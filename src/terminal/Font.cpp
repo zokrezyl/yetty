@@ -118,7 +118,15 @@ bool Font::generate(const std::string& fontPath, float fontSize, uint32_t atlasS
         float uvTop = 1.0f - static_cast<float>(at) / atlasHeight_;
         m.uvMin = glm::vec2(static_cast<float>(al) / atlasWidth_, uvTop);    // top-left
         m.uvMax = glm::vec2(static_cast<float>(ar) / atlasWidth_, uvBottom); // bottom-right
-        m.size = glm::vec2(static_cast<float>((pr - pl) * fontSize), static_cast<float>((pt - pb) * fontSize));
+
+        // Size should match atlas bounds (includes SDF padding) for correct UV mapping
+        // Scale from atlas pixels to target fontSize
+        double atlasScale = fontSize / fontGeometry.getMetrics().emSize;
+        m.size = glm::vec2(
+            static_cast<float>((ar - al) * atlasScale),
+            static_cast<float>((at - ab) * atlasScale)
+        );
+        // Bearing uses plane bounds for correct positioning
         m.bearing = glm::vec2(static_cast<float>(pl * fontSize), static_cast<float>(pt * fontSize));
         m.advance = static_cast<float>(glyph.getAdvance() * fontSize);
 

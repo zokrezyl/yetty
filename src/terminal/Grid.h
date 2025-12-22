@@ -9,7 +9,7 @@ namespace yetty {
 struct Cell {
     uint32_t codepoint = ' ';      // Unicode codepoint
     glm::vec4 fgColor = {1.0f, 1.0f, 1.0f, 1.0f};  // Foreground (text) color
-    glm::vec4 bgColor = {0.1f, 0.1f, 0.1f, 1.0f};  // Background color (match clear color)
+    glm::vec4 bgColor = {0.5f, 0.0f, 0.0f, 1.0f};  // DEBUG: Bright red to see if backgrounds render
     bool bold = false;
     bool italic = false;
     bool underline = false;

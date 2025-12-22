@@ -192,17 +192,10 @@ bool TextRenderer::createPipelines(WGPUDevice device, WGPUTextureFormat format) 
     fragState.module = shaderModule_;
     fragState.entryPoint = "fs_main";
 
-    WGPUBlendState blendState = {};
-    blendState.color.srcFactor = WGPUBlendFactor_SrcAlpha;
-    blendState.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
-    blendState.color.operation = WGPUBlendOperation_Add;
-    blendState.alpha.srcFactor = WGPUBlendFactor_One;
-    blendState.alpha.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
-    blendState.alpha.operation = WGPUBlendOperation_Add;
-
+    // No blending needed - shader outputs fully opaque composited colors
     WGPUColorTargetState colorTarget = {};
     colorTarget.format = format;
-    colorTarget.blend = &blendState;
+    colorTarget.blend = nullptr;
     colorTarget.writeMask = WGPUColorWriteMask_All;
 
     fragState.targetCount = 1;
@@ -239,11 +232,17 @@ bool TextRenderer::createPipelines(WGPUDevice device, WGPUTextureFormat format) 
     bgPipelineDesc.vertex.bufferCount = 1;
     bgPipelineDesc.vertex.buffers = &bgBufferLayout;
 
+    // Background doesn't need blending - just overwrite
+    WGPUColorTargetState bgColorTarget = {};
+    bgColorTarget.format = format;
+    bgColorTarget.blend = nullptr;  // No blending, just overwrite
+    bgColorTarget.writeMask = WGPUColorWriteMask_All;
+
     WGPUFragmentState bgFragState = {};
     bgFragState.module = shaderModule_;
     bgFragState.entryPoint = "fs_background";
     bgFragState.targetCount = 1;
-    bgFragState.targets = &colorTarget;
+    bgFragState.targets = &bgColorTarget;
     bgPipelineDesc.fragment = &bgFragState;
 
     bgPipelineDesc.primitive.topology = WGPUPrimitiveTopology_TriangleList;
@@ -289,13 +288,9 @@ void TextRenderer::updateVertexBuffers(WGPUQueue queue, const Grid& grid, Font& 
 
     std::vector<GlyphVertex> glyphVertices;
     std::vector<uint32_t> glyphIndices;
-    std::vector<BgVertex> bgVertices;
-    std::vector<uint32_t> bgIndices;
 
     glyphVertices.reserve(cellCount * 4);
     glyphIndices.reserve(cellCount * 6);
-    bgVertices.reserve(cellCount * 4);
-    bgIndices.reserve(cellCount * 6);
 
     // Quad corners
     const glm::vec2 corners[4] = {
@@ -307,65 +302,49 @@ void TextRenderer::updateVertexBuffers(WGPUQueue queue, const Grid& grid, Font& 
             const Cell& cell = grid.getCell(col, row);
             glm::vec2 cellPos = {static_cast<float>(col), static_cast<float>(row)};
 
-            // Background quad
-            uint32_t bgBase = static_cast<uint32_t>(bgVertices.size());
+            // Get glyph metrics (or use zero-size for spaces)
+            const GlyphMetrics* glyph = nullptr;
+            if (cell.codepoint != ' ' && cell.codepoint != 0) {
+                glyph = font.getGlyph(cell.codepoint);
+            }
+
+            uint32_t glyphBase = static_cast<uint32_t>(glyphVertices.size());
             for (int i = 0; i < 4; ++i) {
-                BgVertex v;
+                GlyphVertex v;
                 v.position = corners[i];
                 v.cellPos = cellPos;
-                v.bgColor = cell.bgColor;
-                bgVertices.push_back(v);
-            }
-            bgIndices.push_back(bgBase + 0);
-            bgIndices.push_back(bgBase + 1);
-            bgIndices.push_back(bgBase + 2);
-            bgIndices.push_back(bgBase + 2);
-            bgIndices.push_back(bgBase + 1);
-            bgIndices.push_back(bgBase + 3);
-
-            // Glyph quad (skip spaces)
-            if (cell.codepoint != ' ' && cell.codepoint != 0) {
-                const GlyphMetrics* glyph = font.getGlyph(cell.codepoint);
                 if (glyph) {
-                    uint32_t glyphBase = static_cast<uint32_t>(glyphVertices.size());
-                    for (int i = 0; i < 4; ++i) {
-                        GlyphVertex v;
-                        v.position = corners[i];
-                        v.cellPos = cellPos;
-                        v.uvMin = glyph->uvMin;
-                        v.uvMax = glyph->uvMax;
-                        v.glyphSize = glyph->size;
-                        v.glyphBearing = glyph->bearing;
-                        v.fgColor = cell.fgColor;
-                        v.bgColor = cell.bgColor;
-                        glyphVertices.push_back(v);
-                    }
-                    glyphIndices.push_back(glyphBase + 0);
-                    glyphIndices.push_back(glyphBase + 1);
-                    glyphIndices.push_back(glyphBase + 2);
-                    glyphIndices.push_back(glyphBase + 2);
-                    glyphIndices.push_back(glyphBase + 1);
-                    glyphIndices.push_back(glyphBase + 3);
+                    v.uvMin = glyph->uvMin;
+                    v.uvMax = glyph->uvMax;
+                    v.glyphSize = glyph->size;
+                    v.glyphBearing = glyph->bearing;
+                } else {
+                    // No glyph - zero size means shader shows only background
+                    v.uvMin = {0.0f, 0.0f};
+                    v.uvMax = {0.0f, 0.0f};
+                    v.glyphSize = {0.0f, 0.0f};
+                    v.glyphBearing = {0.0f, 0.0f};
                 }
+                v.fgColor = cell.fgColor;
+                v.bgColor = cell.bgColor;
+                glyphVertices.push_back(v);
             }
+            glyphIndices.push_back(glyphBase + 0);
+            glyphIndices.push_back(glyphBase + 1);
+            glyphIndices.push_back(glyphBase + 2);
+            glyphIndices.push_back(glyphBase + 2);
+            glyphIndices.push_back(glyphBase + 1);
+            glyphIndices.push_back(glyphBase + 3);
         }
     }
 
     glyphCount_ = static_cast<uint32_t>(glyphIndices.size());
-    bgCount_ = static_cast<uint32_t>(bgIndices.size());
 
     if (!glyphVertices.empty()) {
         wgpuQueueWriteBuffer(queue, glyphVertexBuffer_, 0,
                              glyphVertices.data(), glyphVertices.size() * sizeof(GlyphVertex));
         wgpuQueueWriteBuffer(queue, glyphIndexBuffer_, 0,
                              glyphIndices.data(), glyphIndices.size() * sizeof(uint32_t));
-    }
-
-    if (!bgVertices.empty()) {
-        wgpuQueueWriteBuffer(queue, bgVertexBuffer_, 0,
-                             bgVertices.data(), bgVertices.size() * sizeof(BgVertex));
-        wgpuQueueWriteBuffer(queue, bgIndexBuffer_, 0,
-                             bgIndices.data(), bgIndices.size() * sizeof(uint32_t));
     }
 }
 
@@ -393,16 +372,7 @@ void TextRenderer::render(WebGPUContext& ctx, const Grid& grid) {
 
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
 
-    // Render backgrounds first
-    if (bgCount_ > 0) {
-        wgpuRenderPassEncoderSetPipeline(pass, bgPipeline_);
-        wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
-        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, bgVertexBuffer_, 0, WGPU_WHOLE_SIZE);
-        wgpuRenderPassEncoderSetIndexBuffer(pass, bgIndexBuffer_, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
-        wgpuRenderPassEncoderDrawIndexed(pass, bgCount_, 1, 0, 0, 0);
-    }
-
-    // Render glyphs on top
+    // Single pass: render all cells with background + glyph composited
     if (glyphCount_ > 0) {
         wgpuRenderPassEncoderSetPipeline(pass, glyphPipeline_);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);

@@ -31,47 +31,43 @@ struct VertexOutput {
     @location(1) fgColor: vec4<f32>,
     @location(2) bgColor: vec4<f32>,
     @location(3) cellUV: vec2<f32>,        // Position within cell (0-1)
+    @location(4) glyphBoundsMin: vec2<f32>, // Glyph start in cell (0-1)
+    @location(5) glyphBoundsMax: vec2<f32>, // Glyph end in cell (0-1)
+    @location(6) uvMin: vec2<f32>,          // Glyph UV min in atlas
+    @location(7) uvMax: vec2<f32>,          // Glyph UV max in atlas
 };
 
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
 
-    // Apply scale to glyph metrics
-    let scaledGlyphSize = input.glyphSize * uniforms.scale;
-    let scaledBearing = input.glyphBearing * uniforms.scale;
-
-    // Calculate cell position in pixels
+    // Calculate cell position in pixels - CELL-SIZED quad
     let cellPixelPos = input.cellPos * uniforms.cellSize;
-
-    // Position glyph within cell
-    // Baseline is at ~80% of cell height from top
-    let baseline = uniforms.cellSize.y * 0.8;
-
-    // glyphBearing.y is the top of the glyph relative to baseline (positive = above baseline)
-    // In screen coords (Y down), top of glyph = baseline - bearing.y
-    let glyphTop = baseline - scaledBearing.y;
-
-    let glyphOffset = vec2<f32>(
-        (uniforms.cellSize.x - scaledGlyphSize.x) * 0.5 + scaledBearing.x,
-        glyphTop
-    );
-
-    // Calculate vertex position
-    // input.position: (0,0)=top-left, (1,1)=bottom-right of quad
-    let localPos = input.position * scaledGlyphSize;
-    let pixelPos = cellPixelPos + glyphOffset + localPos;
+    let localPos = input.position * uniforms.cellSize;
+    let pixelPos = cellPixelPos + localPos;
 
     // Transform to clip space
     output.position = uniforms.projection * vec4<f32>(pixelPos, 0.0, 1.0);
 
-    // UV interpolation - texture and UVs are already in screen space (top-left origin)
-    // uvMin = top-left, uvMax = bottom-right
-    output.uv = mix(input.uvMin, input.uvMax, input.position);
+    // Calculate glyph bounds within cell (normalized 0-1)
+    let scaledGlyphSize = input.glyphSize * uniforms.scale;
+    let scaledBearing = input.glyphBearing * uniforms.scale;
+    let baseline = uniforms.cellSize.y * 0.8;
+    let glyphTop = baseline - scaledBearing.y;
+    let glyphLeft = (uniforms.cellSize.x - scaledGlyphSize.x) * 0.5 + scaledBearing.x;
+
+    // Glyph bounds in cell-normalized coordinates
+    output.glyphBoundsMin = vec2<f32>(glyphLeft, glyphTop) / uniforms.cellSize;
+    output.glyphBoundsMax = vec2<f32>(glyphLeft + scaledGlyphSize.x, glyphTop + scaledGlyphSize.y) / uniforms.cellSize;
+
+    // Pass atlas UVs to fragment shader
+    output.uvMin = input.uvMin;
+    output.uvMax = input.uvMax;
+    output.uv = vec2<f32>(0.0, 0.0); // Not used directly anymore
 
     output.fgColor = input.fgColor;
     output.bgColor = input.bgColor;
-    output.cellUV = input.position;
+    output.cellUV = input.position;  // 0-1 position within cell
 
     return output;
 }
@@ -83,8 +79,29 @@ fn median(r: f32, g: f32, b: f32) -> f32 {
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+    // Early out for empty glyphs (spaces) - prevents division by zero
+    let hasGlyph = input.glyphBoundsMax.x > input.glyphBoundsMin.x &&
+                   input.glyphBoundsMax.y > input.glyphBoundsMin.y;
+    if (!hasGlyph) {
+        return vec4<f32>(input.bgColor.rgb, 1.0);
+    }
+
+    // Check if current pixel is within glyph bounds
+    let inGlyph = input.cellUV.x >= input.glyphBoundsMin.x &&
+                  input.cellUV.x <= input.glyphBoundsMax.x &&
+                  input.cellUV.y >= input.glyphBoundsMin.y &&
+                  input.cellUV.y <= input.glyphBoundsMax.y;
+
+    if (!inGlyph) {
+        return vec4<f32>(input.bgColor.rgb, 1.0);
+    }
+
+    // Map cellUV to atlas UV within glyph bounds
+    let glyphLocalUV = (input.cellUV - input.glyphBoundsMin) / (input.glyphBoundsMax - input.glyphBoundsMin);
+    let atlasUV = mix(input.uvMin, input.uvMax, glyphLocalUV);
+
     // Sample MSDF texture
-    let msdf = textureSample(fontTexture, fontSampler, input.uv);
+    let msdf = textureSample(fontTexture, fontSampler, atlasUV);
 
     // Calculate signed distance
     let sd = median(msdf.r, msdf.g, msdf.b);
@@ -92,16 +109,16 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // Calculate screen-space distance for anti-aliasing
     let screenTexSize = vec2<f32>(textureDimensions(fontTexture));
     let unitRange = uniforms.pixelRange / screenTexSize;
-    let screenSize = uniforms.cellSize;  // Approximate glyph screen size
-    let screenRange = max(screenSize.x * unitRange.x, screenSize.y * unitRange.y);
+    // Use actual glyph size on screen, not cell size
+    let scaledGlyphSize = (input.glyphBoundsMax - input.glyphBoundsMin) * uniforms.cellSize;
+    let screenRange = max(scaledGlyphSize.x * unitRange.x, scaledGlyphSize.y * unitRange.y);
 
-    // Apply anti-aliased edge
-    let opacity = clamp((sd - 0.5) * screenRange + 0.5, 0.0, 1.0);
+    // Apply anti-aliased edge - this is our alpha
+    let alpha = clamp((sd - 0.5) * screenRange + 0.5, 0.0, 1.0);
 
-    // Mix foreground and background colors based on glyph coverage
-    let color = mix(input.bgColor, input.fgColor, opacity);
-
-    return color;
+    // Blend foreground over background - output is fully opaque
+    let color = mix(input.bgColor.rgb, input.fgColor.rgb, alpha);
+    return vec4<f32>(color, 1.0);
 }
 
 // Background quad shader - renders cell backgrounds
