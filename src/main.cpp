@@ -5,6 +5,10 @@
 
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <fstream>
+#include <string>
+#include <vector>
+#include <cstdlib>
 #include <cmath>
 
 using namespace yetty;
@@ -46,8 +50,21 @@ const char* DEFAULT_FONT = "/System/Library/Fonts/Monaco.ttf";
 const char* DEFAULT_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
 #endif
 
+void printUsage(const char* prog) {
+    std::cerr << "Usage: " << prog << " [font.ttf] [input.txt] [width] [height]" << std::endl;
+    std::cerr << "  font.ttf  - Path to TTF font (default: system monospace)" << std::endl;
+    std::cerr << "  input.txt - Text file to display (default: demo text)" << std::endl;
+    std::cerr << "  width     - Window width in pixels (default: 1024)" << std::endl;
+    std::cerr << "  height    - Window height in pixels (default: 768)" << std::endl;
+}
+
 int main(int argc, char* argv[]) {
     const char* fontPath = (argc > 1) ? argv[1] : DEFAULT_FONT;
+    uint32_t width = (argc > 3) ? static_cast<uint32_t>(std::atoi(argv[3])) : 1024;
+    uint32_t height = (argc > 4) ? static_cast<uint32_t>(std::atoi(argv[4])) : 768;
+
+    if (width == 0) width = 1024;
+    if (height == 0) height = 768;
 
     // Initialize GLFW
     if (!glfwInit()) {
@@ -58,9 +75,6 @@ int main(int argc, char* argv[]) {
     // Don't create OpenGL context - we're using WebGPU
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-
-    uint32_t width = 1024;
-    uint32_t height = 768;
 
     GLFWwindow* window = glfwCreateWindow(width, height, "yetty - WebGPU Terminal", nullptr, nullptr);
     if (!window) {
@@ -115,46 +129,61 @@ int main(int argc, char* argv[]) {
     uint32_t rows = static_cast<uint32_t>(height / cellHeight);
     Grid grid(cols, rows);
 
-    // Demo content
-    const char* lines[] = {
-        "Welcome to yetty - WebGPU Terminal Emulator",
-        "============================================",
-        "",
-        "This is a proof-of-concept terminal renderer using:",
-        "  * WebGPU (via wgpu-native)",
-        "  * MSDF (Multi-channel Signed Distance Field) fonts",
-        "  * GPU-accelerated text rendering",
-        "",
-        "Features:",
-        "  - Crisp text at any scale",
-        "  - Colored text and backgrounds",
-        "  - Fast GPU-based rendering",
-        "",
-        "Press ESC to exit.",
-    };
+    // Load content from file or use demo
+    std::vector<std::string> lines;
+    const char* inputFile = (argc > 2) ? argv[2] : nullptr;
+
+    if (inputFile) {
+        std::ifstream file(inputFile);
+        if (file.is_open()) {
+            std::string line;
+            while (std::getline(file, line)) {
+                lines.push_back(line);
+            }
+            std::cout << "Loaded " << lines.size() << " lines from " << inputFile << std::endl;
+        } else {
+            std::cerr << "Failed to open input file: " << inputFile << std::endl;
+        }
+    }
+
+    if (lines.empty()) {
+        // Demo content
+        lines = {
+            "Welcome to yetty - WebGPU Terminal Emulator",
+            "============================================",
+            "",
+            "This is a proof-of-concept terminal renderer using:",
+            "  * WebGPU (via wgpu-native)",
+            "  * MSDF (Multi-channel Signed Distance Field) fonts",
+            "  * GPU-accelerated text rendering",
+            "",
+            "Features:",
+            "  - Crisp text at any scale",
+            "  - Colored text and backgrounds",
+            "  - Fast GPU-based rendering",
+            "",
+            "Usage: yetty [font.ttf] [input.txt]",
+            "Press ESC to exit.",
+        };
+    }
 
     // Colors
     glm::vec4 white = {1.0f, 1.0f, 1.0f, 1.0f};
     glm::vec4 green = {0.0f, 1.0f, 0.0f, 1.0f};
     glm::vec4 cyan = {0.0f, 1.0f, 1.0f, 1.0f};
     glm::vec4 yellow = {1.0f, 1.0f, 0.0f, 1.0f};
-    glm::vec4 magenta = {1.0f, 0.0f, 1.0f, 1.0f};
 
-    // Debug: print what we're writing
-    std::cout << "Writing demo content to grid (" << cols << "x" << rows << "):" << std::endl;
-    for (size_t i = 0; i < sizeof(lines) / sizeof(lines[0]); ++i) {
-        std::cout << "  Line " << i << ": \"" << lines[i] << "\"" << std::endl;
-    }
+    std::cout << "Writing content to grid (" << cols << "x" << rows << ")" << std::endl;
 
-    // Write demo content
-    for (size_t i = 0; i < sizeof(lines) / sizeof(lines[0]) && i < rows; ++i) {
+    // Write content
+    for (size_t i = 0; i < lines.size() && i < rows; ++i) {
         glm::vec4 color = white;
         if (i == 0) color = green;
         else if (i == 1) color = green;
-        else if (lines[i][0] == ' ' && lines[i][1] == ' ' && lines[i][2] == '*') color = cyan;
-        else if (lines[i][0] == ' ' && lines[i][1] == ' ' && lines[i][2] == '-') color = yellow;
+        else if (lines[i].length() > 2 && lines[i][0] == ' ' && lines[i][1] == ' ' && lines[i][2] == '*') color = cyan;
+        else if (lines[i].length() > 2 && lines[i][0] == ' ' && lines[i][1] == ' ' && lines[i][2] == '-') color = yellow;
 
-        grid.writeString(0, static_cast<uint32_t>(i), lines[i], color);
+        grid.writeString(0, static_cast<uint32_t>(i), lines[i].c_str(), color);
     }
 
     // Set up application state for callbacks

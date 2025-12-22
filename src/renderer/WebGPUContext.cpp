@@ -117,7 +117,7 @@ void WebGPUContext::configureSurface(uint32_t width, uint32_t height) {
     config.alphaMode = WGPUCompositeAlphaMode_Auto;
     config.width = width;
     config.height = height;
-    config.presentMode = WGPUPresentMode_Fifo;
+    config.presentMode = WGPUPresentMode_Immediate;  // No VSync, unlimited FPS
 
     wgpuSurfaceConfigure(surface_, &config);
 }
