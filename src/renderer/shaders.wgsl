@@ -41,33 +41,32 @@ struct VertexOutput {
 fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
 
-    // Calculate cell position in pixels - CELL-SIZED quad
-    let cellPixelPos = input.cellPos * uniforms.cellSize;
-    let localPos = input.position * uniforms.cellSize;
-    let pixelPos = cellPixelPos + localPos;
-
-    // Transform to clip space
-    output.position = uniforms.projection * vec4<f32>(pixelPos, 0.0, 1.0);
-
-    // Calculate glyph bounds within cell (normalized 0-1)
+    // Calculate glyph position within cell
     let scaledGlyphSize = input.glyphSize * uniforms.scale;
     let scaledBearing = input.glyphBearing * uniforms.scale;
+
+    let cellPixelPos = input.cellPos * uniforms.cellSize;
     let baseline = uniforms.cellSize.y * 0.8;
     let glyphTop = baseline - scaledBearing.y;
-    let glyphLeft = (uniforms.cellSize.x - scaledGlyphSize.x) * 0.5 + scaledBearing.x;
+    let glyphLeft = scaledBearing.x;
 
-    // Glyph bounds in cell-normalized coordinates
-    output.glyphBoundsMin = vec2<f32>(glyphLeft, glyphTop) / uniforms.cellSize;
-    output.glyphBoundsMax = vec2<f32>(glyphLeft + scaledGlyphSize.x, glyphTop + scaledGlyphSize.y) / uniforms.cellSize;
+    // GLYPH-SIZED quad positioned within the cell
+    let glyphOffset = vec2<f32>(glyphLeft, glyphTop);
+    let localPos = input.position * scaledGlyphSize;
+    let pixelPos = cellPixelPos + glyphOffset + localPos;
 
-    // Pass atlas UVs to fragment shader
+    output.position = uniforms.projection * vec4<f32>(pixelPos, 0.0, 1.0);
+
+    // UV interpolation across the glyph quad
+    output.uv = mix(input.uvMin, input.uvMax, input.position);
     output.uvMin = input.uvMin;
     output.uvMax = input.uvMax;
-    output.uv = vec2<f32>(0.0, 0.0); // Not used directly anymore
 
     output.fgColor = input.fgColor;
     output.bgColor = input.bgColor;
-    output.cellUV = input.position;  // 0-1 position within cell
+    output.cellUV = input.position;
+    output.glyphBoundsMin = vec2<f32>(0.0);
+    output.glyphBoundsMax = vec2<f32>(1.0);
 
     return output;
 }
@@ -79,46 +78,21 @@ fn median(r: f32, g: f32, b: f32) -> f32 {
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    // Early out for empty glyphs (spaces) - prevents division by zero
-    let hasGlyph = input.glyphBoundsMax.x > input.glyphBoundsMin.x &&
-                   input.glyphBoundsMax.y > input.glyphBoundsMin.y;
-    if (!hasGlyph) {
-        return vec4<f32>(input.bgColor.rgb, 1.0);
-    }
-
-    // Check if current pixel is within glyph bounds
-    let inGlyph = input.cellUV.x >= input.glyphBoundsMin.x &&
-                  input.cellUV.x <= input.glyphBoundsMax.x &&
-                  input.cellUV.y >= input.glyphBoundsMin.y &&
-                  input.cellUV.y <= input.glyphBoundsMax.y;
-
-    if (!inGlyph) {
-        return vec4<f32>(input.bgColor.rgb, 1.0);
-    }
-
-    // Map cellUV to atlas UV within glyph bounds
-    let glyphLocalUV = (input.cellUV - input.glyphBoundsMin) / (input.glyphBoundsMax - input.glyphBoundsMin);
-    let atlasUV = mix(input.uvMin, input.uvMax, glyphLocalUV);
-
-    // Sample MSDF texture
-    let msdf = textureSample(fontTexture, fontSampler, atlasUV);
+    // Sample MSDF texture using interpolated UV
+    let msdf = textureSample(fontTexture, fontSampler, input.uv);
 
     // Calculate signed distance
     let sd = median(msdf.r, msdf.g, msdf.b);
 
-    // Calculate screen-space distance for anti-aliasing
-    let screenTexSize = vec2<f32>(textureDimensions(fontTexture));
-    let unitRange = uniforms.pixelRange / screenTexSize;
-    // Use actual glyph size on screen, not cell size
-    let scaledGlyphSize = (input.glyphBoundsMax - input.glyphBoundsMin) * uniforms.cellSize;
-    let screenRange = max(scaledGlyphSize.x * unitRange.x, scaledGlyphSize.y * unitRange.y);
+    // screenPxRange = pixelRange * (glyphScreenSize / glyphAtlasSize)
+    // For sharp edges, we need adequate range. Using pixelRange directly works well.
+    let screenPxRange = uniforms.pixelRange;
 
-    // Apply anti-aliased edge - this is our alpha
-    let alpha = clamp((sd - 0.5) * screenRange + 0.5, 0.0, 1.0);
+    // Apply anti-aliased edge - this is the alpha
+    let alpha = clamp((sd - 0.5) * screenPxRange + 0.5, 0.0, 1.0);
 
-    // Blend foreground over background - output is fully opaque
-    let color = mix(input.bgColor.rgb, input.fgColor.rgb, alpha);
-    return vec4<f32>(color, 1.0);
+    // Output foreground color with alpha - will blend over background
+    return vec4<f32>(input.fgColor.rgb, alpha);
 }
 
 // Background quad shader - renders cell backgrounds

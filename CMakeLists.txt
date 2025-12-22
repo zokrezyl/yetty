@@ -96,6 +96,11 @@ target_include_directories(yetty PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+# Pass source directory path to code for loading shaders
+target_compile_definitions(yetty PRIVATE
+    CMAKE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
 target_link_libraries(yetty PRIVATE
     webgpu
     glfw
