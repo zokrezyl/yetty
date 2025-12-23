@@ -2,15 +2,22 @@
 
 #include "Grid.h"
 #include "Font.h"
+#include "../Config.h"
 
 extern "C" {
 #include <vterm.h>
 }
 
 #include <string>
-#include <functional>
+#include <vector>
 
 namespace yetty {
+
+// Rectangle representing damaged (changed) cells
+struct DamageRect {
+    uint32_t startCol, startRow;
+    uint32_t endCol, endRow;  // exclusive
+};
 
 // Terminal class that wraps libvterm with PTY support
 class Terminal {
@@ -42,6 +49,16 @@ public:
     int getCursorCol() const { return cursorCol_; }
     bool isCursorVisible() const { return cursorVisible_; }
 
+    // Damage tracking
+    const std::vector<DamageRect>& getDamageRects() const { return damageRects_; }
+    void clearDamageRects() { damageRects_.clear(); }
+    bool hasDamage() const { return !damageRects_.empty() || fullDamage_; }
+    bool hasFullDamage() const { return fullDamage_; }
+    void clearFullDamage() { fullDamage_ = false; }
+
+    // Configuration
+    void setConfig(const Config* config) { config_ = config; }
+
     // Static callbacks for libvterm (must be public for C callback)
     static int onDamage(VTermRect rect, void* user);
     static int onMoveCursor(VTermPos pos, VTermPos oldpos, int visible, void* user);
@@ -51,6 +68,7 @@ public:
 private:
     // Sync libvterm screen to our Grid
     void syncToGrid();
+    void syncDamageToGrid();  // Only sync damaged regions
 
     // Convert VTermColor to RGB
     void colorToRGB(const VTermColor& color, uint8_t& r, uint8_t& g, uint8_t& b);
@@ -71,6 +89,12 @@ private:
 
     uint32_t cols_;
     uint32_t rows_;
+
+    // Damage tracking
+    std::vector<DamageRect> damageRects_;
+    bool fullDamage_ = true;  // Start with full damage to render initial content
+
+    const Config* config_ = nullptr;
 };
 
 } // namespace yetty

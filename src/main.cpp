@@ -2,6 +2,7 @@
 #include "renderer/TextRenderer.h"
 #include "terminal/Grid.h"
 #include "terminal/Font.h"
+#include "Config.h"
 
 #if !YETTY_WEB
 #include "terminal/Terminal.h"
@@ -32,6 +33,7 @@ struct AppState {
     WebGPUContext* ctx = nullptr;
     TextRenderer* renderer = nullptr;
     Font* font = nullptr;
+    Config* config = nullptr;
     float zoomLevel = 1.0f;
     float baseCellWidth = 0.0f;
     float baseCellHeight = 0.0f;
@@ -180,11 +182,23 @@ static void mainLoopIteration() {
             state.renderer->resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
         }
 
-        // Render terminal grid with cursor
-        state.renderer->render(*state.ctx, state.terminal->getGrid(),
-                               state.terminal->getCursorCol(),
-                               state.terminal->getCursorRow(),
-                               state.terminal->isCursorVisible());
+        // Render terminal grid with cursor and damage tracking
+        if (state.config && state.config->useDamageTracking) {
+            state.renderer->render(*state.ctx, state.terminal->getGrid(),
+                                   state.terminal->getDamageRects(),
+                                   state.terminal->hasFullDamage(),
+                                   state.terminal->getCursorCol(),
+                                   state.terminal->getCursorRow(),
+                                   state.terminal->isCursorVisible());
+            // Clear damage after rendering
+            state.terminal->clearDamageRects();
+            state.terminal->clearFullDamage();
+        } else {
+            state.renderer->render(*state.ctx, state.terminal->getGrid(),
+                                   state.terminal->getCursorCol(),
+                                   state.terminal->getCursorRow(),
+                                   state.terminal->isCursorVisible());
+        }
     } else
 #endif
     {
@@ -281,6 +295,8 @@ void printUsage(const char* prog) {
 #endif
     std::cerr << "  --load-atlas       Use pre-built atlas instead of generating" << std::endl;
     std::cerr << "  --demo [scroll_ms] Run scrolling text demo (default: terminal mode)" << std::endl;
+    std::cerr << "  --no-damage        Disable damage tracking (update full screen each frame)" << std::endl;
+    std::cerr << "  --debug-damage     Log damage rectangle updates" << std::endl;
     std::cerr << std::endl;
     std::cerr << "Arguments:" << std::endl;
     std::cerr << "  font.ttf   - Path to TTF font (default: system monospace)" << std::endl;
@@ -293,6 +309,8 @@ int main(int argc, char* argv[]) {
     bool generateAtlasOnly = false;
     bool usePrebuiltAtlas = YETTY_USE_PREBUILT_ATLAS;
     bool demoMode = YETTY_WEB ? true : false;  // Web always uses demo mode
+    bool useDamageTracking = true;
+    bool debugDamageRects = false;
     int scrollMs = 50;
     const char* fontPath = DEFAULT_FONT;
     uint32_t width = 1024;
@@ -309,6 +327,10 @@ int main(int argc, char* argv[]) {
             if (argIndex + 1 < argc && argv[argIndex + 1][0] != '-') {
                 scrollMs = std::atoi(argv[++argIndex]);
             }
+        } else if (std::strcmp(argv[argIndex], "--no-damage") == 0) {
+            useDamageTracking = false;
+        } else if (std::strcmp(argv[argIndex], "--debug-damage") == 0) {
+            debugDamageRects = true;
         } else if (std::strcmp(argv[argIndex], "--help") == 0 || std::strcmp(argv[argIndex], "-h") == 0) {
             printUsage(argv[0]);
             return 0;
@@ -424,12 +446,19 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Create config from command line args
+    static Config config;
+    config.useDamageTracking = useDamageTracking;
+    config.showFps = true;
+    config.debugDamageRects = debugDamageRects;
+
     // Initialize text renderer
     TextRenderer renderer;
     float cellWidth = fontSize * 0.6f;   // Approximate monospace width
     float cellHeight = fontSize * 1.2f;  // Line height
     renderer.setCellSize(cellWidth, cellHeight);
     renderer.resize(width, height);
+    renderer.setConfig(&config);
 
     if (!renderer.init(ctx, font)) {
         std::cerr << "Failed to initialize text renderer" << std::endl;
@@ -448,6 +477,7 @@ int main(int argc, char* argv[]) {
     appState.ctx = &ctx;
     appState.renderer = &renderer;
     appState.font = &font;
+    appState.config = &config;
     appState.baseCellWidth = cellWidth;
     appState.baseCellHeight = cellHeight;
     appState.zoomLevel = 1.0f;
@@ -507,6 +537,7 @@ int main(int argc, char* argv[]) {
     else {
         // Terminal mode
         terminal = new Terminal(cols, rows, &font);
+        terminal->setConfig(&config);
         appState.terminal = terminal;
 
         if (!terminal->start()) {
@@ -517,7 +548,8 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        std::cout << "Terminal mode: Grid " << cols << "x" << rows << std::endl;
+        std::cout << "Terminal mode: Grid " << cols << "x" << rows
+                  << " (damage tracking: " << (config.useDamageTracking ? "on" : "off") << ")" << std::endl;
 
         // Set up keyboard callbacks
         glfwSetKeyCallback(window, keyCallback);

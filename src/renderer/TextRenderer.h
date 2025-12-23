@@ -3,9 +3,13 @@
 #include "WebGPUContext.h"
 #include "terminal/Grid.h"
 #include "terminal/Font.h"
+#include "Config.h"
 #include <glm/glm.hpp>
+#include <vector>
 
 namespace yetty {
+
+struct DamageRect;
 
 class TextRenderer {
 public:
@@ -22,6 +26,13 @@ public:
     glm::vec2 getCellSize() const { return cellSize_; }
     float getScale() const { return scale_; }
 
+    void setConfig(const Config* config) { config_ = config; }
+
+    // Render with damage tracking (only updates changed regions)
+    void render(WebGPUContext& ctx, const Grid& grid,
+                const std::vector<DamageRect>& damageRects, bool fullDamage,
+                int cursorCol = -1, int cursorRow = -1, bool cursorVisible = false);
+
 private:
     bool createShaderModule(WGPUDevice device);
     bool createPipeline(WGPUDevice device, WGPUTextureFormat format);
@@ -33,6 +44,7 @@ private:
     void updateUniformBuffer(WGPUQueue queue, const Grid& grid,
                              int cursorCol, int cursorRow, bool cursorVisible);
     void updateCellTextures(WGPUQueue queue, const Grid& grid);
+    void updateCellTextureRegion(WGPUQueue queue, const Grid& grid, const DamageRect& rect);
 
     // Uniforms struct - must match shader
     struct Uniforms {
@@ -78,6 +90,7 @@ private:
 
     WGPUDevice device_ = nullptr;  // Cached for recreating bind groups
     Font* font_ = nullptr;
+    const Config* config_ = nullptr;
 };
 
 } // namespace yetty

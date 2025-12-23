@@ -1,4 +1,5 @@
 #include "TextRenderer.h"
+#include "terminal/Terminal.h"  // For DamageRect
 #include <glm/gtc/matrix_transform.hpp>
 #include <fstream>
 #include <sstream>
@@ -419,6 +420,100 @@ void TextRenderer::updateCellTextures(WGPUQueue queue, const Grid& grid) {
                           cols * rows * 4, &bgLayout, &bgSize);
 }
 
+void TextRenderer::updateCellTextureRegion(WGPUQueue queue, const Grid& grid, const DamageRect& rect) {
+    const uint32_t cols = grid.getCols();
+    const uint32_t regionWidth = rect.endCol - rect.startCol;
+    const uint32_t regionHeight = rect.endRow - rect.startRow;
+
+    if (regionWidth == 0 || regionHeight == 0) return;
+
+    // For partial updates, we need to extract the subregion from the grid's linear data
+    // and write it to the correct location in the texture
+
+    // Glyph texture update
+    std::vector<uint16_t> glyphRegion(regionWidth * regionHeight);
+    const uint16_t* srcGlyphs = grid.getGlyphData();
+    for (uint32_t row = 0; row < regionHeight; row++) {
+        for (uint32_t col = 0; col < regionWidth; col++) {
+            uint32_t srcIdx = (rect.startRow + row) * cols + (rect.startCol + col);
+            glyphRegion[row * regionWidth + col] = srcGlyphs[srcIdx];
+        }
+    }
+
+    WGPUImageCopyTexture glyphDest = {};
+    glyphDest.texture = cellGlyphTexture_;
+    glyphDest.mipLevel = 0;
+    glyphDest.origin = {rect.startCol, rect.startRow, 0};
+    glyphDest.aspect = WGPUTextureAspect_All;
+
+    WGPUTextureDataLayout glyphLayout = {};
+    glyphLayout.offset = 0;
+    glyphLayout.bytesPerRow = regionWidth * sizeof(uint16_t);
+    glyphLayout.rowsPerImage = regionHeight;
+
+    WGPUExtent3D glyphSize = {regionWidth, regionHeight, 1};
+    wgpuQueueWriteTexture(queue, &glyphDest, glyphRegion.data(),
+                          regionWidth * regionHeight * sizeof(uint16_t), &glyphLayout, &glyphSize);
+
+    // FG color texture update
+    std::vector<uint8_t> fgRegion(regionWidth * regionHeight * 4);
+    const uint8_t* srcFg = grid.getFgColorData();
+    for (uint32_t row = 0; row < regionHeight; row++) {
+        for (uint32_t col = 0; col < regionWidth; col++) {
+            uint32_t srcIdx = ((rect.startRow + row) * cols + (rect.startCol + col)) * 4;
+            uint32_t dstIdx = (row * regionWidth + col) * 4;
+            fgRegion[dstIdx + 0] = srcFg[srcIdx + 0];
+            fgRegion[dstIdx + 1] = srcFg[srcIdx + 1];
+            fgRegion[dstIdx + 2] = srcFg[srcIdx + 2];
+            fgRegion[dstIdx + 3] = srcFg[srcIdx + 3];
+        }
+    }
+
+    WGPUImageCopyTexture fgDest = {};
+    fgDest.texture = cellFgColorTexture_;
+    fgDest.mipLevel = 0;
+    fgDest.origin = {rect.startCol, rect.startRow, 0};
+    fgDest.aspect = WGPUTextureAspect_All;
+
+    WGPUTextureDataLayout fgLayout = {};
+    fgLayout.offset = 0;
+    fgLayout.bytesPerRow = regionWidth * 4;
+    fgLayout.rowsPerImage = regionHeight;
+
+    WGPUExtent3D fgSize = {regionWidth, regionHeight, 1};
+    wgpuQueueWriteTexture(queue, &fgDest, fgRegion.data(),
+                          regionWidth * regionHeight * 4, &fgLayout, &fgSize);
+
+    // BG color texture update
+    std::vector<uint8_t> bgRegion(regionWidth * regionHeight * 4);
+    const uint8_t* srcBg = grid.getBgColorData();
+    for (uint32_t row = 0; row < regionHeight; row++) {
+        for (uint32_t col = 0; col < regionWidth; col++) {
+            uint32_t srcIdx = ((rect.startRow + row) * cols + (rect.startCol + col)) * 4;
+            uint32_t dstIdx = (row * regionWidth + col) * 4;
+            bgRegion[dstIdx + 0] = srcBg[srcIdx + 0];
+            bgRegion[dstIdx + 1] = srcBg[srcIdx + 1];
+            bgRegion[dstIdx + 2] = srcBg[srcIdx + 2];
+            bgRegion[dstIdx + 3] = srcBg[srcIdx + 3];
+        }
+    }
+
+    WGPUImageCopyTexture bgDest = {};
+    bgDest.texture = cellBgColorTexture_;
+    bgDest.mipLevel = 0;
+    bgDest.origin = {rect.startCol, rect.startRow, 0};
+    bgDest.aspect = WGPUTextureAspect_All;
+
+    WGPUTextureDataLayout bgLayout = {};
+    bgLayout.offset = 0;
+    bgLayout.bytesPerRow = regionWidth * 4;
+    bgLayout.rowsPerImage = regionHeight;
+
+    WGPUExtent3D bgSize = {regionWidth, regionHeight, 1};
+    wgpuQueueWriteTexture(queue, &bgDest, bgRegion.data(),
+                          regionWidth * regionHeight * 4, &bgLayout, &bgSize);
+}
+
 void TextRenderer::render(WebGPUContext& ctx, const Grid& grid,
                           int cursorCol, int cursorRow, bool cursorVisible) {
     WGPUQueue queue = ctx.getQueue();
@@ -433,6 +528,83 @@ void TextRenderer::render(WebGPUContext& ctx, const Grid& grid,
 
     updateUniformBuffer(queue, grid, cursorCol, cursorRow, cursorVisible);
     updateCellTextures(queue, grid);
+
+    WGPUTextureView targetView = ctx.getCurrentTextureView();
+    if (!targetView) return;
+
+    WGPUCommandEncoderDescriptor encoderDesc = {};
+    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encoderDesc);
+
+    WGPURenderPassColorAttachment colorAttachment = {};
+    colorAttachment.view = targetView;
+    colorAttachment.loadOp = WGPULoadOp_Clear;
+    colorAttachment.storeOp = WGPUStoreOp_Store;
+#if YETTY_WEB
+    colorAttachment.clearColor = {0.1, 0.1, 0.1, 1.0};
+#else
+    colorAttachment.clearValue = {0.1, 0.1, 0.1, 1.0};
+#endif
+
+    WGPURenderPassDescriptor passDesc = {};
+    passDesc.colorAttachmentCount = 1;
+    passDesc.colorAttachments = &colorAttachment;
+
+    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
+
+    wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
+    wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
+    wgpuRenderPassEncoderSetVertexBuffer(pass, 0, quadVertexBuffer_, 0, WGPU_WHOLE_SIZE);
+    wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
+
+    wgpuRenderPassEncoderEnd(pass);
+    wgpuRenderPassEncoderRelease(pass);
+
+    WGPUCommandBufferDescriptor cmdDesc = {};
+    WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdDesc);
+    wgpuCommandEncoderRelease(encoder);
+
+    wgpuQueueSubmit(queue, 1, &cmdBuffer);
+    wgpuCommandBufferRelease(cmdBuffer);
+
+    wgpuTextureViewRelease(targetView);
+
+    ctx.present();
+}
+
+void TextRenderer::render(WebGPUContext& ctx, const Grid& grid,
+                          const std::vector<DamageRect>& damageRects, bool fullDamage,
+                          int cursorCol, int cursorRow, bool cursorVisible) {
+    WGPUQueue queue = ctx.getQueue();
+    const uint32_t cols = grid.getCols();
+    const uint32_t rows = grid.getRows();
+
+    // Recreate textures and bind group if grid size changed
+    if (cols != textureCols_ || rows != textureRows_) {
+        createCellTextures(device_, cols, rows);
+        createBindGroup(device_, *font_);
+        // Force full update when textures are recreated
+        updateCellTextures(queue, grid);
+    } else if (fullDamage) {
+        // Full damage - update entire texture
+        updateCellTextures(queue, grid);
+    } else if (!damageRects.empty()) {
+        // Partial damage - only update changed regions
+        for (const auto& rect : damageRects) {
+            updateCellTextureRegion(queue, grid, rect);
+        }
+
+        if (config_ && config_->debugDamageRects) {
+            uint32_t totalCells = 0;
+            for (const auto& rect : damageRects) {
+                totalCells += (rect.endCol - rect.startCol) * (rect.endRow - rect.startRow);
+            }
+            std::cout << "Updated " << totalCells << " cells in " << damageRects.size()
+                      << " rects (vs " << (cols * rows) << " total)" << std::endl;
+        }
+    }
+    // else: no damage, skip texture update entirely
+
+    updateUniformBuffer(queue, grid, cursorCol, cursorRow, cursorVisible);
 
     WGPUTextureView targetView = ctx.getCurrentTextureView();
     if (!targetView) return;

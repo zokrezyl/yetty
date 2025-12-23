@@ -120,7 +120,14 @@ void Terminal::update() {
         // Feed data to libvterm
         vterm_input_write(vterm_, buf, nread);
         vterm_screen_flush_damage(vtermScreen_);
-        syncToGrid();
+
+        // Sync based on damage tracking config
+        if (config_ && config_->useDamageTracking && !fullDamage_) {
+            syncDamageToGrid();
+        } else {
+            syncToGrid();
+            fullDamage_ = false;
+        }
     } else if (nread < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
         running_ = false;
     }
@@ -222,6 +229,55 @@ void Terminal::syncToGrid() {
             grid_.setCell(col, row, glyphIndex, fgR, fgG, fgB, bgR, bgG, bgB);
         }
     }
+
+    // Clear damage rects since we did a full sync
+    damageRects_.clear();
+}
+
+void Terminal::syncDamageToGrid() {
+    if (damageRects_.empty()) return;
+
+    VTermScreenCell cell;
+    VTermPos pos;
+
+    for (const auto& damage : damageRects_) {
+        for (uint32_t row = damage.startRow; row < damage.endRow && row < rows_; row++) {
+            for (uint32_t col = damage.startCol; col < damage.endCol && col < cols_; col++) {
+                pos.row = row;
+                pos.col = col;
+
+                vterm_screen_get_cell(vtermScreen_, pos, &cell);
+
+                // Get glyph index
+                uint32_t codepoint = cell.chars[0];
+                if (codepoint == 0) codepoint = ' ';
+
+                uint16_t glyphIndex = font_ ? font_->getGlyphIndex(codepoint) : static_cast<uint16_t>(codepoint);
+
+                // Convert colors
+                uint8_t fgR, fgG, fgB;
+                uint8_t bgR, bgG, bgB;
+
+                VTermColor fg = cell.fg;
+                VTermColor bg = cell.bg;
+
+                vterm_screen_convert_color_to_rgb(vtermScreen_, &fg);
+                vterm_screen_convert_color_to_rgb(vtermScreen_, &bg);
+
+                colorToRGB(fg, fgR, fgG, fgB);
+                colorToRGB(bg, bgR, bgG, bgB);
+
+                if (cell.attrs.reverse) {
+                    std::swap(fgR, bgR);
+                    std::swap(fgG, bgG);
+                    std::swap(fgB, bgB);
+                }
+
+                grid_.setCell(col, row, glyphIndex, fgR, fgG, fgB, bgR, bgG, bgB);
+            }
+        }
+    }
+    // Note: don't clear damageRects_ here - TextRenderer needs them for partial updates
 }
 
 void Terminal::colorToRGB(const VTermColor& color, uint8_t& r, uint8_t& g, uint8_t& b) {
@@ -242,9 +298,21 @@ void Terminal::colorToRGB(const VTermColor& color, uint8_t& r, uint8_t& g, uint8
 }
 
 int Terminal::onDamage(VTermRect rect, void* user) {
-    // Terminal is already synced in update() after flush_damage
-    (void)rect;
-    (void)user;
+    Terminal* term = static_cast<Terminal*>(user);
+
+    // Record the damage rectangle
+    DamageRect damage;
+    damage.startCol = static_cast<uint32_t>(rect.start_col);
+    damage.startRow = static_cast<uint32_t>(rect.start_row);
+    damage.endCol = static_cast<uint32_t>(rect.end_col);
+    damage.endRow = static_cast<uint32_t>(rect.end_row);
+    term->damageRects_.push_back(damage);
+
+    if (term->config_ && term->config_->debugDamageRects) {
+        std::cout << "Damage: [" << damage.startCol << "," << damage.startRow
+                  << "] -> [" << damage.endCol << "," << damage.endRow << "]" << std::endl;
+    }
+
     return 0;
 }
 
