@@ -2,17 +2,15 @@
 
 #include <vector>
 #include <cstdint>
-#include <glm/glm.hpp>
 
 namespace yetty {
 
-struct Cell {
-    uint32_t codepoint = ' ';      // Unicode codepoint
-    glm::vec4 fgColor = {1.0f, 1.0f, 1.0f, 1.0f};  // Foreground (text) color
-    glm::vec4 bgColor = {0.1f, 0.1f, 0.1f, 1.0f};  // Background color (dark gray)
-    bool bold = false;
-    bool italic = false;
-    bool underline = false;
+// Cell attributes (bold, italic, etc.) packed into a single byte
+struct CellAttrs {
+    uint8_t bold : 1;
+    uint8_t italic : 1;
+    uint8_t underline : 1;
+    uint8_t _reserved : 5;
 };
 
 class Grid {
@@ -22,27 +20,57 @@ public:
     void resize(uint32_t cols, uint32_t rows);
     void clear();
 
-    void setCell(uint32_t col, uint32_t row, const Cell& cell);
-    void setChar(uint32_t col, uint32_t row, uint32_t codepoint);
-    void setFgColor(uint32_t col, uint32_t row, const glm::vec4& color);
-    void setBgColor(uint32_t col, uint32_t row, const glm::vec4& color);
+    // Set cell data
+    void setCell(uint32_t col, uint32_t row, uint16_t glyphIndex,
+                 uint8_t fgR, uint8_t fgG, uint8_t fgB,
+                 uint8_t bgR, uint8_t bgG, uint8_t bgB);
 
-    const Cell& getCell(uint32_t col, uint32_t row) const;
-    Cell& getCell(uint32_t col, uint32_t row);
+    void setGlyph(uint32_t col, uint32_t row, uint16_t glyphIndex);
+    void setFgColor(uint32_t col, uint32_t row, uint8_t r, uint8_t g, uint8_t b);
+    void setBgColor(uint32_t col, uint32_t row, uint8_t r, uint8_t g, uint8_t b);
 
+    // Get cell data
+    uint16_t getGlyph(uint32_t col, uint32_t row) const;
+
+    // Write ASCII string (helper) - needs Font to convert codepoints to glyph indices
+    // If font is nullptr, uses codepoint directly as index (for testing only)
     void writeString(uint32_t col, uint32_t row, const char* str,
-                     const glm::vec4& fgColor = {1.0f, 1.0f, 1.0f, 1.0f});
+                     uint8_t fgR, uint8_t fgG, uint8_t fgB,
+                     class Font* font);
 
-    void scrollUp();  // Scroll all rows up, clear bottom row
+    void scrollUp();
 
     uint32_t getCols() const { return cols_; }
     uint32_t getRows() const { return rows_; }
-    const std::vector<Cell>& getCells() const { return cells_; }
+
+    // Direct access to texture data for GPU upload
+    const uint16_t* getGlyphData() const { return glyphIndices_.data(); }
+    const uint8_t* getFgColorData() const { return fgColors_.data(); }
+    const uint8_t* getBgColorData() const { return bgColors_.data(); }
+
+    // Data sizes in bytes
+    size_t getGlyphDataSize() const { return glyphIndices_.size() * sizeof(uint16_t); }
+    size_t getFgColorDataSize() const { return fgColors_.size(); }
+    size_t getBgColorDataSize() const { return bgColors_.size(); }
+
+    // Mark as dirty when content changes
+    bool isDirty() const { return dirty_; }
+    void clearDirty() { dirty_ = false; }
 
 private:
     uint32_t cols_;
     uint32_t rows_;
-    std::vector<Cell> cells_;
+
+    // Texture data - flat arrays for GPU upload
+    std::vector<uint16_t> glyphIndices_;  // 1 x uint16 per cell
+    std::vector<uint8_t> fgColors_;       // RGBA per cell (4 bytes)
+    std::vector<uint8_t> bgColors_;       // RGBA per cell (4 bytes)
+
+    bool dirty_ = true;
+
+    size_t cellIndex(uint32_t col, uint32_t row) const {
+        return row * cols_ + col;
+    }
 };
 
 } // namespace yetty

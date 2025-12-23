@@ -1,73 +1,49 @@
-// Uniform buffer for projection and view
+// Uniforms
 struct Uniforms {
-    projection: mat4x4<f32>,
-    screenSize: vec2<f32>,
-    cellSize: vec2<f32>,
-    pixelRange: f32,
-    scale: f32,
-    _pad2: f32,
-    _pad3: f32,
+    projection: mat4x4<f32>,   // 64 bytes
+    screenSize: vec2<f32>,     // 8 bytes
+    cellSize: vec2<f32>,       // 8 bytes
+    gridSize: vec2<f32>,       // 8 bytes (cols, rows)
+    pixelRange: f32,           // 4 bytes
+    scale: f32,                // 4 bytes
+    cursorPos: vec2<f32>,      // 8 bytes (col, row)
+    cursorVisible: f32,        // 4 bytes
+    _pad: f32,                 // 4 bytes
 };
 
+// Glyph metadata (40 bytes per glyph, matches C++ GlyphMetadataGPU)
+struct GlyphMetadata {
+    uvMin: vec2<f32>,      // 8 bytes
+    uvMax: vec2<f32>,      // 8 bytes
+    size: vec2<f32>,       // 8 bytes (glyph size in pixels)
+    bearing: vec2<f32>,    // 8 bytes (glyph offset from baseline)
+    advance: f32,          // 4 bytes
+    _pad: f32,             // 4 bytes
+};
+
+// Bindings
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var fontTexture: texture_2d<f32>;
 @group(0) @binding(2) var fontSampler: sampler;
+@group(0) @binding(3) var<storage, read> glyphMetadata: array<GlyphMetadata>;
+@group(0) @binding(4) var cellGlyphTexture: texture_2d<u32>;   // R16Uint
+@group(0) @binding(5) var cellFgColorTexture: texture_2d<f32>; // RGBA8Unorm
+@group(0) @binding(6) var cellBgColorTexture: texture_2d<f32>; // RGBA8Unorm
 
-// Per-instance vertex data
+// Vertex input/output
 struct VertexInput {
-    @location(0) position: vec2<f32>,      // Quad corner (0,0), (1,0), (0,1), (1,1)
-    @location(1) cellPos: vec2<f32>,       // Grid cell position (col, row)
-    @location(2) uvMin: vec2<f32>,         // Glyph UV min in atlas
-    @location(3) uvMax: vec2<f32>,         // Glyph UV max in atlas
-    @location(4) glyphSize: vec2<f32>,     // Glyph size in pixels
-    @location(5) glyphBearing: vec2<f32>,  // Glyph bearing (offset)
-    @location(6) fgColor: vec4<f32>,       // Foreground color
-    @location(7) bgColor: vec4<f32>,       // Background color
+    @location(0) position: vec2<f32>,
 };
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-    @location(1) fgColor: vec4<f32>,
-    @location(2) bgColor: vec4<f32>,
-    @location(3) cellUV: vec2<f32>,        // Position within cell (0-1)
-    @location(4) glyphBoundsMin: vec2<f32>, // Glyph start in cell (0-1)
-    @location(5) glyphBoundsMax: vec2<f32>, // Glyph end in cell (0-1)
-    @location(6) uvMin: vec2<f32>,          // Glyph UV min in atlas
-    @location(7) uvMax: vec2<f32>,          // Glyph UV max in atlas
 };
 
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
-
-    // Calculate glyph position within cell
-    let scaledGlyphSize = input.glyphSize * uniforms.scale;
-    let scaledBearing = input.glyphBearing * uniforms.scale;
-
-    let cellPixelPos = input.cellPos * uniforms.cellSize;
-    let baseline = uniforms.cellSize.y * 0.8;
-    let glyphTop = baseline - scaledBearing.y;
-    let glyphLeft = scaledBearing.x;
-
-    // GLYPH-SIZED quad positioned within the cell
-    let glyphOffset = vec2<f32>(glyphLeft, glyphTop);
-    let localPos = input.position * scaledGlyphSize;
-    let pixelPos = cellPixelPos + glyphOffset + localPos;
-
-    output.position = uniforms.projection * vec4<f32>(pixelPos, 0.0, 1.0);
-
-    // UV interpolation across the glyph quad
-    output.uv = mix(input.uvMin, input.uvMax, input.position);
-    output.uvMin = input.uvMin;
-    output.uvMax = input.uvMax;
-
-    output.fgColor = input.fgColor;
-    output.bgColor = input.bgColor;
-    output.cellUV = input.position;
-    output.glyphBoundsMin = vec2<f32>(0.0);
-    output.glyphBoundsMax = vec2<f32>(1.0);
-
+    // Pass through clip-space coordinates directly
+    output.position = vec4<f32>(input.position, 0.0, 1.0);
     return output;
 }
 
@@ -78,49 +54,88 @@ fn median(r: f32, g: f32, b: f32) -> f32 {
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    // Sample MSDF texture using interpolated UV
-    let msdf = textureSample(fontTexture, fontSampler, input.uv);
+    // Convert fragment position to pixel coordinates
+    let pixelPos = input.position.xy;
+
+    // Calculate grid dimensions in pixels
+    let gridPixelWidth = uniforms.gridSize.x * uniforms.cellSize.x;
+    let gridPixelHeight = uniforms.gridSize.y * uniforms.cellSize.y;
+
+    // Check if outside the grid area
+    if (pixelPos.x >= gridPixelWidth || pixelPos.y >= gridPixelHeight) {
+        return vec4<f32>(0.1, 0.1, 0.1, 1.0);  // Background color
+    }
+
+    // Calculate which cell we're in
+    let cellCol = floor(pixelPos.x / uniforms.cellSize.x);
+    let cellRow = floor(pixelPos.y / uniforms.cellSize.y);
+    let cellCoord = vec2<i32>(i32(cellCol), i32(cellRow));
+
+    // Position within the cell (0-1)
+    let cellLocalPos = vec2<f32>(
+        (pixelPos.x - cellCol * uniforms.cellSize.x) / uniforms.cellSize.x,
+        (pixelPos.y - cellRow * uniforms.cellSize.y) / uniforms.cellSize.y
+    );
+
+    // Get cell data from textures
+    let glyphIndex = textureLoad(cellGlyphTexture, cellCoord, 0).r;
+    let fgColor = textureLoad(cellFgColorTexture, cellCoord, 0);
+    let bgColor = textureLoad(cellBgColorTexture, cellCoord, 0);
+
+    // If no glyph (index 0), just output background
+    if (glyphIndex == 0u) {
+        return bgColor;
+    }
+
+    // Get glyph metadata
+    let glyph = glyphMetadata[glyphIndex];
+
+    // Calculate glyph position within cell
+    let scaledGlyphSize = glyph.size * uniforms.scale;
+    let scaledBearing = glyph.bearing * uniforms.scale;
+
+    // Baseline at 80% of cell height
+    let baseline = uniforms.cellSize.y * 0.8;
+    let glyphTop = baseline - scaledBearing.y;
+    let glyphLeft = scaledBearing.x;
+
+    // Glyph bounds in cell pixel space
+    let glyphMinPx = vec2<f32>(glyphLeft, glyphTop);
+    let glyphMaxPx = vec2<f32>(glyphLeft + scaledGlyphSize.x, glyphTop + scaledGlyphSize.y);
+
+    // Current pixel position within cell
+    let localPx = cellLocalPos * uniforms.cellSize;
+
+    // Check if inside glyph bounds
+    if (localPx.x < glyphMinPx.x || localPx.x >= glyphMaxPx.x ||
+        localPx.y < glyphMinPx.y || localPx.y >= glyphMaxPx.y) {
+        return bgColor;
+    }
+
+    // Calculate UV for MSDF sampling
+    let glyphLocalPos = (localPx - glyphMinPx) / scaledGlyphSize;
+    let uv = mix(glyph.uvMin, glyph.uvMax, glyphLocalPos);
+
+    // Sample MSDF texture
+    let msdf = textureSample(fontTexture, fontSampler, uv);
 
     // Calculate signed distance
     let sd = median(msdf.r, msdf.g, msdf.b);
 
-    // screenPxRange = pixelRange * (glyphScreenSize / glyphAtlasSize)
-    // For sharp edges, we need adequate range. Using pixelRange directly works well.
+    // Apply anti-aliased edge
     let screenPxRange = uniforms.pixelRange;
-
-    // Apply anti-aliased edge - this is the alpha
     let alpha = clamp((sd - 0.5) * screenPxRange + 0.5, 0.0, 1.0);
 
-    // Output foreground color with alpha - will blend over background
-    return vec4<f32>(input.fgColor.rgb, alpha);
-}
+    // Blend foreground over background
+    var finalColor = mix(bgColor.rgb, fgColor.rgb, alpha);
 
-// Background quad shader - renders cell backgrounds
-struct BgVertexInput {
-    @location(0) position: vec2<f32>,    // Quad corner
-    @location(1) cellPos: vec2<f32>,     // Grid cell position
-    @location(2) bgColor: vec4<f32>,     // Background color
-};
+    // Cursor rendering: invert colors at cursor position
+    if (uniforms.cursorVisible > 0.5 &&
+        cellCol == uniforms.cursorPos.x &&
+        cellRow == uniforms.cursorPos.y) {
+        // Invert colors for cursor visibility
+        finalColor = vec3<f32>(1.0, 1.0, 1.0) - finalColor;
+    }
 
-struct BgVertexOutput {
-    @builtin(position) position: vec4<f32>,
-    @location(0) bgColor: vec4<f32>,
-};
-
-@vertex
-fn vs_background(input: BgVertexInput) -> BgVertexOutput {
-    var output: BgVertexOutput;
-
-    let cellPixelPos = input.cellPos * uniforms.cellSize;
-    let pixelPos = cellPixelPos + input.position * uniforms.cellSize;
-
-    output.position = uniforms.projection * vec4<f32>(pixelPos, 0.0, 1.0);
-    output.bgColor = input.bgColor;
-
-    return output;
-}
-
-@fragment
-fn fs_background(input: BgVertexOutput) -> @location(0) vec4<f32> {
-    return input.bgColor;
+    return vec4<f32>(finalColor, 1.0);
 }

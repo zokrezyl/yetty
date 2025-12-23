@@ -120,6 +120,29 @@ if(NOT EMSCRIPTEN)
 endif()
 
 #-----------------------------------------------------------------------------
+# libvterm (native only)
+#-----------------------------------------------------------------------------
+if(NOT EMSCRIPTEN)
+    set(LIBVTERM_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/libvterm-0.3.3)
+    add_library(vterm STATIC
+        ${LIBVTERM_DIR}/src/encoding.c
+        ${LIBVTERM_DIR}/src/keyboard.c
+        ${LIBVTERM_DIR}/src/mouse.c
+        ${LIBVTERM_DIR}/src/parser.c
+        ${LIBVTERM_DIR}/src/pen.c
+        ${LIBVTERM_DIR}/src/screen.c
+        ${LIBVTERM_DIR}/src/state.c
+        ${LIBVTERM_DIR}/src/unicode.c
+        ${LIBVTERM_DIR}/src/vterm.c
+    )
+    target_include_directories(vterm PUBLIC
+        ${LIBVTERM_DIR}/include
+        ${LIBVTERM_DIR}/src
+    )
+    target_compile_options(vterm PRIVATE -w)  # Suppress warnings in third-party code
+endif()
+
+#-----------------------------------------------------------------------------
 # Main executable
 #-----------------------------------------------------------------------------
 add_executable(yetty
@@ -128,6 +151,7 @@ add_executable(yetty
     src/renderer/TextRenderer.cpp
     src/terminal/Grid.cpp
     src/terminal/Font.cpp
+    $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/terminal/Terminal.cpp>
 )
 
 target_include_directories(yetty PRIVATE
@@ -182,6 +206,8 @@ else()
         msdfgen::msdfgen
         msdfgen::msdfgen-ext
         msdf-atlas-gen::msdf-atlas-gen
+        vterm
+        util  # for forkpty
     )
 
     file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets DESTINATION ${CMAKE_CURRENT_BINARY_DIR})

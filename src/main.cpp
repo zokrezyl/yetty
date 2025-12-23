@@ -3,6 +3,12 @@
 #include "terminal/Grid.h"
 #include "terminal/Font.h"
 
+#if !YETTY_WEB
+#include "terminal/Terminal.h"
+#include <termios.h>
+#include <unistd.h>
+#endif
+
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <fstream>
@@ -25,12 +31,20 @@ struct AppState {
     GLFWwindow* window = nullptr;
     WebGPUContext* ctx = nullptr;
     TextRenderer* renderer = nullptr;
-    Grid* grid = nullptr;
+    Font* font = nullptr;
     float zoomLevel = 1.0f;
     float baseCellWidth = 0.0f;
     float baseCellHeight = 0.0f;
 
-    // Scrolling state
+#if !YETTY_WEB
+    Terminal* terminal = nullptr;
+    struct termios originalTermios;
+    bool termiosSet = false;
+#endif
+
+    // Demo mode (scrolling text)
+    bool demoMode = false;
+    Grid* demoGrid = nullptr;
     int scrollMs = 50;
     double lastScrollTime = 0.0;
     std::vector<std::string>* dictionary = nullptr;
@@ -45,12 +59,13 @@ struct AppState {
 // Global state for Emscripten main loop
 static AppState* g_appState = nullptr;
 
-// Colors for random text
-static glm::vec4 g_colors[] = {
-    {1.0f, 1.0f, 1.0f, 1.0f},  // white
-    {0.0f, 1.0f, 0.0f, 1.0f},  // green
-    {0.0f, 1.0f, 1.0f, 1.0f},  // cyan
-    {1.0f, 1.0f, 0.0f, 1.0f}   // yellow
+// Colors for random text (RGB uint8)
+struct RGB { uint8_t r, g, b; };
+static RGB g_colors[] = {
+    {255, 255, 255},  // white
+    {0, 255, 0},      // green
+    {0, 255, 255},    // cyan
+    {255, 255, 0}     // yellow
 };
 
 // Generate random line from dictionary
@@ -64,6 +79,82 @@ static std::string generateLine(const std::vector<std::string>& dict, uint32_t m
     return line;
 }
 
+#if !YETTY_WEB
+// Key callback for terminal mode
+void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    (void)scancode;
+    if (action != GLFW_PRESS && action != GLFW_REPEAT) return;
+
+    auto* state = static_cast<AppState*>(glfwGetWindowUserPointer(window));
+    if (!state || !state->terminal) return;
+
+    VTermModifier vtermMod = VTERM_MOD_NONE;
+    if (mods & GLFW_MOD_CONTROL) vtermMod = (VTermModifier)(vtermMod | VTERM_MOD_CTRL);
+    if (mods & GLFW_MOD_ALT) vtermMod = (VTermModifier)(vtermMod | VTERM_MOD_ALT);
+    if (mods & GLFW_MOD_SHIFT) vtermMod = (VTermModifier)(vtermMod | VTERM_MOD_SHIFT);
+
+    // Map GLFW keys to VTerm keys
+    switch (key) {
+        case GLFW_KEY_ENTER:
+            state->terminal->sendSpecialKey(VTERM_KEY_ENTER, vtermMod);
+            break;
+        case GLFW_KEY_BACKSPACE:
+            state->terminal->sendSpecialKey(VTERM_KEY_BACKSPACE, vtermMod);
+            break;
+        case GLFW_KEY_TAB:
+            state->terminal->sendSpecialKey(VTERM_KEY_TAB, vtermMod);
+            break;
+        case GLFW_KEY_ESCAPE:
+            if (vtermMod == VTERM_MOD_NONE) {
+                glfwSetWindowShouldClose(window, GLFW_TRUE);
+            } else {
+                state->terminal->sendSpecialKey(VTERM_KEY_ESCAPE, vtermMod);
+            }
+            break;
+        case GLFW_KEY_UP:
+            state->terminal->sendSpecialKey(VTERM_KEY_UP, vtermMod);
+            break;
+        case GLFW_KEY_DOWN:
+            state->terminal->sendSpecialKey(VTERM_KEY_DOWN, vtermMod);
+            break;
+        case GLFW_KEY_LEFT:
+            state->terminal->sendSpecialKey(VTERM_KEY_LEFT, vtermMod);
+            break;
+        case GLFW_KEY_RIGHT:
+            state->terminal->sendSpecialKey(VTERM_KEY_RIGHT, vtermMod);
+            break;
+        case GLFW_KEY_HOME:
+            state->terminal->sendSpecialKey(VTERM_KEY_HOME, vtermMod);
+            break;
+        case GLFW_KEY_END:
+            state->terminal->sendSpecialKey(VTERM_KEY_END, vtermMod);
+            break;
+        case GLFW_KEY_PAGE_UP:
+            state->terminal->sendSpecialKey(VTERM_KEY_PAGEUP, vtermMod);
+            break;
+        case GLFW_KEY_PAGE_DOWN:
+            state->terminal->sendSpecialKey(VTERM_KEY_PAGEDOWN, vtermMod);
+            break;
+        case GLFW_KEY_INSERT:
+            state->terminal->sendSpecialKey(VTERM_KEY_INS, vtermMod);
+            break;
+        case GLFW_KEY_DELETE:
+            state->terminal->sendSpecialKey(VTERM_KEY_DEL, vtermMod);
+            break;
+        default:
+            break;
+    }
+}
+
+// Character callback for regular text input
+void charCallback(GLFWwindow* window, unsigned int codepoint) {
+    auto* state = static_cast<AppState*>(glfwGetWindowUserPointer(window));
+    if (!state || !state->terminal) return;
+
+    state->terminal->sendKey(codepoint);
+}
+#endif
+
 // Main loop iteration (called by Emscripten or native loop)
 static void mainLoopIteration() {
     if (!g_appState) return;
@@ -72,37 +163,68 @@ static void mainLoopIteration() {
 
     glfwPollEvents();
 
-    // Check for ESC key
-    if (glfwGetKey(state.window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-        glfwSetWindowShouldClose(state.window, GLFW_TRUE);
-#if YETTY_WEB
-        emscripten_cancel_main_loop();
+#if !YETTY_WEB
+    // Terminal mode: update terminal and render its grid
+    if (!state.demoMode && state.terminal) {
+        state.terminal->update();
+
+        if (!state.terminal->isRunning()) {
+            glfwSetWindowShouldClose(state.window, GLFW_TRUE);
+            return;
+        }
+
+        // Get current window size
+        int w, h;
+        glfwGetFramebufferSize(state.window, &w, &h);
+        if (w > 0 && h > 0) {
+            state.renderer->resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+        }
+
+        // Render terminal grid with cursor
+        state.renderer->render(*state.ctx, state.terminal->getGrid(),
+                               state.terminal->getCursorCol(),
+                               state.terminal->getCursorRow(),
+                               state.terminal->isCursorVisible());
+    } else
 #endif
-        return;
-    }
+    {
+        // Demo mode: scrolling text
+        if (state.demoMode && state.demoGrid) {
+            // Check for ESC key
+            if (glfwGetKey(state.window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+                glfwSetWindowShouldClose(state.window, GLFW_TRUE);
+#if YETTY_WEB
+                emscripten_cancel_main_loop();
+#endif
+                return;
+            }
 
-    // Scrolling logic
-    double currentTime = glfwGetTime();
-    if (state.scrollMs > 0 && state.dictionary &&
-        (currentTime - state.lastScrollTime) * 1000.0 >= state.scrollMs) {
-        state.grid->scrollUp();
-        std::string newLine = generateLine(*state.dictionary, state.cols);
-        glm::vec4 color = g_colors[std::rand() % 4];
-        state.grid->writeString(0, state.rows - 1, newLine.c_str(), color);
-        state.lastScrollTime = currentTime;
-    }
+            // Scrolling logic
+            double currentTime = glfwGetTime();
+            if (state.scrollMs > 0 && state.dictionary &&
+                (currentTime - state.lastScrollTime) * 1000.0 >= state.scrollMs) {
+                state.demoGrid->scrollUp();
+                std::string newLine = generateLine(*state.dictionary, state.cols);
+                RGB color = g_colors[std::rand() % 4];
+                state.demoGrid->writeString(0, state.rows - 1, newLine.c_str(),
+                                            color.r, color.g, color.b, state.font);
+                state.lastScrollTime = currentTime;
+            }
 
-    // Get current window size
-    int w, h;
-    glfwGetFramebufferSize(state.window, &w, &h);
-    if (w > 0 && h > 0) {
-        state.renderer->resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
-    }
+            // Get current window size
+            int w, h;
+            glfwGetFramebufferSize(state.window, &w, &h);
+            if (w > 0 && h > 0) {
+                state.renderer->resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+            }
 
-    // Render
-    state.renderer->render(*state.ctx, *state.grid);
+            // Render demo grid
+            state.renderer->render(*state.ctx, *state.demoGrid);
+        }
+    }
 
     // FPS counter
+    double currentTime = glfwGetTime();
     state.frameCount++;
     if (currentTime - state.lastFpsTime >= 1.0) {
         std::cout << "FPS: " << state.frameCount << std::endl;
@@ -151,29 +273,30 @@ const char* DEFAULT_METRICS = "assets/atlas.json";
 #endif
 
 void printUsage(const char* prog) {
-    std::cerr << "Usage: " << prog << " [options] [font.ttf] [width] [height] [scroll_ms]" << std::endl;
+    std::cerr << "Usage: " << prog << " [options] [font.ttf] [width] [height]" << std::endl;
     std::cerr << std::endl;
     std::cerr << "Options:" << std::endl;
 #if !YETTY_USE_PREBUILT_ATLAS
     std::cerr << "  --generate-atlas   Generate atlas.png and atlas.json in assets/" << std::endl;
 #endif
     std::cerr << "  --load-atlas       Use pre-built atlas instead of generating" << std::endl;
+    std::cerr << "  --demo [scroll_ms] Run scrolling text demo (default: terminal mode)" << std::endl;
     std::cerr << std::endl;
     std::cerr << "Arguments:" << std::endl;
     std::cerr << "  font.ttf   - Path to TTF font (default: system monospace)" << std::endl;
     std::cerr << "  width      - Window width in pixels (default: 1024)" << std::endl;
     std::cerr << "  height     - Window height in pixels (default: 768)" << std::endl;
-    std::cerr << "  scroll_ms  - Scroll speed in ms (default: 50, 0=static demo)" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
     // Parse command line
     bool generateAtlasOnly = false;
     bool usePrebuiltAtlas = YETTY_USE_PREBUILT_ATLAS;
+    bool demoMode = YETTY_WEB ? true : false;  // Web always uses demo mode
+    int scrollMs = 50;
     const char* fontPath = DEFAULT_FONT;
     uint32_t width = 1024;
     uint32_t height = 768;
-    int scrollMs = 50;
 
     int argIndex = 1;
     while (argIndex < argc && argv[argIndex][0] == '-') {
@@ -181,6 +304,11 @@ int main(int argc, char* argv[]) {
             generateAtlasOnly = true;
         } else if (std::strcmp(argv[argIndex], "--load-atlas") == 0) {
             usePrebuiltAtlas = true;
+        } else if (std::strcmp(argv[argIndex], "--demo") == 0) {
+            demoMode = true;
+            if (argIndex + 1 < argc && argv[argIndex + 1][0] != '-') {
+                scrollMs = std::atoi(argv[++argIndex]);
+            }
         } else if (std::strcmp(argv[argIndex], "--help") == 0 || std::strcmp(argv[argIndex], "-h") == 0) {
             printUsage(argv[0]);
             return 0;
@@ -191,11 +319,9 @@ int main(int argc, char* argv[]) {
     if (argIndex < argc) fontPath = argv[argIndex++];
     if (argIndex < argc) width = static_cast<uint32_t>(std::atoi(argv[argIndex++]));
     if (argIndex < argc) height = static_cast<uint32_t>(std::atoi(argv[argIndex++]));
-    if (argIndex < argc) scrollMs = std::atoi(argv[argIndex++]);
 
     if (width == 0) width = 1024;
     if (height == 0) height = 768;
-    if (scrollMs < 0) scrollMs = 50;
 
 #if !YETTY_USE_PREBUILT_ATLAS
     // Generate atlas only mode (no window needed)
@@ -315,11 +441,38 @@ int main(int argc, char* argv[]) {
     // Calculate grid size based on window
     uint32_t cols = static_cast<uint32_t>(width / cellWidth);
     uint32_t rows = static_cast<uint32_t>(height / cellHeight);
-    Grid grid(cols, rows);
 
-    // Load dictionary for scrolling demo
-    static std::vector<std::string> dictionary;
-    {
+    // Set up application state
+    static AppState appState;
+    appState.window = window;
+    appState.ctx = &ctx;
+    appState.renderer = &renderer;
+    appState.font = &font;
+    appState.baseCellWidth = cellWidth;
+    appState.baseCellHeight = cellHeight;
+    appState.zoomLevel = 1.0f;
+    appState.demoMode = demoMode;
+    appState.cols = cols;
+    appState.rows = rows;
+    appState.lastFpsTime = glfwGetTime();
+    appState.frameCount = 0;
+
+#if !YETTY_WEB
+    Terminal* terminal = nullptr;
+    Grid* demoGrid = nullptr;
+#else
+    Grid* demoGrid = nullptr;
+#endif
+
+    if (demoMode) {
+        // Demo mode: scrolling text
+        demoGrid = new Grid(cols, rows);
+        appState.demoGrid = demoGrid;
+        appState.scrollMs = scrollMs;
+        appState.lastScrollTime = glfwGetTime();
+
+        // Load dictionary
+        static std::vector<std::string> dictionary;
 #if !YETTY_WEB
         std::ifstream dictFile("/usr/share/dict/words");
         if (dictFile.is_open()) {
@@ -333,44 +486,46 @@ int main(int argc, char* argv[]) {
         } else
 #endif
         {
-            // Fallback words (used for web and when dict not available)
             dictionary = {"hello", "world", "terminal", "webgpu", "render", "scroll", "test",
                          "browser", "wasm", "gpu", "shader", "pixel", "font", "text", "grid",
-                         "cell", "color", "alpha", "buffer", "vertex", "fragment", "compute",
-                         "async", "await", "promise", "module", "export", "import", "class"};
+                         "cell", "color", "alpha", "buffer", "vertex", "fragment", "compute"};
             std::cout << "Using fallback dictionary with " << dictionary.size() << " words" << std::endl;
         }
+        appState.dictionary = &dictionary;
+        std::srand(static_cast<unsigned>(std::time(nullptr)));
+
+        // Fill initial content
+        for (uint32_t row = 0; row < rows; ++row) {
+            std::string line = generateLine(dictionary, cols);
+            RGB color = g_colors[std::rand() % 4];
+            demoGrid->writeString(0, row, line.c_str(), color.r, color.g, color.b, &font);
+        }
+
+        std::cout << "Demo mode: Grid " << cols << "x" << rows << ", scroll: " << scrollMs << "ms" << std::endl;
     }
-    std::srand(static_cast<unsigned>(std::time(nullptr)));
+#if !YETTY_WEB
+    else {
+        // Terminal mode
+        terminal = new Terminal(cols, rows, &font);
+        appState.terminal = terminal;
 
-    std::cout << "Grid: " << cols << "x" << rows << ", scroll: " << scrollMs << "ms" << std::endl;
+        if (!terminal->start()) {
+            std::cerr << "Failed to start terminal" << std::endl;
+            delete terminal;
+            glfwDestroyWindow(window);
+            glfwTerminate();
+            return 1;
+        }
 
-    // Fill initial content
-    for (uint32_t row = 0; row < rows; ++row) {
-        std::string line = generateLine(dictionary, cols);
-        glm::vec4 color = g_colors[std::rand() % 4];
-        grid.writeString(0, row, line.c_str(), color);
+        std::cout << "Terminal mode: Grid " << cols << "x" << rows << std::endl;
+
+        // Set up keyboard callbacks
+        glfwSetKeyCallback(window, keyCallback);
+        glfwSetCharCallback(window, charCallback);
     }
-
-    // Set up application state for callbacks and main loop
-    static AppState appState;
-    appState.window = window;
-    appState.ctx = &ctx;
-    appState.renderer = &renderer;
-    appState.grid = &grid;
-    appState.baseCellWidth = cellWidth;
-    appState.baseCellHeight = cellHeight;
-    appState.zoomLevel = 1.0f;
-    appState.scrollMs = scrollMs;
-    appState.dictionary = &dictionary;
-    appState.cols = cols;
-    appState.rows = rows;
-    appState.lastScrollTime = glfwGetTime();
-    appState.lastFpsTime = glfwGetTime();
-    appState.frameCount = 0;
+#endif
 
     g_appState = &appState;
-
     glfwSetWindowUserPointer(window, &appState);
 
     // Window resize callback
@@ -385,17 +540,11 @@ int main(int argc, char* argv[]) {
     // Scroll callback for zooming
     glfwSetScrollCallback(window, scrollCallback);
 
-    std::cout << "Starting render loop... (use mouse scroll to zoom)" << std::endl;
-    if (scrollMs > 0) {
-        std::cout << "Scrolling mode: new line every " << scrollMs << "ms" << std::endl;
-    } else {
-        std::cout << "Static mode: no scrolling" << std::endl;
-    }
+    std::cout << "Starting render loop... (use mouse scroll to zoom, ESC to exit)" << std::endl;
 
 #if YETTY_WEB
     // Emscripten main loop - runs forever, returns immediately
     emscripten_set_main_loop(mainLoopIteration, 0, false);
-    // Don't cleanup - Emscripten keeps running
     return 0;
 #else
     // Native main loop
@@ -404,6 +553,9 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << "Shutting down..." << std::endl;
+
+    delete terminal;
+    delete demoGrid;
 
     glfwDestroyWindow(window);
     glfwTerminate();

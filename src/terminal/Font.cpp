@@ -15,12 +15,14 @@
 #include <fstream>
 #include <sstream>
 #include <cstring>
+#include <algorithm>
 
 namespace yetty {
 
 Font::Font() = default;
 
 Font::~Font() {
+    if (glyphMetadataBuffer_) wgpuBufferRelease(glyphMetadataBuffer_);
     if (sampler_) wgpuSamplerRelease(sampler_);
     if (textureView_) wgpuTextureViewRelease(textureView_);
     if (texture_) wgpuTextureRelease(texture_);
@@ -151,6 +153,9 @@ bool Font::generate(const std::string& fontPath, float fontSize, uint32_t atlasS
 
     std::cout << "Generated MSDF atlas: " << atlasWidth_ << "x" << atlasHeight_
               << " with " << glyphs_.size() << " glyphs" << std::endl;
+
+    // Build codepoint→index mapping
+    buildGlyphIndexMap();
 
     return true;
 }
@@ -396,6 +401,93 @@ bool Font::loadAtlas(const std::string& atlasPath, const std::string& metricsPat
 
     std::cout << "Loaded atlas " << atlasWidth_ << "x" << atlasHeight_
               << " with " << glyphs_.size() << " glyphs from " << metricsPath << std::endl;
+
+    // Build codepoint→index mapping
+    buildGlyphIndexMap();
+
+    return true;
+}
+
+void Font::buildGlyphIndexMap() {
+    codepointToIndex_.clear();
+    glyphMetadata_.clear();
+
+    // Index 0 is reserved for "no glyph" / space
+    GlyphMetadataGPU emptyGlyph = {};
+    glyphMetadata_.push_back(emptyGlyph);
+
+    // Build sorted list of codepoints for consistent ordering
+    std::vector<uint32_t> codepoints;
+    codepoints.reserve(glyphs_.size());
+    for (const auto& [cp, _] : glyphs_) {
+        codepoints.push_back(cp);
+    }
+    std::sort(codepoints.begin(), codepoints.end());
+
+    // Build index map and metadata array
+    for (uint32_t cp : codepoints) {
+        uint16_t index = static_cast<uint16_t>(glyphMetadata_.size());
+        codepointToIndex_[cp] = index;
+
+        const GlyphMetrics& m = glyphs_[cp];
+        GlyphMetadataGPU gpu;
+        gpu.uvMinX = m.uvMin.x;
+        gpu.uvMinY = m.uvMin.y;
+        gpu.uvMaxX = m.uvMax.x;
+        gpu.uvMaxY = m.uvMax.y;
+        gpu.sizeX = m.size.x;
+        gpu.sizeY = m.size.y;
+        gpu.bearingX = m.bearing.x;
+        gpu.bearingY = m.bearing.y;
+        gpu.advance = m.advance;
+        gpu._pad = 0.0f;
+
+        glyphMetadata_.push_back(gpu);
+    }
+
+    std::cout << "Built glyph index map with " << glyphMetadata_.size() << " entries" << std::endl;
+}
+
+uint16_t Font::getGlyphIndex(uint32_t codepoint) const {
+    auto it = codepointToIndex_.find(codepoint);
+    if (it != codepointToIndex_.end()) {
+        return it->second;
+    }
+    // Try fallback to '?'
+    it = codepointToIndex_.find('?');
+    if (it != codepointToIndex_.end()) {
+        return it->second;
+    }
+    return 0;  // No glyph
+}
+
+bool Font::createGlyphMetadataBuffer(WGPUDevice device) {
+    if (glyphMetadata_.empty()) {
+        std::cerr << "No glyph metadata to create buffer from" << std::endl;
+        return false;
+    }
+
+    size_t bufferSize = glyphMetadata_.size() * sizeof(GlyphMetadataGPU);
+
+    WGPUBufferDescriptor bufDesc = {};
+    bufDesc.label = "glyph metadata";
+    bufDesc.size = bufferSize;
+    bufDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
+    bufDesc.mappedAtCreation = true;
+
+    glyphMetadataBuffer_ = wgpuDeviceCreateBuffer(device, &bufDesc);
+    if (!glyphMetadataBuffer_) {
+        std::cerr << "Failed to create glyph metadata buffer" << std::endl;
+        return false;
+    }
+
+    // Copy data to mapped buffer
+    void* mapped = wgpuBufferGetMappedRange(glyphMetadataBuffer_, 0, bufferSize);
+    memcpy(mapped, glyphMetadata_.data(), bufferSize);
+    wgpuBufferUnmap(glyphMetadataBuffer_);
+
+    std::cout << "Created glyph metadata buffer: " << bufferSize << " bytes for "
+              << glyphMetadata_.size() << " glyphs" << std::endl;
 
     return true;
 }

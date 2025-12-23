@@ -10,34 +10,42 @@ namespace yetty {
 TextRenderer::TextRenderer() = default;
 
 TextRenderer::~TextRenderer() {
-    if (bgIndexBuffer_) wgpuBufferRelease(bgIndexBuffer_);
-    if (bgVertexBuffer_) wgpuBufferRelease(bgVertexBuffer_);
-    if (glyphIndexBuffer_) wgpuBufferRelease(glyphIndexBuffer_);
-    if (glyphVertexBuffer_) wgpuBufferRelease(glyphVertexBuffer_);
+    if (cellBgColorView_) wgpuTextureViewRelease(cellBgColorView_);
+    if (cellBgColorTexture_) wgpuTextureRelease(cellBgColorTexture_);
+    if (cellFgColorView_) wgpuTextureViewRelease(cellFgColorView_);
+    if (cellFgColorTexture_) wgpuTextureRelease(cellFgColorTexture_);
+    if (cellGlyphView_) wgpuTextureViewRelease(cellGlyphView_);
+    if (cellGlyphTexture_) wgpuTextureRelease(cellGlyphTexture_);
+    if (quadVertexBuffer_) wgpuBufferRelease(quadVertexBuffer_);
     if (uniformBuffer_) wgpuBufferRelease(uniformBuffer_);
     if (bindGroup_) wgpuBindGroupRelease(bindGroup_);
     if (pipelineLayout_) wgpuPipelineLayoutRelease(pipelineLayout_);
     if (bindGroupLayout_) wgpuBindGroupLayoutRelease(bindGroupLayout_);
-    if (bgPipeline_) wgpuRenderPipelineRelease(bgPipeline_);
-    if (glyphPipeline_) wgpuRenderPipelineRelease(glyphPipeline_);
+    if (pipeline_) wgpuRenderPipelineRelease(pipeline_);
     if (shaderModule_) wgpuShaderModuleRelease(shaderModule_);
 }
 
 bool TextRenderer::init(WebGPUContext& ctx, Font& font) {
     font_ = &font;
+    device_ = ctx.getDevice();
 
-    if (!createShaderModule(ctx.getDevice())) return false;
-    if (!createBuffers(ctx.getDevice())) return false;
-    if (!createBindGroup(ctx.getDevice(), font)) return false;
-    if (!createPipelines(ctx.getDevice(), ctx.getSurfaceFormat())) return false;
+    // Create glyph metadata buffer in Font
+    if (!font.createGlyphMetadataBuffer(device_)) {
+        std::cerr << "Failed to create glyph metadata buffer" << std::endl;
+        return false;
+    }
+
+    if (!createShaderModule(device_)) return false;
+    if (!createBuffers(device_)) return false;
+    if (!createBindGroupLayout(device_)) return false;
+    if (!createPipeline(device_, ctx.getSurfaceFormat())) return false;
 
     return true;
 }
 
 bool TextRenderer::createShaderModule(WGPUDevice device) {
-    // Load shader source - different paths for native vs web
 #if YETTY_WEB
-    const char* shaderPath = "/shaders.wgsl";  // Emscripten virtual filesystem
+    const char* shaderPath = "/shaders.wgsl";
 #else
     const char* shaderPath = CMAKE_SOURCE_DIR "/src/renderer/shaders.wgsl";
 #endif
@@ -55,9 +63,9 @@ bool TextRenderer::createShaderModule(WGPUDevice device) {
     WGPUShaderModuleWGSLDescriptor wgslDesc = {};
     wgslDesc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
 #if YETTY_WEB
-    wgslDesc.source = shaderSource.c_str();  // Emscripten uses 'source'
+    wgslDesc.source = shaderSource.c_str();
 #else
-    wgslDesc.code = shaderSource.c_str();    // wgpu-native uses 'code'
+    wgslDesc.code = shaderSource.c_str();
 #endif
 
     WGPUShaderModuleDescriptor moduleDesc = {};
@@ -74,8 +82,6 @@ bool TextRenderer::createShaderModule(WGPUDevice device) {
 }
 
 bool TextRenderer::createBuffers(WGPUDevice device) {
-    maxCells_ = 256 * 64;  // Support up to 256x64 grid
-
     // Uniform buffer
     WGPUBufferDescriptor uniformDesc = {};
     uniformDesc.label = "uniforms";
@@ -83,61 +89,145 @@ bool TextRenderer::createBuffers(WGPUDevice device) {
     uniformDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
     uniformBuffer_ = wgpuDeviceCreateBuffer(device, &uniformDesc);
 
-    // Glyph vertex buffer (4 vertices per glyph)
-    WGPUBufferDescriptor glyphVertexDesc = {};
-    glyphVertexDesc.label = "glyph vertices";
-    glyphVertexDesc.size = maxCells_ * 4 * sizeof(GlyphVertex);
-    glyphVertexDesc.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
-    glyphVertexBuffer_ = wgpuDeviceCreateBuffer(device, &glyphVertexDesc);
+    // Fullscreen quad vertices (2 triangles, 6 vertices)
+    float quadVertices[] = {
+        -1.0f, -1.0f,  // bottom-left
+         1.0f, -1.0f,  // bottom-right
+        -1.0f,  1.0f,  // top-left
+        -1.0f,  1.0f,  // top-left
+         1.0f, -1.0f,  // bottom-right
+         1.0f,  1.0f,  // top-right
+    };
 
-    // Glyph index buffer (6 indices per glyph - 2 triangles)
-    WGPUBufferDescriptor glyphIndexDesc = {};
-    glyphIndexDesc.label = "glyph indices";
-    glyphIndexDesc.size = maxCells_ * 6 * sizeof(uint32_t);
-    glyphIndexDesc.usage = WGPUBufferUsage_Index | WGPUBufferUsage_CopyDst;
-    glyphIndexBuffer_ = wgpuDeviceCreateBuffer(device, &glyphIndexDesc);
-
-    // Background vertex buffer
-    WGPUBufferDescriptor bgVertexDesc = {};
-    bgVertexDesc.label = "bg vertices";
-    bgVertexDesc.size = maxCells_ * 4 * sizeof(BgVertex);
-    bgVertexDesc.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
-    bgVertexBuffer_ = wgpuDeviceCreateBuffer(device, &bgVertexDesc);
-
-    // Background index buffer
-    WGPUBufferDescriptor bgIndexDesc = {};
-    bgIndexDesc.label = "bg indices";
-    bgIndexDesc.size = maxCells_ * 6 * sizeof(uint32_t);
-    bgIndexDesc.usage = WGPUBufferUsage_Index | WGPUBufferUsage_CopyDst;
-    bgIndexBuffer_ = wgpuDeviceCreateBuffer(device, &bgIndexDesc);
+    WGPUBufferDescriptor quadDesc = {};
+    quadDesc.label = "quad vertices";
+    quadDesc.size = sizeof(quadVertices);
+    quadDesc.usage = WGPUBufferUsage_Vertex;
+    quadDesc.mappedAtCreation = true;
+    quadVertexBuffer_ = wgpuDeviceCreateBuffer(device, &quadDesc);
+    void* mapped = wgpuBufferGetMappedRange(quadVertexBuffer_, 0, sizeof(quadVertices));
+    memcpy(mapped, quadVertices, sizeof(quadVertices));
+    wgpuBufferUnmap(quadVertexBuffer_);
 
     return true;
 }
 
-bool TextRenderer::createBindGroup(WGPUDevice device, Font& font) {
-    // Bind group layout
-    WGPUBindGroupLayoutEntry entries[3] = {};
+bool TextRenderer::createCellTextures(WGPUDevice device, uint32_t cols, uint32_t rows) {
+    // Release old textures if they exist
+    if (cellGlyphView_) { wgpuTextureViewRelease(cellGlyphView_); cellGlyphView_ = nullptr; }
+    if (cellGlyphTexture_) { wgpuTextureRelease(cellGlyphTexture_); cellGlyphTexture_ = nullptr; }
+    if (cellFgColorView_) { wgpuTextureViewRelease(cellFgColorView_); cellFgColorView_ = nullptr; }
+    if (cellFgColorTexture_) { wgpuTextureRelease(cellFgColorTexture_); cellFgColorTexture_ = nullptr; }
+    if (cellBgColorView_) { wgpuTextureViewRelease(cellBgColorView_); cellBgColorView_ = nullptr; }
+    if (cellBgColorTexture_) { wgpuTextureRelease(cellBgColorTexture_); cellBgColorTexture_ = nullptr; }
 
-    // Uniform buffer
+    textureCols_ = cols;
+    textureRows_ = rows;
+
+    // Glyph texture: R16Uint (16-bit unsigned int per cell)
+    WGPUTextureDescriptor glyphTexDesc = {};
+    glyphTexDesc.label = "cell glyphs";
+    glyphTexDesc.size = {cols, rows, 1};
+    glyphTexDesc.mipLevelCount = 1;
+    glyphTexDesc.sampleCount = 1;
+    glyphTexDesc.dimension = WGPUTextureDimension_2D;
+    glyphTexDesc.format = WGPUTextureFormat_R16Uint;
+    glyphTexDesc.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
+    cellGlyphTexture_ = wgpuDeviceCreateTexture(device, &glyphTexDesc);
+
+    WGPUTextureViewDescriptor glyphViewDesc = {};
+    glyphViewDesc.format = WGPUTextureFormat_R16Uint;
+    glyphViewDesc.dimension = WGPUTextureViewDimension_2D;
+    glyphViewDesc.mipLevelCount = 1;
+    glyphViewDesc.arrayLayerCount = 1;
+    cellGlyphView_ = wgpuTextureCreateView(cellGlyphTexture_, &glyphViewDesc);
+
+    // FG color texture: RGBA8Unorm
+    WGPUTextureDescriptor fgTexDesc = {};
+    fgTexDesc.label = "cell fg colors";
+    fgTexDesc.size = {cols, rows, 1};
+    fgTexDesc.mipLevelCount = 1;
+    fgTexDesc.sampleCount = 1;
+    fgTexDesc.dimension = WGPUTextureDimension_2D;
+    fgTexDesc.format = WGPUTextureFormat_RGBA8Unorm;
+    fgTexDesc.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
+    cellFgColorTexture_ = wgpuDeviceCreateTexture(device, &fgTexDesc);
+
+    WGPUTextureViewDescriptor fgViewDesc = {};
+    fgViewDesc.format = WGPUTextureFormat_RGBA8Unorm;
+    fgViewDesc.dimension = WGPUTextureViewDimension_2D;
+    fgViewDesc.mipLevelCount = 1;
+    fgViewDesc.arrayLayerCount = 1;
+    cellFgColorView_ = wgpuTextureCreateView(cellFgColorTexture_, &fgViewDesc);
+
+    // BG color texture: RGBA8Unorm
+    WGPUTextureDescriptor bgTexDesc = {};
+    bgTexDesc.label = "cell bg colors";
+    bgTexDesc.size = {cols, rows, 1};
+    bgTexDesc.mipLevelCount = 1;
+    bgTexDesc.sampleCount = 1;
+    bgTexDesc.dimension = WGPUTextureDimension_2D;
+    bgTexDesc.format = WGPUTextureFormat_RGBA8Unorm;
+    bgTexDesc.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
+    cellBgColorTexture_ = wgpuDeviceCreateTexture(device, &bgTexDesc);
+
+    WGPUTextureViewDescriptor bgViewDesc = {};
+    bgViewDesc.format = WGPUTextureFormat_RGBA8Unorm;
+    bgViewDesc.dimension = WGPUTextureViewDimension_2D;
+    bgViewDesc.mipLevelCount = 1;
+    bgViewDesc.arrayLayerCount = 1;
+    cellBgColorView_ = wgpuTextureCreateView(cellBgColorTexture_, &bgViewDesc);
+
+    return cellGlyphTexture_ && cellFgColorTexture_ && cellBgColorTexture_;
+}
+
+bool TextRenderer::createBindGroupLayout(WGPUDevice device) {
+    // Bind group layout: 7 bindings
+    WGPUBindGroupLayoutEntry entries[7] = {};
+
+    // 0: Uniforms
     entries[0].binding = 0;
     entries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
     entries[0].buffer.type = WGPUBufferBindingType_Uniform;
     entries[0].buffer.minBindingSize = sizeof(Uniforms);
 
-    // Texture
+    // 1: Font atlas texture
     entries[1].binding = 1;
     entries[1].visibility = WGPUShaderStage_Fragment;
     entries[1].texture.sampleType = WGPUTextureSampleType_Float;
     entries[1].texture.viewDimension = WGPUTextureViewDimension_2D;
-    entries[1].texture.multisampled = false;
 
-    // Sampler
+    // 2: Font sampler
     entries[2].binding = 2;
     entries[2].visibility = WGPUShaderStage_Fragment;
     entries[2].sampler.type = WGPUSamplerBindingType_Filtering;
 
+    // 3: Glyph metadata SSBO (still a buffer - one per font, not per cell)
+    entries[3].binding = 3;
+    entries[3].visibility = WGPUShaderStage_Fragment;
+    entries[3].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
+    entries[3].buffer.minBindingSize = sizeof(GlyphMetadataGPU);
+
+    // 4: Cell glyph indices texture (R16Uint)
+    entries[4].binding = 4;
+    entries[4].visibility = WGPUShaderStage_Fragment;
+    entries[4].texture.sampleType = WGPUTextureSampleType_Uint;
+    entries[4].texture.viewDimension = WGPUTextureViewDimension_2D;
+
+    // 5: Cell FG colors texture (RGBA8Unorm)
+    entries[5].binding = 5;
+    entries[5].visibility = WGPUShaderStage_Fragment;
+    entries[5].texture.sampleType = WGPUTextureSampleType_Float;
+    entries[5].texture.viewDimension = WGPUTextureViewDimension_2D;
+
+    // 6: Cell BG colors texture (RGBA8Unorm)
+    entries[6].binding = 6;
+    entries[6].visibility = WGPUShaderStage_Fragment;
+    entries[6].texture.sampleType = WGPUTextureSampleType_Float;
+    entries[6].texture.viewDimension = WGPUTextureViewDimension_2D;
+
     WGPUBindGroupLayoutDescriptor layoutDesc = {};
-    layoutDesc.entryCount = 3;
+    layoutDesc.entryCount = 7;
     layoutDesc.entries = entries;
     bindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(device, &layoutDesc);
 
@@ -147,12 +237,18 @@ bool TextRenderer::createBindGroup(WGPUDevice device, Font& font) {
     pipelineLayoutDesc.bindGroupLayouts = &bindGroupLayout_;
     pipelineLayout_ = wgpuDeviceCreatePipelineLayout(device, &pipelineLayoutDesc);
 
-    // Bind group
-    WGPUBindGroupEntry bgEntries[3] = {};
+    return bindGroupLayout_ && pipelineLayout_;
+}
+
+bool TextRenderer::createBindGroup(WGPUDevice device, Font& font) {
+    // Release old bind group if it exists (for recreation when textures change)
+    if (bindGroup_) { wgpuBindGroupRelease(bindGroup_); bindGroup_ = nullptr; }
+
+    // Bind group entries - uses current texture views
+    WGPUBindGroupEntry bgEntries[7] = {};
 
     bgEntries[0].binding = 0;
     bgEntries[0].buffer = uniformBuffer_;
-    bgEntries[0].offset = 0;
     bgEntries[0].size = sizeof(Uniforms);
 
     bgEntries[1].binding = 1;
@@ -161,48 +257,52 @@ bool TextRenderer::createBindGroup(WGPUDevice device, Font& font) {
     bgEntries[2].binding = 2;
     bgEntries[2].sampler = font.getSampler();
 
+    bgEntries[3].binding = 3;
+    bgEntries[3].buffer = font.getGlyphMetadataBuffer();
+    bgEntries[3].size = font.getGlyphCount() * sizeof(GlyphMetadataGPU);
+
+    bgEntries[4].binding = 4;
+    bgEntries[4].textureView = cellGlyphView_;
+
+    bgEntries[5].binding = 5;
+    bgEntries[5].textureView = cellFgColorView_;
+
+    bgEntries[6].binding = 6;
+    bgEntries[6].textureView = cellBgColorView_;
+
     WGPUBindGroupDescriptor bindGroupDesc = {};
     bindGroupDesc.layout = bindGroupLayout_;
-    bindGroupDesc.entryCount = 3;
+    bindGroupDesc.entryCount = 7;
     bindGroupDesc.entries = bgEntries;
     bindGroup_ = wgpuDeviceCreateBindGroup(device, &bindGroupDesc);
 
-    return true;
+    return bindGroup_ != nullptr;
 }
 
-bool TextRenderer::createPipelines(WGPUDevice device, WGPUTextureFormat format) {
-    // Glyph pipeline vertex attributes
-    WGPUVertexAttribute glyphAttrs[8] = {};
-    glyphAttrs[0] = {WGPUVertexFormat_Float32x2, offsetof(GlyphVertex, position), 0};
-    glyphAttrs[1] = {WGPUVertexFormat_Float32x2, offsetof(GlyphVertex, cellPos), 1};
-    glyphAttrs[2] = {WGPUVertexFormat_Float32x2, offsetof(GlyphVertex, uvMin), 2};
-    glyphAttrs[3] = {WGPUVertexFormat_Float32x2, offsetof(GlyphVertex, uvMax), 3};
-    glyphAttrs[4] = {WGPUVertexFormat_Float32x2, offsetof(GlyphVertex, glyphSize), 4};
-    glyphAttrs[5] = {WGPUVertexFormat_Float32x2, offsetof(GlyphVertex, glyphBearing), 5};
-    glyphAttrs[6] = {WGPUVertexFormat_Float32x4, offsetof(GlyphVertex, fgColor), 6};
-    glyphAttrs[7] = {WGPUVertexFormat_Float32x4, offsetof(GlyphVertex, bgColor), 7};
+bool TextRenderer::createPipeline(WGPUDevice device, WGPUTextureFormat format) {
+    // Vertex attributes: just position (vec2)
+    WGPUVertexAttribute posAttr = {};
+    posAttr.format = WGPUVertexFormat_Float32x2;
+    posAttr.offset = 0;
+    posAttr.shaderLocation = 0;
 
-    WGPUVertexBufferLayout glyphBufferLayout = {};
-    glyphBufferLayout.arrayStride = sizeof(GlyphVertex);
-    glyphBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
-    glyphBufferLayout.attributeCount = 8;
-    glyphBufferLayout.attributes = glyphAttrs;
+    WGPUVertexBufferLayout vertexLayout = {};
+    vertexLayout.arrayStride = 2 * sizeof(float);
+    vertexLayout.stepMode = WGPUVertexStepMode_Vertex;
+    vertexLayout.attributeCount = 1;
+    vertexLayout.attributes = &posAttr;
 
-    // Glyph pipeline
-    WGPURenderPipelineDescriptor glyphPipelineDesc = {};
-    glyphPipelineDesc.label = "glyph pipeline";
-    glyphPipelineDesc.layout = pipelineLayout_;
+    // Pipeline descriptor
+    WGPURenderPipelineDescriptor pipelineDesc = {};
+    pipelineDesc.label = "text pipeline";
+    pipelineDesc.layout = pipelineLayout_;
 
-    glyphPipelineDesc.vertex.module = shaderModule_;
-    glyphPipelineDesc.vertex.entryPoint = "vs_main";
-    glyphPipelineDesc.vertex.bufferCount = 1;
-    glyphPipelineDesc.vertex.buffers = &glyphBufferLayout;
+    pipelineDesc.vertex.module = shaderModule_;
+    pipelineDesc.vertex.entryPoint = "vs_main";
+    pipelineDesc.vertex.bufferCount = 1;
+    pipelineDesc.vertex.buffers = &vertexLayout;
 
-    WGPUFragmentState fragState = {};
-    fragState.module = shaderModule_;
-    fragState.entryPoint = "fs_main";
-
-    // Alpha blending for glyphs over background
+    // Fragment state with blending (for MSDF alpha)
     WGPUBlendState blendState = {};
     blendState.color.srcFactor = WGPUBlendFactor_SrcAlpha;
     blendState.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
@@ -216,63 +316,23 @@ bool TextRenderer::createPipelines(WGPUDevice device, WGPUTextureFormat format) 
     colorTarget.blend = &blendState;
     colorTarget.writeMask = WGPUColorWriteMask_All;
 
+    WGPUFragmentState fragState = {};
+    fragState.module = shaderModule_;
+    fragState.entryPoint = "fs_main";
     fragState.targetCount = 1;
     fragState.targets = &colorTarget;
-    glyphPipelineDesc.fragment = &fragState;
+    pipelineDesc.fragment = &fragState;
 
-    glyphPipelineDesc.primitive.topology = WGPUPrimitiveTopology_TriangleList;
-    glyphPipelineDesc.primitive.frontFace = WGPUFrontFace_CCW;
-    glyphPipelineDesc.primitive.cullMode = WGPUCullMode_None;
+    pipelineDesc.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+    pipelineDesc.primitive.frontFace = WGPUFrontFace_CCW;
+    pipelineDesc.primitive.cullMode = WGPUCullMode_None;
 
-    glyphPipelineDesc.multisample.count = 1;
-    glyphPipelineDesc.multisample.mask = 0xFFFFFFFF;
+    pipelineDesc.multisample.count = 1;
+    pipelineDesc.multisample.mask = 0xFFFFFFFF;
 
-    glyphPipeline_ = wgpuDeviceCreateRenderPipeline(device, &glyphPipelineDesc);
+    pipeline_ = wgpuDeviceCreateRenderPipeline(device, &pipelineDesc);
 
-    // Background pipeline vertex attributes
-    WGPUVertexAttribute bgAttrs[3] = {};
-    bgAttrs[0] = {WGPUVertexFormat_Float32x2, offsetof(BgVertex, position), 0};
-    bgAttrs[1] = {WGPUVertexFormat_Float32x2, offsetof(BgVertex, cellPos), 1};
-    bgAttrs[2] = {WGPUVertexFormat_Float32x4, offsetof(BgVertex, bgColor), 2};
-
-    WGPUVertexBufferLayout bgBufferLayout = {};
-    bgBufferLayout.arrayStride = sizeof(BgVertex);
-    bgBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
-    bgBufferLayout.attributeCount = 3;
-    bgBufferLayout.attributes = bgAttrs;
-
-    WGPURenderPipelineDescriptor bgPipelineDesc = {};
-    bgPipelineDesc.label = "background pipeline";
-    bgPipelineDesc.layout = pipelineLayout_;
-
-    bgPipelineDesc.vertex.module = shaderModule_;
-    bgPipelineDesc.vertex.entryPoint = "vs_background";
-    bgPipelineDesc.vertex.bufferCount = 1;
-    bgPipelineDesc.vertex.buffers = &bgBufferLayout;
-
-    // Background doesn't need blending - just overwrite
-    WGPUColorTargetState bgColorTarget = {};
-    bgColorTarget.format = format;
-    bgColorTarget.blend = nullptr;  // No blending, just overwrite
-    bgColorTarget.writeMask = WGPUColorWriteMask_All;
-
-    WGPUFragmentState bgFragState = {};
-    bgFragState.module = shaderModule_;
-    bgFragState.entryPoint = "fs_background";
-    bgFragState.targetCount = 1;
-    bgFragState.targets = &bgColorTarget;
-    bgPipelineDesc.fragment = &bgFragState;
-
-    bgPipelineDesc.primitive.topology = WGPUPrimitiveTopology_TriangleList;
-    bgPipelineDesc.primitive.frontFace = WGPUFrontFace_CCW;
-    bgPipelineDesc.primitive.cullMode = WGPUCullMode_None;
-
-    bgPipelineDesc.multisample.count = 1;
-    bgPipelineDesc.multisample.mask = 0xFFFFFFFF;
-
-    bgPipeline_ = wgpuDeviceCreateRenderPipeline(device, &bgPipelineDesc);
-
-    return glyphPipeline_ && bgPipeline_;
+    return pipeline_ != nullptr;
 }
 
 void TextRenderer::resize(uint32_t width, uint32_t height) {
@@ -284,8 +344,8 @@ void TextRenderer::setCellSize(float width, float height) {
     cellSize_ = {width, height};
 }
 
-void TextRenderer::updateUniformBuffer(WGPUQueue queue) {
-    // Orthographic projection (top-left origin)
+void TextRenderer::updateUniformBuffer(WGPUQueue queue, const Grid& grid,
+                                       int cursorCol, int cursorRow, bool cursorVisible) {
     uniforms_.projection = glm::ortho(
         0.0f, static_cast<float>(screenWidth_),
         static_cast<float>(screenHeight_), 0.0f,
@@ -293,104 +353,86 @@ void TextRenderer::updateUniformBuffer(WGPUQueue queue) {
     );
     uniforms_.screenSize = {static_cast<float>(screenWidth_), static_cast<float>(screenHeight_)};
     uniforms_.cellSize = cellSize_;
+    uniforms_.gridSize = {static_cast<float>(grid.getCols()), static_cast<float>(grid.getRows())};
     uniforms_.pixelRange = font_ ? font_->getPixelRange() : 2.0f;
     uniforms_.scale = scale_;
+    uniforms_.cursorPos = {static_cast<float>(cursorCol), static_cast<float>(cursorRow)};
+    uniforms_.cursorVisible = cursorVisible ? 1.0f : 0.0f;
+    uniforms_._pad = 0.0f;
 
     wgpuQueueWriteBuffer(queue, uniformBuffer_, 0, &uniforms_, sizeof(Uniforms));
 }
 
-void TextRenderer::updateVertexBuffers(WGPUQueue queue, const Grid& grid, Font& font) {
+void TextRenderer::updateCellTextures(WGPUQueue queue, const Grid& grid) {
     const uint32_t cols = grid.getCols();
     const uint32_t rows = grid.getRows();
-    const uint32_t cellCount = cols * rows;
 
-    std::vector<GlyphVertex> glyphVertices;
-    std::vector<uint32_t> glyphIndices;
-    std::vector<BgVertex> bgVertices;
-    std::vector<uint32_t> bgIndices;
+    gridCols_ = cols;
+    gridRows_ = rows;
 
-    glyphVertices.reserve(cellCount * 4);
-    glyphIndices.reserve(cellCount * 6);
-    bgVertices.reserve(cellCount * 4);
-    bgIndices.reserve(cellCount * 6);
+    // Write glyph indices directly (uint16 -> R16Uint texture)
+    WGPUImageCopyTexture glyphDest = {};
+    glyphDest.texture = cellGlyphTexture_;
+    glyphDest.mipLevel = 0;
+    glyphDest.origin = {0, 0, 0};
+    glyphDest.aspect = WGPUTextureAspect_All;
 
-    // Quad corners
-    const glm::vec2 corners[4] = {
-        {0.0f, 0.0f}, {1.0f, 0.0f}, {0.0f, 1.0f}, {1.0f, 1.0f}
-    };
+    WGPUTextureDataLayout glyphLayout = {};
+    glyphLayout.offset = 0;
+    glyphLayout.bytesPerRow = cols * sizeof(uint16_t);
+    glyphLayout.rowsPerImage = rows;
 
-    for (uint32_t row = 0; row < rows; ++row) {
-        for (uint32_t col = 0; col < cols; ++col) {
-            const Cell& cell = grid.getCell(col, row);
-            glm::vec2 cellPos = {static_cast<float>(col), static_cast<float>(row)};
+    WGPUExtent3D glyphSize = {cols, rows, 1};
+    wgpuQueueWriteTexture(queue, &glyphDest, grid.getGlyphData(),
+                          cols * rows * sizeof(uint16_t), &glyphLayout, &glyphSize);
 
-            // BACKGROUND: Add quad for EVERY cell
-            uint32_t bgBase = static_cast<uint32_t>(bgVertices.size());
-            for (int i = 0; i < 4; ++i) {
-                BgVertex v;
-                v.position = corners[i];
-                v.cellPos = cellPos;
-                v.bgColor = cell.bgColor;
-                bgVertices.push_back(v);
-            }
-            bgIndices.push_back(bgBase + 0);
-            bgIndices.push_back(bgBase + 1);
-            bgIndices.push_back(bgBase + 2);
-            bgIndices.push_back(bgBase + 2);
-            bgIndices.push_back(bgBase + 1);
-            bgIndices.push_back(bgBase + 3);
+    // Write FG colors directly (RGBA8 -> RGBA8Unorm texture)
+    WGPUImageCopyTexture fgDest = {};
+    fgDest.texture = cellFgColorTexture_;
+    fgDest.mipLevel = 0;
+    fgDest.origin = {0, 0, 0};
+    fgDest.aspect = WGPUTextureAspect_All;
 
-            // GLYPH: Only for non-space characters
-            if (cell.codepoint != ' ' && cell.codepoint != 0) {
-                const GlyphMetrics* glyph = font.getGlyph(cell.codepoint);
-                if (glyph) {
-                    uint32_t glyphBase = static_cast<uint32_t>(glyphVertices.size());
-                    for (int i = 0; i < 4; ++i) {
-                        GlyphVertex v;
-                        v.position = corners[i];
-                        v.cellPos = cellPos;
-                        v.uvMin = glyph->uvMin;
-                        v.uvMax = glyph->uvMax;
-                        v.glyphSize = glyph->size;
-                        v.glyphBearing = glyph->bearing;
-                        v.fgColor = cell.fgColor;
-                        v.bgColor = cell.bgColor;
-                        glyphVertices.push_back(v);
-                    }
-                    glyphIndices.push_back(glyphBase + 0);
-                    glyphIndices.push_back(glyphBase + 1);
-                    glyphIndices.push_back(glyphBase + 2);
-                    glyphIndices.push_back(glyphBase + 2);
-                    glyphIndices.push_back(glyphBase + 1);
-                    glyphIndices.push_back(glyphBase + 3);
-                }
-            }
-        }
-    }
+    WGPUTextureDataLayout fgLayout = {};
+    fgLayout.offset = 0;
+    fgLayout.bytesPerRow = cols * 4;  // RGBA8 = 4 bytes per pixel
+    fgLayout.rowsPerImage = rows;
 
-    glyphCount_ = static_cast<uint32_t>(glyphIndices.size());
-    bgCount_ = static_cast<uint32_t>(bgIndices.size());
+    WGPUExtent3D fgSize = {cols, rows, 1};
+    wgpuQueueWriteTexture(queue, &fgDest, grid.getFgColorData(),
+                          cols * rows * 4, &fgLayout, &fgSize);
 
-    if (!glyphVertices.empty()) {
-        wgpuQueueWriteBuffer(queue, glyphVertexBuffer_, 0,
-                             glyphVertices.data(), glyphVertices.size() * sizeof(GlyphVertex));
-        wgpuQueueWriteBuffer(queue, glyphIndexBuffer_, 0,
-                             glyphIndices.data(), glyphIndices.size() * sizeof(uint32_t));
-    }
+    // Write BG colors directly (RGBA8 -> RGBA8Unorm texture)
+    WGPUImageCopyTexture bgDest = {};
+    bgDest.texture = cellBgColorTexture_;
+    bgDest.mipLevel = 0;
+    bgDest.origin = {0, 0, 0};
+    bgDest.aspect = WGPUTextureAspect_All;
 
-    if (!bgVertices.empty()) {
-        wgpuQueueWriteBuffer(queue, bgVertexBuffer_, 0,
-                             bgVertices.data(), bgVertices.size() * sizeof(BgVertex));
-        wgpuQueueWriteBuffer(queue, bgIndexBuffer_, 0,
-                             bgIndices.data(), bgIndices.size() * sizeof(uint32_t));
-    }
+    WGPUTextureDataLayout bgLayout = {};
+    bgLayout.offset = 0;
+    bgLayout.bytesPerRow = cols * 4;
+    bgLayout.rowsPerImage = rows;
+
+    WGPUExtent3D bgSize = {cols, rows, 1};
+    wgpuQueueWriteTexture(queue, &bgDest, grid.getBgColorData(),
+                          cols * rows * 4, &bgLayout, &bgSize);
 }
 
-void TextRenderer::render(WebGPUContext& ctx, const Grid& grid) {
+void TextRenderer::render(WebGPUContext& ctx, const Grid& grid,
+                          int cursorCol, int cursorRow, bool cursorVisible) {
     WGPUQueue queue = ctx.getQueue();
+    const uint32_t cols = grid.getCols();
+    const uint32_t rows = grid.getRows();
 
-    updateUniformBuffer(queue);
-    updateVertexBuffers(queue, grid, *font_);
+    // Recreate textures and bind group if grid size changed
+    if (cols != textureCols_ || rows != textureRows_) {
+        createCellTextures(device_, cols, rows);
+        createBindGroup(device_, *font_);
+    }
+
+    updateUniformBuffer(queue, grid, cursorCol, cursorRow, cursorVisible);
+    updateCellTextures(queue, grid);
 
     WGPUTextureView targetView = ctx.getCurrentTextureView();
     if (!targetView) return;
@@ -403,9 +445,9 @@ void TextRenderer::render(WebGPUContext& ctx, const Grid& grid) {
     colorAttachment.loadOp = WGPULoadOp_Clear;
     colorAttachment.storeOp = WGPUStoreOp_Store;
 #if YETTY_WEB
-    colorAttachment.clearColor = {0.1, 0.1, 0.1, 1.0};  // Emscripten
+    colorAttachment.clearColor = {0.1, 0.1, 0.1, 1.0};
 #else
-    colorAttachment.clearValue = {0.1, 0.1, 0.1, 1.0};  // wgpu-native
+    colorAttachment.clearValue = {0.1, 0.1, 0.1, 1.0};
 #endif
 
     WGPURenderPassDescriptor passDesc = {};
@@ -414,23 +456,10 @@ void TextRenderer::render(WebGPUContext& ctx, const Grid& grid) {
 
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
 
-    // PASS 1: Render backgrounds (solid color, no blending)
-    if (bgCount_ > 0 && bgPipeline_) {
-        wgpuRenderPassEncoderSetPipeline(pass, bgPipeline_);
-        wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
-        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, bgVertexBuffer_, 0, WGPU_WHOLE_SIZE);
-        wgpuRenderPassEncoderSetIndexBuffer(pass, bgIndexBuffer_, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
-        wgpuRenderPassEncoderDrawIndexed(pass, bgCount_, 1, 0, 0, 0);
-    }
-
-    // PASS 2: Render glyphs on top (alpha blended)
-    if (glyphCount_ > 0 && glyphPipeline_) {
-        wgpuRenderPassEncoderSetPipeline(pass, glyphPipeline_);
-        wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
-        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, glyphVertexBuffer_, 0, WGPU_WHOLE_SIZE);
-        wgpuRenderPassEncoderSetIndexBuffer(pass, glyphIndexBuffer_, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
-        wgpuRenderPassEncoderDrawIndexed(pass, glyphCount_, 1, 0, 0, 0);
-    }
+    wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
+    wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
+    wgpuRenderPassEncoderSetVertexBuffer(pass, 0, quadVertexBuffer_, 0, WGPU_WHOLE_SIZE);
+    wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
 
     wgpuRenderPassEncoderEnd(pass);
     wgpuRenderPassEncoderRelease(pass);
