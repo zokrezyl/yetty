@@ -152,6 +152,9 @@ add_executable(yetty
     src/terminal/Grid.cpp
     src/terminal/Font.cpp
     $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/terminal/Terminal.cpp>
+    $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/decorator/Decorator.cpp>
+    $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/decorator/DecoratorManager.cpp>
+    $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/decorator/ShaderToyPlugin.cpp>
 )
 
 target_include_directories(yetty PRIVATE

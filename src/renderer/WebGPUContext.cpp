@@ -184,10 +184,15 @@ void WebGPUContext::resize(uint32_t width, uint32_t height) {
 }
 
 WGPUTextureView WebGPUContext::getCurrentTextureView() {
+    // Return cached view if already acquired this frame
+    if (currentTextureView_) {
+        return currentTextureView_;
+    }
+
 #if YETTY_WEB
     // Emscripten: get texture view from swapchain
-    WGPUTextureView view = wgpuSwapChainGetCurrentTextureView(swapChain_);
-    return view;
+    currentTextureView_ = wgpuSwapChainGetCurrentTextureView(swapChain_);
+    return currentTextureView_;
 #else
     WGPUSurfaceTexture surfaceTexture;
     wgpuSurfaceGetCurrentTexture(surface_, &surfaceTexture);
@@ -195,6 +200,8 @@ WGPUTextureView WebGPUContext::getCurrentTextureView() {
     if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_Success) {
         return nullptr;
     }
+
+    currentTexture_ = surfaceTexture.texture;
 
     WGPUTextureViewDescriptor viewDesc = {};
     viewDesc.format = surfaceFormat_;
@@ -205,11 +212,19 @@ WGPUTextureView WebGPUContext::getCurrentTextureView() {
     viewDesc.arrayLayerCount = 1;
     viewDesc.aspect = WGPUTextureAspect_All;
 
-    return wgpuTextureCreateView(surfaceTexture.texture, &viewDesc);
+    currentTextureView_ = wgpuTextureCreateView(surfaceTexture.texture, &viewDesc);
+    return currentTextureView_;
 #endif
 }
 
 void WebGPUContext::present() {
+    // Release cached texture view
+    if (currentTextureView_) {
+        wgpuTextureViewRelease(currentTextureView_);
+        currentTextureView_ = nullptr;
+    }
+    currentTexture_ = nullptr;
+
 #if YETTY_WEB
     // Emscripten: swapchain presents automatically
 #else

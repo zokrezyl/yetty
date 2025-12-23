@@ -6,6 +6,8 @@
 
 #if !YETTY_WEB
 #include "terminal/Terminal.h"
+#include "decorator/DecoratorManager.h"
+#include "decorator/ShaderToyPlugin.h"
 #include <termios.h>
 #include <unistd.h>
 #endif
@@ -40,6 +42,7 @@ struct AppState {
 
 #if !YETTY_WEB
     Terminal* terminal = nullptr;
+    DecoratorManager* decoratorManager = nullptr;
     struct termios originalTermios;
     bool termiosSet = false;
 #endif
@@ -184,6 +187,16 @@ static void mainLoopIteration() {
         state.terminal->update();
         state.terminal->updateCursorBlink(glfwGetTime());
 
+        // Update decorators
+        static double lastTime = glfwGetTime();
+        double currentTime = glfwGetTime();
+        double deltaTime = currentTime - lastTime;
+        lastTime = currentTime;
+
+        if (state.decoratorManager) {
+            state.decoratorManager->update(deltaTime);
+        }
+
         if (!state.terminal->isRunning()) {
             glfwSetWindowShouldClose(state.window, GLFW_TRUE);
             return;
@@ -213,6 +226,21 @@ static void mainLoopIteration() {
                                    state.terminal->getCursorRow(),
                                    state.terminal->isCursorVisible());
         }
+
+        // Render decorator overlays (after terminal, before present)
+        if (state.decoratorManager && !state.decoratorManager->getDecorators().empty()) {
+            WGPUTextureView targetView = state.ctx->getCurrentTextureView();
+            if (targetView) {
+                float cellWidth = state.baseCellWidth * state.zoomLevel;
+                float cellHeight = state.baseCellHeight * state.zoomLevel;
+                state.decoratorManager->render(*state.ctx, targetView,
+                    static_cast<uint32_t>(w), static_cast<uint32_t>(h),
+                    cellWidth, cellHeight);
+            }
+        }
+
+        // Present the frame (releases cached texture view)
+        state.ctx->present();
     } else
 #endif
     {
@@ -616,8 +644,26 @@ int main(int argc, char* argv[]) {
         terminal->setConfig(&config);
         appState.terminal = terminal;
 
+        // Create and configure DecoratorManager
+        DecoratorManager* decoratorMgr = new DecoratorManager();
+        appState.decoratorManager = decoratorMgr;
+
+        // Register built-in plugins
+        decoratorMgr->registerPlugin(std::make_unique<ShaderToyPlugin>());
+
+        // Load external plugins from directory (if exists)
+        const char* pluginDir = getenv("YETTY_PLUGINS_DIR");
+        if (pluginDir) {
+            decoratorMgr->loadPluginsFromDirectory(pluginDir);
+        }
+
+        // Wire up decorator manager to terminal
+        terminal->setDecoratorManager(decoratorMgr);
+        terminal->setCellSize(static_cast<uint32_t>(cellWidth), static_cast<uint32_t>(cellHeight));
+
         if (!terminal->start()) {
             std::cerr << "Failed to start terminal" << std::endl;
+            delete decoratorMgr;
             delete terminal;
             glfwDestroyWindow(window);
             glfwTerminate();
@@ -687,6 +733,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Shutting down..." << std::endl;
 
+    delete appState.decoratorManager;
     delete terminal;
     delete demoGrid;
 

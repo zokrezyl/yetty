@@ -566,9 +566,8 @@ void TextRenderer::render(WebGPUContext& ctx, const Grid& grid,
     wgpuQueueSubmit(queue, 1, &cmdBuffer);
     wgpuCommandBufferRelease(cmdBuffer);
 
-    wgpuTextureViewRelease(targetView);
-
-    ctx.present();
+    // Note: targetView is cached by WebGPUContext, don't release here
+    // Note: present() should be called by main loop after all rendering
 }
 
 void TextRenderer::render(WebGPUContext& ctx, const Grid& grid,
@@ -643,9 +642,8 @@ void TextRenderer::render(WebGPUContext& ctx, const Grid& grid,
     wgpuQueueSubmit(queue, 1, &cmdBuffer);
     wgpuCommandBufferRelease(cmdBuffer);
 
-    wgpuTextureViewRelease(targetView);
-
-    ctx.present();
+    // Note: targetView is cached by WebGPUContext, don't release here
+    // Note: present() should be called by main loop after all rendering
 }
 
 } // namespace yetty

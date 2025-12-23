@@ -13,6 +13,9 @@ extern "C" {
 
 namespace yetty {
 
+// Forward declaration
+class DecoratorManager;
+
 // Rectangle representing damaged (changed) cells
 struct DamageRect {
     uint32_t startCol, startRow;
@@ -70,6 +73,21 @@ public:
     static int onMoveCursor(VTermPos pos, VTermPos oldpos, int visible, void* user);
     static int onResize(int rows, int cols, void* user);
     static int onBell(void* user);
+    static int onOSC(int command, VTermStringFragment frag, void* user);
+    static int onSbPushline(int cols, const VTermScreenCell* cells, void* user);
+
+    // Decorator support
+    void setDecoratorManager(DecoratorManager* mgr) { decoratorManager_ = mgr; }
+    DecoratorManager* getDecoratorManager() const { return decoratorManager_; }
+    void setCellSize(uint32_t width, uint32_t height) {
+        cellWidth_ = width;
+        cellHeight_ = height;
+    }
+    uint32_t getCellWidth() const { return cellWidth_; }
+    uint32_t getCellHeight() const { return cellHeight_; }
+
+    // Get mutable grid for decorator cell marking
+    Grid& getGridMutable() { return grid_; }
 
 private:
     // Sync libvterm screen to our Grid
@@ -104,6 +122,15 @@ private:
     bool fullDamage_ = true;  // Start with full damage to render initial content
 
     const Config* config_ = nullptr;
+
+    // Decorator support
+    DecoratorManager* decoratorManager_ = nullptr;
+    uint32_t cellWidth_ = 10;   // Default, will be set by renderer
+    uint32_t cellHeight_ = 20;
+
+    // OSC sequence buffer (for multi-fragment sequences)
+    std::string oscBuffer_;
+    int oscCommand_ = -1;
 };
 
 } // namespace yetty

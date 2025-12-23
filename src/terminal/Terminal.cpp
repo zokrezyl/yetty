@@ -1,4 +1,5 @@
 #include "Terminal.h"
+#include "../decorator/DecoratorManager.h"
 
 #include <iostream>
 #include <cstring>
@@ -12,7 +13,7 @@
 
 namespace yetty {
 
-// Static callbacks for libvterm
+// Static callbacks for libvterm screen layer
 static VTermScreenCallbacks screenCallbacks = {
     .damage = Terminal::onDamage,
     .moverect = nullptr,
@@ -20,9 +21,20 @@ static VTermScreenCallbacks screenCallbacks = {
     .settermprop = nullptr,
     .bell = Terminal::onBell,
     .resize = Terminal::onResize,
-    .sb_pushline = nullptr,
+    .sb_pushline = Terminal::onSbPushline,
     .sb_popline = nullptr,
     .sb_clear = nullptr,
+};
+
+// Static fallback callbacks for unrecognized sequences (OSC for decorators)
+static VTermStateFallbacks stateFallbacks = {
+    .control = nullptr,
+    .csi = nullptr,
+    .osc = Terminal::onOSC,
+    .dcs = nullptr,
+    .apc = nullptr,
+    .pm = nullptr,
+    .sos = nullptr,
 };
 
 Terminal::Terminal(uint32_t cols, uint32_t rows, Font* font)
@@ -36,6 +48,10 @@ Terminal::Terminal(uint32_t cols, uint32_t rows, Font* font)
     vtermScreen_ = vterm_obtain_screen(vterm_);
     vterm_screen_set_callbacks(vtermScreen_, &screenCallbacks, this);
     vterm_screen_reset(vtermScreen_, 1);
+
+    // Set up fallback callbacks for unrecognized OSC sequences (decorators)
+    VTermState* state = vterm_obtain_state(vterm_);
+    vterm_state_set_unrecognised_fallbacks(state, &stateFallbacks, this);
 }
 
 Terminal::~Terminal() {
@@ -388,6 +404,76 @@ int Terminal::onBell(void* user) {
     (void)user;
     std::cout << '\a' << std::flush;  // Terminal bell
     return 0;
+}
+
+int Terminal::onSbPushline(int cols, const VTermScreenCell* cells, void* user) {
+    (void)cols;
+    (void)cells;
+    Terminal* term = static_cast<Terminal*>(user);
+
+    // Notify decorator manager that content scrolled up by 1 line
+    if (term->decoratorManager_) {
+        term->decoratorManager_->onScroll(1);
+    }
+
+    return 0;  // We don't store scrollback, just track the scroll event
+}
+
+int Terminal::onOSC(int command, VTermStringFragment frag, void* user) {
+    Terminal* term = static_cast<Terminal*>(user);
+
+    std::cerr << "OSC received: cmd=" << command
+              << " initial=" << (frag.initial ? "yes" : "no")
+              << " final=" << (frag.final ? "yes" : "no")
+              << " len=" << frag.len << std::endl;
+
+    // Check if this is our vendor ID
+    if (command != YETTY_OSC_VENDOR_ID) {
+        std::cerr << "  -> Not our vendor ID (expected " << YETTY_OSC_VENDOR_ID << ")" << std::endl;
+        return 0;  // Not our sequence, let someone else handle it
+    }
+
+    std::cerr << "  -> Yetty decorator sequence!" << std::endl;
+
+    // Handle multi-fragment sequences
+    if (frag.initial) {
+        term->oscBuffer_.clear();
+        term->oscCommand_ = command;
+    }
+
+    // Append fragment data
+    if (frag.len > 0) {
+        term->oscBuffer_.append(frag.str, frag.len);
+    }
+
+    // Process when complete
+    if (frag.final) {
+        std::cerr << "  -> Complete! Buffer: " << term->oscBuffer_.substr(0, 100) << "..." << std::endl;
+
+        if (term->decoratorManager_) {
+            // Build full sequence: command;rest
+            std::string fullSeq = std::to_string(command) + ";" + term->oscBuffer_;
+
+            bool handled = term->decoratorManager_->handleOSCSequence(
+                fullSeq,
+                &term->grid_,
+                term->cursorCol_,
+                term->cursorRow_,
+                term->cellWidth_,
+                term->cellHeight_
+            );
+
+            std::cerr << "  -> Handled: " << (handled ? "yes" : "no") << std::endl;
+
+            if (handled) {
+                term->fullDamage_ = true;  // Force full redraw
+            }
+        }
+        term->oscBuffer_.clear();
+        term->oscCommand_ = -1;
+    }
+
+    return 1;  // We handled it
 }
 
 } // namespace yetty

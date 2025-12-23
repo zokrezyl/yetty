@@ -43,6 +43,10 @@ private:
 
     uint32_t width_ = 0;
     uint32_t height_ = 0;
+
+    // Cached texture view for current frame (to avoid double-acquire)
+    WGPUTextureView currentTextureView_ = nullptr;
+    WGPUTexture currentTexture_ = nullptr;
 };
 
 } // namespace yetty

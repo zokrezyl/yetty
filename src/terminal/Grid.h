@@ -5,6 +5,9 @@
 
 namespace yetty {
 
+// Special glyph index values
+constexpr uint16_t GLYPH_DECORATOR = 0xFFFF;  // Cell is occupied by a decorator
+
 // Cell attributes (bold, italic, etc.) packed into a single byte
 struct CellAttrs {
     uint8_t bold : 1;
