@@ -119,6 +119,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // Check if inside glyph bounds
     if (localPx.x < glyphMinPx.x || localPx.x >= glyphMaxPx.x ||
         localPx.y < glyphMinPx.y || localPx.y >= glyphMaxPx.y) {
+        // Outside glyph bounds - show background (possibly inverted for cursor)
+        if (isCursor) {
+            return vec4<f32>(vec3<f32>(1.0, 1.0, 1.0) - bgColor.rgb, 1.0);
+        }
         return bgColor;
     }
 

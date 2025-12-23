@@ -32,8 +32,11 @@ public:
     void update();
 
     // Send keyboard input to the terminal
-    void sendKey(uint32_t codepoint);
+    void sendKey(uint32_t codepoint, VTermModifier mod = VTERM_MOD_NONE);
     void sendSpecialKey(VTermKey key, VTermModifier mod = VTERM_MOD_NONE);
+
+    // Send raw bytes directly to the PTY (for control characters)
+    void sendRaw(const char* data, size_t len);
 
     // Resize the terminal
     void resize(uint32_t cols, uint32_t rows);

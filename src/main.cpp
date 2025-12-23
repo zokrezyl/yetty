@@ -84,23 +84,32 @@ static std::string generateLine(const std::vector<std::string>& dict, uint32_t m
 #if !YETTY_WEB
 // Key callback for terminal mode
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    (void)scancode;
-    if (action != GLFW_PRESS && action != GLFW_REPEAT) return;
-
     auto* state = static_cast<AppState*>(glfwGetWindowUserPointer(window));
     if (!state || !state->terminal) return;
+
+    // Debug: show all key events
+    const char* actionStr = (action == GLFW_PRESS) ? "PRESS" : (action == GLFW_RELEASE) ? "RELEASE" : "REPEAT";
+    std::cerr << "KEY: " << key << " " << actionStr << " mods=" << mods << std::endl;
+
+    if (action != GLFW_PRESS && action != GLFW_REPEAT) return;
 
     VTermModifier vtermMod = VTERM_MOD_NONE;
     if (mods & GLFW_MOD_CONTROL) vtermMod = (VTermModifier)(vtermMod | VTERM_MOD_CTRL);
     if (mods & GLFW_MOD_ALT) vtermMod = (VTermModifier)(vtermMod | VTERM_MOD_ALT);
     if (mods & GLFW_MOD_SHIFT) vtermMod = (VTermModifier)(vtermMod | VTERM_MOD_SHIFT);
 
-    // Handle Ctrl+letter combinations (Ctrl+A = 0x01, Ctrl+C = 0x03, etc.)
-    if ((mods & GLFW_MOD_CONTROL) && key >= GLFW_KEY_A && key <= GLFW_KEY_Z) {
-        // Convert to control character (Ctrl+A = 1, Ctrl+B = 2, etc.)
-        uint32_t ctrlChar = key - GLFW_KEY_A + 1;
-        state->terminal->sendKey(ctrlChar);
-        return;
+    // Handle Ctrl/Alt combinations - use glfwGetKeyName for correct keyboard layout
+    if (mods & (GLFW_MOD_CONTROL | GLFW_MOD_ALT)) {
+        const char* keyName = glfwGetKeyName(key, scancode);
+        if (keyName && keyName[0] != '\0') {
+            // Single character key name - send it with modifier
+            if (keyName[1] == '\0') {
+                uint32_t ch = keyName[0];
+                std::cerr << "  -> Sending Ctrl/Alt+'" << (char)ch << "'" << std::endl;
+                state->terminal->sendKey(ch, vtermMod);
+                return;
+            }
+        }
     }
 
     // Map GLFW keys to VTerm keys

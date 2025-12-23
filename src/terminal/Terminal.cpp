@@ -121,6 +121,19 @@ void Terminal::update() {
         vterm_input_write(vterm_, buf, nread);
         vterm_screen_flush_damage(vtermScreen_);
 
+        // Flush any output libvterm generated (e.g., cursor position responses)
+        size_t outlen = vterm_output_get_buffer_current(vterm_);
+        if (outlen > 0) {
+            char outbuf[256];
+            while (outlen > 0) {
+                size_t n = vterm_output_read(vterm_, outbuf, sizeof(outbuf));
+                if (n > 0) {
+                    (void)write(ptyMaster_, outbuf, n);
+                }
+                outlen = vterm_output_get_buffer_current(vterm_);
+            }
+        }
+
         // Sync based on damage tracking config
         if (config_ && config_->useDamageTracking && !fullDamage_) {
             syncDamageToGrid();
@@ -133,21 +146,46 @@ void Terminal::update() {
     }
 }
 
-void Terminal::sendKey(uint32_t codepoint) {
+void Terminal::sendKey(uint32_t codepoint, VTermModifier mod) {
     if (!running_ || ptyMaster_ < 0) return;
 
-    // Send to libvterm which will output to PTY via output callback
-    vterm_keyboard_unichar(vterm_, codepoint, VTERM_MOD_NONE);
+    // Flush any accumulated output first (e.g., responses to escape sequences)
+    size_t pending = vterm_output_get_buffer_current(vterm_);
+    if (pending > 0) {
+        std::cerr << "    Flushing " << pending << " pending bytes before key" << std::endl;
+        char discard[256];
+        while (pending > 0) {
+            size_t n = vterm_output_read(vterm_, discard, sizeof(discard));
+            if (n > 0) (void)write(ptyMaster_, discard, n);
+            pending = vterm_output_get_buffer_current(vterm_);
+        }
+    }
 
-    // Read vterm output buffer and write to PTY
+    // Send to libvterm which will generate output
+    vterm_keyboard_unichar(vterm_, codepoint, mod);
+
+    // Read the keyboard output and write to PTY
     size_t buflen = vterm_output_get_buffer_current(vterm_);
     if (buflen > 0) {
         char buf[256];
         size_t len = vterm_output_read(vterm_, buf, sizeof(buf));
         if (len > 0) {
-            ssize_t written = write(ptyMaster_, buf, len);
-            (void)written;  // Ignore errors for now
+            std::cerr << "    PTY write:";
+            for (size_t i = 0; i < len; i++) {
+                std::cerr << " 0x" << std::hex << (int)(unsigned char)buf[i] << std::dec;
+            }
+            std::cerr << std::endl;
+            (void)write(ptyMaster_, buf, len);
         }
+    }
+}
+
+void Terminal::sendRaw(const char* data, size_t len) {
+    if (!running_ || ptyMaster_ < 0 || len == 0) return;
+
+    ssize_t written = write(ptyMaster_, data, len);
+    if (written < 0) {
+        std::cerr << "Failed to write to PTY: " << strerror(errno) << std::endl;
     }
 }
 
@@ -320,11 +358,14 @@ int Terminal::onMoveCursor(VTermPos pos, VTermPos oldpos, int visible, void* use
     Terminal* term = static_cast<Terminal*>(user);
     term->cursorRow_ = pos.row;
     term->cursorCol_ = pos.col;
-    // visible=1 means cursor is visible, visible=0 means hidden by escape sequence
-    // We default to visible if not explicitly hidden
-    if (visible >= 0) {
-        term->cursorVisible_ = (visible != 0);
+    // visible: 1 = visible, 0 = invisible, -1 = no change (cursor hidden by DECCM)
+    // Only hide cursor if explicitly set to 0
+    if (visible == 0) {
+        term->cursorVisible_ = false;
+    } else if (visible > 0) {
+        term->cursorVisible_ = true;
     }
+    // If visible == -1, leave cursorVisible_ unchanged
     (void)oldpos;
     return 0;
 }
