@@ -1,8 +1,10 @@
 #include "Font.h"
 
+#if !YETTY_USE_PREBUILT_ATLAS
 #include <msdf-atlas-gen/msdf-atlas-gen.h>
 #include <msdf-atlas-gen/GlyphGeometry.h>
 #include <msdf-atlas-gen/FontGeometry.h>
+#endif
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -11,6 +13,8 @@
 
 #include <iostream>
 #include <fstream>
+#include <sstream>
+#include <cstring>
 
 namespace yetty {
 
@@ -21,6 +25,8 @@ Font::~Font() {
     if (textureView_) wgpuTextureViewRelease(textureView_);
     if (texture_) wgpuTextureRelease(texture_);
 }
+
+#if !YETTY_USE_PREBUILT_ATLAS
 
 bool Font::generate(const std::string& fontPath, float fontSize, uint32_t atlasSize) {
     using namespace msdf_atlas;
@@ -149,6 +155,91 @@ bool Font::generate(const std::string& fontPath, float fontSize, uint32_t atlasS
     return true;
 }
 
+bool Font::saveAtlas(const std::string& atlasPath, const std::string& metricsPath) const {
+    if (atlasData_.empty()) {
+        std::cerr << "No atlas data to save" << std::endl;
+        return false;
+    }
+
+    // Save atlas as PNG
+    if (!stbi_write_png(atlasPath.c_str(), atlasWidth_, atlasHeight_, 4, atlasData_.data(), atlasWidth_ * 4)) {
+        std::cerr << "Failed to write atlas PNG: " << atlasPath << std::endl;
+        return false;
+    }
+
+    // Save metrics as JSON
+    std::ofstream file(metricsPath);
+    if (!file) {
+        std::cerr << "Failed to open metrics file: " << metricsPath << std::endl;
+        return false;
+    }
+
+    file << "{\n";
+    file << "  \"atlasWidth\": " << atlasWidth_ << ",\n";
+    file << "  \"atlasHeight\": " << atlasHeight_ << ",\n";
+    file << "  \"fontSize\": " << fontSize_ << ",\n";
+    file << "  \"lineHeight\": " << lineHeight_ << ",\n";
+    file << "  \"pixelRange\": " << pixelRange_ << ",\n";
+    file << "  \"glyphs\": {\n";
+
+    bool first = true;
+    for (const auto& [codepoint, m] : glyphs_) {
+        if (!first) file << ",\n";
+        first = false;
+
+        file << "    \"" << codepoint << "\": {\n";
+        file << "      \"uvMin\": [" << m.uvMin.x << ", " << m.uvMin.y << "],\n";
+        file << "      \"uvMax\": [" << m.uvMax.x << ", " << m.uvMax.y << "],\n";
+        file << "      \"size\": [" << m.size.x << ", " << m.size.y << "],\n";
+        file << "      \"bearing\": [" << m.bearing.x << ", " << m.bearing.y << "],\n";
+        file << "      \"advance\": " << m.advance << "\n";
+        file << "    }";
+    }
+
+    file << "\n  }\n";
+    file << "}\n";
+
+    std::cout << "Saved atlas to " << atlasPath << " and metrics to " << metricsPath << std::endl;
+    return true;
+}
+
+#endif // !YETTY_USE_PREBUILT_ATLAS
+
+// Simple JSON value parser helpers
+namespace {
+
+std::string trim(const std::string& s) {
+    size_t start = s.find_first_not_of(" \t\n\r");
+    size_t end = s.find_last_not_of(" \t\n\r");
+    return (start == std::string::npos) ? "" : s.substr(start, end - start + 1);
+}
+
+float parseFloat(const std::string& s) {
+    return std::stof(trim(s));
+}
+
+uint32_t parseUint(const std::string& s) {
+    return static_cast<uint32_t>(std::stoul(trim(s)));
+}
+
+// Parse a simple array like [1.0, 2.0]
+glm::vec2 parseVec2(const std::string& s) {
+    auto start = s.find('[');
+    auto end = s.find(']');
+    if (start == std::string::npos || end == std::string::npos) return glm::vec2(0);
+
+    std::string inner = s.substr(start + 1, end - start - 1);
+    auto comma = inner.find(',');
+    if (comma == std::string::npos) return glm::vec2(0);
+
+    return glm::vec2(
+        parseFloat(inner.substr(0, comma)),
+        parseFloat(inner.substr(comma + 1))
+    );
+}
+
+} // anonymous namespace
+
 bool Font::loadAtlas(const std::string& atlasPath, const std::string& metricsPath) {
     // Load atlas image
     int width, height, channels;
@@ -163,10 +254,150 @@ bool Font::loadAtlas(const std::string& atlasPath, const std::string& metricsPat
     atlasData_.assign(data, data + (width * height * 4));
     stbi_image_free(data);
 
-    // Load metrics from JSON (simplified - you'd want a proper JSON parser)
-    // For now, regenerate is the preferred method
-    std::cerr << "loadAtlas: metrics loading not implemented, use generate() instead" << std::endl;
-    return false;
+    // Load metrics JSON
+    std::ifstream file(metricsPath);
+    if (!file) {
+        std::cerr << "Failed to open metrics file: " << metricsPath << std::endl;
+        return false;
+    }
+
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    std::string json = buffer.str();
+
+    // Simple JSON parsing (not a full parser, just for our specific format)
+    // Parse top-level fields
+    auto findValue = [&json](const std::string& key) -> std::string {
+        std::string search = "\"" + key + "\":";
+        auto pos = json.find(search);
+        if (pos == std::string::npos) return "";
+
+        pos += search.length();
+        while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t')) pos++;
+
+        // Find end of value (comma, newline, or closing brace)
+        size_t end = pos;
+        int braceCount = 0;
+        int bracketCount = 0;
+        bool inString = false;
+
+        while (end < json.size()) {
+            char c = json[end];
+            if (c == '"' && (end == 0 || json[end-1] != '\\')) inString = !inString;
+            if (!inString) {
+                if (c == '{') braceCount++;
+                else if (c == '}') {
+                    if (braceCount == 0) break;
+                    braceCount--;
+                }
+                else if (c == '[') bracketCount++;
+                else if (c == ']') bracketCount--;
+                else if ((c == ',' || c == '\n') && braceCount == 0 && bracketCount == 0) break;
+            }
+            end++;
+        }
+
+        return trim(json.substr(pos, end - pos));
+    };
+
+    // Parse header fields
+    std::string val;
+    val = findValue("atlasWidth");
+    if (!val.empty()) atlasWidth_ = parseUint(val);
+
+    val = findValue("atlasHeight");
+    if (!val.empty()) atlasHeight_ = parseUint(val);
+
+    val = findValue("fontSize");
+    if (!val.empty()) fontSize_ = parseFloat(val);
+
+    val = findValue("lineHeight");
+    if (!val.empty()) lineHeight_ = parseFloat(val);
+
+    val = findValue("pixelRange");
+    if (!val.empty()) pixelRange_ = parseFloat(val);
+
+    // Parse glyphs
+    auto glyphsPos = json.find("\"glyphs\":");
+    if (glyphsPos == std::string::npos) {
+        std::cerr << "No glyphs found in metrics" << std::endl;
+        return false;
+    }
+
+    // Find the glyphs object
+    auto glyphsStart = json.find('{', glyphsPos + 9);
+    if (glyphsStart == std::string::npos) return false;
+
+    // Parse each glyph entry: "codepoint": { ... }
+    size_t pos = glyphsStart + 1;
+    while (pos < json.size()) {
+        // Skip whitespace
+        while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t' || json[pos] == '\n' || json[pos] == '\r' || json[pos] == ',')) pos++;
+
+        if (json[pos] == '}') break;  // End of glyphs
+
+        // Find codepoint key
+        if (json[pos] != '"') { pos++; continue; }
+
+        auto keyEnd = json.find('"', pos + 1);
+        if (keyEnd == std::string::npos) break;
+
+        uint32_t codepoint = parseUint(json.substr(pos + 1, keyEnd - pos - 1));
+        pos = keyEnd + 1;
+
+        // Find colon and opening brace
+        auto braceStart = json.find('{', pos);
+        if (braceStart == std::string::npos) break;
+
+        // Find matching closing brace
+        int depth = 1;
+        size_t braceEnd = braceStart + 1;
+        while (braceEnd < json.size() && depth > 0) {
+            if (json[braceEnd] == '{') depth++;
+            else if (json[braceEnd] == '}') depth--;
+            braceEnd++;
+        }
+
+        std::string glyphJson = json.substr(braceStart, braceEnd - braceStart);
+
+        // Parse glyph fields
+        GlyphMetrics m;
+        auto findGlyphValue = [&glyphJson](const std::string& key) -> std::string {
+            std::string search = "\"" + key + "\":";
+            auto p = glyphJson.find(search);
+            if (p == std::string::npos) return "";
+
+            p += search.length();
+            while (p < glyphJson.size() && (glyphJson[p] == ' ' || glyphJson[p] == '\t')) p++;
+
+            size_t e = p;
+            int bracketCount = 0;
+            while (e < glyphJson.size()) {
+                char c = glyphJson[e];
+                if (c == '[') bracketCount++;
+                else if (c == ']') bracketCount--;
+                else if ((c == ',' || c == '\n' || c == '}') && bracketCount == 0) break;
+                e++;
+            }
+            return trim(glyphJson.substr(p, e - p));
+        };
+
+        m.uvMin = parseVec2(findGlyphValue("uvMin"));
+        m.uvMax = parseVec2(findGlyphValue("uvMax"));
+        m.size = parseVec2(findGlyphValue("size"));
+        m.bearing = parseVec2(findGlyphValue("bearing"));
+
+        val = findGlyphValue("advance");
+        m.advance = val.empty() ? 0.0f : parseFloat(val);
+
+        glyphs_[codepoint] = m;
+        pos = braceEnd;
+    }
+
+    std::cout << "Loaded atlas " << atlasWidth_ << "x" << atlasHeight_
+              << " with " << glyphs_.size() << " glyphs from " << metricsPath << std::endl;
+
+    return true;
 }
 
 bool Font::createTexture(WGPUDevice device, WGPUQueue queue) {
@@ -225,7 +456,11 @@ bool Font::createTexture(WGPUDevice device, WGPUQueue queue) {
     samplerDesc.addressModeW = WGPUAddressMode_ClampToEdge;
     samplerDesc.magFilter = WGPUFilterMode_Linear;
     samplerDesc.minFilter = WGPUFilterMode_Linear;
-    samplerDesc.mipmapFilter = WGPUMipmapFilterMode_Linear;
+#if YETTY_WEB
+    samplerDesc.mipmapFilter = WGPUFilterMode_Linear;  // Emscripten uses WGPUFilterMode
+#else
+    samplerDesc.mipmapFilter = WGPUMipmapFilterMode_Linear;  // wgpu-native
+#endif
     samplerDesc.maxAnisotropy = 1;
 
     sampler_ = wgpuDeviceCreateSampler(device, &samplerDesc);

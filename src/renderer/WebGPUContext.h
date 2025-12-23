@@ -24,7 +24,11 @@ public:
     void present();
 
 private:
+#if YETTY_WEB
+    void createSwapChain(uint32_t width, uint32_t height);
+#else
     void configureSurface(uint32_t width, uint32_t height);
+#endif
 
     WGPUInstance instance_ = nullptr;
     WGPUAdapter adapter_ = nullptr;
@@ -32,6 +36,10 @@ private:
     WGPUQueue queue_ = nullptr;
     WGPUSurface surface_ = nullptr;
     WGPUTextureFormat surfaceFormat_ = WGPUTextureFormat_BGRA8Unorm;
+
+#if YETTY_WEB
+    WGPUSwapChain swapChain_ = nullptr;
+#endif
 
     uint32_t width_ = 0;
     uint32_t height_ = 0;

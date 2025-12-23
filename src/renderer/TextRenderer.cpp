@@ -35,10 +35,16 @@ bool TextRenderer::init(WebGPUContext& ctx, Font& font) {
 }
 
 bool TextRenderer::createShaderModule(WGPUDevice device) {
-    // Load shader source from source directory
-    std::ifstream file(CMAKE_SOURCE_DIR "/src/renderer/shaders.wgsl");
+    // Load shader source - different paths for native vs web
+#if YETTY_WEB
+    const char* shaderPath = "/shaders.wgsl";  // Emscripten virtual filesystem
+#else
+    const char* shaderPath = CMAKE_SOURCE_DIR "/src/renderer/shaders.wgsl";
+#endif
+
+    std::ifstream file(shaderPath);
     if (!file.is_open()) {
-        std::cerr << "Failed to open " CMAKE_SOURCE_DIR "/src/renderer/shaders.wgsl" << std::endl;
+        std::cerr << "Failed to open shader: " << shaderPath << std::endl;
         return false;
     }
 
@@ -48,7 +54,11 @@ bool TextRenderer::createShaderModule(WGPUDevice device) {
 
     WGPUShaderModuleWGSLDescriptor wgslDesc = {};
     wgslDesc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
-    wgslDesc.code = shaderSource.c_str();
+#if YETTY_WEB
+    wgslDesc.source = shaderSource.c_str();  // Emscripten uses 'source'
+#else
+    wgslDesc.code = shaderSource.c_str();    // wgpu-native uses 'code'
+#endif
 
     WGPUShaderModuleDescriptor moduleDesc = {};
     moduleDesc.nextInChain = &wgslDesc.chain;
@@ -392,7 +402,11 @@ void TextRenderer::render(WebGPUContext& ctx, const Grid& grid) {
     colorAttachment.view = targetView;
     colorAttachment.loadOp = WGPULoadOp_Clear;
     colorAttachment.storeOp = WGPUStoreOp_Store;
-    colorAttachment.clearValue = {0.1, 0.1, 0.1, 1.0};
+#if YETTY_WEB
+    colorAttachment.clearColor = {0.1, 0.1, 0.1, 1.0};  // Emscripten
+#else
+    colorAttachment.clearValue = {0.1, 0.1, 0.1, 1.0};  // wgpu-native
+#endif
 
     WGPURenderPassDescriptor passDesc = {};
     passDesc.colorAttachmentCount = 1;

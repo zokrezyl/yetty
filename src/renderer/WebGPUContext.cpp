@@ -1,7 +1,12 @@
 #include "WebGPUContext.h"
-#include <glfw3webgpu.h>
 #include <iostream>
 #include <cassert>
+
+#if YETTY_WEB
+#include <emscripten/html5_webgpu.h>
+#else
+#include <glfw3webgpu.h>
+#endif
 
 namespace yetty {
 
@@ -10,6 +15,9 @@ WebGPUContext::WebGPUContext() = default;
 WebGPUContext::~WebGPUContext() {
     if (device_) wgpuDeviceRelease(device_);
     if (adapter_) wgpuAdapterRelease(adapter_);
+#if YETTY_WEB
+    if (swapChain_) wgpuSwapChainRelease(swapChain_);
+#endif
     if (surface_) wgpuSurfaceRelease(surface_);
     if (instance_) wgpuInstanceRelease(instance_);
 }
@@ -19,15 +27,30 @@ bool WebGPUContext::init(GLFWwindow* window, uint32_t width, uint32_t height) {
     height_ = height;
 
     // Create WebGPU instance
+#if YETTY_WEB
+    instance_ = wgpuCreateInstance(nullptr);
+#else
     WGPUInstanceDescriptor instanceDesc = {};
     instance_ = wgpuCreateInstance(&instanceDesc);
+#endif
     if (!instance_) {
         std::cerr << "Failed to create WebGPU instance" << std::endl;
         return false;
     }
 
     // Create surface from GLFW window
+#if YETTY_WEB
+    // Emscripten: create surface from canvas
+    WGPUSurfaceDescriptorFromCanvasHTMLSelector canvasDesc = {};
+    canvasDesc.chain.sType = WGPUSType_SurfaceDescriptorFromCanvasHTMLSelector;
+    canvasDesc.selector = "#canvas";
+
+    WGPUSurfaceDescriptor surfaceDesc = {};
+    surfaceDesc.nextInChain = &canvasDesc.chain;
+    surface_ = wgpuInstanceCreateSurface(instance_, &surfaceDesc);
+#else
     surface_ = glfwGetWGPUSurface(instance_, window);
+#endif
     if (!surface_) {
         std::cerr << "Failed to create WebGPU surface" << std::endl;
         return false;
@@ -36,7 +59,9 @@ bool WebGPUContext::init(GLFWwindow* window, uint32_t width, uint32_t height) {
     // Request adapter
     WGPURequestAdapterOptions adapterOpts = {};
     adapterOpts.compatibleSurface = surface_;
+#if !YETTY_WEB
     adapterOpts.powerPreference = WGPUPowerPreference_HighPerformance;
+#endif
 
     bool adapterReceived = false;
     wgpuInstanceRequestAdapter(
@@ -60,9 +85,11 @@ bool WebGPUContext::init(GLFWwindow* window, uint32_t width, uint32_t height) {
     // Request device
     WGPUDeviceDescriptor deviceDesc = {};
     deviceDesc.label = "yetty device";
+#if !YETTY_WEB
     deviceDesc.requiredFeatureCount = 0;
     deviceDesc.requiredLimits = nullptr;
     deviceDesc.defaultQueue.label = "default queue";
+#endif
 
     wgpuAdapterRequestDevice(
         adapter_,
@@ -94,7 +121,12 @@ bool WebGPUContext::init(GLFWwindow* window, uint32_t width, uint32_t height) {
     // Get queue
     queue_ = wgpuDeviceGetQueue(device_);
 
-    // Get preferred surface format
+#if YETTY_WEB
+    // Emscripten: use swapchain API
+    surfaceFormat_ = WGPUTextureFormat_BGRA8Unorm;  // Standard for web
+    createSwapChain(width, height);
+#else
+    // wgpu-native: get preferred surface format
     WGPUSurfaceCapabilities caps = {};
     wgpuSurfaceGetCapabilities(surface_, adapter_, &caps);
     if (caps.formatCount > 0) {
@@ -104,11 +136,28 @@ bool WebGPUContext::init(GLFWwindow* window, uint32_t width, uint32_t height) {
 
     // Configure surface
     configureSurface(width, height);
+#endif
 
     std::cout << "WebGPU initialized successfully" << std::endl;
     return true;
 }
 
+#if YETTY_WEB
+void WebGPUContext::createSwapChain(uint32_t width, uint32_t height) {
+    if (swapChain_) {
+        wgpuSwapChainRelease(swapChain_);
+    }
+
+    WGPUSwapChainDescriptor swapChainDesc = {};
+    swapChainDesc.usage = WGPUTextureUsage_RenderAttachment;
+    swapChainDesc.format = surfaceFormat_;
+    swapChainDesc.width = width;
+    swapChainDesc.height = height;
+    swapChainDesc.presentMode = WGPUPresentMode_Fifo;
+
+    swapChain_ = wgpuDeviceCreateSwapChain(device_, surface_, &swapChainDesc);
+}
+#else
 void WebGPUContext::configureSurface(uint32_t width, uint32_t height) {
     WGPUSurfaceConfiguration config = {};
     config.device = device_;
@@ -121,15 +170,25 @@ void WebGPUContext::configureSurface(uint32_t width, uint32_t height) {
 
     wgpuSurfaceConfigure(surface_, &config);
 }
+#endif
 
 void WebGPUContext::resize(uint32_t width, uint32_t height) {
     if (width == 0 || height == 0) return;
     width_ = width;
     height_ = height;
+#if YETTY_WEB
+    createSwapChain(width, height);
+#else
     configureSurface(width, height);
+#endif
 }
 
 WGPUTextureView WebGPUContext::getCurrentTextureView() {
+#if YETTY_WEB
+    // Emscripten: get texture view from swapchain
+    WGPUTextureView view = wgpuSwapChainGetCurrentTextureView(swapChain_);
+    return view;
+#else
     WGPUSurfaceTexture surfaceTexture;
     wgpuSurfaceGetCurrentTexture(surface_, &surfaceTexture);
 
@@ -147,10 +206,15 @@ WGPUTextureView WebGPUContext::getCurrentTextureView() {
     viewDesc.aspect = WGPUTextureAspect_All;
 
     return wgpuTextureCreateView(surfaceTexture.texture, &viewDesc);
+#endif
 }
 
 void WebGPUContext::present() {
+#if YETTY_WEB
+    // Emscripten: swapchain presents automatically
+#else
     wgpuSurfacePresent(surface_);
+#endif
 }
 
 } // namespace yetty
