@@ -1,0 +1,6 @@
+INIT
+WANTSCREEN b
+
+!Clear scrollback
+PUSH "\e[3J"
+  sb_clear
