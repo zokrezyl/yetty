@@ -73,30 +73,31 @@ endif()
 # Native-only dependencies (font atlas generation)
 #-----------------------------------------------------------------------------
 if(NOT EMSCRIPTEN)
-    # msdfgen for SDF generation
+    # FreeType for font loading
+    CPMAddPackage(
+        NAME freetype
+        GITHUB_REPOSITORY freetype/freetype
+        GIT_TAG VER-2-13-2
+        OPTIONS
+            "FT_DISABLE_ZLIB ON"
+            "FT_DISABLE_BZIP2 ON"
+            "FT_DISABLE_PNG ON"
+            "FT_DISABLE_HARFBUZZ ON"
+            "FT_DISABLE_BROTLI ON"
+    )
+
+    # msdfgen with FreeType support
     CPMAddPackage(
         NAME msdfgen
         GITHUB_REPOSITORY Chlumsky/msdfgen
         GIT_TAG v1.12
         OPTIONS
             "MSDFGEN_BUILD_STANDALONE OFF"
+            "MSDFGEN_CORE_ONLY OFF"
             "MSDFGEN_USE_SKIA OFF"
             "MSDFGEN_USE_VCPKG OFF"
             "MSDFGEN_DISABLE_SVG ON"
             "MSDFGEN_INSTALL OFF"
-    )
-
-    # msdf-atlas-gen for atlas generation
-    CPMAddPackage(
-        NAME msdf-atlas-gen
-        GITHUB_REPOSITORY Chlumsky/msdf-atlas-gen
-        GIT_TAG v1.3
-        OPTIONS
-            "MSDF_ATLAS_BUILD_STANDALONE OFF"
-            "MSDF_ATLAS_NO_ARTERY_FONT ON"
-            "MSDF_ATLAS_MSDFGEN_EXTERNAL ON"
-            "MSDF_ATLAS_USE_VCPKG OFF"
-            "MSDF_ATLAS_INSTALL OFF"
     )
 
     # GLFW and glfw3webgpu adapter
@@ -206,9 +207,9 @@ else()
         glfw3webgpu
         glm::glm
         stb
-        msdfgen::msdfgen
+        msdfgen::msdfgen-core
         msdfgen::msdfgen-ext
-        msdf-atlas-gen::msdf-atlas-gen
+        freetype
         vterm
         util  # for forkpty
     )

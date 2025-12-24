@@ -1,9 +1,8 @@
 #include "Font.h"
 
 #if !YETTY_USE_PREBUILT_ATLAS
-#include <msdf-atlas-gen/msdf-atlas-gen.h>
-#include <msdf-atlas-gen/GlyphGeometry.h>
-#include <msdf-atlas-gen/FontGeometry.h>
+#include <msdfgen.h>
+#include <msdfgen-ext.h>
 #endif
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -16,6 +15,7 @@
 #include <sstream>
 #include <cstring>
 #include <algorithm>
+#include <cmath>
 
 namespace yetty {
 
@@ -30,20 +30,68 @@ Font::~Font() {
 
 #if !YETTY_USE_PREBUILT_ATLAS
 
-bool Font::generate(const std::string& fontPath, float fontSize, uint32_t atlasSize) {
-    using namespace msdf_atlas;
+// Simple rectangle packing for atlas
+struct PackedGlyph {
+    uint32_t codepoint;
+    int atlasX, atlasY;
+    int atlasW, atlasH;
+    double advance;
+    double bearingX, bearingY;
+    double sizeX, sizeY;
+    double boundsL, boundsB, boundsR, boundsT;  // Raw bounds in font units
+    msdfgen::Shape shape;
+};
 
+// Simple shelf-based atlas packer
+class ShelfPacker {
+public:
+    ShelfPacker(int width, int height, int padding = 2)
+        : width_(width), height_(height), padding_(padding),
+          shelfX_(padding), shelfY_(padding), shelfHeight_(0) {}
+
+    bool pack(int w, int h, int& outX, int& outY) {
+        // Add padding
+        int pw = w + padding_;
+        int ph = h + padding_;
+
+        // Check if fits on current shelf
+        if (shelfX_ + pw > width_) {
+            // Move to next shelf
+            shelfX_ = padding_;
+            shelfY_ += shelfHeight_ + padding_;
+            shelfHeight_ = 0;
+        }
+
+        // Check if fits vertically
+        if (shelfY_ + ph > height_) {
+            return false;  // Atlas full
+        }
+
+        outX = shelfX_;
+        outY = shelfY_;
+        shelfX_ += pw;
+        shelfHeight_ = std::max(shelfHeight_, ph);
+        return true;
+    }
+
+private:
+    int width_, height_, padding_;
+    int shelfX_, shelfY_, shelfHeight_;
+};
+
+bool Font::generate(const std::string& fontPath, float fontSize, uint32_t atlasSize) {
     fontSize_ = fontSize;
     atlasWidth_ = atlasSize;
     atlasHeight_ = atlasSize;
 
-    // Load font
+    // Initialize FreeType
     msdfgen::FreetypeHandle* ft = msdfgen::initializeFreetype();
     if (!ft) {
         std::cerr << "Failed to initialize FreeType" << std::endl;
         return false;
     }
 
+    // Load font with FreeType
     msdfgen::FontHandle* font = msdfgen::loadFont(ft, fontPath.c_str());
     if (!font) {
         std::cerr << "Failed to load font: " << fontPath << std::endl;
@@ -51,168 +99,208 @@ bool Font::generate(const std::string& fontPath, float fontSize, uint32_t atlasS
         return false;
     }
 
-    // Define character set
-    std::vector<msdf_atlas::GlyphGeometry> glyphGeometries;
-    msdf_atlas::FontGeometry fontGeometry(&glyphGeometries);
+    // Get font metrics
+    msdfgen::FontMetrics metrics;
+    msdfgen::getFontMetrics(metrics, font);
+    double unitsPerEm = metrics.emSize > 0 ? metrics.emSize : (metrics.ascenderY - metrics.descenderY);
+    double fontScale = fontSize / unitsPerEm;
+    double lineHeight = metrics.lineHeight;
 
-    msdf_atlas::Charset charset;
+    // Define character set
+    std::vector<uint32_t> charset;
 
     // ASCII printable (32-126)
-    for (uint32_t c = 32; c <= 126; ++c) {
-        charset.add(c);
-    }
+    for (uint32_t c = 32; c <= 126; ++c) charset.push_back(c);
 
-    // Latin Extended-A (0x0100-0x017F) - accented chars
-    for (uint32_t c = 0x0100; c <= 0x017F; ++c) {
-        charset.add(c);
-    }
+    // Latin Extended-A (0x0100-0x017F)
+    for (uint32_t c = 0x0100; c <= 0x017F; ++c) charset.push_back(c);
 
     // Latin Extended-B subset (0x0180-0x024F)
-    for (uint32_t c = 0x0180; c <= 0x024F; ++c) {
-        charset.add(c);
-    }
+    for (uint32_t c = 0x0180; c <= 0x024F; ++c) charset.push_back(c);
 
-    // General Punctuation (0x2000-0x206F) - various dashes, spaces
-    for (uint32_t c = 0x2000; c <= 0x206F; ++c) {
-        charset.add(c);
-    }
+    // General Punctuation (0x2000-0x206F)
+    for (uint32_t c = 0x2000; c <= 0x206F; ++c) charset.push_back(c);
 
     // Arrows (0x2190-0x21FF)
-    for (uint32_t c = 0x2190; c <= 0x21FF; ++c) {
-        charset.add(c);
-    }
+    for (uint32_t c = 0x2190; c <= 0x21FF; ++c) charset.push_back(c);
 
     // Mathematical Operators (0x2200-0x22FF)
-    for (uint32_t c = 0x2200; c <= 0x22FF; ++c) {
-        charset.add(c);
-    }
+    for (uint32_t c = 0x2200; c <= 0x22FF; ++c) charset.push_back(c);
 
-    // Box Drawing (0x2500-0x257F) - essential for TUI apps
-    for (uint32_t c = 0x2500; c <= 0x257F; ++c) {
-        charset.add(c);
-    }
+    // Box Drawing (0x2500-0x257F)
+    for (uint32_t c = 0x2500; c <= 0x257F; ++c) charset.push_back(c);
 
     // Block Elements (0x2580-0x259F)
-    for (uint32_t c = 0x2580; c <= 0x259F; ++c) {
-        charset.add(c);
-    }
+    for (uint32_t c = 0x2580; c <= 0x259F; ++c) charset.push_back(c);
 
     // Geometric Shapes (0x25A0-0x25FF)
-    for (uint32_t c = 0x25A0; c <= 0x25FF; ++c) {
-        charset.add(c);
-    }
+    for (uint32_t c = 0x25A0; c <= 0x25FF; ++c) charset.push_back(c);
 
-    // Miscellaneous Symbols subset (0x2600-0x26FF)
-    for (uint32_t c = 0x2600; c <= 0x26FF; ++c) {
-        charset.add(c);
-    }
+    // Miscellaneous Symbols (0x2600-0x26FF)
+    for (uint32_t c = 0x2600; c <= 0x26FF; ++c) charset.push_back(c);
 
     // Dingbats (0x2700-0x27BF)
-    for (uint32_t c = 0x2700; c <= 0x27BF; ++c) {
-        charset.add(c);
+    for (uint32_t c = 0x2700; c <= 0x27BF; ++c) charset.push_back(c);
+
+    // Braille Patterns (0x2800-0x28FF)
+    for (uint32_t c = 0x2800; c <= 0x28FF; ++c) charset.push_back(c);
+
+    // Powerline symbols (0xE0A0-0xE0D4)
+    for (uint32_t c = 0xE0A0; c <= 0xE0D4; ++c) charset.push_back(c);
+
+    // Load glyph shapes
+    std::vector<PackedGlyph> glyphs;
+
+    for (uint32_t codepoint : charset) {
+        PackedGlyph pg;
+        pg.codepoint = codepoint;
+
+        double advance;
+        if (!msdfgen::loadGlyph(pg.shape, font, codepoint, &advance)) continue;
+
+        pg.advance = advance * fontScale;
+
+        // Get shape bounds
+        if (!pg.shape.contours.empty()) {
+            pg.shape.normalize();
+            msdfgen::Shape::Bounds bounds = pg.shape.getBounds();
+
+            // Store raw bounds in font units (will be used for transform)
+            pg.boundsL = bounds.l;
+            pg.boundsB = bounds.b;
+            pg.boundsR = bounds.r;
+            pg.boundsT = bounds.t;
+
+            // Scale bounds to target size
+            pg.bearingX = bounds.l * fontScale;
+            pg.bearingY = bounds.t * fontScale;  // Top of glyph from baseline
+            pg.sizeX = (bounds.r - bounds.l) * fontScale;
+            pg.sizeY = (bounds.t - bounds.b) * fontScale;
+
+            // Calculate atlas size needed (with padding for SDF range)
+            int padding = static_cast<int>(std::ceil(pixelRange_));
+            pg.atlasW = static_cast<int>(std::ceil(pg.sizeX)) + padding * 2;
+            pg.atlasH = static_cast<int>(std::ceil(pg.sizeY)) + padding * 2;
+        } else {
+            // Empty glyph (like space)
+            pg.boundsL = pg.boundsB = pg.boundsR = pg.boundsT = 0;
+            pg.bearingX = pg.bearingY = 0;
+            pg.sizeX = pg.sizeY = 0;
+            pg.atlasW = pg.atlasH = 0;
+        }
+
+        glyphs.push_back(std::move(pg));
     }
 
-    // Braille Patterns (0x2800-0x28FF) - used by some TUI apps
-    for (uint32_t c = 0x2800; c <= 0x28FF; ++c) {
-        charset.add(c);
-    }
+    std::cout << "Loaded " << glyphs.size() << " glyphs from font" << std::endl;
 
-    // Private Use Area - Powerline symbols (0xE0A0-0xE0D4)
-    for (uint32_t c = 0xE0A0; c <= 0xE0D4; ++c) {
-        charset.add(c);
-    }
+    // Sort by height for better packing
+    std::sort(glyphs.begin(), glyphs.end(), [](const PackedGlyph& a, const PackedGlyph& b) {
+        return a.atlasH > b.atlasH;
+    });
 
-    fontGeometry.loadCharset(font, 1.0, charset);
-
-    std::cout << "Loaded " << glyphGeometries.size() << " glyphs from font" << std::endl;
-
-    // Apply MSDF edge coloring
-    const double maxCornerAngle = 3.0;
-    for (auto& glyph : glyphGeometries) {
-        glyph.edgeColoring(&msdfgen::edgeColoringInkTrap, maxCornerAngle, 0);
-    }
-
-    // Pack atlas
-    TightAtlasPacker packer;
-    packer.setDimensions(atlasSize, atlasSize);
-    packer.setMinimumScale(fontSize);
-    packer.setPixelRange(pixelRange_);
-    packer.setMiterLimit(1.0);
-    packer.pack(glyphGeometries.data(), static_cast<int>(glyphGeometries.size()));
-
-    int width = 0, height = 0;
-    packer.getDimensions(width, height);
-    atlasWidth_ = static_cast<uint32_t>(width);
-    atlasHeight_ = static_cast<uint32_t>(height);
-
-    // Generate MSDF atlas
-    ImmediateAtlasGenerator<float, 3, msdfGenerator, BitmapAtlasStorage<msdfgen::byte, 3>> generator(width, height);
-    GeneratorAttributes attributes;
-    generator.setAttributes(attributes);
-    generator.setThreadCount(4);
-    generator.generate(glyphGeometries.data(), static_cast<int>(glyphGeometries.size()));
-
-    // Get atlas bitmap
-    msdfgen::BitmapConstRef<msdfgen::byte, 3> bitmap = generator.atlasStorage();
-
-    // Convert to RGBA format for WebGPU
-    // Flip Y: msdf-atlas uses bottom-left origin, WebGPU uses top-left
-    atlasData_.resize(atlasWidth_ * atlasHeight_ * 4);
-    for (uint32_t y = 0; y < atlasHeight_; ++y) {
-        for (uint32_t x = 0; x < atlasWidth_; ++x) {
-            uint32_t dstY = atlasHeight_ - 1 - y;  // Flip destination
-            uint32_t dstIdx = (dstY * atlasWidth_ + x) * 4;
-            const msdfgen::byte* pixel = bitmap(x, y);
-            atlasData_[dstIdx + 0] = pixel[0];  // R
-            atlasData_[dstIdx + 1] = pixel[1];  // G
-            atlasData_[dstIdx + 2] = pixel[2];  // B
-            atlasData_[dstIdx + 3] = 255;       // A
+    // Pack glyphs into atlas
+    ShelfPacker packer(atlasWidth_, atlasHeight_);
+    for (auto& glyph : glyphs) {
+        if (glyph.atlasW > 0 && glyph.atlasH > 0) {
+            if (!packer.pack(glyph.atlasW, glyph.atlasH, glyph.atlasX, glyph.atlasY)) {
+                std::cerr << "Atlas full, could not pack glyph " << glyph.codepoint << std::endl;
+                continue;
+            }
+        } else {
+            glyph.atlasX = glyph.atlasY = 0;
         }
     }
 
-    // Extract glyph metrics
-    const auto& metrics = fontGeometry.getMetrics();
-    lineHeight_ = static_cast<float>(metrics.lineHeight * fontSize);
+    // Create atlas bitmap (RGBA)
+    atlasData_.resize(atlasWidth_ * atlasHeight_ * 4, 0);
 
-    for (const auto& glyph : glyphGeometries) {
-        if (glyph.getCodepoint() == 0) continue;
+    // Generate MSDF for each glyph
+    int padding = static_cast<int>(std::ceil(pixelRange_));
 
-        double al, ab, ar, at;  // Atlas bounds
-        glyph.getQuadAtlasBounds(al, ab, ar, at);
+    for (auto& glyph : glyphs) {
+        if (glyph.shape.contours.empty()) continue;
 
-        double pl, pb, pr, pt;  // Plane bounds
-        glyph.getQuadPlaneBounds(pl, pb, pr, pt);
+        // Validate and prepare shape
+        if (!glyph.shape.validate()) {
+            std::cerr << "Warning: Invalid shape for codepoint " << glyph.codepoint << std::endl;
+        }
 
-        GlyphMetrics m;
-        // Flip UV Y coordinates since we flipped the texture
-        float uvBottom = 1.0f - static_cast<float>(ab) / atlasHeight_;
-        float uvTop = 1.0f - static_cast<float>(at) / atlasHeight_;
-        m.uvMin = glm::vec2(static_cast<float>(al) / atlasWidth_, uvTop);    // top-left
-        m.uvMax = glm::vec2(static_cast<float>(ar) / atlasWidth_, uvBottom); // bottom-right
+        // Normalize shape and apply edge coloring
+        glyph.shape.normalize();
+        msdfgen::edgeColoringSimple(glyph.shape, 3.0);
 
-        // Atlas bounds are in atlas pixels. The packer scaled glyphs by fontSize.
-        // So atlas pixel size / fontSize gives em units, then * fontSize gives screen pixels.
-        // But actually the atlas is at its own scale. We use plane bounds for logical size.
-        m.size = glm::vec2(static_cast<float>((pr - pl) * fontSize), static_cast<float>((pt - pb) * fontSize));
-        m.bearing = glm::vec2(static_cast<float>(pl * fontSize), static_cast<float>(pt * fontSize));
-        m.advance = static_cast<float>(glyph.getAdvance() * fontSize);
+        double scale = fontScale;
 
-        glyphs_[glyph.getCodepoint()] = m;
+        // Create MSDF bitmap for this glyph
+        msdfgen::Bitmap<float, 3> msdf(glyph.atlasW, glyph.atlasH);
 
-        // Debug output for 'A'
-        if (glyph.getCodepoint() == 'A') {
-            std::cout << "Glyph 'A' metrics:" << std::endl;
-            std::cout << "  Atlas bounds: " << al << ", " << ab << " -> " << ar << ", " << at << std::endl;
-            std::cout << "  Plane bounds: " << pl << ", " << pb << " -> " << pr << ", " << pt << std::endl;
-            std::cout << "  UV: " << m.uvMin.x << ", " << m.uvMin.y << " -> " << m.uvMax.x << ", " << m.uvMax.y << std::endl;
-            std::cout << "  Size: " << m.size.x << " x " << m.size.y << std::endl;
-            std::cout << "  Bearing: " << m.bearing.x << ", " << m.bearing.y << std::endl;
+        // Calculate transformation: shape coords -> bitmap coords
+        // Position shape so that (boundsL, boundsB) maps to (padding, padding)
+        msdfgen::Vector2 translate(
+            padding - glyph.boundsL * scale,
+            padding - glyph.boundsB * scale
+        );
+
+        msdfgen::generateMSDF(msdf, glyph.shape, pixelRange_, scale, translate);
+
+        // Copy to atlas with Y-flip (TrueType Y-up -> bitmap/WebGPU Y-down)
+        for (int y = 0; y < glyph.atlasH; ++y) {
+            for (int x = 0; x < glyph.atlasW; ++x) {
+                int atlasX = glyph.atlasX + x;
+                int atlasY = glyph.atlasY + (glyph.atlasH - 1 - y);  // Flip Y
+
+                if (atlasX >= 0 && atlasX < (int)atlasWidth_ &&
+                    atlasY >= 0 && atlasY < (int)atlasHeight_) {
+                    size_t idx = (atlasY * atlasWidth_ + atlasX) * 4;
+                    atlasData_[idx + 0] = static_cast<uint8_t>(std::clamp(msdf(x, y)[0] * 255.0f, 0.0f, 255.0f));
+                    atlasData_[idx + 1] = static_cast<uint8_t>(std::clamp(msdf(x, y)[1] * 255.0f, 0.0f, 255.0f));
+                    atlasData_[idx + 2] = static_cast<uint8_t>(std::clamp(msdf(x, y)[2] * 255.0f, 0.0f, 255.0f));
+                    atlasData_[idx + 3] = 255;
+                }
+            }
         }
     }
 
-    // Cleanup
+    // Calculate line height
+    lineHeight_ = static_cast<float>(lineHeight * fontScale);
+
+    // Cleanup FreeType
     msdfgen::destroyFont(font);
     msdfgen::deinitializeFreetype(ft);
+
+    // Extract glyph metrics
+    for (const auto& glyph : glyphs) {
+        GlyphMetrics m;
+
+        if (glyph.atlasW > 0 && glyph.atlasH > 0) {
+            // UV coordinates
+            m.uvMin = glm::vec2(
+                static_cast<float>(glyph.atlasX) / atlasWidth_,
+                static_cast<float>(glyph.atlasY) / atlasHeight_
+            );
+            m.uvMax = glm::vec2(
+                static_cast<float>(glyph.atlasX + glyph.atlasW) / atlasWidth_,
+                static_cast<float>(glyph.atlasY + glyph.atlasH) / atlasHeight_
+            );
+        } else {
+            m.uvMin = m.uvMax = glm::vec2(0);
+        }
+
+        m.size = glm::vec2(static_cast<float>(glyph.atlasW), static_cast<float>(glyph.atlasH));
+
+        // Bearing: offset from cursor position to glyph quad
+        // bearingX: horizontal offset (left side of glyph minus padding)
+        // bearingY: vertical offset from baseline to TOP of glyph quad
+        //           In screen coords (Y-down), positive bearingY means glyph extends above baseline
+        m.bearing = glm::vec2(
+            static_cast<float>(glyph.bearingX - padding),           // Left edge offset
+            static_cast<float>(glyph.boundsT * fontScale + padding) // Top of glyph from baseline
+        );
+        m.advance = static_cast<float>(glyph.advance);
+
+        glyphs_[glyph.codepoint] = m;
+    }
 
     std::cout << "Generated MSDF atlas: " << atlasWidth_ << "x" << atlasHeight_
               << " with " << glyphs_.size() << " glyphs" << std::endl;
@@ -290,7 +378,6 @@ uint32_t parseUint(const std::string& s) {
     return static_cast<uint32_t>(std::stoul(trim(s)));
 }
 
-// Parse a simple array like [1.0, 2.0]
 glm::vec2 parseVec2(const std::string& s) {
     auto start = s.find('[');
     auto end = s.find(']');
@@ -333,8 +420,7 @@ bool Font::loadAtlas(const std::string& atlasPath, const std::string& metricsPat
     buffer << file.rdbuf();
     std::string json = buffer.str();
 
-    // Simple JSON parsing (not a full parser, just for our specific format)
-    // Parse top-level fields
+    // Simple JSON parsing
     auto findValue = [&json](const std::string& key) -> std::string {
         std::string search = "\"" + key + "\":";
         auto pos = json.find(search);
@@ -343,7 +429,6 @@ bool Font::loadAtlas(const std::string& atlasPath, const std::string& metricsPat
         pos += search.length();
         while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t')) pos++;
 
-        // Find end of value (comma, newline, or closing brace)
         size_t end = pos;
         int braceCount = 0;
         int bracketCount = 0;
@@ -392,19 +477,15 @@ bool Font::loadAtlas(const std::string& atlasPath, const std::string& metricsPat
         return false;
     }
 
-    // Find the glyphs object
     auto glyphsStart = json.find('{', glyphsPos + 9);
     if (glyphsStart == std::string::npos) return false;
 
-    // Parse each glyph entry: "codepoint": { ... }
     size_t pos = glyphsStart + 1;
     while (pos < json.size()) {
-        // Skip whitespace
         while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t' || json[pos] == '\n' || json[pos] == '\r' || json[pos] == ',')) pos++;
 
-        if (json[pos] == '}') break;  // End of glyphs
+        if (json[pos] == '}') break;
 
-        // Find codepoint key
         if (json[pos] != '"') { pos++; continue; }
 
         auto keyEnd = json.find('"', pos + 1);
@@ -413,11 +494,9 @@ bool Font::loadAtlas(const std::string& atlasPath, const std::string& metricsPat
         uint32_t codepoint = parseUint(json.substr(pos + 1, keyEnd - pos - 1));
         pos = keyEnd + 1;
 
-        // Find colon and opening brace
         auto braceStart = json.find('{', pos);
         if (braceStart == std::string::npos) break;
 
-        // Find matching closing brace
         int depth = 1;
         size_t braceEnd = braceStart + 1;
         while (braceEnd < json.size() && depth > 0) {
@@ -428,7 +507,6 @@ bool Font::loadAtlas(const std::string& atlasPath, const std::string& metricsPat
 
         std::string glyphJson = json.substr(braceStart, braceEnd - braceStart);
 
-        // Parse glyph fields
         GlyphMetrics m;
         auto findGlyphValue = [&glyphJson](const std::string& key) -> std::string {
             std::string search = "\"" + key + "\":";
@@ -465,7 +543,6 @@ bool Font::loadAtlas(const std::string& atlasPath, const std::string& metricsPat
     std::cout << "Loaded atlas " << atlasWidth_ << "x" << atlasHeight_
               << " with " << glyphs_.size() << " glyphs from " << metricsPath << std::endl;
 
-    // Build codepoint→index mapping
     buildGlyphIndexMap();
 
     return true;
@@ -475,11 +552,9 @@ void Font::buildGlyphIndexMap() {
     codepointToIndex_.clear();
     glyphMetadata_.clear();
 
-    // Index 0 is reserved for "no glyph" / space
     GlyphMetadataGPU emptyGlyph = {};
     glyphMetadata_.push_back(emptyGlyph);
 
-    // Build sorted list of codepoints for consistent ordering
     std::vector<uint32_t> codepoints;
     codepoints.reserve(glyphs_.size());
     for (const auto& [cp, _] : glyphs_) {
@@ -487,7 +562,6 @@ void Font::buildGlyphIndexMap() {
     }
     std::sort(codepoints.begin(), codepoints.end());
 
-    // Build index map and metadata array
     for (uint32_t cp : codepoints) {
         uint16_t index = static_cast<uint16_t>(glyphMetadata_.size());
         codepointToIndex_[cp] = index;
@@ -516,12 +590,11 @@ uint16_t Font::getGlyphIndex(uint32_t codepoint) const {
     if (it != codepointToIndex_.end()) {
         return it->second;
     }
-    // Try fallback to '?'
     it = codepointToIndex_.find('?');
     if (it != codepointToIndex_.end()) {
         return it->second;
     }
-    return 0;  // No glyph
+    return 0;
 }
 
 bool Font::createGlyphMetadataBuffer(WGPUDevice device) {
@@ -544,7 +617,6 @@ bool Font::createGlyphMetadataBuffer(WGPUDevice device) {
         return false;
     }
 
-    // Copy data to mapped buffer
     void* mapped = wgpuBufferGetMappedRange(glyphMetadataBuffer_, 0, bufferSize);
     memcpy(mapped, glyphMetadata_.data(), bufferSize);
     wgpuBufferUnmap(glyphMetadataBuffer_);
@@ -561,7 +633,6 @@ bool Font::createTexture(WGPUDevice device, WGPUQueue queue) {
         return false;
     }
 
-    // Create texture
     WGPUTextureDescriptor texDesc = {};
     texDesc.label = "font atlas";
     texDesc.dimension = WGPUTextureDimension_2D;
@@ -577,7 +648,6 @@ bool Font::createTexture(WGPUDevice device, WGPUQueue queue) {
         return false;
     }
 
-    // Upload texture data
     WGPUImageCopyTexture dest = {};
     dest.texture = texture_;
     dest.mipLevel = 0;
@@ -592,7 +662,6 @@ bool Font::createTexture(WGPUDevice device, WGPUQueue queue) {
     WGPUExtent3D extent = {atlasWidth_, atlasHeight_, 1};
     wgpuQueueWriteTexture(queue, &dest, atlasData_.data(), atlasData_.size(), &layout, &extent);
 
-    // Create texture view
     WGPUTextureViewDescriptor viewDesc = {};
     viewDesc.format = WGPUTextureFormat_RGBA8Unorm;
     viewDesc.dimension = WGPUTextureViewDimension_2D;
@@ -604,7 +673,6 @@ bool Font::createTexture(WGPUDevice device, WGPUQueue queue) {
 
     textureView_ = wgpuTextureCreateView(texture_, &viewDesc);
 
-    // Create sampler
     WGPUSamplerDescriptor samplerDesc = {};
     samplerDesc.addressModeU = WGPUAddressMode_ClampToEdge;
     samplerDesc.addressModeV = WGPUAddressMode_ClampToEdge;
@@ -612,9 +680,9 @@ bool Font::createTexture(WGPUDevice device, WGPUQueue queue) {
     samplerDesc.magFilter = WGPUFilterMode_Linear;
     samplerDesc.minFilter = WGPUFilterMode_Linear;
 #if YETTY_WEB
-    samplerDesc.mipmapFilter = WGPUFilterMode_Linear;  // Emscripten uses WGPUFilterMode
+    samplerDesc.mipmapFilter = WGPUFilterMode_Linear;
 #else
-    samplerDesc.mipmapFilter = WGPUMipmapFilterMode_Linear;  // wgpu-native
+    samplerDesc.mipmapFilter = WGPUMipmapFilterMode_Linear;
 #endif
     samplerDesc.maxAnisotropy = 1;
 
@@ -629,7 +697,6 @@ const GlyphMetrics* Font::getGlyph(uint32_t codepoint) const {
     if (it != glyphs_.end()) {
         return &it->second;
     }
-    // Fallback to space or question mark
     it = glyphs_.find('?');
     if (it != glyphs_.end()) {
         return &it->second;

@@ -88,7 +88,7 @@ private:
     uint32_t atlasHeight_ = 0;
     float fontSize_ = 0.0f;
     float lineHeight_ = 0.0f;
-    float pixelRange_ = 2.0f;  // MSDF pixel range
+    float pixelRange_ = 4.0f;  // MSDF pixel range (higher = better AA quality)
 
     WGPUTexture texture_ = nullptr;
     WGPUTextureView textureView_ = nullptr;
