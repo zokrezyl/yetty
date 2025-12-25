@@ -233,7 +233,7 @@ else()
         # Fetch ymery-cpp from GitHub
         CPMAddPackage(
             NAME ymery
-            GITHUB_REPOSITORY misirov/ymery-cpp
+            GITHUB_REPOSITORY zokrezyl/ymery-cpp
             GIT_TAG main
             OPTIONS
                 "YMERY_USE_WEBGPU ON"
