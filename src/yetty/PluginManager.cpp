@@ -450,4 +450,124 @@ std::string PluginManager::base94Encode(const std::string& data) {
     return result;
 }
 
+//-----------------------------------------------------------------------------
+// Input routing
+//-----------------------------------------------------------------------------
+
+PluginPtr PluginManager::pluginAtCell(int col, int row, Grid* grid) {
+    if (!grid) return nullptr;
+    if (col < 0 || row < 0) return nullptr;
+    if ((uint32_t)col >= grid->getCols() || (uint32_t)row >= grid->getRows()) return nullptr;
+
+    uint16_t glyph = grid->getGlyph(col, row);
+    if (glyph != GLYPH_PLUGIN) return nullptr;
+
+    // Extract plugin ID from fg color (encoded as RGB)
+    uint8_t r, g, b;
+    grid->getFgColor(col, row, r, g, b);
+    uint32_t pluginId = ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+
+    return getInstance(pluginId);
+}
+
+void PluginManager::clearFocus() {
+    if (focusedPlugin_) {
+        focusedPlugin_->setFocus(false);
+        focusedPlugin_ = nullptr;
+    }
+}
+
+bool PluginManager::onMouseMove(float pixelX, float pixelY, Grid* grid,
+                                 float cellWidth, float cellHeight, int scrollOffset) {
+    lastMouseX_ = pixelX;
+    lastMouseY_ = pixelY;
+
+    // Convert pixel coordinates to grid cell
+    int col = static_cast<int>(pixelX / cellWidth);
+    int row = static_cast<int>(pixelY / cellHeight);
+
+    // Adjust for scroll offset (when viewing scrollback, grid row 0 might be scrollback line N)
+    // For input purposes, we're hitting the visible grid, so no adjustment needed here
+    // The scrollOffset affects rendering position, not grid lookup
+
+    PluginPtr plugin = pluginAtCell(col, row, grid);
+    if (plugin && plugin->wantsMouse()) {
+        // Calculate local coordinates relative to plugin's top-left
+        float pluginPixelX = plugin->getX() * cellWidth;
+        float pluginPixelY = plugin->getY() * cellHeight;
+        float localX = pixelX - pluginPixelX;
+        float localY = pixelY - pluginPixelY;
+
+        return plugin->onMouseMove(localX, localY);
+    }
+
+    return false;
+}
+
+bool PluginManager::onMouseButton(int button, bool pressed, float pixelX, float pixelY,
+                                   Grid* grid, float cellWidth, float cellHeight, int scrollOffset) {
+    (void)scrollOffset;
+
+    // Convert pixel coordinates to grid cell
+    int col = static_cast<int>(pixelX / cellWidth);
+    int row = static_cast<int>(pixelY / cellHeight);
+
+    PluginPtr plugin = pluginAtCell(col, row, grid);
+
+    // Handle focus changes on mouse press
+    if (pressed && button == 0) {  // Left click
+        if (plugin != focusedPlugin_) {
+            clearFocus();
+            if (plugin && plugin->wantsKeyboard()) {
+                focusedPlugin_ = plugin;
+                plugin->setFocus(true);
+            }
+        }
+    }
+
+    if (plugin && plugin->wantsMouse()) {
+        // Calculate local coordinates
+        float pluginPixelX = plugin->getX() * cellWidth;
+        float pluginPixelY = plugin->getY() * cellHeight;
+        float localX = pixelX - pluginPixelX;
+        float localY = pixelY - pluginPixelY;
+
+        // Forward mouse position first (ymery needs this)
+        plugin->onMouseMove(localX, localY);
+        return plugin->onMouseButton(button, pressed);
+    }
+
+    return false;
+}
+
+bool PluginManager::onMouseScroll(float xoffset, float yoffset, float pixelX, float pixelY,
+                                   Grid* grid, float cellWidth, float cellHeight, int scrollOffset) {
+    (void)scrollOffset;
+
+    // Convert pixel coordinates to grid cell
+    int col = static_cast<int>(pixelX / cellWidth);
+    int row = static_cast<int>(pixelY / cellHeight);
+
+    PluginPtr plugin = pluginAtCell(col, row, grid);
+    if (plugin && plugin->wantsMouse()) {
+        return plugin->onMouseScroll(xoffset, yoffset);
+    }
+
+    return false;
+}
+
+bool PluginManager::onKey(int key, int scancode, int action, int mods) {
+    if (focusedPlugin_ && focusedPlugin_->wantsKeyboard()) {
+        return focusedPlugin_->onKey(key, scancode, action, mods);
+    }
+    return false;
+}
+
+bool PluginManager::onChar(unsigned int codepoint) {
+    if (focusedPlugin_ && focusedPlugin_->wantsKeyboard()) {
+        return focusedPlugin_->onChar(codepoint);
+    }
+    return false;
+}
+
 } // namespace yetty

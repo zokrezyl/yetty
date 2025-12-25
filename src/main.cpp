@@ -46,6 +46,10 @@ struct AppState {
     float baseCellWidth = 0.0f;
     float baseCellHeight = 0.0f;
 
+    // Mouse tracking for plugin input
+    double mouseX = 0.0;
+    double mouseY = 0.0;
+
 #if !YETTY_WEB
     Terminal* terminal = nullptr;
     PluginManager* pluginManager = nullptr;
@@ -91,14 +95,60 @@ static std::string generateLine(const std::vector<std::string>& dict, uint32_t m
 }
 
 #if !YETTY_WEB
+// Mouse cursor position callback
+void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
+    auto* state = static_cast<AppState*>(glfwGetWindowUserPointer(window));
+    if (!state) return;
+
+    state->mouseX = xpos;
+    state->mouseY = ypos;
+
+    // Route to plugins
+    if (state->pluginManager && state->terminal) {
+        float cellWidth = state->baseCellWidth * state->zoomLevel;
+        float cellHeight = state->baseCellHeight * state->zoomLevel;
+        int scrollOffset = state->terminal->getScrollOffset();
+
+        state->pluginManager->onMouseMove(
+            static_cast<float>(xpos), static_cast<float>(ypos),
+            &state->terminal->getGrid(), cellWidth, cellHeight, scrollOffset);
+    }
+}
+
+// Mouse button callback
+void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+    (void)mods;
+    auto* state = static_cast<AppState*>(glfwGetWindowUserPointer(window));
+    if (!state) return;
+
+    // Route to plugins
+    if (state->pluginManager && state->terminal) {
+        float cellWidth = state->baseCellWidth * state->zoomLevel;
+        float cellHeight = state->baseCellHeight * state->zoomLevel;
+        int scrollOffset = state->terminal->getScrollOffset();
+
+        bool consumed = state->pluginManager->onMouseButton(
+            button, action == GLFW_PRESS,
+            static_cast<float>(state->mouseX), static_cast<float>(state->mouseY),
+            &state->terminal->getGrid(), cellWidth, cellHeight, scrollOffset);
+
+        if (consumed) return;
+    }
+
+    // TODO: Handle terminal mouse events if not consumed by plugin
+}
+
 // Key callback for terminal mode
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
     auto* state = static_cast<AppState*>(glfwGetWindowUserPointer(window));
     if (!state || !state->terminal) return;
 
-    // Debug: show all key events
-    const char* actionStr = (action == GLFW_PRESS) ? "PRESS" : (action == GLFW_RELEASE) ? "RELEASE" : "REPEAT";
-    std::cerr << "KEY: " << key << " " << actionStr << " mods=" << mods << std::endl;
+    // Route to focused plugin first
+    if (state->pluginManager) {
+        if (state->pluginManager->onKey(key, scancode, action, mods)) {
+            return;  // Plugin consumed the event
+        }
+    }
 
     if (action != GLFW_PRESS && action != GLFW_REPEAT) return;
 
@@ -174,6 +224,13 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 void charCallback(GLFWwindow* window, unsigned int codepoint) {
     auto* state = static_cast<AppState*>(glfwGetWindowUserPointer(window));
     if (!state || !state->terminal) return;
+
+    // Route to focused plugin first
+    if (state->pluginManager) {
+        if (state->pluginManager->onChar(codepoint)) {
+            return;  // Plugin consumed the event
+        }
+    }
 
     state->terminal->sendKey(codepoint);
 }
@@ -310,7 +367,6 @@ static void mainLoopIteration() {
 
 // Scroll callback - wheel=scroll, Ctrl+wheel=zoom
 void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
-    (void)xoffset;
     auto* state = static_cast<AppState*>(glfwGetWindowUserPointer(window));
     if (!state || !state->renderer) return;
 
@@ -318,7 +374,21 @@ void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
                        glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
 
 #if !YETTY_WEB
-    // Scroll through scrollback (no Ctrl)
+    // Check if scroll is over a plugin first
+    if (!ctrlPressed && state->pluginManager && state->terminal) {
+        float cellWidth = state->baseCellWidth * state->zoomLevel;
+        float cellHeight = state->baseCellHeight * state->zoomLevel;
+        int scrollOffset = state->terminal->getScrollOffset();
+
+        bool consumed = state->pluginManager->onMouseScroll(
+            static_cast<float>(xoffset), static_cast<float>(yoffset),
+            static_cast<float>(state->mouseX), static_cast<float>(state->mouseY),
+            &state->terminal->getGrid(), cellWidth, cellHeight, scrollOffset);
+
+        if (consumed) return;
+    }
+
+    // Scroll through scrollback (no Ctrl, not over plugin)
     if (!ctrlPressed && state->terminal) {
         int lines = static_cast<int>(yoffset * 3);  // 3 lines per scroll notch
         if (lines > 0) {
@@ -712,9 +782,11 @@ int main(int argc, char* argv[]) {
         std::cout << "Terminal mode: Grid " << cols << "x" << rows
                   << " (damage tracking: " << (config.useDamageTracking ? "on" : "off") << ")" << std::endl;
 
-        // Set up keyboard callbacks
+        // Set up keyboard and mouse callbacks
         glfwSetKeyCallback(window, keyCallback);
         glfwSetCharCallback(window, charCallback);
+        glfwSetCursorPosCallback(window, cursorPosCallback);
+        glfwSetMouseButtonCallback(window, mouseButtonCallback);
     }
 #endif
 

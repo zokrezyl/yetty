@@ -34,6 +34,7 @@ public:
 
     // Get cell data
     uint16_t getGlyph(uint32_t col, uint32_t row) const;
+    void getFgColor(uint32_t col, uint32_t row, uint8_t& r, uint8_t& g, uint8_t& b) const;
 
     // Write ASCII string (helper) - needs Font to convert codepoints to glyph indices
     // If font is nullptr, uses codepoint directly as index (for testing only)

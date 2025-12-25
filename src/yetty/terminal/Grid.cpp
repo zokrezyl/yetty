@@ -133,6 +133,17 @@ uint16_t Grid::getGlyph(uint32_t col, uint32_t row) const {
     return glyphIndices_[cellIndex(col, row)];
 }
 
+void Grid::getFgColor(uint32_t col, uint32_t row, uint8_t& r, uint8_t& g, uint8_t& b) const {
+    if (col >= cols_ || row >= rows_) {
+        r = g = b = 255;
+        return;
+    }
+    size_t idx = cellIndex(col, row) * 4;
+    r = fgColors_[idx + 0];
+    g = fgColors_[idx + 1];
+    b = fgColors_[idx + 2];
+}
+
 void Grid::writeString(uint32_t col, uint32_t row, const char* str,
                        uint8_t fgR, uint8_t fgG, uint8_t fgB,
                        Font* font) {

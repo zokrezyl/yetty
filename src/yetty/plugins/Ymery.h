@@ -33,15 +33,15 @@ public:
     void onResize(uint32_t newWidth, uint32_t newHeight) override;
 
     // Input forwarding - returns true if event was consumed
-    bool onMouseMove(float x, float y);
-    bool onMouseButton(int button, bool pressed);
-    bool onMouseScroll(float xoffset, float yoffset);
-    bool onKey(int key, int scancode, int action, int mods);
-    bool onChar(unsigned int codepoint);
+    bool onMouseMove(float x, float y) override;
+    bool onMouseButton(int button, bool pressed) override;
+    bool onMouseScroll(float xoffset, float yoffset) override;
+    bool onKey(int key, int scancode, int action, int mods) override;
+    bool onChar(unsigned int codepoint) override;
 
     // Query if ymery wants input
-    bool wantsKeyboard() const;
-    bool wantsMouse() const;
+    bool wantsKeyboard() const override;
+    bool wantsMouse() const override;
 
 private:
     Result<void> parsePayload(const std::string& payload);

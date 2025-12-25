@@ -86,11 +86,30 @@ public:
     // Handle scroll (for relative positioned plugins)
     void onScroll(int lines);
 
+    // Input routing - returns true if event was consumed by a plugin
+    // pixelX/Y are screen coordinates, cellWidth/Height for grid lookup
+    bool onMouseMove(float pixelX, float pixelY, Grid* grid,
+                     float cellWidth, float cellHeight, int scrollOffset);
+    bool onMouseButton(int button, bool pressed, float pixelX, float pixelY,
+                       Grid* grid, float cellWidth, float cellHeight, int scrollOffset);
+    bool onMouseScroll(float xoffset, float yoffset, float pixelX, float pixelY,
+                       Grid* grid, float cellWidth, float cellHeight, int scrollOffset);
+    bool onKey(int key, int scancode, int action, int mods);
+    bool onChar(unsigned int codepoint);
+
+    // Clear focus from all plugins
+    void clearFocus();
+
+    // Get currently focused plugin
+    PluginPtr getFocusedPlugin() const { return focusedPlugin_; }
+
     // Utility: Base94 encode/decode
     static std::string base94Decode(const std::string& encoded);
     static std::string base94Encode(const std::string& data);
 
 private:
+    // Find plugin at grid cell (returns nullptr if no plugin)
+    PluginPtr pluginAtCell(int col, int row, Grid* grid);
     void markGridCells(Grid* grid, Plugin* plugin);
     void clearGridCells(Grid* grid, Plugin* plugin);
 
@@ -98,6 +117,9 @@ private:
     std::vector<PluginPtr> instances_;
     uint32_t nextInstanceId_ = 1;  // 0 is reserved for "no plugin"
     std::vector<void*> handles_;    // For cleanup of dlopen handles
+    PluginPtr focusedPlugin_;       // Plugin that receives keyboard input
+    float lastMouseX_ = 0;          // Last mouse position for hover tracking
+    float lastMouseY_ = 0;
 };
 
 } // namespace yetty

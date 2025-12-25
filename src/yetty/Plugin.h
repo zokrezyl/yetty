@@ -47,6 +47,24 @@ public:
         pixelHeight_ = newHeight;
     }
 
+    // Input handling - coordinates are relative to plugin's top-left
+    // Return true if event was consumed
+    virtual bool onMouseMove(float localX, float localY) { (void)localX; (void)localY; return false; }
+    virtual bool onMouseButton(int button, bool pressed) { (void)button; (void)pressed; return false; }
+    virtual bool onMouseScroll(float xoffset, float yoffset) { (void)xoffset; (void)yoffset; return false; }
+    virtual bool onKey(int key, int scancode, int action, int mods) {
+        (void)key; (void)scancode; (void)action; (void)mods; return false;
+    }
+    virtual bool onChar(unsigned int codepoint) { (void)codepoint; return false; }
+
+    // Query if plugin wants input (for focus management)
+    virtual bool wantsKeyboard() const { return false; }
+    virtual bool wantsMouse() const { return false; }
+
+    // Focus state
+    bool hasFocus() const { return hasFocus_; }
+    void setFocus(bool f) { hasFocus_ = f; }
+
     // Accessors
     uint32_t getId() const { return id_; }
     void setId(uint32_t id) { id_ = id; }
@@ -86,6 +104,7 @@ protected:
     uint32_t pixelHeight_ = 0;
     bool visible_ = true;
     bool needsRender_ = true;
+    bool hasFocus_ = false;
     std::string payload_;
 };
 
