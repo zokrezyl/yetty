@@ -555,6 +555,7 @@ int Terminal::onOSC(int command, VTermStringFragment frag, void* user) {
         if (term->pluginManager_) {
             // Build full sequence: command;rest
             std::string fullSeq = std::to_string(command) + ";" + term->oscBuffer_;
+            std::string response;
 
             bool handled = term->pluginManager_->handleOSCSequence(
                 fullSeq,
@@ -562,11 +563,16 @@ int Terminal::onOSC(int command, VTermStringFragment frag, void* user) {
                 term->cursorCol_,
                 term->cursorRow_,
                 term->cellWidth_,
-                term->cellHeight_
+                term->cellHeight_,
+                &response
             );
 
             if (handled) {
                 term->fullDamage_ = true;  // Force full redraw
+                // Write query response back to PTY if any
+                if (!response.empty() && term->ptyMaster_ >= 0) {
+                    (void)write(term->ptyMaster_, response.c_str(), response.size());
+                }
             }
         }
         term->oscBuffer_.clear();

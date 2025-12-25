@@ -6,8 +6,10 @@
 #endif
 
 #include <GLFW/glfw3.h>
+#include <algorithm>
 #include <iostream>
 #include <sstream>
+
 
 namespace yetty {
 
@@ -167,11 +169,28 @@ void Ymery::render(WebGPUContext& ctx,
 
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &renderPassDesc);
 
-    // Set viewport and scissor to plugin area
-    wgpuRenderPassEncoderSetViewport(pass, pixelX, pixelY, pixelW, pixelH, 0.0f, 1.0f);
+    // Clamp viewport to screen boundaries
+    float clampedX = std::max(0.0f, pixelX);
+    float clampedY = std::max(0.0f, pixelY);
+    float clampedW = std::min(pixelW, static_cast<float>(screenWidth) - clampedX);
+    float clampedH = std::min(pixelH, static_cast<float>(screenHeight) - clampedY);
+
+    // Skip if completely off-screen
+    if (clampedW <= 0 || clampedH <= 0) {
+        wgpuRenderPassEncoderEnd(pass);
+        wgpuRenderPassEncoderRelease(pass);
+        wgpuCommandEncoderRelease(encoder);
+        return;
+    }
+
+    // Set viewport and scissor to clamped plugin area
+    wgpuRenderPassEncoderSetViewport(pass, clampedX, clampedY, clampedW, clampedH, 0.0f, 1.0f);
     wgpuRenderPassEncoderSetScissorRect(pass,
-        static_cast<uint32_t>(pixelX), static_cast<uint32_t>(pixelY),
-        static_cast<uint32_t>(pixelW), static_cast<uint32_t>(pixelH));
+        static_cast<uint32_t>(clampedX), static_cast<uint32_t>(clampedY),
+        static_cast<uint32_t>(clampedW), static_cast<uint32_t>(clampedH));
+
+    // Set display position for correct screen placement
+    app_->set_display_pos(pixelX, pixelY);
 
     // Render ImGui to the pass
     app_->end_frame(pass);

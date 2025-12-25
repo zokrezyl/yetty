@@ -61,12 +61,14 @@ public:
     // Get all instances
     const std::vector<PluginPtr>& getInstances() const { return instances_; }
 
-    // Parse OSC sequence and create/update/delete plugin
+    // Parse OSC sequence and create/update/delete/query plugin
     // Returns true if sequence was handled
+    // If response is non-null and a query is made, response is filled with the reply
     bool handleOSCSequence(const std::string& sequence,
                           Grid* grid,
                           int cursorCol, int cursorRow,
-                          uint32_t cellWidth, uint32_t cellHeight);
+                          uint32_t cellWidth, uint32_t cellHeight,
+                          std::string* response = nullptr);
 
     // Update all plugin instances (called each frame)
     void update(double deltaTime);

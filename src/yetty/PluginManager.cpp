@@ -201,7 +201,8 @@ static std::string getField(const std::string& s, int fieldIndex) {
 bool PluginManager::handleOSCSequence(const std::string& sequence,
                                        Grid* grid,
                                        int cursorCol, int cursorRow,
-                                       uint32_t cellWidth, uint32_t cellHeight) {
+                                       uint32_t cellWidth, uint32_t cellHeight,
+                                       std::string* response) {
     // Format: <vendor_id>;<plugin_id>;<mode>;...
     // Base94 payload may contain ';', so we use fixed field positions.
 
@@ -254,6 +255,35 @@ bool PluginManager::handleOSCSequence(const std::string& sequence,
             std::cerr << "PluginManager: " << error_msg(result) << std::endl;
             return false;
         }
+        return true;
+    }
+
+    if (mode == "Q") {
+        // Query: 99999;?;Q - returns list of active plugin instances
+        if (response) {
+            // Build response: OSC sequence with plugin list
+            // Format: ESC ] 99999;!;Q;<id>;<plugin>;<x>;<y>;<w>;<h>; ... ST
+            std::string result = "\033]";
+            result += std::to_string(YETTY_OSC_VENDOR_ID);
+            result += ";!;Q";  // '!' indicates this is a response
+            for (const auto& instance : instances_) {
+                result += ";";
+                result += std::to_string(instance->getId());
+                result += ",";
+                result += instance->pluginName();
+                result += ",";
+                result += std::to_string(instance->getX());
+                result += ",";
+                result += std::to_string(instance->getY());
+                result += ",";
+                result += std::to_string(instance->getWidthCells());
+                result += ",";
+                result += std::to_string(instance->getHeightCells());
+            }
+            result += "\033\\";  // String terminator
+            *response = result;
+        }
+        std::cout << "PluginManager: Query - " << instances_.size() << " active instances" << std::endl;
         return true;
     }
 
