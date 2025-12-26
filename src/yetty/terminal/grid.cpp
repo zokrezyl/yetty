@@ -1,5 +1,5 @@
-#include "Grid.h"
-#include "Font.h"
+#include "grid.h"
+#include "font.h"
 #include <algorithm>
 #include <cstring>
 

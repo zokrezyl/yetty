@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Plugin.h"
+#include "plugin.h"
 #include "result.hpp"
 #include <memory>
 #include <vector>

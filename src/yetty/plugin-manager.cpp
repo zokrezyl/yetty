@@ -1,4 +1,4 @@
-#include "PluginManager.h"
+#include "plugin-manager.h"
 #include "terminal/Grid.h"
 #include "renderer/WebGPUContext.h"
 #include <spdlog/spdlog.h>

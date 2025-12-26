@@ -1,5 +1,5 @@
-#include "Image.h"
-#include "../renderer/WebGPUContext.h"
+#include "image.h"
+#include "../renderer/webgpu-context.h"
 #include <iostream>
 #include <cstring>
 

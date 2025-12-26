@@ -1,4 +1,4 @@
-#include "WebGPUContext.h"
+#include "webgpu-context.h"
 #include <iostream>
 #include <cassert>
 

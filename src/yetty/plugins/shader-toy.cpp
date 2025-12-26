@@ -1,5 +1,5 @@
-#include "ShaderToy.h"
-#include "../renderer/WebGPUContext.h"
+#include "shader-toy.h"
+#include "../renderer/webgpu-context.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
 #include <sstream>

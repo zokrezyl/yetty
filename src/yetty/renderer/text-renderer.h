@@ -1,6 +1,6 @@
 #pragma once
 
-#include "WebGPUContext.h"
+#include "webgpu-context.h"
 #include "../result.hpp"
 #include "../terminal/Grid.h"
 #include "../terminal/Font.h"

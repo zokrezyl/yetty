@@ -1,4 +1,4 @@
-#include "Font.h"
+#include "font.h"
 
 #if !YETTY_USE_PREBUILT_ATLAS
 #include <msdfgen.h>

@@ -1,5 +1,5 @@
-#include "Ymery.h"
-#include "../renderer/WebGPUContext.h"
+#include "ymery.h"
+#include "../renderer/webgpu-context.h"
 
 #ifdef YETTY_YMERY_ENABLED
 #include <ymery/embedded.hpp>

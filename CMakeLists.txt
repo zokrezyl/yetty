@@ -156,15 +156,15 @@ endif()
 #-----------------------------------------------------------------------------
 add_executable(yetty
     src/main.cpp
-    src/yetty/renderer/WebGPUContext.cpp
-    src/yetty/renderer/TextRenderer.cpp
-    src/yetty/terminal/Grid.cpp
-    src/yetty/terminal/Font.cpp
-    $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/terminal/Terminal.cpp>
-    $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/PluginManager.cpp>
-    $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/plugins/ShaderToy.cpp>
-    $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/plugins/Image.cpp>
-    $<$<AND:$<NOT:$<BOOL:${EMSCRIPTEN}>>,$<BOOL:${YETTY_YMERY_ENABLED}>>:src/yetty/plugins/Ymery.cpp>
+    src/yetty/renderer/webgpu-context.cpp
+    src/yetty/renderer/text-renderer.cpp
+    src/yetty/terminal/grid.cpp
+    src/yetty/terminal/font.cpp
+    $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/terminal/terminal.cpp>
+    $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/plugin-manager.cpp>
+    $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/plugins/shader-toy.cpp>
+    $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/plugins/image.cpp>
+    $<$<AND:$<NOT:$<BOOL:${EMSCRIPTEN}>>,$<BOOL:${YETTY_YMERY_ENABLED}>>:src/yetty/plugins/ymery.cpp>
 )
 
 target_include_directories(yetty PRIVATE

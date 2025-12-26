@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Grid.h"
-#include "Font.h"
+#include "grid.h"
+#include "font.h"
 #include "../Config.h"
 #include "../result.hpp"
 

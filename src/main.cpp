@@ -1,16 +1,16 @@
-#include "yetty/renderer/WebGPUContext.h"
-#include "yetty/renderer/TextRenderer.h"
-#include "yetty/terminal/Grid.h"
-#include "yetty/terminal/Font.h"
-#include "yetty/Config.h"
+#include "yetty/renderer/webgpu-context.h"
+#include "yetty/renderer/text-renderer.h"
+#include "yetty/terminal/grid.h"
+#include "yetty/terminal/font.h"
+#include "yetty/config.h"
 
 #if !YETTY_WEB
-#include "yetty/terminal/Terminal.h"
-#include "yetty/PluginManager.h"
-#include "yetty/plugins/ShaderToy.h"
-#include "yetty/plugins/Image.h"
+#include "yetty/terminal/terminal.h"
+#include "yetty/plugin-manager.h"
+#include "yetty/plugins/shader-toy.h"
+#include "yetty/plugins/image.h"
 #ifdef YETTY_YMERY_ENABLED
-#include "yetty/plugins/Ymery.h"
+#include "yetty/plugins/ymery.h"
 #endif
 #include <termios.h>
 #include <unistd.h>
