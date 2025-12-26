@@ -118,10 +118,9 @@ Result<void> YmeryPlugin::init(WebGPUContext* ctx) {
 
 void YmeryPlugin::dispose() {
 #ifdef YETTY_YMERY_ENABLED
-    if (_app) {
-        _app->dispose();
-        _app.reset();
-    }
+    // Just reset - shared_ptr destructor chain handles cleanup
+    // Don't call _app->dispose() as it causes double-free
+    _app.reset();
 
     if (_imgui_ctx) {
         ImGui::SetCurrentContext(_imgui_ctx);
