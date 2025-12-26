@@ -3,116 +3,143 @@
 #include <iostream>
 #include <cstring>
 
-// Note: STB_IMAGE_IMPLEMENTATION is defined in Font.cpp
 #include <stb_image.h>
 
 namespace yetty {
 
-Image::Image() {
+//-----------------------------------------------------------------------------
+// ImagePlugin
+//-----------------------------------------------------------------------------
+
+ImagePlugin::ImagePlugin() = default;
+ImagePlugin::~ImagePlugin() { dispose(); }
+
+Result<PluginPtr> ImagePlugin::create() {
+    return Ok<PluginPtr>(std::make_shared<ImagePlugin>());
 }
 
-Image::~Image() {
-    dispose();
+Result<void> ImagePlugin::init(WebGPUContext* ctx) {
+    (void)ctx;
+    initialized_ = true;
+    return Ok();
 }
 
-Result<PluginPtr> Image::create() {
-    return Ok<PluginPtr>(std::make_shared<Image>());
+void ImagePlugin::dispose() {
+    Plugin::dispose();
+    initialized_ = false;
 }
 
-Result<void> Image::init(const std::string& payload) {
+Result<PluginLayerPtr> ImagePlugin::createLayer(const std::string& payload) {
+    auto layer = std::make_shared<ImageLayer>();
+    auto result = layer->init(payload);
+    if (!result) {
+        return Err<PluginLayerPtr>("Failed to init ImageLayer", result);
+    }
+    return Ok<PluginLayerPtr>(layer);
+}
+
+void ImagePlugin::renderAll(WebGPUContext& ctx,
+                             WGPUTextureView targetView, WGPUTextureFormat targetFormat,
+                             uint32_t screenWidth, uint32_t screenHeight,
+                             float cellWidth, float cellHeight,
+                             int scrollOffset, uint32_t termRows) {
+    for (auto& layerBase : layers_) {
+        if (!layerBase->isVisible()) continue;
+
+        auto layer = std::static_pointer_cast<ImageLayer>(layerBase);
+
+        float pixelX = layer->getX() * cellWidth;
+        float pixelY = layer->getY() * cellHeight;
+        float pixelW = layer->getWidthCells() * cellWidth;
+        float pixelH = layer->getHeightCells() * cellHeight;
+
+        if (layer->getPositionMode() == PositionMode::Relative && scrollOffset > 0) {
+            pixelY += scrollOffset * cellHeight;
+        }
+
+        if (termRows > 0) {
+            float screenPixelHeight = termRows * cellHeight;
+            if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
+                continue;
+            }
+        }
+
+        layer->render(ctx, targetView, targetFormat,
+                      screenWidth, screenHeight,
+                      pixelX, pixelY, pixelW, pixelH);
+    }
+}
+
+//-----------------------------------------------------------------------------
+// ImageLayer
+//-----------------------------------------------------------------------------
+
+ImageLayer::ImageLayer() = default;
+
+ImageLayer::~ImageLayer() { dispose(); }
+
+Result<void> ImageLayer::init(const std::string& payload) {
     if (payload.empty()) {
-        return Err<void>("Image: empty payload");
+        return Err<void>("ImageLayer: empty payload");
     }
 
-    // Reset state for re-initialization
+    payload_ = payload;
     dispose();
 
-    // Load image from payload (raw image bytes)
     auto result = loadImage(payload);
     if (!result) {
         return result;
     }
 
-    std::cout << "Image: loaded " << imageWidth_ << "x" << imageHeight_
+    std::cout << "ImageLayer: loaded " << imageWidth_ << "x" << imageHeight_
               << " (" << imageChannels_ << " channels)" << std::endl;
     return Ok();
 }
 
-Result<void> Image::loadImage(const std::string& data) {
-    // Free any existing image data
+Result<void> ImageLayer::loadImage(const std::string& data) {
     if (imageData_) {
         stbi_image_free(imageData_);
         imageData_ = nullptr;
     }
 
-    // Load image from memory
     imageData_ = stbi_load_from_memory(
         reinterpret_cast<const unsigned char*>(data.data()),
         static_cast<int>(data.size()),
-        &imageWidth_, &imageHeight_, &imageChannels_,
-        4  // Force RGBA
-    );
+        &imageWidth_, &imageHeight_, &imageChannels_, 4);
 
     if (!imageData_) {
         return Err<void>(std::string("Failed to load image: ") + stbi_failure_reason());
     }
 
-    imageChannels_ = 4;  // We forced RGBA
+    imageChannels_ = 4;
     return Ok();
 }
 
-void Image::dispose() {
-    if (bindGroup_) {
-        wgpuBindGroupRelease(bindGroup_);
-        bindGroup_ = nullptr;
-    }
-    if (pipeline_) {
-        wgpuRenderPipelineRelease(pipeline_);
-        pipeline_ = nullptr;
-    }
-    if (uniformBuffer_) {
-        wgpuBufferRelease(uniformBuffer_);
-        uniformBuffer_ = nullptr;
-    }
-    if (sampler_) {
-        wgpuSamplerRelease(sampler_);
-        sampler_ = nullptr;
-    }
-    if (textureView_) {
-        wgpuTextureViewRelease(textureView_);
-        textureView_ = nullptr;
-    }
-    if (texture_) {
-        wgpuTextureRelease(texture_);
-        texture_ = nullptr;
-    }
-    if (imageData_) {
-        stbi_image_free(imageData_);
-        imageData_ = nullptr;
-    }
-    initialized_ = false;
+void ImageLayer::dispose() {
+    if (bindGroup_) { wgpuBindGroupRelease(bindGroup_); bindGroup_ = nullptr; }
+    if (pipeline_) { wgpuRenderPipelineRelease(pipeline_); pipeline_ = nullptr; }
+    if (uniformBuffer_) { wgpuBufferRelease(uniformBuffer_); uniformBuffer_ = nullptr; }
+    if (sampler_) { wgpuSamplerRelease(sampler_); sampler_ = nullptr; }
+    if (textureView_) { wgpuTextureViewRelease(textureView_); textureView_ = nullptr; }
+    if (texture_) { wgpuTextureRelease(texture_); texture_ = nullptr; }
+    if (imageData_) { stbi_image_free(imageData_); imageData_ = nullptr; }
+    gpuInitialized_ = false;
 }
 
-void Image::update(double deltaTime) {
-    (void)deltaTime;
-    // Images are static, no update needed
-}
-
-void Image::render(WebGPUContext& ctx,
-                   WGPUTextureView targetView, WGPUTextureFormat targetFormat,
-                   uint32_t screenWidth, uint32_t screenHeight,
-                   float pixelX, float pixelY, float pixelW, float pixelH) {
+void ImageLayer::render(WebGPUContext& ctx,
+                         WGPUTextureView targetView, WGPUTextureFormat targetFormat,
+                         uint32_t screenWidth, uint32_t screenHeight,
+                         float pixelX, float pixelY, float pixelW, float pixelH) {
     if (failed_ || !imageData_) return;
 
-    // First time: create GPU resources
-    if (!initialized_) {
+    if (!gpuInitialized_) {
         auto result = createPipeline(ctx, targetFormat);
         if (!result) {
-            std::cerr << "Image: " << error_msg(result) << std::endl;
+            std::cerr << "ImageLayer: " << error_msg(result) << std::endl;
             failed_ = true;
             return;
         }
-        initialized_ = true;
+        gpuInitialized_ = true;
     }
 
     if (!pipeline_ || !uniformBuffer_ || !bindGroup_) {
@@ -120,16 +147,12 @@ void Image::render(WebGPUContext& ctx,
         return;
     }
 
-    // Update uniform buffer with position
     float ndcX = (pixelX / screenWidth) * 2.0f - 1.0f;
     float ndcY = 1.0f - (pixelY / screenHeight) * 2.0f;
     float ndcW = (pixelW / screenWidth) * 2.0f;
     float ndcH = (pixelH / screenHeight) * 2.0f;
 
-    struct Uniforms {
-        float rect[4];  // x, y, w, h in NDC
-    } uniforms;
-
+    struct Uniforms { float rect[4]; } uniforms;
     uniforms.rect[0] = ndcX;
     uniforms.rect[1] = ndcY;
     uniforms.rect[2] = ndcW;
@@ -137,15 +160,10 @@ void Image::render(WebGPUContext& ctx,
 
     wgpuQueueWriteBuffer(ctx.getQueue(), uniformBuffer_, 0, &uniforms, sizeof(uniforms));
 
-    // Create command encoder
     WGPUCommandEncoderDescriptor encoderDesc = {};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encoderDesc);
-    if (!encoder) {
-        std::cerr << "Image: failed to create command encoder" << std::endl;
-        return;
-    }
+    if (!encoder) return;
 
-    // Render pass
     WGPURenderPassColorAttachment colorAttachment = {};
     colorAttachment.view = targetView;
     colorAttachment.loadOp = WGPULoadOp_Load;
@@ -156,11 +174,7 @@ void Image::render(WebGPUContext& ctx,
     passDesc.colorAttachments = &colorAttachment;
 
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
-    if (!pass) {
-        std::cerr << "Image: failed to begin render pass" << std::endl;
-        wgpuCommandEncoderRelease(encoder);
-        return;
-    }
+    if (!pass) { wgpuCommandEncoderRelease(encoder); return; }
 
     wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
     wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
@@ -177,14 +191,9 @@ void Image::render(WebGPUContext& ctx,
     wgpuCommandEncoderRelease(encoder);
 }
 
-void Image::onResize(uint32_t newWidth, uint32_t newHeight) {
-    Plugin::onResize(newWidth, newHeight);
-}
-
-Result<void> Image::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat) {
+Result<void> ImageLayer::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat) {
     WGPUDevice device = ctx.getDevice();
 
-    // Create texture from image data
     WGPUTextureDescriptor texDesc = {};
     texDesc.size.width = imageWidth_;
     texDesc.size.height = imageHeight_;
@@ -196,98 +205,56 @@ Result<void> Image::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetF
     texDesc.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
 
     texture_ = wgpuDeviceCreateTexture(device, &texDesc);
-    if (!texture_) {
-        return Err<void>("Failed to create texture");
-    }
+    if (!texture_) return Err<void>("Failed to create texture");
 
-    // Upload image data
     WGPUImageCopyTexture dst = {};
     dst.texture = texture_;
-    dst.mipLevel = 0;
-    dst.origin = {0, 0, 0};
-    dst.aspect = WGPUTextureAspect_All;
-
     WGPUTextureDataLayout layout = {};
-    layout.offset = 0;
     layout.bytesPerRow = imageWidth_ * 4;
     layout.rowsPerImage = imageHeight_;
-
-    WGPUExtent3D extent = {static_cast<uint32_t>(imageWidth_),
-                           static_cast<uint32_t>(imageHeight_), 1};
+    WGPUExtent3D extent = {(uint32_t)imageWidth_, (uint32_t)imageHeight_, 1};
     wgpuQueueWriteTexture(ctx.getQueue(), &dst, imageData_,
                           imageWidth_ * imageHeight_ * 4, &layout, &extent);
 
-    // Create texture view
     WGPUTextureViewDescriptor viewDesc = {};
     viewDesc.format = WGPUTextureFormat_RGBA8Unorm;
     viewDesc.dimension = WGPUTextureViewDimension_2D;
     viewDesc.mipLevelCount = 1;
     viewDesc.arrayLayerCount = 1;
     textureView_ = wgpuTextureCreateView(texture_, &viewDesc);
-    if (!textureView_) {
-        return Err<void>("Failed to create texture view");
-    }
+    if (!textureView_) return Err<void>("Failed to create texture view");
 
-    // Create sampler
     WGPUSamplerDescriptor samplerDesc = {};
     samplerDesc.minFilter = WGPUFilterMode_Linear;
     samplerDesc.magFilter = WGPUFilterMode_Linear;
     samplerDesc.addressModeU = WGPUAddressMode_ClampToEdge;
     samplerDesc.addressModeV = WGPUAddressMode_ClampToEdge;
     samplerDesc.addressModeW = WGPUAddressMode_ClampToEdge;
-    samplerDesc.maxAnisotropy = 1;  // Must be at least 1
+    samplerDesc.maxAnisotropy = 1;
     sampler_ = wgpuDeviceCreateSampler(device, &samplerDesc);
-    if (!sampler_) {
-        return Err<void>("Failed to create sampler");
-    }
+    if (!sampler_) return Err<void>("Failed to create sampler");
 
-    // Create uniform buffer
     WGPUBufferDescriptor bufDesc = {};
-    bufDesc.size = 16;  // 4 floats for rect
+    bufDesc.size = 16;
     bufDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
     uniformBuffer_ = wgpuDeviceCreateBuffer(device, &bufDesc);
-    if (!uniformBuffer_) {
-        return Err<void>("Failed to create uniform buffer");
-    }
+    if (!uniformBuffer_) return Err<void>("Failed to create uniform buffer");
 
-    // Shader code
     const char* shaderCode = R"(
-struct Uniforms {
-    rect: vec4<f32>,  // x, y, w, h in NDC
-}
-
+struct Uniforms { rect: vec4<f32>, }
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(0) @binding(1) var texSampler: sampler;
 @group(0) @binding(2) var tex: texture_2d<f32>;
-
-struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-    @location(0) uv: vec2<f32>,
+struct VertexOutput { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32>, }
+@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOutput {
+    var p = array<vec2<f32>,6>(vec2(0.,0.),vec2(1.,0.),vec2(1.,1.),vec2(0.,0.),vec2(1.,1.),vec2(0.,1.));
+    let pos = p[vi];
+    var o: VertexOutput;
+    o.position = vec4(u.rect.x + pos.x * u.rect.z, u.rect.y - pos.y * u.rect.w, 0., 1.);
+    o.uv = pos;
+    return o;
 }
-
-@vertex
-fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-    var positions = array<vec2<f32>, 6>(
-        vec2<f32>(0.0, 0.0),
-        vec2<f32>(1.0, 0.0),
-        vec2<f32>(1.0, 1.0),
-        vec2<f32>(0.0, 0.0),
-        vec2<f32>(1.0, 1.0),
-        vec2<f32>(0.0, 1.0)
-    );
-
-    let pos = positions[vertexIndex];
-    let ndcX = u.rect.x + pos.x * u.rect.z;
-    let ndcY = u.rect.y - pos.y * u.rect.w;
-
-    var output: VertexOutput;
-    output.position = vec4<f32>(ndcX, ndcY, 0.0, 1.0);
-    output.uv = pos;
-    return output;
-}
-
-@fragment
-fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+@fragment fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     return textureSample(tex, texSampler, uv);
 }
 )";
@@ -295,93 +262,45 @@ fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     WGPUShaderModuleWGSLDescriptor wgslDesc = {};
     wgslDesc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
     wgslDesc.code = shaderCode;
-
     WGPUShaderModuleDescriptor shaderDesc = {};
     shaderDesc.nextInChain = &wgslDesc.chain;
     WGPUShaderModule shaderModule = wgpuDeviceCreateShaderModule(device, &shaderDesc);
-    if (!shaderModule) {
-        return Err<void>("Failed to create shader module");
-    }
+    if (!shaderModule) return Err<void>("Failed to create shader module");
 
-    // Bind group layout
     WGPUBindGroupLayoutEntry entries[3] = {};
-
-    // Uniform buffer
-    entries[0].binding = 0;
-    entries[0].visibility = WGPUShaderStage_Vertex;
+    entries[0].binding = 0; entries[0].visibility = WGPUShaderStage_Vertex;
     entries[0].buffer.type = WGPUBufferBindingType_Uniform;
-
-    // Sampler
-    entries[1].binding = 1;
-    entries[1].visibility = WGPUShaderStage_Fragment;
+    entries[1].binding = 1; entries[1].visibility = WGPUShaderStage_Fragment;
     entries[1].sampler.type = WGPUSamplerBindingType_Filtering;
-
-    // Texture
-    entries[2].binding = 2;
-    entries[2].visibility = WGPUShaderStage_Fragment;
+    entries[2].binding = 2; entries[2].visibility = WGPUShaderStage_Fragment;
     entries[2].texture.sampleType = WGPUTextureSampleType_Float;
     entries[2].texture.viewDimension = WGPUTextureViewDimension_2D;
 
     WGPUBindGroupLayoutDescriptor bglDesc = {};
-    bglDesc.entryCount = 3;
-    bglDesc.entries = entries;
+    bglDesc.entryCount = 3; bglDesc.entries = entries;
     WGPUBindGroupLayout bgl = wgpuDeviceCreateBindGroupLayout(device, &bglDesc);
-    if (!bgl) {
-        wgpuShaderModuleRelease(shaderModule);
-        return Err<void>("Failed to create bind group layout");
-    }
+    if (!bgl) { wgpuShaderModuleRelease(shaderModule); return Err<void>("Failed to create bgl"); }
 
-    // Pipeline layout
     WGPUPipelineLayoutDescriptor plDesc = {};
-    plDesc.bindGroupLayoutCount = 1;
-    plDesc.bindGroupLayouts = &bgl;
+    plDesc.bindGroupLayoutCount = 1; plDesc.bindGroupLayouts = &bgl;
     WGPUPipelineLayout pipelineLayout = wgpuDeviceCreatePipelineLayout(device, &plDesc);
-    if (!pipelineLayout) {
-        wgpuShaderModuleRelease(shaderModule);
-        wgpuBindGroupLayoutRelease(bgl);
-        return Err<void>("Failed to create pipeline layout");
-    }
 
-    // Bind group
-    WGPUBindGroupEntry bgEntries[3] = {};
-    bgEntries[0].binding = 0;
-    bgEntries[0].buffer = uniformBuffer_;
-    bgEntries[0].size = 16;
-
-    bgEntries[1].binding = 1;
-    bgEntries[1].sampler = sampler_;
-
-    bgEntries[2].binding = 2;
-    bgEntries[2].textureView = textureView_;
-
+    WGPUBindGroupEntry bgE[3] = {};
+    bgE[0].binding = 0; bgE[0].buffer = uniformBuffer_; bgE[0].size = 16;
+    bgE[1].binding = 1; bgE[1].sampler = sampler_;
+    bgE[2].binding = 2; bgE[2].textureView = textureView_;
     WGPUBindGroupDescriptor bgDesc = {};
-    bgDesc.layout = bgl;
-    bgDesc.entryCount = 3;
-    bgDesc.entries = bgEntries;
+    bgDesc.layout = bgl; bgDesc.entryCount = 3; bgDesc.entries = bgE;
     bindGroup_ = wgpuDeviceCreateBindGroup(device, &bgDesc);
-    if (!bindGroup_) {
-        wgpuShaderModuleRelease(shaderModule);
-        wgpuBindGroupLayoutRelease(bgl);
-        wgpuPipelineLayoutRelease(pipelineLayout);
-        return Err<void>("Failed to create bind group");
-    }
 
-    // Render pipeline
     WGPURenderPipelineDescriptor pipelineDesc = {};
     pipelineDesc.layout = pipelineLayout;
-
     pipelineDesc.vertex.module = shaderModule;
     pipelineDesc.vertex.entryPoint = "vs_main";
-
     WGPUFragmentState fragState = {};
-    fragState.module = shaderModule;
-    fragState.entryPoint = "fs_main";
-
+    fragState.module = shaderModule; fragState.entryPoint = "fs_main";
     WGPUColorTargetState colorTarget = {};
-    colorTarget.format = targetFormat;
-    colorTarget.writeMask = WGPUColorWriteMask_All;
-
-    // Alpha blending
+    colorTarget.format = targetFormat; colorTarget.writeMask = WGPUColorWriteMask_All;
     WGPUBlendState blend = {};
     blend.color.srcFactor = WGPUBlendFactor_SrcAlpha;
     blend.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
@@ -390,17 +309,10 @@ fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     blend.alpha.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
     blend.alpha.operation = WGPUBlendOperation_Add;
     colorTarget.blend = &blend;
-
-    fragState.targetCount = 1;
-    fragState.targets = &colorTarget;
+    fragState.targetCount = 1; fragState.targets = &colorTarget;
     pipelineDesc.fragment = &fragState;
-
     pipelineDesc.primitive.topology = WGPUPrimitiveTopology_TriangleList;
-    pipelineDesc.primitive.frontFace = WGPUFrontFace_CCW;
-    pipelineDesc.primitive.cullMode = WGPUCullMode_None;
-
-    pipelineDesc.multisample.count = 1;
-    pipelineDesc.multisample.mask = ~0u;
+    pipelineDesc.multisample.count = 1; pipelineDesc.multisample.mask = ~0u;
 
     pipeline_ = wgpuDeviceCreateRenderPipeline(device, &pipelineDesc);
 
@@ -408,18 +320,15 @@ fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     wgpuBindGroupLayoutRelease(bgl);
     wgpuPipelineLayoutRelease(pipelineLayout);
 
-    if (!pipeline_) {
-        return Err<void>("Failed to create render pipeline");
-    }
+    if (!pipeline_) return Err<void>("Failed to create render pipeline");
 
-    std::cout << "Image: pipeline created successfully" << std::endl;
+    std::cout << "ImageLayer: pipeline created" << std::endl;
     return Ok();
 }
 
 } // namespace yetty
 
-// C exports for dynamic loading (when compiled as separate .so)
 extern "C" {
     const char* image_plugin_name() { return "image"; }
-    yetty::Result<yetty::PluginPtr> image_plugin_create() { return yetty::Image::create(); }
+    yetty::Result<yetty::PluginPtr> image_plugin_create() { return yetty::ImagePlugin::create(); }
 }

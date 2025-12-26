@@ -136,6 +136,15 @@ void Terminal::update() {
         vterm_input_write(vterm_, buf, nread);
         vterm_screen_flush_damage(vtermScreen_);
 
+        // Process any deferred newlines from plugin activation
+        // (can't call vterm_input_write during OSC callback)
+        if (pendingNewlines_ > 0) {
+            std::string newlines(pendingNewlines_, '\n');
+            vterm_input_write(vterm_, newlines.c_str(), newlines.size());
+            vterm_screen_flush_damage(vtermScreen_);
+            pendingNewlines_ = 0;
+        }
+
         // Flush any output libvterm generated (e.g., cursor position responses)
         size_t outlen = vterm_output_get_buffer_current(vterm_);
         if (outlen > 0) {
@@ -475,8 +484,9 @@ int Terminal::onSbPushline(int cols, const VTermScreenCell* cells, void* user) {
     }
 
     // Notify plugin manager that content scrolled up by 1 line
+    // Pass grid so plugin cell markers can be updated
     if (term->pluginManager_) {
-        term->pluginManager_->onScroll(1);
+        term->pluginManager_->onScroll(1, &term->grid_);
     }
 
     return 1;  // We stored the line
@@ -518,6 +528,13 @@ int Terminal::onSbPopline(int cols, VTermScreenCell* cells, void* user) {
     }
 
     term->scrollback_.pop_back();
+
+    // Notify plugin manager that content scrolled down by 1 line
+    // (opposite of pushline - plugins move down)
+    if (term->pluginManager_) {
+        term->pluginManager_->onScroll(-1, &term->grid_);
+    }
+
     return 1;  // We restored the line
 }
 
@@ -556,6 +573,7 @@ int Terminal::onOSC(int command, VTermStringFragment frag, void* user) {
             // Build full sequence: command;rest
             std::string fullSeq = std::to_string(command) + ";" + term->oscBuffer_;
             std::string response;
+            uint32_t linesToAdvance = 0;
 
             bool handled = term->pluginManager_->handleOSCSequence(
                 fullSeq,
@@ -564,7 +582,8 @@ int Terminal::onOSC(int command, VTermStringFragment frag, void* user) {
                 term->cursorRow_,
                 term->cellWidth_,
                 term->cellHeight_,
-                &response
+                &response,
+                &linesToAdvance
             );
 
             if (handled) {
@@ -572,6 +591,12 @@ int Terminal::onOSC(int command, VTermStringFragment frag, void* user) {
                 // Write query response back to PTY if any
                 if (!response.empty() && term->ptyMaster_ >= 0) {
                     (void)write(term->ptyMaster_, response.c_str(), response.size());
+                }
+
+                // Defer cursor advance - can't call vterm_input_write during callback
+                // Will be processed after current vterm_input_write completes
+                if (linesToAdvance > 0) {
+                    term->pendingNewlines_ = linesToAdvance;
                 }
             }
         }

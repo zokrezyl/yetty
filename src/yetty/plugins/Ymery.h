@@ -4,66 +4,102 @@
 #include <webgpu/webgpu.h>
 #include <memory>
 
-// Forward declare ymery types
+#ifdef YETTY_YMERY_ENABLED
+struct ImGuiContext;
+struct ImPlotContext;
 namespace ymery {
     class EmbeddedApp;
 }
+#endif
 
 namespace yetty {
 
-// Ymery plugin - renders ymery YAML-based ImGui widgets
-class Ymery : public Plugin {
-public:
-    Ymery();
-    ~Ymery() override;
+class YmeryLayer;
 
-    // Factory method for plugin creation
+//-----------------------------------------------------------------------------
+// YmeryPlugin - holds shared ImGui context and ymery::EmbeddedApp
+//-----------------------------------------------------------------------------
+class YmeryPlugin : public Plugin {
+public:
+    YmeryPlugin();
+    ~YmeryPlugin() override;
+
     static Result<PluginPtr> create();
 
-    // Plugin interface
     const char* pluginName() const override { return "ymery"; }
+
+    Result<void> init(WebGPUContext* ctx) override;
+    void dispose() override;
+
+    Result<PluginLayerPtr> createLayer(const std::string& payload) override;
+
+    void renderAll(WebGPUContext& ctx,
+                   WGPUTextureView targetView, WGPUTextureFormat targetFormat,
+                   uint32_t screenWidth, uint32_t screenHeight,
+                   float cellWidth, float cellHeight,
+                   int scrollOffset, uint32_t termRows) override;
+
+#ifdef YETTY_YMERY_ENABLED
+    ImGuiContext* imguiContext() const { return imguiCtx_; }
+    std::shared_ptr<ymery::EmbeddedApp> app() const { return app_; }
+
+    // For input coordinate calculation
+    float cellWidth_ = 0;
+    float cellHeight_ = 0;
+#endif
+
+private:
+#ifdef YETTY_YMERY_ENABLED
+    Result<void> initImGui(uint32_t screenWidth, uint32_t screenHeight);
+
+    std::shared_ptr<ymery::EmbeddedApp> app_;
+    ImGuiContext* imguiCtx_ = nullptr;
+    ImPlotContext* implotCtx_ = nullptr;
+    WGPUDevice device_ = nullptr;
+    WGPUQueue queue_ = nullptr;
+    WGPUTextureFormat format_ = WGPUTextureFormat_Undefined;
+#endif
+    double lastTime_ = 0.0;
+};
+
+//-----------------------------------------------------------------------------
+// YmeryLayer - per-layer position/size, forwards input to shared ImGui context
+//-----------------------------------------------------------------------------
+class YmeryLayer : public PluginLayer {
+public:
+    YmeryLayer();
+    ~YmeryLayer() override;
 
     Result<void> init(const std::string& payload) override;
     void dispose() override;
-    void update(double deltaTime) override;
-    void render(WebGPUContext& ctx,
-               WGPUTextureView targetView, WGPUTextureFormat targetFormat,
-               uint32_t screenWidth, uint32_t screenHeight,
-               float pixelX, float pixelY, float pixelW, float pixelH) override;
-    void onResize(uint32_t newWidth, uint32_t newHeight) override;
 
-    // Input forwarding - returns true if event was consumed
     bool onMouseMove(float x, float y) override;
     bool onMouseButton(int button, bool pressed) override;
     bool onMouseScroll(float xoffset, float yoffset, int mods) override;
     bool onKey(int key, int scancode, int action, int mods) override;
     bool onChar(unsigned int codepoint) override;
 
-    // Query if ymery wants input
     bool wantsKeyboard() const override;
     bool wantsMouse() const override;
 
-    // Focus handling
     void setFocus(bool f) override;
+
+    const std::string& getLayoutPath() const { return layoutPath_; }
+    const std::string& getPluginPath() const { return pluginPath_; }
+    const std::string& getMainModule() const { return mainModule_; }
 
 private:
     Result<void> parsePayload(const std::string& payload);
 
-    std::shared_ptr<ymery::EmbeddedApp> app_;
-    double lastTime_ = 0.0;
-
-    // Parsed from payload
     std::string layoutPath_;
     std::string pluginPath_;
     std::string mainModule_ = "app";
-
-    // WebGPU resources for render pass
-    bool initialized_ = false;
 };
+
+using Ymery = YmeryPlugin;
 
 } // namespace yetty
 
-// C exports for dynamic loading (when compiled as separate .so)
 extern "C" {
     const char* ymery_plugin_name();
     yetty::Result<yetty::PluginPtr> ymery_plugin_create();

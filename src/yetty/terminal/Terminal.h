@@ -156,6 +156,9 @@ private:
     // Scrollback buffer
     std::deque<ScrollbackLine> scrollback_;
     int scrollOffset_ = 0;  // 0 = at bottom, >0 = scrolled back N lines
+
+    // Deferred newlines for plugin activation (can't feed during OSC callback)
+    uint32_t pendingNewlines_ = 0;
 };
 
 } // namespace yetty

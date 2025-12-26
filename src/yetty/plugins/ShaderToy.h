@@ -5,11 +5,16 @@
 
 namespace yetty {
 
-// ShaderToy plugin - renders custom WGSL fragment shaders
-class ShaderToy : public Plugin {
+class ShaderToyLayer;
+
+//-----------------------------------------------------------------------------
+// ShaderToyPlugin - manages all shader layers
+// Each layer has its own compiled pipeline and state
+//-----------------------------------------------------------------------------
+class ShaderToyPlugin : public Plugin {
 public:
-    ShaderToy();
-    ~ShaderToy() override;
+    ShaderToyPlugin();
+    ~ShaderToyPlugin() override;
 
     // Factory method for plugin creation
     static Result<PluginPtr> create();
@@ -17,14 +22,35 @@ public:
     // Plugin interface
     const char* pluginName() const override { return "shader"; }
 
+    Result<void> init(WebGPUContext* ctx) override;
+    void dispose() override;
+
+    Result<PluginLayerPtr> createLayer(const std::string& payload) override;
+
+    void renderAll(WebGPUContext& ctx,
+                   WGPUTextureView targetView, WGPUTextureFormat targetFormat,
+                   uint32_t screenWidth, uint32_t screenHeight,
+                   float cellWidth, float cellHeight,
+                   int scrollOffset, uint32_t termRows) override;
+};
+
+//-----------------------------------------------------------------------------
+// ShaderToyLayer - a single shader instance at a position
+//-----------------------------------------------------------------------------
+class ShaderToyLayer : public PluginLayer {
+public:
+    ShaderToyLayer();
+    ~ShaderToyLayer() override;
+
     Result<void> init(const std::string& payload) override;
     void dispose() override;
     void update(double deltaTime) override;
+
+    // Called by ShaderToyPlugin::renderAll
     void render(WebGPUContext& ctx,
-               WGPUTextureView targetView, WGPUTextureFormat targetFormat,
-               uint32_t screenWidth, uint32_t screenHeight,
-               float pixelX, float pixelY, float pixelW, float pixelH) override;
-    void onResize(uint32_t newWidth, uint32_t newHeight) override;
+                WGPUTextureView targetView, WGPUTextureFormat targetFormat,
+                uint32_t screenWidth, uint32_t screenHeight,
+                float pixelX, float pixelY, float pixelW, float pixelH);
 
     // Input handling
     bool onMouseMove(float localX, float localY) override;
@@ -36,10 +62,6 @@ private:
     Result<void> compileShader(WebGPUContext& ctx,
                                WGPUTextureFormat targetFormat,
                                const std::string& fragmentCode);
-    void renderFocusFrame(WebGPUContext& ctx,
-                          WGPUTextureView targetView, WGPUTextureFormat targetFormat,
-                          uint32_t screenWidth, uint32_t screenHeight,
-                          float pixelX, float pixelY, float pixelW, float pixelH);
 
     // Vertex shader that positions the quad
     static const char* getVertexShader();
@@ -50,7 +72,6 @@ private:
     WGPURenderPipeline pipeline_ = nullptr;
     WGPUBindGroup bindGroup_ = nullptr;
     WGPUBuffer uniformBuffer_ = nullptr;
-    WGPURenderPipeline framePipeline_ = nullptr;
 
     float time_ = 0.0f;
     bool compiled_ = false;
@@ -60,27 +81,19 @@ private:
     float mouseX_ = 0.0f;
     float mouseY_ = 0.0f;
     bool mouseDown_ = false;
-    bool mouseGrabbed_ = false;  // True while mouse button held
+    bool mouseGrabbed_ = false;
 
-    // Scroll-controlled parameters (exposed to shader)
-    float param_ = 0.5f;   // wheel scroll
-    float zoom_ = 1.0f;    // ctrl+wheel zoom
-
-    // Frame pipeline for visual feedback
-    bool frameCompiled_ = false;
-    WGPURenderPipeline framePipeline2_ = nullptr;
-    WGPUBindGroup frameBindGroup_ = nullptr;
-    WGPUBuffer frameUniformBuffer_ = nullptr;
-
-    Result<void> compileFramePipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat);
-    void renderFrame(WebGPUContext& ctx, WGPUTextureView targetView,
-                     uint32_t screenWidth, uint32_t screenHeight,
-                     float pixelX, float pixelY, float pixelW, float pixelH);
+    // Scroll-controlled parameters
+    float param_ = 0.5f;
+    float zoom_ = 1.0f;
 };
+
+// Backward compatibility alias
+using ShaderToy = ShaderToyPlugin;
 
 } // namespace yetty
 
-// C exports for dynamic loading (when compiled as separate .so)
+// C exports for dynamic loading
 extern "C" {
     const char* shader_plugin_name();
     yetty::Result<yetty::PluginPtr> shader_plugin_create();

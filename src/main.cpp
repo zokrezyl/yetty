@@ -269,7 +269,7 @@ static void mainLoopIteration() {
         auto cursorBlinkResult = state.terminal->updateCursorBlink(currentTime);
         bool cursorChanged = cursorBlinkResult && *cursorBlinkResult;
         bool hasDamage = state.terminal->hasDamage();
-        bool hasPlugins = state.pluginManager && !state.pluginManager->getInstances().empty();
+        bool hasPlugins = state.pluginManager && !state.pluginManager->getAllLayers().empty();
 
         // Skip rendering if nothing needs update
         if (!cursorChanged && !hasDamage && !hasPlugins) {

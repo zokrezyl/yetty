@@ -8,7 +8,7 @@ CLIENT_DIR="$SCRIPT_DIR/../../tools/yetty-client"
 YETTY_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Default paths - must be absolute!
-LAYOUT_PATH="${YMERY_LAYOUTS:-$(cd "$YETTY_ROOT/../waew-meta/ymery-cpp/demo/layouts/simple" 2>/dev/null && pwd)}"
+LAYOUT_PATH="${YMERY_LAYOUTS:-$(cd "$YETTY_ROOT/../waew-meta/ymery-cpp/demo/layouts/editor" 2>/dev/null && pwd)}"
 PLUGINS_PATH="${YMERY_PLUGINS:-$YETTY_ROOT/build/plugins}"
 
 if [ -z "$LAYOUT_PATH" ] || [ ! -d "$LAYOUT_PATH" ]; then
