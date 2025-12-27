@@ -1,6 +1,8 @@
 #pragma once
 
 #include "plugin.h"
+#include "custom-glyph-plugin.h"
+#include "terminal/grid.h"
 #include "result.hpp"
 #include <webgpu/webgpu.h>
 #include <memory>
@@ -108,6 +110,32 @@ public:
     static std::string base94Decode(const std::string& encoded);
     static std::string base94Encode(const std::string& data);
 
+    //-------------------------------------------------------------------------
+    // Custom Glyph Plugin Support
+    //-------------------------------------------------------------------------
+
+    // Register a custom glyph plugin (handles codepoint ranges)
+    void registerCustomGlyphPlugin(CustomGlyphPluginPtr plugin);
+
+    // Check if a codepoint has a registered custom glyph plugin
+    CustomGlyphPluginPtr getCustomGlyphPluginForCodepoint(uint32_t codepoint);
+
+    // Called when terminal syncs a cell - creates layer if codepoint has custom glyph
+    // Returns the reserved glyph index to use, or 0 if no custom glyph
+    uint16_t onCellSync(uint32_t col, uint32_t row, uint32_t codepoint, uint32_t widthCells);
+
+    // Called when a cell is cleared/overwritten - removes custom glyph layer
+    void onCellClear(uint32_t col, uint32_t row);
+
+    // Render all custom glyph layers (called after grid, before decorator plugins)
+    Result<void> renderCustomGlyphs(WebGPUContext& ctx, WGPUTextureView targetView,
+                                     uint32_t screenWidth, uint32_t screenHeight,
+                                     float cellWidth, float cellHeight,
+                                     int scrollOffset = 0);
+
+    // Update custom glyph plugins (for animation)
+    void updateCustomGlyphs(double deltaTime);
+
 private:
     // Debug frame rendering
     Result<void> initFrameRenderer(WGPUDevice device, WGPUTextureFormat format);
@@ -139,6 +167,18 @@ private:
     WGPUBindGroup frameBindGroup_ = nullptr;
     WGPUBindGroupLayout frameBindGroupLayout_ = nullptr;
     bool frameRendererInitialized_ = false;
+
+    // Custom glyph plugin support
+    std::vector<CustomGlyphPluginPtr> customGlyphPlugins_;
+    uint16_t nextCustomGlyphIndex_ = GLYPH_CUSTOM_START;
+
+    // Map from grid position to custom glyph index for tracking
+    std::unordered_map<uint64_t, uint16_t> customGlyphPositions_;
+
+    // Helper to make position key
+    static uint64_t makePositionKey(uint32_t col, uint32_t row) {
+        return (static_cast<uint64_t>(row) << 32) | col;
+    }
 };
 
 } // namespace yetty

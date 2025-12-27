@@ -162,7 +162,9 @@ add_executable(yetty
     src/yetty/terminal/font.cpp
     $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/terminal/terminal.cpp>
     $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/plugin-manager.cpp>
+    $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/custom-glyph-plugin.cpp>
     $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/plugins/shader-toy.cpp>
+    $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/plugins/shader-glyph.cpp>
     $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/plugins/image.cpp>
     $<$<AND:$<NOT:$<BOOL:${EMSCRIPTEN}>>,$<BOOL:${YETTY_YMERY_ENABLED}>>:src/yetty/plugins/ymery.cpp>
 )

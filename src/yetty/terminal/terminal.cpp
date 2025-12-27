@@ -328,8 +328,19 @@ void Terminal::syncToGrid() {
 
                 uint16_t glyphIndex = font_ ? font_->getGlyphIndex(codepoint) : static_cast<uint16_t>(codepoint);
 
+                // Check if this codepoint has a custom glyph plugin
+                if (pluginManager_) {
+                    uint32_t widthCells = (cell.width > 0) ? cell.width : 1;
+                    uint16_t customIdx = pluginManager_->onCellSync(col, row, codepoint, widthCells);
+                    if (customIdx != 0) {
+                        glyphIndex = customIdx;
+                        spdlog::debug("SyncToGrid ({},{}) U+{:04X} -> custom glyph 0x{:04X}",
+                                     col, row, codepoint, glyphIndex);
+                    }
+                }
+
                 // Log high codepoints (emojis, etc.)
-                if (codepoint > 0x1000) {
+                if (codepoint > 0x1000 && !isCustomGlyph(glyphIndex)) {
                     spdlog::debug("SyncToGrid ({},{}) U+{:04X} -> glyph {}", col, row, codepoint, glyphIndex);
                 }
 
@@ -401,8 +412,19 @@ void Terminal::syncDamageToGrid() {
 
                 uint16_t glyphIndex = font_ ? font_->getGlyphIndex(codepoint) : static_cast<uint16_t>(codepoint);
 
+                // Check if this codepoint has a custom glyph plugin
+                if (pluginManager_) {
+                    uint32_t widthCells = (cell.width > 0) ? cell.width : 1;
+                    uint16_t customIdx = pluginManager_->onCellSync(col, row, codepoint, widthCells);
+                    if (customIdx != 0) {
+                        glyphIndex = customIdx;
+                        spdlog::debug("DamageSync ({},{}) U+{:04X} -> custom glyph 0x{:04X}",
+                                     col, row, codepoint, glyphIndex);
+                    }
+                }
+
                 // Log emoji cells
-                if (codepoint > 0x1F000) {
+                if (codepoint > 0x1F000 && !isCustomGlyph(glyphIndex)) {
                     spdlog::debug("DamageSync ({},{}) U+{:04X} -> glyph {}", col, row, codepoint, glyphIndex);
                 }
 

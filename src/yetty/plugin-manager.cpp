@@ -941,4 +941,126 @@ void PluginManager::renderFrame(WebGPUContext& ctx, WGPUTextureView targetView,
     wgpuCommandEncoderRelease(encoder);
 }
 
+//-----------------------------------------------------------------------------
+// Custom Glyph Plugin Support
+//-----------------------------------------------------------------------------
+
+void PluginManager::registerCustomGlyphPlugin(CustomGlyphPluginPtr plugin) {
+    if (!plugin) return;
+
+    customGlyphPlugins_.push_back(plugin);
+    spdlog::info("Registered custom glyph plugin: {} with {} codepoint ranges",
+                 plugin->pluginName(), plugin->getCodepointRanges().size());
+}
+
+CustomGlyphPluginPtr PluginManager::getCustomGlyphPluginForCodepoint(uint32_t codepoint) {
+    for (auto& plugin : customGlyphPlugins_) {
+        if (plugin->handlesCodepoint(codepoint)) {
+            return plugin;
+        }
+    }
+    return nullptr;
+}
+
+uint16_t PluginManager::onCellSync(uint32_t col, uint32_t row, uint32_t codepoint, uint32_t widthCells) {
+    // Check if we already have a custom glyph at this position
+    uint64_t posKey = makePositionKey(col, row);
+    auto existingIt = customGlyphPositions_.find(posKey);
+    if (existingIt != customGlyphPositions_.end()) {
+        // Already have a custom glyph here - remove the old layer first
+        onCellClear(col, row);
+    }
+
+    // Check if this codepoint should be rendered by a custom glyph plugin
+    auto plugin = getCustomGlyphPluginForCodepoint(codepoint);
+    if (!plugin) {
+        return 0;  // No custom glyph for this codepoint
+    }
+
+    // Create a layer for this codepoint
+    auto layerResult = plugin->createLayer(codepoint);
+    if (!layerResult) {
+        spdlog::warn("Failed to create custom glyph layer for U+{:04X}: {}",
+                     codepoint, error_msg(layerResult));
+        return 0;
+    }
+
+    auto layer = *layerResult;
+    layer->setPosition(col, row);
+    layer->setCellSize(widthCells, 1);
+    plugin->addLayer(layer);
+
+    // Assign a reserved glyph index
+    uint16_t glyphIndex = nextCustomGlyphIndex_++;
+    if (nextCustomGlyphIndex_ > GLYPH_CUSTOM_END) {
+        // Wrap around (unlikely to ever happen)
+        nextCustomGlyphIndex_ = GLYPH_CUSTOM_START;
+    }
+
+    customGlyphPositions_[posKey] = glyphIndex;
+
+    spdlog::debug("Created custom glyph layer for U+{:04X} at ({},{}) -> index 0x{:04X}",
+                  codepoint, col, row, glyphIndex);
+
+    return glyphIndex;
+}
+
+void PluginManager::onCellClear(uint32_t col, uint32_t row) {
+    uint64_t posKey = makePositionKey(col, row);
+    auto it = customGlyphPositions_.find(posKey);
+    if (it == customGlyphPositions_.end()) {
+        return;  // No custom glyph at this position
+    }
+
+    // Find and remove the layer from its plugin
+    for (auto& plugin : customGlyphPlugins_) {
+        auto layer = plugin->getLayerAt(col, row);
+        if (layer) {
+            plugin->removeLayerAt(col, row);
+            spdlog::debug("Removed custom glyph layer at ({},{})", col, row);
+            break;
+        }
+    }
+
+    customGlyphPositions_.erase(it);
+}
+
+Result<void> PluginManager::renderCustomGlyphs(WebGPUContext& ctx, WGPUTextureView targetView,
+                                                uint32_t screenWidth, uint32_t screenHeight,
+                                                float cellWidth, float cellHeight,
+                                                int scrollOffset) {
+    spdlog::debug("renderCustomGlyphs: {} plugins registered", customGlyphPlugins_.size());
+
+    for (auto& plugin : customGlyphPlugins_) {
+        // Lazy init plugin if needed
+        if (!plugin->isInitialized()) {
+            spdlog::info("Initializing custom glyph plugin: {}", plugin->pluginName());
+            if (auto res = plugin->init(&ctx); !res) {
+                spdlog::error("Failed to init custom glyph plugin {}: {}",
+                             plugin->pluginName(), error_msg(res));
+                continue;
+            }
+            spdlog::info("Custom glyph plugin {} initialized successfully", plugin->pluginName());
+        }
+
+        spdlog::debug("Rendering custom glyph plugin {} with {} layers",
+                     plugin->pluginName(), plugin->getLayers().size());
+
+        if (auto res = plugin->renderAll(ctx, targetView, ctx.getSurfaceFormat(),
+                                          screenWidth, screenHeight,
+                                          cellWidth, cellHeight, scrollOffset); !res) {
+            spdlog::warn("Custom glyph plugin {} render failed: {}",
+                        plugin->pluginName(), error_msg(res));
+        }
+    }
+
+    return Ok();
+}
+
+void PluginManager::updateCustomGlyphs(double deltaTime) {
+    for (auto& plugin : customGlyphPlugins_) {
+        plugin->update(deltaTime);
+    }
+}
+
 } // namespace yetty

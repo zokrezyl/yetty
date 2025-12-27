@@ -8,6 +8,7 @@
 #include "yetty/terminal/terminal.h"
 #include "yetty/plugin-manager.h"
 #include "yetty/plugins/shader-toy.h"
+#include "yetty/plugins/shader-glyph.h"
 #include "yetty/plugins/image.h"
 #ifdef YETTY_YMERY_ENABLED
 #include "yetty/plugins/ymery.h"
@@ -261,6 +262,8 @@ static void mainLoopIteration() {
             if (auto res = state._pluginManager->update(deltaTime); !res) {
                 spdlog::error("Plugin update failed: {}", error_msg(res));
             }
+            // Update custom glyph plugins (for animation)
+            state._pluginManager->updateCustomGlyphs(deltaTime);
         }
 
         if (!state._terminal->isRunning()) {
@@ -310,6 +313,22 @@ static void mainLoopIteration() {
                                    state._terminal->getCursorCol(),
                                    state._terminal->getCursorRow(),
                                    state._terminal->isCursorVisible());
+        }
+
+        // Render custom glyph layers (animated emoji, etc.) - after grid, before decorator plugins
+        if (state._pluginManager) {
+            auto targetViewResult = state._ctx->getCurrentTextureView();
+            if (targetViewResult) {
+                float cellWidth = state._baseCellWidth * state._zoomLevel;
+                float cellHeight = state._baseCellHeight * state._zoomLevel;
+                int scrollOffset = state._terminal ? state._terminal->getScrollOffset() : 0;
+                if (auto res = state._pluginManager->renderCustomGlyphs(
+                        *state._ctx, *targetViewResult,
+                        static_cast<uint32_t>(w), static_cast<uint32_t>(h),
+                        cellWidth, cellHeight, scrollOffset); !res) {
+                    spdlog::error("Custom glyph render failed: {}", error_msg(res));
+                }
+            }
         }
 
         // Render plugin overlays (after terminal, before present)
@@ -776,6 +795,11 @@ int main(int argc, char* argv[]) {
 #ifdef YETTY_YMERY_ENABLED
         pluginMgr->registerPlugin("ymery", Ymery::create);
 #endif
+
+        // Register custom glyph plugins (for animated emoji, etc.)
+        if (auto shaderGlyphResult = ShaderGlyphPlugin::create()) {
+            pluginMgr->registerCustomGlyphPlugin(*shaderGlyphResult);
+        }
 
         // Load external plugins from directory (if exists)
         const char* pluginDir = getenv("YETTY_PLUGINS_DIR");

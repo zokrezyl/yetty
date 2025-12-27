@@ -6,8 +6,17 @@
 namespace yetty {
 
 // Special glyph index values
-constexpr uint16_t GLYPH_PLUGIN = 0xFFFF;     // Cell is occupied by a plugin
+constexpr uint16_t GLYPH_PLUGIN = 0xFFFF;     // Cell is occupied by a decorator plugin
 constexpr uint16_t GLYPH_WIDE_CONT = 0xFFFE;  // Wide char continuation (look at previous cell)
+
+// Reserved range for custom glyph rendering (shader-based glyphs like animated emoji)
+constexpr uint16_t GLYPH_CUSTOM_START = 0xF000;
+constexpr uint16_t GLYPH_CUSTOM_END = 0xFFFD;
+
+// Helper to check if a glyph index is in the custom range
+inline bool isCustomGlyph(uint16_t glyphIndex) {
+    return glyphIndex >= GLYPH_CUSTOM_START && glyphIndex <= GLYPH_CUSTOM_END;
+}
 
 // Cell attributes (bold, italic, etc.) packed into a single byte
 struct CellAttrs {

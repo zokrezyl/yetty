@@ -5,6 +5,7 @@
 #include <sstream>
 #include <iostream>
 #include <cstring>
+#include <spdlog/spdlog.h>
 
 namespace yetty {
 

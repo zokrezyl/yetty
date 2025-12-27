@@ -105,8 +105,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
 
-    // If no glyph (index 0) or plugin cell (0xFFFF), output background
-    if (glyphIndex == 0u || glyphIndex == 0xFFFFu) {
+    // If no glyph (index 0), plugin cell (0xFFFF), or custom glyph range (0xF000-0xFFFD),
+    // output background and let the appropriate layer render instead
+    if (glyphIndex == 0u || glyphIndex == 0xFFFFu ||
+        (glyphIndex >= 0xF000u && glyphIndex <= 0xFFFDu)) {
         if (isCursor) {
             return vec4<f32>(vec3<f32>(1.0, 1.0, 1.0) - bgColor.rgb, 1.0);
         }
