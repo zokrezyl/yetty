@@ -72,6 +72,14 @@ if(stb_ADDED)
     target_include_directories(stb INTERFACE ${stb_SOURCE_DIR})
 endif()
 
+# yaml-cpp for config files
+CPMAddPackage(
+    NAME yaml-cpp
+    GITHUB_REPOSITORY jbeder/yaml-cpp
+    GIT_TAG 0.8.0
+    OPTIONS "YAML_CPP_BUILD_TESTS OFF" "YAML_CPP_BUILD_TOOLS OFF"
+)
+
 #-----------------------------------------------------------------------------
 # Native-only dependencies (font atlas generation)
 #-----------------------------------------------------------------------------
@@ -164,7 +172,7 @@ add_executable(yetty
     $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/plugin-manager.cpp>
     $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/custom-glyph-plugin.cpp>
     $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/plugins/shader-toy.cpp>
-    $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/plugins/shader-glyph.cpp>
+    $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/plugins/shader-glyph/shader-glyph.cpp>
     $<$<NOT:$<BOOL:${EMSCRIPTEN}>>:src/yetty/plugins/image.cpp>
     $<$<AND:$<NOT:$<BOOL:${EMSCRIPTEN}>>,$<BOOL:${YETTY_YMERY_ENABLED}>>:src/yetty/plugins/ymery.cpp>
 )
@@ -224,6 +232,7 @@ else()
         glfw3webgpu
         glm::glm
         stb
+        yaml-cpp
         msdfgen::msdfgen-core
         msdfgen::msdfgen-ext
         freetype

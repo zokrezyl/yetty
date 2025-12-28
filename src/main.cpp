@@ -8,7 +8,7 @@
 #include "yetty/terminal/terminal.h"
 #include "yetty/plugin-manager.h"
 #include "yetty/plugins/shader-toy.h"
-#include "yetty/plugins/shader-glyph.h"
+#include "yetty/plugins/shader-glyph/shader-glyph.h"
 #include "yetty/plugins/image.h"
 #ifdef YETTY_YMERY_ENABLED
 #include "yetty/plugins/ymery.h"
