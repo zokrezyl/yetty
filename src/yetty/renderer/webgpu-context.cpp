@@ -4,6 +4,9 @@
 
 #if YETTY_WEB
 #include <emscripten/html5_webgpu.h>
+#elif YETTY_ANDROID
+#include <android/native_window.h>
+#include <webgpu/wgpu.h>  // For wgpu-native Android surface
 #else
 #include <glfw3webgpu.h>
 #endif
@@ -22,7 +25,11 @@ WebGPUContext::~WebGPUContext() {
     if (instance_) wgpuInstanceRelease(instance_);
 }
 
+#if YETTY_ANDROID
+Result<void> WebGPUContext::init(ANativeWindow* window, uint32_t width, uint32_t height) {
+#else
 Result<void> WebGPUContext::init(GLFWwindow* window, uint32_t width, uint32_t height) {
+#endif
     width_ = width;
     height_ = height;
 
@@ -37,7 +44,7 @@ Result<void> WebGPUContext::init(GLFWwindow* window, uint32_t width, uint32_t he
         return Err<void>("Failed to create WebGPU instance");
     }
 
-    // Create surface from GLFW window
+    // Create surface from window
 #if YETTY_WEB
     // Emscripten: create surface from canvas
     WGPUSurfaceDescriptorFromCanvasHTMLSelector canvasDesc = {};
@@ -46,6 +53,15 @@ Result<void> WebGPUContext::init(GLFWwindow* window, uint32_t width, uint32_t he
 
     WGPUSurfaceDescriptor surfaceDesc = {};
     surfaceDesc.nextInChain = &canvasDesc.chain;
+    surface_ = wgpuInstanceCreateSurface(instance_, &surfaceDesc);
+#elif YETTY_ANDROID
+    // Android: create surface from ANativeWindow
+    WGPUSurfaceDescriptorFromAndroidNativeWindow androidDesc = {};
+    androidDesc.chain.sType = WGPUSType_SurfaceDescriptorFromAndroidNativeWindow;
+    androidDesc.window = window;
+
+    WGPUSurfaceDescriptor surfaceDesc = {};
+    surfaceDesc.nextInChain = &androidDesc.chain;
     surface_ = wgpuInstanceCreateSurface(instance_, &surfaceDesc);
 #else
     surface_ = glfwGetWGPUSurface(instance_, window);

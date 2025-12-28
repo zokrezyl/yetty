@@ -43,14 +43,46 @@ include(cmake/CPM.cmake)
 # Dependencies
 #-----------------------------------------------------------------------------
 
-# WebGPU - automatically handles Emscripten via eliemichel's distribution
-CPMAddPackage(
-    NAME webgpu
-    GITHUB_REPOSITORY eliemichel/WebGPU-distribution
-    GIT_TAG wgpu-v0.19.4.1
-    OPTIONS
-        "WEBGPU_BACKEND WGPU"
-)
+# WebGPU setup - different approaches per platform
+if(YETTY_ANDROID)
+    # Android: Use locally-built wgpu-native from android/app/libs
+    # Built by android/build-wgpu.sh script
+    set(WGPU_ANDROID_LIB "${CMAKE_CURRENT_SOURCE_DIR}/android/app/libs/arm64-v8a/libwgpu_native.so")
+
+    if(NOT EXISTS "${WGPU_ANDROID_LIB}")
+        message(FATAL_ERROR
+            "wgpu-native Android library not found at ${WGPU_ANDROID_LIB}\n"
+            "Run 'make android-wgpu' or 'android/build-wgpu.sh' first to build it.")
+    endif()
+
+    # Fetch headers from eliemichel's distribution (headers only)
+    CPMAddPackage(
+        NAME webgpu
+        GITHUB_REPOSITORY eliemichel/WebGPU-distribution
+        GIT_TAG wgpu-v0.19.4.1
+        DOWNLOAD_ONLY YES
+    )
+
+    # Create imported library target for Android
+    add_library(webgpu SHARED IMPORTED GLOBAL)
+    set_target_properties(webgpu PROPERTIES
+        IMPORTED_LOCATION "${WGPU_ANDROID_LIB}"
+        IMPORTED_NO_SONAME TRUE
+        INTERFACE_INCLUDE_DIRECTORIES "${webgpu_SOURCE_DIR}/include"
+    )
+    target_compile_definitions(webgpu INTERFACE WEBGPU_BACKEND_WGPU)
+
+    message(STATUS "Using wgpu-native for Android: ${WGPU_ANDROID_LIB}")
+else()
+    # Desktop/Web: Use eliemichel's WebGPU-distribution
+    CPMAddPackage(
+        NAME webgpu
+        GITHUB_REPOSITORY eliemichel/WebGPU-distribution
+        GIT_TAG wgpu-v0.19.4.1
+        OPTIONS
+            "WEBGPU_BACKEND WGPU"
+    )
+endif()
 
 # GLM for math
 CPMAddPackage(
@@ -79,6 +111,15 @@ CPMAddPackage(
     GIT_TAG 0.8.0
     OPTIONS "YAML_CPP_BUILD_TESTS OFF" "YAML_CPP_BUILD_TOOLS OFF"
 )
+
+# spdlog for logging (desktop and Android, not web)
+if(NOT EMSCRIPTEN)
+    CPMAddPackage(
+        NAME spdlog
+        GITHUB_REPOSITORY gabime/spdlog
+        GIT_TAG v1.12.0
+    )
+endif()
 
 #-----------------------------------------------------------------------------
 # Desktop-only dependencies (font atlas generation, GLFW windowing)
@@ -196,6 +237,7 @@ if(YETTY_ANDROID)
     # Android uses android_main.cpp instead of main.cpp
     list(APPEND YETTY_SOURCES
         src/android/android_main.cpp
+        src/android/plugin-manager-stub.cpp
         src/yetty/terminal/terminal.cpp
     )
 elseif(NOT EMSCRIPTEN)
@@ -286,6 +328,7 @@ elseif(YETTY_ANDROID)
         stb
         yaml-cpp
         vterm
+        spdlog::spdlog
         android
         log
     )

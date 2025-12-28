@@ -1,0 +1,19 @@
+# Built outputs
+*.apk
+*.aab
+*.so
+
+# Local configuration
+local.properties
+
+# Gradle
+.gradle/
+build/
+app/build/
+
+# IDE
+.idea/
+*.iml
+
+# wgpu-native built library (rebuilt by build-wgpu.sh)
+app/libs/

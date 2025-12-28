@@ -2,9 +2,15 @@
 
 #include "../result.hpp"
 #include <webgpu/webgpu.h>
+#if !YETTY_ANDROID
 #include <GLFW/glfw3.h>
+#endif
 #include <functional>
 #include <string>
+
+#if YETTY_ANDROID
+struct ANativeWindow;
+#endif
 
 namespace yetty {
 
@@ -13,7 +19,11 @@ public:
     WebGPUContext();
     ~WebGPUContext();
 
+#if YETTY_ANDROID
+    Result<void> init(ANativeWindow* window, uint32_t width, uint32_t height);
+#else
     Result<void> init(GLFWwindow* window, uint32_t width, uint32_t height);
+#endif
     void resize(uint32_t width, uint32_t height);
 
     WGPUDevice getDevice() const { return device_; }
