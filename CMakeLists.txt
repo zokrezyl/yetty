@@ -183,17 +183,25 @@ endif()
 #-----------------------------------------------------------------------------
 # Main target (executable for desktop/web, shared library for Android)
 #-----------------------------------------------------------------------------
+# Common sources for all platforms
 set(YETTY_SOURCES
-    src/main.cpp
     src/yetty/renderer/webgpu-context.cpp
     src/yetty/renderer/text-renderer.cpp
     src/yetty/terminal/grid.cpp
     src/yetty/terminal/font.cpp
 )
 
-# Platform-specific sources
-if(NOT EMSCRIPTEN)
+# Platform-specific entry point and sources
+if(YETTY_ANDROID)
+    # Android uses android_main.cpp instead of main.cpp
     list(APPEND YETTY_SOURCES
+        src/android/android_main.cpp
+        src/yetty/terminal/terminal.cpp
+    )
+elseif(NOT EMSCRIPTEN)
+    # Desktop uses main.cpp with GLFW
+    list(APPEND YETTY_SOURCES
+        src/main.cpp
         src/yetty/terminal/terminal.cpp
         src/yetty/plugin-manager.cpp
         src/yetty/custom-glyph-plugin.cpp
@@ -201,11 +209,16 @@ if(NOT EMSCRIPTEN)
         src/yetty/plugins/shader-glyph/shader-glyph.cpp
         src/yetty/plugins/image/image.cpp
     )
-    if(YETTY_YMERY_ENABLED AND NOT YETTY_ANDROID)
+    if(YETTY_YMERY_ENABLED)
         list(APPEND YETTY_SOURCES
             src/yetty/plugins/ymery/ymery.cpp
         )
     endif()
+else()
+    # Web uses main.cpp with Emscripten GLFW
+    list(APPEND YETTY_SOURCES
+        src/main.cpp
+    )
 endif()
 
 # Android builds as shared library, others as executable
