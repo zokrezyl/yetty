@@ -65,20 +65,21 @@ web: ## Build for Web with Emscripten
 # === Android Build ===
 
 .PHONY: android-wgpu
-android-wgpu: ## Build wgpu-native for Android (requires Rust + NDK)
-	cd android && PATH="$(SYSTEM_PATH)" bash ./build-wgpu.sh
+android-wgpu: ## Download pre-built wgpu-native for Android
+	cd android && bash ./build-wgpu.sh
 
 .PHONY: android
-android: android-wgpu ## Build Android APK (Debug) - builds wgpu first
-	cd android && PATH="$(SYSTEM_PATH)" ./gradlew assembleDebug
+android: android-wgpu ## Build Android APK (Debug)
+	nix develop .#android --command bash -c "cd android && ./gradlew assembleDebug"
 
 .PHONY: android-release
-android-release: ## Build Android APK (Release)
-	cd android && PATH="$(SYSTEM_PATH)" ./gradlew assembleRelease
+android-release: android-wgpu ## Build Android APK (Release)
+	nix develop .#android --command bash -c "cd android && ./gradlew assembleRelease"
 
 .PHONY: android-clean
 android-clean: ## Clean Android build
-	cd android && PATH="$(SYSTEM_PATH)" ./gradlew clean
+	rm -f android/app/libs/arm64-v8a/libwgpu_native.so
+	nix develop .#android --command bash -c "cd android && ./gradlew clean" || true
 	rm -rf $(BUILD_DIR_ANDROID)
 
 # === BusyBox for Android ===

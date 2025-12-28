@@ -90,12 +90,7 @@ jobs:
         echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
         echo "NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
 
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: aarch64-linux-android
-
-    - name: Build wgpu-native for Android
+    - name: Download wgpu-native for Android
       run: |
         cd android
         bash ./build-wgpu.sh
