@@ -644,6 +644,15 @@ int Terminal::onSbPopline(int cols, VTermScreenCell* cells, void* user) {
 int Terminal::onMoverect(VTermRect dest, VTermRect src, void* user) {
     Terminal* term = static_cast<Terminal*>(user);
 
+    // Calculate vertical scroll delta from source to destination
+    // Positive delta = content moved UP (like sb_pushline)
+    // Negative delta = content moved DOWN (like sb_popline)
+    int scrollDelta = src.start_row - dest.start_row;
+
+    if (scrollDelta != 0 && term->pluginManager_) {
+        term->pluginManager_->onScroll(scrollDelta, &term->grid_);
+    }
+
     // Mark as full damage for now - GPU texture shift optimization later
     term->fullDamage_ = true;
 

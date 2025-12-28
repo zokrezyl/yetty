@@ -272,4 +272,13 @@ else()
         ${CMAKE_CURRENT_BINARY_DIR}/shaders.wgsl
         COPYONLY
     )
+
+    #-------------------------------------------------------------------------
+    # Unit tests (native only)
+    #-------------------------------------------------------------------------
+    option(YETTY_BUILD_TESTS "Build unit tests" ON)
+    if(YETTY_BUILD_TESTS)
+        enable_testing()
+        add_subdirectory(test/ut)
+    endif()
 endif()
