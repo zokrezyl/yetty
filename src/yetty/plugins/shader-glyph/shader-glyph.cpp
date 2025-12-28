@@ -75,8 +75,13 @@ Result<CustomGlyphPluginPtr> ShaderGlyphPlugin::create() {
 
 std::vector<CodepointRange> ShaderGlyphPlugin::getCodepointRanges() const {
     return {
+        {0x231B, 0x231B},    // Hourglass
+        {0x23F3, 0x23F3},    // Hourglass flowing
+        {0x2728, 0x2728},    // Sparkles
+        {0x2764, 0x2764},    // Red heart
+        {0x2B50, 0x2B50},    // Star
+        {0x1F300, 0x1F5FF},  // Misc Symbols and Pictographs (includes fire, gems, etc)
         {0x1F600, 0x1F64F},  // Emoticons
-        {0x1F300, 0x1F5FF},  // Misc Symbols and Pictographs
         {0x1F680, 0x1F6FF},  // Transport and Map
         {0x1F900, 0x1F9FF},  // Supplemental Symbols
     };
