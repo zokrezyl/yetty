@@ -25,6 +25,14 @@ struct ScrollbackLine {
 // Forward declaration
 class PluginManager;
 
+// Selection mode for mouse selection
+enum class SelectionMode {
+    None,
+    Character,  // Single click drag
+    Word,       // Double click
+    Line        // Triple click
+};
+
 // Rectangle representing damaged (changed) cells
 struct DamageRect {
     uint32_t _startCol, _startRow;
@@ -114,6 +122,21 @@ public:
     // Get mutable grid for plugin cell marking
     Grid& getGridMutable() { return grid_; }
 
+    // Selection support
+    void startSelection(int row, int col, SelectionMode mode = SelectionMode::Character);
+    void extendSelection(int row, int col);
+    void clearSelection();
+    bool hasSelection() const { return selectionMode_ != SelectionMode::None; }
+    bool isInSelection(int row, int col) const;
+    std::string getSelectedText() const;
+
+    // Mouse mode (for apps like vim that want mouse events)
+    int getMouseMode() const { return mouseMode_; }
+    bool wantsMouseEvents() const { return mouseMode_ != VTERM_PROP_MOUSE_NONE; }
+
+    // Get VTerm screen for text extraction
+    VTermScreen* getVTermScreen() const { return vtermScreen_; }
+
 private:
     // Sync libvterm screen to our Grid
     void syncToGrid();
@@ -164,6 +187,14 @@ private:
 
     // Deferred newlines for plugin activation (can't feed during OSC callback)
     uint32_t pendingNewlines_ = 0;
+
+    // Selection state
+    VTermPos selectionStart_ = {0, 0};
+    VTermPos selectionEnd_ = {0, 0};
+    SelectionMode selectionMode_ = SelectionMode::None;
+
+    // Mouse mode (apps can request mouse events)
+    int mouseMode_ = VTERM_PROP_MOUSE_NONE;
 };
 
 } // namespace yetty

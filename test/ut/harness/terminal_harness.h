@@ -79,6 +79,16 @@ public:
     VTerm* vterm() { return _vterm; }
     VTermScreen* screen() { return _screen; }
 
+    // Selection support (for testing Terminal selection logic)
+    enum class SelectionMode { None, Character, Word, Line };
+
+    void startSelection(int row, int col, SelectionMode mode = SelectionMode::Character);
+    void extendSelection(int row, int col);
+    void clearSelection();
+    bool hasSelection() const { return _selection_mode != SelectionMode::None; }
+    bool isInSelection(int row, int col) const;
+    std::string getSelectedText() const;
+
     // libvterm callbacks (public for C callback access)
     static int onDamage(VTermRect rect, void* user);
     static int onMoverect(VTermRect dest, VTermRect src, void* user);
@@ -103,6 +113,11 @@ private:
     // Scrollback tracking
     int _sb_pushline_count = 0;
     int _sb_popline_count = 0;
+
+    // Selection state
+    VTermPos _selection_start = {0, 0};
+    VTermPos _selection_end = {0, 0};
+    SelectionMode _selection_mode = SelectionMode::None;
 };
 
 } // namespace yetty::test

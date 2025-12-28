@@ -4,6 +4,8 @@
 
 #include "terminal_harness.h"
 #include <cstring>
+#include <vector>
+#include <algorithm>
 
 namespace yetty::test {
 
@@ -125,6 +127,134 @@ int TerminalHarness::onSbPopline(int cols, VTermScreenCell* cells, void* user) {
     self->_scroll_events.push_back(scroll);
 
     return 0;
+}
+
+//-----------------------------------------------------------------------------
+// Selection support
+//-----------------------------------------------------------------------------
+
+void TerminalHarness::startSelection(int row, int col, SelectionMode mode) {
+    _selection_start.row = row;
+    _selection_start.col = col;
+    _selection_end.row = row;
+    _selection_end.col = col;
+    _selection_mode = mode;
+
+    // For word mode, expand to word boundaries
+    if (mode == SelectionMode::Word) {
+        VTermPos pos = {row, col};
+        VTermScreenCell cell;
+
+        // Find word start (go left while not space)
+        while (pos.col > 0) {
+            VTermPos testPos = {pos.row, pos.col - 1};
+            vterm_screen_get_cell(_screen, testPos, &cell);
+            uint32_t ch = cell.chars[0];
+            if (ch == 0 || ch == ' ' || ch == '\t') break;
+            pos.col--;
+        }
+        _selection_start = pos;
+
+        // Find word end (go right while not space)
+        pos = {row, col};
+        while (pos.col < _cols - 1) {
+            vterm_screen_get_cell(_screen, pos, &cell);
+            uint32_t ch = cell.chars[0];
+            if (ch == 0 || ch == ' ' || ch == '\t') break;
+            pos.col++;
+        }
+        _selection_end = pos;
+    } else if (mode == SelectionMode::Line) {
+        _selection_start.col = 0;
+        _selection_end.col = _cols;
+    }
+}
+
+void TerminalHarness::extendSelection(int row, int col) {
+    if (_selection_mode == SelectionMode::None) return;
+
+    _selection_end.row = row;
+    _selection_end.col = col;
+
+    // For line mode, always extend to full lines
+    if (_selection_mode == SelectionMode::Line) {
+        if (row >= _selection_start.row) {
+            _selection_end.col = _cols;
+        } else {
+            _selection_end.col = 0;
+        }
+    }
+}
+
+void TerminalHarness::clearSelection() {
+    _selection_mode = SelectionMode::None;
+    _selection_start = {0, 0};
+    _selection_end = {0, 0};
+}
+
+bool TerminalHarness::isInSelection(int row, int col) const {
+    if (_selection_mode == SelectionMode::None) return false;
+
+    // Normalize start/end so start <= end in document order
+    VTermPos start = _selection_start;
+    VTermPos end = _selection_end;
+
+    if (vterm_pos_cmp(start, end) > 0) {
+        std::swap(start, end);
+    }
+
+    VTermPos pos = {row, col};
+
+    // Check if pos is between start and end
+    if (vterm_pos_cmp(pos, start) < 0) return false;
+    if (vterm_pos_cmp(pos, end) > 0) return false;
+
+    return true;
+}
+
+std::string TerminalHarness::getSelectedText() const {
+    if (_selection_mode == SelectionMode::None) return "";
+
+    // Normalize start/end
+    VTermPos start = _selection_start;
+    VTermPos end = _selection_end;
+
+    if (vterm_pos_cmp(start, end) > 0) {
+        std::swap(start, end);
+    }
+
+    std::string result;
+
+    // Build text line by line
+    for (int row = start.row; row <= end.row; row++) {
+        int startCol = (row == start.row) ? start.col : 0;
+        // end_col is exclusive in VTermRect, so add 1 to include the last character
+        int endCol = (row == end.row) ? end.col + 1 : _cols;
+
+        // Use vterm_screen_get_text for this row segment
+        VTermRect rect;
+        rect.start_row = row;
+        rect.end_row = row + 1;
+        rect.start_col = startCol;
+        rect.end_col = endCol;
+
+        // Allocate buffer (worst case: 4 bytes per cell for UTF-8)
+        size_t bufSize = (endCol - startCol + 1) * 4 + 1;
+        std::vector<char> buf(bufSize);
+
+        size_t len = vterm_screen_get_text(_screen, buf.data(), bufSize, rect);
+
+        if (len > 0) {
+            result.append(buf.data(), len);
+        }
+
+        // Add newline between lines (but not after last line)
+        if (row < end.row) {
+            result += '\n';
+        }
+    }
+
+    return result;
 }
 
 } // namespace yetty::test

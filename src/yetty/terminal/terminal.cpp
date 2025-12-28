@@ -362,6 +362,13 @@ void Terminal::syncToGrid() {
                     std::swap(fgB, bgB);
                 }
 
+                // Apply selection highlight (invert colors)
+                if (isInSelection(lineIndex, col)) {
+                    std::swap(fgR, bgR);
+                    std::swap(fgG, bgG);
+                    std::swap(fgB, bgB);
+                }
+
                 grid_.setCell(col, row, glyphIndex, fgR, fgG, fgB, bgR, bgG, bgB);
             }
         }
@@ -442,6 +449,13 @@ void Terminal::syncDamageToGrid() {
                 colorToRGB(bg, bgR, bgG, bgB);
 
                 if (cell.attrs.reverse) {
+                    std::swap(fgR, bgR);
+                    std::swap(fgG, bgG);
+                    std::swap(fgB, bgB);
+                }
+
+                // Apply selection highlight (invert colors)
+                if (isInSelection(row, col)) {
                     std::swap(fgR, bgR);
                     std::swap(fgG, bgG);
                     std::swap(fgB, bgB);
@@ -533,6 +547,10 @@ int Terminal::onSetTermProp(VTermProp prop, VTermValue* val, void* user) {
             break;
         case VTERM_PROP_CURSORVISIBLE:
             term->cursorVisible_ = val->boolean;
+            break;
+        case VTERM_PROP_MOUSE:
+            term->mouseMode_ = val->number;
+            spdlog::debug("Terminal: mouse mode set to {}", term->mouseMode_);
             break;
         default:
             break;
@@ -738,6 +756,140 @@ void Terminal::scrollToTop() {
 void Terminal::scrollToBottom() {
     scrollOffset_ = 0;
     fullDamage_ = true;
+}
+
+//-----------------------------------------------------------------------------
+// Selection support
+//-----------------------------------------------------------------------------
+
+void Terminal::startSelection(int row, int col, SelectionMode mode) {
+    selectionStart_.row = row;
+    selectionStart_.col = col;
+    selectionEnd_.row = row;
+    selectionEnd_.col = col;
+    selectionMode_ = mode;
+
+    // For word/line mode, expand selection immediately
+    if (mode == SelectionMode::Word) {
+        // Expand to word boundaries
+        VTermPos pos = {row, col};
+        VTermScreenCell cell;
+
+        // Find word start (go left while not space/punctuation)
+        while (pos.col > 0) {
+            VTermPos testPos = {pos.row, pos.col - 1};
+            vterm_screen_get_cell(vtermScreen_, testPos, &cell);
+            uint32_t ch = cell.chars[0];
+            if (ch == 0 || ch == ' ' || ch == '\t') break;
+            pos.col--;
+        }
+        selectionStart_ = pos;
+
+        // Find word end (go right while not space/punctuation)
+        pos = {row, col};
+        while (pos.col < static_cast<int>(cols_) - 1) {
+            vterm_screen_get_cell(vtermScreen_, pos, &cell);
+            uint32_t ch = cell.chars[0];
+            if (ch == 0 || ch == ' ' || ch == '\t') break;
+            pos.col++;
+        }
+        selectionEnd_ = pos;
+    } else if (mode == SelectionMode::Line) {
+        selectionStart_.col = 0;
+        selectionEnd_.col = static_cast<int>(cols_);
+    }
+
+    fullDamage_ = true;  // Need redraw for selection highlight
+}
+
+void Terminal::extendSelection(int row, int col) {
+    if (selectionMode_ == SelectionMode::None) return;
+
+    selectionEnd_.row = row;
+    selectionEnd_.col = col;
+
+    // For line mode, always extend to full lines
+    if (selectionMode_ == SelectionMode::Line) {
+        if (row >= selectionStart_.row) {
+            selectionEnd_.col = static_cast<int>(cols_);
+        } else {
+            selectionEnd_.col = 0;
+        }
+    }
+
+    fullDamage_ = true;  // Need redraw for selection highlight
+}
+
+void Terminal::clearSelection() {
+    selectionMode_ = SelectionMode::None;
+    selectionStart_ = {0, 0};
+    selectionEnd_ = {0, 0};
+    fullDamage_ = true;  // Need redraw to remove highlight
+}
+
+bool Terminal::isInSelection(int row, int col) const {
+    if (selectionMode_ == SelectionMode::None) return false;
+
+    // Normalize start/end so start <= end in document order
+    VTermPos start = selectionStart_;
+    VTermPos end = selectionEnd_;
+
+    if (vterm_pos_cmp(start, end) > 0) {
+        std::swap(start, end);
+    }
+
+    VTermPos pos = {row, col};
+
+    // Check if pos is between start and end
+    if (vterm_pos_cmp(pos, start) < 0) return false;
+    if (vterm_pos_cmp(pos, end) > 0) return false;
+
+    return true;
+}
+
+std::string Terminal::getSelectedText() const {
+    if (selectionMode_ == SelectionMode::None) return "";
+
+    // Normalize start/end
+    VTermPos start = selectionStart_;
+    VTermPos end = selectionEnd_;
+
+    if (vterm_pos_cmp(start, end) > 0) {
+        std::swap(start, end);
+    }
+
+    std::string result;
+
+    // Build text line by line
+    for (int row = start.row; row <= end.row; row++) {
+        int startCol = (row == start.row) ? start.col : 0;
+        // end_col is exclusive in VTermRect, so add 1 to include the last character
+        int endCol = (row == end.row) ? end.col + 1 : static_cast<int>(cols_);
+
+        // Use vterm_screen_get_text for this row segment
+        VTermRect rect;
+        rect.start_row = row;
+        rect.end_row = row + 1;
+        rect.start_col = startCol;
+        rect.end_col = endCol;
+
+        // Allocate buffer (worst case: 4 bytes per cell for UTF-8)
+        size_t bufSize = (endCol - startCol + 1) * 4 + 1;
+        std::vector<char> buf(bufSize);
+
+        size_t len = vterm_screen_get_text(vtermScreen_, buf.data(), bufSize, rect);
+
+        if (len > 0) {
+            result.append(buf.data(), len);
+        }
+
+        // Add newline between lines (but not after last line)
+        if (row < end.row) {
+            result += '\n';
+        }
+    }
+
+    return result;
 }
 
 } // namespace yetty

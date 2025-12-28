@@ -53,6 +53,11 @@ struct AppState {
     double _mouseX = 0.0;
     double _mouseY = 0.0;
 
+    // Selection state
+    bool _selecting = false;
+    double _lastClickTime = 0.0;
+    int _clickCount = 0;  // For double/triple click detection
+
 #if !YETTY_WEB
     Terminal* _terminal = nullptr;
     PluginManager* _pluginManager = nullptr;
@@ -106,6 +111,18 @@ void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
     state->_mouseX = xpos;
     state->_mouseY = ypos;
 
+    // Handle selection extension while dragging
+    if (state->_selecting && state->_terminal) {
+        float cellWidth = state->_baseCellWidth * state->_zoomLevel;
+        float cellHeight = state->_baseCellHeight * state->_zoomLevel;
+
+        int col = static_cast<int>(xpos / cellWidth);
+        int row = static_cast<int>(ypos / cellHeight);
+
+        state->_terminal->extendSelection(row, col);
+        return;  // Don't route to plugins while selecting
+    }
+
     // Route to plugins
     if (state->_pluginManager && state->_terminal) {
         float cellWidth = state->_baseCellWidth * state->_zoomLevel;
@@ -120,16 +137,42 @@ void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
 
 // Mouse button callback
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
-    (void)mods;
     auto* state = static_cast<AppState*>(glfwGetWindowUserPointer(window));
-    if (!state) return;
+    if (!state || !state->_terminal) return;
 
-    // Route to plugins
-    if (state->_pluginManager && state->_terminal) {
-        float cellWidth = state->_baseCellWidth * state->_zoomLevel;
-        float cellHeight = state->_baseCellHeight * state->_zoomLevel;
-        int scrollOffset = state->_terminal->getScrollOffset();
+    float cellWidth = state->_baseCellWidth * state->_zoomLevel;
+    float cellHeight = state->_baseCellHeight * state->_zoomLevel;
+    int scrollOffset = state->_terminal->getScrollOffset();
 
+    // Check if Shift is held - force selection mode even if app wants mouse
+    bool shiftHeld = (mods & GLFW_MOD_SHIFT) != 0;
+
+    // If app wants mouse events and Shift is not held, pass to app
+    if (!shiftHeld && state->_terminal->wantsMouseEvents()) {
+        // Convert pixel coords to cell coords for vterm
+        int col = static_cast<int>(state->_mouseX / cellWidth);
+        int row = static_cast<int>(state->_mouseY / cellHeight);
+
+        // Send mouse event to vterm (which sends to PTY)
+        VTermModifier vtermMod = VTERM_MOD_NONE;
+        if (mods & GLFW_MOD_CONTROL) vtermMod = (VTermModifier)(vtermMod | VTERM_MOD_CTRL);
+        if (mods & GLFW_MOD_ALT) vtermMod = (VTermModifier)(vtermMod | VTERM_MOD_ALT);
+        if (mods & GLFW_MOD_SHIFT) vtermMod = (VTermModifier)(vtermMod | VTERM_MOD_SHIFT);
+
+        // Get the vterm and send mouse event
+        // Note: vterm buttons are 1-indexed (1=left, 2=middle, 3=right)
+        int vtermButton = button + 1;
+        VTerm* vterm = nullptr;  // TODO: expose vterm from Terminal if needed
+        // For now, skip direct vterm mouse - apps will work via plugin system
+        (void)vtermButton;
+        (void)vtermMod;
+        (void)vterm;
+        (void)row;
+        (void)col;
+    }
+
+    // Route to plugins first (unless selecting)
+    if (!state->_selecting && state->_pluginManager) {
         bool consumed = state->_pluginManager->onMouseButton(
             button, action == GLFW_PRESS,
             static_cast<float>(state->_mouseX), static_cast<float>(state->_mouseY),
@@ -138,13 +181,105 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         if (consumed) return;
     }
 
-    // TODO: Handle terminal mouse events if not consumed by plugin
+    // Handle middle mouse button for paste
+    if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS) {
+        const char* clipboard = glfwGetClipboardString(window);
+        if (clipboard && *clipboard) {
+            state->_terminal->clearSelection();
+            state->_terminal->sendRaw(clipboard, strlen(clipboard));
+            spdlog::debug("Pasted {} bytes from clipboard (middle-click)", strlen(clipboard));
+        }
+        return;
+    }
+
+    // Handle left mouse button for selection
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        int col = static_cast<int>(state->_mouseX / cellWidth);
+        int row = static_cast<int>(state->_mouseY / cellHeight);
+
+        if (action == GLFW_PRESS) {
+            // Detect double/triple click
+            double currentTime = glfwGetTime();
+            double timeSinceLastClick = currentTime - state->_lastClickTime;
+
+            if (timeSinceLastClick < 0.3) {  // 300ms threshold
+                state->_clickCount++;
+                if (state->_clickCount > 3) state->_clickCount = 1;
+            } else {
+                state->_clickCount = 1;
+            }
+            state->_lastClickTime = currentTime;
+
+            // Clear any existing selection on new click
+            state->_terminal->clearSelection();
+
+            // Start selection based on click count
+            SelectionMode mode = SelectionMode::Character;
+            if (state->_clickCount == 2) {
+                mode = SelectionMode::Word;
+            } else if (state->_clickCount == 3) {
+                mode = SelectionMode::Line;
+            }
+
+            state->_terminal->startSelection(row, col, mode);
+            state->_selecting = true;
+
+        } else if (action == GLFW_RELEASE) {
+            state->_selecting = false;
+
+            // Copy selection to clipboard if any
+            if (state->_terminal->hasSelection()) {
+                std::string selectedText = state->_terminal->getSelectedText();
+                if (!selectedText.empty()) {
+                    glfwSetClipboardString(window, selectedText.c_str());
+                    spdlog::debug("Copied {} bytes to clipboard", selectedText.size());
+                }
+            }
+        }
+    }
 }
 
 // Key callback for terminal mode
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
     auto* state = static_cast<AppState*>(glfwGetWindowUserPointer(window));
     if (!state || !state->_terminal) return;
+
+    // Handle clipboard shortcuts (Ctrl+Shift+C/V or Shift+Insert)
+    if (action == GLFW_PRESS) {
+        bool ctrlShift = (mods & GLFW_MOD_CONTROL) && (mods & GLFW_MOD_SHIFT);
+
+        // Ctrl+Shift+C: Copy selection
+        if (ctrlShift && key == GLFW_KEY_C) {
+            if (state->_terminal->hasSelection()) {
+                std::string selectedText = state->_terminal->getSelectedText();
+                if (!selectedText.empty()) {
+                    glfwSetClipboardString(window, selectedText.c_str());
+                    spdlog::debug("Copied {} bytes to clipboard (Ctrl+Shift+C)", selectedText.size());
+                }
+            }
+            return;
+        }
+
+        // Ctrl+Shift+V or Shift+Insert: Paste
+        if ((ctrlShift && key == GLFW_KEY_V) ||
+            ((mods & GLFW_MOD_SHIFT) && key == GLFW_KEY_INSERT)) {
+            const char* clipboard = glfwGetClipboardString(window);
+            if (clipboard && *clipboard) {
+                // Clear selection before pasting
+                state->_terminal->clearSelection();
+                // Send clipboard content to terminal
+                state->_terminal->sendRaw(clipboard, strlen(clipboard));
+                spdlog::debug("Pasted {} bytes from clipboard", strlen(clipboard));
+            }
+            return;
+        }
+
+        // Escape clears selection
+        if (key == GLFW_KEY_ESCAPE && state->_terminal->hasSelection()) {
+            state->_terminal->clearSelection();
+            // Don't return - still send ESC to terminal
+        }
+    }
 
     // Route to focused plugin first
     if (state->_pluginManager) {

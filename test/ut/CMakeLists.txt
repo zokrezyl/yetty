@@ -38,6 +38,7 @@ add_executable(yetty_tests
     terminal_scroll_test.cpp
     terminal_moverect_test.cpp
     terminal_content_test.cpp
+    terminal_selection_test.cpp
     plugin_layer_test.cpp
     plugin_test.cpp
 )
