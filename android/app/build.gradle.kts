@@ -63,6 +63,14 @@ android {
     buildFeatures {
         prefab = true
     }
+
+    // Include pre-built wgpu-native library and assets from build-android
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs(File(rootProject.projectDir.parentFile, "build-android/wgpu-libs"))
+            assets.srcDirs(File(rootProject.projectDir.parentFile, "build-android/assets"))
+        }
+    }
 }
 
 dependencies {

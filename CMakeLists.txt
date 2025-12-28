@@ -323,7 +323,9 @@ elseif(YETTY_ANDROID)
 
     target_link_libraries(yetty PRIVATE
         webgpu
+        -Wl,--whole-archive
         native_app_glue
+        -Wl,--no-whole-archive
         glm::glm
         stb
         yaml-cpp

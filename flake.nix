@@ -101,13 +101,16 @@
             LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
 
             shellHook = ''
+              # Add NDK toolchain to PATH for cross-compilation
+              export PATH="${androidNdk}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+
               echo "Yetty Android build environment"
               echo "  Rust: $(rustc --version)"
               echo "  Android SDK: $ANDROID_HOME"
               echo "  Android NDK: $ANDROID_NDK_HOME"
+              echo "  NDK clang: $(which aarch64-linux-android26-clang 2>/dev/null || echo 'not in PATH')"
               echo ""
-              echo "Run: ./android/build-wgpu.sh"
-              echo "Then: make android"
+              echo "Run: make android"
             '';
           };
         };

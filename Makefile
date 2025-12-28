@@ -19,9 +19,10 @@ BUILD_DIR := build
 BUILD_DIR_DEBUG := build-debug
 BUILD_DIR_WEB := web-build
 BUILD_DIR_ANDROID := build-android
-BUSYBOX_VERSION := 1.36.1
+BUSYBOX_VERSION := 1.34.1
 BUSYBOX_DIR := external/busybox
 BUSYBOX_SRC := $(BUSYBOX_DIR)/busybox-$(BUSYBOX_VERSION)
+BUSYBOX_MEEFIK_DIR := $(BUSYBOX_DIR)/meefik-busybox-$(BUSYBOX_VERSION)
 
 # CMake options
 CMAKE := cmake
@@ -69,11 +70,11 @@ android-wgpu: ## Download pre-built wgpu-native for Android
 	cd android && bash ./build-wgpu.sh
 
 .PHONY: android
-android: android-wgpu ## Build Android APK (Debug)
+android: android-wgpu busybox-android ## Build Android APK (Debug)
 	nix develop .#android --command bash -c "cd android && ./gradlew assembleDebug"
 
 .PHONY: android-release
-android-release: android-wgpu ## Build Android APK (Release)
+android-release: android-wgpu busybox-android ## Build Android APK (Release)
 	nix develop .#android --command bash -c "cd android && ./gradlew assembleRelease"
 
 .PHONY: android-clean
@@ -85,36 +86,55 @@ android-clean: ## Clean Android build
 # === BusyBox for Android ===
 
 .PHONY: busybox-download
-busybox-download: ## Download BusyBox source
+busybox-download: ## Download BusyBox source and meefik patches
 	@mkdir -p $(BUSYBOX_DIR)
-	@if [ ! -d "$(BUSYBOX_SRC)" ]; then \
-		echo "Downloading BusyBox $(BUSYBOX_VERSION)..."; \
+	@if [ ! -d "$(BUSYBOX_MEEFIK_DIR)" ]; then \
+		echo "Downloading meefik/busybox $(BUSYBOX_VERSION) patches..."; \
+		curl -L https://github.com/meefik/busybox/archive/refs/tags/$(BUSYBOX_VERSION).tar.gz | tar -xz -C $(BUSYBOX_DIR); \
+		mv $(BUSYBOX_DIR)/busybox-$(BUSYBOX_VERSION) $(BUSYBOX_MEEFIK_DIR); \
+	else \
+		echo "meefik/busybox patches already exist"; \
+	fi
+	@if [ ! -d "$(BUSYBOX_DIR)/busybox-$(BUSYBOX_VERSION)" ]; then \
+		echo "Downloading official BusyBox $(BUSYBOX_VERSION) source..."; \
 		curl -L https://busybox.net/downloads/busybox-$(BUSYBOX_VERSION).tar.bz2 | tar -xj -C $(BUSYBOX_DIR); \
 	else \
 		echo "BusyBox source already exists"; \
 	fi
 
 .PHONY: busybox-android
-busybox-android: busybox-download ## Cross-compile BusyBox for Android (requires ANDROID_NDK_HOME)
-	@if [ -z "$(ANDROID_NDK_HOME)" ] || [ ! -d "$(ANDROID_NDK_HOME)" ]; then \
-		echo "Note: ANDROID_NDK_HOME not set. Run 'make android' first to download NDK via Gradle,"; \
-		echo "then set ANDROID_NDK_HOME to the downloaded NDK path."; \
-		exit 1; \
-	fi
-	@echo "Building BusyBox for Android ($(ANDROID_ABI))..."
-	@cd $(BUSYBOX_SRC) && \
+busybox-android: busybox-download ## Cross-compile BusyBox for Android using nix flake
+	@echo "Building BusyBox $(BUSYBOX_VERSION) for Android using nix flake..."
+	@mkdir -p $(BUILD_DIR_ANDROID)/assets
+	nix develop .#android --command bash -c '\
+		set -e && \
+		cd $(BUSYBOX_SRC) && \
+		echo "Patching for Android NDK 26..." && \
+		sed -i "s/#if defined(ANDROID) || defined(__ANDROID__)/#if __ANDROID_API__ < 21/" libbb/missing_syscalls.c && \
+		sed -i "s/^# undef HAVE_STRCHRNUL$$/# if __ANDROID_API__ < 24\n#  undef HAVE_STRCHRNUL\n# endif/" include/platform.h && \
+		echo "Configuring BusyBox with defconfig..." && \
 		make defconfig && \
-		sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config && \
-		sed -i 's/CONFIG_FEATURE_PREFER_APPLETS=y/# CONFIG_FEATURE_PREFER_APPLETS is not set/' .config && \
-		sed -i 's/CONFIG_FEATURE_SH_STANDALONE=y/# CONFIG_FEATURE_SH_STANDALONE is not set/' .config && \
+		echo "Disabling Android-incompatible features..." && \
+		sed -i "s/^CONFIG_STATIC=.*/CONFIG_STATIC=y/" .config && \
+		sed -i "s/^CONFIG_ASH_INTERNAL_GLOB=.*/CONFIG_ASH_INTERNAL_GLOB=y/" .config && \
+		for opt in HUSH SHELL_HUSH FEATURE_SH_NOFORK NTPD ADJTIMEX ZCIP FEATURE_UTMP FEATURE_WTMP \
+			HOSTID LOGNAME FEATURE_SYNC_FANCY SU LOADFONT SETFONT CONSPY IFCONFIG ARP IFENSLAVE \
+			FSCK_MINIX MKFS_MINIX IPCRM IPCS MOUNT UMOUNT SWAPON SWAPOFF ETHER_WAKE \
+			SYSLOGD LOGGER LOGREAD KLOGD PIVOT_ROOT NSLOOKUP FEATURE_NSLOOKUP_BIG \
+			FEATURE_INETD_RPC FEATURE_HTTPD_SETUID TRACEROUTE TRACEROUTE6 PING PING6; do \
+			sed -i "s/^CONFIG_$${opt}=y/# CONFIG_$${opt} is not set/" .config; \
+		done && \
 		yes "" | make oldconfig && \
-		make CROSS_COMPILE=$(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android$(subst android-,,$(ANDROID_PLATFORM))- \
-			LDFLAGS="--static" \
-			CFLAGS="--static -fPIE" \
-			LDFLAGS="-pie" \
+		echo "Building with NDK clang..." && \
+		make CC=aarch64-linux-android26-clang \
+			AR=llvm-ar \
+			STRIP=llvm-strip \
+			HOSTCC=gcc \
 			-j$$(nproc) && \
-		make install
-	@echo "BusyBox built. Copy to android/app/src/main/assets/busybox"
+		echo "Stripping..." && \
+		llvm-strip busybox'
+	cp $(BUSYBOX_SRC)/busybox $(BUILD_DIR_ANDROID)/assets/
+	@echo "BusyBox built: $(BUILD_DIR_ANDROID)/assets/busybox"
 
 .PHONY: busybox-clean
 busybox-clean: ## Clean BusyBox build
