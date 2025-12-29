@@ -98,12 +98,17 @@ jobs:
         export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
         bash android/build-busybox.sh
 
+    - name: Copy font assets
+      run: |
+        mkdir -p build-android/assets
+        cp -f assets/*.ttf assets/*.png assets/*.json build-android/assets/
+
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
 
     - name: Build Android APK
       working-directory: android
-      run: ./gradlew assembleDebug
+      run: ./gradlew --project-cache-dir=../build-android/.gradle assembleDebug
 
     - name: Upload Android APK
       uses: actions/upload-artifact@v4

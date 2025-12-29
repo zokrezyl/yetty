@@ -69,18 +69,25 @@ web: ## Build for Web with Emscripten
 android-wgpu: ## Download pre-built wgpu-native for Android
 	cd android && bash ./build-wgpu.sh
 
+# Gradle options to keep all build artifacts in build-android/
+GRADLE_OPTS := --project-cache-dir=../build-android/.gradle
+
+.PHONY: android-assets
+android-assets: ## Copy font assets to build-android/assets
+	@mkdir -p $(BUILD_DIR_ANDROID)/assets
+	@cp -f assets/*.ttf assets/*.png assets/*.json $(BUILD_DIR_ANDROID)/assets/ 2>/dev/null || true
+
 .PHONY: android
-android: android-wgpu busybox-android ## Build Android APK (Debug)
-	nix develop .#android --command bash -c "cd android && ./gradlew assembleDebug"
+android: android-wgpu busybox-android android-assets ## Build Android APK (Debug)
+	nix develop .#android --command bash -c "cd android && ./gradlew $(GRADLE_OPTS) assembleDebug"
 
 .PHONY: android-release
-android-release: android-wgpu busybox-android ## Build Android APK (Release)
-	nix develop .#android --command bash -c "cd android && ./gradlew assembleRelease"
+android-release: android-wgpu busybox-android android-assets ## Build Android APK (Release)
+	nix develop .#android --command bash -c "cd android && ./gradlew $(GRADLE_OPTS) assembleRelease"
 
 .PHONY: android-clean
 android-clean: ## Clean Android build
-	rm -f android/app/libs/arm64-v8a/libwgpu_native.so
-	nix develop .#android --command bash -c "cd android && ./gradlew clean" || true
+	nix develop .#android --command bash -c "cd android && ./gradlew $(GRADLE_OPTS) clean" || true
 	rm -rf $(BUILD_DIR_ANDROID)
 
 # === BusyBox for Android ===

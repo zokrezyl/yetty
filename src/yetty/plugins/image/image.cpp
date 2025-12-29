@@ -1,5 +1,6 @@
 #include "image.h"
 #include "../../renderer/webgpu-context.h"
+#include "../../renderer/wgpu-compat.h"
 #include <iostream>
 #include <cstring>
 
@@ -178,6 +179,7 @@ Result<void> ImageLayer::render(WebGPUContext& ctx,
     colorAttachment.view = targetView;
     colorAttachment.loadOp = WGPULoadOp_Load;
     colorAttachment.storeOp = WGPUStoreOp_Store;
+    colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;  // v27: required for 2D textures
 
     WGPURenderPassDescriptor passDesc = {};
     passDesc.colorAttachmentCount = 1;
@@ -221,9 +223,9 @@ Result<void> ImageLayer::createPipeline(WebGPUContext& ctx, WGPUTextureFormat ta
     _texture = wgpuDeviceCreateTexture(device, &texDesc);
     if (!_texture) return Err<void>("Failed to create texture");
 
-    WGPUImageCopyTexture dst = {};
+    WGPUTexelCopyTextureInfo dst = {};
     dst.texture = _texture;
-    WGPUTextureDataLayout layout = {};
+    WGPUTexelCopyBufferLayout layout = {};
     layout.bytesPerRow = _image_width * 4;
     layout.rowsPerImage = _image_height;
     WGPUExtent3D extent = {(uint32_t)_image_width, (uint32_t)_image_height, 1};
@@ -273,9 +275,9 @@ struct VertexOutput { @builtin(position) position: vec4<f32>, @location(0) uv: v
 }
 )";
 
-    WGPUShaderModuleWGSLDescriptor wgslDesc = {};
-    wgslDesc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
-    wgslDesc.code = shaderCode;
+    WGPUShaderSourceWGSL wgslDesc = {};
+    wgslDesc.chain.sType = WGPUSType_ShaderSourceWGSL;
+    wgslDesc.code = WGPU_STR(shaderCode);
     WGPUShaderModuleDescriptor shaderDesc = {};
     shaderDesc.nextInChain = &wgslDesc.chain;
     WGPUShaderModule shaderModule = wgpuDeviceCreateShaderModule(device, &shaderDesc);
@@ -310,9 +312,9 @@ struct VertexOutput { @builtin(position) position: vec4<f32>, @location(0) uv: v
     WGPURenderPipelineDescriptor pipelineDesc = {};
     pipelineDesc.layout = pipelineLayout;
     pipelineDesc.vertex.module = shaderModule;
-    pipelineDesc.vertex.entryPoint = "vs_main";
+    pipelineDesc.vertex.entryPoint = WGPU_STR("vs_main");
     WGPUFragmentState fragState = {};
-    fragState.module = shaderModule; fragState.entryPoint = "fs_main";
+    fragState.module = shaderModule; fragState.entryPoint = WGPU_STR("fs_main");
     WGPUColorTargetState colorTarget = {};
     colorTarget.format = targetFormat; colorTarget.writeMask = WGPUColorWriteMask_All;
     WGPUBlendState blend = {};

@@ -2,11 +2,58 @@
 
 OSC Format: ESC ] 99999;<plugin>;<mode>;<x>;<y>;<w>;<h>;<base94_payload> ST
 Where ST = ESC \\ (string terminator)
+
+When running inside tmux, sequences are wrapped in DCS passthrough:
+  ESC P tmux; <escaped_content> ESC \\
+Where ESC characters in content are doubled (ESC -> ESC ESC).
+tmux un-doubles them during parsing and passes raw bytes to outer terminal.
 """
 
+import os
 from . import base94
 
 VENDOR_ID = 99999
+
+
+def is_inside_tmux() -> bool:
+    """Check if running inside tmux."""
+    return 'TMUX' in os.environ
+
+
+def wrap_for_tmux(sequence: str) -> str:
+    """Wrap an escape sequence for tmux DCS passthrough.
+
+    Format: ESC P tmux; <content with doubled ESC> ESC \\
+
+    tmux's DCS parser uses ESC to enter escape state:
+    - ESC followed by \\ terminates DCS
+    - ESC followed by anything else (including ESC) collects that byte
+
+    So ESC ESC in input becomes single ESC in output.
+
+    Args:
+        sequence: The raw escape sequence to wrap
+
+    Returns:
+        DCS-wrapped sequence for tmux passthrough
+    """
+    # Double all ESC characters in the content
+    escaped = sequence.replace('\033', '\033\033')
+    return f"\033Ptmux;{escaped}\033\\"
+
+
+def maybe_wrap_for_tmux(sequence: str) -> str:
+    """Wrap sequence for tmux passthrough if running inside tmux.
+
+    Args:
+        sequence: The raw escape sequence
+
+    Returns:
+        Original sequence, or DCS-wrapped if inside tmux
+    """
+    if is_inside_tmux():
+        return wrap_for_tmux(sequence)
+    return sequence
 
 
 def create_sequence(

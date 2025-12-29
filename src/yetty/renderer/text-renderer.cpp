@@ -1,10 +1,12 @@
 #include "text-renderer.h"
+#include "wgpu-compat.h"
 #include "../terminal/terminal.h"  // For DamageRect
 #include <glm/gtc/matrix_transform.hpp>
 #include <fstream>
 #include <sstream>
 #include <iostream>
 #include <cstring>
+#include <cstdlib>  // for getenv
 #include <spdlog/spdlog.h>
 
 namespace yetty {
@@ -55,6 +57,11 @@ Result<void> TextRenderer::init(WebGPUContext& ctx, Font& font) {
 Result<void> TextRenderer::createShaderModule(WGPUDevice device) {
 #if YETTY_WEB
     const char* shaderPath = "/shaders.wgsl";
+#elif YETTY_ANDROID
+    // On Android, shader is extracted to app's data directory
+    const char* envPath = std::getenv("YETTY_SHADER_PATH");
+    const char* shaderPath = envPath ? envPath : "/data/local/tmp/shaders.wgsl";
+    spdlog::info("Loading shader from: {}", shaderPath);
 #else
     const char* shaderPath = CMAKE_SOURCE_DIR "/src/yetty/renderer/shaders.wgsl";
 #endif
@@ -68,17 +75,13 @@ Result<void> TextRenderer::createShaderModule(WGPUDevice device) {
     buffer << file.rdbuf();
     std::string shaderSource = buffer.str();
 
-    WGPUShaderModuleWGSLDescriptor wgslDesc = {};
-    wgslDesc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
-#if YETTY_WEB
-    wgslDesc.source = shaderSource.c_str();
-#else
-    wgslDesc.code = shaderSource.c_str();
-#endif
+    WGPUShaderSourceWGSL wgslDesc = {};
+    wgslDesc.chain.sType = WGPUSType_ShaderSourceWGSL;
+    wgslDesc.code = { .data = shaderSource.c_str(), .length = shaderSource.size() };
 
     WGPUShaderModuleDescriptor moduleDesc = {};
     moduleDesc.nextInChain = &wgslDesc.chain;
-    moduleDesc.label = "text shader";
+    moduleDesc.label = WGPU_STR("text shader");
 
     shaderModule_ = wgpuDeviceCreateShaderModule(device, &moduleDesc);
     if (!shaderModule_) {
@@ -91,7 +94,7 @@ Result<void> TextRenderer::createShaderModule(WGPUDevice device) {
 Result<void> TextRenderer::createBuffers(WGPUDevice device) {
     // Uniform buffer
     WGPUBufferDescriptor uniformDesc = {};
-    uniformDesc.label = "uniforms";
+    uniformDesc.label = WGPU_STR("uniforms");
     uniformDesc.size = sizeof(Uniforms);
     uniformDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
     uniformBuffer_ = wgpuDeviceCreateBuffer(device, &uniformDesc);
@@ -110,7 +113,7 @@ Result<void> TextRenderer::createBuffers(WGPUDevice device) {
     };
 
     WGPUBufferDescriptor quadDesc = {};
-    quadDesc.label = "quad vertices";
+    quadDesc.label = WGPU_STR("quad vertices");
     quadDesc.size = sizeof(quadVertices);
     quadDesc.usage = WGPUBufferUsage_Vertex;
     quadDesc.mappedAtCreation = true;
@@ -139,7 +142,7 @@ Result<void> TextRenderer::createCellTextures(WGPUDevice device, uint32_t cols, 
 
     // Glyph texture: R16Uint (16-bit unsigned int per cell)
     WGPUTextureDescriptor glyphTexDesc = {};
-    glyphTexDesc.label = "cell glyphs";
+    glyphTexDesc.label = WGPU_STR("cell glyphs");
     glyphTexDesc.size = {cols, rows, 1};
     glyphTexDesc.mipLevelCount = 1;
     glyphTexDesc.sampleCount = 1;
@@ -163,7 +166,7 @@ Result<void> TextRenderer::createCellTextures(WGPUDevice device, uint32_t cols, 
 
     // FG color texture: RGBA8Unorm
     WGPUTextureDescriptor fgTexDesc = {};
-    fgTexDesc.label = "cell fg colors";
+    fgTexDesc.label = WGPU_STR("cell fg colors");
     fgTexDesc.size = {cols, rows, 1};
     fgTexDesc.mipLevelCount = 1;
     fgTexDesc.sampleCount = 1;
@@ -187,7 +190,7 @@ Result<void> TextRenderer::createCellTextures(WGPUDevice device, uint32_t cols, 
 
     // BG color texture: RGBA8Unorm
     WGPUTextureDescriptor bgTexDesc = {};
-    bgTexDesc.label = "cell bg colors";
+    bgTexDesc.label = WGPU_STR("cell bg colors");
     bgTexDesc.size = {cols, rows, 1};
     bgTexDesc.mipLevelCount = 1;
     bgTexDesc.sampleCount = 1;
@@ -343,11 +346,11 @@ Result<void> TextRenderer::createPipeline(WGPUDevice device, WGPUTextureFormat f
 
     // Pipeline descriptor
     WGPURenderPipelineDescriptor pipelineDesc = {};
-    pipelineDesc.label = "text pipeline";
+    pipelineDesc.label = WGPU_STR("text pipeline");
     pipelineDesc.layout = pipelineLayout_;
 
     pipelineDesc.vertex.module = shaderModule_;
-    pipelineDesc.vertex.entryPoint = "vs_main";
+    pipelineDesc.vertex.entryPoint = WGPU_STR("vs_main");
     pipelineDesc.vertex.bufferCount = 1;
     pipelineDesc.vertex.buffers = &vertexLayout;
 
@@ -367,7 +370,7 @@ Result<void> TextRenderer::createPipeline(WGPUDevice device, WGPUTextureFormat f
 
     WGPUFragmentState fragState = {};
     fragState.module = shaderModule_;
-    fragState.entryPoint = "fs_main";
+    fragState.entryPoint = WGPU_STR("fs_main");
     fragState.targetCount = 1;
     fragState.targets = &colorTarget;
     pipelineDesc.fragment = &fragState;
@@ -445,13 +448,13 @@ void TextRenderer::updateCellTextures(WGPUQueue queue, const Grid& grid) {
     gridRows_ = rows;
 
     // Write glyph indices directly (uint16 -> R16Uint texture)
-    WGPUImageCopyTexture glyphDest = {};
+    WGPUTexelCopyTextureInfo glyphDest = {};
     glyphDest.texture = cellGlyphTexture_;
     glyphDest.mipLevel = 0;
     glyphDest.origin = {0, 0, 0};
     glyphDest.aspect = WGPUTextureAspect_All;
 
-    WGPUTextureDataLayout glyphLayout = {};
+    WGPUTexelCopyBufferLayout glyphLayout = {};
     glyphLayout.offset = 0;
     glyphLayout.bytesPerRow = cols * sizeof(uint16_t);
     glyphLayout.rowsPerImage = rows;
@@ -461,13 +464,13 @@ void TextRenderer::updateCellTextures(WGPUQueue queue, const Grid& grid) {
                           cols * rows * sizeof(uint16_t), &glyphLayout, &glyphSize);
 
     // Write FG colors directly (RGBA8 -> RGBA8Unorm texture)
-    WGPUImageCopyTexture fgDest = {};
+    WGPUTexelCopyTextureInfo fgDest = {};
     fgDest.texture = cellFgColorTexture_;
     fgDest.mipLevel = 0;
     fgDest.origin = {0, 0, 0};
     fgDest.aspect = WGPUTextureAspect_All;
 
-    WGPUTextureDataLayout fgLayout = {};
+    WGPUTexelCopyBufferLayout fgLayout = {};
     fgLayout.offset = 0;
     fgLayout.bytesPerRow = cols * 4;  // RGBA8 = 4 bytes per pixel
     fgLayout.rowsPerImage = rows;
@@ -477,13 +480,13 @@ void TextRenderer::updateCellTextures(WGPUQueue queue, const Grid& grid) {
                           cols * rows * 4, &fgLayout, &fgSize);
 
     // Write BG colors directly (RGBA8 -> RGBA8Unorm texture)
-    WGPUImageCopyTexture bgDest = {};
+    WGPUTexelCopyTextureInfo bgDest = {};
     bgDest.texture = cellBgColorTexture_;
     bgDest.mipLevel = 0;
     bgDest.origin = {0, 0, 0};
     bgDest.aspect = WGPUTextureAspect_All;
 
-    WGPUTextureDataLayout bgLayout = {};
+    WGPUTexelCopyBufferLayout bgLayout = {};
     bgLayout.offset = 0;
     bgLayout.bytesPerRow = cols * 4;
     bgLayout.rowsPerImage = rows;
@@ -513,13 +516,13 @@ void TextRenderer::updateCellTextureRegion(WGPUQueue queue, const Grid& grid, co
         }
     }
 
-    WGPUImageCopyTexture glyphDest = {};
+    WGPUTexelCopyTextureInfo glyphDest = {};
     glyphDest.texture = cellGlyphTexture_;
     glyphDest.mipLevel = 0;
     glyphDest.origin = {rect._startCol, rect._startRow, 0};
     glyphDest.aspect = WGPUTextureAspect_All;
 
-    WGPUTextureDataLayout glyphLayout = {};
+    WGPUTexelCopyBufferLayout glyphLayout = {};
     glyphLayout.offset = 0;
     glyphLayout.bytesPerRow = regionWidth * sizeof(uint16_t);
     glyphLayout.rowsPerImage = regionHeight;
@@ -542,13 +545,13 @@ void TextRenderer::updateCellTextureRegion(WGPUQueue queue, const Grid& grid, co
         }
     }
 
-    WGPUImageCopyTexture fgDest = {};
+    WGPUTexelCopyTextureInfo fgDest = {};
     fgDest.texture = cellFgColorTexture_;
     fgDest.mipLevel = 0;
     fgDest.origin = {rect._startCol, rect._startRow, 0};
     fgDest.aspect = WGPUTextureAspect_All;
 
-    WGPUTextureDataLayout fgLayout = {};
+    WGPUTexelCopyBufferLayout fgLayout = {};
     fgLayout.offset = 0;
     fgLayout.bytesPerRow = regionWidth * 4;
     fgLayout.rowsPerImage = regionHeight;
@@ -571,13 +574,13 @@ void TextRenderer::updateCellTextureRegion(WGPUQueue queue, const Grid& grid, co
         }
     }
 
-    WGPUImageCopyTexture bgDest = {};
+    WGPUTexelCopyTextureInfo bgDest = {};
     bgDest.texture = cellBgColorTexture_;
     bgDest.mipLevel = 0;
     bgDest.origin = {rect._startCol, rect._startRow, 0};
     bgDest.aspect = WGPUTextureAspect_All;
 
-    WGPUTextureDataLayout bgLayout = {};
+    WGPUTexelCopyBufferLayout bgLayout = {};
     bgLayout.offset = 0;
     bgLayout.bytesPerRow = regionWidth * 4;
     bgLayout.rowsPerImage = regionHeight;
@@ -589,25 +592,29 @@ void TextRenderer::updateCellTextureRegion(WGPUQueue queue, const Grid& grid, co
 
 void TextRenderer::render(WebGPUContext& ctx, const Grid& grid,
                           int cursorCol, int cursorRow, bool cursorVisible) {
+    static int frameCount = 0;
+    frameCount++;
+
     WGPUQueue queue = ctx.getQueue();
     const uint32_t cols = grid.getCols();
     const uint32_t rows = grid.getRows();
 
     // Recreate textures and bind group if grid size changed
     if (cols != textureCols_ || rows != textureRows_) {
+        spdlog::info("Creating cell textures: {}x{}", cols, rows);
         if (auto res = createCellTextures(device_, cols, rows); !res) {
-            std::cerr << "TextRenderer: " << error_msg(res) << std::endl;
+            spdlog::error("TextRenderer: {}", error_msg(res));
             return;
         }
         if (auto res = createBindGroup(device_, *font_); !res) {
-            std::cerr << "TextRenderer: " << error_msg(res) << std::endl;
+            spdlog::error("TextRenderer: {}", error_msg(res));
             return;
         }
         needsBindGroupRecreation_ = false;
     } else if (needsBindGroupRecreation_) {
         // Deferred bind group recreation (e.g., after glyph metadata buffer update)
         if (auto res = createBindGroup(device_, *font_); !res) {
-            std::cerr << "TextRenderer: " << error_msg(res) << std::endl;
+            spdlog::error("TextRenderer: {}", error_msg(res));
             return;
         }
         needsBindGroupRecreation_ = false;
@@ -618,10 +625,15 @@ void TextRenderer::render(WebGPUContext& ctx, const Grid& grid,
 
     auto targetViewResult = ctx.getCurrentTextureView();
     if (!targetViewResult) {
-        std::cerr << "TextRenderer: " << error_msg(targetViewResult) << std::endl;
+        spdlog::error("TextRenderer: getCurrentTextureView failed: {}", error_msg(targetViewResult));
         return;
     }
     WGPUTextureView targetView = *targetViewResult;
+
+    if (frameCount <= 3) {
+        spdlog::info("Frame {}: targetView={}, pipeline={}, bindGroup={}",
+                     frameCount, (void*)targetView, (void*)pipeline_, (void*)bindGroup_);
+    }
 
     WGPUCommandEncoderDescriptor encoderDesc = {};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encoderDesc);
@@ -634,6 +646,7 @@ void TextRenderer::render(WebGPUContext& ctx, const Grid& grid,
     colorAttachment.clearColor = {0.1, 0.1, 0.1, 1.0};
 #else
     colorAttachment.clearValue = {0.1, 0.1, 0.1, 1.0};
+    colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;  // v27: required for 2D textures
 #endif
 
     WGPURenderPassDescriptor passDesc = {};
@@ -730,6 +743,7 @@ void TextRenderer::render(WebGPUContext& ctx, const Grid& grid,
     colorAttachment.clearColor = {0.1, 0.1, 0.1, 1.0};
 #else
     colorAttachment.clearValue = {0.1, 0.1, 0.1, 1.0};
+    colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;  // v27: required for 2D textures
 #endif
 
     WGPURenderPassDescriptor passDesc = {};

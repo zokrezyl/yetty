@@ -43,45 +43,60 @@ include(cmake/CPM.cmake)
 # Dependencies
 #-----------------------------------------------------------------------------
 
-# WebGPU setup - different approaches per platform
+# WebGPU setup - use wgpu-native v27.0.4.0 for all platforms
 if(YETTY_ANDROID)
     # Android: Use pre-built wgpu-native from build-android/wgpu-libs
-    # Downloaded by android/build-wgpu.sh script
-    set(WGPU_ANDROID_LIB "${CMAKE_CURRENT_SOURCE_DIR}/build-android/wgpu-libs/arm64-v8a/libwgpu_native.so")
+    set(WGPU_LIB "${CMAKE_CURRENT_SOURCE_DIR}/build-android/wgpu-libs/arm64-v8a/libwgpu_native.so")
+    set(WGPU_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/build-android/wgpu-include")
+    set(WGPU_IS_SHARED TRUE)
 
-    if(NOT EXISTS "${WGPU_ANDROID_LIB}")
+    if(NOT EXISTS "${WGPU_LIB}")
         message(FATAL_ERROR
-            "wgpu-native Android library not found at ${WGPU_ANDROID_LIB}\n"
-            "Run 'make android-wgpu' or 'android/build-wgpu.sh' first to build it.")
+            "wgpu-native Android library not found at ${WGPU_LIB}\n"
+            "Run 'make android-wgpu' or 'android/build-wgpu.sh' first.")
+    endif()
+elseif(NOT EMSCRIPTEN)
+    # Desktop: Use pre-built wgpu-native from external/wgpu-native
+    set(WGPU_LIB "${CMAKE_CURRENT_SOURCE_DIR}/external/wgpu-native/lib/libwgpu_native.so")
+    set(WGPU_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/external/wgpu-native/include")
+    set(WGPU_IS_SHARED TRUE)
+
+    if(NOT EXISTS "${WGPU_LIB}")
+        message(FATAL_ERROR
+            "wgpu-native library not found at ${WGPU_LIB}\n"
+            "Run 'scripts/build-wgpu-desktop.sh' first.")
+    endif()
+endif()
+
+# Create webgpu target for native builds (Android and Desktop)
+if(YETTY_ANDROID OR NOT EMSCRIPTEN)
+    if(NOT EXISTS "${WGPU_INCLUDE}/webgpu/webgpu.h")
+        message(FATAL_ERROR
+            "wgpu-native headers not found at ${WGPU_INCLUDE}\n"
+            "Run the appropriate build script first.")
     endif()
 
-    # Fetch headers from eliemichel's distribution (headers only)
-    CPMAddPackage(
-        NAME webgpu
-        GITHUB_REPOSITORY eliemichel/WebGPU-distribution
-        GIT_TAG wgpu-v0.19.4.1
-        DOWNLOAD_ONLY YES
-    )
-
-    # Create imported library target for Android
+    # Create imported library target
+    # v27+: all headers are in webgpu/ directory
     add_library(webgpu SHARED IMPORTED GLOBAL)
     set_target_properties(webgpu PROPERTIES
-        IMPORTED_LOCATION "${WGPU_ANDROID_LIB}"
+        IMPORTED_LOCATION "${WGPU_LIB}"
         IMPORTED_NO_SONAME TRUE
-        INTERFACE_INCLUDE_DIRECTORIES "${webgpu_SOURCE_DIR}/include"
+        INTERFACE_INCLUDE_DIRECTORIES "${WGPU_INCLUDE}"
     )
     target_compile_definitions(webgpu INTERFACE WEBGPU_BACKEND_WGPU)
 
-    message(STATUS "Using wgpu-native for Android: ${WGPU_ANDROID_LIB}")
-else()
-    # Desktop/Web: Use eliemichel's WebGPU-distribution
-    CPMAddPackage(
-        NAME webgpu
-        GITHUB_REPOSITORY eliemichel/WebGPU-distribution
-        GIT_TAG wgpu-v0.19.4.1
-        OPTIONS
-            "WEBGPU_BACKEND WGPU"
-    )
+    # Mark webgpu as already added so CPM/ymery won't try to fetch it again
+    # CPM checks if package is in CPM_PACKAGES list
+    set(CPM_PACKAGES "${CPM_PACKAGES};webgpu" CACHE INTERNAL "")
+    set(webgpu_SOURCE_DIR "${WGPU_INCLUDE}" CACHE INTERNAL "")
+    set(webgpu_BINARY_DIR "${CMAKE_BINARY_DIR}/webgpu" CACHE INTERNAL "")
+    set(webgpu_VERSION "27.0.4.0" CACHE INTERNAL "")
+    set(CPM_PACKAGE_webgpu_SOURCE_DIR "${WGPU_INCLUDE}" CACHE INTERNAL "")
+
+    message(STATUS "Using wgpu-native v27.0.4.0:")
+    message(STATUS "  Library: ${WGPU_LIB}")
+    message(STATUS "  Headers: ${WGPU_INCLUDE}")
 endif()
 
 # GLM for math
@@ -173,8 +188,12 @@ if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID)
     CPMAddPackage(
         NAME glfw3webgpu
         GITHUB_REPOSITORY eliemichel/glfw3webgpu
-        GIT_TAG v1.2.0
+        GIT_TAG main  # v27 API compatible
     )
+
+    # glfw3webgpu needs to know which native platform GLFW is using
+    # to properly expose the native window handles
+    target_compile_definitions(glfw3webgpu PRIVATE _GLFW_X11)
 endif()
 
 #-----------------------------------------------------------------------------
@@ -335,11 +354,14 @@ elseif(YETTY_ANDROID)
         log
     )
 
-    # Copy assets to Android assets directory
-    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+    # Copy assets to Android assets directory (where Gradle expects them)
+    set(ANDROID_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build-android/assets")
+    file(MAKE_DIRECTORY ${ANDROID_ASSETS_DIR})
+    file(GLOB ASSET_FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/*")
+    file(COPY ${ASSET_FILES} DESTINATION ${ANDROID_ASSETS_DIR})
     configure_file(
         ${CMAKE_CURRENT_SOURCE_DIR}/src/yetty/renderer/shaders.wgsl
-        ${CMAKE_CURRENT_BINARY_DIR}/shaders.wgsl
+        ${ANDROID_ASSETS_DIR}/shaders.wgsl
         COPYONLY
     )
 
@@ -372,6 +394,7 @@ else()
         msdfgen::msdfgen-ext
         freetype
         vterm
+        spdlog::spdlog
         util  # for forkpty
         ${FONTCONFIG_LIBRARIES}
     )
@@ -396,7 +419,7 @@ else()
 
         target_compile_definitions(yetty PRIVATE YETTY_YMERY_ENABLED=1)
         target_include_directories(yetty PRIVATE ${ymery_SOURCE_DIR}/src)
-        target_link_libraries(yetty PRIVATE ymery spdlog::spdlog)
+        target_link_libraries(yetty PRIVATE ymery)
 
         message(STATUS "ymery plugin enabled (from GitHub)")
     endif()

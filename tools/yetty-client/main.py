@@ -73,9 +73,9 @@ def cmd_ls(ctx):
         click.echo("Would send query: " + repr(osc.create_query_sequence()))
         return
 
-    # Send query sequence
+    # Send query sequence (wrap for tmux if needed)
     query = osc.create_query_sequence()
-    sys.stdout.write(query)
+    sys.stdout.write(osc.maybe_wrap_for_tmux(query))
     sys.stdout.flush()
 
     # TODO: Read and parse response from terminal
@@ -140,7 +140,11 @@ def cmd_run(ctx, plugin_name, mode, pos_x, pos_y, width, height):
         sequence = osc.create_sequence(actual_plugin_name, mode, pos_x, pos_y, width, height, payload)
 
     if ctx.obj['dry_run']:
-        click.echo(f"Would output OSC sequence ({len(sequence)} bytes)")
+        if osc.is_inside_tmux():
+            wrapped = osc.wrap_for_tmux(sequence)
+            click.echo(f"Would output OSC sequence ({len(sequence)} bytes, {len(wrapped)} with tmux wrapper)")
+        else:
+            click.echo(f"Would output OSC sequence ({len(sequence)} bytes)")
         if ctx.obj['verbose']:
             click.echo(f"Plugin: {actual_plugin_name}")
             click.echo(f"Mode: {mode}, Position: ({pos_x},{pos_y}), Size: {width}x{height}")
@@ -148,12 +152,16 @@ def cmd_run(ctx, plugin_name, mode, pos_x, pos_y, width, height):
                 click.echo(f"Payload: {payload[:100]}{'...' if len(payload) > 100 else ''}")
         return
 
-    # Output to stdout
-    sys.stdout.write(sequence)
+    # Output to stdout (wrap for tmux if needed)
+    output_sequence = osc.maybe_wrap_for_tmux(sequence)
+    sys.stdout.write(output_sequence)
     sys.stdout.flush()
 
     if ctx.obj['verbose']:
-        click.echo(f"Sent {len(sequence)} bytes", err=True)
+        if osc.is_inside_tmux():
+            click.echo(f"Sent {len(output_sequence)} bytes (tmux passthrough)", err=True)
+        else:
+            click.echo(f"Sent {len(sequence)} bytes", err=True)
 
 
 @cli.command('dump', context_settings=dict(
@@ -226,6 +234,100 @@ def cmd_dump(ctx, plugin_name, output, mode, pos_x, pos_y, width, height):
         f.write(sequence)
 
     click.echo(f"Saved to: {output} ({len(sequence)} bytes)")
+
+
+@cli.command('decode')
+@click.argument('input_file', type=click.Path(exists=True))
+@click.option('--output', '-o', type=click.Path(), help='Output file (default: stdout)')
+@click.option('--info', '-i', is_flag=True, help='Show sequence metadata only')
+@click.option('--raw', '-r', is_flag=True, help='Output raw bytes (for binary payloads like images)')
+@click.pass_context
+def cmd_decode(ctx, input_file, output, info, raw):
+    """Decode a yetty OSC sequence file.
+
+    Parses .yetty or .osc files and extracts the decoded payload.
+    Useful for inspecting or recovering the original content.
+
+    Example:
+        yetty-client decode demo/files/shader.encoded.yetty
+        yetty-client decode demo.osc -o shader.wgsl
+        yetty-client decode demo.osc --info
+    """
+    with open(input_file, 'r') as f:
+        content = f.read()
+
+    # Strip trailing whitespace/newlines
+    content = content.rstrip('\r\n')
+
+    # Strip OSC terminators: BEL (0x07) or ST (ESC \)
+    if content.endswith('\x07'):
+        content = content[:-1]
+    elif content.endswith('\x1b\\'):
+        content = content[:-2]
+
+    # Strip leading ESC if present (ESC = 0x1B)
+    if content.startswith('\x1b]'):
+        content = content[2:]
+    elif content.startswith(']'):
+        content = content[1:]
+    else:
+        raise click.ClickException(f"Invalid yetty file: expected OSC sequence starting with ESC ]")
+
+    parts = content.split(';', 7)
+    if len(parts) < 8:
+        raise click.ClickException(f"Invalid OSC sequence: expected 8 parts, got {len(parts)}")
+
+    vendor_id, plugin, mode, x, y, w, h, encoded_payload = parts
+
+    if vendor_id != str(osc.VENDOR_ID):
+        raise click.ClickException(f"Unknown vendor ID: {vendor_id} (expected {osc.VENDOR_ID})")
+
+    # Show metadata
+    if info or ctx.obj['verbose']:
+        click.echo(f"Plugin:   {plugin}", err=True)
+        click.echo(f"Mode:     {mode} ({'absolute' if mode == 'A' else 'relative'})", err=True)
+        click.echo(f"Position: ({x}, {y})", err=True)
+        click.echo(f"Size:     {w}x{h}", err=True)
+        click.echo(f"Payload:  {len(encoded_payload)} chars (base94)", err=True)
+
+    if info:
+        return
+
+    # Decode payload
+    try:
+        if raw:
+            decoded_bytes = base94.decode(encoded_payload)
+        else:
+            decoded_bytes = base94.decode(encoded_payload)
+            try:
+                decoded_text = decoded_bytes.decode('utf-8')
+            except UnicodeDecodeError:
+                raise click.ClickException(
+                    f"Payload is not valid UTF-8 text. Use --raw for binary data.")
+    except Exception as e:
+        raise click.ClickException(f"Failed to decode payload: {e}")
+
+    if ctx.obj['verbose']:
+        click.echo(f"Decoded:  {len(decoded_bytes)} bytes", err=True)
+
+    if ctx.obj['dry_run']:
+        click.echo(f"Would write {len(decoded_bytes)} bytes to {'stdout' if not output else output}")
+        return
+
+    if raw:
+        if output:
+            with open(output, 'wb') as f:
+                f.write(decoded_bytes)
+            click.echo(f"Saved to: {output} ({len(decoded_bytes)} bytes)", err=True)
+        else:
+            sys.stdout.buffer.write(decoded_bytes)
+    else:
+        if output:
+            with open(output, 'w') as f:
+                f.write(decoded_text)
+            click.echo(f"Saved to: {output} ({len(decoded_text)} bytes)", err=True)
+        else:
+            click.echo(decoded_text)
 
 
 @cli.command('help')

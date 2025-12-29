@@ -1,4 +1,5 @@
 #include "font.h"
+#include "../renderer/wgpu-compat.h"
 #include <spdlog/spdlog.h>
 
 #if !YETTY_USE_PREBUILT_ATLAS
@@ -730,13 +731,13 @@ bool Font::uploadPendingGlyphs(WGPUDevice device, WGPUQueue queue) {
     // Re-upload entire atlas texture
     // (A more efficient approach would be to only upload the changed regions)
     if (_texture) {
-        WGPUImageCopyTexture dest = {};
+        WGPUTexelCopyTextureInfo dest = {};
         dest.texture = _texture;
         dest.mipLevel = 0;
         dest.origin = {0, 0, 0};
         dest.aspect = WGPUTextureAspect_All;
 
-        WGPUTextureDataLayout layout = {};
+        WGPUTexelCopyBufferLayout layout = {};
         layout.offset = 0;
         layout.bytesPerRow = _atlasWidth * 4;
         layout.rowsPerImage = _atlasHeight;
@@ -1075,7 +1076,7 @@ bool Font::createGlyphMetadataBuffer(WGPUDevice device) {
     size_t bufferSize = _glyphMetadata.size() * sizeof(GlyphMetadataGPU);
 
     WGPUBufferDescriptor bufDesc = {};
-    bufDesc.label = "glyph metadata";
+    bufDesc.label = WGPU_STR("glyph metadata");
     bufDesc.size = bufferSize;
     bufDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
     bufDesc.mappedAtCreation = true;
@@ -1103,7 +1104,7 @@ bool Font::createTexture(WGPUDevice device, WGPUQueue queue) {
     }
 
     WGPUTextureDescriptor texDesc = {};
-    texDesc.label = "font atlas";
+    texDesc.label = WGPU_STR("font atlas");
     texDesc.dimension = WGPUTextureDimension_2D;
     texDesc.size = {_atlasWidth, _atlasHeight, 1};
     texDesc.format = WGPUTextureFormat_RGBA8Unorm;
@@ -1117,13 +1118,13 @@ bool Font::createTexture(WGPUDevice device, WGPUQueue queue) {
         return false;
     }
 
-    WGPUImageCopyTexture dest = {};
+    WGPUTexelCopyTextureInfo dest = {};
     dest.texture = _texture;
     dest.mipLevel = 0;
     dest.origin = {0, 0, 0};
     dest.aspect = WGPUTextureAspect_All;
 
-    WGPUTextureDataLayout layout = {};
+    WGPUTexelCopyBufferLayout layout = {};
     layout.offset = 0;
     layout.bytesPerRow = _atlasWidth * 4;
     layout.rowsPerImage = _atlasHeight;

@@ -39,15 +39,7 @@ namespace {
 struct AndroidAppState {
     struct android_app* app = nullptr;
 
-    // WebGPU
-    WGPUInstance instance = nullptr;
-    WGPUSurface surface = nullptr;
-    WGPUAdapter adapter = nullptr;
-    WGPUDevice device = nullptr;
-    WGPUQueue queue = nullptr;
-    WGPUTextureFormat surfaceFormat = WGPUTextureFormat_BGRA8Unorm;
-
-    // Rendering
+    // Rendering (using WebGPUContext for proper abstraction)
     std::unique_ptr<yetty::WebGPUContext> ctx;
     std::unique_ptr<yetty::TextRenderer> renderer;
     std::unique_ptr<yetty::Font> font;
@@ -150,131 +142,23 @@ static bool setupBusybox(struct android_app* app) {
 }
 
 //-----------------------------------------------------------------------------
-// WebGPU Initialization
+// WebGPU Initialization (using WebGPUContext)
 //-----------------------------------------------------------------------------
 static bool initWebGPU(ANativeWindow* window) {
     LOGI("Initializing WebGPU...");
 
-    // Create instance
-    WGPUInstanceDescriptor instanceDesc = {};
-    g_state.instance = wgpuCreateInstance(&instanceDesc);
-    if (!g_state.instance) {
-        LOGE("Failed to create WebGPU instance");
-        return false;
-    }
-
-    // Create surface from Android window
-    WGPUSurfaceDescriptorFromAndroidNativeWindow androidSurfaceDesc = {};
-    androidSurfaceDesc.chain.sType = WGPUSType_SurfaceDescriptorFromAndroidNativeWindow;
-    androidSurfaceDesc.window = window;
-
-    WGPUSurfaceDescriptor surfaceDesc = {};
-    surfaceDesc.nextInChain = reinterpret_cast<const WGPUChainedStruct*>(&androidSurfaceDesc);
-
-    g_state.surface = wgpuInstanceCreateSurface(g_state.instance, &surfaceDesc);
-    if (!g_state.surface) {
-        LOGE("Failed to create WebGPU surface");
-        return false;
-    }
-
-    // Request adapter
-    WGPURequestAdapterOptions adapterOpts = {};
-    adapterOpts.compatibleSurface = g_state.surface;
-    adapterOpts.powerPreference = WGPUPowerPreference_HighPerformance;
-
-    struct AdapterUserData {
-        WGPUAdapter adapter = nullptr;
-        bool done = false;
-    } adapterData;
-
-    wgpuInstanceRequestAdapter(g_state.instance, &adapterOpts,
-        [](WGPURequestAdapterStatus status, WGPUAdapter adapter, const char* message, void* userdata) {
-            auto* data = static_cast<AdapterUserData*>(userdata);
-            if (status == WGPURequestAdapterStatus_Success) {
-                data->adapter = adapter;
-            } else {
-                LOGE("Failed to get adapter: %s", message ? message : "unknown error");
-            }
-            data->done = true;
-        }, &adapterData);
-
-    // Wait for adapter (synchronous for simplicity)
-    while (!adapterData.done) {
-        // In a real app, you'd want async handling
-    }
-
-    g_state.adapter = adapterData.adapter;
-    if (!g_state.adapter) {
-        LOGE("Failed to get WebGPU adapter");
-        return false;
-    }
-
-    // Request device
-    WGPUDeviceDescriptor deviceDesc = {};
-
-    struct DeviceUserData {
-        WGPUDevice device = nullptr;
-        bool done = false;
-    } deviceData;
-
-    wgpuAdapterRequestDevice(g_state.adapter, &deviceDesc,
-        [](WGPURequestDeviceStatus status, WGPUDevice device, const char* message, void* userdata) {
-            auto* data = static_cast<DeviceUserData*>(userdata);
-            if (status == WGPURequestDeviceStatus_Success) {
-                data->device = device;
-            } else {
-                LOGE("Failed to get device: %s", message ? message : "unknown error");
-            }
-            data->done = true;
-        }, &deviceData);
-
-    while (!deviceData.done) {
-        // Wait for device
-    }
-
-    g_state.device = deviceData.device;
-    if (!g_state.device) {
-        LOGE("Failed to get WebGPU device");
-        return false;
-    }
-
-    g_state.queue = wgpuDeviceGetQueue(g_state.device);
-
-    LOGI("WebGPU initialized successfully");
-    return true;
-}
-
-static bool configureSurface() {
-    g_state.width = ANativeWindow_getWidth(g_state.app->window);
-    g_state.height = ANativeWindow_getHeight(g_state.app->window);
-
+    g_state.width = ANativeWindow_getWidth(window);
+    g_state.height = ANativeWindow_getHeight(window);
     LOGI("Window size: %dx%d", g_state.width, g_state.height);
 
-    // Get surface capabilities
-    WGPUSurfaceCapabilities caps = {};
-    wgpuSurfaceGetCapabilities(g_state.surface, g_state.adapter, &caps);
-    if (caps.formatCount > 0 && caps.formats != nullptr) {
-        g_state.surfaceFormat = caps.formats[0];
-    } else {
-        // Default to BGRA8Unorm if capabilities query fails
-        LOGW("No surface formats returned, using default BGRA8Unorm");
-        g_state.surfaceFormat = WGPUTextureFormat_BGRA8Unorm;
+    g_state.ctx = std::make_unique<yetty::WebGPUContext>();
+    auto result = g_state.ctx->init(window, g_state.width, g_state.height);
+    if (!result) {
+        LOGE("Failed to initialize WebGPU: %s", result.error().message().c_str());
+        return false;
     }
-    wgpuSurfaceCapabilitiesFreeMembers(caps);
 
-    // Configure surface
-    WGPUSurfaceConfiguration config = {};
-    config.device = g_state.device;
-    config.format = g_state.surfaceFormat;
-    config.usage = WGPUTextureUsage_RenderAttachment;
-    config.alphaMode = WGPUCompositeAlphaMode_Auto;
-    config.width = g_state.width;
-    config.height = g_state.height;
-    config.presentMode = WGPUPresentMode_Fifo;  // VSync
-
-    wgpuSurfaceConfigure(g_state.surface, &config);
-
-    LOGI("Surface configured with format %d", g_state.surfaceFormat);
+    LOGI("WebGPU initialized successfully");
     return true;
 }
 
@@ -284,10 +168,67 @@ static bool configureSurface() {
 static bool initTerminal() {
     LOGI("Initializing terminal...");
 
-    // TODO: Load font atlas from assets
-    // For now, use hardcoded cell dimensions
-    g_state.cellWidth = 20.0f;
-    g_state.cellHeight = 40.0f;
+    // Extract font assets and shaders
+    std::string atlasPath = g_state.dataDir + "/atlas.png";
+    std::string metricsPath = g_state.dataDir + "/atlas.json";
+    std::string shaderPath = g_state.dataDir + "/shaders.wgsl";
+
+    if (access(atlasPath.c_str(), R_OK) != 0) {
+        if (!extractAsset(g_state.app, "atlas.png", atlasPath.c_str())) {
+            LOGE("Failed to extract atlas.png");
+            return false;
+        }
+    }
+    if (access(metricsPath.c_str(), R_OK) != 0) {
+        if (!extractAsset(g_state.app, "atlas.json", metricsPath.c_str())) {
+            LOGE("Failed to extract atlas.json");
+            return false;
+        }
+    }
+    // Always extract shader (may have been updated)
+    if (!extractAsset(g_state.app, "shaders.wgsl", shaderPath.c_str())) {
+        LOGE("Failed to extract shaders.wgsl");
+        return false;
+    }
+    LOGI("Shader extracted to %s", shaderPath.c_str());
+
+    // Set environment variable for TextRenderer to find the shader
+    setenv("YETTY_SHADER_PATH", shaderPath.c_str(), 1);
+
+    // Load font
+    g_state.font = std::make_unique<yetty::Font>();
+    if (!g_state.font->loadAtlas(atlasPath, metricsPath)) {
+        LOGE("Failed to load font atlas");
+        return false;
+    }
+    LOGI("Font atlas loaded");
+
+    // Create font texture using WebGPUContext
+    if (!g_state.font->createTexture(g_state.ctx->getDevice(), g_state.ctx->getQueue())) {
+        LOGE("Failed to create font texture");
+        return false;
+    }
+    LOGI("Font texture created");
+
+    // Initialize TextRenderer
+    g_state.renderer = std::make_unique<yetty::TextRenderer>();
+    auto rendererResult = g_state.renderer->init(*g_state.ctx, *g_state.font);
+    if (!rendererResult) {
+        LOGE("Failed to init TextRenderer: %s", rendererResult.error().message().c_str());
+        return false;
+    }
+    // Set screen size for rendering
+    g_state.renderer->resize(g_state.width, g_state.height);
+    LOGI("TextRenderer initialized with screen size %dx%d", g_state.width, g_state.height);
+
+    // Get cell dimensions from font
+    float fontSize = g_state.font->getFontSize();
+    g_state.cellWidth = fontSize * 0.6f;  // Approximate monospace width
+    g_state.cellHeight = g_state.font->getLineHeight();
+    LOGI("Cell size: %.1fx%.1f (fontSize=%.1f)", g_state.cellWidth, g_state.cellHeight, fontSize);
+
+    // Set cell size for text renderer
+    g_state.renderer->setCellSize(g_state.cellWidth, g_state.cellHeight);
 
     // Calculate terminal dimensions based on screen size
     g_state.cols = static_cast<uint32_t>(g_state.width / g_state.cellWidth);
@@ -305,13 +246,19 @@ static bool initTerminal() {
     setenv("PATH", g_state.dataDir.c_str(), 1);
     setenv("SHELL", g_state.busyboxPath.c_str(), 1);
 
-    // TODO: Create terminal with Font - for now skip
-    // Need to load font atlas from assets first
-    // g_state.terminal = std::make_unique<yetty::Terminal>(
-    //     g_state.cols, g_state.rows, g_state.font.get());
+    // Create terminal
+    g_state.terminal = std::make_unique<yetty::Terminal>(
+        g_state.cols, g_state.rows, g_state.font.get());
 
-    // Terminal creation is skipped for now (needs Font)
-    LOGI("Terminal initialization skipped (TODO: load font)");
+    // Start shell
+    std::string shell = g_state.busyboxPath + " ash";
+    auto result = g_state.terminal->start(shell);
+    if (!result) {
+        LOGE("Failed to start shell: %s", result.error().message().c_str());
+        return false;
+    }
+    LOGI("Terminal started with shell: %s", shell.c_str());
+
     return true;
 }
 
@@ -321,31 +268,11 @@ static bool initTerminal() {
 static void cleanup() {
     LOGI("Cleaning up...");
 
+    // Reset in reverse order of creation
     g_state.terminal.reset();
     g_state.renderer.reset();
     g_state.font.reset();
-    g_state.ctx.reset();
-
-    if (g_state.queue) {
-        wgpuQueueRelease(g_state.queue);
-        g_state.queue = nullptr;
-    }
-    if (g_state.device) {
-        wgpuDeviceRelease(g_state.device);
-        g_state.device = nullptr;
-    }
-    if (g_state.adapter) {
-        wgpuAdapterRelease(g_state.adapter);
-        g_state.adapter = nullptr;
-    }
-    if (g_state.surface) {
-        wgpuSurfaceRelease(g_state.surface);
-        g_state.surface = nullptr;
-    }
-    if (g_state.instance) {
-        wgpuInstanceRelease(g_state.instance);
-        g_state.instance = nullptr;
-    }
+    g_state.ctx.reset();  // WebGPUContext handles WebGPU cleanup
 
     g_state.initialized = false;
 }
@@ -450,19 +377,13 @@ static void handleCmd(struct android_app* app, int32_t cmd) {
                     return;
                 }
 
-                // Initialize WebGPU
+                // Initialize WebGPU (includes surface configuration)
                 if (!initWebGPU(app->window)) {
                     LOGE("Failed to initialize WebGPU");
                     return;
                 }
 
-                // Configure surface
-                if (!configureSurface()) {
-                    LOGE("Failed to configure surface");
-                    return;
-                }
-
-                // Initialize terminal
+                // Initialize terminal and renderer
                 if (!initTerminal()) {
                     LOGE("Failed to initialize terminal");
                     return;
@@ -493,9 +414,19 @@ static void handleCmd(struct android_app* app, int32_t cmd) {
         case APP_CMD_CONFIG_CHANGED:
             LOGI("APP_CMD_CONFIG_CHANGED");
             // Handle orientation change, etc.
-            if (g_state.initialized && app->window) {
-                // Reconfigure surface with new dimensions
-                configureSurface();
+            if (g_state.initialized && g_state.ctx && app->window) {
+                // Get new dimensions
+                g_state.width = ANativeWindow_getWidth(app->window);
+                g_state.height = ANativeWindow_getHeight(app->window);
+                LOGI("New window size: %dx%d", g_state.width, g_state.height);
+
+                // Reconfigure surface
+                g_state.ctx->resize(g_state.width, g_state.height);
+
+                // Resize renderer
+                if (g_state.renderer) {
+                    g_state.renderer->resize(g_state.width, g_state.height);
+                }
 
                 // Resize terminal
                 uint32_t newCols = static_cast<uint32_t>(g_state.width / g_state.cellWidth);
@@ -515,61 +446,19 @@ static void handleCmd(struct android_app* app, int32_t cmd) {
 //-----------------------------------------------------------------------------
 static void renderFrame() {
     if (!g_state.initialized || !g_state.running) return;
+    if (!g_state.ctx || !g_state.renderer || !g_state.terminal) return;
 
     // Update terminal (read PTY output)
-    if (g_state.terminal) {
-        g_state.terminal->update();
-    }
+    g_state.terminal->update();
 
-    // Get current surface texture
-    WGPUSurfaceTexture surfaceTexture;
-    wgpuSurfaceGetCurrentTexture(g_state.surface, &surfaceTexture);
-    if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_Success) {
-        LOGW("Failed to get surface texture: %d", surfaceTexture.status);
-        return;
-    }
-
-    WGPUTextureViewDescriptor viewDesc = {};
-    viewDesc.format = g_state.surfaceFormat;
-    viewDesc.dimension = WGPUTextureViewDimension_2D;
-    viewDesc.mipLevelCount = 1;
-    viewDesc.arrayLayerCount = 1;
-    WGPUTextureView textureView = wgpuTextureCreateView(surfaceTexture.texture, &viewDesc);
-
-    // Create command encoder
-    WGPUCommandEncoderDescriptor encoderDesc = {};
-    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(g_state.device, &encoderDesc);
-
-    // Begin render pass
-    WGPURenderPassColorAttachment colorAttachment = {};
-    colorAttachment.view = textureView;
-    colorAttachment.loadOp = WGPULoadOp_Clear;
-    colorAttachment.storeOp = WGPUStoreOp_Store;
-    colorAttachment.clearValue = {0.0f, 0.0f, 0.0f, 1.0f};  // Black background
-
-    WGPURenderPassDescriptor renderPassDesc = {};
-    renderPassDesc.colorAttachmentCount = 1;
-    renderPassDesc.colorAttachments = &colorAttachment;
-
-    WGPURenderPassEncoder renderPass = wgpuCommandEncoderBeginRenderPass(encoder, &renderPassDesc);
-
-    // TODO: Render terminal grid using TextRenderer
-    // This requires setting up the text renderer pipeline
-
-    wgpuRenderPassEncoderEnd(renderPass);
-    wgpuRenderPassEncoderRelease(renderPass);
-
-    // Submit commands
-    WGPUCommandBufferDescriptor cmdBufferDesc = {};
-    WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdBufferDesc);
-    wgpuQueueSubmit(g_state.queue, 1, &cmdBuffer);
-
-    wgpuCommandBufferRelease(cmdBuffer);
-    wgpuCommandEncoderRelease(encoder);
-    wgpuTextureViewRelease(textureView);
+    // Render terminal using TextRenderer
+    g_state.renderer->render(*g_state.ctx, g_state.terminal->getGrid(),
+                             g_state.terminal->getCursorCol(),
+                             g_state.terminal->getCursorRow(),
+                             g_state.terminal->isCursorVisible());
 
     // Present
-    wgpuSurfacePresent(g_state.surface);
+    g_state.ctx->present();
 }
 
 } // anonymous namespace

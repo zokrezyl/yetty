@@ -1,5 +1,6 @@
 #include "shader-glyph.h"
 #include "../../renderer/webgpu-context.h"
+#include "../../renderer/wgpu-compat.h"
 #include <yaml-cpp/yaml.h>
 #include <spdlog/spdlog.h>
 #include <fstream>
@@ -163,9 +164,9 @@ Result<void> ShaderGlyphPlugin::initSharedResources(WGPUDevice device, WGPUTextu
 
     // Compile shared vertex shader
     const char* vertCode = getVertexShader();
-    WGPUShaderModuleWGSLDescriptor wgslDesc = {};
-    wgslDesc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
-    wgslDesc.code = vertCode;
+    WGPUShaderSourceWGSL wgslDesc = {};
+    wgslDesc.chain.sType = WGPUSType_ShaderSourceWGSL;
+    wgslDesc.code = WGPU_STR(vertCode);
 
     WGPUShaderModuleDescriptor shaderDesc = {};
     shaderDesc.nextInChain = &wgslDesc.chain;
@@ -280,13 +281,13 @@ fn fs_entry(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 )";
 
     // Compile fragment shader
-    WGPUShaderModuleWGSLDescriptor wgslDesc = {};
-    wgslDesc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
-    wgslDesc.code = fullFragSource.c_str();
+    WGPUShaderSourceWGSL wgslDescFrag = {};
+    wgslDescFrag.chain.sType = WGPUSType_ShaderSourceWGSL;
+    wgslDescFrag.code = { .data = fullFragSource.c_str(), .length = fullFragSource.size() };
 
-    WGPUShaderModuleDescriptor shaderDesc = {};
-    shaderDesc.nextInChain = &wgslDesc.chain;
-    WGPUShaderModule fragModule = wgpuDeviceCreateShaderModule(_device, &shaderDesc);
+    WGPUShaderModuleDescriptor shaderDescFrag = {};
+    shaderDescFrag.nextInChain = &wgslDescFrag.chain;
+    WGPUShaderModule fragModule = wgpuDeviceCreateShaderModule(_device, &shaderDescFrag);
     if (!fragModule) {
         spdlog::error("Failed to compile shader: {} - fragModule is null", shaderFile);
         return Err<WGPURenderPipeline>("Failed to compile shader: " + shaderFile);
@@ -297,7 +298,7 @@ fn fs_entry(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     WGPURenderPipelineDescriptor pipelineDesc = {};
     pipelineDesc.layout = _pipelineLayout;
     pipelineDesc.vertex.module = _vertModule;
-    pipelineDesc.vertex.entryPoint = "vs_main";
+    pipelineDesc.vertex.entryPoint = WGPU_STR("vs_main");
 
     WGPUBlendState blend = {};
     blend.color.srcFactor = WGPUBlendFactor_SrcAlpha;
@@ -314,7 +315,7 @@ fn fs_entry(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 
     WGPUFragmentState fragState = {};
     fragState.module = fragModule;
-    fragState.entryPoint = "fs_entry";
+    fragState.entryPoint = WGPU_STR("fs_entry");
     fragState.targetCount = 1;
     fragState.targets = &colorTarget;
     pipelineDesc.fragment = &fragState;
@@ -456,6 +457,7 @@ Result<void> ShaderGlyphPlugin::renderLayer(WebGPUContext& ctx,
     colorAtt.view = targetView;
     colorAtt.loadOp = WGPULoadOp_Load;
     colorAtt.storeOp = WGPUStoreOp_Store;
+    colorAtt.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;  // v27: required for 2D textures
 
     WGPURenderPassDescriptor passDesc = {};
     passDesc.colorAttachmentCount = 1;

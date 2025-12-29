@@ -1,5 +1,6 @@
 #include "shader-toy.h"
 #include "../../renderer/webgpu-context.h"
+#include "../../renderer/wgpu-compat.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
 #include <sstream>
@@ -200,6 +201,7 @@ Result<void> ShaderToyLayer::render(WebGPUContext& ctx,
     colorAttachment.view = targetView;
     colorAttachment.loadOp = WGPULoadOp_Load;
     colorAttachment.storeOp = WGPUStoreOp_Store;
+    colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;  // v27: required for 2D textures
 
     WGPURenderPassDescriptor passDesc = {};
     passDesc.colorAttachmentCount = 1;
@@ -374,9 +376,9 @@ Result<void> ShaderToyLayer::compileShader(WebGPUContext& ctx,
 
     // Compile vertex shader
     std::string vertCode = getVertexShader();
-    WGPUShaderModuleWGSLDescriptor wgslDescVert = {};
-    wgslDescVert.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
-    wgslDescVert.code = vertCode.c_str();
+    WGPUShaderSourceWGSL wgslDescVert = {};
+    wgslDescVert.chain.sType = WGPUSType_ShaderSourceWGSL;
+    wgslDescVert.code = { .data = vertCode.c_str(), .length = vertCode.size() };
 
     WGPUShaderModuleDescriptor shaderDescVert = {};
     shaderDescVert.nextInChain = &wgslDescVert.chain;
@@ -386,9 +388,9 @@ Result<void> ShaderToyLayer::compileShader(WebGPUContext& ctx,
     std::string fragCode = wrapFragmentShader(fragmentCode);
     std::cout << "ShaderToyLayer: compiling fragment shader" << std::endl;
 
-    WGPUShaderModuleWGSLDescriptor wgslDescFrag = {};
-    wgslDescFrag.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
-    wgslDescFrag.code = fragCode.c_str();
+    WGPUShaderSourceWGSL wgslDescFrag = {};
+    wgslDescFrag.chain.sType = WGPUSType_ShaderSourceWGSL;
+    wgslDescFrag.code = { .data = fragCode.c_str(), .length = fragCode.size() };
 
     WGPUShaderModuleDescriptor shaderDescFrag = {};
     shaderDescFrag.nextInChain = &wgslDescFrag.chain;
@@ -451,11 +453,11 @@ Result<void> ShaderToyLayer::compileShader(WebGPUContext& ctx,
     WGPURenderPipelineDescriptor pipelineDesc = {};
     pipelineDesc.layout = pipelineLayout;
     pipelineDesc.vertex.module = vertModule;
-    pipelineDesc.vertex.entryPoint = "vs_main";
+    pipelineDesc.vertex.entryPoint = WGPU_STR("vs_main");
 
     WGPUFragmentState fragState = {};
     fragState.module = fragModule;
-    fragState.entryPoint = "fs_main";
+    fragState.entryPoint = WGPU_STR("fs_main");
 
     WGPUColorTargetState colorTarget = {};
     colorTarget.format = targetFormat;

@@ -1,6 +1,7 @@
 #include "plugin-manager.h"
 #include "terminal/grid.h"
 #include "renderer/webgpu-context.h"
+#include "renderer/wgpu-compat.h"
 #include <spdlog/spdlog.h>
 #include <iostream>
 #include <filesystem>
@@ -770,9 +771,9 @@ struct VertexOutput {
 }
 )";
 
-    WGPUShaderModuleWGSLDescriptor wgslDesc = {};
-    wgslDesc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
-    wgslDesc.code = shaderCode;
+    WGPUShaderSourceWGSL wgslDesc = {};
+    wgslDesc.chain.sType = WGPUSType_ShaderSourceWGSL;
+    wgslDesc.code = WGPU_STR(shaderCode);
 
     WGPUShaderModuleDescriptor shaderDesc = {};
     shaderDesc.nextInChain = &wgslDesc.chain;
@@ -832,7 +833,7 @@ struct VertexOutput {
     WGPURenderPipelineDescriptor pipelineDesc = {};
     pipelineDesc.layout = pipelineLayout;
     pipelineDesc.vertex.module = shaderModule;
-    pipelineDesc.vertex.entryPoint = "vs_main";
+    pipelineDesc.vertex.entryPoint = WGPU_STR("vs_main");
 
     WGPUBlendState blend = {};
     blend.color.srcFactor = WGPUBlendFactor_SrcAlpha;
@@ -849,7 +850,7 @@ struct VertexOutput {
 
     WGPUFragmentState fragState = {};
     fragState.module = shaderModule;
-    fragState.entryPoint = "fs_main";
+    fragState.entryPoint = WGPU_STR("fs_main");
     fragState.targetCount = 1;
     fragState.targets = &colorTarget;
     pipelineDesc.fragment = &fragState;
@@ -915,6 +916,7 @@ void PluginManager::renderFrame(WebGPUContext& ctx, WGPUTextureView targetView,
     colorAttachment.view = targetView;
     colorAttachment.loadOp = WGPULoadOp_Load;
     colorAttachment.storeOp = WGPUStoreOp_Store;
+    colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;  // v27: required for 2D textures
 
     WGPURenderPassDescriptor passDesc = {};
     passDesc.colorAttachmentCount = 1;
