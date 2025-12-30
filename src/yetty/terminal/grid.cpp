@@ -11,6 +11,7 @@ Grid::Grid(uint32_t cols, uint32_t rows)
     glyphIndices_.resize(cellCount, 0);
     fgColors_.resize(cellCount * 4, 255);  // RGBA, default white
     bgColors_.resize(cellCount * 4, 0);    // RGBA, default black (with alpha 0)
+    attrs_.resize(cellCount, 0);           // No attributes initially
     pluginIds_.resize(cellCount, 0);       // No plugins initially
 
     // Set default alpha for fg colors
@@ -26,6 +27,7 @@ void Grid::resize(uint32_t cols, uint32_t rows) {
     std::vector<uint16_t> newGlyphs(newCellCount, 0);
     std::vector<uint8_t> newFgColors(newCellCount * 4, 255);
     std::vector<uint8_t> newBgColors(newCellCount * 4, 0);
+    std::vector<uint8_t> newAttrs(newCellCount, 0);
     std::vector<uint16_t> newPluginIds(newCellCount, 0);
 
     // Set alpha for new fg colors
@@ -43,6 +45,7 @@ void Grid::resize(uint32_t cols, uint32_t rows) {
             size_t newIdx = r * cols + c;
 
             newGlyphs[newIdx] = glyphIndices_[oldIdx];
+            newAttrs[newIdx] = attrs_[oldIdx];
             newPluginIds[newIdx] = pluginIds_[oldIdx];
 
             newFgColors[newIdx * 4 + 0] = fgColors_[oldIdx * 4 + 0];
@@ -62,6 +65,7 @@ void Grid::resize(uint32_t cols, uint32_t rows) {
     glyphIndices_ = std::move(newGlyphs);
     fgColors_ = std::move(newFgColors);
     bgColors_ = std::move(newBgColors);
+    attrs_ = std::move(newAttrs);
     pluginIds_ = std::move(newPluginIds);
     dirty_ = true;
 }
@@ -69,6 +73,7 @@ void Grid::resize(uint32_t cols, uint32_t rows) {
 void Grid::clear() {
     size_t cellCount = cols_ * rows_;
     std::fill(glyphIndices_.begin(), glyphIndices_.end(), 0);
+    std::fill(attrs_.begin(), attrs_.end(), 0);
     std::fill(pluginIds_.begin(), pluginIds_.end(), 0);
 
     // Reset fg to white, bg to black
@@ -93,6 +98,30 @@ void Grid::setCell(uint32_t col, uint32_t row, uint16_t glyphIndex,
 
     size_t idx = cellIndex(col, row);
     glyphIndices_[idx] = glyphIndex;
+    attrs_[idx] = 0;  // Clear attributes when using legacy setCell
+
+    fgColors_[idx * 4 + 0] = fgR;
+    fgColors_[idx * 4 + 1] = fgG;
+    fgColors_[idx * 4 + 2] = fgB;
+    fgColors_[idx * 4 + 3] = 255;
+
+    bgColors_[idx * 4 + 0] = bgR;
+    bgColors_[idx * 4 + 1] = bgG;
+    bgColors_[idx * 4 + 2] = bgB;
+    bgColors_[idx * 4 + 3] = 255;
+
+    dirty_ = true;
+}
+
+void Grid::setCell(uint32_t col, uint32_t row, uint16_t glyphIndex,
+                   uint8_t fgR, uint8_t fgG, uint8_t fgB,
+                   uint8_t bgR, uint8_t bgG, uint8_t bgB,
+                   CellAttrs cellAttrs) {
+    if (col >= cols_ || row >= rows_) return;
+
+    size_t idx = cellIndex(col, row);
+    glyphIndices_[idx] = glyphIndex;
+    attrs_[idx] = cellAttrs.pack();
 
     fgColors_[idx * 4 + 0] = fgR;
     fgColors_[idx * 4 + 1] = fgG;
@@ -130,6 +159,12 @@ void Grid::setBgColor(uint32_t col, uint32_t row, uint8_t r, uint8_t g, uint8_t 
     bgColors_[idx + 1] = g;
     bgColors_[idx + 2] = b;
     bgColors_[idx + 3] = 255;
+    dirty_ = true;
+}
+
+void Grid::setAttrs(uint32_t col, uint32_t row, CellAttrs cellAttrs) {
+    if (col >= cols_ || row >= rows_) return;
+    attrs_[cellIndex(col, row)] = cellAttrs.pack();
     dirty_ = true;
 }
 
@@ -189,6 +224,7 @@ void Grid::scrollUp() {
             size_t dstIdx = row * cols_ + col;
 
             glyphIndices_[dstIdx] = glyphIndices_[srcIdx];
+            attrs_[dstIdx] = attrs_[srcIdx];
 
             fgColors_[dstIdx * 4 + 0] = fgColors_[srcIdx * 4 + 0];
             fgColors_[dstIdx * 4 + 1] = fgColors_[srcIdx * 4 + 1];
@@ -207,6 +243,7 @@ void Grid::scrollUp() {
     for (uint32_t col = 0; col < cols_; ++col) {
         size_t idx = lastRow * cols_ + col;
         glyphIndices_[idx] = 0;
+        attrs_[idx] = 0;
 
         fgColors_[idx * 4 + 0] = 255;
         fgColors_[idx * 4 + 1] = 255;

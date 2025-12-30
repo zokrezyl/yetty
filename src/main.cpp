@@ -38,6 +38,14 @@
 
 using namespace yetty;
 
+// Helper macro to check Result in callbacks where we can't return errors
+#define CHECK_RESULT(expr) \
+    do { \
+        if (auto _res = (expr); !_res) { \
+            spdlog::error("{}: {}", #expr, _res.error().message()); \
+        } \
+    } while(0)
+
 // Application state for callbacks and main loop
 struct AppState {
     GLFWwindow* _window = nullptr;
@@ -186,7 +194,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         const char* clipboard = glfwGetClipboardString(window);
         if (clipboard && *clipboard) {
             state->_terminal->clearSelection();
-            state->_terminal->sendRaw(clipboard, strlen(clipboard));
+            CHECK_RESULT(state->_terminal->sendRaw(clipboard, strlen(clipboard)));
             spdlog::debug("Pasted {} bytes from clipboard (middle-click)", strlen(clipboard));
         }
         return;
@@ -268,7 +276,7 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
                 // Clear selection before pasting
                 state->_terminal->clearSelection();
                 // Send clipboard content to terminal
-                state->_terminal->sendRaw(clipboard, strlen(clipboard));
+                CHECK_RESULT(state->_terminal->sendRaw(clipboard, strlen(clipboard)));
                 spdlog::debug("Pasted {} bytes from clipboard", strlen(clipboard));
             }
             return;
@@ -302,8 +310,8 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
             // Single character key name - send it with modifier
             if (keyName[1] == '\0') {
                 uint32_t ch = keyName[0];
-                std::cerr << "  -> Sending Ctrl/Alt+'" << (char)ch << "'" << std::endl;
-                state->_terminal->sendKey(ch, vtermMod);
+                spdlog::debug("Sending Ctrl/Alt+'{}'", (char)ch);
+                CHECK_RESULT(state->_terminal->sendKey(ch, vtermMod));
                 return;
             }
         }
@@ -312,46 +320,46 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
     // Map GLFW keys to VTerm keys
     switch (key) {
         case GLFW_KEY_ENTER:
-            state->_terminal->sendSpecialKey(VTERM_KEY_ENTER, vtermMod);
+            CHECK_RESULT(state->_terminal->sendSpecialKey(VTERM_KEY_ENTER, vtermMod));
             break;
         case GLFW_KEY_BACKSPACE:
-            state->_terminal->sendSpecialKey(VTERM_KEY_BACKSPACE, vtermMod);
+            CHECK_RESULT(state->_terminal->sendSpecialKey(VTERM_KEY_BACKSPACE, vtermMod));
             break;
         case GLFW_KEY_TAB:
-            state->_terminal->sendSpecialKey(VTERM_KEY_TAB, vtermMod);
+            CHECK_RESULT(state->_terminal->sendSpecialKey(VTERM_KEY_TAB, vtermMod));
             break;
         case GLFW_KEY_ESCAPE:
-            state->_terminal->sendSpecialKey(VTERM_KEY_ESCAPE, vtermMod);
+            CHECK_RESULT(state->_terminal->sendSpecialKey(VTERM_KEY_ESCAPE, vtermMod));
             break;
         case GLFW_KEY_UP:
-            state->_terminal->sendSpecialKey(VTERM_KEY_UP, vtermMod);
+            CHECK_RESULT(state->_terminal->sendSpecialKey(VTERM_KEY_UP, vtermMod));
             break;
         case GLFW_KEY_DOWN:
-            state->_terminal->sendSpecialKey(VTERM_KEY_DOWN, vtermMod);
+            CHECK_RESULT(state->_terminal->sendSpecialKey(VTERM_KEY_DOWN, vtermMod));
             break;
         case GLFW_KEY_LEFT:
-            state->_terminal->sendSpecialKey(VTERM_KEY_LEFT, vtermMod);
+            CHECK_RESULT(state->_terminal->sendSpecialKey(VTERM_KEY_LEFT, vtermMod));
             break;
         case GLFW_KEY_RIGHT:
-            state->_terminal->sendSpecialKey(VTERM_KEY_RIGHT, vtermMod);
+            CHECK_RESULT(state->_terminal->sendSpecialKey(VTERM_KEY_RIGHT, vtermMod));
             break;
         case GLFW_KEY_HOME:
-            state->_terminal->sendSpecialKey(VTERM_KEY_HOME, vtermMod);
+            CHECK_RESULT(state->_terminal->sendSpecialKey(VTERM_KEY_HOME, vtermMod));
             break;
         case GLFW_KEY_END:
-            state->_terminal->sendSpecialKey(VTERM_KEY_END, vtermMod);
+            CHECK_RESULT(state->_terminal->sendSpecialKey(VTERM_KEY_END, vtermMod));
             break;
         case GLFW_KEY_PAGE_UP:
-            state->_terminal->sendSpecialKey(VTERM_KEY_PAGEUP, vtermMod);
+            CHECK_RESULT(state->_terminal->sendSpecialKey(VTERM_KEY_PAGEUP, vtermMod));
             break;
         case GLFW_KEY_PAGE_DOWN:
-            state->_terminal->sendSpecialKey(VTERM_KEY_PAGEDOWN, vtermMod);
+            CHECK_RESULT(state->_terminal->sendSpecialKey(VTERM_KEY_PAGEDOWN, vtermMod));
             break;
         case GLFW_KEY_INSERT:
-            state->_terminal->sendSpecialKey(VTERM_KEY_INS, vtermMod);
+            CHECK_RESULT(state->_terminal->sendSpecialKey(VTERM_KEY_INS, vtermMod));
             break;
         case GLFW_KEY_DELETE:
-            state->_terminal->sendSpecialKey(VTERM_KEY_DEL, vtermMod);
+            CHECK_RESULT(state->_terminal->sendSpecialKey(VTERM_KEY_DEL, vtermMod));
             break;
         default:
             break;
@@ -370,7 +378,7 @@ void charCallback(GLFWwindow* window, unsigned int codepoint) {
         }
     }
 
-    state->_terminal->sendKey(codepoint);
+    CHECK_RESULT(state->_terminal->sendKey(codepoint));
 }
 #endif
 
@@ -385,7 +393,7 @@ static void mainLoopIteration() {
 #if !YETTY_WEB
     // Terminal mode: update terminal and render its grid
     if (!state._demoMode && state._terminal) {
-        state._terminal->update();
+        CHECK_RESULT(state._terminal->update());
 
         // Update decorators
         static double lastTime = glfwGetTime();

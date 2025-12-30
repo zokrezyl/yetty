@@ -25,10 +25,14 @@ namespace yetty {
 Font::Font() = default;
 
 Font::~Font() {
+    // Buffer and sampler are safe to release on all platforms
     if (_glyphMetadataBuffer) wgpuBufferRelease(_glyphMetadataBuffer);
     if (_sampler) wgpuSamplerRelease(_sampler);
+#if !YETTY_WEB
+    // On web, texture/view releases cause Emscripten manager issues
     if (_textureView) wgpuTextureViewRelease(_textureView);
     if (_texture) wgpuTextureRelease(_texture);
+#endif
 
 #if !YETTY_USE_PREBUILT_ATLAS
     // Clean up fallback fonts
@@ -45,6 +49,20 @@ Font::~Font() {
         _primaryFont = nullptr;
     }
 
+    // Clean up variant fonts
+    if (_boldFont) {
+        msdfgen::destroyFont(static_cast<msdfgen::FontHandle*>(_boldFont));
+        _boldFont = nullptr;
+    }
+    if (_italicFont) {
+        msdfgen::destroyFont(static_cast<msdfgen::FontHandle*>(_italicFont));
+        _italicFont = nullptr;
+    }
+    if (_boldItalicFont) {
+        msdfgen::destroyFont(static_cast<msdfgen::FontHandle*>(_boldItalicFont));
+        _boldItalicFont = nullptr;
+    }
+
     // Clean up FreeType handle
     if (_freetypeHandle) {
         msdfgen::deinitializeFreetype(static_cast<msdfgen::FreetypeHandle*>(_freetypeHandle));
@@ -58,6 +76,8 @@ Font::~Font() {
 // Simple rectangle packing for atlas
 struct PackedGlyph {
     uint32_t codepoint;
+    Font::Style style;  // Which font variant this glyph is from
+    double fontScale;   // Scale factor used for this glyph's font variant
     int atlasX, atlasY;
     int atlasW, atlasH;
     double advance;
@@ -104,7 +124,92 @@ private:
     int _shelfX, _shelfY, _shelfHeight;
 };
 
+// Helper to check if a file exists
+static bool fileExists(const std::string& path) {
+    std::ifstream f(path.c_str());
+    return f.good();
+}
+
+// Helper to derive variant paths from base font path
+// E.g., "DejaVuSansMono.ttf" -> "DejaVuSansMono-Bold.ttf", "DejaVuSansMono-Oblique.ttf", etc.
+static void discoverVariantPaths(const std::string& basePath,
+                                  std::string& boldPath,
+                                  std::string& italicPath,
+                                  std::string& boldItalicPath) {
+    // Find the base name without extension
+    size_t lastSlash = basePath.find_last_of("/\\");
+    size_t lastDot = basePath.find_last_of('.');
+
+    std::string dir = (lastSlash != std::string::npos) ? basePath.substr(0, lastSlash + 1) : "";
+    std::string name = (lastSlash != std::string::npos) ? basePath.substr(lastSlash + 1) : basePath;
+    std::string ext = (lastDot != std::string::npos && lastDot > lastSlash) ?
+                       basePath.substr(lastDot) : ".ttf";
+
+    // Remove extension from name
+    if (lastDot != std::string::npos && lastDot > lastSlash) {
+        name = name.substr(0, name.find_last_of('.'));
+    }
+
+    // Try common naming patterns for font variants
+    // Pattern 1: Name-Bold, Name-Italic, Name-BoldItalic
+    std::vector<std::string> boldPatterns = {"-Bold", "-bold", "_Bold", "_bold", "Bold"};
+    std::vector<std::string> italicPatterns = {"-Oblique", "-Italic", "-oblique", "-italic",
+                                                "_Oblique", "_Italic", "Oblique", "Italic"};
+    std::vector<std::string> boldItalicPatterns = {"-BoldOblique", "-BoldItalic",
+                                                    "-boldoblique", "-bolditalic",
+                                                    "_BoldOblique", "_BoldItalic",
+                                                    "BoldOblique", "BoldItalic"};
+
+    // Try to find bold variant
+    boldPath = "";
+    for (const auto& pattern : boldPatterns) {
+        std::string candidate = dir + name + pattern + ext;
+        if (fileExists(candidate)) {
+            boldPath = candidate;
+            break;
+        }
+    }
+
+    // Try to find italic variant
+    italicPath = "";
+    for (const auto& pattern : italicPatterns) {
+        std::string candidate = dir + name + pattern + ext;
+        if (fileExists(candidate)) {
+            italicPath = candidate;
+            break;
+        }
+    }
+
+    // Try to find bold-italic variant
+    boldItalicPath = "";
+    for (const auto& pattern : boldItalicPatterns) {
+        std::string candidate = dir + name + pattern + ext;
+        if (fileExists(candidate)) {
+            boldItalicPath = candidate;
+            break;
+        }
+    }
+}
+
 bool Font::generate(const std::string& fontPath, float fontSize, uint32_t atlasSize) {
+    // Auto-detect variant fonts
+    std::string boldPath, italicPath, boldItalicPath;
+    discoverVariantPaths(fontPath, boldPath, italicPath, boldItalicPath);
+
+    spdlog::info("Font variants detected:");
+    spdlog::info("  Regular: {}", fontPath);
+    spdlog::info("  Bold: {}", boldPath.empty() ? "(not found)" : boldPath);
+    spdlog::info("  Italic: {}", italicPath.empty() ? "(not found)" : italicPath);
+    spdlog::info("  BoldItalic: {}", boldItalicPath.empty() ? "(not found)" : boldItalicPath);
+
+    return generate(fontPath, boldPath, italicPath, boldItalicPath, fontSize, atlasSize);
+}
+
+bool Font::generate(const std::string& regularPath,
+                    const std::string& boldPath,
+                    const std::string& italicPath,
+                    const std::string& boldItalicPath,
+                    float fontSize, uint32_t atlasSize) {
     _fontSize = fontSize;
     _atlasWidth = atlasSize;
     _atlasHeight = atlasSize;
@@ -116,15 +221,39 @@ bool Font::generate(const std::string& fontPath, float fontSize, uint32_t atlasS
         return false;
     }
 
-    // Load font with FreeType
-    msdfgen::FontHandle* font = msdfgen::loadFont(ft, fontPath.c_str());
+    // Load regular font with FreeType
+    msdfgen::FontHandle* font = msdfgen::loadFont(ft, regularPath.c_str());
     if (!font) {
-        std::cerr << "Failed to load font: " << fontPath << std::endl;
+        std::cerr << "Failed to load font: " << regularPath << std::endl;
         msdfgen::deinitializeFreetype(ft);
         return false;
     }
 
-    // Get font metrics
+    // Load variant fonts (optional - if not available, variants fall back to regular)
+    msdfgen::FontHandle* boldFont = nullptr;
+    msdfgen::FontHandle* italicFont = nullptr;
+    msdfgen::FontHandle* boldItalicFont = nullptr;
+
+    if (!boldPath.empty()) {
+        boldFont = msdfgen::loadFont(ft, boldPath.c_str());
+        if (boldFont) {
+            spdlog::info("Loaded bold font: {}", boldPath);
+        }
+    }
+    if (!italicPath.empty()) {
+        italicFont = msdfgen::loadFont(ft, italicPath.c_str());
+        if (italicFont) {
+            spdlog::info("Loaded italic font: {}", italicPath);
+        }
+    }
+    if (!boldItalicPath.empty()) {
+        boldItalicFont = msdfgen::loadFont(ft, boldItalicPath.c_str());
+        if (boldItalicFont) {
+            spdlog::info("Loaded bold-italic font: {}", boldItalicPath);
+        }
+    }
+
+    // Get font metrics from regular font
     msdfgen::FontMetrics metrics;
     msdfgen::getFontMetrics(metrics, font);
     double unitsPerEm = metrics.emSize > 0 ? metrics.emSize : (metrics.ascenderY - metrics.descenderY);
@@ -173,51 +302,89 @@ bool Font::generate(const std::string& fontPath, float fontSize, uint32_t atlasS
     // Powerline symbols (0xE0A0-0xE0D4)
     for (uint32_t c = 0xE0A0; c <= 0xE0D4; ++c) charset.push_back(c);
 
-    // Load glyph shapes
+    // Helper lambda to load glyphs from a font variant
+    auto loadGlyphsFromFont = [&](msdfgen::FontHandle* variantFont, Style style,
+                                   std::vector<PackedGlyph>& glyphVec) {
+        if (!variantFont) return;
+
+        // Get font metrics for this variant (for proper scaling)
+        msdfgen::FontMetrics variantMetrics;
+        msdfgen::getFontMetrics(variantMetrics, variantFont);
+        double variantUnitsPerEm = variantMetrics.emSize > 0 ?
+            variantMetrics.emSize : (variantMetrics.ascenderY - variantMetrics.descenderY);
+        double variantScale = fontSize / variantUnitsPerEm;
+
+        for (uint32_t codepoint : charset) {
+            PackedGlyph pg;
+            pg.codepoint = codepoint;
+            pg.style = style;
+            pg.fontScale = variantScale;
+
+            double advance;
+            if (!msdfgen::loadGlyph(pg.shape, variantFont, codepoint, &advance)) continue;
+
+            pg.advance = advance * variantScale;
+
+            // Get shape bounds
+            if (!pg.shape.contours.empty()) {
+                pg.shape.normalize();
+                msdfgen::Shape::Bounds bounds = pg.shape.getBounds();
+
+                // Store raw bounds in font units (will be used for transform)
+                pg.boundsL = bounds.l;
+                pg.boundsB = bounds.b;
+                pg.boundsR = bounds.r;
+                pg.boundsT = bounds.t;
+
+                // Scale bounds to target size
+                pg.bearingX = bounds.l * variantScale;
+                pg.bearingY = bounds.t * variantScale;  // Top of glyph from baseline
+                pg.sizeX = (bounds.r - bounds.l) * variantScale;
+                pg.sizeY = (bounds.t - bounds.b) * variantScale;
+
+                // Calculate atlas size needed (with padding for SDF range)
+                int padding = static_cast<int>(std::ceil(_pixelRange));
+                pg.atlasW = static_cast<int>(std::ceil(pg.sizeX)) + padding * 2;
+                pg.atlasH = static_cast<int>(std::ceil(pg.sizeY)) + padding * 2;
+            } else {
+                // Empty glyph (like space)
+                pg.boundsL = pg.boundsB = pg.boundsR = pg.boundsT = 0;
+                pg.bearingX = pg.bearingY = 0;
+                pg.sizeX = pg.sizeY = 0;
+                pg.atlasW = pg.atlasH = 0;
+            }
+
+            glyphVec.push_back(std::move(pg));
+        }
+    };
+
+    // Load glyph shapes from all font variants
     std::vector<PackedGlyph> glyphs;
 
-    for (uint32_t codepoint : charset) {
-        PackedGlyph pg;
-        pg.codepoint = codepoint;
+    // Load regular glyphs
+    loadGlyphsFromFont(font, Regular, glyphs);
+    spdlog::info("Loaded {} regular glyphs", glyphs.size());
 
-        double advance;
-        if (!msdfgen::loadGlyph(pg.shape, font, codepoint, &advance)) continue;
-
-        pg.advance = advance * fontScale;
-
-        // Get shape bounds
-        if (!pg.shape.contours.empty()) {
-            pg.shape.normalize();
-            msdfgen::Shape::Bounds bounds = pg.shape.getBounds();
-
-            // Store raw bounds in font units (will be used for transform)
-            pg.boundsL = bounds.l;
-            pg.boundsB = bounds.b;
-            pg.boundsR = bounds.r;
-            pg.boundsT = bounds.t;
-
-            // Scale bounds to target size
-            pg.bearingX = bounds.l * fontScale;
-            pg.bearingY = bounds.t * fontScale;  // Top of glyph from baseline
-            pg.sizeX = (bounds.r - bounds.l) * fontScale;
-            pg.sizeY = (bounds.t - bounds.b) * fontScale;
-
-            // Calculate atlas size needed (with padding for SDF range)
-            int padding = static_cast<int>(std::ceil(_pixelRange));
-            pg.atlasW = static_cast<int>(std::ceil(pg.sizeX)) + padding * 2;
-            pg.atlasH = static_cast<int>(std::ceil(pg.sizeY)) + padding * 2;
-        } else {
-            // Empty glyph (like space)
-            pg.boundsL = pg.boundsB = pg.boundsR = pg.boundsT = 0;
-            pg.bearingX = pg.bearingY = 0;
-            pg.sizeX = pg.sizeY = 0;
-            pg.atlasW = pg.atlasH = 0;
-        }
-
-        glyphs.push_back(std::move(pg));
+    // Load variant glyphs (only if the variant font was loaded)
+    size_t regularCount = glyphs.size();
+    if (boldFont) {
+        loadGlyphsFromFont(boldFont, Bold, glyphs);
+        spdlog::info("Loaded {} bold glyphs", glyphs.size() - regularCount);
     }
 
-    std::cout << "Loaded " << glyphs.size() << " glyphs from font" << std::endl;
+    size_t afterBold = glyphs.size();
+    if (italicFont) {
+        loadGlyphsFromFont(italicFont, Italic, glyphs);
+        spdlog::info("Loaded {} italic glyphs", glyphs.size() - afterBold);
+    }
+
+    size_t afterItalic = glyphs.size();
+    if (boldItalicFont) {
+        loadGlyphsFromFont(boldItalicFont, BoldItalic, glyphs);
+        spdlog::info("Loaded {} bold-italic glyphs", glyphs.size() - afterItalic);
+    }
+
+    std::cout << "Loaded " << glyphs.size() << " total glyphs from all font variants" << std::endl;
 
     // Sort by height for better packing
     std::sort(glyphs.begin(), glyphs.end(), [](const PackedGlyph& a, const PackedGlyph& b) {
@@ -255,7 +422,7 @@ bool Font::generate(const std::string& fontPath, float fontSize, uint32_t atlasS
         glyph.shape.normalize();
         msdfgen::edgeColoringSimple(glyph.shape, 3.0);
 
-        double scale = fontScale;
+        double scale = glyph.fontScale;  // Use per-glyph scale for variants
 
         // Create MSDF bitmap for this glyph
         msdfgen::Bitmap<float, 3> msdf(glyph.atlasW, glyph.atlasH);
@@ -290,9 +457,12 @@ bool Font::generate(const std::string& fontPath, float fontSize, uint32_t atlasS
     // Calculate line height
     _lineHeight = static_cast<float>(lineHeight * fontScale);
 
-    // Keep FreeType and font alive for fallback loading
+    // Keep FreeType and fonts alive for fallback loading
     _freetypeHandle = ft;
     _primaryFont = font;
+    _boldFont = boldFont;
+    _italicFont = italicFont;
+    _boldItalicFont = boldItalicFont;
 
     // Track shelf packer state for dynamic glyph addition
     // We need to find the final position after packing
@@ -318,7 +488,7 @@ bool Font::generate(const std::string& fontPath, float fontSize, uint32_t atlasS
     // msdfgen::destroyFont(font);
     // msdfgen::deinitializeFreetype(ft);
 
-    // Extract glyph metrics
+    // Extract glyph metrics and store in appropriate maps based on style
     for (const auto& glyph : glyphs) {
         GlyphMetrics m;
 
@@ -343,16 +513,33 @@ bool Font::generate(const std::string& fontPath, float fontSize, uint32_t atlasS
         // bearingY: vertical offset from baseline to TOP of glyph quad
         //           In screen coords (Y-down), positive bearingY means glyph extends above baseline
         m._bearing = glm::vec2(
-            static_cast<float>(glyph.bearingX - padding),           // Left edge offset
-            static_cast<float>(glyph.boundsT * fontScale + padding) // Top of glyph from baseline
+            static_cast<float>(glyph.bearingX - padding),                    // Left edge offset
+            static_cast<float>(glyph.boundsT * glyph.fontScale + padding)    // Top of glyph from baseline
         );
         m._advance = static_cast<float>(glyph.advance);
 
-        _glyphs[glyph.codepoint] = m;
+        // Store in appropriate map based on style
+        switch (glyph.style) {
+            case Regular:
+                _glyphs[glyph.codepoint] = m;
+                break;
+            case Bold:
+                _boldGlyphs[glyph.codepoint] = m;
+                break;
+            case Italic:
+                _italicGlyphs[glyph.codepoint] = m;
+                break;
+            case BoldItalic:
+                _boldItalicGlyphs[glyph.codepoint] = m;
+                break;
+        }
     }
 
     std::cout << "Generated MSDF atlas: " << _atlasWidth << "x" << _atlasHeight
-              << " with " << _glyphs.size() << " glyphs" << std::endl;
+              << " with " << _glyphs.size() << " regular, "
+              << _boldGlyphs.size() << " bold, "
+              << _italicGlyphs.size() << " italic, "
+              << _boldItalicGlyphs.size() << " bold-italic glyphs" << std::endl;
 
     // Build codepoint→index mapping
     buildGlyphIndexMap();
@@ -387,20 +574,42 @@ bool Font::saveAtlas(const std::string& atlasPath, const std::string& metricsPat
     file << "  \"pixelRange\": " << _pixelRange << ",\n";
     file << "  \"glyphs\": {\n";
 
+    // Helper to write a glyph map
+    auto writeGlyphMap = [&file](const std::unordered_map<uint32_t, GlyphMetrics>& glyphMap, bool& first) {
+        for (const auto& [codepoint, m] : glyphMap) {
+            if (!first) file << ",\n";
+            first = false;
+
+            file << "    \"" << codepoint << "\": {\n";
+            file << "      \"uvMin\": [" << m._uvMin.x << ", " << m._uvMin.y << "],\n";
+            file << "      \"uvMax\": [" << m._uvMax.x << ", " << m._uvMax.y << "],\n";
+            file << "      \"size\": [" << m._size.x << ", " << m._size.y << "],\n";
+            file << "      \"bearing\": [" << m._bearing.x << ", " << m._bearing.y << "],\n";
+            file << "      \"advance\": " << m._advance << "\n";
+            file << "    }";
+        }
+    };
+
     bool first = true;
-    for (const auto& [codepoint, m] : _glyphs) {
-        if (!first) file << ",\n";
-        first = false;
+    writeGlyphMap(_glyphs, first);
+    file << "\n  },\n";
 
-        file << "    \"" << codepoint << "\": {\n";
-        file << "      \"uvMin\": [" << m._uvMin.x << ", " << m._uvMin.y << "],\n";
-        file << "      \"uvMax\": [" << m._uvMax.x << ", " << m._uvMax.y << "],\n";
-        file << "      \"size\": [" << m._size.x << ", " << m._size.y << "],\n";
-        file << "      \"bearing\": [" << m._bearing.x << ", " << m._bearing.y << "],\n";
-        file << "      \"advance\": " << m._advance << "\n";
-        file << "    }";
-    }
+    // Save bold glyphs
+    file << "  \"boldGlyphs\": {\n";
+    first = true;
+    writeGlyphMap(_boldGlyphs, first);
+    file << "\n  },\n";
 
+    // Save italic glyphs
+    file << "  \"italicGlyphs\": {\n";
+    first = true;
+    writeGlyphMap(_italicGlyphs, first);
+    file << "\n  },\n";
+
+    // Save bold-italic glyphs
+    file << "  \"boldItalicGlyphs\": {\n";
+    first = true;
+    writeGlyphMap(_boldItalicGlyphs, first);
     file << "\n  }\n";
     file << "}\n";
 
@@ -875,78 +1084,96 @@ bool Font::loadAtlas(const std::string& atlasPath, const std::string& metricsPat
     val = findValue("pixelRange");
     if (!val.empty()) _pixelRange = parseFloat(val);
 
-    // Parse glyphs
-    auto glyphsPos = json.find("\"glyphs\":");
-    if (glyphsPos == std::string::npos) {
+    // Helper to parse a glyph section from JSON
+    auto parseGlyphSection = [&json](const std::string& sectionName,
+                                      std::unordered_map<uint32_t, GlyphMetrics>& targetMap) {
+        std::string searchKey = "\"" + sectionName + "\":";
+        auto glyphsPos = json.find(searchKey);
+        if (glyphsPos == std::string::npos) {
+            return;  // Section not found is OK (for variant sections)
+        }
+
+        auto glyphsStart = json.find('{', glyphsPos + searchKey.length());
+        if (glyphsStart == std::string::npos) return;
+
+        size_t pos = glyphsStart + 1;
+        while (pos < json.size()) {
+            while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t' || json[pos] == '\n' || json[pos] == '\r' || json[pos] == ',')) pos++;
+
+            if (json[pos] == '}') break;
+
+            if (json[pos] != '"') { pos++; continue; }
+
+            auto keyEnd = json.find('"', pos + 1);
+            if (keyEnd == std::string::npos) break;
+
+            uint32_t codepoint = parseUint(json.substr(pos + 1, keyEnd - pos - 1));
+            pos = keyEnd + 1;
+
+            auto braceStart = json.find('{', pos);
+            if (braceStart == std::string::npos) break;
+
+            int depth = 1;
+            size_t braceEnd = braceStart + 1;
+            while (braceEnd < json.size() && depth > 0) {
+                if (json[braceEnd] == '{') depth++;
+                else if (json[braceEnd] == '}') depth--;
+                braceEnd++;
+            }
+
+            std::string glyphJson = json.substr(braceStart, braceEnd - braceStart);
+
+            GlyphMetrics m;
+            auto findGlyphValue = [&glyphJson](const std::string& key) -> std::string {
+                std::string search = "\"" + key + "\":";
+                auto p = glyphJson.find(search);
+                if (p == std::string::npos) return "";
+
+                p += search.length();
+                while (p < glyphJson.size() && (glyphJson[p] == ' ' || glyphJson[p] == '\t')) p++;
+
+                size_t e = p;
+                int bracketCount = 0;
+                while (e < glyphJson.size()) {
+                    char c = glyphJson[e];
+                    if (c == '[') bracketCount++;
+                    else if (c == ']') bracketCount--;
+                    else if ((c == ',' || c == '\n' || c == '}') && bracketCount == 0) break;
+                    e++;
+                }
+                return trim(glyphJson.substr(p, e - p));
+            };
+
+            m._uvMin = parseVec2(findGlyphValue("uvMin"));
+            m._uvMax = parseVec2(findGlyphValue("uvMax"));
+            m._size = parseVec2(findGlyphValue("size"));
+            m._bearing = parseVec2(findGlyphValue("bearing"));
+
+            std::string advStr = findGlyphValue("advance");
+            m._advance = advStr.empty() ? 0.0f : parseFloat(advStr);
+
+            targetMap[codepoint] = m;
+            pos = braceEnd;
+        }
+    };
+
+    // Parse regular glyphs (required)
+    parseGlyphSection("glyphs", _glyphs);
+    if (_glyphs.empty()) {
         std::cerr << "No glyphs found in metrics" << std::endl;
         return false;
     }
 
-    auto glyphsStart = json.find('{', glyphsPos + 9);
-    if (glyphsStart == std::string::npos) return false;
-
-    size_t pos = glyphsStart + 1;
-    while (pos < json.size()) {
-        while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t' || json[pos] == '\n' || json[pos] == '\r' || json[pos] == ',')) pos++;
-
-        if (json[pos] == '}') break;
-
-        if (json[pos] != '"') { pos++; continue; }
-
-        auto keyEnd = json.find('"', pos + 1);
-        if (keyEnd == std::string::npos) break;
-
-        uint32_t codepoint = parseUint(json.substr(pos + 1, keyEnd - pos - 1));
-        pos = keyEnd + 1;
-
-        auto braceStart = json.find('{', pos);
-        if (braceStart == std::string::npos) break;
-
-        int depth = 1;
-        size_t braceEnd = braceStart + 1;
-        while (braceEnd < json.size() && depth > 0) {
-            if (json[braceEnd] == '{') depth++;
-            else if (json[braceEnd] == '}') depth--;
-            braceEnd++;
-        }
-
-        std::string glyphJson = json.substr(braceStart, braceEnd - braceStart);
-
-        GlyphMetrics m;
-        auto findGlyphValue = [&glyphJson](const std::string& key) -> std::string {
-            std::string search = "\"" + key + "\":";
-            auto p = glyphJson.find(search);
-            if (p == std::string::npos) return "";
-
-            p += search.length();
-            while (p < glyphJson.size() && (glyphJson[p] == ' ' || glyphJson[p] == '\t')) p++;
-
-            size_t e = p;
-            int bracketCount = 0;
-            while (e < glyphJson.size()) {
-                char c = glyphJson[e];
-                if (c == '[') bracketCount++;
-                else if (c == ']') bracketCount--;
-                else if ((c == ',' || c == '\n' || c == '}') && bracketCount == 0) break;
-                e++;
-            }
-            return trim(glyphJson.substr(p, e - p));
-        };
-
-        m._uvMin = parseVec2(findGlyphValue("uvMin"));
-        m._uvMax = parseVec2(findGlyphValue("uvMax"));
-        m._size = parseVec2(findGlyphValue("size"));
-        m._bearing = parseVec2(findGlyphValue("bearing"));
-
-        val = findGlyphValue("advance");
-        m._advance = val.empty() ? 0.0f : parseFloat(val);
-
-        _glyphs[codepoint] = m;
-        pos = braceEnd;
-    }
+    // Parse variant glyphs (optional - may not exist in old cache files)
+    parseGlyphSection("boldGlyphs", _boldGlyphs);
+    parseGlyphSection("italicGlyphs", _italicGlyphs);
+    parseGlyphSection("boldItalicGlyphs", _boldItalicGlyphs);
 
     std::cout << "Loaded atlas " << _atlasWidth << "x" << _atlasHeight
-              << " with " << _glyphs.size() << " glyphs from " << metricsPath << std::endl;
+              << " with " << _glyphs.size() << " regular, "
+              << _boldGlyphs.size() << " bold, "
+              << _italicGlyphs.size() << " italic, "
+              << _boldItalicGlyphs.size() << " bold-italic glyphs from " << metricsPath << std::endl;
 
     buildGlyphIndexMap();
 
@@ -993,45 +1220,72 @@ bool Font::loadAtlas(const std::string& atlasPath, const std::string& metricsPat
 
 void Font::buildGlyphIndexMap() {
     _codepointToIndex.clear();
+    _boldCodepointToIndex.clear();
+    _italicCodepointToIndex.clear();
+    _boldItalicCodepointToIndex.clear();
     _glyphMetadata.clear();
 
+    // Helper lambda to add glyphs from a map to the metadata array
+    auto addGlyphsFromMap = [this](const std::unordered_map<uint32_t, GlyphMetrics>& glyphMap,
+                                    std::unordered_map<uint32_t, uint16_t>& indexMap) {
+        std::vector<uint32_t> codepoints;
+        codepoints.reserve(glyphMap.size());
+        for (const auto& [cp, _] : glyphMap) {
+            codepoints.push_back(cp);
+        }
+        std::sort(codepoints.begin(), codepoints.end());
+
+        for (uint32_t cp : codepoints) {
+            uint16_t index = static_cast<uint16_t>(_glyphMetadata.size());
+            indexMap[cp] = index;
+
+            const GlyphMetrics& m = glyphMap.at(cp);
+            GlyphMetadataGPU gpu;
+            gpu._uvMinX = m._uvMin.x;
+            gpu._uvMinY = m._uvMin.y;
+            gpu._uvMaxX = m._uvMax.x;
+            gpu._uvMaxY = m._uvMax.y;
+            gpu._sizeX = m._size.x;
+            gpu._sizeY = m._size.y;
+            gpu._bearingX = m._bearing.x;
+            gpu._bearingY = m._bearing.y;
+            gpu._advance = m._advance;
+            gpu._pad = 0.0f;
+
+            _glyphMetadata.push_back(gpu);
+        }
+    };
+
+    // Start with empty glyph at index 0
     GlyphMetadataGPU emptyGlyph = {};
     _glyphMetadata.push_back(emptyGlyph);
 
-    std::vector<uint32_t> codepoints;
-    codepoints.reserve(_glyphs.size());
-    for (const auto& [cp, _] : _glyphs) {
-        codepoints.push_back(cp);
-    }
-    std::sort(codepoints.begin(), codepoints.end());
+    // Add regular glyphs first
+    addGlyphsFromMap(_glyphs, _codepointToIndex);
 
-    for (uint32_t cp : codepoints) {
-        uint16_t index = static_cast<uint16_t>(_glyphMetadata.size());
-        _codepointToIndex[cp] = index;
+    // Add variant glyphs (they share the same _glyphMetadata array)
+    addGlyphsFromMap(_boldGlyphs, _boldCodepointToIndex);
+    addGlyphsFromMap(_italicGlyphs, _italicCodepointToIndex);
+    addGlyphsFromMap(_boldItalicGlyphs, _boldItalicCodepointToIndex);
 
-        const GlyphMetrics& m = _glyphs[cp];
-        GlyphMetadataGPU gpu;
-        gpu._uvMinX = m._uvMin.x;
-        gpu._uvMinY = m._uvMin.y;
-        gpu._uvMaxX = m._uvMax.x;
-        gpu._uvMaxY = m._uvMax.y;
-        gpu._sizeX = m._size.x;
-        gpu._sizeY = m._size.y;
-        gpu._bearingX = m._bearing.x;
-        gpu._bearingY = m._bearing.y;
-        gpu._advance = m._advance;
-        gpu._pad = 0.0f;
-
-        _glyphMetadata.push_back(gpu);
-    }
-
-    std::cout << "Built glyph index map with " << _glyphMetadata.size() << " entries" << std::endl;
+    std::cout << "Built glyph index map with " << _glyphMetadata.size() << " entries "
+              << "(regular: " << _codepointToIndex.size()
+              << ", bold: " << _boldCodepointToIndex.size()
+              << ", italic: " << _italicCodepointToIndex.size()
+              << ", bold-italic: " << _boldItalicCodepointToIndex.size() << ")" << std::endl;
 
     // Log sample glyph metrics for debugging
     auto itA = _codepointToIndex.find('A');
     if (itA != _codepointToIndex.end()) {
         const auto& m = _glyphMetadata[itA->second];
-        spdlog::debug("Sample 'A' glyph: uv({:.4f},{:.4f})->({:.4f},{:.4f}) size({:.1f},{:.1f}) bearing({:.1f},{:.1f})",
+        spdlog::debug("Sample 'A' regular: uv({:.4f},{:.4f})->({:.4f},{:.4f}) size({:.1f},{:.1f}) bearing({:.1f},{:.1f})",
+                      m._uvMinX, m._uvMinY, m._uvMaxX, m._uvMaxY,
+                      m._sizeX, m._sizeY, m._bearingX, m._bearingY);
+    }
+    auto itABold = _boldCodepointToIndex.find('A');
+    if (itABold != _boldCodepointToIndex.end()) {
+        const auto& m = _glyphMetadata[itABold->second];
+        spdlog::debug("Sample 'A' bold: uv({:.4f},{:.4f})->({:.4f},{:.4f}) size({:.1f},{:.1f}) bearing({:.1f},{:.1f})",
                       m._uvMinX, m._uvMinY, m._uvMaxX, m._uvMaxY,
                       m._sizeX, m._sizeY, m._bearingX, m._bearingY);
     }
@@ -1065,6 +1319,51 @@ uint16_t Font::getGlyphIndex(uint32_t codepoint) {
         return it->second;
     }
     return 0;
+}
+
+uint16_t Font::getGlyphIndex(uint32_t codepoint, Style style) {
+    // Try to find in the requested style's map first
+    std::unordered_map<uint32_t, uint16_t>* variantMap = nullptr;
+
+    switch (style) {
+        case Bold:
+            variantMap = &_boldCodepointToIndex;
+            break;
+        case Italic:
+            variantMap = &_italicCodepointToIndex;
+            break;
+        case BoldItalic:
+            variantMap = &_boldItalicCodepointToIndex;
+            break;
+        case Regular:
+        default:
+            // Regular style, just use the normal lookup
+            return getGlyphIndex(codepoint);
+    }
+
+    // Try to find in the variant map
+    if (variantMap && !variantMap->empty()) {
+        auto it = variantMap->find(codepoint);
+        if (it != variantMap->end()) {
+            return it->second;
+        }
+    }
+
+    // Fall back to regular style if variant not found
+    // This handles cases where variant font wasn't loaded or doesn't have this glyph
+    return getGlyphIndex(codepoint);
+}
+
+uint16_t Font::getGlyphIndex(uint32_t codepoint, bool bold, bool italic) {
+    Style style = Regular;
+    if (bold && italic) {
+        style = BoldItalic;
+    } else if (bold) {
+        style = Bold;
+    } else if (italic) {
+        style = Italic;
+    }
+    return getGlyphIndex(codepoint, style);
 }
 
 bool Font::createGlyphMetadataBuffer(WGPUDevice device) {

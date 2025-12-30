@@ -32,6 +32,14 @@
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
+// Helper macro to check Result in callbacks where we can't return errors
+#define CHECK_RESULT(expr) \
+    do { \
+        if (auto _res = (expr); !_res) { \
+            LOGE("%s: %s", #expr, _res.error().message().c_str()); \
+        } \
+    } while(0)
+
 namespace {
 
 //-----------------------------------------------------------------------------
@@ -489,46 +497,46 @@ static int32_t handleInput(struct android_app* app, AInputEvent* event) {
             // Handle special keys first
             switch (keyCode) {
                 case AKEYCODE_ENTER:
-                    g_state.terminal->sendKey('\r', mod);
+                    CHECK_RESULT(g_state.terminal->sendKey('\r', mod));
                     return 1;
                 case AKEYCODE_DEL:  // Backspace
-                    g_state.terminal->sendKey(VTERM_KEY_BACKSPACE, mod);
+                    CHECK_RESULT(g_state.terminal->sendSpecialKey(VTERM_KEY_BACKSPACE, mod));
                     return 1;
                 case AKEYCODE_FORWARD_DEL:  // Delete
-                    g_state.terminal->sendKey(VTERM_KEY_DEL, mod);
+                    CHECK_RESULT(g_state.terminal->sendSpecialKey(VTERM_KEY_DEL, mod));
                     return 1;
                 case AKEYCODE_TAB:
-                    g_state.terminal->sendKey('\t', mod);
+                    CHECK_RESULT(g_state.terminal->sendKey('\t', mod));
                     return 1;
                 case AKEYCODE_ESCAPE:
-                    g_state.terminal->sendKey(VTERM_KEY_ESCAPE, mod);
+                    CHECK_RESULT(g_state.terminal->sendSpecialKey(VTERM_KEY_ESCAPE, mod));
                     return 1;
                 case AKEYCODE_DPAD_UP:
-                    g_state.terminal->sendKey(VTERM_KEY_UP, mod);
+                    CHECK_RESULT(g_state.terminal->sendSpecialKey(VTERM_KEY_UP, mod));
                     return 1;
                 case AKEYCODE_DPAD_DOWN:
-                    g_state.terminal->sendKey(VTERM_KEY_DOWN, mod);
+                    CHECK_RESULT(g_state.terminal->sendSpecialKey(VTERM_KEY_DOWN, mod));
                     return 1;
                 case AKEYCODE_DPAD_LEFT:
-                    g_state.terminal->sendKey(VTERM_KEY_LEFT, mod);
+                    CHECK_RESULT(g_state.terminal->sendSpecialKey(VTERM_KEY_LEFT, mod));
                     return 1;
                 case AKEYCODE_DPAD_RIGHT:
-                    g_state.terminal->sendKey(VTERM_KEY_RIGHT, mod);
+                    CHECK_RESULT(g_state.terminal->sendSpecialKey(VTERM_KEY_RIGHT, mod));
                     return 1;
                 case AKEYCODE_MOVE_HOME:
-                    g_state.terminal->sendKey(VTERM_KEY_HOME, mod);
+                    CHECK_RESULT(g_state.terminal->sendSpecialKey(VTERM_KEY_HOME, mod));
                     return 1;
                 case AKEYCODE_MOVE_END:
-                    g_state.terminal->sendKey(VTERM_KEY_END, mod);
+                    CHECK_RESULT(g_state.terminal->sendSpecialKey(VTERM_KEY_END, mod));
                     return 1;
                 case AKEYCODE_PAGE_UP:
-                    g_state.terminal->sendKey(VTERM_KEY_PAGEUP, mod);
+                    CHECK_RESULT(g_state.terminal->sendSpecialKey(VTERM_KEY_PAGEUP, mod));
                     return 1;
                 case AKEYCODE_PAGE_DOWN:
-                    g_state.terminal->sendKey(VTERM_KEY_PAGEDOWN, mod);
+                    CHECK_RESULT(g_state.terminal->sendSpecialKey(VTERM_KEY_PAGEDOWN, mod));
                     return 1;
                 case AKEYCODE_INSERT:
-                    g_state.terminal->sendKey(VTERM_KEY_INS, mod);
+                    CHECK_RESULT(g_state.terminal->sendSpecialKey(VTERM_KEY_INS, mod));
                     return 1;
                 // Skip modifier-only keys
                 case AKEYCODE_SHIFT_LEFT:
@@ -569,14 +577,14 @@ static int32_t handleInput(struct android_app* app, AInputEvent* event) {
                 if (mod & VTERM_MOD_CTRL) {
                     // Ctrl+A through Ctrl+Z become 1-26
                     if (unicodeChar >= 'a' && unicodeChar <= 'z') {
-                        g_state.terminal->sendKey(unicodeChar - 'a' + 1, VTERM_MOD_NONE);
+                        CHECK_RESULT(g_state.terminal->sendKey(unicodeChar - 'a' + 1, VTERM_MOD_NONE));
                     } else if (unicodeChar >= 'A' && unicodeChar <= 'Z') {
-                        g_state.terminal->sendKey(unicodeChar - 'A' + 1, VTERM_MOD_NONE);
+                        CHECK_RESULT(g_state.terminal->sendKey(unicodeChar - 'A' + 1, VTERM_MOD_NONE));
                     } else {
-                        g_state.terminal->sendKey(unicodeChar, mod);
+                        CHECK_RESULT(g_state.terminal->sendKey(unicodeChar, mod));
                     }
                 } else {
-                    g_state.terminal->sendKey(unicodeChar, VTERM_MOD_NONE);
+                    CHECK_RESULT(g_state.terminal->sendKey(unicodeChar, VTERM_MOD_NONE));
                 }
                 return 1;
             }
@@ -726,7 +734,7 @@ static void renderFrame() {
     }
 
     // Update terminal (read PTY output)
-    g_state.terminal->update();
+    CHECK_RESULT(g_state.terminal->update());
 
     // Log grid state for first few frames
     if (frameCount < 3) {

@@ -23,15 +23,21 @@ namespace yetty {
 TextRenderer::TextRenderer() = default;
 
 TextRenderer::~TextRenderer() {
+    // On web, texture and bind group releases cause Emscripten WebGPU manager issues
+    // because bind groups hold references to textures
+#if !YETTY_WEB
+    if (cellAttrsView_) wgpuTextureViewRelease(cellAttrsView_);
     if (cellBgColorView_) wgpuTextureViewRelease(cellBgColorView_);
-    if (cellBgColorTexture_) wgpuTextureRelease(cellBgColorTexture_);
     if (cellFgColorView_) wgpuTextureViewRelease(cellFgColorView_);
-    if (cellFgColorTexture_) wgpuTextureRelease(cellFgColorTexture_);
     if (cellGlyphView_) wgpuTextureViewRelease(cellGlyphView_);
+    if (cellAttrsTexture_) wgpuTextureRelease(cellAttrsTexture_);
+    if (cellBgColorTexture_) wgpuTextureRelease(cellBgColorTexture_);
+    if (cellFgColorTexture_) wgpuTextureRelease(cellFgColorTexture_);
     if (cellGlyphTexture_) wgpuTextureRelease(cellGlyphTexture_);
+    if (bindGroup_) wgpuBindGroupRelease(bindGroup_);
+#endif
     if (quadVertexBuffer_) wgpuBufferRelease(quadVertexBuffer_);
     if (uniformBuffer_) wgpuBufferRelease(uniformBuffer_);
-    if (bindGroup_) wgpuBindGroupRelease(bindGroup_);
     if (pipelineLayout_) wgpuPipelineLayoutRelease(pipelineLayout_);
     if (bindGroupLayout_) wgpuBindGroupLayoutRelease(bindGroupLayout_);
     if (pipeline_) wgpuRenderPipelineRelease(pipeline_);
@@ -138,13 +144,28 @@ Result<void> TextRenderer::createBuffers(WGPUDevice device) {
 }
 
 Result<void> TextRenderer::createCellTextures(WGPUDevice device, uint32_t cols, uint32_t rows) {
-    // Release old textures if they exist
+#if YETTY_WEB
+    // On web, only create textures once to avoid Emscripten WebGPU manager issues
+    if (cellGlyphTexture_) {
+        // Already created, just update dimensions for shader
+        textureCols_ = cols;
+        textureRows_ = rows;
+        return Ok();
+    }
+    // First creation - use large fixed size to avoid needing recreation
+    cols = 200;
+    rows = 100;
+#else
+    // Release old textures if they exist (views first)
     if (cellGlyphView_) { wgpuTextureViewRelease(cellGlyphView_); cellGlyphView_ = nullptr; }
-    if (cellGlyphTexture_) { wgpuTextureRelease(cellGlyphTexture_); cellGlyphTexture_ = nullptr; }
     if (cellFgColorView_) { wgpuTextureViewRelease(cellFgColorView_); cellFgColorView_ = nullptr; }
-    if (cellFgColorTexture_) { wgpuTextureRelease(cellFgColorTexture_); cellFgColorTexture_ = nullptr; }
     if (cellBgColorView_) { wgpuTextureViewRelease(cellBgColorView_); cellBgColorView_ = nullptr; }
+    if (cellAttrsView_) { wgpuTextureViewRelease(cellAttrsView_); cellAttrsView_ = nullptr; }
+    if (cellGlyphTexture_) { wgpuTextureRelease(cellGlyphTexture_); cellGlyphTexture_ = nullptr; }
+    if (cellFgColorTexture_) { wgpuTextureRelease(cellFgColorTexture_); cellFgColorTexture_ = nullptr; }
     if (cellBgColorTexture_) { wgpuTextureRelease(cellBgColorTexture_); cellBgColorTexture_ = nullptr; }
+    if (cellAttrsTexture_) { wgpuTextureRelease(cellAttrsTexture_); cellAttrsTexture_ = nullptr; }
+#endif
 
     textureCols_ = cols;
     textureRows_ = rows;
@@ -221,12 +242,36 @@ Result<void> TextRenderer::createCellTextures(WGPUDevice device, uint32_t cols, 
         return Err<void>("Failed to create background color texture view");
     }
 
+    // Attrs texture: R8Uint (8-bit packed attributes per cell)
+    WGPUTextureDescriptor attrsTexDesc = {};
+    attrsTexDesc.label = WGPU_STR("cell attrs");
+    attrsTexDesc.size = {cols, rows, 1};
+    attrsTexDesc.mipLevelCount = 1;
+    attrsTexDesc.sampleCount = 1;
+    attrsTexDesc.dimension = WGPUTextureDimension_2D;
+    attrsTexDesc.format = WGPUTextureFormat_R8Uint;
+    attrsTexDesc.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
+    cellAttrsTexture_ = wgpuDeviceCreateTexture(device, &attrsTexDesc);
+    if (!cellAttrsTexture_) {
+        return Err<void>("Failed to create attrs texture");
+    }
+
+    WGPUTextureViewDescriptor attrsViewDesc = {};
+    attrsViewDesc.format = WGPUTextureFormat_R8Uint;
+    attrsViewDesc.dimension = WGPUTextureViewDimension_2D;
+    attrsViewDesc.mipLevelCount = 1;
+    attrsViewDesc.arrayLayerCount = 1;
+    cellAttrsView_ = wgpuTextureCreateView(cellAttrsTexture_, &attrsViewDesc);
+    if (!cellAttrsView_) {
+        return Err<void>("Failed to create attrs texture view");
+    }
+
     return Ok();
 }
 
 Result<void> TextRenderer::createBindGroupLayout(WGPUDevice device) {
-    // Bind group layout: 7 bindings
-    WGPUBindGroupLayoutEntry entries[7] = {};
+    // Bind group layout: 8 bindings
+    WGPUBindGroupLayoutEntry entries[8] = {};
 
     // 0: Uniforms
     entries[0].binding = 0;
@@ -269,8 +314,14 @@ Result<void> TextRenderer::createBindGroupLayout(WGPUDevice device) {
     entries[6].texture.sampleType = WGPUTextureSampleType_Float;
     entries[6].texture.viewDimension = WGPUTextureViewDimension_2D;
 
+    // 7: Cell attributes texture (R8Uint - packed bold/italic/underline/strike)
+    entries[7].binding = 7;
+    entries[7].visibility = WGPUShaderStage_Fragment;
+    entries[7].texture.sampleType = WGPUTextureSampleType_Uint;
+    entries[7].texture.viewDimension = WGPUTextureViewDimension_2D;
+
     WGPUBindGroupLayoutDescriptor layoutDesc = {};
-    layoutDesc.entryCount = 7;
+    layoutDesc.entryCount = 8;
     layoutDesc.entries = entries;
     bindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(device, &layoutDesc);
     if (!bindGroupLayout_) {
@@ -290,10 +341,18 @@ Result<void> TextRenderer::createBindGroupLayout(WGPUDevice device) {
 }
 
 Result<void> TextRenderer::createBindGroup(WGPUDevice device, Font& font) {
+#if YETTY_WEB
+    // On web, only create bind group once to avoid Emscripten WebGPU manager issues
+    if (bindGroup_) {
+        return Ok();
+    }
+#else
     // Release old bind group if it exists (for recreation when textures change)
     if (bindGroup_) { wgpuBindGroupRelease(bindGroup_); bindGroup_ = nullptr; }
+#endif
 
     // Validate required resources exist
+    if (!bindGroupLayout_) return Err<void>("bindGroupLayout_ is null");
     if (!uniformBuffer_) return Err<void>("uniformBuffer_ is null");
     if (!font.getTextureView()) return Err<void>("font texture view is null");
     if (!font.getSampler()) return Err<void>("font sampler is null");
@@ -301,9 +360,10 @@ Result<void> TextRenderer::createBindGroup(WGPUDevice device, Font& font) {
     if (!cellGlyphView_) return Err<void>("cellGlyphView_ is null - call render() first");
     if (!cellFgColorView_) return Err<void>("cellFgColorView_ is null");
     if (!cellBgColorView_) return Err<void>("cellBgColorView_ is null");
+    if (!cellAttrsView_) return Err<void>("cellAttrsView_ is null");
 
     // Bind group entries - uses current texture views
-    WGPUBindGroupEntry bgEntries[7] = {};
+    WGPUBindGroupEntry bgEntries[8] = {};
 
     bgEntries[0].binding = 0;
     bgEntries[0].buffer = uniformBuffer_;
@@ -328,9 +388,12 @@ Result<void> TextRenderer::createBindGroup(WGPUDevice device, Font& font) {
     bgEntries[6].binding = 6;
     bgEntries[6].textureView = cellBgColorView_;
 
+    bgEntries[7].binding = 7;
+    bgEntries[7].textureView = cellAttrsView_;
+
     WGPUBindGroupDescriptor bindGroupDesc = {};
     bindGroupDesc.layout = bindGroupLayout_;
-    bindGroupDesc.entryCount = 7;
+    bindGroupDesc.entryCount = 8;
     bindGroupDesc.entries = bgEntries;
     bindGroup_ = wgpuDeviceCreateBindGroup(device, &bindGroupDesc);
     if (!bindGroup_) {
@@ -415,7 +478,7 @@ void TextRenderer::updateFontBindings(Font& font) {
 
     // Only recreate bind group if cell textures already exist
     // Otherwise, render() will create both textures and bind group
-    if (!cellGlyphView_ || !cellFgColorView_ || !cellBgColorView_) {
+    if (!cellGlyphView_ || !cellFgColorView_ || !cellBgColorView_ || !cellAttrsView_) {
         // Mark that bind group needs recreation on next render
         needsBindGroupRecreation_ = true;
         return;
@@ -503,6 +566,22 @@ void TextRenderer::updateCellTextures(WGPUQueue queue, const Grid& grid) {
     WGPUExtent3D bgSize = {cols, rows, 1};
     wgpuQueueWriteTexture(queue, &bgDest, grid.getBgColorData(),
                           cols * rows * 4, &bgLayout, &bgSize);
+
+    // Write attributes directly (uint8 -> R8Uint texture)
+    WGPUTexelCopyTextureInfo attrsDest = {};
+    attrsDest.texture = cellAttrsTexture_;
+    attrsDest.mipLevel = 0;
+    attrsDest.origin = {0, 0, 0};
+    attrsDest.aspect = WGPUTextureAspect_All;
+
+    WGPUTexelCopyBufferLayout attrsLayout = {};
+    attrsLayout.offset = 0;
+    attrsLayout.bytesPerRow = cols;  // 1 byte per cell
+    attrsLayout.rowsPerImage = rows;
+
+    WGPUExtent3D attrsSize = {cols, rows, 1};
+    wgpuQueueWriteTexture(queue, &attrsDest, grid.getAttrsData(),
+                          cols * rows, &attrsLayout, &attrsSize);
 }
 
 void TextRenderer::updateCellTextureRegion(WGPUQueue queue, const Grid& grid, const DamageRect& rect) {
@@ -597,6 +676,31 @@ void TextRenderer::updateCellTextureRegion(WGPUQueue queue, const Grid& grid, co
     WGPUExtent3D bgSize = {regionWidth, regionHeight, 1};
     wgpuQueueWriteTexture(queue, &bgDest, bgRegion.data(),
                           regionWidth * regionHeight * 4, &bgLayout, &bgSize);
+
+    // Attrs texture update
+    std::vector<uint8_t> attrsRegion(regionWidth * regionHeight);
+    const uint8_t* srcAttrs = grid.getAttrsData();
+    for (uint32_t row = 0; row < regionHeight; row++) {
+        for (uint32_t col = 0; col < regionWidth; col++) {
+            uint32_t srcIdx = (rect._startRow + row) * cols + (rect._startCol + col);
+            attrsRegion[row * regionWidth + col] = srcAttrs[srcIdx];
+        }
+    }
+
+    WGPUTexelCopyTextureInfo attrsDest = {};
+    attrsDest.texture = cellAttrsTexture_;
+    attrsDest.mipLevel = 0;
+    attrsDest.origin = {rect._startCol, rect._startRow, 0};
+    attrsDest.aspect = WGPUTextureAspect_All;
+
+    WGPUTexelCopyBufferLayout attrsLayout = {};
+    attrsLayout.offset = 0;
+    attrsLayout.bytesPerRow = regionWidth;
+    attrsLayout.rowsPerImage = regionHeight;
+
+    WGPUExtent3D attrsSize = {regionWidth, regionHeight, 1};
+    wgpuQueueWriteTexture(queue, &attrsDest, attrsRegion.data(),
+                          regionWidth * regionHeight, &attrsLayout, &attrsSize);
 }
 
 void TextRenderer::render(WebGPUContext& ctx, const Grid& grid,

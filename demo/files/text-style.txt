@@ -1,0 +1,31 @@
+=== TEXT STYLE DEMO ===
+
+--- Basic Styles ---
+Normal text
+[1mBold text[0m
+[3mItalic text[0m
+[1m[3mBold + Italic text[0m
+
+--- Underline Styles ---
+[4mSingle underline[0m
+[4:2mDouble underline[0m
+[4:3mCurly underline[0m
+
+--- Strikethrough ---
+[9mStrikethrough text[0m
+
+--- Combined Styles ---
+[1m[4mBold + Underline[0m
+[3m[4mItalic + Underline[0m
+[1m[3m[4m[9mBold + Italic + Underline + Strikethrough[0m
+
+--- With Colors ---
+[1m[31mBold Red[0m
+[3m[32mItalic Green[0m
+[4m[34mUnderlined Blue[0m
+[9m[35mStrikethrough Magenta[0m
+
+--- Sample Text ---
+The [1mquick[0m [33mbrown[0m [3mfox[0m [4mjumps[0m over the [9mlazy[0m dog.
+
+=== END ===

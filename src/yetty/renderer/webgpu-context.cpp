@@ -55,20 +55,20 @@ Result<void> WebGPUContext::init(GLFWwindow* window, uint32_t width, uint32_t he
 
     // Platform-specific WebGPU initialization
 #if YETTY_WEB
-    // Emscripten: Get device directly using emscripten_webgpu_get_device()
-    // This handles adapter/instance internally and is synchronous
+    // On web, device/adapter are initialized in JavaScript and passed via EM_JS
+    // We just need to get them here
     device_ = emscripten_webgpu_get_device();
     if (!device_) {
-        return Err<void>("Failed to get WebGPU device (emscripten_webgpu_get_device failed)");
+        return Err<void>("Failed to get WebGPU device from JavaScript");
     }
 
-    // Get queue from device
     queue_ = wgpuDeviceGetQueue(device_);
     if (!queue_) {
         return Err<void>("Failed to get WebGPU queue");
     }
 
     // Create surface from canvas
+    instance_ = wgpuCreateInstance(nullptr);
     WGPUSurfaceDescriptorFromCanvasHTMLSelector canvasDesc = {};
     canvasDesc.chain.sType = WGPUSType_SurfaceDescriptorFromCanvasHTMLSelector;
     canvasDesc.selector = "#canvas";
@@ -76,8 +76,6 @@ Result<void> WebGPUContext::init(GLFWwindow* window, uint32_t width, uint32_t he
     WGPUSurfaceDescriptor surfaceDesc = {};
     surfaceDesc.nextInChain = &canvasDesc.chain;
 
-    // For Emscripten, we create instance just for creating surface
-    instance_ = wgpuCreateInstance(nullptr);
     surface_ = wgpuInstanceCreateSurface(instance_, &surfaceDesc);
     if (!surface_) {
         return Err<void>("Failed to create WebGPU surface from canvas");
@@ -390,7 +388,7 @@ void WebGPUContext::present() {
     static int presentCount = 0;
     presentCount++;
 
-    // Release cached texture view
+    // Release cached texture view (safe on all platforms including web)
     if (currentTextureView_) {
         wgpuTextureViewRelease(currentTextureView_);
         currentTextureView_ = nullptr;

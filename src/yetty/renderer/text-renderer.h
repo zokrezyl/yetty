@@ -80,6 +80,8 @@ private:
     WGPUTextureView cellFgColorView_ = nullptr;
     WGPUTexture cellBgColorTexture_ = nullptr;  // RGBA8Unorm - BG color per cell
     WGPUTextureView cellBgColorView_ = nullptr;
+    WGPUTexture cellAttrsTexture_ = nullptr;    // R8Uint - attributes per cell (bold, italic, underline, strike)
+    WGPUTextureView cellAttrsView_ = nullptr;
 
     Uniforms uniforms_;
     glm::vec2 cellSize_ = {10.0f, 20.0f};

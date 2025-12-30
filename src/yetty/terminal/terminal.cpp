@@ -2,7 +2,6 @@
 #include "../plugin-manager.h"
 
 #include <spdlog/spdlog.h>
-#include <iostream>
 #include <sstream>
 #include <cstring>
 #include <unistd.h>
@@ -13,14 +12,6 @@
 #include <pty.h>
 #include <signal.h>
 
-#if YETTY_ANDROID
-#include <android/log.h>
-#define TERM_LOGI(...) __android_log_print(ANDROID_LOG_INFO, "yetty-term", __VA_ARGS__)
-#define TERM_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "yetty-term", __VA_ARGS__)
-#else
-#define TERM_LOGI(...) do { } while(0)
-#define TERM_LOGE(...) do { } while(0)
-#endif
 
 namespace yetty {
 
@@ -89,8 +80,8 @@ Result<void> Terminal::start(const std::string& shell) {
         shellPath = envShell ? envShell : "/bin/sh";
     }
 
-    TERM_LOGI("Starting shell: %s", shellPath.c_str());
-    TERM_LOGI("Terminal size: %ux%u", cols_, rows_);
+    spdlog::debug("Starting shell: {}", shellPath);
+    spdlog::debug("Terminal size: {}x{}", cols_, rows_);
 
     // Create PTY
     struct winsize ws;
@@ -99,11 +90,11 @@ Result<void> Terminal::start(const std::string& shell) {
     ws.ws_xpixel = 0;
     ws.ws_ypixel = 0;
 
-    TERM_LOGI("Calling forkpty...");
+    spdlog::debug("Calling forkpty...");
     childPid_ = forkpty(&ptyMaster_, nullptr, nullptr, &ws);
 
     if (childPid_ < 0) {
-        TERM_LOGE("forkpty failed: %s (errno=%d)", strerror(errno), errno);
+        spdlog::error("forkpty failed: {} (errno={})", strerror(errno), errno);
         return Err<void>(std::string("forkpty failed: ") + strerror(errno));
     }
 
@@ -157,40 +148,70 @@ Result<void> Terminal::start(const std::string& shell) {
     }
 
     // Parent process
-    TERM_LOGI("forkpty succeeded: ptyMaster=%d, childPid=%d", ptyMaster_, childPid_);
+    spdlog::debug("forkpty succeeded: ptyMaster={}, childPid={}", ptyMaster_, childPid_);
 
     // Set PTY to non-blocking
     int flags = fcntl(ptyMaster_, F_GETFL, 0);
     fcntl(ptyMaster_, F_SETFL, flags | O_NONBLOCK);
 
     running_ = true;
-    std::cout << "Terminal started with shell: " << shellPath << std::endl;
-    std::cout << "PTY master fd: " << ptyMaster_ << ", child PID: " << childPid_ << std::endl;
-    TERM_LOGI("Terminal started successfully");
+    spdlog::info("Terminal started with shell: {}, PTY fd: {}, child PID: {}",
+                 shellPath, ptyMaster_, childPid_);
 
     return Ok();
 }
 
-void Terminal::update() {
-    static int updateCount = 0;
-    static int totalBytesRead = 0;
-    updateCount++;
+Result<void> Terminal::writeToPty(const char* data, size_t len) {
+    if (ptyMaster_ < 0) {
+        return Err("PTY not open");
+    }
+    if (len == 0) {
+        return Ok();
+    }
 
-    if (!running_ || ptyMaster_ < 0) {
-        if (updateCount <= 3) {
-            TERM_LOGI("update() skipped: running=%d, ptyMaster=%d", running_, ptyMaster_);
+    ssize_t written = write(ptyMaster_, data, len);
+    if (written < 0) {
+        return Err("PTY write failed: " + std::string(strerror(errno)));
+    }
+    if (static_cast<size_t>(written) != len) {
+        return Err("PTY write incomplete: wrote " + std::to_string(written) +
+                   " of " + std::to_string(len) + " bytes");
+    }
+    return Ok();
+}
+
+Result<void> Terminal::flushVtermOutput() {
+    size_t outlen = vterm_output_get_buffer_current(vterm_);
+    if (outlen == 0) {
+        return Ok();
+    }
+
+    char outbuf[256];
+    while (outlen > 0) {
+        size_t n = vterm_output_read(vterm_, outbuf, sizeof(outbuf));
+        if (n > 0) {
+            auto result = writeToPty(outbuf, n);
+            if (!result) {
+                return result;
+            }
         }
-        return;
+        outlen = vterm_output_get_buffer_current(vterm_);
+    }
+    return Ok();
+}
+
+Result<void> Terminal::update() {
+    if (!running_ || ptyMaster_ < 0) {
+        return Ok();  // Not an error, just nothing to do
     }
 
     // Check if child is still running
     int status;
-    pid_t result = waitpid(childPid_, &status, WNOHANG);
-    if (result > 0) {
+    pid_t waitResult = waitpid(childPid_, &status, WNOHANG);
+    if (waitResult > 0) {
         running_ = false;
-        TERM_LOGI("Shell exited with status: %d", WEXITSTATUS(status));
-        std::cout << "Shell exited with status: " << WEXITSTATUS(status) << std::endl;
-        return;
+        spdlog::info("Shell exited with status: {}", WEXITSTATUS(status));
+        return Ok();  // Shell exited, not an error
     }
 
     // Read from PTY
@@ -198,12 +219,6 @@ void Terminal::update() {
     ssize_t nread = read(ptyMaster_, buf, sizeof(buf));
 
     if (nread > 0) {
-        totalBytesRead += nread;
-        if (updateCount <= 10 || updateCount % 100 == 0) {
-            TERM_LOGI("PTY read: %zd bytes (total: %d), first chars: '%.*s'",
-                     nread, totalBytesRead, (int)(nread > 40 ? 40 : nread), buf);
-        }
-
         // Feed data to libvterm
         vterm_input_write(vterm_, buf, nread);
         vterm_screen_flush_damage(vtermScreen_);
@@ -218,16 +233,9 @@ void Terminal::update() {
         }
 
         // Flush any output libvterm generated (e.g., cursor position responses)
-        size_t outlen = vterm_output_get_buffer_current(vterm_);
-        if (outlen > 0) {
-            char outbuf[256];
-            while (outlen > 0) {
-                size_t n = vterm_output_read(vterm_, outbuf, sizeof(outbuf));
-                if (n > 0) {
-                    (void)write(ptyMaster_, outbuf, n);
-                }
-                outlen = vterm_output_get_buffer_current(vterm_);
-            }
+        auto flushResult = flushVtermOutput();
+        if (!flushResult) {
+            return flushResult;
         }
 
         // Sync based on damage tracking config
@@ -236,85 +244,58 @@ void Terminal::update() {
             syncDamageToGrid();
         } else {
             syncToGrid();
-            // Note: don't clear fullDamage_ here - main loop clears after rendering
         }
     } else if (nread < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-        TERM_LOGE("PTY read error: %s (errno=%d)", strerror(errno), errno);
+        spdlog::error("PTY read error: {} (errno={})", strerror(errno), errno);
         running_ = false;
+        return Err("PTY read failed: " + std::string(strerror(errno)));
     } else if (nread < 0) {
         // EAGAIN/EWOULDBLOCK - no data available (normal for non-blocking)
-        if (updateCount <= 5) {
-            TERM_LOGI("PTY read: no data (EAGAIN)");
-        }
-        // Still need to sync if fullDamage_ is set (e.g., after scrolling)
         if (fullDamage_) {
             syncToGrid();
         }
     } else if (fullDamage_) {
         // nread == 0 (EOF) but need to sync
         syncToGrid();
-        // Note: don't clear fullDamage_ here - main loop clears after rendering
     }
+
+    return Ok();
 }
 
-void Terminal::sendKey(uint32_t codepoint, VTermModifier mod) {
-    if (!running_ || ptyMaster_ < 0) return;
+Result<void> Terminal::sendKey(uint32_t codepoint, VTermModifier mod) {
+    if (!running_ || ptyMaster_ < 0) {
+        return Ok();  // Nothing to do
+    }
 
     // Flush any accumulated output first (e.g., responses to escape sequences)
-    size_t pending = vterm_output_get_buffer_current(vterm_);
-    if (pending > 0) {
-        std::cerr << "    Flushing " << pending << " pending bytes before key" << std::endl;
-        char discard[256];
-        while (pending > 0) {
-            size_t n = vterm_output_read(vterm_, discard, sizeof(discard));
-            if (n > 0) (void)write(ptyMaster_, discard, n);
-            pending = vterm_output_get_buffer_current(vterm_);
-        }
+    auto flushResult = flushVtermOutput();
+    if (!flushResult) {
+        return flushResult;
     }
 
     // Send to libvterm which will generate output
     vterm_keyboard_unichar(vterm_, codepoint, mod);
 
-    // Read the keyboard output and write to PTY
-    size_t buflen = vterm_output_get_buffer_current(vterm_);
-    if (buflen > 0) {
-        char buf[256];
-        size_t len = vterm_output_read(vterm_, buf, sizeof(buf));
-        if (len > 0) {
-            std::cerr << "    PTY write:";
-            for (size_t i = 0; i < len; i++) {
-                std::cerr << " 0x" << std::hex << (int)(unsigned char)buf[i] << std::dec;
-            }
-            std::cerr << std::endl;
-            (void)write(ptyMaster_, buf, len);
-        }
-    }
+    // Flush the keyboard output to PTY
+    return flushVtermOutput();
 }
 
-void Terminal::sendRaw(const char* data, size_t len) {
-    if (!running_ || ptyMaster_ < 0 || len == 0) return;
-
-    ssize_t written = write(ptyMaster_, data, len);
-    if (written < 0) {
-        std::cerr << "Failed to write to PTY: " << strerror(errno) << std::endl;
+Result<void> Terminal::sendRaw(const char* data, size_t len) {
+    if (!running_ || ptyMaster_ < 0 || len == 0) {
+        return Ok();
     }
+    return writeToPty(data, len);
 }
 
-void Terminal::sendSpecialKey(VTermKey key, VTermModifier mod) {
-    if (!running_ || ptyMaster_ < 0) return;
+Result<void> Terminal::sendSpecialKey(VTermKey key, VTermModifier mod) {
+    if (!running_ || ptyMaster_ < 0) {
+        return Ok();
+    }
 
     vterm_keyboard_key(vterm_, key, mod);
 
-    // Read vterm output buffer and write to PTY
-    size_t buflen = vterm_output_get_buffer_current(vterm_);
-    if (buflen > 0) {
-        char buf[256];
-        size_t len = vterm_output_read(vterm_, buf, sizeof(buf));
-        if (len > 0) {
-            ssize_t written = write(ptyMaster_, buf, len);
-            (void)written;  // Ignore errors for now
-        }
-    }
+    // Flush vterm output to PTY
+    return flushVtermOutput();
 }
 
 void Terminal::resize(uint32_t cols, uint32_t rows) {
@@ -341,10 +322,8 @@ void Terminal::syncToGrid() {
     static int syncCount = 0;
     syncCount++;
 
-    spdlog::debug("syncToGrid called");
-
     if (syncCount <= 5) {
-        TERM_LOGI("syncToGrid #%d: grid %ux%u", syncCount, cols_, rows_);
+        spdlog::debug("syncToGrid #{}: grid {}x{}", syncCount, cols_, rows_);
     }
 
     VTermScreenCell cell;
@@ -408,12 +387,25 @@ void Terminal::syncToGrid() {
                         std::swap(fgG, bgG);
                         std::swap(fgB, bgB);
                     }
-                    grid_.setCell(col, row, GLYPH_WIDE_CONT, fgR, fgG, fgB, bgR, bgG, bgB);
+                    // Extract text attributes for wide char continuation too
+                    CellAttrs wideAttrs;
+                    wideAttrs._bold = cell.attrs.bold ? 1 : 0;
+                    wideAttrs._italic = cell.attrs.italic ? 1 : 0;
+                    wideAttrs._strikethrough = cell.attrs.strike ? 1 : 0;
+                    wideAttrs._reserved = 0;
+                    wideAttrs._underline = static_cast<uint8_t>(cell.attrs.underline & 0x3);
+                    grid_.setCell(col, row, GLYPH_WIDE_CONT, fgR, fgG, fgB, bgR, bgG, bgB, wideAttrs);
                     continue;
                 }
                 if (codepoint == 0) codepoint = ' ';
 
-                uint16_t glyphIndex = font_ ? font_->getGlyphIndex(codepoint) : static_cast<uint16_t>(codepoint);
+                // Extract text attributes from libvterm (needed for glyph selection)
+                bool isBold = cell.attrs.bold != 0;
+                bool isItalic = cell.attrs.italic != 0;
+
+                // Get glyph index with style (uses bold/italic font variant if available)
+                uint16_t glyphIndex = font_ ? font_->getGlyphIndex(codepoint, isBold, isItalic)
+                                            : static_cast<uint16_t>(codepoint);
 
                 // Check if this codepoint has a custom glyph plugin
                 if (pluginManager_) {
@@ -456,7 +448,16 @@ void Terminal::syncToGrid() {
                     std::swap(fgB, bgB);
                 }
 
-                grid_.setCell(col, row, glyphIndex, fgR, fgG, fgB, bgR, bgG, bgB);
+                // Pack text attributes for GPU
+                CellAttrs attrs;
+                attrs._bold = isBold ? 1 : 0;
+                attrs._italic = isItalic ? 1 : 0;
+                attrs._strikethrough = cell.attrs.strike ? 1 : 0;
+                attrs._reserved = 0;
+                // Map libvterm underline values: 0=none, 1=single, 2=double, 3=curly
+                attrs._underline = static_cast<uint8_t>(cell.attrs.underline & 0x3);
+
+                grid_.setCell(col, row, glyphIndex, fgR, fgG, fgB, bgR, bgG, bgB, attrs);
             }
         }
     }
@@ -472,7 +473,7 @@ void Terminal::syncToGrid() {
                 nonSpaceInRow0++;
             }
         }
-        TERM_LOGI("syncToGrid #%d done: %d non-space glyphs in row 0", syncCount, nonSpaceInRow0);
+        spdlog::debug("syncToGrid #{} done: {} non-space glyphs in row 0", syncCount, nonSpaceInRow0);
     }
 
     // Note: don't clear damage here - main loop clears after rendering
@@ -599,8 +600,8 @@ int Terminal::onDamage(VTermRect rect, void* user) {
     term->damageRects_.push_back(damage);
 
     if (term->config_ && term->config_->_debugDamageRects) {
-        std::cout << "Damage: [" << damage._startCol << "," << damage._startRow
-                  << "] -> [" << damage._endCol << "," << damage._endRow << "]" << std::endl;
+        spdlog::debug("Damage: [{},{}] -> [{},{}]",
+                      damage._startCol, damage._startRow, damage._endCol, damage._endRow);
     }
 
     return 0;
@@ -641,7 +642,7 @@ int Terminal::onSetTermProp(VTermProp prop, VTermValue* val, void* user) {
     switch (prop) {
         case VTERM_PROP_ALTSCREEN:
             term->isAltScreen_ = val->boolean;
-            std::cout << "Terminal: alternate screen " << (term->isAltScreen_ ? "ON" : "OFF") << std::endl;
+            spdlog::debug("Terminal: alternate screen {}", term->isAltScreen_ ? "ON" : "OFF");
             // Notify plugin manager about screen change
             if (term->pluginManager_) {
                 term->pluginManager_->onAltScreenChange(term->isAltScreen_);
@@ -662,7 +663,10 @@ int Terminal::onSetTermProp(VTermProp prop, VTermValue* val, void* user) {
 
 int Terminal::onBell(void* user) {
     (void)user;
-    std::cout << '\a' << std::flush;  // Terminal bell
+    // Ring the bell by writing to stdout (the actual terminal)
+    if (write(STDOUT_FILENO, "\a", 1) < 0) {
+        // Ignore bell errors - not critical
+    }
     return 0;
 }
 
@@ -822,7 +826,10 @@ int Terminal::onOSC(int command, VTermStringFragment frag, void* user) {
                 term->fullDamage_ = true;  // Force full redraw
                 // Write query response back to PTY if any
                 if (!response.empty() && term->ptyMaster_ >= 0) {
-                    (void)write(term->ptyMaster_, response.c_str(), response.size());
+                    auto result = term->writeToPty(response.c_str(), response.size());
+                    if (!result) {
+                        spdlog::error("Failed to write OSC response: {}", result.error().message());
+                    }
                 }
 
                 // Defer cursor advance - can't call vterm_input_write during callback

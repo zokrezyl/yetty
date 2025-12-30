@@ -38,7 +38,15 @@ public:
 
 #if !YETTY_USE_PREBUILT_ATLAS
     // Generate MSDF atlas from a TTF font file (native only)
-    bool generate(const std::string& fontPath, float fontSize, uint32_t atlasSize = 2048);
+    // Automatically discovers Bold, Italic, BoldItalic variants if available
+    bool generate(const std::string& fontPath, float fontSize, uint32_t atlasSize = 4096);
+
+    // Generate MSDF atlas with explicit variant paths
+    bool generate(const std::string& regularPath,
+                  const std::string& boldPath,
+                  const std::string& italicPath,
+                  const std::string& boldItalicPath,
+                  float fontSize, uint32_t atlasSize = 4096);
 
     // Save atlas to PNG and metrics to JSON
     bool saveAtlas(const std::string& atlasPath, const std::string& metricsPath) const;
@@ -53,9 +61,22 @@ public:
     // Create glyph metadata SSBO buffer
     bool createGlyphMetadataBuffer(WGPUDevice device);
 
+    // Font style flags
+    enum Style : uint8_t {
+        Regular = 0,
+        Bold = 1,
+        Italic = 2,
+        BoldItalic = 3  // Bold | Italic
+    };
+
     // Get glyph index for a codepoint (for Grid)
     // On native builds, tries to load missing glyphs from fallback fonts
     uint16_t getGlyphIndex(uint32_t codepoint);
+
+    // Get glyph index with style (bold/italic)
+    // Falls back to regular style if variant not available
+    uint16_t getGlyphIndex(uint32_t codepoint, Style style);
+    uint16_t getGlyphIndex(uint32_t codepoint, bool bold, bool italic);
 
     // Get glyph metrics for a codepoint (for CPU-side calculations)
     const GlyphMetrics* getGlyph(uint32_t codepoint) const;
@@ -119,10 +140,30 @@ private:
     // FreeType handle (kept alive for fallback loading)
     void* _freetypeHandle = nullptr;
     void* _primaryFont = nullptr;
+
+    // Font variant handles
+    void* _boldFont = nullptr;
+    void* _italicFont = nullptr;
+    void* _boldItalicFont = nullptr;
+
+    // Helper to generate glyphs from a font into a specific glyph map
+    bool generateGlyphsFromFont(void* fontHandle, Style style,
+                                const std::vector<uint32_t>& charset,
+                                double fontScale, int& shelfX, int& shelfY, int& shelfHeight);
 #endif
 
+    // Regular font glyphs and index map
     std::unordered_map<uint32_t, GlyphMetrics> _glyphs;        // codepoint → metrics
     std::unordered_map<uint32_t, uint16_t> _codepointToIndex;  // codepoint → glyph index
+
+    // Font variant glyphs and index maps (Bold, Italic, BoldItalic)
+    std::unordered_map<uint32_t, GlyphMetrics> _boldGlyphs;
+    std::unordered_map<uint32_t, GlyphMetrics> _italicGlyphs;
+    std::unordered_map<uint32_t, GlyphMetrics> _boldItalicGlyphs;
+    std::unordered_map<uint32_t, uint16_t> _boldCodepointToIndex;
+    std::unordered_map<uint32_t, uint16_t> _italicCodepointToIndex;
+    std::unordered_map<uint32_t, uint16_t> _boldItalicCodepointToIndex;
+
     std::vector<GlyphMetadataGPU> _glyphMetadata;              // GPU metadata array
     std::vector<uint8_t> _atlasData;
 

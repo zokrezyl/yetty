@@ -49,14 +49,14 @@ public:
     Result<void> start(const std::string& shell = "");
 
     // Process input from PTY (call regularly)
-    void update();
+    Result<void> update();
 
     // Send keyboard input to the terminal
-    void sendKey(uint32_t codepoint, VTermModifier mod = VTERM_MOD_NONE);
-    void sendSpecialKey(VTermKey key, VTermModifier mod = VTERM_MOD_NONE);
+    Result<void> sendKey(uint32_t codepoint, VTermModifier mod = VTERM_MOD_NONE);
+    Result<void> sendSpecialKey(VTermKey key, VTermModifier mod = VTERM_MOD_NONE);
 
     // Send raw bytes directly to the PTY (for control characters)
-    void sendRaw(const char* data, size_t len);
+    Result<void> sendRaw(const char* data, size_t len);
 
     // Resize the terminal
     void resize(uint32_t cols, uint32_t rows);
@@ -138,6 +138,12 @@ public:
     VTermScreen* getVTermScreen() const { return vtermScreen_; }
 
 private:
+    // Write to PTY with error handling
+    Result<void> writeToPty(const char* data, size_t len);
+
+    // Flush libvterm output buffer to PTY
+    Result<void> flushVtermOutput();
+
     // Sync libvterm screen to our Grid
     void syncToGrid();
     void syncDamageToGrid();  // Only sync damaged regions
