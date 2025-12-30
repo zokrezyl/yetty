@@ -246,8 +246,12 @@ void Terminal::update() {
         if (updateCount <= 5) {
             TERM_LOGI("PTY read: no data (EAGAIN)");
         }
+        // Still need to sync if fullDamage_ is set (e.g., after scrolling)
+        if (fullDamage_) {
+            syncToGrid();
+        }
     } else if (fullDamage_) {
-        // No new data but need to sync (e.g., after scrolling)
+        // nread == 0 (EOF) but need to sync
         syncToGrid();
         // Note: don't clear fullDamage_ here - main loop clears after rendering
     }
