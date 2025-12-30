@@ -50,6 +50,7 @@ Terminal::Terminal(uint32_t cols, uint32_t rows, Font* font)
     vtermScreen_ = vterm_obtain_screen(vterm_);
     vterm_screen_set_callbacks(vtermScreen_, &screenCallbacks, this);
     vterm_screen_enable_altscreen(vtermScreen_, 1);  // Enable alternate screen support
+    vterm_screen_enable_reflow(vtermScreen_, true);  // Enable text reflow on resize
     vterm_screen_reset(vtermScreen_, 1);
 
     // Set up fallback callbacks for unrecognized OSC sequences (plugins)
