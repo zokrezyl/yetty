@@ -46,38 +46,23 @@ include(cmake/CPM.cmake)
 # WebGPU setup - use wgpu-native v27.0.4.0 for all platforms
 if(YETTY_ANDROID)
     # Android: Use pre-built wgpu-native from build-android/wgpu-libs
+    # Android cross-compilation requires manual setup due to NDK toolchain
     set(WGPU_LIB "${CMAKE_CURRENT_SOURCE_DIR}/build-android/wgpu-libs/arm64-v8a/libwgpu_native.so")
     set(WGPU_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/build-android/wgpu-include")
-    set(WGPU_IS_SHARED TRUE)
 
     if(NOT EXISTS "${WGPU_LIB}")
         message(FATAL_ERROR
             "wgpu-native Android library not found at ${WGPU_LIB}\n"
             "Run 'make android-wgpu' or 'android/build-wgpu.sh' first.")
     endif()
-elseif(NOT EMSCRIPTEN)
-    # Desktop: Use pre-built wgpu-native from external/wgpu-native
-    set(WGPU_LIB "${CMAKE_CURRENT_SOURCE_DIR}/external/wgpu-native/lib/libwgpu_native.so")
-    set(WGPU_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/external/wgpu-native/include")
-    set(WGPU_IS_SHARED TRUE)
 
-    if(NOT EXISTS "${WGPU_LIB}")
-        message(FATAL_ERROR
-            "wgpu-native library not found at ${WGPU_LIB}\n"
-            "Run 'scripts/build-wgpu-desktop.sh' first.")
-    endif()
-endif()
-
-# Create webgpu target for native builds (Android and Desktop)
-if(YETTY_ANDROID OR NOT EMSCRIPTEN)
     if(NOT EXISTS "${WGPU_INCLUDE}/webgpu/webgpu.h")
         message(FATAL_ERROR
             "wgpu-native headers not found at ${WGPU_INCLUDE}\n"
-            "Run the appropriate build script first.")
+            "Run 'make android-wgpu' first.")
     endif()
 
-    # Create imported library target
-    # v27+: all headers are in webgpu/ directory
+    # Create imported library target for Android
     add_library(webgpu SHARED IMPORTED GLOBAL)
     set_target_properties(webgpu PROPERTIES
         IMPORTED_LOCATION "${WGPU_LIB}"
@@ -87,16 +72,17 @@ if(YETTY_ANDROID OR NOT EMSCRIPTEN)
     target_compile_definitions(webgpu INTERFACE WEBGPU_BACKEND_WGPU)
 
     # Mark webgpu as already added so CPM/ymery won't try to fetch it again
-    # CPM checks if package is in CPM_PACKAGES list
     set(CPM_PACKAGES "${CPM_PACKAGES};webgpu" CACHE INTERNAL "")
     set(webgpu_SOURCE_DIR "${WGPU_INCLUDE}" CACHE INTERNAL "")
-    set(webgpu_BINARY_DIR "${CMAKE_BINARY_DIR}/webgpu" CACHE INTERNAL "")
     set(webgpu_VERSION "27.0.4.0" CACHE INTERNAL "")
-    set(CPM_PACKAGE_webgpu_SOURCE_DIR "${WGPU_INCLUDE}" CACHE INTERNAL "")
 
-    message(STATUS "Using wgpu-native v27.0.4.0:")
+    message(STATUS "Using wgpu-native v27.0.4.0 (Android):")
     message(STATUS "  Library: ${WGPU_LIB}")
     message(STATUS "  Headers: ${WGPU_INCLUDE}")
+
+elseif(NOT EMSCRIPTEN)
+    # Desktop (Linux/macOS/Windows): Auto-download wgpu-native from GitHub releases
+    include(cmake/WgpuNative.cmake)
 endif()
 
 # GLM for math
@@ -127,11 +113,13 @@ CPMAddPackage(
     OPTIONS "YAML_CPP_BUILD_TESTS OFF" "YAML_CPP_BUILD_TOOLS OFF"
 )
 
-# spdlog for logging (all platforms - header-only library)
+# spdlog for logging (all platforms)
 CPMAddPackage(
     NAME spdlog
     GITHUB_REPOSITORY gabime/spdlog
     GIT_TAG v1.12.0
+    OPTIONS
+        "CMAKE_POSITION_INDEPENDENT_CODE ON"
 )
 
 #-----------------------------------------------------------------------------
@@ -414,20 +402,72 @@ else()
         # Configure ymery to use WebGPU backend (must be set before CPMAddPackage)
         set(YMERY_USE_WEBGPU ON CACHE BOOL "Use WebGPU backend for ymery" FORCE)
 
+        # Pass our wgpu-native location to ymery via cache variables
+        # ymery will skip its own wgpu-native setup if these are set
+        set(YMERY_WGPU_NATIVE_INCLUDE_DIR "${WGPU_NATIVE_INCLUDE_DIR}" CACHE PATH "" FORCE)
+        set(YMERY_WGPU_NATIVE_LIB_PATH "${WGPU_NATIVE_LIB_PATH}" CACHE PATH "" FORCE)
+
         # Fetch ymery-cpp from GitHub
         CPMAddPackage(
             NAME ymery
             GITHUB_REPOSITORY zokrezyl/ymery-cpp
             GIT_TAG main
-            OPTIONS
-                "YMERY_USE_WEBGPU ON"
-                "YMERY_BUILD_DEMO OFF"
-                "YMERY_BUILD_TESTS OFF"
+            DOWNLOAD_ONLY YES
         )
 
+        # Patch ymery to skip its own webgpu setup if target already exists
+        if(ymery_ADDED)
+            file(READ "${ymery_SOURCE_DIR}/CMakeLists.txt" YMERY_CMAKE_CONTENT)
+            string(REPLACE
+                "if(YMERY_USE_WEBGPU AND NOT YMERY_WEB)"
+                "if(YMERY_USE_WEBGPU AND NOT YMERY_WEB AND NOT TARGET webgpu)"
+                YMERY_CMAKE_CONTENT "${YMERY_CMAKE_CONTENT}")
+            file(WRITE "${ymery_SOURCE_DIR}/CMakeLists.txt" "${YMERY_CMAKE_CONTENT}")
+            message(STATUS "Patched ymery to use existing webgpu target")
+
+            # Create missing static_plugins files (ymery bug - files referenced but not present)
+            if(NOT EXISTS "${ymery_SOURCE_DIR}/src/ymery/static_plugins.hpp")
+                file(WRITE "${ymery_SOURCE_DIR}/src/ymery/static_plugins.hpp"
+"#pragma once
+#include <vector>
+#include <string>
+
+struct StaticPluginInfo {
+    std::string (*name_fn)();
+    std::string (*type_fn)();
+    void* create;
+
+    std::string name() const { return name_fn(); }
+    std::string type() const { return type_fn(); }
+};
+
+inline const std::vector<StaticPluginInfo>& get_static_plugins() {
+    static std::vector<StaticPluginInfo> plugins;
+    return plugins;
+}
+")
+                file(WRITE "${ymery_SOURCE_DIR}/src/ymery/static_plugins.cpp"
+"#include \"static_plugins.hpp\"
+// Empty - plugins are loaded dynamically on desktop
+")
+                message(STATUS "Created ymery static_plugins stub files")
+            endif()
+        endif()
+
+        # Now add ymery as subdirectory with our options
+        set(YMERY_USE_WEBGPU ON CACHE BOOL "" FORCE)
+        set(YMERY_BUILD_DEMO OFF CACHE BOOL "" FORCE)
+        set(YMERY_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+        add_subdirectory(${ymery_SOURCE_DIR} ${ymery_BINARY_DIR})
+
         target_compile_definitions(yetty PRIVATE YETTY_YMERY_ENABLED=1)
-        target_include_directories(yetty PRIVATE ${ymery_SOURCE_DIR}/src)
-        target_link_libraries(yetty PRIVATE ymery)
+        target_include_directories(yetty PRIVATE
+            ${ymery_SOURCE_DIR}/src
+            ${imgui_SOURCE_DIR}
+            ${imgui_SOURCE_DIR}/backends
+            ${implot_SOURCE_DIR}
+        )
+        target_link_libraries(yetty PRIVATE ymery_lib imgui implot)
 
         message(STATUS "ymery plugin enabled (from GitHub)")
     endif()
