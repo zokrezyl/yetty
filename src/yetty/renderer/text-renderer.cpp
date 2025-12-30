@@ -516,6 +516,11 @@ void TextRenderer::updateCellTextures(WGPUQueue queue, const Grid& grid) {
     const uint32_t cols = grid.getCols();
     const uint32_t rows = grid.getRows();
 
+    // Guard against zero-sized grids (would cause GPU texture errors)
+    if (cols == 0 || rows == 0) {
+        return;
+    }
+
     gridCols_ = cols;
     gridRows_ = rows;
 

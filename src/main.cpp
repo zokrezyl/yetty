@@ -994,6 +994,10 @@ int main(int argc, char* argv[]) {
         uint32_t newCols = static_cast<uint32_t>(newWidth / cellWidth);
         uint32_t newRows = static_cast<uint32_t>(newHeight / cellHeight);
 
+        // Ensure minimum grid size of 1x1 to avoid GPU texture errors
+        if (newCols < 1) newCols = 1;
+        if (newRows < 1) newRows = 1;
+
         if (newCols != state->_cols || newRows != state->_rows) {
             state->_cols = newCols;
             state->_rows = newRows;
