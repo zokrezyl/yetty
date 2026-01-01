@@ -22,6 +22,7 @@ add_library(yetty_test_lib STATIC
 target_include_directories(yetty_test_lib PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/include
 )
 
 target_link_libraries(yetty_test_lib PUBLIC

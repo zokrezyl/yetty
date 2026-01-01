@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../plugin.h"
+#include <yetty/plugin.h>
 #include <webgpu/webgpu.h>
 #include <vector>
 #include <bitset>

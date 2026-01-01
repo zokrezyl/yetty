@@ -7,8 +7,7 @@ function(add_yetty_plugin NAME)
     add_library(${NAME}_plugin SHARED ${PLUGIN_SOURCES})
 
     target_include_directories(${NAME}_plugin PRIVATE
-        ${CMAKE_SOURCE_DIR}/src
-        ${CMAKE_SOURCE_DIR}/src/yetty
+        ${CMAKE_SOURCE_DIR}/include
         ${PLUGIN_INCLUDES}
     )
 

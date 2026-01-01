@@ -1,4 +1,4 @@
-#include "config.h"
+#include "yetty/config.h"
 #include <spdlog/spdlog.h>
 #include <fstream>
 #include <sstream>

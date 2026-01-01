@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../plugin.h"
-#include "../../terminal/font.h"
+#include <yetty/plugin.h>
+#include <yetty/font.h>
 #include <webgpu/webgpu.h>
 #include <string>
 #include <vector>

@@ -1,5 +1,5 @@
 #include "rich-text-plugin.h"
-#include "../../renderer/webgpu-context.h"
+#include <yetty/webgpu-context.h>
 #include <yaml-cpp/yaml.h>
 #include <spdlog/spdlog.h>
 #include <algorithm>
@@ -275,7 +275,11 @@ Result<void> RichTextLayer::render(WebGPUContext& ctx,
         }
 
         // Get font - try FontManager first, fall back to plugin's font
-        Font* font = plugin_->getFontManager().getFont(fontName_);
+        Font* font = nullptr;
+        auto fontResult = plugin_->getFontManager().getFont(fontName_);
+        if (fontResult) {
+            font = *fontResult;
+        }
         if (!font) {
             font = plugin_->getFontManager().getDefaultFont();
         }

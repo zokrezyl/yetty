@@ -7,7 +7,7 @@
 // without GPU dependencies.
 //=============================================================================
 
-#include "yetty/plugin.h"
+#include <yetty/plugin.h>
 #include <string>
 #include <vector>
 

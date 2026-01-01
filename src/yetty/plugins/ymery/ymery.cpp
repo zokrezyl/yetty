@@ -1,5 +1,5 @@
 #include "ymery.h"
-#include "../../renderer/webgpu-context.h"
+#include <yetty/webgpu-context.h>
 
 #include <ymery/embedded.hpp>
 #include <imgui.h>

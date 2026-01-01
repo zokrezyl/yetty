@@ -1,6 +1,6 @@
 #pragma once
 
-#include "result.hpp"
+#include <yetty/result.hpp>
 #include <yaml-cpp/yaml.h>
 #include <string>
 #include <vector>

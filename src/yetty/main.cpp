@@ -1,13 +1,13 @@
-#include "renderer/webgpu-context.h"
-#include "renderer/text-renderer.h"
-#include "terminal/grid.h"
-#include "terminal/font.h"
-#include "config.h"
+#include <yetty/webgpu-context.h>
+#include "yetty/text-renderer.h"
+#include "yetty/grid.h"
+#include <yetty/font.h>
+#include "yetty/config.h"
 
 #if !YETTY_WEB
-#include "terminal/terminal.h"
-#include "plugin-manager.h"
-#include "plugins/shader-glyph/shader-glyph.h"
+#include "yetty/terminal.h"
+#include "yetty/plugin-manager.h"
+#include "yetty/plugins/shader-glyph/shader-glyph.h"
 #include <termios.h>
 #include <unistd.h>
 #include <args.hxx>

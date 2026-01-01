@@ -1,9 +1,9 @@
 #pragma once
 
-#include "plugin.h"
-#include "custom-glyph-plugin.h"
-#include "terminal/grid.h"
-#include "result.hpp"
+#include <yetty/plugin.h>
+#include <yetty/custom-glyph-plugin.h>
+#include "yetty/grid.h"
+#include <yetty/result.hpp>
 #include <webgpu/webgpu.h>
 #include <memory>
 #include <vector>

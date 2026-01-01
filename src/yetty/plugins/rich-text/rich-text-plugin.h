@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../../plugin.h"
-#include "../../renderer/rich-text.h"
-#include "../../renderer/font-manager.h"
+#include <yetty/plugin.h>
+#include <yetty/rich-text.h>
+#include <yetty/font-manager.h>
 #include <webgpu/webgpu.h>
 #include <string>
 #include <memory>

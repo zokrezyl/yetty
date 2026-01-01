@@ -258,12 +258,12 @@ endif()
 #-----------------------------------------------------------------------------
 # Common sources for all platforms
 set(YETTY_SOURCES
-    src/yetty/renderer/webgpu-context.cpp
-    src/yetty/renderer/text-renderer.cpp
-    src/yetty/renderer/font-manager.cpp
-    src/yetty/renderer/rich-text.cpp
-    src/yetty/terminal/grid.cpp
-    src/yetty/terminal/font.cpp
+    src/yetty/webgpu-context.cpp
+    src/yetty/text-renderer.cpp
+    src/yetty/font-manager.cpp
+    src/yetty/rich-text.cpp
+    src/yetty/grid.cpp
+    src/yetty/font.cpp
 )
 
 # Platform-specific entry point and sources
@@ -272,7 +272,7 @@ if(YETTY_ANDROID)
     list(APPEND YETTY_SOURCES
         src/android/android_main.cpp
         src/android/plugin-manager-stub.cpp
-        src/yetty/terminal/terminal.cpp
+        src/yetty/terminal.cpp
     )
 elseif(NOT EMSCRIPTEN)
     # Desktop uses main.cpp with GLFW
@@ -280,7 +280,7 @@ elseif(NOT EMSCRIPTEN)
     list(APPEND YETTY_SOURCES
         src/yetty/main.cpp
         src/yetty/config.cpp
-        src/yetty/terminal/terminal.cpp
+        src/yetty/terminal.cpp
         src/yetty/plugin-manager.cpp
         src/yetty/custom-glyph-plugin.cpp
         src/yetty/plugins/shader-glyph/shader-glyph.cpp
@@ -301,6 +301,7 @@ endif()
 
 target_include_directories(yetty PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 target_compile_definitions(yetty PRIVATE
@@ -324,7 +325,7 @@ if(EMSCRIPTEN)
         -sALLOW_MEMORY_GROWTH
         -sWASM_BIGINT
         --no-heap-copy
-        "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/src/yetty/renderer/shaders.wgsl@/shaders.wgsl"
+        "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/src/yetty/shaders/shaders.wgsl@/shaders.wgsl"
         "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/assets@/assets"
     )
 
@@ -379,7 +380,7 @@ elseif(YETTY_ANDROID)
     file(GLOB ASSET_FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/*")
     file(COPY ${ASSET_FILES} DESTINATION ${ANDROID_ASSETS_DIR})
     configure_file(
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/yetty/renderer/shaders.wgsl
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/yetty/shaders/shaders.wgsl
         ${ANDROID_ASSETS_DIR}/shaders.wgsl
         COPYONLY
     )
@@ -529,7 +530,7 @@ inline const std::vector<StaticPluginInfo>& get_static_plugins() {
 
     file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
     configure_file(
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/yetty/renderer/shaders.wgsl
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/yetty/shaders/shaders.wgsl
         ${CMAKE_CURRENT_BINARY_DIR}/shaders.wgsl
         COPYONLY
     )

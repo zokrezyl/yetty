@@ -1,6 +1,6 @@
 #include "sdf-primitives.h"
-#include "../../renderer/webgpu-context.h"
-#include "../../renderer/wgpu-compat.h"
+#include <yetty/webgpu-context.h>
+#include <yetty/wgpu-compat.h>
 #include <yaml-cpp/yaml.h>
 #include <spdlog/spdlog.h>
 #include <cstring>

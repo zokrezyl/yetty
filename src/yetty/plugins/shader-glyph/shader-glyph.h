@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../custom-glyph-plugin.h"
+#include <yetty/custom-glyph-plugin.h>
 #include <webgpu/webgpu.h>
 #include <unordered_map>
 #include <string>
