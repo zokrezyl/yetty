@@ -75,25 +75,12 @@ Result<CustomGlyphPluginPtr> ShaderGlyphPlugin::create() {
 }
 
 std::vector<CodepointRange> ShaderGlyphPlugin::getCodepointRanges() const {
-    // Only claim specific codepoints that have shader mappings in mapping.yaml
-    // Other emojis should be rendered by the emoji atlas (bitmap font)
+    // Use Private Use Area (PUA) codepoints to avoid conflicts with emoji atlas
+    // Users/apps can map these PUA codepoints to trigger shader animations
+    // PUA-A: U+F0000-U+FFFFD, PUA-B: U+100000-U+10FFFD
+    // We use a small range in PUA for shader glyphs: U+F0000-U+F00FF
     return {
-        {0x231B, 0x231B},    // ⌛ Hourglass done
-        {0x23F3, 0x23F3},    // ⏳ Hourglass flowing
-        {0x2728, 0x2728},    // ✨ Sparkles
-        {0x2764, 0x2764},    // ❤ Red heart
-        {0x2B50, 0x2B50},    // ⭐ Star
-        {0x1F308, 0x1F308},  // 🌈 Rainbow
-        {0x1F30A, 0x1F30A},  // 🌊 Wave
-        {0x1F31F, 0x1F31F},  // 🌟 Glowing star
-        {0x1F389, 0x1F38A},  // 🎉🎊 Party popper, confetti
-        {0x1F493, 0x1F49C},  // 💓-💜 Various hearts
-        {0x1F4A7, 0x1F4A7},  // 💧 Droplet
-        {0x1F4AB, 0x1F4AB},  // 💫 Dizzy star
-        {0x1F525, 0x1F525},  // 🔥 Fire
-        {0x1F48D, 0x1F48E},  // 💍💎 Ring, gem
-        {0x1F600, 0x1F600},  // 😀 Grinning face (only this one has smiley.wgsl)
-        {0x1F680, 0x1F680},  // 🚀 Rocket
+        {0xF0000, 0xF00FF},  // Private Use Area for shader glyphs
     };
 }
 
