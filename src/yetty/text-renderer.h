@@ -6,6 +6,7 @@
 #include "yetty/grid.h"
 #include <yetty/font.h>
 #include "yetty/config.h"
+#include "yetty/emoji-atlas.h"
 #include <glm/glm.hpp>
 #include <vector>
 #include <memory>
@@ -107,6 +108,7 @@ private:
     WebGPUContext::Ptr ctx_;
     FontManager::Ptr fontManager_;
     Font* font_ = nullptr;  // Cached pointer from FontManager
+    EmojiAtlas::Ptr emojiAtlas_;  // Color emoji atlas
     const Config* config_ = nullptr;
     bool needsBindGroupRecreation_ = false;  // Deferred bind group recreation
 };

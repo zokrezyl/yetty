@@ -21,6 +21,14 @@ struct GlyphMetadata {
     _pad: f32,             // 4 bytes
 };
 
+// Emoji glyph metadata (32 bytes per emoji, matches C++ EmojiGlyphMetadata)
+struct EmojiGlyphMetadata {
+    uvMin: vec2<f32>,      // 8 bytes
+    uvMax: vec2<f32>,      // 8 bytes
+    size: vec2<f32>,       // 8 bytes (glyph size in pixels at atlas resolution)
+    _pad: vec2<f32>,       // 8 bytes padding
+};
+
 // Bindings
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var fontTexture: texture_2d<f32>;
@@ -31,11 +39,17 @@ struct GlyphMetadata {
 @group(0) @binding(6) var cellBgColorTexture: texture_2d<f32>; // RGBA8Unorm
 @group(0) @binding(7) var cellAttrsTexture: texture_2d<u32>;   // R8Uint - packed attributes
 
+// Emoji bindings
+@group(0) @binding(8) var emojiTexture: texture_2d<f32>;       // RGBA8Unorm - color emoji atlas
+@group(0) @binding(9) var emojiSampler: sampler;
+@group(0) @binding(10) var<storage, read> emojiMetadata: array<EmojiGlyphMetadata>;
+
 // Attribute bit masks (matches CellAttrs in grid.h)
 const ATTR_BOLD: u32 = 0x01u;           // Bit 0
 const ATTR_ITALIC: u32 = 0x02u;         // Bit 1
 const ATTR_UNDERLINE_MASK: u32 = 0x0Cu; // Bits 2-3 (0=none, 1=single, 2=double, 3=curly)
 const ATTR_STRIKETHROUGH: u32 = 0x10u;  // Bit 4
+const ATTR_EMOJI: u32 = 0x20u;          // Bit 5 - render from emoji atlas
 
 // Vertex input/output
 struct VertexInput {
@@ -144,6 +158,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // Extract attribute flags
     let underlineType = (cellAttrs & ATTR_UNDERLINE_MASK) >> 2u;
     let hasStrikethrough = (cellAttrs & ATTR_STRIKETHROUGH) != 0u;
+    let isEmoji = (cellAttrs & ATTR_EMOJI) != 0u;
 
     // Check if cursor should be rendered on this cell
     let cursorCol = i32(uniforms.cursorPos.x);
@@ -181,42 +196,71 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                     (glyphIndex >= 0xF000u && glyphIndex <= 0xFFFDu);
 
     if (!skipGlyph) {
-        // Get glyph metadata
-        let glyph = glyphMetadata[glyphIndex];
+        if (isEmoji) {
+            // Emoji rendering: glyphIndex is the emoji index in emojiMetadata array
+            let emoji = emojiMetadata[glyphIndex];
 
-        // Calculate glyph position within cell
-        let scaledGlyphSize = glyph.size * uniforms.scale;
-        let scaledBearing = glyph.bearing * uniforms.scale;
+            // Center emoji in cell, scale to fit
+            let emojiSize = min(uniforms.cellSize.x, uniforms.cellSize.y) * 0.9;
+            let emojiLeft = (uniforms.cellSize.x - emojiSize) * 0.5;
+            let emojiTop = (uniforms.cellSize.y - emojiSize) * 0.5;
 
-        // Baseline at 80% of cell height
-        let baseline = uniforms.cellSize.y * 0.8;
-        let glyphTop = baseline - scaledBearing.y;
-        let glyphLeft = scaledBearing.x;
+            // Emoji bounds in cell pixel space
+            let emojiMinPx = vec2<f32>(emojiLeft, emojiTop);
+            let emojiMaxPx = vec2<f32>(emojiLeft + emojiSize, emojiTop + emojiSize);
 
-        // Glyph bounds in cell pixel space
-        let glyphMinPx = vec2<f32>(glyphLeft, glyphTop);
-        let glyphMaxPx = vec2<f32>(glyphLeft + scaledGlyphSize.x, glyphTop + scaledGlyphSize.y);
+            // Check if inside emoji bounds
+            if (localPx.x >= emojiMinPx.x && localPx.x < emojiMaxPx.x &&
+                localPx.y >= emojiMinPx.y && localPx.y < emojiMaxPx.y) {
+                // Calculate UV for emoji sampling
+                let emojiLocalPos = (localPx - emojiMinPx) / emojiSize;
+                let uv = mix(emoji.uvMin, emoji.uvMax, emojiLocalPos);
 
-        // Check if inside glyph bounds
-        if (localPx.x >= glyphMinPx.x && localPx.x < glyphMaxPx.x &&
-            localPx.y >= glyphMinPx.y && localPx.y < glyphMaxPx.y) {
-            // Calculate UV for MSDF sampling
-            let glyphLocalPos = (localPx - glyphMinPx) / scaledGlyphSize;
-            let uv = mix(glyph.uvMin, glyph.uvMax, glyphLocalPos);
+                // Sample emoji texture (RGBA color)
+                let emojiColor = textureSampleLevel(emojiTexture, emojiSampler, uv, 0.0);
 
-            // Sample MSDF texture
-            let msdf = textureSampleLevel(fontTexture, fontSampler, uv, 0.0);
+                // Blend emoji over background using alpha
+                finalColor = mix(bgColor.rgb, emojiColor.rgb, emojiColor.a);
+                hasGlyph = emojiColor.a > 0.01;
+            }
+        } else {
+            // MSDF text rendering
+            let glyph = glyphMetadata[glyphIndex];
 
-            // Calculate signed distance
-            let sd = median(msdf.r, msdf.g, msdf.b);
+            // Calculate glyph position within cell
+            let scaledGlyphSize = glyph.size * uniforms.scale;
+            let scaledBearing = glyph.bearing * uniforms.scale;
 
-            // Apply anti-aliased edge
-            let screenPxRange = uniforms.pixelRange * uniforms.scale;
-            let alpha = clamp((sd - 0.5) * screenPxRange + 0.5, 0.0, 1.0);
+            // Baseline at 80% of cell height
+            let baseline = uniforms.cellSize.y * 0.8;
+            let glyphTop = baseline - scaledBearing.y;
+            let glyphLeft = scaledBearing.x;
 
-            // Blend foreground over background
-            finalColor = mix(bgColor.rgb, fgColor.rgb, alpha);
-            hasGlyph = alpha > 0.01;
+            // Glyph bounds in cell pixel space
+            let glyphMinPx = vec2<f32>(glyphLeft, glyphTop);
+            let glyphMaxPx = vec2<f32>(glyphLeft + scaledGlyphSize.x, glyphTop + scaledGlyphSize.y);
+
+            // Check if inside glyph bounds
+            if (localPx.x >= glyphMinPx.x && localPx.x < glyphMaxPx.x &&
+                localPx.y >= glyphMinPx.y && localPx.y < glyphMaxPx.y) {
+                // Calculate UV for MSDF sampling
+                let glyphLocalPos = (localPx - glyphMinPx) / scaledGlyphSize;
+                let uv = mix(glyph.uvMin, glyph.uvMax, glyphLocalPos);
+
+                // Sample MSDF texture
+                let msdf = textureSampleLevel(fontTexture, fontSampler, uv, 0.0);
+
+                // Calculate signed distance
+                let sd = median(msdf.r, msdf.g, msdf.b);
+
+                // Apply anti-aliased edge
+                let screenPxRange = uniforms.pixelRange * uniforms.scale;
+                let alpha = clamp((sd - 0.5) * screenPxRange + 0.5, 0.0, 1.0);
+
+                // Blend foreground over background
+                finalColor = mix(bgColor.rgb, fgColor.rgb, alpha);
+                hasGlyph = alpha > 0.01;
+            }
         }
     }
 

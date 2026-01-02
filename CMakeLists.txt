@@ -156,14 +156,15 @@ endif()
 #-----------------------------------------------------------------------------
 if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID)
     # FreeType for font loading
+    # NOTE: PNG support is required for color emoji fonts (CBDT/CBLC with PNG-compressed bitmaps)
     CPMAddPackage(
         NAME freetype
         GITHUB_REPOSITORY freetype/freetype
         GIT_TAG VER-2-13-2
         OPTIONS
-            "FT_DISABLE_ZLIB ON"
+            "FT_DISABLE_ZLIB OFF"
             "FT_DISABLE_BZIP2 ON"
-            "FT_DISABLE_PNG ON"
+            "FT_DISABLE_PNG OFF"
             "FT_DISABLE_HARFBUZZ ON"
             "FT_DISABLE_BROTLI ON"
     )
@@ -291,6 +292,7 @@ if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID)
         src/yetty/font.cpp
         src/yetty/font-manager.cpp
         src/yetty/rich-text.cpp
+        src/yetty/emoji-atlas.cpp
     )
 
     add_library(yetty_core SHARED ${YETTY_CORE_SOURCES})
@@ -354,6 +356,7 @@ if(EMSCRIPTEN OR YETTY_ANDROID)
         src/yetty/font.cpp
         src/yetty/font-manager.cpp
         src/yetty/rich-text.cpp
+        src/yetty/emoji-atlas.cpp
     )
 endif()
 
@@ -467,6 +470,7 @@ elseif(YETTY_ANDROID)
         yaml-cpp
         vterm
         spdlog::spdlog
+        lz4_static
         android
         log
     )

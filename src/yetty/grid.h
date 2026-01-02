@@ -19,21 +19,23 @@ inline bool isCustomGlyph(uint16_t glyphIndex) {
 }
 
 // Cell attributes packed into a single byte for GPU upload
-// Bit layout: [strikethrough][underline_type(2)][italic][bold][unused(3)]
+// Bit layout: [reserved(2)][emoji][strikethrough][underline_type(2)][italic][bold]
 // This matches what the shader expects in cellAttrsTexture (R8Uint)
 struct CellAttrs {
     uint8_t _bold : 1;           // Bit 0: bold
     uint8_t _italic : 1;         // Bit 1: italic
     uint8_t _underline : 2;      // Bits 2-3: underline type (0=none, 1=single, 2=double, 3=curly)
     uint8_t _strikethrough : 1;  // Bit 4: strikethrough
-    uint8_t _reserved : 3;       // Bits 5-7: reserved
+    uint8_t _emoji : 1;          // Bit 5: emoji (render from color emoji atlas instead of MSDF)
+    uint8_t _reserved : 2;       // Bits 6-7: reserved
 
     uint8_t pack() const {
         return static_cast<uint8_t>(
             (_bold & 0x1) |
             ((_italic & 0x1) << 1) |
             ((_underline & 0x3) << 2) |
-            ((_strikethrough & 0x1) << 4)
+            ((_strikethrough & 0x1) << 4) |
+            ((_emoji & 0x1) << 5)
         );
     }
 
@@ -43,6 +45,7 @@ struct CellAttrs {
         attrs._italic = (packed >> 1) & 0x1;
         attrs._underline = (packed >> 2) & 0x3;
         attrs._strikethrough = (packed >> 4) & 0x1;
+        attrs._emoji = (packed >> 5) & 0x1;
         attrs._reserved = 0;
         return attrs;
     }

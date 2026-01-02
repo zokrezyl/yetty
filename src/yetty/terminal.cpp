@@ -1,5 +1,6 @@
 #include "yetty/terminal.h"
 #include "yetty/plugin-manager.h"
+#include "yetty/emoji.h"
 
 #include <spdlog/spdlog.h>
 #include <sstream>
@@ -625,7 +626,9 @@ void Terminal::syncToGrid() {
                     }
 
                     uint16_t glyphIndex = font_ ? font_->getGlyphIndex(codepoint) : static_cast<uint16_t>(codepoint);
-                    grid_.setCell(col, row, glyphIndex, fgR, fgG, fgB, bgR, bgG, bgB);
+                    CellAttrs sbAttrs;
+                    sbAttrs._emoji = isEmoji(codepoint) ? 1 : 0;
+                    grid_.setCell(col, row, glyphIndex, fgR, fgG, fgB, bgR, bgG, bgB, sbAttrs);
                 }
             }
         } else {
@@ -724,6 +727,8 @@ void Terminal::syncToGrid() {
                 attrs._reserved = 0;
                 // Map libvterm underline values: 0=none, 1=single, 2=double, 3=curly
                 attrs._underline = static_cast<uint8_t>(cell.attrs.underline & 0x3);
+                // Set emoji flag for emoji codepoints (so shader uses emoji atlas)
+                attrs._emoji = isEmoji(codepoint) ? 1 : 0;
 
                 grid_.setCell(col, row, glyphIndex, fgR, fgG, fgB, bgR, bgG, bgB, attrs);
             }
@@ -832,7 +837,17 @@ void Terminal::syncDamageToGrid() {
                     std::swap(fgB, bgB);
                 }
 
-                grid_.setCell(col, row, glyphIndex, fgR, fgG, fgB, bgR, bgG, bgB);
+                // Build cell attributes
+                CellAttrs cellAttrs;
+                cellAttrs._bold = cell.attrs.bold ? 1 : 0;
+                cellAttrs._italic = cell.attrs.italic ? 1 : 0;
+                cellAttrs._underline = static_cast<uint8_t>(cell.attrs.underline & 0x3);
+                cellAttrs._strikethrough = cell.attrs.strike ? 1 : 0;
+                cellAttrs._reserved = 0;
+                // Set emoji flag for emoji codepoints (so shader uses emoji atlas)
+                cellAttrs._emoji = isEmoji(codepoint) ? 1 : 0;
+
+                grid_.setCell(col, row, glyphIndex, fgR, fgG, fgB, bgR, bgG, bgB, cellAttrs);
             }
         }
     }
