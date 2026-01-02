@@ -135,6 +135,22 @@ CPMAddPackage(
         "CMAKE_POSITION_INDEPENDENT_CODE ON"
 )
 
+# LZ4 for fast font cache compression
+CPMAddPackage(
+    NAME lz4
+    GITHUB_REPOSITORY lz4/lz4
+    GIT_TAG v1.10.0
+    SOURCE_SUBDIR build/cmake
+    OPTIONS
+        "LZ4_BUILD_CLI OFF"
+        "LZ4_BUILD_LEGACY_LZ4C OFF"
+        "BUILD_SHARED_LIBS OFF"
+        "BUILD_STATIC_LIBS ON"
+)
+if(TARGET lz4_static)
+    set_target_properties(lz4_static PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
+
 #-----------------------------------------------------------------------------
 # Desktop-only dependencies (font atlas generation, GLFW windowing)
 #-----------------------------------------------------------------------------
@@ -305,6 +321,7 @@ if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID)
         msdfgen::msdfgen-ext
         freetype
         spdlog::spdlog
+        lz4_static
         $<$<NOT:$<BOOL:${WIN32}>>:${FONTCONFIG_LIBRARIES}>
     )
 

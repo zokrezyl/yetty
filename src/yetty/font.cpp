@@ -989,9 +989,19 @@ bool Font::saveAtlas(const std::string& atlasPath, const std::string& metricsPat
         return false;
     }
 
-    // Save atlas as PNG
-    if (!stbi_write_png(atlasPath.c_str(), _atlasWidth, _atlasHeight, 4, _atlasData.data(), _atlasWidth * 4)) {
-        std::cerr << "Failed to write atlas PNG: " << atlasPath << std::endl;
+    // Save atlas as raw binary (much faster to load than PNG)
+    std::ofstream atlasFile(atlasPath, std::ios::binary);
+    if (!atlasFile) {
+        std::cerr << "Failed to open atlas file for writing: " << atlasPath << std::endl;
+        return false;
+    }
+    // Write header: width, height
+    atlasFile.write(reinterpret_cast<const char*>(&_atlasWidth), sizeof(_atlasWidth));
+    atlasFile.write(reinterpret_cast<const char*>(&_atlasHeight), sizeof(_atlasHeight));
+    // Write raw RGBA data
+    atlasFile.write(reinterpret_cast<const char*>(_atlasData.data()), _atlasData.size());
+    if (!atlasFile) {
+        std::cerr << "Failed to write atlas data: " << atlasPath << std::endl;
         return false;
     }
 

@@ -9,7 +9,7 @@ option(YETTY_COVERAGE "Enable code coverage" OFF)
 CPMAddPackage(
     NAME ut
     GITHUB_REPOSITORY boost-ext/ut
-    GIT_TAG v2.1.0
+    GIT_TAG v2.3.1
 )
 
 #-----------------------------------------------------------------------------
