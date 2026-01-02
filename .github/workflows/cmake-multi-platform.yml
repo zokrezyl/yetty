@@ -163,14 +163,14 @@ jobs:
       uses: gradle/actions/setup-gradle@v3
 
     - name: Build Android APK
-      working-directory: android
-      run: ./gradlew --project-cache-dir=../build-android/.gradle assembleDebug
+      working-directory: build-tools/android
+      run: ./gradlew --project-cache-dir=../../build-android/.gradle assembleDebug
 
     - name: Upload Android APK
       uses: actions/upload-artifact@v4
       with:
         name: yetty-android-apk
-        path: build-android/app/outputs/apk/debug/app-debug.apk
+        path: build-tools/build-android/app/outputs/apk/debug/app-debug.apk
         if-no-files-found: warn
 
   # =============================================================================

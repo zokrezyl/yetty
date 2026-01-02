@@ -192,7 +192,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     var hasGlyph = false;
 
     // Check if we should render a glyph
-    let skipGlyph = glyphIndex == 0u || glyphIndex == 0xFFFFu ||
+    // Note: for emojis, index 0 is valid (first emoji in atlas), so don't skip it
+    let skipGlyph = (!isEmoji && glyphIndex == 0u) || glyphIndex == 0xFFFFu ||
                     (glyphIndex >= 0xF000u && glyphIndex <= 0xFFFDu);
 
     if (!skipGlyph) {
@@ -200,26 +201,35 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             // Emoji rendering: glyphIndex is the emoji index in emojiMetadata array
             let emoji = emojiMetadata[glyphIndex];
 
-            // Center emoji in cell, scale to fit
-            let emojiSize = min(uniforms.cellSize.x, uniforms.cellSize.y) * 0.9;
-            let emojiLeft = (uniforms.cellSize.x - emojiSize) * 0.5;
-            let emojiTop = (uniforms.cellSize.y - emojiSize) * 0.5;
+            // Emoji fills the cell, centered and scaled to fit
+            // emoji.size contains the actual glyph size in atlas pixels
+            let emojiAspect = emoji.size.x / emoji.size.y;
+            let cellAspect = uniforms.cellSize.x / uniforms.cellSize.y;
 
-            // Emoji bounds in cell pixel space
-            let emojiMinPx = vec2<f32>(emojiLeft, emojiTop);
-            let emojiMaxPx = vec2<f32>(emojiLeft + emojiSize, emojiTop + emojiSize);
+            // Scale emoji to fit within cell while maintaining aspect ratio
+            var scaledSize: vec2<f32>;
+            if (emojiAspect > cellAspect) {
+                // Emoji is wider - fit to width
+                scaledSize = vec2<f32>(uniforms.cellSize.x, uniforms.cellSize.x / emojiAspect);
+            } else {
+                // Emoji is taller - fit to height
+                scaledSize = vec2<f32>(uniforms.cellSize.y * emojiAspect, uniforms.cellSize.y);
+            }
+
+            // Center in cell
+            let offset = (uniforms.cellSize - scaledSize) * 0.5;
 
             // Check if inside emoji bounds
-            if (localPx.x >= emojiMinPx.x && localPx.x < emojiMaxPx.x &&
-                localPx.y >= emojiMinPx.y && localPx.y < emojiMaxPx.y) {
-                // Calculate UV for emoji sampling
-                let emojiLocalPos = (localPx - emojiMinPx) / emojiSize;
+            if (localPx.x >= offset.x && localPx.x < offset.x + scaledSize.x &&
+                localPx.y >= offset.y && localPx.y < offset.y + scaledSize.y) {
+                // Calculate UV for sampling
+                let emojiLocalPos = (localPx - offset) / scaledSize;
                 let uv = mix(emoji.uvMin, emoji.uvMax, emojiLocalPos);
 
-                // Sample emoji texture (RGBA color)
+                // Sample emoji texture (pre-rendered RGBA)
                 let emojiColor = textureSampleLevel(emojiTexture, emojiSampler, uv, 0.0);
 
-                // Blend emoji over background using alpha
+                // Alpha blend emoji over background
                 finalColor = mix(bgColor.rgb, emojiColor.rgb, emojiColor.a);
                 hasGlyph = emojiColor.a > 0.01;
             }

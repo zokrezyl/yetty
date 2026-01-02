@@ -261,12 +261,12 @@ constexpr uint32_t COMMON_EMOJIS[] = {
     0x1F31D, // 🌝 full moon face
     0x1F31A, // 🌚 new moon face
     0x1F319, // 🌙 crescent moon
-    0x2B50,  // ⭐ star
+    // 0x2B50 removed - duplicate of line 199
     0x1F308, // 🌈 rainbow
     0x2601,  // ☁️ cloud
     0x26C5,  // ⛅ sun behind cloud
     0x1F327, // 🌧️ cloud with rain
-    0x26A1,  // ⚡ high voltage
+    // 0x26A1 removed - duplicate of line 209
     0x1F4A7, // 💧 droplet
 
     // Checkmarks & Status

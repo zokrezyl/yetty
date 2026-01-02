@@ -1,6 +1,7 @@
 #include "yetty/terminal.h"
 #include "yetty/plugin-manager.h"
 #include "yetty/emoji.h"
+#include "emoji-atlas.h"
 
 #include <spdlog/spdlog.h>
 #include <sstream>
@@ -674,9 +675,19 @@ void Terminal::syncToGrid() {
                 bool isBold = cell.attrs.bold != 0;
                 bool isItalic = cell.attrs.italic != 0;
 
-                // Get glyph index with style (uses bold/italic font variant if available)
-                uint16_t glyphIndex = font_ ? font_->getGlyphIndex(codepoint, isBold, isItalic)
-                                            : static_cast<uint16_t>(codepoint);
+                // Check if this emoji is in our emoji atlas
+                int emojiIndex = findCommonEmojiIndex(codepoint);
+
+                // Get glyph index - use emoji atlas index if available, otherwise MSDF
+                uint16_t glyphIndex;
+                if (emojiIndex >= 0) {
+                    // Emoji is in atlas - use emoji index
+                    glyphIndex = static_cast<uint16_t>(emojiIndex);
+                } else {
+                    // Use MSDF glyph with style (bold/italic font variant if available)
+                    glyphIndex = font_ ? font_->getGlyphIndex(codepoint, isBold, isItalic)
+                                       : static_cast<uint16_t>(codepoint);
+                }
 
                 // Check if this codepoint has a custom glyph plugin
                 if (pluginManager_) {
@@ -727,8 +738,8 @@ void Terminal::syncToGrid() {
                 attrs._reserved = 0;
                 // Map libvterm underline values: 0=none, 1=single, 2=double, 3=curly
                 attrs._underline = static_cast<uint8_t>(cell.attrs.underline & 0x3);
-                // Set emoji flag for emoji codepoints (so shader uses emoji atlas)
-                attrs._emoji = isEmoji(codepoint) ? 1 : 0;
+                // Set emoji flag if emoji is in the atlas (we already computed emojiIndex above)
+                attrs._emoji = (emojiIndex >= 0) ? 1 : 0;
 
                 grid_.setCell(col, row, glyphIndex, fgR, fgG, fgB, bgR, bgG, bgB, attrs);
             }
@@ -793,7 +804,33 @@ void Terminal::syncDamageToGrid() {
                 }
                 if (codepoint == 0) codepoint = ' ';
 
-                uint16_t glyphIndex = font_ ? font_->getGlyphIndex(codepoint) : static_cast<uint16_t>(codepoint);
+                // Check if this is an emoji and try to load it from atlas
+                int emojiIndex = -1;
+                if (!emojiAtlas_) {
+                    if (codepoint > 0x1F000) {
+                        spdlog::error("EMOJI ATLAS IS NULL! codepoint U+{:04X}", codepoint);
+                    }
+                } else if (isEmoji(codepoint)) {
+                    // Try to get existing or load new emoji
+                    emojiIndex = emojiAtlas_->getEmojiIndex(codepoint);
+                    if (emojiIndex < 0) {
+                        // Not loaded yet - try to load it
+                        if (auto res = emojiAtlas_->loadEmoji(codepoint); res && *res >= 0) {
+                            emojiIndex = *res;
+                            spdlog::debug("Loaded emoji U+{:04X} -> index {}", codepoint, emojiIndex);
+                        }
+                    }
+                }
+
+                // Get glyph index - use emoji atlas index if available, otherwise MSDF
+                uint16_t glyphIndex;
+                if (emojiIndex >= 0) {
+                    // Emoji is in atlas - use emoji index
+                    glyphIndex = static_cast<uint16_t>(emojiIndex);
+                } else {
+                    // Use MSDF glyph
+                    glyphIndex = font_ ? font_->getGlyphIndex(codepoint) : static_cast<uint16_t>(codepoint);
+                }
 
                 // Check if this codepoint has a custom glyph plugin
                 if (pluginManager_) {
@@ -844,8 +881,15 @@ void Terminal::syncDamageToGrid() {
                 cellAttrs._underline = static_cast<uint8_t>(cell.attrs.underline & 0x3);
                 cellAttrs._strikethrough = cell.attrs.strike ? 1 : 0;
                 cellAttrs._reserved = 0;
-                // Set emoji flag for emoji codepoints (so shader uses emoji atlas)
-                cellAttrs._emoji = isEmoji(codepoint) ? 1 : 0;
+                // Set emoji flag if emoji is in the atlas (we already computed emojiIndex above)
+                cellAttrs._emoji = (emojiIndex >= 0) ? 1 : 0;
+
+                // DEBUG: Log emoji attrs
+                if (emojiIndex >= 0) {
+                    uint8_t packed = cellAttrs.pack();
+                    spdlog::info("EMOJI ({},{}) U+{:04X} idx={} packed=0x{:02X} emoji_bit={}",
+                                 col, row, codepoint, emojiIndex, packed, (packed & 0x20) ? 1 : 0);
+                }
 
                 grid_.setCell(col, row, glyphIndex, fgR, fgG, fgB, bgR, bgG, bgB, cellAttrs);
             }

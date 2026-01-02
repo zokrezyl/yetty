@@ -1,76 +1,32 @@
 # Codepoint to shader file mapping
+# Use Private Use Area (PUA) codepoints to avoid conflicts with color emoji atlas
+# PUA range: U+F0000-U+F00FF
+# Applications can map these codepoints to trigger animated shader glyphs
 
 shaders:
-  # Faces
-  - codepoint: 0x1F600    # 😀
-    file: smiley.wgsl
-
-  # Hearts
-  - codepoint: 0x2764     # ❤
+  # Example: map PUA codepoints to shaders
+  # To use: output "\uF0001" to trigger heart animation
+  - codepoint: 0xF0001
     file: heart.wgsl
-  - codepoint: 0x1F493    # 💓 beating heart
-    file: heart.wgsl
-  - codepoint: 0x1F495    # 💕 two hearts
-    file: heart.wgsl
-  - codepoint: 0x1F496    # 💖 sparkling heart
-    file: heart.wgsl
-  - codepoint: 0x1F497    # 💗 growing heart
-    file: heart.wgsl
-  - codepoint: 0x1F498    # 💘 heart with arrow
-    file: heart.wgsl
-  - codepoint: 0x1F499    # 💙 blue heart
-    file: heart.wgsl
-  - codepoint: 0x1F49A    # 💚 green heart
-    file: heart.wgsl
-  - codepoint: 0x1F49B    # 💛 yellow heart
-    file: heart.wgsl
-  - codepoint: 0x1F49C    # 💜 purple heart
-    file: heart.wgsl
-
-  # Party/Celebration
-  - codepoint: 0x1F389    # 🎉 party popper
-    file: party.wgsl
-  - codepoint: 0x1F38A    # 🎊 confetti ball
-    file: party.wgsl
-
-  # Fire
-  - codepoint: 0x1F525    # 🔥
+  - codepoint: 0xF0002
     file: fire.wgsl
-
-  # Stars/Sparkles
-  - codepoint: 0x1F31F    # 🌟 glowing star
+  - codepoint: 0xF0003
     file: star.wgsl
-  - codepoint: 0x2B50     # ⭐ star
-    file: star.wgsl
-  - codepoint: 0x2728     # ✨ sparkles
+  - codepoint: 0xF0004
     file: sparkle.wgsl
-  - codepoint: 0x1F4AB    # 💫 dizzy (star)
-    file: sparkle.wgsl
-
-  # Water
-  - codepoint: 0x1F4A7    # 💧 droplet
-    file: ripple.wgsl
-  - codepoint: 0x1F30A    # 🌊 wave
-    file: ripple.wgsl
-
-  # Gems
-  - codepoint: 0x1F48E    # 💎 gem
-    file: gem.wgsl
-  - codepoint: 0x1F48D    # 💍 ring
-    file: gem.wgsl
-
-  # Transport
-  - codepoint: 0x1F680    # 🚀 rocket
+  - codepoint: 0xF0005
+    file: party.wgsl
+  - codepoint: 0xF0006
+    file: spinner.wgsl
+  - codepoint: 0xF0007
     file: rocket.wgsl
-
-  # Loading/Time
-  - codepoint: 0x23F3     # ⏳ hourglass
-    file: spinner.wgsl
-  - codepoint: 0x231B     # ⌛ hourglass done
-    file: spinner.wgsl
-
-  # Rainbow
-  - codepoint: 0x1F308    # 🌈 rainbow
+  - codepoint: 0xF0008
+    file: gem.wgsl
+  - codepoint: 0xF0009
+    file: ripple.wgsl
+  - codepoint: 0xF000A
     file: plasma.wgsl
+  - codepoint: 0xF000B
+    file: smiley.wgsl
 
 default: default.wgsl

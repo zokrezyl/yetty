@@ -27,8 +27,9 @@ struct ScrollbackLine {
     std::vector<uint8_t> _bgColors;    // RGB per cell (3 bytes each)
 };
 
-// Forward declaration
+// Forward declarations
 class PluginManager;
+class EmojiAtlas;
 
 // Selection mode for mouse selection
 enum class SelectionMode {
@@ -124,6 +125,9 @@ public:
     // Plugin support
     void setPluginManager(PluginManager* mgr) { pluginManager_ = mgr; }
     PluginManager* getPluginManager() const { return pluginManager_; }
+
+    // Emoji atlas for dynamic emoji loading
+    void setEmojiAtlas(EmojiAtlas* atlas) { emojiAtlas_ = atlas; }
     void setCellSize(uint32_t width, uint32_t height) {
         cellWidth_ = width;
         cellHeight_ = height;
@@ -207,6 +211,9 @@ private:
     PluginManager* pluginManager_ = nullptr;
     uint32_t cellWidth_ = 10;   // Default, will be set by renderer
     uint32_t cellHeight_ = 20;
+
+    // Emoji atlas for dynamic loading
+    EmojiAtlas* emojiAtlas_ = nullptr;
 
     // OSC sequence buffer (for multi-fragment sequences)
     std::string oscBuffer_;

@@ -74,8 +74,8 @@ Result<void> TextRenderer::init() noexcept {
         return Err<void>("Failed to create glyph metadata buffer");
     }
 
-    // Create emoji atlas
-    auto emojiResult = EmojiAtlas::create(device, 64);  // 64px emoji glyphs
+    // Create emoji atlas (NotoColorEmoji uses 136x128 bitmaps, use 136px cells)
+    auto emojiResult = EmojiAtlas::create(device, 136);
     if (!emojiResult) {
         // Emoji atlas is optional - log warning but continue
         TR_LOGE("Failed to create emoji atlas: %s (emoji rendering disabled)",
@@ -460,7 +460,10 @@ Result<void> TextRenderer::createBindGroup(WGPUDevice device, Font& font) {
 
     bgEntries[10].binding = 10;
     bgEntries[10].buffer = emojiAtlas_->getMetadataBuffer();
-    bgEntries[10].size = std::max(1u, emojiAtlas_->getGlyphCount()) * sizeof(EmojiGlyphMetadata);
+    // Use full buffer size to allow dynamic emoji loading (256 max emojis)
+    uint32_t maxEmojis = (emojiAtlas_->getAtlasSize() / emojiAtlas_->getGlyphSize());
+    maxEmojis = maxEmojis * maxEmojis;  // glyphsPerRow^2
+    bgEntries[10].size = maxEmojis * sizeof(EmojiGlyphMetadata);
 
     WGPUBindGroupDescriptor bindGroupDesc = {};
     bindGroupDesc.layout = bindGroupLayout_;
@@ -786,6 +789,11 @@ void TextRenderer::render(const Grid& grid,
 
     WGPUDevice device = ctx_->getDevice();
     WGPUQueue queue = ctx_->getQueue();
+
+    // Upload any newly loaded emojis to GPU
+    if (emojiAtlas_) {
+        emojiAtlas_->uploadToGPU();
+    }
     const uint32_t cols = grid.getCols();
     const uint32_t rows = grid.getRows();
 
@@ -889,6 +897,11 @@ void TextRenderer::render(const Grid& grid,
                           int cursorCol, int cursorRow, bool cursorVisible) noexcept {
     WGPUDevice device = ctx_->getDevice();
     WGPUQueue queue = ctx_->getQueue();
+
+    // Upload any newly loaded emojis to GPU
+    if (emojiAtlas_) {
+        emojiAtlas_->uploadToGPU();
+    }
     const uint32_t cols = grid.getCols();
     const uint32_t rows = grid.getRows();
 

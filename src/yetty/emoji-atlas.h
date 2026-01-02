@@ -77,8 +77,8 @@ private:
     std::string emojiFontPath_;
 
     // Atlas data
-    uint32_t glyphSize_ = 64;      // Size of each emoji glyph
-    uint32_t atlasSize_ = 1024;    // Atlas texture size (1024x1024 = 16x16 grid of 64px emojis)
+    uint32_t glyphSize_ = 64;      // Size of each emoji glyph (set by create())
+    uint32_t atlasSize_ = 2048;    // Atlas texture size (2048x2048 for larger emoji bitmaps)
     uint32_t glyphsPerRow_ = 16;   // atlasSize / glyphSize
     std::vector<uint8_t> atlasData_; // RGBA pixel data
 

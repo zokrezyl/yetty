@@ -553,6 +553,11 @@ Result<void> Yetty::initTerminalOrDemo() noexcept {
         _terminal->setPluginManager(_pluginManager.get());
         _terminal->setCellSize(static_cast<uint32_t>(_baseCellWidth), static_cast<uint32_t>(_baseCellHeight));
 
+        // Wire up emoji atlas for dynamic emoji loading
+        if (_renderer) {
+            _terminal->setEmojiAtlas(_renderer->getEmojiAtlas());
+        }
+
         if (auto result = _terminal->start(_executeCommand); !result) {
             return Err<void>("Failed to start terminal", result);
         }

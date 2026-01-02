@@ -38,6 +38,9 @@ public:
 
     void setConfig(const Config* config) noexcept { config_ = config; }
 
+    // Get emoji atlas for dynamic loading
+    EmojiAtlas* getEmojiAtlas() const noexcept { return emojiAtlas_.get(); }
+
     // Update font bindings (call after font atlas/metadata changes)
     void updateFontBindings(Font& font) noexcept;
 
