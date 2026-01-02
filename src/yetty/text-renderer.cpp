@@ -20,22 +20,22 @@
 
 namespace yetty {
 
-Result<TextRenderer::Ptr> TextRenderer::create(WebGPUContext::Ptr ctx, Font* font) noexcept {
+Result<TextRenderer::Ptr> TextRenderer::create(WebGPUContext::Ptr ctx, FontManager::Ptr fontManager) noexcept {
     if (!ctx) {
         return Err<Ptr>("TextRenderer::create: null WebGPUContext");
     }
-    if (!font) {
-        return Err<Ptr>("TextRenderer::create: null Font");
+    if (!fontManager) {
+        return Err<Ptr>("TextRenderer::create: null FontManager");
     }
-    auto renderer = Ptr(new TextRenderer(std::move(ctx), font));
+    auto renderer = Ptr(new TextRenderer(std::move(ctx), std::move(fontManager)));
     if (auto res = renderer->init(); !res) {
         return Err<Ptr>("Failed to initialize TextRenderer", res);
     }
     return Ok(std::move(renderer));
 }
 
-TextRenderer::TextRenderer(WebGPUContext::Ptr ctx, Font* font) noexcept
-    : ctx_(std::move(ctx)), font_(font) {}
+TextRenderer::TextRenderer(WebGPUContext::Ptr ctx, FontManager::Ptr fontManager) noexcept
+    : ctx_(std::move(ctx)), fontManager_(std::move(fontManager)) {}
 
 TextRenderer::~TextRenderer() {
     // On web, texture and bind group releases cause Emscripten WebGPU manager issues
@@ -61,6 +61,13 @@ TextRenderer::~TextRenderer() {
 
 Result<void> TextRenderer::init() noexcept {
     WGPUDevice device = ctx_->getDevice();
+
+    // Get terminal font from FontManager
+    auto fontResult = fontManager_->getFont("monospace", Font::Regular, 32.0f);
+    if (!fontResult) {
+        return Err<void>("Failed to get terminal font: " + fontResult.error().message());
+    }
+    font_ = *fontResult;
 
     // Create glyph metadata buffer in Font
     if (!font_->createGlyphMetadataBuffer(device)) {

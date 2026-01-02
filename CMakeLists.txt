@@ -27,7 +27,11 @@ cmake_minimum_required(VERSION 3.20)
 # Allow dependencies with older cmake_minimum_required (yaml-cpp, etc.)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Minimum CMake policy version for dependencies")
 
+# Enable Objective-C++ on macOS for imgui WebGPU backend
 project(yetty-poc VERSION 0.1.0 LANGUAGES C CXX)
+if(APPLE)
+    enable_language(OBJCXX)
+endif()
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -609,6 +613,17 @@ inline const std::vector<StaticPluginInfo>& get_static_plugins() {
         set(YMERY_BUILD_DEMO OFF CACHE BOOL "" FORCE)
         set(YMERY_BUILD_TESTS OFF CACHE BOOL "" FORCE)
         add_subdirectory(${ymery_SOURCE_DIR} ${ymery_BINARY_DIR})
+
+        # macOS: imgui_impl_wgpu.cpp includes Cocoa.h and must be compiled as Objective-C++
+        if(APPLE AND TARGET imgui)
+            get_target_property(IMGUI_SOURCES imgui SOURCES)
+            foreach(SRC ${IMGUI_SOURCES})
+                if(SRC MATCHES "imgui_impl_wgpu\\.cpp$")
+                    set_source_files_properties(${SRC} PROPERTIES LANGUAGE OBJCXX)
+                    message(STATUS "Set ${SRC} to compile as Objective-C++")
+                endif()
+            endforeach()
+        endif()
 
         message(STATUS "ymery library built for plugin")
     endif()

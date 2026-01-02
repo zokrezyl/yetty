@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yetty/webgpu-context.h>
+#include <yetty/font-manager.h>
 #include <yetty/result.hpp>
 #include "yetty/grid.h"
 #include <yetty/font.h>
@@ -17,7 +18,7 @@ class TextRenderer {
 public:
     using Ptr = std::shared_ptr<TextRenderer>;
 
-    static Result<Ptr> create(WebGPUContext::Ptr ctx, Font* font) noexcept;
+    static Result<Ptr> create(WebGPUContext::Ptr ctx, FontManager::Ptr fontManager) noexcept;
 
     ~TextRenderer();
 
@@ -45,7 +46,7 @@ public:
                 int cursorCol = -1, int cursorRow = -1, bool cursorVisible = false) noexcept;
 
 private:
-    TextRenderer(WebGPUContext::Ptr ctx, Font* font) noexcept;
+    TextRenderer(WebGPUContext::Ptr ctx, FontManager::Ptr fontManager) noexcept;
     Result<void> init() noexcept;
     Result<void> createShaderModule(WGPUDevice device);
     Result<void> createPipeline(WGPUDevice device, WGPUTextureFormat format);
@@ -104,7 +105,8 @@ private:
     uint32_t gridRows_ = 0;
 
     WebGPUContext::Ptr ctx_;
-    Font* font_ = nullptr;
+    FontManager::Ptr fontManager_;
+    Font* font_ = nullptr;  // Cached pointer from FontManager
     const Config* config_ = nullptr;
     bool needsBindGroupRecreation_ = false;  // Deferred bind group recreation
 };

@@ -322,7 +322,7 @@ Result<void> Yetty::initWindow() noexcept {
 
         // Save to assets directory
         std::string atlasDir = std::string(CMAKE_SOURCE_DIR) + "/assets";
-        std::string atlasPath = atlasDir + "/atlas.png";
+        std::string atlasPath = atlasDir + "/atlas.lz4";
         std::string metricsPath = atlasDir + "/atlas.json";
 
         if (!font.saveAtlas(atlasPath, metricsPath)) {
@@ -377,102 +377,73 @@ Result<void> Yetty::initGraphics() noexcept {
 }
 
 Result<void> Yetty::initFont() noexcept {
-    _font_storage = std::make_unique<Font>();
-    _font = _font_storage.get();
-    float fontSize = 32.0f;
-
 #if defined(__ANDROID__)
-    // Android: extract assets and load atlas
+    // Android: extract assets and load prebuilt atlas
+    // TODO: Migrate Android to use FontManager with asset loading support
     if (auto res = extractAssets(); !res) {
         return res;
     }
 
-    std::string atlasPath = _dataDir + "/atlas.png";
+    _font_storage = std::make_unique<Font>();
+    _font = _font_storage.get();
+    std::string atlasPath = _dataDir + "/atlas.lz4";
     std::string metricsPath = _dataDir + "/atlas.json";
 
     LOGI("Loading atlas from: %s", atlasPath.c_str());
     if (!_font->loadAtlas(atlasPath, metricsPath)) {
         return Err<void>("Failed to load font atlas");
     }
-    fontSize = _font->getFontSize();
     LOGI("Font atlas loaded");
-#elif YETTY_USE_PREBUILT_ATLAS
-    // Web build: always use pre-built atlas
-    std::cout << "Loading pre-built atlas..." << std::endl;
-    if (!_font->loadAtlas(DEFAULT_ATLAS, DEFAULT_METRICS)) {
-        return Err<void>("Failed to load pre-built atlas");
-    }
-    fontSize = _font->getFontSize();
-#else
-    // Native build: try cache first, then generate
-    std::string cacheDir;
-    const char* homeDir = getenv("HOME");
-    if (homeDir) {
-        cacheDir = std::string(homeDir) + "/.cache/yetty";
-    } else {
-        cacheDir = "/tmp/yetty-cache";
-    }
-    std::string cachedAtlas = cacheDir + "/atlas.png";
-    std::string cachedMetrics = cacheDir + "/atlas.json";
-
-    bool loadedFromCache = false;
-
-    if (_usePrebuiltAtlas) {
-        std::cout << "Loading pre-built atlas..." << std::endl;
-        if (_font->loadAtlas(DEFAULT_ATLAS, DEFAULT_METRICS)) {
-            fontSize = _font->getFontSize();
-            loadedFromCache = true;
-        } else {
-            std::cerr << "Failed to load atlas, falling back to cache/generation" << std::endl;
-        }
-    }
-
-    if (!loadedFromCache) {
-        std::ifstream cacheTest(cachedAtlas);
-        if (cacheTest.good()) {
-            cacheTest.close();
-            std::cout << "Loading cached atlas from: " << cachedAtlas << std::endl;
-            if (_font->loadAtlas(cachedAtlas, cachedMetrics)) {
-                fontSize = _font->getFontSize();
-                loadedFromCache = true;
-            } else {
-                std::cout << "Cache invalid, regenerating..." << std::endl;
-            }
-        }
-    }
-
-    if (!loadedFromCache) {
-        std::cout << "Generating font atlas from: " << _fontPath << std::endl;
-        if (!_font->generate(_fontPath, fontSize)) {
-            return Err<void>("Failed to generate font atlas from: " + _fontPath);
-        }
-
-        // Save to cache
-        std::filesystem::create_directories(cacheDir);
-        std::cout << "Caching atlas to: " << cachedAtlas << std::endl;
-        if (!_font->saveAtlas(cachedAtlas, cachedMetrics)) {
-            std::cerr << "Warning: Failed to cache atlas" << std::endl;
-        }
-    }
-#endif
 
     if (!_font->createTexture(_ctx->getDevice(), _ctx->getQueue())) {
         return Err<void>("Failed to create font texture");
     }
 
-    // Calculate cell size
+    float fontSize = _font->getFontSize();
     _baseCellWidth = fontSize * 0.6f;
     _baseCellHeight = fontSize * 1.2f;
+#elif YETTY_USE_PREBUILT_ATLAS
+    // Web build: load prebuilt atlas
+    // TODO: Migrate Web to use FontManager with asset loading support
+    _font_storage = std::make_unique<Font>();
+    _font = _font_storage.get();
+    std::cout << "Loading pre-built atlas..." << std::endl;
+    if (!_font->loadAtlas(DEFAULT_ATLAS, DEFAULT_METRICS)) {
+        return Err<void>("Failed to load pre-built atlas");
+    }
+
+    if (!_font->createTexture(_ctx->getDevice(), _ctx->getQueue())) {
+        return Err<void>("Failed to create font texture");
+    }
+
+    float fontSize = _font->getFontSize();
+    _baseCellWidth = fontSize * 0.6f;
+    _baseCellHeight = fontSize * 1.2f;
+#else
+    // Native build: FontManager handles everything in initRenderer()
+    // Nothing to do here
+#endif
 
     return Ok();
 }
 
 Result<void> Yetty::initRenderer() noexcept {
-    auto rendererResult = TextRenderer::create(_ctx, _font);
+    auto rendererResult = TextRenderer::create(_ctx, _fontManager);
     if (!rendererResult) {
         return Err<void>("Failed to create text renderer", rendererResult);
     }
     _renderer = *rendererResult;
+
+    // Get font for cell size calculation
+    auto fontResult = _fontManager->getFont("monospace", Font::Regular, 32.0f);
+    if (!fontResult) {
+        return Err<void>("Failed to get font for cell size", fontResult);
+    }
+    _font = *fontResult;
+    float fontSize = _font->getFontSize();
+    _baseCellWidth = fontSize * 0.6f;
+    _baseCellHeight = fontSize * 1.2f;
+
     _renderer->setCellSize(_baseCellWidth, _baseCellHeight);
     _renderer->resize(_initialWidth, _initialHeight);
     _renderer->setConfig(_config.get());
