@@ -74,6 +74,22 @@ Result<void> TextRenderer::init() noexcept {
         return Err<void>("Failed to create glyph metadata buffer");
     }
 
+    // Create emoji atlas
+    auto emojiResult = EmojiAtlas::create(device, 64);  // 64px emoji glyphs
+    if (!emojiResult) {
+        // Emoji atlas is optional - log warning but continue
+        TR_LOGE("Failed to create emoji atlas: %s (emoji rendering disabled)",
+                emojiResult.error().message().c_str());
+    } else {
+        emojiAtlas_ = *emojiResult;
+        // Load common emojis
+        if (auto res = emojiAtlas_->loadCommonEmojis(); !res) {
+            TR_LOGE("Failed to load common emojis: %s", res.error().message().c_str());
+        } else {
+            TR_LOGI("Emoji atlas initialized with {} emojis", emojiAtlas_->getGlyphCount());
+        }
+    }
+
     if (auto res = createShaderModule(device); !res) {
         return Err<void>("Failed to create shader module", res);
     }
@@ -291,8 +307,8 @@ Result<void> TextRenderer::createCellTextures(WGPUDevice device, uint32_t cols, 
 }
 
 Result<void> TextRenderer::createBindGroupLayout(WGPUDevice device) {
-    // Bind group layout: 8 bindings
-    WGPUBindGroupLayoutEntry entries[8] = {};
+    // Bind group layout: 11 bindings (8 base + 3 emoji)
+    WGPUBindGroupLayoutEntry entries[11] = {};
 
     // 0: Uniforms
     entries[0].binding = 0;
@@ -335,14 +351,31 @@ Result<void> TextRenderer::createBindGroupLayout(WGPUDevice device) {
     entries[6].texture.sampleType = WGPUTextureSampleType_Float;
     entries[6].texture.viewDimension = WGPUTextureViewDimension_2D;
 
-    // 7: Cell attributes texture (R8Uint - packed bold/italic/underline/strike)
+    // 7: Cell attributes texture (R8Uint - packed bold/italic/underline/strike/emoji)
     entries[7].binding = 7;
     entries[7].visibility = WGPUShaderStage_Fragment;
     entries[7].texture.sampleType = WGPUTextureSampleType_Uint;
     entries[7].texture.viewDimension = WGPUTextureViewDimension_2D;
 
+    // 8: Emoji atlas texture (RGBA8Unorm - color emoji bitmap)
+    entries[8].binding = 8;
+    entries[8].visibility = WGPUShaderStage_Fragment;
+    entries[8].texture.sampleType = WGPUTextureSampleType_Float;
+    entries[8].texture.viewDimension = WGPUTextureViewDimension_2D;
+
+    // 9: Emoji sampler
+    entries[9].binding = 9;
+    entries[9].visibility = WGPUShaderStage_Fragment;
+    entries[9].sampler.type = WGPUSamplerBindingType_Filtering;
+
+    // 10: Emoji metadata SSBO
+    entries[10].binding = 10;
+    entries[10].visibility = WGPUShaderStage_Fragment;
+    entries[10].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
+    entries[10].buffer.minBindingSize = sizeof(EmojiGlyphMetadata);
+
     WGPUBindGroupLayoutDescriptor layoutDesc = {};
-    layoutDesc.entryCount = 8;
+    layoutDesc.entryCount = 11;
     layoutDesc.entries = entries;
     bindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(device, &layoutDesc);
     if (!bindGroupLayout_) {
@@ -383,8 +416,14 @@ Result<void> TextRenderer::createBindGroup(WGPUDevice device, Font& font) {
     if (!cellBgColorView_) return Err<void>("cellBgColorView_ is null");
     if (!cellAttrsView_) return Err<void>("cellAttrsView_ is null");
 
-    // Bind group entries - uses current texture views
-    WGPUBindGroupEntry bgEntries[8] = {};
+    // Check emoji atlas resources (required for bind group)
+    if (!emojiAtlas_ || !emojiAtlas_->getTextureView() || !emojiAtlas_->getSampler() ||
+        !emojiAtlas_->getMetadataBuffer()) {
+        return Err<void>("emoji atlas resources not ready");
+    }
+
+    // Bind group entries - uses current texture views (11 entries)
+    WGPUBindGroupEntry bgEntries[11] = {};
 
     bgEntries[0].binding = 0;
     bgEntries[0].buffer = uniformBuffer_;
@@ -412,9 +451,20 @@ Result<void> TextRenderer::createBindGroup(WGPUDevice device, Font& font) {
     bgEntries[7].binding = 7;
     bgEntries[7].textureView = cellAttrsView_;
 
+    // Emoji atlas resources
+    bgEntries[8].binding = 8;
+    bgEntries[8].textureView = emojiAtlas_->getTextureView();
+
+    bgEntries[9].binding = 9;
+    bgEntries[9].sampler = emojiAtlas_->getSampler();
+
+    bgEntries[10].binding = 10;
+    bgEntries[10].buffer = emojiAtlas_->getMetadataBuffer();
+    bgEntries[10].size = std::max(1u, emojiAtlas_->getGlyphCount()) * sizeof(EmojiGlyphMetadata);
+
     WGPUBindGroupDescriptor bindGroupDesc = {};
     bindGroupDesc.layout = bindGroupLayout_;
-    bindGroupDesc.entryCount = 8;
+    bindGroupDesc.entryCount = 11;
     bindGroupDesc.entries = bgEntries;
     bindGroup_ = wgpuDeviceCreateBindGroup(device, &bindGroupDesc);
     if (!bindGroup_) {

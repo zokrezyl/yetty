@@ -75,16 +75,25 @@ Result<CustomGlyphPluginPtr> ShaderGlyphPlugin::create() {
 }
 
 std::vector<CodepointRange> ShaderGlyphPlugin::getCodepointRanges() const {
+    // Only claim specific codepoints that have shader mappings in mapping.yaml
+    // Other emojis should be rendered by the emoji atlas (bitmap font)
     return {
-        {0x231B, 0x231B},    // Hourglass
-        {0x23F3, 0x23F3},    // Hourglass flowing
-        {0x2728, 0x2728},    // Sparkles
-        {0x2764, 0x2764},    // Red heart
-        {0x2B50, 0x2B50},    // Star
-        {0x1F300, 0x1F5FF},  // Misc Symbols and Pictographs (includes fire, gems, etc)
-        {0x1F600, 0x1F64F},  // Emoticons
-        {0x1F680, 0x1F6FF},  // Transport and Map
-        {0x1F900, 0x1F9FF},  // Supplemental Symbols
+        {0x231B, 0x231B},    // ⌛ Hourglass done
+        {0x23F3, 0x23F3},    // ⏳ Hourglass flowing
+        {0x2728, 0x2728},    // ✨ Sparkles
+        {0x2764, 0x2764},    // ❤ Red heart
+        {0x2B50, 0x2B50},    // ⭐ Star
+        {0x1F308, 0x1F308},  // 🌈 Rainbow
+        {0x1F30A, 0x1F30A},  // 🌊 Wave
+        {0x1F31F, 0x1F31F},  // 🌟 Glowing star
+        {0x1F389, 0x1F38A},  // 🎉🎊 Party popper, confetti
+        {0x1F493, 0x1F49C},  // 💓-💜 Various hearts
+        {0x1F4A7, 0x1F4A7},  // 💧 Droplet
+        {0x1F4AB, 0x1F4AB},  // 💫 Dizzy star
+        {0x1F525, 0x1F525},  // 🔥 Fire
+        {0x1F48D, 0x1F48E},  // 💍💎 Ring, gem
+        {0x1F600, 0x1F600},  // 😀 Grinning face (only this one has smiley.wgsl)
+        {0x1F680, 0x1F680},  // 🚀 Rocket
     };
 }
 

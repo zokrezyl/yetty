@@ -291,6 +291,7 @@ if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID)
         src/yetty/font.cpp
         src/yetty/font-manager.cpp
         src/yetty/rich-text.cpp
+        src/yetty/emoji-atlas.cpp
     )
 
     add_library(yetty_core SHARED ${YETTY_CORE_SOURCES})
@@ -354,6 +355,7 @@ if(EMSCRIPTEN OR YETTY_ANDROID)
         src/yetty/font.cpp
         src/yetty/font-manager.cpp
         src/yetty/rich-text.cpp
+        src/yetty/emoji-atlas.cpp
     )
 endif()
 
@@ -467,6 +469,7 @@ elseif(YETTY_ANDROID)
         yaml-cpp
         vterm
         spdlog::spdlog
+        lz4_static
         android
         log
     )
