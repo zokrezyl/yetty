@@ -15,6 +15,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
 
+#include <lz4.h>
+
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -989,21 +991,49 @@ bool Font::saveAtlas(const std::string& atlasPath, const std::string& metricsPat
         return false;
     }
 
-    // Save atlas as raw binary (much faster to load than PNG)
+    // Compress atlas data with LZ4 (fast compression/decompression)
+    const int srcSize = static_cast<int>(_atlasData.size());
+    const int maxDstSize = LZ4_compressBound(srcSize);
+    std::vector<char> compressed(maxDstSize);
+
+    const int compressedSize = LZ4_compress_default(
+        reinterpret_cast<const char*>(_atlasData.data()),
+        compressed.data(),
+        srcSize,
+        maxDstSize
+    );
+
+    if (compressedSize <= 0) {
+        std::cerr << "LZ4 compression failed" << std::endl;
+        return false;
+    }
+
+    // Save atlas as LZ4 compressed binary
     std::ofstream atlasFile(atlasPath, std::ios::binary);
     if (!atlasFile) {
         std::cerr << "Failed to open atlas file for writing: " << atlasPath << std::endl;
         return false;
     }
-    // Write header: width, height
+
+    // Write header: magic, width, height, uncompressed size, compressed size
+    const uint32_t magic = 0x344A5A4C; // "LZ4\0" in little-endian
+    atlasFile.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
     atlasFile.write(reinterpret_cast<const char*>(&_atlasWidth), sizeof(_atlasWidth));
     atlasFile.write(reinterpret_cast<const char*>(&_atlasHeight), sizeof(_atlasHeight));
-    // Write raw RGBA data
-    atlasFile.write(reinterpret_cast<const char*>(_atlasData.data()), _atlasData.size());
+    const uint32_t uncompressedSize = static_cast<uint32_t>(srcSize);
+    const uint32_t compressedSizeU32 = static_cast<uint32_t>(compressedSize);
+    atlasFile.write(reinterpret_cast<const char*>(&uncompressedSize), sizeof(uncompressedSize));
+    atlasFile.write(reinterpret_cast<const char*>(&compressedSizeU32), sizeof(compressedSizeU32));
+
+    // Write compressed data
+    atlasFile.write(compressed.data(), compressedSize);
     if (!atlasFile) {
         std::cerr << "Failed to write atlas data: " << atlasPath << std::endl;
         return false;
     }
+
+    spdlog::debug("Atlas compressed: {} -> {} bytes ({:.1f}%)",
+                  srcSize, compressedSize, 100.0f * compressedSize / srcSize);
 
     // Save metrics as JSON
     std::ofstream file(metricsPath);
