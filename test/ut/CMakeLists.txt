@@ -7,6 +7,10 @@ option(YETTY_COVERAGE "Enable code coverage" OFF)
 
 # Boost UT - Modern C++20 unit testing framework
 # Note: v2.3+ requires CMake 4.0, stick with v2.1.0
+# Suppress CMP0175 warning from ut's add_custom_command usage
+if(POLICY CMP0175)
+    cmake_policy(SET CMP0175 OLD)
+endif()
 CPMAddPackage(
     NAME ut
     GITHUB_REPOSITORY boost-ext/ut
