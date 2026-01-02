@@ -361,6 +361,18 @@ Result<Font*> FontManager::getFont(const std::string& family, Font::Style style,
         return Ok(it->second.get());
     }
 
+    // Also check if font was loaded from embedded data (uses empty styleName)
+    FontCacheKey embeddedKey;
+    embeddedKey.familyName = family;
+    embeddedKey.styleName = "";
+    embeddedKey.numGlyphs = 0;
+    embeddedKey.unitsPerEM = 0;
+    it = fontCache_.find(embeddedKey);
+    if (it != fontCache_.end()) {
+        spdlog::debug("FontManager: found embedded font '{}' in cache", family);
+        return Ok(it->second.get());
+    }
+
     std::string fontPath = findFontPath(family, style);
     if (fontPath.empty()) {
         return Err<Font*>("Could not find font: " + family);
