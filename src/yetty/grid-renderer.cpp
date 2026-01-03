@@ -1,5 +1,6 @@
 #include "yetty/terminal.h" // For DamageRect
 #include "yetty/grid-renderer.h"
+#include "yetty/config.h"
 #include <cstdlib> // for getenv
 #include <cstring>
 #include <fstream>
@@ -1120,6 +1121,161 @@ void GridRenderer::render(const Grid &grid,
 
   // Note: targetView is cached by WebGPUContext, don't release here
   // Note: present() should be called by main loop after all rendering
+}
+
+void GridRenderer::renderFromBuffers(uint32_t cols, uint32_t rows,
+                                     const uint16_t* glyphs,
+                                     const uint8_t* fgColors,
+                                     const uint8_t* bgColors,
+                                     const uint8_t* attrs,
+                                     int cursorCol, int cursorRow,
+                                     bool cursorVisible) noexcept {
+  if (!ctx_ || !font_) return;
+
+  WGPUDevice device = ctx_->getDevice();
+  WGPUQueue queue = ctx_->getQueue();
+
+  // Upload any newly loaded emojis to GPU
+  if (emojiAtlas_) {
+    emojiAtlas_->uploadToGPU();
+  }
+
+  // Recreate textures and bind group if grid size changed
+  if (cols != textureCols_ || rows != textureRows_) {
+    if (auto res = createCellTextures(device, cols, rows); !res) {
+      spdlog::error("GridRenderer::renderFromBuffers: {}", error_msg(res));
+      return;
+    }
+    if (auto res = createBindGroup(device, *font_); !res) {
+      spdlog::error("GridRenderer::renderFromBuffers: {}", error_msg(res));
+      return;
+    }
+    needsBindGroupRecreation_ = false;
+  } else if (needsBindGroupRecreation_) {
+    if (auto res = createBindGroup(device, *font_); !res) {
+      spdlog::error("GridRenderer::renderFromBuffers: {}", error_msg(res));
+      return;
+    }
+    needsBindGroupRecreation_ = false;
+  }
+
+  // Update cell textures from buffer data
+  gridCols_ = cols;
+  gridRows_ = rows;
+
+  // Write glyph indices
+  WGPUTexelCopyTextureInfo glyphDest = {};
+  glyphDest.texture = cellGlyphTexture_;
+  glyphDest.mipLevel = 0;
+  glyphDest.origin = {0, 0, 0};
+  glyphDest.aspect = WGPUTextureAspect_All;
+
+  WGPUTexelCopyBufferLayout glyphLayout = {};
+  glyphLayout.offset = 0;
+  glyphLayout.bytesPerRow = cols * sizeof(uint16_t);
+  glyphLayout.rowsPerImage = rows;
+
+  WGPUExtent3D glyphSize = {cols, rows, 1};
+  wgpuQueueWriteTexture(queue, &glyphDest, glyphs,
+                        cols * rows * sizeof(uint16_t), &glyphLayout, &glyphSize);
+
+  // Write FG colors
+  WGPUTexelCopyTextureInfo fgDest = {};
+  fgDest.texture = cellFgColorTexture_;
+  fgDest.mipLevel = 0;
+  fgDest.origin = {0, 0, 0};
+  fgDest.aspect = WGPUTextureAspect_All;
+
+  WGPUTexelCopyBufferLayout fgLayout = {};
+  fgLayout.offset = 0;
+  fgLayout.bytesPerRow = cols * 4;
+  fgLayout.rowsPerImage = rows;
+
+  WGPUExtent3D fgSize = {cols, rows, 1};
+  wgpuQueueWriteTexture(queue, &fgDest, fgColors, cols * rows * 4, &fgLayout, &fgSize);
+
+  // Write BG colors
+  WGPUTexelCopyTextureInfo bgDest = {};
+  bgDest.texture = cellBgColorTexture_;
+  bgDest.mipLevel = 0;
+  bgDest.origin = {0, 0, 0};
+  bgDest.aspect = WGPUTextureAspect_All;
+
+  WGPUTexelCopyBufferLayout bgLayout = {};
+  bgLayout.offset = 0;
+  bgLayout.bytesPerRow = cols * 4;
+  bgLayout.rowsPerImage = rows;
+
+  WGPUExtent3D bgSize = {cols, rows, 1};
+  wgpuQueueWriteTexture(queue, &bgDest, bgColors, cols * rows * 4, &bgLayout, &bgSize);
+
+  // Write attrs
+  WGPUTexelCopyTextureInfo attrsDest = {};
+  attrsDest.texture = cellAttrsTexture_;
+  attrsDest.mipLevel = 0;
+  attrsDest.origin = {0, 0, 0};
+  attrsDest.aspect = WGPUTextureAspect_All;
+
+  WGPUTexelCopyBufferLayout attrsLayout = {};
+  attrsLayout.offset = 0;
+  attrsLayout.bytesPerRow = cols;
+  attrsLayout.rowsPerImage = rows;
+
+  WGPUExtent3D attrsSize = {cols, rows, 1};
+  wgpuQueueWriteTexture(queue, &attrsDest, attrs, cols * rows, &attrsLayout, &attrsSize);
+
+  // Update uniforms
+  uniforms_.projection = glm::ortho(0.0f, static_cast<float>(screenWidth_),
+                                    static_cast<float>(screenHeight_), 0.0f, -1.0f, 1.0f);
+  uniforms_.screenSize = {static_cast<float>(screenWidth_), static_cast<float>(screenHeight_)};
+  uniforms_.cellSize = cellSize_;
+  uniforms_.gridSize = {static_cast<float>(cols), static_cast<float>(rows)};
+  uniforms_.pixelRange = font_ ? font_->getPixelRange() : 2.0f;
+  uniforms_.scale = scale_;
+  uniforms_.cursorPos = {static_cast<float>(cursorCol), static_cast<float>(cursorRow)};
+  uniforms_.cursorVisible = cursorVisible ? 1.0f : 0.0f;
+  wgpuQueueWriteBuffer(queue, uniformBuffer_, 0, &uniforms_, sizeof(Uniforms));
+
+  // Render
+  auto targetViewResult = ctx_->getCurrentTextureView();
+  if (!targetViewResult) {
+    spdlog::error("GridRenderer::renderFromBuffers: getCurrentTextureView failed");
+    return;
+  }
+  WGPUTextureView targetView = *targetViewResult;
+
+  WGPUCommandEncoderDescriptor encoderDesc = {};
+  WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device, &encoderDesc);
+
+  WGPURenderPassColorAttachment colorAttachment = {};
+  colorAttachment.view = targetView;
+  colorAttachment.loadOp = WGPULoadOp_Clear;
+  colorAttachment.storeOp = WGPUStoreOp_Store;
+#if YETTY_WEB
+  WGPU_COLOR_ATTACHMENT_CLEAR(colorAttachment, 0.0, 0.0, 0.0, 1.0);
+#else
+  colorAttachment.clearValue = {0.0, 0.0, 0.0, 1.0};
+  colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+#endif
+
+  WGPURenderPassDescriptor passDesc = {};
+  passDesc.colorAttachmentCount = 1;
+  passDesc.colorAttachments = &colorAttachment;
+
+  WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
+  wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
+  wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
+  wgpuRenderPassEncoderSetVertexBuffer(pass, 0, quadVertexBuffer_, 0, WGPU_WHOLE_SIZE);
+  wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
+  wgpuRenderPassEncoderEnd(pass);
+  wgpuRenderPassEncoderRelease(pass);
+
+  WGPUCommandBufferDescriptor cmdDesc = {};
+  WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdDesc);
+  wgpuCommandEncoderRelease(encoder);
+
+  wgpuQueueSubmit(queue, 1, &cmdBuffer);
+  wgpuCommandBufferRelease(cmdBuffer);
 }
 
 } // namespace yetty

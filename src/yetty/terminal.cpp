@@ -152,9 +152,62 @@ CommandQueue* Terminal::get_command_queue(CommandQueue* old_queue) {
         recycledQueue_.reset(old_queue);
     }
 
-    // Terminal uses GridRenderer directly for now
-    // TODO: Implement command-based rendering for Terminal
-    return nullptr;
+    // Try to acquire lock - don't block main thread
+    std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) {
+        return nullptr;  // Busy, skip this frame
+    }
+
+    if (!running_.load()) {
+        return nullptr;
+    }
+
+    // No damage = no commands needed
+    if (!hasDamage()) {
+        return nullptr;
+    }
+
+    // Get or create queue
+    CommandQueue* queue = recycledQueue_ ? recycledQueue_.release() : new CommandQueue();
+
+    // Copy grid data to CPU buffers (safe snapshot for main thread)
+    const uint32_t cols = grid_.getCols();
+    const uint32_t rows = grid_.getRows();
+    const size_t cellCount = cols * rows;
+
+    GridBufferData buffers;
+    buffers.cols = cols;
+    buffers.rows = rows;
+
+    // Copy glyph indices
+    buffers.glyphs.resize(cellCount);
+    std::memcpy(buffers.glyphs.data(), grid_.getGlyphData(), cellCount * sizeof(uint16_t));
+
+    // Copy FG colors (RGBA)
+    buffers.fgColors.resize(cellCount * 4);
+    std::memcpy(buffers.fgColors.data(), grid_.getFgColorData(), cellCount * 4);
+
+    // Copy BG colors (RGBA)
+    buffers.bgColors.resize(cellCount * 4);
+    std::memcpy(buffers.bgColors.data(), grid_.getBgColorData(), cellCount * 4);
+
+    // Copy attributes
+    buffers.attrs.resize(cellCount);
+    std::memcpy(buffers.attrs.data(), grid_.getAttrsData(), cellCount);
+
+    // Clear damage after copying
+    damageRects_.clear();
+    fullDamage_ = false;
+
+    // Build RenderGridCmd with the buffer data
+    queue->emplace<RenderGridCmd>(
+        std::move(buffers),
+        cursorCol_,
+        cursorRow_,
+        cursorVisible_ && cursorBlink_
+    );
+
+    return queue;
 }
 
 //=============================================================================

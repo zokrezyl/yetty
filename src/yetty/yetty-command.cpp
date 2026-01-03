@@ -2,6 +2,7 @@
 #include <yetty/yetty.h>
 #include <yetty/webgpu-context.h>
 #include <yetty/wgpu-compat.h>
+#include "grid-renderer.h"
 #include <spdlog/spdlog.h>
 
 namespace yetty {
@@ -377,6 +378,31 @@ bool DeleteBufferCmd::execute(WebGPUContext& ctx, Yetty& engine) {
     wgpuBufferRelease(it->second.buffer);
     res.buffers.erase(it);
     spdlog::debug("Deleted buffer '{}'", name_);
+
+    (void)ctx;
+    return true;
+}
+
+//=============================================================================
+// Grid Render Command
+//=============================================================================
+
+bool RenderGridCmd::execute(WebGPUContext& ctx, Yetty& engine) {
+    auto renderer = engine.renderer();
+    if (!renderer) {
+        spdlog::error("RenderGridCmd: no renderer available");
+        return false;
+    }
+
+    const auto& buf = buffers_;
+    renderer->renderFromBuffers(
+        buf.cols, buf.rows,
+        buf.glyphs.data(),
+        buf.fgColors.data(),
+        buf.bgColors.data(),
+        buf.attrs.data(),
+        cursorCol_, cursorRow_, cursorVisible_
+    );
 
     (void)ctx;
     return true;

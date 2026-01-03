@@ -41,6 +41,7 @@ public:
         BeginRenderPass,
         Draw,
         EndRenderPass,
+        RenderGrid,  // Terminal grid rendering
 
         // Resource deletion
         DeleteShader,
@@ -222,6 +223,43 @@ public:
 
     bool execute(WebGPUContext& ctx, Yetty& engine) override;
     Type type() const override { return Type::EndRenderPass; }
+};
+
+//=============================================================================
+// Grid Render Command (Terminal uses this)
+//=============================================================================
+
+// CPU buffer data for grid rendering (copied from Grid on worker thread)
+struct GridBufferData {
+    uint32_t cols = 0;
+    uint32_t rows = 0;
+    std::vector<uint16_t> glyphs;      // Glyph indices
+    std::vector<uint8_t> fgColors;     // RGBA per cell
+    std::vector<uint8_t> bgColors;     // RGBA per cell
+    std::vector<uint8_t> attrs;        // Attributes per cell
+};
+
+class RenderGridCmd : public YettyCommand {
+public:
+    RenderGridCmd(GridBufferData&& buffers,
+                  int cursorCol, int cursorRow, bool cursorVisible)
+        : buffers_(std::move(buffers))
+        , cursorCol_(cursorCol), cursorRow_(cursorRow)
+        , cursorVisible_(cursorVisible) {}
+
+    bool execute(WebGPUContext& ctx, Yetty& engine) override;
+    Type type() const override { return Type::RenderGrid; }
+
+    const GridBufferData& buffers() const { return buffers_; }
+    int cursorCol() const { return cursorCol_; }
+    int cursorRow() const { return cursorRow_; }
+    bool cursorVisible() const { return cursorVisible_; }
+
+private:
+    GridBufferData buffers_;
+    int cursorCol_;
+    int cursorRow_;
+    bool cursorVisible_;
 };
 
 //=============================================================================

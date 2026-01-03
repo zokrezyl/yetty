@@ -1,6 +1,5 @@
 #pragma once
 
-#include "yetty/config.h"
 #include "yetty/emoji-atlas.h"
 #include "yetty/grid.h"
 #include <glm/glm.hpp>
@@ -13,6 +12,7 @@
 
 namespace yetty {
 
+class Config;
 struct DamageRect;
 
 class GridRenderer {
@@ -49,6 +49,15 @@ public:
   void render(const Grid &grid, const std::vector<DamageRect> &damageRects,
               bool fullDamage, int cursorCol = -1, int cursorRow = -1,
               bool cursorVisible = false) noexcept;
+
+  // Render from CPU buffer data (used by RenderGridCmd)
+  void renderFromBuffers(uint32_t cols, uint32_t rows,
+                         const uint16_t* glyphs,
+                         const uint8_t* fgColors,
+                         const uint8_t* bgColors,
+                         const uint8_t* attrs,
+                         int cursorCol, int cursorRow,
+                         bool cursorVisible) noexcept;
 
 private:
   GridRenderer(WebGPUContext::Ptr ctx, FontManager::Ptr fontManager) noexcept;
