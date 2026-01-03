@@ -14,7 +14,6 @@
 
 #include <yetty/webgpu-context.h>
 #include <yetty/result.hpp>
-#include <yetty/config.h>
 #include <yetty/font.h>
 #include <yetty/font-manager.h>
 #include <yetty/renderable.h>
@@ -24,6 +23,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <webgpu/webgpu.h>
 
 #if defined(__ANDROID__)
 #include <jni.h>
@@ -42,11 +42,46 @@
 namespace yetty {
 
 // Forward declarations
+class Config;
 class GridRenderer;
 class Terminal;
 class PluginManager;
 class Grid;
 class InputHandler;
+
+//-----------------------------------------------------------------------------
+// GPU Resource entries (per-renderable namespace)
+//-----------------------------------------------------------------------------
+struct ShaderResource {
+    WGPUShaderModule module = nullptr;
+    WGPURenderPipeline pipeline = nullptr;
+    WGPUBindGroupLayout bindGroupLayout = nullptr;
+    WGPUPipelineLayout pipelineLayout = nullptr;
+    std::string vertexEntry;
+    std::string fragmentEntry;
+};
+
+struct TextureResource {
+    WGPUTexture texture = nullptr;
+    WGPUTextureView view = nullptr;
+    WGPUSampler sampler = nullptr;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    WGPUTextureFormat format = WGPUTextureFormat_RGBA8Unorm;
+};
+
+struct BufferResource {
+    WGPUBuffer buffer = nullptr;
+    uint64_t size = 0;
+    uint32_t usage = 0;
+};
+
+// All resources for one renderable
+struct RenderableResources {
+    std::unordered_map<std::string, ShaderResource> shaders;
+    std::unordered_map<std::string, TextureResource> textures;
+    std::unordered_map<std::string, BufferResource> buffers;
+};
 
 //-----------------------------------------------------------------------------
 // Yetty - Main application engine
@@ -68,7 +103,7 @@ public:
     int run() noexcept;
 
     // Service accessors (for plugins and InputHandler)
-    Config::Ptr config() const noexcept { return _config; }
+    std::shared_ptr<Config> config() const noexcept { return _config; }
     WebGPUContext::Ptr context() const noexcept { return _ctx; }
     std::shared_ptr<GridRenderer> renderer() const noexcept { return _renderer; }
     Font* font() const noexcept { return _font; }
@@ -99,6 +134,32 @@ public:
     // State modifiers (called by InputHandler)
     void setZoomLevel(float zoom) noexcept;
     void updateGridSize(uint32_t cols, uint32_t rows) noexcept;
+
+    //=========================================================================
+    // Per-Renderable Resource Management
+    // Commands use names in their renderable's namespace.
+    // Yetty tracks current renderable during command execution.
+    //=========================================================================
+
+    // Get current renderable's resources (used during command execution)
+    RenderableResources& currentResources() noexcept;
+
+    // Get resources for specific renderable
+    RenderableResources& getResources(uint32_t renderableId) noexcept;
+
+    // Clean up all resources for a renderable (when deleted)
+    void cleanupResources(uint32_t renderableId) noexcept;
+
+    // Current renderable context (set during collectAndExecuteCommands)
+    uint32_t currentRenderableId() const noexcept { return _currentRenderableId; }
+
+    //=========================================================================
+    // Render state (active during command execution)
+    //=========================================================================
+    WGPUCommandEncoder currentEncoder() const noexcept { return _currentEncoder; }
+    WGPURenderPassEncoder currentRenderPass() const noexcept { return _currentRenderPass; }
+    void setCurrentEncoder(WGPUCommandEncoder enc) noexcept { _currentEncoder = enc; }
+    void setCurrentRenderPass(WGPURenderPassEncoder pass) noexcept { _currentRenderPass = pass; }
 
 private:
     Yetty() noexcept = default;
@@ -148,7 +209,7 @@ private:
 #endif
 
     // Core components
-    Config::Ptr _config;
+    std::shared_ptr<Config> _config;
     WebGPUContext::Ptr _ctx;
     std::shared_ptr<GridRenderer> _renderer;
     Font* _font = nullptr;                 // Pointer to font (owned by FontManager)
@@ -165,6 +226,14 @@ private:
     std::unordered_map<uint32_t, CommandQueue*> _oldQueues;  // Recycled queues per renderable
     std::vector<std::unique_ptr<YettyCommand>> _pendingEngineCommands;
     uint32_t _nextRenderableId = 1;
+
+    // Per-renderable GPU resources (renderable_id -> {name -> resource})
+    std::unordered_map<uint32_t, RenderableResources> _resources;
+    uint32_t _currentRenderableId = 0;
+
+    // Active render state (during command execution)
+    WGPUCommandEncoder _currentEncoder = nullptr;
+    WGPURenderPassEncoder _currentRenderPass = nullptr;
 
     // Window / Platform
 #if defined(__ANDROID__)

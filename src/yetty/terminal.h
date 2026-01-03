@@ -240,6 +240,7 @@ private:
 
     // Command queue recycling
     std::unique_ptr<CommandQueue> recycledQueue_;
+    bool shaderRegistered_ = false;  // Track if shader was registered with Yetty
 
     //=========================================================================
     // Terminal state (protected by mutex_)

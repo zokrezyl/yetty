@@ -152,30 +152,9 @@ CommandQueue* Terminal::get_command_queue(CommandQueue* old_queue) {
         recycledQueue_.reset(old_queue);
     }
 
-    // Try to acquire lock - don't block main thread
-    std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);
-    if (!lock.owns_lock()) {
-        return nullptr;
-    }
-
-    if (!running_.load()) {
-        return nullptr;
-    }
-
-    // Get or create queue
-    CommandQueue* queue = recycledQueue_ ? recycledQueue_.release() : new CommandQueue();
-
-    // Build GridRenderCmd
-    queue->emplace<GridRenderCmd>(
-        id_,
-        &grid_,
-        cursorCol_,
-        cursorRow_,
-        cursorVisible_ && cursorBlink_,
-        zOrder_
-    );
-
-    return queue;
+    // Terminal uses GridRenderer directly for now
+    // TODO: Implement command-based rendering for Terminal
+    return nullptr;
 }
 
 //=============================================================================

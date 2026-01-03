@@ -657,27 +657,18 @@ void Yetty::emscriptenMainLoop() noexcept {
 
 void Yetty::mainLoopIteration() noexcept {
 #if defined(__ANDROID__)
-    // Android: simple terminal rendering loop
     if (!_androidInitialized || !_androidRunning) {
         return;
     }
-    if (!_ctx || !_renderer || !_terminal) {
+    if (!_ctx) {
         return;
     }
 
-    // Terminal worker thread handles PTY updates
+    // Process pending engine commands from previous frame
+    processEngineCommands();
 
-    // Get surface texture
-    auto textureViewResult = _ctx->getCurrentTextureView();
-    if (!textureViewResult) {
-        return;
-    }
-
-    // Render terminal using GridRenderer
-    _renderer->render(_terminal->getGrid(),
-                     _terminal->getCursorCol(),
-                     _terminal->getCursorRow(),
-                     _terminal->isCursorVisible());
+    // Collect and execute render commands from all renderables
+    collectAndExecuteCommands();
 
     // Present
     _ctx->present();
@@ -688,108 +679,32 @@ void Yetty::mainLoopIteration() noexcept {
     processEngineCommands();
 
 #if !YETTY_WEB
-    // Terminal mode: worker thread handles PTY updates, we just render
-    if (_terminal) {
-        // Update decorators
-        static double lastTime = glfwGetTime();
-        double currentTime = glfwGetTime();
-        double deltaTime = currentTime - lastTime;
-        lastTime = currentTime;
-
-        if (_pluginManager) {
-            if (auto res = _pluginManager->update(deltaTime); !res) {
-                spdlog::error("Plugin update failed: {}", error_msg(res));
-            }
-            _pluginManager->updateCustomGlyphs(deltaTime);
+    // Check if any renderable is still running
+    bool anyRunning = false;
+    for (const auto& r : _renderables) {
+        if (r->isRunning()) {
+            anyRunning = true;
+            break;
         }
+    }
+    if (!anyRunning && !_renderables.empty()) {
+        glfwSetWindowShouldClose(_window, GLFW_TRUE);
+        return;
+    }
 
-        if (!_terminal->isRunning()) {
-            glfwSetWindowShouldClose(_window, GLFW_TRUE);
-            return;
-        }
-
-        // Check if we need to render this frame
-        // Worker thread updates cursor blink, damage is updated by worker
-        bool hasDamage = _terminal->hasDamage();
-        bool hasPlugins = _pluginManager && !_pluginManager->getAllLayers().empty();
-
-        // Skip rendering if nothing needs update
-        if (!hasDamage && !hasPlugins) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(16));
-            return;
-        }
-
-        // Upload any pending fallback glyphs to GPU
-        if (_font && _font->hasPendingGlyphs()) {
-            _font->uploadPendingGlyphs(_ctx->getDevice(), _ctx->getQueue());
-            _renderer->updateFontBindings(*_font);
-        }
-
-        // Get current window size
-        int w, h;
-        glfwGetFramebufferSize(_window, &w, &h);
-        if (w > 0 && h > 0) {
-            _renderer->resize(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
-        }
-
-        // Render terminal grid with cursor and damage tracking
-        if (_config && _config->useDamageTracking()) {
-            _renderer->render(_terminal->getGrid(),
-                             _terminal->getDamageRects(),
-                             _terminal->hasFullDamage(),
-                             _terminal->getCursorCol(),
-                             _terminal->getCursorRow(),
-                             _terminal->isCursorVisible());
-            _terminal->clearDamageRects();
-            _terminal->clearFullDamage();
-        } else {
-            _renderer->render(_terminal->getGrid(),
-                             _terminal->getCursorCol(),
-                             _terminal->getCursorRow(),
-                             _terminal->isCursorVisible());
-        }
-
-        // Render custom glyph layers
-        if (_pluginManager) {
-            auto targetViewResult = _ctx->getCurrentTextureView();
-            if (targetViewResult) {
-                float cellW = cellWidth();
-                float cellH = cellHeight();
-                int scrollOffset = _terminal ? _terminal->getScrollOffset() : 0;
-                if (auto res = _pluginManager->renderCustomGlyphs(
-                        *_ctx, *targetViewResult,
-                        static_cast<uint32_t>(w), static_cast<uint32_t>(h),
-                        cellW, cellH, scrollOffset); !res) {
-                    spdlog::error("Custom glyph render failed: {}", error_msg(res));
-                }
-            }
-        }
-
-        // Render plugin overlays
-        if (hasPlugins) {
-            auto targetViewResult = _ctx->getCurrentTextureView();
-            if (targetViewResult) {
-                float cellW = cellWidth();
-                float cellH = cellHeight();
-                int scrollOffset = _terminal ? _terminal->getScrollOffset() : 0;
-                uint32_t termRows = _terminal ? _terminal->getGrid().getRows() : 0;
-                if (auto res = _pluginManager->render(*_ctx, *targetViewResult,
-                    static_cast<uint32_t>(w), static_cast<uint32_t>(h),
-                    cellW, cellH, scrollOffset, termRows); !res) {
-                    spdlog::error("Plugin render failed: {}", error_msg(res));
-                }
-            }
-        }
-
-        // Process renderable commands (new architecture)
-        if (!_renderables.empty()) {
-            collectAndExecuteCommands();
-        }
-
-        // Present the frame
-        _ctx->present();
+    // Upload any pending fallback glyphs to GPU
+    if (_font && _font->hasPendingGlyphs()) {
+        _font->uploadPendingGlyphs(_ctx->getDevice(), _ctx->getQueue());
+        _renderer->updateFontBindings(*_font);
     }
 #endif
+
+    // Collect and execute render commands from all renderables
+    // Each renderable returns nullptr if no damage (skip frame efficiently)
+    collectAndExecuteCommands();
+
+    // Present the frame
+    _ctx->present();
 
     // FPS counter
     double currentTime = glfwGetTime();
@@ -963,9 +878,31 @@ void Yetty::processEngineCommands() noexcept {
 }
 
 void Yetty::collectAndExecuteCommands() noexcept {
-    // Collect commands from all renderables
+#if !YETTY_WEB
+    // Render terminal using GridRenderer directly
+    // Terminal is special - it uses GridRenderer for efficient grid rendering
+    if (_terminal && _terminal->isRunning() && _renderer) {
+        // Always render the terminal grid - GridRenderer handles damage internally
+        const auto& grid = _terminal->getGrid();
+        const auto& damageRects = _terminal->getDamageRects();
+        bool fullDamage = _terminal->hasDamage() && damageRects.empty();
+
+        _renderer->render(grid, damageRects, fullDamage,
+                         _terminal->getCursorCol(),
+                         _terminal->getCursorRow(),
+                         _terminal->isCursorVisible());
+
+        // Clear damage after rendering
+        _terminal->clearDamageRects();
+    }
+#endif
+
+    // Collect commands from all renderables (plugins, etc.)
     for (auto& renderable : _renderables) {
         if (!renderable->isRunning()) continue;
+
+        // Set current renderable context for resource namespace lookup
+        _currentRenderableId = renderable->id();
 
         // Get old queue for this renderable (may be nullptr)
         CommandQueue* oldQueue = nullptr;
@@ -975,9 +912,9 @@ void Yetty::collectAndExecuteCommands() noexcept {
             _oldQueues.erase(it);  // Transfer ownership to renderable
         }
 
-        // Get new queue
+        // Get new queue (nullptr if no damage/work to do)
         CommandQueue* queue = renderable->get_command_queue(oldQueue);
-        if (!queue) continue;  // Renderable was busy
+        if (!queue) continue;  // Renderable had no damage or was busy
 
         // Process commands
         for (auto& cmd : queue->commands()) {
@@ -986,7 +923,7 @@ void Yetty::collectAndExecuteCommands() noexcept {
                 _pendingEngineCommands.push_back(std::move(cmd));
             } else {
                 // Execute GPU command immediately
-                cmd->execute(*_ctx);
+                cmd->execute(*_ctx, *this);
             }
         }
 
@@ -994,6 +931,49 @@ void Yetty::collectAndExecuteCommands() noexcept {
         queue->clear();
         _oldQueues[renderable->id()] = queue;
     }
+
+    // Reset context
+    _currentRenderableId = 0;
+}
+
+//-----------------------------------------------------------------------------
+// Per-Renderable Resource Management
+//-----------------------------------------------------------------------------
+
+RenderableResources& Yetty::currentResources() noexcept {
+    return _resources[_currentRenderableId];
+}
+
+RenderableResources& Yetty::getResources(uint32_t renderableId) noexcept {
+    return _resources[renderableId];
+}
+
+void Yetty::cleanupResources(uint32_t renderableId) noexcept {
+    auto it = _resources.find(renderableId);
+    if (it == _resources.end()) return;
+
+    auto& res = it->second;
+
+    // Release all GPU resources
+    for (auto& [name, shader] : res.shaders) {
+        if (shader.pipeline) wgpuRenderPipelineRelease(shader.pipeline);
+        if (shader.pipelineLayout) wgpuPipelineLayoutRelease(shader.pipelineLayout);
+        if (shader.bindGroupLayout) wgpuBindGroupLayoutRelease(shader.bindGroupLayout);
+        if (shader.module) wgpuShaderModuleRelease(shader.module);
+    }
+
+    for (auto& [name, tex] : res.textures) {
+        if (tex.sampler) wgpuSamplerRelease(tex.sampler);
+        if (tex.view) wgpuTextureViewRelease(tex.view);
+        if (tex.texture) wgpuTextureRelease(tex.texture);
+    }
+
+    for (auto& [name, buf] : res.buffers) {
+        if (buf.buffer) wgpuBufferRelease(buf.buffer);
+    }
+
+    _resources.erase(it);
+    spdlog::debug("Cleaned up resources for renderable {}", renderableId);
 }
 
 //-----------------------------------------------------------------------------

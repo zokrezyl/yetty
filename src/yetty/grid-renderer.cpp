@@ -665,11 +665,22 @@ void GridRenderer::updateUniformBuffer(WGPUQueue queue, const Grid &grid,
 }
 
 void GridRenderer::updateCellTextures(WGPUQueue queue, const Grid &grid) {
-  const uint32_t cols = grid.getCols();
-  const uint32_t rows = grid.getRows();
+  // IMPORTANT: Use texture dimensions, not grid dimensions!
+  // The grid can be resized by another thread between the size check
+  // in render() and this function call, causing a race condition.
+  const uint32_t cols = textureCols_;
+  const uint32_t rows = textureRows_;
 
   // Guard against zero-sized grids (would cause GPU texture errors)
   if (cols == 0 || rows == 0) {
+    return;
+  }
+
+  // Guard against grid/texture size mismatch (race condition during resize)
+  // Skip this update - next frame will have matching dimensions after resize
+  if (grid.getCols() != cols || grid.getRows() != rows) {
+    spdlog::debug("GridRenderer: skipping texture update - grid {}x{} != texture {}x{}",
+                  grid.getCols(), grid.getRows(), cols, rows);
     return;
   }
 
