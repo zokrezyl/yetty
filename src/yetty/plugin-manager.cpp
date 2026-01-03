@@ -369,6 +369,7 @@ bool PluginManager::handleOSCSequence(const std::string& sequence,
         std::string encodedPayload = (payloadStart != std::string::npos)
             ? sequence.substr(payloadStart) : "";
         std::string payload = base94Decode(encodedPayload);
+        spdlog::debug("handleOSC: decoded payload:\n{}", payload);
 
         if (posMode == PositionMode::Relative) {
             x += cursorCol;

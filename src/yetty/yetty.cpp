@@ -824,7 +824,30 @@ void Yetty::mainLoopIteration() noexcept {
 
   // Render plugin layers on top
   if (_pluginManager) {
-    _pluginManager->render(*_ctx);
+    auto layers = _pluginManager->getAllLayers();
+    if (!layers.empty()) {
+      auto viewResult = _ctx->getCurrentTextureView();
+      if (viewResult) {
+        RenderContext rc;
+        rc.targetView = *viewResult;
+        rc.targetFormat = _ctx->getSurfaceFormat();
+        rc.screenWidth = windowWidth();
+        rc.screenHeight = windowHeight();
+        rc.cellWidth = cellWidth();
+        rc.cellHeight = cellHeight();
+        rc.scrollOffset = _terminal ? _terminal->getScrollOffset() : 0;
+        rc.termRows = _rows;
+        rc.isAltScreen = false;
+        rc.deltaTime = getElapsedTime();
+
+        for (auto& layer : layers) {
+          if (layer && layer->isVisible()) {
+            layer->setRenderContext(rc);
+            CHECK_RESULT(layer->render(*_ctx));
+          }
+        }
+      }
+    }
   }
 
   // Present the frame

@@ -889,8 +889,6 @@ int Terminal::onOSC(int command, VTermStringFragment frag, void* user) {
 
     if (frag.final && term->pluginManager_) {
         std::string fullSeq = std::to_string(command) + ";" + term->oscBuffer_;
-        spdlog::debug("onOSC: FINAL buffer content: '{}'", term->oscBuffer_);
-        spdlog::debug("onOSC: FINAL fullSeq: '{}'", fullSeq);
 
         std::string response;
         uint32_t linesToAdvance = 0;
