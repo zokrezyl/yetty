@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 400">
+  <!-- Basic shapes -->
+  <circle cx="60" cy="60" r="40" fill="#e74c3c"/>
+  <circle cx="60" cy="60" r="20" fill="#ffffff"/>
+
+  <ellipse cx="180" cy="60" rx="50" ry="30" fill="#3498db"/>
+
+  <rect x="260" y="20" width="80" height="60" fill="#2ecc71" rx="8"/>
+
+  <rect x="380" y="20" width="60" height="60" fill="#9b59b6" rx="0"/>
+
+  <!-- Lines -->
+  <line x1="50" y1="130" x2="450" y2="130" stroke="#7f8c8d" stroke-width="2"/>
+
+  <!-- Polyline and polygon -->
+  <polyline points="50,180 100,150 150,180 200,150 250,180" stroke="#e67e22" stroke-width="3" fill="none"/>
+
+  <polygon points="320,150 370,180 350,230 290,230 270,180" fill="#1abc9c" stroke="#16a085" stroke-width="2"/>
+
+  <!-- Paths with different commands -->
+  <!-- Quadratic bezier -->
+  <path d="M 50,280 Q 100,230 150,280 T 250,280" stroke="#e74c3c" stroke-width="3" fill="none"/>
+
+  <!-- Cubic bezier -->
+  <path d="M 280,280 C 300,230 350,230 370,280 S 430,330 450,280" stroke="#3498db" stroke-width="3" fill="none"/>
+
+  <!-- Arc commands -->
+  <path d="M 80,350 A 40 25 0 0 1 160,350" stroke="#9b59b6" stroke-width="4" fill="none"/>
+  <path d="M 200,350 A 40 25 0 1 1 280,350" stroke="#e74c3c" stroke-width="4" fill="none"/>
+  <path d="M 320,350 A 40 25 30 0 1 400,350" stroke="#2ecc71" stroke-width="4" fill="none"/>
+
+  <!-- Complex path with multiple commands -->
+  <path d="M 420,300 L 470,300 L 470,380 A 25 25 0 0 1 445,355 L 420,380 Z" fill="#f39c12" stroke="#d68910" stroke-width="2"/>
+</svg>

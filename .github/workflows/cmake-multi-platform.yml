@@ -149,10 +149,8 @@ jobs:
     - name: Download wgpu-native for Android
       run: bash build-tools/android/build-wgpu.sh
 
-    - name: Build BusyBox for Android
-      run: |
-        export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
-        bash build-tools/android/build-busybox.sh
+    - name: Download Toybox for Android
+      run: bash build-tools/android/download-toybox.sh
 
     - name: Copy font assets
       run: |

@@ -200,7 +200,7 @@ private:
 
 #if defined(__ANDROID__)
     // Android-specific initialization
-    Result<void> setupBusybox() noexcept;
+    Result<void> setupToybox() noexcept;
     Result<void> extractAssets() noexcept;
     bool extractAsset(const char* assetName, const char* destPath) noexcept;
     std::string getNativeLibraryDir() noexcept;
@@ -245,7 +245,7 @@ private:
 #if defined(__ANDROID__)
     struct android_app* _androidApp = nullptr;
     std::string _dataDir;
-    std::string _busyboxPath;
+    std::string _toyboxPath;
 
     // Android touch state
     float _touchX = 0.0f;

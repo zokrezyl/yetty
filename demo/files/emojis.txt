@@ -1,0 +1,35 @@
+Emoji Test File
+===============
+
+=== SHADER-ANIMATED (shader-glyph plugin) ===
+😀 ❤️ ✨ ⭐ 🌟 🔥 💧 🌊 🌈 💎 💍 🚀 ⏳ ⌛ 🎉 🎊 💫
+💓 💕 💖 💗 💘 💙 💚 💛 💜
+
+=== BITMAP EMOJIS (emoji atlas) ===
+
+Smileys (except 😀):
+😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 😉 😊 😇 🥰 😍 🤩 😘
+
+Hands:
+👍 👎 👊 ✊ 🤛 🤜 🤞 ✌️ 🤟 🤘 👌 🤌 🤏 👈 👉 👆 👇 👋 🙌 👏
+
+Animals:
+🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🐔 🐧 🐦 🦆 🦅
+
+Food:
+🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🥑 🥦 🥕 🌽
+
+Weather (except 🌈🌊):
+☀️ 🌤️ ⛅ 🌥️ ☁️ 🌦️ 🌧️ ⛈️ 🌩️ 🌨️ ❄️ 🌬️ 💨 🌪️
+
+Objects:
+💻 🖥️ 🖨️ ⌨️ 🖱️ 💾 💿 📀 📱 ☎️ 📞 📺 📻 🎙️ ⏰ 📷 🎮 🎸
+
+Flags:
+🏳️ 🏴 🏁 🚩 🎌
+
+Mixed text with emojis:
+Hello 👋 World 🌍!
+I love programming 💻
+Have a nice day ☀️😊
+The quick 🦊 fox jumps over the lazy 🐶 dog.

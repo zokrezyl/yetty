@@ -107,8 +107,8 @@ Result<void> Yetty::init(struct android_app *app) noexcept {
   _androidApp = app;
   _dataDir = std::string(app->activity->internalDataPath);
 
-  // Set up BusyBox
-  if (auto res = setupBusybox(); !res) {
+  // Set up Toybox
+  if (auto res = setupToybox(); !res) {
     return res;
   }
 
@@ -450,14 +450,14 @@ Result<void> Yetty::initTerminal() noexcept {
   setenv("HOME", _dataDir.c_str(), 1);
   setenv("PATH", "/system/bin:/system/xbin", 1);
   setenv("SHELL", "/system/bin/sh", 1);
-  setenv("BUSYBOX", _busyboxPath.c_str(), 1);
+  setenv("TOYBOX", _toyboxPath.c_str(), 1);
 
   // Start shell
   _terminal->setShell("/system/bin/sh");
   _terminal->start();
   addRenderable(_terminal);
   LOGI("Terminal started with shell: /system/bin/sh");
-  LOGI("BusyBox available at: %s", _busyboxPath.c_str());
+  LOGI("Toybox available at: %s", _toyboxPath.c_str());
 #elif !YETTY_WEB
   // Desktop: Terminal mode with plugins
   auto terminalResult =
@@ -1027,21 +1027,21 @@ ANativeWindow *Yetty::nativeWindow() const noexcept {
   return _androidApp ? _androidApp->window : nullptr;
 }
 
-Result<void> Yetty::setupBusybox() noexcept {
-  // BusyBox is now in the native library directory as libbusybox.so
+Result<void> Yetty::setupToybox() noexcept {
+  // Toybox is now in the native library directory as libtoybox.so
   // This directory has execute permissions (unlike the files directory)
   std::string nativeLibDir = getNativeLibraryDir();
-  _busyboxPath = nativeLibDir + "/libbusybox.so";
+  _toyboxPath = nativeLibDir + "/libtoybox.so";
 
-  LOGI("Looking for BusyBox at %s", _busyboxPath.c_str());
+  LOGI("Looking for Toybox at %s", _toyboxPath.c_str());
 
-  // Check if busybox exists and is executable
-  if (access(_busyboxPath.c_str(), X_OK) == 0) {
-    LOGI("BusyBox found at %s", _busyboxPath.c_str());
+  // Check if toybox exists and is executable
+  if (access(_toyboxPath.c_str(), X_OK) == 0) {
+    LOGI("Toybox found at %s", _toyboxPath.c_str());
     return Ok();
   }
 
-  LOGW("BusyBox not found at %s", _busyboxPath.c_str());
+  LOGW("Toybox not found at %s", _toyboxPath.c_str());
   return Ok(); // Not a fatal error
 }
 

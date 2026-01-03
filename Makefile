@@ -185,9 +185,9 @@ clean: ## Clean all build directories
 _android-wgpu:
 	@cd $(CURDIR) && bash build-tools/android/build-wgpu.sh
 
-.PHONY: _android-busybox
-_android-busybox:
-	@nix develop .#android --command bash build-tools/android/build-busybox.sh
+.PHONY: _android-toybox
+_android-toybox:
+	@bash build-tools/android/download-toybox.sh
 
 .PHONY: _android-assets
 _android-assets:
@@ -195,7 +195,7 @@ _android-assets:
 	@cp -f assets/*.ttf assets/*.png assets/*.json $(BUILD_DIR_ANDROID_DEBUG)/assets/ 2>/dev/null || true
 
 .PHONY: _android-deps
-_android-deps: _android-wgpu _android-busybox _android-assets
+_android-deps: _android-wgpu _android-toybox _android-assets
 
 #=============================================================================
 # Help
