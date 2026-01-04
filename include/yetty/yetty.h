@@ -117,6 +117,7 @@ public:
 #if !YETTY_WEB
     std::shared_ptr<Terminal> terminal() const noexcept { return _terminal; }
     std::shared_ptr<PluginManager> pluginManager() const noexcept { return _pluginManager; }
+    std::shared_ptr<ShaderManager> shaderManager() const noexcept { return _shaderManager; }
 #endif
 
     // Window info

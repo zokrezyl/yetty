@@ -38,8 +38,11 @@ public:
     Result<void> init(const std::string& payload) override;
     Result<void> dispose() override;
 
-    // Renderable interface - uses RenderContext from base class
+    // Legacy render (creates own encoder - slow)
     Result<void> render(WebGPUContext& ctx) override;
+
+    // Batched render (draws into existing pass - fast!)
+    bool renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
 private:
     Result<void> loadImage(const std::string& data);
@@ -59,6 +62,9 @@ private:
 
     bool _gpu_initialized = false;
     bool _failed = false;
+
+    // Cached rect for dirty optimization (skip uniform write if unchanged)
+    float _last_rect[4] = {0, 0, 0, 0};
 };
 
 using Image = ImagePlugin;

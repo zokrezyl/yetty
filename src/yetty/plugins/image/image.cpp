@@ -102,6 +102,7 @@ Result<void> ImageLayer::dispose() {
 }
 
 Result<void> ImageLayer::render(WebGPUContext& ctx) {
+    // Legacy path - avoid using this, prefer renderToPass for batching
     if (_failed) return Err<void>("ImageLayer already failed");
     if (!_visible) return Ok();
     if (!_image_data) return Err<void>("ImageLayer has no image data");
@@ -147,13 +148,24 @@ Result<void> ImageLayer::render(WebGPUContext& ctx) {
     float ndcW = (pixelW / rc.screenWidth) * 2.0f;
     float ndcH = (pixelH / rc.screenHeight) * 2.0f;
 
-    struct Uniforms { float rect[4]; } uniforms;
-    uniforms.rect[0] = ndcX;
-    uniforms.rect[1] = ndcY;
-    uniforms.rect[2] = ndcW;
-    uniforms.rect[3] = ndcH;
-
-    wgpuQueueWriteBuffer(ctx.getQueue(), _uniform_buffer, 0, &uniforms, sizeof(uniforms));
+    // Only update uniform buffer if rect changed (quiet plugin optimization)
+    // Note: We still draw every frame (swapchain cleared), but skip uniform write if unchanged.
+    // This also handles scroll offset changes since we compare the final NDC rect.
+    bool rectChanged = (ndcX != _last_rect[0] || ndcY != _last_rect[1] ||
+                        ndcW != _last_rect[2] || ndcH != _last_rect[3]);
+    if (rectChanged) {
+        struct Uniforms { float rect[4]; } uniforms;
+        uniforms.rect[0] = ndcX;
+        uniforms.rect[1] = ndcY;
+        uniforms.rect[2] = ndcW;
+        uniforms.rect[3] = ndcH;
+        wgpuQueueWriteBuffer(ctx.getQueue(), _uniform_buffer, 0, &uniforms, sizeof(uniforms));
+        _last_rect[0] = ndcX;
+        _last_rect[1] = ndcY;
+        _last_rect[2] = ndcW;
+        _last_rect[3] = ndcH;
+        clearDirty();
+    }
 
     WGPUCommandEncoderDescriptor encoderDesc = {};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encoderDesc);
@@ -191,6 +203,74 @@ Result<void> ImageLayer::render(WebGPUContext& ctx) {
     wgpuCommandBufferRelease(cmdBuffer);
     wgpuCommandEncoderRelease(encoder);
     return Ok();
+}
+
+bool ImageLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+    if (_failed || !_visible || !_image_data) return false;
+
+    const auto& rc = _render_context;
+
+    // Initialize GPU resources on first use
+    if (!_gpu_initialized) {
+        auto result = createPipeline(ctx, rc.targetFormat);
+        if (!result) {
+            _failed = true;
+            return false;
+        }
+        _gpu_initialized = true;
+    }
+
+    if (!_pipeline || !_uniform_buffer || !_bind_group) {
+        _failed = true;
+        return false;
+    }
+
+    // Calculate pixel position from cell position
+    float pixelX = _x * rc.cellWidth;
+    float pixelY = _y * rc.cellHeight;
+    float pixelW = _width_cells * rc.cellWidth;
+    float pixelH = _height_cells * rc.cellHeight;
+
+    // Adjust for scroll offset
+    if (_position_mode == PositionMode::Relative && rc.scrollOffset > 0) {
+        pixelY += rc.scrollOffset * rc.cellHeight;
+    }
+
+    // Skip if off-screen
+    if (rc.termRows > 0) {
+        float screenPixelHeight = rc.termRows * rc.cellHeight;
+        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
+            return false;  // Off-screen, nothing to draw
+        }
+    }
+
+    float ndcX = (pixelX / rc.screenWidth) * 2.0f - 1.0f;
+    float ndcY = 1.0f - (pixelY / rc.screenHeight) * 2.0f;
+    float ndcW = (pixelW / rc.screenWidth) * 2.0f;
+    float ndcH = (pixelH / rc.screenHeight) * 2.0f;
+
+    // Only update uniform buffer if rect changed
+    bool rectChanged = (ndcX != _last_rect[0] || ndcY != _last_rect[1] ||
+                        ndcW != _last_rect[2] || ndcH != _last_rect[3]);
+    if (rectChanged) {
+        struct Uniforms { float rect[4]; } uniforms;
+        uniforms.rect[0] = ndcX;
+        uniforms.rect[1] = ndcY;
+        uniforms.rect[2] = ndcW;
+        uniforms.rect[3] = ndcH;
+        wgpuQueueWriteBuffer(ctx.getQueue(), _uniform_buffer, 0, &uniforms, sizeof(uniforms));
+        _last_rect[0] = ndcX;
+        _last_rect[1] = ndcY;
+        _last_rect[2] = ndcW;
+        _last_rect[3] = ndcH;
+    }
+
+    // Just draw - no encoder creation, no pass creation, no submit!
+    wgpuRenderPassEncoderSetPipeline(pass, _pipeline);
+    wgpuRenderPassEncoderSetBindGroup(pass, 0, _bind_group, 0, nullptr);
+    wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
+
+    return true;
 }
 
 Result<void> ImageLayer::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat) {

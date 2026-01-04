@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <filesystem>
+#include <chrono>
 
 namespace yetty {
 
@@ -29,6 +30,16 @@ Result<void> ShaderManager::init(WGPUDevice device, const std::string& shaderPat
         return Err<void>("ShaderManager: failed to create quad vertex shader", res);
     }
 
+    // Create global uniform buffer for time, mouse, screen
+    if (auto res = createGlobalUniformBuffer(); !res) {
+        return Err<void>("ShaderManager: failed to create global uniform buffer", res);
+    }
+
+    // Record app start time
+    auto now = std::chrono::steady_clock::now();
+    _appStartTime = std::chrono::duration<double>(now.time_since_epoch()).count();
+    _lastFrameTime = _appStartTime;
+
     spdlog::info("ShaderManager: initialized with path {}", _shaderPath);
     return Ok();
 }
@@ -46,7 +57,95 @@ void ShaderManager::dispose() {
         _quadVertexShader = nullptr;
     }
 
+    // Release global uniforms
+    if (_globalBindGroup) {
+        wgpuBindGroupRelease(_globalBindGroup);
+        _globalBindGroup = nullptr;
+    }
+    if (_globalBindGroupLayout) {
+        wgpuBindGroupLayoutRelease(_globalBindGroupLayout);
+        _globalBindGroupLayout = nullptr;
+    }
+    if (_globalUniformBuffer) {
+        wgpuBufferRelease(_globalUniformBuffer);
+        _globalUniformBuffer = nullptr;
+    }
+
     _device = nullptr;
+}
+
+Result<void> ShaderManager::createGlobalUniformBuffer() {
+    // Create uniform buffer
+    WGPUBufferDescriptor bufDesc = {};
+    bufDesc.size = sizeof(GlobalUniforms);
+    bufDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+    _globalUniformBuffer = wgpuDeviceCreateBuffer(_device, &bufDesc);
+    if (!_globalUniformBuffer) {
+        return Err<void>("Failed to create global uniform buffer");
+    }
+
+    // Create bind group layout
+    WGPUBindGroupLayoutEntry entry = {};
+    entry.binding = 0;
+    entry.visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+    entry.buffer.type = WGPUBufferBindingType_Uniform;
+
+    WGPUBindGroupLayoutDescriptor bglDesc = {};
+    bglDesc.entryCount = 1;
+    bglDesc.entries = &entry;
+    _globalBindGroupLayout = wgpuDeviceCreateBindGroupLayout(_device, &bglDesc);
+    if (!_globalBindGroupLayout) {
+        return Err<void>("Failed to create global bind group layout");
+    }
+
+    // Create bind group
+    WGPUBindGroupEntry bgEntry = {};
+    bgEntry.binding = 0;
+    bgEntry.buffer = _globalUniformBuffer;
+    bgEntry.size = sizeof(GlobalUniforms);
+
+    WGPUBindGroupDescriptor bgDesc = {};
+    bgDesc.layout = _globalBindGroupLayout;
+    bgDesc.entryCount = 1;
+    bgDesc.entries = &bgEntry;
+    _globalBindGroup = wgpuDeviceCreateBindGroup(_device, &bgDesc);
+    if (!_globalBindGroup) {
+        return Err<void>("Failed to create global bind group");
+    }
+
+    spdlog::debug("ShaderManager: global uniform buffer created (size={})", sizeof(GlobalUniforms));
+    return Ok();
+}
+
+void ShaderManager::updateGlobalUniforms(WGPUQueue queue,
+                                          float deltaTime,
+                                          float mouseX, float mouseY,
+                                          float mouseClickX, float mouseClickY,
+                                          uint32_t screenWidth, uint32_t screenHeight) {
+    // Update frame counter
+    _frameCount++;
+
+    // Calculate time since app start
+    auto now = std::chrono::steady_clock::now();
+    double currentTime = std::chrono::duration<double>(now.time_since_epoch()).count();
+    float timeSinceStart = static_cast<float>(currentTime - _appStartTime);
+
+    // Update global uniforms struct
+    _globalUniforms.iTime = timeSinceStart;
+    _globalUniforms.iTimeRelative = timeSinceStart;
+    _globalUniforms.iTimeDelta = deltaTime;
+    _globalUniforms.iFrame = _frameCount;
+    _globalUniforms.iMouse[0] = mouseX;
+    _globalUniforms.iMouse[1] = mouseY;
+    _globalUniforms.iMouse[2] = mouseClickX;
+    _globalUniforms.iMouse[3] = mouseClickY;
+    _globalUniforms.iScreenResolution[0] = static_cast<float>(screenWidth);
+    _globalUniforms.iScreenResolution[1] = static_cast<float>(screenHeight);
+
+    // Upload to GPU
+    wgpuQueueWriteBuffer(queue, _globalUniformBuffer, 0, &_globalUniforms, sizeof(GlobalUniforms));
+
+    _lastFrameTime = currentTime;
 }
 
 Result<void> ShaderManager::createQuadVertexShader() {

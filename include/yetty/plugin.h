@@ -72,7 +72,13 @@ public:
     void start() override { _running.store(true); }
     void stop() override { _running.store(false); }
     bool isRunning() const override { return _running.load(); }
+
+    // Legacy render - creates own command encoder (slow, avoid!)
     Result<void> render(WebGPUContext& ctx) override = 0;
+
+    // Batched render - draws into existing render pass (fast!)
+    // Returns true if drew something, false if skipped (off-screen, etc.)
+    virtual bool renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) = 0;
 
     // Initialize this layer with its payload
     virtual Result<void> init(const std::string& payload) = 0;
@@ -119,15 +125,40 @@ public:
 
     int32_t getX() const { return _x; }
     int32_t getY() const { return _y; }
-    void setPosition(int32_t x, int32_t y) { _x = x; _y = y; }
+    void setPosition(int32_t x, int32_t y) {
+        if (_x != x || _y != y) {
+            _x = x;
+            _y = y;
+            _dirty = true;  // Mark dirty when position changes
+        }
+    }
+
+    // Dirty flag for "quiet plugins" optimization
+    // Quiet plugins (e.g., static images) only re-render when dirty
+    // Animated plugins (e.g., shaders) should mark dirty every frame
+    bool isDirty() const { return _dirty; }
+    void setDirty(bool d = true) { _dirty = d; }
+    void clearDirty() { _dirty = false; }
 
     uint32_t getWidthCells() const { return _width_cells; }
     uint32_t getHeightCells() const { return _height_cells; }
-    void setCellSize(uint32_t w, uint32_t h) { _width_cells = w; _height_cells = h; }
+    void setCellSize(uint32_t w, uint32_t h) {
+        if (_width_cells != w || _height_cells != h) {
+            _width_cells = w;
+            _height_cells = h;
+            _dirty = true;
+        }
+    }
 
     uint32_t getPixelWidth() const { return _pixel_width; }
     uint32_t getPixelHeight() const { return _pixel_height; }
-    void setPixelSize(uint32_t w, uint32_t h) { _pixel_width = w; _pixel_height = h; }
+    void setPixelSize(uint32_t w, uint32_t h) {
+        if (_pixel_width != w || _pixel_height != h) {
+            _pixel_width = w;
+            _pixel_height = h;
+            _dirty = true;
+        }
+    }
 
     bool isVisible() const { return _visible; }
     void setVisible(bool v) { _visible = v; }
@@ -157,6 +188,7 @@ protected:
     uint32_t _pixel_height = 0;
     bool _visible = true;
     bool _has_focus = false;
+    bool _dirty = true;  // Start dirty (needs initial render)
     std::string _payload;
     RenderContext _render_context;
 };

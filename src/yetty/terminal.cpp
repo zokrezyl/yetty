@@ -162,12 +162,16 @@ Result<void> Terminal::render(WebGPUContext& ctx) {
         return Ok();
     }
 
-    // No damage = nothing to render
-    if (!hasDamage()) {
+    // Check if plugins need rendering - if so, we must always render to provide
+    // a defined base (swapchain texture is undefined each frame)
+    bool pluginsActive = pluginManager_ && !pluginManager_->getAllLayers().empty();
+
+    // Skip rendering if no damage AND no plugins need base
+    if (!hasDamage() && !pluginsActive) {
         return Ok();
     }
 
-    // Render the grid with damage tracking
+    // Render the grid - GridRenderer handles the clear and draw
     renderer_->render(grid_, damageRects_, fullDamage_,
                       cursorCol_, cursorRow_,
                       cursorVisible_ && cursorBlink_);

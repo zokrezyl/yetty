@@ -837,6 +837,28 @@ void Yetty::mainLoopIteration() noexcept {
 
 #endif
 
+  // Update global uniforms (time, mouse, screen) once per frame
+  if (_shaderManager) {
+    double now = glfwGetTime();
+    float deltaTime = static_cast<float>(now - _lastRenderTime);
+    _lastRenderTime = now;
+
+    // Get mouse position (normalized 0-1)
+    double mouseX = 0, mouseY = 0;
+    glfwGetCursorPos(_window, &mouseX, &mouseY);
+    float normMouseX = static_cast<float>(mouseX) / windowWidth();
+    float normMouseY = static_cast<float>(mouseY) / windowHeight();
+
+    // TODO: track mouse click position separately
+    float clickX = normMouseX;
+    float clickY = normMouseY;
+
+    _shaderManager->updateGlobalUniforms(_ctx->getQueue(), deltaTime,
+                                          normMouseX, normMouseY,
+                                          clickX, clickY,
+                                          windowWidth(), windowHeight());
+  }
+
   // Collect and execute render commands from all renderables
   // Each renderable returns nullptr if no damage (skip frame efficiently)
   renderAll();

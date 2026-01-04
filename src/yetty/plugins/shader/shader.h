@@ -39,8 +39,11 @@ public:
     Result<void> init(const std::string& payload) override;
     Result<void> dispose() override;
 
-    // Renderable interface - uses RenderContext from base class
+    // Legacy render (creates own encoder - slow)
     Result<void> render(WebGPUContext& ctx) override;
+
+    // Batched render (draws into existing pass - fast!)
+    bool renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
     // Input handling
     bool onMouseMove(float localX, float localY) override;
@@ -60,10 +63,9 @@ private:
 
     // WebGPU resources
     WGPURenderPipeline _pipeline = nullptr;
-    WGPUBindGroup _bind_group = nullptr;
+    WGPUBindGroup _bind_group = nullptr;        // Per-plugin uniforms (group 1)
     WGPUBuffer _uniform_buffer = nullptr;
-
-    float _time = 0.0f;
+    WGPUBindGroupLayout _bindGroupLayout = nullptr;  // For per-plugin uniforms
     bool _compiled = false;
     bool _failed = false;
 

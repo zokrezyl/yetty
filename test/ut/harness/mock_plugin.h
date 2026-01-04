@@ -38,6 +38,13 @@ public:
         return Ok();
     }
 
+    bool renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) override {
+        (void)pass;
+        (void)ctx;
+        _render_count++;
+        return true;
+    }
+
     bool onMouseMove(float localX, float localY) override {
         _last_mouse_x = localX;
         _last_mouse_y = localY;

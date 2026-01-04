@@ -369,7 +369,6 @@ bool PluginManager::handleOSCSequence(const std::string& sequence,
         std::string encodedPayload = (payloadStart != std::string::npos)
             ? sequence.substr(payloadStart) : "";
         std::string payload = base94Decode(encodedPayload);
-        spdlog::debug("handleOSC: decoded payload:\n{}", payload);
 
         if (posMode == PositionMode::Relative) {
             x += cursorCol;
@@ -419,61 +418,63 @@ Result<void> PluginManager::render(WebGPUContext& ctx, WGPUTextureView targetVie
         frameRendererInitialized_ = true;
     }
 
-    // Render debug frames first, then plugins on top
+    // DEBUG: Skip frame rendering - causes separate GPU submits per layer
+    // TODO: Batch frame rendering or make it configurable
+    constexpr bool RENDER_DEBUG_FRAMES = false;
+
     constexpr float framePadding = 2.0f;  // Pixels larger than layer bounds
+
+    ScreenType currentScreen = isAltScreen_ ? ScreenType::Alternate : ScreenType::Main;
 
     for (auto& [name, plugin] : plugins_) {
         // Plugin is already initialized by create()
 
-        // Render debug frame for each layer
-        ScreenType currentScreen = isAltScreen_ ? ScreenType::Alternate : ScreenType::Main;
-        for (auto& layer : plugin->getLayers()) {
-            if (!layer->isVisible()) continue;
+        // Render debug frame for each layer (disabled by default - expensive!)
+        if (RENDER_DEBUG_FRAMES) {
+            for (auto& layer : plugin->getLayers()) {
+                if (!layer->isVisible()) continue;
 
-            // Skip layers that belong to a different screen
-            if (layer->getScreenType() != currentScreen) continue;
+                // Skip layers that belong to a different screen
+                if (layer->getScreenType() != currentScreen) continue;
 
-            float pixelX = layer->getX() * cellWidth;
-            float pixelY = layer->getY() * cellHeight;
-            float pixelW = layer->getWidthCells() * cellWidth;
-            float pixelH = layer->getHeightCells() * cellHeight;
+                float pixelX = layer->getX() * cellWidth;
+                float pixelY = layer->getY() * cellHeight;
+                float pixelW = layer->getWidthCells() * cellWidth;
+                float pixelH = layer->getHeightCells() * cellHeight;
 
-            // Adjust for scroll offset
-            if (layer->getPositionMode() == PositionMode::Relative && scrollOffset > 0) {
-                pixelY += scrollOffset * cellHeight;
-            }
-
-            // Skip if off-screen
-            if (termRows > 0) {
-                float screenPixelHeight = termRows * cellHeight;
-                if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-                    continue;
+                // Adjust for scroll offset
+                if (layer->getPositionMode() == PositionMode::Relative && scrollOffset > 0) {
+                    pixelY += scrollOffset * cellHeight;
                 }
-            }
 
-            // Determine frame color based on state
-            float r, g, b, a;
-            if (layer == focusedLayer_) {
-                r = 0.0f; g = 1.0f; b = 0.0f; a = 1.0f;  // Green for focused
-            } else if (layer == hoveredLayer_) {
-                r = 1.0f; g = 1.0f; b = 0.0f; a = 1.0f;  // Yellow for hovered
-            } else {
-                r = 0.3f; g = 0.5f; b = 0.7f; a = 0.8f;  // Dim cyan for default
-            }
+                // Skip if off-screen
+                if (termRows > 0) {
+                    float screenPixelHeight = termRows * cellHeight;
+                    if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
+                        continue;
+                    }
+                }
 
-            // Render frame slightly larger than layer
-            renderFrame(ctx, targetView, screenWidth, screenHeight,
-                        pixelX - framePadding, pixelY - framePadding,
-                        pixelW + framePadding * 2, pixelH + framePadding * 2,
-                        r, g, b, a);
+                // Determine frame color based on state
+                float r, g, b, a;
+                if (layer == focusedLayer_) {
+                    r = 0.0f; g = 1.0f; b = 0.0f; a = 1.0f;  // Green for focused
+                } else if (layer == hoveredLayer_) {
+                    r = 1.0f; g = 1.0f; b = 0.0f; a = 1.0f;  // Yellow for hovered
+                } else {
+                    r = 0.3f; g = 0.5f; b = 0.7f; a = 0.8f;  // Dim cyan for default
+                }
+
+                // Render frame slightly larger than layer
+                renderFrame(ctx, targetView, screenWidth, screenHeight,
+                            pixelX - framePadding, pixelY - framePadding,
+                            pixelW + framePadding * 2, pixelH + framePadding * 2,
+                            r, g, b, a);
+            }
         }
 
-        // Render plugin content - each layer renders itself
+        // Set RenderContext for each layer (needed for position calculations)
         for (auto& layer : plugin->getLayers()) {
-            if (!layer->isVisible()) continue;
-            if (layer->getScreenType() != currentScreen) continue;
-
-            // Set RenderContext for the layer
             RenderContext rc;
             rc.targetView = targetView;
             rc.targetFormat = ctx.getSurfaceFormat();
@@ -486,10 +487,56 @@ Result<void> PluginManager::render(WebGPUContext& ctx, WGPUTextureView targetVie
             rc.isAltScreen = isAltScreen_;
             rc.deltaTime = 0.016;  // ~60fps default
             layer->setRenderContext(rc);
-
-            layer->render(ctx);
         }
     }
+
+    // Create ONE command encoder for ALL plugins
+    WGPUCommandEncoderDescriptor encoderDesc = {};
+    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encoderDesc);
+    if (!encoder) {
+        return Err<void>("PluginManager: Failed to create command encoder");
+    }
+
+    // Begin ONE render pass for ALL plugins
+    WGPURenderPassColorAttachment colorAttachment = {};
+    colorAttachment.view = targetView;
+    colorAttachment.loadOp = WGPULoadOp_Load;  // Preserve terminal content
+    colorAttachment.storeOp = WGPUStoreOp_Store;
+    colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+
+    WGPURenderPassDescriptor passDesc = {};
+    passDesc.colorAttachmentCount = 1;
+    passDesc.colorAttachments = &colorAttachment;
+
+    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
+    if (!pass) {
+        wgpuCommandEncoderRelease(encoder);
+        return Err<void>("PluginManager: Failed to begin render pass");
+    }
+
+    // Render ALL plugin layers in this single pass
+    for (auto& [name, plugin] : plugins_) {
+        for (auto& layer : plugin->getLayers()) {
+            if (!layer->isVisible()) continue;
+            if (layer->getScreenType() != currentScreen) continue;
+
+            // Use batched renderToPass - just draws, no encoder/submit overhead!
+            layer->renderToPass(pass, ctx);
+        }
+    }
+
+    // End pass and submit ONCE
+    wgpuRenderPassEncoderEnd(pass);
+    wgpuRenderPassEncoderRelease(pass);
+
+    WGPUCommandBufferDescriptor cmdDesc = {};
+    WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdDesc);
+    if (cmdBuffer) {
+        wgpuQueueSubmit(ctx.getQueue(), 1, &cmdBuffer);
+        wgpuCommandBufferRelease(cmdBuffer);
+    }
+    wgpuCommandEncoderRelease(encoder);
+
     return Ok();
 }
 

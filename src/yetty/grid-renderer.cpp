@@ -1033,9 +1033,9 @@ void GridRenderer::render(const Grid &grid,
     // Also need full update for new glyphs
     updateCellTextures(queue, grid);
   }
-  // PERF: Force full upload - partial updates slower due to GPU call overhead
-  // TODO: revisit damage tracking optimization
-  fullDamage = true;
+  // NOTE: We don't force fullDamage anymore. When there's no damage,
+  // cell textures already have correct data from previous frame.
+  // We still clear screen and draw to provide defined base for plugins.
 
   if (fullDamage) {
     // Full damage - update entire texture
