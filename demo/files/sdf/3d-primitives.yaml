@@ -1,0 +1,45 @@
+# YDraw 3D Primitives Demo
+# GPU-accelerated 3D SDF rendering with raymarching
+# Based on Inigo Quilez (iquilezles.org/articles/distfunctions)
+
+- body:
+    # Sphere - the simplest 3D primitive
+    - sphere:
+        position: [-0.8, 0.3, 0]
+        radius: 0.25
+        fill: "#e74c3c"
+
+    # Box - axis-aligned bounding box
+    - box3d:
+        position: [0, 0.3, 0]
+        size: [0.2, 0.2, 0.2]
+        fill: "#3498db"
+
+    # Torus - donut shape
+    - torus:
+        position: [0.8, 0.3, 0]
+        major-radius: 0.2
+        minor-radius: 0.08
+        fill: "#2ecc71"
+
+    # Cylinder
+    - cylinder:
+        position: [-0.8, -0.3, 0]
+        radius: 0.15
+        height: 0.3
+        fill: "#9b59b6"
+
+    # Capsule - cylinder with hemispherical caps
+    - capsule:
+        position: [0, -0.3, 0]
+        radius: 0.1
+        height: 0.3
+        fill: "#f39c12"
+
+    # Cone
+    - cone:
+        position: [0.8, -0.3, 0]
+        radius1: 0.2
+        radius2: 0.05
+        height: 0.35
+        fill: "#1abc9c"

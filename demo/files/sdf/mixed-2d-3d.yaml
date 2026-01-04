@@ -1,0 +1,70 @@
+# YDraw Mixed 2D and 3D Demo
+# Combines 2D SDF primitives with 3D raymarched shapes
+
+- widget:
+    name: badge
+    args: [x, y, color]
+    body:
+      - sdCircle:
+          position: [$x, $y]
+          radius: 20
+          fill: $color
+          stroke: "#ffffff"
+          stroke-width: 2
+
+- body:
+    # 3D scene in the center (uses normalized coordinates)
+    - sphere:
+        position: [0, 0, 0]
+        radius: 0.3
+        fill: "#e74c3c"
+
+    - torus:
+        position: [0, 0, 0.5]
+        major-radius: 0.5
+        minor-radius: 0.1
+        fill: "#3498db"
+
+    # 2D overlays (uses pixel coordinates)
+    # Title badges
+    - badge:
+        x: 40
+        y: 30
+        color: "#e74c3c"
+
+    - badge:
+        x: 80
+        y: 30
+        color: "#3498db"
+
+    - badge:
+        x: 120
+        y: 30
+        color: "#2ecc71"
+
+    # Decorative 2D elements
+    - sdSegment:
+        from: [20, 60]
+        to: [180, 60]
+        stroke: "#7f8c8d"
+        stroke-width: 2
+
+    - sdBezier:
+        p0: [20, 350]
+        p1: [100, 300]
+        p2: [180, 350]
+        stroke: "#9b59b6"
+        stroke-width: 3
+
+    # Corner accents
+    - sdBox:
+        position: [30, 330]
+        size: [15, 15]
+        fill: "#f39c12"
+        rotate: 45
+
+    - sdBox:
+        position: [170, 330]
+        size: [15, 15]
+        fill: "#1abc9c"
+        rotate: 45

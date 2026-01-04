@@ -1,0 +1,58 @@
+# YDraw 3D Showcase
+# Advanced 3D SDF primitives with raymarching
+# Based on Inigo Quilez (iquilezles.org/articles/distfunctions)
+
+- body:
+    # Row 1: Basic shapes
+    - sphere:
+        position: [-0.6, 0.5, 0]
+        radius: 0.18
+        fill: "#e74c3c"
+
+    - box3d:
+        position: [0, 0.5, 0]
+        size: [0.15, 0.15, 0.15]
+        fill: "#3498db"
+
+    - torus:
+        position: [0.6, 0.5, 0]
+        major-radius: 0.15
+        minor-radius: 0.05
+        fill: "#2ecc71"
+
+    # Row 2: Cylinders and capsules
+    - cylinder:
+        position: [-0.6, 0, 0]
+        radius: 0.12
+        height: 0.2
+        fill: "#9b59b6"
+
+    - capsule:
+        position: [0, 0, 0]
+        radius: 0.08
+        height: 0.25
+        fill: "#f39c12"
+
+    - cone:
+        position: [0.6, 0, 0]
+        radius1: 0.15
+        radius2: 0.0
+        height: 0.25
+        fill: "#1abc9c"
+
+    # Row 3: Advanced shapes
+    - octahedron:
+        position: [-0.6, -0.5, 0]
+        size: 0.2
+        fill: "#e67e22"
+
+    - pyramid:
+        position: [0, -0.5, 0]
+        height: 0.3
+        fill: "#8e44ad"
+
+    # Another sphere with different color
+    - sphere:
+        position: [0.6, -0.5, 0]
+        radius: 0.15
+        fill: "#16a085"
