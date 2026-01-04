@@ -389,7 +389,6 @@ elseif(NOT EMSCRIPTEN)
         src/yetty/custom-glyph-plugin.cpp
         src/yetty/shader-manager.cpp
         src/yetty/shader-glyph-renderer.cpp
-        src/yetty/cursor-renderer.cpp
     )
 else()
     # Web uses main.cpp with Emscripten GLFW
