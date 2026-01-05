@@ -420,6 +420,12 @@ Result<void> ThorvgLayer::renderThorvgFrame(WGPUDevice device) {
     spdlog::info("ThorvgLayer::renderThorvgFrame: rendering frame {}, animated={}", 
                  _current_frame, _is_animated);
 
+    // Get picture size and log it
+    float pw = 0, ph = 0;
+    _picture->size(&pw, &ph);
+    spdlog::info("ThorvgLayer::renderThorvgFrame: picture size = {}x{}, canvas target = {}x{}", 
+                 pw, ph, _content_width, _content_height);
+
     // Update animation frame if animated
     if (_is_animated && _animation) {
         auto frameResult = _animation->frame(_current_frame);
@@ -450,32 +456,7 @@ Result<void> ThorvgLayer::renderThorvgFrame(WGPUDevice device) {
     
     _content_dirty = false;
     
-    // Recreate texture view to ensure fresh GPU state after ThorVG render
-    if (_render_texture_view) {
-        wgpuTextureViewRelease(_render_texture_view);
-    }
-    WGPUTextureViewDescriptor viewDesc = {};
-    viewDesc.format = WGPUTextureFormat_BGRA8Unorm;
-    viewDesc.dimension = WGPUTextureViewDimension_2D;
-    viewDesc.mipLevelCount = 1;
-    viewDesc.arrayLayerCount = 1;
-    _render_texture_view = wgpuTextureCreateView(_render_texture, &viewDesc);
-    
-    // Recreate bind group with fresh texture view
-    if (_bind_group) {
-        wgpuBindGroupRelease(_bind_group);
-    }
-    WGPUBindGroupEntry bgE[3] = {};
-    bgE[0].binding = 0; bgE[0].buffer = _uniform_buffer; bgE[0].size = 16;
-    bgE[1].binding = 1; bgE[1].sampler = _sampler;
-    bgE[2].binding = 2; bgE[2].textureView = _render_texture_view;
-    WGPUBindGroupDescriptor bgDesc = {};
-    bgDesc.layout = wgpuRenderPipelineGetBindGroupLayout(_composite_pipeline, 0);
-    bgDesc.entryCount = 3;
-    bgDesc.entries = bgE;
-    _bind_group = wgpuDeviceCreateBindGroup(device, &bgDesc);
-    
-    spdlog::info("ThorvgLayer::renderThorvgFrame: completed successfully, recreated view/bindgroup");
+    spdlog::info("ThorvgLayer::renderThorvgFrame: completed successfully, frame={}", _current_frame);
     return Ok();
 }
 
@@ -726,11 +707,12 @@ Result<void> ThorvgLayer::render(WebGPUContext& ctx) {
         _accumulated_time += dt;
         
         float fps = _total_frames / _duration;
-        float targetFrame = static_cast<float>(_accumulated_time * fps);
+        float speedMultiplier = 0.25f;  // 0.25x speed = 4x slower for observation (2s becomes 8s)
+        float targetFrame = static_cast<float>(_accumulated_time * fps * speedMultiplier);
         
         if (targetFrame >= _total_frames) {
             if (_loop) {
-                _accumulated_time = std::fmod(_accumulated_time, static_cast<double>(_duration));
+                _accumulated_time = std::fmod(_accumulated_time, static_cast<double>(_duration / speedMultiplier));
                 targetFrame = std::fmod(targetFrame, _total_frames);
             } else {
                 targetFrame = _total_frames - 1;
