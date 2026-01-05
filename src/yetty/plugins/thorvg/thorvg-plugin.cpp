@@ -53,11 +53,14 @@ Result<void> ThorvgPlugin::dispose() {
 }
 
 Result<PluginLayerPtr> ThorvgPlugin::createLayer(const std::string& payload) {
+    spdlog::info("ThorvgPlugin::createLayer called with payload size={}", payload.size());
     auto layer = std::make_shared<ThorvgLayer>();
     auto result = layer->init(payload);
     if (!result) {
+        spdlog::error("ThorvgPlugin::createLayer: init failed: {}", result.error().message());
         return Err<PluginLayerPtr>("Failed to init ThorvgLayer", result);
     }
+    spdlog::info("ThorvgPlugin::createLayer: layer created successfully");
     return Ok<PluginLayerPtr>(layer);
 }
 
@@ -79,10 +82,13 @@ Result<void> ThorvgLayer::init(const std::string& payload) {
     std::string content = payload;
     std::string mimeType;
     
+    spdlog::info("ThorvgLayer::init: payload size={}", payload.size());
+    
     // Check for type prefix (format: "type\n<content>")
     size_t newlinePos = payload.find('\n');
     if (newlinePos != std::string::npos && newlinePos < 20) {
         std::string prefix = payload.substr(0, newlinePos);
+        spdlog::info("ThorvgLayer::init: detected prefix='{}' at pos {}", prefix, newlinePos);
         if (prefix == "svg" || prefix == "lottie" || prefix == "yaml") {
             mimeType = prefix;
             content = payload.substr(newlinePos + 1);
@@ -98,7 +104,10 @@ Result<void> ThorvgLayer::init(const std::string& payload) {
                    (content.find("<?xml") != std::string::npos && content.find("<svg") != std::string::npos)) {
             mimeType = "svg";
         }
+        spdlog::info("ThorvgLayer::init: auto-detected mimeType='{}'", mimeType);
     }
+    
+    spdlog::info("ThorvgLayer::init: mimeType='{}', content size={}", mimeType, content.size());
     
     // Handle YAML vector graphics by converting to SVG
     if (mimeType == "yaml") {
@@ -108,10 +117,12 @@ Result<void> ThorvgLayer::init(const std::string& payload) {
         }
         content = *result;
         mimeType = "svg";
+        spdlog::info("ThorvgLayer::init: converted YAML to SVG, size={}", content.size());
     }
 
     auto result = loadContent(content, mimeType);
     if (!result) {
+        spdlog::error("ThorvgLayer::init: loadContent failed: {}", result.error().message());
         return result;
     }
 
@@ -124,6 +135,8 @@ Result<void> ThorvgLayer::loadContent(const std::string& data, const std::string
     // WgCanvas will be created when WebGPU context is available (in initWebGPU)
     // For now, just parse content to get dimensions and animation info
     
+    spdlog::info("ThorvgLayer::loadContent: mimeType='{}', data size={}", mimeType, data.size());
+    
     // Default size
     _content_width = 256;
     _content_height = 256;
@@ -132,6 +145,7 @@ Result<void> ThorvgLayer::loadContent(const std::string& data, const std::string
 
     // Check if this is an animation (Lottie)
     if (mimeType == "lottie" || mimeType == "lottie+json" || mimeType == "lot") {
+        spdlog::info("ThorvgLayer::loadContent: loading as Lottie animation");
         _animation.reset(tvg::Animation::gen());
         if (!_animation) {
             return Err<void>("Failed to create ThorVG Animation");
@@ -144,6 +158,7 @@ Result<void> ThorvgLayer::loadContent(const std::string& data, const std::string
 
         auto result = picture->load(data.c_str(), static_cast<uint32_t>(data.size()), 
                                     "lottie", nullptr, true);
+        spdlog::info("ThorvgLayer::loadContent: Lottie load result={}", static_cast<int>(result));
         if (result != tvg::Result::Success) {
             _animation.reset();
             return Err<void>("Failed to load Lottie animation");
@@ -158,7 +173,8 @@ Result<void> ThorvgLayer::loadContent(const std::string& data, const std::string
                      _total_frames, _duration);
     } else {
         // Static picture (SVG, PNG, etc.)
-        // Use Animation wrapper for consistency with WgCanvas
+        // Use Animation wrapper for ownership management (Picture has protected destructor)
+        spdlog::info("ThorvgLayer::loadContent: loading as static content (mimeType='{}')", mimeType);
         _animation.reset(tvg::Animation::gen());
         if (!_animation) {
             return Err<void>("Failed to create ThorVG Animation for static content");
@@ -169,12 +185,17 @@ Result<void> ThorvgLayer::loadContent(const std::string& data, const std::string
             return Err<void>("Failed to get picture from Animation");
         }
 
-        const char* mime = mimeType.empty() ? nullptr : mimeType.c_str();
+        // ThorVG auto-detects format from content when mime is nullptr
+        // For SVG, pass nullptr to let ThorVG detect the format from the XML/SVG content
+        const char* mime = nullptr;  // Let ThorVG auto-detect
+        spdlog::info("ThorvgLayer::loadContent: calling picture->load() with mime=nullptr (auto-detect), data size={}", 
+                     data.size());
         auto result = picture->load(data.c_str(), static_cast<uint32_t>(data.size()), 
                                     mime, nullptr, true);
+        spdlog::info("ThorvgLayer::loadContent: picture->load result={}", static_cast<int>(result));
         if (result != tvg::Result::Success) {
             _animation.reset();
-            return Err<void>("Failed to load static content into ThorVG Picture");
+            return Err<void>("Failed to load static content into ThorVG Picture (result=" + std::to_string(static_cast<int>(result)) + ")");
         }
 
         _is_animated = false;
@@ -288,7 +309,9 @@ struct VertexOutput { @builtin(position) position: vec4<f32>, @location(0) uv: v
     return o;
 }
 @fragment fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-    return textureSample(tex, texSampler, uv);
+    let col = textureSample(tex, texSampler, uv);
+    // DEBUG: Mix texture with magenta to see if quad is drawing
+    return mix(vec4(1.0, 0.0, 1.0, 1.0), col, col.a);
 }
 )";
 
@@ -388,57 +411,44 @@ static void thorvgErrorCallback(WGPUPopErrorScopeStatus status, WGPUErrorType ty
 }
 
 Result<void> ThorvgLayer::renderThorvgFrame(WGPUDevice device) {
-    if (!_canvas || !_picture) return Ok();  // Nothing to render is not an error
+    if (!_canvas || !_picture) {
+        spdlog::warn("ThorvgLayer::renderThorvgFrame: no canvas or picture");
+        return Ok();  // Nothing to render is not an error
+    }
+
+    spdlog::info("ThorvgLayer::renderThorvgFrame: rendering frame {}, animated={}", 
+                 _current_frame, _is_animated);
 
     // Update animation frame if animated
     if (_is_animated && _animation) {
-        _animation->frame(_current_frame);
+        auto frameResult = _animation->frame(_current_frame);
+        spdlog::info("ThorvgLayer::renderThorvgFrame: animation->frame({}) result={}", 
+                     _current_frame, static_cast<int>(frameResult));
     }
-
-    // Push error scope to catch validation errors before they panic
-    wgpuDevicePushErrorScope(device, WGPUErrorFilter_Validation);
     
     // Render using ThorVG's WebGPU canvas
     auto updateResult = _canvas->update();
+    spdlog::info("ThorvgLayer::renderThorvgFrame: canvas->update result={}", static_cast<int>(updateResult));
     if (updateResult != tvg::Result::Success) {
-        // Pop and discard error scope
-        WGPUPopErrorScopeCallbackInfo cbInfo = {};
-        cbInfo.mode = WGPUCallbackMode_AllowSpontaneous;
-        cbInfo.callback = nullptr;
-        wgpuDevicePopErrorScope(device, cbInfo);
-        return Err<void>("ThorVG canvas update failed");
+        return Err<void>("ThorVG canvas update failed (result=" + std::to_string(static_cast<int>(updateResult)) + ")");
     }
     
-    auto drawResult = _canvas->draw();
+    // draw(true) clears the buffer before rendering
+    auto drawResult = _canvas->draw(true);
+    spdlog::info("ThorvgLayer::renderThorvgFrame: canvas->draw result={}", static_cast<int>(drawResult));
     if (drawResult != tvg::Result::Success) {
-        // Pop and discard error scope
-        WGPUPopErrorScopeCallbackInfo cbInfo = {};
-        cbInfo.mode = WGPUCallbackMode_AllowSpontaneous;
-        cbInfo.callback = nullptr;
-        wgpuDevicePopErrorScope(device, cbInfo);
-        return Err<void>("ThorVG canvas draw failed");
+        return Err<void>("ThorVG canvas draw failed (result=" + std::to_string(static_cast<int>(drawResult)) + ")");
     }
     
-    // sync() submits WebGPU commands - this is where validation errors occur
+    // sync() submits WebGPU commands
     auto syncResult = _canvas->sync();
-    
-    // Pop error scope and check for WebGPU errors
-    ThorvgErrorData errorData;
-    WGPUPopErrorScopeCallbackInfo cbInfo = {};
-    cbInfo.mode = WGPUCallbackMode_AllowSpontaneous;
-    cbInfo.callback = thorvgErrorCallback;
-    cbInfo.userdata1 = &errorData;
-    wgpuDevicePopErrorScope(device, cbInfo);
-    
-    if (errorData.hasError) {
-        return Err<void>("ThorVG WebGPU sync error: " + errorData.message);
-    }
-    
+    spdlog::info("ThorvgLayer::renderThorvgFrame: canvas->sync result={}", static_cast<int>(syncResult));
     if (syncResult != tvg::Result::Success) {
-        return Err<void>("ThorVG canvas sync failed");
+        return Err<void>("ThorVG canvas sync failed (result=" + std::to_string(static_cast<int>(syncResult)) + ")");
     }
     
     _content_dirty = false;
+    spdlog::info("ThorvgLayer::renderThorvgFrame: completed successfully");
     return Ok();
 }
 
@@ -684,24 +694,25 @@ Result<void> ThorvgLayer::render(WebGPUContext& ctx) {
     const auto& rc = _render_context;
 
     // Update animation if playing
-    if (_is_animated && _playing && _duration > 0) {
-        _accumulated_time += rc.deltaTime;
-        float fps = _total_frames / _duration;
-        float frameDelta = static_cast<float>(_accumulated_time * fps);
+    if (_is_animated && _playing && _animation && _duration > 0) {
+        double dt = rc.deltaTime > 0 ? rc.deltaTime : 0.016;  // Default to ~60fps
+        _accumulated_time += dt;
         
-        if (frameDelta >= 1.0f) {
-            _current_frame += frameDelta;
-            _accumulated_time = 0.0;
-            
-            if (_current_frame >= _total_frames) {
-                if (_loop) {
-                    _current_frame = std::fmod(_current_frame, _total_frames);
-                } else {
-                    _current_frame = _total_frames - 1;
-                    _playing = false;
-                }
+        float fps = _total_frames / _duration;
+        float targetFrame = static_cast<float>(_accumulated_time * fps);
+        
+        if (targetFrame >= _total_frames) {
+            if (_loop) {
+                _accumulated_time = std::fmod(_accumulated_time, static_cast<double>(_duration));
+                targetFrame = std::fmod(targetFrame, _total_frames);
+            } else {
+                targetFrame = _total_frames - 1;
+                _playing = false;
             }
-            
+        }
+        
+        if (std::abs(targetFrame - _current_frame) >= 0.5f) {
+            _current_frame = targetFrame;
             _content_dirty = true;
         }
     }
@@ -816,61 +827,82 @@ Result<void> ThorvgLayer::render(WebGPUContext& ctx) {
 }
 
 bool ThorvgLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (_failed || !_visible || !_animation) return false;
+    if (_failed) {
+        spdlog::warn("ThorvgLayer::renderToPass: layer already failed");
+        return false;
+    }
+    if (!_visible) {
+        return false;  // Silent skip, normal
+    }
+    if (!_animation) {
+        spdlog::warn("ThorvgLayer::renderToPass: no animation/picture loaded");
+        return false;
+    }
 
     const auto& rc = _render_context;
 
     // Update animation if playing
-    if (_is_animated && _playing && _duration > 0) {
-        _accumulated_time += rc.deltaTime;
-        float fps = _total_frames / _duration;
-        float frameDelta = static_cast<float>(_accumulated_time * fps);
+    if (_is_animated && _playing && _animation && _duration > 0) {
+        double dt = rc.deltaTime > 0 ? rc.deltaTime : 0.016;  // Default to ~60fps
+        _accumulated_time += dt;
         
-        if (frameDelta >= 1.0f) {
-            _current_frame += frameDelta;
-            _accumulated_time = 0.0;
-            
-            if (_current_frame >= _total_frames) {
-                if (_loop) {
-                    _current_frame = std::fmod(_current_frame, _total_frames);
-                } else {
-                    _current_frame = _total_frames - 1;
-                    _playing = false;
-                }
+        float fps = _total_frames / _duration;
+        float targetFrame = static_cast<float>(_accumulated_time * fps);
+        
+        if (targetFrame >= _total_frames) {
+            if (_loop) {
+                _accumulated_time = std::fmod(_accumulated_time, static_cast<double>(_duration));
+                targetFrame = std::fmod(targetFrame, _total_frames);
+            } else {
+                targetFrame = _total_frames - 1;
+                _playing = false;
             }
-            
+        }
+        
+        if (std::abs(targetFrame - _current_frame) >= 0.5f) {
+            _current_frame = targetFrame;
             _content_dirty = true;
         }
     }
 
     // Initialize GPU resources on first use
     if (!_gpu_initialized) {
+        spdlog::info("ThorvgLayer::renderToPass: initializing WebGPU resources");
         auto result = initWebGPU(ctx);
         if (!result) {
+            spdlog::error("ThorvgLayer::renderToPass: initWebGPU failed: {}", result.error().message());
             _failed = true;
             return false;
         }
         
+        spdlog::info("ThorvgLayer::renderToPass: creating composite pipeline, targetFormat={}", 
+                     static_cast<int>(rc.targetFormat));
         result = createCompositePipeline(ctx, rc.targetFormat);
         if (!result) {
+            spdlog::error("ThorvgLayer::renderToPass: createCompositePipeline failed: {}", result.error().message());
             _failed = true;
             return false;
         }
         _gpu_initialized = true;
         _content_dirty = true;
+        spdlog::info("ThorvgLayer::renderToPass: GPU resources initialized");
     }
 
     // Render ThorVG content if dirty (animation frame changed)
     if (_content_dirty) {
+        spdlog::info("ThorvgLayer::renderToPass: rendering ThorVG frame (dirty)");
         auto renderResult = renderThorvgFrame(ctx.getDevice());
         if (!renderResult) {
             spdlog::error("ThorvgLayer::renderToPass: {}", renderResult.error().message());
             _failed = true;
             return false;
         }
+        spdlog::info("ThorvgLayer::renderToPass: ThorVG frame rendered successfully");
     }
 
     if (!_composite_pipeline || !_uniform_buffer || !_bind_group) {
+        spdlog::warn("ThorvgLayer::renderToPass: pipeline/buffer/bindgroup null - pipeline={}, buffer={}, bindgroup={}",
+                     (void*)_composite_pipeline, (void*)_uniform_buffer, (void*)_bind_group);
         _failed = true;
         return false;
     }
@@ -880,16 +912,23 @@ bool ThorvgLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     float pixelY = _y * rc.cellHeight;
     float pixelW = _width_cells * rc.cellWidth;
     float pixelH = _height_cells * rc.cellHeight;
+    
+    spdlog::info("ThorvgLayer::renderToPass: cell pos ({},{}) size ({},{}) cells", _x, _y, _width_cells, _height_cells);
+    spdlog::info("ThorvgLayer::renderToPass: pixel pos ({},{}) size ({},{})", pixelX, pixelY, pixelW, pixelH);
 
     // Adjust for scroll offset
     if (_position_mode == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
+        spdlog::info("ThorvgLayer::renderToPass: adjusted for scroll, new pixelY={}", pixelY);
     }
 
     // Skip if off-screen
     if (rc.termRows > 0) {
         float screenPixelHeight = rc.termRows * rc.cellHeight;
+        spdlog::info("ThorvgLayer::renderToPass: termRows={}, screenPixelHeight={}, pixelY={}, pixelH={}", 
+                     rc.termRows, screenPixelHeight, pixelY, pixelH);
         if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
+            spdlog::info("ThorvgLayer::renderToPass: skipped - off-screen");
             return false;
         }
     }
@@ -916,10 +955,18 @@ bool ThorvgLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     }
 
     // Draw ThorVG rendered content into existing pass
+    spdlog::info("ThorvgLayer::renderToPass: drawing composite - NDC rect ({}, {}, {}, {})", 
+                 ndcX, ndcY, ndcW, ndcH);
+    spdlog::info("ThorvgLayer::renderToPass: pixel position ({}, {}) size ({}, {})",
+                 pixelX, pixelY, pixelW, pixelH);
+    spdlog::info("ThorvgLayer::renderToPass: screen size ({}, {}), cell size ({}, {})",
+                 rc.screenWidth, rc.screenHeight, rc.cellWidth, rc.cellHeight);
+    
     wgpuRenderPassEncoderSetPipeline(pass, _composite_pipeline);
     wgpuRenderPassEncoderSetBindGroup(pass, 0, _bind_group, 0, nullptr);
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
 
+    spdlog::info("ThorvgLayer::renderToPass: composite draw issued");
     return true;
 }
 

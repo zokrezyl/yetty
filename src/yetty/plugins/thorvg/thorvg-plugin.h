@@ -72,7 +72,7 @@ private:
     // ThorVG objects - using WebGPU canvas
     std::unique_ptr<tvg::WgCanvas> _canvas;
     tvg::Picture* _picture = nullptr;  // Owned by canvas or animation
-    std::unique_ptr<tvg::Animation> _animation;
+    std::unique_ptr<tvg::Animation> _animation;  // For both Lottie and static content
 
     // Content dimensions
     uint32_t _content_width = 0;
