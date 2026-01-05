@@ -375,6 +375,16 @@ Result<Font*> FontManager::getFont(const std::string& family, Font::Style style,
 
     std::string fontPath = findFontPath(family, style);
     if (fontPath.empty()) {
+#if YETTY_USE_PREBUILT_ATLAS
+        // On web/Android, fall back to default prebuilt font
+        if (hasDefaultFont_) {
+            auto defaultIt = fontCache_.find(defaultFontKey_);
+            if (defaultIt != fontCache_.end()) {
+                spdlog::info("FontManager: using default prebuilt font for '{}'", family);
+                return Ok(defaultIt->second.get());
+            }
+        }
+#endif
         return Err<Font*>("Could not find font: " + family);
     }
 

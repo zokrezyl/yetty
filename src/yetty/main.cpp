@@ -12,6 +12,12 @@
 #include <spdlog/spdlog.h>
 #include <iostream>
 
+#if YETTY_WEB
+// Keep Yetty alive for the duration of the web app
+// (shared_ptr prevents destruction when main() returns)
+static yetty::Yetty::Ptr g_yetty;
+#endif
+
 #if defined(__ANDROID__)
 //-----------------------------------------------------------------------------
 // Android Entry Point
@@ -43,6 +49,13 @@ int main(int argc, char* argv[]) {
         spdlog::error("Failed to initialize yetty: {}", yetty::error_msg(result));
         return 1;
     }
+#if YETTY_WEB
+    // Store in global to keep alive after main() returns
+    // (Emscripten main loop continues via requestAnimationFrame)
+    g_yetty = *result;
+    return g_yetty->run();
+#else
     return (*result)->run();
+#endif
 }
 #endif

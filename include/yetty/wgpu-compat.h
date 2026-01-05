@@ -27,6 +27,11 @@ using WGPUShaderSourceWGSL = WGPUShaderModuleWGSLDescriptor;
 #define WGPU_COLOR_ATTACHMENT_CLEAR(attachment, r, g, b, a) \
     (attachment).clearValue = {(r), (g), (b), (a)}
 
+// depthSlice for 2D textures (Emscripten doesn't define WGPU_DEPTH_SLICE_UNDEFINED)
+#ifndef WGPU_DEPTH_SLICE_UNDEFINED
+#define WGPU_DEPTH_SLICE_UNDEFINED UINT32_MAX
+#endif
+
 // Mipmap filter (both have the enum, but use compat macro for consistency)
 #define WGPU_MIPMAP_FILTER_LINEAR WGPUMipmapFilterMode_Linear
 #define WGPU_MIPMAP_FILTER_NEAREST WGPUMipmapFilterMode_Nearest

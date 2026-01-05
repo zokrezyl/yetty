@@ -954,13 +954,8 @@ void GridRenderer::render(const Grid &grid, int cursorCol, int cursorRow,
   colorAttachment.view = targetView;
   colorAttachment.loadOp = WGPULoadOp_Clear;
   colorAttachment.storeOp = WGPUStoreOp_Store;
-#if YETTY_WEB
   WGPU_COLOR_ATTACHMENT_CLEAR(colorAttachment, 0.1, 0.1, 0.1, 1.0);
-#else
-  colorAttachment.clearValue = {0.1, 0.1, 0.1, 1.0};
-  colorAttachment.depthSlice =
-      WGPU_DEPTH_SLICE_UNDEFINED; // v27: required for 2D textures
-#endif
+  colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED; // Required for 2D textures
 
   WGPURenderPassDescriptor passDesc = {};
   passDesc.colorAttachmentCount = 1;
@@ -1088,13 +1083,8 @@ void GridRenderer::render(const Grid &grid,
   colorAttachment.view = targetView;
   colorAttachment.loadOp = WGPULoadOp_Clear;
   colorAttachment.storeOp = WGPUStoreOp_Store;
-#if YETTY_WEB
   WGPU_COLOR_ATTACHMENT_CLEAR(colorAttachment, 0.1, 0.1, 0.1, 1.0);
-#else
-  colorAttachment.clearValue = {0.1, 0.1, 0.1, 1.0};
-  colorAttachment.depthSlice =
-      WGPU_DEPTH_SLICE_UNDEFINED; // v27: required for 2D textures
-#endif
+  colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED; // Required for 2D textures
 
   WGPURenderPassDescriptor passDesc = {};
   passDesc.colorAttachmentCount = 1;
