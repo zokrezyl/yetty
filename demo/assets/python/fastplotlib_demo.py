@@ -19,7 +19,7 @@ print("[Demo] Starting fastplotlib demo...")
 yetty_pygfx.init()
 print("[Demo] yetty_pygfx initialized")
 
-# Create figure
+# Create figure (setup, done once)
 fig = yetty_pygfx.create_figure()
 print(f"[Demo] Figure created: {fig}")
 
@@ -31,6 +31,21 @@ y = np.sin(x)
 line = fig[0, 0].add_line(np.column_stack([x, y]), thickness=8, cmap='hot')
 print(f"[Demo] Line added: {line}")
 
-# Show
-fig.show()
-print("[Demo] Figure shown")
+
+def render(ctx, frame_num, width, height):
+    """
+    Render callback called every frame by yetty.
+    
+    Args:
+        ctx: WebGPU context dict with 'device' and 'queue'
+        frame_num: Current frame number
+        width: Render target width
+        height: Render target height
+    """
+    # THIS is where the actual rendering happens every frame
+    fig.show()
+    yetty_pygfx.render_frame()
+    return True
+
+
+print("[Demo] Render callback defined")

@@ -167,3 +167,36 @@ if(thorvg_ADDED)
     
     message(STATUS "ThorVG plugin: enabled (v1.0-pre34)")
 endif()
+
+
+#-----------------------------------------------------------------------------
+# Python plugin (Unix only - Python build requires ./configure + make)
+#-----------------------------------------------------------------------------
+if(UNIX)
+    add_yetty_plugin(python
+        SOURCES
+            python/python.cpp
+            python/yetty_wgpu.cpp
+        LIBS python_embedded m dl util pthread
+    )
+
+    # Add compile definition for Python module path
+    target_compile_definitions(python_plugin PRIVATE
+        CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
+    )
+
+    # Copy Python helper modules to build directory
+    file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/python)
+    configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/python/yetty_pygfx.py
+        ${CMAKE_BINARY_DIR}/python/yetty_pygfx.py
+        COPYONLY
+    )
+    configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/python/init.py
+        ${CMAKE_BINARY_DIR}/python/init.py
+        COPYONLY
+    )
+    
+    message(STATUS "Python plugin: enabled with static libpython")
+endif()

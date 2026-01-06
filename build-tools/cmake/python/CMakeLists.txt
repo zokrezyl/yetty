@@ -17,16 +17,21 @@ if(NPROC EQUAL 0)
 endif()
 
 # Configure options for embedded Python
-# --enable-shared: Build libpython as shared library
+# --disable-shared: Build libpython as static library (avoid runtime symbol conflicts with system Python)
 # --with-ensurepip: Include pip for package installation
 # --disable-test-modules: Skip test modules to reduce size
+# CFLAGS=-fPIC: Position-independent code required for shared plugin
 set(PYTHON_CONFIGURE_OPTS
     --prefix=${PYTHON_INSTALL_DIR}
-    --enable-shared
-    --enable-optimizations
-    --with-lto
+    --disable-shared
     --with-ensurepip
     --disable-test-modules
+)
+
+# Set environment variables for configure
+set(PYTHON_CONFIGURE_ENV
+    "CFLAGS=-fPIC"
+    "CXXFLAGS=-fPIC"
 )
 
 if(APPLE)
@@ -40,11 +45,11 @@ endif()
 
 # Determine library name based on platform
 if(APPLE)
-    set(PYTHON_LIB_NAME "libpython3.13.dylib")
+    set(PYTHON_LIB_NAME "libpython3.13.a")
 elseif(WIN32)
-    set(PYTHON_LIB_NAME "python313.dll")
+    set(PYTHON_LIB_NAME "libpython3.13.a")
 else()
-    set(PYTHON_LIB_NAME "libpython3.13.so")
+    set(PYTHON_LIB_NAME "libpython3.13.a")
 endif()
 
 set(PYTHON_LIB_PATH "${PYTHON_LIB_DIR}/${PYTHON_LIB_NAME}")
@@ -52,10 +57,10 @@ set(PYTHON_LIB_PATH "${PYTHON_LIB_DIR}/${PYTHON_LIB_NAME}")
 ExternalProject_Add(python_build
     URL ${PYTHON_URL}
     PREFIX ${PYTHON_PREFIX}
-    CONFIGURE_COMMAND <SOURCE_DIR>/configure ${PYTHON_CONFIGURE_OPTS}
+    CONFIGURE_COMMAND env ${PYTHON_CONFIGURE_ENV} <SOURCE_DIR>/configure ${PYTHON_CONFIGURE_OPTS}
     BUILD_COMMAND make -j${NPROC}
     INSTALL_COMMAND make install
-    BUILD_IN_SOURCE 0
+    BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS
         ${PYTHON_LIB_PATH}
 )
@@ -64,11 +69,10 @@ ExternalProject_Add(python_build
 # The actual headers will be installed by python_build
 file(MAKE_DIRECTORY ${PYTHON_INCLUDE_DIR})
 
-# Create imported target for Python
-add_library(python_embedded SHARED IMPORTED GLOBAL)
+# Create imported target for Python (static library)
+add_library(python_embedded STATIC IMPORTED GLOBAL)
 set_target_properties(python_embedded PROPERTIES
     IMPORTED_LOCATION "${PYTHON_LIB_PATH}"
-    IMPORTED_NO_SONAME TRUE
 )
 
 # Use target_include_directories with SYSTEM to avoid warnings

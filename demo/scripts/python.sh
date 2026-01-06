@@ -8,4 +8,4 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 cd "$ROOT_DIR"
 ~/.local/bin/uv run python tools/yetty-client/main.py create python \
-    demo/assets/python/fastplotlib_demo.py
+    -i demo/assets/python/fastplotlib_demo.py -w 60 -H 30

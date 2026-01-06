@@ -72,7 +72,15 @@ void PluginManager::loadPluginsFromDirectory(const std::string& path) {
             if (ext != ".so") continue;
 #endif
 
-            void* handle = dlopen(filePath.c_str(), RTLD_LAZY);
+            // Use RTLD_GLOBAL for python plugin so libpython symbols are available to numpy extensions
+            int flags = RTLD_LAZY;
+            std::string filename = filePath.filename().string();
+            if (filename.find("python") != std::string::npos) {
+                flags |= RTLD_GLOBAL;
+                spdlog::info("Loading {} with RTLD_GLOBAL flag", filename);
+            }
+            
+            void* handle = dlopen(filePath.c_str(), flags);
             if (!handle) {
                 std::cerr << "Failed to load plugin " << filePath << ": " << dlerror() << std::endl;
                 continue;
