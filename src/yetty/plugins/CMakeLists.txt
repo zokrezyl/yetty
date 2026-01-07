@@ -76,7 +76,7 @@ if(thorvg_ADDED)
 #ifndef _TVG_CONFIG_H_
 #define _TVG_CONFIG_H_
 
-#define THORVG_VERSION_STRING \"1.0-pre34\"
+#define THORVG_VERSION_STRING \"1.0.34\"
 
 // Engine Support
 #define THORVG_WG_RASTER_SUPPORT 1

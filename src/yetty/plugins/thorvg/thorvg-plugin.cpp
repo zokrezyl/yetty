@@ -28,6 +28,7 @@ Result<void> ThorvgPlugin::init() noexcept {
     // Initialize ThorVG engine with WebGPU support
     auto result = tvg::Initializer::init(0);  // Single-threaded for now
     if (result != tvg::Result::Success) {
+        spdlog::error("ThorvgPlugin: tvg::Initializer::init failed with result={}", static_cast<int>(result));
         return Err<void>("Failed to initialize ThorVG engine");
     }
     
@@ -420,12 +421,6 @@ Result<void> ThorvgLayer::renderThorvgFrame(WGPUDevice device) {
     spdlog::info("ThorvgLayer::renderThorvgFrame: rendering frame {}, animated={}", 
                  _current_frame, _is_animated);
 
-    // Get picture size and log it
-    float pw = 0, ph = 0;
-    _picture->size(&pw, &ph);
-    spdlog::info("ThorvgLayer::renderThorvgFrame: picture size = {}x{}, canvas target = {}x{}", 
-                 pw, ph, _content_width, _content_height);
-
     // Update animation frame if animated
     if (_is_animated && _animation) {
         auto frameResult = _animation->frame(_current_frame);
@@ -456,7 +451,32 @@ Result<void> ThorvgLayer::renderThorvgFrame(WGPUDevice device) {
     
     _content_dirty = false;
     
-    spdlog::info("ThorvgLayer::renderThorvgFrame: completed successfully, frame={}", _current_frame);
+    // Recreate texture view to ensure fresh GPU state after ThorVG render
+    if (_render_texture_view) {
+        wgpuTextureViewRelease(_render_texture_view);
+    }
+    WGPUTextureViewDescriptor viewDesc = {};
+    viewDesc.format = WGPUTextureFormat_BGRA8Unorm;
+    viewDesc.dimension = WGPUTextureViewDimension_2D;
+    viewDesc.mipLevelCount = 1;
+    viewDesc.arrayLayerCount = 1;
+    _render_texture_view = wgpuTextureCreateView(_render_texture, &viewDesc);
+    
+    // Recreate bind group with fresh texture view
+    if (_bind_group) {
+        wgpuBindGroupRelease(_bind_group);
+    }
+    WGPUBindGroupEntry bgE[3] = {};
+    bgE[0].binding = 0; bgE[0].buffer = _uniform_buffer; bgE[0].size = 16;
+    bgE[1].binding = 1; bgE[1].sampler = _sampler;
+    bgE[2].binding = 2; bgE[2].textureView = _render_texture_view;
+    WGPUBindGroupDescriptor bgDesc = {};
+    bgDesc.layout = wgpuRenderPipelineGetBindGroupLayout(_composite_pipeline, 0);
+    bgDesc.entryCount = 3;
+    bgDesc.entries = bgE;
+    _bind_group = wgpuDeviceCreateBindGroup(device, &bgDesc);
+    
+    spdlog::info("ThorvgLayer::renderThorvgFrame: completed successfully, recreated view/bindgroup");
     return Ok();
 }
 
@@ -707,12 +727,11 @@ Result<void> ThorvgLayer::render(WebGPUContext& ctx) {
         _accumulated_time += dt;
         
         float fps = _total_frames / _duration;
-        float speedMultiplier = 0.25f;  // 0.25x speed = 4x slower for observation (2s becomes 8s)
-        float targetFrame = static_cast<float>(_accumulated_time * fps * speedMultiplier);
+        float targetFrame = static_cast<float>(_accumulated_time * fps);
         
         if (targetFrame >= _total_frames) {
             if (_loop) {
-                _accumulated_time = std::fmod(_accumulated_time, static_cast<double>(_duration / speedMultiplier));
+                _accumulated_time = std::fmod(_accumulated_time, static_cast<double>(_duration));
                 targetFrame = std::fmod(targetFrame, _total_frames);
             } else {
                 targetFrame = _total_frames - 1;
@@ -835,17 +854,15 @@ Result<void> ThorvgLayer::render(WebGPUContext& ctx) {
     return Ok();
 }
 
-bool ThorvgLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (_failed) {
-        spdlog::warn("ThorvgLayer::renderToPass: layer already failed");
-        return false;
-    }
-    if (!_visible) {
-        return false;  // Silent skip, normal
-    }
-    if (!_animation) {
-        spdlog::warn("ThorvgLayer::renderToPass: no animation/picture loaded");
-        return false;
+void ThorvgLayer::prepareFrame(WebGPUContext& ctx) {
+    // This is called BEFORE the shared render pass begins
+    // Here we render ThorVG content to our intermediate texture
+    
+    spdlog::info("ThorvgLayer::prepareFrame CALLED! failed={} visible={} animation={} gpu_init={} dirty={}", 
+                 _failed, _visible, (void*)_animation.get(), _gpu_initialized, _content_dirty);
+    
+    if (_failed || !_visible || !_animation) {
+        return;
     }
 
     const auto& rc = _render_context;
@@ -876,45 +893,59 @@ bool ThorvgLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
 
     // Initialize GPU resources on first use
     if (!_gpu_initialized) {
-        spdlog::info("ThorvgLayer::renderToPass: initializing WebGPU resources");
+        spdlog::info("ThorvgLayer::prepareFrame: initializing WebGPU resources");
         auto result = initWebGPU(ctx);
         if (!result) {
-            spdlog::error("ThorvgLayer::renderToPass: initWebGPU failed: {}", result.error().message());
+            spdlog::error("ThorvgLayer::prepareFrame: initWebGPU failed: {}", result.error().message());
             _failed = true;
-            return false;
+            return;
         }
         
-        spdlog::info("ThorvgLayer::renderToPass: creating composite pipeline, targetFormat={}", 
+        spdlog::info("ThorvgLayer::prepareFrame: creating composite pipeline, targetFormat={}", 
                      static_cast<int>(rc.targetFormat));
         result = createCompositePipeline(ctx, rc.targetFormat);
         if (!result) {
-            spdlog::error("ThorvgLayer::renderToPass: createCompositePipeline failed: {}", result.error().message());
+            spdlog::error("ThorvgLayer::prepareFrame: createCompositePipeline failed: {}", result.error().message());
             _failed = true;
-            return false;
+            return;
         }
         _gpu_initialized = true;
         _content_dirty = true;
-        spdlog::info("ThorvgLayer::renderToPass: GPU resources initialized");
+        spdlog::info("ThorvgLayer::prepareFrame: GPU resources initialized");
     }
 
-    // Render ThorVG content if dirty (animation frame changed)
+    // Render ThorVG content to texture if dirty
     if (_content_dirty) {
-        spdlog::info("ThorvgLayer::renderToPass: rendering ThorVG frame (dirty)");
+        spdlog::info("ThorvgLayer::prepareFrame: rendering ThorVG frame to texture");
         auto renderResult = renderThorvgFrame(ctx.getDevice());
         if (!renderResult) {
-            spdlog::error("ThorvgLayer::renderToPass: {}", renderResult.error().message());
+            spdlog::error("ThorvgLayer::prepareFrame: {}", renderResult.error().message());
             _failed = true;
-            return false;
+            return;
         }
-        spdlog::info("ThorvgLayer::renderToPass: ThorVG frame rendered successfully");
+        spdlog::info("ThorvgLayer::prepareFrame: ThorVG frame rendered successfully");
     }
+}
 
-    if (!_composite_pipeline || !_uniform_buffer || !_bind_group) {
-        spdlog::warn("ThorvgLayer::renderToPass: pipeline/buffer/bindgroup null - pipeline={}, buffer={}, bindgroup={}",
-                     (void*)_composite_pipeline, (void*)_uniform_buffer, (void*)_bind_group);
-        _failed = true;
+bool ThorvgLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+    // This is called INSIDE the shared render pass
+    // We only blit our pre-rendered texture here - NO ThorVG rendering!
+    
+    if (_failed) {
         return false;
     }
+    if (!_visible) {
+        return false;
+    }
+    if (!_animation) {
+        return false;
+    }
+    if (!_gpu_initialized || !_composite_pipeline || !_uniform_buffer || !_bind_group) {
+        // Not ready yet - prepareFrame() should have set this up
+        return false;
+    }
+
+    const auto& rc = _render_context;
 
     // Calculate pixel position from cell position
     float pixelX = _x * rc.cellWidth;

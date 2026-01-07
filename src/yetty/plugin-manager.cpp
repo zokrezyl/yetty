@@ -150,16 +150,21 @@ Result<WidgetPtr> PluginManager::createWidget(const std::string& pluginName,
                                                    const std::string& payload,
                                                    Grid* grid,
                                                    uint32_t cellWidth, uint32_t cellHeight) {
+    spdlog::info("PluginManager::createWidget: plugin={} payload_size={}", pluginName, payload.size());
+    
     // Get or create the plugin
     auto pluginResult = getOrCreatePlugin(pluginName);
     if (!pluginResult) {
+        spdlog::error("PluginManager::createWidget: getOrCreatePlugin failed for '{}'", pluginName);
         return Err<WidgetPtr>("Failed to get plugin", pluginResult);
     }
     PluginPtr plugin = *pluginResult;
 
     // Create the widget
+    spdlog::info("PluginManager::createWidget: calling plugin->createLayer with payload_size={}", payload.size());
     auto widgetResult = plugin->createLayer(payload);  // Uses legacy name for compatibility
     if (!widgetResult) {
+        spdlog::error("PluginManager::createWidget: createLayer failed: {}", error_msg(widgetResult));
         return Err<WidgetPtr>("Failed to create widget", widgetResult);
     }
     WidgetPtr widget = *widgetResult;
@@ -397,6 +402,7 @@ bool PluginManager::handleOSCSequence(const std::string& sequence,
                                       cmd.create.width, cmd.create.height,
                                       payload, grid, cellWidth, cellHeight);
             if (!result) {
+                spdlog::error("PluginManager: createWidget failed: {}", error_msg(result));
                 if (response) {
                     *response = OscResponse::error(error_msg(result));
                 }
@@ -623,6 +629,19 @@ Result<void> PluginManager::render(WebGPUContext& ctx, WGPUTextureView targetVie
         }
     }
 
+    // PRE-RENDER PHASE: Let plugins render to their intermediate textures
+    // This happens BEFORE the shared render pass, so plugins can submit their own commands
+    for (auto& [name, plugin] : plugins_) {
+        for (auto& layer : plugin->getLayers()) {
+            if (!layer->isVisible()) continue;
+            if (layer->getScreenType() != currentScreen) continue;
+            
+            // prepareFrame() allows plugins to render to textures (ThorVG, pygfx, etc.)
+            spdlog::info("PluginManager: calling prepareFrame on layer {}", layer->name());
+            layer->prepareFrame(ctx);
+        }
+    }
+
     // Create ONE command encoder for ALL plugins
     WGPUCommandEncoderDescriptor encoderDesc = {};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encoderDesc);
@@ -647,7 +666,7 @@ Result<void> PluginManager::render(WebGPUContext& ctx, WGPUTextureView targetVie
         return Err<void>("PluginManager: Failed to begin render pass");
     }
 
-    // Render ALL plugin layers in this single pass
+    // Render ALL plugin layers in this single pass (blit pre-rendered textures)
     for (auto& [name, plugin] : plugins_) {
         for (auto& layer : plugin->getLayers()) {
             if (!layer->isVisible()) continue;

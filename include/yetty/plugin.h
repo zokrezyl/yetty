@@ -96,6 +96,11 @@ public:
     // Legacy render - creates own command encoder (slow, avoid!)
     Result<void> render(WebGPUContext& ctx) override = 0;
 
+    // Pre-render phase - called BEFORE the shared render pass begins
+    // Use this to render to intermediate textures (ThorVG, pygfx, etc.)
+    // Default implementation does nothing
+    virtual void prepareFrame(WebGPUContext& ctx) { (void)ctx; }
+
     // Batched render - draws into existing render pass
     // Widget decides internally: draw directly, or render to texture and blit
     // Returns true if drew something, false if skipped (off-screen, etc.)

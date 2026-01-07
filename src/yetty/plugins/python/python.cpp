@@ -480,16 +480,20 @@ Result<void> PythonLayer::render(WebGPUContext& ctx) {
     return Ok();
 }
 
-bool PythonLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (_failed) return false;
-    if (!_visible) return true;
+void PythonLayer::prepareFrame(WebGPUContext& ctx) {
+    // This is called BEFORE the shared render pass begins
+    // Here we initialize and render pygfx content to our texture
+    
+    if (_failed || !_visible) {
+        return;
+    }
 
     // First time: call init_layer, then execute user script
     if (!_wgpu_handles_set) {
         uint32_t width = getPixelWidth();
         uint32_t height = getPixelHeight();
         
-        spdlog::info("PythonLayer: First render - layer dimensions: {}x{}", width, height);
+        spdlog::info("PythonLayer: First prepareFrame - layer dimensions: {}x{}", width, height);
         
         // Use defaults if not set
         if (width == 0) width = 1024;
@@ -500,7 +504,7 @@ bool PythonLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
         // Call init_layer() callback with WebGPU context
         if (!callInitLayer(ctx, width, height)) {
             _failed = true;
-            return false;
+            return;
         }
         
         // Now execute the user script (init.py has already been called)
@@ -511,7 +515,7 @@ bool PythonLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
                 _output = "Error: " + result.error().message();
                 spdlog::error("PythonLayer: failed to run script: {}", _script_path);
                 _failed = true;
-                return false;
+                return;
             }
             _output = "Script executed: " + _script_path;
             spdlog::info("PythonLayer: User script executed successfully");
@@ -522,13 +526,13 @@ bool PythonLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
             if (!result) {
                 _output = "Error: " + result.error().message();
                 _failed = true;
-                return false;
+                return;
             }
             _output = *result;
         }
     }
 
-    // Call user's render() callback every frame
+    // Call user's render() callback every frame to render to texture
     uint32_t width = getPixelWidth();
     uint32_t height = getPixelHeight();
     if (width == 0) width = _texture_width;
@@ -539,12 +543,23 @@ bool PythonLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
         // The user script might recover
     }
     
+    _frame_count++;
+}
+
+bool PythonLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+    // This is called INSIDE the shared render pass
+    // We only blit our pre-rendered texture here - NO Python rendering!
+    
+    if (_failed) return false;
+    if (!_visible) return false;
+    if (!_wgpu_handles_set) return false;  // prepareFrame() hasn't run yet
+
     // Blit the rendered texture to the layer rectangle in the pass
     if (!blitToPass(pass, ctx)) {
         spdlog::error("PythonLayer: Failed to blit render texture");
+        return false;
     }
     
-    _frame_count++;
     return true;
 }
 
