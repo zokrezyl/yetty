@@ -80,6 +80,29 @@ static const char *DEFAULT_ATLAS = "assets/atlas.png";
 static const char *DEFAULT_METRICS = "assets/atlas.json";
 #endif
 
+// Calculate cell size from font metrics
+// For monospace fonts, all glyphs have the same advance width
+static void calculateCellSizeFromFont(Font* font, float& cellWidth, float& cellHeight) {
+  float fontSize = font->getFontSize();
+  
+  // Try to get actual metrics from a representative glyph
+  const auto* metrics = font->getGlyph('M');
+  if (metrics && metrics->_advance > 0) {
+    cellWidth = metrics->_advance;
+  } else {
+    // Fallback to approximation if metrics unavailable
+    cellWidth = fontSize * 0.6f;
+  }
+  
+  // Use font's line height if available, otherwise approximate
+  float lineHeight = font->getLineHeight();
+  if (lineHeight > 0) {
+    cellHeight = lineHeight;
+  } else {
+    cellHeight = fontSize * 1.2f;
+  }
+}
+
 //-----------------------------------------------------------------------------
 // Yetty Implementation
 //-----------------------------------------------------------------------------
@@ -389,9 +412,7 @@ Result<void> Yetty::initFont() noexcept {
   _font = *fontResult;
   LOGI("Font atlas loaded via FontManager");
 
-  float fontSize = _font->getFontSize();
-  _baseCellWidth = fontSize * 0.6f;
-  _baseCellHeight = fontSize * 1.2f;
+  calculateCellSizeFromFont(_font, _baseCellWidth, _baseCellHeight);
 #elif YETTY_USE_PREBUILT_ATLAS
   // Web build: load prebuilt atlas via FontManager
   spdlog::info("Loading pre-built atlas via FontManager...");
@@ -402,9 +423,7 @@ Result<void> Yetty::initFont() noexcept {
   }
   _font = *fontResult;
 
-  float fontSize = _font->getFontSize();
-  _baseCellWidth = fontSize * 0.6f;
-  _baseCellHeight = fontSize * 1.2f;
+  calculateCellSizeFromFont(_font, _baseCellWidth, _baseCellHeight);
 #else
   // Native build: FontManager handles everything in initRenderer()
   // Nothing to do here
@@ -434,9 +453,7 @@ Result<void> Yetty::initRenderer() noexcept {
     return Err<void>("Failed to get font for cell size", fontResult);
   }
   _font = *fontResult;
-  float fontSize = _font->getFontSize();
-  _baseCellWidth = fontSize * 0.6f;
-  _baseCellHeight = fontSize * 1.2f;
+  calculateCellSizeFromFont(_font, _baseCellWidth, _baseCellHeight);
 
   _renderer->setCellSize(_baseCellWidth, _baseCellHeight);
   _renderer->resize(_initialWidth, _initialHeight);
