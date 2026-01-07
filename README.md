@@ -133,7 +133,20 @@ SHELL=/bin/zsh ./yetty
 
 ## License
 
-[Add license here]
+Yetty is licensed under the **MIT License** - see [LICENSE](LICENSE) for details.
+
+### Licensing by Platform
+
+- **Desktop & Web:** Pure MIT license - fully permissive for any use
+- **Android:** Includes Apache 2.0 components (Android NDK)
+  - When distributing Android APKs, acknowledge Apache 2.0 compliance
+  - See [DEPENDENCIES.md](DEPENDENCIES.md) for full Android licensing details
+
+### Dependencies
+
+All dependencies use MIT-compatible licenses (MIT, BSD, Zlib, Unlicense). See [DEPENDENCIES.md](DEPENDENCIES.md) for the complete dependency list and license information.
+
+For distribution, full license texts are available in the [LICENSES/](LICENSES/) directory.
 
 ---
 
