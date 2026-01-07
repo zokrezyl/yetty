@@ -350,4 +350,8 @@ std::vector<std::string> Config::pluginPaths() const {
     return getPathList(KEY_PLUGINS_PATH);
 }
 
+std::string Config::fontFamily() const {
+    return get<std::string>(KEY_FONT_FAMILY, "default");
+}
+
 } // namespace yetty

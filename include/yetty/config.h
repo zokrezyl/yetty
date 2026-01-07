@@ -60,6 +60,7 @@ public:
     static constexpr const char* KEY_RENDERING_SHOW_FPS = "rendering.show-fps";
     static constexpr const char* KEY_SCROLLBACK_LINES = "scrollback.lines";
     static constexpr const char* KEY_DEBUG_DAMAGE_RECTS = "debug.damage-rects";
+    static constexpr const char* KEY_FONT_FAMILY = "font.family";
 
     // Legacy accessors for backward compatibility
     bool useDamageTracking() const;
@@ -67,6 +68,7 @@ public:
     bool debugDamageRects() const;
     uint32_t scrollbackLines() const;
     std::vector<std::string> pluginPaths() const;
+    std::string fontFamily() const;
 
 private:
     Config(const std::string& configPath, const YAML::Node& cmdOverrides) noexcept;

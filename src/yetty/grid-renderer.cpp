@@ -31,14 +31,15 @@ namespace yetty {
 
 Result<GridRenderer::Ptr>
 GridRenderer::create(WebGPUContext::Ptr ctx,
-                     FontManager::Ptr fontManager) noexcept {
+                     FontManager::Ptr fontManager,
+                     const std::string& fontFamily) noexcept {
   if (!ctx) {
     return Err<Ptr>("GridRenderer::create: null WebGPUContext");
   }
   if (!fontManager) {
     return Err<Ptr>("GridRenderer::create: null FontManager");
   }
-  auto renderer = Ptr(new GridRenderer(std::move(ctx), std::move(fontManager)));
+  auto renderer = Ptr(new GridRenderer(std::move(ctx), std::move(fontManager), fontFamily));
   if (auto res = renderer->init(); !res) {
     return Err<Ptr>("Failed to initialize GridRenderer", res);
   }
@@ -46,8 +47,9 @@ GridRenderer::create(WebGPUContext::Ptr ctx,
 }
 
 GridRenderer::GridRenderer(WebGPUContext::Ptr ctx,
-                           FontManager::Ptr fontManager) noexcept
-    : ctx_(std::move(ctx)), fontManager_(std::move(fontManager)) {}
+                           FontManager::Ptr fontManager,
+                           const std::string& fontFamily) noexcept
+    : ctx_(std::move(ctx)), fontManager_(std::move(fontManager)), fontFamily_(fontFamily) {}
 
 GridRenderer::~GridRenderer() {
   // On web, texture and bind group releases cause Emscripten WebGPU manager
@@ -90,7 +92,7 @@ Result<void> GridRenderer::init() noexcept {
   WGPUDevice device = ctx_->getDevice();
 
   // Get terminal font from FontManager
-  auto fontResult = fontManager_->getFont("monospace", Font::Regular, 32.0f);
+  auto fontResult = fontManager_->getFont(fontFamily_, Font::Regular, 32.0f);
   if (!fontResult) {
     return Err<void>("Failed to get terminal font: " +
                      fontResult.error().message());

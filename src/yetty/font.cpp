@@ -308,6 +308,40 @@ bool Font::generate(const std::string& regularPath,
     // Powerline symbols (0xE0A0-0xE0D4)
     for (uint32_t c = 0xE0A0; c <= 0xE0D4; ++c) charset.push_back(c);
 
+    // Nerd Fonts: Seti-UI + Custom (0xE5FA-0xE6B5)
+    for (uint32_t c = 0xE5FA; c <= 0xE6B5; ++c) charset.push_back(c);
+
+    // Nerd Fonts: Devicons (0xE700-0xE7C5)
+    for (uint32_t c = 0xE700; c <= 0xE7C5; ++c) charset.push_back(c);
+
+    // Nerd Fonts: Font Awesome (0xF000-0xF2E0)
+    for (uint32_t c = 0xF000; c <= 0xF2E0; ++c) charset.push_back(c);
+
+    // Nerd Fonts: Font Awesome Extension (0xE200-0xE2A9)
+    for (uint32_t c = 0xE200; c <= 0xE2A9; ++c) charset.push_back(c);
+
+    // Nerd Fonts: Material Design Icons (0xF0001-0xF1AF0) - subset for common icons
+    for (uint32_t c = 0xF0001; c <= 0xF1AF0; ++c) charset.push_back(c);
+
+    // Nerd Fonts: Weather Icons (0xE300-0xE3E3)
+    for (uint32_t c = 0xE300; c <= 0xE3E3; ++c) charset.push_back(c);
+
+    // Nerd Fonts: Octicons (0xF400-0xF532)
+    for (uint32_t c = 0xF400; c <= 0xF532; ++c) charset.push_back(c);
+
+    // Nerd Fonts: Pomicons (0xE000-0xE00A)
+    for (uint32_t c = 0xE000; c <= 0xE00A; ++c) charset.push_back(c);
+
+    // Nerd Fonts: IEC Power Symbols (0x23FB-0x23FE, 0x2B58)
+    for (uint32_t c = 0x23FB; c <= 0x23FE; ++c) charset.push_back(c);
+    charset.push_back(0x2B58);
+
+    // Nerd Fonts: Font Logos (0xF300-0xF372)
+    for (uint32_t c = 0xF300; c <= 0xF372; ++c) charset.push_back(c);
+
+    // Nerd Fonts: Codicons (0xEA60-0xEBEB)
+    for (uint32_t c = 0xEA60; c <= 0xEBEB; ++c) charset.push_back(c);
+
     // Helper lambda to load glyphs from a font variant
     auto loadGlyphsFromFont = [&](msdfgen::FontHandle* variantFont, Style style,
                                    std::vector<PackedGlyph>& glyphVec) {
@@ -825,6 +859,17 @@ bool Font::generate(const unsigned char* data, size_t dataLen,
     for (uint32_t c = 32; c <= 126; ++c) charset.push_back(c);
     for (uint32_t c = 0x0100; c <= 0x017F; ++c) charset.push_back(c);
     for (uint32_t c = 0x2000; c <= 0x206F; ++c) charset.push_back(c);
+    // Nerd Font ranges
+    for (uint32_t c = 0xE0A0; c <= 0xE0D4; ++c) charset.push_back(c);  // Powerline
+    for (uint32_t c = 0xE5FA; c <= 0xE6B5; ++c) charset.push_back(c);  // Seti-UI
+    for (uint32_t c = 0xE700; c <= 0xE7C5; ++c) charset.push_back(c);  // Devicons
+    for (uint32_t c = 0xF000; c <= 0xF2E0; ++c) charset.push_back(c);  // Font Awesome
+    for (uint32_t c = 0xE200; c <= 0xE2A9; ++c) charset.push_back(c);  // FA Extension
+    for (uint32_t c = 0xE300; c <= 0xE3E3; ++c) charset.push_back(c);  // Weather
+    for (uint32_t c = 0xF400; c <= 0xF532; ++c) charset.push_back(c);  // Octicons
+    for (uint32_t c = 0xE000; c <= 0xE00A; ++c) charset.push_back(c);  // Pomicons
+    for (uint32_t c = 0xF300; c <= 0xF372; ++c) charset.push_back(c);  // Font Logos
+    for (uint32_t c = 0xEA60; c <= 0xEBEB; ++c) charset.push_back(c);  // Codicons
 
     // Load glyph shapes
     std::vector<PackedGlyph> glyphs;

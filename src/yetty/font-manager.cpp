@@ -90,6 +90,38 @@ FontCacheKey FontManager::createCacheKey(const std::string& family, Font::Style 
 std::string FontManager::findFontPath(const std::string& family, Font::Style style) noexcept {
 #if !YETTY_USE_PREBUILT_ATLAS
 
+    // If family looks like a file path, return it directly (possibly with style suffix)
+    bool isPath = (family.find('/') != std::string::npos || 
+                   family.find(".ttf") != std::string::npos ||
+                   family.find(".otf") != std::string::npos);
+    if (isPath) {
+        // For paths, try to find style variants using the same pattern as Font::discoverVariantPaths
+        if (style == Font::Regular) {
+            return family;
+        }
+        // Extract base name and extension
+        std::string basePath = family;
+        std::string ext;
+        auto dotPos = family.rfind('.');
+        if (dotPos != std::string::npos) {
+            basePath = family.substr(0, dotPos);
+            ext = family.substr(dotPos);
+        }
+        // Remove -Regular suffix if present
+        if (basePath.size() > 8 && basePath.substr(basePath.size() - 8) == "-Regular") {
+            basePath = basePath.substr(0, basePath.size() - 8);
+        }
+        // Add style suffix
+        std::string styleSuffix;
+        switch (style) {
+            case Font::Bold: styleSuffix = "-Bold"; break;
+            case Font::Italic: styleSuffix = "-Oblique"; break;
+            case Font::BoldItalic: styleSuffix = "-BoldOblique"; break;
+            default: styleSuffix = "-Regular"; break;
+        }
+        return basePath + styleSuffix + ext;
+    }
+
 #ifdef _WIN32
     // Windows DirectWrite implementation
     ComPtr<IDWriteFactory> factory;

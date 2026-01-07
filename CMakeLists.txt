@@ -541,7 +541,13 @@ else()
         target_compile_definitions(yetty PRIVATE YETTY_USE_FORKPTY=1)
     endif()
 
-    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+    # Copy assets at build time (not just configure time)
+    add_custom_command(TARGET yetty POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets
+            ${CMAKE_CURRENT_BINARY_DIR}/assets
+        COMMENT "Copying assets to build directory"
+    )
     configure_file(
         ${CMAKE_CURRENT_SOURCE_DIR}/src/yetty/shaders/shaders.wgsl
         ${CMAKE_CURRENT_BINARY_DIR}/shaders.wgsl

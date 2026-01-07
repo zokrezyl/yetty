@@ -60,6 +60,8 @@ public:
 
     /**
      * @brief Get a font by family name and style.
+     * If family is a file path (starts with / or contains .ttf/.otf), loads directly.
+     * Otherwise uses fontconfig to resolve the family name.
      */
     Result<Font*> getFont(const std::string& family,
                           Font::Style style = Font::Regular,

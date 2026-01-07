@@ -349,6 +349,11 @@ Result<void> Terminal::readPty() {
         if (totalRead >= PTY_READ_BUFFER_SIZE) break;
     }
     
+    // Only report error if we read nothing AND it's not EAGAIN/EWOULDBLOCK
+    if (totalRead == 0 && n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+        return Err<void>(std::string("PTY read error: ") + strerror(errno));
+    }
+
     if (totalRead > 0) {
         vterm_input_write(vterm_, ptyReadBuffer_.get(), totalRead);
         vterm_screen_flush_damage(vtermScreen_);
@@ -362,10 +367,6 @@ Result<void> Terminal::readPty() {
 
         flushVtermOutput();
         // NOTE: syncToGrid is NOT called here - render() will sync based on damage
-    }
-
-    if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-        return Err<void>(std::string("PTY read error: ") + strerror(errno));
     }
 
     return Ok();

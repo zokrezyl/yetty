@@ -20,7 +20,8 @@ public:
   using Ptr = std::shared_ptr<GridRenderer>;
 
   static Result<Ptr> create(WebGPUContext::Ptr ctx,
-                            FontManager::Ptr fontManager) noexcept;
+                            FontManager::Ptr fontManager,
+                            const std::string& fontFamily = "default") noexcept;
 
   ~GridRenderer();
 
@@ -60,7 +61,8 @@ public:
                          bool cursorVisible) noexcept;
 
 private:
-  GridRenderer(WebGPUContext::Ptr ctx, FontManager::Ptr fontManager) noexcept;
+  GridRenderer(WebGPUContext::Ptr ctx, FontManager::Ptr fontManager,
+               const std::string& fontFamily) noexcept;
   Result<void> init() noexcept;
   Result<void> createShaderModule(WGPUDevice device);
   Result<void> createPipeline(WGPUDevice device, WGPUTextureFormat format);
@@ -123,6 +125,7 @@ private:
 
   WebGPUContext::Ptr ctx_;
   FontManager::Ptr fontManager_;
+  std::string fontFamily_;
   Font *font_ = nullptr;       // Cached pointer from FontManager
   EmojiAtlas::Ptr emojiAtlas_; // Color emoji atlas
   const Config *config_ = nullptr;

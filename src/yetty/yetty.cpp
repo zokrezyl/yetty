@@ -57,7 +57,7 @@ Yetty *Yetty::s_instance = nullptr;
 
 // Default paths
 #if YETTY_WEB
-static const char *DEFAULT_FONT = "/assets/DejaVuSansMono.ttf";
+static const char *DEFAULT_FONT = "/assets/DejaVuSansMNerdFontMono-Regular.ttf";
 static const char *DEFAULT_ATLAS = "/assets/atlas.png";
 static const char *DEFAULT_METRICS = "/assets/atlas.json";
 #elif defined(__ANDROID__)
@@ -414,14 +414,22 @@ Result<void> Yetty::initFont() noexcept {
 }
 
 Result<void> Yetty::initRenderer() noexcept {
-  auto rendererResult = GridRenderer::create(_ctx, _fontManager);
+  // Get font family - use config or default bundled Nerd Font
+  std::string fontFamily = _config ? _config->fontFamily() : "default";
+  if (fontFamily == "default") {
+    // Use bundled Nerd Font
+    fontFamily = Config::getExecutableDir().string() + "/assets/DejaVuSansMNerdFontMono-Regular.ttf";
+  }
+  spdlog::info("Using font: {}", fontFamily);
+
+  auto rendererResult = GridRenderer::create(_ctx, _fontManager, fontFamily);
   if (!rendererResult) {
     return Err<void>("Failed to create text renderer", rendererResult);
   }
   _renderer = *rendererResult;
 
   // Get font for cell size calculation
-  auto fontResult = _fontManager->getFont("monospace", Font::Regular, 32.0f);
+  auto fontResult = _fontManager->getFont(fontFamily, Font::Regular, 32.0f);
   if (!fontResult) {
     return Err<void>("Failed to get font for cell size", fontResult);
   }
