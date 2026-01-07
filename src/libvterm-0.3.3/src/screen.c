@@ -661,8 +661,13 @@ static void resize_buffer(VTermScreen *screen, int bufidx, int new_rows, int new
 
   /* We really expect the cursor position to be set by now */
   if(active && (new_cursor.row == -1 || new_cursor.col == -1)) {
-    fprintf(stderr, "screen_resize failed to update cursor position\n");
-    abort();
+    /* YETTY PATCH: Instead of aborting, fallback to a safe cursor position.
+     * This can happen during rapid resize operations where the reflow logic
+     * doesn't properly track the cursor through all edge cases.
+     */
+    fprintf(stderr, "screen_resize: cursor position not set, falling back to (0,0)\n");
+    new_cursor.row = 0;
+    new_cursor.col = 0;
   }
 
   if(old_row >= 0 && bufidx == BUFIDX_PRIMARY) {
