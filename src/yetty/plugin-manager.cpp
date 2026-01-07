@@ -30,7 +30,7 @@ PluginManager::~PluginManager() {
         if (plugin) (void)plugin->dispose();
     }
     plugins_.clear();
-    pluginMetas_.clear();
+    pluginRegistry_.clear();
 
     // Close dynamic library handles
     for (void* handle : handles_) {
@@ -46,10 +46,10 @@ PluginManager::~PluginManager() {
 }
 
 void PluginManager::registerPlugin(const std::string& name, BuiltinPluginFactory factory) {
-    PluginMeta meta;
-    meta._name = name;
-    meta._factory = std::move(factory);
-    pluginMetas_[name] = std::move(meta);
+    PluginRegistryEntry regEntry;
+    regEntry.name = name;
+    regEntry.factory = std::move(factory);
+    pluginRegistry_[name] = std::move(regEntry);
     std::cout << "Registered built-in plugin: " << name << std::endl;
 }
 
@@ -61,9 +61,9 @@ void PluginManager::loadPluginsFromDirectory(const std::string& path) {
         return;
     }
 
-    for (const auto& entry : fs::directory_iterator(path)) {
-        if (entry.is_regular_file()) {
-            const auto& filePath = entry.path();
+    for (const auto& dirEntry : fs::directory_iterator(path)) {
+        if (dirEntry.is_regular_file()) {
+            const auto& filePath = dirEntry.path();
             std::string ext = filePath.extension().string();
 
 #ifdef __APPLE__
@@ -95,13 +95,13 @@ void PluginManager::loadPluginsFromDirectory(const std::string& path) {
                 continue;
             }
 
-            PluginMeta meta;
-            meta._name = nameFn();
-            meta._handle = handle;
-            meta._createFn = createFn;
+            PluginRegistryEntry regEntry;
+            regEntry.name = nameFn();
+            regEntry.handle = handle;
+            regEntry.createFn = createFn;
 
-            std::cout << "Loaded plugin: " << meta._name << " from " << filePath << std::endl;
-            pluginMetas_[meta._name] = std::move(meta);
+            std::cout << "Loaded plugin: " << regEntry.name << " from " << filePath << std::endl;
+            pluginRegistry_[regEntry.name] = std::move(regEntry);
             handles_.push_back(handle);
         }
     }
@@ -114,19 +114,19 @@ Result<PluginPtr> PluginManager::getOrCreatePlugin(const std::string& name) {
         return Ok(it->second);
     }
 
-    // Find meta
-    auto metaIt = pluginMetas_.find(name);
-    if (metaIt == pluginMetas_.end()) {
+    // Find registry entry
+    auto regIt = pluginRegistry_.find(name);
+    if (regIt == pluginRegistry_.end()) {
         return Err<PluginPtr>("Unknown plugin: " + name);
     }
 
-    const auto& meta = metaIt->second;
+    const auto& regEntry = regIt->second;
     Result<PluginPtr> result;
 
-    if (meta._factory) {
-        result = meta._factory(engine_);
-    } else if (meta._createFn) {
-        result = meta._createFn(engine_);
+    if (regEntry.factory) {
+        result = regEntry.factory(engine_);
+    } else if (regEntry.createFn) {
+        result = regEntry.createFn(engine_);
     } else {
         return Err<PluginPtr>("Plugin has no factory: " + name);
     }
@@ -143,7 +143,7 @@ Result<PluginPtr> PluginManager::getOrCreatePlugin(const std::string& name) {
     return Ok(plugin);
 }
 
-Result<PluginLayerPtr> PluginManager::createLayer(const std::string& pluginName,
+Result<WidgetPtr> PluginManager::createWidget(const std::string& pluginName,
                                                    PositionMode mode,
                                                    int32_t x, int32_t y,
                                                    int32_t widthCells, int32_t heightCells,
@@ -153,16 +153,16 @@ Result<PluginLayerPtr> PluginManager::createLayer(const std::string& pluginName,
     // Get or create the plugin
     auto pluginResult = getOrCreatePlugin(pluginName);
     if (!pluginResult) {
-        return Err<PluginLayerPtr>("Failed to get plugin", pluginResult);
+        return Err<WidgetPtr>("Failed to get plugin", pluginResult);
     }
     PluginPtr plugin = *pluginResult;
 
-    // Create the layer
-    auto layerResult = plugin->createLayer(payload);
-    if (!layerResult) {
-        return Err<PluginLayerPtr>("Failed to create layer", layerResult);
+    // Create the widget
+    auto widgetResult = plugin->createLayer(payload);  // Uses legacy name for compatibility
+    if (!widgetResult) {
+        return Err<WidgetPtr>("Failed to create widget", widgetResult);
     }
-    PluginLayerPtr layer = *layerResult;
+    WidgetPtr widget = *widgetResult;
 
     // Resolve flexible dimensions using terminal size
     uint32_t termCols = grid ? grid->getCols() : 80;
@@ -190,27 +190,27 @@ Result<PluginLayerPtr> PluginManager::createLayer(const std::string& pluginName,
         finalHeight = static_cast<uint32_t>(heightCells);
     }
 
-    // Configure the layer
-    layer->setId(nextLayerId_++);
-    layer->setHashId(oscParser_.generateId());  // Generate 8-char hash ID
-    layer->setPositionMode(mode);
-    layer->setScreenType(isAltScreen_ ? ScreenType::Alternate : ScreenType::Main);
-    layer->setPosition(x, y);
-    layer->setCellSize(finalWidth, finalHeight);
-    layer->setPixelSize(finalWidth * cellWidth, finalHeight * cellHeight);
+    // Configure the widget
+    widget->setId(nextLayerId_++);
+    widget->setHashId(oscParser_.generateId());  // Generate 8-char hash ID
+    widget->setPositionMode(mode);
+    widget->setScreenType(isAltScreen_ ? ScreenType::Alternate : ScreenType::Main);
+    widget->setPosition(x, y);
+    widget->setCellSize(finalWidth, finalHeight);
+    widget->setPixelSize(finalWidth * cellWidth, finalHeight * cellHeight);
 
     // Add to plugin
-    plugin->addLayer(layer);
+    plugin->addWidget(widget);
 
     // Add to hash ID lookup map
-    layersByHashId_[layer->hashId()] = layer;
+    widgetsByHashId_[widget->hashId()] = widget;
 
     // Mark grid cells
     if (grid) {
-        markGridCells(grid, layer.get());
+        markGridCells(grid, widget.get());
     }
 
-    return Ok(layer);
+    return Ok(widget);
 }
 
 Result<void> PluginManager::updateLayer(const std::string& hashId, const std::string& payload) {
@@ -231,8 +231,8 @@ Result<void> PluginManager::updateLayer(const std::string& hashId, const std::st
 }
 
 Result<void> PluginManager::removeLayer(const std::string& hashId, Grid* grid) {
-    auto it = layersByHashId_.find(hashId);
-    if (it == layersByHashId_.end()) {
+    auto it = widgetsByHashId_.find(hashId);
+    if (it == widgetsByHashId_.end()) {
         return Err<void>("Layer not found: " + hashId);
     }
 
@@ -254,14 +254,14 @@ Result<void> PluginManager::removeLayer(const std::string& hashId, Grid* grid) {
     }
 
     // Remove from hash ID map
-    layersByHashId_.erase(it);
+    widgetsByHashId_.erase(it);
 
     return Ok();
 }
 
 PluginLayerPtr PluginManager::getLayer(const std::string& hashId) {
-    auto it = layersByHashId_.find(hashId);
-    return (it != layersByHashId_.end()) ? it->second : nullptr;
+    auto it = widgetsByHashId_.find(hashId);
+    return (it != widgetsByHashId_.end()) ? it->second : nullptr;
 }
 
 PluginLayerPtr PluginManager::getLayerById(uint32_t id) {
@@ -337,8 +337,8 @@ Result<void> PluginManager::killLayersByPlugin(const std::string& pluginName, Gr
 
 std::vector<std::string> PluginManager::getAvailablePlugins() const {
     std::vector<std::string> names;
-    names.reserve(pluginMetas_.size());
-    for (const auto& [name, meta] : pluginMetas_) {
+    names.reserve(pluginRegistry_.size());
+    for (const auto& [name, regEntry] : pluginRegistry_) {
         names.push_back(name);
     }
     return names;
@@ -393,7 +393,7 @@ bool PluginManager::handleOSCSequence(const std::string& sequence,
             // Decode payload if provided in plugin args
             std::string payload = cmd.payload;
 
-            auto result = createLayer(cmd.create.plugin, mode, x, y,
+            auto result = createWidget(cmd.create.plugin, mode, x, y,
                                       cmd.create.width, cmd.create.height,
                                       payload, grid, cellWidth, cellHeight);
             if (!result) {
@@ -403,8 +403,8 @@ bool PluginManager::handleOSCSequence(const std::string& sequence,
                 return false;
             }
 
-            PluginLayerPtr layer = *result;
-            std::cout << "Created layer " << layer->hashId() << " plugin=" << cmd.create.plugin
+            WidgetPtr widget = *result;
+            std::cout << "Created widget " << widget->hashId() << " plugin=" << cmd.create.plugin
                       << " at (" << x << "," << y << ") size "
                       << cmd.create.width << "x" << cmd.create.height << std::endl;
 

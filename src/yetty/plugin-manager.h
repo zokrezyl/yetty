@@ -21,12 +21,12 @@ class WebGPUContext;
 // Factory function type for built-in plugins
 using BuiltinPluginFactory = std::function<Result<PluginPtr>(YettyPtr)>;
 
-// Metadata for a registered plugin type
-struct PluginMeta {
-    std::string _name;
-    BuiltinPluginFactory _factory;
-    void* _handle = nullptr;        // For dynamically loaded plugins
-    PluginCreateFn _createFn = nullptr;
+// Internal registry entry for a plugin type (not the same as PluginMeta from plugin.h)
+struct PluginRegistryEntry {
+    std::string name;
+    BuiltinPluginFactory factory;
+    void* handle = nullptr;        // For dynamically loaded plugins
+    PluginCreateFn createFn = nullptr;
 };
 
 class PluginManager {
@@ -47,17 +47,28 @@ public:
     // Load plugins from directory (.so files)
     void loadPluginsFromDirectory(const std::string& path);
 
-    // Create a new layer for a plugin type
+    // Create a new widget for a plugin type
     // widthCells/heightCells: 0 = stretch to edge, negative = termSize - abs(value)
-    Result<PluginLayerPtr> createLayer(const std::string& pluginName,
-                                        PositionMode mode,
-                                        int32_t x, int32_t y,
-                                        int32_t widthCells, int32_t heightCells,
-                                        const std::string& payload,
-                                        Grid* grid,
-                                        uint32_t cellWidth, uint32_t cellHeight);
+    Result<WidgetPtr> createWidget(const std::string& pluginName,
+                                    PositionMode mode,
+                                    int32_t x, int32_t y,
+                                    int32_t widthCells, int32_t heightCells,
+                                    const std::string& payload,
+                                    Grid* grid,
+                                    uint32_t cellWidth, uint32_t cellHeight);
+    
+    // Legacy alias
+    Result<WidgetPtr> createLayer(const std::string& pluginName,
+                                   PositionMode mode,
+                                   int32_t x, int32_t y,
+                                   int32_t widthCells, int32_t heightCells,
+                                   const std::string& payload,
+                                   Grid* grid,
+                                   uint32_t cellWidth, uint32_t cellHeight) {
+        return createWidget(pluginName, mode, x, y, widthCells, heightCells, payload, grid, cellWidth, cellHeight);
+    }
 
-    // Update a layer (by hash ID)
+    // Update a widget (by hash ID)
     Result<void> updateLayer(const std::string& hashId, const std::string& payload);
 
     // Remove a layer (by hash ID)
@@ -181,12 +192,12 @@ private:
 
     // Find layer at grid cell
     PluginLayerPtr layerAtCell(int col, int row, const Grid* grid);
-    void markGridCells(Grid* grid, PluginLayer* layer);
-    void clearGridCells(Grid* grid, PluginLayer* layer);
+    void markGridCells(Grid* grid, Widget* widget);
+    void clearGridCells(Grid* grid, Widget* widget);
 
-    std::unordered_map<std::string, PluginMeta> pluginMetas_;
+    std::unordered_map<std::string, PluginRegistryEntry> pluginRegistry_;
     std::unordered_map<std::string, PluginPtr> plugins_;  // Active plugin instances
-    std::unordered_map<std::string, PluginLayerPtr> layersByHashId_;  // Hash ID -> layer
+    std::unordered_map<std::string, WidgetPtr> widgetsByHashId_;  // Hash ID -> widget
     uint32_t nextLayerId_ = 1;
     OscCommandParser oscParser_;  // OSC command parser
     Font* font_ = nullptr;

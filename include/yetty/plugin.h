@@ -9,6 +9,7 @@
 #include <vector>
 #include <atomic>
 #include <mutex>
+#include <unordered_map>
 
 namespace yetty {
 
@@ -18,14 +19,29 @@ class Grid;
 class Font;
 class FontManager;
 class Plugin;
-class PluginLayer;
+class Widget;
 class Yetty;
 
 // Yetty shared pointer type (defined here to avoid circular include)
 using YettyPtr = std::shared_ptr<Yetty>;
 
 using PluginPtr = std::shared_ptr<Plugin>;
-using PluginLayerPtr = std::shared_ptr<PluginLayer>;
+using WidgetPtr = std::shared_ptr<Widget>;
+
+// Legacy alias for backward compatibility during migration
+using PluginLayer = Widget;
+using PluginLayerPtr = WidgetPtr;
+
+//-----------------------------------------------------------------------------
+// PluginMeta - metadata returned by plugins via meta() function
+//-----------------------------------------------------------------------------
+struct PluginMeta {
+    std::string name;         // Plugin name (required)
+    std::string version;      // Version string (e.g., "1.0.0")
+    std::string author;       // Author name/email
+    std::string description;  // Short description
+    std::unordered_map<std::string, std::string> extra;  // Additional metadata
+};
 
 //-----------------------------------------------------------------------------
 // RenderContext - rendering parameters passed to PluginLayer::render()
@@ -44,26 +60,30 @@ struct RenderContext {
     double deltaTime = 0.0;  // Time since last frame
 };
 
-// Position mode for plugin layers
+// Position mode for widgets
 enum class PositionMode {
     Absolute,  // Fixed position, doesn't scroll
     Relative   // Relative to cursor when created, scrolls with content
 };
 
-// Screen type for plugin layers (main vs alternate screen)
+// Screen type for widgets (main vs alternate screen)
 enum class ScreenType {
     Main,       // Normal/primary screen
     Alternate   // Alternate screen (vim, less, htop, etc.)
 };
 
 //-----------------------------------------------------------------------------
-// PluginLayer - represents a specific layer/instance at a position
-// Each layer is a Renderable that renders itself via render()
+// Widget - a plugin instance rendered at a position in the terminal
+//
+// Widgets decide internally how to render:
+// - Simple drawing: draw directly to the provided render pass
+// - Need texture: create/manage own texture, render to it, blit to pass
+// - Complex pipeline: manage own render passes, blit result to pass
 //-----------------------------------------------------------------------------
-class PluginLayer : public Renderable, public std::enable_shared_from_this<PluginLayer> {
+class Widget : public Renderable, public std::enable_shared_from_this<Widget> {
 public:
-    PluginLayer() = default;
-    ~PluginLayer() override = default;
+    Widget() = default;
+    ~Widget() override = default;
 
     // Renderable interface
     uint32_t id() const override { return _id; }
@@ -76,17 +96,18 @@ public:
     // Legacy render - creates own command encoder (slow, avoid!)
     Result<void> render(WebGPUContext& ctx) override = 0;
 
-    // Batched render - draws into existing render pass (fast!)
+    // Batched render - draws into existing render pass
+    // Widget decides internally: draw directly, or render to texture and blit
     // Returns true if drew something, false if skipped (off-screen, etc.)
     virtual bool renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) = 0;
 
-    // Initialize this layer with its payload
+    // Initialize this widget with its payload
     virtual Result<void> init(const std::string& payload) = 0;
 
-    // Dispose layer-specific resources
+    // Dispose widget-specific resources
     virtual Result<void> dispose() { return Ok(); }
 
-    // Input handling - coordinates are relative to layer's top-left (in screen pixels)
+    // Input handling - coordinates are relative to widget's top-left (in screen pixels)
     virtual bool onMouseMove(float localX, float localY) { (void)localX; (void)localY; return false; }
     virtual bool onMouseButton(int button, bool pressed) { (void)button; (void)pressed; return false; }
     virtual bool onMouseScroll(float xoffset, float yoffset, int mods) { (void)xoffset; (void)yoffset; (void)mods; return false; }
@@ -95,7 +116,7 @@ public:
     }
     virtual bool onChar(unsigned int codepoint) { (void)codepoint; return false; }
 
-    // Query if layer wants input
+    // Query if widget wants input
     virtual bool wantsKeyboard() const { return false; }
     virtual bool wantsMouse() const { return false; }
 
@@ -137,9 +158,9 @@ public:
         }
     }
 
-    // Dirty flag for "quiet plugins" optimization
-    // Quiet plugins (e.g., static images) only re-render when dirty
-    // Animated plugins (e.g., shaders) should mark dirty every frame
+    // Dirty flag for "quiet widgets" optimization
+    // Quiet widgets (e.g., static images) only re-render when dirty
+    // Animated widgets (e.g., shaders) should mark dirty every frame
     bool isDirty() const { return _dirty; }
     void setDirty(bool d = true) { _dirty = d; }
     void clearDirty() { _dirty = false; }
@@ -177,8 +198,8 @@ public:
 protected:
     uint32_t _id = 0;
     std::string _hashId;     // 8 char nix-style ID: [a-z0-9]{8}
-    uint32_t _zOrder = 200;  // Plugins render above terminal (0)
-    std::string _name = "PluginLayer";
+    uint32_t _zOrder = 200;  // Widgets render above terminal (0)
+    std::string _name = "Widget";
     std::atomic<bool> _running{false};
     std::mutex _mutex;
 
@@ -201,14 +222,22 @@ protected:
 //-----------------------------------------------------------------------------
 // Plugin - represents a plugin TYPE (e.g., "simple-plot", "shadertoy")
 // Plugin is a Renderable for shared resources (shaders, etc.)
-// Layers are separate Renderables for per-instance rendering
+// Widgets are separate Renderables for per-instance rendering
 //-----------------------------------------------------------------------------
 class Plugin : public Renderable, public std::enable_shared_from_this<Plugin> {
 public:
     ~Plugin() override = default;
 
-    // Plugin identification
-    virtual const char* pluginName() const = 0;
+    // Plugin metadata - new API
+    // Override this to provide full metadata, or just override pluginName() for legacy
+    virtual PluginMeta pluginMeta() const {
+        PluginMeta meta;
+        meta.name = pluginName();
+        return meta;
+    }
+    
+    // Legacy plugin identification - override this or pluginMeta()
+    virtual const char* pluginName() const { return "UnnamedPlugin"; }
 
     // Renderable interface
     uint32_t id() const override { return _pluginId; }
@@ -231,57 +260,79 @@ protected:
 public:
     // Dispose shared resources
     virtual Result<void> dispose() {
-        for (auto& layer : _layers) {
-            if (layer) {
-                if (auto res = layer->dispose(); !res) {
-                    return Err<void>("Failed to dispose layer", res);
+        for (auto& widget : _widgets) {
+            if (widget) {
+                if (auto res = widget->dispose(); !res) {
+                    return Err<void>("Failed to dispose widget", res);
                 }
             }
         }
-        _layers.clear();
+        _widgets.clear();
         return Ok();
     }
 
-    // Create a new layer for this plugin
-    virtual Result<PluginLayerPtr> createLayer(const std::string& payload) = 0;
-
-    // Add a layer to this plugin
-    void addLayer(PluginLayerPtr layer) {
-        layer->setParent(this);
-        _layers.push_back(layer);
+    // Create a new widget for this plugin
+    // Legacy name is createLayer - both work
+    virtual Result<WidgetPtr> createWidget(const std::string& payload) {
+        // Default implementation calls legacy createLayer if overridden
+        // Subclasses should override createWidget (preferred) or createLayer (legacy)
+        return Err<WidgetPtr>("createWidget not implemented");
+    }
+    
+    // Legacy name - override this or createWidget
+    virtual Result<WidgetPtr> createLayer(const std::string& payload) {
+        return createWidget(payload);
     }
 
-    // Remove a layer by ID
-    Result<void> removeLayer(uint32_t id) {
-        for (auto it = _layers.begin(); it != _layers.end(); ++it) {
+    // Add a widget to this plugin
+    void addWidget(WidgetPtr widget) {
+        widget->setParent(this);
+        _widgets.push_back(widget);
+    }
+    
+    // Legacy alias
+    void addLayer(WidgetPtr widget) { addWidget(widget); }
+
+    // Remove a widget by ID
+    Result<void> removeWidget(uint32_t id) {
+        for (auto it = _widgets.begin(); it != _widgets.end(); ++it) {
             if ((*it)->id() == id) {
                 if (auto res = (*it)->dispose(); !res) {
-                    return Err<void>("Failed to dispose layer " + std::to_string(id), res);
+                    return Err<void>("Failed to dispose widget " + std::to_string(id), res);
                 }
-                _layers.erase(it);
+                _widgets.erase(it);
                 return Ok();
             }
         }
-        return Err<void>("Layer not found: " + std::to_string(id));
+        return Err<void>("Widget not found: " + std::to_string(id));
     }
+    
+    // Legacy alias
+    Result<void> removeLayer(uint32_t id) { return removeWidget(id); }
 
-    // Get a layer by ID
-    PluginLayerPtr getLayer(uint32_t id) {
-        for (auto& layer : _layers) {
-            if (layer->id() == id) return layer;
+    // Get a widget by ID
+    WidgetPtr getWidget(uint32_t id) {
+        for (auto& widget : _widgets) {
+            if (widget->id() == id) return widget;
         }
         return nullptr;
     }
+    
+    // Legacy alias
+    WidgetPtr getLayer(uint32_t id) { return getWidget(id); }
 
-    // Get all layers (each is a Renderable)
-    const std::vector<PluginLayerPtr>& getLayers() const { return _layers; }
+    // Get all widgets
+    const std::vector<WidgetPtr>& getWidgets() const { return _widgets; }
+    
+    // Legacy alias
+    const std::vector<WidgetPtr>& getLayers() const { return _widgets; }
 
-    // Handle terminal resize - notify all layers
+    // Handle terminal resize - notify all widgets
     virtual Result<void> onTerminalResize(uint32_t cellWidth, uint32_t cellHeight) {
-        for (auto& layer : _layers) {
-            uint32_t newW = layer->getWidthCells() * cellWidth;
-            uint32_t newH = layer->getHeightCells() * cellHeight;
-            layer->onResize(newW, newH);
+        for (auto& widget : _widgets) {
+            uint32_t newW = widget->getWidthCells() * cellWidth;
+            uint32_t newH = widget->getHeightCells() * cellHeight;
+            widget->onResize(newW, newH);
         }
         return Ok();
     }
@@ -299,19 +350,22 @@ public:
 
 protected:
     YettyPtr engine_;
-    std::vector<PluginLayerPtr> _layers;
+    std::vector<WidgetPtr> _widgets;
     bool _initialized = false;
     Font* _font = nullptr;
 
     uint32_t _pluginId = 0;
-    uint32_t _pluginZOrder = 150;  // Plugin shared resources render before layers
+    uint32_t _pluginZOrder = 150;  // Plugin shared resources render before widgets
     std::string _pluginName = "Plugin";
     std::atomic<bool> _running{false};
     std::mutex _mutex;
 };
 
 // C function types for dynamic loading
-using PluginNameFn = const char* (*)();
+using PluginMetaFn = PluginMeta (*)();
 using PluginCreateFn = Result<PluginPtr> (*)(YettyPtr);
+
+// Legacy alias
+using PluginNameFn = const char* (*)();
 
 } // namespace yetty
