@@ -762,10 +762,24 @@ void Yetty::shutdown() noexcept {
   // Web: just clean up shared_ptrs (handled automatically)
   // GLFW termination handled by Emscripten runtime
 #else
-  // Desktop: Shutdown libuv event loop
+  // Desktop: Shutdown libuv event loop first
   shutdownEventLoop();
 
-  // shared_ptrs are cleaned up automatically
+  // Clean up in reverse order of creation
+  // 1. Plugin manager first (disposes all plugin layers)
+  _pluginManager.reset();
+  // 2. Then shader/cursor managers
+  _shaderManager.reset();
+  _cursorRenderer.reset();
+  // 3. Then terminal (stops PTY)
+  _terminal.reset();
+  // 4. Then renderer
+  _renderer.reset();
+  // 5. Then font resources
+  _fontManager.reset();
+  _font = nullptr;
+  // 6. Finally WebGPU context
+  _ctx.reset();
 
   if (_window) {
     glfwDestroyWindow(_window);

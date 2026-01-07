@@ -341,6 +341,11 @@ Result<void> Terminal::readPty() {
         return Ok();
     }
 
+    // Don't try to read if not running
+    if (!running_) {
+        return Ok();
+    }
+
     // Drain PTY - read as much as available up to 40KB
     size_t totalRead = 0;
     ssize_t n;
@@ -349,8 +354,19 @@ Result<void> Terminal::readPty() {
         if (totalRead >= PTY_READ_BUFFER_SIZE) break;
     }
     
-    // Only report error if we read nothing AND it's not EAGAIN/EWOULDBLOCK
-    if (totalRead == 0 && n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+    // Handle read errors
+    if (totalRead == 0 && n < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            // No data available, this is normal for non-blocking read
+            return Ok();
+        }
+        if (errno == EIO) {
+            // EIO means the slave side was closed (shell exited)
+            running_ = false;
+            spdlog::info("Shell exited (PTY closed)");
+            return Ok();
+        }
+        // Other errors are real problems
         return Err<void>(std::string("PTY read error: ") + strerror(errno));
     }
 
