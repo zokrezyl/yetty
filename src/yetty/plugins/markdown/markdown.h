@@ -9,7 +9,7 @@
 namespace yetty {
 
 class MarkdownPlugin;
-class MarkdownLayer;
+class MarkdownW;
 
 //-----------------------------------------------------------------------------
 // MarkdownPlugin - renders markdown content using RichText
@@ -31,7 +31,7 @@ public:
 
 private:
     explicit MarkdownPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
-    Result<void> init() noexcept override;
+    Result<void> pluginInit() noexcept;
 };
 
 //-----------------------------------------------------------------------------
@@ -55,14 +55,20 @@ struct ParsedLine {
 };
 
 //-----------------------------------------------------------------------------
-// MarkdownLayer - single markdown document layer (uses RichText for rendering)
+// MarkdownW - single markdown document widget (uses RichText for rendering)
 //-----------------------------------------------------------------------------
-class MarkdownLayer : public Widget {
+class MarkdownW : public Widget {
 public:
-    explicit MarkdownLayer(MarkdownPlugin* plugin);
-    ~MarkdownLayer() override;
+    static Result<WidgetPtr> create(const std::string& payload, MarkdownPlugin* plugin) {
+        auto w = std::shared_ptr<MarkdownW>(new MarkdownW(payload, plugin));
+        if (auto res = w->init(); !res) {
+            return Err<WidgetPtr>("Failed to init MarkdownW", res);
+        }
+        return Ok(std::static_pointer_cast<Widget>(w));
+    }
 
-    Result<void> init(const std::string& payload) override;
+    ~MarkdownW() override;
+
     Result<void> dispose() override;
 
     // Renderable interface
@@ -74,6 +80,13 @@ public:
     bool wantsMouse() const override { return true; }
 
 private:
+    explicit MarkdownW(const std::string& payload, MarkdownPlugin* plugin)
+        : plugin_(plugin) {
+        payload_ = payload;
+    }
+
+    Result<void> init() override;
+
     void parseMarkdown(const std::string& content);
     void buildRichTextSpans(float fontSize, float maxWidth);
 
@@ -86,8 +99,6 @@ private:
     bool initialized_ = false;
     bool failed_ = false;
 };
-
-using Markdown = MarkdownPlugin;
 
 } // namespace yetty
 

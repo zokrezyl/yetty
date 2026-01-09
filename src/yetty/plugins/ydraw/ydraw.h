@@ -12,7 +12,7 @@ namespace yetty {
 // Demonstrates how to use the core ydraw library in a plugin
 //-----------------------------------------------------------------------------
 
-class YDrawLayer;
+class YDrawW;
 
 class YDrawPlugin : public Plugin {
 public:
@@ -28,19 +28,25 @@ public:
 
 private:
     explicit YDrawPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
-    Result<void> init() noexcept override;
+    Result<void> pluginInit() noexcept;
 };
 
 //-----------------------------------------------------------------------------
-// YDrawLayer - Plugin layer that wraps YDrawRenderer
+// YDrawW - Plugin widget that wraps YDrawRenderer
 //-----------------------------------------------------------------------------
 
-class YDrawLayer : public Widget {
+class YDrawW : public Widget {
 public:
-    YDrawLayer();
-    ~YDrawLayer() override;
+    static Result<WidgetPtr> create(const std::string& payload) {
+        auto w = std::shared_ptr<YDrawW>(new YDrawW(payload));
+        if (auto res = w->init(); !res) {
+            return Err<WidgetPtr>("Failed to init YDrawW", res);
+        }
+        return Ok(std::static_pointer_cast<Widget>(w));
+    }
 
-    Result<void> init(const std::string& payload) override;
+    ~YDrawW() override;
+
     Result<void> dispose() override;
 
     // Renderable interface
@@ -55,8 +61,13 @@ public:
     bool wantsKeyboard() const override { return true; }
 
 private:
-    std::unique_ptr<YDrawRenderer> _renderer;
-    bool _failed = false;
+    explicit YDrawW(const std::string& payload) {
+        payload_ = payload;
+    }
+    Result<void> init() override;
+
+    std::unique_ptr<YDrawRenderer> renderer_;
+    bool failed_ = false;
 };
 
 } // namespace yetty

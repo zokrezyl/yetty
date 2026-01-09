@@ -18,19 +18,19 @@ RichTextPlugin::~RichTextPlugin() {
 
 Result<PluginPtr> RichTextPlugin::create(YettyPtr engine) noexcept {
     auto p = PluginPtr(new RichTextPlugin(std::move(engine)));
-    if (auto res = static_cast<RichTextPlugin*>(p.get())->init(); !res) {
+    if (auto res = static_cast<RichTextPlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init RichTextPlugin", res);
     }
     return Ok(p);
 }
 
-Result<void> RichTextPlugin::init() noexcept {
+Result<void> RichTextPlugin::pluginInit() noexcept {
     // Verify engine has a FontManager
     if (!engine_ || !engine_->fontManager()) {
         return Err<void>("RichTextPlugin: engine has no FontManager");
     }
 
-    _initialized = true;
+    initialized_ = true;
     spdlog::info("RichTextPlugin initialized (using engine's FontManager)");
     return Ok();
 }
@@ -39,7 +39,7 @@ Result<void> RichTextPlugin::dispose() {
     if (auto res = Plugin::dispose(); !res) {
         return Err<void>("Failed to dispose RichTextPlugin", res);
     }
-    _initialized = false;
+    initialized_ = false;
     return Ok();
 }
 
@@ -48,37 +48,26 @@ FontManager* RichTextPlugin::getFontManager() {
 }
 
 Result<WidgetPtr> RichTextPlugin::createWidget(const std::string& payload) {
-    auto layer = std::make_shared<RichTextLayer>(this);
-    auto result = layer->init(payload);
-    if (!result) {
-        return Err<WidgetPtr>("Failed to init RichTextLayer", result);
-    }
-    return Ok<WidgetPtr>(layer);
+    return RichTextW::create(payload, this);
 }
 
 //-----------------------------------------------------------------------------
-// RichTextLayer
+// RichTextW
 //-----------------------------------------------------------------------------
 
-RichTextLayer::RichTextLayer(RichTextPlugin* plugin)
-    : plugin_(plugin) {}
-
-RichTextLayer::~RichTextLayer() {
+RichTextW::~RichTextW() {
     (void)dispose();
 }
 
-Result<void> RichTextLayer::init(const std::string& payload) {
-    if (payload.empty()) {
-        return Err<void>("RichTextLayer: empty payload");
+Result<void> RichTextW::init() {
+    if (payload_.empty()) {
+        return Err<void>("RichTextW: empty payload");
     }
 
-    _payload = payload;
-    (void)dispose();
-
-    return parseYAML(payload);
+    return parseYAML(payload_);
 }
 
-Result<void> RichTextLayer::dispose() {
+Result<void> RichTextW::dispose() {
     if (richText_) {
         richText_->dispose();
         richText_.reset();
@@ -92,7 +81,7 @@ Result<void> RichTextLayer::dispose() {
 // YAML Parsing
 //-----------------------------------------------------------------------------
 
-Result<void> RichTextLayer::parseYAML(const std::string& yaml) {
+Result<void> RichTextW::parseYAML(const std::string& yaml) {
     try {
         YAML::Node root = YAML::Load(yaml);
 
@@ -104,7 +93,7 @@ Result<void> RichTextLayer::parseYAML(const std::string& yaml) {
 
         // Parse spans
         if (!root["spans"] || !root["spans"].IsSequence()) {
-            return Err<void>("RichTextLayer: YAML must have 'spans' array");
+            return Err<void>("RichTextW: YAML must have 'spans' array");
         }
 
         // Clear pending spans (RichText will be created in render() when we have ctx)
@@ -118,7 +107,7 @@ Result<void> RichTextLayer::parseYAML(const std::string& yaml) {
 
             // Required: text
             if (!spanNode["text"]) {
-                spdlog::warn("RichTextLayer: span missing 'text', skipping");
+                spdlog::warn("RichTextW: span missing 'text', skipping");
                 continue;
             }
             span.text = spanNode["text"].as<std::string>();
@@ -204,7 +193,7 @@ Result<void> RichTextLayer::parseYAML(const std::string& yaml) {
             }
         }
 
-        spdlog::info("RichTextLayer: parsed {} spans from YAML", root["spans"].size());
+        spdlog::info("RichTextW: parsed {} spans from YAML", root["spans"].size());
         return Ok();
 
     } catch (const YAML::Exception& e) {
@@ -216,23 +205,23 @@ Result<void> RichTextLayer::parseYAML(const std::string& yaml) {
 // Render
 //-----------------------------------------------------------------------------
 
-Result<void> RichTextLayer::render(WebGPUContext& ctx) {
+Result<void> RichTextW::render(WebGPUContext& ctx) {
     if (failed_) {
-        return Err<void>("RichTextLayer already failed");
+        return Err<void>("RichTextW already failed");
     }
-    if (!_visible) return Ok();
+    if (!visible_) return Ok();
 
     // Get render context set by owner
-    const auto& rc = _render_context;
+    const auto& rc = renderCtx_;
 
     // Calculate pixel position from cell position
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _width_cells * rc.cellWidth;
-    float pixelH = _height_cells * rc.cellHeight;
+    float pixelX = x_ * rc.cellWidth;
+    float pixelY = y_ * rc.cellHeight;
+    float pixelW = widthCells_ * rc.cellWidth;
+    float pixelH = heightCells_ * rc.cellHeight;
 
-    // For Relative layers, adjust position when viewing scrollback
-    if (_position_mode == PositionMode::Relative && rc.scrollOffset > 0) {
+    // For Relative widgets, adjust position when viewing scrollback
+    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
@@ -276,19 +265,19 @@ Result<void> RichTextLayer::render(WebGPUContext& ctx) {
                               pixelX, pixelY, pixelW, pixelH);
 }
 
-bool RichTextLayer::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (failed_ || !_visible) return false;
+bool RichTextW::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+    if (failed_ || !visible_) return false;
 
-    const auto& rc = _render_context;
+    const auto& rc = renderCtx_;
 
     // Calculate pixel position from cell position
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _width_cells * rc.cellWidth;
-    float pixelH = _height_cells * rc.cellHeight;
+    float pixelX = x_ * rc.cellWidth;
+    float pixelY = y_ * rc.cellHeight;
+    float pixelW = widthCells_ * rc.cellWidth;
+    float pixelH = heightCells_ * rc.cellHeight;
 
-    // For Relative layers, adjust position when viewing scrollback
-    if (_position_mode == PositionMode::Relative && rc.scrollOffset > 0) {
+    // For Relative widgets, adjust position when viewing scrollback
+    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
@@ -336,7 +325,7 @@ bool RichTextLayer::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
 // Mouse Scroll
 //-----------------------------------------------------------------------------
 
-bool RichTextLayer::onMouseScroll(float xoffset, float yoffset, int mods) {
+bool RichTextW::onMouseScroll(float xoffset, float yoffset, int mods) {
     (void)xoffset;
     (void)mods;
 
@@ -346,7 +335,7 @@ bool RichTextLayer::onMouseScroll(float xoffset, float yoffset, int mods) {
     richText_->scroll(-scrollAmount);
 
     // Clamp scroll
-    float maxScroll = std::max(0.0f, richText_->getContentHeight() - static_cast<float>(_pixel_height));
+    float maxScroll = std::max(0.0f, richText_->getContentHeight() - static_cast<float>(pixelHeight_));
     if (richText_->getScrollOffset() > maxScroll) {
         richText_->setScrollOffset(maxScroll);
     }

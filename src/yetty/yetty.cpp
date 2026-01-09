@@ -16,10 +16,12 @@
 
 #if !YETTY_WEB && !defined(__ANDROID__)
 #include "plugin-manager.h"
+#include "widget-factory.h"
 #include <yetty/shader-glyph-renderer.h>
 #include <yetty/shader-manager.h>
 #include <yetty/cursor-renderer.h>
 #include "terminal.h"
+#include "remote-terminal.h"
 #include <args.hxx>
 #elif defined(__ANDROID__)
 #include "terminal.h"
@@ -240,6 +242,9 @@ Result<void> Yetty::parseArgs(int argc, char *argv[]) noexcept {
                           {"no-damage"});
   args::Flag debugDamageFlag(parser, "debug-damage",
                              "Log damage rectangle updates", {"debug-damage"});
+  args::Flag muxFlag(parser, "mux",
+                     "Use multiplexed terminal (connect to yetty-server)",
+                     {"mux"});
   args::ValueFlag<std::string> executeArg(
       parser, "command", "Execute command instead of shell", {'e'});
 
@@ -276,6 +281,7 @@ Result<void> Yetty::parseArgs(int argc, char *argv[]) noexcept {
 
   // Extract final values
   _generateAtlasOnly = generateAtlasFlag;
+  _useMux = muxFlag;
   _fontPath = fontPathArg ? args::get(fontPathArg) : std::string(DEFAULT_FONT);
   _executeCommand = executeArg ? args::get(executeArg) : "";
   _initialWidth = widthArg ? args::get(widthArg) : 1024;
@@ -288,6 +294,9 @@ Result<void> Yetty::parseArgs(int argc, char *argv[]) noexcept {
 
   if (!_executeCommand.empty()) {
     spdlog::info("Execute command: {}", _executeCommand);
+  }
+  if (_useMux) {
+    spdlog::info("Multiplexed terminal mode enabled");
   }
 #else
   (void)argc;
@@ -493,6 +502,57 @@ Result<void> Yetty::initTerminal() noexcept {
   LOGI("Toybox available at: %s", _toyboxPath.c_str());
 #elif !YETTY_WEB
   // Desktop: Terminal mode with plugins
+  
+  // Check if multiplexed mode requested
+  if (_useMux) {
+    spdlog::info("Multiplexed terminal mode: connecting to yetty-server...");
+    
+    auto remoteTerminalResult = RemoteTerminal::create(nextRenderableId(), _cols, _rows, _font, _uvLoop);
+    if (!remoteTerminalResult) {
+      spdlog::error("Failed to create RemoteTerminal: {}", error_msg(remoteTerminalResult));
+      spdlog::info("Falling back to in-process terminal...");
+      // Fall through to create local terminal
+    } else {
+      _remoteTerminal = *remoteTerminalResult;
+      _remoteTerminal->setConfig(_config.get());
+      
+      // Set shell command
+      if (!_executeCommand.empty()) {
+        _remoteTerminal->setShell(_executeCommand);
+      }
+      
+      // Wire up renderer
+      if (_renderer) {
+        _remoteTerminal->setRenderer(_renderer.get());
+      }
+      
+      // Set up cell size
+      _remoteTerminal->setBaseCellSize(_baseCellWidth, _baseCellHeight);
+      _remoteTerminal->setCellSize(static_cast<uint32_t>(_baseCellWidth),
+                                   static_cast<uint32_t>(_baseCellHeight));
+      
+      // Start remote terminal
+      _remoteTerminal->start();
+      
+      // Check if start succeeded
+      if (!_remoteTerminal->isRunning()) {
+        spdlog::error("RemoteTerminal failed to start, falling back to in-process terminal");
+        _remoteTerminal.reset();
+        // Fall through to create local terminal
+      } else {
+        // Add to renderables
+        addRenderable(_remoteTerminal);
+        
+        spdlog::info("RemoteTerminal started successfully");
+        
+        // Skip creating local terminal - go directly to ShaderManager setup
+        goto setup_shader_manager;
+      }
+    }
+  }
+  
+  {
+  // In-process terminal (default or fallback from mux mode)
   auto terminalResult =
       Terminal::create(nextRenderableId(), _cols, _rows, _font, _uvLoop);
   if (!terminalResult) {
@@ -511,6 +571,12 @@ Result<void> Yetty::initTerminal() noexcept {
   // Pass font and engine to plugins
   _pluginManager->setFont(_font);
   _pluginManager->setEngine(shared_from_this());
+
+  // Create and initialize WidgetFactory
+  _widgetFactory = std::make_shared<WidgetFactory>(this);
+  if (auto initResult = _widgetFactory->init(); !initResult) {
+    return Err<void>("Failed to initialize widget factory", initResult);
+  }
 
   // Note: ShaderGlyphRenderer is now integrated via Terminal, not as a plugin
 
@@ -543,7 +609,9 @@ Result<void> Yetty::initTerminal() noexcept {
 
   // Add terminal to renderables
   addRenderable(_terminal);
+  }  // end of in-process terminal block
 
+setup_shader_manager:
   // Create ShaderManager for shader-based rendering (cursor, custom glyphs)
   _shaderManager = std::make_shared<ShaderManager>();
   std::string shaderPath = std::string(CMAKE_SOURCE_DIR) + "/src/yetty/shaders/";
@@ -766,9 +834,11 @@ void Yetty::shutdown() noexcept {
   shutdownEventLoop();
 
   // Clean up in reverse order of creation
-  // 1. Plugin manager first (disposes all plugin layers)
+  // 1. Widget factory first
+  _widgetFactory.reset();
+  // 2. Plugin manager (disposes all plugin layers)
   _pluginManager.reset();
-  // 2. Then shader/cursor managers
+  // 3. Then shader/cursor managers
   _shaderManager.reset();
   _cursorRenderer.reset();
   // 3. Then terminal (stops PTY)
@@ -801,10 +871,10 @@ void Yetty::initEventLoop() noexcept {
   uv_loop_init(_uvLoop);
 
   // Frame timer - fires at 50Hz (every 20ms)
+  // Timer is initialized but NOT started here - it's started in run() after init is complete
   _frameTimer = new uv_timer_t;
   uv_timer_init(_uvLoop, _frameTimer);
   _frameTimer->data = this;
-  uv_timer_start(_frameTimer, onFrameTimer, 0, 20); // 50Hz
 
   // Async handle for Terminal to wake up main loop
   _wakeAsync = new uv_async_t;
@@ -927,6 +997,9 @@ int Yetty::run() noexcept {
   std::cout << "Starting render loop... (use mouse scroll to zoom, ESC to exit)"
             << std::endl;
 
+  // Start the frame timer NOW (not during init, to avoid rendering before terminal is ready)
+  uv_timer_start(_frameTimer, onFrameTimer, 0, 20); // 50Hz
+
   // Run libuv event loop - blocks until uv_stop() is called
   uv_run(_uvLoop, UV_RUN_DEFAULT);
 
@@ -962,8 +1035,10 @@ void Yetty::mainLoopIteration() noexcept {
   // Collect and execute render commands from all renderables
   renderAll();
 
-  // Present the frame
-  _ctx->present();
+  // Present the frame (only if a texture was actually acquired)
+  if (_ctx->hasCurrentTexture()) {
+    _ctx->present();
+  }
 #else
   // Desktop build: full rendering with plugins and shader manager
   // Note: glfwPollEvents() is called in onFrameTimer() before this
@@ -1025,8 +1100,42 @@ void Yetty::mainLoopIteration() noexcept {
     }
   }
 
-  // Present the frame
-  _ctx->present();
+  // Render Terminal's widgets (new architecture)
+  if (_terminal && !_terminal->getWidgets().empty()) {
+    auto viewResult = _ctx->getCurrentTextureView();
+    if (viewResult) {
+      // Set up render context for widgets
+      RenderContext rc;
+      rc.targetView = *viewResult;
+      rc.targetFormat = _ctx->getSurfaceFormat();
+      rc.screenWidth = windowWidth();
+      rc.screenHeight = windowHeight();
+      rc.cellWidth = cellWidth();
+      rc.cellHeight = cellHeight();
+      rc.scrollOffset = _terminal->getScrollOffset();
+      rc.termRows = _rows;
+      rc.isAltScreen = _terminal->isAltScreen();
+      rc.deltaTime = glfwGetTime() - _lastRenderTime;
+
+      for (const auto& widget : _terminal->getWidgets()) {
+        if (!widget->isRunning()) continue;
+
+        // Update widget render context
+        widget->setRenderContext(rc);
+
+        // Phase 1: Prepare frame (render to intermediate textures)
+        widget->prepareFrame(*_ctx);
+
+        // Phase 2: Standalone render (creates own pass)
+        widget->render(*_ctx);
+      }
+    }
+  }
+
+  // Present the frame (only if a texture was actually acquired)
+  if (_ctx->hasCurrentTexture()) {
+    _ctx->present();
+  }
 
   // FPS counter
   double currentTime = glfwGetTime();
@@ -1063,8 +1172,6 @@ void Yetty::handleResize(int newWidth, int newHeight) noexcept {
 
   if (newCols != _cols || newRows != _rows) {
     updateGridSize(newCols, newRows);
-    std::cout << "Window resize -> Grid " << newCols << "x" << newRows
-              << std::endl;
   }
 }
 
@@ -1112,6 +1219,9 @@ void Yetty::updateGridSize(uint32_t cols, uint32_t rows) noexcept {
 #if !YETTY_WEB && !defined(__ANDROID__)
   if (_terminal) {
     _terminal->resize(cols, rows);
+  }
+  if (_remoteTerminal) {
+    _remoteTerminal->resize(cols, rows);
   }
 #elif defined(__ANDROID__)
   if (_terminal) {

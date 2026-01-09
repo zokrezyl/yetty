@@ -18,13 +18,13 @@ MarkdownPlugin::~MarkdownPlugin() { (void)dispose(); }
 
 Result<PluginPtr> MarkdownPlugin::create(YettyPtr engine) noexcept {
     auto p = PluginPtr(new MarkdownPlugin(std::move(engine)));
-    if (auto res = static_cast<MarkdownPlugin*>(p.get())->init(); !res) {
+    if (auto res = static_cast<MarkdownPlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init MarkdownPlugin", res);
     }
     return Ok(p);
 }
 
-Result<void> MarkdownPlugin::init() noexcept {
+Result<void> MarkdownPlugin::pluginInit() noexcept {
     // Verify engine has a FontManager
     if (!engine_ || !engine_->fontManager()) {
         return Err<void>("MarkdownPlugin: engine has no FontManager");
@@ -46,41 +46,32 @@ FontManager* MarkdownPlugin::getFontManager() {
 }
 
 Result<WidgetPtr> MarkdownPlugin::createWidget(const std::string& payload) {
-    auto layer = std::make_shared<MarkdownLayer>(this);
-    auto result = layer->init(payload);
-    if (!result) {
-        return Err<WidgetPtr>("Failed to init MarkdownLayer", result);
-    }
-    return Ok<WidgetPtr>(layer);
+    return MarkdownW::create(payload, this);
 }
 
 //-----------------------------------------------------------------------------
-// MarkdownLayer
+// MarkdownW
 //-----------------------------------------------------------------------------
 
-MarkdownLayer::MarkdownLayer(MarkdownPlugin* plugin)
-    : plugin_(plugin) {}
+MarkdownW::~MarkdownW() { (void)dispose(); }
 
-MarkdownLayer::~MarkdownLayer() { (void)dispose(); }
-
-Result<void> MarkdownLayer::init(const std::string& payload) {
-    if (payload.empty()) {
-        return Err<void>("MarkdownLayer: empty payload");
+Result<void> MarkdownW::init() {
+    if (payload_.empty()) {
+        return Err<void>("MarkdownW: empty payload");
     }
 
-    _payload = payload;
     (void)dispose();
 
     std::string content;
 
     // Check if payload is inline content or file path
-    if (payload.substr(0, 7) == "inline:") {
-        content = payload.substr(7);
+    if (payload_.substr(0, 7) == "inline:") {
+        content = payload_.substr(7);
     } else {
         // Try to load from file
-        std::ifstream file(payload);
+        std::ifstream file(payload_);
         if (!file) {
-            return Err<void>("Failed to open markdown file: " + payload);
+            return Err<void>("Failed to open markdown file: " + payload_);
         }
         std::stringstream buffer;
         buffer << file.rdbuf();
@@ -88,11 +79,11 @@ Result<void> MarkdownLayer::init(const std::string& payload) {
     }
 
     parseMarkdown(content);
-    std::cout << "MarkdownLayer: parsed " << parsedLines_.size() << " lines" << std::endl;
+    std::cout << "MarkdownW: parsed " << parsedLines_.size() << " lines" << std::endl;
     return Ok();
 }
 
-Result<void> MarkdownLayer::dispose() {
+Result<void> MarkdownW::dispose() {
     if (richText_) {
         richText_->dispose();
         richText_.reset();
@@ -106,7 +97,7 @@ Result<void> MarkdownLayer::dispose() {
 // Markdown Parser
 //-----------------------------------------------------------------------------
 
-void MarkdownLayer::parseMarkdown(const std::string& content) {
+void MarkdownW::parseMarkdown(const std::string& content) {
     parsedLines_.clear();
 
     std::istringstream stream(content);
@@ -225,13 +216,13 @@ void MarkdownLayer::parseMarkdown(const std::string& content) {
 // Build RichText spans from parsed markdown
 //-----------------------------------------------------------------------------
 
-void MarkdownLayer::buildRichTextSpans(float fontSize, float maxWidth) {
+void MarkdownW::buildRichTextSpans(float fontSize, float maxWidth) {
     if (!richText_) {
-        spdlog::warn("MarkdownLayer::buildRichTextSpans: richText_ is null!");
+        spdlog::warn("MarkdownW::buildRichTextSpans: richText_ is null!");
         return;
     }
 
-    spdlog::debug("MarkdownLayer::buildRichTextSpans: {} lines, fontSize={}, maxWidth={}",
+    spdlog::debug("MarkdownW::buildRichTextSpans: {} lines, fontSize={}, maxWidth={}",
                   parsedLines_.size(), fontSize, maxWidth);
 
     richText_->clear();
@@ -277,7 +268,7 @@ void MarkdownLayer::buildRichTextSpans(float fontSize, float maxWidth) {
         cursorY += scaledLineHeight;
     }
 
-    spdlog::info("MarkdownLayer::buildRichTextSpans: added {} spans", spanCount);
+    spdlog::info("MarkdownW::buildRichTextSpans: added {} spans", spanCount);
     richText_->setNeedsLayout();
 }
 
@@ -285,18 +276,18 @@ void MarkdownLayer::buildRichTextSpans(float fontSize, float maxWidth) {
 // Render
 //-----------------------------------------------------------------------------
 
-Result<void> MarkdownLayer::render(WebGPUContext& ctx) {
+Result<void> MarkdownW::render(WebGPUContext& ctx) {
     // Legacy render - not used, prefer render
-    if (failed_ || !_visible) return Ok();
+    if (failed_ || !visible_) return Ok();
 
-    const auto& rc = _render_context;
+    const auto& rc = renderCtx_;
 
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _width_cells * rc.cellWidth;
-    float pixelH = _height_cells * rc.cellHeight;
+    float pixelX = x_ * rc.cellWidth;
+    float pixelY = y_ * rc.cellHeight;
+    float pixelW = widthCells_ * rc.cellWidth;
+    float pixelH = heightCells_ * rc.cellHeight;
 
-    if (_position_mode == PositionMode::Relative && rc.scrollOffset > 0) {
+    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
@@ -334,17 +325,17 @@ Result<void> MarkdownLayer::render(WebGPUContext& ctx) {
                               pixelX, pixelY, pixelW, pixelH);
 }
 
-bool MarkdownLayer::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (failed_ || !_visible) return false;
+bool MarkdownW::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+    if (failed_ || !visible_) return false;
 
-    const auto& rc = _render_context;
+    const auto& rc = renderCtx_;
 
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _width_cells * rc.cellWidth;
-    float pixelH = _height_cells * rc.cellHeight;
+    float pixelX = x_ * rc.cellWidth;
+    float pixelY = y_ * rc.cellHeight;
+    float pixelW = widthCells_ * rc.cellWidth;
+    float pixelH = heightCells_ * rc.cellHeight;
 
-    if (_position_mode == PositionMode::Relative && rc.scrollOffset > 0) {
+    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
@@ -387,7 +378,7 @@ bool MarkdownLayer::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
 // Mouse Scroll
 //-----------------------------------------------------------------------------
 
-bool MarkdownLayer::onMouseScroll(float xoffset, float yoffset, int mods) {
+bool MarkdownW::onMouseScroll(float xoffset, float yoffset, int mods) {
     (void)xoffset;
     (void)mods;
 
@@ -397,7 +388,7 @@ bool MarkdownLayer::onMouseScroll(float xoffset, float yoffset, int mods) {
     richText_->scroll(-scrollAmount);
 
     // Clamp scroll
-    float maxScroll = std::max(0.0f, richText_->getContentHeight() - static_cast<float>(_pixel_height));
+    float maxScroll = std::max(0.0f, richText_->getContentHeight() - static_cast<float>(pixelHeight_));
     if (richText_->getScrollOffset() > maxScroll) {
         richText_->setScrollOffset(maxScroll);
     }

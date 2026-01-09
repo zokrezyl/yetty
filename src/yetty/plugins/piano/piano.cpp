@@ -19,13 +19,13 @@ PianoPlugin::~PianoPlugin() {
 
 Result<PluginPtr> PianoPlugin::create(YettyPtr engine) noexcept {
     auto p = PluginPtr(new PianoPlugin(std::move(engine)));
-    if (auto res = static_cast<PianoPlugin*>(p.get())->init(); !res) {
+    if (auto res = static_cast<PianoPlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init PianoPlugin", res);
     }
     return Ok(p);
 }
 
-Result<void> PianoPlugin::init() noexcept {
+Result<void> PianoPlugin::pluginInit() noexcept {
     _initialized = true;
     return Ok();
 }
@@ -39,12 +39,7 @@ Result<void> PianoPlugin::dispose() {
 }
 
 Result<WidgetPtr> PianoPlugin::createWidget(const std::string& payload) {
-    auto layer = std::make_shared<PianoLayer>();
-    auto result = layer->init(payload);
-    if (!result) {
-        return Err<WidgetPtr>("Failed to initialize Piano layer", result);
-    }
-    return Ok<WidgetPtr>(layer);
+    return PianoW::create(payload);
 }
 
 Result<void> PianoPlugin::renderAll(WGPUTextureView targetView, WGPUTextureFormat targetFormat,
@@ -59,7 +54,7 @@ Result<void> PianoPlugin::renderAll(WGPUTextureView targetView, WGPUTextureForma
         if (!layerBase->isVisible()) continue;
         if (layerBase->getScreenType() != currentScreen) continue;
 
-        auto layer = std::static_pointer_cast<PianoLayer>(layerBase);
+        auto layer = std::static_pointer_cast<PianoW>(layerBase);
 
         float pixelX = layer->getX() * cellWidth;
         float pixelY = layer->getY() * cellHeight;
@@ -87,70 +82,77 @@ Result<void> PianoPlugin::renderAll(WGPUTextureView targetView, WGPUTextureForma
 }
 
 //-----------------------------------------------------------------------------
-// PianoLayer
+// PianoW
 //-----------------------------------------------------------------------------
 
-PianoLayer::PianoLayer() {
-    _key_states.reset();
+Result<WidgetPtr> PianoW::create(const std::string& payload) {
+    auto w = std::shared_ptr<PianoW>(new PianoW(payload));
+    if (auto res = w->init(); !res) {
+        return Err<WidgetPtr>("Failed to init PianoW", res);
+    }
+    return Ok(std::static_pointer_cast<Widget>(w));
 }
 
-PianoLayer::~PianoLayer() {
+PianoW::PianoW(const std::string& payload) {
+    payload_ = payload;
+    keyStates_.reset();
+}
+
+PianoW::~PianoW() {
     (void)dispose();
 }
 
-Result<void> PianoLayer::init(const std::string& payload) {
-    _payload = payload;
-
+Result<void> PianoW::init() {
     // Parse payload: "octaves[,startOctave]"
-    if (!payload.empty()) {
+    if (!payload_.empty()) {
         int octaves = 2, start = 4;
-        if (sscanf(payload.c_str(), "%d,%d", &octaves, &start) >= 1) {
-            _num_octaves = std::clamp(octaves, 1, MAX_OCTAVES);
-            if (sscanf(payload.c_str(), "%d,%d", &octaves, &start) >= 2) {
-                _start_octave = std::clamp(start, 0, 9);
+        if (sscanf(payload_.c_str(), "%d,%d", &octaves, &start) >= 1) {
+            numOctaves_ = std::clamp(octaves, 1, MAX_OCTAVES);
+            if (sscanf(payload_.c_str(), "%d,%d", &octaves, &start) >= 2) {
+                startOctave_ = std::clamp(start, 0, 9);
             }
         }
     }
 
-    spdlog::info("PianoLayer: initialized ({} octaves starting at C{})",
-                 _num_octaves, _start_octave);
+    spdlog::info("PianoW: initialized ({} octaves starting at C{})",
+                 numOctaves_, startOctave_);
     return Ok();
 }
 
-Result<void> PianoLayer::dispose() {
-    if (_bind_group) { wgpuBindGroupRelease(_bind_group); _bind_group = nullptr; }
-    if (_pipeline) { wgpuRenderPipelineRelease(_pipeline); _pipeline = nullptr; }
-    if (_uniform_buffer) { wgpuBufferRelease(_uniform_buffer); _uniform_buffer = nullptr; }
-    if (_key_state_buffer) { wgpuBufferRelease(_key_state_buffer); _key_state_buffer = nullptr; }
-    _gpu_initialized = false;
+Result<void> PianoW::dispose() {
+    if (bindGroup_) { wgpuBindGroupRelease(bindGroup_); bindGroup_ = nullptr; }
+    if (pipeline_) { wgpuRenderPipelineRelease(pipeline_); pipeline_ = nullptr; }
+    if (uniformBuffer_) { wgpuBufferRelease(uniformBuffer_); uniformBuffer_ = nullptr; }
+    if (keyStateBuffer_) { wgpuBufferRelease(keyStateBuffer_); keyStateBuffer_ = nullptr; }
+    gpuInitialized_ = false;
     return Ok();
 }
 
-Result<void> PianoLayer::update(double deltaTime) {
-    _time += static_cast<float>(deltaTime);
+Result<void> PianoW::update(double deltaTime) {
+    time_ += static_cast<float>(deltaTime);
     return Ok();
 }
 
-void PianoLayer::setKeyPressed(int key, bool pressed) {
+void PianoW::setKeyPressed(int key, bool pressed) {
     if (key >= 0 && key < 128) {
-        _key_states[key] = pressed;
+        keyStates_[key] = pressed;
     }
 }
 
-bool PianoLayer::isKeyPressed(int key) const {
-    return (key >= 0 && key < 128) && _key_states[key];
+bool PianoW::isKeyPressed(int key) const {
+    return (key >= 0 && key < 128) && keyStates_[key];
 }
 
-void PianoLayer::clearAllKeys() {
-    _key_states.reset();
+void PianoW::clearAllKeys() {
+    keyStates_.reset();
 }
 
-int PianoLayer::getKeyAtPosition(float x, float y) const {
+int PianoW::getKeyAtPosition(float x, float y) const {
     // Normalize to [0,1]
-    float normX = x / static_cast<float>(_pixel_width);
-    float normY = y / static_cast<float>(_pixel_height);
+    float normX = x / static_cast<float>(pixelWidth_);
+    float normY = y / static_cast<float>(pixelHeight_);
 
-    int totalWhiteKeys = _num_octaves * WHITE_KEYS_PER_OCTAVE;
+    int totalWhiteKeys = numOctaves_ * WHITE_KEYS_PER_OCTAVE;
     float whiteKeyWidth = 1.0f / totalWhiteKeys;
 
     // Black key dimensions (relative)
@@ -164,7 +166,7 @@ int PianoLayer::getKeyAtPosition(float x, float y) const {
         // Black keys are between: C-D, D-E, F-G, G-A, A-B
         static const int blackKeyOffsets[] = {1, 2, 4, 5, 6};  // After which white key
 
-        for (int oct = 0; oct < _num_octaves; ++oct) {
+        for (int oct = 0; oct < numOctaves_; ++oct) {
             for (int i = 0; i < BLACK_KEYS_PER_OCTAVE; ++i) {
                 int whiteKeyIndex = oct * WHITE_KEYS_PER_OCTAVE + blackKeyOffsets[i];
                 float blackKeyCenter = whiteKeyIndex * whiteKeyWidth;
@@ -175,7 +177,7 @@ int PianoLayer::getKeyAtPosition(float x, float y) const {
                     // Convert to MIDI note
                     // Black keys in octave: C#=1, D#=3, F#=6, G#=8, A#=10
                     static const int blackKeyNotes[] = {1, 3, 6, 8, 10};
-                    int midiNote = (_start_octave + oct) * 12 + blackKeyNotes[i];
+                    int midiNote = (startOctave_ + oct) * 12 + blackKeyNotes[i];
                     return midiNote;
                 }
             }
@@ -189,56 +191,56 @@ int PianoLayer::getKeyAtPosition(float x, float y) const {
         int keyInOctave = whiteKeyIndex % WHITE_KEYS_PER_OCTAVE;
         // White keys in octave: C=0, D=2, E=4, F=5, G=7, A=9, B=11
         static const int whiteKeyNotes[] = {0, 2, 4, 5, 7, 9, 11};
-        int midiNote = (_start_octave + octave) * 12 + whiteKeyNotes[keyInOctave];
+        int midiNote = (startOctave_ + octave) * 12 + whiteKeyNotes[keyInOctave];
         return midiNote;
     }
 
     return -1;
 }
 
-bool PianoLayer::onMouseMove(float localX, float localY) {
-    _mouse_x = localX;
-    _mouse_y = localY;
-    _hover_key = getKeyAtPosition(localX, localY);
+bool PianoW::onMouseMove(float localX, float localY) {
+    mouseX_ = localX;
+    mouseY_ = localY;
+    hoverKey_ = getKeyAtPosition(localX, localY);
 
     // If dragging, update pressed key
-    if (_pressed_key >= 0 && _hover_key != _pressed_key) {
-        setKeyPressed(_pressed_key, false);
-        _pressed_key = _hover_key;
-        if (_pressed_key >= 0) {
-            setKeyPressed(_pressed_key, true);
+    if (pressedKey_ >= 0 && hoverKey_ != pressedKey_) {
+        setKeyPressed(pressedKey_, false);
+        pressedKey_ = hoverKey_;
+        if (pressedKey_ >= 0) {
+            setKeyPressed(pressedKey_, true);
         }
     }
 
     return true;
 }
 
-bool PianoLayer::onMouseButton(int button, bool pressed) {
+bool PianoW::onMouseButton(int button, bool pressed) {
     if (button == 0) {
-        if (pressed && _hover_key >= 0) {
-            _pressed_key = _hover_key;
-            setKeyPressed(_pressed_key, true);
-            spdlog::debug("Piano: key {} pressed (MIDI {})", _hover_key, _pressed_key);
+        if (pressed && hoverKey_ >= 0) {
+            pressedKey_ = hoverKey_;
+            setKeyPressed(pressedKey_, true);
+            spdlog::debug("Piano: key {} pressed (MIDI {})", hoverKey_, pressedKey_);
         } else {
-            if (_pressed_key >= 0) {
-                setKeyPressed(_pressed_key, false);
-                spdlog::debug("Piano: key {} released", _pressed_key);
+            if (pressedKey_ >= 0) {
+                setKeyPressed(pressedKey_, false);
+                spdlog::debug("Piano: key {} released", pressedKey_);
             }
-            _pressed_key = -1;
+            pressedKey_ = -1;
         }
         return true;
     }
     if (button == -1) {
         // Focus lost
-        if (_pressed_key >= 0) {
-            setKeyPressed(_pressed_key, false);
-            _pressed_key = -1;
+        if (pressedKey_ >= 0) {
+            setKeyPressed(pressedKey_, false);
+            pressedKey_ = -1;
         }
     }
     return false;
 }
 
-bool PianoLayer::onKey(int key, int scancode, int action, int mods) {
+bool PianoW::onKey(int key, int scancode, int action, int mods) {
     (void)scancode;
     (void)mods;
 
@@ -268,7 +270,7 @@ bool PianoLayer::onKey(int key, int scancode, int action, int mods) {
 
     for (const auto& [keyCode, noteOffset] : keyMap) {
         if (key == keyCode) {
-            int midiNote = _start_octave * 12 + noteOffset;
+            int midiNote = startOctave_ * 12 + noteOffset;
             if (action == 1) {  // Press
                 setKeyPressed(midiNote, true);
                 spdlog::debug("Piano: keyboard key {} -> MIDI {}", key, midiNote);
@@ -283,30 +285,30 @@ bool PianoLayer::onKey(int key, int scancode, int action, int mods) {
     return true;
 }
 
-bool PianoLayer::onChar(unsigned int codepoint) {
+bool PianoW::onChar(unsigned int codepoint) {
     (void)codepoint;
     // When focused, consume ALL character input - never let it leak to terminal
     return true;
 }
 
-Result<void> PianoLayer::render(WebGPUContext& ctx,
+Result<void> PianoW::render(WebGPUContext& ctx,
                                  WGPUTextureView targetView, WGPUTextureFormat targetFormat,
                                  uint32_t screenWidth, uint32_t screenHeight,
                                  float pixelX, float pixelY, float pixelW, float pixelH) {
-    if (_failed) return Err<void>("PianoLayer already failed");
+    if (failed_) return Err<void>("PianoW already failed");
 
-    if (!_gpu_initialized) {
+    if (!gpuInitialized_) {
         auto result = createPipeline(ctx, targetFormat);
         if (!result) {
-            _failed = true;
+            failed_ = true;
             return Err<void>("Failed to create pipeline", result);
         }
-        _gpu_initialized = true;
+        gpuInitialized_ = true;
     }
 
-    if (!_pipeline || !_uniform_buffer || !_bind_group) {
-        _failed = true;
-        return Err<void>("PianoLayer pipeline not initialized");
+    if (!pipeline_ || !uniformBuffer_ || !bindGroup_) {
+        failed_ = true;
+        return Err<void>("PianoW pipeline not initialized");
     }
 
     // Update uniforms
@@ -332,20 +334,20 @@ Result<void> PianoLayer::render(WebGPUContext& ctx,
     uniforms.rect[3] = ndcH;
     uniforms.resolution[0] = pixelW;
     uniforms.resolution[1] = pixelH;
-    uniforms.time = _time;
-    uniforms.numOctaves = static_cast<float>(_num_octaves);
-    uniforms.hoverKey = static_cast<float>(_hover_key);
+    uniforms.time = time_;
+    uniforms.numOctaves = static_cast<float>(numOctaves_);
+    uniforms.hoverKey = static_cast<float>(hoverKey_);
 
-    wgpuQueueWriteBuffer(ctx.getQueue(), _uniform_buffer, 0, &uniforms, sizeof(uniforms));
+    wgpuQueueWriteBuffer(ctx.getQueue(), uniformBuffer_, 0, &uniforms, sizeof(uniforms));
 
     // Update key states buffer (128 bits = 4 x uint32)
     uint32_t keyStates[4] = {0, 0, 0, 0};
     for (int i = 0; i < 128; ++i) {
-        if (_key_states[i]) {
+        if (keyStates_[i]) {
             keyStates[i / 32] |= (1u << (i % 32));
         }
     }
-    wgpuQueueWriteBuffer(ctx.getQueue(), _key_state_buffer, 0, keyStates, sizeof(keyStates));
+    wgpuQueueWriteBuffer(ctx.getQueue(), keyStateBuffer_, 0, keyStates, sizeof(keyStates));
 
     // Render
     WGPUCommandEncoderDescriptor encoderDesc = {};
@@ -368,8 +370,8 @@ Result<void> PianoLayer::render(WebGPUContext& ctx,
         return Err<void>("Failed to begin render pass");
     }
 
-    wgpuRenderPassEncoderSetPipeline(pass, _pipeline);
-    wgpuRenderPassEncoderSetBindGroup(pass, 0, _bind_group, 0, nullptr);
+    wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
+    wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
     wgpuRenderPassEncoderEnd(pass);
     wgpuRenderPassEncoderRelease(pass);
@@ -384,22 +386,22 @@ Result<void> PianoLayer::render(WebGPUContext& ctx,
     return Ok();
 }
 
-Result<void> PianoLayer::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat) {
+Result<void> PianoW::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat) {
     WGPUDevice device = ctx.getDevice();
 
     // Uniform buffer (48 bytes)
     WGPUBufferDescriptor bufDesc = {};
     bufDesc.size = 48;
     bufDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-    _uniform_buffer = wgpuDeviceCreateBuffer(device, &bufDesc);
-    if (!_uniform_buffer) return Err<void>("Failed to create uniform buffer");
+    uniformBuffer_ = wgpuDeviceCreateBuffer(device, &bufDesc);
+    if (!uniformBuffer_) return Err<void>("Failed to create uniform buffer");
 
     // Key state buffer (128 bits = 16 bytes, round up to 16)
     WGPUBufferDescriptor keyBufDesc = {};
     keyBufDesc.size = 16;
     keyBufDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
-    _key_state_buffer = wgpuDeviceCreateBuffer(device, &keyBufDesc);
-    if (!_key_state_buffer) return Err<void>("Failed to create key state buffer");
+    keyStateBuffer_ = wgpuDeviceCreateBuffer(device, &keyBufDesc);
+    if (!keyStateBuffer_) return Err<void>("Failed to create key state buffer");
 
     // Shader
     const char* shaderCode = R"(
@@ -636,17 +638,17 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Bind group
     WGPUBindGroupEntry bgE[2] = {};
     bgE[0].binding = 0;
-    bgE[0].buffer = _uniform_buffer;
+    bgE[0].buffer = uniformBuffer_;
     bgE[0].size = 48;
     bgE[1].binding = 1;
-    bgE[1].buffer = _key_state_buffer;
+    bgE[1].buffer = keyStateBuffer_;
     bgE[1].size = 16;
 
     WGPUBindGroupDescriptor bgDesc = {};
     bgDesc.layout = bgl;
     bgDesc.entryCount = 2;
     bgDesc.entries = bgE;
-    _bind_group = wgpuDeviceCreateBindGroup(device, &bgDesc);
+    bindGroup_ = wgpuDeviceCreateBindGroup(device, &bgDesc);
 
     // Render pipeline
     WGPURenderPipelineDescriptor pipelineDesc = {};
@@ -670,15 +672,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     pipelineDesc.multisample.count = 1;
     pipelineDesc.multisample.mask = ~0u;
 
-    _pipeline = wgpuDeviceCreateRenderPipeline(device, &pipelineDesc);
+    pipeline_ = wgpuDeviceCreateRenderPipeline(device, &pipelineDesc);
 
     wgpuShaderModuleRelease(shaderModule);
     wgpuBindGroupLayoutRelease(bgl);
     wgpuPipelineLayoutRelease(pipelineLayout);
 
-    if (!_pipeline) return Err<void>("Failed to create render pipeline");
+    if (!pipeline_) return Err<void>("Failed to create render pipeline");
 
-    spdlog::info("PianoLayer: pipeline created");
+    spdlog::info("PianoW: pipeline created");
     return Ok();
 }
 

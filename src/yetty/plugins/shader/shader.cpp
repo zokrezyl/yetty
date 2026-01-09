@@ -19,15 +19,14 @@ ShaderPlugin::~ShaderPlugin() {
 
 Result<PluginPtr> ShaderPlugin::create(YettyPtr engine) noexcept {
     auto p = PluginPtr(new ShaderPlugin(std::move(engine)));
-    if (auto res = static_cast<ShaderPlugin*>(p.get())->init(); !res) {
+    if (auto res = static_cast<ShaderPlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init ShaderPlugin", res);
     }
     return Ok(p);
 }
 
-Result<void> ShaderPlugin::init() noexcept {
-    // No shared resources - each layer compiles its own shader
-    _initialized = true;
+Result<void> ShaderPlugin::pluginInit() noexcept {
+    initialized_ = true;
     return Ok();
 }
 
@@ -35,111 +34,95 @@ Result<void> ShaderPlugin::dispose() {
     if (auto res = Plugin::dispose(); !res) {
         return Err<void>("Failed to dispose ShaderPlugin", res);
     }
-    _initialized = false;
+    initialized_ = false;
     return Ok();
 }
 
 Result<WidgetPtr> ShaderPlugin::createWidget(const std::string& payload) {
-    auto layer = std::make_shared<ShaderLayer>();
-    auto result = layer->init(payload);
-    if (!result) {
-        return Err<WidgetPtr>("Failed to initialize Shader layer", result);
-    }
-    return Ok<WidgetPtr>(layer);
+    return Shader::create(payload);
 }
 
 //-----------------------------------------------------------------------------
-// ShaderLayer
+// Shader
 //-----------------------------------------------------------------------------
 
-ShaderLayer::ShaderLayer() = default;
-
-ShaderLayer::~ShaderLayer() {
+Shader::~Shader() {
     (void)dispose();
 }
 
-Result<void> ShaderLayer::init(const std::string& payload) {
-    if (payload.empty()) {
-        return Err<void>("ShaderLayer: empty payload");
+Result<void> Shader::init() {
+    if (payload_.empty()) {
+        return Err<void>("Shader: empty payload");
     }
-
-    _payload = payload;
-    _compiled = false;
-    _failed = false;
-
-    spdlog::debug("ShaderLayer: initialized with {} bytes of shader code", payload.size());
+    compiled_ = false;
+    failed_ = false;
+    spdlog::debug("Shader: initialized with {} bytes of shader code", payload_.size());
     return Ok();
 }
 
-Result<void> ShaderLayer::dispose() {
-    if (_bind_group) {
-        wgpuBindGroupRelease(_bind_group);
-        _bind_group = nullptr;
+Result<void> Shader::dispose() {
+    if (bind_group_) {
+        wgpuBindGroupRelease(bind_group_);
+        bind_group_ = nullptr;
     }
-    if (_bindGroupLayout) {
-        wgpuBindGroupLayoutRelease(_bindGroupLayout);
-        _bindGroupLayout = nullptr;
+    if (bindGroupLayout_) {
+        wgpuBindGroupLayoutRelease(bindGroupLayout_);
+        bindGroupLayout_ = nullptr;
     }
-    if (_pipeline) {
-        wgpuRenderPipelineRelease(_pipeline);
-        _pipeline = nullptr;
+    if (pipeline_) {
+        wgpuRenderPipelineRelease(pipeline_);
+        pipeline_ = nullptr;
     }
-    if (_uniform_buffer) {
-        wgpuBufferRelease(_uniform_buffer);
-        _uniform_buffer = nullptr;
+    if (uniform_buffer_) {
+        wgpuBufferRelease(uniform_buffer_);
+        uniform_buffer_ = nullptr;
     }
-    _compiled = false;
+    compiled_ = false;
     return Ok();
 }
 
-Result<void> ShaderLayer::render(WebGPUContext& ctx) {
-    if (_failed) return Err<void>("ShaderLayer already failed");
-    if (!_visible) return Ok();
+Result<void> Shader::render(WebGPUContext& ctx) {
+    if (failed_) return Err<void>("Shader already failed");
+    if (!visible_) return Ok();
 
-    // Get render context set by owner
-    const auto& rc = _render_context;
+    const auto& rc = renderCtx_;
 
-    // First time: compile shader
-    if (!_compiled) {
-        auto result = compileShader(ctx, rc.targetFormat, _payload);
+    if (!compiled_) {
+        auto result = compileShader(ctx, rc.targetFormat, payload_);
         if (!result) {
-            _failed = true;
-            return Err<void>("ShaderLayer: Failed to compile shader", result);
+            failed_ = true;
+            return Err<void>("Shader: Failed to compile shader", result);
         }
-        _compiled = true;
+        compiled_ = true;
     }
 
-    if (!_pipeline || !_uniform_buffer || !_bind_group) {
-        _failed = true;
-        return Err<void>("ShaderLayer: pipeline not initialized");
+    if (!pipeline_ || !uniform_buffer_ || !bind_group_) {
+        failed_ = true;
+        return Err<void>("Shader: pipeline not initialized");
     }
 
-    // Get global bind group from ShaderManager
     auto* parent = getParent();
     if (!parent || !parent->getEngine()) {
-        return Err<void>("ShaderLayer: no engine reference");
+        return Err<void>("Shader: no engine reference");
     }
     auto shaderMgr = parent->getEngine()->shaderManager();
     if (!shaderMgr) {
-        return Err<void>("ShaderLayer: no shader manager");
+        return Err<void>("Shader: no shader manager");
     }
     WGPUBindGroup globalBindGroup = shaderMgr->getGlobalBindGroup();
     if (!globalBindGroup) {
-        return Err<void>("ShaderLayer: no global bind group");
+        return Err<void>("Shader: no global bind group");
     }
 
-    // Calculate pixel position from cell position
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _width_cells * rc.cellWidth;
-    float pixelH = _height_cells * rc.cellHeight;
+    float pixelX = x_ * rc.cellWidth;
+    float pixelY = y_ * rc.cellHeight;
+    float pixelW = widthCells_ * rc.cellWidth;
+    float pixelH = heightCells_ * rc.cellHeight;
 
-    // For Relative layers, adjust position when viewing scrollback
-    if (_position_mode == PositionMode::Relative && rc.scrollOffset > 0) {
+    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
-    // Skip if off-screen (not an error)
     if (rc.termRows > 0) {
         float screenPixelHeight = rc.termRows * rc.cellHeight;
         if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
@@ -147,44 +130,40 @@ Result<void> ShaderLayer::render(WebGPUContext& ctx) {
         }
     }
 
-    // Update per-plugin uniform buffer (group 1)
     float ndcX = (pixelX / rc.screenWidth) * 2.0f - 1.0f;
     float ndcY = 1.0f - (pixelY / rc.screenHeight) * 2.0f;
     float ndcW = (pixelW / rc.screenWidth) * 2.0f;
     float ndcH = (pixelH / rc.screenHeight) * 2.0f;
 
-    // Per-plugin uniforms (smaller now - time comes from global)
     struct PluginUniforms {
-        float resolution[2];  // Plugin size in pixels
+        float resolution[2];
         float param;
         float zoom;
-        float rect[4];        // Position in NDC
-        float mouse[4];       // Local mouse state
+        float rect[4];
+        float mouse[4];
     } uniforms;
 
     uniforms.resolution[0] = pixelW;
     uniforms.resolution[1] = pixelH;
-    uniforms.param = _param;
-    uniforms.zoom = _zoom;
+    uniforms.param = param_;
+    uniforms.zoom = zoom_;
     uniforms.rect[0] = ndcX;
     uniforms.rect[1] = ndcY;
     uniforms.rect[2] = ndcW;
     uniforms.rect[3] = ndcH;
-    uniforms.mouse[0] = _mouse_x;
-    uniforms.mouse[1] = _mouse_y;
-    uniforms.mouse[2] = _mouse_grabbed ? 1.0f : 0.0f;
-    uniforms.mouse[3] = _mouse_down ? 1.0f : 0.0f;
+    uniforms.mouse[0] = mouse_x_;
+    uniforms.mouse[1] = mouse_y_;
+    uniforms.mouse[2] = mouse_grabbed_ ? 1.0f : 0.0f;
+    uniforms.mouse[3] = mouse_down_ ? 1.0f : 0.0f;
 
-    wgpuQueueWriteBuffer(ctx.getQueue(), _uniform_buffer, 0, &uniforms, sizeof(uniforms));
+    wgpuQueueWriteBuffer(ctx.getQueue(), uniform_buffer_, 0, &uniforms, sizeof(uniforms));
 
-    // Create command encoder
     WGPUCommandEncoderDescriptor encoderDesc = {};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encoderDesc);
     if (!encoder) {
-        return Err<void>("ShaderLayer: Failed to create command encoder");
+        return Err<void>("Shader: Failed to create command encoder");
     }
 
-    // Render pass
     WGPURenderPassColorAttachment colorAttachment = {};
     colorAttachment.view = rc.targetView;
     colorAttachment.loadOp = WGPULoadOp_Load;
@@ -198,12 +177,12 @@ Result<void> ShaderLayer::render(WebGPUContext& ctx) {
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
     if (!pass) {
         wgpuCommandEncoderRelease(encoder);
-        return Err<void>("ShaderLayer: Failed to begin render pass");
+        return Err<void>("Shader: Failed to begin render pass");
     }
 
-    wgpuRenderPassEncoderSetPipeline(pass, _pipeline);
-    wgpuRenderPassEncoderSetBindGroup(pass, 0, globalBindGroup, 0, nullptr);  // Global uniforms
-    wgpuRenderPassEncoderSetBindGroup(pass, 1, _bind_group, 0, nullptr);       // Per-plugin uniforms
+    wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
+    wgpuRenderPassEncoderSetBindGroup(pass, 0, globalBindGroup, 0, nullptr);
+    wgpuRenderPassEncoderSetBindGroup(pass, 1, bind_group_, 0, nullptr);
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
     wgpuRenderPassEncoderEnd(pass);
     wgpuRenderPassEncoderRelease(pass);
@@ -212,7 +191,7 @@ Result<void> ShaderLayer::render(WebGPUContext& ctx) {
     WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdDesc);
     if (!cmdBuffer) {
         wgpuCommandEncoderRelease(encoder);
-        return Err<void>("ShaderLayer: Failed to finish command encoder");
+        return Err<void>("Shader: Failed to finish command encoder");
     }
     wgpuQueueSubmit(ctx.getQueue(), 1, &cmdBuffer);
     wgpuCommandBufferRelease(cmdBuffer);
@@ -220,27 +199,25 @@ Result<void> ShaderLayer::render(WebGPUContext& ctx) {
     return Ok();
 }
 
-bool ShaderLayer::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (_failed || !_visible) return false;
+bool Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+    if (failed_ || !visible_) return false;
 
-    const auto& rc = _render_context;
+    const auto& rc = renderCtx_;
 
-    // Compile shader on first use
-    if (!_compiled) {
-        auto result = compileShader(ctx, rc.targetFormat, _payload);
+    if (!compiled_) {
+        auto result = compileShader(ctx, rc.targetFormat, payload_);
         if (!result) {
-            _failed = true;
+            failed_ = true;
             return false;
         }
-        _compiled = true;
+        compiled_ = true;
     }
 
-    if (!_pipeline || !_uniform_buffer || !_bind_group) {
-        _failed = true;
+    if (!pipeline_ || !uniform_buffer_ || !bind_group_) {
+        failed_ = true;
         return false;
     }
 
-    // Get global bind group from ShaderManager
     auto* parent = getParent();
     if (!parent || !parent->getEngine()) return false;
     auto shaderMgr = parent->getEngine()->shaderManager();
@@ -248,17 +225,15 @@ bool ShaderLayer::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     WGPUBindGroup globalBindGroup = shaderMgr->getGlobalBindGroup();
     if (!globalBindGroup) return false;
 
-    // Calculate pixel position
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _width_cells * rc.cellWidth;
-    float pixelH = _height_cells * rc.cellHeight;
+    float pixelX = x_ * rc.cellWidth;
+    float pixelY = y_ * rc.cellHeight;
+    float pixelW = widthCells_ * rc.cellWidth;
+    float pixelH = heightCells_ * rc.cellHeight;
 
-    if (_position_mode == PositionMode::Relative && rc.scrollOffset > 0) {
+    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
-    // Skip if off-screen
     if (rc.termRows > 0) {
         float screenPixelHeight = rc.termRows * rc.cellHeight;
         if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
@@ -271,7 +246,6 @@ bool ShaderLayer::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     float ndcW = (pixelW / rc.screenWidth) * 2.0f;
     float ndcH = (pixelH / rc.screenHeight) * 2.0f;
 
-    // Update per-plugin uniforms
     struct PluginUniforms {
         float resolution[2];
         float param;
@@ -282,74 +256,69 @@ bool ShaderLayer::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
 
     uniforms.resolution[0] = pixelW;
     uniforms.resolution[1] = pixelH;
-    uniforms.param = _param;
-    uniforms.zoom = _zoom;
+    uniforms.param = param_;
+    uniforms.zoom = zoom_;
     uniforms.rect[0] = ndcX;
     uniforms.rect[1] = ndcY;
     uniforms.rect[2] = ndcW;
     uniforms.rect[3] = ndcH;
-    uniforms.mouse[0] = _mouse_x;
-    uniforms.mouse[1] = _mouse_y;
-    uniforms.mouse[2] = _mouse_grabbed ? 1.0f : 0.0f;
-    uniforms.mouse[3] = _mouse_down ? 1.0f : 0.0f;
+    uniforms.mouse[0] = mouse_x_;
+    uniforms.mouse[1] = mouse_y_;
+    uniforms.mouse[2] = mouse_grabbed_ ? 1.0f : 0.0f;
+    uniforms.mouse[3] = mouse_down_ ? 1.0f : 0.0f;
 
-    wgpuQueueWriteBuffer(ctx.getQueue(), _uniform_buffer, 0, &uniforms, sizeof(uniforms));
+    wgpuQueueWriteBuffer(ctx.getQueue(), uniform_buffer_, 0, &uniforms, sizeof(uniforms));
 
-    // Draw - no encoder, no pass creation, no submit!
-    wgpuRenderPassEncoderSetPipeline(pass, _pipeline);
+    wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
     wgpuRenderPassEncoderSetBindGroup(pass, 0, globalBindGroup, 0, nullptr);
-    wgpuRenderPassEncoderSetBindGroup(pass, 1, _bind_group, 0, nullptr);
+    wgpuRenderPassEncoderSetBindGroup(pass, 1, bind_group_, 0, nullptr);
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
 
     return true;
 }
 
-bool ShaderLayer::onMouseMove(float localX, float localY) {
-    _mouse_x = localX / static_cast<float>(_pixel_width);
-    _mouse_y = localY / static_cast<float>(_pixel_height);
-    spdlog::debug("ShaderLayer::onMouseMove: local=({},{}) normalized=({},{})",
-                  localX, localY, _mouse_x, _mouse_y);
+bool Shader::onMouseMove(float localX, float localY) {
+    mouse_x_ = localX / static_cast<float>(pixelWidth_);
+    mouse_y_ = localY / static_cast<float>(pixelHeight_);
+    spdlog::debug("Shader::onMouseMove: local=({},{}) normalized=({},{})",
+                  localX, localY, mouse_x_, mouse_y_);
     return true;
 }
 
-bool ShaderLayer::onMouseButton(int button, bool pressed) {
+bool Shader::onMouseButton(int button, bool pressed) {
     if (button == 0) {
-        _mouse_down = pressed;
-        _mouse_grabbed = pressed;
-        spdlog::debug("ShaderLayer::onMouseButton: button={} pressed={} grabbed={}",
-                      button, pressed, _mouse_grabbed);
+        mouse_down_ = pressed;
+        mouse_grabbed_ = pressed;
+        spdlog::debug("Shader::onMouseButton: button={} pressed={} grabbed={}",
+                      button, pressed, mouse_grabbed_);
         return true;
     }
     if (button == -1) {
-        _mouse_grabbed = false;
-        spdlog::debug("ShaderLayer::onMouseButton: focus lost");
+        mouse_grabbed_ = false;
+        spdlog::debug("Shader::onMouseButton: focus lost");
         return false;
     }
     return false;
 }
 
-bool ShaderLayer::onMouseScroll(float xoffset, float yoffset, int mods) {
+bool Shader::onMouseScroll(float xoffset, float yoffset, int mods) {
     (void)xoffset;
     bool ctrlPressed = (mods & 0x0002) != 0;
 
     if (ctrlPressed) {
-        _zoom += yoffset * 0.1f;
-        _zoom = std::max(0.1f, std::min(5.0f, _zoom));
-        spdlog::debug("ShaderLayer::onMouseScroll: CTRL+scroll _zoom={}", _zoom);
+        zoom_ += yoffset * 0.1f;
+        zoom_ = std::max(0.1f, std::min(5.0f, zoom_));
+        spdlog::debug("Shader::onMouseScroll: CTRL+scroll zoom_={}", zoom_);
     } else {
-        _param += yoffset * 0.1f;
-        _param = std::max(0.0f, std::min(1.0f, _param));
-        spdlog::debug("ShaderLayer::onMouseScroll: scroll _param={}", _param);
+        param_ += yoffset * 0.1f;
+        param_ = std::max(0.0f, std::min(1.0f, param_));
+        spdlog::debug("Shader::onMouseScroll: scroll param_={}", param_);
     }
     return true;
 }
 
-const char* ShaderLayer::getVertexShader() {
-    // Uses two bind groups:
-    // @group(0) = Global uniforms (time, mouse, screen) - from ShaderManager
-    // @group(1) = Per-plugin uniforms (resolution, rect, etc.)
+const char* Shader::getVertexShader() {
     return R"(
-// Global uniforms from ShaderManager (updated once per frame)
 struct GlobalUniforms {
     iTime: f32,
     iTimeRelative: f32,
@@ -360,7 +329,6 @@ struct GlobalUniforms {
     _pad: vec2<f32>,
 }
 
-// Per-plugin uniforms (updated per-plugin per-frame)
 struct PluginUniforms {
     resolution: vec2<f32>,
     param: f32,
@@ -400,10 +368,9 @@ fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 )";
 }
 
-std::string ShaderLayer::wrapFragmentShader(const std::string& userCode) {
+std::string Shader::wrapFragmentShader(const std::string& userCode) {
     std::ostringstream ss;
     ss << R"(
-// Global uniforms from ShaderManager (updated once per frame)
 struct GlobalUniforms {
     iTime: f32,
     iTimeRelative: f32,
@@ -414,7 +381,6 @@ struct GlobalUniforms {
     _pad: vec2<f32>,
 }
 
-// Per-plugin uniforms (updated per-plugin per-frame)
 struct PluginUniforms {
     resolution: vec2<f32>,
     param: f32,
@@ -426,15 +392,14 @@ struct PluginUniforms {
 @group(0) @binding(0) var<uniform> global: GlobalUniforms;
 @group(1) @binding(0) var<uniform> plugin: PluginUniforms;
 
-// ShaderToy-compatible accessors
 fn iTime() -> f32 { return global.iTime; }
 fn iTimeRelative() -> f32 { return global.iTimeRelative; }
 fn iTimeDelta() -> f32 { return global.iTimeDelta; }
 fn iFrame() -> u32 { return global.iFrame; }
 fn iResolution() -> vec2<f32> { return plugin.resolution; }
 fn iScreenResolution() -> vec2<f32> { return global.iScreenResolution; }
-fn iMouse() -> vec4<f32> { return plugin.mouse; }  // Local mouse (normalized)
-fn iMouseGlobal() -> vec4<f32> { return global.iMouse; }  // Screen mouse
+fn iMouse() -> vec4<f32> { return plugin.mouse; }
+fn iMouseGlobal() -> vec4<f32> { return global.iMouse; }
 fn iParam() -> f32 { return plugin.param; }
 fn iZoom() -> f32 { return plugin.zoom; }
 fn iGrabbed() -> bool { return plugin.mouse.z > 0.5; }
@@ -466,34 +431,30 @@ fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     return ss.str();
 }
 
-Result<void> ShaderLayer::compileShader(WebGPUContext& ctx,
-                                            WGPUTextureFormat targetFormat,
-                                            const std::string& fragmentCode) {
-    // Get global bind group layout from ShaderManager
+Result<void> Shader::compileShader(WebGPUContext& ctx,
+                                        WGPUTextureFormat targetFormat,
+                                        const std::string& fragmentCode) {
     auto* parent = getParent();
     if (!parent || !parent->getEngine()) {
-        return Err<void>("ShaderLayer: no engine reference for shader compilation");
+        return Err<void>("Shader: no engine reference for shader compilation");
     }
     auto shaderMgr = parent->getEngine()->shaderManager();
     if (!shaderMgr) {
-        return Err<void>("ShaderLayer: no shader manager for shader compilation");
+        return Err<void>("Shader: no shader manager for shader compilation");
     }
     WGPUBindGroupLayout globalBGL = shaderMgr->getGlobalBindGroupLayout();
     if (!globalBGL) {
-        return Err<void>("ShaderLayer: no global bind group layout");
+        return Err<void>("Shader: no global bind group layout");
     }
 
-    // Create per-plugin uniform buffer (smaller now - no time)
-    // PluginUniforms: resolution(2) + param + zoom + rect(4) + mouse(4) = 12 floats = 48 bytes
     WGPUBufferDescriptor bufDesc = {};
     bufDesc.size = 48;
     bufDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-    _uniform_buffer = wgpuDeviceCreateBuffer(ctx.getDevice(), &bufDesc);
-    if (!_uniform_buffer) {
+    uniform_buffer_ = wgpuDeviceCreateBuffer(ctx.getDevice(), &bufDesc);
+    if (!uniform_buffer_) {
         return Err<void>("Failed to create uniform buffer");
     }
 
-    // Compile vertex shader
     std::string vertCode = getVertexShader();
     WGPUShaderSourceWGSL wgslDescVert = {};
     wgslDescVert.chain.sType = WGPUSType_ShaderSourceWGSL;
@@ -503,9 +464,8 @@ Result<void> ShaderLayer::compileShader(WebGPUContext& ctx,
     shaderDescVert.nextInChain = &wgslDescVert.chain;
     WGPUShaderModule vertModule = wgpuDeviceCreateShaderModule(ctx.getDevice(), &shaderDescVert);
 
-    // Compile fragment shader
     std::string fragCode = wrapFragmentShader(fragmentCode);
-    spdlog::debug("ShaderLayer: compiling fragment shader");
+    spdlog::debug("Shader: compiling fragment shader");
 
     WGPUShaderSourceWGSL wgslDescFrag = {};
     wgslDescFrag.chain.sType = WGPUSType_ShaderSourceWGSL;
@@ -521,7 +481,6 @@ Result<void> ShaderLayer::compileShader(WebGPUContext& ctx,
         return Err<void>("Failed to create shader modules");
     }
 
-    // Create per-plugin bind group layout (group 1)
     WGPUBindGroupLayoutEntry bindingEntry = {};
     bindingEntry.binding = 0;
     bindingEntry.visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
@@ -530,15 +489,14 @@ Result<void> ShaderLayer::compileShader(WebGPUContext& ctx,
     WGPUBindGroupLayoutDescriptor bglDesc = {};
     bglDesc.entryCount = 1;
     bglDesc.entries = &bindingEntry;
-    _bindGroupLayout = wgpuDeviceCreateBindGroupLayout(ctx.getDevice(), &bglDesc);
-    if (!_bindGroupLayout) {
+    bindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(ctx.getDevice(), &bglDesc);
+    if (!bindGroupLayout_) {
         wgpuShaderModuleRelease(vertModule);
         wgpuShaderModuleRelease(fragModule);
         return Err<void>("Failed to create per-plugin bind group layout");
     }
 
-    // Pipeline layout with TWO bind group layouts: [global, per-plugin]
-    WGPUBindGroupLayout layouts[2] = { globalBGL, _bindGroupLayout };
+    WGPUBindGroupLayout layouts[2] = { globalBGL, bindGroupLayout_ };
     WGPUPipelineLayoutDescriptor plDesc = {};
     plDesc.bindGroupLayoutCount = 2;
     plDesc.bindGroupLayouts = layouts;
@@ -549,25 +507,23 @@ Result<void> ShaderLayer::compileShader(WebGPUContext& ctx,
         return Err<void>("Failed to create pipeline layout");
     }
 
-    // Create per-plugin bind group (group 1)
     WGPUBindGroupEntry bgEntry = {};
     bgEntry.binding = 0;
-    bgEntry.buffer = _uniform_buffer;
+    bgEntry.buffer = uniform_buffer_;
     bgEntry.size = 48;
 
     WGPUBindGroupDescriptor bgDesc = {};
-    bgDesc.layout = _bindGroupLayout;
+    bgDesc.layout = bindGroupLayout_;
     bgDesc.entryCount = 1;
     bgDesc.entries = &bgEntry;
-    _bind_group = wgpuDeviceCreateBindGroup(ctx.getDevice(), &bgDesc);
-    if (!_bind_group) {
+    bind_group_ = wgpuDeviceCreateBindGroup(ctx.getDevice(), &bgDesc);
+    if (!bind_group_) {
         wgpuShaderModuleRelease(vertModule);
         wgpuShaderModuleRelease(fragModule);
         wgpuPipelineLayoutRelease(pipelineLayout);
         return Err<void>("Failed to create per-plugin bind group");
     }
 
-    // Render pipeline
     WGPURenderPipelineDescriptor pipelineDesc = {};
     pipelineDesc.layout = pipelineLayout;
     pipelineDesc.vertex.module = vertModule;
@@ -601,23 +557,22 @@ Result<void> ShaderLayer::compileShader(WebGPUContext& ctx,
     pipelineDesc.multisample.count = 1;
     pipelineDesc.multisample.mask = ~0u;
 
-    _pipeline = wgpuDeviceCreateRenderPipeline(ctx.getDevice(), &pipelineDesc);
+    pipeline_ = wgpuDeviceCreateRenderPipeline(ctx.getDevice(), &pipelineDesc);
 
     wgpuShaderModuleRelease(vertModule);
     wgpuShaderModuleRelease(fragModule);
     wgpuPipelineLayoutRelease(pipelineLayout);
 
-    if (!_pipeline) {
+    if (!pipeline_) {
         return Err<void>("Failed to create render pipeline");
     }
 
-    spdlog::debug("ShaderLayer: pipeline created with global + per-plugin uniforms");
+    spdlog::debug("Shader: pipeline created with global + per-plugin uniforms");
     return Ok();
 }
 
 } // namespace yetty
 
-// C exports for dynamic loading
 extern "C" {
     const char* name() { return "shader"; }
     yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine) {

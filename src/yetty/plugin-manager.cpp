@@ -224,11 +224,12 @@ Result<void> PluginManager::updateWidget(const std::string& hashId, const std::s
         return Err<void>("Widget not found: " + hashId);
     }
 
-    // Re-init
+    // Re-init: dispose, update payload, then init
     if (auto res = widget->dispose(); !res) {
         return Err<void>("Failed to dispose widget during update", res);
     }
-    if (auto res = widget->init(payload); !res) {
+    widget->setPayload(payload);
+    if (auto res = widget->reinit(); !res) {
         return Err<void>("Widget re-init failed", res);
     }
 

@@ -48,7 +48,9 @@ namespace yetty {
 class Config;
 class GridRenderer;
 class Terminal;
+class RemoteTerminal;
 class PluginManager;
+class WidgetFactory;
 class Grid;
 class InputHandler;
 class ShaderManager;
@@ -116,7 +118,9 @@ public:
 
 #if !YETTY_WEB
     std::shared_ptr<Terminal> terminal() const noexcept { return _terminal; }
+    std::shared_ptr<RemoteTerminal> remoteTerminal() const noexcept { return _remoteTerminal; }
     std::shared_ptr<PluginManager> pluginManager() const noexcept { return _pluginManager; }
+    std::shared_ptr<WidgetFactory> widgetFactory() const noexcept { return _widgetFactory; }
     std::shared_ptr<ShaderManager> shaderManager() const noexcept { return _shaderManager; }
 #endif
 
@@ -230,7 +234,9 @@ private:
     std::shared_ptr<class WebDisplay> _webDisplay;  // Demo display for web builds
 #else
     std::shared_ptr<Terminal> _terminal;
+    std::shared_ptr<RemoteTerminal> _remoteTerminal;  // For --mux mode
     std::shared_ptr<PluginManager> _pluginManager;
+    std::shared_ptr<WidgetFactory> _widgetFactory;
     std::shared_ptr<InputHandler> _inputHandler;
     std::shared_ptr<ShaderManager> _shaderManager;
     std::shared_ptr<CursorRenderer> _cursorRenderer;
@@ -279,6 +285,13 @@ private:
     uint32_t _initialWidth = 1024;
     uint32_t _initialHeight = 768;
     bool _generateAtlasOnly = false;
+    bool _useMux = false;  // Use multiplexed terminal (connect to yetty-server)
+
+public:
+    // Check if multiplexed terminal mode is enabled
+    bool useMux() const noexcept { return _useMux; }
+
+private:
 
     // FPS tracking
     double _lastFpsTime = 0.0;

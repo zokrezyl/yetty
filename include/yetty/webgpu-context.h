@@ -39,6 +39,9 @@ public:
 
     Result<WGPUTextureView> getCurrentTextureView() noexcept;
     void present() noexcept;
+    
+    // Check if a texture was acquired this frame (to know if present() should be called)
+    bool hasCurrentTexture() const noexcept { return currentTextureView_ != nullptr; }
 
 private:
 #if YETTY_ANDROID

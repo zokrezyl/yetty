@@ -126,14 +126,43 @@ if(NOT YETTY_ANDROID AND NOT EMSCRIPTEN)
     )
 endif()
 
-# spdlog for logging (all platforms)
+# ytrace for logging with runtime control (includes spdlog)
+# Note: We download ytrace but don't add it as a subdirectory directly
+# because it tries to include its own CPM.cmake which conflicts when used as a dependency
 CPMAddPackage(
-    NAME spdlog
-    GITHUB_REPOSITORY gabime/spdlog
-    GIT_TAG v1.16.0
-    OPTIONS
-        "CMAKE_POSITION_INDEPENDENT_CODE ON"
+    NAME ytrace
+    GITHUB_REPOSITORY zokrezyl/ytrace
+    GIT_TAG main
+    DOWNLOAD_ONLY YES
 )
+
+if(ytrace_ADDED)
+    # Create ytrace target manually (it's header-only)
+    add_library(ytrace INTERFACE)
+    add_library(ytrace::ytrace ALIAS ytrace)
+    target_compile_features(ytrace INTERFACE cxx_std_20)
+    target_include_directories(ytrace INTERFACE ${ytrace_SOURCE_DIR}/include)
+    
+    # Add spdlog dependency
+    CPMAddPackage(
+        NAME spdlog
+        GITHUB_REPOSITORY gabime/spdlog
+        GIT_TAG v1.16.0
+        OPTIONS "CMAKE_POSITION_INDEPENDENT_CODE ON"
+    )
+    target_compile_definitions(ytrace INTERFACE YTRACE_USE_SPDLOG)
+    target_link_libraries(ytrace INTERFACE spdlog::spdlog)
+    
+    # Enable all trace macros by default
+    target_compile_definitions(ytrace INTERFACE
+        YTRACE_ENABLE_YLOG=1
+        YTRACE_ENABLE_YTRACE=1
+        YTRACE_ENABLE_YDEBUG=1
+        YTRACE_ENABLE_YINFO=1
+        YTRACE_ENABLE_YWARN=1
+        YTRACE_ENABLE_YFUNC=1
+    )
+endif()
 
 # LZ4 for fast font cache compression
 CPMAddPackage(
@@ -372,7 +401,7 @@ if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID)
         msdfgen::msdfgen-core
         msdfgen::msdfgen-ext
         freetype
-        spdlog::spdlog
+        ytrace::ytrace
         lz4_static
         uv_a
         $<$<NOT:$<BOOL:${WIN32}>>:${FONTCONFIG_LIBRARIES}>
@@ -428,7 +457,12 @@ elseif(NOT EMSCRIPTEN)
         src/yetty/input-handler.cpp
         src/yetty/config.cpp
         src/yetty/terminal.cpp
+        src/yetty/local-terminal-backend.cpp
+        src/yetty/remote-terminal-backend.cpp
+        src/yetty/remote-terminal.cpp
+        src/yetty/shared-grid.cpp
         src/yetty/plugin-manager.cpp
+        src/yetty/widget-factory.cpp
         src/yetty/osc-command.cpp
         src/yetty/custom-glyph-plugin.cpp
         src/yetty/shader-manager.cpp
@@ -501,7 +535,7 @@ if(EMSCRIPTEN)
         stb
         yaml-cpp
         vterm
-        spdlog::spdlog
+        ytrace::ytrace
     )
 
 elseif(YETTY_ANDROID)
@@ -528,7 +562,7 @@ elseif(YETTY_ANDROID)
         stb
         yaml-cpp
         vterm
-        spdlog::spdlog
+        ytrace::ytrace
         lz4_static
         uv_a
         android
@@ -621,10 +655,38 @@ else()
         glfw
         glfw3webgpu
         glm::glm
-        spdlog::spdlog
+        ytrace::ytrace
         args
         ${CMAKE_DL_LIBS}
     )
+
+    #-------------------------------------------------------------------------
+    # yetty-server - Terminal multiplexer server (desktop only)
+    #-------------------------------------------------------------------------
+    add_executable(yetty-server
+        src/yetty/server/main.cpp
+        src/yetty/local-terminal-backend.cpp
+        src/yetty/shared-grid.cpp
+        src/yetty/grid.cpp
+    )
+    target_include_directories(yetty-server PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    target_compile_definitions(yetty-server PRIVATE
+        CMAKE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+        YETTY_SERVER_BUILD=1
+    )
+    target_link_libraries(yetty-server PRIVATE
+        vterm
+        uv_a
+        ytrace::ytrace
+        ${CMAKE_DL_LIBS}
+    )
+    # Unix: Link against util for forkpty, rt for shm_open
+    if(NOT WIN32)
+        target_link_libraries(yetty-server PRIVATE util rt)
+    endif()
 endif()
 
 

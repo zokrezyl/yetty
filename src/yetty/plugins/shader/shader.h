@@ -5,7 +5,7 @@
 
 namespace yetty {
 
-class ShaderLayer;
+class Shader;
 
 //-----------------------------------------------------------------------------
 // ShaderPlugin - manages all shader layers
@@ -25,18 +25,29 @@ public:
 
 private:
     explicit ShaderPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
-    Result<void> init() noexcept override;
+    Result<void> pluginInit() noexcept;
 };
 
 //-----------------------------------------------------------------------------
-// ShaderLayer - a single shader instance at a position
+// Shader - a single shader instance at a position
+//
+// Two-phase construction:
+//   1. Constructor (private) - stores payload
+//   2. init() (private) - no args, compiles shader
+//   3. create() (public) - factory
 //-----------------------------------------------------------------------------
-class ShaderLayer : public Widget {
+class Shader : public Widget {
 public:
-    ShaderLayer();
-    ~ShaderLayer() override;
+    static Result<WidgetPtr> create(const std::string& payload) {
+        auto w = std::shared_ptr<Shader>(new Shader(payload));
+        if (auto res = w->init(); !res) {
+            return Err<WidgetPtr>("Failed to init Shader", res);
+        }
+        return Ok(std::static_pointer_cast<Widget>(w));
+    }
 
-    Result<void> init(const std::string& payload) override;
+    ~Shader() override;
+
     Result<void> dispose() override;
 
     // Legacy render (creates own encoder - slow)
@@ -52,6 +63,12 @@ public:
     bool wantsMouse() const override { return true; }
 
 private:
+    explicit Shader(const std::string& payload) {
+        payload_ = payload;
+    }
+
+    Result<void> init() override;
+
     Result<void> compileShader(WebGPUContext& ctx,
                                WGPUTextureFormat targetFormat,
                                const std::string& fragmentCode);
@@ -62,22 +79,22 @@ private:
     static std::string wrapFragmentShader(const std::string& userCode);
 
     // WebGPU resources
-    WGPURenderPipeline _pipeline = nullptr;
-    WGPUBindGroup _bind_group = nullptr;        // Per-plugin uniforms (group 1)
-    WGPUBuffer _uniform_buffer = nullptr;
-    WGPUBindGroupLayout _bindGroupLayout = nullptr;  // For per-plugin uniforms
-    bool _compiled = false;
-    bool _failed = false;
+    WGPURenderPipeline pipeline_ = nullptr;
+    WGPUBindGroup bind_group_ = nullptr;
+    WGPUBuffer uniform_buffer_ = nullptr;
+    WGPUBindGroupLayout bindGroupLayout_ = nullptr;
+    bool compiled_ = false;
+    bool failed_ = false;
 
     // Mouse state (in local coordinates, normalized 0-1)
-    float _mouse_x = 0.0f;
-    float _mouse_y = 0.0f;
-    bool _mouse_down = false;
-    bool _mouse_grabbed = false;
+    float mouse_x_ = 0.0f;
+    float mouse_y_ = 0.0f;
+    bool mouse_down_ = false;
+    bool mouse_grabbed_ = false;
 
     // Scroll-controlled parameters
-    float _param = 0.5f;
-    float _zoom = 1.0f;
+    float param_ = 0.5f;
+    float zoom_ = 1.0f;
 };
 
 // Backward compatibility alias

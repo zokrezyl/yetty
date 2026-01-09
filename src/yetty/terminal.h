@@ -1,10 +1,12 @@
 #pragma once
 
 #include <yetty/renderable.h>
+#include <yetty/widget.h>
 #include <yetty/font.h>
 #include <yetty/config.h>
 #include <yetty/result.hpp>
 #include "grid.h"
+#include "terminal-backend.h"  // For SelectionMode, ScrollbackStyle, ScrollbackLine
 
 extern "C" {
 #include <vterm.h>
@@ -30,41 +32,15 @@ namespace yetty {
 
 // Forward declarations
 class PluginManager;
+class WidgetFactory;
 class EmojiAtlas;
 class GridRenderer;
 
-// Scrollback cell style (colors + attrs packed together for RLE)
-struct ScrollbackStyle {
-    uint8_t fgR, fgG, fgB;
-    uint8_t bgR, bgG, bgB;
-    uint16_t attrs;  // packed VTermScreenCellAttrs
-    
-    bool operator==(const ScrollbackStyle& o) const {
-        return fgR == o.fgR && fgG == o.fgG && fgB == o.fgB &&
-               bgR == o.bgR && bgG == o.bgG && bgB == o.bgB &&
-               attrs == o.attrs;
-    }
-};
-
-// RLE run for style (colors + attrs)
-struct StyleRun {
-    ScrollbackStyle style;
-    uint16_t count;
-};
-
-// A single line in the scrollback buffer
-struct ScrollbackLine {
-    std::vector<uint32_t> chars;        // one per cell
-    std::vector<StyleRun> styleRuns;    // RLE-compressed styles
-};
-
-// Selection mode for mouse selection
-enum class SelectionMode {
-    None,
-    Character,
-    Word,
-    Line
-};
+// Types are now defined in terminal-backend.h:
+// - SelectionMode
+// - ScrollbackStyle
+// - StyleRun  
+// - ScrollbackLine
 
 //=============================================================================
 // Terminal - Renderable terminal emulator with libuv-based async PTY I/O
@@ -153,11 +129,20 @@ public:
     void setConfig(const Config* config) { config_ = config; }
     void setShell(const std::string& shell) { shell_ = shell; }
 
-    // Plugin support
+    // Plugin support (legacy - will be replaced by WidgetFactory)
     void setPluginManager(PluginManager* mgr) { pluginManager_ = mgr; }
     PluginManager* getPluginManager() const { return pluginManager_; }
     void setEmojiAtlas(EmojiAtlas* atlas) { emojiAtlas_ = atlas; }
     void setRenderer(GridRenderer* renderer) { renderer_ = renderer; }
+
+    // Widget ownership (new architecture)
+    void setWidgetFactory(WidgetFactory* factory) { widgetFactory_ = factory; }
+    WidgetFactory* getWidgetFactory() const { return widgetFactory_; }
+
+    void addWidget(WidgetPtr widget);
+    Result<void> removeWidget(uint32_t id);
+    WidgetPtr getWidget(uint32_t id) const;
+    const std::vector<WidgetPtr>& getWidgets() const { return widgets_; }
 
     // Cell size
     void setCellSize(uint32_t width, uint32_t height);
@@ -265,9 +250,13 @@ private:
     bool fullDamage_ = true;
 
     const Config* config_ = nullptr;
-    PluginManager* pluginManager_ = nullptr;
+    PluginManager* pluginManager_ = nullptr;  // Legacy
+    WidgetFactory* widgetFactory_ = nullptr;
     EmojiAtlas* emojiAtlas_ = nullptr;
     GridRenderer* renderer_ = nullptr;
+
+    // Widget ownership (new architecture)
+    std::vector<WidgetPtr> widgets_;
 
     uint32_t cellWidth_ = 10;
     uint32_t cellHeight_ = 20;

@@ -6,7 +6,7 @@
 
 namespace yetty {
 
-class PlotLayer;
+class PlotW;
 
 //-----------------------------------------------------------------------------
 // PlotPlugin - manages all plot layers
@@ -32,11 +32,11 @@ public:
 
 private:
     explicit PlotPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
-    Result<void> init() noexcept override;
+    Result<void> pluginInit() noexcept;
 };
 
 //-----------------------------------------------------------------------------
-// PlotLayer - a single plot widget showing N line plots
+// PlotW - a single plot widget showing N line plots
 //
 // Data format: NxM matrix where:
 //   - N = number of plots (rows)
@@ -44,15 +44,26 @@ private:
 //   - Each value is a float Y coordinate
 //
 // The X axis is implicit: x[i] = i / (M-1) normalized to [0,1]
+//
+// Two-phase construction:
+//   1. Constructor (private) - stores payload
+//   2. init() (private) - no args, parses payload
+//   3. create() (public) - factory
 //-----------------------------------------------------------------------------
-class PlotLayer : public Widget {
+class PlotW : public Widget {
 public:
     static constexpr uint32_t MAX_PLOTS = 16;  // Maximum number of plots per layer
 
-    PlotLayer();
-    ~PlotLayer() override;
+    static Result<WidgetPtr> create(const std::string& payload) {
+        auto w = std::shared_ptr<PlotW>(new PlotW(payload));
+        if (auto res = w->init(); !res) {
+            return Err<WidgetPtr>("Failed to init PlotW", res);
+        }
+        return Ok(std::static_pointer_cast<Widget>(w));
+    }
 
-    Result<void> init(const std::string& payload) override;
+    ~PlotW() override;
+
     Result<void> dispose() override;
     Result<void> update(double deltaTime) override;
 
@@ -85,50 +96,53 @@ public:
     bool wantsMouse() const override { return true; }
 
 private:
+    explicit PlotW(const std::string& payload) {
+        payload_ = payload;
+    }
+
+    Result<void> init() override;
     Result<void> createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat);
     Result<void> updateDataTexture(WebGPUContext& ctx);
 
     // Plot data (CPU side, for updates)
-    std::vector<float> _data;
-    uint32_t _num_plots = 0;
-    uint32_t _num_points = 0;
-    bool _data_dirty = false;
+    std::vector<float> data_;
+    uint32_t numPlots_ = 0;
+    uint32_t numPoints_ = 0;
+    bool dataDirty_ = false;
 
     // Viewport
-    float _x_min = 0.0f;
-    float _x_max = 1.0f;
-    float _y_min = 0.0f;
-    float _y_max = 1.0f;
+    float xMin_ = 0.0f;
+    float xMax_ = 1.0f;
+    float yMin_ = 0.0f;
+    float yMax_ = 1.0f;
 
     // Visual settings
-    float _line_width = 2.0f;
-    bool _grid_enabled = true;
-    float _colors[MAX_PLOTS * 4];  // RGBA for each plot
+    float lineWidth_ = 2.0f;
+    bool gridEnabled_ = true;
+    float colors_[MAX_PLOTS * 4];  // RGBA for each plot
 
     // Pan/zoom state
-    float _mouse_x = 0.0f;
-    float _mouse_y = 0.0f;
-    bool _panning = false;
-    float _pan_start_x = 0.0f;
-    float _pan_start_y = 0.0f;
-    float _viewport_start_x_min = 0.0f;
-    float _viewport_start_x_max = 1.0f;
-    float _viewport_start_y_min = 0.0f;
-    float _viewport_start_y_max = 1.0f;
+    float mouseX_ = 0.0f;
+    float mouseY_ = 0.0f;
+    bool panning_ = false;
+    float panStartX_ = 0.0f;
+    float panStartY_ = 0.0f;
+    float viewportStartXMin_ = 0.0f;
+    float viewportStartXMax_ = 1.0f;
+    float viewportStartYMin_ = 0.0f;
+    float viewportStartYMax_ = 1.0f;
 
     // WebGPU resources
-    WGPURenderPipeline _pipeline = nullptr;
-    WGPUBindGroup _bind_group = nullptr;
-    WGPUBuffer _uniform_buffer = nullptr;
-    WGPUTexture _data_texture = nullptr;
-    WGPUTextureView _data_texture_view = nullptr;
-    WGPUSampler _sampler = nullptr;
+    WGPURenderPipeline pipeline_ = nullptr;
+    WGPUBindGroup bindGroup_ = nullptr;
+    WGPUBuffer uniformBuffer_ = nullptr;
+    WGPUTexture dataTexture_ = nullptr;
+    WGPUTextureView dataTextureView_ = nullptr;
+    WGPUSampler sampler_ = nullptr;
 
-    bool _gpu_initialized = false;
-    bool _failed = false;
+    bool gpuInitialized_ = false;
+    bool failed_ = false;
 };
-
-using Plot = PlotPlugin;
 
 } // namespace yetty
 

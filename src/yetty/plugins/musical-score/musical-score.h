@@ -5,7 +5,7 @@
 
 namespace yetty {
 
-class MusicalScoreLayer;
+class MusicalScoreW;
 
 //-----------------------------------------------------------------------------
 // MusicalScorePlugin - renders a musical score sheet with WebGPU
@@ -30,24 +30,30 @@ public:
 
 private:
     explicit MusicalScorePlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
-    Result<void> init() noexcept override;
+    Result<void> pluginInit() noexcept;
 };
 
 //-----------------------------------------------------------------------------
-// MusicalScoreLayer - a single musical score instance
+// MusicalScoreW - a single musical score instance
 //
 // Payload format: "sheetWidth,numStaves"
 //   e.g., "800,4" = 800px wide sheet with 4 staves
 //-----------------------------------------------------------------------------
-class MusicalScoreLayer : public Widget {
+class MusicalScoreW : public Widget {
 public:
     static constexpr int MAX_STAVES = 16;
     static constexpr int LINES_PER_STAFF = 5;
 
-    MusicalScoreLayer();
-    ~MusicalScoreLayer() override;
+    static Result<WidgetPtr> create(const std::string& payload) {
+        auto w = std::shared_ptr<MusicalScoreW>(new MusicalScoreW(payload));
+        if (auto res = w->init(); !res) {
+            return Err<WidgetPtr>("Failed to init MusicalScoreW", res);
+        }
+        return Ok(std::static_pointer_cast<Widget>(w));
+    }
 
-    Result<void> init(const std::string& payload) override;
+    ~MusicalScoreW() override;
+
     Result<void> dispose() override;
     Result<void> update(double deltaTime) override;
 
@@ -65,22 +71,25 @@ public:
     bool wantsKeyboard() const override { return true; }
 
 private:
+    explicit MusicalScoreW(const std::string& payload) {
+        payload_ = payload;
+    }
+
+    Result<void> init() override;
     Result<void> createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat);
 
     // Configuration
-    int _sheet_width = 800;
-    int _num_staves = 4;
+    int sheetWidth_ = 800;
+    int numStaves_ = 4;
 
     // GPU resources
-    WGPURenderPipeline _pipeline = nullptr;
-    WGPUBindGroup _bind_group = nullptr;
-    WGPUBuffer _uniform_buffer = nullptr;
+    WGPURenderPipeline pipeline_ = nullptr;
+    WGPUBindGroup bindGroup_ = nullptr;
+    WGPUBuffer uniformBuffer_ = nullptr;
 
-    bool _gpu_initialized = false;
-    bool _failed = false;
+    bool gpuInitialized_ = false;
+    bool failed_ = false;
 };
-
-using MusicalScore = MusicalScorePlugin;
 
 } // namespace yetty
 

@@ -13,7 +13,7 @@ typedef _ts PyThreadState;
 
 namespace yetty {
 
-class PythonWidget;
+class PythonW;
 
 //-----------------------------------------------------------------------------
 // PythonPlugin - Embeds Python interpreter
@@ -37,52 +37,58 @@ public:
     Result<void> runFile(const std::string& path);
 
     // Check if Python is initialized
-    bool isInitialized() const { return _py_initialized; }
-    
+    bool isInitialized() const { return pyInitialized_; }
+
     // Callback functions from init.py
-    PyObject* getInitWidgetFunc() const { return _init_widget_func; }
-    PyObject* getDisposeWidgetFunc() const { return _dispose_widget_func; }
+    PyObject* getInitWidgetFunc() const { return initWidgetFunc_; }
+    PyObject* getDisposeWidgetFunc() const { return disposeWidgetFunc_; }
 
 private:
     explicit PythonPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
-    Result<void> init() noexcept override;
+    Result<void> pluginInit() noexcept;
     Result<void> initPython();
     Result<void> loadInitCallbacks();
 
-    bool _py_initialized = false;
-    PyObject* _main_module = nullptr;
-    PyObject* _main_dict = nullptr;
-    PyThreadState* _main_thread_state = nullptr;  // For GIL management
-    
+    bool pyInitialized_ = false;
+    PyObject* mainModule_ = nullptr;
+    PyObject* mainDict_ = nullptr;
+    PyThreadState* mainThreadState_ = nullptr;  // For GIL management
+
     // Callback functions from init.py
-    PyObject* _init_module = nullptr;
-    PyObject* _init_plugin_func = nullptr;
-    PyObject* _init_widget_func = nullptr;
-    PyObject* _dispose_widget_func = nullptr;
-    PyObject* _dispose_plugin_func = nullptr;
+    PyObject* initModule_ = nullptr;
+    PyObject* initPluginFunc_ = nullptr;
+    PyObject* initWidgetFunc_ = nullptr;
+    PyObject* disposeWidgetFunc_ = nullptr;
+    PyObject* disposePluginFunc_ = nullptr;
 };
 
 //-----------------------------------------------------------------------------
-// PythonWidget - Displays Python output or runs Python scripts
+// PythonW - Displays Python output or runs Python scripts
 //-----------------------------------------------------------------------------
-class PythonWidget : public Widget {
+class PythonW : public Widget {
 public:
-    PythonWidget(PythonPlugin* plugin);
-    ~PythonWidget() override;
+    static Result<WidgetPtr> create(const std::string& payload, PythonPlugin* plugin) {
+        auto w = std::shared_ptr<PythonW>(new PythonW(payload, plugin));
+        if (auto res = w->init(); !res) {
+            return Err<WidgetPtr>("Failed to init PythonW", res);
+        }
+        return Ok(std::static_pointer_cast<Widget>(w));
+    }
 
-    Result<void> init(const std::string& payload) override;
+    ~PythonW() override;
+
     Result<void> dispose() override;
 
     // Renderable interface
-    const std::string& name() const override { return _name; }
-    void start() override { _running = true; }
-    void stop() override { _running = false; }
-    bool isRunning() const override { return _running; }
+    const std::string& name() const override { return name_; }
+    void start() override { running_ = true; }
+    void stop() override { running_ = false; }
+    bool isRunning() const override { return running_; }
     Result<void> render(WebGPUContext& ctx) override;
-    
+
     // Pre-render phase - render pygfx to texture BEFORE shared pass
     void prepareFrame(WebGPUContext& ctx) override;
-    
+
     // Batched render - only blits pre-rendered texture
     bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
@@ -90,7 +96,7 @@ public:
     bool onKey(int key, int scancode, int action, int mods) override;
     bool onChar(unsigned int codepoint) override;
     bool wantsKeyboard() const override { return true; }
-    
+
     // Mouse input handling for pygfx interaction
     bool onMouseMove(float localX, float localY) override;
     bool onMouseButton(int button, bool pressed) override;
@@ -102,50 +108,55 @@ public:
     bool renderPygfx();
     bool blitRenderTexture(WebGPUContext& ctx);
     bool blitToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx);
-    bool isPygfxInitialized() const { return _pygfx_initialized; }
-    
+    bool isPygfxInitialized() const { return pygfxInitialized_; }
+
     // Callback management
     bool callInitWidget(WebGPUContext& ctx, uint32_t width, uint32_t height);
-    bool callRender(WebGPUContext& ctx, uint32_t frame_num, uint32_t width, uint32_t height);
+    bool callRender(WebGPUContext& ctx, uint32_t frameNum, uint32_t width, uint32_t height);
     bool callDisposeWidget();
 
 private:
-    PythonPlugin* _plugin = nullptr;
-    std::string _name = "python";
-    std::string _script_path;
-    std::string _output;
-    std::string _input_buffer;
-    bool _initialized = false;
-    bool _failed = false;
-    bool _running = false;
+    explicit PythonW(const std::string& payload, PythonPlugin* plugin)
+        : plugin_(plugin)
+    {
+        payload_ = payload;
+    }
+
+    Result<void> init() override;
+    bool createBlitPipeline(WebGPUContext& ctx);
+
+    PythonPlugin* plugin_ = nullptr;
+    std::string scriptPath_;
+    std::string output_;
+    std::string inputBuffer_;
+    bool failed_ = false;
 
     // For rendering output
-    float _scroll_offset = 0.0f;
+    float scrollOffset_ = 0.0f;
 
     // pygfx integration state
-    bool _pygfx_initialized = false;
-    bool _wgpu_handles_set = false;
-    PyObject* _pygfx_module = nullptr;
-    PyObject* _render_frame_func = nullptr;
-    uint32_t _texture_width = 0;
-    uint32_t _texture_height = 0;
-    uint32_t _frame_count = 0;
-    
+    bool pygfxInitialized_ = false;
+    bool wgpuHandlesSet_ = false;
+    PyObject* pygfxModule_ = nullptr;
+    PyObject* renderFrameFunc_ = nullptr;
+    uint32_t textureWidth_ = 0;
+    uint32_t textureHeight_ = 0;
+    uint32_t frameCount_ = 0;
+
     // User render callback
-    PyObject* _user_render_func = nullptr;
-    
+    PyObject* userRenderFunc_ = nullptr;
+
     // Mouse state for pygfx interaction
-    float _mouse_x = 0.0f;
-    float _mouse_y = 0.0f;
-    bool _mouse_down = false;
-    int _mouse_button = 0;
+    float mouseX_ = 0.0f;
+    float mouseY_ = 0.0f;
+    bool mouseDown_ = false;
+    int mouseButton_ = 0;
 
     // Blit pipeline resources
-    WGPURenderPipeline _blit_pipeline = nullptr;
-    WGPUBindGroup _blit_bind_group = nullptr;
-    WGPUSampler _blit_sampler = nullptr;
-    bool _blit_initialized = false;
-    bool createBlitPipeline(WebGPUContext& ctx);
+    WGPURenderPipeline blitPipeline_ = nullptr;
+    WGPUBindGroup blitBindGroup_ = nullptr;
+    WGPUSampler blitSampler_ = nullptr;
+    bool blitInitialized_ = false;
 };
 
 using Python = PythonPlugin;

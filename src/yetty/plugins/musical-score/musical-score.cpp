@@ -19,14 +19,14 @@ MusicalScorePlugin::~MusicalScorePlugin() {
 
 Result<PluginPtr> MusicalScorePlugin::create(YettyPtr engine) noexcept {
     auto p = PluginPtr(new MusicalScorePlugin(std::move(engine)));
-    if (auto res = static_cast<MusicalScorePlugin*>(p.get())->init(); !res) {
+    if (auto res = static_cast<MusicalScorePlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init MusicalScorePlugin", res);
     }
     return Ok(p);
 }
 
-Result<void> MusicalScorePlugin::init() noexcept {
-    _initialized = true;
+Result<void> MusicalScorePlugin::pluginInit() noexcept {
+    initialized_ = true;
     return Ok();
 }
 
@@ -34,17 +34,12 @@ Result<void> MusicalScorePlugin::dispose() {
     if (auto res = Plugin::dispose(); !res) {
         return Err<void>("Failed to dispose MusicalScorePlugin", res);
     }
-    _initialized = false;
+    initialized_ = false;
     return Ok();
 }
 
 Result<WidgetPtr> MusicalScorePlugin::createWidget(const std::string& payload) {
-    auto layer = std::make_shared<MusicalScoreLayer>();
-    auto result = layer->init(payload);
-    if (!result) {
-        return Err<WidgetPtr>("Failed to initialize MusicalScore layer", result);
-    }
-    return Ok<WidgetPtr>(layer);
+    return MusicalScoreW::create(payload);
 }
 
 Result<void> MusicalScorePlugin::renderAll(WGPUTextureView targetView, WGPUTextureFormat targetFormat,
@@ -55,18 +50,18 @@ Result<void> MusicalScorePlugin::renderAll(WGPUTextureView targetView, WGPUTextu
     if (!engine_) return Err<void>("MusicalScorePlugin::renderAll: no engine");
 
     ScreenType currentScreen = isAltScreen ? ScreenType::Alternate : ScreenType::Main;
-    for (auto& layerBase : _layers) {
-        if (!layerBase->isVisible()) continue;
-        if (layerBase->getScreenType() != currentScreen) continue;
+    for (auto& widgetBase : widgets_) {
+        if (!widgetBase->isVisible()) continue;
+        if (widgetBase->getScreenType() != currentScreen) continue;
 
-        auto layer = std::static_pointer_cast<MusicalScoreLayer>(layerBase);
+        auto widget = std::static_pointer_cast<MusicalScoreW>(widgetBase);
 
-        float pixelX = layer->getX() * cellWidth;
-        float pixelY = layer->getY() * cellHeight;
-        float pixelW = layer->getWidthCells() * cellWidth;
-        float pixelH = layer->getHeightCells() * cellHeight;
+        float pixelX = widget->getX() * cellWidth;
+        float pixelY = widget->getY() * cellHeight;
+        float pixelW = widget->getWidthCells() * cellWidth;
+        float pixelH = widget->getHeightCells() * cellHeight;
 
-        if (layer->getPositionMode() == PositionMode::Relative && scrollOffset > 0) {
+        if (widget->getPositionMode() == PositionMode::Relative && scrollOffset > 0) {
             pixelY += scrollOffset * cellHeight;
         }
 
@@ -77,70 +72,66 @@ Result<void> MusicalScorePlugin::renderAll(WGPUTextureView targetView, WGPUTextu
             }
         }
 
-        if (auto res = layer->render(*engine_->context(), targetView, targetFormat,
+        if (auto res = widget->render(*engine_->context(), targetView, targetFormat,
                                       screenWidth, screenHeight,
                                       pixelX, pixelY, pixelW, pixelH); !res) {
-            return Err<void>("Failed to render MusicalScore layer", res);
+            return Err<void>("Failed to render MusicalScoreW", res);
         }
     }
     return Ok();
 }
 
 //-----------------------------------------------------------------------------
-// MusicalScoreLayer
+// MusicalScoreW
 //-----------------------------------------------------------------------------
 
-MusicalScoreLayer::MusicalScoreLayer() = default;
-
-MusicalScoreLayer::~MusicalScoreLayer() {
+MusicalScoreW::~MusicalScoreW() {
     (void)dispose();
 }
 
-Result<void> MusicalScoreLayer::init(const std::string& payload) {
-    _payload = payload;
-
+Result<void> MusicalScoreW::init() {
     // Parse payload: "sheetWidth,numStaves"
-    if (!payload.empty()) {
+    if (!payload_.empty()) {
         int width = 800, staves = 4;
-        if (sscanf(payload.c_str(), "%d,%d", &width, &staves) >= 1) {
-            _sheet_width = std::max(100, width);
-            if (sscanf(payload.c_str(), "%d,%d", &width, &staves) >= 2) {
-                _num_staves = std::clamp(staves, 1, MAX_STAVES);
+        if (sscanf(payload_.c_str(), "%d,%d", &width, &staves) >= 1) {
+            sheetWidth_ = std::max(100, width);
+            if (sscanf(payload_.c_str(), "%d,%d", &width, &staves) >= 2) {
+                numStaves_ = std::clamp(staves, 1, MAX_STAVES);
             }
         }
     }
 
-    spdlog::info("MusicalScoreLayer: initialized ({}px wide, {} staves)",
-                 _sheet_width, _num_staves);
+    spdlog::info("MusicalScoreW: initialized ({}px wide, {} staves)",
+                 sheetWidth_, numStaves_);
     return Ok();
 }
 
-Result<void> MusicalScoreLayer::dispose() {
-    if (_bind_group) { wgpuBindGroupRelease(_bind_group); _bind_group = nullptr; }
-    if (_pipeline) { wgpuRenderPipelineRelease(_pipeline); _pipeline = nullptr; }
-    if (_uniform_buffer) { wgpuBufferRelease(_uniform_buffer); _uniform_buffer = nullptr; }
-    _gpu_initialized = false;
+Result<void> MusicalScoreW::dispose() {
+    if (bindGroup_) { wgpuBindGroupRelease(bindGroup_); bindGroup_ = nullptr; }
+    if (pipeline_) { wgpuRenderPipelineRelease(pipeline_); pipeline_ = nullptr; }
+    if (uniformBuffer_) { wgpuBufferRelease(uniformBuffer_); uniformBuffer_ = nullptr; }
+    gpuInitialized_ = false;
     return Ok();
 }
 
-Result<void> MusicalScoreLayer::update(double deltaTime) {
+Result<void> MusicalScoreW::update(double deltaTime) {
     (void)deltaTime;
     return Ok();
 }
 
-bool MusicalScoreLayer::onMouseMove(float localX, float localY) {
+bool MusicalScoreW::onMouseMove(float localX, float localY) {
     (void)localX;
     (void)localY;
     return true;
 }
 
-bool MusicalScoreLayer::onMouseButton(int button, bool pressed) {
+bool MusicalScoreW::onMouseButton(int button, bool pressed) {
     (void)button;
     (void)pressed;
     return true;
 }
 
-bool MusicalScoreLayer::onKey(int key, int scancode, int action, int mods) {
+bool MusicalScoreW::onKey(int key, int scancode, int action, int mods) {
     (void)key;
     (void)scancode;
     (void)action;
@@ -149,30 +140,30 @@ bool MusicalScoreLayer::onKey(int key, int scancode, int action, int mods) {
     return true;
 }
 
-bool MusicalScoreLayer::onChar(unsigned int codepoint) {
+bool MusicalScoreW::onChar(unsigned int codepoint) {
     (void)codepoint;
     // Consume all chars when focused
     return true;
 }
 
-Result<void> MusicalScoreLayer::render(WebGPUContext& ctx,
+Result<void> MusicalScoreW::render(WebGPUContext& ctx,
                                  WGPUTextureView targetView, WGPUTextureFormat targetFormat,
                                  uint32_t screenWidth, uint32_t screenHeight,
                                  float pixelX, float pixelY, float pixelW, float pixelH) {
-    if (_failed) return Err<void>("MusicalScoreLayer already failed");
+    if (failed_) return Err<void>("MusicalScoreW already failed");
 
-    if (!_gpu_initialized) {
+    if (!gpuInitialized_) {
         auto result = createPipeline(ctx, targetFormat);
         if (!result) {
-            _failed = true;
+            failed_ = true;
             return Err<void>("Failed to create pipeline", result);
         }
-        _gpu_initialized = true;
+        gpuInitialized_ = true;
     }
 
-    if (!_pipeline || !_uniform_buffer || !_bind_group) {
-        _failed = true;
-        return Err<void>("MusicalScoreLayer pipeline not initialized");
+    if (!pipeline_ || !uniformBuffer_ || !bindGroup_) {
+        failed_ = true;
+        return Err<void>("MusicalScoreW pipeline not initialized");
     }
 
     // Update uniforms
@@ -185,7 +176,7 @@ Result<void> MusicalScoreLayer::render(WebGPUContext& ctx,
         float rect[4];        // 16 bytes, offset 0
         float resolution[2];  // 8 bytes, offset 16
         float numStaves;      // 4 bytes, offset 24
-        float _pad1;          // 4 bytes, offset 28 (total 32)
+        float pad1_;          // 4 bytes, offset 28 (total 32)
     } uniforms;
 
     uniforms.rect[0] = ndcX;
@@ -194,10 +185,10 @@ Result<void> MusicalScoreLayer::render(WebGPUContext& ctx,
     uniforms.rect[3] = ndcH;
     uniforms.resolution[0] = pixelW;
     uniforms.resolution[1] = pixelH;
-    uniforms.numStaves = static_cast<float>(_num_staves);
-    uniforms._pad1 = 0;
+    uniforms.numStaves = static_cast<float>(numStaves_);
+    uniforms.pad1_ = 0;
 
-    wgpuQueueWriteBuffer(ctx.getQueue(), _uniform_buffer, 0, &uniforms, sizeof(uniforms));
+    wgpuQueueWriteBuffer(ctx.getQueue(), uniformBuffer_, 0, &uniforms, sizeof(uniforms));
 
     // Render
     WGPUCommandEncoderDescriptor encoderDesc = {};
@@ -220,8 +211,8 @@ Result<void> MusicalScoreLayer::render(WebGPUContext& ctx,
         return Err<void>("Failed to begin render pass");
     }
 
-    wgpuRenderPassEncoderSetPipeline(pass, _pipeline);
-    wgpuRenderPassEncoderSetBindGroup(pass, 0, _bind_group, 0, nullptr);
+    wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
+    wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
     wgpuRenderPassEncoderEnd(pass);
     wgpuRenderPassEncoderRelease(pass);
@@ -236,15 +227,15 @@ Result<void> MusicalScoreLayer::render(WebGPUContext& ctx,
     return Ok();
 }
 
-Result<void> MusicalScoreLayer::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat) {
+Result<void> MusicalScoreW::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat) {
     WGPUDevice device = ctx.getDevice();
 
     // Uniform buffer (32 bytes)
     WGPUBufferDescriptor bufDesc = {};
     bufDesc.size = 32;
     bufDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-    _uniform_buffer = wgpuDeviceCreateBuffer(device, &bufDesc);
-    if (!_uniform_buffer) return Err<void>("Failed to create uniform buffer");
+    uniformBuffer_ = wgpuDeviceCreateBuffer(device, &bufDesc);
+    if (!uniformBuffer_) return Err<void>("Failed to create uniform buffer");
 
     // Shader
     const char* shaderCode = R"(
@@ -381,14 +372,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Bind group
     WGPUBindGroupEntry bgE = {};
     bgE.binding = 0;
-    bgE.buffer = _uniform_buffer;
+    bgE.buffer = uniformBuffer_;
     bgE.size = 32;
 
     WGPUBindGroupDescriptor bgDesc = {};
     bgDesc.layout = bgl;
     bgDesc.entryCount = 1;
     bgDesc.entries = &bgE;
-    _bind_group = wgpuDeviceCreateBindGroup(device, &bgDesc);
+    bindGroup_ = wgpuDeviceCreateBindGroup(device, &bgDesc);
 
     // Render pipeline
     WGPURenderPipelineDescriptor pipelineDesc = {};
@@ -412,15 +403,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     pipelineDesc.multisample.count = 1;
     pipelineDesc.multisample.mask = ~0u;
 
-    _pipeline = wgpuDeviceCreateRenderPipeline(device, &pipelineDesc);
+    pipeline_ = wgpuDeviceCreateRenderPipeline(device, &pipelineDesc);
 
     wgpuShaderModuleRelease(shaderModule);
     wgpuBindGroupLayoutRelease(bgl);
     wgpuPipelineLayoutRelease(pipelineLayout);
 
-    if (!_pipeline) return Err<void>("Failed to create render pipeline");
+    if (!pipeline_) return Err<void>("Failed to create render pipeline");
 
-    spdlog::info("MusicalScoreLayer: pipeline created");
+    spdlog::info("MusicalScoreW: pipeline created");
     return Ok();
 }
 

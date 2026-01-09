@@ -1,5 +1,7 @@
 #include "yetty/grid.h"
+#ifndef YETTY_SERVER_BUILD
 #include <yetty/font.h>
+#endif
 #include <algorithm>
 #include <cstring>
 
@@ -206,7 +208,12 @@ void Grid::writeString(uint32_t col, uint32_t row, const char* str,
     uint32_t c = col;
     while (*str && c < cols_) {
         uint32_t codepoint = static_cast<uint8_t>(*str);
+#ifndef YETTY_SERVER_BUILD
         uint16_t glyphIndex = font ? font->getGlyphIndex(codepoint) : static_cast<uint16_t>(codepoint);
+#else
+        (void)font;
+        uint16_t glyphIndex = static_cast<uint16_t>(codepoint);
+#endif
         setGlyph(c, row, glyphIndex);
         setFgColor(c, row, fgR, fgG, fgB);
         ++str;

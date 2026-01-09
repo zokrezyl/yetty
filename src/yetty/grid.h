@@ -54,6 +54,7 @@ struct CellAttrs {
 class Grid {
 public:
     Grid(uint32_t cols = 80, uint32_t rows = 24);
+    virtual ~Grid() = default;
 
     void resize(uint32_t cols, uint32_t rows);
     void clear();
@@ -91,14 +92,14 @@ public:
 
     void scrollUp();
 
-    uint32_t getCols() const { return cols_; }
-    uint32_t getRows() const { return rows_; }
+    virtual uint32_t getCols() const { return cols_; }
+    virtual uint32_t getRows() const { return rows_; }
 
     // Direct access to texture data for GPU upload
-    const uint16_t* getGlyphData() const { return glyphIndices_.data(); }
-    const uint8_t* getFgColorData() const { return fgColors_.data(); }
-    const uint8_t* getBgColorData() const { return bgColors_.data(); }
-    const uint8_t* getAttrsData() const { return attrs_.data(); }
+    virtual const uint16_t* getGlyphData() const { return glyphIndices_.data(); }
+    virtual const uint8_t* getFgColorData() const { return fgColors_.data(); }
+    virtual const uint8_t* getBgColorData() const { return bgColors_.data(); }
+    virtual const uint8_t* getAttrsData() const { return attrs_.data(); }
 
     // Data sizes in bytes
     size_t getGlyphDataSize() const { return glyphIndices_.size() * sizeof(uint16_t); }

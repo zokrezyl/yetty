@@ -9,7 +9,7 @@
 
 namespace yetty {
 
-class RichTextLayer;
+class RichTextW;
 
 //-----------------------------------------------------------------------------
 // RichTextPlugin - renders styled text from YAML input
@@ -47,18 +47,24 @@ public:
 
 private:
     explicit RichTextPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
-    Result<void> init() noexcept override;
+    Result<void> pluginInit() noexcept;
 };
 
 //-----------------------------------------------------------------------------
-// RichTextLayer - single rich text document layer
+// RichTextW - single rich text document widget
 //-----------------------------------------------------------------------------
-class RichTextLayer : public Widget {
+class RichTextW : public Widget {
 public:
-    RichTextLayer(RichTextPlugin* plugin);
-    ~RichTextLayer() override;
+    static Result<WidgetPtr> create(const std::string& payload, RichTextPlugin* plugin) {
+        auto w = std::shared_ptr<RichTextW>(new RichTextW(payload, plugin));
+        if (auto res = w->init(); !res) {
+            return Err<WidgetPtr>("Failed to init RichTextW", res);
+        }
+        return Ok(std::static_pointer_cast<Widget>(w));
+    }
 
-    Result<void> init(const std::string& payload) override;
+    ~RichTextW() override;
+
     Result<void> dispose() override;
 
     // Renderable interface - uses RenderContext from base class
@@ -70,6 +76,12 @@ public:
     bool wantsMouse() const override { return true; }
 
 private:
+    explicit RichTextW(const std::string& payload, RichTextPlugin* plugin)
+        : plugin_(plugin) {
+        payload_ = payload;
+    }
+
+    Result<void> init() override;
     Result<void> parseYAML(const std::string& yaml);
 
     RichTextPlugin* plugin_ = nullptr;
