@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yetty/renderable.h>
+#include <yetty/widget.h>
 #include <yetty/result.hpp>
 #include <webgpu/webgpu.h>
 #include <string>
@@ -34,13 +34,13 @@ struct ShaderGlyphRenderContext {
 };
 
 //-----------------------------------------------------------------------------
-// ShaderGlyphRenderer - Renderable, one per shader
+// ShaderGlyphRenderer - Widget, one per shader
 //
 // Terminal creates one instance per shader name it uses.
 // Positions are updated only when terminal is dirty.
 // Renders all instances in one batched draw call.
 //-----------------------------------------------------------------------------
-class ShaderGlyphRenderer : public Renderable {
+class ShaderGlyphRenderer : public Widget {
 public:
     ShaderGlyphRenderer(uint32_t id, const std::string& shaderName);
     ~ShaderGlyphRenderer() override;
@@ -50,8 +50,8 @@ public:
                       WGPUTextureFormat targetFormat);
     Result<void> dispose();
 
-    // Renderable interface
-    uint32_t id() const override { return _id; }
+    // Widget interface
+    // id() inherited from Widget
     uint32_t zOrder() const override { return _zOrder; }
     const std::string& name() const override { return _name; }
     void start() override { _running.store(true); }

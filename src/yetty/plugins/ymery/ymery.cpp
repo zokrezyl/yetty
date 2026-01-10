@@ -1,6 +1,7 @@
 #include "ymery.h"
 #include <yetty/yetty.h>
 #include <yetty/webgpu-context.h>
+#include <ytrace/ytrace.hpp>
 
 #include <ymery/embedded.hpp>
 #include <imgui.h>
@@ -11,7 +12,7 @@
 #include <algorithm>
 #include <sstream>
 #include <filesystem>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 
 #ifdef __linux__
 #include <unistd.h>
@@ -108,8 +109,8 @@ YmeryPlugin::~YmeryPlugin() {
     (void)dispose();
 }
 
-Result<PluginPtr> YmeryPlugin::create(YettyPtr engine) noexcept {
-    auto p = PluginPtr(new YmeryPlugin(std::move(engine)));
+Result<PluginPtr> YmeryPlugin::create() noexcept {
+    auto p = PluginPtr(new YmeryPlugin());
     if (auto res = static_cast<YmeryPlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init YmeryPlugin", res);
     }
@@ -117,16 +118,25 @@ Result<PluginPtr> YmeryPlugin::create(YettyPtr engine) noexcept {
 }
 
 Result<void> YmeryPlugin::pluginInit() noexcept {
-    if (!engine_) {
-        return Err<void>("YmeryPlugin::pluginInit: Yetty engine required");
+    // Note: Will be initialized properly in init() with WebGPUContext
+    _initialized = false;
+    return Ok();
+}
+
+Result<void> YmeryPlugin::init(WebGPUContext* ctx) {
+    auto res = Plugin::init(ctx);
+    if (!res) return res;
+
+    if (!_ctx) {
+        return Err<void>("YmeryPlugin: WebGPUContext required");
     }
 
-    _device = engine_->context()->getDevice();
-    _queue = engine_->context()->getQueue();
-    _format = engine_->context()->getSurfaceFormat();
+    _device = _ctx->getDevice();
+    _queue = _ctx->getQueue();
+    _format = _ctx->getSurfaceFormat();
 
     _initialized = true;
-    spdlog::info("YmeryPlugin initialized");
+    yinfo("YmeryPlugin initialized");
     return Ok();
 }
 
@@ -158,8 +168,26 @@ Result<void> YmeryPlugin::dispose() {
     return Ok();
 }
 
-Result<WidgetPtr> YmeryPlugin::createWidget(const std::string& payload) {
-    return YmeryW::create(payload);
+Result<WidgetPtr> YmeryPlugin::createWidget(
+    const std::string& widgetName,
+    WidgetFactory* factory,
+    FontManager* fontManager,
+    uv_loop_t* loop,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
+    const std::string& pluginArgs,
+    const std::string& payload
+) {
+    (void)widgetName;
+    yfunc();
+    yinfo("payload={} x={} y={} w={} h={}", payload, x, y, widthCells, heightCells);
+    auto result = Ymery::create(factory, fontManager, loop, x, y, widthCells, heightCells, pluginArgs, payload);
+    if (result) {
+        _widgets.push_back(*result);
+    }
+    return result;
 }
 
 Result<void> YmeryPlugin::initImGui(uint32_t screenWidth, uint32_t screenHeight) {
@@ -205,12 +233,12 @@ Result<void> YmeryPlugin::initImGui(uint32_t screenWidth, uint32_t screenHeight)
         return Err<void>("Failed to init ImGui WebGPU backend");
     }
 
-    spdlog::info("YmeryPlugin: ImGui initialized ({}x{})", screenWidth, screenHeight);
+    yinfo("YmeryPlugin: ImGui initialized ({}x{})", screenWidth, screenHeight);
     return Ok();
 }
 
 Result<void> YmeryPlugin::render(WebGPUContext& ctx) {
-    if (!engine_) return Err<void>("YmeryPlugin::render: no engine");
+    (void)ctx;  // Use _ctx from base class
 
     if (_widgets.empty()) return Ok();
 
@@ -237,7 +265,7 @@ Result<void> YmeryPlugin::render(WebGPUContext& ctx) {
 
     // Lazy create ymery app on first render
     if (!_app) {
-        auto firstLayer = std::static_pointer_cast<YmeryW>(_widgets[0]);
+        auto firstLayer = std::static_pointer_cast<Ymery>(_widgets[0]);
 
         ymery::EmbeddedConfig config;
         config.layout_paths.push_back(firstLayer->getLayoutPath());
@@ -254,11 +282,11 @@ Result<void> YmeryPlugin::render(WebGPUContext& ctx) {
             pluginsDir = getExecutableDir() + "/plugins";
         }
 
-        spdlog::info("YmeryPlugin: using plugins dir: {}", pluginsDir);
+        yinfo("YmeryPlugin: using plugins dir: {}", pluginsDir);
         if (std::filesystem::exists(pluginsDir)) {
             config.plugin_paths.push_back(pluginsDir);
         } else {
-            spdlog::warn("YmeryPlugin: plugins dir does not exist: {}", pluginsDir);
+            ywarn("YmeryPlugin: plugins dir does not exist: {}", pluginsDir);
         }
         config.main_module = firstLayer->getMainModule();
 
@@ -267,7 +295,7 @@ Result<void> YmeryPlugin::render(WebGPUContext& ctx) {
             return Err<void>("Failed to create EmbeddedApp: " + ymery::error_msg(res));
         }
         _app = *res;
-        spdlog::info("YmeryPlugin: EmbeddedApp created");
+        yinfo("YmeryPlugin: EmbeddedApp created");
     }
 
     if (!_app) return Err<void>("YmeryPlugin: app not initialized");
@@ -298,7 +326,7 @@ Result<void> YmeryPlugin::render(WebGPUContext& ctx) {
         if (!layerBase->isVisible()) continue;
         if (layerBase->getScreenType() != currentScreen) continue;
 
-        auto layer = std::static_pointer_cast<YmeryW>(layerBase);
+        auto layer = std::static_pointer_cast<Ymery>(layerBase);
 
         float pixelX = layer->getX() * rc.cellWidth;
         float pixelY = layer->getY() * rc.cellHeight;
@@ -362,13 +390,13 @@ Result<void> YmeryPlugin::render(WebGPUContext& ctx) {
 }
 
 //-----------------------------------------------------------------------------
-// YmeryW
+// Ymery
 //-----------------------------------------------------------------------------
 
-YmeryW::~YmeryW() = default;
+Ymery::~Ymery() = default;
 
-Result<void> YmeryW::parsePayload() {
-    std::istringstream stream(payload_);
+Result<void> Ymery::parsePayload() {
+    std::istringstream stream(_payload);
     std::string pair;
 
     while (std::getline(stream, pair, ';')) {
@@ -394,22 +422,22 @@ Result<void> YmeryW::parsePayload() {
     }
 
     if (_layout_path.empty()) {
-        return Err<void>("YmeryW: layout_path is required");
+        return Err<void>("Ymery: layout_path is required");
     }
 
     return Ok();
 }
 
-Result<void> YmeryW::init() {
+Result<void> Ymery::init() {
     return parsePayload();
 }
 
-Result<void> YmeryW::dispose() {
+Result<void> Ymery::dispose() {
     return Ok();
 }
 
-bool YmeryW::onMouseMove(float x, float y) {
-    auto plugin = static_cast<YmeryPlugin*>(parent_);
+bool Ymery::onMouseMove(float x, float y) {
+    auto plugin = static_cast<YmeryPlugin*>(_parent);
     if (plugin && plugin->imguiContext()) {
         ImGui::SetCurrentContext(plugin->imguiContext());
         ImGuiIO& io = ImGui::GetIO();
@@ -422,8 +450,8 @@ bool YmeryW::onMouseMove(float x, float y) {
     return false;
 }
 
-bool YmeryW::onMouseButton(int button, bool pressed) {
-    auto plugin = static_cast<YmeryPlugin*>(parent_);
+bool Ymery::onMouseButton(int button, bool pressed) {
+    auto plugin = static_cast<YmeryPlugin*>(_parent);
     if (plugin && plugin->imguiContext()) {
         ImGui::SetCurrentContext(plugin->imguiContext());
         ImGuiIO& io = ImGui::GetIO();
@@ -435,9 +463,9 @@ bool YmeryW::onMouseButton(int button, bool pressed) {
     return false;
 }
 
-bool YmeryW::onMouseScroll(float xoffset, float yoffset, int mods) {
+bool Ymery::onMouseScroll(float xoffset, float yoffset, int mods) {
     (void)mods;
-    auto plugin = static_cast<YmeryPlugin*>(parent_);
+    auto plugin = static_cast<YmeryPlugin*>(_parent);
     if (plugin && plugin->imguiContext()) {
         ImGui::SetCurrentContext(plugin->imguiContext());
         ImGuiIO& io = ImGui::GetIO();
@@ -447,9 +475,9 @@ bool YmeryW::onMouseScroll(float xoffset, float yoffset, int mods) {
     return false;
 }
 
-bool YmeryW::onKey(int key, int scancode, int action, int mods) {
+bool Ymery::onKey(int key, int scancode, int action, int mods) {
     (void)scancode;
-    auto plugin = static_cast<YmeryPlugin*>(parent_);
+    auto plugin = static_cast<YmeryPlugin*>(_parent);
     if (plugin && plugin->imguiContext()) {
         ImGui::SetCurrentContext(plugin->imguiContext());
         ImGuiIO& io = ImGui::GetIO();
@@ -468,8 +496,8 @@ bool YmeryW::onKey(int key, int scancode, int action, int mods) {
     return false;
 }
 
-bool YmeryW::onChar(unsigned int codepoint) {
-    auto plugin = static_cast<YmeryPlugin*>(parent_);
+bool Ymery::onChar(unsigned int codepoint) {
+    auto plugin = static_cast<YmeryPlugin*>(_parent);
     if (plugin && plugin->imguiContext()) {
         ImGui::SetCurrentContext(plugin->imguiContext());
         ImGuiIO& io = ImGui::GetIO();
@@ -479,8 +507,8 @@ bool YmeryW::onChar(unsigned int codepoint) {
     return false;
 }
 
-bool YmeryW::wantsKeyboard() const {
-    auto plugin = static_cast<YmeryPlugin*>(parent_);
+bool Ymery::wantsKeyboard() const {
+    auto plugin = static_cast<YmeryPlugin*>(_parent);
     if (plugin && plugin->imguiContext()) {
         ImGui::SetCurrentContext(plugin->imguiContext());
         return ImGui::GetIO().WantCaptureKeyboard;
@@ -488,14 +516,14 @@ bool YmeryW::wantsKeyboard() const {
     return false;
 }
 
-bool YmeryW::wantsMouse() const {
-    auto plugin = static_cast<YmeryPlugin*>(parent_);
+bool Ymery::wantsMouse() const {
+    auto plugin = static_cast<YmeryPlugin*>(_parent);
     return plugin && plugin->imguiContext();
 }
 
-void YmeryW::setFocus(bool f) {
+void Ymery::setFocus(bool f) {
     Widget::setFocus(f);
-    auto plugin = static_cast<YmeryPlugin*>(parent_);
+    auto plugin = static_cast<YmeryPlugin*>(_parent);
     if (plugin && plugin->imguiContext()) {
         ImGui::SetCurrentContext(plugin->imguiContext());
         ImGuiIO& io = ImGui::GetIO();
@@ -507,5 +535,5 @@ void YmeryW::setFocus(bool f) {
 
 extern "C" {
     const char* name() { return "ymery"; }
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine) { return yetty::YmeryPlugin::create(std::move(engine)); }
+    yetty::Result<yetty::PluginPtr> create() { return yetty::YmeryPlugin::create(); }
 }

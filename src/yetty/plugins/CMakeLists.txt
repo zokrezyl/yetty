@@ -173,12 +173,15 @@ endif()
 # Python plugin (Unix only - Python build requires ./configure + make)
 #-----------------------------------------------------------------------------
 if(UNIX)
+    # Python is linked into main yetty executable - plugin just uses the symbols
     add_yetty_plugin(python
         SOURCES
             python/python.cpp
             python/yetty_wgpu.cpp
-        LIBS python_embedded m dl util pthread
     )
+
+    # Need Python headers for compilation (symbols come from main executable)
+    target_include_directories(python_plugin PRIVATE ${PYTHON_EMBEDDED_INCLUDE_DIR})
 
     # Add compile definition for Python module path
     target_compile_definitions(python_plugin PRIVATE

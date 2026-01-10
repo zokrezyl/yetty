@@ -2,7 +2,8 @@
 #include <yetty/yetty.h>
 #include <yetty/webgpu-context.h>
 #include <yetty/wgpu-compat.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
+#include <ytrace/ytrace.hpp>
 #include <cstring>
 #include <cmath>
 #include <algorithm>
@@ -17,8 +18,8 @@ PianoPlugin::~PianoPlugin() {
     (void)dispose();
 }
 
-Result<PluginPtr> PianoPlugin::create(YettyPtr engine) noexcept {
-    auto p = PluginPtr(new PianoPlugin(std::move(engine)));
+Result<PluginPtr> PianoPlugin::create() noexcept {
+    auto p = PluginPtr(new PianoPlugin());
     if (auto res = static_cast<PianoPlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init PianoPlugin", res);
     }
@@ -38,7 +39,29 @@ Result<void> PianoPlugin::dispose() {
     return Ok();
 }
 
-Result<WidgetPtr> PianoPlugin::createWidget(const std::string& payload) {
+Result<WidgetPtr> PianoPlugin::createWidget(
+    const std::string& widgetName,
+    WidgetFactory* factory,
+    FontManager* fontManager,
+    uv_loop_t* loop,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
+    const std::string& pluginArgs,
+    const std::string& payload
+) {
+    (void)widgetName;
+    (void)factory;
+    (void)fontManager;
+    (void)loop;
+    (void)x;
+    (void)y;
+    (void)widthCells;
+    (void)heightCells;
+    (void)pluginArgs;
+    yfunc();
+    yinfo("payload={}", payload);
     return PianoW::create(payload);
 }
 
@@ -47,7 +70,7 @@ Result<void> PianoPlugin::renderAll(WGPUTextureView targetView, WGPUTextureForma
                                      float cellWidth, float cellHeight,
                                      int scrollOffset, uint32_t termRows,
                                      bool isAltScreen) {
-    if (!engine_) return Err<void>("PianoPlugin::renderAll: no engine");
+    // Note: renderAll is deprecated - widgets should use render(pass, ctx)
 
     ScreenType currentScreen = isAltScreen ? ScreenType::Alternate : ScreenType::Main;
     for (auto& layerBase : _layers) {
@@ -72,7 +95,7 @@ Result<void> PianoPlugin::renderAll(WGPUTextureView targetView, WGPUTextureForma
             }
         }
 
-        if (auto res = layer->render(*engine_->context(), targetView, targetFormat,
+        if (auto res = layer->render(*_ctx, targetView, targetFormat,
                                       screenWidth, screenHeight,
                                       pixelX, pixelY, pixelW, pixelH); !res) {
             return Err<void>("Failed to render Piano layer", res);
@@ -94,7 +117,7 @@ Result<WidgetPtr> PianoW::create(const std::string& payload) {
 }
 
 PianoW::PianoW(const std::string& payload) {
-    payload_ = payload;
+    _payload = payload;
     keyStates_.reset();
 }
 
@@ -104,17 +127,17 @@ PianoW::~PianoW() {
 
 Result<void> PianoW::init() {
     // Parse payload: "octaves[,startOctave]"
-    if (!payload_.empty()) {
+    if (!_payload.empty()) {
         int octaves = 2, start = 4;
-        if (sscanf(payload_.c_str(), "%d,%d", &octaves, &start) >= 1) {
+        if (sscanf(_payload.c_str(), "%d,%d", &octaves, &start) >= 1) {
             numOctaves_ = std::clamp(octaves, 1, MAX_OCTAVES);
-            if (sscanf(payload_.c_str(), "%d,%d", &octaves, &start) >= 2) {
+            if (sscanf(_payload.c_str(), "%d,%d", &octaves, &start) >= 2) {
                 startOctave_ = std::clamp(start, 0, 9);
             }
         }
     }
 
-    spdlog::info("PianoW: initialized ({} octaves starting at C{})",
+    yinfo("PianoW: initialized ({} octaves starting at C{})",
                  numOctaves_, startOctave_);
     return Ok();
 }
@@ -149,8 +172,8 @@ void PianoW::clearAllKeys() {
 
 int PianoW::getKeyAtPosition(float x, float y) const {
     // Normalize to [0,1]
-    float normX = x / static_cast<float>(pixelWidth_);
-    float normY = y / static_cast<float>(pixelHeight_);
+    float normX = x / static_cast<float>(_pixelWidth);
+    float normY = y / static_cast<float>(_pixelHeight);
 
     int totalWhiteKeys = numOctaves_ * WHITE_KEYS_PER_OCTAVE;
     float whiteKeyWidth = 1.0f / totalWhiteKeys;
@@ -220,11 +243,11 @@ bool PianoW::onMouseButton(int button, bool pressed) {
         if (pressed && hoverKey_ >= 0) {
             pressedKey_ = hoverKey_;
             setKeyPressed(pressedKey_, true);
-            spdlog::debug("Piano: key {} pressed (MIDI {})", hoverKey_, pressedKey_);
+            ydebug("Piano: key {} pressed (MIDI {})", hoverKey_, pressedKey_);
         } else {
             if (pressedKey_ >= 0) {
                 setKeyPressed(pressedKey_, false);
-                spdlog::debug("Piano: key {} released", pressedKey_);
+                ydebug("Piano: key {} released", pressedKey_);
             }
             pressedKey_ = -1;
         }
@@ -273,7 +296,7 @@ bool PianoW::onKey(int key, int scancode, int action, int mods) {
             int midiNote = startOctave_ * 12 + noteOffset;
             if (action == 1) {  // Press
                 setKeyPressed(midiNote, true);
-                spdlog::debug("Piano: keyboard key {} -> MIDI {}", key, midiNote);
+                ydebug("Piano: keyboard key {} -> MIDI {}", key, midiNote);
             } else if (action == 0) {  // Release
                 setKeyPressed(midiNote, false);
             }
@@ -680,7 +703,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     if (!pipeline_) return Err<void>("Failed to create render pipeline");
 
-    spdlog::info("PianoW: pipeline created");
+    yinfo("PianoW: pipeline created");
     return Ok();
 }
 
@@ -688,5 +711,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 extern "C" {
     const char* name() { return "piano"; }
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine) { return yetty::PianoPlugin::create(std::move(engine)); }
+    yetty::Result<yetty::PluginPtr> create() { return yetty::PianoPlugin::create(); }
 }

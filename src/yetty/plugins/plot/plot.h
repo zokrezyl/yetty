@@ -16,13 +16,24 @@ class PlotPlugin : public Plugin {
 public:
     ~PlotPlugin() override;
 
-    static Result<PluginPtr> create(YettyPtr engine) noexcept;
+    static Result<PluginPtr> create() noexcept;
 
     const char* pluginName() const override { return "plot"; }
 
     Result<void> dispose() override;
 
-    Result<WidgetPtr> createWidget(const std::string& payload) override;
+    Result<WidgetPtr> createWidget(
+        const std::string& widgetName,
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) override;
 
     Result<void> renderAll(WGPUTextureView targetView, WGPUTextureFormat targetFormat,
                            uint32_t screenWidth, uint32_t screenHeight,
@@ -31,7 +42,7 @@ public:
                            bool isAltScreen = false) override;
 
 private:
-    explicit PlotPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
+    PlotPlugin() noexcept = default;
     Result<void> pluginInit() noexcept;
 };
 
@@ -97,7 +108,7 @@ public:
 
 private:
     explicit PlotW(const std::string& payload) {
-        payload_ = payload;
+        _payload = payload;
     }
 
     Result<void> init() override;
@@ -148,5 +159,5 @@ private:
 
 extern "C" {
     const char* name();
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine);
+    yetty::Result<yetty::PluginPtr> create();
 }

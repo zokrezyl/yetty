@@ -18,7 +18,7 @@
 #include <webgpu/webgpu.h>
 #include <GLFW/glfw3.h>
 #include <glfw3webgpu.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 #include <args.hxx>
 
 #include <dlfcn.h>
@@ -36,7 +36,7 @@ namespace fs = std::filesystem;
 struct PluginHandle {
     void* handle = nullptr;
     const char* (*name_func)() = nullptr;
-    yetty::Result<yetty::PluginPtr> (*create_func)(yetty::YettyPtr) = nullptr;
+    yetty::Result<yetty::PluginPtr> (*create_func)() = nullptr;
     yetty::PluginPtr plugin;
     std::string path;
 
@@ -54,7 +54,7 @@ std::unique_ptr<PluginHandle> loadPlugin(const std::string& pluginDir, const std
     // Construct plugin path
     std::string pluginPath = pluginDir + "/" + pluginName + ".so";
     if (!fs::exists(pluginPath)) {
-        spdlog::error("Plugin not found: {}", pluginPath);
+        yerror("Plugin not found: {}", pluginPath);
         return nullptr;
     }
     handle->path = pluginPath;
@@ -63,26 +63,26 @@ std::unique_ptr<PluginHandle> loadPlugin(const std::string& pluginDir, const std
     // Use RTLD_GLOBAL so Python extension modules can find libpython symbols
     handle->handle = dlopen(pluginPath.c_str(), RTLD_NOW | RTLD_GLOBAL);
     if (!handle->handle) {
-        spdlog::error("Failed to load plugin: {}", dlerror());
+        yerror("Failed to load plugin: {}", dlerror());
         return nullptr;
     }
 
     // Get the name function
     handle->name_func = reinterpret_cast<const char*(*)()>(dlsym(handle->handle, "name"));
     if (!handle->name_func) {
-        spdlog::error("Plugin missing 'name' function: {}", dlerror());
+        yerror("Plugin missing 'name' function: {}", dlerror());
         return nullptr;
     }
 
-    // Get the create function
-    handle->create_func = reinterpret_cast<yetty::Result<yetty::PluginPtr>(*)(yetty::YettyPtr)>(
+    // Get the create function (new signature: no args)
+    handle->create_func = reinterpret_cast<yetty::Result<yetty::PluginPtr>(*)()>(
         dlsym(handle->handle, "create"));
     if (!handle->create_func) {
-        spdlog::error("Plugin missing 'create' function: {}", dlerror());
+        yerror("Plugin missing 'create' function: {}", dlerror());
         return nullptr;
     }
 
-    spdlog::info("Loaded plugin '{}' from {}", handle->name_func(), pluginPath);
+    yinfo("Loaded plugin '{}' from {}", handle->name_func(), pluginPath);
     return handle;
 }
 
@@ -171,7 +171,7 @@ int cmdRun(const std::string& pluginDir,
 
     // Initialize GLFW
     if (!glfwInit()) {
-        spdlog::error("Failed to initialize GLFW");
+        yerror("Failed to initialize GLFW");
         return 1;
     }
 
@@ -185,7 +185,7 @@ int cmdRun(const std::string& pluginDir,
     GLFWwindow* window = glfwCreateWindow(width, height,
         ("Plugin Tester - " + pluginName).c_str(), nullptr, nullptr);
     if (!window) {
-        spdlog::error("Failed to create GLFW window");
+        yerror("Failed to create GLFW window");
         glfwTerminate();
         return 1;
     }
@@ -197,7 +197,7 @@ int cmdRun(const std::string& pluginDir,
     int fb_width, fb_height;
     glfwGetFramebufferSize(window, &fb_width, &fb_height);
     if (fb_width != width || fb_height != height) {
-        spdlog::info("HiDPI scaling: window {}x{} -> framebuffer {}x{}", 
+        yinfo("HiDPI scaling: window {}x{} -> framebuffer {}x{}", 
                      width, height, fb_width, fb_height);
         width = fb_width;
         height = fb_height;
@@ -208,19 +208,19 @@ int cmdRun(const std::string& pluginDir,
     // Create WebGPU context
     auto ctxResult = yetty::WebGPUContext::create(window, width, height);
     if (!ctxResult) {
-        spdlog::error("Failed to create WebGPU context: {}", ctxResult.error().message());
+        yerror("Failed to create WebGPU context: {}", ctxResult.error().message());
         glfwDestroyWindow(window);
         glfwTerminate();
         return 1;
     }
     auto ctx = *ctxResult;
     
-    spdlog::info("Surface format: {} (BGRA8Unorm=23, BGRA8UnormSrgb=24)", static_cast<int>(ctx->getSurfaceFormat()));
+    yinfo("Surface format: {} (BGRA8Unorm=23, BGRA8UnormSrgb=24)", static_cast<int>(ctx->getSurfaceFormat()));
 
-    // Create plugin instance (passing nullptr for YettyPtr - plugins should handle this)
-    auto pluginResult = handle->create_func(nullptr);
+    // Create plugin instance
+    auto pluginResult = handle->create_func();
     if (!pluginResult) {
-        spdlog::error("Failed to create plugin: {}", pluginResult.error().message());
+        yerror("Failed to create plugin: {}", pluginResult.error().message());
         glfwDestroyWindow(window);
         glfwTerminate();
         return 1;
@@ -234,15 +234,25 @@ int cmdRun(const std::string& pluginDir,
             dlsym(handle->handle, "yetty_wgpu_set_handles"));
         if (set_handles_fn) {
             set_handles_fn(nullptr, nullptr, ctx->getDevice(), ctx->getQueue());
-            spdlog::info("Set WebGPU handles for Python plugin");
+            yinfo("Set WebGPU handles for Python plugin");
         }
         // NOTE: Don't create render texture - we want direct render pass rendering!
     }
 
-    // Create layer with payload
-    auto layerResult = handle->plugin->createWidget(payload);
+    // Create layer with payload (using new signature with all explicit params)
+    auto layerResult = handle->plugin->createWidget(
+        "",           // widgetName
+        nullptr,      // factory
+        nullptr,      // fontManager
+        nullptr,      // loop
+        x, y,         // position
+        static_cast<uint32_t>(width / 10),  // widthCells (approx based on cell size)
+        static_cast<uint32_t>(height / 20), // heightCells
+        "",           // pluginArgs
+        payload       // payload
+    );
     if (!layerResult) {
-        spdlog::error("Failed to create layer: {}", layerResult.error().message());
+        yerror("Failed to create layer: {}", layerResult.error().message());
         glfwDestroyWindow(window);
         glfwTerminate();
         return 1;
@@ -250,14 +260,14 @@ int cmdRun(const std::string& pluginDir,
     auto layer = *layerResult;
     
     // Debug: print struct sizes to detect ODR violations
-    spdlog::info("Tester: sizeof(RenderContext)={} sizeof(Widget)={}", 
+    yinfo("Tester: sizeof(RenderContext)={} sizeof(Widget)={}", 
                  sizeof(yetty::RenderContext), sizeof(yetty::Widget));
 
     // Set pixel size for the layer (fills the whole window)
-    spdlog::info("Tester: layer ptr = {}", (void*)layer.get());
-    spdlog::info("Tester: Setting pixel size to {}x{}", width, height);
+    yinfo("Tester: layer ptr = {}", (void*)layer.get());
+    yinfo("Tester: Setting pixel size to {}x{}", width, height);
     layer->setPixelSize(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
-    spdlog::info("Tester: After setPixelSize, getPixelWidth={}", layer->getPixelWidth());
+    yinfo("Tester: After setPixelSize, getPixelWidth={}", layer->getPixelWidth());
 
     // Set render context
     yetty::RenderContext renderCtx;
@@ -268,14 +278,14 @@ int cmdRun(const std::string& pluginDir,
     renderCtx.deltaTime = 0.016; // ~60fps
     renderCtx.targetFormat = ctx->getSurfaceFormat();
     layer->setRenderContext(renderCtx);
-    spdlog::info("Tester: After setRenderContext, screenWidth={}", layer->getRenderContext().screenWidth);
+    yinfo("Tester: After setRenderContext, screenWidth={}", layer->getRenderContext().screenWidth);
 
     // Store position for layer (not used in RenderContext but may be needed)
     (void)x; (void)y;
 
-    spdlog::info("Running plugin '{}' with payload: {}", pluginName,
+    yinfo("Running plugin '{}' with payload: {}", pluginName,
                  payload.empty() ? "(empty)" : payload.substr(0, 50));
-    spdlog::info("Tester: Before main loop, getPixelWidth={}", layer->getPixelWidth());
+    yinfo("Tester: Before main loop, getPixelWidth={}", layer->getPixelWidth());
 
     // Main loop
     auto startTime = std::chrono::steady_clock::now();
@@ -284,11 +294,11 @@ int cmdRun(const std::string& pluginDir,
 
     while (!glfwWindowShouldClose(window) && !g_shouldClose) {
         if (frameCount == 0) {
-            spdlog::info("Tester: First frame start, getPixelWidth={}", layer->getPixelWidth());
+            yinfo("Tester: First frame start, getPixelWidth={}", layer->getPixelWidth());
         }
         glfwPollEvents();
         if (frameCount == 0) {
-            spdlog::info("Tester: After glfwPollEvents, getPixelWidth={}", layer->getPixelWidth());
+            yinfo("Tester: After glfwPollEvents, getPixelWidth={}", layer->getPixelWidth());
         }
 
         // Check duration limit
@@ -296,14 +306,14 @@ int cmdRun(const std::string& pluginDir,
             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - startTime).count();
             if (elapsed >= durationMs) {
-                spdlog::info("Duration limit reached ({} ms)", durationMs);
+                yinfo("Duration limit reached ({} ms)", durationMs);
                 break;
             }
         }
 
         // Handle resize
         if (g_resized) {
-            spdlog::info("Tester: RESIZE to {}x{}", g_width, g_height);
+            yinfo("Tester: RESIZE to {}x{}", g_width, g_height);
             ctx->resize(g_width, g_height);
             layer->setPixelSize(static_cast<uint32_t>(g_width), static_cast<uint32_t>(g_height));
             renderCtx.screenWidth = static_cast<uint32_t>(g_width);
@@ -317,26 +327,26 @@ int cmdRun(const std::string& pluginDir,
         float deltaTime = std::chrono::duration<float>(now - lastFrameTime).count();
         lastFrameTime = now;
         renderCtx.deltaTime = deltaTime;
-        spdlog::info("Tester: BEFORE setRenderContext1, getPixelWidth={} renderCtx.screenWidth={}", 
+        yinfo("Tester: BEFORE setRenderContext1, getPixelWidth={} renderCtx.screenWidth={}", 
                      layer->getPixelWidth(), renderCtx.screenWidth);
         layer->setRenderContext(renderCtx);
         if (frameCount == 0) {
-            spdlog::info("Tester: After setRenderContext1, getPixelWidth={}", layer->getPixelWidth());
+            yinfo("Tester: After setRenderContext1, getPixelWidth={}", layer->getPixelWidth());
         }
 
         // Get current texture view
         auto viewResult = ctx->getCurrentTextureView();
         if (!viewResult) {
-            spdlog::error("Failed to get texture view: {}", viewResult.error().message());
+            yerror("Failed to get texture view: {}", viewResult.error().message());
             continue;
         }
         if (frameCount == 0) {
-            spdlog::info("Tester: After getCurrentTextureView, getPixelWidth={}", layer->getPixelWidth());
+            yinfo("Tester: After getCurrentTextureView, getPixelWidth={}", layer->getPixelWidth());
         }
         renderCtx.targetView = *viewResult;
         layer->setRenderContext(renderCtx);
         if (frameCount == 0) {
-            spdlog::info("Tester: After setRenderContext2, getPixelWidth={}", layer->getPixelWidth());
+            yinfo("Tester: After setRenderContext2, getPixelWidth={}", layer->getPixelWidth());
         }
 
         // Create command encoder and render pass
@@ -360,7 +370,7 @@ int cmdRun(const std::string& pluginDir,
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
 
         // Render using render
-        spdlog::debug("Tester: Before render, getPixelWidth={}", layer->getPixelWidth());
+        ydebug("Tester: Before render, getPixelWidth={}", layer->getPixelWidth());
         layer->render(pass, *ctx);
 
         wgpuRenderPassEncoderEnd(pass);
@@ -384,7 +394,7 @@ int cmdRun(const std::string& pluginDir,
     // Calculate stats
     auto totalTime = std::chrono::duration<float>(
         std::chrono::steady_clock::now() - startTime).count();
-    spdlog::info("Rendered {} frames in {:.2f}s ({:.1f} fps)",
+    yinfo("Rendered {} frames in {:.2f}s ({:.1f} fps)",
                  frameCount, totalTime, frameCount / totalTime);
 
     // Cleanup - order matters!
@@ -413,7 +423,6 @@ int cmdRun(const std::string& pluginDir,
 //-----------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
-    spdlog::set_level(spdlog::level::info);
 
     args::ArgumentParser parser("yetty-plugin-tester - Test yetty plugins");
     args::HelpFlag help(parser, "help", "Display this help menu", {'h', "help"});
@@ -462,7 +471,6 @@ int main(int argc, char* argv[]) {
     }
 
     if (verbose) {
-        spdlog::set_level(spdlog::level::debug);
     }
 
     std::string dir = args::get(pluginDir);
@@ -499,7 +507,7 @@ int main(int argc, char* argv[]) {
         int x = 0, y = 0, w = 1024, h = 768;
         std::string rectStr = args::get(rectArg);
         if (sscanf(rectStr.c_str(), "%d,%d,%d,%d", &x, &y, &w, &h) != 4) {
-            spdlog::warn("Invalid rect format, using defaults");
+            ywarn("Invalid rect format, using defaults");
         }
 
         // Handle pygfx flag for python plugin

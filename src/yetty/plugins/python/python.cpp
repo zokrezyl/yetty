@@ -2,7 +2,8 @@
 #include "yetty_wgpu.h"
 #include <yetty/yetty.h>
 #include <yetty/webgpu-context.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
+#include <ytrace/ytrace.hpp>
 
 // Python must be included after other headers to avoid conflicts
 #define PY_SSIZE_T_CLEAN
@@ -41,28 +42,26 @@ static bool setupPythonPackages() {
 
     // Check if packages already exist (check for pygfx directory)
     if (fs::exists(pkgPath + "/pygfx")) {
-        spdlog::info("Python packages ready at {}", pkgPath);
+        yinfo("Python packages ready at {}", pkgPath);
         return true;
     }
 
     // Create the directory
-    spdlog::info("Installing pygfx and fastplotlib to {}...", pkgPath);
+    yinfo("Installing pygfx and fastplotlib to {}...", pkgPath);
     fs::create_directories(pkgPath);
 
     // Use the embedded Python's pip (CMAKE_BINARY_DIR/python/install/bin/python3)
-    // Need to set LD_LIBRARY_PATH for libpython3.13.so
     std::string pythonDir = std::string(CMAKE_BINARY_DIR) + "/python/install";
-    std::string ldPath = "LD_LIBRARY_PATH=" + pythonDir + "/lib:$LD_LIBRARY_PATH ";
     std::string embeddedPip = pythonDir + "/bin/python3 -m pip";
-    std::string installCmd = ldPath + embeddedPip + " install --target=" + pkgPath + " --quiet pygfx fastplotlib wgpu glfw pillow imageio 2>&1";
+    std::string installCmd = embeddedPip + " install --target=" + pkgPath + " pygfx fastplotlib wgpu glfw pillow imageio 2>&1";
 
-    spdlog::info("Running: {}", installCmd);
+    yinfo("Running: {}", installCmd);
     if (std::system(installCmd.c_str()) != 0) {
-        spdlog::error("Failed to install Python packages");
+        yerror("Failed to install Python packages");
         return false;
     }
 
-    spdlog::info("Python packages installed successfully");
+    yinfo("Python packages installed successfully");
     return true;
 }
 
@@ -74,8 +73,8 @@ PythonPlugin::~PythonPlugin() {
     (void)dispose();
 }
 
-Result<PluginPtr> PythonPlugin::create(YettyPtr engine) noexcept {
-    auto p = PluginPtr(new PythonPlugin(std::move(engine)));
+Result<PluginPtr> PythonPlugin::create() noexcept {
+    auto p = PluginPtr(new PythonPlugin());
     if (auto res = static_cast<PythonPlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init PythonPlugin", res);
     }
@@ -85,7 +84,7 @@ Result<PluginPtr> PythonPlugin::create(YettyPtr engine) noexcept {
 Result<void> PythonPlugin::pluginInit() noexcept {
     // Setup packages with pygfx/fastplotlib
     if (!setupPythonPackages()) {
-        spdlog::warn("Failed to setup Python packages - pygfx features may not work");
+        ywarn("Failed to setup Python packages - pygfx features may not work");
     }
 
     auto result = initPython();
@@ -99,33 +98,33 @@ Result<void> PythonPlugin::pluginInit() noexcept {
         return initResult;
     }
 
-    initialized_ = true;
-    spdlog::info("PythonPlugin initialized");
+    _initialized = true;
+    yinfo("PythonPlugin initialized");
 
     // Release GIL so render thread can acquire it later
     mainThreadState_ = PyEval_SaveThread();
-    spdlog::debug("GIL released after init");
+    ydebug("GIL released after init");
 
     return Ok();
 }
 
 Result<void> PythonPlugin::initPython() {
     if (pyInitialized_) {
-        spdlog::debug("Python already initialized, skipping");
+        ydebug("Python already initialized, skipping");
         return Ok();
     }
 
-    spdlog::info("=== Initializing Python interpreter ===");
-    spdlog::info("CMAKE_BINARY_DIR: {}", CMAKE_BINARY_DIR);
+    yinfo("=== Initializing Python interpreter ===");
+    yinfo("CMAKE_BINARY_DIR: {}", CMAKE_BINARY_DIR);
 
     // Set YETTY_WGPU_LIB_PATH so wgpu-py uses the same wgpu-native as yetty
     // This MUST be done before any Python/wgpu imports
     std::string wgpuLibPath = std::string(CMAKE_BINARY_DIR) + "/_deps/wgpu-native/lib/libwgpu_native.so";
     setenv("YETTY_WGPU_LIB_PATH", wgpuLibPath.c_str(), 1);
-    spdlog::info("Set YETTY_WGPU_LIB_PATH={}", wgpuLibPath);
+    yinfo("Set YETTY_WGPU_LIB_PATH={}", wgpuLibPath);
 
     // Register yetty_wgpu as a built-in module BEFORE Py_Initialize
-    spdlog::debug("Registering yetty_wgpu built-in module");
+    ydebug("Registering yetty_wgpu built-in module");
     if (PyImport_AppendInittab("yetty_wgpu", PyInit_yetty_wgpu) == -1) {
         return Err<void>("Failed to register yetty_wgpu module");
     }
@@ -134,8 +133,20 @@ Result<void> PythonPlugin::initPython() {
     PyConfig config;
     PyConfig_InitIsolatedConfig(&config);
 
+    // Set Python home to the embedded Python installation
+    // This is where the stdlib (lib/python3.13/) is located
+    std::string pythonHome = std::string(CMAKE_BINARY_DIR) + "/python/install";
+    std::wstring pythonHomeW(pythonHome.begin(), pythonHome.end());
+    yinfo("Setting Python home to: {}", pythonHome);
+
+    PyStatus status = PyConfig_SetString(&config, &config.home, pythonHomeW.c_str());
+    if (PyStatus_Exception(status)) {
+        PyConfig_Clear(&config);
+        return Err<void>("Failed to set Python home");
+    }
+
     // Set program name
-    PyStatus status = PyConfig_SetString(&config, &config.program_name, L"yetty-python");
+    status = PyConfig_SetString(&config, &config.program_name, L"yetty-python");
     if (PyStatus_Exception(status)) {
         PyConfig_Clear(&config);
         return Err<void>("Failed to set Python program name");
@@ -145,7 +156,7 @@ Result<void> PythonPlugin::initPython() {
     config.site_import = 1;
 
     // Initialize Python
-    spdlog::debug("Calling Py_InitializeFromConfig");
+    ydebug("Calling Py_InitializeFromConfig");
     status = Py_InitializeFromConfig(&config);
     PyConfig_Clear(&config);
 
@@ -167,7 +178,7 @@ Result<void> PythonPlugin::initPython() {
     }
 
     pyInitialized_ = true;
-    spdlog::info("Python {} interpreter initialized", Py_GetVersion());
+    yinfo("Python {} interpreter initialized", Py_GetVersion());
 
     // Log Python executable path
     PyRun_SimpleString("import sys; print('[Python] executable:', sys.executable)");
@@ -176,24 +187,24 @@ Result<void> PythonPlugin::initPython() {
 
     // Add packages directory to sys.path
     std::string pkgPath = getPythonPackagesPath();
-    spdlog::info("Python packages path: {}", pkgPath);
+    yinfo("Python packages path: {}", pkgPath);
     if (fs::exists(pkgPath)) {
         std::string code = "import sys; sys.path.insert(0, '" + pkgPath + "')";
         PyRun_SimpleString(code.c_str());
-        spdlog::info("Added Python packages to path: {}", pkgPath);
+        yinfo("Added Python packages to path: {}", pkgPath);
     } else {
-        spdlog::warn("Python packages path does not exist: {}", pkgPath);
+        ywarn("Python packages path does not exist: {}", pkgPath);
     }
 
     // Also add the yetty_pygfx module path
     std::string pygfxPath = std::string(CMAKE_BINARY_DIR) + "/python";
-    spdlog::info("yetty_pygfx module path: {}", pygfxPath);
+    yinfo("yetty_pygfx module path: {}", pygfxPath);
     if (fs::exists(pygfxPath)) {
         std::string code = "import sys; sys.path.insert(0, '" + pygfxPath + "')";
         PyRun_SimpleString(code.c_str());
-        spdlog::info("Added yetty_pygfx module to path: {}", pygfxPath);
+        yinfo("Added yetty_pygfx module to path: {}", pygfxPath);
     } else {
-        spdlog::warn("yetty_pygfx module path does not exist: {}", pygfxPath);
+        ywarn("yetty_pygfx module path does not exist: {}", pygfxPath);
     }
 
     // Log sys.path
@@ -203,14 +214,14 @@ Result<void> PythonPlugin::initPython() {
 }
 
 Result<void> PythonPlugin::loadInitCallbacks() {
-    spdlog::info("Loading init.py callbacks...");
+    yinfo("Loading init.py callbacks...");
 
     // Load init module from src/yetty/plugins/python/init.py
     std::string initPath = std::string(__FILE__);
     initPath = initPath.substr(0, initPath.find_last_of("/\\"));
     initPath += "/init.py";
 
-    spdlog::debug("Loading init.py from: {}", initPath);
+    ydebug("Loading init.py from: {}", initPath);
 
     // Add the directory to sys.path
     std::string addPath = "import sys; sys.path.insert(0, '" +
@@ -236,7 +247,7 @@ Result<void> PythonPlugin::loadInitCallbacks() {
     }
 
     // Call init_plugin()
-    spdlog::info("Calling init_plugin()...");
+    yinfo("Calling init_plugin()...");
     PyObject* result = PyObject_CallObject(initPluginFunc_, nullptr);
     if (!result) {
         PyErr_Print();
@@ -244,7 +255,7 @@ Result<void> PythonPlugin::loadInitCallbacks() {
     }
     Py_DECREF(result);
 
-    spdlog::info("init.py callbacks loaded successfully");
+    yinfo("init.py callbacks loaded successfully");
     return Ok();
 }
 
@@ -265,15 +276,29 @@ Result<void> PythonPlugin::dispose() {
         mainDict_ = nullptr;
         // Py_Finalize();  // Causes segfault - skip for now
         pyInitialized_ = false;
-        spdlog::info("Python interpreter cleanup complete");
+        yinfo("Python interpreter cleanup complete");
     }
 
-    initialized_ = false;
+    _initialized = false;
     return Ok();
 }
 
-Result<WidgetPtr> PythonPlugin::createWidget(const std::string& payload) {
-    return PythonW::create(payload, this);
+Result<WidgetPtr> PythonPlugin::createWidget(
+    const std::string& widgetName,
+    WidgetFactory* factory,
+    FontManager* fontManager,
+    uv_loop_t* loop,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
+    const std::string& pluginArgs,
+    const std::string& payload
+) {
+    (void)widgetName;
+    yfunc();
+    yinfo("payload size={} x={} y={} w={} h={}", payload.size(), x, y, widthCells, heightCells);
+    return Python::create(factory, fontManager, loop, x, y, widthCells, heightCells, pluginArgs, payload, this);
 }
 
 Result<std::string> PythonPlugin::execute(const std::string& code) {
@@ -361,37 +386,37 @@ Result<void> PythonPlugin::runFile(const std::string& path) {
         return Err<void>("Failed to execute Python file", result);
     }
 
-    spdlog::info("Python file executed: {}", path);
+    yinfo("Python file executed: {}", path);
     return Ok();
 }
 
 //-----------------------------------------------------------------------------
-// PythonW
+// Python
 //-----------------------------------------------------------------------------
 
-PythonW::~PythonW() {
+Python::~Python() {
     (void)dispose();
 }
 
-Result<void> PythonW::init() {
+Result<void> Python::init() {
     // Store the payload but DON'T execute yet
     // We need to wait for render() to be called so we have WebGPU context
     // to call init_widget() first
 
-    if (payload_.empty()) {
+    if (_payload.empty()) {
         return Err("Empty payload");
     }
 
     // Check if it's inline content (prefixed with "inline:")
-    if (payload_.compare(0, 7, "inline:") == 0) {
+    if (_payload.compare(0, 7, "inline:") == 0) {
         // Inline code - extract content after "inline:" prefix
-        payload_ = payload_.substr(7);
-        spdlog::info("PythonW: inline code provided ({} bytes)", payload_.size());
+        _payload = _payload.substr(7);
+        yinfo("Python: inline code provided ({} bytes)", _payload.size());
     } else {
         // File path - verify it exists and load it
-        std::ifstream file(payload_);
+        std::ifstream file(_payload);
         if (!file.good()) {
-            return Err("Failed to open Python script file: " + payload_);
+            return Err("Failed to open Python script file: " + _payload);
         }
 
         // Read file content
@@ -400,19 +425,19 @@ Result<void> PythonW::init() {
         file.close();
 
         if (content.empty()) {
-            return Err("Empty Python script file: " + payload_);
+            return Err("Empty Python script file: " + _payload);
         }
 
-        scriptPath_ = payload_;
-        payload_ = content;
-        spdlog::info("PythonW: loaded script from file: {} ({} bytes)",
-                    scriptPath_, payload_.size());
+        scriptPath_ = _payload;
+        _payload = content;
+        yinfo("Python: loaded script from file: {} ({} bytes)",
+                    scriptPath_, _payload.size());
     }
 
     return Ok();
 }
 
-Result<void> PythonW::dispose() {
+Result<void> Python::dispose() {
     // Call dispose_layer callback
     callDisposeWidget();
 
@@ -464,17 +489,17 @@ Result<void> PythonW::dispose() {
     return Ok();
 }
 
-Result<void> PythonW::render(WebGPUContext& ctx) {
+Result<void> Python::render(WebGPUContext& ctx) {
     (void)ctx;
     // Legacy render - not used. Use render() instead.
     return Ok();
 }
 
-void PythonW::prepareFrame(WebGPUContext& ctx) {
+void Python::prepareFrame(WebGPUContext& ctx) {
     // This is called BEFORE the shared render pass begins
     // Here we initialize and render pygfx content to our texture
 
-    if (failed_ || !visible_) {
+    if (failed_ || !_visible) {
         return;
     }
 
@@ -483,13 +508,13 @@ void PythonW::prepareFrame(WebGPUContext& ctx) {
         uint32_t width = getPixelWidth();
         uint32_t height = getPixelHeight();
 
-        spdlog::info("PythonW: First prepareFrame - layer dimensions: {}x{}", width, height);
+        yinfo("Python: First prepareFrame - layer dimensions: {}x{}", width, height);
 
         // Use defaults if not set
         if (width == 0) width = 1024;
         if (height == 0) height = 768;
 
-        spdlog::info("PythonW: Initializing layer with dimensions: {}x{}", width, height);
+        yinfo("Python: Initializing layer with dimensions: {}x{}", width, height);
 
         // Call init_widget() callback with WebGPU context
         if (!callInitWidget(ctx, width, height)) {
@@ -499,20 +524,20 @@ void PythonW::prepareFrame(WebGPUContext& ctx) {
 
         // Now execute the user script (init.py has already been called)
         if (!scriptPath_.empty()) {
-            spdlog::info("PythonW: Executing user script: {}", scriptPath_);
+            yinfo("Python: Executing user script: {}", scriptPath_);
             auto result = plugin_->runFile(scriptPath_);
             if (!result) {
                 output_ = "Error: " + result.error().message();
-                spdlog::error("PythonW: failed to run script: {}", scriptPath_);
+                yerror("Python: failed to run script: {}", scriptPath_);
                 failed_ = true;
                 return;
             }
             output_ = "Script executed: " + scriptPath_;
-            spdlog::info("PythonW: User script executed successfully");
-        } else if (!payload_.empty()) {
+            yinfo("Python: User script executed successfully");
+        } else if (!_payload.empty()) {
             // Inline code
-            spdlog::info("PythonW: Executing inline code");
-            auto result = plugin_->execute(payload_);
+            yinfo("Python: Executing inline code");
+            auto result = plugin_->execute(_payload);
             if (!result) {
                 output_ = "Error: " + result.error().message();
                 failed_ = true;
@@ -536,32 +561,32 @@ void PythonW::prepareFrame(WebGPUContext& ctx) {
     frameCount_++;
 }
 
-bool PythonW::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+bool Python::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     // This is called INSIDE the shared render pass
     // We only blit our pre-rendered texture here - NO Python rendering!
 
     if (failed_) return false;
-    if (!visible_) return false;
+    if (!_visible) return false;
     if (!wgpuHandlesSet_) return false;  // prepareFrame() hasn't run yet
 
     // Blit the rendered texture to the layer rectangle in the pass
     if (!blitToPass(pass, ctx)) {
-        spdlog::error("PythonW: Failed to blit render texture");
+        yerror("Python: Failed to blit render texture");
         return false;
     }
 
     return true;
 }
 
-bool PythonW::callInitWidget(WebGPUContext& ctx, uint32_t width, uint32_t height) {
-    spdlog::info("PythonW: calling init_widget({}, {})", width, height);
+bool Python::callInitWidget(WebGPUContext& ctx, uint32_t width, uint32_t height) {
+    yinfo("Python: calling init_widget({}, {})", width, height);
 
     // Acquire GIL
     PyGILState_STATE gstate = PyGILState_Ensure();
 
     auto initFunc = plugin_->getInitWidgetFunc();
     if (!initFunc) {
-        spdlog::error("PythonW: init_layer function not available");
+        yerror("Python: init_layer function not available");
         PyGILState_Release(gstate);
         return false;
     }
@@ -569,7 +594,7 @@ bool PythonW::callInitWidget(WebGPUContext& ctx, uint32_t width, uint32_t height
     // Create context dict with WebGPU handles
     PyObject* ctxDict = PyDict_New();
     if (!ctxDict) {
-        spdlog::error("PythonW: Failed to create ctx dict");
+        yerror("Python: Failed to create ctx dict");
         PyGILState_Release(gstate);
         return false;
     }
@@ -596,20 +621,20 @@ bool PythonW::callInitWidget(WebGPUContext& ctx, uint32_t width, uint32_t height
     PyObject* args = Py_BuildValue("(OII)", ctxDict, width, height);
     if (!args) {
         Py_DECREF(ctxDict);
-        spdlog::error("PythonW: Failed to build args");
+        yerror("Python: Failed to build args");
         PyErr_Print();
         PyGILState_Release(gstate);
         return false;
     }
 
-    spdlog::info("PythonW: Calling Python init_layer...");
+    yinfo("Python: Calling Python init_layer...");
     PyObject* result = PyObject_CallObject(initFunc, args);
 
     Py_DECREF(ctxDict);
     Py_DECREF(args);
 
     if (!result) {
-        spdlog::error("PythonW: init_widget() raised exception");
+        yerror("Python: init_widget() raised exception");
         PyErr_Print();
         PyGILState_Release(gstate);
         return false;
@@ -622,11 +647,11 @@ bool PythonW::callInitWidget(WebGPUContext& ctx, uint32_t width, uint32_t height
     textureWidth_ = width;
     textureHeight_ = height;
 
-    spdlog::info("PythonW: init_widget() completed successfully");
+    yinfo("Python: init_widget() completed successfully");
     return true;
 }
 
-bool PythonW::callRender(WebGPUContext& ctx, uint32_t frameNum, uint32_t width, uint32_t height) {
+bool Python::callRender(WebGPUContext& ctx, uint32_t frameNum, uint32_t width, uint32_t height) {
     // Acquire GIL
     PyGILState_STATE gstate = PyGILState_Ensure();
 
@@ -637,13 +662,13 @@ bool PythonW::callRender(WebGPUContext& ctx, uint32_t frameNum, uint32_t width, 
         userRenderFunc_ = PyDict_GetItemString(mainDict, "render");
 
         if (!userRenderFunc_) {
-            spdlog::warn("PythonW: No render() function found in user script");
+            ywarn("Python: No render() function found in user script");
             PyGILState_Release(gstate);
             return false;
         }
 
         Py_INCREF(userRenderFunc_);  // Keep reference
-        spdlog::info("PythonW: Found user render() function");
+        yinfo("Python: Found user render() function");
     }
 
     // Create context dict
@@ -660,7 +685,7 @@ bool PythonW::callRender(WebGPUContext& ctx, uint32_t frameNum, uint32_t width, 
 
     if (!result) {
         PyErr_Print();
-        spdlog::error("PythonW: render() failed");
+        yerror("Python: render() failed");
         PyGILState_Release(gstate);
         return false;
     }
@@ -670,8 +695,8 @@ bool PythonW::callRender(WebGPUContext& ctx, uint32_t frameNum, uint32_t width, 
     return true;
 }
 
-bool PythonW::callDisposeWidget() {
-    spdlog::info("PythonW: calling dispose_widget()");
+bool Python::callDisposeWidget() {
+    yinfo("Python: calling dispose_widget()");
 
     // Acquire GIL
     PyGILState_STATE gstate = PyGILState_Ensure();
@@ -685,7 +710,7 @@ bool PythonW::callDisposeWidget() {
     PyObject* result = PyObject_CallObject(disposeFunc, nullptr);
     if (!result) {
         PyErr_Print();
-        spdlog::warn("PythonW: dispose_widget() failed");
+        ywarn("Python: dispose_widget() failed");
         PyGILState_Release(gstate);
         return false;
     }
@@ -695,7 +720,7 @@ bool PythonW::callDisposeWidget() {
     return true;
 }
 
-bool PythonW::initPygfx(WebGPUContext& ctx, uint32_t width, uint32_t height) {
+bool Python::initPygfx(WebGPUContext& ctx, uint32_t width, uint32_t height) {
     if (pygfxInitialized_) {
         return true;
     }
@@ -713,7 +738,7 @@ bool PythonW::initPygfx(WebGPUContext& ctx, uint32_t width, uint32_t height) {
 
     // Create render texture
     if (!yetty_wgpu_create_render_texture(width, height)) {
-        spdlog::error("PythonW: Failed to create render texture");
+        yerror("Python: Failed to create render texture");
         return false;
     }
     textureWidth_ = width;
@@ -726,7 +751,7 @@ bool PythonW::initPygfx(WebGPUContext& ctx, uint32_t width, uint32_t height) {
         "sys.path.insert(0, '" + std::string(CMAKE_BINARY_DIR) + "/python')\n"
     );
     if (!result) {
-        spdlog::error("PythonW: Failed to set Python path");
+        yerror("Python: Failed to set Python path");
         return false;
     }
 
@@ -736,7 +761,7 @@ bool PythonW::initPygfx(WebGPUContext& ctx, uint32_t width, uint32_t height) {
         "yetty_pygfx.init_pygfx()\n"
     );
     if (!result) {
-        spdlog::error("PythonW: Failed to import yetty_pygfx: {}", result.error().message());
+        yerror("Python: Failed to import yetty_pygfx: {}", result.error().message());
         return false;
     }
 
@@ -745,7 +770,7 @@ bool PythonW::initPygfx(WebGPUContext& ctx, uint32_t width, uint32_t height) {
         "fig = yetty_pygfx.create_figure(" + std::to_string(width) + ", " + std::to_string(height) + ")\n";
     result = plugin_->execute(createFigCode);
     if (!result) {
-        spdlog::error("PythonW: Failed to create figure: {}", result.error().message());
+        yerror("Python: Failed to create figure: {}", result.error().message());
         return false;
     }
 
@@ -756,12 +781,12 @@ bool PythonW::initPygfx(WebGPUContext& ctx, uint32_t width, uint32_t height) {
     }
 
     pygfxInitialized_ = true;
-    spdlog::info("PythonW: pygfx initialized with {}x{} render target", width, height);
+    yinfo("Python: pygfx initialized with {}x{} render target", width, height);
 
     return true;
 }
 
-bool PythonW::renderPygfx() {
+bool Python::renderPygfx() {
     if (!pygfxInitialized_ || !renderFrameFunc_) {
         return false;
     }
@@ -780,7 +805,7 @@ bool PythonW::renderPygfx() {
     return success;
 }
 
-bool PythonW::createBlitPipeline(WebGPUContext& ctx) {
+bool Python::createBlitPipeline(WebGPUContext& ctx) {
     if (blitInitialized_) return true;
 
     WGPUDevice device = ctx.getDevice();
@@ -797,7 +822,7 @@ bool PythonW::createBlitPipeline(WebGPUContext& ctx) {
 
     blitSampler_ = wgpuDeviceCreateSampler(device, &samplerDesc);
     if (!blitSampler_) {
-        spdlog::error("PythonW: Failed to create blit sampler");
+        yerror("Python: Failed to create blit sampler");
         return false;
     }
 
@@ -850,7 +875,7 @@ bool PythonW::createBlitPipeline(WebGPUContext& ctx) {
 
     WGPUShaderModule shader = wgpuDeviceCreateShaderModule(device, &shaderDesc);
     if (!shader) {
-        spdlog::error("PythonW: Failed to create blit shader");
+        yerror("Python: Failed to create blit shader");
         return false;
     }
 
@@ -919,16 +944,16 @@ bool PythonW::createBlitPipeline(WebGPUContext& ctx) {
     wgpuBindGroupLayoutRelease(bgl);
 
     if (!blitPipeline_) {
-        spdlog::error("PythonW: Failed to create blit pipeline");
+        yerror("Python: Failed to create blit pipeline");
         return false;
     }
 
     blitInitialized_ = true;
-    spdlog::info("PythonW: Blit pipeline created");
+    yinfo("Python: Blit pipeline created");
     return true;
 }
 
-bool PythonW::blitToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+bool Python::blitToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     // Get the render texture view
     WGPUTextureView texView = yetty_wgpu_get_render_texture_view();
     if (!texView) {
@@ -967,19 +992,19 @@ bool PythonW::blitToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     wgpuBindGroupLayoutRelease(bgl);
 
     if (!blitBindGroup_) {
-        spdlog::error("PythonW: Failed to create blit bind group");
+        yerror("Python: Failed to create blit bind group");
         return false;
     }
 
     // Calculate pixel position from render context
-    const auto& rc = renderCtx_;
-    float pixelX = x_ * rc.cellWidth;
-    float pixelY = y_ * rc.cellHeight;
-    float pixelW = widthCells_ * rc.cellWidth;
-    float pixelH = heightCells_ * rc.cellHeight;
+    const auto& rc = _renderCtx;
+    float pixelX = _x * rc.cellWidth;
+    float pixelY = _y * rc.cellHeight;
+    float pixelW = _widthCells * rc.cellWidth;
+    float pixelH = _heightCells * rc.cellHeight;
 
     // Adjust for scroll offset if relative positioning
-    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
@@ -1019,14 +1044,14 @@ bool PythonW::blitToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     return true;
 }
 
-bool PythonW::blitRenderTexture(WebGPUContext& ctx) {
+bool Python::blitRenderTexture(WebGPUContext& ctx) {
     // Legacy method - creates own render pass (slow, don't use)
     // Use blitToPass() instead
     (void)ctx;
     return false;
 }
 
-bool PythonW::onKey(int key, int scancode, int action, int mods) {
+bool Python::onKey(int key, int scancode, int action, int mods) {
     (void)scancode;
     (void)mods;
 
@@ -1057,7 +1082,7 @@ bool PythonW::onKey(int key, int scancode, int action, int mods) {
     return false;
 }
 
-bool PythonW::onChar(unsigned int codepoint) {
+bool Python::onChar(unsigned int codepoint) {
     if (codepoint < 128) {
         inputBuffer_ += static_cast<char>(codepoint);
         return true;
@@ -1065,7 +1090,7 @@ bool PythonW::onChar(unsigned int codepoint) {
     return false;
 }
 
-bool PythonW::onMouseMove(float localX, float localY) {
+bool Python::onMouseMove(float localX, float localY) {
     mouseX_ = localX;
     mouseY_ = localY;
 
@@ -1093,7 +1118,7 @@ bool PythonW::onMouseMove(float localX, float localY) {
     return true;
 }
 
-bool PythonW::onMouseButton(int button, bool pressed) {
+bool Python::onMouseButton(int button, bool pressed) {
     mouseDown_ = pressed;
     mouseButton_ = button;
 
@@ -1120,7 +1145,7 @@ bool PythonW::onMouseButton(int button, bool pressed) {
     return true;
 }
 
-bool PythonW::onMouseScroll(float xoffset, float yoffset, int mods) {
+bool Python::onMouseScroll(float xoffset, float yoffset, int mods) {
     if (!pygfxInitialized_) return false;
 
     // Forward to pygfx via Python callback
@@ -1148,7 +1173,7 @@ bool PythonW::onMouseScroll(float xoffset, float yoffset, int mods) {
 
 extern "C" {
     const char* name() { return "python"; }
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine) {
-        return yetty::PythonPlugin::create(std::move(engine));
+    yetty::Result<yetty::PluginPtr> create() {
+        return yetty::PythonPlugin::create();
     }
 }

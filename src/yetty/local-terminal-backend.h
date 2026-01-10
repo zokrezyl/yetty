@@ -22,7 +22,6 @@ namespace yetty {
 // Forward declarations
 class Font;
 class Config;
-class PluginManager;
 class EmojiAtlas;
 
 //=============================================================================
@@ -104,9 +103,7 @@ public:
     void setConfig(const Config* config) { config_ = config; }
     void setCallbacks(const TerminalBackendCallbacks& callbacks) { callbacks_ = callbacks; }
     
-    // Plugin support (for OSC handling, custom glyphs)
-    void setPluginManager(PluginManager* mgr) { pluginManager_ = mgr; }
-    PluginManager* getPluginManager() const { return pluginManager_; }
+    // Emoji support
     void setEmojiAtlas(EmojiAtlas* atlas) { emojiAtlas_ = atlas; }
     
     // VTerm access (needed for some operations)
@@ -180,7 +177,6 @@ private:
 
     const Config* config_ = nullptr;
     TerminalBackendCallbacks callbacks_;
-    PluginManager* pluginManager_ = nullptr;
     EmojiAtlas* emojiAtlas_ = nullptr;
 
     std::string oscBuffer_;

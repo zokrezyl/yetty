@@ -79,10 +79,10 @@ public:
     uint16_t getGlyph(uint32_t col, uint32_t row) const;
     void getFgColor(uint32_t col, uint32_t row, uint8_t& r, uint8_t& g, uint8_t& b) const;
 
-    // Plugin ID tracking (separate from glyph data)
-    void setPluginId(uint32_t col, uint32_t row, uint16_t pluginId);
-    uint16_t getPluginId(uint32_t col, uint32_t row) const;
-    void clearPluginId(uint32_t col, uint32_t row);
+    // Widget ID tracking (separate from glyph data)
+    void setWidgetId(uint32_t col, uint32_t row, uint16_t widgetId);
+    uint16_t getWidgetId(uint32_t col, uint32_t row) const;
+    void clearWidgetId(uint32_t col, uint32_t row);
 
     // Write ASCII string (helper) - needs Font to convert codepoints to glyph indices
     // If font is nullptr, uses codepoint directly as index (for testing only)
@@ -108,8 +108,8 @@ public:
     size_t getAttrsDataSize() const { return attrs_.size(); }
 
     // Mark as dirty when content changes
-    bool isDirty() const { return dirty_; }
-    void clearDirty() { dirty_ = false; }
+    bool isDirty() const { return _dirty; }
+    void clearDirty() { _dirty = false; }
 
 private:
     uint32_t cols_;
@@ -121,10 +121,10 @@ private:
     std::vector<uint8_t> bgColors_;       // RGBA per cell (4 bytes)
     std::vector<uint8_t> attrs_;          // 1 byte per cell (packed CellAttrs)
 
-    // Plugin tracking (0 = no plugin, non-zero = plugin ID)
-    std::vector<uint16_t> pluginIds_;
+    // Widget tracking (0 = no widget, non-zero = widget ID)
+    std::vector<uint16_t> _widgetIds;
 
-    bool dirty_ = true;
+    bool _dirty = true;
 
     size_t cellIndex(uint32_t col, uint32_t row) const {
         return row * cols_ + col;

@@ -2,7 +2,8 @@
 #include <yetty/yetty.h>
 #include <yetty/webgpu-context.h>
 #include <yetty/wgpu-compat.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
+#include <ytrace/ytrace.hpp>
 #include <iostream>
 #include <cstring>
 
@@ -76,8 +77,8 @@ bool VideoPlugin::isVideoFormat(const std::string& data) {
 
 VideoPlugin::~VideoPlugin() { (void)dispose(); }
 
-Result<PluginPtr> VideoPlugin::create(YettyPtr engine) noexcept {
-    auto p = PluginPtr(new VideoPlugin(std::move(engine)));
+Result<PluginPtr> VideoPlugin::create() noexcept {
+    auto p = PluginPtr(new VideoPlugin());
     if (auto res = static_cast<VideoPlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init VideoPlugin", res);
     }
@@ -85,7 +86,7 @@ Result<PluginPtr> VideoPlugin::create(YettyPtr engine) noexcept {
 }
 
 Result<void> VideoPlugin::pluginInit() noexcept {
-    initialized_ = true;
+    _initialized = true;
     return Ok();
 }
 
@@ -93,12 +94,26 @@ Result<void> VideoPlugin::dispose() {
     if (auto res = Plugin::dispose(); !res) {
         return Err<void>("Failed to dispose VideoPlugin", res);
     }
-    initialized_ = false;
+    _initialized = false;
     return Ok();
 }
 
-Result<WidgetPtr> VideoPlugin::createWidget(const std::string& payload) {
-    return Video::create(payload);
+Result<WidgetPtr> VideoPlugin::createWidget(
+    const std::string& widgetName,
+    WidgetFactory* factory,
+    FontManager* fontManager,
+    uv_loop_t* loop,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
+    const std::string& pluginArgs,
+    const std::string& payload
+) {
+    (void)widgetName;
+    yfunc();
+    yinfo("payload size={} x={} y={} w={} h={}", payload.size(), x, y, widthCells, heightCells);
+    return Video::create(factory, fontManager, loop, x, y, widthCells, heightCells, pluginArgs, payload);
 }
 
 //-----------------------------------------------------------------------------
@@ -108,13 +123,13 @@ Result<WidgetPtr> VideoPlugin::createWidget(const std::string& payload) {
 Video::~Video() { (void)dispose(); }
 
 Result<void> Video::init() {
-    if (payload_.empty()) {
+    if (_payload.empty()) {
         return Err<void>("Video: empty payload");
     }
 
     (void)dispose();
 
-    auto result = initFFmpeg(payload_);
+    auto result = initFFmpeg(_payload);
     if (!result) {
         return result;
     }
@@ -371,11 +386,11 @@ void Video::updateTexture(WebGPUContext& ctx) {
 
 Result<void> Video::render(WebGPUContext& ctx) {
     if (failed_) return Err<void>("Video already failed");
-    if (!visible_) return Ok();
+    if (!_visible) return Ok();
     if (frameBuffer_.empty()) return Err<void>("Video has no frame data");
 
     // Get render context set by owner
-    const auto& rc = renderCtx_;
+    const auto& rc = _renderCtx;
 
     // Update playback (integrate former update() logic)
     if (playing_) {
@@ -404,13 +419,13 @@ Result<void> Video::render(WebGPUContext& ctx) {
     }
 
     // Calculate pixel position from cell position
-    float pixelX = x_ * rc.cellWidth;
-    float pixelY = y_ * rc.cellHeight;
-    float pixelW = widthCells_ * rc.cellWidth;
-    float pixelH = heightCells_ * rc.cellHeight;
+    float pixelX = _x * rc.cellWidth;
+    float pixelY = _y * rc.cellHeight;
+    float pixelW = _widthCells * rc.cellWidth;
+    float pixelH = _heightCells * rc.cellHeight;
 
     // For Relative layers, adjust position when viewing scrollback
-    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
@@ -479,7 +494,7 @@ void Video::prepareFrame(WebGPUContext& ctx) {
     // Video uses its own command encoder/pass, so render during prepareFrame
     auto result = render(ctx);
     if (!result) {
-        spdlog::error("Video::prepareFrame failed: {}", error_msg(result));
+        yerror("Video::prepareFrame failed: {}", error_msg(result));
     }
 }
 
@@ -640,5 +655,5 @@ struct VertexOutput { @builtin(position) position: vec4<f32>, @location(0) uv: v
 
 extern "C" {
     const char* name() { return "video"; }
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine) { return yetty::VideoPlugin::create(std::move(engine)); }
+    yetty::Result<yetty::PluginPtr> create() { return yetty::VideoPlugin::create(); }
 }

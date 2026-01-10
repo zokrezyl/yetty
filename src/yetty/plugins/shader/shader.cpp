@@ -1,9 +1,11 @@
 #include "shader.h"
+#include "../../widget-factory.h"
 #include <yetty/yetty.h>
 #include <yetty/webgpu-context.h>
 #include <yetty/shader-manager.h>
 #include <yetty/wgpu-compat.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
+#include <ytrace/ytrace.hpp>
 #include <iostream>
 #include <sstream>
 
@@ -17,8 +19,8 @@ ShaderPlugin::~ShaderPlugin() {
     (void)dispose();
 }
 
-Result<PluginPtr> ShaderPlugin::create(YettyPtr engine) noexcept {
-    auto p = PluginPtr(new ShaderPlugin(std::move(engine)));
+Result<PluginPtr> ShaderPlugin::create() noexcept {
+    auto p = PluginPtr(new ShaderPlugin());
     if (auto res = static_cast<ShaderPlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init ShaderPlugin", res);
     }
@@ -26,7 +28,7 @@ Result<PluginPtr> ShaderPlugin::create(YettyPtr engine) noexcept {
 }
 
 Result<void> ShaderPlugin::pluginInit() noexcept {
-    initialized_ = true;
+    _initialized = true;
     return Ok();
 }
 
@@ -34,12 +36,26 @@ Result<void> ShaderPlugin::dispose() {
     if (auto res = Plugin::dispose(); !res) {
         return Err<void>("Failed to dispose ShaderPlugin", res);
     }
-    initialized_ = false;
+    _initialized = false;
     return Ok();
 }
 
-Result<WidgetPtr> ShaderPlugin::createWidget(const std::string& payload) {
-    return Shader::create(payload);
+Result<WidgetPtr> ShaderPlugin::createWidget(
+    const std::string& widgetName,
+    WidgetFactory* factory,
+    FontManager* fontManager,
+    uv_loop_t* loop,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
+    const std::string& pluginArgs,
+    const std::string& payload
+) {
+    (void)widgetName;
+    yfunc();
+    yinfo("payload size={} x={} y={} w={} h={}", payload.size(), x, y, widthCells, heightCells);
+    return Shader::create(factory, fontManager, loop, x, y, widthCells, heightCells, pluginArgs, payload);
 }
 
 //-----------------------------------------------------------------------------
@@ -51,12 +67,12 @@ Shader::~Shader() {
 }
 
 Result<void> Shader::init() {
-    if (payload_.empty()) {
+    if (_payload.empty()) {
         return Err<void>("Shader: empty payload");
     }
     compiled_ = false;
     failed_ = false;
-    spdlog::debug("Shader: initialized with {} bytes of shader code", payload_.size());
+    ydebug("Shader: initialized with {} bytes of shader code", _payload.size());
     return Ok();
 }
 
@@ -83,12 +99,12 @@ Result<void> Shader::dispose() {
 
 Result<void> Shader::render(WebGPUContext& ctx) {
     if (failed_) return Err<void>("Shader already failed");
-    if (!visible_) return Ok();
+    if (!_visible) return Ok();
 
-    const auto& rc = renderCtx_;
+    const auto& rc = _renderCtx;
 
     if (!compiled_) {
-        auto result = compileShader(ctx, rc.targetFormat, payload_);
+        auto result = compileShader(ctx, rc.targetFormat, _payload);
         if (!result) {
             failed_ = true;
             return Err<void>("Shader: Failed to compile shader", result);
@@ -101,11 +117,10 @@ Result<void> Shader::render(WebGPUContext& ctx) {
         return Err<void>("Shader: pipeline not initialized");
     }
 
-    auto* parent = getParent();
-    if (!parent || !parent->getEngine()) {
-        return Err<void>("Shader: no engine reference");
+    if (!_factory) {
+        return Err<void>("Shader: no factory reference");
     }
-    auto shaderMgr = parent->getEngine()->shaderManager();
+    auto shaderMgr = _factory->getShaderManager();
     if (!shaderMgr) {
         return Err<void>("Shader: no shader manager");
     }
@@ -114,15 +129,18 @@ Result<void> Shader::render(WebGPUContext& ctx) {
         return Err<void>("Shader: no global bind group");
     }
 
-    float pixelX = x_ * rc.cellWidth;
-    float pixelY = y_ * rc.cellHeight;
-    float pixelW = widthCells_ * rc.cellWidth;
-    float pixelH = heightCells_ * rc.cellHeight;
+    // Compute pixel position from cell position and scroll
+    float pixelX = static_cast<float>(_x) * rc.cellWidth;
+    float pixelY = static_cast<float>(_y) * rc.cellHeight;
+    float pixelW = static_cast<float>(_widthCells) * rc.cellWidth;
+    float pixelH = static_cast<float>(_heightCells) * rc.cellHeight;
 
-    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
+    // Relative widgets scroll with content
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
+    // Visibility check
     if (rc.termRows > 0) {
         float screenPixelHeight = rc.termRows * rc.cellHeight;
         if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
@@ -200,12 +218,12 @@ Result<void> Shader::render(WebGPUContext& ctx) {
 }
 
 bool Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (failed_ || !visible_) return false;
+    if (failed_ || !_visible) return false;
 
-    const auto& rc = renderCtx_;
+    const auto& rc = _renderCtx;
 
     if (!compiled_) {
-        auto result = compileShader(ctx, rc.targetFormat, payload_);
+        auto result = compileShader(ctx, rc.targetFormat, _payload);
         if (!result) {
             failed_ = true;
             return false;
@@ -218,22 +236,24 @@ bool Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
         return false;
     }
 
-    auto* parent = getParent();
-    if (!parent || !parent->getEngine()) return false;
-    auto shaderMgr = parent->getEngine()->shaderManager();
+    if (!_factory) return false;
+    auto shaderMgr = _factory->getShaderManager();
     if (!shaderMgr) return false;
     WGPUBindGroup globalBindGroup = shaderMgr->getGlobalBindGroup();
     if (!globalBindGroup) return false;
 
-    float pixelX = x_ * rc.cellWidth;
-    float pixelY = y_ * rc.cellHeight;
-    float pixelW = widthCells_ * rc.cellWidth;
-    float pixelH = heightCells_ * rc.cellHeight;
+    // Compute pixel position from cell position and scroll
+    float pixelX = static_cast<float>(_x) * rc.cellWidth;
+    float pixelY = static_cast<float>(_y) * rc.cellHeight;
+    float pixelW = static_cast<float>(_widthCells) * rc.cellWidth;
+    float pixelH = static_cast<float>(_heightCells) * rc.cellHeight;
 
-    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
+    // Relative widgets scroll with content
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
+    // Visibility check
     if (rc.termRows > 0) {
         float screenPixelHeight = rc.termRows * rc.cellHeight;
         if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
@@ -278,9 +298,9 @@ bool Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
 }
 
 bool Shader::onMouseMove(float localX, float localY) {
-    mouse_x_ = localX / static_cast<float>(pixelWidth_);
-    mouse_y_ = localY / static_cast<float>(pixelHeight_);
-    spdlog::debug("Shader::onMouseMove: local=({},{}) normalized=({},{})",
+    mouse_x_ = localX / static_cast<float>(_pixelWidth);
+    mouse_y_ = localY / static_cast<float>(_pixelHeight);
+    ydebug("Shader::onMouseMove: local=({},{}) normalized=({},{})",
                   localX, localY, mouse_x_, mouse_y_);
     return true;
 }
@@ -289,13 +309,13 @@ bool Shader::onMouseButton(int button, bool pressed) {
     if (button == 0) {
         mouse_down_ = pressed;
         mouse_grabbed_ = pressed;
-        spdlog::debug("Shader::onMouseButton: button={} pressed={} grabbed={}",
+        ydebug("Shader::onMouseButton: button={} pressed={} grabbed={}",
                       button, pressed, mouse_grabbed_);
         return true;
     }
     if (button == -1) {
         mouse_grabbed_ = false;
-        spdlog::debug("Shader::onMouseButton: focus lost");
+        ydebug("Shader::onMouseButton: focus lost");
         return false;
     }
     return false;
@@ -308,11 +328,11 @@ bool Shader::onMouseScroll(float xoffset, float yoffset, int mods) {
     if (ctrlPressed) {
         zoom_ += yoffset * 0.1f;
         zoom_ = std::max(0.1f, std::min(5.0f, zoom_));
-        spdlog::debug("Shader::onMouseScroll: CTRL+scroll zoom_={}", zoom_);
+        ydebug("Shader::onMouseScroll: CTRL+scroll zoom_={}", zoom_);
     } else {
         param_ += yoffset * 0.1f;
         param_ = std::max(0.0f, std::min(1.0f, param_));
-        spdlog::debug("Shader::onMouseScroll: scroll param_={}", param_);
+        ydebug("Shader::onMouseScroll: scroll param_={}", param_);
     }
     return true;
 }
@@ -434,11 +454,10 @@ fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 Result<void> Shader::compileShader(WebGPUContext& ctx,
                                         WGPUTextureFormat targetFormat,
                                         const std::string& fragmentCode) {
-    auto* parent = getParent();
-    if (!parent || !parent->getEngine()) {
-        return Err<void>("Shader: no engine reference for shader compilation");
+    if (!_factory) {
+        return Err<void>("Shader: no factory reference for shader compilation");
     }
-    auto shaderMgr = parent->getEngine()->shaderManager();
+    auto shaderMgr = _factory->getShaderManager();
     if (!shaderMgr) {
         return Err<void>("Shader: no shader manager for shader compilation");
     }
@@ -465,7 +484,7 @@ Result<void> Shader::compileShader(WebGPUContext& ctx,
     WGPUShaderModule vertModule = wgpuDeviceCreateShaderModule(ctx.getDevice(), &shaderDescVert);
 
     std::string fragCode = wrapFragmentShader(fragmentCode);
-    spdlog::debug("Shader: compiling fragment shader");
+    ydebug("Shader: compiling fragment shader");
 
     WGPUShaderSourceWGSL wgslDescFrag = {};
     wgslDescFrag.chain.sType = WGPUSType_ShaderSourceWGSL;
@@ -567,7 +586,7 @@ Result<void> Shader::compileShader(WebGPUContext& ctx,
         return Err<void>("Failed to create render pipeline");
     }
 
-    spdlog::debug("Shader: pipeline created with global + per-plugin uniforms");
+    ydebug("Shader: pipeline created with global + per-plugin uniforms");
     return Ok();
 }
 
@@ -575,7 +594,7 @@ Result<void> Shader::compileShader(WebGPUContext& ctx,
 
 extern "C" {
     const char* name() { return "shader"; }
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine) {
-        return yetty::ShaderPlugin::create(std::move(engine));
+    yetty::Result<yetty::PluginPtr> create() {
+        return yetty::ShaderPlugin::create();
     }
 }

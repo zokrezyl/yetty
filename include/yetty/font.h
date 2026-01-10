@@ -116,7 +116,7 @@ public:
     uint32_t getBufferGlyphCount() const { return _bufferGlyphCount; }
     
     // Version number incremented when GPU resources change (buffer recreated)
-    // Renderables should track this to know when to recreate their bind groups
+    // Widgets should track this to know when to recreate their bind groups
     uint32_t getResourceVersion() const { return _resourceVersion; }
 
     // Get pixel range for MSDF shader

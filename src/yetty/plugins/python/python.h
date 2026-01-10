@@ -13,7 +13,7 @@ typedef _ts PyThreadState;
 
 namespace yetty {
 
-class PythonW;
+class Python;
 
 //-----------------------------------------------------------------------------
 // PythonPlugin - Embeds Python interpreter
@@ -22,13 +22,24 @@ class PythonPlugin : public Plugin {
 public:
     ~PythonPlugin() override;
 
-    static Result<PluginPtr> create(YettyPtr engine) noexcept;
+    static Result<PluginPtr> create() noexcept;
 
     const char* pluginName() const override { return "python"; }
 
     Result<void> dispose() override;
 
-    Result<WidgetPtr> createWidget(const std::string& payload) override;
+    Result<WidgetPtr> createWidget(
+        const std::string& widgetName,
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) override;
 
     // Execute Python code and return result as string
     Result<std::string> execute(const std::string& code);
@@ -44,7 +55,7 @@ public:
     PyObject* getDisposeWidgetFunc() const { return disposeWidgetFunc_; }
 
 private:
-    explicit PythonPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
+    PythonPlugin() noexcept = default;
     Result<void> pluginInit() noexcept;
     Result<void> initPython();
     Result<void> loadInitCallbacks();
@@ -63,27 +74,46 @@ private:
 };
 
 //-----------------------------------------------------------------------------
-// PythonW - Displays Python output or runs Python scripts
+// Python - Displays Python output or runs Python scripts
 //-----------------------------------------------------------------------------
-class PythonW : public Widget {
+class Python : public Widget {
 public:
-    static Result<WidgetPtr> create(const std::string& payload, PythonPlugin* plugin) {
-        auto w = std::shared_ptr<PythonW>(new PythonW(payload, plugin));
+    static Result<WidgetPtr> create(
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload,
+        PythonPlugin* plugin
+    ) {
+        (void)factory;
+        (void)fontManager;
+        (void)loop;
+        (void)pluginArgs;
+        auto w = std::shared_ptr<Python>(new Python(payload, plugin));
+        w->_x = x;
+        w->_y = y;
+        w->_widthCells = widthCells;
+        w->_heightCells = heightCells;
         if (auto res = w->init(); !res) {
-            return Err<WidgetPtr>("Failed to init PythonW", res);
+            return Err<WidgetPtr>("Failed to init Python", res);
         }
         return Ok(std::static_pointer_cast<Widget>(w));
     }
 
-    ~PythonW() override;
+    ~Python() override;
 
     Result<void> dispose() override;
 
     // Renderable interface
-    const std::string& name() const override { return name_; }
-    void start() override { running_ = true; }
-    void stop() override { running_ = false; }
-    bool isRunning() const override { return running_; }
+    const std::string& name() const override { return _name; }
+    void start() override { _running = true; }
+    void stop() override { _running = false; }
+    bool isRunning() const override { return _running; }
     Result<void> render(WebGPUContext& ctx) override;
 
     // Pre-render phase - render pygfx to texture BEFORE shared pass
@@ -116,10 +146,10 @@ public:
     bool callDisposeWidget();
 
 private:
-    explicit PythonW(const std::string& payload, PythonPlugin* plugin)
+    explicit Python(const std::string& payload, PythonPlugin* plugin)
         : plugin_(plugin)
     {
-        payload_ = payload;
+        _payload = payload;
     }
 
     Result<void> init() override;
@@ -159,11 +189,9 @@ private:
     bool blitInitialized_ = false;
 };
 
-using Python = PythonPlugin;
-
 } // namespace yetty
 
 extern "C" {
     const char* name();
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine);
+    yetty::Result<yetty::PluginPtr> create();
 }

@@ -1,6 +1,6 @@
 #include <yetty/shader-manager.h>
 #include <yetty/wgpu-compat.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 #include <fstream>
 #include <sstream>
 #include <filesystem>
@@ -40,7 +40,7 @@ Result<void> ShaderManager::init(WGPUDevice device, const std::string& shaderPat
     _appStartTime = std::chrono::duration<double>(now.time_since_epoch()).count();
     _lastFrameTime = _appStartTime;
 
-    spdlog::info("ShaderManager: initialized with path {}", _shaderPath);
+    yinfo("ShaderManager: initialized with path {}", _shaderPath);
     return Ok();
 }
 
@@ -113,7 +113,7 @@ Result<void> ShaderManager::createGlobalUniformBuffer() {
         return Err<void>("Failed to create global bind group");
     }
 
-    spdlog::debug("ShaderManager: global uniform buffer created (size={})", sizeof(GlobalUniforms));
+    ydebug("ShaderManager: global uniform buffer created (size={})", sizeof(GlobalUniforms));
     return Ok();
 }
 
@@ -233,7 +233,7 @@ Result<WGPUShaderModule> ShaderManager::getFragmentShader(const std::string& nam
     }
 
     _fragmentShaders[name] = *result;
-    spdlog::debug("ShaderManager: loaded and cached shader {}", name);
+    ydebug("ShaderManager: loaded and cached shader {}", name);
     return Ok(*result);
 }
 
@@ -302,7 +302,7 @@ fn fs_entry(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
         return Err<WGPUShaderModule>("Failed to compile shader: " + filename);
     }
 
-    spdlog::info("ShaderManager: compiled shader {}", filename);
+    yinfo("ShaderManager: compiled shader {}", filename);
     return Ok(module);
 }
 

@@ -14,7 +14,7 @@ namespace ymery {
 
 namespace yetty {
 
-class YmeryW;
+class Ymery;
 
 //-----------------------------------------------------------------------------
 // YmeryPlugin - holds shared ImGui context and ymery::EmbeddedApp
@@ -23,16 +23,28 @@ class YmeryPlugin : public Plugin {
 public:
     ~YmeryPlugin() override;
 
-    static Result<PluginPtr> create(YettyPtr engine) noexcept;
+    static Result<PluginPtr> create() noexcept;
 
     const char* pluginName() const override { return "ymery"; }
 
+    Result<void> init(WebGPUContext* ctx) override;
     Result<void> dispose() override;
 
-    Result<WidgetPtr> createWidget(const std::string& payload) override;
+    Result<WidgetPtr> createWidget(
+        const std::string& widgetName,
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) override;
 
     // Shared render for ImGui - called once per frame for all layers
-    Result<void> render(WebGPUContext& ctx) override;
+    Result<void> render(WebGPUContext& ctx);
 
 #ifdef YETTY_YMERY_ENABLED
     ImGuiContext* imguiContext() const { return _imgui_ctx; }
@@ -44,7 +56,7 @@ public:
 #endif
 
 private:
-    explicit YmeryPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
+    YmeryPlugin() noexcept = default;
     Result<void> pluginInit() noexcept;
 
 #ifdef YETTY_YMERY_ENABLED
@@ -58,22 +70,41 @@ private:
     WGPUTextureFormat _format = WGPUTextureFormat_Undefined;
 #endif
     double _last_time = 0.0;
+    std::vector<WidgetPtr> _widgets;  // Track created widgets for this plugin
 };
 
 //-----------------------------------------------------------------------------
-// YmeryW - per-layer position/size, forwards input to shared ImGui context
+// Ymery - per-layer position/size, forwards input to shared ImGui context
 //-----------------------------------------------------------------------------
-class YmeryW : public Widget {
+class Ymery : public Widget {
 public:
-    static Result<WidgetPtr> create(const std::string& payload) {
-        auto w = std::shared_ptr<YmeryW>(new YmeryW(payload));
+    static Result<WidgetPtr> create(
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) {
+        (void)factory;
+        (void)fontManager;
+        (void)loop;
+        (void)pluginArgs;
+        auto w = std::shared_ptr<Ymery>(new Ymery(payload));
+        w->_x = x;
+        w->_y = y;
+        w->_widthCells = widthCells;
+        w->_heightCells = heightCells;
         if (auto res = w->init(); !res) {
-            return Err<WidgetPtr>("Failed to init YmeryW", res);
+            return Err<WidgetPtr>("Failed to init Ymery", res);
         }
         return Ok(std::static_pointer_cast<Widget>(w));
     }
 
-    ~YmeryW() override;
+    ~Ymery() override;
 
     Result<void> dispose() override;
 
@@ -99,8 +130,8 @@ public:
     const std::string& getMainModule() const { return _main_module; }
 
 private:
-    explicit YmeryW(const std::string& payload) {
-        payload_ = payload;
+    explicit Ymery(const std::string& payload) {
+        _payload = payload;
     }
 
     Result<void> init() override;
@@ -115,5 +146,5 @@ private:
 
 extern "C" {
     const char* name();
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine);
+    yetty::Result<yetty::PluginPtr> create();
 }

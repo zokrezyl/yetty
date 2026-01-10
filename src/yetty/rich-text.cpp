@@ -1,7 +1,7 @@
 #include <yetty/rich-text.h>
 #include <yetty/webgpu-context.h>
 #include <yetty/wgpu-compat.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 #include <cstring>
 #include <algorithm>
 #include <cmath>
@@ -100,14 +100,14 @@ Result<RichText::Ptr> RichText::create(WebGPUContext* ctx, WGPUTextureFormat tar
 }
 
 RichText::RichText(WebGPUContext* ctx, WGPUTextureFormat targetFormat, FontManager* fontMgr) noexcept
-    : ctx_(ctx), targetFormat_(targetFormat), fontMgr_(fontMgr) {}
+    : _ctx(ctx), targetFormat_(targetFormat), fontMgr_(fontMgr) {}
 
 RichText::~RichText() {
     dispose();
 }
 
 Result<void> RichText::init() noexcept {
-    auto result = createPipeline(*ctx_, targetFormat_);
+    auto result = createPipeline(*_ctx, targetFormat_);
     if (!result) {
         return Err<void>("Failed to create RichText pipeline", result);
     }
@@ -145,14 +145,14 @@ void RichText::dispose() noexcept {
 
 Font* RichText::resolveFont(const std::string& fontFamily, Font::Style style) {
     if (!fontMgr_) {
-        spdlog::error("RichText::resolveFont: fontMgr_ is null!");
+        yerror("RichText::resolveFont: fontMgr_ is null!");
         return nullptr;
     }
 
     // Use specified family or fall back to default
     std::string family = fontFamily.empty() ? defaultFontFamily_ : fontFamily;
 
-    spdlog::debug("RichText::resolveFont: family='{}' (input='{}', default='{}'), style={}",
+    ydebug("RichText::resolveFont: family='{}' (input='{}', default='{}'), style={}",
                   family, fontFamily, defaultFontFamily_, static_cast<int>(style));
 
     // If family is specified, try to get it
@@ -160,14 +160,14 @@ Font* RichText::resolveFont(const std::string& fontFamily, Font::Style style) {
         // Try to get font with specific style
         auto result = fontMgr_->getFont(family, style);
         if (result && *result) {
-            spdlog::debug("RichText::resolveFont: found font for family='{}' style={}", family, static_cast<int>(style));
+            ydebug("RichText::resolveFont: found font for family='{}' style={}", family, static_cast<int>(style));
             return *result;
         }
 
         // Fall back to regular style of same family
         result = fontMgr_->getFont(family);
         if (result && *result) {
-            spdlog::debug("RichText::resolveFont: found font for family='{}' (regular)", family);
+            ydebug("RichText::resolveFont: found font for family='{}' (regular)", family);
             return *result;
         }
     }
@@ -175,7 +175,7 @@ Font* RichText::resolveFont(const std::string& fontFamily, Font::Style style) {
     // Try default font from FontManager
     Font* font = fontMgr_->getDefaultFont();
     if (font) {
-        spdlog::debug("RichText::resolveFont: using FontManager default font");
+        ydebug("RichText::resolveFont: using FontManager default font");
         return font;
     }
 
@@ -194,12 +194,12 @@ Font* RichText::resolveFont(const std::string& fontFamily, Font::Style style) {
     for (const char* fallback : fallbackFonts) {
         auto result = fontMgr_->getFont(fallback, style);
         if (result && *result) {
-            spdlog::info("RichText::resolveFont: loaded fallback font '{}'", fallback);
+            yinfo("RichText::resolveFont: loaded fallback font '{}'", fallback);
             return *result;
         }
     }
 
-    spdlog::error("RichText::resolveFont: no font could be loaded!");
+    yerror("RichText::resolveFont: no font could be loaded!");
     return nullptr;
 }
 
@@ -285,11 +285,11 @@ uint32_t RichText::decodeUTF8(const uint8_t*& ptr, const uint8_t* end) {
 void RichText::layoutSpans(float viewWidth, float viewHeight) {
     (void)viewHeight;
     if (!fontMgr_) {
-        spdlog::error("RichText::layoutSpans: fontMgr_ is null!");
+        yerror("RichText::layoutSpans: fontMgr_ is null!");
         return;
     }
 
-    spdlog::debug("RichText::layoutSpans: {} spans, viewWidth={}", spans_.size(), viewWidth);
+    ydebug("RichText::layoutSpans: {} spans, viewWidth={}", spans_.size(), viewWidth);
 
     chars_.clear();
     contentHeight_ = 0;
@@ -301,7 +301,7 @@ void RichText::layoutSpans(float viewWidth, float viewHeight) {
         // Resolve font for this span
         Font* font = resolveFont(span.fontFamily, span.style);
         if (!font) {
-            spdlog::warn("RichText::layoutSpans: no font for span, skipping");
+            ywarn("RichText::layoutSpans: no font for span, skipping");
             continue;
         }
 
@@ -358,7 +358,7 @@ void RichText::layoutSpans(float viewWidth, float viewHeight) {
         contentHeight_ = std::max(contentHeight_, cursorY + lineHeight);
     }
 
-    spdlog::debug("RichText::layoutSpans: produced {} chars, content {}x{}",
+    ydebug("RichText::layoutSpans: produced {} chars, content {}x{}",
                   chars_.size(), contentWidth_, contentHeight_);
 }
 
@@ -370,7 +370,7 @@ void RichText::layoutChars(float viewWidth, float viewHeight) {
     (void)viewWidth;
     (void)viewHeight;
 
-    spdlog::debug("RichText::layoutChars: {} chars (useCharsDirectly={})",
+    ydebug("RichText::layoutChars: {} chars (useCharsDirectly={})",
                   chars_.size(), useCharsDirectly_);
 
     contentHeight_ = 0;
@@ -381,7 +381,7 @@ void RichText::layoutChars(float viewWidth, float viewHeight) {
         contentHeight_ = std::max(contentHeight_, ch.y + ch.size);
     }
 
-    spdlog::debug("RichText::layoutChars: content {}x{}", contentWidth_, contentHeight_);
+    ydebug("RichText::layoutChars: content {}x{}", contentWidth_, contentHeight_);
 }
 
 //-----------------------------------------------------------------------------
@@ -390,11 +390,11 @@ void RichText::layoutChars(float viewWidth, float viewHeight) {
 
 void RichText::buildGlyphInstances() {
     if (!fontMgr_) {
-        spdlog::error("RichText::buildGlyphInstances: fontMgr_ is null!");
+        yerror("RichText::buildGlyphInstances: fontMgr_ is null!");
         return;
     }
 
-    spdlog::debug("RichText::buildGlyphInstances: processing {} chars", chars_.size());
+    ydebug("RichText::buildGlyphInstances: processing {} chars", chars_.size());
 
     fontBatches_.clear();
     glyphCount_ = 0;
@@ -436,7 +436,7 @@ void RichText::buildGlyphInstances() {
 
         // Debug logging for descender characters
         if (ch.codepoint == 'g' || ch.codepoint == 'p' || ch.codepoint == 'q' || ch.codepoint == 'A') {
-            spdlog::debug("Glyph '{}': ch.y={:.2f}, bearing.y={:.2f}, fontScale={:.4f}, glyphY={:.2f}, size=({:.1f},{:.1f})",
+            ydebug("Glyph '{}': ch.y={:.2f}, bearing.y={:.2f}, fontScale={:.4f}, glyphY={:.2f}, size=({:.1f},{:.1f})",
                           static_cast<char>(ch.codepoint), ch.y, metrics->_bearing.y, fontScale, glyphY, glyphW, glyphH);
         }
 
@@ -469,7 +469,7 @@ void RichText::buildGlyphInstances() {
         glyphCount_++;
     }
 
-    spdlog::info("RichText::buildGlyphInstances: {} glyphs in {} batches (skipped: {} no font, {} no glyph)",
+    yinfo("RichText::buildGlyphInstances: {} glyphs in {} batches (skipped: {} no font, {} no glyph)",
                   glyphCount_, fontBatches_.size(), skippedNoFont, skippedNoGlyph);
 }
 
@@ -495,7 +495,7 @@ void RichText::layout(float viewWidth, float viewHeight) {
     layoutDirty_ = false;
     gpuResourcesDirty_ = true;
 
-    spdlog::debug("RichText::layout: {} chars -> {} glyphs, content {}x{}",
+    ydebug("RichText::layout: {} chars -> {} glyphs, content {}x{}",
                   chars_.size(), glyphCount_, contentWidth_, contentHeight_);
 }
 
@@ -682,28 +682,28 @@ Result<void> RichText::render(WebGPUContext& ctx,
                                uint32_t screenWidth, uint32_t screenHeight,
                                float pixelX, float pixelY,
                                float pixelW, float pixelH) {
-    spdlog::debug("RichText::render: initialized={}, spans={}, chars={}, batches={}, glyphs={}",
+    ydebug("RichText::render: initialized={}, spans={}, chars={}, batches={}, glyphs={}",
                   initialized_, spans_.size(), chars_.size(), fontBatches_.size(), glyphCount_);
 
     if (!initialized_) {
-        spdlog::error("RichText::render: not initialized!");
+        yerror("RichText::render: not initialized!");
         return Err<void>("RichText not initialized");
     }
 
     // Re-layout if view size changed
     if (lastViewWidth_ != pixelW || lastViewHeight_ != pixelH || layoutDirty_) {
-        spdlog::debug("RichText::render: triggering layout (dirty={}, size changed={})",
+        ydebug("RichText::render: triggering layout (dirty={}, size changed={})",
                       layoutDirty_, lastViewWidth_ != pixelW || lastViewHeight_ != pixelH);
         layout(pixelW, pixelH);
     }
 
     if (!pipeline_) {
-        spdlog::warn("RichText::render: no pipeline!");
+        ywarn("RichText::render: no pipeline!");
         return Ok();
     }
 
     if (fontBatches_.empty() || glyphCount_ == 0) {
-        spdlog::debug("RichText::render: nothing to render (batches={}, glyphs={})",
+        ydebug("RichText::render: nothing to render (batches={}, glyphs={})",
                       fontBatches_.size(), glyphCount_);
         return Ok();  // Nothing to render
     }
@@ -798,7 +798,7 @@ Result<void> RichText::render(WebGPUContext& ctx,
         // Ensure bind group exists for this font
         auto result = createBindGroup(ctx, batch.font);
         if (!result) {
-            spdlog::warn("RichText: Failed to create bind group for font");
+            ywarn("RichText: Failed to create bind group for font");
             continue;
         }
 

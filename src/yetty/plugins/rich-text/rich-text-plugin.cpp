@@ -1,8 +1,9 @@
 #include "rich-text-plugin.h"
 #include <yetty/yetty.h>
 #include <yetty/webgpu-context.h>
+#include <ytrace/ytrace.hpp>
 #include <yaml-cpp/yaml.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 #include <algorithm>
 #include <cmath>
 
@@ -16,8 +17,8 @@ RichTextPlugin::~RichTextPlugin() {
     (void)dispose();
 }
 
-Result<PluginPtr> RichTextPlugin::create(YettyPtr engine) noexcept {
-    auto p = PluginPtr(new RichTextPlugin(std::move(engine)));
+Result<PluginPtr> RichTextPlugin::create() noexcept {
+    auto p = PluginPtr(new RichTextPlugin());
     if (auto res = static_cast<RichTextPlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init RichTextPlugin", res);
     }
@@ -25,13 +26,8 @@ Result<PluginPtr> RichTextPlugin::create(YettyPtr engine) noexcept {
 }
 
 Result<void> RichTextPlugin::pluginInit() noexcept {
-    // Verify engine has a FontManager
-    if (!engine_ || !engine_->fontManager()) {
-        return Err<void>("RichTextPlugin: engine has no FontManager");
-    }
-
-    initialized_ = true;
-    spdlog::info("RichTextPlugin initialized (using engine's FontManager)");
+    _initialized = true;
+    yinfo("RichTextPlugin initialized");
     return Ok();
 }
 
@@ -39,15 +35,37 @@ Result<void> RichTextPlugin::dispose() {
     if (auto res = Plugin::dispose(); !res) {
         return Err<void>("Failed to dispose RichTextPlugin", res);
     }
-    initialized_ = false;
+    _initialized = false;
     return Ok();
 }
 
 FontManager* RichTextPlugin::getFontManager() {
-    return engine_ ? engine_->fontManager().get() : nullptr;
+    return _fontManager;
 }
 
-Result<WidgetPtr> RichTextPlugin::createWidget(const std::string& payload) {
+Result<WidgetPtr> RichTextPlugin::createWidget(
+    const std::string& widgetName,
+    WidgetFactory* factory,
+    FontManager* fontManager,
+    uv_loop_t* loop,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
+    const std::string& pluginArgs,
+    const std::string& payload
+) {
+    (void)widgetName;
+    (void)factory;
+    (void)loop;
+    (void)x;
+    (void)y;
+    (void)widthCells;
+    (void)heightCells;
+    (void)pluginArgs;
+    _fontManager = fontManager;  // Store for widget use
+    yfunc();
+    yinfo("payload size={}", payload.size());
     return RichTextW::create(payload, this);
 }
 
@@ -60,11 +78,11 @@ RichTextW::~RichTextW() {
 }
 
 Result<void> RichTextW::init() {
-    if (payload_.empty()) {
+    if (_payload.empty()) {
         return Err<void>("RichTextW: empty payload");
     }
 
-    return parseYAML(payload_);
+    return parseYAML(_payload);
 }
 
 Result<void> RichTextW::dispose() {
@@ -72,7 +90,7 @@ Result<void> RichTextW::dispose() {
         richText_->dispose();
         richText_.reset();
     }
-    initialized_ = false;
+    _initialized = false;
     failed_ = false;
     return Ok();
 }
@@ -107,7 +125,7 @@ Result<void> RichTextW::parseYAML(const std::string& yaml) {
 
             // Required: text
             if (!spanNode["text"]) {
-                spdlog::warn("RichTextW: span missing 'text', skipping");
+                ywarn("RichTextW: span missing 'text', skipping");
                 continue;
             }
             span.text = spanNode["text"].as<std::string>();
@@ -193,7 +211,7 @@ Result<void> RichTextW::parseYAML(const std::string& yaml) {
             }
         }
 
-        spdlog::info("RichTextW: parsed {} spans from YAML", root["spans"].size());
+        yinfo("RichTextW: parsed {} spans from YAML", root["spans"].size());
         return Ok();
 
     } catch (const YAML::Exception& e) {
@@ -209,19 +227,19 @@ Result<void> RichTextW::render(WebGPUContext& ctx) {
     if (failed_) {
         return Err<void>("RichTextW already failed");
     }
-    if (!visible_) return Ok();
+    if (!_visible) return Ok();
 
     // Get render context set by owner
-    const auto& rc = renderCtx_;
+    const auto& rc = _renderCtx;
 
     // Calculate pixel position from cell position
-    float pixelX = x_ * rc.cellWidth;
-    float pixelY = y_ * rc.cellHeight;
-    float pixelW = widthCells_ * rc.cellWidth;
-    float pixelH = heightCells_ * rc.cellHeight;
+    float pixelX = _x * rc.cellWidth;
+    float pixelY = _y * rc.cellHeight;
+    float pixelW = _widthCells * rc.cellWidth;
+    float pixelH = _heightCells * rc.cellHeight;
 
     // For Relative widgets, adjust position when viewing scrollback
-    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
@@ -257,7 +275,7 @@ Result<void> RichTextW::render(WebGPUContext& ctx) {
         }
         pendingSpans_.clear();
 
-        initialized_ = true;
+        _initialized = true;
     }
 
     // Render
@@ -266,18 +284,18 @@ Result<void> RichTextW::render(WebGPUContext& ctx) {
 }
 
 bool RichTextW::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (failed_ || !visible_) return false;
+    if (failed_ || !_visible) return false;
 
-    const auto& rc = renderCtx_;
+    const auto& rc = _renderCtx;
 
     // Calculate pixel position from cell position
-    float pixelX = x_ * rc.cellWidth;
-    float pixelY = y_ * rc.cellHeight;
-    float pixelW = widthCells_ * rc.cellWidth;
-    float pixelH = heightCells_ * rc.cellHeight;
+    float pixelX = _x * rc.cellWidth;
+    float pixelY = _y * rc.cellHeight;
+    float pixelW = _widthCells * rc.cellWidth;
+    float pixelH = _heightCells * rc.cellHeight;
 
     // For Relative widgets, adjust position when viewing scrollback
-    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
@@ -313,7 +331,7 @@ bool RichTextW::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
         }
         pendingSpans_.clear();
 
-        initialized_ = true;
+        _initialized = true;
     }
 
     // Use batched render
@@ -335,7 +353,7 @@ bool RichTextW::onMouseScroll(float xoffset, float yoffset, int mods) {
     richText_->scroll(-scrollAmount);
 
     // Clamp scroll
-    float maxScroll = std::max(0.0f, richText_->getContentHeight() - static_cast<float>(pixelHeight_));
+    float maxScroll = std::max(0.0f, richText_->getContentHeight() - static_cast<float>(_pixelHeight));
     if (richText_->getScrollOffset() > maxScroll) {
         richText_->setScrollOffset(maxScroll);
     }
@@ -355,8 +373,8 @@ const char* name() {
     return "rich-text";
 }
 
-yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine) {
-    return yetty::RichTextPlugin::create(std::move(engine));
+yetty::Result<yetty::PluginPtr> create() {
+    return yetty::RichTextPlugin::create();
 }
 
 }

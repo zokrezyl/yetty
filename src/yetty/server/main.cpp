@@ -9,7 +9,7 @@
 #include "../shared-grid.h"
 #include "../terminal-backend.h"
 
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 #include <uv.h>
 
 #include <csignal>
@@ -62,7 +62,7 @@ void handleClientCommand(uv_pipe_t* client, const std::string& cmd);
 
 void onNewConnection(uv_stream_t* server, int status) {
     if (status < 0) {
-        spdlog::error("Connection error: {}", uv_strerror(status));
+        yerror("Connection error: {}", uv_strerror(status));
         return;
     }
 
@@ -73,7 +73,7 @@ void onNewConnection(uv_stream_t* server, int status) {
         client->data = nullptr;
         g_state.clients.push_back(client);
         uv_read_start(reinterpret_cast<uv_stream_t*>(client), allocBuffer, onClientRead);
-        spdlog::info("Client connected ({} total)", g_state.clients.size());
+        yinfo("Client connected ({} total)", g_state.clients.size());
         
         // Send initial state
         std::string msg = "CONNECTED " + g_state.shmName + " " +
@@ -99,7 +99,7 @@ void onClientRead(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
     
     if (nread < 0) {
         if (nread != UV_EOF) {
-            spdlog::error("Read error: {}", uv_strerror(nread));
+            yerror("Read error: {}", uv_strerror(nread));
         }
         // Remove client
         auto it = std::find(g_state.clients.begin(), g_state.clients.end(), client);
@@ -108,7 +108,7 @@ void onClientRead(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
         }
         uv_close(reinterpret_cast<uv_handle_t*>(client),
                  [](uv_handle_t* h) { delete reinterpret_cast<uv_pipe_t*>(h); });
-        spdlog::info("Client disconnected ({} remaining)", g_state.clients.size());
+        yinfo("Client disconnected ({} remaining)", g_state.clients.size());
         delete[] buf->base;
         return;
     }
@@ -133,7 +133,7 @@ void handleClientCommand(uv_pipe_t* client, const std::string& cmd) {
         
         if (line.empty()) continue;
         
-        spdlog::debug("Command from client: {}", line);
+        ydebug("Command from client: {}", line);
         
         // Parse command
         if (line.rfind("KEY ", 0) == 0) {
@@ -174,9 +174,9 @@ void handleClientCommand(uv_pipe_t* client, const std::string& cmd) {
                     yetty::SharedGrid::unlink(g_state.shmName);
                     g_state.sharedGrid.reset(yetty::SharedGrid::createServer(g_state.shmName, cols, rows));
                     if (!g_state.sharedGrid || !g_state.sharedGrid->isValid()) {
-                        spdlog::error("Failed to recreate shared grid for resize");
+                        yerror("Failed to recreate shared grid for resize");
                     } else {
-                        spdlog::info("Resized to {}x{}", cols, rows);
+                        yinfo("Resized to {}x{}", cols, rows);
                         // Notify all clients to remap
                         std::string msg = "RESIZED " + g_state.shmName + " " + 
                                           std::to_string(cols) + " " + std::to_string(rows) + "\n";
@@ -301,7 +301,7 @@ void broadcastDamage() {
 //=============================================================================
 
 void onSignal(uv_signal_t*, int) {
-    spdlog::info("Received signal, shutting down...");
+    yinfo("Received signal, shutting down...");
     g_state.running = false;
     uv_stop(g_state.loop);
 }
@@ -324,8 +324,7 @@ void printUsage(const char* prog) {
 } // anonymous namespace
 
 int main(int argc, char* argv[]) {
-    spdlog::set_level(spdlog::level::info);
-    spdlog::info("yetty-server starting...");
+    yinfo("yetty-server starting...");
 
     // Default paths
     const char* xdgRuntime = getenv("XDG_RUNTIME_DIR");
@@ -363,21 +362,21 @@ int main(int argc, char* argv[]) {
     // Create shared grid
     g_state.sharedGrid.reset(yetty::SharedGrid::createServer(g_state.shmName, g_state.cols, g_state.rows));
     if (!g_state.sharedGrid || !g_state.sharedGrid->isValid()) {
-        spdlog::error("Failed to create shared grid");
+        yerror("Failed to create shared grid");
         return 1;
     }
 
     // Create terminal backend (without font - glyph indices will be codepoints)
     auto backendResult = yetty::LocalTerminalBackend::create(g_state.cols, g_state.rows, nullptr, g_state.loop);
     if (!backendResult) {
-        spdlog::error("Failed to create terminal backend: {}", backendResult.error().message());
+        yerror("Failed to create terminal backend: {}", backendResult.error().message());
         return 1;
     }
     g_state.backend = std::move(*backendResult);
 
     // Start shell
     if (auto res = g_state.backend->start(shell); !res) {
-        spdlog::error("Failed to start shell: {}", res.error().message());
+        yerror("Failed to start shell: {}", res.error().message());
         return 1;
     }
 
@@ -390,13 +389,13 @@ int main(int argc, char* argv[]) {
     
     int r = uv_pipe_bind(g_state.server, g_state.socketPath.c_str());
     if (r < 0) {
-        spdlog::error("Bind error: {}", uv_strerror(r));
+        yerror("Bind error: {}", uv_strerror(r));
         return 1;
     }
     
     r = uv_listen(reinterpret_cast<uv_stream_t*>(g_state.server), 128, onNewConnection);
     if (r < 0) {
-        spdlog::error("Listen error: {}", uv_strerror(r));
+        yerror("Listen error: {}", uv_strerror(r));
         return 1;
     }
 
@@ -415,14 +414,14 @@ int main(int argc, char* argv[]) {
     uv_signal_start(&sigint, onSignal, SIGINT);
     uv_signal_start(&sigterm, onSignal, SIGTERM);
 
-    spdlog::info("Server listening on {} (shm: {})", g_state.socketPath, g_state.shmName);
-    spdlog::info("Grid: {}x{}", g_state.cols, g_state.rows);
+    yinfo("Server listening on {} (shm: {})", g_state.socketPath, g_state.shmName);
+    yinfo("Grid: {}x{}", g_state.cols, g_state.rows);
 
     // Run event loop
     uv_run(g_state.loop, UV_RUN_DEFAULT);
 
     // Cleanup
-    spdlog::info("Shutting down...");
+    yinfo("Shutting down...");
     
     uv_timer_stop(g_state.syncTimer);
     uv_close(reinterpret_cast<uv_handle_t*>(g_state.syncTimer),
@@ -450,6 +449,6 @@ int main(int argc, char* argv[]) {
     
     uv_loop_close(g_state.loop);
     
-    spdlog::info("Server stopped");
+    yinfo("Server stopped");
     return 0;
 }

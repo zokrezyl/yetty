@@ -2,7 +2,7 @@
 #include "shared-grid.h"
 #include <yetty/font.h>
 
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 #include <cstring>
 #include <vector>
 #include <chrono>
@@ -66,7 +66,7 @@ Result<void> RemoteTerminalBackend::init(const std::string& serverSocketPath) no
     
     readBuffer_ = std::make_unique<char[]>(READ_BUFFER_SIZE);
     
-    spdlog::info("RemoteTerminalBackend: will connect to {}", socketPath_);
+    yinfo("RemoteTerminalBackend: will connect to {}", socketPath_);
     return Ok();
 }
 
@@ -82,11 +82,11 @@ RemoteTerminalBackend::~RemoteTerminalBackend() {
 Result<void> RemoteTerminalBackend::start(const std::string& shell) {
     if (running_) return Ok();
     
-    spdlog::info("RemoteTerminalBackend: starting (shell='{}')", shell);
+    yinfo("RemoteTerminalBackend: starting (shell='{}')", shell);
     
     // Try to connect to existing server
     if (auto res = connectToServer(); !res) {
-        spdlog::info("RemoteTerminalBackend: server not running, spawning yetty-server...");
+        yinfo("RemoteTerminalBackend: server not running, spawning yetty-server...");
         
         // Spawn server
         if (auto spawnRes = spawnServer(shell); !spawnRes) {
@@ -129,7 +129,7 @@ Result<void> RemoteTerminalBackend::start(const std::string& shell) {
     // Tell server our desired grid size (client dictates size, not server)
     resize(cols_, rows_);
     
-    spdlog::info("RemoteTerminalBackend: connected to server, grid mapped");
+    yinfo("RemoteTerminalBackend: connected to server, grid mapped");
     return Ok();
 }
 
@@ -173,7 +173,7 @@ Result<void> RemoteTerminalBackend::spawnServer(const std::string& shell) noexce
         serverPath = "yetty-server";
     }
     
-    spdlog::info("RemoteTerminalBackend: spawning {}", serverPath);
+    yinfo("RemoteTerminalBackend: spawning {}", serverPath);
     
     pid_t pid = fork();
     if (pid < 0) {
@@ -229,7 +229,7 @@ Result<void> RemoteTerminalBackend::spawnServer(const std::string& shell) noexce
     
     // Parent - server spawned
     serverPid_ = pid;
-    spdlog::info("RemoteTerminalBackend: spawned server PID {}", pid);
+    yinfo("RemoteTerminalBackend: spawned server PID {}", pid);
     return Ok();
 #else
     return Err<void>("Windows not implemented");
@@ -320,7 +320,7 @@ Result<void> RemoteTerminalBackend::mapSharedGrid() noexcept {
     cols_ = sharedGrid_->getCols();
     rows_ = sharedGrid_->getRows();
     
-    spdlog::info("RemoteTerminalBackend: using SharedGridView for zero-copy access to {}x{} grid", 
+    yinfo("RemoteTerminalBackend: using SharedGridView for zero-copy access to {}x{} grid", 
                  cols_, rows_);
     
     return Ok();
@@ -485,7 +485,7 @@ std::string RemoteTerminalBackend::getSelectedText() {
     if (!connected_) return "";
     
     // For now, return empty - server will need to provide this
-    spdlog::warn("RemoteTerminalBackend::getSelectedText: TODO - request from server");
+    ywarn("RemoteTerminalBackend::getSelectedText: TODO - request from server");
     return "";
 }
 
@@ -538,7 +538,7 @@ void RemoteTerminalBackend::sendCommand(const std::string& cmd) {
     uv_write(req, reinterpret_cast<uv_stream_t*>(socket_), &buf, 1,
              [](uv_write_t* req, int status) {
                  if (status < 0) {
-                     spdlog::error("RemoteTerminalBackend: write error: {}", uv_strerror(status));
+                     yerror("RemoteTerminalBackend: write error: {}", uv_strerror(status));
                  }
                  delete[] static_cast<char*>(req->data);
                  delete req;
@@ -555,7 +555,7 @@ void RemoteTerminalBackend::onServerMessage(const char* data, size_t len) {
     //   "SCROLLBACK <size>\n"
     
     std::string msg(data, len);
-    spdlog::debug("RemoteTerminalBackend: received: {}", msg);
+    ydebug("RemoteTerminalBackend: received: {}", msg);
     
     // Handle multiple messages (may be buffered together)
     size_t pos = 0;
@@ -593,21 +593,21 @@ void RemoteTerminalBackend::onServerMessage(const char* data, size_t len) {
             }
         } else if (line.rfind("CONNECTED ", 0) == 0) {
             // Already handled during connection setup
-            spdlog::debug("RemoteTerminalBackend: server confirmed connection");
+            ydebug("RemoteTerminalBackend: server confirmed connection");
         } else if (line.rfind("RESIZED ", 0) == 0) {
             // Server resized the grid, need to remap shared memory
             // Format: RESIZED <shmName> <cols> <rows>
             char shmName[256];
             uint32_t newCols, newRows;
             if (sscanf(line.c_str(), "RESIZED %255s %u %u", shmName, &newCols, &newRows) == 3) {
-                spdlog::info("RemoteTerminalBackend: server resized to {}x{}, remapping shm", newCols, newRows);
+                yinfo("RemoteTerminalBackend: server resized to {}x{}, remapping shm", newCols, newRows);
                 shmName_ = shmName;
                 
                 // Remap shared memory
                 sharedGrid_.reset();
                 sharedGrid_.reset(SharedGrid::openClient(shmName_));
                 if (!sharedGrid_ || !sharedGrid_->isValid()) {
-                    spdlog::error("Failed to remap shared memory after resize");
+                    yerror("Failed to remap shared memory after resize");
                 } else {
                     // Update SharedGridView
                     sharedGridView_ = std::make_unique<SharedGridView>(sharedGrid_.get());
@@ -615,7 +615,7 @@ void RemoteTerminalBackend::onServerMessage(const char* data, size_t len) {
                     cols_ = newCols;
                     rows_ = newRows;
                     fullDamage_ = true;
-                    spdlog::info("RemoteTerminalBackend: remapped to {}x{}", newCols, newRows);
+                    yinfo("RemoteTerminalBackend: remapped to {}x{}", newCols, newRows);
                 }
             }
         }
@@ -631,12 +631,12 @@ void RemoteTerminalBackend::onConnect(uv_connect_t* req, int status) {
     delete req;
     
     if (status < 0) {
-        spdlog::error("RemoteTerminalBackend: connect error: {}", uv_strerror(status));
+        yerror("RemoteTerminalBackend: connect error: {}", uv_strerror(status));
         self->connected_ = false;
         return;
     }
     
-    spdlog::info("RemoteTerminalBackend: connected to server");
+    yinfo("RemoteTerminalBackend: connected to server");
     self->connected_ = true;
     
     // Start reading from server
@@ -654,7 +654,7 @@ void RemoteTerminalBackend::onRead(uv_stream_t* stream, ssize_t nread, const uv_
     
     if (nread < 0) {
         if (nread != UV_EOF) {
-            spdlog::error("RemoteTerminalBackend: read error: {}", uv_strerror(nread));
+            yerror("RemoteTerminalBackend: read error: {}", uv_strerror(nread));
         }
         self->connected_ = false;
         self->running_ = false;

@@ -27,19 +27,30 @@ class VideoPlugin : public Plugin {
 public:
     ~VideoPlugin() override;
 
-    static Result<PluginPtr> create(YettyPtr engine) noexcept;
+    static Result<PluginPtr> create() noexcept;
 
     const char* pluginName() const override { return "video"; }
 
     Result<void> dispose() override;
 
-    Result<WidgetPtr> createWidget(const std::string& payload) override;
+    Result<WidgetPtr> createWidget(
+        const std::string& widgetName,
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) override;
 
     // Check if data looks like a video format
     static bool isVideoFormat(const std::string& data);
 
 private:
-    explicit VideoPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
+    VideoPlugin() noexcept = default;
     Result<void> pluginInit() noexcept;
 };
 
@@ -53,8 +64,26 @@ private:
 //-----------------------------------------------------------------------------
 class Video : public Widget {
 public:
-    static Result<WidgetPtr> create(const std::string& payload) {
+    static Result<WidgetPtr> create(
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) {
+        (void)factory;
+        (void)fontManager;
+        (void)loop;
+        (void)pluginArgs;
         auto w = std::shared_ptr<Video>(new Video(payload));
+        w->_x = x;
+        w->_y = y;
+        w->_widthCells = widthCells;
+        w->_heightCells = heightCells;
         if (auto res = w->init(); !res) {
             return Err<WidgetPtr>("Failed to init Video", res);
         }
@@ -85,7 +114,7 @@ public:
 
 private:
     explicit Video(const std::string& payload) {
-        payload_ = payload;
+        _payload = payload;
     }
 
     Result<void> init() override;
@@ -141,5 +170,5 @@ private:
 
 extern "C" {
     const char* name();
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine);
+    yetty::Result<yetty::PluginPtr> create();
 }

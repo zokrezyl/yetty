@@ -1,9 +1,8 @@
 #include "remote-terminal.h"
 #include "grid-renderer.h"
-#include "yetty/plugin-manager.h"
 
 #include <chrono>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 
 namespace yetty {
 
@@ -13,15 +12,16 @@ namespace yetty {
 
 Result<RemoteTerminal::Ptr> RemoteTerminal::create(
     uint32_t id, uint32_t cols, uint32_t rows, Font* font, uv_loop_t* loop) noexcept {
-    
+    (void)id;  // Ignored - Widget base class auto-assigns IDs
+
     if (!font) {
         return Err<Ptr>("RemoteTerminal::create: null Font");
     }
     if (!loop) {
         return Err<Ptr>("RemoteTerminal::create: null libuv loop");
     }
-    
-    auto term = Ptr(new RemoteTerminal(id, cols, rows, font, loop));
+
+    auto term = Ptr(new RemoteTerminal(cols, rows, font, loop));
     if (auto res = term->init(); !res) {
         return Err<Ptr>("Failed to initialize RemoteTerminal", res);
     }
@@ -29,25 +29,27 @@ Result<RemoteTerminal::Ptr> RemoteTerminal::create(
 }
 
 RemoteTerminal::RemoteTerminal(
-    uint32_t id, uint32_t cols, uint32_t rows, Font* font, uv_loop_t* loop) noexcept
-    : id_(id)
-    , name_("remote-terminal-" + std::to_string(id))
-    , loop_(loop)
-    , font_(font)
-    , cols_(cols)
-    , rows_(rows) {}
+    uint32_t cols, uint32_t rows, Font* font, uv_loop_t* loop) noexcept
+    : Widget()
+    , _loop(loop)
+    , _font(font)
+    , _cols(cols)
+    , _rows(rows)
+{
+    _name = "remote-terminal-" + std::to_string(id());
+}
 
 Result<void> RemoteTerminal::init() noexcept {
     // Create remote backend
-    auto backendResult = RemoteTerminalBackend::create(cols_, rows_, loop_);
+    auto backendResult = RemoteTerminalBackend::create(_cols, _rows, _loop);
     if (!backendResult) {
         return Err<void>("Failed to create RemoteTerminalBackend", backendResult);
     }
-    backend_ = *backendResult;
-    
+    _backend = *backendResult;
+
     // Pass Font for codepoint-to-glyph conversion
-    backend_->setFont(font_);
-    
+    _backend->setFont(_font);
+
     // Set up callbacks for server notifications
     TerminalBackendCallbacks callbacks;
     callbacks.onBell = []() {
@@ -56,10 +58,10 @@ Result<void> RemoteTerminal::init() noexcept {
 #endif
     };
     callbacks.onTitleChange = [](const std::string& title) {
-        spdlog::debug("RemoteTerminal: title changed to '{}'", title);
+        ydebug("RemoteTerminal: title changed to '{}'", title);
     };
-    backend_->setCallbacks(callbacks);
-    
+    _backend->setCallbacks(callbacks);
+
     return Ok();
 }
 
@@ -72,37 +74,37 @@ RemoteTerminal::~RemoteTerminal() {
 //=============================================================================
 
 void RemoteTerminal::start() {
-    spdlog::info("RemoteTerminal: starting...");
-    
+    yinfo("RemoteTerminal: starting...");
+
     // Start backend (connects to server or spawns one)
-    if (auto res = backend_->start(shell_); !res) {
-        spdlog::error("RemoteTerminal: failed to start backend: {}", res.error().message());
+    if (auto res = _backend->start(_shell); !res) {
+        yerror("RemoteTerminal: failed to start backend: {}", res.error().message());
         return;
     }
-    
+
     // Now that SharedGridView exists, set the Font for codepoint conversion
-    backend_->setFont(font_);
-    
+    _backend->setFont(_font);
+
     // Create cursor blink timer
-    cursorTimer_ = new uv_timer_t;
-    uv_timer_init(loop_, cursorTimer_);
-    cursorTimer_->data = this;
-    uv_timer_start(cursorTimer_, onTimer, 16, 16);  // ~60 FPS for cursor blink
-    
-    spdlog::info("RemoteTerminal: started");
+    _cursorTimer = new uv_timer_t;
+    uv_timer_init(_loop, _cursorTimer);
+    _cursorTimer->data = this;
+    uv_timer_start(_cursorTimer, onTimer, 16, 16);  // ~60 FPS for cursor blink
+
+    yinfo("RemoteTerminal: started");
 }
 
 void RemoteTerminal::stop() {
-    if (cursorTimer_) {
-        uv_timer_stop(cursorTimer_);
-        uv_close(reinterpret_cast<uv_handle_t*>(cursorTimer_), [](uv_handle_t* h) {
+    if (_cursorTimer) {
+        uv_timer_stop(_cursorTimer);
+        uv_close(reinterpret_cast<uv_handle_t*>(_cursorTimer), [](uv_handle_t* h) {
             delete reinterpret_cast<uv_timer_t*>(h);
         });
-        cursorTimer_ = nullptr;
+        _cursorTimer = nullptr;
     }
-    
-    if (backend_) {
-        backend_->stop();
+
+    if (_backend) {
+        _backend->stop();
     }
 }
 
@@ -111,41 +113,38 @@ void RemoteTerminal::stop() {
 //=============================================================================
 
 Result<void> RemoteTerminal::render(WebGPUContext& ctx) {
-    (void)ctx;  // We use renderer_ directly
+    (void)ctx;  // We use _renderer directly
 
-    if (!backend_ || !backend_->isRunning()) {
+    if (!_backend || !_backend->isRunning()) {
         return Ok();
     }
 
-    if (!renderer_) {
+    if (!_renderer) {
         return Ok();
     }
 
     // Sync cursor/state from shared memory header
-    backend_->syncToGrid();
+    _backend->syncToGrid();
 
-    // Check if plugins need rendering
-    bool pluginsActive = pluginManager_ && !pluginManager_->getAllWidgets().empty();
+    bool hasDamage = _backend->hasDamage();
+    bool fullDamage = _backend->hasFullDamage();
 
-    bool hasDamage = backend_->hasDamage();
-    bool fullDamage = backend_->hasFullDamage();
-
-    // Skip rendering if no damage AND no plugins need base
-    if (!hasDamage && !pluginsActive) {
+    // Skip rendering if no damage
+    if (!hasDamage) {
         return Ok();
     }
 
     // Get damage info
-    const auto& damageRects = backend_->getDamageRects();
+    const auto& damageRects = _backend->getDamageRects();
 
     // Render the grid - getGrid() returns SharedGridView which reads directly from shm
-    renderer_->render(backend_->getGrid(), damageRects, fullDamage,
-                      backend_->getCursorCol(), backend_->getCursorRow(),
-                      backend_->isCursorVisible() && cursorBlink_);
+    _renderer->render(_backend->getGrid(), damageRects, fullDamage,
+                      _backend->getCursorCol(), _backend->getCursorRow(),
+                      _backend->isCursorVisible() && _cursorBlink);
 
     // Clear damage after rendering
-    backend_->clearDamageRects();
-    backend_->clearFullDamage();
+    _backend->clearDamageRects();
+    _backend->clearFullDamage();
 
     return Ok();
 }
@@ -155,28 +154,28 @@ Result<void> RemoteTerminal::render(WebGPUContext& ctx) {
 //=============================================================================
 
 void RemoteTerminal::sendKey(uint32_t codepoint, VTermModifier mod) {
-    if (backend_) {
-        backend_->sendKey(codepoint, mod);
+    if (_backend) {
+        _backend->sendKey(codepoint, mod);
     }
 }
 
 void RemoteTerminal::sendSpecialKey(VTermKey key, VTermModifier mod) {
-    if (backend_) {
-        backend_->sendSpecialKey(key, mod);
+    if (_backend) {
+        _backend->sendSpecialKey(key, mod);
     }
 }
 
 void RemoteTerminal::sendRaw(const char* data, size_t len) {
-    if (backend_) {
-        backend_->sendRaw(data, len);
+    if (_backend) {
+        _backend->sendRaw(data, len);
     }
 }
 
 void RemoteTerminal::resize(uint32_t cols, uint32_t rows) {
-    cols_ = cols;
-    rows_ = rows;
-    if (backend_) {
-        backend_->resize(cols, rows);
+    _cols = cols;
+    _rows = rows;
+    if (_backend) {
+        _backend->resize(cols, rows);
     }
 }
 
@@ -185,17 +184,17 @@ void RemoteTerminal::resize(uint32_t cols, uint32_t rows) {
 //=============================================================================
 
 void RemoteTerminal::setCellSize(uint32_t width, uint32_t height) {
-    cellWidth_ = width;
-    cellHeight_ = height;
+    _cellWidth = width;
+    _cellHeight = height;
 }
 
 void RemoteTerminal::setBaseCellSize(float width, float height) {
-    baseCellWidth_ = width;
-    baseCellHeight_ = height;
+    _baseCellWidth = width;
+    _baseCellHeight = height;
 }
 
 void RemoteTerminal::setZoomLevel(float zoom) {
-    zoomLevel_ = zoom;
+    _zoomLevel = zoom;
 }
 
 //=============================================================================
@@ -212,9 +211,9 @@ void RemoteTerminal::onTimer(uv_timer_t* handle) {
 }
 
 void RemoteTerminal::updateCursorBlink(double currentTime) {
-    if (currentTime - lastBlinkTime_ >= blinkInterval_) {
-        cursorBlink_ = !cursorBlink_;
-        lastBlinkTime_ = currentTime;
+    if (currentTime - _lastBlinkTime >= _blinkInterval) {
+        _cursorBlink = !_cursorBlink;
+        _lastBlinkTime = currentTime;
     }
 }
 

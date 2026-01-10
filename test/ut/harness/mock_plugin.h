@@ -15,11 +15,6 @@ namespace yetty::test {
 
 //-----------------------------------------------------------------------------
 // MockPluginWidget - Simple widget for testing
-//
-// Two-phase construction:
-//   1. Constructor (private) - stores payload
-//   2. init() (private) - no args, returns Result
-//   3. create() (public) - factory
 //-----------------------------------------------------------------------------
 class MockPluginWidget : public Widget {
 public:
@@ -34,74 +29,74 @@ public:
     ~MockPluginWidget() override = default;
 
     Result<void> dispose() override {
-        dispose_called_ = true;
+        _disposeCalled = true;
         return Ok();
     }
 
     Result<void> render(WebGPUContext& ctx) override {
         (void)ctx;
-        render_count_++;
+        _renderCount++;
         return Ok();
     }
 
     bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override {
         (void)pass;
         (void)ctx;
-        render_count_++;
+        _renderCount++;
         return true;
     }
 
     bool onMouseMove(float localX, float localY) override {
-        last_mouse_x_ = localX;
-        last_mouse_y_ = localY;
-        mouse_move_count_++;
-        return wants_mouse_;
+        _lastMouseX = localX;
+        _lastMouseY = localY;
+        _mouseMoveCount++;
+        return _wantsMouse;
     }
 
     bool onMouseButton(int button, bool pressed) override {
-        last_button_ = button;
-        last_pressed_ = pressed;
-        mouse_button_count_++;
-        return wants_mouse_;
+        _lastButton = button;
+        _lastPressed = pressed;
+        _mouseButtonCount++;
+        return _wantsMouse;
     }
 
-    bool wantsKeyboard() const override { return wants_keyboard_; }
-    bool wantsMouse() const override { return wants_mouse_; }
+    bool wantsKeyboard() const override { return _wantsKeyboard; }
+    bool wantsMouse() const override { return _wantsMouse; }
 
     // Test inspection
-    bool initCalled() const { return init_called_; }
-    bool disposeCalled() const { return dispose_called_; }
-    int renderCount() const { return render_count_; }
-    float lastMouseX() const { return last_mouse_x_; }
-    float lastMouseY() const { return last_mouse_y_; }
-    int mouseButtonCount() const { return mouse_button_count_; }
-    int mouseMoveCount() const { return mouse_move_count_; }
+    bool initCalled() const { return _initCalled; }
+    bool disposeCalled() const { return _disposeCalled; }
+    int renderCount() const { return _renderCount; }
+    float lastMouseX() const { return _lastMouseX; }
+    float lastMouseY() const { return _lastMouseY; }
+    int mouseMoveCount() const { return _mouseMoveCount; }
+    int mouseButtonCount() const { return _mouseButtonCount; }
 
     // Test control
-    void setWantsKeyboard(bool v) { wants_keyboard_ = v; }
-    void setWantsMouse(bool v) { wants_mouse_ = v; }
+    void setWantsKeyboard(bool v) { _wantsKeyboard = v; }
+    void setWantsMouse(bool v) { _wantsMouse = v; }
 
 private:
     explicit MockPluginWidget(const std::string& payload) {
-        payload_ = payload;
+        _payload = payload;
     }
 
     Result<void> init() override {
-        init_called_ = true;
+        _initCalled = true;
         return Ok();
     }
 
-    bool init_called_ = false;
-    bool dispose_called_ = false;
-    int render_count_ = 0;
-    float last_mouse_x_ = 0;
-    float last_mouse_y_ = 0;
-    int last_button_ = 0;
-    bool last_pressed_ = false;
-    int mouse_button_count_ = 0;
-    int mouse_move_count_ = 0;
-    bool wants_keyboard_ = false;
-    bool wants_mouse_ = false;
+    bool _initCalled = false;
+    bool _disposeCalled = false;
+    int _renderCount = 0;
+    float _lastMouseX = 0;
+    float _lastMouseY = 0;
+    int _lastButton = 0;
+    bool _lastPressed = false;
+    int _mouseMoveCount = 0;
+    int _mouseButtonCount = 0;
+    bool _wantsKeyboard = false;
+    bool _wantsMouse = false;
 };
 
 //-----------------------------------------------------------------------------
@@ -111,9 +106,9 @@ class MockPlugin : public Plugin {
 public:
     ~MockPlugin() override = default;
 
-    static Result<PluginPtr> create(YettyPtr engine) noexcept {
-        auto p = PluginPtr(new MockPlugin(std::move(engine)));
-        if (auto res = static_cast<MockPlugin*>(p.get())->pluginInit(); !res) {
+    static Result<PluginPtr> create() noexcept {
+        auto p = PluginPtr(new MockPlugin());
+        if (auto res = p->init(nullptr); !res) {
             return Err<PluginPtr>("Failed to init MockPlugin", res);
         }
         return Ok(p);
@@ -121,41 +116,54 @@ public:
 
     const char* pluginName() const override { return "mock"; }
 
-    Result<WidgetPtr> createWidget(const std::string& payload) override {
+    Result<WidgetPtr> createWidget(
+        const std::string& widgetName,
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) override {
+        (void)widgetName;
+        (void)factory;
+        (void)fontManager;
+        (void)loop;
+        (void)x;
+        (void)y;
+        (void)widthCells;
+        (void)heightCells;
+        (void)pluginArgs;
         auto result = MockPluginWidget::create(payload);
         if (!result) {
             return Err<WidgetPtr>("Failed to create mock widget", result);
         }
-        auto layer = std::static_pointer_cast<MockPluginWidget>(*result);
-        created_layers_.push_back(layer);
-        return Ok<WidgetPtr>(layer);
+        auto widget = std::static_pointer_cast<MockPluginWidget>(*result);
+        _createdWidgets.push_back(widget);
+        return Ok<WidgetPtr>(widget);
     }
 
-    Result<void> render(WebGPUContext& ctx) override {
+    Result<void> init(WebGPUContext* ctx) override {
         (void)ctx;
-        render_count_++;
+        _initialized = true;
+        _initCount++;
         return Ok();
     }
 
     // Test inspection
-    int initCount() const { return init_count_; }
-    int renderCount() const { return render_count_; }
+    int initCount() const { return _initCount; }
     const std::vector<std::shared_ptr<MockPluginWidget>>& createdWidgets() const {
-        return created_layers_;
+        return _createdWidgets;
     }
 
 private:
-    explicit MockPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
+    MockPlugin() noexcept = default;
 
-    Result<void> pluginInit() noexcept {
-        initialized_ = true;
-        init_count_++;
-        return Ok();
-    }
-
-    int init_count_ = 0;
-    int render_count_ = 0;
-    std::vector<std::shared_ptr<MockPluginWidget>> created_layers_;
+    int _initCount = 0;
+    std::vector<std::shared_ptr<MockPluginWidget>> _createdWidgets;
 };
 
 } // namespace yetty::test

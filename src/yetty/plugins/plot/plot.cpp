@@ -2,7 +2,8 @@
 #include <yetty/yetty.h>
 #include <yetty/webgpu-context.h>
 #include <yetty/wgpu-compat.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
+#include <ytrace/ytrace.hpp>
 #include <cstring>
 #include <cmath>
 #include <algorithm>
@@ -39,8 +40,8 @@ PlotPlugin::~PlotPlugin() {
     (void)dispose();
 }
 
-Result<PluginPtr> PlotPlugin::create(YettyPtr engine) noexcept {
-    auto p = PluginPtr(new PlotPlugin(std::move(engine)));
+Result<PluginPtr> PlotPlugin::create() noexcept {
+    auto p = PluginPtr(new PlotPlugin());
     if (auto res = static_cast<PlotPlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init PlotPlugin", res);
     }
@@ -48,7 +49,7 @@ Result<PluginPtr> PlotPlugin::create(YettyPtr engine) noexcept {
 }
 
 Result<void> PlotPlugin::pluginInit() noexcept {
-    initialized_ = true;
+    _initialized = true;
     return Ok();
 }
 
@@ -56,11 +57,33 @@ Result<void> PlotPlugin::dispose() {
     if (auto res = Plugin::dispose(); !res) {
         return Err<void>("Failed to dispose PlotPlugin", res);
     }
-    initialized_ = false;
+    _initialized = false;
     return Ok();
 }
 
-Result<WidgetPtr> PlotPlugin::createWidget(const std::string& payload) {
+Result<WidgetPtr> PlotPlugin::createWidget(
+    const std::string& widgetName,
+    WidgetFactory* factory,
+    FontManager* fontManager,
+    uv_loop_t* loop,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
+    const std::string& pluginArgs,
+    const std::string& payload
+) {
+    (void)widgetName;
+    (void)factory;
+    (void)fontManager;
+    (void)loop;
+    (void)x;
+    (void)y;
+    (void)widthCells;
+    (void)heightCells;
+    (void)pluginArgs;
+    yfunc();
+    yinfo("payload size={}", payload.size());
     return PlotW::create(payload);
 }
 
@@ -69,7 +92,7 @@ Result<void> PlotPlugin::renderAll(WGPUTextureView targetView, WGPUTextureFormat
                                     float cellWidth, float cellHeight,
                                     int scrollOffset, uint32_t termRows,
                                     bool isAltScreen) {
-    if (!engine_) return Err<void>("PlotPlugin::renderAll: no engine");
+    // Note: renderAll is deprecated - widgets should use render(pass, ctx)
 
     ScreenType currentScreen = isAltScreen ? ScreenType::Alternate : ScreenType::Main;
     for (auto& layerBase : widgets_) {
@@ -94,7 +117,7 @@ Result<void> PlotPlugin::renderAll(WGPUTextureView targetView, WGPUTextureFormat
             }
         }
 
-        if (auto res = layer->render(*engine_->context(), targetView, targetFormat,
+        if (auto res = layer->render(*_ctx, targetView, targetFormat,
                                       screenWidth, screenHeight,
                                       pixelX, pixelY, pixelW, pixelH); !res) {
             return Err<void>("Failed to render PlotW layer", res);
@@ -114,7 +137,7 @@ PlotW::~PlotW() {
 Result<void> PlotW::init() {
     std::memcpy(colors_, DEFAULT_COLORS, sizeof(colors_));
 
-    if (payload_.empty()) {
+    if (_payload.empty()) {
         return Ok();
     }
 
@@ -122,8 +145,8 @@ Result<void> PlotW::init() {
     // Header size: 8 + 16 = 24 bytes
     constexpr size_t HEADER_SIZE = 24;
 
-    if (payload_.size() >= HEADER_SIZE) {
-        const uint8_t* data = reinterpret_cast<const uint8_t*>(payload_.data());
+    if (_payload.size() >= HEADER_SIZE) {
+        const uint8_t* data = reinterpret_cast<const uint8_t*>(_payload.data());
 
         uint32_t n, m;
         float xmin, xmax, ymin, ymax;
@@ -138,7 +161,7 @@ Result<void> PlotW::init() {
 
         // Check if this looks like valid binary data
         if (n > 0 && n <= MAX_PLOTS && m > 0 && m <= 65536 &&
-            payload_.size() == expected_size &&
+            _payload.size() == expected_size &&
             std::isfinite(xmin) && std::isfinite(xmax) &&
             std::isfinite(ymin) && std::isfinite(ymax)) {
 
@@ -149,7 +172,7 @@ Result<void> PlotW::init() {
             setViewport(xmin, xmax, ymin, ymax);
             dataDirty_ = true;
 
-            spdlog::info("PlotW: initialized from binary (N={}, M={}, viewport=[{},{},{},{}])",
+            yinfo("PlotW: initialized from binary (N={}, M={}, viewport=[{},{},{},{}])",
                          numPlots_, numPoints_, xmin, xmax, ymin, ymax);
             return Ok();
         }
@@ -158,7 +181,7 @@ Result<void> PlotW::init() {
     // Fallback: text format "N,M" or "N,M,xmin,xmax,ymin,ymax"
     uint32_t n = 0, m = 0;
     float xmin = 0, xmax = 1, ymin = 0, ymax = 1;
-    int parsed = sscanf(payload_.c_str(), "%u,%u,%f,%f,%f,%f",
+    int parsed = sscanf(_payload.c_str(), "%u,%u,%f,%f,%f,%f",
                         &n, &m, &xmin, &xmax, &ymin, &ymax);
     if (parsed >= 2 && n > 0 && m > 0) {
         numPlots_ = std::min(n, MAX_PLOTS);
@@ -170,7 +193,7 @@ Result<void> PlotW::init() {
         }
     }
 
-    spdlog::info("PlotW: initialized (N={}, M={})", numPlots_, numPoints_);
+    yinfo("PlotW: initialized (N={}, M={})", numPlots_, numPoints_);
     return Ok();
 }
 
@@ -202,7 +225,7 @@ Result<void> PlotW::setData(const float* data, uint32_t numPlots, uint32_t numPo
     std::memcpy(data_.data(), data, numPlots_ * numPoints_ * sizeof(float));
     dataDirty_ = true;
 
-    spdlog::debug("PlotW: data updated (N={}, M={})", numPlots_, numPoints_);
+    ydebug("PlotW: data updated (N={}, M={})", numPlots_, numPoints_);
     return Ok();
 }
 
@@ -230,8 +253,8 @@ void PlotW::setGridEnabled(bool enabled) {
 }
 
 bool PlotW::onMouseMove(float localX, float localY) {
-    float normX = localX / static_cast<float>(pixelWidth_);
-    float normY = localY / static_cast<float>(pixelHeight_);
+    float normX = localX / static_cast<float>(_pixelWidth);
+    float normY = localY / static_cast<float>(_pixelHeight);
 
     if (panning_) {
         float dx = normX - panStartX_;
@@ -706,7 +729,7 @@ fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 
     if (!pipeline_) return Err<void>("Failed to create render pipeline");
 
-    spdlog::info("PlotW: pipeline created ({}x{} texture)", texWidth, texHeight);
+    yinfo("PlotW: pipeline created ({}x{} texture)", texWidth, texHeight);
     return Ok();
 }
 
@@ -714,5 +737,5 @@ fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 
 extern "C" {
     const char* name() { return "plot"; }
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine) { return yetty::PlotPlugin::create(std::move(engine)); }
+    yetty::Result<yetty::PluginPtr> create() { return yetty::PlotPlugin::create(); }
 }

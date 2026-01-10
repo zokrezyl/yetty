@@ -1,5 +1,5 @@
 #include <yetty/osc-command.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 #include <algorithm>
 #include <chrono>
 #include <cstring>

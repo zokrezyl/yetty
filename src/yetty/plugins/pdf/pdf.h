@@ -20,23 +20,35 @@ class PDFPlugin : public Plugin {
 public:
     ~PDFPlugin() override;
 
-    static Result<PluginPtr> create(YettyPtr engine) noexcept;
+    static Result<PluginPtr> create() noexcept;
 
     const char* pluginName() const override { return "pdf"; }
 
     Result<void> dispose() override;
 
-    Result<WidgetPtr> createWidget(const std::string& payload) override;
+    Result<WidgetPtr> createWidget(
+        const std::string& widgetName,
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) override;
 
     FontManager* getFontManager();
 
     void* getMupdfContext() const noexcept { return fzCtx_; }
 
 private:
-    explicit PDFPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
+    PDFPlugin() noexcept = default;
     Result<void> pluginInit() noexcept;
 
     void* fzCtx_ = nullptr;  // fz_context*
+    FontManager* _fontManager = nullptr;
 };
 
 //-----------------------------------------------------------------------------
@@ -112,7 +124,7 @@ private:
     float documentHeight_ = 0.0f;
     float scrollOffset_ = 0.0f;
 
-    bool initialized_ = false;
+    bool _initialized = false;
     bool failed_ = false;
     float lastViewWidth_ = 0.0f;
     float lastViewHeight_ = 0.0f;
@@ -122,5 +134,5 @@ private:
 
 extern "C" {
     const char* name();
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine);
+    yetty::Result<yetty::PluginPtr> create();
 }

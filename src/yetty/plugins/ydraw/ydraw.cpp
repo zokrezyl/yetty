@@ -2,7 +2,7 @@
 #include <yetty/yetty.h>
 #include <yetty/webgpu-context.h>
 #include <yetty/wgpu-compat.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 
 namespace yetty {
 
@@ -14,8 +14,8 @@ YDrawPlugin::~YDrawPlugin() {
     (void)dispose();
 }
 
-Result<PluginPtr> YDrawPlugin::create(YettyPtr engine) noexcept {
-    auto p = PluginPtr(new YDrawPlugin(std::move(engine)));
+Result<PluginPtr> YDrawPlugin::create() noexcept {
+    auto p = PluginPtr(new YDrawPlugin());
     if (auto res = static_cast<YDrawPlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init YDrawPlugin", res);
     }
@@ -23,7 +23,7 @@ Result<PluginPtr> YDrawPlugin::create(YettyPtr engine) noexcept {
 }
 
 Result<void> YDrawPlugin::pluginInit() noexcept {
-    initialized_ = true;
+    _initialized = true;
     return Ok();
 }
 
@@ -31,11 +31,31 @@ Result<void> YDrawPlugin::dispose() {
     if (auto res = Plugin::dispose(); !res) {
         return Err<void>("Failed to dispose YDrawPlugin", res);
     }
-    initialized_ = false;
+    _initialized = false;
     return Ok();
 }
 
-Result<WidgetPtr> YDrawPlugin::createWidget(const std::string& payload) {
+Result<WidgetPtr> YDrawPlugin::createWidget(
+    const std::string& widgetName,
+    WidgetFactory* factory,
+    FontManager* fontManager,
+    uv_loop_t* loop,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
+    const std::string& pluginArgs,
+    const std::string& payload
+) {
+    (void)widgetName;
+    (void)factory;
+    (void)fontManager;
+    (void)loop;
+    (void)x;
+    (void)y;
+    (void)widthCells;
+    (void)heightCells;
+    (void)pluginArgs;
     return YDrawW::create(payload);
 }
 
@@ -50,14 +70,14 @@ YDrawW::~YDrawW() {
 Result<void> YDrawW::init() {
     renderer_ = std::make_unique<YDrawRenderer>();
 
-    if (!payload_.empty()) {
-        auto result = renderer_->parse(payload_);
+    if (!_payload.empty()) {
+        auto result = renderer_->parse(_payload);
         if (!result) {
             return Err<void>("Failed to parse ydraw content", result);
         }
     }
 
-    spdlog::info("YDrawW: initialized with {} primitives", renderer_->primitiveCount());
+    yinfo("YDrawW: initialized with {} primitives", renderer_->primitiveCount());
     return Ok();
 }
 
@@ -95,19 +115,19 @@ bool YDrawW::onChar(unsigned int codepoint) {
 
 Result<void> YDrawW::render(WebGPUContext& ctx) {
     if (failed_) return Err<void>("YDrawW already failed");
-    if (!visible_) return Ok();
+    if (!_visible) return Ok();
     if (!renderer_ || renderer_->primitiveCount() == 0) return Ok();
 
-    const auto& rc = renderCtx_;
+    const auto& rc = _renderCtx;
 
     // Calculate pixel position from cell position
-    float pixelX = x_ * rc.cellWidth;
-    float pixelY = y_ * rc.cellHeight;
-    float pixelW = widthCells_ * rc.cellWidth;
-    float pixelH = heightCells_ * rc.cellHeight;
+    float pixelX = _x * rc.cellWidth;
+    float pixelY = _y * rc.cellHeight;
+    float pixelW = _widthCells * rc.cellWidth;
+    float pixelH = _heightCells * rc.cellHeight;
 
     // For Relative layers, adjust position when viewing scrollback
-    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
@@ -168,16 +188,16 @@ Result<void> YDrawW::render(WebGPUContext& ctx) {
 }
 
 bool YDrawW::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (failed_ || !visible_ || !renderer_) return false;
+    if (failed_ || !_visible || !renderer_) return false;
 
-    const auto& rc = renderCtx_;
+    const auto& rc = _renderCtx;
 
-    float pixelX = x_ * rc.cellWidth;
-    float pixelY = y_ * rc.cellHeight;
-    float pixelW = widthCells_ * rc.cellWidth;
-    float pixelH = heightCells_ * rc.cellHeight;
+    float pixelX = _x * rc.cellWidth;
+    float pixelY = _y * rc.cellHeight;
+    float pixelW = _widthCells * rc.cellWidth;
+    float pixelH = _heightCells * rc.cellHeight;
 
-    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
@@ -190,7 +210,7 @@ bool YDrawW::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
 
 extern "C" {
     const char* name() { return "ydraw"; }
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine) {
-        return yetty::YDrawPlugin::create(std::move(engine));
+    yetty::Result<yetty::PluginPtr> create() {
+        return yetty::YDrawPlugin::create();
     }
 }

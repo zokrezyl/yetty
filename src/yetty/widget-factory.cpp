@@ -1,63 +1,85 @@
 #include "widget-factory.h"
 #include <yetty/yetty.h>
 #include <yetty/webgpu-context.h>
-#include <sstream>
-#include <algorithm>
+#include <yetty/font-manager.h>
+#include <yetty/config.h>
+#include <ytrace/ytrace.hpp>
+#include <ytrace/ytrace.hpp>
+#include <filesystem>
+#include <dlfcn.h>
+
+// Built-in plugins (linked into main executable)
+#ifdef __unix__
+#include "plugins/python/python.h"
+#endif
 
 namespace yetty {
 
 //-----------------------------------------------------------------------------
-// Construction
+// Factory
 //-----------------------------------------------------------------------------
 
-WidgetFactory::WidgetFactory(Yetty* engine)
-    : engine_(engine)
+std::shared_ptr<WidgetFactory> WidgetFactory::create(
+    Yetty* engine,
+    const std::vector<std::string>& searchPaths
+) {
+    return std::shared_ptr<WidgetFactory>(new WidgetFactory(engine, searchPaths));
+}
+
+WidgetFactory::WidgetFactory(Yetty* engine, const std::vector<std::string>& searchPaths)
+    : _engine(engine)
+    , _searchPaths(searchPaths)
 {
+    // Register built-in plugins (linked into main executable)
+#ifdef __unix__
+    auto pythonResult = PythonPlugin::create();
+    if (pythonResult) {
+        _loadedPlugins["python"] = *pythonResult;
+        yinfo("Registered built-in plugin: python");
+    } else {
+        ywarn("Failed to create built-in Python plugin: {}", error_msg(pythonResult));
+    }
+#endif
 }
 
 WidgetFactory::~WidgetFactory() {
-    // Dispose all loaded plugins
-    for (auto& [name, entry] : plugins_) {
-        if (entry.instance) {
-            entry.instance->dispose();
+    for (auto& [name, plugin] : _loadedPlugins) {
+        if (plugin) {
+            plugin->dispose();
         }
     }
 }
 
-Result<void> WidgetFactory::init() {
-    ctx_ = engine_->context().get();
-    if (!ctx_) {
-        return Err<void>("WebGPU context not available");
-    }
+//-----------------------------------------------------------------------------
+// Shared resource access
+//-----------------------------------------------------------------------------
 
-    // Register built-in plugins (lazy loaded)
-    registerPlugin("thorvg");
-    registerPlugin("shader");
+FontManager* WidgetFactory::getFontManager() const {
+    return _engine ? _engine->fontManager().get() : nullptr;
+}
 
-    // Internal widgets will be registered by the engine/terminal
+WebGPUContext* WidgetFactory::getContext() const {
+    return _engine ? _engine->context().get() : nullptr;
+}
 
-    return Ok();
+Config* WidgetFactory::getConfig() const {
+    return _engine ? _engine->config().get() : nullptr;
+}
+
+uv_loop_t* WidgetFactory::getLoop() const {
+    return _engine ? _engine->getLoop() : nullptr;
+}
+
+ShaderManager* WidgetFactory::getShaderManager() const {
+    return _engine ? _engine->shaderManager().get() : nullptr;
 }
 
 //-----------------------------------------------------------------------------
 // Registration
 //-----------------------------------------------------------------------------
 
-void WidgetFactory::registerInternal(const std::string& name, InternalWidgetFactory factory) {
-    internalFactories_[name] = std::move(factory);
-}
-
-void WidgetFactory::registerPlugin(const std::string& name, const std::string& path) {
-    plugins_[name] = PluginEntry{
-        .path = path,
-        .instance = nullptr,
-        .isLoaded = false
-    };
-}
-
-void WidgetFactory::loadPluginsFromDirectory(const std::string& path) {
-    // TODO: Scan directory for .so/.dylib files and register them
-    (void)path;
+void WidgetFactory::registerWidget(const std::string& name, WidgetCreateFn factory) {
+    _widgetFactories[name] = std::move(factory);
 }
 
 //-----------------------------------------------------------------------------
@@ -67,67 +89,79 @@ void WidgetFactory::loadPluginsFromDirectory(const std::string& path) {
 std::pair<std::string, std::string> WidgetFactory::parseName(const std::string& name) const {
     auto dot = name.find('.');
     if (dot == std::string::npos) {
-        return {"", name};  // Internal widget
+        return {"", name};
     }
     return {name.substr(0, dot), name.substr(dot + 1)};
 }
 
-WidgetParams WidgetFactory::parseGenericArgs(const std::string& args) const {
-    WidgetParams params;
+Result<WidgetPtr> WidgetFactory::createWidget(
+    const std::string& name,
+    uv_loop_t* loop,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
+    const std::string& pluginArgs,
+    const std::string& payload
+) {
+    yfunc();
+    ydebug("createWidget: name='{}' x={} y={} w={} h={} args='{}' payload_size={}",
+           name, x, y, widthCells, heightCells, pluginArgs, payload.size());
 
-    // Simple argument parser for: -x N -y N -w N -h N --relative --absolute
-    std::istringstream iss(args);
-    std::string token;
+    auto [pluginName, widgetName] = parseName(name);
+    ydebug("createWidget: parsed pluginName='{}' widgetName='{}'", pluginName, widgetName);
 
-    while (iss >> token) {
-        if (token == "-x" && iss >> token) {
-            params.x = std::stoi(token);
-        } else if (token == "-y" && iss >> token) {
-            params.y = std::stoi(token);
-        } else if (token == "-w" && iss >> token) {
-            params.widthCells = std::stoul(token);
-        } else if (token == "-h" && iss >> token) {
-            params.heightCells = std::stoul(token);
-        } else if (token == "--relative") {
-            params.mode = PositionMode::Relative;
-        } else if (token == "--absolute") {
-            params.mode = PositionMode::Absolute;
+    if (pluginName.empty()) {
+        // No dot - first check widget factories
+        ydebug("createWidget: no dot, checking widget factories for '{}'", widgetName);
+        auto it = _widgetFactories.find(widgetName);
+        if (it != _widgetFactories.end()) {
+            ydebug("createWidget: found in widget factories, calling factory");
+            return it->second(widgetName, this, getFontManager(), loop, x, y, widthCells, heightCells, pluginArgs, payload);
         }
+
+        // Try loading as plugin (e.g., "shader" -> shader.so with default widget)
+        ydebug("createWidget: not in factories, trying to load as plugin '{}'", widgetName);
+        auto pluginResult = getOrLoadPlugin(widgetName);
+        if (!pluginResult.has_value()) {
+            ydebug("createWidget: plugin load FAILED for '{}'", widgetName);
+            return Err<WidgetPtr>("Unknown widget: " + widgetName, pluginResult);
+        }
+
+        // Use default widget type (empty string lets plugin decide)
+        ydebug("createWidget: plugin loaded, calling plugin->createWidget with widgetName=''");
+        ydebug("createWidget: this={} getFontManager()={} loop={}", (void*)this, (void*)getFontManager(), (void*)loop);
+        auto result = pluginResult.value()->createWidget("", this, getFontManager(), loop, x, y, widthCells, heightCells, pluginArgs, payload);
+        if (!result) {
+            ydebug("createWidget: plugin->createWidget FAILED: {}", result.error().message());
+        } else {
+            ydebug("createWidget: plugin->createWidget SUCCESS");
+        }
+        return result;
     }
 
-    // Get cell dimensions from engine if available
-    // TODO: Get from terminal context
-    if (params.cellWidth == 0) params.cellWidth = 10;
-    if (params.cellHeight == 0) params.cellHeight = 20;
+    // Has dot - format is "plugin.widgetName"
+    ydebug("createWidget: has dot, loading plugin '{}'", pluginName);
+    auto pluginResult = getOrLoadPlugin(pluginName);
+    if (!pluginResult.has_value()) {
+        ydebug("createWidget: plugin load FAILED for '{}'", pluginName);
+        return Err<WidgetPtr>("Failed to load plugin: " + pluginName, pluginResult);
+    }
 
-    return params;
+    ydebug("createWidget: plugin loaded, calling plugin->createWidget with widgetName='{}'", widgetName);
+    return pluginResult.value()->createWidget(widgetName, this, getFontManager(), loop, x, y, widthCells, heightCells, pluginArgs, payload);
 }
 
 Result<WidgetPtr> WidgetFactory::createWidget(
     const std::string& name,
-    const std::string& genericArgs,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
     const std::string& pluginArgs,
     const std::string& payload
 ) {
-    auto [pluginName, widgetType] = parseName(name);
-    auto params = parseGenericArgs(genericArgs);
-
-    if (pluginName.empty()) {
-        // Internal widget
-        auto it = internalFactories_.find(widgetType);
-        if (it == internalFactories_.end()) {
-            return Err<WidgetPtr>("Unknown internal widget: " + widgetType);
-        }
-        return it->second(ctx_, params, pluginArgs, payload);
-    }
-
-    // Plugin widget - lazy load plugin
-    auto pluginResult = getOrLoadPlugin(pluginName);
-    if (!pluginResult.has_value()) {
-        return Err<WidgetPtr>("Failed to load plugin: " + pluginName, pluginResult);
-    }
-
-    return pluginResult.value()->createWidget(widgetType, params, pluginArgs, payload);
+    return createWidget(name, getLoop(), x, y, widthCells, heightCells, pluginArgs, payload);
 }
 
 //-----------------------------------------------------------------------------
@@ -137,92 +171,145 @@ Result<WidgetPtr> WidgetFactory::createWidget(
 std::vector<std::string> WidgetFactory::getAvailableWidgets() const {
     std::vector<std::string> result;
 
-    // Internal widgets
-    for (const auto& [name, _] : internalFactories_) {
+    for (const auto& [name, _] : _widgetFactories) {
         result.push_back(name);
     }
 
-    // Plugin widgets
-    for (const auto& [pluginName, entry] : plugins_) {
-        if (entry.isLoaded && entry.instance) {
-            for (const auto& widgetType : entry.instance->getWidgetTypes()) {
+    for (const auto& [pluginName, plugin] : _loadedPlugins) {
+        if (plugin) {
+            for (const auto& widgetType : plugin->getWidgetTypes()) {
                 result.push_back(pluginName + "." + widgetType);
             }
-        } else {
-            // Plugin not loaded yet, just show plugin name
-            result.push_back(pluginName + ".*");
         }
     }
 
-    return result;
-}
-
-std::vector<std::string> WidgetFactory::getAvailablePlugins() const {
-    std::vector<std::string> result;
-    for (const auto& [name, _] : plugins_) {
-        result.push_back(name);
-    }
     return result;
 }
 
 bool WidgetFactory::hasWidget(const std::string& name) const {
-    auto [pluginName, widgetType] = parseName(name);
+    auto [pluginName, widgetName] = parseName(name);
 
     if (pluginName.empty()) {
-        return internalFactories_.contains(widgetType);
+        return _widgetFactories.contains(widgetName);
     }
 
-    return plugins_.contains(pluginName);
+    // Check if plugin is loaded, but don't load it just to check
+    return _loadedPlugins.contains(pluginName);
 }
 
 //-----------------------------------------------------------------------------
-// Plugin loading
+// Plugin loading (lazy)
 //-----------------------------------------------------------------------------
 
 Result<PluginPtr> WidgetFactory::getOrLoadPlugin(const std::string& name) {
-    auto it = plugins_.find(name);
-    if (it == plugins_.end()) {
-        return Err<PluginPtr>("Unknown plugin: " + name);
+    yfunc();
+    ydebug("getOrLoadPlugin: name='{}'", name);
+
+    // Check if already loaded
+    auto it = _loadedPlugins.find(name);
+    if (it != _loadedPlugins.end()) {
+        ydebug("getOrLoadPlugin: already loaded, returning cached plugin");
+        return Ok(it->second);
     }
 
-    if (!it->second.isLoaded) {
-        auto loadResult = loadPlugin(name);
-        if (!loadResult.has_value()) {
-            return Err<PluginPtr>("Failed to load plugin: " + name, loadResult);
-        }
-        it->second.instance = loadResult.value();
-        it->second.isLoaded = true;
+    // Find and load plugin
+    ydebug("getOrLoadPlugin: not cached, calling findAndLoadPlugin");
+    auto loadResult = findAndLoadPlugin(name);
+    if (!loadResult.has_value()) {
+        ydebug("getOrLoadPlugin: findAndLoadPlugin FAILED: {}", loadResult.error().message());
+        return loadResult;
     }
 
-    return Ok(it->second.instance);
+    // Cache it
+    ydebug("getOrLoadPlugin: caching plugin");
+    _loadedPlugins[name] = loadResult.value();
+    return loadResult;
 }
 
-Result<PluginPtr> WidgetFactory::loadPlugin(const std::string& name) {
-    // Built-in plugins - these will be implemented as separate includes
-    // For now, return error as plugins need to be migrated
+Result<PluginPtr> WidgetFactory::findAndLoadPlugin(const std::string& name) {
+    yfunc();
+    ydebug("findAndLoadPlugin: name='{}' searchPaths.size={}", name, _searchPaths.size());
+    namespace fs = std::filesystem;
 
-    auto it = plugins_.find(name);
-    if (it == plugins_.end()) {
-        return Err<PluginPtr>("Unknown plugin: " + name);
+    // Search for plugin in all search paths
+    for (const auto& dir : _searchPaths) {
+        ydebug("findAndLoadPlugin: searching in dir='{}'", dir);
+        // Try different extensions
+        for (const char* ext : {".so", ".dylib", ".dll"}) {
+            fs::path pluginPath = fs::path(dir) / (name + ext);
+            ydebug("findAndLoadPlugin: checking path='{}'", pluginPath.string());
+            if (fs::exists(pluginPath)) {
+                ydebug("findAndLoadPlugin: FOUND at {}", pluginPath.string());
+                yinfo("Found plugin '{}' at {}", name, pluginPath.string());
+                return loadDynamicPlugin(pluginPath.string());
+            }
+        }
     }
 
-    // Dynamic loading from path
-    if (!it->second.path.empty()) {
-        return loadDynamicPlugin(it->second.path);
-    }
-
-    // Built-in plugin creation will be added here after migration
-    // if (name == "thorvg") {
-    //     return ThorvgPlugin::create(ctx_);
-    // }
-
-    return Err<PluginPtr>("Plugin not yet migrated: " + name);
+    ydebug("findAndLoadPlugin: NOT FOUND in any search path");
+    return Err<PluginPtr>("Plugin not found: " + name);
 }
 
 Result<PluginPtr> WidgetFactory::loadDynamicPlugin(const std::string& path) {
-    // TODO: Implement dynamic plugin loading via dlopen/LoadLibrary
-    (void)path;
-    return Err<PluginPtr>("Dynamic plugin loading not yet implemented");
+    yfunc();
+    ydebug("loadDynamicPlugin: path='{}'", path);
+
+    // Use RTLD_GLOBAL for python plugin so libpython symbols are available to numpy extensions
+    int flags = RTLD_NOW;
+    if (path.find("python") != std::string::npos) {
+        flags |= RTLD_GLOBAL;
+        yinfo("loadDynamicPlugin: using RTLD_GLOBAL for python plugin");
+    } else {
+        flags |= RTLD_LOCAL;
+    }
+
+    // Load shared library
+    ydebug("loadDynamicPlugin: calling dlopen with flags={}", flags);
+    void* handle = dlopen(path.c_str(), flags);
+    if (!handle) {
+        const char* err = dlerror();
+        ydebug("loadDynamicPlugin: dlopen FAILED: {}", err ? err : "unknown");
+        return Err<PluginPtr>("Failed to load: " + std::string(err ? err : "unknown"));
+    }
+    ydebug("loadDynamicPlugin: dlopen SUCCESS, handle={}", handle);
+
+    // Look for create function - plugins export: Result<PluginPtr> create()
+    ydebug("loadDynamicPlugin: looking for 'create' symbol");
+    using CreateFn = Result<PluginPtr> (*)();
+    auto createFn = reinterpret_cast<CreateFn>(dlsym(handle, "create"));
+    if (!createFn) {
+        ydebug("loadDynamicPlugin: 'create' symbol NOT FOUND");
+        dlclose(handle);
+        return Err<PluginPtr>("Missing create(): " + path);
+    }
+    ydebug("loadDynamicPlugin: 'create' symbol found at {}", (void*)createFn);
+
+    // Create plugin instance
+    ydebug("loadDynamicPlugin: calling create()");
+    auto result = createFn();
+    if (!result) {
+        ydebug("loadDynamicPlugin: create() FAILED: {}", result.error().message());
+        dlclose(handle);
+        return Err<PluginPtr>("create() failed: " + path, result);
+    }
+    ydebug("loadDynamicPlugin: create() SUCCESS");
+
+    PluginPtr plugin = *result;
+    ydebug("loadDynamicPlugin: plugin name='{}' initialized={}", plugin->pluginName(), plugin->isInitialized());
+
+    // Initialize plugin
+    ydebug("loadDynamicPlugin: calling plugin->init(getContext())");
+    ydebug("loadDynamicPlugin: getContext()={}", (void*)getContext());
+    if (auto res = plugin->init(getContext()); !res) {
+        ydebug("loadDynamicPlugin: plugin->init() FAILED: {}", res.error().message());
+        dlclose(handle);
+        return Err<PluginPtr>("Plugin init failed: " + path, res);
+    }
+    ydebug("loadDynamicPlugin: plugin->init() SUCCESS");
+
+    yinfo("Loaded plugin: {}", plugin->pluginName());
+    ydebug("loadDynamicPlugin: returning plugin successfully");
+    return Ok(plugin);
 }
 
 } // namespace yetty

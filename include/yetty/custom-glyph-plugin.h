@@ -104,7 +104,7 @@ public:
     virtual Result<CustomGlyphWidgetPtr> createWidget(uint32_t codepoint) = 0;
 
     // Render all widgets (can batch for efficiency)
-    // Uses stored ctx_ from init()
+    // Uses stored _ctx from init()
     virtual Result<void> renderAll(WGPUTextureView targetView,
                                     WGPUTextureFormat targetFormat,
                                     uint32_t screenWidth, uint32_t screenHeight,
@@ -139,10 +139,10 @@ public:
     void setInitialized(bool v) { _initialized = v; }
 
     // Context access
-    WebGPUContext* getContext() const { return ctx_; }
+    WebGPUContext* getContext() const { return _ctx; }
 
 protected:
-    WebGPUContext* ctx_ = nullptr;
+    WebGPUContext* _ctx = nullptr;
     std::vector<CustomGlyphWidgetPtr> _widgets;
     bool _initialized = false;
 };

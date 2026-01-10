@@ -153,7 +153,7 @@ private:
     Result<std::unique_ptr<Font>> loadFromDiskCache(const std::string& cachePath) noexcept;
     bool saveToDiskCache(const Font* font, const std::string& cachePath) const noexcept;
 
-    WebGPUContext::Ptr ctx_;
+    WebGPUContext::Ptr _ctx;
     std::unordered_map<FontCacheKey, std::unique_ptr<Font>, FontCacheKeyHash> fontCache_;
     FontCacheKey defaultFontKey_;
     bool hasDefaultFont_ = false;

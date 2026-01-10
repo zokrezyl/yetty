@@ -186,7 +186,7 @@ private:
     //-------------------------------------------------------------------------
     // GPU resources (shared across all fonts)
     //-------------------------------------------------------------------------
-    WebGPUContext* ctx_ = nullptr;
+    WebGPUContext* _ctx = nullptr;
     WGPUTextureFormat targetFormat_ = WGPUTextureFormat_Undefined;
     WGPURenderPipeline pipeline_ = nullptr;
     WGPUBindGroupLayout bindGroupLayout_ = nullptr;

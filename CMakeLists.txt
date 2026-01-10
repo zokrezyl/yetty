@@ -126,43 +126,29 @@ if(NOT YETTY_ANDROID AND NOT EMSCRIPTEN)
     )
 endif()
 
-# ytrace for logging with runtime control (includes spdlog)
-# Note: We download ytrace but don't add it as a subdirectory directly
-# because it tries to include its own CPM.cmake which conflicts when used as a dependency
+# spdlog - add FIRST so ytrace detects it
+CPMAddPackage(
+    NAME spdlog
+    GITHUB_REPOSITORY gabime/spdlog
+    GIT_TAG v1.16.0
+    OPTIONS "CMAKE_POSITION_INDEPENDENT_CODE ON"
+)
+
+# ytrace for logging with runtime control (will use existing spdlog)
 CPMAddPackage(
     NAME ytrace
     GITHUB_REPOSITORY zokrezyl/ytrace
     GIT_TAG main
-    DOWNLOAD_ONLY YES
+    OPTIONS
+        "YTRACE_BUILD_TOOLS ON"
+        "YTRACE_BUILD_EXAMPLES OFF"
+        "YTRACE_ENABLE_YLOG ON"
+        "YTRACE_ENABLE_YTRACE ON"
+        "YTRACE_ENABLE_YDEBUG ON"
+        "YTRACE_ENABLE_YINFO ON"
+        "YTRACE_ENABLE_YWARN ON"
+        "YTRACE_ENABLE_YFUNC ON"
 )
-
-if(ytrace_ADDED)
-    # Create ytrace target manually (it's header-only)
-    add_library(ytrace INTERFACE)
-    add_library(ytrace::ytrace ALIAS ytrace)
-    target_compile_features(ytrace INTERFACE cxx_std_20)
-    target_include_directories(ytrace INTERFACE ${ytrace_SOURCE_DIR}/include)
-    
-    # Add spdlog dependency
-    CPMAddPackage(
-        NAME spdlog
-        GITHUB_REPOSITORY gabime/spdlog
-        GIT_TAG v1.16.0
-        OPTIONS "CMAKE_POSITION_INDEPENDENT_CODE ON"
-    )
-    target_compile_definitions(ytrace INTERFACE YTRACE_USE_SPDLOG)
-    target_link_libraries(ytrace INTERFACE spdlog::spdlog)
-    
-    # Enable all trace macros by default
-    target_compile_definitions(ytrace INTERFACE
-        YTRACE_ENABLE_YLOG=1
-        YTRACE_ENABLE_YTRACE=1
-        YTRACE_ENABLE_YDEBUG=1
-        YTRACE_ENABLE_YINFO=1
-        YTRACE_ENABLE_YWARN=1
-        YTRACE_ENABLE_YFUNC=1
-    )
-endif()
 
 # LZ4 for fast font cache compression
 CPMAddPackage(
@@ -356,13 +342,18 @@ endif()
 # Core shared library (for plugins to link against on desktop)
 #-----------------------------------------------------------------------------
 if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID)
+    # Python for built-in plugin (Unix only - requires ./configure + make)
+    # Must be defined before yetty so python_embedded target exists
+    if(UNIX)
+        add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/build-tools/cmake/python python_build)
+    endif()
+
     set(YETTY_CORE_SOURCES
         src/yetty/webgpu-context.cpp
         src/yetty/font.cpp
         src/yetty/font-manager.cpp
         src/yetty/rich-text.cpp
         src/yetty/emoji-atlas.cpp
-        src/yetty/renderable.cpp
         src/yetty/ydraw.cpp
     )
 
@@ -446,7 +437,6 @@ if(YETTY_ANDROID)
         src/yetty/config.cpp
         src/yetty/terminal.cpp
         src/yetty/osc-command.cpp
-        src/android/plugin-manager-stub.cpp
     )
 elseif(NOT EMSCRIPTEN)
     # Desktop uses main.cpp with GLFW
@@ -461,13 +451,19 @@ elseif(NOT EMSCRIPTEN)
         src/yetty/remote-terminal-backend.cpp
         src/yetty/remote-terminal.cpp
         src/yetty/shared-grid.cpp
-        src/yetty/plugin-manager.cpp
         src/yetty/widget-factory.cpp
         src/yetty/osc-command.cpp
         src/yetty/custom-glyph-plugin.cpp
         src/yetty/shader-manager.cpp
         src/yetty/shader-glyph-renderer.cpp
     )
+    # Python plugin built into main executable (Unix only)
+    if(UNIX)
+        list(APPEND YETTY_SOURCES
+            src/yetty/plugins/python/python.cpp
+            src/yetty/plugins/python/yetty_wgpu.cpp
+        )
+    endif()
 else()
     # Web uses main.cpp with Emscripten GLFW
     list(APPEND YETTY_SOURCES
@@ -475,7 +471,6 @@ else()
         src/yetty/yetty.cpp
         src/yetty/config.cpp
         src/yetty/input-handler.cpp
-        src/yetty/renderable.cpp
         src/yetty/web-terminal.cpp
         src/yetty/web-display.cpp
     )
@@ -492,6 +487,12 @@ target_include_directories(yetty PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+
+# Python includes for built-in Python plugin (Unix only)
+if(UNIX AND NOT EMSCRIPTEN)
+    target_include_directories(yetty PRIVATE ${CMAKE_BINARY_DIR}/python/install/include/python3.13)
+    target_compile_definitions(yetty PRIVATE CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}")
+endif()
 
 target_compile_definitions(yetty PRIVATE
     CMAKE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
@@ -592,6 +593,9 @@ else()
         YETTY_USE_PREBUILT_ATLAS=0
     )
 
+    # Export symbols so plugins can find them (e.g., WidgetFactory::getShaderManager)
+    set_target_properties(yetty PROPERTIES ENABLE_EXPORTS TRUE)
+
     # Link against yetty_core (provides font, rich-text, webgpu-context)
     target_link_libraries(yetty PRIVATE
         yetty_core
@@ -611,6 +615,18 @@ else()
         # Unix: Link against util for forkpty
         target_link_libraries(yetty PRIVATE util)
         target_compile_definitions(yetty PRIVATE YETTY_USE_FORKPTY=1)
+
+        # Link Python into main executable so symbols are globally visible to numpy extensions
+        # Use --whole-archive to export all Python symbols from the static library
+        if(TARGET python_embedded)
+            add_dependencies(yetty python_embedded)
+            target_link_libraries(yetty PRIVATE
+                -Wl,--whole-archive
+                python_embedded
+                -Wl,--no-whole-archive
+                m dl pthread
+            )
+        endif()
     endif()
 
     # Copy assets at build time (not just configure time)
@@ -690,8 +706,5 @@ else()
 endif()
 
 
-# Python for python plugin (Unix only - requires ./configure + make)
-if(UNIX)
-    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/build-tools/cmake/python python_build)
-endif()
+# Python subdirectory moved earlier in file (before yetty target)
 

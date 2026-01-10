@@ -1,7 +1,7 @@
 #include "emoji-atlas.h"
 #include "emoji.h"
 #include <yetty/wgpu-compat.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 
 // Android/Emscripten: stub implementation without FreeType/fontconfig
 #if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
@@ -59,7 +59,7 @@ EmojiAtlas::~EmojiAtlas() {
 
 Result<void> EmojiAtlas::init() noexcept {
     // Stub: no emoji font support on Android/Emscripten
-    spdlog::info("EmojiAtlas: stub implementation (no FreeType support)");
+    yinfo("EmojiAtlas: stub implementation (no FreeType support)");
     atlasData_.resize(atlasSize_ * atlasSize_ * 4, 0);
     return Ok();
 }
@@ -71,7 +71,7 @@ Result<void> EmojiAtlas::findEmojiFont() noexcept {
 
 Result<void> EmojiAtlas::loadCommonEmojis() noexcept {
     // Stub: no emojis
-    spdlog::info("EmojiAtlas: no emoji support on this platform");
+    yinfo("EmojiAtlas: no emoji support on this platform");
     return uploadToGPU();
 }
 
@@ -154,7 +154,7 @@ Result<void> EmojiAtlas::createGPUResources() noexcept {
     }
 
     gpuResourcesCreated_ = true;
-    spdlog::info("EmojiAtlas: stub GPU resources created");
+    yinfo("EmojiAtlas: stub GPU resources created");
 
     return Ok();
 }
@@ -203,7 +203,7 @@ Result<void> EmojiAtlas::init() noexcept {
     // Log FreeType version
     FT_Int major, minor, patch;
     FT_Library_Version(library, &major, &minor, &patch);
-    spdlog::info("EmojiAtlas: FreeType version {}.{}.{}", major, minor, patch);
+    yinfo("EmojiAtlas: FreeType version {}.{}.{}", major, minor, patch);
 
     // Find emoji font
     if (auto res = findEmojiFont(); !res) {
@@ -213,7 +213,7 @@ Result<void> EmojiAtlas::init() noexcept {
     // Initialize atlas data (RGBA)
     atlasData_.resize(atlasSize_ * atlasSize_ * 4, 0);
 
-    spdlog::info("EmojiAtlas initialized: {}x{} atlas, {}px glyphs",
+    yinfo("EmojiAtlas initialized: {}x{} atlas, {}px glyphs",
                  atlasSize_, atlasSize_, glyphSize_);
 
     return Ok();
@@ -261,19 +261,19 @@ Result<void> EmojiAtlas::findEmojiFont() noexcept {
                     ftFace_ = face;
 
                     // Log font info
-                    spdlog::info("EmojiAtlas: using font '{}'", emojiFontPath_);
-                    spdlog::debug("EmojiAtlas: font has {} glyphs, {} charmaps, {} fixed sizes",
+                    yinfo("EmojiAtlas: using font '{}'", emojiFontPath_);
+                    ydebug("EmojiAtlas: font has {} glyphs, {} charmaps, {} fixed sizes",
                                   face->num_glyphs, face->num_charmaps, face->num_fixed_sizes);
 
                     // Log face flags
-                    spdlog::debug("EmojiAtlas: face_flags={:08X} scalable={} fixed_sizes={} color={}",
+                    ydebug("EmojiAtlas: face_flags={:08X} scalable={} fixed_sizes={} color={}",
                                   face->face_flags,
                                   (face->face_flags & FT_FACE_FLAG_SCALABLE) ? 1 : 0,
                                   (face->face_flags & FT_FACE_FLAG_FIXED_SIZES) ? 1 : 0,
                                   (face->face_flags & FT_FACE_FLAG_COLOR) ? 1 : 0);
 
                     for (int i = 0; i < face->num_charmaps; i++) {
-                        spdlog::debug("EmojiAtlas: charmap[{}] encoding={:08X} platform={} id={}",
+                        ydebug("EmojiAtlas: charmap[{}] encoding={:08X} platform={} id={}",
                                       i, static_cast<uint32_t>(face->charmaps[i]->encoding),
                                       face->charmaps[i]->platform_id, face->charmaps[i]->encoding_id);
                     }
@@ -283,9 +283,9 @@ Result<void> EmojiAtlas::findEmojiFont() noexcept {
                     if (face->num_fixed_sizes > 0) {
                         FT_Error sizeErr = FT_Select_Size(face, 0);
                         if (sizeErr) {
-                            spdlog::warn("EmojiAtlas: FT_Select_Size failed: {}", sizeErr);
+                            ywarn("EmojiAtlas: FT_Select_Size failed: {}", sizeErr);
                         } else {
-                            spdlog::debug("EmojiAtlas: FT_Select_Size(0) succeeded: {}x{}",
+                            ydebug("EmojiAtlas: FT_Select_Size(0) succeeded: {}x{}",
                                           face->size->metrics.x_ppem, face->size->metrics.y_ppem);
                         }
                     }
@@ -293,39 +293,39 @@ Result<void> EmojiAtlas::findEmojiFont() noexcept {
                     // Select Unicode charmap
                     FT_Error cmErr = FT_Select_Charmap(face, FT_ENCODING_UNICODE);
                     if (cmErr) {
-                        spdlog::warn("EmojiAtlas: failed to select Unicode charmap: {}", cmErr);
+                        ywarn("EmojiAtlas: failed to select Unicode charmap: {}", cmErr);
                     } else {
-                        spdlog::debug("EmojiAtlas: selected Unicode charmap");
+                        ydebug("EmojiAtlas: selected Unicode charmap");
                     }
 
                     // Test if we can find and load 😀 (U+1F600)
                     FT_UInt testIdx = FT_Get_Char_Index(face, 0x1F600);
-                    spdlog::info("EmojiAtlas: test glyph U+1F600 -> index {}", testIdx);
+                    yinfo("EmojiAtlas: test glyph U+1F600 -> index {}", testIdx);
 
                     // Test with FRESH FreeType instance to isolate the problem
-                    spdlog::info("EmojiAtlas: Testing with fresh FreeType instance...");
+                    yinfo("EmojiAtlas: Testing with fresh FreeType instance...");
                     {
                         FT_Library freshLib;
                         FT_Face freshFace;
                         FT_Error err;
 
                         err = FT_Init_FreeType(&freshLib);
-                        spdlog::info("EmojiAtlas: Fresh FT_Init_FreeType: {}", err);
+                        yinfo("EmojiAtlas: Fresh FT_Init_FreeType: {}", err);
 
                         err = FT_New_Face(freshLib, emojiFontPath_.c_str(), 0, &freshFace);
-                        spdlog::info("EmojiAtlas: Fresh FT_New_Face: {}", err);
+                        yinfo("EmojiAtlas: Fresh FT_New_Face: {}", err);
 
                         err = FT_Select_Size(freshFace, 0);
-                        spdlog::info("EmojiAtlas: Fresh FT_Select_Size: {}", err);
+                        yinfo("EmojiAtlas: Fresh FT_Select_Size: {}", err);
 
                         err = FT_Select_Charmap(freshFace, FT_ENCODING_UNICODE);
-                        spdlog::info("EmojiAtlas: Fresh FT_Select_Charmap: {}", err);
+                        yinfo("EmojiAtlas: Fresh FT_Select_Charmap: {}", err);
 
                         FT_UInt freshIdx = FT_Get_Char_Index(freshFace, 0x1F600);
-                        spdlog::info("EmojiAtlas: Fresh glyph index: {}", freshIdx);
+                        yinfo("EmojiAtlas: Fresh glyph index: {}", freshIdx);
 
                         err = FT_Load_Glyph(freshFace, freshIdx, FT_LOAD_DEFAULT | FT_LOAD_COLOR);
-                        spdlog::info("EmojiAtlas: Fresh FT_Load_Glyph: {} (bitmap={}x{} mode={})",
+                        yinfo("EmojiAtlas: Fresh FT_Load_Glyph: {} (bitmap={}x{} mode={})",
                                      err, freshFace->glyph->bitmap.width, freshFace->glyph->bitmap.rows,
                                      freshFace->glyph->bitmap.pixel_mode);
 
@@ -334,17 +334,17 @@ Result<void> EmojiAtlas::findEmojiFont() noexcept {
                     }
 
                     // Test load with our face
-                    spdlog::info("EmojiAtlas: about to call FT_Load_Glyph with our face={} idx={} flags=0x{:X}",
+                    yinfo("EmojiAtlas: about to call FT_Load_Glyph with our face={} idx={} flags=0x{:X}",
                                  (void*)face, testIdx, FT_LOAD_DEFAULT | FT_LOAD_COLOR);
-                    spdlog::info("EmojiAtlas: face->size={} face->glyph={}",
+                    yinfo("EmojiAtlas: face->size={} face->glyph={}",
                                  (void*)face->size, (void*)face->glyph);
 
                     FT_Error testErr = FT_Load_Glyph(face, testIdx, FT_LOAD_DEFAULT | FT_LOAD_COLOR);
-                    spdlog::info("EmojiAtlas: Our FT_Load_Glyph(DEFAULT|COLOR) returned {}", testErr);
+                    yinfo("EmojiAtlas: Our FT_Load_Glyph(DEFAULT|COLOR) returned {}", testErr);
                     if (testErr) {
-                        spdlog::warn("EmojiAtlas: TEST FT_Load_Glyph FAILED: {}", testErr);
+                        ywarn("EmojiAtlas: TEST FT_Load_Glyph FAILED: {}", testErr);
                     } else {
-                        spdlog::info("EmojiAtlas: TEST FT_Load_Glyph OK! format={} bitmap={}x{} mode={}",
+                        yinfo("EmojiAtlas: TEST FT_Load_Glyph OK! format={} bitmap={}x{} mode={}",
                                      face->glyph->format == FT_GLYPH_FORMAT_BITMAP ? "BITMAP" : "OTHER",
                                      face->glyph->bitmap.width, face->glyph->bitmap.rows,
                                      face->glyph->bitmap.pixel_mode);
@@ -364,7 +364,7 @@ Result<void> EmojiAtlas::findEmojiFont() noexcept {
 }
 
 Result<void> EmojiAtlas::loadCommonEmojis() noexcept {
-    spdlog::info("EmojiAtlas: loading {} common emojis", COMMON_EMOJI_COUNT);
+    yinfo("EmojiAtlas: loading {} common emojis", COMMON_EMOJI_COUNT);
 
     int loaded = 0;
     for (size_t i = 0; i < COMMON_EMOJI_COUNT; ++i) {
@@ -373,7 +373,7 @@ Result<void> EmojiAtlas::loadCommonEmojis() noexcept {
         }
     }
 
-    spdlog::info("EmojiAtlas: loaded {}/{} common emojis", loaded, COMMON_EMOJI_COUNT);
+    yinfo("EmojiAtlas: loaded {}/{} common emojis", loaded, COMMON_EMOJI_COUNT);
 
     // Upload to GPU
     return uploadToGPU();
@@ -394,11 +394,11 @@ Result<int> EmojiAtlas::loadEmoji(uint32_t codepoint) noexcept {
     // Log face pointer for debugging
     static bool firstCall = true;
     if (firstCall) {
-        spdlog::debug("EmojiAtlas::loadEmoji first call: face={} num_glyphs={} charmap={} num_fixed_sizes={}",
+        ydebug("EmojiAtlas::loadEmoji first call: face={} num_glyphs={} charmap={} num_fixed_sizes={}",
                       (void*)face, face->num_glyphs, (void*)face->charmap, face->num_fixed_sizes);
         // Log available fixed sizes for bitmap fonts
         for (int i = 0; i < face->num_fixed_sizes; i++) {
-            spdlog::debug("EmojiAtlas: fixed size[{}]: {}x{} (ppem={})",
+            ydebug("EmojiAtlas: fixed size[{}]: {}x{} (ppem={})",
                           i, face->available_sizes[i].width, face->available_sizes[i].height,
                           face->available_sizes[i].y_ppem >> 6);
         }
@@ -411,7 +411,7 @@ Result<int> EmojiAtlas::loadEmoji(uint32_t codepoint) noexcept {
     // Log first few lookups
     static int logCount = 0;
     if (logCount < 5) {
-        spdlog::debug("EmojiAtlas: U+{:04X} -> glyph {}", codepoint, glyphIndex);
+        ydebug("EmojiAtlas: U+{:04X} -> glyph {}", codepoint, glyphIndex);
         logCount++;
     }
 
@@ -424,11 +424,11 @@ Result<int> EmojiAtlas::loadEmoji(uint32_t codepoint) noexcept {
     FT_Error error = 0;
     error = FT_Load_Glyph(face, glyphIndex, FT_LOAD_DEFAULT | FT_LOAD_COLOR);
     if (error) {
-        spdlog::debug("EmojiAtlas: FT_Load_Glyph (DEFAULT|COLOR) failed: {}", error);
+        ydebug("EmojiAtlas: FT_Load_Glyph (DEFAULT|COLOR) failed: {}", error);
         // Try without COLOR flag as fallback
         error = FT_Load_Glyph(face, glyphIndex, FT_LOAD_DEFAULT);
         if (error) {
-            spdlog::debug("EmojiAtlas: FT_Load_Glyph (DEFAULT) also failed: {}", error);
+            ydebug("EmojiAtlas: FT_Load_Glyph (DEFAULT) also failed: {}", error);
             return Err<int>("Failed to load glyph");
         }
     }
@@ -441,7 +441,7 @@ Result<int> EmojiAtlas::loadEmoji(uint32_t codepoint) noexcept {
         const char* formatStr = "UNKNOWN";
         if (slot->format == FT_GLYPH_FORMAT_BITMAP) formatStr = "BITMAP";
         else if (slot->format == FT_GLYPH_FORMAT_OUTLINE) formatStr = "OUTLINE";
-        spdlog::debug("EmojiAtlas: glyph {} loaded: format={} bitmap={}x{} pixel_mode={}",
+        ydebug("EmojiAtlas: glyph {} loaded: format={} bitmap={}x{} pixel_mode={}",
                       glyphIndex, formatStr, slot->bitmap.width, slot->bitmap.rows, slot->bitmap.pixel_mode);
         loadLogCount++;
     }
@@ -454,7 +454,7 @@ Result<int> EmojiAtlas::loadEmoji(uint32_t codepoint) noexcept {
     if (slot->format != FT_GLYPH_FORMAT_BITMAP) {
         error = FT_Render_Glyph(slot, FT_RENDER_MODE_NORMAL);
         if (error) {
-            spdlog::debug("EmojiAtlas: FT_Render_Glyph failed: {}", error);
+            ydebug("EmojiAtlas: FT_Render_Glyph failed: {}", error);
             return Err<int>("Failed to render glyph");
         }
     }
@@ -464,7 +464,7 @@ Result<int> EmojiAtlas::loadEmoji(uint32_t codepoint) noexcept {
     // Log bitmap info for first few
     static int bitmapLogCount = 0;
     if (bitmapLogCount < 5) {
-        spdlog::debug("EmojiAtlas: glyph {} final bitmap: {}x{} pitch={} mode={}",
+        ydebug("EmojiAtlas: glyph {} final bitmap: {}x{} pitch={} mode={}",
                       glyphIndex, bitmap.width, bitmap.rows, bitmap.pitch, bitmap.pixel_mode);
         bitmapLogCount++;
     }
@@ -591,7 +591,7 @@ Result<void> EmojiAtlas::uploadToGPU() noexcept {
     }
 
     needsUpload_ = false;
-    spdlog::debug("EmojiAtlas: uploaded {} emojis to GPU", emojiMetadata_.size());
+    ydebug("EmojiAtlas: uploaded {} emojis to GPU", emojiMetadata_.size());
 
     return Ok();
 }
@@ -653,7 +653,7 @@ Result<void> EmojiAtlas::createGPUResources() noexcept {
     }
 
     gpuResourcesCreated_ = true;
-    spdlog::info("EmojiAtlas: created GPU resources ({}x{} texture, {} max emojis)",
+    yinfo("EmojiAtlas: created GPU resources ({}x{} texture, {} max emojis)",
                  atlasSize_, atlasSize_, maxEmojis);
 
     return Ok();

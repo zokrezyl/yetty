@@ -2,7 +2,8 @@
 #include <yetty/yetty.h>
 #include <yetty/webgpu-context.h>
 #include <yetty/wgpu-compat.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
+#include <ytrace/ytrace.hpp>
 #include <cstring>
 
 #include <stb_image.h>
@@ -15,8 +16,8 @@ namespace yetty {
 
 ImagePlugin::~ImagePlugin() { (void)dispose(); }
 
-Result<PluginPtr> ImagePlugin::create(YettyPtr engine) noexcept {
-    auto p = PluginPtr(new ImagePlugin(std::move(engine)));
+Result<PluginPtr> ImagePlugin::create() noexcept {
+    auto p = PluginPtr(new ImagePlugin());
     if (auto res = static_cast<ImagePlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init ImagePlugin", res);
     }
@@ -24,7 +25,7 @@ Result<PluginPtr> ImagePlugin::create(YettyPtr engine) noexcept {
 }
 
 Result<void> ImagePlugin::pluginInit() noexcept {
-    initialized_ = true;
+    _initialized = true;
     return Ok();
 }
 
@@ -32,12 +33,26 @@ Result<void> ImagePlugin::dispose() {
     if (auto res = Plugin::dispose(); !res) {
         return Err<void>("Failed to dispose ImagePlugin", res);
     }
-    initialized_ = false;
+    _initialized = false;
     return Ok();
 }
 
-Result<WidgetPtr> ImagePlugin::createWidget(const std::string& payload) {
-    return Image::create(payload);
+Result<WidgetPtr> ImagePlugin::createWidget(
+    const std::string& widgetName,
+    WidgetFactory* factory,
+    FontManager* fontManager,
+    uv_loop_t* loop,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
+    const std::string& pluginArgs,
+    const std::string& payload
+) {
+    (void)widgetName;
+    yfunc();
+    yinfo("payload size={} x={} y={} w={} h={}", payload.size(), x, y, widthCells, heightCells);
+    return Image::create(factory, fontManager, loop, x, y, widthCells, heightCells, pluginArgs, payload);
 }
 
 //-----------------------------------------------------------------------------
@@ -47,18 +62,18 @@ Result<WidgetPtr> ImagePlugin::createWidget(const std::string& payload) {
 Image::~Image() { (void)dispose(); }
 
 Result<void> Image::init() {
-    if (payload_.empty()) {
+    if (_payload.empty()) {
         return Err<void>("Image: empty payload");
     }
 
     (void)dispose();
 
-    auto result = loadImage(payload_);
+    auto result = loadImage(_payload);
     if (!result) {
         return result;
     }
 
-    spdlog::info("Image: loaded {}x{} ({} channels)", imageWidth_, imageHeight_, imageChannels_);
+    yinfo("Image: loaded {}x{} ({} channels)", imageWidth_, imageHeight_, imageChannels_);
     return Ok();
 }
 
@@ -95,10 +110,10 @@ Result<void> Image::dispose() {
 
 Result<void> Image::render(WebGPUContext& ctx) {
     if (failed_) return Err<void>("Image already failed");
-    if (!visible_) return Ok();
+    if (!_visible) return Ok();
     if (!imageData_) return Err<void>("Image has no image data");
 
-    const auto& rc = renderCtx_;
+    const auto& rc = _renderCtx;
 
     if (!gpuInitialized_) {
         auto result = createPipeline(ctx, rc.targetFormat);
@@ -114,12 +129,12 @@ Result<void> Image::render(WebGPUContext& ctx) {
         return Err<void>("Image pipeline not initialized");
     }
 
-    float pixelX = x_ * rc.cellWidth;
-    float pixelY = y_ * rc.cellHeight;
-    float pixelW = widthCells_ * rc.cellWidth;
-    float pixelH = heightCells_ * rc.cellHeight;
+    float pixelX = _x * rc.cellWidth;
+    float pixelY = _y * rc.cellHeight;
+    float pixelW = _widthCells * rc.cellWidth;
+    float pixelH = _heightCells * rc.cellHeight;
 
-    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
@@ -190,9 +205,9 @@ Result<void> Image::render(WebGPUContext& ctx) {
 }
 
 bool Image::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (failed_ || !visible_ || !imageData_) return false;
+    if (failed_ || !_visible || !imageData_) return false;
 
-    const auto& rc = renderCtx_;
+    const auto& rc = _renderCtx;
 
     if (!gpuInitialized_) {
         auto result = createPipeline(ctx, rc.targetFormat);
@@ -208,12 +223,12 @@ bool Image::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
         return false;
     }
 
-    float pixelX = x_ * rc.cellWidth;
-    float pixelY = y_ * rc.cellHeight;
-    float pixelW = widthCells_ * rc.cellWidth;
-    float pixelH = heightCells_ * rc.cellHeight;
+    float pixelX = _x * rc.cellWidth;
+    float pixelY = _y * rc.cellHeight;
+    float pixelW = _widthCells * rc.cellWidth;
+    float pixelH = _heightCells * rc.cellHeight;
 
-    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
@@ -382,7 +397,7 @@ struct VertexOutput { @builtin(position) position: vec4<f32>, @location(0) uv: v
 
     if (!pipeline_) return Err<void>("Failed to create render pipeline");
 
-    spdlog::debug("Image: pipeline created");
+    ydebug("Image: pipeline created");
     return Ok();
 }
 
@@ -390,7 +405,7 @@ struct VertexOutput { @builtin(position) position: vec4<f32>, @location(0) uv: v
 
 extern "C" {
     const char* name() { return "image"; }
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine) {
-        return yetty::ImagePlugin::create(std::move(engine));
+    yetty::Result<yetty::PluginPtr> create() {
+        return yetty::ImagePlugin::create();
     }
 }

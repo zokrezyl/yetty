@@ -123,7 +123,7 @@ private:
   uint32_t gridCols_ = 0;
   uint32_t gridRows_ = 0;
 
-  WebGPUContext::Ptr ctx_;
+  WebGPUContext::Ptr _ctx;
   FontManager::Ptr fontManager_;
   std::string fontFamily_;
   Font *font_ = nullptr;       // Cached pointer from FontManager

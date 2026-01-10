@@ -1,5 +1,5 @@
 #include "shared-grid.h"
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 #include <cstring>
 
 #ifndef _WIN32
@@ -24,14 +24,14 @@ SharedGrid* SharedGrid::createServer(const std::string& name, uint32_t cols, uin
     // Create shared memory
     sg->fd_ = shm_open(name.c_str(), O_CREAT | O_RDWR, 0666);
     if (sg->fd_ < 0) {
-        spdlog::error("SharedGrid: shm_open failed: {}", strerror(errno));
+        yerror("SharedGrid: shm_open failed: {}", strerror(errno));
         delete sg;
         return nullptr;
     }
 
     // Set size
     if (ftruncate(sg->fd_, sg->size_) < 0) {
-        spdlog::error("SharedGrid: ftruncate failed: {}", strerror(errno));
+        yerror("SharedGrid: ftruncate failed: {}", strerror(errno));
         close(sg->fd_);
         shm_unlink(name.c_str());
         delete sg;
@@ -41,7 +41,7 @@ SharedGrid* SharedGrid::createServer(const std::string& name, uint32_t cols, uin
     // Map
     sg->ptr_ = mmap(nullptr, sg->size_, PROT_READ | PROT_WRITE, MAP_SHARED, sg->fd_, 0);
     if (sg->ptr_ == MAP_FAILED) {
-        spdlog::error("SharedGrid: mmap failed: {}", strerror(errno));
+        yerror("SharedGrid: mmap failed: {}", strerror(errno));
         close(sg->fd_);
         shm_unlink(name.c_str());
         delete sg;
@@ -65,11 +65,11 @@ SharedGrid* SharedGrid::createServer(const std::string& name, uint32_t cols, uin
         bufHdr->sequenceNumber = 0;
     }
 
-    spdlog::info("SharedGrid: created {} ({}x{}, {} bytes, double-buffered)", 
+    yinfo("SharedGrid: created {} ({}x{}, {} bytes, double-buffered)", 
                  name, cols, rows, sg->size_);
     return sg;
 #else
-    spdlog::error("SharedGrid: Windows not implemented");
+    yerror("SharedGrid: Windows not implemented");
     return nullptr;
 #endif
 }
@@ -83,7 +83,7 @@ SharedGrid* SharedGrid::openClient(const std::string& name) {
     // Open existing shared memory
     sg->fd_ = shm_open(name.c_str(), O_RDONLY, 0);
     if (sg->fd_ < 0) {
-        spdlog::error("SharedGrid: shm_open failed (client): {}", strerror(errno));
+        yerror("SharedGrid: shm_open failed (client): {}", strerror(errno));
         delete sg;
         return nullptr;
     }
@@ -91,7 +91,7 @@ SharedGrid* SharedGrid::openClient(const std::string& name) {
     // Get size
     struct stat st;
     if (fstat(sg->fd_, &st) < 0) {
-        spdlog::error("SharedGrid: fstat failed: {}", strerror(errno));
+        yerror("SharedGrid: fstat failed: {}", strerror(errno));
         close(sg->fd_);
         delete sg;
         return nullptr;
@@ -101,7 +101,7 @@ SharedGrid* SharedGrid::openClient(const std::string& name) {
     // Map read-only
     sg->ptr_ = mmap(nullptr, sg->size_, PROT_READ, MAP_SHARED, sg->fd_, 0);
     if (sg->ptr_ == MAP_FAILED) {
-        spdlog::error("SharedGrid: mmap failed (client): {}", strerror(errno));
+        yerror("SharedGrid: mmap failed (client): {}", strerror(errno));
         close(sg->fd_);
         delete sg;
         return nullptr;
@@ -110,25 +110,25 @@ SharedGrid* SharedGrid::openClient(const std::string& name) {
     // Validate header
     auto* hdr = sg->header();
     if (hdr->magic != SHARED_GRID_MAGIC) {
-        spdlog::error("SharedGrid: invalid magic: {:08x}", hdr->magic);
+        yerror("SharedGrid: invalid magic: {:08x}", hdr->magic);
         munmap(sg->ptr_, sg->size_);
         close(sg->fd_);
         delete sg;
         return nullptr;
     }
     if (hdr->version != SHARED_GRID_VERSION) {
-        spdlog::error("SharedGrid: version mismatch: {} vs {}", hdr->version, SHARED_GRID_VERSION);
+        yerror("SharedGrid: version mismatch: {} vs {}", hdr->version, SHARED_GRID_VERSION);
         munmap(sg->ptr_, sg->size_);
         close(sg->fd_);
         delete sg;
         return nullptr;
     }
 
-    spdlog::info("SharedGrid: opened {} ({}x{}, {} bytes, double-buffered)", 
+    yinfo("SharedGrid: opened {} ({}x{}, {} bytes, double-buffered)", 
                  name, hdr->cols, hdr->rows, sg->size_);
     return sg;
 #else
-    spdlog::error("SharedGrid: Windows not implemented");
+    yerror("SharedGrid: Windows not implemented");
     return nullptr;
 #endif
 }
@@ -149,7 +149,7 @@ SharedGrid::~SharedGrid() {
     }
     if (isServer_ && !name_.empty()) {
         shm_unlink(name_.c_str());
-        spdlog::info("SharedGrid: unlinked {}", name_);
+        yinfo("SharedGrid: unlinked {}", name_);
     }
 #endif
 }
@@ -161,7 +161,7 @@ void SharedGrid::copyFromGrid(const Grid& grid) {
     uint32_t rows = getRows();
     
     if (grid.getCols() != cols || grid.getRows() != rows) {
-        spdlog::warn("SharedGrid::copyFromGrid: size mismatch {}x{} vs {}x{}",
+        ywarn("SharedGrid::copyFromGrid: size mismatch {}x{} vs {}x{}",
                      grid.getCols(), grid.getRows(), cols, rows);
         return;
     }
@@ -231,7 +231,7 @@ void SharedGridView::syncFromSharedMemory() {
         return;  // No change, skip conversion
     }
     
-    spdlog::debug("SharedGridView::sync seq {} -> {}, font={}", 
+    ydebug("SharedGridView::sync seq {} -> {}, font={}", 
                   lastSequence_, bufHdr->sequenceNumber, font_ != nullptr);
     lastSequence_ = bufHdr->sequenceNumber;
     

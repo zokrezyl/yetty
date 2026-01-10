@@ -6,7 +6,7 @@
 #include <fstream>
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 #include <sstream>
 #include <yetty/wgpu-compat.h>
 
@@ -19,11 +19,11 @@
 #else
 #define TR_LOGI(...)                                                           \
   do {                                                                         \
-    spdlog::info(__VA_ARGS__);                                                 \
+    yinfo(__VA_ARGS__);                                                 \
   } while (0)
 #define TR_LOGE(...)                                                           \
   do {                                                                         \
-    spdlog::error(__VA_ARGS__);                                                \
+    yerror(__VA_ARGS__);                                                \
   } while (0)
 #endif
 
@@ -49,7 +49,7 @@ GridRenderer::create(WebGPUContext::Ptr ctx,
 GridRenderer::GridRenderer(WebGPUContext::Ptr ctx,
                            FontManager::Ptr fontManager,
                            const std::string& fontFamily) noexcept
-    : ctx_(std::move(ctx)), fontManager_(std::move(fontManager)), fontFamily_(fontFamily) {}
+    : _ctx(std::move(ctx)), fontManager_(std::move(fontManager)), fontFamily_(fontFamily) {}
 
 GridRenderer::~GridRenderer() {
   // On web, texture and bind group releases cause Emscripten WebGPU manager
@@ -89,7 +89,7 @@ GridRenderer::~GridRenderer() {
 }
 
 Result<void> GridRenderer::init() noexcept {
-  WGPUDevice device = ctx_->getDevice();
+  WGPUDevice device = _ctx->getDevice();
 
   // Get terminal font from FontManager
   auto fontResult = fontManager_->getFont(fontFamily_, Font::Regular, 32.0f);
@@ -131,7 +131,7 @@ Result<void> GridRenderer::init() noexcept {
   if (auto res = createBindGroupLayout(device); !res) {
     return Err<void>("Failed to create bind group layout", res);
   }
-  if (auto res = createPipeline(device, ctx_->getSurfaceFormat()); !res) {
+  if (auto res = createPipeline(device, _ctx->getSurfaceFormat()); !res) {
     return Err<void>("Failed to create pipeline", res);
   }
 
@@ -145,7 +145,7 @@ Result<void> GridRenderer::createShaderModule(WGPUDevice device) {
   // On Android, shader is extracted to app's data directory
   const char *envPath = std::getenv("YETTY_SHADER_PATH");
   const char *shaderPath = envPath ? envPath : "/data/local/tmp/shaders.wgsl";
-  spdlog::info("Loading shader from: {}", shaderPath);
+  yinfo("Loading shader from: {}", shaderPath);
 #else
   const char *shaderPath = CMAKE_SOURCE_DIR "/src/yetty/shaders/shaders.wgsl";
 #endif
@@ -622,7 +622,7 @@ void GridRenderer::setCellSize(float width, float height) noexcept {
 }
 
 void GridRenderer::updateFontBindings(Font &font) noexcept {
-  if (!ctx_)
+  if (!_ctx)
     return;
 
   font_ = &font;
@@ -637,7 +637,7 @@ void GridRenderer::updateFontBindings(Font &font) noexcept {
   }
 
   // Recreate bind group with updated font resources
-  auto result = createBindGroup(ctx_->getDevice(), font);
+  auto result = createBindGroup(_ctx->getDevice(), font);
   if (!result) {
     std::cerr << "Failed to update font bindings: " << error_msg(result)
               << std::endl;
@@ -682,7 +682,7 @@ void GridRenderer::updateCellTextures(WGPUQueue queue, const Grid &grid) {
   // Guard against grid/texture size mismatch (race condition during resize)
   // Skip this update - next frame will have matching dimensions after resize
   if (grid.getCols() != cols || grid.getRows() != rows) {
-    spdlog::debug("GridRenderer: skipping texture update - grid {}x{} != texture {}x{}",
+    ydebug("GridRenderer: skipping texture update - grid {}x{} != texture {}x{}",
                   grid.getCols(), grid.getRows(), cols, rows);
     return;
   }
@@ -885,8 +885,8 @@ void GridRenderer::render(const Grid &grid, int cursorCol, int cursorRow,
   static int frameCount = 0;
   frameCount++;
 
-  WGPUDevice device = ctx_->getDevice();
-  WGPUQueue queue = ctx_->getQueue();
+  WGPUDevice device = _ctx->getDevice();
+  WGPUQueue queue = _ctx->getQueue();
 
   // Upload any newly loaded emojis to GPU
   if (emojiAtlas_) {
@@ -930,7 +930,7 @@ void GridRenderer::render(const Grid &grid, int cursorCol, int cursorRow,
   updateUniformBuffer(queue, grid, cursorCol, cursorRow, cursorVisible);
   updateCellTextures(queue, grid);
 
-  auto targetViewResult = ctx_->getCurrentTextureView();
+  auto targetViewResult = _ctx->getCurrentTextureView();
   if (!targetViewResult) {
     TR_LOGE("GridRenderer: getCurrentTextureView failed: %s",
             error_msg(targetViewResult).c_str());
@@ -945,7 +945,7 @@ void GridRenderer::render(const Grid &grid, int cursorCol, int cursorRow,
   }
 #else
   if (frameCount <= 3) {
-    spdlog::info("Frame {}: targetView={}, pipeline={}, bindGroup={}",
+    yinfo("Frame {}: targetView={}, pipeline={}, bindGroup={}",
                  frameCount, (void *)targetView, (void *)pipeline_,
                  (void *)bindGroup_);
   }
@@ -1000,8 +1000,8 @@ void GridRenderer::render(const Grid &grid,
                           const std::vector<DamageRect> &damageRects,
                           bool fullDamage, int cursorCol, int cursorRow,
                           bool cursorVisible) noexcept {
-  WGPUDevice device = ctx_->getDevice();
-  WGPUQueue queue = ctx_->getQueue();
+  WGPUDevice device = _ctx->getDevice();
+  WGPUQueue queue = _ctx->getQueue();
 
   // Upload any newly loaded emojis to GPU
   if (emojiAtlas_) {
@@ -1052,7 +1052,7 @@ void GridRenderer::render(const Grid &grid,
     if (damageRects.size() > threshold) {
       // Many small rects - single full upload is more efficient
       updateCellTextures(queue, grid);
-      spdlog::debug("Damage rects {} > threshold {} - using full upload",
+      ydebug("Damage rects {} > threshold {} - using full upload",
                     damageRects.size(), threshold);
     } else {
       // Partial damage - only update changed regions
@@ -1076,7 +1076,7 @@ void GridRenderer::render(const Grid &grid,
 
   updateUniformBuffer(queue, grid, cursorCol, cursorRow, cursorVisible);
 
-  auto targetViewResult = ctx_->getCurrentTextureView();
+  auto targetViewResult = _ctx->getCurrentTextureView();
   if (!targetViewResult) {
     std::cerr << "GridRenderer: " << error_msg(targetViewResult) << std::endl;
     return;
@@ -1128,10 +1128,10 @@ void GridRenderer::renderFromBuffers(uint32_t cols, uint32_t rows,
                                      const uint8_t* attrs,
                                      int cursorCol, int cursorRow,
                                      bool cursorVisible) noexcept {
-  if (!ctx_ || !font_) return;
+  if (!_ctx || !font_) return;
 
-  WGPUDevice device = ctx_->getDevice();
-  WGPUQueue queue = ctx_->getQueue();
+  WGPUDevice device = _ctx->getDevice();
+  WGPUQueue queue = _ctx->getQueue();
 
   // Upload any newly loaded emojis to GPU
   if (emojiAtlas_) {
@@ -1141,11 +1141,11 @@ void GridRenderer::renderFromBuffers(uint32_t cols, uint32_t rows,
   // Recreate textures and bind group if grid size changed
   if (cols != textureCols_ || rows != textureRows_) {
     if (auto res = createCellTextures(device, cols, rows); !res) {
-      spdlog::error("GridRenderer::renderFromBuffers: {}", error_msg(res));
+      yerror("GridRenderer::renderFromBuffers: {}", error_msg(res));
       return;
     }
     if (auto res = createBindGroup(device, *font_); !res) {
-      spdlog::error("GridRenderer::renderFromBuffers: {}", error_msg(res));
+      yerror("GridRenderer::renderFromBuffers: {}", error_msg(res));
       return;
     }
     needsBindGroupRecreation_ = false;
@@ -1153,7 +1153,7 @@ void GridRenderer::renderFromBuffers(uint32_t cols, uint32_t rows,
   } else if (needsBindGroupRecreation_ ||
              font_->getResourceVersion() != lastFontResourceVersion_) {
     if (auto res = createBindGroup(device, *font_); !res) {
-      spdlog::error("GridRenderer::renderFromBuffers: {}", error_msg(res));
+      yerror("GridRenderer::renderFromBuffers: {}", error_msg(res));
       return;
     }
     needsBindGroupRecreation_ = false;
@@ -1238,9 +1238,9 @@ void GridRenderer::renderFromBuffers(uint32_t cols, uint32_t rows,
   wgpuQueueWriteBuffer(queue, uniformBuffer_, 0, &uniforms_, sizeof(Uniforms));
 
   // Render
-  auto targetViewResult = ctx_->getCurrentTextureView();
+  auto targetViewResult = _ctx->getCurrentTextureView();
   if (!targetViewResult) {
-    spdlog::error("GridRenderer::renderFromBuffers: getCurrentTextureView failed");
+    yerror("GridRenderer::renderFromBuffers: getCurrentTextureView failed");
     return;
   }
   WGPUTextureView targetView = *targetViewResult;

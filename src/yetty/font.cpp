@@ -1,6 +1,6 @@
 #include <yetty/font.h>
 #include <yetty/wgpu-compat.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 
 #if !YETTY_USE_PREBUILT_ATLAS
 #include <ft2build.h>
@@ -202,11 +202,11 @@ bool Font::generate(const std::string& fontPath, float fontSize, uint32_t atlasS
     std::string boldPath, italicPath, boldItalicPath;
     discoverVariantPaths(fontPath, boldPath, italicPath, boldItalicPath);
 
-    spdlog::info("Font variants detected:");
-    spdlog::info("  Regular: {}", fontPath);
-    spdlog::info("  Bold: {}", boldPath.empty() ? "(not found)" : boldPath);
-    spdlog::info("  Italic: {}", italicPath.empty() ? "(not found)" : italicPath);
-    spdlog::info("  BoldItalic: {}", boldItalicPath.empty() ? "(not found)" : boldItalicPath);
+    yinfo("Font variants detected:");
+    yinfo("  Regular: {}", fontPath);
+    yinfo("  Bold: {}", boldPath.empty() ? "(not found)" : boldPath);
+    yinfo("  Italic: {}", italicPath.empty() ? "(not found)" : italicPath);
+    yinfo("  BoldItalic: {}", boldItalicPath.empty() ? "(not found)" : boldItalicPath);
 
     return generate(fontPath, boldPath, italicPath, boldItalicPath, fontSize, atlasSize);
 }
@@ -243,19 +243,19 @@ bool Font::generate(const std::string& regularPath,
     if (!boldPath.empty()) {
         boldFont = msdfgen::loadFont(ft, boldPath.c_str());
         if (boldFont) {
-            spdlog::info("Loaded bold font: {}", boldPath);
+            yinfo("Loaded bold font: {}", boldPath);
         }
     }
     if (!italicPath.empty()) {
         italicFont = msdfgen::loadFont(ft, italicPath.c_str());
         if (italicFont) {
-            spdlog::info("Loaded italic font: {}", italicPath);
+            yinfo("Loaded italic font: {}", italicPath);
         }
     }
     if (!boldItalicPath.empty()) {
         boldItalicFont = msdfgen::loadFont(ft, boldItalicPath.c_str());
         if (boldItalicFont) {
-            spdlog::info("Loaded bold-italic font: {}", boldItalicPath);
+            yinfo("Loaded bold-italic font: {}", boldItalicPath);
         }
     }
 
@@ -403,25 +403,25 @@ bool Font::generate(const std::string& regularPath,
 
     // Load regular glyphs
     loadGlyphsFromFont(font, Regular, glyphs);
-    spdlog::info("Loaded {} regular glyphs", glyphs.size());
+    yinfo("Loaded {} regular glyphs", glyphs.size());
 
     // Load variant glyphs (only if the variant font was loaded)
     size_t regularCount = glyphs.size();
     if (boldFont) {
         loadGlyphsFromFont(boldFont, Bold, glyphs);
-        spdlog::info("Loaded {} bold glyphs", glyphs.size() - regularCount);
+        yinfo("Loaded {} bold glyphs", glyphs.size() - regularCount);
     }
 
     size_t afterBold = glyphs.size();
     if (italicFont) {
         loadGlyphsFromFont(italicFont, Italic, glyphs);
-        spdlog::info("Loaded {} italic glyphs", glyphs.size() - afterBold);
+        yinfo("Loaded {} italic glyphs", glyphs.size() - afterBold);
     }
 
     size_t afterItalic = glyphs.size();
     if (boldItalicFont) {
         loadGlyphsFromFont(boldItalicFont, BoldItalic, glyphs);
-        spdlog::info("Loaded {} bold-italic glyphs", glyphs.size() - afterItalic);
+        yinfo("Loaded {} bold-italic glyphs", glyphs.size() - afterItalic);
     }
 
     std::cout << "Loaded " << glyphs.size() << " total glyphs from all font variants" << std::endl;
@@ -589,19 +589,19 @@ bool Font::generate(const std::string& regularPath,
 
 bool Font::generate(FT_Face face, float fontSize, uint32_t atlasSize) {
     if (!face) {
-        spdlog::error("Font::generate(FT_Face): null FT_Face");
+        yerror("Font::generate(FT_Face): null FT_Face");
         return false;
     }
 
     // Validate the FT_Face has basic required data
     if (!face->num_glyphs || face->num_glyphs < 1) {
-        spdlog::error("Font::generate(FT_Face): FT_Face has no glyphs");
+        yerror("Font::generate(FT_Face): FT_Face has no glyphs");
         return false;
     }
 
     std::string fontFamily = face->family_name ? face->family_name : "unknown";
     std::string fontStyle = face->style_name ? face->style_name : "Regular";
-    spdlog::info("Font::generate(FT_Face): generating atlas for '{}' {} (num_glyphs={}, units_per_EM={})",
+    yinfo("Font::generate(FT_Face): generating atlas for '{}' {} (num_glyphs={}, units_per_EM={})",
                  fontFamily, fontStyle, face->num_glyphs, face->units_per_EM);
 
     _fontSize = fontSize;
@@ -614,7 +614,7 @@ bool Font::generate(FT_Face face, float fontSize, uint32_t atlasSize) {
     if (!s_freetypeHandle) {
         s_freetypeHandle = msdfgen::initializeFreetype();
         if (!s_freetypeHandle) {
-            spdlog::error("Failed to initialize msdfgen FreeType");
+            yerror("Failed to initialize msdfgen FreeType");
             return false;
         }
     }
@@ -622,7 +622,7 @@ bool Font::generate(FT_Face face, float fontSize, uint32_t atlasSize) {
     // Adopt the existing FT_Face into msdfgen
     msdfgen::FontHandle* font = msdfgen::adoptFreetypeFont(face);
     if (!font) {
-        spdlog::error("Failed to adopt FreeType face for embedded font '{}'", fontFamily);
+        yerror("Failed to adopt FreeType face for embedded font '{}'", fontFamily);
         return false;
     }
 
@@ -632,7 +632,7 @@ bool Font::generate(FT_Face face, float fontSize, uint32_t atlasSize) {
     double unitsPerEm = metrics.emSize > 0 ? metrics.emSize : 1000.0;
     double fontScale = fontSize / unitsPerEm;
     double lineHeight = metrics.lineHeight;
-    spdlog::debug("Font::generate(FT_Face): unitsPerEm={}, fontScale={}", unitsPerEm, fontScale);
+    ydebug("Font::generate(FT_Face): unitsPerEm={}, fontScale={}", unitsPerEm, fontScale);
 
     // Define character set - we'll generate a smaller set for PDF embedded fonts
     // since they may only contain a subset of glyphs anyway
@@ -688,7 +688,7 @@ bool Font::generate(FT_Face face, float fontSize, uint32_t atlasSize) {
         glyphs.push_back(std::move(pg));
     }
 
-    spdlog::info("Font::generate(FT_Face): loaded {} glyphs from embedded font", glyphs.size());
+    yinfo("Font::generate(FT_Face): loaded {} glyphs from embedded font", glyphs.size());
 
     // Sort by height for better packing
     std::sort(glyphs.begin(), glyphs.end(), [](const PackedGlyph& a, const PackedGlyph& b) {
@@ -700,7 +700,7 @@ bool Font::generate(FT_Face face, float fontSize, uint32_t atlasSize) {
     for (auto& glyph : glyphs) {
         if (glyph.atlasW > 0 && glyph.atlasH > 0) {
             if (!packer.pack(glyph.atlasW, glyph.atlasH, glyph.atlasX, glyph.atlasY)) {
-                spdlog::warn("Atlas full, could not pack glyph {}", glyph.codepoint);
+                ywarn("Atlas full, could not pack glyph {}", glyph.codepoint);
                 continue;
             }
         } else {
@@ -716,7 +716,7 @@ bool Font::generate(FT_Face face, float fontSize, uint32_t atlasSize) {
         if (glyph.shape.contours.empty()) continue;
 
         if (!glyph.shape.validate()) {
-            spdlog::warn("Invalid shape for codepoint {} in embedded font", glyph.codepoint);
+            ywarn("Invalid shape for codepoint {} in embedded font", glyph.codepoint);
         }
 
         glyph.shape.normalize();
@@ -800,7 +800,7 @@ bool Font::generate(FT_Face face, float fontSize, uint32_t atlasSize) {
         _glyphs[glyph.codepoint] = m;
     }
 
-    spdlog::info("Generated MSDF atlas for embedded font '{}': {}x{} with {} glyphs",
+    yinfo("Generated MSDF atlas for embedded font '{}': {}x{} with {} glyphs",
                  fontFamily, _atlasWidth, _atlasHeight, _glyphs.size());
 
     buildGlyphIndexMap();
@@ -814,18 +814,18 @@ bool Font::generate(FT_Face face, float fontSize, uint32_t atlasSize) {
 bool Font::generate(FT_Face face, const std::string& fontName, float fontSize, uint32_t atlasSize) {
     // This is just a wrapper that logs the font name properly
     // The actual implementation still uses face->family_name internally
-    spdlog::info("Font::generate(FT_Face, name='{}'): delegating to FT_Face generate", fontName);
+    yinfo("Font::generate(FT_Face, name='{}'): delegating to FT_Face generate", fontName);
     return generate(face, fontSize, atlasSize);
 }
 
 bool Font::generate(const unsigned char* data, size_t dataLen,
                     const std::string& fontName, float fontSize, uint32_t atlasSize) {
     if (!data || dataLen == 0) {
-        spdlog::error("Font::generate(data): null or empty font data");
+        yerror("Font::generate(data): null or empty font data");
         return false;
     }
 
-    spdlog::info("Font::generate(data): loading font '{}' from {} bytes", fontName, dataLen);
+    yinfo("Font::generate(data): loading font '{}' from {} bytes", fontName, dataLen);
 
     _fontSize = fontSize;
     _atlasWidth = atlasSize;
@@ -834,14 +834,14 @@ bool Font::generate(const unsigned char* data, size_t dataLen,
     // Initialize msdfgen's FreeType
     msdfgen::FreetypeHandle* ft = msdfgen::initializeFreetype();
     if (!ft) {
-        spdlog::error("Failed to initialize msdfgen FreeType");
+        yerror("Failed to initialize msdfgen FreeType");
         return false;
     }
 
     // Load font from memory
     msdfgen::FontHandle* font = msdfgen::loadFontData(ft, data, static_cast<int>(dataLen));
     if (!font) {
-        spdlog::error("Failed to load font '{}' from data", fontName);
+        yerror("Failed to load font '{}' from data", fontName);
         msdfgen::deinitializeFreetype(ft);
         return false;
     }
@@ -852,7 +852,7 @@ bool Font::generate(const unsigned char* data, size_t dataLen,
     double unitsPerEm = metrics.emSize > 0 ? metrics.emSize : 1000.0;
     double fontScale = fontSize / unitsPerEm;
     double lineHeight = metrics.lineHeight;
-    spdlog::debug("Font::generate(data): unitsPerEm={}, fontScale={}", unitsPerEm, fontScale);
+    ydebug("Font::generate(data): unitsPerEm={}, fontScale={}", unitsPerEm, fontScale);
 
     // Define character set
     std::vector<uint32_t> charset;
@@ -912,7 +912,7 @@ bool Font::generate(const unsigned char* data, size_t dataLen,
         glyphs.push_back(std::move(pg));
     }
 
-    spdlog::info("Font::generate(data): loaded {} glyphs from font '{}'", glyphs.size(), fontName);
+    yinfo("Font::generate(data): loaded {} glyphs from font '{}'", glyphs.size(), fontName);
 
     // Sort by height for better packing
     std::sort(glyphs.begin(), glyphs.end(), [](const PackedGlyph& a, const PackedGlyph& b) {
@@ -924,7 +924,7 @@ bool Font::generate(const unsigned char* data, size_t dataLen,
     for (auto& glyph : glyphs) {
         if (glyph.atlasW > 0 && glyph.atlasH > 0) {
             if (!packer.pack(glyph.atlasW, glyph.atlasH, glyph.atlasX, glyph.atlasY)) {
-                spdlog::warn("Atlas full, could not pack glyph {}", glyph.codepoint);
+                ywarn("Atlas full, could not pack glyph {}", glyph.codepoint);
                 continue;
             }
         } else {
@@ -940,7 +940,7 @@ bool Font::generate(const unsigned char* data, size_t dataLen,
         if (glyph.shape.contours.empty()) continue;
 
         if (!glyph.shape.validate()) {
-            spdlog::warn("Invalid shape for codepoint {} in font '{}'", glyph.codepoint, fontName);
+            ywarn("Invalid shape for codepoint {} in font '{}'", glyph.codepoint, fontName);
         }
 
         glyph.shape.normalize();
@@ -1024,7 +1024,7 @@ bool Font::generate(const unsigned char* data, size_t dataLen,
         _glyphs[glyph.codepoint] = m;
     }
 
-    spdlog::info("Generated MSDF atlas for font '{}': {}x{} with {} glyphs",
+    yinfo("Generated MSDF atlas for font '{}': {}x{} with {} glyphs",
                  fontName, _atlasWidth, _atlasHeight, _glyphs.size());
 
     buildGlyphIndexMap();
@@ -1079,7 +1079,7 @@ bool Font::saveAtlas(const std::string& atlasPath, const std::string& metricsPat
         return false;
     }
 
-    spdlog::debug("Atlas compressed: {} -> {} bytes ({:.1f}%)",
+    ydebug("Atlas compressed: {} -> {} bytes ({:.1f}%)",
                   srcSize, compressedSize, 100.0f * compressedSize / srcSize);
 
     // Save metrics as JSON
@@ -1281,12 +1281,12 @@ bool Font::loadGlyphFromFont(const std::string& fontPath, uint32_t codepoint) {
         // Scale fallback glyphs to fit cell height
         // Use fontSize/2 as target (typical cell height for monospace fonts)
         double targetHeight = _fontSize * 0.5;
-        spdlog::debug("Fallback glyph U+{:04X}: rawSizeY={:.1f} target={:.1f} fontSize={:.1f}",
+        ydebug("Fallback glyph U+{:04X}: rawSizeY={:.1f} target={:.1f} fontSize={:.1f}",
                       codepoint, rawSizeY, targetHeight, _fontSize);
         if (rawSizeY > targetHeight && targetHeight > 0) {
             double scaleDown = targetHeight / rawSizeY;
             fontScale *= scaleDown;
-            spdlog::debug("  -> Scaling down by {:.3f}", scaleDown);
+            ydebug("  -> Scaling down by {:.3f}", scaleDown);
         }
 
         bearingX = bounds.l * fontScale;
@@ -1404,9 +1404,9 @@ bool Font::loadGlyphFromFont(const std::string& fontPath, uint32_t codepoint) {
     // Mark as pending for GPU upload
     _pendingGlyphs.insert(codepoint);
 
-    spdlog::info("Loaded fallback glyph U+{:04X} at ({},{}) size {}x{}",
+    yinfo("Loaded fallback glyph U+{:04X} at ({},{}) size {}x{}",
                  codepoint, atlasX, atlasY, atlasW, atlasH);
-    spdlog::debug("  Glyph metrics: uv({:.4f},{:.4f})->({:.4f},{:.4f}) size({:.1f},{:.1f}) bearing({:.1f},{:.1f}) adv={:.1f}",
+    ydebug("  Glyph metrics: uv({:.4f},{:.4f})->({:.4f},{:.4f}) size({:.1f},{:.1f}) bearing({:.1f},{:.1f}) adv={:.1f}",
                   m._uvMin.x, m._uvMin.y, m._uvMax.x, m._uvMax.y,
                   m._size.x, m._size.y, m._bearing.x, m._bearing.y, m._advance);
 
@@ -1414,7 +1414,7 @@ bool Font::loadGlyphFromFont(const std::string& fontPath, uint32_t codepoint) {
 }
 
 bool Font::loadMissingGlyph(uint32_t codepoint) {
-    spdlog::debug("Loading fallback glyph U+{:04X}", codepoint);
+    ydebug("Loading fallback glyph U+{:04X}", codepoint);
 
     // Check if already loaded
     if (_glyphs.find(codepoint) != _glyphs.end()) {
@@ -1428,14 +1428,14 @@ bool Font::loadMissingGlyph(uint32_t codepoint) {
 
     // Check if FreeType is initialized
     if (!_freetypeHandle) {
-        spdlog::error("FreeType not initialized for fallback loading");
+        yerror("FreeType not initialized for fallback loading");
         _failedCodepoints.insert(codepoint);
         return false;
     }
 
     // Find fallback fonts using fontconfig
     std::vector<std::string> fontPaths = findFontsForCodepoint(codepoint);
-    spdlog::debug("Found {} fallback fonts for U+{:04X}", fontPaths.size(), codepoint);
+    ydebug("Found {} fallback fonts for U+{:04X}", fontPaths.size(), codepoint);
 
     if (fontPaths.empty()) {
         _failedCodepoints.insert(codepoint);
@@ -1445,7 +1445,7 @@ bool Font::loadMissingGlyph(uint32_t codepoint) {
     // Try each font until one works
     for (const auto& fontPath : fontPaths) {
         if (loadGlyphFromFont(fontPath, codepoint)) {
-            spdlog::debug("Loaded U+{:04X} from: {}", codepoint, fontPath);
+            ydebug("Loaded U+{:04X} from: {}", codepoint, fontPath);
             return true;
         }
     }
@@ -1856,14 +1856,14 @@ void Font::buildGlyphIndexMap() {
     auto itA = _codepointToIndex.find('A');
     if (itA != _codepointToIndex.end()) {
         const auto& m = _glyphMetadata[itA->second];
-        spdlog::debug("Sample 'A' regular: uv({:.4f},{:.4f})->({:.4f},{:.4f}) size({:.1f},{:.1f}) bearing({:.1f},{:.1f})",
+        ydebug("Sample 'A' regular: uv({:.4f},{:.4f})->({:.4f},{:.4f}) size({:.1f},{:.1f}) bearing({:.1f},{:.1f})",
                       m._uvMinX, m._uvMinY, m._uvMaxX, m._uvMaxY,
                       m._sizeX, m._sizeY, m._bearingX, m._bearingY);
     }
     auto itABold = _boldCodepointToIndex.find('A');
     if (itABold != _boldCodepointToIndex.end()) {
         const auto& m = _glyphMetadata[itABold->second];
-        spdlog::debug("Sample 'A' bold: uv({:.4f},{:.4f})->({:.4f},{:.4f}) size({:.1f},{:.1f}) bearing({:.1f},{:.1f})",
+        ydebug("Sample 'A' bold: uv({:.4f},{:.4f})->({:.4f},{:.4f}) size({:.1f},{:.1f}) bearing({:.1f},{:.1f})",
                       m._uvMinX, m._uvMinY, m._uvMaxX, m._uvMaxY,
                       m._sizeX, m._sizeY, m._bearingX, m._bearingY);
     }
@@ -1877,7 +1877,7 @@ uint16_t Font::getGlyphIndex(uint32_t codepoint) {
 
     // Log missing codepoints in emoji range
     if (codepoint > 0x1F000) {
-        spdlog::debug("Missing emoji glyph U+{:04X}", codepoint);
+        ydebug("Missing emoji glyph U+{:04X}", codepoint);
     }
 
 #if !YETTY_USE_PREBUILT_ATLAS
@@ -1885,7 +1885,7 @@ uint16_t Font::getGlyphIndex(uint32_t codepoint) {
     if (loadMissingGlyph(codepoint)) {
         it = _codepointToIndex.find(codepoint);
         if (it != _codepointToIndex.end()) {
-            spdlog::debug("Loaded fallback glyph U+{:04X} -> index {}", codepoint, it->second);
+            ydebug("Loaded fallback glyph U+{:04X} -> index {}", codepoint, it->second);
             return it->second;
         }
     }

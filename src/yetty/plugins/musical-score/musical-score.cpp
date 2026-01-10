@@ -2,7 +2,7 @@
 #include <yetty/yetty.h>
 #include <yetty/webgpu-context.h>
 #include <yetty/wgpu-compat.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 #include <cstring>
 #include <cmath>
 #include <algorithm>
@@ -17,8 +17,8 @@ MusicalScorePlugin::~MusicalScorePlugin() {
     (void)dispose();
 }
 
-Result<PluginPtr> MusicalScorePlugin::create(YettyPtr engine) noexcept {
-    auto p = PluginPtr(new MusicalScorePlugin(std::move(engine)));
+Result<PluginPtr> MusicalScorePlugin::create() noexcept {
+    auto p = PluginPtr(new MusicalScorePlugin());
     if (auto res = static_cast<MusicalScorePlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init MusicalScorePlugin", res);
     }
@@ -26,7 +26,7 @@ Result<PluginPtr> MusicalScorePlugin::create(YettyPtr engine) noexcept {
 }
 
 Result<void> MusicalScorePlugin::pluginInit() noexcept {
-    initialized_ = true;
+    _initialized = true;
     return Ok();
 }
 
@@ -34,11 +34,31 @@ Result<void> MusicalScorePlugin::dispose() {
     if (auto res = Plugin::dispose(); !res) {
         return Err<void>("Failed to dispose MusicalScorePlugin", res);
     }
-    initialized_ = false;
+    _initialized = false;
     return Ok();
 }
 
-Result<WidgetPtr> MusicalScorePlugin::createWidget(const std::string& payload) {
+Result<WidgetPtr> MusicalScorePlugin::createWidget(
+    const std::string& widgetName,
+    WidgetFactory* factory,
+    FontManager* fontManager,
+    uv_loop_t* loop,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
+    const std::string& pluginArgs,
+    const std::string& payload
+) {
+    (void)widgetName;
+    (void)factory;
+    (void)fontManager;
+    (void)loop;
+    (void)x;
+    (void)y;
+    (void)widthCells;
+    (void)heightCells;
+    (void)pluginArgs;
     return MusicalScoreW::create(payload);
 }
 
@@ -47,7 +67,7 @@ Result<void> MusicalScorePlugin::renderAll(WGPUTextureView targetView, WGPUTextu
                                      float cellWidth, float cellHeight,
                                      int scrollOffset, uint32_t termRows,
                                      bool isAltScreen) {
-    if (!engine_) return Err<void>("MusicalScorePlugin::renderAll: no engine");
+    // Note: renderAll is deprecated - widgets should use render(pass, ctx)
 
     ScreenType currentScreen = isAltScreen ? ScreenType::Alternate : ScreenType::Main;
     for (auto& widgetBase : widgets_) {
@@ -72,7 +92,7 @@ Result<void> MusicalScorePlugin::renderAll(WGPUTextureView targetView, WGPUTextu
             }
         }
 
-        if (auto res = widget->render(*engine_->context(), targetView, targetFormat,
+        if (auto res = widget->render(*_ctx, targetView, targetFormat,
                                       screenWidth, screenHeight,
                                       pixelX, pixelY, pixelW, pixelH); !res) {
             return Err<void>("Failed to render MusicalScoreW", res);
@@ -91,17 +111,17 @@ MusicalScoreW::~MusicalScoreW() {
 
 Result<void> MusicalScoreW::init() {
     // Parse payload: "sheetWidth,numStaves"
-    if (!payload_.empty()) {
+    if (!_payload.empty()) {
         int width = 800, staves = 4;
-        if (sscanf(payload_.c_str(), "%d,%d", &width, &staves) >= 1) {
+        if (sscanf(_payload.c_str(), "%d,%d", &width, &staves) >= 1) {
             sheetWidth_ = std::max(100, width);
-            if (sscanf(payload_.c_str(), "%d,%d", &width, &staves) >= 2) {
+            if (sscanf(_payload.c_str(), "%d,%d", &width, &staves) >= 2) {
                 numStaves_ = std::clamp(staves, 1, MAX_STAVES);
             }
         }
     }
 
-    spdlog::info("MusicalScoreW: initialized ({}px wide, {} staves)",
+    yinfo("MusicalScoreW: initialized ({}px wide, {} staves)",
                  sheetWidth_, numStaves_);
     return Ok();
 }
@@ -411,7 +431,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     if (!pipeline_) return Err<void>("Failed to create render pipeline");
 
-    spdlog::info("MusicalScoreW: pipeline created");
+    yinfo("MusicalScoreW: pipeline created");
     return Ok();
 }
 
@@ -419,5 +439,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 extern "C" {
     const char* name() { return "musical-score"; }
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine) { return yetty::MusicalScorePlugin::create(std::move(engine)); }
+    yetty::Result<yetty::PluginPtr> create() { return yetty::MusicalScorePlugin::create(); }
 }

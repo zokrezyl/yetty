@@ -4,13 +4,11 @@
 #ifndef YETTY_SERVER_BUILD
 #include "emoji-atlas.h"
 #include "yetty/emoji.h"
-#include "yetty/plugin-manager.h"
 #include <yetty/font.h>
 #else
 // Stubs for server build
 namespace yetty {
 class EmojiAtlas;
-class PluginManager;
 class Font {
 public:
     uint16_t getGlyphIndex(uint32_t cp, bool = false, bool = false) const { return static_cast<uint16_t>(cp); }
@@ -21,7 +19,7 @@ inline bool isEmoji(uint32_t) { return false; }
 
 #include <chrono>
 #include <cstring>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 
 #ifndef _WIN32
 #include <fcntl.h>
@@ -145,7 +143,7 @@ Result<void> LocalTerminalBackend::start(const std::string& shell) {
 #ifndef _WIN32
     std::string shellPath = shell.empty() ? (getenv("SHELL") ? getenv("SHELL") : "/bin/sh") : shell;
 
-    spdlog::debug("Starting shell: {}", shellPath);
+    ydebug("Starting shell: {}", shellPath);
 
     struct winsize ws;
     ws.ws_row = rows_;
@@ -185,7 +183,7 @@ Result<void> LocalTerminalBackend::start(const std::string& shell) {
     ptyPoll_->data = this;
     uv_poll_start(ptyPoll_, UV_READABLE, onPtyPoll);
 
-    spdlog::info("LocalTerminalBackend started: PTY fd={}, PID={}", ptyMaster_, childPid_);
+    yinfo("LocalTerminalBackend started: PTY fd={}, PID={}", ptyMaster_, childPid_);
     running_ = true;
     return Ok();
 #else
@@ -261,7 +259,7 @@ void LocalTerminalBackend::scrollUp(int lines) {
     int oldOffset = scrollOffset_;
     int sbSize = static_cast<int>(scrollback_.size());
     scrollOffset_ = std::min(scrollOffset_ + lines, sbSize);
-    spdlog::debug("LocalTerminalBackend::scrollUp: lines={}, scrollback_.size()={}, oldOffset={}, newOffset={}", 
+    ydebug("LocalTerminalBackend::scrollUp: lines={}, scrollback_.size()={}, oldOffset={}, newOffset={}", 
                   lines, sbSize, oldOffset, scrollOffset_);
     fullDamage_ = true;
 }
@@ -269,7 +267,7 @@ void LocalTerminalBackend::scrollUp(int lines) {
 void LocalTerminalBackend::scrollDown(int lines) {
     int oldOffset = scrollOffset_;
     scrollOffset_ = std::max(scrollOffset_ - lines, 0);
-    spdlog::debug("LocalTerminalBackend::scrollDown: lines={}, oldOffset={}, newOffset={}", 
+    ydebug("LocalTerminalBackend::scrollDown: lines={}, oldOffset={}, newOffset={}", 
                   lines, oldOffset, scrollOffset_);
     fullDamage_ = true;
 }
@@ -344,13 +342,13 @@ void LocalTerminalBackend::onPtyPoll(uv_poll_t* handle, int status, int events) 
     auto* self = static_cast<LocalTerminalBackend*>(handle->data);
 
     if (status < 0) {
-        spdlog::error("LocalTerminalBackend: PTY poll error: {}", uv_strerror(status));
+        yerror("LocalTerminalBackend: PTY poll error: {}", uv_strerror(status));
         return;
     }
 
     if (events & UV_READABLE) {
         if (auto res = self->readPty(); !res) {
-            spdlog::error("LocalTerminalBackend: PTY read error: {}", res.error().to_string());
+            yerror("LocalTerminalBackend: PTY read error: {}", res.error().to_string());
         }
     }
 }
@@ -361,7 +359,7 @@ Result<void> LocalTerminalBackend::readPty() {
     int status;
     if (waitpid(childPid_, &status, WNOHANG) > 0) {
         running_ = false;
-        spdlog::info("Shell exited");
+        yinfo("Shell exited");
         return Ok();
     }
 
@@ -383,7 +381,7 @@ Result<void> LocalTerminalBackend::readPty() {
         }
         if (errno == EIO) {
             running_ = false;
-            spdlog::info("Shell exited (PTY closed)");
+            yinfo("Shell exited (PTY closed)");
             return Ok();
         }
         return Err<void>(std::string("PTY read error: ") + strerror(errno));
@@ -554,12 +552,6 @@ void LocalTerminalBackend::syncToGrid() {
                 } else {
                     gi = font_ ? font_->getGlyphIndex(cp, isBold, isItalic) : static_cast<uint16_t>(cp);
                 }
-
-                if (pluginManager_) {
-                    uint32_t w = cell.width > 0 ? cell.width : 1;
-                    uint16_t customIdx = pluginManager_->onCellSync(col, row, cp, w);
-                    if (customIdx != 0) gi = customIdx;
-                }
 #else
                 // Server build: just use codepoint directly
                 gi = static_cast<uint16_t>(cp);
@@ -724,12 +716,6 @@ int LocalTerminalBackend::onSbPushline(int cols, const VTermScreenCell* cells, v
         backend->scrollback_.pop_front();
     }
 
-#ifndef YETTY_SERVER_BUILD
-    if (backend->pluginManager_) {
-        backend->pluginManager_->onScroll(1, &backend->grid_);
-    }
-#endif
-
     return 1;
 }
 
@@ -804,12 +790,6 @@ int LocalTerminalBackend::onSbPopline(int cols, VTermScreenCell* cells, void* us
 
     backend->scrollback_.pop_back();
 
-#ifndef YETTY_SERVER_BUILD
-    if (backend->pluginManager_) {
-        backend->pluginManager_->onScroll(-1, &backend->grid_);
-    }
-#endif
-
     return 1;
 }
 
@@ -822,7 +802,7 @@ int LocalTerminalBackend::onMoverect(VTermRect, VTermRect, void* user) {
 int LocalTerminalBackend::onOSC(int command, VTermStringFragment frag, void* user) {
     auto* backend = static_cast<LocalTerminalBackend*>(user);
 
-    spdlog::debug("onOSC: command={} initial={} final={} len={}",
+    ydebug("onOSC: command={} initial={} final={} len={}",
                   command, (bool)frag.initial, (bool)frag.final, (size_t)frag.len);
 
     // Handle custom OSC via callback
@@ -839,7 +819,7 @@ int LocalTerminalBackend::onOSC(int command, VTermStringFragment frag, void* use
     // Also handle via plugin manager for backward compatibility
     constexpr int YETTY_OSC_VENDOR_ID = 7777;
     if (command != YETTY_OSC_VENDOR_ID) {
-        spdlog::debug("onOSC: ignoring non-yetty command {}", command);
+        ydebug("onOSC: ignoring non-yetty command {}", command);
         return 0;
     }
 
@@ -852,38 +832,10 @@ int LocalTerminalBackend::onOSC(int command, VTermStringFragment frag, void* use
         backend->oscBuffer_.append(frag.str, frag.len);
     }
 
-#ifndef YETTY_SERVER_BUILD
-    if (frag.final && backend->pluginManager_) {
-        std::string fullSeq = std::to_string(command) + ";" + backend->oscBuffer_;
-
-        std::string response;
-        uint32_t linesToAdvance = 0;
-
-        // Need cell size for plugin - use defaults if not available
-        uint32_t cellWidth = 10, cellHeight = 20;
-
-        bool handled = backend->pluginManager_->handleOSCSequence(
-            fullSeq, &backend->grid_, backend->cursorCol_, backend->cursorRow_,
-            cellWidth, cellHeight, &response, &linesToAdvance);
-
-        if (handled) {
-            backend->fullDamage_ = true;
-            if (!response.empty() && backend->ptyMaster_ >= 0) {
-                backend->writeToPty(response.c_str(), response.size());
-            }
-            if (linesToAdvance > 0) {
-                backend->pendingNewlines_ = linesToAdvance;
-            }
-        }
-        backend->oscBuffer_.clear();
-        backend->oscCommand_ = -1;
-    }
-#else
     if (frag.final) {
         backend->oscBuffer_.clear();
         backend->oscCommand_ = -1;
     }
-#endif
 
     return 1;
 }

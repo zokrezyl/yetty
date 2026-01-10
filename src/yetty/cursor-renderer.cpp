@@ -2,7 +2,7 @@
 #include <yetty/shader-manager.h>
 #include <yetty/webgpu-context.h>
 #include <yetty/wgpu-compat.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 
 namespace yetty {
 
@@ -31,7 +31,7 @@ Result<void> CursorRenderer::init(WebGPUContext* ctx, ShaderManager* shaderMgr,
     }
 
     _initialized = true;
-    spdlog::info("CursorRenderer: initialized");
+    yinfo("CursorRenderer: initialized");
     return Ok();
 }
 
@@ -196,7 +196,7 @@ Result<void> CursorRenderer::createPipeline(WGPUTextureFormat targetFormat) {
         return Err<void>("CursorRenderer: failed to create render pipeline");
     }
 
-    spdlog::debug("CursorRenderer: pipeline created successfully");
+    ydebug("CursorRenderer: pipeline created successfully");
     return Ok();
 }
 

@@ -19,16 +19,27 @@ class ThorvgPlugin : public Plugin {
 public:
     ~ThorvgPlugin() override;
 
-    static Result<PluginPtr> create(YettyPtr engine) noexcept;
+    static Result<PluginPtr> create() noexcept;
 
     const char* pluginName() const override { return "thorvg"; }
 
     Result<void> dispose() override;
 
-    Result<WidgetPtr> createWidget(const std::string& payload) override;
+    Result<WidgetPtr> createWidget(
+        const std::string& widgetName,
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) override;
 
 private:
-    explicit ThorvgPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
+    ThorvgPlugin() noexcept = default;
     Result<void> pluginInit() noexcept;
 };
 
@@ -39,8 +50,26 @@ private:
 //-----------------------------------------------------------------------------
 class Lottie : public Widget {
 public:
-    static Result<WidgetPtr> create(const std::string& payload) {
+    static Result<WidgetPtr> create(
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) {
+        (void)factory;
+        (void)fontManager;
+        (void)loop;
+        (void)pluginArgs;
         auto w = std::shared_ptr<Lottie>(new Lottie(payload));
+        w->_x = x;
+        w->_y = y;
+        w->_widthCells = widthCells;
+        w->_heightCells = heightCells;
         if (auto res = w->init(); !res) {
             return Err<WidgetPtr>("Failed to init Lottie", res);
         }
@@ -74,7 +103,7 @@ public:
 
 private:
     explicit Lottie(const std::string& payload) {
-        payload_ = payload;
+        _payload = payload;
     }
 
     Result<void> init() override;
@@ -122,5 +151,5 @@ private:
 
 extern "C" {
     const char* name();
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine);
+    yetty::Result<yetty::PluginPtr> create();
 }

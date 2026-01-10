@@ -1,67 +1,92 @@
 #pragma once
 
-#include <yetty/plugin.h>  // Plugin, PluginPtr, WidgetPtr, WidgetParams
+#include <yetty/plugin.h>  // Plugin, PluginPtr, WidgetPtr
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
+// Forward declare libuv types
+struct uv_loop_s;
+typedef struct uv_loop_s uv_loop_t;
+
 namespace yetty {
 
 // Forward declarations
 class Yetty;
 class WebGPUContext;
+class FontManager;
+class Config;
+class WidgetFactory;
 
 //-----------------------------------------------------------------------------
-// InternalWidgetFactory - function type for creating internal widgets
+// WidgetCreateFn - function type for creating widgets
 //-----------------------------------------------------------------------------
-using InternalWidgetFactory = std::function<Result<WidgetPtr>(
-    WebGPUContext* ctx,
-    const WidgetParams& params,
+using WidgetCreateFn = std::function<Result<WidgetPtr>(
+    const std::string& widgetName,
+    WidgetFactory* factory,
+    FontManager* fontManager,
+    uv_loop_t* loop,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
     const std::string& pluginArgs,
     const std::string& payload
 )>;
 
 //-----------------------------------------------------------------------------
-// WidgetFactory - single entry point for creating all widgets
+// WidgetFactory - lazy-loads plugins and creates widgets
 //
-// Usage:
-//   factory->createWidget("thorvg.lottie", "-x 0 -y 0 -w 10 -h 10", "--loop", payload)
-//   factory->createWidget("plot", "-x 0 -y 0 -w 20 -h 10", "", payload)
+// Plugins are discovered from search paths but only loaded when first accessed.
 //-----------------------------------------------------------------------------
 class WidgetFactory {
 public:
-    explicit WidgetFactory(Yetty* engine);
+    // Factory method - search paths passed at creation
+    static std::shared_ptr<WidgetFactory> create(
+        Yetty* engine,
+        const std::vector<std::string>& searchPaths
+    );
+
     ~WidgetFactory();
 
-    Result<void> init();
+    //-------------------------------------------------------------------------
+    // Shared resource access (for widgets that need them)
+    //-------------------------------------------------------------------------
+    FontManager* getFontManager() const;
+    WebGPUContext* getContext() const;
+    Config* getConfig() const;
+    uv_loop_t* getLoop() const;
+    class ShaderManager* getShaderManager() const;
 
     //-------------------------------------------------------------------------
-    // Registration
+    // Widget registration (for non-plugin widgets)
     //-------------------------------------------------------------------------
-
-    // Register internal widget type (built into binary)
-    void registerInternal(const std::string& name, InternalWidgetFactory factory);
-
-    // Register plugin for lazy loading
-    void registerPlugin(const std::string& name, const std::string& path = "");
-
-    // Scan directory for dynamic plugins
-    void loadPluginsFromDirectory(const std::string& path);
+    void registerWidget(const std::string& name, WidgetCreateFn factory);
 
     //-------------------------------------------------------------------------
-    // Widget creation
+    // Widget creation - explicit parameters
     //-------------------------------------------------------------------------
-
-    // Create widget
-    // name: "widgetType" for internal, "plugin.widgetType" for plugins
-    // genericArgs: "-x 0 -y 0 -w 10 -h 10 --relative" etc.
-    // pluginArgs: plugin-specific args (passed through)
-    // payload: base64-encoded data (passed through)
     Result<WidgetPtr> createWidget(
         const std::string& name,
-        const std::string& genericArgs,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    );
+
+    // Convenience version using factory's default loop
+    Result<WidgetPtr> createWidget(
+        const std::string& name,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
         const std::string& pluginArgs,
         const std::string& payload
     );
@@ -69,40 +94,28 @@ public:
     //-------------------------------------------------------------------------
     // Queries
     //-------------------------------------------------------------------------
-
     std::vector<std::string> getAvailableWidgets() const;
-    std::vector<std::string> getAvailablePlugins() const;
     bool hasWidget(const std::string& name) const;
 
     //-------------------------------------------------------------------------
-    // Plugin access (for shared resources)
+    // Plugin access (lazy-loaded)
     //-------------------------------------------------------------------------
-
     Result<PluginPtr> getOrLoadPlugin(const std::string& name);
 
 private:
-    Yetty* engine_;
-    WebGPUContext* ctx_ = nullptr;
+    WidgetFactory(Yetty* engine, const std::vector<std::string>& searchPaths);
 
-    // Internal widget factories
-    std::unordered_map<std::string, InternalWidgetFactory> internalFactories_;
+    Yetty* _engine;
+    std::vector<std::string> _searchPaths;
 
-    // Plugin registry (lazy loaded)
-    struct PluginEntry {
-        std::string path;           // Empty for built-in
-        PluginPtr instance;         // nullptr until loaded
-        bool isLoaded = false;
-    };
-    std::unordered_map<std::string, PluginEntry> plugins_;
+    // Direct widget factories (non-plugin widgets)
+    std::unordered_map<std::string, WidgetCreateFn> _widgetFactories;
 
-    // Parse "plugin.widget" or "widget"
+    // Loaded plugins (lazy-loaded on first access)
+    std::unordered_map<std::string, PluginPtr> _loadedPlugins;
+
     std::pair<std::string, std::string> parseName(const std::string& name) const;
-
-    // Parse generic args into WidgetParams
-    WidgetParams parseGenericArgs(const std::string& args) const;
-
-    // Load plugin
-    Result<PluginPtr> loadPlugin(const std::string& name);
+    Result<PluginPtr> findAndLoadPlugin(const std::string& name);
     Result<PluginPtr> loadDynamicPlugin(const std::string& path);
 };
 

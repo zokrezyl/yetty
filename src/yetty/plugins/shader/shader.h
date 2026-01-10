@@ -15,16 +15,27 @@ class ShaderPlugin : public Plugin {
 public:
     ~ShaderPlugin() override;
 
-    static Result<PluginPtr> create(YettyPtr engine) noexcept;
+    static Result<PluginPtr> create() noexcept;
 
     const char* pluginName() const override { return "shader"; }
 
     Result<void> dispose() override;
 
-    Result<WidgetPtr> createWidget(const std::string& payload) override;
+    Result<WidgetPtr> createWidget(
+        const std::string& widgetName,
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) override;
 
 private:
-    explicit ShaderPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
+    ShaderPlugin() noexcept = default;
     Result<void> pluginInit() noexcept;
 };
 
@@ -36,10 +47,29 @@ private:
 //   2. init() (private) - no args, compiles shader
 //   3. create() (public) - factory
 //-----------------------------------------------------------------------------
+class WidgetFactory;
+
 class Shader : public Widget {
 public:
-    static Result<WidgetPtr> create(const std::string& payload) {
-        auto w = std::shared_ptr<Shader>(new Shader(payload));
+    static Result<WidgetPtr> create(
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) {
+        (void)fontManager;
+        (void)loop;
+        (void)pluginArgs;
+        auto w = std::shared_ptr<Shader>(new Shader(payload, factory));
+        w->_x = x;
+        w->_y = y;
+        w->_widthCells = widthCells;
+        w->_heightCells = heightCells;
         if (auto res = w->init(); !res) {
             return Err<WidgetPtr>("Failed to init Shader", res);
         }
@@ -63,11 +93,14 @@ public:
     bool wantsMouse() const override { return true; }
 
 private:
-    explicit Shader(const std::string& payload) {
-        payload_ = payload;
+    explicit Shader(const std::string& payload, WidgetFactory* factory)
+        : _factory(factory) {
+        _payload = payload;
     }
 
     Result<void> init() override;
+
+    WidgetFactory* _factory = nullptr;
 
     Result<void> compileShader(WebGPUContext& ctx,
                                WGPUTextureFormat targetFormat,
@@ -105,5 +138,5 @@ using ShaderToy = ShaderPlugin;
 // C exports for dynamic loading
 extern "C" {
     const char* name();
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine);
+    yetty::Result<yetty::PluginPtr> create();
 }

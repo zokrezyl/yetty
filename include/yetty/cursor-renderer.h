@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yetty/renderable.h>
+#include <yetty/widget.h>
 #include <yetty/result.hpp>
 #include <webgpu/webgpu.h>
 #include <string>
@@ -27,7 +27,7 @@ enum class CursorStyle : uint32_t {
 // Registered with ShaderManager, uses shared quad vertex shader.
 // Runs every frame but is very lightweight (single quad draw).
 //-----------------------------------------------------------------------------
-class CursorRenderer : public Renderable {
+class CursorRenderer : public Widget {
 public:
     CursorRenderer(uint32_t id);
     ~CursorRenderer() override;
@@ -37,8 +37,8 @@ public:
                       WGPUTextureFormat targetFormat);
     Result<void> dispose();
 
-    // Renderable interface
-    uint32_t id() const override { return _id; }
+    // Widget interface
+    // id() inherited from Widget
     uint32_t zOrder() const override { return _zOrder; }
     const std::string& name() const override { return _name; }
     void start() override { _running.store(true); }

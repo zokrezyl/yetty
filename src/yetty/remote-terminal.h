@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yetty/renderable.h>
+#include <yetty/widget.h>
 #include <yetty/font.h>
 #include <yetty/config.h>
 #include <yetty/result.hpp>
@@ -13,12 +13,11 @@
 
 namespace yetty {
 
-class PluginManager;
 class EmojiAtlas;
 class GridRenderer;
 
 //=============================================================================
-// RemoteTerminal - Renderable that uses RemoteTerminalBackend for multiplexing
+// RemoteTerminal - Widget that uses RemoteTerminalBackend for multiplexing
 //
 // This class provides a Terminal-like interface but connects to yetty-server
 // for the actual PTY/vterm processing. The Grid is in shared memory.
@@ -29,11 +28,12 @@ class GridRenderer;
 //   - Input is forwarded to server via socket
 //=============================================================================
 
-class RemoteTerminal : public Renderable {
+class RemoteTerminal : public Widget {
 public:
     using Ptr = std::shared_ptr<RemoteTerminal>;
 
     // Factory - creates remote terminal with given grid size
+    // ID is ignored - Widget base class auto-assigns IDs
     static Result<Ptr> create(uint32_t id, uint32_t cols, uint32_t rows,
                               Font* font, uv_loop_t* loop) noexcept;
 
@@ -44,17 +44,23 @@ public:
     RemoteTerminal& operator=(const RemoteTerminal&) = delete;
 
     //=========================================================================
-    // Renderable interface
+    // Widget interface
     //=========================================================================
-    uint32_t id() const override { return id_; }
-    uint32_t zOrder() const override { return zOrder_; }
-    const std::string& name() const override { return name_; }
+    // id() inherited from Widget
+    uint32_t zOrder() const override { return _zOrder; }
+    const std::string& name() const override { return _name; }
 
     void start() override;
     void stop() override;
-    bool isRunning() const override { return backend_ && backend_->isRunning(); }
+    bool isRunning() const override { return _backend && _backend->isRunning(); }
 
+    // Standalone render (RemoteTerminal manages its own pass)
     Result<void> render(WebGPUContext& ctx) override;
+
+    // Batched render (for child widgets - RemoteTerminal doesn't use this directly)
+    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override {
+        (void)pass; (void)ctx; return false;
+    }
 
     //=========================================================================
     // Terminal-compatible interface
@@ -69,74 +75,72 @@ public:
     void resize(uint32_t cols, uint32_t rows);
 
     // Grid access (from shared memory)
-    const Grid& getGrid() const { return backend_->getGrid(); }
-    Grid& getGridMutable() { return backend_->getGridMutable(); }
+    const Grid& getGrid() const { return _backend->getGrid(); }
+    Grid& getGridMutable() { return _backend->getGridMutable(); }
 
     // Cursor state
-    int getCursorRow() const { return backend_->getCursorRow(); }
-    int getCursorCol() const { return backend_->getCursorCol(); }
-    bool isCursorVisible() const { return backend_->isCursorVisible() && cursorBlink_; }
+    int getCursorRow() const { return _backend->getCursorRow(); }
+    int getCursorCol() const { return _backend->getCursorCol(); }
+    bool isCursorVisible() const { return _backend->isCursorVisible() && _cursorBlink; }
 
     // Damage tracking
-    const std::vector<DamageRect>& getDamageRects() const { return backend_->getDamageRects(); }
-    void clearDamageRects() { backend_->clearDamageRects(); }
-    bool hasDamage() const { return backend_->hasDamage(); }
-    bool hasFullDamage() const { return backend_->hasFullDamage(); }
-    void clearFullDamage() { backend_->clearFullDamage(); }
+    const std::vector<DamageRect>& getDamageRects() const { return _backend->getDamageRects(); }
+    void clearDamageRects() { _backend->clearDamageRects(); }
+    bool hasDamage() const { return _backend->hasDamage(); }
+    bool hasFullDamage() const { return _backend->hasFullDamage(); }
+    void clearFullDamage() { _backend->clearFullDamage(); }
 
     // Scrollback navigation
-    void scrollUp(int lines = 1) { backend_->scrollUp(lines); }
-    void scrollDown(int lines = 1) { backend_->scrollDown(lines); }
-    void scrollToTop() { backend_->scrollToTop(); }
-    void scrollToBottom() { backend_->scrollToBottom(); }
-    int getScrollOffset() const { return backend_->getScrollOffset(); }
-    bool isScrolledBack() const { return backend_->isScrolledBack(); }
-    size_t getScrollbackSize() const { return backend_->getScrollbackSize(); }
+    void scrollUp(int lines = 1) { _backend->scrollUp(lines); }
+    void scrollDown(int lines = 1) { _backend->scrollDown(lines); }
+    void scrollToTop() { _backend->scrollToTop(); }
+    void scrollToBottom() { _backend->scrollToBottom(); }
+    int getScrollOffset() const { return _backend->getScrollOffset(); }
+    bool isScrolledBack() const { return _backend->isScrolledBack(); }
+    size_t getScrollbackSize() const { return _backend->getScrollbackSize(); }
 
     // Selection
     void startSelection(int row, int col, SelectionMode mode = SelectionMode::Character) {
-        backend_->startSelection(row, col, mode);
+        _backend->startSelection(row, col, mode);
     }
-    void extendSelection(int row, int col) { backend_->extendSelection(row, col); }
-    void clearSelection() { backend_->clearSelection(); }
-    bool hasSelection() const { return backend_->hasSelection(); }
-    bool isInSelection(int row, int col) const { return backend_->isInSelection(row, col); }
-    std::string getSelectedText() { return backend_->getSelectedText(); }
+    void extendSelection(int row, int col) { _backend->extendSelection(row, col); }
+    void clearSelection() { _backend->clearSelection(); }
+    bool hasSelection() const { return _backend->hasSelection(); }
+    bool isInSelection(int row, int col) const { return _backend->isInSelection(row, col); }
+    std::string getSelectedText() { return _backend->getSelectedText(); }
 
     // Configuration
-    void setConfig(const Config* config) { config_ = config; }
-    void setShell(const std::string& shell) { shell_ = shell; }
+    void setConfig(const Config* config) { _config = config; }
+    void setShell(const std::string& shell) { _shell = shell; }
 
-    // Plugin support
-    void setPluginManager(PluginManager* mgr) { pluginManager_ = mgr; }
-    PluginManager* getPluginManager() const { return pluginManager_; }
-    void setEmojiAtlas(EmojiAtlas* atlas) { emojiAtlas_ = atlas; }
-    void setRenderer(GridRenderer* renderer) { renderer_ = renderer; }
+    // Emoji support
+    void setEmojiAtlas(EmojiAtlas* atlas) { _emojiAtlas = atlas; }
+    void setRenderer(GridRenderer* renderer) { _renderer = renderer; }
 
     // Cell size
     void setCellSize(uint32_t width, uint32_t height);
-    uint32_t getCellWidth() const { return cellWidth_; }
-    uint32_t getCellHeight() const { return cellHeight_; }
+    uint32_t getCellWidth() const { return _cellWidth; }
+    uint32_t getCellHeight() const { return _cellHeight; }
 
     void setBaseCellSize(float width, float height);
-    float getBaseCellWidth() const { return baseCellWidth_; }
-    float getBaseCellHeight() const { return baseCellHeight_; }
+    float getBaseCellWidth() const { return _baseCellWidth; }
+    float getBaseCellHeight() const { return _baseCellHeight; }
 
     void setZoomLevel(float zoom);
-    float getZoomLevel() const { return zoomLevel_; }
-    float getCellWidthF() const { return baseCellWidth_ * zoomLevel_; }
-    float getCellHeightF() const { return baseCellHeight_ * zoomLevel_; }
+    float getZoomLevel() const { return _zoomLevel; }
+    float getCellWidthF() const { return _baseCellWidth * _zoomLevel; }
+    float getCellHeightF() const { return _baseCellHeight * _zoomLevel; }
 
     // Mouse mode
-    int getMouseMode() const { return backend_->getMouseMode(); }
-    bool wantsMouseEvents() const { return backend_->wantsMouseEvents(); }
-    bool isAltScreen() const { return backend_->isAltScreen(); }
+    int getMouseMode() const { return _backend->getMouseMode(); }
+    bool wantsMouseEvents() const { return _backend->wantsMouseEvents(); }
+    bool isAltScreen() const { return _backend->isAltScreen(); }
 
     // Backend access (for advanced use)
-    RemoteTerminalBackend* getBackend() const { return backend_.get(); }
+    RemoteTerminalBackend* getBackend() const { return _backend.get(); }
 
 private:
-    RemoteTerminal(uint32_t id, uint32_t cols, uint32_t rows, Font* font, uv_loop_t* loop) noexcept;
+    RemoteTerminal(uint32_t cols, uint32_t rows, Font* font, uv_loop_t* loop) noexcept;
     Result<void> init() noexcept;
 
     // libuv callbacks
@@ -146,42 +150,34 @@ private:
     void updateCursorBlink(double currentTime);
 
     //=========================================================================
-    // Identity
-    //=========================================================================
-    uint32_t id_;
-    uint32_t zOrder_ = 0;
-    std::string name_;
-
-    //=========================================================================
     // libuv (external loop, not owned)
     //=========================================================================
-    uv_loop_t* loop_ = nullptr;
-    uv_timer_t* cursorTimer_ = nullptr;
+    uv_loop_t* _loop = nullptr;
+    uv_timer_t* _cursorTimer = nullptr;
 
     //=========================================================================
     // Backend and state
     //=========================================================================
-    RemoteTerminalBackend::Ptr backend_;
-    Font* font_;
-    std::string shell_;
+    RemoteTerminalBackend::Ptr _backend;
+    Font* _font;
+    std::string _shell;
 
-    uint32_t cols_;
-    uint32_t rows_;
+    uint32_t _cols;
+    uint32_t _rows;
 
-    bool cursorBlink_ = true;
-    double lastBlinkTime_ = 0.0;
-    double blinkInterval_ = 0.5;
+    bool _cursorBlink = true;
+    double _lastBlinkTime = 0.0;
+    double _blinkInterval = 0.5;
 
-    const Config* config_ = nullptr;
-    PluginManager* pluginManager_ = nullptr;
-    EmojiAtlas* emojiAtlas_ = nullptr;
-    GridRenderer* renderer_ = nullptr;
+    const Config* _config = nullptr;
+    EmojiAtlas* _emojiAtlas = nullptr;
+    GridRenderer* _renderer = nullptr;
 
-    uint32_t cellWidth_ = 10;
-    uint32_t cellHeight_ = 20;
-    float baseCellWidth_ = 10.0f;
-    float baseCellHeight_ = 20.0f;
-    float zoomLevel_ = 1.0f;
+    uint32_t _cellWidth = 10;
+    uint32_t _cellHeight = 20;
+    float _baseCellWidth = 10.0f;
+    float _baseCellHeight = 20.0f;
+    float _zoomLevel = 1.0f;
 };
 
 } // namespace yetty

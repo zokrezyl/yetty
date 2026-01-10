@@ -2,7 +2,8 @@
 #include <yetty/yetty.h>
 #include <yetty/webgpu-context.h>
 #include <yetty/wgpu-compat.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
+#include <ytrace/ytrace.hpp>
 #include <yaml-cpp/yaml.h>
 #include <cstring>
 #include <cmath>
@@ -16,8 +17,8 @@ namespace yetty {
 
 ThorvgPlugin::~ThorvgPlugin() { (void)dispose(); }
 
-Result<PluginPtr> ThorvgPlugin::create(YettyPtr engine) noexcept {
-    auto p = PluginPtr(new ThorvgPlugin(std::move(engine)));
+Result<PluginPtr> ThorvgPlugin::create() noexcept {
+    auto p = PluginPtr(new ThorvgPlugin());
     if (auto res = static_cast<ThorvgPlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init ThorvgPlugin", res);
     }
@@ -28,15 +29,15 @@ Result<void> ThorvgPlugin::pluginInit() noexcept {
     // Initialize ThorVG engine with WebGPU support
     auto result = tvg::Initializer::init(0);  // Single-threaded for now
     if (result != tvg::Result::Success) {
-        spdlog::error("ThorvgPlugin: tvg::Initializer::init failed with result={}", static_cast<int>(result));
+        yerror("ThorvgPlugin: tvg::Initializer::init failed with result={}", static_cast<int>(result));
         return Err<void>("Failed to initialize ThorVG engine");
     }
 
     uint32_t major, minor, micro;
     const char* version = tvg::Initializer::version(&major, &minor, &micro);
-    spdlog::info("ThorvgPlugin: initialized ThorVG {} (WebGPU renderer)", version ? version : "unknown");
+    yinfo("ThorvgPlugin: initialized ThorVG {} (WebGPU renderer)", version ? version : "unknown");
 
-    initialized_ = true;
+    _initialized = true;
     return Ok();
 }
 
@@ -45,17 +46,30 @@ Result<void> ThorvgPlugin::dispose() {
         return Err<void>("Failed to dispose ThorvgPlugin", res);
     }
 
-    if (initialized_) {
+    if (_initialized) {
         tvg::Initializer::term();
     }
 
-    initialized_ = false;
+    _initialized = false;
     return Ok();
 }
 
-Result<WidgetPtr> ThorvgPlugin::createWidget(const std::string& payload) {
-    spdlog::info("ThorvgPlugin::createWidget called with payload size={}", payload.size());
-    return Lottie::create(payload);
+Result<WidgetPtr> ThorvgPlugin::createWidget(
+    const std::string& widgetName,
+    WidgetFactory* factory,
+    FontManager* fontManager,
+    uv_loop_t* loop,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
+    const std::string& pluginArgs,
+    const std::string& payload
+) {
+    (void)widgetName;
+    yfunc();
+    yinfo("payload size={} x={} y={} w={} h={}", payload.size(), x, y, widthCells, heightCells);
+    return Lottie::create(factory, fontManager, loop, x, y, widthCells, heightCells, pluginArgs, payload);
 }
 
 //-----------------------------------------------------------------------------
@@ -65,23 +79,23 @@ Result<WidgetPtr> ThorvgPlugin::createWidget(const std::string& payload) {
 Lottie::~Lottie() { (void)dispose(); }
 
 Result<void> Lottie::init() {
-    if (payload_.empty()) {
+    if (_payload.empty()) {
         return Err<void>("Lottie: empty payload");
     }
 
-    std::string content = payload_;
+    std::string content = _payload;
     std::string mimeType;
 
-    spdlog::info("Lottie::init: payload size={}", payload_.size());
+    yinfo("Lottie::init: payload size={}", _payload.size());
 
     // Check for type prefix (format: "type\n<content>")
-    size_t newlinePos = payload_.find('\n');
+    size_t newlinePos = _payload.find('\n');
     if (newlinePos != std::string::npos && newlinePos < 20) {
-        std::string prefix = payload_.substr(0, newlinePos);
-        spdlog::info("Lottie::init: detected prefix='{}' at pos {}", prefix, newlinePos);
+        std::string prefix = _payload.substr(0, newlinePos);
+        yinfo("Lottie::init: detected prefix='{}' at pos {}", prefix, newlinePos);
         if (prefix == "svg" || prefix == "lottie" || prefix == "yaml") {
             mimeType = prefix;
-            content = payload_.substr(newlinePos + 1);
+            content = _payload.substr(newlinePos + 1);
         }
     }
 
@@ -94,10 +108,10 @@ Result<void> Lottie::init() {
                    (content.find("<?xml") != std::string::npos && content.find("<svg") != std::string::npos)) {
             mimeType = "svg";
         }
-        spdlog::info("Lottie::init: auto-detected mimeType='{}'", mimeType);
+        yinfo("Lottie::init: auto-detected mimeType='{}'", mimeType);
     }
 
-    spdlog::info("Lottie::init: mimeType='{}', content size={}", mimeType, content.size());
+    yinfo("Lottie::init: mimeType='{}', content size={}", mimeType, content.size());
 
     // Handle YAML vector graphics by converting to SVG
     if (mimeType == "yaml") {
@@ -107,16 +121,16 @@ Result<void> Lottie::init() {
         }
         content = *result;
         mimeType = "svg";
-        spdlog::info("Lottie::init: converted YAML to SVG, size={}", content.size());
+        yinfo("Lottie::init: converted YAML to SVG, size={}", content.size());
     }
 
     auto result = loadContent(content, mimeType);
     if (!result) {
-        spdlog::error("Lottie::init: loadContent failed: {}", result.error().message());
+        yerror("Lottie::init: loadContent failed: {}", result.error().message());
         return result;
     }
 
-    spdlog::info("Lottie: loaded {}x{} content (animated: {})",
+    yinfo("Lottie: loaded {}x{} content (animated: {})",
                  contentWidth_, contentHeight_, isAnimated_);
     return Ok();
 }
@@ -125,7 +139,7 @@ Result<void> Lottie::loadContent(const std::string& data, const std::string& mim
     // WgCanvas will be created when WebGPU context is available (in initWebGPU)
     // For now, just parse content to get dimensions and animation info
 
-    spdlog::info("Lottie::loadContent: mimeType='{}', data size={}", mimeType, data.size());
+    yinfo("Lottie::loadContent: mimeType='{}', data size={}", mimeType, data.size());
 
     // Default size
     contentWidth_ = 256;
@@ -135,7 +149,7 @@ Result<void> Lottie::loadContent(const std::string& data, const std::string& mim
 
     // Check if this is an animation (Lottie)
     if (mimeType == "lottie" || mimeType == "lottie+json" || mimeType == "lot") {
-        spdlog::info("Lottie::loadContent: loading as Lottie animation");
+        yinfo("Lottie::loadContent: loading as Lottie animation");
         animation_.reset(tvg::Animation::gen());
         if (!animation_) {
             return Err<void>("Failed to create ThorVG Animation");
@@ -148,7 +162,7 @@ Result<void> Lottie::loadContent(const std::string& data, const std::string& mim
 
         auto result = picture->load(data.c_str(), static_cast<uint32_t>(data.size()),
                                     "lottie", nullptr, true);
-        spdlog::info("Lottie::loadContent: Lottie load result={}", static_cast<int>(result));
+        yinfo("Lottie::loadContent: Lottie load result={}", static_cast<int>(result));
         if (result != tvg::Result::Success) {
             animation_.reset();
             return Err<void>("Failed to load Lottie animation");
@@ -159,12 +173,12 @@ Result<void> Lottie::loadContent(const std::string& data, const std::string& mim
         duration_ = animation_->duration();
         currentFrame_ = 0.0f;
 
-        spdlog::debug("Lottie: Lottie animation loaded - {} frames, {}s duration",
+        ydebug("Lottie: Lottie animation loaded - {} frames, {}s duration",
                      totalFrames_, duration_);
     } else {
         // Static picture (SVG, PNG, etc.)
         // Use Animation wrapper for ownership management (Picture has protected destructor)
-        spdlog::info("Lottie::loadContent: loading as static content (mimeType='{}')", mimeType);
+        yinfo("Lottie::loadContent: loading as static content (mimeType='{}')", mimeType);
         animation_.reset(tvg::Animation::gen());
         if (!animation_) {
             return Err<void>("Failed to create ThorVG Animation for static content");
@@ -178,11 +192,11 @@ Result<void> Lottie::loadContent(const std::string& data, const std::string& mim
         // ThorVG auto-detects format from content when mime is nullptr
         // For SVG, pass nullptr to let ThorVG detect the format from the XML/SVG content
         const char* mime = nullptr;  // Let ThorVG auto-detect
-        spdlog::info("Lottie::loadContent: calling picture->load() with mime=nullptr (auto-detect), data size={}",
+        yinfo("Lottie::loadContent: calling picture->load() with mime=nullptr (auto-detect), data size={}",
                      data.size());
         auto result = picture->load(data.c_str(), static_cast<uint32_t>(data.size()),
                                     mime, nullptr, true);
-        spdlog::info("Lottie::loadContent: picture->load result={}", static_cast<int>(result));
+        yinfo("Lottie::loadContent: picture->load result={}", static_cast<int>(result));
         if (result != tvg::Result::Success) {
             animation_.reset();
             return Err<void>("Failed to load static content into ThorVG Picture (result=" + std::to_string(static_cast<int>(result)) + ")");
@@ -258,7 +272,7 @@ Result<void> Lottie::initWebGPU(WebGPUContext& ctx) {
         }
     }
 
-    spdlog::debug("Lottie: WebGPU canvas initialized {}x{}", contentWidth_, contentHeight_);
+    ydebug("Lottie: WebGPU canvas initialized {}x{}", contentWidth_, contentHeight_);
     return Ok();
 }
 
@@ -380,7 +394,7 @@ struct VertexOutput { @builtin(position) position: vec4<f32>, @location(0) uv: v
 
     if (!compositePipeline_) return Err<void>("Failed to create composite pipeline");
 
-    spdlog::debug("Lottie: composite pipeline created");
+    ydebug("Lottie: composite pipeline created");
     return Ok();
 }
 
@@ -397,43 +411,43 @@ static void thorvgErrorCallback(WGPUPopErrorScopeStatus status, WGPUErrorType ty
     if (status != WGPUPopErrorScopeStatus_Success || type != WGPUErrorType_NoError) {
         data->hasError = true;
         data->message = message.data ? std::string(message.data, message.length) : "unknown WebGPU error";
-        spdlog::error("Lottie WebGPU error (type={}): {}", static_cast<int>(type), data->message);
+        yerror("Lottie WebGPU error (type={}): {}", static_cast<int>(type), data->message);
     }
 }
 
 Result<void> Lottie::renderThorvgFrame(WGPUDevice device) {
     if (!canvas_ || !picture_) {
-        spdlog::warn("Lottie::renderThorvgFrame: no canvas or picture");
+        ywarn("Lottie::renderThorvgFrame: no canvas or picture");
         return Ok();  // Nothing to render is not an error
     }
 
-    spdlog::info("Lottie::renderThorvgFrame: rendering frame {}, animated={}",
+    yinfo("Lottie::renderThorvgFrame: rendering frame {}, animated={}",
                  currentFrame_, isAnimated_);
 
     // Update animation frame if animated
     if (isAnimated_ && animation_) {
         auto frameResult = animation_->frame(currentFrame_);
-        spdlog::info("Lottie::renderThorvgFrame: animation->frame({}) result={}",
+        yinfo("Lottie::renderThorvgFrame: animation->frame({}) result={}",
                      currentFrame_, static_cast<int>(frameResult));
     }
 
     // Render using ThorVG's WebGPU canvas
     auto updateResult = canvas_->update();
-    spdlog::info("Lottie::renderThorvgFrame: canvas->update result={}", static_cast<int>(updateResult));
+    yinfo("Lottie::renderThorvgFrame: canvas->update result={}", static_cast<int>(updateResult));
     if (updateResult != tvg::Result::Success) {
         return Err<void>("ThorVG canvas update failed (result=" + std::to_string(static_cast<int>(updateResult)) + ")");
     }
 
     // draw(true) clears the buffer before rendering
     auto drawResult = canvas_->draw(true);
-    spdlog::info("Lottie::renderThorvgFrame: canvas->draw result={}", static_cast<int>(drawResult));
+    yinfo("Lottie::renderThorvgFrame: canvas->draw result={}", static_cast<int>(drawResult));
     if (drawResult != tvg::Result::Success) {
         return Err<void>("ThorVG canvas draw failed (result=" + std::to_string(static_cast<int>(drawResult)) + ")");
     }
 
     // sync() submits WebGPU commands
     auto syncResult = canvas_->sync();
-    spdlog::info("Lottie::renderThorvgFrame: canvas->sync result={}", static_cast<int>(syncResult));
+    yinfo("Lottie::renderThorvgFrame: canvas->sync result={}", static_cast<int>(syncResult));
     if (syncResult != tvg::Result::Success) {
         return Err<void>("ThorVG canvas sync failed (result=" + std::to_string(static_cast<int>(syncResult)) + ")");
     }
@@ -465,7 +479,7 @@ Result<void> Lottie::renderThorvgFrame(WGPUDevice device) {
     bgDesc.entries = bgE;
     bindGroup_ = wgpuDeviceCreateBindGroup(device, &bgDesc);
 
-    spdlog::info("Lottie::renderThorvgFrame: completed successfully, recreated view/bindgroup");
+    yinfo("Lottie::renderThorvgFrame: completed successfully, recreated view/bindgroup");
     return Ok();
 }
 
@@ -672,7 +686,7 @@ Result<std::string> Lottie::yamlToSvg(const std::string& yamlContent) {
 
         svg << R"(</svg>)" << "\n";
 
-        spdlog::debug("Lottie: converted YAML to SVG ({} bytes)", svg.str().size());
+        ydebug("Lottie: converted YAML to SVG ({} bytes)", svg.str().size());
         return Ok(svg.str());
 
     } catch (const YAML::Exception& e) {
@@ -705,10 +719,10 @@ Result<void> Lottie::dispose() {
 
 Result<void> Lottie::render(WebGPUContext& ctx) {
     if (failed_) return Err<void>("Lottie already failed");
-    if (!visible_) return Ok();
+    if (!_visible) return Ok();
     if (!animation_) return Err<void>("Lottie has no content");
 
-    const auto& rc = renderCtx_;
+    const auto& rc = _renderCtx;
 
     // Update animation if playing
     if (isAnimated_ && playing_ && animation_ && duration_ > 0) {
@@ -766,13 +780,13 @@ Result<void> Lottie::render(WebGPUContext& ctx) {
     }
 
     // Calculate pixel position from cell position
-    float pixelX = x_ * rc.cellWidth;
-    float pixelY = y_ * rc.cellHeight;
-    float pixelW = widthCells_ * rc.cellWidth;
-    float pixelH = heightCells_ * rc.cellHeight;
+    float pixelX = _x * rc.cellWidth;
+    float pixelY = _y * rc.cellHeight;
+    float pixelW = _widthCells * rc.cellWidth;
+    float pixelH = _heightCells * rc.cellHeight;
 
     // Adjust for scroll offset
-    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
@@ -847,14 +861,14 @@ void Lottie::prepareFrame(WebGPUContext& ctx) {
     // This is called BEFORE the shared render pass begins
     // Here we render ThorVG content to our intermediate texture
 
-    spdlog::info("Lottie::prepareFrame CALLED! failed={} visible={} animation={} gpu_init={} dirty={}",
-                 failed_, visible_, (void*)animation_.get(), gpuInitialized_, contentDirty_);
+    yinfo("Lottie::prepareFrame CALLED! failed={} visible={} animation={} gpu_init={} dirty={}",
+                 failed_, _visible, (void*)animation_.get(), gpuInitialized_, contentDirty_);
 
-    if (failed_ || !visible_ || !animation_) {
+    if (failed_ || !_visible || !animation_) {
         return;
     }
 
-    const auto& rc = renderCtx_;
+    const auto& rc = _renderCtx;
 
     // Update animation if playing
     if (isAnimated_ && playing_ && animation_ && duration_ > 0) {
@@ -882,37 +896,37 @@ void Lottie::prepareFrame(WebGPUContext& ctx) {
 
     // Initialize GPU resources on first use
     if (!gpuInitialized_) {
-        spdlog::info("Lottie::prepareFrame: initializing WebGPU resources");
+        yinfo("Lottie::prepareFrame: initializing WebGPU resources");
         auto result = initWebGPU(ctx);
         if (!result) {
-            spdlog::error("Lottie::prepareFrame: initWebGPU failed: {}", result.error().message());
+            yerror("Lottie::prepareFrame: initWebGPU failed: {}", result.error().message());
             failed_ = true;
             return;
         }
 
-        spdlog::info("Lottie::prepareFrame: creating composite pipeline, targetFormat={}",
+        yinfo("Lottie::prepareFrame: creating composite pipeline, targetFormat={}",
                      static_cast<int>(rc.targetFormat));
         result = createCompositePipeline(ctx, rc.targetFormat);
         if (!result) {
-            spdlog::error("Lottie::prepareFrame: createCompositePipeline failed: {}", result.error().message());
+            yerror("Lottie::prepareFrame: createCompositePipeline failed: {}", result.error().message());
             failed_ = true;
             return;
         }
         gpuInitialized_ = true;
         contentDirty_ = true;
-        spdlog::info("Lottie::prepareFrame: GPU resources initialized");
+        yinfo("Lottie::prepareFrame: GPU resources initialized");
     }
 
     // Render ThorVG content to texture if dirty
     if (contentDirty_) {
-        spdlog::info("Lottie::prepareFrame: rendering ThorVG frame to texture");
+        yinfo("Lottie::prepareFrame: rendering ThorVG frame to texture");
         auto renderResult = renderThorvgFrame(ctx.getDevice());
         if (!renderResult) {
-            spdlog::error("Lottie::prepareFrame: {}", renderResult.error().message());
+            yerror("Lottie::prepareFrame: {}", renderResult.error().message());
             failed_ = true;
             return;
         }
-        spdlog::info("Lottie::prepareFrame: ThorVG frame rendered successfully");
+        yinfo("Lottie::prepareFrame: ThorVG frame rendered successfully");
     }
 }
 
@@ -923,7 +937,7 @@ bool Lottie::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     if (failed_) {
         return false;
     }
-    if (!visible_) {
+    if (!_visible) {
         return false;
     }
     if (!animation_) {
@@ -934,30 +948,30 @@ bool Lottie::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
         return false;
     }
 
-    const auto& rc = renderCtx_;
+    const auto& rc = _renderCtx;
 
     // Calculate pixel position from cell position
-    float pixelX = x_ * rc.cellWidth;
-    float pixelY = y_ * rc.cellHeight;
-    float pixelW = widthCells_ * rc.cellWidth;
-    float pixelH = heightCells_ * rc.cellHeight;
+    float pixelX = _x * rc.cellWidth;
+    float pixelY = _y * rc.cellHeight;
+    float pixelW = _widthCells * rc.cellWidth;
+    float pixelH = _heightCells * rc.cellHeight;
 
-    spdlog::info("Lottie::render: cell pos ({},{}) size ({},{}) cells", x_, y_, widthCells_, heightCells_);
-    spdlog::info("Lottie::render: pixel pos ({},{}) size ({},{})", pixelX, pixelY, pixelW, pixelH);
+    yinfo("Lottie::render: cell pos ({},{}) size ({},{}) cells", _x, _y, _widthCells, _heightCells);
+    yinfo("Lottie::render: pixel pos ({},{}) size ({},{})", pixelX, pixelY, pixelW, pixelH);
 
     // Adjust for scroll offset
-    if (positionMode_ == PositionMode::Relative && rc.scrollOffset > 0) {
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
-        spdlog::info("Lottie::render: adjusted for scroll, new pixelY={}", pixelY);
+        yinfo("Lottie::render: adjusted for scroll, new pixelY={}", pixelY);
     }
 
     // Skip if off-screen
     if (rc.termRows > 0) {
         float screenPixelHeight = rc.termRows * rc.cellHeight;
-        spdlog::info("Lottie::render: termRows={}, screenPixelHeight={}, pixelY={}, pixelH={}",
+        yinfo("Lottie::render: termRows={}, screenPixelHeight={}, pixelY={}, pixelH={}",
                      rc.termRows, screenPixelHeight, pixelY, pixelH);
         if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            spdlog::info("Lottie::render: skipped - off-screen");
+            yinfo("Lottie::render: skipped - off-screen");
             return false;
         }
     }
@@ -984,18 +998,18 @@ bool Lottie::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     }
 
     // Draw ThorVG rendered content into existing pass
-    spdlog::info("Lottie::render: drawing composite - NDC rect ({}, {}, {}, {})",
+    yinfo("Lottie::render: drawing composite - NDC rect ({}, {}, {}, {})",
                  ndcX, ndcY, ndcW, ndcH);
-    spdlog::info("Lottie::render: pixel position ({}, {}) size ({}, {})",
+    yinfo("Lottie::render: pixel position ({}, {}) size ({}, {})",
                  pixelX, pixelY, pixelW, pixelH);
-    spdlog::info("Lottie::render: screen size ({}, {}), cell size ({}, {})",
+    yinfo("Lottie::render: screen size ({}, {}), cell size ({}, {})",
                  rc.screenWidth, rc.screenHeight, rc.cellWidth, rc.cellHeight);
 
     wgpuRenderPassEncoderSetPipeline(pass, compositePipeline_);
     wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
 
-    spdlog::info("Lottie::render: composite draw issued");
+    yinfo("Lottie::render: composite draw issued");
     return true;
 }
 
@@ -1003,7 +1017,7 @@ bool Lottie::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
 
 extern "C" {
     const char* name() { return "thorvg"; }
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine) {
-        return yetty::ThorvgPlugin::create(std::move(engine));
+    yetty::Result<yetty::PluginPtr> create() {
+        return yetty::ThorvgPlugin::create();
     }
 }
