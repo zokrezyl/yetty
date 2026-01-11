@@ -1,5 +1,7 @@
 #include "yetty/grid.h"
+#ifndef YETTY_SERVER_BUILD
 #include <yetty/font.h>
+#endif
 #include <algorithm>
 #include <cstring>
 
@@ -12,7 +14,7 @@ Grid::Grid(uint32_t cols, uint32_t rows)
     fgColors_.resize(cellCount * 4, 255);  // RGBA, default white
     bgColors_.resize(cellCount * 4, 0);    // RGBA, default black (with alpha 0)
     attrs_.resize(cellCount, 0);           // No attributes initially
-    pluginIds_.resize(cellCount, 0);       // No plugins initially
+    _widgetIds.resize(cellCount, 0);       // No plugins initially
 
     // Set default alpha for fg colors
     for (size_t i = 0; i < cellCount; ++i) {
@@ -28,7 +30,7 @@ void Grid::resize(uint32_t cols, uint32_t rows) {
     std::vector<uint8_t> newFgColors(newCellCount * 4, 255);
     std::vector<uint8_t> newBgColors(newCellCount * 4, 0);
     std::vector<uint8_t> newAttrs(newCellCount, 0);
-    std::vector<uint16_t> newPluginIds(newCellCount, 0);
+    std::vector<uint16_t> newWidgetIds(newCellCount, 0);
 
     // Set alpha for new fg colors
     for (size_t i = 0; i < newCellCount; ++i) {
@@ -46,7 +48,7 @@ void Grid::resize(uint32_t cols, uint32_t rows) {
 
             newGlyphs[newIdx] = glyphIndices_[oldIdx];
             newAttrs[newIdx] = attrs_[oldIdx];
-            newPluginIds[newIdx] = pluginIds_[oldIdx];
+            newWidgetIds[newIdx] = _widgetIds[oldIdx];
 
             newFgColors[newIdx * 4 + 0] = fgColors_[oldIdx * 4 + 0];
             newFgColors[newIdx * 4 + 1] = fgColors_[oldIdx * 4 + 1];
@@ -66,15 +68,15 @@ void Grid::resize(uint32_t cols, uint32_t rows) {
     fgColors_ = std::move(newFgColors);
     bgColors_ = std::move(newBgColors);
     attrs_ = std::move(newAttrs);
-    pluginIds_ = std::move(newPluginIds);
-    dirty_ = true;
+    _widgetIds = std::move(newWidgetIds);
+    _dirty = true;
 }
 
 void Grid::clear() {
     size_t cellCount = cols_ * rows_;
     std::fill(glyphIndices_.begin(), glyphIndices_.end(), 0);
     std::fill(attrs_.begin(), attrs_.end(), 0);
-    std::fill(pluginIds_.begin(), pluginIds_.end(), 0);
+    std::fill(_widgetIds.begin(), _widgetIds.end(), 0);
 
     // Reset fg to white, bg to black
     for (size_t i = 0; i < cellCount; ++i) {
@@ -88,7 +90,7 @@ void Grid::clear() {
         bgColors_[i * 4 + 2] = 0;
         bgColors_[i * 4 + 3] = 0;
     }
-    dirty_ = true;
+    _dirty = true;
 }
 
 void Grid::setCell(uint32_t col, uint32_t row, uint16_t glyphIndex,
@@ -110,7 +112,7 @@ void Grid::setCell(uint32_t col, uint32_t row, uint16_t glyphIndex,
     bgColors_[idx * 4 + 2] = bgB;
     bgColors_[idx * 4 + 3] = 255;
 
-    dirty_ = true;
+    _dirty = true;
 }
 
 void Grid::setCell(uint32_t col, uint32_t row, uint16_t glyphIndex,
@@ -133,13 +135,13 @@ void Grid::setCell(uint32_t col, uint32_t row, uint16_t glyphIndex,
     bgColors_[idx * 4 + 2] = bgB;
     bgColors_[idx * 4 + 3] = 255;
 
-    dirty_ = true;
+    _dirty = true;
 }
 
 void Grid::setGlyph(uint32_t col, uint32_t row, uint16_t glyphIndex) {
     if (col >= cols_ || row >= rows_) return;
     glyphIndices_[cellIndex(col, row)] = glyphIndex;
-    dirty_ = true;
+    _dirty = true;
 }
 
 void Grid::setFgColor(uint32_t col, uint32_t row, uint8_t r, uint8_t g, uint8_t b) {
@@ -149,7 +151,7 @@ void Grid::setFgColor(uint32_t col, uint32_t row, uint8_t r, uint8_t g, uint8_t 
     fgColors_[idx + 1] = g;
     fgColors_[idx + 2] = b;
     fgColors_[idx + 3] = 255;
-    dirty_ = true;
+    _dirty = true;
 }
 
 void Grid::setBgColor(uint32_t col, uint32_t row, uint8_t r, uint8_t g, uint8_t b) {
@@ -159,13 +161,13 @@ void Grid::setBgColor(uint32_t col, uint32_t row, uint8_t r, uint8_t g, uint8_t 
     bgColors_[idx + 1] = g;
     bgColors_[idx + 2] = b;
     bgColors_[idx + 3] = 255;
-    dirty_ = true;
+    _dirty = true;
 }
 
 void Grid::setAttrs(uint32_t col, uint32_t row, CellAttrs cellAttrs) {
     if (col >= cols_ || row >= rows_) return;
     attrs_[cellIndex(col, row)] = cellAttrs.pack();
-    dirty_ = true;
+    _dirty = true;
 }
 
 uint16_t Grid::getGlyph(uint32_t col, uint32_t row) const {
@@ -184,18 +186,18 @@ void Grid::getFgColor(uint32_t col, uint32_t row, uint8_t& r, uint8_t& g, uint8_
     b = fgColors_[idx + 2];
 }
 
-void Grid::setPluginId(uint32_t col, uint32_t row, uint16_t pluginId) {
+void Grid::setWidgetId(uint32_t col, uint32_t row, uint16_t widgetId) {
     if (col >= cols_ || row >= rows_) return;
-    pluginIds_[cellIndex(col, row)] = pluginId;
+    _widgetIds[cellIndex(col, row)] = widgetId;
 }
 
-uint16_t Grid::getPluginId(uint32_t col, uint32_t row) const {
+uint16_t Grid::getWidgetId(uint32_t col, uint32_t row) const {
     if (col >= cols_ || row >= rows_) return 0;
-    return pluginIds_[cellIndex(col, row)];
+    return _widgetIds[cellIndex(col, row)];
 }
 
-void Grid::clearPluginId(uint32_t col, uint32_t row) {
-    setPluginId(col, row, 0);
+void Grid::clearWidgetId(uint32_t col, uint32_t row) {
+    setWidgetId(col, row, 0);
 }
 
 void Grid::writeString(uint32_t col, uint32_t row, const char* str,
@@ -206,7 +208,12 @@ void Grid::writeString(uint32_t col, uint32_t row, const char* str,
     uint32_t c = col;
     while (*str && c < cols_) {
         uint32_t codepoint = static_cast<uint8_t>(*str);
+#ifndef YETTY_SERVER_BUILD
         uint16_t glyphIndex = font ? font->getGlyphIndex(codepoint) : static_cast<uint16_t>(codepoint);
+#else
+        (void)font;
+        uint16_t glyphIndex = static_cast<uint16_t>(codepoint);
+#endif
         setGlyph(c, row, glyphIndex);
         setFgColor(c, row, fgR, fgG, fgB);
         ++str;
@@ -256,7 +263,7 @@ void Grid::scrollUp() {
         bgColors_[idx * 4 + 3] = 0;
     }
 
-    dirty_ = true;
+    _dirty = true;
 }
 
 } // namespace yetty

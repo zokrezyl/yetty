@@ -2,7 +2,8 @@
 #include <yetty/yetty.h>
 #include <yetty/webgpu-context.h>
 #include <yetty/wgpu-compat.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
+#include <ytrace/ytrace.hpp>
 #include <cstring>
 #include <cmath>
 #include <algorithm>
@@ -39,15 +40,15 @@ PlotPlugin::~PlotPlugin() {
     (void)dispose();
 }
 
-Result<PluginPtr> PlotPlugin::create(YettyPtr engine) noexcept {
-    auto p = PluginPtr(new PlotPlugin(std::move(engine)));
-    if (auto res = static_cast<PlotPlugin*>(p.get())->init(); !res) {
+Result<PluginPtr> PlotPlugin::create() noexcept {
+    auto p = PluginPtr(new PlotPlugin());
+    if (auto res = static_cast<PlotPlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init PlotPlugin", res);
     }
     return Ok(p);
 }
 
-Result<void> PlotPlugin::init() noexcept {
+Result<void> PlotPlugin::pluginInit() noexcept {
     _initialized = true;
     return Ok();
 }
@@ -60,13 +61,30 @@ Result<void> PlotPlugin::dispose() {
     return Ok();
 }
 
-Result<PluginLayerPtr> PlotPlugin::createLayer(const std::string& payload) {
-    auto layer = std::make_shared<PlotLayer>();
-    auto result = layer->init(payload);
-    if (!result) {
-        return Err<PluginLayerPtr>("Failed to initialize Plot layer", result);
-    }
-    return Ok<PluginLayerPtr>(layer);
+Result<WidgetPtr> PlotPlugin::createWidget(
+    const std::string& widgetName,
+    WidgetFactory* factory,
+    FontManager* fontManager,
+    uv_loop_t* loop,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
+    const std::string& pluginArgs,
+    const std::string& payload
+) {
+    (void)widgetName;
+    (void)factory;
+    (void)fontManager;
+    (void)loop;
+    (void)x;
+    (void)y;
+    (void)widthCells;
+    (void)heightCells;
+    (void)pluginArgs;
+    yfunc();
+    yinfo("payload size={}", payload.size());
+    return PlotW::create(payload);
 }
 
 Result<void> PlotPlugin::renderAll(WGPUTextureView targetView, WGPUTextureFormat targetFormat,
@@ -74,14 +92,14 @@ Result<void> PlotPlugin::renderAll(WGPUTextureView targetView, WGPUTextureFormat
                                     float cellWidth, float cellHeight,
                                     int scrollOffset, uint32_t termRows,
                                     bool isAltScreen) {
-    if (!engine_) return Err<void>("PlotPlugin::renderAll: no engine");
+    // Note: renderAll is deprecated - widgets should use render(pass, ctx)
 
     ScreenType currentScreen = isAltScreen ? ScreenType::Alternate : ScreenType::Main;
-    for (auto& layerBase : _layers) {
+    for (auto& layerBase : widgets_) {
         if (!layerBase->isVisible()) continue;
         if (layerBase->getScreenType() != currentScreen) continue;
 
-        auto layer = std::static_pointer_cast<PlotLayer>(layerBase);
+        auto layer = std::static_pointer_cast<PlotW>(layerBase);
 
         float pixelX = layer->getX() * cellWidth;
         float pixelY = layer->getY() * cellHeight;
@@ -99,31 +117,27 @@ Result<void> PlotPlugin::renderAll(WGPUTextureView targetView, WGPUTextureFormat
             }
         }
 
-        if (auto res = layer->render(*engine_->context(), targetView, targetFormat,
+        if (auto res = layer->render(*_ctx, targetView, targetFormat,
                                       screenWidth, screenHeight,
                                       pixelX, pixelY, pixelW, pixelH); !res) {
-            return Err<void>("Failed to render Plot layer", res);
+            return Err<void>("Failed to render PlotW layer", res);
         }
     }
     return Ok();
 }
 
 //-----------------------------------------------------------------------------
-// PlotLayer
+// PlotW
 //-----------------------------------------------------------------------------
 
-PlotLayer::PlotLayer() {
-    std::memcpy(_colors, DEFAULT_COLORS, sizeof(_colors));
-}
-
-PlotLayer::~PlotLayer() {
+PlotW::~PlotW() {
     (void)dispose();
 }
 
-Result<void> PlotLayer::init(const std::string& payload) {
-    _payload = payload;
+Result<void> PlotW::init() {
+    std::memcpy(colors_, DEFAULT_COLORS, sizeof(colors_));
 
-    if (payload.empty()) {
+    if (_payload.empty()) {
         return Ok();
     }
 
@@ -131,8 +145,8 @@ Result<void> PlotLayer::init(const std::string& payload) {
     // Header size: 8 + 16 = 24 bytes
     constexpr size_t HEADER_SIZE = 24;
 
-    if (payload.size() >= HEADER_SIZE) {
-        const uint8_t* data = reinterpret_cast<const uint8_t*>(payload.data());
+    if (_payload.size() >= HEADER_SIZE) {
+        const uint8_t* data = reinterpret_cast<const uint8_t*>(_payload.data());
 
         uint32_t n, m;
         float xmin, xmax, ymin, ymax;
@@ -147,19 +161,19 @@ Result<void> PlotLayer::init(const std::string& payload) {
 
         // Check if this looks like valid binary data
         if (n > 0 && n <= MAX_PLOTS && m > 0 && m <= 65536 &&
-            payload.size() == expected_size &&
+            _payload.size() == expected_size &&
             std::isfinite(xmin) && std::isfinite(xmax) &&
             std::isfinite(ymin) && std::isfinite(ymax)) {
 
-            _num_plots = n;
-            _num_points = m;
-            _data.resize(_num_plots * _num_points);
-            std::memcpy(_data.data(), data + HEADER_SIZE, _num_plots * _num_points * sizeof(float));
+            numPlots_ = n;
+            numPoints_ = m;
+            data_.resize(numPlots_ * numPoints_);
+            std::memcpy(data_.data(), data + HEADER_SIZE, numPlots_ * numPoints_ * sizeof(float));
             setViewport(xmin, xmax, ymin, ymax);
-            _data_dirty = true;
+            dataDirty_ = true;
 
-            spdlog::info("PlotLayer: initialized from binary (N={}, M={}, viewport=[{},{},{},{}])",
-                         _num_plots, _num_points, xmin, xmax, ymin, ymax);
+            yinfo("PlotW: initialized from binary (N={}, M={}, viewport=[{},{},{},{}])",
+                         numPlots_, numPoints_, xmin, xmax, ymin, ymax);
             return Ok();
         }
     }
@@ -167,191 +181,191 @@ Result<void> PlotLayer::init(const std::string& payload) {
     // Fallback: text format "N,M" or "N,M,xmin,xmax,ymin,ymax"
     uint32_t n = 0, m = 0;
     float xmin = 0, xmax = 1, ymin = 0, ymax = 1;
-    int parsed = sscanf(payload.c_str(), "%u,%u,%f,%f,%f,%f",
+    int parsed = sscanf(_payload.c_str(), "%u,%u,%f,%f,%f,%f",
                         &n, &m, &xmin, &xmax, &ymin, &ymax);
     if (parsed >= 2 && n > 0 && m > 0) {
-        _num_plots = std::min(n, MAX_PLOTS);
-        _num_points = m;
-        _data.resize(_num_plots * _num_points, 0.0f);
-        _data_dirty = true;
+        numPlots_ = std::min(n, MAX_PLOTS);
+        numPoints_ = m;
+        data_.resize(numPlots_ * numPoints_, 0.0f);
+        dataDirty_ = true;
         if (parsed >= 6) {
             setViewport(xmin, xmax, ymin, ymax);
         }
     }
 
-    spdlog::info("PlotLayer: initialized (N={}, M={})", _num_plots, _num_points);
+    yinfo("PlotW: initialized (N={}, M={})", numPlots_, numPoints_);
     return Ok();
 }
 
-Result<void> PlotLayer::dispose() {
-    if (_bind_group) { wgpuBindGroupRelease(_bind_group); _bind_group = nullptr; }
-    if (_pipeline) { wgpuRenderPipelineRelease(_pipeline); _pipeline = nullptr; }
-    if (_uniform_buffer) { wgpuBufferRelease(_uniform_buffer); _uniform_buffer = nullptr; }
-    if (_sampler) { wgpuSamplerRelease(_sampler); _sampler = nullptr; }
-    if (_data_texture_view) { wgpuTextureViewRelease(_data_texture_view); _data_texture_view = nullptr; }
-    if (_data_texture) { wgpuTextureRelease(_data_texture); _data_texture = nullptr; }
-    _gpu_initialized = false;
-    _data.clear();
+Result<void> PlotW::dispose() {
+    if (bindGroup_) { wgpuBindGroupRelease(bindGroup_); bindGroup_ = nullptr; }
+    if (pipeline_) { wgpuRenderPipelineRelease(pipeline_); pipeline_ = nullptr; }
+    if (uniformBuffer_) { wgpuBufferRelease(uniformBuffer_); uniformBuffer_ = nullptr; }
+    if (sampler_) { wgpuSamplerRelease(sampler_); sampler_ = nullptr; }
+    if (dataTextureView_) { wgpuTextureViewRelease(dataTextureView_); dataTextureView_ = nullptr; }
+    if (dataTexture_) { wgpuTextureRelease(dataTexture_); dataTexture_ = nullptr; }
+    gpuInitialized_ = false;
+    data_.clear();
     return Ok();
 }
 
-Result<void> PlotLayer::update(double deltaTime) {
+Result<void> PlotW::update(double deltaTime) {
     (void)deltaTime;
     return Ok();
 }
 
-Result<void> PlotLayer::setData(const float* data, uint32_t numPlots, uint32_t numPoints) {
+Result<void> PlotW::setData(const float* data, uint32_t numPlots, uint32_t numPoints) {
     if (!data || numPlots == 0 || numPoints == 0) {
         return Err<void>("Invalid plot data");
     }
 
-    _num_plots = std::min(numPlots, MAX_PLOTS);
-    _num_points = numPoints;
-    _data.resize(_num_plots * _num_points);
-    std::memcpy(_data.data(), data, _num_plots * _num_points * sizeof(float));
-    _data_dirty = true;
+    numPlots_ = std::min(numPlots, MAX_PLOTS);
+    numPoints_ = numPoints;
+    data_.resize(numPlots_ * numPoints_);
+    std::memcpy(data_.data(), data, numPlots_ * numPoints_ * sizeof(float));
+    dataDirty_ = true;
 
-    spdlog::debug("PlotLayer: data updated (N={}, M={})", _num_plots, _num_points);
+    ydebug("PlotW: data updated (N={}, M={})", numPlots_, numPoints_);
     return Ok();
 }
 
-void PlotLayer::setViewport(float xMin, float xMax, float yMin, float yMax) {
-    _x_min = xMin;
-    _x_max = xMax;
-    _y_min = yMin;
-    _y_max = yMax;
+void PlotW::setViewport(float xMin, float xMax, float yMin, float yMax) {
+    xMin_ = xMin;
+    xMax_ = xMax;
+    yMin_ = yMin;
+    yMax_ = yMax;
 }
 
-void PlotLayer::setPlotColor(uint32_t plotIndex, float r, float g, float b, float a) {
+void PlotW::setPlotColor(uint32_t plotIndex, float r, float g, float b, float a) {
     if (plotIndex >= MAX_PLOTS) return;
-    _colors[plotIndex * 4 + 0] = r;
-    _colors[plotIndex * 4 + 1] = g;
-    _colors[plotIndex * 4 + 2] = b;
-    _colors[plotIndex * 4 + 3] = a;
+    colors_[plotIndex * 4 + 0] = r;
+    colors_[plotIndex * 4 + 1] = g;
+    colors_[plotIndex * 4 + 2] = b;
+    colors_[plotIndex * 4 + 3] = a;
 }
 
-void PlotLayer::setLineWidth(float width) {
-    _line_width = std::max(0.5f, std::min(10.0f, width));
+void PlotW::setLineWidth(float width) {
+    lineWidth_ = std::max(0.5f, std::min(10.0f, width));
 }
 
-void PlotLayer::setGridEnabled(bool enabled) {
-    _grid_enabled = enabled;
+void PlotW::setGridEnabled(bool enabled) {
+    gridEnabled_ = enabled;
 }
 
-bool PlotLayer::onMouseMove(float localX, float localY) {
-    float normX = localX / static_cast<float>(_pixel_width);
-    float normY = localY / static_cast<float>(_pixel_height);
+bool PlotW::onMouseMove(float localX, float localY) {
+    float normX = localX / static_cast<float>(_pixelWidth);
+    float normY = localY / static_cast<float>(_pixelHeight);
 
-    if (_panning) {
-        float dx = normX - _pan_start_x;
-        float dy = normY - _pan_start_y;
+    if (panning_) {
+        float dx = normX - panStartX_;
+        float dy = normY - panStartY_;
 
-        float rangeX = _viewport_start_x_max - _viewport_start_x_min;
-        float rangeY = _viewport_start_y_max - _viewport_start_y_min;
+        float rangeX = viewportStartXMax_ - viewportStartXMin_;
+        float rangeY = viewportStartYMax_ - viewportStartYMin_;
 
-        _x_min = _viewport_start_x_min - dx * rangeX;
-        _x_max = _viewport_start_x_max - dx * rangeX;
-        _y_min = _viewport_start_y_min + dy * rangeY;
-        _y_max = _viewport_start_y_max + dy * rangeY;
+        xMin_ = viewportStartXMin_ - dx * rangeX;
+        xMax_ = viewportStartXMax_ - dx * rangeX;
+        yMin_ = viewportStartYMin_ + dy * rangeY;
+        yMax_ = viewportStartYMax_ + dy * rangeY;
     }
 
-    _mouse_x = normX;
-    _mouse_y = normY;
+    mouseX_ = normX;
+    mouseY_ = normY;
     return true;
 }
 
-bool PlotLayer::onMouseButton(int button, bool pressed) {
+bool PlotW::onMouseButton(int button, bool pressed) {
     if (button == 0) {
-        _panning = pressed;
+        panning_ = pressed;
         if (pressed) {
-            _pan_start_x = _mouse_x;
-            _pan_start_y = _mouse_y;
-            _viewport_start_x_min = _x_min;
-            _viewport_start_x_max = _x_max;
-            _viewport_start_y_min = _y_min;
-            _viewport_start_y_max = _y_max;
+            panStartX_ = mouseX_;
+            panStartY_ = mouseY_;
+            viewportStartXMin_ = xMin_;
+            viewportStartXMax_ = xMax_;
+            viewportStartYMin_ = yMin_;
+            viewportStartYMax_ = yMax_;
         }
         return true;
     }
     if (button == -1) {
-        _panning = false;
+        panning_ = false;
         return false;
     }
     return false;
 }
 
-bool PlotLayer::onMouseScroll(float xoffset, float yoffset, int mods) {
+bool PlotW::onMouseScroll(float xoffset, float yoffset, int mods) {
     (void)xoffset;
 
     float zoomFactor = 1.0f - yoffset * 0.1f;
     zoomFactor = std::max(0.5f, std::min(2.0f, zoomFactor));
 
     // Zoom centered on mouse position
-    float pivotX = _x_min + _mouse_x * (_x_max - _x_min);
-    float pivotY = _y_min + (1.0f - _mouse_y) * (_y_max - _y_min);
+    float pivotX = xMin_ + mouseX_ * (xMax_ - xMin_);
+    float pivotY = yMin_ + (1.0f - mouseY_) * (yMax_ - yMin_);
 
     bool ctrlPressed = (mods & 0x0002) != 0;
 
     if (ctrlPressed) {
         // Zoom only Y axis
-        _y_min = pivotY + (_y_min - pivotY) * zoomFactor;
-        _y_max = pivotY + (_y_max - pivotY) * zoomFactor;
+        yMin_ = pivotY + (yMin_ - pivotY) * zoomFactor;
+        yMax_ = pivotY + (yMax_ - pivotY) * zoomFactor;
     } else {
         // Zoom both axes
-        _x_min = pivotX + (_x_min - pivotX) * zoomFactor;
-        _x_max = pivotX + (_x_max - pivotX) * zoomFactor;
-        _y_min = pivotY + (_y_min - pivotY) * zoomFactor;
-        _y_max = pivotY + (_y_max - pivotY) * zoomFactor;
+        xMin_ = pivotX + (xMin_ - pivotX) * zoomFactor;
+        xMax_ = pivotX + (xMax_ - pivotX) * zoomFactor;
+        yMin_ = pivotY + (yMin_ - pivotY) * zoomFactor;
+        yMax_ = pivotY + (yMax_ - pivotY) * zoomFactor;
     }
 
     return true;
 }
 
-Result<void> PlotLayer::updateDataTexture(WebGPUContext& ctx) {
-    if (_data.empty() || _num_plots == 0 || _num_points == 0) {
+Result<void> PlotW::updateDataTexture(WebGPUContext& ctx) {
+    if (data_.empty() || numPlots_ == 0 || numPoints_ == 0) {
         return Ok();
     }
 
     WGPUTexelCopyTextureInfo dst = {};
-    dst.texture = _data_texture;
+    dst.texture = dataTexture_;
     WGPUTexelCopyBufferLayout layout = {};
-    layout.bytesPerRow = _num_points * sizeof(float);
-    layout.rowsPerImage = _num_plots;
-    WGPUExtent3D extent = {_num_points, _num_plots, 1};
+    layout.bytesPerRow = numPoints_ * sizeof(float);
+    layout.rowsPerImage = numPlots_;
+    WGPUExtent3D extent = {numPoints_, numPlots_, 1};
 
-    wgpuQueueWriteTexture(ctx.getQueue(), &dst, _data.data(),
-                          _data.size() * sizeof(float), &layout, &extent);
-    _data_dirty = false;
+    wgpuQueueWriteTexture(ctx.getQueue(), &dst, data_.data(),
+                          data_.size() * sizeof(float), &layout, &extent);
+    dataDirty_ = false;
     return Ok();
 }
 
-Result<void> PlotLayer::render(WebGPUContext& ctx,
+Result<void> PlotW::render(WebGPUContext& ctx,
                                 WGPUTextureView targetView, WGPUTextureFormat targetFormat,
                                 uint32_t screenWidth, uint32_t screenHeight,
                                 float pixelX, float pixelY, float pixelW, float pixelH) {
-    if (_failed) return Err<void>("PlotLayer already failed");
-    if (_data.empty()) return Ok();  // Nothing to render
+    if (failed_) return Err<void>("PlotW already failed");
+    if (data_.empty()) return Ok();  // Nothing to render
 
-    if (!_gpu_initialized) {
+    if (!gpuInitialized_) {
         auto result = createPipeline(ctx, targetFormat);
         if (!result) {
-            _failed = true;
+            failed_ = true;
             return Err<void>("Failed to create pipeline", result);
         }
-        _gpu_initialized = true;
-        _data_dirty = true;
+        gpuInitialized_ = true;
+        dataDirty_ = true;
     }
 
-    if (_data_dirty) {
+    if (dataDirty_) {
         auto result = updateDataTexture(ctx);
         if (!result) {
             return Err<void>("Failed to update data texture", result);
         }
     }
 
-    if (!_pipeline || !_uniform_buffer || !_bind_group) {
-        _failed = true;
-        return Err<void>("PlotLayer pipeline not initialized");
+    if (!pipeline_ || !uniformBuffer_ || !bindGroup_) {
+        failed_ = true;
+        return Err<void>("PlotW pipeline not initialized");
     }
 
     // Update uniforms
@@ -388,21 +402,21 @@ Result<void> PlotLayer::render(WebGPUContext& ctx,
     uniforms.rect[1] = ndcY;
     uniforms.rect[2] = ndcW;
     uniforms.rect[3] = ndcH;
-    uniforms.viewport[0] = _x_min;
-    uniforms.viewport[1] = _x_max;
-    uniforms.viewport[2] = _y_min;
-    uniforms.viewport[3] = _y_max;
+    uniforms.viewport[0] = xMin_;
+    uniforms.viewport[1] = xMax_;
+    uniforms.viewport[2] = yMin_;
+    uniforms.viewport[3] = yMax_;
     uniforms.resolution[0] = pixelW;
     uniforms.resolution[1] = pixelH;
-    uniforms.lineWidth = _line_width;
-    uniforms.gridEnabled = _grid_enabled ? 1.0f : 0.0f;
-    uniforms.numPlots = _num_plots;
-    uniforms.numPoints = _num_points;
+    uniforms.lineWidth = lineWidth_;
+    uniforms.gridEnabled = gridEnabled_ ? 1.0f : 0.0f;
+    uniforms.numPlots = numPlots_;
+    uniforms.numPoints = numPoints_;
     uniforms._pad[0] = 0;
     uniforms._pad[1] = 0;
-    std::memcpy(uniforms.colors, _colors, sizeof(_colors));
+    std::memcpy(uniforms.colors, colors_, sizeof(colors_));
 
-    wgpuQueueWriteBuffer(ctx.getQueue(), _uniform_buffer, 0, &uniforms, sizeof(uniforms));
+    wgpuQueueWriteBuffer(ctx.getQueue(), uniformBuffer_, 0, &uniforms, sizeof(uniforms));
 
     // Create command encoder and render
     WGPUCommandEncoderDescriptor encoderDesc = {};
@@ -425,8 +439,8 @@ Result<void> PlotLayer::render(WebGPUContext& ctx,
         return Err<void>("Failed to begin render pass");
     }
 
-    wgpuRenderPassEncoderSetPipeline(pass, _pipeline);
-    wgpuRenderPassEncoderSetBindGroup(pass, 0, _bind_group, 0, nullptr);
+    wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
+    wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
     wgpuRenderPassEncoderEnd(pass);
     wgpuRenderPassEncoderRelease(pass);
@@ -441,12 +455,12 @@ Result<void> PlotLayer::render(WebGPUContext& ctx,
     return Ok();
 }
 
-Result<void> PlotLayer::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat) {
+Result<void> PlotW::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat) {
     WGPUDevice device = ctx.getDevice();
 
     // Create data texture (NxM, R32Float)
-    uint32_t texWidth = std::max(_num_points, 1u);
-    uint32_t texHeight = std::max(_num_plots, 1u);
+    uint32_t texWidth = std::max(numPoints_, 1u);
+    uint32_t texHeight = std::max(numPlots_, 1u);
 
     WGPUTextureDescriptor texDesc = {};
     texDesc.size.width = texWidth;
@@ -458,16 +472,16 @@ Result<void> PlotLayer::createPipeline(WebGPUContext& ctx, WGPUTextureFormat tar
     texDesc.format = WGPUTextureFormat_R32Float;
     texDesc.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
 
-    _data_texture = wgpuDeviceCreateTexture(device, &texDesc);
-    if (!_data_texture) return Err<void>("Failed to create data texture");
+    dataTexture_ = wgpuDeviceCreateTexture(device, &texDesc);
+    if (!dataTexture_) return Err<void>("Failed to create data texture");
 
     WGPUTextureViewDescriptor viewDesc = {};
     viewDesc.format = WGPUTextureFormat_R32Float;
     viewDesc.dimension = WGPUTextureViewDimension_2D;
     viewDesc.mipLevelCount = 1;
     viewDesc.arrayLayerCount = 1;
-    _data_texture_view = wgpuTextureCreateView(_data_texture, &viewDesc);
-    if (!_data_texture_view) return Err<void>("Failed to create texture view");
+    dataTextureView_ = wgpuTextureCreateView(dataTexture_, &viewDesc);
+    if (!dataTextureView_) return Err<void>("Failed to create texture view");
 
     // Sampler for data texture (nearest - R32Float is non-filterable)
     WGPUSamplerDescriptor samplerDesc = {};
@@ -477,15 +491,15 @@ Result<void> PlotLayer::createPipeline(WebGPUContext& ctx, WGPUTextureFormat tar
     samplerDesc.addressModeV = WGPUAddressMode_ClampToEdge;
     samplerDesc.addressModeW = WGPUAddressMode_ClampToEdge;
     samplerDesc.maxAnisotropy = 1;
-    _sampler = wgpuDeviceCreateSampler(device, &samplerDesc);
-    if (!_sampler) return Err<void>("Failed to create sampler");
+    sampler_ = wgpuDeviceCreateSampler(device, &samplerDesc);
+    if (!sampler_) return Err<void>("Failed to create sampler");
 
     // Uniform buffer
     WGPUBufferDescriptor bufDesc = {};
     bufDesc.size = 320;  // sizeof(Uniforms)
     bufDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-    _uniform_buffer = wgpuDeviceCreateBuffer(device, &bufDesc);
-    if (!_uniform_buffer) return Err<void>("Failed to create uniform buffer");
+    uniformBuffer_ = wgpuDeviceCreateBuffer(device, &bufDesc);
+    if (!uniformBuffer_) return Err<void>("Failed to create uniform buffer");
 
     // Shader code
     const char* shaderCode = R"(
@@ -664,17 +678,17 @@ fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     // Bind group
     WGPUBindGroupEntry bgE[3] = {};
     bgE[0].binding = 0;
-    bgE[0].buffer = _uniform_buffer;
+    bgE[0].buffer = uniformBuffer_;
     bgE[0].size = 320;
     bgE[1].binding = 1;
-    bgE[1].sampler = _sampler;
+    bgE[1].sampler = sampler_;
     bgE[2].binding = 2;
-    bgE[2].textureView = _data_texture_view;
+    bgE[2].textureView = dataTextureView_;
     WGPUBindGroupDescriptor bgDesc = {};
     bgDesc.layout = bgl;
     bgDesc.entryCount = 3;
     bgDesc.entries = bgE;
-    _bind_group = wgpuDeviceCreateBindGroup(device, &bgDesc);
+    bindGroup_ = wgpuDeviceCreateBindGroup(device, &bgDesc);
 
     // Render pipeline
     WGPURenderPipelineDescriptor pipelineDesc = {};
@@ -707,15 +721,15 @@ fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     pipelineDesc.multisample.count = 1;
     pipelineDesc.multisample.mask = ~0u;
 
-    _pipeline = wgpuDeviceCreateRenderPipeline(device, &pipelineDesc);
+    pipeline_ = wgpuDeviceCreateRenderPipeline(device, &pipelineDesc);
 
     wgpuShaderModuleRelease(shaderModule);
     wgpuBindGroupLayoutRelease(bgl);
     wgpuPipelineLayoutRelease(pipelineLayout);
 
-    if (!_pipeline) return Err<void>("Failed to create render pipeline");
+    if (!pipeline_) return Err<void>("Failed to create render pipeline");
 
-    spdlog::info("PlotLayer: pipeline created ({}x{} texture)", texWidth, texHeight);
+    yinfo("PlotW: pipeline created ({}x{} texture)", texWidth, texHeight);
     return Ok();
 }
 
@@ -723,5 +737,5 @@ fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 
 extern "C" {
     const char* name() { return "plot"; }
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine) { return yetty::PlotPlugin::create(std::move(engine)); }
+    yetty::Result<yetty::PluginPtr> create() { return yetty::PlotPlugin::create(); }
 }

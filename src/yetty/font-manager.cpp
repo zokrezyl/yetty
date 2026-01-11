@@ -1,6 +1,6 @@
 #include <yetty/font-manager.h>
 #include <yetty/webgpu-context.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 
 #include <filesystem>
 #include <fstream>
@@ -38,7 +38,7 @@ Result<FontManager::Ptr> FontManager::create(WebGPUContext::Ptr ctx) noexcept {
 }
 
 FontManager::FontManager(WebGPUContext::Ptr ctx) noexcept
-    : ctx_(std::move(ctx)) {}
+    : _ctx(std::move(ctx)) {}
 
 FontManager::~FontManager() {
     unloadAll();
@@ -131,14 +131,14 @@ std::string FontManager::findFontPath(const std::string& family, Font::Style sty
         reinterpret_cast<IUnknown**>(factory.GetAddressOf())
     );
     if (FAILED(hr)) {
-        spdlog::error("FontManager: Failed to create DirectWrite factory");
+        yerror("FontManager: Failed to create DirectWrite factory");
         return "";
     }
 
     ComPtr<IDWriteFontCollection> fontCollection;
     hr = factory->GetSystemFontCollection(&fontCollection);
     if (FAILED(hr)) {
-        spdlog::error("FontManager: Failed to get system font collection");
+        yerror("FontManager: Failed to get system font collection");
         return "";
     }
 
@@ -152,7 +152,7 @@ std::string FontManager::findFontPath(const std::string& family, Font::Style sty
     BOOL exists = FALSE;
     hr = fontCollection->FindFamilyName(wideFamily.c_str(), &familyIndex, &exists);
     if (FAILED(hr) || !exists) {
-        spdlog::warn("FontManager: Could not find font family '{}'", family);
+        ywarn("FontManager: Could not find font family '{}'", family);
         return "";
     }
 
@@ -189,7 +189,7 @@ std::string FontManager::findFontPath(const std::string& family, Font::Style sty
     ComPtr<IDWriteFont> font;
     hr = fontFamily->GetFirstMatchingFont(weight, DWRITE_FONT_STRETCH_NORMAL, fontStyle, &font);
     if (FAILED(hr)) {
-        spdlog::warn("FontManager: Could not find matching font for '{}' with style {}", family, static_cast<int>(style));
+        ywarn("FontManager: Could not find matching font for '{}' with style {}", family, static_cast<int>(style));
         return "";
     }
 
@@ -227,7 +227,7 @@ std::string FontManager::findFontPath(const std::string& family, Font::Style sty
     ComPtr<IDWriteLocalFontFileLoader> localLoader;
     hr = loader->QueryInterface(__uuidof(IDWriteLocalFontFileLoader), reinterpret_cast<void**>(localLoader.GetAddressOf()));
     if (FAILED(hr)) {
-        spdlog::warn("FontManager: Font is not a local file");
+        ywarn("FontManager: Font is not a local file");
         return "";
     }
 
@@ -253,7 +253,7 @@ std::string FontManager::findFontPath(const std::string& family, Font::Style sty
         fontPath.pop_back();
     }
 
-    spdlog::debug("FontManager: Found font '{}' {} at: {}",
+    ydebug("FontManager: Found font '{}' {} at: {}",
                   family,
                   style == Font::Bold ? "Bold" :
                   style == Font::Italic ? "Italic" :
@@ -266,7 +266,7 @@ std::string FontManager::findFontPath(const std::string& family, Font::Style sty
     // Unix fontconfig implementation
     FcConfig* config = FcInitLoadConfigAndFonts();
     if (!config) {
-        spdlog::error("FontManager: Failed to initialize fontconfig");
+        yerror("FontManager: Failed to initialize fontconfig");
         return "";
     }
 
@@ -320,21 +320,21 @@ std::string FontManager::findFontPath(const std::string& family, Font::Style sty
     FcConfigDestroy(config);
 
     if (!fontPath.empty()) {
-        spdlog::debug("FontManager: Found font '{}' {} at: {}",
+        ydebug("FontManager: Found font '{}' {} at: {}",
                       family,
                       style == Font::Bold ? "Bold" :
                       style == Font::Italic ? "Italic" :
                       style == Font::BoldItalic ? "BoldItalic" : "Regular",
                       fontPath);
     } else {
-        spdlog::warn("FontManager: Could not find font '{}' with style {}", family, static_cast<int>(style));
+        ywarn("FontManager: Could not find font '{}' with style {}", family, static_cast<int>(style));
     }
 
     return fontPath;
 #endif
 
 #else
-    spdlog::warn("FontManager: findFontPath not available on this platform");
+    ywarn("FontManager: findFontPath not available on this platform");
     return "";
 #endif
 }
@@ -347,11 +347,11 @@ Result<std::unique_ptr<Font>> FontManager::generateFont(const std::string& path,
         return Err<std::unique_ptr<Font>>("Failed to generate font atlas from: " + path);
     }
 
-    if (!font->createTexture(ctx_->getDevice(), ctx_->getQueue())) {
+    if (!font->createTexture(_ctx->getDevice(), _ctx->getQueue())) {
         return Err<std::unique_ptr<Font>>("Failed to create font texture");
     }
 
-    if (!font->createGlyphMetadataBuffer(ctx_->getDevice())) {
+    if (!font->createGlyphMetadataBuffer(_ctx->getDevice())) {
         return Err<std::unique_ptr<Font>>("Failed to create glyph metadata buffer");
     }
 
@@ -369,11 +369,11 @@ Result<std::unique_ptr<Font>> FontManager::generateFont(FT_Face face, const std:
         return Err<std::unique_ptr<Font>>("Failed to generate font atlas from FT_Face");
     }
 
-    if (!font->createTexture(ctx_->getDevice(), ctx_->getQueue())) {
+    if (!font->createTexture(_ctx->getDevice(), _ctx->getQueue())) {
         return Err<std::unique_ptr<Font>>("Failed to create font texture for embedded font");
     }
 
-    if (!font->createGlyphMetadataBuffer(ctx_->getDevice())) {
+    if (!font->createGlyphMetadataBuffer(_ctx->getDevice())) {
         return Err<std::unique_ptr<Font>>("Failed to create glyph metadata buffer for embedded font");
     }
 
@@ -389,7 +389,7 @@ Result<Font*> FontManager::getFont(const std::string& family, Font::Style style,
     // Check memory cache first
     auto it = fontCache_.find(key);
     if (it != fontCache_.end()) {
-        spdlog::debug("FontManager: memory cache hit for '{}' {}", family, static_cast<int>(style));
+        ydebug("FontManager: memory cache hit for '{}' {}", family, static_cast<int>(style));
         return Ok(it->second.get());
     }
 
@@ -401,7 +401,7 @@ Result<Font*> FontManager::getFont(const std::string& family, Font::Style style,
     embeddedKey.unitsPerEM = 0;
     it = fontCache_.find(embeddedKey);
     if (it != fontCache_.end()) {
-        spdlog::debug("FontManager: found embedded font '{}' in cache", family);
+        ydebug("FontManager: found embedded font '{}' in cache", family);
         return Ok(it->second.get());
     }
 
@@ -412,7 +412,7 @@ Result<Font*> FontManager::getFont(const std::string& family, Font::Style style,
         if (hasDefaultFont_) {
             auto defaultIt = fontCache_.find(defaultFontKey_);
             if (defaultIt != fontCache_.end()) {
-                spdlog::info("FontManager: using default prebuilt font for '{}'", family);
+                yinfo("FontManager: using default prebuilt font for '{}'", family);
                 return Ok(defaultIt->second.get());
             }
         }
@@ -441,10 +441,10 @@ Result<Font*> FontManager::getFont(const std::string& family, Font::Style style,
     std::string cachePath = getCachePath(cacheName, fontSize, fontData.data(), fontData.size());
 
     // Check disk cache
-    spdlog::info("FontManager: looking for disk cache: {}.lz4", cachePath);
+    yinfo("FontManager: looking for disk cache: {}.lz4", cachePath);
     auto diskResult = loadFromDiskCache(cachePath);
     if (diskResult) {
-        spdlog::info("FontManager: DISK CACHE HIT for font '{}' {}", family, styleName);
+        yinfo("FontManager: DISK CACHE HIT for font '{}' {}", family, styleName);
         Font* ptr = diskResult.value().get();
         fontCache_[key] = std::move(diskResult.value());
 
@@ -457,7 +457,7 @@ Result<Font*> FontManager::getFont(const std::string& family, Font::Style style,
     }
 
     // Generate font from file path
-    spdlog::info("FontManager: DISK CACHE MISS for font '{}' {}, generating atlas...", family, styleName);
+    yinfo("FontManager: DISK CACHE MISS for font '{}' {}, generating atlas...", family, styleName);
     auto result = generateFont(fontPath, fontSize);
     if (!result) {
         return Err<Font*>(result.error().message());
@@ -475,7 +475,7 @@ Result<Font*> FontManager::getFont(const std::string& family, Font::Style style,
         hasDefaultFont_ = true;
     }
 
-    spdlog::info("FontManager: loaded font '{}' {} from {}", family, static_cast<int>(style), fontPath);
+    yinfo("FontManager: loaded font '{}' {} from {}", family, static_cast<int>(style), fontPath);
     return Ok(ptr);
 }
 
@@ -494,11 +494,11 @@ Result<Font*> FontManager::getFont(FT_Face face, const std::string& fontName, fl
 
     auto it = fontCache_.find(key);
     if (it != fontCache_.end()) {
-        spdlog::debug("FontManager: cache hit for FT_Face '{}'", fontName);
+        ydebug("FontManager: cache hit for FT_Face '{}'", fontName);
         return Ok(it->second.get());
     }
 
-    spdlog::info("FontManager: cache miss for FT_Face '{}', generating font", fontName);
+    yinfo("FontManager: cache miss for FT_Face '{}', generating font", fontName);
 
     auto result = generateFont(face, fontName, fontSize);
     if (!result) {
@@ -528,11 +528,11 @@ Result<std::unique_ptr<Font>> FontManager::generateFont(const unsigned char* dat
         return Err<std::unique_ptr<Font>>("Failed to generate font atlas from font data");
     }
 
-    if (!font->createTexture(ctx_->getDevice(), ctx_->getQueue())) {
+    if (!font->createTexture(_ctx->getDevice(), _ctx->getQueue())) {
         return Err<std::unique_ptr<Font>>("Failed to create font texture for embedded font");
     }
 
-    if (!font->createGlyphMetadataBuffer(ctx_->getDevice())) {
+    if (!font->createGlyphMetadataBuffer(_ctx->getDevice())) {
         return Err<std::unique_ptr<Font>>("Failed to create glyph metadata buffer for embedded font");
     }
 
@@ -559,16 +559,16 @@ Result<Font*> FontManager::getFont(const unsigned char* data, size_t dataLen,
     // Check memory cache first
     auto it = fontCache_.find(key);
     if (it != fontCache_.end()) {
-        spdlog::debug("FontManager: memory cache hit for font data '{}'", fontName);
+        ydebug("FontManager: memory cache hit for font data '{}'", fontName);
         return Ok(it->second.get());
     }
 
     // Check disk cache
     std::string cachePath = getCachePath(fontName, fontSize, data, dataLen);
-    spdlog::info("FontManager: looking for disk cache: {}.lz4", cachePath);
+    yinfo("FontManager: looking for disk cache: {}.lz4", cachePath);
     auto diskResult = loadFromDiskCache(cachePath);
     if (diskResult) {
-        spdlog::info("FontManager: DISK CACHE HIT for font '{}'", fontName);
+        yinfo("FontManager: DISK CACHE HIT for font '{}'", fontName);
         Font* ptr = diskResult.value().get();
         fontCache_[key] = std::move(diskResult.value());
 
@@ -581,7 +581,7 @@ Result<Font*> FontManager::getFont(const unsigned char* data, size_t dataLen,
     }
 
     // Generate font
-    spdlog::info("FontManager: DISK CACHE MISS for font '{}', generating atlas...", fontName);
+    yinfo("FontManager: DISK CACHE MISS for font '{}', generating atlas...", fontName);
     auto result = generateFont(data, dataLen, fontName, fontSize);
     if (!result) {
         return Err<Font*>(result.error().message());
@@ -617,19 +617,19 @@ Result<Font*> FontManager::loadFromAtlas(const std::string& atlasPath,
 
     auto it = fontCache_.find(key);
     if (it != fontCache_.end()) {
-        spdlog::debug("FontManager: cache hit for prebuilt atlas '{}'", fontName);
+        ydebug("FontManager: cache hit for prebuilt atlas '{}'", fontName);
         return Ok(it->second.get());
     }
 
     // Load font from prebuilt atlas
     auto font = std::make_unique<Font>();
 
-    spdlog::info("FontManager: loading prebuilt atlas from: {}", atlasPath);
+    yinfo("FontManager: loading prebuilt atlas from: {}", atlasPath);
     if (!font->loadAtlas(atlasPath, metricsPath)) {
         return Err<Font*>("Failed to load font atlas from: " + atlasPath);
     }
 
-    if (!font->createTexture(ctx_->getDevice(), ctx_->getQueue())) {
+    if (!font->createTexture(_ctx->getDevice(), _ctx->getQueue())) {
         return Err<Font*>("Failed to create font texture from prebuilt atlas");
     }
 
@@ -641,7 +641,7 @@ Result<Font*> FontManager::loadFromAtlas(const std::string& atlasPath,
         hasDefaultFont_ = true;
     }
 
-    spdlog::info("FontManager: loaded prebuilt atlas '{}' successfully", fontName);
+    yinfo("FontManager: loaded prebuilt atlas '{}' successfully", fontName);
     return Ok(ptr);
 }
 
@@ -690,14 +690,14 @@ void FontManager::unloadFont(const std::string& family, Font::Style style) noexc
         }
 
         fontCache_.erase(it);
-        spdlog::info("FontManager: unloaded font '{}' {}", family, static_cast<int>(style));
+        yinfo("FontManager: unloaded font '{}' {}", family, static_cast<int>(style));
     }
 }
 
 void FontManager::unloadAll() noexcept {
     fontCache_.clear();
     hasDefaultFont_ = false;
-    spdlog::debug("FontManager: unloaded all fonts");
+    ydebug("FontManager: unloaded all fonts");
 }
 
 //-----------------------------------------------------------------------------
@@ -776,22 +776,22 @@ Result<std::unique_ptr<Font>> FontManager::loadFromDiskCache(const std::string& 
         return Err<std::unique_ptr<Font>>("Cache miss");
     }
 
-    spdlog::info("FontManager: loading from disk cache: {}", cachePath);
+    yinfo("FontManager: loading from disk cache: {}", cachePath);
 
     auto font = std::make_unique<Font>();
     if (!font->loadAtlas(atlasPath, metricsPath)) {
         return Err<std::unique_ptr<Font>>("Failed to load cached atlas");
     }
 
-    if (!font->createTexture(ctx_->getDevice(), ctx_->getQueue())) {
+    if (!font->createTexture(_ctx->getDevice(), _ctx->getQueue())) {
         return Err<std::unique_ptr<Font>>("Failed to create texture from cached atlas");
     }
 
-    if (!font->createGlyphMetadataBuffer(ctx_->getDevice())) {
+    if (!font->createGlyphMetadataBuffer(_ctx->getDevice())) {
         return Err<std::unique_ptr<Font>>("Failed to create glyph buffer from cached atlas");
     }
 
-    spdlog::info("FontManager: loaded {} glyphs from disk cache", font->getGlyphCount());
+    yinfo("FontManager: loaded {} glyphs from disk cache", font->getGlyphCount());
     return Ok(std::move(font));
 #else
     return Err<std::unique_ptr<Font>>("Disk cache not available on this platform");
@@ -808,22 +808,22 @@ bool FontManager::saveToDiskCache(const Font* font, const std::string& cachePath
     std::error_code ec;
     if (!fs::exists(cacheDir)) {
         if (!fs::create_directories(cacheDir, ec)) {
-            spdlog::warn("FontManager: failed to create cache directory '{}': {}",
+            ywarn("FontManager: failed to create cache directory '{}': {}",
                          cacheDir, ec.message());
             return false;
         }
-        spdlog::info("FontManager: created cache directory: {}", cacheDir);
+        yinfo("FontManager: created cache directory: {}", cacheDir);
     }
 
     std::string atlasPath = cachePath + ".lz4";
     std::string metricsPath = cachePath + ".json";
 
     if (!font->saveAtlas(atlasPath, metricsPath)) {
-        spdlog::warn("FontManager: failed to save font to disk cache: {}", cachePath);
+        ywarn("FontManager: failed to save font to disk cache: {}", cachePath);
         return false;
     }
 
-    spdlog::info("FontManager: saved font to disk cache: {}", cachePath);
+    yinfo("FontManager: saved font to disk cache: {}", cachePath);
     return true;
 #else
     return false;

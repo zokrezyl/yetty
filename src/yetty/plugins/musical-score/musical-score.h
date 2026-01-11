@@ -5,7 +5,7 @@
 
 namespace yetty {
 
-class MusicalScoreLayer;
+class MusicalScoreW;
 
 //-----------------------------------------------------------------------------
 // MusicalScorePlugin - renders a musical score sheet with WebGPU
@@ -14,13 +14,24 @@ class MusicalScorePlugin : public Plugin {
 public:
     ~MusicalScorePlugin() override;
 
-    static Result<PluginPtr> create(YettyPtr engine) noexcept;
+    static Result<PluginPtr> create() noexcept;
 
     const char* pluginName() const override { return "musical-score"; }
 
     Result<void> dispose() override;
 
-    Result<PluginLayerPtr> createLayer(const std::string& payload) override;
+    Result<WidgetPtr> createWidget(
+        const std::string& widgetName,
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) override;
 
     Result<void> renderAll(WGPUTextureView targetView, WGPUTextureFormat targetFormat,
                            uint32_t screenWidth, uint32_t screenHeight,
@@ -29,25 +40,31 @@ public:
                            bool isAltScreen = false) override;
 
 private:
-    explicit MusicalScorePlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
-    Result<void> init() noexcept override;
+    MusicalScorePlugin() noexcept = default;
+    Result<void> pluginInit() noexcept;
 };
 
 //-----------------------------------------------------------------------------
-// MusicalScoreLayer - a single musical score instance
+// MusicalScoreW - a single musical score instance
 //
 // Payload format: "sheetWidth,numStaves"
 //   e.g., "800,4" = 800px wide sheet with 4 staves
 //-----------------------------------------------------------------------------
-class MusicalScoreLayer : public PluginLayer {
+class MusicalScoreW : public Widget {
 public:
     static constexpr int MAX_STAVES = 16;
     static constexpr int LINES_PER_STAFF = 5;
 
-    MusicalScoreLayer();
-    ~MusicalScoreLayer() override;
+    static Result<WidgetPtr> create(const std::string& payload) {
+        auto w = std::shared_ptr<MusicalScoreW>(new MusicalScoreW(payload));
+        if (auto res = w->init(); !res) {
+            return Err<WidgetPtr>("Failed to init MusicalScoreW", res);
+        }
+        return Ok(std::static_pointer_cast<Widget>(w));
+    }
 
-    Result<void> init(const std::string& payload) override;
+    ~MusicalScoreW() override;
+
     Result<void> dispose() override;
     Result<void> update(double deltaTime) override;
 
@@ -65,26 +82,29 @@ public:
     bool wantsKeyboard() const override { return true; }
 
 private:
+    explicit MusicalScoreW(const std::string& payload) {
+        _payload = payload;
+    }
+
+    Result<void> init() override;
     Result<void> createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat);
 
     // Configuration
-    int _sheet_width = 800;
-    int _num_staves = 4;
+    int sheetWidth_ = 800;
+    int numStaves_ = 4;
 
     // GPU resources
-    WGPURenderPipeline _pipeline = nullptr;
-    WGPUBindGroup _bind_group = nullptr;
-    WGPUBuffer _uniform_buffer = nullptr;
+    WGPURenderPipeline pipeline_ = nullptr;
+    WGPUBindGroup bindGroup_ = nullptr;
+    WGPUBuffer uniformBuffer_ = nullptr;
 
-    bool _gpu_initialized = false;
-    bool _failed = false;
+    bool gpuInitialized_ = false;
+    bool failed_ = false;
 };
-
-using MusicalScore = MusicalScorePlugin;
 
 } // namespace yetty
 
 extern "C" {
     const char* name();
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine);
+    yetty::Result<yetty::PluginPtr> create();
 }

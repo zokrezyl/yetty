@@ -7,7 +7,7 @@
 
 namespace yetty {
 
-class PianoLayer;
+class PianoW;
 
 //-----------------------------------------------------------------------------
 // PianoPlugin - renders a piano keyboard with WebGPU
@@ -16,13 +16,24 @@ class PianoPlugin : public Plugin {
 public:
     ~PianoPlugin() override;
 
-    static Result<PluginPtr> create(YettyPtr engine) noexcept;
+    static Result<PluginPtr> create() noexcept;
 
     const char* pluginName() const override { return "piano"; }
 
     Result<void> dispose() override;
 
-    Result<PluginLayerPtr> createLayer(const std::string& payload) override;
+    Result<WidgetPtr> createWidget(
+        const std::string& widgetName,
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) override;
 
     Result<void> renderAll(WGPUTextureView targetView, WGPUTextureFormat targetFormat,
                            uint32_t screenWidth, uint32_t screenHeight,
@@ -31,28 +42,28 @@ public:
                            bool isAltScreen = false) override;
 
 private:
-    explicit PianoPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
-    Result<void> init() noexcept override;
+    PianoPlugin() noexcept = default;
+    Result<void> pluginInit() noexcept;
 };
 
 //-----------------------------------------------------------------------------
-// PianoLayer - a single piano keyboard instance
+// PianoW - a single piano keyboard instance
 //
 // Payload format: "octaves[,startOctave]"
 //   e.g., "2" = 2 octaves starting from C4
 //   e.g., "3,3" = 3 octaves starting from C3
 //-----------------------------------------------------------------------------
-class PianoLayer : public PluginLayer {
+class PianoW : public Widget {
 public:
     static constexpr int MAX_OCTAVES = 8;
     static constexpr int KEYS_PER_OCTAVE = 12;  // 7 white + 5 black
     static constexpr int WHITE_KEYS_PER_OCTAVE = 7;
     static constexpr int BLACK_KEYS_PER_OCTAVE = 5;
 
-    PianoLayer();
-    ~PianoLayer() override;
+    static Result<WidgetPtr> create(const std::string& payload);
 
-    Result<void> init(const std::string& payload) override;
+    ~PianoW() override;
+
     Result<void> dispose() override;
     Result<void> update(double deltaTime) override;
 
@@ -75,40 +86,41 @@ public:
     bool wantsKeyboard() const override { return true; }
 
 private:
+    explicit PianoW(const std::string& payload);
+    Result<void> init() override;
+
     Result<void> createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat);
     int getKeyAtPosition(float x, float y) const;  // Returns MIDI note or -1
 
     // Configuration
-    int _num_octaves = 2;
-    int _start_octave = 4;  // C4 = middle C
+    int numOctaves_ = 2;
+    int startOctave_ = 4;  // C4 = middle C
 
     // Key states (128 MIDI notes)
-    std::bitset<128> _key_states;
+    std::bitset<128> keyStates_;
 
     // Mouse state
-    float _mouse_x = 0;
-    float _mouse_y = 0;
-    int _hover_key = -1;
-    int _pressed_key = -1;
+    float mouseX_ = 0;
+    float mouseY_ = 0;
+    int hoverKey_ = -1;
+    int pressedKey_ = -1;
 
     // Animation
-    float _time = 0;
+    float time_ = 0;
 
     // GPU resources
-    WGPURenderPipeline _pipeline = nullptr;
-    WGPUBindGroup _bind_group = nullptr;
-    WGPUBuffer _uniform_buffer = nullptr;
-    WGPUBuffer _key_state_buffer = nullptr;
+    WGPURenderPipeline pipeline_ = nullptr;
+    WGPUBindGroup bindGroup_ = nullptr;
+    WGPUBuffer uniformBuffer_ = nullptr;
+    WGPUBuffer keyStateBuffer_ = nullptr;
 
-    bool _gpu_initialized = false;
-    bool _failed = false;
+    bool gpuInitialized_ = false;
+    bool failed_ = false;
 };
-
-using Piano = PianoPlugin;
 
 } // namespace yetty
 
 extern "C" {
     const char* name();
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine);
+    yetty::Result<yetty::PluginPtr> create();
 }

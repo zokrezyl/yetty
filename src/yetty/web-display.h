@@ -2,7 +2,7 @@
 
 #if YETTY_WEB
 
-#include <yetty/renderable.h>
+#include <yetty/widget.h>
 #include <yetty/font.h>
 #include <yetty/result.hpp>
 #include "grid.h"
@@ -19,18 +19,18 @@ extern "C" {
 namespace yetty {
 
 //=============================================================================
-// WebDisplay - Terminal Renderable for web builds with vterm emulation
+// WebDisplay - Terminal Widget for web builds with vterm emulation
 //
 // This provides full terminal emulation via libvterm, with input/output
 // bridged to JavaScript for integration with Toybox shell.
 //=============================================================================
 
-class WebDisplay : public Renderable {
+class WebDisplay : public Widget {
 public:
     using Ptr = std::shared_ptr<WebDisplay>;
 
     // Factory - creates display with given grid size
-    static Result<Ptr> create(uint32_t id, uint32_t cols, uint32_t rows,
+    static Result<Ptr> create(uint32_t cols, uint32_t rows,
                               WebGPUContext::Ptr ctx, FontManager::Ptr fontManager) noexcept;
 
     ~WebDisplay() override;
@@ -40,15 +40,15 @@ public:
     WebDisplay& operator=(const WebDisplay&) = delete;
 
     //=========================================================================
-    // Renderable interface
+    // Widget interface
     //=========================================================================
-    uint32_t id() const override { return id_; }
-    uint32_t zOrder() const override { return zOrder_; }
-    const std::string& name() const override { return name_; }
+    // id() inherited from Widget base class
+    uint32_t zOrder() const override { return _zOrder; }
+    const std::string& name() const override { return _name; }
 
-    void start() override { running_ = true; }
-    void stop() override { running_ = false; }
-    bool isRunning() const override { return running_; }
+    void start() override { _running.store(true); }
+    void stop() override { _running.store(false); }
+    bool isRunning() const override { return _running.load(); }
 
     Result<void> render(WebGPUContext& ctx) override;
 
@@ -68,17 +68,17 @@ public:
     size_t readOutput(char* buffer, size_t maxlen);
 
     // Grid access
-    Grid& grid() { return grid_; }
-    const Grid& grid() const { return grid_; }
+    Grid& grid() { return _grid; }
+    const Grid& grid() const { return _grid; }
 
     // Font access
-    Font* font() const { return font_; }
+    Font* font() const { return _font; }
 
     // Cursor control
     void setCursor(int col, int row, bool visible = true);
-    int getCursorCol() const { return cursorCol_; }
-    int getCursorRow() const { return cursorRow_; }
-    bool isCursorVisible() const { return cursorVisible_; }
+    int getCursorCol() const { return _cursorCol; }
+    int getCursorRow() const { return _cursorRow; }
+    bool isCursorVisible() const { return _cursorVisible; }
 
     // Cell size for scaling
     void setCellSize(float width, float height);
@@ -87,10 +87,10 @@ public:
     void syncToGrid();
 
     // Static instance accessor (for C callbacks)
-    static WebDisplay* instance() { return s_instance; }
+    static WebDisplay* instance() { return _sInstance; }
 
 private:
-    WebDisplay(uint32_t id, uint32_t cols, uint32_t rows,
+    WebDisplay(uint32_t cols, uint32_t rows,
                WebGPUContext::Ptr ctx, FontManager::Ptr fontManager) noexcept;
     Result<void> init() noexcept;
 
@@ -101,33 +101,26 @@ private:
 
     void colorToRGB(const VTermColor& color, uint8_t& r, uint8_t& g, uint8_t& b);
 
-    // Identity
-    uint32_t id_;
-    uint32_t zOrder_ = 0;
-    std::string name_ = "WebDisplay";
-    bool running_ = false;
-
     // Display state
-    Grid grid_;
-    Font* font_ = nullptr;
-    GridRenderer::Ptr renderer_;
-    WebGPUContext::Ptr ctx_;
-    FontManager::Ptr fontManager_;
+    Grid _grid;
+    Font* _font = nullptr;
+    GridRenderer::Ptr _renderer;
+    FontManager::Ptr _fontManager;
 
     // vterm state
-    VTerm* vterm_ = nullptr;
-    VTermScreen* vtermScreen_ = nullptr;
-    bool needsSync_ = true;
+    VTerm* _vterm = nullptr;
+    VTermScreen* _vtermScreen = nullptr;
+    bool _needsSync = true;
 
     // Cursor
-    int cursorCol_ = 0;
-    int cursorRow_ = 0;
-    bool cursorVisible_ = true;
+    int _cursorCol = 0;
+    int _cursorRow = 0;
+    bool _cursorVisible = true;
 
-    uint32_t cols_;
-    uint32_t rows_;
+    uint32_t _cols;
+    uint32_t _rows;
 
-    static WebDisplay* s_instance;
+    static WebDisplay* _sInstance;
 };
 
 } // namespace yetty

@@ -48,11 +48,19 @@ add_executable(yetty_tests
     terminal_selection_test.cpp
     plugin_layer_test.cpp
     plugin_test.cpp
+    shared_grid_test.cpp
+    # SharedGrid implementation for testing
+    ${CMAKE_SOURCE_DIR}/src/yetty/shared-grid.cpp
+    ${CMAKE_SOURCE_DIR}/src/yetty/grid.cpp
 )
+
+# Define YETTY_SERVER_BUILD to avoid Font dependency in SharedGridView
+target_compile_definitions(yetty_tests PRIVATE YETTY_SERVER_BUILD=1)
 
 target_link_libraries(yetty_tests PRIVATE
     yetty_test_lib
     ut
+    ytrace::ytrace
 )
 
 # Coverage support

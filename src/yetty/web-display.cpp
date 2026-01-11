@@ -2,13 +2,13 @@
 
 #include "web-display.h"
 #include <emscripten.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 #include <cstring>
 
 namespace yetty {
 
 // Static instance for JavaScript callbacks
-WebDisplay* WebDisplay::s_instance = nullptr;
+WebDisplay* WebDisplay::_sInstance = nullptr;
 
 // vterm screen callbacks
 static VTermScreenCallbacks screenCallbacks = {
@@ -23,34 +23,35 @@ static VTermScreenCallbacks screenCallbacks = {
     .sb_clear = nullptr,
 };
 
-WebDisplay::WebDisplay(uint32_t id, uint32_t cols, uint32_t rows,
+WebDisplay::WebDisplay(uint32_t cols, uint32_t rows,
                        WebGPUContext::Ptr ctx, FontManager::Ptr fontManager) noexcept
-    : id_(id)
-    , grid_(cols, rows)
-    , ctx_(ctx)
-    , fontManager_(fontManager)
-    , cols_(cols)
-    , rows_(rows)
+    : Widget()
+    , _grid(cols, rows)
+    , _fontManager(fontManager)
+    , _cols(cols)
+    , _rows(rows)
 {
-    s_instance = this;
+    _ctx = ctx.get();
+    _name = "WebDisplay";
+    _sInstance = this;
 }
 
 WebDisplay::~WebDisplay()
 {
-    if (vterm_) {
-        vterm_free(vterm_);
-        vterm_ = nullptr;
+    if (_vterm) {
+        vterm_free(_vterm);
+        _vterm = nullptr;
     }
-    if (s_instance == this) {
-        s_instance = nullptr;
+    if (_sInstance == this) {
+        _sInstance = nullptr;
     }
 }
 
-Result<WebDisplay::Ptr> WebDisplay::create(uint32_t id, uint32_t cols, uint32_t rows,
+Result<WebDisplay::Ptr> WebDisplay::create(uint32_t cols, uint32_t rows,
                                            WebGPUContext::Ptr ctx,
                                            FontManager::Ptr fontManager) noexcept
 {
-    auto display = Ptr(new WebDisplay(id, cols, rows, ctx, fontManager));
+    auto display = Ptr(new WebDisplay(cols, rows, ctx, fontManager));
     if (auto res = display->init(); !res) {
         return Err<Ptr>("Failed to initialize WebDisplay", res);
     }
@@ -60,40 +61,41 @@ Result<WebDisplay::Ptr> WebDisplay::create(uint32_t id, uint32_t cols, uint32_t 
 Result<void> WebDisplay::init() noexcept
 {
     // Get default font from FontManager
-    font_ = fontManager_->getDefaultFont();
-    if (!font_) {
+    _font = _fontManager->getDefaultFont();
+    if (!_font) {
         return Err<void>("No default font available in FontManager");
     }
 
     // Create GridRenderer
-    auto rendererResult = GridRenderer::create(ctx_, fontManager_);
+    auto ctxShared = std::shared_ptr<WebGPUContext>(_ctx, [](WebGPUContext*){});  // non-owning shared_ptr
+    auto rendererResult = GridRenderer::create(ctxShared, _fontManager);
     if (!rendererResult) {
         return Err<void>("Failed to create GridRenderer", rendererResult);
     }
-    renderer_ = *rendererResult;
+    _renderer = *rendererResult;
 
     // Set cell size based on font metrics
-    float lineHeight = font_->getLineHeight();
+    float lineHeight = _font->getLineHeight();
     float cellWidth = lineHeight * 0.5f;
     float cellHeight = lineHeight;
-    renderer_->setCellSize(cellWidth, cellHeight);
+    _renderer->setCellSize(cellWidth, cellHeight);
 
     // Initialize vterm
-    vterm_ = vterm_new(rows_, cols_);
-    if (!vterm_) {
+    _vterm = vterm_new(_rows, _cols);
+    if (!_vterm) {
         return Err<void>("Failed to create vterm");
     }
-    vterm_set_utf8(vterm_, 1);
+    vterm_set_utf8(_vterm, 1);
 
-    vtermScreen_ = vterm_obtain_screen(vterm_);
-    vterm_screen_set_callbacks(vtermScreen_, &screenCallbacks, this);
-    vterm_screen_reset(vtermScreen_, 1);
+    _vtermScreen = vterm_obtain_screen(_vterm);
+    vterm_screen_set_callbacks(_vtermScreen, &screenCallbacks, this);
+    vterm_screen_reset(_vtermScreen, 1);
 
-    spdlog::info("WebDisplay initialized: {}x{} grid with vterm", cols_, rows_);
+    yinfo("WebDisplay initialized: {}x{} grid with vterm", _cols, _rows);
 
     // Print initial prompt
     const char* welcome = "\r\n  Welcome to yetty - WebGPU Terminal\r\n\r\n$ ";
-    vterm_input_write(vterm_, welcome, strlen(welcome));
+    vterm_input_write(_vterm, welcome, strlen(welcome));
     syncToGrid();
 
     return Ok();
@@ -106,16 +108,16 @@ Result<void> WebDisplay::init() noexcept
 int WebDisplay::onDamage(VTermRect rect, void* user)
 {
     auto* self = static_cast<WebDisplay*>(user);
-    self->needsSync_ = true;
+    self->_needsSync = true;
     return 1;
 }
 
 int WebDisplay::onMoveCursor(VTermPos pos, VTermPos oldpos, int visible, void* user)
 {
     auto* self = static_cast<WebDisplay*>(user);
-    self->cursorRow_ = pos.row;
-    self->cursorCol_ = pos.col;
-    self->cursorVisible_ = visible;
+    self->_cursorRow = pos.row;
+    self->_cursorCol = pos.col;
+    self->_cursorVisible = visible;
     return 1;
 }
 
@@ -130,27 +132,27 @@ int WebDisplay::onSetTermProp(VTermProp prop, VTermValue* val, void* user)
 
 void WebDisplay::write(const char* data, size_t len)
 {
-    if (!vterm_ || !data || len == 0) return;
-    vterm_input_write(vterm_, data, len);
-    needsSync_ = true;
+    if (!_vterm || !data || len == 0) return;
+    vterm_input_write(_vterm, data, len);
+    _needsSync = true;
 }
 
 void WebDisplay::sendKey(uint32_t codepoint)
 {
-    if (!vterm_) return;
-    vterm_keyboard_unichar(vterm_, codepoint, VTERM_MOD_NONE);
+    if (!_vterm) return;
+    vterm_keyboard_unichar(_vterm, codepoint, VTERM_MOD_NONE);
 }
 
 void WebDisplay::sendSpecialKey(VTermKey key, VTermModifier mod)
 {
-    if (!vterm_) return;
-    vterm_keyboard_key(vterm_, key, mod);
+    if (!_vterm) return;
+    vterm_keyboard_key(_vterm, key, mod);
 }
 
 size_t WebDisplay::readOutput(char* buffer, size_t maxlen)
 {
-    if (!vterm_ || !buffer || maxlen == 0) return 0;
-    return vterm_output_read(vterm_, buffer, maxlen);
+    if (!_vterm || !buffer || maxlen == 0) return 0;
+    return vterm_output_read(_vterm, buffer, maxlen);
 }
 
 //=============================================================================
@@ -195,13 +197,13 @@ void WebDisplay::colorToRGB(const VTermColor& color, uint8_t& r, uint8_t& g, uin
 
 void WebDisplay::syncToGrid()
 {
-    if (!vtermScreen_) return;
+    if (!_vtermScreen) return;
 
-    for (int row = 0; row < static_cast<int>(rows_); row++) {
-        for (int col = 0; col < static_cast<int>(cols_); col++) {
+    for (int row = 0; row < static_cast<int>(_rows); row++) {
+        for (int col = 0; col < static_cast<int>(_cols); col++) {
             VTermPos pos = {row, col};
             VTermScreenCell cell;
-            vterm_screen_get_cell(vtermScreen_, pos, &cell);
+            vterm_screen_get_cell(_vtermScreen, pos, &cell);
 
             uint32_t codepoint = cell.chars[0] ? cell.chars[0] : ' ';
             uint8_t fgR, fgG, fgB, bgR, bgG, bgB;
@@ -213,13 +215,13 @@ void WebDisplay::syncToGrid()
                 fgR = fgG = fgB = 204;
             }
 
-            grid_.setCell(col, row, codepoint,
+            _grid.setCell(col, row, codepoint,
                          fgR, fgG, fgB,
                          bgR, bgG, bgB);
         }
     }
 
-    needsSync_ = false;
+    _needsSync = false;
 }
 
 //=============================================================================
@@ -228,32 +230,32 @@ void WebDisplay::syncToGrid()
 
 Result<void> WebDisplay::render(WebGPUContext& ctx)
 {
-    if (!renderer_) {
+    if (!_renderer) {
         return Err<void>("No renderer available");
     }
 
     // Sync vterm to grid if needed
-    if (needsSync_) {
+    if (_needsSync) {
         syncToGrid();
     }
 
     // Render the grid with cursor
-    renderer_->render(grid_, cursorCol_, cursorRow_, cursorVisible_);
+    _renderer->render(_grid, _cursorCol, _cursorRow, _cursorVisible);
 
     return Ok();
 }
 
 void WebDisplay::setCursor(int col, int row, bool visible)
 {
-    cursorCol_ = col;
-    cursorRow_ = row;
-    cursorVisible_ = visible;
+    _cursorCol = col;
+    _cursorRow = row;
+    _cursorVisible = visible;
 }
 
 void WebDisplay::setCellSize(float width, float height)
 {
-    if (renderer_) {
-        renderer_->setCellSize(width, height);
+    if (_renderer) {
+        _renderer->setCellSize(width, height);
     }
 }
 

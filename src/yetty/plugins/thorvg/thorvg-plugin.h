@@ -8,7 +8,7 @@
 
 namespace yetty {
 
-class ThorvgLayer;
+class Lottie;
 
 //-----------------------------------------------------------------------------
 // ThorvgPlugin - Vector graphics plugin using ThorVG library
@@ -19,50 +19,94 @@ class ThorvgPlugin : public Plugin {
 public:
     ~ThorvgPlugin() override;
 
-    static Result<PluginPtr> create(YettyPtr engine) noexcept;
+    static Result<PluginPtr> create() noexcept;
 
     const char* pluginName() const override { return "thorvg"; }
 
     Result<void> dispose() override;
 
-    Result<PluginLayerPtr> createLayer(const std::string& payload) override;
+    Result<WidgetPtr> createWidget(
+        const std::string& widgetName,
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) override;
 
 private:
-    explicit ThorvgPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
-    Result<void> init() noexcept override;
+    ThorvgPlugin() noexcept = default;
+    Result<void> pluginInit() noexcept;
 };
 
 //-----------------------------------------------------------------------------
-// ThorvgLayer - A single vector graphics layer instance
+// Lottie - A single vector graphics widget instance
 // Can display static SVG or animated Lottie content
 // Renders directly using WebGPU via ThorVG's WgCanvas
 //-----------------------------------------------------------------------------
-class ThorvgLayer : public PluginLayer {
+class Lottie : public Widget {
 public:
-    ThorvgLayer();
-    ~ThorvgLayer() override;
+    static Result<WidgetPtr> create(
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) {
+        (void)factory;
+        (void)fontManager;
+        (void)loop;
+        (void)pluginArgs;
+        auto w = std::shared_ptr<Lottie>(new Lottie(payload));
+        w->_x = x;
+        w->_y = y;
+        w->_widthCells = widthCells;
+        w->_heightCells = heightCells;
+        if (auto res = w->init(); !res) {
+            return Err<WidgetPtr>("Failed to init Lottie", res);
+        }
+        return Ok(std::static_pointer_cast<Widget>(w));
+    }
 
-    Result<void> init(const std::string& payload) override;
+    ~Lottie() override;
+
     Result<void> dispose() override;
 
     // Legacy render (creates own encoder - slow)
     Result<void> render(WebGPUContext& ctx) override;
 
+    // Pre-render phase - render ThorVG content to texture BEFORE shared pass
+    void prepareFrame(WebGPUContext& ctx) override;
+
     // Batched render (draws into existing pass - fast!)
-    bool renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    // Only blits pre-rendered texture, no ThorVG rendering here
+    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
     // Animation control
-    bool isAnimated() const { return _is_animated; }
-    float getTotalFrames() const { return _total_frames; }
-    float getCurrentFrame() const { return _current_frame; }
-    float getDuration() const { return _duration; }
+    bool isAnimated() const { return isAnimated_; }
+    float getTotalFrames() const { return totalFrames_; }
+    float getCurrentFrame() const { return currentFrame_; }
+    float getDuration() const { return duration_; }
     void setFrame(float frame);
-    void setPlaying(bool playing) { _playing = playing; }
-    bool isPlaying() const { return _playing; }
-    void setLoop(bool loop) { _loop = loop; }
-    bool isLooping() const { return _loop; }
+    void setPlaying(bool playing) { playing_ = playing; }
+    bool isPlaying() const { return playing_; }
+    void setLoop(bool loop) { loop_ = loop; }
+    bool isLooping() const { return loop_; }
 
 private:
+    explicit Lottie(const std::string& payload) {
+        _payload = payload;
+    }
+
+    Result<void> init() override;
     Result<void> loadContent(const std::string& data, const std::string& mimeType = "");
     Result<void> initWebGPU(WebGPUContext& ctx);
     Result<void> createCompositePipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat);
@@ -70,47 +114,42 @@ private:
     Result<std::string> yamlToSvg(const std::string& yamlContent);
 
     // ThorVG objects - using WebGPU canvas
-    std::unique_ptr<tvg::WgCanvas> _canvas;
-    tvg::Picture* _picture = nullptr;  // Owned by canvas or animation
-    std::unique_ptr<tvg::Animation> _animation;  // For both Lottie and static content
+    std::unique_ptr<tvg::WgCanvas> canvas_;
+    tvg::Picture* picture_ = nullptr;  // Owned by canvas or animation
+    std::unique_ptr<tvg::Animation> animation_;  // For both Lottie and static content
 
     // Content dimensions
-    uint32_t _content_width = 0;
-    uint32_t _content_height = 0;
+    uint32_t contentWidth_ = 0;
+    uint32_t contentHeight_ = 0;
 
     // Animation state
-    bool _is_animated = false;
-    float _total_frames = 0.0f;
-    float _current_frame = 0.0f;
-    float _duration = 0.0f;
-    bool _playing = true;
-    bool _loop = true;
-    double _accumulated_time = 0.0;
+    bool isAnimated_ = false;
+    float totalFrames_ = 0.0f;
+    float currentFrame_ = 0.0f;
+    float duration_ = 0.0f;
+    bool playing_ = true;
+    bool loop_ = true;
+    double accumulatedTime_ = 0.0;
 
     // WebGPU resources for compositing ThorVG output to screen
-    WGPURenderPipeline _composite_pipeline = nullptr;
-    WGPUBindGroup _bind_group = nullptr;
-    WGPUBuffer _uniform_buffer = nullptr;
-    WGPUTexture _render_texture = nullptr;  // ThorVG renders to this
-    WGPUTextureView _render_texture_view = nullptr;
-    WGPUSampler _sampler = nullptr;
+    WGPURenderPipeline compositePipeline_ = nullptr;
+    WGPUBindGroup bindGroup_ = nullptr;
+    WGPUBuffer uniformBuffer_ = nullptr;
+    WGPUTexture renderTexture_ = nullptr;  // ThorVG renders to this
+    WGPUTextureView renderTextureView_ = nullptr;
+    WGPUSampler sampler_ = nullptr;
 
-    bool _gpu_initialized = false;
-    bool _content_dirty = true;
-    bool _failed = false;
+    bool gpuInitialized_ = false;
+    bool contentDirty_ = true;
+    bool failed_ = false;
 
     // Cached rect for dirty optimization
-    float _last_rect[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-
-    // Cached payload for re-init
-    std::string _payload;
+    float lastRect_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 };
-
-using Thorvg = ThorvgPlugin;
 
 } // namespace yetty
 
 extern "C" {
     const char* name();
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine);
+    yetty::Result<yetty::PluginPtr> create();
 }

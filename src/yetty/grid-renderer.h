@@ -51,6 +51,12 @@ public:
               bool fullDamage, int cursorCol = -1, int cursorRow = -1,
               bool cursorVisible = false) noexcept;
 
+  // Render to provided pass (for batched rendering - no encoder/submit)
+  void renderToPass(WGPURenderPassEncoder pass, const Grid &grid,
+                    const std::vector<DamageRect> &damageRects,
+                    bool fullDamage, int cursorCol = -1, int cursorRow = -1,
+                    bool cursorVisible = false) noexcept;
+
   // Render from CPU buffer data (used by RenderGridCmd)
   void renderFromBuffers(uint32_t cols, uint32_t rows,
                          const uint16_t* glyphs,
@@ -123,7 +129,7 @@ private:
   uint32_t gridCols_ = 0;
   uint32_t gridRows_ = 0;
 
-  WebGPUContext::Ptr ctx_;
+  WebGPUContext::Ptr _ctx;
   FontManager::Ptr fontManager_;
   std::string fontFamily_;
   Font *font_ = nullptr;       // Cached pointer from FontManager

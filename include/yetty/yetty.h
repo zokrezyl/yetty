@@ -16,7 +16,7 @@
 #include <yetty/result.hpp>
 #include <yetty/font.h>
 #include <yetty/font-manager.h>
-#include <yetty/renderable.h>
+#include <yetty/widget.h>
 
 #include <memory>
 #include <string>
@@ -48,7 +48,8 @@ namespace yetty {
 class Config;
 class GridRenderer;
 class Terminal;
-class PluginManager;
+class RemoteTerminal;
+class WidgetFactory;
 class Grid;
 class InputHandler;
 class ShaderManager;
@@ -81,13 +82,6 @@ struct BufferResource {
     uint32_t usage = 0;
 };
 
-// All resources for one renderable
-struct RenderableResources {
-    std::unordered_map<std::string, ShaderResource> shaders;
-    std::unordered_map<std::string, TextureResource> textures;
-    std::unordered_map<std::string, BufferResource> buffers;
-};
-
 //-----------------------------------------------------------------------------
 // Yetty - Main application engine
 //-----------------------------------------------------------------------------
@@ -116,8 +110,13 @@ public:
 
 #if !YETTY_WEB
     std::shared_ptr<Terminal> terminal() const noexcept { return _terminal; }
-    std::shared_ptr<PluginManager> pluginManager() const noexcept { return _pluginManager; }
+    std::shared_ptr<RemoteTerminal> remoteTerminal() const noexcept { return _remoteTerminal; }
+    std::shared_ptr<WidgetFactory> widgetFactory() const noexcept { return _widgetFactory; }
     std::shared_ptr<ShaderManager> shaderManager() const noexcept { return _shaderManager; }
+#endif
+
+#if !YETTY_WEB && !defined(__ANDROID__)
+    uv_loop_t* getLoop() const noexcept { return _uvLoop; }
 #endif
 
     // Window info
@@ -146,24 +145,6 @@ public:
 
     // Get elapsed time since start (for shader uniforms)
     double getElapsedTime() const noexcept;
-
-    //=========================================================================
-    // Per-Renderable Resource Management
-    // Commands use names in their renderable's namespace.
-    // Yetty tracks current renderable during command execution.
-    //=========================================================================
-
-    // Get current renderable's resources (used during command execution)
-    RenderableResources& currentResources() noexcept;
-
-    // Get resources for specific renderable
-    RenderableResources& getResources(uint32_t renderableId) noexcept;
-
-    // Clean up all resources for a renderable (when deleted)
-    void cleanupResources(uint32_t renderableId) noexcept;
-
-    // Current renderable context (set during renderAll)
-    uint32_t currentRenderableId() const noexcept { return _currentRenderableId; }
 
     //=========================================================================
     // Render state (active during command execution)
@@ -195,12 +176,6 @@ private:
     void mainLoopIteration() noexcept;
     void handleResize(int width, int height) noexcept;
 
-    // Renderable management
-    void renderAll() noexcept;
-    void addRenderable(Renderable::Ptr renderable) noexcept;
-    void removeRenderable(uint32_t id) noexcept;
-    uint32_t nextRenderableId() noexcept { return _nextRenderableId++; }
-
 #if defined(__ANDROID__)
     // Android-specific initialization
     Result<void> setupToybox() noexcept;
@@ -230,19 +205,15 @@ private:
     std::shared_ptr<class WebDisplay> _webDisplay;  // Demo display for web builds
 #else
     std::shared_ptr<Terminal> _terminal;
-    std::shared_ptr<PluginManager> _pluginManager;
+    std::shared_ptr<RemoteTerminal> _remoteTerminal;  // For --mux mode
+    std::shared_ptr<WidgetFactory> _widgetFactory;
     std::shared_ptr<InputHandler> _inputHandler;
     std::shared_ptr<ShaderManager> _shaderManager;
     std::shared_ptr<CursorRenderer> _cursorRenderer;
 #endif
 
-    // Renderables (sorted by zOrder)
-    std::vector<Renderable::Ptr> _renderables;
-    uint32_t _nextRenderableId = 1;
-
-    // Per-renderable GPU resources (renderable_id -> {name -> resource})
-    std::unordered_map<uint32_t, RenderableResources> _resources;
-    uint32_t _currentRenderableId = 0;
+    // Root widgets (Terminal or RemoteTerminal, more in future)
+    std::vector<WidgetPtr> _rootWidgets;
 
     // Active render state (during command execution)
     WGPUCommandEncoder _currentEncoder = nullptr;
@@ -279,6 +250,13 @@ private:
     uint32_t _initialWidth = 1024;
     uint32_t _initialHeight = 768;
     bool _generateAtlasOnly = false;
+    bool _useMux = false;  // Use multiplexed terminal (connect to yetty-server)
+
+public:
+    // Check if multiplexed terminal mode is enabled
+    bool useMux() const noexcept { return _useMux; }
+
+private:
 
     // FPS tracking
     double _lastFpsTime = 0.0;

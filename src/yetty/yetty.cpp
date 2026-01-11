@@ -15,17 +15,18 @@
 #endif
 
 #if !YETTY_WEB && !defined(__ANDROID__)
-#include "plugin-manager.h"
+#include "remote-terminal.h"
+#include "terminal.h"
+#include "widget-factory.h"
+#include <args.hxx>
+#include <yetty/cursor-renderer.h>
 #include <yetty/shader-glyph-renderer.h>
 #include <yetty/shader-manager.h>
-#include <yetty/cursor-renderer.h>
-#include "terminal.h"
-#include <args.hxx>
 #elif defined(__ANDROID__)
 #include "terminal.h"
 #elif YETTY_WEB
-#include <yetty/config.h>
 #include "web-display.h"
+#include <yetty/config.h>
 #endif
 
 #include <algorithm>
@@ -35,8 +36,8 @@
 #include <ctime>
 #include <fstream>
 #include <iostream>
-#include <spdlog/spdlog.h>
 #include <thread>
+#include <ytrace/ytrace.hpp>
 
 #if !defined(__ANDROID__)
 #include <filesystem>
@@ -48,7 +49,7 @@ namespace yetty {
 #define CHECK_RESULT(expr)                                                     \
   do {                                                                         \
     if (auto _res = (expr); !_res) {                                           \
-      spdlog::error("{}: {}", #expr, _res.error().message());                  \
+      yerror("{}: {}", #expr, _res.error().message());                         \
     }                                                                          \
   } while (0)
 
@@ -82,18 +83,19 @@ static const char *DEFAULT_METRICS = "assets/atlas.json";
 
 // Calculate cell size from font metrics
 // For monospace fonts, all glyphs have the same advance width
-static void calculateCellSizeFromFont(Font* font, float& cellWidth, float& cellHeight) {
+static void calculateCellSizeFromFont(Font *font, float &cellWidth,
+                                      float &cellHeight) {
   float fontSize = font->getFontSize();
-  
+
   // Try to get actual metrics from a representative glyph
-  const auto* metrics = font->getGlyph('M');
+  const auto *metrics = font->getGlyph('M');
   if (metrics && metrics->_advance > 0) {
     cellWidth = metrics->_advance;
   } else {
     // Fallback to approximation if metrics unavailable
     cellWidth = fontSize * 0.6f;
   }
-  
+
   // Use font's line height if available, otherwise approximate
   float lineHeight = font->getLineHeight();
   if (lineHeight > 0) {
@@ -130,7 +132,6 @@ Result<Yetty::Ptr> Yetty::create(int argc, char *argv[]) noexcept {
 #if defined(__ANDROID__)
 Result<void> Yetty::init(struct android_app *app) noexcept {
   LOGI("yetty starting...");
-  spdlog::set_level(spdlog::level::debug);
 
   _androidApp = app;
   _dataDir = std::string(app->activity->internalDataPath);
@@ -156,8 +157,8 @@ Result<void> Yetty::init(struct android_app *app) noexcept {
 }
 #else
 Result<void> Yetty::init(int argc, char *argv[]) noexcept {
-  spdlog::set_level(spdlog::level::debug);
-  spdlog::info("yetty starting...");
+  yfunc();
+  yinfo("yetty starting...");
 
   // Parse command line arguments
   if (auto res = parseArgs(argc, argv); !res) {
@@ -240,6 +241,9 @@ Result<void> Yetty::parseArgs(int argc, char *argv[]) noexcept {
                           {"no-damage"});
   args::Flag debugDamageFlag(parser, "debug-damage",
                              "Log damage rectangle updates", {"debug-damage"});
+  args::Flag muxFlag(parser, "mux",
+                     "Use multiplexed terminal (connect to yetty-server)",
+                     {"mux"});
   args::ValueFlag<std::string> executeArg(
       parser, "command", "Execute command instead of shell", {'e'});
 
@@ -276,6 +280,7 @@ Result<void> Yetty::parseArgs(int argc, char *argv[]) noexcept {
 
   // Extract final values
   _generateAtlasOnly = generateAtlasFlag;
+  _useMux = muxFlag;
   _fontPath = fontPathArg ? args::get(fontPathArg) : std::string(DEFAULT_FONT);
   _executeCommand = executeArg ? args::get(executeArg) : "";
   _initialWidth = widthArg ? args::get(widthArg) : 1024;
@@ -287,7 +292,10 @@ Result<void> Yetty::parseArgs(int argc, char *argv[]) noexcept {
     _initialHeight = 768;
 
   if (!_executeCommand.empty()) {
-    spdlog::info("Execute command: {}", _executeCommand);
+    yinfo("Execute command: {}", _executeCommand);
+  }
+  if (_useMux) {
+    yinfo("Multiplexed terminal mode enabled");
   }
 #else
   (void)argc;
@@ -415,7 +423,7 @@ Result<void> Yetty::initFont() noexcept {
   calculateCellSizeFromFont(_font, _baseCellWidth, _baseCellHeight);
 #elif YETTY_USE_PREBUILT_ATLAS
   // Web build: load prebuilt atlas via FontManager
-  spdlog::info("Loading pre-built atlas via FontManager...");
+  yinfo("Loading pre-built atlas via FontManager...");
   auto fontResult =
       _fontManager->loadFromAtlas(DEFAULT_ATLAS, DEFAULT_METRICS, "default");
   if (!fontResult) {
@@ -437,9 +445,10 @@ Result<void> Yetty::initRenderer() noexcept {
   std::string fontFamily = _config ? _config->fontFamily() : "default";
   if (fontFamily == "default") {
     // Use bundled Nerd Font
-    fontFamily = Config::getExecutableDir().string() + "/assets/DejaVuSansMNerdFontMono-Regular.ttf";
+    fontFamily = Config::getExecutableDir().string() +
+                 "/assets/DejaVuSansMNerdFontMono-Regular.ttf";
   }
-  spdlog::info("Using font: {}", fontFamily);
+  yinfo("Using font: {}", fontFamily);
 
   auto rendererResult = GridRenderer::create(_ctx, _fontManager, fontFamily);
   if (!rendererResult) {
@@ -469,8 +478,8 @@ Result<void> Yetty::initRenderer() noexcept {
 Result<void> Yetty::initTerminal() noexcept {
 #if defined(__ANDROID__)
   // Android: Terminal mode (no plugins)
-  auto terminalResult =
-      Terminal::create(nextRenderableId(), _cols, _rows, _font, _uvLoop);
+  // ID 0 means Widget base class will auto-assign an ID
+  auto terminalResult = Terminal::create(0, _cols, _rows, _font, _uvLoop);
   if (!terminalResult) {
     return Err<void>("Failed to create terminal", terminalResult);
   }
@@ -488,67 +497,126 @@ Result<void> Yetty::initTerminal() noexcept {
   // Start shell
   _terminal->setShell("/system/bin/sh");
   _terminal->start();
-  addRenderable(_terminal);
+  _rootWidgets.push_back(_terminal);
   LOGI("Terminal started with shell: /system/bin/sh");
   LOGI("Toybox available at: %s", _toyboxPath.c_str());
 #elif !YETTY_WEB
   // Desktop: Terminal mode with plugins
-  auto terminalResult =
-      Terminal::create(nextRenderableId(), _cols, _rows, _font, _uvLoop);
-  if (!terminalResult) {
-    return Err<void>("Failed to create terminal", terminalResult);
+
+  // Check if multiplexed mode requested
+  if (_useMux) {
+    yinfo("Multiplexed terminal mode: connecting to yetty-server...");
+
+    // ID 0 means Widget base class will auto-assign an ID
+    auto remoteTerminalResult =
+        RemoteTerminal::create(0, _cols, _rows, _font, _uvLoop);
+    if (!remoteTerminalResult) {
+      yerror("Failed to create RemoteTerminal: {}",
+             error_msg(remoteTerminalResult));
+      yinfo("Falling back to in-process terminal...");
+      // Fall through to create local terminal
+    } else {
+      _remoteTerminal = *remoteTerminalResult;
+      _remoteTerminal->setConfig(_config.get());
+
+      // Set shell command
+      if (!_executeCommand.empty()) {
+        _remoteTerminal->setShell(_executeCommand);
+      }
+
+      // Wire up renderer
+      if (_renderer) {
+        _remoteTerminal->setRenderer(_renderer.get());
+      }
+
+      // Set up cell size
+      _remoteTerminal->setBaseCellSize(_baseCellWidth, _baseCellHeight);
+      _remoteTerminal->setCellSize(static_cast<uint32_t>(_baseCellWidth),
+                                   static_cast<uint32_t>(_baseCellHeight));
+
+      // Start remote terminal
+      _remoteTerminal->start();
+
+      // Check if start succeeded
+      if (!_remoteTerminal->isRunning()) {
+        yerror("RemoteTerminal failed to start, falling back to in-process "
+               "terminal");
+        _remoteTerminal.reset();
+        // Fall through to create local terminal
+      } else {
+        // Add to root widgets
+        _rootWidgets.push_back(_remoteTerminal);
+
+        yinfo("RemoteTerminal started successfully");
+
+        // Skip creating local terminal - go directly to ShaderManager setup
+        goto setup_shader_manager;
+      }
+    }
   }
-  _terminal = *terminalResult;
-  _terminal->setConfig(_config.get());
 
-  // Create and configure PluginManager
-  auto pluginMgrResult = PluginManager::create();
-  if (!pluginMgrResult) {
-    return Err<void>("Failed to create plugin manager", pluginMgrResult);
-  }
-  _pluginManager = *pluginMgrResult;
+  {
+    yfunc();
+    yinfo("Yetty::initTerminal: In-process terminal setup");
 
-  // Pass font and engine to plugins
-  _pluginManager->setFont(_font);
-  _pluginManager->setEngine(shared_from_this());
+    // Create WidgetFactory with plugin search paths (plugins lazy-loaded on
+    // access)
+    _widgetFactory = WidgetFactory::create(this, _config->pluginPaths());
+    yinfo("Yetty::initTerminal: WidgetFactory created");
 
-  // Note: ShaderGlyphRenderer is now integrated via Terminal, not as a plugin
+    // Create Terminal via generic create (uses WidgetFactory)
+    yinfo("Yetty::initTerminal: Creating Terminal via generic create");
+    WidgetParams termParams;
+    termParams.widthCells = _cols;
+    termParams.heightCells = _rows;
+    termParams.cellWidth = static_cast<uint32_t>(_baseCellWidth);
+    termParams.cellHeight = static_cast<uint32_t>(_baseCellHeight);
+    termParams.loop = _uvLoop;
 
-  // Load plugins from configured paths
-  auto pluginPaths = _config->pluginPaths();
-  for (const auto &path : pluginPaths) {
-    spdlog::info("Loading plugins from: {}", path);
-    _pluginManager->loadPluginsFromDirectory(path);
-  }
+    auto terminalResult =
+        Terminal::create(_widgetFactory.get(), termParams, _executeCommand);
+    if (!terminalResult) {
+      ywarn("Yetty::initTerminal: Failed to create terminal: {}",
+            error_msg(terminalResult));
+      return Err<void>("Failed to create terminal", terminalResult);
+    }
+    // Cast WidgetPtr back to Terminal::Ptr
+    _terminal = std::dynamic_pointer_cast<Terminal>(*terminalResult);
+    if (!_terminal) {
+      ywarn("Yetty::initTerminal: dynamic_pointer_cast to Terminal failed");
+      return Err<void>("Failed to cast Widget to Terminal");
+    }
+    yinfo("Yetty::initTerminal: Terminal created id={}", _terminal->id());
 
-  // Wire up plugin manager to terminal
-  _terminal->setPluginManager(_pluginManager.get());
-  _terminal->setCellSize(static_cast<uint32_t>(_baseCellWidth),
-                         static_cast<uint32_t>(_baseCellHeight));
+    _terminal->setCellSize(static_cast<uint32_t>(_baseCellWidth),
+                           static_cast<uint32_t>(_baseCellHeight));
 
-  // Wire up emoji atlas for dynamic emoji loading
-  if (_renderer) {
-    _terminal->setEmojiAtlas(_renderer->getEmojiAtlas());
-    _terminal->setRenderer(_renderer.get());
-  }
+    // Wire up emoji atlas for dynamic emoji loading
+    if (_renderer) {
+      _terminal->setEmojiAtlas(_renderer->getEmojiAtlas());
+      _terminal->setRenderer(_renderer.get());
+    }
 
-  // Set up zoom handling on terminal
-  _terminal->setBaseCellSize(_baseCellWidth, _baseCellHeight);
+    // Set up zoom handling on terminal
+    _terminal->setBaseCellSize(_baseCellWidth, _baseCellHeight);
 
-  // Set shell command and start terminal
-  if (!_executeCommand.empty()) {
-    _terminal->setShell(_executeCommand);
-  }
-  _terminal->start();
+    // Start terminal
+    yinfo("Yetty::initTerminal: Starting terminal");
+    _terminal->start();
+    yinfo("Yetty::initTerminal: Terminal started");
 
-  // Add terminal to renderables
-  addRenderable(_terminal);
+    // Add Terminal to root widgets
+    _rootWidgets.push_back(_terminal);
+  } // end of in-process terminal block
 
+setup_shader_manager:
   // Create ShaderManager for shader-based rendering (cursor, custom glyphs)
   _shaderManager = std::make_shared<ShaderManager>();
-  std::string shaderPath = std::string(CMAKE_SOURCE_DIR) + "/src/yetty/shaders/";
+  std::string shaderPath =
+      std::string(CMAKE_SOURCE_DIR) + "/src/yetty/shaders/";
   if (auto res = _shaderManager->init(_ctx->getDevice(), shaderPath); !res) {
-    spdlog::warn("Failed to init ShaderManager: {} - cursor shader disabled", error_msg(res));
+    ywarn("Failed to init ShaderManager: {} - cursor shader disabled",
+                 error_msg(res));
     _shaderManager.reset();
   }
 
@@ -558,7 +626,7 @@ Result<void> Yetty::initTerminal() noexcept {
   // content. CursorRenderer's LoadOp_Load then loads garbage.
   // TODO: Implement GPU-driven cursor blinking in GridRenderer's shader
   // using a time uniform, so cursor blinks even without damage.
-  (void)_shaderManager;  // Keep ShaderManager for future use
+  (void)_shaderManager; // Keep ShaderManager for future use
 
   std::cout << "Terminal mode: Grid " << _cols << "x" << _rows
             << " (damage tracking: "
@@ -572,53 +640,73 @@ Result<void> Yetty::initTerminal() noexcept {
   }
   _inputHandler = *inputResult;
 #else
-  // Web build: Create WebDisplay renderable
-  spdlog::info("Web build: Creating WebDisplay");
+  // Web build: Create WebDisplay widget
+  yinfo("Web build: Creating WebDisplay");
 
-  auto displayResult = WebDisplay::create(nextRenderableId(), _cols, _rows, _ctx, _fontManager);
+  auto displayResult = WebDisplay::create(_cols, _rows, _ctx, _fontManager);
   if (!displayResult) {
     return Err<void>("Failed to create WebDisplay", displayResult);
   }
   _webDisplay = *displayResult;
-  addRenderable(_webDisplay);
+  _rootWidgets.push_back(_webDisplay);
 
   // Fill the grid with a welcome message
-  Grid& grid = _webDisplay->grid();
-  Font* font = _webDisplay->font();
+  Grid &grid = _webDisplay->grid();
+  Font *font = _webDisplay->font();
 
-  const char* lines[] = {
-    "+---------------------------------------------------------------------------+",
-    "|                                                                           |",
-    "|                     YETTY - WebGPU Terminal Emulator                      |",
-    "|                                                                           |",
-    "+---------------------------------------------------------------------------+",
-    "|                                                                           |",
-    "|  Welcome to the yetty web demo!                                           |",
-    "|                                                                           |",
-    "|  This terminal is rendered using WebGPU with MSDF fonts.                  |",
-    "|                                                                           |",
-    "|  Features:                                                                |",
-    "|    * GPU-accelerated text rendering                                       |",
-    "|    * Smooth scaling via MSDF (Multi-channel Signed Distance Fields)       |",
-    "|    * Full Unicode support including emoji                                 |",
-    "|    * 24-bit true color support                                            |",
-    "|                                                                           |",
-    "|  Use the Toybox shell below to run commands.                              |",
-    "|                                                                           |",
-    "+---------------------------------------------------------------------------+",
+  const char *lines[] = {
+      "+-----------------------------------------------------------------------"
+      "----+",
+      "|                                                                       "
+      "    |",
+      "|                     YETTY - WebGPU Terminal Emulator                  "
+      "    |",
+      "|                                                                       "
+      "    |",
+      "+-----------------------------------------------------------------------"
+      "----+",
+      "|                                                                       "
+      "    |",
+      "|  Welcome to the yetty web demo!                                       "
+      "    |",
+      "|                                                                       "
+      "    |",
+      "|  This terminal is rendered using WebGPU with MSDF fonts.              "
+      "    |",
+      "|                                                                       "
+      "    |",
+      "|  Features:                                                            "
+      "    |",
+      "|    * GPU-accelerated text rendering                                   "
+      "    |",
+      "|    * Smooth scaling via MSDF (Multi-channel Signed Distance Fields)   "
+      "    |",
+      "|    * Full Unicode support including emoji                             "
+      "    |",
+      "|    * 24-bit true color support                                        "
+      "    |",
+      "|                                                                       "
+      "    |",
+      "|  Use the Toybox shell below to run commands.                          "
+      "    |",
+      "|                                                                       "
+      "    |",
+      "+-----------------------------------------------------------------------"
+      "----+",
   };
 
   // Default colors
-  uint8_t fgR = 0xCC, fgG = 0xCC, fgB = 0xCC;  // Light gray
-  uint8_t bgR = 0x0F, bgG = 0x0F, bgB = 0x23;  // Dark background
+  uint8_t fgR = 0xCC, fgG = 0xCC, fgB = 0xCC; // Light gray
+  uint8_t bgR = 0x0F, bgG = 0x0F, bgB = 0x23; // Dark background
 
   // Write each line
-  for (size_t row = 0; row < sizeof(lines)/sizeof(lines[0]) && row < _rows; row++) {
-    const char* line = lines[row];
+  for (size_t row = 0; row < sizeof(lines) / sizeof(lines[0]) && row < _rows;
+       row++) {
+    const char *line = lines[row];
     uint32_t col = 0;
 
     // UTF-8 decode and write
-    const uint8_t* p = reinterpret_cast<const uint8_t*>(line);
+    const uint8_t *p = reinterpret_cast<const uint8_t *>(line);
     while (*p && col < _cols) {
       uint32_t codepoint;
       if ((*p & 0x80) == 0) {
@@ -641,15 +729,20 @@ Result<void> Yetty::initTerminal() noexcept {
       }
 
       // Get glyph index from font
-      uint16_t glyphIndex = font ? font->getGlyphIndex(codepoint) : static_cast<uint16_t>(codepoint);
+      uint16_t glyphIndex = font ? font->getGlyphIndex(codepoint)
+                                 : static_cast<uint16_t>(codepoint);
 
       // Set colors based on character type
       uint8_t r = fgR, g = fgG, b = fgB;
       if (codepoint == '+' || codepoint == '-' || codepoint == '|') {
         // Box drawing characters - use accent color
-        r = 0xE9; g = 0x45; b = 0x60;  // Red accent
+        r = 0xE9;
+        g = 0x45;
+        b = 0x60; // Red accent
       } else if (codepoint == '*') {
-        r = 0x4A; g = 0xDE; b = 0x80;  // Green for bullets
+        r = 0x4A;
+        g = 0xDE;
+        b = 0x80; // Green for bullets
       }
 
       grid.setCell(col, row, glyphIndex, r, g, b, bgR, bgG, bgB);
@@ -666,14 +759,14 @@ Result<void> Yetty::initTerminal() noexcept {
 
   // Fill remaining rows with spaces
   uint16_t spaceGlyph = font ? font->getGlyphIndex(' ') : ' ';
-  for (uint32_t row = sizeof(lines)/sizeof(lines[0]); row < _rows; row++) {
+  for (uint32_t row = sizeof(lines) / sizeof(lines[0]); row < _rows; row++) {
     for (uint32_t col = 0; col < _cols; col++) {
       grid.setCell(col, row, spaceGlyph, fgR, fgG, fgB, bgR, bgG, bgB);
     }
   }
 
   _webDisplay->start();
-  spdlog::info("Web demo: WebDisplay {}x{} initialized", _cols, _rows);
+  yinfo("Web demo: WebDisplay {}x{} initialized", _cols, _rows);
 #endif
 
   return Ok();
@@ -766,9 +859,9 @@ void Yetty::shutdown() noexcept {
   shutdownEventLoop();
 
   // Clean up in reverse order of creation
-  // 1. Plugin manager first (disposes all plugin layers)
-  _pluginManager.reset();
-  // 2. Then shader/cursor managers
+  // 1. Widget factory first
+  _widgetFactory.reset();
+  // 2. Shader/cursor managers
   _shaderManager.reset();
   _cursorRenderer.reset();
   // 3. Then terminal (stops PTY)
@@ -801,10 +894,11 @@ void Yetty::initEventLoop() noexcept {
   uv_loop_init(_uvLoop);
 
   // Frame timer - fires at 50Hz (every 20ms)
+  // Timer is initialized but NOT started here - it's started in run() after
+  // init is complete
   _frameTimer = new uv_timer_t;
   uv_timer_init(_uvLoop, _frameTimer);
   _frameTimer->data = this;
-  uv_timer_start(_frameTimer, onFrameTimer, 0, 20); // 50Hz
 
   // Async handle for Terminal to wake up main loop
   _wakeAsync = new uv_async_t;
@@ -812,7 +906,7 @@ void Yetty::initEventLoop() noexcept {
   _wakeAsync->data = this;
 
   _lastRenderTime = glfwGetTime();
-  spdlog::debug("libuv event loop initialized (50Hz timer)");
+  ydebug("libuv event loop initialized (50Hz timer)");
 }
 
 void Yetty::shutdownEventLoop() noexcept {
@@ -927,6 +1021,10 @@ int Yetty::run() noexcept {
   std::cout << "Starting render loop... (use mouse scroll to zoom, ESC to exit)"
             << std::endl;
 
+  // Start the frame timer NOW (not during init, to avoid rendering before
+  // terminal is ready)
+  uv_timer_start(_frameTimer, onFrameTimer, 0, 20); // 50Hz
+
   // Run libuv event loop - blocks until uv_stop() is called
   uv_run(_uvLoop, UV_RUN_DEFAULT);
 
@@ -952,31 +1050,40 @@ void Yetty::mainLoopIteration() noexcept {
     return;
   }
 
-  // Render all renderables
-  renderAll();
+  // Render all root widgets
+  for (const auto &widget : _rootWidgets) {
+    if (!widget->isRunning())
+      continue;
+    widget->render(*_ctx);
+  }
 
   // Present
   _ctx->present();
 #elif YETTY_WEB
   // Web build: simplified rendering loop
-  // Collect and execute render commands from all renderables
-  renderAll();
+  for (const auto &widget : _rootWidgets) {
+    if (!widget->isRunning())
+      continue;
+    widget->render(*_ctx);
+  }
 
-  // Present the frame
-  _ctx->present();
+  // Present the frame (only if a texture was actually acquired)
+  if (_ctx->hasCurrentTexture()) {
+    _ctx->present();
+  }
 #else
   // Desktop build: full rendering with plugins and shader manager
   // Note: glfwPollEvents() is called in onFrameTimer() before this
 
-  // Check if any renderable is still running
+  // Check if any root widget is still running
   bool anyRunning = false;
-  for (const auto &r : _renderables) {
-    if (r->isRunning()) {
+  for (const auto &widget : _rootWidgets) {
+    if (widget->isRunning()) {
       anyRunning = true;
       break;
     }
   }
-  if (!anyRunning && !_renderables.empty()) {
+  if (!anyRunning && !_rootWidgets.empty()) {
     glfwSetWindowShouldClose(_window, GLFW_TRUE);
     return;
   }
@@ -988,11 +1095,11 @@ void Yetty::mainLoopIteration() noexcept {
   }
 
   // Update global uniforms (time, mouse, screen) once per frame
-  if (_shaderManager) {
-    double now = glfwGetTime();
-    float deltaTime = static_cast<float>(now - _lastRenderTime);
-    _lastRenderTime = now;
+  double now = glfwGetTime();
+  float deltaTime = static_cast<float>(now - _lastRenderTime);
+  _lastRenderTime = now;
 
+  if (_shaderManager) {
     // Get mouse position (normalized 0-1)
     double mouseX = 0, mouseY = 0;
     glfwGetCursorPos(_window, &mouseX, &mouseY);
@@ -1004,29 +1111,103 @@ void Yetty::mainLoopIteration() noexcept {
     float clickY = normMouseY;
 
     _shaderManager->updateGlobalUniforms(_ctx->getQueue(), deltaTime,
-                                          normMouseX, normMouseY,
-                                          clickX, clickY,
-                                          windowWidth(), windowHeight());
+                                         normMouseX, normMouseY, clickX, clickY,
+                                         windowWidth(), windowHeight());
   }
 
-  // Collect and execute render commands from all renderables
-  // Each renderable returns nullptr if no damage (skip frame efficiently)
-  renderAll();
-
-  // Render plugin layers on top (only if there are layers)
-  if (_pluginManager && !_pluginManager->getAllLayers().empty()) {
-    auto viewResult = _ctx->getCurrentTextureView();
-    if (viewResult) {
-      CHECK_RESULT(_pluginManager->render(*_ctx, *viewResult,
-                                          windowWidth(), windowHeight(),
-                                          cellWidth(), cellHeight(),
-                                          _terminal ? _terminal->getScrollOffset() : 0,
-                                          _rows));
-    }
+  // Get texture view for this frame
+  auto viewResult = _ctx->getCurrentTextureView();
+  if (!viewResult) {
+    ydebug("mainLoopIteration: no texture view available");
+    return;
   }
+  WGPUTextureView targetView = *viewResult;
+
+  // Build RenderContext for all widgets
+  RenderContext rc;
+  rc.targetView = targetView;
+  rc.targetFormat = _ctx->getSurfaceFormat();
+  rc.screenWidth = windowWidth();
+  rc.screenHeight = windowHeight();
+  rc.cellWidth = cellWidth();
+  rc.cellHeight = cellHeight();
+  rc.scrollOffset = _terminal ? _terminal->getScrollOffset() : 0;
+  rc.termRows = _rows;
+  rc.isAltScreen = _terminal ? _terminal->isAltScreen() : false;
+  rc.deltaTime = deltaTime;
+
+  //=========================================================================
+  // Phase 1: PREPARE - Set RenderContext and call prepareFrame() on all widgets
+  // Widgets that render to intermediate textures (ThorVG, pygfx, video) do
+  // their texture rendering here. Direct-render widgets do nothing.
+  //=========================================================================
+  for (const auto &widget : _rootWidgets) {
+    if (!widget->isRunning())
+      continue;
+    widget->setRenderContext(rc);
+    widget->prepareFrame(*_ctx);
+  }
+
+  //=========================================================================
+  // Phase 2: BATCHED RENDER - ONE encoder, ONE pass for ALL widgets
+  //=========================================================================
+  WGPUCommandEncoderDescriptor encoderDesc = {};
+  WGPUCommandEncoder encoder =
+      wgpuDeviceCreateCommandEncoder(_ctx->getDevice(), &encoderDesc);
+  if (!encoder) {
+    yerror("mainLoopIteration: Failed to create command encoder");
+    return;
+  }
+
+  WGPURenderPassColorAttachment colorAttachment = {};
+  colorAttachment.view = targetView;
+  colorAttachment.loadOp = WGPULoadOp_Clear;
+  colorAttachment.storeOp = WGPUStoreOp_Store;
+  colorAttachment.clearValue = {0.0588f, 0.0588f, 0.1373f, 1.0f}; // Dark blue background
+  colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+
+  WGPURenderPassDescriptor passDesc = {};
+  passDesc.colorAttachmentCount = 1;
+  passDesc.colorAttachments = &colorAttachment;
+
+  WGPURenderPassEncoder pass =
+      wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
+  if (!pass) {
+    wgpuCommandEncoderRelease(encoder);
+    yerror("mainLoopIteration: Failed to begin render pass");
+    return;
+  }
+
+  // Set current encoder/pass for any code that needs it
+  _currentEncoder = encoder;
+  _currentRenderPass = pass;
+
+  // Render all root widgets (each propagates to its children)
+  for (const auto &widget : _rootWidgets) {
+    if (!widget->isRunning())
+      continue;
+    widget->render(pass, *_ctx);
+  }
+
+  // Clear current encoder/pass
+  _currentEncoder = nullptr;
+  _currentRenderPass = nullptr;
+
+  wgpuRenderPassEncoderEnd(pass);
+  wgpuRenderPassEncoderRelease(pass);
+
+  WGPUCommandBufferDescriptor cmdDesc = {};
+  WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdDesc);
+  if (cmdBuffer) {
+    wgpuQueueSubmit(_ctx->getQueue(), 1, &cmdBuffer);
+    wgpuCommandBufferRelease(cmdBuffer);
+  }
+  wgpuCommandEncoderRelease(encoder);
 
   // Present the frame
-  _ctx->present();
+  if (_ctx->hasCurrentTexture()) {
+    _ctx->present();
+  }
 
   // FPS counter
   double currentTime = glfwGetTime();
@@ -1063,8 +1244,6 @@ void Yetty::handleResize(int newWidth, int newHeight) noexcept {
 
   if (newCols != _cols || newRows != _rows) {
     updateGridSize(newCols, newRows);
-    std::cout << "Window resize -> Grid " << newCols << "x" << newRows
-              << std::endl;
   }
 }
 
@@ -1113,109 +1292,14 @@ void Yetty::updateGridSize(uint32_t cols, uint32_t rows) noexcept {
   if (_terminal) {
     _terminal->resize(cols, rows);
   }
+  if (_remoteTerminal) {
+    _remoteTerminal->resize(cols, rows);
+  }
 #elif defined(__ANDROID__)
   if (_terminal) {
     _terminal->resize(cols, rows);
   }
 #endif
-}
-
-//-----------------------------------------------------------------------------
-// Renderable management
-//-----------------------------------------------------------------------------
-
-void Yetty::addRenderable(Renderable::Ptr renderable) noexcept {
-  if (!renderable)
-    return;
-
-  // Insert sorted by zOrder
-  auto it =
-      std::lower_bound(_renderables.begin(), _renderables.end(), renderable,
-                       [](const Renderable::Ptr &a, const Renderable::Ptr &b) {
-                         return a->zOrder() < b->zOrder();
-                       });
-  _renderables.insert(it, renderable);
-
-  spdlog::debug("Added renderable '{}' (id={}, zOrder={})", renderable->name(),
-                renderable->id(), renderable->zOrder());
-}
-
-void Yetty::removeRenderable(uint32_t id) noexcept {
-  auto it =
-      std::find_if(_renderables.begin(), _renderables.end(),
-                   [id](const Renderable::Ptr &r) { return r->id() == id; });
-
-  if (it != _renderables.end()) {
-    spdlog::debug("Removing renderable '{}' (id={})", (*it)->name(), id);
-    (*it)->stop();
-    _renderables.erase(it);
-  }
-}
-
-void Yetty::renderAll() noexcept {
-  // Render all renderables in zOrder
-  for (auto &renderable : _renderables) {
-    if (!renderable->isRunning())
-      continue;
-
-    // Set current renderable context
-    _currentRenderableId = renderable->id();
-
-    // Call render - each renderable manages its own GPU resources
-    renderable->render(*_ctx);
-  }
-
-  // Reset context
-  _currentRenderableId = 0;
-}
-
-//-----------------------------------------------------------------------------
-// Per-Renderable Resource Management
-//-----------------------------------------------------------------------------
-
-RenderableResources &Yetty::currentResources() noexcept {
-  return _resources[_currentRenderableId];
-}
-
-RenderableResources &Yetty::getResources(uint32_t renderableId) noexcept {
-  return _resources[renderableId];
-}
-
-void Yetty::cleanupResources(uint32_t renderableId) noexcept {
-  auto it = _resources.find(renderableId);
-  if (it == _resources.end())
-    return;
-
-  auto &res = it->second;
-
-  // Release all GPU resources
-  for (auto &[name, shader] : res.shaders) {
-    if (shader.pipeline)
-      wgpuRenderPipelineRelease(shader.pipeline);
-    if (shader.pipelineLayout)
-      wgpuPipelineLayoutRelease(shader.pipelineLayout);
-    if (shader.bindGroupLayout)
-      wgpuBindGroupLayoutRelease(shader.bindGroupLayout);
-    if (shader.module)
-      wgpuShaderModuleRelease(shader.module);
-  }
-
-  for (auto &[name, tex] : res.textures) {
-    if (tex.sampler)
-      wgpuSamplerRelease(tex.sampler);
-    if (tex.view)
-      wgpuTextureViewRelease(tex.view);
-    if (tex.texture)
-      wgpuTextureRelease(tex.texture);
-  }
-
-  for (auto &[name, buf] : res.buffers) {
-    if (buf.buffer)
-      wgpuBufferRelease(buf.buffer);
-  }
-
-  _resources.erase(it);
-  spdlog::debug("Cleaned up resources for renderable {}", renderableId);
 }
 
 //-----------------------------------------------------------------------------

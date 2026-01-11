@@ -1,7 +1,7 @@
 //=============================================================================
 // Plugin Layer Tests
 //
-// Tests for PluginLayer position, visibility, screen type, and input handling
+// Tests for Widget position, visibility, screen type, and input handling
 //=============================================================================
 
 #include <boost/ut.hpp>
@@ -11,212 +11,212 @@ using namespace boost::ut;
 using namespace yetty;
 using namespace yetty::test;
 
+// Helper to create MockPluginWidget with factory pattern
+inline std::shared_ptr<MockPluginWidget> createTestWidget(const std::string& payload = "") {
+    auto result = MockPluginWidget::create(payload);
+    return std::static_pointer_cast<MockPluginWidget>(*result);
+}
+
 suite plugin_layer_tests = [] {
-    "layer has default position 0,0"_test = [] {
-        MockPluginLayer layer;
+    "widget has default position 0,0"_test = [] {
+        auto widget = createTestWidget();
 
-        expect(layer.getX() == 0_i);
-        expect(layer.getY() == 0_i);
+        expect(widget->getX() == 0_i);
+        expect(widget->getY() == 0_i);
     };
 
-    "layer position can be set"_test = [] {
-        MockPluginLayer layer;
+    "widget position can be set"_test = [] {
+        auto widget = createTestWidget();
 
-        layer.setPosition(10, 20);
+        widget->setPosition(10, 20);
 
-        expect(layer.getX() == 10_i);
-        expect(layer.getY() == 20_i);
+        expect(widget->getX() == 10_i);
+        expect(widget->getY() == 20_i);
     };
 
-    "layer has default cell size 1x1"_test = [] {
-        MockPluginLayer layer;
+    "widget has default cell size 1x1"_test = [] {
+        auto widget = createTestWidget();
 
-        expect(layer.getWidthCells() == 1_u);
-        expect(layer.getHeightCells() == 1_u);
+        expect(widget->getWidthCells() == 1_u);
+        expect(widget->getHeightCells() == 1_u);
     };
 
-    "layer cell size can be set"_test = [] {
-        MockPluginLayer layer;
+    "widget cell size can be set"_test = [] {
+        auto widget = createTestWidget();
 
-        layer.setCellSize(40, 20);
+        widget->setCellSize(40, 20);
 
-        expect(layer.getWidthCells() == 40_u);
-        expect(layer.getHeightCells() == 20_u);
+        expect(widget->getWidthCells() == 40_u);
+        expect(widget->getHeightCells() == 20_u);
     };
 
-    "layer pixel size can be set"_test = [] {
-        MockPluginLayer layer;
+    "widget pixel size can be set"_test = [] {
+        auto widget = createTestWidget();
 
-        layer.setPixelSize(800, 600);
+        widget->setPixelSize(800, 600);
 
-        expect(layer.getPixelWidth() == 800_u);
-        expect(layer.getPixelHeight() == 600_u);
+        expect(widget->getPixelWidth() == 800_u);
+        expect(widget->getPixelHeight() == 600_u);
     };
 
-    "layer is visible by default"_test = [] {
-        MockPluginLayer layer;
+    "widget is visible by default"_test = [] {
+        auto widget = createTestWidget();
 
-        expect(layer.isVisible());
+        expect(widget->isVisible());
     };
 
-    "layer visibility can be toggled"_test = [] {
-        MockPluginLayer layer;
+    "widget visibility can be toggled"_test = [] {
+        auto widget = createTestWidget();
 
-        layer.setVisible(false);
-        expect(!layer.isVisible());
+        widget->setVisible(false);
+        expect(!widget->isVisible());
 
-        layer.setVisible(true);
-        expect(layer.isVisible());
+        widget->setVisible(true);
+        expect(widget->isVisible());
     };
 
-    "layer has default position mode Absolute"_test = [] {
-        MockPluginLayer layer;
+    "widget has default position mode Absolute"_test = [] {
+        auto widget = createTestWidget();
 
-        expect(layer.getPositionMode() == PositionMode::Absolute);
+        expect(widget->getPositionMode() == PositionMode::Absolute);
     };
 
-    "layer position mode can be set to Relative"_test = [] {
-        MockPluginLayer layer;
+    "widget position mode can be set to Relative"_test = [] {
+        auto widget = createTestWidget();
 
-        layer.setPositionMode(PositionMode::Relative);
+        widget->setPositionMode(PositionMode::Relative);
 
-        expect(layer.getPositionMode() == PositionMode::Relative);
+        expect(widget->getPositionMode() == PositionMode::Relative);
     };
 
-    "layer has default screen type Main"_test = [] {
-        MockPluginLayer layer;
+    "widget has default screen type Main"_test = [] {
+        auto widget = createTestWidget();
 
-        expect(layer.getScreenType() == ScreenType::Main);
+        expect(widget->getScreenType() == ScreenType::Main);
     };
 
-    "layer screen type can be set to Alternate"_test = [] {
-        MockPluginLayer layer;
+    "widget screen type can be set to Alternate"_test = [] {
+        auto widget = createTestWidget();
 
-        layer.setScreenType(ScreenType::Alternate);
+        widget->setScreenType(ScreenType::Alternate);
 
-        expect(layer.getScreenType() == ScreenType::Alternate);
+        expect(widget->getScreenType() == ScreenType::Alternate);
     };
 
-    "layer ID can be set and retrieved"_test = [] {
-        MockPluginLayer layer;
+    "widget ID can be set and retrieved"_test = [] {
+        auto widget = createTestWidget();
 
-        layer.setId(42);
+        widget->setId(42);
 
-        expect(layer.id() == 42_u);
+        expect(widget->id() == 42_u);
     };
 
-    "layer has no focus by default"_test = [] {
-        MockPluginLayer layer;
+    "widget has no focus by default"_test = [] {
+        auto widget = createTestWidget();
 
-        expect(!layer.hasFocus());
+        expect(!widget->hasFocus());
     };
 
-    "layer focus can be set"_test = [] {
-        MockPluginLayer layer;
+    "widget focus can be set"_test = [] {
+        auto widget = createTestWidget();
 
-        layer.setFocus(true);
-        expect(layer.hasFocus());
+        widget->setFocus(true);
+        expect(widget->hasFocus());
 
-        layer.setFocus(false);
-        expect(!layer.hasFocus());
+        widget->setFocus(false);
+        expect(!widget->hasFocus());
     };
 
-    "layer payload can be set"_test = [] {
-        MockPluginLayer layer;
+    "widget payload is set from create"_test = [] {
+        auto widget = createTestWidget("test_payload");
 
-        layer.setPayload("test_payload");
-
-        expect(layer.getPayload() == "test_payload");
+        expect(widget->getPayload() == "test_payload");
     };
 
-    "layer init is called with payload"_test = [] {
-        MockPluginLayer layer;
+    "widget init is called during create"_test = [] {
+        auto widget = createTestWidget("my_payload");
 
-        auto result = layer.init("my_payload");
+        expect(widget->initCalled());
+        expect(widget->getPayload() == "my_payload");
+    };
+
+    "widget dispose marks widget as disposed"_test = [] {
+        auto widget = createTestWidget("test");
+
+        auto result = widget->dispose();
 
         expect(result.has_value());
-        expect(layer.initCalled());
-        expect(layer.getPayload() == "my_payload");
+        expect(widget->disposeCalled());
     };
 
-    "layer dispose marks layer as disposed"_test = [] {
-        MockPluginLayer layer;
-        layer.init("test");
+    "widget mouse move is tracked"_test = [] {
+        auto widget = createTestWidget();
+        widget->setWantsMouse(true);
 
-        auto result = layer.dispose();
+        widget->onMouseMove(100.5f, 200.5f);
 
-        expect(result.has_value());
-        expect(layer.disposeCalled());
+        expect(widget->lastMouseX() == 100.5_f);
+        expect(widget->lastMouseY() == 200.5_f);
+        expect(widget->mouseMoveCount() == 1_i);
     };
 
-    "layer mouse move is tracked"_test = [] {
-        MockPluginLayer layer;
-        layer.setWantsMouse(true);
+    "widget mouse button is tracked"_test = [] {
+        auto widget = createTestWidget();
+        widget->setWantsMouse(true);
 
-        layer.onMouseMove(100.5f, 200.5f);
+        widget->onMouseButton(0, true);
+        widget->onMouseButton(0, false);
 
-        expect(layer.lastMouseX() == 100.5_f);
-        expect(layer.lastMouseY() == 200.5_f);
-        expect(layer.mouseMoveCount() == 1_i);
+        expect(widget->mouseButtonCount() == 2_i);
     };
 
-    "layer mouse button is tracked"_test = [] {
-        MockPluginLayer layer;
-        layer.setWantsMouse(true);
+    "widget wantsKeyboard returns configured value"_test = [] {
+        auto widget = createTestWidget();
 
-        layer.onMouseButton(0, true);
-        layer.onMouseButton(0, false);
+        expect(!widget->wantsKeyboard());
 
-        expect(layer.mouseButtonCount() == 2_i);
+        widget->setWantsKeyboard(true);
+        expect(widget->wantsKeyboard());
     };
 
-    "layer wantsKeyboard returns configured value"_test = [] {
-        MockPluginLayer layer;
+    "widget wantsMouse returns configured value"_test = [] {
+        auto widget = createTestWidget();
 
-        expect(!layer.wantsKeyboard());
+        expect(!widget->wantsMouse());
 
-        layer.setWantsKeyboard(true);
-        expect(layer.wantsKeyboard());
+        widget->setWantsMouse(true);
+        expect(widget->wantsMouse());
     };
 
-    "layer wantsMouse returns configured value"_test = [] {
-        MockPluginLayer layer;
+    "widget onResize updates pixel dimensions"_test = [] {
+        auto widget = createTestWidget();
 
-        expect(!layer.wantsMouse());
+        widget->onResize(1024, 768);
 
-        layer.setWantsMouse(true);
-        expect(layer.wantsMouse());
+        expect(widget->getPixelWidth() == 1024_u);
+        expect(widget->getPixelHeight() == 768_u);
     };
 
-    "layer onResize updates pixel dimensions"_test = [] {
-        MockPluginLayer layer;
-
-        layer.onResize(1024, 768);
-
-        expect(layer.getPixelWidth() == 1024_u);
-        expect(layer.getPixelHeight() == 768_u);
-    };
-
-    "relative layer position updated on scroll simulation"_test = [] {
-        MockPluginLayer layer;
-        layer.setPositionMode(PositionMode::Relative);
-        layer.setPosition(5, 10);
+    "relative widget position updated on scroll simulation"_test = [] {
+        auto widget = createTestWidget();
+        widget->setPositionMode(PositionMode::Relative);
+        widget->setPosition(5, 10);
 
         // Simulate scroll: content moves up by 3 rows
         // Layer Y should decrease by 3
         int scrollDelta = 3;
-        layer.setPosition(layer.getX(), layer.getY() - scrollDelta);
+        widget->setPosition(widget->getX(), widget->getY() - scrollDelta);
 
-        expect(layer.getY() == 7_i);
+        expect(widget->getY() == 7_i);
     };
 
-    "absolute layer position not affected by scroll simulation"_test = [] {
-        MockPluginLayer layer;
-        layer.setPositionMode(PositionMode::Absolute);
-        layer.setPosition(5, 10);
+    "absolute widget position not affected by scroll simulation"_test = [] {
+        auto widget = createTestWidget();
+        widget->setPositionMode(PositionMode::Absolute);
+        widget->setPosition(5, 10);
 
         // For absolute layers, position should not change
-        // (scroll handling is done by PluginManager, not layer)
-        expect(layer.getY() == 10_i);
+        // (scroll handling is done by PluginManager, not widget)
+        expect(widget->getY() == 10_i);
     };
 };

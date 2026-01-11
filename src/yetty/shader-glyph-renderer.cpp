@@ -2,7 +2,7 @@
 #include <yetty/shader-manager.h>
 #include <yetty/webgpu-context.h>
 #include <yetty/wgpu-compat.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 
 namespace yetty {
 
@@ -48,7 +48,7 @@ Result<void> ShaderGlyphRenderer::init(WebGPUContext* ctx, ShaderManager* shader
     }
 
     _initialized = true;
-    spdlog::info("ShaderGlyphRenderer: initialized for shader {}", _shaderName);
+    yinfo("ShaderGlyphRenderer: initialized for shader {}", _shaderName);
     return Ok();
 }
 
@@ -180,7 +180,7 @@ Result<void> ShaderGlyphRenderer::createPipeline(WGPUTextureFormat targetFormat)
         return Err<void>("Failed to create render pipeline");
     }
 
-    spdlog::debug("ShaderGlyphRenderer: created pipeline for {}", _shaderName);
+    ydebug("ShaderGlyphRenderer: created pipeline for {}", _shaderName);
     return Ok();
 }
 

@@ -9,7 +9,7 @@
 namespace yetty {
 
 class MarkdownPlugin;
-class MarkdownLayer;
+class MarkdownW;
 
 //-----------------------------------------------------------------------------
 // MarkdownPlugin - renders markdown content using RichText
@@ -18,20 +18,33 @@ class MarkdownPlugin : public Plugin {
 public:
     ~MarkdownPlugin() override;
 
-    static Result<PluginPtr> create(YettyPtr engine) noexcept;
+    static Result<PluginPtr> create() noexcept;
 
     const char* pluginName() const override { return "markdown"; }
 
     Result<void> dispose() override;
 
-    Result<PluginLayerPtr> createLayer(const std::string& payload) override;
+    Result<WidgetPtr> createWidget(
+        const std::string& widgetName,
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) override;
 
     // Access to font manager (from engine)
     FontManager* getFontManager();
 
 private:
-    explicit MarkdownPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
-    Result<void> init() noexcept override;
+    MarkdownPlugin() noexcept = default;
+    Result<void> pluginInit() noexcept;
+
+    FontManager* _fontManager = nullptr;
 };
 
 //-----------------------------------------------------------------------------
@@ -55,25 +68,38 @@ struct ParsedLine {
 };
 
 //-----------------------------------------------------------------------------
-// MarkdownLayer - single markdown document layer (uses RichText for rendering)
+// MarkdownW - single markdown document widget (uses RichText for rendering)
 //-----------------------------------------------------------------------------
-class MarkdownLayer : public PluginLayer {
+class MarkdownW : public Widget {
 public:
-    explicit MarkdownLayer(MarkdownPlugin* plugin);
-    ~MarkdownLayer() override;
+    static Result<WidgetPtr> create(const std::string& payload, MarkdownPlugin* plugin) {
+        auto w = std::shared_ptr<MarkdownW>(new MarkdownW(payload, plugin));
+        if (auto res = w->init(); !res) {
+            return Err<WidgetPtr>("Failed to init MarkdownW", res);
+        }
+        return Ok(std::static_pointer_cast<Widget>(w));
+    }
 
-    Result<void> init(const std::string& payload) override;
+    ~MarkdownW() override;
+
     Result<void> dispose() override;
 
     // Renderable interface
     Result<void> render(WebGPUContext& ctx) override;
-    bool renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
     // Mouse scrolling
     bool onMouseScroll(float xoffset, float yoffset, int mods) override;
     bool wantsMouse() const override { return true; }
 
 private:
+    explicit MarkdownW(const std::string& payload, MarkdownPlugin* plugin)
+        : plugin_(plugin) {
+        _payload = payload;
+    }
+
+    Result<void> init() override;
+
     void parseMarkdown(const std::string& content);
     void buildRichTextSpans(float fontSize, float maxWidth);
 
@@ -83,15 +109,13 @@ private:
 
     float baseSize_ = 16.0f;
     float lastLayoutWidth_ = 0.0f;
-    bool initialized_ = false;
+    bool _initialized = false;
     bool failed_ = false;
 };
-
-using Markdown = MarkdownPlugin;
 
 } // namespace yetty
 
 extern "C" {
     const char* name();
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine);
+    yetty::Result<yetty::PluginPtr> create();
 }

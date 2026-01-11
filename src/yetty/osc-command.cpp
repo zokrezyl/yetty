@@ -1,5 +1,5 @@
 #include <yetty/osc-command.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -334,16 +334,16 @@ std::string OscResponse::error(const std::string& message) {
     return "error: " + message + "\n";
 }
 
-std::string OscResponse::layerList(const std::vector<std::tuple<std::string, std::string, int, int, int, int, bool>>& layers) {
-    if (layers.empty()) {
-        return "no layers\n";
+std::string OscResponse::widgetList(const std::vector<std::tuple<std::string, std::string, int, int, int, int, bool>>& widgets) {
+    if (widgets.empty()) {
+        return "no widgets\n";
     }
 
     std::string result;
     result += "ID        PLUGIN          X     Y     W     H  STATE\n";
     result += "--------  --------------  ----  ----  ----  ----  -------\n";
 
-    for (const auto& [id, plugin, x, y, w, h, running] : layers) {
+    for (const auto& [id, plugin, x, y, w, h, running] : widgets) {
         char line[128];
         snprintf(line, sizeof(line), "%-8s  %-14s  %4d  %4d  %4d  %4d  %s\n",
                  id.c_str(), plugin.c_str(), x, y, w, h,

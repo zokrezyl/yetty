@@ -2,7 +2,8 @@
 #include <yetty/yetty.h>
 #include <yetty/webgpu-context.h>
 #include <yetty/font-manager.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
+#include <ytrace/ytrace.hpp>
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -16,19 +17,15 @@ namespace yetty {
 
 MarkdownPlugin::~MarkdownPlugin() { (void)dispose(); }
 
-Result<PluginPtr> MarkdownPlugin::create(YettyPtr engine) noexcept {
-    auto p = PluginPtr(new MarkdownPlugin(std::move(engine)));
-    if (auto res = static_cast<MarkdownPlugin*>(p.get())->init(); !res) {
+Result<PluginPtr> MarkdownPlugin::create() noexcept {
+    auto p = PluginPtr(new MarkdownPlugin());
+    if (auto res = static_cast<MarkdownPlugin*>(p.get())->pluginInit(); !res) {
         return Err<PluginPtr>("Failed to init MarkdownPlugin", res);
     }
     return Ok(p);
 }
 
-Result<void> MarkdownPlugin::init() noexcept {
-    // Verify engine has a FontManager
-    if (!engine_ || !engine_->fontManager()) {
-        return Err<void>("MarkdownPlugin: engine has no FontManager");
-    }
+Result<void> MarkdownPlugin::pluginInit() noexcept {
     _initialized = true;
     return Ok();
 }
@@ -42,45 +39,58 @@ Result<void> MarkdownPlugin::dispose() {
 }
 
 FontManager* MarkdownPlugin::getFontManager() {
-    return engine_ ? engine_->fontManager().get() : nullptr;
+    return _fontManager;
 }
 
-Result<PluginLayerPtr> MarkdownPlugin::createLayer(const std::string& payload) {
-    auto layer = std::make_shared<MarkdownLayer>(this);
-    auto result = layer->init(payload);
-    if (!result) {
-        return Err<PluginLayerPtr>("Failed to init MarkdownLayer", result);
-    }
-    return Ok<PluginLayerPtr>(layer);
+Result<WidgetPtr> MarkdownPlugin::createWidget(
+    const std::string& widgetName,
+    WidgetFactory* factory,
+    FontManager* fontManager,
+    uv_loop_t* loop,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
+    const std::string& pluginArgs,
+    const std::string& payload
+) {
+    (void)widgetName;
+    (void)factory;
+    (void)loop;
+    (void)x;
+    (void)y;
+    (void)widthCells;
+    (void)heightCells;
+    (void)pluginArgs;
+    _fontManager = fontManager;  // Store for widget use
+    yfunc();
+    yinfo("payload size={}", payload.size());
+    return MarkdownW::create(payload, this);
 }
 
 //-----------------------------------------------------------------------------
-// MarkdownLayer
+// MarkdownW
 //-----------------------------------------------------------------------------
 
-MarkdownLayer::MarkdownLayer(MarkdownPlugin* plugin)
-    : plugin_(plugin) {}
+MarkdownW::~MarkdownW() { (void)dispose(); }
 
-MarkdownLayer::~MarkdownLayer() { (void)dispose(); }
-
-Result<void> MarkdownLayer::init(const std::string& payload) {
-    if (payload.empty()) {
-        return Err<void>("MarkdownLayer: empty payload");
+Result<void> MarkdownW::init() {
+    if (_payload.empty()) {
+        return Err<void>("MarkdownW: empty payload");
     }
 
-    _payload = payload;
     (void)dispose();
 
     std::string content;
 
     // Check if payload is inline content or file path
-    if (payload.substr(0, 7) == "inline:") {
-        content = payload.substr(7);
+    if (_payload.substr(0, 7) == "inline:") {
+        content = _payload.substr(7);
     } else {
         // Try to load from file
-        std::ifstream file(payload);
+        std::ifstream file(_payload);
         if (!file) {
-            return Err<void>("Failed to open markdown file: " + payload);
+            return Err<void>("Failed to open markdown file: " + _payload);
         }
         std::stringstream buffer;
         buffer << file.rdbuf();
@@ -88,16 +98,16 @@ Result<void> MarkdownLayer::init(const std::string& payload) {
     }
 
     parseMarkdown(content);
-    std::cout << "MarkdownLayer: parsed " << parsedLines_.size() << " lines" << std::endl;
+    std::cout << "MarkdownW: parsed " << parsedLines_.size() << " lines" << std::endl;
     return Ok();
 }
 
-Result<void> MarkdownLayer::dispose() {
+Result<void> MarkdownW::dispose() {
     if (richText_) {
         richText_->dispose();
         richText_.reset();
     }
-    initialized_ = false;
+    _initialized = false;
     failed_ = false;
     return Ok();
 }
@@ -106,7 +116,7 @@ Result<void> MarkdownLayer::dispose() {
 // Markdown Parser
 //-----------------------------------------------------------------------------
 
-void MarkdownLayer::parseMarkdown(const std::string& content) {
+void MarkdownW::parseMarkdown(const std::string& content) {
     parsedLines_.clear();
 
     std::istringstream stream(content);
@@ -225,13 +235,13 @@ void MarkdownLayer::parseMarkdown(const std::string& content) {
 // Build RichText spans from parsed markdown
 //-----------------------------------------------------------------------------
 
-void MarkdownLayer::buildRichTextSpans(float fontSize, float maxWidth) {
+void MarkdownW::buildRichTextSpans(float fontSize, float maxWidth) {
     if (!richText_) {
-        spdlog::warn("MarkdownLayer::buildRichTextSpans: richText_ is null!");
+        ywarn("MarkdownW::buildRichTextSpans: richText_ is null!");
         return;
     }
 
-    spdlog::debug("MarkdownLayer::buildRichTextSpans: {} lines, fontSize={}, maxWidth={}",
+    ydebug("MarkdownW::buildRichTextSpans: {} lines, fontSize={}, maxWidth={}",
                   parsedLines_.size(), fontSize, maxWidth);
 
     richText_->clear();
@@ -277,7 +287,7 @@ void MarkdownLayer::buildRichTextSpans(float fontSize, float maxWidth) {
         cursorY += scaledLineHeight;
     }
 
-    spdlog::info("MarkdownLayer::buildRichTextSpans: added {} spans", spanCount);
+    yinfo("MarkdownW::buildRichTextSpans: added {} spans", spanCount);
     richText_->setNeedsLayout();
 }
 
@@ -285,18 +295,18 @@ void MarkdownLayer::buildRichTextSpans(float fontSize, float maxWidth) {
 // Render
 //-----------------------------------------------------------------------------
 
-Result<void> MarkdownLayer::render(WebGPUContext& ctx) {
-    // Legacy render - not used, prefer renderToPass
+Result<void> MarkdownW::render(WebGPUContext& ctx) {
+    // Legacy render - not used, prefer render
     if (failed_ || !_visible) return Ok();
 
-    const auto& rc = _render_context;
+    const auto& rc = _renderCtx;
 
     float pixelX = _x * rc.cellWidth;
     float pixelY = _y * rc.cellHeight;
-    float pixelW = _width_cells * rc.cellWidth;
-    float pixelH = _height_cells * rc.cellHeight;
+    float pixelW = _widthCells * rc.cellWidth;
+    float pixelH = _heightCells * rc.cellHeight;
 
-    if (_position_mode == PositionMode::Relative && rc.scrollOffset > 0) {
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
@@ -322,7 +332,7 @@ Result<void> MarkdownLayer::render(WebGPUContext& ctx) {
         }
         richText_ = *result;
         richText_->setDefaultFontFamily("monospace");
-        initialized_ = true;
+        _initialized = true;
     }
 
     if (lastLayoutWidth_ != pixelW) {
@@ -334,17 +344,17 @@ Result<void> MarkdownLayer::render(WebGPUContext& ctx) {
                               pixelX, pixelY, pixelW, pixelH);
 }
 
-bool MarkdownLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+bool MarkdownW::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     if (failed_ || !_visible) return false;
 
-    const auto& rc = _render_context;
+    const auto& rc = _renderCtx;
 
     float pixelX = _x * rc.cellWidth;
     float pixelY = _y * rc.cellHeight;
-    float pixelW = _width_cells * rc.cellWidth;
-    float pixelH = _height_cells * rc.cellHeight;
+    float pixelW = _widthCells * rc.cellWidth;
+    float pixelH = _heightCells * rc.cellHeight;
 
-    if (_position_mode == PositionMode::Relative && rc.scrollOffset > 0) {
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
@@ -370,7 +380,7 @@ bool MarkdownLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx)
         }
         richText_ = *result;
         richText_->setDefaultFontFamily("monospace");
-        initialized_ = true;
+        _initialized = true;
     }
 
     if (lastLayoutWidth_ != pixelW) {
@@ -379,7 +389,7 @@ bool MarkdownLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx)
     }
 
     // Use batched render
-    return richText_->renderToPass(pass, ctx, rc.screenWidth, rc.screenHeight,
+    return richText_->render(pass, ctx, rc.screenWidth, rc.screenHeight,
                                     pixelX, pixelY, pixelW, pixelH);
 }
 
@@ -387,7 +397,7 @@ bool MarkdownLayer::renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx)
 // Mouse Scroll
 //-----------------------------------------------------------------------------
 
-bool MarkdownLayer::onMouseScroll(float xoffset, float yoffset, int mods) {
+bool MarkdownW::onMouseScroll(float xoffset, float yoffset, int mods) {
     (void)xoffset;
     (void)mods;
 
@@ -397,7 +407,7 @@ bool MarkdownLayer::onMouseScroll(float xoffset, float yoffset, int mods) {
     richText_->scroll(-scrollAmount);
 
     // Clamp scroll
-    float maxScroll = std::max(0.0f, richText_->getContentHeight() - static_cast<float>(_pixel_height));
+    float maxScroll = std::max(0.0f, richText_->getContentHeight() - static_cast<float>(_pixelHeight));
     if (richText_->getScrollOffset() > maxScroll) {
         richText_->setScrollOffset(maxScroll);
     }
@@ -409,5 +419,5 @@ bool MarkdownLayer::onMouseScroll(float xoffset, float yoffset, int mods) {
 
 extern "C" {
     const char* name() { return "markdown"; }
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine) { return yetty::MarkdownPlugin::create(std::move(engine)); }
+    yetty::Result<yetty::PluginPtr> create() { return yetty::MarkdownPlugin::create(); }
 }

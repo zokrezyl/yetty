@@ -25,21 +25,21 @@ struct CodepointRange {
 };
 
 //-----------------------------------------------------------------------------
-// CustomGlyphLayer - represents a single glyph instance at a grid position
+// CustomGlyphWidget - represents a single glyph instance at a grid position
 // Created automatically when a registered codepoint appears in the terminal
 //-----------------------------------------------------------------------------
-class CustomGlyphLayer {
+class CustomGlyphWidget {
 public:
-    virtual ~CustomGlyphLayer() = default;
+    virtual ~CustomGlyphWidget() = default;
 
-    // Initialize this layer for a specific codepoint
+    // Initialize this widget for a specific codepoint
     virtual Result<void> init(uint32_t codepoint) = 0;
 
     // Called each frame for animation
     virtual void update(double deltaTime) = 0;
 
     // Render the glyph at the given pixel position
-    // Note: The layer itself doesn't create WebGPU resources - uses shared resources from plugin
+    // Note: The widget itself doesn't create WebGPU resources - uses shared resources from plugin
     virtual Result<void> render(WebGPUContext& ctx,
                                  WGPUTextureView targetView,
                                  WGPUTextureFormat targetFormat,
@@ -55,7 +55,7 @@ public:
     uint32_t getRow() const { return _row; }
     void setPosition(uint32_t col, uint32_t row) { _col = col; _row = row; }
 
-    // Codepoint this layer renders
+    // Codepoint this widget renders
     uint32_t getCodepoint() const { return _codepoint; }
     void setCodepoint(uint32_t cp) { _codepoint = cp; }
 
@@ -81,11 +81,11 @@ protected:
     float _time = 0.0f;
 };
 
-using CustomGlyphLayerPtr = std::shared_ptr<CustomGlyphLayer>;
+using CustomGlyphWidgetPtr = std::shared_ptr<CustomGlyphWidget>;
 
 //-----------------------------------------------------------------------------
 // CustomGlyphPlugin - base class for custom glyph rendering plugins
-// Manages shared resources and layers for a set of codepoint ranges
+// Manages shared resources and widgets for a set of codepoint ranges
 //-----------------------------------------------------------------------------
 class CustomGlyphPlugin : public std::enable_shared_from_this<CustomGlyphPlugin> {
 public:
@@ -100,18 +100,18 @@ public:
     // Initialize shared resources (pipelines, etc.)
     virtual Result<void> init(WebGPUContext* ctx) = 0;
 
-    // Create a new layer for a codepoint
-    virtual Result<CustomGlyphLayerPtr> createLayer(uint32_t codepoint) = 0;
+    // Create a new widget for a codepoint
+    virtual Result<CustomGlyphWidgetPtr> createWidget(uint32_t codepoint) = 0;
 
-    // Render all layers (can batch for efficiency)
-    // Uses stored ctx_ from init()
+    // Render all widgets (can batch for efficiency)
+    // Uses stored _ctx from init()
     virtual Result<void> renderAll(WGPUTextureView targetView,
                                     WGPUTextureFormat targetFormat,
                                     uint32_t screenWidth, uint32_t screenHeight,
                                     float cellWidth, float cellHeight,
                                     int scrollOffset = 0) = 0;
 
-    // Update all layers (for animation)
+    // Update all widgets (for animation)
     virtual void update(double deltaTime) = 0;
 
     // Cleanup
@@ -127,23 +127,23 @@ public:
         return false;
     }
 
-    // Layer management
-    void addLayer(CustomGlyphLayerPtr layer);
-    void removeLayerAt(uint32_t col, uint32_t row);
-    CustomGlyphLayerPtr getLayerAt(uint32_t col, uint32_t row) const;
-    const std::vector<CustomGlyphLayerPtr>& getLayers() const { return _layers; }
-    void clearLayers();
+    // Widget management
+    void addWidget(CustomGlyphWidgetPtr widget);
+    void removeWidgetAt(uint32_t col, uint32_t row);
+    CustomGlyphWidgetPtr getWidgetAt(uint32_t col, uint32_t row) const;
+    const std::vector<CustomGlyphWidgetPtr>& getWidgets() const { return _widgets; }
+    void clearWidgets();
 
     // Check if initialized
     bool isInitialized() const { return _initialized; }
     void setInitialized(bool v) { _initialized = v; }
 
     // Context access
-    WebGPUContext* getContext() const { return ctx_; }
+    WebGPUContext* getContext() const { return _ctx; }
 
 protected:
-    WebGPUContext* ctx_ = nullptr;
-    std::vector<CustomGlyphLayerPtr> _layers;
+    WebGPUContext* _ctx = nullptr;
+    std::vector<CustomGlyphWidgetPtr> _widgets;
     bool _initialized = false;
 };
 

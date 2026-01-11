@@ -120,8 +120,8 @@ public:
     // Build error response
     static std::string error(const std::string& message);
 
-    // Build list response (layers)
-    static std::string layerList(const std::vector<std::tuple<std::string, std::string, int, int, int, int, bool>>& layers);
+    // Build list response (widgets)
+    static std::string widgetList(const std::vector<std::tuple<std::string, std::string, int, int, int, int, bool>>& widgets);
 
     // Build plugins list response
     static std::string pluginList(const std::vector<std::string>& plugins);

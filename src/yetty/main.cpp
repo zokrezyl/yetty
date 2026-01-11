@@ -9,7 +9,7 @@
 //=============================================================================
 
 #include <yetty/yetty.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 #include <iostream>
 
 #if YETTY_WEB
@@ -46,7 +46,7 @@ int main(int argc, char* argv[]) {
         if (msg == "Help requested" || msg == "Atlas generation complete") {
             return 0;
         }
-        spdlog::error("Failed to initialize yetty: {}", yetty::error_msg(result));
+        yerror("Failed to initialize yetty: {}", yetty::error_msg(result));
         return 1;
     }
 #if YETTY_WEB

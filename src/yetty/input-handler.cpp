@@ -1,16 +1,18 @@
 #include "input-handler.h"
 #include <yetty/yetty.h>
+#include <yetty/widget.h>
 #include "grid-renderer.h"
+#include "grid.h"
 
 #include <iostream>
 
 #if !YETTY_WEB
 #include "terminal.h"
-#include "plugin-manager.h"
+#include "remote-terminal.h"
 #include <vterm.h>
 #endif
 
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 #include <cstring>
 
 namespace yetty {
@@ -19,7 +21,7 @@ namespace yetty {
 #define CHECK_RESULT(expr) \
     do { \
         if (auto _res = (expr); !_res) { \
-            spdlog::error("{}: {}", #expr, _res.error().message()); \
+            yerror("{}: {}", #expr, _res.error().message()); \
         } \
     } while(0)
 
@@ -28,9 +30,12 @@ namespace yetty {
 //-----------------------------------------------------------------------------
 
 InputHandler::InputHandler(Yetty* engine) noexcept
-    : _engine(engine) {}
+    : _engine(engine) {
+    yfunc();
+}
 
 Result<InputHandler::Ptr> InputHandler::create(Yetty* engine) noexcept {
+    yfunc();
     auto p = Ptr(new InputHandler(engine));
     if (auto res = p->init(); !res) {
         return Err<Ptr>("Failed to init InputHandler", res);
@@ -39,59 +44,274 @@ Result<InputHandler::Ptr> InputHandler::create(Yetty* engine) noexcept {
 }
 
 Result<void> InputHandler::init() noexcept {
+    yfunc();
     return Ok();
 }
+
+#if !YETTY_WEB
+// Helper template to dispatch to either Terminal or RemoteTerminal
+// Both have the same input API so this works seamlessly
+template<typename TerminalType>
+struct TerminalHelper {
+    TerminalType* term;
+
+    explicit TerminalHelper(TerminalType* t) : term(t) {}
+
+    bool valid() const { return term != nullptr; }
+    void extendSelection(int row, int col) { term->extendSelection(row, col); }
+    int getScrollOffset() const { return term->getScrollOffset(); }
+    const Grid& getGrid() const { return term->getGrid(); }
+    Grid& getGridMutable() { return term->getGridMutable(); }
+    bool wantsMouseEvents() const { return term->wantsMouseEvents(); }
+    void clearSelection() { term->clearSelection(); }
+    void sendRaw(const char* data, size_t len) { term->sendRaw(data, len); }
+    void startSelection(int row, int col, SelectionMode mode) { term->startSelection(row, col, mode); }
+    bool hasSelection() const { return term->hasSelection(); }
+    std::string getSelectedText() { return term->getSelectedText(); }
+    void sendKey(uint32_t cp, VTermModifier mod = VTERM_MOD_NONE) { term->sendKey(cp, mod); }
+    void sendSpecialKey(VTermKey key, VTermModifier mod = VTERM_MOD_NONE) { term->sendSpecialKey(key, mod); }
+    void scrollUp(int lines = 1) { term->scrollUp(lines); }
+    void scrollDown(int lines = 1) { term->scrollDown(lines); }
+};
+
+// Macro to get active terminal and run code with it
+// Uses template helper to provide unified interface
+#define WITH_ACTIVE_TERMINAL(code) \
+    do { \
+        if (auto rt = _engine->remoteTerminal()) { \
+            TerminalHelper<RemoteTerminal> terminal(rt.get()); \
+            code \
+        } else if (auto t = _engine->terminal()) { \
+            TerminalHelper<Terminal> terminal(t.get()); \
+            code \
+        } \
+    } while(0)
+
+// Helper to get Grid pointer from active terminal
+inline const Grid* getActiveGrid(Yetty* engine) {
+    if (auto rt = engine->remoteTerminal()) return &rt->getGrid();
+    if (auto t = engine->terminal()) return &t->getGrid();
+    return nullptr;
+}
+
+inline int getActiveScrollOffset(Yetty* engine) {
+    if (auto rt = engine->remoteTerminal()) return rt->getScrollOffset();
+    if (auto t = engine->terminal()) return t->getScrollOffset();
+    return 0;
+}
+
+// Helper to get child widgets from active terminal
+inline const std::vector<WidgetPtr>* getActiveWidgets(Yetty* engine) {
+    if (auto t = engine->terminal()) return &t->getChildWidgets();
+    return nullptr;
+}
+#endif
+
+//-----------------------------------------------------------------------------
+// Widget mouse dispatching
+//-----------------------------------------------------------------------------
+
+WidgetPtr InputHandler::widgetAtPixel(float pixelX, float pixelY) {
+    yfunc();
+#if !YETTY_WEB
+    auto t = _engine->terminal();
+    if (!t) return nullptr;
+
+    float cellWidth = _engine->cellWidth();
+    float cellHeight = _engine->cellHeight();
+    int scrollOffset = t->getScrollOffset();
+
+    // Check each widget's pixel bounds (compute on-the-fly for scroll accuracy)
+    for (const auto& widget : t->getChildWidgets()) {
+        if (!widget->isVisible()) continue;
+
+        // Compute pixel position from cell position
+        float wx = static_cast<float>(widget->getX()) * cellWidth;
+        float wy = static_cast<float>(widget->getY()) * cellHeight;
+        float ww = static_cast<float>(widget->getWidthCells()) * cellWidth;
+        float wh = static_cast<float>(widget->getHeightCells()) * cellHeight;
+
+        // Adjust for scroll (relative widgets move with content)
+        if (widget->getPositionMode() == PositionMode::Relative && scrollOffset > 0) {
+            wy += scrollOffset * cellHeight;
+        }
+
+        if (pixelX >= wx && pixelX < wx + ww &&
+            pixelY >= wy && pixelY < wy + wh) {
+            ydebug("widgetAtPixel({:.1f},{:.1f}) -> hit '{}' at ({:.1f},{:.1f}) size {:.0f}x{:.0f}",
+                   pixelX, pixelY, widget->name(), wx, wy, ww, wh);
+            return widget;
+        }
+    }
+#else
+    (void)pixelX; (void)pixelY;
+#endif
+    return nullptr;
+}
+
+bool InputHandler::dispatchMouseMoveToWidget(float pixelX, float pixelY) {
+    yfunc();
+#if !YETTY_WEB
+    WidgetPtr widget = widgetAtPixel(pixelX, pixelY);
+
+    // Track hovered widget
+    _hoveredWidget = widget;
+
+    if (widget && widget->wantsMouse()) {
+        auto t = _engine->terminal();
+        float cellWidth = _engine->cellWidth();
+        float cellHeight = _engine->cellHeight();
+        int scrollOffset = t ? t->getScrollOffset() : 0;
+
+        // Compute widget pixel position on-the-fly
+        float wx = static_cast<float>(widget->getX()) * cellWidth;
+        float wy = static_cast<float>(widget->getY()) * cellHeight;
+        if (widget->getPositionMode() == PositionMode::Relative && scrollOffset > 0) {
+            wy += scrollOffset * cellHeight;
+        }
+
+        float localX = pixelX - wx;
+        float localY = pixelY - wy;
+
+        return widget->onMouseMove(localX, localY);
+    }
+#else
+    (void)pixelX; (void)pixelY;
+#endif
+    return false;
+}
+
+bool InputHandler::dispatchMouseButtonToWidget(int button, bool pressed, float pixelX, float pixelY) {
+    yfunc();
+#if !YETTY_WEB
+    WidgetPtr widget = widgetAtPixel(pixelX, pixelY);
+
+    // Handle focus changes on left click
+    if (pressed && button == 0) {
+        if (widget != _focusedWidget) {
+            if (_focusedWidget) {
+                _focusedWidget->onMouseButton(-1, false);
+            }
+            clearWidgetFocus();
+            if (widget && (widget->wantsKeyboard() || widget->wantsMouse())) {
+                _focusedWidget = widget;
+                widget->setFocus(true);
+                ydebug("Widget '{}' gained focus", widget->name());
+            }
+        }
+    }
+
+    if (widget && widget->wantsMouse()) {
+        auto t = _engine->terminal();
+        if (!t) return false;
+
+        float cellWidth = _engine->cellWidth();
+        float cellHeight = _engine->cellHeight();
+        int scrollOffset = t->getScrollOffset();
+
+        float widgetPixelX = widget->getX() * cellWidth;
+        float widgetPixelY = widget->getY() * cellHeight;
+
+        if (widget->getPositionMode() == PositionMode::Relative && scrollOffset > 0) {
+            widgetPixelY += scrollOffset * cellHeight;
+        }
+
+        float localX = pixelX - widgetPixelX;
+        float localY = pixelY - widgetPixelY;
+
+        widget->onMouseMove(localX, localY);
+        return widget->onMouseButton(button, pressed);
+    }
+#else
+    (void)button; (void)pressed; (void)pixelX; (void)pixelY;
+#endif
+    return false;
+}
+
+bool InputHandler::dispatchMouseScrollToWidget(float xoffset, float yoffset, int mods, float pixelX, float pixelY) {
+    yfunc();
+#if !YETTY_WEB
+    WidgetPtr widget = widgetAtPixel(pixelX, pixelY);
+
+    ydebug("dispatchMouseScrollToWidget: pixel({:.1f},{:.1f}) widget={}",
+           pixelX, pixelY, widget ? widget->name() : "none");
+
+    if (widget && widget->wantsMouse()) {
+        bool handled = widget->onMouseScroll(xoffset, yoffset, mods);
+        ydebug("Widget '{}' handled scroll={}", widget->name(), handled);
+        return handled;
+    }
+#else
+    (void)xoffset; (void)yoffset; (void)mods; (void)pixelX; (void)pixelY;
+#endif
+    return false;
+}
+
+void InputHandler::clearWidgetFocus() {
+    yfunc();
+    if (_focusedWidget) {
+        _focusedWidget->setFocus(false);
+        ydebug("Widget '{}' lost focus", _focusedWidget->name());
+        _focusedWidget = nullptr;
+    }
+}
+
+//-----------------------------------------------------------------------------
+// Event handlers
+//-----------------------------------------------------------------------------
 
 void InputHandler::onMouseMove(double xpos, double ypos) noexcept {
     _mouseX = xpos;
     _mouseY = ypos;
 
 #if !YETTY_WEB
-    auto terminal = _engine->terminal();
-    auto pluginManager = _engine->pluginManager();
+    // First, try to dispatch to widget
+    if (dispatchMouseMoveToWidget(static_cast<float>(xpos), static_cast<float>(ypos))) {
+        return;
+    }
 
     // Handle selection extension while dragging
-    if (_selecting && terminal) {
+    if (_selecting) {
         float cellWidth = _engine->cellWidth();
         float cellHeight = _engine->cellHeight();
-
         int col = static_cast<int>(xpos / cellWidth);
         int row = static_cast<int>(ypos / cellHeight);
 
-        terminal->extendSelection(row, col);
-        return;  // Don't route to plugins while selecting
-    }
-
-    // Route to plugins
-    if (pluginManager && terminal) {
-        float cellWidth = _engine->cellWidth();
-        float cellHeight = _engine->cellHeight();
-        int scrollOffset = terminal->getScrollOffset();
-
-        pluginManager->onMouseMove(
-            static_cast<float>(xpos), static_cast<float>(ypos),
-            &terminal->getGrid(), cellWidth, cellHeight, scrollOffset);
+        WITH_ACTIVE_TERMINAL(
+            terminal.extendSelection(row, col);
+            return;
+        );
     }
 #endif
 }
 
 void InputHandler::onMouseButton(int button, int action, int mods) noexcept {
+    yfunc();
 #if !YETTY_WEB
-    auto terminal = _engine->terminal();
-    auto pluginManager = _engine->pluginManager();
     GLFWwindow* window = _engine->window();
 
-    if (!terminal) return;
+    // First, try to dispatch to widget
+    bool pressed = (action == GLFW_PRESS);
+    if (dispatchMouseButtonToWidget(button, pressed, static_cast<float>(_mouseX), static_cast<float>(_mouseY))) {
+        return;
+    }
+
+    const Grid* grid = getActiveGrid(_engine);
+    if (!grid) return;
 
     float cellWidth = _engine->cellWidth();
     float cellHeight = _engine->cellHeight();
-    int scrollOffset = terminal->getScrollOffset();
 
     // Check if Shift is held - force selection mode even if app wants mouse
     bool shiftHeld = (mods & GLFW_MOD_SHIFT) != 0;
 
     // If app wants mouse events and Shift is not held, pass to app
-    if (!shiftHeld && terminal->wantsMouseEvents()) {
+    bool wantsMouse = false;
+    WITH_ACTIVE_TERMINAL(
+        wantsMouse = terminal.wantsMouseEvents();
+    );
+
+    if (!shiftHeld && wantsMouse) {
         // Convert pixel coords to cell coords for vterm
         int col = static_cast<int>(_mouseX / cellWidth);
         int row = static_cast<int>(_mouseY / cellHeight);
@@ -104,30 +324,21 @@ void InputHandler::onMouseButton(int button, int action, int mods) noexcept {
 
         // Note: vterm buttons are 1-indexed (1=left, 2=middle, 3=right)
         int vtermButton = button + 1;
-        // For now, skip direct vterm mouse - apps will work via plugin system
         (void)vtermButton;
         (void)vtermMod;
         (void)row;
         (void)col;
     }
 
-    // Route to plugins first (unless selecting)
-    if (!_selecting && pluginManager) {
-        bool consumed = pluginManager->onMouseButton(
-            button, action == GLFW_PRESS,
-            static_cast<float>(_mouseX), static_cast<float>(_mouseY),
-            &terminal->getGrid(), cellWidth, cellHeight, scrollOffset);
-
-        if (consumed) return;
-    }
-
     // Handle middle mouse button for paste
     if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS) {
         const char* clipboard = glfwGetClipboardString(window);
         if (clipboard && *clipboard) {
-            terminal->clearSelection();
-            terminal->sendRaw(clipboard, strlen(clipboard));
-            spdlog::debug("Pasted {} bytes from clipboard (middle-click)", strlen(clipboard));
+            WITH_ACTIVE_TERMINAL(
+                terminal.clearSelection();
+                terminal.sendRaw(clipboard, strlen(clipboard));
+            );
+            ydebug("Pasted {} bytes from clipboard (middle-click)", strlen(clipboard));
         }
         return;
     }
@@ -151,7 +362,7 @@ void InputHandler::onMouseButton(int button, int action, int mods) noexcept {
             _lastClickTime = currentTime;
 
             // Clear any existing selection on new click
-            terminal->clearSelection();
+            WITH_ACTIVE_TERMINAL(terminal.clearSelection(););
 
             // Start selection based on click count
             SelectionMode mode = SelectionMode::Character;
@@ -161,18 +372,21 @@ void InputHandler::onMouseButton(int button, int action, int mods) noexcept {
                 mode = SelectionMode::Line;
             }
 
-            terminal->startSelection(row, col, mode);
+            WITH_ACTIVE_TERMINAL(terminal.startSelection(row, col, mode););
             _selecting = true;
 
         } else if (action == GLFW_RELEASE) {
             _selecting = false;
 
             // Copy selection to clipboard if any
-            if (terminal->hasSelection()) {
-                std::string selectedText = terminal->getSelectedText();
+            bool hasSel = false;
+            WITH_ACTIVE_TERMINAL(hasSel = terminal.hasSelection(););
+            if (hasSel) {
+                std::string selectedText;
+                WITH_ACTIVE_TERMINAL(selectedText = terminal.getSelectedText(););
                 if (!selectedText.empty()) {
                     glfwSetClipboardString(window, selectedText.c_str());
-                    spdlog::debug("Copied {} bytes to clipboard", selectedText.size());
+                    ydebug("Copied {} bytes to clipboard", selectedText.size());
                 }
             }
         }
@@ -183,12 +397,12 @@ void InputHandler::onMouseButton(int button, int action, int mods) noexcept {
 }
 
 void InputHandler::onKey(int key, int scancode, int action, int mods) noexcept {
+    yfunc();
 #if !YETTY_WEB
-    auto terminal = _engine->terminal();
-    auto pluginManager = _engine->pluginManager();
     GLFWwindow* window = _engine->window();
 
-    if (!terminal) return;
+    const Grid* grid = getActiveGrid(_engine);
+    if (!grid) return;
 
     // Handle clipboard shortcuts (Ctrl+Shift+C/V or Shift+Insert)
     if (action == GLFW_PRESS) {
@@ -196,11 +410,14 @@ void InputHandler::onKey(int key, int scancode, int action, int mods) noexcept {
 
         // Ctrl+Shift+C: Copy selection
         if (ctrlShift && key == GLFW_KEY_C) {
-            if (terminal->hasSelection()) {
-                std::string selectedText = terminal->getSelectedText();
+            bool hasSel = false;
+            WITH_ACTIVE_TERMINAL(hasSel = terminal.hasSelection(););
+            if (hasSel) {
+                std::string selectedText;
+                WITH_ACTIVE_TERMINAL(selectedText = terminal.getSelectedText(););
                 if (!selectedText.empty()) {
                     glfwSetClipboardString(window, selectedText.c_str());
-                    spdlog::debug("Copied {} bytes to clipboard (Ctrl+Shift+C)", selectedText.size());
+                    ydebug("Copied {} bytes to clipboard (Ctrl+Shift+C)", selectedText.size());
                 }
             }
             return;
@@ -212,25 +429,21 @@ void InputHandler::onKey(int key, int scancode, int action, int mods) noexcept {
             const char* clipboard = glfwGetClipboardString(window);
             if (clipboard && *clipboard) {
                 // Clear selection before pasting
-                terminal->clearSelection();
-                // Send clipboard content to terminal
-                terminal->sendRaw(clipboard, strlen(clipboard));
-                spdlog::debug("Pasted {} bytes from clipboard", strlen(clipboard));
+                WITH_ACTIVE_TERMINAL(
+                    terminal.clearSelection();
+                    terminal.sendRaw(clipboard, strlen(clipboard));
+                );
+                ydebug("Pasted {} bytes from clipboard", strlen(clipboard));
             }
             return;
         }
 
         // Escape clears selection
-        if (key == GLFW_KEY_ESCAPE && terminal->hasSelection()) {
-            terminal->clearSelection();
+        bool hasSel = false;
+        WITH_ACTIVE_TERMINAL(hasSel = terminal.hasSelection(););
+        if (key == GLFW_KEY_ESCAPE && hasSel) {
+            WITH_ACTIVE_TERMINAL(terminal.clearSelection(););
             // Don't return - still send ESC to terminal
-        }
-    }
-
-    // Route to focused plugin first
-    if (pluginManager) {
-        if (pluginManager->onKey(key, scancode, action, mods)) {
-            return;  // Plugin consumed the event
         }
     }
 
@@ -248,8 +461,8 @@ void InputHandler::onKey(int key, int scancode, int action, int mods) noexcept {
             // Single character key name - send it with modifier
             if (keyName[1] == '\0') {
                 uint32_t ch = keyName[0];
-                spdlog::debug("Sending Ctrl/Alt+'{}'", (char)ch);
-                terminal->sendKey(ch, vtermMod);
+                ydebug("Sending Ctrl/Alt+'{}'", (char)ch);
+                WITH_ACTIVE_TERMINAL(terminal.sendKey(ch, vtermMod););
                 return;
             }
         }
@@ -258,46 +471,46 @@ void InputHandler::onKey(int key, int scancode, int action, int mods) noexcept {
     // Map GLFW keys to VTerm keys
     switch (key) {
         case GLFW_KEY_ENTER:
-            terminal->sendSpecialKey(VTERM_KEY_ENTER, vtermMod);
+            WITH_ACTIVE_TERMINAL(terminal.sendSpecialKey(VTERM_KEY_ENTER, vtermMod););
             break;
         case GLFW_KEY_BACKSPACE:
-            terminal->sendSpecialKey(VTERM_KEY_BACKSPACE, vtermMod);
+            WITH_ACTIVE_TERMINAL(terminal.sendSpecialKey(VTERM_KEY_BACKSPACE, vtermMod););
             break;
         case GLFW_KEY_TAB:
-            terminal->sendSpecialKey(VTERM_KEY_TAB, vtermMod);
+            WITH_ACTIVE_TERMINAL(terminal.sendSpecialKey(VTERM_KEY_TAB, vtermMod););
             break;
         case GLFW_KEY_ESCAPE:
-            terminal->sendSpecialKey(VTERM_KEY_ESCAPE, vtermMod);
+            WITH_ACTIVE_TERMINAL(terminal.sendSpecialKey(VTERM_KEY_ESCAPE, vtermMod););
             break;
         case GLFW_KEY_UP:
-            terminal->sendSpecialKey(VTERM_KEY_UP, vtermMod);
+            WITH_ACTIVE_TERMINAL(terminal.sendSpecialKey(VTERM_KEY_UP, vtermMod););
             break;
         case GLFW_KEY_DOWN:
-            terminal->sendSpecialKey(VTERM_KEY_DOWN, vtermMod);
+            WITH_ACTIVE_TERMINAL(terminal.sendSpecialKey(VTERM_KEY_DOWN, vtermMod););
             break;
         case GLFW_KEY_LEFT:
-            terminal->sendSpecialKey(VTERM_KEY_LEFT, vtermMod);
+            WITH_ACTIVE_TERMINAL(terminal.sendSpecialKey(VTERM_KEY_LEFT, vtermMod););
             break;
         case GLFW_KEY_RIGHT:
-            terminal->sendSpecialKey(VTERM_KEY_RIGHT, vtermMod);
+            WITH_ACTIVE_TERMINAL(terminal.sendSpecialKey(VTERM_KEY_RIGHT, vtermMod););
             break;
         case GLFW_KEY_HOME:
-            terminal->sendSpecialKey(VTERM_KEY_HOME, vtermMod);
+            WITH_ACTIVE_TERMINAL(terminal.sendSpecialKey(VTERM_KEY_HOME, vtermMod););
             break;
         case GLFW_KEY_END:
-            terminal->sendSpecialKey(VTERM_KEY_END, vtermMod);
+            WITH_ACTIVE_TERMINAL(terminal.sendSpecialKey(VTERM_KEY_END, vtermMod););
             break;
         case GLFW_KEY_PAGE_UP:
-            terminal->sendSpecialKey(VTERM_KEY_PAGEUP, vtermMod);
+            WITH_ACTIVE_TERMINAL(terminal.sendSpecialKey(VTERM_KEY_PAGEUP, vtermMod););
             break;
         case GLFW_KEY_PAGE_DOWN:
-            terminal->sendSpecialKey(VTERM_KEY_PAGEDOWN, vtermMod);
+            WITH_ACTIVE_TERMINAL(terminal.sendSpecialKey(VTERM_KEY_PAGEDOWN, vtermMod););
             break;
         case GLFW_KEY_INSERT:
-            terminal->sendSpecialKey(VTERM_KEY_INS, vtermMod);
+            WITH_ACTIVE_TERMINAL(terminal.sendSpecialKey(VTERM_KEY_INS, vtermMod););
             break;
         case GLFW_KEY_DELETE:
-            terminal->sendSpecialKey(VTERM_KEY_DEL, vtermMod);
+            WITH_ACTIVE_TERMINAL(terminal.sendSpecialKey(VTERM_KEY_DEL, vtermMod););
             break;
         default:
             break;
@@ -308,70 +521,59 @@ void InputHandler::onKey(int key, int scancode, int action, int mods) noexcept {
 }
 
 void InputHandler::onChar(unsigned int codepoint) noexcept {
+    yfunc();
 #if !YETTY_WEB
-    auto terminal = _engine->terminal();
-    auto pluginManager = _engine->pluginManager();
+    const Grid* grid = getActiveGrid(_engine);
+    if (!grid) return;
 
-    if (!terminal) return;
-
-    // Route to focused plugin first
-    if (pluginManager) {
-        if (pluginManager->onChar(codepoint)) {
-            return;  // Plugin consumed the event
-        }
-    }
-
-    terminal->sendKey(codepoint);
+    WITH_ACTIVE_TERMINAL(terminal.sendKey(codepoint););
 #else
     (void)codepoint;
 #endif
 }
 
 void InputHandler::onScroll(double xoffset, double yoffset) noexcept {
+    yfunc();
     if (!_engine->renderer()) return;
 
     bool ctrlPressed = glfwGetKey(_engine->window(), GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
                        glfwGetKey(_engine->window(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
-    int mods = ctrlPressed ? GLFW_MOD_CONTROL : 0;
 
 #if !YETTY_WEB
-    auto terminal = _engine->terminal();
-    auto pluginManager = _engine->pluginManager();
+    // First, try to dispatch scroll to widget (only if not zooming)
+    if (!ctrlPressed) {
+        int mods = 0;
+        if (glfwGetKey(_engine->window(), GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
+            glfwGetKey(_engine->window(), GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS) {
+            mods |= GLFW_MOD_SHIFT;
+        }
+        if (glfwGetKey(_engine->window(), GLFW_KEY_LEFT_ALT) == GLFW_PRESS ||
+            glfwGetKey(_engine->window(), GLFW_KEY_RIGHT_ALT) == GLFW_PRESS) {
+            mods |= GLFW_MOD_ALT;
+        }
 
-    // Check if scroll is over a plugin first (with or without Ctrl)
-    if (pluginManager && terminal) {
-        float cellWidth = _engine->cellWidth();
-        float cellHeight = _engine->cellHeight();
-        int scrollOffset = terminal->getScrollOffset();
-
-        spdlog::debug("onScroll: yoffset={:.2f} ctrlPressed={} mouseX={:.1f} mouseY={:.1f} scrollOffset={}", 
-                      yoffset, ctrlPressed, _mouseX, _mouseY, scrollOffset);
-
-        bool consumed = pluginManager->onMouseScroll(
-            static_cast<float>(xoffset), static_cast<float>(yoffset), mods,
-            static_cast<float>(_mouseX), static_cast<float>(_mouseY),
-            &terminal->getGrid(), cellWidth, cellHeight, scrollOffset);
-
-        spdlog::debug("onScroll: plugin consumed={}", consumed);
-
-        if (consumed) {
-            spdlog::info("onScroll: Plugin consumed scroll event - NOT scrolling terminal");
+        if (dispatchMouseScrollToWidget(static_cast<float>(xoffset), static_cast<float>(yoffset),
+                                         mods, static_cast<float>(_mouseX), static_cast<float>(_mouseY))) {
             return;
         }
     }
 
-    // Scroll through scrollback (no Ctrl, not over plugin)
-    if (!ctrlPressed && terminal) {
+    const Grid* grid = getActiveGrid(_engine);
+
+    // Scroll through scrollback (no Ctrl)
+    if (!ctrlPressed && grid) {
         int lines = static_cast<int>(yoffset * 3);  // 3 lines per scroll notch
-        spdlog::info("onScroll: Scrolling terminal by {} lines", lines);
+        ydebug("onScroll: Scrolling terminal by {} lines", lines);
         if (lines > 0) {
-            terminal->scrollUp(lines);
+            WITH_ACTIVE_TERMINAL(terminal.scrollUp(lines););
         } else if (lines < 0) {
-            terminal->scrollDown(-lines);
+            WITH_ACTIVE_TERMINAL(terminal.scrollDown(-lines););
         }
         return;
     }
 #endif
+
+    (void)xoffset;
 
     // Zoom grid (Ctrl + wheel, not over plugin)
     float newZoom = _engine->zoomLevel() + static_cast<float>(yoffset) * 0.1f;
@@ -388,8 +590,7 @@ void InputHandler::onScroll(double xoffset, double yoffset) noexcept {
 
     if (newCols != _engine->cols() || newRows != _engine->rows()) {
         _engine->updateGridSize(newCols, newRows);
-        std::cout << "Zoom: " << (newZoom * 100.0f) << "% -> Grid "
-                  << newCols << "x" << newRows << std::endl;
+        yinfo("Zoom: {:.0f}% -> Grid {}x{}", newZoom * 100.0f, newCols, newRows);
     }
 }
 
@@ -398,18 +599,9 @@ void InputHandler::onScroll(double xoffset, double yoffset) noexcept {
 //-----------------------------------------------------------------------------
 
 void glfwCursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
+    (void)xpos; (void)ypos;
     auto* engine = static_cast<Yetty*>(glfwGetWindowUserPointer(window));
     if (!engine) return;
-
-#if !YETTY_WEB
-    auto inputHandler = std::dynamic_pointer_cast<InputHandler>(
-        std::const_pointer_cast<InputHandler>(
-            std::shared_ptr<const InputHandler>(engine->pluginManager() ?
-                reinterpret_cast<const InputHandler*>(glfwGetWindowUserPointer(window)) : nullptr,
-                [](const InputHandler*){})));
-    // Actually we need to store InputHandler in the engine and get it from there
-    // For now, cast through engine
-#endif
 
     // The InputHandler is stored in the Yetty engine, we access it indirectly
     // through a static method or by storing it externally

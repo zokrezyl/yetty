@@ -1,10 +1,12 @@
 #pragma once
 
-#include <yetty/renderable.h>
+#include <yetty/widget.h>
 #include <yetty/font.h>
 #include <yetty/config.h>
 #include <yetty/result.hpp>
+#include <yetty/osc-command.h>
 #include "grid.h"
+#include "terminal-backend.h"  // For SelectionMode, ScrollbackStyle, ScrollbackLine
 
 extern "C" {
 #include <vterm.h>
@@ -29,45 +31,18 @@ extern "C" {
 namespace yetty {
 
 // Forward declarations
-class PluginManager;
+class WidgetFactory;
 class EmojiAtlas;
 class GridRenderer;
 
-// Scrollback cell style (colors + attrs packed together for RLE)
-struct ScrollbackStyle {
-    uint8_t fgR, fgG, fgB;
-    uint8_t bgR, bgG, bgB;
-    uint16_t attrs;  // packed VTermScreenCellAttrs
-    
-    bool operator==(const ScrollbackStyle& o) const {
-        return fgR == o.fgR && fgG == o.fgG && fgB == o.fgB &&
-               bgR == o.bgR && bgG == o.bgG && bgB == o.bgB &&
-               attrs == o.attrs;
-    }
-};
-
-// RLE run for style (colors + attrs)
-struct StyleRun {
-    ScrollbackStyle style;
-    uint16_t count;
-};
-
-// A single line in the scrollback buffer
-struct ScrollbackLine {
-    std::vector<uint32_t> chars;        // one per cell
-    std::vector<StyleRun> styleRuns;    // RLE-compressed styles
-};
-
-// Selection mode for mouse selection
-enum class SelectionMode {
-    None,
-    Character,
-    Word,
-    Line
-};
+// Types are now defined in terminal-backend.h:
+// - SelectionMode
+// - ScrollbackStyle
+// - StyleRun
+// - ScrollbackLine
 
 //=============================================================================
-// Terminal - Renderable terminal emulator with libuv-based async PTY I/O
+// Terminal - Widget-based terminal emulator with libuv-based async PTY I/O
 //
 // Threading model:
 //   - Single-threaded: uses external libuv loop (from Yetty)
@@ -75,12 +50,18 @@ enum class SelectionMode {
 //   - render() syncs grid from vterm damage
 //=============================================================================
 
-class Terminal : public Renderable {
+class Terminal : public Widget {
 public:
     using Ptr = std::shared_ptr<Terminal>;
 
-    // Factory - creates terminal with given grid size and external libuv loop
-    static Result<Ptr> create(uint32_t id, uint32_t cols, uint32_t rows, Font* font, uv_loop_t* loop) noexcept;
+    // Factory - generic signature for creation through WidgetFactory
+    static Result<WidgetPtr> create(WidgetFactory* factory,
+                                    const WidgetParams& params,
+                                    const std::string& payload) noexcept;
+
+    // Legacy create (for direct creation during transition)
+    static Result<Ptr> create(uint32_t id, uint32_t cols, uint32_t rows,
+                              Font* font, uv_loop_t* loop) noexcept;
 
     ~Terminal() override;
 
@@ -89,16 +70,18 @@ public:
     Terminal& operator=(const Terminal&) = delete;
 
     //=========================================================================
-    // Renderable interface
+    // Widget interface overrides
     //=========================================================================
-    uint32_t id() const override { return id_; }
-    uint32_t zOrder() const override { return zOrder_; }
-    const std::string& name() const override { return name_; }
-
     void start() override;
     void stop() override;
-    bool isRunning() const override { return running_; }
 
+    // Prepare frame - propagates RenderContext and prepareFrame to children
+    void prepareFrame(WebGPUContext& ctx) override;
+
+    // Batched render - renders grid and child widgets to provided pass
+    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+
+    // Standalone render (deprecated - use batched render)
     Result<void> render(WebGPUContext& ctx) override;
 
     //=========================================================================
@@ -117,69 +100,84 @@ public:
     void resize(uint32_t cols, uint32_t rows);
 
     // Grid access
-    const Grid& getGrid() const { return grid_; }
-    Grid& getGridMutable() { return grid_; }
+    const Grid& getGrid() const { return _grid; }
+    Grid& getGridMutable() { return _grid; }
 
     // Cursor state
-    int getCursorRow() const { return cursorRow_; }
-    int getCursorCol() const { return cursorCol_; }
-    bool isCursorVisible() const { return cursorVisible_ && cursorBlink_; }
+    int getCursorRow() const { return _cursorRow; }
+    int getCursorCol() const { return _cursorCol; }
+    bool isCursorVisible() const { return _cursorVisible && _cursorBlink; }
 
     // Damage tracking
-    const std::vector<DamageRect>& getDamageRects() const { return damageRects_; }
-    void clearDamageRects() { damageRects_.clear(); }
-    bool hasDamage() const { return !damageRects_.empty() || fullDamage_; }
-    bool hasFullDamage() const { return fullDamage_; }
-    void clearFullDamage() { fullDamage_ = false; }
+    const std::vector<DamageRect>& getDamageRects() const { return _damageRects; }
+    void clearDamageRects() { _damageRects.clear(); }
+    bool hasDamage() const { return !_damageRects.empty() || _fullDamage; }
+    bool hasFullDamage() const { return _fullDamage; }
+    void clearFullDamage() { _fullDamage = false; }
 
     // Scrollback navigation
     void scrollUp(int lines = 1);
     void scrollDown(int lines = 1);
     void scrollToTop();
     void scrollToBottom();
-    int getScrollOffset() const { return scrollOffset_; }
-    bool isScrolledBack() const { return scrollOffset_ > 0; }
-    size_t getScrollbackSize() const { return scrollback_.size(); }
+    int getScrollOffset() const { return _scrollOffset; }
+    bool isScrolledBack() const { return _scrollOffset > 0; }
+    size_t getScrollbackSize() const { return _scrollback.size(); }
 
     // Selection
     void startSelection(int row, int col, SelectionMode mode = SelectionMode::Character);
     void extendSelection(int row, int col);
     void clearSelection();
-    bool hasSelection() const { return selectionMode_ != SelectionMode::None; }
+    bool hasSelection() const { return _selectionMode != SelectionMode::None; }
     bool isInSelection(int row, int col) const;
     std::string getSelectedText();
 
     // Configuration
-    void setConfig(const Config* config) { config_ = config; }
-    void setShell(const std::string& shell) { shell_ = shell; }
+    void setConfig(const Config* config) { _config = config; }
+    void setShell(const std::string& shell) { _shell = shell; }
 
-    // Plugin support
-    void setPluginManager(PluginManager* mgr) { pluginManager_ = mgr; }
-    PluginManager* getPluginManager() const { return pluginManager_; }
-    void setEmojiAtlas(EmojiAtlas* atlas) { emojiAtlas_ = atlas; }
-    void setRenderer(GridRenderer* renderer) { renderer_ = renderer; }
+    // Rendering support
+    void setEmojiAtlas(EmojiAtlas* atlas) { _emojiAtlas = atlas; }
+    void setRenderer(GridRenderer* renderer) { _renderer = renderer; }
+
+    // Child widget management (Terminal owns its child widgets)
+    void addChildWidget(WidgetPtr widget);
+    Result<void> removeChildWidget(uint32_t id);
+    Result<void> removeChildWidgetByHashId(const std::string& hashId);
+    WidgetPtr getChildWidget(uint32_t id) const;
+    WidgetPtr getChildWidgetByHashId(const std::string& hashId) const;
+    const std::vector<WidgetPtr>& getChildWidgets() const { return _childWidgets; }
+
+    // Grid cell marking for widget mouse hit testing
+    void markWidgetGridCells(Widget* widget);
+    void clearWidgetGridCells(Widget* widget);
+
+    // OSC sequence handling (widget creation/management)
+    bool handleOSCSequence(const std::string& sequence,
+                           std::string* response = nullptr,
+                           uint32_t* linesToAdvance = nullptr);
 
     // Cell size
     void setCellSize(uint32_t width, uint32_t height);
-    uint32_t getCellWidth() const { return cellWidth_; }
-    uint32_t getCellHeight() const { return cellHeight_; }
+    uint32_t getCellWidth() const { return _cellWidth; }
+    uint32_t getCellHeight() const { return _cellHeight; }
 
     void setBaseCellSize(float width, float height);
-    float getBaseCellWidth() const { return baseCellWidth_; }
-    float getBaseCellHeight() const { return baseCellHeight_; }
+    float getBaseCellWidth() const { return _baseCellWidth; }
+    float getBaseCellHeight() const { return _baseCellHeight; }
 
     void setZoomLevel(float zoom);
-    float getZoomLevel() const { return zoomLevel_; }
-    float getCellWidthF() const { return baseCellWidth_ * zoomLevel_; }
-    float getCellHeightF() const { return baseCellHeight_ * zoomLevel_; }
+    float getZoomLevel() const { return _zoomLevel; }
+    float getCellWidthF() const { return _baseCellWidth * _zoomLevel; }
+    float getCellHeightF() const { return _baseCellHeight * _zoomLevel; }
 
     // Mouse mode
-    int getMouseMode() const { return mouseMode_; }
-    bool wantsMouseEvents() const { return mouseMode_ != VTERM_PROP_MOUSE_NONE; }
+    int getMouseMode() const { return _mouseMode; }
+    bool wantsMouseEvents() const { return _mouseMode != VTERM_PROP_MOUSE_NONE; }
 
     // VTerm access
-    VTermScreen* getVTermScreen() const { return vtermScreen_; }
-    bool isAltScreen() const { return isAltScreen_; }
+    VTermScreen* getVTermScreen() const { return _vtermScreen; }
+    bool isAltScreen() const { return _isAltScreen; }
 
     // libvterm callbacks (public for C callback access)
     static int onDamage(VTermRect rect, void* user);
@@ -210,87 +208,88 @@ private:
     void syncDamageToGrid();
     void colorToRGB(const VTermColor& color, uint8_t& r, uint8_t& g, uint8_t& b);
 
+    // Widget position update on scroll (called when lines are pushed/popped from scrollback)
+    void updateWidgetPositionsOnScroll(int lines);
+
     // Update cursor blink
     void updateCursorBlink(double currentTime);
 
     //=========================================================================
-    // Identity
-    //=========================================================================
-    uint32_t id_;
-    uint32_t zOrder_ = 0;
-    std::string name_;
-
-    //=========================================================================
     // libuv (external loop, not owned)
     //=========================================================================
-    uv_loop_t* loop_ = nullptr;
-    uv_timer_t* cursorTimer_ = nullptr;
-    uv_poll_t* ptyPoll_ = nullptr;
-    bool running_ = false;
+    uv_loop_t* _loop = nullptr;
+    uv_timer_t* _cursorTimer = nullptr;
+    uv_poll_t* _ptyPoll = nullptr;
 
 
     //=========================================================================
     // Terminal state
     //=========================================================================
-    VTerm* vterm_ = nullptr;
-    VTermScreen* vtermScreen_ = nullptr;
+    VTerm* _vterm = nullptr;
+    VTermScreen* _vtermScreen = nullptr;
 
-    Grid grid_;
-    Font* font_;
-    std::string shell_;
+    Grid _grid;
+    Font* _font;
+    std::string _shell;
 
 #ifdef _WIN32
-    HPCON hPC_ = INVALID_HANDLE_VALUE;
-    HANDLE hPipeIn_ = INVALID_HANDLE_VALUE;
-    HANDLE hPipeOut_ = INVALID_HANDLE_VALUE;
-    HANDLE hProcess_ = INVALID_HANDLE_VALUE;
-    HANDLE hThread_ = INVALID_HANDLE_VALUE;
+    HPCON _hPC = INVALID_HANDLE_VALUE;
+    HANDLE _hPipeIn = INVALID_HANDLE_VALUE;
+    HANDLE _hPipeOut = INVALID_HANDLE_VALUE;
+    HANDLE _hProcess = INVALID_HANDLE_VALUE;
+    HANDLE _hThread = INVALID_HANDLE_VALUE;
 #else
-    int ptyMaster_ = -1;
-    pid_t childPid_ = -1;
+    int _ptyMaster = -1;
+    pid_t _childPid = -1;
 #endif
 
-    int cursorRow_ = 0;
-    int cursorCol_ = 0;
-    bool cursorVisible_ = true;
-    bool cursorBlink_ = true;
-    bool isAltScreen_ = false;
-    double lastBlinkTime_ = 0.0;
-    double blinkInterval_ = 0.5;
+    int _cursorRow = 0;
+    int _cursorCol = 0;
+    bool _cursorVisible = true;
+    bool _cursorBlink = true;
+    bool _isAltScreen = false;
+    double _lastBlinkTime = 0.0;
+    double _blinkInterval = 0.5;
 
-    uint32_t cols_;
-    uint32_t rows_;
+    uint32_t _cols;
+    uint32_t _rows;
 
-    std::vector<DamageRect> damageRects_;
-    bool fullDamage_ = true;
+    std::vector<DamageRect> _damageRects;
+    bool _fullDamage = true;
 
-    const Config* config_ = nullptr;
-    PluginManager* pluginManager_ = nullptr;
-    EmojiAtlas* emojiAtlas_ = nullptr;
-    GridRenderer* renderer_ = nullptr;
+    const Config* _config = nullptr;
+    WidgetFactory* _widgetFactory = nullptr;  // For creating child widgets
+    EmojiAtlas* _emojiAtlas = nullptr;
+    GridRenderer* _renderer = nullptr;
 
-    uint32_t cellWidth_ = 10;
-    uint32_t cellHeight_ = 20;
-    float baseCellWidth_ = 10.0f;
-    float baseCellHeight_ = 20.0f;
-    float zoomLevel_ = 1.0f;
+    // Child widgets (Terminal owns its child widgets)
+    std::vector<WidgetPtr> _childWidgets;
+    std::unordered_map<std::string, WidgetPtr> _childWidgetsByHashId;
+    OscCommandParser _oscParser;
+    uint32_t _nextChildWidgetId = 1;
 
-    std::string oscBuffer_;
-    int oscCommand_ = -1;
+    uint32_t _cellWidth = 10;
+    uint32_t _cellHeight = 20;
+    float _baseCellWidth = 10.0f;
+    float _baseCellHeight = 20.0f;
+    float _zoomLevel = 1.0f;
 
-    std::deque<ScrollbackLine> scrollback_;
-    int scrollOffset_ = 0;
+    std::string _oscBuffer;
+    int _oscCommand = -1;
 
-    uint32_t pendingNewlines_ = 0;
+    std::deque<ScrollbackLine> _scrollback;
+    int _scrollOffset = 0;
 
-    VTermPos selectionStart_ = {0, 0};
-    VTermPos selectionEnd_ = {0, 0};
-    SelectionMode selectionMode_ = SelectionMode::None;
+    uint32_t _pendingNewlines = 0;
 
-    int mouseMode_ = VTERM_PROP_MOUSE_NONE;
+    VTermPos _selectionStart = {0, 0};
+    VTermPos _selectionEnd = {0, 0};
+    SelectionMode _selectionMode = SelectionMode::None;
+
+    int _mouseMode = VTERM_PROP_MOUSE_NONE;
 
     static constexpr size_t PTY_READ_BUFFER_SIZE = 40960;  // 40KB (10x4KB)
-    std::unique_ptr<char[]> ptyReadBuffer_;
+    std::unique_ptr<char[]> _ptyReadBuffer;
 };
 
 } // namespace yetty

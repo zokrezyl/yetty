@@ -15,8 +15,10 @@ namespace yetty {
 
 // Forward declarations
 class Terminal;
-class PluginManager;
 class Yetty;
+class Widget;
+class Grid;
+using WidgetPtr = std::shared_ptr<Widget>;
 
 //-----------------------------------------------------------------------------
 // InputHandler - Handles mouse, keyboard, and scroll input
@@ -44,9 +46,19 @@ public:
     // Selection state
     bool isSelecting() const noexcept { return _selecting; }
 
+    // Widget focus
+    WidgetPtr focusedWidget() const { return _focusedWidget; }
+    void clearWidgetFocus();
+
 private:
     explicit InputHandler(Yetty* engine) noexcept;
     Result<void> init() noexcept;
+
+    // Widget mouse dispatching
+    WidgetPtr widgetAtPixel(float pixelX, float pixelY);
+    bool dispatchMouseMoveToWidget(float pixelX, float pixelY);
+    bool dispatchMouseButtonToWidget(int button, bool pressed, float pixelX, float pixelY);
+    bool dispatchMouseScrollToWidget(float xoffset, float yoffset, int mods, float pixelX, float pixelY);
 
     // Back-reference to engine (not owning)
     Yetty* _engine = nullptr;
@@ -59,6 +71,10 @@ private:
     bool _selecting = false;
     double _lastClickTime = 0.0;
     int _clickCount = 0;  // For double/triple click detection
+
+    // Widget interaction
+    WidgetPtr _hoveredWidget;
+    WidgetPtr _focusedWidget;
 };
 
 //-----------------------------------------------------------------------------

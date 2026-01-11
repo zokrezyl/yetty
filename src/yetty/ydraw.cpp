@@ -1,7 +1,7 @@
 #include <yetty/ydraw.h>
 #include <yetty/wgpu-compat.h>
 #include <yaml-cpp/yaml.h>
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 #include <cstring>
 #include <cmath>
 #include <regex>
@@ -764,7 +764,7 @@ YDrawStyle YDrawRenderer::expandStruct(const std::string& name,
         if (body["round"]) style.round = body["round"].as<float>();
         if (body["rotate"]) style.rotate = body["rotate"].as<float>();
     } catch (const std::exception& e) {
-        spdlog::error("Failed to expand struct '{}': {}", name, e.what());
+        yerror("Failed to expand struct '{}': {}", name, e.what());
     }
 
     return style;
@@ -1167,7 +1167,7 @@ Result<void> YDrawRenderer::parseSVG(const std::string& svg) {
         }
 
         _primitives_dirty = true;
-        spdlog::info("YDraw SVG parsed: {} primitives", _primitives.size());
+        yinfo("YDraw SVG parsed: {} primitives", _primitives.size());
     } catch (const std::exception& e) {
         return Err<void>(std::string("SVG parse error: ") + e.what());
     }
@@ -1346,7 +1346,7 @@ Result<void> YDrawRenderer::createPipeline(WebGPUContext& ctx, WGPUTextureFormat
 
     if (!_pipeline) return Err<void>("Failed to create render pipeline");
 
-    spdlog::info("YDrawRenderer: pipeline created");
+    yinfo("YDrawRenderer: pipeline created");
     return Ok();
 }
 

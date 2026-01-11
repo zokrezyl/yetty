@@ -54,6 +54,7 @@ struct CellAttrs {
 class Grid {
 public:
     Grid(uint32_t cols = 80, uint32_t rows = 24);
+    virtual ~Grid() = default;
 
     void resize(uint32_t cols, uint32_t rows);
     void clear();
@@ -78,10 +79,10 @@ public:
     uint16_t getGlyph(uint32_t col, uint32_t row) const;
     void getFgColor(uint32_t col, uint32_t row, uint8_t& r, uint8_t& g, uint8_t& b) const;
 
-    // Plugin ID tracking (separate from glyph data)
-    void setPluginId(uint32_t col, uint32_t row, uint16_t pluginId);
-    uint16_t getPluginId(uint32_t col, uint32_t row) const;
-    void clearPluginId(uint32_t col, uint32_t row);
+    // Widget ID tracking (separate from glyph data)
+    void setWidgetId(uint32_t col, uint32_t row, uint16_t widgetId);
+    uint16_t getWidgetId(uint32_t col, uint32_t row) const;
+    void clearWidgetId(uint32_t col, uint32_t row);
 
     // Write ASCII string (helper) - needs Font to convert codepoints to glyph indices
     // If font is nullptr, uses codepoint directly as index (for testing only)
@@ -91,14 +92,14 @@ public:
 
     void scrollUp();
 
-    uint32_t getCols() const { return cols_; }
-    uint32_t getRows() const { return rows_; }
+    virtual uint32_t getCols() const { return cols_; }
+    virtual uint32_t getRows() const { return rows_; }
 
     // Direct access to texture data for GPU upload
-    const uint16_t* getGlyphData() const { return glyphIndices_.data(); }
-    const uint8_t* getFgColorData() const { return fgColors_.data(); }
-    const uint8_t* getBgColorData() const { return bgColors_.data(); }
-    const uint8_t* getAttrsData() const { return attrs_.data(); }
+    virtual const uint16_t* getGlyphData() const { return glyphIndices_.data(); }
+    virtual const uint8_t* getFgColorData() const { return fgColors_.data(); }
+    virtual const uint8_t* getBgColorData() const { return bgColors_.data(); }
+    virtual const uint8_t* getAttrsData() const { return attrs_.data(); }
 
     // Data sizes in bytes
     size_t getGlyphDataSize() const { return glyphIndices_.size() * sizeof(uint16_t); }
@@ -107,8 +108,8 @@ public:
     size_t getAttrsDataSize() const { return attrs_.size(); }
 
     // Mark as dirty when content changes
-    bool isDirty() const { return dirty_; }
-    void clearDirty() { dirty_ = false; }
+    bool isDirty() const { return _dirty; }
+    void clearDirty() { _dirty = false; }
 
 private:
     uint32_t cols_;
@@ -120,10 +121,10 @@ private:
     std::vector<uint8_t> bgColors_;       // RGBA per cell (4 bytes)
     std::vector<uint8_t> attrs_;          // 1 byte per cell (packed CellAttrs)
 
-    // Plugin tracking (0 = no plugin, non-zero = plugin ID)
-    std::vector<uint16_t> pluginIds_;
+    // Widget tracking (0 = no widget, non-zero = widget ID)
+    std::vector<uint16_t> _widgetIds;
 
-    bool dirty_ = true;
+    bool _dirty = true;
 
     size_t cellIndex(uint32_t col, uint32_t row) const {
         return row * cols_ + col;

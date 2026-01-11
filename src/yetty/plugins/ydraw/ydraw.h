@@ -12,40 +12,57 @@ namespace yetty {
 // Demonstrates how to use the core ydraw library in a plugin
 //-----------------------------------------------------------------------------
 
-class YDrawLayer;
+class YDrawW;
 
 class YDrawPlugin : public Plugin {
 public:
     ~YDrawPlugin() override;
 
-    static Result<PluginPtr> create(YettyPtr engine) noexcept;
+    static Result<PluginPtr> create() noexcept;
 
     const char* pluginName() const override { return "ydraw"; }
 
     Result<void> dispose() override;
 
-    Result<PluginLayerPtr> createLayer(const std::string& payload) override;
+    Result<WidgetPtr> createWidget(
+        const std::string& widgetName,
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) override;
 
 private:
-    explicit YDrawPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
-    Result<void> init() noexcept override;
+    YDrawPlugin() noexcept = default;
+    Result<void> pluginInit() noexcept;
 };
 
 //-----------------------------------------------------------------------------
-// YDrawLayer - Plugin layer that wraps YDrawRenderer
+// YDrawW - Plugin widget that wraps YDrawRenderer
 //-----------------------------------------------------------------------------
 
-class YDrawLayer : public PluginLayer {
+class YDrawW : public Widget {
 public:
-    YDrawLayer();
-    ~YDrawLayer() override;
+    static Result<WidgetPtr> create(const std::string& payload) {
+        auto w = std::shared_ptr<YDrawW>(new YDrawW(payload));
+        if (auto res = w->init(); !res) {
+            return Err<WidgetPtr>("Failed to init YDrawW", res);
+        }
+        return Ok(std::static_pointer_cast<Widget>(w));
+    }
 
-    Result<void> init(const std::string& payload) override;
+    ~YDrawW() override;
+
     Result<void> dispose() override;
 
     // Renderable interface
     Result<void> render(WebGPUContext& ctx) override;
-    bool renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
     bool onMouseMove(float localX, float localY) override;
     bool onMouseButton(int button, bool pressed) override;
@@ -55,13 +72,18 @@ public:
     bool wantsKeyboard() const override { return true; }
 
 private:
-    std::unique_ptr<YDrawRenderer> _renderer;
-    bool _failed = false;
+    explicit YDrawW(const std::string& payload) {
+        _payload = payload;
+    }
+    Result<void> init() override;
+
+    std::unique_ptr<YDrawRenderer> renderer_;
+    bool failed_ = false;
 };
 
 } // namespace yetty
 
 extern "C" {
     const char* name();
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine);
+    yetty::Result<yetty::PluginPtr> create();
 }

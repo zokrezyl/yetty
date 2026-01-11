@@ -1,163 +1,358 @@
 """
-yetty_pygfx - Direct rendering to yetty's render pass
+yetty_pygfx - Direct integration of pygfx/fastplotlib with yetty's WebGPU context.
+
+This module hooks into pygfx to use yetty's WebGPU device and render to
+yetty's textures (no offscreen rendering or pixel copying).
+
+Supports multiple simultaneous widgets - each gets its own render texture.
+The adapter/device are shared (yetty's WebGPU context).
+
+Must be imported BEFORE any pygfx/wgpu imports to work correctly.
 """
+
 import os
 import sys
+import atexit
 
+# Step 1: Point wgpu-py to yetty's wgpu-native library
+_yetty_wgpu_lib = os.environ.get('YETTY_WGPU_LIB_PATH')
+if _yetty_wgpu_lib:
+    os.environ['WGPU_LIB_PATH'] = _yetty_wgpu_lib
+
+# Force offscreen mode to avoid glfw issues
 os.environ['RENDERCANVAS_FORCE_OFFSCREEN'] = '1'
 
+# Import yetty_wgpu (our C++ module)
+import yetty_wgpu
+
+# Import wgpu
 import wgpu
-from wgpu.backends.wgpu_native import ffi, lib
+from wgpu.backends.wgpu_native import ffi, GPUDevice, GPUQueue, GPUAdapter, GPUAdapterInfo
+from wgpu.backends.wgpu_native._api import GPUTexture, _get_limits
 
 
-class PygfxRenderer:
-    def __init__(self, ctx):
-        self.ctx = ctx
-        self._setup_pygfx()
-    
-    def _setup_pygfx(self):
-        from wgpu.backends.wgpu_native._api import GPUDevice, GPUQueue
-        from pygfx.renderers.wgpu.engine.shared import Shared
-        
-        device_ptr = ffi.cast('WGPUDevice', self.ctx.device_handle)
-        queue_ptr = ffi.cast('WGPUQueue', self.ctx.queue_handle)
-        
-        class YettyQueue(GPUQueue):
-            _release_function = None
-        class YettyDevice(GPUDevice):
-            _release_function = None
-        
-        queue = YettyQueue.__new__(YettyQueue)
-        queue._internal = queue_ptr
-        queue._device = None
-        
-        device = YettyDevice.__new__(YettyDevice)
-        device._internal = device_ptr
-        device._adapter = None
-        device._features = frozenset(['float32-filterable'])
-        device._limits = {}
-        device._queue = queue
-        device._poller = None
-        queue._device = device
-        
-        self._device = device
-        
-        if Shared._instance:
-            Shared._instance._device = device
-            Shared._instance._queue = queue
-        
-        from pygfx.renderers.wgpu.engine.shared import get_shared
-        self._shared = get_shared()
-    
-    def render(self, render_pass, scene, camera):
-        from pygfx.renderers.wgpu.engine.renderer import FlatScene
-        from pygfx.renderers.wgpu.engine.renderstate import get_renderstate
-        from wgpu.backends.wgpu_native._api import GPURenderPassEncoder
-        
-        width = render_pass.width
-        height = render_pass.height
-        
-        camera.set_view_size(width, height)
-        
-        # Wrap yetty's render pass
-        class YettyRenderPass(GPURenderPassEncoder):
-            _release_function = None
-            def __del__(self): pass
-        
-        wgpu_pass = YettyRenderPass.__new__(YettyRenderPass)
-        wgpu_pass._internal = ffi.cast('WGPURenderPassEncoder', render_pass.handle)
-        wgpu_pass._device = self._device
-        wgpu_pass._label = ""
-        
-        # Update uniforms
-        stdinfo = self._shared.uniform_buffer.data
-        stdinfo["cam_transform"] = camera.world.inverse_matrix.T
-        stdinfo["cam_transform_inv"] = camera.world.matrix.T
-        stdinfo["projection_transform"] = camera.projection_matrix.T
-        stdinfo["projection_transform_inv"] = camera.projection_matrix_inverse.T
-        stdinfo["physical_size"] = (width, height)
-        stdinfo["logical_size"] = (width, height)
-        stdinfo["ndc_offset"] = (1.0, 1.0, 0.0, 0.0)
-        self._shared.uniform_buffer.update_full()
-        
-        # Force upload buffers NOW
-        for resource in [self._shared.uniform_buffer]:
-            if hasattr(resource, '_gfx_pending_uploads') and resource._gfx_pending_uploads:
-                from pygfx.renderers.wgpu.engine.update import update_resource
-                update_resource(resource, self._device)
-        
-        self._shared.pre_render_hook()
-        
-        # Collect scene
-        view_matrix = camera.world.inverse_matrix
-        flat = FlatScene(scene, view_matrix, 0)
-        flat.sort()
-        
-        # Custom blender for bgra8unorm_srgb
-        blender = _Blender(self._device)
-        renderstate = get_renderstate(flat.lights, blender)
-        
-        flat.collect_pipelines_container_groups(renderstate)
-        flat.call_bake_functions(camera, (width, height))
-        
-        # Draw using lib directly
-        lib.wgpuRenderPassEncoderSetViewport(wgpu_pass._internal, 0, 0, float(width), float(height), 0.0, 1.0)
-        lib.wgpuRenderPassEncoderSetScissorRect(wgpu_pass._internal, 0, 0, width, height)
-        
-        for pass_type, containers in flat.iter_render_pipelines_per_pass_type():
-            for container in containers:
-                if container.broken:
-                    continue
-                
-                # Force update object's buffers
-                for resource in container.wobject._wgpu_resources:
-                    if hasattr(resource, '_gfx_pending_uploads') and resource._gfx_pending_uploads:
-                        from pygfx.renderers.wgpu.engine.update import update_resource
-                        update_resource(resource, self._device)
-                
-                pipeline = container.wgpu_pipeline
-                indices = container.render_info["indices"]
-                bind_groups = container.wgpu_bind_groups
-                
-                lib.wgpuRenderPassEncoderSetPipeline(wgpu_pass._internal, pipeline._internal)
-                
-                for bg_id, bg in enumerate(bind_groups):
-                    lib.wgpuRenderPassEncoderSetBindGroup(wgpu_pass._internal, bg_id, bg._internal, 0, ffi.NULL)
-                
-                rs_bg_id = len(bind_groups)
-                lib.wgpuRenderPassEncoderSetBindGroup(wgpu_pass._internal, rs_bg_id, renderstate.wgpu_bind_group._internal, 0, ffi.NULL)
-                
-                lib.wgpuRenderPassEncoderDraw(wgpu_pass._internal, indices[0], indices[1], indices[2], indices[3])
+#-----------------------------------------------------------------------------
+# Adapter/Device wrappers (shared across all widgets)
+#-----------------------------------------------------------------------------
+
+def _create_adapter_info():
+    return GPUAdapterInfo({
+        'vendor': 'yetty',
+        'architecture': '',
+        'device': 'yetty-embedded',
+        'description': 'Yetty embedded WebGPU device',
+        'backend': 'Vulkan',
+        'adapter_type': 'DiscreteGPU',
+        'vendor_id': 0,
+        'device_id': 0,
+    })
 
 
-class _Blender:
-    def __init__(self, device):
-        self.device = device
-        self.size = (0, 0)
-        self._texture_info = {"color": {"name": "color", "format": wgpu.TextureFormat.bgra8unorm_srgb, "usage": wgpu.TextureUsage.RENDER_ATTACHMENT, "is_used": True, "clear": False}}
-        self._hash = hash(("yetty", "bgra8unorm_srgb"))
-    
+class YettyGPUAdapter(GPUAdapter):
+    """Wrapper adapter that returns yetty's device."""
+
+    def __init__(self, device_handle, queue_handle):
+        self._device_handle = device_handle
+        self._queue_handle = queue_handle
+        self._internal = None
+        self._features = frozenset(['float32-filterable'])
+        self._limits = {}
+        self._info = _create_adapter_info()
+
     @property
-    def hash(self):
-        return self._hash
-    
-    def get_color_descriptors(self, material_pick_write, alpha_config):
-        bf, bo = wgpu.BlendFactor, wgpu.BlendOperation
-        return [{"format": wgpu.TextureFormat.bgra8unorm_srgb, "blend": {"color": {"src_factor": bf.src_alpha, "dst_factor": bf.one_minus_src_alpha, "operation": bo.add}, "alpha": {"src_factor": bf.one, "dst_factor": bf.one_minus_src_alpha, "operation": bo.add}}, "write_mask": wgpu.ColorWrite.ALL}]
-    
-    def get_depth_descriptor(self, depth_test, depth_compare, depth_write):
-        return None
-    
-    def get_shader_kwargs(self, material_pick_write, alpha_config):
-        return {"alpha_method": alpha_config.get("method", "opaque"), "fragment_output_code": "struct FragmentOutput { @location(0) color: vec4<f32>, }; fn apply_virtual_fields_of_fragment_output(outp: ptr<function,FragmentOutput>, stub: bool) { let color = (*outp).color; (*outp).color = vec4f(color.rgb, 1.0); }", "write_pick": False}
-    
-    def get_color_attachments(self, pass_type):
-        return []
-    
-    def get_depth_attachment(self, pass_type=None):
-        return None
-    
-    def ensure_target_size(self, size):
-        self.size = size
+    def info(self):
+        return self._info
 
-__all__ = ['PygfxRenderer']
+    @property
+    def features(self):
+        return self._features
+
+    @property
+    def limits(self):
+        return self._limits
+
+    def request_device_sync(self, **kwargs):
+        return _create_device(self._device_handle, self._queue_handle, self)
+
+
+def _create_device(device_handle, queue_handle, adapter):
+    device_ptr = ffi.cast('WGPUDevice', device_handle)
+    queue_ptr = ffi.cast('WGPUQueue', queue_handle)
+
+    features = set(adapter.features)
+    try:
+        limits = _get_limits(device_ptr, device=True)
+    except:
+        limits = {}
+
+    queue = GPUQueue("yetty-queue", queue_ptr, None)
+    device = GPUDevice("yetty-device", device_ptr, adapter, features, limits, queue)
+
+    # Don't release - yetty owns these
+    device._release_function = None
+    queue._release_function = None
+
+    return device
+
+
+#-----------------------------------------------------------------------------
+# Shared state (adapter/device - same for all widgets)
+#-----------------------------------------------------------------------------
+
+_adapter = None
+_device = None
+_initialized = False
+
+
+def _init_shared():
+    """Initialize shared adapter/device once."""
+    global _adapter, _device, _initialized
+
+    if _initialized:
+        return
+
+    if not yetty_wgpu.is_initialized():
+        raise RuntimeError("yetty_wgpu not initialized")
+
+    device_handle = yetty_wgpu.get_device_handle()
+    queue_handle = yetty_wgpu.get_queue_handle()
+
+    _adapter = YettyGPUAdapter(device_handle, queue_handle)
+    _device = _adapter.request_device_sync()
+
+    # Inject into pygfx's Shared
+    from pygfx.renderers.wgpu.engine.shared import Shared
+    if Shared._instance is None:
+        Shared._selected_adapter = _adapter
+
+    # Patch fastplotlib axes for None bbox
+    _patch_axes()
+
+    atexit.register(_cleanup_all)
+    _initialized = True
+
+
+def _patch_axes():
+    """Patch fastplotlib axes to handle None bbox."""
+    try:
+        from fastplotlib.graphics._axes import Axes
+        if hasattr(Axes, '_yetty_patched'):
+            return
+
+        orig = Axes.update_using_camera
+        def patched(self):
+            if self._plot_area.camera.fov != 0:
+                bbox = self._plot_area._fpl_graphics_scene.get_world_bounding_box()
+                if bbox is None:
+                    return
+            return orig(self)
+
+        Axes.update_using_camera = patched
+        Axes._yetty_patched = True
+    except:
+        pass
+
+
+#-----------------------------------------------------------------------------
+# Per-widget texture wrappers
+#-----------------------------------------------------------------------------
+
+_textures = {}  # widget_id -> pygfx Texture
+_current_widget_id = None  # Set by init_widget, used as default
+
+
+def set_current_widget(widget_id):
+    """Set the current widget context (called from init_widget)."""
+    global _current_widget_id
+    _current_widget_id = widget_id
+
+
+def get_current_widget():
+    """Get the current widget ID."""
+    return _current_widget_id
+
+
+def init(widget_id=None):
+    """
+    Initialize pygfx for a widget. Call before creating figures.
+
+    Args:
+        widget_id: Widget ID from yetty_wgpu.allocate_widget_id()
+                   If None, uses current widget set by set_current_widget()
+    """
+    global _textures
+
+    if widget_id is None:
+        widget_id = _current_widget_id
+    if widget_id is None:
+        raise RuntimeError("No widget_id provided and no current widget set")
+
+    _init_shared()
+
+    if widget_id in _textures:
+        return _textures[widget_id]
+
+    # Get texture from C++
+    texture_handle = yetty_wgpu.get_render_texture_handle(widget_id)
+    tex_w, tex_h = yetty_wgpu.get_render_texture_size(widget_id)
+
+    # Create wgpu texture wrapper
+    texture_ptr = ffi.cast('WGPUTexture', texture_handle)
+    tex_info = {
+        'size': (tex_w, tex_h, 1),
+        'format': 'rgba8unorm',
+        'mip_level_count': 1,
+        'sample_count': 1,
+        'dimension': '2d',
+        'usage': (wgpu.TextureUsage.RENDER_ATTACHMENT |
+                  wgpu.TextureUsage.TEXTURE_BINDING |
+                  wgpu.TextureUsage.COPY_SRC |
+                  wgpu.TextureUsage.COPY_DST),
+    }
+    wgpu_tex = GPUTexture("yetty-texture", texture_ptr, _device, tex_info)
+    wgpu_tex._release_function = None
+
+    # Create pygfx Texture wrapper
+    import pygfx
+    pygfx_tex = pygfx.Texture(
+        data=None, dim=2,
+        size=(tex_w, tex_h, 1),
+        format='rgba8unorm',
+    )
+    pygfx_tex._wgpu_usage = tex_info['usage']
+    pygfx_tex._wgpu_object = wgpu_tex
+
+    # Add canvas-like methods for fastplotlib
+    pygfx_tex._event_handlers = {}
+    pygfx_tex._width = tex_w
+    pygfx_tex._height = tex_h
+    pygfx_tex._render_callback = None
+
+    def add_event_handler(handler, *types):
+        for t in types:
+            pygfx_tex._event_handlers.setdefault(t, []).append(handler)
+
+    def remove_event_handler(handler, *types):
+        for t in types:
+            if t in pygfx_tex._event_handlers:
+                pygfx_tex._event_handlers[t] = [h for h in pygfx_tex._event_handlers[t] if h != handler]
+
+    def request_draw(cb=None):
+        if cb:
+            pygfx_tex._render_callback = cb
+
+    pygfx_tex.add_event_handler = add_event_handler
+    pygfx_tex.remove_event_handler = remove_event_handler
+    pygfx_tex.get_logical_size = lambda: (pygfx_tex._width, pygfx_tex._height)
+    pygfx_tex.get_physical_size = lambda: (pygfx_tex._width, pygfx_tex._height)
+    pygfx_tex.get_pixel_ratio = lambda: 1.0
+    pygfx_tex.request_draw = request_draw
+    pygfx_tex.close = lambda: None
+    pygfx_tex.is_closed = lambda: False
+
+    _textures[widget_id] = pygfx_tex
+    return pygfx_tex
+
+
+def get_texture(widget_id):
+    """Get the pygfx texture for a widget."""
+    return _textures.get(widget_id)
+
+
+def create_figure(widget_id=None, **kwargs):
+    """
+    Create a fastplotlib Figure for a widget.
+
+    Args:
+        widget_id: Widget ID. If None, uses current widget.
+        **kwargs: Passed to fpl.Figure (cameras, shape, etc.)
+
+    Returns:
+        fastplotlib Figure
+    """
+    if widget_id is None:
+        widget_id = _current_widget_id
+    if widget_id is None:
+        raise RuntimeError("No widget_id provided and no current widget set")
+
+    tex = _textures.get(widget_id)
+    if not tex:
+        tex = init(widget_id)
+
+    import fastplotlib as fpl
+    import pygfx
+
+    w, h = tex._width, tex._height
+    renderer = pygfx.WgpuRenderer(tex)
+
+    return fpl.Figure(
+        size=(w, h),
+        canvas=tex,
+        renderer=renderer,
+        **kwargs
+    )
+
+
+def render_frame(widget_id=None):
+    """Render one frame. Called by yetty each frame."""
+    if widget_id is None:
+        widget_id = _current_widget_id
+    if widget_id is None:
+        return False
+
+    tex = _textures.get(widget_id)
+    if tex and tex._render_callback:
+        try:
+            tex._render_callback()
+            return True
+        except Exception as e:
+            sys.stderr.write(f"render_frame error: {e}\n")
+    return False
+
+
+def cleanup(widget_id):
+    """Cleanup a widget's texture."""
+    global _textures
+
+    tex = _textures.pop(widget_id, None)
+    if tex:
+        try:
+            tex._wgpu_object = None
+        except:
+            pass
+
+    yetty_wgpu.cleanup_widget(widget_id)
+
+
+def _cleanup_all():
+    """Cleanup everything at exit."""
+    global _textures, _adapter, _device, _initialized
+
+    for wid in list(_textures.keys()):
+        cleanup(wid)
+
+    if _device:
+        try:
+            if hasattr(_device, '_poller') and _device._poller:
+                _device._poller.stop()
+        except:
+            pass
+
+    _device = None
+    _adapter = None
+    _initialized = False
+
+    try:
+        from pygfx.renderers.wgpu.engine.shared import Shared
+        Shared._instance = None
+        Shared._selected_adapter = None
+    except:
+        pass
+
+
+# Convenience accessors
+def get_device():
+    return _device
+
+def get_adapter():
+    return _adapter

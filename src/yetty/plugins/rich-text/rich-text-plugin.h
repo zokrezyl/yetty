@@ -9,7 +9,7 @@
 
 namespace yetty {
 
-class RichTextLayer;
+class RichTextW;
 
 //-----------------------------------------------------------------------------
 // RichTextPlugin - renders styled text from YAML input
@@ -34,42 +34,67 @@ class RichTextPlugin : public Plugin {
 public:
     ~RichTextPlugin() override;
 
-    static Result<PluginPtr> create(YettyPtr engine) noexcept;
+    static Result<PluginPtr> create() noexcept;
 
     const char* pluginName() const override { return "rich-text"; }
 
     Result<void> dispose() override;
 
-    Result<PluginLayerPtr> createLayer(const std::string& payload) override;
+    Result<WidgetPtr> createWidget(
+        const std::string& widgetName,
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) override;
 
     // Access to font manager for layers (from engine)
     FontManager* getFontManager();
 
 private:
-    explicit RichTextPlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
-    Result<void> init() noexcept override;
+    RichTextPlugin() noexcept = default;
+    Result<void> pluginInit() noexcept;
+
+    FontManager* _fontManager = nullptr;
 };
 
 //-----------------------------------------------------------------------------
-// RichTextLayer - single rich text document layer
+// RichTextW - single rich text document widget
 //-----------------------------------------------------------------------------
-class RichTextLayer : public PluginLayer {
+class RichTextW : public Widget {
 public:
-    RichTextLayer(RichTextPlugin* plugin);
-    ~RichTextLayer() override;
+    static Result<WidgetPtr> create(const std::string& payload, RichTextPlugin* plugin) {
+        auto w = std::shared_ptr<RichTextW>(new RichTextW(payload, plugin));
+        if (auto res = w->init(); !res) {
+            return Err<WidgetPtr>("Failed to init RichTextW", res);
+        }
+        return Ok(std::static_pointer_cast<Widget>(w));
+    }
 
-    Result<void> init(const std::string& payload) override;
+    ~RichTextW() override;
+
     Result<void> dispose() override;
 
     // Renderable interface - uses RenderContext from base class
     Result<void> render(WebGPUContext& ctx) override;
-    bool renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
     // Mouse scrolling
     bool onMouseScroll(float xoffset, float yoffset, int mods) override;
     bool wantsMouse() const override { return true; }
 
 private:
+    explicit RichTextW(const std::string& payload, RichTextPlugin* plugin)
+        : plugin_(plugin) {
+        _payload = payload;
+    }
+
+    Result<void> init() override;
     Result<void> parseYAML(const std::string& yaml);
 
     RichTextPlugin* plugin_ = nullptr;
@@ -77,7 +102,7 @@ private:
     std::string fontName_;
     std::vector<TextSpan> pendingSpans_;  // Stored until RichText is created
 
-    bool initialized_ = false;
+    bool _initialized = false;
     bool failed_ = false;
 };
 
@@ -85,5 +110,5 @@ private:
 
 extern "C" {
     const char* name();
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine);
+    yetty::Result<yetty::PluginPtr> create();
 }

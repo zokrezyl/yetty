@@ -5,7 +5,7 @@
 
 namespace yetty {
 
-class ImageLayer;
+class Image;
 
 //-----------------------------------------------------------------------------
 // ImagePlugin
@@ -14,64 +14,104 @@ class ImagePlugin : public Plugin {
 public:
     ~ImagePlugin() override;
 
-    static Result<PluginPtr> create(YettyPtr engine) noexcept;
+    static Result<PluginPtr> create() noexcept;
 
     const char* pluginName() const override { return "image"; }
 
     Result<void> dispose() override;
 
-    Result<PluginLayerPtr> createLayer(const std::string& payload) override;
+    Result<WidgetPtr> createWidget(
+        const std::string& widgetName,
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) override;
 
 private:
-    explicit ImagePlugin(YettyPtr engine) noexcept : Plugin(std::move(engine)) {}
-    Result<void> init() noexcept override;
+    ImagePlugin() noexcept = default;
+    Result<void> pluginInit() noexcept;
 };
 
 //-----------------------------------------------------------------------------
-// ImageLayer
+// Image - displays a static image
+//
+// Two-phase construction:
+//   1. Constructor (private) - stores payload
+//   2. init() (private) - no args, loads image
+//   3. create() (public) - factory
 //-----------------------------------------------------------------------------
-class ImageLayer : public PluginLayer {
+class Image : public Widget {
 public:
-    ImageLayer();
-    ~ImageLayer() override;
+    static Result<WidgetPtr> create(
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) {
+        (void)factory;
+        (void)fontManager;
+        (void)loop;
+        (void)pluginArgs;
+        auto w = std::shared_ptr<Image>(new Image(payload));
+        w->_x = x;
+        w->_y = y;
+        w->_widthCells = widthCells;
+        w->_heightCells = heightCells;
+        if (auto res = w->init(); !res) {
+            return Err<WidgetPtr>("Failed to init Image", res);
+        }
+        return Ok(std::static_pointer_cast<Widget>(w));
+    }
 
-    Result<void> init(const std::string& payload) override;
+    ~Image() override;
+
     Result<void> dispose() override;
 
-    // Legacy render (creates own encoder - slow)
     Result<void> render(WebGPUContext& ctx) override;
-
-    // Batched render (draws into existing pass - fast!)
-    bool renderToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
 private:
+    explicit Image(const std::string& payload) {
+        _payload = payload;
+    }
+
+    Result<void> init() override;
+
     Result<void> loadImage(const std::string& data);
     Result<void> createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat);
 
-    unsigned char* _image_data = nullptr;
-    int _image_width = 0;
-    int _image_height = 0;
-    int _image_channels = 0;
+    unsigned char* imageData_ = nullptr;
+    int imageWidth_ = 0;
+    int imageHeight_ = 0;
+    int imageChannels_ = 0;
 
-    WGPURenderPipeline _pipeline = nullptr;
-    WGPUBindGroup _bind_group = nullptr;
-    WGPUBuffer _uniform_buffer = nullptr;
-    WGPUTexture _texture = nullptr;
-    WGPUTextureView _texture_view = nullptr;
-    WGPUSampler _sampler = nullptr;
+    WGPURenderPipeline pipeline_ = nullptr;
+    WGPUBindGroup bindGroup_ = nullptr;
+    WGPUBuffer uniformBuffer_ = nullptr;
+    WGPUTexture texture_ = nullptr;
+    WGPUTextureView textureView_ = nullptr;
+    WGPUSampler sampler_ = nullptr;
 
-    bool _gpu_initialized = false;
-    bool _failed = false;
+    bool gpuInitialized_ = false;
+    bool failed_ = false;
 
-    // Cached rect for dirty optimization (skip uniform write if unchanged)
-    float _last_rect[4] = {0, 0, 0, 0};
+    float lastRect_[4] = {0, 0, 0, 0};
 };
-
-using Image = ImagePlugin;
 
 } // namespace yetty
 
 extern "C" {
     const char* name();
-    yetty::Result<yetty::PluginPtr> create(yetty::YettyPtr engine);
+    yetty::Result<yetty::PluginPtr> create();
 }

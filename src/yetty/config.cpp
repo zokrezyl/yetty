@@ -1,5 +1,5 @@
 #include "yetty/config.h"
-#include <spdlog/spdlog.h>
+#include <ytrace/ytrace.hpp>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -56,9 +56,9 @@ Result<void> Config::init() noexcept {
     if (!effectivePath.empty()) {
         if (auto res = loadFile(effectivePath); !res) {
             // Log warning but continue - config file is optional
-            spdlog::warn("Failed to load config file {}: {}", effectivePath, error_msg(res));
+            ywarn("Failed to load config file {}: {}", effectivePath, error_msg(res));
         } else {
-            spdlog::info("Loaded config from: {}", effectivePath);
+            yinfo("Loaded config from: {}", effectivePath);
         }
     }
 
@@ -156,7 +156,7 @@ void Config::applyEnvOverrides() {
                 current[parts.back()] = std::string(value);
             }
 
-            spdlog::debug("Config override from env: {}={}", envVar, value);
+            ydebug("Config override from env: {}={}", envVar, value);
         }
     }
 }
