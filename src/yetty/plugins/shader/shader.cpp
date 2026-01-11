@@ -789,6 +789,21 @@ Result<void> Shader::compileShader(WebGPUContext& ctx,
         return Err<void>("Failed to create shader modules");
     }
 
+    // Validate shader modules to catch compilation errors before they cause a crash
+    std::string validationError;
+    if (!validateShaderModule(vertModule, validationError)) {
+        wgpuShaderModuleRelease(vertModule);
+        wgpuShaderModuleRelease(fragModule);
+        yerror("Shader: vertex shader validation failed: {}", validationError);
+        return Err<void>("Vertex shader validation failed: " + validationError);
+    }
+    if (!validateShaderModule(fragModule, validationError)) {
+        wgpuShaderModuleRelease(vertModule);
+        wgpuShaderModuleRelease(fragModule);
+        yerror("Shader: fragment shader validation failed: {}", validationError);
+        return Err<void>("Fragment shader validation failed: " + validationError);
+    }
+
     // Create bind group layout - different for multipass/channel textures (needs textures)
     if (_isMultipass || _hasChannelTextures) {
         // Reuse _bufferBindGroupLayout which has uniform + sampler + textures
@@ -1320,6 +1335,14 @@ Result<void> Shader::compileBufferPass(WebGPUContext& ctx, int passIndex) {
     
     if (!shaderModule) {
         return Err<void>("Failed to create buffer pass shader module");
+    }
+    
+    // Validate shader module
+    std::string validationError;
+    if (!validateShaderModule(shaderModule, validationError)) {
+        wgpuShaderModuleRelease(shaderModule);
+        yerror("Shader: buffer pass {} shader validation failed: {}", passIndex, validationError);
+        return Err<void>("Buffer pass shader validation failed: " + validationError);
     }
     
     // Pipeline layout
