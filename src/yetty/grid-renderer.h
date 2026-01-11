@@ -51,6 +51,12 @@ public:
               bool fullDamage, int cursorCol = -1, int cursorRow = -1,
               bool cursorVisible = false) noexcept;
 
+  // Render to provided pass (for batched rendering - no encoder/submit)
+  void renderToPass(WGPURenderPassEncoder pass, const Grid &grid,
+                    const std::vector<DamageRect> &damageRects,
+                    bool fullDamage, int cursorCol = -1, int cursorRow = -1,
+                    bool cursorVisible = false) noexcept;
+
   // Render from CPU buffer data (used by RenderGridCmd)
   void renderFromBuffers(uint32_t cols, uint32_t rows,
                          const uint16_t* glyphs,

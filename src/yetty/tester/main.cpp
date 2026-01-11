@@ -54,6 +54,7 @@ std::unique_ptr<PluginHandle> loadPlugin(const std::string& pluginDir, const std
     // Construct plugin path
     std::string pluginPath = pluginDir + "/" + pluginName + ".so";
     if (!fs::exists(pluginPath)) {
+        std::cerr << "Plugin not found: " << pluginPath << std::endl;
         yerror("Plugin not found: {}", pluginPath);
         return nullptr;
     }
@@ -63,6 +64,7 @@ std::unique_ptr<PluginHandle> loadPlugin(const std::string& pluginDir, const std
     // Use RTLD_GLOBAL so Python extension modules can find libpython symbols
     handle->handle = dlopen(pluginPath.c_str(), RTLD_NOW | RTLD_GLOBAL);
     if (!handle->handle) {
+        std::cerr << "Failed to dlopen: " << dlerror() << std::endl;
         yerror("Failed to load plugin: {}", dlerror());
         return nullptr;
     }
@@ -70,6 +72,7 @@ std::unique_ptr<PluginHandle> loadPlugin(const std::string& pluginDir, const std
     // Get the name function
     handle->name_func = reinterpret_cast<const char*(*)()>(dlsym(handle->handle, "name"));
     if (!handle->name_func) {
+        std::cerr << "Plugin missing 'name' function: " << dlerror() << std::endl;
         yerror("Plugin missing 'name' function: {}", dlerror());
         return nullptr;
     }
@@ -78,6 +81,7 @@ std::unique_ptr<PluginHandle> loadPlugin(const std::string& pluginDir, const std
     handle->create_func = reinterpret_cast<yetty::Result<yetty::PluginPtr>(*)()>(
         dlsym(handle->handle, "create"));
     if (!handle->create_func) {
+        std::cerr << "Plugin missing 'create' function: " << dlerror() << std::endl;
         yerror("Plugin missing 'create' function: {}", dlerror());
         return nullptr;
     }
@@ -159,23 +163,42 @@ int cmdInfo(const std::string& pluginDir, const std::string& pluginName) {
 int cmdRun(const std::string& pluginDir,
            const std::string& pluginName,
            const std::string& payload,
+           const std::string& pluginArgs,
            int x, int y, int width, int height,
            bool headless,
            int durationMs) {
 
+    yinfo("=== cmdRun START ===");
+    yinfo("  pluginDir: {}", pluginDir);
+    yinfo("  pluginName: {}", pluginName);
+    yinfo("  payload length: {}", payload.length());
+    yinfo("  pluginArgs: {}", pluginArgs);
+    yinfo("  rect: {},{} {}x{}", x, y, width, height);
+    yinfo("  headless: {}", headless);
+    yinfo("  durationMs: {}", durationMs);
+
     // Load plugin
+    std::cerr << "Loading plugin..." << std::endl;
+    yinfo("Loading plugin...");
     auto handle = loadPlugin(pluginDir, pluginName);
     if (!handle) {
+        std::cerr << "Failed to load plugin!" << std::endl;
+        yerror("Failed to load plugin!");
         return 1;
     }
+    std::cerr << "Plugin loaded successfully" << std::endl;
+    yinfo("Plugin loaded successfully");
 
     // Initialize GLFW
+    yinfo("Initializing GLFW...");
     if (!glfwInit()) {
         yerror("Failed to initialize GLFW");
         return 1;
     }
+    yinfo("GLFW initialized");
 
     // Create window
+    yinfo("Creating window {}x{}...", width, height);
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     if (headless) {
@@ -206,6 +229,7 @@ int cmdRun(const std::string& pluginDir,
     g_height = height;
 
     // Create WebGPU context
+    yinfo("Creating WebGPU context...");
     auto ctxResult = yetty::WebGPUContext::create(window, width, height);
     if (!ctxResult) {
         yerror("Failed to create WebGPU context: {}", ctxResult.error().message());
@@ -214,8 +238,10 @@ int cmdRun(const std::string& pluginDir,
         return 1;
     }
     auto ctx = *ctxResult;
-    
-    yinfo("Surface format: {} (BGRA8Unorm=23, BGRA8UnormSrgb=24)", static_cast<int>(ctx->getSurfaceFormat()));
+    yinfo("WebGPU context created successfully");
+    yinfo("  Device: {}", (void*)ctx->getDevice());
+    yinfo("  Queue: {}", (void*)ctx->getQueue());
+    yinfo("  Surface format: {} (BGRA8Unorm=23, BGRA8UnormSrgb=24)", static_cast<int>(ctx->getSurfaceFormat()));
 
     // Create plugin instance
     auto pluginResult = handle->create_func();
@@ -248,10 +274,11 @@ int cmdRun(const std::string& pluginDir,
         x, y,         // position
         static_cast<uint32_t>(width / 10),  // widthCells (approx based on cell size)
         static_cast<uint32_t>(height / 20), // heightCells
-        "",           // pluginArgs
+        pluginArgs,   // pluginArgs
         payload       // payload
     );
     if (!layerResult) {
+        std::cerr << "Failed to create layer: " << layerResult.error().message() << std::endl;
         yerror("Failed to create layer: {}", layerResult.error().message());
         glfwDestroyWindow(window);
         glfwTerminate();
@@ -348,6 +375,9 @@ int cmdRun(const std::string& pluginDir,
         if (frameCount == 0) {
             yinfo("Tester: After setRenderContext2, getPixelWidth={}", layer->getPixelWidth());
         }
+
+        // Pre-render phase - pygfx renders to intermediate texture
+        layer->prepareFrame(*ctx);
 
         // Create command encoder and render pass
         WGPUCommandEncoderDescriptor encoderDesc = {};
@@ -451,6 +481,8 @@ int main(int argc, char* argv[]) {
     args::ValueFlag<int> duration(runCmd, "ms", "Run for specified duration in milliseconds",
                                   {'t', "duration"}, 0);
     args::Flag pygfx(runCmd, "pygfx", "Initialize pygfx for Python plugin", {"pygfx"});
+    args::ValueFlag<std::string> pluginArgsArg(runCmd, "args", "Plugin-specific arguments",
+                                               {'a', "args"}, "");
 
     // Info command options
     args::Positional<std::string> infoPluginName(infoCmd, "plugin", "Plugin name");
@@ -471,9 +503,11 @@ int main(int argc, char* argv[]) {
     }
 
     if (verbose) {
+        yenable_all();
     }
 
     std::string dir = args::get(pluginDir);
+    yinfo("Plugin directory: {}", dir);
 
     if (listCmd) {
         return cmdList(dir);
@@ -496,7 +530,20 @@ int main(int argc, char* argv[]) {
         // Determine payload
         std::string payloadStr;
         if (fileArg) {
-            payloadStr = args::get(fileArg);
+            std::string filePath = args::get(fileArg);
+            // For shader plugin, read file contents
+            if (args::get(pluginName) == "shader") {
+                std::ifstream file(filePath);
+                if (!file) {
+                    std::cerr << "Failed to open file: " << filePath << std::endl;
+                    return 1;
+                }
+                std::stringstream buffer;
+                buffer << file.rdbuf();
+                payloadStr = buffer.str();
+            } else {
+                payloadStr = filePath;
+            }
         } else if (codeArg) {
             payloadStr = args::get(codeArg);
         } else if (payload) {
@@ -512,14 +559,33 @@ int main(int argc, char* argv[]) {
 
         // Handle pygfx flag for python plugin
         if (pygfx && args::get(pluginName) == "python") {
-            // Prepend sys.path setup and pygfx initialization to payload
-            // Use the plugin directory's parent to find the python modules
+            // For pygfx, we need to:
+            // 1. Read the script file content
+            // 2. Prepend pygfx init code
+            // 3. Mark as inline code
             std::string pythonPath = fs::path(dir).parent_path().string() + "/python";
-            payloadStr = "import sys; sys.path.insert(0, '" + pythonPath + "'); "
-                         "import yetty_pygfx; yetty_pygfx.init_pygfx(); " + payloadStr;
+            std::string scriptContent;
+
+            if (fileArg) {
+                std::ifstream file(payloadStr);  // payloadStr is the file path
+                if (!file) {
+                    std::cerr << "Failed to open Python script: " << payloadStr << std::endl;
+                    return 1;
+                }
+                std::stringstream buffer;
+                buffer << file.rdbuf();
+                scriptContent = buffer.str();
+            } else {
+                scriptContent = payloadStr;  // Already inline code
+            }
+
+            payloadStr = "inline:import sys; sys.path.insert(0, '" + pythonPath + "'); "
+                         "import yetty_pygfx; yetty_pygfx.init(); "
+                         + scriptContent;
         }
 
-        return cmdRun(dir, args::get(pluginName), payloadStr,
+        std::string pluginArgsStr = pluginArgsArg ? args::get(pluginArgsArg) : "";
+        return cmdRun(dir, args::get(pluginName), payloadStr, pluginArgsStr,
                       x, y, w, h, headless, args::get(duration));
     }
 

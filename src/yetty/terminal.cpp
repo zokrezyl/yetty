@@ -272,6 +272,59 @@ void Terminal::stop() {
     }
 }
 
+void Terminal::prepareFrame(WebGPUContext& ctx) {
+    // Get current screen type for filtering
+    ScreenType currentScreen = _isAltScreen ? ScreenType::Alternate : ScreenType::Main;
+
+    // Propagate RenderContext and prepareFrame to all child widgets
+    for (const auto& widget : _childWidgets) {
+        if (!widget->isVisible()) continue;
+        if (widget->getScreenType() != currentScreen) continue;
+
+        // Propagate our RenderContext to children
+        widget->setRenderContext(_renderCtx);
+
+        // Call prepareFrame on child (for texture-based widgets)
+        widget->prepareFrame(ctx);
+    }
+}
+
+bool Terminal::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+    (void)ctx;
+
+    if (!_running || !_renderer) {
+        return false;
+    }
+
+    // Sync grid from vterm based on damage
+    if (_fullDamage) {
+        syncToGrid();
+    } else if (!_damageRects.empty()) {
+        syncDamageToGrid();
+    }
+
+    // Render grid to provided pass
+    _renderer->renderToPass(pass, _grid, _damageRects, _fullDamage,
+                            _cursorCol, _cursorRow,
+                            _cursorVisible && _cursorBlink);
+
+    // Clear damage after rendering
+    _damageRects.clear();
+    _fullDamage = false;
+
+    // Get current screen type for filtering
+    ScreenType currentScreen = _isAltScreen ? ScreenType::Alternate : ScreenType::Main;
+
+    // Render child widgets to same pass
+    for (const auto& widget : _childWidgets) {
+        if (!widget->isVisible()) continue;
+        if (widget->getScreenType() != currentScreen) continue;
+        widget->render(pass, ctx);
+    }
+
+    return true;
+}
+
 Result<void> Terminal::render(WebGPUContext& ctx) {
     (void)ctx;  // We use _renderer directly
 
@@ -1244,10 +1297,13 @@ bool Terminal::handleOSCSequence(const std::string& sequence,
             // Build widget name: "plugin" or "plugin.type"
             std::string widgetName = cmd.create.plugin;
 
-            // Build plugin args string (position/size now passed explicitly)
-            std::string pluginArgs;
+            // Build plugin args string - include both position args and user-provided args
+            std::string pluginArgs = cmd.pluginArgs;
             if (cmd.create.relative) {
-                pluginArgs = "--relative";
+                if (!pluginArgs.empty()) {
+                    pluginArgs += " ";
+                }
+                pluginArgs += "--relative";
             }
 
             auto result = _widgetFactory->createWidget(

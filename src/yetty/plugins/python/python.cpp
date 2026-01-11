@@ -456,7 +456,8 @@ Result<void> Python::dispose() {
     }
     blitInitialized_ = false;
 
-    // Cleanup pygfx resources (only if Python is still initialized)
+    // Cleanup Python references (only if Python is still initialized)
+    // Note: yetty_pygfx.cleanup() is already called by dispose_widget() above
     if (plugin_ && plugin_->isInitialized()) {
         if (userRenderFunc_) {
             Py_DECREF(userRenderFunc_);
@@ -467,13 +468,6 @@ Result<void> Python::dispose() {
             renderFrameFunc_ = nullptr;
         }
         if (pygfxModule_) {
-            // Call cleanup
-            PyObject* cleanupFunc = PyObject_GetAttrString(pygfxModule_, "cleanup");
-            if (cleanupFunc) {
-                PyObject* result = PyObject_CallObject(cleanupFunc, nullptr);
-                Py_XDECREF(result);
-                Py_DECREF(cleanupFunc);
-            }
             Py_DECREF(pygfxModule_);
             pygfxModule_ = nullptr;
         }
@@ -581,17 +575,21 @@ bool Python::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
 bool Python::callInitWidget(WebGPUContext& ctx, uint32_t width, uint32_t height) {
     yinfo("Python: calling init_widget({}, {})", width, height);
 
+    // Allocate a unique widget ID for this widget's texture
+    widgetId_ = yetty_wgpu_allocate_widget_id();
+    yinfo("Python: allocated widget_id={}", widgetId_);
+
     // Acquire GIL
     PyGILState_STATE gstate = PyGILState_Ensure();
 
     auto initFunc = plugin_->getInitWidgetFunc();
     if (!initFunc) {
-        yerror("Python: init_layer function not available");
+        yerror("Python: init_widget function not available");
         PyGILState_Release(gstate);
         return false;
     }
 
-    // Create context dict with WebGPU handles
+    // Create context dict with WebGPU handles and widget_id
     PyObject* ctxDict = PyDict_New();
     if (!ctxDict) {
         yerror("Python: Failed to create ctx dict");
@@ -604,18 +602,15 @@ bool Python::callInitWidget(WebGPUContext& ctx, uint32_t width, uint32_t height)
 
     PyObject* deviceObj = PyLong_FromVoidPtr(device);
     PyObject* queueObj = PyLong_FromVoidPtr(queue);
-    PyObject* widthObj = PyLong_FromUnsignedLong(width);
-    PyObject* heightObj = PyLong_FromUnsignedLong(height);
+    PyObject* widgetIdObj = PyLong_FromLong(widgetId_);
 
     PyDict_SetItemString(ctxDict, "device", deviceObj);
     PyDict_SetItemString(ctxDict, "queue", queueObj);
-    PyDict_SetItemString(ctxDict, "width", widthObj);
-    PyDict_SetItemString(ctxDict, "height", heightObj);
+    PyDict_SetItemString(ctxDict, "widget_id", widgetIdObj);
 
     Py_DECREF(deviceObj);
     Py_DECREF(queueObj);
-    Py_DECREF(widthObj);
-    Py_DECREF(heightObj);
+    Py_DECREF(widgetIdObj);
 
     // Call init_widget(ctx, width, height)
     PyObject* args = Py_BuildValue("(OII)", ctxDict, width, height);
@@ -627,7 +622,7 @@ bool Python::callInitWidget(WebGPUContext& ctx, uint32_t width, uint32_t height)
         return false;
     }
 
-    yinfo("Python: Calling Python init_layer...");
+    yinfo("Python: Calling Python init_widget...");
     PyObject* result = PyObject_CallObject(initFunc, args);
 
     Py_DECREF(ctxDict);
@@ -696,7 +691,11 @@ bool Python::callRender(WebGPUContext& ctx, uint32_t frameNum, uint32_t width, u
 }
 
 bool Python::callDisposeWidget() {
-    yinfo("Python: calling dispose_widget()");
+    if (widgetId_ < 0) {
+        return true;  // Widget was never initialized
+    }
+
+    yinfo("Python: calling dispose_widget({})", widgetId_);
 
     // Acquire GIL
     PyGILState_STATE gstate = PyGILState_Ensure();
@@ -704,25 +703,43 @@ bool Python::callDisposeWidget() {
     auto disposeFunc = plugin_->getDisposeWidgetFunc();
     if (!disposeFunc) {
         PyGILState_Release(gstate);
-        return true;  // Not an error if not available
+        // Still cleanup C++ side
+        yetty_wgpu_cleanup_widget(widgetId_);
+        widgetId_ = -1;
+        return true;
     }
 
-    PyObject* result = PyObject_CallObject(disposeFunc, nullptr);
+    // Call dispose_widget(widget_id)
+    PyObject* args = Py_BuildValue("(i)", widgetId_);
+    PyObject* result = PyObject_CallObject(disposeFunc, args);
+    Py_DECREF(args);
+
     if (!result) {
         PyErr_Print();
         ywarn("Python: dispose_widget() failed");
         PyGILState_Release(gstate);
+        // Still cleanup C++ side
+        yetty_wgpu_cleanup_widget(widgetId_);
+        widgetId_ = -1;
         return false;
     }
 
     Py_DECREF(result);
     PyGILState_Release(gstate);
+
+    widgetId_ = -1;
     return true;
 }
 
 bool Python::initPygfx(WebGPUContext& ctx, uint32_t width, uint32_t height) {
     if (pygfxInitialized_) {
         return true;
+    }
+
+    // Allocate widget ID if not already done
+    if (widgetId_ < 0) {
+        widgetId_ = yetty_wgpu_allocate_widget_id();
+        yinfo("Python: allocated widget_id={} for pygfx", widgetId_);
     }
 
     // Ensure WebGPU handles are set
@@ -736,8 +753,8 @@ bool Python::initPygfx(WebGPUContext& ctx, uint32_t width, uint32_t height) {
         wgpuHandlesSet_ = true;
     }
 
-    // Create render texture
-    if (!yetty_wgpu_create_render_texture(width, height)) {
+    // Create render texture for this widget
+    if (!yetty_wgpu_create_render_texture(widgetId_, width, height)) {
         yerror("Python: Failed to create render texture");
         return false;
     }
@@ -745,7 +762,6 @@ bool Python::initPygfx(WebGPUContext& ctx, uint32_t width, uint32_t height) {
     textureHeight_ = height;
 
     // Import and initialize yetty_pygfx module
-    // First, add the build/python directory to sys.path
     auto result = plugin_->execute(
         "import sys\n"
         "sys.path.insert(0, '" + std::string(CMAKE_BINARY_DIR) + "/python')\n"
@@ -755,19 +771,19 @@ bool Python::initPygfx(WebGPUContext& ctx, uint32_t width, uint32_t height) {
         return false;
     }
 
-    // Import yetty_pygfx
+    // Import yetty_pygfx and init for this widget
     result = plugin_->execute(
         "import yetty_pygfx\n"
-        "yetty_pygfx.init_pygfx()\n"
+        "yetty_pygfx.init(" + std::to_string(widgetId_) + ")\n"
     );
     if (!result) {
         yerror("Python: Failed to import yetty_pygfx: {}", result.error().message());
         return false;
     }
 
-    // Create the figure
+    // Create the figure for this widget
     std::string createFigCode =
-        "fig = yetty_pygfx.create_figure(" + std::to_string(width) + ", " + std::to_string(height) + ")\n";
+        "fig = yetty_pygfx.create_figure(" + std::to_string(widgetId_) + ")\n";
     result = plugin_->execute(createFigCode);
     if (!result) {
         yerror("Python: Failed to create figure: {}", result.error().message());
@@ -781,7 +797,7 @@ bool Python::initPygfx(WebGPUContext& ctx, uint32_t width, uint32_t height) {
     }
 
     pygfxInitialized_ = true;
-    yinfo("Python: pygfx initialized with {}x{} render target", width, height);
+    yinfo("Python: pygfx initialized with {}x{} render target (widget_id={})", width, height, widgetId_);
 
     return true;
 }
@@ -791,8 +807,11 @@ bool Python::renderPygfx() {
         return false;
     }
 
-    // Call render_frame()
-    PyObject* result = PyObject_CallObject(renderFrameFunc_, nullptr);
+    // Call render_frame(widget_id)
+    PyObject* args = Py_BuildValue("(i)", widgetId_);
+    PyObject* result = PyObject_CallObject(renderFrameFunc_, args);
+    Py_DECREF(args);
+
     if (!result) {
         PyErr_Print();
         PyErr_Clear();
@@ -954,8 +973,8 @@ bool Python::createBlitPipeline(WebGPUContext& ctx) {
 }
 
 bool Python::blitToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    // Get the render texture view
-    WGPUTextureView texView = yetty_wgpu_get_render_texture_view();
+    // Get the render texture view for this widget
+    WGPUTextureView texView = yetty_wgpu_get_render_texture_view(widgetId_);
     if (!texView) {
         return false;
     }

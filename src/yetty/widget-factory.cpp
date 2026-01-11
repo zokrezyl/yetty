@@ -30,15 +30,12 @@ WidgetFactory::WidgetFactory(Yetty* engine, const std::vector<std::string>& sear
     : _engine(engine)
     , _searchPaths(searchPaths)
 {
-    // Register built-in plugins (linked into main executable)
+    // Register built-in plugins as available (lazy - not created until used)
 #ifdef __unix__
-    auto pythonResult = PythonPlugin::create();
-    if (pythonResult) {
-        _loadedPlugins["python"] = *pythonResult;
-        yinfo("Registered built-in plugin: python");
-    } else {
-        ywarn("Failed to create built-in Python plugin: {}", error_msg(pythonResult));
-    }
+    _builtinPlugins["python"] = []() -> Result<PluginPtr> {
+        return PythonPlugin::create();
+    };
+    yinfo("Registered built-in plugin: python (lazy)");
 #endif
 }
 
@@ -212,7 +209,27 @@ Result<PluginPtr> WidgetFactory::getOrLoadPlugin(const std::string& name) {
         return Ok(it->second);
     }
 
-    // Find and load plugin
+    // Check if it's a built-in plugin (lazy creation)
+    auto builtinIt = _builtinPlugins.find(name);
+    if (builtinIt != _builtinPlugins.end()) {
+        ydebug("getOrLoadPlugin: found built-in plugin '{}', creating lazily", name);
+        auto createResult = builtinIt->second();
+        if (!createResult.has_value()) {
+            ydebug("getOrLoadPlugin: built-in plugin creation FAILED: {}", createResult.error().message());
+            return createResult;
+        }
+        // Initialize the plugin
+        auto plugin = createResult.value();
+        if (auto res = plugin->init(getContext()); !res) {
+            ydebug("getOrLoadPlugin: built-in plugin init FAILED: {}", res.error().message());
+            return Err<PluginPtr>("Plugin init failed: " + name, res);
+        }
+        _loadedPlugins[name] = plugin;
+        yinfo("Loaded built-in plugin: {}", name);
+        return Ok(plugin);
+    }
+
+    // Find and load dynamic plugin
     ydebug("getOrLoadPlugin: not cached, calling findAndLoadPlugin");
     auto loadResult = findAndLoadPlugin(name);
     if (!loadResult.has_value()) {

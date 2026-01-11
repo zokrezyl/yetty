@@ -114,6 +114,10 @@ private:
     // Loaded plugins (lazy-loaded on first access)
     std::unordered_map<std::string, PluginPtr> _loadedPlugins;
 
+    // Built-in plugin factories (lazy - created on first use)
+    using BuiltinPluginFactory = std::function<Result<PluginPtr>()>;
+    std::unordered_map<std::string, BuiltinPluginFactory> _builtinPlugins;
+
     std::pair<std::string, std::string> parseName(const std::string& name) const;
     Result<PluginPtr> findAndLoadPlugin(const std::string& name);
     Result<PluginPtr> loadDynamicPlugin(const std::string& path);

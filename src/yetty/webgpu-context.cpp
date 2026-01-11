@@ -223,10 +223,15 @@ Result<void> WebGPUContext::init() noexcept {
         return Err<void>("Failed to get WebGPU adapter");
     }
 
-    // Request device
+    // Request device with features needed for pygfx
+    static WGPUFeatureName requiredFeatures[] = {
+        WGPUFeatureName_Float32Filterable,  // Required for pygfx float texture sampling
+    };
+
     WGPUDeviceDescriptor deviceDesc = {};
     deviceDesc.label = WGPU_STR("yetty device");
-    deviceDesc.requiredFeatureCount = 0;
+    deviceDesc.requiredFeatureCount = sizeof(requiredFeatures) / sizeof(requiredFeatures[0]);
+    deviceDesc.requiredFeatures = requiredFeatures;
     deviceDesc.requiredLimits = nullptr;
     deviceDesc.defaultQueue.label = WGPU_STR("default queue");
     deviceDesc.uncapturedErrorCallbackInfo.callback = [](WGPUDevice const* device, WGPUErrorType type, WGPUStringView message, void* userdata1, void* userdata2) {

@@ -172,6 +172,7 @@ private:
     uint32_t textureWidth_ = 0;
     uint32_t textureHeight_ = 0;
     uint32_t frameCount_ = 0;
+    int widgetId_ = -1;  // Unique widget ID for per-widget texture
 
     // User render callback
     PyObject* userRenderFunc_ = nullptr;

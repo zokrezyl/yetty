@@ -1095,11 +1095,11 @@ void Yetty::mainLoopIteration() noexcept {
   }
 
   // Update global uniforms (time, mouse, screen) once per frame
-  if (_shaderManager) {
-    double now = glfwGetTime();
-    float deltaTime = static_cast<float>(now - _lastRenderTime);
-    _lastRenderTime = now;
+  double now = glfwGetTime();
+  float deltaTime = static_cast<float>(now - _lastRenderTime);
+  _lastRenderTime = now;
 
+  if (_shaderManager) {
     // Get mouse position (normalized 0-1)
     double mouseX = 0, mouseY = 0;
     glfwGetCursorPos(_window, &mouseX, &mouseY);
@@ -1115,33 +1115,96 @@ void Yetty::mainLoopIteration() noexcept {
                                          windowWidth(), windowHeight());
   }
 
-  // Render all root widgets
+  // Get texture view for this frame
+  auto viewResult = _ctx->getCurrentTextureView();
+  if (!viewResult) {
+    ydebug("mainLoopIteration: no texture view available");
+    return;
+  }
+  WGPUTextureView targetView = *viewResult;
+
+  // Build RenderContext for all widgets
+  RenderContext rc;
+  rc.targetView = targetView;
+  rc.targetFormat = _ctx->getSurfaceFormat();
+  rc.screenWidth = windowWidth();
+  rc.screenHeight = windowHeight();
+  rc.cellWidth = cellWidth();
+  rc.cellHeight = cellHeight();
+  rc.scrollOffset = _terminal ? _terminal->getScrollOffset() : 0;
+  rc.termRows = _rows;
+  rc.isAltScreen = _terminal ? _terminal->isAltScreen() : false;
+  rc.deltaTime = deltaTime;
+
+  //=========================================================================
+  // Phase 1: PREPARE - Set RenderContext and call prepareFrame() on all widgets
+  // Widgets that render to intermediate textures (ThorVG, pygfx, video) do
+  // their texture rendering here. Direct-render widgets do nothing.
+  //=========================================================================
   for (const auto &widget : _rootWidgets) {
     if (!widget->isRunning())
       continue;
-
-    auto result = widget->render(*_ctx);
-    if (!result) {
-      yerror("Widget '{}' render failed: {}", widget->name(),
-             error_msg(result));
-    }
+    widget->setRenderContext(rc);
+    widget->prepareFrame(*_ctx);
   }
 
-  // Render Terminal's child widgets (multi-phase batched rendering)
-  size_t childWidgetCount = _terminal ? _terminal->getChildWidgets().size() : 0;
-  ydebug("renderFrame: terminal={} childWidgets={}", (void *)_terminal.get(),
-         childWidgetCount);
-  if (_terminal && !_terminal->getChildWidgets().empty()) {
-    ydebug("renderFrame: calling renderWidgets");
-    auto viewResult = _ctx->getCurrentTextureView();
-    if (viewResult) {
-      CHECK_RESULT(renderWidgets(*viewResult));
-    } else {
-      ydebug("renderFrame: no texture view");
-    }
+  //=========================================================================
+  // Phase 2: BATCHED RENDER - ONE encoder, ONE pass for ALL widgets
+  //=========================================================================
+  WGPUCommandEncoderDescriptor encoderDesc = {};
+  WGPUCommandEncoder encoder =
+      wgpuDeviceCreateCommandEncoder(_ctx->getDevice(), &encoderDesc);
+  if (!encoder) {
+    yerror("mainLoopIteration: Failed to create command encoder");
+    return;
   }
 
-  // Present the frame (only if a texture was actually acquired)
+  WGPURenderPassColorAttachment colorAttachment = {};
+  colorAttachment.view = targetView;
+  colorAttachment.loadOp = WGPULoadOp_Clear;
+  colorAttachment.storeOp = WGPUStoreOp_Store;
+  colorAttachment.clearValue = {0.0588f, 0.0588f, 0.1373f, 1.0f}; // Dark blue background
+  colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+
+  WGPURenderPassDescriptor passDesc = {};
+  passDesc.colorAttachmentCount = 1;
+  passDesc.colorAttachments = &colorAttachment;
+
+  WGPURenderPassEncoder pass =
+      wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
+  if (!pass) {
+    wgpuCommandEncoderRelease(encoder);
+    yerror("mainLoopIteration: Failed to begin render pass");
+    return;
+  }
+
+  // Set current encoder/pass for any code that needs it
+  _currentEncoder = encoder;
+  _currentRenderPass = pass;
+
+  // Render all root widgets (each propagates to its children)
+  for (const auto &widget : _rootWidgets) {
+    if (!widget->isRunning())
+      continue;
+    widget->render(pass, *_ctx);
+  }
+
+  // Clear current encoder/pass
+  _currentEncoder = nullptr;
+  _currentRenderPass = nullptr;
+
+  wgpuRenderPassEncoderEnd(pass);
+  wgpuRenderPassEncoderRelease(pass);
+
+  WGPUCommandBufferDescriptor cmdDesc = {};
+  WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdDesc);
+  if (cmdBuffer) {
+    wgpuQueueSubmit(_ctx->getQueue(), 1, &cmdBuffer);
+    wgpuCommandBufferRelease(cmdBuffer);
+  }
+  wgpuCommandEncoderRelease(encoder);
+
+  // Present the frame
   if (_ctx->hasCurrentTexture()) {
     _ctx->present();
   }
@@ -1238,131 +1301,6 @@ void Yetty::updateGridSize(uint32_t cols, uint32_t rows) noexcept {
   }
 #endif
 }
-
-//-----------------------------------------------------------------------------
-// Widget Rendering (Multi-phase: prepareFrame -> batched render)
-//-----------------------------------------------------------------------------
-
-#if !YETTY_WEB && !defined(__ANDROID__)
-Result<void> Yetty::renderWidgets(WGPUTextureView targetView) noexcept {
-  yfunc();
-  if (!_terminal) {
-    ydebug("renderWidgets: no terminal");
-    return Ok();
-  }
-  const auto &widgets = _terminal->getChildWidgets();
-  ydebug("renderWidgets: {} widgets", widgets.size());
-  if (widgets.empty())
-    return Ok();
-
-  // Build RenderContext
-  RenderContext rc;
-  rc.targetView = targetView;
-  rc.targetFormat = _ctx->getSurfaceFormat();
-  rc.screenWidth = windowWidth();
-  rc.screenHeight = windowHeight();
-  rc.cellWidth = cellWidth();
-  rc.cellHeight = cellHeight();
-  rc.scrollOffset = _terminal->getScrollOffset();
-  rc.termRows = _rows;
-  rc.isAltScreen = _terminal->isAltScreen();
-  rc.deltaTime = glfwGetTime() - _lastRenderTime;
-
-  ydebug("renderWidgets: rc screen={}x{} cell={}x{} scrollOffset={} "
-         "termRows={} isAltScreen={}",
-         rc.screenWidth, rc.screenHeight, rc.cellWidth, rc.cellHeight,
-         rc.scrollOffset, rc.termRows, rc.isAltScreen);
-
-  ScreenType currentScreen =
-      _terminal->isAltScreen() ? ScreenType::Alternate : ScreenType::Main;
-
-  // Phase 1: Set RenderContext for all widgets
-  for (const auto &widget : widgets) {
-    ydebug("renderWidgets: widget '{}' id={} pos=({},{}) size={}x{} visible={} "
-           "screen={}",
-           widget->name(), widget->id(), widget->getX(), widget->getY(),
-           widget->getWidthCells(), widget->getHeightCells(),
-           widget->isVisible(), static_cast<int>(widget->getScreenType()));
-    widget->setRenderContext(rc);
-  }
-
-  // Phase 2: PRE-RENDER - widgets that need to render to intermediate textures
-  // (e.g., ThorVG, pygfx, video) do so here. Direct-render widgets do nothing.
-  int preparedCount = 0;
-  for (const auto &widget : widgets) {
-    if (!widget->isVisible()) {
-      ydebug("renderWidgets: skipping prepareFrame for '{}' - not visible",
-             widget->name());
-      continue;
-    }
-    if (widget->getScreenType() != currentScreen) {
-      ydebug("renderWidgets: skipping prepareFrame for '{}' - wrong screen",
-             widget->name());
-      continue;
-    }
-    ydebug("renderWidgets: prepareFrame for '{}'", widget->name());
-    widget->prepareFrame(*_ctx);
-    preparedCount++;
-  }
-  ydebug("renderWidgets: prepared {} widgets", preparedCount);
-
-  // Phase 3: BATCHED RENDER - ONE encoder, ONE pass for ALL widgets
-  WGPUCommandEncoderDescriptor encoderDesc = {};
-  WGPUCommandEncoder encoder =
-      wgpuDeviceCreateCommandEncoder(_ctx->getDevice(), &encoderDesc);
-  if (!encoder) {
-    return Err<void>("Yetty::renderWidgets: Failed to create command encoder");
-  }
-
-  WGPURenderPassColorAttachment colorAttachment = {};
-  colorAttachment.view = targetView;
-  colorAttachment.loadOp = WGPULoadOp_Load; // Preserve terminal content
-  colorAttachment.storeOp = WGPUStoreOp_Store;
-  colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
-
-  WGPURenderPassDescriptor passDesc = {};
-  passDesc.colorAttachmentCount = 1;
-  passDesc.colorAttachments = &colorAttachment;
-
-  WGPURenderPassEncoder pass =
-      wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
-  if (!pass) {
-    wgpuCommandEncoderRelease(encoder);
-    return Err<void>("Yetty::renderWidgets: Failed to begin render pass");
-  }
-
-  // Render all widgets in this single pass
-  // - Direct-render widgets draw directly
-  // - Texture-based widgets blit their pre-rendered texture
-  int renderedCount = 0;
-  for (const auto &widget : widgets) {
-    if (!widget->isVisible())
-      continue;
-    if (widget->getScreenType() != currentScreen)
-      continue;
-    ydebug("renderWidgets: render(pass) for '{}' at ({},{}) size {}x{}",
-           widget->name(), widget->getX(), widget->getY(),
-           widget->getWidthCells(), widget->getHeightCells());
-    widget->render(pass, *_ctx); // BATCHED!
-    renderedCount++;
-  }
-  ydebug("renderWidgets: rendered {} widgets", renderedCount);
-
-  wgpuRenderPassEncoderEnd(pass);
-  wgpuRenderPassEncoderRelease(pass);
-
-  WGPUCommandBufferDescriptor cmdDesc = {};
-  WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdDesc);
-  if (cmdBuffer) {
-    wgpuQueueSubmit(_ctx->getQueue(), 1, &cmdBuffer);
-    wgpuCommandBufferRelease(cmdBuffer);
-  }
-  wgpuCommandEncoderRelease(encoder);
-
-  ydebug("renderWidgets: done");
-  return Ok();
-}
-#endif
 
 //-----------------------------------------------------------------------------
 // Android-specific implementations

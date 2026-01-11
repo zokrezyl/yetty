@@ -675,6 +675,17 @@ else()
         args
         ${CMAKE_DL_LIBS}
     )
+    # Link Python into plugin tester so Python plugin symbols are available
+    if(TARGET python_embedded)
+        add_dependencies(yetty-plugin-tester python_embedded)
+        target_link_options(yetty-plugin-tester PRIVATE -rdynamic)
+        target_link_libraries(yetty-plugin-tester PRIVATE
+            -Wl,--whole-archive
+            python_embedded
+            -Wl,--no-whole-archive
+            m dl pthread
+        )
+    endif()
 
     #-------------------------------------------------------------------------
     # yetty-server - Terminal multiplexer server (desktop only)

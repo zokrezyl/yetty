@@ -75,13 +75,14 @@ public:
     void start() override;
     void stop() override;
 
-    // Standalone render (Terminal manages its own pass)
-    Result<void> render(WebGPUContext& ctx) override;
+    // Prepare frame - propagates RenderContext and prepareFrame to children
+    void prepareFrame(WebGPUContext& ctx) override;
 
-    // Batched render (for child widgets - Terminal doesn't use this directly)
-    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override {
-        (void)pass; (void)ctx; return false;
-    }
+    // Batched render - renders grid and child widgets to provided pass
+    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+
+    // Standalone render (deprecated - use batched render)
+    Result<void> render(WebGPUContext& ctx) override;
 
     //=========================================================================
     // Terminal-specific interface (single-threaded, call from main thread)

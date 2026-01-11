@@ -176,9 +176,6 @@ private:
     void mainLoopIteration() noexcept;
     void handleResize(int width, int height) noexcept;
 
-    // Widget rendering (multi-phase: prepareFrame -> batched render)
-    Result<void> renderWidgets(WGPUTextureView targetView) noexcept;
-
 #if defined(__ANDROID__)
     // Android-specific initialization
     Result<void> setupToybox() noexcept;

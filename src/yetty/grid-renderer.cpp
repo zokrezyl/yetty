@@ -1121,6 +1121,68 @@ void GridRenderer::render(const Grid &grid,
   // Note: present() should be called by main loop after all rendering
 }
 
+void GridRenderer::renderToPass(WGPURenderPassEncoder pass, const Grid &grid,
+                                const std::vector<DamageRect> &damageRects,
+                                bool fullDamage, int cursorCol, int cursorRow,
+                                bool cursorVisible) noexcept {
+  WGPUDevice device = _ctx->getDevice();
+  WGPUQueue queue = _ctx->getQueue();
+
+  // Upload any newly loaded emojis to GPU
+  if (emojiAtlas_) {
+    emojiAtlas_->uploadToGPU();
+  }
+  const uint32_t cols = grid.getCols();
+  const uint32_t rows = grid.getRows();
+
+  // Recreate textures and bind group if grid size changed
+  if (cols != textureCols_ || rows != textureRows_) {
+    if (auto res = createCellTextures(device, cols, rows); !res) {
+      std::cerr << "GridRenderer: " << error_msg(res) << std::endl;
+      return;
+    }
+    if (auto res = createBindGroup(device, *font_); !res) {
+      std::cerr << "GridRenderer: " << error_msg(res) << std::endl;
+      return;
+    }
+    needsBindGroupRecreation_ = false;
+    lastFontResourceVersion_ = font_->getResourceVersion();
+    updateCellTextures(queue, grid);
+  } else if (needsBindGroupRecreation_ ||
+             font_->getResourceVersion() != lastFontResourceVersion_) {
+    if (auto res = createBindGroup(device, *font_); !res) {
+      std::cerr << "GridRenderer: " << error_msg(res) << std::endl;
+      return;
+    }
+    needsBindGroupRecreation_ = false;
+    lastFontResourceVersion_ = font_->getResourceVersion();
+    updateCellTextures(queue, grid);
+  }
+
+  if (fullDamage) {
+    updateCellTextures(queue, grid);
+  } else if (!damageRects.empty()) {
+    const size_t threshold = std::max(static_cast<size_t>(100),
+                                      static_cast<size_t>(cols * rows / 10));
+    if (damageRects.size() > threshold) {
+      updateCellTextures(queue, grid);
+    } else {
+      for (const auto &rect : damageRects) {
+        updateCellTextureRegion(queue, grid, rect);
+      }
+    }
+  }
+
+  updateUniformBuffer(queue, grid, cursorCol, cursorRow, cursorVisible);
+
+  // Draw to provided pass (no encoder/submit - caller handles that)
+  wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
+  wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
+  wgpuRenderPassEncoderSetVertexBuffer(pass, 0, quadVertexBuffer_, 0,
+                                       WGPU_WHOLE_SIZE);
+  wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
+}
+
 void GridRenderer::renderFromBuffers(uint32_t cols, uint32_t rows,
                                      const uint16_t* glyphs,
                                      const uint8_t* fgColors,

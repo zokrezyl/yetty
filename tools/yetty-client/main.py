@@ -81,6 +81,7 @@ def cmd_create(ctx, plugin_name, pos_x, pos_y, width, height, absolute, output):
         payload = plugin_ctx.obj.get('payload') if plugin_ctx.obj else None
         payload_bytes = plugin_ctx.obj.get('payload_bytes') if plugin_ctx.obj else None
         actual_plugin = plugin_ctx.obj.get('plugin_name', plugin_name) if plugin_ctx.obj else plugin_name
+        plugin_args = plugin_ctx.obj.get('plugin_args', '') if plugin_ctx.obj else ''
 
     if payload is None and payload_bytes is None:
         raise click.ClickException(f"Plugin '{plugin_name}' did not set a payload")
@@ -88,12 +89,14 @@ def cmd_create(ctx, plugin_name, pos_x, pos_y, width, height, absolute, output):
     if payload_bytes is not None:
         sequence = osc.create_sequence_bytes(
             plugin=actual_plugin, x=pos_x, y=pos_y, w=width, h=height,
-            relative=not absolute, payload_bytes=payload_bytes
+            relative=not absolute, payload_bytes=payload_bytes,
+            plugin_args=plugin_args
         )
     else:
         sequence = osc.create_sequence(
             plugin=actual_plugin, x=pos_x, y=pos_y, w=width, h=height,
-            relative=not absolute, payload=payload
+            relative=not absolute, payload=payload,
+            plugin_args=plugin_args
         )
 
     if ctx.obj['dry_run']:

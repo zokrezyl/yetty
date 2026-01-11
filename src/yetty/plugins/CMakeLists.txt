@@ -183,6 +183,9 @@ if(UNIX)
     # Need Python headers for compilation (symbols come from main executable)
     target_include_directories(python_plugin PRIVATE ${PYTHON_EMBEDDED_INCLUDE_DIR})
 
+    # Ensure Python is built before plugin (for headers)
+    add_dependencies(python_plugin python_embedded)
+
     # Add compile definition for Python module path
     target_compile_definitions(python_plugin PRIVATE
         CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"

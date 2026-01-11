@@ -7,86 +7,82 @@ User scripts should not modify this file.
 
 import yetty_wgpu
 
-# Global state
-_plugin_initialized = False
-
 
 def init_plugin():
     """
-    Called once when the Python plugin is loaded.
-    
-    This is the place for global initialization that should happen
-    once per plugin, not per widget.
+    Called once when the Python plugin is first loaded.
     """
-    global _plugin_initialized
-    
-    if _plugin_initialized:
-        return
-    
-    print("[yetty] Python plugin initializing...")
-    
-    # Any global setup goes here
-    
-    _plugin_initialized = True
-    print("[yetty] Python plugin initialized")
+    pass
+
+
+def dispose_plugin():
+    """
+    Called when the Python plugin is unloaded.
+    """
+    pass
 
 
 def init_widget(ctx, width, height):
     """
     Called when a new Python widget is created.
-    
-    This is called BEFORE the user script runs, so WebGPU resources
-    are available to the user script.
-    
+
     Args:
-        ctx: Dictionary with WebGPU context info:
-            - 'device': WGPUDevice handle (as int)
-            - 'queue': WGPUQueue handle (as int)
-            - 'width': Render target width
-            - 'height': Render target height
+        ctx: Dictionary with:
+            - 'device': WGPUDevice handle
+            - 'queue': WGPUQueue handle
+            - 'widget_id': Unique widget ID
         width: Widget width in pixels
         height: Widget height in pixels
+
+    Returns:
+        widget_id for use in subsequent calls
     """
-    print(f"[yetty] Initializing widget: {width}x{height}")
-    
-    # Set WebGPU handles for yetty_wgpu module
+    widget_id = ctx.get('widget_id')
+    print(f"[yetty] Initializing widget {widget_id}: {width}x{height}")
+
+    # Set WebGPU handles (shared)
     yetty_wgpu.set_handles(
         device=ctx['device'],
         queue=ctx['queue']
     )
-    
+
     # Create render texture for this widget
-    if not yetty_wgpu.create_render_texture(width, height):
-        raise RuntimeError(f"Failed to create render texture {width}x{height}")
-    
-    print(f"[yetty] Widget initialized: {width}x{height}")
+    if not yetty_wgpu.create_render_texture(widget_id, width, height):
+        raise RuntimeError(f"Failed to create render texture for widget {widget_id}")
+
+    # Set as current widget so user scripts can use init()/create_figure() without widget_id
+    try:
+        import yetty_pygfx
+        yetty_pygfx.set_current_widget(widget_id)
+    except ImportError:
+        pass
+
+    print(f"[yetty] Widget {widget_id} initialized: {width}x{height}")
+    return widget_id
 
 
-def dispose_widget():
+def dispose_widget(widget_id):
     """
     Called when a Python widget is destroyed.
-    
-    Clean up any widget-specific resources here.
-    """
-    print("[yetty] Disposing widget...")
-    
-    # Cleanup yetty_wgpu resources
-    yetty_wgpu.cleanup()
-    
-    print("[yetty] Widget disposed")
 
+    Args:
+        widget_id: The widget ID to cleanup
+    """
+    print(f"[yetty] Disposing widget {widget_id}...")
 
-def dispose_plugin():
-    """
-    Called when the Python plugin is unloaded (future feature).
-    
-    This is a placeholder for future implementation.
-    """
-    global _plugin_initialized
-    
-    print("[yetty] Python plugin disposing...")
-    
-    # Global cleanup goes here
-    
-    _plugin_initialized = False
-    print("[yetty] Python plugin disposed")
+    # Cleanup pygfx state for this widget
+    try:
+        import yetty_pygfx
+        yetty_pygfx.cleanup(widget_id)
+    except ImportError:
+        pass
+    except Exception as e:
+        print(f"[yetty] Warning: pygfx cleanup failed: {e}")
+
+    # Cleanup C++ texture (already done by yetty_pygfx.cleanup, but be safe)
+    try:
+        yetty_wgpu.cleanup_widget(widget_id)
+    except:
+        pass
+
+    print(f"[yetty] Widget {widget_id} disposed")
