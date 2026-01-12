@@ -18,8 +18,8 @@ extern "C" {
 }
 
 // Helper macros for accessing typed MuPDF pointers from void*
-#define MCTX static_cast<fz_context*>(mupdfCtx_)
-#define MDOC static_cast<fz_document*>(doc_)
+#define MCTX static_cast<fz_context*>(_mupdfCtx)
+#define MDOC static_cast<fz_document*>(_doc)
 
 namespace yetty {
 
@@ -43,13 +43,13 @@ Result<void> PDFPlugin::pluginInit() noexcept {
     if (!mctx) {
         return Err<void>("Failed to create MuPDF context");
     }
-    fzCtx_ = mctx;
+    _fzCtx = mctx;
 
     // Register document handlers
     fz_try(mctx) { fz_register_document_handlers(mctx); }
     fz_catch(mctx) {
         fz_drop_context(mctx);
-        fzCtx_ = nullptr;
+        _fzCtx = nullptr;
         return Err<void>("Failed to register MuPDF document handlers");
     }
 
@@ -59,9 +59,9 @@ Result<void> PDFPlugin::pluginInit() noexcept {
 }
 
 Result<void> PDFPlugin::dispose() {
-    if (fzCtx_) {
-        fz_drop_context(static_cast<fz_context*>(fzCtx_));
-        fzCtx_ = nullptr;
+    if (_fzCtx) {
+        fz_drop_context(static_cast<fz_context*>(_fzCtx));
+        _fzCtx = nullptr;
     }
 
     if (auto res = Plugin::dispose(); !res) {
@@ -88,17 +88,10 @@ Result<WidgetPtr> PDFPlugin::createWidget(
     const std::string& payload
 ) {
     (void)widgetName;
-    (void)factory;
-    (void)loop;
-    (void)x;
-    (void)y;
-    (void)widthCells;
-    (void)heightCells;
-    (void)pluginArgs;
     _fontManager = fontManager;  // Store for widget use
     yfunc();
-    yinfo("payload={}", payload);
-    return Pdf::create(payload, this, fzCtx_);
+    yinfo("payload={} x={} y={} w={} h={}", payload, x, y, widthCells, heightCells);
+    return Pdf::create(factory, fontManager, loop, x, y, widthCells, heightCells, pluginArgs, payload, this, _fzCtx);
 }
 
 //-----------------------------------------------------------------------------
@@ -106,14 +99,34 @@ Result<WidgetPtr> PDFPlugin::createWidget(
 //-----------------------------------------------------------------------------
 
 Pdf::Pdf(const std::string& payload, PDFPlugin* plugin, void* ctx) noexcept
-    : plugin_(plugin), mupdfCtx_(ctx) {
+    : _plugin(plugin), _mupdfCtx(ctx) {
     _payload = payload;
 }
 
 Pdf::~Pdf() { (void)dispose(); }
 
-Result<WidgetPtr> Pdf::create(const std::string& payload, PDFPlugin* plugin, void* ctx) noexcept {
+Result<WidgetPtr> Pdf::create(
+    WidgetFactory* factory,
+    FontManager* fontManager,
+    uv_loop_t* loop,
+    int32_t x,
+    int32_t y,
+    uint32_t widthCells,
+    uint32_t heightCells,
+    const std::string& pluginArgs,
+    const std::string& payload,
+    PDFPlugin* plugin,
+    void* ctx
+) noexcept {
+    (void)factory;
+    (void)fontManager;
+    (void)loop;
+    (void)pluginArgs;
     auto w = std::shared_ptr<Pdf>(new Pdf(payload, plugin, ctx));
+    w->_x = x;
+    w->_y = y;
+    w->_widthCells = widthCells;
+    w->_heightCells = heightCells;
     if (auto res = w->init(); !res) {
         return Err<WidgetPtr>("Failed to init Pdf", res);
     }
@@ -131,20 +144,20 @@ Result<void> Pdf::init() {
 }
 
 Result<void> Pdf::dispose() {
-    if (doc_) {
+    if (_doc) {
         fz_drop_document(MCTX, MDOC);
-        doc_ = nullptr;
+        _doc = nullptr;
     }
 
-    if (richText_) {
-        richText_->dispose();
-        richText_.reset();
+    if (_richText) {
+        _richText->dispose();
+        _richText.reset();
     }
 
-    pages_.clear();
-    fontNameMap_.clear();
+    _pages.clear();
+    _fontNameMap.clear();
     _initialized = false;
-    failed_ = false;
+    _failed = false;
     return Ok();
 }
 
@@ -153,19 +166,19 @@ Result<void> Pdf::dispose() {
 //-----------------------------------------------------------------------------
 
 Result<void> Pdf::loadPDF(const std::string& path) {
-    if (!mupdfCtx_) {
+    if (!_mupdfCtx) {
         return Err<void>("MuPDF context not initialized");
     }
 
-    fz_try(MCTX) { doc_ = fz_open_document(MCTX, path.c_str()); }
+    fz_try(MCTX) { _doc = fz_open_document(MCTX, path.c_str()); }
     fz_catch(MCTX) { return Err<void>("Failed to open PDF: " + path); }
 
-    pageCount_ = fz_count_pages(MCTX, MDOC);
-    if (pageCount_ <= 0) {
+    _pageCount = fz_count_pages(MCTX, MDOC);
+    if (_pageCount <= 0) {
         return Err<void>("PDF has no pages");
     }
 
-    yinfo("Pdf: loaded {} with {} pages", path, pageCount_);
+    yinfo("Pdf: loaded {} with {} pages", path, _pageCount);
 
     // Extract first page content
     return extractPageContent(0);
@@ -179,8 +192,8 @@ std::string Pdf::registerFont(void* fzFont) {
     if (!fzFont) return "";
 
     // Check if already registered
-    auto it = fontNameMap_.find(fzFont);
-    if (it != fontNameMap_.end()) {
+    auto it = _fontNameMap.find(fzFont);
+    if (it != _fontNameMap.end()) {
         return it->second;
     }
 
@@ -191,7 +204,7 @@ std::string Pdf::registerFont(void* fzFont) {
     // This avoids using MuPDF's FT_Face directly which has lock callback issues
     if (!font->buffer) {
         ywarn("Pdf: no font buffer for font '{}'", fontName);
-        fontNameMap_[fzFont] = "";
+        _fontNameMap[fzFont] = "";
         return "";
     }
 
@@ -199,28 +212,28 @@ std::string Pdf::registerFont(void* fzFont) {
     size_t fontDataLen = fz_buffer_storage(MCTX, font->buffer, &fontData);
     if (!fontData || fontDataLen == 0) {
         ywarn("Pdf: no font data for font '{}'", fontName);
-        fontNameMap_[fzFont] = "";
+        _fontNameMap[fzFont] = "";
         return "";
     }
 
     // Store the font name and data for later atlas generation
-    fontNameMap_[fzFont] = fontName;
+    _fontNameMap[fzFont] = fontName;
     PendingFont pf;
     pf.data.assign(fontData, fontData + fontDataLen);
     pf.name = fontName;
-    pendingFonts_[fzFont] = std::move(pf);
+    _pendingFonts[fzFont] = std::move(pf);
 
     ydebug("Pdf: collected font '{}' ({} bytes)", fontName, fontDataLen);
     return fontName;
 }
 
 Result<void> Pdf::generateFontAtlases() {
-    auto fontMgr = plugin_->getFontManager();
+    auto fontMgr = _plugin->getFontManager();
     if (!fontMgr) {
         return Err<void>("No FontManager available");
     }
 
-    for (auto& [fzFont, pendingFont] : pendingFonts_) {
+    for (auto& [fzFont, pendingFont] : _pendingFonts) {
         yinfo("Pdf: generating atlas for font '{}'", pendingFont.name);
         auto result = fontMgr->getFont(pendingFont.data.data(), pendingFont.data.size(),
                                         pendingFont.name, 32.0f);
@@ -228,11 +241,11 @@ Result<void> Pdf::generateFontAtlases() {
             ywarn("Pdf: failed to generate atlas for font '{}': {}", pendingFont.name,
                          result ? "null font" : result.error().message());
             // Mark as failed - will use fallback
-            fontNameMap_[fzFont] = "";
+            _fontNameMap[fzFont] = "";
         }
     }
 
-    pendingFonts_.clear();
+    _pendingFonts.clear();
     return Ok();
 }
 
@@ -241,12 +254,12 @@ Result<void> Pdf::generateFontAtlases() {
 //-----------------------------------------------------------------------------
 
 Result<void> Pdf::extractPageContent(int pageNum) {
-    if (!doc_ || pageNum < 0 || pageNum >= pageCount_) {
+    if (!_doc || pageNum < 0 || pageNum >= _pageCount) {
         return Err<void>("Invalid page number");
     }
 
-    currentPage_ = pageNum;
-    pages_.clear();
+    _currentPage = pageNum;
+    _pages.clear();
 
     fz_page* page = nullptr;
     fz_stext_page* textPage = nullptr;
@@ -287,9 +300,9 @@ Result<void> Pdf::extractPageContent(int pageNum) {
             }
         }
 
-        pages_.push_back(std::move(pdfPage));
+        _pages.push_back(std::move(pdfPage));
         yinfo("Pdf: extracted {} characters from page {}",
-                     pages_[0].chars.size(), pageNum);
+                     _pages[0].chars.size(), pageNum);
 
         // Generate font atlases AFTER extraction but still inside fz_try
         // This matches pdf-old's approach
@@ -304,10 +317,10 @@ Result<void> Pdf::extractPageContent(int pageNum) {
     fz_catch(MCTX) { return Err<void>("Failed to extract page content"); }
 
     // Force re-layout
-    lastViewWidth_ = 0;
-    lastViewHeight_ = 0;
-    if (richText_) {
-        richText_->clear();
+    _lastViewWidth = 0;
+    _lastViewHeight = 0;
+    if (_richText) {
+        _richText->clear();
     }
 
     return Ok();
@@ -318,17 +331,17 @@ Result<void> Pdf::extractPageContent(int pageNum) {
 //-----------------------------------------------------------------------------
 
 void Pdf::buildRichTextContent(float viewWidth) {
-    if (!richText_ || pages_.empty()) return;
+    if (!_richText || _pages.empty()) return;
 
-    richText_->clear();
+    _richText->clear();
 
-    const auto& page = pages_[0];
+    const auto& page = _pages[0];
     float pdfWidth = page.width;
     float pdfHeight = page.height;
 
     // Calculate scale to fit view width
-    float scale = viewWidth / pdfWidth * zoom_;
-    documentHeight_ = pdfHeight * scale;
+    float scale = viewWidth / pdfWidth * _zoom;
+    _documentHeight = pdfHeight * scale;
 
     for (const auto& ch : page.chars) {
         if (ch.codepoint == '\n' || ch.codepoint == '\r') continue;
@@ -371,10 +384,10 @@ void Pdf::buildRichTextContent(float viewWidth) {
             textChar.style = Font::Regular;
         }
 
-        richText_->addChar(textChar);
+        _richText->addChar(textChar);
     }
 
-    richText_->setNeedsLayout();
+    _richText->setNeedsLayout();
     ydebug("Pdf: built RichText content with {} chars", page.chars.size());
 }
 
@@ -383,51 +396,49 @@ void Pdf::buildRichTextContent(float viewWidth) {
 //-----------------------------------------------------------------------------
 
 void Pdf::prepareFrame(WebGPUContext& ctx) {
-    if (failed_ || !_visible) return;
+    (void)ctx;
+    // PDF renders directly to render pass - no texture preparation needed
+}
 
-    // Get render context set by owner
+Result<void> Pdf::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+    yinfo("Pdf::render called, failed={} visible={} richText={}", _failed, _visible, _richText != nullptr);
+    if (_failed || !_visible) return Ok();
+
     const auto& rc = _renderCtx;
 
-    // Calculate pixel position from cell position
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _widthCells * rc.cellWidth;
-    float pixelH = _heightCells * rc.cellHeight;
-
-    // For Relative layers, adjust position when viewing scrollback
-    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
-        pixelY += rc.scrollOffset * rc.cellHeight;
-    }
+    // Use pre-computed pixel positions from Widget base class
+    float pixelX = _pixelX;
+    float pixelY = _pixelY;
+    float pixelW = static_cast<float>(_pixelWidth);
+    float pixelH = static_cast<float>(_pixelHeight);
 
     // Skip if off-screen
     if (rc.termRows > 0) {
         float screenPixelHeight = rc.termRows * rc.cellHeight;
         if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return;
+            return Ok();  // Off-screen, not an error
         }
     }
 
     // Create RichText if needed
-    if (!richText_) {
-        auto fontMgr = plugin_->getFontManager();
+    if (!_richText) {
+        auto fontMgr = _plugin->getFontManager();
         if (!fontMgr) {
-            failed_ = true;
-            yerror("No FontManager available for PDF rendering");
-            return;
+            _failed = true;
+            return Err<void>("Pdf: no font manager");
         }
 
         auto result = RichText::create(&ctx, rc.targetFormat, fontMgr);
         if (!result) {
-            failed_ = true;
-            yerror("Failed to create RichText: {}", result.error().message());
-            return;
+            _failed = true;
+            return Err<void>("Pdf: failed to create RichText", result);
         }
-        richText_ = *result;
+        _richText = *result;
 
         // Pre-load a fallback font NOW (before rendering) to avoid MSDF generation during render loop
         // This is blocking but happens only once during initialization
         yinfo("Pdf: pre-loading fallback font...");
-        richText_->setDefaultFontFamily("monospace");
+        _richText->setDefaultFontFamily("monospace");
 
         // Force the font to actually load now by requesting it from FontManager
         auto preloadResult = fontMgr->getFont("monospace", Font::Regular);
@@ -445,28 +456,18 @@ void Pdf::prepareFrame(WebGPUContext& ctx) {
     }
 
     // Re-layout if view size changed
-    if (lastViewWidth_ != pixelW || lastViewHeight_ != pixelH) {
+    if (_lastViewWidth != pixelW || _lastViewHeight != pixelH) {
         buildRichTextContent(pixelW);
-        lastViewWidth_ = pixelW;
-        lastViewHeight_ = pixelH;
+        _lastViewWidth = pixelW;
+        _lastViewHeight = pixelH;
     }
 
     // Apply scroll offset to RichText
-    richText_->setScrollOffset(scrollOffset_);
+    _richText->setScrollOffset(_scrollOffset);
 
-    // Render
-    auto res = richText_->render(ctx, rc.targetView, rc.screenWidth, rc.screenHeight,
-                                  pixelX, pixelY, pixelW, pixelH);
-    if (!res) {
-        yerror("Pdf: render failed: {}", res.error().message());
-    }
-}
-
-Result<void> Pdf::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    (void)pass;
-    (void)ctx;
-    // PDF widget doesn't render to pass directly - uses its own render method
-    return Ok();
+    // Use batched render
+    return _richText->render(pass, ctx, rc.screenWidth, rc.screenHeight,
+                             pixelX, pixelY, pixelW, pixelH);
 }
 
 //-----------------------------------------------------------------------------
@@ -479,22 +480,22 @@ bool Pdf::onMouseScroll(float xoffset, float yoffset, int mods) {
     // Ctrl + scroll = zoom
     if (mods & 0x0002) {  // GLFW_MOD_CONTROL
         float zoomFactor = (yoffset > 0) ? 1.1f : 0.9f;
-        zoom_ *= zoomFactor;
-        zoom_ = std::clamp(zoom_, 0.1f, 10.0f);
+        _zoom *= zoomFactor;
+        _zoom = std::clamp(_zoom, 0.1f, 10.0f);
         // Force re-layout
-        lastViewWidth_ = 0;
-        lastViewHeight_ = 0;
-        ydebug("Pdf: zoom changed to {}", zoom_);
+        _lastViewWidth = 0;
+        _lastViewHeight = 0;
+        ydebug("Pdf: zoom changed to {}", _zoom);
         return true;
     }
 
     // Regular scroll
     float scrollAmount = yoffset * 40.0f;
-    scrollOffset_ -= scrollAmount;
+    _scrollOffset -= scrollAmount;
 
     // Clamp scroll
-    float maxScroll = std::max(0.0f, documentHeight_ - static_cast<float>(_pixelHeight));
-    scrollOffset_ = std::clamp(scrollOffset_, 0.0f, maxScroll);
+    float maxScroll = std::max(0.0f, _documentHeight - static_cast<float>(_pixelHeight));
+    _scrollOffset = std::clamp(_scrollOffset, 0.0f, maxScroll);
 
     return true;
 }
@@ -511,28 +512,28 @@ bool Pdf::onKey(int key, int scancode, int action, int mods) {
 
     // Page Up/Down for navigation
     if (key == 266) {  // GLFW_KEY_PAGE_UP
-        if (currentPage_ > 0) {
-            (void)extractPageContent(currentPage_ - 1);
-            scrollOffset_ = 0;
+        if (_currentPage > 0) {
+            (void)extractPageContent(_currentPage - 1);
+            _scrollOffset = 0;
             return true;
         }
     } else if (key == 267) {  // GLFW_KEY_PAGE_DOWN
-        if (currentPage_ < pageCount_ - 1) {
-            (void)extractPageContent(currentPage_ + 1);
-            scrollOffset_ = 0;
+        if (_currentPage < _pageCount - 1) {
+            (void)extractPageContent(_currentPage + 1);
+            _scrollOffset = 0;
             return true;
         }
     }
 
     // Zoom with +/-
     if (key == 61 || key == 334) {  // = or numpad +
-        zoom_ *= 1.1f;
-        lastViewWidth_ = 0;
+        _zoom *= 1.1f;
+        _lastViewWidth = 0;
         return true;
     } else if (key == 45 || key == 333) {  // - or numpad -
-        zoom_ *= 0.9f;
-        zoom_ = std::max(0.1f, zoom_);
-        lastViewWidth_ = 0;
+        _zoom *= 0.9f;
+        _zoom = std::max(0.1f, _zoom);
+        _lastViewWidth = 0;
         return true;
     }
 

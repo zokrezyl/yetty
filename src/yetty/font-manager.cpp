@@ -437,7 +437,17 @@ Result<Font*> FontManager::getFont(const std::string& family, Font::Style style,
     std::string styleName = style == Font::Bold ? "Bold" :
                             style == Font::Italic ? "Italic" :
                             style == Font::BoldItalic ? "BoldItalic" : "Regular";
-    std::string cacheName = family + "-" + styleName;
+    // Extract basename from family if it's a path
+    std::string baseName = family;
+    size_t lastSlash = family.rfind('/');
+    if (lastSlash != std::string::npos) {
+        baseName = family.substr(lastSlash + 1);
+    }
+    size_t lastDot = baseName.rfind('.');
+    if (lastDot != std::string::npos) {
+        baseName = baseName.substr(0, lastDot);
+    }
+    std::string cacheName = baseName + "-" + styleName;
     std::string cachePath = getCachePath(cacheName, fontSize, fontData.data(), fontData.size());
 
     // Check disk cache

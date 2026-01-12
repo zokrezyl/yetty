@@ -42,7 +42,7 @@ add_yetty_plugin(ydraw
 
 # rich-text plugin
 add_yetty_plugin(rich-text
-    SOURCES rich-text/rich-text-plugin.cpp
+    SOURCES rich-text/rich-text.cpp
 )
 
 # image plugin

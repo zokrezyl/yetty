@@ -6,10 +6,10 @@
 #include <string>
 #include <vector>
 
-namespace yetty {
+namespace yetty::plugins {
 
 class MarkdownPlugin;
-class MarkdownW;
+class Markdown;
 
 //-----------------------------------------------------------------------------
 // MarkdownPlugin - renders markdown content using RichText
@@ -68,19 +68,38 @@ struct ParsedLine {
 };
 
 //-----------------------------------------------------------------------------
-// MarkdownW - single markdown document widget (uses RichText for rendering)
+// Markdown - single markdown document widget (uses RichText for rendering)
 //-----------------------------------------------------------------------------
-class MarkdownW : public Widget {
+class Markdown : public Widget {
 public:
-    static Result<WidgetPtr> create(const std::string& payload, MarkdownPlugin* plugin) {
-        auto w = std::shared_ptr<MarkdownW>(new MarkdownW(payload, plugin));
+    static Result<WidgetPtr> create(
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload,
+        MarkdownPlugin* plugin
+    ) {
+        (void)factory;
+        (void)fontManager;
+        (void)loop;
+        (void)pluginArgs;
+        auto w = std::shared_ptr<Markdown>(new Markdown(payload, plugin));
+        w->_x = x;
+        w->_y = y;
+        w->_widthCells = widthCells;
+        w->_heightCells = heightCells;
         if (auto res = w->init(); !res) {
-            return Err<WidgetPtr>("Failed to init MarkdownW", res);
+            return Err<WidgetPtr>("Failed to init Markdown", res);
         }
         return Ok(std::static_pointer_cast<Widget>(w));
     }
 
-    ~MarkdownW() override;
+    ~Markdown() override;
 
     Result<void> dispose() override;
 
@@ -92,8 +111,8 @@ public:
     bool wantsMouse() const override { return true; }
 
 private:
-    explicit MarkdownW(const std::string& payload, MarkdownPlugin* plugin)
-        : plugin_(plugin) {
+    explicit Markdown(const std::string& payload, MarkdownPlugin* plugin)
+        : _plugin(plugin) {
         _payload = payload;
     }
 
@@ -102,17 +121,17 @@ private:
     void parseMarkdown(const std::string& content);
     void buildRichTextSpans(float fontSize, float maxWidth);
 
-    MarkdownPlugin* plugin_ = nullptr;
-    std::vector<ParsedLine> parsedLines_;
-    RichText::Ptr richText_;
+    MarkdownPlugin* _plugin = nullptr;
+    std::vector<ParsedLine> _parsedLines;
+    RichText::Ptr _richText;
 
-    float baseSize_ = 16.0f;
-    float lastLayoutWidth_ = 0.0f;
+    float _baseSize = 16.0f;
+    float _lastLayoutWidth = 0.0f;
     bool _initialized = false;
-    bool failed_ = false;
+    bool _failed = false;
 };
 
-} // namespace yetty
+} // namespace yetty::plugins
 
 extern "C" {
     const char* name();

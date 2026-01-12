@@ -269,6 +269,11 @@ bool Font::generate(const std::string& regularPath,
     // Define character set
     std::vector<uint32_t> charset;
 
+    // Check if this is a Nerd Font (needs icon ranges)
+    bool isNerdFont = regularPath.find("NerdFont") != std::string::npos ||
+                      regularPath.find("Nerd Font") != std::string::npos ||
+                      regularPath.find("nerd-font") != std::string::npos;
+
     // ASCII printable (32-126)
     for (uint32_t c = 32; c <= 126; ++c) charset.push_back(c);
 
@@ -280,6 +285,12 @@ bool Font::generate(const std::string& regularPath,
 
     // General Punctuation (0x2000-0x206F)
     for (uint32_t c = 0x2000; c <= 0x206F; ++c) charset.push_back(c);
+
+    // Only include extended ranges for Nerd Fonts
+    if (!isNerdFont) {
+        yinfo("Using minimal charset for non-NerdFont: {}", regularPath);
+        goto charset_done;
+    }
 
     // Arrows (0x2190-0x21FF)
     for (uint32_t c = 0x2190; c <= 0x21FF; ++c) charset.push_back(c);
@@ -341,6 +352,9 @@ bool Font::generate(const std::string& regularPath,
 
     // Nerd Fonts: Codicons (0xEA60-0xEBEB)
     for (uint32_t c = 0xEA60; c <= 0xEBEB; ++c) charset.push_back(c);
+
+charset_done:
+    yinfo("Charset size: {} codepoints (isNerdFont={})", charset.size(), isNerdFont);
 
     // Helper lambda to load glyphs from a font variant
     auto loadGlyphsFromFont = [&](msdfgen::FontHandle* variantFont, Style style,
@@ -425,6 +439,23 @@ bool Font::generate(const std::string& regularPath,
     }
 
     std::cout << "Loaded " << glyphs.size() << " total glyphs from all font variants" << std::endl;
+
+    // Calculate required atlas height based on total glyph area
+    uint64_t totalArea = 0;
+    int maxGlyphHeight = 0;
+    for (const auto& glyph : glyphs) {
+        if (glyph.atlasW > 0 && glyph.atlasH > 0) {
+            totalArea += static_cast<uint64_t>(glyph.atlasW) * glyph.atlasH;
+            maxGlyphHeight = std::max(maxGlyphHeight, glyph.atlasH);
+        }
+    }
+    // Add 30% padding for packing inefficiency, round up to 512
+    uint32_t estimatedHeight = static_cast<uint32_t>((totalArea * 13 / 10) / _atlasWidth);
+    estimatedHeight = std::max(estimatedHeight, static_cast<uint32_t>(maxGlyphHeight + 64));
+    estimatedHeight = ((estimatedHeight + 511) / 512) * 512;
+    _atlasHeight = std::max(_atlasHeight, estimatedHeight);
+    yinfo("Dynamic atlas size: {}x{} for {} glyphs (total area: {} pixels)",
+          _atlasWidth, _atlasHeight, glyphs.size(), totalArea);
 
     // Sort by height for better packing
     std::sort(glyphs.begin(), glyphs.end(), [](const PackedGlyph& a, const PackedGlyph& b) {

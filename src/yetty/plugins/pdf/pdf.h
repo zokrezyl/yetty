@@ -41,13 +41,13 @@ public:
 
     FontManager* getFontManager();
 
-    void* getMupdfContext() const noexcept { return fzCtx_; }
+    void* getMupdfContext() const noexcept { return _fzCtx; }
 
 private:
     PDFPlugin() noexcept = default;
     Result<void> pluginInit() noexcept;
 
-    void* fzCtx_ = nullptr;  // fz_context*
+    void* _fzCtx = nullptr;  // fz_context*
     FontManager* _fontManager = nullptr;
 };
 
@@ -58,7 +58,19 @@ class Pdf : public Widget {
 public:
     ~Pdf() override;
 
-    static Result<WidgetPtr> create(const std::string& payload, PDFPlugin* plugin, void* ctx) noexcept;
+    static Result<WidgetPtr> create(
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload,
+        PDFPlugin* plugin,
+        void* ctx
+    ) noexcept;
 
     Result<void> dispose() override;
 
@@ -85,12 +97,12 @@ private:
     std::string registerFont(void* fzFont);
     Result<void> generateFontAtlases();
 
-    PDFPlugin* plugin_ = nullptr;
-    void* mupdfCtx_ = nullptr;  // fz_context*
-    void* doc_ = nullptr;       // fz_document*
-    int pageCount_ = 0;
-    int currentPage_ = 0;
-    float zoom_ = 1.0f;
+    PDFPlugin* _plugin = nullptr;
+    void* _mupdfCtx = nullptr;  // fz_context*
+    void* _doc = nullptr;       // fz_document*
+    int _pageCount = 0;
+    int _currentPage = 0;
+    float _zoom = 1.0f;
 
     // Extracted page data
     struct ExtractedChar {
@@ -108,25 +120,25 @@ private:
         std::vector<ExtractedChar> chars;
     };
 
-    std::vector<ExtractedPage> pages_;
-    std::unordered_map<void*, std::string> fontNameMap_;  // fz_font* -> family name
+    std::vector<ExtractedPage> _pages;
+    std::unordered_map<void*, std::string> _fontNameMap;  // fz_font* -> family name
 
     // Store font data instead of FT_Face to avoid MuPDF lock callback issues
     struct PendingFont {
         std::vector<unsigned char> data;
         std::string name;
     };
-    std::unordered_map<void*, PendingFont> pendingFonts_;  // fz_font* -> font data for deferred atlas generation
+    std::unordered_map<void*, PendingFont> _pendingFonts;  // fz_font* -> font data for deferred atlas generation
 
     // RichText for rendering
-    RichText::Ptr richText_;
-    float documentHeight_ = 0.0f;
-    float scrollOffset_ = 0.0f;
+    RichText::Ptr _richText;
+    float _documentHeight = 0.0f;
+    float _scrollOffset = 0.0f;
 
     bool _initialized = false;
-    bool failed_ = false;
-    float lastViewWidth_ = 0.0f;
-    float lastViewHeight_ = 0.0f;
+    bool _failed = false;
+    float _lastViewWidth = 0.0f;
+    float _lastViewHeight = 0.0f;
 };
 
 } // namespace yetty
