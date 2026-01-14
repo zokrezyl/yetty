@@ -48,8 +48,26 @@ private:
 
 class YDrawW : public Widget {
 public:
-    static Result<WidgetPtr> create(const std::string& payload) {
+    static Result<WidgetPtr> create(
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) {
+        (void)factory;
+        (void)fontManager;
+        (void)loop;
+        (void)pluginArgs;
         auto w = std::shared_ptr<YDrawW>(new YDrawW(payload));
+        w->_x = x;
+        w->_y = y;
+        w->_widthCells = widthCells;
+        w->_heightCells = heightCells;
         if (auto res = w->init(); !res) {
             return Err<WidgetPtr>("Failed to init YDrawW", res);
         }

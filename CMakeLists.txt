@@ -667,6 +667,7 @@ else()
         CMAKE_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
     )
     target_link_libraries(yetty-plugin-tester PRIVATE
+        yetty_core
         webgpu
         glfw
         glfw3webgpu
@@ -714,6 +715,9 @@ else()
     if(NOT WIN32)
         target_link_libraries(yetty-server PRIVATE util rt)
     endif()
+
+    # Tools
+    add_subdirectory(tools)
 endif()
 
 

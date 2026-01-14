@@ -43,11 +43,13 @@ public:
         const std::string& payload
     ) override;
 
-    // Plugin-level render for ImGui (called from Ymery widget's prepareFrame)
-    Result<void> renderImGui(WebGPUContext& ctx);
+    // Initialize ImGui and ymery app (called lazily from widget render)
+    Result<void> ensureInitialized(const RenderContext& rc, const std::string& layoutPath,
+                                    const std::string& pluginPath, const std::string& mainModule);
 
 #ifdef YETTY_YMERY_ENABLED
     ImGuiContext* imguiContext() const { return _imgui_ctx; }
+    ImPlotContext* implotContext() const { return _implot_ctx; }
     std::shared_ptr<ymery::EmbeddedApp> app() const { return _app; }
 
     // For input coordinate calculation
@@ -74,7 +76,7 @@ private:
 };
 
 //-----------------------------------------------------------------------------
-// Ymery - per-layer position/size, forwards input to shared ImGui context
+// Ymery - self-contained widget with own ImGui context and drawing queue
 //-----------------------------------------------------------------------------
 class Ymery : public Widget {
 public:
@@ -92,8 +94,8 @@ public:
         (void)factory;
         (void)fontManager;
         (void)loop;
-        (void)pluginArgs;
-        auto w = std::shared_ptr<Ymery>(new Ymery(payload));
+        (void)payload;
+        auto w = std::shared_ptr<Ymery>(new Ymery(pluginArgs));
         w->_x = x;
         w->_y = y;
         w->_widthCells = widthCells;
@@ -108,9 +110,7 @@ public:
 
     Result<void> dispose() override;
 
-    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override {
-        (void)pass; (void)ctx; return Ok();
-    }
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
     bool onMouseMove(float x, float y) override;
     bool onMouseButton(int button, bool pressed) override;
@@ -123,21 +123,22 @@ public:
 
     void setFocus(bool f) override;
 
-    const std::string& getLayoutPath() const { return _layout_path; }
-    const std::string& getPluginPath() const { return _plugin_path; }
-    const std::string& getMainModule() const { return _main_module; }
-
 private:
-    explicit Ymery(const std::string& payload) {
-        _payload = payload;
-    }
+    explicit Ymery(const std::string& args) : _args_str(args) {}
 
     Result<void> init() override;
-    Result<void> parsePayload();
+    Result<void> parseArgs();
+    Result<void> ensureImGuiInitialized(WebGPUContext& ctx);
 
-    std::string _layout_path;
-    std::string _plugin_path;
-    std::string _main_module = "app";
+    std::string _args_str;
+    std::vector<std::string> _layout_paths;  // -p arguments
+    std::string _main_module;                 // -m argument
+
+#ifdef YETTY_YMERY_ENABLED
+    ImGuiContext* _imgui_ctx = nullptr;
+    ImPlotContext* _implot_ctx = nullptr;
+    std::shared_ptr<ymery::EmbeddedApp> _app;
+#endif
 };
 
 } // namespace yetty

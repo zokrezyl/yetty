@@ -1,1 +1,1 @@
-]999999;create -p ymery -x 0 -y 0 -w 40 -h 20 -r;;"/"$"<"2"8"7"""3"$"7"+!^!P"+"2"0"(!P"0","6",!P":"2"5".!P"0"<!P":"$"(":!N"0"("7"$!P"<"0"("5"<!N"&"3"3!P"'"("0"2!P"/"$"<"2"8"7"6!P"6","0"3"/"(!\"3"/"8"*","1"6!^!P"+"2"0"(!P"0","6",!P":"2"5".!P"0"<!P"<"("7"7"<!N"3"2"&!P"%"8","/"'!P"3"/"8"*","1"6!\"0"$","1!^"$"3"3\
+]999999;create -p ymery -x 0 -y 0 -w 60 -h 30 -r;-p build-desktop-release/_deps/ymery-cpp-src/demo/layouts -m build-desktop-release/_deps/ymery-cpp-src/demo/layouts/simple/app.yaml;\

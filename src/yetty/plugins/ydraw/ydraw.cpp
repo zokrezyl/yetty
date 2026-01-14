@@ -48,15 +48,8 @@ Result<WidgetPtr> YDrawPlugin::createWidget(
     const std::string& payload
 ) {
     (void)widgetName;
-    (void)factory;
-    (void)fontManager;
-    (void)loop;
-    (void)x;
-    (void)y;
-    (void)widthCells;
-    (void)heightCells;
-    (void)pluginArgs;
-    return YDrawW::create(payload);
+    yinfo("payload size={} x={} y={} w={} h={}", payload.size(), x, y, widthCells, heightCells);
+    return YDrawW::create(factory, fontManager, loop, x, y, widthCells, heightCells, pluginArgs, payload);
 }
 
 //-----------------------------------------------------------------------------
