@@ -540,22 +540,24 @@ void InputHandler::onScroll(double xoffset, double yoffset) noexcept {
                        glfwGetKey(_engine->window(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
 
 #if !YETTY_WEB
-    // First, try to dispatch scroll to widget (only if not zooming)
-    if (!ctrlPressed) {
-        int mods = 0;
-        if (glfwGetKey(_engine->window(), GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
-            glfwGetKey(_engine->window(), GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS) {
-            mods |= GLFW_MOD_SHIFT;
-        }
-        if (glfwGetKey(_engine->window(), GLFW_KEY_LEFT_ALT) == GLFW_PRESS ||
-            glfwGetKey(_engine->window(), GLFW_KEY_RIGHT_ALT) == GLFW_PRESS) {
-            mods |= GLFW_MOD_ALT;
-        }
+    // Build modifier flags
+    int mods = 0;
+    if (ctrlPressed) {
+        mods |= GLFW_MOD_CONTROL;
+    }
+    if (glfwGetKey(_engine->window(), GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
+        glfwGetKey(_engine->window(), GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS) {
+        mods |= GLFW_MOD_SHIFT;
+    }
+    if (glfwGetKey(_engine->window(), GLFW_KEY_LEFT_ALT) == GLFW_PRESS ||
+        glfwGetKey(_engine->window(), GLFW_KEY_RIGHT_ALT) == GLFW_PRESS) {
+        mods |= GLFW_MOD_ALT;
+    }
 
-        if (dispatchMouseScrollToWidget(static_cast<float>(xoffset), static_cast<float>(yoffset),
-                                         mods, static_cast<float>(_mouseX), static_cast<float>(_mouseY))) {
-            return;
-        }
+    // First, always try to dispatch scroll to widget (including Ctrl+scroll)
+    if (dispatchMouseScrollToWidget(static_cast<float>(xoffset), static_cast<float>(yoffset),
+                                     mods, static_cast<float>(_mouseX), static_cast<float>(_mouseY))) {
+        return;
     }
 
     const Grid* grid = getActiveGrid(_engine);

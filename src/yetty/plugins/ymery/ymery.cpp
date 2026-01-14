@@ -488,6 +488,9 @@ Result<void> Ymery::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     ImGui::Render();
     ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), pass);
 
+    // Reset scissor rect to full screen - ImGui leaves it set to its last clip rect
+    wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, rc.screenWidth, rc.screenHeight);
+
     return Ok();
 }
 
@@ -498,6 +501,10 @@ bool Ymery::onMouseMove(float x, float y) {
     const auto& rc = _renderCtx;
     float absX = x + _x * rc.cellWidth;
     float absY = y + _y * rc.cellHeight;
+    // Adjust for scroll offset (same as in render)
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
+        absY += rc.scrollOffset * rc.cellHeight;
+    }
     io.AddMousePosEvent(absX, absY);
     return true;
 }

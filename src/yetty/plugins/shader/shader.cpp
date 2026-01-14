@@ -600,7 +600,8 @@ Result<void> Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
 
 bool Shader::onMouseMove(float localX, float localY) {
     _mouseX = localX / static_cast<float>(_pixelWidth);
-    _mouseY = localY / static_cast<float>(_pixelHeight);
+    // Invert Y to match Shadertoy/GLSL convention (Y=0 at bottom)
+    _mouseY = 1.0f - (localY / static_cast<float>(_pixelHeight));
     ydebug("Shader::onMouseMove: local=({},{}) normalized=({},{})",
                   localX, localY, _mouseX, _mouseY);
     return true;
