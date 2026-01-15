@@ -5,7 +5,7 @@
 
 namespace yetty {
 
-class MusicalScoreW;
+class MusicalScore;
 
 //-----------------------------------------------------------------------------
 // MusicalScorePlugin - renders a musical score sheet with WebGPU
@@ -33,45 +33,54 @@ public:
         const std::string& payload
     ) override;
 
-    Result<void> renderAll(WGPUTextureView targetView, WGPUTextureFormat targetFormat,
-                           uint32_t screenWidth, uint32_t screenHeight,
-                           float cellWidth, float cellHeight,
-                           int scrollOffset, uint32_t termRows,
-                           bool isAltScreen = false) override;
-
 private:
     MusicalScorePlugin() noexcept = default;
     Result<void> pluginInit() noexcept;
 };
 
 //-----------------------------------------------------------------------------
-// MusicalScoreW - a single musical score instance
+// MusicalScore - a single musical score instance
 //
 // Payload format: "sheetWidth,numStaves"
 //   e.g., "800,4" = 800px wide sheet with 4 staves
 //-----------------------------------------------------------------------------
-class MusicalScoreW : public Widget {
+class MusicalScore : public Widget {
 public:
     static constexpr int MAX_STAVES = 16;
     static constexpr int LINES_PER_STAFF = 5;
 
-    static Result<WidgetPtr> create(const std::string& payload) {
-        auto w = std::shared_ptr<MusicalScoreW>(new MusicalScoreW(payload));
+    static Result<WidgetPtr> create(
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) {
+        (void)factory;
+        (void)fontManager;
+        (void)loop;
+        (void)pluginArgs;
+        auto w = std::shared_ptr<MusicalScore>(new MusicalScore(payload));
+        w->_x = x;
+        w->_y = y;
+        w->_widthCells = widthCells;
+        w->_heightCells = heightCells;
         if (auto res = w->init(); !res) {
-            return Err<WidgetPtr>("Failed to init MusicalScoreW", res);
+            return Err<WidgetPtr>("Failed to init MusicalScore", res);
         }
         return Ok(std::static_pointer_cast<Widget>(w));
     }
 
-    ~MusicalScoreW() override;
+    ~MusicalScore() override;
 
     Result<void> dispose() override;
-    Result<void> update(double deltaTime) override;
+    void update(double deltaTime) override;
 
-    Result<void> render(WebGPUContext& ctx,
-                        WGPUTextureView targetView, WGPUTextureFormat targetFormat,
-                        uint32_t screenWidth, uint32_t screenHeight,
-                        float pixelX, float pixelY, float pixelW, float pixelH);
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
     // Input handling
     bool onMouseMove(float localX, float localY) override;
@@ -82,7 +91,7 @@ public:
     bool wantsKeyboard() const override { return true; }
 
 private:
-    explicit MusicalScoreW(const std::string& payload) {
+    explicit MusicalScore(const std::string& payload) {
         _payload = payload;
     }
 

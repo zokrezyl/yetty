@@ -946,7 +946,7 @@ void Yetty::onFrameTimer(uv_timer_t *handle) {
     return;
   }
 
-  // Render frame
+  // Render frame - widgets decide internally if they have work to do
   self->mainLoopIteration();
 }
 

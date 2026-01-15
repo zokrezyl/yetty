@@ -12,7 +12,7 @@ namespace yetty {
 // Demonstrates how to use the core ydraw library in a plugin
 //-----------------------------------------------------------------------------
 
-class YDrawW;
+class YDraw;
 
 class YDrawPlugin : public Plugin {
 public:
@@ -43,10 +43,10 @@ private:
 };
 
 //-----------------------------------------------------------------------------
-// YDrawW - Plugin widget that wraps YDrawRenderer
+// YDraw - Plugin widget that wraps YDrawRenderer
 //-----------------------------------------------------------------------------
 
-class YDrawW : public Widget {
+class YDraw : public Widget {
 public:
     static Result<WidgetPtr> create(
         WidgetFactory* factory,
@@ -63,18 +63,18 @@ public:
         (void)fontManager;
         (void)loop;
         (void)pluginArgs;
-        auto w = std::shared_ptr<YDrawW>(new YDrawW(payload));
+        auto w = std::shared_ptr<YDraw>(new YDraw(payload));
         w->_x = x;
         w->_y = y;
         w->_widthCells = widthCells;
         w->_heightCells = heightCells;
         if (auto res = w->init(); !res) {
-            return Err<WidgetPtr>("Failed to init YDrawW", res);
+            return Err<WidgetPtr>("Failed to init YDraw", res);
         }
         return Ok(std::static_pointer_cast<Widget>(w));
     }
 
-    ~YDrawW() override;
+    ~YDraw() override;
 
     Result<void> dispose() override;
 
@@ -89,7 +89,7 @@ public:
     bool wantsKeyboard() const override { return true; }
 
 private:
-    explicit YDrawW(const std::string& payload) {
+    explicit YDraw(const std::string& payload) {
         _payload = payload;
     }
     Result<void> init() override;

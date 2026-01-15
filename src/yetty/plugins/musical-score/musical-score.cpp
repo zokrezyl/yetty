@@ -51,65 +51,20 @@ Result<WidgetPtr> MusicalScorePlugin::createWidget(
     const std::string& payload
 ) {
     (void)widgetName;
-    (void)factory;
-    (void)fontManager;
-    (void)loop;
-    (void)x;
-    (void)y;
-    (void)widthCells;
-    (void)heightCells;
-    (void)pluginArgs;
-    return MusicalScoreW::create(payload);
-}
-
-Result<void> MusicalScorePlugin::renderAll(WGPUTextureView targetView, WGPUTextureFormat targetFormat,
-                                     uint32_t screenWidth, uint32_t screenHeight,
-                                     float cellWidth, float cellHeight,
-                                     int scrollOffset, uint32_t termRows,
-                                     bool isAltScreen) {
-    // Note: renderAll is deprecated - widgets should use render(pass, ctx)
-
-    ScreenType currentScreen = isAltScreen ? ScreenType::Alternate : ScreenType::Main;
-    for (auto& widgetBase : widgets_) {
-        if (!widgetBase->isVisible()) continue;
-        if (widgetBase->getScreenType() != currentScreen) continue;
-
-        auto widget = std::static_pointer_cast<MusicalScoreW>(widgetBase);
-
-        float pixelX = widget->getX() * cellWidth;
-        float pixelY = widget->getY() * cellHeight;
-        float pixelW = widget->getWidthCells() * cellWidth;
-        float pixelH = widget->getHeightCells() * cellHeight;
-
-        if (widget->getPositionMode() == PositionMode::Relative && scrollOffset > 0) {
-            pixelY += scrollOffset * cellHeight;
-        }
-
-        if (termRows > 0) {
-            float screenPixelHeight = termRows * cellHeight;
-            if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-                continue;
-            }
-        }
-
-        if (auto res = widget->render(*_ctx, targetView, targetFormat,
-                                      screenWidth, screenHeight,
-                                      pixelX, pixelY, pixelW, pixelH); !res) {
-            return Err<void>("Failed to render MusicalScoreW", res);
-        }
-    }
-    return Ok();
+    yfunc();
+    yinfo("payload={} x={} y={} w={} h={}", payload, x, y, widthCells, heightCells);
+    return MusicalScore::create(factory, fontManager, loop, x, y, widthCells, heightCells, pluginArgs, payload);
 }
 
 //-----------------------------------------------------------------------------
-// MusicalScoreW
+// MusicalScore
 //-----------------------------------------------------------------------------
 
-MusicalScoreW::~MusicalScoreW() {
+MusicalScore::~MusicalScore() {
     (void)dispose();
 }
 
-Result<void> MusicalScoreW::init() {
+Result<void> MusicalScore::init() {
     // Parse payload: "sheetWidth,numStaves"
     if (!_payload.empty()) {
         int width = 800, staves = 4;
@@ -121,12 +76,12 @@ Result<void> MusicalScoreW::init() {
         }
     }
 
-    yinfo("MusicalScoreW: initialized ({}px wide, {} staves)",
+    yinfo("MusicalScore: initialized ({}px wide, {} staves)",
                  sheetWidth_, numStaves_);
     return Ok();
 }
 
-Result<void> MusicalScoreW::dispose() {
+Result<void> MusicalScore::dispose() {
     if (bindGroup_) { wgpuBindGroupRelease(bindGroup_); bindGroup_ = nullptr; }
     if (pipeline_) { wgpuRenderPipelineRelease(pipeline_); pipeline_ = nullptr; }
     if (uniformBuffer_) { wgpuBufferRelease(uniformBuffer_); uniformBuffer_ = nullptr; }
@@ -134,24 +89,23 @@ Result<void> MusicalScoreW::dispose() {
     return Ok();
 }
 
-Result<void> MusicalScoreW::update(double deltaTime) {
+void MusicalScore::update(double deltaTime) {
     (void)deltaTime;
-    return Ok();
 }
 
-bool MusicalScoreW::onMouseMove(float localX, float localY) {
+bool MusicalScore::onMouseMove(float localX, float localY) {
     (void)localX;
     (void)localY;
     return true;
 }
 
-bool MusicalScoreW::onMouseButton(int button, bool pressed) {
+bool MusicalScore::onMouseButton(int button, bool pressed) {
     (void)button;
     (void)pressed;
     return true;
 }
 
-bool MusicalScoreW::onKey(int key, int scancode, int action, int mods) {
+bool MusicalScore::onKey(int key, int scancode, int action, int mods) {
     (void)key;
     (void)scancode;
     (void)action;
@@ -160,20 +114,20 @@ bool MusicalScoreW::onKey(int key, int scancode, int action, int mods) {
     return true;
 }
 
-bool MusicalScoreW::onChar(unsigned int codepoint) {
+bool MusicalScore::onChar(unsigned int codepoint) {
     (void)codepoint;
     // Consume all chars when focused
     return true;
 }
 
-Result<void> MusicalScoreW::render(WebGPUContext& ctx,
-                                 WGPUTextureView targetView, WGPUTextureFormat targetFormat,
-                                 uint32_t screenWidth, uint32_t screenHeight,
-                                 float pixelX, float pixelY, float pixelW, float pixelH) {
-    if (failed_) return Err<void>("MusicalScoreW already failed");
+Result<void> MusicalScore::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+    if (!_visible) return Ok();
+    if (failed_) return Err<void>("MusicalScore already failed");
+
+    const auto& rc = _renderCtx;
 
     if (!gpuInitialized_) {
-        auto result = createPipeline(ctx, targetFormat);
+        auto result = createPipeline(ctx, ctx.getSurfaceFormat());
         if (!result) {
             failed_ = true;
             return Err<void>("Failed to create pipeline", result);
@@ -183,14 +137,33 @@ Result<void> MusicalScoreW::render(WebGPUContext& ctx,
 
     if (!pipeline_ || !uniformBuffer_ || !bindGroup_) {
         failed_ = true;
-        return Err<void>("MusicalScoreW pipeline not initialized");
+        return Err<void>("MusicalScore pipeline not initialized");
+    }
+
+    // Calculate pixel position from cell position
+    float pixelX = _x * rc.cellWidth;
+    float pixelY = _y * rc.cellHeight;
+    float pixelW = _widthCells * rc.cellWidth;
+    float pixelH = _heightCells * rc.cellHeight;
+
+    // Adjust for scroll offset
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
+        pixelY += rc.scrollOffset * rc.cellHeight;
+    }
+
+    // Skip if off-screen
+    if (rc.termRows > 0) {
+        float screenPixelHeight = rc.termRows * rc.cellHeight;
+        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
+            return Ok();
+        }
     }
 
     // Update uniforms
-    float ndcX = (pixelX / screenWidth) * 2.0f - 1.0f;
-    float ndcY = 1.0f - (pixelY / screenHeight) * 2.0f;
-    float ndcW = (pixelW / screenWidth) * 2.0f;
-    float ndcH = (pixelH / screenHeight) * 2.0f;
+    float ndcX = (pixelX / rc.screenWidth) * 2.0f - 1.0f;
+    float ndcY = 1.0f - (pixelY / rc.screenHeight) * 2.0f;
+    float ndcW = (pixelW / rc.screenWidth) * 2.0f;
+    float ndcH = (pixelH / rc.screenHeight) * 2.0f;
 
     struct Uniforms {
         float rect[4];        // 16 bytes, offset 0
@@ -210,44 +183,15 @@ Result<void> MusicalScoreW::render(WebGPUContext& ctx,
 
     wgpuQueueWriteBuffer(ctx.getQueue(), uniformBuffer_, 0, &uniforms, sizeof(uniforms));
 
-    // Render
-    WGPUCommandEncoderDescriptor encoderDesc = {};
-    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encoderDesc);
-    if (!encoder) return Err<void>("Failed to create command encoder");
-
-    WGPURenderPassColorAttachment colorAttachment = {};
-    colorAttachment.view = targetView;
-    colorAttachment.loadOp = WGPULoadOp_Load;
-    colorAttachment.storeOp = WGPUStoreOp_Store;
-    colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
-
-    WGPURenderPassDescriptor passDesc = {};
-    passDesc.colorAttachmentCount = 1;
-    passDesc.colorAttachments = &colorAttachment;
-
-    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
-    if (!pass) {
-        wgpuCommandEncoderRelease(encoder);
-        return Err<void>("Failed to begin render pass");
-    }
-
+    // Render to provided pass
     wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
     wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
-    wgpuRenderPassEncoderEnd(pass);
-    wgpuRenderPassEncoderRelease(pass);
 
-    WGPUCommandBufferDescriptor cmdDesc = {};
-    WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdDesc);
-    if (cmdBuffer) {
-        wgpuQueueSubmit(ctx.getQueue(), 1, &cmdBuffer);
-        wgpuCommandBufferRelease(cmdBuffer);
-    }
-    wgpuCommandEncoderRelease(encoder);
     return Ok();
 }
 
-Result<void> MusicalScoreW::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat) {
+Result<void> MusicalScore::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat) {
     WGPUDevice device = ctx.getDevice();
 
     // Uniform buffer (32 bytes)
@@ -431,7 +375,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     if (!pipeline_) return Err<void>("Failed to create render pipeline");
 
-    yinfo("MusicalScoreW: pipeline created");
+    yinfo("MusicalScore: pipeline created");
     return Ok();
 }
 

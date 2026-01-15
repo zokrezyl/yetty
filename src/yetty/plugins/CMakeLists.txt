@@ -55,6 +55,12 @@ add_yetty_plugin(plot
     SOURCES plot/plot.cpp
 )
 
+# piano plugin
+add_subdirectory(piano)
+
+# musical-score plugin
+add_subdirectory(musical-score)
+
 # markdown plugin
 add_yetty_plugin(markdown
     SOURCES markdown/markdown.cpp

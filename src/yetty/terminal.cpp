@@ -292,30 +292,30 @@ void Terminal::prepareFrame(WebGPUContext& ctx) {
 Result<void> Terminal::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     (void)ctx;
 
-    if (!_running || !_renderer) {
-        return Ok();  // Not running, not an error
+    if (!_running) {
+        return Ok();
     }
 
-    // Sync grid from vterm based on damage
+    // Sync grid from vterm when there's damage
     if (_fullDamage) {
         syncToGrid();
     } else if (!_damageRects.empty()) {
         syncDamageToGrid();
     }
 
-    // Render grid to provided pass
-    _renderer->renderToPass(pass, _grid, _damageRects, _fullDamage,
-                            _cursorCol, _cursorRow,
-                            _cursorVisible && _cursorBlink);
+    // Render grid - renderToPass uploads to GPU only when damage exists
+    if (_renderer) {
+        _renderer->renderToPass(pass, _grid, _damageRects, _fullDamage,
+                                _cursorCol, _cursorRow,
+                                _cursorVisible && _cursorBlink);
+    }
 
-    // Clear damage after rendering
+    // Clear damage after renderToPass has used it
     _damageRects.clear();
     _fullDamage = false;
 
-    // Get current screen type for filtering
+    // Child widgets decide themselves if they need to render
     ScreenType currentScreen = _isAltScreen ? ScreenType::Alternate : ScreenType::Main;
-
-    // Render child widgets to same pass
     for (const auto& widget : _childWidgets) {
         if (!widget->isVisible()) continue;
         if (widget->getScreenType() != currentScreen) continue;
