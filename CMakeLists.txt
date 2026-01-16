@@ -284,6 +284,11 @@ if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID)
             "YMERY_BUILD_GUI_TESTS OFF"
             "YMERY_USE_WEBGPU ON"
     )
+    # Fix: ymery-cpp's filesystem_common includes ytrace headers but doesn't link ytrace::ytrace
+    # This adds the missing YTRACE_USE_SPDLOG define
+    if(TARGET filesystem_common)
+        target_compile_definitions(filesystem_common PRIVATE YTRACE_USE_SPDLOG=1)
+    endif()
 endif()
 
 #-----------------------------------------------------------------------------
@@ -437,6 +442,7 @@ if(YETTY_ANDROID)
         src/yetty/config.cpp
         src/yetty/terminal.cpp
         src/yetty/osc-command.cpp
+        src/yetty/widget-factory.cpp
     )
 elseif(NOT EMSCRIPTEN)
     # Desktop uses main.cpp with GLFW
@@ -711,8 +717,9 @@ else()
         ytrace::ytrace
         ${CMAKE_DL_LIBS}
     )
-    # Unix: Link against util for forkpty, rt for shm_open
-    if(NOT WIN32)
+    # Linux: Link against util for forkpty, rt for shm_open
+    # macOS has these in libc, no separate libraries needed
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         target_link_libraries(yetty-server PRIVATE util rt)
     endif()
 

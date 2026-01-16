@@ -5,7 +5,7 @@ import numpy as np
 import yetty_pygfx
 
 yetty_pygfx.init()
-fig = yetty_pygfx.create_figure(cameras="3d", controller_types="orbit")
+fig = yetty_pygfx.create_figure(cameras="3d")
 
 radius = 10
 nx, ny = 100, 100
@@ -24,25 +24,26 @@ ripple = ripple_amplitude * np.sin(ripple_frequency * theta_grid)
 z_ref = radius * np.sin(phi_grid) * theta_grid_sin
 z = z_ref * (1 + ripple / radius)
 
-data = np.column_stack([x.flatten(), y.flatten(), z.flatten()])
-sphere = fig[0, 0].add_scatter(data, cmap="jet", sizes=1)
+current_data = np.column_stack([x.flatten(), y.flatten(), z.flatten()])
+sphere = fig[0, 0].add_scatter(current_data, cmap="jet", sizes=3)
 
 start = 0
 
 
 def animate():
-    global start
+    global start, current_data
     theta_anim = np.linspace(start, start + np.pi, num=ny, dtype=np.float32)
     _, theta_grid_anim = np.meshgrid(phi, theta_anim)
     ripple = ripple_amplitude * np.sin(ripple_frequency * theta_grid_anim)
     z = z_ref * (1 + ripple / radius)
-    sphere.data[:, 2] = z.flatten()
+    current_data[:, 2] = z.flatten()
+    sphere.data = current_data
     start += 0.005
     if start > np.pi * 2:
         start = 0
 
 
-fig[0, 0].add_animations(animate)
+fig.add_animations(animate)
 
 
 def render(ctx, frame_num, width, height):

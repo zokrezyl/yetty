@@ -9,7 +9,7 @@
 #include <dlfcn.h>
 
 // Built-in plugins (linked into main executable)
-#ifdef __unix__
+#if defined(__unix__) && !defined(__ANDROID__)
 #include "plugins/python/python.h"
 #endif
 
@@ -31,7 +31,7 @@ WidgetFactory::WidgetFactory(Yetty* engine, const std::vector<std::string>& sear
     , _searchPaths(searchPaths)
 {
     // Register built-in plugins as available (lazy - not created until used)
-#ifdef __unix__
+#if defined(__unix__) && !defined(__ANDROID__)
     _builtinPlugins["python"] = []() -> Result<PluginPtr> {
         return PythonPlugin::create();
     };

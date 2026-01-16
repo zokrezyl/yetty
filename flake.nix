@@ -26,6 +26,11 @@
           ndkVersions = [ "26.1.10909125" ];
           cmakeVersions = [ "3.22.1" ];
           includeNDK = true;
+          # Emulator support
+          includeEmulator = true;
+          includeSystemImages = true;
+          systemImageTypes = [ "google_apis" ];
+          abiVersions = [ "arm64-v8a" ];
         };
 
         androidSdk = androidComposition.androidsdk;
@@ -74,7 +79,53 @@
           androidSdk
           pkgs.llvmPackages.libclang
           pkgs.llvmPackages.clang
+          pkgs.qemu  # For ARM emulation
         ];
+
+        # ARM emulator script using QEMU
+        armEmulatorScript = pkgs.writeShellScriptBin "run-arm-emulator" ''
+          SYSTEM_IMG="${androidSdk}/libexec/android-sdk/system-images/android-34/google_apis/arm64-v8a"
+
+          echo "Starting ARM64 Android emulator (software emulation - will be slow)"
+          echo "System image: $SYSTEM_IMG"
+
+          # Create temp directory for runtime files
+          WORKDIR=$(mktemp -d)
+          trap "rm -rf $WORKDIR" EXIT
+
+          echo "Copying images to writable location..."
+          cp $SYSTEM_IMG/system.img $WORKDIR/system.img
+          cp $SYSTEM_IMG/vendor.img $WORKDIR/vendor.img
+          cp $SYSTEM_IMG/userdata.img $WORKDIR/userdata.img
+          chmod 644 $WORKDIR/*.img
+
+          # Resize userdata for more space
+          ${pkgs.qemu}/bin/qemu-img resize -f raw $WORKDIR/userdata.img 2G
+
+          echo "Starting QEMU with GUI..."
+          # Run QEMU with Android system image and graphical display
+          ${pkgs.qemu}/bin/qemu-system-aarch64 \
+            -machine virt,gic-version=2 \
+            -cpu cortex-a57 \
+            -smp 4 \
+            -m 3072 \
+            -kernel $SYSTEM_IMG/kernel-ranchu \
+            -initrd $SYSTEM_IMG/ramdisk.img \
+            -drive file=$WORKDIR/system.img,format=raw,if=none,id=system,readonly=off \
+            -device virtio-blk-device,drive=system \
+            -drive file=$WORKDIR/vendor.img,format=raw,if=none,id=vendor,readonly=off \
+            -device virtio-blk-device,drive=vendor \
+            -drive file=$WORKDIR/userdata.img,format=raw,if=none,id=userdata \
+            -device virtio-blk-device,drive=userdata \
+            -append "androidboot.hardware=ranchu androidboot.selinux=permissive console=ttyAMA0 androidboot.console=ttyAMA0" \
+            -netdev user,id=net0,hostfwd=tcp::5555-:5555 \
+            -device virtio-net-device,netdev=net0 \
+            -device virtio-gpu-pci,xres=720,yres=1280 \
+            -display sdl \
+            -device qemu-xhci \
+            -device usb-kbd \
+            -device usb-tablet
+        '';
 
       in {
         devShells = {
@@ -92,7 +143,7 @@
 
           # Android build shell
           android = pkgs.mkShell {
-            buildInputs = commonDeps ++ androidDeps ++ [ pkgs.zlib pkgs.openssl ];
+            buildInputs = commonDeps ++ androidDeps ++ [ pkgs.zlib pkgs.openssl armEmulatorScript ];
 
             ANDROID_HOME = "${androidSdk}/libexec/android-sdk";
             ANDROID_SDK_ROOT = "${androidSdk}/libexec/android-sdk";
@@ -112,6 +163,7 @@
               echo "  NDK clang: $(which aarch64-linux-android26-clang 2>/dev/null || echo 'not in PATH')"
               echo ""
               echo "Run: make android"
+              echo "Run ARM emulator: run-arm-emulator"
             '';
           };
 
@@ -136,6 +188,19 @@
               echo "Run: make web"
             '';
           };
+        };
+
+        # Apps - runnable outputs
+        apps = {
+          emulator = {
+            type = "app";
+            program = "${armEmulatorScript}/bin/run-arm-emulator";
+          };
+        };
+
+        # Packages
+        packages = {
+          arm-emulator = armEmulatorScript;
         };
       }
     );

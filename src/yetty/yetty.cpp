@@ -1050,26 +1050,112 @@ void Yetty::mainLoopIteration() noexcept {
     return;
   }
 
+  // Get texture view for this frame
+  auto viewResult = _ctx->getCurrentTextureView();
+  if (!viewResult) {
+    return;
+  }
+  WGPUTextureView targetView = *viewResult;
+
+  // Create command encoder and render pass
+  WGPUCommandEncoderDescriptor encoderDesc = {};
+  WGPUCommandEncoder encoder =
+      wgpuDeviceCreateCommandEncoder(_ctx->getDevice(), &encoderDesc);
+  if (!encoder) {
+    return;
+  }
+
+  WGPURenderPassColorAttachment colorAttachment = {};
+  colorAttachment.view = targetView;
+  colorAttachment.loadOp = WGPULoadOp_Clear;
+  colorAttachment.storeOp = WGPUStoreOp_Store;
+  colorAttachment.clearValue = {0.0588f, 0.0588f, 0.1373f, 1.0f};
+  colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+
+  WGPURenderPassDescriptor passDesc = {};
+  passDesc.colorAttachmentCount = 1;
+  passDesc.colorAttachments = &colorAttachment;
+
+  WGPURenderPassEncoder pass =
+      wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
+  if (!pass) {
+    wgpuCommandEncoderRelease(encoder);
+    return;
+  }
+
   // Render all root widgets
   for (const auto &widget : _rootWidgets) {
     if (!widget->isRunning())
       continue;
-    if (auto res = widget->render(*_ctx); !res) {
+    if (auto res = widget->render(pass, *_ctx); !res) {
       yerror("Yetty: root widget render failed: {}", res.error().message());
     }
   }
+
+  wgpuRenderPassEncoderEnd(pass);
+  wgpuRenderPassEncoderRelease(pass);
+
+  WGPUCommandBufferDescriptor cmdDesc = {};
+  WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdDesc);
+  if (cmdBuffer) {
+    wgpuQueueSubmit(_ctx->getQueue(), 1, &cmdBuffer);
+    wgpuCommandBufferRelease(cmdBuffer);
+  }
+  wgpuCommandEncoderRelease(encoder);
 
   // Present
   _ctx->present();
 #elif YETTY_WEB
   // Web build: simplified rendering loop
+  auto viewResult = _ctx->getCurrentTextureView();
+  if (!viewResult) {
+    return;
+  }
+  WGPUTextureView targetView = *viewResult;
+
+  WGPUCommandEncoderDescriptor encoderDesc = {};
+  WGPUCommandEncoder encoder =
+      wgpuDeviceCreateCommandEncoder(_ctx->getDevice(), &encoderDesc);
+  if (!encoder) {
+    return;
+  }
+
+  WGPURenderPassColorAttachment colorAttachment = {};
+  colorAttachment.view = targetView;
+  colorAttachment.loadOp = WGPULoadOp_Clear;
+  colorAttachment.storeOp = WGPUStoreOp_Store;
+  colorAttachment.clearValue = {0.0588f, 0.0588f, 0.1373f, 1.0f};
+  colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+
+  WGPURenderPassDescriptor passDesc = {};
+  passDesc.colorAttachmentCount = 1;
+  passDesc.colorAttachments = &colorAttachment;
+
+  WGPURenderPassEncoder pass =
+      wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
+  if (!pass) {
+    wgpuCommandEncoderRelease(encoder);
+    return;
+  }
+
   for (const auto &widget : _rootWidgets) {
     if (!widget->isRunning())
       continue;
-    if (auto res = widget->render(*_ctx); !res) {
+    if (auto res = widget->render(pass, *_ctx); !res) {
       yerror("Yetty: root widget render failed: {}", res.error().message());
     }
   }
+
+  wgpuRenderPassEncoderEnd(pass);
+  wgpuRenderPassEncoderRelease(pass);
+
+  WGPUCommandBufferDescriptor cmdDesc = {};
+  WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdDesc);
+  if (cmdBuffer) {
+    wgpuQueueSubmit(_ctx->getQueue(), 1, &cmdBuffer);
+    wgpuCommandBufferRelease(cmdBuffer);
+  }
+  wgpuCommandEncoderRelease(encoder);
 
   // Present the frame (only if a texture was actually acquired)
   if (_ctx->hasCurrentTexture()) {
@@ -1649,6 +1735,10 @@ void Yetty::handleCmd(struct android_app *app, int32_t cmd) {
         LOGE("Failed to init renderer: %s", res.error().message().c_str());
         return;
       }
+
+      // Initialize libuv loop for terminal PTY operations
+      engine->_uvLoop = new uv_loop_t;
+      uv_loop_init(engine->_uvLoop);
 
       // Initialize terminal
       if (auto res = engine->initTerminal(); !res) {
