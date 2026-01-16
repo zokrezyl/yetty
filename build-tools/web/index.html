@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>yetty - WebGPU Terminal</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #1a1a2e;
+            color: #eee;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        header {
+            background: #16213e;
+            padding: 10px 20px;
+            border-bottom: 1px solid #0f3460;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        header h1 {
+            font-size: 1.2em;
+            font-weight: 500;
+            color: #e94560;
+        }
+        header .info {
+            font-size: 0.8em;
+            color: #888;
+        }
+        #terminal-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            gap: 10px;
+        }
+        #canvas-container {
+            flex: 1;
+            background: #0f0f23;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        canvas {
+            display: block;
+        }
+        #shell-container {
+            background: #0f0f23;
+            border-radius: 8px;
+            padding: 15px;
+            min-height: 200px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        #output {
+            white-space: pre-wrap;
+            font-size: 14px;
+            line-height: 1.4;
+            color: #ccc;
+        }
+        #output .prompt {
+            color: #4ade80;
+        }
+        #output .command {
+            color: #fff;
+        }
+        #output .error {
+            color: #ef4444;
+        }
+        #input-line {
+            display: flex;
+            align-items: center;
+            margin-top: 5px;
+        }
+        #prompt {
+            color: #4ade80;
+            margin-right: 8px;
+        }
+        #command-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-family: inherit;
+            font-size: 14px;
+            outline: none;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+        #loading .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #333;
+            border-top-color: #e94560;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        #status {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 10px;
+        }
+        .help-text {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>yetty</h1>
+        <span class="info">WebGPU Terminal Emulator</span>
+    </header>
+
+    <div id="terminal-container">
+        <div id="canvas-container">
+            <canvas id="canvas" width="800" height="400"></canvas>
+            <div id="loading">
+                <div class="spinner"></div>
+                <div>Loading WebGPU...</div>
+                <div id="status"></div>
+            </div>
+        </div>
+
+        <div id="shell-container">
+            <div class="help-text">Toybox Shell - Type 'help' for available commands</div>
+            <div id="output"></div>
+            <div id="input-line">
+                <span id="prompt">$ </span>
+                <input type="text" id="command-input" autofocus placeholder="Enter command...">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Toybox WASM module factory (recreate module for each command due to exit() calls)
+        let ToyboxFactory = null;
+        let commandHistory = [];
+        let historyIndex = -1;
+
+        // Available Toybox commands
+        const AVAILABLE_COMMANDS = [
+            'ls', 'cat', 'head', 'tail', 'touch', 'mkdir', 'rmdir', 'rm', 'cp', 'mv', 'find',
+            'echo', 'printf', 'pwd', 'printenv', 'env', 'test', 'true', 'false',
+            'wc', 'sort', 'uniq', 'cut', 'tr', 'rev', 'basename', 'dirname', 'tee',
+            'yes', 'seq', 'cal', 'factor', 'sleep', 'date'
+        ];
+
+        // Initialize Toybox
+        async function initToybox() {
+            const status = document.getElementById('status');
+            const loading = document.getElementById('loading');
+
+            if (status) status.textContent = 'Loading Toybox...';
+
+            try {
+                // Load toybox.js (modularized build exports ToyboxModule factory)
+                const script = document.createElement('script');
+                script.src = 'toybox.js';
+
+                await new Promise((resolve, reject) => {
+                    script.onload = resolve;
+                    script.onerror = () => reject(new Error('Failed to load toybox.js'));
+                    document.head.appendChild(script);
+                });
+
+                // Store the factory - we'll create new instances for each command
+                // because Toybox calls exit() after each command
+                ToyboxFactory = ToyboxModule;
+
+                if (status) status.textContent = 'Toybox ready!';
+                appendOutput('Welcome to yetty web demo!\n');
+                appendOutput('Available commands: ' + AVAILABLE_COMMANDS.join(', ') + '\n');
+                appendOutput('Type a command to try it out.\n\n');
+
+                setTimeout(() => {
+                    if (loading) loading.style.display = 'none';
+                }, 500);
+
+            } catch (err) {
+                if (status) status.textContent = 'Error: ' + err.message;
+                console.error('Failed to initialize Toybox:', err);
+            }
+        }
+
+        // Append output to terminal
+        function appendOutput(text, className = '') {
+            const output = document.getElementById('output');
+            const span = document.createElement('span');
+            if (className) span.className = className;
+            span.textContent = text;
+            output.appendChild(span);
+
+            // Auto-scroll
+            const container = document.getElementById('shell-container');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Run a Toybox command
+        async function runCommand(cmdLine) {
+            if (!cmdLine.trim()) return;
+
+            // Add to history
+            commandHistory.push(cmdLine);
+            historyIndex = commandHistory.length;
+
+            // Echo the command
+            const output = document.getElementById('output');
+            const promptSpan = document.createElement('span');
+            promptSpan.className = 'prompt';
+            promptSpan.textContent = '$ ';
+            output.appendChild(promptSpan);
+
+            const cmdSpan = document.createElement('span');
+            cmdSpan.className = 'command';
+            cmdSpan.textContent = cmdLine + '\n';
+            output.appendChild(cmdSpan);
+
+            // Parse command
+            const parts = cmdLine.trim().split(/\s+/);
+            const cmd = parts[0];
+
+            // Built-in commands
+            if (cmd === 'help') {
+                appendOutput('Available commands:\n');
+                appendOutput('  ' + AVAILABLE_COMMANDS.join(', ') + '\n');
+                appendOutput('  help  - Show this help\n');
+                appendOutput('  clear - Clear screen\n\n');
+                return;
+            }
+
+            if (cmd === 'clear') {
+                output.innerHTML = '';
+                return;
+            }
+
+            // Check if Toybox is loaded
+            if (!ToyboxFactory) {
+                appendOutput('Error: Toybox not loaded yet\n', 'error');
+                return;
+            }
+
+            // Check if command is available
+            if (!AVAILABLE_COMMANDS.includes(cmd)) {
+                appendOutput(`'${cmd}' is not available in this minimal build.\n`, 'error');
+                appendOutput('Available: ' + AVAILABLE_COMMANDS.join(', ') + '\n');
+                return;
+            }
+
+            // Run Toybox command - create fresh module instance for each command
+            // (Toybox calls exit() after each command, corrupting module state)
+            try {
+                const mod = await ToyboxFactory({
+                    thisProgram: 'toybox',
+                    print: (text) => appendOutput(text + '\n'),
+                    printErr: (text) => appendOutput(text + '\n', 'error'),
+                    noExitRuntime: true,
+                });
+                mod.callMain(parts);
+            } catch (err) {
+                // Emscripten throws on exit(0), which is normal
+                if (!err.message?.includes('exit') && !err.message?.includes('unreachable')) {
+                    appendOutput('Error: ' + err.message + '\n', 'error');
+                }
+            }
+        }
+
+        // Set up input handling
+        document.getElementById('command-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const input = e.target;
+                runCommand(input.value);
+                input.value = '';
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    e.target.value = commandHistory[historyIndex];
+                }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (historyIndex < commandHistory.length - 1) {
+                    historyIndex++;
+                    e.target.value = commandHistory[historyIndex];
+                } else {
+                    historyIndex = commandHistory.length;
+                    e.target.value = '';
+                }
+            }
+        });
+
+        // Focus input on click
+        document.getElementById('shell-container').addEventListener('click', () => {
+            document.getElementById('command-input').focus();
+        });
+
+        // Check for WebGPU support
+        async function checkWebGPU() {
+            const status = document.getElementById('status');
+
+            if (!navigator.gpu) {
+                status.textContent = 'WebGPU not supported in this browser';
+                document.getElementById('loading').innerHTML = `
+                    <div style="color: #e94560;">WebGPU Not Supported</div>
+                    <div style="margin-top: 10px; font-size: 0.9em;">
+                        Try Chrome/Edge 113+ or Firefox Nightly with WebGPU enabled.
+                    </div>
+                `;
+                return false;
+            }
+
+            try {
+                const adapter = await navigator.gpu.requestAdapter();
+                if (!adapter) {
+                    status.textContent = 'No WebGPU adapter found';
+                    return false;
+                }
+                status.textContent = 'WebGPU available';
+                return true;
+            } catch (err) {
+                status.textContent = 'WebGPU error: ' + err.message;
+                return false;
+            }
+        }
+
+        // Configure Emscripten Module BEFORE loading yetty.js
+        var Module = {
+            canvas: document.getElementById('canvas'),
+            print: function(text) { console.log('[yetty]', text); },
+            printErr: function(text) { console.error('[yetty]', text); },
+            onRuntimeInitialized: function() {
+                console.log('yetty runtime initialized');
+                const status = document.getElementById('status');
+                const loading = document.getElementById('loading');
+                if (status) status.textContent = 'yetty ready!';
+                setTimeout(() => {
+                    if (loading) loading.style.display = 'none';
+                }, 500);
+            }
+        };
+
+        // Initialize yetty WebGPU terminal
+        async function initYetty() {
+            const status = document.getElementById('status');
+
+            if (status) status.textContent = 'Loading yetty...';
+
+            try {
+                // yetty.js is not modularized - it runs main() automatically
+                // Module config above will be used by Emscripten
+                const script = document.createElement('script');
+                script.src = 'yetty.js';
+
+                await new Promise((resolve, reject) => {
+                    script.onload = resolve;
+                    script.onerror = () => reject(new Error('Failed to load yetty.js'));
+                    document.head.appendChild(script);
+                });
+
+                console.log('yetty.js loaded');
+                return true;
+            } catch (err) {
+                console.error('Failed to load yetty:', err);
+                if (status) status.textContent = 'yetty error: ' + err.message;
+                return false;
+            }
+        }
+
+        // Initialize
+        async function init() {
+            const hasWebGPU = await checkWebGPU();
+
+            if (hasWebGPU) {
+                // Initialize yetty WebGPU terminal
+                const yettyOk = await initYetty();
+                if (!yettyOk) {
+                    console.warn('yetty failed to initialize, falling back to Toybox shell only');
+                }
+            }
+
+            // Initialize Toybox shell (works regardless of WebGPU)
+            await initToybox();
+        }
+
+        init();
+    </script>
+</body>
+</html>

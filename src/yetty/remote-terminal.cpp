@@ -112,15 +112,15 @@ void RemoteTerminal::stop() {
 // Rendering
 //=============================================================================
 
-Result<void> RemoteTerminal::render(WebGPUContext& ctx) {
+void RemoteTerminal::prepareFrame(WebGPUContext& ctx) {
     (void)ctx;  // We use _renderer directly
 
     if (!_backend || !_backend->isRunning()) {
-        return Ok();
+        return;
     }
 
     if (!_renderer) {
-        return Ok();
+        return;
     }
 
     // Sync cursor/state from shared memory header
@@ -131,7 +131,7 @@ Result<void> RemoteTerminal::render(WebGPUContext& ctx) {
 
     // Skip rendering if no damage
     if (!hasDamage) {
-        return Ok();
+        return;
     }
 
     // Get damage info
@@ -145,8 +145,6 @@ Result<void> RemoteTerminal::render(WebGPUContext& ctx) {
     // Clear damage after rendering
     _backend->clearDamageRects();
     _backend->clearFullDamage();
-
-    return Ok();
 }
 
 //=============================================================================

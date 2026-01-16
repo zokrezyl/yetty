@@ -97,6 +97,10 @@ public:
     // Get glyph metrics for a codepoint (for CPU-side calculations)
     const GlyphMetrics* getGlyph(uint32_t codepoint) const;
 
+    // Get glyph metrics with style (bold/italic)
+    // Falls back to regular style if variant not available
+    const GlyphMetrics* getGlyph(uint32_t codepoint, Style style) const;
+
     // Atlas properties
     uint32_t getAtlasWidth() const { return _atlasWidth; }
     uint32_t getAtlasHeight() const { return _atlasHeight; }

@@ -17,7 +17,8 @@ params = [(3, 2), (5, 4), (7, 6), (3, 4), (5, 6), (7, 4)]
 for i, (a, b) in enumerate(params):
     x = np.sin(a * t + i * 0.5)
     y = np.cos(b * t) + i * 2.5
-    data = np.column_stack([t, y])
+    z = np.zeros_like(x)
+    data = np.column_stack([x, y, z])
     curves.append(fig[0, 0].add_line(data, thickness=3, colors=colors[i]))
 
 phase = 0.0
@@ -29,7 +30,8 @@ def animate():
     for i, (a, b) in enumerate(params):
         x = np.sin(a * t + phase + i * 0.5)
         y = np.cos(b * t + phase * 0.7) + i * 2.5
-        curves[i].data = np.column_stack([t, y])
+        z = np.zeros_like(x)
+        curves[i].data = np.column_stack([x, y, z])
 
 
 fig.add_animations(animate)

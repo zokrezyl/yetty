@@ -289,83 +289,40 @@ void Terminal::prepareFrame(WebGPUContext& ctx) {
     }
 }
 
-bool Terminal::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+Result<void> Terminal::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     (void)ctx;
 
-    if (!_running || !_renderer) {
-        return false;
+    if (!_running) {
+        return Ok();
     }
 
-    // Sync grid from vterm based on damage
+    // Sync grid from vterm when there's damage
     if (_fullDamage) {
         syncToGrid();
     } else if (!_damageRects.empty()) {
         syncDamageToGrid();
     }
 
-    // Render grid to provided pass
-    _renderer->renderToPass(pass, _grid, _damageRects, _fullDamage,
-                            _cursorCol, _cursorRow,
-                            _cursorVisible && _cursorBlink);
+    // Render grid - renderToPass uploads to GPU only when damage exists
+    if (_renderer) {
+        _renderer->renderToPass(pass, _grid, _damageRects, _fullDamage,
+                                _cursorCol, _cursorRow,
+                                _cursorVisible && _cursorBlink);
+    }
 
-    // Clear damage after rendering
+    // Clear damage after renderToPass has used it
     _damageRects.clear();
     _fullDamage = false;
 
-    // Get current screen type for filtering
+    // Child widgets decide themselves if they need to render
     ScreenType currentScreen = _isAltScreen ? ScreenType::Alternate : ScreenType::Main;
-
-    // Render child widgets to same pass
     for (const auto& widget : _childWidgets) {
         if (!widget->isVisible()) continue;
         if (widget->getScreenType() != currentScreen) continue;
-        widget->render(pass, ctx);
+        if (auto res = widget->render(pass, ctx); !res) {
+            yerror("Terminal: widget '{}' render failed: {}", widget->name(), res.error().message());
+        }
     }
-
-    return true;
-}
-
-Result<void> Terminal::render(WebGPUContext& ctx) {
-    (void)ctx;  // We use _renderer directly
-
-    if (!_running) {
-        yerror("Terminal::render: NOT running, skip");
-        return Ok();
-    }
-
-    if (!_renderer) {
-        yerror("Terminal::render: NO renderer, skip _renderer={}", (void*)_renderer);
-        return Ok();
-    }
-
-    // Check if child widgets need rendering - if so, we must always render to provide
-    // a defined base (swapchain texture is undefined each frame)
-    bool widgetsActive = !_childWidgets.empty();
-
-    // Skip rendering if no damage AND no widgets need base
-    if (!hasDamage() && !widgetsActive) {
-        ydebug("Terminal::render: no damage and no widgets, skip");
-        return Ok();
-    }
-
-    ydebug("Terminal::render: _fullDamage={} _damageRects={} widgetsActive={}",
-           _fullDamage, _damageRects.size(), widgetsActive);
-
-    // Sync grid from vterm based on damage
-    if (_fullDamage) {
-        syncToGrid();
-    } else if (!_damageRects.empty()) {
-        syncDamageToGrid();
-    }
-
-    // Render the grid - GridRenderer handles the clear and draw
-    _renderer->render(_grid, _damageRects, _fullDamage,
-                      _cursorCol, _cursorRow,
-                      _cursorVisible && _cursorBlink);
-
-    // Clear damage after rendering
-    _damageRects.clear();
-    _fullDamage = false;
 
     return Ok();
 }
@@ -546,14 +503,6 @@ Result<void> Terminal::readPty() {
     if (totalRead > 0) {
         vterm_input_write(_vterm, _ptyReadBuffer.get(), totalRead);
         vterm_screen_flush_damage(_vtermScreen);
-
-        if (_pendingNewlines > 0) {
-            std::string nl(_pendingNewlines, '\n');
-            vterm_input_write(_vterm, nl.c_str(), nl.size());
-            vterm_screen_flush_damage(_vtermScreen);
-            _pendingNewlines = 0;
-        }
-
         flushVtermOutput();
         // NOTE: syncToGrid is NOT called here - render() will sync based on damage
     }
@@ -1137,8 +1086,14 @@ int Terminal::onOSC(int command, VTermStringFragment frag, void* user) {
             if (!response.empty() && term->_ptyMaster >= 0) {
                 term->writeToPty(response.c_str(), response.size());
             }
+            // Inject newlines immediately to advance cursor past the widget
+            // This must happen during OSC processing, not deferred, otherwise
+            // any prompt text that follows in the same PTY read gets displayed
+            // before the cursor advances
             if (linesToAdvance > 0) {
-                term->_pendingNewlines = linesToAdvance;
+                std::string nl(linesToAdvance, '\n');
+                vterm_input_write(term->_vterm, nl.c_str(), nl.size());
+                vterm_screen_flush_damage(term->_vtermScreen);
             }
         }
         term->_oscBuffer.clear();

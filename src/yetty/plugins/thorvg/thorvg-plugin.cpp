@@ -717,146 +717,6 @@ Result<void> Lottie::dispose() {
     return Ok();
 }
 
-Result<void> Lottie::render(WebGPUContext& ctx) {
-    if (failed_) return Err<void>("Lottie already failed");
-    if (!_visible) return Ok();
-    if (!animation_) return Err<void>("Lottie has no content");
-
-    const auto& rc = _renderCtx;
-
-    // Update animation if playing
-    if (isAnimated_ && playing_ && animation_ && duration_ > 0) {
-        double dt = rc.deltaTime > 0 ? rc.deltaTime : 0.016;  // Default to ~60fps
-        accumulatedTime_ += dt;
-
-        float fps = totalFrames_ / duration_;
-        float targetFrame = static_cast<float>(accumulatedTime_ * fps);
-
-        if (targetFrame >= totalFrames_) {
-            if (loop_) {
-                accumulatedTime_ = std::fmod(accumulatedTime_, static_cast<double>(duration_));
-                targetFrame = std::fmod(targetFrame, totalFrames_);
-            } else {
-                targetFrame = totalFrames_ - 1;
-                playing_ = false;
-            }
-        }
-
-        if (std::abs(targetFrame - currentFrame_) >= 0.5f) {
-            currentFrame_ = targetFrame;
-            contentDirty_ = true;
-        }
-    }
-
-    // Initialize GPU resources on first use
-    if (!gpuInitialized_) {
-        auto result = initWebGPU(ctx);
-        if (!result) {
-            failed_ = true;
-            return Err<void>("Failed to init WebGPU", result);
-        }
-
-        result = createCompositePipeline(ctx, rc.targetFormat);
-        if (!result) {
-            failed_ = true;
-            return Err<void>("Failed to create pipeline", result);
-        }
-        gpuInitialized_ = true;
-        contentDirty_ = true;  // Need initial render
-    }
-
-    // Render ThorVG content if dirty
-    if (contentDirty_) {
-        auto renderResult = renderThorvgFrame(ctx.getDevice());
-        if (!renderResult) {
-            failed_ = true;
-            return Err<void>("Lottie render failed", renderResult);
-        }
-    }
-
-    if (!compositePipeline_ || !uniformBuffer_ || !bindGroup_) {
-        failed_ = true;
-        return Err<void>("Lottie pipeline not initialized");
-    }
-
-    // Calculate pixel position from cell position
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _widthCells * rc.cellWidth;
-    float pixelH = _heightCells * rc.cellHeight;
-
-    // Adjust for scroll offset
-    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
-        pixelY += rc.scrollOffset * rc.cellHeight;
-    }
-
-    // Skip if off-screen
-    if (rc.termRows > 0) {
-        float screenPixelHeight = rc.termRows * rc.cellHeight;
-        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return Ok();
-        }
-    }
-
-    float ndcX = (pixelX / rc.screenWidth) * 2.0f - 1.0f;
-    float ndcY = 1.0f - (pixelY / rc.screenHeight) * 2.0f;
-    float ndcW = (pixelW / rc.screenWidth) * 2.0f;
-    float ndcH = (pixelH / rc.screenHeight) * 2.0f;
-
-    // Update uniform buffer if rect changed
-    bool rectChanged = (ndcX != lastRect_[0] || ndcY != lastRect_[1] ||
-                        ndcW != lastRect_[2] || ndcH != lastRect_[3]);
-    if (rectChanged) {
-        struct Uniforms { float rect[4]; } uniforms;
-        uniforms.rect[0] = ndcX;
-        uniforms.rect[1] = ndcY;
-        uniforms.rect[2] = ndcW;
-        uniforms.rect[3] = ndcH;
-        wgpuQueueWriteBuffer(ctx.getQueue(), uniformBuffer_, 0, &uniforms, sizeof(uniforms));
-        lastRect_[0] = ndcX;
-        lastRect_[1] = ndcY;
-        lastRect_[2] = ndcW;
-        lastRect_[3] = ndcH;
-    }
-
-    WGPUCommandEncoderDescriptor encoderDesc = {};
-    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encoderDesc);
-    if (!encoder) return Err<void>("Lottie: Failed to create command encoder");
-
-    WGPURenderPassColorAttachment colorAttachment = {};
-    colorAttachment.view = rc.targetView;
-    colorAttachment.loadOp = WGPULoadOp_Load;
-    colorAttachment.storeOp = WGPUStoreOp_Store;
-    colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
-
-    WGPURenderPassDescriptor passDesc = {};
-    passDesc.colorAttachmentCount = 1;
-    passDesc.colorAttachments = &colorAttachment;
-
-    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
-    if (!pass) {
-        wgpuCommandEncoderRelease(encoder);
-        return Err<void>("Lottie: Failed to begin render pass");
-    }
-
-    wgpuRenderPassEncoderSetPipeline(pass, compositePipeline_);
-    wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
-    wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
-    wgpuRenderPassEncoderEnd(pass);
-    wgpuRenderPassEncoderRelease(pass);
-
-    WGPUCommandBufferDescriptor cmdDesc = {};
-    WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdDesc);
-    if (!cmdBuffer) {
-        wgpuCommandEncoderRelease(encoder);
-        return Err<void>("Lottie: Failed to finish command encoder");
-    }
-    wgpuQueueSubmit(ctx.getQueue(), 1, &cmdBuffer);
-    wgpuCommandBufferRelease(cmdBuffer);
-    wgpuCommandEncoderRelease(encoder);
-    return Ok();
-}
-
 void Lottie::prepareFrame(WebGPUContext& ctx) {
     // This is called BEFORE the shared render pass begins
     // Here we render ThorVG content to our intermediate texture
@@ -930,22 +790,22 @@ void Lottie::prepareFrame(WebGPUContext& ctx) {
     }
 }
 
-bool Lottie::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+Result<void> Lottie::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     // This is called INSIDE the shared render pass
     // We only blit our pre-rendered texture here - NO ThorVG rendering!
 
     if (failed_) {
-        return false;
+        return Err<void>("Lottie: failed flag is set");
     }
     if (!_visible) {
-        return false;
+        return Ok();  // Not visible, not an error
     }
     if (!animation_) {
-        return false;
+        return Ok();  // No animation loaded yet
     }
     if (!gpuInitialized_ || !compositePipeline_ || !uniformBuffer_ || !bindGroup_) {
         // Not ready yet - prepareFrame() should have set this up
-        return false;
+        return Ok();
     }
 
     const auto& rc = _renderCtx;
@@ -972,7 +832,7 @@ bool Lottie::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
                      rc.termRows, screenPixelHeight, pixelY, pixelH);
         if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
             yinfo("Lottie::render: skipped - off-screen");
-            return false;
+            return Ok();  // Off-screen, not an error
         }
     }
 
@@ -1010,7 +870,7 @@ bool Lottie::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
 
     yinfo("Lottie::render: composite draw issued");
-    return true;
+    return Ok();
 }
 
 } // namespace yetty

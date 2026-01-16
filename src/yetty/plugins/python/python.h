@@ -114,13 +114,10 @@ public:
     void start() override { _running = true; }
     void stop() override { _running = false; }
     bool isRunning() const override { return _running; }
-    Result<void> render(WebGPUContext& ctx) override;
 
-    // Pre-render phase - render pygfx to texture BEFORE shared pass
     void prepareFrame(WebGPUContext& ctx) override;
 
-    // Batched render - only blits pre-rendered texture
-    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
     // Input handling for REPL-like interaction
     bool onKey(int key, int scancode, int action, int mods) override;

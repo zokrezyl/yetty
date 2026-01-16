@@ -33,17 +33,11 @@ public:
         return Ok();
     }
 
-    Result<void> render(WebGPUContext& ctx) override {
-        (void)ctx;
-        _renderCount++;
-        return Ok();
-    }
-
-    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override {
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override {
         (void)pass;
         (void)ctx;
         _renderCount++;
-        return true;
+        return Ok();
     }
 
     bool onMouseMove(float localX, float localY) override {

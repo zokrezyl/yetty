@@ -1,4 +1,4 @@
-#include "rich-text-plugin.h"
+#include "rich-text.h"
 #include <yetty/yetty.h>
 #include <yetty/webgpu-context.h>
 #include <ytrace/ytrace.hpp>
@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace yetty {
+namespace yetty::plugins {
 
 //-----------------------------------------------------------------------------
 // RichTextPlugin
@@ -56,42 +56,35 @@ Result<WidgetPtr> RichTextPlugin::createWidget(
     const std::string& payload
 ) {
     (void)widgetName;
-    (void)factory;
-    (void)loop;
-    (void)x;
-    (void)y;
-    (void)widthCells;
-    (void)heightCells;
-    (void)pluginArgs;
     _fontManager = fontManager;  // Store for widget use
     yfunc();
-    yinfo("payload size={}", payload.size());
-    return RichTextW::create(payload, this);
+    yinfo("payload size={} x={} y={} w={} h={}", payload.size(), x, y, widthCells, heightCells);
+    return RichText::create(factory, fontManager, loop, x, y, widthCells, heightCells, pluginArgs, payload, this);
 }
 
 //-----------------------------------------------------------------------------
-// RichTextW
+// RichText
 //-----------------------------------------------------------------------------
 
-RichTextW::~RichTextW() {
+RichText::~RichText() {
     (void)dispose();
 }
 
-Result<void> RichTextW::init() {
+Result<void> RichText::init() {
     if (_payload.empty()) {
-        return Err<void>("RichTextW: empty payload");
+        return Err<void>("RichText: empty payload");
     }
 
     return parseYAML(_payload);
 }
 
-Result<void> RichTextW::dispose() {
-    if (richText_) {
-        richText_->dispose();
-        richText_.reset();
+Result<void> RichText::dispose() {
+    if (_richText) {
+        _richText->dispose();
+        _richText.reset();
     }
     _initialized = false;
-    failed_ = false;
+    _failed = false;
     return Ok();
 }
 
@@ -99,23 +92,23 @@ Result<void> RichTextW::dispose() {
 // YAML Parsing
 //-----------------------------------------------------------------------------
 
-Result<void> RichTextW::parseYAML(const std::string& yaml) {
+Result<void> RichText::parseYAML(const std::string& yaml) {
     try {
         YAML::Node root = YAML::Load(yaml);
 
         // Get font name (optional) - if not specified, will use FontManager's default
-        fontName_ = "";
+        _fontName = "";
         if (root["font-name"]) {
-            fontName_ = root["font-name"].as<std::string>();
+            _fontName = root["font-name"].as<std::string>();
         }
 
         // Parse spans
         if (!root["spans"] || !root["spans"].IsSequence()) {
-            return Err<void>("RichTextW: YAML must have 'spans' array");
+            return Err<void>("RichText: YAML must have 'spans' array");
         }
 
         // Clear pending spans (RichText will be created in render() when we have ctx)
-        pendingSpans_.clear();
+        _pendingSpans.clear();
 
         float cursorY = 0;
         float lastLineHeight = 20.0f;
@@ -125,7 +118,7 @@ Result<void> RichTextW::parseYAML(const std::string& yaml) {
 
             // Required: text
             if (!spanNode["text"]) {
-                ywarn("RichTextW: span missing 'text', skipping");
+                ywarn("RichText: span missing 'text', skipping");
                 continue;
             }
             span.text = spanNode["text"].as<std::string>();
@@ -197,7 +190,7 @@ Result<void> RichTextW::parseYAML(const std::string& yaml) {
                 lastLineHeight = span.lineHeight;
             }
 
-            pendingSpans_.push_back(span);
+            _pendingSpans.push_back(span);
 
             // Update cursor for next span (if no explicit y)
             if (!spanNode["y"]) {
@@ -211,7 +204,7 @@ Result<void> RichTextW::parseYAML(const std::string& yaml) {
             }
         }
 
-        yinfo("RichTextW: parsed {} spans from YAML", root["spans"].size());
+        yinfo("RichText: parsed {} spans from YAML", root["spans"].size());
         return Ok();
 
     } catch (const YAML::Exception& e) {
@@ -223,119 +216,60 @@ Result<void> RichTextW::parseYAML(const std::string& yaml) {
 // Render
 //-----------------------------------------------------------------------------
 
-Result<void> RichTextW::render(WebGPUContext& ctx) {
-    if (failed_) {
-        return Err<void>("RichTextW already failed");
-    }
-    if (!_visible) return Ok();
-
-    // Get render context set by owner
-    const auto& rc = _renderCtx;
-
-    // Calculate pixel position from cell position
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _widthCells * rc.cellWidth;
-    float pixelH = _heightCells * rc.cellHeight;
-
-    // For Relative widgets, adjust position when viewing scrollback
-    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
-        pixelY += rc.scrollOffset * rc.cellHeight;
-    }
-
-    // Skip if off-screen (not an error)
-    if (rc.termRows > 0) {
-        float screenPixelHeight = rc.termRows * rc.cellHeight;
-        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return Ok();
-        }
-    }
-
-    // Initialize RichText GPU resources if needed
-    if (!richText_) {
-        auto fontMgr = plugin_->getFontManager();
-        if (!fontMgr) {
-            failed_ = true;
-            return Err<void>("No FontManager available for RichText rendering");
-        }
-
-        auto result = RichText::create(&ctx, rc.targetFormat, fontMgr);
-        if (!result) {
-            failed_ = true;
-            return Err<void>("Failed to create RichText", result);
-        }
-        richText_ = *result;
-
-        // Set default font family
-        richText_->setDefaultFontFamily(fontName_);
-
-        // Add pending spans
-        for (const auto& span : pendingSpans_) {
-            richText_->addSpan(span);
-        }
-        pendingSpans_.clear();
-
-        _initialized = true;
-    }
-
-    // Render
-    return richText_->render(ctx, rc.targetView, rc.screenWidth, rc.screenHeight,
-                              pixelX, pixelY, pixelW, pixelH);
+void RichText::prepareFrame(WebGPUContext& ctx) {
+    (void)ctx;
+    // RichText renders directly to render pass - no texture preparation needed
 }
 
-bool RichTextW::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (failed_ || !_visible) return false;
+Result<void> RichText::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+    yinfo("RichText::render called, failed={} visible={} richText={}", _failed, _visible, _richText != nullptr);
+    if (_failed || !_visible) return Ok();
 
     const auto& rc = _renderCtx;
 
-    // Calculate pixel position from cell position
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _widthCells * rc.cellWidth;
-    float pixelH = _heightCells * rc.cellHeight;
-
-    // For Relative widgets, adjust position when viewing scrollback
-    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
-        pixelY += rc.scrollOffset * rc.cellHeight;
-    }
+    // Use pre-computed pixel positions from Widget base class
+    float pixelX = _pixelX;
+    float pixelY = _pixelY;
+    float pixelW = static_cast<float>(_pixelWidth);
+    float pixelH = static_cast<float>(_pixelHeight);
 
     // Skip if off-screen
     if (rc.termRows > 0) {
         float screenPixelHeight = rc.termRows * rc.cellHeight;
         if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return false;
+            return Ok();  // Off-screen, not an error
         }
     }
 
     // Initialize RichText GPU resources if needed
-    if (!richText_) {
-        auto fontMgr = plugin_->getFontManager();
+    if (!_richText) {
+        auto fontMgr = _plugin->getFontManager();
         if (!fontMgr) {
-            failed_ = true;
-            return false;
+            _failed = true;
+            return Err<void>("RichText: no font manager");
         }
 
-        auto result = RichText::create(&ctx, rc.targetFormat, fontMgr);
+        auto result = yetty::RichText::create(&ctx, rc.targetFormat, fontMgr);
         if (!result) {
-            failed_ = true;
-            return false;
+            _failed = true;
+            return Err<void>("RichText: failed to create RichText", result);
         }
-        richText_ = *result;
+        _richText = *result;
 
         // Set default font family
-        richText_->setDefaultFontFamily(fontName_);
+        _richText->setDefaultFontFamily(_fontName);
 
         // Add pending spans
-        for (const auto& span : pendingSpans_) {
-            richText_->addSpan(span);
+        for (const auto& span : _pendingSpans) {
+            _richText->addSpan(span);
         }
-        pendingSpans_.clear();
+        _pendingSpans.clear();
 
         _initialized = true;
     }
 
     // Use batched render
-    return richText_->render(pass, ctx, rc.screenWidth, rc.screenHeight,
+    return _richText->render(pass, ctx, rc.screenWidth, rc.screenHeight,
                                     pixelX, pixelY, pixelW, pixelH);
 }
 
@@ -343,25 +277,25 @@ bool RichTextW::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
 // Mouse Scroll
 //-----------------------------------------------------------------------------
 
-bool RichTextW::onMouseScroll(float xoffset, float yoffset, int mods) {
+bool RichText::onMouseScroll(float xoffset, float yoffset, int mods) {
     (void)xoffset;
     (void)mods;
 
-    if (!richText_) return false;
+    if (!_richText) return false;
 
     float scrollAmount = yoffset * 40.0f;
-    richText_->scroll(-scrollAmount);
+    _richText->scroll(-scrollAmount);
 
     // Clamp scroll
-    float maxScroll = std::max(0.0f, richText_->getContentHeight() - static_cast<float>(_pixelHeight));
-    if (richText_->getScrollOffset() > maxScroll) {
-        richText_->setScrollOffset(maxScroll);
+    float maxScroll = std::max(0.0f, _richText->getContentHeight() - static_cast<float>(_pixelHeight));
+    if (_richText->getScrollOffset() > maxScroll) {
+        _richText->setScrollOffset(maxScroll);
     }
 
     return true;
 }
 
-} // namespace yetty
+} // namespace yetty::plugins
 
 //-----------------------------------------------------------------------------
 // Plugin exports
@@ -374,7 +308,7 @@ const char* name() {
 }
 
 yetty::Result<yetty::PluginPtr> create() {
-    return yetty::RichTextPlugin::create();
+    return yetty::plugins::RichTextPlugin::create();
 }
 
 }

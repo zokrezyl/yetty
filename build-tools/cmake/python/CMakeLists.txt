@@ -41,6 +41,13 @@ if(APPLE)
     list(APPEND PYTHON_CONFIGURE_OPTS
         --without-dtrace
     )
+    # Prevent Python from finding libintl by unsetting the library paths
+    # This avoids libintl dependency in the _locale module
+    list(APPEND PYTHON_CONFIGURE_ENV
+        "LIBRARY_PATH="
+        "C_INCLUDE_PATH="
+        "CPLUS_INCLUDE_PATH="
+    )
 endif()
 
 # Determine library name based on platform

@@ -190,39 +190,39 @@ Result<void> Shader::dispose() {
     return Ok();
 }
 
-Result<void> Shader::render(WebGPUContext& ctx) {
-    if (_failed) return Err<void>("Shader already failed");
-    if (!_visible) return Ok();
+void Shader::prepareFrame(WebGPUContext& ctx) {
+    if (_failed || !_visible) return;
 
     const auto& rc = _renderCtx;
 
     if (!_compiled) {
-        ydebug("Shader: compiling, pluginArgs='{}', channels[0].path='{}'", _pluginArgs, _channels[0].path);
-        
+        ydebug("Shader prepareFrame: compiling, pluginArgs='{}', channels[0].path='{}'", _pluginArgs, _channels[0].path);
+
         // Load channel textures if specified
         for (int i = 0; i < kMaxChannels; ++i) {
-            ydebug("Shader: channel[{}] path='{}' loaded={}", i, _channels[i].path, _channels[i].loaded);
+            ydebug("Shader prepareFrame: channel[{}] path='{}' loaded={}", i, _channels[i].path, _channels[i].loaded);
             if (!_channels[i].path.empty() && !_channels[i].loaded) {
                 if (auto res = createChannelSampler(ctx); !res) {
-                    ywarn("Shader: Failed to create channel sampler: {}", res.error().message());
+                    ywarn("Shader prepareFrame: Failed to create channel sampler: {}", res.error().message());
                 }
                 if (auto res = loadChannelTexture(ctx, i, _channels[i].path); !res) {
-                    ywarn("Shader: Failed to load iChannel{}: {}", i, res.error().message());
+                    ywarn("Shader prepareFrame: Failed to load iChannel{}: {}", i, res.error().message());
                 }
             }
         }
-        
-        ydebug("Shader: after loading, _hasChannelTextures={}", _hasChannelTextures);
-        
+
+        ydebug("Shader prepareFrame: after loading, _hasChannelTextures={}", _hasChannelTextures);
+
         // Parse multipass sections first
         _isMultipass = parseMultipassShader(_payload);
-        
+
         // Use parsed _mainImageCode or original payload
         std::string shaderToCompile = _mainImageCode.empty() ? _payload : _mainImageCode;
         auto result = compileShader(ctx, rc.targetFormat, shaderToCompile);
         if (!result) {
             _failed = true;
-            return Err<void>("Shader: Failed to compile shader", result);
+            yerror("Shader prepareFrame: Failed to compile shader: {}", result.error().message());
+            return;
         }
         
         // Setup multipass if detected
@@ -275,14 +275,16 @@ Result<void> Shader::render(WebGPUContext& ctx) {
 
     if (!_pipeline || !_uniformBuffer || !_bindGroup) {
         _failed = true;
-        return Err<void>("Shader: pipeline not initialized");
+        yerror("Shader prepareFrame: pipeline not initialized");
+        return;
     }
 
     // Get global bind group - standalone mode (plugin tester or standalone)
     WGPUBindGroup globalBindGroup = nullptr;
     if (!_globalBindGroup) {
         if (auto res = createStandaloneGlobalBindGroup(ctx); !res) {
-            return Err<void>("Shader: failed to create standalone global bind group", res);
+            yerror("Shader prepareFrame: failed to create standalone global bind group: {}", res.error().message());
+            return;
         }
     }
     globalBindGroup = _globalBindGroup;
@@ -336,7 +338,7 @@ Result<void> Shader::render(WebGPUContext& ctx) {
     if (rc.termRows > 0) {
         float screenPixelHeight = rc.termRows * rc.cellHeight;
         if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return Ok();
+            return;  // Off-screen, skip
         }
     }
 
@@ -371,7 +373,8 @@ Result<void> Shader::render(WebGPUContext& ctx) {
     WGPUCommandEncoderDescriptor encoderDesc = {};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encoderDesc);
     if (!encoder) {
-        return Err<void>("Shader: Failed to create command encoder");
+        yerror("Shader prepareFrame: Failed to create command encoder");
+        return;
     }
 
     WGPURenderPassColorAttachment colorAttachment = {};
@@ -387,7 +390,8 @@ Result<void> Shader::render(WebGPUContext& ctx) {
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
     if (!pass) {
         wgpuCommandEncoderRelease(encoder);
-        return Err<void>("Shader: Failed to begin render pass");
+        yerror("Shader prepareFrame: Failed to begin render pass");
+        return;
     }
 
     wgpuRenderPassEncoderSetPipeline(pass, _pipeline);
@@ -401,20 +405,38 @@ Result<void> Shader::render(WebGPUContext& ctx) {
     WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdDesc);
     if (!cmdBuffer) {
         wgpuCommandEncoderRelease(encoder);
-        return Err<void>("Shader: Failed to finish command encoder");
+        yerror("Shader prepareFrame: Failed to finish command encoder");
+        return;
     }
     wgpuQueueSubmit(ctx.getQueue(), 1, &cmdBuffer);
     wgpuCommandBufferRelease(cmdBuffer);
     wgpuCommandEncoderRelease(encoder);
-    return Ok();
 }
 
-bool Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (_failed || !_visible) return false;
+Result<void> Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+    if (_failed) return Err<void>("Shader already failed");
+    if (!_visible) return Ok();
 
     const auto& rc = _renderCtx;
 
     if (!_compiled) {
+        ydebug("Shader: compiling, pluginArgs='{}', channels[0].path='{}'", _pluginArgs, _channels[0].path);
+
+        // Load channel textures if specified
+        for (int i = 0; i < kMaxChannels; ++i) {
+            ydebug("Shader: channel[{}] path='{}' loaded={}", i, _channels[i].path, _channels[i].loaded);
+            if (!_channels[i].path.empty() && !_channels[i].loaded) {
+                if (auto res = createChannelSampler(ctx); !res) {
+                    ywarn("Shader: Failed to create channel sampler: {}", res.error().message());
+                }
+                if (auto res = loadChannelTexture(ctx, i, _channels[i].path); !res) {
+                    ywarn("Shader: Failed to load iChannel{}: {}", i, res.error().message());
+                }
+            }
+        }
+
+        ydebug("Shader: after loading, _hasChannelTextures={}", _hasChannelTextures);
+
         // Parse multipass sections first
         _isMultipass = parseMultipassShader(_payload);
         
@@ -423,7 +445,7 @@ bool Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
         auto result = compileShader(ctx, rc.targetFormat, shaderToCompile);
         if (!result) {
             _failed = true;
-            return false;
+            return Err<void>("Shader: Failed to compile shader", result);
         }
         
         // Setup multipass if detected
@@ -472,7 +494,7 @@ bool Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
 
     if (!_pipeline || !_uniformBuffer || !_bindGroup) {
         _failed = true;
-        return false;
+        return Err<void>("Shader: pipeline not initialized");
     }
 
     // Get global bind group - standalone mode
@@ -480,8 +502,7 @@ bool Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     if (!_globalBindGroup) {
         // Create standalone bind group
         if (auto res = createStandaloneGlobalBindGroup(ctx); !res) {
-            yerror("Shader: failed to create standalone global bind group: {}", res.error().message());
-            return false;
+            return Err<void>("Shader: failed to create standalone global bind group", res);
         }
     }
     globalBindGroup = _globalBindGroup;
@@ -515,7 +536,7 @@ bool Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     
     wgpuQueueWriteBuffer(ctx.getQueue(), _globalUniformBuffer, 0, &globals, sizeof(globals));
 
-    if (!globalBindGroup) return false;
+    if (!globalBindGroup) return Err<void>("Shader: no global bind group");
 
     // Render buffer passes first (if any) - these create their own command buffers
     if (_isMultipass) {
@@ -537,7 +558,7 @@ bool Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     if (rc.termRows > 0) {
         float screenPixelHeight = rc.termRows * rc.cellHeight;
         if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return false;
+            return Ok();  // Off-screen, not an error
         }
     }
 
@@ -574,12 +595,13 @@ bool Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     wgpuRenderPassEncoderSetBindGroup(pass, 1, _bindGroup, 0, nullptr);
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
 
-    return true;
+    return Ok();
 }
 
 bool Shader::onMouseMove(float localX, float localY) {
     _mouseX = localX / static_cast<float>(_pixelWidth);
-    _mouseY = localY / static_cast<float>(_pixelHeight);
+    // Invert Y to match Shadertoy/GLSL convention (Y=0 at bottom)
+    _mouseY = 1.0f - (localY / static_cast<float>(_pixelHeight));
     ydebug("Shader::onMouseMove: local=({},{}) normalized=({},{})",
                   localX, localY, _mouseX, _mouseY);
     return true;

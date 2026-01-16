@@ -94,10 +94,8 @@ public:
 
     Result<void> dispose() override;
 
-    // Renderable interface - uses RenderContext from base class
-    Result<void> render(WebGPUContext& ctx) override;
     void prepareFrame(WebGPUContext& ctx) override;
-    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
     // Playback control
     void play();

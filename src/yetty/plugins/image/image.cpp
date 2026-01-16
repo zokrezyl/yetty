@@ -108,25 +108,22 @@ Result<void> Image::dispose() {
     return Ok();
 }
 
-Result<void> Image::render(WebGPUContext& ctx) {
-    if (failed_) return Err<void>("Image already failed");
-    if (!_visible) return Ok();
-    if (!imageData_) return Err<void>("Image has no image data");
+Result<void> Image::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+    if (failed_ || !_visible || !imageData_) return Ok();
 
     const auto& rc = _renderCtx;
 
     if (!gpuInitialized_) {
-        auto result = createPipeline(ctx, rc.targetFormat);
-        if (!result) {
+        if (auto res = createPipeline(ctx, rc.targetFormat); !res) {
             failed_ = true;
-            return Err<void>("Failed to create pipeline", result);
+            return Err<void>("Image: failed to create pipeline", res);
         }
         gpuInitialized_ = true;
     }
 
     if (!pipeline_ || !uniformBuffer_ || !bindGroup_) {
         failed_ = true;
-        return Err<void>("Image pipeline not initialized");
+        return Err<void>("Image: pipeline resources not initialized");
     }
 
     float pixelX = _x * rc.cellWidth;
@@ -141,7 +138,7 @@ Result<void> Image::render(WebGPUContext& ctx) {
     if (rc.termRows > 0) {
         float screenPixelHeight = rc.termRows * rc.cellHeight;
         if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return Ok();
+            return Ok();  // Off-screen, not an error
         }
     }
 
@@ -163,107 +160,13 @@ Result<void> Image::render(WebGPUContext& ctx) {
         lastRect_[1] = ndcY;
         lastRect_[2] = ndcW;
         lastRect_[3] = ndcH;
-        clearDirty();
-    }
-
-    WGPUCommandEncoderDescriptor encoderDesc = {};
-    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encoderDesc);
-    if (!encoder) return Err<void>("Image: Failed to create command encoder");
-
-    WGPURenderPassColorAttachment colorAttachment = {};
-    colorAttachment.view = rc.targetView;
-    colorAttachment.loadOp = WGPULoadOp_Load;
-    colorAttachment.storeOp = WGPUStoreOp_Store;
-    colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
-
-    WGPURenderPassDescriptor passDesc = {};
-    passDesc.colorAttachmentCount = 1;
-    passDesc.colorAttachments = &colorAttachment;
-
-    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
-    if (!pass) {
-        wgpuCommandEncoderRelease(encoder);
-        return Err<void>("Image: Failed to begin render pass");
     }
 
     wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
     wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
-    wgpuRenderPassEncoderEnd(pass);
-    wgpuRenderPassEncoderRelease(pass);
 
-    WGPUCommandBufferDescriptor cmdDesc = {};
-    WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdDesc);
-    if (!cmdBuffer) {
-        wgpuCommandEncoderRelease(encoder);
-        return Err<void>("Image: Failed to finish command encoder");
-    }
-    wgpuQueueSubmit(ctx.getQueue(), 1, &cmdBuffer);
-    wgpuCommandBufferRelease(cmdBuffer);
-    wgpuCommandEncoderRelease(encoder);
     return Ok();
-}
-
-bool Image::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (failed_ || !_visible || !imageData_) return false;
-
-    const auto& rc = _renderCtx;
-
-    if (!gpuInitialized_) {
-        auto result = createPipeline(ctx, rc.targetFormat);
-        if (!result) {
-            failed_ = true;
-            return false;
-        }
-        gpuInitialized_ = true;
-    }
-
-    if (!pipeline_ || !uniformBuffer_ || !bindGroup_) {
-        failed_ = true;
-        return false;
-    }
-
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _widthCells * rc.cellWidth;
-    float pixelH = _heightCells * rc.cellHeight;
-
-    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
-        pixelY += rc.scrollOffset * rc.cellHeight;
-    }
-
-    if (rc.termRows > 0) {
-        float screenPixelHeight = rc.termRows * rc.cellHeight;
-        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return false;
-        }
-    }
-
-    float ndcX = (pixelX / rc.screenWidth) * 2.0f - 1.0f;
-    float ndcY = 1.0f - (pixelY / rc.screenHeight) * 2.0f;
-    float ndcW = (pixelW / rc.screenWidth) * 2.0f;
-    float ndcH = (pixelH / rc.screenHeight) * 2.0f;
-
-    bool rectChanged = (ndcX != lastRect_[0] || ndcY != lastRect_[1] ||
-                        ndcW != lastRect_[2] || ndcH != lastRect_[3]);
-    if (rectChanged) {
-        struct Uniforms { float rect[4]; } uniforms;
-        uniforms.rect[0] = ndcX;
-        uniforms.rect[1] = ndcY;
-        uniforms.rect[2] = ndcW;
-        uniforms.rect[3] = ndcH;
-        wgpuQueueWriteBuffer(ctx.getQueue(), uniformBuffer_, 0, &uniforms, sizeof(uniforms));
-        lastRect_[0] = ndcX;
-        lastRect_[1] = ndcY;
-        lastRect_[2] = ndcW;
-        lastRect_[3] = ndcH;
-    }
-
-    wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
-    wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
-    wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
-
-    return true;
 }
 
 Result<void> Image::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat) {

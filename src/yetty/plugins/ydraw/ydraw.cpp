@@ -48,26 +48,19 @@ Result<WidgetPtr> YDrawPlugin::createWidget(
     const std::string& payload
 ) {
     (void)widgetName;
-    (void)factory;
-    (void)fontManager;
-    (void)loop;
-    (void)x;
-    (void)y;
-    (void)widthCells;
-    (void)heightCells;
-    (void)pluginArgs;
-    return YDrawW::create(payload);
+    yinfo("payload size={} x={} y={} w={} h={}", payload.size(), x, y, widthCells, heightCells);
+    return YDraw::create(factory, fontManager, loop, x, y, widthCells, heightCells, pluginArgs, payload);
 }
 
 //-----------------------------------------------------------------------------
-// YDrawW
+// YDraw
 //-----------------------------------------------------------------------------
 
-YDrawW::~YDrawW() {
+YDraw::~YDraw() {
     (void)dispose();
 }
 
-Result<void> YDrawW::init() {
+Result<void> YDraw::init() {
     renderer_ = std::make_unique<YDrawRenderer>();
 
     if (!_payload.empty()) {
@@ -77,11 +70,11 @@ Result<void> YDrawW::init() {
         }
     }
 
-    yinfo("YDrawW: initialized with {} primitives", renderer_->primitiveCount());
+    yinfo("YDraw: initialized with {} primitives", renderer_->primitiveCount());
     return Ok();
 }
 
-Result<void> YDrawW::dispose() {
+Result<void> YDraw::dispose() {
     if (renderer_) {
         renderer_->dispose();
         renderer_.reset();
@@ -89,22 +82,22 @@ Result<void> YDrawW::dispose() {
     return Ok();
 }
 
-bool YDrawW::onMouseMove(float localX, float localY) {
+bool YDraw::onMouseMove(float localX, float localY) {
     (void)localX; (void)localY;
     return true;
 }
 
-bool YDrawW::onMouseButton(int button, bool pressed) {
+bool YDraw::onMouseButton(int button, bool pressed) {
     (void)button; (void)pressed;
     return true;
 }
 
-bool YDrawW::onKey(int key, int scancode, int action, int mods) {
+bool YDraw::onKey(int key, int scancode, int action, int mods) {
     (void)key; (void)scancode; (void)action; (void)mods;
     return true;
 }
 
-bool YDrawW::onChar(unsigned int codepoint) {
+bool YDraw::onChar(unsigned int codepoint) {
     (void)codepoint;
     return true;
 }
@@ -113,10 +106,9 @@ bool YDrawW::onChar(unsigned int codepoint) {
 // Rendering
 //-----------------------------------------------------------------------------
 
-Result<void> YDrawW::render(WebGPUContext& ctx) {
-    if (failed_) return Err<void>("YDrawW already failed");
-    if (!_visible) return Ok();
-    if (!renderer_ || renderer_->primitiveCount() == 0) return Ok();
+void YDraw::prepareFrame(WebGPUContext& ctx) {
+    if (failed_ || !_visible) return;
+    if (!renderer_ || renderer_->primitiveCount() == 0) return;
 
     const auto& rc = _renderCtx;
 
@@ -135,7 +127,7 @@ Result<void> YDrawW::render(WebGPUContext& ctx) {
     if (rc.termRows > 0) {
         float screenPixelHeight = rc.termRows * rc.cellHeight;
         if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return Ok();
+            return;
         }
     }
 
@@ -143,7 +135,8 @@ Result<void> YDrawW::render(WebGPUContext& ctx) {
     WGPUCommandEncoderDescriptor encoderDesc = {};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encoderDesc);
     if (!encoder) {
-        return Err<void>("YDrawW: Failed to create command encoder");
+        yerror("YDraw: Failed to create command encoder");
+        return;
     }
 
     WGPURenderPassColorAttachment colorAttachment = {};
@@ -159,7 +152,8 @@ Result<void> YDrawW::render(WebGPUContext& ctx) {
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
     if (!pass) {
         wgpuCommandEncoderRelease(encoder);
-        return Err<void>("YDrawW: Failed to begin render pass");
+        yerror("YDraw: Failed to begin render pass");
+        return;
     }
 
     // Render using core YDrawRenderer
@@ -173,7 +167,8 @@ Result<void> YDrawW::render(WebGPUContext& ctx) {
     WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdDesc);
     if (!cmdBuffer) {
         wgpuCommandEncoderRelease(encoder);
-        return Err<void>("YDrawW: Failed to finish command encoder");
+        yerror("YDraw: Failed to finish command encoder");
+        return;
     }
     wgpuQueueSubmit(ctx.getQueue(), 1, &cmdBuffer);
     wgpuCommandBufferRelease(cmdBuffer);
@@ -181,14 +176,12 @@ Result<void> YDrawW::render(WebGPUContext& ctx) {
 
     if (!result) {
         failed_ = true;
-        return Err<void>("YDrawW: render failed", result);
+        yerror("YDraw: render failed: {}", result.error().message());
     }
-
-    return Ok();
 }
 
-bool YDrawW::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (failed_ || !_visible || !renderer_) return false;
+Result<void> YDraw::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+    if (failed_ || !_visible || !renderer_) return Ok();
 
     const auto& rc = _renderCtx;
 
@@ -201,9 +194,8 @@ bool YDrawW::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
-    auto result = renderer_->render(ctx, pass, pixelX, pixelY, pixelW, pixelH,
-                                     rc.screenWidth, rc.screenHeight, rc.targetFormat);
-    return result.has_value();
+    return renderer_->render(ctx, pass, pixelX, pixelY, pixelW, pixelH,
+                             rc.screenWidth, rc.screenHeight, rc.targetFormat);
 }
 
 } // namespace yetty

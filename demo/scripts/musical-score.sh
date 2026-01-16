@@ -14,6 +14,6 @@ WIDTH="${2:-80}"
 HEIGHT="${3:-30}"
 
 cd "$ROOT_DIR"
-~/.local/bin/uv run python tools/yetty-client/main.py create musical_score \
+uv run python3 tools/yetty-client/main.py create musical-score \
     -s "$STAVES" \
     -w "$WIDTH" -H "$HEIGHT"

@@ -13,7 +13,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <linux/limits.h>
+#include <limits.h>  // PATH_MAX (portable, works on Linux/macOS/BSD)
 #endif
 
 namespace yetty {

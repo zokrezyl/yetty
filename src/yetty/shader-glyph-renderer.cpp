@@ -192,20 +192,15 @@ void ShaderGlyphRenderer::clearInstances() {
     _instances.clear();
 }
 
-Result<void> ShaderGlyphRenderer::render(WebGPUContext& ctx) {
-    if (_failed) {
-        return Err<void>("ShaderGlyphRenderer already failed");
-    }
-    if (!_initialized) {
-        return Err<void>("ShaderGlyphRenderer not initialized");
-    }
-    if (_instances.empty()) {
-        return Ok();
+void ShaderGlyphRenderer::prepareFrame(WebGPUContext& ctx) {
+    if (_failed || !_initialized || _instances.empty()) {
+        return;
     }
 
     const auto& rc = _renderContext;
     if (!rc.targetView) {
-        return Err<void>("ShaderGlyphRenderer: no target view");
+        yerror("ShaderGlyphRenderer: no target view");
+        return;
     }
 
     // Render each instance
@@ -238,7 +233,8 @@ Result<void> ShaderGlyphRenderer::render(WebGPUContext& ctx) {
         WGPUCommandEncoderDescriptor encDesc = {};
         WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encDesc);
         if (!encoder) {
-            return Err<void>("ShaderGlyphRenderer: failed to create command encoder");
+            yerror("ShaderGlyphRenderer: failed to create command encoder");
+            return;
         }
 
         // Render pass
@@ -255,7 +251,8 @@ Result<void> ShaderGlyphRenderer::render(WebGPUContext& ctx) {
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
         if (!pass) {
             wgpuCommandEncoderRelease(encoder);
-            return Err<void>("ShaderGlyphRenderer: failed to begin render pass");
+            yerror("ShaderGlyphRenderer: failed to begin render pass");
+            return;
         }
 
         wgpuRenderPassEncoderSetPipeline(pass, _pipeline);
@@ -268,13 +265,19 @@ Result<void> ShaderGlyphRenderer::render(WebGPUContext& ctx) {
         WGPUCommandBuffer cmdBuf = wgpuCommandEncoderFinish(encoder, &cmdDesc);
         if (!cmdBuf) {
             wgpuCommandEncoderRelease(encoder);
-            return Err<void>("ShaderGlyphRenderer: failed to finish command encoder");
+            yerror("ShaderGlyphRenderer: failed to finish command encoder");
+            return;
         }
         wgpuQueueSubmit(ctx.getQueue(), 1, &cmdBuf);
         wgpuCommandBufferRelease(cmdBuf);
         wgpuCommandEncoderRelease(encoder);
     }
+}
 
+Result<void> ShaderGlyphRenderer::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+    (void)pass;
+    (void)ctx;
+    // Rendering is done in prepareFrame() with its own pass
     return Ok();
 }
 

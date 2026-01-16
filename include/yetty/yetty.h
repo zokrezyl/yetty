@@ -115,7 +115,7 @@ public:
     std::shared_ptr<ShaderManager> shaderManager() const noexcept { return _shaderManager; }
 #endif
 
-#if !YETTY_WEB && !defined(__ANDROID__)
+#if !YETTY_WEB
     uv_loop_t* getLoop() const noexcept { return _uvLoop; }
 #endif
 
@@ -262,9 +262,11 @@ private:
     double _lastFpsTime = 0.0;
     uint32_t _frameCount = 0;
 
-#if !YETTY_WEB && !defined(__ANDROID__)
-    // libuv event loop for main thread (50Hz timer-driven rendering)
+#if !YETTY_WEB
+    // libuv event loop (needed for Terminal PTY operations)
     uv_loop_t* _uvLoop = nullptr;
+#if !defined(__ANDROID__)
+    // Desktop-only: timer-driven rendering at 50Hz
     uv_timer_t* _frameTimer = nullptr;
     uv_async_t* _wakeAsync = nullptr;  // For Terminal to wake up main loop
     bool _needsRender = true;          // Flag to trigger render
@@ -275,6 +277,7 @@ private:
     static void onWakeAsync(uv_async_t* handle);
     void initEventLoop() noexcept;
     void shutdownEventLoop() noexcept;
+#endif
 #endif
 
     // For Emscripten

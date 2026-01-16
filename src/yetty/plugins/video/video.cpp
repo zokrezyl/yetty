@@ -384,10 +384,13 @@ void Video::updateTexture(WebGPUContext& ctx) {
     frameUpdated_ = false;
 }
 
-Result<void> Video::render(WebGPUContext& ctx) {
-    if (failed_) return Err<void>("Video already failed");
-    if (!_visible) return Ok();
-    if (frameBuffer_.empty()) return Err<void>("Video has no frame data");
+void Video::prepareFrame(WebGPUContext& ctx) {
+    // Video uses its own command encoder/pass, so render during prepareFrame
+    if (failed_ || !_visible) return;
+    if (frameBuffer_.empty()) {
+        yerror("Video has no frame data");
+        return;
+    }
 
     // Get render context set by owner
     const auto& rc = _renderCtx;
@@ -408,14 +411,16 @@ Result<void> Video::render(WebGPUContext& ctx) {
         auto result = createPipeline(ctx, rc.targetFormat);
         if (!result) {
             failed_ = true;
-            return Err<void>("Failed to create pipeline", result);
+            yerror("Video: Failed to create pipeline: {}", result.error().message());
+            return;
         }
         gpuInitialized_ = true;
     }
 
     if (!pipeline_ || !uniformBuffer_ || !bindGroup_) {
         failed_ = true;
-        return Err<void>("Video pipeline not initialized");
+        yerror("Video pipeline not initialized");
+        return;
     }
 
     // Calculate pixel position from cell position
@@ -429,11 +434,11 @@ Result<void> Video::render(WebGPUContext& ctx) {
         pixelY += rc.scrollOffset * rc.cellHeight;
     }
 
-    // Skip if off-screen (not an error)
+    // Skip if off-screen
     if (rc.termRows > 0) {
         float screenPixelHeight = rc.termRows * rc.cellHeight;
         if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return Ok();
+            return;
         }
     }
 
@@ -456,7 +461,10 @@ Result<void> Video::render(WebGPUContext& ctx) {
 
     WGPUCommandEncoderDescriptor encoderDesc = {};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encoderDesc);
-    if (!encoder) return Err<void>("Failed to create command encoder");
+    if (!encoder) {
+        yerror("Video: Failed to create command encoder");
+        return;
+    }
 
     WGPURenderPassColorAttachment colorAttachment = {};
     colorAttachment.view = rc.targetView;
@@ -471,7 +479,8 @@ Result<void> Video::render(WebGPUContext& ctx) {
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
     if (!pass) {
         wgpuCommandEncoderRelease(encoder);
-        return Err<void>("Failed to begin render pass");
+        yerror("Video: Failed to begin render pass");
+        return;
     }
 
     wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
@@ -487,22 +496,13 @@ Result<void> Video::render(WebGPUContext& ctx) {
         wgpuCommandBufferRelease(cmdBuffer);
     }
     wgpuCommandEncoderRelease(encoder);
-    return Ok();
 }
 
-void Video::prepareFrame(WebGPUContext& ctx) {
-    // Video uses its own command encoder/pass, so render during prepareFrame
-    auto result = render(ctx);
-    if (!result) {
-        yerror("Video::prepareFrame failed: {}", error_msg(result));
-    }
-}
-
-bool Video::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+Result<void> Video::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     (void)pass;
     (void)ctx;
     // Video renders in prepareFrame() with its own pass, nothing to do here
-    return true;
+    return Ok();
 }
 
 Result<void> Video::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat) {

@@ -11,3 +11,25 @@ spans:
     line-height: 28
     color: [0.9, 0.9, 0.9, 1.0]
     font-name: DejaVu Sans
+
+  - text: "This is the same text but in ITALIC style. When the text reaches the maximum width, it automatically wraps to the next line. gpqyj descenders should align properly. (DejaVu Sans Italic)"
+    x: 10
+    y: 140
+    size: 20
+    style: italic
+    wrap: true
+    max-width: 500
+    line-height: 28
+    color: [0.7, 1.0, 0.7, 1.0]
+    font-name: DejaVu Sans
+
+  - text: "This is the same text but in BOLD style. When the text reaches the maximum width, it automatically wraps to the next line. gpqyj descenders should align properly. (DejaVu Sans Bold)"
+    x: 10
+    y: 260
+    size: 20
+    style: bold
+    wrap: true
+    max-width: 500
+    line-height: 28
+    color: [1.0, 1.0, 0.7, 1.0]
+    font-name: DejaVu Sans

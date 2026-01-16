@@ -3,7 +3,6 @@
 #include <yetty/webgpu-context.h>
 #include <yetty/wgpu-compat.h>
 #include <ytrace/ytrace.hpp>
-#include <ytrace/ytrace.hpp>
 #include <cstring>
 #include <cmath>
 #include <algorithm>
@@ -52,80 +51,25 @@ Result<WidgetPtr> PianoPlugin::createWidget(
     const std::string& payload
 ) {
     (void)widgetName;
-    (void)factory;
-    (void)fontManager;
-    (void)loop;
-    (void)x;
-    (void)y;
-    (void)widthCells;
-    (void)heightCells;
-    (void)pluginArgs;
     yfunc();
-    yinfo("payload={}", payload);
-    return PianoW::create(payload);
-}
-
-Result<void> PianoPlugin::renderAll(WGPUTextureView targetView, WGPUTextureFormat targetFormat,
-                                     uint32_t screenWidth, uint32_t screenHeight,
-                                     float cellWidth, float cellHeight,
-                                     int scrollOffset, uint32_t termRows,
-                                     bool isAltScreen) {
-    // Note: renderAll is deprecated - widgets should use render(pass, ctx)
-
-    ScreenType currentScreen = isAltScreen ? ScreenType::Alternate : ScreenType::Main;
-    for (auto& layerBase : _layers) {
-        if (!layerBase->isVisible()) continue;
-        if (layerBase->getScreenType() != currentScreen) continue;
-
-        auto layer = std::static_pointer_cast<PianoW>(layerBase);
-
-        float pixelX = layer->getX() * cellWidth;
-        float pixelY = layer->getY() * cellHeight;
-        float pixelW = layer->getWidthCells() * cellWidth;
-        float pixelH = layer->getHeightCells() * cellHeight;
-
-        if (layer->getPositionMode() == PositionMode::Relative && scrollOffset > 0) {
-            pixelY += scrollOffset * cellHeight;
-        }
-
-        if (termRows > 0) {
-            float screenPixelHeight = termRows * cellHeight;
-            if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-                continue;
-            }
-        }
-
-        if (auto res = layer->render(*_ctx, targetView, targetFormat,
-                                      screenWidth, screenHeight,
-                                      pixelX, pixelY, pixelW, pixelH); !res) {
-            return Err<void>("Failed to render Piano layer", res);
-        }
-    }
-    return Ok();
+    yinfo("payload={} x={} y={} w={} h={}", payload, x, y, widthCells, heightCells);
+    return Piano::create(factory, fontManager, loop, x, y, widthCells, heightCells, pluginArgs, payload);
 }
 
 //-----------------------------------------------------------------------------
-// PianoW
+// Piano
 //-----------------------------------------------------------------------------
 
-Result<WidgetPtr> PianoW::create(const std::string& payload) {
-    auto w = std::shared_ptr<PianoW>(new PianoW(payload));
-    if (auto res = w->init(); !res) {
-        return Err<WidgetPtr>("Failed to init PianoW", res);
-    }
-    return Ok(std::static_pointer_cast<Widget>(w));
-}
-
-PianoW::PianoW(const std::string& payload) {
+Piano::Piano(const std::string& payload) {
     _payload = payload;
     keyStates_.reset();
 }
 
-PianoW::~PianoW() {
+Piano::~Piano() {
     (void)dispose();
 }
 
-Result<void> PianoW::init() {
+Result<void> Piano::init() {
     // Parse payload: "octaves[,startOctave]"
     if (!_payload.empty()) {
         int octaves = 2, start = 4;
@@ -137,12 +81,12 @@ Result<void> PianoW::init() {
         }
     }
 
-    yinfo("PianoW: initialized ({} octaves starting at C{})",
+    yinfo("Piano: initialized ({} octaves starting at C{})",
                  numOctaves_, startOctave_);
     return Ok();
 }
 
-Result<void> PianoW::dispose() {
+Result<void> Piano::dispose() {
     if (bindGroup_) { wgpuBindGroupRelease(bindGroup_); bindGroup_ = nullptr; }
     if (pipeline_) { wgpuRenderPipelineRelease(pipeline_); pipeline_ = nullptr; }
     if (uniformBuffer_) { wgpuBufferRelease(uniformBuffer_); uniformBuffer_ = nullptr; }
@@ -151,26 +95,25 @@ Result<void> PianoW::dispose() {
     return Ok();
 }
 
-Result<void> PianoW::update(double deltaTime) {
+void Piano::update(double deltaTime) {
     time_ += static_cast<float>(deltaTime);
-    return Ok();
 }
 
-void PianoW::setKeyPressed(int key, bool pressed) {
+void Piano::setKeyPressed(int key, bool pressed) {
     if (key >= 0 && key < 128) {
         keyStates_[key] = pressed;
     }
 }
 
-bool PianoW::isKeyPressed(int key) const {
+bool Piano::isKeyPressed(int key) const {
     return (key >= 0 && key < 128) && keyStates_[key];
 }
 
-void PianoW::clearAllKeys() {
+void Piano::clearAllKeys() {
     keyStates_.reset();
 }
 
-int PianoW::getKeyAtPosition(float x, float y) const {
+int Piano::getKeyAtPosition(float x, float y) const {
     // Normalize to [0,1]
     float normX = x / static_cast<float>(_pixelWidth);
     float normY = y / static_cast<float>(_pixelHeight);
@@ -221,7 +164,7 @@ int PianoW::getKeyAtPosition(float x, float y) const {
     return -1;
 }
 
-bool PianoW::onMouseMove(float localX, float localY) {
+bool Piano::onMouseMove(float localX, float localY) {
     mouseX_ = localX;
     mouseY_ = localY;
     hoverKey_ = getKeyAtPosition(localX, localY);
@@ -238,7 +181,7 @@ bool PianoW::onMouseMove(float localX, float localY) {
     return true;
 }
 
-bool PianoW::onMouseButton(int button, bool pressed) {
+bool Piano::onMouseButton(int button, bool pressed) {
     if (button == 0) {
         if (pressed && hoverKey_ >= 0) {
             pressedKey_ = hoverKey_;
@@ -263,7 +206,7 @@ bool PianoW::onMouseButton(int button, bool pressed) {
     return false;
 }
 
-bool PianoW::onKey(int key, int scancode, int action, int mods) {
+bool Piano::onKey(int key, int scancode, int action, int mods) {
     (void)scancode;
     (void)mods;
 
@@ -308,20 +251,20 @@ bool PianoW::onKey(int key, int scancode, int action, int mods) {
     return true;
 }
 
-bool PianoW::onChar(unsigned int codepoint) {
+bool Piano::onChar(unsigned int codepoint) {
     (void)codepoint;
     // When focused, consume ALL character input - never let it leak to terminal
     return true;
 }
 
-Result<void> PianoW::render(WebGPUContext& ctx,
-                                 WGPUTextureView targetView, WGPUTextureFormat targetFormat,
-                                 uint32_t screenWidth, uint32_t screenHeight,
-                                 float pixelX, float pixelY, float pixelW, float pixelH) {
-    if (failed_) return Err<void>("PianoW already failed");
+Result<void> Piano::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+    if (!_visible) return Ok();
+    if (failed_) return Err<void>("Piano already failed");
+
+    const auto& rc = _renderCtx;
 
     if (!gpuInitialized_) {
-        auto result = createPipeline(ctx, targetFormat);
+        auto result = createPipeline(ctx, ctx.getSurfaceFormat());
         if (!result) {
             failed_ = true;
             return Err<void>("Failed to create pipeline", result);
@@ -331,14 +274,33 @@ Result<void> PianoW::render(WebGPUContext& ctx,
 
     if (!pipeline_ || !uniformBuffer_ || !bindGroup_) {
         failed_ = true;
-        return Err<void>("PianoW pipeline not initialized");
+        return Err<void>("Piano pipeline not initialized");
+    }
+
+    // Calculate pixel position from cell position
+    float pixelX = _x * rc.cellWidth;
+    float pixelY = _y * rc.cellHeight;
+    float pixelW = _widthCells * rc.cellWidth;
+    float pixelH = _heightCells * rc.cellHeight;
+
+    // Adjust for scroll offset
+    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
+        pixelY += rc.scrollOffset * rc.cellHeight;
+    }
+
+    // Skip if off-screen
+    if (rc.termRows > 0) {
+        float screenPixelHeight = rc.termRows * rc.cellHeight;
+        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
+            return Ok();
+        }
     }
 
     // Update uniforms
-    float ndcX = (pixelX / screenWidth) * 2.0f - 1.0f;
-    float ndcY = 1.0f - (pixelY / screenHeight) * 2.0f;
-    float ndcW = (pixelW / screenWidth) * 2.0f;
-    float ndcH = (pixelH / screenHeight) * 2.0f;
+    float ndcX = (pixelX / rc.screenWidth) * 2.0f - 1.0f;
+    float ndcY = 1.0f - (pixelY / rc.screenHeight) * 2.0f;
+    float ndcW = (pixelW / rc.screenWidth) * 2.0f;
+    float ndcH = (pixelH / rc.screenHeight) * 2.0f;
 
     struct Uniforms {
         float rect[4];        // 16 bytes, offset 0
@@ -372,44 +334,15 @@ Result<void> PianoW::render(WebGPUContext& ctx,
     }
     wgpuQueueWriteBuffer(ctx.getQueue(), keyStateBuffer_, 0, keyStates, sizeof(keyStates));
 
-    // Render
-    WGPUCommandEncoderDescriptor encoderDesc = {};
-    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encoderDesc);
-    if (!encoder) return Err<void>("Failed to create command encoder");
-
-    WGPURenderPassColorAttachment colorAttachment = {};
-    colorAttachment.view = targetView;
-    colorAttachment.loadOp = WGPULoadOp_Load;
-    colorAttachment.storeOp = WGPUStoreOp_Store;
-    colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
-
-    WGPURenderPassDescriptor passDesc = {};
-    passDesc.colorAttachmentCount = 1;
-    passDesc.colorAttachments = &colorAttachment;
-
-    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
-    if (!pass) {
-        wgpuCommandEncoderRelease(encoder);
-        return Err<void>("Failed to begin render pass");
-    }
-
+    // Render to provided pass
     wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
     wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
-    wgpuRenderPassEncoderEnd(pass);
-    wgpuRenderPassEncoderRelease(pass);
 
-    WGPUCommandBufferDescriptor cmdDesc = {};
-    WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdDesc);
-    if (cmdBuffer) {
-        wgpuQueueSubmit(ctx.getQueue(), 1, &cmdBuffer);
-        wgpuCommandBufferRelease(cmdBuffer);
-    }
-    wgpuCommandEncoderRelease(encoder);
     return Ok();
 }
 
-Result<void> PianoW::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat) {
+Result<void> Piano::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat) {
     WGPUDevice device = ctx.getDevice();
 
     // Uniform buffer (48 bytes)
@@ -703,7 +636,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     if (!pipeline_) return Err<void>("Failed to create render pipeline");
 
-    yinfo("PianoW: pipeline created");
+    yinfo("Piano: pipeline created");
     return Ok();
 }
 

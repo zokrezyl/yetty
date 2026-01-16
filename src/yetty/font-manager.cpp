@@ -384,12 +384,16 @@ Result<std::unique_ptr<Font>> FontManager::generateFont(FT_Face face, const std:
 }
 
 Result<Font*> FontManager::getFont(const std::string& family, Font::Style style, float fontSize) noexcept {
-    FontCacheKey key = createCacheKey(family, style);
+    // Font::generate() loads ALL style variants (Regular, Bold, Italic, BoldItalic) into one Font object.
+    // So we cache ONE Font per family, not one per (family, style).
+    // Always use Regular as the cache key.
+    FontCacheKey key = createCacheKey(family, Font::Regular);
+    (void)style;  // Style is handled within the Font object via getGlyph(codepoint, style)
 
     // Check memory cache first
     auto it = fontCache_.find(key);
     if (it != fontCache_.end()) {
-        ydebug("FontManager: memory cache hit for '{}' {}", family, static_cast<int>(style));
+        ydebug("FontManager: memory cache hit for '{}' (has all styles)", family);
         return Ok(it->second.get());
     }
 
@@ -405,7 +409,8 @@ Result<Font*> FontManager::getFont(const std::string& family, Font::Style style,
         return Ok(it->second.get());
     }
 
-    std::string fontPath = findFontPath(family, style);
+    // Always request REGULAR variant - Font::generate() will discover all style variants
+    std::string fontPath = findFontPath(family, Font::Regular);
     if (fontPath.empty()) {
 #if YETTY_USE_PREBUILT_ATLAS
         // On web/Android, fall back to default prebuilt font
@@ -434,17 +439,26 @@ Result<Font*> FontManager::getFont(const std::string& family, Font::Style style,
     fontFile.close();
 
     // Create cache path using font file data hash
-    std::string styleName = style == Font::Bold ? "Bold" :
-                            style == Font::Italic ? "Italic" :
-                            style == Font::BoldItalic ? "BoldItalic" : "Regular";
-    std::string cacheName = family + "-" + styleName;
+    // Always use "Regular" since this Font contains all style variants
+    std::string styleName = "Regular";
+    // Extract basename from family if it's a path
+    std::string baseName = family;
+    size_t lastSlash = family.rfind('/');
+    if (lastSlash != std::string::npos) {
+        baseName = family.substr(lastSlash + 1);
+    }
+    size_t lastDot = baseName.rfind('.');
+    if (lastDot != std::string::npos) {
+        baseName = baseName.substr(0, lastDot);
+    }
+    std::string cacheName = baseName + "-" + styleName;
     std::string cachePath = getCachePath(cacheName, fontSize, fontData.data(), fontData.size());
 
     // Check disk cache
     yinfo("FontManager: looking for disk cache: {}.lz4", cachePath);
     auto diskResult = loadFromDiskCache(cachePath);
     if (diskResult) {
-        yinfo("FontManager: DISK CACHE HIT for font '{}' {}", family, styleName);
+        yinfo("FontManager: DISK CACHE HIT for font '{}' (all styles)", family);
         Font* ptr = diskResult.value().get();
         fontCache_[key] = std::move(diskResult.value());
 
@@ -456,8 +470,8 @@ Result<Font*> FontManager::getFont(const std::string& family, Font::Style style,
         return Ok(ptr);
     }
 
-    // Generate font from file path
-    yinfo("FontManager: DISK CACHE MISS for font '{}' {}, generating atlas...", family, styleName);
+    // Generate font from file path (will discover all style variants)
+    yinfo("FontManager: DISK CACHE MISS for font '{}', generating atlas with all styles...", family);
     auto result = generateFont(fontPath, fontSize);
     if (!result) {
         return Err<Font*>(result.error().message());
@@ -475,7 +489,7 @@ Result<Font*> FontManager::getFont(const std::string& family, Font::Style style,
         hasDefaultFont_ = true;
     }
 
-    yinfo("FontManager: loaded font '{}' {} from {}", family, static_cast<int>(style), fontPath);
+    yinfo("FontManager: loaded font '{}' (all styles) from {}", family, fontPath);
     return Ok(ptr);
 }
 

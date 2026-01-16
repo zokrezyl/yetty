@@ -127,16 +127,9 @@ public:
     /// Phase 1: Pre-render (before shared pass)
     virtual void prepareFrame(WebGPUContext& ctx) { (void)ctx; }
 
-    /// Phase 2a: Batched render (during shared pass)
-    virtual bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) = 0;
+    /// Render to the given render pass
+    virtual Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) = 0;
 
-    /// Phase 2b: Standalone render (creates own pass)
-    virtual Result<void> render(WebGPUContext& ctx) {
-        (void)ctx;
-        return Ok();
-    }
-
-    virtual bool supportsBatchedRendering() const { return true; }
     virtual void update(double deltaTime) { (void)deltaTime; }
 
     //-------------------------------------------------------------------------

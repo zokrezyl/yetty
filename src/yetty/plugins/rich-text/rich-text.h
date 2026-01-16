@@ -7,9 +7,9 @@
 #include <string>
 #include <memory>
 
-namespace yetty {
+namespace yetty::plugins {
 
-class RichTextW;
+class RichText;
 
 //-----------------------------------------------------------------------------
 // RichTextPlugin - renders styled text from YAML input
@@ -30,20 +30,20 @@ class RichTextW;
 //       size: 16
 //       color: [0, 1, 0.5, 1]
 //-----------------------------------------------------------------------------
-class RichTextPlugin : public Plugin {
+class RichTextPlugin : public yetty::Plugin {
 public:
     ~RichTextPlugin() override;
 
-    static Result<PluginPtr> create() noexcept;
+    static yetty::Result<yetty::PluginPtr> create() noexcept;
 
     const char* pluginName() const override { return "rich-text"; }
 
-    Result<void> dispose() override;
+    yetty::Result<void> dispose() override;
 
-    Result<WidgetPtr> createWidget(
+    yetty::Result<yetty::WidgetPtr> createWidget(
         const std::string& widgetName,
-        WidgetFactory* factory,
-        FontManager* fontManager,
+        yetty::WidgetFactory* factory,
+        yetty::FontManager* fontManager,
         uv_loop_t* loop,
         int32_t x,
         int32_t y,
@@ -54,59 +54,77 @@ public:
     ) override;
 
     // Access to font manager for layers (from engine)
-    FontManager* getFontManager();
+    yetty::FontManager* getFontManager();
 
 private:
     RichTextPlugin() noexcept = default;
-    Result<void> pluginInit() noexcept;
+    yetty::Result<void> pluginInit() noexcept;
 
-    FontManager* _fontManager = nullptr;
+    yetty::FontManager* _fontManager = nullptr;
 };
 
 //-----------------------------------------------------------------------------
-// RichTextW - single rich text document widget
+// RichText - single rich text document widget
 //-----------------------------------------------------------------------------
-class RichTextW : public Widget {
+class RichText : public yetty::Widget {
 public:
-    static Result<WidgetPtr> create(const std::string& payload, RichTextPlugin* plugin) {
-        auto w = std::shared_ptr<RichTextW>(new RichTextW(payload, plugin));
+    static yetty::Result<yetty::WidgetPtr> create(
+        yetty::WidgetFactory* factory,
+        yetty::FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload,
+        RichTextPlugin* plugin
+    ) {
+        (void)factory;
+        (void)fontManager;
+        (void)loop;
+        (void)pluginArgs;
+        auto w = std::shared_ptr<RichText>(new RichText(payload, plugin));
+        w->_x = x;
+        w->_y = y;
+        w->_widthCells = widthCells;
+        w->_heightCells = heightCells;
         if (auto res = w->init(); !res) {
-            return Err<WidgetPtr>("Failed to init RichTextW", res);
+            return yetty::Err<yetty::WidgetPtr>("Failed to init RichText", res);
         }
-        return Ok(std::static_pointer_cast<Widget>(w));
+        return yetty::Ok(std::static_pointer_cast<yetty::Widget>(w));
     }
 
-    ~RichTextW() override;
+    ~RichText() override;
 
-    Result<void> dispose() override;
+    yetty::Result<void> dispose() override;
 
-    // Renderable interface - uses RenderContext from base class
-    Result<void> render(WebGPUContext& ctx) override;
-    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    void prepareFrame(yetty::WebGPUContext& ctx) override;
+    yetty::Result<void> render(WGPURenderPassEncoder pass, yetty::WebGPUContext& ctx) override;
 
     // Mouse scrolling
     bool onMouseScroll(float xoffset, float yoffset, int mods) override;
     bool wantsMouse() const override { return true; }
 
 private:
-    explicit RichTextW(const std::string& payload, RichTextPlugin* plugin)
-        : plugin_(plugin) {
+    explicit RichText(const std::string& payload, RichTextPlugin* plugin)
+        : _plugin(plugin) {
         _payload = payload;
     }
 
-    Result<void> init() override;
-    Result<void> parseYAML(const std::string& yaml);
+    yetty::Result<void> init() override;
+    yetty::Result<void> parseYAML(const std::string& yaml);
 
-    RichTextPlugin* plugin_ = nullptr;
-    RichText::Ptr richText_;
-    std::string fontName_;
-    std::vector<TextSpan> pendingSpans_;  // Stored until RichText is created
+    RichTextPlugin* _plugin = nullptr;
+    yetty::RichText::Ptr _richText;  // The utility class
+    std::string _fontName;
+    std::vector<yetty::TextSpan> _pendingSpans;  // Stored until RichText is created
 
     bool _initialized = false;
-    bool failed_ = false;
+    bool _failed = false;
 };
 
-} // namespace yetty
+} // namespace yetty::plugins
 
 extern "C" {
     const char* name();

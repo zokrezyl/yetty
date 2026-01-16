@@ -1,4 +1,5 @@
 #include "local-terminal-backend.h"
+#include <yetty/osc-command.h>
 
 // Optional dependencies - may not be available in server build
 #ifndef YETTY_SERVER_BUILD
@@ -817,7 +818,6 @@ int LocalTerminalBackend::onOSC(int command, VTermStringFragment frag, void* use
     }
 
     // Also handle via plugin manager for backward compatibility
-    constexpr int YETTY_OSC_VENDOR_ID = 7777;
     if (command != YETTY_OSC_VENDOR_ID) {
         ydebug("onOSC: ignoring non-yetty command {}", command);
         return 0;

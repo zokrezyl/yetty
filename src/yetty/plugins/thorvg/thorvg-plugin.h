@@ -80,15 +80,9 @@ public:
 
     Result<void> dispose() override;
 
-    // Legacy render (creates own encoder - slow)
-    Result<void> render(WebGPUContext& ctx) override;
-
-    // Pre-render phase - render ThorVG content to texture BEFORE shared pass
     void prepareFrame(WebGPUContext& ctx) override;
 
-    // Batched render (draws into existing pass - fast!)
-    // Only blits pre-rendered texture, no ThorVG rendering here
-    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
     // Animation control
     bool isAnimated() const { return isAnimated_; }

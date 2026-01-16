@@ -7,7 +7,7 @@
 
 namespace yetty {
 
-class PianoW;
+class Piano;
 
 //-----------------------------------------------------------------------------
 // PianoPlugin - renders a piano keyboard with WebGPU
@@ -35,42 +35,57 @@ public:
         const std::string& payload
     ) override;
 
-    Result<void> renderAll(WGPUTextureView targetView, WGPUTextureFormat targetFormat,
-                           uint32_t screenWidth, uint32_t screenHeight,
-                           float cellWidth, float cellHeight,
-                           int scrollOffset, uint32_t termRows,
-                           bool isAltScreen = false) override;
-
 private:
     PianoPlugin() noexcept = default;
     Result<void> pluginInit() noexcept;
 };
 
 //-----------------------------------------------------------------------------
-// PianoW - a single piano keyboard instance
+// Piano - a single piano keyboard instance
 //
 // Payload format: "octaves[,startOctave]"
 //   e.g., "2" = 2 octaves starting from C4
 //   e.g., "3,3" = 3 octaves starting from C3
 //-----------------------------------------------------------------------------
-class PianoW : public Widget {
+class Piano : public Widget {
 public:
     static constexpr int MAX_OCTAVES = 8;
     static constexpr int KEYS_PER_OCTAVE = 12;  // 7 white + 5 black
     static constexpr int WHITE_KEYS_PER_OCTAVE = 7;
     static constexpr int BLACK_KEYS_PER_OCTAVE = 5;
 
-    static Result<WidgetPtr> create(const std::string& payload);
+    static Result<WidgetPtr> create(
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) {
+        (void)factory;
+        (void)fontManager;
+        (void)loop;
+        (void)pluginArgs;
+        auto w = std::shared_ptr<Piano>(new Piano(payload));
+        w->_x = x;
+        w->_y = y;
+        w->_widthCells = widthCells;
+        w->_heightCells = heightCells;
+        if (auto res = w->init(); !res) {
+            return Err<WidgetPtr>("Failed to init Piano", res);
+        }
+        return Ok(std::static_pointer_cast<Widget>(w));
+    }
 
-    ~PianoW() override;
+    ~Piano() override;
 
     Result<void> dispose() override;
-    Result<void> update(double deltaTime) override;
+    void update(double deltaTime) override;
 
-    Result<void> render(WebGPUContext& ctx,
-                        WGPUTextureView targetView, WGPUTextureFormat targetFormat,
-                        uint32_t screenWidth, uint32_t screenHeight,
-                        float pixelX, float pixelY, float pixelW, float pixelH);
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
     // Key state management
     void setKeyPressed(int key, bool pressed);  // key = 0-127 (MIDI note)
@@ -86,7 +101,7 @@ public:
     bool wantsKeyboard() const override { return true; }
 
 private:
-    explicit PianoW(const std::string& payload);
+    explicit Piano(const std::string& payload);
     Result<void> init() override;
 
     Result<void> createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat);

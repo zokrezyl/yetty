@@ -78,8 +78,7 @@ public:
 
     Result<void> dispose() override;
 
-    Result<void> render(WebGPUContext& ctx) override;
-    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
 private:
     explicit Image(const std::string& payload) {

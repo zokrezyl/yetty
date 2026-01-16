@@ -86,11 +86,8 @@ public:
 
     Result<void> dispose() override;
 
-    // Legacy render (creates own encoder - slow)
-    Result<void> render(WebGPUContext& ctx) override;
-
-    // Batched render (draws into existing pass - fast!)
-    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    void prepareFrame(WebGPUContext& ctx) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
     // Input handling
     bool onMouseMove(float localX, float localY) override;

@@ -1,1 +1,12 @@
-printf '\e]999999;ymery;relative;0,0,40,20;layout_path=/path/to/layouts;main=app\e\\'
+#!/bin/bash
+# Ymery demo: ImGui widgets from YAML layouts
+DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$DIR/../.."
+
+# Use ymery-cpp demo layouts from the build directory
+YMERY_LAYOUTS="build-desktop-release/_deps/ymery-cpp-src/demo/layouts"
+
+uv run python3 tools/yetty-client/main.py create ymery \
+    -p "$YMERY_LAYOUTS" \
+    -m "$YMERY_LAYOUTS/simple/app.yaml" \
+    -w 60 -H 30

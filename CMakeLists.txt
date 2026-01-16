@@ -284,6 +284,11 @@ if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID)
             "YMERY_BUILD_GUI_TESTS OFF"
             "YMERY_USE_WEBGPU ON"
     )
+    # Fix: ymery-cpp's filesystem_common includes ytrace headers but doesn't link ytrace::ytrace
+    # This adds the missing YTRACE_USE_SPDLOG define
+    if(TARGET filesystem_common)
+        target_compile_definitions(filesystem_common PRIVATE YTRACE_USE_SPDLOG=1)
+    endif()
 endif()
 
 #-----------------------------------------------------------------------------
@@ -437,6 +442,7 @@ if(YETTY_ANDROID)
         src/yetty/config.cpp
         src/yetty/terminal.cpp
         src/yetty/osc-command.cpp
+        src/yetty/widget-factory.cpp
     )
 elseif(NOT EMSCRIPTEN)
     # Desktop uses main.cpp with GLFW
@@ -596,11 +602,9 @@ else()
     # Export symbols so plugins can find them (e.g., WidgetFactory::getShaderManager)
     set_target_properties(yetty PROPERTIES ENABLE_EXPORTS TRUE)
 
-    # Link against yetty_core (provides font, rich-text, webgpu-context)
+    # Link against yetty_core (provides font, rich-text, webgpu-context, glfw, glfw3webgpu)
     target_link_libraries(yetty PRIVATE
         yetty_core
-        glfw
-        glfw3webgpu
         stb
         yaml-cpp
         args
@@ -612,20 +616,43 @@ else()
         # Windows: Link against ConPTY (part of kernel32)
         target_compile_definitions(yetty PRIVATE YETTY_USE_CONPTY=1)
     else()
-        # Unix: Link against util for forkpty
-        target_link_libraries(yetty PRIVATE util)
+        # Unix: Link against util for forkpty (Linux only, macOS has it in libc)
+        if(NOT APPLE)
+            target_link_libraries(yetty PRIVATE util)
+        endif()
         target_compile_definitions(yetty PRIVATE YETTY_USE_FORKPTY=1)
 
         # Link Python into main executable so symbols are globally visible to numpy extensions
-        # Use --whole-archive to export all Python symbols from the static library
+        # Use --whole-archive (Linux) or -force_load (macOS) to export all Python symbols
         if(TARGET python_embedded)
             add_dependencies(yetty python_embedded)
-            target_link_libraries(yetty PRIVATE
-                -Wl,--whole-archive
-                python_embedded
-                -Wl,--no-whole-archive
-                m dl pthread
-            )
+            if(APPLE)
+                # On macOS, also need libintl and iconv for Python's locale module
+                if(EXISTS "/usr/local/lib/libintl.a")
+                    set(INTL_LIBRARY "/usr/local/lib/libintl.a")
+                elseif(EXISTS "/opt/homebrew/lib/libintl.a")
+                    set(INTL_LIBRARY "/opt/homebrew/lib/libintl.a")
+                elseif(EXISTS "/opt/local/lib/libintl.a")
+                    set(INTL_LIBRARY "/opt/local/lib/libintl.a")
+                endif()
+
+                target_link_libraries(yetty PRIVATE
+                    -Wl,-force_load,$<TARGET_FILE:python_embedded>
+                    ${INTL_LIBRARY}
+                    iconv
+                    m pthread
+                )
+            else()
+                target_link_libraries(yetty PRIVATE
+                    -Wl,--whole-archive
+                    python_embedded
+                    -Wl,--no-whole-archive
+                    m dl pthread
+                )
+            endif()
+
+            # Link the Python widget (statically linked, instantiated via plugin system)
+            target_link_libraries(yetty PRIVATE python_widget)
         endif()
     endif()
 
@@ -667,9 +694,8 @@ else()
         CMAKE_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
     )
     target_link_libraries(yetty-plugin-tester PRIVATE
+        yetty_core
         webgpu
-        glfw
-        glfw3webgpu
         glm::glm
         ytrace::ytrace
         args
@@ -678,13 +704,31 @@ else()
     # Link Python into plugin tester so Python plugin symbols are available
     if(TARGET python_embedded)
         add_dependencies(yetty-plugin-tester python_embedded)
-        target_link_options(yetty-plugin-tester PRIVATE -rdynamic)
-        target_link_libraries(yetty-plugin-tester PRIVATE
-            -Wl,--whole-archive
-            python_embedded
-            -Wl,--no-whole-archive
-            m dl pthread
-        )
+        if(APPLE)
+            # On macOS, also need libintl and iconv for Python's locale module
+            if(EXISTS "/usr/local/lib/libintl.a")
+                set(INTL_LIBRARY "/usr/local/lib/libintl.a")
+            elseif(EXISTS "/opt/homebrew/lib/libintl.a")
+                set(INTL_LIBRARY "/opt/homebrew/lib/libintl.a")
+            elseif(EXISTS "/opt/local/lib/libintl.a")
+                set(INTL_LIBRARY "/opt/local/lib/libintl.a")
+            endif()
+
+            target_link_libraries(yetty-plugin-tester PRIVATE
+                -Wl,-force_load,$<TARGET_FILE:python_embedded>
+                ${INTL_LIBRARY}
+                iconv
+                m pthread
+            )
+        else()
+            target_link_options(yetty-plugin-tester PRIVATE -rdynamic)
+            target_link_libraries(yetty-plugin-tester PRIVATE
+                -Wl,--whole-archive
+                python_embedded
+                -Wl,--no-whole-archive
+                m dl pthread
+            )
+        endif()
     endif()
 
     #-------------------------------------------------------------------------
@@ -710,10 +754,14 @@ else()
         ytrace::ytrace
         ${CMAKE_DL_LIBS}
     )
-    # Unix: Link against util for forkpty, rt for shm_open
-    if(NOT WIN32)
+    # Linux: Link against util for forkpty, rt for shm_open
+    # macOS has these in libc, no separate libraries needed
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         target_link_libraries(yetty-server PRIVATE util rt)
     endif()
+
+    # Tools
+    add_subdirectory(tools)
 endif()
 
 

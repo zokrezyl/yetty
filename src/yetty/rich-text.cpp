@@ -328,8 +328,8 @@ void RichText::layoutSpans(float viewWidth, float viewHeight) {
             }
             if (codepoint == '\r') continue;
 
-            // Get glyph metrics
-            const auto* metrics = font->getGlyph(codepoint);
+            // Get glyph metrics with style
+            const auto* metrics = font->getGlyph(codepoint, span.style);
             if (!metrics) continue;
 
             float advance = metrics->_advance * scale;
@@ -414,7 +414,7 @@ void RichText::buildGlyphInstances() {
             continue;
         }
 
-        const auto* metrics = font->getGlyph(ch.codepoint);
+        const auto* metrics = font->getGlyph(ch.codepoint, ch.style);
         if (!metrics) {
             skippedNoGlyph++;
             continue;
@@ -471,6 +471,13 @@ void RichText::buildGlyphInstances() {
 
     yinfo("RichText::buildGlyphInstances: {} glyphs in {} batches (skipped: {} no font, {} no glyph)",
                   glyphCount_, fontBatches_.size(), skippedNoFont, skippedNoGlyph);
+
+    // Debug: print first few glyphs
+    if (!fontBatches_.empty() && !fontBatches_[0].glyphs.empty()) {
+        const auto& g = fontBatches_[0].glyphs[0];
+        yinfo("First glyph: pos=({:.1f},{:.1f}) uv=({:.4f},{:.4f})-({:.4f},{:.4f}) size=({:.1f},{:.1f}) color=({:.1f},{:.1f},{:.1f},{:.1f})",
+              g.posX, g.posY, g.uvMinX, g.uvMinY, g.uvMaxX, g.uvMaxY, g.sizeX, g.sizeY, g.colorR, g.colorG, g.colorB, g.colorA);
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -674,37 +681,21 @@ Result<void> RichText::uploadGlyphBuffer(WebGPUContext& ctx) {
 }
 
 //-----------------------------------------------------------------------------
-// Render - renders all font batches
+// Render - renders all font batches into the provided render pass
 //-----------------------------------------------------------------------------
 
-Result<void> RichText::render(WebGPUContext& ctx,
-                               WGPUTextureView targetView,
-                               uint32_t screenWidth, uint32_t screenHeight,
-                               float pixelX, float pixelY,
-                               float pixelW, float pixelH) {
-    ydebug("RichText::render: initialized={}, spans={}, chars={}, batches={}, glyphs={}",
-                  initialized_, spans_.size(), chars_.size(), fontBatches_.size(), glyphCount_);
-
-    if (!initialized_) {
-        yerror("RichText::render: not initialized!");
-        return Err<void>("RichText not initialized");
-    }
+Result<void> RichText::render(WGPURenderPassEncoder pass, WebGPUContext& ctx,
+                             uint32_t screenWidth, uint32_t screenHeight,
+                             float pixelX, float pixelY,
+                             float pixelW, float pixelH) {
+    if (!initialized_ || !pipeline_) return Ok();  // Not initialized yet
 
     // Re-layout if view size changed
     if (lastViewWidth_ != pixelW || lastViewHeight_ != pixelH || layoutDirty_) {
-        ydebug("RichText::render: triggering layout (dirty={}, size changed={})",
-                      layoutDirty_, lastViewWidth_ != pixelW || lastViewHeight_ != pixelH);
         layout(pixelW, pixelH);
     }
 
-    if (!pipeline_) {
-        ywarn("RichText::render: no pipeline!");
-        return Ok();
-    }
-
     if (fontBatches_.empty() || glyphCount_ == 0) {
-        ydebug("RichText::render: nothing to render (batches={}, glyphs={})",
-                      fontBatches_.size(), glyphCount_);
         return Ok();  // Nothing to render
     }
 
@@ -728,141 +719,7 @@ Result<void> RichText::render(WebGPUContext& ctx,
         bufDesc.size = glyphBufferCapacity_ * sizeof(GlyphInstance);
         bufDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
         glyphBuffer_ = device ? wgpuDeviceCreateBuffer(device, &bufDesc) : nullptr;
-        if (!glyphBuffer_) return Err<void>("Failed to create glyph buffer");
-
-        // Invalidate cached bind groups since buffer changed
-        for (auto& [font, bindGroup] : fontBindGroups_) {
-            if (bindGroup) wgpuBindGroupRelease(bindGroup);
-        }
-        fontBindGroups_.clear();
-        fontResourceVersions_.clear();
-    }
-
-    // Update uniforms
-    float ndcX = (pixelX / screenWidth) * 2.0f - 1.0f;
-    float ndcY = 1.0f - (pixelY / screenHeight) * 2.0f;
-
-    struct Uniforms {
-        float rect[4];      // NDC viewport
-        float screenSize[2];
-        float scrollOffset;
-        float pixelRange;
-        float _pad[4];      // Padding to 48 bytes
-    } uniforms;
-
-    uniforms.rect[0] = ndcX;
-    uniforms.rect[1] = ndcY;
-    uniforms.rect[2] = pixelW;
-    uniforms.rect[3] = pixelH;
-    uniforms.screenSize[0] = static_cast<float>(screenWidth);
-    uniforms.screenSize[1] = static_cast<float>(screenHeight);
-    uniforms.scrollOffset = scrollOffset_;
-    uniforms.pixelRange = pixelRange_;
-
-    wgpuQueueWriteBuffer(ctx.getQueue(), uniformBuffer_, 0, &uniforms, sizeof(uniforms));
-
-    // Create render pass
-    WGPURenderPassColorAttachment colorAttachment = {};
-    colorAttachment.view = targetView;
-    colorAttachment.loadOp = WGPULoadOp_Load;
-    colorAttachment.storeOp = WGPUStoreOp_Store;
-    colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
-
-    WGPURenderPassDescriptor passDesc = {};
-    passDesc.colorAttachmentCount = 1;
-    passDesc.colorAttachments = &colorAttachment;
-
-    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device, nullptr);
-    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
-
-    // Set scissor rect to clip content to bounds (clamped to screen)
-    float sx = std::max(0.0f, pixelX);
-    float sy = std::max(0.0f, pixelY);
-    float sw = std::min(pixelW, screenWidth - sx);
-    float sh = std::min(pixelH, screenHeight - sy);
-    if (sw > 0 && sh > 0) {
-        wgpuRenderPassEncoderSetScissorRect(
-            pass,
-            static_cast<uint32_t>(sx),
-            static_cast<uint32_t>(sy),
-            static_cast<uint32_t>(sw),
-            static_cast<uint32_t>(sh));
-    }
-
-    wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
-
-    // Render each font batch
-    for (const auto& batch : fontBatches_) {
-        if (batch.glyphs.empty() || !batch.font) continue;
-
-        // Ensure bind group exists for this font
-        auto result = createBindGroup(ctx, batch.font);
-        if (!result) {
-            ywarn("RichText: Failed to create bind group for font");
-            continue;
-        }
-
-        auto it = fontBindGroups_.find(batch.font);
-        if (it == fontBindGroups_.end() || !it->second) continue;
-
-        // Upload this batch's glyphs
-        wgpuQueueWriteBuffer(ctx.getQueue(), glyphBuffer_, 0,
-                             batch.glyphs.data(), batch.glyphs.size() * sizeof(GlyphInstance));
-
-        // Draw with this font's bind group
-        wgpuRenderPassEncoderSetBindGroup(pass, 0, it->second, 0, nullptr);
-        wgpuRenderPassEncoderDraw(pass, 6, static_cast<uint32_t>(batch.glyphs.size()), 0, 0);
-    }
-
-    wgpuRenderPassEncoderEnd(pass);
-    wgpuRenderPassEncoderRelease(pass);
-
-    WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, nullptr);
-    wgpuCommandEncoderRelease(encoder);
-
-    wgpuQueueSubmit(ctx.getQueue(), 1, &cmdBuffer);
-    wgpuCommandBufferRelease(cmdBuffer);
-
-    gpuResourcesDirty_ = false;
-    return Ok();
-}
-
-bool RichText::render(WGPURenderPassEncoder pass, WebGPUContext& ctx,
-                             uint32_t screenWidth, uint32_t screenHeight,
-                             float pixelX, float pixelY,
-                             float pixelW, float pixelH) {
-    if (!initialized_ || !pipeline_) return false;
-
-    // Re-layout if view size changed
-    if (lastViewWidth_ != pixelW || lastViewHeight_ != pixelH || layoutDirty_) {
-        layout(pixelW, pixelH);
-    }
-
-    if (fontBatches_.empty() || glyphCount_ == 0) {
-        return false;  // Nothing to render
-    }
-
-    WGPUDevice device = ctx.getDevice();
-
-    // Find max batch size for glyph buffer allocation
-    size_t maxBatchSize = 0;
-    for (const auto& batch : fontBatches_) {
-        maxBatchSize = std::max(maxBatchSize, batch.glyphs.size());
-    }
-
-    // Ensure glyph buffer is large enough for any batch
-    if (maxBatchSize > glyphBufferCapacity_) {
-        if (glyphBuffer_) {
-            wgpuBufferRelease(glyphBuffer_);
-        }
-        glyphBufferCapacity_ = std::max(static_cast<uint32_t>(maxBatchSize), glyphBufferCapacity_ * 2);
-        if (glyphBufferCapacity_ < 256) glyphBufferCapacity_ = 256;
-
-        WGPUBufferDescriptor bufDesc = {};
-        bufDesc.size = glyphBufferCapacity_ * sizeof(GlyphInstance);
-        bufDesc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
-        glyphBuffer_ = device ? wgpuDeviceCreateBuffer(device, &bufDesc) : nullptr;
-        if (!glyphBuffer_) return false;
+        if (!glyphBuffer_) return Err<void>("RichText: failed to create glyph buffer");
 
         // Invalidate cached bind groups since buffer changed
         for (auto& [font, bindGroup] : fontBindGroups_) {
@@ -893,6 +750,9 @@ bool RichText::render(WGPURenderPassEncoder pass, WebGPUContext& ctx,
     uniforms.scrollOffset = scrollOffset_;
     uniforms.pixelRange = pixelRange_;
 
+    yinfo("RichText::render uniforms: ndc=({:.3f},{:.3f}) size=({:.0f},{:.0f}) screen={}x{} scroll={:.1f} pixelRange={:.1f}",
+          ndcX, ndcY, pixelW, pixelH, screenWidth, screenHeight, scrollOffset_, pixelRange_);
+
     wgpuQueueWriteBuffer(ctx.getQueue(), uniformBuffer_, 0, &uniforms, sizeof(uniforms));
 
     // Set scissor rect to clip content to bounds (clamped to screen)
@@ -911,20 +771,37 @@ bool RichText::render(WGPURenderPassEncoder pass, WebGPUContext& ctx,
 
     wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
 
+    yinfo("RichText::render: rendering {} batches, {} total glyphs, glyphBuffer={}, uniformBuffer={}",
+          fontBatches_.size(), glyphCount_, glyphBuffer_ != nullptr, uniformBuffer_ != nullptr);
+
     // Render each font batch
     for (const auto& batch : fontBatches_) {
-        if (batch.glyphs.empty() || !batch.font) continue;
+        if (batch.glyphs.empty() || !batch.font) {
+            ywarn("RichText::render: skipping batch - empty={}, font={}", batch.glyphs.empty(), batch.font != nullptr);
+            continue;
+        }
+
+        yinfo("RichText::render: batch has {} glyphs, font textureView={}",
+              batch.glyphs.size(), batch.font->getTextureView() != nullptr);
 
         // Ensure bind group exists for this font
         auto result = createBindGroup(ctx, batch.font);
-        if (!result) continue;
+        if (!result) {
+            yerror("RichText::render: createBindGroup failed: {}", result.error().message());
+            continue;
+        }
 
         auto it = fontBindGroups_.find(batch.font);
-        if (it == fontBindGroups_.end() || !it->second) continue;
+        if (it == fontBindGroups_.end() || !it->second) {
+            yerror("RichText::render: bind group not found after createBindGroup!");
+            continue;
+        }
 
         // Upload this batch's glyphs
         wgpuQueueWriteBuffer(ctx.getQueue(), glyphBuffer_, 0,
                              batch.glyphs.data(), batch.glyphs.size() * sizeof(GlyphInstance));
+
+        yinfo("RichText::render: drawing {} instances", batch.glyphs.size());
 
         // Draw with this font's bind group
         wgpuRenderPassEncoderSetBindGroup(pass, 0, it->second, 0, nullptr);
@@ -932,7 +809,7 @@ bool RichText::render(WGPURenderPassEncoder pass, WebGPUContext& ctx,
     }
 
     gpuResourcesDirty_ = false;
-    return true;
+    return Ok();
 }
 
 } // namespace yetty

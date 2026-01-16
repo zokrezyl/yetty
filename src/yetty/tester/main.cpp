@@ -15,6 +15,7 @@
 
 #include <yetty/plugin.h>
 #include <yetty/webgpu-context.h>
+#include <yetty/font-manager.h>
 #include <webgpu/webgpu.h>
 #include <GLFW/glfw3.h>
 #include <glfw3webgpu.h>
@@ -243,6 +244,18 @@ int cmdRun(const std::string& pluginDir,
     yinfo("  Queue: {}", (void*)ctx->getQueue());
     yinfo("  Surface format: {} (BGRA8Unorm=23, BGRA8UnormSrgb=24)", static_cast<int>(ctx->getSurfaceFormat()));
 
+    // Create FontManager (required by some plugins like PDF)
+    yinfo("Creating FontManager...");
+    auto fontManagerResult = yetty::FontManager::create(ctx);
+    if (!fontManagerResult) {
+        yerror("Failed to create FontManager: {}", fontManagerResult.error().message());
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return 1;
+    }
+    auto fontManager = *fontManagerResult;
+    yinfo("FontManager created successfully");
+
     // Create plugin instance
     auto pluginResult = handle->create_func();
     if (!pluginResult) {
@@ -269,7 +282,7 @@ int cmdRun(const std::string& pluginDir,
     auto layerResult = handle->plugin->createWidget(
         "",           // widgetName
         nullptr,      // factory
-        nullptr,      // fontManager
+        fontManager.get(),  // fontManager
         nullptr,      // loop
         x, y,         // position
         static_cast<uint32_t>(width / 10),  // widthCells (approx based on cell size)
@@ -401,7 +414,9 @@ int cmdRun(const std::string& pluginDir,
 
         // Render using render
         ydebug("Tester: Before render, getPixelWidth={}", layer->getPixelWidth());
-        layer->render(pass, *ctx);
+        if (auto res = layer->render(pass, *ctx); !res) {
+            yerror("Tester: widget render failed: {}", res.error().message());
+        }
 
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
@@ -440,6 +455,9 @@ int cmdRun(const std::string& pluginDir,
     }
     handle->plugin.reset();
     handle.reset();
+
+    // FontManager must be released before ctx
+    fontManager.reset();
     ctx.reset();
 
     glfwDestroyWindow(window);

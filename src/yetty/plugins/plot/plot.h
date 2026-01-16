@@ -1,12 +1,14 @@
 #pragma once
 
 #include <yetty/plugin.h>
+#include <yetty/font.h>
 #include <webgpu/webgpu.h>
 #include <vector>
+#include <array>
 
 namespace yetty {
 
-class PlotW;
+class Plot;
 
 //-----------------------------------------------------------------------------
 // PlotPlugin - manages all plot layers
@@ -35,19 +37,13 @@ public:
         const std::string& payload
     ) override;
 
-    Result<void> renderAll(WGPUTextureView targetView, WGPUTextureFormat targetFormat,
-                           uint32_t screenWidth, uint32_t screenHeight,
-                           float cellWidth, float cellHeight,
-                           int scrollOffset, uint32_t termRows,
-                           bool isAltScreen = false) override;
-
 private:
     PlotPlugin() noexcept = default;
     Result<void> pluginInit() noexcept;
 };
 
 //-----------------------------------------------------------------------------
-// PlotW - a single plot widget showing N line plots
+// Plot - a single plot widget showing N line plots
 //
 // Data format: NxM matrix where:
 //   - N = number of plots (rows)
@@ -61,28 +57,27 @@ private:
 //   2. init() (private) - no args, parses payload
 //   3. create() (public) - factory
 //-----------------------------------------------------------------------------
-class PlotW : public Widget {
+class Plot : public Widget {
 public:
     static constexpr uint32_t MAX_PLOTS = 16;  // Maximum number of plots per layer
+    static constexpr uint32_t MAX_TICKS = 10;  // Maximum ticks per axis
+    static constexpr uint32_t MAX_LABEL_CHARS = 12;  // Max chars per label
 
-    static Result<WidgetPtr> create(const std::string& payload) {
-        auto w = std::shared_ptr<PlotW>(new PlotW(payload));
+    static Result<WidgetPtr> create(const std::string& payload, Font* font = nullptr) {
+        auto w = std::shared_ptr<Plot>(new Plot(payload, font));
         if (auto res = w->init(); !res) {
-            return Err<WidgetPtr>("Failed to init PlotW", res);
+            return Err<WidgetPtr>("Failed to init Plot", res);
         }
         return Ok(std::static_pointer_cast<Widget>(w));
     }
 
-    ~PlotW() override;
+    ~Plot() override;
 
     Result<void> dispose() override;
-    Result<void> update(double deltaTime) override;
+    void update(double deltaTime) override;
 
-    // Called by PlotPlugin::renderAll
-    Result<void> render(WebGPUContext& ctx,
-                        WGPUTextureView targetView, WGPUTextureFormat targetFormat,
-                        uint32_t screenWidth, uint32_t screenHeight,
-                        float pixelX, float pixelY, float pixelW, float pixelH);
+    // Widget render interface (batched rendering)
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
     // Update plot data - NxM matrix of Y values
     // Data layout: row-major, data[row * M + col] = Y value for plot 'row' at point 'col'
@@ -107,13 +102,16 @@ public:
     bool wantsMouse() const override { return true; }
 
 private:
-    explicit PlotW(const std::string& payload) {
+    explicit Plot(const std::string& payload, Font* font = nullptr)
+        : _font(font) {
         _payload = payload;
     }
 
     Result<void> init() override;
     Result<void> createPipeline(WebGPUContext& ctx, WGPUTextureFormat targetFormat);
     Result<void> updateDataTexture(WebGPUContext& ctx);
+    void calculateAxisTicks();
+    std::string formatTickValue(float value) const;
 
     // Plot data (CPU side, for updates)
     std::vector<float> data_;
@@ -142,6 +140,22 @@ private:
     float viewportStartXMax_ = 1.0f;
     float viewportStartYMin_ = 0.0f;
     float viewportStartYMax_ = 1.0f;
+
+    // Font resources (from FontManager)
+    Font* _font = nullptr;
+
+    // Axis tick data (computed on viewport change)
+    struct AxisTickData {
+        float positions[MAX_TICKS];              // Screen positions (pixels)
+        uint16_t glyphIndices[MAX_TICKS][MAX_LABEL_CHARS];  // Glyph indices per label
+        uint32_t charCounts[MAX_TICKS];          // Chars per label
+        uint32_t count = 0;                      // Number of ticks
+    };
+    AxisTickData _xTicks;
+    AxisTickData _yTicks;
+    float _marginLeft = 60.0f;   // Pixels for Y-axis labels
+    float _marginBottom = 30.0f; // Pixels for X-axis labels
+    bool _ticksDirty = true;
 
     // WebGPU resources
     WGPURenderPipeline pipeline_ = nullptr;

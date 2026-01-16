@@ -12,7 +12,7 @@ namespace yetty {
 // Demonstrates how to use the core ydraw library in a plugin
 //-----------------------------------------------------------------------------
 
-class YDrawW;
+class YDraw;
 
 class YDrawPlugin : public Plugin {
 public:
@@ -43,26 +43,43 @@ private:
 };
 
 //-----------------------------------------------------------------------------
-// YDrawW - Plugin widget that wraps YDrawRenderer
+// YDraw - Plugin widget that wraps YDrawRenderer
 //-----------------------------------------------------------------------------
 
-class YDrawW : public Widget {
+class YDraw : public Widget {
 public:
-    static Result<WidgetPtr> create(const std::string& payload) {
-        auto w = std::shared_ptr<YDrawW>(new YDrawW(payload));
+    static Result<WidgetPtr> create(
+        WidgetFactory* factory,
+        FontManager* fontManager,
+        uv_loop_t* loop,
+        int32_t x,
+        int32_t y,
+        uint32_t widthCells,
+        uint32_t heightCells,
+        const std::string& pluginArgs,
+        const std::string& payload
+    ) {
+        (void)factory;
+        (void)fontManager;
+        (void)loop;
+        (void)pluginArgs;
+        auto w = std::shared_ptr<YDraw>(new YDraw(payload));
+        w->_x = x;
+        w->_y = y;
+        w->_widthCells = widthCells;
+        w->_heightCells = heightCells;
         if (auto res = w->init(); !res) {
-            return Err<WidgetPtr>("Failed to init YDrawW", res);
+            return Err<WidgetPtr>("Failed to init YDraw", res);
         }
         return Ok(std::static_pointer_cast<Widget>(w));
     }
 
-    ~YDrawW() override;
+    ~YDraw() override;
 
     Result<void> dispose() override;
 
-    // Renderable interface
-    Result<void> render(WebGPUContext& ctx) override;
-    bool render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    void prepareFrame(WebGPUContext& ctx) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
 
     bool onMouseMove(float localX, float localY) override;
     bool onMouseButton(int button, bool pressed) override;
@@ -72,7 +89,7 @@ public:
     bool wantsKeyboard() const override { return true; }
 
 private:
-    explicit YDrawW(const std::string& payload) {
+    explicit YDraw(const std::string& payload) {
         _payload = payload;
     }
     Result<void> init() override;

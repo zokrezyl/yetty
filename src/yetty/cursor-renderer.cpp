@@ -200,19 +200,19 @@ Result<void> CursorRenderer::createPipeline(WGPUTextureFormat targetFormat) {
     return Ok();
 }
 
-Result<void> CursorRenderer::render(WebGPUContext& ctx) {
+void CursorRenderer::prepareFrame(WebGPUContext& ctx) {
     if (_failed || !_initialized) {
-        return Ok();  // Silently skip if failed or not initialized
+        return;  // Silently skip if failed or not initialized
     }
 
     if (!_visible) {
-        return Ok();  // Cursor hidden
+        return;  // Cursor hidden
     }
 
     // Get current texture view from context (same view Terminal rendered to)
     auto viewResult = ctx.getCurrentTextureView();
     if (!viewResult) {
-        return Ok();  // No view available yet
+        return;  // No view available yet
     }
     _targetView = *viewResult;
 
@@ -266,7 +266,8 @@ Result<void> CursorRenderer::render(WebGPUContext& ctx) {
     WGPUCommandEncoderDescriptor encoderDesc = {};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encoderDesc);
     if (!encoder) {
-        return Err<void>("CursorRenderer: failed to create command encoder");
+        yerror("CursorRenderer: failed to create command encoder");
+        return;
     }
 
     // Render pass - Load existing content
@@ -283,7 +284,8 @@ Result<void> CursorRenderer::render(WebGPUContext& ctx) {
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDesc);
     if (!pass) {
         wgpuCommandEncoderRelease(encoder);
-        return Err<void>("CursorRenderer: failed to begin render pass");
+        yerror("CursorRenderer: failed to begin render pass");
+        return;
     }
 
     wgpuRenderPassEncoderSetPipeline(pass, _pipeline);
@@ -296,14 +298,13 @@ Result<void> CursorRenderer::render(WebGPUContext& ctx) {
     WGPUCommandBuffer cmdBuffer = wgpuCommandEncoderFinish(encoder, &cmdDesc);
     if (!cmdBuffer) {
         wgpuCommandEncoderRelease(encoder);
-        return Err<void>("CursorRenderer: failed to finish command encoder");
+        yerror("CursorRenderer: failed to finish command encoder");
+        return;
     }
 
     wgpuQueueSubmit(ctx.getQueue(), 1, &cmdBuffer);
     wgpuCommandBufferRelease(cmdBuffer);
     wgpuCommandEncoderRelease(encoder);
-
-    return Ok();
 }
 
 } // namespace yetty
