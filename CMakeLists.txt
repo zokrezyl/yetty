@@ -602,11 +602,9 @@ else()
     # Export symbols so plugins can find them (e.g., WidgetFactory::getShaderManager)
     set_target_properties(yetty PROPERTIES ENABLE_EXPORTS TRUE)
 
-    # Link against yetty_core (provides font, rich-text, webgpu-context)
+    # Link against yetty_core (provides font, rich-text, webgpu-context, glfw, glfw3webgpu)
     target_link_libraries(yetty PRIVATE
         yetty_core
-        glfw
-        glfw3webgpu
         stb
         yaml-cpp
         args
@@ -629,8 +627,19 @@ else()
         if(TARGET python_embedded)
             add_dependencies(yetty python_embedded)
             if(APPLE)
+                # On macOS, also need libintl and iconv for Python's locale module
+                if(EXISTS "/usr/local/lib/libintl.a")
+                    set(INTL_LIBRARY "/usr/local/lib/libintl.a")
+                elseif(EXISTS "/opt/homebrew/lib/libintl.a")
+                    set(INTL_LIBRARY "/opt/homebrew/lib/libintl.a")
+                elseif(EXISTS "/opt/local/lib/libintl.a")
+                    set(INTL_LIBRARY "/opt/local/lib/libintl.a")
+                endif()
+
                 target_link_libraries(yetty PRIVATE
                     -Wl,-force_load,$<TARGET_FILE:python_embedded>
+                    ${INTL_LIBRARY}
+                    iconv
                     m pthread
                 )
             else()
@@ -641,6 +650,9 @@ else()
                     m dl pthread
                 )
             endif()
+
+            # Link the Python widget (statically linked, instantiated via plugin system)
+            target_link_libraries(yetty PRIVATE python_widget)
         endif()
     endif()
 
@@ -684,8 +696,6 @@ else()
     target_link_libraries(yetty-plugin-tester PRIVATE
         yetty_core
         webgpu
-        glfw
-        glfw3webgpu
         glm::glm
         ytrace::ytrace
         args
@@ -695,8 +705,19 @@ else()
     if(TARGET python_embedded)
         add_dependencies(yetty-plugin-tester python_embedded)
         if(APPLE)
+            # On macOS, also need libintl and iconv for Python's locale module
+            if(EXISTS "/usr/local/lib/libintl.a")
+                set(INTL_LIBRARY "/usr/local/lib/libintl.a")
+            elseif(EXISTS "/opt/homebrew/lib/libintl.a")
+                set(INTL_LIBRARY "/opt/homebrew/lib/libintl.a")
+            elseif(EXISTS "/opt/local/lib/libintl.a")
+                set(INTL_LIBRARY "/opt/local/lib/libintl.a")
+            endif()
+
             target_link_libraries(yetty-plugin-tester PRIVATE
                 -Wl,-force_load,$<TARGET_FILE:python_embedded>
+                ${INTL_LIBRARY}
+                iconv
                 m pthread
             )
         else()

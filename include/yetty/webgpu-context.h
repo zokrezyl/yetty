@@ -36,6 +36,8 @@ public:
     WGPUSurface getSurface() const noexcept { return surface_; }
     WGPUTextureFormat getSurfaceFormat() const noexcept { return surfaceFormat_; }
     WGPUInstance getInstance() const noexcept { return instance_; }
+    uint32_t getSurfaceWidth() const noexcept { return width_; }
+    uint32_t getSurfaceHeight() const noexcept { return height_; }
 
     Result<WGPUTextureView> getCurrentTextureView() noexcept;
     void present() noexcept;

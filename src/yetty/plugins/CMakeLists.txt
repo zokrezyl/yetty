@@ -181,26 +181,31 @@ endif()
 
 
 #-----------------------------------------------------------------------------
-# Python plugin (Unix only - Python build requires ./configure + make)
+# Python widget - statically linked into main executable (not a dynamic plugin)
+# Python requires -force_load/--whole-archive so extension modules can resolve symbols
 #-----------------------------------------------------------------------------
 if(UNIX)
-    # Python is linked into main yetty executable - plugin just uses the symbols
-    add_yetty_plugin(python
-        SOURCES
-            python/python.cpp
-            python/yetty_wgpu.cpp
+    add_library(python_widget STATIC
+        python/python.cpp
+        python/yetty_wgpu.cpp
     )
 
-    # Need Python headers for compilation (symbols come from main executable)
-    target_include_directories(python_plugin PRIVATE ${PYTHON_EMBEDDED_INCLUDE_DIR})
+    target_include_directories(python_widget PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/src
+        ${PYTHON_EMBEDDED_INCLUDE_DIR}
+    )
 
-    # Ensure Python is built before plugin (for headers)
-    add_dependencies(python_plugin python_embedded)
+    target_link_libraries(python_widget PRIVATE yetty_core yaml-cpp)
 
-    # Add compile definition for Python module path
-    target_compile_definitions(python_plugin PRIVATE
+    # Ensure Python is built before this
+    add_dependencies(python_widget python_embedded)
+
+    target_compile_definitions(python_widget PRIVATE
         CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
     )
+
+    set_target_properties(python_widget PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
     # Copy Python helper modules to build directory
     file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/python)
@@ -214,8 +219,8 @@ if(UNIX)
         ${CMAKE_BINARY_DIR}/python/init.py
         COPYONLY
     )
-    
-    message(STATUS "Python plugin: enabled with static libpython")
+
+    message(STATUS "Python widget: enabled (statically linked)")
 endif()
 
 

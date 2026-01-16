@@ -1214,11 +1214,13 @@ void Yetty::mainLoopIteration() noexcept {
   WGPUTextureView targetView = *viewResult;
 
   // Build RenderContext for all widgets
+  // Use actual surface dimensions (not window size) to avoid scissor rect validation errors
+  // when window is resized but surface hasn't been reconfigured yet
   RenderContext rc;
   rc.targetView = targetView;
   rc.targetFormat = _ctx->getSurfaceFormat();
-  rc.screenWidth = windowWidth();
-  rc.screenHeight = windowHeight();
+  rc.screenWidth = _ctx->getSurfaceWidth();
+  rc.screenHeight = _ctx->getSurfaceHeight();
   rc.cellWidth = cellWidth();
   rc.cellHeight = cellHeight();
   rc.scrollOffset = _terminal ? _terminal->getScrollOffset() : 0;
