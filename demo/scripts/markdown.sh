@@ -6,7 +6,7 @@
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR/../.."
 
-MARKDOWN_FILE="demo/assets/markdown/simple.md"
+MARKDOWN_FILE="README.md"
 
 if [[ ! -f "$MARKDOWN_FILE" ]]; then
     echo "Error: Markdown file not found at $MARKDOWN_FILE"

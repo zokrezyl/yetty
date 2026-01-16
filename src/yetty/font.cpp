@@ -2087,4 +2087,36 @@ const GlyphMetrics* Font::getGlyph(uint32_t codepoint) const {
     return nullptr;
 }
 
+const GlyphMetrics* Font::getGlyph(uint32_t codepoint, Style style) const {
+    // Try to find in the requested style's map first
+    const std::unordered_map<uint32_t, GlyphMetrics>* variantMap = nullptr;
+
+    switch (style) {
+        case Bold:
+            variantMap = &_boldGlyphs;
+            break;
+        case Italic:
+            variantMap = &_italicGlyphs;
+            break;
+        case BoldItalic:
+            variantMap = &_boldItalicGlyphs;
+            break;
+        case Regular:
+        default:
+            // Regular style, just use the normal lookup
+            return getGlyph(codepoint);
+    }
+
+    // Try to find in the variant map
+    if (variantMap && !variantMap->empty()) {
+        auto it = variantMap->find(codepoint);
+        if (it != variantMap->end()) {
+            return &it->second;
+        }
+    }
+
+    // Fall back to regular style if variant not found
+    return getGlyph(codepoint);
+}
+
 } // namespace yetty

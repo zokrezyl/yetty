@@ -328,8 +328,8 @@ void RichText::layoutSpans(float viewWidth, float viewHeight) {
             }
             if (codepoint == '\r') continue;
 
-            // Get glyph metrics
-            const auto* metrics = font->getGlyph(codepoint);
+            // Get glyph metrics with style
+            const auto* metrics = font->getGlyph(codepoint, span.style);
             if (!metrics) continue;
 
             float advance = metrics->_advance * scale;
@@ -414,7 +414,7 @@ void RichText::buildGlyphInstances() {
             continue;
         }
 
-        const auto* metrics = font->getGlyph(ch.codepoint);
+        const auto* metrics = font->getGlyph(ch.codepoint, ch.style);
         if (!metrics) {
             skippedNoGlyph++;
             continue;
