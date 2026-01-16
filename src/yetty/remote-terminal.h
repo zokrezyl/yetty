@@ -141,7 +141,7 @@ public:
 
 private:
     RemoteTerminal(uint32_t cols, uint32_t rows, Font* font, uv_loop_t* loop) noexcept;
-    Result<void> init() noexcept;
+    Result<void> init() noexcept override;
 
     // libuv callbacks
     static void onTimer(uv_timer_t* handle);

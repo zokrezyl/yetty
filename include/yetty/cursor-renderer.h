@@ -35,7 +35,7 @@ public:
     // Initialize with context and shader manager
     Result<void> init(WebGPUContext* ctx, ShaderManager* shaderMgr,
                       WGPUTextureFormat targetFormat);
-    Result<void> dispose();
+    Result<void> dispose() override;
 
     // Widget interface
     // id() inherited from Widget
