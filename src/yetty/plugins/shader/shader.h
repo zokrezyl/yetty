@@ -86,8 +86,8 @@ public:
 
     Result<void> dispose() override;
 
-    void prepareFrame(WebGPUContext& ctx) override;
-    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    void prepareFrame(WebGPUContext& ctx, bool on) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) override;
 
     // Input handling
     bool onMouseMove(float localX, float localY) override;
@@ -202,6 +202,10 @@ private:
     // Scroll-controlled parameters
     float _param = 0.5f;
     float _zoom = 1.0f;
+
+    // On/off state tracking for GPU resource management
+    bool wasOn_ = true;
+    void releaseGPUResources();
 };
 
 // Backward compatibility alias

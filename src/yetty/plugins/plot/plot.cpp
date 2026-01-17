@@ -178,6 +178,20 @@ Result<void> Plot::dispose() {
     return Ok();
 }
 
+void Plot::releaseGPUResources() {
+    // Release GPU resources but keep data_ for restoration
+    if (bindGroup_) { wgpuBindGroupRelease(bindGroup_); bindGroup_ = nullptr; }
+    if (pipeline_) { wgpuRenderPipelineRelease(pipeline_); pipeline_ = nullptr; }
+    if (uniformBuffer_) { wgpuBufferRelease(uniformBuffer_); uniformBuffer_ = nullptr; }
+    if (sampler_) { wgpuSamplerRelease(sampler_); sampler_ = nullptr; }
+    if (dataTextureView_) { wgpuTextureViewRelease(dataTextureView_); dataTextureView_ = nullptr; }
+    if (dataTexture_) { wgpuTextureRelease(dataTexture_); dataTexture_ = nullptr; }
+    gpuInitialized_ = false;
+    dataDirty_ = true;  // Mark dirty to recreate texture data
+    _ticksDirty = true;
+    yinfo("Plot: GPU resources released");
+}
+
 void Plot::update(double deltaTime) {
     (void)deltaTime;
 }
@@ -436,9 +450,23 @@ Result<void> Plot::updateDataTexture(WebGPUContext& ctx) {
 }
 
 // Batched render - uses the shared render pass
-Result<void> Plot::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    ydebug("Plot::render called, failed_={}, data_.size()={}", failed_, data_.size());
-    if (failed_ || data_.empty()) {
+Result<void> Plot::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
+    // Handle on/off transitions for GPU resource management
+    if (!on && wasOn_) {
+        yinfo("Plot: Transitioning to off - releasing GPU resources");
+        releaseGPUResources();
+        wasOn_ = false;
+        return Ok();
+    }
+
+    if (on && !wasOn_) {
+        yinfo("Plot: Transitioning to on - will reinitialize");
+        wasOn_ = true;
+        gpuInitialized_ = false;
+    }
+
+    ydebug("Plot::render called, on={} failed_={}, data_.size()={}", on, failed_, data_.size());
+    if (!on || failed_ || data_.empty()) {
         ydebug("Plot::render returning early - no data or failed");
         return Ok();
     }

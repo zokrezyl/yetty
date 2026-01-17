@@ -21,15 +21,16 @@ for a, e, _, color in planets:
     r = a * (1 - e**2) / (1 + e * np.cos(theta))
     x = r * np.cos(theta)
     y = r * np.sin(theta)
-    fig[0, 0].add_line(np.column_stack([x, y]), thickness=1, colors="gray", alpha=0.5)
+    z = np.zeros_like(x)
+    fig[0, 0].add_line(np.column_stack([x, y, z]), thickness=1, colors="gray", alpha=0.5)
 
 # Sun at center
-fig[0, 0].add_scatter(np.array([[0, 0]]), sizes=20, colors="yellow")
+fig[0, 0].add_scatter(np.array([[0, 0, 0]]), sizes=20, colors="yellow")
 
 # Planets (will be animated)
 planet_scatters = []
 for a, e, _, color in planets:
-    scatter = fig[0, 0].add_scatter(np.array([[a, 0]]), sizes=8, colors=color)
+    scatter = fig[0, 0].add_scatter(np.array([[a, 0, 0]]), sizes=8, colors=color)
     planet_scatters.append(scatter)
 
 t = 0.0
@@ -43,7 +44,7 @@ def animate():
         r = a * (1 - e**2) / (1 + e * np.cos(theta))
         x = r * np.cos(theta)
         y = r * np.sin(theta)
-        planet_scatters[i].data = np.array([[x, y]])
+        planet_scatters[i].data = np.array([[x, y, 0]])
 
 
 fig.add_animations(animate)

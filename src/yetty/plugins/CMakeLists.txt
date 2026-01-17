@@ -224,11 +224,22 @@ if(UNIX)
 endif()
 
 
-# pdf plugin - uses RichText for rendering
+# pdf plugin - uses RichText for rendering (MuPDF - AGPL licensed)
 add_yetty_plugin(pdf
     SOURCES pdf/pdf.cpp
     LIBS mupdf
 )
+
+# pdfium plugin - uses RichText for rendering (PDFium - BSD-3-Clause, MIT compatible)
+if(TARGET pdfium_lib)
+    add_yetty_plugin(pdfium
+        SOURCES pdfium/pdfium.cpp
+        LIBS pdfium_lib
+    )
+    message(STATUS "pdfium plugin: enabled (BSD-3-Clause license)")
+else()
+    message(STATUS "pdfium plugin: disabled (pdfium_lib not found)")
+endif()
 
 # video plugin (Unix only - FFmpeg build requires ./configure + make)
 if(UNIX)

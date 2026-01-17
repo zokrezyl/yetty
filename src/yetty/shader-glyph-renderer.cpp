@@ -192,8 +192,8 @@ void ShaderGlyphRenderer::clearInstances() {
     _instances.clear();
 }
 
-void ShaderGlyphRenderer::prepareFrame(WebGPUContext& ctx) {
-    if (_failed || !_initialized || _instances.empty()) {
+void ShaderGlyphRenderer::prepareFrame(WebGPUContext& ctx, bool on) {
+    if (!on || _failed || !_initialized || _instances.empty()) {
         return;
     }
 
@@ -274,9 +274,10 @@ void ShaderGlyphRenderer::prepareFrame(WebGPUContext& ctx) {
     }
 }
 
-Result<void> ShaderGlyphRenderer::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+Result<void> ShaderGlyphRenderer::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
     (void)pass;
     (void)ctx;
+    (void)on;
     // Rendering is done in prepareFrame() with its own pass
     return Ok();
 }

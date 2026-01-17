@@ -103,8 +103,8 @@ public:
 
     Result<void> dispose() override;
 
-    void prepareFrame(WebGPUContext& ctx) override;
-    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    void prepareFrame(WebGPUContext& ctx, bool on) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) override;
 
     // Mouse scrolling
     bool onMouseScroll(float xoffset, float yoffset, int mods) override;

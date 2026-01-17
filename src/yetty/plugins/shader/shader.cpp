@@ -190,8 +190,69 @@ Result<void> Shader::dispose() {
     return Ok();
 }
 
-void Shader::prepareFrame(WebGPUContext& ctx) {
-    if (_failed || !_visible) return;
+void Shader::releaseGPUResources() {
+    // Release GPU resources but keep shader code and channel paths for recompilation
+
+    // Release main pass resources
+    if (_bindGroup) { wgpuBindGroupRelease(_bindGroup); _bindGroup = nullptr; }
+    if (_bindGroupLayout) { wgpuBindGroupLayoutRelease(_bindGroupLayout); _bindGroupLayout = nullptr; }
+    if (_pipeline) { wgpuRenderPipelineRelease(_pipeline); _pipeline = nullptr; }
+    if (_uniformBuffer) { wgpuBufferRelease(_uniformBuffer); _uniformBuffer = nullptr; }
+
+    // Release buffer pass resources
+    for (auto& pass : _bufferPasses) {
+        if (pass.bindGroup) { wgpuBindGroupRelease(pass.bindGroup); pass.bindGroup = nullptr; }
+        if (pass.pipeline) { wgpuRenderPipelineRelease(pass.pipeline); pass.pipeline = nullptr; }
+        if (pass.textureView) { wgpuTextureViewRelease(pass.textureView); pass.textureView = nullptr; }
+        if (pass.texturePrevView) { wgpuTextureViewRelease(pass.texturePrevView); pass.texturePrevView = nullptr; }
+        if (pass.texture) { wgpuTextureRelease(pass.texture); pass.texture = nullptr; }
+        if (pass.texturePrev) { wgpuTextureRelease(pass.texturePrev); pass.texturePrev = nullptr; }
+        // Keep pass.enabled and pass.shaderCode
+    }
+    if (_bufferSampler) { wgpuSamplerRelease(_bufferSampler); _bufferSampler = nullptr; }
+    if (_bufferBindGroupLayout) { wgpuBindGroupLayoutRelease(_bufferBindGroupLayout); _bufferBindGroupLayout = nullptr; }
+    _bufferWidth = 0;
+    _bufferHeight = 0;
+
+    // Release channel texture GPU resources but keep paths and loaded image data
+    for (auto& channel : _channels) {
+        if (channel.textureView) { wgpuTextureViewRelease(channel.textureView); channel.textureView = nullptr; }
+        if (channel.texture) { wgpuTextureRelease(channel.texture); channel.texture = nullptr; }
+        // Keep channel.path, channel.imageData, channel.width, channel.height
+        // Just mark as not loaded so texture gets recreated
+        if (channel.loaded) channel.loaded = false;
+    }
+    if (_channelSampler) { wgpuSamplerRelease(_channelSampler); _channelSampler = nullptr; }
+    if (_placeholderTextureView) { wgpuTextureViewRelease(_placeholderTextureView); _placeholderTextureView = nullptr; }
+    if (_placeholderTexture) { wgpuTextureRelease(_placeholderTexture); _placeholderTexture = nullptr; }
+
+    // Release standalone global resources
+    if (_globalBindGroup) { wgpuBindGroupRelease(_globalBindGroup); _globalBindGroup = nullptr; }
+    if (_globalBindGroupLayout) { wgpuBindGroupLayoutRelease(_globalBindGroupLayout); _globalBindGroupLayout = nullptr; }
+    if (_globalUniformBuffer) { wgpuBufferRelease(_globalUniformBuffer); _globalUniformBuffer = nullptr; }
+
+    _compiled = false;
+    yinfo("Shader: GPU resources released");
+}
+
+void Shader::prepareFrame(WebGPUContext& ctx, bool on) {
+    // Handle on/off transitions for GPU resource management
+    if (!on && wasOn_) {
+        // Transitioning to off - release GPU resources
+        yinfo("Shader: Transitioning to off - releasing GPU resources");
+        releaseGPUResources();
+        wasOn_ = false;
+        return;
+    }
+
+    if (on && !wasOn_) {
+        // Transitioning to on - will reinitialize
+        yinfo("Shader: Transitioning to on - will reinitialize");
+        wasOn_ = true;
+        _compiled = false;  // Force recompilation
+    }
+
+    if (!on || _failed || !_visible) return;
 
     const auto& rc = _renderCtx;
 
@@ -413,7 +474,8 @@ void Shader::prepareFrame(WebGPUContext& ctx) {
     wgpuCommandEncoderRelease(encoder);
 }
 
-Result<void> Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+Result<void> Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
+    if (!on) return Ok();  // Skip when off
     if (_failed) return Err<void>("Shader already failed");
     if (!_visible) return Ok();
 

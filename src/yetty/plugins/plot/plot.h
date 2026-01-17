@@ -77,7 +77,7 @@ public:
     void update(double deltaTime) override;
 
     // Widget render interface (batched rendering)
-    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) override;
 
     // Update plot data - NxM matrix of Y values
     // Data layout: row-major, data[row * M + col] = Y value for plot 'row' at point 'col'
@@ -167,6 +167,10 @@ private:
 
     bool gpuInitialized_ = false;
     bool failed_ = false;
+
+    // On/off state tracking for GPU resource management
+    bool wasOn_ = true;
+    void releaseGPUResources();
 };
 
 } // namespace yetty

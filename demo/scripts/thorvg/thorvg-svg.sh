@@ -1,5 +1,5 @@
 #!/bin/bash
-# ThorVG demo: Display SVG image
+# ThorVG Plugin: SVG rendering - static vector graphics (sunset scene)
 DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$DIR/../.."
+cd "$DIR/../../.."
 uv run python3 tools/yetty-client/main.py create thorvg --svg demo/assets/thorvg/sunset.svg -w 50 -H 25

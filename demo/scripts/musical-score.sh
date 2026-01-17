@@ -1,5 +1,5 @@
 #!/bin/bash
-# Musical score sheet demo
+# Musical-Score Plugin: Sheet music display with configurable staves
 #
 # Usage: ./demo/scripts/musical-score.sh [staves] [width] [height]
 #   staves: 1-16 (default: 4)

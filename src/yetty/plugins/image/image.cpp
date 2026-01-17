@@ -108,8 +108,34 @@ Result<void> Image::dispose() {
     return Ok();
 }
 
-Result<void> Image::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (failed_ || !_visible || !imageData_) return Ok();
+void Image::releaseGPUResources() {
+    // Release GPU resources but keep imageData_ for restoration
+    if (bindGroup_) { wgpuBindGroupRelease(bindGroup_); bindGroup_ = nullptr; }
+    if (pipeline_) { wgpuRenderPipelineRelease(pipeline_); pipeline_ = nullptr; }
+    if (uniformBuffer_) { wgpuBufferRelease(uniformBuffer_); uniformBuffer_ = nullptr; }
+    if (sampler_) { wgpuSamplerRelease(sampler_); sampler_ = nullptr; }
+    if (textureView_) { wgpuTextureViewRelease(textureView_); textureView_ = nullptr; }
+    if (texture_) { wgpuTextureRelease(texture_); texture_ = nullptr; }
+    gpuInitialized_ = false;
+    yinfo("Image: GPU resources released");
+}
+
+Result<void> Image::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
+    // Handle on/off transitions for GPU resource management
+    if (!on && wasOn_) {
+        yinfo("Image: Transitioning to off - releasing GPU resources");
+        releaseGPUResources();
+        wasOn_ = false;
+        return Ok();
+    }
+
+    if (on && !wasOn_) {
+        yinfo("Image: Transitioning to on - will reinitialize");
+        wasOn_ = true;
+        gpuInitialized_ = false;
+    }
+
+    if (!on || failed_ || !_visible || !imageData_) return Ok();
 
     const auto& rc = _renderCtx;
 

@@ -200,8 +200,8 @@ Result<void> CursorRenderer::createPipeline(WGPUTextureFormat targetFormat) {
     return Ok();
 }
 
-void CursorRenderer::prepareFrame(WebGPUContext& ctx) {
-    if (_failed || !_initialized) {
+void CursorRenderer::prepareFrame(WebGPUContext& ctx, bool on) {
+    if (!on || _failed || !_initialized) {
         return;  // Silently skip if failed or not initialized
     }
 

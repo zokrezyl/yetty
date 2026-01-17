@@ -1,7 +1,5 @@
 #!/bin/bash
-# Demo: Paint shader - interactive painting with persistent strokes
-# Click and drag to paint, use scroll wheel to change brush size
-
+# Shader Plugin: Interactive paint - click/drag to paint, scroll for brush size
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLIENT_DIR="$SCRIPT_DIR/../../../tools/yetty-client"
 SHADER_FILE="$SCRIPT_DIR/../../assets/shader/paint.wgsl"

@@ -433,8 +433,8 @@ Result<void> Ymery::ensureImGuiInitialized(WebGPUContext& ctx) {
     return Ok();
 }
 
-Result<void> Ymery::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (!_visible) return Ok();
+Result<void> Ymery::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
+    if (!on || !_visible) return Ok();
 
     // Lazy initialize
     if (auto res = ensureImGuiInitialized(ctx); !res) {

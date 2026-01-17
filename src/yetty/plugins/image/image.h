@@ -78,7 +78,7 @@ public:
 
     Result<void> dispose() override;
 
-    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) override;
 
 private:
     explicit Image(const std::string& payload) {
@@ -106,6 +106,10 @@ private:
     bool failed_ = false;
 
     float lastRect_[4] = {0, 0, 0, 0};
+
+    // On/off state tracking for GPU resource management
+    bool wasOn_ = true;
+    void releaseGPUResources();
 };
 
 } // namespace yetty

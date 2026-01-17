@@ -1,5 +1,5 @@
 #!/bin/bash
-# Piano keyboard demo
+# Piano Plugin: Interactive keyboard with mouse/keyboard input, MIDI note display
 #
 # Usage: ./demo/scripts/piano.sh [octaves] [start_octave]
 #   octaves: 1-8 (default: 2)

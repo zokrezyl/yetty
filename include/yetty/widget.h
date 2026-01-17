@@ -125,10 +125,12 @@ public:
     //-------------------------------------------------------------------------
 
     /// Phase 1: Pre-render (before shared pass)
-    virtual void prepareFrame(WebGPUContext& ctx) { (void)ctx; }
+    /// @param on - false if widget should release GPU resources (scrolled out or explicitly disabled)
+    virtual void prepareFrame(WebGPUContext& ctx, bool on) { (void)ctx; (void)on; }
 
     /// Render to the given render pass
-    virtual Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) = 0;
+    /// @param on - false if widget should skip rendering (scrolled out or explicitly disabled)
+    virtual Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) = 0;
 
     virtual void update(double deltaTime) { (void)deltaTime; }
 

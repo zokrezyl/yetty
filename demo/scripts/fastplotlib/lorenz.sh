@@ -1,4 +1,5 @@
 #!/bin/bash
+# Python Plugin (fastplotlib): Lorenz attractor - chaotic 3D trajectory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$ROOT_DIR"

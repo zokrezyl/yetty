@@ -1,6 +1,5 @@
 #!/bin/bash
-# Rich Text Plugin Demo
-
+# Rich-Text Plugin: Styled text with fonts, colors, sizes from YAML configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLIENT_DIR="$SCRIPT_DIR/../../tools/yetty-client"
 DEMO_FILE="$SCRIPT_DIR/../assets/rich-text/simple.yaml"

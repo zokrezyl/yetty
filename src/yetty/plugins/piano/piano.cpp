@@ -95,6 +95,15 @@ Result<void> Piano::dispose() {
     return Ok();
 }
 
+void Piano::releaseGPUResources() {
+    if (bindGroup_) { wgpuBindGroupRelease(bindGroup_); bindGroup_ = nullptr; }
+    if (pipeline_) { wgpuRenderPipelineRelease(pipeline_); pipeline_ = nullptr; }
+    if (uniformBuffer_) { wgpuBufferRelease(uniformBuffer_); uniformBuffer_ = nullptr; }
+    if (keyStateBuffer_) { wgpuBufferRelease(keyStateBuffer_); keyStateBuffer_ = nullptr; }
+    gpuInitialized_ = false;
+    yinfo("Piano: GPU resources released");
+}
+
 void Piano::update(double deltaTime) {
     time_ += static_cast<float>(deltaTime);
 }
@@ -257,8 +266,22 @@ bool Piano::onChar(unsigned int codepoint) {
     return true;
 }
 
-Result<void> Piano::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (!_visible) return Ok();
+Result<void> Piano::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
+    // Handle on/off transitions for GPU resource management
+    if (!on && wasOn_) {
+        yinfo("Piano: Transitioning to off - releasing GPU resources");
+        releaseGPUResources();
+        wasOn_ = false;
+        return Ok();
+    }
+
+    if (on && !wasOn_) {
+        yinfo("Piano: Transitioning to on - will reinitialize");
+        wasOn_ = true;
+        gpuInitialized_ = false;
+    }
+
+    if (!on || !_visible) return Ok();
     if (failed_) return Err<void>("Piano already failed");
 
     const auto& rc = _renderCtx;

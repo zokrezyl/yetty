@@ -272,7 +272,9 @@ void Terminal::stop() {
     }
 }
 
-void Terminal::prepareFrame(WebGPUContext& ctx) {
+void Terminal::prepareFrame(WebGPUContext& ctx, bool on) {
+    (void)on;  // Terminal is always on when called
+
     // Get current screen type for filtering
     ScreenType currentScreen = _isAltScreen ? ScreenType::Alternate : ScreenType::Main;
 
@@ -284,13 +286,17 @@ void Terminal::prepareFrame(WebGPUContext& ctx) {
         // Propagate our RenderContext to children
         widget->setRenderContext(_renderCtx);
 
+        // TODO: Calculate if widget is visible based on scroll position
+        bool widgetOn = true;
+
         // Call prepareFrame on child (for texture-based widgets)
-        widget->prepareFrame(ctx);
+        widget->prepareFrame(ctx, widgetOn);
     }
 }
 
-Result<void> Terminal::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+Result<void> Terminal::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
     (void)ctx;
+    (void)on;  // Terminal is always on when called
 
     if (!_running) {
         return Ok();
@@ -319,7 +325,11 @@ Result<void> Terminal::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
     for (const auto& widget : _childWidgets) {
         if (!widget->isVisible()) continue;
         if (widget->getScreenType() != currentScreen) continue;
-        if (auto res = widget->render(pass, ctx); !res) {
+
+        // TODO: Calculate if widget is visible based on scroll position
+        bool widgetOn = true;
+
+        if (auto res = widget->render(pass, ctx, widgetOn); !res) {
             yerror("Terminal: widget '{}' render failed: {}", widget->name(), res.error().message());
         }
     }

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Text Style Demo for yetty terminal
+# Terminal: ANSI escape code text styles (bold, italic, underline, strikethrough)
 
 echo ""
 echo "=== YETTY TEXT STYLE DEMO ==="

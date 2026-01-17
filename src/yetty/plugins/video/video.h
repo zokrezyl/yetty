@@ -94,8 +94,8 @@ public:
 
     Result<void> dispose() override;
 
-    void prepareFrame(WebGPUContext& ctx) override;
-    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    void prepareFrame(WebGPUContext& ctx, bool on) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) override;
 
     // Playback control
     void play();
@@ -162,6 +162,10 @@ private:
 
     bool gpuInitialized_ = false;
     bool failed_ = false;
+
+    // On/off state tracking for GPU resource management
+    bool wasOn_ = true;
+    void releaseGPUResources();
 };
 
 } // namespace yetty

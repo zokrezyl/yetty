@@ -256,7 +256,7 @@ if(NOT EMSCRIPTEN)
 endif()
 
 #-----------------------------------------------------------------------------
-# MuPDF for PDF rendering (desktop only)
+# MuPDF for PDF rendering (desktop only) - AGPL licensed
 #-----------------------------------------------------------------------------
 if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID)
     CPMAddPackage(
@@ -266,6 +266,50 @@ if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID)
     )
     if(mupdf_ADDED)
         include(${CMAKE_CURRENT_SOURCE_DIR}/build-tools/cmake/mupdf/CMakeLists.txt)
+    endif()
+endif()
+
+#-----------------------------------------------------------------------------
+# PDFium for PDF rendering (desktop only) - BSD-3-Clause licensed (MIT compatible)
+# Uses prebuilt binaries from https://github.com/bblanchon/pdfium-binaries
+#-----------------------------------------------------------------------------
+if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID)
+    # Detect platform for PDFium binary download
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+            set(PDFIUM_PLATFORM "linux-arm64")
+        else()
+            set(PDFIUM_PLATFORM "linux-x64")
+        endif()
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+            set(PDFIUM_PLATFORM "mac-arm64")
+        else()
+            set(PDFIUM_PLATFORM "mac-x64")
+        endif()
+    elseif(WIN32)
+        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            set(PDFIUM_PLATFORM "win-x64")
+        else()
+            set(PDFIUM_PLATFORM "win-x86")
+        endif()
+    else()
+        message(WARNING "Unknown platform for PDFium, skipping")
+        set(PDFIUM_PLATFORM "")
+    endif()
+
+    if(PDFIUM_PLATFORM)
+        # PDFium version 7630 (chromium/7630 release - latest as of Jan 2026)
+        set(PDFIUM_VERSION "7630")
+        CPMAddPackage(
+            NAME pdfium
+            URL https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/${PDFIUM_VERSION}/pdfium-${PDFIUM_PLATFORM}.tgz
+            DOWNLOAD_ONLY YES
+        )
+        if(pdfium_ADDED)
+            include(${CMAKE_CURRENT_SOURCE_DIR}/build-tools/cmake/pdfium/CMakeLists.txt)
+            message(STATUS "PDFium: enabled (${PDFIUM_PLATFORM}, chromium/${PDFIUM_VERSION})")
+        endif()
     endif()
 endif()
 
@@ -514,7 +558,19 @@ if(EMSCRIPTEN)
         YETTY_WEB=1
         YETTY_ANDROID=0
         YETTY_USE_PREBUILT_ATLAS=1
+        # Disable ytrace for Emscripten (POSIX socket code not supported)
+        YTRACE_ENABLED=0
+        YTRACE_ENABLE_YLOG=0
+        YTRACE_ENABLE_YTRACE=0
+        YTRACE_ENABLE_YDEBUG=0
+        YTRACE_ENABLE_YINFO=0
+        YTRACE_ENABLE_YWARN=0
+        YTRACE_ENABLE_YERROR=0
+        YTRACE_ENABLE_YFUNC=0
     )
+
+    # Include ytrace headers (macros become no-ops with YTRACE_ENABLED=0)
+    target_include_directories(yetty PRIVATE ${ytrace_SOURCE_DIR}/include)
 
     target_link_options(yetty PRIVATE
         -sUSE_GLFW=3
@@ -526,8 +582,8 @@ if(EMSCRIPTEN)
         "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/src/yetty/shaders/shaders.wgsl@/shaders.wgsl"
         "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/assets@/assets"
         # Export web terminal functions for JavaScript
-        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8']"
-        "-sEXPORTED_FUNCTIONS=['_main','_web_terminal_init','_web_terminal_write','_web_terminal_print','_web_terminal_get_cell_char','_web_terminal_get_cursor_row','_web_terminal_get_cursor_col','_web_terminal_get_rows','_web_terminal_get_cols','_web_terminal_key_input','_web_terminal_read_output','_web_terminal_cleanup']"
+        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','allocateUTF8','writeAsciiToMemory']"
+        "-sEXPORTED_FUNCTIONS=['_main','_web_terminal_init','_web_terminal_write','_web_terminal_print','_web_terminal_get_cell_char','_web_terminal_get_cursor_row','_web_terminal_get_cursor_col','_web_terminal_get_rows','_web_terminal_get_cols','_web_terminal_key_input','_web_terminal_read_output','_web_terminal_cleanup','_yetty_write','_yetty_key','_yetty_special_key','_yetty_read_input','_yetty_sync','_yetty_set_scale','_malloc','_free']"
     )
 
     # Use -O1 to avoid wasm-opt which has binaryen version mismatch issues
@@ -544,7 +600,7 @@ if(EMSCRIPTEN)
         stb
         yaml-cpp
         vterm
-        ytrace::ytrace
+        # ytrace disabled for Emscripten (POSIX sockets not supported)
     )
 
 elseif(YETTY_ANDROID)

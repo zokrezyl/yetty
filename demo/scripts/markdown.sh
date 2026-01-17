@@ -1,8 +1,5 @@
 #!/bin/bash
-# Markdown Plugin Demo for yetty terminal
-#
-# Usage: Run this script inside yetty terminal
-
+# Markdown Plugin: Renders markdown with headers, bold, italic, code blocks, lists
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR/../.."
 

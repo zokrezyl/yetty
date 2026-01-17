@@ -80,7 +80,7 @@ public:
     Result<void> dispose() override;
     void update(double deltaTime) override;
 
-    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) override;
 
     // Input handling
     bool onMouseMove(float localX, float localY) override;
@@ -109,6 +109,10 @@ private:
 
     bool gpuInitialized_ = false;
     bool failed_ = false;
+
+    // On/off state tracking for GPU resource management
+    bool wasOn_ = true;
+    void releaseGPUResources();
 };
 
 } // namespace yetty

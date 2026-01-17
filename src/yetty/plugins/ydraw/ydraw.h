@@ -78,8 +78,8 @@ public:
 
     Result<void> dispose() override;
 
-    void prepareFrame(WebGPUContext& ctx) override;
-    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    void prepareFrame(WebGPUContext& ctx, bool on) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) override;
 
     bool onMouseMove(float localX, float localY) override;
     bool onMouseButton(int button, bool pressed) override;

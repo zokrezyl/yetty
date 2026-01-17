@@ -89,6 +89,14 @@ Result<void> MusicalScore::dispose() {
     return Ok();
 }
 
+void MusicalScore::releaseGPUResources() {
+    if (bindGroup_) { wgpuBindGroupRelease(bindGroup_); bindGroup_ = nullptr; }
+    if (pipeline_) { wgpuRenderPipelineRelease(pipeline_); pipeline_ = nullptr; }
+    if (uniformBuffer_) { wgpuBufferRelease(uniformBuffer_); uniformBuffer_ = nullptr; }
+    gpuInitialized_ = false;
+    yinfo("MusicalScore: GPU resources released");
+}
+
 void MusicalScore::update(double deltaTime) {
     (void)deltaTime;
 }
@@ -120,8 +128,22 @@ bool MusicalScore::onChar(unsigned int codepoint) {
     return true;
 }
 
-Result<void> MusicalScore::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (!_visible) return Ok();
+Result<void> MusicalScore::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
+    // Handle on/off transitions for GPU resource management
+    if (!on && wasOn_) {
+        yinfo("MusicalScore: Transitioning to off - releasing GPU resources");
+        releaseGPUResources();
+        wasOn_ = false;
+        return Ok();
+    }
+
+    if (on && !wasOn_) {
+        yinfo("MusicalScore: Transitioning to on - will reinitialize");
+        wasOn_ = true;
+        gpuInitialized_ = false;
+    }
+
+    if (!on || !_visible) return Ok();
     if (failed_) return Err<void>("MusicalScore already failed");
 
     const auto& rc = _renderCtx;

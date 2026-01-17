@@ -110,7 +110,7 @@ public:
 
     Result<void> dispose() override;
 
-    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) override;
 
     bool onMouseMove(float x, float y) override;
     bool onMouseButton(int button, bool pressed) override;

@@ -76,10 +76,10 @@ public:
     void stop() override;
 
     // Pre-render phase - propagates RenderContext and prepareFrame to children
-    void prepareFrame(WebGPUContext& ctx) override;
+    void prepareFrame(WebGPUContext& ctx, bool on) override;
 
     // Batched render - renders grid and child widgets to provided pass
-    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) override;
 
     //=========================================================================
     // Terminal-specific interface (single-threaded, call from main thread)

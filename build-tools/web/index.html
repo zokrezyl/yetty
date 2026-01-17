@@ -49,12 +49,11 @@
             border-radius: 8px;
             overflow: hidden;
             position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
         canvas {
             display: block;
+            width: 100%;
+            height: 100%;
         }
         #shell-container {
             background: #0f0f23;
@@ -168,7 +167,7 @@
             'yes', 'seq', 'cal', 'factor', 'sleep', 'date'
         ];
 
-        // Initialize Toybox
+        // Initialize Toybox and connect to WebDisplay terminal
         async function initToybox() {
             const status = document.getElementById('status');
             const loading = document.getElementById('loading');
@@ -191,9 +190,10 @@
                 ToyboxFactory = ToyboxModule;
 
                 if (status) status.textContent = 'Toybox ready!';
-                appendOutput('Welcome to yetty web demo!\n');
-                appendOutput('Available commands: ' + AVAILABLE_COMMANDS.join(', ') + '\n');
-                appendOutput('Type a command to try it out.\n\n');
+
+                // Hide the text-based shell container since we use WebGPU terminal
+                const shellContainer = document.getElementById('shell-container');
+                if (shellContainer) shellContainer.style.display = 'none';
 
                 setTimeout(() => {
                     if (loading) loading.style.display = 'none';
@@ -202,6 +202,167 @@
             } catch (err) {
                 if (status) status.textContent = 'Error: ' + err.message;
                 console.error('Failed to initialize Toybox:', err);
+            }
+        }
+
+        // Write text to WebDisplay terminal
+        function writeToTerminal(text) {
+            if (typeof Module._yetty_write === 'function' && typeof Module._malloc === 'function') {
+                const len = text.length;
+                const ptr = Module._malloc(len + 1);
+                Module.writeAsciiToMemory(text, ptr);
+                Module._yetty_write(ptr, len);
+                Module._free(ptr);
+            }
+        }
+
+        // Current command line buffer
+        let commandBuffer = '';
+
+        // Set up keyboard input on canvas
+        function setupCanvasInput() {
+            const canvas = document.getElementById('canvas');
+            canvas.tabIndex = 0; // Make canvas focusable
+            canvas.focus();
+
+            canvas.addEventListener('keydown', async (e) => {
+                e.preventDefault();
+
+                // Send key to vterm and read back what it produces
+                function sendKeyAndEcho() {
+                    // Read vterm output and echo it back to display
+                    const buf = Module._malloc(256);
+                    const len = Module._yetty_read_input(buf, 255);
+                    if (len > 0) {
+                        // Echo back to vterm for display
+                        Module._yetty_write(buf, len);
+                    }
+                    Module._free(buf);
+                    // Don't call _yetty_sync() - render loop handles it
+                }
+
+                if (e.key === 'Enter') {
+                    // Send Enter to vterm
+                    Module._yetty_special_key(1, 0);
+
+                    // Read what vterm produced (CR/LF)
+                    const buf = Module._malloc(256);
+                    const len = Module._yetty_read_input(buf, 255);
+                    Module._free(buf);
+
+                    // Process the command
+                    const cmd = commandBuffer.trim();
+                    commandBuffer = '';
+
+                    // Write newline to display
+                    writeToTerminal('\r\n');
+
+                    if (cmd) {
+                        await runToyboxCommand(cmd);
+                    }
+
+                    writeToTerminal('$ ');
+                } else if (e.key === 'Backspace') {
+                    if (commandBuffer.length > 0) {
+                        commandBuffer = commandBuffer.slice(0, -1);
+                        // Send visual backspace: move back, space to erase, move back
+                        writeToTerminal('\b \b');
+                    }
+                } else if (e.key === 'Tab') {
+                    Module._yetty_special_key(2, 0);
+                    sendKeyAndEcho();
+                } else if (e.key === 'Escape') {
+                    Module._yetty_special_key(4, 0);
+                    sendKeyAndEcho();
+                } else if (e.key === 'ArrowUp') {
+                    Module._yetty_special_key(5, 0);
+                    sendKeyAndEcho();
+                } else if (e.key === 'ArrowDown') {
+                    Module._yetty_special_key(6, 0);
+                    sendKeyAndEcho();
+                } else if (e.key === 'ArrowLeft') {
+                    Module._yetty_special_key(7, 0);
+                    sendKeyAndEcho();
+                } else if (e.key === 'ArrowRight') {
+                    Module._yetty_special_key(8, 0);
+                    sendKeyAndEcho();
+                } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                    // Regular character - send to vterm
+                    commandBuffer += e.key;
+                    Module._yetty_key(e.key.charCodeAt(0));
+                    sendKeyAndEcho();
+                }
+            });
+
+            // Focus canvas when clicking on it
+            canvas.addEventListener('click', () => canvas.focus());
+
+            // Ctrl+wheel to zoom
+            let currentScale = 1.0;
+            canvas.addEventListener('wheel', (e) => {
+                if (e.ctrlKey) {
+                    e.preventDefault();
+                    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                    currentScale = Math.max(0.3, Math.min(3.0, currentScale + delta));
+                    // Update glyph rendering scale in C++
+                    if (typeof Module._yetty_set_scale === 'function') {
+                        Module._yetty_set_scale(currentScale);
+                    }
+                }
+            }, { passive: false });
+        }
+
+        // Run a toybox command and write output to terminal
+        async function runToyboxCommand(cmdLine) {
+            // Add to history
+            if (cmdLine.trim()) {
+                commandHistory.push(cmdLine);
+                historyIndex = commandHistory.length;
+            }
+
+            const parts = cmdLine.trim().split(/\s+/);
+            const cmd = parts[0];
+
+            // Built-in commands
+            if (cmd === 'help') {
+                writeToTerminal('Available commands:\r\n');
+                writeToTerminal('  ' + AVAILABLE_COMMANDS.join(', ') + '\r\n');
+                writeToTerminal('  help  - Show this help\r\n');
+                writeToTerminal('  clear - Clear screen\r\n');
+                return;
+            }
+
+            if (cmd === 'clear') {
+                writeToTerminal('\x1b[2J\x1b[H'); // ANSI clear screen
+                return;
+            }
+
+            // Check if Toybox is loaded
+            if (!ToyboxFactory) {
+                writeToTerminal('Error: Toybox not loaded yet\r\n');
+                return;
+            }
+
+            // Check if command is available
+            if (!AVAILABLE_COMMANDS.includes(cmd)) {
+                writeToTerminal(`'${cmd}' is not available.\r\n`);
+                return;
+            }
+
+            // Run Toybox command
+            try {
+                const mod = await ToyboxFactory({
+                    thisProgram: 'toybox',
+                    print: (text) => writeToTerminal(text + '\r\n'),
+                    printErr: (text) => writeToTerminal('\x1b[31m' + text + '\x1b[0m\r\n'),
+                    noExitRuntime: true,
+                });
+                mod.callMain(parts);
+            } catch (err) {
+                // Emscripten throws on exit(0), which is normal
+                if (!err.message?.includes('exit') && !err.message?.includes('unreachable')) {
+                    writeToTerminal('Error: ' + err.message + '\r\n');
+                }
             }
         }
 
@@ -316,7 +477,7 @@
             document.getElementById('command-input').focus();
         });
 
-        // Check for WebGPU support
+        // Check for WebGPU support and initialize device
         async function checkWebGPU() {
             const status = document.getElementById('status');
 
@@ -332,18 +493,48 @@
             }
 
             try {
+                status.textContent = 'Requesting WebGPU adapter...';
                 const adapter = await navigator.gpu.requestAdapter();
                 if (!adapter) {
                     status.textContent = 'No WebGPU adapter found';
                     return false;
                 }
-                status.textContent = 'WebGPU available';
+
+                status.textContent = 'Requesting WebGPU device...';
+                const device = await adapter.requestDevice();
+                if (!device) {
+                    status.textContent = 'Failed to get WebGPU device';
+                    return false;
+                }
+
+                // Store device globally for Emscripten to access
+                // Emscripten's emscripten_webgpu_get_device() looks for this
+                Module.preinitializedWebGPUDevice = device;
+
+                status.textContent = 'WebGPU initialized';
+                console.log('WebGPU device ready:', device);
                 return true;
             } catch (err) {
                 status.textContent = 'WebGPU error: ' + err.message;
+                console.error('WebGPU initialization error:', err);
                 return false;
             }
         }
+
+        // Resize canvas to fill container
+        function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
+            const canvas = document.getElementById('canvas');
+            if (container && canvas) {
+                const rect = container.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+            }
+        }
+
+        // Promise that resolves when Module is ready
+        let moduleReadyResolve;
+        const moduleReady = new Promise(resolve => { moduleReadyResolve = resolve; });
 
         // Configure Emscripten Module BEFORE loading yetty.js
         var Module = {
@@ -358,8 +549,25 @@
                 setTimeout(() => {
                     if (loading) loading.style.display = 'none';
                 }, 500);
+                // Resize canvas after initialization
+                resizeCanvas();
+                // Signal that module is ready
+                moduleReadyResolve();
+
+                // Write initial prompt directly
+                setTimeout(() => {
+                    writeToTerminal('$ ');
+                    // Initial sync needed to display prompt
+                    if (typeof Module._yetty_sync === 'function') {
+                        Module._yetty_sync();
+                    }
+                    setupCanvasInput();
+                }, 100);
             }
         };
+
+        // Handle window resize
+        window.addEventListener('resize', resizeCanvas);
 
         // Initialize yetty WebGPU terminal
         async function initYetty() {
@@ -390,6 +598,9 @@
 
         // Initialize
         async function init() {
+            // Set initial canvas size
+            resizeCanvas();
+
             const hasWebGPU = await checkWebGPU();
 
             if (hasWebGPU) {

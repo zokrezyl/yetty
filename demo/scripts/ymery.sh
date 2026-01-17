@@ -1,5 +1,5 @@
 #!/bin/bash
-# Ymery demo: ImGui widgets from YAML layouts
+# Ymery Plugin: ImGui widgets rendered from YAML layout definitions
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR/../.."
 

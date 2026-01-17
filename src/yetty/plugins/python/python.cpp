@@ -394,6 +394,97 @@ Result<void> PythonPlugin::runFile(const std::string& path) {
     return Ok();
 }
 
+Result<std::string> PythonPlugin::executeInNamespace(const std::string& code, PyObject* namespaceDict) {
+    if (!pyInitialized_) {
+        return Err<std::string>("Python not initialized");
+    }
+    if (!namespaceDict) {
+        return execute(code);  // Fall back to main dict
+    }
+
+    // Acquire GIL
+    PyGILState_STATE gstate = PyGILState_Ensure();
+
+    // Redirect stdout/stderr to capture output
+    PyObject* sys = PyImport_ImportModule("sys");
+    if (!sys) {
+        PyGILState_Release(gstate);
+        return Err<std::string>("Failed to import sys module");
+    }
+
+    PyObject* io = PyImport_ImportModule("io");
+    if (!io) {
+        Py_DECREF(sys);
+        PyGILState_Release(gstate);
+        return Err<std::string>("Failed to import io module");
+    }
+
+    // Create StringIO for capturing output
+    PyObject* stringIoClass = PyObject_GetAttrString(io, "StringIO");
+    PyObject* stringIo = PyObject_CallObject(stringIoClass, nullptr);
+    Py_DECREF(stringIoClass);
+
+    // Save original stdout/stderr
+    PyObject* oldStdout = PyObject_GetAttrString(sys, "stdout");
+    PyObject* oldStderr = PyObject_GetAttrString(sys, "stderr");
+
+    // Redirect stdout/stderr to our StringIO
+    PyObject_SetAttrString(sys, "stdout", stringIo);
+    PyObject_SetAttrString(sys, "stderr", stringIo);
+
+    // Execute the code in the provided namespace
+    PyObject* result = PyRun_String(code.c_str(), Py_file_input, namespaceDict, namespaceDict);
+
+    // Get captured output
+    PyObject* getvalue = PyObject_GetAttrString(stringIo, "getvalue");
+    PyObject* outputObj = PyObject_CallObject(getvalue, nullptr);
+    Py_DECREF(getvalue);
+
+    std::string output;
+    if (outputObj && PyUnicode_Check(outputObj)) {
+        output = PyUnicode_AsUTF8(outputObj);
+    }
+    Py_XDECREF(outputObj);
+
+    // Restore stdout/stderr
+    PyObject_SetAttrString(sys, "stdout", oldStdout);
+    PyObject_SetAttrString(sys, "stderr", oldStderr);
+    Py_DECREF(oldStdout);
+    Py_DECREF(oldStderr);
+    Py_DECREF(stringIo);
+    Py_DECREF(io);
+    Py_DECREF(sys);
+
+    if (!result) {
+        PyErr_Print();
+        PyErr_Clear();
+        PyGILState_Release(gstate);
+        return Err<std::string>("Python execution error: " + output);
+    }
+
+    Py_DECREF(result);
+    PyGILState_Release(gstate);
+    return Ok(output);
+}
+
+Result<void> PythonPlugin::runFileInNamespace(const std::string& path, PyObject* namespaceDict) {
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return Err<void>("Failed to open Python file: " + path);
+    }
+
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+
+    auto result = executeInNamespace(buffer.str(), namespaceDict);
+    if (!result) {
+        return Err<void>("Failed to execute Python file", result);
+    }
+
+    yinfo("Python file executed in namespace: {}", path);
+    return Ok();
+}
+
 //-----------------------------------------------------------------------------
 // Python
 //-----------------------------------------------------------------------------
@@ -441,6 +532,25 @@ Result<void> Python::init() {
     return Ok();
 }
 
+void Python::releaseGPUResources() {
+    // Release blit pipeline resources when widget goes off-screen
+    // This saves GPU memory for widgets that are scrolled out of view
+    if (blitBindGroup_) {
+        wgpuBindGroupRelease(blitBindGroup_);
+        blitBindGroup_ = nullptr;
+    }
+    if (blitPipeline_) {
+        wgpuRenderPipelineRelease(blitPipeline_);
+        blitPipeline_ = nullptr;
+    }
+    if (blitSampler_) {
+        wgpuSamplerRelease(blitSampler_);
+        blitSampler_ = nullptr;
+    }
+    blitInitialized_ = false;
+    yinfo("Python: GPU resources released");
+}
+
 Result<void> Python::dispose() {
     // Call dispose_layer callback
     callDisposeWidget();
@@ -463,6 +573,7 @@ Result<void> Python::dispose() {
     // Cleanup Python references (only if Python is still initialized)
     // Note: yetty_pygfx.cleanup() is already called by dispose_widget() above
     if (plugin_ && plugin_->isInitialized()) {
+        PyGILState_STATE gstate = PyGILState_Ensure();
         if (userRenderFunc_) {
             Py_DECREF(userRenderFunc_);
             userRenderFunc_ = nullptr;
@@ -475,11 +586,17 @@ Result<void> Python::dispose() {
             Py_DECREF(pygfxModule_);
             pygfxModule_ = nullptr;
         }
+        if (widgetDict_) {
+            Py_DECREF(widgetDict_);
+            widgetDict_ = nullptr;
+        }
+        PyGILState_Release(gstate);
     } else {
         // Python already finalized, just null out pointers
         userRenderFunc_ = nullptr;
         renderFrameFunc_ = nullptr;
         pygfxModule_ = nullptr;
+        widgetDict_ = nullptr;
     }
     pygfxInitialized_ = false;
     wgpuHandlesSet_ = false;
@@ -487,11 +604,29 @@ Result<void> Python::dispose() {
     return Ok();
 }
 
-void Python::prepareFrame(WebGPUContext& ctx) {
+void Python::prepareFrame(WebGPUContext& ctx, bool on) {
     // This is called BEFORE the shared render pass begins
     // Here we initialize and render pygfx content to our texture
 
-    if (failed_ || !_visible) {
+    // Handle on/off transitions for GPU resource management
+    if (!on && wasOn_) {
+        // Transitioning to off - release GPU resources
+        yinfo("Python: Transitioning to off - releasing GPU resources");
+        releaseGPUResources();
+        wasOn_ = false;
+        return;
+    }
+
+    if (on && !wasOn_) {
+        // Transitioning to on - will reinitialize on next frame
+        yinfo("Python: Transitioning to on - will reinitialize");
+        wasOn_ = true;
+        // Reset initialization flags so we recreate resources
+        blitInitialized_ = false;
+        // Note: wgpuHandlesSet_ stays true, we just need to recreate blit pipeline
+    }
+
+    if (!on || failed_ || !_visible) {
         return;
     }
 
@@ -514,10 +649,33 @@ void Python::prepareFrame(WebGPUContext& ctx) {
             return;
         }
 
-        // Now execute the user script (init.py has already been called)
+        // Create per-widget namespace for isolated execution
+        if (!widgetDict_) {
+            PyGILState_STATE gstate = PyGILState_Ensure();
+
+            // Create a new dict that inherits from __main__ but is isolated
+            widgetDict_ = PyDict_New();
+
+            // Copy builtins so import etc. works
+            PyObject* mainModule = PyImport_AddModule("__main__");
+            PyObject* mainDict = PyModule_GetDict(mainModule);
+            PyObject* builtins = PyDict_GetItemString(mainDict, "__builtins__");
+            if (builtins) {
+                PyDict_SetItemString(widgetDict_, "__builtins__", builtins);
+            }
+
+            // Set widget name
+            PyDict_SetItemString(widgetDict_, "__name__", PyUnicode_FromString("__widget__"));
+            PyDict_SetItemString(widgetDict_, "__widget_id__", PyLong_FromLong(widgetId_));
+
+            PyGILState_Release(gstate);
+            yinfo("Python: Created per-widget namespace for widget {}", widgetId_);
+        }
+
+        // Now execute the user script in the widget's namespace
         if (!scriptPath_.empty()) {
-            yinfo("Python: Executing user script: {}", scriptPath_);
-            auto result = plugin_->runFile(scriptPath_);
+            yinfo("Python: Executing user script in widget namespace: {}", scriptPath_);
+            auto result = plugin_->runFileInNamespace(scriptPath_, widgetDict_);
             if (!result) {
                 output_ = "Error: " + result.error().message();
                 yerror("Python: failed to run script: {}", scriptPath_);
@@ -525,11 +683,11 @@ void Python::prepareFrame(WebGPUContext& ctx) {
                 return;
             }
             output_ = "Script executed: " + scriptPath_;
-            yinfo("Python: User script executed successfully");
+            yinfo("Python: User script executed successfully in widget namespace");
         } else if (!_payload.empty()) {
             // Inline code
-            yinfo("Python: Executing inline code");
-            auto result = plugin_->execute(_payload);
+            yinfo("Python: Executing inline code in widget namespace");
+            auto result = plugin_->executeInNamespace(_payload, widgetDict_);
             if (!result) {
                 output_ = "Error: " + result.error().message();
                 failed_ = true;
@@ -553,10 +711,11 @@ void Python::prepareFrame(WebGPUContext& ctx) {
     frameCount_++;
 }
 
-Result<void> Python::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+Result<void> Python::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
     // This is called INSIDE the shared render pass
     // We only blit our pre-rendered texture here - NO Python rendering!
 
+    if (!on) return Ok();  // Skip rendering when off
     if (failed_) return Err<void>("Python: failed flag is set");
     if (!_visible) return Ok();
     if (!wgpuHandlesSet_) return Ok();  // prepareFrame() hasn't run yet
@@ -648,25 +807,46 @@ bool Python::callRender(WebGPUContext& ctx, uint32_t frameNum, uint32_t width, u
     PyGILState_STATE gstate = PyGILState_Ensure();
 
     if (!userRenderFunc_) {
-        // Try to get render function from main dict
-        PyObject* mainModule = PyImport_AddModule("__main__");
-        PyObject* mainDict = PyModule_GetDict(mainModule);
-        userRenderFunc_ = PyDict_GetItemString(mainDict, "render");
+        // Try to get render function from widget's namespace (per-widget isolation)
+        if (widgetDict_) {
+            userRenderFunc_ = PyDict_GetItemString(widgetDict_, "render");
+        }
+
+        // Fall back to main dict if not found in widget namespace
+        if (!userRenderFunc_) {
+            PyObject* mainModule = PyImport_AddModule("__main__");
+            PyObject* mainDict = PyModule_GetDict(mainModule);
+            userRenderFunc_ = PyDict_GetItemString(mainDict, "render");
+        }
 
         if (!userRenderFunc_) {
-            ywarn("Python: No render() function found in user script");
+            ywarn("Python: No render() function found in user script for widget {}", widgetId_);
             PyGILState_Release(gstate);
             return false;
         }
 
         Py_INCREF(userRenderFunc_);  // Keep reference
-        yinfo("Python: Found user render() function");
+        yinfo("Python: Found user render() function for widget {}", widgetId_);
     }
 
     // Create context dict
     PyObject* ctxDict = PyDict_New();
     PyDict_SetItemString(ctxDict, "device", PyLong_FromVoidPtr((void*)ctx.getDevice()));
     PyDict_SetItemString(ctxDict, "queue", PyLong_FromVoidPtr((void*)ctx.getQueue()));
+    PyDict_SetItemString(ctxDict, "widget_id", PyLong_FromLong(widgetId_));
+
+    // Set current widget in yetty_pygfx before calling user's render function
+    // This ensures render_frame() uses the correct widget even if called without args
+    if (pygfxModule_) {
+        PyObject* setCurrentFunc = PyObject_GetAttrString(pygfxModule_, "set_current_widget");
+        if (setCurrentFunc) {
+            PyObject* widgetIdArg = PyLong_FromLong(widgetId_);
+            PyObject* setResult = PyObject_CallFunctionObjArgs(setCurrentFunc, widgetIdArg, NULL);
+            Py_XDECREF(setResult);
+            Py_DECREF(widgetIdArg);
+            Py_DECREF(setCurrentFunc);
+        }
+    }
 
     // Call render(ctx, frame_num, width, height)
     PyObject* args = Py_BuildValue("(Oiii)", ctxDict, frameNum, width, height);

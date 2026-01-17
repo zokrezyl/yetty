@@ -36,6 +36,9 @@ struct TextChar {
     glm::vec4 color = {1.0f, 1.0f, 1.0f, 1.0f};
     Font::Style style = Font::Regular;
     std::string fontFamily;                    // Font family (resolved via FontManager)
+    bool prePositioned = false;                // If true, (x,y) is glyph top-left, skip bearing
+    float targetWidth = 0;                     // If >0, scale glyph to this width (for prePositioned)
+    float targetHeight = 0;                    // If >0, scale glyph to this height (for prePositioned)
 };
 
 //-----------------------------------------------------------------------------
@@ -81,6 +84,10 @@ public:
 
     // Set default font family (used when TextChar/TextSpan has empty fontFamily)
     void setDefaultFontFamily(const std::string& family) { defaultFontFamily_ = family; }
+
+    // Set background color (renders a quad behind all text)
+    void setBackgroundColor(const glm::vec4& color) { backgroundColor_ = color; hasBackground_ = true; }
+    void clearBackgroundColor() { hasBackground_ = false; }
 
     //-------------------------------------------------------------------------
     // Content building - two approaches:
@@ -196,6 +203,13 @@ private:
     static constexpr float pixelRange_ = 4.0f;
     bool initialized_ = false;
     bool gpuResourcesDirty_ = true;
+
+    // Background color support
+    glm::vec4 backgroundColor_ = {1.0f, 1.0f, 1.0f, 1.0f};  // Default white
+    bool hasBackground_ = false;
+    WGPURenderPipeline bgPipeline_ = nullptr;
+    WGPUBindGroup bgBindGroup_ = nullptr;
+    WGPUBuffer bgUniformBuffer_ = nullptr;
 };
 
 } // namespace yetty

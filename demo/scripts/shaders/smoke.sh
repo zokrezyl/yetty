@@ -1,7 +1,5 @@
 #!/bin/bash
-# Demo: Smoke shader - fluid/smoke simulation with mouse interaction
-# Move mouse to add smoke, watch it rise and diffuse
-
+# Shader Plugin: Fluid smoke - mouse-interactive smoke simulation
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLIENT_DIR="$SCRIPT_DIR/../../../tools/yetty-client"
 SHADER_FILE="$SCRIPT_DIR/../../assets/shader/smoke.wgsl"

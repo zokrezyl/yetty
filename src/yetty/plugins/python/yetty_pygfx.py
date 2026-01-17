@@ -293,12 +293,22 @@ def create_figure(widget_id=None, **kwargs):
     )
 
 
+_debug_frame_count = 0
+
 def render_frame(widget_id=None):
     """Render one frame. Called by yetty each frame."""
+    global _debug_frame_count
+    _debug_frame_count += 1
+
     if widget_id is None:
         widget_id = _current_widget_id
     if widget_id is None:
         return False
+
+    # Debug every 60 frames
+    if _debug_frame_count % 60 == 0:
+        callbacks_info = {wid: (tex._render_callback is not None) for wid, tex in _textures.items()}
+        print(f"[render_frame] frame={_debug_frame_count} widget_id={widget_id} callbacks={callbacks_info}")
 
     tex = _textures.get(widget_id)
     if tex and tex._render_callback:
@@ -306,8 +316,21 @@ def render_frame(widget_id=None):
             tex._render_callback()
             return True
         except Exception as e:
-            sys.stderr.write(f"render_frame error: {e}\n")
+            sys.stderr.write(f"render_frame error for widget {widget_id}: {e}\n")
     return False
+
+
+def render_all_frames():
+    """Render all widgets that have callbacks. Call this instead of render_frame for multi-widget support."""
+    rendered = False
+    for wid, tex in _textures.items():
+        if tex and tex._render_callback:
+            try:
+                tex._render_callback()
+                rendered = True
+            except Exception as e:
+                sys.stderr.write(f"render_all_frames error for widget {wid}: {e}\n")
+    return rendered
 
 
 def cleanup(widget_id):

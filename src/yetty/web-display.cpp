@@ -1,9 +1,11 @@
 #if YETTY_WEB
 
 #include "web-display.h"
+#include "damage-rect.h"
 #include <emscripten.h>
 #include <ytrace/ytrace.hpp>
 #include <cstring>
+#include <vector>
 
 namespace yetty {
 
@@ -91,12 +93,10 @@ Result<void> WebDisplay::init() noexcept
     vterm_screen_set_callbacks(_vtermScreen, &screenCallbacks, this);
     vterm_screen_reset(_vtermScreen, 1);
 
-    yinfo("WebDisplay initialized: {}x{} grid with vterm", _cols, _rows);
-
-    // Print initial prompt
-    const char* welcome = "\r\n  Welcome to yetty - WebGPU Terminal\r\n\r\n$ ";
-    vterm_input_write(_vterm, welcome, strlen(welcome));
+    // Initialize grid with spaces from vterm's initial state
     syncToGrid();
+
+    yinfo("WebDisplay initialized: {}x{} grid with vterm", _cols, _rows);
 
     return Ok();
 }
@@ -206,16 +206,32 @@ void WebDisplay::syncToGrid()
             vterm_screen_get_cell(_vtermScreen, pos, &cell);
 
             uint32_t codepoint = cell.chars[0] ? cell.chars[0] : ' ';
+
+            // Convert codepoint to glyph index
+            uint16_t glyphIndex = _font ? _font->getGlyphIndex(codepoint)
+                                        : static_cast<uint16_t>(codepoint);
+
             uint8_t fgR, fgG, fgB, bgR, bgG, bgB;
-            colorToRGB(cell.fg, fgR, fgG, fgB);
-            colorToRGB(cell.bg, bgR, bgG, bgB);
+
+            // Handle default colors explicitly
+            if (VTERM_COLOR_IS_DEFAULT_FG(&cell.fg)) {
+                fgR = fgG = fgB = 204; // Light gray foreground
+            } else {
+                colorToRGB(cell.fg, fgR, fgG, fgB);
+            }
+
+            if (VTERM_COLOR_IS_DEFAULT_BG(&cell.bg)) {
+                bgR = 0x0F; bgG = 0x0F; bgB = 0x23; // Dark background
+            } else {
+                colorToRGB(cell.bg, bgR, bgG, bgB);
+            }
 
             // Use default colors if black on black
             if (fgR == 0 && fgG == 0 && fgB == 0 && bgR == 0 && bgG == 0 && bgB == 0) {
                 fgR = fgG = fgB = 204;
             }
 
-            _grid.setCell(col, row, codepoint,
+            _grid.setCell(col, row, glyphIndex,
                          fgR, fgG, fgB,
                          bgR, bgG, bgB);
         }
@@ -228,20 +244,35 @@ void WebDisplay::syncToGrid()
 // Rendering
 //=============================================================================
 
-Result<void> WebDisplay::render(WebGPUContext& ctx)
+void WebDisplay::prepareFrame(WebGPUContext& ctx, bool on)
 {
+    (void)ctx;
+    (void)on;
+    // Sync vterm to grid if needed
+    if (_needsSync) {
+        syncToGrid();
+        _needsRender = true;
+    }
+}
+
+bool WebDisplay::needsRender() const
+{
+    return _needsRender || _needsSync;
+}
+
+Result<void> WebDisplay::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on)
+{
+    (void)ctx;
+    (void)on;
     if (!_renderer) {
         return Err<void>("No renderer available");
     }
 
-    // Sync vterm to grid if needed
-    if (_needsSync) {
-        syncToGrid();
-    }
+    // Render the grid with cursor using the provided render pass
+    std::vector<DamageRect> emptyDamage;
+    _renderer->renderToPass(pass, _grid, emptyDamage, true, _cursorCol, _cursorRow, _cursorVisible);
 
-    // Render the grid with cursor
-    _renderer->render(_grid, _cursorCol, _cursorRow, _cursorVisible);
-
+    _needsRender = false;
     return Ok();
 }
 
@@ -256,6 +287,18 @@ void WebDisplay::setCellSize(float width, float height)
 {
     if (_renderer) {
         _renderer->setCellSize(width, height);
+    }
+}
+
+void WebDisplay::setScale(float scale)
+{
+    if (_renderer && _font) {
+        // Scale both cell size AND glyph rendering (like desktop)
+        float lineHeight = _font->getLineHeight();
+        float baseCellWidth = lineHeight * 0.5f;
+        float baseCellHeight = lineHeight;
+        _renderer->setCellSize(baseCellWidth * scale, baseCellHeight * scale);
+        _renderer->setScale(scale);
     }
 }
 
@@ -335,6 +378,16 @@ void yetty_sync()
     auto* display = yetty::WebDisplay::instance();
     if (display) {
         display->syncToGrid();
+    }
+}
+
+// Set display scale (glyph rendering scale)
+EMSCRIPTEN_KEEPALIVE
+void yetty_set_scale(float scale)
+{
+    auto* display = yetty::WebDisplay::instance();
+    if (display) {
+        display->setScale(scale);
     }
 }
 

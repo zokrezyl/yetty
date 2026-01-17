@@ -194,7 +194,9 @@ Result<void> Yetty::init(int argc, char *argv[]) noexcept {
   }
 
   // Initialize libuv loop before terminal (terminal uses it)
+#if !YETTY_WEB
   initEventLoop();
+#endif
 
   // Initialize terminal
   if (auto res = initTerminal(); !res) {
@@ -662,121 +664,6 @@ setup_shader_manager:
   _webDisplay = *displayResult;
   _rootWidgets.push_back(_webDisplay);
 
-  // Fill the grid with a welcome message
-  Grid &grid = _webDisplay->grid();
-  Font *font = _webDisplay->font();
-
-  const char *lines[] = {
-      "+-----------------------------------------------------------------------"
-      "----+",
-      "|                                                                       "
-      "    |",
-      "|                     YETTY - WebGPU Terminal Emulator                  "
-      "    |",
-      "|                                                                       "
-      "    |",
-      "+-----------------------------------------------------------------------"
-      "----+",
-      "|                                                                       "
-      "    |",
-      "|  Welcome to the yetty web demo!                                       "
-      "    |",
-      "|                                                                       "
-      "    |",
-      "|  This terminal is rendered using WebGPU with MSDF fonts.              "
-      "    |",
-      "|                                                                       "
-      "    |",
-      "|  Features:                                                            "
-      "    |",
-      "|    * GPU-accelerated text rendering                                   "
-      "    |",
-      "|    * Smooth scaling via MSDF (Multi-channel Signed Distance Fields)   "
-      "    |",
-      "|    * Full Unicode support including emoji                             "
-      "    |",
-      "|    * 24-bit true color support                                        "
-      "    |",
-      "|                                                                       "
-      "    |",
-      "|  Use the Toybox shell below to run commands.                          "
-      "    |",
-      "|                                                                       "
-      "    |",
-      "+-----------------------------------------------------------------------"
-      "----+",
-  };
-
-  // Default colors
-  uint8_t fgR = 0xCC, fgG = 0xCC, fgB = 0xCC; // Light gray
-  uint8_t bgR = 0x0F, bgG = 0x0F, bgB = 0x23; // Dark background
-
-  // Write each line
-  for (size_t row = 0; row < sizeof(lines) / sizeof(lines[0]) && row < _rows;
-       row++) {
-    const char *line = lines[row];
-    uint32_t col = 0;
-
-    // UTF-8 decode and write
-    const uint8_t *p = reinterpret_cast<const uint8_t *>(line);
-    while (*p && col < _cols) {
-      uint32_t codepoint;
-      if ((*p & 0x80) == 0) {
-        codepoint = *p++;
-      } else if ((*p & 0xE0) == 0xC0) {
-        codepoint = (*p++ & 0x1F) << 6;
-        codepoint |= (*p++ & 0x3F);
-      } else if ((*p & 0xF0) == 0xE0) {
-        codepoint = (*p++ & 0x0F) << 12;
-        codepoint |= (*p++ & 0x3F) << 6;
-        codepoint |= (*p++ & 0x3F);
-      } else if ((*p & 0xF8) == 0xF0) {
-        codepoint = (*p++ & 0x07) << 18;
-        codepoint |= (*p++ & 0x3F) << 12;
-        codepoint |= (*p++ & 0x3F) << 6;
-        codepoint |= (*p++ & 0x3F);
-      } else {
-        codepoint = '?';
-        p++;
-      }
-
-      // Get glyph index from font
-      uint16_t glyphIndex = font ? font->getGlyphIndex(codepoint)
-                                 : static_cast<uint16_t>(codepoint);
-
-      // Set colors based on character type
-      uint8_t r = fgR, g = fgG, b = fgB;
-      if (codepoint == '+' || codepoint == '-' || codepoint == '|') {
-        // Box drawing characters - use accent color
-        r = 0xE9;
-        g = 0x45;
-        b = 0x60; // Red accent
-      } else if (codepoint == '*') {
-        r = 0x4A;
-        g = 0xDE;
-        b = 0x80; // Green for bullets
-      }
-
-      grid.setCell(col, row, glyphIndex, r, g, b, bgR, bgG, bgB);
-      col++;
-    }
-
-    // Fill rest of line with spaces
-    uint16_t spaceGlyph = font ? font->getGlyphIndex(' ') : ' ';
-    while (col < _cols) {
-      grid.setCell(col, row, spaceGlyph, fgR, fgG, fgB, bgR, bgG, bgB);
-      col++;
-    }
-  }
-
-  // Fill remaining rows with spaces
-  uint16_t spaceGlyph = font ? font->getGlyphIndex(' ') : ' ';
-  for (uint32_t row = sizeof(lines) / sizeof(lines[0]); row < _rows; row++) {
-    for (uint32_t col = 0; col < _cols; col++) {
-      grid.setCell(col, row, spaceGlyph, fgR, fgG, fgB, bgR, bgG, bgB);
-    }
-  }
-
   _webDisplay->start();
   yinfo("Web demo: WebDisplay {}x{} initialized", _cols, _rows);
 #endif
@@ -1099,7 +986,7 @@ void Yetty::mainLoopIteration() noexcept {
   for (const auto &widget : _rootWidgets) {
     if (!widget->isRunning())
       continue;
-    if (auto res = widget->render(pass, *_ctx); !res) {
+    if (auto res = widget->render(pass, *_ctx, true); !res) {
       yerror("Yetty: root widget render failed: {}", res.error().message());
     }
   }
@@ -1119,6 +1006,25 @@ void Yetty::mainLoopIteration() noexcept {
   _ctx->present();
 #elif YETTY_WEB
   // Web build: simplified rendering loop
+
+  // Call prepareFrame on all widgets (syncs vterm to grid, etc.)
+  bool anyNeedsRender = false;
+  for (const auto &widget : _rootWidgets) {
+    if (!widget->isRunning())
+      continue;
+    widget->prepareFrame(*_ctx, true);
+  }
+
+  // Check if any widget needs rendering (for WebDisplay, check needsRender)
+  if (_webDisplay && _webDisplay->needsRender()) {
+    anyNeedsRender = true;
+  }
+
+  // Skip rendering if nothing changed
+  if (!anyNeedsRender) {
+    return;
+  }
+
   auto viewResult = _ctx->getCurrentTextureView();
   if (!viewResult) {
     return;
@@ -1153,7 +1059,7 @@ void Yetty::mainLoopIteration() noexcept {
   for (const auto &widget : _rootWidgets) {
     if (!widget->isRunning())
       continue;
-    if (auto res = widget->render(pass, *_ctx); !res) {
+    if (auto res = widget->render(pass, *_ctx, true); !res) {
       yerror("Yetty: root widget render failed: {}", res.error().message());
     }
   }
@@ -1249,7 +1155,7 @@ void Yetty::mainLoopIteration() noexcept {
     if (!widget->isRunning())
       continue;
     widget->setRenderContext(rc);
-    widget->prepareFrame(*_ctx);
+    widget->prepareFrame(*_ctx, true);
   }
 
   //=========================================================================
@@ -1290,7 +1196,7 @@ void Yetty::mainLoopIteration() noexcept {
   for (const auto &widget : _rootWidgets) {
     if (!widget->isRunning())
       continue;
-    if (auto res = widget->render(pass, *_ctx); !res) {
+    if (auto res = widget->render(pass, *_ctx, true); !res) {
       yerror("Yetty: root widget batched render failed: {}", res.error().message());
     }
   }

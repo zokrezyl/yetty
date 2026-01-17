@@ -1,8 +1,5 @@
 #!/bin/bash
-# PDF Plugin Demo for yetty terminal
-#
-# Usage: Run this script inside yetty terminal
-
+# PDF Plugin: Renders PDF documents with page navigation and zoom
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR/../.."
 

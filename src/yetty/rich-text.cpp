@@ -81,6 +81,33 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 )";
 
+// Simple background quad shader
+static const char* BG_SHADER = R"(
+struct BgUniforms {
+    rect: vec4<f32>,       // x, y, w, h in NDC
+    color: vec4<f32>,      // background color
+}
+
+@group(0) @binding(0) var<uniform> u: BgUniforms;
+
+@vertex
+fn vs_main(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
+    let corners = array<vec2<f32>, 6>(
+        vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(1.0, 1.0),
+        vec2(0.0, 0.0), vec2(1.0, 1.0), vec2(0.0, 1.0)
+    );
+    let corner = corners[vi];
+    let x = u.rect.x + corner.x * u.rect.z;
+    let y = u.rect.y - corner.y * u.rect.w;
+    return vec4(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+    return u.color;
+}
+)";
+
 //-----------------------------------------------------------------------------
 // RichText Implementation
 //-----------------------------------------------------------------------------
@@ -127,6 +154,11 @@ void RichText::dispose() noexcept {
     if (bindGroupLayout_) { wgpuBindGroupLayoutRelease(bindGroupLayout_); bindGroupLayout_ = nullptr; }
     if (pipeline_) { wgpuRenderPipelineRelease(pipeline_); pipeline_ = nullptr; }
     if (uniformBuffer_) { wgpuBufferRelease(uniformBuffer_); uniformBuffer_ = nullptr; }
+
+    // Background resources
+    if (bgBindGroup_) { wgpuBindGroupRelease(bgBindGroup_); bgBindGroup_ = nullptr; }
+    if (bgPipeline_) { wgpuRenderPipelineRelease(bgPipeline_); bgPipeline_ = nullptr; }
+    if (bgUniformBuffer_) { wgpuBufferRelease(bgUniformBuffer_); bgUniformBuffer_ = nullptr; }
     if (glyphBuffer_) { wgpuBufferRelease(glyphBuffer_); glyphBuffer_ = nullptr; }
     if (sampler_) { wgpuSamplerRelease(sampler_); sampler_ = nullptr; }
 
@@ -424,20 +456,35 @@ void RichText::buildGlyphInstances() {
         float atlasBaseSize = font->getFontSize();
         float fontScale = ch.size / atlasBaseSize;
 
+        // Always use font metrics for glyph size - never stretch to fit bounding box
+        // Stretching distorts glyphs and breaks baseline alignment
         float glyphW = metrics->_size.x * fontScale;
         float glyphH = metrics->_size.y * fontScale;
 
         // Skip empty glyphs (spaces)
         if (glyphW < 0.1f || glyphH < 0.1f) continue;
 
-        // Position with bearing (same as terminal shader: glyphTop = baseline - bearingY)
-        float glyphX = ch.x + metrics->_bearing.x * fontScale;
-        float glyphY = ch.y - metrics->_bearing.y * fontScale;
+        // Position calculation
+        float glyphX, glyphY;
+        if (ch.prePositioned) {
+            // Position is already glyph top-left, no bearing adjustment needed
+            glyphX = ch.x;
+            glyphY = ch.y;
+        } else {
+            // Position is baseline, apply bearing (same as terminal shader)
+            glyphX = ch.x + metrics->_bearing.x * fontScale;
+            glyphY = ch.y - metrics->_bearing.y * fontScale;
+        }
 
-        // Debug logging for descender characters
-        if (ch.codepoint == 'g' || ch.codepoint == 'p' || ch.codepoint == 'q' || ch.codepoint == 'A') {
-            ydebug("Glyph '{}': ch.y={:.2f}, bearing.y={:.2f}, fontScale={:.4f}, glyphY={:.2f}, size=({:.1f},{:.1f})",
-                          static_cast<char>(ch.codepoint), ch.y, metrics->_bearing.y, fontScale, glyphY, glyphW, glyphH);
+        // Debug logging for descender characters - USE yinfo to actually see it!
+        if (ch.codepoint == 'g' || ch.codepoint == 'p' || ch.codepoint == 'q' || ch.codepoint == 'S') {
+            yinfo("GLYPH '{}': prePos={} ch.pos=({:.1f},{:.1f}) bearing=({:.1f},{:.1f}) metrics.size=({:.1f},{:.1f}) target=({:.1f},{:.1f}) -> glyph.pos=({:.1f},{:.1f}) glyph.size=({:.1f},{:.1f})",
+                  static_cast<char>(ch.codepoint), ch.prePositioned,
+                  ch.x, ch.y,
+                  metrics->_bearing.x, metrics->_bearing.y,
+                  metrics->_size.x, metrics->_size.y,
+                  ch.targetWidth, ch.targetHeight,
+                  glyphX, glyphY, glyphW, glyphH);
         }
 
         GlyphInstance inst;
@@ -611,6 +658,82 @@ Result<void> RichText::createPipeline(WebGPUContext& ctx, WGPUTextureFormat targ
 
     if (!pipeline_) return Err<void>("Failed to create render pipeline");
 
+    // Create background pipeline
+    {
+        // Background uniform buffer (32 bytes: vec4 rect + vec4 color)
+        WGPUBufferDescriptor bgBufDesc = {};
+        bgBufDesc.size = 32;
+        bgBufDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        bgUniformBuffer_ = wgpuDeviceCreateBuffer(device, &bgBufDesc);
+        if (!bgUniformBuffer_) return Err<void>("Failed to create bg uniform buffer");
+
+        // Background shader module
+        WGPUShaderSourceWGSL bgWgslDesc = {};
+        bgWgslDesc.chain.sType = WGPUSType_ShaderSourceWGSL;
+        bgWgslDesc.code = WGPU_STR(BG_SHADER);
+        WGPUShaderModuleDescriptor bgShaderDesc = {};
+        bgShaderDesc.nextInChain = &bgWgslDesc.chain;
+        WGPUShaderModule bgShaderModule = wgpuDeviceCreateShaderModule(device, &bgShaderDesc);
+        if (!bgShaderModule) return Err<void>("Failed to create bg shader module");
+
+        // Background bind group layout
+        WGPUBindGroupLayoutEntry bgEntry = {};
+        bgEntry.binding = 0;
+        bgEntry.visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+        bgEntry.buffer.type = WGPUBufferBindingType_Uniform;
+
+        WGPUBindGroupLayoutDescriptor bgLayoutDesc = {};
+        bgLayoutDesc.entryCount = 1;
+        bgLayoutDesc.entries = &bgEntry;
+        WGPUBindGroupLayout bgBindGroupLayout = wgpuDeviceCreateBindGroupLayout(device, &bgLayoutDesc);
+
+        // Background bind group
+        WGPUBindGroupEntry bgBindEntry = {};
+        bgBindEntry.binding = 0;
+        bgBindEntry.buffer = bgUniformBuffer_;
+        bgBindEntry.size = 32;
+
+        WGPUBindGroupDescriptor bgBindGroupDesc = {};
+        bgBindGroupDesc.layout = bgBindGroupLayout;
+        bgBindGroupDesc.entryCount = 1;
+        bgBindGroupDesc.entries = &bgBindEntry;
+        bgBindGroup_ = wgpuDeviceCreateBindGroup(device, &bgBindGroupDesc);
+
+        // Background pipeline layout
+        WGPUPipelineLayoutDescriptor bgPipelineLayoutDesc = {};
+        bgPipelineLayoutDesc.bindGroupLayoutCount = 1;
+        bgPipelineLayoutDesc.bindGroupLayouts = &bgBindGroupLayout;
+        WGPUPipelineLayout bgPipelineLayout = wgpuDeviceCreatePipelineLayout(device, &bgPipelineLayoutDesc);
+
+        // Background render pipeline (no blending, just overwrite)
+        WGPUColorTargetState bgColorTarget = {};
+        bgColorTarget.format = targetFormat;
+        bgColorTarget.writeMask = WGPUColorWriteMask_All;
+
+        WGPUFragmentState bgFragment = {};
+        bgFragment.module = bgShaderModule;
+        bgFragment.entryPoint = WGPU_STR("fs_main");
+        bgFragment.targetCount = 1;
+        bgFragment.targets = &bgColorTarget;
+
+        WGPURenderPipelineDescriptor bgPipelineDesc = {};
+        bgPipelineDesc.layout = bgPipelineLayout;
+        bgPipelineDesc.vertex.module = bgShaderModule;
+        bgPipelineDesc.vertex.entryPoint = WGPU_STR("vs_main");
+        bgPipelineDesc.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+        bgPipelineDesc.fragment = &bgFragment;
+        bgPipelineDesc.multisample.count = 1;
+        bgPipelineDesc.multisample.mask = 0xFFFFFFFF;
+
+        bgPipeline_ = wgpuDeviceCreateRenderPipeline(device, &bgPipelineDesc);
+
+        wgpuBindGroupLayoutRelease(bgBindGroupLayout);
+        wgpuPipelineLayoutRelease(bgPipelineLayout);
+        wgpuShaderModuleRelease(bgShaderModule);
+
+        if (!bgPipeline_) return Err<void>("Failed to create bg pipeline");
+    }
+
     return Ok();
 }
 
@@ -767,6 +890,32 @@ Result<void> RichText::render(WGPURenderPassEncoder pass, WebGPUContext& ctx,
             static_cast<uint32_t>(sy),
             static_cast<uint32_t>(sw),
             static_cast<uint32_t>(sh));
+    }
+
+    // Render background if set
+    if (hasBackground_ && bgPipeline_ && bgBindGroup_ && bgUniformBuffer_) {
+        // NDC width and height
+        float ndcW = (pixelW / screenWidth) * 2.0f;
+        float ndcH = (pixelH / screenHeight) * 2.0f;
+
+        struct BgUniforms {
+            float rect[4];   // x, y, w, h in NDC
+            float color[4];  // RGBA
+        } bgUniforms;
+
+        bgUniforms.rect[0] = ndcX;
+        bgUniforms.rect[1] = ndcY;
+        bgUniforms.rect[2] = ndcW;
+        bgUniforms.rect[3] = ndcH;
+        bgUniforms.color[0] = backgroundColor_.r;
+        bgUniforms.color[1] = backgroundColor_.g;
+        bgUniforms.color[2] = backgroundColor_.b;
+        bgUniforms.color[3] = backgroundColor_.a;
+
+        wgpuQueueWriteBuffer(ctx.getQueue(), bgUniformBuffer_, 0, &bgUniforms, sizeof(bgUniforms));
+        wgpuRenderPassEncoderSetPipeline(pass, bgPipeline_);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, bgBindGroup_, 0, nullptr);
+        wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
     }
 
     wgpuRenderPassEncoderSetPipeline(pass, pipeline_);

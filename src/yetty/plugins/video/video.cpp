@@ -340,6 +340,18 @@ bool Video::onMouseButton(int button, bool pressed) {
     return false;
 }
 
+void Video::releaseGPUResources() {
+    // Release WebGPU resources when widget goes off-screen
+    if (bindGroup_) { wgpuBindGroupRelease(bindGroup_); bindGroup_ = nullptr; }
+    if (pipeline_) { wgpuRenderPipelineRelease(pipeline_); pipeline_ = nullptr; }
+    if (uniformBuffer_) { wgpuBufferRelease(uniformBuffer_); uniformBuffer_ = nullptr; }
+    if (sampler_) { wgpuSamplerRelease(sampler_); sampler_ = nullptr; }
+    if (textureView_) { wgpuTextureViewRelease(textureView_); textureView_ = nullptr; }
+    if (texture_) { wgpuTextureRelease(texture_); texture_ = nullptr; }
+    gpuInitialized_ = false;
+    yinfo("Video: GPU resources released");
+}
+
 Result<void> Video::dispose() {
     // Release WebGPU resources
     if (bindGroup_) { wgpuBindGroupRelease(bindGroup_); bindGroup_ = nullptr; }
@@ -384,9 +396,26 @@ void Video::updateTexture(WebGPUContext& ctx) {
     frameUpdated_ = false;
 }
 
-void Video::prepareFrame(WebGPUContext& ctx) {
+void Video::prepareFrame(WebGPUContext& ctx, bool on) {
     // Video uses its own command encoder/pass, so render during prepareFrame
-    if (failed_ || !_visible) return;
+
+    // Handle on/off transitions for GPU resource management
+    if (!on && wasOn_) {
+        // Transitioning to off - release GPU resources
+        yinfo("Video: Transitioning to off - releasing GPU resources");
+        releaseGPUResources();
+        wasOn_ = false;
+        return;
+    }
+
+    if (on && !wasOn_) {
+        // Transitioning to on - will reinitialize on next frame
+        yinfo("Video: Transitioning to on - will reinitialize");
+        wasOn_ = true;
+        gpuInitialized_ = false;  // Force pipeline recreation
+    }
+
+    if (!on || failed_ || !_visible) return;
     if (frameBuffer_.empty()) {
         yerror("Video has no frame data");
         return;
@@ -498,9 +527,10 @@ void Video::prepareFrame(WebGPUContext& ctx) {
     wgpuCommandEncoderRelease(encoder);
 }
 
-Result<void> Video::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+Result<void> Video::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
     (void)pass;
     (void)ctx;
+    (void)on;
     // Video renders in prepareFrame() with its own pass, nothing to do here
     return Ok();
 }

@@ -294,14 +294,15 @@ void Markdown::buildRichTextSpans(float fontSize, float maxWidth) {
 // Render
 //-----------------------------------------------------------------------------
 
-void Markdown::prepareFrame(WebGPUContext& ctx) {
+void Markdown::prepareFrame(WebGPUContext& ctx, bool on) {
     (void)ctx;
+    (void)on;
     // Markdown renders directly to render pass - no texture preparation needed
 }
 
-Result<void> Markdown::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    yinfo("Markdown::render called, failed={} visible={} richText={}", _failed, _visible, _richText != nullptr);
-    if (_failed || !_visible) return Ok();
+Result<void> Markdown::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
+    yinfo("Markdown::render called, on={} failed={} visible={} richText={}", on, _failed, _visible, _richText != nullptr);
+    if (!on || _failed || !_visible) return Ok();
 
     const auto& rc = _renderCtx;
 

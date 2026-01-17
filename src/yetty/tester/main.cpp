@@ -390,7 +390,7 @@ int cmdRun(const std::string& pluginDir,
         }
 
         // Pre-render phase - pygfx renders to intermediate texture
-        layer->prepareFrame(*ctx);
+        layer->prepareFrame(*ctx, true);
 
         // Create command encoder and render pass
         WGPUCommandEncoderDescriptor encoderDesc = {};
@@ -414,7 +414,7 @@ int cmdRun(const std::string& pluginDir,
 
         // Render using render
         ydebug("Tester: Before render, getPixelWidth={}", layer->getPixelWidth());
-        if (auto res = layer->render(pass, *ctx); !res) {
+        if (auto res = layer->render(pass, *ctx, true); !res) {
             yerror("Tester: widget render failed: {}", res.error().message());
         }
 

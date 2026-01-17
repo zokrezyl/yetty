@@ -1,5 +1,5 @@
 #!/bin/bash
-# Julia - Distance 1 - Julia set fractal by Inigo Quilez
+# Shader Plugin: Julia set fractal - animated distance field by iq
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLIENT_DIR="$SCRIPT_DIR/../../../tools/yetty-client"
 SHADER_FILE="$SCRIPT_DIR/../../assets/shader/julia-1.wgsl"

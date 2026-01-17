@@ -99,8 +99,8 @@ public:
 
     yetty::Result<void> dispose() override;
 
-    void prepareFrame(yetty::WebGPUContext& ctx) override;
-    yetty::Result<void> render(WGPURenderPassEncoder pass, yetty::WebGPUContext& ctx) override;
+    void prepareFrame(yetty::WebGPUContext& ctx, bool on) override;
+    yetty::Result<void> render(WGPURenderPassEncoder pass, yetty::WebGPUContext& ctx, bool on) override;
 
     // Mouse scrolling
     bool onMouseScroll(float xoffset, float yoffset, int mods) override;

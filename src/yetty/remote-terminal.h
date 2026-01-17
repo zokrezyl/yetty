@@ -55,11 +55,11 @@ public:
     bool isRunning() const override { return _backend && _backend->isRunning(); }
 
     // Pre-render (RemoteTerminal manages its own pass for main content)
-    void prepareFrame(WebGPUContext& ctx) override;
+    void prepareFrame(WebGPUContext& ctx, bool on) override;
 
     // Batched render (for child widgets - RemoteTerminal doesn't use this directly)
-    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override {
-        (void)pass; (void)ctx; return Ok();
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) override {
+        (void)pass; (void)ctx; (void)on; return Ok();
     }
 
     //=========================================================================

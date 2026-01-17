@@ -717,14 +717,49 @@ Result<void> Lottie::dispose() {
     return Ok();
 }
 
-void Lottie::prepareFrame(WebGPUContext& ctx) {
+void Lottie::releaseGPUResources() {
+    // Release composite resources (but not animation/picture which we need to restore)
+    if (bindGroup_) { wgpuBindGroupRelease(bindGroup_); bindGroup_ = nullptr; }
+    if (compositePipeline_) { wgpuRenderPipelineRelease(compositePipeline_); compositePipeline_ = nullptr; }
+    if (uniformBuffer_) { wgpuBufferRelease(uniformBuffer_); uniformBuffer_ = nullptr; }
+    if (sampler_) { wgpuSamplerRelease(sampler_); sampler_ = nullptr; }
+    if (renderTextureView_) { wgpuTextureViewRelease(renderTextureView_); renderTextureView_ = nullptr; }
+
+    // Release ThorVG canvas before destroying the texture it targets
+    canvas_.reset();
+
+    if (renderTexture_) { wgpuTextureRelease(renderTexture_); renderTexture_ = nullptr; }
+
+    gpuInitialized_ = false;
+    contentDirty_ = true;
+    yinfo("Lottie: GPU resources released");
+}
+
+void Lottie::prepareFrame(WebGPUContext& ctx, bool on) {
     // This is called BEFORE the shared render pass begins
     // Here we render ThorVG content to our intermediate texture
 
-    yinfo("Lottie::prepareFrame CALLED! failed={} visible={} animation={} gpu_init={} dirty={}",
-                 failed_, _visible, (void*)animation_.get(), gpuInitialized_, contentDirty_);
+    // Handle on/off transitions for GPU resource management
+    if (!on && wasOn_) {
+        // Transitioning to off - release GPU resources
+        yinfo("Lottie: Transitioning to off - releasing GPU resources");
+        releaseGPUResources();
+        wasOn_ = false;
+        return;
+    }
 
-    if (failed_ || !_visible || !animation_) {
+    if (on && !wasOn_) {
+        // Transitioning to on - will reinitialize on next frame
+        yinfo("Lottie: Transitioning to on - will reinitialize");
+        wasOn_ = true;
+        gpuInitialized_ = false;  // Force pipeline recreation
+        contentDirty_ = true;
+    }
+
+    yinfo("Lottie::prepareFrame CALLED! on={} failed={} visible={} animation={} gpu_init={} dirty={}",
+                 on, failed_, _visible, (void*)animation_.get(), gpuInitialized_, contentDirty_);
+
+    if (!on || failed_ || !_visible || !animation_) {
         return;
     }
 
@@ -790,10 +825,13 @@ void Lottie::prepareFrame(WebGPUContext& ctx) {
     }
 }
 
-Result<void> Lottie::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
+Result<void> Lottie::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
     // This is called INSIDE the shared render pass
     // We only blit our pre-rendered texture here - NO ThorVG rendering!
 
+    if (!on) {
+        return Ok();  // Skip when off
+    }
     if (failed_) {
         return Err<void>("Lottie: failed flag is set");
     }

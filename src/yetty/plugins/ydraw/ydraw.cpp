@@ -106,8 +106,8 @@ bool YDraw::onChar(unsigned int codepoint) {
 // Rendering
 //-----------------------------------------------------------------------------
 
-void YDraw::prepareFrame(WebGPUContext& ctx) {
-    if (failed_ || !_visible) return;
+void YDraw::prepareFrame(WebGPUContext& ctx, bool on) {
+    if (!on || failed_ || !_visible) return;
     if (!renderer_ || renderer_->primitiveCount() == 0) return;
 
     const auto& rc = _renderCtx;
@@ -180,8 +180,8 @@ void YDraw::prepareFrame(WebGPUContext& ctx) {
     }
 }
 
-Result<void> YDraw::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    if (failed_ || !_visible || !renderer_) return Ok();
+Result<void> YDraw::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
+    if (!on || failed_ || !_visible || !renderer_) return Ok();
 
     const auto& rc = _renderCtx;
 

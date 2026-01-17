@@ -7,22 +7,27 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <set>
+
+// Include PDFium headers for proper type declarations
+#include <fpdfview.h>
 
 namespace yetty {
 
-class Pdf;
+class PdfiumWidget;
 class FontManager;
 
 //-----------------------------------------------------------------------------
-// PDFPlugin - renders PDF documents using RichText
+// PdfiumPlugin - renders PDF documents using PDFium + RichText
+// Uses BSD-3-Clause licensed PDFium (MIT compatible)
 //-----------------------------------------------------------------------------
-class PDFPlugin : public Plugin {
+class PdfiumPlugin : public Plugin {
 public:
-    ~PDFPlugin() override;
+    ~PdfiumPlugin() override;
 
     static Result<PluginPtr> create() noexcept;
 
-    const char* pluginName() const override { return "pdf"; }
+    const char* pluginName() const override { return "pdfium"; }
 
     Result<void> dispose() override;
 
@@ -39,24 +44,22 @@ public:
         const std::string& payload
     ) override;
 
-    FontManager* getFontManager();
-
-    void* getMupdfContext() const noexcept { return _fzCtx; }
+    FontManager* getFontManager() const { return _fontManager; }
 
 private:
-    PDFPlugin() noexcept = default;
+    PdfiumPlugin() noexcept = default;
     Result<void> pluginInit() noexcept;
 
-    void* _fzCtx = nullptr;  // fz_context*
     FontManager* _fontManager = nullptr;
+    bool _libraryInitialized = false;
 };
 
 //-----------------------------------------------------------------------------
-// Pdf - single PDF document widget using RichText for rendering
+// PdfiumWidget - single PDF document widget using RichText for rendering
 //-----------------------------------------------------------------------------
-class Pdf : public Widget {
+class PdfiumWidget : public Widget {
 public:
-    ~Pdf() override;
+    ~PdfiumWidget() override;
 
     static Result<WidgetPtr> create(
         WidgetFactory* factory,
@@ -68,8 +71,7 @@ public:
         uint32_t heightCells,
         const std::string& pluginArgs,
         const std::string& payload,
-        PDFPlugin* plugin,
-        void* ctx
+        PdfiumPlugin* plugin
     ) noexcept;
 
     Result<void> dispose() override;
@@ -86,20 +88,20 @@ public:
     bool wantsKeyboard() const override { return true; }
 
 private:
-    explicit Pdf(const std::string& payload, PDFPlugin* plugin, void* ctx) noexcept;
+    explicit PdfiumWidget(const std::string& payload, PdfiumPlugin* plugin) noexcept;
     Result<void> init() override;
 
     Result<void> loadPDF(const std::string& path);
     Result<void> extractPageContent(int pageNum);
+    void extractFontsFromPage(FPDF_PAGE page);
     void buildRichTextContent(float viewWidth);
 
     // Font registration with FontManager
-    std::string registerFont(void* fzFont);
+    std::string registerFont(FPDF_FONT font);
     Result<void> generateFontAtlases();
 
-    PDFPlugin* _plugin = nullptr;
-    void* _mupdfCtx = nullptr;  // fz_context*
-    void* _doc = nullptr;       // fz_document*
+    PdfiumPlugin* _plugin = nullptr;
+    FPDF_DOCUMENT _doc = nullptr;
     int _pageCount = 0;
     int _currentPage = 0;
     float _zoom = 1.0f;
@@ -107,7 +109,8 @@ private:
     // Extracted page data
     struct ExtractedChar {
         uint32_t codepoint;
-        float x, y;              // PDF coordinates
+        float x, y;              // PDF coordinates (bounding box top-left)
+        float width, height;     // Bounding box dimensions
         float size;              // Font size in PDF points
         uint32_t color;          // ARGB color
         std::string fontFamily;  // Registered font family name
@@ -121,14 +124,20 @@ private:
     };
 
     std::vector<ExtractedPage> _pages;
-    std::unordered_map<void*, std::string> _fontNameMap;  // fz_font* -> family name
 
-    // Store font data instead of FT_Face to avoid MuPDF lock callback issues
+    // Font tracking - map font pointer to registered family name
+    std::unordered_map<FPDF_FONT, std::string> _fontNameMap;
+    std::set<FPDF_FONT> _processedFonts;
+
+    // Map from font info name (FPDFText_GetFontInfo) to registered font family name
+    std::unordered_map<std::string, std::string> _fontInfoToFamily;
+
+    // Store font data for deferred atlas generation
     struct PendingFont {
         std::vector<unsigned char> data;
         std::string name;
     };
-    std::unordered_map<void*, PendingFont> _pendingFonts;  // fz_font* -> font data for deferred atlas generation
+    std::unordered_map<FPDF_FONT, PendingFont> _pendingFonts;
 
     // RichText for rendering
     RichText::Ptr _richText;

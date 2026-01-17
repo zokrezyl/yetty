@@ -85,7 +85,7 @@ public:
     Result<void> dispose() override;
     void update(double deltaTime) override;
 
-    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) override;
 
     // Key state management
     void setKeyPressed(int key, bool pressed);  // key = 0-127 (MIDI note)
@@ -131,6 +131,10 @@ private:
 
     bool gpuInitialized_ = false;
     bool failed_ = false;
+
+    // On/off state tracking for GPU resource management
+    bool wasOn_ = true;
+    void releaseGPUResources();
 };
 
 } // namespace yetty

@@ -50,7 +50,8 @@ public:
     void stop() override { _running.store(false); }
     bool isRunning() const override { return _running.load(); }
 
-    Result<void> render(WebGPUContext& ctx) override;
+    void prepareFrame(WebGPUContext& ctx, bool on) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) override;
 
     //=========================================================================
     // Terminal emulation interface
@@ -83,21 +84,27 @@ public:
     // Cell size for scaling
     void setCellSize(float width, float height);
 
+    // Set rendering scale
+    void setScale(float scale);
+
     // Sync vterm state to grid
     void syncToGrid();
+
+    // Check if rendering is needed
+    bool needsRender() const;
 
     // Static instance accessor (for C callbacks)
     static WebDisplay* instance() { return _sInstance; }
 
-private:
-    WebDisplay(uint32_t cols, uint32_t rows,
-               WebGPUContext::Ptr ctx, FontManager::Ptr fontManager) noexcept;
-    Result<void> init() noexcept;
-
-    // vterm callbacks
+    // vterm callbacks (need to be public for C callback struct)
     static int onDamage(VTermRect rect, void* user);
     static int onMoveCursor(VTermPos pos, VTermPos oldpos, int visible, void* user);
     static int onSetTermProp(VTermProp prop, VTermValue* val, void* user);
+
+private:
+    WebDisplay(uint32_t cols, uint32_t rows,
+               WebGPUContext::Ptr ctx, FontManager::Ptr fontManager) noexcept;
+    Result<void> init() noexcept override;
 
     void colorToRGB(const VTermColor& color, uint8_t& r, uint8_t& g, uint8_t& b);
 
@@ -111,6 +118,7 @@ private:
     VTerm* _vterm = nullptr;
     VTermScreen* _vtermScreen = nullptr;
     bool _needsSync = true;
+    bool _needsRender = true;
 
     // Cursor
     int _cursorCol = 0;

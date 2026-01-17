@@ -1,7 +1,5 @@
 #!/bin/bash
-# Demo: Clouds shader - raymarched volumetric clouds
-# Based on Shadertoy "Clouds" by iq (Inigo Quilez)
-
+# Shader Plugin: Volumetric clouds - raymarched 3D cloud rendering by iq
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLIENT_DIR="$SCRIPT_DIR/../../../tools/yetty-client"
 SHADER_FILE="$SCRIPT_DIR/../../assets/shader/clouds.wgsl"

@@ -54,7 +54,7 @@ def main():
 
     handler = partial(CORSRequestHandler, directory=directory)
 
-    with socketserver.TCPServer(("127.0.0.1", port), handler) as httpd:
+    with socketserver.TCPServer(("0.0.0.0", port), handler) as httpd:
         print(f"\n  yetty web demo server")
         print(f"  Serving at: http://localhost:{port}/")
         print(f"  Directory:  {os.path.abspath(directory)}")

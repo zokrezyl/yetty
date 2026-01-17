@@ -112,8 +112,9 @@ void RemoteTerminal::stop() {
 // Rendering
 //=============================================================================
 
-void RemoteTerminal::prepareFrame(WebGPUContext& ctx) {
+void RemoteTerminal::prepareFrame(WebGPUContext& ctx, bool on) {
     (void)ctx;  // We use _renderer directly
+    (void)on;  // RemoteTerminal is always on when called
 
     if (!_backend || !_backend->isRunning()) {
         return;

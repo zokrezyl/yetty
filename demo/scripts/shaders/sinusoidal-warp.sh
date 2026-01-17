@@ -1,8 +1,5 @@
 #!/bin/bash
-# Demo: Sinusoidal Warp - bumped sinusoidal deformation with texture
-# Based on Shadertoy by Shane
-# Uses iChannel0 for texture input
-
+# Shader Plugin: Sinusoidal warp - texture deformation effect by Shane
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLIENT_DIR="$SCRIPT_DIR/../../../tools/yetty-client"
 SHADER_FILE="$SCRIPT_DIR/../../assets/shader/sinusoidal-warp.wgsl"

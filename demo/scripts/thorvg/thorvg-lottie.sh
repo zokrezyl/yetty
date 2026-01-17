@@ -1,5 +1,5 @@
 #!/bin/bash
-# ThorVG demo: Display Lottie animation
+# ThorVG Plugin: Lottie animation - bouncing ball vector animation
 DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$DIR/../.."
+cd "$DIR/../../.."
 uv run python3 tools/yetty-client/main.py create thorvg --lottie demo/assets/thorvg/bouncing-ball.json -w 40 -H 25

@@ -44,8 +44,17 @@ public:
     // Execute Python code and return result as string
     Result<std::string> execute(const std::string& code);
 
+    // Execute Python code in a specific namespace dict
+    Result<std::string> executeInNamespace(const std::string& code, PyObject* namespaceDict);
+
     // Run a Python file
     Result<void> runFile(const std::string& path);
+
+    // Run a Python file in a specific namespace
+    Result<void> runFileInNamespace(const std::string& path, PyObject* namespaceDict);
+
+    // Get main dict for creating derived namespaces
+    PyObject* getMainDict() const { return mainDict_; }
 
     // Check if Python is initialized
     bool isInitialized() const { return pyInitialized_; }
@@ -115,9 +124,9 @@ public:
     void stop() override { _running = false; }
     bool isRunning() const override { return _running; }
 
-    void prepareFrame(WebGPUContext& ctx) override;
+    void prepareFrame(WebGPUContext& ctx, bool on) override;
 
-    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override;
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) override;
 
     // Input handling for REPL-like interaction
     bool onKey(int key, int scancode, int action, int mods) override;
@@ -174,6 +183,9 @@ private:
     // User render callback
     PyObject* userRenderFunc_ = nullptr;
 
+    // Per-widget Python namespace (so each widget has isolated globals)
+    PyObject* widgetDict_ = nullptr;
+
     // Mouse state for pygfx interaction
     float mouseX_ = 0.0f;
     float mouseY_ = 0.0f;
@@ -185,6 +197,10 @@ private:
     WGPUBindGroup blitBindGroup_ = nullptr;
     WGPUSampler blitSampler_ = nullptr;
     bool blitInitialized_ = false;
+
+    // On/off state tracking for GPU resource management
+    bool wasOn_ = true;
+    void releaseGPUResources();
 };
 
 } // namespace yetty

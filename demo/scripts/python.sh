@@ -1,8 +1,5 @@
 #!/bin/bash
-# Python plugin demo - fastplotlib visualization
-#
-# Usage: ./demo/scripts/python.sh
-
+# Python Plugin: GPU-accelerated 3D graphics using pygfx/wgpu (fastplotlib sine wave)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 

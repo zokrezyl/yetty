@@ -216,14 +216,15 @@ Result<void> RichText::parseYAML(const std::string& yaml) {
 // Render
 //-----------------------------------------------------------------------------
 
-void RichText::prepareFrame(WebGPUContext& ctx) {
+void RichText::prepareFrame(WebGPUContext& ctx, bool on) {
     (void)ctx;
+    (void)on;
     // RichText renders directly to render pass - no texture preparation needed
 }
 
-Result<void> RichText::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    yinfo("RichText::render called, failed={} visible={} richText={}", _failed, _visible, _richText != nullptr);
-    if (_failed || !_visible) return Ok();
+Result<void> RichText::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
+    yinfo("RichText::render called, on={} failed={} visible={} richText={}", on, _failed, _visible, _richText != nullptr);
+    if (!on || _failed || !_visible) return Ok();
 
     const auto& rc = _renderCtx;
 

@@ -395,14 +395,15 @@ void Pdf::buildRichTextContent(float viewWidth) {
 // Render
 //-----------------------------------------------------------------------------
 
-void Pdf::prepareFrame(WebGPUContext& ctx) {
+void Pdf::prepareFrame(WebGPUContext& ctx, bool on) {
     (void)ctx;
+    (void)on;
     // PDF renders directly to render pass - no texture preparation needed
 }
 
-Result<void> Pdf::render(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
-    yinfo("Pdf::render called, failed={} visible={} richText={}", _failed, _visible, _richText != nullptr);
-    if (_failed || !_visible) return Ok();
+Result<void> Pdf::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
+    yinfo("Pdf::render called, on={} failed={} visible={} richText={}", on, _failed, _visible, _richText != nullptr);
+    if (!on || _failed || !_visible) return Ok();
 
     const auto& rc = _renderCtx;
 

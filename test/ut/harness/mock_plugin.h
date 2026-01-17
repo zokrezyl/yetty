@@ -33,9 +33,10 @@ public:
         return Ok();
     }
 
-    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx) override {
+    Result<void> render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) override {
         (void)pass;
         (void)ctx;
+        (void)on;
         _renderCount++;
         return Ok();
     }
