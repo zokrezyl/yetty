@@ -254,42 +254,30 @@ void Shader::prepareFrame(WebGPUContext& ctx, bool on) {
 
     if (!on || _failed || !_visible) return;
 
-    const auto& rc = _renderCtx;
-
     if (!_compiled) {
-        ydebug("Shader prepareFrame: compiling, pluginArgs='{}', channels[0].path='{}'", _pluginArgs, _channels[0].path);
-
         // Load channel textures if specified
         for (int i = 0; i < kMaxChannels; ++i) {
-            ydebug("Shader prepareFrame: channel[{}] path='{}' loaded={}", i, _channels[i].path, _channels[i].loaded);
             if (!_channels[i].path.empty() && !_channels[i].loaded) {
-                if (auto res = createChannelSampler(ctx); !res) {
-                    ywarn("Shader prepareFrame: Failed to create channel sampler: {}", res.error().message());
-                }
-                if (auto res = loadChannelTexture(ctx, i, _channels[i].path); !res) {
-                    ywarn("Shader prepareFrame: Failed to load iChannel{}: {}", i, res.error().message());
-                }
+                (void)createChannelSampler(ctx);
+                (void)loadChannelTexture(ctx, i, _channels[i].path);
             }
         }
-
-        ydebug("Shader prepareFrame: after loading, _hasChannelTextures={}", _hasChannelTextures);
 
         // Parse multipass sections first
         _isMultipass = parseMultipassShader(_payload);
 
         // Use parsed _mainImageCode or original payload
         std::string shaderToCompile = _mainImageCode.empty() ? _payload : _mainImageCode;
-        auto result = compileShader(ctx, rc.targetFormat, shaderToCompile);
+        auto result = compileShader(ctx, ctx.getSurfaceFormat(), shaderToCompile);
         if (!result) {
             _failed = true;
-            yerror("Shader prepareFrame: Failed to compile shader: {}", result.error().message());
             return;
         }
-        
+
         // Setup multipass if detected
         if (_isMultipass) {
-            uint32_t w = static_cast<uint32_t>(_widthCells * rc.cellWidth);
-            uint32_t h = static_cast<uint32_t>(_heightCells * rc.cellHeight);
+            uint32_t w = _pixelWidth;
+            uint32_t h = _pixelHeight;
             if (w > 0 && h > 0) {
                 if (auto res = createBufferTextures(ctx, w, h); !res) {
                     ywarn("Shader: Failed to create buffer textures: {}", res.error().message());
@@ -366,17 +354,20 @@ void Shader::prepareFrame(WebGPUContext& ctx, bool on) {
     auto now = std::chrono::steady_clock::now();
     float elapsed = std::chrono::duration<float>(now - startTime).count();
     
+    uint32_t screenW = ctx.getSurfaceWidth();
+    uint32_t screenH = ctx.getSurfaceHeight();
+
     globals.iTime = elapsed;
     globals.iTimeRelative = elapsed;
-    globals.iTimeDelta = rc.deltaTime;
+    globals.iTimeDelta = 0.016f;  // ~60fps default
     globals.iFrame = frameCount++;
-    globals.iMouse[0] = _mouseX * rc.screenWidth;
-    globals.iMouse[1] = _mouseY * rc.screenHeight;
+    globals.iMouse[0] = _mouseX * screenW;
+    globals.iMouse[1] = _mouseY * screenH;
     globals.iMouse[2] = _mouseDown ? 1.0f : 0.0f;
     globals.iMouse[3] = _mouseGrabbed ? 1.0f : 0.0f;
-    globals.iScreenResolution[0] = static_cast<float>(rc.screenWidth);
-    globals.iScreenResolution[1] = static_cast<float>(rc.screenHeight);
-    
+    globals.iScreenResolution[0] = static_cast<float>(screenW);
+    globals.iScreenResolution[1] = static_cast<float>(screenH);
+
     wgpuQueueWriteBuffer(ctx.getQueue(), _globalUniformBuffer, 0, &globals, sizeof(globals));
 
     // Render buffer passes first (if any)
@@ -384,29 +375,11 @@ void Shader::prepareFrame(WebGPUContext& ctx, bool on) {
         renderBufferPasses(ctx);
     }
 
-    // Compute pixel position from cell position and scroll
-    float pixelX = static_cast<float>(_x) * rc.cellWidth;
-    float pixelY = static_cast<float>(_y) * rc.cellHeight;
-    float pixelW = static_cast<float>(_widthCells) * rc.cellWidth;
-    float pixelH = static_cast<float>(_heightCells) * rc.cellHeight;
-
-    // Relative widgets scroll with content
-    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
-        pixelY += rc.scrollOffset * rc.cellHeight;
-    }
-
-    // Visibility check
-    if (rc.termRows > 0) {
-        float screenPixelHeight = rc.termRows * rc.cellHeight;
-        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return;  // Off-screen, skip
-        }
-    }
-
-    float ndcX = (pixelX / rc.screenWidth) * 2.0f - 1.0f;
-    float ndcY = 1.0f - (pixelY / rc.screenHeight) * 2.0f;
-    float ndcW = (pixelW / rc.screenWidth) * 2.0f;
-    float ndcH = (pixelH / rc.screenHeight) * 2.0f;
+    // Use pixel position/size set by Terminal
+    float ndcX = (_pixelX / screenW) * 2.0f - 1.0f;
+    float ndcY = 1.0f - (_pixelY / screenH) * 2.0f;
+    float ndcW = (static_cast<float>(_pixelWidth) / screenW) * 2.0f;
+    float ndcH = (static_cast<float>(_pixelHeight) / screenH) * 2.0f;
 
     struct PluginUniforms {
         float resolution[2];
@@ -416,8 +389,8 @@ void Shader::prepareFrame(WebGPUContext& ctx, bool on) {
         float mouse[4];
     } uniforms;
 
-    uniforms.resolution[0] = pixelW;
-    uniforms.resolution[1] = pixelH;
+    uniforms.resolution[0] = static_cast<float>(_pixelWidth);
+    uniforms.resolution[1] = static_cast<float>(_pixelHeight);
     uniforms.param = _param;
     uniforms.zoom = _zoom;
     uniforms.rect[0] = ndcX;
@@ -438,8 +411,10 @@ void Shader::prepareFrame(WebGPUContext& ctx, bool on) {
         return;
     }
 
+    auto viewResult = ctx.getCurrentTextureView();
+    if (!viewResult) return;
     WGPURenderPassColorAttachment colorAttachment = {};
-    colorAttachment.view = rc.targetView;
+    colorAttachment.view = *viewResult;
     colorAttachment.loadOp = WGPULoadOp_Load;
     colorAttachment.storeOp = WGPUStoreOp_Store;
     colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
@@ -475,45 +450,35 @@ void Shader::prepareFrame(WebGPUContext& ctx, bool on) {
 }
 
 Result<void> Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
-    if (!on) return Ok();  // Skip when off
+    (void)pass;  // Shader renders in prepareFrame
+    if (!on) return Ok();
     if (_failed) return Err<void>("Shader already failed");
     if (!_visible) return Ok();
 
-    const auto& rc = _renderCtx;
-
     if (!_compiled) {
-        ydebug("Shader: compiling, pluginArgs='{}', channels[0].path='{}'", _pluginArgs, _channels[0].path);
-
         // Load channel textures if specified
         for (int i = 0; i < kMaxChannels; ++i) {
-            ydebug("Shader: channel[{}] path='{}' loaded={}", i, _channels[i].path, _channels[i].loaded);
             if (!_channels[i].path.empty() && !_channels[i].loaded) {
-                if (auto res = createChannelSampler(ctx); !res) {
-                    ywarn("Shader: Failed to create channel sampler: {}", res.error().message());
-                }
-                if (auto res = loadChannelTexture(ctx, i, _channels[i].path); !res) {
-                    ywarn("Shader: Failed to load iChannel{}: {}", i, res.error().message());
-                }
+                (void)createChannelSampler(ctx);
+                (void)loadChannelTexture(ctx, i, _channels[i].path);
             }
         }
 
-        ydebug("Shader: after loading, _hasChannelTextures={}", _hasChannelTextures);
-
         // Parse multipass sections first
         _isMultipass = parseMultipassShader(_payload);
-        
+
         // Use parsed _mainImageCode or original payload
         std::string shaderToCompile = _mainImageCode.empty() ? _payload : _mainImageCode;
-        auto result = compileShader(ctx, rc.targetFormat, shaderToCompile);
+        auto result = compileShader(ctx, ctx.getSurfaceFormat(), shaderToCompile);
         if (!result) {
             _failed = true;
             return Err<void>("Shader: Failed to compile shader", result);
         }
-        
+
         // Setup multipass if detected
         if (_isMultipass) {
-            uint32_t w = static_cast<uint32_t>(_widthCells * rc.cellWidth);
-            uint32_t h = static_cast<uint32_t>(_heightCells * rc.cellHeight);
+            uint32_t w = _pixelWidth;
+            uint32_t h = _pixelHeight;
             if (w > 0 && h > 0) {
                 if (auto res = createBufferTextures(ctx, w, h); res) {
                     for (int i = 0; i < kMaxBufferPasses; ++i) {
@@ -527,10 +492,10 @@ Result<void> Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool
                         bgEntries[0].binding = 0;
                         bgEntries[0].buffer = _uniformBuffer;
                         bgEntries[0].size = 48;
-                        
+
                         bgEntries[1].binding = 1;
                         bgEntries[1].sampler = _bufferSampler;
-                        
+
                         for (int i = 0; i < 4; ++i) {
                             bgEntries[2 + i].binding = 2 + i;
                             if (i < kMaxBufferPasses && _bufferPasses[i].texturePrevView) {
@@ -539,7 +504,7 @@ Result<void> Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool
                                 bgEntries[2 + i].textureView = _bufferPasses[0].texturePrevView;
                             }
                         }
-                        
+
                         WGPUBindGroupDescriptor bgDesc = {};
                         bgDesc.layout = _bufferBindGroupLayout;
                         bgDesc.entryCount = bgEntries.size();
@@ -568,7 +533,7 @@ Result<void> Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool
         }
     }
     globalBindGroup = _globalBindGroup;
-    
+
     // Update global uniforms
     struct GlobalUniforms {
         float iTime;
@@ -579,23 +544,23 @@ Result<void> Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool
         float iScreenResolution[2];
         float _pad[2];
     } globals;
-    
+
     static auto startTime = std::chrono::steady_clock::now();
     static uint32_t frameCount = 0;
     auto now = std::chrono::steady_clock::now();
     float elapsed = std::chrono::duration<float>(now - startTime).count();
-    
+
     globals.iTime = elapsed;
     globals.iTimeRelative = elapsed;
-    globals.iTimeDelta = rc.deltaTime;
+    globals.iTimeDelta = 0.016f;  // ~60fps
     globals.iFrame = frameCount++;
-    globals.iMouse[0] = _mouseX * rc.screenWidth;
-    globals.iMouse[1] = _mouseY * rc.screenHeight;
+    globals.iMouse[0] = _mouseX * ctx.getSurfaceWidth();
+    globals.iMouse[1] = _mouseY * ctx.getSurfaceHeight();
     globals.iMouse[2] = _mouseDown ? 1.0f : 0.0f;
     globals.iMouse[3] = _mouseGrabbed ? 1.0f : 0.0f;
-    globals.iScreenResolution[0] = static_cast<float>(rc.screenWidth);
-    globals.iScreenResolution[1] = static_cast<float>(rc.screenHeight);
-    
+    globals.iScreenResolution[0] = static_cast<float>(ctx.getSurfaceWidth());
+    globals.iScreenResolution[1] = static_cast<float>(ctx.getSurfaceHeight());
+
     wgpuQueueWriteBuffer(ctx.getQueue(), _globalUniformBuffer, 0, &globals, sizeof(globals));
 
     if (!globalBindGroup) return Err<void>("Shader: no global bind group");
@@ -605,29 +570,10 @@ Result<void> Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool
         renderBufferPasses(ctx);
     }
 
-    // Compute pixel position from cell position and scroll
-    float pixelX = static_cast<float>(_x) * rc.cellWidth;
-    float pixelY = static_cast<float>(_y) * rc.cellHeight;
-    float pixelW = static_cast<float>(_widthCells) * rc.cellWidth;
-    float pixelH = static_cast<float>(_heightCells) * rc.cellHeight;
-
-    // Relative widgets scroll with content
-    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
-        pixelY += rc.scrollOffset * rc.cellHeight;
-    }
-
-    // Visibility check
-    if (rc.termRows > 0) {
-        float screenPixelHeight = rc.termRows * rc.cellHeight;
-        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return Ok();  // Off-screen, not an error
-        }
-    }
-
-    float ndcX = (pixelX / rc.screenWidth) * 2.0f - 1.0f;
-    float ndcY = 1.0f - (pixelY / rc.screenHeight) * 2.0f;
-    float ndcW = (pixelW / rc.screenWidth) * 2.0f;
-    float ndcH = (pixelH / rc.screenHeight) * 2.0f;
+    float ndcX = (static_cast<float>(_pixelX) / ctx.getSurfaceWidth()) * 2.0f - 1.0f;
+    float ndcY = 1.0f - (static_cast<float>(_pixelY) / ctx.getSurfaceHeight()) * 2.0f;
+    float ndcW = (static_cast<float>(_pixelWidth) / ctx.getSurfaceWidth()) * 2.0f;
+    float ndcH = (static_cast<float>(_pixelHeight) / ctx.getSurfaceHeight()) * 2.0f;
 
     struct PluginUniforms {
         float resolution[2];
@@ -637,8 +583,8 @@ Result<void> Shader::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool
         float mouse[4];
     } uniforms;
 
-    uniforms.resolution[0] = pixelW;
-    uniforms.resolution[1] = pixelH;
+    uniforms.resolution[0] = static_cast<float>(_pixelWidth);
+    uniforms.resolution[1] = static_cast<float>(_pixelHeight);
     uniforms.param = _param;
     uniforms.zoom = _zoom;
     uniforms.rect[0] = ndcX;

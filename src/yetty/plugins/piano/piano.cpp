@@ -284,8 +284,6 @@ Result<void> Piano::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool 
     if (!on || !_visible) return Ok();
     if (failed_) return Err<void>("Piano already failed");
 
-    const auto& rc = _renderCtx;
-
     if (!gpuInitialized_) {
         auto result = createPipeline(ctx, ctx.getSurfaceFormat());
         if (!result) {
@@ -300,30 +298,11 @@ Result<void> Piano::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool 
         return Err<void>("Piano pipeline not initialized");
     }
 
-    // Calculate pixel position from cell position
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _widthCells * rc.cellWidth;
-    float pixelH = _heightCells * rc.cellHeight;
-
-    // Adjust for scroll offset
-    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
-        pixelY += rc.scrollOffset * rc.cellHeight;
-    }
-
-    // Skip if off-screen
-    if (rc.termRows > 0) {
-        float screenPixelHeight = rc.termRows * rc.cellHeight;
-        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return Ok();
-        }
-    }
-
     // Update uniforms
-    float ndcX = (pixelX / rc.screenWidth) * 2.0f - 1.0f;
-    float ndcY = 1.0f - (pixelY / rc.screenHeight) * 2.0f;
-    float ndcW = (pixelW / rc.screenWidth) * 2.0f;
-    float ndcH = (pixelH / rc.screenHeight) * 2.0f;
+    float ndcX = (static_cast<float>(_pixelX) / ctx.getSurfaceWidth()) * 2.0f - 1.0f;
+    float ndcY = 1.0f - (static_cast<float>(_pixelY) / ctx.getSurfaceHeight()) * 2.0f;
+    float ndcW = (static_cast<float>(_pixelWidth) / ctx.getSurfaceWidth()) * 2.0f;
+    float ndcH = (static_cast<float>(_pixelHeight) / ctx.getSurfaceHeight()) * 2.0f;
 
     struct Uniforms {
         float rect[4];        // 16 bytes, offset 0
@@ -340,8 +319,8 @@ Result<void> Piano::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool 
     uniforms.rect[1] = ndcY;
     uniforms.rect[2] = ndcW;
     uniforms.rect[3] = ndcH;
-    uniforms.resolution[0] = pixelW;
-    uniforms.resolution[1] = pixelH;
+    uniforms.resolution[0] = static_cast<float>(_pixelWidth);
+    uniforms.resolution[1] = static_cast<float>(_pixelHeight);
     uniforms.time = time_;
     uniforms.numOctaves = static_cast<float>(numOctaves_);
     uniforms.hoverKey = static_cast<float>(hoverKey_);

@@ -1,34 +1,18 @@
 #if YETTY_WEB
 
 #include "web-display.h"
-#include "damage-rect.h"
 #include <emscripten.h>
 #include <ytrace/ytrace.hpp>
 #include <cstring>
-#include <vector>
 
 namespace yetty {
 
 // Static instance for JavaScript callbacks
 WebDisplay* WebDisplay::_sInstance = nullptr;
 
-// vterm screen callbacks
-static VTermScreenCallbacks screenCallbacks = {
-    .damage = WebDisplay::onDamage,
-    .moverect = nullptr,
-    .movecursor = WebDisplay::onMoveCursor,
-    .settermprop = WebDisplay::onSetTermProp,
-    .bell = nullptr,
-    .resize = nullptr,
-    .sb_pushline = nullptr,
-    .sb_popline = nullptr,
-    .sb_clear = nullptr,
-};
-
 WebDisplay::WebDisplay(uint32_t cols, uint32_t rows,
                        WebGPUContext::Ptr ctx, FontManager::Ptr fontManager) noexcept
     : Widget()
-    , _grid(cols, rows)
     , _fontManager(fontManager)
     , _cols(cols)
     , _rows(rows)
@@ -82,6 +66,14 @@ Result<void> WebDisplay::init() noexcept
     float cellHeight = lineHeight;
     _renderer->setCellSize(cellWidth, cellHeight);
 
+    // Initialize renderer screen dimensions from WebGPU context
+    // This is critical for correct projection matrix calculation
+    uint32_t screenWidth = _ctx->getSurfaceWidth();
+    uint32_t screenHeight = _ctx->getSurfaceHeight();
+    if (screenWidth > 0 && screenHeight > 0) {
+        _renderer->resize(screenWidth, screenHeight);
+    }
+
     // Initialize vterm
     _vterm = vterm_new(_rows, _cols);
     if (!_vterm) {
@@ -89,42 +81,19 @@ Result<void> WebDisplay::init() noexcept
     }
     vterm_set_utf8(_vterm, 1);
 
-    _vtermScreen = vterm_obtain_screen(_vterm);
-    vterm_screen_set_callbacks(_vtermScreen, &screenCallbacks, this);
-    vterm_screen_reset(_vtermScreen, 1);
+    // Create GPUScreen - replaces vterm's Screen layer with direct State callbacks
+    _gpuScreen = std::make_unique<GPUScreen>(_rows, _cols, _font);
+    _gpuScreen->attach(_vterm);
 
-    // Initialize grid with spaces from vterm's initial state
-    syncToGrid();
-
-    yinfo("WebDisplay initialized: {}x{} grid with vterm", _cols, _rows);
+    yinfo("WebDisplay initialized: {}x{} grid with GPUScreen, screen {}x{}", 
+          _cols, _rows, screenWidth, screenHeight);
 
     return Ok();
 }
 
 //=============================================================================
-// vterm callbacks
+// GPUScreen callbacks (unused for now, but available if needed)
 //=============================================================================
-
-int WebDisplay::onDamage(VTermRect rect, void* user)
-{
-    auto* self = static_cast<WebDisplay*>(user);
-    self->_needsSync = true;
-    return 1;
-}
-
-int WebDisplay::onMoveCursor(VTermPos pos, VTermPos oldpos, int visible, void* user)
-{
-    auto* self = static_cast<WebDisplay*>(user);
-    self->_cursorRow = pos.row;
-    self->_cursorCol = pos.col;
-    self->_cursorVisible = visible;
-    return 1;
-}
-
-int WebDisplay::onSetTermProp(VTermProp prop, VTermValue* val, void* user)
-{
-    return 1;
-}
 
 //=============================================================================
 // Terminal I/O
@@ -134,7 +103,7 @@ void WebDisplay::write(const char* data, size_t len)
 {
     if (!_vterm || !data || len == 0) return;
     vterm_input_write(_vterm, data, len);
-    _needsSync = true;
+    // Note: damage callbacks will be triggered by vterm_input_write
 }
 
 void WebDisplay::sendKey(uint32_t codepoint)
@@ -156,91 +125,6 @@ size_t WebDisplay::readOutput(char* buffer, size_t maxlen)
 }
 
 //=============================================================================
-// Grid synchronization
-//=============================================================================
-
-void WebDisplay::colorToRGB(const VTermColor& color, uint8_t& r, uint8_t& g, uint8_t& b)
-{
-    if (VTERM_COLOR_IS_RGB(&color)) {
-        r = color.rgb.red;
-        g = color.rgb.green;
-        b = color.rgb.blue;
-    } else if (VTERM_COLOR_IS_INDEXED(&color)) {
-        // Basic 16-color palette
-        static const uint8_t palette[16][3] = {
-            {0, 0, 0}, {170, 0, 0}, {0, 170, 0}, {170, 85, 0},
-            {0, 0, 170}, {170, 0, 170}, {0, 170, 170}, {170, 170, 170},
-            {85, 85, 85}, {255, 85, 85}, {85, 255, 85}, {255, 255, 85},
-            {85, 85, 255}, {255, 85, 255}, {85, 255, 255}, {255, 255, 255}
-        };
-        int idx = color.indexed.idx;
-        if (idx < 16) {
-            r = palette[idx][0];
-            g = palette[idx][1];
-            b = palette[idx][2];
-        } else if (idx < 232) {
-            // 6x6x6 color cube
-            idx -= 16;
-            r = (idx / 36) * 51;
-            g = ((idx / 6) % 6) * 51;
-            b = (idx % 6) * 51;
-        } else {
-            // Grayscale
-            int gray = (idx - 232) * 10 + 8;
-            r = g = b = gray;
-        }
-    } else {
-        // Default colors
-        r = g = b = 204;
-    }
-}
-
-void WebDisplay::syncToGrid()
-{
-    if (!_vtermScreen) return;
-
-    for (int row = 0; row < static_cast<int>(_rows); row++) {
-        for (int col = 0; col < static_cast<int>(_cols); col++) {
-            VTermPos pos = {row, col};
-            VTermScreenCell cell;
-            vterm_screen_get_cell(_vtermScreen, pos, &cell);
-
-            uint32_t codepoint = cell.chars[0] ? cell.chars[0] : ' ';
-
-            // Convert codepoint to glyph index
-            uint16_t glyphIndex = _font ? _font->getGlyphIndex(codepoint)
-                                        : static_cast<uint16_t>(codepoint);
-
-            uint8_t fgR, fgG, fgB, bgR, bgG, bgB;
-
-            // Handle default colors explicitly
-            if (VTERM_COLOR_IS_DEFAULT_FG(&cell.fg)) {
-                fgR = fgG = fgB = 204; // Light gray foreground
-            } else {
-                colorToRGB(cell.fg, fgR, fgG, fgB);
-            }
-
-            if (VTERM_COLOR_IS_DEFAULT_BG(&cell.bg)) {
-                bgR = 0x0F; bgG = 0x0F; bgB = 0x23; // Dark background
-            } else {
-                colorToRGB(cell.bg, bgR, bgG, bgB);
-            }
-
-            // Use default colors if black on black
-            if (fgR == 0 && fgG == 0 && fgB == 0 && bgR == 0 && bgG == 0 && bgB == 0) {
-                fgR = fgG = fgB = 204;
-            }
-
-            _grid.setCell(col, row, glyphIndex,
-                         fgR, fgG, fgB,
-                         bgR, bgG, bgB);
-        }
-    }
-
-    _needsSync = false;
-}
-
-//=============================================================================
 // Rendering
 //=============================================================================
 
@@ -248,31 +132,47 @@ void WebDisplay::prepareFrame(WebGPUContext& ctx, bool on)
 {
     (void)ctx;
     (void)on;
-    // Sync vterm to grid if needed
-    if (_needsSync) {
-        syncToGrid();
-        _needsRender = true;
-    }
+    // Nothing to do here - GPUScreen handles data directly
 }
 
 bool WebDisplay::needsRender() const
 {
-    return _needsRender || _needsSync;
+    return _fullDamage || (_gpuScreen && _gpuScreen->hasDamage());
 }
 
 Result<void> WebDisplay::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on)
 {
     (void)ctx;
     (void)on;
-    if (!_renderer) {
-        return Err<void>("No renderer available");
+    if (!_renderer || !_gpuScreen) {
+        return Err<void>("No renderer or GPUScreen available");
     }
 
-    // Render the grid with cursor using the provided render pass
-    std::vector<DamageRect> emptyDamage;
-    _renderer->renderToPass(pass, _grid, emptyDamage, true, _cursorCol, _cursorRow, _cursorVisible);
+    // Get cursor info from GPUScreen
+    _cursorCol = _gpuScreen->getCursorCol();
+    _cursorRow = _gpuScreen->getCursorRow();
+    _cursorVisible = _gpuScreen->isCursorVisible();
 
-    _needsRender = false;
+    // Determine if we need to upload textures (any damage = full upload for now)
+    bool needsUpload = _fullDamage || _gpuScreen->hasDamage();
+
+    // Render directly from GPUScreen buffers - zero-copy path
+    _renderer->renderToPassFromBuffers(
+        pass,
+        _cols,
+        _rows,
+        _gpuScreen->getGlyphData(),
+        _gpuScreen->getFgColorData(),
+        _gpuScreen->getBgColorData(),
+        _gpuScreen->getAttrsData(),
+        needsUpload,
+        _cursorCol, _cursorRow, _cursorVisible
+    );
+
+    // Clear damage after rendering
+    _gpuScreen->clearDamage();
+    _fullDamage = false;
+
     return Ok();
 }
 
@@ -299,7 +199,63 @@ void WebDisplay::setScale(float scale)
         float baseCellHeight = lineHeight;
         _renderer->setCellSize(baseCellWidth * scale, baseCellHeight * scale);
         _renderer->setScale(scale);
+        // Mark full damage to trigger re-render with new scale
+        _fullDamage = true;
     }
+}
+
+void WebDisplay::resize(uint32_t cols, uint32_t rows)
+{
+    if (cols == _cols && rows == _rows) {
+        return;  // No change
+    }
+
+    _cols = cols;
+    _rows = rows;
+
+    // Resize vterm
+    if (_vterm) {
+        vterm_set_size(_vterm, _rows, _cols);
+    }
+
+    // Resize GPUScreen (note: GPUScreen uses rows, cols order)
+    if (_gpuScreen) {
+        _gpuScreen->resize(_rows, _cols);
+    }
+
+    // Mark full damage for re-render
+    _fullDamage = true;
+
+    yinfo("WebDisplay resized to {}x{}", _cols, _rows);
+}
+
+void WebDisplay::resizeToPixels(uint32_t pixelWidth, uint32_t pixelHeight)
+{
+    if (!_font || !_renderer || !_ctx) {
+        return;
+    }
+
+    // Resize the WebGPU context/swapchain to match canvas size
+    _ctx->resize(pixelWidth, pixelHeight);
+
+    // Resize the GridRenderer's screen dimensions
+    _renderer->resize(pixelWidth, pixelHeight);
+
+    // Calculate cell size from font
+    float lineHeight = _font->getLineHeight();
+    float cellWidth = lineHeight * 0.5f;
+    float cellHeight = lineHeight;
+
+    // Calculate grid dimensions
+    uint32_t cols = static_cast<uint32_t>(pixelWidth / cellWidth);
+    uint32_t rows = static_cast<uint32_t>(pixelHeight / cellHeight);
+
+    // Minimum size
+    if (cols < 10) cols = 10;
+    if (rows < 3) rows = 3;
+
+    // Resize the terminal grid
+    resize(cols, rows);
 }
 
 } // namespace yetty
@@ -371,13 +327,13 @@ int yetty_read_input(char* buffer, int maxlen)
     return 0;
 }
 
-// Force sync display
+// Force sync display (marks full damage for next render)
 EMSCRIPTEN_KEEPALIVE
 void yetty_sync()
 {
     auto* display = yetty::WebDisplay::instance();
     if (display) {
-        display->syncToGrid();
+        display->markFullDamage();
     }
 }
 
@@ -389,6 +345,39 @@ void yetty_set_scale(float scale)
     if (display) {
         display->setScale(scale);
     }
+}
+
+// Resize terminal to fit pixel dimensions
+// Returns: cols in high 16 bits, rows in low 16 bits
+EMSCRIPTEN_KEEPALIVE
+int yetty_resize(int pixelWidth, int pixelHeight)
+{
+    auto* display = yetty::WebDisplay::instance();
+    if (!display || !display->font()) {
+        return 0;
+    }
+
+    // Resize display to fit pixel dimensions (updates both renderer and grid)
+    display->resizeToPixels(static_cast<uint32_t>(pixelWidth), 
+                            static_cast<uint32_t>(pixelHeight));
+
+    // Return packed dimensions for JavaScript
+    return (static_cast<int>(display->getCols()) << 16) | static_cast<int>(display->getRows());
+}
+
+// Get current terminal dimensions
+EMSCRIPTEN_KEEPALIVE
+int yetty_get_cols()
+{
+    auto* display = yetty::WebDisplay::instance();
+    return display ? static_cast<int>(display->getCols()) : 80;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int yetty_get_rows()
+{
+    auto* display = yetty::WebDisplay::instance();
+    return display ? static_cast<int>(display->getRows()) : 24;
 }
 
 } // extern "C"

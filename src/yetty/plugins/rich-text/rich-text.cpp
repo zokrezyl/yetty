@@ -223,24 +223,10 @@ void RichText::prepareFrame(WebGPUContext& ctx, bool on) {
 }
 
 Result<void> RichText::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
-    yinfo("RichText::render called, on={} failed={} visible={} richText={}", on, _failed, _visible, _richText != nullptr);
     if (!on || _failed || !_visible) return Ok();
 
-    const auto& rc = _renderCtx;
-
-    // Use pre-computed pixel positions from Widget base class
-    float pixelX = _pixelX;
-    float pixelY = _pixelY;
-    float pixelW = static_cast<float>(_pixelWidth);
-    float pixelH = static_cast<float>(_pixelHeight);
-
-    // Skip if off-screen
-    if (rc.termRows > 0) {
-        float screenPixelHeight = rc.termRows * rc.cellHeight;
-        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return Ok();  // Off-screen, not an error
-        }
-    }
+    yinfo("RichText::render _pixelX={} _pixelY={} _pixelWidth={} _pixelHeight={}",
+          _pixelX, _pixelY, _pixelWidth, _pixelHeight);
 
     // Initialize RichText GPU resources if needed
     if (!_richText) {
@@ -250,28 +236,23 @@ Result<void> RichText::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bo
             return Err<void>("RichText: no font manager");
         }
 
-        auto result = yetty::RichText::create(&ctx, rc.targetFormat, fontMgr);
+        auto result = yetty::RichText::create(&ctx, ctx.getSurfaceFormat(), fontMgr);
         if (!result) {
             _failed = true;
             return Err<void>("RichText: failed to create RichText", result);
         }
         _richText = *result;
-
-        // Set default font family
         _richText->setDefaultFontFamily(_fontName);
 
-        // Add pending spans
         for (const auto& span : _pendingSpans) {
             _richText->addSpan(span);
         }
         _pendingSpans.clear();
-
         _initialized = true;
     }
 
-    // Use batched render
-    return _richText->render(pass, ctx, rc.screenWidth, rc.screenHeight,
-                                    pixelX, pixelY, pixelW, pixelH);
+    return _richText->render(pass, ctx, ctx.getSurfaceWidth(), ctx.getSurfaceHeight(),
+                             _pixelX, _pixelY, static_cast<float>(_pixelWidth), static_cast<float>(_pixelHeight));
 }
 
 //-----------------------------------------------------------------------------

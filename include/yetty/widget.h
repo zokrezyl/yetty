@@ -50,21 +50,6 @@ struct WidgetParams {
     uv_loop_t* loop = nullptr;  // libuv event loop
 };
 
-//-----------------------------------------------------------------------------
-// RenderContext - rendering parameters passed to Widget each frame
-//-----------------------------------------------------------------------------
-struct RenderContext {
-    WGPUTextureView targetView = nullptr;
-    WGPUTextureFormat targetFormat = WGPUTextureFormat_BGRA8Unorm;
-    uint32_t screenWidth = 0;
-    uint32_t screenHeight = 0;
-    float cellWidth = 0.0f;
-    float cellHeight = 0.0f;
-    int scrollOffset = 0;
-    uint32_t termRows = 0;
-    bool isAltScreen = false;
-    double deltaTime = 0.0;
-};
 
 //-----------------------------------------------------------------------------
 // Widget - base class for all renderable widgets
@@ -201,27 +186,6 @@ public:
     virtual void setFocus(bool f) { _hasFocus = f; }
 
     //-------------------------------------------------------------------------
-    // Render context
-    //-------------------------------------------------------------------------
-
-    const RenderContext& getRenderContext() const { return _renderCtx; }
-    void setRenderContext(const RenderContext& ctx) {
-        _renderCtx = ctx;
-        // Update pixel dimensions and position from cell dimensions
-        if (ctx.cellWidth > 0 && ctx.cellHeight > 0) {
-            _pixelWidth = _widthCells * ctx.cellWidth;
-            _pixelHeight = _heightCells * ctx.cellHeight;
-            // Compute pixel position from cell position
-            _pixelX = static_cast<float>(_x) * ctx.cellWidth;
-            _pixelY = static_cast<float>(_y) * ctx.cellHeight;
-            // For relative widgets, adjust for scroll
-            if (_positionMode == PositionMode::Relative && ctx.scrollOffset > 0) {
-                _pixelY += ctx.scrollOffset * ctx.cellHeight;
-            }
-        }
-    }
-
-    //-------------------------------------------------------------------------
     // Setters for factory use
     //-------------------------------------------------------------------------
 
@@ -295,7 +259,6 @@ protected:
 
     std::string _payload;
     std::string _args;
-    RenderContext _renderCtx;
     std::mutex _mutex;
 
     Plugin* _parent = nullptr;

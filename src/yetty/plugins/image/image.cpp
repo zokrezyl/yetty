@@ -137,10 +137,8 @@ Result<void> Image::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool 
 
     if (!on || failed_ || !_visible || !imageData_) return Ok();
 
-    const auto& rc = _renderCtx;
-
     if (!gpuInitialized_) {
-        if (auto res = createPipeline(ctx, rc.targetFormat); !res) {
+        if (auto res = createPipeline(ctx, ctx.getSurfaceFormat()); !res) {
             failed_ = true;
             return Err<void>("Image: failed to create pipeline", res);
         }
@@ -152,26 +150,10 @@ Result<void> Image::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool 
         return Err<void>("Image: pipeline resources not initialized");
     }
 
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _widthCells * rc.cellWidth;
-    float pixelH = _heightCells * rc.cellHeight;
-
-    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
-        pixelY += rc.scrollOffset * rc.cellHeight;
-    }
-
-    if (rc.termRows > 0) {
-        float screenPixelHeight = rc.termRows * rc.cellHeight;
-        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return Ok();  // Off-screen, not an error
-        }
-    }
-
-    float ndcX = (pixelX / rc.screenWidth) * 2.0f - 1.0f;
-    float ndcY = 1.0f - (pixelY / rc.screenHeight) * 2.0f;
-    float ndcW = (pixelW / rc.screenWidth) * 2.0f;
-    float ndcH = (pixelH / rc.screenHeight) * 2.0f;
+    float ndcX = (static_cast<float>(_pixelX) / ctx.getSurfaceWidth()) * 2.0f - 1.0f;
+    float ndcY = 1.0f - (static_cast<float>(_pixelY) / ctx.getSurfaceHeight()) * 2.0f;
+    float ndcW = (static_cast<float>(_pixelWidth) / ctx.getSurfaceWidth()) * 2.0f;
+    float ndcH = (static_cast<float>(_pixelHeight) / ctx.getSurfaceHeight()) * 2.0f;
 
     bool rectChanged = (ndcX != lastRect_[0] || ndcY != lastRect_[1] ||
                         ndcW != lastRect_[2] || ndcH != lastRect_[3]);

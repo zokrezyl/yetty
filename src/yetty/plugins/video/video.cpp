@@ -421,12 +421,9 @@ void Video::prepareFrame(WebGPUContext& ctx, bool on) {
         return;
     }
 
-    // Get render context set by owner
-    const auto& rc = _renderCtx;
-
-    // Update playback (integrate former update() logic)
+    // Update playback
     if (playing_) {
-        accumulatedTime_ += rc.deltaTime;
+        accumulatedTime_ += 0.016;  // ~60fps
         if (accumulatedTime_ >= frameTime_) {
             accumulatedTime_ -= frameTime_;
             auto res = decodeNextFrame();
@@ -437,7 +434,7 @@ void Video::prepareFrame(WebGPUContext& ctx, bool on) {
     }
 
     if (!gpuInitialized_) {
-        auto result = createPipeline(ctx, rc.targetFormat);
+        auto result = createPipeline(ctx, ctx.getSurfaceFormat());
         if (!result) {
             failed_ = true;
             yerror("Video: Failed to create pipeline: {}", result.error().message());
@@ -452,33 +449,14 @@ void Video::prepareFrame(WebGPUContext& ctx, bool on) {
         return;
     }
 
-    // Calculate pixel position from cell position
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _widthCells * rc.cellWidth;
-    float pixelH = _heightCells * rc.cellHeight;
-
-    // For Relative layers, adjust position when viewing scrollback
-    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
-        pixelY += rc.scrollOffset * rc.cellHeight;
-    }
-
-    // Skip if off-screen
-    if (rc.termRows > 0) {
-        float screenPixelHeight = rc.termRows * rc.cellHeight;
-        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return;
-        }
-    }
-
     // Update texture with latest frame
     updateTexture(ctx);
 
     // Update uniforms
-    float ndcX = (pixelX / rc.screenWidth) * 2.0f - 1.0f;
-    float ndcY = 1.0f - (pixelY / rc.screenHeight) * 2.0f;
-    float ndcW = (pixelW / rc.screenWidth) * 2.0f;
-    float ndcH = (pixelH / rc.screenHeight) * 2.0f;
+    float ndcX = (static_cast<float>(_pixelX) / ctx.getSurfaceWidth()) * 2.0f - 1.0f;
+    float ndcY = 1.0f - (static_cast<float>(_pixelY) / ctx.getSurfaceHeight()) * 2.0f;
+    float ndcW = (static_cast<float>(_pixelWidth) / ctx.getSurfaceWidth()) * 2.0f;
+    float ndcH = (static_cast<float>(_pixelHeight) / ctx.getSurfaceHeight()) * 2.0f;
 
     struct Uniforms { float rect[4]; } uniforms;
     uniforms.rect[0] = ndcX;
@@ -495,8 +473,10 @@ void Video::prepareFrame(WebGPUContext& ctx, bool on) {
         return;
     }
 
+    auto viewResult = ctx.getCurrentTextureView();
+    if (!viewResult) return;
     WGPURenderPassColorAttachment colorAttachment = {};
-    colorAttachment.view = rc.targetView;
+    colorAttachment.view = *viewResult;
     colorAttachment.loadOp = WGPULoadOp_Load;
     colorAttachment.storeOp = WGPUStoreOp_Store;
     colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;

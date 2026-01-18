@@ -233,11 +233,11 @@ Result<void> YmeryPlugin::initImGui(uint32_t screenWidth, uint32_t screenHeight)
     return Ok();
 }
 
-Result<void> YmeryPlugin::ensureInitialized(const RenderContext& rc, const std::string& layoutPath,
+Result<void> YmeryPlugin::ensureInitialized(WebGPUContext& ctx, const std::string& layoutPath,
                                             const std::string& pluginPath, const std::string& mainModule) {
     // Initialize ImGui on first call
     if (!_imgui_ctx) {
-        if (auto res = initImGui(rc.screenWidth, rc.screenHeight); !res) {
+        if (auto res = initImGui(ctx.getSurfaceWidth(), ctx.getSurfaceHeight()); !res) {
             return Err<void>("Failed to initialize ImGui", res);
         }
     }
@@ -270,10 +270,6 @@ Result<void> YmeryPlugin::ensureInitialized(const RenderContext& rc, const std::
         _app = *res;
         yinfo("YmeryPlugin: EmbeddedApp created");
     }
-
-    // Store cell dimensions for input coordinate calculation
-    _cell_width = rc.cellWidth;
-    _cell_height = rc.cellHeight;
 
     return Ok();
 }
@@ -336,8 +332,6 @@ Result<void> Ymery::dispose() {
 Result<void> Ymery::ensureImGuiInitialized(WebGPUContext& ctx) {
     if (_imgui_ctx) return Ok();
 
-    const auto& rc = _renderCtx;
-
     // Create ImGui context
     _imgui_ctx = ImGui::CreateContext();
     if (!_imgui_ctx) {
@@ -359,7 +353,7 @@ Result<void> Ymery::ensureImGuiInitialized(WebGPUContext& ctx) {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.IniFilename = nullptr;
-    io.DisplaySize = ImVec2(static_cast<float>(rc.screenWidth), static_cast<float>(rc.screenHeight));
+    io.DisplaySize = ImVec2(static_cast<float>(ctx.getSurfaceWidth()), static_cast<float>(ctx.getSurfaceHeight()));
 
     ImGui::StyleColorsDark();
 
@@ -441,45 +435,23 @@ Result<void> Ymery::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool 
         return res;
     }
 
-    const auto& rc = _renderCtx;
-
-    // Calculate pixel position
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _widthCells * rc.cellWidth;
-    float pixelH = _heightCells * rc.cellHeight;
-
-    // Adjust for scroll offset
-    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
-        pixelY += rc.scrollOffset * rc.cellHeight;
-    }
-
-    // Skip if off-screen
-    if (rc.termRows > 0) {
-        float screenPixelHeight = rc.termRows * rc.cellHeight;
-        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return Ok();
-        }
-    }
-
     // Set contexts
     ImGui::SetCurrentContext(_imgui_ctx);
     ImPlot::SetCurrentContext(_implot_ctx);
 
     // Build ImGui frame
-    float deltaTime = static_cast<float>(rc.deltaTime);
-    if (deltaTime <= 0.0f) deltaTime = 1.0f / 60.0f;
+    float deltaTime = 1.0f / 60.0f;
 
     ImGuiIO& io = ImGui::GetIO();
-    io.DisplaySize = ImVec2(static_cast<float>(rc.screenWidth), static_cast<float>(rc.screenHeight));
+    io.DisplaySize = ImVec2(static_cast<float>(ctx.getSurfaceWidth()), static_cast<float>(ctx.getSurfaceHeight()));
     io.DeltaTime = deltaTime;
 
     ImGui_ImplWGPU_NewFrame();
     ImGui::NewFrame();
 
     // Position widget's ImGui window
-    ImGui::SetNextWindowPos(ImVec2(pixelX, pixelY), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(pixelW, pixelH), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(static_cast<float>(_pixelX), static_cast<float>(_pixelY)), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(static_cast<float>(_pixelWidth), static_cast<float>(_pixelHeight)), ImGuiCond_Always);
 
     // Render ymery widgets
     _app->render_widgets();
@@ -489,7 +461,7 @@ Result<void> Ymery::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool 
     ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), pass);
 
     // Reset scissor rect to full screen - ImGui leaves it set to its last clip rect
-    wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, rc.screenWidth, rc.screenHeight);
+    wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, ctx.getSurfaceWidth(), ctx.getSurfaceHeight());
 
     return Ok();
 }
@@ -498,13 +470,9 @@ bool Ymery::onMouseMove(float x, float y) {
     if (!_imgui_ctx) return false;
     ImGui::SetCurrentContext(_imgui_ctx);
     ImGuiIO& io = ImGui::GetIO();
-    const auto& rc = _renderCtx;
-    float absX = x + _x * rc.cellWidth;
-    float absY = y + _y * rc.cellHeight;
-    // Adjust for scroll offset (same as in render)
-    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
-        absY += rc.scrollOffset * rc.cellHeight;
-    }
+    // x,y are local to widget, _pixelX/_pixelY are absolute (set by Terminal)
+    float absX = x + _pixelX;
+    float absY = y + _pixelY;
     io.AddMousePosEvent(absX, absY);
     return true;
 }

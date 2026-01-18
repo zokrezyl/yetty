@@ -57,7 +57,18 @@ public:
                     bool fullDamage, int cursorCol = -1, int cursorRow = -1,
                     bool cursorVisible = false) noexcept;
 
-  // Render from CPU buffer data (used by RenderGridCmd)
+  // Render to existing pass from CPU buffer data (zero-copy path)
+  void renderToPassFromBuffers(WGPURenderPassEncoder pass,
+                               uint32_t cols, uint32_t rows,
+                               const uint16_t* glyphs,
+                               const uint8_t* fgColors,
+                               const uint8_t* bgColors,
+                               const uint8_t* attrs,
+                               bool fullDamage,
+                               int cursorCol, int cursorRow,
+                               bool cursorVisible) noexcept;
+
+  // Render from CPU buffer data (creates its own pass, used by RenderGridCmd)
   void renderFromBuffers(uint32_t cols, uint32_t rows,
                          const uint16_t* glyphs,
                          const uint8_t* fgColors,

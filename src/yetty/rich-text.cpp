@@ -456,10 +456,17 @@ void RichText::buildGlyphInstances() {
         float atlasBaseSize = font->getFontSize();
         float fontScale = ch.size / atlasBaseSize;
 
-        // Always use font metrics for glyph size - never stretch to fit bounding box
-        // Stretching distorts glyphs and breaks baseline alignment
-        float glyphW = metrics->_size.x * fontScale;
-        float glyphH = metrics->_size.y * fontScale;
+        // Glyph size: use target dimensions if provided (for exact PDF charbox sizing)
+        float glyphW, glyphH;
+        if (ch.prePositioned && ch.targetWidth > 0.1f && ch.targetHeight > 0.1f) {
+            // Use exact charbox dimensions from PDF - ensures precise alignment
+            glyphW = ch.targetWidth;
+            glyphH = ch.targetHeight;
+        } else {
+            // Standard: use font metrics scaled by font size
+            glyphW = metrics->_size.x * fontScale;
+            glyphH = metrics->_size.y * fontScale;
+        }
 
         // Skip empty glyphs (spaces)
         if (glyphW < 0.1f || glyphH < 0.1f) continue;
@@ -477,13 +484,12 @@ void RichText::buildGlyphInstances() {
         }
 
         // Debug logging for descender characters - USE yinfo to actually see it!
-        if (ch.codepoint == 'g' || ch.codepoint == 'p' || ch.codepoint == 'q' || ch.codepoint == 'S') {
-            yinfo("GLYPH '{}': prePos={} ch.pos=({:.1f},{:.1f}) bearing=({:.1f},{:.1f}) metrics.size=({:.1f},{:.1f}) target=({:.1f},{:.1f}) -> glyph.pos=({:.1f},{:.1f}) glyph.size=({:.1f},{:.1f})",
+        if (ch.codepoint == 'g' || ch.codepoint == 'p' || ch.codepoint == 'a' || ch.codepoint == 'e') {
+            yinfo("GLYPH '{}': prePos={} ch.pos=({:.1f},{:.1f}) bearing=({:.1f},{:.1f}) metrics.size=({:.1f},{:.1f}) -> glyph.pos=({:.1f},{:.1f}) glyph.size=({:.1f},{:.1f})",
                   static_cast<char>(ch.codepoint), ch.prePositioned,
                   ch.x, ch.y,
                   metrics->_bearing.x, metrics->_bearing.y,
                   metrics->_size.x, metrics->_size.y,
-                  ch.targetWidth, ch.targetHeight,
                   glyphX, glyphY, glyphW, glyphH);
         }
 

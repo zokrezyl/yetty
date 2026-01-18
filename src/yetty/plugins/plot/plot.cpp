@@ -471,14 +471,10 @@ Result<void> Plot::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool o
         return Ok();
     }
 
-    // Get render context parameters
-    WGPUTextureFormat targetFormat = _renderCtx.targetFormat;
-    uint32_t screenWidth = _renderCtx.screenWidth;
-    uint32_t screenHeight = _renderCtx.screenHeight;
-    float pixelX = _pixelX;
-    float pixelY = _pixelY;
-    float pixelW = static_cast<float>(_pixelWidth);
-    float pixelH = static_cast<float>(_pixelHeight);
+    // Get render parameters from ctx
+    WGPUTextureFormat targetFormat = ctx.getSurfaceFormat();
+    uint32_t screenWidth = ctx.getSurfaceWidth();
+    uint32_t screenHeight = ctx.getSurfaceHeight();
 
     if (!gpuInitialized_) {
         if (auto res = createPipeline(ctx, targetFormat); !res) {
@@ -507,10 +503,10 @@ Result<void> Plot::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool o
     }
 
     // Update uniforms
-    float ndcX = (pixelX / screenWidth) * 2.0f - 1.0f;
-    float ndcY = 1.0f - (pixelY / screenHeight) * 2.0f;
-    float ndcW = (pixelW / screenWidth) * 2.0f;
-    float ndcH = (pixelH / screenHeight) * 2.0f;
+    float ndcX = (_pixelX / screenWidth) * 2.0f - 1.0f;
+    float ndcY = 1.0f - (_pixelY / screenHeight) * 2.0f;
+    float ndcW = (static_cast<float>(_pixelWidth) / screenWidth) * 2.0f;
+    float ndcH = (static_cast<float>(_pixelHeight) / screenHeight) * 2.0f;
 
     // Extended uniform structure (must match shader - all arrays use vec4 for 16-byte alignment)
     struct Uniforms {
@@ -549,8 +545,8 @@ Result<void> Plot::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool o
     uniforms.viewport[1] = xMax_;
     uniforms.viewport[2] = yMin_;
     uniforms.viewport[3] = yMax_;
-    uniforms.resolution[0] = pixelW;
-    uniforms.resolution[1] = pixelH;
+    uniforms.resolution[0] = static_cast<float>(_pixelWidth);
+    uniforms.resolution[1] = static_cast<float>(_pixelHeight);
     uniforms.lineWidth = lineWidth_;
     uniforms.gridEnabled = gridEnabled_ ? 1.0f : 0.0f;
     uniforms.numPlots = numPlots_;

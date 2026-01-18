@@ -1131,30 +1131,15 @@ void Yetty::mainLoopIteration() noexcept {
   }
   WGPUTextureView targetView = *viewResult;
 
-  // Build RenderContext for all widgets
-  // Use actual surface dimensions (not window size) to avoid scissor rect validation errors
-  // when window is resized but surface hasn't been reconfigured yet
-  RenderContext rc;
-  rc.targetView = targetView;
-  rc.targetFormat = _ctx->getSurfaceFormat();
-  rc.screenWidth = _ctx->getSurfaceWidth();
-  rc.screenHeight = _ctx->getSurfaceHeight();
-  rc.cellWidth = cellWidth();
-  rc.cellHeight = cellHeight();
-  rc.scrollOffset = _terminal ? _terminal->getScrollOffset() : 0;
-  rc.termRows = _rows;
-  rc.isAltScreen = _terminal ? _terminal->isAltScreen() : false;
-  rc.deltaTime = deltaTime;
-
   //=========================================================================
-  // Phase 1: PREPARE - Set RenderContext and call prepareFrame() on all widgets
+  // Phase 1: PREPARE - call prepareFrame() on all root widgets
   // Widgets that render to intermediate textures (ThorVG, pygfx, video) do
   // their texture rendering here. Direct-render widgets do nothing.
+  // Root widgets (like Terminal) manage their own child widget positions.
   //=========================================================================
   for (const auto &widget : _rootWidgets) {
     if (!widget->isRunning())
       continue;
-    widget->setRenderContext(rc);
     widget->prepareFrame(*_ctx, true);
   }
 
@@ -1219,20 +1204,14 @@ void Yetty::mainLoopIteration() noexcept {
             hoveredWidget ? hoveredWidget->name() : "none");
     }
 
-    int scrollOffset = _terminal->getScrollOffset();
-
     for (const auto& child : _terminal->getChildWidgets()) {
       if (!child->isVisible()) continue;
 
-      float pixelX = child->getX() * cellW;
-      float pixelY = child->getY() * cellH;
-      float pixelW = child->getWidthCells() * cellW;
-      float pixelH = child->getHeightCells() * cellH;
-
-      // Adjust for scroll (relative widgets move with content)
-      if (child->getPositionMode() == PositionMode::Relative && scrollOffset > 0) {
-        pixelY += scrollOffset * cellH;
-      }
+      // Use the widget's pixel position (set by Terminal::prepareFrame)
+      float pixelX = child->getPixelX();
+      float pixelY = child->getPixelY();
+      float pixelW = static_cast<float>(child->getPixelWidth());
+      float pixelH = static_cast<float>(child->getPixelHeight());
 
       // Determine frame color based on state
       // Priority: focused (green) > hovered (yellow) > default (white)

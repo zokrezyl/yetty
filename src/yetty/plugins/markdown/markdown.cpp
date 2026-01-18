@@ -301,24 +301,7 @@ void Markdown::prepareFrame(WebGPUContext& ctx, bool on) {
 }
 
 Result<void> Markdown::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
-    yinfo("Markdown::render called, on={} failed={} visible={} richText={}", on, _failed, _visible, _richText != nullptr);
     if (!on || _failed || !_visible) return Ok();
-
-    const auto& rc = _renderCtx;
-
-    // Use pre-computed pixel positions from Widget base class
-    float pixelX = _pixelX;
-    float pixelY = _pixelY;
-    float pixelW = static_cast<float>(_pixelWidth);
-    float pixelH = static_cast<float>(_pixelHeight);
-
-    // Skip if off-screen
-    if (rc.termRows > 0) {
-        float screenPixelHeight = rc.termRows * rc.cellHeight;
-        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return Ok();  // Off-screen, not an error
-        }
-    }
 
     // Create RichText if needed
     if (!_richText) {
@@ -328,7 +311,7 @@ Result<void> Markdown::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bo
             return Err<void>("Markdown: no font manager");
         }
 
-        auto result = yetty::RichText::create(&ctx, rc.targetFormat, fontMgr);
+        auto result = yetty::RichText::create(&ctx, ctx.getSurfaceFormat(), fontMgr);
         if (!result) {
             _failed = true;
             return Err<void>("Markdown: failed to create RichText", result);
@@ -338,14 +321,13 @@ Result<void> Markdown::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bo
         _initialized = true;
     }
 
-    if (_lastLayoutWidth != pixelW) {
-        buildRichTextSpans(_baseSize, pixelW);
-        _lastLayoutWidth = pixelW;
+    if (_lastLayoutWidth != _pixelWidth) {
+        buildRichTextSpans(_baseSize, static_cast<float>(_pixelWidth));
+        _lastLayoutWidth = _pixelWidth;
     }
 
-    // Use batched render
-    return _richText->render(pass, ctx, rc.screenWidth, rc.screenHeight,
-                                    pixelX, pixelY, pixelW, pixelH);
+    return _richText->render(pass, ctx, ctx.getSurfaceWidth(), ctx.getSurfaceHeight(),
+                             _pixelX, _pixelY, static_cast<float>(_pixelWidth), static_cast<float>(_pixelHeight));
 }
 
 //-----------------------------------------------------------------------------

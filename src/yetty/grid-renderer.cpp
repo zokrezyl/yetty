@@ -1183,6 +1183,136 @@ void GridRenderer::renderToPass(WGPURenderPassEncoder pass, const Grid &grid,
   wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
 }
 
+void GridRenderer::renderToPassFromBuffers(WGPURenderPassEncoder pass,
+                                           uint32_t cols, uint32_t rows,
+                                           const uint16_t* glyphs,
+                                           const uint8_t* fgColors,
+                                           const uint8_t* bgColors,
+                                           const uint8_t* attrs,
+                                           bool fullDamage,
+                                           int cursorCol, int cursorRow,
+                                           bool cursorVisible) noexcept {
+  if (!_ctx || !font_) return;
+
+  WGPUDevice device = _ctx->getDevice();
+  WGPUQueue queue = _ctx->getQueue();
+
+  // Upload any newly loaded emojis to GPU
+  if (emojiAtlas_) {
+    emojiAtlas_->uploadToGPU();
+  }
+
+  // Recreate textures and bind group if grid size changed
+  if (cols != textureCols_ || rows != textureRows_) {
+    if (auto res = createCellTextures(device, cols, rows); !res) {
+      yerror("GridRenderer::renderToPassFromBuffers: {}", error_msg(res));
+      return;
+    }
+    if (auto res = createBindGroup(device, *font_); !res) {
+      yerror("GridRenderer::renderToPassFromBuffers: {}", error_msg(res));
+      return;
+    }
+    needsBindGroupRecreation_ = false;
+    lastFontResourceVersion_ = font_->getResourceVersion();
+    fullDamage = true;  // Force full upload on resize
+  } else if (needsBindGroupRecreation_ ||
+             font_->getResourceVersion() != lastFontResourceVersion_) {
+    if (auto res = createBindGroup(device, *font_); !res) {
+      yerror("GridRenderer::renderToPassFromBuffers: {}", error_msg(res));
+      return;
+    }
+    needsBindGroupRecreation_ = false;
+    lastFontResourceVersion_ = font_->getResourceVersion();
+    fullDamage = true;
+  }
+
+  // Only upload textures when there's damage
+  if (fullDamage) {
+    gridCols_ = cols;
+    gridRows_ = rows;
+
+    // Write glyph indices
+    WGPUTexelCopyTextureInfo glyphDest = {};
+    glyphDest.texture = cellGlyphTexture_;
+    glyphDest.mipLevel = 0;
+    glyphDest.origin = {0, 0, 0};
+    glyphDest.aspect = WGPUTextureAspect_All;
+
+    WGPUTexelCopyBufferLayout glyphLayout = {};
+    glyphLayout.offset = 0;
+    glyphLayout.bytesPerRow = cols * sizeof(uint16_t);
+    glyphLayout.rowsPerImage = rows;
+
+    WGPUExtent3D glyphSize = {cols, rows, 1};
+    wgpuQueueWriteTexture(queue, &glyphDest, glyphs,
+                          cols * rows * sizeof(uint16_t), &glyphLayout, &glyphSize);
+
+    // Write FG colors
+    WGPUTexelCopyTextureInfo fgDest = {};
+    fgDest.texture = cellFgColorTexture_;
+    fgDest.mipLevel = 0;
+    fgDest.origin = {0, 0, 0};
+    fgDest.aspect = WGPUTextureAspect_All;
+
+    WGPUTexelCopyBufferLayout fgLayout = {};
+    fgLayout.offset = 0;
+    fgLayout.bytesPerRow = cols * 4;
+    fgLayout.rowsPerImage = rows;
+
+    WGPUExtent3D fgSize = {cols, rows, 1};
+    wgpuQueueWriteTexture(queue, &fgDest, fgColors, cols * rows * 4, &fgLayout, &fgSize);
+
+    // Write BG colors
+    WGPUTexelCopyTextureInfo bgDest = {};
+    bgDest.texture = cellBgColorTexture_;
+    bgDest.mipLevel = 0;
+    bgDest.origin = {0, 0, 0};
+    bgDest.aspect = WGPUTextureAspect_All;
+
+    WGPUTexelCopyBufferLayout bgLayout = {};
+    bgLayout.offset = 0;
+    bgLayout.bytesPerRow = cols * 4;
+    bgLayout.rowsPerImage = rows;
+
+    WGPUExtent3D bgSize = {cols, rows, 1};
+    wgpuQueueWriteTexture(queue, &bgDest, bgColors, cols * rows * 4, &bgLayout, &bgSize);
+
+    // Write attrs
+    WGPUTexelCopyTextureInfo attrsDest = {};
+    attrsDest.texture = cellAttrsTexture_;
+    attrsDest.mipLevel = 0;
+    attrsDest.origin = {0, 0, 0};
+    attrsDest.aspect = WGPUTextureAspect_All;
+
+    WGPUTexelCopyBufferLayout attrsLayout = {};
+    attrsLayout.offset = 0;
+    attrsLayout.bytesPerRow = cols;
+    attrsLayout.rowsPerImage = rows;
+
+    WGPUExtent3D attrsSize = {cols, rows, 1};
+    wgpuQueueWriteTexture(queue, &attrsDest, attrs, cols * rows, &attrsLayout, &attrsSize);
+  }
+
+  // Update uniforms
+  uniforms_.projection = glm::ortho(0.0f, static_cast<float>(screenWidth_),
+                                    static_cast<float>(screenHeight_), 0.0f, -1.0f, 1.0f);
+  uniforms_.screenSize = {static_cast<float>(screenWidth_), static_cast<float>(screenHeight_)};
+  uniforms_.cellSize = cellSize_;
+  uniforms_.gridSize = {static_cast<float>(cols), static_cast<float>(rows)};
+  uniforms_.pixelRange = font_ ? font_->getPixelRange() : 2.0f;
+  uniforms_.scale = scale_;
+  uniforms_.cursorPos = {static_cast<float>(cursorCol), static_cast<float>(cursorRow)};
+  uniforms_.cursorVisible = cursorVisible ? 1.0f : 0.0f;
+  wgpuQueueWriteBuffer(queue, uniformBuffer_, 0, &uniforms_, sizeof(Uniforms));
+
+  // Draw to provided pass
+  wgpuRenderPassEncoderSetPipeline(pass, pipeline_);
+  wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
+  wgpuRenderPassEncoderSetVertexBuffer(pass, 0, quadVertexBuffer_, 0,
+                                       WGPU_WHOLE_SIZE);
+  wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
+}
+
 void GridRenderer::renderFromBuffers(uint32_t cols, uint32_t rows,
                                      const uint16_t* glyphs,
                                      const uint8_t* fgColors,

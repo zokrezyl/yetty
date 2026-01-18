@@ -907,19 +907,39 @@ bool Font::generate(const unsigned char* data, size_t dataLen,
     int padding = static_cast<int>(std::ceil(_pixelRange));
 
     for (uint32_t codepoint : charset) {
+        // Skip glyphs that don't exist in the font (would map to .notdef)
+        // This is critical for PDF subset fonts that only contain used glyphs
+        msdfgen::GlyphIndex glyphIndex;
+        if (!msdfgen::getGlyphIndex(glyphIndex, font, codepoint)) {
+            // Debug: log skipped descender chars
+            if (codepoint == 'g' || codepoint == 'p' || codepoint == 'y' || codepoint == 'q' || codepoint == 'j') {
+                yinfo("Font::generate: SKIPPED '{}' (cp={}) - glyph not in font '{}'",
+                      (char)codepoint, codepoint, fontName);
+            }
+            continue;  // Glyph doesn't exist in font, skip it
+        }
+
         PackedGlyph pg;
         pg.codepoint = codepoint;
         pg.style = Regular;
         pg.fontScale = fontScale;
 
         double advance;
-        if (!msdfgen::loadGlyph(pg.shape, font, codepoint, msdfgen::FONT_SCALING_NONE, &advance)) continue;
+        // Load by glyph index instead of codepoint to avoid .notdef fallback
+        if (!msdfgen::loadGlyph(pg.shape, font, glyphIndex, msdfgen::FONT_SCALING_NONE, &advance)) continue;
 
         pg.advance = advance * fontScale;
 
         if (!pg.shape.contours.empty()) {
             pg.shape.normalize();
             msdfgen::Shape::Bounds bounds = pg.shape.getBounds();
+
+            // Debug: log bounds for descender chars
+            if (codepoint == 'g' || codepoint == 'p' || codepoint == 'y' || codepoint == 'q' || codepoint == 'j') {
+                yinfo("Font::generate(data): '{}' glyphIdx={} bounds=[L={:.1f},B={:.1f},R={:.1f},T={:.1f}] in '{}'",
+                      (char)codepoint, glyphIndex.getIndex(),
+                      bounds.l, bounds.b, bounds.r, bounds.t, fontName);
+            }
 
             pg.boundsL = bounds.l;
             pg.boundsB = bounds.b;

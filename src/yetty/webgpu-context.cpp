@@ -5,6 +5,7 @@
 
 #if YETTY_WEB
 #include <emscripten/html5_webgpu.h>
+#include <emscripten/html5.h>
 #elif YETTY_ANDROID
 #include <android/native_window.h>
 #include <android/log.h>
@@ -99,7 +100,16 @@ Result<void> WebGPUContext::init() noexcept {
         return Err<void>("Failed to create WebGPU surface from canvas");
     }
 
-    // Set up swapchain
+    // Get actual canvas size from the DOM
+    int canvasWidth = 0, canvasHeight = 0;
+    emscripten_get_canvas_element_size("#canvas", &canvasWidth, &canvasHeight);
+    if (canvasWidth > 0 && canvasHeight > 0) {
+        width_ = static_cast<uint32_t>(canvasWidth);
+        height_ = static_cast<uint32_t>(canvasHeight);
+    }
+    std::cout << "WebGPU canvas size: " << width_ << "x" << height_ << std::endl;
+
+    // Set up swapchain with actual canvas dimensions
     surfaceFormat_ = WGPUTextureFormat_BGRA8Unorm;
     createSwapChain(width_, height_);
 

@@ -299,29 +299,16 @@ int cmdRun(const std::string& pluginDir,
     }
     auto layer = *layerResult;
     
-    // Debug: print struct sizes to detect ODR violations
-    yinfo("Tester: sizeof(RenderContext)={} sizeof(Widget)={}", 
-                 sizeof(yetty::RenderContext), sizeof(yetty::Widget));
+    // Debug: print struct sizes
+    yinfo("Tester: sizeof(Widget)={}", sizeof(yetty::Widget));
 
-    // Set pixel size for the layer (fills the whole window)
+    // Set pixel position and size for the layer (fills the whole window)
     yinfo("Tester: layer ptr = {}", (void*)layer.get());
     yinfo("Tester: Setting pixel size to {}x{}", width, height);
+    layer->setPixelPosition(static_cast<float>(x), static_cast<float>(y));
     layer->setPixelSize(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
     yinfo("Tester: After setPixelSize, getPixelWidth={}", layer->getPixelWidth());
 
-    // Set render context
-    yetty::RenderContext renderCtx;
-    renderCtx.screenWidth = static_cast<uint32_t>(width);
-    renderCtx.screenHeight = static_cast<uint32_t>(height);
-    renderCtx.cellWidth = 10.0f;  // Default cell size
-    renderCtx.cellHeight = 20.0f;
-    renderCtx.deltaTime = 0.016; // ~60fps
-    renderCtx.targetFormat = ctx->getSurfaceFormat();
-    layer->setRenderContext(renderCtx);
-    yinfo("Tester: After setRenderContext, screenWidth={}", layer->getRenderContext().screenWidth);
-
-    // Store position for layer (not used in RenderContext but may be needed)
-    (void)x; (void)y;
 
     yinfo("Running plugin '{}' with payload: {}", pluginName,
                  payload.empty() ? "(empty)" : payload.substr(0, 50));
@@ -356,9 +343,6 @@ int cmdRun(const std::string& pluginDir,
             yinfo("Tester: RESIZE to {}x{}", g_width, g_height);
             ctx->resize(g_width, g_height);
             layer->setPixelSize(static_cast<uint32_t>(g_width), static_cast<uint32_t>(g_height));
-            renderCtx.screenWidth = static_cast<uint32_t>(g_width);
-            renderCtx.screenHeight = static_cast<uint32_t>(g_height);
-            layer->setRenderContext(renderCtx);
             g_resized = false;
         }
 
@@ -366,27 +350,13 @@ int cmdRun(const std::string& pluginDir,
         auto now = std::chrono::steady_clock::now();
         float deltaTime = std::chrono::duration<float>(now - lastFrameTime).count();
         lastFrameTime = now;
-        renderCtx.deltaTime = deltaTime;
-        yinfo("Tester: BEFORE setRenderContext1, getPixelWidth={} renderCtx.screenWidth={}", 
-                     layer->getPixelWidth(), renderCtx.screenWidth);
-        layer->setRenderContext(renderCtx);
-        if (frameCount == 0) {
-            yinfo("Tester: After setRenderContext1, getPixelWidth={}", layer->getPixelWidth());
-        }
+        (void)deltaTime;  // Unused now - widgets use fixed 60fps
 
         // Get current texture view
         auto viewResult = ctx->getCurrentTextureView();
         if (!viewResult) {
             yerror("Failed to get texture view: {}", viewResult.error().message());
             continue;
-        }
-        if (frameCount == 0) {
-            yinfo("Tester: After getCurrentTextureView, getPixelWidth={}", layer->getPixelWidth());
-        }
-        renderCtx.targetView = *viewResult;
-        layer->setRenderContext(renderCtx);
-        if (frameCount == 0) {
-            yinfo("Tester: After setRenderContext2, getPixelWidth={}", layer->getPixelWidth());
         }
 
         // Pre-render phase - pygfx renders to intermediate texture

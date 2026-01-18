@@ -110,27 +110,6 @@ void YDraw::prepareFrame(WebGPUContext& ctx, bool on) {
     if (!on || failed_ || !_visible) return;
     if (!renderer_ || renderer_->primitiveCount() == 0) return;
 
-    const auto& rc = _renderCtx;
-
-    // Calculate pixel position from cell position
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _widthCells * rc.cellWidth;
-    float pixelH = _heightCells * rc.cellHeight;
-
-    // For Relative layers, adjust position when viewing scrollback
-    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
-        pixelY += rc.scrollOffset * rc.cellHeight;
-    }
-
-    // Skip if off-screen
-    if (rc.termRows > 0) {
-        float screenPixelHeight = rc.termRows * rc.cellHeight;
-        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return;
-        }
-    }
-
     // Create render pass
     WGPUCommandEncoderDescriptor encoderDesc = {};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(ctx.getDevice(), &encoderDesc);
@@ -139,8 +118,13 @@ void YDraw::prepareFrame(WebGPUContext& ctx, bool on) {
         return;
     }
 
+    auto viewResult = ctx.getCurrentTextureView();
+    if (!viewResult) {
+        wgpuCommandEncoderRelease(encoder);
+        return;
+    }
     WGPURenderPassColorAttachment colorAttachment = {};
-    colorAttachment.view = rc.targetView;
+    colorAttachment.view = *viewResult;
     colorAttachment.loadOp = WGPULoadOp_Load;
     colorAttachment.storeOp = WGPUStoreOp_Store;
     colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
@@ -157,8 +141,12 @@ void YDraw::prepareFrame(WebGPUContext& ctx, bool on) {
     }
 
     // Render using core YDrawRenderer
-    auto result = renderer_->render(ctx, pass, pixelX, pixelY, pixelW, pixelH,
-                                     rc.screenWidth, rc.screenHeight, rc.targetFormat);
+    yinfo("YDraw::prepareFrame rendering at pixel=({},{}) size={}x{} screen={}x{}",
+          _pixelX, _pixelY, _pixelWidth, _pixelHeight, ctx.getSurfaceWidth(), ctx.getSurfaceHeight());
+    auto result = renderer_->render(ctx, pass,
+                                    static_cast<float>(_pixelX), static_cast<float>(_pixelY),
+                                    static_cast<float>(_pixelWidth), static_cast<float>(_pixelHeight),
+                                    ctx.getSurfaceWidth(), ctx.getSurfaceHeight(), ctx.getSurfaceFormat());
 
     wgpuRenderPassEncoderEnd(pass);
     wgpuRenderPassEncoderRelease(pass);
@@ -183,19 +171,10 @@ void YDraw::prepareFrame(WebGPUContext& ctx, bool on) {
 Result<void> YDraw::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
     if (!on || failed_ || !_visible || !renderer_) return Ok();
 
-    const auto& rc = _renderCtx;
-
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _widthCells * rc.cellWidth;
-    float pixelH = _heightCells * rc.cellHeight;
-
-    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
-        pixelY += rc.scrollOffset * rc.cellHeight;
-    }
-
-    return renderer_->render(ctx, pass, pixelX, pixelY, pixelW, pixelH,
-                             rc.screenWidth, rc.screenHeight, rc.targetFormat);
+    return renderer_->render(ctx, pass,
+                             static_cast<float>(_pixelX), static_cast<float>(_pixelY),
+                             static_cast<float>(_pixelWidth), static_cast<float>(_pixelHeight),
+                             ctx.getSurfaceWidth(), ctx.getSurfaceHeight(), ctx.getSurfaceFormat());
 }
 
 } // namespace yetty

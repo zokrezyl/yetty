@@ -402,24 +402,7 @@ void Pdf::prepareFrame(WebGPUContext& ctx, bool on) {
 }
 
 Result<void> Pdf::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on) {
-    yinfo("Pdf::render called, on={} failed={} visible={} richText={}", on, _failed, _visible, _richText != nullptr);
     if (!on || _failed || !_visible) return Ok();
-
-    const auto& rc = _renderCtx;
-
-    // Use pre-computed pixel positions from Widget base class
-    float pixelX = _pixelX;
-    float pixelY = _pixelY;
-    float pixelW = static_cast<float>(_pixelWidth);
-    float pixelH = static_cast<float>(_pixelHeight);
-
-    // Skip if off-screen
-    if (rc.termRows > 0) {
-        float screenPixelHeight = rc.termRows * rc.cellHeight;
-        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            return Ok();  // Off-screen, not an error
-        }
-    }
 
     // Create RichText if needed
     if (!_richText) {
@@ -429,46 +412,32 @@ Result<void> Pdf::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool on
             return Err<void>("Pdf: no font manager");
         }
 
-        auto result = RichText::create(&ctx, rc.targetFormat, fontMgr);
+        auto result = RichText::create(&ctx, ctx.getSurfaceFormat(), fontMgr);
         if (!result) {
             _failed = true;
             return Err<void>("Pdf: failed to create RichText", result);
         }
         _richText = *result;
-
-        // Pre-load a fallback font NOW (before rendering) to avoid MSDF generation during render loop
-        // This is blocking but happens only once during initialization
-        yinfo("Pdf: pre-loading fallback font...");
         _richText->setDefaultFontFamily("monospace");
 
-        // Force the font to actually load now by requesting it from FontManager
         auto preloadResult = fontMgr->getFont("monospace", Font::Regular);
         if (!preloadResult || !*preloadResult) {
-            // Try sans-serif as fallback
             preloadResult = fontMgr->getFont("sans-serif", Font::Regular);
         }
-        if (preloadResult && *preloadResult) {
-            yinfo("Pdf: fallback font pre-loaded successfully");
-        } else {
-            ywarn("Pdf: could not pre-load fallback font");
-        }
-
         _initialized = true;
     }
 
     // Re-layout if view size changed
-    if (_lastViewWidth != pixelW || _lastViewHeight != pixelH) {
-        buildRichTextContent(pixelW);
-        _lastViewWidth = pixelW;
-        _lastViewHeight = pixelH;
+    if (_lastViewWidth != _pixelWidth || _lastViewHeight != _pixelHeight) {
+        buildRichTextContent(static_cast<float>(_pixelWidth));
+        _lastViewWidth = _pixelWidth;
+        _lastViewHeight = _pixelHeight;
     }
 
-    // Apply scroll offset to RichText
     _richText->setScrollOffset(_scrollOffset);
 
-    // Use batched render
-    return _richText->render(pass, ctx, rc.screenWidth, rc.screenHeight,
-                             pixelX, pixelY, pixelW, pixelH);
+    return _richText->render(pass, ctx, ctx.getSurfaceWidth(), ctx.getSurfaceHeight(),
+                             _pixelX, _pixelY, static_cast<float>(_pixelWidth), static_cast<float>(_pixelHeight));
 }
 
 //-----------------------------------------------------------------------------

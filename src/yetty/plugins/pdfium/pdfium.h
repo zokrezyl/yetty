@@ -109,8 +109,9 @@ private:
     // Extracted page data
     struct ExtractedChar {
         uint32_t codepoint;
-        float x, y;              // PDF coordinates (bounding box top-left)
+        float x, y;              // PDF coordinates - origin (baseline) position
         float width, height;     // Bounding box dimensions
+        float ascent;            // Distance from baseline to charbox TOP (positive)
         float size;              // Font size in PDF points
         uint32_t color;          // ARGB color
         std::string fontFamily;  // Registered font family name

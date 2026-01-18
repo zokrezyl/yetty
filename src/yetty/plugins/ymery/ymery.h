@@ -44,17 +44,13 @@ public:
     ) override;
 
     // Initialize ImGui and ymery app (called lazily from widget render)
-    Result<void> ensureInitialized(const RenderContext& rc, const std::string& layoutPath,
+    Result<void> ensureInitialized(WebGPUContext& ctx, const std::string& layoutPath,
                                     const std::string& pluginPath, const std::string& mainModule);
 
 #ifdef YETTY_YMERY_ENABLED
     ImGuiContext* imguiContext() const { return _imgui_ctx; }
     ImPlotContext* implotContext() const { return _implot_ctx; }
     std::shared_ptr<ymery::EmbeddedApp> app() const { return _app; }
-
-    // For input coordinate calculation
-    float _cell_width = 0;
-    float _cell_height = 0;
 #endif
 
 private:

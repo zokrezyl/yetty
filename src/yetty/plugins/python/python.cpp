@@ -1192,50 +1192,19 @@ bool Python::blitToPass(WGPURenderPassEncoder pass, WebGPUContext& ctx) {
         return false;
     }
 
-    // Calculate pixel position from render context
-    const auto& rc = _renderCtx;
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _widthCells * rc.cellWidth;
-    float pixelH = _heightCells * rc.cellHeight;
-
-    // Adjust for scroll offset if relative positioning
-    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
-        pixelY += rc.scrollOffset * rc.cellHeight;
-    }
-
-    // Check if layer is off-screen (scrolled out of view)
-    if (pixelY + pixelH < 0 || pixelY >= (float)rc.screenHeight ||
-        pixelX + pixelW < 0 || pixelX >= (float)rc.screenWidth) {
-        // Layer is completely off-screen, skip rendering
-        return true;
-    }
-
-    // Clamp scissor rect to screen bounds to avoid negative/huge values
-    uint32_t scissorX = pixelX < 0 ? 0 : (uint32_t)pixelX;
-    uint32_t scissorY = pixelY < 0 ? 0 : (uint32_t)pixelY;
-    uint32_t scissorW = (uint32_t)pixelW;
-    uint32_t scissorH = (uint32_t)pixelH;
-
-    // Clamp width/height to screen bounds
-    if (scissorX + scissorW > rc.screenWidth) {
-        scissorW = rc.screenWidth - scissorX;
-    }
-    if (scissorY + scissorH > rc.screenHeight) {
-        scissorH = rc.screenHeight - scissorY;
-    }
-
     // Set viewport to layer rectangle
-    wgpuRenderPassEncoderSetViewport(pass, pixelX, pixelY, pixelW, pixelH, 0.0f, 1.0f);
-    wgpuRenderPassEncoderSetScissorRect(pass, scissorX, scissorY, scissorW, scissorH);
+    wgpuRenderPassEncoderSetViewport(pass, static_cast<float>(_pixelX), static_cast<float>(_pixelY),
+                                     static_cast<float>(_pixelWidth), static_cast<float>(_pixelHeight), 0.0f, 1.0f);
+    wgpuRenderPassEncoderSetScissorRect(pass, _pixelX, _pixelY, _pixelWidth, _pixelHeight);
 
     wgpuRenderPassEncoderSetPipeline(pass, blitPipeline_);
     wgpuRenderPassEncoderSetBindGroup(pass, 0, blitBindGroup_, 0, nullptr);
     wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
 
     // Reset viewport to full screen for next layer
-    wgpuRenderPassEncoderSetViewport(pass, 0, 0, (float)rc.screenWidth, (float)rc.screenHeight, 0.0f, 1.0f);
-    wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, rc.screenWidth, rc.screenHeight);
+    wgpuRenderPassEncoderSetViewport(pass, 0, 0, static_cast<float>(ctx.getSurfaceWidth()),
+                                     static_cast<float>(ctx.getSurfaceHeight()), 0.0f, 1.0f);
+    wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, ctx.getSurfaceWidth(), ctx.getSurfaceHeight());
 
     return true;
 }

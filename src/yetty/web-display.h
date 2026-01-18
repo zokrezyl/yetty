@@ -5,7 +5,7 @@
 #include <yetty/widget.h>
 #include <yetty/font.h>
 #include <yetty/result.hpp>
-#include "grid.h"
+#include "gpu-screen.h"
 #include "grid-renderer.h"
 
 extern "C" {
@@ -14,7 +14,6 @@ extern "C" {
 
 #include <memory>
 #include <string>
-#include <vector>
 
 namespace yetty {
 
@@ -68,10 +67,6 @@ public:
     // Read pending output (what to send to shell after keyboard input)
     size_t readOutput(char* buffer, size_t maxlen);
 
-    // Grid access
-    Grid& grid() { return _grid; }
-    const Grid& grid() const { return _grid; }
-
     // Font access
     Font* font() const { return _font; }
 
@@ -87,8 +82,18 @@ public:
     // Set rendering scale
     void setScale(float scale);
 
-    // Sync vterm state to grid
-    void syncToGrid();
+    // Resize terminal grid (in cells)
+    void resize(uint32_t cols, uint32_t rows);
+
+    // Resize to fit pixel dimensions (resizes both grid and renderer)
+    void resizeToPixels(uint32_t pixelWidth, uint32_t pixelHeight);
+
+    // Get current dimensions
+    uint32_t getCols() const { return _cols; }
+    uint32_t getRows() const { return _rows; }
+
+    // Force full redraw on next frame
+    void markFullDamage() { _fullDamage = true; }
 
     // Check if rendering is needed
     bool needsRender() const;
@@ -96,29 +101,20 @@ public:
     // Static instance accessor (for C callbacks)
     static WebDisplay* instance() { return _sInstance; }
 
-    // vterm callbacks (need to be public for C callback struct)
-    static int onDamage(VTermRect rect, void* user);
-    static int onMoveCursor(VTermPos pos, VTermPos oldpos, int visible, void* user);
-    static int onSetTermProp(VTermProp prop, VTermValue* val, void* user);
-
 private:
     WebDisplay(uint32_t cols, uint32_t rows,
                WebGPUContext::Ptr ctx, FontManager::Ptr fontManager) noexcept;
     Result<void> init() noexcept override;
 
-    void colorToRGB(const VTermColor& color, uint8_t& r, uint8_t& g, uint8_t& b);
-
     // Display state
-    Grid _grid;
+    std::unique_ptr<GPUScreen> _gpuScreen;
     Font* _font = nullptr;
     GridRenderer::Ptr _renderer;
     FontManager::Ptr _fontManager;
 
     // vterm state
     VTerm* _vterm = nullptr;
-    VTermScreen* _vtermScreen = nullptr;
-    bool _needsSync = true;
-    bool _needsRender = true;
+    bool _fullDamage = true;  // Full redraw needed (initial or after resize)
 
     // Cursor
     int _cursorCol = 0;

@@ -763,11 +763,9 @@ void Lottie::prepareFrame(WebGPUContext& ctx, bool on) {
         return;
     }
 
-    const auto& rc = _renderCtx;
-
     // Update animation if playing
     if (isAnimated_ && playing_ && animation_ && duration_ > 0) {
-        double dt = rc.deltaTime > 0 ? rc.deltaTime : 0.016;  // Default to ~60fps
+        double dt = 0.016;  // ~60fps
         accumulatedTime_ += dt;
 
         float fps = totalFrames_ / duration_;
@@ -800,8 +798,8 @@ void Lottie::prepareFrame(WebGPUContext& ctx, bool on) {
         }
 
         yinfo("Lottie::prepareFrame: creating composite pipeline, targetFormat={}",
-                     static_cast<int>(rc.targetFormat));
-        result = createCompositePipeline(ctx, rc.targetFormat);
+                     static_cast<int>(ctx.getSurfaceFormat()));
+        result = createCompositePipeline(ctx, ctx.getSurfaceFormat());
         if (!result) {
             yerror("Lottie::prepareFrame: createCompositePipeline failed: {}", result.error().message());
             failed_ = true;
@@ -846,38 +844,13 @@ Result<void> Lottie::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool
         return Ok();
     }
 
-    const auto& rc = _renderCtx;
-
-    // Calculate pixel position from cell position
-    float pixelX = _x * rc.cellWidth;
-    float pixelY = _y * rc.cellHeight;
-    float pixelW = _widthCells * rc.cellWidth;
-    float pixelH = _heightCells * rc.cellHeight;
-
     yinfo("Lottie::render: cell pos ({},{}) size ({},{}) cells", _x, _y, _widthCells, _heightCells);
-    yinfo("Lottie::render: pixel pos ({},{}) size ({},{})", pixelX, pixelY, pixelW, pixelH);
+    yinfo("Lottie::render: pixel pos ({},{}) size ({},{})", _pixelX, _pixelY, _pixelWidth, _pixelHeight);
 
-    // Adjust for scroll offset
-    if (_positionMode == PositionMode::Relative && rc.scrollOffset > 0) {
-        pixelY += rc.scrollOffset * rc.cellHeight;
-        yinfo("Lottie::render: adjusted for scroll, new pixelY={}", pixelY);
-    }
-
-    // Skip if off-screen
-    if (rc.termRows > 0) {
-        float screenPixelHeight = rc.termRows * rc.cellHeight;
-        yinfo("Lottie::render: termRows={}, screenPixelHeight={}, pixelY={}, pixelH={}",
-                     rc.termRows, screenPixelHeight, pixelY, pixelH);
-        if (pixelY + pixelH <= 0 || pixelY >= screenPixelHeight) {
-            yinfo("Lottie::render: skipped - off-screen");
-            return Ok();  // Off-screen, not an error
-        }
-    }
-
-    float ndcX = (pixelX / rc.screenWidth) * 2.0f - 1.0f;
-    float ndcY = 1.0f - (pixelY / rc.screenHeight) * 2.0f;
-    float ndcW = (pixelW / rc.screenWidth) * 2.0f;
-    float ndcH = (pixelH / rc.screenHeight) * 2.0f;
+    float ndcX = (static_cast<float>(_pixelX) / ctx.getSurfaceWidth()) * 2.0f - 1.0f;
+    float ndcY = 1.0f - (static_cast<float>(_pixelY) / ctx.getSurfaceHeight()) * 2.0f;
+    float ndcW = (static_cast<float>(_pixelWidth) / ctx.getSurfaceWidth()) * 2.0f;
+    float ndcH = (static_cast<float>(_pixelHeight) / ctx.getSurfaceHeight()) * 2.0f;
 
     // Update uniform buffer if rect changed
     bool rectChanged = (ndcX != lastRect_[0] || ndcY != lastRect_[1] ||
@@ -899,9 +872,9 @@ Result<void> Lottie::render(WGPURenderPassEncoder pass, WebGPUContext& ctx, bool
     yinfo("Lottie::render: drawing composite - NDC rect ({}, {}, {}, {})",
                  ndcX, ndcY, ndcW, ndcH);
     yinfo("Lottie::render: pixel position ({}, {}) size ({}, {})",
-                 pixelX, pixelY, pixelW, pixelH);
-    yinfo("Lottie::render: screen size ({}, {}), cell size ({}, {})",
-                 rc.screenWidth, rc.screenHeight, rc.cellWidth, rc.cellHeight);
+                 _pixelX, _pixelY, _pixelWidth, _pixelHeight);
+    yinfo("Lottie::render: screen size ({}, {})",
+                 ctx.getSurfaceWidth(), ctx.getSurfaceHeight());
 
     wgpuRenderPassEncoderSetPipeline(pass, compositePipeline_);
     wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup_, 0, nullptr);
