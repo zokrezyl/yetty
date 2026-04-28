@@ -216,7 +216,16 @@ static const struct yetty_ycore_event_loop_ops libuv_ops = {
 static void on_signal(uv_signal_t *handle, int signum)
 {
     struct libuv_event_loop *impl = handle->data;
+    struct yetty_ycore_event ev = { .type = YETTY_EVENT_SHUTDOWN };
     (void)signum;
+
+    /* Route SIGINT/SIGTERM through the same SHUTDOWN handler that the
+     * window-close callback uses, so terminals get a chance to mark
+     * shutting_down=1 (skipping further GPU work) before the loop stops.
+     * The SHUTDOWN listener (yetty_event_handler) calls uv_stop itself;
+     * the explicit uv_stop below is a safety net in case no listener is
+     * registered. */
+    libuv_dispatch(&impl->base, &ev);
     uv_stop(impl->loop);
 }
 #endif

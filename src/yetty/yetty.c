@@ -452,6 +452,27 @@ static struct yetty_ycore_int_result yetty_event_handler(
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
+    /* Graceful shutdown.
+     *
+     * Same handler for window-close (window_close_callback posts SHUTDOWN)
+     * and SIGINT/SIGTERM (libuv signal handler dispatches SHUTDOWN). The
+     * sequence is:
+     *   1. Forward to workspace → terminals set shutting_down=1, which
+     *      makes terminal_render_frame skip further GPU work (avoids
+     *      racing the device tear-down).
+     *   2. Stop the event loop → yetty_run returns → main thread sees
+     *      *running=0 and breaks out of glfwWaitEvents, after which the
+     *      cleanup chain (yetty_destroy → workspace → terminals →
+     *      fork_pty_stop) reaps the PTY children. */
+    if (event->type == YETTY_EVENT_SHUTDOWN) {
+        ydebug("yetty: SHUTDOWN — winding down");
+        if (yetty->workspace)
+            yetty_yui_workspace_on_event(yetty->workspace, event);
+        if (yetty->event_loop && yetty->event_loop->ops->stop)
+            yetty->event_loop->ops->stop(yetty->event_loop);
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+
     /* Forward other events to workspace */
     if (yetty->workspace)
         return yetty_yui_workspace_on_event(yetty->workspace, event);
@@ -1172,6 +1193,20 @@ void yetty_destroy(struct yetty_yetty *yetty)
         ydebug("yetty_destroy: workspace destroyed");
     }
 
+    /* Destroy render target BEFORE wgpu and the event loop.
+     *
+     * Releasing GPU buffers (e.g. tile-diff readback buffers) synchronously
+     * fires any pending wgpuBufferMapAsync callbacks with status=Aborted.
+     * Those callbacks (map_callback in ywebgpu.c) dereference wgpu->loop to
+     * post a coro-resume — so wgpu and the event loop must still be alive
+     * when render_target's destroy runs. */
+    if (yetty->render_target && yetty->render_target->ops &&
+        yetty->render_target->ops->destroy) {
+        ydebug("yetty_destroy: destroying render_target");
+        yetty->render_target->ops->destroy(yetty->render_target);
+        yetty->render_target = NULL;
+    }
+
     /* Tear down the GPU await machinery before the event loop. The tick
      * timer is owned by the loop, so this must happen first. */
     if (yetty->wgpu) {
@@ -1187,14 +1222,6 @@ void yetty_destroy(struct yetty_yetty *yetty)
         yetty->event_loop = NULL;
         yetty->context.event_loop = NULL;
         ydebug("yetty_destroy: event_loop destroyed");
-    }
-
-    /* Destroy render target before allocator */
-    if (yetty->render_target && yetty->render_target->ops &&
-        yetty->render_target->ops->destroy) {
-        ydebug("yetty_destroy: destroying render_target");
-        yetty->render_target->ops->destroy(yetty->render_target);
-        yetty->render_target = NULL;
     }
 
     /* Destroy VNC server after render target (render target references it) */

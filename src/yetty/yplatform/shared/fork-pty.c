@@ -112,6 +112,23 @@ static struct yetty_ycore_void_result fork_pty_resize(struct yetty_yplatform_pty
     return YETTY_OK_VOID();
 }
 
+/* Poll waitpid(WNOHANG) until the child is reaped or the deadline passes.
+ * Returns 1 if reaped, 0 if timed out, -1 on error. */
+static int fork_pty_wait_ms(pid_t pid, int *status, int timeout_ms)
+{
+    int waited = 0;
+    while (waited < timeout_ms) {
+        pid_t r = waitpid(pid, status, WNOHANG);
+        if (r == pid)
+            return 1;
+        if (r < 0)
+            return -1;
+        usleep(10 * 1000);
+        waited += 10;
+    }
+    return 0;
+}
+
 static struct yetty_ycore_void_result fork_pty_stop(struct yetty_yplatform_pty *self)
 {
     struct fork_pty *pty = container_of(self, struct fork_pty, base);
@@ -122,14 +139,28 @@ static struct yetty_ycore_void_result fork_pty_stop(struct yetty_yplatform_pty *
 
     pty->running = 0;
 
+    /* Closing the master end disconnects the slave: the kernel sends SIGHUP
+     * to the foreground process group via the controlling-terminal mechanism,
+     * which is the canonical "the terminal went away" signal. Most shells
+     * respond by exiting cleanly. */
     if (pty->pty_master >= 0) {
         close(pty->pty_master);
         pty->pty_master = -1;
     }
 
     if (pty->child_pid > 0) {
-        kill(pty->child_pid, SIGTERM);
-        waitpid(pty->child_pid, &status, 0);
+        /* Belt-and-suspenders: explicit SIGHUP in case master-close didn't
+         * propagate (e.g. if the child detached from its controlling tty).
+         * Then escalate: SIGHUP → 200ms grace → SIGTERM → 200ms → SIGKILL.
+         * The escalation matters: a hung child must not block window close. */
+        kill(pty->child_pid, SIGHUP);
+        if (fork_pty_wait_ms(pty->child_pid, &status, 200) <= 0) {
+            kill(pty->child_pid, SIGTERM);
+            if (fork_pty_wait_ms(pty->child_pid, &status, 200) <= 0) {
+                kill(pty->child_pid, SIGKILL);
+                waitpid(pty->child_pid, &status, 0);
+            }
+        }
         pty->child_pid = -1;
     }
 
