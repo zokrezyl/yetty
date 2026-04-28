@@ -82,6 +82,15 @@ CMAKE_ARGS=(
     -DSKIP_INSTALL_PROGRAMS=ON
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    # Compile every libpng object with hidden visibility. libpng's PNG_EXPORT
+    # only attaches default visibility on shared (PNG_DLL) builds — for
+    # PNG_STATIC=ON it expands to nothing, so the global preset wins and all
+    # png_* symbols become STV_HIDDEN. They are still resolvable at static-
+    # link time inside the consuming executable, but never reach its dynamic
+    # symbol table — which is what stops libdecor's GTK plugin from rejecting
+    # itself with "conflicting symbol png_free" on Wayland (issue #107).
+    -DCMAKE_C_VISIBILITY_PRESET=hidden
+    -DCMAKE_VISIBILITY_INLINES_HIDDEN=ON
     -DZLIB_ROOT="$ZLIB_PREFIX"
     -DZLIB_INCLUDE_DIR="$ZLIB_PREFIX/include"
     -DZLIB_LIBRARY="$ZLIB_PREFIX/lib/libz.a"

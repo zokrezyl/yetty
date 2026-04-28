@@ -68,6 +68,7 @@ struct yetty_yrender_utils_tile_diff_engine {
     /* Per-size GPU resources, reallocated when dimensions change. */
     uint32_t last_width;
     uint32_t last_height;
+    WGPUTextureFormat prev_format;
     uint32_t tiles_x;
     uint32_t tiles_y;
     WGPUTexture prev_texture;
@@ -168,9 +169,16 @@ create_pipeline(struct yetty_yrender_utils_tile_diff_engine *eng)
  */
 static struct yetty_ycore_void_result
 ensure_resources(struct yetty_yrender_utils_tile_diff_engine *eng,
-                 uint32_t width, uint32_t height)
+                 uint32_t width, uint32_t height, WGPUTextureFormat format)
 {
-    if (eng->last_width == width && eng->last_height == height && eng->prev_texture)
+    /* prev_texture must match the source texture's format so the per-frame
+     * CopyTextureToTexture (line 361) is valid and so the compute shader
+     * sees both views with consistent sRGB-or-not decoding. Re-create when
+     * the format changes too — under Wayland with libdecor the surface
+     * format negotiates to BGRA8UnormSrgb on first present, whereas the
+     * pre-libdecor (no-titlebar) path got plain BGRA8Unorm. */
+    if (eng->last_width == width && eng->last_height == height &&
+        eng->prev_texture && eng->prev_format == format)
         return YETTY_OK_VOID();
 
     eng->force_full_frame = true;
@@ -196,6 +204,7 @@ ensure_resources(struct yetty_yrender_utils_tile_diff_engine *eng,
 
     eng->last_width = width;
     eng->last_height = height;
+    eng->prev_format = format;
     eng->tiles_x = (width + eng->tile_size - 1) / eng->tile_size;
     eng->tiles_y = (height + eng->tile_size - 1) / eng->tile_size;
 
@@ -211,7 +220,7 @@ ensure_resources(struct yetty_yrender_utils_tile_diff_engine *eng,
 
     WGPUTextureDescriptor tex_desc = {0};
     tex_desc.size = (WGPUExtent3D){width, height, 1};
-    tex_desc.format = WGPUTextureFormat_BGRA8Unorm;
+    tex_desc.format = format;
     tex_desc.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
     tex_desc.mipLevelCount = 1;
     tex_desc.sampleCount = 1;
@@ -271,7 +280,8 @@ static void submit_coro_entry(void *arg)
     void *sink_ctx = args->sink_ctx;
     free(args);
 
-    struct yetty_ycore_void_result res = ensure_resources(eng, width, height);
+    struct yetty_ycore_void_result res =
+        ensure_resources(eng, width, height, wgpuTextureGetFormat(texture));
     if (!YETTY_IS_OK(res)) {
         ywarn("tile_diff: ensure_resources failed: %s", res.error.msg);
         submit_coro_finish(eng);
@@ -308,13 +318,15 @@ static void submit_coro_entry(void *arg)
     /* Only run the diff compute pass when we're doing an incremental frame. */
     WGPUBindGroup diff_bind_group = NULL;
     if (!do_full) {
-        WGPUTextureViewDescriptor view_desc = {0};
-        view_desc.format = WGPUTextureFormat_BGRA8Unorm;
-        view_desc.dimension = WGPUTextureViewDimension_2D;
-        view_desc.mipLevelCount = 1;
-        view_desc.arrayLayerCount = 1;
-        WGPUTextureView curr_view = wgpuTextureCreateView(texture, &view_desc);
-        WGPUTextureView prev_view = wgpuTextureCreateView(eng->prev_texture, &view_desc);
+        /* NULL descriptor → views inherit each texture's own format. The
+         * compute shader binds both as texture_2d<f32> and only compares
+         * curr vs prev pointwise, so as long as both views decode pixels
+         * the same way the diff is consistent — no need to force a
+         * non-sRGB BGRA8Unorm view (which used to fail validation under
+         * libdecor's BGRA8UnormSrgb surface unless the texture declared
+         * BGRA8Unorm in viewFormats). */
+        WGPUTextureView curr_view = wgpuTextureCreateView(texture, NULL);
+        WGPUTextureView prev_view = wgpuTextureCreateView(eng->prev_texture, NULL);
 
         WGPUBindGroupEntry entries[3] = {0};
         entries[0].binding = 0;

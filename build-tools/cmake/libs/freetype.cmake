@@ -12,7 +12,18 @@
 include_guard(GLOBAL)
 include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
 
-if(TARGET freetype OR TARGET Freetype::Freetype)
+# Idempotency guard keyed on our internal target only. We deliberately do
+# NOT bail out when Freetype::Freetype already exists: FindX11 (pulled in
+# by Dawn / imgui / yrender) calls find_package(Freetype QUIET) as part of
+# its X11-extension search, which silently creates Freetype::Freetype as
+# an UNKNOWN IMPORTED target pointing at the system libfreetype.so. If we
+# returned here, msdfgen-ext (which links Freetype::Freetype) and yfont
+# (which uses FREETYPE_INCLUDE_DIR) would silently bind against the system
+# .so instead of our prebuilt static archive — defeating the whole
+# 3rdparty-from-github model. Instead we fall through and either alias or
+# repoint Freetype::Freetype at our prebuilt below. include_guard(GLOBAL)
+# already prevents this file from running twice.
+if(TARGET freetype)
     return()
 endif()
 
@@ -45,7 +56,25 @@ set_target_properties(freetype PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${_FREETYPE_INC}"
     INTERFACE_LINK_LIBRARIES "ZLIB::ZLIB"
 )
-add_library(Freetype::Freetype ALIAS freetype)
+
+# If FindX11's cascade already created Freetype::Freetype as IMPORTED
+# pointing at the system libfreetype.so, repoint it at our prebuilt static
+# archive in place — we can't ALIAS over an existing target. Otherwise
+# create the alias as usual. Override per-config IMPORTED_LOCATION_* slots
+# too: FindFreetype sets _RELEASE / _DEBUG which take precedence over the
+# bare IMPORTED_LOCATION, and the default IMPORTED_CONFIGURATIONS the
+# system find_package set may not include the active config.
+if(TARGET Freetype::Freetype)
+    set_target_properties(Freetype::Freetype PROPERTIES
+        IMPORTED_LOCATION         "${_FREETYPE_DIR}/lib/libfreetype.a"
+        IMPORTED_LOCATION_RELEASE "${_FREETYPE_DIR}/lib/libfreetype.a"
+        IMPORTED_LOCATION_DEBUG   "${_FREETYPE_DIR}/lib/libfreetype.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${_FREETYPE_INC}"
+        INTERFACE_LINK_LIBRARIES  "ZLIB::ZLIB"
+    )
+else()
+    add_library(Freetype::Freetype ALIAS freetype)
+endif()
 
 set(FREETYPE_INCLUDE_DIR "${_FREETYPE_INC}"                    CACHE INTERNAL "")
 set(FREETYPE_LIBRARY     "${_FREETYPE_DIR}/lib/libfreetype.a"  CACHE INTERNAL "")
