@@ -57,8 +57,16 @@ struct VTermScreen
   unsigned int global_reverse : 1;
   unsigned int reflow : 1;
 
-  /* Primary and Altscreen. buffers[1] is lazily allocated as needed */
+  /* Primary and Altscreen. buffers[1] is lazily allocated as needed.
+   *
+   * yetty: each buffer is allocated 2*rows tall — the "double-allocation
+   * circular buffer" trick. The live screen is always rows[root_row[i]
+   * .. root_row[i]+rows-1] within buffers[i]. On a full-screen scroll-up
+   * we just bump root_row instead of memmoving rows-1 rows. When root_row
+   * would exceed `rows`, we do one big memmove to linearise and reset.
+   * Consumers pull root_row via vterm_screen_get_buffer_root_row(). */
   VTermScreenCell *buffers[2];
+  int root_row[2];
 
   /* buffer will == buffers[0] or buffers[1], depending on altscreen */
   VTermScreenCell *buffer;
@@ -94,20 +102,37 @@ static inline void clearcell(VTermScreen *screen, VTermScreenCell *cell)
   cell->attrs.font_type = 0;
 }
 
+/* Active root_row index — depends on which buffer is live. Tells callers and
+ * getcell where row 0 of the visible screen sits within the 2*rows-tall
+ * underlying allocation. */
+static inline int active_bufidx(const VTermScreen *screen)
+{
+  return (screen->buffers[1] && screen->buffer == screen->buffers[1]) ? 1 : 0;
+}
+
+static inline int active_root_row(const VTermScreen *screen)
+{
+  return screen->root_row[active_bufidx(screen)];
+}
+
 static inline VTermScreenCell *getcell(const VTermScreen *screen, int row, int col)
 {
   if(row < 0 || row >= screen->rows)
     return NULL;
   if(col < 0 || col >= screen->cols)
     return NULL;
-  return screen->buffer + (screen->cols * row) + col;
+  return screen->buffer + (screen->cols * (active_root_row(screen) + row)) + col;
 }
 
+/* Allocate 2*rows*cols cells (the "double-allocation circular buffer"
+ * trick) and clear all of them so the second half is well-defined at all
+ * times. */
 static VTermScreenCell *alloc_buffer(VTermScreen *screen, int rows, int cols)
 {
-  VTermScreenCell *new_buffer = vterm_allocator_malloc(screen->vt, sizeof(VTermScreenCell) * rows * cols);
+  int alloc_rows = rows * 2;
+  VTermScreenCell *new_buffer = vterm_allocator_malloc(screen->vt, sizeof(VTermScreenCell) * alloc_rows * cols);
 
-  for(int row = 0; row < rows; row++) {
+  for(int row = 0; row < alloc_rows; row++) {
     for(int col = 0; col < cols; col++) {
       clearcell(screen, &new_buffer[row * cols + col]);
     }
@@ -281,6 +306,55 @@ static int moverect_internal(VTermRect dest, VTermRect src, void *user)
 
   int cols = src.end_col - src.start_col;
   int downward = src.start_row - dest.start_row;
+
+  /* yetty fast path: full-screen scroll-up by N rows.
+   *
+   *   src  = (N..rows)   × full-width    (downward = N > 0)
+   *   dest = (0..rows-N) × full-width
+   *
+   * Since the buffer is allocated 2*rows tall, we just bump root_row by N —
+   * no per-row memmove. The N rows that "appear" at the bottom (rows that
+   * the live window didn't see before) are pre-cleared at allocation time
+   * and kept clean: the caller (state.c) issues an erase for the freshly
+   * exposed bottom region after the move. When root_row would advance past
+   * `rows` (i.e. the live window would walk off the end of the
+   * 2*rows-tall buffer), we do one big memmove to copy the live rows back
+   * to the start of the buffer and reset root_row to 0. */
+  if(downward > 0 &&
+     dest.start_row == 0 && src.start_row == downward &&
+     dest.end_row == screen->rows - downward && src.end_row == screen->rows &&
+     dest.start_col == 0 && src.start_col == 0 &&
+     dest.end_col == screen->cols && src.end_col == screen->cols) {
+    int N = downward;
+    int bufidx = active_bufidx(screen);
+    int new_root = screen->root_row[bufidx] + N;
+    if(new_root + screen->rows > screen->rows * 2) {
+      /* Linearise: the live N..rows window after this scroll would extend
+       * past the 2*rows allocation. Memmove the live rows-N rows that we
+       * are KEEPING (currently at root_row+N..root_row+rows) down to row 0,
+       * then reset root_row. One memmove of (rows-N)*cols cells, instead of
+       * (rows-1)*cols every scroll. */
+      int kept_rows = screen->rows - N;
+      memmove(screen->buffer,
+              screen->buffer + (size_t)(screen->root_row[bufidx] + N) * screen->cols,
+              (size_t)kept_rows * screen->cols * sizeof(VTermScreenCell));
+      /* Clear the just-exposed N rows (caller will erase them anyway, but
+       * we also want any later read of them to see clean cells, not stale
+       * data from a previous wrap). */
+      for(int row = kept_rows; row < screen->rows; row++)
+        for(int col = 0; col < screen->cols; col++)
+          clearcell(screen, screen->buffer + (size_t)row * screen->cols + col);
+      /* The unused second half should also be clean. */
+      for(int row = screen->rows; row < screen->rows * 2; row++)
+        for(int col = 0; col < screen->cols; col++)
+          clearcell(screen, screen->buffer + (size_t)row * screen->cols + col);
+      screen->root_row[bufidx] = 0;
+    }
+    else {
+      screen->root_row[bufidx] = new_root;
+    }
+    return 1;
+  }
 
   int init_row, test_row, inc_row;
   if(downward < 0) {
@@ -579,7 +653,23 @@ static void resize_buffer(VTermScreen *screen, int bufidx, int new_rows, int new
   VTermScreenCell *old_buffer = screen->buffers[bufidx];
   VTermLineInfo *old_lineinfo = statefields->lineinfos[bufidx];
 
-  VTermScreenCell *new_buffer = vterm_allocator_malloc(screen->vt, sizeof(VTermScreenCell) * new_rows * new_cols);
+  /* yetty: linearise the live rows down to offset 0 before the reflow
+   * walks them. The reflow code uses flat row*cols indexing on old_buffer,
+   * which only matches the live screen when root_row == 0. After the
+   * linearise, root_row is reset to 0 for this bufidx; the new_buffer is
+   * also allocated with root_row 0 (set after the buffer swap below). */
+  if(old_buffer && screen->root_row[bufidx] != 0) {
+    memmove(old_buffer,
+            old_buffer + (size_t)screen->root_row[bufidx] * old_cols,
+            (size_t)old_rows * old_cols * sizeof(VTermScreenCell));
+    screen->root_row[bufidx] = 0;
+  }
+
+  /* Allocate the new buffer 2*rows tall to maintain the double-allocation
+   * circular buffer invariant. The reflow code below only writes the first
+   * new_rows rows; the second half is cleared explicitly so reads of it
+   * (e.g. the GPU upload, which uploads the full 2*rows) see clean cells. */
+  VTermScreenCell *new_buffer = vterm_allocator_malloc(screen->vt, sizeof(VTermScreenCell) * new_rows * 2 * new_cols);
   VTermLineInfo *new_lineinfo = vterm_allocator_malloc(screen->vt, sizeof(new_lineinfo[0]) * new_rows);
 
   int old_row = old_rows - 1;
@@ -781,6 +871,14 @@ static void resize_buffer(VTermScreen *screen, int bufidx, int new_rows, int new
     }
   }
 
+  /* yetty: clear the second half of the 2*rows allocation so reads (the
+   * GPU upload uploads the full 2*new_rows) see clean cells. The first
+   * new_rows are populated by the reflow code above. */
+  for(int row = new_rows; row < new_rows * 2; row++)
+    for(int col = 0; col < new_cols; col++)
+      clearcell(screen, &new_buffer[(size_t)row * new_cols + col]);
+  screen->root_row[bufidx] = 0;
+
   vterm_allocator_free(screen->vt, old_buffer);
   screen->buffers[bufidx] = new_buffer;
 
@@ -923,6 +1021,9 @@ static VTermScreen *screen_new(VTerm *vt)
   screen->cbdata    = NULL;
 
   screen->buffers[BUFIDX_PRIMARY] = alloc_buffer(screen, rows, cols);
+  screen->buffers[BUFIDX_ALTSCREEN] = NULL;
+  screen->root_row[BUFIDX_PRIMARY] = 0;
+  screen->root_row[BUFIDX_ALTSCREEN] = 0;
 
   screen->buffer = screen->buffers[BUFIDX_PRIMARY];
 
@@ -1173,10 +1274,12 @@ int vterm_screen_get_attrs_extent(const VTermScreen *screen, VTermRect *extent, 
 
 /* yetty: removed vterm_screen_convert_color_to_rgb - colors are always RGB */
 
-/* yetty: use attrs.default_fg/bg flags instead of VTermColor type field */
+/* yetty: use attrs.default_fg/bg flags instead of VTermColor type field.
+ * Walks the entire 2*rows allocation so the offscreen half stays consistent
+ * if the live window later wraps into it. */
 static void reset_default_colours(VTermScreen *screen, VTermScreenCell *buffer)
 {
-  for(int row = 0; row < screen->rows; row++)
+  for(int row = 0; row < screen->rows * 2; row++)
     for(int col = 0; col < screen->cols; col++) {
       VTermScreenCell *cell = &buffer[row * screen->cols + col];
       if(cell->attrs.default_fg)
@@ -1206,9 +1309,18 @@ const VTermScreenCell *vterm_screen_get_buffer(const VTermScreen *screen)
   return screen->buffer;
 }
 
+/* yetty: buffer is allocated 2*rows tall (double-allocation circular buffer).
+ * Consumers that upload it to the GPU must use this size. The shader applies
+ * the root_row offset (see vterm_screen_get_buffer_root_row) to find row 0
+ * of the visible screen within this 2*rows allocation. */
 size_t vterm_screen_get_buffer_size(const VTermScreen *screen)
 {
-  return (size_t)screen->rows * (size_t)screen->cols * sizeof(VTermScreenCell);
+  return (size_t)screen->rows * 2 * (size_t)screen->cols * sizeof(VTermScreenCell);
+}
+
+int vterm_screen_get_buffer_root_row(const VTermScreen *screen)
+{
+  return active_root_row(screen);
 }
 
 /* yetty: set cursor position directly and notify via callback */

@@ -30,7 +30,12 @@
  * only way to zoom without turning the composite into a bitmap blur. */
 #define U_VZ_SCALE        9
 #define U_VZ_OFF          10
-#define U_COUNT           11
+/* Row offset within the libvterm 2*rows-tall cell buffer that marks the top
+ * of the visible screen. Bumped by libvterm on full-screen scroll-up; the
+ * shader applies it when computing cell_index so the live window appears in
+ * the correct place. */
+#define U_ROOT_ROW        11
+#define U_COUNT           12
 
 /* Setters */
 static inline void set_grid_size(struct yetty_yrender_gpu_resource_set *rs, float cols, float rows) {
@@ -66,6 +71,9 @@ static inline void set_visual_zoom(struct yetty_yrender_gpu_resource_set *rs,
     rs->uniforms[U_VZ_OFF].vec2[0] = off_x;
     rs->uniforms[U_VZ_OFF].vec2[1] = off_y;
 }
+static inline void set_root_row(struct yetty_yrender_gpu_resource_set *rs, uint32_t r) {
+    rs->uniforms[U_ROOT_ROW].u32 = r;
+}
 
 /* Init — names and types use the same constants */
 static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
@@ -83,6 +91,7 @@ static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
     rs->uniforms[U_FONT_TYPE]     = (struct yetty_yrender_uniform){"font_type",     YETTY_YRENDER_UNIFORM_U32};
     rs->uniforms[U_VZ_SCALE]      = (struct yetty_yrender_uniform){"visual_zoom_scale",  YETTY_YRENDER_UNIFORM_F32};
     rs->uniforms[U_VZ_OFF]        = (struct yetty_yrender_uniform){"visual_zoom_off",    YETTY_YRENDER_UNIFORM_VEC2};
+    rs->uniforms[U_ROOT_ROW]      = (struct yetty_yrender_uniform){"root_row",           YETTY_YRENDER_UNIFORM_U32};
 
     set_scale(rs, 1.0f);
     set_cursor_shape(rs, 1.0f);
@@ -91,13 +100,43 @@ static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
     set_visual_zoom(rs, 1.0f, 0.0f, 0.0f);
 }
 
-/* One row of scrollback — cells captured at the moment vterm pushed the row
- * off the top of the primary screen. Each line owns its own cells array and
- * remembers its width at push time, so a later resize can pop it back at the
- * column count vterm asks for (truncate or pad as needed). */
-struct yetty_yterm_text_sb_line {
-    VTermScreenCell *cells;
+/* Per-line descriptor in the scrollback arena: byte offset into the cells
+ * ring + width at push time. Width is frozen — resize never rewrites stored
+ * lines; pops just truncate/pad to whatever vterm asks for. */
+struct yetty_yterm_text_sb_line_rec {
+    size_t offset;
     int cols;
+};
+
+/* Scrollback arena.
+ *
+ * Cells payload is packed back-to-back in a byte ring; lines[] is a parallel
+ * ring of (offset, cols) descriptors. Two phases:
+ *
+ *   Growth phase (lines_cap < max_lines): both buffers double std::vector-
+ *     style when full. No eviction. Data is contiguous from offset 0, so
+ *     plain realloc preserves it.
+ *
+ *   Steady phase (lines_cap == max_lines): both buffers fixed; push evicts
+ *     oldest line(s) until the new line fits in cells[] and lines[] has a
+ *     free slot. Pure circular ring.
+ *
+ * Logical indexing: position 0 = oldest live line, lines_count-1 = newest.
+ * Stored at lines[(lines_tail + i) % lines_cap]. */
+struct yetty_yterm_text_sb_arena {
+    uint8_t *cells;
+    size_t cells_cap;
+    size_t cells_head;
+    size_t cells_tail;
+    size_t cells_used;
+
+    struct yetty_yterm_text_sb_line_rec *lines;
+    uint32_t lines_cap;
+    uint32_t lines_head;
+    uint32_t lines_tail;
+    uint32_t lines_count;
+
+    uint32_t max_lines;
 };
 
 /* Text layer - embeds base as first member */
@@ -116,13 +155,10 @@ struct yetty_yterm_terminal_text_layer {
     int mouse_click_subscribed;
     int mouse_move_subscribed;
 
-    /* Scrollback buffer. Lines are appended in chronological order: index 0
-     * is the oldest line, sb_lines[sb_count-1] is the newest (most recently
-     * pushed off the top of the live screen). vterm requests pops from the
-     * tail (most-recent first) when growing the screen. */
-    struct yetty_yterm_text_sb_line *sb_lines;
-    uint32_t sb_count;
-    uint32_t sb_capacity;
+    /* Scrollback buffer. Two-ring arena (cells + line descriptors) — see
+     * struct yetty_yterm_text_sb_arena above. Logical position 0 is the
+     * oldest live line; pop reads the newest. */
+    struct yetty_yterm_text_sb_arena sb;
 
     /* Scrollback view (tmux-style copy mode). When active, the GPU buffer
      * is built by stitching sb_lines + live screen so the user sees a
@@ -225,6 +261,166 @@ static int text_layer_is_empty(const struct yetty_yterm_terminal_layer *self)
     return 0;
 }
 
+/*=============================================================================
+ * Scrollback arena
+ *
+ * See struct yetty_yterm_text_sb_arena for the design. All operations are
+ * O(1) amortised; eviction is only entered after lines_cap hits max_lines.
+ *===========================================================================*/
+
+static void sb_arena_init(struct yetty_yterm_text_sb_arena *a,
+                          uint32_t max_lines)
+{
+    memset(a, 0, sizeof(*a));
+    a->max_lines = max_lines ? max_lines : 1;
+}
+
+static void sb_arena_destroy(struct yetty_yterm_text_sb_arena *a)
+{
+    free(a->cells);
+    free(a->lines);
+    memset(a, 0, sizeof(*a));
+}
+
+/* Drop the oldest line, freeing its bytes from the cells ring. */
+static void sb_arena_drop_oldest(struct yetty_yterm_text_sb_arena *a)
+{
+    if (a->lines_count == 0)
+        return;
+    size_t bytes = (size_t)a->lines[a->lines_tail].cols * sizeof(VTermScreenCell);
+    a->cells_tail = (a->cells_tail + bytes) % a->cells_cap;
+    a->cells_used -= bytes;
+    a->lines_tail = (a->lines_tail + 1) % a->lines_cap;
+    a->lines_count--;
+}
+
+/* Drop the newest line. Used by pop. */
+static void sb_arena_drop_newest(struct yetty_yterm_text_sb_arena *a)
+{
+    if (a->lines_count == 0)
+        return;
+    a->lines_head = (a->lines_head + a->lines_cap - 1) % a->lines_cap;
+    size_t bytes = (size_t)a->lines[a->lines_head].cols * sizeof(VTermScreenCell);
+    a->cells_head = (a->cells_head + a->cells_cap - bytes) % a->cells_cap;
+    a->cells_used -= bytes;
+    a->lines_count--;
+}
+
+/* Read cols cells from the ring at byte offset into dst, handling wrap. */
+static void sb_arena_read(const struct yetty_yterm_text_sb_arena *a,
+                          size_t offset, int cols, VTermScreenCell *dst)
+{
+    size_t bytes = (size_t)cols * sizeof(VTermScreenCell);
+    if (offset + bytes <= a->cells_cap) {
+        memcpy(dst, a->cells + offset, bytes);
+    } else {
+        size_t first = a->cells_cap - offset;
+        memcpy(dst, a->cells + offset, first);
+        memcpy((uint8_t *)dst + first, a->cells, bytes - first);
+    }
+}
+
+/* Resolve logical index (0=oldest) to a descriptor pointer. */
+static const struct yetty_yterm_text_sb_line_rec *
+sb_arena_peek(const struct yetty_yterm_text_sb_arena *a, uint32_t i)
+{
+    if (i >= a->lines_count)
+        return NULL;
+    return &a->lines[(a->lines_tail + i) % a->lines_cap];
+}
+
+/* Push one line. Returns 1 on success. */
+static int sb_arena_push(struct yetty_yterm_text_sb_arena *a,
+                         const VTermScreenCell *src, int cols)
+{
+    if (cols <= 0)
+        return 1;
+    size_t bytes = (size_t)cols * sizeof(VTermScreenCell);
+
+    /* Growth phase: extend lines[] up to max_lines. The live range is
+     * always linear in this phase (lines_tail = 0), so realloc preserves it. */
+    if (a->lines_count >= a->lines_cap && a->lines_cap < a->max_lines) {
+        uint32_t new_cap = a->lines_cap == 0 ? 256 : a->lines_cap * 2;
+        if (new_cap > a->max_lines)
+            new_cap = a->max_lines;
+        struct yetty_yterm_text_sb_line_rec *grown =
+            realloc(a->lines, (size_t)new_cap * sizeof(*grown));
+        if (!grown) {
+            yerror("sb_arena: lines realloc failed (new_cap=%u)", new_cap);
+            return 0;
+        }
+        a->lines = grown;
+        a->lines_cap = new_cap;
+    }
+
+    /* Growth phase: extend cells[] until the new line fits. Same linearity
+     * argument — cells_tail = 0 so realloc keeps the range valid. */
+    while (a->cells_used + bytes > a->cells_cap &&
+           a->lines_cap < a->max_lines) {
+        size_t new_cap = a->cells_cap == 0 ? 64 * 1024 : a->cells_cap * 2;
+        while (new_cap < a->cells_used + bytes)
+            new_cap *= 2;
+        uint8_t *grown = realloc(a->cells, new_cap);
+        if (!grown) {
+            yerror("sb_arena: cells realloc failed (%zu)", new_cap);
+            return 0;
+        }
+        a->cells = grown;
+        a->cells_cap = new_cap;
+    }
+
+    /* Steady phase: evict oldest until lines[] has a free slot and cells[]
+     * has room. If a single line exceeds the entire cells_cap (extreme
+     * resize), one-time grow rather than dropping data silently. */
+    while (a->lines_count >= a->lines_cap ||
+           a->cells_used + bytes > a->cells_cap) {
+        if (a->lines_count == 0) {
+            uint8_t *grown = realloc(a->cells, bytes);
+            if (!grown) {
+                yerror("sb_arena: emergency cells realloc (%zu) failed", bytes);
+                return 0;
+            }
+            a->cells = grown;
+            a->cells_cap = bytes;
+            break;
+        }
+        sb_arena_drop_oldest(a);
+    }
+
+    /* Write payload, handling ring wrap. */
+    if (a->cells_head + bytes <= a->cells_cap) {
+        memcpy(a->cells + a->cells_head, src, bytes);
+    } else {
+        size_t first = a->cells_cap - a->cells_head;
+        memcpy(a->cells + a->cells_head, src, first);
+        memcpy(a->cells, (const uint8_t *)src + first, bytes - first);
+    }
+
+    /* Record line descriptor. */
+    a->lines[a->lines_head].offset = a->cells_head;
+    a->lines[a->lines_head].cols = cols;
+    a->lines_head = (a->lines_head + 1) % a->lines_cap;
+    a->cells_head = (a->cells_head + bytes) % a->cells_cap;
+    a->cells_used += bytes;
+    a->lines_count++;
+    return 1;
+}
+
+/* Pop newest line. Copies up to copy_cols cells into dst. Returns the number
+ * of cells copied (0 on empty). */
+static int sb_arena_pop(struct yetty_yterm_text_sb_arena *a,
+                        VTermScreenCell *dst, int copy_cols)
+{
+    if (a->lines_count == 0 || !dst || copy_cols <= 0)
+        return 0;
+    uint32_t newest = (a->lines_head + a->lines_cap - 1) % a->lines_cap;
+    int line_cols = a->lines[newest].cols;
+    int n = line_cols < copy_cols ? line_cols : copy_cols;
+    sb_arena_read(a, a->lines[newest].offset, n, dst);
+    sb_arena_drop_newest(a);
+    return n;
+}
+
 /* Append a synthetic blank scrollback line — used when ypaint asks to
  * scroll more lines than the live screen contains. Without this we'd
  * desync from ypaint's rolling_row_0 (which counts every row of unified
@@ -234,26 +430,19 @@ static void push_blank_sb_line(struct yetty_yterm_terminal_text_layer *layer,
 {
     if (cols <= 0)
         return;
-    if (layer->sb_count >= layer->sb_capacity) {
-        uint32_t new_cap = layer->sb_capacity == 0 ? 256 : layer->sb_capacity * 2;
-        struct yetty_yterm_text_sb_line *grown = realloc(
-            layer->sb_lines,
-            new_cap * sizeof(struct yetty_yterm_text_sb_line));
-        if (!grown) {
-            yerror("push_blank_sb_line: realloc failed");
+    enum { STACK_BLANK_CELLS = 4096 };
+    if (cols <= STACK_BLANK_CELLS) {
+        VTermScreenCell stack_blanks[STACK_BLANK_CELLS] = {0};
+        sb_arena_push(&layer->sb, stack_blanks, cols);
+    } else {
+        VTermScreenCell *blanks = calloc((size_t)cols, sizeof(VTermScreenCell));
+        if (!blanks) {
+            yerror("push_blank_sb_line: calloc failed (cols=%d)", cols);
             return;
         }
-        layer->sb_lines = grown;
-        layer->sb_capacity = new_cap;
+        sb_arena_push(&layer->sb, blanks, cols);
+        free(blanks);
     }
-    struct yetty_yterm_text_sb_line *line = &layer->sb_lines[layer->sb_count];
-    line->cells = calloc((size_t)cols, sizeof(VTermScreenCell));
-    if (!line->cells) {
-        yerror("push_blank_sb_line: calloc failed (cols=%d)", cols);
-        return;
-    }
-    line->cols = cols;
-    layer->sb_count++;
 }
 
 /* Receive scroll from other layers (e.g., ypaint).
@@ -306,7 +495,7 @@ static struct yetty_ycore_void_result text_layer_scroll(
 
     ydebug("text_layer_scroll EXIT: lines=%d (via_vterm=%d blanks=%d) "
            "sb_count=%u",
-           lines, via_vterm, blank_lines, text_layer->sb_count);
+           lines, via_vterm, blank_lines, text_layer->sb.lines_count);
     return YETTY_OK_VOID();
 }
 
@@ -491,6 +680,12 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
         return YETTY_ERR(yetty_yterm_terminal_layer, "failed to allocate text layer");
     }
 
+    /* Initialise the scrollback arena with the configured max-lines cap. */
+    sb_arena_init(&text_layer->sb,
+                  config->ops->scrollback_lines
+                      ? config->ops->scrollback_lines(config)
+                      : 10000);
+
     text_layer->shader_code = shader_res.value;
     text_layer->base.ops = &text_layer_ops;
     text_layer->base.grid_size.cols = cols;
@@ -637,9 +832,7 @@ static void text_layer_destroy(struct yetty_yterm_terminal_layer *self)
     if (text_layer->vterm)
         vterm_free(text_layer->vterm);
 
-    for (uint32_t i = 0; i < text_layer->sb_count; i++)
-        free(text_layer->sb_lines[i].cells);
-    free(text_layer->sb_lines);
+    sb_arena_destroy(&text_layer->sb);
     free(text_layer->view_staging);
 
     free(text_layer->shader_code.data);
@@ -797,11 +990,19 @@ static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_
             text_layer->rs.buffers[0].size =
                 (size_t)text_layer->base.grid_size.cols *
                 text_layer->base.grid_size.rows * sizeof(VTermScreenCell);
+            /* view_staging is laid out cols*rows starting at row 0, so the
+             * shader should NOT apply any root_row offset. */
+            set_root_row(&text_layer->rs, 0);
         } else {
             text_layer->rs.buffers[0].data =
                 (uint8_t *)vterm_screen_get_buffer(text_layer->screen);
             text_layer->rs.buffers[0].size =
                 vterm_screen_get_buffer_size(text_layer->screen);
+            /* libvterm's buffer is allocated 2*rows tall; the live screen
+             * starts at row root_row within it. The shader uses this to
+             * locate the visible cells. */
+            set_root_row(&text_layer->rs,
+                (uint32_t)vterm_screen_get_buffer_root_row(text_layer->screen));
         }
         text_layer->rs.buffers[0].dirty = 1;
     }
@@ -889,37 +1090,12 @@ static int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user)
     struct yetty_yterm_terminal_text_layer *text_layer = user;
 
     /* Capture the row vterm is evicting from the top of the live screen.
-     * Each line owns its own cells buffer so resizes that change cols don't
-     * invalidate older entries. Append-only: index 0 is oldest. */
+     * The arena copies the cells into its own storage so libvterm's buffer
+     * can be reused immediately. Resizes don't rewrite stored lines. */
     if (cells && cols > 0) {
-        if (text_layer->sb_count >= text_layer->sb_capacity) {
-            uint32_t new_cap = text_layer->sb_capacity == 0
-                                   ? 256
-                                   : text_layer->sb_capacity * 2;
-            struct yetty_yterm_text_sb_line *new_lines = realloc(
-                text_layer->sb_lines,
-                new_cap * sizeof(struct yetty_yterm_text_sb_line));
-            if (!new_lines) {
-                yerror("on_sb_pushline: realloc sb_lines failed");
-                return 1;
-            }
-            text_layer->sb_lines = new_lines;
-            text_layer->sb_capacity = new_cap;
-        }
-
-        struct yetty_yterm_text_sb_line *line =
-            &text_layer->sb_lines[text_layer->sb_count];
-        line->cells = malloc((size_t)cols * sizeof(VTermScreenCell));
-        if (!line->cells) {
-            yerror("on_sb_pushline: malloc cells failed (cols=%d)", cols);
-            return 1;
-        }
-        memcpy(line->cells, cells, (size_t)cols * sizeof(VTermScreenCell));
-        line->cols = cols;
-        text_layer->sb_count++;
-
-        ydebug("on_sb_pushline: stored line cols=%d sb_count=%u", cols,
-               text_layer->sb_count);
+        sb_arena_push(&text_layer->sb, cells, cols);
+        ydebug("on_sb_pushline: stored line cols=%d sb_count=%u",
+               cols, text_layer->sb.lines_count);
     }
 
     /* Notify scroll callback - 1 line scrolled down
@@ -945,7 +1121,7 @@ static uint32_t text_layer_get_live_anchor(
     const struct yetty_yterm_terminal_text_layer *text_layer =
         container_of((struct yetty_yterm_terminal_layer *)self,
                      struct yetty_yterm_terminal_text_layer, base);
-    return text_layer->sb_count;
+    return text_layer->sb.lines_count;
 }
 
 /* Reallocate view_staging if the requested cell count outgrew capacity.
@@ -992,15 +1168,15 @@ static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer)
         uint32_t total_idx = layer->view_top_total_idx + gpu_y;
         VTermScreenCell *dst = layer->view_staging + (size_t)gpu_y * cols;
 
-        if (total_idx < layer->sb_count) {
-            const struct yetty_yterm_text_sb_line *sl =
-                &layer->sb_lines[total_idx];
-            int copy = (sl->cols < (int)cols) ? sl->cols : (int)cols;
-            memcpy(dst, sl->cells, (size_t)copy * sizeof(VTermScreenCell));
+        if (total_idx < layer->sb.lines_count) {
+            const struct yetty_yterm_text_sb_line_rec *rec =
+                sb_arena_peek(&layer->sb, total_idx);
+            int copy = (rec->cols < (int)cols) ? rec->cols : (int)cols;
+            sb_arena_read(&layer->sb, rec->offset, copy, dst);
             for (int c = copy; c < (int)cols; c++)
                 dst[c] = blank;
         } else if (live) {
-            uint32_t live_row = total_idx - layer->sb_count;
+            uint32_t live_row = total_idx - layer->sb.lines_count;
             if (live_row < rows) {
                 memcpy(dst, live + (size_t)live_row * cols,
                        (size_t)cols * sizeof(VTermScreenCell));
@@ -1047,20 +1223,10 @@ static void text_layer_set_view_top(struct yetty_yterm_terminal_layer *self,
 static int on_sb_popline(int cols, VTermScreenCell *cells, void *user)
 {
     struct yetty_yterm_terminal_text_layer *text_layer = user;
-    if (text_layer->sb_count == 0 || !cells || cols <= 0)
+    int copy_cols = sb_arena_pop(&text_layer->sb, cells, cols);
+    if (copy_cols == 0)
         return 0;
-
-    struct yetty_yterm_text_sb_line *line =
-        &text_layer->sb_lines[text_layer->sb_count - 1];
-    int copy_cols = (line->cols < cols) ? line->cols : cols;
-    memcpy(cells, line->cells, (size_t)copy_cols * sizeof(VTermScreenCell));
-
-    free(line->cells);
-    line->cells = NULL;
-    line->cols = 0;
-    text_layer->sb_count--;
-
     ydebug("on_sb_popline: returned %d cols (target=%d) sb_count=%u",
-           copy_cols, cols, text_layer->sb_count);
+           copy_cols, cols, text_layer->sb.lines_count);
     return 1;
 }

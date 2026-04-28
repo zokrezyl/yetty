@@ -79,7 +79,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
     let cell_col = floor(pixel_pos.x / cell_size.x);
     let cell_row = floor(pixel_pos.y / cell_size.y);
-    let cell_index = u32(cell_row) * u32(grid_size.x) + u32(cell_col);
+    // libvterm allocates the cell buffer 2*rows tall (double-allocation
+    // circular buffer). text_grid_root_row tells us where row 0 of the
+    // visible screen sits within that buffer; libvterm bumps it on full-
+    // screen scroll-up instead of memmoving rows-1 rows.
+    let cell_index = (u32(cell_row) + uniforms.text_grid_root_row) * u32(grid_size.x) + u32(cell_col);
 
     let local_px = vec2<f32>(
         pixel_pos.x - cell_col * cell_size.x,

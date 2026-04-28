@@ -490,9 +490,12 @@ int vterm_screen_is_eol(const VTermScreen *screen, VTermPos pos);
  */
 void vterm_screen_set_default_colors(VTermScreen *screen, const VTermColor *default_fg, const VTermColor *default_bg);
 
-/* yetty: direct buffer access for upload */
+/* yetty: direct buffer access for upload. buffer is allocated 2*rows tall
+ * (double-allocation circular buffer); the shader applies the root_row
+ * offset when indexing. */
 const VTermScreenCell *vterm_screen_get_buffer(const VTermScreen *screen);
 size_t vterm_screen_get_buffer_size(const VTermScreen *screen);
+int vterm_screen_get_buffer_root_row(const VTermScreen *screen);
 
 /* yetty: direct cursor/scroll control for ypaint integration */
 void vterm_screen_set_cursorpos(VTermScreen *screen, VTermPos pos);
