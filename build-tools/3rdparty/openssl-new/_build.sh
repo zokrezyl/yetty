@@ -159,18 +159,21 @@ ios-arm64|ios-x86_64)
     CFG_ARGS+=("-mios-version-min=${IOS_MIN}")
     ;;
 
-tvos-x86_64)
+tvos-x86_64|tvos-arm64)
     # Same xcrun trap as ios — see above.
     unset DEVELOPER_DIR MACOSX_DEPLOYMENT_TARGET SDKROOT NIX_APPLE_SDK_VERSION
     export PATH="/usr/bin:$PATH"
 
     : "${TVOS_MIN:=17.0}"
-    # OpenSSL 4.0 has no built-in tvOS target. Reuse iossimulator-x86_64-xcrun
-    # as the base — its `-arch x86_64 -fno-common` cflags + macosx asm scheme
-    # are correct for the appletvsimulator x86_64 ABI — and override CC via
-    # env to point at the tvOS simulator SDK. sys_id stays "iOS" (cosmetic
-    # string baked into the lib's version output, no binary effect).
-    CFG_TARGET="iossimulator-x86_64-xcrun"
+    # OpenSSL 4.0 has no built-in tvOS target. Reuse the iossimulator-*-xcrun
+    # configs as bases — their `-arch <arch> -fno-common` cflags + macosx asm
+    # scheme are correct for the appletvsimulator ABI — and override CC via env
+    # to point at the tvOS simulator SDK. sys_id stays "iOS" (cosmetic string
+    # baked into the lib's version output, no binary effect).
+    case "$TARGET_PLATFORM" in
+        tvos-x86_64) CFG_TARGET="iossimulator-x86_64-xcrun" ;;
+        tvos-arm64)  CFG_TARGET="iossimulator-arm64-xcrun"  ;;
+    esac
     export CC="xcrun -sdk appletvsimulator cc"
     CFG_ARGS+=("-mtvos-simulator-version-min=${TVOS_MIN}")
     ;;

@@ -151,7 +151,7 @@ macos-arm64)
     CMAKE_ARGS+=("-DCMAKE_OSX_ARCHITECTURES=arm64")
     ;;
 
-ios-arm64|ios-x86_64|tvos-x86_64)
+ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64)
     # Same nix-on-macOS xcrun trap as openh264 / dav1d — see those scripts
     # for the full explanation. /usr/bin first on PATH, unset nix apple-sdk.
     unset DEVELOPER_DIR MACOSX_DEPLOYMENT_TARGET SDKROOT NIX_APPLE_SDK_VERSION
@@ -170,6 +170,10 @@ ios-arm64|ios-x86_64|tvos-x86_64)
             ;;
         tvos-x86_64)
             _IOS_SDK="appletvsimulator"; _IOS_ARCH="x86_64"
+            _CMAKE_SYS="tvOS"; _CMAKE_DEPL="$TVOS_MIN"
+            ;;
+        tvos-arm64)
+            _IOS_SDK="appletvsimulator"; _IOS_ARCH="arm64"
             _CMAKE_SYS="tvOS"; _CMAKE_DEPL="$TVOS_MIN"
             ;;
     esac

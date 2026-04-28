@@ -172,12 +172,16 @@ ios-arm64|ios-x86_64)
     )
     ;;
 
-tvos-x86_64)
+tvos-x86_64|tvos-arm64)
     # Same xcrun trap as ios — see ios case above.
     unset DEVELOPER_DIR MACOSX_DEPLOYMENT_TARGET SDKROOT NIX_APPLE_SDK_VERSION
     export PATH="/usr/bin:$PATH"
 
     : "${TVOS_MIN:=17.0}"
+    case "$TARGET_PLATFORM" in
+        tvos-x86_64) _OH264_ARCH=x86_64 ;;
+        tvos-arm64)  _OH264_ARCH=arm64  ;;
+    esac
     # openh264 v2.4.1 ships no build/platform-tvos.mk — only platform-ios.mk,
     # which hardcodes -miphoneos-version-min=$(SDK_MIN). Drop a tvos-specific
     # platform makefile alongside it; the top-level Makefile picks it up via
@@ -193,7 +197,7 @@ LDFLAGS += -arch $(ARCH) -isysroot $(SDKROOT) -mtvos-simulator-version-min=$(SDK
 TVOS_MK
     EXTRA_ARGS=(
         OS=tvos
-        ARCH=x86_64
+        "ARCH=${_OH264_ARCH}"
         "SDK_MIN=${TVOS_MIN}"
         "CC=/usr/bin/xcrun -sdk appletvsimulator clang"
         "CXX=/usr/bin/xcrun -sdk appletvsimulator clang++"

@@ -76,6 +76,7 @@ jobs:
         target:
           - macos-arm64
           - ios-arm64
+          - tvos-arm64
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main

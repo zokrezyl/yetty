@@ -180,7 +180,7 @@ CROSS
     CROSS_FLAG="--cross-file $CROSS_FILE"
     ;;
 
-ios-arm64|ios-x86_64|tvos-x86_64)
+ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64)
     # Same nix-on-macOS xcrun trap as openh264 — see that script for full
     # explanation. /usr/bin must be first on PATH for any bare-`xcrun`
     # shell-out (meson does this internally for SDK detection).
@@ -206,6 +206,12 @@ ios-arm64|ios-x86_64|tvos-x86_64)
             _IOS_SDK="appletvsimulator"
             _IOS_ARCH="x86_64"
             DAV1D_CPU_FAMILY=x86_64;  DAV1D_CPU=x86_64
+            _MIN_FLAG="-mtvos-simulator-version-min=${TVOS_MIN}"
+            ;;
+        tvos-arm64)
+            _IOS_SDK="appletvsimulator"
+            _IOS_ARCH="arm64"
+            DAV1D_CPU_FAMILY=aarch64; DAV1D_CPU=aarch64
             _MIN_FLAG="-mtvos-simulator-version-min=${TVOS_MIN}"
             ;;
     esac

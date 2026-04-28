@@ -67,13 +67,20 @@ linux-aarch64)
     ;;
 macos-x86_64) CXX=clang++; CXXFLAGS_EXTRA="-arch x86_64" ;;
 macos-arm64)  CXX=clang++; CXXFLAGS_EXTRA="-arch arm64"  ;;
-ios-arm64|ios-x86_64)
+ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64)
     unset DEVELOPER_DIR MACOSX_DEPLOYMENT_TARGET SDKROOT NIX_APPLE_SDK_VERSION
     export PATH="/usr/bin:$PATH"
     : "${IOS_MIN:=15.0}"
+    : "${TVOS_MIN:=17.0}"
     case "$TARGET_PLATFORM" in
-        ios-arm64)  _IOS_SDK="iphoneos";        _IOS_ARCH="arm64";  _MIN_FLAG="-miphoneos-version-min=${IOS_MIN}" ;;
-        ios-x86_64) _IOS_SDK="iphonesimulator"; _IOS_ARCH="x86_64"; _MIN_FLAG="-mios-simulator-version-min=${IOS_MIN}" ;;
+        ios-arm64)   _IOS_SDK="iphoneos";         _IOS_ARCH="arm64"
+                     _MIN_FLAG="-miphoneos-version-min=${IOS_MIN}" ;;
+        ios-x86_64)  _IOS_SDK="iphonesimulator";  _IOS_ARCH="x86_64"
+                     _MIN_FLAG="-mios-simulator-version-min=${IOS_MIN}" ;;
+        tvos-x86_64) _IOS_SDK="appletvsimulator"; _IOS_ARCH="x86_64"
+                     _MIN_FLAG="-mtvos-simulator-version-min=${TVOS_MIN}" ;;
+        tvos-arm64)  _IOS_SDK="appletvsimulator"; _IOS_ARCH="arm64"
+                     _MIN_FLAG="-mtvos-simulator-version-min=${TVOS_MIN}" ;;
     esac
     _IOS_SYSROOT="$(/usr/bin/xcrun --sdk "$_IOS_SDK" --show-sdk-path)"
     CXX=/usr/bin/clang++; AR=/usr/bin/ar

@@ -95,7 +95,7 @@ macos-arm64)
     CFLAGS_EXTRA="-arch arm64"
     ;;
 
-ios-arm64|ios-x86_64|tvos-x86_64)
+ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64)
     # nix-on-macOS xcrun trap — same as openssl/dav1d/openh264. Apple's
     # xcrun must be first on PATH; nix's apple-sdk env vars unset so
     # /usr/bin/xcrun finds the real iOS / tvOS SDK.
@@ -115,6 +115,10 @@ ios-arm64|ios-x86_64|tvos-x86_64)
             ;;
         tvos-x86_64)
             _IOS_SDK="appletvsimulator"; _IOS_ARCH="x86_64"
+            _MIN_FLAG="-mtvos-simulator-version-min=${TVOS_MIN}"
+            ;;
+        tvos-arm64)
+            _IOS_SDK="appletvsimulator"; _IOS_ARCH="arm64"
             _MIN_FLAG="-mtvos-simulator-version-min=${TVOS_MIN}"
             ;;
     esac

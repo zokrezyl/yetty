@@ -145,7 +145,7 @@ macos-arm64)
     CC="clang -arch arm64"
     ;;
 
-ios-arm64|ios-x86_64|tvos-x86_64)
+ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64)
     # nix-on-macOS xcrun trap.
     unset DEVELOPER_DIR MACOSX_DEPLOYMENT_TARGET SDKROOT NIX_APPLE_SDK_VERSION
     export PATH="/usr/bin:$PATH"
@@ -165,6 +165,11 @@ ios-arm64|ios-x86_64|tvos-x86_64)
         tvos-x86_64)
             _IOS_SDK="appletvsimulator"; _IOS_ARCH="x86_64"
             EXTRA_CONFIGURE+=("--host=x86_64-apple-darwin")
+            _MIN_FLAG="-mtvos-simulator-version-min=${TVOS_MIN}"
+            ;;
+        tvos-arm64)
+            _IOS_SDK="appletvsimulator"; _IOS_ARCH="arm64"
+            EXTRA_CONFIGURE+=("--host=arm-apple-darwin")
             _MIN_FLAG="-mtvos-simulator-version-min=${TVOS_MIN}"
             ;;
     esac

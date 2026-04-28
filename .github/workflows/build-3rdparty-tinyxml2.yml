@@ -67,7 +67,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [macos-arm64, ios-arm64]
+        target: [macos-arm64, ios-arm64, tvos-arm64]
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
@@ -91,7 +91,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [macos-x86_64, ios-x86_64]
+        target: [macos-x86_64, ios-x86_64, tvos-x86_64]
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main

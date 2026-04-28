@@ -70,25 +70,32 @@ linux-aarch64)
     ) ;;
 macos-x86_64) CMAKE_ARGS+=("-DCMAKE_OSX_ARCHITECTURES=x86_64") ;;
 macos-arm64)  CMAKE_ARGS+=("-DCMAKE_OSX_ARCHITECTURES=arm64")  ;;
-ios-arm64|ios-x86_64)
+ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64)
     unset DEVELOPER_DIR MACOSX_DEPLOYMENT_TARGET SDKROOT NIX_APPLE_SDK_VERSION
     export PATH="/usr/bin:$PATH"
     : "${IOS_MIN:=15.0}"
+    : "${TVOS_MIN:=17.0}"
     case "$TARGET_PLATFORM" in
-        ios-arm64)  _IOS_SDK="iphoneos";        _IOS_ARCH="arm64"  ;;
-        ios-x86_64) _IOS_SDK="iphonesimulator"; _IOS_ARCH="x86_64" ;;
+        ios-arm64)   _IOS_SDK="iphoneos";         _IOS_ARCH="arm64"
+                     _CMAKE_SYS="iOS";  _CMAKE_DEPL="$IOS_MIN" ;;
+        ios-x86_64)  _IOS_SDK="iphonesimulator";  _IOS_ARCH="x86_64"
+                     _CMAKE_SYS="iOS";  _CMAKE_DEPL="$IOS_MIN" ;;
+        tvos-x86_64) _IOS_SDK="appletvsimulator"; _IOS_ARCH="x86_64"
+                     _CMAKE_SYS="tvOS"; _CMAKE_DEPL="$TVOS_MIN" ;;
+        tvos-arm64)  _IOS_SDK="appletvsimulator"; _IOS_ARCH="arm64"
+                     _CMAKE_SYS="tvOS"; _CMAKE_DEPL="$TVOS_MIN" ;;
     esac
     _IOS_SYSROOT="$(/usr/bin/xcrun --sdk "$_IOS_SDK" --show-sdk-path)"
     CMAKE_ARGS+=(
-        "-DCMAKE_SYSTEM_NAME=iOS"
+        "-DCMAKE_SYSTEM_NAME=$_CMAKE_SYS"
         "-DCMAKE_SYSTEM_PROCESSOR=$_IOS_ARCH"
         "-DCMAKE_OSX_ARCHITECTURES=$_IOS_ARCH"
         "-DCMAKE_OSX_SYSROOT=$_IOS_SYSROOT"
-        "-DCMAKE_OSX_DEPLOYMENT_TARGET=$IOS_MIN"
+        "-DCMAKE_OSX_DEPLOYMENT_TARGET=$_CMAKE_DEPL"
         "-DCMAKE_C_COMPILER=/usr/bin/clang"
-        # libjpeg-turbo's NASM SIMD path doesn't have an iOS toolchain
+        # libjpeg-turbo's NASM SIMD path doesn't have an iOS/tvOS toolchain
         # description that matches our cross setup — disable SIMD on
-        # iOS to skip the nasm probe.
+        # iOS/tvOS to skip the nasm probe.
         "-DWITH_SIMD=OFF"
         "-DREQUIRE_SIMD=OFF"
     ) ;;
