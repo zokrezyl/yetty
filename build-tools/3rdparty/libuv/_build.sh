@@ -178,16 +178,9 @@ webasm)
     ;;
 
 windows-x86_64)
-    # MSYS2 CLANG64 — clang + ninja + mingw-w64 runtime. Same toolchain
-    # as qemu's windows path.
-    if [ "${MSYSTEM:-}" != "CLANG64" ]; then
-        echo "error: windows-x86_64 must run inside MSYS2 CLANG64 (MSYSTEM=$MSYSTEM)" >&2
-        exit 1
-    fi
-    CMAKE_ARGS+=(
-        "-DCMAKE_C_COMPILER=clang"
-        "-DCMAKE_CXX_COMPILER=clang++"
-    )
+    # Native MSVC — caller must have vcvarsall'd the shell. cmake auto-
+    # detects cl.exe. libuv's own CMakeLists upstream supports MSVC.
+    : # cmake's default Ninja+cl pickup is fine
     ;;
 
 *)
@@ -222,8 +215,9 @@ done
 cp -a "$INSTALL_DIR/include" "$STAGE/"
 
 if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
-    # MSYS2 CLANG64 → MinGW format → libuv_a.a or uv_a.lib depending on settings.
-    _LIB_CANDIDATES=("$STAGE/lib/libuv_a.a" "$STAGE/lib/uv_a.lib" "$STAGE/lib/libuv.a")
+    # Native MSVC: cmake's static-lib output is libuv.lib; older configs
+    # produced uv_a.lib. Accept both.
+    _LIB_CANDIDATES=("$STAGE/lib/libuv.lib" "$STAGE/lib/uv_a.lib" "$STAGE/lib/libuv_a.a" "$STAGE/lib/libuv.a")
 else
     _LIB_CANDIDATES=("$STAGE/lib/libuv_a.a" "$STAGE/lib/libuv.a")
 fi

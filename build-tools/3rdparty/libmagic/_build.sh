@@ -207,12 +207,14 @@ webasm)
     ;;
 
 windows-x86_64)
-    if [ "${MSYSTEM:-}" != "CLANG64" ]; then
-        echo "error: windows-x86_64 must run inside MSYS2 CLANG64 (MSYSTEM=$MSYSTEM)" >&2
-        exit 1
-    fi
-    CC=clang
-    # MSYS2 CLANG64 is "native" enough for autotools — no --host needed.
+    # libmagic uses upstream autotools (./configure). Native MSVC is not
+    # supported by upstream `file` — and the previous mingw build produces
+    # libmagic.a with GCC ABI that MSVC link.exe rejects when linked into
+    # yetty.exe. Disabled until someone ports libmagic to a CMake/MSVC
+    # build. yetty's variables.cmake disables YETTY_ENABLE_LIB_LIBMAGIC
+    # on Windows accordingly.
+    echo "error: libmagic windows-x86_64 not supported (autotools, no MSVC port)" >&2
+    exit 1
     ;;
 
 *)

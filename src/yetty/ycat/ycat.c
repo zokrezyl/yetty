@@ -13,7 +13,12 @@
 
 #include <stddef.h>
 #include <string.h>
+#ifdef _WIN32
+#define strcasecmp  _stricmp
+#define strncasecmp _strnicmp
+#else
 #include <strings.h>
+#endif
 
 /* Forward decls: handlers defined in handler-*.c files. */
 extern struct yetty_ypaint_core_buffer_result

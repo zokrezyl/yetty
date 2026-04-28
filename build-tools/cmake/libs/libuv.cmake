@@ -17,10 +17,12 @@ endif()
 
 yetty_3rdparty_fetch(libuv _LIBUV_DIR)
 
-# Tarball layout: lib/libuv.a + include/uv.h + include/uv/*.h
-# (Windows MSYS2 CLANG64 also produces libuv.a; native MSVC would be uv_a.lib
-# but we don't ship that path yet.)
-if(WIN32 AND EXISTS "${_LIBUV_DIR}/lib/uv_a.lib")
+# Tarball layout: lib/libuv.a (POSIX) or lib/libuv.lib (native MSVC).
+# Older builds also produced uv_a.lib / libuv_a.a — accept those for
+# back-compat with already-published tarballs.
+if(WIN32 AND EXISTS "${_LIBUV_DIR}/lib/libuv.lib")
+    set(_LIBUV_LIB "${_LIBUV_DIR}/lib/libuv.lib")
+elseif(WIN32 AND EXISTS "${_LIBUV_DIR}/lib/uv_a.lib")
     set(_LIBUV_LIB "${_LIBUV_DIR}/lib/uv_a.lib")
 elseif(EXISTS "${_LIBUV_DIR}/lib/libuv.a")
     set(_LIBUV_LIB "${_LIBUV_DIR}/lib/libuv.a")

@@ -37,6 +37,10 @@
 #include <vector>
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>      /* Sleep + DWORD for ImGui_ImplYetty_WaitInput */
 #define YMGUI_STDOUT_FD 1
 #define YMGUI_STDIN_FD  0
 #else
@@ -745,10 +749,7 @@ bool ImGui_ImplYetty_WaitInput(int timeout_ms)
 {
 #ifdef _WIN32
     if (timeout_ms > 0) {
-        struct timespec ts;
-        ts.tv_sec  = timeout_ms / 1000;
-        ts.tv_nsec = (long)(timeout_ms % 1000) * 1000000L;
-        nanosleep(&ts, nullptr);
+        Sleep((DWORD)timeout_ms);
     }
     return false;
 #else

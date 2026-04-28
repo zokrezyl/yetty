@@ -110,40 +110,7 @@ jobs:
           files: out/libmagic-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
 
-  build-windows:
-    needs: resolve
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [windows-x86_64]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: CLANG64
-          update: false
-          install: >-
-            git
-            diffutils
-            tar
-            make
-            autoconf
-            automake
-            libtool
-            mingw-w64-clang-x86_64-clang
-            mingw-w64-clang-x86_64-lld
-            mingw-w64-clang-x86_64-libgnurx
-      - name: Build libmagic for ${{ matrix.target }}
-        shell: msys2 {0}
-        env:
-          TARGET_PLATFORM: ${{ matrix.target }}
-        run: |
-          mkdir -p out
-          OUTPUT_DIR="$(pwd)/out" \
-              ./build-tools/3rdparty/libmagic/build.sh
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/libmagic-${{ matrix.target }}-*.tar.gz
-          fail_on_unmatched_files: true
+  # No windows-x86_64 job: libmagic uses upstream autotools (./configure +
+  # make), which has no native MSVC port. yetty's variables.cmake disables
+  # YETTY_ENABLE_LIB_LIBMAGIC on Windows, so yetty.exe never tries to link
+  # against this lib on Windows.

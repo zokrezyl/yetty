@@ -28,9 +28,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
 
-#ifdef __unix__
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <io.h>
+#define isatty _isatty
+#else
+#include <unistd.h>
 #include <sys/ioctl.h>
 #endif
 
@@ -425,11 +432,15 @@ int main(int argc, char **argv)
 	/* Hold the slave PTY open a bit longer so a parent yetty has time
 	 * to drain the master before EOF arrives there. */
 	if (opts.sleep_after_ms > 0) {
+#ifdef _WIN32
+		Sleep((DWORD)opts.sleep_after_ms);
+#else
 		struct timespec ts = {
 			.tv_sec  = opts.sleep_after_ms / 1000,
 			.tv_nsec = (long)(opts.sleep_after_ms % 1000) * 1000000L,
 		};
 		nanosleep(&ts, NULL);
+#endif
 	}
 
 	return rc;

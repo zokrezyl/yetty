@@ -126,6 +126,9 @@ jobs:
           files: out/dav1d-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
 
+  # Windows: native MSVC under vcvarsall x64. Every lib that links into
+  # yetty.exe needs MSVC ABI (qemu is the lone mingw exception, since
+  # it ships standalone).
   build-windows:
     needs: resolve
     runs-on: windows-latest
@@ -137,28 +140,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: CLANG64
-          update: false
-          install: >-
-            git
-            tar
-            mingw-w64-clang-x86_64-clang
-            mingw-w64-clang-x86_64-lld
-            mingw-w64-clang-x86_64-meson
-            mingw-w64-clang-x86_64-ninja
-            mingw-w64-clang-x86_64-pkgconf
-            mingw-w64-clang-x86_64-nasm
+      - name: Install nasm
+        shell: pwsh
+        run: choco install nasm -y --no-progress
 
+      - name: Install meson + ninja via pip
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install meson ninja
+          # Surface the user-Scripts dir where pip put meson.exe / ninja.exe
+          $scripts = python -c "import sysconfig; print(sysconfig.get_path('scripts', 'nt_user'))"
+          "$scripts" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
       - name: Build dav1d for ${{ matrix.target }}
-        shell: msys2 {0}
+        shell: cmd
         env:
           TARGET_PLATFORM: ${{ matrix.target }}
         run: |
-          mkdir -p out
-          OUTPUT_DIR="$(pwd)/out" \
-              ./build-tools/3rdparty/dav1d/build.sh
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          if errorlevel 1 exit /b 1
+          mkdir out 2>nul
+
+          bash -c "OUTPUT_DIR=\"$(pwd)/out\" ./build-tools/3rdparty/dav1d/build.sh"
 
       - uses: softprops/action-gh-release@v2
         with:

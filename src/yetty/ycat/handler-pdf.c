@@ -16,17 +16,42 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>      /* GetTempPathA / GetTempFileNameA / MAX_PATH */
+#include <io.h>
+#include <fcntl.h>        /* _O_WRONLY / _O_BINARY for _open */
+typedef long long ssize_t;
+#define write(fd, buf, n) _write((fd), (buf), (unsigned int)(n))
+#define close             _close
+#define unlink            _unlink
+#else
 #include <unistd.h>
+#endif
 
 /*=============================================================================
  * Spill bytes to temp file
  *===========================================================================*/
 
-/* Writes bytes to a fresh mkstemp file; stores the path in `path_out` (must be
+/* Writes bytes to a fresh tempfile; stores the path in `path_out` (must be
  * at least sz_out bytes). Returns 0 on success, -1 on failure. */
 static int spill_to_tempfile(const uint8_t *bytes, size_t len,
 			     char *path_out, size_t sz_out)
 {
+#ifdef _WIN32
+	/* MSVC: GetTempPath + GetTempFileName. The latter creates a 0-byte
+	 * file on disk and returns a unique path under it. */
+	char tmpdir[MAX_PATH];
+	if (GetTempPathA((DWORD)sizeof(tmpdir), tmpdir) == 0)
+		return -1;
+	if (GetTempFileNameA(tmpdir, "ycat", 0, path_out) == 0)
+		return -1;
+	int fd = _open(path_out, _O_WRONLY | _O_BINARY);
+	if (fd < 0)
+		return -1;
+#else
 	const char *tmpdir = getenv("TMPDIR");
 	if (!tmpdir || !*tmpdir)
 		tmpdir = "/tmp";
@@ -38,6 +63,7 @@ static int spill_to_tempfile(const uint8_t *bytes, size_t len,
 	int fd = mkstemp(path_out);
 	if (fd < 0)
 		return -1;
+#endif
 
 	size_t written = 0;
 	while (written < len) {

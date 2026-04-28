@@ -176,13 +176,9 @@ webasm)
     ;;
 
 windows-x86_64)
-    if [ "${MSYSTEM:-}" != "CLANG64" ]; then
-        echo "error: windows-x86_64 must run inside MSYS2 CLANG64 (MSYSTEM=$MSYSTEM)" >&2
-        exit 1
-    fi
-    CMAKE_ARGS+=(
-        "-DCMAKE_C_COMPILER=clang"
-    )
+    # Native MSVC — caller must have vcvarsall'd the shell. cmake auto-
+    # detects cl.exe.
+    : # cmake's default Ninja+cl pickup is fine
     ;;
 
 *)
@@ -216,7 +212,7 @@ cp -a "$INSTALL_DIR/include" "$STAGE/"
 
 # Accept libmsgpackc.a (linux/macos/MSYS2) or msgpackc.lib (windows native MSVC).
 _LIB_FOUND=""
-for _CAND in "$STAGE/lib/libmsgpackc.a" "$STAGE/lib/libmsgpack-c.a" "$STAGE/lib/msgpackc.lib"; do
+for _CAND in "$STAGE/lib/libmsgpackc.a" "$STAGE/lib/libmsgpack-c.a" "$STAGE/lib/msgpack-c.lib" "$STAGE/lib/msgpackc.lib"; do
     if [ -f "$_CAND" ]; then _LIB_FOUND="$_CAND"; break; fi
 done
 if [ -z "$_LIB_FOUND" ]; then

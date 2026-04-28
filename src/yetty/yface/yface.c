@@ -865,7 +865,13 @@ struct yetty_ycore_buffer *yetty_yface_out_buf(struct yetty_yface *y)
  * yface for the call, do the streaming op once, copy result, free.
  *=========================================================================*/
 
+#ifdef _WIN32
+#include <io.h>
+typedef long long ssize_t;
+#define write(fd, buf, n) _write((fd), (buf), (unsigned int)(n))
+#else
 #include <unistd.h>
+#endif
 #include <errno.h>
 
 struct yetty_ycore_void_result

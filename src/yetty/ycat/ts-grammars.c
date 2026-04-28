@@ -11,7 +11,12 @@
 #include "ts-grammars.h"
 
 #include <string.h>
+#ifdef _WIN32
+#define strcasecmp  _stricmp
+#define strncasecmp _strnicmp
+#else
 #include <strings.h>
+#endif
 
 #ifdef YETTY_YCAT_HAS_TREESITTER
 

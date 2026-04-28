@@ -205,16 +205,14 @@ webasm)
     ;;
 
 windows-x86_64)
-    # MSYS2 CLANG64 — use openssl's mingw64 target with clang. CI:
-    # msys2/setup-msys2 with msystem: CLANG64.
-    if [ "${MSYSTEM:-}" != "CLANG64" ]; then
-        echo "error: windows-x86_64 must run inside MSYS2 CLANG64 (MSYSTEM=${MSYSTEM:-unset})" >&2
-        exit 1
-    fi
-    CFG_TARGET="mingw64"
-    export CC="clang"
-    export AR="llvm-ar"
-    export RANLIB="llvm-ranlib"
+    # Native MSVC — caller must have vcvarsall'd the shell. Use Strawberry
+    # Perl: openssl's Configure pulls Locale::Maketext::Simple via Params/Check
+    # which Git Bash's bundled perl is missing. Strawberry is preinstalled
+    # on the windows-latest runner and on misi's dev machine.
+    CFG_TARGET="VC-WIN64A"
+    MAKE_CMD="nmake"
+    PERL=/c/Strawberry/perl/bin/perl.exe
+    [ -x "$PERL" ] || PERL=$(command -v perl)
     ;;
 
 *)
@@ -230,10 +228,17 @@ cd "$SRC_DIR"
 
 echo "==> configuring openssl ${VERSION} for ${CFG_TARGET}"
 echo "    args: ${CFG_ARGS[*]}"
-perl ./Configure "$CFG_TARGET" "${CFG_ARGS[@]}"
+"${PERL:-perl}" ./Configure "$CFG_TARGET" "${CFG_ARGS[@]}"
 
-echo "==> building (-j${NCPU})"
-${MAKE_PREFIX}$MAKE_CMD -j"$NCPU" build_libs
+# nmake doesn't take -j (single-threaded by design); GNU make + emmake do.
+if [ "$MAKE_CMD" = "nmake" ]; then
+    _MAKE_J=()
+else
+    _MAKE_J=(-j"$NCPU")
+fi
+
+echo "==> building (${_MAKE_J[*]:-serial})"
+${MAKE_PREFIX}$MAKE_CMD "${_MAKE_J[@]}" build_libs
 
 echo "==> installing libs + headers (no docs/man)"
 ${MAKE_PREFIX}$MAKE_CMD install_dev
@@ -250,7 +255,11 @@ for _D in lib lib64; do
 done
 cp -a "$INSTALL_DIR/include" "$STAGE/"
 
-_LIBS=("libssl.a" "libcrypto.a")
+if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+    _LIBS=("libssl.lib" "libcrypto.lib")
+else
+    _LIBS=("libssl.a" "libcrypto.a")
+fi
 
 for _LIB in "${_LIBS[@]}"; do
     if [ ! -f "$STAGE/lib/$_LIB" ]; then

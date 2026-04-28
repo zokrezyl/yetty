@@ -120,8 +120,9 @@ jobs:
           files: out/libuv-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
 
-  # Windows: MSYS2 CLANG64 (clang + lld + mingw-w64 libs). Same pattern
-  # as build-3rdparty-qemu.yml — no MSVC, no vcpkg.
+  # Windows: native MSVC under vcvarsall x64. Every lib that links into
+  # yetty.exe needs MSVC ABI (qemu is the lone mingw exception, since
+  # it ships standalone). cmake auto-detects cl.exe via Ninja.
   build-windows:
     needs: resolve
     runs-on: windows-latest
@@ -133,27 +134,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: CLANG64
-          update: false
-          install: >-
-            git
-            diffutils
-            tar
-            mingw-w64-clang-x86_64-clang
-            mingw-w64-clang-x86_64-lld
-            mingw-w64-clang-x86_64-cmake
-            mingw-w64-clang-x86_64-ninja
-
       - name: Build libuv for ${{ matrix.target }}
-        shell: msys2 {0}
+        shell: cmd
         env:
           TARGET_PLATFORM: ${{ matrix.target }}
         run: |
-          mkdir -p out
-          OUTPUT_DIR="$(pwd)/out" \
-              ./build-tools/3rdparty/libuv/build.sh
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          if errorlevel 1 exit /b 1
+          mkdir out 2>nul
+
+          bash -c "OUTPUT_DIR=\"$(pwd)/out\" ./build-tools/3rdparty/libuv/build.sh"
 
       - uses: softprops/action-gh-release@v2
         with:

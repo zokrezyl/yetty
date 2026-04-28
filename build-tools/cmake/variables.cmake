@@ -160,13 +160,15 @@ if(WIN32)
     foreach(_f
         YETTY_ENABLE_FEATURE_SSH    # src/yetty/yssh: <netdb.h>, <pthread.h>, <poll.h>
         YETTY_ENABLE_LIB_LIBSSH2    # libssh2 itself supports Windows but yssh wrapper doesn't
-        YETTY_ENABLE_FEATURE_YCAT   # src/yetty/ycat: <strings.h>, <unistd.h>
-        YETTY_ENABLE_TOOL_YCAT      # tool depends on FEATURE_YCAT
         YETTY_ENABLE_FEATURE_YTHORVG # src/yetty/ythorvg/ythorvg.cpp: C99 compound literals (MSVC C++ rejects)
         YETTY_ENABLE_LIB_THORVG     # only consumer is FEATURE_YTHORVG
         YETTY_ENABLE_TOOL_YTHORVG   # tool depends on LIB_THORVG / FEATURE_YTHORVG
         YETTY_ENABLE_TOOL_YPAINT_BENCH # tools/ypaint-bench: passes -Wextra unconditionally (MSVC: D8021)
         YETTY_ENABLE_FEATURE_DEMO      # demo/ygui/CMakeLists.txt hardcodes shared/{thread,term}.c (POSIX)
+        YETTY_ENABLE_TOOL_YDOC         # tools/ydoc + yrich-runner: poll.h, termios.h, unistd.h (POSIX TTY)
+        YETTY_ENABLE_TOOL_YSHEET       # uses yrich-runner — same POSIX TTY deps
+        YETTY_ENABLE_TOOL_YSLIDE       # uses yrich-runner — same POSIX TTY deps
+        YETTY_ENABLE_LIB_LIBMAGIC      # upstream autotools-only; no MSVC port (libmagic.cmake's ExternalProject runs ./configure + make).
     )
         if(${_f})
             message(STATUS "Disabling ${_f} on Windows (sources not ported)")

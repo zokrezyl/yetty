@@ -27,8 +27,11 @@ case "$TARGET_PLATFORM" in
         SHELL_NAME="3rdparty-${TARGET_PLATFORM}"
         ;;
     windows-x86_64)
-        if [ "${MSYSTEM:-}" != "CLANG64" ]; then
-            echo "error: windows-x86_64 must run inside MSYS2 CLANG64 (MSYSTEM=${MSYSTEM:-unset})" >&2
+        # Native MSVC: caller must have vcvarsall'd the shell. qemu is the
+        # lone mingw build — every lib that links into yetty.exe needs
+        # MSVC ABI.
+        if ! command -v cl >/dev/null 2>&1 && ! command -v cl.exe >/dev/null 2>&1; then
+            echo "error: windows-x86_64 requires MSVC cl on PATH (vcvarsall x64)" >&2
             exit 1
         fi
         exec bash "$(dirname "$0")/_build.sh" "$@"

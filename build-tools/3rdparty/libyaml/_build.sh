@@ -174,13 +174,9 @@ webasm)
     ;;
 
 windows-x86_64)
-    if [ "${MSYSTEM:-}" != "CLANG64" ]; then
-        echo "error: windows-x86_64 must run inside MSYS2 CLANG64 (MSYSTEM=$MSYSTEM)" >&2
-        exit 1
-    fi
-    CMAKE_ARGS+=(
-        "-DCMAKE_C_COMPILER=clang"
-    )
+    # Native MSVC — caller must have vcvarsall'd the shell. cmake auto-
+    # detects cl.exe.
+    : # cmake's default Ninja+cl pickup is fine
     ;;
 
 *)

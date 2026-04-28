@@ -15,6 +15,7 @@
 
 #ifdef _WIN32
 #include <io.h>
+typedef long long ssize_t;
 #define YMGUI_WRITE _write
 #else
 #include <poll.h>

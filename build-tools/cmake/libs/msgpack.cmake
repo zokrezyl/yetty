@@ -20,8 +20,11 @@ endif()
 
 yetty_3rdparty_fetch(msgpack-c _MSGPACK_DIR)
 
-# Tarball layout: lib/libmsgpack-c.a (or msgpackc.lib on Windows native MSVC) + include/msgpack.h
-if(WIN32 AND EXISTS "${_MSGPACK_DIR}/lib/msgpackc.lib")
+# Tarball layout: lib/libmsgpack-c.a (POSIX) or lib/msgpack-c.lib (native MSVC).
+# msgpack 6.x's CMakeLists installs as msgpack-c.lib (with the dash).
+if(WIN32 AND EXISTS "${_MSGPACK_DIR}/lib/msgpack-c.lib")
+    set(_MSGPACK_LIB "${_MSGPACK_DIR}/lib/msgpack-c.lib")
+elseif(WIN32 AND EXISTS "${_MSGPACK_DIR}/lib/msgpackc.lib")
     set(_MSGPACK_LIB "${_MSGPACK_DIR}/lib/msgpackc.lib")
 elseif(EXISTS "${_MSGPACK_DIR}/lib/libmsgpack-c.a")
     set(_MSGPACK_LIB "${_MSGPACK_DIR}/lib/libmsgpack-c.a")

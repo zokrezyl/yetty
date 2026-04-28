@@ -268,14 +268,33 @@ CROSS
     ;;
 
 windows-x86_64)
-    # Native MSYS2 CLANG64 — caller must already be in the CLANG64 shell
-    # (CI: msys2/setup-msys2 with msystem: CLANG64). dav1d's regular
-    # native meson detection already picks up clang/llvm-ar from
-    # /clang64/bin without a cross/native file, so leave $CROSS_FLAG empty.
-    if [ "${MSYSTEM:-}" != "CLANG64" ]; then
-        echo "error: windows-x86_64 must run inside MSYS2 CLANG64 (MSYSTEM=${MSYSTEM:-unset})" >&2
-        exit 1
+    # Native MSVC — caller must have vcvarsall'd the shell. Every lib that
+    # links into yetty.exe needs MSVC ABI (qemu is the lone mingw build).
+    #
+    # Git Bash on the runner / dev box prepends /usr/bin to PATH for child
+    # processes — and `/usr/bin/link.exe` is GNU coreutils' `link`. meson's
+    # MSVC detection runs `where link` and trips on it:
+    #   ERROR: Found GNU link.exe instead of MSVC link.exe in C:\Program Files\Git\usr\bin\link.EXE
+    # Push MSVC's Hostx64\x64 (where MS link.exe lives) to the front so it
+    # wins. vcvarsall sets $VCToolsInstallDir to the active MSVC version.
+    if [ -n "${VCToolsInstallDir:-}" ]; then
+        _MSVC_BIN="$(cygpath -u "$VCToolsInstallDir" 2>/dev/null)bin/Hostx64/x64"
+        if [ -d "$_MSVC_BIN" ]; then
+            export PATH="$_MSVC_BIN:$PATH"
+        fi
     fi
+    CROSS_FILE="$WORK_DIR/native-windows.ini"
+    cat > "$CROSS_FILE" <<CROSS
+[binaries]
+c = 'cl'
+cpp = 'cl'
+ar = 'lib'
+
+[built-in options]
+c_args = []
+cpp_args = []
+CROSS
+    CROSS_FLAG="--native-file $CROSS_FILE"
     ;;
 
 *)
@@ -325,12 +344,13 @@ fi
 #-----------------------------------------------------------------------------
 # Verify install layout
 #-----------------------------------------------------------------------------
-# MSYS2 CLANG64 produces libdav1d.a (mingw convention) — same as POSIX
-# targets. The earlier MSVC case used dav1d.lib; we keep the fallback so
-# any future toolchain switch still validates.
-_LIB="$INSTALL_DIR/lib/libdav1d.a"
-if [ ! -f "$_LIB" ] && [ -f "$INSTALL_DIR/lib/dav1d.lib" ]; then
-    _LIB="$INSTALL_DIR/lib/dav1d.lib"
+case "$TARGET_PLATFORM" in
+    windows-x86_64) _LIB="$INSTALL_DIR/lib/dav1d.lib"  ;;
+    *)              _LIB="$INSTALL_DIR/lib/libdav1d.a" ;;
+esac
+# meson on windows also writes libdav1d.a in some configurations — accept either.
+if [ ! -f "$_LIB" ] && [ -f "$INSTALL_DIR/lib/libdav1d.a" ]; then
+    _LIB="$INSTALL_DIR/lib/libdav1d.a"
 fi
 if [ ! -f "$_LIB" ]; then
     echo "missing library: $_LIB" >&2

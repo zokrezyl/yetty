@@ -20,3 +20,7 @@ target_link_libraries(decode-ypaint PRIVATE
     yetty_yface
     yetty_ycore
 )
+
+if(NOT MSVC)
+    target_compile_options(decode-ypaint PRIVATE -Wall -Wextra)
+endif()

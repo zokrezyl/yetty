@@ -10,8 +10,7 @@ add_executable(ycat
     main.c
     ${YETTY_ROOT}/src/yetty/ytrace.c
     ${YETTY_ROOT}/src/yetty/yplatform/getopt.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/thread.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/term.c
+    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
 target_include_directories(ycat PRIVATE
@@ -27,4 +26,6 @@ target_link_libraries(ycat PRIVATE
     Threads::Threads
 )
 
-target_compile_options(ycat PRIVATE -Wall -Wextra)
+if(NOT MSVC)
+    target_compile_options(ycat PRIVATE -Wall -Wextra)
+endif()

@@ -135,8 +135,9 @@ jobs:
           files: out/openh264-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
 
-  # Windows: MSYS2 CLANG64 — clang + GNU make from msys2 base. openh264's
-  # mingw_nt platform make rules build natively without cross-prefixing.
+  # Windows: native MSVC under vcvarsall x64. Every lib that links into
+  # yetty.exe needs MSVC ABI (qemu is the lone mingw exception, since
+  # it ships standalone).
   build-windows:
     needs: resolve
     runs-on: windows-latest
@@ -148,26 +149,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: CLANG64
-          update: false
-          install: >-
-            git
-            tar
-            make
-            mingw-w64-clang-x86_64-clang
-            mingw-w64-clang-x86_64-lld
-            mingw-w64-clang-x86_64-nasm
-
+      - name: Install build tools
+        shell: pwsh
+        run: choco install nasm make -y --no-progress
       - name: Build openh264 for ${{ matrix.target }}
-        shell: msys2 {0}
+        shell: cmd
         env:
           TARGET_PLATFORM: ${{ matrix.target }}
         run: |
-          mkdir -p out
-          OUTPUT_DIR="$(pwd)/out" \
-              ./build-tools/3rdparty/openh264/build.sh
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          if errorlevel 1 exit /b 1
+          mkdir out 2>nul
+
+          bash -c "OUTPUT_DIR=\"$(pwd)/out\" ./build-tools/3rdparty/openh264/build.sh"
 
       - uses: softprops/action-gh-release@v2
         with:

@@ -220,19 +220,10 @@ webasm)
     ;;
 
 windows-x86_64)
-    # MSYS2 CLANG64 — use openh264's mingw_nt platform make rules with
-    # clang as the compiler. CI: msys2/setup-msys2 with msystem: CLANG64.
-    if [ "${MSYSTEM:-}" != "CLANG64" ]; then
-        echo "error: windows-x86_64 must run inside MSYS2 CLANG64 (MSYSTEM=${MSYSTEM:-unset})" >&2
-        exit 1
-    fi
-    EXTRA_ARGS=(
-        OS=mingw_nt
-        ARCH=x86_64
-        CC=clang
-        CXX=clang++
-        AR=llvm-ar
-    )
+    # Cisco's Makefile supports OS=msvc — invoked through GNU make
+    # (chocolatey: `choco install make`) under a vcvarsall'd shell so
+    # cl.exe produces MSVC-ABI openh264.lib for yetty.exe linking.
+    EXTRA_ARGS=(OS=msvc ARCH=x86_64)
     ;;
 
 *)
@@ -261,13 +252,10 @@ fi
 #-----------------------------------------------------------------------------
 # Verify install layout
 #-----------------------------------------------------------------------------
-# mingw_nt builds produce libopenh264.a — same as POSIX targets. Keep
-# the openh264.lib fallback in case a future toolchain switch goes back
-# to MSVC naming.
-_LIB="$INSTALL_DIR/lib/libopenh264.a"
-if [ ! -f "$_LIB" ] && [ -f "$INSTALL_DIR/lib/openh264.lib" ]; then
-    _LIB="$INSTALL_DIR/lib/openh264.lib"
-fi
+case "$TARGET_PLATFORM" in
+    windows-x86_64) _LIB="$INSTALL_DIR/lib/openh264.lib"     ;;
+    *)              _LIB="$INSTALL_DIR/lib/libopenh264.a"    ;;
+esac
 
 if [ ! -f "$_LIB" ]; then
     echo "missing library: $_LIB" >&2

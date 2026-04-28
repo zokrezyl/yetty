@@ -98,8 +98,17 @@ if [ ! -d "$OSSL_DIR" ]; then
     mkdir -p "$OSSL_DIR"
     tar -C "$OSSL_DIR" -xzf "$OSSL_TARBALL"
 fi
-[ -f "$OSSL_DIR/lib/libssl.a"    ] || { echo "openssl-new: missing libssl.a"    >&2; exit 1; }
-[ -f "$OSSL_DIR/lib/libcrypto.a" ] || { echo "openssl-new: missing libcrypto.a" >&2; exit 1; }
+# Windows MSVC build of openssl-new ships libssl.lib + libcrypto.lib;
+# everywhere else the convention is libssl.a + libcrypto.a.
+if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+    _OSSL_SSL="$OSSL_DIR/lib/libssl.lib"
+    _OSSL_CRYPTO="$OSSL_DIR/lib/libcrypto.lib"
+else
+    _OSSL_SSL="$OSSL_DIR/lib/libssl.a"
+    _OSSL_CRYPTO="$OSSL_DIR/lib/libcrypto.a"
+fi
+[ -f "$_OSSL_SSL"    ] || { echo "openssl-new: missing $(basename "$_OSSL_SSL")"    >&2; exit 1; }
+[ -f "$_OSSL_CRYPTO" ] || { echo "openssl-new: missing $(basename "$_OSSL_CRYPTO")" >&2; exit 1; }
 [ -f "$OSSL_DIR/include/openssl/ssl.h" ] || { echo "openssl-new: missing ssl.h" >&2; exit 1; }
 
 #-----------------------------------------------------------------------------
@@ -148,8 +157,8 @@ CMAKE_ARGS=(
     -DCURL_USE_OPENSSL=ON
     -DOPENSSL_ROOT_DIR="$OSSL_DIR"
     -DOPENSSL_INCLUDE_DIR="$OSSL_DIR/include"
-    -DOPENSSL_SSL_LIBRARY="$OSSL_DIR/lib/libssl.a"
-    -DOPENSSL_CRYPTO_LIBRARY="$OSSL_DIR/lib/libcrypto.a"
+    -DOPENSSL_SSL_LIBRARY="$_OSSL_SSL"
+    -DOPENSSL_CRYPTO_LIBRARY="$_OSSL_CRYPTO"
 
     # Flag-name conventions are mixed in curl 8.x: CURL_USE_* for some,
     # USE_* for others (libidn2, nghttp2, librtmp). Audit confirmed
@@ -269,16 +278,10 @@ webasm)
     ;;
 
 windows-x86_64)
-    if [ "${MSYSTEM:-}" != "CLANG64" ]; then
-        echo "error: windows-x86_64 must run inside MSYS2 CLANG64 (MSYSTEM=$MSYSTEM)" >&2
-        exit 1
-    fi
-    CMAKE_ARGS+=(
-        "-DCMAKE_C_COMPILER=clang"
-        "-DCMAKE_CXX_COMPILER=clang++"
-        # Curl on Windows needs SCHANNEL fallback off (we want OpenSSL only)
-        "-DCURL_USE_SCHANNEL=OFF"
-    )
+    # Native MSVC — caller must have vcvarsall'd the shell. cmake picks
+    # up cl.exe via auto-detection. SCHANNEL off so curl uses our
+    # prebuilt OpenSSL only.
+    CMAKE_ARGS+=("-DCURL_USE_SCHANNEL=OFF")
     ;;
 
 *)
