@@ -26,8 +26,9 @@ scrollback:
 # Shell Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 shell:
+  # Default shell binary. Overridden by $SHELL env var at startup if set.
   # Toybox shell - symlinked from libtoybox.so at runtime
-  path: "/data/data/com.yetty.terminal/cache/bin/sh"
+  default: "/data/data/com.yetty.terminal/cache/bin/sh"
 
   env:
     TERM: "xterm-256color"

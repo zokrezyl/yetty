@@ -22,6 +22,18 @@ struct yetty_yplatform_paths {
 /* Result type */
 YETTY_YRESULT_DECLARE(yetty_yconfig, struct yetty_yconfig *);
 
+/* Resolved shell argv for execvp.
+ *
+ * Caller-owned buffer; filled by ops->get_shell_argv. argv[] points into buf.
+ * argv is NULL-terminated and ready to pass to execvp. */
+#define YETTY_YCONFIG_SHELL_ARGV_MAX 64
+#define YETTY_YCONFIG_SHELL_BUF_SIZE 2048
+struct yetty_yconfig_shell_argv {
+    char *argv[YETTY_YCONFIG_SHELL_ARGV_MAX];
+    char buf[YETTY_YCONFIG_SHELL_BUF_SIZE];
+    int argc;
+};
+
 /* Config ops */
 struct yetty_yconfig_ops {
     void (*destroy)(struct yetty_yconfig *self);
@@ -44,6 +56,14 @@ struct yetty_yconfig_ops {
     /* Get sub-config at path (returns NULL if not found, no ownership transfer) */
     struct yetty_yconfig *(*get_node)(const struct yetty_yconfig *self,
                                      const char *path);
+
+    /* Resolve shell argv for execvp.
+     *
+     * If shell/command is set (via -e), tokenize it into argv (no shell
+     * wrapper). Otherwise argv is { resolved_shell, NULL } where the shell
+     * is $SHELL > shell/default > /bin/bash. */
+    struct yetty_ycore_void_result (*get_shell_argv)(const struct yetty_yconfig *self,
+                                                     struct yetty_yconfig_shell_argv *out);
 
     /* Legacy accessors */
     int (*use_damage_tracking)(const struct yetty_yconfig *self);

@@ -75,13 +75,18 @@ scrollback:
 # Shell Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 shell:
+  # Default shell binary. Overridden by $SHELL env var at startup if set.
+  # If -e CMD is given, the command is execvp'd directly and the shell is
+  # bypassed entirely.
+  # default: "/bin/bash"
+
   # Environment variables to export to the shell
   env:
     TERM: "xterm-256color"
     COLORTERM: "truecolor"
     # YETTY_SOCKET is set at runtime with the RPC socket path
 
-  # Shell command to execute (set via -c/-e flags, not typically in config)
+  # Shell command to execute (set via -e flag, not typically in config)
   # command: ""
 
 # ─────────────────────────────────────────────────────────────────────────────

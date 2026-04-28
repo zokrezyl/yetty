@@ -147,7 +147,8 @@ static struct yetty_yplatform_pty_pipe_source *fork_pty_pipe_source(struct yetty
 struct yetty_yplatform_pty_result fork_pty_create(struct yetty_yconfig *config)
 {
     struct fork_pty *pty;
-    const char *shell;
+    struct yetty_yconfig_shell_argv shellv;
+    struct yetty_ycore_void_result argv_res;
     struct winsize ws;
     int flags;
 
@@ -163,7 +164,11 @@ struct yetty_yplatform_pty_result fork_pty_create(struct yetty_yconfig *config)
     pty->running = 0;
     pty->pipe_source.abstract = -1;
 
-    shell = config->ops->get_string(config, "shell/path", "/bin/bash");
+    argv_res = config->ops->get_shell_argv(config, &shellv);
+    if (!YETTY_IS_OK(argv_res)) {
+        free(pty);
+        return YETTY_ERR(yetty_yplatform_pty, "failed to resolve shell argv");
+    }
 
     ws.ws_row = (unsigned short)pty->rows;
     ws.ws_col = (unsigned short)pty->cols;
@@ -183,13 +188,7 @@ struct yetty_yplatform_pty_result fork_pty_create(struct yetty_yconfig *config)
         for (fd = 3; fd < 1024; fd++)
             close(fd);
 
-        /* Check for command to execute (-e flag) */
-        const char *command = config->ops->get_string(config, "shell/command", NULL);
-        if (command && command[0]) {
-            execl(shell, shell, "-c", command, NULL);
-        } else {
-            execl(shell, shell, NULL);
-        }
+        execvp(shellv.argv[0], shellv.argv);
         _exit(1);
     }
 

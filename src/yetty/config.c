@@ -2,6 +2,7 @@
 
 #include <yetty/yconfig.h>
 #include <yetty/ycore/types.h>
+#include <yetty/yplatform/getopt.h>
 #include <yaml.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,6 +62,8 @@ static const char *config_font_family(const struct yetty_yconfig *self);
 
 static struct yetty_yconfig *config_get_node(const struct yetty_yconfig *self,
                                             const char *path);
+static struct yetty_ycore_void_result config_get_shell_argv(const struct yetty_yconfig *self,
+                                                            struct yetty_yconfig_shell_argv *out);
 
 static const struct yetty_yconfig_ops config_ops = {
     .destroy = config_destroy,
@@ -70,6 +73,7 @@ static const struct yetty_yconfig_ops config_ops = {
     .has = config_has,
     .set_string = config_set_string,
     .get_node = config_get_node,
+    .get_shell_argv = config_get_shell_argv,
     .use_damage_tracking = config_use_damage_tracking,
     .show_fps = config_show_fps,
     .debug_damage_rects = config_debug_damage_rects,
@@ -518,6 +522,7 @@ static const struct yetty_yconfig_ops subnode_ops = {
     .has = subnode_has,
     .set_string = subnode_set_string,
     .get_node = subnode_get_node,
+    .get_shell_argv = NULL,
     .use_damage_tracking = NULL,
     .show_fps = NULL,
     .debug_damage_rects = NULL,
@@ -642,57 +647,81 @@ static void try_load_config_file(struct config_impl *impl, int argc, char *argv[
     }
 }
 
-/* Find argument value by short or long name, returns NULL if not found */
-
-static const char *find_arg(int argc, char *argv[], const char *short_name, const char *long_name)
-{
-    for (int i = 1; i < argc; i++) {
-        if (short_name && strcmp(argv[i], short_name) == 0 && i + 1 < argc)
-            return argv[i + 1];
-        if (long_name && strcmp(argv[i], long_name) == 0 && i + 1 < argc)
-            return argv[i + 1];
-    }
-    return NULL;
-}
-
-/* Set config value from command line argument */
-
-static void parse_arg_to_config(struct config_impl *impl, int argc, char *argv[],
-                                const char *short_name, const char *long_name,
-                                const char *config_path)
-{
-    const char *value = find_arg(argc, argv, short_name, long_name);
-    if (value) {
-        char key[MAX_KEY_LEN];
-        struct config_node *parent = navigate_or_create(impl->root, config_path, key);
-        if (parent)
-            node_set_value(parent, key, value);
-    }
-}
-
-/* Parse command line for --temu and --qemu flags */
-
-static void parse_vm_args(struct config_impl *impl, int argc, char *argv[])
-{
-    char key[MAX_KEY_LEN];
-    struct config_node *parent;
-
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--temu") == 0) {
-            parent = navigate_or_create(impl->root, YETTY_YCONFIG_KEY_TEMU, key);
-            if (parent)
-                node_set_value(parent, key, "true");
-        } else if (strcmp(argv[i], "--qemu") == 0) {
-            parent = navigate_or_create(impl->root, YETTY_YCONFIG_KEY_QEMU, key);
-            if (parent)
-                node_set_value(parent, key, "true");
-        }
-    }
-}
-
-/* Parse command line for --ssh flag
+/* Tokenize a command string into argv, respecting single and double quotes.
  *
- * Accepts optional "user@host[:port]" target that follows the flag. */
+ * Writes pointers into out->argv (NULL-terminated) that reference into
+ * out->buf. Sets out->argc. Returns 0 on success, -1 on overflow. */
+static int tokenize_command(const char *cmd, struct yetty_yconfig_shell_argv *out)
+{
+    const char *p = cmd;
+    size_t bp = 0;
+    int ac = 0;
+
+    while (*p) {
+        while (*p && isspace((unsigned char)*p))
+            p++;
+        if (!*p)
+            break;
+
+        if (ac >= YETTY_YCONFIG_SHELL_ARGV_MAX - 1)
+            return -1;
+        out->argv[ac++] = &out->buf[bp];
+
+        while (*p && !isspace((unsigned char)*p)) {
+            if (*p == '\'' || *p == '"') {
+                char q = *p++;
+                while (*p && *p != q) {
+                    if (bp >= YETTY_YCONFIG_SHELL_BUF_SIZE - 1)
+                        return -1;
+                    out->buf[bp++] = *p++;
+                }
+                if (*p == q)
+                    p++;
+            } else {
+                if (bp >= YETTY_YCONFIG_SHELL_BUF_SIZE - 1)
+                    return -1;
+                out->buf[bp++] = *p++;
+            }
+        }
+        if (bp >= YETTY_YCONFIG_SHELL_BUF_SIZE)
+            return -1;
+        out->buf[bp++] = '\0';
+    }
+    out->argv[ac] = NULL;
+    out->argc = ac;
+    return 0;
+}
+
+static struct yetty_ycore_void_result config_get_shell_argv(const struct yetty_yconfig *self,
+                                                            struct yetty_yconfig_shell_argv *out)
+{
+    if (!out)
+        return YETTY_ERR(yetty_ycore_void, "out is NULL");
+
+    memset(out, 0, sizeof(*out));
+
+    /* -e bypasses the shell entirely: tokenize and exec the command directly */
+    const char *command = self->ops->get_string(self, "shell/command", NULL);
+    if (command && command[0]) {
+        if (tokenize_command(command, out) < 0 || out->argc == 0)
+            return YETTY_ERR(yetty_ycore_void, "failed to tokenize shell/command");
+        return YETTY_OK_VOID();
+    }
+
+    /* No -e: run the resolved shell. Resolution order: $SHELL > shell/default
+     * > /bin/bash. $SHELL is folded into shell/default at config-create time. */
+    const char *shell = self->ops->get_string(self, "shell/default", "/bin/bash");
+    size_t len = strlen(shell);
+    if (len + 1 > YETTY_YCONFIG_SHELL_BUF_SIZE)
+        return YETTY_ERR(yetty_ycore_void, "shell path too long");
+    memcpy(out->buf, shell, len + 1);
+    out->argv[0] = out->buf;
+    out->argv[1] = NULL;
+    out->argc = 1;
+    return YETTY_OK_VOID();
+}
+
+/* Parse "user@host[:port]" SSH target into ssh/{username,host,port} */
 static int parse_ssh_target(struct config_impl *impl, const char *target)
 {
     const char *at, *colon;
@@ -739,23 +768,164 @@ static int parse_ssh_target(struct config_impl *impl, const char *target)
     return 1;
 }
 
-static void parse_ssh_args(struct config_impl *impl, int argc, char *argv[])
+/* Long-only option ids (above 255 to avoid colliding with short-form ASCII) */
+enum {
+    OPT_VNC_RAW = 1000,
+    OPT_VNC_COMPRESSION_QUALITY,
+    OPT_VNC_ALWAYS_FULL,
+    OPT_VNC_USE_H264,
+    OPT_VNC_MERGE_RECTS,
+    OPT_VNC_H264_BITRATE,
+    OPT_VNC_H264_FRAMERATE,
+    OPT_VNC_H264_IDR_INTERVAL,
+    OPT_VNC_H264_SCREEN_CONTENT,
+    OPT_RPC_HOST,
+    OPT_TEMU,
+    OPT_QEMU,
+    OPT_SSH,
+};
+
+static struct option long_options[] = {
+    {"config",                    required_argument, 0, 'c'},
+    {"execute",                   required_argument, 0, 'e'},
+    {"vnc-server",                no_argument,       0, 's'},
+    {"vnc-headless",              no_argument,       0, 'H'},
+    {"vnc-port",                  required_argument, 0, 'p'},
+    {"vnc-client",                required_argument, 0, 'C'},
+    {"vnc-raw",                   no_argument,       0, OPT_VNC_RAW},
+    {"vnc-compression-quality",   required_argument, 0, OPT_VNC_COMPRESSION_QUALITY},
+    {"vnc-always-full",           no_argument,       0, OPT_VNC_ALWAYS_FULL},
+    {"vnc-use-h264",              no_argument,       0, OPT_VNC_USE_H264},
+    {"vnc-merge-rects",           no_argument,       0, OPT_VNC_MERGE_RECTS},
+    {"vnc-h264-bitrate",          required_argument, 0, OPT_VNC_H264_BITRATE},
+    {"vnc-h264-framerate",        required_argument, 0, OPT_VNC_H264_FRAMERATE},
+    {"vnc-h264-idr-interval",     required_argument, 0, OPT_VNC_H264_IDR_INTERVAL},
+    {"vnc-h264-screen-content",   required_argument, 0, OPT_VNC_H264_SCREEN_CONTENT},
+    {"rpc-host",                  required_argument, 0, OPT_RPC_HOST},
+    {"rpc-port",                  required_argument, 0, 'r'},
+    {"temu",                      no_argument,       0, OPT_TEMU},
+    {"qemu",                      no_argument,       0, OPT_QEMU},
+    {"ssh",                       optional_argument, 0, OPT_SSH},
+    {"help",                      no_argument,       0, 'h'},
+    {0, 0, 0, 0}
+};
+
+static void print_usage(const char *prog)
+{
+    fprintf(stderr, "Usage: %s [options]\n", prog);
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  -c, --config=FILE      Load config from FILE\n");
+    fprintf(stderr, "  -e, --execute=CMD      Execute CMD in terminal\n");
+    fprintf(stderr, "  -s, --vnc-server       Run VNC server (mirror mode - window + VNC)\n");
+    fprintf(stderr, "  -H, --vnc-headless     Run VNC server (headless - no window)\n");
+    fprintf(stderr, "  -p, --vnc-port=PORT    VNC server port (default: 5900)\n");
+    fprintf(stderr, "  -C, --vnc-client=HOST  Connect as VNC client to HOST[:PORT]\n");
+    fprintf(stderr, "      --vnc-raw                  Disable JPEG, send raw BGRA tiles\n");
+    fprintf(stderr, "      --vnc-compression-quality Q  JPEG quality 1-100 (default: 80)\n");
+    fprintf(stderr, "      --vnc-always-full          Disable delta, send full frame every time\n");
+    fprintf(stderr, "      --vnc-use-h264             Use H.264 encoder instead of JPEG (requires openh264)\n");
+    fprintf(stderr, "      --vnc-merge-rects          Merge adjacent dirty tiles into bigger rectangles\n");
+    fprintf(stderr, "      --vnc-h264-bitrate BPS     H.264 target bitrate in bps (default: auto-scales with resolution)\n");
+    fprintf(stderr, "      --vnc-h264-framerate FPS   H.264 encode framerate (default: 30)\n");
+    fprintf(stderr, "      --vnc-h264-idr-interval N  Frames between H.264 keyframes (default: 60 — 2s at 30 fps)\n");
+    fprintf(stderr, "      --vnc-h264-screen-content 0|1  H.264 screen-content optimisation (default: 1)\n");
+    fprintf(stderr, "      --rpc-host=HOST    RPC server host\n");
+    fprintf(stderr, "  -r, --rpc-port=PORT    RPC server port\n");
+    fprintf(stderr, "      --temu             Run in-process TinyEMU RISC-V VM\n");
+    fprintf(stderr, "      --qemu             Run external QEMU RISC-V VM (via telnet)\n");
+    fprintf(stderr, "      --ssh [USER@HOST[:PORT]]  Connect to SSH remote shell\n");
+    fprintf(stderr, "  -h, --help             Show this help\n");
+}
+
+static void set_config(struct config_impl *impl, const char *path, const char *value)
 {
     char key[MAX_KEY_LEN];
-    struct config_node *parent;
+    struct config_node *parent = navigate_or_create(impl->root, path, key);
+    if (parent)
+        node_set_value(parent, key, value);
+}
 
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--ssh") != 0)
-            continue;
-
-        /* Optional "user@host[:port]" follows if it isn't another flag */
-        if (i + 1 < argc && argv[i + 1][0] != '-' &&
-            parse_ssh_target(impl, argv[i + 1])) {
-            i++;
+/* Parse the command line into config. Recognises -c/--config (already loaded
+ * by try_load_config_file before we get here), -e command, VNC flags, RPC
+ * host/port, --temu/--qemu, and --ssh [user@host[:port]].
+ *
+ * On -h/--help or unknown args, prints usage and exits. */
+static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
+{
+    optreset = 1;
+    optind = 1;
+    int c;
+    while ((c = getopt_long(argc, argv, "c:e:sHp:C:r:h", long_options, NULL)) != -1) {
+        switch (c) {
+        case 'c':
+            /* config file already loaded by try_load_config_file */
+            break;
+        case 'e':
+            set_config(impl, "shell/command", optarg);
+            break;
+        case 's':
+            set_config(impl, "vnc/server", "true");
+            break;
+        case 'H':
+            set_config(impl, "vnc/headless", "true");
+            break;
+        case 'p':
+            set_config(impl, "vnc/port", optarg);
+            break;
+        case 'C':
+            set_config(impl, "vnc/client", optarg);
+            break;
+        case OPT_VNC_RAW:
+            set_config(impl, "vnc/raw", "true");
+            break;
+        case OPT_VNC_COMPRESSION_QUALITY:
+            set_config(impl, "vnc/compression-quality", optarg);
+            break;
+        case OPT_VNC_ALWAYS_FULL:
+            set_config(impl, "vnc/always-full", "true");
+            break;
+        case OPT_VNC_USE_H264:
+            set_config(impl, "vnc/use-h264", "true");
+            break;
+        case OPT_VNC_MERGE_RECTS:
+            set_config(impl, "vnc/merge-rects", "true");
+            break;
+        case OPT_VNC_H264_BITRATE:
+            set_config(impl, "vnc/h264/bitrate", optarg);
+            break;
+        case OPT_VNC_H264_FRAMERATE:
+            set_config(impl, "vnc/h264/framerate", optarg);
+            break;
+        case OPT_VNC_H264_IDR_INTERVAL:
+            set_config(impl, "vnc/h264/idr-interval", optarg);
+            break;
+        case OPT_VNC_H264_SCREEN_CONTENT:
+            set_config(impl, "vnc/h264/screen-content", optarg);
+            break;
+        case OPT_RPC_HOST:
+            set_config(impl, YETTY_YCONFIG_KEY_RPC_HOST, optarg);
+            break;
+        case 'r':
+            set_config(impl, YETTY_YCONFIG_KEY_RPC_PORT, optarg);
+            break;
+        case OPT_TEMU:
+            set_config(impl, YETTY_YCONFIG_KEY_TEMU, "true");
+            break;
+        case OPT_QEMU:
+            set_config(impl, YETTY_YCONFIG_KEY_QEMU, "true");
+            break;
+        case OPT_SSH:
+            if (optarg)
+                parse_ssh_target(impl, optarg);
+            set_config(impl, YETTY_YCONFIG_KEY_SSH, "true");
+            break;
+        case 'h':
+            print_usage(argv[0]);
+            exit(0);
+        default:
+            print_usage(argv[0]);
+            exit(1);
         }
-        parent = navigate_or_create(impl->root, YETTY_YCONFIG_KEY_SSH, key);
-        if (parent)
-            node_set_value(parent, key, "true");
     }
 }
 
@@ -777,11 +947,13 @@ struct yetty_yconfig_result yetty_yconfig_create(int argc, char *argv[],
 
     try_load_config_file(impl, argc, argv);
     store_platform_paths(impl, paths);
-    parse_arg_to_config(impl, argc, argv, "-e", NULL, "shell/command");
-    parse_arg_to_config(impl, argc, argv, NULL, "--rpc-host", YETTY_YCONFIG_KEY_RPC_HOST);
-    parse_arg_to_config(impl, argc, argv, "-r", "--rpc-port", YETTY_YCONFIG_KEY_RPC_PORT);
-    parse_vm_args(impl, argc, argv);
-    parse_ssh_args(impl, argc, argv);
+
+    /* $SHELL overrides shell/default from yaml */
+    const char *env_shell = getenv("SHELL");
+    if (env_shell && env_shell[0])
+        set_config(impl, "shell/default", env_shell);
+
+    parse_cmdline(impl, argc, argv);
 
     return YETTY_OK(yetty_yconfig, &impl->base);
 }
