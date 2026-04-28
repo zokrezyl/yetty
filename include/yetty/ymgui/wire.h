@@ -65,7 +65,7 @@ extern "C" {
  * client routes input to the right per-card ImGuiContext.
  *===========================================================================*/
 
-#define YMGUI_CARD_ID_NONE      0u
+#define YMGUI_CARD_ID_NONE 0u
 
 /*=============================================================================
  * OSC codes
@@ -77,45 +77,45 @@ extern "C" {
 
 /* client → server (frontend → ymgui-layer). 600000–600003 belong to
  * ypaint (see <yetty/yterm/pty-reader.h>); ymgui starts at 610000. */
-#define YMGUI_OSC_CS_CLEAR        610000  /* ymgui_wire_clear,        comp=0 */
-#define YMGUI_OSC_CS_FRAME        610001  /* ymgui_wire_frame,        comp=1 */
-#define YMGUI_OSC_CS_TEX          610002  /* ymgui_wire_tex,          comp=1 */
-#define YMGUI_OSC_CS_CARD_PLACE   610003  /* ymgui_wire_card_place,   comp=0 */
-#define YMGUI_OSC_CS_CARD_REMOVE  610004  /* ymgui_wire_card_remove,  comp=0 */
+#define YMGUI_OSC_CS_CLEAR 610000       /* ymgui_wire_clear,        comp=0 */
+#define YMGUI_OSC_CS_FRAME 610001       /* ymgui_wire_frame,        comp=1 */
+#define YMGUI_OSC_CS_TEX 610002         /* ymgui_wire_tex,          comp=1 */
+#define YMGUI_OSC_CS_CARD_PLACE 610003  /* ymgui_wire_card_place,   comp=0 */
+#define YMGUI_OSC_CS_CARD_REMOVE 610004 /* ymgui_wire_card_remove,  comp=0 */
 
 /* server → client (yetty terminal → frontend / ygui / yrich) */
-#define YMGUI_OSC_SC_MOUSE        700000  /* ymgui_wire_input_mouse,  comp=0 */
-#define YMGUI_OSC_SC_RESIZE       700001  /* ymgui_wire_input_resize, comp=0 */
-#define YMGUI_OSC_SC_FOCUS        700002  /* ymgui_wire_input_focus,  comp=0 */
-#define YMGUI_OSC_SC_KEY          700003  /* ymgui_wire_input_key,    comp=0 */
+#define YMGUI_OSC_SC_MOUSE 700000  /* ymgui_wire_input_mouse,  comp=0 */
+#define YMGUI_OSC_SC_RESIZE 700001 /* ymgui_wire_input_resize, comp=0 */
+#define YMGUI_OSC_SC_FOCUS 700002  /* ymgui_wire_input_focus,  comp=0 */
+#define YMGUI_OSC_SC_KEY 700003    /* ymgui_wire_input_key,    comp=0 */
 
 /*=============================================================================
  * Magic numbers + versioning
  *===========================================================================*/
-#define YMGUI_WIRE_MAGIC_FRAME        0x4D47494Fu  /* 'OIGM' → "YMGI" */
-#define YMGUI_WIRE_MAGIC_TEX          0x4D58544Fu  /* 'OTXM' → "YMTX" */
-#define YMGUI_WIRE_MAGIC_CLEAR        0x4D4C4359u  /* "YCLM" */
-#define YMGUI_WIRE_MAGIC_CARD_PLACE   0x4D504443u  /* "CDPM" */
-#define YMGUI_WIRE_MAGIC_CARD_REMOVE  0x4D524443u  /* "CDRM" */
-#define YMGUI_WIRE_MAGIC_INPUT_MOUSE  0x4D49534Du  /* "MSIM" reversed: "MISM" */
-#define YMGUI_WIRE_MAGIC_INPUT_RESIZE 0x4D52534Du  /* "MSRM" reversed: "MRSM" */
-#define YMGUI_WIRE_MAGIC_INPUT_FOCUS  0x4D434F46u  /* "FOCM" */
-#define YMGUI_WIRE_MAGIC_INPUT_KEY    0x4D59454Bu  /* "KEYM" */
+#define YMGUI_WIRE_MAGIC_FRAME 0x4D47494Fu        /* 'OIGM' → "YMGI" */
+#define YMGUI_WIRE_MAGIC_TEX 0x4D58544Fu          /* 'OTXM' → "YMTX" */
+#define YMGUI_WIRE_MAGIC_CLEAR 0x4D4C4359u        /* "YCLM" */
+#define YMGUI_WIRE_MAGIC_CARD_PLACE 0x4D504443u   /* "CDPM" */
+#define YMGUI_WIRE_MAGIC_CARD_REMOVE 0x4D524443u  /* "CDRM" */
+#define YMGUI_WIRE_MAGIC_INPUT_MOUSE 0x4D49534Du  /* "MSIM" reversed: "MISM" */
+#define YMGUI_WIRE_MAGIC_INPUT_RESIZE 0x4D52534Du /* "MSRM" reversed: "MRSM" */
+#define YMGUI_WIRE_MAGIC_INPUT_FOCUS 0x4D434F46u  /* "FOCM" */
+#define YMGUI_WIRE_MAGIC_INPUT_KEY 0x4D59454Bu    /* "KEYM" */
 
-#define YMGUI_WIRE_VERSION      2u
+#define YMGUI_WIRE_VERSION 2u
 
 /* Texture IDs. Per-card namespace: each card has its own tex_id space.
  * tex_id=1 = that card's font atlas. User textures (v2) allocate 2..N
  * within the card. tex_id=0 = "no texture" (solid-colored triangles only). */
-#define YMGUI_TEX_ID_NONE       0u
+#define YMGUI_TEX_ID_NONE 0u
 #define YMGUI_TEX_ID_FONT_ATLAS 1u
 
 /* Texture formats. */
-#define YMGUI_TEX_FMT_R8        1u
-#define YMGUI_TEX_FMT_RGBA8     2u
+#define YMGUI_TEX_FMT_R8 1u
+#define YMGUI_TEX_FMT_RGBA8 2u
 
 /* Frame flags. */
-#define YMGUI_FRAME_FLAG_IDX32  (1u << 0)
+#define YMGUI_FRAME_FLAG_IDX32 (1u << 0)
 
 /*---------------------------------------------------------------------------
  * Vertex — identical to ImDrawVert (pos:vec2, uv:vec2, col:u32 RGBA).
@@ -125,7 +125,7 @@ struct ymgui_wire_vertex {
     float pos_y;
     float uv_x;
     float uv_y;
-    uint32_t col;  /* IM_COL32 (AABBGGRR little-endian → R,G,B,A bytes) */
+    uint32_t col; /* IM_COL32 (AABBGGRR little-endian → R,G,B,A bytes) */
 };
 
 /*---------------------------------------------------------------------------
@@ -137,9 +137,9 @@ struct ymgui_wire_cmd {
     float clip_max_x;
     float clip_max_y;
     uint32_t tex_id;
-    uint32_t vtx_offset;  /* within the owning cmd-list's vertex array */
-    uint32_t idx_offset;  /* within the owning cmd-list's index  array */
-    uint32_t elem_count;  /* number of indices for this call (multiple of 3) */
+    uint32_t vtx_offset; /* within the owning cmd-list's vertex array */
+    uint32_t idx_offset; /* within the owning cmd-list's index  array */
+    uint32_t elem_count; /* number of indices for this call (multiple of 3) */
 };
 
 /*---------------------------------------------------------------------------
@@ -164,18 +164,18 @@ struct ymgui_wire_cmd_list {
  * IS the card.
  *-------------------------------------------------------------------------*/
 struct ymgui_wire_frame {
-    uint32_t magic;           /* YMGUI_WIRE_MAGIC_FRAME */
-    uint32_t version;         /* YMGUI_WIRE_VERSION */
-    uint32_t flags;           /* YMGUI_FRAME_FLAG_* */
-    uint32_t total_size;      /* bytes in the whole frame payload */
-    uint32_t card_id;         /* card this frame belongs to (must be live) */
+    uint32_t magic;      /* YMGUI_WIRE_MAGIC_FRAME */
+    uint32_t version;    /* YMGUI_WIRE_VERSION */
+    uint32_t flags;      /* YMGUI_FRAME_FLAG_* */
+    uint32_t total_size; /* bytes in the whole frame payload */
+    uint32_t card_id;    /* card this frame belongs to (must be live) */
     uint32_t cmd_list_count;
-    float    display_pos_x;   /* ImDrawData::DisplayPos (typically 0) */
-    float    display_pos_y;
-    float    display_size_x;  /* ImDrawData::DisplaySize == card pixel size */
-    float    display_size_y;
-    float    fb_scale_x;      /* ImDrawData::FramebufferScale */
-    float    fb_scale_y;
+    float display_pos_x; /* ImDrawData::DisplayPos (typically 0) */
+    float display_pos_y;
+    float display_size_x; /* ImDrawData::DisplaySize == card pixel size */
+    float display_size_y;
+    float fb_scale_x; /* ImDrawData::FramebufferScale */
+    float fb_scale_y;
     /* Followed by cmd_list_count × (ymgui_wire_cmd_list + vtx + idx + cmds). */
 };
 
@@ -186,14 +186,14 @@ struct ymgui_wire_frame {
  * Textures are owned per-card: tex_id is namespaced to card_id.
  *-------------------------------------------------------------------------*/
 struct ymgui_wire_tex {
-    uint32_t magic;           /* YMGUI_WIRE_MAGIC_TEX */
-    uint32_t version;         /* YMGUI_WIRE_VERSION */
-    uint32_t card_id;         /* card this texture belongs to (must be live) */
-    uint32_t tex_id;          /* per-card; 1 = font atlas */
-    uint32_t format;          /* YMGUI_TEX_FMT_* */
+    uint32_t magic;   /* YMGUI_WIRE_MAGIC_TEX */
+    uint32_t version; /* YMGUI_WIRE_VERSION */
+    uint32_t card_id; /* card this texture belongs to (must be live) */
+    uint32_t tex_id;  /* per-card; 1 = font atlas */
+    uint32_t format;  /* YMGUI_TEX_FMT_* */
     uint32_t width;
     uint32_t height;
-    uint32_t total_size;      /* bytes in the whole tex payload */
+    uint32_t total_size; /* bytes in the whole tex payload */
     /* Followed by width*height*bpp bytes of pixel data. */
 };
 
@@ -212,13 +212,13 @@ struct ymgui_wire_tex {
  *                      on app shutdown).
  *   (no flag set):     drop without archiving (interactive `--clear`).
  *-------------------------------------------------------------------------*/
-#define YMGUI_CLEAR_FLAG_KEEP_VISIBLE  (1u << 0)
+#define YMGUI_CLEAR_FLAG_KEEP_VISIBLE (1u << 0)
 
 struct ymgui_wire_clear {
-    uint32_t magic;           /* YMGUI_WIRE_MAGIC_CLEAR */
-    uint32_t version;         /* YMGUI_WIRE_VERSION */
-    uint32_t card_id;         /* YMGUI_CARD_ID_NONE = all cards */
-    uint32_t flags;           /* YMGUI_CLEAR_FLAG_* */
+    uint32_t magic;   /* YMGUI_WIRE_MAGIC_CLEAR */
+    uint32_t version; /* YMGUI_WIRE_VERSION */
+    uint32_t card_id; /* YMGUI_CARD_ID_NONE = all cards */
+    uint32_t flags;   /* YMGUI_CLEAR_FLAG_* */
 };
 
 /*---------------------------------------------------------------------------
@@ -243,14 +243,14 @@ struct ymgui_wire_clear {
  *   re-resolved against the current visible window.
  *-------------------------------------------------------------------------*/
 struct ymgui_wire_card_place {
-    uint32_t magic;           /* YMGUI_WIRE_MAGIC_CARD_PLACE */
-    uint32_t version;         /* YMGUI_WIRE_VERSION */
-    uint32_t card_id;         /* must be != YMGUI_CARD_ID_NONE */
-    uint32_t flags;           /* reserved, send 0 */
-    int32_t  col;             /* grid column (0-based) */
-    int32_t  row;             /* grid row (0-based, relative to visible top) */
-    uint32_t w_cells;         /* width  in cells; 0 = "until right edge"   */
-    uint32_t h_cells;         /* height in cells; 0 = "until bottom (at
+    uint32_t magic;   /* YMGUI_WIRE_MAGIC_CARD_PLACE */
+    uint32_t version; /* YMGUI_WIRE_VERSION */
+    uint32_t card_id; /* must be != YMGUI_CARD_ID_NONE */
+    uint32_t flags;   /* reserved, send 0 */
+    int32_t col;      /* grid column (0-based) */
+    int32_t row;      /* grid row (0-based, relative to visible top) */
+    uint32_t w_cells; /* width  in cells; 0 = "until right edge"   */
+    uint32_t h_cells; /* height in cells; 0 = "until bottom (at
                                *                       placement time)"    */
 };
 
@@ -262,10 +262,10 @@ struct ymgui_wire_card_place {
  * closes inside an app that owns multiple cards.
  *-------------------------------------------------------------------------*/
 struct ymgui_wire_card_remove {
-    uint32_t magic;           /* YMGUI_WIRE_MAGIC_CARD_REMOVE */
-    uint32_t version;         /* YMGUI_WIRE_VERSION */
+    uint32_t magic;   /* YMGUI_WIRE_MAGIC_CARD_REMOVE */
+    uint32_t version; /* YMGUI_WIRE_VERSION */
     uint32_t card_id;
-    uint32_t flags;           /* YMGUI_CLEAR_FLAG_* */
+    uint32_t flags; /* YMGUI_CLEAR_FLAG_* */
 };
 
 /*=============================================================================
@@ -281,24 +281,24 @@ struct ymgui_wire_card_remove {
 
 /* ymgui_wire_input_mouse.kind */
 enum ymgui_wire_input_mouse_kind {
-    YMGUI_INPUT_MOUSE_POS    = 0,  /* x,y; buttons_held mask for drag tracking */
-    YMGUI_INPUT_MOUSE_BUTTON = 1,  /* button transition: button + pressed + x,y */
-    YMGUI_INPUT_MOUSE_WHEEL  = 2,  /* wheel: wheel_dy at x,y */
+    YMGUI_INPUT_MOUSE_POS = 0,    /* x,y; buttons_held mask for drag tracking */
+    YMGUI_INPUT_MOUSE_BUTTON = 1, /* button transition: button + pressed + x,y */
+    YMGUI_INPUT_MOUSE_WHEEL = 2,  /* wheel: wheel_dy at x,y */
 };
 
 /* Single struct covers move / button / wheel — kind discriminates.
  * Fields not relevant to a kind are zero on the wire. */
 struct ymgui_wire_input_mouse {
-    uint32_t magic;           /* YMGUI_WIRE_MAGIC_INPUT_MOUSE */
-    uint32_t version;         /* YMGUI_WIRE_VERSION */
-    uint32_t card_id;         /* card under cursor (focused for click events) */
-    uint32_t kind;            /* enum ymgui_wire_input_mouse_kind */
-    int32_t  button;          /* BUTTON: 0=left,1=right,2=middle,...; else -1 */
-    int32_t  pressed;         /* BUTTON: 1=down 0=up; else 0 */
-    uint32_t buttons_held;    /* POS during drag: bitmask (1<<button) */
-    float    x;               /* card-local pixel */
-    float    y;               /* card-local pixel */
-    float    wheel_dy;        /* WHEEL */
+    uint32_t magic;        /* YMGUI_WIRE_MAGIC_INPUT_MOUSE */
+    uint32_t version;      /* YMGUI_WIRE_VERSION */
+    uint32_t card_id;      /* card under cursor (focused for click events) */
+    uint32_t kind;         /* enum ymgui_wire_input_mouse_kind */
+    int32_t button;        /* BUTTON: 0=left,1=right,2=middle,...; else -1 */
+    int32_t pressed;       /* BUTTON: 1=down 0=up; else 0 */
+    uint32_t buttons_held; /* POS during drag: bitmask (1<<button) */
+    float x;               /* card-local pixel */
+    float y;               /* card-local pixel */
+    float wheel_dy;        /* WHEEL */
     uint32_t _pad0;
 };
 
@@ -311,12 +311,12 @@ struct ymgui_wire_input_mouse {
  * The client uses (width, height) as DisplaySize for that card's
  * ImGuiContext. */
 struct ymgui_wire_input_resize {
-    uint32_t magic;           /* YMGUI_WIRE_MAGIC_INPUT_RESIZE */
-    uint32_t version;         /* YMGUI_WIRE_VERSION */
+    uint32_t magic;   /* YMGUI_WIRE_MAGIC_INPUT_RESIZE */
+    uint32_t version; /* YMGUI_WIRE_VERSION */
     uint32_t card_id;
     uint32_t _pad0;
-    float    width;           /* pixels */
-    float    height;          /* pixels */
+    float width;  /* pixels */
+    float height; /* pixels */
 };
 
 /* Focus transition for a card. Click-focus model: the focused card
@@ -325,10 +325,10 @@ struct ymgui_wire_input_resize {
  * event to set its per-card ImGuiContext as current; lost to drain
  * "key up" / "mouse up" on the previously-focused card. */
 struct ymgui_wire_input_focus {
-    uint32_t magic;           /* YMGUI_WIRE_MAGIC_INPUT_FOCUS */
-    uint32_t version;         /* YMGUI_WIRE_VERSION */
+    uint32_t magic;   /* YMGUI_WIRE_MAGIC_INPUT_FOCUS */
+    uint32_t version; /* YMGUI_WIRE_VERSION */
     uint32_t card_id;
-    int32_t  gained;          /* 1 = card gained focus, 0 = lost */
+    int32_t gained; /* 1 = card gained focus, 0 = lost */
 };
 
 /*---------------------------------------------------------------------------
@@ -344,18 +344,18 @@ struct ymgui_wire_input_focus {
  *-------------------------------------------------------------------------*/
 enum ymgui_wire_input_key_kind {
     YMGUI_INPUT_KEY_DOWN = 0,
-    YMGUI_INPUT_KEY_UP   = 1,
-    YMGUI_INPUT_KEY_CHAR = 2,  /* unicode text input (uses codepoint, not key) */
+    YMGUI_INPUT_KEY_UP = 1,
+    YMGUI_INPUT_KEY_CHAR = 2, /* unicode text input (uses codepoint, not key) */
 };
 
 struct ymgui_wire_input_key {
-    uint32_t magic;           /* YMGUI_WIRE_MAGIC_INPUT_KEY */
-    uint32_t version;         /* YMGUI_WIRE_VERSION */
+    uint32_t magic;   /* YMGUI_WIRE_MAGIC_INPUT_KEY */
+    uint32_t version; /* YMGUI_WIRE_VERSION */
     uint32_t card_id;
-    uint32_t kind;            /* enum ymgui_wire_input_key_kind */
-    int32_t  key;              /* GLFW keycode, DOWN/UP only; -1 for CHAR */
-    int32_t  mods;             /* bitmask */
-    uint32_t codepoint;        /* CHAR only; 0 otherwise */
+    uint32_t kind;      /* enum ymgui_wire_input_key_kind */
+    int32_t key;        /* GLFW keycode, DOWN/UP only; -1 for CHAR */
+    int32_t mods;       /* bitmask */
+    uint32_t codepoint; /* CHAR only; 0 otherwise */
     uint32_t _pad0;
 };
 

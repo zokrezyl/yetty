@@ -15,63 +15,73 @@
 #include <string.h>
 
 /* Uniform positions */
-#define U_GRID_SIZE       0
-#define U_CELL_SIZE       1
-#define U_CURSOR_POS      2
-#define U_CURSOR_VISIBLE  3
-#define U_CURSOR_SHAPE    4
-#define U_SCALE           5
-#define U_DEFAULT_FG      6
-#define U_DEFAULT_BG      7
-#define U_FONT_TYPE       8
+#define U_GRID_SIZE 0
+#define U_CELL_SIZE 1
+#define U_CURSOR_POS 2
+#define U_CURSOR_VISIBLE 3
+#define U_CURSOR_SHAPE 4
+#define U_SCALE 5
+#define U_DEFAULT_FG 6
+#define U_DEFAULT_BG 7
+#define U_FONT_TYPE 8
 /* Visual zoom state pushed in from yetty.c. Applied to the incoming pixel
  * position at the start of fs_main — so cell lookup, glyph sampling, and
  * MSDF/SDF math all evaluate at the *transformed* coordinate. That is the
  * only way to zoom without turning the composite into a bitmap blur. */
-#define U_VZ_SCALE        9
-#define U_VZ_OFF          10
+#define U_VZ_SCALE 9
+#define U_VZ_OFF 10
 /* Row offset within the libvterm 2*rows-tall cell buffer that marks the top
  * of the visible screen. Bumped by libvterm on full-screen scroll-up; the
  * shader applies it when computing cell_index so the live window appears in
  * the correct place. */
-#define U_ROOT_ROW        11
-#define U_COUNT           12
+#define U_ROOT_ROW 11
+#define U_COUNT 12
 
 /* Setters */
-static inline void set_grid_size(struct yetty_yrender_gpu_resource_set *rs, float cols, float rows) {
+static inline void set_grid_size(struct yetty_yrender_gpu_resource_set *rs, float cols, float rows)
+{
     rs->uniforms[U_GRID_SIZE].vec2[0] = cols;
     rs->uniforms[U_GRID_SIZE].vec2[1] = rows;
 }
-static inline void set_cell_size(struct yetty_yrender_gpu_resource_set *rs, float w, float h) {
+static inline void set_cell_size(struct yetty_yrender_gpu_resource_set *rs, float w, float h)
+{
     rs->uniforms[U_CELL_SIZE].vec2[0] = w;
     rs->uniforms[U_CELL_SIZE].vec2[1] = h;
 }
-static inline void set_cursor_pos(struct yetty_yrender_gpu_resource_set *rs, float col, float row) {
+static inline void set_cursor_pos(struct yetty_yrender_gpu_resource_set *rs, float col, float row)
+{
     rs->uniforms[U_CURSOR_POS].vec2[0] = col;
     rs->uniforms[U_CURSOR_POS].vec2[1] = row;
 }
-static inline void set_cursor_visible(struct yetty_yrender_gpu_resource_set *rs, float v) {
+static inline void set_cursor_visible(struct yetty_yrender_gpu_resource_set *rs, float v)
+{
     rs->uniforms[U_CURSOR_VISIBLE].f32 = v;
 }
-static inline void set_cursor_shape(struct yetty_yrender_gpu_resource_set *rs, float s) {
+static inline void set_cursor_shape(struct yetty_yrender_gpu_resource_set *rs, float s)
+{
     rs->uniforms[U_CURSOR_SHAPE].f32 = s;
 }
-static inline void set_scale(struct yetty_yrender_gpu_resource_set *rs, float s) {
+static inline void set_scale(struct yetty_yrender_gpu_resource_set *rs, float s)
+{
     rs->uniforms[U_SCALE].f32 = s;
 }
-static inline void set_default_fg(struct yetty_yrender_gpu_resource_set *rs, uint32_t c) {
+static inline void set_default_fg(struct yetty_yrender_gpu_resource_set *rs, uint32_t c)
+{
     rs->uniforms[U_DEFAULT_FG].u32 = c;
 }
-static inline void set_default_bg(struct yetty_yrender_gpu_resource_set *rs, uint32_t c) {
+static inline void set_default_bg(struct yetty_yrender_gpu_resource_set *rs, uint32_t c)
+{
     rs->uniforms[U_DEFAULT_BG].u32 = c;
 }
-static inline void set_visual_zoom(struct yetty_yrender_gpu_resource_set *rs,
-                                   float scale, float off_x, float off_y) {
+static inline void set_visual_zoom(struct yetty_yrender_gpu_resource_set *rs, float scale,
+                                   float off_x, float off_y)
+{
     rs->uniforms[U_VZ_SCALE].f32 = scale;
     rs->uniforms[U_VZ_OFF].vec2[0] = off_x;
     rs->uniforms[U_VZ_OFF].vec2[1] = off_y;
 }
-static inline void set_root_row(struct yetty_yrender_gpu_resource_set *rs, uint32_t r) {
+static inline void set_root_row(struct yetty_yrender_gpu_resource_set *rs, uint32_t r)
+{
     rs->uniforms[U_ROOT_ROW].u32 = r;
 }
 
@@ -80,18 +90,29 @@ static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
 {
     rs->uniform_count = U_COUNT;
 
-    rs->uniforms[U_GRID_SIZE]      = (struct yetty_yrender_uniform){"grid_size",      YETTY_YRENDER_UNIFORM_VEC2};
-    rs->uniforms[U_CELL_SIZE]      = (struct yetty_yrender_uniform){"cell_size",      YETTY_YRENDER_UNIFORM_VEC2};
-    rs->uniforms[U_CURSOR_POS]     = (struct yetty_yrender_uniform){"cursor_pos",     YETTY_YRENDER_UNIFORM_VEC2};
-    rs->uniforms[U_CURSOR_VISIBLE] = (struct yetty_yrender_uniform){"cursor_visible", YETTY_YRENDER_UNIFORM_F32};
-    rs->uniforms[U_CURSOR_SHAPE]   = (struct yetty_yrender_uniform){"cursor_shape",   YETTY_YRENDER_UNIFORM_F32};
-    rs->uniforms[U_SCALE]          = (struct yetty_yrender_uniform){"scale",          YETTY_YRENDER_UNIFORM_F32};
-    rs->uniforms[U_DEFAULT_FG]     = (struct yetty_yrender_uniform){"default_fg",     YETTY_YRENDER_UNIFORM_U32};
-    rs->uniforms[U_DEFAULT_BG]     = (struct yetty_yrender_uniform){"default_bg",     YETTY_YRENDER_UNIFORM_U32};
-    rs->uniforms[U_FONT_TYPE]     = (struct yetty_yrender_uniform){"font_type",     YETTY_YRENDER_UNIFORM_U32};
-    rs->uniforms[U_VZ_SCALE]      = (struct yetty_yrender_uniform){"visual_zoom_scale",  YETTY_YRENDER_UNIFORM_F32};
-    rs->uniforms[U_VZ_OFF]        = (struct yetty_yrender_uniform){"visual_zoom_off",    YETTY_YRENDER_UNIFORM_VEC2};
-    rs->uniforms[U_ROOT_ROW]      = (struct yetty_yrender_uniform){"root_row",           YETTY_YRENDER_UNIFORM_U32};
+    rs->uniforms[U_GRID_SIZE] =
+        (struct yetty_yrender_uniform){"grid_size", YETTY_YRENDER_UNIFORM_VEC2};
+    rs->uniforms[U_CELL_SIZE] =
+        (struct yetty_yrender_uniform){"cell_size", YETTY_YRENDER_UNIFORM_VEC2};
+    rs->uniforms[U_CURSOR_POS] =
+        (struct yetty_yrender_uniform){"cursor_pos", YETTY_YRENDER_UNIFORM_VEC2};
+    rs->uniforms[U_CURSOR_VISIBLE] =
+        (struct yetty_yrender_uniform){"cursor_visible", YETTY_YRENDER_UNIFORM_F32};
+    rs->uniforms[U_CURSOR_SHAPE] =
+        (struct yetty_yrender_uniform){"cursor_shape", YETTY_YRENDER_UNIFORM_F32};
+    rs->uniforms[U_SCALE] = (struct yetty_yrender_uniform){"scale", YETTY_YRENDER_UNIFORM_F32};
+    rs->uniforms[U_DEFAULT_FG] =
+        (struct yetty_yrender_uniform){"default_fg", YETTY_YRENDER_UNIFORM_U32};
+    rs->uniforms[U_DEFAULT_BG] =
+        (struct yetty_yrender_uniform){"default_bg", YETTY_YRENDER_UNIFORM_U32};
+    rs->uniforms[U_FONT_TYPE] =
+        (struct yetty_yrender_uniform){"font_type", YETTY_YRENDER_UNIFORM_U32};
+    rs->uniforms[U_VZ_SCALE] =
+        (struct yetty_yrender_uniform){"visual_zoom_scale", YETTY_YRENDER_UNIFORM_F32};
+    rs->uniforms[U_VZ_OFF] =
+        (struct yetty_yrender_uniform){"visual_zoom_off", YETTY_YRENDER_UNIFORM_VEC2};
+    rs->uniforms[U_ROOT_ROW] =
+        (struct yetty_yrender_uniform){"root_row", YETTY_YRENDER_UNIFORM_U32};
 
     set_scale(rs, 1.0f);
     set_cursor_shape(rs, 1.0f);
@@ -181,22 +202,20 @@ struct yetty_yterm_terminal_text_layer {
 
 /* Forward declarations */
 static void text_layer_destroy(struct yetty_yterm_terminal_layer *self);
-static struct yetty_ycore_void_result
-text_layer_write(struct yetty_yterm_terminal_layer *self,
-                 int osc_code, const char *data, size_t len);
-static struct yetty_ycore_void_result
-text_layer_resize_grid(struct yetty_yterm_terminal_layer *self,
-                       struct grid_size grid_size);
+static struct yetty_ycore_void_result text_layer_write(struct yetty_yterm_terminal_layer *self,
+                                                       int osc_code, const char *data, size_t len);
+static struct yetty_ycore_void_result text_layer_resize_grid(
+    struct yetty_yterm_terminal_layer *self, struct grid_size grid_size);
 static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_set(
     const struct yetty_yterm_terminal_layer *self);
 static int text_layer_on_key(struct yetty_yterm_terminal_layer *self, int key, int mods);
-static int text_layer_on_char(struct yetty_yterm_terminal_layer *self, uint32_t codepoint, int mods);
-static struct yetty_ycore_void_result text_layer_render(
-    struct yetty_yterm_terminal_layer *self, struct yetty_yrender_target *target);
-static uint32_t text_layer_get_live_anchor(
-    const struct yetty_yterm_terminal_layer *self);
-static void text_layer_set_view_top(struct yetty_yterm_terminal_layer *self,
-                                    int active, uint32_t view_top_total_idx);
+static int text_layer_on_char(struct yetty_yterm_terminal_layer *self, uint32_t codepoint,
+                              int mods);
+static struct yetty_ycore_void_result text_layer_render(struct yetty_yterm_terminal_layer *self,
+                                                        struct yetty_yrender_target *target);
+static uint32_t text_layer_get_live_anchor(const struct yetty_yterm_terminal_layer *self);
+static void text_layer_set_view_top(struct yetty_yterm_terminal_layer *self, int active,
+                                    uint32_t view_top_total_idx);
 static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer);
 
 /* VTerm callbacks */
@@ -207,13 +226,14 @@ static int on_sb_popline(int cols, VTermScreenCell *cells, void *user);
 static int on_settermprop(VTermProp prop, VTermValue *val, void *user);
 
 /* Glyph resolver — called by vterm for every codepoint */
-static VTermResolvedGlyph resolve_glyph(const uint32_t *chars, int count,
-                                         int bold, int italic, void *user)
+static VTermResolvedGlyph resolve_glyph(const uint32_t *chars, int count, int bold, int italic,
+                                        void *user)
 {
     struct yetty_yterm_terminal_text_layer *text_layer = user;
     VTermResolvedGlyph result = {0, 0};
 
-    ydebug("resolve_glyph ENTER: count=%d cp=U+%04X bold=%d italic=%d", count, count > 0 ? chars[0] : 0u, bold, italic);
+    ydebug("resolve_glyph ENTER: count=%d cp=U+%04X bold=%d italic=%d", count,
+           count > 0 ? chars[0] : 0u, bold, italic);
 
     if (count == 0) {
         ydebug("resolve_glyph EXIT early: count=0");
@@ -227,8 +247,7 @@ static VTermResolvedGlyph resolve_glyph(const uint32_t *chars, int count,
     if (yetty_shader_glyph_codepoint_in_range(chars[0])) {
         result.glyph_index = yetty_shader_glyph_id_from_codepoint(chars[0]);
         result.font_type = 0;
-        ydebug("resolve_glyph SHADER: U+%04X -> glyph_index=0x%08X",
-               chars[0], result.glyph_index);
+        ydebug("resolve_glyph SHADER: U+%04X -> glyph_index=0x%08X", chars[0], result.glyph_index);
         return result;
     }
 
@@ -238,16 +257,22 @@ static VTermResolvedGlyph resolve_glyph(const uint32_t *chars, int count,
     }
 
     enum yetty_font_ms_style style = YETTY_YFONT_MS_STYLE_REGULAR;
-    if (bold && italic)      style = YETTY_YFONT_MS_STYLE_BOLD_ITALIC;
-    else if (bold)           style = YETTY_YFONT_MS_STYLE_BOLD;
-    else if (italic)         style = YETTY_YFONT_MS_STYLE_ITALIC;
+    if (bold && italic) {
+        style = YETTY_YFONT_MS_STYLE_BOLD_ITALIC;
+    } else if (bold) {
+        style = YETTY_YFONT_MS_STYLE_BOLD;
+    } else if (italic) {
+        style = YETTY_YFONT_MS_STYLE_ITALIC;
+    }
 
-    struct uint32_result glyph_res = text_layer->font->ops->get_glyph_index_styled(
-        text_layer->font, chars[0], style);
-    if (YETTY_IS_OK(glyph_res))
+    struct uint32_result glyph_res =
+        text_layer->font->ops->get_glyph_index_styled(text_layer->font, chars[0], style);
+    if (YETTY_IS_OK(glyph_res)) {
         result.glyph_index = glyph_res.value;
-    else
-        ydebug("resolve_glyph: get_glyph_index_styled ERR for U+%04X: %s", chars[0], glyph_res.error.msg);
+    } else {
+        ydebug("resolve_glyph: get_glyph_index_styled ERR for U+%04X: %s", chars[0],
+               glyph_res.error.msg);
+    }
     result.font_type = 0;
 
     ydebug("resolve_glyph EXIT: U+%04X -> glyph_index=%u", chars[0], result.glyph_index);
@@ -268,8 +293,7 @@ static int text_layer_is_empty(const struct yetty_yterm_terminal_layer *self)
  * O(1) amortised; eviction is only entered after lines_cap hits max_lines.
  *===========================================================================*/
 
-static void sb_arena_init(struct yetty_yterm_text_sb_arena *a,
-                          uint32_t max_lines)
+static void sb_arena_init(struct yetty_yterm_text_sb_arena *a, uint32_t max_lines)
 {
     memset(a, 0, sizeof(*a));
     a->max_lines = max_lines ? max_lines : 1;
@@ -285,8 +309,9 @@ static void sb_arena_destroy(struct yetty_yterm_text_sb_arena *a)
 /* Drop the oldest line, freeing its bytes from the cells ring. */
 static void sb_arena_drop_oldest(struct yetty_yterm_text_sb_arena *a)
 {
-    if (a->lines_count == 0)
+    if (a->lines_count == 0) {
         return;
+    }
     size_t bytes = (size_t)a->lines[a->lines_tail].cols * sizeof(VTermScreenCell);
     a->cells_tail = (a->cells_tail + bytes) % a->cells_cap;
     a->cells_used -= bytes;
@@ -297,8 +322,9 @@ static void sb_arena_drop_oldest(struct yetty_yterm_text_sb_arena *a)
 /* Drop the newest line. Used by pop. */
 static void sb_arena_drop_newest(struct yetty_yterm_text_sb_arena *a)
 {
-    if (a->lines_count == 0)
+    if (a->lines_count == 0) {
         return;
+    }
     a->lines_head = (a->lines_head + a->lines_cap - 1) % a->lines_cap;
     size_t bytes = (size_t)a->lines[a->lines_head].cols * sizeof(VTermScreenCell);
     a->cells_head = (a->cells_head + a->cells_cap - bytes) % a->cells_cap;
@@ -307,8 +333,8 @@ static void sb_arena_drop_newest(struct yetty_yterm_text_sb_arena *a)
 }
 
 /* Read cols cells from the ring at byte offset into dst, handling wrap. */
-static void sb_arena_read(const struct yetty_yterm_text_sb_arena *a,
-                          size_t offset, int cols, VTermScreenCell *dst)
+static void sb_arena_read(const struct yetty_yterm_text_sb_arena *a, size_t offset, int cols,
+                          VTermScreenCell *dst)
 {
     size_t bytes = (size_t)cols * sizeof(VTermScreenCell);
     if (offset + bytes <= a->cells_cap) {
@@ -321,28 +347,30 @@ static void sb_arena_read(const struct yetty_yterm_text_sb_arena *a,
 }
 
 /* Resolve logical index (0=oldest) to a descriptor pointer. */
-static const struct yetty_yterm_text_sb_line_rec *
-sb_arena_peek(const struct yetty_yterm_text_sb_arena *a, uint32_t i)
+static const struct yetty_yterm_text_sb_line_rec *sb_arena_peek(
+    const struct yetty_yterm_text_sb_arena *a, uint32_t i)
 {
-    if (i >= a->lines_count)
+    if (i >= a->lines_count) {
         return NULL;
+    }
     return &a->lines[(a->lines_tail + i) % a->lines_cap];
 }
 
 /* Push one line. Returns 1 on success. */
-static int sb_arena_push(struct yetty_yterm_text_sb_arena *a,
-                         const VTermScreenCell *src, int cols)
+static int sb_arena_push(struct yetty_yterm_text_sb_arena *a, const VTermScreenCell *src, int cols)
 {
-    if (cols <= 0)
+    if (cols <= 0) {
         return 1;
+    }
     size_t bytes = (size_t)cols * sizeof(VTermScreenCell);
 
     /* Growth phase: extend lines[] up to max_lines. The live range is
      * always linear in this phase (lines_tail = 0), so realloc preserves it. */
     if (a->lines_count >= a->lines_cap && a->lines_cap < a->max_lines) {
         uint32_t new_cap = a->lines_cap == 0 ? 256 : a->lines_cap * 2;
-        if (new_cap > a->max_lines)
+        if (new_cap > a->max_lines) {
             new_cap = a->max_lines;
+        }
         struct yetty_yterm_text_sb_line_rec *grown =
             realloc(a->lines, (size_t)new_cap * sizeof(*grown));
         if (!grown) {
@@ -355,11 +383,11 @@ static int sb_arena_push(struct yetty_yterm_text_sb_arena *a,
 
     /* Growth phase: extend cells[] until the new line fits. Same linearity
      * argument — cells_tail = 0 so realloc keeps the range valid. */
-    while (a->cells_used + bytes > a->cells_cap &&
-           a->lines_cap < a->max_lines) {
+    while (a->cells_used + bytes > a->cells_cap && a->lines_cap < a->max_lines) {
         size_t new_cap = a->cells_cap == 0 ? 64 * 1024 : a->cells_cap * 2;
-        while (new_cap < a->cells_used + bytes)
+        while (new_cap < a->cells_used + bytes) {
             new_cap *= 2;
+        }
         uint8_t *grown = realloc(a->cells, new_cap);
         if (!grown) {
             yerror("sb_arena: cells realloc failed (%zu)", new_cap);
@@ -372,8 +400,7 @@ static int sb_arena_push(struct yetty_yterm_text_sb_arena *a,
     /* Steady phase: evict oldest until lines[] has a free slot and cells[]
      * has room. If a single line exceeds the entire cells_cap (extreme
      * resize), one-time grow rather than dropping data silently. */
-    while (a->lines_count >= a->lines_cap ||
-           a->cells_used + bytes > a->cells_cap) {
+    while (a->lines_count >= a->lines_cap || a->cells_used + bytes > a->cells_cap) {
         if (a->lines_count == 0) {
             uint8_t *grown = realloc(a->cells, bytes);
             if (!grown) {
@@ -408,11 +435,11 @@ static int sb_arena_push(struct yetty_yterm_text_sb_arena *a,
 
 /* Pop newest line. Copies up to copy_cols cells into dst. Returns the number
  * of cells copied (0 on empty). */
-static int sb_arena_pop(struct yetty_yterm_text_sb_arena *a,
-                        VTermScreenCell *dst, int copy_cols)
+static int sb_arena_pop(struct yetty_yterm_text_sb_arena *a, VTermScreenCell *dst, int copy_cols)
 {
-    if (a->lines_count == 0 || !dst || copy_cols <= 0)
+    if (a->lines_count == 0 || !dst || copy_cols <= 0) {
         return 0;
+    }
     uint32_t newest = (a->lines_head + a->lines_cap - 1) % a->lines_cap;
     int line_cols = a->lines[newest].cols;
     int n = line_cols < copy_cols ? line_cols : copy_cols;
@@ -425,11 +452,11 @@ static int sb_arena_pop(struct yetty_yterm_text_sb_arena *a,
  * scroll more lines than the live screen contains. Without this we'd
  * desync from ypaint's rolling_row_0 (which counts every row of unified
  * scroll history, including space the text screen never had content in). */
-static void push_blank_sb_line(struct yetty_yterm_terminal_text_layer *layer,
-                               int cols)
+static void push_blank_sb_line(struct yetty_yterm_terminal_text_layer *layer, int cols)
 {
-    if (cols <= 0)
+    if (cols <= 0) {
         return;
+    }
     enum { STACK_BLANK_CELLS = 4096 };
     if (cols <= STACK_BLANK_CELLS) {
         VTermScreenCell stack_blanks[STACK_BLANK_CELLS] = {0};
@@ -456,19 +483,20 @@ static void push_blank_sb_line(struct yetty_yterm_terminal_text_layer *layer,
  * Solution: cap the chunk vterm sees at rows-1 (so it always takes the slow,
  * sb-pushing path), and once vterm has emptied the screen, append blank
  * entries directly for the remainder. */
-static struct yetty_ycore_void_result text_layer_scroll(
-    struct yetty_yterm_terminal_layer *self, int lines)
+static struct yetty_ycore_void_result text_layer_scroll(struct yetty_yterm_terminal_layer *self,
+                                                        int lines)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
 
-    ydebug("text_layer_scroll ENTER: lines=%d screen=%p", lines,
-           (void *)text_layer->screen);
+    ydebug("text_layer_scroll ENTER: lines=%d screen=%p", lines, (void *)text_layer->screen);
 
-    if (!text_layer->screen)
+    if (!text_layer->screen) {
         return YETTY_ERR(yetty_ycore_void, "screen is NULL");
-    if (lines <= 0)
+    }
+    if (lines <= 0) {
         return YETTY_OK_VOID();
+    }
 
     int rows = (int)text_layer->base.grid_size.rows;
     int cols = (int)text_layer->base.grid_size.cols;
@@ -488,8 +516,9 @@ static struct yetty_ycore_void_result text_layer_scroll(
     }
 
     int blank_lines = lines - via_vterm;
-    for (int i = 0; i < blank_lines; i++)
+    for (int i = 0; i < blank_lines; i++) {
         push_blank_sb_line(text_layer, cols);
+    }
 
     text_layer->base.dirty = 1;
 
@@ -505,56 +534,53 @@ static void text_layer_set_cursor(struct yetty_yterm_terminal_layer *self, int c
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
 
-    ydebug("text_layer_set_cursor ENTER: col=%d row=%d screen=%p", col, row, (void*)text_layer->screen);
+    ydebug("text_layer_set_cursor ENTER: col=%d row=%d screen=%p", col, row,
+           (void *)text_layer->screen);
 
-    if (!text_layer->screen)
+    if (!text_layer->screen) {
         return;
+    }
 
-    VTermPos pos = { .row = row, .col = col };
+    VTermPos pos = {.row = row, .col = col};
     vterm_screen_set_cursorpos(text_layer->screen, pos);
     text_layer->base.dirty = 1;
 
     ydebug("text_layer_set_cursor EXIT: col=%d row=%d set", col, row);
 }
 
-static struct yetty_ycore_void_result
-text_layer_set_cell_size(struct yetty_yterm_terminal_layer *self,
-                         struct pixel_size cell_size)
+static struct yetty_ycore_void_result text_layer_set_cell_size(
+    struct yetty_yterm_terminal_layer *self, struct pixel_size cell_size)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
-    if (cell_size.width <= 0.0f || cell_size.height <= 0.0f)
+    if (cell_size.width <= 0.0f || cell_size.height <= 0.0f) {
         return YETTY_ERR(yetty_ycore_void, "invalid cell size");
+    }
 
     /* Ask the font to re-rasterize (raster) or update its requested render
      * size (MSDF) FIRST, so get_cell_size() reports something useful if we
      * later want to snap to the font's natural cell. */
-    if (text_layer->font && text_layer->font->ops &&
-        text_layer->font->ops->set_cell_size) {
+    if (text_layer->font && text_layer->font->ops && text_layer->font->ops->set_cell_size) {
         struct yetty_ycore_void_result r =
             text_layer->font->ops->set_cell_size(text_layer->font, cell_size);
-        if (!YETTY_IS_OK(r))
-            ywarn("text_layer_set_cell_size: font set_cell_size failed: %s",
-                  r.error.msg);
+        if (!YETTY_IS_OK(r)) {
+            ywarn("text_layer_set_cell_size: font set_cell_size failed: %s", r.error.msg);
+        }
     }
 
     self->cell_size = cell_size;
     /* Push to the GPU uniform the shader actually reads. Keeping base.cell_size
      * in sync without this is invisible to the shader. */
     set_cell_size(&text_layer->rs, cell_size.width, cell_size.height);
-    text_layer->rs.pixel_size.width =
-        (float)self->grid_size.cols * cell_size.width;
-    text_layer->rs.pixel_size.height =
-        (float)self->grid_size.rows * cell_size.height;
+    text_layer->rs.pixel_size.width = (float)self->grid_size.cols * cell_size.width;
+    text_layer->rs.pixel_size.height = (float)self->grid_size.rows * cell_size.height;
     self->dirty = 1;
-    ydebug("text_layer_set_cell_size: %.1fx%.1f",
-           cell_size.width, cell_size.height);
+    ydebug("text_layer_set_cell_size: %.1fx%.1f", cell_size.width, cell_size.height);
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result
-text_layer_set_visual_zoom(struct yetty_yterm_terminal_layer *self,
-                           float scale, float off_x, float off_y)
+static struct yetty_ycore_void_result text_layer_set_visual_zoom(
+    struct yetty_yterm_terminal_layer *self, float scale, float off_x, float off_y)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
@@ -601,7 +627,9 @@ static VTermScreenCallbacks screen_callbacks = {
 static int on_settermprop(VTermProp prop, VTermValue *val, void *user)
 {
     struct yetty_yterm_terminal_text_layer *layer = user;
-    if (!layer || !val) return 1;
+    if (!layer || !val) {
+        return 1;
+    }
 
     int changed = 0;
     if (prop == VTERM_PROP_CARDCLICK) {
@@ -620,21 +648,17 @@ static int on_settermprop(VTermProp prop, VTermValue *val, void *user)
         /* libvterm has already swapped its internal buffer pointer; refresh
          * our GPU-side pointer so the next render samples the right one,
          * and notify the terminal so the other layers can save/restore. */
-        layer->rs.buffers[0].data =
-            (uint8_t *)vterm_screen_get_buffer(layer->screen);
-        layer->rs.buffers[0].size =
-            vterm_screen_get_buffer_size(layer->screen);
+        layer->rs.buffers[0].data = (uint8_t *)vterm_screen_get_buffer(layer->screen);
+        layer->rs.buffers[0].size = vterm_screen_get_buffer_size(layer->screen);
         layer->rs.buffers[0].dirty = 1;
         layer->base.dirty = 1;
         if (layer->base.alt_screen_fn) {
-            layer->base.alt_screen_fn(val->boolean ? 1 : 0,
-                                      layer->base.alt_screen_userdata);
+            layer->base.alt_screen_fn(val->boolean ? 1 : 0, layer->base.alt_screen_userdata);
         }
     }
 
     if (changed && layer->base.mouse_sub_fn) {
-        layer->base.mouse_sub_fn(layer->mouse_click_subscribed,
-                                 layer->mouse_move_subscribed,
+        layer->base.mouse_sub_fn(layer->mouse_click_subscribed, layer->mouse_move_subscribed,
                                  layer->base.mouse_sub_userdata);
     }
     return 1;
@@ -652,15 +676,10 @@ static void vterm_output_callback(const char *data, size_t len, void *user)
 }
 
 struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
-    uint32_t cols, uint32_t rows,
-    const struct yetty_context *context,
-    yetty_yterm_pty_write_fn pty_write_fn,
-    void *pty_write_userdata,
-    yetty_yterm_request_render_fn request_render_fn,
-    void *request_render_userdata,
-    yetty_yterm_scroll_fn scroll_fn,
-    void *scroll_userdata,
-    yetty_yterm_cursor_fn cursor_fn,
+    uint32_t cols, uint32_t rows, const struct yetty_context *context,
+    yetty_yterm_pty_write_fn pty_write_fn, void *pty_write_userdata,
+    yetty_yterm_request_render_fn request_render_fn, void *request_render_userdata,
+    yetty_yterm_scroll_fn scroll_fn, void *scroll_userdata, yetty_yterm_cursor_fn cursor_fn,
     void *cursor_userdata)
 {
     struct yetty_yterm_terminal_text_layer *text_layer;
@@ -671,8 +690,9 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
     char shader_path[512];
     snprintf(shader_path, sizeof(shader_path), "%s/text-layer.wgsl", shaders_dir);
     struct yetty_ycore_buffer_result shader_res = yetty_ycore_read_file(shader_path);
-    if (YETTY_IS_ERR(shader_res))
+    if (YETTY_IS_ERR(shader_res)) {
         return YETTY_ERR(yetty_yterm_terminal_layer, shader_res.error.msg);
+    }
 
     text_layer = calloc(1, sizeof(struct yetty_yterm_terminal_text_layer));
     if (!text_layer) {
@@ -682,9 +702,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
 
     /* Initialise the scrollback arena with the configured max-lines cap. */
     sb_arena_init(&text_layer->sb,
-                  config->ops->scrollback_lines
-                      ? config->ops->scrollback_lines(config)
-                      : 10000);
+                  config->ops->scrollback_lines ? config->ops->scrollback_lines(config) : 10000);
 
     text_layer->shader_code = shader_res.value;
     text_layer->base.ops = &text_layer_ops;
@@ -708,46 +726,48 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
      * actually ships. Raster bitmaps look fuzzy under Ctrl+Scroll (shader-level
      * zoom just stretches the atlas); MSDF re-evaluates per fragment and
      * stays crisp at any scale. */
-    const char *render_method = config->ops->get_string(
-        config, YETTY_YCONFIG_KEY_TERMINAL_FONT_RENDER_METHOD, "msdf");
+    const char *render_method =
+        config->ops->get_string(config, YETTY_YCONFIG_KEY_TERMINAL_FONT_RENDER_METHOD, "msdf");
     ydebug("text_layer: render_method='%s'", render_method);
     struct yetty_font_ms_font_result font_res;
     if (strcmp(render_method, "msdf") == 0) {
         const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
         const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
         const char *font_family = config->ops->font_family(config);
-        if (!font_family || strcmp(font_family, "default") == 0)
+        if (!font_family || strcmp(font_family, "default") == 0) {
             font_family = "DejaVuSansMNerdFontMono";
+        }
         char cdb_path[512];
         char shader_path[512];
-        snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb",
-                 fonts_dir, font_family);
+        snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir,
+                 font_family);
         snprintf(shader_path, sizeof(shader_path), "%s/ms-msdf-font.wgsl", shaders_dir);
         ydebug("text_layer: ms-msdf cdb_path='%s' shader='%s'", cdb_path, shader_path);
-        float msdf_font_size = (float)config->ops->get_int(
-            config, "terminal/text-layer/font/size", 14);
+        float msdf_font_size =
+            (float)config->ops->get_int(config, "terminal/text-layer/font/size", 14);
 
         /* Cell padding around the glyph, fractions of glyph dim. Default 0
          * = cell exactly wraps the glyph extent, which fixes the "glyph too
          * small in cell" feel introduced by the underscore fix. */
         struct yetty_font_ms_padding padding = {
-            .left   = strtof(config->ops->get_string(
-                config, "terminal/text-layer/font/padding/left",   "0.0"), NULL),
-            .right  = strtof(config->ops->get_string(
-                config, "terminal/text-layer/font/padding/right",  "0.0"), NULL),
-            .top    = strtof(config->ops->get_string(
-                config, "terminal/text-layer/font/padding/top",    "0.0"), NULL),
-            .bottom = strtof(config->ops->get_string(
-                config, "terminal/text-layer/font/padding/bottom", "0.0"), NULL),
+            .left = strtof(
+                config->ops->get_string(config, "terminal/text-layer/font/padding/left", "0.0"),
+                NULL),
+            .right = strtof(
+                config->ops->get_string(config, "terminal/text-layer/font/padding/right", "0.0"),
+                NULL),
+            .top = strtof(
+                config->ops->get_string(config, "terminal/text-layer/font/padding/top", "0.0"),
+                NULL),
+            .bottom = strtof(
+                config->ops->get_string(config, "terminal/text-layer/font/padding/bottom", "0.0"),
+                NULL),
         };
 
-        font_res = yetty_font_ms_msdf_font_create(cdb_path, shader_path,
-                                                  msdf_font_size, padding);
+        font_res = yetty_font_ms_msdf_font_create(cdb_path, shader_path, msdf_font_size, padding);
     } else {
-        font_res = yetty_font_ms_raster_font_create(
-            config,
-            text_layer->base.cell_size.width,
-            text_layer->base.cell_size.height);
+        font_res = yetty_font_ms_raster_font_create(config, text_layer->base.cell_size.width,
+                                                    text_layer->base.cell_size.height);
     }
     if (!YETTY_IS_OK(font_res)) {
         yerror("text_layer: font creation failed: %s", font_res.error.msg);
@@ -766,8 +786,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
     }
     text_layer->base.cell_size.width = cs_res.value.width;
     text_layer->base.cell_size.height = cs_res.value.height;
-    ydebug("text_layer: cell_size from font: %.1fx%.1f",
-           cs_res.value.width, cs_res.value.height);
+    ydebug("text_layer: cell_size from font: %.1fx%.1f", cs_res.value.width, cs_res.value.height);
 
     text_layer->vterm = vterm_new((int)rows, (int)cols);
     if (!text_layer->vterm) {
@@ -795,7 +814,8 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
 
     init_uniforms(&text_layer->rs);
     set_grid_size(&text_layer->rs, (float)cols, (float)rows);
-    set_cell_size(&text_layer->rs, text_layer->base.cell_size.width, text_layer->base.cell_size.height);
+    set_cell_size(&text_layer->rs, text_layer->base.cell_size.width,
+                  text_layer->base.cell_size.height);
     text_layer->rs.uniforms[U_FONT_TYPE].u32 = text_layer->font_type;
 
     /* Set pixel size for render target */
@@ -803,10 +823,12 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
     text_layer->rs.pixel_size.height = (float)rows * text_layer->base.cell_size.height;
 
     yetty_yrender_shader_code_set(&text_layer->rs.shader,
-        (const char *)text_layer->shader_code.data, text_layer->shader_code.size);
+                                  (const char *)text_layer->shader_code.data,
+                                  text_layer->shader_code.size);
 
-    if (text_layer->font)
+    if (text_layer->font) {
         text_layer->rs.children_count = 1;
+    }
 
     /* Initial buffer setup - point to vterm buffer directly.
      * Cast away const is safe: buffer is readonly, GPU only reads from it. */
@@ -829,8 +851,9 @@ static void text_layer_destroy(struct yetty_yterm_terminal_layer *self)
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
 
-    if (text_layer->vterm)
+    if (text_layer->vterm) {
         vterm_free(text_layer->vterm);
+    }
 
     sb_arena_destroy(&text_layer->sb);
     free(text_layer->view_staging);
@@ -839,16 +862,16 @@ static void text_layer_destroy(struct yetty_yterm_terminal_layer *self)
     free(text_layer);
 }
 
-static struct yetty_ycore_void_result
-text_layer_write(struct yetty_yterm_terminal_layer *self,
-                 int osc_code, const char *data, size_t len)
+static struct yetty_ycore_void_result text_layer_write(struct yetty_yterm_terminal_layer *self,
+                                                       int osc_code, const char *data, size_t len)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
     (void)osc_code; /* text-layer is the default sink — no OSC dispatch */
 
-    if (!text_layer->vterm)
+    if (!text_layer->vterm) {
         return YETTY_ERR(yetty_ycore_void, "vterm is NULL");
+    }
 
     if (len > 0) {
         char hex[256] = {0};
@@ -857,49 +880,57 @@ text_layer_write(struct yetty_yterm_terminal_layer *self,
         size_t hoff = 0, aoff = 0;
         for (size_t i = 0; i < dump_n; i++) {
             unsigned char c = (unsigned char)data[i];
-            if (hoff + 4 < sizeof(hex))
+            if (hoff + 4 < sizeof(hex)) {
                 hoff += (size_t)snprintf(hex + hoff, sizeof(hex) - hoff, "%02x ", c);
-            if (aoff + 2 < sizeof(asc))
+            }
+            if (aoff + 2 < sizeof(asc)) {
                 asc[aoff++] = (c >= 0x20 && c < 0x7f) ? (char)c : '.';
+            }
         }
-        ydebug("text_layer_write: len=%zu dump=[%s] ascii=[%s] -> vterm_input_write",
-               len, hex, asc);
+        ydebug("text_layer_write: len=%zu dump=[%s] ascii=[%s] -> vterm_input_write", len, hex,
+               asc);
         vterm_input_write(text_layer->vterm, data, len);
-        ydebug("text_layer_write: vterm_input_write returned; dirty=%d",
-               text_layer->base.dirty);
+        ydebug("text_layer_write: vterm_input_write returned; dirty=%d", text_layer->base.dirty);
     }
 
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result
-text_layer_resize_grid(struct yetty_yterm_terminal_layer *self,
-                       struct grid_size grid_size) {
-  struct yetty_yterm_terminal_text_layer *text_layer =
-      container_of(self, struct yetty_yterm_terminal_text_layer, base);
+static struct yetty_ycore_void_result text_layer_resize_grid(
+    struct yetty_yterm_terminal_layer *self, struct grid_size grid_size)
+{
+    struct yetty_yterm_terminal_text_layer *text_layer =
+        container_of(self, struct yetty_yterm_terminal_text_layer, base);
 
-  if (!text_layer->vterm)
-    return YETTY_ERR(yetty_ycore_void, "vterm is NULL");
+    if (!text_layer->vterm) {
+        return YETTY_ERR(yetty_ycore_void, "vterm is NULL");
+    }
 
-  vterm_set_size(text_layer->vterm, (int)grid_size.rows, (int)grid_size.cols);
-  self->grid_size = grid_size;
-  set_grid_size(&text_layer->rs, (float)grid_size.cols, (float)grid_size.rows);
+    vterm_set_size(text_layer->vterm, (int)grid_size.rows, (int)grid_size.cols);
+    self->grid_size = grid_size;
+    set_grid_size(&text_layer->rs, (float)grid_size.cols, (float)grid_size.rows);
 
-  /* Update pixel size */
-  text_layer->rs.pixel_size.width = (float)grid_size.cols * self->cell_size.width;
-  text_layer->rs.pixel_size.height = (float)grid_size.rows * self->cell_size.height;
+    /* Update pixel size */
+    text_layer->rs.pixel_size.width = (float)grid_size.cols * self->cell_size.width;
+    text_layer->rs.pixel_size.height = (float)grid_size.rows * self->cell_size.height;
 
-  self->dirty = 1;
-  return YETTY_OK_VOID();
+    self->dirty = 1;
+    return YETTY_OK_VOID();
 }
 
 /* Convert GLFW modifier flags to VTerm modifier flags */
 static VTermModifier glfw_mods_to_vterm(int mods)
 {
     VTermModifier vt_mod = VTERM_MOD_NONE;
-    if (mods & 0x0001) vt_mod |= VTERM_MOD_SHIFT;
-    if (mods & 0x0002) vt_mod |= VTERM_MOD_CTRL;
-    if (mods & 0x0004) vt_mod |= VTERM_MOD_ALT;
+    if (mods & 0x0001) {
+        vt_mod |= VTERM_MOD_SHIFT;
+    }
+    if (mods & 0x0002) {
+        vt_mod |= VTERM_MOD_CTRL;
+    }
+    if (mods & 0x0004) {
+        vt_mod |= VTERM_MOD_ALT;
+    }
     return vt_mod;
 }
 
@@ -907,33 +938,60 @@ static VTermModifier glfw_mods_to_vterm(int mods)
 static VTermKey glfw_key_to_vterm(int key)
 {
     switch (key) {
-    case 257: return VTERM_KEY_ENTER;      /* GLFW_KEY_ENTER */
-    case 258: return VTERM_KEY_TAB;        /* GLFW_KEY_TAB */
-    case 259: return VTERM_KEY_BACKSPACE;  /* GLFW_KEY_BACKSPACE */
-    case 260: return VTERM_KEY_INS;        /* GLFW_KEY_INSERT */
-    case 261: return VTERM_KEY_DEL;        /* GLFW_KEY_DELETE */
-    case 262: return VTERM_KEY_RIGHT;      /* GLFW_KEY_RIGHT */
-    case 263: return VTERM_KEY_LEFT;       /* GLFW_KEY_LEFT */
-    case 264: return VTERM_KEY_DOWN;       /* GLFW_KEY_DOWN */
-    case 265: return VTERM_KEY_UP;         /* GLFW_KEY_UP */
-    case 266: return VTERM_KEY_PAGEUP;     /* GLFW_KEY_PAGE_UP */
-    case 267: return VTERM_KEY_PAGEDOWN;   /* GLFW_KEY_PAGE_DOWN */
-    case 268: return VTERM_KEY_HOME;       /* GLFW_KEY_HOME */
-    case 269: return VTERM_KEY_END;        /* GLFW_KEY_END */
-    case 256: return VTERM_KEY_ESCAPE;     /* GLFW_KEY_ESCAPE */
-    case 290: return VTERM_KEY_FUNCTION(1);
-    case 291: return VTERM_KEY_FUNCTION(2);
-    case 292: return VTERM_KEY_FUNCTION(3);
-    case 293: return VTERM_KEY_FUNCTION(4);
-    case 294: return VTERM_KEY_FUNCTION(5);
-    case 295: return VTERM_KEY_FUNCTION(6);
-    case 296: return VTERM_KEY_FUNCTION(7);
-    case 297: return VTERM_KEY_FUNCTION(8);
-    case 298: return VTERM_KEY_FUNCTION(9);
-    case 299: return VTERM_KEY_FUNCTION(10);
-    case 300: return VTERM_KEY_FUNCTION(11);
-    case 301: return VTERM_KEY_FUNCTION(12);
-    default:  return VTERM_KEY_NONE;
+    case 257:
+        return VTERM_KEY_ENTER; /* GLFW_KEY_ENTER */
+    case 258:
+        return VTERM_KEY_TAB; /* GLFW_KEY_TAB */
+    case 259:
+        return VTERM_KEY_BACKSPACE; /* GLFW_KEY_BACKSPACE */
+    case 260:
+        return VTERM_KEY_INS; /* GLFW_KEY_INSERT */
+    case 261:
+        return VTERM_KEY_DEL; /* GLFW_KEY_DELETE */
+    case 262:
+        return VTERM_KEY_RIGHT; /* GLFW_KEY_RIGHT */
+    case 263:
+        return VTERM_KEY_LEFT; /* GLFW_KEY_LEFT */
+    case 264:
+        return VTERM_KEY_DOWN; /* GLFW_KEY_DOWN */
+    case 265:
+        return VTERM_KEY_UP; /* GLFW_KEY_UP */
+    case 266:
+        return VTERM_KEY_PAGEUP; /* GLFW_KEY_PAGE_UP */
+    case 267:
+        return VTERM_KEY_PAGEDOWN; /* GLFW_KEY_PAGE_DOWN */
+    case 268:
+        return VTERM_KEY_HOME; /* GLFW_KEY_HOME */
+    case 269:
+        return VTERM_KEY_END; /* GLFW_KEY_END */
+    case 256:
+        return VTERM_KEY_ESCAPE; /* GLFW_KEY_ESCAPE */
+    case 290:
+        return VTERM_KEY_FUNCTION(1);
+    case 291:
+        return VTERM_KEY_FUNCTION(2);
+    case 292:
+        return VTERM_KEY_FUNCTION(3);
+    case 293:
+        return VTERM_KEY_FUNCTION(4);
+    case 294:
+        return VTERM_KEY_FUNCTION(5);
+    case 295:
+        return VTERM_KEY_FUNCTION(6);
+    case 296:
+        return VTERM_KEY_FUNCTION(7);
+    case 297:
+        return VTERM_KEY_FUNCTION(8);
+    case 298:
+        return VTERM_KEY_FUNCTION(9);
+    case 299:
+        return VTERM_KEY_FUNCTION(10);
+    case 300:
+        return VTERM_KEY_FUNCTION(11);
+    case 301:
+        return VTERM_KEY_FUNCTION(12);
+    default:
+        return VTERM_KEY_NONE;
     }
 }
 
@@ -942,8 +1000,9 @@ static int text_layer_on_key(struct yetty_yterm_terminal_layer *self, int key, i
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
 
-    if (!text_layer->vterm)
+    if (!text_layer->vterm) {
         return 0;
+    }
 
     VTermKey vt_key = glfw_key_to_vterm(key);
     if (vt_key != VTERM_KEY_NONE) {
@@ -952,7 +1011,7 @@ static int text_layer_on_key(struct yetty_yterm_terminal_layer *self, int key, i
         ydebug("text_layer_on_key: key=%d vt_key=%d mods=%d", key, (int)vt_key, mods);
         return 1;
     }
-    return 0;  /* Not a special key */
+    return 0; /* Not a special key */
 }
 
 static int text_layer_on_char(struct yetty_yterm_terminal_layer *self, uint32_t codepoint, int mods)
@@ -960,8 +1019,9 @@ static int text_layer_on_char(struct yetty_yterm_terminal_layer *self, uint32_t 
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
 
-    if (!text_layer->vterm)
+    if (!text_layer->vterm) {
         return 0;
+    }
 
     VTermModifier vt_mod = glfw_mods_to_vterm(mods);
     vterm_keyboard_unichar(text_layer->vterm, codepoint, vt_mod);
@@ -973,8 +1033,9 @@ static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_
     const struct yetty_yterm_terminal_layer *self)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
-        (struct yetty_yterm_terminal_text_layer *)
-        ((const char *)self - offsetof(struct yetty_yterm_terminal_text_layer, base));
+        (struct yetty_yterm_terminal_text_layer *)((const char *)self -
+                                                   offsetof(struct yetty_yterm_terminal_text_layer,
+                                                            base));
 
     /* Live mode: GPU reads vterm's buffer directly (zero-copy).
      * Scrollback view: rebuild the stitched buffer every dirty pass — new
@@ -987,41 +1048,39 @@ static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_
         if (text_layer->view_active) {
             text_layer_build_view(text_layer);
             text_layer->rs.buffers[0].data = (uint8_t *)text_layer->view_staging;
-            text_layer->rs.buffers[0].size =
-                (size_t)text_layer->base.grid_size.cols *
-                text_layer->base.grid_size.rows * sizeof(VTermScreenCell);
+            text_layer->rs.buffers[0].size = (size_t)text_layer->base.grid_size.cols *
+                                             text_layer->base.grid_size.rows *
+                                             sizeof(VTermScreenCell);
             /* view_staging is laid out cols*rows starting at row 0, so the
              * shader should NOT apply any root_row offset. */
             set_root_row(&text_layer->rs, 0);
         } else {
-            text_layer->rs.buffers[0].data =
-                (uint8_t *)vterm_screen_get_buffer(text_layer->screen);
-            text_layer->rs.buffers[0].size =
-                vterm_screen_get_buffer_size(text_layer->screen);
+            text_layer->rs.buffers[0].data = (uint8_t *)vterm_screen_get_buffer(text_layer->screen);
+            text_layer->rs.buffers[0].size = vterm_screen_get_buffer_size(text_layer->screen);
             /* libvterm's buffer is allocated 2*rows tall; the live screen
              * starts at row root_row within it. The shader uses this to
              * locate the visible cells. */
             set_root_row(&text_layer->rs,
-                (uint32_t)vterm_screen_get_buffer_root_row(text_layer->screen));
+                         (uint32_t)vterm_screen_get_buffer_root_row(text_layer->screen));
         }
         text_layer->rs.buffers[0].dirty = 1;
     }
 
     /* Update font child pointer */
-    if (text_layer->font && text_layer->font->ops &&
-        text_layer->font->ops->get_gpu_resource_set) {
+    if (text_layer->font && text_layer->font->ops && text_layer->font->ops->get_gpu_resource_set) {
         struct yetty_yrender_gpu_resource_set_result font_rs =
             text_layer->font->ops->get_gpu_resource_set(text_layer->font);
-        if (YETTY_IS_OK(font_rs))
+        if (YETTY_IS_OK(font_rs)) {
             text_layer->rs.children[0] = (struct yetty_yrender_gpu_resource_set *)font_rs.value;
+        }
     }
 
     return YETTY_OK(yetty_yrender_gpu_resource_set, &text_layer->rs);
 }
 
 /* Render layer to target - delegate to render_target */
-static struct yetty_ycore_void_result text_layer_render(
-    struct yetty_yterm_terminal_layer *self, struct yetty_yrender_target *target)
+static struct yetty_ycore_void_result text_layer_render(struct yetty_yterm_terminal_layer *self,
+                                                        struct yetty_yrender_target *target)
 {
     return target->ops->render_layer(target, self);
 }
@@ -1030,24 +1089,29 @@ static struct yetty_ycore_void_result text_layer_render(
  * shader-glyph layer) that need to read the same grid as the text shader.
  * Returns the same pointer text-layer uploads — live screen in normal mode,
  * stitched scrollback view when view_active. */
-void yetty_yterm_terminal_text_layer_get_cells(
-    const struct yetty_yterm_terminal_layer *self,
-    const uint8_t **out_data, size_t *out_size)
+void yetty_yterm_terminal_text_layer_get_cells(const struct yetty_yterm_terminal_layer *self,
+                                               const uint8_t **out_data, size_t *out_size)
 {
-    const struct yetty_yterm_terminal_text_layer *text_layer =
-        container_of((struct yetty_yterm_terminal_layer *)self,
-                     struct yetty_yterm_terminal_text_layer, base);
+    const struct yetty_yterm_terminal_text_layer *text_layer = container_of(
+        (struct yetty_yterm_terminal_layer *)self, struct yetty_yterm_terminal_text_layer, base);
 
     if (text_layer->view_active && text_layer->view_staging) {
-        if (out_data) *out_data = (const uint8_t *)text_layer->view_staging;
-        if (out_size) *out_size = (size_t)text_layer->base.grid_size.cols *
-                                  text_layer->base.grid_size.rows *
-                                  sizeof(VTermScreenCell);
+        if (out_data) {
+            *out_data = (const uint8_t *)text_layer->view_staging;
+        }
+        if (out_size) {
+            *out_size = (size_t)text_layer->base.grid_size.cols * text_layer->base.grid_size.rows *
+                        sizeof(VTermScreenCell);
+        }
         return;
     }
 
-    if (out_data) *out_data = (const uint8_t *)vterm_screen_get_buffer(text_layer->screen);
-    if (out_size) *out_size = vterm_screen_get_buffer_size(text_layer->screen);
+    if (out_data) {
+        *out_data = (const uint8_t *)vterm_screen_get_buffer(text_layer->screen);
+    }
+    if (out_size) {
+        *out_size = vterm_screen_get_buffer_size(text_layer->screen);
+    }
 }
 
 /* VTerm callbacks */
@@ -1055,8 +1119,8 @@ void yetty_yterm_terminal_text_layer_get_cells(
 static int on_damage(VTermRect rect, void *user)
 {
     struct yetty_yterm_terminal_text_layer *text_layer = user;
-    ydebug("on_damage: rect(%d,%d)-(%d,%d) -> dirty=1",
-           rect.start_row, rect.start_col, rect.end_row, rect.end_col);
+    ydebug("on_damage: rect(%d,%d)-(%d,%d) -> dirty=1", rect.start_row, rect.start_col,
+           rect.end_row, rect.end_col);
     text_layer->base.dirty = 1;
     return 1;
 }
@@ -1070,16 +1134,16 @@ static int on_move_cursor(VTermPos pos, VTermPos oldpos, int visible, void *user
      * scrollback view. Only push to the GPU uniform when not in view —
      * while in view the cursor is forced hidden. */
     text_layer->vterm_cursor_visible = visible ? 1.0f : 0.0f;
-    if (!text_layer->view_active)
+    if (!text_layer->view_active) {
         set_cursor_visible(&text_layer->rs, text_layer->vterm_cursor_visible);
+    }
     text_layer->base.dirty = 1;
 
     /* Notify cursor callback */
     if (text_layer->base.cursor_fn) {
         text_layer->base.cursor_fn(
             &text_layer->base,
-            (struct grid_cursor_pos){.cols = (uint32_t)pos.col,
-                                     .rows = (uint32_t)pos.row},
+            (struct grid_cursor_pos){.cols = (uint32_t)pos.col, .rows = (uint32_t)pos.row},
             text_layer->base.cursor_userdata);
     }
     return 1;
@@ -1094,16 +1158,15 @@ static int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user)
      * can be reused immediately. Resizes don't rewrite stored lines. */
     if (cells && cols > 0) {
         sb_arena_push(&text_layer->sb, cells, cols);
-        ydebug("on_sb_pushline: stored line cols=%d sb_count=%u",
-               cols, text_layer->sb.lines_count);
+        ydebug("on_sb_pushline: stored line cols=%d sb_count=%u", cols, text_layer->sb.lines_count);
     }
 
     /* Notify scroll callback - 1 line scrolled down
      * BUT: if in_external_scroll is set, this scroll was triggered by another
      * layer and we should NOT propagate back to avoid double-scroll loop */
     if (text_layer->base.scroll_fn && !text_layer->base.in_external_scroll) {
-        struct yetty_ycore_void_result res = text_layer->base.scroll_fn(
-            &text_layer->base, 1, text_layer->base.scroll_userdata);
+        struct yetty_ycore_void_result res =
+            text_layer->base.scroll_fn(&text_layer->base, 1, text_layer->base.scroll_userdata);
         if (YETTY_IS_ERR(res)) {
             yerror("on_sb_pushline: scroll_fn failed: %s", res.error.msg);
             text_layer->pending_error = res;
@@ -1115,23 +1178,21 @@ static int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user)
 /* Live anchor — count of rows pushed off the top of the screen so far. The
  * terminal converts mouse-wheel deltas relative to this so view_top_total_idx
  * stays absolute and stable as new content keeps arriving during scrollback. */
-static uint32_t text_layer_get_live_anchor(
-    const struct yetty_yterm_terminal_layer *self)
+static uint32_t text_layer_get_live_anchor(const struct yetty_yterm_terminal_layer *self)
 {
-    const struct yetty_yterm_terminal_text_layer *text_layer =
-        container_of((struct yetty_yterm_terminal_layer *)self,
-                     struct yetty_yterm_terminal_text_layer, base);
+    const struct yetty_yterm_terminal_text_layer *text_layer = container_of(
+        (struct yetty_yterm_terminal_layer *)self, struct yetty_yterm_terminal_text_layer, base);
     return text_layer->sb.lines_count;
 }
 
 /* Reallocate view_staging if the requested cell count outgrew capacity.
  * Returns 1 on success. Caller writes cells * sizeof(VTermScreenCell) bytes. */
-static int ensure_view_staging(struct yetty_yterm_terminal_text_layer *layer,
-                               size_t cells)
+static int ensure_view_staging(struct yetty_yterm_terminal_text_layer *layer, size_t cells)
 {
     size_t bytes = cells * sizeof(VTermScreenCell);
-    if (bytes <= layer->view_staging_capacity)
+    if (bytes <= layer->view_staging_capacity) {
         return 1;
+    }
     void *new_buf = realloc(layer->view_staging, bytes);
     if (!new_buf) {
         yerror("ensure_view_staging: realloc(%zu) failed", bytes);
@@ -1154,11 +1215,13 @@ static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer)
 {
     uint32_t cols = layer->base.grid_size.cols;
     uint32_t rows = layer->base.grid_size.rows;
-    if (cols == 0 || rows == 0)
+    if (cols == 0 || rows == 0) {
         return;
+    }
 
-    if (!ensure_view_staging(layer, (size_t)cols * rows))
+    if (!ensure_view_staging(layer, (size_t)cols * rows)) {
         return;
+    }
 
     const VTermScreenCell *live = vterm_screen_get_buffer(layer->screen);
     VTermScreenCell blank;
@@ -1169,24 +1232,25 @@ static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer)
         VTermScreenCell *dst = layer->view_staging + (size_t)gpu_y * cols;
 
         if (total_idx < layer->sb.lines_count) {
-            const struct yetty_yterm_text_sb_line_rec *rec =
-                sb_arena_peek(&layer->sb, total_idx);
+            const struct yetty_yterm_text_sb_line_rec *rec = sb_arena_peek(&layer->sb, total_idx);
             int copy = (rec->cols < (int)cols) ? rec->cols : (int)cols;
             sb_arena_read(&layer->sb, rec->offset, copy, dst);
-            for (int c = copy; c < (int)cols; c++)
+            for (int c = copy; c < (int)cols; c++) {
                 dst[c] = blank;
+            }
         } else if (live) {
             uint32_t live_row = total_idx - layer->sb.lines_count;
             if (live_row < rows) {
-                memcpy(dst, live + (size_t)live_row * cols,
-                       (size_t)cols * sizeof(VTermScreenCell));
+                memcpy(dst, live + (size_t)live_row * cols, (size_t)cols * sizeof(VTermScreenCell));
             } else {
-                for (uint32_t c = 0; c < cols; c++)
+                for (uint32_t c = 0; c < cols; c++) {
                     dst[c] = blank;
+                }
             }
         } else {
-            for (uint32_t c = 0; c < cols; c++)
+            for (uint32_t c = 0; c < cols; c++) {
                 dst[c] = blank;
+            }
         }
     }
 }
@@ -1195,8 +1259,8 @@ static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer)
  * live screen (active=0). When activating, hide the cursor and snap the GPU
  * buffer to the synthetic stitched view; on release, restore the cursor to
  * whatever vterm last reported and re-point the buffer at the live screen. */
-static void text_layer_set_view_top(struct yetty_yterm_terminal_layer *self,
-                                    int active, uint32_t view_top_total_idx)
+static void text_layer_set_view_top(struct yetty_yterm_terminal_layer *self, int active,
+                                    uint32_t view_top_total_idx)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
@@ -1211,8 +1275,9 @@ static void text_layer_set_view_top(struct yetty_yterm_terminal_layer *self,
     }
 
     text_layer->base.dirty = 1;
-    if (text_layer->base.request_render_fn)
+    if (text_layer->base.request_render_fn) {
         text_layer->base.request_render_fn(text_layer->base.request_render_userdata);
+    }
 }
 
 /* vterm asks for a previously-pushed line back, e.g. when the screen grows
@@ -1224,9 +1289,10 @@ static int on_sb_popline(int cols, VTermScreenCell *cells, void *user)
 {
     struct yetty_yterm_terminal_text_layer *text_layer = user;
     int copy_cols = sb_arena_pop(&text_layer->sb, cells, cols);
-    if (copy_cols == 0)
+    if (copy_cols == 0) {
         return 0;
-    ydebug("on_sb_popline: returned %d cols (target=%d) sb_count=%u",
-           copy_cols, cols, text_layer->sb.lines_count);
+    }
+    ydebug("on_sb_popline: returned %d cols (target=%d) sb_count=%u", copy_cols, cols,
+           text_layer->sb.lines_count);
     return 1;
 }

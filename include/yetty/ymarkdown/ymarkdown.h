@@ -26,29 +26,27 @@ extern "C" {
 #endif
 
 struct yetty_ymarkdown_render_config {
-	uint32_t cell_width;
-	uint32_t cell_height;
-	uint32_t width_cells;
-	uint32_t height_cells;
+    uint32_t cell_width;
+    uint32_t cell_height;
+    uint32_t width_cells;
+    uint32_t height_cells;
 };
 
 struct yetty_ymarkdown_render_output {
-	struct yetty_ypaint_core_buffer *buffer;
-	float scene_width;
-	float scene_height;
+    struct yetty_ypaint_core_buffer *buffer;
+    float scene_width;
+    float scene_height;
 };
 
-YETTY_YRESULT_DECLARE(yetty_ymarkdown_render,
-		      struct yetty_ymarkdown_render_output);
+YETTY_YRESULT_DECLARE(yetty_ymarkdown_render, struct yetty_ymarkdown_render_output);
 
 /* Args string honours the same flags as the C++ original:
  *   --font-size=<float>   override derived font size (default: cell_height)
  *   --line-spacing=<float> (default 1.4)
  * Unknown flags are ignored. Pass NULL / 0 to use defaults. */
-struct yetty_ymarkdown_render_result
-yetty_ymarkdown_render(const char *content, size_t content_len,
-		       const char *args, size_t args_len,
-		       const struct yetty_ymarkdown_render_config *config);
+struct yetty_ymarkdown_render_result yetty_ymarkdown_render(
+    const char *content, size_t content_len, const char *args, size_t args_len,
+    const struct yetty_ymarkdown_render_config *config);
 
 #ifdef __cplusplus
 }

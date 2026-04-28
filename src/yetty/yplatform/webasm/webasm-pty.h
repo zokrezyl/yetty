@@ -20,16 +20,16 @@ struct yetty_yconfig;
  * write() sends postMessage to iframe.
  */
 struct webasm_pty {
-	struct yetty_yplatform_pty base;
-	struct webasm_pty_pipe_source pipe_source;
-	uint32_t cols;
-	uint32_t rows;
-	int running;
+    struct yetty_yplatform_pty base;
+    struct webasm_pty_pipe_source pipe_source;
+    uint32_t cols;
+    uint32_t rows;
+    int running;
 };
 
 /* Initialize the PTY */
 struct yetty_ycore_void_result webasm_pty_init(struct webasm_pty *pty,
-					      struct yetty_yconfig *config);
+                                               struct yetty_yconfig *config);
 
 #ifdef __cplusplus
 }

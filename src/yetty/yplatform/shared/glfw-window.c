@@ -14,8 +14,9 @@ GLFWwindow *yetty_yplatform_create_window(int width, int height, const char *tit
 
 void yetty_yplatform_destroy_window(GLFWwindow *window)
 {
-    if (window)
+    if (window) {
         glfwDestroyWindow(window);
+    }
 }
 
 void yetty_yplatform_get_window_size(GLFWwindow *window, int *width, int *height)
@@ -55,6 +56,7 @@ int yetty_yplatform_window_should_close(GLFWwindow *window)
 
 void yetty_yplatform_set_window_title(GLFWwindow *window, const char *title)
 {
-    if (window)
+    if (window) {
         glfwSetWindowTitle(window, title);
+    }
 }

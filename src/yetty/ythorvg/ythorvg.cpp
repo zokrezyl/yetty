@@ -73,7 +73,8 @@ bool engine_acquire() {
 
 void engine_release() {
     std::lock_guard<std::mutex> lock(g_engine_mutex);
-    if (g_engine_refcount <= 0) return;
+    if (g_engine_refcount <= 0) { return;
+}
     if (--g_engine_refcount == 0) {
         tvg::Initializer::term();
         ydebug("ythorvg: engine terminated");
@@ -95,10 +96,12 @@ struct yetty_ythorvg_renderer {
 namespace {
 
 void render_once(yetty_ythorvg_renderer* r) {
-    if (!r || !r->picture || !r->render_method) return;
+    if (!r || !r->picture || !r->render_method) { return;
+}
 
     auto* paintImpl = PAINT(r->picture);
-    if (!paintImpl) return;
+    if (!paintImpl) { return;
+}
 
     r->render_method->preRender();
 
@@ -110,7 +113,8 @@ void render_once(yetty_ythorvg_renderer* r) {
 }
 
 const char* detect_mimetype(const void* data, size_t size) {
-    if (!data || size == 0) return nullptr;
+    if (!data || size == 0) { return nullptr;
+}
     std::string_view sv(static_cast<const char*>(data), size);
     if (sv.find("<svg") != std::string_view::npos ||
         sv.find("<?xml") != std::string_view::npos) {
@@ -145,7 +149,8 @@ yetty_ythorvg_renderer_create(struct yetty_ypaint_core_buffer* buf) {
 }
 
 void yetty_ythorvg_renderer_destroy(struct yetty_ythorvg_renderer* r) {
-    if (!r) return;
+    if (!r) { return;
+}
 
     // Animation must be destroyed before the render method — it uses the
     // render method to dispose its own render data.
@@ -167,7 +172,8 @@ void yetty_ythorvg_renderer_destroy(struct yetty_ythorvg_renderer* r) {
 
 void yetty_ythorvg_renderer_set_target(struct yetty_ythorvg_renderer* r,
                                        uint32_t width, uint32_t height) {
-    if (!r || !r->render_method) return;
+    if (!r || !r->render_method) { return;
+}
     r->render_method->setTarget(width, height);
 }
 
@@ -183,7 +189,8 @@ yetty_ythorvg_render(struct yetty_ythorvg_renderer* r,
         return yetty_cpp_err("yetty_ythorvg_render: data is empty");
     }
 
-    if (!mimetype) mimetype = detect_mimetype(data, size);
+    if (!mimetype) { mimetype = detect_mimetype(data, size);
+}
 
     // Fresh Animation wrapper — replaces any previously loaded content.
     r->animation.reset(tvg::Animation::gen());
@@ -220,8 +227,10 @@ yetty_ythorvg_render(struct yetty_ythorvg_renderer* r,
 
     float w = 0.0f, h = 0.0f;
     r->picture->size(&w, &h);
-    if (out_width) *out_width = w;
-    if (out_height) *out_height = h;
+    if (out_width) { *out_width = w;
+}
+    if (out_height) { *out_height = h;
+}
 
     render_once(r);
     return YETTY_OK_VOID();

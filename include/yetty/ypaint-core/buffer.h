@@ -19,8 +19,8 @@ extern "C" {
 
 // Result from adding a primitive
 struct yetty_ypaint_id_result {
-  int error;
-  uint32_t id; // byte offset in prims buffer
+    int error;
+    uint32_t id; // byte offset in prims buffer
 };
 
 struct yetty_ypaint_core_buffer;
@@ -71,13 +71,12 @@ void yetty_ypaint_core_buffer_clear(struct yetty_ypaint_core_buffer *buf);
 // Read-only view into the primitives payload. Used by serializers that base64-
 // encode the raw primitive bytes (the wire format accepted by
 // yetty_ypaint_core_buffer_create_from_base64). NULL on invalid buf.
-const struct yetty_ycore_buffer *
-yetty_ypaint_core_buffer_primitives(const struct yetty_ypaint_core_buffer *buf);
+const struct yetty_ycore_buffer *yetty_ypaint_core_buffer_primitives(
+    const struct yetty_ypaint_core_buffer *buf);
 
 // Add raw primitive data, returns byte offset
-struct yetty_ypaint_id_result
-yetty_ypaint_core_buffer_add_prim(struct yetty_ypaint_core_buffer *buf,
-                             const void *data, size_t size);
+struct yetty_ypaint_id_result yetty_ypaint_core_buffer_add_prim(
+    struct yetty_ypaint_core_buffer *buf, const void *data, size_t size);
 
 // Read-only access to the accumulated primitive bytes — base64-encode these
 // and the receiver's yetty_ypaint_core_buffer_create_from_base64() rebuilds
@@ -90,13 +89,12 @@ size_t yetty_ypaint_core_buffer_size(const struct yetty_ypaint_core_buffer *buf)
  * create_from_base64() after base64-encoding on the sender; the receiver
  * recognises the magic and restores all sections. Lifetime of *out_data =
  * until next serialize/clear/destroy. Returns byte count. */
-size_t yetty_ypaint_core_buffer_serialize(
-    struct yetty_ypaint_core_buffer *buf, const uint8_t **out_data);
+size_t yetty_ypaint_core_buffer_serialize(struct yetty_ypaint_core_buffer *buf,
+                                          const uint8_t **out_data);
 
 // Update scene bounds on an existing buffer.
-void yetty_ypaint_core_buffer_set_scene_bounds(
-    struct yetty_ypaint_core_buffer *buf,
-    float min_x, float min_y, float max_x, float max_y);
+void yetty_ypaint_core_buffer_set_scene_bounds(struct yetty_ypaint_core_buffer *buf, float min_x,
+                                               float min_y, float max_x, float max_y);
 
 // Primitive iterator
 struct yetty_ypaint_core_primitive_iter {
@@ -106,12 +104,10 @@ struct yetty_ypaint_core_primitive_iter {
 YETTY_YRESULT_DECLARE(yetty_ypaint_core_primitive_iter, struct yetty_ypaint_core_primitive_iter);
 
 struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_first(
-    const struct yetty_ypaint_core_buffer *buf,
-    const struct yetty_ypaint_flyweight_registry *reg);
+    const struct yetty_ypaint_core_buffer *buf, const struct yetty_ypaint_flyweight_registry *reg);
 
 struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_next(
-    const struct yetty_ypaint_core_buffer *buf,
-    const struct yetty_ypaint_flyweight_registry *reg,
+    const struct yetty_ypaint_core_buffer *buf, const struct yetty_ypaint_flyweight_registry *reg,
     const struct yetty_ypaint_core_primitive_iter *iter);
 
 /*=============================================================================
@@ -123,20 +119,15 @@ struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_nex
 /* Pack a FONT primitive (font-prim.h). Returns the producer-assigned
  * font_id (consecutive, starts at 0). Text spans reference fonts by this
  * id. */
-struct yetty_ycore_int_result
-yetty_ypaint_core_buffer_add_font(struct yetty_ypaint_core_buffer *buf,
-                                  const struct yetty_ycore_buffer *ttf_data,
-                                  const char *name);
+struct yetty_ycore_int_result yetty_ypaint_core_buffer_add_font(
+    struct yetty_ypaint_core_buffer *buf, const struct yetty_ycore_buffer *ttf_data,
+    const char *name);
 
 /* Pack a TEXT_SPAN primitive (text-span-prim.h). font_id must match a
  * previously-added FONT prim's id, or be -1 to use the canvas default. */
-struct yetty_ycore_void_result
-yetty_ypaint_core_buffer_add_text(struct yetty_ypaint_core_buffer *buf,
-                                  float x, float y,
-                                  const struct yetty_ycore_buffer *text,
-                                  float font_size, uint32_t color,
-                                  uint32_t layer, int32_t font_id,
-                                  float rotation);
+struct yetty_ycore_void_result yetty_ypaint_core_buffer_add_text(
+    struct yetty_ypaint_core_buffer *buf, float x, float y, const struct yetty_ycore_buffer *text,
+    float font_size, uint32_t color, uint32_t layer, int32_t font_id, float rotation);
 
 #ifdef __cplusplus
 }

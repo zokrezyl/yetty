@@ -20,36 +20,36 @@ extern "C" {
 #endif
 
 enum yetty_yrich_selection_kind {
-	YETTY_YRICH_SEL_NONE = 0,
-	YETTY_YRICH_SEL_ELEMENTS,
-	YETTY_YRICH_SEL_CELLS,
-	YETTY_YRICH_SEL_TEXT,
+    YETTY_YRICH_SEL_NONE = 0,
+    YETTY_YRICH_SEL_ELEMENTS,
+    YETTY_YRICH_SEL_CELLS,
+    YETTY_YRICH_SEL_TEXT,
 };
 
 struct yetty_yrich_selection_elements {
-	yetty_yrich_element_id *ids;  /* ordered by selection time */
-	size_t count;
-	size_t capacity;
+    yetty_yrich_element_id *ids; /* ordered by selection time */
+    size_t count;
+    size_t capacity;
 };
 
 struct yetty_yrich_selection_cells {
-	struct yetty_yrich_cell_range range;
-	struct yetty_yrich_cell_addr active;
+    struct yetty_yrich_cell_range range;
+    struct yetty_yrich_cell_addr active;
 };
 
 struct yetty_yrich_selection_text {
-	yetty_yrich_element_id element_id;
-	int32_t start;
-	int32_t end;
+    yetty_yrich_element_id element_id;
+    int32_t start;
+    int32_t end;
 };
 
 struct yetty_yrich_selection {
-	uint32_t kind;  /* enum yetty_yrich_selection_kind */
-	union {
-		struct yetty_yrich_selection_elements elements;
-		struct yetty_yrich_selection_cells cells;
-		struct yetty_yrich_selection_text text;
-	} u;
+    uint32_t kind; /* enum yetty_yrich_selection_kind */
+    union {
+        struct yetty_yrich_selection_elements elements;
+        struct yetty_yrich_selection_cells cells;
+        struct yetty_yrich_selection_text text;
+    } u;
 };
 
 /*=============================================================================
@@ -69,50 +69,45 @@ void yetty_yrich_selection_clear(struct yetty_yrich_selection *s);
 
 /* Replace selection with a single element. Returns -1 on alloc failure. */
 int yetty_yrich_selection_select_element(struct yetty_yrich_selection *s,
-					 yetty_yrich_element_id id);
+                                         yetty_yrich_element_id id);
 
 void yetty_yrich_selection_select_cells(struct yetty_yrich_selection *s,
-					struct yetty_yrich_cell_range range,
-					struct yetty_yrich_cell_addr active);
+                                        struct yetty_yrich_cell_range range,
+                                        struct yetty_yrich_cell_addr active);
 
 void yetty_yrich_selection_select_cell(struct yetty_yrich_selection *s,
-				       struct yetty_yrich_cell_addr addr);
+                                       struct yetty_yrich_cell_addr addr);
 
 void yetty_yrich_selection_select_text(struct yetty_yrich_selection *s,
-				       yetty_yrich_element_id element_id,
-				       int32_t start, int32_t end);
+                                       yetty_yrich_element_id element_id, int32_t start,
+                                       int32_t end);
 
 void yetty_yrich_selection_set_cursor(struct yetty_yrich_selection *s,
-				      yetty_yrich_element_id element_id,
-				      int32_t position);
+                                      yetty_yrich_element_id element_id, int32_t position);
 
 /*=============================================================================
  * Element-set mutators (only valid when kind == ELEMENTS)
  *===========================================================================*/
 
 bool yetty_yrich_selection_contains(const struct yetty_yrich_selection *s,
-				    yetty_yrich_element_id id);
+                                    yetty_yrich_element_id id);
 
-int yetty_yrich_selection_add(struct yetty_yrich_selection *s,
-			      yetty_yrich_element_id id);
+int yetty_yrich_selection_add(struct yetty_yrich_selection *s, yetty_yrich_element_id id);
 
-void yetty_yrich_selection_remove(struct yetty_yrich_selection *s,
-				  yetty_yrich_element_id id);
+void yetty_yrich_selection_remove(struct yetty_yrich_selection *s, yetty_yrich_element_id id);
 
-int yetty_yrich_selection_toggle(struct yetty_yrich_selection *s,
-				 yetty_yrich_element_id id);
+int yetty_yrich_selection_toggle(struct yetty_yrich_selection *s, yetty_yrich_element_id id);
 
 /* "Extend" — add element to existing element selection or convert to one. */
 int yetty_yrich_selection_extend_element(struct yetty_yrich_selection *s,
-					 yetty_yrich_element_id id);
+                                         yetty_yrich_element_id id);
 
 /* "Extend" cell range to addr (anchor stays put). */
 void yetty_yrich_selection_extend_cell(struct yetty_yrich_selection *s,
-				       struct yetty_yrich_cell_addr addr);
+                                       struct yetty_yrich_cell_addr addr);
 
 /* "Extend" text selection end position. */
-void yetty_yrich_selection_extend_text(struct yetty_yrich_selection *s,
-				       int32_t position);
+void yetty_yrich_selection_extend_text(struct yetty_yrich_selection *s, int32_t position);
 
 #ifdef __cplusplus
 }

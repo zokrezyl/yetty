@@ -19,9 +19,8 @@ struct yetty_yplatform_pty_result tinyemu_pty_create(struct yetty_yconfig *confi
 
 /* Telnet PTY - TCP telnet connection (libuv-driven, async connect) */
 struct yetty_ycore_event_loop;
-struct yetty_yplatform_pty_result telnet_pty_create(
-    const char *host, uint16_t port,
-    struct yetty_ycore_event_loop *event_loop);
+struct yetty_yplatform_pty_result telnet_pty_create(const char *host, uint16_t port,
+                                                    struct yetty_ycore_event_loop *event_loop);
 
 #ifdef __cplusplus
 }

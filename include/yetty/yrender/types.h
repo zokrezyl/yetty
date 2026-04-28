@@ -27,11 +27,11 @@ struct yetty_yrender_texture {
     uint8_t *data;
     uint32_t width;
     uint32_t height;
-    uint32_t format;          /* WGPUTextureFormat */
+    uint32_t format; /* WGPUTextureFormat */
     char name[YETTY_YRENDER_NAME_MAX];
     char wgsl_type[YETTY_YRENDER_WGSL_TYPE_MAX];
     char sampler_name[YETTY_YRENDER_NAME_MAX];
-    uint32_t sampler_filter;  /* WGPUFilterMode */
+    uint32_t sampler_filter; /* WGPUFilterMode */
     int dirty;
 };
 
@@ -69,12 +69,11 @@ struct yetty_yrender_shader_code {
 };
 
 /* Set shader code and compute hash */
-void yetty_yrender_shader_code_set(struct yetty_yrender_shader_code *sc,
-                                   const char *data, size_t size);
+void yetty_yrender_shader_code_set(struct yetty_yrender_shader_code *sc, const char *data,
+                                   size_t size);
 
 /* Load shader code from file (allocates memory, caller must free sc->data) */
-int yetty_yrender_shader_code_load_file(struct yetty_yrender_shader_code *sc,
-                                        const char *path);
+int yetty_yrender_shader_code_load_file(struct yetty_yrender_shader_code *sc, const char *path);
 
 /* Compute FNV-1a hash */
 uint64_t yetty_yrender_hash(const void *data, size_t size);

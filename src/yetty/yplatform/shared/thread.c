@@ -22,7 +22,9 @@ static void *thread_wrapper(void *arg)
 ythread_t *ythread_create(ythread_func_t func, void *arg)
 {
     struct ythread *t = calloc(1, sizeof(*t));
-    if (!t) return NULL;
+    if (!t) {
+        return NULL;
+    }
 
     t->func = func;
     t->arg = arg;
@@ -36,7 +38,9 @@ ythread_t *ythread_create(ythread_func_t func, void *arg)
 
 int ythread_join(ythread_t *thread)
 {
-    if (!thread) return -1;
+    if (!thread) {
+        return -1;
+    }
     int ret = pthread_join(thread->handle, NULL);
     free(thread);
     return ret;
@@ -51,14 +55,18 @@ struct ymutex {
 ymutex_t *ymutex_create(void)
 {
     struct ymutex *m = calloc(1, sizeof(*m));
-    if (!m) return NULL;
+    if (!m) {
+        return NULL;
+    }
     pthread_mutex_init(&m->handle, NULL);
     return m;
 }
 
 void ymutex_destroy(ymutex_t *m)
 {
-    if (!m) return;
+    if (!m) {
+        return;
+    }
     pthread_mutex_destroy(&m->handle);
     free(m);
 }

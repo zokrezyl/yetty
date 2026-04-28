@@ -52,8 +52,7 @@ struct yetty_yrender_utils_tile_diff_frame {
 };
 
 typedef void (*yetty_yrender_utils_tile_diff_sink_fn)(
-    void *ctx,
-    const struct yetty_yrender_utils_tile_diff_frame *frame);
+    void *ctx, const struct yetty_yrender_utils_tile_diff_frame *frame);
 
 /*
  * Create the engine. `device`, `queue`, and `wgpu` are borrowed — the caller
@@ -61,14 +60,10 @@ typedef void (*yetty_yrender_utils_tile_diff_sink_fn)(
  * length (in pixels) of a single tile; must match the compute shader's
  * expectation (64 today).
  */
-struct yetty_yrender_utils_tile_diff_engine_ptr_result
-yetty_yrender_utils_tile_diff_engine_create(WGPUDevice device,
-                                            WGPUQueue queue,
-                                            struct yplatform_wgpu *wgpu,
-                                            uint32_t tile_size);
+struct yetty_yrender_utils_tile_diff_engine_ptr_result yetty_yrender_utils_tile_diff_engine_create(
+    WGPUDevice device, WGPUQueue queue, struct yplatform_wgpu *wgpu, uint32_t tile_size);
 
-void yetty_yrender_utils_tile_diff_engine_destroy(
-    struct yetty_yrender_utils_tile_diff_engine *eng);
+void yetty_yrender_utils_tile_diff_engine_destroy(struct yetty_yrender_utils_tile_diff_engine *eng);
 
 /* Mark the next submit as full-frame (all tiles dirty). Used by callers on
  * state they know invalidates the delta — e.g. a new VNC client connecting. */
@@ -115,8 +110,8 @@ void yetty_yrender_utils_tile_diff_engine_set_always_full(
  */
 typedef void (*yetty_yrender_utils_tile_diff_on_idle_fn)(void *ctx);
 void yetty_yrender_utils_tile_diff_engine_set_on_idle(
-    struct yetty_yrender_utils_tile_diff_engine *eng,
-    yetty_yrender_utils_tile_diff_on_idle_fn fn, void *ctx);
+    struct yetty_yrender_utils_tile_diff_engine *eng, yetty_yrender_utils_tile_diff_on_idle_fn fn,
+    void *ctx);
 
 /*
  * Submit a texture for diffing + readback.
@@ -131,11 +126,9 @@ void yetty_yrender_utils_tile_diff_engine_set_on_idle(
  * coro (the encode + submit), so the caller does not need to keep it alive
  * past this call.
  */
-struct yetty_ycore_void_result
-yetty_yrender_utils_tile_diff_engine_submit(
-    struct yetty_yrender_utils_tile_diff_engine *eng,
-    WGPUTexture texture, uint32_t width, uint32_t height,
-    yetty_yrender_utils_tile_diff_sink_fn sink_fn, void *sink_ctx);
+struct yetty_ycore_void_result yetty_yrender_utils_tile_diff_engine_submit(
+    struct yetty_yrender_utils_tile_diff_engine *eng, WGPUTexture texture, uint32_t width,
+    uint32_t height, yetty_yrender_utils_tile_diff_sink_fn sink_fn, void *sink_ctx);
 
 #ifdef __cplusplus
 }

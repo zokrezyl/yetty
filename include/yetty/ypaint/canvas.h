@@ -25,8 +25,8 @@ struct yetty_yetty_ypaint_canvas_ops {
     int (*scrolling_mode)(const struct yetty_yetty_ypaint_canvas *self);
 
     /* Configuration */
-    void (*set_scene_bounds)(struct yetty_yetty_ypaint_canvas *self,
-                             float min_x, float min_y, float max_x, float max_y);
+    void (*set_scene_bounds)(struct yetty_yetty_ypaint_canvas *self, float min_x, float min_y,
+                             float max_x, float max_y);
     void (*set_cell_size)(struct yetty_yetty_ypaint_canvas *self, float size_x, float size_y);
     void (*set_max_prims_per_cell)(struct yetty_yetty_ypaint_canvas *self, uint32_t max);
 
@@ -53,9 +53,8 @@ struct yetty_yetty_ypaint_canvas_ops {
     uint32_t (*rolling_row)(const struct yetty_yetty_ypaint_canvas *self);
 
     /* Primitive management */
-    void (*add_primitive)(struct yetty_yetty_ypaint_canvas *self,
-                          const float *prim_data, size_t prim_data_count,
-                          float aabb_min_x, float aabb_min_y,
+    void (*add_primitive)(struct yetty_yetty_ypaint_canvas *self, const float *prim_data,
+                          size_t prim_data_count, float aabb_min_x, float aabb_min_y,
                           float aabb_max_x, float aabb_max_y);
 
     /* Scrolling */

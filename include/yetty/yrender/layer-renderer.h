@@ -13,26 +13,25 @@ extern "C" {
 struct yetty_yrender_layer_renderer;
 
 /* Result type */
-YETTY_YRESULT_DECLARE(yetty_yrender_layer_renderer,
-		     struct yetty_yrender_layer_renderer *);
+YETTY_YRESULT_DECLARE(yetty_yrender_layer_renderer, struct yetty_yrender_layer_renderer *);
 
 /* Layer renderer vtable */
 struct yetty_yrender_layer_renderer_ops {
-	void (*destroy)(struct yetty_yrender_layer_renderer *self);
+    void (*destroy)(struct yetty_yrender_layer_renderer *self);
 
-	struct yetty_yrender_rendered_layer_result (*render)(
-		struct yetty_yrender_layer_renderer *self,
-		const struct yetty_yrender_gpu_resource_set *resource_set);
+    struct yetty_yrender_rendered_layer_result (*render)(
+        struct yetty_yrender_layer_renderer *self,
+        const struct yetty_yrender_gpu_resource_set *resource_set);
 };
 
 /* Layer renderer base - embed as first member in implementations */
 struct yetty_yrender_layer_renderer {
-	const struct yetty_yrender_layer_renderer_ops *ops;
+    const struct yetty_yrender_layer_renderer_ops *ops;
 };
 
 /* Surface specialization: renders to GPU intermediate texture via binder */
 struct yetty_yrender_layer_renderer_result yetty_yrender_layer_renderer_surface_create(
-	WGPUDevice device, WGPUQueue queue, WGPUTextureFormat format);
+    WGPUDevice device, WGPUQueue queue, WGPUTextureFormat format);
 
 #ifdef __cplusplus
 }

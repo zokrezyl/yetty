@@ -45,28 +45,26 @@ static void coro_trampoline(void)
     struct yplatform_coro *self = g_current;
     ydebug("coro %u (%s) entry", self->id, self->name ? self->name : "(anon)");
     self->entry(self->arg);
-    ydebug("coro %u (%s) returned from entry", self->id,
-           self->name ? self->name : "(anon)");
+    ydebug("coro %u (%s) returned from entry", self->id, self->name ? self->name : "(anon)");
     self->finished = 1;
     /* Return to whoever last resumed us; they'll see finished and may
      * destroy us. The yco_switch call must NOT return. */
     yetty_yco_switch(self->caller);
 }
 
-struct yplatform_coro_ptr_result
-yplatform_coro_spawn(yplatform_coro_entry entry, void *arg, size_t stack_hint,
-                     const char *name)
+struct yplatform_coro_ptr_result yplatform_coro_spawn(yplatform_coro_entry entry, void *arg,
+                                                      size_t stack_hint, const char *name)
 {
-    if (!entry)
+    if (!entry) {
         return YETTY_ERR(yplatform_coro_ptr, "entry is NULL");
+    }
 
     struct yplatform_coro *coro = calloc(1, sizeof(struct yplatform_coro));
-    if (!coro)
+    if (!coro) {
         return YETTY_ERR(yplatform_coro_ptr, "calloc failed");
+    }
 
-    unsigned int stack = stack_hint
-        ? (unsigned int)stack_hint
-        : YPLATFORM_CORO_DEFAULT_STACK;
+    unsigned int stack = stack_hint ? (unsigned int)stack_hint : YPLATFORM_CORO_DEFAULT_STACK;
 
     coro->thread = yetty_yco_create(stack, coro_trampoline);
     if (!coro->thread) {
@@ -86,8 +84,8 @@ yplatform_coro_spawn(yplatform_coro_entry entry, void *arg, size_t stack_hint,
         }
     }
 
-    ydebug("coro spawn id=%u name=%s stack=%u", coro->id,
-           coro->name ? coro->name : "(anon)", stack);
+    ydebug("coro spawn id=%u name=%s stack=%u", coro->id, coro->name ? coro->name : "(anon)",
+           stack);
     return YETTY_OK(yplatform_coro_ptr, coro);
 }
 
@@ -105,8 +103,9 @@ void yplatform_coro_yield(void)
 
 void yplatform_coro_resume(struct yplatform_coro *coro)
 {
-    if (!coro || coro->finished)
+    if (!coro || coro->finished) {
         return;
+    }
 
     struct yplatform_coro *prev_current = g_current;
     coro->caller = yetty_yco_active();
@@ -119,12 +118,14 @@ void yplatform_coro_resume(struct yplatform_coro *coro)
 
 void yplatform_coro_destroy(struct yplatform_coro *coro)
 {
-    if (!coro)
+    if (!coro) {
         return;
-    ydebug("coro destroy id=%u name=%s finished=%d", coro->id,
-           coro->name ? coro->name : "(anon)", coro->finished);
-    if (coro->thread)
+    }
+    ydebug("coro destroy id=%u name=%s finished=%d", coro->id, coro->name ? coro->name : "(anon)",
+           coro->finished);
+    if (coro->thread) {
         yetty_yco_delete(coro->thread);
+    }
     free(coro->name);
     free(coro);
 }
@@ -151,8 +152,9 @@ const char *yplatform_coro_name(const struct yplatform_coro *coro)
 
 void yplatform_coro_set_status(struct yplatform_coro *coro, int status)
 {
-    if (coro)
+    if (coro) {
         coro->status = status;
+    }
 }
 
 int yplatform_coro_get_status(const struct yplatform_coro *coro)

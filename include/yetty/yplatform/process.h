@@ -32,9 +32,7 @@ typedef struct yprocess yprocess_t;
  *                   null device.
  * Returns YPROCESS_INVALID on failure.
  */
-yprocess_t *yprocess_spawn(const char *const argv[],
-                           int detached,
-                           int stdio_to_null);
+yprocess_t *yprocess_spawn(const char *const argv[], int detached, int stdio_to_null);
 
 /*
  * Ask the child to terminate. POSIX sends SIGTERM, waits up to grace_ms,

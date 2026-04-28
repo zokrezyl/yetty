@@ -45,29 +45,26 @@ YETTY_YRESULT_DECLARE(yetty_yrich_element_ptr, struct yetty_yrich_element *);
  *===========================================================================*/
 
 struct yetty_yrich_element_ops {
-	void (*destroy)(struct yetty_yrich_element *self);
+    void (*destroy)(struct yetty_yrich_element *self);
 
-	struct yetty_yrich_rect (*bounds)(const struct yetty_yrich_element *self);
-	bool (*hit_test)(const struct yetty_yrich_element *self,
-			 float x, float y);
+    struct yetty_yrich_rect (*bounds)(const struct yetty_yrich_element *self);
+    bool (*hit_test)(const struct yetty_yrich_element *self, float x, float y);
 
-	void (*render)(struct yetty_yrich_element *self,
-		       struct yetty_ypaint_core_buffer *buf,
-		       uint32_t layer, bool selected);
+    void (*render)(struct yetty_yrich_element *self, struct yetty_ypaint_core_buffer *buf,
+                   uint32_t layer, bool selected);
 
-	bool (*is_editable)(const struct yetty_yrich_element *self);
-	void (*begin_edit)(struct yetty_yrich_element *self);
-	void (*end_edit)(struct yetty_yrich_element *self);
-	bool (*is_editing)(const struct yetty_yrich_element *self);
+    bool (*is_editable)(const struct yetty_yrich_element *self);
+    void (*begin_edit)(struct yetty_yrich_element *self);
+    void (*end_edit)(struct yetty_yrich_element *self);
+    bool (*is_editing)(const struct yetty_yrich_element *self);
 
-	void (*insert_text)(struct yetty_yrich_element *self,
-			    const char *text, size_t text_len);
-	void (*delete_sel)(struct yetty_yrich_element *self);
+    void (*insert_text)(struct yetty_yrich_element *self, const char *text, size_t text_len);
+    void (*delete_sel)(struct yetty_yrich_element *self);
 };
 
 struct yetty_yrich_element {
-	const struct yetty_yrich_element_ops *ops;
-	yetty_yrich_element_id id;
+    const struct yetty_yrich_element_ops *ops;
+    yetty_yrich_element_id id;
 };
 
 /*=============================================================================
@@ -76,35 +73,30 @@ struct yetty_yrich_element {
 
 void yetty_yrich_element_destroy(struct yetty_yrich_element *e);
 
-static inline yetty_yrich_element_id
-yetty_yrich_element_id_get(const struct yetty_yrich_element *e)
+static inline yetty_yrich_element_id yetty_yrich_element_id_get(const struct yetty_yrich_element *e)
 {
-	return e ? e->id : YETTY_YRICH_INVALID_ELEMENT_ID;
+    return e ? e->id : YETTY_YRICH_INVALID_ELEMENT_ID;
 }
 
-struct yetty_yrich_rect
-yetty_yrich_element_bounds(const struct yetty_yrich_element *e);
+struct yetty_yrich_rect yetty_yrich_element_bounds(const struct yetty_yrich_element *e);
 
-bool yetty_yrich_element_hit_test(const struct yetty_yrich_element *e,
-				  float x, float y);
+bool yetty_yrich_element_hit_test(const struct yetty_yrich_element *e, float x, float y);
 
-void yetty_yrich_element_render(struct yetty_yrich_element *e,
-				struct yetty_ypaint_core_buffer *buf,
-				uint32_t layer, bool selected);
+void yetty_yrich_element_render(struct yetty_yrich_element *e, struct yetty_ypaint_core_buffer *buf,
+                                uint32_t layer, bool selected);
 
 bool yetty_yrich_element_is_editable(const struct yetty_yrich_element *e);
 void yetty_yrich_element_begin_edit(struct yetty_yrich_element *e);
 void yetty_yrich_element_end_edit(struct yetty_yrich_element *e);
 bool yetty_yrich_element_is_editing(const struct yetty_yrich_element *e);
 
-void yetty_yrich_element_insert_text(struct yetty_yrich_element *e,
-				     const char *text, size_t text_len);
+void yetty_yrich_element_insert_text(struct yetty_yrich_element *e, const char *text,
+                                     size_t text_len);
 void yetty_yrich_element_delete_sel(struct yetty_yrich_element *e);
 
 /* Default hit_test implementation — point-in-bounds. Subclasses can use this
  * directly or override. */
-bool yetty_yrich_element_default_hit_test(const struct yetty_yrich_element *e,
-					  float x, float y);
+bool yetty_yrich_element_default_hit_test(const struct yetty_yrich_element *e, float x, float y);
 
 #ifdef __cplusplus
 }

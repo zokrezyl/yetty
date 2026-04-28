@@ -8,26 +8,26 @@
 #include <stdio.h>
 
 #define MAX_RESOURCE_SETS 32
-#define MAX_BINDING_CODE  16384
-#define MAX_FLAT_BUFFERS  64
+#define MAX_BINDING_CODE 16384
+#define MAX_FLAT_BUFFERS 64
 #define MAX_FLAT_TEXTURES 64
 #define MAX_FLAT_UNIFORMS 256
-#define ATLAS_MIN_SIZE     32
-#define ATLAS_MAX_SIZE     8192
+#define ATLAS_MIN_SIZE 32
+#define ATLAS_MAX_SIZE 8192
 
 /* Flat buffer entry — one per buffer across all resource sets */
 struct flat_buffer {
-    struct yetty_yrender_buffer *src;   /* mutable to clear dirty */
-    const char *ns;       /* namespace for WGSL name */
-    size_t mega_offset;   /* byte offset in mega buffer */
+    struct yetty_yrender_buffer *src; /* mutable to clear dirty */
+    const char *ns;                   /* namespace for WGSL name */
+    size_t mega_offset;               /* byte offset in mega buffer */
 };
 
 /* Flat texture entry — one per texture across all resource sets */
 struct flat_texture {
-    struct yetty_yrender_texture *src;  /* mutable to clear dirty */
+    struct yetty_yrender_texture *src; /* mutable to clear dirty */
     const char *ns;
-    uint32_t atlas_x, atlas_y;  /* position in atlas */
-    size_t atlas_index;          /* which atlas (by format) */
+    uint32_t atlas_x, atlas_y; /* position in atlas */
+    size_t atlas_index;        /* which atlas (by format) */
 };
 
 /* Flat uniform entry — one per uniform across all resource sets */
@@ -46,7 +46,7 @@ struct gpu_resource_binder_impl {
     /* Submitted resource sets (persistent pointers, submitted once) */
     struct yetty_yrender_gpu_resource_set *resource_sets[MAX_RESOURCE_SETS];
     size_t resource_set_count;
-    int submitted;  /* resource sets already submitted */
+    int submitted; /* resource sets already submitted */
 
     /* Flattened resources (collected from all resource sets + children) */
     struct flat_buffer flat_buffers[MAX_FLAT_BUFFERS];
@@ -70,7 +70,7 @@ struct gpu_resource_binder_impl {
         WGPUTextureView view;
         WGPUSampler sampler;
     };
-#define ATLAS_R8    0
+#define ATLAS_R8 0
 #define ATLAS_RGBA8 1
 #define ATLAS_COUNT 2
     struct texture_atlas atlases[ATLAS_COUNT];
@@ -101,14 +101,17 @@ struct gpu_resource_binder_impl {
 
 /* Forward declarations */
 static void binder_destroy(struct yetty_yrender_gpu_resource_binder *self);
-static struct yetty_ycore_void_result binder_submit(struct yetty_yrender_gpu_resource_binder *self,
-                                                    const struct yetty_yrender_gpu_resource_set *rs);
-static struct yetty_ycore_void_result binder_finalize(struct yetty_yrender_gpu_resource_binder *self);
+static struct yetty_ycore_void_result binder_submit(
+    struct yetty_yrender_gpu_resource_binder *self,
+    const struct yetty_yrender_gpu_resource_set *rs);
+static struct yetty_ycore_void_result binder_finalize(
+    struct yetty_yrender_gpu_resource_binder *self);
 static struct yetty_ycore_void_result binder_update(struct yetty_yrender_gpu_resource_binder *self);
 static struct yetty_ycore_void_result binder_bind(struct yetty_yrender_gpu_resource_binder *self,
                                                   WGPURenderPassEncoder pass, uint32_t group_index);
 static WGPURenderPipeline binder_get_pipeline(const struct yetty_yrender_gpu_resource_binder *self);
-static WGPUBuffer binder_get_quad_vertex_buffer(const struct yetty_yrender_gpu_resource_binder *self);
+static WGPUBuffer binder_get_quad_vertex_buffer(
+    const struct yetty_yrender_gpu_resource_binder *self);
 
 static const struct yetty_yrender_gpu_resource_binder_ops binder_ops = {
     .destroy = binder_destroy,
@@ -122,10 +125,11 @@ static const struct yetty_yrender_gpu_resource_binder_ops binder_ops = {
 
 /* Append shader code to merged buffer */
 static void append_shader(struct gpu_resource_binder_impl *impl,
-                           const struct yetty_yrender_shader_code *sc,
-                           const char *ns)
+                          const struct yetty_yrender_shader_code *sc, const char *ns)
 {
-    if (!sc->data || sc->size == 0) return;
+    if (!sc->data || sc->size == 0) {
+        return;
+    }
 
     size_t needed = impl->shader_code.size + sc->size + 2;
     if (needed > impl->shader_code.capacity) {
@@ -133,13 +137,14 @@ static void append_shader(struct gpu_resource_binder_impl *impl,
         impl->shader_code.data = realloc(impl->shader_code.data, new_cap);
         impl->shader_code.capacity = new_cap;
     }
-    if (impl->shader_code.size > 0)
+    if (impl->shader_code.size > 0) {
         impl->shader_code.data[impl->shader_code.size++] = '\n';
+    }
     memcpy(impl->shader_code.data + impl->shader_code.size, sc->data, sc->size);
     impl->shader_code.size += sc->size;
     impl->shader_code.data[impl->shader_code.size] = '\0';
-    ydebug("GpuResourceBinder: shader +%zu bytes from '%s' (total %zu)",
-           sc->size, ns, impl->shader_code.size);
+    ydebug("GpuResourceBinder: shader +%zu bytes from '%s' (total %zu)", sc->size, ns,
+           impl->shader_code.size);
 }
 
 /* Compute combined hash of entire resource set tree */
@@ -147,8 +152,9 @@ static uint64_t compute_tree_shader_hash(const struct yetty_yrender_gpu_resource
 {
     uint64_t h = rs->shader.hash;
     for (size_t i = 0; i < rs->children_count; i++) {
-        if (rs->children[i])
+        if (rs->children[i]) {
             h ^= compute_tree_shader_hash(rs->children[i]);
+        }
     }
     return h;
 }
@@ -160,16 +166,19 @@ static void collect_resources(struct gpu_resource_binder_impl *impl,
 {
     /* Check if already visited (avoid duplicating shared children) */
     for (size_t i = 0; i < impl->visited_rs_count; i++) {
-        if (impl->visited_rs[i] == rs)
+        if (impl->visited_rs[i] == rs) {
             return;
+        }
     }
-    if (impl->visited_rs_count < sizeof(impl->visited_rs) / sizeof(impl->visited_rs[0]))
+    if (impl->visited_rs_count < sizeof(impl->visited_rs) / sizeof(impl->visited_rs[0])) {
         impl->visited_rs[impl->visited_rs_count++] = rs;
+    }
 
     /* Children first — depth-first, they define shader functions */
     for (size_t i = 0; i < rs->children_count; i++) {
-        if (rs->children[i])
+        if (rs->children[i]) {
             collect_resources(impl, rs->children[i]);
+        }
     }
 
     /* Buffers - always collect even if empty (shader needs offset constants) */
@@ -184,11 +193,14 @@ static void collect_resources(struct gpu_resource_binder_impl *impl,
 
     /* Textures */
     for (size_t i = 0; i < rs->texture_count && impl->flat_texture_count < MAX_FLAT_TEXTURES; i++) {
-        if (rs->textures[i].width == 0 || rs->textures[i].height == 0) continue;
+        if (rs->textures[i].width == 0 || rs->textures[i].height == 0) {
+            continue;
+        }
         struct flat_texture *ft = &impl->flat_textures[impl->flat_texture_count++];
         ft->src = &rs->textures[i];
         ft->ns = rs->namespace;
-        ft->atlas_index = (rs->textures[i].format == WGPUTextureFormat_R8Unorm) ? ATLAS_R8 : ATLAS_RGBA8;
+        ft->atlas_index =
+            (rs->textures[i].format == WGPUTextureFormat_R8Unorm) ? ATLAS_R8 : ATLAS_RGBA8;
     }
 
     /* Uniforms */
@@ -207,9 +219,13 @@ static void pack_one_atlas(struct gpu_resource_binder_impl *impl, size_t ai)
 {
     /* Sort textures belonging to this atlas by height descending */
     for (size_t i = 0; i < impl->flat_texture_count; i++) {
-        if (impl->flat_textures[i].atlas_index != ai) continue;
+        if (impl->flat_textures[i].atlas_index != ai) {
+            continue;
+        }
         for (size_t j = i + 1; j < impl->flat_texture_count; j++) {
-            if (impl->flat_textures[j].atlas_index != ai) continue;
+            if (impl->flat_textures[j].atlas_index != ai) {
+                continue;
+            }
             if (impl->flat_textures[j].src->height > impl->flat_textures[i].src->height) {
                 struct flat_texture tmp = impl->flat_textures[i];
                 impl->flat_textures[i] = impl->flat_textures[j];
@@ -221,32 +237,49 @@ static void pack_one_atlas(struct gpu_resource_binder_impl *impl, size_t ai)
     /* Start from at least the widest texture */
     uint32_t min_size = ATLAS_MIN_SIZE;
     for (size_t i = 0; i < impl->flat_texture_count; i++) {
-        if (impl->flat_textures[i].atlas_index != ai) continue;
-        if (impl->flat_textures[i].src->width > min_size)
+        if (impl->flat_textures[i].atlas_index != ai) {
+            continue;
+        }
+        if (impl->flat_textures[i].src->width > min_size) {
             min_size = impl->flat_textures[i].src->width;
-        if (impl->flat_textures[i].src->height > min_size)
+        }
+        if (impl->flat_textures[i].src->height > min_size) {
             min_size = impl->flat_textures[i].src->height;
+        }
     }
     /* Round up to power of 2 */
     uint32_t size = ATLAS_MIN_SIZE;
-    while (size < min_size) size *= 2;
+    while (size < min_size) {
+        size *= 2;
+    }
 
     while (size <= ATLAS_MAX_SIZE) {
         uint32_t x = 0, y = 0, row_h = 0;
         int fits = 1;
 
         for (size_t i = 0; i < impl->flat_texture_count; i++) {
-            if (impl->flat_textures[i].atlas_index != ai) continue;
+            if (impl->flat_textures[i].atlas_index != ai) {
+                continue;
+            }
             uint32_t w = impl->flat_textures[i].src->width;
             uint32_t h = impl->flat_textures[i].src->height;
 
-            if (x + w > size) { y += row_h; x = 0; row_h = 0; }
-            if (y + h > size) { fits = 0; break; }
+            if (x + w > size) {
+                y += row_h;
+                x = 0;
+                row_h = 0;
+            }
+            if (y + h > size) {
+                fits = 0;
+                break;
+            }
 
             impl->flat_textures[i].atlas_x = x;
             impl->flat_textures[i].atlas_y = y;
             x += w;
-            if (h > row_h) row_h = h;
+            if (h > row_h) {
+                row_h = h;
+            }
         }
 
         if (fits) {
@@ -275,8 +308,11 @@ static const char *atlas_names[ATLAS_COUNT] = {
 /* Check if any textures use a given atlas index */
 static int atlas_has_textures(struct gpu_resource_binder_impl *impl, size_t ai)
 {
-    for (size_t i = 0; i < impl->flat_texture_count; i++)
-        if (impl->flat_textures[i].atlas_index == ai) return 1;
+    for (size_t i = 0; i < impl->flat_texture_count; i++) {
+        if (impl->flat_textures[i].atlas_index == ai) {
+            return 1;
+        }
+    }
     return 0;
 }
 
@@ -298,8 +334,9 @@ static struct yetty_ycore_void_result create_atlas(struct gpu_resource_binder_im
     tex_desc.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
 
     a->texture = impl->allocator->ops->create_texture(impl->allocator, &tex_desc);
-    if (!a->texture)
+    if (!a->texture) {
         return YETTY_ERR(yetty_ycore_void, "failed to create atlas texture");
+    }
 
     WGPUTextureViewDescriptor view_desc = {0};
     view_desc.format = atlas_formats[ai];
@@ -331,11 +368,12 @@ static struct yetty_ycore_void_result create_gpu_resources(struct gpu_resource_b
         WGPUBufferDescriptor desc = {0};
         desc.label.data = label;
         desc.label.length = sizeof(label) - 1;
-        desc.size = impl->storage_buffer_size > 0 ? impl->storage_buffer_size : 4;  /* min 4 bytes */
+        desc.size = impl->storage_buffer_size > 0 ? impl->storage_buffer_size : 4; /* min 4 bytes */
         desc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
         impl->storage_buffer = impl->allocator->ops->create_buffer(impl->allocator, &desc);
-        if (!impl->storage_buffer)
+        if (!impl->storage_buffer) {
             return YETTY_ERR(yetty_ycore_void, "failed to create storage buffer");
+        }
         ydebug("GpuResourceBinder: storage_buffer %zu bytes", impl->storage_buffer_size);
     }
 
@@ -343,7 +381,9 @@ static struct yetty_ycore_void_result create_gpu_resources(struct gpu_resource_b
     for (size_t ai = 0; ai < ATLAS_COUNT; ai++) {
         if (atlas_has_textures(impl, ai)) {
             struct yetty_ycore_void_result res = create_atlas(impl, ai);
-            if (!YETTY_IS_OK(res)) return res;
+            if (!YETTY_IS_OK(res)) {
+                return res;
+            }
         }
     }
 
@@ -353,7 +393,8 @@ static struct yetty_ycore_void_result create_gpu_resources(struct gpu_resource_b
         for (size_t i = 0; i < impl->flat_uniform_count; i++) {
             size_t align = yetty_yrender_uniform_type_align(impl->flat_uniforms[i].src->type);
             impl->uniform_buffer_size = (impl->uniform_buffer_size + align - 1) & ~(align - 1);
-            impl->uniform_buffer_size += yetty_yrender_uniform_type_size(impl->flat_uniforms[i].src->type);
+            impl->uniform_buffer_size +=
+                yetty_yrender_uniform_type_size(impl->flat_uniforms[i].src->type);
         }
         impl->uniform_buffer_size = (impl->uniform_buffer_size + 15) & ~(size_t)15;
 
@@ -364,8 +405,9 @@ static struct yetty_ycore_void_result create_gpu_resources(struct gpu_resource_b
         desc.size = impl->uniform_buffer_size;
         desc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
         impl->uniform_buffer = impl->allocator->ops->create_buffer(impl->allocator, &desc);
-        if (!impl->uniform_buffer)
+        if (!impl->uniform_buffer) {
             return YETTY_ERR(yetty_ycore_void, "failed to create uniform buffer");
+        }
     }
 
     return YETTY_OK_VOID();
@@ -378,22 +420,26 @@ static struct yetty_ycore_void_result upload_all(struct gpu_resource_binder_impl
     for (size_t i = 0; i < impl->flat_buffer_count; i++) {
         const struct flat_buffer *fb = &impl->flat_buffers[i];
         if (fb->src->data && fb->src->size > 0 && impl->storage_buffer) {
-            ydebug("GpuResourceBinder: upload buffer '%s_%s' %zu bytes at offset %zu (u32 offset=%zu)",
-                   fb->ns, fb->src->name, fb->src->size, fb->mega_offset, fb->mega_offset / 4);
-            wgpuQueueWriteBuffer(impl->queue, impl->storage_buffer, fb->mega_offset,
-                                 fb->src->data, fb->src->size);
+            ydebug(
+                "GpuResourceBinder: upload buffer '%s_%s' %zu bytes at offset %zu (u32 offset=%zu)",
+                fb->ns, fb->src->name, fb->src->size, fb->mega_offset, fb->mega_offset / 4);
+            wgpuQueueWriteBuffer(impl->queue, impl->storage_buffer, fb->mega_offset, fb->src->data,
+                                 fb->src->size);
 
             /* Dump first few u32/float values for debugging */
             size_t dump_count = fb->src->size / 4;
-            if (dump_count > 10) dump_count = 10;
+            if (dump_count > 10) {
+                dump_count = 10;
+            }
             const float *fvals = (const float *)fb->src->data;
             const uint32_t *uvals = (const uint32_t *)fb->src->data;
             for (size_t j = 0; j < dump_count; j++) {
                 ydebug("  [%zu] u32=0x%08x float=%.6f", j, uvals[j], fvals[j]);
             }
         } else {
-            ydebug("GpuResourceBinder: SKIP buffer '%s_%s' data=%p size=%zu mega=%p",
-                   fb->ns, fb->src->name, (void*)fb->src->data, fb->src->size, (void*)impl->storage_buffer);
+            ydebug("GpuResourceBinder: SKIP buffer '%s_%s' data=%p size=%zu mega=%p", fb->ns,
+                   fb->src->name, (void *)fb->src->data, fb->src->size,
+                   (void *)impl->storage_buffer);
         }
     }
 
@@ -402,8 +448,8 @@ static struct yetty_ycore_void_result upload_all(struct gpu_resource_binder_impl
         const struct flat_texture *ft = &impl->flat_textures[i];
         struct texture_atlas *a = &impl->atlases[ft->atlas_index];
         if (!ft->src->data || !a->texture) {
-            ydebug("GpuResourceBinder: SKIP texture '%s_%s' data=%p atlas=%p",
-                   ft->ns, ft->src->name, (void*)ft->src->data, (void*)a->texture);
+            ydebug("GpuResourceBinder: SKIP texture '%s_%s' data=%p atlas=%p", ft->ns,
+                   ft->src->name, (void *)ft->src->data, (void *)a->texture);
             continue;
         }
 
@@ -427,11 +473,10 @@ static struct yetty_ycore_void_result upload_all(struct gpu_resource_binder_impl
 
         WGPUExtent3D extent = {ft->src->width, ft->src->height, 1};
         ydebug("GpuResourceBinder: upload texture '%s_%s' %ux%u bpp=%u at atlas(%u,%u) %zu bytes",
-               ft->ns, ft->src->name, ft->src->width, ft->src->height, bpp,
-               ft->atlas_x, ft->atlas_y, tex_size);
+               ft->ns, ft->src->name, ft->src->width, ft->src->height, bpp, ft->atlas_x,
+               ft->atlas_y, tex_size);
 
-        wgpuQueueWriteTexture(impl->queue, &dest, ft->src->data, tex_size,
-                              &src_layout, &extent);
+        wgpuQueueWriteTexture(impl->queue, &dest, ft->src->data, tex_size, &src_layout, &extent);
     }
 
     /* Upload uniforms (with WGSL alignment) */
@@ -444,20 +489,24 @@ static struct yetty_ycore_void_result upload_all(struct gpu_resource_binder_impl
             size_t align = yetty_yrender_uniform_type_align(u->type);
             offset = (offset + align - 1) & ~(align - 1);
             size_t sz = yetty_yrender_uniform_type_size(u->type);
-            if (offset + sz > sizeof(packed)) break;
-            memcpy(packed + offset, &u->f32, sz);  /* union starts at f32 */
-            if (u->type == YETTY_YRENDER_UNIFORM_VEC2)
-                ydebug("GpuResourceBinder: uniform[%zu] '%s_%s' vec2(%.1f, %.1f) at offset %zu",
-                       i, impl->flat_uniforms[i].ns, u->name, u->vec2[0], u->vec2[1], offset);
-            else if (u->type == YETTY_YRENDER_UNIFORM_F32)
-                ydebug("GpuResourceBinder: uniform[%zu] '%s_%s' f32=%.3f at offset %zu",
-                       i, impl->flat_uniforms[i].ns, u->name, u->f32, offset);
-            else if (u->type == YETTY_YRENDER_UNIFORM_U32)
-                ydebug("GpuResourceBinder: uniform[%zu] '%s_%s' u32=0x%08x at offset %zu",
-                       i, impl->flat_uniforms[i].ns, u->name, u->u32, offset);
+            if (offset + sz > sizeof(packed)) {
+                break;
+            }
+            memcpy(packed + offset, &u->f32, sz); /* union starts at f32 */
+            if (u->type == YETTY_YRENDER_UNIFORM_VEC2) {
+                ydebug("GpuResourceBinder: uniform[%zu] '%s_%s' vec2(%.1f, %.1f) at offset %zu", i,
+                       impl->flat_uniforms[i].ns, u->name, u->vec2[0], u->vec2[1], offset);
+            } else if (u->type == YETTY_YRENDER_UNIFORM_F32) {
+                ydebug("GpuResourceBinder: uniform[%zu] '%s_%s' f32=%.3f at offset %zu", i,
+                       impl->flat_uniforms[i].ns, u->name, u->f32, offset);
+            } else if (u->type == YETTY_YRENDER_UNIFORM_U32) {
+                ydebug("GpuResourceBinder: uniform[%zu] '%s_%s' u32=0x%08x at offset %zu", i,
+                       impl->flat_uniforms[i].ns, u->name, u->u32, offset);
+            }
             offset += sz;
         }
-        ydebug("GpuResourceBinder: uniform buffer total %zu bytes (gpu buffer %zu)", offset, impl->uniform_buffer_size);
+        ydebug("GpuResourceBinder: uniform buffer total %zu bytes (gpu buffer %zu)", offset,
+               impl->uniform_buffer_size);
         wgpuQueueWriteBuffer(impl->queue, impl->uniform_buffer, 0, packed, offset);
     }
 
@@ -465,7 +514,8 @@ static struct yetty_ycore_void_result upload_all(struct gpu_resource_binder_impl
 }
 
 /* Generate WGSL binding declarations */
-static void generate_wgsl_bindings(struct gpu_resource_binder_impl *impl, char *out, size_t out_size)
+static void generate_wgsl_bindings(struct gpu_resource_binder_impl *impl, char *out,
+                                   size_t out_size)
 {
     char *p = out;
     size_t rem = out_size;
@@ -475,41 +525,67 @@ static void generate_wgsl_bindings(struct gpu_resource_binder_impl *impl, char *
     /* Uniform struct + binding */
     if (impl->flat_uniform_count > 0) {
         n = snprintf(p, rem, "struct Uniforms {\n");
-        if (n > 0 && (size_t)n < rem) { p += n; rem -= n; }
+        if (n > 0 && (size_t)n < rem) {
+            p += n;
+            rem -= n;
+        }
 
         for (size_t i = 0; i < impl->flat_uniform_count; i++) {
             const struct flat_uniform *fu = &impl->flat_uniforms[i];
             const char *wgsl_type = yetty_yrender_uniform_type_wgsl(fu->src->type);
             n = snprintf(p, rem, "    %s_%s: %s,\n", fu->ns, fu->src->name, wgsl_type);
-            if (n > 0 && (size_t)n < rem) { p += n; rem -= n; }
+            if (n > 0 && (size_t)n < rem) {
+                p += n;
+                rem -= n;
+            }
         }
 
-        n = snprintf(p, rem, "};\n@group(0) @binding(%u) var<uniform> uniforms: Uniforms;\n", binding++);
-        if (n > 0 && (size_t)n < rem) { p += n; rem -= n; }
+        n = snprintf(p, rem, "};\n@group(0) @binding(%u) var<uniform> uniforms: Uniforms;\n",
+                     binding++);
+        if (n > 0 && (size_t)n < rem) {
+            p += n;
+            rem -= n;
+        }
     }
 
     /* Per-format atlas textures + samplers */
     for (size_t ai = 0; ai < ATLAS_COUNT; ai++) {
-        if (!impl->atlases[ai].texture) continue;
-        n = snprintf(p, rem, "@group(0) @binding(%u) var %s_texture: texture_2d<f32>;\n",
-                     binding++, atlas_names[ai]);
-        if (n > 0 && (size_t)n < rem) { p += n; rem -= n; }
-        n = snprintf(p, rem, "@group(0) @binding(%u) var %s_sampler: sampler;\n",
-                     binding++, atlas_names[ai]);
-        if (n > 0 && (size_t)n < rem) { p += n; rem -= n; }
+        if (!impl->atlases[ai].texture) {
+            continue;
+        }
+        n = snprintf(p, rem, "@group(0) @binding(%u) var %s_texture: texture_2d<f32>;\n", binding++,
+                     atlas_names[ai]);
+        if (n > 0 && (size_t)n < rem) {
+            p += n;
+            rem -= n;
+        }
+        n = snprintf(p, rem, "@group(0) @binding(%u) var %s_sampler: sampler;\n", binding++,
+                     atlas_names[ai]);
+        if (n > 0 && (size_t)n < rem) {
+            p += n;
+            rem -= n;
+        }
     }
 
     /* Storage buffer - declare if any buffers exist (even if size is 0 during pipeline compilation) */
     if (impl->flat_buffer_count > 0) {
-        n = snprintf(p, rem, "@group(0) @binding(%u) var<storage, read> storage_buffer: array<u32>;\n", binding++);
-        if (n > 0 && (size_t)n < rem) { p += n; rem -= n; }
+        n = snprintf(p, rem,
+                     "@group(0) @binding(%u) var<storage, read> storage_buffer: array<u32>;\n",
+                     binding++);
+        if (n > 0 && (size_t)n < rem) {
+            p += n;
+            rem -= n;
+        }
 
         /* Buffer offset constants (in u32 units) */
         for (size_t i = 0; i < impl->flat_buffer_count; i++) {
             const struct flat_buffer *fb = &impl->flat_buffers[i];
-            n = snprintf(p, rem, "const %s_%s_offset: u32 = %uu;\n",
-                         fb->ns, fb->src->name, (uint32_t)(fb->mega_offset / 4));
-            if (n > 0 && (size_t)n < rem) { p += n; rem -= n; }
+            n = snprintf(p, rem, "const %s_%s_offset: u32 = %uu;\n", fb->ns, fb->src->name,
+                         (uint32_t)(fb->mega_offset / 4));
+            if (n > 0 && (size_t)n < rem) {
+                p += n;
+                rem -= n;
+            }
         }
     }
 
@@ -517,16 +593,21 @@ static void generate_wgsl_bindings(struct gpu_resource_binder_impl *impl, char *
     for (size_t i = 0; i < impl->flat_texture_count; i++) {
         const struct flat_texture *ft = &impl->flat_textures[i];
         const struct texture_atlas *a = &impl->atlases[ft->atlas_index];
-        if (!a->texture) continue;
+        if (!a->texture) {
+            continue;
+        }
         float aw = (float)a->width;
         float ah = (float)a->height;
         float u0 = (float)ft->atlas_x / aw;
         float v0 = (float)ft->atlas_y / ah;
         float u1 = (float)(ft->atlas_x + ft->src->width) / aw;
         float v1 = (float)(ft->atlas_y + ft->src->height) / ah;
-        n = snprintf(p, rem, "const %s_%s_region: vec4<f32> = vec4<f32>(%f, %f, %f, %f);\n",
-                     ft->ns, ft->src->name, u0, v0, u1, v1);
-        if (n > 0 && (size_t)n < rem) { p += n; rem -= n; }
+        n = snprintf(p, rem, "const %s_%s_region: vec4<f32> = vec4<f32>(%f, %f, %f, %f);\n", ft->ns,
+                     ft->src->name, u0, v0, u1, v1);
+        if (n > 0 && (size_t)n < rem) {
+            p += n;
+            rem -= n;
+        }
     }
 }
 
@@ -551,12 +632,15 @@ static struct yetty_ycore_void_result create_bind_group(struct gpu_resource_bind
         ge->binding = binding;
         ge->buffer = impl->uniform_buffer;
         ge->size = impl->uniform_buffer_size;
-        count++; binding++;
+        count++;
+        binding++;
     }
 
     for (size_t ai = 0; ai < ATLAS_COUNT; ai++) {
         struct texture_atlas *a = &impl->atlases[ai];
-        if (!a->texture) continue;
+        if (!a->texture) {
+            continue;
+        }
 
         WGPUBindGroupLayoutEntry *le = &layout_entries[count];
         memset(le, 0, sizeof(*le));
@@ -569,7 +653,8 @@ static struct yetty_ycore_void_result create_bind_group(struct gpu_resource_bind
         memset(ge, 0, sizeof(*ge));
         ge->binding = binding;
         ge->textureView = a->view;
-        count++; binding++;
+        count++;
+        binding++;
 
         le = &layout_entries[count];
         memset(le, 0, sizeof(*le));
@@ -581,7 +666,8 @@ static struct yetty_ycore_void_result create_bind_group(struct gpu_resource_bind
         memset(ge, 0, sizeof(*ge));
         ge->binding = binding;
         ge->sampler = a->sampler;
-        count++; binding++;
+        count++;
+        binding++;
     }
 
     if (impl->storage_buffer) {
@@ -596,35 +682,41 @@ static struct yetty_ycore_void_result create_bind_group(struct gpu_resource_bind
         ge->binding = binding;
         ge->buffer = impl->storage_buffer;
         ge->size = impl->storage_buffer_size > 0 ? impl->storage_buffer_size : 4;
-        count++; binding++;
+        count++;
+        binding++;
     }
 
-    if (count == 0)
+    if (count == 0) {
         return YETTY_ERR(yetty_ycore_void, "no bindings");
+    }
 
     WGPUBindGroupLayoutDescriptor layout_desc = {0};
     layout_desc.entryCount = count;
     layout_desc.entries = layout_entries;
     impl->bind_group_layout = wgpuDeviceCreateBindGroupLayout(impl->device, &layout_desc);
-    if (!impl->bind_group_layout)
+    if (!impl->bind_group_layout) {
         return YETTY_ERR(yetty_ycore_void, "failed to create bind group layout");
+    }
 
     WGPUBindGroupDescriptor group_desc = {0};
     group_desc.layout = impl->bind_group_layout;
     group_desc.entryCount = count;
     group_desc.entries = group_entries;
     impl->bind_group = wgpuDeviceCreateBindGroup(impl->device, &group_desc);
-    if (!impl->bind_group)
+    if (!impl->bind_group) {
         return YETTY_ERR(yetty_ycore_void, "failed to create bind group");
+    }
 
     return YETTY_OK_VOID();
 }
 
 /* Compile shader and create pipeline */
-static struct yetty_ycore_void_result compile_and_create_pipeline(struct gpu_resource_binder_impl *impl)
+static struct yetty_ycore_void_result compile_and_create_pipeline(
+    struct gpu_resource_binder_impl *impl)
 {
-    if (impl->shader_code.size == 0)
+    if (impl->shader_code.size == 0) {
         return YETTY_ERR(yetty_ycore_void, "no shader code");
+    }
 
     char bindings[MAX_BINDING_CODE];
     generate_wgsl_bindings(impl, bindings, sizeof(bindings));
@@ -632,8 +724,9 @@ static struct yetty_ycore_void_result compile_and_create_pipeline(struct gpu_res
     size_t bindings_len = strlen(bindings);
     size_t total_len = bindings_len + impl->shader_code.size + 2;
     char *merged = malloc(total_len);
-    if (!merged)
+    if (!merged) {
         return YETTY_ERR(yetty_ycore_void, "failed to allocate merged shader");
+    }
 
     memcpy(merged, bindings, bindings_len);
     merged[bindings_len] = '\n';
@@ -666,16 +759,16 @@ static struct yetty_ycore_void_result compile_and_create_pipeline(struct gpu_res
     impl->shader_module = wgpuDeviceCreateShaderModule(impl->device, &shader_desc);
     free(merged);
 
-    if (!impl->shader_module || yetty_webgpu_error_check())
+    if (!impl->shader_module || yetty_webgpu_error_check()) {
         return YETTY_ERR(yetty_ycore_void, yetty_webgpu_error.has_error
-                         ? yetty_webgpu_error.message
-                         : "failed to compile shader");
+                                               ? yetty_webgpu_error.message
+                                               : "failed to compile shader");
+    }
 
     /* Quad vertex buffer — only create once */
     if (!impl->quad_vertex_buffer) {
         float quad_vertices[] = {
-            -1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,
-            -1.0f,  1.0f,  1.0f, -1.0f,  1.0f,  1.0f,
+            -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 1.0f,
         };
         WGPUBufferDescriptor quad_desc = {0};
         quad_desc.label.data = "quad vertices";
@@ -684,8 +777,9 @@ static struct yetty_ycore_void_result compile_and_create_pipeline(struct gpu_res
         quad_desc.usage = WGPUBufferUsage_Vertex;
         quad_desc.mappedAtCreation = 1;
         impl->quad_vertex_buffer = impl->allocator->ops->create_buffer(impl->allocator, &quad_desc);
-        if (!impl->quad_vertex_buffer)
+        if (!impl->quad_vertex_buffer) {
             return YETTY_ERR(yetty_ycore_void, "failed to create quad buffer");
+        }
 
         void *mapped = wgpuBufferGetMappedRange(impl->quad_vertex_buffer, 0, sizeof(quad_vertices));
         memcpy(mapped, quad_vertices, sizeof(quad_vertices));
@@ -697,8 +791,9 @@ static struct yetty_ycore_void_result compile_and_create_pipeline(struct gpu_res
     pl_desc.bindGroupLayoutCount = 1;
     pl_desc.bindGroupLayouts = &impl->bind_group_layout;
     impl->pipeline_layout = wgpuDeviceCreatePipelineLayout(impl->device, &pl_desc);
-    if (!impl->pipeline_layout)
+    if (!impl->pipeline_layout) {
         return YETTY_ERR(yetty_ycore_void, "failed to create pipeline layout");
+    }
 
     WGPUVertexAttribute pos_attr = {0};
     pos_attr.format = WGPUVertexFormat_Float32x2;
@@ -748,8 +843,9 @@ static struct yetty_ycore_void_result compile_and_create_pipeline(struct gpu_res
     pipe_desc.multisample.mask = ~0u;
 
     impl->pipeline = wgpuDeviceCreateRenderPipeline(impl->device, &pipe_desc);
-    if (!impl->pipeline)
+    if (!impl->pipeline) {
         return YETTY_ERR(yetty_ycore_void, "failed to create pipeline");
+    }
 
     ydebug("GpuResourceBinder: pipeline created");
     return YETTY_OK_VOID();
@@ -761,23 +857,41 @@ static void binder_destroy(struct yetty_yrender_gpu_resource_binder *self)
 {
     struct gpu_resource_binder_impl *impl = (struct gpu_resource_binder_impl *)self;
 
-    if (impl->pipeline) wgpuRenderPipelineRelease(impl->pipeline);
-    if (impl->pipeline_layout) wgpuPipelineLayoutRelease(impl->pipeline_layout);
-    if (impl->shader_module) wgpuShaderModuleRelease(impl->shader_module);
-    if (impl->quad_vertex_buffer && impl->allocator)
+    if (impl->pipeline) {
+        wgpuRenderPipelineRelease(impl->pipeline);
+    }
+    if (impl->pipeline_layout) {
+        wgpuPipelineLayoutRelease(impl->pipeline_layout);
+    }
+    if (impl->shader_module) {
+        wgpuShaderModuleRelease(impl->shader_module);
+    }
+    if (impl->quad_vertex_buffer && impl->allocator) {
         impl->allocator->ops->release_buffer(impl->allocator, impl->quad_vertex_buffer);
-    if (impl->bind_group) wgpuBindGroupRelease(impl->bind_group);
-    if (impl->bind_group_layout) wgpuBindGroupLayoutRelease(impl->bind_group_layout);
-    if (impl->storage_buffer && impl->allocator)
+    }
+    if (impl->bind_group) {
+        wgpuBindGroupRelease(impl->bind_group);
+    }
+    if (impl->bind_group_layout) {
+        wgpuBindGroupLayoutRelease(impl->bind_group_layout);
+    }
+    if (impl->storage_buffer && impl->allocator) {
         impl->allocator->ops->release_buffer(impl->allocator, impl->storage_buffer);
-    if (impl->uniform_buffer && impl->allocator)
+    }
+    if (impl->uniform_buffer && impl->allocator) {
         impl->allocator->ops->release_buffer(impl->allocator, impl->uniform_buffer);
+    }
     for (size_t ai = 0; ai < ATLAS_COUNT; ai++) {
         struct texture_atlas *a = &impl->atlases[ai];
-        if (a->sampler) wgpuSamplerRelease(a->sampler);
-        if (a->view) wgpuTextureViewRelease(a->view);
-        if (a->texture && impl->allocator)
+        if (a->sampler) {
+            wgpuSamplerRelease(a->sampler);
+        }
+        if (a->view) {
+            wgpuTextureViewRelease(a->view);
+        }
+        if (a->texture && impl->allocator) {
             impl->allocator->ops->release_texture(impl->allocator, a->texture);
+        }
     }
     free(impl->shader_code.data);
     free(impl);
@@ -791,19 +905,22 @@ static struct yetty_ycore_void_result binder_submit(struct yetty_yrender_gpu_res
     /* Don't re-add if already submitted (idempotent) */
     if (impl->submitted) {
         for (size_t i = 0; i < impl->resource_set_count; i++) {
-            if (impl->resource_sets[i] == rs)
+            if (impl->resource_sets[i] == rs) {
                 return YETTY_OK_VOID();
+            }
         }
     }
 
-    if (impl->resource_set_count >= MAX_RESOURCE_SETS)
+    if (impl->resource_set_count >= MAX_RESOURCE_SETS) {
         return YETTY_ERR(yetty_ycore_void, "max resource sets reached");
+    }
 
     impl->resource_sets[impl->resource_set_count++] = (struct yetty_yrender_gpu_resource_set *)rs;
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result binder_finalize(struct yetty_yrender_gpu_resource_binder *self)
+static struct yetty_ycore_void_result binder_finalize(
+    struct yetty_yrender_gpu_resource_binder *self)
 {
     struct gpu_resource_binder_impl *impl = (struct gpu_resource_binder_impl *)self;
 
@@ -814,11 +931,26 @@ static struct yetty_ycore_void_result binder_finalize(struct yetty_yrender_gpu_r
     ydebug("GpuResourceBinder: finalize CACHE MISS - rebuilding pipeline");
 
     /* Release old GPU resources if re-finalizing */
-    if (impl->pipeline) { wgpuRenderPipelineRelease(impl->pipeline); impl->pipeline = NULL; }
-    if (impl->pipeline_layout) { wgpuPipelineLayoutRelease(impl->pipeline_layout); impl->pipeline_layout = NULL; }
-    if (impl->shader_module) { wgpuShaderModuleRelease(impl->shader_module); impl->shader_module = NULL; }
-    if (impl->bind_group) { wgpuBindGroupRelease(impl->bind_group); impl->bind_group = NULL; }
-    if (impl->bind_group_layout) { wgpuBindGroupLayoutRelease(impl->bind_group_layout); impl->bind_group_layout = NULL; }
+    if (impl->pipeline) {
+        wgpuRenderPipelineRelease(impl->pipeline);
+        impl->pipeline = NULL;
+    }
+    if (impl->pipeline_layout) {
+        wgpuPipelineLayoutRelease(impl->pipeline_layout);
+        impl->pipeline_layout = NULL;
+    }
+    if (impl->shader_module) {
+        wgpuShaderModuleRelease(impl->shader_module);
+        impl->shader_module = NULL;
+    }
+    if (impl->bind_group) {
+        wgpuBindGroupRelease(impl->bind_group);
+        impl->bind_group = NULL;
+    }
+    if (impl->bind_group_layout) {
+        wgpuBindGroupLayoutRelease(impl->bind_group_layout);
+        impl->bind_group_layout = NULL;
+    }
     if (impl->storage_buffer && impl->allocator) {
         impl->allocator->ops->release_buffer(impl->allocator, impl->storage_buffer);
         impl->storage_buffer = NULL;
@@ -829,8 +961,14 @@ static struct yetty_ycore_void_result binder_finalize(struct yetty_yrender_gpu_r
     }
     for (size_t ai = 0; ai < ATLAS_COUNT; ai++) {
         struct texture_atlas *a = &impl->atlases[ai];
-        if (a->sampler) { wgpuSamplerRelease(a->sampler); a->sampler = NULL; }
-        if (a->view) { wgpuTextureViewRelease(a->view); a->view = NULL; }
+        if (a->sampler) {
+            wgpuSamplerRelease(a->sampler);
+            a->sampler = NULL;
+        }
+        if (a->view) {
+            wgpuTextureViewRelease(a->view);
+            a->view = NULL;
+        }
         if (a->texture && impl->allocator) {
             impl->allocator->ops->release_texture(impl->allocator, a->texture);
             a->texture = NULL;
@@ -848,34 +986,45 @@ static struct yetty_ycore_void_result binder_finalize(struct yetty_yrender_gpu_r
     impl->shader_code.size = 0;
     impl->visited_rs_count = 0;
 
-    for (size_t i = 0; i < impl->resource_set_count; i++)
+    for (size_t i = 0; i < impl->resource_set_count; i++) {
         collect_resources(impl, impl->resource_sets[i]);
+    }
 
     /* Create GPU resources */
     struct yetty_ycore_void_result res = create_gpu_resources(impl);
-    if (!YETTY_IS_OK(res)) return res;
+    if (!YETTY_IS_OK(res)) {
+        return res;
+    }
 
     /* Upload data */
     res = upload_all(impl);
-    if (!YETTY_IS_OK(res)) return res;
+    if (!YETTY_IS_OK(res)) {
+        return res;
+    }
 
     /* Create bind group */
     res = create_bind_group(impl);
-    if (!YETTY_IS_OK(res)) return res;
+    if (!YETTY_IS_OK(res)) {
+        return res;
+    }
 
     /* Compile and create pipeline */
     res = compile_and_create_pipeline(impl);
-    if (!YETTY_IS_OK(res)) return res;
+    if (!YETTY_IS_OK(res)) {
+        return res;
+    }
 
     impl->finalized = 1;
     impl->submitted = 1;
 
     /* Store shader hash and resource sizes for change detection */
     impl->last_shader_hash = 0;
-    for (size_t i = 0; i < impl->resource_set_count; i++)
+    for (size_t i = 0; i < impl->resource_set_count; i++) {
         impl->last_shader_hash ^= compute_tree_shader_hash(impl->resource_sets[i]);
-    for (size_t i = 0; i < impl->flat_buffer_count; i++)
+    }
+    for (size_t i = 0; i < impl->flat_buffer_count; i++) {
         impl->last_buffer_sizes[i] = impl->flat_buffers[i].src->size;
+    }
     for (size_t i = 0; i < impl->flat_texture_count; i++) {
         impl->last_tex_width[i] = impl->flat_textures[i].src->width;
         impl->last_tex_height[i] = impl->flat_textures[i].src->height;
@@ -892,16 +1041,18 @@ static struct yetty_ycore_void_result binder_update(struct yetty_yrender_gpu_res
 {
     struct gpu_resource_binder_impl *impl = (struct gpu_resource_binder_impl *)self;
 
-    if (!impl->finalized)
+    if (!impl->finalized) {
         return YETTY_ERR(yetty_ycore_void, "not finalized");
+    }
 
     /* Check if anything structural changed — requires full re-finalize */
     int need_refinalize = 0;
 
     /* Shader hash */
     uint64_t current_hash = 0;
-    for (size_t i = 0; i < impl->resource_set_count; i++)
+    for (size_t i = 0; i < impl->resource_set_count; i++) {
         current_hash ^= compute_tree_shader_hash(impl->resource_sets[i]);
+    }
     if (current_hash != impl->last_shader_hash) {
         ydebug("GpuResourceBinder: shader hash changed 0x%llx -> 0x%llx",
                (unsigned long long)impl->last_shader_hash, (unsigned long long)current_hash);
@@ -949,13 +1100,15 @@ static struct yetty_ycore_void_result binder_update(struct yetty_yrender_gpu_res
     /* Dirty buffers */
     for (size_t i = 0; i < impl->flat_buffer_count; i++) {
         struct flat_buffer *fb = &impl->flat_buffers[i];
-        if (!fb->src->dirty) continue;
+        if (!fb->src->dirty) {
+            continue;
+        }
         any_dirty = 1;
         if (fb->src->data && fb->src->size > 0 && impl->storage_buffer) {
-            ydebug("GpuResourceBinder: update buffer '%s_%s' %zu bytes at offset %zu",
-                   fb->ns, fb->src->name, fb->src->size, fb->mega_offset);
-            wgpuQueueWriteBuffer(impl->queue, impl->storage_buffer, fb->mega_offset,
-                                 fb->src->data, fb->src->size);
+            ydebug("GpuResourceBinder: update buffer '%s_%s' %zu bytes at offset %zu", fb->ns,
+                   fb->src->name, fb->src->size, fb->mega_offset);
+            wgpuQueueWriteBuffer(impl->queue, impl->storage_buffer, fb->mega_offset, fb->src->data,
+                                 fb->src->size);
         }
         fb->src->dirty = 0;
     }
@@ -963,13 +1116,21 @@ static struct yetty_ycore_void_result binder_update(struct yetty_yrender_gpu_res
     /* Dirty textures */
     for (size_t i = 0; i < impl->flat_texture_count; i++) {
         struct flat_texture *ft = &impl->flat_textures[i];
-        if (!ft->src->dirty) continue;
+        if (!ft->src->dirty) {
+            continue;
+        }
         any_dirty = 1;
 
         struct texture_atlas *a = &impl->atlases[ft->atlas_index];
-        if (!ft->src->data || !a->texture) { ft->src->dirty = 0; continue; }
+        if (!ft->src->data || !a->texture) {
+            ft->src->dirty = 0;
+            continue;
+        }
         size_t tex_size = yetty_yrender_texture_get_size(ft->src);
-        if (tex_size == 0) { ft->src->dirty = 0; continue; }
+        if (tex_size == 0) {
+            ft->src->dirty = 0;
+            continue;
+        }
 
         uint32_t bpp = (ft->src->format == WGPUTextureFormat_R8Unorm) ? 1 : 4;
         WGPUTexelCopyTextureInfo dest = {0};
@@ -983,11 +1144,9 @@ static struct yetty_ycore_void_result binder_update(struct yetty_yrender_gpu_res
         src_layout.rowsPerImage = ft->src->height;
 
         WGPUExtent3D extent = {ft->src->width, ft->src->height, 1};
-        ydebug("GpuResourceBinder: update texture '%s_%s' %ux%u at atlas(%u,%u)",
-               ft->ns, ft->src->name, ft->src->width, ft->src->height,
-               ft->atlas_x, ft->atlas_y);
-        wgpuQueueWriteTexture(impl->queue, &dest, ft->src->data, tex_size,
-                              &src_layout, &extent);
+        ydebug("GpuResourceBinder: update texture '%s_%s' %ux%u at atlas(%u,%u)", ft->ns,
+               ft->src->name, ft->src->width, ft->src->height, ft->atlas_x, ft->atlas_y);
+        wgpuQueueWriteTexture(impl->queue, &dest, ft->src->data, tex_size, &src_layout, &extent);
         ft->src->dirty = 0;
     }
 
@@ -1001,15 +1160,18 @@ static struct yetty_ycore_void_result binder_update(struct yetty_yrender_gpu_res
             size_t align = yetty_yrender_uniform_type_align(u->type);
             offset = (offset + align - 1) & ~(align - 1);
             size_t sz = yetty_yrender_uniform_type_size(u->type);
-            if (offset + sz > sizeof(packed)) break;
+            if (offset + sz > sizeof(packed)) {
+                break;
+            }
             memcpy(packed + offset, &u->f32, sz);
             offset += sz;
         }
         wgpuQueueWriteBuffer(impl->queue, impl->uniform_buffer, 0, packed, offset);
     }
 
-    if (any_dirty)
+    if (any_dirty) {
         ydebug("GpuResourceBinder: update done (dirty resources uploaded)");
+    }
 
     return YETTY_OK_VOID();
 }
@@ -1019,10 +1181,12 @@ static struct yetty_ycore_void_result binder_bind(struct yetty_yrender_gpu_resou
 {
     struct gpu_resource_binder_impl *impl = (struct gpu_resource_binder_impl *)self;
 
-    if (!impl->finalized)
+    if (!impl->finalized) {
         return YETTY_ERR(yetty_ycore_void, "not finalized");
-    if (!impl->bind_group)
+    }
+    if (!impl->bind_group) {
         return YETTY_ERR(yetty_ycore_void, "bind group is null");
+    }
 
     wgpuRenderPassEncoderSetBindGroup(pass, group_index, impl->bind_group, 0, NULL);
     return YETTY_OK_VOID();
@@ -1033,23 +1197,30 @@ static WGPURenderPipeline binder_get_pipeline(const struct yetty_yrender_gpu_res
     return ((const struct gpu_resource_binder_impl *)self)->pipeline;
 }
 
-static WGPUBuffer binder_get_quad_vertex_buffer(const struct yetty_yrender_gpu_resource_binder *self)
+static WGPUBuffer binder_get_quad_vertex_buffer(
+    const struct yetty_yrender_gpu_resource_binder *self)
 {
     return ((const struct gpu_resource_binder_impl *)self)->quad_vertex_buffer;
 }
 
 struct yetty_yrender_gpu_resource_binder_result yetty_yrender_gpu_resource_binder_create(
-    WGPUDevice device,
-    WGPUQueue queue,
-    WGPUTextureFormat surface_format,
+    WGPUDevice device, WGPUQueue queue, WGPUTextureFormat surface_format,
     struct yetty_yrender_gpu_allocator *allocator)
 {
-    if (!device) return YETTY_ERR(yetty_yrender_gpu_resource_binder, "device is null");
-    if (!queue) return YETTY_ERR(yetty_yrender_gpu_resource_binder, "queue is null");
-    if (!allocator) return YETTY_ERR(yetty_yrender_gpu_resource_binder, "allocator is null");
+    if (!device) {
+        return YETTY_ERR(yetty_yrender_gpu_resource_binder, "device is null");
+    }
+    if (!queue) {
+        return YETTY_ERR(yetty_yrender_gpu_resource_binder, "queue is null");
+    }
+    if (!allocator) {
+        return YETTY_ERR(yetty_yrender_gpu_resource_binder, "allocator is null");
+    }
 
     struct gpu_resource_binder_impl *impl = calloc(1, sizeof(struct gpu_resource_binder_impl));
-    if (!impl) return YETTY_ERR(yetty_yrender_gpu_resource_binder, "failed to allocate");
+    if (!impl) {
+        return YETTY_ERR(yetty_yrender_gpu_resource_binder, "failed to allocate");
+    }
 
     impl->base.ops = &binder_ops;
     impl->device = device;

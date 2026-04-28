@@ -77,11 +77,15 @@ struct ssh_pty {
 
 /* Forward declarations */
 static void ssh_pty_destroy(struct yetty_yplatform_pty *self);
-static struct yetty_ycore_size_result ssh_pty_read(struct yetty_yplatform_pty *self, char *buf, size_t max_len);
-static struct yetty_ycore_size_result ssh_pty_write(struct yetty_yplatform_pty *self, const char *data, size_t len);
-static struct yetty_ycore_void_result ssh_pty_resize(struct yetty_yplatform_pty *self, uint32_t cols, uint32_t rows);
+static struct yetty_ycore_size_result ssh_pty_read(struct yetty_yplatform_pty *self, char *buf,
+                                                   size_t max_len);
+static struct yetty_ycore_size_result ssh_pty_write(struct yetty_yplatform_pty *self,
+                                                    const char *data, size_t len);
+static struct yetty_ycore_void_result ssh_pty_resize(struct yetty_yplatform_pty *self,
+                                                     uint32_t cols, uint32_t rows);
 static struct yetty_ycore_void_result ssh_pty_stop(struct yetty_yplatform_pty *self);
-static struct yetty_yplatform_pty_pipe_source *ssh_pty_pipe_source(struct yetty_yplatform_pty *self);
+static struct yetty_yplatform_pty_pipe_source *ssh_pty_pipe_source(
+    struct yetty_yplatform_pty *self);
 
 static const struct yetty_yplatform_pty_ops ssh_pty_ops = {
     .destroy = ssh_pty_destroy,
@@ -95,8 +99,9 @@ static const struct yetty_yplatform_pty_ops ssh_pty_ops = {
 /* Duplicate string or NULL. Empty strings become NULL for easier "has value" checks. */
 static char *dup_str_or_null(const char *s)
 {
-    if (!s || !s[0])
+    if (!s || !s[0]) {
         return NULL;
+    }
     return strdup(s);
 }
 
@@ -122,10 +127,12 @@ static int ssh_pty_tcp_connect(const char *host, uint16_t port)
 
     for (rp = res; rp != NULL; rp = rp->ai_next) {
         sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-        if (sock < 0)
+        if (sock < 0) {
             continue;
-        if (connect(sock, rp->ai_addr, rp->ai_addrlen) == 0)
+        }
+        if (connect(sock, rp->ai_addr, rp->ai_addrlen) == 0) {
             break;
+        }
         close(sock);
         sock = -1;
     }
@@ -156,17 +163,21 @@ static int ssh_pty_wait_socket(struct ssh_pty *pty)
 
     pfd.fd = pty->socket;
     pfd.events = 0;
-    if (dir & LIBSSH2_SESSION_BLOCK_INBOUND)
+    if (dir & LIBSSH2_SESSION_BLOCK_INBOUND) {
         pfd.events |= POLLIN;
-    if (dir & LIBSSH2_SESSION_BLOCK_OUTBOUND)
+    }
+    if (dir & LIBSSH2_SESSION_BLOCK_OUTBOUND) {
         pfd.events |= POLLOUT;
-    if (pfd.events == 0)
+    }
+    if (pfd.events == 0) {
         pfd.events = POLLIN;
+    }
 
     rc = poll(&pfd, 1, SSH_PTY_POLL_TIMEOUT_MS);
     if (rc < 0) {
-        if (errno == EINTR)
+        if (errno == EINTR) {
             return 0;
+        }
         return -1;
     }
     return 0;
@@ -174,16 +185,19 @@ static int ssh_pty_wait_socket(struct ssh_pty *pty)
 
 /* Run an arbitrary non-blocking libssh2 call to completion.
  * Used during connect() / auth() / channel setup under session_mutex. */
-#define SSH_RUN_NB(pty, call) \
-    ({ \
-        int _rc; \
-        do { \
-            _rc = (call); \
-            if (_rc == LIBSSH2_ERROR_EAGAIN) { \
-                if (ssh_pty_wait_socket(pty) < 0) { _rc = -1; break; } \
-            } \
-        } while (_rc == LIBSSH2_ERROR_EAGAIN); \
-        _rc; \
+#define SSH_RUN_NB(pty, call)                                                                      \
+    ({                                                                                             \
+        int _rc;                                                                                   \
+        do {                                                                                       \
+            _rc = (call);                                                                          \
+            if (_rc == LIBSSH2_ERROR_EAGAIN) {                                                     \
+                if (ssh_pty_wait_socket(pty) < 0) {                                                \
+                    _rc = -1;                                                                      \
+                    break;                                                                         \
+                }                                                                                  \
+            }                                                                                      \
+        } while (_rc == LIBSSH2_ERROR_EAGAIN);                                                     \
+        _rc;                                                                                       \
     })
 
 static int ssh_pty_handshake(struct ssh_pty *pty)
@@ -205,9 +219,9 @@ static int ssh_pty_authenticate(struct ssh_pty *pty)
 
     /* Try public key auth first if provided */
     if (pty->private_key_path) {
-        rc = SSH_RUN_NB(pty, libssh2_userauth_publickey_fromfile(
-            pty->session, pty->username, NULL,
-            pty->private_key_path, pty->private_key_passphrase));
+        rc = SSH_RUN_NB(pty, libssh2_userauth_publickey_fromfile(pty->session, pty->username, NULL,
+                                                                 pty->private_key_path,
+                                                                 pty->private_key_passphrase));
         if (rc == 0) {
             yinfo("ssh: authenticated with public key");
             return 0;
@@ -217,8 +231,7 @@ static int ssh_pty_authenticate(struct ssh_pty *pty)
 
     /* Try password auth */
     if (pty->password) {
-        rc = SSH_RUN_NB(pty, libssh2_userauth_password(
-            pty->session, pty->username, pty->password));
+        rc = SSH_RUN_NB(pty, libssh2_userauth_password(pty->session, pty->username, pty->password));
         if (rc == 0) {
             yinfo("ssh: authenticated with password");
             return 0;
@@ -235,21 +248,21 @@ static int ssh_pty_open_channel(struct ssh_pty *pty)
     /* libssh2_channel_open_session returns NULL on error; EAGAIN via session */
     while (1) {
         pty->channel = libssh2_channel_open_session(pty->session);
-        if (pty->channel)
+        if (pty->channel) {
             break;
+        }
         if (libssh2_session_last_errno(pty->session) != LIBSSH2_ERROR_EAGAIN) {
             yerror("ssh: failed to open channel");
             return -1;
         }
-        if (ssh_pty_wait_socket(pty) < 0)
+        if (ssh_pty_wait_socket(pty) < 0) {
             return -1;
+        }
     }
 
     int rc = SSH_RUN_NB(pty, libssh2_channel_request_pty_ex(
-        pty->channel,
-        pty->term_type, (unsigned int)strlen(pty->term_type),
-        NULL, 0,
-        (int)pty->cols, (int)pty->rows, 0, 0));
+                                 pty->channel, pty->term_type, (unsigned int)strlen(pty->term_type),
+                                 NULL, 0, (int)pty->cols, (int)pty->rows, 0, 0));
     if (rc != 0) {
         yerror("ssh: failed to request pty (rc=%d)", rc);
         return -1;
@@ -280,14 +293,17 @@ static void *ssh_pty_reader_thread(void *arg)
 
         int pr = poll(&pfd, 1, SSH_PTY_POLL_TIMEOUT_MS);
         if (pr < 0) {
-            if (errno == EINTR)
+            if (errno == EINTR) {
                 continue;
+            }
             break;
         }
-        if (!pty->running)
+        if (!pty->running) {
             break;
-        if (pr == 0)
-            continue;  /* timeout - loop to re-check running */
+        }
+        if (pr == 0) {
+            continue; /* timeout - loop to re-check running */
+        }
 
         if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
             yinfo("ssh_reader: socket closed");
@@ -299,11 +315,13 @@ static void *ssh_pty_reader_thread(void *arg)
         ssize_t total = 0;
         for (;;) {
             ssize_t n = libssh2_channel_read(pty->channel, buf, sizeof(buf));
-            if (n == LIBSSH2_ERROR_EAGAIN)
+            if (n == LIBSSH2_ERROR_EAGAIN) {
                 break;
+            }
             if (n <= 0) {
-                if (libssh2_channel_eof(pty->channel))
+                if (libssh2_channel_eof(pty->channel)) {
                     channel_eof = 1;
+                }
                 break;
             }
             /* Write to pipe while still under mutex is OK: pipe is non-blocking.
@@ -315,8 +333,9 @@ static void *ssh_pty_reader_thread(void *arg)
         }
         pthread_mutex_unlock(&pty->session_mutex);
 
-        if (total > 0)
+        if (total > 0) {
             ytrace("ssh_reader: forwarded %zd bytes", total);
+        }
 
         if (channel_eof) {
             yinfo("ssh_reader: channel EOF");
@@ -354,11 +373,16 @@ static void ssh_pty_destroy(struct yetty_yplatform_pty *self)
         pty->socket = -1;
     }
 
-    if (pty->output_pipe[0] >= 0) close(pty->output_pipe[0]);
-    if (pty->output_pipe[1] >= 0) close(pty->output_pipe[1]);
+    if (pty->output_pipe[0] >= 0) {
+        close(pty->output_pipe[0]);
+    }
+    if (pty->output_pipe[1] >= 0) {
+        close(pty->output_pipe[1]);
+    }
 
-    if (pty->libssh2_initialized)
+    if (pty->libssh2_initialized) {
         libssh2_exit();
+    }
 
     pthread_mutex_destroy(&pty->session_mutex);
 
@@ -378,26 +402,31 @@ static void ssh_pty_destroy(struct yetty_yplatform_pty *self)
     free(pty);
 }
 
-static struct yetty_ycore_size_result ssh_pty_read(struct yetty_yplatform_pty *self, char *buf, size_t max_len)
+static struct yetty_ycore_size_result ssh_pty_read(struct yetty_yplatform_pty *self, char *buf,
+                                                   size_t max_len)
 {
     struct ssh_pty *pty = (struct ssh_pty *)self;
 
-    if (max_len == 0)
+    if (max_len == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
+    }
 
     ssize_t n = read(pty->output_pipe[0], buf, max_len);
-    if (n < 0)
+    if (n < 0) {
         n = 0;
+    }
 
     return YETTY_OK(yetty_ycore_size, (size_t)n);
 }
 
-static struct yetty_ycore_size_result ssh_pty_write(struct yetty_yplatform_pty *self, const char *data, size_t len)
+static struct yetty_ycore_size_result ssh_pty_write(struct yetty_yplatform_pty *self,
+                                                    const char *data, size_t len)
 {
     struct ssh_pty *pty = (struct ssh_pty *)self;
 
-    if (!pty->running || !pty->channel || len == 0)
+    if (!pty->running || !pty->channel || len == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
+    }
 
     size_t written = 0;
 
@@ -419,22 +448,25 @@ static struct yetty_ycore_size_result ssh_pty_write(struct yetty_yplatform_pty *
     return YETTY_OK(yetty_ycore_size, written);
 }
 
-static struct yetty_ycore_void_result ssh_pty_resize(struct yetty_yplatform_pty *self, uint32_t cols, uint32_t rows)
+static struct yetty_ycore_void_result ssh_pty_resize(struct yetty_yplatform_pty *self,
+                                                     uint32_t cols, uint32_t rows)
 {
     struct ssh_pty *pty = (struct ssh_pty *)self;
 
     pty->cols = cols;
     pty->rows = rows;
 
-    if (!pty->channel)
+    if (!pty->channel) {
         return YETTY_OK_VOID();
+    }
 
     pthread_mutex_lock(&pty->session_mutex);
     int rc = libssh2_channel_request_pty_size(pty->channel, (int)cols, (int)rows);
     pthread_mutex_unlock(&pty->session_mutex);
 
-    if (rc != 0 && rc != LIBSSH2_ERROR_EAGAIN)
+    if (rc != 0 && rc != LIBSSH2_ERROR_EAGAIN) {
         ywarn("ssh: failed to send window size: rc=%d", rc);
+    }
 
     return YETTY_OK_VOID();
 }
@@ -443,14 +475,16 @@ static struct yetty_ycore_void_result ssh_pty_stop(struct yetty_yplatform_pty *s
 {
     struct ssh_pty *pty = (struct ssh_pty *)self;
 
-    if (!pty->running && !pty->reader_started)
+    if (!pty->running && !pty->reader_started) {
         return YETTY_OK_VOID();
+    }
 
     pty->running = 0;
 
     /* shutdown wakes the reader's poll() */
-    if (pty->socket >= 0)
+    if (pty->socket >= 0) {
         shutdown(pty->socket, SHUT_RDWR);
+    }
 
     if (pty->reader_started) {
         pthread_join(pty->reader_thread, NULL);
@@ -479,25 +513,29 @@ struct yetty_yplatform_pty_result ssh_pty_create(struct yetty_yconfig *config)
     const char *key_pass;
     const char *term_type;
 
-    if (!config || !config->ops)
+    if (!config || !config->ops) {
         return YETTY_ERR(yetty_yplatform_pty, "ssh: missing yconfig");
+    }
 
-    host      = config->ops->get_string(config, "ssh/host", "127.0.0.1");
-    port_i    = config->ops->get_int(config,    "ssh/port", 22);
-    username  = config->ops->get_string(config, "ssh/username", "");
-    password  = config->ops->get_string(config, "ssh/password", "");
-    key_path  = config->ops->get_string(config, "ssh/private-key-path", "");
-    key_pass  = config->ops->get_string(config, "ssh/private-key-passphrase", "");
+    host = config->ops->get_string(config, "ssh/host", "127.0.0.1");
+    port_i = config->ops->get_int(config, "ssh/port", 22);
+    username = config->ops->get_string(config, "ssh/username", "");
+    password = config->ops->get_string(config, "ssh/password", "");
+    key_path = config->ops->get_string(config, "ssh/private-key-path", "");
+    key_pass = config->ops->get_string(config, "ssh/private-key-passphrase", "");
     term_type = config->ops->get_string(config, "ssh/term-type", "xterm-256color");
 
-    if (!username || !username[0])
+    if (!username || !username[0]) {
         return YETTY_ERR(yetty_yplatform_pty, "ssh: ssh/username is required");
-    if (port_i <= 0 || port_i > 65535)
+    }
+    if (port_i <= 0 || port_i > 65535) {
         return YETTY_ERR(yetty_yplatform_pty, "ssh: invalid ssh/port");
+    }
 
     pty = calloc(1, sizeof(struct ssh_pty));
-    if (!pty)
+    if (!pty) {
         return YETTY_ERR(yetty_yplatform_pty, "ssh: alloc failed");
+    }
 
     pty->base.ops = &ssh_pty_ops;
     pty->socket = -1;

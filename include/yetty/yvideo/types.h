@@ -26,11 +26,11 @@ enum yetty_yvideo_color_matrix {
  * convert before handing off. */
 struct yetty_yvideo_yuv_frame {
     const uint8_t *y_plane;
-    uint32_t       y_stride;
+    uint32_t y_stride;
     const uint8_t *u_plane;
-    uint32_t       u_stride;
+    uint32_t u_stride;
     const uint8_t *v_plane;
-    uint32_t       v_stride;
+    uint32_t v_stride;
 
     uint32_t width;
     uint32_t height;
@@ -43,10 +43,10 @@ struct yetty_yvideo_yuv_frame {
  * on the same encoder. */
 struct yetty_yvideo_encoded_frame {
     const uint8_t *data;
-    size_t         size;
-    bool           is_idr;
-    uint64_t       timestamp_us;
-    uint32_t       frame_index;
+    size_t size;
+    bool is_idr;
+    uint64_t timestamp_us;
+    uint32_t frame_index;
 };
 
 #ifdef __cplusplus

@@ -35,25 +35,21 @@ extern "C" {
 
 /* Create the wgpu await machinery. On desktop also starts the periodic
  * ProcessEvents tick on the loop thread. */
-struct yplatform_wgpu_ptr_result
-yplatform_wgpu_create(WGPUInstance instance,
-                      struct yetty_ycore_event_loop *loop);
+struct yplatform_wgpu_ptr_result yplatform_wgpu_create(WGPUInstance instance,
+                                                       struct yetty_ycore_event_loop *loop);
 
 /* Destroy. Stops the tick on desktop. Handles NULL. */
 void yplatform_wgpu_destroy(struct yplatform_wgpu *wgpu);
 
 /* Yield the calling coroutine until the buffer map completes. Caller must
  * subsequently use wgpuBufferGetConstMappedRange / wgpuBufferUnmap. */
-struct yetty_ycore_void_result
-yplatform_wgpu_buffer_map_await(struct yplatform_wgpu *wgpu,
-                                WGPUBuffer buffer,
-                                WGPUMapMode mode,
-                                size_t offset,
-                                size_t size);
+struct yetty_ycore_void_result yplatform_wgpu_buffer_map_await(struct yplatform_wgpu *wgpu,
+                                                               WGPUBuffer buffer, WGPUMapMode mode,
+                                                               size_t offset, size_t size);
 
 /* Yield until all currently-submitted work on the queue has finished. */
-struct yetty_ycore_void_result
-yplatform_wgpu_queue_done_await(struct yplatform_wgpu *wgpu, WGPUQueue queue);
+struct yetty_ycore_void_result yplatform_wgpu_queue_done_await(struct yplatform_wgpu *wgpu,
+                                                               WGPUQueue queue);
 
 #ifdef __cplusplus
 }

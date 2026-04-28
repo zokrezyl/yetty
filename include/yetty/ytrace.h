@@ -67,12 +67,12 @@ extern "C" {
 
 /* Trace point information */
 typedef struct {
-    bool* enabled;
-    const char* file;
+    bool *enabled;
+    const char *file;
     int line;
-    const char* function;
-    const char* level;
-    const char* message;
+    const char *function;
+    const char *level;
+    const char *message;
 } ytrace_point_t;
 
 /* Initialize the trace system (call once at startup, optional - auto-inits on first use) */
@@ -82,13 +82,13 @@ void ytrace_init(void);
 void ytrace_shutdown(void);
 
 /* Register a trace point - returns initial enabled state */
-bool ytrace_register(bool* enabled, const char* file, int line,
-                     const char* func, const char* level, const char* message);
+bool ytrace_register(bool *enabled, const char *file, int line, const char *func, const char *level,
+                     const char *message);
 
 /* Output a trace message (called when trace point is enabled) */
 // TODO: WE DO NOT WANT TO SEE ANY PLATFORM SPECIFIC CODE! ADD THEN WITH IFDEF!
-void ytrace_output(const char* level, const char* file, int line,
-                   const char* func, const char* fmt, ...)
+void ytrace_output(const char *level, const char *file, int line, const char *func, const char *fmt,
+                   ...)
 #ifndef _MSC_VER
     __attribute__((format(printf, 5, 6)))
 #endif
@@ -96,13 +96,13 @@ void ytrace_output(const char* level, const char* file, int line,
 
 /* Control functions */
 void ytrace_set_all_enabled(bool enabled);
-void ytrace_set_level_enabled(const char* level, bool enabled);
-void ytrace_set_file_enabled(const char* file, bool enabled);
-void ytrace_set_function_enabled(const char* function, bool enabled);
+void ytrace_set_level_enabled(const char *level, bool enabled);
+void ytrace_set_file_enabled(const char *file, bool enabled);
+void ytrace_set_function_enabled(const char *function, bool enabled);
 
 /* Query functions */
 size_t ytrace_get_point_count(void);
-const ytrace_point_t* ytrace_get_points(void);
+const ytrace_point_t *ytrace_get_points(void);
 
 /* List all trace points to stderr */
 void ytrace_list(void);
@@ -136,12 +136,8 @@ struct ytime_timer {
  * Record an observation for the given timer. On first call the timer is
  * registered into the global registry so ytime_timer_list() can report it.
  */
-void ytime_timer_observe(struct ytime_timer *t,
-                         const char *name,
-                         const char *file,
-                         int line,
-                         const char *function,
-                         double elapsed_ms);
+void ytime_timer_observe(struct ytime_timer *t, const char *name, const char *file, int line,
+                         const char *function, double elapsed_ms);
 
 /* Query functions for timer objects */
 size_t ytime_timer_get_count(void);
@@ -163,85 +159,90 @@ void ytime_timer_reset_all(void);
  */
 
 #if YTRACE_C_ENABLE_TRACE
-#define ytrace(fmt, ...) \
-    do { \
-        static bool _ytrace_enabled_ = false; \
-        static bool _ytrace_registered_ = false; \
-        if (!_ytrace_registered_) { \
-            _ytrace_enabled_ = ytrace_register(&_ytrace_enabled_, __FILE__, __LINE__, __func__, "trace", fmt); \
-            _ytrace_registered_ = true; \
-        } \
-        if (_ytrace_enabled_) { \
-            ytrace_output("trace", __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__); \
-        } \
+#define ytrace(fmt, ...)                                                                           \
+    do {                                                                                           \
+        static bool _ytrace_enabled_ = false;                                                      \
+        static bool _ytrace_registered_ = false;                                                   \
+        if (!_ytrace_registered_) {                                                                \
+            _ytrace_enabled_ =                                                                     \
+                ytrace_register(&_ytrace_enabled_, __FILE__, __LINE__, __func__, "trace", fmt);    \
+            _ytrace_registered_ = true;                                                            \
+        }                                                                                          \
+        if (_ytrace_enabled_) {                                                                    \
+            ytrace_output("trace", __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__);              \
+        }                                                                                          \
     } while (0)
 #else
 #define ytrace(fmt, ...) ((void)0)
 #endif
 
 #if YTRACE_C_ENABLE_DEBUG
-#define ydebug(fmt, ...) \
-    do { \
-        static bool _ytrace_enabled_ = false; \
-        static bool _ytrace_registered_ = false; \
-        if (!_ytrace_registered_) { \
-            _ytrace_enabled_ = ytrace_register(&_ytrace_enabled_, __FILE__, __LINE__, __func__, "debug", fmt); \
-            _ytrace_registered_ = true; \
-        } \
-        if (_ytrace_enabled_) { \
-            ytrace_output("debug", __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__); \
-        } \
+#define ydebug(fmt, ...)                                                                           \
+    do {                                                                                           \
+        static bool _ytrace_enabled_ = false;                                                      \
+        static bool _ytrace_registered_ = false;                                                   \
+        if (!_ytrace_registered_) {                                                                \
+            _ytrace_enabled_ =                                                                     \
+                ytrace_register(&_ytrace_enabled_, __FILE__, __LINE__, __func__, "debug", fmt);    \
+            _ytrace_registered_ = true;                                                            \
+        }                                                                                          \
+        if (_ytrace_enabled_) {                                                                    \
+            ytrace_output("debug", __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__);              \
+        }                                                                                          \
     } while (0)
 #else
 #define ydebug(fmt, ...) ((void)0)
 #endif
 
 #if YTRACE_C_ENABLE_INFO
-#define yinfo(fmt, ...) \
-    do { \
-        static bool _ytrace_enabled_ = false; \
-        static bool _ytrace_registered_ = false; \
-        if (!_ytrace_registered_) { \
-            _ytrace_enabled_ = ytrace_register(&_ytrace_enabled_, __FILE__, __LINE__, __func__, "info", fmt); \
-            _ytrace_registered_ = true; \
-        } \
-        if (_ytrace_enabled_) { \
-            ytrace_output("info", __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__); \
-        } \
+#define yinfo(fmt, ...)                                                                            \
+    do {                                                                                           \
+        static bool _ytrace_enabled_ = false;                                                      \
+        static bool _ytrace_registered_ = false;                                                   \
+        if (!_ytrace_registered_) {                                                                \
+            _ytrace_enabled_ =                                                                     \
+                ytrace_register(&_ytrace_enabled_, __FILE__, __LINE__, __func__, "info", fmt);     \
+            _ytrace_registered_ = true;                                                            \
+        }                                                                                          \
+        if (_ytrace_enabled_) {                                                                    \
+            ytrace_output("info", __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__);               \
+        }                                                                                          \
     } while (0)
 #else
 #define yinfo(fmt, ...) ((void)0)
 #endif
 
 #if YTRACE_C_ENABLE_WARN
-#define ywarn(fmt, ...) \
-    do { \
-        static bool _ytrace_enabled_ = false; \
-        static bool _ytrace_registered_ = false; \
-        if (!_ytrace_registered_) { \
-            _ytrace_enabled_ = ytrace_register(&_ytrace_enabled_, __FILE__, __LINE__, __func__, "warn", fmt); \
-            _ytrace_registered_ = true; \
-        } \
-        if (_ytrace_enabled_) { \
-            ytrace_output("warn", __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__); \
-        } \
+#define ywarn(fmt, ...)                                                                            \
+    do {                                                                                           \
+        static bool _ytrace_enabled_ = false;                                                      \
+        static bool _ytrace_registered_ = false;                                                   \
+        if (!_ytrace_registered_) {                                                                \
+            _ytrace_enabled_ =                                                                     \
+                ytrace_register(&_ytrace_enabled_, __FILE__, __LINE__, __func__, "warn", fmt);     \
+            _ytrace_registered_ = true;                                                            \
+        }                                                                                          \
+        if (_ytrace_enabled_) {                                                                    \
+            ytrace_output("warn", __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__);               \
+        }                                                                                          \
     } while (0)
 #else
 #define ywarn(fmt, ...) ((void)0)
 #endif
 
 #if YTRACE_C_ENABLE_ERROR
-#define yerror(fmt, ...) \
-    do { \
-        static bool _ytrace_enabled_ = false; \
-        static bool _ytrace_registered_ = false; \
-        if (!_ytrace_registered_) { \
-            _ytrace_enabled_ = ytrace_register(&_ytrace_enabled_, __FILE__, __LINE__, __func__, "error", fmt); \
-            _ytrace_registered_ = true; \
-        } \
-        if (_ytrace_enabled_) { \
-            ytrace_output("error", __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__); \
-        } \
+#define yerror(fmt, ...)                                                                           \
+    do {                                                                                           \
+        static bool _ytrace_enabled_ = false;                                                      \
+        static bool _ytrace_registered_ = false;                                                   \
+        if (!_ytrace_registered_) {                                                                \
+            _ytrace_enabled_ =                                                                     \
+                ytrace_register(&_ytrace_enabled_, __FILE__, __LINE__, __func__, "error", fmt);    \
+            _ytrace_registered_ = true;                                                            \
+        }                                                                                          \
+        if (_ytrace_enabled_) {                                                                    \
+            ytrace_output("error", __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__);              \
+        }                                                                                          \
     } while (0)
 #else
 #define yerror(fmt, ...) ((void)0)
@@ -265,36 +266,32 @@ void ytime_timer_reset_all(void);
  * Because it uses ydebug, it obeys the standard ytrace enable/disable
  * controls. Start and report must live in the same scope.
  */
-#define ytime_start(name) \
-    double ytime_##name = ytime_monotonic_sec()
+#define ytime_start(name) double ytime_##name = ytime_monotonic_sec()
 
-#define ytime_report(name) \
-    do { \
-        static struct ytime_timer _ytime_timer_##name; \
-        double _ytime_elapsed_ms_ = \
-            (ytime_monotonic_sec() - ytime_##name) * 1000.0; \
-        ytime_timer_observe(&_ytime_timer_##name, #name, __FILE__, \
-                            __LINE__, __func__, _ytime_elapsed_ms_); \
-        yinfo(#name ": %.3f ms  (avg %.3f ms, min %.3f, max %.3f, n=%llu)", \
-              _ytime_elapsed_ms_, \
-              _ytime_timer_##name.avg_ms, \
-              _ytime_timer_##name.min_ms, \
-              _ytime_timer_##name.max_ms, \
-              (unsigned long long)_ytime_timer_##name.count); \
+#define ytime_report(name)                                                                         \
+    do {                                                                                           \
+        static struct ytime_timer _ytime_timer_##name;                                             \
+        double _ytime_elapsed_ms_ = (ytime_monotonic_sec() - ytime_##name) * 1000.0;               \
+        ytime_timer_observe(&_ytime_timer_##name, #name, __FILE__, __LINE__, __func__,             \
+                            _ytime_elapsed_ms_);                                                   \
+        yinfo(#name ": %.3f ms  (avg %.3f ms, min %.3f, max %.3f, n=%llu)", _ytime_elapsed_ms_,    \
+              _ytime_timer_##name.avg_ms, _ytime_timer_##name.min_ms, _ytime_timer_##name.max_ms,  \
+              (unsigned long long)_ytime_timer_##name.count);                                      \
     } while (0)
 
 /* Generic log macro with explicit level */
-#define ylog(lvl, fmt, ...) \
-    do { \
-        static bool _ytrace_enabled_ = false; \
-        static bool _ytrace_registered_ = false; \
-        if (!_ytrace_registered_) { \
-            _ytrace_enabled_ = ytrace_register(&_ytrace_enabled_, __FILE__, __LINE__, __func__, lvl, fmt); \
-            _ytrace_registered_ = true; \
-        } \
-        if (_ytrace_enabled_) { \
-            ytrace_output(lvl, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__); \
-        } \
+#define ylog(lvl, fmt, ...)                                                                        \
+    do {                                                                                           \
+        static bool _ytrace_enabled_ = false;                                                      \
+        static bool _ytrace_registered_ = false;                                                   \
+        if (!_ytrace_registered_) {                                                                \
+            _ytrace_enabled_ =                                                                     \
+                ytrace_register(&_ytrace_enabled_, __FILE__, __LINE__, __func__, lvl, fmt);        \
+            _ytrace_registered_ = true;                                                            \
+        }                                                                                          \
+        if (_ytrace_enabled_) {                                                                    \
+            ytrace_output(lvl, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__);                  \
+        }                                                                                          \
     } while (0)
 
 #else /* !YTRACE_C_ENABLED */
@@ -302,31 +299,74 @@ void ytime_timer_reset_all(void);
 /* All macros become no-ops when ytrace-c is disabled */
 #define ytrace(fmt, ...) ((void)0)
 #define ydebug(fmt, ...) ((void)0)
-#define yinfo(fmt, ...)  ((void)0)
-#define ywarn(fmt, ...)  ((void)0)
+#define yinfo(fmt, ...) ((void)0)
+#define ywarn(fmt, ...) ((void)0)
 #define yerror(fmt, ...) ((void)0)
 #define ylog(lvl, fmt, ...) ((void)0)
 #define ytime_start(name) ((void)0)
 #define ytime_report(name) ((void)0)
 
-static inline void ytrace_init(void) {}
-static inline void ytrace_shutdown(void) {}
-static inline void ytrace_set_all_enabled(bool enabled) { (void)enabled; }
-static inline void ytrace_set_level_enabled(const char* level, bool enabled) { (void)level; (void)enabled; }
-static inline void ytrace_set_file_enabled(const char* file, bool enabled) { (void)file; (void)enabled; }
-static inline void ytrace_set_function_enabled(const char* function, bool enabled) { (void)function; (void)enabled; }
-static inline size_t ytrace_get_point_count(void) { return 0; }
-static inline const ytrace_point_t* ytrace_get_points(void) { return NULL; }
-static inline void ytrace_list(void) {}
+static inline void ytrace_init(void)
+{
+}
+static inline void ytrace_shutdown(void)
+{
+}
+static inline void ytrace_set_all_enabled(bool enabled)
+{
+    (void)enabled;
+}
+static inline void ytrace_set_level_enabled(const char *level, bool enabled)
+{
+    (void)level;
+    (void)enabled;
+}
+static inline void ytrace_set_file_enabled(const char *file, bool enabled)
+{
+    (void)file;
+    (void)enabled;
+}
+static inline void ytrace_set_function_enabled(const char *function, bool enabled)
+{
+    (void)function;
+    (void)enabled;
+}
+static inline size_t ytrace_get_point_count(void)
+{
+    return 0;
+}
+static inline const ytrace_point_t *ytrace_get_points(void)
+{
+    return NULL;
+}
+static inline void ytrace_list(void)
+{
+}
 struct ytime_timer;
-static inline void ytime_timer_observe(struct ytime_timer *t, const char *name,
-                                       const char *file, int line,
-                                       const char *function, double elapsed_ms)
-{ (void)t; (void)name; (void)file; (void)line; (void)function; (void)elapsed_ms; }
-static inline size_t ytime_timer_get_count(void) { return 0; }
-static inline const struct ytime_timer *const *ytime_timer_get_all(void) { return NULL; }
-static inline void ytime_timer_list(void) {}
-static inline void ytime_timer_reset_all(void) {}
+static inline void ytime_timer_observe(struct ytime_timer *t, const char *name, const char *file,
+                                       int line, const char *function, double elapsed_ms)
+{
+    (void)t;
+    (void)name;
+    (void)file;
+    (void)line;
+    (void)function;
+    (void)elapsed_ms;
+}
+static inline size_t ytime_timer_get_count(void)
+{
+    return 0;
+}
+static inline const struct ytime_timer *const *ytime_timer_get_all(void)
+{
+    return NULL;
+}
+static inline void ytime_timer_list(void)
+{
+}
+static inline void ytime_timer_reset_all(void)
+{
+}
 
 #endif /* YTRACE_C_ENABLED */
 

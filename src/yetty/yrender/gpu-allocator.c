@@ -5,10 +5,7 @@
 
 #define MAX_ALLOCATIONS 1024
 
-enum alloc_type {
-    ALLOC_TYPE_BUFFER,
-    ALLOC_TYPE_TEXTURE
-};
+enum alloc_type { ALLOC_TYPE_BUFFER, ALLOC_TYPE_TEXTURE };
 
 struct allocation {
     char name[64];
@@ -28,11 +25,13 @@ struct gpu_allocator_impl {
 /* Forward declarations */
 static void gpu_allocator_destroy(struct yetty_yrender_gpu_allocator *self);
 static WGPUBuffer gpu_allocator_create_buffer(struct yetty_yrender_gpu_allocator *self,
-                                               const WGPUBufferDescriptor *desc);
-static void gpu_allocator_release_buffer(struct yetty_yrender_gpu_allocator *self, WGPUBuffer buffer);
+                                              const WGPUBufferDescriptor *desc);
+static void gpu_allocator_release_buffer(struct yetty_yrender_gpu_allocator *self,
+                                         WGPUBuffer buffer);
 static WGPUTexture gpu_allocator_create_texture(struct yetty_yrender_gpu_allocator *self,
-                                                 const WGPUTextureDescriptor *desc);
-static void gpu_allocator_release_texture(struct yetty_yrender_gpu_allocator *self, WGPUTexture texture);
+                                                const WGPUTextureDescriptor *desc);
+static void gpu_allocator_release_texture(struct yetty_yrender_gpu_allocator *self,
+                                          WGPUTexture texture);
 static uint64_t gpu_allocator_total_allocated_bytes(const struct yetty_yrender_gpu_allocator *self);
 
 static const struct yetty_yrender_gpu_allocator_ops gpu_allocator_ops = {
@@ -52,8 +51,9 @@ static void label_to_string(WGPUStringView label, char *out, size_t out_size)
         return;
     }
     size_t len = label.length;
-    if (len >= out_size)
+    if (len >= out_size) {
         len = out_size - 1;
+    }
     memcpy(out, label.data, len);
     out[len] = '\0';
 }
@@ -82,7 +82,7 @@ static void gpu_allocator_destroy(struct yetty_yrender_gpu_allocator *self)
 }
 
 static WGPUBuffer gpu_allocator_create_buffer(struct yetty_yrender_gpu_allocator *self,
-                                               const WGPUBufferDescriptor *desc)
+                                              const WGPUBufferDescriptor *desc)
 {
     struct gpu_allocator_impl *impl = (struct gpu_allocator_impl *)self;
 
@@ -104,27 +104,27 @@ static WGPUBuffer gpu_allocator_create_buffer(struct yetty_yrender_gpu_allocator
     alloc->handle = buffer;
     impl->total_bytes += desc->size;
 
-    ydebug("GPU [+] buffer '%s': %lu bytes — total: %lu bytes",
-           alloc->name, (unsigned long)desc->size, (unsigned long)impl->total_bytes);
+    ydebug("GPU [+] buffer '%s': %lu bytes — total: %lu bytes", alloc->name,
+           (unsigned long)desc->size, (unsigned long)impl->total_bytes);
 
     return buffer;
 }
 
-static void gpu_allocator_release_buffer(struct yetty_yrender_gpu_allocator *self, WGPUBuffer buffer)
+static void gpu_allocator_release_buffer(struct yetty_yrender_gpu_allocator *self,
+                                         WGPUBuffer buffer)
 {
     struct gpu_allocator_impl *impl = (struct gpu_allocator_impl *)self;
 
-    if (!buffer)
+    if (!buffer) {
         return;
+    }
 
     for (size_t i = 0; i < impl->allocation_count; i++) {
         if (impl->allocations[i].type == ALLOC_TYPE_BUFFER &&
             impl->allocations[i].handle == buffer) {
             impl->total_bytes -= impl->allocations[i].size;
-            ydebug("GPU [-] buffer '%s': %lu bytes — total: %lu bytes",
-                   impl->allocations[i].name,
-                   (unsigned long)impl->allocations[i].size,
-                   (unsigned long)impl->total_bytes);
+            ydebug("GPU [-] buffer '%s': %lu bytes — total: %lu bytes", impl->allocations[i].name,
+                   (unsigned long)impl->allocations[i].size, (unsigned long)impl->total_bytes);
             memmove(&impl->allocations[i], &impl->allocations[i + 1],
                     (impl->allocation_count - i - 1) * sizeof(struct allocation));
             impl->allocation_count--;
@@ -136,7 +136,7 @@ static void gpu_allocator_release_buffer(struct yetty_yrender_gpu_allocator *sel
 }
 
 static WGPUTexture gpu_allocator_create_texture(struct yetty_yrender_gpu_allocator *self,
-                                                 const WGPUTextureDescriptor *desc)
+                                                const WGPUTextureDescriptor *desc)
 {
     struct gpu_allocator_impl *impl = (struct gpu_allocator_impl *)self;
 
@@ -151,8 +151,8 @@ static WGPUTexture gpu_allocator_create_texture(struct yetty_yrender_gpu_allocat
         return NULL;
     }
 
-    uint64_t size = (uint64_t)desc->size.width * desc->size.height *
-                    desc->size.depthOrArrayLayers * bytes_per_pixel(desc->format);
+    uint64_t size = (uint64_t)desc->size.width * desc->size.height * desc->size.depthOrArrayLayers *
+                    bytes_per_pixel(desc->format);
 
     struct allocation *alloc = &impl->allocations[impl->allocation_count++];
     label_to_string(desc->label, alloc->name, sizeof(alloc->name));
@@ -161,28 +161,28 @@ static WGPUTexture gpu_allocator_create_texture(struct yetty_yrender_gpu_allocat
     alloc->handle = texture;
     impl->total_bytes += size;
 
-    ydebug("GPU [+] texture '%s': %ux%u = %lu bytes — total: %lu bytes",
-           alloc->name, desc->size.width, desc->size.height,
-           (unsigned long)size, (unsigned long)impl->total_bytes);
+    ydebug("GPU [+] texture '%s': %ux%u = %lu bytes — total: %lu bytes", alloc->name,
+           desc->size.width, desc->size.height, (unsigned long)size,
+           (unsigned long)impl->total_bytes);
 
     return texture;
 }
 
-static void gpu_allocator_release_texture(struct yetty_yrender_gpu_allocator *self, WGPUTexture texture)
+static void gpu_allocator_release_texture(struct yetty_yrender_gpu_allocator *self,
+                                          WGPUTexture texture)
 {
     struct gpu_allocator_impl *impl = (struct gpu_allocator_impl *)self;
 
-    if (!texture)
+    if (!texture) {
         return;
+    }
 
     for (size_t i = 0; i < impl->allocation_count; i++) {
         if (impl->allocations[i].type == ALLOC_TYPE_TEXTURE &&
             impl->allocations[i].handle == texture) {
             impl->total_bytes -= impl->allocations[i].size;
-            ydebug("GPU [-] texture '%s': %lu bytes — total: %lu bytes",
-                   impl->allocations[i].name,
-                   (unsigned long)impl->allocations[i].size,
-                   (unsigned long)impl->total_bytes);
+            ydebug("GPU [-] texture '%s': %lu bytes — total: %lu bytes", impl->allocations[i].name,
+                   (unsigned long)impl->allocations[i].size, (unsigned long)impl->total_bytes);
             memmove(&impl->allocations[i], &impl->allocations[i + 1],
                     (impl->allocation_count - i - 1) * sizeof(struct allocation));
             impl->allocation_count--;
@@ -201,12 +201,14 @@ static uint64_t gpu_allocator_total_allocated_bytes(const struct yetty_yrender_g
 
 struct yetty_yrender_gpu_allocator_result yetty_yrender_gpu_allocator_create(WGPUDevice device)
 {
-    if (!device)
+    if (!device) {
         return YETTY_ERR(yetty_yrender_gpu_allocator, "device is null");
+    }
 
     struct gpu_allocator_impl *impl = calloc(1, sizeof(struct gpu_allocator_impl));
-    if (!impl)
+    if (!impl) {
         return YETTY_ERR(yetty_yrender_gpu_allocator, "failed to allocate");
+    }
 
     impl->base.ops = &gpu_allocator_ops;
     impl->device = device;

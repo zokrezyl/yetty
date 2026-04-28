@@ -19,8 +19,8 @@ struct yetty_ypaint_core_complex_prim;
 struct yetty_ypaint_core_complex_prim_ops {
     void (*destroy)(struct yetty_ypaint_core_complex_prim *self);
 
-    struct yetty_yrender_gpu_resource_set_result
-        (*get_gpu_resource_set)(struct yetty_ypaint_core_complex_prim *self);
+    struct yetty_yrender_gpu_resource_set_result (*get_gpu_resource_set)(
+        struct yetty_ypaint_core_complex_prim *self);
 };
 
 struct yetty_ypaint_core_complex_prim {

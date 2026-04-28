@@ -35,7 +35,8 @@ from _common import (  # noqa: E402
 )
 
 CLANG_TIDY_CANDIDATES = (
-    "clang-tidy-18", "clang-tidy", "clang-tidy-17", "clang-tidy-15", "clang-tidy-14",
+    "clang-tidy", "clang-tidy-21", "clang-tidy-18", "clang-tidy-17",
+    "clang-tidy-15", "clang-tidy-14",
 )
 DIAG_RE = re.compile(r"^(?P<file>[^:]+):(?P<line>\d+):\d+: (?P<sev>warning|error): (?P<msg>.*?) \[(?P<rule>[^\]]+)\]$")
 

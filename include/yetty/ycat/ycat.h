@@ -31,10 +31,10 @@ extern "C" {
  *===========================================================================*/
 
 enum yetty_ycat_type {
-	YETTY_YCAT_TYPE_UNKNOWN = 0,
-	YETTY_YCAT_TYPE_TEXT,
-	YETTY_YCAT_TYPE_MARKDOWN,
-	YETTY_YCAT_TYPE_PDF,
+    YETTY_YCAT_TYPE_UNKNOWN = 0,
+    YETTY_YCAT_TYPE_TEXT,
+    YETTY_YCAT_TYPE_MARKDOWN,
+    YETTY_YCAT_TYPE_PDF,
 };
 
 const char *yetty_ycat_type_name(enum yetty_ycat_type type);
@@ -53,18 +53,17 @@ enum yetty_ycat_type yetty_ycat_type_from_extension(const char *ext);
 /* Detect from bytes (optionally with a path for extension fallback).
  * Uses libmagic when compiled with YETTY_YCAT_HAS_LIBMAGIC, otherwise
  * extension-only. path may be NULL for stdin. */
-enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len,
-				       const char *path);
+enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const char *path);
 
 /*=============================================================================
  * Rendering
  *===========================================================================*/
 
 struct yetty_ycat_config {
-	uint32_t cell_width;
-	uint32_t cell_height;
-	uint32_t width_cells;
-	uint32_t height_cells;
+    uint32_t cell_width;
+    uint32_t cell_height;
+    uint32_t width_cells;
+    uint32_t height_cells;
 };
 
 /* Handler signature: bytes+len (and optionally a path for formats that need
@@ -73,10 +72,9 @@ struct yetty_ycat_config {
  *
  * path_hint may be NULL (for stdin / URL). If the handler needs a real file
  * and path_hint is NULL, it is expected to spill to a temp file. */
-typedef struct yetty_ypaint_core_buffer_result
-(*yetty_ycat_handler_fn)(const uint8_t *bytes, size_t len,
-			 const char *path_hint,
-			 const struct yetty_ycat_config *config);
+typedef struct yetty_ypaint_core_buffer_result (*yetty_ycat_handler_fn)(
+    const uint8_t *bytes, size_t len, const char *path_hint,
+    const struct yetty_ycat_config *config);
 
 /* Registry lookup. Returns NULL for types with no handler (TEXT / UNKNOWN). */
 yetty_ycat_handler_fn yetty_ycat_get_handler(enum yetty_ycat_type type);
@@ -84,14 +82,12 @@ yetty_ycat_handler_fn yetty_ycat_get_handler(enum yetty_ycat_type type);
 /* Register / override a handler at runtime (used to plug in later types
  * like tree-sitter syntax highlighting). Returns 0 on success, -1 on a bad
  * type argument. */
-int yetty_ycat_register_handler(enum yetty_ycat_type type,
-				yetty_ycat_handler_fn fn);
+int yetty_ycat_register_handler(enum yetty_ycat_type type, yetty_ycat_handler_fn fn);
 
 /* One-shot: detect → render. */
-struct yetty_ypaint_core_buffer_result
-yetty_ycat_render(const uint8_t *bytes, size_t len,
-		  const char *path_hint,
-		  const struct yetty_ycat_config *config);
+struct yetty_ypaint_core_buffer_result yetty_ycat_render(const uint8_t *bytes, size_t len,
+                                                         const char *path_hint,
+                                                         const struct yetty_ycat_config *config);
 
 /*=============================================================================
  * Tree-sitter direct access — two emitters, shared parser+color-map.
@@ -103,15 +99,13 @@ const char *yetty_ycat_grammar_lookup(const char *mime, const char *path);
 
 /* Parse bytes with `grammar_name`, emit coloured spans into a fresh ypaint
  * buffer. Useful when targeting a yetty terminal (via the OSC envelope). */
-struct yetty_ypaint_core_buffer_result
-yetty_ycat_ts_render(const uint8_t *bytes, size_t len,
-		     const char *grammar_name,
-		     const struct yetty_ycat_config *config);
+struct yetty_ypaint_core_buffer_result yetty_ycat_ts_render(const uint8_t *bytes, size_t len,
+                                                            const char *grammar_name,
+                                                            const struct yetty_ycat_config *config);
 
 /* Parse bytes with `grammar_name`, emit 24-bit SGR-coloured source text to
  * `out`. Works on any terminal. Returns 0 on success, -1 on failure. */
-int yetty_ycat_ts_emit_sgr(const uint8_t *bytes, size_t len,
-			   const char *grammar_name, FILE *out);
+int yetty_ycat_ts_emit_sgr(const uint8_t *bytes, size_t len, const char *grammar_name, FILE *out);
 
 /*=============================================================================
  * URL fetching
@@ -123,9 +117,7 @@ int yetty_ycat_is_url(const char *s);
 /* Fetch url into *out / *out_len (malloc'd, caller frees). On success,
  * optionally stores the Content-Type MIME (before ';') in content_type_out
  * (caller must free if non-NULL). Returns 0 on success, -1 on error. */
-int yetty_ycat_fetch_url(const char *url,
-			 uint8_t **out, size_t *out_len,
-			 char **content_type_out);
+int yetty_ycat_fetch_url(const char *url, uint8_t **out, size_t *out_len, char **content_type_out);
 
 /*=============================================================================
  * OSC emission
@@ -134,8 +126,7 @@ int yetty_ycat_fetch_url(const char *url,
 /* Emit an OSC 666674 (YPAINT_SCROLL) sequence wrapping the buffer's primitive
  * bytes (base64-encoded, `--bin` format) to `out`. Returns number of bytes
  * written, 0 on failure. */
-size_t yetty_ycat_osc_bin_emit(const struct yetty_ypaint_core_buffer *buffer,
-			       FILE *out);
+size_t yetty_ycat_osc_bin_emit(const struct yetty_ypaint_core_buffer *buffer, FILE *out);
 
 #ifdef __cplusplus
 }

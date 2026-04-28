@@ -20,13 +20,13 @@
 #define YPAINT_BUFFER_INITIAL_CAPACITY 1024
 
 struct yetty_ypaint_core_buffer {
-  struct yetty_ycore_named_buffer primitives;
+    struct yetty_ycore_named_buffer primitives;
 
-  float scene_min_x, scene_min_y, scene_max_x, scene_max_y;
+    float scene_min_x, scene_min_y, scene_max_x, scene_max_y;
 
-  /* serialize() scratch — reused across calls, grows on demand. */
-  uint8_t *serial_data;
-  size_t serial_cap;
+    /* serialize() scratch — reused across calls, grows on demand. */
+    uint8_t *serial_data;
+    size_t serial_cap;
 };
 
 /* Framed wire format. Magic chosen so it can't look like a valid
@@ -37,205 +37,233 @@ struct yetty_ypaint_core_buffer {
  *   u32 byte_count
  *   u8  prim_bytes[byte_count]
  */
-#define YPAINT_SERIAL_MAGIC 0x31425059u  /* 'YPB1' little-endian */
+#define YPAINT_SERIAL_MAGIC 0x31425059u /* 'YPB1' little-endian */
 #define YPAINT_SERIAL_HEADER_BYTES (4 + 16 + 4)
 
-static int parse_framed_payload(struct yetty_ypaint_core_buffer *buf,
-                                const uint8_t *data, size_t size) {
-  if (size < YPAINT_SERIAL_HEADER_BYTES)
-    return 0;
+static int parse_framed_payload(struct yetty_ypaint_core_buffer *buf, const uint8_t *data,
+                                size_t size)
+{
+    if (size < YPAINT_SERIAL_HEADER_BYTES) {
+        return 0;
+    }
 
-  const uint8_t *p = data + 4; /* skip magic, validated by caller */
-  memcpy(&buf->scene_min_x, p,  4);
-  memcpy(&buf->scene_min_y, p + 4,  4);
-  memcpy(&buf->scene_max_x, p + 8,  4);
-  memcpy(&buf->scene_max_y, p + 12, 4);
-  p += 16;
+    const uint8_t *p = data + 4; /* skip magic, validated by caller */
+    memcpy(&buf->scene_min_x, p, 4);
+    memcpy(&buf->scene_min_y, p + 4, 4);
+    memcpy(&buf->scene_max_x, p + 8, 4);
+    memcpy(&buf->scene_max_y, p + 12, 4);
+    p += 16;
 
-  uint32_t byte_count;
-  memcpy(&byte_count, p, 4);
-  p += 4;
+    uint32_t byte_count;
+    memcpy(&byte_count, p, 4);
+    p += 4;
 
-  if (byte_count > size - YPAINT_SERIAL_HEADER_BYTES)
-    return 0;
+    if (byte_count > size - YPAINT_SERIAL_HEADER_BYTES) {
+        return 0;
+    }
 
-  if (byte_count > 0) {
-    uint8_t *pd = malloc(byte_count);
-    if (!pd) return 0;
-    memcpy(pd, p, byte_count);
-    free(buf->primitives.buf.data);
-    buf->primitives.buf.data = pd;
-    buf->primitives.buf.size = byte_count;
-    buf->primitives.buf.capacity = byte_count;
-  }
-  return 1;
+    if (byte_count > 0) {
+        uint8_t *pd = malloc(byte_count);
+        if (!pd) {
+            return 0;
+        }
+        memcpy(pd, p, byte_count);
+        free(buf->primitives.buf.data);
+        buf->primitives.buf.data = pd;
+        buf->primitives.buf.size = byte_count;
+        buf->primitives.buf.capacity = byte_count;
+    }
+    return 1;
 }
 
 /* Construct from already-decoded bytes. Owns a private copy. */
 struct yetty_ypaint_core_buffer_result yetty_ypaint_core_buffer_create_from_bytes(
-    const uint8_t *data, size_t len) {
-  if (!data || len == 0)
-    return YETTY_ERR(yetty_ypaint_core_buffer, "null or empty bytes");
+    const uint8_t *data, size_t len)
+{
+    if (!data || len == 0) {
+        return YETTY_ERR(yetty_ypaint_core_buffer, "null or empty bytes");
+    }
 
-  struct yetty_ypaint_core_buffer *buf =
-      calloc(1, sizeof(struct yetty_ypaint_core_buffer));
-  if (!buf)
-    return YETTY_ERR(yetty_ypaint_core_buffer, "calloc failed");
+    struct yetty_ypaint_core_buffer *buf = calloc(1, sizeof(struct yetty_ypaint_core_buffer));
+    if (!buf) {
+        return YETTY_ERR(yetty_ypaint_core_buffer, "calloc failed");
+    }
 
-  /* Framed (magic-tagged) payload = scene_bounds + raw prim stream.
+    /* Framed (magic-tagged) payload = scene_bounds + raw prim stream.
    * Otherwise the bytes are a bare primitive stream (legacy path). */
-  uint32_t magic;
-  memcpy(&magic, data, len >= 4 ? 4 : 0);
-  if (len >= 4 && magic == YPAINT_SERIAL_MAGIC) {
-    if (!parse_framed_payload(buf, data, len)) {
-      yetty_ypaint_core_buffer_destroy(buf);
-      return YETTY_ERR(yetty_ypaint_core_buffer, "framed payload parse failed");
+    uint32_t magic;
+    memcpy(&magic, data, len >= 4 ? 4 : 0);
+    if (len >= 4 && magic == YPAINT_SERIAL_MAGIC) {
+        if (!parse_framed_payload(buf, data, len)) {
+            yetty_ypaint_core_buffer_destroy(buf);
+            return YETTY_ERR(yetty_ypaint_core_buffer, "framed payload parse failed");
+        }
+    } else {
+        uint8_t *copy = malloc(len);
+        if (!copy) {
+            free(buf);
+            return YETTY_ERR(yetty_ypaint_core_buffer, "malloc failed");
+        }
+        memcpy(copy, data, len);
+        buf->primitives.buf.data = copy;
+        buf->primitives.buf.capacity = len;
+        buf->primitives.buf.size = len;
     }
-  } else {
-    uint8_t *copy = malloc(len);
-    if (!copy) {
-      free(buf);
-      return YETTY_ERR(yetty_ypaint_core_buffer, "malloc failed");
-    }
-    memcpy(copy, data, len);
-    buf->primitives.buf.data = copy;
-    buf->primitives.buf.capacity = len;
-    buf->primitives.buf.size = len;
-  }
-  strncpy(buf->primitives.name, "prims",
-          YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH - 1);
-  return YETTY_OK(yetty_ypaint_core_buffer, buf);
+    strncpy(buf->primitives.name, "prims", YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH - 1);
+    return YETTY_OK(yetty_ypaint_core_buffer, buf);
 }
 
 struct yetty_ypaint_core_buffer_result yetty_ypaint_core_buffer_create_from_base64(
-    const struct yetty_ycore_buffer *base64_buf) {
-  if (!base64_buf || !base64_buf->data || base64_buf->size == 0)
-    return YETTY_ERR(yetty_ypaint_core_buffer, "null or empty base64 buffer");
+    const struct yetty_ycore_buffer *base64_buf)
+{
+    if (!base64_buf || !base64_buf->data || base64_buf->size == 0) {
+        return YETTY_ERR(yetty_ypaint_core_buffer, "null or empty base64 buffer");
+    }
 
-  size_t decoded_cap = (base64_buf->size * 3) / 4 + 4;
-  uint8_t *decoded = malloc(decoded_cap);
-  if (!decoded)
-    return YETTY_ERR(yetty_ypaint_core_buffer, "malloc failed");
-  size_t decoded_len = yetty_ycore_base64_decode(
-      (const char *)base64_buf->data, base64_buf->size,
-      (char *)decoded, decoded_cap);
+    size_t decoded_cap = (base64_buf->size * 3) / 4 + 4;
+    uint8_t *decoded = malloc(decoded_cap);
+    if (!decoded) {
+        return YETTY_ERR(yetty_ypaint_core_buffer, "malloc failed");
+    }
+    size_t decoded_len = yetty_ycore_base64_decode((const char *)base64_buf->data, base64_buf->size,
+                                                   (char *)decoded, decoded_cap);
 
-  struct yetty_ypaint_core_buffer_result r =
-      yetty_ypaint_core_buffer_create_from_bytes(decoded, decoded_len);
-  free(decoded);
-  return r;
+    struct yetty_ypaint_core_buffer_result r =
+        yetty_ypaint_core_buffer_create_from_bytes(decoded, decoded_len);
+    free(decoded);
+    return r;
 }
 
 struct yetty_ypaint_core_buffer_result yetty_ypaint_core_buffer_create(
-    const struct yetty_ypaint_core_buffer_config *config) {
-  struct yetty_ypaint_core_buffer *buf =
-      calloc(1, sizeof(struct yetty_ypaint_core_buffer));
-  if (!buf)
-    return YETTY_ERR(yetty_ypaint_core_buffer, "calloc failed");
-
-  buf->primitives.buf.data = calloc(1, YPAINT_BUFFER_INITIAL_CAPACITY);
-  if (!buf->primitives.buf.data) {
-    free(buf);
-    return YETTY_ERR(yetty_ypaint_core_buffer, "calloc for prims failed");
-  }
-
-  buf->primitives.buf.capacity = YPAINT_BUFFER_INITIAL_CAPACITY;
-  buf->primitives.buf.size = 0;
-  strncpy(buf->primitives.name, "prims",
-          YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH - 1);
-
-  if (config) {
-    buf->scene_min_x = config->scene_min_x;
-    buf->scene_min_y = config->scene_min_y;
-    buf->scene_max_x = config->scene_max_x;
-    buf->scene_max_y = config->scene_max_y;
-  }
-
-  return YETTY_OK(yetty_ypaint_core_buffer, buf);
-}
-
-float yetty_ypaint_core_buffer_scene_min_x(const struct yetty_ypaint_core_buffer *buf) {
-  return buf ? buf->scene_min_x : 0.0f;
-}
-float yetty_ypaint_core_buffer_scene_min_y(const struct yetty_ypaint_core_buffer *buf) {
-  return buf ? buf->scene_min_y : 0.0f;
-}
-float yetty_ypaint_core_buffer_scene_max_x(const struct yetty_ypaint_core_buffer *buf) {
-  return buf ? buf->scene_max_x : 0.0f;
-}
-float yetty_ypaint_core_buffer_scene_max_y(const struct yetty_ypaint_core_buffer *buf) {
-  return buf ? buf->scene_max_y : 0.0f;
-}
-
-void yetty_ypaint_core_buffer_destroy(struct yetty_ypaint_core_buffer *buf) {
-  if (!buf)
-    return;
-
-  free(buf->primitives.buf.data);
-  free(buf->serial_data);
-  free(buf);
-}
-
-void yetty_ypaint_core_buffer_clear(struct yetty_ypaint_core_buffer *buf) {
-  if (!buf) {
-    yerror("yetty_ypaint_core_buffer_clear: buf is NULL");
-    return;
-  }
-  buf->primitives.buf.size = 0;
-}
-
-const void *yetty_ypaint_core_buffer_data(const struct yetty_ypaint_core_buffer *buf) {
-  return buf ? buf->primitives.buf.data : NULL;
-}
-
-size_t yetty_ypaint_core_buffer_size(const struct yetty_ypaint_core_buffer *buf) {
-  return buf ? buf->primitives.buf.size : 0;
-}
-
-void yetty_ypaint_core_buffer_set_scene_bounds(struct yetty_ypaint_core_buffer *buf,
-                                               float min_x, float min_y,
-                                               float max_x, float max_y) {
-  if (!buf)
-    return;
-  buf->scene_min_x = min_x;
-  buf->scene_min_y = min_y;
-  buf->scene_max_x = max_x;
-  buf->scene_max_y = max_y;
-}
-
-size_t yetty_ypaint_core_buffer_serialize(
-    struct yetty_ypaint_core_buffer *buf, const uint8_t **out_data) {
-  if (!buf || !out_data) {
-    if (out_data) *out_data = NULL;
-    return 0;
-  }
-
-  size_t need = YPAINT_SERIAL_HEADER_BYTES + buf->primitives.buf.size;
-
-  if (buf->serial_cap < need) {
-    uint8_t *np = realloc(buf->serial_data, need);
-    if (!np) {
-      *out_data = NULL;
-      return 0;
+    const struct yetty_ypaint_core_buffer_config *config)
+{
+    struct yetty_ypaint_core_buffer *buf = calloc(1, sizeof(struct yetty_ypaint_core_buffer));
+    if (!buf) {
+        return YETTY_ERR(yetty_ypaint_core_buffer, "calloc failed");
     }
-    buf->serial_data = np;
-    buf->serial_cap = need;
-  }
 
-  uint8_t *p = buf->serial_data;
-  uint32_t magic = YPAINT_SERIAL_MAGIC;
-  memcpy(p, &magic, 4); p += 4;
-  memcpy(p, &buf->scene_min_x, 4); p += 4;
-  memcpy(p, &buf->scene_min_y, 4); p += 4;
-  memcpy(p, &buf->scene_max_x, 4); p += 4;
-  memcpy(p, &buf->scene_max_y, 4); p += 4;
-  uint32_t byte_count = (uint32_t)buf->primitives.buf.size;
-  memcpy(p, &byte_count, 4); p += 4;
-  if (byte_count > 0)
-    memcpy(p, buf->primitives.buf.data, byte_count);
+    buf->primitives.buf.data = calloc(1, YPAINT_BUFFER_INITIAL_CAPACITY);
+    if (!buf->primitives.buf.data) {
+        free(buf);
+        return YETTY_ERR(yetty_ypaint_core_buffer, "calloc for prims failed");
+    }
 
-  *out_data = buf->serial_data;
-  return need;
+    buf->primitives.buf.capacity = YPAINT_BUFFER_INITIAL_CAPACITY;
+    buf->primitives.buf.size = 0;
+    strncpy(buf->primitives.name, "prims", YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH - 1);
+
+    if (config) {
+        buf->scene_min_x = config->scene_min_x;
+        buf->scene_min_y = config->scene_min_y;
+        buf->scene_max_x = config->scene_max_x;
+        buf->scene_max_y = config->scene_max_y;
+    }
+
+    return YETTY_OK(yetty_ypaint_core_buffer, buf);
+}
+
+float yetty_ypaint_core_buffer_scene_min_x(const struct yetty_ypaint_core_buffer *buf)
+{
+    return buf ? buf->scene_min_x : 0.0f;
+}
+float yetty_ypaint_core_buffer_scene_min_y(const struct yetty_ypaint_core_buffer *buf)
+{
+    return buf ? buf->scene_min_y : 0.0f;
+}
+float yetty_ypaint_core_buffer_scene_max_x(const struct yetty_ypaint_core_buffer *buf)
+{
+    return buf ? buf->scene_max_x : 0.0f;
+}
+float yetty_ypaint_core_buffer_scene_max_y(const struct yetty_ypaint_core_buffer *buf)
+{
+    return buf ? buf->scene_max_y : 0.0f;
+}
+
+void yetty_ypaint_core_buffer_destroy(struct yetty_ypaint_core_buffer *buf)
+{
+    if (!buf) {
+        return;
+    }
+
+    free(buf->primitives.buf.data);
+    free(buf->serial_data);
+    free(buf);
+}
+
+void yetty_ypaint_core_buffer_clear(struct yetty_ypaint_core_buffer *buf)
+{
+    if (!buf) {
+        yerror("yetty_ypaint_core_buffer_clear: buf is NULL");
+        return;
+    }
+    buf->primitives.buf.size = 0;
+}
+
+const void *yetty_ypaint_core_buffer_data(const struct yetty_ypaint_core_buffer *buf)
+{
+    return buf ? buf->primitives.buf.data : NULL;
+}
+
+size_t yetty_ypaint_core_buffer_size(const struct yetty_ypaint_core_buffer *buf)
+{
+    return buf ? buf->primitives.buf.size : 0;
+}
+
+void yetty_ypaint_core_buffer_set_scene_bounds(struct yetty_ypaint_core_buffer *buf, float min_x,
+                                               float min_y, float max_x, float max_y)
+{
+    if (!buf) {
+        return;
+    }
+    buf->scene_min_x = min_x;
+    buf->scene_min_y = min_y;
+    buf->scene_max_x = max_x;
+    buf->scene_max_y = max_y;
+}
+
+size_t yetty_ypaint_core_buffer_serialize(struct yetty_ypaint_core_buffer *buf,
+                                          const uint8_t **out_data)
+{
+    if (!buf || !out_data) {
+        if (out_data) {
+            *out_data = NULL;
+        }
+        return 0;
+    }
+
+    size_t need = YPAINT_SERIAL_HEADER_BYTES + buf->primitives.buf.size;
+
+    if (buf->serial_cap < need) {
+        uint8_t *np = realloc(buf->serial_data, need);
+        if (!np) {
+            *out_data = NULL;
+            return 0;
+        }
+        buf->serial_data = np;
+        buf->serial_cap = need;
+    }
+
+    uint8_t *p = buf->serial_data;
+    uint32_t magic = YPAINT_SERIAL_MAGIC;
+    memcpy(p, &magic, 4);
+    p += 4;
+    memcpy(p, &buf->scene_min_x, 4);
+    p += 4;
+    memcpy(p, &buf->scene_min_y, 4);
+    p += 4;
+    memcpy(p, &buf->scene_max_x, 4);
+    p += 4;
+    memcpy(p, &buf->scene_max_y, 4);
+    p += 4;
+    uint32_t byte_count = (uint32_t)buf->primitives.buf.size;
+    memcpy(p, &byte_count, 4);
+    p += 4;
+    if (byte_count > 0) {
+        memcpy(p, buf->primitives.buf.data, byte_count);
+    }
+
+    *out_data = buf->serial_data;
+    return need;
 }
 
 /* Single-pass base64 encode of the framed wire format. */
@@ -243,173 +271,193 @@ static const char YPAINT_B64_ALPHABET[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 struct yetty_ycore_buffer_result yetty_ypaint_core_buffer_to_base64(
-    const struct yetty_ypaint_core_buffer *buf) {
-  if (!buf)
-    return YETTY_ERR(yetty_ycore_buffer, "buf is NULL");
+    const struct yetty_ypaint_core_buffer *buf)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_buffer, "buf is NULL");
+    }
 
-  size_t need = YPAINT_SERIAL_HEADER_BYTES + buf->primitives.buf.size;
-  size_t cap = ((need + 2) / 3) * 4 + 1;
-  char *out = malloc(cap);
-  if (!out)
-    return YETTY_ERR(yetty_ycore_buffer, "malloc failed");
+    size_t need = YPAINT_SERIAL_HEADER_BYTES + buf->primitives.buf.size;
+    size_t cap = ((need + 2) / 3) * 4 + 1;
+    char *out = malloc(cap);
+    if (!out) {
+        return YETTY_ERR(yetty_ycore_buffer, "malloc failed");
+    }
 
-  /* Build the framed bytes into a temporary stack-friendly path: write
+    /* Build the framed bytes into a temporary stack-friendly path: write
    * directly into a small buffer and then base64. For very small
    * payloads avoiding malloc here would be nice, but serialize() does
    * the same allocation pattern via serial_data. Just allocate once. */
-  uint8_t *raw = malloc(need);
-  if (!raw) {
-    free(out);
-    return YETTY_ERR(yetty_ycore_buffer, "malloc failed");
-  }
-
-  uint8_t *p = raw;
-  uint32_t magic = YPAINT_SERIAL_MAGIC;
-  memcpy(p, &magic, 4); p += 4;
-  memcpy(p, &buf->scene_min_x, 4); p += 4;
-  memcpy(p, &buf->scene_min_y, 4); p += 4;
-  memcpy(p, &buf->scene_max_x, 4); p += 4;
-  memcpy(p, &buf->scene_max_y, 4); p += 4;
-  uint32_t byte_count = (uint32_t)buf->primitives.buf.size;
-  memcpy(p, &byte_count, 4); p += 4;
-  if (byte_count > 0)
-    memcpy(p, buf->primitives.buf.data, byte_count);
-
-  size_t olen = 0;
-  for (size_t i = 0; i + 3 <= need; i += 3) {
-    uint32_t t = ((uint32_t)raw[i] << 16) | ((uint32_t)raw[i+1] << 8)
-               |  (uint32_t)raw[i+2];
-    out[olen++] = YPAINT_B64_ALPHABET[(t >> 18) & 0x3F];
-    out[olen++] = YPAINT_B64_ALPHABET[(t >> 12) & 0x3F];
-    out[olen++] = YPAINT_B64_ALPHABET[(t >>  6) & 0x3F];
-    out[olen++] = YPAINT_B64_ALPHABET[ t        & 0x3F];
-  }
-  size_t rem = need % 3;
-  if (rem == 1) {
-    uint32_t t = (uint32_t)raw[need - 1] << 16;
-    out[olen++] = YPAINT_B64_ALPHABET[(t >> 18) & 0x3F];
-    out[olen++] = YPAINT_B64_ALPHABET[(t >> 12) & 0x3F];
-    out[olen++] = '=';
-    out[olen++] = '=';
-  } else if (rem == 2) {
-    uint32_t t = ((uint32_t)raw[need - 2] << 16)
-               | ((uint32_t)raw[need - 1] <<  8);
-    out[olen++] = YPAINT_B64_ALPHABET[(t >> 18) & 0x3F];
-    out[olen++] = YPAINT_B64_ALPHABET[(t >> 12) & 0x3F];
-    out[olen++] = YPAINT_B64_ALPHABET[(t >>  6) & 0x3F];
-    out[olen++] = '=';
-  }
-  out[olen] = '\0';
-  free(raw);
-
-  struct yetty_ycore_buffer b = {0};
-  b.data = (uint8_t *)out;
-  b.size = olen;
-  b.capacity = cap;
-  return YETTY_OK(yetty_ycore_buffer, b);
-}
-
-const struct yetty_ycore_buffer *
-yetty_ypaint_core_buffer_primitives(const struct yetty_ypaint_core_buffer *buf) {
-  if (!buf)
-    return NULL;
-  return &buf->primitives.buf;
-}
-
-struct yetty_ypaint_id_result
-yetty_ypaint_core_buffer_add_prim(struct yetty_ypaint_core_buffer *buf,
-                                  const void *data, size_t size) {
-  struct yetty_ypaint_id_result result = {0, 0};
-
-  if (!buf) {
-    yerror("yetty_ypaint_core_buffer_add_prim: buf is NULL");
-    result.error = YPAINT_ERR_NULL;
-    return result;
-  }
-  if (!data) {
-    yerror("yetty_ypaint_core_buffer_add_prim: data is NULL");
-    result.error = YPAINT_ERR_NULL;
-    return result;
-  }
-
-  size_t new_size = buf->primitives.buf.size + size;
-
-  // Grow if needed
-  if (new_size > buf->primitives.buf.capacity) {
-    size_t new_capacity = buf->primitives.buf.capacity * 2;
-    if (new_capacity < new_size)
-      new_capacity = new_size;
-
-    uint8_t *new_data = realloc(buf->primitives.buf.data, new_capacity);
-    if (!new_data) {
-      yerror("yetty_ypaint_core_buffer_add_prim: realloc failed for %zu bytes",
-             new_capacity);
-      result.error = YPAINT_ERR_ALLOC;
-      return result;
+    uint8_t *raw = malloc(need);
+    if (!raw) {
+        free(out);
+        return YETTY_ERR(yetty_ycore_buffer, "malloc failed");
     }
 
-    buf->primitives.buf.data = new_data;
-    buf->primitives.buf.capacity = new_capacity;
-  }
+    uint8_t *p = raw;
+    uint32_t magic = YPAINT_SERIAL_MAGIC;
+    memcpy(p, &magic, 4);
+    p += 4;
+    memcpy(p, &buf->scene_min_x, 4);
+    p += 4;
+    memcpy(p, &buf->scene_min_y, 4);
+    p += 4;
+    memcpy(p, &buf->scene_max_x, 4);
+    p += 4;
+    memcpy(p, &buf->scene_max_y, 4);
+    p += 4;
+    uint32_t byte_count = (uint32_t)buf->primitives.buf.size;
+    memcpy(p, &byte_count, 4);
+    p += 4;
+    if (byte_count > 0) {
+        memcpy(p, buf->primitives.buf.data, byte_count);
+    }
 
-  result.id = (uint32_t)buf->primitives.buf.size;
-  memcpy(buf->primitives.buf.data + buf->primitives.buf.size, data, size);
-  buf->primitives.buf.size = new_size;
+    size_t olen = 0;
+    for (size_t i = 0; i + 3 <= need; i += 3) {
+        uint32_t t = ((uint32_t)raw[i] << 16) | ((uint32_t)raw[i + 1] << 8) | (uint32_t)raw[i + 2];
+        out[olen++] = YPAINT_B64_ALPHABET[(t >> 18) & 0x3F];
+        out[olen++] = YPAINT_B64_ALPHABET[(t >> 12) & 0x3F];
+        out[olen++] = YPAINT_B64_ALPHABET[(t >> 6) & 0x3F];
+        out[olen++] = YPAINT_B64_ALPHABET[t & 0x3F];
+    }
+    size_t rem = need % 3;
+    if (rem == 1) {
+        uint32_t t = (uint32_t)raw[need - 1] << 16;
+        out[olen++] = YPAINT_B64_ALPHABET[(t >> 18) & 0x3F];
+        out[olen++] = YPAINT_B64_ALPHABET[(t >> 12) & 0x3F];
+        out[olen++] = '=';
+        out[olen++] = '=';
+    } else if (rem == 2) {
+        uint32_t t = ((uint32_t)raw[need - 2] << 16) | ((uint32_t)raw[need - 1] << 8);
+        out[olen++] = YPAINT_B64_ALPHABET[(t >> 18) & 0x3F];
+        out[olen++] = YPAINT_B64_ALPHABET[(t >> 12) & 0x3F];
+        out[olen++] = YPAINT_B64_ALPHABET[(t >> 6) & 0x3F];
+        out[olen++] = '=';
+    }
+    out[olen] = '\0';
+    free(raw);
 
-  return result;
+    struct yetty_ycore_buffer b = {0};
+    b.data = (uint8_t *)out;
+    b.size = olen;
+    b.capacity = cap;
+    return YETTY_OK(yetty_ycore_buffer, b);
+}
+
+const struct yetty_ycore_buffer *yetty_ypaint_core_buffer_primitives(
+    const struct yetty_ypaint_core_buffer *buf)
+{
+    if (!buf) {
+        return NULL;
+    }
+    return &buf->primitives.buf;
+}
+
+struct yetty_ypaint_id_result yetty_ypaint_core_buffer_add_prim(
+    struct yetty_ypaint_core_buffer *buf, const void *data, size_t size)
+{
+    struct yetty_ypaint_id_result result = {0, 0};
+
+    if (!buf) {
+        yerror("yetty_ypaint_core_buffer_add_prim: buf is NULL");
+        result.error = YPAINT_ERR_NULL;
+        return result;
+    }
+    if (!data) {
+        yerror("yetty_ypaint_core_buffer_add_prim: data is NULL");
+        result.error = YPAINT_ERR_NULL;
+        return result;
+    }
+
+    size_t new_size = buf->primitives.buf.size + size;
+
+    // Grow if needed
+    if (new_size > buf->primitives.buf.capacity) {
+        size_t new_capacity = buf->primitives.buf.capacity * 2;
+        if (new_capacity < new_size) {
+            new_capacity = new_size;
+        }
+
+        uint8_t *new_data = realloc(buf->primitives.buf.data, new_capacity);
+        if (!new_data) {
+            yerror("yetty_ypaint_core_buffer_add_prim: realloc failed for %zu bytes", new_capacity);
+            result.error = YPAINT_ERR_ALLOC;
+            return result;
+        }
+
+        buf->primitives.buf.data = new_data;
+        buf->primitives.buf.capacity = new_capacity;
+    }
+
+    result.id = (uint32_t)buf->primitives.buf.size;
+    memcpy(buf->primitives.buf.data + buf->primitives.buf.size, data, size);
+    buf->primitives.buf.size = new_size;
+
+    return result;
 }
 
 struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_first(
-    const struct yetty_ypaint_core_buffer *buf,
-    const struct yetty_ypaint_flyweight_registry *reg) {
-  if (!buf)
-    return YETTY_ERR(yetty_ypaint_core_primitive_iter, "buf is NULL");
-  if (!reg)
-    return YETTY_ERR(yetty_ypaint_core_primitive_iter, "reg is NULL");
-  if (!buf->primitives.buf.data || buf->primitives.buf.size == 0)
-    return YETTY_ERR(yetty_ypaint_core_primitive_iter, "buffer empty");
+    const struct yetty_ypaint_core_buffer *buf, const struct yetty_ypaint_flyweight_registry *reg)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ypaint_core_primitive_iter, "buf is NULL");
+    }
+    if (!reg) {
+        return YETTY_ERR(yetty_ypaint_core_primitive_iter, "reg is NULL");
+    }
+    if (!buf->primitives.buf.data || buf->primitives.buf.size == 0) {
+        return YETTY_ERR(yetty_ypaint_core_primitive_iter, "buffer empty");
+    }
 
-  const uint32_t *prim = (const uint32_t *)buf->primitives.buf.data;
-  uint32_t prim_type = prim[0];
-  struct yetty_ypaint_prim_flyweight_ptr_result fw_res =
-      yetty_ypaint_flyweight_registry_get(reg, prim_type, prim);
-  if (YETTY_IS_ERR(fw_res))
-    return YETTY_ERR(yetty_ypaint_core_primitive_iter, fw_res.error.msg);
+    const uint32_t *prim = (const uint32_t *)buf->primitives.buf.data;
+    uint32_t prim_type = prim[0];
+    struct yetty_ypaint_prim_flyweight_ptr_result fw_res =
+        yetty_ypaint_flyweight_registry_get(reg, prim_type, prim);
+    if (YETTY_IS_ERR(fw_res)) {
+        return YETTY_ERR(yetty_ypaint_core_primitive_iter, fw_res.error.msg);
+    }
 
-  struct yetty_ypaint_core_primitive_iter iter = {.fw = *fw_res.value};
-  return YETTY_OK(yetty_ypaint_core_primitive_iter, iter);
+    struct yetty_ypaint_core_primitive_iter iter = {.fw = *fw_res.value};
+    return YETTY_OK(yetty_ypaint_core_primitive_iter, iter);
 }
 
 struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_next(
-    const struct yetty_ypaint_core_buffer *buf,
-    const struct yetty_ypaint_flyweight_registry *reg,
-    const struct yetty_ypaint_core_primitive_iter *iter) {
-  if (!buf)
-    return YETTY_ERR(yetty_ypaint_core_primitive_iter, "buf is NULL");
-  if (!reg)
-    return YETTY_ERR(yetty_ypaint_core_primitive_iter, "reg is NULL");
-  if (!iter || !iter->fw.ops)
-    return YETTY_ERR(yetty_ypaint_core_primitive_iter, "iter is NULL");
+    const struct yetty_ypaint_core_buffer *buf, const struct yetty_ypaint_flyweight_registry *reg,
+    const struct yetty_ypaint_core_primitive_iter *iter)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ypaint_core_primitive_iter, "buf is NULL");
+    }
+    if (!reg) {
+        return YETTY_ERR(yetty_ypaint_core_primitive_iter, "reg is NULL");
+    }
+    if (!iter || !iter->fw.ops) {
+        return YETTY_ERR(yetty_ypaint_core_primitive_iter, "iter is NULL");
+    }
 
-  const uint8_t *base = buf->primitives.buf.data;
-  size_t buf_size = buf->primitives.buf.size;
-  struct yetty_ycore_size_result size_res = iter->fw.ops->size(iter->fw.data);
-  if (YETTY_IS_ERR(size_res))
-    return YETTY_ERR(yetty_ypaint_core_primitive_iter, size_res.error.msg);
-  const uint32_t *next = (const uint32_t *)((const uint8_t *)iter->fw.data + size_res.value);
-  size_t offset = (const uint8_t *)next - base;
+    const uint8_t *base = buf->primitives.buf.data;
+    size_t buf_size = buf->primitives.buf.size;
+    struct yetty_ycore_size_result size_res = iter->fw.ops->size(iter->fw.data);
+    if (YETTY_IS_ERR(size_res)) {
+        return YETTY_ERR(yetty_ypaint_core_primitive_iter, size_res.error.msg);
+    }
+    const uint32_t *next = (const uint32_t *)((const uint8_t *)iter->fw.data + size_res.value);
+    size_t offset = (const uint8_t *)next - base;
 
-  if (offset >= buf_size)
-    return YETTY_ERR(yetty_ypaint_core_primitive_iter, "end of buffer");
+    if (offset >= buf_size) {
+        return YETTY_ERR(yetty_ypaint_core_primitive_iter, "end of buffer");
+    }
 
-  uint32_t prim_type = next[0];
-  struct yetty_ypaint_prim_flyweight_ptr_result fw_res =
-      yetty_ypaint_flyweight_registry_get(reg, prim_type, next);
-  if (YETTY_IS_ERR(fw_res))
-    return YETTY_ERR(yetty_ypaint_core_primitive_iter, fw_res.error.msg);
+    uint32_t prim_type = next[0];
+    struct yetty_ypaint_prim_flyweight_ptr_result fw_res =
+        yetty_ypaint_flyweight_registry_get(reg, prim_type, next);
+    if (YETTY_IS_ERR(fw_res)) {
+        return YETTY_ERR(yetty_ypaint_core_primitive_iter, fw_res.error.msg);
+    }
 
-  struct yetty_ypaint_core_primitive_iter new_iter = {.fw = *fw_res.value};
-  return YETTY_OK(yetty_ypaint_core_primitive_iter, new_iter);
+    struct yetty_ypaint_core_primitive_iter new_iter = {.fw = *fw_res.value};
+    return YETTY_OK(yetty_ypaint_core_primitive_iter, new_iter);
 }
 
 /*=============================================================================
@@ -417,90 +465,90 @@ struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_nex
  * Same path as add_prim — these just pack the FAM payload first.
  *===========================================================================*/
 
-struct yetty_ycore_int_result
-yetty_ypaint_core_buffer_add_font(struct yetty_ypaint_core_buffer *buf,
-                                  const struct yetty_ycore_buffer *ttf_data,
-                                  const char *name)
+struct yetty_ycore_int_result yetty_ypaint_core_buffer_add_font(
+    struct yetty_ypaint_core_buffer *buf, const struct yetty_ycore_buffer *ttf_data,
+    const char *name)
 {
-  if (!buf)
-    return YETTY_ERR(yetty_ycore_int, "buf is NULL");
-  if (!ttf_data || !ttf_data->data || ttf_data->size == 0)
-    return YETTY_ERR(yetty_ycore_int, "ttf_data is empty");
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_int, "buf is NULL");
+    }
+    if (!ttf_data || !ttf_data->data || ttf_data->size == 0) {
+        return YETTY_ERR(yetty_ycore_int, "ttf_data is empty");
+    }
 
-  uint32_t name_len = name ? (uint32_t)strlen(name) : 0;
-  uint32_t ttf_len = (uint32_t)ttf_data->size;
-  size_t prim_size = yetty_ypaint_font_prim_size_for(name_len, ttf_len);
+    uint32_t name_len = name ? (uint32_t)strlen(name) : 0;
+    uint32_t ttf_len = (uint32_t)ttf_data->size;
+    size_t prim_size = yetty_ypaint_font_prim_size_for(name_len, ttf_len);
 
-  uint8_t *staging = malloc(prim_size);
-  if (!staging)
-    return YETTY_ERR(yetty_ycore_int, "alloc failed");
+    uint8_t *staging = malloc(prim_size);
+    if (!staging) {
+        return YETTY_ERR(yetty_ycore_int, "alloc failed");
+    }
 
-  /* font_id is producer-assigned; we use the byte-offset-based primitive
+    /* font_id is producer-assigned; we use the byte-offset-based primitive
    * count would-be, but the canonical id is just the next consecutive one
    * — producers have always referenced fonts by 0,1,2,… so we keep that.
    * The receiver builds its own (buf_font_id → MSDF font*) map. */
-  /* Walk existing prims to count fonts so far. Simple, infrequent. */
-  int next_id = 0;
-  const uint8_t *p = buf->primitives.buf.data;
-  const uint8_t *end = p + buf->primitives.buf.size;
-  while (p + 8 <= end) {
-    uint32_t t, ps;
-    memcpy(&t, p, 4);
-    memcpy(&ps, p + 4, 4);
-    if (t == YETTY_YPAINT_TYPE_FONT)
-      next_id++;
-    /* Walk by FAM size for flyweight/complex; otherwise stop — we'd need
+    /* Walk existing prims to count fonts so far. Simple, infrequent. */
+    int next_id = 0;
+    const uint8_t *p = buf->primitives.buf.data;
+    const uint8_t *end = p + buf->primitives.buf.size;
+    while (p + 8 <= end) {
+        uint32_t t, ps;
+        memcpy(&t, p, 4);
+        memcpy(&ps, p + 4, 4);
+        if (t == YETTY_YPAINT_TYPE_FONT) {
+            next_id++;
+        }
+        /* Walk by FAM size for flyweight/complex; otherwise stop — we'd need
      * the registry to walk SDF prims correctly. We only need to count
      * FONTs that precede this insertion, and producers add fonts before
      * other prims in practice (PDF, markdown). If a producer interleaves,
      * they should pass an explicit id (future API). */
-    if (t >= 0x40000000u) {
-      p += 8 + ps;
-    } else {
-      break;
+        if (t >= 0x40000000u) {
+            p += 8 + ps;
+        } else {
+            break;
+        }
     }
-  }
 
-  yetty_ypaint_font_prim_write(staging, (int32_t)next_id,
-                               name, name_len,
-                               ttf_data->data, ttf_len);
+    yetty_ypaint_font_prim_write(staging, (int32_t)next_id, name, name_len, ttf_data->data,
+                                 ttf_len);
 
-  struct yetty_ypaint_id_result r =
-      yetty_ypaint_core_buffer_add_prim(buf, staging, prim_size);
-  free(staging);
-  if (r.error)
-    return YETTY_ERR(yetty_ycore_int, "add_prim failed");
-  return YETTY_OK(yetty_ycore_int, next_id);
+    struct yetty_ypaint_id_result r = yetty_ypaint_core_buffer_add_prim(buf, staging, prim_size);
+    free(staging);
+    if (r.error) {
+        return YETTY_ERR(yetty_ycore_int, "add_prim failed");
+    }
+    return YETTY_OK(yetty_ycore_int, next_id);
 }
 
-struct yetty_ycore_void_result
-yetty_ypaint_core_buffer_add_text(struct yetty_ypaint_core_buffer *buf,
-                                  float x, float y,
-                                  const struct yetty_ycore_buffer *text,
-                                  float font_size, uint32_t color,
-                                  uint32_t layer, int32_t font_id,
-                                  float rotation)
+struct yetty_ycore_void_result yetty_ypaint_core_buffer_add_text(
+    struct yetty_ypaint_core_buffer *buf, float x, float y, const struct yetty_ycore_buffer *text,
+    float font_size, uint32_t color, uint32_t layer, int32_t font_id, float rotation)
 {
-  if (!buf)
-    return YETTY_ERR(yetty_ycore_void, "buf is NULL");
-  if (!text || !text->data || text->size == 0)
-    return YETTY_ERR(yetty_ycore_void, "text is empty");
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_void, "buf is NULL");
+    }
+    if (!text || !text->data || text->size == 0) {
+        return YETTY_ERR(yetty_ycore_void, "text is empty");
+    }
 
-  uint32_t text_len = (uint32_t)text->size;
-  size_t prim_size = yetty_ypaint_text_span_prim_size_for(text_len);
+    uint32_t text_len = (uint32_t)text->size;
+    size_t prim_size = yetty_ypaint_text_span_prim_size_for(text_len);
 
-  uint8_t *staging = malloc(prim_size);
-  if (!staging)
-    return YETTY_ERR(yetty_ycore_void, "alloc failed");
+    uint8_t *staging = malloc(prim_size);
+    if (!staging) {
+        return YETTY_ERR(yetty_ycore_void, "alloc failed");
+    }
 
-  yetty_ypaint_text_span_prim_write(staging, x, y, font_size, rotation,
-                                    color, layer, font_id,
-                                    (const char *)text->data, text_len);
+    yetty_ypaint_text_span_prim_write(staging, x, y, font_size, rotation, color, layer, font_id,
+                                      (const char *)text->data, text_len);
 
-  struct yetty_ypaint_id_result r =
-      yetty_ypaint_core_buffer_add_prim(buf, staging, prim_size);
-  free(staging);
-  if (r.error)
-    return YETTY_ERR(yetty_ycore_void, "add_prim failed");
-  return YETTY_OK_VOID();
+    struct yetty_ypaint_id_result r = yetty_ypaint_core_buffer_add_prim(buf, staging, prim_size);
+    free(staging);
+    if (r.error) {
+        return YETTY_ERR(yetty_ycore_void, "add_prim failed");
+    }
+    return YETTY_OK_VOID();
 }

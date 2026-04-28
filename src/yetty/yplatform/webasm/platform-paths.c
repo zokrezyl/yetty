@@ -5,10 +5,10 @@
 
 const char *yetty_yplatform_get_cache_dir(void)
 {
-	return "/cache";
+    return "/cache";
 }
 
 const char *yetty_yplatform_get_runtime_dir(void)
 {
-	return "/tmp";
+    return "/tmp";
 }

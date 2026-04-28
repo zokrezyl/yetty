@@ -59,11 +59,15 @@ extern const char *yetty_yplatform_get_config_dir(void);
 
 /* Forward declarations */
 static void tinyemu_pty_destroy(struct yetty_yplatform_pty *self);
-static struct yetty_ycore_size_result tinyemu_pty_read(struct yetty_yplatform_pty *self, char *buf, size_t max_len);
-static struct yetty_ycore_size_result tinyemu_pty_write(struct yetty_yplatform_pty *self, const char *data, size_t len);
-static struct yetty_ycore_void_result tinyemu_pty_resize(struct yetty_yplatform_pty *self, uint32_t cols, uint32_t rows);
+static struct yetty_ycore_size_result tinyemu_pty_read(struct yetty_yplatform_pty *self, char *buf,
+                                                       size_t max_len);
+static struct yetty_ycore_size_result tinyemu_pty_write(struct yetty_yplatform_pty *self,
+                                                        const char *data, size_t len);
+static struct yetty_ycore_void_result tinyemu_pty_resize(struct yetty_yplatform_pty *self,
+                                                         uint32_t cols, uint32_t rows);
 static struct yetty_ycore_void_result tinyemu_pty_stop(struct yetty_yplatform_pty *self);
-static struct yetty_yplatform_pty_pipe_source *tinyemu_pty_pipe_source(struct yetty_yplatform_pty *self);
+static struct yetty_yplatform_pty_pipe_source *tinyemu_pty_pipe_source(
+    struct yetty_yplatform_pty *self);
 
 /* Ops table */
 static const struct yetty_yplatform_pty_ops tinyemu_pty_ops = {
@@ -83,7 +87,9 @@ static void tinyemu_console_write(void *opaque, const uint8_t *buf, int len)
 {
     struct tinyemu_pty *pty = g_pty;
     (void)opaque;
-    if (!pty || len <= 0) return;
+    if (!pty || len <= 0) {
+        return;
+    }
 
     ssize_t written = write(pty->pty_pipe[1], buf, len);
     if (written != len) {
@@ -96,7 +102,9 @@ static int tinyemu_console_read(void *opaque, uint8_t *buf, int len)
 {
     struct tinyemu_pty *pty = g_pty;
     (void)opaque;
-    if (!pty || len <= 0) return 0;
+    if (!pty || len <= 0) {
+        return 0;
+    }
 
     int ret = read(pty->os_input_pipe[0], buf, len);
     if (ret > 0) {
@@ -125,8 +133,8 @@ static int64_t bf_get_sector_count(BlockDevice *bs)
     return bf->nb_sectors;
 }
 
-static int bf_read_async(BlockDevice *bs, uint64_t sector_num, uint8_t *buf,
-                         int n, BlockDeviceCompletionFunc *cb, void *opaque)
+static int bf_read_async(BlockDevice *bs, uint64_t sector_num, uint8_t *buf, int n,
+                         BlockDeviceCompletionFunc *cb, void *opaque)
 {
     BlockDeviceFile *bf = bs->opaque;
     if (bf->mode == BF_MODE_SNAPSHOT) {
@@ -147,8 +155,7 @@ static int bf_read_async(BlockDevice *bs, uint64_t sector_num, uint8_t *buf,
     return 0;
 }
 
-static int bf_write_async(BlockDevice *bs, uint64_t sector_num,
-                          const uint8_t *buf, int n,
+static int bf_write_async(BlockDevice *bs, uint64_t sector_num, const uint8_t *buf, int n,
                           BlockDeviceCompletionFunc *cb, void *opaque)
 {
     BlockDeviceFile *bf = bs->opaque;
@@ -181,7 +188,9 @@ static BlockDevice *block_device_init(const char *filename, BlockDeviceModeEnum 
     FILE *f;
 
     f = fopen(filename, mode == BF_MODE_RW ? "r+b" : "rb");
-    if (!f) return NULL;
+    if (!f) {
+        return NULL;
+    }
 
     fseek(f, 0, SEEK_END);
     file_size = ftello(f);
@@ -226,16 +235,14 @@ void slirp_output(void *opaque, const uint8_t *pkt, int pkt_len)
     net->device_write_packet(net, pkt, pkt_len);
 }
 
-static void slirp_select_fill1(EthernetDevice *net, int *pfd_max,
-                               fd_set *rfds, fd_set *wfds, fd_set *efds,
-                               int *pdelay)
+static void slirp_select_fill1(EthernetDevice *net, int *pfd_max, fd_set *rfds, fd_set *wfds,
+                               fd_set *efds, int *pdelay)
 {
     Slirp *slirp = net->opaque;
     slirp_select_fill(slirp, pfd_max, rfds, wfds, efds);
 }
 
-static void slirp_select_poll1(EthernetDevice *net,
-                               fd_set *rfds, fd_set *wfds, fd_set *efds,
+static void slirp_select_poll1(EthernetDevice *net, fd_set *rfds, fd_set *wfds, fd_set *efds,
                                int select_ret)
 {
     Slirp *slirp = net->opaque;
@@ -245,13 +252,15 @@ static void slirp_select_poll1(EthernetDevice *net,
 static EthernetDevice *slirp_open(void)
 {
     EthernetDevice *net;
-    struct in_addr net_addr  = { .s_addr = htonl(0x0a000200) };
-    struct in_addr mask = { .s_addr = htonl(0xffffff00) };
-    struct in_addr host = { .s_addr = htonl(0x0a000202) };
-    struct in_addr dhcp = { .s_addr = htonl(0x0a00020f) };
-    struct in_addr dns  = { .s_addr = htonl(0x0a000203) };
+    struct in_addr net_addr = {.s_addr = htonl(0x0a000200)};
+    struct in_addr mask = {.s_addr = htonl(0xffffff00)};
+    struct in_addr host = {.s_addr = htonl(0x0a000202)};
+    struct in_addr dhcp = {.s_addr = htonl(0x0a00020f)};
+    struct in_addr dns = {.s_addr = htonl(0x0a000203)};
 
-    if (slirp_state) return NULL;
+    if (slirp_state) {
+        return NULL;
+    }
 
     net = mallocz(sizeof(*net));
     slirp_state = slirp_init(0, net_addr, mask, host, NULL, "", NULL, dhcp, dns, net);
@@ -292,8 +301,9 @@ static void vm_run_once(struct tinyemu_pty *pty)
     /* Add os_input_pipe[0] to select for keyboard input */
     if (m->console_dev && virtio_console_can_write_data(m->console_dev)) {
         FD_SET(pty->os_input_pipe[0], &rfds);
-        if (pty->os_input_pipe[0] > fd_max)
+        if (pty->os_input_pipe[0] > fd_max) {
             fd_max = pty->os_input_pipe[0];
+        }
     }
 
     if (m->net) {
@@ -318,19 +328,21 @@ static void vm_run_once(struct tinyemu_pty *pty)
 #ifdef _WIN32
         DWORD avail = 0;
         HANDLE h = (HANDLE)_get_osfhandle(pty->os_input_pipe[0]);
-        if (h == INVALID_HANDLE_VALUE ||
-            !PeekNamedPipe(h, NULL, 0, NULL, &avail, NULL) ||
+        if (h == INVALID_HANDLE_VALUE || !PeekNamedPipe(h, NULL, 0, NULL, &avail, NULL) ||
             avail == 0) {
             has_data = 0;
         }
 #else
-        if (!FD_ISSET(pty->os_input_pipe[0], &rfds)) has_data = 0;
+        if (!FD_ISSET(pty->os_input_pipe[0], &rfds)) {
+            has_data = 0;
+        }
 #endif
         if (has_data) {
             uint8_t buf[128];
             int len = virtio_console_get_write_len(m->console_dev);
-            if (len > (int)sizeof(buf))
+            if (len > (int)sizeof(buf)) {
                 len = sizeof(buf);
+            }
             int n = read(pty->os_input_pipe[0], buf, len);
             if (n > 0) {
                 virtio_console_write_data(m->console_dev, buf, n);
@@ -408,7 +420,9 @@ static int init_vm(struct tinyemu_pty *pty)
         int kept = 0;
         for (int i = 0; i < p->eth_count; i++) {
             if (p->tab_eth[i].net) {
-                if (kept != i) p->tab_eth[kept] = p->tab_eth[i];
+                if (kept != i) {
+                    p->tab_eth[kept] = p->tab_eth[i];
+                }
                 kept++;
             }
         }
@@ -444,48 +458,65 @@ static void tinyemu_pty_destroy(struct yetty_yplatform_pty *self)
     struct tinyemu_pty *pty = container_of(self, struct tinyemu_pty, base);
     tinyemu_pty_stop(self);
 
-    if (pty->os_input_pipe[0] >= 0) close(pty->os_input_pipe[0]);
-    if (pty->os_input_pipe[1] >= 0) close(pty->os_input_pipe[1]);
-    if (pty->pty_pipe[0] >= 0) close(pty->pty_pipe[0]);
-    if (pty->pty_pipe[1] >= 0) close(pty->pty_pipe[1]);
+    if (pty->os_input_pipe[0] >= 0) {
+        close(pty->os_input_pipe[0]);
+    }
+    if (pty->os_input_pipe[1] >= 0) {
+        close(pty->os_input_pipe[1]);
+    }
+    if (pty->pty_pipe[0] >= 0) {
+        close(pty->pty_pipe[0]);
+    }
+    if (pty->pty_pipe[1] >= 0) {
+        close(pty->pty_pipe[1]);
+    }
 
     free(pty->config_path);
     free(pty);
 
-    if (g_pty == pty) g_pty = NULL;
+    if (g_pty == pty) {
+        g_pty = NULL;
+    }
 }
 
-static struct yetty_ycore_size_result tinyemu_pty_read(struct yetty_yplatform_pty *self, char *buf, size_t max_len)
+static struct yetty_ycore_size_result tinyemu_pty_read(struct yetty_yplatform_pty *self, char *buf,
+                                                       size_t max_len)
 {
     struct tinyemu_pty *pty = container_of(self, struct tinyemu_pty, base);
 
-    if (!pty->running || max_len == 0)
+    if (!pty->running || max_len == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
+    }
 
     /* Read from pty_pipe[0] - VM output */
     ssize_t n = read(pty->pty_pipe[0], buf, max_len);
-    if (n < 0)
+    if (n < 0) {
         n = 0;
+    }
 
     return YETTY_OK(yetty_ycore_size, (size_t)n);
 }
 
-static struct yetty_ycore_size_result tinyemu_pty_write(struct yetty_yplatform_pty *self, const char *data, size_t len)
+static struct yetty_ycore_size_result tinyemu_pty_write(struct yetty_yplatform_pty *self,
+                                                        const char *data, size_t len)
 {
     struct tinyemu_pty *pty = container_of(self, struct tinyemu_pty, base);
 
-    if (!pty->running || len == 0)
+    if (!pty->running || len == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
+    }
 
     /* Write to os_input_pipe[1] - keyboard input to VM */
     ssize_t n = write(pty->os_input_pipe[1], data, len);
-    if (n < 0)
+    if (n < 0) {
         n = 0;
+    }
 
     return YETTY_OK(yetty_ycore_size, (size_t)n);
 }
 
-static struct yetty_ycore_void_result tinyemu_pty_resize(struct yetty_yplatform_pty *self, uint32_t cols, uint32_t rows)
+static struct yetty_ycore_void_result tinyemu_pty_resize(struct yetty_yplatform_pty *self,
+                                                         uint32_t cols, uint32_t rows)
 {
     struct tinyemu_pty *pty = container_of(self, struct tinyemu_pty, base);
     pty->cols = cols;
@@ -498,8 +529,9 @@ static struct yetty_ycore_void_result tinyemu_pty_stop(struct yetty_yplatform_pt
 {
     struct tinyemu_pty *pty = container_of(self, struct tinyemu_pty, base);
 
-    if (!pty->running)
+    if (!pty->running) {
         return YETTY_OK_VOID();
+    }
 
     pty->running = 0;
 
@@ -516,7 +548,8 @@ static struct yetty_ycore_void_result tinyemu_pty_stop(struct yetty_yplatform_pt
     return YETTY_OK_VOID();
 }
 
-static struct yetty_yplatform_pty_pipe_source *tinyemu_pty_pipe_source(struct yetty_yplatform_pty *self)
+static struct yetty_yplatform_pty_pipe_source *tinyemu_pty_pipe_source(
+    struct yetty_yplatform_pty *self)
 {
     struct tinyemu_pty *pty = container_of(self, struct tinyemu_pty, base);
     return &pty->pipe_source;
@@ -528,8 +561,9 @@ struct yetty_yplatform_pty_result tinyemu_pty_create(struct yetty_yconfig *confi
     struct tinyemu_pty *pty;
 
     pty = malloc(sizeof(struct tinyemu_pty));
-    if (!pty)
+    if (!pty) {
         return YETTY_ERR(yetty_yplatform_pty, "failed to allocate tinyemu pty");
+    }
 
     memset(pty, 0, sizeof(*pty));
     pty->base.ops = &tinyemu_pty_ops;
@@ -584,13 +618,15 @@ struct yetty_yplatform_pty_result tinyemu_pty_create(struct yetty_yconfig *confi
             for (char *p = tmp + 1; *p && cfg_ready; p++) {
                 if (*p == '/') {
                     *p = 0;
-                    if (mkdir(tmp, 0755) != 0 && errno != EEXIST)
+                    if (mkdir(tmp, 0755) != 0 && errno != EEXIST) {
                         cfg_ready = 0;
+                    }
                     *p = '/';
                 }
             }
-            if (cfg_ready && mkdir(tmp, 0755) != 0 && errno != EEXIST)
+            if (cfg_ready && mkdir(tmp, 0755) != 0 && errno != EEXIST) {
                 cfg_ready = 0;
+            }
         }
 
         if (cfg_ready && access(cfg_path, F_OK) != 0) {
@@ -603,9 +639,12 @@ struct yetty_yplatform_pty_result tinyemu_pty_create(struct yetty_yconfig *confi
                 char data_dir_fwd[512];
                 snprintf(data_dir_fwd, sizeof(data_dir_fwd), "%s", data_dir);
                 for (char *p = data_dir_fwd; *p; p++) {
-                    if (*p == '\\') *p = '/';
+                    if (*p == '\\') {
+                        *p = '/';
+                    }
                 }
-                fprintf(f,
+                fprintf(
+                    f,
                     "/* TinyEMU VM Configuration (auto-generated; edit to customize) */\n"
                     "{\n"
                     "    version: 1,\n"
@@ -631,8 +670,7 @@ struct yetty_yplatform_pty_result tinyemu_pty_create(struct yetty_yconfig *confi
             close(pty->pty_pipe[0]);
             close(pty->pty_pipe[1]);
             free(pty);
-            return YETTY_ERR(yetty_yplatform_pty,
-                "failed to prepare temu cfg under config dir");
+            return YETTY_ERR(yetty_yplatform_pty, "failed to prepare temu cfg under config dir");
         }
 
         pty->config_path = strdup(cfg_path);
@@ -668,8 +706,7 @@ static void tinyemu_pty_factory_destroy(struct yetty_yplatform_pty_factory *self
 }
 
 static struct yetty_yplatform_pty_result tinyemu_pty_factory_create_pty(
-    struct yetty_yplatform_pty_factory *self,
-    struct yetty_ycore_event_loop *event_loop)
+    struct yetty_yplatform_pty_factory *self, struct yetty_ycore_event_loop *event_loop)
 {
     struct tinyemu_pty_factory *factory = container_of(self, struct tinyemu_pty_factory, base);
     (void)event_loop;
@@ -682,14 +719,14 @@ static const struct yetty_yplatform_pty_factory_ops tinyemu_pty_factory_ops = {
 };
 
 /* Factory creation - called when --virtual flag is set */
-struct yetty_yplatform_pty_factory_result tinyemu_pty_factory_create(
-    struct yetty_yconfig *config)
+struct yetty_yplatform_pty_factory_result tinyemu_pty_factory_create(struct yetty_yconfig *config)
 {
     struct tinyemu_pty_factory *factory;
 
     factory = malloc(sizeof(struct tinyemu_pty_factory));
-    if (!factory)
+    if (!factory) {
         return YETTY_ERR(yetty_yplatform_pty_factory, "failed to allocate tinyemu pty factory");
+    }
 
     factory->base.ops = &tinyemu_pty_factory_ops;
     factory->config = config;

@@ -50,12 +50,11 @@ struct yetty_yconfig_ops {
     int (*has)(const struct yetty_yconfig *self, const char *path);
 
     /* Set string value */
-    struct yetty_ycore_void_result (*set_string)(struct yetty_yconfig *self,
-                                                 const char *path, const char *value);
+    struct yetty_ycore_void_result (*set_string)(struct yetty_yconfig *self, const char *path,
+                                                 const char *value);
 
     /* Get sub-config at path (returns NULL if not found, no ownership transfer) */
-    struct yetty_yconfig *(*get_node)(const struct yetty_yconfig *self,
-                                     const char *path);
+    struct yetty_yconfig *(*get_node)(const struct yetty_yconfig *self, const char *path);
 
     /* Resolve shell argv for execvp.
      *
@@ -91,11 +90,11 @@ struct yetty_yconfig {
 #define YETTY_YCONFIG_KEY_RPC_SOCKET_PATH "rpc/socket-path"
 #define YETTY_YCONFIG_KEY_TEMU "temu"
 #define YETTY_YCONFIG_KEY_QEMU "qemu"
-#define YETTY_YCONFIG_KEY_SSH  "ssh/enabled"
+#define YETTY_YCONFIG_KEY_SSH "ssh/enabled"
 
 /* Create config */
 struct yetty_yconfig_result yetty_yconfig_create(int argc, char *argv[],
-                                                const struct yetty_yplatform_paths *paths);
+                                                 const struct yetty_yplatform_paths *paths);
 
 #ifdef __cplusplus
 }

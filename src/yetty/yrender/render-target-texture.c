@@ -21,38 +21,38 @@ extern const unsigned int gblend_shaderSize;
 #define MAX_BLEND_SOURCES 4
 
 struct render_target_texture {
-	struct yetty_yrender_target base;  /* viewport stored here */
-	WGPUDevice device;
-	WGPUQueue queue;
-	WGPUTextureFormat format;
-	struct yetty_yrender_gpu_allocator *allocator;
+    struct yetty_yrender_target base; /* viewport stored here */
+    WGPUDevice device;
+    WGPUQueue queue;
+    WGPUTextureFormat format;
+    struct yetty_yrender_gpu_allocator *allocator;
 
-	/* Owned texture (size from base.viewport.w/h) */
-	WGPUTexture texture;
-	WGPUTextureView view;
+    /* Owned texture (size from base.viewport.w/h) */
+    WGPUTexture texture;
+    WGPUTextureView view;
 
-	/* Optional surface for present() - NULL for layer/terminal targets */
-	WGPUSurface surface;
+    /* Optional surface for present() - NULL for layer/terminal targets */
+    WGPUSurface surface;
 
-	/* Binder for render_layer */
-	struct yetty_yrender_gpu_resource_binder *binder;
+    /* Binder for render_layer */
+    struct yetty_yrender_gpu_resource_binder *binder;
 
-	/* Blend pipeline resources (also used for present) */
-	WGPUShaderModule blend_shader;
-	WGPURenderPipeline blend_pipeline;
-	WGPURenderPipeline present_pipeline;  /* For presenting to surface */
-	WGPUBindGroupLayout blend_layout;
-	WGPUSampler sampler;
-	WGPUBuffer uniform_buffer;
-	WGPUTexture placeholder_texture;
-	WGPUTextureView placeholder_view;
+    /* Blend pipeline resources (also used for present) */
+    WGPUShaderModule blend_shader;
+    WGPURenderPipeline blend_pipeline;
+    WGPURenderPipeline present_pipeline; /* For presenting to surface */
+    WGPUBindGroupLayout blend_layout;
+    WGPUSampler sampler;
+    WGPUBuffer uniform_buffer;
+    WGPUTexture placeholder_texture;
+    WGPUTextureView placeholder_view;
 
-	/* Visual zoom state. scale=1.0 disables zoom. Offsets are in source
+    /* Visual zoom state. scale=1.0 disables zoom. Offsets are in source
 	 * pixels within this target. Read by blend()/present() and packed into
 	 * the blend uniform buffer. */
-	float visual_zoom_scale;
-	float visual_zoom_offset_x;
-	float visual_zoom_offset_y;
+    float visual_zoom_scale;
+    float visual_zoom_offset_x;
+    float visual_zoom_offset_y;
 };
 
 /*=============================================================================
@@ -61,295 +61,295 @@ struct render_target_texture {
 
 static void render_target_texture_destroy(struct yetty_yrender_target *self)
 {
-	struct render_target_texture *rt = (struct render_target_texture *)self;
+    struct render_target_texture *rt = (struct render_target_texture *)self;
 
-	if (rt->view) {
-		wgpuTextureViewRelease(rt->view);
-		rt->view = NULL;
-	}
-	if (rt->texture) {
-		if (rt->allocator)
-			rt->allocator->ops->release_texture(rt->allocator, rt->texture);
-		else {
-			wgpuTextureDestroy(rt->texture);
-			wgpuTextureRelease(rt->texture);
-		}
-		rt->texture = NULL;
-	}
-	if (rt->binder) {
-		rt->binder->ops->destroy(rt->binder);
-		rt->binder = NULL;
-	}
-	if (rt->blend_pipeline) {
-		wgpuRenderPipelineRelease(rt->blend_pipeline);
-		rt->blend_pipeline = NULL;
-	}
-	if (rt->blend_layout) {
-		wgpuBindGroupLayoutRelease(rt->blend_layout);
-		rt->blend_layout = NULL;
-	}
-	if (rt->blend_shader) {
-		wgpuShaderModuleRelease(rt->blend_shader);
-		rt->blend_shader = NULL;
-	}
-	if (rt->sampler) {
-		wgpuSamplerRelease(rt->sampler);
-		rt->sampler = NULL;
-	}
-	if (rt->uniform_buffer) {
-		wgpuBufferDestroy(rt->uniform_buffer);
-		wgpuBufferRelease(rt->uniform_buffer);
-		rt->uniform_buffer = NULL;
-	}
-	if (rt->placeholder_view) {
-		wgpuTextureViewRelease(rt->placeholder_view);
-		rt->placeholder_view = NULL;
-	}
-	if (rt->placeholder_texture) {
-		wgpuTextureDestroy(rt->placeholder_texture);
-		wgpuTextureRelease(rt->placeholder_texture);
-		rt->placeholder_texture = NULL;
-	}
+    if (rt->view) {
+        wgpuTextureViewRelease(rt->view);
+        rt->view = NULL;
+    }
+    if (rt->texture) {
+        if (rt->allocator) {
+            rt->allocator->ops->release_texture(rt->allocator, rt->texture);
+        } else {
+            wgpuTextureDestroy(rt->texture);
+            wgpuTextureRelease(rt->texture);
+        }
+        rt->texture = NULL;
+    }
+    if (rt->binder) {
+        rt->binder->ops->destroy(rt->binder);
+        rt->binder = NULL;
+    }
+    if (rt->blend_pipeline) {
+        wgpuRenderPipelineRelease(rt->blend_pipeline);
+        rt->blend_pipeline = NULL;
+    }
+    if (rt->blend_layout) {
+        wgpuBindGroupLayoutRelease(rt->blend_layout);
+        rt->blend_layout = NULL;
+    }
+    if (rt->blend_shader) {
+        wgpuShaderModuleRelease(rt->blend_shader);
+        rt->blend_shader = NULL;
+    }
+    if (rt->sampler) {
+        wgpuSamplerRelease(rt->sampler);
+        rt->sampler = NULL;
+    }
+    if (rt->uniform_buffer) {
+        wgpuBufferDestroy(rt->uniform_buffer);
+        wgpuBufferRelease(rt->uniform_buffer);
+        rt->uniform_buffer = NULL;
+    }
+    if (rt->placeholder_view) {
+        wgpuTextureViewRelease(rt->placeholder_view);
+        rt->placeholder_view = NULL;
+    }
+    if (rt->placeholder_texture) {
+        wgpuTextureDestroy(rt->placeholder_texture);
+        wgpuTextureRelease(rt->placeholder_texture);
+        rt->placeholder_texture = NULL;
+    }
 
-	free(rt);
+    free(rt);
 }
 
 /*=============================================================================
  * Clear
  *===========================================================================*/
 
-static struct yetty_ycore_void_result
-render_target_texture_clear(struct yetty_yrender_target *self)
+static struct yetty_ycore_void_result render_target_texture_clear(struct yetty_yrender_target *self)
 {
-	struct render_target_texture *rt = (struct render_target_texture *)self;
+    struct render_target_texture *rt = (struct render_target_texture *)self;
 
-	WGPUCommandEncoderDescriptor enc_desc = {0};
-	WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(rt->device, &enc_desc);
-	if (!encoder)
-		return YETTY_ERR(yetty_ycore_void, "failed to create encoder");
+    WGPUCommandEncoderDescriptor enc_desc = {0};
+    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(rt->device, &enc_desc);
+    if (!encoder) {
+        return YETTY_ERR(yetty_ycore_void, "failed to create encoder");
+    }
 
-	WGPURenderPassColorAttachment color_attachment = {0};
-	color_attachment.view = rt->view;
-	color_attachment.loadOp = WGPULoadOp_Clear;
-	color_attachment.storeOp = WGPUStoreOp_Store;
-	color_attachment.clearValue = (WGPUColor){0.0, 0.0, 0.0, 1.0};
-	color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+    WGPURenderPassColorAttachment color_attachment = {0};
+    color_attachment.view = rt->view;
+    color_attachment.loadOp = WGPULoadOp_Clear;
+    color_attachment.storeOp = WGPUStoreOp_Store;
+    color_attachment.clearValue = (WGPUColor){0.0, 0.0, 0.0, 1.0};
+    color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
 
-	WGPURenderPassDescriptor pass_desc = {0};
-	pass_desc.colorAttachmentCount = 1;
-	pass_desc.colorAttachments = &color_attachment;
+    WGPURenderPassDescriptor pass_desc = {0};
+    pass_desc.colorAttachmentCount = 1;
+    pass_desc.colorAttachments = &color_attachment;
 
-	WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &pass_desc);
-	if (!pass) {
-		wgpuCommandEncoderRelease(encoder);
-		return YETTY_ERR(yetty_ycore_void, "failed to begin render pass");
-	}
+    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &pass_desc);
+    if (!pass) {
+        wgpuCommandEncoderRelease(encoder);
+        return YETTY_ERR(yetty_ycore_void, "failed to begin render pass");
+    }
 
-	wgpuRenderPassEncoderEnd(pass);
-	wgpuRenderPassEncoderRelease(pass);
+    wgpuRenderPassEncoderEnd(pass);
+    wgpuRenderPassEncoderRelease(pass);
 
-	WGPUCommandBufferDescriptor cmd_desc = {0};
-	WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_desc);
-	wgpuQueueSubmit(rt->queue, 1, &cmd);
-	wgpuCommandBufferRelease(cmd);
-	wgpuCommandEncoderRelease(encoder);
+    WGPUCommandBufferDescriptor cmd_desc = {0};
+    WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_desc);
+    wgpuQueueSubmit(rt->queue, 1, &cmd);
+    wgpuCommandBufferRelease(cmd);
+    wgpuCommandEncoderRelease(encoder);
 
-	return YETTY_OK_VOID();
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================
  * Resize
  *===========================================================================*/
 
-static struct yetty_ycore_void_result
-render_target_texture_resize(struct yetty_yrender_target *self,
-			     struct yetty_yrender_viewport viewport)
+static struct yetty_ycore_void_result render_target_texture_resize(
+    struct yetty_yrender_target *self, struct yetty_yrender_viewport viewport)
 {
-	struct render_target_texture *rt = (struct render_target_texture *)self;
-	uint32_t width = (uint32_t)viewport.w;
-	uint32_t height = (uint32_t)viewport.h;
+    struct render_target_texture *rt = (struct render_target_texture *)self;
+    uint32_t width = (uint32_t)viewport.w;
+    uint32_t height = (uint32_t)viewport.h;
 
-	/* Store viewport */
-	rt->base.viewport = viewport;
+    /* Store viewport */
+    rt->base.viewport = viewport;
 
-	/* Only recreate texture if size changed */
-	if (rt->texture) {
-		uint32_t old_w = wgpuTextureGetWidth(rt->texture);
-		uint32_t old_h = wgpuTextureGetHeight(rt->texture);
-		if (old_w == width && old_h == height)
-			return YETTY_OK_VOID();
-	}
+    /* Only recreate texture if size changed */
+    if (rt->texture) {
+        uint32_t old_w = wgpuTextureGetWidth(rt->texture);
+        uint32_t old_h = wgpuTextureGetHeight(rt->texture);
+        if (old_w == width && old_h == height) {
+            return YETTY_OK_VOID();
+        }
+    }
 
-	/* Release old texture */
-	if (rt->view) {
-		wgpuTextureViewRelease(rt->view);
-		rt->view = NULL;
-	}
-	if (rt->texture) {
-		if (rt->allocator)
-			rt->allocator->ops->release_texture(rt->allocator, rt->texture);
-		else {
-			wgpuTextureDestroy(rt->texture);
-			wgpuTextureRelease(rt->texture);
-		}
-		rt->texture = NULL;
-	}
+    /* Release old texture */
+    if (rt->view) {
+        wgpuTextureViewRelease(rt->view);
+        rt->view = NULL;
+    }
+    if (rt->texture) {
+        if (rt->allocator) {
+            rt->allocator->ops->release_texture(rt->allocator, rt->texture);
+        } else {
+            wgpuTextureDestroy(rt->texture);
+            wgpuTextureRelease(rt->texture);
+        }
+        rt->texture = NULL;
+    }
 
-	/* Create new texture */
-	WGPUTextureDescriptor tex_desc = {0};
-	tex_desc.label = (WGPUStringView){.data = "render_target", .length = 13};
-	tex_desc.usage = WGPUTextureUsage_RenderAttachment |
-			 WGPUTextureUsage_TextureBinding |
-			 WGPUTextureUsage_CopySrc;
-	tex_desc.dimension = WGPUTextureDimension_2D;
-	tex_desc.size.width = width;
-	tex_desc.size.height = height;
-	tex_desc.size.depthOrArrayLayers = 1;
-	tex_desc.format = rt->format;
-	tex_desc.mipLevelCount = 1;
-	tex_desc.sampleCount = 1;
+    /* Create new texture */
+    WGPUTextureDescriptor tex_desc = {0};
+    tex_desc.label = (WGPUStringView){.data = "render_target", .length = 13};
+    tex_desc.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding |
+                     WGPUTextureUsage_CopySrc;
+    tex_desc.dimension = WGPUTextureDimension_2D;
+    tex_desc.size.width = width;
+    tex_desc.size.height = height;
+    tex_desc.size.depthOrArrayLayers = 1;
+    tex_desc.format = rt->format;
+    tex_desc.mipLevelCount = 1;
+    tex_desc.sampleCount = 1;
 
-	if (rt->allocator)
-		rt->texture = rt->allocator->ops->create_texture(rt->allocator, &tex_desc);
-	else
-		rt->texture = wgpuDeviceCreateTexture(rt->device, &tex_desc);
+    if (rt->allocator) {
+        rt->texture = rt->allocator->ops->create_texture(rt->allocator, &tex_desc);
+    } else {
+        rt->texture = wgpuDeviceCreateTexture(rt->device, &tex_desc);
+    }
 
-	if (!rt->texture)
-		return YETTY_ERR(yetty_ycore_void, "failed to create texture");
+    if (!rt->texture) {
+        return YETTY_ERR(yetty_ycore_void, "failed to create texture");
+    }
 
-	rt->view = wgpuTextureCreateView(rt->texture, NULL);
-	if (!rt->view) {
-		if (rt->allocator)
-			rt->allocator->ops->release_texture(rt->allocator, rt->texture);
-		else {
-			wgpuTextureDestroy(rt->texture);
-			wgpuTextureRelease(rt->texture);
-		}
-		rt->texture = NULL;
-		return YETTY_ERR(yetty_ycore_void, "failed to create view");
-	}
+    rt->view = wgpuTextureCreateView(rt->texture, NULL);
+    if (!rt->view) {
+        if (rt->allocator) {
+            rt->allocator->ops->release_texture(rt->allocator, rt->texture);
+        } else {
+            wgpuTextureDestroy(rt->texture);
+            wgpuTextureRelease(rt->texture);
+        }
+        rt->texture = NULL;
+        return YETTY_ERR(yetty_ycore_void, "failed to create view");
+    }
 
-	ydebug("render_target_texture: resized to %ux%u", width, height);
-	return YETTY_OK_VOID();
+    ydebug("render_target_texture: resized to %ux%u", width, height);
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================
  * Accessors
  *===========================================================================*/
 
-static WGPUTextureView
-render_target_texture_get_view(const struct yetty_yrender_target *self)
+static WGPUTextureView render_target_texture_get_view(const struct yetty_yrender_target *self)
 {
-	const struct render_target_texture *rt =
-		(const struct render_target_texture *)self;
-	return rt->view;
+    const struct render_target_texture *rt = (const struct render_target_texture *)self;
+    return rt->view;
 }
 
-static WGPUTexture
-render_target_texture_get_texture(const struct yetty_yrender_target *self)
+static WGPUTexture render_target_texture_get_texture(const struct yetty_yrender_target *self)
 {
-	const struct render_target_texture *rt =
-		(const struct render_target_texture *)self;
-	return rt->texture;
+    const struct render_target_texture *rt = (const struct render_target_texture *)self;
+    return rt->texture;
 }
-
 
 /*=============================================================================
  * render_layer - render a terminal layer to this target
  *===========================================================================*/
 
-static struct yetty_ycore_void_result
-render_target_texture_render_layer(struct yetty_yrender_target *self,
-				   struct yetty_yterm_terminal_layer *layer)
+static struct yetty_ycore_void_result render_target_texture_render_layer(
+    struct yetty_yrender_target *self, struct yetty_yterm_terminal_layer *layer)
 {
-	struct render_target_texture *rt = (struct render_target_texture *)self;
+    struct render_target_texture *rt = (struct render_target_texture *)self;
 
-	/* Early out if not dirty */
-	if (!layer->dirty)
-		return YETTY_OK_VOID();
+    /* Early out if not dirty */
+    if (!layer->dirty) {
+        return YETTY_OK_VOID();
+    }
 
-	/* Get gpu_resource_set from layer */
-	struct yetty_yrender_gpu_resource_set_result rs_res =
-		layer->ops->get_gpu_resource_set(layer);
-	if (!YETTY_IS_OK(rs_res))
-		return YETTY_ERR(yetty_ycore_void, rs_res.error.msg);
+    /* Get gpu_resource_set from layer */
+    struct yetty_yrender_gpu_resource_set_result rs_res = layer->ops->get_gpu_resource_set(layer);
+    if (!YETTY_IS_OK(rs_res)) {
+        return YETTY_ERR(yetty_ycore_void, rs_res.error.msg);
+    }
 
-	const struct yetty_yrender_gpu_resource_set *rs = rs_res.value;
+    const struct yetty_yrender_gpu_resource_set *rs = rs_res.value;
 
-	/* Submit to binder */
-	ytime_start(rt_submit);
-	struct yetty_ycore_void_result res = rt->binder->ops->submit(rt->binder, rs);
-	ytime_report(rt_submit);
-	if (!YETTY_IS_OK(res))
-		return res;
+    /* Submit to binder */
+    ytime_start(rt_submit);
+    struct yetty_ycore_void_result res = rt->binder->ops->submit(rt->binder, rs);
+    ytime_report(rt_submit);
+    if (!YETTY_IS_OK(res)) {
+        return res;
+    }
 
-	/* Finalize (compile shader if needed) */
-	ytime_start(rt_finalize);
-	res = rt->binder->ops->finalize(rt->binder);
-	ytime_report(rt_finalize);
-	if (!YETTY_IS_OK(res))
-		return res;
+    /* Finalize (compile shader if needed) */
+    ytime_start(rt_finalize);
+    res = rt->binder->ops->finalize(rt->binder);
+    ytime_report(rt_finalize);
+    if (!YETTY_IS_OK(res)) {
+        return res;
+    }
 
-	/* Update uniforms/buffers */
-	ytime_start(rt_update);
-	res = rt->binder->ops->update(rt->binder);
-	ytime_report(rt_update);
-	if (!YETTY_IS_OK(res))
-		return res;
+    /* Update uniforms/buffers */
+    ytime_start(rt_update);
+    res = rt->binder->ops->update(rt->binder);
+    ytime_report(rt_update);
+    if (!YETTY_IS_OK(res)) {
+        return res;
+    }
 
-	/* Encode + draw + submit command buffer to GPU */
-	ytime_start(rt_gpu);
+    /* Encode + draw + submit command buffer to GPU */
+    ytime_start(rt_gpu);
 
-	WGPUCommandEncoderDescriptor enc_desc = {0};
-	WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(rt->device, &enc_desc);
-	if (!encoder)
-		return YETTY_ERR(yetty_ycore_void, "failed to create encoder");
+    WGPUCommandEncoderDescriptor enc_desc = {0};
+    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(rt->device, &enc_desc);
+    if (!encoder) {
+        return YETTY_ERR(yetty_ycore_void, "failed to create encoder");
+    }
 
-	WGPURenderPassColorAttachment color_attachment = {0};
-	color_attachment.view = rt->view;
-	color_attachment.loadOp = WGPULoadOp_Clear;
-	color_attachment.storeOp = WGPUStoreOp_Store;
-	color_attachment.clearValue = (WGPUColor){0.0, 0.0, 0.0, 0.0};
-	color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+    WGPURenderPassColorAttachment color_attachment = {0};
+    color_attachment.view = rt->view;
+    color_attachment.loadOp = WGPULoadOp_Clear;
+    color_attachment.storeOp = WGPUStoreOp_Store;
+    color_attachment.clearValue = (WGPUColor){0.0, 0.0, 0.0, 0.0};
+    color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
 
-	WGPURenderPassDescriptor pass_desc = {0};
-	pass_desc.colorAttachmentCount = 1;
-	pass_desc.colorAttachments = &color_attachment;
+    WGPURenderPassDescriptor pass_desc = {0};
+    pass_desc.colorAttachmentCount = 1;
+    pass_desc.colorAttachments = &color_attachment;
 
-	WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &pass_desc);
-	if (!pass) {
-		wgpuCommandEncoderRelease(encoder);
-		return YETTY_ERR(yetty_ycore_void, "failed to begin render pass");
-	}
+    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &pass_desc);
+    if (!pass) {
+        wgpuCommandEncoderRelease(encoder);
+        return YETTY_ERR(yetty_ycore_void, "failed to begin render pass");
+    }
 
-	WGPURenderPipeline pipeline = rt->binder->ops->get_pipeline(rt->binder);
-	WGPUBuffer quad_vb = rt->binder->ops->get_quad_vertex_buffer(rt->binder);
+    WGPURenderPipeline pipeline = rt->binder->ops->get_pipeline(rt->binder);
+    WGPUBuffer quad_vb = rt->binder->ops->get_quad_vertex_buffer(rt->binder);
 
-	if (pipeline && quad_vb) {
-		wgpuRenderPassEncoderSetPipeline(pass, pipeline);
-		rt->binder->ops->bind(rt->binder, pass, 0);
-		wgpuRenderPassEncoderSetVertexBuffer(pass, 0, quad_vb, 0, WGPU_WHOLE_SIZE);
-		wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
-	}
+    if (pipeline && quad_vb) {
+        wgpuRenderPassEncoderSetPipeline(pass, pipeline);
+        rt->binder->ops->bind(rt->binder, pass, 0);
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, quad_vb, 0, WGPU_WHOLE_SIZE);
+        wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
+    }
 
-	wgpuRenderPassEncoderEnd(pass);
-	wgpuRenderPassEncoderRelease(pass);
+    wgpuRenderPassEncoderEnd(pass);
+    wgpuRenderPassEncoderRelease(pass);
 
-	WGPUCommandBufferDescriptor cmd_desc = {0};
-	WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_desc);
-	ytime_start(rt_submit_queue);
-	wgpuQueueSubmit(rt->queue, 1, &cmd);
-	ytime_report(rt_submit_queue);
-	wgpuCommandBufferRelease(cmd);
-	wgpuCommandEncoderRelease(encoder);
+    WGPUCommandBufferDescriptor cmd_desc = {0};
+    WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_desc);
+    ytime_start(rt_submit_queue);
+    wgpuQueueSubmit(rt->queue, 1, &cmd);
+    ytime_report(rt_submit_queue);
+    wgpuCommandBufferRelease(cmd);
+    wgpuCommandEncoderRelease(encoder);
 
-	ytime_report(rt_gpu);
+    ytime_report(rt_gpu);
 
-	/* Clear dirty flag */
-	layer->dirty = 0;
+    /* Clear dirty flag */
+    layer->dirty = 0;
 
-	ydebug("render_target_texture: rendered layer");
-	return YETTY_OK_VOID();
+    ydebug("render_target_texture: rendered layer");
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================
@@ -358,481 +358,489 @@ render_target_texture_render_layer(struct yetty_yrender_target *self,
 
 static struct yetty_ycore_void_result create_blend_pipeline(struct render_target_texture *rt)
 {
-	/* Shader module */
-	WGPUShaderSourceWGSL wgsl_src = {0};
-	wgsl_src.chain.sType = WGPUSType_ShaderSourceWGSL;
+    /* Shader module */
+    WGPUShaderSourceWGSL wgsl_src = {0};
+    wgsl_src.chain.sType = WGPUSType_ShaderSourceWGSL;
 #ifdef __EMSCRIPTEN__
-	struct yetty_yrender_shader_code blend_code = {0};
-	yetty_yrender_shader_code_load_file(&blend_code, "/assets/shaders/blend.wgsl");
-	wgsl_src.code = (WGPUStringView){
-		.data = blend_code.data,
-		.length = blend_code.size
-	};
+    struct yetty_yrender_shader_code blend_code = {0};
+    yetty_yrender_shader_code_load_file(&blend_code, "/assets/shaders/blend.wgsl");
+    wgsl_src.code = (WGPUStringView){.data = blend_code.data, .length = blend_code.size};
 #else
-	wgsl_src.code = (WGPUStringView){
-		.data = (const char *)gblend_shaderData,
-		.length = gblend_shaderSize
-	};
+    wgsl_src.code =
+        (WGPUStringView){.data = (const char *)gblend_shaderData, .length = gblend_shaderSize};
 #endif
 
-	WGPUShaderModuleDescriptor shader_desc = {0};
-	shader_desc.nextInChain = (WGPUChainedStruct *)&wgsl_src;
+    WGPUShaderModuleDescriptor shader_desc = {0};
+    shader_desc.nextInChain = (WGPUChainedStruct *)&wgsl_src;
 
-	rt->blend_shader = wgpuDeviceCreateShaderModule(rt->device, &shader_desc);
-	if (!rt->blend_shader)
-		return YETTY_ERR(yetty_ycore_void, "failed to create blend shader");
+    rt->blend_shader = wgpuDeviceCreateShaderModule(rt->device, &shader_desc);
+    if (!rt->blend_shader) {
+        return YETTY_ERR(yetty_ycore_void, "failed to create blend shader");
+    }
 
-	/* Bind group layout */
-	WGPUBindGroupLayoutEntry entries[MAX_BLEND_SOURCES + 2] = {0};
+    /* Bind group layout */
+    WGPUBindGroupLayoutEntry entries[MAX_BLEND_SOURCES + 2] = {0};
 
-	for (int i = 0; i < MAX_BLEND_SOURCES; i++) {
-		entries[i].binding = i;
-		entries[i].visibility = WGPUShaderStage_Fragment;
-		entries[i].texture.sampleType = WGPUTextureSampleType_Float;
-		entries[i].texture.viewDimension = WGPUTextureViewDimension_2D;
-	}
-	entries[MAX_BLEND_SOURCES].binding = MAX_BLEND_SOURCES;
-	entries[MAX_BLEND_SOURCES].visibility = WGPUShaderStage_Fragment;
-	entries[MAX_BLEND_SOURCES].sampler.type = WGPUSamplerBindingType_Filtering;
+    for (int i = 0; i < MAX_BLEND_SOURCES; i++) {
+        entries[i].binding = i;
+        entries[i].visibility = WGPUShaderStage_Fragment;
+        entries[i].texture.sampleType = WGPUTextureSampleType_Float;
+        entries[i].texture.viewDimension = WGPUTextureViewDimension_2D;
+    }
+    entries[MAX_BLEND_SOURCES].binding = MAX_BLEND_SOURCES;
+    entries[MAX_BLEND_SOURCES].visibility = WGPUShaderStage_Fragment;
+    entries[MAX_BLEND_SOURCES].sampler.type = WGPUSamplerBindingType_Filtering;
 
-	entries[MAX_BLEND_SOURCES + 1].binding = MAX_BLEND_SOURCES + 1;
-	entries[MAX_BLEND_SOURCES + 1].visibility = WGPUShaderStage_Fragment;
-	entries[MAX_BLEND_SOURCES + 1].buffer.type = WGPUBufferBindingType_Uniform;
-	entries[MAX_BLEND_SOURCES + 1].buffer.minBindingSize = 32;
+    entries[MAX_BLEND_SOURCES + 1].binding = MAX_BLEND_SOURCES + 1;
+    entries[MAX_BLEND_SOURCES + 1].visibility = WGPUShaderStage_Fragment;
+    entries[MAX_BLEND_SOURCES + 1].buffer.type = WGPUBufferBindingType_Uniform;
+    entries[MAX_BLEND_SOURCES + 1].buffer.minBindingSize = 32;
 
-	WGPUBindGroupLayoutDescriptor bgl_desc = {0};
-	bgl_desc.entryCount = MAX_BLEND_SOURCES + 2;
-	bgl_desc.entries = entries;
+    WGPUBindGroupLayoutDescriptor bgl_desc = {0};
+    bgl_desc.entryCount = MAX_BLEND_SOURCES + 2;
+    bgl_desc.entries = entries;
 
-	rt->blend_layout = wgpuDeviceCreateBindGroupLayout(rt->device, &bgl_desc);
-	if (!rt->blend_layout)
-		return YETTY_ERR(yetty_ycore_void, "failed to create blend layout");
+    rt->blend_layout = wgpuDeviceCreateBindGroupLayout(rt->device, &bgl_desc);
+    if (!rt->blend_layout) {
+        return YETTY_ERR(yetty_ycore_void, "failed to create blend layout");
+    }
 
-	/* Pipeline layout */
-	WGPUPipelineLayoutDescriptor pl_desc = {0};
-	pl_desc.bindGroupLayoutCount = 1;
-	pl_desc.bindGroupLayouts = &rt->blend_layout;
+    /* Pipeline layout */
+    WGPUPipelineLayoutDescriptor pl_desc = {0};
+    pl_desc.bindGroupLayoutCount = 1;
+    pl_desc.bindGroupLayouts = &rt->blend_layout;
 
-	WGPUPipelineLayout layout = wgpuDeviceCreatePipelineLayout(rt->device, &pl_desc);
-	if (!layout)
-		return YETTY_ERR(yetty_ycore_void, "failed to create pipeline layout");
+    WGPUPipelineLayout layout = wgpuDeviceCreatePipelineLayout(rt->device, &pl_desc);
+    if (!layout) {
+        return YETTY_ERR(yetty_ycore_void, "failed to create pipeline layout");
+    }
 
-	/* Render pipeline */
-	WGPURenderPipelineDescriptor rp_desc = {0};
-	rp_desc.layout = layout;
-	rp_desc.vertex.module = rt->blend_shader;
-	rp_desc.vertex.entryPoint = (WGPUStringView){.data = "vs_main", .length = 7};
+    /* Render pipeline */
+    WGPURenderPipelineDescriptor rp_desc = {0};
+    rp_desc.layout = layout;
+    rp_desc.vertex.module = rt->blend_shader;
+    rp_desc.vertex.entryPoint = (WGPUStringView){.data = "vs_main", .length = 7};
 
-	WGPUColorTargetState color_target = {0};
-	color_target.format = rt->format;
-	color_target.writeMask = WGPUColorWriteMask_All;
+    WGPUColorTargetState color_target = {0};
+    color_target.format = rt->format;
+    color_target.writeMask = WGPUColorWriteMask_All;
 
-	WGPUFragmentState fragment = {0};
-	fragment.module = rt->blend_shader;
-	fragment.entryPoint = (WGPUStringView){.data = "fs_main", .length = 7};
-	fragment.targetCount = 1;
-	fragment.targets = &color_target;
-	rp_desc.fragment = &fragment;
+    WGPUFragmentState fragment = {0};
+    fragment.module = rt->blend_shader;
+    fragment.entryPoint = (WGPUStringView){.data = "fs_main", .length = 7};
+    fragment.targetCount = 1;
+    fragment.targets = &color_target;
+    rp_desc.fragment = &fragment;
 
-	rp_desc.primitive.topology = WGPUPrimitiveTopology_TriangleList;
-	rp_desc.primitive.frontFace = WGPUFrontFace_CCW;
-	rp_desc.primitive.cullMode = WGPUCullMode_None;
-	rp_desc.multisample.count = 1;
-	rp_desc.multisample.mask = ~0u;
+    rp_desc.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+    rp_desc.primitive.frontFace = WGPUFrontFace_CCW;
+    rp_desc.primitive.cullMode = WGPUCullMode_None;
+    rp_desc.multisample.count = 1;
+    rp_desc.multisample.mask = ~0u;
 
-	rt->blend_pipeline = wgpuDeviceCreateRenderPipeline(rt->device, &rp_desc);
-	wgpuPipelineLayoutRelease(layout);
+    rt->blend_pipeline = wgpuDeviceCreateRenderPipeline(rt->device, &rp_desc);
+    wgpuPipelineLayoutRelease(layout);
 
-	if (!rt->blend_pipeline)
-		return YETTY_ERR(yetty_ycore_void, "failed to create blend pipeline");
+    if (!rt->blend_pipeline) {
+        return YETTY_ERR(yetty_ycore_void, "failed to create blend pipeline");
+    }
 
-	/* Sampler */
-	WGPUSamplerDescriptor sampler_desc = {0};
-	sampler_desc.minFilter = WGPUFilterMode_Linear;
-	sampler_desc.magFilter = WGPUFilterMode_Linear;
-	sampler_desc.addressModeU = WGPUAddressMode_ClampToEdge;
-	sampler_desc.addressModeV = WGPUAddressMode_ClampToEdge;
-	sampler_desc.maxAnisotropy = 1;
+    /* Sampler */
+    WGPUSamplerDescriptor sampler_desc = {0};
+    sampler_desc.minFilter = WGPUFilterMode_Linear;
+    sampler_desc.magFilter = WGPUFilterMode_Linear;
+    sampler_desc.addressModeU = WGPUAddressMode_ClampToEdge;
+    sampler_desc.addressModeV = WGPUAddressMode_ClampToEdge;
+    sampler_desc.maxAnisotropy = 1;
 
-	rt->sampler = wgpuDeviceCreateSampler(rt->device, &sampler_desc);
-	if (!rt->sampler)
-		return YETTY_ERR(yetty_ycore_void, "failed to create sampler");
+    rt->sampler = wgpuDeviceCreateSampler(rt->device, &sampler_desc);
+    if (!rt->sampler) {
+        return YETTY_ERR(yetty_ycore_void, "failed to create sampler");
+    }
 
-	/* Uniform buffer - BlendUniforms is 32 bytes:
+    /* Uniform buffer - BlendUniforms is 32 bytes:
 	 *   u32 layer_count; u32 target_w; u32 target_h; u32 _pad;
 	 *   f32 visual_zoom_scale; f32 visual_zoom_offset_x;
 	 *   f32 visual_zoom_offset_y; f32 _pad2; */
-	WGPUBufferDescriptor buf_desc = {0};
-	buf_desc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-	buf_desc.size = 32;
+    WGPUBufferDescriptor buf_desc = {0};
+    buf_desc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+    buf_desc.size = 32;
 
-	rt->uniform_buffer = wgpuDeviceCreateBuffer(rt->device, &buf_desc);
-	if (!rt->uniform_buffer)
-		return YETTY_ERR(yetty_ycore_void, "failed to create uniform buffer");
+    rt->uniform_buffer = wgpuDeviceCreateBuffer(rt->device, &buf_desc);
+    if (!rt->uniform_buffer) {
+        return YETTY_ERR(yetty_ycore_void, "failed to create uniform buffer");
+    }
 
-	/* Placeholder texture */
-	WGPUTextureDescriptor tex_desc = {0};
-	tex_desc.usage = WGPUTextureUsage_TextureBinding;
-	tex_desc.dimension = WGPUTextureDimension_2D;
-	tex_desc.size.width = 1;
-	tex_desc.size.height = 1;
-	tex_desc.size.depthOrArrayLayers = 1;
-	tex_desc.format = WGPUTextureFormat_RGBA8Unorm;
-	tex_desc.mipLevelCount = 1;
-	tex_desc.sampleCount = 1;
+    /* Placeholder texture */
+    WGPUTextureDescriptor tex_desc = {0};
+    tex_desc.usage = WGPUTextureUsage_TextureBinding;
+    tex_desc.dimension = WGPUTextureDimension_2D;
+    tex_desc.size.width = 1;
+    tex_desc.size.height = 1;
+    tex_desc.size.depthOrArrayLayers = 1;
+    tex_desc.format = WGPUTextureFormat_RGBA8Unorm;
+    tex_desc.mipLevelCount = 1;
+    tex_desc.sampleCount = 1;
 
-	rt->placeholder_texture = wgpuDeviceCreateTexture(rt->device, &tex_desc);
-	if (!rt->placeholder_texture)
-		return YETTY_ERR(yetty_ycore_void, "failed to create placeholder texture");
+    rt->placeholder_texture = wgpuDeviceCreateTexture(rt->device, &tex_desc);
+    if (!rt->placeholder_texture) {
+        return YETTY_ERR(yetty_ycore_void, "failed to create placeholder texture");
+    }
 
-	rt->placeholder_view = wgpuTextureCreateView(rt->placeholder_texture, NULL);
-	if (!rt->placeholder_view)
-		return YETTY_ERR(yetty_ycore_void, "failed to create placeholder view");
+    rt->placeholder_view = wgpuTextureCreateView(rt->placeholder_texture, NULL);
+    if (!rt->placeholder_view) {
+        return YETTY_ERR(yetty_ycore_void, "failed to create placeholder view");
+    }
 
-	ydebug("render_target_texture: blend pipeline created");
-	return YETTY_OK_VOID();
+    ydebug("render_target_texture: blend pipeline created");
+    return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result
-render_target_texture_blend(struct yetty_yrender_target *self,
-			    struct yetty_yrender_target **sources,
-			    size_t count)
+static struct yetty_ycore_void_result render_target_texture_blend(
+    struct yetty_yrender_target *self, struct yetty_yrender_target **sources, size_t count)
 {
-	struct render_target_texture *rt = (struct render_target_texture *)self;
+    struct render_target_texture *rt = (struct render_target_texture *)self;
 
-	if (count == 0)
-		return YETTY_OK_VOID();
+    if (count == 0) {
+        return YETTY_OK_VOID();
+    }
 
-	if (count > MAX_BLEND_SOURCES) {
-		yerror("render_target_texture: too many sources (%zu > %d)", count, MAX_BLEND_SOURCES);
-		count = MAX_BLEND_SOURCES;
-	}
+    if (count > MAX_BLEND_SOURCES) {
+        yerror("render_target_texture: too many sources (%zu > %d)", count, MAX_BLEND_SOURCES);
+        count = MAX_BLEND_SOURCES;
+    }
 
-	/* Create blend pipeline on first use */
-	if (!rt->blend_pipeline) {
-		struct yetty_ycore_void_result res = create_blend_pipeline(rt);
-		if (!YETTY_IS_OK(res))
-			return res;
-	}
+    /* Create blend pipeline on first use */
+    if (!rt->blend_pipeline) {
+        struct yetty_ycore_void_result res = create_blend_pipeline(rt);
+        if (!YETTY_IS_OK(res)) {
+            return res;
+        }
+    }
 
-	/* Update uniforms. See BlendUniforms layout in blend.wgsl. */
-	struct {
-		uint32_t layer_count;
-		uint32_t target_w;
-		uint32_t target_h;
-		uint32_t _pad;
-		float zoom_scale;
-		float zoom_offset_x;
-		float zoom_offset_y;
-		float _pad2;
-	} uniforms = {
-		.layer_count = (uint32_t)count,
-		.target_w = (uint32_t)rt->base.viewport.w,
-		.target_h = (uint32_t)rt->base.viewport.h,
-		.zoom_scale = rt->visual_zoom_scale > 0.0f ? rt->visual_zoom_scale : 1.0f,
-		.zoom_offset_x = rt->visual_zoom_offset_x,
-		.zoom_offset_y = rt->visual_zoom_offset_y,
-	};
-	wgpuQueueWriteBuffer(rt->queue, rt->uniform_buffer, 0, &uniforms, sizeof(uniforms));
+    /* Update uniforms. See BlendUniforms layout in blend.wgsl. */
+    struct {
+        uint32_t layer_count;
+        uint32_t target_w;
+        uint32_t target_h;
+        uint32_t _pad;
+        float zoom_scale;
+        float zoom_offset_x;
+        float zoom_offset_y;
+        float _pad2;
+    } uniforms = {
+        .layer_count = (uint32_t)count,
+        .target_w = (uint32_t)rt->base.viewport.w,
+        .target_h = (uint32_t)rt->base.viewport.h,
+        .zoom_scale = rt->visual_zoom_scale > 0.0f ? rt->visual_zoom_scale : 1.0f,
+        .zoom_offset_x = rt->visual_zoom_offset_x,
+        .zoom_offset_y = rt->visual_zoom_offset_y,
+    };
+    wgpuQueueWriteBuffer(rt->queue, rt->uniform_buffer, 0, &uniforms, sizeof(uniforms));
 
-	/* Collect source views */
-	WGPUTextureView source_views[MAX_BLEND_SOURCES];
-	for (size_t i = 0; i < MAX_BLEND_SOURCES; i++) {
-		if (i < count && sources[i] && sources[i]->ops->get_view)
-			source_views[i] = sources[i]->ops->get_view(sources[i]);
-		else
-			source_views[i] = rt->placeholder_view;
-	}
+    /* Collect source views */
+    WGPUTextureView source_views[MAX_BLEND_SOURCES];
+    for (size_t i = 0; i < MAX_BLEND_SOURCES; i++) {
+        if (i < count && sources[i] && sources[i]->ops->get_view) {
+            source_views[i] = sources[i]->ops->get_view(sources[i]);
+        } else {
+            source_views[i] = rt->placeholder_view;
+        }
+    }
 
-	/* Create bind group */
-	WGPUBindGroupEntry bg_entries[MAX_BLEND_SOURCES + 2] = {0};
-	for (int i = 0; i < MAX_BLEND_SOURCES; i++) {
-		bg_entries[i].binding = i;
-		bg_entries[i].textureView = source_views[i];
-	}
-	bg_entries[MAX_BLEND_SOURCES].binding = MAX_BLEND_SOURCES;
-	bg_entries[MAX_BLEND_SOURCES].sampler = rt->sampler;
-	bg_entries[MAX_BLEND_SOURCES + 1].binding = MAX_BLEND_SOURCES + 1;
-	bg_entries[MAX_BLEND_SOURCES + 1].buffer = rt->uniform_buffer;
-	bg_entries[MAX_BLEND_SOURCES + 1].size = 32;
+    /* Create bind group */
+    WGPUBindGroupEntry bg_entries[MAX_BLEND_SOURCES + 2] = {0};
+    for (int i = 0; i < MAX_BLEND_SOURCES; i++) {
+        bg_entries[i].binding = i;
+        bg_entries[i].textureView = source_views[i];
+    }
+    bg_entries[MAX_BLEND_SOURCES].binding = MAX_BLEND_SOURCES;
+    bg_entries[MAX_BLEND_SOURCES].sampler = rt->sampler;
+    bg_entries[MAX_BLEND_SOURCES + 1].binding = MAX_BLEND_SOURCES + 1;
+    bg_entries[MAX_BLEND_SOURCES + 1].buffer = rt->uniform_buffer;
+    bg_entries[MAX_BLEND_SOURCES + 1].size = 32;
 
-	WGPUBindGroupDescriptor bg_desc = {0};
-	bg_desc.layout = rt->blend_layout;
-	bg_desc.entryCount = MAX_BLEND_SOURCES + 2;
-	bg_desc.entries = bg_entries;
+    WGPUBindGroupDescriptor bg_desc = {0};
+    bg_desc.layout = rt->blend_layout;
+    bg_desc.entryCount = MAX_BLEND_SOURCES + 2;
+    bg_desc.entries = bg_entries;
 
-	WGPUBindGroup bind_group = wgpuDeviceCreateBindGroup(rt->device, &bg_desc);
-	if (!bind_group)
-		return YETTY_ERR(yetty_ycore_void, "failed to create bind group");
+    WGPUBindGroup bind_group = wgpuDeviceCreateBindGroup(rt->device, &bg_desc);
+    if (!bind_group) {
+        return YETTY_ERR(yetty_ycore_void, "failed to create bind group");
+    }
 
-	/* Create encoder */
-	WGPUCommandEncoderDescriptor enc_desc = {0};
-	WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(rt->device, &enc_desc);
-	if (!encoder) {
-		wgpuBindGroupRelease(bind_group);
-		return YETTY_ERR(yetty_ycore_void, "failed to create encoder");
-	}
+    /* Create encoder */
+    WGPUCommandEncoderDescriptor enc_desc = {0};
+    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(rt->device, &enc_desc);
+    if (!encoder) {
+        wgpuBindGroupRelease(bind_group);
+        return YETTY_ERR(yetty_ycore_void, "failed to create encoder");
+    }
 
-	/* Render pass - use Load to preserve existing content (for tiled rendering) */
-	WGPURenderPassColorAttachment color_attachment = {0};
-	color_attachment.view = rt->view;
-	color_attachment.loadOp = WGPULoadOp_Load;  /* Don't clear - preserve existing */
-	color_attachment.storeOp = WGPUStoreOp_Store;
-	color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+    /* Render pass - use Load to preserve existing content (for tiled rendering) */
+    WGPURenderPassColorAttachment color_attachment = {0};
+    color_attachment.view = rt->view;
+    color_attachment.loadOp = WGPULoadOp_Load; /* Don't clear - preserve existing */
+    color_attachment.storeOp = WGPUStoreOp_Store;
+    color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
 
-	WGPURenderPassDescriptor pass_desc = {0};
-	pass_desc.colorAttachmentCount = 1;
-	pass_desc.colorAttachments = &color_attachment;
+    WGPURenderPassDescriptor pass_desc = {0};
+    pass_desc.colorAttachmentCount = 1;
+    pass_desc.colorAttachments = &color_attachment;
 
-	WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &pass_desc);
-	if (!pass) {
-		wgpuCommandEncoderRelease(encoder);
-		wgpuBindGroupRelease(bind_group);
-		return YETTY_ERR(yetty_ycore_void, "failed to begin render pass");
-	}
+    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &pass_desc);
+    if (!pass) {
+        wgpuCommandEncoderRelease(encoder);
+        wgpuBindGroupRelease(bind_group);
+        return YETTY_ERR(yetty_ycore_void, "failed to begin render pass");
+    }
 
-	wgpuRenderPassEncoderSetPipeline(pass, rt->blend_pipeline);
-	wgpuRenderPassEncoderSetBindGroup(pass, 0, bind_group, 0, NULL);
+    wgpuRenderPassEncoderSetPipeline(pass, rt->blend_pipeline);
+    wgpuRenderPassEncoderSetBindGroup(pass, 0, bind_group, 0, NULL);
 
-	/* Set viewport and scissor from target's viewport */
-	struct yetty_yrender_viewport vp = self->viewport;
-	wgpuRenderPassEncoderSetViewport(pass, vp.x, vp.y, vp.w, vp.h, 0.0f, 1.0f);
-	wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)vp.x, (uint32_t)vp.y,
-					    (uint32_t)vp.w, (uint32_t)vp.h);
+    /* Set viewport and scissor from target's viewport */
+    struct yetty_yrender_viewport vp = self->viewport;
+    wgpuRenderPassEncoderSetViewport(pass, vp.x, vp.y, vp.w, vp.h, 0.0f, 1.0f);
+    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)vp.x, (uint32_t)vp.y, (uint32_t)vp.w,
+                                        (uint32_t)vp.h);
 
-	wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
+    wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
 
-	wgpuRenderPassEncoderEnd(pass);
-	wgpuRenderPassEncoderRelease(pass);
+    wgpuRenderPassEncoderEnd(pass);
+    wgpuRenderPassEncoderRelease(pass);
 
-	/* Submit */
-	WGPUCommandBufferDescriptor cmd_desc = {0};
-	WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_desc);
-	wgpuQueueSubmit(rt->queue, 1, &cmd);
-	wgpuCommandBufferRelease(cmd);
-	wgpuCommandEncoderRelease(encoder);
-	wgpuBindGroupRelease(bind_group);
+    /* Submit */
+    WGPUCommandBufferDescriptor cmd_desc = {0};
+    WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_desc);
+    wgpuQueueSubmit(rt->queue, 1, &cmd);
+    wgpuCommandBufferRelease(cmd);
+    wgpuCommandEncoderRelease(encoder);
+    wgpuBindGroupRelease(bind_group);
 
-	ydebug("render_target_texture[%p]: blended %zu sources at (%.0f,%.0f) %.0fx%.0f zoom=%.2f off=(%.1f,%.1f)",
-	       (void *)rt, count, vp.x, vp.y, vp.w, vp.h,
-	       rt->visual_zoom_scale,
-	       rt->visual_zoom_offset_x, rt->visual_zoom_offset_y);
-	return YETTY_OK_VOID();
+    ydebug("render_target_texture[%p]: blended %zu sources at (%.0f,%.0f) %.0fx%.0f zoom=%.2f "
+           "off=(%.1f,%.1f)",
+           (void *)rt, count, vp.x, vp.y, vp.w, vp.h, rt->visual_zoom_scale,
+           rt->visual_zoom_offset_x, rt->visual_zoom_offset_y);
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================
  * present - blit texture to surface (if surface was provided at creation)
  *===========================================================================*/
 
-static struct yetty_ycore_void_result
-render_target_texture_present(struct yetty_yrender_target *self)
+static struct yetty_ycore_void_result render_target_texture_present(
+    struct yetty_yrender_target *self)
 {
-	struct render_target_texture *rt = (struct render_target_texture *)self;
+    struct render_target_texture *rt = (struct render_target_texture *)self;
 
-	if (!rt->surface)
-		return YETTY_ERR(yetty_ycore_void, "no surface configured for present");
+    if (!rt->surface) {
+        return YETTY_ERR(yetty_ycore_void, "no surface configured for present");
+    }
 
-	/* Acquire surface texture — on X11/VNC (incl. VirtualGL) this can block
+    /* Acquire surface texture — on X11/VNC (incl. VirtualGL) this can block
 	 * waiting for the compositor/VNC-server to hand back a free swapchain
 	 * image, so this is one of the prime suspects on slow remote displays. */
-	ytime_start(present_acquire);
-	WGPUSurfaceTexture surface_texture;
-	wgpuSurfaceGetCurrentTexture(rt->surface, &surface_texture);
-	ytime_report(present_acquire);
+    ytime_start(present_acquire);
+    WGPUSurfaceTexture surface_texture;
+    wgpuSurfaceGetCurrentTexture(rt->surface, &surface_texture);
+    ytime_report(present_acquire);
 
-	if (surface_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
-	    surface_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal)
-		return YETTY_ERR(yetty_ycore_void, "surface not ready");
+    if (surface_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
+        surface_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal) {
+        return YETTY_ERR(yetty_ycore_void, "surface not ready");
+    }
 
-	WGPUTextureView surface_view = wgpuTextureCreateView(surface_texture.texture, NULL);
-	if (!surface_view)
-		return YETTY_ERR(yetty_ycore_void, "failed to create surface view");
+    WGPUTextureView surface_view = wgpuTextureCreateView(surface_texture.texture, NULL);
+    if (!surface_view) {
+        return YETTY_ERR(yetty_ycore_void, "failed to create surface view");
+    }
 
-	/* Create blend pipeline if needed (reuse for present) */
-	if (!rt->blend_pipeline) {
-		struct yetty_ycore_void_result res = create_blend_pipeline(rt);
-		if (!YETTY_IS_OK(res)) {
-			wgpuTextureViewRelease(surface_view);
-			return res;
-		}
-	}
+    /* Create blend pipeline if needed (reuse for present) */
+    if (!rt->blend_pipeline) {
+        struct yetty_ycore_void_result res = create_blend_pipeline(rt);
+        if (!YETTY_IS_OK(res)) {
+            wgpuTextureViewRelease(surface_view);
+            return res;
+        }
+    }
 
-	/* Update uniforms - single source (present path). Zoom is applied during
+    /* Update uniforms - single source (present path). Zoom is applied during
 	 * blend(), so present blits 1:1. Match the 32-byte BlendUniforms layout. */
-	struct {
-		uint32_t layer_count;
-		uint32_t target_w;
-		uint32_t target_h;
-		uint32_t _pad;
-		float zoom_scale;
-		float zoom_offset_x;
-		float zoom_offset_y;
-		float _pad2;
-	} uniforms = {
-		.layer_count = 1,
-		.target_w = (uint32_t)rt->base.viewport.w,
-		.target_h = (uint32_t)rt->base.viewport.h,
-		.zoom_scale = 1.0f,
-	};
-	wgpuQueueWriteBuffer(rt->queue, rt->uniform_buffer, 0, &uniforms, sizeof(uniforms));
+    struct {
+        uint32_t layer_count;
+        uint32_t target_w;
+        uint32_t target_h;
+        uint32_t _pad;
+        float zoom_scale;
+        float zoom_offset_x;
+        float zoom_offset_y;
+        float _pad2;
+    } uniforms = {
+        .layer_count = 1,
+        .target_w = (uint32_t)rt->base.viewport.w,
+        .target_h = (uint32_t)rt->base.viewport.h,
+        .zoom_scale = 1.0f,
+    };
+    wgpuQueueWriteBuffer(rt->queue, rt->uniform_buffer, 0, &uniforms, sizeof(uniforms));
 
-	/* Create bind group with this target's texture as source */
-	WGPUTextureView source_views[MAX_BLEND_SOURCES];
-	source_views[0] = rt->view;
-	for (int i = 1; i < MAX_BLEND_SOURCES; i++)
-		source_views[i] = rt->placeholder_view;
+    /* Create bind group with this target's texture as source */
+    WGPUTextureView source_views[MAX_BLEND_SOURCES];
+    source_views[0] = rt->view;
+    for (int i = 1; i < MAX_BLEND_SOURCES; i++) {
+        source_views[i] = rt->placeholder_view;
+    }
 
-	WGPUBindGroupEntry bg_entries[MAX_BLEND_SOURCES + 2] = {0};
-	for (int i = 0; i < MAX_BLEND_SOURCES; i++) {
-		bg_entries[i].binding = i;
-		bg_entries[i].textureView = source_views[i];
-	}
-	bg_entries[MAX_BLEND_SOURCES].binding = MAX_BLEND_SOURCES;
-	bg_entries[MAX_BLEND_SOURCES].sampler = rt->sampler;
-	bg_entries[MAX_BLEND_SOURCES + 1].binding = MAX_BLEND_SOURCES + 1;
-	bg_entries[MAX_BLEND_SOURCES + 1].buffer = rt->uniform_buffer;
-	bg_entries[MAX_BLEND_SOURCES + 1].size = 32;
+    WGPUBindGroupEntry bg_entries[MAX_BLEND_SOURCES + 2] = {0};
+    for (int i = 0; i < MAX_BLEND_SOURCES; i++) {
+        bg_entries[i].binding = i;
+        bg_entries[i].textureView = source_views[i];
+    }
+    bg_entries[MAX_BLEND_SOURCES].binding = MAX_BLEND_SOURCES;
+    bg_entries[MAX_BLEND_SOURCES].sampler = rt->sampler;
+    bg_entries[MAX_BLEND_SOURCES + 1].binding = MAX_BLEND_SOURCES + 1;
+    bg_entries[MAX_BLEND_SOURCES + 1].buffer = rt->uniform_buffer;
+    bg_entries[MAX_BLEND_SOURCES + 1].size = 32;
 
-	WGPUBindGroupDescriptor bg_desc = {0};
-	bg_desc.layout = rt->blend_layout;
-	bg_desc.entryCount = MAX_BLEND_SOURCES + 2;
-	bg_desc.entries = bg_entries;
+    WGPUBindGroupDescriptor bg_desc = {0};
+    bg_desc.layout = rt->blend_layout;
+    bg_desc.entryCount = MAX_BLEND_SOURCES + 2;
+    bg_desc.entries = bg_entries;
 
-	WGPUBindGroup bind_group = wgpuDeviceCreateBindGroup(rt->device, &bg_desc);
-	if (!bind_group) {
-		wgpuTextureViewRelease(surface_view);
-		return YETTY_ERR(yetty_ycore_void, "failed to create bind group");
-	}
+    WGPUBindGroup bind_group = wgpuDeviceCreateBindGroup(rt->device, &bg_desc);
+    if (!bind_group) {
+        wgpuTextureViewRelease(surface_view);
+        return YETTY_ERR(yetty_ycore_void, "failed to create bind group");
+    }
 
-	/* Create encoder */
-	WGPUCommandEncoderDescriptor enc_desc = {0};
-	WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(rt->device, &enc_desc);
-	if (!encoder) {
-		wgpuBindGroupRelease(bind_group);
-		wgpuTextureViewRelease(surface_view);
-		return YETTY_ERR(yetty_ycore_void, "failed to create encoder");
-	}
+    /* Create encoder */
+    WGPUCommandEncoderDescriptor enc_desc = {0};
+    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(rt->device, &enc_desc);
+    if (!encoder) {
+        wgpuBindGroupRelease(bind_group);
+        wgpuTextureViewRelease(surface_view);
+        return YETTY_ERR(yetty_ycore_void, "failed to create encoder");
+    }
 
-	/* Render pass to surface */
-	WGPURenderPassColorAttachment color_attachment = {0};
-	color_attachment.view = surface_view;
-	color_attachment.loadOp = WGPULoadOp_Clear;
-	color_attachment.storeOp = WGPUStoreOp_Store;
-	color_attachment.clearValue = (WGPUColor){0.0, 0.0, 0.0, 1.0};
-	color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+    /* Render pass to surface */
+    WGPURenderPassColorAttachment color_attachment = {0};
+    color_attachment.view = surface_view;
+    color_attachment.loadOp = WGPULoadOp_Clear;
+    color_attachment.storeOp = WGPUStoreOp_Store;
+    color_attachment.clearValue = (WGPUColor){0.0, 0.0, 0.0, 1.0};
+    color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
 
-	WGPURenderPassDescriptor pass_desc = {0};
-	pass_desc.colorAttachmentCount = 1;
-	pass_desc.colorAttachments = &color_attachment;
+    WGPURenderPassDescriptor pass_desc = {0};
+    pass_desc.colorAttachmentCount = 1;
+    pass_desc.colorAttachments = &color_attachment;
 
-	WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &pass_desc);
-	if (!pass) {
-		wgpuCommandEncoderRelease(encoder);
-		wgpuBindGroupRelease(bind_group);
-		wgpuTextureViewRelease(surface_view);
-		return YETTY_ERR(yetty_ycore_void, "failed to begin render pass");
-	}
+    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &pass_desc);
+    if (!pass) {
+        wgpuCommandEncoderRelease(encoder);
+        wgpuBindGroupRelease(bind_group);
+        wgpuTextureViewRelease(surface_view);
+        return YETTY_ERR(yetty_ycore_void, "failed to begin render pass");
+    }
 
-	wgpuRenderPassEncoderSetPipeline(pass, rt->blend_pipeline);
-	wgpuRenderPassEncoderSetBindGroup(pass, 0, bind_group, 0, NULL);
-	wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
+    wgpuRenderPassEncoderSetPipeline(pass, rt->blend_pipeline);
+    wgpuRenderPassEncoderSetBindGroup(pass, 0, bind_group, 0, NULL);
+    wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
 
-	wgpuRenderPassEncoderEnd(pass);
-	wgpuRenderPassEncoderRelease(pass);
+    wgpuRenderPassEncoderEnd(pass);
+    wgpuRenderPassEncoderRelease(pass);
 
-	/* Submit the blit-to-surface command buffer */
-	WGPUCommandBufferDescriptor cmd_desc = {0};
-	WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_desc);
-	ytime_start(present_submit);
-	wgpuQueueSubmit(rt->queue, 1, &cmd);
-	ytime_report(present_submit);
-	wgpuCommandBufferRelease(cmd);
-	wgpuCommandEncoderRelease(encoder);
-	wgpuBindGroupRelease(bind_group);
+    /* Submit the blit-to-surface command buffer */
+    WGPUCommandBufferDescriptor cmd_desc = {0};
+    WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_desc);
+    ytime_start(present_submit);
+    wgpuQueueSubmit(rt->queue, 1, &cmd);
+    ytime_report(present_submit);
+    wgpuCommandBufferRelease(cmd);
+    wgpuCommandEncoderRelease(encoder);
+    wgpuBindGroupRelease(bind_group);
 
-	/* Hand texture to the window system. On X11/VNC with VirtualGL this is
+    /* Hand texture to the window system. On X11/VNC with VirtualGL this is
 	 * where the GPU->CPU readback happens and the image is shipped to the
 	 * X server (and then to the VNC client over the network). Expect this
 	 * to dominate on remote displays. */
 #ifndef __EMSCRIPTEN__
-	ytime_start(surface_present);
-	wgpuSurfacePresent(rt->surface);
-	ytime_report(surface_present);
+    ytime_start(surface_present);
+    wgpuSurfacePresent(rt->surface);
+    ytime_report(surface_present);
 #endif
-	wgpuTextureViewRelease(surface_view);
+    wgpuTextureViewRelease(surface_view);
 
-	ydebug("render_target_texture: presented to surface");
-	return YETTY_OK_VOID();
+    ydebug("render_target_texture: presented to surface");
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================
  * vtable and create
  *===========================================================================*/
 
-static struct yetty_ycore_void_result
-render_target_texture_set_visual_zoom(struct yetty_yrender_target *self,
-				      float scale, float offset_x, float offset_y)
+static struct yetty_ycore_void_result render_target_texture_set_visual_zoom(
+    struct yetty_yrender_target *self, float scale, float offset_x, float offset_y)
 {
-	struct render_target_texture *rt = (struct render_target_texture *)self;
-	if (!(scale > 0.0f))
-		scale = 1.0f;
-	rt->visual_zoom_scale = scale;
-	rt->visual_zoom_offset_x = offset_x;
-	rt->visual_zoom_offset_y = offset_y;
-	ydebug("render_target_texture[%p]: set_visual_zoom scale=%.2f off=(%.1f,%.1f)",
-	       (void *)rt, scale, offset_x, offset_y);
-	return YETTY_OK_VOID();
+    struct render_target_texture *rt = (struct render_target_texture *)self;
+    if (!(scale > 0.0f)) {
+        scale = 1.0f;
+    }
+    rt->visual_zoom_scale = scale;
+    rt->visual_zoom_offset_x = offset_x;
+    rt->visual_zoom_offset_y = offset_y;
+    ydebug("render_target_texture[%p]: set_visual_zoom scale=%.2f off=(%.1f,%.1f)", (void *)rt,
+           scale, offset_x, offset_y);
+    return YETTY_OK_VOID();
 }
 
 static const struct yetty_yrender_target_ops render_target_texture_ops = {
-	.destroy = render_target_texture_destroy,
-	.clear = render_target_texture_clear,
-	.render_layer = render_target_texture_render_layer,
-	.blend = render_target_texture_blend,
-	.present = render_target_texture_present,
-	.get_view = render_target_texture_get_view,
-	.get_texture = render_target_texture_get_texture,
-	.resize = render_target_texture_resize,
-	.set_visual_zoom = render_target_texture_set_visual_zoom,
+    .destroy = render_target_texture_destroy,
+    .clear = render_target_texture_clear,
+    .render_layer = render_target_texture_render_layer,
+    .blend = render_target_texture_blend,
+    .present = render_target_texture_present,
+    .get_view = render_target_texture_get_view,
+    .get_texture = render_target_texture_get_texture,
+    .resize = render_target_texture_resize,
+    .set_visual_zoom = render_target_texture_set_visual_zoom,
 };
 
-struct yetty_yrender_target_ptr_result
-yetty_yrender_target_texture_create(WGPUDevice device, WGPUQueue queue,
-				   WGPUTextureFormat format,
-				   struct yetty_yrender_gpu_allocator *allocator,
-				   WGPUSurface surface,
-				   struct yetty_yrender_viewport viewport)
+struct yetty_yrender_target_ptr_result yetty_yrender_target_texture_create(
+    WGPUDevice device, WGPUQueue queue, WGPUTextureFormat format,
+    struct yetty_yrender_gpu_allocator *allocator, WGPUSurface surface,
+    struct yetty_yrender_viewport viewport)
 {
-	struct render_target_texture *rt = calloc(1, sizeof(*rt));
-	if (!rt)
-		return YETTY_ERR(yetty_yrender_target_ptr, "failed to allocate render target");
+    struct render_target_texture *rt = calloc(1, sizeof(*rt));
+    if (!rt) {
+        return YETTY_ERR(yetty_yrender_target_ptr, "failed to allocate render target");
+    }
 
-	rt->base.ops = &render_target_texture_ops;
-	rt->device = device;
-	rt->queue = queue;
-	rt->format = format;
-	rt->allocator = allocator;
-	rt->surface = surface;  /* NULL for layer/terminal targets */
-	rt->visual_zoom_scale = 1.0f;
+    rt->base.ops = &render_target_texture_ops;
+    rt->device = device;
+    rt->queue = queue;
+    rt->format = format;
+    rt->allocator = allocator;
+    rt->surface = surface; /* NULL for layer/terminal targets */
+    rt->visual_zoom_scale = 1.0f;
 
-	/* Create binder */
-	struct yetty_yrender_gpu_resource_binder_result binder_res =
-		yetty_yrender_gpu_resource_binder_create(device, queue, format, allocator);
-	if (!YETTY_IS_OK(binder_res)) {
-		free(rt);
-		return YETTY_ERR(yetty_yrender_target_ptr, binder_res.error.msg);
-	}
-	rt->binder = binder_res.value;
+    /* Create binder */
+    struct yetty_yrender_gpu_resource_binder_result binder_res =
+        yetty_yrender_gpu_resource_binder_create(device, queue, format, allocator);
+    if (!YETTY_IS_OK(binder_res)) {
+        free(rt);
+        return YETTY_ERR(yetty_yrender_target_ptr, binder_res.error.msg);
+    }
+    rt->binder = binder_res.value;
 
-	/* Create initial texture */
-	struct yetty_ycore_void_result res = render_target_texture_resize(&rt->base, viewport);
-	if (!YETTY_IS_OK(res)) {
-		rt->binder->ops->destroy(rt->binder);
-		free(rt);
-		return YETTY_ERR(yetty_yrender_target_ptr, res.error.msg);
-	}
+    /* Create initial texture */
+    struct yetty_ycore_void_result res = render_target_texture_resize(&rt->base, viewport);
+    if (!YETTY_IS_OK(res)) {
+        rt->binder->ops->destroy(rt->binder);
+        free(rt);
+        return YETTY_ERR(yetty_yrender_target_ptr, res.error.msg);
+    }
 
-	ydebug("yetty_yrender_target_texture_create: %.0fx%.0f at (%.0f,%.0f) format=%d surface=%p",
-	       viewport.w, viewport.h, viewport.x, viewport.y, format, (void *)surface);
-	return YETTY_OK(yetty_yrender_target_ptr, &rt->base);
+    ydebug("yetty_yrender_target_texture_create: %.0fx%.0f at (%.0f,%.0f) format=%d surface=%p",
+           viewport.w, viewport.h, viewport.x, viewport.y, format, (void *)surface);
+    return YETTY_OK(yetty_yrender_target_ptr, &rt->base);
 }

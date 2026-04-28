@@ -8,8 +8,9 @@
  * Theme Lifecycle
  *===========================================================================*/
 
-ygui_theme_t* ygui_theme_create(void) {
-    ygui_theme_t* theme = (ygui_theme_t*)calloc(1, sizeof(ygui_theme_t));
+ygui_theme_t *ygui_theme_create(void)
+{
+    ygui_theme_t *theme = (ygui_theme_t *)calloc(1, sizeof(ygui_theme_t));
     if (!theme) {
         ygui_set_error("Failed to allocate theme");
         return NULL;
@@ -17,9 +18,12 @@ ygui_theme_t* ygui_theme_create(void) {
     return theme;
 }
 
-ygui_theme_t* ygui_theme_create_default(void) {
-    ygui_theme_t* theme = ygui_theme_create();
-    if (!theme) return NULL;
+ygui_theme_t *ygui_theme_create_default(void)
+{
+    ygui_theme_t *theme = ygui_theme_create();
+    if (!theme) {
+        return NULL;
+    }
 
     /* Spacing */
     theme->pad_small = 2.0f;
@@ -61,7 +65,8 @@ ygui_theme_t* ygui_theme_create_default(void) {
     return theme;
 }
 
-void ygui_theme_destroy(ygui_theme_t* theme) {
+void ygui_theme_destroy(ygui_theme_t *theme)
+{
     free(theme);
 }
 
@@ -69,98 +74,150 @@ void ygui_theme_destroy(ygui_theme_t* theme) {
  * Theme Setters
  *===========================================================================*/
 
-void ygui_theme_set_padding(ygui_theme_t* theme,
-                            float sm, float med, float lg) {
-    if (!theme) return;
+void ygui_theme_set_padding(ygui_theme_t *theme, float sm, float med, float lg)
+{
+    if (!theme) {
+        return;
+    }
     theme->pad_small = sm;
     theme->pad_medium = med;
     theme->pad_large = lg;
 }
 
-void ygui_theme_set_radius(ygui_theme_t* theme,
-                           float sm, float med, float lg) {
-    if (!theme) return;
+void ygui_theme_set_radius(ygui_theme_t *theme, float sm, float med, float lg)
+{
+    if (!theme) {
+        return;
+    }
     theme->radius_small = sm;
     theme->radius_medium = med;
     theme->radius_large = lg;
 }
 
-void ygui_theme_set_row_height(ygui_theme_t* theme, float height) {
-    if (!theme) return;
+void ygui_theme_set_row_height(ygui_theme_t *theme, float height)
+{
+    if (!theme) {
+        return;
+    }
     theme->row_height = height;
 }
 
-void ygui_theme_set_font_size(ygui_theme_t* theme, float size) {
-    if (!theme) return;
+void ygui_theme_set_font_size(ygui_theme_t *theme, float size)
+{
+    if (!theme) {
+        return;
+    }
     theme->font_size = size;
 }
 
-void ygui_theme_set_scrollbar_size(ygui_theme_t* theme, float size) {
-    if (!theme) return;
+void ygui_theme_set_scrollbar_size(ygui_theme_t *theme, float size)
+{
+    if (!theme) {
+        return;
+    }
     theme->scrollbar_size = size;
 }
 
-void ygui_theme_set_bg_primary(ygui_theme_t* theme, uint32_t color) {
-    if (!theme) return;
+void ygui_theme_set_bg_primary(ygui_theme_t *theme, uint32_t color)
+{
+    if (!theme) {
+        return;
+    }
     theme->bg_primary = color;
 }
 
-void ygui_theme_set_bg_surface(ygui_theme_t* theme, uint32_t color) {
-    if (!theme) return;
+void ygui_theme_set_bg_surface(ygui_theme_t *theme, uint32_t color)
+{
+    if (!theme) {
+        return;
+    }
     theme->bg_surface = color;
 }
 
-void ygui_theme_set_bg_hover(ygui_theme_t* theme, uint32_t color) {
-    if (!theme) return;
+void ygui_theme_set_bg_hover(ygui_theme_t *theme, uint32_t color)
+{
+    if (!theme) {
+        return;
+    }
     theme->bg_hover = color;
 }
 
-void ygui_theme_set_text_primary(ygui_theme_t* theme, uint32_t color) {
-    if (!theme) return;
+void ygui_theme_set_text_primary(ygui_theme_t *theme, uint32_t color)
+{
+    if (!theme) {
+        return;
+    }
     theme->text_primary = color;
 }
 
-void ygui_theme_set_text_muted(ygui_theme_t* theme, uint32_t color) {
-    if (!theme) return;
+void ygui_theme_set_text_muted(ygui_theme_t *theme, uint32_t color)
+{
+    if (!theme) {
+        return;
+    }
     theme->text_muted = color;
 }
 
-void ygui_theme_set_accent(ygui_theme_t* theme, uint32_t color) {
-    if (!theme) return;
+void ygui_theme_set_accent(ygui_theme_t *theme, uint32_t color)
+{
+    if (!theme) {
+        return;
+    }
     theme->accent = color;
 }
 
-void ygui_theme_set_border(ygui_theme_t* theme, uint32_t color) {
-    if (!theme) return;
+void ygui_theme_set_border(ygui_theme_t *theme, uint32_t color)
+{
+    if (!theme) {
+        return;
+    }
     theme->border = color;
 }
 
-void ygui_theme_set_border_muted(ygui_theme_t* theme, uint32_t color) {
-    if (!theme) return;
+void ygui_theme_set_border_muted(ygui_theme_t *theme, uint32_t color)
+{
+    if (!theme) {
+        return;
+    }
     theme->border_muted = color;
 }
 
-void ygui_theme_set_bg_dropdown(ygui_theme_t* theme, uint32_t color) {
-    if (!theme) return;
+void ygui_theme_set_bg_dropdown(ygui_theme_t *theme, uint32_t color)
+{
+    if (!theme) {
+        return;
+    }
     theme->bg_dropdown = color;
 }
 
-void ygui_theme_set_overlay_modal(ygui_theme_t* theme, uint32_t color) {
-    if (!theme) return;
+void ygui_theme_set_overlay_modal(ygui_theme_t *theme, uint32_t color)
+{
+    if (!theme) {
+        return;
+    }
     theme->overlay_modal = color;
 }
 
-void ygui_theme_set_shadow(ygui_theme_t* theme, uint32_t color) {
-    if (!theme) return;
+void ygui_theme_set_shadow(ygui_theme_t *theme, uint32_t color)
+{
+    if (!theme) {
+        return;
+    }
     theme->shadow = color;
 }
 
-void ygui_theme_set_tooltip_bg(ygui_theme_t* theme, uint32_t color) {
-    if (!theme) return;
+void ygui_theme_set_tooltip_bg(ygui_theme_t *theme, uint32_t color)
+{
+    if (!theme) {
+        return;
+    }
     theme->tooltip_bg = color;
 }
 
-void ygui_theme_set_selection_bg(ygui_theme_t* theme, uint32_t color) {
-    if (!theme) return;
+void ygui_theme_set_selection_bg(ygui_theme_t *theme, uint32_t color)
+{
+    if (!theme) {
+        return;
+    }
     theme->selection_bg = color;
 }

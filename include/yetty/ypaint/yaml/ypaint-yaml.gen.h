@@ -18,8 +18,7 @@ extern "C" {
  * @param len Length of YAML string
  * @return 0 on success, -1 on error
  */
-int ypaint_sdf_yaml_parse(struct yetty_ypaint_core_buffer *canvas, const char *yaml,
-                          size_t len);
+int ypaint_sdf_yaml_parse(struct yetty_ypaint_core_buffer *canvas, const char *yaml, size_t len);
 
 #ifdef __cplusplus
 }

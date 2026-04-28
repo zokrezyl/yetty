@@ -33,11 +33,10 @@ struct yetty_yrender_rendered_layer {
 };
 
 /* Create rendered layer wrapping existing texture (view not owned) */
-struct yetty_yrender_rendered_layer_result yetty_yrender_rendered_layer_wrap(
-    WGPUTexture texture,
-    WGPUTextureView view,
-    uint32_t width,
-    uint32_t height);
+struct yetty_yrender_rendered_layer_result yetty_yrender_rendered_layer_wrap(WGPUTexture texture,
+                                                                             WGPUTextureView view,
+                                                                             uint32_t width,
+                                                                             uint32_t height);
 
 #ifdef __cplusplus
 }

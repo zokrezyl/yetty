@@ -10,8 +10,9 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
     struct yetty_yplatform_input_pipe *pipe = glfwGetWindowUserPointer(window);
     struct yetty_ycore_event event = {0};
 
-    if (!pipe)
+    if (!pipe) {
         return;
+    }
 
     if (action == GLFW_PRESS || action == GLFW_REPEAT) {
         if (mods & (GLFW_MOD_CONTROL | GLFW_MOD_ALT)) {
@@ -52,8 +53,9 @@ static void char_callback(GLFWwindow *window, unsigned int codepoint)
     struct yetty_yplatform_input_pipe *pipe = glfwGetWindowUserPointer(window);
     struct yetty_ycore_event event = {0};
 
-    if (!pipe)
+    if (!pipe) {
         return;
+    }
 
     event.type = YETTY_EVENT_CHAR;
     event.chr.codepoint = codepoint;
@@ -67,8 +69,9 @@ static void mouse_button_callback(GLFWwindow *window, int button, int action, in
     struct yetty_ycore_event event = {0};
     double x, y;
 
-    if (!pipe)
+    if (!pipe) {
         return;
+    }
 
     glfwGetCursorPos(window, &x, &y);
 
@@ -90,8 +93,9 @@ static void cursor_pos_callback(GLFWwindow *window, double x, double y)
     struct yetty_yplatform_input_pipe *pipe = glfwGetWindowUserPointer(window);
     struct yetty_ycore_event event = {0};
 
-    if (!pipe)
+    if (!pipe) {
         return;
+    }
 
     event.type = YETTY_EVENT_MOUSE_MOVE;
     event.mouse.x = (float)x;
@@ -107,20 +111,24 @@ static void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
     double x, y;
     int mods = 0;
 
-    if (!pipe)
+    if (!pipe) {
         return;
+    }
 
     glfwGetCursorPos(window, &x, &y);
 
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
-        glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS)
+        glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS) {
         mods |= GLFW_MOD_SHIFT;
+    }
     if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
-        glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS)
+        glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) {
         mods |= GLFW_MOD_CONTROL;
+    }
     if (glfwGetKey(window, GLFW_KEY_LEFT_ALT) == GLFW_PRESS ||
-        glfwGetKey(window, GLFW_KEY_RIGHT_ALT) == GLFW_PRESS)
+        glfwGetKey(window, GLFW_KEY_RIGHT_ALT) == GLFW_PRESS) {
         mods |= GLFW_MOD_ALT;
+    }
 
     event.type = YETTY_EVENT_SCROLL;
     event.scroll.x = (float)x;
@@ -137,8 +145,9 @@ static void framebuffer_size_callback(GLFWwindow *window, int width, int height)
     struct yetty_yplatform_input_pipe *pipe = glfwGetWindowUserPointer(window);
     struct yetty_ycore_event event = {0};
 
-    if (!pipe)
+    if (!pipe) {
         return;
+    }
 
     event.type = YETTY_EVENT_RESIZE;
     event.resize.width = (float)width;
@@ -152,8 +161,9 @@ static void window_close_callback(GLFWwindow *window)
     struct yetty_yplatform_input_pipe *pipe = glfwGetWindowUserPointer(window);
     struct yetty_ycore_event event = {0};
 
-    if (!pipe)
+    if (!pipe) {
         return;
+    }
 
     event.type = YETTY_EVENT_SHUTDOWN;
     pipe->ops->write(pipe, &event, sizeof(event));
@@ -166,8 +176,9 @@ static void window_refresh_callback(GLFWwindow *window)
 
     yinfo("glfw: window_refresh_callback fired");
 
-    if (!pipe)
+    if (!pipe) {
         return;
+    }
 
     /* Expose/refresh: GPU texture is unchanged but the window contents were
      * clobbered. Post WINDOW_REFRESH so damage-aware targets (X11-tile) can
@@ -192,6 +203,7 @@ void yetty_yplatform_setup_window_callbacks(GLFWwindow *window)
 
 void yetty_yplatform_run_os_event_loop(GLFWwindow *window, int *running)
 {
-    while (*running && !glfwWindowShouldClose(window))
+    while (*running && !glfwWindowShouldClose(window)) {
         glfwWaitEvents();
+    }
 }

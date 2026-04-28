@@ -37,6 +37,5 @@ void yetty_yco_switch(yetty_yco_thread thread)
     yetty_yco_thread from = co_active();
     ydebug("yco_switch %p -> %p", from, thread);
     co_switch(thread);
-    ydebug("yco_switch resumed (now on %p, came back from %p)",
-           co_active(), thread);
+    ydebug("yco_switch resumed (now on %p, came back from %p)", co_active(), thread);
 }

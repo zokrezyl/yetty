@@ -21,13 +21,16 @@
 #endif
 
 /* Debug logging - set YGUI_C_LOG env var to enable */
-static FILE* _ygui_log_file = NULL;
+static FILE *_ygui_log_file = NULL;
 static int _ygui_log_checked = 0;
 
-static void _ygui_log_init(void) {
-    if (_ygui_log_checked) return;
+static void _ygui_log_init(void)
+{
+    if (_ygui_log_checked) {
+        return;
+    }
     _ygui_log_checked = 1;
-    const char* log_path = getenv("YGUI_C_LOG");
+    const char *log_path = getenv("YGUI_C_LOG");
     if (log_path) {
         _ygui_log_file = fopen(log_path, "w");
         if (_ygui_log_file) {
@@ -37,21 +40,26 @@ static void _ygui_log_init(void) {
     }
 }
 
-#define YGUI_LOG(...) do { \
-    _ygui_log_init(); \
-    if (_ygui_log_file) { fprintf(_ygui_log_file, "[YGUI-C] " __VA_ARGS__); fprintf(_ygui_log_file, "\n"); } \
-} while(0)
+#define YGUI_LOG(...)                                                                              \
+    do {                                                                                           \
+        _ygui_log_init();                                                                          \
+        if (_ygui_log_file) {                                                                      \
+            fprintf(_ygui_log_file, "[YGUI-C] " __VA_ARGS__);                                      \
+            fprintf(_ygui_log_file, "\n");                                                         \
+        }                                                                                          \
+    } while (0)
 
 /* Calculate grid bucket size based on canvas dimensions.
  * Aims for ~16 buckets on the larger dimension, minimum 32.0f */
-static float calc_grid_bucket_size(float width, float height) {
+static float calc_grid_bucket_size(float width, float height)
+{
     float larger = (width > height) ? width : height;
     float bucket = larger / 16.0f;
     return (bucket < 32.0f) ? 32.0f : bucket;
 }
 
 /* Forward declarations */
-static void handle_resize(ygui_engine_t* engine);
+static void handle_resize(ygui_engine_t *engine);
 
 /*=============================================================================
  * Terminal State (Unix only - Windows uses ConPTY via yetty)
@@ -59,13 +67,14 @@ static void handle_resize(ygui_engine_t* engine);
 
 static int ygui_initialized = 0;
 static volatile int ygui_resize_pending = 0;
-static ygui_engine_t* ygui_active_engine = NULL;  /* For resize handler */
+static ygui_engine_t *ygui_active_engine = NULL; /* For resize handler */
 
 #ifndef _WIN32
 static struct termios ygui_orig_termios;
 static int ygui_raw_mode = 0;
 
-static void ygui_restore_terminal(void) {
+static void ygui_restore_terminal(void)
+{
     if (ygui_raw_mode) {
         /* Leave alternate screen — host terminal restores its prior content. */
         const char leave_alt[] = "\033[?1049l";
@@ -76,21 +85,26 @@ static void ygui_restore_terminal(void) {
     }
 }
 
-static void ygui_signal_handler(int sig) {
+static void ygui_signal_handler(int sig)
+{
     ygui_restore_terminal();
     /* Re-raise signal with default handler */
     signal(sig, SIG_DFL);
     raise(sig);
 }
 
-static void ygui_sigwinch_handler(int sig) {
+static void ygui_sigwinch_handler(int sig)
+{
     (void)sig;
     ygui_resize_pending = 1;
 }
 #endif /* !_WIN32 */
 
-int ygui_init(void) {
-    if (ygui_initialized) return 0;
+int ygui_init(void)
+{
+    if (ygui_initialized) {
+        return 0;
+    }
 
 #ifndef _WIN32
     /* Save original terminal settings */
@@ -102,7 +116,7 @@ int ygui_init(void) {
     /* Set up raw mode */
     struct termios raw = ygui_orig_termios;
     raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-    raw.c_oflag |= OPOST;  /* Keep output processing */
+    raw.c_oflag |= OPOST; /* Keep output processing */
     raw.c_cflag |= CS8;
     raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
     raw.c_cc[VMIN] = 0;
@@ -136,7 +150,8 @@ int ygui_init(void) {
     return 0;
 }
 
-void ygui_shutdown(void) {
+void ygui_shutdown(void)
+{
 #ifndef _WIN32
     ygui_restore_terminal();
 #endif
@@ -149,7 +164,8 @@ void ygui_shutdown(void) {
 
 static _Thread_local char ygui_error_msg[256] = {0};
 
-void ygui_set_error(const char* msg) {
+void ygui_set_error(const char *msg)
+{
     if (msg) {
         snprintf(ygui_error_msg, sizeof(ygui_error_msg), "%s", msg);
     } else {
@@ -157,7 +173,8 @@ void ygui_set_error(const char* msg) {
     }
 }
 
-const char* ygui_get_error(void) {
+const char *ygui_get_error(void)
+{
     return ygui_error_msg;
 }
 
@@ -165,7 +182,8 @@ const char* ygui_get_error(void) {
  * Version
  *===========================================================================*/
 
-const char* ygui_version(void) {
+const char *ygui_version(void)
+{
     return "0.2.0";
 }
 
@@ -174,8 +192,9 @@ const char* ygui_version(void) {
  *===========================================================================*/
 
 /* Internal helper to allocate and initialize common engine state */
-static ygui_engine_t* engine_alloc_init(const char* card_name, int x, int y, int cols, int rows) {
-    ygui_engine_t* engine = (ygui_engine_t*)calloc(1, sizeof(ygui_engine_t));
+static ygui_engine_t *engine_alloc_init(const char *card_name, int x, int y, int cols, int rows)
+{
+    ygui_engine_t *engine = (ygui_engine_t *)calloc(1, sizeof(ygui_engine_t));
     if (!engine) {
         ygui_set_error("Failed to allocate engine");
         return NULL;
@@ -184,8 +203,7 @@ static ygui_engine_t* engine_alloc_init(const char* card_name, int x, int y, int
     /* Create ypaint-core buffer — widgets accumulate SDF primitives + text
      * spans into it; the engine base64-encodes the serialization and ships
      * it via OSC 666674 every render. */
-    struct yetty_ypaint_core_buffer_result br =
-        yetty_ypaint_core_buffer_create(NULL);
+    struct yetty_ypaint_core_buffer_result br = yetty_ypaint_core_buffer_create(NULL);
     if (!YETTY_IS_OK(br)) {
         ygui_set_error("Failed to create ypaint buffer");
         free(engine);
@@ -197,13 +215,14 @@ static ygui_engine_t* engine_alloc_init(const char* card_name, int x, int y, int
      * measurement. The env var lets users point at any TTF; absence just
      * leaves measure_font NULL and ygui falls back to its heuristic. Same
      * pattern as ypdf (pdf-renderer.c line ~359). */
-    const char* ttf = getenv("YGUI_MEASURE_FONT");
+    const char *ttf = getenv("YGUI_MEASURE_FONT");
     if (ttf && ttf[0]) {
         engine->measure_base_size = 32.0f;
-        struct yetty_font_font_result fr =
-            yetty_font_raster_font_create_from_file(ttf, /*shader*/ NULL,
-                                                    engine->measure_base_size);
-        if (YETTY_IS_OK(fr)) engine->measure_font = fr.value;
+        struct yetty_font_font_result fr = yetty_font_raster_font_create_from_file(
+            ttf, /*shader*/ NULL, engine->measure_base_size);
+        if (YETTY_IS_OK(fr)) {
+            engine->measure_font = fr.value;
+        }
     }
 
     /* Store card name, position, and cell dimensions */
@@ -219,7 +238,7 @@ static ygui_engine_t* engine_alloc_init(const char* card_name, int x, int y, int
 
     /* Initial state - canvas size set after OSC 777780 */
     engine->dirty = 1;
-    engine->width = 1.0f;   /* Placeholder until pixel size known */
+    engine->width = 1.0f; /* Placeholder until pixel size known */
     engine->height = 1.0f;
     engine->cell_width = 0.0f;
     engine->cell_height = 0.0f;
@@ -251,7 +270,9 @@ static ygui_engine_t* engine_alloc_init(const char* card_name, int x, int y, int
     /* Long-lived yface used to parse inbound binary OSC envelopes
      * (mouse/resize/focus/key from the ymgui-layer hit router). */
     struct yetty_yface_ptr_result fr = yetty_yface_create();
-    if (YETTY_IS_OK(fr)) engine->yface_in = fr.value;
+    if (YETTY_IS_OK(fr)) {
+        engine->yface_in = fr.value;
+    }
 
     /* Grid initialized after pixel size known */
     ygui_grid_init(&engine->grid, 1.0f, 1.0f, 1.0f);
@@ -259,26 +280,33 @@ static ygui_engine_t* engine_alloc_init(const char* card_name, int x, int y, int
     return engine;
 }
 
-ygui_engine_t* ygui_engine_create(const char* card_name, int x, int y, int cols, int rows) {
+ygui_engine_t *ygui_engine_create(const char *card_name, int x, int y, int cols, int rows)
+{
     return engine_alloc_init(card_name, x, y, cols, rows);
 }
 
-ygui_engine_t* ygui_engine_create_with_pixel_hint(const char* card_name, int x, int y, float width_hint, float height_hint) {
+ygui_engine_t *ygui_engine_create_with_pixel_hint(const char *card_name, int x, int y,
+                                                  float width_hint, float height_hint)
+{
     /* TODO: Query cell size first to calculate cols/rows
      * For now, use reasonable defaults (10x16 cell size) */
     int cols = (int)(width_hint / 10.0f + 0.5f);
     int rows = (int)(height_hint / 16.0f + 0.5f);
-    if (cols < 1) cols = 1;
-    if (rows < 1) rows = 1;
+    if (cols < 1) {
+        cols = 1;
+    }
+    if (rows < 1) {
+        rows = 1;
+    }
 
-    ygui_engine_t* engine = engine_alloc_init(card_name, x, y, cols, rows);
+    ygui_engine_t *engine = engine_alloc_init(card_name, x, y, cols, rows);
     if (engine) {
         /* Store pixel hints as reference size for widget scaling */
         engine->reference_w = width_hint;
         engine->reference_h = height_hint;
         engine->width = width_hint;
         engine->height = height_hint;
-        engine->scale_mode = YGUI_SCALE_ON;  /* Scale widgets from hint to actual */
+        engine->scale_mode = YGUI_SCALE_ON; /* Scale widgets from hint to actual */
 
         /* Initialize grid with hint size */
         ygui_grid_destroy(&engine->grid);
@@ -288,8 +316,11 @@ ygui_engine_t* ygui_engine_create_with_pixel_hint(const char* card_name, int x, 
     return engine;
 }
 
-void ygui_engine_destroy(ygui_engine_t* engine) {
-    if (!engine) return;
+void ygui_engine_destroy(ygui_engine_t *engine)
+{
+    if (!engine) {
+        return;
+    }
 
     /* Stop running if needed */
     engine->running = 0;
@@ -325,9 +356,9 @@ void ygui_engine_destroy(ygui_engine_t* engine) {
     }
 
     /* Destroy all widgets */
-    ygui_widget_t* w = engine->first_widget;
+    ygui_widget_t *w = engine->first_widget;
     while (w) {
-        ygui_widget_t* next = w->next_sibling;
+        ygui_widget_t *next = w->next_sibling;
         ygui_widget_free(w);
         w = next;
     }
@@ -341,10 +372,12 @@ void ygui_engine_destroy(ygui_engine_t* engine) {
     }
 
     /* Destroy buffer + measurement font */
-    if (engine->buffer) yetty_ypaint_core_buffer_destroy(engine->buffer);
-    if (engine->measure_font && engine->measure_font->ops &&
-        engine->measure_font->ops->destroy)
+    if (engine->buffer) {
+        yetty_ypaint_core_buffer_destroy(engine->buffer);
+    }
+    if (engine->measure_font && engine->measure_font->ops && engine->measure_font->ops->destroy) {
         engine->measure_font->ops->destroy(engine->measure_font);
+    }
 
     /* Free card name */
     free(engine->card_name);
@@ -356,8 +389,11 @@ void ygui_engine_destroy(ygui_engine_t* engine) {
  * Engine Configuration
  *===========================================================================*/
 
-void ygui_engine_set_size(ygui_engine_t* engine, float width, float height) {
-    if (!engine) return;
+void ygui_engine_set_size(ygui_engine_t *engine, float width, float height)
+{
+    if (!engine) {
+        return;
+    }
     engine->width = width;
     engine->height = height;
     ygui_grid_destroy(&engine->grid);
@@ -365,8 +401,11 @@ void ygui_engine_set_size(ygui_engine_t* engine, float width, float height) {
     engine->dirty = 1;
 }
 
-void ygui_engine_set_theme(ygui_engine_t* engine, ygui_theme_t* theme) {
-    if (!engine) return;
+void ygui_engine_set_theme(ygui_engine_t *engine, ygui_theme_t *theme)
+{
+    if (!engine) {
+        return;
+    }
     if (engine->owns_theme && engine->theme) {
         ygui_theme_destroy(engine->theme);
     }
@@ -375,16 +414,21 @@ void ygui_engine_set_theme(ygui_engine_t* engine, ygui_theme_t* theme) {
     engine->dirty = 1;
 }
 
-void ygui_engine_set_event_callback(ygui_engine_t* engine,
-                                     ygui_event_callback_t callback,
-                                     void* userdata) {
-    if (!engine) return;
+void ygui_engine_set_event_callback(ygui_engine_t *engine, ygui_event_callback_t callback,
+                                    void *userdata)
+{
+    if (!engine) {
+        return;
+    }
     engine->event_callback = callback;
     engine->event_userdata = userdata;
 }
 
-void ygui_engine_on_key(ygui_engine_t* engine, ygui_key_callback_t callback, void* userdata) {
-    if (!engine) return;
+void ygui_engine_on_key(ygui_engine_t *engine, ygui_key_callback_t callback, void *userdata)
+{
+    if (!engine) {
+        return;
+    }
     engine->key_callback = callback;
     engine->key_userdata = userdata;
 }
@@ -393,20 +437,27 @@ void ygui_engine_on_key(ygui_engine_t* engine, ygui_key_callback_t callback, voi
  * Engine State
  *===========================================================================*/
 
-int ygui_engine_is_dirty(const ygui_engine_t* engine) {
+int ygui_engine_is_dirty(const ygui_engine_t *engine)
+{
     return engine ? engine->dirty : 0;
 }
 
-void ygui_engine_mark_dirty(ygui_engine_t* engine) {
-    if (engine) engine->dirty = 1;
+void ygui_engine_mark_dirty(ygui_engine_t *engine)
+{
+    if (engine) {
+        engine->dirty = 1;
+    }
 }
 
 /*=============================================================================
  * Rendering
  *===========================================================================*/
 
-static void engine_rebuild(ygui_engine_t* engine) {
-    if (!engine || !engine->buffer) return;
+static void engine_rebuild(ygui_engine_t *engine)
+{
+    if (!engine || !engine->buffer) {
+        return;
+    }
 
     /* Clear the grid */
     ygui_grid_clear(&engine->grid);
@@ -416,7 +467,7 @@ static void engine_rebuild(ygui_engine_t* engine) {
     ygui_render_ctx_init(&ctx, engine->buffer, engine->theme);
 
     /* Render all top-level widgets */
-    for (ygui_widget_t* w = engine->first_widget; w; w = w->next_sibling) {
+    for (ygui_widget_t *w = engine->first_widget; w; w = w->next_sibling) {
         w->was_rendered = 0;
         if (w->render_all) {
             w->render_all(w, &ctx);
@@ -426,7 +477,7 @@ static void engine_rebuild(ygui_engine_t* engine) {
     }
 
     /* Rebuild spatial grid with rendered widgets */
-    for (ygui_widget_t* w = engine->first_widget; w; w = w->next_sibling) {
+    for (ygui_widget_t *w = engine->first_widget; w; w = w->next_sibling) {
         if (w->was_rendered) {
             ygui_grid_insert(&engine->grid, w);
         }
@@ -435,8 +486,11 @@ static void engine_rebuild(ygui_engine_t* engine) {
     engine->dirty = 0;
 }
 
-void ygui_engine_render(ygui_engine_t* engine) {
-    if (!engine || !engine->buffer) return;
+void ygui_engine_render(ygui_engine_t *engine)
+{
+    if (!engine || !engine->buffer) {
+        return;
+    }
 
     /* 0. Handle pending resize BEFORE rendering - keeps visual and hit-test in sync */
     if (engine->needs_resize) {
@@ -448,32 +502,33 @@ void ygui_engine_render(ygui_engine_t* engine) {
     yetty_ypaint_core_buffer_clear(engine->buffer);
 
     /* 2. Set explicit scene bounds to match full canvas */
-    yetty_ypaint_core_buffer_set_scene_bounds(engine->buffer,
-                                              0, 0,
-                                              engine->width, engine->height);
+    yetty_ypaint_core_buffer_set_scene_bounds(engine->buffer, 0, 0, engine->width, engine->height);
 
     /* 3. Rebuild UI */
     engine_rebuild(engine);
 
     /* 4. Serialize (framed: prims + text_spans + scene_bounds) */
-    const uint8_t* data = NULL;
+    const uint8_t *data = NULL;
     uint32_t size = (uint32_t)yetty_ypaint_core_buffer_serialize(engine->buffer, &data);
-    if (size == 0 || !data) return;
+    if (size == 0 || !data) {
+        return;
+    }
 
     /* 5. Send OSC */
     if (!engine->card_shown) {
-        ygui_osc_create_card(engine->card_name,
-                             engine->card_x, engine->card_y,
-                             engine->card_w, engine->card_h,
-                             data, size);
+        ygui_osc_create_card(engine->card_name, engine->card_x, engine->card_y, engine->card_w,
+                             engine->card_h, data, size);
         engine->card_shown = 1;
     } else {
         ygui_osc_update_card(engine->card_name, data, size);
     }
 }
 
-void ygui_engine_show(ygui_engine_t* engine) {
-    if (!engine) return;
+void ygui_engine_show(ygui_engine_t *engine)
+{
+    if (!engine) {
+        return;
+    }
 
     /* card_x, card_y, card_w, card_h already set in ygui_engine_create */
 
@@ -489,9 +544,8 @@ void ygui_engine_show(ygui_engine_t* engine) {
     /* Register our card with the ymgui-layer so the server hit-tests the
      * cursor against our rect and emits YMGUI_OSC_SC_MOUSE with card-local
      * coordinates. Without this, mouse events have nowhere to go. */
-    ygui_osc_card_place(engine->card_id,
-                        engine->card_x, engine->card_y,
-                        (uint32_t)engine->card_w, (uint32_t)engine->card_h);
+    ygui_osc_card_place(engine->card_id, engine->card_x, engine->card_y, (uint32_t)engine->card_w,
+                        (uint32_t)engine->card_h);
 
     /* In CANVAS_FIT mode, create card with minimal data first to trigger OSC 777780.
      * The real render happens after we receive the actual pixel size.
@@ -501,16 +555,14 @@ void ygui_engine_show(ygui_engine_t* engine) {
          * with the pixel size we need to drive the first real render. */
         yetty_ypaint_core_buffer_clear(engine->buffer);
         yetty_ypaint_core_buffer_set_scene_bounds(engine->buffer, 0, 0, 1, 1);
-        const uint8_t* data = NULL;
+        const uint8_t *data = NULL;
         uint32_t size = (uint32_t)yetty_ypaint_core_buffer_serialize(engine->buffer, &data);
         if (size > 0 && data) {
-            ygui_osc_create_card(engine->card_name,
-                                 engine->card_x, engine->card_y,
-                                 engine->card_w, engine->card_h,
-                                 data, size);
+            ygui_osc_create_card(engine->card_name, engine->card_x, engine->card_y, engine->card_w,
+                                 engine->card_h, data, size);
             engine->card_shown = 1;
         }
-        engine->dirty = 1;  /* Real render after OSC 777780 */
+        engine->dirty = 1; /* Real render after OSC 777780 */
         YGUI_LOG("CANVAS_FIT: created placeholder card, waiting for OSC 777780");
     } else {
         /* CANVAS_FIXED or already have pixel size: render immediately */
@@ -522,16 +574,20 @@ void ygui_engine_show(ygui_engine_t* engine) {
  * Input Handling
  *===========================================================================*/
 
-static void emit_event(ygui_engine_t* engine, const ygui_event_t* event) {
+static void emit_event(ygui_engine_t *engine, const ygui_event_t *event)
+{
     if (engine->event_callback && event->type != YGUI_EVENT_NONE) {
         engine->event_callback(event, engine->event_userdata);
     }
 }
 
-void ygui_engine_mouse_move(ygui_engine_t* engine, float x, float y) {
-    if (!engine) return;
+void ygui_engine_mouse_move(ygui_engine_t *engine, float x, float y)
+{
+    if (!engine) {
+        return;
+    }
 
-    ygui_widget_t* hit = ygui_grid_query(&engine->grid, x, y);
+    ygui_widget_t *hit = ygui_grid_query(&engine->grid, x, y);
 
     /* Handle hover changes */
     if (hit != engine->hovered) {
@@ -558,13 +614,16 @@ void ygui_engine_mouse_move(ygui_engine_t* engine, float x, float y) {
     }
 }
 
-void ygui_engine_mouse_down(ygui_engine_t* engine, float x, float y, int button) {
-    if (!engine) return;
+void ygui_engine_mouse_down(ygui_engine_t *engine, float x, float y, int button)
+{
+    if (!engine) {
+        return;
+    }
     (void)button;
 
     YGUI_LOG("mouse_down at (%.1f, %.1f)", x, y);
-    ygui_widget_t* hit = ygui_grid_query(&engine->grid, x, y);
-    YGUI_LOG("  grid_query returned: %s (ptr=%p)", hit ? hit->id : "NULL", (void*)hit);
+    ygui_widget_t *hit = ygui_grid_query(&engine->grid, x, y);
+    YGUI_LOG("  grid_query returned: %s (ptr=%p)", hit ? hit->id : "NULL", (void *)hit);
 
     if (hit) {
         hit->flags |= YGUI_FLAG_PRESSED;
@@ -591,20 +650,25 @@ void ygui_engine_mouse_down(ygui_engine_t* engine, float x, float y, int button)
     }
 }
 
-void ygui_engine_mouse_up(ygui_engine_t* engine, float x, float y, int button) {
-    if (!engine) return;
+void ygui_engine_mouse_up(ygui_engine_t *engine, float x, float y, int button)
+{
+    if (!engine) {
+        return;
+    }
     (void)button;
 
-    YGUI_LOG("mouse_up at (%.1f, %.1f) pressed=%s", x, y, engine->pressed ? engine->pressed->id : "NULL");
+    YGUI_LOG("mouse_up at (%.1f, %.1f) pressed=%s", x, y,
+             engine->pressed ? engine->pressed->id : "NULL");
 
     if (engine->pressed) {
-        ygui_widget_t* widget = engine->pressed;
+        ygui_widget_t *widget = engine->pressed;
         widget->flags &= ~YGUI_FLAG_PRESSED;
         engine->dirty = 1;
 
         /* Check if release is on same widget (click) */
-        ygui_widget_t* hit = ygui_grid_query(&engine->grid, x, y);
-        YGUI_LOG("  release hit=%s, pressed=%s, match=%d", hit ? hit->id : "NULL", widget->id, hit == widget);
+        ygui_widget_t *hit = ygui_grid_query(&engine->grid, x, y);
+        YGUI_LOG("  release hit=%s, pressed=%s, match=%d", hit ? hit->id : "NULL", widget->id,
+                 hit == widget);
         if (hit == widget) {
             /* Call widget's click callback */
             if (widget->click_callback) {
@@ -612,10 +676,7 @@ void ygui_engine_mouse_up(ygui_engine_t* engine, float x, float y, int button) {
             }
 
             /* Legacy event */
-            ygui_event_t event = {
-                .widget_id = widget->id,
-                .type = YGUI_EVENT_CLICK
-            };
+            ygui_event_t event = {.widget_id = widget->id, .type = YGUI_EVENT_CLICK};
             emit_event(engine, &event);
         }
 
@@ -632,11 +693,13 @@ void ygui_engine_mouse_up(ygui_engine_t* engine, float x, float y, int button) {
     }
 }
 
-void ygui_engine_mouse_scroll(ygui_engine_t* engine, float x, float y,
-                               float dx, float dy) {
-    if (!engine) return;
+void ygui_engine_mouse_scroll(ygui_engine_t *engine, float x, float y, float dx, float dy)
+{
+    if (!engine) {
+        return;
+    }
 
-    ygui_widget_t* hit = ygui_grid_query(&engine->grid, x, y);
+    ygui_widget_t *hit = ygui_grid_query(&engine->grid, x, y);
 
     if (hit && hit->on_scroll) {
         ygui_event_t event = {0};
@@ -647,8 +710,11 @@ void ygui_engine_mouse_scroll(ygui_engine_t* engine, float x, float y,
     }
 }
 
-void ygui_engine_key_down(ygui_engine_t* engine, uint32_t key, int mods) {
-    if (!engine) return;
+void ygui_engine_key_down(ygui_engine_t *engine, uint32_t key, int mods)
+{
+    if (!engine) {
+        return;
+    }
 
     /* Call global key callback */
     if (engine->key_callback) {
@@ -665,25 +731,31 @@ void ygui_engine_key_down(ygui_engine_t* engine, uint32_t key, int mods) {
     }
 }
 
-void ygui_engine_key_up(ygui_engine_t* engine, uint32_t key, int mods) {
+void ygui_engine_key_up(ygui_engine_t *engine, uint32_t key, int mods)
+{
     (void)engine;
     (void)key;
     (void)mods;
     /* Currently unused */
 }
 
-void ygui_engine_text_input(ygui_engine_t* engine, const char* text) {
-    if (!engine || !engine->focused) return;
+void ygui_engine_text_input(ygui_engine_t *engine, const char *text)
+{
+    if (!engine || !engine->focused) {
+        return;
+    }
 
     /* Only textinput handles text input */
     if (engine->focused->type == YGUI_WIDGET_TEXTINPUT) {
         /* Append text to input */
-        char* old_text = engine->focused->data.textinput.text;
+        char *old_text = engine->focused->data.textinput.text;
         size_t old_len = old_text ? strlen(old_text) : 0;
         size_t add_len = strlen(text);
-        char* new_text = (char*)malloc(old_len + add_len + 1);
+        char *new_text = (char *)malloc(old_len + add_len + 1);
         if (new_text) {
-            if (old_text) memcpy(new_text, old_text, old_len);
+            if (old_text) {
+                memcpy(new_text, old_text, old_len);
+            }
             memcpy(new_text + old_len, text, add_len + 1);
             free(old_text);
             engine->focused->data.textinput.text = new_text;
@@ -697,11 +769,9 @@ void ygui_engine_text_input(ygui_engine_t* engine, const char* text) {
             }
 
             /* Legacy event */
-            ygui_event_t event = {
-                .widget_id = engine->focused->id,
-                .type = YGUI_EVENT_CHANGE,
-                .data.string_value = new_text
-            };
+            ygui_event_t event = {.widget_id = engine->focused->id,
+                                  .type = YGUI_EVENT_CHANGE,
+                                  .data.string_value = new_text};
             emit_event(engine, &event);
         }
     }
@@ -711,29 +781,44 @@ void ygui_engine_text_input(ygui_engine_t* engine, const char* text) {
  * Widget Lookup
  *===========================================================================*/
 
-static ygui_widget_t* find_recursive(ygui_widget_t* w, const char* id) {
-    if (!w || !id) return NULL;
-    if (w->id && strcmp(w->id, id) == 0) return w;
+static ygui_widget_t *find_recursive(ygui_widget_t *w, const char *id)
+{
+    if (!w || !id) {
+        return NULL;
+    }
+    if (w->id && strcmp(w->id, id) == 0) {
+        return w;
+    }
 
-    for (ygui_widget_t* child = w->first_child; child; child = child->next_sibling) {
-        ygui_widget_t* found = find_recursive(child, id);
-        if (found) return found;
+    for (ygui_widget_t *child = w->first_child; child; child = child->next_sibling) {
+        ygui_widget_t *found = find_recursive(child, id);
+        if (found) {
+            return found;
+        }
     }
     return NULL;
 }
 
-ygui_widget_t* ygui_engine_find(ygui_engine_t* engine, const char* id) {
-    if (!engine || !id) return NULL;
+ygui_widget_t *ygui_engine_find(ygui_engine_t *engine, const char *id)
+{
+    if (!engine || !id) {
+        return NULL;
+    }
 
-    for (ygui_widget_t* w = engine->first_widget; w; w = w->next_sibling) {
-        ygui_widget_t* found = find_recursive(w, id);
-        if (found) return found;
+    for (ygui_widget_t *w = engine->first_widget; w; w = w->next_sibling) {
+        ygui_widget_t *found = find_recursive(w, id);
+        if (found) {
+            return found;
+        }
     }
     return NULL;
 }
 
-ygui_widget_t* ygui_engine_widget_at(ygui_engine_t* engine, float x, float y) {
-    if (!engine) return NULL;
+ygui_widget_t *ygui_engine_widget_at(ygui_engine_t *engine, float x, float y)
+{
+    if (!engine) {
+        return NULL;
+    }
     return ygui_grid_query(&engine->grid, x, y);
 }
 
@@ -745,12 +830,16 @@ ygui_widget_t* ygui_engine_widget_at(ygui_engine_t* engine, float x, float y) {
  * Format: ESC ] CODE ; card-name ; buttons ; [press ;] x ; y ESC \
  * Returns 1 on success, 0 if not a matching sequence
  */
-static int parse_card_mouse_osc(const char* buf, int len,
-                                 int* osc_code, char* card_name, int name_max,
-                                 int* buttons, int* press,
-                                 float* x, float* y, int* consumed) {
-    if (len < 10) return 0;
-    if (buf[0] != '\033' || buf[1] != ']') return 0;
+static int parse_card_mouse_osc(const char *buf, int len, int *osc_code, char *card_name,
+                                int name_max, int *buttons, int *press, float *x, float *y,
+                                int *consumed)
+{
+    if (len < 10) {
+        return 0;
+    }
+    if (buf[0] != '\033' || buf[1] != ']') {
+        return 0;
+    }
 
     int i = 2;
     int code = 0;
@@ -758,16 +847,26 @@ static int parse_card_mouse_osc(const char* buf, int len,
         code = code * 10 + (buf[i] - '0');
         i++;
     }
-    if (code != 777777 && code != 777778) return 0;
-    if (i >= len || buf[i] != ';') return 0;
+    if (code != 777777 && code != 777778) {
+        return 0;
+    }
+    if (i >= len || buf[i] != ';') {
+        return 0;
+    }
     i++;
 
     /* Parse card name */
     int name_start = i;
-    while (i < len && buf[i] != ';') i++;
-    if (i >= len) return 0;
+    while (i < len && buf[i] != ';') {
+        i++;
+    }
+    if (i >= len) {
+        return 0;
+    }
     int name_len = i - name_start;
-    if (name_len >= name_max) name_len = name_max - 1;
+    if (name_len >= name_max) {
+        name_len = name_max - 1;
+    }
     memcpy(card_name, buf + name_start, name_len);
     card_name[name_len] = '\0';
     i++;
@@ -779,7 +878,9 @@ static int parse_card_mouse_osc(const char* buf, int len,
         i++;
     }
     *buttons = btn;
-    if (i >= len || buf[i] != ';') return 0;
+    if (i >= len || buf[i] != ';') {
+        return 0;
+    }
     i++;
 
     /* For OSC 777777, parse press */
@@ -790,16 +891,21 @@ static int parse_card_mouse_osc(const char* buf, int len,
             i++;
         }
         *press = p;
-        if (i >= len || buf[i] != ';') return 0;
+        if (i >= len || buf[i] != ';') {
+            return 0;
+        }
         i++;
     } else {
-        *press = -1;  /* N/A for move */
+        *press = -1; /* N/A for move */
     }
 
     /* Parse x (float, e.g., "123.45" or "123") */
     float fx = 0.0f;
     int neg = 0;
-    if (i < len && buf[i] == '-') { neg = 1; i++; }
+    if (i < len && buf[i] == '-') {
+        neg = 1;
+        i++;
+    }
     while (i < len && buf[i] >= '0' && buf[i] <= '9') {
         fx = fx * 10.0f + (float)(buf[i] - '0');
         i++;
@@ -814,13 +920,18 @@ static int parse_card_mouse_osc(const char* buf, int len,
         }
     }
     *x = neg ? -fx : fx;
-    if (i >= len || buf[i] != ';') return 0;
+    if (i >= len || buf[i] != ';') {
+        return 0;
+    }
     i++;
 
     /* Parse y (float, e.g., "123.45" or "123") */
     float fy = 0.0f;
     neg = 0;
-    if (i < len && buf[i] == '-') { neg = 1; i++; }
+    if (i < len && buf[i] == '-') {
+        neg = 1;
+        i++;
+    }
     while (i < len && buf[i] >= '0' && buf[i] <= '9') {
         fy = fy * 10.0f + (float)(buf[i] - '0');
         i++;
@@ -837,7 +948,9 @@ static int parse_card_mouse_osc(const char* buf, int len,
     *y = neg ? -fy : fy;
 
     /* Expect ST: ESC \ */
-    if (i + 1 >= len || buf[i] != '\033' || buf[i+1] != '\\') return 0;
+    if (i + 1 >= len || buf[i] != '\033' || buf[i + 1] != '\\') {
+        return 0;
+    }
 
     *osc_code = code;
     *consumed = i + 2;
@@ -848,12 +961,15 @@ static int parse_card_mouse_osc(const char* buf, int len,
  * Format: ESC ] 777780 ; card-name ; pixel-width ; pixel-height ESC \
  * Returns 1 on success, 0 if not a matching sequence
  */
-static int parse_card_pixel_size_osc(const char* buf, int len,
-                                      char* card_name, int name_max,
-                                      float* pixel_w, float* pixel_h,
-                                      int* consumed) {
-    if (len < 15) return 0;
-    if (buf[0] != '\033' || buf[1] != ']') return 0;
+static int parse_card_pixel_size_osc(const char *buf, int len, char *card_name, int name_max,
+                                     float *pixel_w, float *pixel_h, int *consumed)
+{
+    if (len < 15) {
+        return 0;
+    }
+    if (buf[0] != '\033' || buf[1] != ']') {
+        return 0;
+    }
 
     int i = 2;
     /* Parse OSC code */
@@ -862,8 +978,12 @@ static int parse_card_pixel_size_osc(const char* buf, int len,
         code = code * 10 + (buf[i] - '0');
         i++;
     }
-    if (code != 777780) return 0;
-    if (i >= len || buf[i] != ';') return 0;
+    if (code != 777780) {
+        return 0;
+    }
+    if (i >= len || buf[i] != ';') {
+        return 0;
+    }
     i++;
 
     /* Parse card name */
@@ -872,7 +992,9 @@ static int parse_card_pixel_size_osc(const char* buf, int len,
         card_name[name_len++] = buf[i++];
     }
     card_name[name_len] = '\0';
-    if (i >= len || buf[i] != ';') return 0;
+    if (i >= len || buf[i] != ';') {
+        return 0;
+    }
     i++;
 
     /* Parse pixel width (float) */
@@ -890,7 +1012,9 @@ static int parse_card_pixel_size_osc(const char* buf, int len,
             i++;
         }
     }
-    if (i >= len || buf[i] != ';') return 0;
+    if (i >= len || buf[i] != ';') {
+        return 0;
+    }
     i++;
 
     /* Parse pixel height (float) */
@@ -910,7 +1034,9 @@ static int parse_card_pixel_size_osc(const char* buf, int len,
     }
 
     /* Expect ST: ESC \ */
-    if (i + 1 >= len || buf[i] != '\033' || buf[i+1] != '\\') return 0;
+    if (i + 1 >= len || buf[i] != '\033' || buf[i + 1] != '\\') {
+        return 0;
+    }
 
     *pixel_w = w;
     *pixel_h = h;
@@ -923,10 +1049,15 @@ static int parse_card_pixel_size_osc(const char* buf, int len,
  * Height and width can be floats (e.g., "9.60") for sub-pixel precision
  * Returns 1 on success, 0 if not a matching sequence
  */
-static int parse_cell_size_csi(const char* buf, int len,
-                                float* cell_height, float* cell_width, int* consumed) {
-    if (len < 8) return 0;  /* Minimum: ESC [ 6 ; h ; w t */
-    if (buf[0] != '\033' || buf[1] != '[') return 0;
+static int parse_cell_size_csi(const char *buf, int len, float *cell_height, float *cell_width,
+                               int *consumed)
+{
+    if (len < 8) {
+        return 0; /* Minimum: ESC [ 6 ; h ; w t */
+    }
+    if (buf[0] != '\033' || buf[1] != '[') {
+        return 0;
+    }
 
     int i = 2;
     /* Parse first number (should be 6) */
@@ -935,8 +1066,12 @@ static int parse_cell_size_csi(const char* buf, int len,
         n1 = n1 * 10 + (buf[i] - '0');
         i++;
     }
-    if (n1 != 6) return 0;  /* Not a cell size report */
-    if (i >= len || buf[i] != ';') return 0;
+    if (n1 != 6) {
+        return 0; /* Not a cell size report */
+    }
+    if (i >= len || buf[i] != ';') {
+        return 0;
+    }
     i++;
 
     /* Parse height (may be float like "16.00") */
@@ -954,7 +1089,9 @@ static int parse_cell_size_csi(const char* buf, int len,
             i++;
         }
     }
-    if (i >= len || buf[i] != ';') return 0;
+    if (i >= len || buf[i] != ';') {
+        return 0;
+    }
     i++;
 
     /* Parse width (may be float like "9.60") */
@@ -972,7 +1109,9 @@ static int parse_cell_size_csi(const char* buf, int len,
             i++;
         }
     }
-    if (i >= len || buf[i] != 't') return 0;
+    if (i >= len || buf[i] != 't') {
+        return 0;
+    }
     i++;
 
     *cell_height = h;
@@ -982,7 +1121,8 @@ static int parse_cell_size_csi(const char* buf, int len,
 }
 
 /* Scale coordinates from display space to internal canvas space */
-static void scale_coords(ygui_engine_t* engine, float* x, float* y) {
+static void scale_coords(ygui_engine_t *engine, float *x, float *y)
+{
     float orig_x = *x, orig_y = *y;
 
     /* MUST have pixel size from OSC 777780 - no fallback */
@@ -1002,13 +1142,16 @@ static void scale_coords(ygui_engine_t* engine, float* x, float* y) {
     *x = engine->view_scroll_x + (*x / display_w) * visible_w;
     *y = engine->view_scroll_y + (*y / display_h) * visible_h;
 
-    YGUI_LOG("scale_coords: in=(%.1f,%.1f) out=(%.1f,%.1f) disp=%.2fx%.2f canvas=%.0fx%.0f",
-             orig_x, orig_y, *x, *y, display_w, display_h, engine->width, engine->height);
+    YGUI_LOG("scale_coords: in=(%.1f,%.1f) out=(%.1f,%.1f) disp=%.2fx%.2f canvas=%.0fx%.0f", orig_x,
+             orig_y, *x, *y, display_w, display_h, engine->width, engine->height);
 }
 
 /* Handle terminal resize based on canvas_mode and scale_mode */
-static void handle_resize(ygui_engine_t* engine) {
-    if (!engine || engine->reference_w == 0.0f) return;
+static void handle_resize(ygui_engine_t *engine)
+{
+    if (!engine || engine->reference_w == 0.0f) {
+        return;
+    }
 
     /* MUST have pixel size from OSC 777780 - no fallback */
     if (!engine->have_pixel_size) {
@@ -1036,8 +1179,9 @@ static void handle_resize(ygui_engine_t* engine) {
                 float scale_x = new_display_w / old_canvas_w;
                 float scale_y = new_display_h / old_canvas_h;
                 YGUI_LOG("First resize: canvas %.0fx%.0f -> %.0fx%.0f scale=(%.4f,%.4f)",
-                         old_canvas_w, old_canvas_h, new_display_w, new_display_h, scale_x, scale_y);
-                for (ygui_widget_t* w = engine->first_widget; w; w = w->next_sibling) {
+                         old_canvas_w, old_canvas_h, new_display_w, new_display_h, scale_x,
+                         scale_y);
+                for (ygui_widget_t *w = engine->first_widget; w; w = w->next_sibling) {
                     w->x *= scale_x;
                     w->y *= scale_y;
                     w->w *= scale_x;
@@ -1046,9 +1190,9 @@ static void handle_resize(ygui_engine_t* engine) {
                     w->effective_y = w->y;
                 }
             } else {
-                YGUI_LOG("First resize: canvas %.0fx%.0f -> %.0fx%.0f (no scaling)",
-                         old_canvas_w, old_canvas_h, new_display_w, new_display_h);
-                for (ygui_widget_t* w = engine->first_widget; w; w = w->next_sibling) {
+                YGUI_LOG("First resize: canvas %.0fx%.0f -> %.0fx%.0f (no scaling)", old_canvas_w,
+                         old_canvas_h, new_display_w, new_display_h);
+                for (ygui_widget_t *w = engine->first_widget; w; w = w->next_sibling) {
                     w->effective_x = w->x;
                     w->effective_y = w->y;
                 }
@@ -1060,7 +1204,7 @@ static void handle_resize(ygui_engine_t* engine) {
 
             YGUI_LOG("Scaling widgets by %.4fx%.4f", scale_x, scale_y);
 
-            for (ygui_widget_t* w = engine->first_widget; w; w = w->next_sibling) {
+            for (ygui_widget_t *w = engine->first_widget; w; w = w->next_sibling) {
                 /* Scale positions and sizes (all FLOAT) */
                 w->x *= scale_x;
                 w->y *= scale_y;
@@ -1079,7 +1223,7 @@ static void handle_resize(ygui_engine_t* engine) {
                        calc_grid_bucket_size(engine->width, engine->height));
 
         /* Re-insert all widgets - they now have correct effective positions */
-        for (ygui_widget_t* w = engine->first_widget; w; w = w->next_sibling) {
+        for (ygui_widget_t *w = engine->first_widget; w; w = w->next_sibling) {
             if (w->was_rendered) {
                 ygui_grid_insert(&engine->grid, w);
             }
@@ -1099,12 +1243,15 @@ static void handle_resize(ygui_engine_t* engine) {
  * Format: ESC ] 777779 ; card-name ; zoom ; scroll-x ; scroll-y ESC \
  * Returns 1 on success, 0 if not a matching sequence
  */
-static int parse_view_change_osc(const char* buf, int len,
-                                  char* card_name, int name_max,
-                                  float* zoom, float* scroll_x, float* scroll_y,
-                                  int* consumed) {
-    if (len < 12) return 0;
-    if (buf[0] != '\033' || buf[1] != ']') return 0;
+static int parse_view_change_osc(const char *buf, int len, char *card_name, int name_max,
+                                 float *zoom, float *scroll_x, float *scroll_y, int *consumed)
+{
+    if (len < 12) {
+        return 0;
+    }
+    if (buf[0] != '\033' || buf[1] != ']') {
+        return 0;
+    }
 
     int i = 2;
     int code = 0;
@@ -1112,16 +1259,26 @@ static int parse_view_change_osc(const char* buf, int len,
         code = code * 10 + (buf[i] - '0');
         i++;
     }
-    if (code != 777779) return 0;
-    if (i >= len || buf[i] != ';') return 0;
+    if (code != 777779) {
+        return 0;
+    }
+    if (i >= len || buf[i] != ';') {
+        return 0;
+    }
     i++;
 
     /* Parse card name */
     int name_start = i;
-    while (i < len && buf[i] != ';') i++;
-    if (i >= len) return 0;
+    while (i < len && buf[i] != ';') {
+        i++;
+    }
+    if (i >= len) {
+        return 0;
+    }
     int name_len = i - name_start;
-    if (name_len >= name_max) name_len = name_max - 1;
+    if (name_len >= name_max) {
+        name_len = name_max - 1;
+    }
     memcpy(card_name, buf + name_start, name_len);
     card_name[name_len] = '\0';
     i++;
@@ -1129,7 +1286,10 @@ static int parse_view_change_osc(const char* buf, int len,
     /* Parse zoom */
     float z = 0.0f;
     int neg = 0;
-    if (i < len && buf[i] == '-') { neg = 1; i++; }
+    if (i < len && buf[i] == '-') {
+        neg = 1;
+        i++;
+    }
     while (i < len && (buf[i] >= '0' && buf[i] <= '9')) {
         z = z * 10.0f + (float)(buf[i] - '0');
         i++;
@@ -1144,13 +1304,18 @@ static int parse_view_change_osc(const char* buf, int len,
         }
     }
     *zoom = neg ? -z : z;
-    if (i >= len || buf[i] != ';') return 0;
+    if (i >= len || buf[i] != ';') {
+        return 0;
+    }
     i++;
 
     /* Parse scroll_x */
     float sx = 0.0f;
     neg = 0;
-    if (i < len && buf[i] == '-') { neg = 1; i++; }
+    if (i < len && buf[i] == '-') {
+        neg = 1;
+        i++;
+    }
     while (i < len && buf[i] >= '0' && buf[i] <= '9') {
         sx = sx * 10.0f + (float)(buf[i] - '0');
         i++;
@@ -1165,13 +1330,18 @@ static int parse_view_change_osc(const char* buf, int len,
         }
     }
     *scroll_x = neg ? -sx : sx;
-    if (i >= len || buf[i] != ';') return 0;
+    if (i >= len || buf[i] != ';') {
+        return 0;
+    }
     i++;
 
     /* Parse scroll_y */
     float sy = 0.0f;
     neg = 0;
-    if (i < len && buf[i] == '-') { neg = 1; i++; }
+    if (i < len && buf[i] == '-') {
+        neg = 1;
+        i++;
+    }
     while (i < len && buf[i] >= '0' && buf[i] <= '9') {
         sy = sy * 10.0f + (float)(buf[i] - '0');
         i++;
@@ -1188,16 +1358,19 @@ static int parse_view_change_osc(const char* buf, int len,
     *scroll_y = neg ? -sy : sy;
 
     /* Expect ST: ESC \ */
-    if (i + 1 >= len || buf[i] != '\033' || buf[i+1] != '\\') return 0;
+    if (i + 1 >= len || buf[i] != '\033' || buf[i + 1] != '\\') {
+        return 0;
+    }
 
     *consumed = i + 2;
     return 1;
 }
 
-static void process_input(ygui_engine_t* engine, const char* data, int len) {
+static void process_input(ygui_engine_t *engine, const char *data, int len)
+{
     /* Append to input buffer */
     if (engine->input_len + len > (int)sizeof(engine->input_buffer) - 1) {
-        engine->input_len = 0;  /* Reset on overflow */
+        engine->input_len = 0; /* Reset on overflow */
     }
     memcpy(engine->input_buffer + engine->input_len, data, len);
     engine->input_len += len;
@@ -1214,10 +1387,8 @@ static void process_input(ygui_engine_t* engine, const char* data, int len) {
 
         /* Try to parse OSC 777780 (card pixel size) first - this is the most accurate */
         float pixel_w, pixel_h;
-        if (parse_card_pixel_size_osc(engine->input_buffer + i,
-                                       engine->input_len - i,
-                                       card_name, sizeof(card_name),
-                                       &pixel_w, &pixel_h, &consumed)) {
+        if (parse_card_pixel_size_osc(engine->input_buffer + i, engine->input_len - i, card_name,
+                                      sizeof(card_name), &pixel_w, &pixel_h, &consumed)) {
             /* Only use if this is our card */
             if (engine->card_name && strcmp(card_name, engine->card_name) == 0) {
                 YGUI_LOG("Got card pixel size for '%s': %.2fx%.2f", card_name, pixel_w, pixel_h);
@@ -1229,7 +1400,8 @@ static void process_input(ygui_engine_t* engine, const char* data, int len) {
                 if (engine->reference_w == 0.0f) {
                     engine->reference_w = pixel_w;
                     engine->reference_h = pixel_h;
-                    YGUI_LOG("Reference size set from pixel: %.0fx%.0f", engine->reference_w, engine->reference_h);
+                    YGUI_LOG("Reference size set from pixel: %.0fx%.0f", engine->reference_w,
+                             engine->reference_h);
                 }
 
                 /* Defer resize to render time - keeps visual and hit-test in sync */
@@ -1239,9 +1411,8 @@ static void process_input(ygui_engine_t* engine, const char* data, int len) {
             i += consumed;
         }
         /* Try to parse CSI cell size response */
-        else if (parse_cell_size_csi(engine->input_buffer + i,
-                                 engine->input_len - i,
-                                 &cell_h, &cell_w, &consumed)) {
+        else if (parse_cell_size_csi(engine->input_buffer + i, engine->input_len - i, &cell_h,
+                                     &cell_w, &consumed)) {
             YGUI_LOG("Got cell size: %.2fx%.2f", cell_w, cell_h);
             float old_w = engine->cell_width;
             float old_h = engine->cell_height;
@@ -1252,10 +1423,9 @@ static void process_input(ygui_engine_t* engine, const char* data, int len) {
             /* Cell size is stored but not used for coordinate mapping
              * (OSC 777780 provides direct pixel size) */
             i += consumed;
-        } else if (parse_card_mouse_osc(engine->input_buffer + i,
-                                  engine->input_len - i,
-                                  &osc_code, card_name, sizeof(card_name),
-                                  &buttons, &press, &x, &y, &consumed)) {
+        } else if (parse_card_mouse_osc(engine->input_buffer + i, engine->input_len - i, &osc_code,
+                                        card_name, sizeof(card_name), &buttons, &press, &x, &y,
+                                        &consumed)) {
             /* If resize is pending, apply it NOW before processing mouse events.
              * This ensures canvas size and widget positions are correct for hit testing. */
             if (engine->needs_resize) {
@@ -1264,10 +1434,11 @@ static void process_input(ygui_engine_t* engine, const char* data, int len) {
             }
 
             /* Scale coordinates from display to internal space */
-            YGUI_LOG("OSC mouse: display=(%.1f,%.1f) cell=(%.1f,%.1f) card=(%d,%d) canvas=(%.0f,%.0f) zoom=%.2f scroll=(%.1f,%.1f)",
-                     x, y, engine->cell_width, engine->cell_height,
-                     engine->card_w, engine->card_h, engine->width, engine->height,
-                     engine->view_zoom, engine->view_scroll_x, engine->view_scroll_y);
+            YGUI_LOG("OSC mouse: display=(%.1f,%.1f) cell=(%.1f,%.1f) card=(%d,%d) "
+                     "canvas=(%.0f,%.0f) zoom=%.2f scroll=(%.1f,%.1f)",
+                     x, y, engine->cell_width, engine->cell_height, engine->card_w, engine->card_h,
+                     engine->width, engine->height, engine->view_zoom, engine->view_scroll_x,
+                     engine->view_scroll_y);
             scale_coords(engine, &x, &y);
             YGUI_LOG("  -> canvas coords: (%.1f, %.1f)", x, y);
 
@@ -1287,10 +1458,9 @@ static void process_input(ygui_engine_t* engine, const char* data, int len) {
         } else {
             /* Try to parse OSC 777779 (view change) */
             float view_zoom, view_sx, view_sy;
-            if (parse_view_change_osc(engine->input_buffer + i,
-                                       engine->input_len - i,
-                                       card_name, sizeof(card_name),
-                                       &view_zoom, &view_sx, &view_sy, &consumed)) {
+            if (parse_view_change_osc(engine->input_buffer + i, engine->input_len - i, card_name,
+                                      sizeof(card_name), &view_zoom, &view_sx, &view_sy,
+                                      &consumed)) {
                 YGUI_LOG("View change: zoom=%.2f scroll=(%.1f,%.1f)", view_zoom, view_sx, view_sy);
                 engine->view_zoom = view_zoom;
                 engine->view_scroll_x = view_sx;
@@ -1316,8 +1486,7 @@ static void process_input(ygui_engine_t* engine, const char* data, int len) {
 
     /* Compact buffer */
     if (i > 0 && i < engine->input_len) {
-        memmove(engine->input_buffer, engine->input_buffer + i,
-                engine->input_len - i);
+        memmove(engine->input_buffer, engine->input_buffer + i, engine->input_len - i);
         engine->input_len -= i;
     } else if (i >= engine->input_len) {
         engine->input_len = 0;
@@ -1334,30 +1503,39 @@ static void process_input(ygui_engine_t* engine, const char* data, int len) {
  * keystrokes) are forwarded through on_raw to the existing parser.
  *===========================================================================*/
 
-static void yface_on_osc(void *user, int osc_code,
-                         const uint8_t *args, size_t args_len,
-                         const uint8_t *payload, size_t payload_len) {
-    (void)args; (void)args_len;
+static void yface_on_osc(void *user, int osc_code, const uint8_t *args, size_t args_len,
+                         const uint8_t *payload, size_t payload_len)
+{
+    (void)args;
+    (void)args_len;
     ygui_engine_t *engine = (ygui_engine_t *)user;
-    if (!engine) return;
+    if (!engine) {
+        return;
+    }
 
     switch (osc_code) {
     case YMGUI_OSC_SC_MOUSE: {
-        if (payload_len < sizeof(struct ymgui_wire_input_mouse)) return;
-        const struct ymgui_wire_input_mouse *m =
-            (const struct ymgui_wire_input_mouse *)payload;
-        if (m->magic != YMGUI_WIRE_MAGIC_INPUT_MOUSE) return;
-        if (m->card_id != engine->card_id) return;  /* not ours */
+        if (payload_len < sizeof(struct ymgui_wire_input_mouse)) {
+            return;
+        }
+        const struct ymgui_wire_input_mouse *m = (const struct ymgui_wire_input_mouse *)payload;
+        if (m->magic != YMGUI_WIRE_MAGIC_INPUT_MOUSE) {
+            return;
+        }
+        if (m->card_id != engine->card_id) {
+            return; /* not ours */
+        }
 
         switch (m->kind) {
         case YMGUI_INPUT_MOUSE_POS:
             ygui_engine_mouse_move(engine, m->x, m->y);
             break;
         case YMGUI_INPUT_MOUSE_BUTTON:
-            if (m->pressed)
+            if (m->pressed) {
                 ygui_engine_mouse_down(engine, m->x, m->y, m->button);
-            else
+            } else {
                 ygui_engine_mouse_up(engine, m->x, m->y, m->button);
+            }
             break;
         case YMGUI_INPUT_MOUSE_WHEEL:
             ygui_engine_mouse_scroll(engine, m->x, m->y, 0.0f, m->wheel_dy);
@@ -1366,11 +1544,16 @@ static void yface_on_osc(void *user, int osc_code,
         break;
     }
     case YMGUI_OSC_SC_RESIZE: {
-        if (payload_len < sizeof(struct ymgui_wire_input_resize)) return;
-        const struct ymgui_wire_input_resize *r =
-            (const struct ymgui_wire_input_resize *)payload;
-        if (r->magic != YMGUI_WIRE_MAGIC_INPUT_RESIZE) return;
-        if (r->card_id != engine->card_id) return;
+        if (payload_len < sizeof(struct ymgui_wire_input_resize)) {
+            return;
+        }
+        const struct ymgui_wire_input_resize *r = (const struct ymgui_wire_input_resize *)payload;
+        if (r->magic != YMGUI_WIRE_MAGIC_INPUT_RESIZE) {
+            return;
+        }
+        if (r->card_id != engine->card_id) {
+            return;
+        }
 
         engine->display_pixel_w = r->width;
         engine->display_pixel_h = r->height;
@@ -1381,36 +1564,48 @@ static void yface_on_osc(void *user, int osc_code,
         }
         engine->needs_resize = 1;
         engine->dirty = 1;
-        if (engine->resize_callback)
+        if (engine->resize_callback) {
             engine->resize_callback(engine, engine->resize_userdata);
+        }
         break;
     }
     case YMGUI_OSC_SC_FOCUS: {
         /* Focus tracking is internal to the engine for now — no public API
          * surface. The server tells us when our card gains/loses focus;
          * widget-level focus stays driven by mouse/key events. */
-        if (payload_len < sizeof(struct ymgui_wire_input_focus)) return;
-        const struct ymgui_wire_input_focus *f =
-            (const struct ymgui_wire_input_focus *)payload;
-        if (f->magic != YMGUI_WIRE_MAGIC_INPUT_FOCUS) return;
-        if (f->card_id != engine->card_id) return;
+        if (payload_len < sizeof(struct ymgui_wire_input_focus)) {
+            return;
+        }
+        const struct ymgui_wire_input_focus *f = (const struct ymgui_wire_input_focus *)payload;
+        if (f->magic != YMGUI_WIRE_MAGIC_INPUT_FOCUS) {
+            return;
+        }
+        if (f->card_id != engine->card_id) {
+            return;
+        }
         /* Currently unused — wire it through if/when we add a focus API. */
         break;
     }
     case YMGUI_OSC_SC_KEY: {
-        if (payload_len < sizeof(struct ymgui_wire_input_key)) return;
-        const struct ymgui_wire_input_key *k =
-            (const struct ymgui_wire_input_key *)payload;
-        if (k->magic != YMGUI_WIRE_MAGIC_INPUT_KEY) return;
-        if (k->card_id != engine->card_id) return;
+        if (payload_len < sizeof(struct ymgui_wire_input_key)) {
+            return;
+        }
+        const struct ymgui_wire_input_key *k = (const struct ymgui_wire_input_key *)payload;
+        if (k->magic != YMGUI_WIRE_MAGIC_INPUT_KEY) {
+            return;
+        }
+        if (k->card_id != engine->card_id) {
+            return;
+        }
 
         if (k->kind == YMGUI_INPUT_KEY_CHAR) {
             char utf8[8];
             uint32_t cp = k->codepoint;
             int n = 0;
             /* Quick UTF-32 → UTF-8 (ASCII-fast-path good enough here). */
-            if (cp < 0x80) { utf8[n++] = (char)cp; }
-            else if (cp < 0x800) {
+            if (cp < 0x80) {
+                utf8[n++] = (char)cp;
+            } else if (cp < 0x800) {
                 utf8[n++] = (char)(0xC0 | (cp >> 6));
                 utf8[n++] = (char)(0x80 | (cp & 0x3F));
             } else if (cp < 0x10000) {
@@ -1437,9 +1632,12 @@ static void yface_on_osc(void *user, int osc_code,
     }
 }
 
-static void yface_on_raw(void *user, const char *bytes, size_t n) {
+static void yface_on_raw(void *user, const char *bytes, size_t n)
+{
     ygui_engine_t *engine = (ygui_engine_t *)user;
-    if (!engine || n == 0) return;
+    if (!engine || n == 0) {
+        return;
+    }
     /* Non-OSC bytes (CSI replies, raw keystrokes) — feed the legacy
      * parser, which still handles cell-size CSI / view-change OSC and
      * direct keyboard chars. */
@@ -1450,9 +1648,12 @@ static void yface_on_raw(void *user, const char *bytes, size_t n) {
  * libuv Event Loop
  *===========================================================================*/
 
-static void stdin_poll_cb(uv_poll_t* handle, int status, int events) {
-    ygui_engine_t* engine = (ygui_engine_t*)handle->data;
-    if (status < 0) return;
+static void stdin_poll_cb(uv_poll_t *handle, int status, int events)
+{
+    ygui_engine_t *engine = (ygui_engine_t *)handle->data;
+    if (status < 0) {
+        return;
+    }
 
     if (events & UV_READABLE) {
         char buf[1024];
@@ -1473,8 +1674,9 @@ static void stdin_poll_cb(uv_poll_t* handle, int status, int events) {
     }
 }
 
-static void prepare_cb(uv_prepare_t* handle) {
-    ygui_engine_t* engine = (ygui_engine_t*)handle->data;
+static void prepare_cb(uv_prepare_t *handle)
+{
+    ygui_engine_t *engine = (ygui_engine_t *)handle->data;
 
     /* Check for terminal resize */
     if (ygui_resize_pending) {
@@ -1495,16 +1697,18 @@ static void prepare_cb(uv_prepare_t* handle) {
     }
 }
 
-void ygui_engine_attach(ygui_engine_t* engine, uv_loop_t* loop) {
-    if (!engine || !loop) return;
+void ygui_engine_attach(ygui_engine_t *engine, uv_loop_t *loop)
+{
+    if (!engine || !loop) {
+        return;
+    }
 
     engine->loop = loop;
     engine->owns_loop = 0;
 
     /* Wire up the yface handlers so feed_bytes can dispatch into us. */
     if (engine->yface_in) {
-        yetty_yface_set_handlers(engine->yface_in,
-                                 yface_on_osc, yface_on_raw, engine);
+        yetty_yface_set_handlers(engine->yface_in, yface_on_osc, yface_on_raw, engine);
     }
 
     /* Set up stdin poll */
@@ -1518,13 +1722,18 @@ void ygui_engine_attach(ygui_engine_t* engine, uv_loop_t* loop) {
     uv_prepare_start(&engine->prepare_handle, prepare_cb);
 }
 
-void ygui_engine_run(ygui_engine_t* engine) {
-    if (!engine) return;
+void ygui_engine_run(ygui_engine_t *engine)
+{
+    if (!engine) {
+        return;
+    }
 
     /* Create loop if needed */
     if (!engine->loop) {
-        engine->loop = (uv_loop_t*)malloc(sizeof(uv_loop_t));
-        if (!engine->loop) return;
+        engine->loop = (uv_loop_t *)malloc(sizeof(uv_loop_t));
+        if (!engine->loop) {
+            return;
+        }
         uv_loop_init(engine->loop);
         engine->owns_loop = 1;
 
@@ -1542,31 +1751,44 @@ void ygui_engine_run(ygui_engine_t* engine) {
     uv_prepare_stop(&engine->prepare_handle);
 }
 
-void ygui_engine_stop(ygui_engine_t* engine) {
-    if (engine) engine->running = 0;
+void ygui_engine_stop(ygui_engine_t *engine)
+{
+    if (engine) {
+        engine->running = 0;
+    }
 }
 
 /*=============================================================================
  * Testing API
  *===========================================================================*/
 
-void ygui_engine_set_input_fd(ygui_engine_t* engine, int fd) {
-    if (engine) engine->input_fd = fd;
+void ygui_engine_set_input_fd(ygui_engine_t *engine, int fd)
+{
+    if (engine) {
+        engine->input_fd = fd;
+    }
 }
 
-void ygui_engine_set_output_fd(ygui_engine_t* engine, int fd) {
-    if (engine) engine->output_fd = fd;
+void ygui_engine_set_output_fd(ygui_engine_t *engine, int fd)
+{
+    if (engine) {
+        engine->output_fd = fd;
+    }
 }
 
-void ygui_engine_set_card_size(ygui_engine_t* engine, int card_w, int card_h) {
+void ygui_engine_set_card_size(ygui_engine_t *engine, int card_w, int card_h)
+{
     if (engine) {
         engine->card_w = card_w;
         engine->card_h = card_h;
     }
 }
 
-void ygui_engine_set_display_pixel_size(ygui_engine_t* engine, float width, float height) {
-    if (!engine) return;
+void ygui_engine_set_display_pixel_size(ygui_engine_t *engine, float width, float height)
+{
+    if (!engine) {
+        return;
+    }
 
     engine->display_pixel_w = width;
     engine->display_pixel_h = height;
@@ -1581,12 +1803,16 @@ void ygui_engine_set_display_pixel_size(ygui_engine_t* engine, float width, floa
     ygui_grid_init(&engine->grid, width, height, calc_grid_bucket_size(width, height));
 }
 
-uv_loop_t* ygui_engine_get_loop(ygui_engine_t* engine) {
+uv_loop_t *ygui_engine_get_loop(ygui_engine_t *engine)
+{
     return engine ? engine->loop : NULL;
 }
 
-int ygui_engine_poll(ygui_engine_t* engine) {
-    if (!engine || !engine->loop) return 0;
+int ygui_engine_poll(ygui_engine_t *engine)
+{
+    if (!engine || !engine->loop) {
+        return 0;
+    }
     return uv_run(engine->loop, UV_RUN_NOWAIT);
 }
 
@@ -1600,26 +1826,39 @@ int ygui_engine_poll(ygui_engine_t* engine) {
  * Widget Callbacks
  *===========================================================================*/
 
-void ygui_button_on_click(ygui_widget_t* button, ygui_click_callback_t callback, void* userdata) {
-    if (!button || button->type != YGUI_WIDGET_BUTTON) return;
+void ygui_button_on_click(ygui_widget_t *button, ygui_click_callback_t callback, void *userdata)
+{
+    if (!button || button->type != YGUI_WIDGET_BUTTON) {
+        return;
+    }
     button->click_callback = callback;
     button->click_userdata = userdata;
 }
 
-void ygui_slider_on_change(ygui_widget_t* slider, ygui_change_callback_t callback, void* userdata) {
-    if (!slider || slider->type != YGUI_WIDGET_SLIDER) return;
+void ygui_slider_on_change(ygui_widget_t *slider, ygui_change_callback_t callback, void *userdata)
+{
+    if (!slider || slider->type != YGUI_WIDGET_SLIDER) {
+        return;
+    }
     slider->change_callback = callback;
     slider->change_userdata = userdata;
 }
 
-void ygui_checkbox_on_change(ygui_widget_t* checkbox, ygui_check_callback_t callback, void* userdata) {
-    if (!checkbox || checkbox->type != YGUI_WIDGET_CHECKBOX) return;
+void ygui_checkbox_on_change(ygui_widget_t *checkbox, ygui_check_callback_t callback,
+                             void *userdata)
+{
+    if (!checkbox || checkbox->type != YGUI_WIDGET_CHECKBOX) {
+        return;
+    }
     checkbox->check_callback = callback;
     checkbox->check_userdata = userdata;
 }
 
-void ygui_textinput_on_change(ygui_widget_t* input, ygui_text_callback_t callback, void* userdata) {
-    if (!input || input->type != YGUI_WIDGET_TEXTINPUT) return;
+void ygui_textinput_on_change(ygui_widget_t *input, ygui_text_callback_t callback, void *userdata)
+{
+    if (!input || input->type != YGUI_WIDGET_TEXTINPUT) {
+        return;
+    }
     input->text_callback = callback;
     input->text_userdata = userdata;
 }
@@ -1628,13 +1867,16 @@ void ygui_textinput_on_change(ygui_widget_t* input, ygui_text_callback_t callbac
  * Engine Clear (removes all widgets)
  *===========================================================================*/
 
-void ygui_engine_clear(ygui_engine_t* engine) {
-    if (!engine) return;
+void ygui_engine_clear(ygui_engine_t *engine)
+{
+    if (!engine) {
+        return;
+    }
 
     /* Free all widgets */
-    ygui_widget_t* w = engine->first_widget;
+    ygui_widget_t *w = engine->first_widget;
     while (w) {
-        ygui_widget_t* next = w->next_sibling;
+        ygui_widget_t *next = w->next_sibling;
         ygui_widget_free(w);
         w = next;
     }
@@ -1654,8 +1896,11 @@ void ygui_engine_clear(ygui_engine_t* engine) {
  * Deprecated/Legacy Functions
  *===========================================================================*/
 
-void ygui_engine_subscribe_clicks(ygui_engine_t* engine, int enable) {
-    if (!engine) return;
+void ygui_engine_subscribe_clicks(ygui_engine_t *engine, int enable)
+{
+    if (!engine) {
+        return;
+    }
     if (enable && !engine->clicks_subscribed) {
         ygui_osc_subscribe_clicks(1);
         engine->clicks_subscribed = 1;
@@ -1665,8 +1910,11 @@ void ygui_engine_subscribe_clicks(ygui_engine_t* engine, int enable) {
     }
 }
 
-void ygui_engine_subscribe_moves(ygui_engine_t* engine, int enable) {
-    if (!engine) return;
+void ygui_engine_subscribe_moves(ygui_engine_t *engine, int enable)
+{
+    if (!engine) {
+        return;
+    }
     if (enable && !engine->moves_subscribed) {
         ygui_osc_subscribe_moves(1);
         engine->moves_subscribed = 1;
@@ -1677,7 +1925,8 @@ void ygui_engine_subscribe_moves(ygui_engine_t* engine, int enable) {
 }
 
 /* Rebuild without render (for internal use) */
-void ygui_engine_rebuild(ygui_engine_t* engine) {
+void ygui_engine_rebuild(ygui_engine_t *engine)
+{
     engine_rebuild(engine);
 }
 
@@ -1685,16 +1934,25 @@ void ygui_engine_rebuild(ygui_engine_t* engine) {
  * Resize Handling API
  *===========================================================================*/
 
-void ygui_engine_set_canvas_mode(ygui_engine_t* engine, ygui_canvas_mode_t mode) {
-    if (engine) engine->canvas_mode = mode;
+void ygui_engine_set_canvas_mode(ygui_engine_t *engine, ygui_canvas_mode_t mode)
+{
+    if (engine) {
+        engine->canvas_mode = mode;
+    }
 }
 
-void ygui_engine_set_scale_mode(ygui_engine_t* engine, ygui_scale_mode_t mode) {
-    if (engine) engine->scale_mode = mode;
+void ygui_engine_set_scale_mode(ygui_engine_t *engine, ygui_scale_mode_t mode)
+{
+    if (engine) {
+        engine->scale_mode = mode;
+    }
 }
 
-void ygui_engine_on_resize(ygui_engine_t* engine, ygui_resize_callback_t callback, void* userdata) {
-    if (!engine) return;
+void ygui_engine_on_resize(ygui_engine_t *engine, ygui_resize_callback_t callback, void *userdata)
+{
+    if (!engine) {
+        return;
+    }
     engine->resize_callback = callback;
     engine->resize_userdata = userdata;
 }
@@ -1703,15 +1961,18 @@ void ygui_engine_on_resize(ygui_engine_t* engine, ygui_resize_callback_t callbac
  * View State API (read-only)
  *===========================================================================*/
 
-float ygui_engine_get_zoom(const ygui_engine_t* engine) {
+float ygui_engine_get_zoom(const ygui_engine_t *engine)
+{
     return engine ? engine->view_zoom : 1.0f;
 }
 
-float ygui_engine_get_scroll_x(const ygui_engine_t* engine) {
+float ygui_engine_get_scroll_x(const ygui_engine_t *engine)
+{
     return engine ? engine->view_scroll_x : 0.0f;
 }
 
-float ygui_engine_get_scroll_y(const ygui_engine_t* engine) {
+float ygui_engine_get_scroll_y(const ygui_engine_t *engine)
+{
     return engine ? engine->view_scroll_y : 0.0f;
 }
 
@@ -1719,8 +1980,11 @@ float ygui_engine_get_scroll_y(const ygui_engine_t* engine) {
  * View Change Subscription
  *===========================================================================*/
 
-void ygui_engine_subscribe_view_changes(ygui_engine_t* engine, int enable) {
-    if (!engine) return;
+void ygui_engine_subscribe_view_changes(ygui_engine_t *engine, int enable)
+{
+    if (!engine) {
+        return;
+    }
     if (enable && !engine->view_subscribed) {
         ygui_osc_subscribe_view_changes(1);
         engine->view_subscribed = 1;
@@ -1734,17 +1998,26 @@ void ygui_engine_subscribe_view_changes(ygui_engine_t* engine, int enable) {
  * View Control API (app → yetty)
  *===========================================================================*/
 
-void ygui_engine_set_zoom(ygui_engine_t* engine, float level) {
-    if (!engine || !engine->card_name) return;
+void ygui_engine_set_zoom(ygui_engine_t *engine, float level)
+{
+    if (!engine || !engine->card_name) {
+        return;
+    }
     ygui_osc_zoom_card(engine->card_name, level);
 }
 
-void ygui_engine_scroll_to(ygui_engine_t* engine, float x, float y) {
-    if (!engine || !engine->card_name) return;
+void ygui_engine_scroll_to(ygui_engine_t *engine, float x, float y)
+{
+    if (!engine || !engine->card_name) {
+        return;
+    }
     ygui_osc_scroll_card(engine->card_name, x, y, 1);
 }
 
-void ygui_engine_scroll_by(ygui_engine_t* engine, float dx, float dy) {
-    if (!engine || !engine->card_name) return;
+void ygui_engine_scroll_by(ygui_engine_t *engine, float dx, float dy)
+{
+    if (!engine || !engine->card_name) {
+        return;
+    }
     ygui_osc_scroll_card(engine->card_name, dx, dy, 0);
 }

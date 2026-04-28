@@ -18,15 +18,14 @@ typedef void (*webasm_pty_notify_callback)(void *user_data);
  * when data arrives in the buffer, which triggers the callback.
  */
 struct webasm_pty_pipe_source {
-	struct yetty_yplatform_pty_pipe_source base;
-	webasm_pty_notify_callback notify_callback;
-	void *notify_user_data;
+    struct yetty_yplatform_pty_pipe_source base;
+    webasm_pty_notify_callback notify_callback;
+    void *notify_user_data;
 };
 
 /* Set the notification callback - called by EventLoop during register_pty_pipe */
 void webasm_pty_pipe_source_set_callback(struct webasm_pty_pipe_source *source,
-					 webasm_pty_notify_callback callback,
-					 void *user_data);
+                                         webasm_pty_notify_callback callback, void *user_data);
 
 /* Notify that data is available - called by JS via C export */
 void webasm_pty_pipe_source_notify(struct webasm_pty_pipe_source *source);

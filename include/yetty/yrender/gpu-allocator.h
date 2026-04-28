@@ -14,10 +14,10 @@ struct yetty_yrender_gpu_allocator;
 struct yetty_yrender_gpu_allocator_ops {
     void (*destroy)(struct yetty_yrender_gpu_allocator *self);
     WGPUBuffer (*create_buffer)(struct yetty_yrender_gpu_allocator *self,
-                                 const WGPUBufferDescriptor *desc);
+                                const WGPUBufferDescriptor *desc);
     void (*release_buffer)(struct yetty_yrender_gpu_allocator *self, WGPUBuffer buffer);
     WGPUTexture (*create_texture)(struct yetty_yrender_gpu_allocator *self,
-                                   const WGPUTextureDescriptor *desc);
+                                  const WGPUTextureDescriptor *desc);
     void (*release_texture)(struct yetty_yrender_gpu_allocator *self, WGPUTexture texture);
     uint64_t (*total_allocated_bytes)(const struct yetty_yrender_gpu_allocator *self);
 };

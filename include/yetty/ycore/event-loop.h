@@ -31,8 +31,7 @@ struct yetty_tcp_server_callbacks {
     /* Allocate buffer for reading */
     void (*on_alloc)(void *conn_ctx, size_t suggested, char **buf, size_t *len);
     /* Data received */
-    void (*on_data)(void *conn_ctx, struct yetty_tcp_conn *conn,
-                    const char *data, long nread);
+    void (*on_data)(void *conn_ctx, struct yetty_tcp_conn *conn, const char *data, long nread);
     /* Client disconnected */
     void (*on_disconnect)(void *conn_ctx);
 };
@@ -47,8 +46,7 @@ struct yetty_tcp_client_callbacks {
     /* Allocate buffer for reading */
     void (*on_alloc)(void *ctx, size_t suggested, char **buf, size_t *len);
     /* Data received */
-    void (*on_data)(void *ctx, struct yetty_tcp_conn *conn,
-                    const char *data, long nread);
+    void (*on_data)(void *ctx, struct yetty_tcp_conn *conn, const char *data, long nread);
     /* Disconnected */
     void (*on_disconnect)(void *ctx);
 };
@@ -67,9 +65,7 @@ typedef void (*yetty_pipe_read_cb)(void *ctx, const char *buf, long nread);
 
 /* Event listener callback - returns int (1=handled, 0=not) or error */
 typedef struct yetty_ycore_int_result (*yetty_ycore_event_handler)(
-    struct yetty_ycore_event_listener *listener,
-    const struct yetty_ycore_event *event
-);
+    struct yetty_ycore_event_listener *listener, const struct yetty_ycore_event *event);
 
 /* Event listener - embed as first member in your listener struct */
 struct yetty_ycore_event_listener {
@@ -83,85 +79,60 @@ struct yetty_ycore_event_loop_ops {
     struct yetty_ycore_void_result (*start)(struct yetty_ycore_event_loop *self);
     struct yetty_ycore_void_result (*stop)(struct yetty_ycore_event_loop *self);
 
-    struct yetty_ycore_void_result (*register_listener)(
-        struct yetty_ycore_event_loop *self,
-        enum yetty_ycore_event_type type,
-        struct yetty_ycore_event_listener *listener,
-        int priority);
+    struct yetty_ycore_void_result (*register_listener)(struct yetty_ycore_event_loop *self,
+                                                        enum yetty_ycore_event_type type,
+                                                        struct yetty_ycore_event_listener *listener,
+                                                        int priority);
     struct yetty_ycore_void_result (*deregister_listener)(
-        struct yetty_ycore_event_loop *self,
-        enum yetty_ycore_event_type type,
+        struct yetty_ycore_event_loop *self, enum yetty_ycore_event_type type,
         struct yetty_ycore_event_listener *listener);
 
-    struct yetty_ycore_int_result (*dispatch)(
-        struct yetty_ycore_event_loop *self,
-        const struct yetty_ycore_event *event);
-    struct yetty_ycore_void_result (*broadcast)(
-        struct yetty_ycore_event_loop *self,
-        const struct yetty_ycore_event *event);
+    struct yetty_ycore_int_result (*dispatch)(struct yetty_ycore_event_loop *self,
+                                              const struct yetty_ycore_event *event);
+    struct yetty_ycore_void_result (*broadcast)(struct yetty_ycore_event_loop *self,
+                                                const struct yetty_ycore_event *event);
 
     /* PTY pipe — uv_pipe_t with uv_read_start, caller provides callbacks */
     struct yetty_ycore_pipe_id_result (*register_pty_pipe)(
-        struct yetty_ycore_event_loop *self,
-        struct yetty_yplatform_pty_pipe_source *source,
-        yetty_pipe_alloc_cb alloc_cb,
-        yetty_pipe_read_cb read_cb,
-        void *cb_ctx);
-    struct yetty_ycore_void_result (*unregister_pty_pipe)(
-        struct yetty_ycore_event_loop *self,
-        yetty_ycore_pipe_id id);
+        struct yetty_ycore_event_loop *self, struct yetty_yplatform_pty_pipe_source *source,
+        yetty_pipe_alloc_cb alloc_cb, yetty_pipe_read_cb read_cb, void *cb_ctx);
+    struct yetty_ycore_void_result (*unregister_pty_pipe)(struct yetty_ycore_event_loop *self,
+                                                          yetty_ycore_pipe_id id);
 
     /* Timer management */
-    struct yetty_ycore_timer_id_result (*create_timer)(
-        struct yetty_ycore_event_loop *self);
-    struct yetty_ycore_void_result (*config_timer)(
-        struct yetty_ycore_event_loop *self,
-        yetty_ycore_timer_id id,
-        int timeout_ms);
-    struct yetty_ycore_void_result (*start_timer)(
-        struct yetty_ycore_event_loop *self,
-        yetty_ycore_timer_id id);
-    struct yetty_ycore_void_result (*stop_timer)(
-        struct yetty_ycore_event_loop *self,
-        yetty_ycore_timer_id id);
-    struct yetty_ycore_void_result (*destroy_timer)(
-        struct yetty_ycore_event_loop *self,
-        yetty_ycore_timer_id id);
+    struct yetty_ycore_timer_id_result (*create_timer)(struct yetty_ycore_event_loop *self);
+    struct yetty_ycore_void_result (*config_timer)(struct yetty_ycore_event_loop *self,
+                                                   yetty_ycore_timer_id id, int timeout_ms);
+    struct yetty_ycore_void_result (*start_timer)(struct yetty_ycore_event_loop *self,
+                                                  yetty_ycore_timer_id id);
+    struct yetty_ycore_void_result (*stop_timer)(struct yetty_ycore_event_loop *self,
+                                                 yetty_ycore_timer_id id);
+    struct yetty_ycore_void_result (*destroy_timer)(struct yetty_ycore_event_loop *self,
+                                                    yetty_ycore_timer_id id);
     struct yetty_ycore_void_result (*register_timer_listener)(
-        struct yetty_ycore_event_loop *self,
-        yetty_ycore_timer_id id,
+        struct yetty_ycore_event_loop *self, yetty_ycore_timer_id id,
         struct yetty_ycore_event_listener *listener);
 
     /* TCP server */
     struct yetty_ycore_tcp_server_id_result (*create_tcp_server)(
-        struct yetty_ycore_event_loop *self,
-        const char *host,
-        int port,
+        struct yetty_ycore_event_loop *self, const char *host, int port,
         const struct yetty_tcp_server_callbacks *callbacks);
-    struct yetty_ycore_void_result (*start_tcp_server)(
-        struct yetty_ycore_event_loop *self,
-        yetty_ycore_tcp_server_id id);
-    struct yetty_ycore_void_result (*stop_tcp_server)(
-        struct yetty_ycore_event_loop *self,
-        yetty_ycore_tcp_server_id id);
+    struct yetty_ycore_void_result (*start_tcp_server)(struct yetty_ycore_event_loop *self,
+                                                       yetty_ycore_tcp_server_id id);
+    struct yetty_ycore_void_result (*stop_tcp_server)(struct yetty_ycore_event_loop *self,
+                                                      yetty_ycore_tcp_server_id id);
 
     /* TCP client */
     struct yetty_ycore_tcp_client_id_result (*create_tcp_client)(
-        struct yetty_ycore_event_loop *self,
-        const char *host,
-        int port,
+        struct yetty_ycore_event_loop *self, const char *host, int port,
         const struct yetty_tcp_client_callbacks *callbacks);
-    struct yetty_ycore_void_result (*stop_tcp_client)(
-        struct yetty_ycore_event_loop *self,
-        yetty_ycore_tcp_client_id id);
+    struct yetty_ycore_void_result (*stop_tcp_client)(struct yetty_ycore_event_loop *self,
+                                                      yetty_ycore_tcp_client_id id);
 
     /* TCP connection operations (works for both server and client connections) */
-    struct yetty_ycore_size_result (*tcp_send)(
-        struct yetty_tcp_conn *conn,
-        const void *data,
-        size_t len);
-    struct yetty_ycore_void_result (*tcp_close)(
-        struct yetty_tcp_conn *conn);
+    struct yetty_ycore_size_result (*tcp_send)(struct yetty_tcp_conn *conn, const void *data,
+                                               size_t len);
+    struct yetty_ycore_void_result (*tcp_close)(struct yetty_tcp_conn *conn);
 
     void (*request_render)(struct yetty_ycore_event_loop *self);
 
@@ -169,8 +140,7 @@ struct yetty_ycore_event_loop_ops {
      * called from any thread, including the loop thread itself. The order
      * of dispatch matches submission order. Used by the GPU poll thread to
      * resume coroutines on the loop after wgpu callbacks fire. */
-    void (*post_to_loop)(struct yetty_ycore_event_loop *self,
-                         void (*fn)(void *), void *arg);
+    void (*post_to_loop)(struct yetty_ycore_event_loop *self, void (*fn)(void *), void *arg);
 };
 
 /* Event loop base */

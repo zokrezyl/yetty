@@ -31,9 +31,9 @@ extern "C" {
  * a PUA codepoint and you get an animated shader glyph at that cell.
  */
 
-#define YETTY_SHADER_GLYPH_BASE      0x80000000u
-#define YETTY_SHADER_GLYPH_PUA_BASE  0x0000E000u
-#define YETTY_SHADER_GLYPH_PUA_END   0x0000E100u  /* exclusive */
+#define YETTY_SHADER_GLYPH_BASE 0x80000000u
+#define YETTY_SHADER_GLYPH_PUA_BASE 0x0000E000u
+#define YETTY_SHADER_GLYPH_PUA_END 0x0000E100u /* exclusive */
 
 static inline int yetty_shader_glyph_is(uint32_t glyph_index)
 {
@@ -69,15 +69,10 @@ static inline uint32_t yetty_shader_glyph_id_from_codepoint(uint32_t cp)
  * the animation loop runs at the screen frame rate.
  */
 struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
-    uint32_t cols, uint32_t rows,
-    float cell_width, float cell_height,
-    struct yetty_yterm_terminal_layer *text_layer,
-    const struct yetty_context *context,
-    yetty_yterm_request_render_fn request_render_fn,
-    void *request_render_userdata,
-    yetty_yterm_scroll_fn scroll_fn,
-    void *scroll_userdata,
-    yetty_yterm_cursor_fn cursor_fn,
+    uint32_t cols, uint32_t rows, float cell_width, float cell_height,
+    struct yetty_yterm_terminal_layer *text_layer, const struct yetty_context *context,
+    yetty_yterm_request_render_fn request_render_fn, void *request_render_userdata,
+    yetty_yterm_scroll_fn scroll_fn, void *scroll_userdata, yetty_yterm_cursor_fn cursor_fn,
     void *cursor_userdata);
 
 #ifdef __cplusplus

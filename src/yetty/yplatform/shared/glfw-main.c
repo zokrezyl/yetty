@@ -69,8 +69,9 @@ static int render_thread_func(void *arg)
     args->result = YETTY_IS_OK(res) ? 0 : 1;
     *(args->running) = 0;
 
-    if (args->window)
+    if (args->window) {
         glfwPostEmptyEvent();
+    }
 
     return 0;
 }
@@ -103,12 +104,10 @@ int main(int argc, char **argv)
     yplatform_mkdir_p(runtime_dir);
     yplatform_mkdir_p(fonts_dir);
 
-    struct yetty_yplatform_paths paths = {
-        .shaders_dir = shaders_dir,
-        .fonts_dir = fonts_dir,
-        .runtime_dir = runtime_dir,
-        .bin_dir = NULL
-    };
+    struct yetty_yplatform_paths paths = {.shaders_dir = shaders_dir,
+                                          .fonts_dir = fonts_dir,
+                                          .runtime_dir = runtime_dir,
+                                          .bin_dir = NULL};
 
     /* Config */
     struct yetty_yconfig_result config_result = yetty_yconfig_create(argc, argv, &paths);
@@ -156,24 +155,28 @@ int main(int argc, char **argv)
     ydebug("main: platform input pipe created, ok=%d", pipe_result.ok);
     if (!YETTY_IS_OK(pipe_result)) {
         fprintf(stderr, "Failed to create platform input pipe\n");
-        if (window)
+        if (window) {
             yetty_yplatform_destroy_window(window);
+        }
         config->ops->destroy(config);
         glfwTerminate();
         return 1;
     }
     struct yetty_yplatform_input_pipe *platform_input_pipe = pipe_result.value;
-    if (window)
+    if (window) {
         glfwSetWindowUserPointer(window, platform_input_pipe);
+    }
 
     /* PTY factory */
     ydebug("main: creating PTY factory");
-    struct yetty_yplatform_pty_factory_result pty_factory_result = yetty_yplatform_pty_factory_create(config, NULL);
+    struct yetty_yplatform_pty_factory_result pty_factory_result =
+        yetty_yplatform_pty_factory_create(config, NULL);
     if (!YETTY_IS_OK(pty_factory_result)) {
         fprintf(stderr, "Failed to create PTY factory\n");
         platform_input_pipe->ops->destroy(platform_input_pipe);
-        if (window)
+        if (window) {
             yetty_yplatform_destroy_window(window);
+        }
         config->ops->destroy(config);
         glfwTerminate();
         return 1;
@@ -186,8 +189,9 @@ int main(int argc, char **argv)
         fprintf(stderr, "Failed to create WebGPU instance\n");
         pty_factory->ops->destroy(pty_factory);
         platform_input_pipe->ops->destroy(platform_input_pipe);
-        if (window)
+        if (window) {
             yetty_yplatform_destroy_window(window);
+        }
         config->ops->destroy(config);
         glfwTerminate();
         return 1;
@@ -224,18 +228,15 @@ int main(int argc, char **argv)
     platform_get_x11_handles(window, &x11_display, &x11_window);
 
     struct yetty_app_context app_context = {
-        .app_gpu_context = {
-            .instance = instance,
-            .surface = surface,
-            .surface_width = (uint32_t)fb_width,
-            .surface_height = (uint32_t)fb_height,
-            .x11_display = x11_display,
-            .x11_window = x11_window
-        },
+        .app_gpu_context = {.instance = instance,
+                            .surface = surface,
+                            .surface_width = (uint32_t)fb_width,
+                            .surface_height = (uint32_t)fb_height,
+                            .x11_display = x11_display,
+                            .x11_window = x11_window},
         .config = config,
         .platform_input_pipe = platform_input_pipe,
-        .pty_factory = pty_factory
-    };
+        .pty_factory = pty_factory};
 
     /* Yetty */
     struct yetty_yetty_result yetty_result = yetty_create(&app_context);
@@ -245,8 +246,9 @@ int main(int argc, char **argv)
         wgpuInstanceRelease(instance);
         pty_factory->ops->destroy(pty_factory);
         platform_input_pipe->ops->destroy(platform_input_pipe);
-        if (window)
+        if (window) {
             yetty_yplatform_destroy_window(window);
+        }
         config->ops->destroy(config);
         glfwTerminate();
         return 1;
@@ -256,24 +258,17 @@ int main(int argc, char **argv)
     /* Render thread */
     int running = 1;
     struct render_thread_args thread_args = {
-        .yetty = yetty,
-        .running = &running,
-        .window = window,
-        .result = 0
-    };
+        .yetty = yetty, .running = &running, .window = window, .result = 0};
 
     ythread_t *render_thread = ythread_create(render_thread_func, &thread_args);
 
     /* Initial resize event */
-    if (window)
+    if (window) {
         yetty_yplatform_get_framebuffer_size(window, &fb_width, &fb_height);
+    }
     struct yetty_ycore_event event = {
         .type = YETTY_EVENT_RESIZE,
-        .resize = {
-            .width = (float)fb_width,
-            .height = (float)fb_height
-        }
-    };
+        .resize = {.width = (float)fb_width, .height = (float)fb_height}};
     platform_input_pipe->ops->write(platform_input_pipe, &event, sizeof(event));
 
     /* OS event loop (headless uses a simple wait loop) */
@@ -295,8 +290,9 @@ int main(int argc, char **argv)
     ydebug("main: instance released, destroying pty_factory");
     pty_factory->ops->destroy(pty_factory);
     ydebug("main: pty_factory destroyed");
-    if (window)
+    if (window) {
         glfwSetWindowUserPointer(window, NULL);
+    }
     platform_input_pipe->ops->destroy(platform_input_pipe);
     ydebug("main: platform_input_pipe destroyed");
     config->ops->destroy(config);

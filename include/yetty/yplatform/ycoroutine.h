@@ -33,11 +33,8 @@ typedef void (*yplatform_coro_entry)(void *arg);
 /* Spawn a coroutine. Does not start it; call yplatform_coro_resume to run.
  * stack_hint of 0 means use the platform default. name is copied internally
  * and used in trace output; may be NULL. */
-struct yplatform_coro_ptr_result
-yplatform_coro_spawn(yplatform_coro_entry entry,
-                     void *arg,
-                     size_t stack_hint,
-                     const char *name);
+struct yplatform_coro_ptr_result yplatform_coro_spawn(yplatform_coro_entry entry, void *arg,
+                                                      size_t stack_hint, const char *name);
 
 /* Suspend the currently-running coroutine. Returns when somebody resumes it.
  * Must be called from inside a coroutine (not the main stack). */

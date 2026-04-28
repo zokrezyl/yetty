@@ -115,7 +115,8 @@ bool YDrawRenderMethod::postUpdate() {
 }
 
 bool YDrawRenderMethod::preRender() {
-    if (_buffer) yetty_ypaint_core_buffer_clear(_buffer);
+    if (_buffer) { yetty_ypaint_core_buffer_clear(_buffer);
+}
     _nextPrimId = 0;
     return true;
 }
@@ -125,7 +126,8 @@ bool YDrawRenderMethod::postRender() {
 }
 
 bool YDrawRenderMethod::clear() {
-    if (_buffer) yetty_ypaint_core_buffer_clear(_buffer);
+    if (_buffer) { yetty_ypaint_core_buffer_clear(_buffer);
+}
     _nextPrimId = 0;
     return true;
 }
@@ -264,13 +266,18 @@ bool YDrawRenderMethod::renderShape(tvg::RenderData data) {
         return true;
     }
 
-    if (hasGradient && tryRenderAsGradientBox(rd)) return true;
+    if (hasGradient && tryRenderAsGradientBox(rd)) { return true;
+}
 
-    if (tryRenderAsEllipse(rd)) return true;
-    if (tryRenderAsBox(rd)) return true;
-    if (tryRenderAsPolygon(rd)) return true;
+    if (tryRenderAsEllipse(rd)) { return true;
+}
+    if (tryRenderAsBox(rd)) { return true;
+}
+    if (tryRenderAsPolygon(rd)) { return true;
+}
 
-    if (tryRenderAsFilledPath(rd)) return true;
+    if (tryRenderAsFilledPath(rd)) { return true;
+}
 
     renderPath(rd);
     return true;
@@ -294,7 +301,8 @@ bool YDrawRenderMethod::renderImage(tvg::RenderData data) {
 
 void YDrawRenderMethod::dispose(tvg::RenderData data) {
     auto* rd = static_cast<YDrawRenderData*>(data);
-    if (!rd) return;
+    if (!rd) { return;
+}
 
     auto it = std::find(_renderDataList.begin(), _renderDataList.end(), rd);
     if (it != _renderDataList.end()) {
@@ -309,13 +317,15 @@ void YDrawRenderMethod::dispose(tvg::RenderData data) {
 
 tvg::RenderRegion YDrawRenderMethod::region(tvg::RenderData data) {
     auto* rd = static_cast<YDrawRenderData*>(data);
-    if (!rd) return {{0, 0}, {0, 0}};
+    if (!rd) { return {{0, 0}, {0, 0}};
+}
     return rd->bounds;
 }
 
 bool YDrawRenderMethod::bounds(tvg::RenderData data, tvg::Point* pt4, const tvg::Matrix& m) {
     auto* rd = static_cast<YDrawRenderData*>(data);
-    if (!rd || !pt4) return false;
+    if (!rd || !pt4) { return false;
+}
 
     auto& b = rd->bounds;
     pt4[0] = {static_cast<float>(b.min.x), static_cast<float>(b.min.y)};
@@ -331,7 +341,8 @@ bool YDrawRenderMethod::bounds(tvg::RenderData data, tvg::Point* pt4, const tvg:
 
 bool YDrawRenderMethod::intersectsShape(tvg::RenderData data, const tvg::RenderRegion& region) {
     auto* rd = static_cast<YDrawRenderData*>(data);
-    if (!rd) return false;
+    if (!rd) { return false;
+}
     return rd->bounds.intersected(region);
 }
 
@@ -446,7 +457,8 @@ uint32_t YDrawRenderMethod::rgbaToPackedABGR(uint8_t r, uint8_t g, uint8_t b, ui
 void YDrawRenderMethod::emitMeshPolygon(uint32_t vertexCount, const float* vertices,
                                          uint32_t fillColor, uint32_t strokeColor, float strokeWidth)
 {
-    if (!_buffer || vertexCount < 3 || !vertices) return;
+    if (!_buffer || vertexCount < 3 || !vertices) { return;
+}
 
     bool hasFill = (fillColor & 0xFF000000u) != 0;
     bool hasStroke = (strokeColor & 0xFF000000u) != 0 && strokeWidth > 0.0f;
@@ -461,7 +473,8 @@ void YDrawRenderMethod::emitMeshPolygon(uint32_t vertexCount, const float* verti
             tri.vertex_c_x = vertices[(i + 1) * 2];
             tri.vertex_c_y = vertices[(i + 1) * 2 + 1];
             auto r = yetty_ysdf_add_triangle(_buffer, 0, fillColor, 0, 0.0f, &tri);
-            if (r.error == YPAINT_OK) _nextPrimId++;
+            if (r.error == YPAINT_OK) { _nextPrimId++;
+}
         }
     }
 
@@ -474,7 +487,8 @@ void YDrawRenderMethod::emitMeshPolygon(uint32_t vertexCount, const float* verti
             seg.end_x = vertices[j * 2];
             seg.end_y = vertices[j * 2 + 1];
             auto r = yetty_ysdf_add_segment(_buffer, 0, 0, strokeColor, strokeWidth, &seg);
-            if (r.error == YPAINT_OK) _nextPrimId++;
+            if (r.error == YPAINT_OK) { _nextPrimId++;
+}
         }
     }
 }
@@ -484,11 +498,13 @@ void YDrawRenderMethod::emitMeshPolygonGroup(uint32_t totalVertexCount,
                                               const float* vertices,
                                               uint32_t fillColor, uint32_t strokeColor, float strokeWidth)
 {
-    if (!_buffer || contourCount == 0 || !contourStarts || !vertices) return;
+    if (!_buffer || contourCount == 0 || !contourStarts || !vertices) { return;
+}
     for (uint32_t c = 0; c < contourCount; ++c) {
         uint32_t start = contourStarts[c];
         uint32_t end = (c + 1 < contourCount) ? contourStarts[c + 1] : totalVertexCount;
-        if (end <= start) continue;
+        if (end <= start) { continue;
+}
         uint32_t count = end - start;
         emitMeshPolygon(count, vertices + start * 2, fillColor, strokeColor, strokeWidth);
     }
@@ -504,15 +520,23 @@ bool YDrawRenderMethod::tryRenderAsEllipse(YDrawRenderData* rd) {
     const auto& m = rd->transform;
 
     // Ellipse pattern: MoveTo, CubicTo, CubicTo, CubicTo, CubicTo, Close
-    if (cmds.size() != 6) return false;
-    if (cmds[0] != tvg::PathCommand::MoveTo) return false;
-    if (cmds[1] != tvg::PathCommand::CubicTo) return false;
-    if (cmds[2] != tvg::PathCommand::CubicTo) return false;
-    if (cmds[3] != tvg::PathCommand::CubicTo) return false;
-    if (cmds[4] != tvg::PathCommand::CubicTo) return false;
-    if (cmds[5] != tvg::PathCommand::Close) return false;
+    if (cmds.size() != 6) { return false;
+}
+    if (cmds[0] != tvg::PathCommand::MoveTo) { return false;
+}
+    if (cmds[1] != tvg::PathCommand::CubicTo) { return false;
+}
+    if (cmds[2] != tvg::PathCommand::CubicTo) { return false;
+}
+    if (cmds[3] != tvg::PathCommand::CubicTo) { return false;
+}
+    if (cmds[4] != tvg::PathCommand::CubicTo) { return false;
+}
+    if (cmds[5] != tvg::PathCommand::Close) { return false;
+}
 
-    if (pts.size() < 13) return false;
+    if (pts.size() < 13) { return false;
+}
 
     float minX = 1e10f, minY = 1e10f, maxX = -1e10f, maxY = -1e10f;
     for (const auto& pt : pts) {
@@ -535,7 +559,8 @@ bool YDrawRenderMethod::tryRenderAsEllipse(YDrawRenderData* rd) {
 
     yetty_ysdf_ellipse geom{cx, cy, rx, ry};
     auto result = yetty_ysdf_add_ellipse(_buffer, 0, fillColor, strokeColor, rd->strokeWidth, &geom);
-    if (result.error == YPAINT_OK) _nextPrimId++;
+    if (result.error == YPAINT_OK) { _nextPrimId++;
+}
     return true;
 }
 
@@ -573,7 +598,8 @@ bool YDrawRenderMethod::tryRenderAsBox(YDrawRenderData* rd) {
                           cmds[8] == tvg::PathCommand::CubicTo &&
                           cmds[9] == tvg::PathCommand::Close);
 
-    if (!isSimpleRect && !isRoundedRect) return false;
+    if (!isSimpleRect && !isRoundedRect) { return false;
+}
 
     float cornerRadius = 0.0f;
     if (isRoundedRect && pts.size() >= 5) {
@@ -605,7 +631,8 @@ bool YDrawRenderMethod::tryRenderAsBox(YDrawRenderData* rd) {
                            std::abs(yVals[0] - yVals[1]) < eps &&
                            std::abs(yVals[2] - yVals[3]) < eps &&
                            std::abs(yVals[1] - yVals[2]) > eps);
-        if (!twoUniqueX || !twoUniqueY) return false;
+        if (!twoUniqueX || !twoUniqueY) { return false;
+}
     }
 
     float minX = 1e10f, minY = 1e10f, maxX = -1e10f, maxY = -1e10f;
@@ -629,7 +656,8 @@ bool YDrawRenderMethod::tryRenderAsBox(YDrawRenderData* rd) {
 
     yetty_ysdf_box geom{cx, cy, hw, hh, cornerRadius};
     auto result = yetty_ysdf_add_box(_buffer, 0, fillColor, strokeColor, rd->strokeWidth, &geom);
-    if (result.error == YPAINT_OK) _nextPrimId++;
+    if (result.error == YPAINT_OK) { _nextPrimId++;
+}
     return true;
 }
 
@@ -639,25 +667,29 @@ bool YDrawRenderMethod::tryRenderAsPolygon(YDrawRenderData* rd) {
     const auto& m = rd->transform;
 
     uint8_t fillA = static_cast<uint8_t>((rd->fillA * rd->opacity) / 255);
-    if (fillA == 0) return false;
+    if (fillA == 0) { return false;
+}
 
     bool hasCurves = false;
     bool isClosed = false;
     int moveCount = 0;
 
     for (const auto& cmd : cmds) {
-        if (cmd == tvg::PathCommand::MoveTo) moveCount++;
-        else if (cmd == tvg::PathCommand::CubicTo) hasCurves = true;
-        else if (cmd == tvg::PathCommand::Close) isClosed = true;
+        if (cmd == tvg::PathCommand::MoveTo) { moveCount++;
+        } else if (cmd == tvg::PathCommand::CubicTo) { hasCurves = true;
+        } else if (cmd == tvg::PathCommand::Close) { isClosed = true;
+}
     }
 
-    if (hasCurves || moveCount > 1 || !isClosed) return false;
+    if (hasCurves || moveCount > 1 || !isClosed) { return false;
+}
 
     std::vector<float> vertices;
     uint32_t ptIdx = 0;
 
     for (const auto& cmd : cmds) {
-        if (ptIdx >= pts.size()) break;
+        if (ptIdx >= pts.size()) { break;
+}
         if (cmd == tvg::PathCommand::MoveTo || cmd == tvg::PathCommand::LineTo) {
             auto p = transformPoint(pts[ptIdx++], m);
             vertices.push_back(p.x);
@@ -666,7 +698,8 @@ bool YDrawRenderMethod::tryRenderAsPolygon(YDrawRenderData* rd) {
     }
 
     uint32_t vertexCount = static_cast<uint32_t>(vertices.size() / 2);
-    if (vertexCount < 3) return false;
+    if (vertexCount < 3) { return false;
+}
 
     uint8_t strokeA = static_cast<uint8_t>((rd->strokeA * rd->opacity) / 255);
     uint32_t fillColor = rgbaToPackedABGR(rd->fillR, rd->fillG, rd->fillB, fillA);
@@ -825,7 +858,8 @@ void YDrawRenderMethod::renderPath(YDrawRenderData* rd) {
     uint32_t strokeColor = (strokeA > 0 && rd->strokeWidth > 0)
                                ? rgbaToPackedABGR(rd->strokeR, rd->strokeG, rd->strokeB, strokeA) : 0;
 
-    if (strokeColor == 0) return;
+    if (strokeColor == 0) { return;
+}
 
     bool hasDash = !rd->dashPattern.empty() && rd->dashPattern.size() >= 2;
     float dashPos = rd->dashOffset;
@@ -836,7 +870,8 @@ void YDrawRenderMethod::renderPath(YDrawRenderData* rd) {
     uint32_t ptIdx = 0;
 
     for (const auto& cmd : cmds) {
-        if (ptIdx >= pts.size()) break;
+        if (ptIdx >= pts.size()) { break;
+}
 
         switch (cmd) {
             case tvg::PathCommand::MoveTo:
@@ -855,14 +890,16 @@ void YDrawRenderMethod::renderPath(YDrawRenderData* rd) {
                 } else {
                     yetty_ysdf_segment seg{current.x, current.y, next.x, next.y};
                     auto r = yetty_ysdf_add_segment(_buffer, 0, 0, strokeColor, rd->strokeWidth, &seg);
-                    if (r.error == YPAINT_OK) _nextPrimId++;
+                    if (r.error == YPAINT_OK) { _nextPrimId++;
+}
                 }
                 current = next;
                 break;
             }
 
             case tvg::PathCommand::CubicTo: {
-                if (ptIdx + 2 >= pts.size()) break;
+                if (ptIdx + 2 >= pts.size()) { break;
+}
                 auto cp1 = transformPoint(pts[ptIdx++], m);
                 auto cp2 = transformPoint(pts[ptIdx++], m);
                 auto end = transformPoint(pts[ptIdx++], m);
@@ -879,7 +916,8 @@ void YDrawRenderMethod::renderPath(YDrawRenderData* rd) {
                 for (size_t k = 2; k + 1 < flat.size(); k += 2) {
                     yetty_ysdf_segment seg{flat[k - 2], flat[k - 1], flat[k], flat[k + 1]};
                     auto r = yetty_ysdf_add_segment(_buffer, 0, 0, strokeColor, rd->strokeWidth, &seg);
-                    if (r.error == YPAINT_OK) _nextPrimId++;
+                    if (r.error == YPAINT_OK) { _nextPrimId++;
+}
                 }
                 current = end;
                 break;
@@ -899,7 +937,8 @@ void YDrawRenderMethod::renderDashedSegment(float x0, float y0, float x1, float 
     float dx = x1 - x0;
     float dy = y1 - y0;
     float segLen = std::sqrt(dx * dx + dy * dy);
-    if (segLen < 0.001f) return;
+    if (segLen < 0.001f) { return;
+}
 
     float ux = dx / segLen;
     float uy = dy / segLen;
@@ -924,7 +963,8 @@ void YDrawRenderMethod::renderDashedSegment(float x0, float y0, float x1, float 
             float ey = y0 + uy * (pos + advance);
             yetty_ysdf_segment seg{sx, sy, ex, ey};
             auto r = yetty_ysdf_add_segment(_buffer, 0, 0, strokeColor, strokeWidth, &seg);
-            if (r.error == YPAINT_OK) _nextPrimId++;
+            if (r.error == YPAINT_OK) { _nextPrimId++;
+}
         }
 
         pos += advance;
@@ -947,13 +987,15 @@ bool YDrawRenderMethod::extractGradientInfo(YDrawRenderData* rd, bool& isLinear,
                                             float& gcx, float& gcy, float& gr,
                                             uint32_t& color1, uint32_t& color2)
 {
-    if (!rd->fill) return false;
+    if (!rd->fill) { return false;
+}
 
     auto fillType = rd->fill->type();
     const tvg::Fill::ColorStop* stops = nullptr;
     uint32_t stopCount = rd->fill->colorStops(&stops);
 
-    if (stopCount < 2 || !stops) return false;
+    if (stopCount < 2 || !stops) { return false;
+}
 
     const auto& c1 = stops[0];
     const auto& c2 = stops[stopCount - 1];
@@ -984,17 +1026,23 @@ bool YDrawRenderMethod::tryRenderAsGradientBox(YDrawRenderData* rd) {
     const auto& pts = rd->pts;
     const auto& m = rd->transform;
 
-    if (!rd->fill) return false;
+    if (!rd->fill) { return false;
+}
 
-    if (cmds.size() < 4 || cmds.size() > 6) return false;
-    if (cmds[0] != tvg::PathCommand::MoveTo) return false;
-    if (cmds.back() != tvg::PathCommand::Close) return false;
+    if (cmds.size() < 4 || cmds.size() > 6) { return false;
+}
+    if (cmds[0] != tvg::PathCommand::MoveTo) { return false;
+}
+    if (cmds.back() != tvg::PathCommand::Close) { return false;
+}
 
     for (size_t i = 1; i < cmds.size() - 1; ++i) {
-        if (cmds[i] != tvg::PathCommand::LineTo) return false;
+        if (cmds[i] != tvg::PathCommand::LineTo) { return false;
+}
     }
 
-    if (pts.size() < 4) return false;
+    if (pts.size() < 4) { return false;
+}
 
     bool isLinear = false;
     float gx1 = 0, gy1 = 0, gx2 = 0, gy2 = 0;
@@ -1029,12 +1077,14 @@ bool YDrawRenderMethod::tryRenderAsGradientBox(YDrawRenderData* rd) {
     if (isLinear) {
         yetty_ysdf_box geom{cx, cy, hw, hh, 0.0f};
         auto result = yetty_ysdf_add_box(_buffer, 0, gradColor1, strokeColor, rd->strokeWidth, &geom);
-        if (result.error == YPAINT_OK) _nextPrimId++;
+        if (result.error == YPAINT_OK) { _nextPrimId++;
+}
     } else {
         float r = std::max(hw, hh);
         yetty_ysdf_ellipse geom{cx, cy, r, r};
         auto result = yetty_ysdf_add_ellipse(_buffer, 0, gradColor1, strokeColor, rd->strokeWidth, &geom);
-        if (result.error == YPAINT_OK) _nextPrimId++;
+        if (result.error == YPAINT_OK) { _nextPrimId++;
+}
     }
 
     return true;

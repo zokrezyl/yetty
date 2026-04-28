@@ -32,7 +32,8 @@ const char *yetty_yplatform_get_cache_dir(void);
 const char *yetty_yplatform_get_runtime_dir(void);
 const char *yetty_yplatform_get_data_dir(void);
 const char *yetty_yplatform_get_config_dir(void);
-WGPUSurface yetty_yplatform_create_surface_from_window(WGPUInstance instance, ANativeWindow *window);
+WGPUSurface yetty_yplatform_create_surface_from_window(WGPUInstance instance,
+                                                       ANativeWindow *window);
 
 /* App state */
 struct app_state {
@@ -92,10 +93,10 @@ static void ime_call(struct android_app *app, int show)
      * tree (it just returns a Binder), so it's safe from this thread. */
     jclass actCls = (*env)->GetObjectClass(env, activity->clazz);
     jmethodID midGetSysSvc = (*env)->GetMethodID(env, actCls, "getSystemService",
-        "(Ljava/lang/String;)Ljava/lang/Object;");
+                                                 "(Ljava/lang/String;)Ljava/lang/Object;");
 
     jstring jsImm = (*env)->NewStringUTF(env, "input_method");
-    jobject imm  = (*env)->CallObjectMethod(env, activity->clazz, midGetSysSvc, jsImm);
+    jobject imm = (*env)->CallObjectMethod(env, activity->clazz, midGetSysSvc, jsImm);
     (*env)->DeleteLocalRef(env, jsImm);
 
     jclass immCls = (*env)->GetObjectClass(env, imm);
@@ -106,20 +107,20 @@ static void ime_call(struct android_app *app, int show)
         jmethodID midToggle = (*env)->GetMethodID(env, immCls, "toggleSoftInput", "(II)V");
         (*env)->CallVoidMethod(env, imm, midToggle, 2 /* SHOW_FORCED */, 0);
     } else {
-        jmethodID midGetWindow = (*env)->GetMethodID(env, actCls, "getWindow",
-            "()Landroid/view/Window;");
+        jmethodID midGetWindow =
+            (*env)->GetMethodID(env, actCls, "getWindow", "()Landroid/view/Window;");
         jobject window = (*env)->CallObjectMethod(env, activity->clazz, midGetWindow);
         jclass winCls = (*env)->GetObjectClass(env, window);
-        jmethodID midGetDecor = (*env)->GetMethodID(env, winCls, "getDecorView",
-            "()Landroid/view/View;");
+        jmethodID midGetDecor =
+            (*env)->GetMethodID(env, winCls, "getDecorView", "()Landroid/view/View;");
         jobject decor = (*env)->CallObjectMethod(env, window, midGetDecor);
         jclass viewCls = (*env)->GetObjectClass(env, decor);
-        jmethodID midGetWindowToken = (*env)->GetMethodID(env, viewCls,
-            "getWindowToken", "()Landroid/os/IBinder;");
+        jmethodID midGetWindowToken =
+            (*env)->GetMethodID(env, viewCls, "getWindowToken", "()Landroid/os/IBinder;");
         jobject token = (*env)->CallObjectMethod(env, decor, midGetWindowToken);
         if (token) {
-            jmethodID midHide = (*env)->GetMethodID(env, immCls,
-                "hideSoftInputFromWindow", "(Landroid/os/IBinder;I)Z");
+            jmethodID midHide = (*env)->GetMethodID(env, immCls, "hideSoftInputFromWindow",
+                                                    "(Landroid/os/IBinder;I)Z");
             (*env)->CallBooleanMethod(env, imm, midHide, token, 0);
             (*env)->DeleteLocalRef(env, token);
         }
@@ -133,12 +134,19 @@ static void ime_call(struct android_app *app, int show)
     (*env)->DeleteLocalRef(env, imm);
     (*env)->DeleteLocalRef(env, actCls);
 
-    if (needed_attach)
+    if (needed_attach) {
         (*vm)->DetachCurrentThread(vm);
+    }
 }
 
-static inline void show_soft_keyboard(struct android_app *app) { ime_call(app, 1); }
-static inline void hide_soft_keyboard(struct android_app *app) { ime_call(app, 0); }
+static inline void show_soft_keyboard(struct android_app *app)
+{
+    ime_call(app, 1);
+}
+static inline void hide_soft_keyboard(struct android_app *app)
+{
+    ime_call(app, 0);
+}
 
 static void mkdir_p(const char *path)
 {
@@ -148,8 +156,9 @@ static void mkdir_p(const char *path)
 
     snprintf(tmp, sizeof(tmp), "%s", path);
     len = strlen(tmp);
-    if (tmp[len - 1] == '/')
+    if (tmp[len - 1] == '/') {
         tmp[len - 1] = '\0';
+    }
 
     for (p = tmp + 1; *p; p++) {
         if (*p == '/') {
@@ -183,8 +192,9 @@ static void init_yetty(struct app_state *state)
     struct render_thread_args *args;
     int32_t width, height;
 
-    if (state->initialized || !state->window)
+    if (state->initialized || !state->window) {
         return;
+    }
 
     LOGI("Initializing yetty...");
 
@@ -207,7 +217,7 @@ static void init_yetty(struct app_state *state)
         static char shaders_dir[512];
         static char fonts_dir[512];
         snprintf(shaders_dir, sizeof(shaders_dir), "%s/shaders", data_dir);
-        snprintf(fonts_dir,   sizeof(fonts_dir),   "%s/fonts",   data_dir);
+        snprintf(fonts_dir, sizeof(fonts_dir), "%s/fonts", data_dir);
 
         paths.shaders_dir = shaders_dir;
         paths.fonts_dir = fonts_dir;
@@ -218,7 +228,7 @@ static void init_yetty(struct app_state *state)
     /* Config — default to --temu (in-process TinyEMU) on Android. There's
      * no shell command line on Android, so synthesize one. */
     {
-        char *fake_argv[] = { (char *)"yetty", (char *)"--temu", NULL };
+        char *fake_argv[] = {(char *)"yetty", (char *)"--temu", NULL};
         int fake_argc = 2;
         config_result = yetty_yconfig_create(fake_argc, fake_argv, &paths);
     }
@@ -329,8 +339,9 @@ static void init_yetty(struct app_state *state)
 
 static void term_yetty(struct app_state *state)
 {
-    if (!state->initialized)
+    if (!state->initialized) {
         return;
+    }
 
     LOGI("Terminating yetty...");
 
@@ -374,57 +385,101 @@ static void term_yetty(struct app_state *state)
 static int akeycode_to_glfw(int akey)
 {
     /* AKEYCODE_A=29 .. AKEYCODE_Z=54 -> GLFW 65..90 */
-    if (akey >= AKEYCODE_A && akey <= AKEYCODE_Z)
+    if (akey >= AKEYCODE_A && akey <= AKEYCODE_Z) {
         return 65 + (akey - AKEYCODE_A);
+    }
     /* AKEYCODE_0=7 .. AKEYCODE_9=16 -> GLFW 48..57 */
-    if (akey >= AKEYCODE_0 && akey <= AKEYCODE_9)
+    if (akey >= AKEYCODE_0 && akey <= AKEYCODE_9) {
         return 48 + (akey - AKEYCODE_0);
+    }
     /* F1=131..F12=142 -> GLFW 290..301 */
-    if (akey >= AKEYCODE_F1 && akey <= AKEYCODE_F12)
+    if (akey >= AKEYCODE_F1 && akey <= AKEYCODE_F12) {
         return 290 + (akey - AKEYCODE_F1);
+    }
 
     switch (akey) {
-    case AKEYCODE_ENTER:        return 257;
-    case AKEYCODE_NUMPAD_ENTER: return 335;
-    case AKEYCODE_ESCAPE:       return 256;
-    case AKEYCODE_TAB:          return 258;
-    case AKEYCODE_DEL:          return 259; /* Android DEL = backspace */
-    case AKEYCODE_FORWARD_DEL:  return 261; /* Android FORWARD_DEL = delete */
-    case AKEYCODE_INSERT:       return 260;
-    case AKEYCODE_DPAD_RIGHT:   return 262;
-    case AKEYCODE_DPAD_LEFT:    return 263;
-    case AKEYCODE_DPAD_DOWN:    return 264;
-    case AKEYCODE_DPAD_UP:      return 265;
-    case AKEYCODE_PAGE_UP:      return 266;
-    case AKEYCODE_PAGE_DOWN:    return 267;
-    case AKEYCODE_MOVE_HOME:    return 268;
-    case AKEYCODE_MOVE_END:     return 269;
-    case AKEYCODE_CAPS_LOCK:    return 280;
-    case AKEYCODE_SCROLL_LOCK:  return 281;
-    case AKEYCODE_NUM_LOCK:     return 282;
-    case AKEYCODE_SYSRQ:        return 283; /* PrintScreen */
-    case AKEYCODE_BREAK:        return 284; /* Pause */
-    case AKEYCODE_SPACE:        return 32;
-    case AKEYCODE_MINUS:        return 45;
-    case AKEYCODE_EQUALS:       return 61;
-    case AKEYCODE_LEFT_BRACKET: return 91;
-    case AKEYCODE_RIGHT_BRACKET:return 93;
-    case AKEYCODE_BACKSLASH:    return 92;
-    case AKEYCODE_SEMICOLON:    return 59;
-    case AKEYCODE_APOSTROPHE:   return 39;
-    case AKEYCODE_GRAVE:        return 96;
-    case AKEYCODE_COMMA:        return 44;
-    case AKEYCODE_PERIOD:       return 46;
-    case AKEYCODE_SLASH:        return 47;
-    case AKEYCODE_SHIFT_LEFT:   return 340;
-    case AKEYCODE_SHIFT_RIGHT:  return 344;
-    case AKEYCODE_CTRL_LEFT:    return 341;
-    case AKEYCODE_CTRL_RIGHT:   return 345;
-    case AKEYCODE_ALT_LEFT:     return 342;
-    case AKEYCODE_ALT_RIGHT:    return 346;
-    case AKEYCODE_META_LEFT:    return 343;
-    case AKEYCODE_META_RIGHT:   return 347;
-    default:                    return 0;
+    case AKEYCODE_ENTER:
+        return 257;
+    case AKEYCODE_NUMPAD_ENTER:
+        return 335;
+    case AKEYCODE_ESCAPE:
+        return 256;
+    case AKEYCODE_TAB:
+        return 258;
+    case AKEYCODE_DEL:
+        return 259; /* Android DEL = backspace */
+    case AKEYCODE_FORWARD_DEL:
+        return 261; /* Android FORWARD_DEL = delete */
+    case AKEYCODE_INSERT:
+        return 260;
+    case AKEYCODE_DPAD_RIGHT:
+        return 262;
+    case AKEYCODE_DPAD_LEFT:
+        return 263;
+    case AKEYCODE_DPAD_DOWN:
+        return 264;
+    case AKEYCODE_DPAD_UP:
+        return 265;
+    case AKEYCODE_PAGE_UP:
+        return 266;
+    case AKEYCODE_PAGE_DOWN:
+        return 267;
+    case AKEYCODE_MOVE_HOME:
+        return 268;
+    case AKEYCODE_MOVE_END:
+        return 269;
+    case AKEYCODE_CAPS_LOCK:
+        return 280;
+    case AKEYCODE_SCROLL_LOCK:
+        return 281;
+    case AKEYCODE_NUM_LOCK:
+        return 282;
+    case AKEYCODE_SYSRQ:
+        return 283; /* PrintScreen */
+    case AKEYCODE_BREAK:
+        return 284; /* Pause */
+    case AKEYCODE_SPACE:
+        return 32;
+    case AKEYCODE_MINUS:
+        return 45;
+    case AKEYCODE_EQUALS:
+        return 61;
+    case AKEYCODE_LEFT_BRACKET:
+        return 91;
+    case AKEYCODE_RIGHT_BRACKET:
+        return 93;
+    case AKEYCODE_BACKSLASH:
+        return 92;
+    case AKEYCODE_SEMICOLON:
+        return 59;
+    case AKEYCODE_APOSTROPHE:
+        return 39;
+    case AKEYCODE_GRAVE:
+        return 96;
+    case AKEYCODE_COMMA:
+        return 44;
+    case AKEYCODE_PERIOD:
+        return 46;
+    case AKEYCODE_SLASH:
+        return 47;
+    case AKEYCODE_SHIFT_LEFT:
+        return 340;
+    case AKEYCODE_SHIFT_RIGHT:
+        return 344;
+    case AKEYCODE_CTRL_LEFT:
+        return 341;
+    case AKEYCODE_CTRL_RIGHT:
+        return 345;
+    case AKEYCODE_ALT_LEFT:
+        return 342;
+    case AKEYCODE_ALT_RIGHT:
+        return 346;
+    case AKEYCODE_META_LEFT:
+        return 343;
+    case AKEYCODE_META_RIGHT:
+        return 347;
+    default:
+        return 0;
     }
 }
 
@@ -432,10 +487,18 @@ static int akeycode_to_glfw(int akey)
 static int ameta_to_glfw_mods(int32_t meta)
 {
     int mods = 0;
-    if (meta & AMETA_SHIFT_ON) mods |= 0x0001;
-    if (meta & AMETA_CTRL_ON)  mods |= 0x0002;
-    if (meta & AMETA_ALT_ON)   mods |= 0x0004;
-    if (meta & AMETA_META_ON)  mods |= 0x0008;
+    if (meta & AMETA_SHIFT_ON) {
+        mods |= 0x0001;
+    }
+    if (meta & AMETA_CTRL_ON) {
+        mods |= 0x0002;
+    }
+    if (meta & AMETA_ALT_ON) {
+        mods |= 0x0004;
+    }
+    if (meta & AMETA_META_ON) {
+        mods |= 0x0008;
+    }
     return mods;
 }
 
@@ -447,7 +510,7 @@ static int ameta_to_glfw_mods(int32_t meta)
 static uint32_t akey_to_ascii(int akey, int32_t meta)
 {
     int shift = (meta & AMETA_SHIFT_ON) != 0;
-    int caps  = (meta & AMETA_CAPS_LOCK_ON) != 0;
+    int caps = (meta & AMETA_CAPS_LOCK_ON) != 0;
     int upper = shift ^ caps;
 
     if (akey >= AKEYCODE_A && akey <= AKEYCODE_Z) {
@@ -455,29 +518,45 @@ static uint32_t akey_to_ascii(int akey, int32_t meta)
         return (uint32_t)(upper ? (c - 32) : c);
     }
     if (akey >= AKEYCODE_0 && akey <= AKEYCODE_9) {
-        if (!shift)
+        if (!shift) {
             return (uint32_t)('0' + (akey - AKEYCODE_0));
+        }
         /* Shift+digit: US layout shifted symbols. */
         static const char shifted[] = ")!@#$%^&*(";
         return (uint32_t)shifted[akey - AKEYCODE_0];
     }
     switch (akey) {
-    case AKEYCODE_SPACE:        return ' ';
-    case AKEYCODE_MINUS:        return shift ? '_' : '-';
-    case AKEYCODE_EQUALS:       return shift ? '+' : '=';
-    case AKEYCODE_LEFT_BRACKET: return shift ? '{' : '[';
-    case AKEYCODE_RIGHT_BRACKET:return shift ? '}' : ']';
-    case AKEYCODE_BACKSLASH:    return shift ? '|' : '\\';
-    case AKEYCODE_SEMICOLON:    return shift ? ':' : ';';
-    case AKEYCODE_APOSTROPHE:   return shift ? '"' : '\'';
-    case AKEYCODE_GRAVE:        return shift ? '~' : '`';
-    case AKEYCODE_COMMA:        return shift ? '<' : ',';
-    case AKEYCODE_PERIOD:       return shift ? '>' : '.';
-    case AKEYCODE_SLASH:        return shift ? '?' : '/';
-    case AKEYCODE_TAB:          return '\t';
+    case AKEYCODE_SPACE:
+        return ' ';
+    case AKEYCODE_MINUS:
+        return shift ? '_' : '-';
+    case AKEYCODE_EQUALS:
+        return shift ? '+' : '=';
+    case AKEYCODE_LEFT_BRACKET:
+        return shift ? '{' : '[';
+    case AKEYCODE_RIGHT_BRACKET:
+        return shift ? '}' : ']';
+    case AKEYCODE_BACKSLASH:
+        return shift ? '|' : '\\';
+    case AKEYCODE_SEMICOLON:
+        return shift ? ':' : ';';
+    case AKEYCODE_APOSTROPHE:
+        return shift ? '"' : '\'';
+    case AKEYCODE_GRAVE:
+        return shift ? '~' : '`';
+    case AKEYCODE_COMMA:
+        return shift ? '<' : ',';
+    case AKEYCODE_PERIOD:
+        return shift ? '>' : '.';
+    case AKEYCODE_SLASH:
+        return shift ? '?' : '/';
+    case AKEYCODE_TAB:
+        return '\t';
     case AKEYCODE_ENTER:
-    case AKEYCODE_NUMPAD_ENTER: return '\r';
-    default:                    return 0;
+    case AKEYCODE_NUMPAD_ENTER:
+        return '\r';
+    default:
+        return 0;
     }
 }
 
@@ -489,8 +568,9 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event)
     float x, y;
     struct yetty_ycore_event ev = {0};
 
-    if (!state->pipe)
+    if (!state->pipe) {
         return 0;
+    }
 
     type = AInputEvent_getType(event);
 
@@ -501,12 +581,13 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event)
         int glfw_key = akeycode_to_glfw(akey);
         int mods = ameta_to_glfw_mods(meta);
 
-        LOGI("key event: akey=%d action=%d meta=0x%x glfw=%d mods=0x%x",
-             akey, kaction, meta, glfw_key, mods);
+        LOGI("key event: akey=%d action=%d meta=0x%x glfw=%d mods=0x%x", akey, kaction, meta,
+             glfw_key, mods);
 
         /* Don't swallow the BACK button — let Android handle it (close app). */
-        if (akey == AKEYCODE_BACK)
+        if (akey == AKEYCODE_BACK) {
             return 0;
+        }
 
         if (kaction == AKEY_EVENT_ACTION_DOWN) {
             if (glfw_key) {
@@ -626,8 +707,9 @@ static void *yetty_stdio_logger(void *arg)
 
     while (1) {
         ssize_t n = read(fd, buf + len, sizeof(buf) - 1 - len);
-        if (n <= 0)
+        if (n <= 0) {
             break;
+        }
         len += (size_t)n;
         buf[len] = '\0';
         char *line_start = buf;
@@ -638,8 +720,9 @@ static void *yetty_stdio_logger(void *arg)
             line_start = nl + 1;
         }
         len = strlen(line_start);
-        if (line_start != buf)
+        if (line_start != buf) {
             memmove(buf, line_start, len + 1);
+        }
         if (len == sizeof(buf) - 1) {
             __android_log_write(ANDROID_LOG_INFO, "yetty.stdio", buf);
             len = 0;
@@ -655,8 +738,9 @@ static void redirect_stdio_to_logcat(void)
 
     setvbuf(stdout, NULL, _IOLBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
-    if (pipe(pipefd) != 0)
+    if (pipe(pipefd) != 0) {
         return;
+    }
     dup2(pipefd[1], STDOUT_FILENO);
     dup2(pipefd[1], STDERR_FILENO);
     close(pipefd[1]);
@@ -686,8 +770,9 @@ void android_main(struct android_app *app)
         struct android_poll_source *source;
 
         while (ALooper_pollAll(state.running ? 0 : -1, NULL, &events, (void **)&source) >= 0) {
-            if (source)
+            if (source) {
                 source->process(app, source);
+            }
 
             if (app->destroyRequested) {
                 LOGI("Destroy requested");

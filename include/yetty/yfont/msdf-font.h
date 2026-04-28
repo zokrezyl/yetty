@@ -10,8 +10,8 @@ extern "C" {
 /* Create non-monospace MSDF font from .cdb file.
  * Can be used at any font size — scaling handled by shader.
  */
-struct yetty_font_font_result
-yetty_font_msdf_font_create(const char *cdb_path, const char *shader_path);
+struct yetty_font_font_result yetty_font_msdf_font_create(const char *cdb_path,
+                                                          const char *shader_path);
 
 #ifdef __cplusplus
 }

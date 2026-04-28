@@ -36,11 +36,13 @@ static void qemu_settings_defaults(struct qemu_settings *s)
 /* Trim ASCII whitespace in-place (lightweight, no locale) */
 static char *qemu_trim(char *s)
 {
-    while (*s == ' ' || *s == '\t') s++;
+    while (*s == ' ' || *s == '\t') {
+        s++;
+    }
     char *end = s + strlen(s);
-    while (end > s && (end[-1] == ' ' || end[-1] == '\t' ||
-                       end[-1] == '\n' || end[-1] == '\r'))
+    while (end > s && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n' || end[-1] == '\r')) {
         *--end = '\0';
+    }
     return s;
 }
 
@@ -48,18 +50,21 @@ static char *qemu_trim(char *s)
 static void qemu_settings_load(struct qemu_settings *s, const char *path)
 {
     FILE *f = fopen(path, "r");
-    if (!f)
+    if (!f) {
         return;
+    }
 
     char line[256];
     while (fgets(line, sizeof(line), f)) {
         char *p = qemu_trim(line);
-        if (*p == '\0' || *p == '#')
+        if (*p == '\0' || *p == '#') {
             continue;
+        }
 
         char *eq = strchr(p, '=');
-        if (!eq)
+        if (!eq) {
             continue;
+        }
         *eq = '\0';
         char *key = qemu_trim(p);
         char *val = qemu_trim(eq + 1);
@@ -78,19 +83,20 @@ static void qemu_settings_load(struct qemu_settings *s, const char *path)
 /* Ensure a default qemu.cfg exists so users can discover/tune settings. */
 static void qemu_settings_ensure_default(const char *path)
 {
-    if (yplatform_file_exists(path))
+    if (yplatform_file_exists(path)) {
         return;
+    }
 
     FILE *f = fopen(path, "w");
-    if (!f)
+    if (!f) {
         return;
-    fprintf(f,
-        "# yetty --qemu settings\n"
-        "# Lines are key = value; '#' starts a comment.\n"
-        "memory_mb = 256\n"
-        "smp = 1\n"
-        "# Appended verbatim to the kernel cmdline (optional):\n"
-        "# extra_append =\n");
+    }
+    fprintf(f, "# yetty --qemu settings\n"
+               "# Lines are key = value; '#' starts a comment.\n"
+               "memory_mb = 256\n"
+               "smp = 1\n"
+               "# Appended verbatim to the kernel cmdline (optional):\n"
+               "# extra_append =\n");
     fclose(f);
 }
 
@@ -133,15 +139,12 @@ yprocess_t *qemu_start(uint16_t port)
             slash = strrchr(native_dir, '/');
             if (slash) {
                 native_dir[slash - native_dir] = '\0';
-                snprintf(qemu_bin, sizeof(qemu_bin),
-                         "%s/libqemu-system-riscv64.so", native_dir);
+                snprintf(qemu_bin, sizeof(qemu_bin), "%s/libqemu-system-riscv64.so", native_dir);
             } else {
-                snprintf(qemu_bin, sizeof(qemu_bin),
-                         "%s/qemu/qemu-system-riscv64", data_dir);
+                snprintf(qemu_bin, sizeof(qemu_bin), "%s/qemu/qemu-system-riscv64", data_dir);
             }
         } else {
-            snprintf(qemu_bin, sizeof(qemu_bin),
-                     "%s/qemu/qemu-system-riscv64", data_dir);
+            snprintf(qemu_bin, sizeof(qemu_bin), "%s/qemu/qemu-system-riscv64", data_dir);
         }
     }
 #elif defined(_WIN32)
@@ -183,46 +186,60 @@ yprocess_t *qemu_start(uint16_t port)
     }
 
     snprintf(chardev_arg, sizeof(chardev_arg),
-        "socket,id=char0,host=127.0.0.1,port=%u,server=on,wait=off,telnet=on", port);
+             "socket,id=char0,host=127.0.0.1,port=%u,server=on,wait=off,telnet=on", port);
 
     if (settings.extra_append[0]) {
         snprintf(append_arg, sizeof(append_arg),
-            "earlycon=sbi console=hvc0 root=/dev/vda rw init=/init %s",
-            settings.extra_append);
+                 "earlycon=sbi console=hvc0 root=/dev/vda rw init=/init %s", settings.extra_append);
     } else {
         snprintf(append_arg, sizeof(append_arg),
-            "earlycon=sbi console=hvc0 root=/dev/vda rw init=/init");
+                 "earlycon=sbi console=hvc0 root=/dev/vda rw init=/init");
     }
 
-    snprintf(drive_arg, sizeof(drive_arg),
-        "file=%s,if=none,format=raw,id=hd0", blk_path);
-    snprintf(fsdev_arg, sizeof(fsdev_arg),
-        "local,id=fsdev0,path=%s,security_model=none", share_path);
+    snprintf(drive_arg, sizeof(drive_arg), "file=%s,if=none,format=raw,id=hd0", blk_path);
+    snprintf(fsdev_arg, sizeof(fsdev_arg), "local,id=fsdev0,path=%s,security_model=none",
+             share_path);
     snprintf(memory_arg, sizeof(memory_arg), "%u", settings.memory_mb);
     snprintf(smp_arg, sizeof(smp_arg), "%u", settings.smp);
 
-    yinfo("Starting QEMU on port %u (mem=%uMB smp=%u)", port,
-          settings.memory_mb, settings.smp);
+    yinfo("Starting QEMU on port %u (mem=%uMB smp=%u)", port, settings.memory_mb, settings.smp);
 
     const char *argv[] = {
         qemu_bin,
-        "-machine", "virt",
-        "-smp", smp_arg,
-        "-m", memory_arg,
-        "-bios", bios_path,
-        "-kernel", kernel_path,
-        "-append", append_arg,
-        "-drive", drive_arg,
-        "-device", "virtio-blk-device,drive=hd0",
-        "-fsdev", fsdev_arg,
-        "-device", "virtio-9p-device,fsdev=fsdev0,mount_tag=hostshare",
-        "-netdev", "user,id=net0",
-        "-device", "virtio-net-device,netdev=net0",
-        "-device", "virtio-serial-device",
-        "-device", "virtconsole,chardev=char0",
-        "-chardev", chardev_arg,
-        "-serial", "none",
-        "-display", "none",
+        "-machine",
+        "virt",
+        "-smp",
+        smp_arg,
+        "-m",
+        memory_arg,
+        "-bios",
+        bios_path,
+        "-kernel",
+        kernel_path,
+        "-append",
+        append_arg,
+        "-drive",
+        drive_arg,
+        "-device",
+        "virtio-blk-device,drive=hd0",
+        "-fsdev",
+        fsdev_arg,
+        "-device",
+        "virtio-9p-device,fsdev=fsdev0,mount_tag=hostshare",
+        "-netdev",
+        "user,id=net0",
+        "-device",
+        "virtio-net-device,netdev=net0",
+        "-device",
+        "virtio-serial-device",
+        "-device",
+        "virtconsole,chardev=char0",
+        "-chardev",
+        chardev_arg,
+        "-serial",
+        "none",
+        "-display",
+        "none",
         NULL,
     };
 
@@ -238,8 +255,9 @@ yprocess_t *qemu_start(uint16_t port)
 
 void qemu_stop(yprocess_t *proc)
 {
-    if (!proc)
+    if (!proc) {
         return;
+    }
     yprocess_terminate(proc, /*grace_ms=*/100);
 }
 

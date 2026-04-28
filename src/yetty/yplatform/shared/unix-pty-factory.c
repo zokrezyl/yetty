@@ -24,8 +24,7 @@ struct unix_pty_factory {
 /* Forward declarations */
 static void unix_pty_factory_destroy(struct yetty_yplatform_pty_factory *self);
 static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
-    struct yetty_yplatform_pty_factory *self,
-    struct yetty_ycore_event_loop *event_loop);
+    struct yetty_yplatform_pty_factory *self, struct yetty_ycore_event_loop *event_loop);
 
 /* Factory ops table */
 static const struct yetty_yplatform_pty_factory_ops unix_pty_factory_ops = {
@@ -46,8 +45,7 @@ static void unix_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
 }
 
 static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
-    struct yetty_yplatform_pty_factory *self,
-    struct yetty_ycore_event_loop *event_loop)
+    struct yetty_yplatform_pty_factory *self, struct yetty_ycore_event_loop *event_loop)
 {
     struct unix_pty_factory *factory = (struct unix_pty_factory *)self;
     struct yetty_yconfig *config = factory->config;
@@ -68,8 +66,9 @@ static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
     if (config && config->ops->get_bool(config, YETTY_YCONFIG_KEY_QEMU, 0)) {
         if (!factory->qemu_proc) {
             factory->qemu_proc = qemu_start(QEMU_TELNET_PORT);
-            if (!factory->qemu_proc)
+            if (!factory->qemu_proc) {
                 return YETTY_ERR(yetty_yplatform_pty, "failed to start QEMU");
+            }
 
             if (!qemu_wait_ready(QEMU_TELNET_PORT, 5000)) {
                 qemu_stop(factory->qemu_proc);
@@ -88,16 +87,16 @@ static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
 /* Factory creation - the public API */
 
 struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
-    struct yetty_yconfig *config,
-    void *os_specific)
+    struct yetty_yconfig *config, void *os_specific)
 {
     struct unix_pty_factory *factory;
 
     (void)os_specific;
 
     factory = calloc(1, sizeof(struct unix_pty_factory));
-    if (!factory)
+    if (!factory) {
         return YETTY_ERR(yetty_yplatform_pty_factory, "failed to allocate pty factory");
+    }
 
     factory->base.ops = &unix_pty_factory_ops;
     factory->config = config;

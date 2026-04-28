@@ -14,56 +14,56 @@
 #include <stddef.h>
 #include <string.h>
 #ifdef _WIN32
-#define strcasecmp  _stricmp
+#define strcasecmp _stricmp
 #define strncasecmp _strnicmp
 #else
 #include <strings.h>
 #endif
 
 /* Forward decls: handlers defined in handler-*.c files. */
-extern struct yetty_ypaint_core_buffer_result
-ycat_handler_markdown(const uint8_t *bytes, size_t len,
-		      const char *path_hint,
-		      const struct yetty_ycat_config *config);
+extern struct yetty_ypaint_core_buffer_result ycat_handler_markdown(
+    const uint8_t *bytes, size_t len, const char *path_hint,
+    const struct yetty_ycat_config *config);
 
-extern struct yetty_ypaint_core_buffer_result
-ycat_handler_pdf(const uint8_t *bytes, size_t len,
-		 const char *path_hint,
-		 const struct yetty_ycat_config *config);
-
+extern struct yetty_ypaint_core_buffer_result ycat_handler_pdf(
+    const uint8_t *bytes, size_t len, const char *path_hint,
+    const struct yetty_ycat_config *config);
 
 /*=============================================================================
  * Type name mapping
  *===========================================================================*/
 
 static const struct {
-	enum yetty_ycat_type type;
-	const char *name;
+    enum yetty_ycat_type type;
+    const char *name;
 } type_names[] = {
-	{ YETTY_YCAT_TYPE_UNKNOWN,  "unknown"  },
-	{ YETTY_YCAT_TYPE_TEXT,     "text"     },
-	{ YETTY_YCAT_TYPE_MARKDOWN, "markdown" },
-	{ YETTY_YCAT_TYPE_PDF,      "pdf"      },
+    {YETTY_YCAT_TYPE_UNKNOWN, "unknown"},
+    {YETTY_YCAT_TYPE_TEXT, "text"},
+    {YETTY_YCAT_TYPE_MARKDOWN, "markdown"},
+    {YETTY_YCAT_TYPE_PDF, "pdf"},
 };
 
 const char *yetty_ycat_type_name(enum yetty_ycat_type type)
 {
-	for (size_t i = 0; i < sizeof(type_names) / sizeof(type_names[0]); i++) {
-		if (type_names[i].type == type)
-			return type_names[i].name;
-	}
-	return "unknown";
+    for (size_t i = 0; i < sizeof(type_names) / sizeof(type_names[0]); i++) {
+        if (type_names[i].type == type) {
+            return type_names[i].name;
+        }
+    }
+    return "unknown";
 }
 
 enum yetty_ycat_type yetty_ycat_type_from_name(const char *name)
 {
-	if (!name)
-		return YETTY_YCAT_TYPE_UNKNOWN;
-	for (size_t i = 0; i < sizeof(type_names) / sizeof(type_names[0]); i++) {
-		if (strcasecmp(name, type_names[i].name) == 0)
-			return type_names[i].type;
-	}
-	return YETTY_YCAT_TYPE_UNKNOWN;
+    if (!name) {
+        return YETTY_YCAT_TYPE_UNKNOWN;
+    }
+    for (size_t i = 0; i < sizeof(type_names) / sizeof(type_names[0]); i++) {
+        if (strcasecmp(name, type_names[i].name) == 0) {
+            return type_names[i].type;
+        }
+    }
+    return YETTY_YCAT_TYPE_UNKNOWN;
 }
 
 /*=============================================================================
@@ -77,47 +77,46 @@ static int handlers_initialized = 0;
 
 static void init_handlers(void)
 {
-	if (handlers_initialized)
-		return;
-	handlers_initialized = 1;
-	handlers[YETTY_YCAT_TYPE_MARKDOWN] = ycat_handler_markdown;
-	handlers[YETTY_YCAT_TYPE_PDF]      = ycat_handler_pdf;
+    if (handlers_initialized) {
+        return;
+    }
+    handlers_initialized = 1;
+    handlers[YETTY_YCAT_TYPE_MARKDOWN] = ycat_handler_markdown;
+    handlers[YETTY_YCAT_TYPE_PDF] = ycat_handler_pdf;
 }
 
 yetty_ycat_handler_fn yetty_ycat_get_handler(enum yetty_ycat_type type)
 {
-	init_handlers();
-	if ((int)type < 0 || (int)type >= YCAT_MAX_TYPE)
-		return NULL;
-	return handlers[type];
+    init_handlers();
+    if ((int)type < 0 || (int)type >= YCAT_MAX_TYPE) {
+        return NULL;
+    }
+    return handlers[type];
 }
 
-int yetty_ycat_register_handler(enum yetty_ycat_type type,
-				yetty_ycat_handler_fn fn)
+int yetty_ycat_register_handler(enum yetty_ycat_type type, yetty_ycat_handler_fn fn)
 {
-	init_handlers();
-	if ((int)type < 0 || (int)type >= YCAT_MAX_TYPE)
-		return -1;
-	handlers[type] = fn;
-	return 0;
+    init_handlers();
+    if ((int)type < 0 || (int)type >= YCAT_MAX_TYPE) {
+        return -1;
+    }
+    handlers[type] = fn;
+    return 0;
 }
 
 /*=============================================================================
  * Dispatch
  *===========================================================================*/
 
-struct yetty_ypaint_core_buffer_result
-yetty_ycat_render(const uint8_t *bytes, size_t len,
-		  const char *path_hint,
-		  const struct yetty_ycat_config *config)
+struct yetty_ypaint_core_buffer_result yetty_ycat_render(const uint8_t *bytes, size_t len,
+                                                         const char *path_hint,
+                                                         const struct yetty_ycat_config *config)
 {
-	enum yetty_ycat_type type = yetty_ycat_detect(bytes, len, path_hint);
-	yetty_ycat_handler_fn fn = yetty_ycat_get_handler(type);
-	if (!fn) {
-		ydebug("ycat_render: no handler for type=%s",
-		       yetty_ycat_type_name(type));
-		return YETTY_ERR(yetty_ypaint_core_buffer,
-				 "no handler for detected type");
-	}
-	return fn(bytes, len, path_hint, config);
+    enum yetty_ycat_type type = yetty_ycat_detect(bytes, len, path_hint);
+    yetty_ycat_handler_fn fn = yetty_ycat_get_handler(type);
+    if (!fn) {
+        ydebug("ycat_render: no handler for type=%s", yetty_ycat_type_name(type));
+        return YETTY_ERR(yetty_ypaint_core_buffer, "no handler for detected type");
+    }
+    return fn(bytes, len, path_hint, config);
 }

@@ -17,7 +17,8 @@ struct yetty_incbin_assets *yetty_incbin_assets_create(void);
 void yetty_incbin_assets_destroy(struct yetty_incbin_assets *assets);
 int yetty_incbin_assets_needs_extraction(struct yetty_incbin_assets *assets, const char *dir);
 int yetty_incbin_assets_extract_data_to(struct yetty_incbin_assets *assets, const char *data_dir);
-int yetty_incbin_assets_extract_config_to(struct yetty_incbin_assets *assets, const char *config_dir);
+int yetty_incbin_assets_extract_config_to(struct yetty_incbin_assets *assets,
+                                          const char *config_dir);
 int yetty_incbin_assets_extract_yemu_to(struct yetty_incbin_assets *assets, const char *data_dir);
 int yetty_incbin_assets_has_yemu(struct yetty_incbin_assets *assets);
 int yetty_incbin_assets_extract_qemu_to(struct yetty_incbin_assets *assets, const char *data_dir);
@@ -35,12 +36,14 @@ struct yetty_ycore_void_result yetty_yplatform_extract_assets(struct yetty_yconf
     data_dir = yetty_yplatform_get_data_dir();
     config_dir = yetty_yplatform_get_config_dir();
 
-    if (!data_dir || !data_dir[0])
+    if (!data_dir || !data_dir[0]) {
         return YETTY_OK_VOID();
+    }
 
     assets = yetty_incbin_assets_create();
-    if (!assets)
+    if (!assets) {
         return YETTY_OK_VOID(); /* No embedded assets - development build */
+    }
 
     /* Check if data extraction needed */
     needs_extract = yetty_incbin_assets_needs_extraction(assets, data_dir);

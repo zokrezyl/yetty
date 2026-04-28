@@ -27,20 +27,23 @@ static void openh264_trace_cb(void *ctx, int level, const char *msg)
     (void)ctx;
     /* Strip trailing newlines without allocating. */
     size_t len = strlen(msg);
-    while (len > 0 && (msg[len - 1] == '\n' || msg[len - 1] == '\r'))
+    while (len > 0 && (msg[len - 1] == '\n' || msg[len - 1] == '\r')) {
         len--;
+    }
     char buf[256];
-    if (len >= sizeof(buf))
+    if (len >= sizeof(buf)) {
         len = sizeof(buf) - 1;
+    }
     memcpy(buf, msg, len);
     buf[len] = '\0';
 
-    if (level <= WELS_LOG_ERROR)
+    if (level <= WELS_LOG_ERROR) {
         yerror("[openh264] %s", buf);
-    else if (level <= WELS_LOG_WARNING)
+    } else if (level <= WELS_LOG_WARNING) {
         ywarn("[openh264] %s", buf);
-    else
+    } else {
         ydebug("[openh264] %s", buf);
+    }
 }
 
 struct yetty_yvideo_encoder {
@@ -57,16 +60,16 @@ struct yetty_yvideo_encoder {
      * that only stay stable until the next call — stitch them here so the
      * caller gets a simple (data, size) pair with predictable lifetime. */
     uint8_t *out_buf;
-    size_t   out_size;
-    size_t   out_cap;
+    size_t out_size;
+    size_t out_cap;
 };
 
-void yetty_yvideo_encoder_config_defaults(
-    struct yetty_yvideo_encoder_config *cfg,
-    uint32_t width, uint32_t height)
+void yetty_yvideo_encoder_config_defaults(struct yetty_yvideo_encoder_config *cfg, uint32_t width,
+                                          uint32_t height)
 {
-    if (!cfg)
+    if (!cfg) {
         return;
+    }
     cfg->width = width;
     cfg->height = height;
     /* Auto-scale bitrate with pixel count: ~0.1 bits/pixel/frame at 30 fps,
@@ -75,26 +78,30 @@ void yetty_yvideo_encoder_config_defaults(
      * --vnc-h264-bitrate / vnc/h264/bitrate before handing the cfg in. */
     double px_per_frame = (double)width * (double)height;
     uint32_t bps = (uint32_t)(px_per_frame * 0.1 * 30.0);
-    if (bps < 4000000u)  bps = 4000000u;
-    if (bps > 40000000u) bps = 40000000u;
+    if (bps < 4000000u) {
+        bps = 4000000u;
+    }
+    if (bps > 40000000u) {
+        bps = 40000000u;
+    }
     cfg->bitrate = bps;
     cfg->frame_rate = 30.0f;
-    cfg->idr_interval = 60;       /* keyframe every 2 s at 30 fps */
+    cfg->idr_interval = 60; /* keyframe every 2 s at 30 fps */
     cfg->screen_content = true;
 }
 
-struct yetty_yvideo_encoder_ptr_result
-yetty_yvideo_encoder_create(const struct yetty_yvideo_encoder_config *cfg)
+struct yetty_yvideo_encoder_ptr_result yetty_yvideo_encoder_create(
+    const struct yetty_yvideo_encoder_config *cfg)
 {
-    if (!cfg || cfg->width == 0 || cfg->height == 0 ||
-        (cfg->width & 1) || (cfg->height & 1)) {
+    if (!cfg || cfg->width == 0 || cfg->height == 0 || (cfg->width & 1) || (cfg->height & 1)) {
         return YETTY_ERR(yetty_yvideo_encoder_ptr,
                          "invalid encoder config (dims must be >0 and even)");
     }
 
     struct yetty_yvideo_encoder *enc = calloc(1, sizeof(*enc));
-    if (!enc)
+    if (!enc) {
         return YETTY_ERR(yetty_yvideo_encoder_ptr, "encoder alloc failed");
+    }
     enc->cfg = *cfg;
 
     if (WelsCreateSVCEncoder(&enc->h264) != 0 || !enc->h264) {
@@ -114,8 +121,7 @@ yetty_yvideo_encoder_create(const struct yetty_yvideo_encoder_config *cfg)
     param.iTargetBitrate = (int)cfg->bitrate;
     param.iMaxBitrate = (int)cfg->bitrate * 2;
     param.fMaxFrameRate = cfg->frame_rate;
-    param.iUsageType = cfg->screen_content ? SCREEN_CONTENT_REAL_TIME
-                                           : CAMERA_VIDEO_REAL_TIME;
+    param.iUsageType = cfg->screen_content ? SCREEN_CONTENT_REAL_TIME : CAMERA_VIDEO_REAL_TIME;
     param.iSpatialLayerNum = 1;
     param.iTemporalLayerNum = 1;
     param.sSpatialLayers[0].iVideoWidth = (int)cfg->width;
@@ -130,8 +136,8 @@ yetty_yvideo_encoder_create(const struct yetty_yvideo_encoder_config *cfg)
     param.iPaddingFlag = 0;
     param.uiIntraPeriod = (unsigned int)cfg->idr_interval;
     param.bEnableFrameSkip = false;
-    param.iEntropyCodingModeFlag = 0;  /* CAVLC — baseline profile */
-    param.iMultipleThreadIdc = 1;      /* single-thread: lowest latency */
+    param.iEntropyCodingModeFlag = 0; /* CAVLC — baseline profile */
+    param.iMultipleThreadIdc = 1;     /* single-thread: lowest latency */
     param.bEnableLongTermReference = false;
 
     if ((*enc->h264)->InitializeExt(enc->h264, &param) != 0) {
@@ -147,17 +153,18 @@ yetty_yvideo_encoder_create(const struct yetty_yvideo_encoder_config *cfg)
 
     enc->start_time_sec = ytime_monotonic_sec();
 
-    yinfo("yvideo: encoder %ux%u @ %.1ffps, %u kbps, IDR every %u, screen=%d",
-          cfg->width, cfg->height, cfg->frame_rate,
-          cfg->bitrate / 1000, cfg->idr_interval, (int)cfg->screen_content);
+    yinfo("yvideo: encoder %ux%u @ %.1ffps, %u kbps, IDR every %u, screen=%d", cfg->width,
+          cfg->height, cfg->frame_rate, cfg->bitrate / 1000, cfg->idr_interval,
+          (int)cfg->screen_content);
 
     return YETTY_OK(yetty_yvideo_encoder_ptr, enc);
 }
 
 void yetty_yvideo_encoder_destroy(struct yetty_yvideo_encoder *enc)
 {
-    if (!enc)
+    if (!enc) {
         return;
+    }
     if (enc->h264) {
         (*enc->h264)->Uninitialize(enc->h264);
         WelsDestroySVCEncoder(enc->h264);
@@ -169,31 +176,32 @@ void yetty_yvideo_encoder_destroy(struct yetty_yvideo_encoder *enc)
 /* Grow the bitstream scratch buffer to at least `need` bytes. */
 static int ensure_out_cap(struct yetty_yvideo_encoder *enc, size_t need)
 {
-    if (enc->out_cap >= need)
+    if (enc->out_cap >= need) {
         return 1;
+    }
     size_t new_cap = enc->out_cap ? enc->out_cap : 64 * 1024;
-    while (new_cap < need)
+    while (new_cap < need) {
         new_cap *= 2;
+    }
     uint8_t *nb = realloc(enc->out_buf, new_cap);
-    if (!nb)
+    if (!nb) {
         return 0;
+    }
     enc->out_buf = nb;
     enc->out_cap = new_cap;
     return 1;
 }
 
-struct yetty_ycore_void_result
-yetty_yvideo_encoder_encode(
-    struct yetty_yvideo_encoder *enc,
-    const uint8_t *y_plane,
-    const uint8_t *u_plane,
-    const uint8_t *v_plane,
-    uint32_t y_stride,
-    uint32_t uv_stride,
-    struct yetty_yvideo_encoded_frame *out)
+struct yetty_ycore_void_result yetty_yvideo_encoder_encode(struct yetty_yvideo_encoder *enc,
+                                                           const uint8_t *y_plane,
+                                                           const uint8_t *u_plane,
+                                                           const uint8_t *v_plane,
+                                                           uint32_t y_stride, uint32_t uv_stride,
+                                                           struct yetty_yvideo_encoded_frame *out)
 {
-    if (!enc || !enc->h264 || !y_plane || !u_plane || !v_plane || !out)
+    if (!enc || !enc->h264 || !y_plane || !u_plane || !v_plane || !out) {
         return YETTY_ERR(yetty_ycore_void, "null args");
+    }
 
     SSourcePicture src = {0};
     src.iColorFormat = videoFormatI420;
@@ -218,8 +226,9 @@ yetty_yvideo_encoder_encode(
     }
 
     SFrameBSInfo info = {0};
-    if ((*enc->h264)->EncodeFrame(enc->h264, &src, &info) != 0)
+    if ((*enc->h264)->EncodeFrame(enc->h264, &src, &info) != 0) {
         return YETTY_ERR(yetty_ycore_void, "EncodeFrame failed");
+    }
 
     /* Rate-control skip: no bytes produced — signal via size=0. */
     if (info.eFrameType == videoFrameTypeSkip) {
@@ -236,10 +245,12 @@ yetty_yvideo_encoder_encode(
     for (int l = 0; l < info.iLayerNum; l++) {
         const SLayerBSInfo *li = &info.sLayerInfo[l];
         size_t layer_size = 0;
-        for (int n = 0; n < li->iNalCount; n++)
+        for (int n = 0; n < li->iNalCount; n++) {
             layer_size += (size_t)li->pNalLengthInByte[n];
-        if (!ensure_out_cap(enc, enc->out_size + layer_size))
+        }
+        if (!ensure_out_cap(enc, enc->out_size + layer_size)) {
             return YETTY_ERR(yetty_ycore_void, "out buf alloc failed");
+        }
         memcpy(enc->out_buf + enc->out_size, li->pBsBuf, layer_size);
         enc->out_size += layer_size;
     }
@@ -254,20 +265,23 @@ yetty_yvideo_encoder_encode(
 
 void yetty_yvideo_encoder_force_idr(struct yetty_yvideo_encoder *enc)
 {
-    if (enc)
+    if (enc) {
         enc->force_idr = 1;
+    }
 }
 
-struct yetty_ycore_void_result
-yetty_yvideo_encoder_set_bitrate(struct yetty_yvideo_encoder *enc, uint32_t bitrate)
+struct yetty_ycore_void_result yetty_yvideo_encoder_set_bitrate(struct yetty_yvideo_encoder *enc,
+                                                                uint32_t bitrate)
 {
-    if (!enc || !enc->h264)
+    if (!enc || !enc->h264) {
         return YETTY_ERR(yetty_ycore_void, "null encoder");
+    }
     SBitrateInfo bi = {0};
     bi.iLayer = SPATIAL_LAYER_ALL;
     bi.iBitrate = (int)bitrate;
-    if ((*enc->h264)->SetOption(enc->h264, ENCODER_OPTION_BITRATE, &bi) != 0)
+    if ((*enc->h264)->SetOption(enc->h264, ENCODER_OPTION_BITRATE, &bi) != 0) {
         return YETTY_ERR(yetty_ycore_void, "set bitrate failed");
+    }
     enc->cfg.bitrate = bitrate;
     return YETTY_OK_VOID();
 }
@@ -286,10 +300,9 @@ uint32_t yetty_yvideo_encoder_height(const struct yetty_yvideo_encoder *enc)
  * BGRA → YUV420 (BT.709, video range). Scalar C path — sub-ms at typical
  * terminal resolutions. Ported from yetty-poc's convertBgraToYuv420Cpu.
  *-------------------------------------------------------------------------*/
-void yetty_yvideo_bgra_to_yuv420(
-    const uint8_t *bgra, uint32_t width, uint32_t height, uint32_t bgra_stride,
-    uint8_t *y_plane, uint8_t *u_plane, uint8_t *v_plane,
-    uint32_t y_stride, uint32_t uv_stride)
+void yetty_yvideo_bgra_to_yuv420(const uint8_t *bgra, uint32_t width, uint32_t height,
+                                 uint32_t bgra_stride, uint8_t *y_plane, uint8_t *u_plane,
+                                 uint8_t *v_plane, uint32_t y_stride, uint32_t uv_stride)
 {
     for (uint32_t y = 0; y < height; y++) {
         const uint8_t *row = bgra + (size_t)y * bgra_stride;
@@ -299,8 +312,12 @@ void yetty_yvideo_bgra_to_yuv420(
             uint8_t g = row[x * 4 + 1];
             uint8_t r = row[x * 4 + 2];
             int yv = 16 + ((66 * r + 129 * g + 25 * b + 128) >> 8);
-            if (yv < 16)  yv = 16;
-            if (yv > 235) yv = 235;
+            if (yv < 16) {
+                yv = 16;
+            }
+            if (yv > 235) {
+                yv = 235;
+            }
             y_row[x] = (uint8_t)yv;
         }
     }
@@ -327,10 +344,18 @@ void yetty_yvideo_bgra_to_yuv420(
             int avg_b = sum_b / 4;
             int cb = 128 + ((-38 * avg_r - 74 * avg_g + 112 * avg_b + 128) >> 8);
             int cr = 128 + ((112 * avg_r - 94 * avg_g - 18 * avg_b + 128) >> 8);
-            if (cb < 16)  cb = 16;
-            if (cb > 240) cb = 240;
-            if (cr < 16)  cr = 16;
-            if (cr > 240) cr = 240;
+            if (cb < 16) {
+                cb = 16;
+            }
+            if (cb > 240) {
+                cb = 240;
+            }
+            if (cr < 16) {
+                cr = 16;
+            }
+            if (cr > 240) {
+                cr = 240;
+            }
             u_row[uv_x] = (uint8_t)cb;
             v_row[uv_x] = (uint8_t)cr;
         }

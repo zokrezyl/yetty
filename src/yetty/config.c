@@ -49,19 +49,20 @@ static int g_subconfig_count = 0;
 
 /* Forward declarations */
 static void config_destroy(struct yetty_yconfig *self);
-static const char *config_get_string(const struct yetty_yconfig *self, const char *path, const char *default_value);
+static const char *config_get_string(const struct yetty_yconfig *self, const char *path,
+                                     const char *default_value);
 static int config_get_int(const struct yetty_yconfig *self, const char *path, int default_value);
 static int config_get_bool(const struct yetty_yconfig *self, const char *path, int default_value);
 static int config_has(const struct yetty_yconfig *self, const char *path);
-static struct yetty_ycore_void_result config_set_string(struct yetty_yconfig *self, const char *path, const char *value);
+static struct yetty_ycore_void_result config_set_string(struct yetty_yconfig *self,
+                                                        const char *path, const char *value);
 static int config_use_damage_tracking(const struct yetty_yconfig *self);
 static int config_show_fps(const struct yetty_yconfig *self);
 static int config_debug_damage_rects(const struct yetty_yconfig *self);
 static uint32_t config_scrollback_lines(const struct yetty_yconfig *self);
 static const char *config_font_family(const struct yetty_yconfig *self);
 
-static struct yetty_yconfig *config_get_node(const struct yetty_yconfig *self,
-                                            const char *path);
+static struct yetty_yconfig *config_get_node(const struct yetty_yconfig *self, const char *path);
 static struct yetty_ycore_void_result config_get_shell_argv(const struct yetty_yconfig *self,
                                                             struct yetty_yconfig_shell_argv *out);
 
@@ -86,22 +87,26 @@ static const struct yetty_yconfig_ops config_ops = {
 static struct config_node *node_create(const char *key)
 {
     struct config_node *node = calloc(1, sizeof(struct config_node));
-    if (!node)
+    if (!node) {
         return NULL;
+    }
 
-    if (key)
+    if (key) {
         strncpy(node->key, key, MAX_KEY_LEN - 1);
+    }
 
     return node;
 }
 
 static void node_destroy(struct config_node *node)
 {
-    if (!node)
+    if (!node) {
         return;
+    }
 
-    for (int i = 0; i < node->child_count; i++)
+    for (int i = 0; i < node->child_count; i++) {
         node_destroy(node->children[i]);
+    }
 
     free(node);
 }
@@ -109,8 +114,9 @@ static void node_destroy(struct config_node *node)
 static struct config_node *node_find_child(struct config_node *node, const char *key)
 {
     for (int i = 0; i < node->child_count; i++) {
-        if (strcmp(node->children[i]->key, key) == 0)
+        if (strcmp(node->children[i]->key, key) == 0) {
             return node->children[i];
+        }
     }
     return NULL;
 }
@@ -118,15 +124,18 @@ static struct config_node *node_find_child(struct config_node *node, const char 
 static struct config_node *node_get_or_create_child(struct config_node *node, const char *key)
 {
     struct config_node *child = node_find_child(node, key);
-    if (child)
+    if (child) {
         return child;
+    }
 
-    if (node->child_count >= MAX_CHILDREN)
+    if (node->child_count >= MAX_CHILDREN) {
         return NULL;
+    }
 
     child = node_create(key);
-    if (!child)
+    if (!child) {
         return NULL;
+    }
 
     node->children[node->child_count++] = child;
     return child;
@@ -147,14 +156,16 @@ static struct config_node *navigate_path(struct config_node *root, const char *p
         char *next = strtok(NULL, "/");
         if (!next) {
             /* This is the leaf key */
-            if (out_key)
+            if (out_key) {
                 strncpy(out_key, token, MAX_KEY_LEN - 1);
+            }
             return current;
         }
 
         current = node_find_child(current, token);
-        if (!current)
+        if (!current) {
             return NULL;
+        }
 
         token = next;
     }
@@ -163,7 +174,8 @@ static struct config_node *navigate_path(struct config_node *root, const char *p
 }
 
 /* Navigate and create intermediate nodes */
-static struct config_node *navigate_or_create(struct config_node *root, const char *path, char *out_key)
+static struct config_node *navigate_or_create(struct config_node *root, const char *path,
+                                              char *out_key)
 {
     char buf[512];
     strncpy(buf, path, sizeof(buf) - 1);
@@ -175,33 +187,40 @@ static struct config_node *navigate_or_create(struct config_node *root, const ch
 
     char *p = buf;
     while (*p && token_count < 32) {
-        while (*p == '/')
+        while (*p == '/') {
             p++;
-        if (!*p)
+        }
+        if (!*p) {
             break;
+        }
 
         tokens[token_count++] = p;
 
-        while (*p && *p != '/')
+        while (*p && *p != '/') {
             p++;
-        if (*p)
+        }
+        if (*p) {
             *p++ = '\0';
+        }
     }
 
-    if (token_count == 0)
+    if (token_count == 0) {
         return NULL;
+    }
 
     /* Navigate to parent, creating as needed */
     struct config_node *current = root;
     for (int i = 0; i < token_count - 1; i++) {
         current = node_get_or_create_child(current, tokens[i]);
-        if (!current)
+        if (!current) {
             return NULL;
+        }
     }
 
     /* Return leaf key */
-    if (out_key)
+    if (out_key) {
         strncpy(out_key, tokens[token_count - 1], MAX_KEY_LEN - 1);
+    }
 
     return current;
 }
@@ -210,16 +229,19 @@ static struct config_node *navigate_or_create(struct config_node *root, const ch
 static void node_set_value(struct config_node *parent, const char *key, const char *value)
 {
     struct config_node *node = node_get_or_create_child(parent, key);
-    if (!node)
+    if (!node) {
         return;
+    }
 
     strncpy(node->value, value, MAX_VALUE_LEN - 1);
 
     /* Try to parse as bool */
-    if (strcasecmp(value, "true") == 0 || strcasecmp(value, "yes") == 0 || strcmp(value, "1") == 0) {
+    if (strcasecmp(value, "true") == 0 || strcasecmp(value, "yes") == 0 ||
+        strcmp(value, "1") == 0) {
         node->is_bool = 1;
         node->bool_value = 1;
-    } else if (strcasecmp(value, "false") == 0 || strcasecmp(value, "no") == 0 || strcmp(value, "0") == 0) {
+    } else if (strcasecmp(value, "false") == 0 || strcasecmp(value, "no") == 0 ||
+               strcmp(value, "0") == 0) {
         node->is_bool = 1;
         node->bool_value = 0;
     }
@@ -241,8 +263,9 @@ static void load_yaml_value(yaml_parser_t *parser, struct config_node *parent, c
 {
     yaml_event_t event;
 
-    if (!yaml_parser_parse(parser, &event))
+    if (!yaml_parser_parse(parser, &event)) {
         return;
+    }
 
     if (event.type == YAML_SCALAR_EVENT) {
         node_set_value(parent, key, (const char *)event.data.scalar.value);
@@ -250,17 +273,19 @@ static void load_yaml_value(yaml_parser_t *parser, struct config_node *parent, c
     } else if (event.type == YAML_MAPPING_START_EVENT) {
         yaml_event_delete(&event);
         struct config_node *child = node_get_or_create_child(parent, key);
-        if (child)
+        if (child) {
             load_yaml_mapping(parser, child);
+        }
     } else if (event.type == YAML_SEQUENCE_START_EVENT) {
         /* Skip sequences for now */
         yaml_event_delete(&event);
         int depth = 1;
         while (depth > 0 && yaml_parser_parse(parser, &event)) {
-            if (event.type == YAML_SEQUENCE_START_EVENT)
+            if (event.type == YAML_SEQUENCE_START_EVENT) {
                 depth++;
-            else if (event.type == YAML_SEQUENCE_END_EVENT)
+            } else if (event.type == YAML_SEQUENCE_END_EVENT) {
                 depth--;
+            }
             yaml_event_delete(&event);
         }
     } else {
@@ -292,8 +317,9 @@ static void load_yaml_mapping(yaml_parser_t *parser, struct config_node *node)
 static int load_yaml_file(struct config_node *root, const char *path)
 {
     FILE *file = fopen(path, "r");
-    if (!file)
+    if (!file) {
         return 0;
+    }
 
     yaml_parser_t parser;
     if (!yaml_parser_initialize(&parser)) {
@@ -311,8 +337,9 @@ static int load_yaml_file(struct config_node *root, const char *path)
             break;
         }
         yaml_event_delete(&event);
-        if (event.type == YAML_STREAM_END_EVENT)
+        if (event.type == YAML_STREAM_END_EVENT) {
             break;
+        }
     }
 
     yaml_parser_delete(&parser);
@@ -329,18 +356,21 @@ static void config_destroy(struct yetty_yconfig *self)
     free(impl);
 }
 
-static const char *config_get_string(const struct yetty_yconfig *self, const char *path, const char *default_value)
+static const char *config_get_string(const struct yetty_yconfig *self, const char *path,
+                                     const char *default_value)
 {
     struct config_impl *impl = container_of(self, struct config_impl, base);
     char key[MAX_KEY_LEN] = {0};
 
     struct config_node *parent = navigate_path(impl->root, path, key);
-    if (!parent)
+    if (!parent) {
         return default_value;
+    }
 
     struct config_node *node = node_find_child(parent, key);
-    if (!node || !node->value[0])
+    if (!node || !node->value[0]) {
         return default_value;
+    }
 
     return node->value;
 }
@@ -351,12 +381,14 @@ static int config_get_int(const struct yetty_yconfig *self, const char *path, in
     char key[MAX_KEY_LEN] = {0};
 
     struct config_node *parent = navigate_path(impl->root, path, key);
-    if (!parent)
+    if (!parent) {
         return default_value;
+    }
 
     struct config_node *node = node_find_child(parent, key);
-    if (!node || !node->is_int)
+    if (!node || !node->is_int) {
         return default_value;
+    }
 
     return node->int_value;
 }
@@ -367,12 +399,14 @@ static int config_get_bool(const struct yetty_yconfig *self, const char *path, i
     char key[MAX_KEY_LEN] = {0};
 
     struct config_node *parent = navigate_path(impl->root, path, key);
-    if (!parent)
+    if (!parent) {
         return default_value;
+    }
 
     struct config_node *node = node_find_child(parent, key);
-    if (!node || !node->is_bool)
+    if (!node || !node->is_bool) {
         return default_value;
+    }
 
     return node->bool_value;
 }
@@ -383,20 +417,23 @@ static int config_has(const struct yetty_yconfig *self, const char *path)
     char key[MAX_KEY_LEN] = {0};
 
     struct config_node *parent = navigate_path(impl->root, path, key);
-    if (!parent)
+    if (!parent) {
         return 0;
+    }
 
     return node_find_child(parent, key) != NULL;
 }
 
-static struct yetty_ycore_void_result config_set_string(struct yetty_yconfig *self, const char *path, const char *value)
+static struct yetty_ycore_void_result config_set_string(struct yetty_yconfig *self,
+                                                        const char *path, const char *value)
 {
     struct config_impl *impl = container_of(self, struct config_impl, base);
     char key[MAX_KEY_LEN] = {0};
 
     struct config_node *parent = navigate_or_create(impl->root, path, key);
-    if (!parent)
+    if (!parent) {
         return YETTY_ERR(yetty_ycore_void, "failed to create config path");
+    }
 
     node_set_value(parent, key, value);
     return YETTY_OK_VOID();
@@ -437,54 +474,57 @@ static void subnode_destroy(struct yetty_yconfig *self)
     (void)self;
 }
 
-static const char *subnode_get_string(const struct yetty_yconfig *self,
-                                      const char *path,
+static const char *subnode_get_string(const struct yetty_yconfig *self, const char *path,
                                       const char *default_value)
 {
     struct config_subnode *sub = (struct config_subnode *)self;
     char key[MAX_KEY_LEN] = {0};
 
     struct config_node *parent = navigate_path(sub->node, path, key);
-    if (!parent)
+    if (!parent) {
         return default_value;
+    }
 
     struct config_node *node = node_find_child(parent, key);
-    if (!node || !node->value[0])
+    if (!node || !node->value[0]) {
         return default_value;
+    }
 
     return node->value;
 }
 
-static int subnode_get_int(const struct yetty_yconfig *self, const char *path,
-                           int default_value)
+static int subnode_get_int(const struct yetty_yconfig *self, const char *path, int default_value)
 {
     struct config_subnode *sub = (struct config_subnode *)self;
     char key[MAX_KEY_LEN] = {0};
 
     struct config_node *parent = navigate_path(sub->node, path, key);
-    if (!parent)
+    if (!parent) {
         return default_value;
+    }
 
     struct config_node *node = node_find_child(parent, key);
-    if (!node || !node->is_int)
+    if (!node || !node->is_int) {
         return default_value;
+    }
 
     return node->int_value;
 }
 
-static int subnode_get_bool(const struct yetty_yconfig *self, const char *path,
-                            int default_value)
+static int subnode_get_bool(const struct yetty_yconfig *self, const char *path, int default_value)
 {
     struct config_subnode *sub = (struct config_subnode *)self;
     char key[MAX_KEY_LEN] = {0};
 
     struct config_node *parent = navigate_path(sub->node, path, key);
-    if (!parent)
+    if (!parent) {
         return default_value;
+    }
 
     struct config_node *node = node_find_child(parent, key);
-    if (!node || !node->is_bool)
+    if (!node || !node->is_bool) {
         return default_value;
+    }
 
     return node->bool_value;
 }
@@ -495,15 +535,15 @@ static int subnode_has(const struct yetty_yconfig *self, const char *path)
     char key[MAX_KEY_LEN] = {0};
 
     struct config_node *parent = navigate_path(sub->node, path, key);
-    if (!parent)
+    if (!parent) {
         return 0;
+    }
 
     return node_find_child(parent, key) != NULL;
 }
 
 static struct yetty_ycore_void_result subnode_set_string(struct yetty_yconfig *self,
-                                                        const char *path,
-                                                        const char *value)
+                                                         const char *path, const char *value)
 {
     (void)self;
     (void)path;
@@ -511,8 +551,7 @@ static struct yetty_ycore_void_result subnode_set_string(struct yetty_yconfig *s
     return YETTY_ERR(yetty_ycore_void, "cannot set on subnode");
 }
 
-static struct yetty_yconfig *subnode_get_node(const struct yetty_yconfig *self,
-                                             const char *path);
+static struct yetty_yconfig *subnode_get_node(const struct yetty_yconfig *self, const char *path);
 
 static const struct yetty_yconfig_ops subnode_ops = {
     .destroy = subnode_destroy,
@@ -532,8 +571,9 @@ static const struct yetty_yconfig_ops subnode_ops = {
 
 static struct yetty_yconfig *create_subconfig(struct config_node *node)
 {
-    if (!node || g_subconfig_count >= MAX_SUBCONFIGS)
+    if (!node || g_subconfig_count >= MAX_SUBCONFIGS) {
         return NULL;
+    }
 
     struct config_subnode *sub = &g_subconfigs[g_subconfig_count++];
     sub->base.ops = &subnode_ops;
@@ -541,72 +581,77 @@ static struct yetty_yconfig *create_subconfig(struct config_node *node)
     return &sub->base;
 }
 
-static struct yetty_yconfig *config_get_node(const struct yetty_yconfig *self,
-                                            const char *path)
+static struct yetty_yconfig *config_get_node(const struct yetty_yconfig *self, const char *path)
 {
     struct config_impl *impl = container_of(self, struct config_impl, base);
     char key[MAX_KEY_LEN] = {0};
 
     struct config_node *parent = navigate_path(impl->root, path, key);
-    if (!parent)
+    if (!parent) {
         return NULL;
+    }
 
     struct config_node *node = node_find_child(parent, key);
     return create_subconfig(node);
 }
 
-static struct yetty_yconfig *subnode_get_node(const struct yetty_yconfig *self,
-                                             const char *path)
+static struct yetty_yconfig *subnode_get_node(const struct yetty_yconfig *self, const char *path)
 {
     struct config_subnode *sub = (struct config_subnode *)self;
     char key[MAX_KEY_LEN] = {0};
 
     struct config_node *parent = navigate_path(sub->node, path, key);
-    if (!parent)
+    if (!parent) {
         return NULL;
+    }
 
     struct config_node *node = node_find_child(parent, key);
     return create_subconfig(node);
 }
 
-
 /* Store platform paths */
 
-static void store_platform_paths(struct config_impl *impl, const struct yetty_yplatform_paths *paths)
+static void store_platform_paths(struct config_impl *impl,
+                                 const struct yetty_yplatform_paths *paths)
 {
-    if (!paths)
+    if (!paths) {
         return;
+    }
 
     if (paths->shaders_dir) {
         strncpy(impl->shaders_dir, paths->shaders_dir, sizeof(impl->shaders_dir) - 1);
         char key[MAX_KEY_LEN];
         struct config_node *parent = navigate_or_create(impl->root, "paths/shaders", key);
-        if (parent)
+        if (parent) {
             node_set_value(parent, key, paths->shaders_dir);
+        }
     }
 
     if (paths->fonts_dir) {
         strncpy(impl->fonts_dir, paths->fonts_dir, sizeof(impl->fonts_dir) - 1);
         char key[MAX_KEY_LEN];
         struct config_node *parent = navigate_or_create(impl->root, "paths/fonts", key);
-        if (parent)
+        if (parent) {
             node_set_value(parent, key, paths->fonts_dir);
+        }
     }
 
     if (paths->runtime_dir) {
         strncpy(impl->runtime_dir, paths->runtime_dir, sizeof(impl->runtime_dir) - 1);
         char key[MAX_KEY_LEN];
         struct config_node *parent = navigate_or_create(impl->root, "paths/runtime", key);
-        if (parent)
+        if (parent) {
             node_set_value(parent, key, paths->runtime_dir);
+        }
     }
 
     if (paths->bin_dir) {
         strncpy(impl->bin_dir, paths->bin_dir, sizeof(impl->bin_dir) - 1);
         char key[MAX_KEY_LEN];
         struct config_node *parent = navigate_or_create(impl->root, "paths/bin", key);
-        if (parent)
+        if (parent) {
             node_set_value(parent, key, paths->bin_dir);
+        }
     }
 }
 
@@ -637,8 +682,9 @@ static void try_load_config_file(struct config_impl *impl, int argc, char *argv[
 
     if (xdg) {
         snprintf(path, sizeof(path), "%s/yetty/config.yaml", xdg);
-        if (load_yaml_file(impl->root, path))
+        if (load_yaml_file(impl->root, path)) {
             return;
+        }
     }
 
     if (home) {
@@ -658,33 +704,40 @@ static int tokenize_command(const char *cmd, struct yetty_yconfig_shell_argv *ou
     int ac = 0;
 
     while (*p) {
-        while (*p && isspace((unsigned char)*p))
+        while (*p && isspace((unsigned char)*p)) {
             p++;
-        if (!*p)
+        }
+        if (!*p) {
             break;
+        }
 
-        if (ac >= YETTY_YCONFIG_SHELL_ARGV_MAX - 1)
+        if (ac >= YETTY_YCONFIG_SHELL_ARGV_MAX - 1) {
             return -1;
+        }
         out->argv[ac++] = &out->buf[bp];
 
         while (*p && !isspace((unsigned char)*p)) {
             if (*p == '\'' || *p == '"') {
                 char q = *p++;
                 while (*p && *p != q) {
-                    if (bp >= YETTY_YCONFIG_SHELL_BUF_SIZE - 1)
+                    if (bp >= YETTY_YCONFIG_SHELL_BUF_SIZE - 1) {
                         return -1;
+                    }
                     out->buf[bp++] = *p++;
                 }
-                if (*p == q)
+                if (*p == q) {
                     p++;
+                }
             } else {
-                if (bp >= YETTY_YCONFIG_SHELL_BUF_SIZE - 1)
+                if (bp >= YETTY_YCONFIG_SHELL_BUF_SIZE - 1) {
                     return -1;
+                }
                 out->buf[bp++] = *p++;
             }
         }
-        if (bp >= YETTY_YCONFIG_SHELL_BUF_SIZE)
+        if (bp >= YETTY_YCONFIG_SHELL_BUF_SIZE) {
             return -1;
+        }
         out->buf[bp++] = '\0';
     }
     out->argv[ac] = NULL;
@@ -695,16 +748,18 @@ static int tokenize_command(const char *cmd, struct yetty_yconfig_shell_argv *ou
 static struct yetty_ycore_void_result config_get_shell_argv(const struct yetty_yconfig *self,
                                                             struct yetty_yconfig_shell_argv *out)
 {
-    if (!out)
+    if (!out) {
         return YETTY_ERR(yetty_ycore_void, "out is NULL");
+    }
 
     memset(out, 0, sizeof(*out));
 
     /* -e bypasses the shell entirely: tokenize and exec the command directly */
     const char *command = self->ops->get_string(self, "shell/command", NULL);
     if (command && command[0]) {
-        if (tokenize_command(command, out) < 0 || out->argc == 0)
+        if (tokenize_command(command, out) < 0 || out->argc == 0) {
             return YETTY_ERR(yetty_ycore_void, "failed to tokenize shell/command");
+        }
         return YETTY_OK_VOID();
     }
 
@@ -712,8 +767,9 @@ static struct yetty_ycore_void_result config_get_shell_argv(const struct yetty_y
      * > /bin/bash. $SHELL is folded into shell/default at config-create time. */
     const char *shell = self->ops->get_string(self, "shell/default", "/bin/bash");
     size_t len = strlen(shell);
-    if (len + 1 > YETTY_YCONFIG_SHELL_BUF_SIZE)
+    if (len + 1 > YETTY_YCONFIG_SHELL_BUF_SIZE) {
         return YETTY_ERR(yetty_ycore_void, "shell path too long");
+    }
     memcpy(out->buf, shell, len + 1);
     out->argv[0] = out->buf;
     out->argv[1] = NULL;
@@ -733,12 +789,14 @@ static int parse_ssh_target(struct config_impl *impl, const char *target)
     struct config_node *parent;
 
     at = strchr(target, '@');
-    if (!at || at == target)
+    if (!at || at == target) {
         return 0;
+    }
 
     user_len = (size_t)(at - target);
-    if (user_len >= sizeof(user))
+    if (user_len >= sizeof(user)) {
         return 0;
+    }
     memcpy(user, target, user_len);
     user[user_len] = '\0';
 
@@ -750,20 +808,27 @@ static int parse_ssh_target(struct config_impl *impl, const char *target)
         host_len = strlen(at + 1);
         port[0] = '\0';
     }
-    if (host_len == 0 || host_len >= sizeof(host))
+    if (host_len == 0 || host_len >= sizeof(host)) {
         return 0;
+    }
     memcpy(host, at + 1, host_len);
     host[host_len] = '\0';
 
     parent = navigate_or_create(impl->root, "ssh/username", key);
-    if (parent) node_set_value(parent, key, user);
+    if (parent) {
+        node_set_value(parent, key, user);
+    }
 
     parent = navigate_or_create(impl->root, "ssh/host", key);
-    if (parent) node_set_value(parent, key, host);
+    if (parent) {
+        node_set_value(parent, key, host);
+    }
 
     if (port[0]) {
         parent = navigate_or_create(impl->root, "ssh/port", key);
-        if (parent) node_set_value(parent, key, port);
+        if (parent) {
+            node_set_value(parent, key, port);
+        }
     }
     return 1;
 }
@@ -786,29 +851,28 @@ enum {
 };
 
 static struct option long_options[] = {
-    {"config",                    required_argument, 0, 'c'},
-    {"execute",                   required_argument, 0, 'e'},
-    {"vnc-server",                no_argument,       0, 's'},
-    {"vnc-headless",              no_argument,       0, 'H'},
-    {"vnc-port",                  required_argument, 0, 'p'},
-    {"vnc-client",                required_argument, 0, 'C'},
-    {"vnc-raw",                   no_argument,       0, OPT_VNC_RAW},
-    {"vnc-compression-quality",   required_argument, 0, OPT_VNC_COMPRESSION_QUALITY},
-    {"vnc-always-full",           no_argument,       0, OPT_VNC_ALWAYS_FULL},
-    {"vnc-use-h264",              no_argument,       0, OPT_VNC_USE_H264},
-    {"vnc-merge-rects",           no_argument,       0, OPT_VNC_MERGE_RECTS},
-    {"vnc-h264-bitrate",          required_argument, 0, OPT_VNC_H264_BITRATE},
-    {"vnc-h264-framerate",        required_argument, 0, OPT_VNC_H264_FRAMERATE},
-    {"vnc-h264-idr-interval",     required_argument, 0, OPT_VNC_H264_IDR_INTERVAL},
-    {"vnc-h264-screen-content",   required_argument, 0, OPT_VNC_H264_SCREEN_CONTENT},
-    {"rpc-host",                  required_argument, 0, OPT_RPC_HOST},
-    {"rpc-port",                  required_argument, 0, 'r'},
-    {"temu",                      no_argument,       0, OPT_TEMU},
-    {"qemu",                      no_argument,       0, OPT_QEMU},
-    {"ssh",                       optional_argument, 0, OPT_SSH},
-    {"help",                      no_argument,       0, 'h'},
-    {0, 0, 0, 0}
-};
+    {"config", required_argument, 0, 'c'},
+    {"execute", required_argument, 0, 'e'},
+    {"vnc-server", no_argument, 0, 's'},
+    {"vnc-headless", no_argument, 0, 'H'},
+    {"vnc-port", required_argument, 0, 'p'},
+    {"vnc-client", required_argument, 0, 'C'},
+    {"vnc-raw", no_argument, 0, OPT_VNC_RAW},
+    {"vnc-compression-quality", required_argument, 0, OPT_VNC_COMPRESSION_QUALITY},
+    {"vnc-always-full", no_argument, 0, OPT_VNC_ALWAYS_FULL},
+    {"vnc-use-h264", no_argument, 0, OPT_VNC_USE_H264},
+    {"vnc-merge-rects", no_argument, 0, OPT_VNC_MERGE_RECTS},
+    {"vnc-h264-bitrate", required_argument, 0, OPT_VNC_H264_BITRATE},
+    {"vnc-h264-framerate", required_argument, 0, OPT_VNC_H264_FRAMERATE},
+    {"vnc-h264-idr-interval", required_argument, 0, OPT_VNC_H264_IDR_INTERVAL},
+    {"vnc-h264-screen-content", required_argument, 0, OPT_VNC_H264_SCREEN_CONTENT},
+    {"rpc-host", required_argument, 0, OPT_RPC_HOST},
+    {"rpc-port", required_argument, 0, 'r'},
+    {"temu", no_argument, 0, OPT_TEMU},
+    {"qemu", no_argument, 0, OPT_QEMU},
+    {"ssh", optional_argument, 0, OPT_SSH},
+    {"help", no_argument, 0, 'h'},
+    {0, 0, 0, 0}};
 
 static void print_usage(const char *prog)
 {
@@ -823,12 +887,19 @@ static void print_usage(const char *prog)
     fprintf(stderr, "      --vnc-raw                  Disable JPEG, send raw BGRA tiles\n");
     fprintf(stderr, "      --vnc-compression-quality Q  JPEG quality 1-100 (default: 80)\n");
     fprintf(stderr, "      --vnc-always-full          Disable delta, send full frame every time\n");
-    fprintf(stderr, "      --vnc-use-h264             Use H.264 encoder instead of JPEG (requires openh264)\n");
-    fprintf(stderr, "      --vnc-merge-rects          Merge adjacent dirty tiles into bigger rectangles\n");
-    fprintf(stderr, "      --vnc-h264-bitrate BPS     H.264 target bitrate in bps (default: auto-scales with resolution)\n");
+    fprintf(
+        stderr,
+        "      --vnc-use-h264             Use H.264 encoder instead of JPEG (requires openh264)\n");
+    fprintf(stderr,
+            "      --vnc-merge-rects          Merge adjacent dirty tiles into bigger rectangles\n");
+    fprintf(stderr, "      --vnc-h264-bitrate BPS     H.264 target bitrate in bps (default: "
+                    "auto-scales with resolution)\n");
     fprintf(stderr, "      --vnc-h264-framerate FPS   H.264 encode framerate (default: 30)\n");
-    fprintf(stderr, "      --vnc-h264-idr-interval N  Frames between H.264 keyframes (default: 60 — 2s at 30 fps)\n");
-    fprintf(stderr, "      --vnc-h264-screen-content 0|1  H.264 screen-content optimisation (default: 1)\n");
+    fprintf(stderr, "      --vnc-h264-idr-interval N  Frames between H.264 keyframes (default: 60 "
+                    "— 2s at 30 fps)\n");
+    fprintf(
+        stderr,
+        "      --vnc-h264-screen-content 0|1  H.264 screen-content optimisation (default: 1)\n");
     fprintf(stderr, "      --rpc-host=HOST    RPC server host\n");
     fprintf(stderr, "  -r, --rpc-port=PORT    RPC server port\n");
     fprintf(stderr, "      --temu             Run in-process TinyEMU RISC-V VM\n");
@@ -841,8 +912,9 @@ static void set_config(struct config_impl *impl, const char *path, const char *v
 {
     char key[MAX_KEY_LEN];
     struct config_node *parent = navigate_or_create(impl->root, path, key);
-    if (parent)
+    if (parent) {
         node_set_value(parent, key, value);
+    }
 }
 
 /* Parse the command line into config. Recognises -c/--config (already loaded
@@ -915,8 +987,9 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             set_config(impl, YETTY_YCONFIG_KEY_QEMU, "true");
             break;
         case OPT_SSH:
-            if (optarg)
+            if (optarg) {
                 parse_ssh_target(impl, optarg);
+            }
             set_config(impl, YETTY_YCONFIG_KEY_SSH, "true");
             break;
         case 'h':
@@ -932,11 +1005,12 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
 /* Public create function */
 
 struct yetty_yconfig_result yetty_yconfig_create(int argc, char *argv[],
-                                                const struct yetty_yplatform_paths *paths)
+                                                 const struct yetty_yplatform_paths *paths)
 {
     struct config_impl *impl = calloc(1, sizeof(struct config_impl));
-    if (!impl)
+    if (!impl) {
         return YETTY_ERR(yetty_yconfig, "failed to allocate config");
+    }
 
     impl->base.ops = &config_ops;
     impl->root = node_create(NULL);
@@ -950,8 +1024,9 @@ struct yetty_yconfig_result yetty_yconfig_create(int argc, char *argv[],
 
     /* $SHELL overrides shell/default from yaml */
     const char *env_shell = getenv("SHELL");
-    if (env_shell && env_shell[0])
+    if (env_shell && env_shell[0]) {
         set_config(impl, "shell/default", env_shell);
+    }
 
     parse_cmdline(impl, argc, argv);
 

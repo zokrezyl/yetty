@@ -30,18 +30,16 @@ extern "C" {
 /* Load from TTF file path.
  * base_size: pixel size the atlas rasterizes at; measurement is base-size
  * independent (scales with the requested font_size). */
-struct yetty_font_font_result
-yetty_font_raster_font_create_from_file(const char *ttf_path,
-                                        const char *shader_path,
-                                        float base_size);
+struct yetty_font_font_result yetty_font_raster_font_create_from_file(const char *ttf_path,
+                                                                      const char *shader_path,
+                                                                      float base_size);
 
 /* Load from TTF bytes held in memory. name is used only for diagnostics. */
-struct yetty_font_font_result
-yetty_font_raster_font_create_from_data(const uint8_t *ttf_data,
-                                        size_t ttf_size,
-                                        const char *name,
-                                        const char *shader_path,
-                                        float base_size);
+struct yetty_font_font_result yetty_font_raster_font_create_from_data(const uint8_t *ttf_data,
+                                                                      size_t ttf_size,
+                                                                      const char *name,
+                                                                      const char *shader_path,
+                                                                      float base_size);
 
 #ifdef __cplusplus
 }

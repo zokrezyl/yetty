@@ -66,7 +66,8 @@ public:
 	}
 	bool pop(uint32_t &cp) {
 		std::lock_guard<std::mutex> lock(_mutex);
-		if (_queue.empty()) return false;
+		if (_queue.empty()) { return false;
+}
 		cp = _queue.front();
 		_queue.pop();
 		return true;
@@ -97,8 +98,9 @@ static glyph_result generate_glyph(worker_ctx &ctx, uint32_t codepoint)
 
 	msdfgen::Shape shape;
 	double advance;
-	if (!msdfgen::loadGlyph(shape, ctx.font, codepoint, &advance))
+	if (!msdfgen::loadGlyph(shape, ctx.font, codepoint, &advance)) {
 		return res;
+}
 
 	msdfgen::FontMetrics metrics;
 	msdfgen::getFontMetrics(metrics, ctx.font);
@@ -126,8 +128,9 @@ static glyph_result generate_glyph(worker_ctx &ctx, uint32_t codepoint)
 	int bmp_w = static_cast<int>(std::ceil(logical_w)) + padding * 2;
 	int bmp_h = static_cast<int>(std::ceil(logical_h)) + padding * 2;
 
-	if (bmp_w <= 0 || bmp_h <= 0)
+	if (bmp_w <= 0 || bmp_h <= 0) {
 		return res;
+}
 
 	res.header.width = static_cast<uint16_t>(bmp_w);
 	res.header.height = static_cast<uint16_t>(bmp_h);
@@ -176,7 +179,8 @@ static void worker_thread(WorkQueue &queue,
 			  float font_size, float pixel_range)
 {
 	auto ft = msdfgen::initializeFreetype();
-	if (!ft) return;
+	if (!ft) { return;
+}
 
 	auto font = msdfgen::loadFont(ft, font_path.c_str());
 	if (!font) {
@@ -209,7 +213,8 @@ static std::vector<uint32_t> get_default_charset(bool nerd_fonts, bool cjk)
 	std::vector<uint32_t> cs;
 
 	auto add = [&](uint32_t lo, uint32_t hi) {
-		for (uint32_t c = lo; c <= hi; c++) cs.push_back(c);
+		for (uint32_t c = lo; c <= hi; c++) { cs.push_back(c);
+}
 	};
 
 	add(0x20, 0x7E);       /* Basic Latin */
@@ -257,7 +262,8 @@ static std::vector<uint32_t> get_font_charset(const std::string &font_path)
 {
 	std::vector<uint32_t> cs;
 	FT_Library lib;
-	if (FT_Init_FreeType(&lib)) return cs;
+	if (FT_Init_FreeType(&lib)) { return cs;
+}
 
 	FT_Face face;
 	if (FT_New_Face(lib, font_path.c_str(), 0, &face)) {
@@ -286,18 +292,21 @@ static struct yetty_ycore_void_result
 write_cdb(const char *path, const std::vector<glyph_result> &results)
 {
 	struct yetty_ycdb_writer_result wr = yetty_ycdb_writer_create(path);
-	if (YETTY_IS_ERR(wr))
+	if (YETTY_IS_ERR(wr)) {
 		return yetty_cpp_err( wr.error.msg);
+}
 
 	for (const auto &r : results) {
-		if (!r.success) continue;
+		if (!r.success) { continue;
+}
 
 		size_t val_size = sizeof(struct msdf_glyph_header) + r.pixels.size();
 		std::vector<char> val(val_size);
 		std::memcpy(val.data(), &r.header, sizeof(r.header));
-		if (!r.pixels.empty())
+		if (!r.pixels.empty()) {
 			std::memcpy(val.data() + sizeof(r.header),
 				    r.pixels.data(), r.pixels.size());
+}
 
 		uint32_t key = r.codepoint;
 		struct yetty_ycore_void_result add_res = yetty_ycdb_writer_add(
@@ -318,31 +327,37 @@ write_cdb(const char *path, const std::vector<glyph_result> &results)
 extern "C" struct yetty_ycore_void_result
 yetty_ymsdf_gen_cpu_generate(const struct yetty_ymsdf_gen_config *config)
 {
-	if (!config || !config->ttf_path || !config->output_dir)
+	if (!config || !config->ttf_path || !config->output_dir) {
 		return yetty_cpp_err( "invalid config");
+}
 
 	float font_size = config->font_size > 0 ? config->font_size : 32.0f;
 	float pixel_range = config->pixel_range > 0 ? config->pixel_range : 4.0f;
 	int thread_count = config->thread_count;
-	if (thread_count <= 0)
+	if (thread_count <= 0) {
 		thread_count = static_cast<int>(std::thread::hardware_concurrency());
-	if (thread_count < 1) thread_count = 1;
+}
+	if (thread_count < 1) { thread_count = 1;
+}
 
 	/* Build charset */
 	std::vector<uint32_t> charset;
-	if (config->all_glyphs)
+	if (config->all_glyphs) {
 		charset = get_font_charset(config->ttf_path);
-	else
+	} else {
 		charset = get_default_charset(config->include_nerd_fonts,
 					      config->include_cjk);
+}
 
-	if (charset.empty())
+	if (charset.empty()) {
 		return yetty_cpp_err( "empty charset");
+}
 
 	/* Work queue */
 	WorkQueue queue;
-	for (uint32_t cp : charset)
+	for (uint32_t cp : charset) {
 		queue.push(cp);
+}
 
 	std::vector<glyph_result> results;
 	std::mutex results_mutex;
@@ -358,8 +373,9 @@ yetty_ymsdf_gen_cpu_generate(const struct yetty_ymsdf_gen_config *config)
 			font_size, pixel_range);
 	}
 
-	for (auto &t : workers)
+	for (auto &t : workers) {
 		t.join();
+}
 
 	/* Extract font name for output file */
 	std::filesystem::path fp(config->ttf_path);

@@ -22,15 +22,15 @@ extern "C" {
  *===========================================================================*/
 
 struct yetty_ymsdf_gen_glyph_header {
-	uint32_t codepoint;
-	uint16_t width;
-	uint16_t height;
-	float bearing_x;
-	float bearing_y;
-	float size_x;
-	float size_y;
-	float advance;
-	/* followed by width * height * 4 bytes RGBA8 pixel data */
+    uint32_t codepoint;
+    uint16_t width;
+    uint16_t height;
+    float bearing_x;
+    float bearing_y;
+    float size_x;
+    float size_y;
+    float advance;
+    /* followed by width * height * 4 bytes RGBA8 pixel data */
 };
 
 /*=============================================================================
@@ -38,22 +38,22 @@ struct yetty_ymsdf_gen_glyph_header {
  *===========================================================================*/
 
 struct yetty_ymsdf_gen_config {
-	const char *ttf_path;
-	const char *output_dir;
-	float font_size;          /* pixels, default 32 */
-	float pixel_range;        /* default 4 */
-	int thread_count;         /* 0 = auto */
-	int include_nerd_fonts;
-	int include_cjk;
-	int all_glyphs;
+    const char *ttf_path;
+    const char *output_dir;
+    float font_size;   /* pixels, default 32 */
+    float pixel_range; /* default 4 */
+    int thread_count;  /* 0 = auto */
+    int include_nerd_fonts;
+    int include_cjk;
+    int all_glyphs;
 };
 
 /*=============================================================================
  * API
  *===========================================================================*/
 
-struct yetty_ycore_void_result
-yetty_ymsdf_gen_cpu_generate(const struct yetty_ymsdf_gen_config *config);
+struct yetty_ycore_void_result yetty_ymsdf_gen_cpu_generate(
+    const struct yetty_ymsdf_gen_config *config);
 
 #ifdef __cplusplus
 }

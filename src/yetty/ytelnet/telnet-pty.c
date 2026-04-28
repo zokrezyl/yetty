@@ -40,14 +40,14 @@
 
 /* Telnet protocol state machine */
 enum telnet_state {
-    STATE_DATA,     /* Normal data */
-    STATE_IAC,      /* Received IAC */
-    STATE_WILL,     /* Received IAC WILL */
-    STATE_WONT,     /* Received IAC WONT */
-    STATE_DO,       /* Received IAC DO */
-    STATE_DONT,     /* Received IAC DONT */
-    STATE_SB,       /* In subnegotiation */
-    STATE_SB_IAC,   /* IAC in subnegotiation */
+    STATE_DATA,   /* Normal data */
+    STATE_IAC,    /* Received IAC */
+    STATE_WILL,   /* Received IAC WILL */
+    STATE_WONT,   /* Received IAC WONT */
+    STATE_DO,     /* Received IAC DO */
+    STATE_DONT,   /* Received IAC DONT */
+    STATE_SB,     /* In subnegotiation */
+    STATE_SB_IAC, /* IAC in subnegotiation */
 };
 
 struct telnet_pty {
@@ -57,9 +57,9 @@ struct telnet_pty {
     /* Loop + libuv handles */
     struct yetty_ycore_event_loop *event_loop;
     yetty_ycore_tcp_client_id tcp_client_id;
-    struct yetty_tcp_conn *conn;             /* set in on_connect */
-    int tcp_client_active;                   /* create_tcp_client succeeded */
-    int connected;                           /* on_connect fired ok */
+    struct yetty_tcp_conn *conn; /* set in on_connect */
+    int tcp_client_active;       /* create_tcp_client succeeded */
+    int connected;               /* on_connect fired ok */
 
     /* NAWS-fallback timer (one-shot, started in on_connect) */
     yetty_ycore_timer_id naws_timer_id;
@@ -99,11 +99,15 @@ struct telnet_pty {
 
 /* Forward declarations */
 static void telnet_pty_destroy(struct yetty_yplatform_pty *self);
-static struct yetty_ycore_size_result telnet_pty_read(struct yetty_yplatform_pty *self, char *buf, size_t max_len);
-static struct yetty_ycore_size_result telnet_pty_write(struct yetty_yplatform_pty *self, const char *data, size_t len);
-static struct yetty_ycore_void_result telnet_pty_resize(struct yetty_yplatform_pty *self, uint32_t cols, uint32_t rows);
+static struct yetty_ycore_size_result telnet_pty_read(struct yetty_yplatform_pty *self, char *buf,
+                                                      size_t max_len);
+static struct yetty_ycore_size_result telnet_pty_write(struct yetty_yplatform_pty *self,
+                                                       const char *data, size_t len);
+static struct yetty_ycore_void_result telnet_pty_resize(struct yetty_yplatform_pty *self,
+                                                        uint32_t cols, uint32_t rows);
 static struct yetty_ycore_void_result telnet_pty_stop(struct yetty_yplatform_pty *self);
-static struct yetty_yplatform_pty_pipe_source *telnet_pty_pipe_source(struct yetty_yplatform_pty *self);
+static struct yetty_yplatform_pty_pipe_source *telnet_pty_pipe_source(
+    struct yetty_yplatform_pty *self);
 
 static const struct yetty_yplatform_pty_ops telnet_pty_ops = {
     .destroy = telnet_pty_destroy,
@@ -117,40 +121,42 @@ static const struct yetty_yplatform_pty_ops telnet_pty_ops = {
 /* Send raw bytes on the libuv TCP connection. Drops if not yet connected. */
 static int telnet_send_raw(struct telnet_pty *pty, const uint8_t *data, size_t len)
 {
-    if (!pty->connected || !pty->conn)
+    if (!pty->connected || !pty->conn) {
         return -1;
+    }
 
-    struct yetty_ycore_size_result r = pty->event_loop->ops->tcp_send(
-        pty->conn, data, len);
-    if (!r.ok)
+    struct yetty_ycore_size_result r = pty->event_loop->ops->tcp_send(pty->conn, data, len);
+    if (!r.ok) {
         return -1;
+    }
     return 0;
 }
 
 static void telnet_send_cmd(struct telnet_pty *pty, uint8_t cmd, uint8_t opt)
 {
-    uint8_t buf[3] = { TELNET_IAC, cmd, opt };
+    uint8_t buf[3] = {TELNET_IAC, cmd, opt};
     telnet_send_raw(pty, buf, 3);
 }
 
 /* Inject `stty cols X rows Y\r` into the guest shell — NAWS fallback. */
 static void telnet_inject_stty(struct telnet_pty *pty)
 {
-    if (pty->cols == 0 || pty->rows == 0)
+    if (pty->cols == 0 || pty->rows == 0) {
         return;
+    }
     char cmd[80];
-    int n = snprintf(cmd, sizeof(cmd),
-                     "\rstty cols %u rows %u\r", pty->cols, pty->rows);
-    if (n > 0 && (size_t)n < sizeof(cmd))
+    int n = snprintf(cmd, sizeof(cmd), "\rstty cols %u rows %u\r", pty->cols, pty->rows);
+    if (n > 0 && (size_t)n < sizeof(cmd)) {
         telnet_send_raw(pty, (const uint8_t *)cmd, (size_t)n);
-    yinfo("telnet: injected stty cols %u rows %u (NAWS fallback)",
-          pty->cols, pty->rows);
+    }
+    yinfo("telnet: injected stty cols %u rows %u (NAWS fallback)", pty->cols, pty->rows);
 }
 
 static void telnet_send_naws(struct telnet_pty *pty)
 {
-    if (!pty->naws_enabled)
+    if (!pty->naws_enabled) {
         return;
+    }
 
     uint8_t buf[9];
     buf[0] = TELNET_IAC;
@@ -216,8 +222,9 @@ static void telnet_handle_do(struct telnet_pty *pty, uint8_t opt)
 
 static void telnet_handle_subneg(struct telnet_pty *pty)
 {
-    if (pty->subneg_len < 1)
+    if (pty->subneg_len < 1) {
         return;
+    }
 
     uint8_t opt = pty->subneg_buf[0];
 
@@ -317,8 +324,9 @@ static void telnet_process_byte(struct telnet_pty *pty, uint8_t byte)
             telnet_handle_subneg(pty);
             pty->state = STATE_DATA;
         } else if (byte == TELNET_IAC) {
-            if (pty->subneg_len < sizeof(pty->subneg_buf))
+            if (pty->subneg_len < sizeof(pty->subneg_buf)) {
                 pty->subneg_buf[pty->subneg_len++] = TELNET_IAC;
+            }
             pty->state = STATE_SB;
         } else {
             pty->state = STATE_DATA;
@@ -329,8 +337,7 @@ static void telnet_process_byte(struct telnet_pty *pty, uint8_t byte)
 
 /* libuv TCP client callbacks (all run on the loop thread) */
 
-static void telnet_on_alloc(void *ctx, size_t suggested,
-                            char **buf, size_t *len)
+static void telnet_on_alloc(void *ctx, size_t suggested, char **buf, size_t *len)
 {
     struct telnet_pty *pty = ctx;
     (void)suggested;
@@ -338,24 +345,24 @@ static void telnet_on_alloc(void *ctx, size_t suggested,
     *len = sizeof(pty->read_buf);
 }
 
-static void telnet_on_data(void *ctx, struct yetty_tcp_conn *conn,
-                           const char *data, long nread)
+static void telnet_on_data(void *ctx, struct yetty_tcp_conn *conn, const char *data, long nread)
 {
     struct telnet_pty *pty = ctx;
     (void)conn;
-    if (nread <= 0)
+    if (nread <= 0) {
         return;
-    for (long i = 0; i < nread; i++)
+    }
+    for (long i = 0; i < nread; i++) {
         telnet_process_byte(pty, (uint8_t)data[i]);
+    }
 }
 
 static struct yetty_ycore_int_result telnet_naws_timer_handler(
-    struct yetty_ycore_event_listener *listener,
-    const struct yetty_ycore_event *event)
+    struct yetty_ycore_event_listener *listener, const struct yetty_ycore_event *event)
 {
     (void)event;
-    struct telnet_pty *pty = (struct telnet_pty *)((char *)listener -
-        offsetof(struct telnet_pty, naws_listener));
+    struct telnet_pty *pty =
+        (struct telnet_pty *)((char *)listener - offsetof(struct telnet_pty, naws_listener));
 
     /* One-shot: stop ourselves regardless of NAWS state. */
     if (pty->naws_timer_active) {
@@ -390,12 +397,12 @@ static void telnet_on_connect(void *ctx, struct yetty_tcp_conn *conn)
     struct yetty_ycore_void_result vr = pty->event_loop->ops->config_timer(
         pty->event_loop, pty->naws_timer_id, TELNET_NAWS_FALLBACK_MS);
     if (vr.ok) {
-        vr = pty->event_loop->ops->start_timer(
-            pty->event_loop, pty->naws_timer_id);
-        if (vr.ok)
+        vr = pty->event_loop->ops->start_timer(pty->event_loop, pty->naws_timer_id);
+        if (vr.ok) {
             pty->naws_timer_active = 1;
-        else
+        } else {
             yerror("telnet: start_timer failed: %s", vr.error.msg);
+        }
     } else {
         yerror("telnet: config_timer failed: %s", vr.error.msg);
     }
@@ -404,8 +411,8 @@ static void telnet_on_connect(void *ctx, struct yetty_tcp_conn *conn)
 static void telnet_on_connect_error(void *ctx, const char *error)
 {
     struct telnet_pty *pty = ctx;
-    yerror("telnet: connect to %s:%u failed: %s",
-           pty->host, pty->port, error ? error : "(unknown)");
+    yerror("telnet: connect to %s:%u failed: %s", pty->host, pty->port,
+           error ? error : "(unknown)");
     pty->tcp_client_active = 0;
 }
 
@@ -419,22 +426,26 @@ static void telnet_on_disconnect(void *ctx)
 
 /* PTY ops */
 
-static struct yetty_ycore_size_result telnet_pty_read(struct yetty_yplatform_pty *self, char *buf, size_t max_len)
+static struct yetty_ycore_size_result telnet_pty_read(struct yetty_yplatform_pty *self, char *buf,
+                                                      size_t max_len)
 {
     struct telnet_pty *pty = (struct telnet_pty *)self;
 
-    if (max_len == 0)
+    if (max_len == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
+    }
 
     return pty->output_pipe->ops->read(pty->output_pipe, buf, max_len);
 }
 
-static struct yetty_ycore_size_result telnet_pty_write(struct yetty_yplatform_pty *self, const char *data, size_t len)
+static struct yetty_ycore_size_result telnet_pty_write(struct yetty_yplatform_pty *self,
+                                                       const char *data, size_t len)
 {
     struct telnet_pty *pty = (struct telnet_pty *)self;
 
-    if (len == 0)
+    if (len == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
+    }
 
     if (!pty->connected) {
         ydebug("telnet: write %zu bytes dropped (not connected)", len);
@@ -454,26 +465,30 @@ static struct yetty_ycore_size_result telnet_pty_write(struct yetty_yplatform_pt
         }
     }
 
-    if (telnet_send_raw(pty, buf, j) < 0)
+    if (telnet_send_raw(pty, buf, j) < 0) {
         return YETTY_OK(yetty_ycore_size, 0);
+    }
 
     return YETTY_OK(yetty_ycore_size, len);
 }
 
-static struct yetty_ycore_void_result telnet_pty_resize(struct yetty_yplatform_pty *self, uint32_t cols, uint32_t rows)
+static struct yetty_ycore_void_result telnet_pty_resize(struct yetty_yplatform_pty *self,
+                                                        uint32_t cols, uint32_t rows)
 {
     struct telnet_pty *pty = (struct telnet_pty *)self;
 
     pty->cols = cols;
     pty->rows = rows;
 
-    if (!pty->connected)
+    if (!pty->connected) {
         return YETTY_OK_VOID();
+    }
 
-    if (pty->naws_enabled)
+    if (pty->naws_enabled) {
         telnet_send_naws(pty);
-    else if (pty->stty_initial_sent)
+    } else if (pty->stty_initial_sent) {
         telnet_inject_stty(pty);
+    }
     /* else: NAWS-fallback timer is still pending — first inject happens there. */
 
     return YETTY_OK_VOID();
@@ -489,8 +504,7 @@ static struct yetty_ycore_void_result telnet_pty_stop(struct yetty_yplatform_pty
     }
 
     if (pty->tcp_client_active) {
-        pty->event_loop->ops->stop_tcp_client(
-            pty->event_loop, pty->tcp_client_id);
+        pty->event_loop->ops->stop_tcp_client(pty->event_loop, pty->tcp_client_id);
         pty->tcp_client_active = 0;
         pty->connected = 0;
         pty->conn = NULL;
@@ -517,22 +531,24 @@ static void telnet_pty_destroy(struct yetty_yplatform_pty *self)
     free(pty);
 }
 
-static struct yetty_yplatform_pty_pipe_source *telnet_pty_pipe_source(struct yetty_yplatform_pty *self)
+static struct yetty_yplatform_pty_pipe_source *telnet_pty_pipe_source(
+    struct yetty_yplatform_pty *self)
 {
     struct telnet_pty *pty = (struct telnet_pty *)self;
     return &pty->pipe_source;
 }
 
-struct yetty_yplatform_pty_result telnet_pty_create(
-    const char *host, uint16_t port,
-    struct yetty_ycore_event_loop *event_loop)
+struct yetty_yplatform_pty_result telnet_pty_create(const char *host, uint16_t port,
+                                                    struct yetty_ycore_event_loop *event_loop)
 {
-    if (!event_loop || !event_loop->ops)
+    if (!event_loop || !event_loop->ops) {
         return YETTY_ERR(yetty_yplatform_pty, "telnet_pty_create: event_loop required");
+    }
 
     struct telnet_pty *pty = calloc(1, sizeof(struct telnet_pty));
-    if (!pty)
+    if (!pty) {
         return YETTY_ERR(yetty_yplatform_pty, "failed to allocate telnet pty");
+    }
 
     pty->base.ops = &telnet_pty_ops;
     pty->event_loop = event_loop;
@@ -598,8 +614,8 @@ struct yetty_yplatform_pty_result telnet_pty_create(
         .on_disconnect = telnet_on_disconnect,
     };
 
-    struct yetty_ycore_tcp_client_id_result cres = event_loop->ops->create_tcp_client(
-        event_loop, host, (int)port, &callbacks);
+    struct yetty_ycore_tcp_client_id_result cres =
+        event_loop->ops->create_tcp_client(event_loop, host, (int)port, &callbacks);
     if (!cres.ok) {
         event_loop->ops->destroy_timer(event_loop, pty->naws_timer_id);
         pty->output_pipe->ops->destroy(pty->output_pipe);
@@ -630,8 +646,7 @@ static void telnet_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
 }
 
 static struct yetty_yplatform_pty_result telnet_pty_factory_create_pty(
-    struct yetty_yplatform_pty_factory *self,
-    struct yetty_ycore_event_loop *event_loop)
+    struct yetty_yplatform_pty_factory *self, struct yetty_ycore_event_loop *event_loop)
 {
     struct telnet_pty_factory *factory = (struct telnet_pty_factory *)self;
     return telnet_pty_create(factory->host, factory->port, event_loop);
@@ -642,14 +657,14 @@ static const struct yetty_yplatform_pty_factory_ops telnet_pty_factory_ops = {
     .create_pty = telnet_pty_factory_create_pty,
 };
 
-struct yetty_yplatform_pty_factory_result telnet_pty_factory_create(
-    const char *host, uint16_t port)
+struct yetty_yplatform_pty_factory_result telnet_pty_factory_create(const char *host, uint16_t port)
 {
     struct telnet_pty_factory *factory;
 
     factory = calloc(1, sizeof(struct telnet_pty_factory));
-    if (!factory)
+    if (!factory) {
         return YETTY_ERR(yetty_yplatform_pty_factory, "failed to allocate telnet pty factory");
+    }
 
     factory->base.ops = &telnet_pty_factory_ops;
     factory->host = strdup(host);

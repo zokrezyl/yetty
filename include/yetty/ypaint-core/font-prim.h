@@ -35,11 +35,11 @@ extern "C" {
 #define YETTY_YPAINT_TYPE_FONT 0x40000001u
 
 struct yetty_ypaint_font_prim_view {
-	int32_t font_id;
-	const char *name;       /* NOT NUL-terminated, len in name_len */
-	uint32_t name_len;
-	const uint8_t *ttf;
-	uint32_t ttf_len;
+    int32_t font_id;
+    const char *name; /* NOT NUL-terminated, len in name_len */
+    uint32_t name_len;
+    const uint8_t *ttf;
+    uint32_t ttf_len;
 };
 
 /* Size in bytes of a packed FONT prim including the 8-byte FAM header
@@ -48,20 +48,16 @@ size_t yetty_ypaint_font_prim_size_for(uint32_t name_len, uint32_t ttf_len);
 
 /* Pack a FONT prim into out. out must have at least
  * yetty_ypaint_font_prim_size_for(name_len, ttf_len) bytes. */
-void yetty_ypaint_font_prim_write(uint8_t *out,
-                                  int32_t font_id,
-                                  const char *name, uint32_t name_len,
-                                  const uint8_t *ttf, uint32_t ttf_len);
+void yetty_ypaint_font_prim_write(uint8_t *out, int32_t font_id, const char *name,
+                                  uint32_t name_len, const uint8_t *ttf, uint32_t ttf_len);
 
 /* Parse a FONT prim. The view points into the prim payload — lifetime is
  * tied to the underlying buffer. Returns 0 on success, -1 on malformed. */
-int yetty_ypaint_font_prim_parse(const uint32_t *prim,
-                                 struct yetty_ypaint_font_prim_view *out);
+int yetty_ypaint_font_prim_parse(const uint32_t *prim, struct yetty_ypaint_font_prim_view *out);
 
 /* Flyweight base ops handler. Returns ops only for type FONT. Register
  * via yetty_ypaint_flyweight_registry_add(reg, FONT, FONT, handler). */
-struct yetty_ypaint_prim_base_ops_ptr_result
-yetty_ypaint_font_prim_handler(uint32_t prim_type);
+struct yetty_ypaint_prim_base_ops_ptr_result yetty_ypaint_font_prim_handler(uint32_t prim_type);
 
 #ifdef __cplusplus
 }

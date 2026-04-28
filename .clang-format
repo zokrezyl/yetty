@@ -15,6 +15,11 @@ ContinuationIndentWidth: 4
 # attached (K&R-ish).
 BreakBeforeBraces: Linux
 
+# Always wrap single-statement bodies of if/for/while/do in {}.
+# Requires clang-format >= 14; the flake's llvmPackages_21 supplies it.
+# Host clang-format-9 silently ignores the option.
+InsertBraces: true
+
 # Pointer alignment: "type *name" per docs/c-coding-style.md.
 PointerAlignment: Right
 DerivePointerAlignment: false

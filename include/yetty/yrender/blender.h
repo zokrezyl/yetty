@@ -21,19 +21,15 @@ struct yetty_yrender_blender_ops {
     void (*destroy)(struct yetty_yrender_blender *self);
 
     /* Blend rendered layers to target */
-    struct yetty_ycore_void_result (*blend)(
-        struct yetty_yrender_blender *self,
-        struct yetty_yrender_rendered_layer **layers,
-        size_t layer_count);
+    struct yetty_ycore_void_result (*blend)(struct yetty_yrender_blender *self,
+                                            struct yetty_yrender_rendered_layer **layers,
+                                            size_t layer_count);
 
     /* Set/replace render target (takes ownership, destroys old target) */
-    void (*set_target)(
-        struct yetty_yrender_blender *self,
-        struct yetty_yrender_target *target);
+    void (*set_target)(struct yetty_yrender_blender *self, struct yetty_yrender_target *target);
 
     /* Get current target (not owned by caller) */
-    struct yetty_yrender_target *(*get_target)(
-        const struct yetty_yrender_blender *self);
+    struct yetty_yrender_target *(*get_target)(const struct yetty_yrender_blender *self);
 };
 
 /* Blender base */
@@ -43,9 +39,7 @@ struct yetty_yrender_blender {
 
 /* Create blender with initial target (takes ownership of target) */
 struct yetty_yrender_blender_result yetty_yrender_blender_create(
-    WGPUDevice device,
-    WGPUQueue queue,
-    struct yetty_yrender_target *target,
+    WGPUDevice device, WGPUQueue queue, struct yetty_yrender_target *target,
     const char *shader_path);
 
 #ifdef __cplusplus

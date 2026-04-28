@@ -28,23 +28,18 @@ extern "C" {
  * via yetty_yrich_document_destroy(). On error the result carries no
  * document and the caller does nothing. */
 
-struct yetty_yrich_ydoc_ptr_result
-yetty_yrich_ydoc_load_yaml(const char *yaml, size_t len);
+struct yetty_yrich_ydoc_ptr_result yetty_yrich_ydoc_load_yaml(const char *yaml, size_t len);
 
-struct yetty_yrich_ydoc_ptr_result
-yetty_yrich_ydoc_load_yaml_file(const char *path);
+struct yetty_yrich_ydoc_ptr_result yetty_yrich_ydoc_load_yaml_file(const char *path);
 
-struct yetty_yrich_spreadsheet_ptr_result
-yetty_yrich_spreadsheet_load_yaml(const char *yaml, size_t len);
+struct yetty_yrich_spreadsheet_ptr_result yetty_yrich_spreadsheet_load_yaml(const char *yaml,
+                                                                            size_t len);
 
-struct yetty_yrich_spreadsheet_ptr_result
-yetty_yrich_spreadsheet_load_yaml_file(const char *path);
+struct yetty_yrich_spreadsheet_ptr_result yetty_yrich_spreadsheet_load_yaml_file(const char *path);
 
-struct yetty_yrich_slides_ptr_result
-yetty_yrich_slides_load_yaml(const char *yaml, size_t len);
+struct yetty_yrich_slides_ptr_result yetty_yrich_slides_load_yaml(const char *yaml, size_t len);
 
-struct yetty_yrich_slides_ptr_result
-yetty_yrich_slides_load_yaml_file(const char *path);
+struct yetty_yrich_slides_ptr_result yetty_yrich_slides_load_yaml_file(const char *path);
 
 #ifdef __cplusplus
 }

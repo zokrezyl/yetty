@@ -11,7 +11,8 @@ extern "C" {
 struct yetty_yplatform_clipboard_manager;
 
 /* Result type */
-YETTY_YRESULT_DECLARE(yetty_yplatform_clipboard_manager, struct yetty_yplatform_clipboard_manager *);
+YETTY_YRESULT_DECLARE(yetty_yplatform_clipboard_manager,
+                      struct yetty_yplatform_clipboard_manager *);
 
 /* Clipboard manager ops */
 struct yetty_yplatform_clipboard_manager_ops {

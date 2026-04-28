@@ -28,12 +28,11 @@ struct yetty_yrender_gpu_resource_binder {
     const struct yetty_yrender_gpu_resource_binder_ops *ops;
 };
 
-YETTY_YRESULT_DECLARE(yetty_yrender_gpu_resource_binder, struct yetty_yrender_gpu_resource_binder *);
+YETTY_YRESULT_DECLARE(yetty_yrender_gpu_resource_binder,
+                      struct yetty_yrender_gpu_resource_binder *);
 
 struct yetty_yrender_gpu_resource_binder_result yetty_yrender_gpu_resource_binder_create(
-    WGPUDevice device,
-    WGPUQueue queue,
-    WGPUTextureFormat surface_format,
+    WGPUDevice device, WGPUQueue queue, WGPUTextureFormat surface_format,
     struct yetty_yrender_gpu_allocator *allocator);
 
 #ifdef __cplusplus

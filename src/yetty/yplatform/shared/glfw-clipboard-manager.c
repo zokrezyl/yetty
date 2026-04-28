@@ -69,8 +69,9 @@ struct yetty_yplatform_clipboard_manager_result yetty_yplatform_clipboard_manage
     struct glfw_clipboard_manager *manager;
 
     manager = malloc(sizeof(struct glfw_clipboard_manager));
-    if (!manager)
+    if (!manager) {
         return YETTY_ERR(yetty_yplatform_clipboard_manager, "failed to allocate clipboard manager");
+    }
 
     manager->base.ops = &glfw_clipboard_ops;
 

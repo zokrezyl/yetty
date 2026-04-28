@@ -6,8 +6,9 @@
 
 WGPUSurface yetty_yplatform_create_surface(WGPUInstance instance, GLFWwindow *window)
 {
-    if (!instance || !window)
+    if (!instance || !window) {
         return NULL;
+    }
 
     return glfwCreateWindowWGPUSurface(instance, window);
 }

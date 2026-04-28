@@ -15,16 +15,16 @@ struct yprocess {
     pid_t pid;
 };
 
-yprocess_t *yprocess_spawn(const char *const argv[],
-                           int detached,
-                           int stdio_to_null)
+yprocess_t *yprocess_spawn(const char *const argv[], int detached, int stdio_to_null)
 {
-    if (!argv || !argv[0])
+    if (!argv || !argv[0]) {
         return YPROCESS_INVALID;
+    }
 
     pid_t pid = fork();
-    if (pid < 0)
+    if (pid < 0) {
         return YPROCESS_INVALID;
+    }
 
     if (pid == 0) {
         /* Child */
@@ -34,12 +34,14 @@ yprocess_t *yprocess_spawn(const char *const argv[],
                 dup2(devnull, STDIN_FILENO);
                 dup2(devnull, STDOUT_FILENO);
                 dup2(devnull, STDERR_FILENO);
-                if (devnull > STDERR_FILENO)
+                if (devnull > STDERR_FILENO) {
                     close(devnull);
+                }
             }
         }
-        if (detached)
+        if (detached) {
             setsid();
+        }
 
         execvp(argv[0], (char *const *)argv);
         _exit(127);
@@ -56,12 +58,14 @@ yprocess_t *yprocess_spawn(const char *const argv[],
 
 void yprocess_terminate(yprocess_t *proc, unsigned grace_ms)
 {
-    if (!proc)
+    if (!proc) {
         return;
+    }
 
     kill(proc->pid, SIGTERM);
-    if (grace_ms > 0)
+    if (grace_ms > 0) {
         ytime_sleep_ms(grace_ms);
+    }
 
     /* If still alive, force-kill. waitpid below reaps in either case. */
     int status;
@@ -76,8 +80,9 @@ void yprocess_terminate(yprocess_t *proc, unsigned grace_ms)
 
 int yprocess_is_running(yprocess_t *proc)
 {
-    if (!proc)
+    if (!proc) {
         return 0;
+    }
 
     int status;
     pid_t r = waitpid(proc->pid, &status, WNOHANG);

@@ -28,42 +28,37 @@ struct yetty_yrender_gpu_allocator;
 
 struct yetty_primitive_gpu_binder;
 
-YETTY_YRESULT_DECLARE(yetty_primitive_gpu_binder_ptr,
-	struct yetty_primitive_gpu_binder *);
+YETTY_YRESULT_DECLARE(yetty_primitive_gpu_binder_ptr, struct yetty_primitive_gpu_binder *);
 
 // Create binder
-struct yetty_primitive_gpu_binder_ptr_result
-yetty_primitive_gpu_binder_create(WGPUDevice device, WGPUQueue queue,
-	struct yetty_yrender_gpu_allocator *allocator);
+struct yetty_primitive_gpu_binder_ptr_result yetty_primitive_gpu_binder_create(
+    WGPUDevice device, WGPUQueue queue, struct yetty_yrender_gpu_allocator *allocator);
 
 // Destroy binder
 void yetty_primitive_gpu_binder_destroy(struct yetty_primitive_gpu_binder *binder);
 
 // Set pre-compiled pipeline (from concrete factory)
 // This pipeline will be used for all subsequent renders
-struct yetty_ycore_void_result
-yetty_primitive_gpu_binder_set_pipeline(struct yetty_primitive_gpu_binder *binder,
-	WGPURenderPipeline pipeline);
+struct yetty_ycore_void_result yetty_primitive_gpu_binder_set_pipeline(
+    struct yetty_primitive_gpu_binder *binder, WGPURenderPipeline pipeline);
 
 // Add resource set (buffers, textures, uniforms)
 // Does NOT compile anything - just collects resources for bind group
-struct yetty_ycore_void_result
-yetty_primitive_gpu_binder_add_resource_set(struct yetty_primitive_gpu_binder *binder,
-	const struct yetty_yrender_gpu_resource_set *rs);
+struct yetty_ycore_void_result yetty_primitive_gpu_binder_add_resource_set(
+    struct yetty_primitive_gpu_binder *binder, const struct yetty_yrender_gpu_resource_set *rs);
 
 // Finalize - create bind group from collected resources
 // Uses pre-set pipeline's bind group layout
-struct yetty_ycore_void_result
-yetty_primitive_gpu_binder_finalize(struct yetty_primitive_gpu_binder *binder);
+struct yetty_ycore_void_result yetty_primitive_gpu_binder_finalize(
+    struct yetty_primitive_gpu_binder *binder);
 
 // Update - upload dirty buffers/textures (no recompilation ever)
-struct yetty_ycore_void_result
-yetty_primitive_gpu_binder_update(struct yetty_primitive_gpu_binder *binder);
+struct yetty_ycore_void_result yetty_primitive_gpu_binder_update(
+    struct yetty_primitive_gpu_binder *binder);
 
 // Bind to render pass and draw
-struct yetty_ycore_void_result
-yetty_primitive_gpu_binder_render(struct yetty_primitive_gpu_binder *binder,
-	WGPURenderPassEncoder pass, uint32_t instance_count);
+struct yetty_ycore_void_result yetty_primitive_gpu_binder_render(
+    struct yetty_primitive_gpu_binder *binder, WGPURenderPassEncoder pass, uint32_t instance_count);
 
 // Reset for next frame (clears resource sets, keeps pipeline)
 void yetty_primitive_gpu_binder_reset(struct yetty_primitive_gpu_binder *binder);

@@ -25,20 +25,23 @@ typedef long long ssize_t;
 
 struct pending {
     uint8_t *data;
-    size_t   size;
-    size_t   off;
+    size_t size;
+    size_t off;
 };
-static struct pending g_pending = { NULL, 0, 0 };
+static struct pending g_pending = {NULL, 0, 0};
 
 static int try_drain_pending(int fd)
 {
     while (g_pending.off < g_pending.size) {
-        ssize_t w = YMGUI_WRITE(fd,
-                                (const char *)g_pending.data + g_pending.off,
+        ssize_t w = YMGUI_WRITE(fd, (const char *)g_pending.data + g_pending.off,
                                 (unsigned)(g_pending.size - g_pending.off));
         if (w < 0) {
-            if (errno == EINTR) continue;
-            if (errno == EAGAIN || errno == EWOULDBLOCK) return 1;
+            if (errno == EINTR) {
+                continue;
+            }
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                return 1;
+            }
             return -1;
         }
         g_pending.off += (size_t)w;
@@ -51,7 +54,9 @@ static int try_drain_pending(int fd)
 
 int ymgui_pending_flush(int fd)
 {
-    if (!g_pending.data) return 0;
+    if (!g_pending.data) {
+        return 0;
+    }
     return try_drain_pending(fd);
 }
 
@@ -69,16 +74,26 @@ int ymgui_pending_drain_blocking(int fd)
 #else
     while (g_pending.data) {
         int r = try_drain_pending(fd);
-        if (r < 0) return -1;
-        if (r == 0) return 0;
-        struct pollfd pfd = { .fd = fd, .events = POLLOUT, .revents = 0 };
-        int n = poll(&pfd, 1, 5000 /* ms */);
-        if (n < 0) {
-            if (errno == EINTR) continue;
+        if (r < 0) {
             return -1;
         }
-        if (n == 0) return -1;        /* timed out — receiver wedged */
-        if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) return -1;
+        if (r == 0) {
+            return 0;
+        }
+        struct pollfd pfd = {.fd = fd, .events = POLLOUT, .revents = 0};
+        int n = poll(&pfd, 1, 5000 /* ms */);
+        if (n < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            return -1;
+        }
+        if (n == 0) {
+            return -1; /* timed out — receiver wedged */
+        }
+        if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+            return -1;
+        }
     }
     return 0;
 #endif
@@ -90,26 +105,35 @@ int ymgui_pending_write(int fd, const uint8_t *bytes, size_t len)
      * would corrupt the OSC stream. */
     if (g_pending.data) {
         int r = try_drain_pending(fd);
-        if (r < 0) return -1;
-        if (r > 0) return 1;
+        if (r < 0) {
+            return -1;
+        }
+        if (r > 0) {
+            return 1;
+        }
     }
-    if (len == 0) return 0;
+    if (len == 0) {
+        return 0;
+    }
 
     size_t off = 0;
     while (off < len) {
-        ssize_t w = YMGUI_WRITE(fd, (const char *)(bytes + off),
-                                (unsigned)(len - off));
+        ssize_t w = YMGUI_WRITE(fd, (const char *)(bytes + off), (unsigned)(len - off));
         if (w < 0) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR) {
+                continue;
+            }
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 /* Park the unsent tail in the queue. */
                 size_t left = len - off;
                 uint8_t *tail = (uint8_t *)malloc(left);
-                if (!tail) return -1;
+                if (!tail) {
+                    return -1;
+                }
                 memcpy(tail, bytes + off, left);
                 g_pending.data = tail;
                 g_pending.size = left;
-                g_pending.off  = 0;
+                g_pending.off = 0;
                 return 0;
             }
             return -1;

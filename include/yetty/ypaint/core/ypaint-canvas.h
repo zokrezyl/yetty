@@ -18,25 +18,22 @@ struct yetty_context;
 // Create a canvas
 // @param scrolling_mode If true, primitives are cursor-relative and scroll
 // @param context Yetty context for config access (fonts path, etc.)
-struct yetty_ypaint_canvas *yetty_ypaint_canvas_create(
-    bool scrolling_mode, const struct yetty_context *context);
+struct yetty_ypaint_canvas *yetty_ypaint_canvas_create(bool scrolling_mode,
+                                                       const struct yetty_context *context);
 
 // Destroy a canvas
-struct yetty_ycore_void_result
-yetty_ypaint_canvas_destroy(struct yetty_ypaint_canvas *canvas);
+struct yetty_ycore_void_result yetty_ypaint_canvas_destroy(struct yetty_ypaint_canvas *canvas);
 
 //=============================================================================
 // Configuration
 //=============================================================================
 
 // Set grid cell size (pixels)
-struct yetty_ycore_void_result
-yetty_ypaint_canvas_set_cell_size(struct yetty_ypaint_canvas *canvas,
-                            struct pixel_size pixel_size);
+struct yetty_ycore_void_result yetty_ypaint_canvas_set_cell_size(struct yetty_ypaint_canvas *canvas,
+                                                                 struct pixel_size pixel_size);
 // Set grid dimensions (cols/rows)
-struct yetty_ycore_void_result
-yetty_ypaint_canvas_set_grid_size(struct yetty_ypaint_canvas *canvas,
-                            struct grid_size grid_size);
+struct yetty_ycore_void_result yetty_ypaint_canvas_set_grid_size(struct yetty_ypaint_canvas *canvas,
+                                                                 struct grid_size grid_size);
 
 //=============================================================================
 // Accessors
@@ -44,8 +41,7 @@ yetty_ypaint_canvas_set_grid_size(struct yetty_ypaint_canvas *canvas,
 
 bool yetty_ypaint_canvas_scrolling_mode(struct yetty_ypaint_canvas *canvas);
 
-struct pixel_size
-yetty_ypaint_canvas_cell_get_pixel_size(struct yetty_ypaint_canvas *canvas);
+struct pixel_size yetty_ypaint_canvas_cell_get_pixel_size(struct yetty_ypaint_canvas *canvas);
 
 struct grid_size yetty_ypaint_canvas_get_grid_size(struct yetty_ypaint_canvas *canvas);
 
@@ -55,9 +51,8 @@ uint32_t yetty_ypaint_canvas_line_count(struct yetty_ypaint_canvas *canvas);
 // Cursor (scrolling mode only)
 //=============================================================================
 
-struct yetty_ycore_void_result
-yetty_ypaint_canvas_set_cursor_pos(struct yetty_ypaint_canvas *canvas,
-                             struct grid_cursor_pos grid_cursor_pos);
+struct yetty_ycore_void_result yetty_ypaint_canvas_set_cursor_pos(
+    struct yetty_ypaint_canvas *canvas, struct grid_cursor_pos grid_cursor_pos);
 
 //=============================================================================
 // Rolling offset (for shader uniform)
@@ -72,17 +67,15 @@ uint32_t yetty_ypaint_canvas_rolling_row_0(struct yetty_ypaint_canvas *canvas);
 // top of the viewport if no scrollback override were active. Use this when
 // you need the live anchor (e.g. to translate a relative scroll-back
 // request into an absolute view_top).
-uint32_t yetty_ypaint_canvas_live_rolling_row_0(
-    struct yetty_ypaint_canvas *canvas);
+uint32_t yetty_ypaint_canvas_live_rolling_row_0(struct yetty_ypaint_canvas *canvas);
 
 // Pin the visible viewport to an absolute canvas-line index, freezing the
 // current scrollback content even as new prims keep arriving (active=true).
 // Pass active=false to drop the override and resume tracking the live
 // rolling_row_0. While active, scroll_lines still advances the live anchor
 // in the background — it just doesn't move the visible viewport.
-struct yetty_ycore_void_result
-yetty_ypaint_canvas_set_view_top(struct yetty_ypaint_canvas *canvas,
-                                 bool active, uint32_t view_top);
+struct yetty_ycore_void_result yetty_ypaint_canvas_set_view_top(struct yetty_ypaint_canvas *canvas,
+                                                                bool active, uint32_t view_top);
 
 //=============================================================================
 // Buffer management
@@ -94,9 +87,8 @@ struct yetty_ypaint_core_buffer;
 // Computes AABB for each primitive, tracks max_row, handles scrolling
 // In scrolling mode: primitives positioned relative to cursor
 // In non-scrolling mode: primitives positioned at absolute scene coordinates
-struct yetty_ycore_void_result
-yetty_ypaint_canvas_add_buffer(struct yetty_ypaint_canvas *canvas,
-                         struct yetty_ypaint_core_buffer *buffer);
+struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
+    struct yetty_ypaint_canvas *canvas, struct yetty_ypaint_core_buffer *buffer);
 
 //=============================================================================
 // Scrolling
@@ -115,45 +107,41 @@ typedef struct yetty_ycore_void_result (*yetty_ypaint_canvas_cursor_set_callback
     struct yetty_ycore_void_result *user_data, uint16_t new_row);
 
 // Set scroll callback (called when add_buffer triggers scroll)
-struct yetty_ycore_void_result
-yetty_ypaint_canvas_set_scroll_callback(struct yetty_ypaint_canvas *canvas,
-                                  yetty_ypaint_canvas_scroll_callback callback,
-                                  struct yetty_ycore_void_result *user_data);
+struct yetty_ycore_void_result yetty_ypaint_canvas_set_scroll_callback(
+    struct yetty_ypaint_canvas *canvas, yetty_ypaint_canvas_scroll_callback callback,
+    struct yetty_ycore_void_result *user_data);
 
 // Set cursor callback (called when cursor moves without scroll)
-struct yetty_ycore_void_result
-yetty_ypaint_canvas_set_cursor_callback(struct yetty_ypaint_canvas *canvas,
-                                  yetty_ypaint_canvas_cursor_set_callback callback,
-                                  struct yetty_ycore_void_result *user_data);
+struct yetty_ycore_void_result yetty_ypaint_canvas_set_cursor_callback(
+    struct yetty_ypaint_canvas *canvas, yetty_ypaint_canvas_cursor_set_callback callback,
+    struct yetty_ycore_void_result *user_data);
 
 // Remove N lines from the top - primitives in those lines are deleted
 // Only valid in scrolling mode
 // O(1) for offset update, O(n) only for deleting the actual lines
-struct yetty_ycore_void_result
-yetty_ypaint_canvas_scroll_lines(struct yetty_ypaint_canvas *canvas, uint16_t num_lines);
+struct yetty_ycore_void_result yetty_ypaint_canvas_scroll_lines(struct yetty_ypaint_canvas *canvas,
+                                                                uint16_t num_lines);
 
 //=============================================================================
 // Packed GPU format
 //=============================================================================
 
 // Mark grid as dirty (needs rebuild)
-struct yetty_ycore_void_result
-yetty_ypaint_canvas_mark_dirty(struct yetty_ypaint_canvas *canvas);
+struct yetty_ycore_void_result yetty_ypaint_canvas_mark_dirty(struct yetty_ypaint_canvas *canvas);
 
 // Check if grid needs rebuild
 bool yetty_ypaint_canvas_is_dirty(struct yetty_ypaint_canvas *canvas);
 
 // Rebuild packed grid format for GPU upload
-struct yetty_ycore_void_result
-yetty_ypaint_canvas_rebuild_grid(struct yetty_ypaint_canvas *canvas);
+struct yetty_ycore_void_result yetty_ypaint_canvas_rebuild_grid(struct yetty_ypaint_canvas *canvas);
 
 // Get packed grid data for GPU upload
 const uint32_t *yetty_ypaint_canvas_grid_data(struct yetty_ypaint_canvas *canvas);
 uint32_t yetty_ypaint_canvas_grid_word_count(struct yetty_ypaint_canvas *canvas);
 
 // Clear packed grid staging
-struct yetty_ycore_void_result
-yetty_ypaint_canvas_clear_staging(struct yetty_ypaint_canvas *canvas);
+struct yetty_ycore_void_result yetty_ypaint_canvas_clear_staging(
+    struct yetty_ypaint_canvas *canvas);
 
 //=============================================================================
 // Primitive staging for GPU
@@ -162,7 +150,7 @@ yetty_ypaint_canvas_clear_staging(struct yetty_ypaint_canvas *canvas);
 // Build primitive staging data for GPU upload
 // Returns pointer to staging buffer, sets word_count
 const uint32_t *yetty_ypaint_canvas_build_prim_staging(struct yetty_ypaint_canvas *canvas,
-                                                 uint32_t *word_count);
+                                                       uint32_t *word_count);
 
 // Get total GPU size for primitives (in bytes)
 uint32_t yetty_ypaint_canvas_prim_gpu_size(struct yetty_ypaint_canvas *canvas);
@@ -181,34 +169,29 @@ bool yetty_ypaint_canvas_empty(struct yetty_ypaint_canvas *canvas);
 uint32_t yetty_ypaint_canvas_primitive_count(struct yetty_ypaint_canvas *canvas);
 
 // Get default font (for gpu resource set child inclusion)
-struct yetty_font_font *yetty_ypaint_canvas_get_default_font(
-    struct yetty_ypaint_canvas *canvas);
+struct yetty_font_font *yetty_ypaint_canvas_get_default_font(struct yetty_ypaint_canvas *canvas);
 
 //=============================================================================
 // Complex primitive access (for atlas rendering)
 //=============================================================================
 
 // Get count of visible complex prims (on visible grid lines)
-uint32_t yetty_ypaint_canvas_complex_prim_count(
-    struct yetty_ypaint_canvas *canvas);
+uint32_t yetty_ypaint_canvas_complex_prim_count(struct yetty_ypaint_canvas *canvas);
 
 // Get complex prim instance by index (0 to count-1)
 // Returns NULL if index out of range
 struct yetty_ypaint_complex_prim_instance;
-struct yetty_ypaint_complex_prim_instance *
-yetty_ypaint_canvas_get_complex_prim(
+struct yetty_ypaint_complex_prim_instance *yetty_ypaint_canvas_get_complex_prim(
     struct yetty_ypaint_canvas *canvas, uint32_t index);
 
 // Get flyweight registry (for SDF ops lookup)
 struct yetty_ypaint_flyweight_registry;
-const struct yetty_ypaint_flyweight_registry *
-yetty_ypaint_canvas_get_flyweight_registry(
+const struct yetty_ypaint_flyweight_registry *yetty_ypaint_canvas_get_flyweight_registry(
     struct yetty_ypaint_canvas *canvas);
 
 // Get complex prim factory (for complex prim ops)
 struct yetty_ypaint_complex_prim_factory;
-struct yetty_ypaint_complex_prim_factory *
-yetty_ypaint_canvas_get_complex_prim_factory(
+struct yetty_ypaint_complex_prim_factory *yetty_ypaint_canvas_get_complex_prim_factory(
     struct yetty_ypaint_canvas *canvas);
 
 #ifdef __cplusplus

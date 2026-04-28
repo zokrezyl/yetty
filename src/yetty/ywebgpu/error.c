@@ -17,12 +17,9 @@ int yetty_webgpu_error_check(void)
     return yetty_webgpu_error.has_error;
 }
 
-void yetty_webgpu_uncaptured_error_callback(
-    WGPUDevice const *device,
-    WGPUErrorType type,
-    WGPUStringView message,
-    void *userdata1,
-    void *userdata2)
+void yetty_webgpu_uncaptured_error_callback(WGPUDevice const *device, WGPUErrorType type,
+                                            WGPUStringView message, void *userdata1,
+                                            void *userdata2)
 {
     (void)device;
     (void)userdata1;
@@ -40,11 +37,20 @@ void yetty_webgpu_uncaptured_error_callback(
     /* Also log it */
     const char *type_str = "Unknown";
     switch (type) {
-        case WGPUErrorType_Validation: type_str = "Validation"; break;
-        case WGPUErrorType_OutOfMemory: type_str = "OutOfMemory"; break;
-        case WGPUErrorType_Internal: type_str = "Internal"; break;
-        case WGPUErrorType_Unknown: type_str = "Unknown"; break;
-        default: break;
+    case WGPUErrorType_Validation:
+        type_str = "Validation";
+        break;
+    case WGPUErrorType_OutOfMemory:
+        type_str = "OutOfMemory";
+        break;
+    case WGPUErrorType_Internal:
+        type_str = "Internal";
+        break;
+    case WGPUErrorType_Unknown:
+        type_str = "Unknown";
+        break;
+    default:
+        break;
     }
     yerror("WebGPU %s error: %s", type_str, yetty_webgpu_error.message);
 }

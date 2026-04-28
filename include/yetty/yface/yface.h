@@ -90,11 +90,11 @@ YETTY_YRESULT_DECLARE(yetty_yface_ptr, struct yetty_yface *);
  * leave the slot empty (`;;` on the wire).
  *---------------------------------------------------------------------------*/
 
-#define YETTY_YFACE_BIN_MAGIC      0x4E494249u  /* "IBIN" */
-#define YETTY_YFACE_BIN_VERSION    1u
+#define YETTY_YFACE_BIN_MAGIC 0x4E494249u /* "IBIN" */
+#define YETTY_YFACE_BIN_VERSION 1u
 
-#define YETTY_YFACE_COMP_NONE      0u
-#define YETTY_YFACE_COMP_LZ4F      1u
+#define YETTY_YFACE_COMP_NONE 0u
+#define YETTY_YFACE_COMP_LZ4F 1u
 
 struct yetty_yface_bin_meta {
     uint32_t magic;            /* YETTY_YFACE_BIN_MAGIC */
@@ -109,14 +109,14 @@ struct yetty_yface_bin_meta {
  * Lifecycle
  *---------------------------------------------------------------------------*/
 struct yetty_yface_ptr_result yetty_yface_create(void);
-void                          yetty_yface_destroy(struct yetty_yface *yface);
+void yetty_yface_destroy(struct yetty_yface *yface);
 
 /*-----------------------------------------------------------------------------
  * Buffer access — in_buf / out_buf are owned by yface; caller may read
  * them and clear them via yetty_ycore_buffer_clear() when transferred.
  * The pointers are stable for the lifetime of the yface.
  *---------------------------------------------------------------------------*/
-struct yetty_ycore_buffer *yetty_yface_in_buf (struct yetty_yface *yface);
+struct yetty_ycore_buffer *yetty_yface_in_buf(struct yetty_yface *yface);
 struct yetty_ycore_buffer *yetty_yface_out_buf(struct yetty_yface *yface);
 
 /*-----------------------------------------------------------------------------
@@ -139,13 +139,11 @@ struct yetty_ycore_buffer *yetty_yface_out_buf(struct yetty_yface *yface);
  * codes the same flag should also be reflected in the meta struct that
  * lives in `args` so the receiver can mirror the choice without needing
  * a yface API param. */
-struct yetty_ycore_void_result yetty_yface_start_write (struct yetty_yface *yface,
-                                                        int osc_code,
-                                                        int compressed,
-                                                        const void *args,
-                                                        size_t args_len);
-struct yetty_ycore_void_result yetty_yface_write       (struct yetty_yface *yface,
-                                                        const void *src, size_t len);
+struct yetty_ycore_void_result yetty_yface_start_write(struct yetty_yface *yface, int osc_code,
+                                                       int compressed, const void *args,
+                                                       size_t args_len);
+struct yetty_ycore_void_result yetty_yface_write(struct yetty_yface *yface, const void *src,
+                                                 size_t len);
 struct yetty_ycore_void_result yetty_yface_finish_write(struct yetty_yface *yface);
 
 /*-----------------------------------------------------------------------------
@@ -159,18 +157,15 @@ struct yetty_ycore_void_result yetty_yface_finish_write(struct yetty_yface *yfac
  *
  * Either callback may be NULL to discard that direction.
  *---------------------------------------------------------------------------*/
-typedef void (*yetty_yface_msg_cb)(void *user, int osc_code,
-                                   const uint8_t *args,    size_t args_len,
+typedef void (*yetty_yface_msg_cb)(void *user, int osc_code, const uint8_t *args, size_t args_len,
                                    const uint8_t *payload, size_t payload_len);
 typedef void (*yetty_yface_raw_cb)(void *user, const char *bytes, size_t n);
 
-void yetty_yface_set_handlers(struct yetty_yface *yface,
-                              yetty_yface_msg_cb on_osc,
-                              yetty_yface_raw_cb on_raw,
-                              void *user);
+void yetty_yface_set_handlers(struct yetty_yface *yface, yetty_yface_msg_cb on_osc,
+                              yetty_yface_raw_cb on_raw, void *user);
 
-struct yetty_ycore_void_result yetty_yface_feed_bytes(struct yetty_yface *yface,
-                                                      const char *bytes, size_t n);
+struct yetty_ycore_void_result yetty_yface_feed_bytes(struct yetty_yface *yface, const char *bytes,
+                                                      size_t n);
 
 /*-----------------------------------------------------------------------------
  * Low-level read API — for callers that already hold the body
@@ -180,11 +175,10 @@ struct yetty_ycore_void_result yetty_yface_feed_bytes(struct yetty_yface *yface,
  * (e.g. yterm/pty-reader-driven layer dispatch). `compressed` must
  * match what the writer used.
  *---------------------------------------------------------------------------*/
-struct yetty_ycore_void_result yetty_yface_start_read  (struct yetty_yface *yface,
-                                                        int compressed);
-struct yetty_ycore_void_result yetty_yface_feed        (struct yetty_yface *yface,
-                                                        const char *b64, size_t n);
-struct yetty_ycore_void_result yetty_yface_finish_read (struct yetty_yface *yface);
+struct yetty_ycore_void_result yetty_yface_start_read(struct yetty_yface *yface, int compressed);
+struct yetty_ycore_void_result yetty_yface_feed(struct yetty_yface *yface, const char *b64,
+                                                size_t n);
+struct yetty_ycore_void_result yetty_yface_finish_read(struct yetty_yface *yface);
 
 /*-----------------------------------------------------------------------------
  * One-shot helpers for callers that emit / consume a single OSC at a time
@@ -199,24 +193,20 @@ struct yetty_ycore_void_result yetty_yface_finish_read (struct yetty_yface *yfac
  * to `out_buf`. `args`/`args_len` and `body`/`body_len` may both be 0;
  * the wire still carries `;;` between them. `compressed` matches
  * yetty_yface_start_write. */
-struct yetty_ycore_void_result yetty_yface_emit(
-    int osc_code, int compressed,
-    const void *args, size_t args_len,
-    const void *body, size_t body_len,
-    struct yetty_ycore_buffer *out_buf);
+struct yetty_ycore_void_result yetty_yface_emit(int osc_code, int compressed, const void *args,
+                                                size_t args_len, const void *body, size_t body_len,
+                                                struct yetty_ycore_buffer *out_buf);
 
 /* Same, but write the full envelope straight to `fd` (blocking write). */
-struct yetty_ycore_void_result yetty_yface_emit_to_fd(
-    int fd, int osc_code, int compressed,
-    const void *args, size_t args_len,
-    const void *body, size_t body_len);
+struct yetty_ycore_void_result yetty_yface_emit_to_fd(int fd, int osc_code, int compressed,
+                                                      const void *args, size_t args_len,
+                                                      const void *body, size_t body_len);
 
 /* Decode an OSC body's b64-payload (the bytes between the second `;`
  * and the trailing ESC\) into `out_buf`. `compressed` must match the
  * writer (typically read from the bin meta in args). */
-struct yetty_ycore_void_result yetty_yface_decode(
-    const char *b64, size_t n, int compressed,
-    struct yetty_ycore_buffer *out_buf);
+struct yetty_ycore_void_result yetty_yface_decode(const char *b64, size_t n, int compressed,
+                                                  struct yetty_ycore_buffer *out_buf);
 
 #ifdef __cplusplus
 }

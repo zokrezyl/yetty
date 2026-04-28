@@ -235,7 +235,7 @@ struct yetty_ycore_event {
         struct yetty_ycore_event_zoom_visual_pan zoom_visual_pan;
         struct yetty_ycore_event_zoom_cell_size zoom_cell_size;
     };
-    void *payload;  /* optional heap-allocated data (copy/paste text) */
+    void *payload; /* optional heap-allocated data (copy/paste text) */
 };
 
 #ifdef __cplusplus

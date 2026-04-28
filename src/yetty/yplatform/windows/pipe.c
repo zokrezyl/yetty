@@ -14,16 +14,19 @@ struct win_platform_input_pipe {
     struct yetty_yplatform_input_pipe base;
     HANDLE read_handle;
     HANDLE write_handle;
-    int read_fd;  /* CRT fd for libuv */
+    int read_fd; /* CRT fd for libuv */
 };
 
 /* Forward declarations */
 static void win_pipe_destroy(struct yetty_yplatform_input_pipe *self);
-static struct yetty_ycore_size_result win_pipe_write(struct yetty_yplatform_input_pipe *self, const void *data, size_t size);
-static struct yetty_ycore_size_result win_pipe_read(struct yetty_yplatform_input_pipe *self, void *data, size_t max_size);
-static struct yetty_ycore_int_result win_pipe_read_fd(const struct yetty_yplatform_input_pipe *self);
-static struct yetty_ycore_void_result win_pipe_set_event_loop(struct yetty_yplatform_input_pipe *self,
-                                                              struct yetty_ycore_event_loop *loop);
+static struct yetty_ycore_size_result win_pipe_write(struct yetty_yplatform_input_pipe *self,
+                                                     const void *data, size_t size);
+static struct yetty_ycore_size_result win_pipe_read(struct yetty_yplatform_input_pipe *self,
+                                                    void *data, size_t max_size);
+static struct yetty_ycore_int_result win_pipe_read_fd(
+    const struct yetty_yplatform_input_pipe *self);
+static struct yetty_ycore_void_result win_pipe_set_event_loop(
+    struct yetty_yplatform_input_pipe *self, struct yetty_ycore_event_loop *loop);
 
 /* Ops table */
 static const struct yetty_yplatform_input_pipe_ops win_pipe_ops = {
@@ -43,34 +46,42 @@ static void win_pipe_destroy(struct yetty_yplatform_input_pipe *self)
     pipe_impl = container_of(self, struct win_platform_input_pipe, base);
 
     /* read_fd owns read_handle via _open_osfhandle */
-    if (pipe_impl->read_fd >= 0)
+    if (pipe_impl->read_fd >= 0) {
         _close(pipe_impl->read_fd);
-    else if (pipe_impl->read_handle != INVALID_HANDLE_VALUE)
+    } else if (pipe_impl->read_handle != INVALID_HANDLE_VALUE) {
         CloseHandle(pipe_impl->read_handle);
-    if (pipe_impl->write_handle != INVALID_HANDLE_VALUE)
+    }
+    if (pipe_impl->write_handle != INVALID_HANDLE_VALUE) {
         CloseHandle(pipe_impl->write_handle);
+    }
 
     free(pipe_impl);
 }
 
-static struct yetty_ycore_size_result win_pipe_write(struct yetty_yplatform_input_pipe *self, const void *data, size_t size)
+static struct yetty_ycore_size_result win_pipe_write(struct yetty_yplatform_input_pipe *self,
+                                                     const void *data, size_t size)
 {
-    struct win_platform_input_pipe *pipe_impl = container_of(self, struct win_platform_input_pipe, base);
+    struct win_platform_input_pipe *pipe_impl =
+        container_of(self, struct win_platform_input_pipe, base);
     DWORD bytes_written = 0;
 
-    if (pipe_impl->write_handle == INVALID_HANDLE_VALUE)
+    if (pipe_impl->write_handle == INVALID_HANDLE_VALUE) {
         return YETTY_ERR(yetty_ycore_size, "pipe write handle not open");
+    }
 
-    if (size == 0)
+    if (size == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
+    }
 
-    if (!WriteFile(pipe_impl->write_handle, data, (DWORD)size, &bytes_written, NULL))
+    if (!WriteFile(pipe_impl->write_handle, data, (DWORD)size, &bytes_written, NULL)) {
         return YETTY_ERR(yetty_ycore_size, "WriteFile to pipe failed");
+    }
 
     return YETTY_OK(yetty_ycore_size, (size_t)bytes_written);
 }
 
-static struct yetty_ycore_size_result win_pipe_read(struct yetty_yplatform_input_pipe *self, void *data, size_t max_size)
+static struct yetty_ycore_size_result win_pipe_read(struct yetty_yplatform_input_pipe *self,
+                                                    void *data, size_t max_size)
 {
     struct win_platform_input_pipe *pipe_impl;
     DWORD bytes_read = 0;
@@ -78,30 +89,35 @@ static struct yetty_ycore_size_result win_pipe_read(struct yetty_yplatform_input
 
     pipe_impl = container_of(self, struct win_platform_input_pipe, base);
 
-    if (pipe_impl->read_handle == INVALID_HANDLE_VALUE)
+    if (pipe_impl->read_handle == INVALID_HANDLE_VALUE) {
         return YETTY_ERR(yetty_ycore_size, "pipe read handle not open");
+    }
 
-    if (max_size == 0)
+    if (max_size == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
+    }
 
     /* Check if data is available (non-blocking) */
-    if (!PeekNamedPipe(pipe_impl->read_handle, NULL, 0, NULL, &available, NULL) || available == 0)
+    if (!PeekNamedPipe(pipe_impl->read_handle, NULL, 0, NULL, &available, NULL) || available == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
+    }
 
-    if (!ReadFile(pipe_impl->read_handle, data, (DWORD)max_size, &bytes_read, NULL))
+    if (!ReadFile(pipe_impl->read_handle, data, (DWORD)max_size, &bytes_read, NULL)) {
         return YETTY_ERR(yetty_ycore_size, "ReadFile from pipe failed");
+    }
 
     return YETTY_OK(yetty_ycore_size, (size_t)bytes_read);
 }
 
 static struct yetty_ycore_int_result win_pipe_read_fd(const struct yetty_yplatform_input_pipe *self)
 {
-    struct win_platform_input_pipe *pipe_impl = container_of(self, struct win_platform_input_pipe, base);
+    struct win_platform_input_pipe *pipe_impl =
+        container_of(self, struct win_platform_input_pipe, base);
     return YETTY_OK(yetty_ycore_int, pipe_impl->read_fd);
 }
 
-static struct yetty_ycore_void_result win_pipe_set_event_loop(struct yetty_yplatform_input_pipe *self,
-                                                              struct yetty_ycore_event_loop *loop)
+static struct yetty_ycore_void_result win_pipe_set_event_loop(
+    struct yetty_yplatform_input_pipe *self, struct yetty_ycore_event_loop *loop)
 {
     /* TODO: integrate with Windows event loop when needed */
     (void)self;
@@ -117,8 +133,9 @@ struct yetty_yplatform_input_pipe_result yetty_yplatform_input_pipe_create(void)
     SECURITY_ATTRIBUTES sa;
 
     pipe_impl = malloc(sizeof(struct win_platform_input_pipe));
-    if (!pipe_impl)
+    if (!pipe_impl) {
         return YETTY_ERR(yetty_yplatform_input_pipe, "failed to allocate input pipe");
+    }
 
     pipe_impl->base.ops = &win_pipe_ops;
     pipe_impl->read_handle = INVALID_HANDLE_VALUE;
@@ -128,26 +145,22 @@ struct yetty_yplatform_input_pipe_result yetty_yplatform_input_pipe_create(void)
     static volatile LONG pipe_counter = 0;
     char pipe_name[256];
     LONG id = InterlockedIncrement(&pipe_counter);
-    snprintf(pipe_name, sizeof(pipe_name),
-             "\\\\.\\pipe\\yetty-input-%lu-%ld", (unsigned long)GetCurrentProcessId(), (long)id);
+    snprintf(pipe_name, sizeof(pipe_name), "\\\\.\\pipe\\yetty-input-%lu-%ld",
+             (unsigned long)GetCurrentProcessId(), (long)id);
 
     ZeroMemory(&sa, sizeof(sa));
     sa.nLength = sizeof(sa);
     sa.bInheritHandle = FALSE;
 
-    pipe_impl->read_handle = CreateNamedPipeA(
-        pipe_name,
-        PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
-        PIPE_TYPE_BYTE | PIPE_WAIT,
-        1, 4096, 4096, 0, &sa);
+    pipe_impl->read_handle = CreateNamedPipeA(pipe_name, PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
+                                              PIPE_TYPE_BYTE | PIPE_WAIT, 1, 4096, 4096, 0, &sa);
     if (pipe_impl->read_handle == INVALID_HANDLE_VALUE) {
         free(pipe_impl);
         return YETTY_ERR(yetty_yplatform_input_pipe, "CreateNamedPipe failed");
     }
 
-    pipe_impl->write_handle = CreateFileA(
-        pipe_name, GENERIC_WRITE, 0, &sa,
-        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    pipe_impl->write_handle =
+        CreateFileA(pipe_name, GENERIC_WRITE, 0, &sa, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (pipe_impl->write_handle == INVALID_HANDLE_VALUE) {
         CloseHandle(pipe_impl->read_handle);
         free(pipe_impl);

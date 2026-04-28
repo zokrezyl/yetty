@@ -19,35 +19,35 @@
 
 /* Encoding types */
 enum vnc_encoding {
-	VNC_ENCODING_RAW = 0,
-	VNC_ENCODING_RLE = 1,
-	VNC_ENCODING_JPEG = 2,
-	VNC_ENCODING_FULL_FRAME = 3,
-	VNC_ENCODING_RECT_RAW = 4,
-	VNC_ENCODING_RECT_JPEG = 5,
-	VNC_ENCODING_H264 = 6,
+    VNC_ENCODING_RAW = 0,
+    VNC_ENCODING_RLE = 1,
+    VNC_ENCODING_JPEG = 2,
+    VNC_ENCODING_FULL_FRAME = 3,
+    VNC_ENCODING_RECT_RAW = 4,
+    VNC_ENCODING_RECT_JPEG = 5,
+    VNC_ENCODING_H264 = 6,
 };
 
 /* Input event types (client -> server) */
 enum vnc_input_type {
-	VNC_INPUT_MOUSE_MOVE = 0,
-	VNC_INPUT_MOUSE_BUTTON = 1,
-	VNC_INPUT_MOUSE_SCROLL = 2,
-	VNC_INPUT_KEY_DOWN = 3,
-	VNC_INPUT_KEY_UP = 4,
-	VNC_INPUT_TEXT = 5,
-	VNC_INPUT_RESIZE = 6,
-	VNC_INPUT_CELL_SIZE = 7,
-	VNC_INPUT_CHAR_WITH_MODS = 8,
-	VNC_INPUT_FRAME_ACK = 9,
-	VNC_INPUT_COMPRESSION_CONFIG = 10,
+    VNC_INPUT_MOUSE_MOVE = 0,
+    VNC_INPUT_MOUSE_BUTTON = 1,
+    VNC_INPUT_MOUSE_SCROLL = 2,
+    VNC_INPUT_KEY_DOWN = 3,
+    VNC_INPUT_KEY_UP = 4,
+    VNC_INPUT_TEXT = 5,
+    VNC_INPUT_RESIZE = 6,
+    VNC_INPUT_CELL_SIZE = 7,
+    VNC_INPUT_CHAR_WITH_MODS = 8,
+    VNC_INPUT_FRAME_ACK = 9,
+    VNC_INPUT_COMPRESSION_CONFIG = 10,
 };
 
 /* Mouse buttons */
 enum vnc_mouse_button {
-	VNC_MOUSE_LEFT = 0,
-	VNC_MOUSE_MIDDLE = 1,
-	VNC_MOUSE_RIGHT = 2,
+    VNC_MOUSE_LEFT = 0,
+    VNC_MOUSE_MIDDLE = 1,
+    VNC_MOUSE_RIGHT = 2,
 };
 
 /* Codec types */
@@ -61,93 +61,93 @@ enum vnc_mouse_button {
 #pragma pack(push, 1)
 
 struct vnc_frame_header {
-	uint32_t magic;
-	uint16_t width;
-	uint16_t height;
-	uint16_t tile_size;
-	uint16_t num_tiles;
+    uint32_t magic;
+    uint16_t width;
+    uint16_t height;
+    uint16_t tile_size;
+    uint16_t num_tiles;
 };
 
 struct vnc_tile_header {
-	uint16_t tile_x;
-	uint16_t tile_y;
-	uint8_t encoding;
-	uint32_t data_size;
+    uint16_t tile_x;
+    uint16_t tile_y;
+    uint8_t encoding;
+    uint32_t data_size;
 };
 
 struct vnc_rect_header {
-	uint16_t px_x;
-	uint16_t px_y;
-	uint16_t width;
-	uint16_t height;
-	uint8_t encoding;
-	uint8_t reserved;
-	uint32_t data_size;
+    uint16_t px_x;
+    uint16_t px_y;
+    uint16_t width;
+    uint16_t height;
+    uint8_t encoding;
+    uint8_t reserved;
+    uint32_t data_size;
 };
 
 struct vnc_video_frame_header {
-	uint8_t frame_type;
-	uint8_t reserved[3];
-	uint32_t timestamp;
-	uint32_t data_size;
+    uint8_t frame_type;
+    uint8_t reserved[3];
+    uint32_t timestamp;
+    uint32_t data_size;
 };
 
 struct vnc_input_header {
-	uint8_t type;
-	uint8_t reserved;
-	uint16_t data_size;
+    uint8_t type;
+    uint8_t reserved;
+    uint16_t data_size;
 };
 
 struct vnc_mouse_move_event {
-	int16_t x;
-	int16_t y;
-	uint8_t mods;
-	uint8_t reserved;
+    int16_t x;
+    int16_t y;
+    uint8_t mods;
+    uint8_t reserved;
 };
 
 struct vnc_mouse_button_event {
-	int16_t x;
-	int16_t y;
-	uint8_t button;
-	uint8_t pressed;
-	uint8_t mods;
-	uint8_t reserved;
+    int16_t x;
+    int16_t y;
+    uint8_t button;
+    uint8_t pressed;
+    uint8_t mods;
+    uint8_t reserved;
 };
 
 struct vnc_mouse_scroll_event {
-	int16_t x;
-	int16_t y;
-	int16_t delta_x;
-	int16_t delta_y;
-	uint8_t mods;
-	uint8_t reserved;
+    int16_t x;
+    int16_t y;
+    int16_t delta_x;
+    int16_t delta_y;
+    uint8_t mods;
+    uint8_t reserved;
 };
 
 struct vnc_key_event {
-	uint32_t keycode;
-	uint32_t scancode;
-	uint8_t mods;
+    uint32_t keycode;
+    uint32_t scancode;
+    uint8_t mods;
 };
 
 struct vnc_char_with_mods_event {
-	uint32_t codepoint;
-	uint8_t mods;
+    uint32_t codepoint;
+    uint8_t mods;
 };
 
 struct vnc_resize_event {
-	uint16_t width;
-	uint16_t height;
+    uint16_t width;
+    uint16_t height;
 };
 
 struct vnc_cell_size_event {
-	uint8_t cell_height;
+    uint8_t cell_height;
 };
 
 struct vnc_compression_config_event {
-	uint8_t force_raw;
-	uint8_t quality;
-	uint8_t always_full;
-	uint8_t codec;
+    uint8_t force_raw;
+    uint8_t quality;
+    uint8_t always_full;
+    uint8_t codec;
 };
 
 #pragma pack(pop)
@@ -158,12 +158,12 @@ struct vnc_compression_config_event {
 
 static inline uint16_t vnc_tiles_x(uint16_t width)
 {
-	return (width + VNC_TILE_SIZE - 1) / VNC_TILE_SIZE;
+    return (width + VNC_TILE_SIZE - 1) / VNC_TILE_SIZE;
 }
 
 static inline uint16_t vnc_tiles_y(uint16_t height)
 {
-	return (height + VNC_TILE_SIZE - 1) / VNC_TILE_SIZE;
+    return (height + VNC_TILE_SIZE - 1) / VNC_TILE_SIZE;
 }
 
 #endif /* YETTY_YVNC_PROTOCOL_INTERNAL_H */

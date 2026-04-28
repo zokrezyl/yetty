@@ -31,9 +31,9 @@
 struct yetty_tcp_conn {
     uv_tcp_t tcp;
     struct libuv_event_loop *loop_impl;
-    void *conn_ctx;                      /* connection-specific context from on_connect */
-    struct tcp_server_handle *server;    /* NULL for client connections */
-    struct tcp_client_handle *client;    /* NULL for server connections */
+    void *conn_ctx;                   /* connection-specific context from on_connect */
+    struct tcp_server_handle *server; /* NULL for client connections */
+    struct tcp_client_handle *client; /* NULL for server connections */
     int active;
 };
 
@@ -139,49 +139,44 @@ static struct yetty_ycore_void_result libuv_register_listener(
 static struct yetty_ycore_void_result libuv_deregister_listener(
     struct yetty_ycore_event_loop *self, enum yetty_ycore_event_type type,
     struct yetty_ycore_event_listener *listener);
-static struct yetty_ycore_int_result libuv_dispatch(
-    struct yetty_ycore_event_loop *self, const struct yetty_ycore_event *event);
-static struct yetty_ycore_void_result libuv_broadcast(
-    struct yetty_ycore_event_loop *self, const struct yetty_ycore_event *event);
+static struct yetty_ycore_int_result libuv_dispatch(struct yetty_ycore_event_loop *self,
+                                                    const struct yetty_ycore_event *event);
+static struct yetty_ycore_void_result libuv_broadcast(struct yetty_ycore_event_loop *self,
+                                                      const struct yetty_ycore_event *event);
 static struct yetty_ycore_pipe_id_result libuv_register_pty_pipe(
-    struct yetty_ycore_event_loop *self,
-    struct yetty_yplatform_pty_pipe_source *source,
-    yetty_pipe_alloc_cb alloc_cb,
-    yetty_pipe_read_cb read_cb,
-    void *cb_ctx);
-static struct yetty_ycore_void_result libuv_unregister_pty_pipe(
-    struct yetty_ycore_event_loop *self, yetty_ycore_pipe_id id);
+    struct yetty_ycore_event_loop *self, struct yetty_yplatform_pty_pipe_source *source,
+    yetty_pipe_alloc_cb alloc_cb, yetty_pipe_read_cb read_cb, void *cb_ctx);
+static struct yetty_ycore_void_result libuv_unregister_pty_pipe(struct yetty_ycore_event_loop *self,
+                                                                yetty_ycore_pipe_id id);
 static struct yetty_ycore_timer_id_result libuv_create_timer(struct yetty_ycore_event_loop *self);
-static struct yetty_ycore_void_result libuv_config_timer(
-    struct yetty_ycore_event_loop *self, yetty_ycore_timer_id id, int timeout_ms);
-static struct yetty_ycore_void_result libuv_start_timer(
-    struct yetty_ycore_event_loop *self, yetty_ycore_timer_id id);
-static struct yetty_ycore_void_result libuv_stop_timer(
-    struct yetty_ycore_event_loop *self, yetty_ycore_timer_id id);
-static struct yetty_ycore_void_result libuv_destroy_timer(
-    struct yetty_ycore_event_loop *self, yetty_ycore_timer_id id);
+static struct yetty_ycore_void_result libuv_config_timer(struct yetty_ycore_event_loop *self,
+                                                         yetty_ycore_timer_id id, int timeout_ms);
+static struct yetty_ycore_void_result libuv_start_timer(struct yetty_ycore_event_loop *self,
+                                                        yetty_ycore_timer_id id);
+static struct yetty_ycore_void_result libuv_stop_timer(struct yetty_ycore_event_loop *self,
+                                                       yetty_ycore_timer_id id);
+static struct yetty_ycore_void_result libuv_destroy_timer(struct yetty_ycore_event_loop *self,
+                                                          yetty_ycore_timer_id id);
 static struct yetty_ycore_void_result libuv_register_timer_listener(
     struct yetty_ycore_event_loop *self, yetty_ycore_timer_id id,
     struct yetty_ycore_event_listener *listener);
 static struct yetty_ycore_tcp_server_id_result libuv_create_tcp_server(
     struct yetty_ycore_event_loop *self, const char *host, int port,
     const struct yetty_tcp_server_callbacks *callbacks);
-static struct yetty_ycore_void_result libuv_start_tcp_server(
-    struct yetty_ycore_event_loop *self, yetty_ycore_tcp_server_id id);
-static struct yetty_ycore_void_result libuv_stop_tcp_server(
-    struct yetty_ycore_event_loop *self, yetty_ycore_tcp_server_id id);
+static struct yetty_ycore_void_result libuv_start_tcp_server(struct yetty_ycore_event_loop *self,
+                                                             yetty_ycore_tcp_server_id id);
+static struct yetty_ycore_void_result libuv_stop_tcp_server(struct yetty_ycore_event_loop *self,
+                                                            yetty_ycore_tcp_server_id id);
 static struct yetty_ycore_tcp_client_id_result libuv_create_tcp_client(
     struct yetty_ycore_event_loop *self, const char *host, int port,
     const struct yetty_tcp_client_callbacks *callbacks);
-static struct yetty_ycore_void_result libuv_stop_tcp_client(
-    struct yetty_ycore_event_loop *self, yetty_ycore_tcp_client_id id);
-static struct yetty_ycore_size_result libuv_tcp_send(
-    struct yetty_tcp_conn *conn, const void *data, size_t len);
-static struct yetty_ycore_void_result libuv_tcp_close(
-    struct yetty_tcp_conn *conn);
+static struct yetty_ycore_void_result libuv_stop_tcp_client(struct yetty_ycore_event_loop *self,
+                                                            yetty_ycore_tcp_client_id id);
+static struct yetty_ycore_size_result libuv_tcp_send(struct yetty_tcp_conn *conn, const void *data,
+                                                     size_t len);
+static struct yetty_ycore_void_result libuv_tcp_close(struct yetty_tcp_conn *conn);
 static void libuv_request_render(struct yetty_ycore_event_loop *self);
-static void libuv_post_to_loop(struct yetty_ycore_event_loop *self,
-                               void (*fn)(void *), void *arg);
+static void libuv_post_to_loop(struct yetty_ycore_event_loop *self, void (*fn)(void *), void *arg);
 
 static const struct yetty_ycore_event_loop_ops libuv_ops = {
     .destroy = libuv_destroy,
@@ -216,7 +211,7 @@ static const struct yetty_ycore_event_loop_ops libuv_ops = {
 static void on_signal(uv_signal_t *handle, int signum)
 {
     struct libuv_event_loop *impl = handle->data;
-    struct yetty_ycore_event ev = { .type = YETTY_EVENT_SHUTDOWN };
+    struct yetty_ycore_event ev = {.type = YETTY_EVENT_SHUTDOWN};
     (void)signum;
 
     /* Route SIGINT/SIGTERM through the same SHUTDOWN handler that the
@@ -262,8 +257,9 @@ static void on_post_async(uv_async_t *handle)
         struct post_node *node = batch;
         batch = node->next;
         ydebug("on_post_async: invoking fn=%p arg=%p", (void *)node->fn, node->arg);
-        if (node->fn)
+        if (node->fn) {
             node->fn(node->arg);
+        }
         free(node);
     }
 }
@@ -283,8 +279,9 @@ static void on_input_pipe_read(uv_stream_t *stream, ssize_t nread, const uv_buf_
 {
     struct libuv_event_loop *impl = stream->data;
 
-    if (nread <= 0)
+    if (nread <= 0) {
         return;
+    }
 
     size_t offset = 0;
     while (offset + sizeof(struct yetty_ycore_event) <= (size_t)nread) {
@@ -310,8 +307,8 @@ static void on_pty_pipe_alloc(uv_handle_t *handle, size_t suggested_size, uv_buf
 static void on_pty_pipe_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
 {
     struct pty_pipe_handle *ph = stream->data;
-    ydebug("on_pty_pipe_read: nread=%zd buf_base=%p buf_len=%zu",
-           nread, (void *)(buf ? buf->base : NULL), (size_t)(buf ? buf->len : 0));
+    ydebug("on_pty_pipe_read: nread=%zd buf_base=%p buf_len=%zu", nread,
+           (void *)(buf ? buf->base : NULL), (size_t)(buf ? buf->len : 0));
     ph->read_cb(ph->cb_ctx, buf->base, (long)nread);
 }
 
@@ -324,8 +321,9 @@ static void on_timer(uv_timer_t *handle)
     event.type = YETTY_EVENT_TIMER;
     event.timer.timer_id = th->id;
 
-    for (i = 0; i < th->listener_count; i++)
+    for (i = 0; i < th->listener_count; i++) {
         th->listeners[i]->handler(th->listeners[i], &event);
+    }
 }
 
 /* Implementation */
@@ -343,8 +341,9 @@ static void libuv_destroy(struct yetty_ycore_event_loop *self)
     uv_close((uv_handle_t *)&impl->render_async, NULL);
     uv_close((uv_handle_t *)&impl->post_async, NULL);
 
-    if (impl->input_pipe_active)
+    if (impl->input_pipe_active) {
         uv_close((uv_handle_t *)&impl->input_pipe, NULL);
+    }
 
     /* Drain any leftover post-queue nodes. */
     while (impl->post_head) {
@@ -362,8 +361,9 @@ static struct yetty_ycore_void_result libuv_start(struct yetty_ycore_event_loop 
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
     int r = uv_run(impl->loop, UV_RUN_DEFAULT);
 
-    if (r < 0)
+    if (r < 0) {
         return YETTY_ERR(yetty_ycore_void, "uv_run failed");
+    }
 
     return YETTY_OK_VOID();
 }
@@ -382,12 +382,14 @@ static struct yetty_ycore_void_result libuv_register_listener(
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
     int count, i, insert_pos;
 
-    if (!listener || type >= YETTY_EVENT_COUNT)
+    if (!listener || type >= YETTY_EVENT_COUNT) {
         return YETTY_ERR(yetty_ycore_void, "invalid listener or type");
+    }
 
     count = impl->listener_counts[type];
-    if (count >= MAX_LISTENERS_PER_TYPE)
+    if (count >= MAX_LISTENERS_PER_TYPE) {
         return YETTY_ERR(yetty_ycore_void, "too many listeners");
+    }
 
     insert_pos = count;
     for (i = 0; i < count; i++) {
@@ -397,8 +399,9 @@ static struct yetty_ycore_void_result libuv_register_listener(
         }
     }
 
-    for (i = count; i > insert_pos; i--)
+    for (i = count; i > insert_pos; i--) {
         impl->listeners[type][i] = impl->listeners[type][i - 1];
+    }
 
     impl->listeners[type][insert_pos].listener = listener;
     impl->listeners[type][insert_pos].priority = priority;
@@ -414,14 +417,16 @@ static struct yetty_ycore_void_result libuv_deregister_listener(
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
     int count, i, j;
 
-    if (type >= YETTY_EVENT_COUNT)
+    if (type >= YETTY_EVENT_COUNT) {
         return YETTY_OK_VOID();
+    }
 
     count = impl->listener_counts[type];
     for (i = 0; i < count; i++) {
         if (impl->listeners[type][i].listener == listener) {
-            for (j = i; j < count - 1; j++)
+            for (j = i; j < count - 1; j++) {
                 impl->listeners[type][j] = impl->listeners[type][j + 1];
+            }
             impl->listener_counts[type]--;
             break;
         }
@@ -430,30 +435,33 @@ static struct yetty_ycore_void_result libuv_deregister_listener(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_int_result libuv_dispatch(
-    struct yetty_ycore_event_loop *self, const struct yetty_ycore_event *event)
+static struct yetty_ycore_int_result libuv_dispatch(struct yetty_ycore_event_loop *self,
+                                                    const struct yetty_ycore_event *event)
 {
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
     int count, i;
 
-    if (event->type >= YETTY_EVENT_COUNT)
+    if (event->type >= YETTY_EVENT_COUNT) {
         return YETTY_OK(yetty_ycore_int, 0);
+    }
 
     count = impl->listener_counts[event->type];
     for (i = 0; i < count; i++) {
         struct yetty_ycore_event_listener *listener = impl->listeners[event->type][i].listener;
         struct yetty_ycore_int_result result = listener->handler(listener, event);
-        if (YETTY_IS_ERR(result))
+        if (YETTY_IS_ERR(result)) {
             return result;
-        if (result.value)
+        }
+        if (result.value) {
             return YETTY_OK(yetty_ycore_int, 1);
+        }
     }
 
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
-static struct yetty_ycore_void_result libuv_broadcast(
-    struct yetty_ycore_event_loop *self, const struct yetty_ycore_event *event)
+static struct yetty_ycore_void_result libuv_broadcast(struct yetty_ycore_event_loop *self,
+                                                      const struct yetty_ycore_event *event)
 {
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
     int t, count, i;
@@ -472,22 +480,21 @@ static struct yetty_ycore_void_result libuv_broadcast(
 /* PTY pipe — uv_pipe_t with uv_read_start, data feeds to pty_reader */
 
 static struct yetty_ycore_pipe_id_result libuv_register_pty_pipe(
-    struct yetty_ycore_event_loop *self,
-    struct yetty_yplatform_pty_pipe_source *source,
-    yetty_pipe_alloc_cb alloc_cb,
-    yetty_pipe_read_cb read_cb,
-    void *cb_ctx)
+    struct yetty_ycore_event_loop *self, struct yetty_yplatform_pty_pipe_source *source,
+    yetty_pipe_alloc_cb alloc_cb, yetty_pipe_read_cb read_cb, void *cb_ctx)
 {
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
     struct pty_pipe_handle *ph;
     int id, r;
 
-    if (!source || !alloc_cb || !read_cb)
+    if (!source || !alloc_cb || !read_cb) {
         return YETTY_ERR(yetty_ycore_pipe_id, "invalid source or callbacks");
+    }
 
     id = impl->next_pty_pipe_id++;
-    if (id >= MAX_PTY_PIPES)
+    if (id >= MAX_PTY_PIPES) {
         return YETTY_ERR(yetty_ycore_pipe_id, "too many pty pipes");
+    }
 
     ph = &impl->pty_pipes[id];
     memset(ph, 0, sizeof(*ph));
@@ -496,31 +503,35 @@ static struct yetty_ycore_pipe_id_result libuv_register_pty_pipe(
     ph->cb_ctx = cb_ctx;
 
     r = uv_pipe_init(impl->loop, &ph->pipe, 0);
-    if (r != 0)
+    if (r != 0) {
         return YETTY_ERR(yetty_ycore_pipe_id, "uv_pipe_init failed");
+    }
 
     r = uv_pipe_open(&ph->pipe, (uv_file)source->abstract);
-    if (r != 0)
+    if (r != 0) {
         return YETTY_ERR(yetty_ycore_pipe_id, "uv_pipe_open failed");
+    }
 
     ph->pipe.data = ph;
 
     r = uv_read_start((uv_stream_t *)&ph->pipe, on_pty_pipe_alloc, on_pty_pipe_read);
-    if (r != 0)
+    if (r != 0) {
         return YETTY_ERR(yetty_ycore_pipe_id, "uv_read_start failed");
+    }
 
     ph->active = 1;
     yinfo("libuv_register_pty_pipe: registered fd=%d as pipe_id=%d", (int)source->abstract, id);
     return YETTY_OK(yetty_ycore_pipe_id, id);
 }
 
-static struct yetty_ycore_void_result libuv_unregister_pty_pipe(
-    struct yetty_ycore_event_loop *self, yetty_ycore_pipe_id id)
+static struct yetty_ycore_void_result libuv_unregister_pty_pipe(struct yetty_ycore_event_loop *self,
+                                                                yetty_ycore_pipe_id id)
 {
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
 
-    if (id < 0 || id >= MAX_PTY_PIPES)
+    if (id < 0 || id >= MAX_PTY_PIPES) {
         return YETTY_ERR(yetty_ycore_void, "invalid pipe id");
+    }
 
     if (impl->pty_pipes[id].active) {
         uv_read_stop((uv_stream_t *)&impl->pty_pipes[id].pipe);
@@ -539,8 +550,9 @@ static struct yetty_ycore_timer_id_result libuv_create_timer(struct yetty_ycore_
     int id = impl->next_timer_id++;
     struct timer_handle *th;
 
-    if (id >= MAX_TIMERS)
+    if (id >= MAX_TIMERS) {
         return YETTY_ERR(yetty_ycore_timer_id, "too many timers");
+    }
 
     th = &impl->timers[id];
     memset(th, 0, sizeof(*th));
@@ -551,30 +563,33 @@ static struct yetty_ycore_timer_id_result libuv_create_timer(struct yetty_ycore_
     return YETTY_OK(yetty_ycore_timer_id, id);
 }
 
-static struct yetty_ycore_void_result libuv_config_timer(
-    struct yetty_ycore_event_loop *self, yetty_ycore_timer_id id, int timeout_ms)
+static struct yetty_ycore_void_result libuv_config_timer(struct yetty_ycore_event_loop *self,
+                                                         yetty_ycore_timer_id id, int timeout_ms)
 {
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
 
-    if (id < 0 || id >= MAX_TIMERS)
+    if (id < 0 || id >= MAX_TIMERS) {
         return YETTY_ERR(yetty_ycore_void, "invalid timer id");
+    }
 
     impl->timers[id].timeout_ms = timeout_ms;
 
-    if (impl->timers[id].active)
+    if (impl->timers[id].active) {
         uv_timer_start(&impl->timers[id].timer, on_timer, timeout_ms, timeout_ms);
+    }
 
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result libuv_start_timer(
-    struct yetty_ycore_event_loop *self, yetty_ycore_timer_id id)
+static struct yetty_ycore_void_result libuv_start_timer(struct yetty_ycore_event_loop *self,
+                                                        yetty_ycore_timer_id id)
 {
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
     struct timer_handle *th;
 
-    if (id < 0 || id >= MAX_TIMERS)
+    if (id < 0 || id >= MAX_TIMERS) {
         return YETTY_ERR(yetty_ycore_void, "invalid timer id");
+    }
 
     th = &impl->timers[id];
     uv_timer_start(&th->timer, on_timer, th->timeout_ms, th->timeout_ms);
@@ -582,26 +597,28 @@ static struct yetty_ycore_void_result libuv_start_timer(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result libuv_stop_timer(
-    struct yetty_ycore_event_loop *self, yetty_ycore_timer_id id)
+static struct yetty_ycore_void_result libuv_stop_timer(struct yetty_ycore_event_loop *self,
+                                                       yetty_ycore_timer_id id)
 {
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
 
-    if (id < 0 || id >= MAX_TIMERS)
+    if (id < 0 || id >= MAX_TIMERS) {
         return YETTY_ERR(yetty_ycore_void, "invalid timer id");
+    }
 
     uv_timer_stop(&impl->timers[id].timer);
     impl->timers[id].active = 0;
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result libuv_destroy_timer(
-    struct yetty_ycore_event_loop *self, yetty_ycore_timer_id id)
+static struct yetty_ycore_void_result libuv_destroy_timer(struct yetty_ycore_event_loop *self,
+                                                          yetty_ycore_timer_id id)
 {
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
 
-    if (id < 0 || id >= MAX_TIMERS)
+    if (id < 0 || id >= MAX_TIMERS) {
         return YETTY_ERR(yetty_ycore_void, "invalid timer id");
+    }
 
     uv_timer_stop(&impl->timers[id].timer);
     uv_close((uv_handle_t *)&impl->timers[id].timer, NULL);
@@ -616,12 +633,14 @@ static struct yetty_ycore_void_result libuv_register_timer_listener(
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
     struct timer_handle *th;
 
-    if (id < 0 || id >= MAX_TIMERS || !listener)
+    if (id < 0 || id >= MAX_TIMERS || !listener) {
         return YETTY_ERR(yetty_ycore_void, "invalid timer id or listener");
+    }
 
     th = &impl->timers[id];
-    if (th->listener_count >= MAX_LISTENERS_PER_TIMER)
+    if (th->listener_count >= MAX_LISTENERS_PER_TIMER) {
         return YETTY_ERR(yetty_ycore_void, "too many timer listeners");
+    }
 
     th->listeners[th->listener_count++] = listener;
     return YETTY_OK_VOID();
@@ -636,14 +655,14 @@ static void libuv_request_render(struct yetty_ycore_event_loop *self)
 }
 
 /* Thread-safe: append (fn, arg) to the post queue and wake the loop. */
-static void libuv_post_to_loop(struct yetty_ycore_event_loop *self,
-                               void (*fn)(void *), void *arg)
+static void libuv_post_to_loop(struct yetty_ycore_event_loop *self, void (*fn)(void *), void *arg)
 {
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
     struct post_node *node;
 
-    if (!fn)
+    if (!fn) {
         return;
+    }
 
     node = malloc(sizeof(struct post_node));
     if (!node) {
@@ -655,10 +674,11 @@ static void libuv_post_to_loop(struct yetty_ycore_event_loop *self,
     node->next = NULL;
 
     uv_mutex_lock(&impl->post_mutex);
-    if (impl->post_tail)
+    if (impl->post_tail) {
         impl->post_tail->next = node;
-    else
+    } else {
         impl->post_head = node;
+    }
     impl->post_tail = node;
     uv_mutex_unlock(&impl->post_mutex);
 
@@ -675,8 +695,9 @@ static void on_server_conn_alloc(uv_handle_t *handle, size_t suggested, uv_buf_t
     char *base = NULL;
     size_t len = 0;
 
-    if (server->callbacks.on_alloc)
+    if (server->callbacks.on_alloc) {
         server->callbacks.on_alloc(conn->conn_ctx, suggested, &base, &len);
+    }
 
     buf->base = base;
     buf->len = len;
@@ -690,19 +711,22 @@ static void on_server_conn_read(uv_stream_t *stream, ssize_t nread, const uv_buf
 
     if (nread < 0) {
         ytrace("tcp_server: client disconnected");
-        if (server->callbacks.on_disconnect)
+        if (server->callbacks.on_disconnect) {
             server->callbacks.on_disconnect(conn->conn_ctx);
+        }
         uv_close((uv_handle_t *)stream, NULL);
         conn->active = 0;
         server->conn_count--;
         return;
     }
 
-    if (nread == 0)
+    if (nread == 0) {
         return;
+    }
 
-    if (server->callbacks.on_data)
+    if (server->callbacks.on_data) {
         server->callbacks.on_data(conn->conn_ctx, conn, buf->base, nread);
+    }
 }
 
 /* New connection callback */
@@ -759,16 +783,18 @@ static void on_tcp_server_connection(uv_stream_t *server_stream, int status)
     server->conn_count++;
 
     /* Call on_connect to get connection context */
-    if (server->callbacks.on_connect)
+    if (server->callbacks.on_connect) {
         conn->conn_ctx = server->callbacks.on_connect(server->callbacks.ctx, conn);
+    }
 
     ytrace("tcp_server: client connected (total: %d)", server->conn_count);
 
     r = uv_read_start((uv_stream_t *)&conn->tcp, on_server_conn_alloc, on_server_conn_read);
     if (r != 0) {
         yerror("tcp_server: read_start failed: %s", uv_strerror(r));
-        if (server->callbacks.on_disconnect)
+        if (server->callbacks.on_disconnect) {
             server->callbacks.on_disconnect(conn->conn_ctx);
+        }
         uv_close((uv_handle_t *)&conn->tcp, NULL);
         conn->active = 0;
         server->conn_count--;
@@ -783,44 +809,50 @@ static struct yetty_ycore_tcp_server_id_result libuv_create_tcp_server(
     int id = impl->next_tcp_server_id++;
     struct tcp_server_handle *server;
 
-    if (id >= MAX_TCP_SERVERS)
+    if (id >= MAX_TCP_SERVERS) {
         return YETTY_ERR(yetty_ycore_tcp_server_id, "too many tcp servers");
+    }
 
-    if (!callbacks)
+    if (!callbacks) {
         return YETTY_ERR(yetty_ycore_tcp_server_id, "callbacks required");
+    }
 
     server = &impl->tcp_servers[id];
     memset(server, 0, sizeof(*server));
     server->id = id;
     server->loop_impl = impl;
     server->callbacks = *callbacks;
-    if (host)
+    if (host) {
         strncpy(server->host, host, sizeof(server->host) - 1);
+    }
     server->port = port;
 
     ytrace("tcp_server: created server id=%d host=%s port=%d", id, host, port);
     return YETTY_OK(yetty_ycore_tcp_server_id, id);
 }
 
-static struct yetty_ycore_void_result libuv_start_tcp_server(
-    struct yetty_ycore_event_loop *self, yetty_ycore_tcp_server_id id)
+static struct yetty_ycore_void_result libuv_start_tcp_server(struct yetty_ycore_event_loop *self,
+                                                             yetty_ycore_tcp_server_id id)
 {
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
     struct tcp_server_handle *server;
     struct sockaddr_in addr;
     int r;
 
-    if (id < 0 || id >= MAX_TCP_SERVERS)
+    if (id < 0 || id >= MAX_TCP_SERVERS) {
         return YETTY_ERR(yetty_ycore_void, "invalid server id");
+    }
 
     server = &impl->tcp_servers[id];
 
-    if (server->active)
+    if (server->active) {
         return YETTY_ERR(yetty_ycore_void, "server already running");
+    }
 
     r = uv_tcp_init(impl->loop, &server->tcp);
-    if (r != 0)
+    if (r != 0) {
         return YETTY_ERR(yetty_ycore_void, "uv_tcp_init failed");
+    }
 
     server->tcp.data = server;
 
@@ -847,25 +879,28 @@ static struct yetty_ycore_void_result libuv_start_tcp_server(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result libuv_stop_tcp_server(
-    struct yetty_ycore_event_loop *self, yetty_ycore_tcp_server_id id)
+static struct yetty_ycore_void_result libuv_stop_tcp_server(struct yetty_ycore_event_loop *self,
+                                                            yetty_ycore_tcp_server_id id)
 {
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
     struct tcp_server_handle *server;
 
-    if (id < 0 || id >= MAX_TCP_SERVERS)
+    if (id < 0 || id >= MAX_TCP_SERVERS) {
         return YETTY_ERR(yetty_ycore_void, "invalid server id");
+    }
 
     server = &impl->tcp_servers[id];
 
-    if (!server->active)
+    if (!server->active) {
         return YETTY_OK_VOID();
+    }
 
     /* Close all connections */
     for (int i = 0; i < MAX_TCP_CLIENTS; i++) {
         if (server->conns[i] && server->conns[i]->active) {
-            if (server->callbacks.on_disconnect)
+            if (server->callbacks.on_disconnect) {
                 server->callbacks.on_disconnect(server->conns[i]->conn_ctx);
+            }
             uv_close((uv_handle_t *)&server->conns[i]->tcp, NULL);
             server->conns[i]->active = 0;
         }
@@ -888,8 +923,9 @@ static void on_client_alloc(uv_handle_t *handle, size_t suggested, uv_buf_t *buf
     char *base = NULL;
     size_t len = 0;
 
-    if (client->callbacks.on_alloc)
+    if (client->callbacks.on_alloc) {
         client->callbacks.on_alloc(client->callbacks.ctx, suggested, &base, &len);
+    }
 
     buf->base = base;
     buf->len = len;
@@ -902,19 +938,22 @@ static void on_client_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *b
 
     if (nread < 0) {
         ytrace("tcp_client: disconnected");
-        if (client->callbacks.on_disconnect)
+        if (client->callbacks.on_disconnect) {
             client->callbacks.on_disconnect(client->callbacks.ctx);
+        }
         uv_close((uv_handle_t *)stream, NULL);
         conn->active = 0;
         client->active = 0;
         return;
     }
 
-    if (nread == 0)
+    if (nread == 0) {
         return;
+    }
 
-    if (client->callbacks.on_data)
+    if (client->callbacks.on_data) {
         client->callbacks.on_data(client->callbacks.ctx, conn, buf->base, nread);
+    }
 }
 
 static void on_client_connect(uv_connect_t *req, int status)
@@ -924,8 +963,9 @@ static void on_client_connect(uv_connect_t *req, int status)
 
     if (status < 0) {
         yerror("tcp_client: connect failed: %s", uv_strerror(status));
-        if (client->callbacks.on_connect_error)
+        if (client->callbacks.on_connect_error) {
             client->callbacks.on_connect_error(client->callbacks.ctx, uv_strerror(status));
+        }
         uv_close((uv_handle_t *)&conn->tcp, NULL);
         client->active = 0;
         return;
@@ -936,14 +976,16 @@ static void on_client_connect(uv_connect_t *req, int status)
 
     ytrace("tcp_client: connected to %s:%d", client->host, client->port);
 
-    if (client->callbacks.on_connect)
+    if (client->callbacks.on_connect) {
         client->callbacks.on_connect(client->callbacks.ctx, conn);
+    }
 
     int r = uv_read_start((uv_stream_t *)&conn->tcp, on_client_alloc, on_client_read);
     if (r != 0) {
         yerror("tcp_client: read_start failed: %s", uv_strerror(r));
-        if (client->callbacks.on_disconnect)
+        if (client->callbacks.on_disconnect) {
             client->callbacks.on_disconnect(client->callbacks.ctx);
+        }
         uv_close((uv_handle_t *)&conn->tcp, NULL);
         conn->active = 0;
         client->active = 0;
@@ -960,19 +1002,22 @@ static struct yetty_ycore_tcp_client_id_result libuv_create_tcp_client(
     struct sockaddr_in addr;
     int r;
 
-    if (id >= MAX_TCP_CLIENTS)
+    if (id >= MAX_TCP_CLIENTS) {
         return YETTY_ERR(yetty_ycore_tcp_client_id, "too many tcp clients");
+    }
 
-    if (!callbacks)
+    if (!callbacks) {
         return YETTY_ERR(yetty_ycore_tcp_client_id, "callbacks required");
+    }
 
     client = &impl->tcp_clients[id];
     memset(client, 0, sizeof(*client));
     client->id = id;
     client->loop_impl = impl;
     client->callbacks = *callbacks;
-    if (host)
+    if (host) {
         strncpy(client->host, host, sizeof(client->host) - 1);
+    }
     client->port = port;
 
     /* Setup connection */
@@ -981,39 +1026,45 @@ static struct yetty_ycore_tcp_client_id_result libuv_create_tcp_client(
     client->conn.tcp.data = &client->conn;
 
     r = uv_tcp_init(impl->loop, &client->conn.tcp);
-    if (r != 0)
+    if (r != 0) {
         return YETTY_ERR(yetty_ycore_tcp_client_id, "uv_tcp_init failed");
+    }
 
     r = uv_ip4_addr(host, port, &addr);
-    if (r != 0)
+    if (r != 0) {
         return YETTY_ERR(yetty_ycore_tcp_client_id, "uv_ip4_addr failed");
+    }
 
     client->connect_req.data = client;
-    r = uv_tcp_connect(&client->connect_req, &client->conn.tcp,
-                       (const struct sockaddr *)&addr, on_client_connect);
-    if (r != 0)
+    r = uv_tcp_connect(&client->connect_req, &client->conn.tcp, (const struct sockaddr *)&addr,
+                       on_client_connect);
+    if (r != 0) {
         return YETTY_ERR(yetty_ycore_tcp_client_id, "uv_tcp_connect failed");
+    }
 
     ytrace("tcp_client: connecting to %s:%d", host, port);
     return YETTY_OK(yetty_ycore_tcp_client_id, id);
 }
 
-static struct yetty_ycore_void_result libuv_stop_tcp_client(
-    struct yetty_ycore_event_loop *self, yetty_ycore_tcp_client_id id)
+static struct yetty_ycore_void_result libuv_stop_tcp_client(struct yetty_ycore_event_loop *self,
+                                                            yetty_ycore_tcp_client_id id)
 {
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
     struct tcp_client_handle *client;
 
-    if (id < 0 || id >= MAX_TCP_CLIENTS)
+    if (id < 0 || id >= MAX_TCP_CLIENTS) {
         return YETTY_ERR(yetty_ycore_void, "invalid client id");
+    }
 
     client = &impl->tcp_clients[id];
 
-    if (!client->active)
+    if (!client->active) {
         return YETTY_OK_VOID();
+    }
 
-    if (client->callbacks.on_disconnect)
+    if (client->callbacks.on_disconnect) {
         client->callbacks.on_disconnect(client->callbacks.ctx);
+    }
 
     uv_close((uv_handle_t *)&client->conn.tcp, NULL);
     client->conn.active = 0;
@@ -1031,18 +1082,20 @@ static void on_tcp_write_done(uv_write_t *req, int status)
     free(req);
 }
 
-static struct yetty_ycore_size_result libuv_tcp_send(
-    struct yetty_tcp_conn *conn, const void *data, size_t len)
+static struct yetty_ycore_size_result libuv_tcp_send(struct yetty_tcp_conn *conn, const void *data,
+                                                     size_t len)
 {
     uv_write_t *req;
     uv_buf_t buf;
 
-    if (!conn || !conn->active)
+    if (!conn || !conn->active) {
         return YETTY_ERR(yetty_ycore_size, "invalid connection");
+    }
 
     req = malloc(sizeof(uv_write_t));
-    if (!req)
+    if (!req) {
         return YETTY_ERR(yetty_ycore_size, "out of memory");
+    }
 
     buf = uv_buf_init((char *)data, len);
     if (uv_write(req, (uv_stream_t *)&conn->tcp, &buf, 1, on_tcp_write_done) != 0) {
@@ -1055,21 +1108,24 @@ static struct yetty_ycore_size_result libuv_tcp_send(
 
 static struct yetty_ycore_void_result libuv_tcp_close(struct yetty_tcp_conn *conn)
 {
-    if (!conn)
+    if (!conn) {
         return YETTY_ERR(yetty_ycore_void, "invalid connection");
+    }
 
     if (conn->active) {
         /* Call disconnect callback */
-        if (conn->server && conn->server->callbacks.on_disconnect)
+        if (conn->server && conn->server->callbacks.on_disconnect) {
             conn->server->callbacks.on_disconnect(conn->conn_ctx);
-        else if (conn->client && conn->client->callbacks.on_disconnect)
+        } else if (conn->client && conn->client->callbacks.on_disconnect) {
             conn->client->callbacks.on_disconnect(conn->client->callbacks.ctx);
+        }
 
         uv_close((uv_handle_t *)&conn->tcp, NULL);
         conn->active = 0;
 
-        if (conn->server)
+        if (conn->server) {
             conn->server->conn_count--;
+        }
     }
 
     return YETTY_OK_VOID();
@@ -1081,8 +1137,9 @@ struct yetty_ycore_event_loop_result yetty_ycore_event_loop_create(
     struct libuv_event_loop *impl;
 
     impl = malloc(sizeof(struct libuv_event_loop));
-    if (!impl)
+    if (!impl) {
         return YETTY_ERR(yetty_ycore_event_loop, "failed to allocate event loop");
+    }
 
     memset(impl, 0, sizeof(*impl));
     impl->base.ops = &libuv_ops;
@@ -1115,8 +1172,8 @@ struct yetty_ycore_event_loop_result yetty_ycore_event_loop_create(
             uv_pipe_init(impl->loop, &impl->input_pipe, 0);
             impl->input_pipe.data = impl;
             uv_pipe_open(&impl->input_pipe, fd_res.value);
-            uv_read_start((uv_stream_t *)&impl->input_pipe,
-                          on_input_pipe_alloc, on_input_pipe_read);
+            uv_read_start((uv_stream_t *)&impl->input_pipe, on_input_pipe_alloc,
+                          on_input_pipe_read);
             impl->input_pipe_active = 1;
         }
     }

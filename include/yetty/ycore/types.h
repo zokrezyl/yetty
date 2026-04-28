@@ -10,8 +10,7 @@ extern "C" {
 #endif
 
 /* Get pointer to containing struct from member pointer */
-#define container_of(ptr, type, member)                                        \
-  ((type *)((char *)(ptr) - offsetof(type, member)))
+#define container_of(ptr, type, member) ((type *)((char *)(ptr) - offsetof(type, member)))
 
 typedef uint64_t yetty_ycore_object_id;
 
@@ -22,7 +21,7 @@ typedef uint64_t yetty_ycore_object_id;
  *===========================================================================*/
 
 struct yetty_color_rgba {
-  uint8_t r, g, b, a;
+    uint8_t r, g, b, a;
 };
 
 /*=============================================================================
@@ -32,9 +31,9 @@ struct yetty_color_rgba {
 #define YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH 32
 
 struct yetty_ycore_buffer {
-  uint8_t *data;
-  size_t capacity;
-  size_t size;
+    uint8_t *data;
+    size_t capacity;
+    size_t size;
 };
 
 YETTY_YRESULT_DECLARE(yetty_ycore_buffer, struct yetty_ycore_buffer);
@@ -43,20 +42,20 @@ YETTY_YRESULT_DECLARE(yetty_ycore_buffer, struct yetty_ycore_buffer);
 struct yetty_ycore_buffer_result yetty_ycore_buffer_create(size_t initial_capacity);
 void yetty_ycore_buffer_destroy(struct yetty_ycore_buffer *buf);
 void yetty_ycore_buffer_clear(struct yetty_ycore_buffer *buf);
-struct yetty_ycore_void_result yetty_ycore_buffer_append(
-    struct yetty_ycore_buffer *buf, const struct yetty_ycore_buffer *src);
+struct yetty_ycore_void_result yetty_ycore_buffer_append(struct yetty_ycore_buffer *buf,
+                                                         const struct yetty_ycore_buffer *src);
 
 /* Append raw bytes to a buffer, growing capacity (doubling) if needed.
  * Same growth semantics as yetty_ycore_buffer_append; this is the
  * (void*, size_t) sibling for callers that don't have a yetty_ycore_buffer
  * wrapper around their bytes. Used heavily by yetty_yface's streaming
  * pipeline (LZ4 chunks, base64 chars). */
-struct yetty_ycore_void_result yetty_ycore_buffer_write(
-    struct yetty_ycore_buffer *buf, const void *src, size_t len);
+struct yetty_ycore_void_result yetty_ycore_buffer_write(struct yetty_ycore_buffer *buf,
+                                                        const void *src, size_t len);
 
 struct yetty_ycore_named_buffer {
-  struct yetty_ycore_buffer buf;
-  char name[YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH];
+    struct yetty_ycore_buffer buf;
+    char name[YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH];
 };
 
 /*=============================================================================
@@ -64,8 +63,8 @@ struct yetty_ycore_named_buffer {
  *===========================================================================*/
 
 struct yetty_font_blob {
-  struct yetty_ycore_named_buffer named_buf;
-  int32_t font_id;
+    struct yetty_ycore_named_buffer named_buf;
+    int32_t font_id;
 };
 
 /*=============================================================================
@@ -73,12 +72,12 @@ struct yetty_font_blob {
  *===========================================================================*/
 
 struct yetty_image_data {
-  struct yetty_ycore_named_buffer named_buf;
-  float x, y, w, h;
-  uint32_t pixel_width;
-  uint32_t pixel_height;
-  uint32_t layer;
-  uint32_t atlas_x, atlas_y;
+    struct yetty_ycore_named_buffer named_buf;
+    float x, y, w, h;
+    uint32_t pixel_width;
+    uint32_t pixel_height;
+    uint32_t layer;
+    uint32_t atlas_x, atlas_y;
 };
 
 /*=============================================================================
@@ -86,38 +85,38 @@ struct yetty_image_data {
  *===========================================================================*/
 
 struct yetty_text_span {
-  struct yetty_ycore_named_buffer named_buf;
-  float x, y;
-  float font_size;
-  float rotation;
-  struct yetty_color_rgba color;
-  uint32_t layer;
-  int32_t font_id;
+    struct yetty_ycore_named_buffer named_buf;
+    float x, y;
+    float font_size;
+    float rotation;
+    struct yetty_color_rgba color;
+    uint32_t layer;
+    int32_t font_id;
 };
 
 struct grid_size {
-  uint32_t rows;
-  uint32_t cols;
+    uint32_t rows;
+    uint32_t cols;
 };
 
 struct pixel_size {
-  float width;
-  float height;
+    float width;
+    float height;
 };
 
 struct pixel_coord {
-  float x;
-  float y;
+    float x;
+    float y;
 };
 
 struct grid_cursor_pos {
-  uint32_t rows;
-  uint32_t cols;
+    uint32_t rows;
+    uint32_t cols;
 };
 
 struct rectangle {
-  struct pixel_coord min;
-  struct pixel_coord max;
+    struct pixel_coord min;
+    struct pixel_coord max;
 };
 
 YETTY_YRESULT_DECLARE(uint32, uint32_t);

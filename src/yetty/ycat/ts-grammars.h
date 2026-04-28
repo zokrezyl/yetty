@@ -18,10 +18,10 @@ extern "C" {
 #endif
 
 struct yetty_ycat_grammar {
-	const char *name;                       /* "c", "python", ... */
-	const TSLanguage *(*language_fn)(void);
-	const char *highlights_scm;             /* embedded at configure time */
-	size_t highlights_scm_len;
+    const char *name; /* "c", "python", ... */
+    const TSLanguage *(*language_fn)(void);
+    const char *highlights_scm; /* embedded at configure time */
+    size_t highlights_scm_len;
 };
 
 /* Look up a grammar by name. NULL if not found or tree-sitter disabled. */

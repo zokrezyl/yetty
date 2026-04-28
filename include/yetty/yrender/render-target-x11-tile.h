@@ -47,16 +47,11 @@ struct yetty_ycore_event_loop;
  * Returns an error if XShm is unavailable or initial setup fails. Callers
  * should fall back to the regular texture target on failure.
  */
-struct yetty_yrender_target_ptr_result
-yetty_yrender_target_x11_tile_create(WGPUDevice device,
-                                     WGPUQueue queue,
-                                     WGPUTextureFormat format,
-                                     struct yetty_yrender_gpu_allocator *allocator,
-                                     struct yplatform_wgpu *wgpu,
-                                     struct yetty_ycore_event_loop *event_loop,
-                                     void *x11_display,
-                                     unsigned long x11_window,
-                                     struct yetty_yrender_viewport viewport);
+struct yetty_yrender_target_ptr_result yetty_yrender_target_x11_tile_create(
+    WGPUDevice device, WGPUQueue queue, WGPUTextureFormat format,
+    struct yetty_yrender_gpu_allocator *allocator, struct yplatform_wgpu *wgpu,
+    struct yetty_ycore_event_loop *event_loop, void *x11_display, unsigned long x11_window,
+    struct yetty_yrender_viewport viewport);
 
 #ifdef __cplusplus
 }

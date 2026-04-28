@@ -22,45 +22,43 @@ YETTY_YRESULT_DECLARE(yetty_rpc_server_ptr, struct yetty_rpc_server *);
  * For notifications, response is ignored.
  */
 struct yetty_rpc_handler_result {
-	int ok;
-	union {
-		struct {
-			const uint8_t *data; /* NULL for bool response */
-			size_t len;
-			int bool_value; /* used when data is NULL */
-		} value;
-		const char *error;
-	};
+    int ok;
+    union {
+        struct {
+            const uint8_t *data; /* NULL for bool response */
+            size_t len;
+            int bool_value; /* used when data is NULL */
+        } value;
+        const char *error;
+    };
 };
 
 /* Create success result with msgpack data */
-#define YETTY_YRPC_HANDLER_OK_DATA(d, l)                                        \
-	((struct yetty_rpc_handler_result){                                    \
-		.ok = 1, .value = {.data = (d), .len = (l)}})
+#define YETTY_YRPC_HANDLER_OK_DATA(d, l)                                                           \
+    ((struct yetty_rpc_handler_result){.ok = 1, .value = {.data = (d), .len = (l)}})
 
 /* Create success result with bool */
-#define YETTY_YRPC_HANDLER_OK_BOOL(v)                                           \
-	((struct yetty_rpc_handler_result){                                    \
-		.ok = 1, .value = {.data = NULL, .len = 0, .bool_value = (v)}})
+#define YETTY_YRPC_HANDLER_OK_BOOL(v)                                                              \
+    ((struct yetty_rpc_handler_result){.ok = 1,                                                    \
+                                       .value = {.data = NULL, .len = 0, .bool_value = (v)}})
 
 /* Create error result */
-#define YETTY_YRPC_HANDLER_ERR(msg)                                             \
-	((struct yetty_rpc_handler_result){.ok = 0, .error = (msg)})
+#define YETTY_YRPC_HANDLER_ERR(msg) ((struct yetty_rpc_handler_result){.ok = 0, .error = (msg)})
 
 /*
  * RPC handler function type.
  * Receives parsed message and userdata, returns handler result.
  */
-typedef struct yetty_rpc_handler_result (*yetty_rpc_handler_fn)(
-	const struct yetty_rpc_message *msg, void *userdata);
+typedef struct yetty_rpc_handler_result (*yetty_rpc_handler_fn)(const struct yetty_rpc_message *msg,
+                                                                void *userdata);
 
 /*
  * Create RPC server with event loop for dispatching events.
  * Does not start listening until yetty_rpc_server_start() is called.
  * Registers built-in handlers for EventLoop channel automatically.
  */
-struct yetty_rpc_server_ptr_result
-yetty_rpc_server_create(struct yetty_ycore_event_loop *event_loop);
+struct yetty_rpc_server_ptr_result yetty_rpc_server_create(
+    struct yetty_ycore_event_loop *event_loop);
 
 /*
  * Destroy RPC server.
@@ -73,9 +71,8 @@ void yetty_rpc_server_destroy(struct yetty_rpc_server *server);
  * Host is the bind address (e.g., "127.0.0.1" or "0.0.0.0").
  * Port is the TCP port number.
  */
-struct yetty_ycore_void_result
-yetty_rpc_server_start(struct yetty_rpc_server *server,
-		       const char *host, int port);
+struct yetty_ycore_void_result yetty_rpc_server_start(struct yetty_rpc_server *server,
+                                                      const char *host, int port);
 
 /*
  * Get the port the server is listening on.
@@ -87,8 +84,7 @@ int yetty_rpc_server_get_port(const struct yetty_rpc_server *server);
  * Stop RPC server.
  * Closes listening socket and all client connections.
  */
-struct yetty_ycore_void_result
-yetty_rpc_server_stop(struct yetty_rpc_server *server);
+struct yetty_ycore_void_result yetty_rpc_server_stop(struct yetty_rpc_server *server);
 
 /*
  * Check if server is running.
@@ -100,17 +96,18 @@ int yetty_rpc_server_is_running(const struct yetty_rpc_server *server);
  * Only one handler per (channel, method) pair.
  * Returns error if handler already registered.
  */
-struct yetty_ycore_void_result
-yetty_rpc_server_register_handler(struct yetty_rpc_server *server,
-				  uint32_t channel, const char *method,
-				  yetty_rpc_handler_fn handler, void *userdata);
+struct yetty_ycore_void_result yetty_rpc_server_register_handler(struct yetty_rpc_server *server,
+                                                                 uint32_t channel,
+                                                                 const char *method,
+                                                                 yetty_rpc_handler_fn handler,
+                                                                 void *userdata);
 
 /*
  * Unregister a handler.
  */
-struct yetty_ycore_void_result
-yetty_rpc_server_unregister_handler(struct yetty_rpc_server *server,
-				    uint32_t channel, const char *method);
+struct yetty_ycore_void_result yetty_rpc_server_unregister_handler(struct yetty_rpc_server *server,
+                                                                   uint32_t channel,
+                                                                   const char *method);
 
 /*
  * Get the number of connected clients.

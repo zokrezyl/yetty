@@ -32,16 +32,10 @@ extern "C" {
  * @param request_render_userdata: userdata for callback
  */
 struct yetty_yterm_terminal_layer_result yetty_yterm_ypaint_layer_create(
-    uint32_t cols, uint32_t rows,
-    float cell_width, float cell_height,
-    int scrolling_mode,
-    const struct yetty_context *context,
-    yetty_yterm_request_render_fn request_render_fn,
-    void *request_render_userdata,
-    yetty_yterm_scroll_fn scroll_fn,
-    void *scroll_userdata,
-    yetty_yterm_cursor_fn cursor_fn,
-    void *cursor_userdata);
+    uint32_t cols, uint32_t rows, float cell_width, float cell_height, int scrolling_mode,
+    const struct yetty_context *context, yetty_yterm_request_render_fn request_render_fn,
+    void *request_render_userdata, yetty_yterm_scroll_fn scroll_fn, void *scroll_userdata,
+    yetty_yterm_cursor_fn cursor_fn, void *cursor_userdata);
 
 #ifdef __cplusplus
 }

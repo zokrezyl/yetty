@@ -46,35 +46,33 @@
 
 #define UNCONST(p) ((void *)(uintptr_t)(const void *)(p))
 
-int   opterr   = 1;  /* if error message should be printed */
-int   optind   = 1;  /* index into parent argv vector */
-int   optopt   = '?';/* character checked for validity */
-int   optreset = 0;  /* reset getopt */
-char *optarg   = NULL;
+int opterr = 1;   /* if error message should be printed */
+int optind = 1;   /* index into parent argv vector */
+int optopt = '?'; /* character checked for validity */
+int optreset = 0; /* reset getopt */
+char *optarg = NULL;
 
-#define IGNORE_FIRST  (*options == '-' || *options == '+')
-#define PRINT_ERROR   ((opterr) && ((*options != ':') \
-                                    || (IGNORE_FIRST && options[1] != ':')))
+#define IGNORE_FIRST (*options == '-' || *options == '+')
+#define PRINT_ERROR ((opterr) && ((*options != ':') || (IGNORE_FIRST && options[1] != ':')))
 #define IS_POSIXLY_CORRECT (getenv("POSIXLY_CORRECT") != NULL)
-#define PERMUTE       (!IS_POSIXLY_CORRECT && !IGNORE_FIRST)
-#define IN_ORDER      (!IS_POSIXLY_CORRECT && *options == '-')
+#define PERMUTE (!IS_POSIXLY_CORRECT && !IGNORE_FIRST)
+#define IN_ORDER (!IS_POSIXLY_CORRECT && *options == '-')
 
-#define BADCH   (int)'?'
-#define BADARG  ((IGNORE_FIRST && options[1] == ':') \
-                  || (*options == ':') ? (int)':' : (int)'?')
+#define BADCH (int)'?'
+#define BADARG ((IGNORE_FIRST && options[1] == ':') || (*options == ':') ? (int)':' : (int)'?')
 #define INORDER (int)1
 
-#define EMSG    ""
+#define EMSG ""
 
-static const char *place = EMSG;       /* option letter processing */
-static int nonopt_start = -1;          /* first non option argument (for permute) */
-static int nonopt_end   = -1;          /* first option after non options (for permute) */
+static const char *place = EMSG; /* option letter processing */
+static int nonopt_start = -1;    /* first non option argument (for permute) */
+static int nonopt_end = -1;      /* first option after non options (for permute) */
 
-static const char recargchar[]   = "%s: option requires an argument -- %c\n";
+static const char recargchar[] = "%s: option requires an argument -- %c\n";
 static const char recargstring[] = "%s: option requires an argument -- %s\n";
-static const char ambig[]        = "%s: ambiguous option -- %.*s\n";
-static const char noarg[]        = "%s: option doesn't take an argument -- %.*s\n";
-static const char illoptchar[]   = "%s: unknown option -- %c\n";
+static const char ambig[] = "%s: ambiguous option -- %.*s\n";
+static const char noarg[] = "%s: option doesn't take an argument -- %.*s\n";
+static const char illoptchar[] = "%s: unknown option -- %c\n";
 static const char illoptstring[] = "%s: unknown option -- %s\n";
 
 static const char *progname(void)
@@ -83,8 +81,7 @@ static const char *progname(void)
     return "getopt";
 }
 
-static int
-gcd(int a, int b)
+static int gcd(int a, int b)
 {
     int c = a % b;
     while (c != 0) {
@@ -100,25 +97,25 @@ gcd(int a, int b)
  * from nonopt_end to opt_end (keeping the same order of arguments
  * in each block).
  */
-static void
-permute_args(int panonopt_start, int panonopt_end, int opt_end, char **nargv)
+static void permute_args(int panonopt_start, int panonopt_end, int opt_end, char **nargv)
 {
     int cstart, cyclelen, i, j, ncycle, nnonopts, nopts, pos;
     char *swap;
 
     nnonopts = panonopt_end - panonopt_start;
-    nopts    = opt_end - panonopt_end;
-    ncycle   = gcd(nnonopts, nopts);
+    nopts = opt_end - panonopt_end;
+    ncycle = gcd(nnonopts, nopts);
     cyclelen = (opt_end - panonopt_start) / ncycle;
 
     for (i = 0; i < ncycle; i++) {
         cstart = panonopt_end + i;
         pos = cstart;
         for (j = 0; j < cyclelen; j++) {
-            if (pos >= panonopt_end)
+            if (pos >= panonopt_end) {
                 pos -= nnonopts;
-            else
+            } else {
                 pos += nopts;
+            }
             swap = nargv[pos];
             nargv[pos] = nargv[cstart];
             nargv[cstart] = swap;
@@ -131,19 +128,20 @@ permute_args(int panonopt_start, int panonopt_end, int opt_end, char **nargv)
  *  Parse argc/argv argument vector.  Called by user level routines.
  *  Returns -2 if -- is found (can be long option or end of options marker).
  */
-static int
-getopt_internal(int nargc, char **nargv, const char *options)
+static int getopt_internal(int nargc, char **nargv, const char *options)
 {
     const char *oli;
     int optchar;
 
     optarg = NULL;
 
-    if (optind == 0)
+    if (optind == 0) {
         optind = 1;
+    }
 
-    if (optreset)
+    if (optreset) {
         nonopt_start = nonopt_end = -1;
+    }
 start:
     if (optreset || !*place) {
         optreset = 0;
@@ -164,11 +162,12 @@ start:
                 optarg = nargv[optind++];
                 return INORDER;
             }
-            if (!PERMUTE)
+            if (!PERMUTE) {
                 return -1;
-            if (nonopt_start == -1)
+            }
+            if (nonopt_start == -1) {
                 nonopt_start = optind;
-            else if (nonopt_end != -1) {
+            } else if (nonopt_end != -1) {
                 permute_args(nonopt_start, nonopt_end, optind, nargv);
                 nonopt_start = optind - (nonopt_end - nonopt_start);
                 nonopt_end = -1;
@@ -176,8 +175,9 @@ start:
             optind++;
             goto start;
         }
-        if (nonopt_start != -1 && nonopt_end == -1)
+        if (nonopt_start != -1 && nonopt_end == -1) {
             nonopt_end = optind;
+        }
         if (place[1] && *++place == '-') {
             place++;
             return -2;
@@ -185,20 +185,24 @@ start:
     }
     if ((optchar = (int)*place++) == (int)':' ||
         (oli = strchr(options + (IGNORE_FIRST ? 1 : 0), optchar)) == NULL) {
-        if (!*place)
+        if (!*place) {
             ++optind;
-        if (PRINT_ERROR)
+        }
+        if (PRINT_ERROR) {
             fprintf(stderr, illoptchar, progname(), optchar);
+        }
         optopt = optchar;
         return BADCH;
     }
     if (optchar == 'W' && oli[1] == ';') {
-        if (*place)
+        if (*place) {
             return -2;
+        }
         if (++optind >= nargc) {
             place = EMSG;
-            if (PRINT_ERROR)
+            if (PRINT_ERROR) {
                 fprintf(stderr, recargchar, progname(), optchar);
+            }
             optopt = optchar;
             return BADARG;
         } else {
@@ -207,8 +211,9 @@ start:
         return -2;
     }
     if (*++oli != ':') {
-        if (!*place)
+        if (!*place) {
             ++optind;
+        }
     } else {
         optarg = NULL;
         if (*place) {
@@ -216,8 +221,9 @@ start:
         } else if (oli[1] != ':') {
             if (++optind >= nargc) {
                 place = EMSG;
-                if (PRINT_ERROR)
+                if (PRINT_ERROR) {
                     fprintf(stderr, recargchar, progname(), optchar);
+                }
                 optopt = optchar;
                 return BADARG;
             } else {
@@ -230,8 +236,7 @@ start:
     return optchar;
 }
 
-int
-getopt(int nargc, char * const *nargv, const char *options)
+int getopt(int nargc, char *const *nargv, const char *options)
 {
     int retval = getopt_internal(nargc, UNCONST(nargv), options);
     if (retval == -2) {
@@ -246,16 +251,15 @@ getopt(int nargc, char * const *nargv, const char *options)
     return retval;
 }
 
-int
-getopt_long(int nargc, char * const *nargv, const char *options,
-            const struct option *long_options, int *idx)
+int getopt_long(int nargc, char *const *nargv, const char *options,
+                const struct option *long_options, int *idx)
 {
     int retval;
 
-#define IDENTICAL_INTERPRETATION(_x, _y)                                \
-    (long_options[(_x)].has_arg == long_options[(_y)].has_arg &&        \
-     long_options[(_x)].flag    == long_options[(_y)].flag    &&        \
-     long_options[(_x)].val     == long_options[(_y)].val)
+#define IDENTICAL_INTERPRETATION(_x, _y)                                                           \
+    (long_options[(_x)].has_arg == long_options[(_y)].has_arg &&                                   \
+     long_options[(_x)].flag == long_options[(_y)].flag &&                                         \
+     long_options[(_x)].val == long_options[(_y)].val)
 
     retval = getopt_internal(nargc, UNCONST(nargv), options);
     if (retval == -2) {
@@ -270,7 +274,7 @@ getopt_long(int nargc, char * const *nargv, const char *options,
         optind++;
         place = EMSG;
 
-        if (*current_argv == '\0') {           /* found "--" */
+        if (*current_argv == '\0') { /* found "--" */
             if (nonopt_end != -1) {
                 permute_args(nonopt_start, nonopt_end, optind, UNCONST(nargv));
                 optind -= nonopt_end - nonopt_start;
@@ -286,58 +290,63 @@ getopt_long(int nargc, char * const *nargv, const char *options,
         }
 
         for (i = 0; long_options[i].name; i++) {
-            if (strncmp(current_argv, long_options[i].name, current_argv_len))
+            if (strncmp(current_argv, long_options[i].name, current_argv_len)) {
                 continue;
+            }
             if (strlen(long_options[i].name) == current_argv_len) {
                 match = i;
                 ambiguous = 0;
                 break;
             }
-            if (match == -1)
+            if (match == -1) {
                 match = i;
-            else if (!IDENTICAL_INTERPRETATION(i, match))
+            } else if (!IDENTICAL_INTERPRETATION(i, match)) {
                 ambiguous = 1;
+            }
         }
         if (ambiguous) {
-            if (PRINT_ERROR)
-                fprintf(stderr, ambig, progname(),
-                        (int)current_argv_len, current_argv);
+            if (PRINT_ERROR) {
+                fprintf(stderr, ambig, progname(), (int)current_argv_len, current_argv);
+            }
             optopt = 0;
             return BADCH;
         }
         if (match != -1) {
             if (long_options[match].has_arg == no_argument && has_equal) {
-                if (PRINT_ERROR)
-                    fprintf(stderr, noarg, progname(),
-                            (int)current_argv_len, current_argv);
-                if (long_options[match].flag == NULL)
+                if (PRINT_ERROR) {
+                    fprintf(stderr, noarg, progname(), (int)current_argv_len, current_argv);
+                }
+                if (long_options[match].flag == NULL) {
                     optopt = long_options[match].val;
-                else
+                } else {
                     optopt = 0;
+                }
                 return BADARG;
             }
             if (long_options[match].has_arg == required_argument ||
                 long_options[match].has_arg == optional_argument) {
-                if (has_equal)
+                if (has_equal) {
                     optarg = has_equal;
-                else if (long_options[match].has_arg == required_argument) {
+                } else if (long_options[match].has_arg == required_argument) {
                     optarg = nargv[optind++];
                 }
             }
-            if ((long_options[match].has_arg == required_argument)
-                && (optarg == NULL)) {
-                if (PRINT_ERROR)
+            if ((long_options[match].has_arg == required_argument) && (optarg == NULL)) {
+                if (PRINT_ERROR) {
                     fprintf(stderr, recargstring, progname(), current_argv);
-                if (long_options[match].flag == NULL)
+                }
+                if (long_options[match].flag == NULL) {
                     optopt = long_options[match].val;
-                else
+                } else {
                     optopt = 0;
+                }
                 --optind;
                 return BADARG;
             }
         } else {
-            if (PRINT_ERROR)
+            if (PRINT_ERROR) {
                 fprintf(stderr, illoptstring, progname(), current_argv);
+            }
             optopt = 0;
             return BADCH;
         }
@@ -347,8 +356,9 @@ getopt_long(int nargc, char * const *nargv, const char *options,
         } else {
             retval = long_options[match].val;
         }
-        if (idx)
+        if (idx) {
             *idx = match;
+        }
     }
     return retval;
 #undef IDENTICAL_INTERPRETATION

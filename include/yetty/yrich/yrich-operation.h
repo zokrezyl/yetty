@@ -30,76 +30,76 @@ typedef uint64_t yetty_yrich_session_id;
  *===========================================================================*/
 
 enum yetty_yrich_op_type {
-	YETTY_YRICH_OP_INSERT = 0,
-	YETTY_YRICH_OP_DELETE,
-	YETTY_YRICH_OP_UPDATE,
-	YETTY_YRICH_OP_TEXT_INSERT,
-	YETTY_YRICH_OP_TEXT_DELETE,
-	YETTY_YRICH_OP_TEXT_FORMAT,
-	YETTY_YRICH_OP_CELL_SET,
-	YETTY_YRICH_OP_CELL_CLEAR,
-	YETTY_YRICH_OP_CELL_FORMAT,
-	YETTY_YRICH_OP_STYLE_SET,
-	YETTY_YRICH_OP_CURSOR_MOVE,
-	YETTY_YRICH_OP_SELECTION_SET,
+    YETTY_YRICH_OP_INSERT = 0,
+    YETTY_YRICH_OP_DELETE,
+    YETTY_YRICH_OP_UPDATE,
+    YETTY_YRICH_OP_TEXT_INSERT,
+    YETTY_YRICH_OP_TEXT_DELETE,
+    YETTY_YRICH_OP_TEXT_FORMAT,
+    YETTY_YRICH_OP_CELL_SET,
+    YETTY_YRICH_OP_CELL_CLEAR,
+    YETTY_YRICH_OP_CELL_FORMAT,
+    YETTY_YRICH_OP_STYLE_SET,
+    YETTY_YRICH_OP_CURSOR_MOVE,
+    YETTY_YRICH_OP_SELECTION_SET,
 };
 
 struct yetty_yrich_op_insert {
-	yetty_yrich_element_id id;
-	char *element_type;  /* owned, may be NULL */
-	char *data;          /* owned serialized payload, may be NULL */
+    yetty_yrich_element_id id;
+    char *element_type; /* owned, may be NULL */
+    char *data;         /* owned serialized payload, may be NULL */
 };
 
 struct yetty_yrich_op_delete {
-	yetty_yrich_element_id id;
-	char *data;          /* serialized for undo, owned */
+    yetty_yrich_element_id id;
+    char *data; /* serialized for undo, owned */
 };
 
 struct yetty_yrich_op_update {
-	yetty_yrich_element_id id;
-	char *property;      /* owned */
-	char *old_value;     /* owned */
-	char *new_value;     /* owned */
+    yetty_yrich_element_id id;
+    char *property;  /* owned */
+    char *old_value; /* owned */
+    char *new_value; /* owned */
 };
 
 struct yetty_yrich_op_text_insert {
-	yetty_yrich_element_id id;
-	int32_t position;
-	char *text;          /* owned */
+    yetty_yrich_element_id id;
+    int32_t position;
+    char *text; /* owned */
 };
 
 struct yetty_yrich_op_text_delete {
-	yetty_yrich_element_id id;
-	int32_t position;
-	int32_t length;
-	char *deleted_text;  /* owned, for undo */
+    yetty_yrich_element_id id;
+    int32_t position;
+    int32_t length;
+    char *deleted_text; /* owned, for undo */
 };
 
 struct yetty_yrich_op_text_format {
-	yetty_yrich_element_id id;
-	int32_t start_pos;
-	int32_t end_pos;
-	uint32_t add_format;
-	uint32_t remove_format;
-	uint32_t old_format;
+    yetty_yrich_element_id id;
+    int32_t start_pos;
+    int32_t end_pos;
+    uint32_t add_format;
+    uint32_t remove_format;
+    uint32_t old_format;
 };
 
 struct yetty_yrich_op_cell_set {
-	struct yetty_yrich_cell_addr addr;
-	char *old_value;     /* owned */
-	char *new_value;     /* owned */
+    struct yetty_yrich_cell_addr addr;
+    char *old_value; /* owned */
+    char *new_value; /* owned */
 };
 
 struct yetty_yrich_op_style_set {
-	yetty_yrich_element_id id;
-	char *property;
-	char *old_value;
-	char *new_value;
+    yetty_yrich_element_id id;
+    char *property;
+    char *old_value;
+    char *new_value;
 };
 
 struct yetty_yrich_op_cursor_move {
-	yetty_yrich_element_id element_id;
-	int32_t position;
+    yetty_yrich_element_id element_id;
+    int32_t position;
 };
 
 /*=============================================================================
@@ -108,31 +108,30 @@ struct yetty_yrich_op_cursor_move {
  *===========================================================================*/
 
 struct yetty_yrich_operation {
-	uint32_t type;        /* enum yetty_yrich_op_type */
-	uint64_t timestamp;   /* monotonic counter (logical clock) */
-	yetty_yrich_session_id author;
+    uint32_t type;      /* enum yetty_yrich_op_type */
+    uint64_t timestamp; /* monotonic counter (logical clock) */
+    yetty_yrich_session_id author;
 
-	union {
-		struct yetty_yrich_op_insert insert;
-		struct yetty_yrich_op_delete del;
-		struct yetty_yrich_op_update update;
-		struct yetty_yrich_op_text_insert text_insert;
-		struct yetty_yrich_op_text_delete text_delete;
-		struct yetty_yrich_op_text_format text_format;
-		struct yetty_yrich_op_cell_set cell_set;
-		struct yetty_yrich_op_style_set style_set;
-		struct yetty_yrich_op_cursor_move cursor_move;
-	} u;
+    union {
+        struct yetty_yrich_op_insert insert;
+        struct yetty_yrich_op_delete del;
+        struct yetty_yrich_op_update update;
+        struct yetty_yrich_op_text_insert text_insert;
+        struct yetty_yrich_op_text_delete text_delete;
+        struct yetty_yrich_op_text_format text_format;
+        struct yetty_yrich_op_cell_set cell_set;
+        struct yetty_yrich_op_style_set style_set;
+        struct yetty_yrich_op_cursor_move cursor_move;
+    } u;
 };
 
-YETTY_YRESULT_DECLARE(yetty_yrich_operation_ptr,
-		      struct yetty_yrich_operation *);
+YETTY_YRESULT_DECLARE(yetty_yrich_operation_ptr, struct yetty_yrich_operation *);
 
 /* Allocate empty operation of given type at timestamp/author. Caller fills the
  * union body and string fields (transferring ownership). */
-struct yetty_yrich_operation_ptr_result
-yetty_yrich_operation_create(uint32_t type, uint64_t timestamp,
-			     yetty_yrich_session_id author);
+struct yetty_yrich_operation_ptr_result yetty_yrich_operation_create(uint32_t type,
+                                                                     uint64_t timestamp,
+                                                                     yetty_yrich_session_id author);
 
 /* Free an operation including all owned strings. NULL-safe. */
 void yetty_yrich_operation_destroy(struct yetty_yrich_operation *op);
@@ -142,26 +141,24 @@ bool yetty_yrich_operation_is_presence(const struct yetty_yrich_operation *op);
 
 /* Build the inverse operation (for undo). Returns NULL on alloc failure or
  * for ops that have no inverse (presence). */
-struct yetty_yrich_operation *
-yetty_yrich_operation_inverse(const struct yetty_yrich_operation *op);
+struct yetty_yrich_operation *yetty_yrich_operation_inverse(const struct yetty_yrich_operation *op);
 
 /*=============================================================================
  * Operation log — append-only history.
  *===========================================================================*/
 
 struct yetty_yrich_op_log {
-	struct yetty_yrich_operation **ops;
-	size_t count;
-	size_t capacity;
-	uint64_t current_ts;
+    struct yetty_yrich_operation **ops;
+    size_t count;
+    size_t capacity;
+    uint64_t current_ts;
 };
 
 void yetty_yrich_op_log_init(struct yetty_yrich_op_log *log);
 void yetty_yrich_op_log_clear(struct yetty_yrich_op_log *log);
 
 /* Take ownership of op. Returns -1 on alloc failure (op is destroyed). */
-int yetty_yrich_op_log_append(struct yetty_yrich_op_log *log,
-			      struct yetty_yrich_operation *op);
+int yetty_yrich_op_log_append(struct yetty_yrich_op_log *log, struct yetty_yrich_operation *op);
 
 #ifdef __cplusplus
 }

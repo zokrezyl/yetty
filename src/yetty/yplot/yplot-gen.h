@@ -37,14 +37,12 @@ struct yetty_yplot_buffers {
 // Serialization API
 //=============================================================================
 
-size_t yetty_yplot_serialized_size(
-    const struct yetty_yplot_uniforms *uniforms,
-    const struct yetty_yplot_buffers *buffers);
+size_t yetty_yplot_serialized_size(const struct yetty_yplot_uniforms *uniforms,
+                                   const struct yetty_yplot_buffers *buffers);
 
-struct yetty_ycore_size_result yetty_yplot_serialize(
-    const struct yetty_yplot_uniforms *uniforms,
-    const struct yetty_yplot_buffers *buffers,
-    uint8_t *out, size_t out_capacity);
+struct yetty_ycore_size_result yetty_yplot_serialize(const struct yetty_yplot_uniforms *uniforms,
+                                                     const struct yetty_yplot_buffers *buffers,
+                                                     uint8_t *out, size_t out_capacity);
 
 //=============================================================================
 // Factory API (creates binder with pre-compiled pipeline)
@@ -63,4 +61,3 @@ void yetty_yplot_register_yaml_factory(struct yetty_ypaint_yaml_parser *parser);
 #ifdef __cplusplus
 }
 #endif
-

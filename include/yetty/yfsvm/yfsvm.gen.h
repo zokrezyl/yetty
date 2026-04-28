@@ -71,62 +71,123 @@ typedef enum YfsvmOpcode {
 //   [11:0]  imm12  (12 bits)
 
 // Encode instruction
-static inline uint32_t yfsvm_encode(YfsvmOpcode op, uint8_t dst, uint8_t src1, uint8_t src2, uint16_t imm12) {
-    return ((uint32_t)op << 24) | ((dst & 0xF) << 20) | ((src1 & 0xF) << 16) | ((src2 & 0xF) << 12) | (imm12 & 0xFFF);
+static inline uint32_t yfsvm_encode(YfsvmOpcode op, uint8_t dst, uint8_t src1, uint8_t src2,
+                                    uint16_t imm12)
+{
+    return ((uint32_t)op << 24) | ((dst & 0xF) << 20) | ((src1 & 0xF) << 16) |
+           ((src2 & 0xF) << 12) | (imm12 & 0xFFF);
 }
 
 // Decode instruction
-static inline YfsvmOpcode yfsvm_decode_opcode(uint32_t instr) { return (YfsvmOpcode)((instr >> 24) & 0xFF); }
-static inline uint8_t yfsvm_decode_dst(uint32_t instr) { return (instr >> 20) & 0xF; }
-static inline uint8_t yfsvm_decode_src1(uint32_t instr) { return (instr >> 16) & 0xF; }
-static inline uint8_t yfsvm_decode_src2(uint32_t instr) { return (instr >> 12) & 0xF; }
-static inline uint16_t yfsvm_decode_imm12(uint32_t instr) { return instr & 0xFFF; }
+static inline YfsvmOpcode yfsvm_decode_opcode(uint32_t instr)
+{
+    return (YfsvmOpcode)((instr >> 24) & 0xFF);
+}
+static inline uint8_t yfsvm_decode_dst(uint32_t instr)
+{
+    return (instr >> 20) & 0xF;
+}
+static inline uint8_t yfsvm_decode_src1(uint32_t instr)
+{
+    return (instr >> 16) & 0xF;
+}
+static inline uint8_t yfsvm_decode_src2(uint32_t instr)
+{
+    return (instr >> 12) & 0xF;
+}
+static inline uint16_t yfsvm_decode_imm12(uint32_t instr)
+{
+    return instr & 0xFFF;
+}
 
 // Get opcode name for debugging
-static inline const char* yfsvm_opcode_name(YfsvmOpcode op) {
+static inline const char *yfsvm_opcode_name(YfsvmOpcode op)
+{
     switch (op) {
-        case YFSVM_OP_NOP: return "NOP";
-        case YFSVM_OP_RET: return "RET";
-        case YFSVM_OP_LOAD_C: return "LOAD_C";
-        case YFSVM_OP_LOAD_X: return "LOAD_X";
-        case YFSVM_OP_LOAD_T: return "LOAD_T";
-        case YFSVM_OP_LOAD_S: return "LOAD_S";
-        case YFSVM_OP_MOV: return "MOV";
-        case YFSVM_OP_ADD: return "ADD";
-        case YFSVM_OP_SUB: return "SUB";
-        case YFSVM_OP_MUL: return "MUL";
-        case YFSVM_OP_DIV: return "DIV";
-        case YFSVM_OP_NEG: return "NEG";
-        case YFSVM_OP_MOD: return "MOD";
-        case YFSVM_OP_SIN: return "SIN";
-        case YFSVM_OP_COS: return "COS";
-        case YFSVM_OP_TAN: return "TAN";
-        case YFSVM_OP_ASIN: return "ASIN";
-        case YFSVM_OP_ACOS: return "ACOS";
-        case YFSVM_OP_ATAN: return "ATAN";
-        case YFSVM_OP_ATAN2: return "ATAN2";
-        case YFSVM_OP_SINH: return "SINH";
-        case YFSVM_OP_COSH: return "COSH";
-        case YFSVM_OP_TANH: return "TANH";
-        case YFSVM_OP_EXP: return "EXP";
-        case YFSVM_OP_EXP2: return "EXP2";
-        case YFSVM_OP_LOG: return "LOG";
-        case YFSVM_OP_LOG2: return "LOG2";
-        case YFSVM_OP_POW: return "POW";
-        case YFSVM_OP_SQRT: return "SQRT";
-        case YFSVM_OP_RSQRT: return "RSQRT";
-        case YFSVM_OP_ABS: return "ABS";
-        case YFSVM_OP_MIN: return "MIN";
-        case YFSVM_OP_MAX: return "MAX";
-        case YFSVM_OP_FLOOR: return "FLOOR";
-        case YFSVM_OP_CEIL: return "CEIL";
-        case YFSVM_OP_ROUND: return "ROUND";
-        case YFSVM_OP_FRACT: return "FRACT";
-        case YFSVM_OP_SIGN: return "SIGN";
-        case YFSVM_OP_CLAMP01: return "CLAMP01";
-        case YFSVM_OP_STEP: return "STEP";
-        case YFSVM_OP_MIX: return "MIX";
-        default: return "UNKNOWN";
+    case YFSVM_OP_NOP:
+        return "NOP";
+    case YFSVM_OP_RET:
+        return "RET";
+    case YFSVM_OP_LOAD_C:
+        return "LOAD_C";
+    case YFSVM_OP_LOAD_X:
+        return "LOAD_X";
+    case YFSVM_OP_LOAD_T:
+        return "LOAD_T";
+    case YFSVM_OP_LOAD_S:
+        return "LOAD_S";
+    case YFSVM_OP_MOV:
+        return "MOV";
+    case YFSVM_OP_ADD:
+        return "ADD";
+    case YFSVM_OP_SUB:
+        return "SUB";
+    case YFSVM_OP_MUL:
+        return "MUL";
+    case YFSVM_OP_DIV:
+        return "DIV";
+    case YFSVM_OP_NEG:
+        return "NEG";
+    case YFSVM_OP_MOD:
+        return "MOD";
+    case YFSVM_OP_SIN:
+        return "SIN";
+    case YFSVM_OP_COS:
+        return "COS";
+    case YFSVM_OP_TAN:
+        return "TAN";
+    case YFSVM_OP_ASIN:
+        return "ASIN";
+    case YFSVM_OP_ACOS:
+        return "ACOS";
+    case YFSVM_OP_ATAN:
+        return "ATAN";
+    case YFSVM_OP_ATAN2:
+        return "ATAN2";
+    case YFSVM_OP_SINH:
+        return "SINH";
+    case YFSVM_OP_COSH:
+        return "COSH";
+    case YFSVM_OP_TANH:
+        return "TANH";
+    case YFSVM_OP_EXP:
+        return "EXP";
+    case YFSVM_OP_EXP2:
+        return "EXP2";
+    case YFSVM_OP_LOG:
+        return "LOG";
+    case YFSVM_OP_LOG2:
+        return "LOG2";
+    case YFSVM_OP_POW:
+        return "POW";
+    case YFSVM_OP_SQRT:
+        return "SQRT";
+    case YFSVM_OP_RSQRT:
+        return "RSQRT";
+    case YFSVM_OP_ABS:
+        return "ABS";
+    case YFSVM_OP_MIN:
+        return "MIN";
+    case YFSVM_OP_MAX:
+        return "MAX";
+    case YFSVM_OP_FLOOR:
+        return "FLOOR";
+    case YFSVM_OP_CEIL:
+        return "CEIL";
+    case YFSVM_OP_ROUND:
+        return "ROUND";
+    case YFSVM_OP_FRACT:
+        return "FRACT";
+    case YFSVM_OP_SIGN:
+        return "SIGN";
+    case YFSVM_OP_CLAMP01:
+        return "CLAMP01";
+    case YFSVM_OP_STEP:
+        return "STEP";
+    case YFSVM_OP_MIX:
+        return "MIX";
+    default:
+        return "UNKNOWN";
     }
 }
 

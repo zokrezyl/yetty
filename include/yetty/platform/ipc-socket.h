@@ -37,8 +37,7 @@ YETTY_YRESULT_DECLARE(yetty_ipc_socket, yetty_ipc_socket_t);
  *
  * Copies the actual path to path_out if not NULL (must be PATH_MAX bytes).
  */
-struct yetty_ipc_socket_result
-yetty_ipc_socket_listen(const char *path, char *path_out);
+struct yetty_ipc_socket_result yetty_ipc_socket_listen(const char *path, char *path_out);
 
 /*
  * Connect to an IPC socket at the given path.
@@ -61,16 +60,15 @@ struct yetty_ipc_socket_result yetty_ipc_socket_accept(yetty_ipc_socket_t sock);
  * Send data on a connected socket.
  * Returns number of bytes sent, or 0 if would block.
  */
-struct yetty_ycore_size_result yetty_ipc_socket_send(yetty_ipc_socket_t sock,
-						    const void *data,
-						    size_t len);
+struct yetty_ycore_size_result yetty_ipc_socket_send(yetty_ipc_socket_t sock, const void *data,
+                                                     size_t len);
 
 /*
  * Receive data from a connected socket.
  * Returns number of bytes received, or 0 if would block or EOF.
  */
-struct yetty_ycore_size_result yetty_ipc_socket_recv(yetty_ipc_socket_t sock,
-						    void *buf, size_t max_len);
+struct yetty_ycore_size_result yetty_ipc_socket_recv(yetty_ipc_socket_t sock, void *buf,
+                                                     size_t max_len);
 
 /*
  * Check if last operation would block.

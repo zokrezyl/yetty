@@ -19,6 +19,6 @@ void yplatform_format_timestamp(char *buf, size_t bufsize)
 {
     SYSTEMTIME st;
     GetLocalTime(&st);
-    snprintf(buf, bufsize, "%02d:%02d:%02d.%03d",
-             st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+    snprintf(buf, bufsize, "%02d:%02d:%02d.%03d", st.wHour, st.wMinute, st.wSecond,
+             st.wMilliseconds);
 }

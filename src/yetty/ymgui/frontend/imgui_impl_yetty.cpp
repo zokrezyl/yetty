@@ -103,8 +103,10 @@ static struct ymgui_impl_state g_state = {
  *=========================================================================*/
 
 static ymgui_card_state *find_card(uint32_t id) {
-    for (auto *c : g_state.cards)
-        if (c->id == id) return c;
+    for (auto *c : g_state.cards) {
+        if (c->id == id) { return c;
+}
+}
     return nullptr;
 }
 
@@ -115,14 +117,18 @@ static ymgui_card_state *find_card(uint32_t id) {
  * incidentally drained it. Cheaper to just block briefly per emit. */
 static int flush_yface_to_fd(void)
 {
-    if (!g_state.yface_out) return -1;
+    if (!g_state.yface_out) { return -1;
+}
     struct yetty_ycore_buffer *out = yetty_yface_out_buf(g_state.yface_out);
-    if (!out || out->size == 0) return 0;
+    if (!out || out->size == 0) { return 0;
+}
     int rc = ymgui_pending_write(g_state.out_fd, out->data, out->size);
     yetty_ycore_buffer_clear(out);
-    if (rc < 0) return rc;
-    if (ymgui_pending_active())
+    if (rc < 0) { return rc;
+}
+    if (ymgui_pending_active()) {
         return ymgui_pending_drain_blocking(g_state.out_fd);
+}
     return 0;
 }
 
@@ -132,13 +138,17 @@ static int flush_yface_to_fd(void)
 static bool emit_osc(int osc_code, bool compressed,
                      const void *payload, size_t len)
 {
-    if (!g_state.yface_out) return false;
+    if (!g_state.yface_out) { return false;
+}
     if (!yetty_yface_start_write(g_state.yface_out, osc_code,
                                  compressed ? 1 : 0,
-                                 /*args=*/NULL, /*args_len=*/0).ok)
+                                 /*args=*/NULL, /*args_len=*/0).ok) {
         return false;
-    if (!yetty_yface_write(g_state.yface_out, payload, len).ok) return false;
-    if (!yetty_yface_finish_write(g_state.yface_out).ok) return false;
+}
+    if (!yetty_yface_write(g_state.yface_out, payload, len).ok) { return false;
+}
+    if (!yetty_yface_finish_write(g_state.yface_out).ok) { return false;
+}
     return flush_yface_to_fd() >= 0;
 }
 
@@ -154,7 +164,8 @@ bool ImGui_ImplYetty_Init(void)
     /* Two yface instances — one each for the encode/decode pipelines. */
     {
         struct yetty_yface_ptr_result yr = yetty_yface_create();
-        if (!yr.ok) return false;
+        if (!yr.ok) { return false;
+}
         g_state.yface_out = yr.value;
     }
     {
@@ -174,7 +185,8 @@ void ImGui_ImplYetty_Shutdown(void)
     /* Destroy any remaining cards (does NOT emit CARD_REMOVE — that's
      * the app's call via Clear()). */
     for (auto *c : g_state.cards) {
-        if (c->ctx) ImGui::DestroyContext(c->ctx);
+        if (c->ctx) { ImGui::DestroyContext(c->ctx);
+}
         delete c;
     }
     g_state.cards.clear();
@@ -206,10 +218,11 @@ void ImGui_ImplYetty_Clear(bool keep_visible)
 uint32_t ImGui_ImplYetty_CreateCard(uint32_t card_id, int col, int row,
                                     uint32_t w_cells, uint32_t h_cells)
 {
-    if (card_id == YMGUI_CARD_ID_NONE)
+    if (card_id == YMGUI_CARD_ID_NONE) {
         card_id = g_state.next_auto_card_id++;
-    else if (card_id >= g_state.next_auto_card_id)
+    } else if (card_id >= g_state.next_auto_card_id) {
         g_state.next_auto_card_id = card_id + 1u;
+}
 
     if (find_card(card_id)) {
         /* Already exists — treat as move. */
@@ -261,7 +274,8 @@ void ImGui_ImplYetty_MoveCard(uint32_t card_id, int col, int row,
                               uint32_t w_cells, uint32_t h_cells)
 {
     auto *c = find_card(card_id);
-    if (!c) return;
+    if (!c) { return;
+}
     c->col = col; c->row = row; c->w_cells = w_cells; c->h_cells = h_cells;
     struct ymgui_wire_card_place msg = {};
     msg.magic   = YMGUI_WIRE_MAGIC_CARD_PLACE;
@@ -287,14 +301,16 @@ void ImGui_ImplYetty_RemoveCard(uint32_t card_id, bool keep_visible)
     /* Then drop our local state. */
     for (auto it = g_state.cards.begin(); it != g_state.cards.end(); ++it) {
         if ((*it)->id == card_id) {
-            if ((*it)->ctx) ImGui::DestroyContext((*it)->ctx);
+            if ((*it)->ctx) { ImGui::DestroyContext((*it)->ctx);
+}
             delete *it;
             g_state.cards.erase(it);
             break;
         }
     }
-    if (g_state.focused_card_id == card_id)
+    if (g_state.focused_card_id == card_id) {
         g_state.focused_card_id = 0;
+}
 }
 
 ImGuiContext *ImGui_ImplYetty_GetCardContext(uint32_t card_id)
@@ -316,7 +332,8 @@ static bool upload_card_atlas(ymgui_card_state *c)
     unsigned char *pixels = nullptr;
     int w = 0, h = 0;
     io.Fonts->GetTexDataAsAlpha8(&pixels, &w, &h);
-    if (!pixels || w <= 0 || h <= 0) return false;
+    if (!pixels || w <= 0 || h <= 0) { return false;
+}
 
     size_t pixel_bytes = (size_t)w * (size_t)h;
     size_t payload_sz  = sizeof(struct ymgui_wire_tex) + pixel_bytes;
@@ -332,12 +349,17 @@ static bool upload_card_atlas(ymgui_card_state *c)
     hdr.total_size = (uint32_t)payload_sz;
 
     if (!yetty_yface_start_write(g_state.yface_out, YMGUI_OSC_CS_TEX,
-                                 /*compressed=*/1, /*args=*/NULL, 0).ok)
+                                 /*compressed=*/1, /*args=*/NULL, 0).ok) {
         return false;
-    if (!yetty_yface_write(g_state.yface_out, &hdr, sizeof(hdr)).ok) return false;
-    if (!yetty_yface_write(g_state.yface_out, pixels, pixel_bytes).ok) return false;
-    if (!yetty_yface_finish_write(g_state.yface_out).ok) return false;
-    if (flush_yface_to_fd() < 0) return false;
+}
+    if (!yetty_yface_write(g_state.yface_out, &hdr, sizeof(hdr)).ok) { return false;
+}
+    if (!yetty_yface_write(g_state.yface_out, pixels, pixel_bytes).ok) { return false;
+}
+    if (!yetty_yface_finish_write(g_state.yface_out).ok) { return false;
+}
+    if (flush_yface_to_fd() < 0) { return false;
+}
 
     io.Fonts->SetTexID((ImTextureID)(intptr_t)YMGUI_TEX_ID_FONT_ATLAS);
     c->atlas_uploaded = true;
@@ -347,26 +369,33 @@ static bool upload_card_atlas(ymgui_card_state *c)
 void ImGui_ImplYetty_BeginCardFrame(uint32_t card_id)
 {
     auto *c = find_card(card_id);
-    if (!c) return;
+    if (!c) { return;
+}
     ImGui::SetCurrentContext(c->ctx);
-    if (!c->atlas_uploaded)
+    if (!c->atlas_uploaded) {
         upload_card_atlas(c);
+}
 }
 
 void ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData *draw_data)
 {
     auto *c = find_card(card_id);
-    if (!c) return;
-    if (!draw_data || draw_data->CmdListsCount <= 0) return;
-    if (!g_state.yface_out) return;
+    if (!c) { return;
+}
+    if (!draw_data || draw_data->CmdListsCount <= 0) { return;
+}
+    if (!g_state.yface_out) { return;
+}
     /* Static-size sanity — we memcpy ImDrawVert straight onto the wire. */
-    if (sizeof(ImDrawVert) != sizeof(struct ymgui_wire_vertex)) return;
+    if (sizeof(ImDrawVert) != sizeof(struct ymgui_wire_vertex)) { return;
+}
 
     size_t total_size = sizeof(struct ymgui_wire_frame);
     for (int n = 0; n < draw_data->CmdListsCount; ++n) {
         const ImDrawList *cl = draw_data->CmdLists[n];
         size_t idx_bytes = (size_t)cl->IdxBuffer.Size * sizeof(ImDrawIdx);
-        if (idx_bytes & 3u) idx_bytes += 4u - (idx_bytes & 3u);
+        if (idx_bytes & 3u) { idx_bytes += 4u - (idx_bytes & 3u);
+}
         total_size += sizeof(struct ymgui_wire_cmd_list)
                     + (size_t)cl->VtxBuffer.Size * sizeof(ImDrawVert)
                     + idx_bytes
@@ -388,9 +417,11 @@ void ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData *draw_data)
     fh.fb_scale_y     = draw_data->FramebufferScale.y;
 
     if (!yetty_yface_start_write(g_state.yface_out, YMGUI_OSC_CS_FRAME,
-                                 /*compressed=*/1, /*args=*/NULL, 0).ok)
+                                 /*compressed=*/1, /*args=*/NULL, 0).ok) {
         return;
-    if (!yetty_yface_write(g_state.yface_out, &fh, sizeof(fh)).ok) return;
+}
+    if (!yetty_yface_write(g_state.yface_out, &fh, sizeof(fh)).ok) { return;
+}
 
     static const uint8_t pad[4] = {0, 0, 0, 0};
 
@@ -401,25 +432,31 @@ void ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData *draw_data)
         cl_hdr.vtx_count = (uint32_t)cl->VtxBuffer.Size;
         cl_hdr.idx_count = (uint32_t)cl->IdxBuffer.Size;
         cl_hdr.cmd_count = (uint32_t)cl->CmdBuffer.Size;
-        if (!yetty_yface_write(g_state.yface_out, &cl_hdr, sizeof(cl_hdr)).ok) return;
+        if (!yetty_yface_write(g_state.yface_out, &cl_hdr, sizeof(cl_hdr)).ok) { return;
+}
 
         if (cl_hdr.vtx_count) {
             size_t nbytes = (size_t)cl_hdr.vtx_count * sizeof(ImDrawVert);
-            if (!yetty_yface_write(g_state.yface_out, cl->VtxBuffer.Data, nbytes).ok)
+            if (!yetty_yface_write(g_state.yface_out, cl->VtxBuffer.Data, nbytes).ok) {
                 return;
+}
         }
         if (cl_hdr.idx_count) {
             size_t nbytes = (size_t)cl_hdr.idx_count * sizeof(ImDrawIdx);
-            if (!yetty_yface_write(g_state.yface_out, cl->IdxBuffer.Data, nbytes).ok)
+            if (!yetty_yface_write(g_state.yface_out, cl->IdxBuffer.Data, nbytes).ok) {
                 return;
+}
             size_t rem = nbytes & 3u;
-            if (rem)
-                if (!yetty_yface_write(g_state.yface_out, pad, 4u - rem).ok) return;
+            if (rem) {
+                if (!yetty_yface_write(g_state.yface_out, pad, 4u - rem).ok) { return;
+}
+}
         }
 
         for (int i = 0; i < cl->CmdBuffer.Size; ++i) {
             const ImDrawCmd *dc = &cl->CmdBuffer[i];
-            if (dc->UserCallback) continue;
+            if (dc->UserCallback) { continue;
+}
             struct ymgui_wire_cmd wc = {};
             wc.clip_min_x = dc->ClipRect.x;
             wc.clip_min_y = dc->ClipRect.y;
@@ -429,11 +466,13 @@ void ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData *draw_data)
             wc.vtx_offset = dc->VtxOffset;
             wc.idx_offset = dc->IdxOffset;
             wc.elem_count = dc->ElemCount;
-            if (!yetty_yface_write(g_state.yface_out, &wc, sizeof(wc)).ok) return;
+            if (!yetty_yface_write(g_state.yface_out, &wc, sizeof(wc)).ok) { return;
+}
         }
     }
 
-    if (!yetty_yface_finish_write(g_state.yface_out).ok) return;
+    if (!yetty_yface_finish_write(g_state.yface_out).ok) { return;
+}
     flush_yface_to_fd();
 }
 
@@ -444,7 +483,8 @@ void ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData *draw_data)
 #ifndef _WIN32
 static bool platform_set_raw_mode(int fd, struct termios *saved)
 {
-    if (tcgetattr(fd, saved) != 0) return false;
+    if (tcgetattr(fd, saved) != 0) { return false;
+}
     struct termios raw = *saved;
     raw.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR
                      | ICRNL | IXON);
@@ -453,9 +493,11 @@ static bool platform_set_raw_mode(int fd, struct termios *saved)
     raw.c_cflag |= CS8;
     raw.c_cc[VMIN]  = 0;
     raw.c_cc[VTIME] = 0;
-    if (tcsetattr(fd, TCSANOW, &raw) != 0) return false;
+    if (tcsetattr(fd, TCSANOW, &raw) != 0) { return false;
+}
     int flags = fcntl(fd, F_GETFL, 0);
-    if (flags >= 0) fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    if (flags >= 0) { fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
     return true;
 }
 
@@ -470,8 +512,9 @@ bool ImGui_ImplYetty_PlatformInit(void)
 #ifdef _WIN32
     return false;
 #else
-    if (!platform_set_raw_mode(g_state.in_fd, &g_state.saved_termios))
+    if (!platform_set_raw_mode(g_state.in_fd, &g_state.saved_termios)) {
         return false;
+}
     g_state.raw_mode_active = 1;
 
     /* Stdout stays in default (blocking) mode so partial OSC writes can
@@ -519,7 +562,8 @@ void ImGui_ImplYetty_OnCardMousePos(uint32_t card_id, double x, double y,
 {
     (void)buttons_held;
     auto *c = find_card(card_id);
-    if (!c) return;
+    if (!c) { return;
+}
     context_scope cs(c->ctx);
     ImGui::GetIO().AddMousePosEvent((float)x, (float)y);
 }
@@ -528,19 +572,22 @@ void ImGui_ImplYetty_OnCardMouseButton(uint32_t card_id, int button, int pressed
                                        double x, double y)
 {
     auto *c = find_card(card_id);
-    if (!c) return;
+    if (!c) { return;
+}
     context_scope cs(c->ctx);
     ImGuiIO& io = ImGui::GetIO();
     io.AddMousePosEvent((float)x, (float)y);
-    if (button >= 0 && button < 5)
+    if (button >= 0 && button < 5) {
         io.AddMouseButtonEvent(button, pressed != 0);
+}
 }
 
 void ImGui_ImplYetty_OnCardMouseWheel(uint32_t card_id, double dy,
                                       double x, double y)
 {
     auto *c = find_card(card_id);
-    if (!c) return;
+    if (!c) { return;
+}
     context_scope cs(c->ctx);
     ImGuiIO& io = ImGui::GetIO();
     io.AddMousePosEvent((float)x, (float)y);
@@ -550,8 +597,10 @@ void ImGui_ImplYetty_OnCardMouseWheel(uint32_t card_id, double dy,
 void ImGui_ImplYetty_OnCardResize(uint32_t card_id, double width, double height)
 {
     auto *c = find_card(card_id);
-    if (!c) return;
-    if (width <= 0.0 || height <= 0.0) return;
+    if (!c) { return;
+}
+    if (width <= 0.0 || height <= 0.0) { return;
+}
     c->w_pixels = (float)width;
     c->h_pixels = (float)height;
     context_scope cs(c->ctx);
@@ -561,9 +610,11 @@ void ImGui_ImplYetty_OnCardResize(uint32_t card_id, double width, double height)
 void ImGui_ImplYetty_OnCardFocus(uint32_t card_id, int gained)
 {
     auto *c = find_card(card_id);
-    if (!c) return;
-    if (gained) g_state.focused_card_id = card_id;
-    else if (g_state.focused_card_id == card_id) g_state.focused_card_id = 0;
+    if (!c) { return;
+}
+    if (gained) { g_state.focused_card_id = card_id;
+    } else if (g_state.focused_card_id == card_id) { g_state.focused_card_id = 0;
+}
 
     context_scope cs(c->ctx);
     ImGuiIO& io = ImGui::GetIO();
@@ -644,7 +695,8 @@ void ImGui_ImplYetty_OnCardKey(uint32_t card_id, int kind, int key, int mods,
                                uint32_t codepoint)
 {
     auto *c = find_card(card_id);
-    if (!c) return;
+    if (!c) { return;
+}
     context_scope cs(c->ctx);
     ImGuiIO& io = ImGui::GetIO();
     /* GLFW mods bitmask: SHIFT=1, CTRL=2, ALT=4, SUPER=8. */
@@ -654,11 +706,13 @@ void ImGui_ImplYetty_OnCardKey(uint32_t card_id, int kind, int key, int mods,
     io.AddKeyEvent(ImGuiMod_Super, (mods & 8) != 0);
 
     if (kind == YMGUI_INPUT_KEY_CHAR) {
-        if (codepoint) io.AddInputCharacter(codepoint);
+        if (codepoint) { io.AddInputCharacter(codepoint);
+}
     } else {
         ImGuiKey ikey = glfw_to_imgui_key(key);
-        if (ikey != ImGuiKey_None)
+        if (ikey != ImGuiKey_None) {
             io.AddKeyEvent(ikey, kind == YMGUI_INPUT_KEY_DOWN);
+}
     }
 }
 
@@ -674,10 +728,12 @@ static void poll_on_osc(void *user, int osc_code,
     (void)user; (void)args; (void)args_len;
     switch (osc_code) {
     case YMGUI_OSC_SC_MOUSE: {
-        if (len < sizeof(struct ymgui_wire_input_mouse)) return;
+        if (len < sizeof(struct ymgui_wire_input_mouse)) { return;
+}
         const struct ymgui_wire_input_mouse *m =
             (const struct ymgui_wire_input_mouse *)payload;
-        if (m->magic != YMGUI_WIRE_MAGIC_INPUT_MOUSE) return;
+        if (m->magic != YMGUI_WIRE_MAGIC_INPUT_MOUSE) { return;
+}
         switch (m->kind) {
         case YMGUI_INPUT_MOUSE_POS:
             ImGui_ImplYetty_OnCardMousePos(m->card_id, m->x, m->y, m->buttons_held);
@@ -693,26 +749,32 @@ static void poll_on_osc(void *user, int osc_code,
         break;
     }
     case YMGUI_OSC_SC_RESIZE: {
-        if (len < sizeof(struct ymgui_wire_input_resize)) return;
+        if (len < sizeof(struct ymgui_wire_input_resize)) { return;
+}
         const struct ymgui_wire_input_resize *r =
             (const struct ymgui_wire_input_resize *)payload;
-        if (r->magic != YMGUI_WIRE_MAGIC_INPUT_RESIZE) return;
+        if (r->magic != YMGUI_WIRE_MAGIC_INPUT_RESIZE) { return;
+}
         ImGui_ImplYetty_OnCardResize(r->card_id, r->width, r->height);
         break;
     }
     case YMGUI_OSC_SC_FOCUS: {
-        if (len < sizeof(struct ymgui_wire_input_focus)) return;
+        if (len < sizeof(struct ymgui_wire_input_focus)) { return;
+}
         const struct ymgui_wire_input_focus *f =
             (const struct ymgui_wire_input_focus *)payload;
-        if (f->magic != YMGUI_WIRE_MAGIC_INPUT_FOCUS) return;
+        if (f->magic != YMGUI_WIRE_MAGIC_INPUT_FOCUS) { return;
+}
         ImGui_ImplYetty_OnCardFocus(f->card_id, f->gained);
         break;
     }
     case YMGUI_OSC_SC_KEY: {
-        if (len < sizeof(struct ymgui_wire_input_key)) return;
+        if (len < sizeof(struct ymgui_wire_input_key)) { return;
+}
         const struct ymgui_wire_input_key *k =
             (const struct ymgui_wire_input_key *)payload;
-        if (k->magic != YMGUI_WIRE_MAGIC_INPUT_KEY) return;
+        if (k->magic != YMGUI_WIRE_MAGIC_INPUT_KEY) { return;
+}
         ImGui_ImplYetty_OnCardKey(k->card_id, (int)k->kind, k->key, k->mods,
                                   k->codepoint);
         break;
@@ -728,7 +790,8 @@ void ImGui_ImplYetty_PollInput(void)
 #ifdef _WIN32
     return;
 #else
-    if (!g_state.raw_mode_active || !g_state.yface_in) return;
+    if (!g_state.raw_mode_active || !g_state.yface_in) { return;
+}
 
     static int handlers_set = 0;
     if (!handlers_set) {
@@ -739,7 +802,8 @@ void ImGui_ImplYetty_PollInput(void)
     char buf[4096];
     for (;;) {
         ssize_t n = read(g_state.in_fd, buf, sizeof(buf));
-        if (n <= 0) break;
+        if (n <= 0) { break;
+}
         yetty_yface_feed_bytes(g_state.yface_in, buf, (size_t)n);
     }
 #endif
@@ -765,9 +829,11 @@ bool ImGui_ImplYetty_WaitInput(int timeout_ms)
         nfds = 2;
     }
     int n = poll(pfd, (nfds_t)nfds, timeout_ms);
-    if (n <= 0) return false;
-    if (nfds == 2 && (pfd[1].revents & POLLOUT))
+    if (n <= 0) { return false;
+}
+    if (nfds == 2 && (pfd[1].revents & POLLOUT)) {
         ymgui_pending_flush(g_state.out_fd);
+}
     return (pfd[0].revents & POLLIN) != 0;
 #endif
 }
@@ -800,7 +866,8 @@ static void loop_on_key(void *u, uint32_t card_id, int kind, int key, int mods,
 
 void ImGui_ImplYetty_AttachEventLoop(struct yetty_yclient_event_loop *loop)
 {
-    if (!loop) return;
+    if (!loop) { return;
+}
     yetty_yclient_event_loop_set_user           (loop, &g_state);
     yetty_yclient_event_loop_set_mouse_pos_cb   (loop, loop_on_pos);
     yetty_yclient_event_loop_set_mouse_button_cb(loop, loop_on_btn);

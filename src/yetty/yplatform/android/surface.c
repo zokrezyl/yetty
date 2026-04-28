@@ -8,8 +8,9 @@ WGPUSurface yetty_yplatform_create_surface_from_window(WGPUInstance instance, AN
     WGPUSurfaceSourceAndroidNativeWindow android_source = {0};
     WGPUSurfaceDescriptor surface_desc = {0};
 
-    if (!instance || !window)
+    if (!instance || !window) {
         return NULL;
+    }
 
     android_source.chain.sType = WGPUSType_SurfaceSourceAndroidNativeWindow;
     android_source.window = window;

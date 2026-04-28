@@ -31,31 +31,27 @@ extern "C" {
 #define YETTY_YPAINT_TYPE_TEXT_SPAN 0x40000002u
 
 struct yetty_ypaint_text_span_prim_view {
-	float x, y;
-	float font_size;
-	float rotation;
-	uint32_t color;
-	uint32_t layer;
-	int32_t font_id;
-	const char *text;       /* NOT NUL-terminated, len in text_len */
-	uint32_t text_len;
+    float x, y;
+    float font_size;
+    float rotation;
+    uint32_t color;
+    uint32_t layer;
+    int32_t font_id;
+    const char *text; /* NOT NUL-terminated, len in text_len */
+    uint32_t text_len;
 };
 
 size_t yetty_ypaint_text_span_prim_size_for(uint32_t text_len);
 
-void yetty_ypaint_text_span_prim_write(uint8_t *out,
-                                       float x, float y,
-                                       float font_size, float rotation,
-                                       uint32_t color, uint32_t layer,
-                                       int32_t font_id,
-                                       const char *text, uint32_t text_len);
+void yetty_ypaint_text_span_prim_write(uint8_t *out, float x, float y, float font_size,
+                                       float rotation, uint32_t color, uint32_t layer,
+                                       int32_t font_id, const char *text, uint32_t text_len);
 
-int yetty_ypaint_text_span_prim_parse(
-	const uint32_t *prim,
-	struct yetty_ypaint_text_span_prim_view *out);
+int yetty_ypaint_text_span_prim_parse(const uint32_t *prim,
+                                      struct yetty_ypaint_text_span_prim_view *out);
 
-struct yetty_ypaint_prim_base_ops_ptr_result
-yetty_ypaint_text_span_prim_handler(uint32_t prim_type);
+struct yetty_ypaint_prim_base_ops_ptr_result yetty_ypaint_text_span_prim_handler(
+    uint32_t prim_type);
 
 #ifdef __cplusplus
 }

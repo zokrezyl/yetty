@@ -17,8 +17,9 @@ void yplatform_mkdir_p(const char *path)
     snprintf(tmp, sizeof(tmp), "%s", path);
 
     size_t len = strlen(tmp);
-    if (len > 0 && (tmp[len - 1] == '/' || tmp[len - 1] == '\\'))
+    if (len > 0 && (tmp[len - 1] == '/' || tmp[len - 1] == '\\')) {
         tmp[len - 1] = '\0';
+    }
 
     for (char *p = tmp + 1; *p; p++) {
         if (*p == '/' || *p == '\\') {

@@ -5,8 +5,8 @@
 #include "ygui_internal.h"
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/types.h>
-#include <yetty/yterm/pty-reader.h>   /* YETTY_OSC_YPAINT_* */
-#include <yetty/ymgui/wire.h>         /* YMGUI_OSC_CS_CARD_*, wire structs */
+#include <yetty/yterm/pty-reader.h> /* YETTY_OSC_YPAINT_* */
+#include <yetty/ymgui/wire.h>       /* YMGUI_OSC_CS_CARD_*, wire structs */
 #include <stdio.h>
 #include <string.h>
 
@@ -19,19 +19,25 @@
 #endif
 
 /* Base64 encoding table */
-static const char b64_table[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static const char b64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 /* Encode data to base64 into output buffer. Returns bytes written. */
-static size_t base64_encode(const uint8_t* data, uint32_t size, char* out, size_t out_size) {
+static size_t base64_encode(const uint8_t *data, uint32_t size, char *out, size_t out_size)
+{
     size_t out_len = ((size + 2) / 3) * 4;
-    if (out_len + 1 > out_size) return 0;
+    if (out_len + 1 > out_size) {
+        return 0;
+    }
 
     size_t j = 0;
     for (uint32_t i = 0; i < size; i += 3) {
         uint32_t n = ((uint32_t)data[i]) << 16;
-        if (i + 1 < size) n |= ((uint32_t)data[i + 1]) << 8;
-        if (i + 2 < size) n |= (uint32_t)data[i + 2];
+        if (i + 1 < size) {
+            n |= ((uint32_t)data[i + 1]) << 8;
+        }
+        if (i + 2 < size) {
+            n |= (uint32_t)data[i + 2];
+        }
 
         out[j++] = b64_table[(n >> 18) & 0x3F];
         out[j++] = b64_table[(n >> 12) & 0x3F];
@@ -43,7 +49,8 @@ static size_t base64_encode(const uint8_t* data, uint32_t size, char* out, size_
 }
 
 /* Write OSC sequence to stdout */
-static void write_osc(const char* data, size_t len) {
+static void write_osc(const char *data, size_t len)
+{
     ssize_t written = write(STDOUT_FILENO, data, len);
     (void)written; /* Ignore return value - best effort */
 }
@@ -60,54 +67,64 @@ static void write_osc(const char* data, size_t len) {
  * ypaint primitives already carry absolute pixel coords. */
 #define VENDOR_ID "666674"
 
-static void write_clear_and_bin(const uint8_t* data, uint32_t size) {
+static void write_clear_and_bin(const uint8_t *data, uint32_t size)
+{
     /* 1) Clear the ypaint canvas. Empty body, no args. */
     static const char clear_seq[] = "\033]600000;;\033\\";
     write_osc(clear_seq, sizeof(clear_seq) - 1);
 
-    if (size == 0 || !data) return;
+    if (size == 0 || !data) {
+        return;
+    }
 
     /* 2) Bin envelope: args = bin meta (compressed=1), payload = LZ4F'd
      * + b64'd ypaint serialized buffer. yetty_yface_emit builds the
      * whole envelope into out_buf and we push it via the blocking
      * write helper. */
     struct yetty_yface_bin_meta meta = {
-        .magic           = YETTY_YFACE_BIN_MAGIC,
-        .version         = YETTY_YFACE_BIN_VERSION,
-        .compressed      = YETTY_YFACE_COMP_LZ4F,
-        .compression_algo= 0,
-        .raw_size        = size,
-        .reserved        = {0, 0},
+        .magic = YETTY_YFACE_BIN_MAGIC,
+        .version = YETTY_YFACE_BIN_VERSION,
+        .compressed = YETTY_YFACE_COMP_LZ4F,
+        .compression_algo = 0,
+        .raw_size = size,
+        .reserved = {0, 0},
     };
     struct yetty_ycore_buffer out = {0};
-    struct yetty_ycore_void_result r = yetty_yface_emit(
-        YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
-        &meta, sizeof(meta),
-        data, size, &out);
-    if (YETTY_IS_OK(r) && out.size > 0)
+    struct yetty_ycore_void_result r = yetty_yface_emit(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
+                                                        &meta, sizeof(meta), data, size, &out);
+    if (YETTY_IS_OK(r) && out.size > 0) {
         write_osc((const char *)out.data, out.size);
+    }
     yetty_ycore_buffer_destroy(&out);
 }
 
-void ygui_osc_create_card(const char* name, int x, int y, int w, int h,
-                          const uint8_t* data, uint32_t size) {
-    (void)name; (void)x; (void)y; (void)w; (void)h;
+void ygui_osc_create_card(const char *name, int x, int y, int w, int h, const uint8_t *data,
+                          uint32_t size)
+{
+    (void)name;
+    (void)x;
+    (void)y;
+    (void)w;
+    (void)h;
     write_clear_and_bin(data, size);
 }
 
-void ygui_osc_update_card(const char* name, const uint8_t* data, uint32_t size) {
+void ygui_osc_update_card(const char *name, const uint8_t *data, uint32_t size)
+{
     (void)name;
     write_clear_and_bin(data, size);
 }
 
-void ygui_osc_kill_card(const char* name) {
+void ygui_osc_kill_card(const char *name)
+{
     /* No named-card concept on this sink — kill = clear the canvas. */
     (void)name;
     static const char clear_seq[] = "\033]600000;;\033\\";
     write_osc(clear_seq, sizeof(clear_seq) - 1);
 }
 
-void ygui_osc_subscribe_clicks(int enable) {
+void ygui_osc_subscribe_clicks(int enable)
+{
     if (enable) {
         write_osc("\033[?1500h", 8);
     } else {
@@ -115,7 +132,8 @@ void ygui_osc_subscribe_clicks(int enable) {
     }
 }
 
-void ygui_osc_subscribe_moves(int enable) {
+void ygui_osc_subscribe_moves(int enable)
+{
     if (enable) {
         write_osc("\033[?1501h", 8);
     } else {
@@ -123,12 +141,14 @@ void ygui_osc_subscribe_moves(int enable) {
     }
 }
 
-void ygui_osc_query_cell_size(void) {
+void ygui_osc_query_cell_size(void)
+{
     /* CSI 16 t - request cell size in pixels */
     write_osc("\033[16t", 5);
 }
 
-void ygui_osc_subscribe_view_changes(int enable) {
+void ygui_osc_subscribe_view_changes(int enable)
+{
     /* DEC mode 1502 - subscribe to card view change events */
     if (enable) {
         write_osc("\033[?1502h", 8);
@@ -142,67 +162,71 @@ void ygui_osc_subscribe_view_changes(int enable) {
  * coords. Without this, the server's hit table has no entry for our UI and
  * no mouse traffic ever flows back. col/row/w_cells/h_cells are in grid
  * cells (matching ygui_engine_create's x,y,cols,rows). */
-void ygui_osc_card_place(uint32_t card_id, int col, int row,
-                          uint32_t w_cells, uint32_t h_cells) {
+void ygui_osc_card_place(uint32_t card_id, int col, int row, uint32_t w_cells, uint32_t h_cells)
+{
     struct ymgui_wire_card_place msg = {
-        .magic   = YMGUI_WIRE_MAGIC_CARD_PLACE,
+        .magic = YMGUI_WIRE_MAGIC_CARD_PLACE,
         .version = YMGUI_WIRE_VERSION,
         .card_id = card_id,
-        .flags   = 0,
-        .col     = col,
-        .row     = row,
+        .flags = 0,
+        .col = col,
+        .row = row,
         .w_cells = w_cells,
         .h_cells = h_cells,
     };
     struct yetty_ycore_buffer out = {0};
-    struct yetty_ycore_void_result r = yetty_yface_emit(
-        YMGUI_OSC_CS_CARD_PLACE, /*compressed=*/0,
-        /*args=*/NULL, /*args_len=*/0,
-        &msg, sizeof(msg), &out);
-    if (YETTY_IS_OK(r) && out.size > 0)
+    struct yetty_ycore_void_result r =
+        yetty_yface_emit(YMGUI_OSC_CS_CARD_PLACE, /*compressed=*/0,
+                         /*args=*/NULL, /*args_len=*/0, &msg, sizeof(msg), &out);
+    if (YETTY_IS_OK(r) && out.size > 0) {
         write_osc((const char *)out.data, out.size);
+    }
     yetty_ycore_buffer_destroy(&out);
 }
 
-void ygui_osc_card_remove(uint32_t card_id) {
+void ygui_osc_card_remove(uint32_t card_id)
+{
     struct ymgui_wire_card_remove msg = {
-        .magic   = YMGUI_WIRE_MAGIC_CARD_REMOVE,
+        .magic = YMGUI_WIRE_MAGIC_CARD_REMOVE,
         .version = YMGUI_WIRE_VERSION,
         .card_id = card_id,
-        .flags   = 0,
+        .flags = 0,
     };
     struct yetty_ycore_buffer out = {0};
-    struct yetty_ycore_void_result r = yetty_yface_emit(
-        YMGUI_OSC_CS_CARD_REMOVE, /*compressed=*/0,
-        /*args=*/NULL, /*args_len=*/0,
-        &msg, sizeof(msg), &out);
-    if (YETTY_IS_OK(r) && out.size > 0)
+    struct yetty_ycore_void_result r =
+        yetty_yface_emit(YMGUI_OSC_CS_CARD_REMOVE, /*compressed=*/0,
+                         /*args=*/NULL, /*args_len=*/0, &msg, sizeof(msg), &out);
+    if (YETTY_IS_OK(r) && out.size > 0) {
         write_osc((const char *)out.data, out.size);
+    }
     yetty_ycore_buffer_destroy(&out);
 }
 
-void ygui_osc_zoom_card(const char* name, float level) {
+void ygui_osc_zoom_card(const char *name, float level)
+{
     char buf[256];
-    int len = snprintf(buf, sizeof(buf),
-        "\033]" VENDOR_ID ";zoom --name %s --level %.2f\033\\", name, level);
+    int len = snprintf(buf, sizeof(buf), "\033]" VENDOR_ID ";zoom --name %s --level %.2f\033\\",
+                       name, level);
     write_osc(buf, len);
 }
 
-void ygui_osc_scroll_card(const char* name, float x, float y, int absolute) {
+void ygui_osc_scroll_card(const char *name, float x, float y, int absolute)
+{
     char buf[256];
     int len;
     if (absolute) {
         /* Absolute scroll position: -x/-y */
         len = snprintf(buf, sizeof(buf),
-            "\033]" VENDOR_ID ";scroll --name %s -x %.0f -y %.0f\033\\", name, x, y);
+                       "\033]" VENDOR_ID ";scroll --name %s -x %.0f -y %.0f\033\\", name, x, y);
     } else {
         /* Relative scroll delta: --dx/--dy */
         len = snprintf(buf, sizeof(buf),
-            "\033]" VENDOR_ID ";scroll --name %s --dx %.0f --dy %.0f\033\\", name, x, y);
+                       "\033]" VENDOR_ID ";scroll --name %s --dx %.0f --dy %.0f\033\\", name, x, y);
     }
     write_osc(buf, len);
 }
 
-void ygui_osc_scroll_card_delta(const char* name, float dx, float dy) {
+void ygui_osc_scroll_card_delta(const char *name, float dx, float dy)
+{
     ygui_osc_scroll_card(name, dx, dy, 0);
 }

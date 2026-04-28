@@ -27,23 +27,22 @@ YETTY_YRESULT_DECLARE(yetty_yvideo_encoder_ptr, struct yetty_yvideo_encoder *);
 struct yetty_yvideo_encoder_config {
     uint32_t width;
     uint32_t height;
-    uint32_t bitrate;         /* bits/second (typical screen: 2-4 Mbps) */
-    float    frame_rate;      /* fps */
-    uint32_t idr_interval;    /* keyframe period in frames */
-    bool     screen_content;  /* SCREEN_CONTENT_REAL_TIME in openh264 */
+    uint32_t bitrate;      /* bits/second (typical screen: 2-4 Mbps) */
+    float frame_rate;      /* fps */
+    uint32_t idr_interval; /* keyframe period in frames */
+    bool screen_content;   /* SCREEN_CONTENT_REAL_TIME in openh264 */
 };
 
 /* Helper: fill `cfg` with reasonable defaults for the given resolution. */
-void yetty_yvideo_encoder_config_defaults(
-    struct yetty_yvideo_encoder_config *cfg,
-    uint32_t width, uint32_t height);
+void yetty_yvideo_encoder_config_defaults(struct yetty_yvideo_encoder_config *cfg, uint32_t width,
+                                          uint32_t height);
 
 /*
  * Create an H.264 encoder. Width and height must be even (H.264 constraint);
  * callers should round down before passing them in.
  */
-struct yetty_yvideo_encoder_ptr_result
-yetty_yvideo_encoder_create(const struct yetty_yvideo_encoder_config *cfg);
+struct yetty_yvideo_encoder_ptr_result yetty_yvideo_encoder_create(
+    const struct yetty_yvideo_encoder_config *cfg);
 
 void yetty_yvideo_encoder_destroy(struct yetty_yvideo_encoder *enc);
 
@@ -57,24 +56,20 @@ void yetty_yvideo_encoder_destroy(struct yetty_yvideo_encoder *enc);
  * A rate-control skip surfaces as `out->size == 0` — treat it as "no frame
  * this tick, resubmit a catch-up later".
  */
-struct yetty_ycore_void_result
-yetty_yvideo_encoder_encode(
-    struct yetty_yvideo_encoder *enc,
-    const uint8_t *y_plane,
-    const uint8_t *u_plane,
-    const uint8_t *v_plane,
-    uint32_t y_stride,
-    uint32_t uv_stride,
-    struct yetty_yvideo_encoded_frame *out);
+struct yetty_ycore_void_result yetty_yvideo_encoder_encode(struct yetty_yvideo_encoder *enc,
+                                                           const uint8_t *y_plane,
+                                                           const uint8_t *u_plane,
+                                                           const uint8_t *v_plane,
+                                                           uint32_t y_stride, uint32_t uv_stride,
+                                                           struct yetty_yvideo_encoded_frame *out);
 
 /* Force the next encoded frame to be an IDR (keyframe). Used on new VNC
  * client connect so the newcomer gets a valid stream from frame 1. */
 void yetty_yvideo_encoder_force_idr(struct yetty_yvideo_encoder *enc);
 
 /* Update target bitrate in bps. */
-struct yetty_ycore_void_result
-yetty_yvideo_encoder_set_bitrate(struct yetty_yvideo_encoder *enc,
-                                  uint32_t bitrate);
+struct yetty_ycore_void_result yetty_yvideo_encoder_set_bitrate(struct yetty_yvideo_encoder *enc,
+                                                                uint32_t bitrate);
 
 uint32_t yetty_yvideo_encoder_width(const struct yetty_yvideo_encoder *enc);
 uint32_t yetty_yvideo_encoder_height(const struct yetty_yvideo_encoder *enc);
@@ -88,10 +83,9 @@ uint32_t yetty_yvideo_encoder_height(const struct yetty_yvideo_encoder *enc);
  * path. Output planes and strides are caller-allocated. This is what the VNC
  * server uses before handing pixels to yetty_yvideo_encoder_encode().
  */
-void yetty_yvideo_bgra_to_yuv420(
-    const uint8_t *bgra, uint32_t width, uint32_t height, uint32_t bgra_stride,
-    uint8_t *y_plane, uint8_t *u_plane, uint8_t *v_plane,
-    uint32_t y_stride, uint32_t uv_stride);
+void yetty_yvideo_bgra_to_yuv420(const uint8_t *bgra, uint32_t width, uint32_t height,
+                                 uint32_t bgra_stride, uint8_t *y_plane, uint8_t *u_plane,
+                                 uint8_t *v_plane, uint32_t y_stride, uint32_t uv_stride);
 
 #ifdef __cplusplus
 }

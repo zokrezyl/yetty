@@ -8,15 +8,10 @@
 #define PTY_READ_BUF_SIZE 4096
 #define PTY_READ_MAX_CHUNK 65536
 #define OSC_BUF_INITIAL 4096
-#define OSC_BUF_MAX (500 * 1024 * 1024)   /* 500 MB */
+#define OSC_BUF_MAX (500 * 1024 * 1024) /* 500 MB */
 #define MAX_OSC_SINKS 64
 
-enum osc_state {
-    OSC_STATE_NORMAL,
-    OSC_STATE_ESC,
-    OSC_STATE_IN_OSC,
-    OSC_STATE_OSC_ESC_END
-};
+enum osc_state { OSC_STATE_NORMAL, OSC_STATE_ESC, OSC_STATE_IN_OSC, OSC_STATE_OSC_ESC_END };
 
 struct osc_sink {
     int vendor_id;
@@ -36,16 +31,19 @@ struct yetty_yterm_pty_reader {
 
 static int osc_buf_append(struct yetty_yterm_pty_reader *r, char c)
 {
-    if (r->osc_buf_len >= OSC_BUF_MAX)
+    if (r->osc_buf_len >= OSC_BUF_MAX) {
         return 0;
+    }
 
     if (r->osc_buf_len >= r->osc_buf_cap) {
         size_t new_cap = r->osc_buf_cap == 0 ? OSC_BUF_INITIAL : r->osc_buf_cap * 2;
-        if (new_cap > OSC_BUF_MAX)
+        if (new_cap > OSC_BUF_MAX) {
             new_cap = OSC_BUF_MAX;
+        }
         char *new_buf = realloc(r->osc_buf, new_cap);
-        if (!new_buf)
+        if (!new_buf) {
             return 0;
+        }
         r->osc_buf = new_buf;
         r->osc_buf_cap = new_cap;
     }
@@ -53,20 +51,22 @@ static int osc_buf_append(struct yetty_yterm_pty_reader *r, char c)
     return 1;
 }
 
-static struct yetty_yterm_terminal_layer *find_osc_sink(
-    struct yetty_yterm_pty_reader *r, int vendor_id)
+static struct yetty_yterm_terminal_layer *find_osc_sink(struct yetty_yterm_pty_reader *r,
+                                                        int vendor_id)
 {
     for (size_t i = 0; i < r->osc_sink_count; i++) {
-        if (r->osc_sinks[i].vendor_id == vendor_id)
+        if (r->osc_sinks[i].vendor_id == vendor_id) {
             return r->osc_sinks[i].layer;
+        }
     }
     return NULL;
 }
 
 static void dispatch_osc(struct yetty_yterm_pty_reader *r)
 {
-    if (r->osc_buf_len == 0)
+    if (r->osc_buf_len == 0) {
         return;
+    }
 
     /* Parse vendor ID */
     const char *semi = memchr(r->osc_buf, ';', r->osc_buf_len);
@@ -76,8 +76,9 @@ static void dispatch_osc(struct yetty_yterm_pty_reader *r)
     }
 
     size_t id_len = semi - r->osc_buf;
-    if (id_len == 0 || id_len > 10)
+    if (id_len == 0 || id_len > 10) {
         return;
+    }
 
     char id_str[16];
     memcpy(id_str, r->osc_buf, id_len);
@@ -85,16 +86,17 @@ static void dispatch_osc(struct yetty_yterm_pty_reader *r)
 
     char *endptr;
     long vendor_id = strtol(id_str, &endptr, 10);
-    if (*endptr != '\0')
+    if (*endptr != '\0') {
         return;
+    }
 
     /* Find sink and dispatch payload (after semicolon) */
     struct yetty_yterm_terminal_layer *layer = find_osc_sink(r, (int)vendor_id);
     if (layer && layer->ops && layer->ops->write) {
         const char *payload = semi + 1;
         size_t payload_len = r->osc_buf_len - id_len - 1;
-        ydebug("pty_reader: OSC %ld -> layer %p, payload_len=%zu",
-               vendor_id, (void *)layer, payload_len);
+        ydebug("pty_reader: OSC %ld -> layer %p, payload_len=%zu", vendor_id, (void *)layer,
+               payload_len);
         layer->ops->write(layer, (int)vendor_id, payload, payload_len);
     } else {
         ydebug("pty_reader: no sink for OSC %ld", vendor_id);
@@ -106,8 +108,8 @@ static void process_data(struct yetty_yterm_pty_reader *r, const char *data, siz
     size_t i = 0;
     size_t normal_start = 0;
 
-    ydebug("pty_reader process_data ENTER: len=%zu state=%d default_sink=%p",
-           len, (int)r->state, (void *)r->default_sink);
+    ydebug("pty_reader process_data ENTER: len=%zu state=%d default_sink=%p", len, (int)r->state,
+           (void *)r->default_sink);
 
     while (i < len) {
         char c = data[i];
@@ -116,12 +118,11 @@ static void process_data(struct yetty_yterm_pty_reader *r, const char *data, siz
         case OSC_STATE_NORMAL:
             if (c == '\033') {
                 /* Flush normal data before ESC */
-                if (i > normal_start && r->default_sink &&
-                    r->default_sink->ops && r->default_sink->ops->write) {
-                    ydebug("pty_reader: flush normal %zu bytes -> default_sink",
-                           i - normal_start);
-                    r->default_sink->ops->write(r->default_sink,
-                        0, data + normal_start, i - normal_start);
+                if (i > normal_start && r->default_sink && r->default_sink->ops &&
+                    r->default_sink->ops->write) {
+                    ydebug("pty_reader: flush normal %zu bytes -> default_sink", i - normal_start);
+                    r->default_sink->ops->write(r->default_sink, 0, data + normal_start,
+                                                i - normal_start);
                 }
                 r->state = OSC_STATE_ESC;
                 i++;
@@ -186,28 +187,27 @@ static void process_data(struct yetty_yterm_pty_reader *r, const char *data, siz
     }
 
     /* Flush remaining normal data */
-    if (r->state == OSC_STATE_NORMAL && i > normal_start &&
-        r->default_sink && r->default_sink->ops && r->default_sink->ops->write) {
-        ydebug("pty_reader: tail flush %zu bytes -> default_sink",
-               i - normal_start);
-        r->default_sink->ops->write(r->default_sink,
-            0, data + normal_start, i - normal_start);
+    if (r->state == OSC_STATE_NORMAL && i > normal_start && r->default_sink &&
+        r->default_sink->ops && r->default_sink->ops->write) {
+        ydebug("pty_reader: tail flush %zu bytes -> default_sink", i - normal_start);
+        r->default_sink->ops->write(r->default_sink, 0, data + normal_start, i - normal_start);
     }
-    ydebug("pty_reader process_data EXIT: state=%d normal_start=%zu i=%zu",
-           (int)r->state, normal_start, i);
+    ydebug("pty_reader process_data EXIT: state=%d normal_start=%zu i=%zu", (int)r->state,
+           normal_start, i);
 }
 
-struct yetty_yterm_pty_reader_result yetty_yterm_pty_reader_create(
-    struct yetty_yplatform_pty *pty)
+struct yetty_yterm_pty_reader_result yetty_yterm_pty_reader_create(struct yetty_yplatform_pty *pty)
 {
     struct yetty_yterm_pty_reader *r;
 
-    if (!pty)
+    if (!pty) {
         return YETTY_ERR(yetty_yterm_pty_reader, "null pty");
+    }
 
     r = calloc(1, sizeof(struct yetty_yterm_pty_reader));
-    if (!r)
+    if (!r) {
         return YETTY_ERR(yetty_yterm_pty_reader, "alloc failed");
+    }
 
     r->pty = pty;
     r->state = OSC_STATE_NORMAL;
@@ -217,38 +217,39 @@ struct yetty_yterm_pty_reader_result yetty_yterm_pty_reader_create(
 
 void yetty_yterm_pty_reader_destroy(struct yetty_yterm_pty_reader *reader)
 {
-    if (!reader)
+    if (!reader) {
         return;
+    }
     free(reader->osc_buf);
     free(reader);
 }
 
-void yetty_yterm_pty_reader_register_default_sink(
-    struct yetty_yterm_pty_reader *reader,
-    struct yetty_yterm_terminal_layer *layer)
+void yetty_yterm_pty_reader_register_default_sink(struct yetty_yterm_pty_reader *reader,
+                                                  struct yetty_yterm_terminal_layer *layer)
 {
-    if (reader)
+    if (reader) {
         reader->default_sink = layer;
+    }
 }
 
-void yetty_yterm_pty_reader_register_osc_sink(
-    struct yetty_yterm_pty_reader *reader,
-    int vendor_id,
-    struct yetty_yterm_terminal_layer *layer)
+void yetty_yterm_pty_reader_register_osc_sink(struct yetty_yterm_pty_reader *reader, int vendor_id,
+                                              struct yetty_yterm_terminal_layer *layer)
 {
-    if (!reader || reader->osc_sink_count >= MAX_OSC_SINKS)
+    if (!reader || reader->osc_sink_count >= MAX_OSC_SINKS) {
         return;
+    }
 
     reader->osc_sinks[reader->osc_sink_count].vendor_id = vendor_id;
     reader->osc_sinks[reader->osc_sink_count].layer = layer;
     reader->osc_sink_count++;
 }
 
-void yetty_yterm_pty_reader_feed(struct yetty_yterm_pty_reader *reader,
-                                const char *data, size_t len)
+void yetty_yterm_pty_reader_feed(struct yetty_yterm_pty_reader *reader, const char *data,
+                                 size_t len)
 {
-    if (!reader || !data || len == 0)
+    if (!reader || !data || len == 0) {
         return;
+    }
     process_data(reader, data, len);
 }
 
@@ -257,8 +258,9 @@ int yetty_yterm_pty_reader_read(struct yetty_yterm_pty_reader *reader)
     char buf[PTY_READ_BUF_SIZE];
     size_t total = 0;
 
-    if (!reader || !reader->pty || !reader->pty->ops || !reader->pty->ops->read)
+    if (!reader || !reader->pty || !reader->pty->ops || !reader->pty->ops->read) {
         return -1;
+    }
 
     struct yetty_ycore_size_result res;
     while ((res = reader->pty->ops->read(reader->pty, buf, sizeof(buf))),
@@ -267,12 +269,14 @@ int yetty_yterm_pty_reader_read(struct yetty_yterm_pty_reader *reader)
         total += res.value;
 
         /* Keep reading if in OSC (can be huge) */
-        if (reader->state != OSC_STATE_NORMAL)
+        if (reader->state != OSC_STATE_NORMAL) {
             continue;
+        }
 
         /* Yield after max chunk */
-        if (total >= PTY_READ_MAX_CHUNK)
+        if (total >= PTY_READ_MAX_CHUNK) {
             break;
+        }
     }
 
     return (int)total;

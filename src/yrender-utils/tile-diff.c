@@ -72,13 +72,13 @@ struct yetty_yrender_utils_tile_diff_engine {
     uint32_t tiles_x;
     uint32_t tiles_y;
     WGPUTexture prev_texture;
-    WGPUBuffer dirty_flags_buffer;    /* GPU storage (compute shader writes) */
-    WGPUBuffer dirty_flags_readback;  /* mappable, size = num_tiles * u32 */
-    WGPUBuffer tile_readback_buffer;  /* mappable, holds full frame pixels */
+    WGPUBuffer dirty_flags_buffer;   /* GPU storage (compute shader writes) */
+    WGPUBuffer dirty_flags_readback; /* mappable, size = num_tiles * u32 */
+    WGPUBuffer tile_readback_buffer; /* mappable, holds full frame pixels */
     uint32_t tile_readback_buffer_size;
 
     /* CPU-side scratch, lives across calls to avoid reallocs. */
-    uint8_t *dirty_bitmap;            /* num_tiles bytes, 0/1 per tile */
+    uint8_t *dirty_bitmap; /* num_tiles bytes, 0/1 per tile */
     uint32_t dirty_bitmap_len;
 
     /* Control flags. */
@@ -107,8 +107,8 @@ struct submit_args {
     void *sink_ctx;
 };
 
-static struct yetty_ycore_void_result
-create_pipeline(struct yetty_yrender_utils_tile_diff_engine *eng)
+static struct yetty_ycore_void_result create_pipeline(
+    struct yetty_yrender_utils_tile_diff_engine *eng)
 {
     WGPUShaderSourceWGSL wgsl = {0};
     wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
@@ -118,8 +118,9 @@ create_pipeline(struct yetty_yrender_utils_tile_diff_engine *eng)
     shader_desc.nextInChain = (WGPUChainedStruct *)&wgsl;
 
     WGPUShaderModule shader = wgpuDeviceCreateShaderModule(eng->device, &shader_desc);
-    if (!shader)
+    if (!shader) {
         return YETTY_ERR(yetty_ycore_void, "failed to create diff shader");
+    }
 
     WGPUBindGroupLayoutEntry entries[3] = {0};
     entries[0].binding = 0;
@@ -156,8 +157,9 @@ create_pipeline(struct yetty_yrender_utils_tile_diff_engine *eng)
     wgpuShaderModuleRelease(shader);
     wgpuPipelineLayoutRelease(layout);
 
-    if (!eng->pipeline)
+    if (!eng->pipeline) {
         return YETTY_ERR(yetty_ycore_void, "failed to create diff pipeline");
+    }
 
     return YETTY_OK_VOID();
 }
@@ -167,9 +169,9 @@ create_pipeline(struct yetty_yrender_utils_tile_diff_engine *eng)
  * submit; no-op when dimensions match the cached ones. Forces a full frame
  * on resize since prev_texture is now stale.
  */
-static struct yetty_ycore_void_result
-ensure_resources(struct yetty_yrender_utils_tile_diff_engine *eng,
-                 uint32_t width, uint32_t height, WGPUTextureFormat format)
+static struct yetty_ycore_void_result ensure_resources(
+    struct yetty_yrender_utils_tile_diff_engine *eng, uint32_t width, uint32_t height,
+    WGPUTextureFormat format)
 {
     /* prev_texture must match the source texture's format so the per-frame
      * CopyTextureToTexture (line 361) is valid and so the compute shader
@@ -177,9 +179,10 @@ ensure_resources(struct yetty_yrender_utils_tile_diff_engine *eng,
      * the format changes too — under Wayland with libdecor the surface
      * format negotiates to BGRA8UnormSrgb on first present, whereas the
      * pre-libdecor (no-titlebar) path got plain BGRA8Unorm. */
-    if (eng->last_width == width && eng->last_height == height &&
-        eng->prev_texture && eng->prev_format == format)
+    if (eng->last_width == width && eng->last_height == height && eng->prev_texture &&
+        eng->prev_format == format) {
         return YETTY_OK_VOID();
+    }
 
     eng->force_full_frame = true;
     eng->prev_has_content = false;
@@ -213,8 +216,9 @@ ensure_resources(struct yetty_yrender_utils_tile_diff_engine *eng,
     if (eng->dirty_bitmap_len < num_tiles) {
         free(eng->dirty_bitmap);
         eng->dirty_bitmap = calloc(num_tiles, 1);
-        if (!eng->dirty_bitmap)
+        if (!eng->dirty_bitmap) {
             return YETTY_ERR(yetty_ycore_void, "failed to allocate dirty bitmap");
+        }
         eng->dirty_bitmap_len = num_tiles;
     }
 
@@ -226,26 +230,29 @@ ensure_resources(struct yetty_yrender_utils_tile_diff_engine *eng,
     tex_desc.sampleCount = 1;
     tex_desc.dimension = WGPUTextureDimension_2D;
     eng->prev_texture = wgpuDeviceCreateTexture(eng->device, &tex_desc);
-    if (!eng->prev_texture)
+    if (!eng->prev_texture) {
         return YETTY_ERR(yetty_ycore_void, "failed to create prev texture");
+    }
 
     WGPUBufferDescriptor buf_desc = {0};
     buf_desc.size = num_tiles * sizeof(uint32_t);
-    buf_desc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc |
-                     WGPUBufferUsage_CopyDst;
+    buf_desc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc | WGPUBufferUsage_CopyDst;
     eng->dirty_flags_buffer = wgpuDeviceCreateBuffer(eng->device, &buf_desc);
-    if (!eng->dirty_flags_buffer)
+    if (!eng->dirty_flags_buffer) {
         return YETTY_ERR(yetty_ycore_void, "failed to create dirty flags buffer");
+    }
 
     buf_desc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
     eng->dirty_flags_readback = wgpuDeviceCreateBuffer(eng->device, &buf_desc);
-    if (!eng->dirty_flags_readback)
+    if (!eng->dirty_flags_readback) {
         return YETTY_ERR(yetty_ycore_void, "failed to create flags readback buffer");
+    }
 
     if (!eng->pipeline) {
         struct yetty_ycore_void_result res = create_pipeline(eng);
-        if (!YETTY_IS_OK(res))
+        if (!YETTY_IS_OK(res)) {
             return res;
+        }
     }
 
     ydebug("tile_diff: resources for %ux%u, %u tiles", width, height, num_tiles);
@@ -265,8 +272,9 @@ static void submit_coro_finish(struct yetty_yrender_utils_tile_diff_engine *eng)
     eng->submit_in_flight = false;
     bool fire = eng->redraw_pending;
     eng->redraw_pending = false;
-    if (fire && eng->on_idle_fn)
+    if (fire && eng->on_idle_fn) {
         eng->on_idle_fn(eng->on_idle_ctx);
+    }
 }
 
 static void submit_coro_entry(void *arg)
@@ -294,10 +302,10 @@ static void submit_coro_entry(void *arg)
     uint32_t aligned_bytes_per_row = (width * 4 + 255) & ~255u;
     uint32_t full_buf_size = aligned_bytes_per_row * height;
 
-    if (!eng->tile_readback_buffer ||
-        eng->tile_readback_buffer_size != full_buf_size) {
-        if (eng->tile_readback_buffer)
+    if (!eng->tile_readback_buffer || eng->tile_readback_buffer_size != full_buf_size) {
+        if (eng->tile_readback_buffer) {
             wgpuBufferRelease(eng->tile_readback_buffer);
+        }
         WGPUBufferDescriptor buf_desc = {0};
         buf_desc.size = full_buf_size;
         buf_desc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
@@ -305,15 +313,13 @@ static void submit_coro_entry(void *arg)
         eng->tile_readback_buffer_size = full_buf_size;
     }
 
-    bool do_full = !eng->prev_has_content || eng->force_full_frame ||
-                   eng->always_full_frame;
+    bool do_full = !eng->prev_has_content || eng->force_full_frame || eng->always_full_frame;
     if (do_full) {
         eng->force_full_frame = false;
         memset(eng->dirty_bitmap, 1, num_tiles);
     }
 
-    WGPUCommandEncoder encoder =
-        wgpuDeviceCreateCommandEncoder(eng->device, NULL);
+    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(eng->device, NULL);
 
     /* Only run the diff compute pass when we're doing an incremental frame. */
     WGPUBindGroup diff_bind_group = NULL;
@@ -346,21 +352,19 @@ static void submit_coro_entry(void *arg)
         wgpuTextureViewRelease(curr_view);
         wgpuTextureViewRelease(prev_view);
 
-        wgpuCommandEncoderClearBuffer(encoder, eng->dirty_flags_buffer,
-                                      0, num_tiles * sizeof(uint32_t));
+        wgpuCommandEncoderClearBuffer(encoder, eng->dirty_flags_buffer, 0,
+                                      num_tiles * sizeof(uint32_t));
         WGPUComputePassDescriptor cp_desc = {0};
-        WGPUComputePassEncoder cpass =
-            wgpuCommandEncoderBeginComputePass(encoder, &cp_desc);
+        WGPUComputePassEncoder cpass = wgpuCommandEncoderBeginComputePass(encoder, &cp_desc);
         wgpuComputePassEncoderSetPipeline(cpass, eng->pipeline);
         wgpuComputePassEncoderSetBindGroup(cpass, 0, diff_bind_group, 0, NULL);
-        wgpuComputePassEncoderDispatchWorkgroups(cpass, eng->tiles_x,
-                                                 eng->tiles_y, 1);
+        wgpuComputePassEncoderDispatchWorkgroups(cpass, eng->tiles_x, eng->tiles_y, 1);
         wgpuComputePassEncoderEnd(cpass);
         wgpuComputePassEncoderRelease(cpass);
 
-        wgpuCommandEncoderCopyBufferToBuffer(encoder, eng->dirty_flags_buffer,
-                                             0, eng->dirty_flags_readback,
-                                             0, num_tiles * sizeof(uint32_t));
+        wgpuCommandEncoderCopyBufferToBuffer(encoder, eng->dirty_flags_buffer, 0,
+                                             eng->dirty_flags_readback, 0,
+                                             num_tiles * sizeof(uint32_t));
     }
 
     /* Snapshot this frame as next frame's baseline. */
@@ -390,30 +394,30 @@ static void submit_coro_entry(void *arg)
     wgpuCommandBufferRelease(cmd_buf);
     wgpuCommandEncoderRelease(encoder);
 
-    if (diff_bind_group)
+    if (diff_bind_group) {
         wgpuBindGroupRelease(diff_bind_group);
+    }
 
     /* Texture is no longer touched past this point — caller may release it. */
 
     if (!do_full) {
-        res = yplatform_wgpu_buffer_map_await(eng->wgpu,
-            eng->dirty_flags_readback, WGPUMapMode_Read,
-            0, num_tiles * sizeof(uint32_t));
+        res = yplatform_wgpu_buffer_map_await(eng->wgpu, eng->dirty_flags_readback,
+                                              WGPUMapMode_Read, 0, num_tiles * sizeof(uint32_t));
         if (!YETTY_IS_OK(res)) {
             ywarn("tile_diff: flags map failed: %s", res.error.msg);
             submit_coro_finish(eng);
             return;
         }
-        const uint32_t *flags = wgpuBufferGetConstMappedRange(
-            eng->dirty_flags_readback,
-            0, num_tiles * sizeof(uint32_t));
-        for (uint32_t i = 0; i < num_tiles; i++)
+        const uint32_t *flags = wgpuBufferGetConstMappedRange(eng->dirty_flags_readback, 0,
+                                                              num_tiles * sizeof(uint32_t));
+        for (uint32_t i = 0; i < num_tiles; i++) {
             eng->dirty_bitmap[i] = flags[i] ? 1u : 0u;
+        }
         wgpuBufferUnmap(eng->dirty_flags_readback);
     }
 
-    res = yplatform_wgpu_buffer_map_await(eng->wgpu,
-        eng->tile_readback_buffer, WGPUMapMode_Read, 0, full_buf_size);
+    res = yplatform_wgpu_buffer_map_await(eng->wgpu, eng->tile_readback_buffer, WGPUMapMode_Read, 0,
+                                          full_buf_size);
     if (!YETTY_IS_OK(res)) {
         ywarn("tile_diff: pixels map failed: %s", res.error.msg);
         submit_coro_finish(eng);
@@ -423,12 +427,14 @@ static void submit_coro_entry(void *arg)
     eng->prev_has_content = true;
 
     uint32_t dirty_count = 0;
-    for (uint32_t i = 0; i < num_tiles; i++)
-        if (eng->dirty_bitmap[i])
+    for (uint32_t i = 0; i < num_tiles; i++) {
+        if (eng->dirty_bitmap[i]) {
             dirty_count++;
+        }
+    }
 
-    const uint8_t *mapped = wgpuBufferGetConstMappedRange(
-        eng->tile_readback_buffer, 0, full_buf_size);
+    const uint8_t *mapped =
+        wgpuBufferGetConstMappedRange(eng->tile_readback_buffer, 0, full_buf_size);
 
     struct yetty_yrender_utils_tile_diff_frame frame = {
         .pixels = mapped,
@@ -442,28 +448,26 @@ static void submit_coro_entry(void *arg)
         .dirty_count = dirty_count,
     };
 
-    if (sink_fn)
+    if (sink_fn) {
         sink_fn(sink_ctx, &frame);
+    }
 
     wgpuBufferUnmap(eng->tile_readback_buffer);
 
     submit_coro_finish(eng);
 }
 
-struct yetty_yrender_utils_tile_diff_engine_ptr_result
-yetty_yrender_utils_tile_diff_engine_create(WGPUDevice device,
-                                            WGPUQueue queue,
-                                            struct yplatform_wgpu *wgpu,
-                                            uint32_t tile_size)
+struct yetty_yrender_utils_tile_diff_engine_ptr_result yetty_yrender_utils_tile_diff_engine_create(
+    WGPUDevice device, WGPUQueue queue, struct yplatform_wgpu *wgpu, uint32_t tile_size)
 {
-    if (!device || !queue || !wgpu || tile_size == 0)
-        return YETTY_ERR(yetty_yrender_utils_tile_diff_engine_ptr,
-                         "invalid arguments");
+    if (!device || !queue || !wgpu || tile_size == 0) {
+        return YETTY_ERR(yetty_yrender_utils_tile_diff_engine_ptr, "invalid arguments");
+    }
 
     struct yetty_yrender_utils_tile_diff_engine *eng = calloc(1, sizeof(*eng));
-    if (!eng)
-        return YETTY_ERR(yetty_yrender_utils_tile_diff_engine_ptr,
-                         "calloc failed");
+    if (!eng) {
+        return YETTY_ERR(yetty_yrender_utils_tile_diff_engine_ptr, "calloc failed");
+    }
 
     eng->device = device;
     eng->queue = queue;
@@ -473,24 +477,30 @@ yetty_yrender_utils_tile_diff_engine_create(WGPUDevice device,
     return YETTY_OK(yetty_yrender_utils_tile_diff_engine_ptr, eng);
 }
 
-void yetty_yrender_utils_tile_diff_engine_destroy(
-    struct yetty_yrender_utils_tile_diff_engine *eng)
+void yetty_yrender_utils_tile_diff_engine_destroy(struct yetty_yrender_utils_tile_diff_engine *eng)
 {
-    if (!eng)
+    if (!eng) {
         return;
+    }
 
-    if (eng->pipeline)
+    if (eng->pipeline) {
         wgpuComputePipelineRelease(eng->pipeline);
-    if (eng->bind_group_layout)
+    }
+    if (eng->bind_group_layout) {
         wgpuBindGroupLayoutRelease(eng->bind_group_layout);
-    if (eng->prev_texture)
+    }
+    if (eng->prev_texture) {
         wgpuTextureRelease(eng->prev_texture);
-    if (eng->dirty_flags_buffer)
+    }
+    if (eng->dirty_flags_buffer) {
         wgpuBufferRelease(eng->dirty_flags_buffer);
-    if (eng->dirty_flags_readback)
+    }
+    if (eng->dirty_flags_readback) {
         wgpuBufferRelease(eng->dirty_flags_readback);
-    if (eng->tile_readback_buffer)
+    }
+    if (eng->tile_readback_buffer) {
         wgpuBufferRelease(eng->tile_readback_buffer);
+    }
 
     free(eng->dirty_bitmap);
     free(eng);
@@ -499,8 +509,9 @@ void yetty_yrender_utils_tile_diff_engine_destroy(
 void yetty_yrender_utils_tile_diff_engine_force_full(
     struct yetty_yrender_utils_tile_diff_engine *eng)
 {
-    if (eng)
+    if (eng) {
         eng->force_full_frame = true;
+    }
 }
 
 bool yetty_yrender_utils_tile_diff_engine_is_busy(
@@ -512,35 +523,37 @@ bool yetty_yrender_utils_tile_diff_engine_is_busy(
 void yetty_yrender_utils_tile_diff_engine_mark_redraw_pending(
     struct yetty_yrender_utils_tile_diff_engine *eng)
 {
-    if (eng)
+    if (eng) {
         eng->redraw_pending = true;
+    }
 }
 
 void yetty_yrender_utils_tile_diff_engine_set_always_full(
     struct yetty_yrender_utils_tile_diff_engine *eng, bool on)
 {
-    if (eng)
+    if (eng) {
         eng->always_full_frame = on;
+    }
 }
 
 void yetty_yrender_utils_tile_diff_engine_set_on_idle(
-    struct yetty_yrender_utils_tile_diff_engine *eng,
-    yetty_yrender_utils_tile_diff_on_idle_fn fn, void *ctx)
+    struct yetty_yrender_utils_tile_diff_engine *eng, yetty_yrender_utils_tile_diff_on_idle_fn fn,
+    void *ctx)
 {
-    if (!eng)
+    if (!eng) {
         return;
+    }
     eng->on_idle_fn = fn;
     eng->on_idle_ctx = ctx;
 }
 
-struct yetty_ycore_void_result
-yetty_yrender_utils_tile_diff_engine_submit(
-    struct yetty_yrender_utils_tile_diff_engine *eng,
-    WGPUTexture texture, uint32_t width, uint32_t height,
-    yetty_yrender_utils_tile_diff_sink_fn sink_fn, void *sink_ctx)
+struct yetty_ycore_void_result yetty_yrender_utils_tile_diff_engine_submit(
+    struct yetty_yrender_utils_tile_diff_engine *eng, WGPUTexture texture, uint32_t width,
+    uint32_t height, yetty_yrender_utils_tile_diff_sink_fn sink_fn, void *sink_ctx)
 {
-    if (!eng || !texture || width == 0 || height == 0)
+    if (!eng || !texture || width == 0 || height == 0) {
         return YETTY_ERR(yetty_ycore_void, "invalid arguments");
+    }
 
     /* Backpressure: only one coroutine in flight. Concurrent submits would
      * race on prev_texture / dirty_flags_buffer / tile_readback_buffer and
@@ -554,8 +567,9 @@ yetty_yrender_utils_tile_diff_engine_submit(
     }
 
     struct submit_args *args = malloc(sizeof(*args));
-    if (!args)
+    if (!args) {
         return YETTY_ERR(yetty_ycore_void, "malloc failed");
+    }
 
     args->eng = eng;
     args->texture = texture;
@@ -564,8 +578,8 @@ yetty_yrender_utils_tile_diff_engine_submit(
     args->sink_fn = sink_fn;
     args->sink_ctx = sink_ctx;
 
-    struct yplatform_coro_ptr_result coro_res = yplatform_coro_spawn(
-        submit_coro_entry, args, 0, "tile-diff-submit");
+    struct yplatform_coro_ptr_result coro_res =
+        yplatform_coro_spawn(submit_coro_entry, args, 0, "tile-diff-submit");
     if (!YETTY_IS_OK(coro_res)) {
         free(args);
         return YETTY_ERR(yetty_ycore_void, "tile_diff coro spawn failed");
@@ -573,8 +587,9 @@ yetty_yrender_utils_tile_diff_engine_submit(
 
     eng->submit_in_flight = true;
     yplatform_coro_resume(coro_res.value);
-    if (yplatform_coro_is_finished(coro_res.value))
+    if (yplatform_coro_is_finished(coro_res.value)) {
         yplatform_coro_destroy(coro_res.value);
+    }
     /* Otherwise the coro yielded into the GPU await; resume_coro_on_loop
      * (in ywebgpu.c) destroys it once it finishes. Mirrors the old VNC path. */
 

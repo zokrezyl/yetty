@@ -9,10 +9,10 @@
 extern "C" {
 #endif
 
-#define YETTY_YRENDER_RS_MAX_TEXTURES  4
-#define YETTY_YRENDER_RS_MAX_BUFFERS   4
+#define YETTY_YRENDER_RS_MAX_TEXTURES 4
+#define YETTY_YRENDER_RS_MAX_BUFFERS 4
 #define YETTY_YRENDER_RS_MAX_UNIFORMS 32
-#define YETTY_YRENDER_RS_MAX_CHILDREN  4
+#define YETTY_YRENDER_RS_MAX_CHILDREN 4
 
 /* GPU resource set - collection of resources a provider needs */
 struct yetty_yrender_gpu_resource_set {
@@ -34,7 +34,8 @@ struct yetty_yrender_gpu_resource_set {
     size_t children_count;
 };
 
-YETTY_YRESULT_DECLARE(yetty_yrender_gpu_resource_set, const struct yetty_yrender_gpu_resource_set *);
+YETTY_YRESULT_DECLARE(yetty_yrender_gpu_resource_set,
+                      const struct yetty_yrender_gpu_resource_set *);
 
 #ifdef __cplusplus
 }

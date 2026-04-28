@@ -28,8 +28,9 @@ from _common import (  # noqa: E402
     warn,
 )
 
-SCAN_BUILD_CANDIDATES = ("scan-build-18", "scan-build", "scan-build-17",
-                         "scan-build-15", "scan-build-14", "scan-build-9")
+SCAN_BUILD_CANDIDATES = ("scan-build", "scan-build-21", "scan-build-18",
+                         "scan-build-17", "scan-build-15", "scan-build-14",
+                         "scan-build-9")
 
 
 def check_scan_build() -> CheckResult:

@@ -41,7 +41,8 @@ const char *yetty_yplatform_get_config_dir(void)
 {
     const char *home = getenv("HOME");
     if (home) {
-        snprintf(config_dir_buf, sizeof(config_dir_buf), "%s/Library/Application Support/yetty", home);
+        snprintf(config_dir_buf, sizeof(config_dir_buf), "%s/Library/Application Support/yetty",
+                 home);
         return config_dir_buf;
     }
     return "/tmp/yetty";
