@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Reject the push if any commit being pushed has an author or committer
+# email that is not listed in CODEOWNERS.
+set -e
+
+dir=$(dirname "$0")
+. "$dir/lib-codeowners.sh"
+
+if [ -z "$CODEOWNERS_FILE" ]; then
+  echo "pre-push: no CODEOWNERS file found — refusing the push" >&2
+  exit 1
+fi
+
+zero=$(printf '0%.0s' $(seq 1 40))
+remote_name=${1:-origin}
+
+violations=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "$local_sha" ] && continue
+  [ "$local_sha" = "$zero" ] && continue            # branch deletion
+
+  if [ "$remote_sha" = "$zero" ]; then
+    range_args=("$local_sha" --not --remotes="$remote_name")
+  else
+    range_args=("$remote_sha..$local_sha")
+  fi
+
+  while IFS= read -r email; do
+    [ -z "$email" ] && continue
+    if ! codeowners_allows "$email"; then
+      echo "pre-push: '$email' is not in $CODEOWNERS_FILE" >&2
+      git log "${range_args[@]}" --format='  %h  author=%ae  committer=%ce  %s' \
+        | grep -F "$email" >&2 || true
+      violations=$((violations + 1))
+    fi
+  done < <(git log "${range_args[@]}" --format='%ae%n%ce' | sort -u)
+done
+
+if [ "$violations" -gt 0 ]; then
+  echo "pre-push: refusing push — $violations email(s) not in CODEOWNERS" >&2
+  echo "allowed emails:" >&2
+  codeowners_emails | sed 's/^/  /' >&2
+  exit 1
+fi
+
+exit 0

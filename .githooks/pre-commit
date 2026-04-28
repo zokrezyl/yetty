@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Reject the commit if the author or committer email is not an allowed
+# email address listed in CODEOWNERS.
+set -e
+
+
+dir=$(dirname "$0")
+. "$dir/lib-codeowners.sh"
+
+if [ -z "$CODEOWNERS_FILE" ]; then
+  echo "pre-commit: no CODEOWNERS file found — refusing to allow unverified commit" >&2
+  exit 1
+fi
+
+author_email=${GIT_AUTHOR_EMAIL:-$(git config user.email)}
+committer_email=${GIT_COMMITTER_EMAIL:-$(git config user.email)}
+
+if ! codeowners_allows "$author_email"; then
+  echo "pre-commit: author '$author_email' is not in $CODEOWNERS_FILE" >&2
+  echo "  allowed:" >&2
+  codeowners_emails | sed 's/^/    /' >&2
+  exit 1
+fi
+
+if [ "$author_email" != "$committer_email" ] && ! codeowners_allows "$committer_email"; then
+  echo "pre-commit: committer '$committer_email' is not in $CODEOWNERS_FILE" >&2
+  exit 1
+fi
+
+exit 0

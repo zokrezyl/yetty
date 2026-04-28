@@ -1,0 +1,8 @@
+# Owners — also serves as the allowlist for the local pre-commit / pre-push
+# hooks under .githooks/. Tokens that contain "@" but don't start with "@"
+# are treated as email addresses by those hooks.
+#
+# Standard CODEOWNERS syntax: <path-pattern>  <owner1>  <owner2>...
+# An "owner" can be a GitHub @handle, an @org/team, or an email address.
+
+*       zokrezyl@gmail.com
