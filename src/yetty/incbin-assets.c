@@ -117,7 +117,32 @@ static void get_marker_path(const char *cache_dir, char *out, size_t out_size) {
   snprintf(out, out_size, "%s/.yetty-assets/version", cache_dir);
 }
 
-/* Create directory recursively */
+/* Create directory recursively. We can't tell from errno alone whether an
+ * intermediate step "succeeded" — on iOS sandboxes mkdir on a pre-existing
+ * system dir like /var returns EACCES/EROFS (not EEXIST). So for every
+ * step we check whether the path already exists as a dir and treat that
+ * as success. Only the final leaf must be a real success. */
+static int mkdir_one(const char *path) {
+  int rc = yplatform_mkdir(path);
+  int saved_errno = errno;
+  if (rc == 0) {
+    ydebug("mkdir_one: created '%s'", path);
+    return 0;
+  }
+  struct stat st;
+  if (stat(path, &st) == 0) {
+    if (S_ISDIR(st.st_mode)) {
+      ydebug("mkdir_one: '%s' already a dir (mkdir errno=%d)", path, saved_errno);
+      return 0;
+    }
+    ydebug("mkdir_one: '%s' exists but is not a dir (mode=0%o)", path, st.st_mode);
+  } else {
+    ydebug("mkdir_one: mkdir failed errno=%d (%s); stat failed errno=%d (%s); path='%s'",
+           saved_errno, strerror(saved_errno), errno, strerror(errno), path);
+  }
+  return -1;
+}
+
 static int mkdir_p(const char *path) {
   char tmp[MAX_PATH_LEN];
   char *p = NULL;
@@ -131,16 +156,12 @@ static int mkdir_p(const char *path) {
   for (p = tmp + 1; *p; p++) {
     if (*p == '/') {
       *p = 0;
-      if (yplatform_mkdir(tmp) != 0 && errno != EEXIST)
-        return -1;
+      (void)mkdir_one(tmp);  /* ancestors: best-effort */
       *p = '/';
     }
   }
 
-  if (yplatform_mkdir(tmp) != 0 && errno != EEXIST)
-    return -1;
-
-  return 0;
+  return mkdir_one(tmp);  /* leaf: must end up as a dir */
 }
 
 /* Check if extraction is needed */

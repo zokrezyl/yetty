@@ -8,7 +8,7 @@
 #   TARGET_PLATFORM   linux-x86_64 | linux-aarch64 |
 #                     macos-arm64 | macos-x86_64 |
 #                     android-arm64-v8a | android-x86_64 |
-#                     ios-arm64 | ios-x86_64 | tvos-x86_64 |
+#                     ios-arm64 | ios-x86_64 | tvos-arm64|tvos-x86_64 |
 #                     webasm | windows-x86_64
 #   OUTPUT_DIR        where the tarball is written
 #
@@ -172,36 +172,18 @@ ios-arm64|ios-x86_64)
     )
     ;;
 
-tvos-x86_64|tvos-arm64)
+tvos-arm64|tvos-x86_64)
     # Same xcrun trap as ios — see ios case above.
     unset DEVELOPER_DIR MACOSX_DEPLOYMENT_TARGET SDKROOT NIX_APPLE_SDK_VERSION
     export PATH="/usr/bin:$PATH"
 
     : "${TVOS_MIN:=17.0}"
-    case "$TARGET_PLATFORM" in
-        tvos-x86_64) _OH264_ARCH=x86_64 ;;
-        tvos-arm64)  _OH264_ARCH=arm64  ;;
-    esac
-    # openh264 v2.4.1 ships no build/platform-tvos.mk — only platform-ios.mk,
-    # which hardcodes -miphoneos-version-min=$(SDK_MIN). Drop a tvos-specific
-    # platform makefile alongside it; the top-level Makefile picks it up via
-    # `include build/platform-$(OS).mk` when we pass OS=tvos.
-    cat > "$SRC_DIR/build/platform-tvos.mk" <<'TVOS_MK'
-include $(SRC_PATH)build/platform-darwin.mk
-CXX = clang++
-CC = clang
-SDKTYPE = AppleTVSimulator
-SDKROOT := $(shell xcrun --sdk $(shell echo $(SDKTYPE) | tr A-Z a-z) --show-sdk-path)
-CFLAGS  += -arch $(ARCH) -isysroot $(SDKROOT) -mtvos-simulator-version-min=$(SDK_MIN) -DAPPLE_IOS
-LDFLAGS += -arch $(ARCH) -isysroot $(SDKROOT) -mtvos-simulator-version-min=$(SDK_MIN)
-TVOS_MK
-    EXTRA_ARGS=(
-        OS=tvos
-        "ARCH=${_OH264_ARCH}"
-        "SDK_MIN=${TVOS_MIN}"
-        "CC=/usr/bin/xcrun -sdk appletvsimulator clang"
-        "CXX=/usr/bin/xcrun -sdk appletvsimulator clang++"
-        "AR=/usr/bin/xcrun -sdk appletvsimulator ar"
+        "ARCH=${_IOS_ARCH}"
+        "SDKTYPE=${_IOS_SDK}"
+        "SDK_MIN_FLAG=${_MIN_FLAG}"
+        "CC=/usr/bin/xcrun -sdk ${_IOS_SDK} clang"
+        "CXX=/usr/bin/xcrun -sdk ${_IOS_SDK} clang++"
+        "AR=/usr/bin/xcrun -sdk ${_IOS_SDK} ar"
     )
     ;;
 

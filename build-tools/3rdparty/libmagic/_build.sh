@@ -168,7 +168,7 @@ ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64)
             _MIN_FLAG="-mtvos-simulator-version-min=${TVOS_MIN}"
             ;;
         tvos-arm64)
-            _IOS_SDK="appletvsimulator"; _IOS_ARCH="arm64"
+            _IOS_SDK="appletvos"       ; _IOS_ARCH="arm64"
             EXTRA_CONFIGURE+=("--host=arm-apple-darwin")
             _MIN_FLAG="-mtvos-simulator-version-min=${TVOS_MIN}"
             ;;

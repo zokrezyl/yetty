@@ -212,7 +212,7 @@ ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64)
             _IOS_SDK="appletvsimulator"
             _IOS_ARCH="arm64"
             DAV1D_CPU_FAMILY=aarch64; DAV1D_CPU=aarch64
-            _MIN_FLAG="-mtvos-simulator-version-min=${TVOS_MIN}"
+            _MIN_FLAG="-mtvos-version-min=${TVOS_MIN}"
             ;;
     esac
     _IOS_SYSROOT="$(/usr/bin/xcrun --sdk "$_IOS_SDK" --show-sdk-path)"

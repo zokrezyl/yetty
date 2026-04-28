@@ -9,7 +9,7 @@
 #     linux-x86_64 | linux-aarch64 |
 #     macos-arm64 | macos-x86_64 |
 #     android-arm64-v8a | android-x86_64 |
-#     ios-arm64 | ios-x86_64 | tvos-x86_64 |
+#     ios-arm64 | ios-x86_64 | tvos-arm64|tvos-x86_64 |
 #     webasm | windows-x86_64
 #   OUTPUT_DIR        where the tarball is written
 #
@@ -23,7 +23,7 @@ case "$TARGET_PLATFORM" in
     linux-x86_64|linux-aarch64|\
     macos-x86_64|macos-arm64|\
     android-arm64-v8a|android-x86_64|\
-    ios-arm64|ios-x86_64|tvos-x86_64|\
+    ios-arm64|ios-x86_64|tvos-arm64|tvos-x86_64|\
     webasm)
         SHELL_NAME="3rdparty-${TARGET_PLATFORM}"
         ;;

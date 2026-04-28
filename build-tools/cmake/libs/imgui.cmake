@@ -72,15 +72,25 @@ else()
     list(APPEND _IMGUI_BACKEND_SOURCES "${_IMGUI_DIR}/src-backends/imgui_impl_glfw.cpp")
 endif()
 
-add_library(imgui STATIC ${_IMGUI_BACKEND_SOURCES})
-target_link_libraries(imgui PUBLIC imgui_core)
-target_include_directories(imgui PUBLIC "${_IMGUI_DIR}/include" "${_IMGUI_DIR}/src-backends")
-set_target_properties(imgui PROPERTIES
-    POSITION_INDEPENDENT_CODE ON
-    CXX_STANDARD 17
-    CXX_STANDARD_REQUIRED ON
-)
-target_compile_options(imgui PRIVATE -w)
+# On iOS/tvOS we exclude every upstream backend (Metal+Cocoa unavailable
+# from the wgpu backend, no GLFW). With no sources cmake refuses
+# `add_library STATIC`. Use INTERFACE there — consumers still get headers
+# and link to imgui_core. Custom backend lives in src/yetty/ymgui/frontend/.
+if(_IMGUI_BACKEND_SOURCES)
+    add_library(imgui STATIC ${_IMGUI_BACKEND_SOURCES})
+    target_link_libraries(imgui PUBLIC imgui_core)
+    target_include_directories(imgui PUBLIC "${_IMGUI_DIR}/include" "${_IMGUI_DIR}/src-backends")
+    set_target_properties(imgui PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+    )
+    target_compile_options(imgui PRIVATE -w)
+else()
+    add_library(imgui INTERFACE)
+    target_link_libraries(imgui INTERFACE imgui_core)
+    target_include_directories(imgui INTERFACE "${_IMGUI_DIR}/include" "${_IMGUI_DIR}/src-backends")
+endif()
 
 # Platform-specific link + compile flags. Mirrors the from-source
 # imgui.cmake exactly — only the source-of-truth changed (now staged
@@ -90,9 +100,19 @@ if(EMSCRIPTEN)
     target_compile_options(imgui PUBLIC --use-port=emdawnwebgpu)
     target_link_options(imgui PUBLIC -sUSE_GLFW=3)
     target_compile_definitions(imgui PUBLIC IMGUI_IMPL_WEBGPU_BACKEND_DAWN=1)
-elseif(YETTY_ANDROID OR YETTY_IOS OR YETTY_TVOS
+elseif(YETTY_IOS OR YETTY_TVOS
         OR CMAKE_SYSTEM_NAME STREQUAL "iOS"
         OR CMAKE_SYSTEM_NAME STREQUAL "tvOS")
+    # On iOS/tvOS imgui is an INTERFACE library (no upstream backend sources
+    # compile there) — must use INTERFACE keyword, not PUBLIC.
+    target_link_libraries(imgui INTERFACE webgpu)
+    if(WEBGPU_BACKEND STREQUAL "wgpu")
+        target_compile_definitions(imgui INTERFACE IMGUI_IMPL_WEBGPU_BACKEND_WGPU=1)
+    else()
+        target_compile_definitions(imgui INTERFACE IMGUI_IMPL_WEBGPU_BACKEND_DAWN=1)
+    endif()
+elseif(YETTY_ANDROID)
+    # Android: imgui_impl_wgpu compiles fine, library is STATIC.
     target_link_libraries(imgui PUBLIC webgpu)
     if(WEBGPU_BACKEND STREQUAL "wgpu")
         target_compile_definitions(imgui PUBLIC IMGUI_IMPL_WEBGPU_BACKEND_WGPU=1)

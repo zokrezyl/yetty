@@ -69,6 +69,11 @@ target_compile_definitions(yetty PRIVATE
     YETTY_USE_FORKPTY=0
     YETTY_HAS_VNC=1
     YETTY_HAS_YVIDEO=1
+    $<$<BOOL:${YETTY_ENABLE_LIB_TINYEMU}>:YETTY_HAS_TINYEMU=1>
+    # CONFIG_SLIRP must be defined for src/yetty/yplatform/ios/tinyemu-pty.c
+    # so its slirp_open() ifdef block compiles in. Without it, p->tab_eth[i].net
+    # is never set and virtio_net_init derefs NULL → SIGSEGV at vm init.
+    $<$<BOOL:${YETTY_ENABLE_LIB_TINYEMU}>:CONFIG_SLIRP>
 )
 
 # iOS app bundle properties

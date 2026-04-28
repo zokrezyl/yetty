@@ -133,8 +133,8 @@ ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64)
                      _MIN_FLAG="-mios-simulator-version-min=${IOS_MIN}" ;;
         tvos-x86_64) _IOS_SDK="appletvsimulator"; _IOS_ARCH="x86_64"
                      _MIN_FLAG="-mtvos-simulator-version-min=${TVOS_MIN}" ;;
-        tvos-arm64)  _IOS_SDK="appletvsimulator"; _IOS_ARCH="arm64"
-                     _MIN_FLAG="-mtvos-simulator-version-min=${TVOS_MIN}" ;;
+        tvos-arm64)  _IOS_SDK="appletvos"       ; _IOS_ARCH="arm64"
+                     _MIN_FLAG="-mtvos-version-min=${TVOS_MIN}" ;;
     esac
     _IOS_SYSROOT="$(/usr/bin/xcrun --sdk "$_IOS_SDK" --show-sdk-path)"
     [ -d "$_IOS_SYSROOT" ] || { echo "missing SDK: $_IOS_SYSROOT" >&2; exit 1; }

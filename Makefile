@@ -481,6 +481,39 @@ build-tvos_x86_64-ytrace-release: ## Build tvOS x86_64 ytrace release (simulator
 	$(CMAKE) --build $(BUILD_DIR_TVOS_X86_64_YTRACE_RELEASE) $(CMAKE_PARALLEL)
 
 #=============================================================================
+# tvOS arm64 (real Apple TV device) - requires macOS with Xcode
+# Note: appletvos SDK has no x86_64 slice, hence the device-only build dir.
+# Deployment to a paired Apple TV uses `xcrun devicectl device install/launch`.
+#=============================================================================
+
+BUILD_DIR_TVOS_YTRACE_DEBUG := build-tvos-ytrace-debug
+BUILD_DIR_TVOS_YTRACE_RELEASE := build-tvos-ytrace-release
+
+CMAKE_TVOS_TOOLCHAIN := -DCMAKE_SYSTEM_NAME=tvOS -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_SYSROOT=appletvos -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0
+
+.PHONY: config-tvos-ytrace-debug
+config-tvos-ytrace-debug: ## Configure tvOS ytrace debug build (device, macOS only)
+	$(CHECK_MACOS)
+	$(CMAKE) -B $(BUILD_DIR_TVOS_YTRACE_DEBUG) $(CMAKE_GENERATOR) $(CMAKE_DEBUG) $(CMAKE_LOGLEVEL_YTRACE) $(CMAKE_TVOS_TOOLCHAIN) -DYETTY_TVOS=ON
+
+.PHONY: config-tvos-ytrace-release
+config-tvos-ytrace-release: ## Configure tvOS ytrace release build (device, macOS only)
+	$(CHECK_MACOS)
+	$(CMAKE) -B $(BUILD_DIR_TVOS_YTRACE_RELEASE) $(CMAKE_GENERATOR) $(CMAKE_RELEASE) $(CMAKE_LOGLEVEL_YTRACE) $(CMAKE_TVOS_TOOLCHAIN) -DYETTY_TVOS=ON
+
+.PHONY: build-tvos-ytrace-debug
+build-tvos-ytrace-debug: ## Build tvOS ytrace debug (device, macOS only)
+	$(CHECK_MACOS)
+	@if [ ! -f "$(BUILD_DIR_TVOS_YTRACE_DEBUG)/build.ninja" ]; then $(MAKE) config-tvos-ytrace-debug; fi
+	$(CMAKE) --build $(BUILD_DIR_TVOS_YTRACE_DEBUG) $(CMAKE_PARALLEL)
+
+.PHONY: build-tvos-ytrace-release
+build-tvos-ytrace-release: ## Build tvOS ytrace release (device, macOS only)
+	$(CHECK_MACOS)
+	@if [ ! -f "$(BUILD_DIR_TVOS_YTRACE_RELEASE)/build.ninja" ]; then $(MAKE) config-tvos-ytrace-release; fi
+	$(CMAKE) --build $(BUILD_DIR_TVOS_YTRACE_RELEASE) $(CMAKE_PARALLEL)
+
+#=============================================================================
 # Clean
 #=============================================================================
 

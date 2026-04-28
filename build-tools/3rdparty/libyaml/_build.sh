@@ -7,7 +7,7 @@
 #   TARGET_PLATFORM   linux-x86_64 | linux-aarch64 |
 #                     macos-arm64 | macos-x86_64 |
 #                     android-arm64-v8a | android-x86_64 |
-#                     ios-arm64 | ios-x86_64 | tvos-x86_64 |
+#                     ios-arm64 | ios-x86_64 | tvos-arm64|tvos-x86_64 |
 #                     webasm | windows-x86_64
 #   OUTPUT_DIR        where the tarball is written
 #
@@ -134,12 +134,13 @@ ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64)
             _IOS_SDK="iphonesimulator";  _IOS_ARCH="x86_64"
             _CMAKE_SYS="iOS";  _CMAKE_DEPL="$IOS_MIN"
             ;;
-        tvos-x86_64)
-            _IOS_SDK="appletvsimulator"; _IOS_ARCH="x86_64"
+        tvos-arm64)
+            _IOS_SDK="appletvos"; _IOS_ARCH="arm64"
             _CMAKE_SYS="tvOS"; _CMAKE_DEPL="$TVOS_MIN"
             ;;
-        tvos-arm64)
-            _IOS_SDK="appletvsimulator"; _IOS_ARCH="arm64"
+
+        tvos-x86_64)
+            _IOS_SDK="appletvsimulator"; _IOS_ARCH="x86_64"
             _CMAKE_SYS="tvOS"; _CMAKE_DEPL="$TVOS_MIN"
             ;;
     esac

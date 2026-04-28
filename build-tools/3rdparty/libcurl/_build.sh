@@ -236,7 +236,7 @@ ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64)
             _CMAKE_SYS="tvOS"; _CMAKE_DEPL="$TVOS_MIN"
             ;;
         tvos-arm64)
-            _IOS_SDK="appletvsimulator"; _IOS_ARCH="arm64"
+            _IOS_SDK="appletvos"       ; _IOS_ARCH="arm64"
             _CMAKE_SYS="tvOS"; _CMAKE_DEPL="$TVOS_MIN"
             ;;
     esac

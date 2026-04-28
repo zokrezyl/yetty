@@ -89,7 +89,7 @@ ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64)
                      _CMAKE_SYS="iOS";  _CMAKE_DEPL="$IOS_MIN" ;;
         tvos-x86_64) _IOS_SDK="appletvsimulator"; _IOS_ARCH="x86_64"
                      _CMAKE_SYS="tvOS"; _CMAKE_DEPL="$TVOS_MIN" ;;
-        tvos-arm64)  _IOS_SDK="appletvsimulator"; _IOS_ARCH="arm64"
+        tvos-arm64)  _IOS_SDK="appletvos"       ; _IOS_ARCH="arm64"
                      _CMAKE_SYS="tvOS"; _CMAKE_DEPL="$TVOS_MIN" ;;
     esac
     _IOS_SYSROOT="$(/usr/bin/xcrun --sdk "$_IOS_SDK" --show-sdk-path)"

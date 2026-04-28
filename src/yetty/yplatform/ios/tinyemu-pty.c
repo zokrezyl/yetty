@@ -345,7 +345,10 @@ static int init_vm(struct tinyemu_pty *pty)
         p->tab_drive[i].block_dev = drive;
     }
 
-    /* Initialize network */
+    /* Initialize network. CONFIG_SLIRP must be defined for the eth0 in our
+     * cfg to actually get a backing device — otherwise virtio_net_init in
+     * tinyemu derefs a NULL EthernetDevice and we SIGSEGV. The cmake target
+     * for ios/tvos passes CONFIG_SLIRP for this file. */
     for (int i = 0; i < p->eth_count; i++) {
 #ifdef CONFIG_SLIRP
         if (!strcmp(p->tab_eth[i].driver, "user")) {
@@ -533,7 +536,13 @@ static struct yetty_yplatform_pty_result tinyemu_pty_create(struct yetty_yconfig
                 cfg_ready = 0;
         }
 
-        if (cfg_ready && access(cfg_path, F_OK) != 0) {
+        /* Always overwrite the cfg: data_dir is a sandbox-relative path
+         * that can change between installs (iOS rotates the container UUID).
+         * Caching the cfg means a stale path from a previous install
+         * survives — and load_file(opensbi-fw_jump.elf) then perror+exits.
+         * Cheap to re-emit; just do it. */
+        if (cfg_ready) {
+            (void)unlink(cfg_path);
             FILE *f = fopen(cfg_path, "w");
             if (f) {
                 fprintf(f,
@@ -545,7 +554,12 @@ static struct yetty_yplatform_pty_result tinyemu_pty_create(struct yetty_yconfig
                     "    bios: \"%s/yemu/opensbi-fw_jump.elf\",\n"
                     "    kernel: \"%s/yemu/kernel-riscv64.bin\",\n"
                     "    cmdline: \"earlycon=sbi console=hvc0 root=/dev/vda rootfstype=ext4 rw init=/init\",\n"
-                    "    drive0: { file: \"%s/yemu/alpine-rootfs.img\" }\n"
+                    "    drive0: { file: \"%s/yemu/alpine-rootfs.img\" },\n"
+                    /* eth0 is required even though we don't use the network: without
+                     * a virtio-net device the kernel wedges at PLIC init and never
+                     * reaches console=hvc0 switch. Same shape as the shared cfg in
+                     * src/yetty/yplatform/shared/tinyemu-pty.c. */
+                    "    eth0: { driver: \"user\" }\n"
                     "}\n",
                     data_dir, data_dir, data_dir);
                 fclose(f);

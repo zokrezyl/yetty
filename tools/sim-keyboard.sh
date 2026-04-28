@@ -10,6 +10,14 @@
 # Yetty's pressesBegan: reads UIKey.characters, which is post-layout — once
 # the Simulator's layout is right, yetty does the right thing.
 #
+# IMPORTANT: This script REQUIRES a fully-booted sim (PineBoard / TVHome up)
+# and writes the keyboard prefs via `simctl spawn defaults write`. We tried
+# the alternative of shutdown + edit .GlobalPreferences.plist + reboot — it
+# is FASTER but corrupts the sim's data store on tvOS: the next data
+# migration crashes PineBoard with status -6, and the sim becomes unusable
+# (only black screen, simctl launch returns "system shell probably crashed").
+# So we accept the slower-but-safe post-boot route here.
+#
 # Usage:
 #   tools/sim-keyboard.sh [layout] [device]
 #     layout  one of: Dvorak | DvorakLeft | DvorakRight | QWERTY (default Dvorak)
@@ -34,7 +42,6 @@ case "$LAYOUT" in
         ;;
 esac
 
-# Resolve to UDID. simctl accepts names but defaults write needs a stable target.
 UDID="$(xcrun simctl list devices -j 2>/dev/null \
     | python3 -c "
 import sys, json
@@ -47,43 +54,58 @@ for runtime, devs in d['devices'].items():
 sys.exit(1)
 " )" || { echo "error: device '$DEVICE' not found" >&2; exit 1; }
 
+LAYOUT_ID="en_US@hw=$LAYOUT;sw=$LAYOUT"
 echo "device: $DEVICE ($UDID)"
-echo "layout: en_US@hw=$LAYOUT;sw=$LAYOUT"
+echo "layout: $LAYOUT_ID"
 
-# Boot if not running — defaults write needs a live device for some keys.
-STATE="$(xcrun simctl list devices -j | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-udid = '$UDID'
-for runtime, devs in d['devices'].items():
-    for dev in devs:
-        if dev['udid'] == udid:
-            print(dev['state']); sys.exit(0)
-" )"
-
-if [ "$STATE" != "Booted" ]; then
-    echo "booting $DEVICE..."
-    xcrun simctl boot "$UDID"
-    sleep 3
+# Fast path: query the live pref via simctl spawn — if the sim already has
+# what we want we skip the writes entirely.
+if CURRENT="$(xcrun simctl spawn "$UDID" defaults read -g KeyboardLastUsedKeyboard 2>/dev/null)" \
+        && [ "$CURRENT" = "$LAYOUT_ID" ]; then
+    echo "already set — nothing to do"
+    exit 0
 fi
 
-# Two preference keys: AppleKeyboards (the enabled list) +
-# AppleKeyboardsExpanded (which Settings.app reads). Set both.
-PLIST="$HOME/Library/Developer/CoreSimulator/Devices/$UDID/data/Library/Preferences/.GlobalPreferences.plist"
+# Make sure the sim is actually ready for `defaults write` — needs launchd
+# in the sim to spawn user processes. If state isn't Booted, we can't write.
+state="$(xcrun simctl list devices -j 2>/dev/null | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+for runtime, devs in d['devices'].items():
+    for dev in devs:
+        if dev['udid'] == '$UDID':
+            print(dev.get('state','Unknown')); sys.exit(0)
+" 2>/dev/null)"
+if [ "$state" != "Booted" ]; then
+    echo "error: sim not booted (state=$state) — boot it first (and let System App come up) before setting keyboard layout" >&2
+    exit 1
+fi
 
-xcrun simctl spawn "$UDID" defaults write -g AppleKeyboards -array "en_US@hw=$LAYOUT;sw=$LAYOUT"
-xcrun simctl spawn "$UDID" defaults write -g AppleKeyboardsExpanded -dict-add "en_US@hw=$LAYOUT;sw=$LAYOUT" 1
-xcrun simctl spawn "$UDID" defaults write -g KeyboardLastUsedKeyboards -array "en_US@hw=$LAYOUT;sw=$LAYOUT"
-xcrun simctl spawn "$UDID" defaults write -g KeyboardLastUsedKeyboard "en_US@hw=$LAYOUT;sw=$LAYOUT"
+# Wrap each spawn in a 30s timeout: if launchd in the sim is wedged we want
+# to fail loud, not hang forever.
+spawn_with_timeout() {
+    ( xcrun simctl spawn "$UDID" "$@" 2>&1 &
+      P=$!
+      for i in $(seq 1 30); do sleep 1; kill -0 $P 2>/dev/null || { wait $P; return $?; }; done
+      kill -9 $P 2>/dev/null
+      echo "timeout waiting for: $*" >&2
+      return 124
+    )
+}
 
-# Restart the device so iOS re-reads the keyboard prefs at next launch.
-echo "restarting device so iOS picks up the new layout..."
-xcrun simctl shutdown "$UDID"
-xcrun simctl boot "$UDID"
+echo "writing keyboard prefs via defaults write..."
+spawn_with_timeout defaults write -g AppleKeyboards -array "$LAYOUT_ID" >/dev/null
+spawn_with_timeout defaults write -g KeyboardLastUsedKeyboards -array "$LAYOUT_ID" >/dev/null
+spawn_with_timeout defaults write -g KeyboardLastUsedKeyboard "$LAYOUT_ID" >/dev/null
+spawn_with_timeout defaults write -g AppleKeyboardsExpanded -dict "$LAYOUT_ID" 1 >/dev/null
 
-echo
+# Verify
+CURRENT="$(xcrun simctl spawn "$UDID" defaults read -g KeyboardLastUsedKeyboard 2>/dev/null || true)"
+if [ "$CURRENT" = "$LAYOUT_ID" ]; then
+    echo "ok: KeyboardLastUsedKeyboard = $CURRENT"
+else
+    echo "warn: post-write read returned '$CURRENT' (expected '$LAYOUT_ID')" >&2
+fi
+
 echo "done. Connect Hardware Keyboard must be ON in the simulator menubar"
 echo "(I/O > Keyboard > Connect Hardware Keyboard, or ⌘K)."
-echo
-echo "verify with:"
-echo "  plutil -p '$PLIST' | grep -E 'AppleKeyboards|KeyboardLastUsed'"
