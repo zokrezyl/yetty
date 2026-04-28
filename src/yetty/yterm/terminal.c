@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <yetty/platform/platform-input-pipe.h>
 #include <yetty/platform/pty-factory.h>
 #include <yetty/platform/pty-pipe-source.h>
 #include <yetty/platform/pty.h>
@@ -127,6 +128,27 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread) {
         terminal->context.yetty_context.event_loop->ops->request_render(
             terminal->context.yetty_context.event_loop);
       }
+    }
+  } else if (nread < 0 && !terminal->shutting_down) {
+    /* PTY closed (UV_EOF / read error): the child shell exited — typically
+     * Ctrl-D in the prompt, or the user typed `exit`. Trigger the same
+     * graceful teardown as window-close and SIGINT by posting SHUTDOWN
+     * through the platform input pipe.
+     *
+     * The shutting_down guard avoids re-posting if SHUTDOWN was already
+     * issued (e.g. fork_pty_stop closed the master while we were tearing
+     * down for another reason).
+     *
+     * NOTE: today there is exactly one terminal per yetty instance, so
+     * "PTY closed" is always "the last terminal closed". When multi-
+     * terminal support lands, this should walk the workspace tree and
+     * only post SHUTDOWN if no other live terminal remains. */
+    ydebug("terminal_pty_pipe_read: PTY EOF (nread=%ld), posting SHUTDOWN", nread);
+    struct yetty_yplatform_input_pipe *pipe =
+        terminal->context.yetty_context.app_context.platform_input_pipe;
+    if (pipe && pipe->ops && pipe->ops->write) {
+      struct yetty_ycore_event ev = { .type = YETTY_EVENT_SHUTDOWN };
+      pipe->ops->write(pipe, &ev, sizeof(ev));
     }
   } else {
     ydebug("terminal_pty_pipe_read: skipped (nread=%ld pty_reader=%p)",
