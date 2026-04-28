@@ -5,6 +5,8 @@
 #include <time.h>
 
 #include <yetty/yconfig.h>
+#include <yetty/ycore/event-loop.h>
+#include <yetty/ycore/event.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yetty.h>
@@ -79,6 +81,16 @@ struct yetty_yterm_shader_glyph_layer {
     struct yetty_yrender_gpu_resource_set rs;
     /* CPU-side animation clock origin. Time uniform is (now - t0). */
     struct timespec t0;
+
+    /* Animation timer. Drives request_render at target_fps while there's
+     * any shader-glyph cell on screen; stays stopped (zero-cost) on idle
+     * terminals so the input→render loop can quiesce. Borrowed event loop;
+     * timer_id valid only when timer_created. */
+    struct yetty_ycore_event_loop *event_loop;
+    yetty_ycore_timer_id timer_id;
+    int timer_created;
+    int timer_running;
+    struct yetty_ycore_event_listener listener;
 };
 
 /* -- glyph-shader assembly --------------------------------------------------
@@ -294,6 +306,9 @@ shader_glyph_get_gpu_resource_set(const struct yetty_yterm_terminal_layer *self)
 static struct yetty_ycore_void_result shader_glyph_render(
     struct yetty_yterm_terminal_layer *self,
     struct yetty_yrender_target *target);
+static struct yetty_ycore_int_result on_anim_tick(
+    struct yetty_ycore_event_listener *listener,
+    const struct yetty_ycore_event *event);
 static int shader_glyph_is_empty(const struct yetty_yterm_terminal_layer *self);
 static int shader_glyph_on_key(struct yetty_yterm_terminal_layer *self,
                                int key, int mods);
@@ -437,12 +452,38 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
     layer->rs.buffers[0].size = cells_size;
     layer->rs.buffers[0].dirty = 1;
 
+    /* Animation timer. Period from terminal/shader-glyph-layer/target-fps
+     * (default 60). Created stopped — render() starts/stops it based on
+     * is_empty so empty terminals cost nothing. */
+    layer->event_loop = context->event_loop;
+    layer->listener.handler = on_anim_tick;
+    if (layer->event_loop && layer->event_loop->ops &&
+        layer->event_loop->ops->create_timer) {
+        int target_fps = config->ops->get_int(
+            config, "terminal/shader-glyph-layer/target-fps", 60);
+        if (target_fps < 1) target_fps = 1;
+        if (target_fps > 1000) target_fps = 1000;
+        int period_ms = 1000 / target_fps;
+        if (period_ms < 1) period_ms = 1;
+
+        struct yetty_ycore_timer_id_result tres =
+            layer->event_loop->ops->create_timer(layer->event_loop);
+        if (YETTY_IS_OK(tres)) {
+            layer->timer_id = tres.value;
+            layer->event_loop->ops->config_timer(
+                layer->event_loop, layer->timer_id, period_ms);
+            layer->event_loop->ops->register_timer_listener(
+                layer->event_loop, layer->timer_id, &layer->listener);
+            layer->timer_created = 1;
+            yinfo("shader-glyph-layer: anim timer fps=%d period=%dms",
+                  target_fps, period_ms);
+        } else {
+            ywarn("shader-glyph-layer: create_timer failed; animations static");
+        }
+    }
+
     ydebug("shader_glyph_layer_create: %ux%u grid, %.1fx%.1f cells",
            cols, rows, cell_width, cell_height);
-
-    /* Kick the first animation frame. */
-    if (request_render_fn)
-        request_render_fn(request_render_userdata);
 
     return YETTY_OK(yetty_yterm_terminal_layer, &layer->base);
 }
@@ -451,6 +492,14 @@ static void shader_glyph_destroy(struct yetty_yterm_terminal_layer *self)
 {
     struct yetty_yterm_shader_glyph_layer *layer =
         container_of(self, struct yetty_yterm_shader_glyph_layer, base);
+    if (layer->timer_created && layer->event_loop && layer->event_loop->ops) {
+        if (layer->timer_running && layer->event_loop->ops->stop_timer)
+            layer->event_loop->ops->stop_timer(layer->event_loop,
+                                               layer->timer_id);
+        if (layer->event_loop->ops->destroy_timer)
+            layer->event_loop->ops->destroy_timer(layer->event_loop,
+                                                  layer->timer_id);
+    }
     free(layer->shader_source);
     free(layer);
 }
@@ -551,6 +600,45 @@ shader_glyph_get_gpu_resource_set(const struct yetty_yterm_terminal_layer *self)
     return YETTY_OK(yetty_yrender_gpu_resource_set, &layer->rs);
 }
 
+/* Recover the layer pointer from its embedded tick listener. */
+static inline struct yetty_yterm_shader_glyph_layer *
+layer_from_listener(struct yetty_ycore_event_listener *l)
+{
+    return (struct yetty_yterm_shader_glyph_layer *)((char *)l -
+        offsetof(struct yetty_yterm_shader_glyph_layer, listener));
+}
+
+/* Animation tick — runs on the event-loop thread at target_fps. Schedules
+ * one render; the actual draw happens when RENDER is dispatched. Returns 0
+ * (not-handled) so the timer event still propagates to other listeners. */
+static struct yetty_ycore_int_result on_anim_tick(
+    struct yetty_ycore_event_listener *listener,
+    const struct yetty_ycore_event *event)
+{
+    (void)event;
+    struct yetty_yterm_shader_glyph_layer *layer =
+        layer_from_listener(listener);
+    if (layer->base.request_render_fn)
+        layer->base.request_render_fn(layer->base.request_render_userdata);
+    return YETTY_OK(yetty_ycore_int, 0);
+}
+
+static void anim_timer_start(struct yetty_yterm_shader_glyph_layer *layer)
+{
+    if (!layer->timer_created || layer->timer_running)
+        return;
+    layer->event_loop->ops->start_timer(layer->event_loop, layer->timer_id);
+    layer->timer_running = 1;
+}
+
+static void anim_timer_stop(struct yetty_yterm_shader_glyph_layer *layer)
+{
+    if (!layer->timer_created || !layer->timer_running)
+        return;
+    layer->event_loop->ops->stop_timer(layer->event_loop, layer->timer_id);
+    layer->timer_running = 0;
+}
+
 static struct yetty_ycore_void_result shader_glyph_render(
     struct yetty_yterm_terminal_layer *self,
     struct yetty_yrender_target *target)
@@ -558,19 +646,25 @@ static struct yetty_ycore_void_result shader_glyph_render(
     struct yetty_yterm_shader_glyph_layer *layer =
         container_of(self, struct yetty_yterm_shader_glyph_layer, base);
 
-    /* Animation layer: keep dirty=1 so render-target's early-out doesn't
-     * skip us between content events. Set BEFORE render_layer (which checks
-     * dirty before doing any work). */
+    /* Animation timer gates only the animation tick — when there's nothing
+     * on screen to animate, stop ticking so the input→render loop can
+     * idle. Otherwise, ensure the timer is ticking at target_fps; the
+     * existing tick already calls request_render. */
+    if (shader_glyph_is_empty(self))
+        anim_timer_stop(layer);
+    else
+        anim_timer_start(layer);
+
+    /* Always render — even when empty. render_layer's loadOp is Clear, and
+     * the fragment shader outputs transparent for every cell whose
+     * glyph_index is below SHADER_GLYPH_BASE, so an "empty" frame is
+     * functionally the clear we need to evict the previous non-empty
+     * frame from this layer's target. Skipping the render leaves the last
+     * shader-glyph image stuck on the target, which then bleeds through
+     * blend() — visible as the last shader-glyph "staying at the top"
+     * after its cell scrolls off the screen. */
     layer->base.dirty = 1;
-
-    struct yetty_ycore_void_result res =
-        target->ops->render_layer(target, self);
-
-    /* Schedule the next animation frame via the event loop. */
-    if (layer->base.request_render_fn)
-        layer->base.request_render_fn(layer->base.request_render_userdata);
-
-    return res;
+    return target->ops->render_layer(target, self);
 }
 
 /* Empty when there are no shader-glyph cells in the current grid.
