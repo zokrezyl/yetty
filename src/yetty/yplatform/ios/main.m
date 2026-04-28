@@ -4,6 +4,7 @@
 #import <UIKit/UIKit.h>
 #import <QuartzCore/CAMetalLayer.h>
 #import <Metal/Metal.h>
+#import <GameController/GameController.h>
 
 #include <webgpu/webgpu.h>
 #include <pthread.h>
@@ -222,6 +223,100 @@ static void *render_thread_func(void *arg)
 
     /* Become first responder to receive keyboard input */
     [self becomeFirstResponder];
+
+    /* tvOS does NOT route hardware-keyboard UIPress events through the
+     * responder chain to the view controller — they go via the focus
+     * engine, which our full-screen render view is not part of. The
+     * GameController framework's GCKeyboard gives us raw HW key events
+     * regardless of focus, which is the only reliable path for a HW kb
+     * on tvOS. (Works on iOS too, harmless to register there.) */
+    [self setupGCKeyboard];
+}
+
+#pragma mark - GCKeyboard (tvOS hardware keyboard)
+
+- (void)setupGCKeyboard
+{
+    if (GCKeyboard.coalescedKeyboard) {
+        [self attachKeyboard:GCKeyboard.coalescedKeyboard];
+    }
+    [[NSNotificationCenter defaultCenter]
+        addObserver:self
+           selector:@selector(keyboardDidConnect:)
+               name:GCKeyboardDidConnectNotification
+             object:nil];
+}
+
+- (void)keyboardDidConnect:(NSNotification *)note
+{
+    GCKeyboard *kb = note.object;
+    ydebug("GCKeyboard connected");
+    [self attachKeyboard:kb];
+}
+
+- (void)attachKeyboard:(GCKeyboard *)kb
+{
+    /* File compiles under MRC (no ARC), can't use __weak. Use
+     * __unsafe_unretained — view controller lives for app lifetime so
+     * dangling-ref risk is nil. */
+    __unsafe_unretained YettyViewController *self_ = self;
+    kb.keyboardInput.keyChangedHandler =
+        ^(GCKeyboardInput *input, GCControllerButtonInput *btn, GCKeyCode keyCode, BOOL pressed) {
+            if (!pressed || !self_ || !self_->_pipe) return;
+            [self_ handleGCKey:keyCode input:input];
+        };
+}
+
+- (void)handleGCKey:(GCKeyCode)keyCode input:(GCKeyboardInput *)input
+{
+    /* GCKeyCode constants are extern consts (not compile-time) so we
+     * can't use switch. Use if/else. Map HID-style key codes to GLFW
+     * key numbers for the navigation/control set vterm needs. */
+    int glfw_key = 0;
+    if      (keyCode == GCKeyCodeReturnOrEnter)     glfw_key = 257;
+    else if (keyCode == GCKeyCodeTab)               glfw_key = 258;
+    else if (keyCode == GCKeyCodeDeleteOrBackspace) glfw_key = 259;
+    else if (keyCode == GCKeyCodeEscape)            glfw_key = 256;
+    else if (keyCode == GCKeyCodeLeftArrow)         glfw_key = 263;
+    else if (keyCode == GCKeyCodeRightArrow)        glfw_key = 262;
+    else if (keyCode == GCKeyCodeUpArrow)           glfw_key = 265;
+    else if (keyCode == GCKeyCodeDownArrow)         glfw_key = 264;
+    else if (keyCode == GCKeyCodeHome)              glfw_key = 268;
+    else if (keyCode == GCKeyCodeEnd)               glfw_key = 269;
+    else if (keyCode == GCKeyCodePageUp)            glfw_key = 266;
+    else if (keyCode == GCKeyCodePageDown)          glfw_key = 267;
+    if (glfw_key) {
+        struct yetty_ycore_event ev = {0};
+        ev.type = YETTY_EVENT_KEY_DOWN;
+        ev.key.key = glfw_key;
+        ev.key.mods = 0;
+        ev.key.scancode = 0;
+        _pipe->ops->write(_pipe, &ev, sizeof(ev));
+        return;
+    }
+
+    /* Printable: derive ASCII from keycode + shift. Shift detected via
+     * the GCKeyboardInput dictionary lookup. */
+    GCControllerButtonInput *lshift = [input buttonForKeyCode:GCKeyCodeLeftShift];
+    GCControllerButtonInput *rshift = [input buttonForKeyCode:GCKeyCodeRightShift];
+    BOOL shift = (lshift && lshift.pressed) || (rshift && rshift.pressed);
+    int ascii = 0;
+    if (keyCode >= GCKeyCodeKeyA && keyCode <= GCKeyCodeKeyZ) {
+        ascii = (shift ? 'A' : 'a') + (int)(keyCode - GCKeyCodeKeyA);
+    } else if (keyCode == GCKeyCodeSpacebar) {
+        ascii = ' ';
+    } else if (keyCode >= GCKeyCodeOne && keyCode <= GCKeyCodeNine) {
+        ascii = '1' + (int)(keyCode - GCKeyCodeOne);
+    } else if (keyCode == GCKeyCodeZero) {
+        ascii = '0';
+    }
+    if (ascii) {
+        struct yetty_ycore_event ev = {0};
+        ev.type = YETTY_EVENT_CHAR;
+        ev.chr.codepoint = (uint32_t)ascii;
+        ev.chr.mods = 0;
+        _pipe->ops->write(_pipe, &ev, sizeof(ev));
+    }
 }
 
 #pragma mark - UIKeyInput

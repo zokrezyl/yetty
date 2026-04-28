@@ -89,6 +89,10 @@ find_library(COREFOUNDATION_LIBRARY CoreFoundation REQUIRED)
 find_library(COREGRAPHICS_LIBRARY CoreGraphics REQUIRED)
 find_library(METAL_LIBRARY Metal REQUIRED)
 find_library(QUARTZCORE_LIBRARY QuartzCore REQUIRED)
+# GameController: needed for GCKeyboard — UIPress doesn't reach the
+# render view via the focus engine on tvOS, so HW kb input goes through
+# GCKeyboard instead. See setupGCKeyboard in src/yetty/yplatform/ios/main.m.
+find_library(GAMECONTROLLER_LIBRARY GameController REQUIRED)
 
 target_link_libraries(yetty PRIVATE
     ${YETTY_LIBS}
@@ -101,6 +105,7 @@ target_link_libraries(yetty PRIVATE
     ${UIKIT_LIBRARY}
     ${METAL_LIBRARY}
     ${QUARTZCORE_LIBRARY}
+    ${GAMECONTROLLER_LIBRARY}
 )
 
 if(YETTY_ENABLE_FEATURE_DEMO)
