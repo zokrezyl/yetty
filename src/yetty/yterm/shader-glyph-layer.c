@@ -1,4 +1,4 @@
-#include <dirent.h>
+#include <yetty/yplatform/compat.h>  /* dirent on POSIX, Win32 shim on MSVC */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

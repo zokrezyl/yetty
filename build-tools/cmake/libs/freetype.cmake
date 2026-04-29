@@ -27,20 +27,19 @@ if(TARGET freetype)
     return()
 endif()
 
-if(WIN32)
-    message(FATAL_ERROR
-        "freetype: no windows-x86_64 tarball is published yet — yetty.exe is \
-being switched to native MSVC and the freetype MSVC build path will land \
-together with that work (see the windows-libs-msvc branch).")
-endif()
-
 # zlib resolves first — freetype.a has unresolved zlib symbols.
 include(${CMAKE_CURRENT_LIST_DIR}/zlib.cmake)
 
 yetty_3rdparty_fetch(freetype _FREETYPE_DIR)
 
-if(NOT EXISTS "${_FREETYPE_DIR}/lib/libfreetype.a")
-    message(FATAL_ERROR "freetype: libfreetype.a not found in ${_FREETYPE_DIR}/lib/ — tarball layout changed?")
+if(WIN32)
+    set(_FREETYPE_LIB "${_FREETYPE_DIR}/lib/freetype.lib")
+else()
+    set(_FREETYPE_LIB "${_FREETYPE_DIR}/lib/libfreetype.a")
+endif()
+
+if(NOT EXISTS "${_FREETYPE_LIB}")
+    message(FATAL_ERROR "freetype: archive not found at ${_FREETYPE_LIB} — tarball layout changed?")
 endif()
 
 # Upstream installs to include/freetype2/, but we ship include/ flat.
@@ -52,7 +51,7 @@ endif()
 
 add_library(freetype STATIC IMPORTED GLOBAL)
 set_target_properties(freetype PROPERTIES
-    IMPORTED_LOCATION "${_FREETYPE_DIR}/lib/libfreetype.a"
+    IMPORTED_LOCATION "${_FREETYPE_LIB}"
     INTERFACE_INCLUDE_DIRECTORIES "${_FREETYPE_INC}"
     INTERFACE_LINK_LIBRARIES "ZLIB::ZLIB"
 )
@@ -66,9 +65,9 @@ set_target_properties(freetype PROPERTIES
 # system find_package set may not include the active config.
 if(TARGET Freetype::Freetype)
     set_target_properties(Freetype::Freetype PROPERTIES
-        IMPORTED_LOCATION         "${_FREETYPE_DIR}/lib/libfreetype.a"
-        IMPORTED_LOCATION_RELEASE "${_FREETYPE_DIR}/lib/libfreetype.a"
-        IMPORTED_LOCATION_DEBUG   "${_FREETYPE_DIR}/lib/libfreetype.a"
+        IMPORTED_LOCATION         "${_FREETYPE_LIB}"
+        IMPORTED_LOCATION_RELEASE "${_FREETYPE_LIB}"
+        IMPORTED_LOCATION_DEBUG   "${_FREETYPE_LIB}"
         INTERFACE_INCLUDE_DIRECTORIES "${_FREETYPE_INC}"
         INTERFACE_LINK_LIBRARIES  "ZLIB::ZLIB"
     )
@@ -76,9 +75,9 @@ else()
     add_library(Freetype::Freetype ALIAS freetype)
 endif()
 
-set(FREETYPE_INCLUDE_DIR "${_FREETYPE_INC}"                    CACHE INTERNAL "")
-set(FREETYPE_LIBRARY     "${_FREETYPE_DIR}/lib/libfreetype.a"  CACHE INTERNAL "")
-set(FREETYPE_FOUND       TRUE                                  CACHE BOOL    "" FORCE)
+set(FREETYPE_INCLUDE_DIR "${_FREETYPE_INC}"  CACHE INTERNAL "")
+set(FREETYPE_LIBRARY     "${_FREETYPE_LIB}"  CACHE INTERNAL "")
+set(FREETYPE_FOUND       TRUE                CACHE BOOL    "" FORCE)
 
 # Bundle var that downstream code (yetty cmake targets) reads — a
 # sane link order for a final executable that uses freetype.
@@ -95,4 +94,4 @@ set(FREETYPE_ALL_LIBS
     CACHE INTERNAL "All FreeType static libs in link order"
 )
 
-message(STATUS "freetype: prebuilt v${YETTY_3RDPARTY_freetype_VERSION} (${_FREETYPE_DIR}/lib/libfreetype.a)")
+message(STATUS "freetype: prebuilt v${YETTY_3RDPARTY_freetype_VERSION} (${_FREETYPE_LIB})")

@@ -18,7 +18,9 @@
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yfont/raster-font.h>
+#if YETTY_HAS_YMSDF_GEN
 #include <yetty/ymsdf-gen/ymsdf-gen.h>
+#endif
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/yconfig.h>
 #include <yetty/yetty.h>
@@ -532,6 +534,7 @@ static struct yetty_font_font_result ypaint_canvas_materialize_blob_font(
     }
 
     if (!yplatform_file_exists(cdb_path)) {
+#if YETTY_HAS_YMSDF_GEN
         struct yetty_ymsdf_gen_config gen = {0};
         gen.ttf_path = ttf_path;
         gen.output_dir = fonts_dir;
@@ -545,6 +548,12 @@ static struct yetty_font_font_result ypaint_canvas_materialize_blob_font(
             return YETTY_ERR(yetty_font_font, gr.error.msg);
         }
         ydebug("ypaint_canvas: generated CDB '%s'", cdb_path);
+#else
+        yerror("ypaint_canvas: CDB '%s' missing and ymsdf-gen disabled at "
+               "build time — pre-bake the CDB or rebuild with "
+               "YETTY_ENABLE_FEATURE_YMSDF_GEN=ON.", cdb_path);
+        return YETTY_ERR(yetty_font_font, "ymsdf-gen disabled");
+#endif
     }
 
     snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl", canvas->shaders_dir);

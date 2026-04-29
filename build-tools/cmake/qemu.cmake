@@ -200,20 +200,39 @@ function(qemu_embed_runtime TARGET)
     set(_STAGING "${CMAKE_BINARY_DIR}/incbin-qemu")
     file(MAKE_DIRECTORY "${_STAGING}")
 
-    # Source: prefer the prebuilt 3rdparty fetch; fall back to the
-    # legacy from-source QEMU_OUTPUT_DIR if a developer kept that path.
-    if(DEFINED YETTY_3RDPARTY_qemu_DIR AND IS_DIRECTORY "${YETTY_3RDPARTY_qemu_DIR}")
-        set(_BIN "${YETTY_3RDPARTY_qemu_DIR}/qemu-system-riscv64")
-    elseif(DEFINED QEMU_OUTPUT_DIR)
-        set(_BIN "${QEMU_OUTPUT_DIR}/qemu-system-riscv64")
+    # Pick binary name. Windows ships qemu-system-riscv64.exe alongside a set
+    # of MSVC/MSYS2 runtime DLLs; other targets ship just the bare ELF/Mach-O
+    # binary.
+    if(WIN32)
+        set(_BIN_NAME "qemu-system-riscv64.exe")
     else()
-        set(_BIN "")
+        set(_BIN_NAME "qemu-system-riscv64")
     endif()
 
-    if(_BIN AND EXISTS "${_BIN}")
+    # Source: prefer the prebuilt 3rdparty fetch; fall back to the
+    # legacy from-source QEMU_OUTPUT_DIR if a developer kept that path.
+    set(_SRC_DIR "")
+    if(DEFINED YETTY_3RDPARTY_qemu_DIR AND IS_DIRECTORY "${YETTY_3RDPARTY_qemu_DIR}")
+        set(_SRC_DIR "${YETTY_3RDPARTY_qemu_DIR}")
+    elseif(DEFINED QEMU_OUTPUT_DIR AND IS_DIRECTORY "${QEMU_OUTPUT_DIR}")
+        set(_SRC_DIR "${QEMU_OUTPUT_DIR}")
+    endif()
+
+    set(_BIN "${_SRC_DIR}/${_BIN_NAME}")
+    if(_SRC_DIR AND EXISTS "${_BIN}")
         file(COPY "${_BIN}" DESTINATION "${_STAGING}")
+        # On Windows, also stage the runtime DLLs the .exe needs (glib,
+        # iconv, pcre, pixman, zlib, winpthread, libc++, ...). The tarball
+        # ships them alongside the .exe; everything in the source dir except
+        # the binary itself + cmake's fetch stamp gets copied.
+        if(WIN32)
+            file(GLOB _QEMU_DLLS "${_SRC_DIR}/*.dll")
+            if(_QEMU_DLLS)
+                file(COPY ${_QEMU_DLLS} DESTINATION "${_STAGING}")
+            endif()
+        endif()
     else()
-        message(WARNING "qemu_embed_runtime: qemu-system-riscv64 not found at '${_BIN}'; QEMU will be embedded empty")
+        message(WARNING "qemu_embed_runtime: ${_BIN_NAME} not found at '${_BIN}'; QEMU will be embedded empty")
     endif()
 
     # Not compressed — it's an executable, runtime extracts and chmods it

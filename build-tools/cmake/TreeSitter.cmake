@@ -19,8 +19,17 @@ endif()
 
 yetty_3rdparty_fetch(tree-sitter _TS_DIR)
 
+# MSVC tarball ships <name>.lib (no lib prefix); unix ships lib<name>.a.
+if(WIN32)
+    set(_TS_LIB_PREFIX "")
+    set(_TS_LIB_SUFFIX ".lib")
+else()
+    set(_TS_LIB_PREFIX "lib")
+    set(_TS_LIB_SUFFIX ".a")
+endif()
+
 # Core
-set(_TS_CORE_LIB "${_TS_DIR}/lib/libtree-sitter-core.a")
+set(_TS_CORE_LIB "${_TS_DIR}/lib/${_TS_LIB_PREFIX}tree-sitter-core${_TS_LIB_SUFFIX}")
 if(NOT EXISTS "${_TS_CORE_LIB}")
     message(FATAL_ERROR
         "tree-sitter: prebuilt core lib not found: ${_TS_CORE_LIB} — \
@@ -38,7 +47,7 @@ set(_TS_GRAMMARS
     yaml toml html xml markdown)
 
 foreach(_g ${_TS_GRAMMARS})
-    set(_lib "${_TS_DIR}/lib/libts-grammar-${_g}.a")
+    set(_lib "${_TS_DIR}/lib/${_TS_LIB_PREFIX}ts-grammar-${_g}${_TS_LIB_SUFFIX}")
     if(NOT EXISTS "${_lib}")
         message(FATAL_ERROR
             "tree-sitter: grammar lib not found: ${_lib} — \

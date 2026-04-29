@@ -386,11 +386,13 @@ static void telnet_on_connect(void *ctx, struct yetty_tcp_conn *conn)
 
     yinfo("telnet: connected to %s:%u", pty->host, pty->port);
 
-    /* Proactively offer WILL NAWS. Real telnet servers reply DO NAWS,
-     * we then send proper subnegotiations. QEMU's telnet chardev does NOT
-     * respond — naws_enabled stays 0 and the NAWS-fallback timer below
-     * injects an `stty cols X rows Y` after the boot grace period. */
-    telnet_send_cmd(pty, TELNET_WILL, TELOPT_NAWS);
+    /* Originally we proactively offered WILL NAWS here. We've dropped that
+     * because the qemu chardev is now a *raw* TCP socket (telnet=on
+     * segfaults in our MSYS2 CLANG64 build of QEMU 11.0.0-rc4). On a raw
+     * socket, the IAC bytes don't get parsed off — they arrive at the
+     * guest's virtio-console as input garbage. The NAWS-fallback timer
+     * below injects `stty cols X rows Y` after the boot grace period,
+     * which is what actually configures the guest tty. */
 
     /* Arm the one-shot fallback timer. config_timer + start_timer set up
      * a periodic timer; the handler stops it after the first fire. */

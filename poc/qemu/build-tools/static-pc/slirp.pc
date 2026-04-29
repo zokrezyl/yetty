@@ -1,0 +1,10 @@
+prefix=C:/msys64/clang64
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: slirp
+Description: User-space network stack (static overlay for QEMU on MSYS2 CLANG64)
+Version: 4.9.1
+Requires: glib-2.0
+Libs: ${libdir}/libslirp.a -liconv -liphlpapi -lws2_32
+Cflags: -I${includedir}/slirp -DLIBSLIRP_STATIC

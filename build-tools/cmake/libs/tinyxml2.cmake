@@ -11,25 +11,24 @@ if(TARGET tinyxml2::tinyxml2)
     return()
 endif()
 
-if(WIN32)
-    message(FATAL_ERROR
-        "tinyxml2: no windows-x86_64 tarball is published yet — yetty.exe is \
-being switched to native MSVC and the tinyxml2 MSVC build path will land \
-together with that work (see the windows-libs-msvc branch).")
-endif()
-
 yetty_3rdparty_fetch(tinyxml2 _TINYXML2_DIR)
 
-if(NOT EXISTS "${_TINYXML2_DIR}/lib/libtinyxml2.a")
+if(WIN32)
+    set(_TINYXML2_LIB "${_TINYXML2_DIR}/lib/tinyxml2.lib")
+else()
+    set(_TINYXML2_LIB "${_TINYXML2_DIR}/lib/libtinyxml2.a")
+endif()
+
+if(NOT EXISTS "${_TINYXML2_LIB}")
     message(FATAL_ERROR
-        "tinyxml2: libtinyxml2.a not found in ${_TINYXML2_DIR}/lib/ — tarball layout changed?")
+        "tinyxml2: archive not found at ${_TINYXML2_LIB} — tarball layout changed?")
 endif()
 
 add_library(tinyxml2 STATIC IMPORTED GLOBAL)
 set_target_properties(tinyxml2 PROPERTIES
-    IMPORTED_LOCATION "${_TINYXML2_DIR}/lib/libtinyxml2.a"
+    IMPORTED_LOCATION "${_TINYXML2_LIB}"
     INTERFACE_INCLUDE_DIRECTORIES "${_TINYXML2_DIR}/include"
 )
 add_library(tinyxml2::tinyxml2 ALIAS tinyxml2)
 
-message(STATUS "tinyxml2: prebuilt v${YETTY_3RDPARTY_tinyxml2_VERSION} (${_TINYXML2_DIR}/lib/libtinyxml2.a)")
+message(STATUS "tinyxml2: prebuilt v${YETTY_3RDPARTY_tinyxml2_VERSION} (${_TINYXML2_LIB})")

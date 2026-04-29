@@ -15,25 +15,24 @@ if(TARGET png_static)
     return()
 endif()
 
-if(WIN32)
-    message(FATAL_ERROR
-        "libpng: no windows-x86_64 tarball is published yet — yetty.exe is \
-being switched to native MSVC and the libpng MSVC build path will land \
-together with that work (see the windows-libs-msvc branch).")
-endif()
-
 # zlib must resolve before us — png_static carries unresolved zlib refs.
 include(${CMAKE_CURRENT_LIST_DIR}/zlib.cmake)
 
 yetty_3rdparty_fetch(libpng _LIBPNG_DIR)
 
-if(NOT EXISTS "${_LIBPNG_DIR}/lib/libpng.a")
-    message(FATAL_ERROR "libpng: libpng.a not found in ${_LIBPNG_DIR}/lib/ — tarball layout changed?")
+if(WIN32)
+    set(_LIBPNG_LIB "${_LIBPNG_DIR}/lib/libpng16_static.lib")
+else()
+    set(_LIBPNG_LIB "${_LIBPNG_DIR}/lib/libpng.a")
+endif()
+
+if(NOT EXISTS "${_LIBPNG_LIB}")
+    message(FATAL_ERROR "libpng: archive not found at ${_LIBPNG_LIB} — tarball layout changed?")
 endif()
 
 add_library(png_static STATIC IMPORTED GLOBAL)
 set_target_properties(png_static PROPERTIES
-    IMPORTED_LOCATION "${_LIBPNG_DIR}/lib/libpng.a"
+    IMPORTED_LOCATION "${_LIBPNG_LIB}"
     INTERFACE_INCLUDE_DIRECTORIES "${_LIBPNG_DIR}/include"
     INTERFACE_LINK_LIBRARIES "ZLIB::ZLIB"
 )
@@ -44,4 +43,4 @@ set(PNG_PNG_INCLUDE_DIR "${_LIBPNG_DIR}/include"     CACHE PATH    "" FORCE)
 set(PNG_LIBRARY        png_static                    CACHE STRING  "" FORCE)
 set(PNG_LIBRARIES      png_static                    CACHE STRING  "" FORCE)
 
-message(STATUS "libpng: prebuilt v${YETTY_3RDPARTY_libpng_VERSION} (${_LIBPNG_DIR}/lib/libpng.a)")
+message(STATUS "libpng: prebuilt v${YETTY_3RDPARTY_libpng_VERSION} (${_LIBPNG_LIB})")

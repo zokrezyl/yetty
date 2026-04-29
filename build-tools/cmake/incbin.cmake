@@ -284,9 +284,8 @@ function(incbin_add_directory TARGET PREFIX DIR)
                 set(_PRECOMPRESSED TRUE)
                 string(REGEX REPLACE "\\.br$" "" REL_PATH "${REL_PATH}")
             endif()
-            string(REPLACE "/" "_" SAFE_NAME "${REL_PATH}")
-            string(REPLACE "." "_" SAFE_NAME "${SAFE_NAME}")
-            string(REPLACE "-" "_" SAFE_NAME "${SAFE_NAME}")
+            # Sanitize REL_PATH into a valid C identifier (handles /, ., -, +, etc.)
+            string(MAKE_C_IDENTIFIER "${REL_PATH}" SAFE_NAME)
             set(SYMBOL_NAME "${PREFIX_SAFE}_${SAFE_NAME}")
             set(ASSET_NAME "${PREFIX}/${REL_PATH}")
             if(_PRECOMPRESSED)
@@ -318,9 +317,8 @@ const unsigned int g${SYMBOL_NAME}Size = 0;
                 set(_PRECOMPRESSED TRUE)
                 string(REGEX REPLACE "\\.br$" "" REL_PATH "${REL_PATH}")
             endif()
-            string(REPLACE "/" "_" SAFE_NAME "${REL_PATH}")
-            string(REPLACE "." "_" SAFE_NAME "${SAFE_NAME}")
-            string(REPLACE "-" "_" SAFE_NAME "${SAFE_NAME}")
+            # Sanitize REL_PATH into a valid C identifier (handles /, ., -, +, etc.)
+            string(MAKE_C_IDENTIFIER "${REL_PATH}" SAFE_NAME)
             set(SYMBOL_NAME "${PREFIX_SAFE}_${SAFE_NAME}")
             set(ASSET_NAME "${PREFIX}/${REL_PATH}")
 
@@ -368,9 +366,8 @@ extern \"C\" {
             # Match the .br stripping done in the matching INCBIN loop
             # above so the symbol names line up.
             string(REGEX REPLACE "\\.br$" "" REL_PATH "${REL_PATH}")
-            string(REPLACE "/" "_" SAFE_NAME "${REL_PATH}")
-            string(REPLACE "." "_" SAFE_NAME "${SAFE_NAME}")
-            string(REPLACE "-" "_" SAFE_NAME "${SAFE_NAME}")
+            # Sanitize REL_PATH into a valid C identifier (handles /, ., -, +, etc.)
+            string(MAKE_C_IDENTIFIER "${REL_PATH}" SAFE_NAME)
             set(SYMBOL_NAME "${PREFIX_SAFE}_${SAFE_NAME}")
             file(APPEND ${RESOURCE_SOURCE}
 "extern const unsigned char g${SYMBOL_NAME}Data[];
@@ -401,9 +398,8 @@ extern const unsigned int g${SYMBOL_NAME}Size;
                 set(_PRECOMPRESSED TRUE)
                 string(REGEX REPLACE "\\.br$" "" REL_PATH "${REL_PATH}")
             endif()
-            string(REPLACE "/" "_" SAFE_NAME "${REL_PATH}")
-            string(REPLACE "." "_" SAFE_NAME "${SAFE_NAME}")
-            string(REPLACE "-" "_" SAFE_NAME "${SAFE_NAME}")
+            # Sanitize REL_PATH into a valid C identifier (handles /, ., -, +, etc.)
+            string(MAKE_C_IDENTIFIER "${REL_PATH}" SAFE_NAME)
             set(SYMBOL_NAME "${PREFIX_SAFE}_${SAFE_NAME}")
             set(ASSET_NAME "${PREFIX}/${REL_PATH}")
 

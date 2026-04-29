@@ -14,35 +14,38 @@ if(TARGET brotlidec)
     return()
 endif()
 
-if(WIN32)
-    message(FATAL_ERROR
-        "brotli: no windows-x86_64 tarball is published yet — yetty.exe is \
-being switched to native MSVC and the brotli MSVC build path will land \
-together with that work (see the windows-libs-msvc branch).")
-endif()
-
 yetty_3rdparty_fetch(brotli _BROTLI_DIR)
 
-foreach(_LIB libbrotlicommon.a libbrotlidec.a libbrotlienc.a)
-    if(NOT EXISTS "${_BROTLI_DIR}/lib/${_LIB}")
-        message(FATAL_ERROR "brotli: ${_LIB} not found in ${_BROTLI_DIR}/lib/ — tarball layout changed?")
+if(WIN32)
+    set(_BROTLI_COMMON "${_BROTLI_DIR}/lib/brotlicommon.lib")
+    set(_BROTLI_DEC    "${_BROTLI_DIR}/lib/brotlidec.lib")
+    set(_BROTLI_ENC    "${_BROTLI_DIR}/lib/brotlienc.lib")
+else()
+    set(_BROTLI_COMMON "${_BROTLI_DIR}/lib/libbrotlicommon.a")
+    set(_BROTLI_DEC    "${_BROTLI_DIR}/lib/libbrotlidec.a")
+    set(_BROTLI_ENC    "${_BROTLI_DIR}/lib/libbrotlienc.a")
+endif()
+
+foreach(_LIB "${_BROTLI_COMMON}" "${_BROTLI_DEC}" "${_BROTLI_ENC}")
+    if(NOT EXISTS "${_LIB}")
+        message(FATAL_ERROR "brotli: archive not found at ${_LIB} — tarball layout changed?")
     endif()
 endforeach()
 
 add_library(brotlicommon STATIC IMPORTED GLOBAL)
 set_target_properties(brotlicommon PROPERTIES
-    IMPORTED_LOCATION "${_BROTLI_DIR}/lib/libbrotlicommon.a"
+    IMPORTED_LOCATION "${_BROTLI_COMMON}"
     INTERFACE_INCLUDE_DIRECTORIES "${_BROTLI_DIR}/include"
 )
 add_library(brotlidec STATIC IMPORTED GLOBAL)
 set_target_properties(brotlidec PROPERTIES
-    IMPORTED_LOCATION "${_BROTLI_DIR}/lib/libbrotlidec.a"
+    IMPORTED_LOCATION "${_BROTLI_DEC}"
     INTERFACE_INCLUDE_DIRECTORIES "${_BROTLI_DIR}/include"
     INTERFACE_LINK_LIBRARIES "brotlicommon"
 )
 add_library(brotlienc STATIC IMPORTED GLOBAL)
 set_target_properties(brotlienc PROPERTIES
-    IMPORTED_LOCATION "${_BROTLI_DIR}/lib/libbrotlienc.a"
+    IMPORTED_LOCATION "${_BROTLI_ENC}"
     INTERFACE_INCLUDE_DIRECTORIES "${_BROTLI_DIR}/include"
     INTERFACE_LINK_LIBRARIES "brotlicommon"
 )

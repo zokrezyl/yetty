@@ -23,17 +23,16 @@ if(TARGET imgui)
     return()
 endif()
 
-if(WIN32)
-    message(FATAL_ERROR
-        "imgui: no windows-x86_64 tarball is published yet — yetty.exe is \
-being switched to native MSVC and the imgui MSVC build path will land \
-together with that work (see the windows-libs-msvc branch).")
-endif()
-
 yetty_3rdparty_fetch(imgui _IMGUI_DIR)
 
-if(NOT EXISTS "${_IMGUI_DIR}/lib/libimgui_core.a")
-    message(FATAL_ERROR "imgui: libimgui_core.a not found in ${_IMGUI_DIR}/lib/ — tarball layout changed?")
+if(WIN32)
+    set(_IMGUI_LIB "${_IMGUI_DIR}/lib/libimgui_core.lib")
+else()
+    set(_IMGUI_LIB "${_IMGUI_DIR}/lib/libimgui_core.a")
+endif()
+
+if(NOT EXISTS "${_IMGUI_LIB}")
+    message(FATAL_ERROR "imgui: archive not found at ${_IMGUI_LIB} — tarball layout changed?")
 endif()
 
 #-----------------------------------------------------------------------------
@@ -41,7 +40,7 @@ endif()
 #-----------------------------------------------------------------------------
 add_library(imgui_core STATIC IMPORTED GLOBAL)
 set_target_properties(imgui_core PROPERTIES
-    IMPORTED_LOCATION "${_IMGUI_DIR}/lib/libimgui_core.a"
+    IMPORTED_LOCATION "${_IMGUI_LIB}"
     INTERFACE_INCLUDE_DIRECTORIES "${_IMGUI_DIR}/include"
 )
 
@@ -128,6 +127,10 @@ else()
             "${_IMGUI_DIR}/src-backends/imgui_impl_wgpu.cpp"
             PROPERTIES COMPILE_FLAGS "-x objective-c++"
         )
+    elseif(WIN32)
+        # No X11 on Windows; glfw's INTERFACE_LINK_LIBRARIES already pulls in
+        # the Win32 GDI/USER bits the platform backend needs.
+        target_link_libraries(imgui PUBLIC glfw webgpu)
     else()
         find_package(X11 REQUIRED)
         target_link_libraries(imgui PUBLIC glfw webgpu X11::X11)

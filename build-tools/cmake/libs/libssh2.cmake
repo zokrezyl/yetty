@@ -23,13 +23,6 @@ if(TARGET libssh2_static)
     return()
 endif()
 
-if(WIN32)
-    message(FATAL_ERROR
-        "libssh2: no windows-x86_64 tarball is published yet — yetty.exe is \
-being switched to native MSVC and the libssh2 MSVC build path will land \
-together with that work (see the windows-libs-msvc branch).")
-endif()
-
 # openssl must be resolved before us — the prebuilt libssh2 archive
 # carries unresolved openssl symbols that yetty links via OpenSSL::SSL /
 # OpenSSL::Crypto.
@@ -37,11 +30,15 @@ include(${YETTY_ROOT}/build-tools/cmake/openssl.cmake)
 
 yetty_3rdparty_fetch(libssh2 _LIBSSH2_DIR)
 
-if(EXISTS "${_LIBSSH2_DIR}/lib/libssh2.a")
-    set(_LIBSSH2_LIB "${_LIBSSH2_DIR}/lib/libssh2.a")
+if(WIN32)
+    set(_LIBSSH2_LIB "${_LIBSSH2_DIR}/lib/libssh2.lib")
 else()
+    set(_LIBSSH2_LIB "${_LIBSSH2_DIR}/lib/libssh2.a")
+endif()
+
+if(NOT EXISTS "${_LIBSSH2_LIB}")
     message(FATAL_ERROR
-        "libssh2: no static lib found in ${_LIBSSH2_DIR}/lib/ — \
+        "libssh2: archive not found at ${_LIBSSH2_LIB} — \
 tarball layout changed? (check build-tools/3rdparty/libssh2/_build.sh)")
 endif()
 if(NOT EXISTS "${_LIBSSH2_DIR}/include/libssh2.h")

@@ -729,6 +729,34 @@ import sys
 sys.exit(0)
 PYEOF
 
+    # Static-link libslirp on Windows: the system mingw libslirp ships both
+    # libslirp.a and libslirp.dll.a, and lld picks the import lib by default.
+    # An overlay slirp.pc points pkg-config at the .a, lists slirp's private
+    # deps (-liconv -liphlpapi -lws2_32) in Libs, and adds -DLIBSLIRP_STATIC
+    # to Cflags so the headers don't emit __declspec(dllimport). Result:
+    # libslirp folded into qemu-system-riscv64.exe — no libslirp-0.dll to
+    # bundle next to it.
+    #
+    # The prefix is baked as an absolute Windows path via cygpath because
+    # pkgconf only auto-rewrites ${prefix} when the .pc file lives under
+    # <prefix>/lib/pkgconfig/, which our overlay doesn't.
+    _STATICPC_DIR="$WORK_DIR/static-pc-${TARGET_PLATFORM}"
+    _CLANG64_WIN="$(cygpath -m /clang64)"
+    mkdir -p "$_STATICPC_DIR"
+    cat > "$_STATICPC_DIR/slirp.pc" <<PCEOF
+prefix=$_CLANG64_WIN
+libdir=\${prefix}/lib
+includedir=\${prefix}/include
+
+Name: slirp
+Description: User-space network stack (static overlay for QEMU on MSYS2 CLANG64)
+Version: 4.9.1
+Requires: glib-2.0
+Libs: \${libdir}/libslirp.a -liconv -liphlpapi -lws2_32
+Cflags: -I\${includedir}/slirp -DLIBSLIRP_STATIC
+PCEOF
+    export PKG_CONFIG_PATH="$_STATICPC_DIR:${PKG_CONFIG_PATH:-}"
+
     _CONFIGURE_ARGS+=(
         --cc=clang
         --cxx=clang++
@@ -798,15 +826,13 @@ OUT_NAME="${_QEMU_OUTPUT_NAME:-$_QEMU_BINARY_NAME}"
 cp "$BUILT" "$STAGE/$OUT_NAME"
 
 # Windows: bundle every non-system DLL the .exe links against. Without
-# these the binary won't start outside an MSYS2 CLANG64 shell. The
-# -Dslirp:default_library=static option only affects QEMU's bundled
-# subproject — we use the system mingw libslirp so it stays dynamic and
-# its DLL has to ship too.
+# these the binary won't start outside an MSYS2 CLANG64 shell. libslirp is
+# now folded into the .exe via the static overlay above, so its DLL is no
+# longer staged.
 if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
     _CLANG64_BIN="/clang64/bin"
     for _dll in libglib-2.0-0.dll libintl-8.dll libiconv-2.dll \
                 libpcre2-8-0.dll libpixman-1-0.dll zlib1.dll \
-                libslirp-0.dll \
                 libwinpthread-1.dll libc++.dll libunwind.dll; do
         if [ -f "$_CLANG64_BIN/$_dll" ]; then
             cp "$_CLANG64_BIN/$_dll" "$STAGE/"

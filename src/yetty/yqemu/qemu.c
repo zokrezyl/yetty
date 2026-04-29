@@ -102,8 +102,28 @@ static void qemu_settings_ensure_default(const char *path)
 
 yprocess_t *qemu_start(uint16_t port)
 {
-    const char *data_dir = yetty_yplatform_get_data_dir();
-    const char *config_dir = yetty_yplatform_get_config_dir();
+    const char *raw_data_dir = yetty_yplatform_get_data_dir();
+    const char *raw_config_dir = yetty_yplatform_get_config_dir();
+
+#ifdef _WIN32
+    /* Normalize path separators to forward slashes. QEMU's option parsers
+     * (-drive, -chardev, -fsdev, ...) use comma-separated `key=value` lists
+     * where backslash is the escape character. Paths like
+     * `file=C:\Users\foo\...` get mangled because `\U`, `\f`, etc. become
+     * escape sequences. We use forward slashes throughout — Windows file
+     * APIs accept them, and qemu's parsers are happy. */
+    static char data_dir_buf[512];
+    static char config_dir_buf[512];
+    snprintf(data_dir_buf, sizeof(data_dir_buf), "%s", raw_data_dir);
+    snprintf(config_dir_buf, sizeof(config_dir_buf), "%s", raw_config_dir);
+    for (char *p = data_dir_buf; *p; p++) if (*p == '\\') *p = '/';
+    for (char *p = config_dir_buf; *p; p++) if (*p == '\\') *p = '/';
+    const char *data_dir = data_dir_buf;
+    const char *config_dir = config_dir_buf;
+#else
+    const char *data_dir = raw_data_dir;
+    const char *config_dir = raw_config_dir;
+#endif
     char qemu_bin[512];
     char bios_path[512];
     char kernel_path[512];
@@ -185,8 +205,14 @@ yprocess_t *qemu_start(uint16_t port)
         return YPROCESS_INVALID;
     }
 
+    /* Plain TCP socket — no `telnet=on`. The QEMU 11.0.0-rc4 build under
+     * MSYS2 CLANG64 segfaults inside the telnet chardev IAC parser shortly
+     * after a client connects, so we use a raw socket and let yetty's
+     * telnet_pty stream bytes as data. yetty doesn't send IAC negotiation
+     * proactively (see ytelnet/telnet-pty.c::telnet_on_connect), so the
+     * guest's virtio-console sees only data — no garbage input. */
     snprintf(chardev_arg, sizeof(chardev_arg),
-             "socket,id=char0,host=127.0.0.1,port=%u,server=on,wait=off,telnet=on", port);
+             "socket,id=char0,host=127.0.0.1,port=%u,server=on,wait=off", port);
 
     if (settings.extra_append[0]) {
         snprintf(append_arg, sizeof(append_arg),
@@ -222,10 +248,18 @@ yprocess_t *qemu_start(uint16_t port)
         drive_arg,
         "-device",
         "virtio-blk-device,drive=hd0",
+#ifndef _WIN32
+        /* virtfs/9p is disabled on the Windows minimal qemu build
+         * (--without-default-features in build-tools/3rdparty/qemu/_build.sh —
+         * QEMU's virtfs needs POSIX 9p machinery + xattr that don't exist on
+         * Windows). Passing -fsdev there makes qemu exit immediately with
+         * "fsdev support is disabled". Skip the host-share mount on Windows;
+         * the guest still gets virtio-blk + virtio-net + virtio-console. */
         "-fsdev",
         fsdev_arg,
         "-device",
         "virtio-9p-device,fsdev=fsdev0,mount_tag=hostshare",
+#endif
         "-netdev",
         "user,id=net0",
         "-device",
@@ -240,6 +274,11 @@ yprocess_t *qemu_start(uint16_t port)
         "none",
         "-display",
         "none",
+        /* -no-reboot + -no-shutdown so a guest kernel panic doesn't take
+         * the qemu process down silently — keep the chardev open so yetty
+         * sees the panic message instead of a blank disconnect. */
+        "-no-reboot",
+        "-no-shutdown",
         NULL,
     };
 

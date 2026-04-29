@@ -16,35 +16,36 @@ if(TARGET msdfgen::msdfgen-core)
     return()
 endif()
 
-if(WIN32)
-    message(FATAL_ERROR
-        "msdfgen: no windows-x86_64 tarball is published yet — yetty.exe is \
-being switched to native MSVC and the msdfgen MSVC build path will land \
-together with that work (see the windows-libs-msvc branch).")
-endif()
-
 # Pull in deps — msdfgen-ext links freetype + tinyxml2.
 include(${CMAKE_CURRENT_LIST_DIR}/tinyxml2.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/freetype.cmake)
 
 yetty_3rdparty_fetch(msdfgen _MSDFGEN_DIR)
 
-if(NOT EXISTS "${_MSDFGEN_DIR}/lib/libmsdfgen-core.a")
-    message(FATAL_ERROR "msdfgen: libmsdfgen-core.a not found in ${_MSDFGEN_DIR}/lib/ — tarball layout changed?")
+if(WIN32)
+    set(_MSDFGEN_CORE_LIB "${_MSDFGEN_DIR}/lib/msdfgen-core.lib")
+    set(_MSDFGEN_EXT_LIB  "${_MSDFGEN_DIR}/lib/msdfgen-ext.lib")
+else()
+    set(_MSDFGEN_CORE_LIB "${_MSDFGEN_DIR}/lib/libmsdfgen-core.a")
+    set(_MSDFGEN_EXT_LIB  "${_MSDFGEN_DIR}/lib/libmsdfgen-ext.a")
+endif()
+
+if(NOT EXISTS "${_MSDFGEN_CORE_LIB}")
+    message(FATAL_ERROR "msdfgen: archive not found at ${_MSDFGEN_CORE_LIB} — tarball layout changed?")
 endif()
 
 add_library(msdfgen-core STATIC IMPORTED GLOBAL)
 set_target_properties(msdfgen-core PROPERTIES
-    IMPORTED_LOCATION "${_MSDFGEN_DIR}/lib/libmsdfgen-core.a"
+    IMPORTED_LOCATION "${_MSDFGEN_CORE_LIB}"
     INTERFACE_INCLUDE_DIRECTORIES "${_MSDFGEN_DIR}/include"
     INTERFACE_COMPILE_DEFINITIONS "MSDFGEN_PUBLIC=;MSDFGEN_USE_CPP11"
 )
 add_library(msdfgen::msdfgen-core ALIAS msdfgen-core)
 
-if(EXISTS "${_MSDFGEN_DIR}/lib/libmsdfgen-ext.a")
+if(EXISTS "${_MSDFGEN_EXT_LIB}")
     add_library(msdfgen-ext STATIC IMPORTED GLOBAL)
     set_target_properties(msdfgen-ext PROPERTIES
-        IMPORTED_LOCATION "${_MSDFGEN_DIR}/lib/libmsdfgen-ext.a"
+        IMPORTED_LOCATION "${_MSDFGEN_EXT_LIB}"
         INTERFACE_INCLUDE_DIRECTORIES "${_MSDFGEN_DIR}/include"
         INTERFACE_COMPILE_DEFINITIONS "MSDFGEN_EXT_PUBLIC=;MSDFGEN_EXTENSIONS;MSDFGEN_USE_TINYXML2;MSDFGEN_DISABLE_PNG"
         INTERFACE_LINK_LIBRARIES "msdfgen-core;Freetype::Freetype;tinyxml2::tinyxml2"

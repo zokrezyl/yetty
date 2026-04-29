@@ -10,6 +10,14 @@
 #include <string.h>
 #include <sys/stat.h>
 
+/* MSVC <sys/stat.h> doesn't define POSIX S_ISDIR / S_ISREG. */
+#if defined(_MSC_VER) && !defined(S_ISDIR)
+# define S_ISDIR(m) (((m) & _S_IFMT) == _S_IFDIR)
+#endif
+#if defined(_MSC_VER) && !defined(S_ISREG)
+# define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
+#endif
+
 #ifndef YETTY_BUILD_VERSION
 #define YETTY_BUILD_VERSION "dev"
 #endif

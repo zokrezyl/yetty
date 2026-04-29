@@ -84,6 +84,31 @@ mkdir -p "$QEMUSRC/configs/devices/riscv64-softmmu"
 cp "$SCRIPTDIR/../configs/riscv64-softmmu/default.mak" \
    "$QEMUSRC/configs/devices/riscv64-softmmu/"
 
+# -- 3b. Generate static-link slirp.pc overlay -------------------------------
+# Override the system slirp.pc so pkg-config hands meson the static archive
+# (libslirp.a) plus its private deps (-liconv -liphlpapi -lws2_32) and defines
+# LIBSLIRP_STATIC so the libslirp headers don't emit __declspec(dllimport).
+# Result: qemu-system-riscv64.exe with no libslirp-0.dll runtime dependency.
+#
+# We bake the absolute Windows prefix in (via cygpath) instead of /clang64,
+# because pkgconf's auto prefix-rewrite only fires when the .pc file lives
+# under <prefix>/lib/pkgconfig/, which our overlay doesn't.
+STATICPC_DIR="$SCRIPTDIR/static-pc"
+CLANG64_WINPATH="$(cygpath -m "$MSYS2_ROOT/clang64")"
+mkdir -p "$STATICPC_DIR"
+cat > "$STATICPC_DIR/slirp.pc" <<PCEOF
+prefix=$CLANG64_WINPATH
+libdir=\${prefix}/lib
+includedir=\${prefix}/include
+
+Name: slirp
+Description: User-space network stack (static overlay for QEMU on MSYS2 CLANG64)
+Version: 4.9.1
+Requires: glib-2.0
+Libs: \${libdir}/libslirp.a -liconv -liphlpapi -lws2_32
+Cflags: -I\${includedir}/slirp -DLIBSLIRP_STATIC
+PCEOF
+
 # -- 4. Neutralise scripts/symlink-install-tree.py ---------------------------
 # Postconf runs this to stage `meson install` symlinks. On Windows without
 # Developer Mode it fails and breaks meson setup. We never run `meson install`.
@@ -113,12 +138,17 @@ fi
 QEMUSRC_M="$(cygpath -u "$QEMUSRC")"
 BUILDDIR_M="$(cygpath -u "$BUILDDIR")"
 LOGDIR_M="$(cygpath -u "$LOGDIR")"
+STATIC_PC_M="$(cygpath -u "$SCRIPTDIR/static-pc")"
 
 BUILD_SCRIPT="$LOGDIR/run-build-windows-minimal.sh"
 cat > "$BUILD_SCRIPT" <<EOF
 #!/usr/bin/env bash
 set -e
 cd "$BUILDDIR_M"
+
+# Static-link libslirp: overlay slirp.pc points pkg-config at libslirp.a +
+# defines LIBSLIRP_STATIC so the headers don't emit __declspec(dllimport).
+export PKG_CONFIG_PATH="$STATIC_PC_M:\${PKG_CONFIG_PATH:-}"
 
 echo "=== toolchain ==="
 which clang && clang --version | head -1
@@ -127,13 +157,13 @@ which meson  && meson --version
 which ninja  && ninja --version
 which pkgconf && pkgconf --version
 
-echo "=== configure (no slirp) ==="
+echo "=== configure (with slirp) ==="
 "$QEMUSRC_M/configure" \\
     --target-list=riscv64-softmmu \\
     --without-default-features \\
     --enable-tcg \\
     --enable-fdt=internal \\
-    --disable-slirp \\
+    --enable-slirp \\
     --disable-werror \\
     --disable-docs \\
     --disable-guest-agent \\

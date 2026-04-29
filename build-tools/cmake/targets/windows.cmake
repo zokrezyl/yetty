@@ -8,6 +8,16 @@
 set(YETTY_ENABLE_LIB_TINYEMU ON CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_LIB_QEMU    ON CACHE BOOL "" FORCE)
 
+# yetty-ymsdf-gen is an offline build-time tool for generating MSDF font
+# atlases. yetty.exe consumes the pre-generated atlas via incbin and does
+# not need msdfgen at runtime. Disable on Windows: the prebuilt msdfgen
+# windows-x86_64 tarball ships /MT static-CRT, while the rest of yetty's
+# 3rdparty Windows libs (freetype, zlib, png, lz4, ...) are /MD. Mixing
+# triggers `LNK2038 mismatch detected for 'RuntimeLibrary'`. Cheapest fix
+# is to skip the only consumer of msdfgen on Windows.
+set(YETTY_ENABLE_FEATURE_YMSDF_GEN OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_LIB_MSDFGEN       OFF CACHE BOOL "" FORCE)
+
 include(${YETTY_ROOT}/build-tools/cmake/targets/shared.cmake)
 
 # Windows-specific libraries (guarded by variables.cmake)

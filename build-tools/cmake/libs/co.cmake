@@ -23,20 +23,17 @@ if(EMSCRIPTEN)
     return()
 endif()
 
-if(WIN32)
-    message(FATAL_ERROR
-        "libco: no windows-x86_64 tarball is published yet — yetty.exe is \
-being switched to native MSVC and the libco MSVC build path will land \
-together with that work (see the windows-libs-msvc branch).")
-endif()
-
 yetty_3rdparty_fetch(libco _LIBCO_DIR)
 
-if(EXISTS "${_LIBCO_DIR}/lib/libco.a")
-    set(_LIBCO_LIB "${_LIBCO_DIR}/lib/libco.a")
+if(WIN32)
+    set(_LIBCO_LIB "${_LIBCO_DIR}/lib/libco.lib")
 else()
+    set(_LIBCO_LIB "${_LIBCO_DIR}/lib/libco.a")
+endif()
+
+if(NOT EXISTS "${_LIBCO_LIB}")
     message(FATAL_ERROR
-        "libco: no static lib found in ${_LIBCO_DIR}/lib/ — \
+        "libco: archive not found at ${_LIBCO_LIB} — \
 tarball layout changed? (check build-tools/3rdparty/libco/_build.sh)")
 endif()
 if(NOT EXISTS "${_LIBCO_DIR}/include/libco.h")

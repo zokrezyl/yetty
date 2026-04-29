@@ -81,7 +81,11 @@ struct yetty_ycore_void_result yetty_yplatform_extract_assets(struct yetty_yconf
     /* Extract QEMU binary to <data_dir>/qemu if embedded and not yet extracted */
     if (yetty_incbin_assets_has_qemu(assets)) {
         char qemu_bin[512];
+#ifdef _WIN32
+        snprintf(qemu_bin, sizeof(qemu_bin), "%s/qemu/qemu-system-riscv64.exe", data_dir);
+#else
         snprintf(qemu_bin, sizeof(qemu_bin), "%s/qemu/qemu-system-riscv64", data_dir);
+#endif
         if (!yplatform_file_exists(qemu_bin)) {
             if (!yetty_incbin_assets_extract_qemu_to(assets, data_dir)) {
                 yetty_incbin_assets_destroy(assets);
