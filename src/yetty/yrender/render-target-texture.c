@@ -363,7 +363,12 @@ static struct yetty_ycore_void_result create_blend_pipeline(struct render_target
     wgsl_src.chain.sType = WGPUSType_ShaderSourceWGSL;
 #ifdef __EMSCRIPTEN__
     struct yetty_yrender_shader_code blend_code = {0};
-    yetty_yrender_shader_code_load_file(&blend_code, "/assets/shaders/blend.wgsl");
+    /* yetty_yplatform_extract_assets() decompresses the incbin'd blend
+     * shader into /data/shaders/blender.wgsl (note: yetty_embed_assets
+     * renames blend.wgsl → blender.wgsl, see shared.cmake). The old
+     * /assets/shaders/* path was a leftover from the preload-file era
+     * and 404s under the new incbin+extract model. */
+    yetty_yrender_shader_code_load_file(&blend_code, "/data/shaders/blender.wgsl");
     wgsl_src.code = (WGPUStringView){.data = blend_code.data, .length = blend_code.size};
 #else
     wgsl_src.code =

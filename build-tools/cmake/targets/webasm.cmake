@@ -55,7 +55,9 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/platform-paths.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/ycoroutine.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/ywebgpu.c
+    ${YETTY_ROOT}/src/yetty/yplatform/shared/extract-assets.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/fs.c
+    ${YETTY_ROOT}/src/yetty/incbin-assets.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/thread.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/term.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/time.c
@@ -76,13 +78,16 @@ endif()
 
 target_include_directories(yetty PRIVATE ${YETTY_INCLUDES} ${YETTY_RENDERER_INCLUDES} ${JPEG_INCLUDE_DIRS})
 
-# Embed resources (stubs on web, but needed for symbol resolution)
-# Note: webasm uses preload files, not incbin, so we only need stubs for symbols
+# Embed resources directly into yetty.wasm (same as desktop platforms).
+# Logo + DefaultConfig are referenced by name; yetty_embed_assets adds
+# the bulk fonts / shaders / msdf-fonts / yemu (each pre-brotli'd; the
+# extract-assets startup path decompresses to MEMFS).
 if(YETTY_ENABLE_LIB_INCBIN)
     incbin_add_resources(yetty
         Logo "${YETTY_ROOT}/docs/logo-2.jpeg"
         DefaultConfig "${YETTY_ROOT}/assets/default-config.yaml"
     )
+    yetty_embed_assets(yetty)
 endif()
 
 if(YETTY_ENABLE_FEATURE_ASSETS)
@@ -122,7 +127,10 @@ target_link_options(yetty PRIVATE
     -sINITIAL_MEMORY=2048MB
     -sASSERTIONS=2
     -lwebsocket.js
-    "--preload-file=${CMAKE_BINARY_DIR}/assets@/assets"
+    # No --preload-file=assets — fonts/shaders/CDB/yemu are baked into
+    # yetty.wasm via yetty_embed_assets() (incbin, brotli-compressed) and
+    # decompressed into MEMFS at startup by yetty_yplatform_extract_assets.
+    # Same flow as desktop targets.
     "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','FS','ENV','HEAPU8']"
     # "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_yetty_write','_yetty_key','_yetty_special_key','_yetty_read_input','_yetty_sync','_yetty_set_scale','_yetty_resize','_yetty_get_cols','_yetty_get_rows','_webpty_on_data']"
     "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_webpty_pipe_source_notify']"
@@ -153,40 +161,13 @@ if(YETTY_ENABLE_FEATURE_DEMO)
     )
 endif()
 
-# Stage fetched 3rdparty assets into ${CMAKE_BINARY_DIR}/assets/<subdir>/
-# pre-link, so emcc's --preload-file=${CMAKE_BINARY_DIR}/assets@/assets
-# (above) packs them into the wasm virtual filesystem under /assets.
-# Three fetch dirs (linux + opensbi + alpine-disk) all contribute to
-# /assets/yemu, so a multi-preload would collide — single staging dir is
-# the only path. Stamp files (.fetched-<ver>) are filtered out so emcc
-# doesn't pack them.
+# msdf-fonts CDBs and the yemu kernel/opensbi/img bundle are no longer
+# staged into the preload — they're embedded into yetty.wasm via
+# yetty_embed_assets() (see incbin path) and yetty_yplatform_extract_assets()
+# decompresses them into MEMFS at startup. Same flow as desktop.
 add_custom_command(TARGET yetty PRE_LINK
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/assets/msdf-fonts"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/assets/yemu"
-    # cdb (.cdb.br files)
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${YETTY_3RDPARTY_cdb_DIR}" "${CMAKE_BINARY_DIR}/assets/msdf-fonts"
-    # linux: pick only the kernel files. The fetch dir also contains an
-    # alpine-rootfs/ source tree that was packaged into alpine-rootfs.img;
-    # webasm doesn't need that tree at runtime, and copy_directory chokes
-    # on it under CMake 4.x. Naming each file explicitly is also more
-    # honest about what we ship into the wasm FS.
-    COMMAND ${CMAKE_COMMAND} -E copy
-        "${YETTY_3RDPARTY_linux_DIR}/kernel-riscv64.bin"
-        "${YETTY_3RDPARTY_linux_DIR}/kernel-riscv64.bin.br"
-        "${CMAKE_BINARY_DIR}/assets/yemu/"
-    # opensbi (firmware bins)
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${YETTY_3RDPARTY_opensbi_DIR}" "${CMAKE_BINARY_DIR}/assets/yemu"
-    # alpine-disk (raw ext4)
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${YETTY_3RDPARTY_alpine-disk_DIR}" "${CMAKE_BINARY_DIR}/assets/yemu"
-    # 3rdparty-fetch leaves stamp + .br files; strip the fetch-internal stamps
-    # (the .br files stay — runtime decompresses on read).
-    COMMAND ${CMAKE_COMMAND} -E rm -f
-        "${CMAKE_BINARY_DIR}/assets/msdf-fonts/.fetched-*"
-        "${CMAKE_BINARY_DIR}/assets/yemu/.fetched-*"
-    COMMENT "Staging 3rdparty fetched assets into ${CMAKE_BINARY_DIR}/assets/ for emcc preload"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/assets"
+    COMMENT "(no 3rdparty staging — assets are embedded via incbin and extracted at startup)"
 )
 
 # Copy web files

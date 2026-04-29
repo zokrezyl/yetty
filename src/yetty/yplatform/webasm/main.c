@@ -8,6 +8,7 @@
 #include <yetty/yconfig.h>
 #include <yetty/ycore/event.h>
 #include <yetty/ycore/event-loop.h>
+#include <yetty/platform/extract-assets.h>
 #include <yetty/platform/platform-input-pipe.h>
 #include <yetty/platform/pty-factory.h>
 #include <yetty/ytrace.h>
@@ -440,6 +441,12 @@ static void setup_input_callbacks(struct yetty_yplatform_input_pipe *pipe)
 
 int main(int argc, char **argv)
 {
+    /* Force-enable all ytrace points by default on webasm so the headless
+     * Chrome test (tools/test-chrome-headless.sh) and any browser-side
+     * debugging see the full trace stream without env wiring on the JS
+     * side. Mirrors `YTRACE_DEFAULT_ON=yes` on desktop. */
+    setenv("YTRACE_DEFAULT_ON", "yes", 1);
+
     struct yetty_yplatform_paths paths;
     struct yetty_yconfig_result config_result;
     struct yetty_yconfig *config;
@@ -459,9 +466,12 @@ int main(int argc, char **argv)
 
     ydebug("main: WebASM starting");
 
-    /* Platform paths (virtual filesystem) */
-    paths.shaders_dir = "/assets/shaders";
-    paths.fonts_dir = "/assets/fonts";
+    /* Platform paths (MEMFS). yetty_yplatform_extract_assets() decompresses
+     * incbin'd brotli blobs into /data/{shaders,fonts,msdf-fonts,yemu}/ at
+     * startup; runtime then reads them as ordinary files. Same model as
+     * desktop, where the data dir lives on the user's disk. */
+    paths.shaders_dir = "/data/shaders";
+    paths.fonts_dir = "/data/fonts";
     paths.runtime_dir = "/tmp";
     paths.bin_dir = NULL;
 
@@ -473,6 +483,21 @@ int main(int argc, char **argv)
     }
     config = config_result.value;
     ydebug("main: Config created");
+
+    /* Extract incbin'd assets into MEMFS. Always "first time" on web —
+     * MEMFS is fresh per page load, so this runs every startup. Decompresses
+     * brotli'd shaders / fonts / msdf-fonts / yemu blobs into /data/. */
+    {
+        struct yetty_ycore_void_result extract_result =
+            yetty_yplatform_extract_assets(config);
+        if (!YETTY_IS_OK(extract_result)) {
+            yerror("Failed to extract embedded assets: %s",
+                   extract_result.error.msg ? extract_result.error.msg : "(no msg)");
+            config->ops->destroy(config);
+            return 1;
+        }
+        ydebug("main: Embedded assets extracted to /data/");
+    }
 
     /* Window (canvas) */
     if (!yetty_yplatform_webasm_create_window(config)) {
@@ -575,16 +600,16 @@ int main(int argc, char **argv)
     pipe->ops->write(pipe, &event, sizeof(event));
     ydebug("main: Posted initial resize %dx%d", fb_width, fb_height);
 
-    /* Run (event loop starts via emscripten_set_main_loop) */
+    /* Render runs on the main thread (rAF / emscripten_set_main_loop_arg).
+     * yetty_run returns immediately; the JS event loop drives subsequent
+     * ticks. Heavy compute (TinyEMU CPU) goes to a worker via pthread_create
+     * inside the relevant platform-pty backend. */
     ydebug("main: Starting Yetty");
     run_result = yetty_run(yetty);
     if (!YETTY_IS_OK(run_result)) {
-        yerror("Yetty run failed");
+        yerror("yetty_run failed");
     }
 
-    /* On webasm, return without cleanup - the event loop keeps running.
-	 * emscripten_set_main_loop_arg returns immediately but the loop continues.
-	 * Returning 0 keeps the runtime alive. */
-    ydebug("main: Returning (event loop continues asynchronously)");
+    ydebug("main: returning (event loop continues asynchronously)");
     return 0;
 }

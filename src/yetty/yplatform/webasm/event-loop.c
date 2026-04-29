@@ -8,6 +8,7 @@
 #include "webasm-pty-pipe-source.h"
 #include "webasm-pty.h"
 #include <emscripten/emscripten.h>
+#include <emscripten/threading.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -184,7 +185,10 @@ static struct yetty_ycore_void_result webasm_start(struct yetty_ycore_event_loop
 
     impl->running = 1;
 
-    /* Set up emscripten main loop for timer handling */
+    /* Render runs on the main thread via rAF. Heavy compute (TinyEMU CPU)
+     * goes to a worker created via pthread_create from a platform-pty
+     * backend; pthreads on emcc map to Web Workers and share linear memory
+     * via SharedArrayBuffer (requires COOP/COEP from serve.py). */
     emscripten_set_main_loop_arg(main_loop_tick, impl, 0, 0);
 
     ydebug("webasm_event_loop: started");

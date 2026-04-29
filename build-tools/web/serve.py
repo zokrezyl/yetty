@@ -51,6 +51,10 @@ def main():
 
     handler = partial(CORSRequestHandler, directory=directory)
 
+    # SO_REUSEADDR — without this, restarting the test within the OS's
+    # TIME_WAIT window (~60s) fails with "Address already in use".
+    socketserver.TCPServer.allow_reuse_address = True
+
     with socketserver.TCPServer(("0.0.0.0", port), handler) as httpd:
         print(f"\n  yetty web demo server")
         print(f"  Serving at: http://localhost:{port}/")

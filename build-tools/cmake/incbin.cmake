@@ -55,6 +55,38 @@ if(MSVC)
     )
 endif()
 
+# For Emscripten, the same incbin_tool is needed because clang's wasm
+# backend rejects `.incbin` inline asm ("data symbols must have a size
+# set with .size" / "Wasm doesn't support data symbols in text sections").
+# Build it with the HOST compiler at configure time so it doesn't go
+# through emcc — it just generates C array literals at our build time.
+if(EMSCRIPTEN)
+    if(NOT EXISTS "${_INCBIN_DIR}/src/incbin.c")
+        message(FATAL_ERROR
+            "incbin: src/incbin.c missing in tarball — needed for Emscripten code path")
+    endif()
+    set(INCBIN_TOOL_HOST "${CMAKE_BINARY_DIR}/tools/incbin_tool")
+    if(NOT EXISTS "${INCBIN_TOOL_HOST}")
+        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/tools")
+        find_program(_HOST_CC NAMES cc gcc clang REQUIRED
+            HINTS ENV PATH NO_CMAKE_FIND_ROOT_PATH)
+        message(STATUS "incbin: building host incbin_tool with ${_HOST_CC}")
+        execute_process(
+            COMMAND "${_HOST_CC}" -O2 -o "${INCBIN_TOOL_HOST}" "${_INCBIN_DIR}/src/incbin.c"
+            RESULT_VARIABLE _RC
+            OUTPUT_VARIABLE _OUT
+            ERROR_VARIABLE  _ERR
+        )
+        if(NOT _RC EQUAL 0)
+            message(FATAL_ERROR "incbin: host build of incbin_tool failed: ${_ERR}")
+        endif()
+    endif()
+    # Mimic the imported-target shape so the rest of this file can call
+    # `incbin_tool` as a command, same as the MSVC path.
+    add_executable(incbin_tool IMPORTED GLOBAL)
+    set_target_properties(incbin_tool PROPERTIES IMPORTED_LOCATION "${INCBIN_TOOL_HOST}")
+endif()
+
 #-----------------------------------------------------------------------------
 # incbin_add_resources(target NAME1 FILE1 [NAME2 FILE2 ...])
 #
@@ -82,8 +114,10 @@ function(incbin_add_resources TARGET)
     # Generate resource source file
     set(RESOURCE_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_resources.cpp")
 
-    if(MSVC)
-        # MSVC: Use incbin tool to generate resource file
+    if(MSVC OR EMSCRIPTEN)
+        # MSVC and Emscripten both use incbin_tool to generate a C source
+        # with raw byte arrays (no inline `.incbin` asm; clang's wasm
+        # backend rejects that, and MSVC has no inline asm at all).
         set(INCBIN_ARGS "")
         set(RESOURCE_FILES "")
 
@@ -154,35 +188,6 @@ extern const unsigned int g${RES_NAME}Size;
 
         target_sources(${TARGET} PRIVATE ${RESOURCE_SOURCE} ${INCBIN_OUTPUT})
         target_include_directories(${TARGET} PRIVATE ${INCBIN_INCLUDE_DIR})
-
-    elseif(EMSCRIPTEN)
-        # Emscripten: incbin's inline assembly doesn't work with WASM
-        # Provide empty stubs - icons not supported on web
-        # Compile as C (not C++) to get external linkage for const by default
-        message(STATUS "incbin: Using Emscripten stubs for ${TARGET}")
-
-        # Use .c extension so it compiles as C (const has external linkage in C)
-        set(RESOURCE_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_resources.c")
-
-        file(WRITE ${RESOURCE_SOURCE}
-"/* Generated stub resources for ${TARGET} (Emscripten) */
-/* incbin inline assembly not supported on WASM - providing empty stubs */
-/* Compiled as C for external linkage of const variables */
-
-")
-        math(EXPR LAST_INDEX "${PAIR_COUNT} - 1")
-        foreach(I RANGE 0 ${LAST_INDEX})
-            math(EXPR NAME_INDEX "${I} * 2")
-            list(GET RESOURCES ${NAME_INDEX} RES_NAME)
-
-            file(APPEND ${RESOURCE_SOURCE}
-"const unsigned char g${RES_NAME}Data[] = {0};
-const unsigned char* const g${RES_NAME}End = g${RES_NAME}Data;
-const unsigned int g${RES_NAME}Size = 0;
-")
-        endforeach()
-
-        target_sources(${TARGET} PRIVATE ${RESOURCE_SOURCE})
 
     else()
         # GCC/Clang: Use incbin.h directly with inline assembly
@@ -270,38 +275,12 @@ function(incbin_add_directory TARGET PREFIX DIR)
         file(MAKE_DIRECTORY "${COMPRESSED_DIR}")
     endif()
 
-    if(EMSCRIPTEN)
-        # Emscripten: provide stubs
-        file(WRITE ${RESOURCE_SOURCE}
-"/* Generated stub resources for ${TARGET}/${PREFIX} (Emscripten) */
-")
-        foreach(FILE ${FILES})
-            file(RELATIVE_PATH REL_PATH "${DIR}" "${FILE}")
-            # Strip .br suffix from in-binary asset name so consumers
-            # look up the logical name, regardless of pre-compression.
-            set(_PRECOMPRESSED FALSE)
-            if(REL_PATH MATCHES "\\.br$")
-                set(_PRECOMPRESSED TRUE)
-                string(REGEX REPLACE "\\.br$" "" REL_PATH "${REL_PATH}")
-            endif()
-            # Sanitize REL_PATH into a valid C identifier (handles /, ., -, +, etc.)
-            string(MAKE_C_IDENTIFIER "${REL_PATH}" SAFE_NAME)
-            set(SYMBOL_NAME "${PREFIX_SAFE}_${SAFE_NAME}")
-            set(ASSET_NAME "${PREFIX}/${REL_PATH}")
-            if(_PRECOMPRESSED)
-                list(APPEND MANIFEST_ENTRIES "${SYMBOL_NAME}|${ASSET_NAME}|1")
-            else()
-                list(APPEND MANIFEST_ENTRIES "${SYMBOL_NAME}|${ASSET_NAME}|0")
-            endif()
-
-            file(APPEND ${RESOURCE_SOURCE}
-"const unsigned char g${SYMBOL_NAME}Data[] = {0};
-const unsigned char* const g${SYMBOL_NAME}End = g${SYMBOL_NAME}Data;
-const unsigned int g${SYMBOL_NAME}Size = 0;
-")
-        endforeach()
-    elseif(MSVC)
-        # MSVC: Use incbin tool to generate data file
+    if(MSVC OR EMSCRIPTEN)
+        # MSVC and Emscripten: Use incbin_tool to generate a C source with
+        # plain `static const unsigned char[]` arrays. Both targets reject
+        # the `.incbin` inline-asm path used elsewhere (clang's wasm
+        # backend rejects data symbols in text sections; MSVC has no
+        # inline asm at all).
         set(INCBIN_INPUT "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_${PREFIX_SAFE}_incbin_input.c")
         set(INCBIN_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_${PREFIX_SAFE}_data.c")
 

@@ -244,41 +244,78 @@ export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json
 # --enable-unsafe-webgpu: Enable WebGPU
 # --enable-features=Vulkan,WebGPU: Enable Vulkan backend for WebGPU
 # --use-vulkan: Force Vulkan usage
-timeout 120 $CHROME \
+# Use Chrome DevTools Protocol to reliably capture page console.log
+# output. --headless=new doesn't pipe console messages to stderr, and
+# --headless=old is unreliable across Chrome versions. CDP is the
+# canonical channel.
+DEBUG_PORT="${DEBUG_PORT:-9222}"
+$CHROME \
     --headless=new \
     --no-sandbox \
     --disable-dev-shm-usage \
     --disable-gpu-sandbox \
-    --enable-logging=stderr \
+    --remote-debugging-port="$DEBUG_PORT" \
+    --remote-allow-origins=* \
     --enable-unsafe-webgpu \
     --enable-features=Vulkan,WebGPU \
     --use-vulkan \
     --allow-insecure-localhost \
     --disable-web-security \
-    --v=1 \
-    --virtual-time-budget=60000 \
-    "$TEST_URL" \
-    2>&1 | tee "$CONSOLE_LOG" || true
+    --user-data-dir="/tmp/yetty-chrome-prof.$$" \
+    about:blank \
+    > /tmp/yetty-chrome-stderr.log 2>&1 &
+CHROME_PID=$!
+
+# Use system python (has websocket-client); nix dev shell python may not.
+PY=/usr/bin/python3
+[ -x "$PY" ] || PY=python3
+
+# Connect CDP, enable Runtime/Log/Page domains BEFORE navigating to
+# $TEST_URL — otherwise we miss the earliest console.log calls (e.g.
+# yetty's index.html boot logs and emcc's preRun output). 90s capture
+# window.
+timeout 110 "$PY" "$YETTY_ROOT/tools/capture-chrome-console.py" \
+    "$DEBUG_PORT" 90 "$TEST_URL" \
+    2>/tmp/yetty-cdp-stderr.log | tee "$CONSOLE_LOG"
+CDP_RC=$?
+
+kill "$CHROME_PID" 2>/dev/null || true
+wait "$CHROME_PID" 2>/dev/null || true
+rm -rf "/tmp/yetty-chrome-prof.$$"
+if [ $CDP_RC -ne 0 ] && [ $CDP_RC -ne 124 ]; then
+    echo "${YELLOW}WARN: CDP capture exited with $CDP_RC (chrome stderr below)${NC}"
+    cat /tmp/yetty-chrome-stderr.log | tail -20
+fi
 
 echo ""
 echo "=== Chrome Output Analysis ==="
 
 RESULT=0
 
-# Check for fatal errors first
+# Check for fatal errors. Each branch below is independent, so a build
+# can hit several at once (e.g. WebGPU validation + RuntimeError) and
+# all get reported. Don't skip later checks just because an earlier
+# one matched.
+
 if grep -q "Destroyed texture" "$CONSOLE_LOG"; then
     echo -e "${RED}ERROR: Destroyed texture used in submit (use-after-free)${NC}"
     grep -B2 -A2 "Destroyed texture" "$CONSOLE_LOG" || true
     RESULT=1
-elif grep -q "function signature mismatch" "$CONSOLE_LOG"; then
+fi
+
+if grep -q "function signature mismatch" "$CONSOLE_LOG"; then
     echo -e "${RED}ERROR: WASM function signature mismatch${NC}"
     grep -B2 -A2 "function signature mismatch" "$CONSOLE_LOG" || true
     RESULT=1
-elif grep -q "RuntimeError" "$CONSOLE_LOG"; then
+fi
+
+if grep -q "RuntimeError" "$CONSOLE_LOG"; then
     echo -e "${RED}ERROR: WASM RuntimeError${NC}"
     grep -B2 -A2 "RuntimeError" "$CONSOLE_LOG" || true
     RESULT=1
-elif grep -q "Uncaught" "$CONSOLE_LOG"; then
+fi
+
+if grep -q "Uncaught" "$CONSOLE_LOG"; then
     # Check if the only Uncaught is the benign "Instance reference" error from preinitializedWebGPUDevice
     if grep "Uncaught" "$CONSOLE_LOG" | grep -v "external Instance reference" | grep -q .; then
         echo -e "${RED}ERROR: Uncaught exception${NC}"
@@ -287,9 +324,57 @@ elif grep -q "Uncaught" "$CONSOLE_LOG"; then
     else
         echo -e "${YELLOW}WARN: Benign WebGPU instance reference warning (preinitializedWebGPUDevice not used)${NC}"
     fi
-elif grep -q "processPackageData" "$CONSOLE_LOG"; then
+fi
+
+if grep -q "processPackageData" "$CONSOLE_LOG"; then
     echo -e "${RED}ERROR: processPackageData error${NC}"
     grep -A2 "processPackageData" "$CONSOLE_LOG" || true
+    RESULT=1
+fi
+
+# WebGPU device validation errors come through yetty_webgpu_uncaptured_error_callback
+# which logs via ydebug as `[error]`. They look like:
+#   [error] error.c:55 (yetty_webgpu_uncaptured_error_callback): WebGPU Validation error: ...
+# A failed shader entry point or pipeline creation cascades into many
+# "Invalid RenderPipeline" / "Invalid CommandBuffer" follow-ups; those
+# are noise after the first real error. Surface the *root* cause first.
+if grep -q "WebGPU Validation error" "$CONSOLE_LOG"; then
+    echo -e "${RED}ERROR: WebGPU validation errors${NC}"
+    # Most useful root causes — show first occurrence with context.
+    if grep -q "Entry point" "$CONSOLE_LOG"; then
+        echo -e "${RED}  Cause: shader missing entry point${NC}"
+        grep -B1 -A2 "Entry point" "$CONSOLE_LOG" | head -8 || true
+    fi
+    if grep -q "shader module is invalid" "$CONSOLE_LOG"; then
+        echo -e "${RED}  Cause: shader module compilation failed${NC}"
+        grep -B1 -A2 "shader module is invalid" "$CONSOLE_LOG" | head -8 || true
+    fi
+    if grep -q "type mismatch" "$CONSOLE_LOG"; then
+        echo -e "${RED}  Cause: pipeline / binding type mismatch${NC}"
+        grep -B1 -A2 "type mismatch" "$CONSOLE_LOG" | head -8 || true
+    fi
+    # Distinct first-line-only summary of every unique validation error
+    echo -e "${RED}  Distinct validation messages:${NC}"
+    grep "WebGPU Validation error" "$CONSOLE_LOG" \
+        | sed 's/.*WebGPU Validation error: //' \
+        | sort -u | head -10 | sed 's/^/    /'
+    RESULT=1
+fi
+
+# yetty's own ydebug `[error]` lines that are NOT covered by the more
+# specific checks above (rare — most go through the WebGPU callback).
+if grep -E "^\[CONSOLE log\].*\[error\]" "$CONSOLE_LOG" | grep -v "WebGPU Validation error" | grep -q .; then
+    echo -e "${RED}ERROR: yetty logged ydebug-error-level messages${NC}"
+    grep -E "^\[CONSOLE log\].*\[error\]" "$CONSOLE_LOG" | grep -v "WebGPU Validation error" | head -10
+    RESULT=1
+fi
+
+# CDP-level uncaught exceptions thrown on the page (other than the ones
+# already captured by the Uncaught/RuntimeError checks). The capture
+# script tags these as [PAGE-EXCEPTION].
+if grep -q "^\[PAGE-EXCEPTION\]" "$CONSOLE_LOG"; then
+    echo -e "${RED}ERROR: page-level uncaught exception(s)${NC}"
+    grep "^\[PAGE-EXCEPTION\]" "$CONSOLE_LOG" | head -10
     RESULT=1
 fi
 
