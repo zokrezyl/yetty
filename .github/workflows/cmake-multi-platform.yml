@@ -9,7 +9,7 @@ on:
       # use their own `lib-<name>-*` namespaces, handled by the per-lib
       # build-3rdparty-<name>.yml workflows; those don't trigger the
       # main multi-platform build.
-      - 'yetty-*'
+      - 'yetty-[0-9]+.[0-9]+.[0-9]+'
     branches:
       - '**'
 
@@ -18,7 +18,7 @@ on:
 # BUILD FLAGS - Set to true to enable specific builds (tags always build all)
 # =============================================================================
 env:
-  BUILD_LINUX: false
+  BUILD_LINUX: true
   BUILD_LINUX_ASAN: false
   BUILD_MACOS: false
   BUILD_WINDOWS: false
@@ -31,7 +31,7 @@ env:
   RUN_CODEQL: false
   RUN_CODACY: false
 
-  TEST_ANDROID: true
+  TEST_ANDROID: false
 
 jobs:
   # =============================================================================
