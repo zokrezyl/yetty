@@ -241,20 +241,32 @@ active development target.
 
 ## Webasm
 
-Not implemented yet. The required pieces, mirroring the desktop set:
+Implemented, but with a different mechanism than desktop:
 
-- `src/yetty/yplatform/webasm/ycoroutine.c` — `emscripten_fiber_t` backend.
-  Needs `-s ASYNCIFY=1` and `-s FIBERS=1` link flags.
-- `src/yetty/yplatform/webasm/ywebgpu.c` — JS-side wgpu callbacks already
-  fire on the JS event loop; `_await` posts the resume via
-  `emscripten_set_immediate` (the webasm equivalent of `post_to_loop`).
-- `src/yetty/yplatform/webasm/event-loop.c` — implement `post_to_loop` using
-  `emscripten_set_immediate`.
-- No tick timer needed on web — emscripten's WebGPU implementation drives
-  callbacks itself.
+- `src/yetty/yplatform/webasm/ywebgpu.c` — wgpu `_await` wrappers register a
+  callback and busy-wait on a `volatile done` flag using `emscripten_sleep`.
+  Asyncify (already enabled via `-sASYNCIFY` in `webasm.cmake`) suspends
+  the entire C call stack at the sleep; the browser pumps the wgpu
+  Promise from the JS event loop and the callback flips the flag, at
+  which point asyncify resumes the C stack. No `ProcessEvents` tick, no
+  cross-thread routing, no `post_to_loop`.
+- `src/yetty/yplatform/webasm/ycoroutine.c` — degenerate stub. `spawn`
+  allocates a control struct, `resume` runs the entry function inline,
+  `yield` is a warn-only no-op. The asyncify-suspend inside `_await` is
+  what gives the JS event loop air to breathe; no fiber stack needed.
 
-The application API stays identical between platforms; only the backend
-differs.
+The application API (`yplatform_coro_*`, `yplatform_wgpu_*_await`) is
+identical to desktop. Trade-off: on webasm, `yplatform_coro_resume`
+blocks (asyncify-suspended) until the entry returns rather than
+returning at the first yield. In the GPU readback use case this is
+observably equivalent — the browser's JS event loop continues running
+during the suspension so input / `requestAnimationFrame` / PTY callbacks
+all still fire.
+
+If a future caller needs *real* concurrent coroutines on webasm
+(multiple in-flight reads with overlapping yields), the stub would need
+to be replaced with `emscripten_fiber_t` (`-sFIBERS`) or JSPI. For now
+the GPU readback path is the only consumer and the stub is sufficient.
 
 ## File index
 
@@ -278,5 +290,7 @@ src/yetty/yetty.c                             owns wgpu, creates/destroys
 src/yetty/yplatform/shared/ycoroutine.c       desktop coroutine impl
 src/yetty/yplatform/shared/ywebgpu.c          desktop wgpu awaits
 src/yetty/yplatform/shared/libuv-event-loop.c + post_to_loop queue
+src/yetty/yplatform/webasm/ycoroutine.c       webasm coroutine stub (inline-resume)
+src/yetty/yplatform/webasm/ywebgpu.c          webasm wgpu awaits (asyncify+sleep)
 src/yetty/yvnc/vnc-server.c                   readback migrated to coroutine
 ```

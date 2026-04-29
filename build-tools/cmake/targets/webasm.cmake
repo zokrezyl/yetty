@@ -3,11 +3,33 @@
 # Disable desktop-only libraries
 set(YETTY_ENABLE_LIB_LIBUV OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_LIB_GLFW OFF CACHE BOOL "" FORCE)
-# libco is desktop-only — webasm uses emscripten_fiber_t (Asyncify) instead.
+# libco is desktop-only. Webasm doesn't need a coroutine library: the
+# wgpu _await wrappers (src/yetty/yplatform/webasm/ywebgpu.c) suspend the
+# C stack via Asyncify (emscripten_sleep) instead of switching stacks,
+# and the coroutine API (src/yetty/yplatform/webasm/ycoroutine.c) is a
+# degenerate stub for source compatibility.
 set(YETTY_ENABLE_LIB_LIBCO OFF CACHE BOOL "" FORCE)
 # qemu is not built for webasm — the webasm yetty build uses in-process
 # TinyEMU (compiled to wasm) instead of a prebuilt QEMU binary.
 set(YETTY_ENABLE_LIB_QEMU OFF CACHE BOOL "" FORCE)
+
+# Drop the C++ prebuilt libs on webasm. Each one drags in libc++ (so
+# std::shared_ptr / std::atomic etc.), and the upstream prebuilt tarballs
+# were not produced with the same emscripten/clang version we link with —
+# the resulting wasm has caller/callee type-signature mismatches that
+# wasm-emscripten-finalize rejects with "popping from empty stack".
+# Yetty's webasm config is single-threaded by design, so refcount
+# atomics from these libs are pure cost with no benefit.
+set(YETTY_ENABLE_LIB_THORVG     OFF CACHE BOOL "" FORCE)  # vector graphics renderer (C++)
+set(YETTY_ENABLE_LIB_LIBSSH2    OFF CACHE BOOL "" FORCE)  # transitively pulls openssl libcrypto
+set(YETTY_ENABLE_LIB_OPENH264   OFF CACHE BOOL "" FORCE)  # H.264 decoder (C++)
+# msdfgen + tinyxml2 stay ON: yetty_ypaint hard-depends on
+# yetty_ymsdf_gen, which in turn pulls msdfgen-core/msdfgen-ext +
+# tinyxml2. Unwinding that needs source surgery in ypaint.
+set(YETTY_ENABLE_LIB_MSDFGEN       ON  CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_FEATURE_YMSDF_GEN ON  CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_FEATURE_YTHORVG   OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_FEATURE_SSH       OFF CACHE BOOL "" FORCE)
 
 include(${YETTY_ROOT}/build-tools/cmake/targets/shared.cmake)
 
@@ -31,6 +53,9 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/event-loop.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/pipe.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/platform-paths.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webasm/ycoroutine.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webasm/ywebgpu.c
+    ${YETTY_ROOT}/src/yetty/yplatform/shared/fs.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/thread.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/term.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/time.c
@@ -64,7 +89,7 @@ if(YETTY_ENABLE_FEATURE_ASSETS)
     add_dependencies(yetty copy-assets)
 endif()
 
-if(YETTY_ENABLE_FEATURE_SHADERS)
+if(YETTY_ENABLE_FEATURE_YSHADERS)
     add_dependencies(yetty copy-shaders)
 endif()
 
@@ -141,9 +166,15 @@ add_custom_command(TARGET yetty PRE_LINK
     # cdb (.cdb.br files)
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${YETTY_3RDPARTY_cdb_DIR}" "${CMAKE_BINARY_DIR}/assets/msdf-fonts"
-    # linux (kernel + alpine-rootfs/ tree)
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${YETTY_3RDPARTY_linux_DIR}" "${CMAKE_BINARY_DIR}/assets/yemu"
+    # linux: pick only the kernel files. The fetch dir also contains an
+    # alpine-rootfs/ source tree that was packaged into alpine-rootfs.img;
+    # webasm doesn't need that tree at runtime, and copy_directory chokes
+    # on it under CMake 4.x. Naming each file explicitly is also more
+    # honest about what we ship into the wasm FS.
+    COMMAND ${CMAKE_COMMAND} -E copy
+        "${YETTY_3RDPARTY_linux_DIR}/kernel-riscv64.bin"
+        "${YETTY_3RDPARTY_linux_DIR}/kernel-riscv64.bin.br"
+        "${CMAKE_BINARY_DIR}/assets/yemu/"
     # opensbi (firmware bins)
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${YETTY_3RDPARTY_opensbi_DIR}" "${CMAKE_BINARY_DIR}/assets/yemu"

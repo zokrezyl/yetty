@@ -1,17 +1,23 @@
 /*
- * yplatform/ycoroutine.h - Cross-platform stackful coroutine primitive.
+ * yplatform/ycoroutine.h - Coroutine primitive.
  *
- * Two backends, identical API:
- *   - desktop:  POSIX ucontext (makecontext/swapcontext)
- *   - webasm:   emscripten_fiber_t (Asyncify under the hood)
+ * Two backends, identical API but different mechanics:
  *
- * A coroutine is created with yplatform_coro_spawn but does not run until
- * yplatform_coro_resume is called on it. Inside the coroutine entry, calling
- * yplatform_coro_yield suspends back to whoever resumed it.
+ *   - desktop (yplatform/shared/ycoroutine.c):
+ *       Real stackful coroutines via libco. spawn allocates a stack;
+ *       resume switches into it; yield switches back to whoever resumed.
+ *       Resume must be called on the event-loop thread. Cross-thread
+ *       wakeups (e.g. the GPU poll thread) post a request via the event
+ *       loop and the loop thread invokes resume.
  *
- * Resume must always be called on the event-loop thread. Cross-thread wakeups
- * (e.g. the GPU poll thread) post a request via the event loop and the loop
- * thread invokes resume.
+ *   - webasm (yplatform/webasm/ycoroutine.c):
+ *       Degenerate stub. spawn allocates a control struct, resume calls
+ *       the entry function inline (no stack switch). The webasm wgpu
+ *       _await wrappers (yplatform/webasm/ywebgpu.c) suspend the C call
+ *       stack via Asyncify (emscripten_sleep) instead of yield, so a
+ *       coroutine isn't actually needed — the stub exists only so
+ *       desktop callers compile unchanged. yplatform_coro_yield is a
+ *       warn-only no-op on this backend.
  */
 
 #ifndef YETTY_YPLATFORM_YCOROUTINE_H

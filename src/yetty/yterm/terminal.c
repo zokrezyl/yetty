@@ -53,6 +53,10 @@ struct yetty_yterm_terminal {
     int shutting_down;
     struct yetty_yterm_pty_reader *pty_reader;
 
+    /* Reusable read buffer handed back from terminal_pty_pipe_alloc.
+     * Lazily allocated on the first read; freed in destroy. */
+    char *pty_read_buf;
+
     /* Pixel-precise mouse forwarding (DEC ?1500/?1501; OSC 777777/777778).
    * The text-layer's libvterm settermprop hook flips these and reports
    * via terminal_mouse_sub_callback, which also emits OSC 777780 with
@@ -86,14 +90,25 @@ static void terminal_read_pty(struct yetty_yterm_terminal *terminal);
 static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_terminal *terminal,
                                                             struct yetty_yrender_target *target);
 
-/* PTY pipe alloc callback — provides buffer for uv_pipe_t reads */
+/* PTY pipe alloc callback — provides buffer for uv_pipe_t reads.
+ * One reusable per-terminal buffer, lazily allocated. 64KB matches
+ * libuv's default suggested_size on Linux/macOS and is plenty for one
+ * PTY chunk; the read callback drains it before the next call. */
+#define YETTY_YTERM_PTY_READ_BUF_SIZE (64 * 1024)
 static void terminal_pty_pipe_alloc(void *ctx, size_t suggested_size, char **buf, size_t *buflen)
 {
-    (void)ctx;
     (void)suggested_size;
-    static char pty_read_buf[500 * 1024 * 1024]; /* 500 MB */
-    *buf = pty_read_buf;
-    *buflen = sizeof(pty_read_buf);
+    struct yetty_yterm_terminal *terminal = ctx;
+    if (!terminal->pty_read_buf) {
+        terminal->pty_read_buf = malloc(YETTY_YTERM_PTY_READ_BUF_SIZE);
+        if (!terminal->pty_read_buf) {
+            *buf = NULL;
+            *buflen = 0;
+            return;
+        }
+    }
+    *buf = terminal->pty_read_buf;
+    *buflen = YETTY_YTERM_PTY_READ_BUF_SIZE;
 }
 
 /* PTY pipe read callback — feeds data to pty_reader, triggers render */
@@ -912,6 +927,8 @@ void yetty_yterm_terminal_destroy(struct yetty_yterm_terminal *terminal)
         yetty_yface_destroy(terminal->emit_yface);
         terminal->emit_yface = NULL;
     }
+
+    free(terminal->pty_read_buf);
 
     ydebug("terminal_destroy: freeing terminal struct");
     free(terminal);

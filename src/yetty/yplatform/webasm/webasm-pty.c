@@ -75,7 +75,7 @@ static struct yetty_ycore_size_result webasm_pty_read(struct yetty_yplatform_pty
         {
             var maxLen = $1;
             var chunk = window.pty_read_buffer(maxLen);
-            if (chunk.length == = 0) {
+            if (chunk.length === 0) {
                 return 0;
             }
 
@@ -208,16 +208,16 @@ struct yetty_ycore_void_result webasm_pty_init(struct webasm_pty *pty, struct ye
             /* Message listener - receives data from iframe, buffers it, notifies PipeSource */
             window.addEventListener(
                 'message', function(e) {
-                    if (e.data &&e.data.type == = 'term-output') {
+                    if (e.data &&e.data.type === 'term-output') {
                         var data = e.data.data;
-                        if (!data || data.length == = 0) {
+                        if (!data || data.length === 0) {
                             return;
                         }
                         window.ptyBuffer += data;
                         Module._webpty_pipe_source_notify(pipeSourcePointer);
                     }
                     /* Handle term-ready: iframe is loaded, send pending resize */
-                    if (e.data &&e.data.type == = 'term-ready') {
+                    if (e.data &&e.data.type === 'term-ready') {
                         window.ptyReady = true;
                         var iframe = document.getElementById('jslinux-pty');
                         if (iframe && iframe.contentWindow) {
