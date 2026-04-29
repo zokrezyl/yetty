@@ -86,6 +86,17 @@ android-arm64-v8a|android-x86_64)
     esac
     CC="${_T}${ANDROID_API}-clang"; AR="llvm-ar" ;;
 webasm) CC=emcc; AR=emar ;;
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell. cl.exe + lib.exe.
+    # MSYS2_ARG_CONV_EXCL='*' is applied locally on each cl/lib call
+    # below so MSVC /flags pass through. Do NOT export it globally —
+    # git-bash on windows-latest needs MSYS conversion for the curl
+    # invocations that fetch source tarballs.
+    CC=cl
+    AR=lib
+    CFLAGS_BASE="/nologo /O2 /MT /D_CRT_SECURE_NO_WARNINGS"
+    CFLAGS_EXTRA=""
+    ;;
 *) echo "unknown $TARGET_PLATFORM" >&2; exit 1 ;;
 esac
 
@@ -93,16 +104,40 @@ CFLAGS="$CFLAGS_BASE $CFLAGS_EXTRA"
 SOURCES=(blocksort.c huffman.c crctable.c randtable.c compress.c decompress.c bzlib.c)
 
 OBJS=()
-for _s in "${SOURCES[@]}"; do
-    _o="$WORK_DIR/${_s%.c}-${TARGET_PLATFORM}.o"
-    $CC $CFLAGS -I"$SRC_DIR" -c "$SRC_DIR/$_s" -o "$_o"
-    OBJS+=("$_o")
-done
-
-$AR rcs "$STAGE/lib/libbz2.a" "${OBJS[@]}"
+if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+    # MSVC: cl /c /Fo<obj> <src>; lib /OUT:<lib> <objs>
+    # cygpath -w converts /tmp/... -> C:\msys64\tmp\... so cl sees a real
+    # Windows path (it would otherwise treat the leading / as a flag).
+    # MSYS2_ARG_CONV_EXCL='*' applied per-call so MSVC /flags pass
+    # through without affecting the curl/tar/etc. invocations elsewhere.
+    _SRC_DIR_W=$(cygpath -w "$SRC_DIR")
+    for _s in "${SOURCES[@]}"; do
+        _o="$WORK_DIR/${_s%.c}-${TARGET_PLATFORM}.obj"
+        _o_w=$(cygpath -w "$_o")
+        _src_w=$(cygpath -w "$SRC_DIR/$_s")
+        MSYS2_ARG_CONV_EXCL='*' \
+            $CC $CFLAGS "/I${_SRC_DIR_W}" /c "$_src_w" "/Fo${_o_w}"
+        OBJS+=("$_o")
+    done
+    _OUT_W=$(cygpath -w "$STAGE/lib/libbz2.lib")
+    _OBJS_W=()
+    for _o in "${OBJS[@]}"; do _OBJS_W+=("$(cygpath -w "$_o")"); done
+    MSYS2_ARG_CONV_EXCL='*' \
+        $AR /nologo "/OUT:${_OUT_W}" "${_OBJS_W[@]}"
+else
+    for _s in "${SOURCES[@]}"; do
+        _o="$WORK_DIR/${_s%.c}-${TARGET_PLATFORM}.o"
+        $CC $CFLAGS -I"$SRC_DIR" -c "$SRC_DIR/$_s" -o "$_o"
+        OBJS+=("$_o")
+    done
+    $AR rcs "$STAGE/lib/libbz2.a" "${OBJS[@]}"
+fi
 cp "$SRC_DIR/bzlib.h" "$STAGE/include/"
 
-[ -f "$STAGE/lib/libbz2.a" ]    || { echo "missing libbz2.a" >&2; exit 1; }
+if [ ! -f "$STAGE/lib/libbz2.a" ] && [ ! -f "$STAGE/lib/libbz2.lib" ]; then
+    echo "missing libbz2.a / libbz2.lib" >&2
+    exit 1
+fi
 [ -f "$STAGE/include/bzlib.h" ] || { echo "missing bzlib.h"  >&2; exit 1; }
 
 tar -C "$STAGE" -czf "$TARBALL" .

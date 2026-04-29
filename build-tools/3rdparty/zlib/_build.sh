@@ -113,6 +113,11 @@ android-arm64-v8a|android-x86_64)
         "-DANDROID_PLATFORM=android-${ANDROID_API}"
     ) ;;
 webasm) EMCMAKE_PREFIX="emcmake" ;;
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell. cmake auto-
+    # detects cl.exe.
+    : # cmake's default Ninja+cl pickup is fine
+    ;;
 *) echo "unknown $TARGET_PLATFORM" >&2; exit 1 ;;
 esac
 
@@ -141,7 +146,15 @@ fi
 #   consumers like libpng fail with "No such file or directory").
 cp -a "$INSTALL_DIR/include/." "$STAGE/include/"
 
-[ -f "$STAGE/lib/libz.a" ]      || { echo "missing libz.a in stage" >&2; find "$INSTALL_DIR" >&2; exit 1; }
+# On Unix the static lib is libz.a; on Windows MSVC it's zlibstatic.lib
+# (or zlib.lib for some configurations).
+if [ ! -f "$STAGE/lib/libz.a" ] \
+    && [ ! -f "$STAGE/lib/zlibstatic.lib" ] \
+    && [ ! -f "$STAGE/lib/zlib.lib" ]; then
+    echo "missing zlib static lib in stage" >&2
+    find "$INSTALL_DIR" >&2
+    exit 1
+fi
 [ -f "$STAGE/include/zlib.h" ]  || { echo "missing zlib.h"  >&2; exit 1; }
 
 tar -C "$STAGE" -czf "$TARBALL" .

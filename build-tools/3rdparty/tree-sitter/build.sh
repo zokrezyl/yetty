@@ -27,8 +27,12 @@ case "$TARGET_PLATFORM" in
         SHELL_NAME="3rdparty-${TARGET_PLATFORM}"
         ;;
     windows-x86_64)
-        echo "tree-sitter windows-x86_64 not implemented yet (defer like other libs)" >&2
-        exit 1
+        # Native MSVC: caller must have vcvarsall'd the shell.
+        if ! command -v cl >/dev/null 2>&1 && ! command -v cl.exe >/dev/null 2>&1; then
+            echo "error: windows-x86_64 requires MSVC cl on PATH (vcvarsall x64)" >&2
+            exit 1
+        fi
+        exec bash "$(dirname "$0")/_build.sh" "$@"
         ;;
     *)
         echo "unknown TARGET_PLATFORM: $TARGET_PLATFORM" >&2

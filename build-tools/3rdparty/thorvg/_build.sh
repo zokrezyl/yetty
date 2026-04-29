@@ -213,6 +213,15 @@ webasm)
     CXX=em++
     AR=emar
     ;;
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell. cl.exe + lib.exe.
+    # NOMINMAX prevents windef.h from defining min()/max() macros that
+    # collide with thorvg's tvgMath.h `static inline Point min(...)`.
+    CXX=cl
+    AR=lib
+    CXXFLAGS_BASE="/nologo /O2 /MT /EHsc /std:c++17 /DNOMINMAX /D_CRT_SECURE_NO_WARNINGS /DNDEBUG /DTVG_STATIC"
+    CXXFLAGS_EXTRA=""
+    ;;
 *) echo "unknown TARGET_PLATFORM: $TARGET_PLATFORM" >&2; exit 1 ;;
 esac
 
@@ -235,15 +244,28 @@ SRC_GROUPS=(
 )
 
 # Build the include path the same way the old cmake's PRIVATE list did.
-INCS=(
-    "-I$SRC_DIR/inc"
-    "-I$SRC_DIR/src/common"
-    "-I$SRC_DIR/src/renderer"
-    "-I$SRC_DIR/src/renderer/sw_engine"
-    "-I$SRC_DIR/src/loaders/svg"
-    "-I$SRC_DIR/src/loaders/lottie"
-    "-I$SRC_DIR/src/loaders/raw"
-)
+# On windows we need cygpath-converted paths and /I prefix for MSVC.
+if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+    INCS=(
+        "/I$(cygpath -w "$SRC_DIR/inc")"
+        "/I$(cygpath -w "$SRC_DIR/src/common")"
+        "/I$(cygpath -w "$SRC_DIR/src/renderer")"
+        "/I$(cygpath -w "$SRC_DIR/src/renderer/sw_engine")"
+        "/I$(cygpath -w "$SRC_DIR/src/loaders/svg")"
+        "/I$(cygpath -w "$SRC_DIR/src/loaders/lottie")"
+        "/I$(cygpath -w "$SRC_DIR/src/loaders/raw")"
+    )
+else
+    INCS=(
+        "-I$SRC_DIR/inc"
+        "-I$SRC_DIR/src/common"
+        "-I$SRC_DIR/src/renderer"
+        "-I$SRC_DIR/src/renderer/sw_engine"
+        "-I$SRC_DIR/src/loaders/svg"
+        "-I$SRC_DIR/src/loaders/lottie"
+        "-I$SRC_DIR/src/loaders/raw"
+    )
+fi
 
 SOURCES=()
 for _grp in "${SRC_GROUPS[@]}"; do
@@ -261,30 +283,50 @@ echo "==> compiling thorvg ${VERSION} for $TARGET_PLATFORM (${#SOURCES[@]} .cpp 
 #-----------------------------------------------------------------------------
 mkdir -p "$WORK_DIR/obj"
 OBJS=()
-PIDS=()
-JOBS=0
-for _src in "${SOURCES[@]}"; do
-    # Object name uses sha-of-path to dedupe identically-named files
-    # across the loader subdirs (svg/tvgSvgLoader.cpp vs lottie/...).
-    _hash="$(printf '%s' "$_src" | cksum | awk '{print $1}')"
-    _base="$(basename "${_src%.cpp}")"
-    _obj="$WORK_DIR/obj/${_base}-${_hash}.o"
-    OBJS+=("$_obj")
+if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+    # MSVC: cl /c /Fo<obj> <src>; lib /OUT:<lib> <objs>. Sequential —
+    # parallel cl invocations on the same .pdb collide with C2120/C2121.
+    for _src in "${SOURCES[@]}"; do
+        _hash="$(printf '%s' "$_src" | cksum | awk '{print $1}')"
+        _base="$(basename "${_src%.cpp}")"
+        _obj="$WORK_DIR/obj/${_base}-${_hash}.obj"
+        _src_w=$(cygpath -w "$_src")
+        _obj_w=$(cygpath -w "$_obj")
+        MSYS2_ARG_CONV_EXCL='*' \
+            $CXX $CXXFLAGS "${INCS[@]}" /c "$_src_w" "/Fo${_obj_w}"
+        OBJS+=("$_obj")
+    done
+    _OUT_W=$(cygpath -w "$INSTALL_DIR/lib/libthorvg.lib")
+    _OBJS_W=()
+    for _o in "${OBJS[@]}"; do _OBJS_W+=("$(cygpath -w "$_o")"); done
+    MSYS2_ARG_CONV_EXCL='*' \
+        $AR /nologo "/OUT:${_OUT_W}" "${_OBJS_W[@]}"
+else
+    PIDS=()
+    JOBS=0
+    for _src in "${SOURCES[@]}"; do
+        # Object name uses sha-of-path to dedupe identically-named files
+        # across the loader subdirs (svg/tvgSvgLoader.cpp vs lottie/...).
+        _hash="$(printf '%s' "$_src" | cksum | awk '{print $1}')"
+        _base="$(basename "${_src%.cpp}")"
+        _obj="$WORK_DIR/obj/${_base}-${_hash}.o"
+        OBJS+=("$_obj")
 
-    (
-        $CXX $CXXFLAGS "${INCS[@]}" -c "$_src" -o "$_obj"
-    ) &
-    PIDS+=($!)
-    JOBS=$((JOBS+1))
-    if [ "$JOBS" -ge "$NCPU" ]; then
-        wait "${PIDS[0]}"
-        PIDS=("${PIDS[@]:1}")
-        JOBS=$((JOBS-1))
-    fi
-done
-for pid in "${PIDS[@]}"; do wait "$pid"; done
+        (
+            $CXX $CXXFLAGS "${INCS[@]}" -c "$_src" -o "$_obj"
+        ) &
+        PIDS+=($!)
+        JOBS=$((JOBS+1))
+        if [ "$JOBS" -ge "$NCPU" ]; then
+            wait "${PIDS[0]}"
+            PIDS=("${PIDS[@]:1}")
+            JOBS=$((JOBS-1))
+        fi
+    done
+    for pid in "${PIDS[@]}"; do wait "$pid"; done
 
-$AR rcs "$INSTALL_DIR/lib/libthorvg.a" "${OBJS[@]}"
+    $AR rcs "$INSTALL_DIR/lib/libthorvg.a" "${OBJS[@]}"
+fi
 
 #-----------------------------------------------------------------------------
 # Stage public headers (whatever upstream ships under inc/)
@@ -323,7 +365,10 @@ cp -a "$INSTALL_DIR/lib"              "$STAGE/"
 cp -a "$INSTALL_DIR/include"          "$STAGE/"
 cp -a "$INSTALL_DIR/include-internal" "$STAGE/"
 
-[ -f "$STAGE/lib/libthorvg.a" ]                        || { echo "missing libthorvg.a"            >&2; exit 1; }
+if [ ! -f "$STAGE/lib/libthorvg.a" ] && [ ! -f "$STAGE/lib/libthorvg.lib" ]; then
+    echo "missing libthorvg.a / libthorvg.lib in stage" >&2
+    exit 1
+fi
 [ -f "$STAGE/include/thorvg.h" ]                       || { echo "missing thorvg.h"               >&2; exit 1; }
 [ -d "$STAGE/include-internal/renderer" ]              || { echo "missing include-internal/renderer" >&2; exit 1; }
 [ -d "$STAGE/include-internal/common" ]                || { echo "missing include-internal/common"   >&2; exit 1; }

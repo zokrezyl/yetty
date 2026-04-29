@@ -96,6 +96,17 @@ android-arm64-v8a|android-x86_64)
     CXX="${_T}${ANDROID_API}-clang++"; AR="llvm-ar"
     ;;
 webasm) CXX=em++; AR=emar ;;
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell. cl.exe + lib.exe.
+    # MSYS2_ARG_CONV_EXCL='*' is applied locally on each cl/lib call
+    # below so MSVC /flags pass through. Do NOT export it globally —
+    # git-bash on windows-latest needs MSYS conversion for the curl
+    # invocation that fetches the imgui source tarball.
+    CXX=cl
+    AR=lib
+    CXXFLAGS_BASE="/nologo /O2 /MT /EHsc /std:c++17 /D_CRT_SECURE_NO_WARNINGS /DNDEBUG"
+    CXXFLAGS_EXTRA=""
+    ;;
 *) echo "unknown $TARGET_PLATFORM" >&2; exit 1 ;;
 esac
 
@@ -106,12 +117,33 @@ CXXFLAGS="$CXXFLAGS_BASE $CXXFLAGS_EXTRA"
 #-----------------------------------------------------------------------------
 CORE=(imgui.cpp imgui_demo.cpp imgui_draw.cpp imgui_tables.cpp imgui_widgets.cpp)
 OBJS=()
-for _s in "${CORE[@]}"; do
-    _o="$WORK_DIR/${_s%.cpp}-${TARGET_PLATFORM}.o"
-    $CXX $CXXFLAGS -I"$SRC_DIR" -c "$SRC_DIR/$_s" -o "$_o"
-    OBJS+=("$_o")
-done
-$AR rcs "$STAGE/lib/libimgui_core.a" "${OBJS[@]}"
+if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+    # cygpath -w converts /tmp/... -> C:\msys64\tmp\... so cl sees a real
+    # Windows path (it would otherwise treat the leading / as a flag).
+    # MSYS2_ARG_CONV_EXCL='*' applied per-call so MSVC /flags pass
+    # through.
+    _SRC_DIR_W=$(cygpath -w "$SRC_DIR")
+    for _s in "${CORE[@]}"; do
+        _o="$WORK_DIR/${_s%.cpp}-${TARGET_PLATFORM}.obj"
+        _o_w=$(cygpath -w "$_o")
+        _src_w=$(cygpath -w "$SRC_DIR/$_s")
+        MSYS2_ARG_CONV_EXCL='*' \
+            $CXX $CXXFLAGS "/I${_SRC_DIR_W}" /c "$_src_w" "/Fo${_o_w}"
+        OBJS+=("$_o")
+    done
+    _OUT_W=$(cygpath -w "$STAGE/lib/libimgui_core.lib")
+    _OBJS_W=()
+    for _o in "${OBJS[@]}"; do _OBJS_W+=("$(cygpath -w "$_o")"); done
+    MSYS2_ARG_CONV_EXCL='*' \
+        $AR /nologo "/OUT:${_OUT_W}" "${_OBJS_W[@]}"
+else
+    for _s in "${CORE[@]}"; do
+        _o="$WORK_DIR/${_s%.cpp}-${TARGET_PLATFORM}.o"
+        $CXX $CXXFLAGS -I"$SRC_DIR" -c "$SRC_DIR/$_s" -o "$_o"
+        OBJS+=("$_o")
+    done
+    $AR rcs "$STAGE/lib/libimgui_core.a" "${OBJS[@]}"
+fi
 
 #-----------------------------------------------------------------------------
 # Stage public headers + backend source files.
@@ -125,7 +157,10 @@ for _b in imgui_impl_glfw.cpp imgui_impl_glfw.h imgui_impl_wgpu.cpp imgui_impl_w
     [ -f "$SRC_DIR/backends/$_b" ] && cp "$SRC_DIR/backends/$_b" "$STAGE/src-backends/" || true
 done
 
-[ -f "$STAGE/lib/libimgui_core.a" ]                 || { echo "missing libimgui_core.a"           >&2; exit 1; }
+if [ ! -f "$STAGE/lib/libimgui_core.a" ] && [ ! -f "$STAGE/lib/libimgui_core.lib" ]; then
+    echo "missing libimgui_core.a / libimgui_core.lib" >&2
+    exit 1
+fi
 [ -f "$STAGE/include/imgui.h" ]                     || { echo "missing imgui.h"                   >&2; exit 1; }
 [ -f "$STAGE/src-backends/imgui_impl_wgpu.cpp" ]    || { echo "missing imgui_impl_wgpu.cpp"        >&2; exit 1; }
 

@@ -105,6 +105,10 @@ android-arm64-v8a|android-x86_64)
         "-DANDROID_PLATFORM=android-${ANDROID_API}"
     ) ;;
 webasm) EMCMAKE_PREFIX="emcmake" ;;
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell.
+    : # cmake's default Ninja+cl pickup is fine
+    ;;
 *) echo "unknown $TARGET_PLATFORM" >&2; exit 1 ;;
 esac
 
@@ -116,7 +120,9 @@ cmake --install "$BUILD_DIR"
 mkdir -p "$STAGE/lib" "$STAGE/include"
 for _D in lib lib64; do
     if [ -d "$INSTALL_DIR/$_D" ]; then
-        find "$INSTALL_DIR/$_D" -maxdepth 1 -name 'liblz4*.a' -exec cp -a {} "$STAGE/lib/" \;
+        find "$INSTALL_DIR/$_D" -maxdepth 1 \
+            \( -name 'liblz4*.a' -o -name 'lz4*.lib' \) \
+            -exec cp -a {} "$STAGE/lib/" \;
     fi
 done
 # Normalise: ensure liblz4.a exists.
@@ -127,7 +133,13 @@ for _h in lz4.h lz4frame.h lz4hc.h xxhash.h; do
     [ -f "$INSTALL_DIR/include/$_h" ] && cp "$INSTALL_DIR/include/$_h" "$STAGE/include/" || true
 done
 
-[ -f "$STAGE/lib/liblz4.a" ] || { echo "missing liblz4.a" >&2; find "$INSTALL_DIR" >&2; exit 1; }
+# Unix: liblz4.a; Windows MSVC: lz4.lib (or lz4_static.lib).
+if [ ! -f "$STAGE/lib/liblz4.a" ] \
+    && ! ls "$STAGE/lib/"lz4*.lib >/dev/null 2>&1; then
+    echo "missing lz4 static lib in stage" >&2
+    find "$INSTALL_DIR" >&2
+    exit 1
+fi
 [ -f "$STAGE/include/lz4.h" ] || { echo "missing lz4.h" >&2; exit 1; }
 
 tar -C "$STAGE" -czf "$TARBALL" .

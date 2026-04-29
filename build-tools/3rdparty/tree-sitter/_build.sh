@@ -156,6 +156,20 @@ webasm)
     AR=emar
     ;;
 
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell. cl.exe + lib.exe.
+    # NB: the cc_compile / ar_create helpers set MSYS2_ARG_CONV_EXCL='*'
+    # locally for the cl/lib invocation (so MSVC /flags pass through),
+    # but leave it unset globally — git-bash's curl on the windows-latest
+    # GHA runner needs MSYS path conversion to find /c/Users/.../*.part.
+    CC=cl
+    CXX=cl
+    AR=lib
+    CFLAGS_BASE="/nologo /O2 /MT /D_CRT_SECURE_NO_WARNINGS /DNDEBUG"
+    CXXFLAGS_BASE="/nologo /O2 /MT /EHsc /std:c++17 /D_CRT_SECURE_NO_WARNINGS /DNDEBUG"
+    CFLAGS_EXTRA=""
+    ;;
+
 *)
     echo "unknown TARGET_PLATFORM: $TARGET_PLATFORM" >&2
     exit 1
@@ -164,6 +178,62 @@ esac
 
 CFLAGS="$CFLAGS_BASE $CFLAGS_EXTRA"
 CXXFLAGS="$CXXFLAGS_BASE $CFLAGS_EXTRA"
+
+#-----------------------------------------------------------------------------
+# Compile/archive helpers — unify gcc-style and MSVC-style invocations so
+# downstream code below stays platform-independent.
+#-----------------------------------------------------------------------------
+_OBJ_EXT=o
+_LIB_PREFIX=lib
+_LIB_EXT=a
+if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+    _OBJ_EXT=obj
+    _LIB_PREFIX=
+    _LIB_EXT=lib
+fi
+
+# cc_compile <c|cpp> <src> <obj> [extra_include_dirs...]
+cc_compile() {
+    local lang="$1" src="$2" obj="$3"; shift 3
+    local _flags="$CFLAGS"
+    local _cc="$CC"
+    [ "$lang" = "cpp" ] && { _flags="$CXXFLAGS"; _cc="$CXX"; }
+    if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+        # cygpath -w converts /tmp/... -> C:\msys64\tmp\... so cl sees a
+        # real Windows path (it would otherwise treat the leading / as a
+        # flag, once MSYS2_ARG_CONV_EXCL stops auto-conversion).
+        local _src_w _obj_w
+        _src_w=$(cygpath -w "$src")
+        _obj_w=$(cygpath -w "$obj")
+        local _includes=()
+        for _d in "$@"; do _includes+=("/I$(cygpath -w "$_d")"); done
+        # MSYS2_ARG_CONV_EXCL='*' is set only for this cl invocation so
+        # /nologo /O2 /MT etc. pass through to cl unchanged. Globally
+        # setting it would break the curl invocations elsewhere in this
+        # script (git-bash's curl on windows-latest needs MSYS to convert
+        # /c/Users/.../foo.part to C:\Users\...\foo.part).
+        MSYS2_ARG_CONV_EXCL='*' \
+            $_cc $_flags "${_includes[@]}" /c "$_src_w" "/Fo${_obj_w}"
+    else
+        local _includes=()
+        for _d in "$@"; do _includes+=("-I$_d"); done
+        $_cc $_flags "${_includes[@]}" -c "$src" -o "$obj"
+    fi
+}
+
+# ar_create <out_lib> <obj...>
+ar_create() {
+    local out="$1"; shift
+    if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+        local _out_w _objs_w=()
+        _out_w=$(cygpath -w "$out")
+        for _o in "$@"; do _objs_w+=("$(cygpath -w "$_o")"); done
+        MSYS2_ARG_CONV_EXCL='*' \
+            $AR /nologo "/OUT:${_out_w}" "${_objs_w[@]}"
+    else
+        $AR rcs "$out" "$@"
+    fi
+}
 
 #-----------------------------------------------------------------------------
 # Fetch + extract any of the 16 GitHub source tarballs into $SRC_BASE.
@@ -204,12 +274,13 @@ TS_CORE_DIR="$SRC_BASE/tree-sitter-core"
 _extract "$TS_CORE_TARBALL" "$TS_CORE_DIR"
 
 echo "==> compiling tree-sitter core for $TARGET_PLATFORM"
-$CC $CFLAGS \
-    -I"$TS_CORE_DIR/lib/include" \
-    -I"$TS_CORE_DIR/lib/src" \
-    -c "$TS_CORE_DIR/lib/src/lib.c" \
-    -o "$WORK_DIR/tree-sitter-core.o"
-$AR rcs "$INSTALL_DIR/lib/libtree-sitter-core.a" "$WORK_DIR/tree-sitter-core.o"
+cc_compile c \
+    "$TS_CORE_DIR/lib/src/lib.c" \
+    "$WORK_DIR/tree-sitter-core.${_OBJ_EXT}" \
+    "$TS_CORE_DIR/lib/include" \
+    "$TS_CORE_DIR/lib/src"
+ar_create "$INSTALL_DIR/lib/${_LIB_PREFIX}tree-sitter-core.${_LIB_EXT}" \
+    "$WORK_DIR/tree-sitter-core.${_OBJ_EXT}"
 cp -a "$TS_CORE_DIR/lib/include/tree_sitter" "$INSTALL_DIR/include/"
 
 #-----------------------------------------------------------------------------
@@ -256,32 +327,32 @@ for record in "${GRAMMARS[@]}"; do
 
     OBJS=()
     [ -f "$G_SRC_DIR/parser.c" ] || { echo "missing $G_SRC_DIR/parser.c" >&2; exit 1; }
-    $CC $CFLAGS \
-        -I"$G_SRC_DIR" \
-        -I"$TS_CORE_DIR/lib/include" \
-        -c "$G_SRC_DIR/parser.c" \
-        -o "$WORK_DIR/${G_NAME}-parser.o"
-    OBJS+=("$WORK_DIR/${G_NAME}-parser.o")
+    cc_compile c \
+        "$G_SRC_DIR/parser.c" \
+        "$WORK_DIR/${G_NAME}-parser.${_OBJ_EXT}" \
+        "$G_SRC_DIR" \
+        "$TS_CORE_DIR/lib/include"
+    OBJS+=("$WORK_DIR/${G_NAME}-parser.${_OBJ_EXT}")
 
     if [ "$G_SCANNER" = "1" ]; then
         if [ -f "$G_SRC_DIR/scanner.c" ]; then
-            $CC $CFLAGS \
-                -I"$G_SRC_DIR" \
-                -I"$TS_CORE_DIR/lib/include" \
-                -c "$G_SRC_DIR/scanner.c" \
-                -o "$WORK_DIR/${G_NAME}-scanner.o"
-            OBJS+=("$WORK_DIR/${G_NAME}-scanner.o")
+            cc_compile c \
+                "$G_SRC_DIR/scanner.c" \
+                "$WORK_DIR/${G_NAME}-scanner.${_OBJ_EXT}" \
+                "$G_SRC_DIR" \
+                "$TS_CORE_DIR/lib/include"
+            OBJS+=("$WORK_DIR/${G_NAME}-scanner.${_OBJ_EXT}")
         elif [ -f "$G_SRC_DIR/scanner.cc" ]; then
-            $CXX $CXXFLAGS \
-                -I"$G_SRC_DIR" \
-                -I"$TS_CORE_DIR/lib/include" \
-                -c "$G_SRC_DIR/scanner.cc" \
-                -o "$WORK_DIR/${G_NAME}-scanner.o"
-            OBJS+=("$WORK_DIR/${G_NAME}-scanner.o")
+            cc_compile cpp \
+                "$G_SRC_DIR/scanner.cc" \
+                "$WORK_DIR/${G_NAME}-scanner.${_OBJ_EXT}" \
+                "$G_SRC_DIR" \
+                "$TS_CORE_DIR/lib/include"
+            OBJS+=("$WORK_DIR/${G_NAME}-scanner.${_OBJ_EXT}")
         fi
     fi
 
-    $AR rcs "$INSTALL_DIR/lib/libts-grammar-${G_NAME}.a" "${OBJS[@]}"
+    ar_create "$INSTALL_DIR/lib/${_LIB_PREFIX}ts-grammar-${G_NAME}.${_LIB_EXT}" "${OBJS[@]}"
 
     # Stage queries: pick source layout, copy into queries/<name>/.
     if [ -n "$G_QUERIES_DIR" ]; then
@@ -309,12 +380,12 @@ cp -a "$INSTALL_DIR/queries" "$STAGE/"
 # Sanity: every expected lib produced
 for record in "${GRAMMARS[@]}"; do
     IFS='|' read -r G_NAME _ <<< "$record"
-    if [ ! -f "$STAGE/lib/libts-grammar-${G_NAME}.a" ]; then
-        echo "missing libts-grammar-${G_NAME}.a in stage" >&2
+    if [ ! -f "$STAGE/lib/${_LIB_PREFIX}ts-grammar-${G_NAME}.${_LIB_EXT}" ]; then
+        echo "missing ${_LIB_PREFIX}ts-grammar-${G_NAME}.${_LIB_EXT} in stage" >&2
         exit 1
     fi
 done
-[ -f "$STAGE/lib/libtree-sitter-core.a" ] || { echo "missing libtree-sitter-core.a" >&2; exit 1; }
+[ -f "$STAGE/lib/${_LIB_PREFIX}tree-sitter-core.${_LIB_EXT}" ] || { echo "missing ${_LIB_PREFIX}tree-sitter-core.${_LIB_EXT}" >&2; exit 1; }
 [ -f "$STAGE/include/tree_sitter/api.h" ]  || { echo "missing tree_sitter/api.h" >&2; exit 1; }
 
 echo "==> packaging -> $TARBALL"

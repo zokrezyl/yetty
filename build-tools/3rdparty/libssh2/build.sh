@@ -3,15 +3,13 @@
 # from build-tools/3rdparty/openssl/ — see _build.sh for the cross-fetch
 # of that asset at build time.
 #
-# windows-x86_64 is intentionally absent — same MSVC ABI concern as
-# libco/pdfio/thorvg. TODO: add windows once windows-libs-msvc lands.
-#
 # Required env:
 #   TARGET_PLATFORM   linux-x86_64 | linux-aarch64 |
 #                     macos-arm64 | macos-x86_64 |
 #                     android-arm64-v8a | android-x86_64 |
 #                     ios-arm64 | ios-x86_64 |
-#                     webasm
+#                     tvos-arm64 | tvos-x86_64 |
+#                     webasm | windows-x86_64
 #   OUTPUT_DIR        where the tarball is written
 
 set -euo pipefail
@@ -22,9 +20,19 @@ case "$TARGET_PLATFORM" in
     linux-x86_64|linux-aarch64|\
     macos-x86_64|macos-arm64|\
     android-arm64-v8a|android-x86_64|\
-    ios-arm64|ios-x86_64|\
+    ios-arm64|ios-x86_64|tvos-arm64|tvos-x86_64|\
     webasm)
         SHELL_NAME="3rdparty-${TARGET_PLATFORM}"
+        ;;
+    windows-x86_64)
+        # Native MSVC: caller must have vcvarsall'd the shell so cl.exe
+        # is on PATH. Built against the prebuilt openssl windows tarball
+        # fetched by _build.sh.
+        if ! command -v cl >/dev/null 2>&1 && ! command -v cl.exe >/dev/null 2>&1; then
+            echo "error: windows-x86_64 requires MSVC cl on PATH (vcvarsall x64)" >&2
+            exit 1
+        fi
+        exec bash "$(dirname "$0")/_build.sh" "$@"
         ;;
     *)
         echo "unknown TARGET_PLATFORM: $TARGET_PLATFORM" >&2

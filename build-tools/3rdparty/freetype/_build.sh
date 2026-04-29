@@ -136,6 +136,11 @@ android-arm64-v8a|android-x86_64)
         "-DANDROID_PLATFORM=android-${ANDROID_API}"
     ) ;;
 webasm) EMCMAKE_PREFIX="emcmake" ;;
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell. cmake auto-
+    # detects cl.exe.
+    : # cmake's default Ninja+cl pickup is fine
+    ;;
 *) echo "unknown $TARGET_PLATFORM" >&2; exit 1 ;;
 esac
 
@@ -147,12 +152,18 @@ cmake --install "$BUILD_DIR"
 mkdir -p "$STAGE/lib" "$STAGE/include"
 for _D in lib lib64; do
     if [ -d "$INSTALL_DIR/$_D" ]; then
-        find "$INSTALL_DIR/$_D" -maxdepth 1 -name 'libfreetype*.a' -exec cp -a {} "$STAGE/lib/" \;
+        find "$INSTALL_DIR/$_D" -maxdepth 1 \
+            \( -name 'libfreetype*.a' -o -name 'freetype*.lib' \) \
+            -exec cp -a {} "$STAGE/lib/" \;
     fi
 done
 cp -a "$INSTALL_DIR/include/." "$STAGE/include/"
 
-[ -f "$STAGE/lib/libfreetype.a" ] || { echo "missing libfreetype.a" >&2; find "$INSTALL_DIR" >&2; exit 1; }
+if [ ! -f "$STAGE/lib/libfreetype.a" ] && [ ! -f "$STAGE/lib/freetype.lib" ]; then
+    echo "missing libfreetype.a / freetype.lib" >&2
+    find "$INSTALL_DIR" >&2
+    exit 1
+fi
 [ -f "$STAGE/include/ft2build.h" ] || \
 [ -f "$STAGE/include/freetype2/ft2build.h" ] || { echo "missing ft2build.h" >&2; exit 1; }
 

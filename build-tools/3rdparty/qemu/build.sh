@@ -22,6 +22,11 @@ case "$TARGET_PLATFORM" in
     macos-x86_64|macos-arm64|ios-arm64|ios-x86_64|tvos-arm64|tvos-x86_64)
         SHELL_NAME="assets-qemu-${TARGET_PLATFORM}"
         ;;
+    webasm)
+        echo "qemu does not target webasm — the webasm yetty build uses in-process" >&2
+        echo "TinyEMU (compiled to wasm) instead of a prebuilt QEMU binary. Skipping." >&2
+        exit 1
+        ;;
     windows-x86_64)
         # Windows uses MSYS2 CLANG64 — no nix shell. The caller must already
         # be inside CLANG64 (CI: msys2/setup-msys2 with msystem: CLANG64;

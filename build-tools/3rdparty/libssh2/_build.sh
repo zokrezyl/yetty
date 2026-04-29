@@ -114,9 +114,23 @@ rm -rf "$OSSL_PREFIX"
 mkdir -p "$OSSL_PREFIX"
 tar -C "$OSSL_PREFIX" -xzf "$OSSL_TARBALL"
 
-# Sanity-check: prebuilt openssl tarball must look like {lib/libssl.a, lib/libcrypto.a, include/openssl/}
-[ -f "$OSSL_PREFIX/lib/libssl.a" ]    || { echo "missing $OSSL_PREFIX/lib/libssl.a — openssl tarball layout?" >&2; exit 1; }
-[ -f "$OSSL_PREFIX/lib/libcrypto.a" ] || { echo "missing $OSSL_PREFIX/lib/libcrypto.a — openssl tarball layout?" >&2; exit 1; }
+# Sanity-check the prebuilt openssl tarball — Unix ships libssl.a /
+# libcrypto.a, MSVC ships libssl.lib / libcrypto.lib.
+OSSL_SSL=""; OSSL_CRYPTO=""
+for _candidate in libssl.a libssl.lib; do
+    if [ -f "$OSSL_PREFIX/lib/$_candidate" ]; then
+        OSSL_SSL="$OSSL_PREFIX/lib/$_candidate"
+        break
+    fi
+done
+for _candidate in libcrypto.a libcrypto.lib; do
+    if [ -f "$OSSL_PREFIX/lib/$_candidate" ]; then
+        OSSL_CRYPTO="$OSSL_PREFIX/lib/$_candidate"
+        break
+    fi
+done
+[ -n "$OSSL_SSL" ]    || { echo "missing libssl in $OSSL_PREFIX/lib/ — openssl tarball layout?" >&2; ls -la "$OSSL_PREFIX/lib/" >&2; exit 1; }
+[ -n "$OSSL_CRYPTO" ] || { echo "missing libcrypto in $OSSL_PREFIX/lib/ — openssl tarball layout?" >&2; ls -la "$OSSL_PREFIX/lib/" >&2; exit 1; }
 [ -d "$OSSL_PREFIX/include/openssl" ] || { echo "missing $OSSL_PREFIX/include/openssl/" >&2; exit 1; }
 
 rm -rf "$BUILD_DIR" "$INSTALL_DIR" "$STAGE"
@@ -139,8 +153,8 @@ CMAKE_ARGS=(
     -DOPENSSL_ROOT_DIR="$OSSL_PREFIX"
     -DOPENSSL_USE_STATIC_LIBS=ON
     -DOPENSSL_INCLUDE_DIR="$OSSL_PREFIX/include"
-    -DOPENSSL_SSL_LIBRARY="$OSSL_PREFIX/lib/libssl.a"
-    -DOPENSSL_CRYPTO_LIBRARY="$OSSL_PREFIX/lib/libcrypto.a"
+    -DOPENSSL_SSL_LIBRARY="$OSSL_SSL"
+    -DOPENSSL_CRYPTO_LIBRARY="$OSSL_CRYPTO"
     # libssh2's zlib compression is off — yetty links zlib downstream
     # via consumer wiring; folding it into libssh2 here would conflict
     # with that. Same as the from-source build.
@@ -225,6 +239,12 @@ webasm)
     EMCMAKE_PREFIX="emcmake"
     ;;
 
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell. cmake auto-
+    # detects cl.exe.
+    : # cmake's default Ninja+cl pickup is fine
+    ;;
+
 *)
     echo "unknown TARGET_PLATFORM: $TARGET_PLATFORM" >&2
     exit 1
@@ -258,11 +278,11 @@ for _D in lib lib64; do
 done
 cp -a "$INSTALL_DIR/include/." "$STAGE/include/"
 
-[ -f "$STAGE/lib/libssh2.a" ] || {
-    echo "missing libssh2.a in $STAGE/lib/ — install layout changed?" >&2
+if [ ! -f "$STAGE/lib/libssh2.a" ] && [ ! -f "$STAGE/lib/libssh2.lib" ]; then
+    echo "missing libssh2.a / libssh2.lib in $STAGE/lib/ — install layout changed?" >&2
     find "$INSTALL_DIR" -maxdepth 4 -print >&2 || true
     exit 1
-}
+fi
 [ -f "$STAGE/include/libssh2.h" ] || { echo "missing libssh2.h" >&2; exit 1; }
 
 echo "==> packaging -> $TARBALL"

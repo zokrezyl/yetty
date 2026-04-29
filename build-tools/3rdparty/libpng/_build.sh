@@ -65,7 +65,17 @@ rm -rf "$ZLIB_PREFIX"
 mkdir -p "$ZLIB_PREFIX"
 tar -C "$ZLIB_PREFIX" -xzf "$ZLIB_TARBALL"
 
-[ -f "$ZLIB_PREFIX/lib/libz.a" ] || { echo "missing $ZLIB_PREFIX/lib/libz.a" >&2; exit 1; }
+# Resolve the actual zlib static archive path inside the prebuilt
+# tarball — Unix produces lib/libz.a, MSVC produces lib/zlibstatic.lib
+# (or lib/zlib.lib).
+ZLIB_LIB=""
+for _candidate in libz.a zlibstatic.lib zlib.lib; do
+    if [ -f "$ZLIB_PREFIX/lib/$_candidate" ]; then
+        ZLIB_LIB="$ZLIB_PREFIX/lib/$_candidate"
+        break
+    fi
+done
+[ -n "$ZLIB_LIB" ] || { echo "missing zlib static lib in $ZLIB_PREFIX/lib/" >&2; ls -la "$ZLIB_PREFIX/lib/" >&2; exit 1; }
 [ -f "$ZLIB_PREFIX/include/zlib.h" ] || { echo "missing zlib.h" >&2; exit 1; }
 
 rm -rf "$BUILD_DIR" "$INSTALL_DIR" "$STAGE"
@@ -93,7 +103,7 @@ CMAKE_ARGS=(
     -DCMAKE_VISIBILITY_INLINES_HIDDEN=ON
     -DZLIB_ROOT="$ZLIB_PREFIX"
     -DZLIB_INCLUDE_DIR="$ZLIB_PREFIX/include"
-    -DZLIB_LIBRARY="$ZLIB_PREFIX/lib/libz.a"
+    -DZLIB_LIBRARY="$ZLIB_LIB"
 )
 EMCMAKE_PREFIX=""
 
@@ -147,6 +157,11 @@ android-arm64-v8a|android-x86_64)
         "-DPNG_HARDWARE_OPTIMIZATIONS=OFF"
     ) ;;
 webasm) EMCMAKE_PREFIX="emcmake"; CMAKE_ARGS+=("-DPNG_HARDWARE_OPTIMIZATIONS=OFF") ;;
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell. cmake auto-
+    # detects cl.exe.
+    : # cmake's default Ninja+cl pickup is fine
+    ;;
 *) echo "unknown $TARGET_PLATFORM" >&2; exit 1 ;;
 esac
 
@@ -158,7 +173,9 @@ cmake --install "$BUILD_DIR"
 mkdir -p "$STAGE/lib" "$STAGE/include"
 for _D in lib lib64; do
     if [ -d "$INSTALL_DIR/$_D" ]; then
-        find "$INSTALL_DIR/$_D" -maxdepth 1 -name 'libpng*.a' -exec cp -a {} "$STAGE/lib/" \;
+        find "$INSTALL_DIR/$_D" -maxdepth 1 \
+            \( -name 'libpng*.a' -o -name 'libpng*_static.lib' -o -name 'libpng*.lib' \) \
+            -exec cp -a {} "$STAGE/lib/" \;
     fi
 done
 # Provide a libpng.a alias pointing at libpng16.a for consumers that
@@ -170,7 +187,16 @@ cp "$INSTALL_DIR/include/png.h" "$STAGE/include/"
 cp "$INSTALL_DIR/include/pngconf.h" "$STAGE/include/"
 cp "$INSTALL_DIR/include/pnglibconf.h" "$STAGE/include/"
 
-[ -f "$STAGE/lib/libpng.a" ]   || { echo "missing libpng.a" >&2; find "$INSTALL_DIR" >&2; exit 1; }
+# On Unix the static lib is libpng.a / libpng16.a; on Windows MSVC it's
+# libpng16_static.lib (or libpng16.lib).
+if [ ! -f "$STAGE/lib/libpng.a" ] \
+    && [ ! -f "$STAGE/lib/libpng16.a" ] \
+    && ! ls "$STAGE/lib/"libpng*_static.lib >/dev/null 2>&1 \
+    && ! ls "$STAGE/lib/"libpng*.lib >/dev/null 2>&1; then
+    echo "missing libpng static lib in stage" >&2
+    find "$INSTALL_DIR" >&2
+    exit 1
+fi
 [ -f "$STAGE/include/png.h" ]  || { echo "missing png.h"   >&2; exit 1; }
 
 tar -C "$STAGE" -czf "$TARBALL" .

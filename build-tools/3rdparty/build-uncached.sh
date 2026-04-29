@@ -95,6 +95,7 @@ fi
 #   libpng   — fetches prebuilt zlib at build time
 #   freetype — fetches prebuilt zlib at build time
 #   libssh2  — fetches prebuilt openssl at build time
+#   libcurl  — fetches prebuilt openssl-new at build time
 #   glfw     — system X11 only (still build before glfw3webgpu)
 # Tier 2 (depends on tier 1):
 #   msdfgen      — fetches prebuilt freetype + tinyxml2
@@ -102,9 +103,9 @@ fi
 #-----------------------------------------------------------------------------
 _tier() {
     case "$1" in
-        msdfgen|glfw3webgpu)        echo 2 ;;
-        libpng|freetype|libssh2|glfw) echo 1 ;;
-        *)                          echo 0 ;;
+        msdfgen|glfw3webgpu)                 echo 2 ;;
+        libpng|freetype|libssh2|libcurl|glfw) echo 1 ;;
+        *)                                   echo 0 ;;
     esac
 }
 declare -a SORTED_TODO=()

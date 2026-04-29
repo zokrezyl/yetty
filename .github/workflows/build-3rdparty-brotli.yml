@@ -86,3 +86,32 @@ jobs:
           tag_name: ${{ needs.resolve.outputs.tag }}
           files: out/brotli-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
+
+  # Windows: native MSVC under vcvarsall x64. Every lib that links into
+  # yetty.exe needs MSVC ABI (qemu is the lone mingw exception).
+  build-windows:
+    needs: resolve
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - windows-x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build brotli for ${{ matrix.target }}
+        shell: cmd
+        env:
+          TARGET_PLATFORM: ${{ matrix.target }}
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          if errorlevel 1 exit /b 1
+
+          bash -c "OUTPUT_DIR=\"$(pwd)/out\" ./build-tools/3rdparty/brotli/build.sh"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/brotli-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true

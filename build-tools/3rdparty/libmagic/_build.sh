@@ -170,7 +170,23 @@ ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64)
         tvos-arm64)
             _IOS_SDK="appletvos"       ; _IOS_ARCH="arm64"
             EXTRA_CONFIGURE+=("--host=arm-apple-darwin")
-            _MIN_FLAG="-mtvos-simulator-version-min=${TVOS_MIN}"
+            _MIN_FLAG="-mtvos-version-min=${TVOS_MIN}"
+            ;;
+    esac
+    case "$TARGET_PLATFORM" in
+        tvos-arm64|tvos-x86_64)
+            # tvOS marks fork/vfork/posix_spawn* with __TVOS_PROHIBITED.
+            # Configure runs on the macOS host where these all link, so
+            # without these cache overrides it would set HAVE_FORK /
+            # HAVE_POSIX_SPAWNP and the cross-compile of compress.c would
+            # then hit the SDK header attribute and fail. compress.c
+            # already has fallback paths gated on these macros.
+            CONFIGURE_ENV+=(
+                "ac_cv_func_fork=no"
+                "ac_cv_func_vfork=no"
+                "ac_cv_func_posix_spawn=no"
+                "ac_cv_func_posix_spawnp=no"
+            )
             ;;
     esac
     _IOS_SYSROOT="$(/usr/bin/xcrun --sdk "$_IOS_SDK" --show-sdk-path)"
@@ -278,14 +294,14 @@ if [ "$NEEDS_NATIVE_BOOTSTRAP" = "1" ]; then
                     nix develop ".#3rdparty-linux-x86_64" --command bash -c "$_BOOTSTRAP_CMD"
                 )
                 ;;
-            ios-arm64|ios-x86_64)
+            ios-arm64|ios-x86_64|tvos-arm64|tvos-x86_64)
                 # macOS runner — system /usr/bin/clang is the host
                 # compiler. Pin CC explicitly: configure's auto-detect
                 # would otherwise pick whatever `cc` resolves to, which
-                # in the iOS-cross nix shell is the cross compiler
+                # in the iOS/tvOS-cross nix shell is the cross compiler
                 # (produces arm64 binaries that won't run on the host).
-                # Also drop iOS-specific env so the SDK lookup defaults
-                # to macOS.
+                # Also drop iOS/tvOS-specific env so the SDK lookup
+                # defaults to macOS.
                 (
                     unset DEVELOPER_DIR MACOSX_DEPLOYMENT_TARGET SDKROOT NIX_APPLE_SDK_VERSION
                     export PATH="/usr/bin:$PATH"

@@ -112,6 +112,10 @@ android-arm64-v8a|android-x86_64)
         "-DANDROID_NDK=${ANDROID_NDK_HOME}"
     ) ;;
 webasm) EMCMAKE_PREFIX="emcmake" ;;
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell.
+    : # cmake's default Ninja+cl pickup is fine
+    ;;
 *) echo "unknown $TARGET_PLATFORM" >&2; exit 1 ;;
 esac
 
@@ -123,7 +127,7 @@ cmake --install "$BUILD_DIR"
 mkdir -p "$STAGE/lib" "$STAGE/include"
 for _D in lib lib64; do
     [ -d "$INSTALL_DIR/$_D" ] && find "$INSTALL_DIR/$_D" -maxdepth 1 \
-        -name 'libtinyxml2*' \( -name '*.a' -o -name '*.lib' \) \
+        \( -name 'libtinyxml2*.a' -o -name 'tinyxml2*.lib' \) \
         -exec cp -a {} "$STAGE/lib/" \;
 done
 cp "$INSTALL_DIR/include/tinyxml2.h" "$STAGE/include/"
@@ -137,7 +141,10 @@ for _D in lib lib64; do
     fi
 done
 
-[ -f "$STAGE/lib/libtinyxml2.a" ] || { echo "missing libtinyxml2.a" >&2; exit 1; }
+if [ ! -f "$STAGE/lib/libtinyxml2.a" ] && [ ! -f "$STAGE/lib/tinyxml2.lib" ]; then
+    echo "missing libtinyxml2.a / tinyxml2.lib" >&2
+    exit 1
+fi
 [ -f "$STAGE/include/tinyxml2.h"   ] || { echo "missing tinyxml2.h"   >&2; exit 1; }
 
 tar -C "$STAGE" -czf "$TARBALL" .

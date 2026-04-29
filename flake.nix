@@ -545,7 +545,17 @@
             shellHook = "echo 'Yetty 3rdparty-build (ios-x86_64 simulator)'";
           };
 
-          # tvOS — same toolchain shape as iOS; x86_64 is the appletvsimulator.
+          # tvOS — same toolchain shape as iOS; x86_64 is the appletvsimulator,
+          # arm64 is the Apple TV device (appletvos SDK).
+          "3rdparty-tvos-arm64" = pkgs.mkShell {
+            buildInputs = with pkgs; [
+              meson ninja gnumake perl python3
+              curl gnutar xz gzip
+              pkg-config
+            ];
+            shellHook = "echo 'Yetty 3rdparty-build (tvos-arm64)'";
+          };
+
           "3rdparty-tvos-x86_64" = pkgs.mkShell {
             buildInputs = with pkgs; [
               meson ninja gnumake perl nasm python3

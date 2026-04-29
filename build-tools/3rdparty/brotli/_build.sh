@@ -112,6 +112,11 @@ android-arm64-v8a|android-x86_64)
         "-DANDROID_PLATFORM=android-${ANDROID_API}"
     ) ;;
 webasm) EMCMAKE_PREFIX="emcmake" ;;
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell. cmake auto-
+    # detects cl.exe.
+    : # cmake's default Ninja+cl pickup is fine
+    ;;
 *) echo "unknown $TARGET_PLATFORM" >&2; exit 1 ;;
 esac
 
@@ -123,13 +128,23 @@ cmake --install "$BUILD_DIR"
 mkdir -p "$STAGE/lib" "$STAGE/include"
 for _D in lib lib64; do
     if [ -d "$INSTALL_DIR/$_D" ]; then
-        find "$INSTALL_DIR/$_D" -maxdepth 1 -name 'libbrotli*.a' -exec cp -a {} "$STAGE/lib/" \;
+        find "$INSTALL_DIR/$_D" -maxdepth 1 \
+            \( -name 'libbrotli*.a' -o -name 'brotli*-static.lib' -o -name 'brotli*.lib' \) \
+            -exec cp -a {} "$STAGE/lib/" \;
     fi
 done
 cp -a "$INSTALL_DIR/include/brotli" "$STAGE/include/"
 
-for _need in libbrotlicommon.a libbrotlidec.a libbrotlienc.a; do
-    [ -f "$STAGE/lib/$_need" ] || { echo "missing $_need" >&2; find "$INSTALL_DIR" >&2; exit 1; }
+# brotli's MSVC install names static archives `<name>-static.lib`; on
+# Unix they're `lib<name>.a`. Accept either set.
+for _name in brotlicommon brotlidec brotlienc; do
+    if [ ! -f "$STAGE/lib/lib${_name}.a" ] \
+        && [ ! -f "$STAGE/lib/${_name}-static.lib" ] \
+        && [ ! -f "$STAGE/lib/${_name}.lib" ]; then
+        echo "missing static $_name in stage" >&2
+        find "$INSTALL_DIR" >&2
+        exit 1
+    fi
 done
 [ -f "$STAGE/include/brotli/decode.h" ] || { echo "missing brotli/decode.h" >&2; exit 1; }
 

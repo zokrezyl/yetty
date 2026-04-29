@@ -162,6 +162,14 @@ macos-x86_64|macos-arm64)
         macos-arm64)  CMAKE_ARGS+=("-DCMAKE_OSX_ARCHITECTURES=arm64")  ;;
     esac
     ;;
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell. cmake auto-
+    # detects cl.exe. GLFW upstream supports Win32 natively.
+    CMAKE_ARGS+=(
+        -DGLFW_BUILD_X11=OFF
+        -DGLFW_BUILD_WAYLAND=OFF
+    )
+    ;;
 *) echo "unsupported $TARGET_PLATFORM" >&2; exit 1 ;;
 esac
 
@@ -173,12 +181,18 @@ cmake --install "$BUILD_DIR"
 mkdir -p "$STAGE/lib" "$STAGE/include"
 for _D in lib lib64; do
     if [ -d "$INSTALL_DIR/$_D" ]; then
-        find "$INSTALL_DIR/$_D" -maxdepth 1 -name 'libglfw*.a' -exec cp -a {} "$STAGE/lib/" \;
+        find "$INSTALL_DIR/$_D" -maxdepth 1 \
+            \( -name 'libglfw*.a' -o -name 'glfw3.lib' -o -name 'glfw*.lib' \) \
+            -exec cp -a {} "$STAGE/lib/" \;
     fi
 done
 cp -a "$INSTALL_DIR/include/GLFW" "$STAGE/include/"
 
-[ -f "$STAGE/lib/libglfw3.a" ]            || { echo "missing libglfw3.a"           >&2; find "$INSTALL_DIR" >&2; exit 1; }
+if [ ! -f "$STAGE/lib/libglfw3.a" ] && [ ! -f "$STAGE/lib/glfw3.lib" ]; then
+    echo "missing libglfw3.a / glfw3.lib in stage" >&2
+    find "$INSTALL_DIR" >&2
+    exit 1
+fi
 [ -f "$STAGE/include/GLFW/glfw3.h" ]      || { echo "missing GLFW/glfw3.h"          >&2; exit 1; }
 
 tar -C "$STAGE" -czf "$TARBALL" .

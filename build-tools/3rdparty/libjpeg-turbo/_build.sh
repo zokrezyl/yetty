@@ -115,6 +115,10 @@ webasm)
     EMCMAKE_PREFIX="emcmake"
     # webasm has no SIMD path in libjpeg-turbo.
     CMAKE_ARGS+=("-DWITH_SIMD=OFF") ;;
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell.
+    : # cmake's default Ninja+cl pickup is fine
+    ;;
 *) echo "unknown $TARGET_PLATFORM" >&2; exit 1 ;;
 esac
 
@@ -126,7 +130,10 @@ cmake --install "$BUILD_DIR"
 mkdir -p "$STAGE/lib" "$STAGE/include"
 for _D in lib lib64; do
     if [ -d "$INSTALL_DIR/$_D" ]; then
-        find "$INSTALL_DIR/$_D" -maxdepth 1 \( -name 'libjpeg.a' -o -name 'libturbojpeg.a' \) \
+        find "$INSTALL_DIR/$_D" -maxdepth 1 \
+            \( -name 'libjpeg.a' -o -name 'libturbojpeg.a' \
+               -o -name 'jpeg-static.lib' -o -name 'turbojpeg-static.lib' \
+               -o -name 'jpeg.lib' -o -name 'turbojpeg.lib' \) \
             -exec cp -a {} "$STAGE/lib/" \;
     fi
 done
@@ -134,8 +141,16 @@ for _h in jpeglib.h jconfig.h jmorecfg.h jerror.h turbojpeg.h; do
     [ -f "$INSTALL_DIR/include/$_h" ] && cp "$INSTALL_DIR/include/$_h" "$STAGE/include/" || true
 done
 
-[ -f "$STAGE/lib/libjpeg.a" ]      || { echo "missing libjpeg.a" >&2; find "$INSTALL_DIR" >&2; exit 1; }
-[ -f "$STAGE/lib/libturbojpeg.a" ] || { echo "missing libturbojpeg.a" >&2; exit 1; }
+# Unix: lib{jpeg,turbojpeg}.a; Windows MSVC: {jpeg,turbojpeg}-static.lib.
+for _name in jpeg turbojpeg; do
+    if [ ! -f "$STAGE/lib/lib${_name}.a" ] \
+        && [ ! -f "$STAGE/lib/${_name}-static.lib" ] \
+        && [ ! -f "$STAGE/lib/${_name}.lib" ]; then
+        echo "missing $_name static lib in stage" >&2
+        find "$INSTALL_DIR" >&2
+        exit 1
+    fi
+done
 [ -f "$STAGE/include/jpeglib.h" ]  || { echo "missing jpeglib.h" >&2; exit 1; }
 
 tar -C "$STAGE" -czf "$TARBALL" .

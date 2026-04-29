@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
-# tinyxml2 3rdparty wrapper. 9-target matrix (no windows-x86_64 — same
-# MSVC ABI concern as libco/pdfio/thorvg/libssh2; TODO: add MSVC path
-# once windows-libs-msvc lands on main).
+# tinyxml2 3rdparty wrapper.
 #
 # Required env:
 #   TARGET_PLATFORM   linux-x86_64 | linux-aarch64 |
 #                     macos-arm64 | macos-x86_64 |
 #                     android-arm64-v8a | android-x86_64 |
 #                     ios-arm64 | ios-x86_64 |
-#                     webasm
+#                     webasm | windows-x86_64
 #   OUTPUT_DIR        where the tarball is written
 
 set -euo pipefail
@@ -18,9 +16,15 @@ case "$TARGET_PLATFORM" in
     linux-x86_64|linux-aarch64|\
     macos-x86_64|macos-arm64|\
     android-arm64-v8a|android-x86_64|\
-    ios-arm64|ios-x86_64|tvos-arm64|\
+    ios-arm64|ios-x86_64|tvos-arm64|tvos-x86_64|\
     webasm)
         SHELL_NAME="3rdparty-${TARGET_PLATFORM}" ;;
+    windows-x86_64)
+        if ! command -v cl >/dev/null 2>&1 && ! command -v cl.exe >/dev/null 2>&1; then
+            echo "error: windows-x86_64 requires MSVC cl on PATH (vcvarsall x64)" >&2
+            exit 1
+        fi
+        exec bash "$(dirname "$0")/_build.sh" "$@" ;;
     *) echo "unknown TARGET_PLATFORM: $TARGET_PLATFORM" >&2; exit 1 ;;
 esac
 

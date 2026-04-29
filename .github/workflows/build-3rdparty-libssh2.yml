@@ -129,3 +129,32 @@ jobs:
   # windows-x86_64 deliberately absent: yetty.exe is being switched to
   # native MSVC (see windows-libs-msvc branch). Add an MSVC build job
   # once that branch lands on main, mirroring libuv's MSVC path.
+
+  # Windows: native MSVC under vcvarsall x64. Every lib that links into
+  # yetty.exe needs MSVC ABI (qemu is the lone mingw exception).
+  build-windows:
+    needs: resolve
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - windows-x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build libssh2 for ${{ matrix.target }}
+        shell: cmd
+        env:
+          TARGET_PLATFORM: ${{ matrix.target }}
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          if errorlevel 1 exit /b 1
+
+          bash -c "OUTPUT_DIR=\"$(pwd)/out\" ./build-tools/3rdparty/libssh2/build.sh"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/libssh2-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true

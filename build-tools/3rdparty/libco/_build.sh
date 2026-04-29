@@ -133,6 +133,13 @@ android-arm64-v8a|android-x86_64)
         exit 1
     }
     ;;
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell. cl.exe + lib.exe.
+    CC=cl
+    AR=lib
+    CFLAGS_BASE="/nologo /O2 /MT /D_CRT_SECURE_NO_WARNINGS"
+    CFLAGS_EXTRA=""
+    ;;
 *)
     echo "unknown TARGET_PLATFORM: $TARGET_PLATFORM" >&2
     exit 1
@@ -145,8 +152,19 @@ CFLAGS="$CFLAGS_BASE $CFLAGS_EXTRA"
 # Compile + archive
 #-----------------------------------------------------------------------------
 echo "==> compiling libco for $TARGET_PLATFORM"
-$CC $CFLAGS -I"$SRC_DIR" -c "$SRC_DIR/libco.c" -o "$WORK_DIR/libco.o"
-$AR rcs "$INSTALL_DIR/lib/libco.a" "$WORK_DIR/libco.o"
+if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+    _SRC_W=$(cygpath -w "$SRC_DIR/libco.c")
+    _OBJ_W=$(cygpath -w "$WORK_DIR/libco.obj")
+    _OUT_W=$(cygpath -w "$INSTALL_DIR/lib/libco.lib")
+    _SRC_DIR_W=$(cygpath -w "$SRC_DIR")
+    MSYS2_ARG_CONV_EXCL='*' \
+        $CC $CFLAGS "/I${_SRC_DIR_W}" /c "$_SRC_W" "/Fo${_OBJ_W}"
+    MSYS2_ARG_CONV_EXCL='*' \
+        $AR /nologo "/OUT:${_OUT_W}" "${_OBJ_W}"
+else
+    $CC $CFLAGS -I"$SRC_DIR" -c "$SRC_DIR/libco.c" -o "$WORK_DIR/libco.o"
+    $AR rcs "$INSTALL_DIR/lib/libco.a" "$WORK_DIR/libco.o"
+fi
 cp "$SRC_DIR/libco.h" "$INSTALL_DIR/include/"
 
 #-----------------------------------------------------------------------------
@@ -155,7 +173,10 @@ cp "$SRC_DIR/libco.h" "$INSTALL_DIR/include/"
 cp -a "$INSTALL_DIR/lib"     "$STAGE/"
 cp -a "$INSTALL_DIR/include" "$STAGE/"
 
-[ -f "$STAGE/lib/libco.a" ] || { echo "missing libco.a in stage" >&2; exit 1; }
+if [ ! -f "$STAGE/lib/libco.a" ] && [ ! -f "$STAGE/lib/libco.lib" ]; then
+    echo "missing libco.a / libco.lib in stage" >&2
+    exit 1
+fi
 [ -f "$STAGE/include/libco.h" ] || { echo "missing libco.h in stage" >&2; exit 1; }
 
 echo "==> packaging -> $TARBALL"

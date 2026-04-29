@@ -85,6 +85,37 @@ mkdir -p "$INSTALL_DIR" "$STAGE"
 _FT_INC="$FT_PREFIX/include"
 [ -d "$FT_PREFIX/include/freetype2" ] && _FT_INC="$FT_PREFIX/include/freetype2"
 
+# Resolve the actual static-archive paths inside the prebuilt tarballs —
+# Unix produces lib*.a, MSVC produces *.lib (no lib prefix).
+_FT_LIB=""
+for _candidate in libfreetype.a freetype.lib; do
+    if [ -f "$FT_PREFIX/lib/$_candidate" ]; then
+        _FT_LIB="$FT_PREFIX/lib/$_candidate"
+        break
+    fi
+done
+_TX_LIB=""
+for _candidate in libtinyxml2.a tinyxml2.lib; do
+    if [ -f "$TX_PREFIX/lib/$_candidate" ]; then
+        _TX_LIB="$TX_PREFIX/lib/$_candidate"
+        break
+    fi
+done
+[ -n "$_FT_LIB" ] || { echo "missing freetype static lib in $FT_PREFIX/lib/" >&2; ls -la "$FT_PREFIX/lib/" >&2; exit 1; }
+[ -n "$_TX_LIB" ] || { echo "missing tinyxml2 static lib in $TX_PREFIX/lib/" >&2; ls -la "$TX_PREFIX/lib/" >&2; exit 1; }
+
+# On windows the cmake invocation expects native Windows paths in -D
+# vars; otherwise FindFreetype builds a Freetype::Freetype imported
+# target with INTERFACE_INCLUDE_DIRECTORIES set to /tmp/... and cmake's
+# Generate step bails ("non-existent path"). Convert with cygpath -w.
+_path() {
+    if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+        cygpath -w "$1"
+    else
+        printf '%s' "$1"
+    fi
+}
+
 CMAKE_ARGS=(
     -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR"
     -DCMAKE_BUILD_TYPE=Release
@@ -97,13 +128,13 @@ CMAKE_ARGS=(
     -DMSDFGEN_DISABLE_SVG=OFF
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-    "-DFREETYPE_INCLUDE_DIRS=$_FT_INC;$FT_PREFIX/include"
-    "-DFREETYPE_LIBRARY=$FT_PREFIX/lib/libfreetype.a"
-    "-Dtinyxml2_INCLUDE_DIRS=$TX_PREFIX/include"
-    "-Dtinyxml2_LIBRARIES=$TX_PREFIX/lib/libtinyxml2.a"
+    "-DFREETYPE_INCLUDE_DIRS=$(_path "$_FT_INC");$(_path "$FT_PREFIX/include")"
+    "-DFREETYPE_LIBRARY=$(_path "$_FT_LIB")"
+    "-Dtinyxml2_INCLUDE_DIRS=$(_path "$TX_PREFIX/include")"
+    "-Dtinyxml2_LIBRARIES=$(_path "$_TX_LIB")"
     # msdfgen uses find_package(tinyxml2 CONFIG) which needs the
     # config dir, not just include + lib paths.
-    "-Dtinyxml2_DIR=$TX_PREFIX/lib/cmake/tinyxml2"
+    "-Dtinyxml2_DIR=$(_path "$TX_PREFIX/lib/cmake/tinyxml2")"
 )
 EMCMAKE_PREFIX=""
 
@@ -156,6 +187,10 @@ android-arm64-v8a|android-x86_64)
         "-DANDROID_PLATFORM=android-${ANDROID_API}"
     ) ;;
 webasm) EMCMAKE_PREFIX="emcmake" ;;
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell.
+    : # cmake's default Ninja+cl pickup is fine
+    ;;
 *) echo "unknown $TARGET_PLATFORM" >&2; exit 1 ;;
 esac
 
@@ -165,13 +200,19 @@ cmake --build "$BUILD_DIR" -j"$NCPU"
 cmake --install "$BUILD_DIR" || true
 
 mkdir -p "$STAGE/lib" "$STAGE/include"
-# The cmake install path is unstable across versions — pick up the .a's
-# from the build dir directly.
-find "$BUILD_DIR" -maxdepth 3 -name 'libmsdfgen*.a' -exec cp -a {} "$STAGE/lib/" \;
+# The cmake install path is unstable across versions — pick up the
+# static archives from the build dir directly. Accept either Unix
+# (.a) or MSVC (.lib) extensions.
+find "$BUILD_DIR" -maxdepth 3 \
+    \( -name 'libmsdfgen*.a' -o -name 'msdfgen*.lib' \) \
+    -exec cp -a {} "$STAGE/lib/" \;
 # Fallback: if build dir didn't yield anything, look in install.
-if ! ls "$STAGE/lib/"libmsdfgen*.a >/dev/null 2>&1; then
+if ! ls "$STAGE/lib/"libmsdfgen*.a >/dev/null 2>&1 \
+        && ! ls "$STAGE/lib/"msdfgen*.lib >/dev/null 2>&1; then
     for _D in lib lib64; do
-        [ -d "$INSTALL_DIR/$_D" ] && find "$INSTALL_DIR/$_D" -maxdepth 1 -name 'libmsdfgen*.a' -exec cp -a {} "$STAGE/lib/" \;
+        [ -d "$INSTALL_DIR/$_D" ] && find "$INSTALL_DIR/$_D" -maxdepth 1 \
+            \( -name 'libmsdfgen*.a' -o -name 'msdfgen*.lib' \) \
+            -exec cp -a {} "$STAGE/lib/" \;
     done
 fi
 
@@ -191,7 +232,12 @@ cp -a "$SRC_DIR/ext/."  "$STAGE/include/ext/"
 # Strip .cpp files from the staged headers (we only want declarations).
 find "$STAGE/include" -name '*.cpp' -delete 2>/dev/null || true
 
-ls "$STAGE/lib/"libmsdfgen-core.a >/dev/null 2>&1 || { echo "missing libmsdfgen-core.a" >&2; find "$BUILD_DIR" "$INSTALL_DIR" 2>/dev/null >&2; exit 1; }
+if ! ls "$STAGE/lib/"libmsdfgen-core.a >/dev/null 2>&1 \
+        && ! ls "$STAGE/lib/"msdfgen-core*.lib >/dev/null 2>&1; then
+    echo "missing msdfgen-core static lib in stage" >&2
+    find "$BUILD_DIR" "$INSTALL_DIR" 2>/dev/null >&2
+    exit 1
+fi
 
 tar -C "$STAGE" -czf "$TARBALL" .
 echo "msdfgen $VERSION ($TARGET_PLATFORM) ready:"

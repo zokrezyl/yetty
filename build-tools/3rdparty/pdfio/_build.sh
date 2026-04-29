@@ -203,6 +203,15 @@ ssize_t getrandom(void *buf, size_t buflen, unsigned int flags) {
 STUB_EOF
     EXTRA_SOURCES+=("$WORK_DIR/pdfio-getrandom-stub.c")
     ;;
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell. cl.exe + lib.exe.
+    CC=cl
+    AR=lib
+    CFLAGS_BASE="/nologo /O2 /MT /D_CRT_SECURE_NO_WARNINGS /DNDEBUG"
+    CFLAGS_EXTRA=""
+    # MSVC has no getrandom(); pdfio uses CryptGenRandom on _WIN32 via its
+    # own #ifdef path, so no stub source is needed.
+    ;;
 *) echo "unknown TARGET_PLATFORM: $TARGET_PLATFORM" >&2; exit 1 ;;
 esac
 
@@ -231,23 +240,52 @@ PDFIO_SOURCES=(
 )
 
 OBJS=()
-for _f in "${PDFIO_SOURCES[@]}"; do
-    [ -f "$SRC_DIR/$_f" ] || { echo "missing pdfio source: $SRC_DIR/$_f" >&2; exit 1; }
-    obj="$WORK_DIR/${_f%.c}.o"
-    $CC $CFLAGS \
-        -I"$SRC_DIR" \
-        -I"$ZLIB_DIR" \
-        -c "$SRC_DIR/$_f" -o "$obj"
-    OBJS+=("$obj")
-done
+if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+    _SRC_DIR_W=$(cygpath -w "$SRC_DIR")
+    _ZLIB_DIR_W=$(cygpath -w "$ZLIB_DIR")
+    for _f in "${PDFIO_SOURCES[@]}"; do
+        [ -f "$SRC_DIR/$_f" ] || { echo "missing pdfio source: $SRC_DIR/$_f" >&2; exit 1; }
+        obj="$WORK_DIR/${_f%.c}.obj"
+        _src_w=$(cygpath -w "$SRC_DIR/$_f")
+        _obj_w=$(cygpath -w "$obj")
+        MSYS2_ARG_CONV_EXCL='*' \
+            $CC $CFLAGS \
+                "/I${_SRC_DIR_W}" "/I${_ZLIB_DIR_W}" \
+                /c "$_src_w" "/Fo${_obj_w}"
+        OBJS+=("$obj")
+    done
+    for _src in "${EXTRA_SOURCES[@]}"; do
+        obj="$WORK_DIR/$(basename "${_src%.c}").obj"
+        _src_w=$(cygpath -w "$_src")
+        _obj_w=$(cygpath -w "$obj")
+        MSYS2_ARG_CONV_EXCL='*' \
+            $CC $CFLAGS /c "$_src_w" "/Fo${_obj_w}"
+        OBJS+=("$obj")
+    done
+    _OUT_W=$(cygpath -w "$INSTALL_DIR/lib/libpdfio.lib")
+    _OBJS_W=()
+    for _o in "${OBJS[@]}"; do _OBJS_W+=("$(cygpath -w "$_o")"); done
+    MSYS2_ARG_CONV_EXCL='*' \
+        $AR /nologo "/OUT:${_OUT_W}" "${_OBJS_W[@]}"
+else
+    for _f in "${PDFIO_SOURCES[@]}"; do
+        [ -f "$SRC_DIR/$_f" ] || { echo "missing pdfio source: $SRC_DIR/$_f" >&2; exit 1; }
+        obj="$WORK_DIR/${_f%.c}.o"
+        $CC $CFLAGS \
+            -I"$SRC_DIR" \
+            -I"$ZLIB_DIR" \
+            -c "$SRC_DIR/$_f" -o "$obj"
+        OBJS+=("$obj")
+    done
 
-for _src in "${EXTRA_SOURCES[@]}"; do
-    obj="$WORK_DIR/$(basename "${_src%.c}").o"
-    $CC $CFLAGS -c "$_src" -o "$obj"
-    OBJS+=("$obj")
-done
+    for _src in "${EXTRA_SOURCES[@]}"; do
+        obj="$WORK_DIR/$(basename "${_src%.c}").o"
+        $CC $CFLAGS -c "$_src" -o "$obj"
+        OBJS+=("$obj")
+    done
 
-$AR rcs "$INSTALL_DIR/lib/libpdfio.a" "${OBJS[@]}"
+    $AR rcs "$INSTALL_DIR/lib/libpdfio.a" "${OBJS[@]}"
+fi
 
 # Headers — pdfio.h is the public header; pdfio-content.h is also public
 # (high-level content API). pdfio-private.h is internal but consumers
@@ -262,7 +300,10 @@ cp "$SRC_DIR/pdfio.h" "$INSTALL_DIR/include/"
 cp -a "$INSTALL_DIR/lib"     "$STAGE/"
 cp -a "$INSTALL_DIR/include" "$STAGE/"
 
-[ -f "$STAGE/lib/libpdfio.a" ] || { echo "missing libpdfio.a" >&2; exit 1; }
+if [ ! -f "$STAGE/lib/libpdfio.a" ] && [ ! -f "$STAGE/lib/libpdfio.lib" ]; then
+    echo "missing libpdfio.a / libpdfio.lib in stage" >&2
+    exit 1
+fi
 [ -f "$STAGE/include/pdfio.h" ] || { echo "missing pdfio.h"  >&2; exit 1; }
 
 echo "==> packaging -> $TARBALL"

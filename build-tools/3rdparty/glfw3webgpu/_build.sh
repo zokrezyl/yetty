@@ -124,6 +124,18 @@ macos-x86_64|macos-arm64)
     # them through.
     CFLAGS_EXTRA="$CFLAGS_EXTRA -ObjC -fno-objc-arc"
     ;;
+windows-x86_64)
+    # Native MSVC — caller must have vcvarsall'd the shell. cl.exe + lib.exe.
+    # MSYS2_ARG_CONV_EXCL='*' is applied locally on each cl/lib call
+    # below so MSVC /flags pass through. Do NOT export it globally —
+    # git-bash on windows-latest needs MSYS conversion for the curl
+    # invocations that fetch source tarballs.
+    PLATFORM_DEF="/D_GLFW_WIN32 /DWEBGPU_BACKEND_DAWN"
+    CC=cl
+    AR=lib
+    CFLAGS_BASE="/nologo /O2 /MT /D_CRT_SECURE_NO_WARNINGS /DNDEBUG /DGLFW_INCLUDE_NONE"
+    CFLAGS_EXTRA=""
+    ;;
 *) echo "unsupported $TARGET_PLATFORM" >&2; exit 1 ;;
 esac
 
@@ -132,17 +144,41 @@ CFLAGS="$CFLAGS_BASE $CFLAGS_EXTRA $PLATFORM_DEF"
 # glfw3webgpu's source file is glfw3webgpu.c. On macos it's built as
 # obj-c via the -ObjC flag above.
 echo "==> compiling glfw3webgpu @${VERSION:0:8} for $TARGET_PLATFORM"
-$CC $CFLAGS \
-    -I"$SRC_DIR" \
-    -I"$GLFW_PREFIX/include" \
-    -I"$WEBGPU_HEADERS_DIR/include" \
-    -c "$SRC_DIR/glfw3webgpu.c" \
-    -o "$WORK_DIR/glfw3webgpu-${TARGET_PLATFORM}.o"
-
-$AR rcs "$STAGE/lib/libglfw3webgpu.a" "$WORK_DIR/glfw3webgpu-${TARGET_PLATFORM}.o"
+if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+    # cygpath -w converts /tmp/... -> C:\msys64\tmp\... so cl sees a real
+    # Windows path (it would otherwise treat the leading / as a flag).
+    # MSYS2_ARG_CONV_EXCL='*' applied per-call so MSVC /flags pass
+    # through.
+    _SRC_W=$(cygpath -w "$SRC_DIR/glfw3webgpu.c")
+    _OBJ_W=$(cygpath -w "$WORK_DIR/glfw3webgpu-${TARGET_PLATFORM}.obj")
+    _OUT_W=$(cygpath -w "$STAGE/lib/libglfw3webgpu.lib")
+    _SRC_DIR_W=$(cygpath -w "$SRC_DIR")
+    _GLFW_INC_W=$(cygpath -w "$GLFW_PREFIX/include")
+    _WEBGPU_INC_W=$(cygpath -w "$WEBGPU_HEADERS_DIR/include")
+    MSYS2_ARG_CONV_EXCL='*' \
+        $CC $CFLAGS \
+            "/I${_SRC_DIR_W}" \
+            "/I${_GLFW_INC_W}" \
+            "/I${_WEBGPU_INC_W}" \
+            /c "$_SRC_W" \
+            "/Fo${_OBJ_W}"
+    MSYS2_ARG_CONV_EXCL='*' \
+        $AR /nologo "/OUT:${_OUT_W}" "${_OBJ_W}"
+else
+    $CC $CFLAGS \
+        -I"$SRC_DIR" \
+        -I"$GLFW_PREFIX/include" \
+        -I"$WEBGPU_HEADERS_DIR/include" \
+        -c "$SRC_DIR/glfw3webgpu.c" \
+        -o "$WORK_DIR/glfw3webgpu-${TARGET_PLATFORM}.o"
+    $AR rcs "$STAGE/lib/libglfw3webgpu.a" "$WORK_DIR/glfw3webgpu-${TARGET_PLATFORM}.o"
+fi
 cp "$SRC_DIR/glfw3webgpu.h" "$STAGE/include/"
 
-[ -f "$STAGE/lib/libglfw3webgpu.a" ] || { echo "missing libglfw3webgpu.a" >&2; exit 1; }
+if [ ! -f "$STAGE/lib/libglfw3webgpu.a" ] && [ ! -f "$STAGE/lib/libglfw3webgpu.lib" ]; then
+    echo "missing libglfw3webgpu.a / libglfw3webgpu.lib" >&2
+    exit 1
+fi
 [ -f "$STAGE/include/glfw3webgpu.h" ] || { echo "missing glfw3webgpu.h" >&2; exit 1; }
 
 tar -C "$STAGE" -czf "$TARBALL" .

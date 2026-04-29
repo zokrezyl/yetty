@@ -5,6 +5,9 @@ set(YETTY_ENABLE_LIB_LIBUV OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_LIB_GLFW OFF CACHE BOOL "" FORCE)
 # libco is desktop-only — webasm uses emscripten_fiber_t (Asyncify) instead.
 set(YETTY_ENABLE_LIB_LIBCO OFF CACHE BOOL "" FORCE)
+# qemu is not built for webasm — the webasm yetty build uses in-process
+# TinyEMU (compiled to wasm) instead of a prebuilt QEMU binary.
+set(YETTY_ENABLE_LIB_QEMU OFF CACHE BOOL "" FORCE)
 
 include(${YETTY_ROOT}/build-tools/cmake/targets/shared.cmake)
 

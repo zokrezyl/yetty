@@ -112,7 +112,7 @@ if(YETTY_ENABLE_FEATURE_YECHO)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YCAT)
-    if(NOT EMSCRIPTEN AND NOT YETTY_IOS)
+    if(NOT YETTY_IOS)
         add_subdirectory(ycat)
     endif()
 endif()
