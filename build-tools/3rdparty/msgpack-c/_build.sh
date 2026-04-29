@@ -113,6 +113,16 @@ linux-aarch64)
     )
     ;;
 
+linux-riscv64)
+    : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
+    CMAKE_ARGS+=(
+        "-DCMAKE_SYSTEM_NAME=Linux"
+        "-DCMAKE_SYSTEM_PROCESSOR=riscv64"
+        "-DCMAKE_C_COMPILER=${CROSS_PREFIX}gcc"
+        "-DCMAKE_CXX_COMPILER=${CROSS_PREFIX}g++"
+    )
+    ;;
+
 macos-x86_64)
     CMAKE_ARGS+=("-DCMAKE_OSX_ARCHITECTURES=x86_64")
     ;;

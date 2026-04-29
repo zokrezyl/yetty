@@ -57,7 +57,7 @@ CMAKE_ARGS=(
 )
 
 case "$TARGET_PLATFORM" in
-linux-x86_64|linux-aarch64)
+linux-x86_64|linux-aarch64|linux-riscv64)
     # Wayland disabled — the 3rdparty-linux-* nix shells don't ship the
     # wayland/xkbcommon -dev pkgconfigs glfw probes for. X11-only build
     # still works on a Wayland desktop via XWayland; if a true Wayland
@@ -81,6 +81,9 @@ linux-x86_64|linux-aarch64)
     if [ "$TARGET_PLATFORM" = "linux-aarch64" ] && \
        command -v "${CROSS_PREFIX:-aarch64-unknown-linux-gnu-}pkg-config" >/dev/null 2>&1; then
         _PC="${CROSS_PREFIX:-aarch64-unknown-linux-gnu-}pkg-config"
+    elif [ "$TARGET_PLATFORM" = "linux-riscv64" ] && \
+         command -v "${CROSS_PREFIX:-riscv64-unknown-linux-gnu-}pkg-config" >/dev/null 2>&1; then
+        _PC="${CROSS_PREFIX:-riscv64-unknown-linux-gnu-}pkg-config"
     fi
     if command -v "$_PC" >/dev/null 2>&1 && "$_PC" --exists x11; then
         _X11_INC="$($_PC --variable=includedir x11)"
@@ -148,6 +151,13 @@ linux-x86_64|linux-aarch64)
         CMAKE_ARGS+=(
             "-DCMAKE_SYSTEM_NAME=Linux"
             "-DCMAKE_SYSTEM_PROCESSOR=aarch64"
+            "-DCMAKE_C_COMPILER=${CROSS_PREFIX}gcc"
+        )
+    elif [ "$TARGET_PLATFORM" = "linux-riscv64" ]; then
+        : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
+        CMAKE_ARGS+=(
+            "-DCMAKE_SYSTEM_NAME=Linux"
+            "-DCMAKE_SYSTEM_PROCESSOR=riscv64"
             "-DCMAKE_C_COMPILER=${CROSS_PREFIX}gcc"
         )
     fi

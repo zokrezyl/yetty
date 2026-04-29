@@ -99,7 +99,7 @@ CFLAGS_EXTRA=""
 PLATFORM_DEF=""
 
 case "$TARGET_PLATFORM" in
-linux-x86_64|linux-aarch64)
+linux-x86_64|linux-aarch64|linux-riscv64)
     # X11 only — Wayland headers aren't in the 3rdparty-linux-* nix
     # shells (see glfw producer for the same restriction).
     PLATFORM_DEF="-D_GLFW_X11 -DWEBGPU_BACKEND_DAWN"
@@ -107,6 +107,9 @@ linux-x86_64|linux-aarch64)
         linux-x86_64) CC=gcc ;;
         linux-aarch64)
             : "${CROSS_PREFIX:=aarch64-unknown-linux-gnu-}"
+            CC="${CROSS_PREFIX}gcc"; AR="${CROSS_PREFIX}ar" ;;
+        linux-riscv64)
+            : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
             CC="${CROSS_PREFIX}gcc"; AR="${CROSS_PREFIX}ar" ;;
     esac
     ;;

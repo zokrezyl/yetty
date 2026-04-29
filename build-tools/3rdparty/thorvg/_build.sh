@@ -174,6 +174,11 @@ linux-aarch64)
     CXX="${CROSS_PREFIX}g++"
     AR="${CROSS_PREFIX}ar"
     ;;
+linux-riscv64)
+    : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
+    CXX="${CROSS_PREFIX}g++"
+    AR="${CROSS_PREFIX}ar"
+    ;;
 macos-x86_64) CXX=clang++; CXXFLAGS_EXTRA="-arch x86_64" ;;
 macos-arm64)  CXX=clang++; CXXFLAGS_EXTRA="-arch arm64"  ;;
 ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64)

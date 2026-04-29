@@ -56,6 +56,9 @@ linux-x86_64) CC=gcc ;;
 linux-aarch64)
     : "${CROSS_PREFIX:=aarch64-unknown-linux-gnu-}"
     CC="${CROSS_PREFIX}gcc"; AR="${CROSS_PREFIX}ar" ;;
+linux-riscv64)
+    : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
+    CC="${CROSS_PREFIX}gcc"; AR="${CROSS_PREFIX}ar" ;;
 macos-x86_64) CC=clang; CFLAGS_EXTRA="-arch x86_64" ;;
 macos-arm64)  CC=clang; CFLAGS_EXTRA="-arch arm64"  ;;
 ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64)

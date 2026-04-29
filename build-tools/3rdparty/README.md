@@ -54,6 +54,7 @@ Same set as `assets/qemu/` (link targets only — no `tvos-arm64`):
 |---------------------|-------------------|------------------------------|
 | `linux-x86_64`      | ubuntu-latest     | `.#3rdparty-linux-x86_64`    |
 | `linux-aarch64`     | ubuntu-latest     | `.#3rdparty-linux-aarch64`   |
+| `linux-riscv64`     | ubuntu-latest     | `.#3rdparty-linux-riscv64`   |
 | `android-arm64-v8a` | ubuntu-latest     | `.#3rdparty-android-arm64-v8a`|
 | `android-x86_64`    | ubuntu-latest     | `.#3rdparty-android-x86_64`  |
 | `webasm`            | ubuntu-latest     | `.#3rdparty-webasm`          |

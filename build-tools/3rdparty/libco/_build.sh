@@ -90,6 +90,13 @@ linux-aarch64)
     CC="${CROSS_PREFIX}gcc"
     AR="${CROSS_PREFIX}ar"
     ;;
+linux-riscv64)
+    # libco has no riscv64 inline-asm backend — falls through to its
+    # ucontext fallback in libco.c, which is fine on glibc Linux.
+    : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
+    CC="${CROSS_PREFIX}gcc"
+    AR="${CROSS_PREFIX}ar"
+    ;;
 macos-x86_64)
     CC=clang
     CFLAGS_EXTRA="-arch x86_64"

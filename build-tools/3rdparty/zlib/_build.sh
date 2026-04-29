@@ -75,6 +75,13 @@ linux-aarch64)
         "-DCMAKE_SYSTEM_PROCESSOR=aarch64"
         "-DCMAKE_C_COMPILER=${CROSS_PREFIX}gcc"
     ) ;;
+linux-riscv64)
+    : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
+    CMAKE_ARGS+=(
+        "-DCMAKE_SYSTEM_NAME=Linux"
+        "-DCMAKE_SYSTEM_PROCESSOR=riscv64"
+        "-DCMAKE_C_COMPILER=${CROSS_PREFIX}gcc"
+    ) ;;
 macos-x86_64) CMAKE_ARGS+=("-DCMAKE_OSX_ARCHITECTURES=x86_64") ;;
 macos-arm64)  CMAKE_ARGS+=("-DCMAKE_OSX_ARCHITECTURES=arm64")  ;;
 ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64)

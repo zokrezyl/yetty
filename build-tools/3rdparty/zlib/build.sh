@@ -7,7 +7,7 @@ set -euo pipefail
 : "${TARGET_PLATFORM:?TARGET_PLATFORM is required}"
 
 case "$TARGET_PLATFORM" in
-    linux-x86_64|linux-aarch64|\
+    linux-x86_64|linux-aarch64|linux-riscv64|\
     macos-x86_64|macos-arm64|\
     android-arm64-v8a|android-x86_64|\
     ios-arm64|ios-x86_64|tvos-arm64|tvos-x86_64|\

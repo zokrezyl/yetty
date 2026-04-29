@@ -137,6 +137,13 @@ linux-aarch64)
     NEEDS_NATIVE_BOOTSTRAP=1
     ;;
 
+linux-riscv64)
+    : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
+    CC="${CROSS_PREFIX}gcc"
+    EXTRA_CONFIGURE+=("--host=riscv64-linux-gnu")
+    NEEDS_NATIVE_BOOTSTRAP=1
+    ;;
+
 macos-x86_64)
     CC="clang -arch x86_64"
     ;;
@@ -285,7 +292,7 @@ if [ "$NEEDS_NATIVE_BOOTSTRAP" = "1" ]; then
                 >/dev/null'
 
         case "$TARGET_PLATFORM" in
-            linux-aarch64|android-arm64-v8a|android-x86_64|webasm)
+            linux-aarch64|linux-riscv64|android-arm64-v8a|android-x86_64|webasm)
                 # Linux runner — host shell is the linux-x86_64 3rdparty
                 # shell so we get a native gcc (not the cross compiler
                 # the outer shell installed).

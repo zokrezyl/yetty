@@ -118,6 +118,23 @@ linux-aarch64)
     )
     ;;
 
+linux-riscv64)
+    # openh264 ships hand-written x86 NASM + ARM neon asm only — no
+    # RISC-V backend. USE_ASM=No forces the pure-C build path. ARCH=
+    # is left empty so the Makefile doesn't try to pull -m64-style
+    # x86-only flags from build/platform-linux.mk's arch logic.
+    : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
+    EXTRA_ARGS=(
+        USE_ASM=No
+        ARCH=
+        "CC=${CROSS_PREFIX}gcc"
+        "CXX=${CROSS_PREFIX}g++"
+        "AR=${CROSS_PREFIX}ar"
+        "AS=${CROSS_PREFIX}as"
+        "STRIP=${CROSS_PREFIX}strip"
+    )
+    ;;
+
 macos-x86_64)
     EXTRA_ARGS=(OS=darwin ARCH=x86_64)
     ;;

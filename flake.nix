@@ -500,6 +500,30 @@
             '';
           };
 
+          # Cross to riscv64 Linux: same shape as linux-aarch64. Host runs
+          # demo clients inside a RISC-V VM, so every link-target lib needs
+          # a riscv64 build alongside x86_64/aarch64. nasm stays in the kit
+          # for symmetry — RISC-V has no NASM target, individual _build.sh
+          # branches gate hand-rolled asm with USE_ASM=No / WITH_SIMD=OFF /
+          # enable_asm=false depending on the upstream build system.
+          "3rdparty-linux-riscv64" = pkgs.pkgsCross.riscv64.mkShell {
+            nativeBuildInputs = with pkgs; [
+              meson ninja gnumake perl nasm python3
+              curl gnutar xz gzip
+              pkgsCross.riscv64.buildPackages.gcc
+              pkgsCross.riscv64.buildPackages.binutils
+              pkgsCross.riscv64.buildPackages.pkg-config
+            ];
+            buildInputs = with pkgs.pkgsCross.riscv64; [
+              xorg.libX11 xorg.libXrandr xorg.libXinerama
+              xorg.libXcursor xorg.libXi xorg.libXext xorgproto
+            ];
+            shellHook = ''
+              export CROSS_PREFIX="riscv64-unknown-linux-gnu-"
+              echo "Yetty 3rdparty-build (linux-riscv64) — CROSS_PREFIX=$CROSS_PREFIX"
+            '';
+          };
+
           # macOS native — clang comes from Xcode on the host runner.
           # autoconf/automake/libtool are needed by libmagic (file 5.x):
           # its `make` rules regenerate Makefile.in from Makefile.am even

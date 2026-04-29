@@ -130,6 +130,17 @@ linux-aarch64)
     export RANLIB="${CROSS_PREFIX}ranlib"
     ;;
 
+linux-riscv64)
+    # openssl Configure target is `linux64-riscv64` (note the linux64-
+    # prefix, unlike linux-aarch64). Defined in Configurations/10-main.conf.
+    : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
+    CFG_TARGET="linux64-riscv64"
+    export CC="${CROSS_PREFIX}gcc"
+    export CXX="${CROSS_PREFIX}g++"
+    export AR="${CROSS_PREFIX}ar"
+    export RANLIB="${CROSS_PREFIX}ranlib"
+    ;;
+
 macos-x86_64)
     CFG_TARGET="darwin64-x86_64-cc"
     ;;

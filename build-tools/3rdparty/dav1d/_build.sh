@@ -121,6 +121,29 @@ CROSS
     CROSS_FLAG="--cross-file $CROSS_FILE"
     ;;
 
+linux-riscv64)
+    # dav1d has no RISC-V asm backend (only x86 + ARM); -Denable_asm=false
+    # forces the pure-C build.
+    : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
+    CROSS_FILE="$WORK_DIR/cross-linux-riscv64.ini"
+    cat > "$CROSS_FILE" <<CROSS
+[binaries]
+c = '${CROSS_PREFIX}gcc'
+cpp = '${CROSS_PREFIX}g++'
+ar = '${CROSS_PREFIX}ar'
+strip = '${CROSS_PREFIX}strip'
+pkg-config = '${CROSS_PREFIX}pkg-config'
+
+[host_machine]
+system = 'linux'
+cpu_family = 'riscv64'
+cpu = 'riscv64'
+endian = 'little'
+CROSS
+    CROSS_FLAG="--cross-file $CROSS_FILE"
+    MESON_EXTRA_ARGS+=("-Denable_asm=false")
+    ;;
+
 macos-x86_64)
     MESON_EXTRA_ARGS+=(
         "-Dc_args=-arch x86_64"

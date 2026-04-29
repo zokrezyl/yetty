@@ -3,7 +3,7 @@
 set -euo pipefail
 : "${TARGET_PLATFORM:?TARGET_PLATFORM is required}"
 case "$TARGET_PLATFORM" in
-    linux-x86_64|linux-aarch64|macos-x86_64|macos-arm64)
+    linux-x86_64|linux-aarch64|linux-riscv64|macos-x86_64|macos-arm64)
         SHELL_NAME="3rdparty-${TARGET_PLATFORM}" ;;
     windows-x86_64)
         if ! command -v cl >/dev/null 2>&1 && ! command -v cl.exe >/dev/null 2>&1; then
