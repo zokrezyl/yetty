@@ -75,10 +75,10 @@ struct loop_timer_slot {
 
 /* Single-linked queue of (fn, arg) callbacks scheduled via post(). Drained
  * by the post_async handler. */
-struct post_node {
+struct yetty_yplatform_post_node {
     yetty_yclient_task_cb     cb;
     void                     *cb_user;
-    struct post_node         *next;
+    struct yetty_yplatform_post_node         *next;
 };
 
 struct yetty_yclient_event_loop {
@@ -121,8 +121,8 @@ struct yetty_yclient_event_loop {
 
     /* Posted tasks (cross-thread) */
     uv_mutex_t        post_mutex;
-    struct post_node *post_head;
-    struct post_node *post_tail;
+    struct yetty_yplatform_post_node *post_head;
+    struct yetty_yplatform_post_node *post_tail;
 };
 
 /*=============================================================================
@@ -146,20 +146,20 @@ static void on_yface_osc(void *user, int osc_code,
 
     switch (osc_code) {
     case YMGUI_OSC_SC_MOUSE: {
-        if (len < sizeof(struct ymgui_wire_input_mouse)) return;
-        const struct ymgui_wire_input_mouse *m =
-            (const struct ymgui_wire_input_mouse *)payload;
+        if (len < sizeof(struct yetty_ymgui_wire_input_mouse)) return;
+        const struct yetty_ymgui_wire_input_mouse *m =
+            (const struct yetty_ymgui_wire_input_mouse *)payload;
         if (m->magic != YMGUI_WIRE_MAGIC_INPUT_MOUSE) return;
         switch (m->kind) {
-        case YMGUI_INPUT_MOUSE_POS:
+        case YETTY_YMGUI_INPUT_MOUSE_POS:
             if (L->on_pos)
                 L->on_pos(L->user, m->card_id, m->x, m->y, m->buttons_held);
             break;
-        case YMGUI_INPUT_MOUSE_BUTTON:
+        case YETTY_YMGUI_INPUT_MOUSE_BUTTON:
             if (L->on_btn)
                 L->on_btn(L->user, m->card_id, m->button, m->pressed, m->x, m->y);
             break;
-        case YMGUI_INPUT_MOUSE_WHEEL:
+        case YETTY_YMGUI_INPUT_MOUSE_WHEEL:
             if (L->on_wheel)
                 L->on_wheel(L->user, m->card_id, m->wheel_dy, m->x, m->y);
             break;
@@ -168,9 +168,9 @@ static void on_yface_osc(void *user, int osc_code,
         break;
     }
     case YMGUI_OSC_SC_RESIZE: {
-        if (len < sizeof(struct ymgui_wire_input_resize)) return;
-        const struct ymgui_wire_input_resize *r =
-            (const struct ymgui_wire_input_resize *)payload;
+        if (len < sizeof(struct yetty_ymgui_wire_input_resize)) return;
+        const struct yetty_ymgui_wire_input_resize *r =
+            (const struct yetty_ymgui_wire_input_resize *)payload;
         if (r->magic != YMGUI_WIRE_MAGIC_INPUT_RESIZE) return;
         if (L->on_resize)
             L->on_resize(L->user, r->card_id, r->width, r->height);
@@ -178,9 +178,9 @@ static void on_yface_osc(void *user, int osc_code,
         break;
     }
     case YMGUI_OSC_SC_FOCUS: {
-        if (len < sizeof(struct ymgui_wire_input_focus)) return;
-        const struct ymgui_wire_input_focus *f =
-            (const struct ymgui_wire_input_focus *)payload;
+        if (len < sizeof(struct yetty_ymgui_wire_input_focus)) return;
+        const struct yetty_ymgui_wire_input_focus *f =
+            (const struct yetty_ymgui_wire_input_focus *)payload;
         if (f->magic != YMGUI_WIRE_MAGIC_INPUT_FOCUS) return;
         if (L->on_focus)
             L->on_focus(L->user, f->card_id, f->gained);
@@ -188,9 +188,9 @@ static void on_yface_osc(void *user, int osc_code,
         break;
     }
     case YMGUI_OSC_SC_KEY: {
-        if (len < sizeof(struct ymgui_wire_input_key)) return;
-        const struct ymgui_wire_input_key *k =
-            (const struct ymgui_wire_input_key *)payload;
+        if (len < sizeof(struct yetty_ymgui_wire_input_key)) return;
+        const struct yetty_ymgui_wire_input_key *k =
+            (const struct yetty_ymgui_wire_input_key *)payload;
         if (k->magic != YMGUI_WIRE_MAGIC_INPUT_KEY) return;
         if (L->on_key)
             L->on_key(L->user, k->card_id, (int)k->kind, k->key, k->mods,
@@ -280,7 +280,7 @@ static void on_post_async(uv_async_t *handle)
 {
     struct yetty_yclient_event_loop *L = handle->data;
 
-    struct post_node *head;
+    struct yetty_yplatform_post_node *head;
     uv_mutex_lock(&L->post_mutex);
     head        = L->post_head;
     L->post_head = NULL;
@@ -288,7 +288,7 @@ static void on_post_async(uv_async_t *handle)
     uv_mutex_unlock(&L->post_mutex);
 
     while (head) {
-        struct post_node *next = head->next;
+        struct yetty_yplatform_post_node *next = head->next;
         if (head->cb) head->cb(head->cb_user);
         free(head);
         head = next;
@@ -300,7 +300,7 @@ static void on_post_async(uv_async_t *handle)
  *===========================================================================*/
 
 struct yetty_yclient_event_loop *yetty_yclient_event_loop_create(
-    const struct yetty_yclient_event_loop_config *cfg)
+    const struct yetty_yclient_lib_event_loop_config *cfg)
 {
     struct yetty_yclient_event_loop *L = calloc(1, sizeof(*L));
     if (!L) return NULL;
@@ -386,7 +386,7 @@ void yetty_yclient_event_loop_destroy(struct yetty_yclient_event_loop *L)
 
     /* Drain post queue (in case any tasks were posted after destroy). */
     while (L->post_head) {
-        struct post_node *n = L->post_head;
+        struct yetty_yplatform_post_node *n = L->post_head;
         L->post_head = n->next;
         free(n);
     }
@@ -565,7 +565,7 @@ void yetty_yclient_event_loop_post(struct yetty_yclient_event_loop *L,
                                    yetty_yclient_task_cb cb, void *cb_user)
 {
     if (!L || !cb) return;
-    struct post_node *n = calloc(1, sizeof(*n));
+    struct yetty_yplatform_post_node *n = calloc(1, sizeof(*n));
     if (!n) return;
     n->cb      = cb;
     n->cb_user = cb_user;

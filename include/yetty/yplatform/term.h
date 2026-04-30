@@ -12,10 +12,10 @@ extern "C" {
 #endif
 
 /* Check if stderr supports ANSI colors (enables VT processing on Windows) */
-int yplatform_stderr_supports_color(void);
+int yetty_yplatform_stderr_supports_color(void);
 
 /* Format current local time as "HH:MM:SS.mmm" into buf (must be >= 16 bytes) */
-void yplatform_format_timestamp(char *buf, size_t bufsize);
+void yetty_yplatform_format_timestamp(char *buf, size_t bufsize);
 
 #ifdef __cplusplus
 }

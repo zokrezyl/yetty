@@ -25,7 +25,7 @@ namespace yetty { class YDrawBuffer; }
 using namespace yetty;
 using namespace yetty::card;
 
-static bool pdfioErrorHandler(pdfio_file_t*, const char* message, void*) {
+static bool pdfioErrorHandler(struct _pdfio_file_s*, const char* message, void*) {
     ywarn("pdfio: {}", message);
     return true;
 }
@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
     }
 
     // Open PDF
-    pdfio_file_t* pdf = pdfioFileOpen(path.c_str(), nullptr, nullptr,
+    struct _pdfio_file_s* pdf = pdfioFileOpen(path.c_str(), nullptr, nullptr,
                                        pdfioErrorHandler, nullptr);
     if (!pdf) {
         std::cerr << "Error: failed to open PDF: " << path << "\n";

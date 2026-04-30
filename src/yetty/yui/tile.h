@@ -11,11 +11,11 @@ extern "C" {
 #endif
 
 struct yetty_yui_tile;
-struct yetty_yui_view;
+struct yetty_yterm_view;
 struct yetty_yconfig;
 struct yetty_context;
-struct yetty_ycore_event;
-struct yetty_yrender_target;
+struct yetty_yui_event;
+struct yetty_ypaint_core_target;
 
 /* Result types */
 YETTY_YRESULT_DECLARE(yetty_yui_tile_ptr, struct yetty_yui_tile *);
@@ -50,14 +50,14 @@ struct yetty_ycore_void_result yetty_yui_tile_destroy(struct yetty_yui_tile *til
 
 /* Tile operations */
 struct yetty_ycore_void_result yetty_yui_tile_render(struct yetty_yui_tile *tile,
-                                                     struct yetty_yrender_target *render_target);
+                                                     struct yetty_ypaint_core_target *render_target);
 
 struct yetty_ycore_void_result yetty_yui_tile_set_bounds(struct yetty_yui_tile *tile,
                                                          struct yetty_yui_rect bounds);
 
 /* Event handling - returns 1 if handled, 0 if not */
 struct yetty_ycore_int_result yetty_yui_tile_on_event(struct yetty_yui_tile *tile,
-                                                      const struct yetty_ycore_event *event);
+                                                      const struct yetty_yui_event *event);
 
 /* Accessors */
 yetty_ycore_object_id yetty_yui_tile_id(const struct yetty_yui_tile *tile);
@@ -65,34 +65,34 @@ enum yetty_yui_tile_type yetty_yui_tile_type(const struct yetty_yui_tile *tile);
 struct yetty_yui_rect yetty_yui_tile_bounds(const struct yetty_yui_tile *tile);
 
 /* Split-specific */
-struct yetty_ycore_void_result yetty_yui_split_set_first(struct yetty_yui_tile *split,
+struct yetty_ycore_void_result yetty_yui_tile_split_set_first(struct yetty_yui_tile *split,
                                                          struct yetty_yui_tile *tile);
 
-struct yetty_ycore_void_result yetty_yui_split_set_second(struct yetty_yui_tile *split,
+struct yetty_ycore_void_result yetty_yui_tile_split_set_second(struct yetty_yui_tile *split,
                                                           struct yetty_yui_tile *tile);
 
-struct yetty_ycore_void_result yetty_yui_split_set_ratio(struct yetty_yui_tile *split, float ratio);
+struct yetty_ycore_void_result yetty_yui_tile_split_set_ratio(struct yetty_yui_tile *split, float ratio);
 
-struct yetty_yui_tile *yetty_yui_split_first(const struct yetty_yui_tile *split);
-struct yetty_yui_tile *yetty_yui_split_second(const struct yetty_yui_tile *split);
-float yetty_yui_split_ratio(const struct yetty_yui_tile *split);
-enum yetty_yui_orientation yetty_yui_split_orientation(const struct yetty_yui_tile *split);
+struct yetty_yui_tile *yetty_yui_tile_split_first(const struct yetty_yui_tile *split);
+struct yetty_yui_tile *yetty_yui_tile_split_second(const struct yetty_yui_tile *split);
+float yetty_yui_tile_split_ratio(const struct yetty_yui_tile *split);
+enum yetty_yui_orientation yetty_yui_tile_split_orientation(const struct yetty_yui_tile *split);
 
 /* Pane-specific */
-struct yetty_ycore_void_result yetty_yui_pane_push_view(struct yetty_yui_tile *pane,
-                                                        struct yetty_yui_view *view);
+struct yetty_ycore_void_result yetty_yui_tile_pane_push_view(struct yetty_yui_tile *pane,
+                                                        struct yetty_yterm_view *view);
 
-struct yetty_ycore_void_result yetty_yui_pane_pop_view(struct yetty_yui_tile *pane);
+struct yetty_ycore_void_result yetty_yui_tile_pane_pop_view(struct yetty_yui_tile *pane);
 
-struct yetty_yui_view *yetty_yui_pane_active_view(const struct yetty_yui_tile *pane);
+struct yetty_yterm_view *yetty_yui_tile_pane_active_view(const struct yetty_yui_tile *pane);
 
-size_t yetty_yui_pane_view_count(const struct yetty_yui_tile *pane);
+size_t yetty_yui_tile_pane_view_count(const struct yetty_yui_tile *pane);
 
-int yetty_yui_pane_has_view(const struct yetty_yui_tile *pane, yetty_ycore_object_id view_id);
+int yetty_yui_tile_pane_has_view(const struct yetty_yui_tile *pane, yetty_ycore_object_id view_id);
 
-int yetty_yui_pane_focused(const struct yetty_yui_tile *pane);
+int yetty_yui_tile_pane_focused(const struct yetty_yui_tile *pane);
 
-void yetty_yui_pane_set_focused(struct yetty_yui_tile *pane, int focused);
+void yetty_yui_tile_pane_set_focused(struct yetty_yui_tile *pane, int focused);
 
 /* Tree helpers */
 struct yetty_yui_tile *yetty_yui_tile_find_by_id(struct yetty_yui_tile *root,

@@ -8,7 +8,7 @@
 #include <sys/time.h>
 #include <time.h>
 
-int yplatform_stderr_supports_color(void)
+int yetty_yplatform_stderr_supports_color(void)
 {
     const char *term = getenv("TERM");
     if (!term || !isatty(fileno(stderr))) {
@@ -20,7 +20,7 @@ int yplatform_stderr_supports_color(void)
             strcmp(term, "linux") == 0);
 }
 
-void yplatform_format_timestamp(char *buf, size_t bufsize)
+void yetty_yplatform_format_timestamp(char *buf, size_t bufsize)
 {
     struct timeval tv;
     gettimeofday(&tv, NULL);

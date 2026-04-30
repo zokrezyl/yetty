@@ -42,10 +42,10 @@
  * Font tracking
  *===========================================================================*/
 
-struct ypdf_font_info {
+struct yetty_ypdf_font_info {
     char tag[64];                     /* e.g. "/F1" or "F1" */
     int buffer_font_id;               /* yetty_ypaint_core_buffer font index */
-    struct yetty_font_font *raw_font; /* non-atlas metrics source */
+    struct yetty_ypaint_font *raw_font; /* non-atlas metrics source */
     bool is_identity_h;
     struct yetty_ycore_map to_unicode; /* CID → Unicode */
     bool to_unicode_init;
@@ -125,7 +125,7 @@ static const char *str_find(const char *hay, size_t hay_len, const char *needle,
 
 static void parse_to_unicode_cmap(pdfio_obj_t *cmap_obj, struct yetty_ycore_map *map)
 {
-    pdfio_stream_t *stream = pdfioObjOpenStream(cmap_obj, true);
+    struct _pdfio_stream_s *stream = pdfioObjOpenStream(cmap_obj, true);
     if (!stream) {
         return;
     }
@@ -305,7 +305,7 @@ static size_t remap_cid_text(const char *decoded, size_t decoded_len,
  * Font extraction
  *===========================================================================*/
 
-static int find_font_idx(const struct ypdf_font_info *fonts, size_t count, const char *tag)
+static int find_font_idx(const struct yetty_ypdf_font_info *fonts, size_t count, const char *tag)
 {
     for (size_t i = 0; i < count; i++) {
         if (strcmp(fonts[i].tag, tag) == 0) {
@@ -327,7 +327,7 @@ static int find_font_idx(const struct ypdf_font_info *fonts, size_t count, const
  * APIs); it always reports OK. */
 static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
                                                          struct yetty_ypaint_core_buffer *buffer,
-                                                         struct ypdf_font_info *fonts,
+                                                         struct yetty_ypdf_font_info *fonts,
                                                          size_t *font_count)
 {
     pdfio_dict_t *page_dict = pdfioObjGetDict(page_obj);
@@ -424,7 +424,7 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
             continue;
         }
 
-        pdfio_stream_t *ff_stream = pdfioObjOpenStream(font_file_obj, true);
+        struct _pdfio_stream_s *ff_stream = pdfioObjOpenStream(font_file_obj, true);
         if (!ff_stream) {
             continue;
         }
@@ -469,7 +469,7 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
 
         /* Metrics-only font for measurement. */
         struct yetty_font_font_result ff_res =
-            yetty_font_raster_font_create_from_data(bytes, sz, tag, NULL, 32.0f);
+            yetty_yfont_raster_font_create_from_data(bytes, sz, tag, NULL, 32.0f);
 
         free(bytes);
 
@@ -478,7 +478,7 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
             continue;
         }
 
-        struct ypdf_font_info *fi_out = &fonts[*font_count];
+        struct yetty_ypdf_font_info *fi_out = &fonts[*font_count];
         memset(fi_out, 0, sizeof(*fi_out));
         strncpy(fi_out->tag, tag, sizeof(fi_out->tag) - 1);
         fi_out->buffer_font_id = buf_font_id;
@@ -503,9 +503,9 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
  * Render context (shared by the three callbacks via user_data)
  *===========================================================================*/
 
-struct render_ctx {
+struct yetty_ypdf_render_ctx {
     struct yetty_ypaint_core_buffer *buffer;
-    struct ypdf_font_info *fonts;
+    struct yetty_ypdf_font_info *fonts;
     size_t font_count;
     float y_offset;
     float page_height;
@@ -520,12 +520,12 @@ static struct float_result text_emit_cb(void *ud, const char *text, size_t text_
                                         const struct yetty_ypdf_text_state *state)
 {
 
-    struct render_ctx *c = (struct render_ctx *)ud;
+    struct yetty_ypdf_render_ctx *c = (struct yetty_ypdf_render_ctx *)ud;
     float sx = pos_x;
     float sy = c->y_offset + (c->page_height - pos_y);
 
     int font_idx = find_font_idx(c->fonts, c->font_count, state->font_name);
-    struct ypdf_font_info *fi = (font_idx >= 0) ? &c->fonts[font_idx] : NULL;
+    struct yetty_ypdf_font_info *fi = (font_idx >= 0) ? &c->fonts[font_idx] : NULL;
 
     /* CID remap on Identity-H fonts with a ToUnicode map. */
     const char *emit_text_p = text;
@@ -616,7 +616,7 @@ static void rect_paint_cb(void *ud, float x, float y, float w, float h,
                           float fg, float fb, float line_width)
 {
 
-    struct render_ctx *c = (struct render_ctx *)ud;
+    struct yetty_ypdf_render_ctx *c = (struct yetty_ypdf_render_ctx *)ud;
     float rx = x;
     float ry = c->y_offset + (c->page_height - y - h);
 
@@ -650,7 +650,7 @@ static void line_paint_cb(void *ud, float x0, float y0, float x1, float y1, floa
                           float b, float line_width)
 {
 
-    struct render_ctx *c = (struct render_ctx *)ud;
+    struct yetty_ypdf_render_ctx *c = (struct yetty_ypdf_render_ctx *)ud;
     uint32_t color = rgb_to_abgr(r, g, b);
     struct yetty_ysdf_segment geom = {
         .start_x = x0,
@@ -665,7 +665,7 @@ static void line_paint_cb(void *ud, float x0, float y0, float x1, float y1, floa
  * Public entry point
  *===========================================================================*/
 
-struct yetty_ypdf_render_result yetty_ypdf_render_pdf(pdfio_file_t *pdf)
+struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf)
 {
     if (!pdf) {
         return YETTY_ERR(yetty_ypdf_render, "pdf is NULL");
@@ -716,18 +716,18 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(pdfio_file_t *pdf)
         .scene_max_x = max_width,
         .scene_max_y = total_height,
     };
-    struct yetty_ypaint_core_buffer_result br = yetty_ypaint_core_buffer_create(&cfg);
+    struct yetty_ypaint_core_buffer_result br = yetty_ypaint_core_buffer_config_buffer_create(&cfg);
     if (YETTY_IS_ERR(br)) {
         return YETTY_ERR(yetty_ypdf_render, br.error.msg);
     }
     struct yetty_ypaint_core_buffer *buffer = br.value;
 
     /* ---------- Pass 2: emission ---------- */
-    struct ypdf_font_info fonts[MAX_FONTS];
+    struct yetty_ypdf_font_info fonts[MAX_FONTS];
     memset(fonts, 0, sizeof(fonts));
     size_t font_count = 0;
 
-    struct render_ctx ctx = {
+    struct yetty_ypdf_render_ctx ctx = {
         .buffer = buffer,
         .fonts = fonts,
         .font_count = 0,
@@ -762,7 +762,7 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(pdfio_file_t *pdf)
             extract_page_fonts(page_obj, buffer, fonts, &font_count);
         (void)fr; /* per-font failures already logged inside */
 
-        struct yetty_ypdf_content_parser_ptr_result pr = yetty_ypdf_content_parser_create(&cb);
+        struct yetty_ypdf_content_parser_ptr_result pr = yetty_ypdf_content_parser_callbacks_content_parser_create(&cb);
         if (YETTY_IS_ERR(pr)) {
             yetty_ypaint_core_buffer_destroy(buffer);
             return YETTY_ERR(yetty_ypdf_render, pr.error.msg);
@@ -775,7 +775,7 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(pdfio_file_t *pdf)
 
         size_t num_streams = pdfioPageGetNumStreams(page_obj);
         for (size_t s = 0; s < num_streams; s++) {
-            pdfio_stream_t *stream = pdfioPageOpenStream(page_obj, s, true);
+            struct _pdfio_stream_s *stream = pdfioPageOpenStream(page_obj, s, true);
             if (!stream) {
                 continue;
             }

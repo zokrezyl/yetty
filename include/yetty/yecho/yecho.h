@@ -133,7 +133,7 @@ struct yetty_yecho_render_config {
 /* Render `doc` into a fresh ypaint-core buffer. Caller frees with
  * yetty_ypaint_core_buffer_destroy. */
 struct yetty_ypaint_core_buffer_result
-yetty_yecho_render(const struct yetty_yecho_doc *doc,
+yetty_yecho_doc_render(const struct yetty_yecho_doc *doc,
                    const struct yetty_yecho_render_config *config);
 
 /* Convenience: parse + render in one call. */

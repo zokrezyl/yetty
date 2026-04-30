@@ -126,7 +126,7 @@ void yetty_ycore_error_destroy(struct yetty_ycore_error err);
 }
 
 /* C++ helper — compound literals are a C-only feature */
-inline struct yetty_ycore_void_result yetty_cpp_err(const char *msg)
+inline struct yetty_ycore_void_result yetty_ycore_err(const char *msg)
 {
     struct yetty_ycore_void_result r = {};
     r.ok = 0;

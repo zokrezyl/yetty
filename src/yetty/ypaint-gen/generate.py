@@ -556,22 +556,22 @@ static WGPURenderPipeline {name}_get_pipeline(struct yetty_ypaint_concrete_facto
     return factory->binder->ops->get_pipeline(factory->binder);
 }}
 
-static struct yetty_ypaint_complex_prim_instance_ptr_result
+static struct yetty_ypaint_core_complex_prim_instance_ptr_result
 {name}_create_instance(struct yetty_ypaint_concrete_factory *self,
                        const void *buffer_data, size_t size, uint32_t rolling_row)
 {{
     if (!buffer_data || size < sizeof(struct yetty_ypaint_complex_prim))
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "invalid buffer data");
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "invalid buffer data");
 
     struct yetty_ypaint_complex_prim_instance *instance =
         calloc(1, sizeof(struct yetty_ypaint_complex_prim_instance));
     if (!instance)
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "allocation failed");
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "allocation failed");
 
     instance->buffer_data = malloc(size);
     if (!instance->buffer_data) {{
         free(instance);
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "buffer alloc failed");
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "buffer alloc failed");
     }}
 
     memcpy(instance->buffer_data, buffer_data, size);
@@ -585,7 +585,7 @@ static struct yetty_ypaint_complex_prim_instance_ptr_result
     if (YETTY_IS_OK(aabb_res))
         instance->bounds = aabb_res.value;
 
-    return YETTY_OK(yetty_ypaint_complex_prim_instance_ptr, instance);
+    return YETTY_OK(yetty_ypaint_core_complex_prim_instance_ptr, instance);
 }}
 
 static void {name}_destroy_instance(struct yetty_ypaint_concrete_factory *self,
@@ -788,7 +788,7 @@ static const uint32_t {NAME}_COLOR_PALETTE[8] = {{
 
 static struct yetty_ycore_void_result
 {name}_yaml_factory(struct yetty_ypaint_core_buffer *buffer,
-                    yaml_parser_t *yaml_parser,
+                    struct yaml_parser_s *yaml_parser,
                     const char *primitive_type_name)
 {{
     (void)primitive_type_name;
@@ -922,7 +922,7 @@ static struct yetty_ycore_void_result
         return YETTY_ERR(yetty_ycore_void, ser_res.error.msg);
     }}
 
-    struct yetty_ypaint_id_result id_res =
+    struct yetty_ypaint_core_id_result id_res =
         yetty_ypaint_core_buffer_add_prim(buffer, prim_buf, required);
     free(prim_buf);
 

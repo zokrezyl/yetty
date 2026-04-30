@@ -8,27 +8,27 @@
 extern "C" {
 #endif
 
-struct yetty_yplatform_clipboard_manager;
+struct yetty_platform_clipboard_manager;
 
 /* Result type */
 YETTY_YRESULT_DECLARE(yetty_yplatform_clipboard_manager,
-                      struct yetty_yplatform_clipboard_manager *);
+                      struct yetty_platform_clipboard_manager *);
 
 /* Clipboard manager ops */
-struct yetty_yplatform_clipboard_manager_ops {
-    void (*destroy)(struct yetty_yplatform_clipboard_manager *self);
+struct yetty_platform_clipboard_manager_ops {
+    void (*destroy)(struct yetty_platform_clipboard_manager *self);
     /* Returns pointer to internal buffer, valid until next get_text or destroy */
-    const char *(*get_text)(struct yetty_yplatform_clipboard_manager *self);
-    void (*set_text)(struct yetty_yplatform_clipboard_manager *self, const char *text, size_t len);
+    const char *(*get_text)(struct yetty_platform_clipboard_manager *self);
+    void (*set_text)(struct yetty_platform_clipboard_manager *self, const char *text, size_t len);
 };
 
 /* Clipboard manager base */
-struct yetty_yplatform_clipboard_manager {
-    const struct yetty_yplatform_clipboard_manager_ops *ops;
+struct yetty_platform_clipboard_manager {
+    const struct yetty_platform_clipboard_manager_ops *ops;
 };
 
 /* Platform-specific create (implemented per platform) */
-struct yetty_yplatform_clipboard_manager_result yetty_yplatform_clipboard_manager_create(void);
+struct yetty_yplatform_clipboard_manager_result yetty_platform_clipboard_manager_create(void);
 
 #ifdef __cplusplus
 }

@@ -61,7 +61,7 @@ typedef void (*yetty_yrender_utils_tile_diff_sink_fn)(
  * expectation (64 today).
  */
 struct yetty_yrender_utils_tile_diff_engine_ptr_result yetty_yrender_utils_tile_diff_engine_create(
-    WGPUDevice device, WGPUQueue queue, struct yplatform_wgpu *wgpu, uint32_t tile_size);
+    WGPUDevice device, WGPUQueue queue, struct yetty_yplatform_wgpu *wgpu, uint32_t tile_size);
 
 void yetty_yrender_utils_tile_diff_engine_destroy(struct yetty_yrender_utils_tile_diff_engine *eng);
 

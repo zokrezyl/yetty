@@ -35,7 +35,7 @@
 struct yetty_yetty {
     struct yetty_context context;
     struct yetty_yui_workspace *workspace;
-    struct yetty_ycore_event_loop *event_loop;
+    struct yetty_yplatform_event_loop *event_loop;
     struct yetty_ycore_event_listener listener;
 
     /* WebGPU state (owned by Yetty) */
@@ -46,18 +46,18 @@ struct yetty_yetty {
 
     /* Coroutine-aware wgpu await machinery (loop-thread tick + completion
      * routing). Owned by Yetty; lifetime spans event_loop + wgpu instance. */
-    struct yplatform_wgpu *wgpu;
+    struct yetty_yplatform_wgpu *wgpu;
 
     /* Big render target - window-sized texture with surface for presentation */
-    struct yetty_yrender_target *render_target;
+    struct yetty_ypaint_core_target *render_target;
 
     /* RPC server (optional, enabled via -r/--rpc-socket) */
-    struct yetty_rpc_server *rpc_server;
+    struct yetty_yrpc_server *rpc_server;
     yetty_ycore_timer_id rpc_timer_id;
     struct yetty_ycore_event_listener rpc_timer_listener;
 
     /* VNC server (optional, for --vnc-server or --vnc-headless) */
-    struct yetty_vnc_server *vnc_server;
+    struct yetty_yvnc_server *vnc_server;
 
     /* Visual (shader-level) zoom state — applied by the final blend. */
     float visual_zoom_scale;    /* 1.0 = off; clamped to [1.0, 100.0] */
@@ -97,9 +97,9 @@ static float yetty_clampf(float v, float lo, float hi)
  * This decouples the translation (e.g. Ctrl+Scroll → ZOOM_VISUAL) from the
  * handler, and gives rpc/keyboard-mapping paths one entry point to inject
  * the same named events. */
-static void yetty_post_event_async(struct yetty_yetty *yetty, const struct yetty_ycore_event *event)
+static void yetty_post_event_async(struct yetty_yetty *yetty, const struct yetty_yui_event *event)
 {
-    struct yetty_yplatform_input_pipe *pipe = yetty->context.app_context.platform_input_pipe;
+    struct yetty_ycore_input_pipe *pipe = yetty->context.app_context.platform_input_pipe;
     if (!pipe || !pipe->ops || !pipe->ops->write) {
         yerror("yetty_post_event_async: no input pipe available");
         return;
@@ -112,25 +112,25 @@ static void yetty_post_event_async(struct yetty_yetty *yetty, const struct yetty
  *===========================================================================*/
 
 static struct yetty_ycore_int_result yetty_event_handler(
-    struct yetty_ycore_event_listener *listener, const struct yetty_ycore_event *event)
+    struct yetty_ycore_event_listener *listener, const struct yetty_yui_event *event)
 {
     struct yetty_yetty *yetty = container_of(listener, struct yetty_yetty, listener);
 
     /* X11 Expose / window-uncover: mark every tile dirty on damage-aware
      * targets so the next render actually repaints the window. Fall through
      * to the normal RENDER path below (no early return). */
-    if (event->type == YETTY_EVENT_WINDOW_REFRESH) {
+    if (event->type == YETTY_YCORE_WINDOW_REFRESH) {
         if (yetty->render_target && yetty->render_target->ops->refresh_full) {
             yetty->render_target->ops->refresh_full(yetty->render_target);
         }
         /* Re-dispatch as a normal RENDER so the single render pipeline runs
          * exactly once, via the same code path used by all other triggers. */
-        struct yetty_ycore_event re = {.type = YETTY_EVENT_RENDER};
+        struct yetty_yui_event re = {.type = YETTY_YCORE_RENDER};
         return yetty_event_handler(listener, &re);
     }
 
     /* Handle RENDER event directly - yetty owns the render cycle */
-    if (event->type == YETTY_EVENT_RENDER) {
+    if (event->type == YETTY_YCORE_RENDER) {
         if (!yetty->render_target) {
             yerror("yetty: RENDER but no render_target");
             return YETTY_OK(yetty_ycore_int, 0);
@@ -198,21 +198,21 @@ static struct yetty_ycore_int_result yetty_event_handler(
      * that wants to trigger zoom — RPC, keyboard remapping, macro replay — can
      * push the same ZOOM_VISUAL / ZOOM_CELL_SIZE event. The raw scroll keeps
      * flowing to the workspace unchanged when no zoom modifier is held. */
-    if (event->type == YETTY_EVENT_SCROLL) {
+    if (event->type == YETTY_YCORE_SCROLL) {
         int mods = event->scroll.mods;
         bool ctrl = (mods & YETTY_MOD_CONTROL) != 0;
         bool shift = (mods & YETTY_MOD_SHIFT) != 0;
 
         if (ctrl && shift) {
-            struct yetty_ycore_event ev = {0};
-            ev.type = YETTY_EVENT_ZOOM_CELL_SIZE;
+            struct yetty_yui_event ev = {0};
+            ev.type = YETTY_YCORE_ZOOM_CELL_SIZE;
             ev.zoom_cell_size.delta = event->scroll.dy * 0.04f;
             yetty_post_event_async(yetty, &ev);
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (ctrl) {
-            struct yetty_ycore_event ev = {0};
-            ev.type = YETTY_EVENT_ZOOM_VISUAL;
+            struct yetty_yui_event ev = {0};
+            ev.type = YETTY_YCORE_ZOOM_VISUAL;
             ev.zoom_visual.delta = event->scroll.dy * 0.1f;
             ev.zoom_visual.anchor_x = event->scroll.x;
             ev.zoom_visual.anchor_y = event->scroll.y;
@@ -227,12 +227,12 @@ static struct yetty_ycore_int_result yetty_event_handler(
      * shell under the terminal doesn't see a phantom keystroke while the
      * user is just trying to look around. */
     if (yetty->visual_zoom_scale > 1.0f &&
-        (event->type == YETTY_EVENT_KEY_DOWN || event->type == YETTY_EVENT_KEY_UP ||
-         event->type == YETTY_EVENT_CHAR)) {
-        if (event->type == YETTY_EVENT_KEY_DOWN &&
+        (event->type == YETTY_YCORE_KEY_DOWN || event->type == YETTY_YCORE_KEY_UP ||
+         event->type == YETTY_YCORE_CHAR)) {
+        if (event->type == YETTY_YCORE_KEY_DOWN &&
             (event->key.key == 256 /* ESC */ || event->key.key == 257 /* ENTER */)) {
-            struct yetty_ycore_event ev = {0};
-            ev.type = YETTY_EVENT_ZOOM_VISUAL;
+            struct yetty_yui_event ev = {0};
+            ev.type = YETTY_YCORE_ZOOM_VISUAL;
             ev.zoom_visual.reset = 1;
             yetty_post_event_async(yetty, &ev);
             ydebug("yetty: visual zoom EXIT (key=%d)", event->key.key);
@@ -244,7 +244,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
      * a drag; subsequent moves emit ZOOM_VISUAL_PAN with the pixel delta; up
      * ends it. We swallow these events so the terminal underneath doesn't see
      * a phantom click-drag. */
-    if (event->type == YETTY_EVENT_MOUSE_DOWN && event->mouse.button == 0 &&
+    if (event->type == YETTY_YCORE_MOUSE_DOWN && event->mouse.button == 0 &&
         yetty->visual_zoom_scale > 1.0f) {
         yetty->visual_zoom_dragging = 1;
         yetty->visual_zoom_drag_last_x = event->mouse.x;
@@ -252,22 +252,22 @@ static struct yetty_ycore_int_result yetty_event_handler(
         ydebug("yetty: visual zoom drag START at (%.1f,%.1f)", event->mouse.x, event->mouse.y);
         return YETTY_OK(yetty_ycore_int, 1);
     }
-    if ((event->type == YETTY_EVENT_MOUSE_MOVE || event->type == YETTY_EVENT_MOUSE_DRAG) &&
+    if ((event->type == YETTY_YCORE_MOUSE_MOVE || event->type == YETTY_YCORE_MOUSE_DRAG) &&
         yetty->visual_zoom_dragging) {
         float dx = event->mouse.x - yetty->visual_zoom_drag_last_x;
         float dy = event->mouse.y - yetty->visual_zoom_drag_last_y;
         yetty->visual_zoom_drag_last_x = event->mouse.x;
         yetty->visual_zoom_drag_last_y = event->mouse.y;
         if (dx != 0.0f || dy != 0.0f) {
-            struct yetty_ycore_event ev = {0};
-            ev.type = YETTY_EVENT_ZOOM_VISUAL_PAN;
+            struct yetty_yui_event ev = {0};
+            ev.type = YETTY_YCORE_ZOOM_VISUAL_PAN;
             ev.zoom_visual_pan.dx = dx;
             ev.zoom_visual_pan.dy = dy;
             yetty_post_event_async(yetty, &ev);
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
-    if (event->type == YETTY_EVENT_MOUSE_UP && yetty->visual_zoom_dragging) {
+    if (event->type == YETTY_YCORE_MOUSE_UP && yetty->visual_zoom_dragging) {
         yetty->visual_zoom_dragging = 0;
         ydebug("yetty: visual zoom drag END");
         return YETTY_OK(yetty_ycore_int, 1);
@@ -284,7 +284,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
      * s_uv_mouse across a scale change yields
      *     off_new = off_old + (m - size/2) * (1/scale_old - 1/scale_new).
      */
-    if (event->type == YETTY_EVENT_ZOOM_VISUAL) {
+    if (event->type == YETTY_YCORE_ZOOM_VISUAL) {
         if (event->zoom_visual.reset) {
             yetty->visual_zoom_scale = 1.0f;
             yetty->visual_zoom_offset_x = 0.0f;
@@ -338,8 +338,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
          * at the blend stage was a post-rasterization bitmap stretch and
          * produced blurry text at large scales. */
         {
-            struct yetty_ycore_event apply = {0};
-            apply.type = YETTY_EVENT_ZOOM_VISUAL_APPLY;
+            struct yetty_yui_event apply = {0};
+            apply.type = YETTY_YCORE_ZOOM_VISUAL_APPLY;
             apply.zoom_visual_apply.scale = yetty->visual_zoom_scale;
             apply.zoom_visual_apply.offset_x = yetty->visual_zoom_offset_x;
             apply.zoom_visual_apply.offset_y = yetty->visual_zoom_offset_y;
@@ -358,7 +358,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
      * RPC/kb. The offset moves opposite to the drag (so content follows the
      * cursor) and is scaled down by the zoom factor (a pixel of drag moves
      * fewer source pixels when zoomed in). */
-    if (event->type == YETTY_EVENT_ZOOM_VISUAL_PAN) {
+    if (event->type == YETTY_YCORE_ZOOM_VISUAL_PAN) {
         if (yetty->visual_zoom_scale > 1.0f) {
             float inv = 1.0f / yetty->visual_zoom_scale;
             yetty->visual_zoom_offset_x -= event->zoom_visual_pan.dx * inv;
@@ -380,8 +380,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
                 yetty_clampf(yetty->visual_zoom_offset_y, -max_off_y, max_off_y);
 
             {
-                struct yetty_ycore_event apply = {0};
-                apply.type = YETTY_EVENT_ZOOM_VISUAL_APPLY;
+                struct yetty_yui_event apply = {0};
+                apply.type = YETTY_YCORE_ZOOM_VISUAL_APPLY;
                 apply.zoom_visual_apply.scale = yetty->visual_zoom_scale;
                 apply.zoom_visual_apply.offset_x = yetty->visual_zoom_offset_x;
                 apply.zoom_visual_apply.offset_y = yetty->visual_zoom_offset_y;
@@ -399,7 +399,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
     /* ZOOM_CELL_SIZE — structural zoom. Forward to the workspace so the
      * active terminal can scale its layers' cell_size and recompute cols/rows.
      * See terminal.c for the actual restructuring. */
-    if (event->type == YETTY_EVENT_ZOOM_CELL_SIZE) {
+    if (event->type == YETTY_YCORE_ZOOM_CELL_SIZE) {
         if (yetty->workspace) {
             yetty_yui_workspace_on_event(yetty->workspace, event);
         }
@@ -407,7 +407,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
     }
 
     /* Handle RESIZE event - reconfigure surface and resize render target */
-    if (event->type == YETTY_EVENT_RESIZE) {
+    if (event->type == YETTY_YCORE_RESIZE) {
         uint32_t width = (uint32_t)event->resize.width;
         uint32_t height = (uint32_t)event->resize.height;
 
@@ -474,7 +474,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
      *      *running=0 and breaks out of glfwWaitEvents, after which the
      *      cleanup chain (yetty_destroy → workspace → terminals →
      *      fork_pty_stop) reaps the PTY children. */
-    if (event->type == YETTY_EVENT_SHUTDOWN) {
+    if (event->type == YETTY_YCORE_SHUTDOWN) {
         ydebug("yetty: SHUTDOWN — winding down");
         if (yetty->workspace) {
             yetty_yui_workspace_on_event(yetty->workspace, event);
@@ -495,61 +495,61 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
 static struct yetty_ycore_void_result register_event_listeners(struct yetty_yetty *yetty)
 {
-    struct yetty_ycore_event_loop *el = yetty->event_loop;
+    struct yetty_yplatform_event_loop *el = yetty->event_loop;
     struct yetty_ycore_void_result res;
 
     yetty->listener.handler = yetty_event_handler;
 
     /* Keyboard events */
-    res = el->ops->register_listener(el, YETTY_EVENT_KEY_DOWN, &yetty->listener, 0);
+    res = el->ops->register_listener(el, YETTY_YCORE_KEY_DOWN, &yetty->listener, 0);
     if (!YETTY_IS_OK(res)) {
         return res;
     }
-    res = el->ops->register_listener(el, YETTY_EVENT_KEY_UP, &yetty->listener, 0);
+    res = el->ops->register_listener(el, YETTY_YCORE_KEY_UP, &yetty->listener, 0);
     if (!YETTY_IS_OK(res)) {
         return res;
     }
-    res = el->ops->register_listener(el, YETTY_EVENT_CHAR, &yetty->listener, 0);
+    res = el->ops->register_listener(el, YETTY_YCORE_CHAR, &yetty->listener, 0);
     if (!YETTY_IS_OK(res)) {
         return res;
     }
 
     /* Mouse events */
-    res = el->ops->register_listener(el, YETTY_EVENT_MOUSE_DOWN, &yetty->listener, 0);
+    res = el->ops->register_listener(el, YETTY_YCORE_MOUSE_DOWN, &yetty->listener, 0);
     if (!YETTY_IS_OK(res)) {
         return res;
     }
-    res = el->ops->register_listener(el, YETTY_EVENT_MOUSE_UP, &yetty->listener, 0);
+    res = el->ops->register_listener(el, YETTY_YCORE_MOUSE_UP, &yetty->listener, 0);
     if (!YETTY_IS_OK(res)) {
         return res;
     }
-    res = el->ops->register_listener(el, YETTY_EVENT_MOUSE_MOVE, &yetty->listener, 0);
+    res = el->ops->register_listener(el, YETTY_YCORE_MOUSE_MOVE, &yetty->listener, 0);
     if (!YETTY_IS_OK(res)) {
         return res;
     }
-    res = el->ops->register_listener(el, YETTY_EVENT_MOUSE_DRAG, &yetty->listener, 0);
+    res = el->ops->register_listener(el, YETTY_YCORE_MOUSE_DRAG, &yetty->listener, 0);
     if (!YETTY_IS_OK(res)) {
         return res;
     }
-    res = el->ops->register_listener(el, YETTY_EVENT_SCROLL, &yetty->listener, 0);
+    res = el->ops->register_listener(el, YETTY_YCORE_SCROLL, &yetty->listener, 0);
     if (!YETTY_IS_OK(res)) {
         return res;
     }
 
     /* Other events */
-    res = el->ops->register_listener(el, YETTY_EVENT_RESIZE, &yetty->listener, 0);
+    res = el->ops->register_listener(el, YETTY_YCORE_RESIZE, &yetty->listener, 0);
     if (!YETTY_IS_OK(res)) {
         return res;
     }
-    res = el->ops->register_listener(el, YETTY_EVENT_RENDER, &yetty->listener, 0);
+    res = el->ops->register_listener(el, YETTY_YCORE_RENDER, &yetty->listener, 0);
     if (!YETTY_IS_OK(res)) {
         return res;
     }
-    res = el->ops->register_listener(el, YETTY_EVENT_WINDOW_REFRESH, &yetty->listener, 0);
+    res = el->ops->register_listener(el, YETTY_YCORE_WINDOW_REFRESH, &yetty->listener, 0);
     if (!YETTY_IS_OK(res)) {
         return res;
     }
-    res = el->ops->register_listener(el, YETTY_EVENT_SHUTDOWN, &yetty->listener, 0);
+    res = el->ops->register_listener(el, YETTY_YCORE_SHUTDOWN, &yetty->listener, 0);
     if (!YETTY_IS_OK(res)) {
         return res;
     }
@@ -557,21 +557,21 @@ static struct yetty_ycore_void_result register_event_listeners(struct yetty_yett
     /* Named zoom events — consumed here (ZOOM_VISUAL / ZOOM_VISUAL_PAN) or
      * forwarded to the workspace (ZOOM_CELL_SIZE). Same entry point for
      * RPC / kb-map injection. */
-    res = el->ops->register_listener(el, YETTY_EVENT_ZOOM_VISUAL, &yetty->listener, 0);
+    res = el->ops->register_listener(el, YETTY_YCORE_ZOOM_VISUAL, &yetty->listener, 0);
     if (!YETTY_IS_OK(res)) {
         return res;
     }
-    res = el->ops->register_listener(el, YETTY_EVENT_ZOOM_VISUAL_PAN, &yetty->listener, 0);
+    res = el->ops->register_listener(el, YETTY_YCORE_ZOOM_VISUAL_PAN, &yetty->listener, 0);
     if (!YETTY_IS_OK(res)) {
         return res;
     }
     /* ZOOM_VISUAL_APPLY is forwarded via workspace_on_event, not dispatched,
      * but register a listener so the event-loop knows the type exists. */
-    res = el->ops->register_listener(el, YETTY_EVENT_ZOOM_VISUAL_APPLY, &yetty->listener, 0);
+    res = el->ops->register_listener(el, YETTY_YCORE_ZOOM_VISUAL_APPLY, &yetty->listener, 0);
     if (!YETTY_IS_OK(res)) {
         return res;
     }
-    res = el->ops->register_listener(el, YETTY_EVENT_ZOOM_CELL_SIZE, &yetty->listener, 0);
+    res = el->ops->register_listener(el, YETTY_YCORE_ZOOM_CELL_SIZE, &yetty->listener, 0);
     if (!YETTY_IS_OK(res)) {
         return res;
     }
@@ -720,9 +720,9 @@ static uint64_t min_u64(uint64_t a, uint64_t b)
  * them the same way GLFW input would.
  *===========================================================================*/
 
-static void vnc_push_event(struct yetty_yetty *yetty, const struct yetty_ycore_event *event)
+static void vnc_push_event(struct yetty_yetty *yetty, const struct yetty_yui_event *event)
 {
-    struct yetty_yplatform_input_pipe *pipe = yetty->context.app_context.platform_input_pipe;
+    struct yetty_ycore_input_pipe *pipe = yetty->context.app_context.platform_input_pipe;
     if (!pipe) {
         return;
     }
@@ -732,8 +732,8 @@ static void vnc_push_event(struct yetty_yetty *yetty, const struct yetty_ycore_e
 static void vnc_on_mouse_move_cb(int16_t x, int16_t y, uint8_t mods, void *userdata)
 {
     struct yetty_yetty *yetty = userdata;
-    struct yetty_ycore_event event = {0};
-    event.type = YETTY_EVENT_MOUSE_MOVE;
+    struct yetty_yui_event event = {0};
+    event.type = YETTY_YCORE_MOUSE_MOVE;
     event.mouse.x = (float)x;
     event.mouse.y = (float)y;
     event.mouse.mods = mods;
@@ -744,8 +744,8 @@ static void vnc_on_mouse_button_cb(int16_t x, int16_t y, uint8_t button, int pre
                                    void *userdata)
 {
     struct yetty_yetty *yetty = userdata;
-    struct yetty_ycore_event event = {0};
-    event.type = pressed ? YETTY_EVENT_MOUSE_DOWN : YETTY_EVENT_MOUSE_UP;
+    struct yetty_yui_event event = {0};
+    event.type = pressed ? YETTY_YCORE_MOUSE_DOWN : YETTY_YCORE_MOUSE_UP;
     event.mouse.x = (float)x;
     event.mouse.y = (float)y;
     event.mouse.button = button;
@@ -757,8 +757,8 @@ static void vnc_on_mouse_scroll_cb(int16_t x, int16_t y, int16_t dx, int16_t dy,
                                    void *userdata)
 {
     struct yetty_yetty *yetty = userdata;
-    struct yetty_ycore_event event = {0};
-    event.type = YETTY_EVENT_SCROLL;
+    struct yetty_yui_event event = {0};
+    event.type = YETTY_YCORE_SCROLL;
     event.scroll.x = (float)x;
     event.scroll.y = (float)y;
     event.scroll.dx = (float)dx;
@@ -770,8 +770,8 @@ static void vnc_on_mouse_scroll_cb(int16_t x, int16_t y, int16_t dx, int16_t dy,
 static void vnc_on_key_down_cb(uint32_t keycode, uint32_t scancode, uint8_t mods, void *userdata)
 {
     struct yetty_yetty *yetty = userdata;
-    struct yetty_ycore_event event = {0};
-    event.type = YETTY_EVENT_KEY_DOWN;
+    struct yetty_yui_event event = {0};
+    event.type = YETTY_YCORE_KEY_DOWN;
     event.key.key = (int)keycode;
     event.key.scancode = (int)scancode;
     event.key.mods = mods;
@@ -781,8 +781,8 @@ static void vnc_on_key_down_cb(uint32_t keycode, uint32_t scancode, uint8_t mods
 static void vnc_on_key_up_cb(uint32_t keycode, uint32_t scancode, uint8_t mods, void *userdata)
 {
     struct yetty_yetty *yetty = userdata;
-    struct yetty_ycore_event event = {0};
-    event.type = YETTY_EVENT_KEY_UP;
+    struct yetty_yui_event event = {0};
+    event.type = YETTY_YCORE_KEY_UP;
     event.key.key = (int)keycode;
     event.key.scancode = (int)scancode;
     event.key.mods = mods;
@@ -792,8 +792,8 @@ static void vnc_on_key_up_cb(uint32_t keycode, uint32_t scancode, uint8_t mods, 
 static void vnc_on_char_cb(uint32_t codepoint, uint8_t mods, void *userdata)
 {
     struct yetty_yetty *yetty = userdata;
-    struct yetty_ycore_event event = {0};
-    event.type = YETTY_EVENT_CHAR;
+    struct yetty_yui_event event = {0};
+    event.type = YETTY_YCORE_CHAR;
     event.chr.codepoint = codepoint;
     event.chr.mods = mods;
     vnc_push_event(yetty, &event);
@@ -802,8 +802,8 @@ static void vnc_on_char_cb(uint32_t codepoint, uint8_t mods, void *userdata)
 static void vnc_on_resize_cb(uint16_t width, uint16_t height, void *userdata)
 {
     struct yetty_yetty *yetty = userdata;
-    struct yetty_ycore_event event = {0};
-    event.type = YETTY_EVENT_RESIZE;
+    struct yetty_yui_event event = {0};
+    event.type = YETTY_YCORE_RESIZE;
     event.resize.width = (float)width;
     event.resize.height = (float)height;
     vnc_push_event(yetty, &event);
@@ -979,7 +979,7 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty *yetty)
 
     /* Create VNC server if enabled */
     if (vnc_enabled) {
-        struct yetty_vnc_server_ptr_result vnc_res = yetty_vnc_server_create(
+        struct yetty_vnc_server_ptr_result vnc_res = yetty_yvnc_server_create(
             instance, yetty->device, yetty->queue, yetty->event_loop, yetty->wgpu);
         if (!YETTY_IS_OK(vnc_res)) {
             return YETTY_ERR(yetty_ycore_void, "failed to create VNC server");
@@ -991,60 +991,60 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty *yetty)
          * key comes from the matching --vnc-* CLI flag and tunes the VNC
          * server's encode+send path. Setters are no-ops on NULL / unset. */
         if (config->ops->get_bool(config, "vnc/raw", 0)) {
-            yetty_vnc_server_set_force_raw(yetty->vnc_server, 1);
+            yetty_yvnc_server_set_force_raw(yetty->vnc_server, 1);
         }
         int jpeg_q = config->ops->get_int(config, "vnc/compression-quality", 0);
         if (jpeg_q > 0) {
-            yetty_vnc_server_set_jpeg_quality(yetty->vnc_server, (uint8_t)jpeg_q);
+            yetty_yvnc_server_set_jpeg_quality(yetty->vnc_server, (uint8_t)jpeg_q);
         }
         if (config->ops->get_bool(config, "vnc/always-full", 0)) {
-            yetty_vnc_server_set_always_full_frame(yetty->vnc_server, 1);
+            yetty_yvnc_server_set_always_full_frame(yetty->vnc_server, 1);
         }
         if (config->ops->get_bool(config, "vnc/use-h264", 0)) {
-            yetty_vnc_server_set_use_h264(yetty->vnc_server, 1);
+            yetty_yvnc_server_set_use_h264(yetty->vnc_server, 1);
         }
         if (config->ops->get_bool(config, "vnc/merge-rects", 0)) {
-            yetty_vnc_server_set_merge_rectangles(yetty->vnc_server, 1);
+            yetty_yvnc_server_set_merge_rectangles(yetty->vnc_server, 1);
         }
 
         /* H.264 tuning knobs — read from vnc/h264/... config keys. Each is
          * optional; the server treats zero / unset as "use encoder defaults". */
         int h264_bps = config->ops->get_int(config, "vnc/h264/bitrate", 0);
         if (h264_bps > 0) {
-            yetty_vnc_server_set_h264_bitrate(yetty->vnc_server, (uint32_t)h264_bps);
+            yetty_yvnc_server_set_h264_bitrate(yetty->vnc_server, (uint32_t)h264_bps);
         }
         int h264_fps = config->ops->get_int(config, "vnc/h264/framerate", 0);
         if (h264_fps > 0) {
-            yetty_vnc_server_set_h264_framerate(yetty->vnc_server, (float)h264_fps);
+            yetty_yvnc_server_set_h264_framerate(yetty->vnc_server, (float)h264_fps);
         }
         int h264_idr = config->ops->get_int(config, "vnc/h264/idr-interval", 0);
         if (h264_idr > 0) {
-            yetty_vnc_server_set_h264_idr_interval(yetty->vnc_server, (uint32_t)h264_idr);
+            yetty_yvnc_server_set_h264_idr_interval(yetty->vnc_server, (uint32_t)h264_idr);
         }
         if (config->ops->has(config, "vnc/h264/screen-content")) {
-            yetty_vnc_server_set_h264_screen_content(
+            yetty_yvnc_server_set_h264_screen_content(
                 yetty->vnc_server, config->ops->get_bool(config, "vnc/h264/screen-content", 1));
         }
 
         /* Start VNC server */
         int vnc_port = config->ops->get_int(config, "vnc/port", 5900);
         struct yetty_ycore_void_result start_res =
-            yetty_vnc_server_start(yetty->vnc_server, (uint16_t)vnc_port);
+            yetty_yvnc_server_start(yetty->vnc_server, (uint16_t)vnc_port);
         if (!YETTY_IS_OK(start_res)) {
-            yetty_vnc_server_destroy(yetty->vnc_server);
+            yetty_yvnc_server_destroy(yetty->vnc_server);
             yetty->vnc_server = NULL;
             return YETTY_ERR(yetty_ycore_void, "failed to start VNC server");
         }
         yinfo("VNC server started on port %d", vnc_port);
 
         /* Wire VNC input -> platform_input_pipe so events reach workspace */
-        yetty_vnc_server_set_on_mouse_move(yetty->vnc_server, vnc_on_mouse_move_cb, yetty);
-        yetty_vnc_server_set_on_mouse_button(yetty->vnc_server, vnc_on_mouse_button_cb, yetty);
-        yetty_vnc_server_set_on_mouse_scroll(yetty->vnc_server, vnc_on_mouse_scroll_cb, yetty);
-        yetty_vnc_server_set_on_key_down(yetty->vnc_server, vnc_on_key_down_cb, yetty);
-        yetty_vnc_server_set_on_key_up(yetty->vnc_server, vnc_on_key_up_cb, yetty);
-        yetty_vnc_server_set_on_char_with_mods(yetty->vnc_server, vnc_on_char_cb, yetty);
-        yetty_vnc_server_set_on_resize(yetty->vnc_server, vnc_on_resize_cb, yetty);
+        yetty_yvnc_server_set_on_mouse_move(yetty->vnc_server, vnc_on_mouse_move_cb, yetty);
+        yetty_yvnc_server_set_on_mouse_button(yetty->vnc_server, vnc_on_mouse_button_cb, yetty);
+        yetty_yvnc_server_set_on_mouse_scroll(yetty->vnc_server, vnc_on_mouse_scroll_cb, yetty);
+        yetty_yvnc_server_set_on_key_down(yetty->vnc_server, vnc_on_key_down_cb, yetty);
+        yetty_yvnc_server_set_on_key_up(yetty->vnc_server, vnc_on_key_up_cb, yetty);
+        yetty_yvnc_server_set_on_char_with_mods(yetty->vnc_server, vnc_on_char_cb, yetty);
+        yetty_yvnc_server_set_on_resize(yetty->vnc_server, vnc_on_resize_cb, yetty);
     }
 
     /* Create render target */
@@ -1128,7 +1128,7 @@ struct yetty_yetty_result yetty_create(const struct yetty_app_context *app_conte
     ydebug("yetty_create: Copied app context");
 
     /* Create event loop early - needed by VNC in init_webgpu */
-    struct yetty_yplatform_input_pipe *pipe = app_context->platform_input_pipe;
+    struct yetty_ycore_input_pipe *pipe = app_context->platform_input_pipe;
     struct yetty_ycore_event_loop_result event_loop_res = yetty_ycore_event_loop_create(pipe);
     if (!YETTY_IS_OK(event_loop_res)) {
         free(yetty);
@@ -1140,7 +1140,7 @@ struct yetty_yetty_result yetty_create(const struct yetty_app_context *app_conte
 
     /* Create the GPU await machinery before init_webgpu so the VNC server
      * (which init_webgpu may create) has it available. */
-    struct yplatform_wgpu_ptr_result wgpu_res = yplatform_wgpu_create(
+    struct yplatform_wgpu_ptr_result wgpu_res = yetty_yplatform_wgpu_create(
         yetty->context.app_context.app_gpu_context.instance, yetty->event_loop);
     if (!YETTY_IS_OK(wgpu_res)) {
         yetty_destroy(yetty);
@@ -1192,16 +1192,16 @@ struct yetty_yetty_result yetty_create(const struct yetty_app_context *app_conte
             app_context->config, YETTY_YCONFIG_KEY_RPC_HOST, "127.0.0.1");
         int rpc_port = atoi(rpc_port_str);
         ydebug("yetty_create: Starting RPC server on %s:%d", rpc_host, rpc_port);
-        struct yetty_rpc_server_ptr_result rpc_res = yetty_rpc_server_create(yetty->event_loop);
+        struct yetty_rpc_server_ptr_result rpc_res = yetty_yrpc_server_create(yetty->event_loop);
         if (YETTY_IS_OK(rpc_res)) {
             yetty->rpc_server = rpc_res.value;
             struct yetty_ycore_void_result start_res =
-                yetty_rpc_server_start(yetty->rpc_server, rpc_host, rpc_port);
+                yetty_yrpc_server_start(yetty->rpc_server, rpc_host, rpc_port);
             if (YETTY_IS_OK(start_res)) {
                 yinfo("yetty: RPC server listening on %s:%d", rpc_host, rpc_port);
             } else {
                 yerror("yetty: failed to start RPC server: %s", start_res.error.msg);
-                yetty_rpc_server_destroy(yetty->rpc_server);
+                yetty_yrpc_server_destroy(yetty->rpc_server);
                 yetty->rpc_server = NULL;
             }
         } else {
@@ -1226,7 +1226,7 @@ struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty *yetty)
     /* Destroy RPC server */
     if (yetty->rpc_server) {
         ydebug("yetty_destroy: destroying RPC server");
-        struct yetty_ycore_void_result rr = yetty_rpc_server_destroy(yetty->rpc_server);
+        struct yetty_ycore_void_result rr = yetty_yrpc_server_destroy(yetty->rpc_server);
         if (YETTY_IS_ERR(rr)) {
             first_err = rr;
         }
@@ -1257,7 +1257,7 @@ struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty *yetty)
     /* Tear down the GPU await machinery before the event loop. The tick
      * timer is owned by the loop, so this must happen first. */
     if (yetty->wgpu) {
-        yplatform_wgpu_destroy(yetty->wgpu);
+        yetty_yplatform_wgpu_destroy(yetty->wgpu);
         yetty->wgpu = NULL;
     }
 
@@ -1273,7 +1273,7 @@ struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty *yetty)
     /* Destroy VNC server after render target (render target references it) */
     if (yetty->vnc_server) {
         ydebug("yetty_destroy: stopping VNC server");
-        struct yetty_ycore_void_result vsr = yetty_vnc_server_stop(yetty->vnc_server);
+        struct yetty_ycore_void_result vsr = yetty_yvnc_server_stop(yetty->vnc_server);
         if (YETTY_IS_ERR(vsr)) {
             if (YETTY_IS_OK(first_err)) {
                 first_err = vsr;
@@ -1282,7 +1282,7 @@ struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty *yetty)
             }
         }
         ydebug("yetty_destroy: destroying VNC server");
-        struct yetty_ycore_void_result vdr = yetty_vnc_server_destroy(yetty->vnc_server);
+        struct yetty_ycore_void_result vdr = yetty_yvnc_server_destroy(yetty->vnc_server);
         if (YETTY_IS_ERR(vdr)) {
             if (YETTY_IS_OK(first_err)) {
                 first_err = vdr;

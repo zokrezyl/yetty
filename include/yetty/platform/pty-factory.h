@@ -8,28 +8,28 @@
 extern "C" {
 #endif
 
-struct yetty_yplatform_pty_factory;
+struct yetty_platform_pty_factory;
 struct yetty_yconfig;
-struct yetty_ycore_event_loop;
+struct yetty_yplatform_event_loop;
 
 /* Result types */
-YETTY_YRESULT_DECLARE(yetty_yplatform_pty_factory, struct yetty_yplatform_pty_factory *);
-YETTY_YRESULT_DECLARE(yetty_yplatform_pty, struct yetty_yplatform_pty *);
+YETTY_YRESULT_DECLARE(yetty_yplatform_pty_factory, struct yetty_platform_pty_factory *);
+YETTY_YRESULT_DECLARE(yetty_yplatform_pty, struct yetty_platform_pty *);
 
 /* Pty factory ops */
-struct yetty_yplatform_pty_factory_ops {
-    void (*destroy)(struct yetty_yplatform_pty_factory *self);
-    struct yetty_yplatform_pty_result (*create_pty)(struct yetty_yplatform_pty_factory *self,
-                                                    struct yetty_ycore_event_loop *event_loop);
+struct yetty_platform_pty_factory_ops {
+    void (*destroy)(struct yetty_platform_pty_factory *self);
+    struct yetty_yplatform_pty_result (*create_pty)(struct yetty_platform_pty_factory *self,
+                                                    struct yetty_yplatform_event_loop *event_loop);
 };
 
 /* Pty factory base */
-struct yetty_yplatform_pty_factory {
-    const struct yetty_yplatform_pty_factory_ops *ops;
+struct yetty_platform_pty_factory {
+    const struct yetty_platform_pty_factory_ops *ops;
 };
 
 /* Platform-specific create functions (implemented per platform) */
-struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
+struct yetty_yplatform_pty_factory_result yetty_platform_pty_factory_create(
     struct yetty_yconfig *config, void *os_specific);
 
 #ifdef __cplusplus

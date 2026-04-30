@@ -148,7 +148,7 @@ static uint32_t theme_color(const char *capname, size_t caplen)
 
 #ifdef YETTY_YCAT_HAS_TREESITTER
 
-struct span {
+struct yetty_ycat_span {
     uint32_t start;
     uint32_t end;
     uint32_t pattern_idx;
@@ -157,7 +157,7 @@ struct span {
 
 static int span_cmp(const void *a, const void *b)
 {
-    const struct span *x = a, *y = b;
+    const struct yetty_ycat_span *x = a, *y = b;
     uint32_t wa = x->end - x->start;
     uint32_t wb = y->end - y->start;
     /* Wider first → narrower overwrites later in the paint pass. */
@@ -192,7 +192,7 @@ static uint32_t *compute_color_map(const TSLanguage *lang, const char *query_str
     ts_query_cursor_exec(cursor, query, ts_tree_root_node(tree));
 
     size_t span_cap = 256, span_count = 0;
-    struct span *spans = malloc(span_cap * sizeof(*spans));
+    struct yetty_ycat_span *spans = malloc(span_cap * sizeof(*spans));
     if (!spans) {
         ts_query_cursor_delete(cursor);
         ts_query_delete(query);
@@ -217,13 +217,13 @@ static uint32_t *compute_color_map(const TSLanguage *lang, const char *query_str
 
             if (span_count == span_cap) {
                 span_cap *= 2;
-                struct span *ns = realloc(spans, span_cap * sizeof(*ns));
+                struct yetty_ycat_span *ns = realloc(spans, span_cap * sizeof(*ns));
                 if (!ns) {
                     break;
                 }
                 spans = ns;
             }
-            spans[span_count++] = (struct span){
+            spans[span_count++] = (struct yetty_ycat_span){
                 .start = s,
                 .end = e,
                 .pattern_idx = match.pattern_index,
@@ -237,7 +237,7 @@ static uint32_t *compute_color_map(const TSLanguage *lang, const char *query_str
 
     qsort(spans, span_count, sizeof(*spans), span_cmp);
     for (size_t si = 0; si < span_count; si++) {
-        const struct span *sp = &spans[si];
+        const struct yetty_ycat_span *sp = &spans[si];
         for (uint32_t i = sp->start; i < sp->end; i++) {
             color_map[i] = sp->color;
         }
@@ -392,7 +392,7 @@ struct yetty_ypaint_core_buffer_result yetty_ycat_ts_render(const uint8_t *bytes
         .scene_max_x = scene_w,
         .scene_max_y = scene_h,
     };
-    struct yetty_ypaint_core_buffer_result br = yetty_ypaint_core_buffer_create(&bcfg);
+    struct yetty_ypaint_core_buffer_result br = yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         ts_parse_done(parser, tree, color_map);
         return br;

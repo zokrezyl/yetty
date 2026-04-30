@@ -19,7 +19,7 @@
 #define RESPONSE_BUFFER_SIZE 4096
 
 /* Handler entry */
-struct yetty_rpc_handler_entry {
+struct yetty_yrpc_handler_entry {
     uint32_t channel;
     char method[64];
     yetty_rpc_handler_fn handler;
@@ -27,33 +27,33 @@ struct yetty_rpc_handler_entry {
 };
 
 /* Per-connection context */
-struct rpc_conn_ctx {
-    struct yetty_rpc_server *server;
+struct yetty_yrpc_rpc_conn_ctx {
+    struct yetty_yrpc_server *server;
     char read_buf[READ_BUFFER_SIZE];
     uint8_t response_buf[RESPONSE_BUFFER_SIZE];
 };
 
 /* RPC server */
-struct yetty_rpc_server {
-    struct yetty_ycore_event_loop *event_loop;
+struct yetty_yrpc_server {
+    struct yetty_yplatform_event_loop *event_loop;
     yetty_ycore_tcp_server_id server_id;
     int port;
     int running;
 
     /* Handlers */
-    struct yetty_rpc_handler_entry handlers[MAX_HANDLERS];
+    struct yetty_yrpc_handler_entry handlers[MAX_HANDLERS];
     size_t handler_count;
 
     /* Client count */
     size_t client_count;
 };
 
-static struct yetty_rpc_handler_entry *find_handler(struct yetty_rpc_server *server,
+static struct yetty_yrpc_handler_entry *find_handler(struct yetty_yrpc_server *server,
                                                     uint32_t channel, const char *method,
                                                     size_t method_len)
 {
     for (size_t i = 0; i < server->handler_count; i++) {
-        struct yetty_rpc_handler_entry *e = &server->handlers[i];
+        struct yetty_yrpc_handler_entry *e = &server->handlers[i];
         if (e->channel == channel && strncmp(e->method, method, method_len) == 0 &&
             e->method[method_len] == '\0') {
             return e;
@@ -63,17 +63,17 @@ static struct yetty_rpc_handler_entry *find_handler(struct yetty_rpc_server *ser
 }
 
 YETTY_EXTERNAL_CALLBACK
-static void handle_message(struct rpc_conn_ctx *ctx, struct yetty_tcp_conn *conn,
+static void handle_message(struct yetty_yrpc_rpc_conn_ctx *ctx, struct yetty_ycore_conn *conn,
                            const uint8_t *data, size_t len)
 {
-    struct yetty_rpc_server *server = ctx->server;
+    struct yetty_yrpc_server *server = ctx->server;
     struct yetty_rpc_message_result parse_res;
-    struct yetty_rpc_message msg;
-    struct yetty_rpc_handler_entry *handler;
+    struct yetty_yrpc_message msg;
+    struct yetty_yrpc_handler_entry *handler;
     struct yetty_rpc_handler_result result;
-    struct yetty_rpc_write_buffer wbuf;
+    struct yetty_yrpc_write_buffer wbuf;
 
-    parse_res = yetty_rpc_message_parse(data, len);
+    parse_res = yetty_yrpc_message_parse(data, len);
     if (YETTY_IS_ERR(parse_res)) {
         ytrace("yrpc: failed to parse message: %s", parse_res.error.msg);
         return;
@@ -95,8 +95,8 @@ static void handle_message(struct rpc_conn_ctx *ctx, struct yetty_tcp_conn *conn
 
         if (msg.type == YETTY_YRPC_MSG_REQUEST) {
             /* Send error response */
-            yetty_rpc_write_buffer_init(&wbuf, ctx->response_buf, RESPONSE_BUFFER_SIZE);
-            yetty_rpc_write_response_error(&wbuf, msg.msgid, "method not found");
+            yetty_yrpc_write_buffer_init(&wbuf, ctx->response_buf, RESPONSE_BUFFER_SIZE);
+            yetty_yrpc_write_response_error(&wbuf, msg.msgid, "method not found");
             server->event_loop->ops->tcp_send(conn, wbuf.data, wbuf.len);
         }
         free((void *)msg.params);
@@ -108,16 +108,16 @@ static void handle_message(struct rpc_conn_ctx *ctx, struct yetty_tcp_conn *conn
 
     /* Send response for requests */
     if (msg.type == YETTY_YRPC_MSG_REQUEST) {
-        yetty_rpc_write_buffer_init(&wbuf, ctx->response_buf, RESPONSE_BUFFER_SIZE);
+        yetty_yrpc_write_buffer_init(&wbuf, ctx->response_buf, RESPONSE_BUFFER_SIZE);
 
         if (result.ok) {
             if (result.value.data) {
-                yetty_rpc_write_response_ok(&wbuf, msg.msgid, result.value.data, result.value.len);
+                yetty_yrpc_write_response_ok(&wbuf, msg.msgid, result.value.data, result.value.len);
             } else {
-                yetty_rpc_write_response_bool(&wbuf, msg.msgid, result.value.bool_value);
+                yetty_yrpc_write_response_bool(&wbuf, msg.msgid, result.value.bool_value);
             }
         } else {
-            yetty_rpc_write_response_error(&wbuf, msg.msgid, result.error);
+            yetty_yrpc_write_response_error(&wbuf, msg.msgid, result.error);
         }
 
         server->event_loop->ops->tcp_send(conn, wbuf.data, wbuf.len);
@@ -128,14 +128,14 @@ static void handle_message(struct rpc_conn_ctx *ctx, struct yetty_tcp_conn *conn
 
 /* TCP server callbacks */
 
-static void *rpc_on_connect(void *ctx, struct yetty_tcp_conn *conn)
+static void *rpc_on_connect(void *ctx, struct yetty_ycore_conn *conn)
 {
-    struct yetty_rpc_server *server = ctx;
-    struct rpc_conn_ctx *conn_ctx;
+    struct yetty_yrpc_server *server = ctx;
+    struct yetty_yrpc_rpc_conn_ctx *conn_ctx;
 
     (void)conn;
 
-    conn_ctx = calloc(1, sizeof(struct rpc_conn_ctx));
+    conn_ctx = calloc(1, sizeof(struct yetty_yrpc_rpc_conn_ctx));
     if (!conn_ctx) {
         ytrace("yrpc: failed to allocate connection context");
         return NULL;
@@ -151,7 +151,7 @@ static void *rpc_on_connect(void *ctx, struct yetty_tcp_conn *conn)
 
 static void rpc_on_alloc(void *conn_ctx_ptr, size_t suggested, char **buf, size_t *len)
 {
-    struct rpc_conn_ctx *ctx = conn_ctx_ptr;
+    struct yetty_yrpc_rpc_conn_ctx *ctx = conn_ctx_ptr;
 
     (void)suggested;
 
@@ -164,10 +164,10 @@ static void rpc_on_alloc(void *conn_ctx_ptr, size_t suggested, char **buf, size_
     }
 }
 
-static void rpc_on_data(void *conn_ctx_ptr, struct yetty_tcp_conn *conn, const char *data,
+static void rpc_on_data(void *conn_ctx_ptr, struct yetty_ycore_conn *conn, const char *data,
                         long nread)
 {
-    struct rpc_conn_ctx *ctx = conn_ctx_ptr;
+    struct yetty_yrpc_rpc_conn_ctx *ctx = conn_ctx_ptr;
 
     if (!ctx || nread <= 0) {
         return;
@@ -178,7 +178,7 @@ static void rpc_on_data(void *conn_ctx_ptr, struct yetty_tcp_conn *conn, const c
 
 static void rpc_on_disconnect(void *conn_ctx_ptr)
 {
-    struct rpc_conn_ctx *ctx = conn_ctx_ptr;
+    struct yetty_yrpc_rpc_conn_ctx *ctx = conn_ctx_ptr;
 
     if (!ctx) {
         return;
@@ -194,19 +194,19 @@ static void rpc_on_disconnect(void *conn_ctx_ptr)
     free(ctx);
 }
 
-static struct yetty_ycore_void_result register_builtin_handlers(struct yetty_rpc_server *server);
+static struct yetty_ycore_void_result register_builtin_handlers(struct yetty_yrpc_server *server);
 
-struct yetty_rpc_server_ptr_result yetty_rpc_server_create(
-    struct yetty_ycore_event_loop *event_loop)
+struct yetty_rpc_server_ptr_result yetty_yrpc_server_create(
+    struct yetty_yplatform_event_loop *event_loop)
 {
-    struct yetty_rpc_server *server;
+    struct yetty_yrpc_server *server;
     struct yetty_ycore_void_result res;
 
     if (!event_loop) {
         return YETTY_ERR(yetty_rpc_server_ptr, "event_loop is NULL");
     }
 
-    server = calloc(1, sizeof(struct yetty_rpc_server));
+    server = calloc(1, sizeof(struct yetty_yrpc_server));
     if (!server) {
         return YETTY_ERR(yetty_rpc_server_ptr, "out of memory");
     }
@@ -223,13 +223,13 @@ struct yetty_rpc_server_ptr_result yetty_rpc_server_create(
     return YETTY_OK(yetty_rpc_server_ptr, server);
 }
 
-struct yetty_ycore_void_result yetty_rpc_server_destroy(struct yetty_rpc_server *server)
+struct yetty_ycore_void_result yetty_yrpc_server_destroy(struct yetty_yrpc_server *server)
 {
     if (!server) {
         return YETTY_ERR(yetty_ycore_void, "yetty_rpc_server_destroy: NULL server");
     }
 
-    struct yetty_ycore_void_result stop_r = yetty_rpc_server_stop(server);
+    struct yetty_ycore_void_result stop_r = yetty_yrpc_server_stop(server);
     free(server);
 
     if (YETTY_IS_ERR(stop_r)) {
@@ -238,12 +238,12 @@ struct yetty_ycore_void_result yetty_rpc_server_destroy(struct yetty_rpc_server 
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_rpc_server_start(struct yetty_rpc_server *server,
+struct yetty_ycore_void_result yetty_yrpc_server_start(struct yetty_yrpc_server *server,
                                                       const char *host, int port)
 {
     struct yetty_ycore_tcp_server_id_result id_res;
     struct yetty_ycore_void_result res;
-    struct yetty_tcp_server_callbacks callbacks;
+    struct yetty_ycore_server_callbacks callbacks;
 
     if (!server) {
         return YETTY_ERR(yetty_ycore_void, "server is NULL");
@@ -284,7 +284,7 @@ struct yetty_ycore_void_result yetty_rpc_server_start(struct yetty_rpc_server *s
     return YETTY_OK_VOID();
 }
 
-int yetty_rpc_server_get_port(const struct yetty_rpc_server *server)
+int yetty_yrpc_server_get_port(const struct yetty_yrpc_server *server)
 {
     if (!server || !server->running) {
         return 0;
@@ -292,7 +292,7 @@ int yetty_rpc_server_get_port(const struct yetty_rpc_server *server)
     return server->port;
 }
 
-struct yetty_ycore_void_result yetty_rpc_server_stop(struct yetty_rpc_server *server)
+struct yetty_ycore_void_result yetty_yrpc_server_stop(struct yetty_yrpc_server *server)
 {
     if (!server) {
         return YETTY_OK_VOID();
@@ -311,18 +311,18 @@ struct yetty_ycore_void_result yetty_rpc_server_stop(struct yetty_rpc_server *se
     return YETTY_OK_VOID();
 }
 
-int yetty_rpc_server_is_running(const struct yetty_rpc_server *server)
+int yetty_yrpc_server_is_running(const struct yetty_yrpc_server *server)
 {
     return server && server->running;
 }
 
-struct yetty_ycore_void_result yetty_rpc_server_register_handler(struct yetty_rpc_server *server,
+struct yetty_ycore_void_result yetty_yrpc_server_register_handler(struct yetty_yrpc_server *server,
                                                                  uint32_t channel,
                                                                  const char *method,
                                                                  yetty_rpc_handler_fn handler,
                                                                  void *userdata)
 {
-    struct yetty_rpc_handler_entry *entry;
+    struct yetty_yrpc_handler_entry *entry;
 
     if (!server) {
         return YETTY_ERR(yetty_ycore_void, "server is NULL");
@@ -352,11 +352,11 @@ struct yetty_ycore_void_result yetty_rpc_server_register_handler(struct yetty_rp
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_rpc_server_unregister_handler(struct yetty_rpc_server *server,
+struct yetty_ycore_void_result yetty_yrpc_server_unregister_handler(struct yetty_yrpc_server *server,
                                                                    uint32_t channel,
                                                                    const char *method)
 {
-    struct yetty_rpc_handler_entry *entry;
+    struct yetty_yrpc_handler_entry *entry;
 
     if (!server) {
         return YETTY_ERR(yetty_ycore_void, "server is NULL");
@@ -377,7 +377,7 @@ struct yetty_ycore_void_result yetty_rpc_server_unregister_handler(struct yetty_
     return YETTY_OK_VOID();
 }
 
-size_t yetty_rpc_server_client_count(const struct yetty_rpc_server *server)
+size_t yetty_yrpc_server_client_count(const struct yetty_yrpc_server *server)
 {
     return server ? server->client_count : 0;
 }
@@ -437,11 +437,11 @@ static float get_map_float(const msgpack_object *map, const char *key, float def
  * Built-in EventLoop channel handlers
  */
 
-static struct yetty_rpc_handler_result handle_key_down(const struct yetty_rpc_message *msg,
+static struct yetty_rpc_handler_result handle_key_down(const struct yetty_yrpc_message *msg,
                                                        void *userdata)
 {
-    struct yetty_rpc_server *server = userdata;
-    struct yetty_ycore_event event = {0};
+    struct yetty_yrpc_server *server = userdata;
+    struct yetty_yui_event event = {0};
     msgpack_unpacked unpacked;
     msgpack_object *params;
 
@@ -460,7 +460,7 @@ static struct yetty_rpc_handler_result handle_key_down(const struct yetty_rpc_me
     }
     params = &unpacked.data;
 
-    event.type = YETTY_EVENT_KEY_DOWN;
+    event.type = YETTY_YCORE_KEY_DOWN;
     event.key.key = get_map_int(params, "key", 0);
     event.key.mods = get_map_int(params, "mods", 0);
     event.key.scancode = get_map_int(params, "scancode", 0);
@@ -470,11 +470,11 @@ static struct yetty_rpc_handler_result handle_key_down(const struct yetty_rpc_me
     return YETTY_YRPC_HANDLER_OK_BOOL(1);
 }
 
-static struct yetty_rpc_handler_result handle_key_up(const struct yetty_rpc_message *msg,
+static struct yetty_rpc_handler_result handle_key_up(const struct yetty_yrpc_message *msg,
                                                      void *userdata)
 {
-    struct yetty_rpc_server *server = userdata;
-    struct yetty_ycore_event event = {0};
+    struct yetty_yrpc_server *server = userdata;
+    struct yetty_yui_event event = {0};
     msgpack_unpacked unpacked;
     msgpack_object *params;
 
@@ -493,7 +493,7 @@ static struct yetty_rpc_handler_result handle_key_up(const struct yetty_rpc_mess
     }
     params = &unpacked.data;
 
-    event.type = YETTY_EVENT_KEY_UP;
+    event.type = YETTY_YCORE_KEY_UP;
     event.key.key = get_map_int(params, "key", 0);
     event.key.mods = get_map_int(params, "mods", 0);
     event.key.scancode = get_map_int(params, "scancode", 0);
@@ -503,11 +503,11 @@ static struct yetty_rpc_handler_result handle_key_up(const struct yetty_rpc_mess
     return YETTY_YRPC_HANDLER_OK_BOOL(1);
 }
 
-static struct yetty_rpc_handler_result handle_char(const struct yetty_rpc_message *msg,
+static struct yetty_rpc_handler_result handle_char(const struct yetty_yrpc_message *msg,
                                                    void *userdata)
 {
-    struct yetty_rpc_server *server = userdata;
-    struct yetty_ycore_event event = {0};
+    struct yetty_yrpc_server *server = userdata;
+    struct yetty_yui_event event = {0};
     msgpack_unpacked unpacked;
     msgpack_object *params;
 
@@ -526,7 +526,7 @@ static struct yetty_rpc_handler_result handle_char(const struct yetty_rpc_messag
     }
     params = &unpacked.data;
 
-    event.type = YETTY_EVENT_CHAR;
+    event.type = YETTY_YCORE_CHAR;
     event.chr.codepoint = (uint32_t)get_map_int(params, "codepoint", 0);
     event.chr.mods = get_map_int(params, "mods", 0);
 
@@ -539,11 +539,11 @@ static struct yetty_rpc_handler_result handle_char(const struct yetty_rpc_messag
     return YETTY_YRPC_HANDLER_OK_BOOL(1);
 }
 
-static struct yetty_rpc_handler_result handle_mouse_down(const struct yetty_rpc_message *msg,
+static struct yetty_rpc_handler_result handle_mouse_down(const struct yetty_yrpc_message *msg,
                                                          void *userdata)
 {
-    struct yetty_rpc_server *server = userdata;
-    struct yetty_ycore_event event = {0};
+    struct yetty_yrpc_server *server = userdata;
+    struct yetty_yui_event event = {0};
     msgpack_unpacked unpacked;
     msgpack_object *params;
 
@@ -562,7 +562,7 @@ static struct yetty_rpc_handler_result handle_mouse_down(const struct yetty_rpc_
     }
     params = &unpacked.data;
 
-    event.type = YETTY_EVENT_MOUSE_DOWN;
+    event.type = YETTY_YCORE_MOUSE_DOWN;
     event.mouse.x = get_map_float(params, "x", 0);
     event.mouse.y = get_map_float(params, "y", 0);
     event.mouse.button = get_map_int(params, "button", 0);
@@ -572,11 +572,11 @@ static struct yetty_rpc_handler_result handle_mouse_down(const struct yetty_rpc_
     return YETTY_YRPC_HANDLER_OK_BOOL(1);
 }
 
-static struct yetty_rpc_handler_result handle_mouse_up(const struct yetty_rpc_message *msg,
+static struct yetty_rpc_handler_result handle_mouse_up(const struct yetty_yrpc_message *msg,
                                                        void *userdata)
 {
-    struct yetty_rpc_server *server = userdata;
-    struct yetty_ycore_event event = {0};
+    struct yetty_yrpc_server *server = userdata;
+    struct yetty_yui_event event = {0};
     msgpack_unpacked unpacked;
     msgpack_object *params;
 
@@ -595,7 +595,7 @@ static struct yetty_rpc_handler_result handle_mouse_up(const struct yetty_rpc_me
     }
     params = &unpacked.data;
 
-    event.type = YETTY_EVENT_MOUSE_UP;
+    event.type = YETTY_YCORE_MOUSE_UP;
     event.mouse.x = get_map_float(params, "x", 0);
     event.mouse.y = get_map_float(params, "y", 0);
     event.mouse.button = get_map_int(params, "button", 0);
@@ -605,11 +605,11 @@ static struct yetty_rpc_handler_result handle_mouse_up(const struct yetty_rpc_me
     return YETTY_YRPC_HANDLER_OK_BOOL(1);
 }
 
-static struct yetty_rpc_handler_result handle_mouse_move(const struct yetty_rpc_message *msg,
+static struct yetty_rpc_handler_result handle_mouse_move(const struct yetty_yrpc_message *msg,
                                                          void *userdata)
 {
-    struct yetty_rpc_server *server = userdata;
-    struct yetty_ycore_event event = {0};
+    struct yetty_yrpc_server *server = userdata;
+    struct yetty_yui_event event = {0};
     msgpack_unpacked unpacked;
     msgpack_object *params;
 
@@ -628,7 +628,7 @@ static struct yetty_rpc_handler_result handle_mouse_move(const struct yetty_rpc_
     }
     params = &unpacked.data;
 
-    event.type = YETTY_EVENT_MOUSE_MOVE;
+    event.type = YETTY_YCORE_MOUSE_MOVE;
     event.mouse.x = get_map_float(params, "x", 0);
     event.mouse.y = get_map_float(params, "y", 0);
 
@@ -637,11 +637,11 @@ static struct yetty_rpc_handler_result handle_mouse_move(const struct yetty_rpc_
     return YETTY_YRPC_HANDLER_OK_BOOL(1);
 }
 
-static struct yetty_rpc_handler_result handle_scroll(const struct yetty_rpc_message *msg,
+static struct yetty_rpc_handler_result handle_scroll(const struct yetty_yrpc_message *msg,
                                                      void *userdata)
 {
-    struct yetty_rpc_server *server = userdata;
-    struct yetty_ycore_event event = {0};
+    struct yetty_yrpc_server *server = userdata;
+    struct yetty_yui_event event = {0};
     msgpack_unpacked unpacked;
     msgpack_object *params;
 
@@ -660,7 +660,7 @@ static struct yetty_rpc_handler_result handle_scroll(const struct yetty_rpc_mess
     }
     params = &unpacked.data;
 
-    event.type = YETTY_EVENT_SCROLL;
+    event.type = YETTY_YCORE_SCROLL;
     event.scroll.x = get_map_float(params, "x", 0);
     event.scroll.y = get_map_float(params, "y", 0);
     event.scroll.dx = get_map_float(params, "dx", 0);
@@ -672,11 +672,11 @@ static struct yetty_rpc_handler_result handle_scroll(const struct yetty_rpc_mess
     return YETTY_YRPC_HANDLER_OK_BOOL(1);
 }
 
-static struct yetty_rpc_handler_result handle_resize(const struct yetty_rpc_message *msg,
+static struct yetty_rpc_handler_result handle_resize(const struct yetty_yrpc_message *msg,
                                                      void *userdata)
 {
-    struct yetty_rpc_server *server = userdata;
-    struct yetty_ycore_event event = {0};
+    struct yetty_yrpc_server *server = userdata;
+    struct yetty_yui_event event = {0};
     msgpack_unpacked unpacked;
     msgpack_object *params;
 
@@ -695,7 +695,7 @@ static struct yetty_rpc_handler_result handle_resize(const struct yetty_rpc_mess
     }
     params = &unpacked.data;
 
-    event.type = YETTY_EVENT_RESIZE;
+    event.type = YETTY_YCORE_RESIZE;
     event.resize.width = get_map_float(params, "width", 0);
     event.resize.height = get_map_float(params, "height", 0);
 
@@ -704,7 +704,7 @@ static struct yetty_rpc_handler_result handle_resize(const struct yetty_rpc_mess
     return YETTY_YRPC_HANDLER_OK_BOOL(1);
 }
 
-static struct yetty_ycore_void_result register_builtin_handlers(struct yetty_rpc_server *server)
+static struct yetty_ycore_void_result register_builtin_handlers(struct yetty_yrpc_server *server)
 {
     struct yetty_ycore_void_result res;
 
@@ -713,7 +713,7 @@ static struct yetty_ycore_void_result register_builtin_handlers(struct yetty_rpc
     }
 
 #define REG(method, handler)                                                                       \
-    res = yetty_rpc_server_register_handler(server, YETTY_YRPC_CHANNEL_EVENT_LOOP, method,         \
+    res = yetty_yrpc_server_register_handler(server, YETTY_YRPC_CHANNEL_EVENT_LOOP, method,         \
                                             handler, server);                                      \
     if (YETTY_IS_ERR(res))                                                                         \
         return res;

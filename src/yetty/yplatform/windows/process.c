@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct yprocess {
+struct yetty_yplatform_yprocess {
     HANDLE process;
     HANDLE thread;
 };
@@ -103,7 +103,7 @@ static int build_command_line(const char *const argv[], char *out, size_t out_si
     return 0;
 }
 
-yprocess_t *yprocess_spawn(const char *const argv[], int detached, int stdio_to_null)
+struct yetty_yplatform_yprocess *yetty_yplatform_yprocess_spawn(const char *const argv[], int detached, int stdio_to_null)
 {
     if (!argv || !argv[0]) {
         return YPROCESS_INVALID;
@@ -153,7 +153,7 @@ yprocess_t *yprocess_spawn(const char *const argv[], int detached, int stdio_to_
         return YPROCESS_INVALID;
     }
 
-    yprocess_t *p = malloc(sizeof(*p));
+    struct yetty_yplatform_yprocess *p = malloc(sizeof(*p));
     if (!p) {
         TerminateProcess(pi.hProcess, 1);
         CloseHandle(pi.hProcess);
@@ -165,7 +165,7 @@ yprocess_t *yprocess_spawn(const char *const argv[], int detached, int stdio_to_
     return p;
 }
 
-void yprocess_terminate(yprocess_t *proc, unsigned grace_ms)
+void yetty_yplatform_yprocess_terminate(struct yetty_yplatform_yprocess *proc, unsigned grace_ms)
 {
     if (!proc) {
         return;
@@ -188,7 +188,7 @@ void yprocess_terminate(yprocess_t *proc, unsigned grace_ms)
     free(proc);
 }
 
-int yprocess_is_running(yprocess_t *proc)
+int yetty_yplatform_yprocess_is_running(struct yetty_yplatform_yprocess *proc)
 {
     if (!proc) {
         return 0;

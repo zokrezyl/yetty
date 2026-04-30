@@ -20,12 +20,12 @@ extern "C" {
  * @param port Telnet port for serial console
  * @return Opaque process handle, or YPROCESS_INVALID on error.
  */
-yprocess_t *qemu_start(uint16_t port);
+struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t port);
 
 /**
  * Stop QEMU process. Frees the handle.
  */
-void qemu_stop(yprocess_t *proc);
+void yetty_yqemu_qemu_stop(struct yetty_yplatform_yprocess *proc);
 
 /**
  * Wait for QEMU telnet to be ready.
@@ -33,7 +33,7 @@ void qemu_stop(yprocess_t *proc);
  * @param port Telnet port
  * @param timeout_ms Timeout in milliseconds
  */
-struct yetty_ycore_void_result qemu_wait_ready(uint16_t port, int timeout_ms);
+struct yetty_ycore_void_result yetty_yqemu_qemu_wait_ready(uint16_t port, int timeout_ms);
 
 #ifdef __cplusplus
 }

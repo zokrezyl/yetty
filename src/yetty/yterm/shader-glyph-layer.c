@@ -24,24 +24,24 @@
 #define U_VZ_OFF 4
 #define U_COUNT 5
 
-static inline void set_grid_size(struct yetty_yrender_gpu_resource_set *rs, float cols, float rows)
+static inline void set_grid_size(struct yetty_ypaint_core_gpu_resource_set *rs, float cols, float rows)
 {
     rs->uniforms[U_GRID_SIZE].vec2[0] = cols;
     rs->uniforms[U_GRID_SIZE].vec2[1] = rows;
 }
 
-static inline void set_cell_size(struct yetty_yrender_gpu_resource_set *rs, float w, float h)
+static inline void set_cell_size(struct yetty_ypaint_core_gpu_resource_set *rs, float w, float h)
 {
     rs->uniforms[U_CELL_SIZE].vec2[0] = w;
     rs->uniforms[U_CELL_SIZE].vec2[1] = h;
 }
 
-static inline void set_time(struct yetty_yrender_gpu_resource_set *rs, float t)
+static inline void set_time(struct yetty_ypaint_core_gpu_resource_set *rs, float t)
 {
     rs->uniforms[U_TIME].f32 = t;
 }
 
-static inline void set_visual_zoom(struct yetty_yrender_gpu_resource_set *rs, float scale,
+static inline void set_visual_zoom(struct yetty_ypaint_core_gpu_resource_set *rs, float scale,
                                    float off_x, float off_y)
 {
     rs->uniforms[U_VZ_SCALE].f32 = scale;
@@ -49,7 +49,7 @@ static inline void set_visual_zoom(struct yetty_yrender_gpu_resource_set *rs, fl
     rs->uniforms[U_VZ_OFF].vec2[1] = off_y;
 }
 
-static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
+static void init_uniforms(struct yetty_ypaint_core_gpu_resource_set *rs)
 {
     rs->uniform_count = U_COUNT;
 
@@ -69,13 +69,13 @@ static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
 
 /* Layer struct - embeds base as first member */
 struct yetty_yterm_shader_glyph_layer {
-    struct yetty_yterm_terminal_layer base;
+    struct yetty_yrender_terminal_layer base;
     /* Borrowed: text-layer owns the cell buffer; we just point at it. */
-    struct yetty_yterm_terminal_layer *text_layer;
+    struct yetty_yrender_terminal_layer *text_layer;
     /* Final assembled shader source (template with glyph code spliced in). */
     char *shader_source;
     size_t shader_source_size;
-    struct yetty_yrender_gpu_resource_set rs;
+    struct yetty_ypaint_core_gpu_resource_set rs;
     /* CPU-side animation clock origin. Time uniform is (now - t0). */
     struct timespec t0;
 
@@ -83,7 +83,7 @@ struct yetty_yterm_shader_glyph_layer {
      * any shader-glyph cell on screen; stays stopped (zero-cost) on idle
      * terminals so the input→render loop can quiesce. Borrowed event loop;
      * timer_id valid only when timer_created. */
-    struct yetty_ycore_event_loop *event_loop;
+    struct yetty_yplatform_event_loop *event_loop;
     yetty_ycore_timer_id timer_id;
     int timer_created;
     int timer_running;
@@ -100,7 +100,7 @@ struct yetty_yterm_shader_glyph_layer {
  * file into the directory and relaunching.
  */
 
-struct glyph_entry {
+struct yetty_yterm_glyph_entry {
     uint32_t local_id;
     char *body;
     size_t body_size;
@@ -108,8 +108,8 @@ struct glyph_entry {
 
 static int glyph_entry_cmp(const void *a, const void *b)
 {
-    uint32_t la = ((const struct glyph_entry *)a)->local_id;
-    uint32_t lb = ((const struct glyph_entry *)b)->local_id;
+    uint32_t la = ((const struct yetty_yterm_glyph_entry *)a)->local_id;
+    uint32_t lb = ((const struct yetty_yterm_glyph_entry *)b)->local_id;
     return (la > lb) - (la < lb);
 }
 
@@ -128,7 +128,7 @@ static struct yetty_ycore_buffer_result assemble_glyph_shaders(const char *glyph
         return YETTY_ERR(yetty_ycore_buffer, "glyph-shaders: opendir failed");
     }
 
-    struct glyph_entry *entries = NULL;
+    struct yetty_yterm_glyph_entry *entries = NULL;
     size_t cap = 0, n = 0;
 
     /* Preludes (`_*.wgsl`) — concatenated first, name-sorted. */
@@ -181,7 +181,7 @@ static struct yetty_ycore_buffer_result assemble_glyph_shaders(const char *glyph
 
         if (n >= cap) {
             size_t new_cap = cap ? cap * 2 : 32;
-            struct glyph_entry *grown = realloc(entries, new_cap * sizeof(*entries));
+            struct yetty_yterm_glyph_entry *grown = realloc(entries, new_cap * sizeof(*entries));
             if (!grown) {
                 free(br.value.data);
                 break;
@@ -196,7 +196,7 @@ static struct yetty_ycore_buffer_result assemble_glyph_shaders(const char *glyph
     }
     closedir(d);
 
-    qsort(entries, n, sizeof(struct glyph_entry), glyph_entry_cmp);
+    qsort(entries, n, sizeof(struct yetty_yterm_glyph_entry), glyph_entry_cmp);
 
     /* Compute output size: prelude bodies + glyph bodies + dispatcher slack. */
     size_t total = 256 + n * 128;
@@ -311,30 +311,30 @@ static char *splice_marker(const char *template, size_t template_size, const cha
 }
 
 /* Forward declarations */
-static struct yetty_ycore_void_result shader_glyph_destroy(struct yetty_yterm_terminal_layer *self);
-static struct yetty_ycore_void_result shader_glyph_write(struct yetty_yterm_terminal_layer *self,
+static struct yetty_ycore_void_result shader_glyph_destroy(struct yetty_yrender_terminal_layer *self);
+static struct yetty_ycore_void_result shader_glyph_write(struct yetty_yrender_terminal_layer *self,
                                                          int osc_code, const char *data,
                                                          size_t len);
 static struct yetty_ycore_void_result shader_glyph_resize_grid(
-    struct yetty_yterm_terminal_layer *self, struct grid_size grid_size);
+    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size);
 static struct yetty_ycore_void_result shader_glyph_set_cell_size(
-    struct yetty_yterm_terminal_layer *self, struct pixel_size cell_size);
+    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_pixel_size cell_size);
 static struct yetty_ycore_void_result shader_glyph_set_visual_zoom(
-    struct yetty_yterm_terminal_layer *self, float scale, float off_x, float off_y);
+    struct yetty_yrender_terminal_layer *self, float scale, float off_x, float off_y);
 static struct yetty_yrender_gpu_resource_set_result shader_glyph_get_gpu_resource_set(
-    const struct yetty_yterm_terminal_layer *self);
-static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yterm_terminal_layer *self,
-                                                          struct yetty_yrender_target *target);
+    const struct yetty_yrender_terminal_layer *self);
+static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yrender_terminal_layer *self,
+                                                          struct yetty_ypaint_core_target *target);
 static struct yetty_ycore_int_result on_anim_tick(struct yetty_ycore_event_listener *listener,
-                                                  const struct yetty_ycore_event *event);
-static int shader_glyph_is_empty(const struct yetty_yterm_terminal_layer *self);
-static int shader_glyph_on_key(struct yetty_yterm_terminal_layer *self, int key, int mods);
-static int shader_glyph_on_char(struct yetty_yterm_terminal_layer *self, uint32_t codepoint,
+                                                  const struct yetty_yui_event *event);
+static int shader_glyph_is_empty(const struct yetty_yrender_terminal_layer *self);
+static int shader_glyph_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods);
+static int shader_glyph_on_char(struct yetty_yrender_terminal_layer *self, uint32_t codepoint,
                                 int mods);
-static struct yetty_ycore_void_result shader_glyph_scroll(struct yetty_yterm_terminal_layer *self,
+static struct yetty_ycore_void_result shader_glyph_scroll(struct yetty_yrender_terminal_layer *self,
                                                           int lines);
 static struct yetty_ycore_void_result shader_glyph_set_cursor(
-    struct yetty_yterm_terminal_layer *self, int col, int row);
+    struct yetty_yrender_terminal_layer *self, int col, int row);
 
 static const struct yetty_yterm_terminal_layer_ops shader_glyph_layer_ops = {
     .destroy = shader_glyph_destroy,
@@ -353,7 +353,7 @@ static const struct yetty_yterm_terminal_layer_ops shader_glyph_layer_ops = {
 
 struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
     uint32_t cols, uint32_t rows, float cell_width, float cell_height,
-    struct yetty_yterm_terminal_layer *text_layer, const struct yetty_context *context,
+    struct yetty_yrender_terminal_layer *text_layer, const struct yetty_context *context,
     yetty_yterm_request_render_fn request_render_fn, void *request_render_userdata,
     yetty_yterm_scroll_fn scroll_fn, void *scroll_userdata, yetty_yterm_cursor_fn cursor_fn,
     void *cursor_userdata)
@@ -452,7 +452,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
     /* Initial buffer pointer — refreshed each frame in get_gpu_resource_set. */
     const uint8_t *cells_data = NULL;
     size_t cells_size = 0;
-    yetty_yterm_terminal_text_layer_get_cells(text_layer, &cells_data, &cells_size);
+    yetty_yterm_terminal_layer_terminal_text_layer_get_cells(text_layer, &cells_data, &cells_size);
     layer->rs.buffers[0].data = (uint8_t *)cells_data;
     layer->rs.buffers[0].size = cells_size;
     layer->rs.buffers[0].dirty = 1;
@@ -495,7 +495,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
     return YETTY_OK(yetty_yterm_terminal_layer, &layer->base);
 }
 
-static struct yetty_ycore_void_result shader_glyph_destroy(struct yetty_yterm_terminal_layer *self)
+static struct yetty_ycore_void_result shader_glyph_destroy(struct yetty_yrender_terminal_layer *self)
 {
     struct yetty_yterm_shader_glyph_layer *layer =
         container_of(self, struct yetty_yterm_shader_glyph_layer, base);
@@ -512,7 +512,7 @@ static struct yetty_ycore_void_result shader_glyph_destroy(struct yetty_yterm_te
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result shader_glyph_write(struct yetty_yterm_terminal_layer *self,
+static struct yetty_ycore_void_result shader_glyph_write(struct yetty_yrender_terminal_layer *self,
                                                          int osc_code, const char *data, size_t len)
 {
     (void)self;
@@ -524,7 +524,7 @@ static struct yetty_ycore_void_result shader_glyph_write(struct yetty_yterm_term
 }
 
 static struct yetty_ycore_void_result shader_glyph_resize_grid(
-    struct yetty_yterm_terminal_layer *self, struct grid_size grid_size)
+    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size)
 {
     struct yetty_yterm_shader_glyph_layer *layer =
         container_of(self, struct yetty_yterm_shader_glyph_layer, base);
@@ -538,7 +538,7 @@ static struct yetty_ycore_void_result shader_glyph_resize_grid(
 }
 
 static struct yetty_ycore_void_result shader_glyph_set_cell_size(
-    struct yetty_yterm_terminal_layer *self, struct pixel_size cell_size)
+    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_pixel_size cell_size)
 {
     struct yetty_yterm_shader_glyph_layer *layer =
         container_of(self, struct yetty_yterm_shader_glyph_layer, base);
@@ -556,7 +556,7 @@ static struct yetty_ycore_void_result shader_glyph_set_cell_size(
 }
 
 static struct yetty_ycore_void_result shader_glyph_set_visual_zoom(
-    struct yetty_yterm_terminal_layer *self, float scale, float off_x, float off_y)
+    struct yetty_yrender_terminal_layer *self, float scale, float off_x, float off_y)
 {
     struct yetty_yterm_shader_glyph_layer *layer =
         container_of(self, struct yetty_yterm_shader_glyph_layer, base);
@@ -566,16 +566,16 @@ static struct yetty_ycore_void_result shader_glyph_set_visual_zoom(
 }
 
 static struct yetty_yrender_gpu_resource_set_result shader_glyph_get_gpu_resource_set(
-    const struct yetty_yterm_terminal_layer *self)
+    const struct yetty_yrender_terminal_layer *self)
 {
     struct yetty_yterm_shader_glyph_layer *layer = container_of(
-        (struct yetty_yterm_terminal_layer *)self, struct yetty_yterm_shader_glyph_layer, base);
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yterm_shader_glyph_layer, base);
 
     /* Refresh the cell buffer pointer — text-layer may switch between live
      * vterm screen and stitched scrollback view between frames. */
     const uint8_t *cells_data = NULL;
     size_t cells_size = 0;
-    yetty_yterm_terminal_text_layer_get_cells(layer->text_layer, &cells_data, &cells_size);
+    yetty_yterm_terminal_layer_terminal_text_layer_get_cells(layer->text_layer, &cells_data, &cells_size);
     if ((const uint8_t *)layer->rs.buffers[0].data != cells_data ||
         layer->rs.buffers[0].size != cells_size) {
         layer->rs.buffers[0].data = (uint8_t *)cells_data;
@@ -617,7 +617,7 @@ static inline struct yetty_yterm_shader_glyph_layer *layer_from_listener(
  * one render; the actual draw happens when RENDER is dispatched. Returns 0
  * (not-handled) so the timer event still propagates to other listeners. */
 static struct yetty_ycore_int_result on_anim_tick(struct yetty_ycore_event_listener *listener,
-                                                  const struct yetty_ycore_event *event)
+                                                  const struct yetty_yui_event *event)
 {
     (void)event;
     struct yetty_yterm_shader_glyph_layer *layer = layer_from_listener(listener);
@@ -645,8 +645,8 @@ static void anim_timer_stop(struct yetty_yterm_shader_glyph_layer *layer)
     layer->timer_running = 0;
 }
 
-static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yterm_terminal_layer *self,
-                                                          struct yetty_yrender_target *target)
+static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yrender_terminal_layer *self,
+                                                          struct yetty_ypaint_core_target *target)
 {
     struct yetty_yterm_shader_glyph_layer *layer =
         container_of(self, struct yetty_yterm_shader_glyph_layer, base);
@@ -679,14 +679,14 @@ static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yterm_ter
  * every frame in idle terminals. Cheap CPU scan over the cell buffer (~100µs
  * for a 200k-cell grid; see poc/term-grid-scan). The render_target will skip
  * draws when is_empty returns 1. */
-static int shader_glyph_is_empty(const struct yetty_yterm_terminal_layer *self)
+static int shader_glyph_is_empty(const struct yetty_yrender_terminal_layer *self)
 {
     const struct yetty_yterm_shader_glyph_layer *layer = container_of(
-        (struct yetty_yterm_terminal_layer *)self, struct yetty_yterm_shader_glyph_layer, base);
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yterm_shader_glyph_layer, base);
 
     const uint8_t *data = NULL;
     size_t size = 0;
-    yetty_yterm_terminal_text_layer_get_cells(layer->text_layer, &data, &size);
+    yetty_yterm_terminal_layer_terminal_text_layer_get_cells(layer->text_layer, &data, &size);
     if (!data || size < 12) {
         return 1;
     }
@@ -703,7 +703,7 @@ static int shader_glyph_is_empty(const struct yetty_yterm_terminal_layer *self)
     return found ? 0 : 1;
 }
 
-static int shader_glyph_on_key(struct yetty_yterm_terminal_layer *self, int key, int mods)
+static int shader_glyph_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods)
 {
     (void)self;
     (void)key;
@@ -711,7 +711,7 @@ static int shader_glyph_on_key(struct yetty_yterm_terminal_layer *self, int key,
     return 0;
 }
 
-static int shader_glyph_on_char(struct yetty_yterm_terminal_layer *self, uint32_t codepoint,
+static int shader_glyph_on_char(struct yetty_yrender_terminal_layer *self, uint32_t codepoint,
                                 int mods)
 {
     (void)self;
@@ -720,7 +720,7 @@ static int shader_glyph_on_char(struct yetty_yterm_terminal_layer *self, uint32_
     return 0;
 }
 
-static struct yetty_ycore_void_result shader_glyph_scroll(struct yetty_yterm_terminal_layer *self,
+static struct yetty_ycore_void_result shader_glyph_scroll(struct yetty_yrender_terminal_layer *self,
                                                           int lines)
 {
     (void)lines;
@@ -729,7 +729,7 @@ static struct yetty_ycore_void_result shader_glyph_scroll(struct yetty_yterm_ter
 }
 
 static struct yetty_ycore_void_result shader_glyph_set_cursor(
-    struct yetty_yterm_terminal_layer *self, int col, int row)
+    struct yetty_yrender_terminal_layer *self, int col, int row)
 {
     (void)self;
     (void)col;

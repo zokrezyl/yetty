@@ -21,12 +21,12 @@ static uint32_t text_span_payload_size(uint32_t text_len)
     return align4(TEXT_SPAN_FIXED_BYTES + text_len);
 }
 
-size_t yetty_ypaint_text_span_prim_size_for(uint32_t text_len)
+size_t yetty_ypaint_core_text_span_prim_size_for(uint32_t text_len)
 {
     return TEXT_SPAN_PRIM_HEADER + text_span_payload_size(text_len);
 }
 
-void yetty_ypaint_text_span_prim_write(uint8_t *out, float x, float y, float font_size,
+void yetty_ypaint_core_text_span_prim_write(uint8_t *out, float x, float y, float font_size,
                                        float rotation, uint32_t color, uint32_t layer,
                                        int32_t font_id, const char *text, uint32_t text_len)
 {
@@ -60,8 +60,8 @@ void yetty_ypaint_text_span_prim_write(uint8_t *out, float x, float y, float fon
     }
 }
 
-int yetty_ypaint_text_span_prim_parse(const uint32_t *prim,
-                                      struct yetty_ypaint_text_span_prim_view *out)
+int yetty_ypaint_core_text_span_prim_parse(const uint32_t *prim,
+                                      struct yetty_ypaint_core_text_span_prim_view *out)
 {
     if (!prim || !out) {
         return -1;
@@ -121,14 +121,14 @@ static struct yetty_ycore_size_result text_span_prim_size(const uint32_t *prim)
  * multi-byte sequences but never under-estimates the row span). */
 static struct rectangle_result text_span_prim_aabb(const uint32_t *prim)
 {
-    struct yetty_ypaint_text_span_prim_view v;
-    if (yetty_ypaint_text_span_prim_parse(prim, &v) < 0) {
+    struct yetty_ypaint_core_text_span_prim_view v;
+    if (yetty_ypaint_core_text_span_prim_parse(prim, &v) < 0) {
         return YETTY_ERR(rectangle, "malformed TEXT_SPAN");
     }
 
     float w_est = 0.6f * v.font_size * (float)v.text_len;
     float h_est = v.font_size;
-    struct rectangle r = {
+    struct yetty_ycore_rectangle r = {
         .min = {.x = v.x, .y = v.y - h_est},
         .max = {.x = v.x + w_est, .y = v.y},
     };
@@ -136,15 +136,15 @@ static struct rectangle_result text_span_prim_aabb(const uint32_t *prim)
     return YETTY_OK(rectangle, r);
 }
 
-static const struct yetty_ypaint_prim_base_ops g_text_span_prim_base_ops = {
+static const struct yetty_ypaint_core_prim_base_ops g_text_span_prim_base_ops = {
     .size = text_span_prim_size,
     .aabb = text_span_prim_aabb,
 };
 
-struct yetty_ypaint_prim_base_ops_ptr_result yetty_ypaint_text_span_prim_handler(uint32_t prim_type)
+struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_text_span_prim_handler(uint32_t prim_type)
 {
     if (prim_type == YETTY_YPAINT_TYPE_TEXT_SPAN) {
-        return YETTY_OK(yetty_ypaint_prim_base_ops_ptr, &g_text_span_prim_base_ops);
+        return YETTY_OK(yetty_ypaint_core_prim_base_ops_ptr, &g_text_span_prim_base_ops);
     }
-    return YETTY_ERR(yetty_ypaint_prim_base_ops_ptr, "not TEXT_SPAN");
+    return YETTY_ERR(yetty_ypaint_core_prim_base_ops_ptr, "not TEXT_SPAN");
 }

@@ -10,7 +10,7 @@ extern "C" {
 struct yetty_yconfig;
 
 /* Create monospace raster font from config */
-struct yetty_font_ms_font_result yetty_font_ms_raster_font_create(struct yetty_yconfig *config,
+struct yetty_font_ms_font_result yetty_yfont_ms_raster_font_create(struct yetty_yconfig *config,
                                                                   float cell_width,
                                                                   float cell_height);
 

@@ -118,7 +118,7 @@ static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e
 
     float cx = s->bounds.x + s->bounds.w * 0.5f;
     float cy = s->bounds.y + s->bounds.h * 0.5f;
-    struct yetty_ypaint_id_result idr = {.error = YPAINT_OK, .id = 0};
+    struct yetty_ypaint_core_id_result idr = {.error = YPAINT_OK, .id = 0};
 
     switch (s->kind) {
     case YETTY_YRICH_SHAPE_RECTANGLE:
@@ -376,7 +376,7 @@ static struct yetty_ycore_void_result slides_render(struct yetty_yrich_document 
         .half_height = s->slide_height * 0.5f,
         .corner_radius = 0.0f,
     };
-    struct yetty_ypaint_id_result br =
+    struct yetty_ypaint_core_id_result br =
         yetty_ysdf_add_box(doc->buffer, 0, slide->bg_color, 0, 0.0f, &bg);
     if (br.error != YPAINT_OK) {
         return YETTY_ERR(yetty_ycore_void, "slides_render: bg add failed");

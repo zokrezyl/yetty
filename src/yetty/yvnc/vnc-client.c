@@ -20,12 +20,12 @@
 #define RECV_BUFFER_SIZE 65536
 
 /* Recv state machine */
-enum recv_state {
-    RECV_FRAME_HEADER,
-    RECV_TILE_HEADER,
-    RECV_TILE_DATA,
-    RECV_RECT_HEADER,
-    RECV_RECT_DATA
+enum yetty_yvnc_recv_state {
+    YETTY_YVNC_RECV_FRAME_HEADER,
+    YETTY_YVNC_RECV_TILE_HEADER,
+    YETTY_YVNC_RECV_TILE_DATA,
+    YETTY_YVNC_RECV_RECT_HEADER,
+    YETTY_YVNC_RECV_RECT_DATA
 };
 
 /* Fullscreen quad shader */
@@ -63,15 +63,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {\n\
     return tex;\n\
 }\n";
 
-struct yetty_vnc_client {
+struct yetty_yvnc_client {
     WGPUDevice device;
     WGPUQueue queue;
     WGPUTextureFormat surface_format;
 
     /* Event loop for async I/O */
-    struct yetty_ycore_event_loop *event_loop;
+    struct yetty_yplatform_event_loop *event_loop;
     yetty_ycore_tcp_client_id tcp_client_id;
-    struct yetty_tcp_conn *conn;
+    struct yetty_ycore_conn *conn;
 
     /* Connection state */
     int connected;
@@ -86,16 +86,16 @@ struct yetty_vnc_client {
     uint16_t height;
 
     /* Recv state machine */
-    enum recv_state recv_state;
+    enum yetty_yvnc_recv_state recv_state;
     uint8_t *recv_buffer;
     size_t recv_buffer_capacity;
     size_t recv_offset;
     size_t recv_needed;
 
     /* Current frame/tile/rect being received */
-    struct vnc_frame_header current_frame;
-    struct vnc_tile_header current_tile;
-    struct vnc_rect_header current_rect;
+    struct yetty_yvnc_vnc_frame_header current_frame;
+    struct yetty_yvnc_vnc_tile_header current_tile;
+    struct yetty_yvnc_vnc_rect_header current_rect;
     uint16_t tiles_received;
 
     /* GPU resources */
@@ -131,22 +131,22 @@ struct yetty_vnc_client {
     void *on_disconnected_userdata;
 
     /* Stats */
-    struct yetty_vnc_client_stats stats;
+    struct yetty_yvnc_client_stats stats;
     uint64_t stats_bytes_window;
     uint32_t stats_frames_window;
     uint32_t stats_tiles_window;
     double stats_window_start;
 };
 
-static struct yetty_ycore_void_result ensure_resources(struct yetty_vnc_client *client,
+static struct yetty_ycore_void_result ensure_resources(struct yetty_yvnc_client *client,
                                                        uint16_t width, uint16_t height);
-static struct yetty_ycore_void_result create_pipeline(struct yetty_vnc_client *client);
+static struct yetty_ycore_void_result create_pipeline(struct yetty_yvnc_client *client);
 
 /*===========================================================================
  * Send helper
  *===========================================================================*/
 
-static void send_input(struct yetty_vnc_client *client, const void *data, size_t size)
+static void send_input(struct yetty_yvnc_client *client, const void *data, size_t size)
 {
     if (!client || !client->connected || !client->conn) {
         return;
@@ -159,7 +159,7 @@ static void send_input(struct yetty_vnc_client *client, const void *data, size_t
  * Frame processing
  *===========================================================================*/
 
-static struct yetty_ycore_void_result process_tile_data(struct yetty_vnc_client *client)
+static struct yetty_ycore_void_result process_tile_data(struct yetty_yvnc_client *client)
 {
     ydebug("vnc_client: tile (%u,%u) encoding=%u size=%u", client->current_tile.tile_x,
            client->current_tile.tile_y, client->current_tile.encoding,
@@ -168,14 +168,14 @@ static struct yetty_ycore_void_result process_tile_data(struct yetty_vnc_client 
     memset(client->tile_pixels, 0, VNC_TILE_SIZE * VNC_TILE_SIZE * 4);
 
     switch (client->current_tile.encoding) {
-    case VNC_ENCODING_RAW:
+    case YETTY_YVNC_VNC_ENCODING_RAW:
         ydebug("vnc_client: decoding RAW tile");
         if (client->current_tile.data_size == VNC_TILE_SIZE * VNC_TILE_SIZE * 4) {
             memcpy(client->tile_pixels, client->recv_buffer, client->current_tile.data_size);
         }
         break;
 
-    case VNC_ENCODING_JPEG: {
+    case YETTY_YVNC_VNC_ENCODING_JPEG: {
         ydebug("vnc_client: decoding JPEG tile");
         int w, h, subsamp, cs;
         if (tjDecompressHeader3(client->jpeg_decompressor, client->recv_buffer,
@@ -189,7 +189,7 @@ static struct yetty_ycore_void_result process_tile_data(struct yetty_vnc_client 
         break;
     }
 
-    case VNC_ENCODING_FULL_FRAME: {
+    case YETTY_YVNC_VNC_ENCODING_FULL_FRAME: {
         int w, h, subsamp, cs;
         if (tjDecompressHeader3(client->jpeg_decompressor, client->recv_buffer,
                                 client->current_tile.data_size, &w, &h, &subsamp, &cs) == 0) {
@@ -221,9 +221,9 @@ static struct yetty_ycore_void_result process_tile_data(struct yetty_vnc_client 
         client->stats_tiles_window++;
         if (client->tiles_received >= client->current_frame.num_tiles) {
             client->stats_frames_window++;
-            client->recv_state = RECV_FRAME_HEADER;
-            client->recv_needed = sizeof(struct vnc_frame_header);
-            struct yetty_ycore_void_result ar = yetty_vnc_client_send_frame_ack(client);
+            client->recv_state = YETTY_YVNC_RECV_FRAME_HEADER;
+            client->recv_needed = sizeof(struct yetty_yvnc_vnc_frame_header);
+            struct yetty_ycore_void_result ar = yetty_yvnc_client_send_frame_ack(client);
             if (YETTY_IS_ERR(ar)) {
                 yetty_ycore_error_destroy(ar.error);
             }
@@ -232,21 +232,21 @@ static struct yetty_ycore_void_result process_tile_data(struct yetty_vnc_client 
     }
 
 #ifdef YETTY_HAS_YVIDEO
-    case VNC_ENCODING_H264: {
+    case YETTY_YVNC_VNC_ENCODING_H264: {
         /*
 		 * Wire layout (produced by h264_send_full_frame on the server):
 		 *     [vnc_video_frame_header] [NAL bytes ...]
 		 * The enclosing tile header's data_size counts both parts; the
 		 * inner data_size is the NAL-only size.
 		 */
-        if (client->current_tile.data_size < sizeof(struct vnc_video_frame_header)) {
+        if (client->current_tile.data_size < sizeof(struct yetty_yvnc_vnc_video_frame_header)) {
             ywarn("vnc_client: H.264 tile too small (%u bytes)", client->current_tile.data_size);
             break;
         }
-        const struct vnc_video_frame_header *vhdr =
-            (const struct vnc_video_frame_header *)client->recv_buffer;
-        const uint8_t *nal_data = client->recv_buffer + sizeof(struct vnc_video_frame_header);
-        size_t nal_size = client->current_tile.data_size - sizeof(struct vnc_video_frame_header);
+        const struct yetty_yvnc_vnc_video_frame_header *vhdr =
+            (const struct yetty_yvnc_vnc_video_frame_header *)client->recv_buffer;
+        const uint8_t *nal_data = client->recv_buffer + sizeof(struct yetty_yvnc_vnc_video_frame_header);
+        size_t nal_size = client->current_tile.data_size - sizeof(struct yetty_yvnc_vnc_video_frame_header);
 
         if (vhdr->data_size != nal_size) {
             ywarn("vnc_client: H.264 inner data_size mismatch (hdr=%u, avail=%zu)", vhdr->data_size,
@@ -299,7 +299,7 @@ static struct yetty_ycore_void_result process_tile_data(struct yetty_vnc_client 
             }
             client->h264_bgra_buf_size = bgra_size;
         }
-        yetty_yvideo_yuv420_to_bgra(&yuv, client->h264_bgra_buf);
+        yetty_yvideo_yuv_frame_yuv420_to_bgra(&yuv, client->h264_bgra_buf);
 
         if (client->texture && (uint16_t)yuv.width == client->width &&
             (uint16_t)yuv.height == client->height) {
@@ -320,9 +320,9 @@ static struct yetty_ycore_void_result process_tile_data(struct yetty_vnc_client 
         client->stats_tiles_window++;
         if (client->tiles_received >= client->current_frame.num_tiles) {
             client->stats_frames_window++;
-            client->recv_state = RECV_FRAME_HEADER;
-            client->recv_needed = sizeof(struct vnc_frame_header);
-            struct yetty_ycore_void_result ar = yetty_vnc_client_send_frame_ack(client);
+            client->recv_state = YETTY_YVNC_RECV_FRAME_HEADER;
+            client->recv_needed = sizeof(struct yetty_yvnc_vnc_frame_header);
+            struct yetty_ycore_void_result ar = yetty_yvnc_client_send_frame_ack(client);
             if (YETTY_IS_ERR(ar)) {
                 yetty_ycore_error_destroy(ar.error);
             }
@@ -371,20 +371,20 @@ static struct yetty_ycore_void_result process_tile_data(struct yetty_vnc_client 
     /* State transition - buffer management handled by caller */
     if (client->tiles_received >= client->current_frame.num_tiles) {
         client->stats_frames_window++;
-        client->recv_state = RECV_FRAME_HEADER;
-        client->recv_needed = sizeof(struct vnc_frame_header);
-        struct yetty_ycore_void_result ar = yetty_vnc_client_send_frame_ack(client);
+        client->recv_state = YETTY_YVNC_RECV_FRAME_HEADER;
+        client->recv_needed = sizeof(struct yetty_yvnc_vnc_frame_header);
+        struct yetty_ycore_void_result ar = yetty_yvnc_client_send_frame_ack(client);
         if (YETTY_IS_ERR(ar)) {
             yetty_ycore_error_destroy(ar.error);
         }
     } else {
-        client->recv_state = RECV_TILE_HEADER;
-        client->recv_needed = sizeof(struct vnc_tile_header);
+        client->recv_state = YETTY_YVNC_RECV_TILE_HEADER;
+        client->recv_needed = sizeof(struct yetty_yvnc_vnc_tile_header);
     }
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result process_rect_data(struct yetty_vnc_client *client)
+static struct yetty_ycore_void_result process_rect_data(struct yetty_yvnc_client *client)
 {
     uint16_t px = client->current_rect.px_x;
     uint16_t py = client->current_rect.px_y;
@@ -399,13 +399,13 @@ static struct yetty_ycore_void_result process_rect_data(struct yetty_vnc_client 
     memset(pixels, 0, rw * rh * 4);
 
     switch (client->current_rect.encoding) {
-    case VNC_ENCODING_RAW:
+    case YETTY_YVNC_VNC_ENCODING_RAW:
         if (client->current_rect.data_size == (uint32_t)(rw * rh * 4)) {
             memcpy(pixels, client->recv_buffer, client->current_rect.data_size);
         }
         break;
 
-    case VNC_ENCODING_JPEG: {
+    case YETTY_YVNC_VNC_ENCODING_JPEG: {
         int w, h, subsamp, cs;
         if (tjDecompressHeader3(client->jpeg_decompressor, client->recv_buffer,
                                 client->current_rect.data_size, &w, &h, &subsamp, &cs) == 0) {
@@ -454,34 +454,34 @@ static struct yetty_ycore_void_result process_rect_data(struct yetty_vnc_client 
 
     if (client->tiles_received >= client->current_frame.num_tiles) {
         client->stats_frames_window++;
-        client->recv_state = RECV_FRAME_HEADER;
-        client->recv_needed = sizeof(struct vnc_frame_header);
+        client->recv_state = YETTY_YVNC_RECV_FRAME_HEADER;
+        client->recv_needed = sizeof(struct yetty_yvnc_vnc_frame_header);
         client->recv_offset = 0;
-        struct yetty_ycore_void_result ar = yetty_vnc_client_send_frame_ack(client);
+        struct yetty_ycore_void_result ar = yetty_yvnc_client_send_frame_ack(client);
         if (YETTY_IS_ERR(ar)) {
             yetty_ycore_error_destroy(ar.error);
         }
     } else {
-        client->recv_state = RECV_RECT_HEADER;
-        client->recv_needed = sizeof(struct vnc_rect_header);
+        client->recv_state = YETTY_YVNC_RECV_RECT_HEADER;
+        client->recv_needed = sizeof(struct yetty_yvnc_vnc_rect_header);
         client->recv_offset = 0;
     }
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result process_received_data(struct yetty_vnc_client *client)
+static struct yetty_ycore_void_result process_received_data(struct yetty_yvnc_client *client)
 {
     int tiles_received = 0;
 
     while (client->recv_offset >= client->recv_needed) {
         switch (client->recv_state) {
-        case RECV_FRAME_HEADER: {
-            memcpy(&client->current_frame, client->recv_buffer, sizeof(struct vnc_frame_header));
+        case YETTY_YVNC_RECV_FRAME_HEADER: {
+            memcpy(&client->current_frame, client->recv_buffer, sizeof(struct yetty_yvnc_vnc_frame_header));
 
             if (client->current_frame.magic != VNC_FRAME_MAGIC) {
                 ywarn("VNC client: invalid frame magic 0x%08X", client->current_frame.magic);
-                client->recv_state = RECV_FRAME_HEADER;
-                client->recv_needed = sizeof(struct vnc_frame_header);
+                client->recv_state = YETTY_YVNC_RECV_FRAME_HEADER;
+                client->recv_needed = sizeof(struct yetty_yvnc_vnc_frame_header);
                 client->recv_offset = 0;
                 return YETTY_ERR(yetty_ycore_void, "vnc_client: protocol error or invalid frame");
             }
@@ -490,8 +490,8 @@ static struct yetty_ycore_void_result process_received_data(struct yetty_vnc_cli
                 client->current_frame.width > 8192 || client->current_frame.height > 8192) {
                 ywarn("VNC client: invalid frame dimensions %ux%u", client->current_frame.width,
                       client->current_frame.height);
-                client->recv_state = RECV_FRAME_HEADER;
-                client->recv_needed = sizeof(struct vnc_frame_header);
+                client->recv_state = YETTY_YVNC_RECV_FRAME_HEADER;
+                client->recv_needed = sizeof(struct yetty_yvnc_vnc_frame_header);
                 client->recv_offset = 0;
                 return YETTY_ERR(yetty_ycore_void, "vnc_client: protocol error or invalid frame");
             }
@@ -509,7 +509,7 @@ static struct yetty_ycore_void_result process_received_data(struct yetty_vnc_cli
             client->tiles_received = 0;
 
             /* Consume header and shift remaining data */
-            size_t consumed = sizeof(struct vnc_frame_header);
+            size_t consumed = sizeof(struct yetty_yvnc_vnc_frame_header);
             size_t remaining = client->recv_offset - consumed;
             if (remaining > 0) {
                 memmove(client->recv_buffer, client->recv_buffer + consumed, remaining);
@@ -517,38 +517,38 @@ static struct yetty_ycore_void_result process_received_data(struct yetty_vnc_cli
             client->recv_offset = remaining;
 
             if (client->current_frame.num_tiles == 0) {
-                client->recv_needed = sizeof(struct vnc_frame_header);
+                client->recv_needed = sizeof(struct yetty_yvnc_vnc_frame_header);
             } else {
-                client->recv_state = RECV_TILE_HEADER;
-                client->recv_needed = sizeof(struct vnc_tile_header);
+                client->recv_state = YETTY_YVNC_RECV_TILE_HEADER;
+                client->recv_needed = sizeof(struct yetty_yvnc_vnc_tile_header);
             }
             break;
         }
 
-        case RECV_TILE_HEADER: {
-            memcpy(&client->current_tile, client->recv_buffer, sizeof(struct vnc_tile_header));
+        case YETTY_YVNC_RECV_TILE_HEADER: {
+            memcpy(&client->current_tile, client->recv_buffer, sizeof(struct yetty_yvnc_vnc_tile_header));
 
             if (client->current_tile.data_size > 16 * 1024 * 1024) {
                 ywarn("VNC client: tile data too large %u", client->current_tile.data_size);
-                client->recv_state = RECV_FRAME_HEADER;
-                client->recv_needed = sizeof(struct vnc_frame_header);
+                client->recv_state = YETTY_YVNC_RECV_FRAME_HEADER;
+                client->recv_needed = sizeof(struct yetty_yvnc_vnc_frame_header);
                 client->recv_offset = 0;
                 return YETTY_ERR(yetty_ycore_void, "vnc_client: protocol error or invalid frame");
             }
 
-            size_t consumed = sizeof(struct vnc_tile_header);
+            size_t consumed = sizeof(struct yetty_yvnc_vnc_tile_header);
             size_t remaining = client->recv_offset - consumed;
             if (remaining > 0) {
                 memmove(client->recv_buffer, client->recv_buffer + consumed, remaining);
             }
             client->recv_offset = remaining;
 
-            client->recv_state = RECV_TILE_DATA;
+            client->recv_state = YETTY_YVNC_RECV_TILE_DATA;
             client->recv_needed = client->current_tile.data_size;
             break;
         }
 
-        case RECV_TILE_DATA: {
+        case YETTY_YVNC_RECV_TILE_DATA: {
             { struct yetty_ycore_void_result _ptr = process_tile_data(client); if (YETTY_IS_ERR(_ptr)) yetty_ycore_error_destroy(_ptr.error); }
             tiles_received = 1;
 
@@ -562,30 +562,30 @@ static struct yetty_ycore_void_result process_received_data(struct yetty_vnc_cli
             break;
         }
 
-        case RECV_RECT_HEADER: {
-            memcpy(&client->current_rect, client->recv_buffer, sizeof(struct vnc_rect_header));
+        case YETTY_YVNC_RECV_RECT_HEADER: {
+            memcpy(&client->current_rect, client->recv_buffer, sizeof(struct yetty_yvnc_vnc_rect_header));
 
             if (client->current_rect.data_size > 16 * 1024 * 1024) {
                 ywarn("VNC client: rect data too large %u", client->current_rect.data_size);
-                client->recv_state = RECV_FRAME_HEADER;
-                client->recv_needed = sizeof(struct vnc_frame_header);
+                client->recv_state = YETTY_YVNC_RECV_FRAME_HEADER;
+                client->recv_needed = sizeof(struct yetty_yvnc_vnc_frame_header);
                 client->recv_offset = 0;
                 return YETTY_ERR(yetty_ycore_void, "vnc_client: protocol error or invalid frame");
             }
 
-            size_t consumed = sizeof(struct vnc_rect_header);
+            size_t consumed = sizeof(struct yetty_yvnc_vnc_rect_header);
             size_t remaining = client->recv_offset - consumed;
             if (remaining > 0) {
                 memmove(client->recv_buffer, client->recv_buffer + consumed, remaining);
             }
             client->recv_offset = remaining;
 
-            client->recv_state = RECV_RECT_DATA;
+            client->recv_state = YETTY_YVNC_RECV_RECT_DATA;
             client->recv_needed = client->current_rect.data_size;
             break;
         }
 
-        case RECV_RECT_DATA: {
+        case YETTY_YVNC_RECV_RECT_DATA: {
             { struct yetty_ycore_void_result _prr = process_rect_data(client); if (YETTY_IS_ERR(_prr)) yetty_ycore_error_destroy(_prr.error); }
             tiles_received = 1;
 
@@ -611,9 +611,9 @@ static struct yetty_ycore_void_result process_received_data(struct yetty_vnc_cli
  * TCP Client Callbacks
  *===========================================================================*/
 
-static void vnc_client_on_connect(void *ctx, struct yetty_tcp_conn *conn)
+static void vnc_client_on_connect(void *ctx, struct yetty_ycore_conn *conn)
 {
-    struct yetty_vnc_client *client = ctx;
+    struct yetty_yvnc_client *client = ctx;
     ydebug("VNC client: on_connect callback fired, conn=%p", (void *)conn);
     client->conn = conn;
     client->connected = 1;
@@ -628,7 +628,7 @@ static void vnc_client_on_connect(void *ctx, struct yetty_tcp_conn *conn)
 
 static void vnc_client_on_connect_error(void *ctx, const char *error)
 {
-    struct yetty_vnc_client *client = ctx;
+    struct yetty_yvnc_client *client = ctx;
     ydebug("VNC client: on_connect_error callback fired, error=%s", error);
 
     yerror("VNC client connect failed: %s", error);
@@ -645,7 +645,7 @@ static void vnc_client_on_connect_error(void *ctx, const char *error)
 
 static void vnc_client_on_alloc(void *ctx, size_t suggested, char **buf, size_t *len)
 {
-    struct yetty_vnc_client *client = ctx;
+    struct yetty_yvnc_client *client = ctx;
     (void)suggested;
 
     /* Ensure buffer capacity */
@@ -667,9 +667,9 @@ static void vnc_client_on_alloc(void *ctx, size_t suggested, char **buf, size_t 
 }
 
 YETTY_EXTERNAL_CALLBACK
-static void vnc_client_on_data(void *ctx, struct yetty_tcp_conn *conn, const char *data, long nread)
+static void vnc_client_on_data(void *ctx, struct yetty_ycore_conn *conn, const char *data, long nread)
 {
-    struct yetty_vnc_client *client = ctx;
+    struct yetty_yvnc_client *client = ctx;
     (void)conn;
     (void)data; /* Data already in recv_buffer from on_alloc */
 
@@ -692,7 +692,7 @@ static void vnc_client_on_data(void *ctx, struct yetty_tcp_conn *conn, const cha
 
 static void vnc_client_on_disconnect(void *ctx)
 {
-    struct yetty_vnc_client *client = ctx;
+    struct yetty_yvnc_client *client = ctx;
 
     yinfo("VNC client disconnected");
 
@@ -710,9 +710,9 @@ static void vnc_client_on_disconnect(void *ctx)
  * Public API
  *===========================================================================*/
 
-struct yetty_vnc_client_ptr_result yetty_vnc_client_create(
+struct yetty_vnc_client_ptr_result yetty_yvnc_client_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat surface_format,
-    struct yetty_ycore_event_loop *event_loop, uint16_t width, uint16_t height)
+    struct yetty_yplatform_event_loop *event_loop, uint16_t width, uint16_t height)
 {
     ydebug("VNC client: create called, device=%p queue=%p event_loop=%p %ux%u", (void *)device,
            (void *)queue, (void *)event_loop, width, height);
@@ -721,7 +721,7 @@ struct yetty_vnc_client_ptr_result yetty_vnc_client_create(
         return YETTY_ERR(yetty_vnc_client_ptr, "event_loop is NULL");
     }
 
-    struct yetty_vnc_client *client = calloc(1, sizeof(struct yetty_vnc_client));
+    struct yetty_yvnc_client *client = calloc(1, sizeof(struct yetty_yvnc_client));
     if (!client) {
         return YETTY_ERR(yetty_vnc_client_ptr, "failed to allocate client");
     }
@@ -735,8 +735,8 @@ struct yetty_vnc_client_ptr_result yetty_vnc_client_create(
     client->height = height;
 
     /* Initialize recv state */
-    client->recv_state = RECV_FRAME_HEADER;
-    client->recv_needed = sizeof(struct vnc_frame_header);
+    client->recv_state = YETTY_YVNC_RECV_FRAME_HEADER;
+    client->recv_needed = sizeof(struct yetty_yvnc_vnc_frame_header);
     client->recv_buffer_capacity = RECV_BUFFER_SIZE;
     client->recv_buffer = malloc(client->recv_buffer_capacity);
     if (!client->recv_buffer) {
@@ -761,7 +761,7 @@ struct yetty_vnc_client_ptr_result yetty_vnc_client_create(
         return YETTY_ERR(yetty_vnc_client_ptr, "failed to allocate tile pixels");
     }
 
-    client->stats_window_start = ytime_monotonic_sec();
+    client->stats_window_start = yetty_yplatform_ytime_monotonic_sec();
 
     /* Create initial GPU resources */
     if (width > 0 && height > 0) {
@@ -779,13 +779,13 @@ struct yetty_vnc_client_ptr_result yetty_vnc_client_create(
     return YETTY_OK(yetty_vnc_client_ptr, client);
 }
 
-struct yetty_ycore_void_result yetty_vnc_client_destroy(struct yetty_vnc_client *client)
+struct yetty_ycore_void_result yetty_yvnc_client_destroy(struct yetty_yvnc_client *client)
 {
     if (!client) {
         return YETTY_ERR(yetty_ycore_void, "yetty_vnc_client_destroy: NULL client");
     }
 
-    struct yetty_ycore_void_result disc_r = yetty_vnc_client_disconnect(client);
+    struct yetty_ycore_void_result disc_r = yetty_yvnc_client_disconnect(client);
 
     if (client->jpeg_decompressor) {
         tjDestroy(client->jpeg_decompressor);
@@ -828,7 +828,7 @@ struct yetty_ycore_void_result yetty_vnc_client_destroy(struct yetty_vnc_client 
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_vnc_client_connect(struct yetty_vnc_client *client,
+struct yetty_ycore_void_result yetty_yvnc_client_connect(struct yetty_yvnc_client *client,
                                                         const char *host, uint16_t port)
 {
     ydebug("VNC client: connect called, host=%s port=%u", host, port);
@@ -841,13 +841,13 @@ struct yetty_ycore_void_result yetty_vnc_client_connect(struct yetty_vnc_client 
     }
 
     /* Reset recv state */
-    client->recv_state = RECV_FRAME_HEADER;
-    client->recv_needed = sizeof(struct vnc_frame_header);
+    client->recv_state = YETTY_YVNC_RECV_FRAME_HEADER;
+    client->recv_needed = sizeof(struct yetty_yvnc_vnc_frame_header);
     client->recv_offset = 0;
 
     /* Setup TCP client callbacks */
     ydebug("VNC client: setting up TCP callbacks");
-    struct yetty_tcp_client_callbacks callbacks = {
+    struct yetty_ycore_client_callbacks callbacks = {
         .ctx = client,
         .on_connect = vnc_client_on_connect,
         .on_connect_error = vnc_client_on_connect_error,
@@ -871,7 +871,7 @@ struct yetty_ycore_void_result yetty_vnc_client_connect(struct yetty_vnc_client 
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_vnc_client_disconnect(struct yetty_vnc_client *client)
+struct yetty_ycore_void_result yetty_yvnc_client_disconnect(struct yetty_yvnc_client *client)
 {
     if (!client) {
         return YETTY_OK_VOID();
@@ -888,17 +888,17 @@ struct yetty_ycore_void_result yetty_vnc_client_disconnect(struct yetty_vnc_clie
     return YETTY_OK_VOID();
 }
 
-int yetty_vnc_client_is_connected(const struct yetty_vnc_client *client)
+int yetty_yvnc_client_is_connected(const struct yetty_yvnc_client *client)
 {
     return client ? client->connected : 0;
 }
 
-uint16_t yetty_vnc_client_width(const struct yetty_vnc_client *client)
+uint16_t yetty_yvnc_client_width(const struct yetty_yvnc_client *client)
 {
     return client ? client->width : 0;
 }
 
-uint16_t yetty_vnc_client_height(const struct yetty_vnc_client *client)
+uint16_t yetty_yvnc_client_height(const struct yetty_yvnc_client *client)
 {
     return client ? client->height : 0;
 }
@@ -907,7 +907,7 @@ uint16_t yetty_vnc_client_height(const struct yetty_vnc_client *client)
  * GPU Resources
  *===========================================================================*/
 
-static struct yetty_ycore_void_result ensure_resources(struct yetty_vnc_client *client,
+static struct yetty_ycore_void_result ensure_resources(struct yetty_yvnc_client *client,
                                                        uint16_t width, uint16_t height)
 {
     if (client->texture_width == width && client->texture_height == height && client->texture) {
@@ -1006,7 +1006,7 @@ static struct yetty_ycore_void_result ensure_resources(struct yetty_vnc_client *
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result create_pipeline(struct yetty_vnc_client *client)
+static struct yetty_ycore_void_result create_pipeline(struct yetty_yvnc_client *client)
 {
     /* Create shader */
     WGPUShaderSourceWGSL wgsl_desc = {0};
@@ -1079,14 +1079,14 @@ static struct yetty_ycore_void_result create_pipeline(struct yetty_vnc_client *c
  * Rendering
  *===========================================================================*/
 
-struct yetty_ycore_void_result yetty_vnc_client_update_texture(struct yetty_vnc_client *client)
+struct yetty_ycore_void_result yetty_yvnc_client_update_texture(struct yetty_yvnc_client *client)
 {
     (void)client;
     /* Texture is updated in on_data callback */
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_vnc_client_render(struct yetty_vnc_client *client,
+struct yetty_ycore_void_result yetty_yvnc_client_render(struct yetty_yvnc_client *client,
                                                        WGPURenderPassEncoder pass,
                                                        uint32_t viewport_width,
                                                        uint32_t viewport_height)
@@ -1109,7 +1109,7 @@ struct yetty_ycore_void_result yetty_vnc_client_render(struct yetty_vnc_client *
  * Input sending
  *===========================================================================*/
 
-struct yetty_ycore_void_result yetty_vnc_client_send_mouse_move(struct yetty_vnc_client *client,
+struct yetty_ycore_void_result yetty_yvnc_client_send_mouse_move(struct yetty_yvnc_client *client,
                                                                 int16_t x, int16_t y,
                                                                 uint8_t buttons)
 {
@@ -1117,11 +1117,11 @@ struct yetty_ycore_void_result yetty_vnc_client_send_mouse_move(struct yetty_vnc
         return YETTY_ERR(yetty_ycore_void, "null client");
     }
 
-    struct vnc_input_header hdr = {0};
-    hdr.type = VNC_INPUT_MOUSE_MOVE;
-    hdr.data_size = sizeof(struct vnc_mouse_move_event);
+    struct yetty_yvnc_vnc_input_header hdr = {0};
+    hdr.type = YETTY_YVNC_VNC_INPUT_MOUSE_MOVE;
+    hdr.data_size = sizeof(struct yetty_yvnc_vnc_mouse_move_event);
 
-    struct vnc_mouse_move_event msg = {0};
+    struct yetty_yvnc_vnc_mouse_move_event msg = {0};
     msg.x = x;
     msg.y = y;
     msg.mods = buttons;
@@ -1134,7 +1134,7 @@ struct yetty_ycore_void_result yetty_vnc_client_send_mouse_move(struct yetty_vnc
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_vnc_client_send_mouse_button(struct yetty_vnc_client *client,
+struct yetty_ycore_void_result yetty_yvnc_client_send_mouse_button(struct yetty_yvnc_client *client,
                                                                   int16_t x, int16_t y,
                                                                   uint8_t button, int pressed,
                                                                   uint8_t mods)
@@ -1143,11 +1143,11 @@ struct yetty_ycore_void_result yetty_vnc_client_send_mouse_button(struct yetty_v
         return YETTY_ERR(yetty_ycore_void, "null client");
     }
 
-    struct vnc_input_header hdr = {0};
-    hdr.type = VNC_INPUT_MOUSE_BUTTON;
-    hdr.data_size = sizeof(struct vnc_mouse_button_event);
+    struct yetty_yvnc_vnc_input_header hdr = {0};
+    hdr.type = YETTY_YVNC_VNC_INPUT_MOUSE_BUTTON;
+    hdr.data_size = sizeof(struct yetty_yvnc_vnc_mouse_button_event);
 
-    struct vnc_mouse_button_event msg = {0};
+    struct yetty_yvnc_vnc_mouse_button_event msg = {0};
     msg.x = x;
     msg.y = y;
     msg.button = button;
@@ -1162,7 +1162,7 @@ struct yetty_ycore_void_result yetty_vnc_client_send_mouse_button(struct yetty_v
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_vnc_client_send_mouse_scroll(struct yetty_vnc_client *client,
+struct yetty_ycore_void_result yetty_yvnc_client_send_mouse_scroll(struct yetty_yvnc_client *client,
                                                                   int16_t x, int16_t y, int16_t dx,
                                                                   int16_t dy, uint8_t buttons)
 {
@@ -1170,11 +1170,11 @@ struct yetty_ycore_void_result yetty_vnc_client_send_mouse_scroll(struct yetty_v
         return YETTY_ERR(yetty_ycore_void, "null client");
     }
 
-    struct vnc_input_header hdr = {0};
-    hdr.type = VNC_INPUT_MOUSE_SCROLL;
-    hdr.data_size = sizeof(struct vnc_mouse_scroll_event);
+    struct yetty_yvnc_vnc_input_header hdr = {0};
+    hdr.type = YETTY_YVNC_VNC_INPUT_MOUSE_SCROLL;
+    hdr.data_size = sizeof(struct yetty_yvnc_vnc_mouse_scroll_event);
 
-    struct vnc_mouse_scroll_event msg = {0};
+    struct yetty_yvnc_vnc_mouse_scroll_event msg = {0};
     msg.x = x;
     msg.y = y;
     msg.delta_x = dx;
@@ -1189,7 +1189,7 @@ struct yetty_ycore_void_result yetty_vnc_client_send_mouse_scroll(struct yetty_v
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_vnc_client_send_key_down(struct yetty_vnc_client *client,
+struct yetty_ycore_void_result yetty_yvnc_client_send_key_down(struct yetty_yvnc_client *client,
                                                               uint32_t keycode, uint32_t scancode,
                                                               uint8_t mods)
 {
@@ -1197,11 +1197,11 @@ struct yetty_ycore_void_result yetty_vnc_client_send_key_down(struct yetty_vnc_c
         return YETTY_ERR(yetty_ycore_void, "null client");
     }
 
-    struct vnc_input_header hdr = {0};
-    hdr.type = VNC_INPUT_KEY_DOWN;
-    hdr.data_size = sizeof(struct vnc_key_event);
+    struct yetty_yvnc_vnc_input_header hdr = {0};
+    hdr.type = YETTY_YVNC_VNC_INPUT_KEY_DOWN;
+    hdr.data_size = sizeof(struct yetty_yvnc_vnc_key_event);
 
-    struct vnc_key_event msg = {0};
+    struct yetty_yvnc_vnc_key_event msg = {0};
     msg.keycode = keycode;
     msg.scancode = scancode;
     msg.mods = mods;
@@ -1214,7 +1214,7 @@ struct yetty_ycore_void_result yetty_vnc_client_send_key_down(struct yetty_vnc_c
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_vnc_client_send_key_up(struct yetty_vnc_client *client,
+struct yetty_ycore_void_result yetty_yvnc_client_send_key_up(struct yetty_yvnc_client *client,
                                                             uint32_t keycode, uint32_t scancode,
                                                             uint8_t mods)
 {
@@ -1222,11 +1222,11 @@ struct yetty_ycore_void_result yetty_vnc_client_send_key_up(struct yetty_vnc_cli
         return YETTY_ERR(yetty_ycore_void, "null client");
     }
 
-    struct vnc_input_header hdr = {0};
-    hdr.type = VNC_INPUT_KEY_UP;
-    hdr.data_size = sizeof(struct vnc_key_event);
+    struct yetty_yvnc_vnc_input_header hdr = {0};
+    hdr.type = YETTY_YVNC_VNC_INPUT_KEY_UP;
+    hdr.data_size = sizeof(struct yetty_yvnc_vnc_key_event);
 
-    struct vnc_key_event msg = {0};
+    struct yetty_yvnc_vnc_key_event msg = {0};
     msg.keycode = keycode;
     msg.scancode = scancode;
     msg.mods = mods;
@@ -1239,7 +1239,7 @@ struct yetty_ycore_void_result yetty_vnc_client_send_key_up(struct yetty_vnc_cli
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_vnc_client_send_char_with_mods(struct yetty_vnc_client *client,
+struct yetty_ycore_void_result yetty_yvnc_client_send_char_with_mods(struct yetty_yvnc_client *client,
                                                                     uint32_t codepoint,
                                                                     uint8_t mods)
 {
@@ -1247,11 +1247,11 @@ struct yetty_ycore_void_result yetty_vnc_client_send_char_with_mods(struct yetty
         return YETTY_ERR(yetty_ycore_void, "null client");
     }
 
-    struct vnc_input_header hdr = {0};
-    hdr.type = VNC_INPUT_CHAR_WITH_MODS;
-    hdr.data_size = sizeof(struct vnc_char_with_mods_event);
+    struct yetty_yvnc_vnc_input_header hdr = {0};
+    hdr.type = YETTY_YVNC_VNC_INPUT_CHAR_WITH_MODS;
+    hdr.data_size = sizeof(struct yetty_yvnc_vnc_char_with_mods_event);
 
-    struct vnc_char_with_mods_event msg = {0};
+    struct yetty_yvnc_vnc_char_with_mods_event msg = {0};
     msg.codepoint = codepoint;
     msg.mods = mods;
 
@@ -1263,7 +1263,7 @@ struct yetty_ycore_void_result yetty_vnc_client_send_char_with_mods(struct yetty
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_vnc_client_send_resize(struct yetty_vnc_client *client,
+struct yetty_ycore_void_result yetty_yvnc_client_send_resize(struct yetty_yvnc_client *client,
                                                             uint16_t width, uint16_t height)
 {
     if (!client) {
@@ -1272,11 +1272,11 @@ struct yetty_ycore_void_result yetty_vnc_client_send_resize(struct yetty_vnc_cli
 
     ydebug("VNC client send resize: %ux%u", width, height);
 
-    struct vnc_input_header hdr = {0};
-    hdr.type = VNC_INPUT_RESIZE;
-    hdr.data_size = sizeof(struct vnc_resize_event);
+    struct yetty_yvnc_vnc_input_header hdr = {0};
+    hdr.type = YETTY_YVNC_VNC_INPUT_RESIZE;
+    hdr.data_size = sizeof(struct yetty_yvnc_vnc_resize_event);
 
-    struct vnc_resize_event msg = {0};
+    struct yetty_yvnc_vnc_resize_event msg = {0};
     msg.width = width;
     msg.height = height;
 
@@ -1288,14 +1288,14 @@ struct yetty_ycore_void_result yetty_vnc_client_send_resize(struct yetty_vnc_cli
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_vnc_client_send_frame_ack(struct yetty_vnc_client *client)
+struct yetty_ycore_void_result yetty_yvnc_client_send_frame_ack(struct yetty_yvnc_client *client)
 {
     if (!client) {
         return YETTY_ERR(yetty_ycore_void, "null client");
     }
 
-    struct vnc_input_header hdr = {0};
-    hdr.type = VNC_INPUT_FRAME_ACK;
+    struct yetty_yvnc_vnc_input_header hdr = {0};
+    hdr.type = YETTY_YVNC_VNC_INPUT_FRAME_ACK;
     hdr.data_size = 0;
 
     send_input(client, &hdr, sizeof(hdr));
@@ -1307,7 +1307,7 @@ struct yetty_ycore_void_result yetty_vnc_client_send_frame_ack(struct yetty_vnc_
  * Callbacks and stats
  *===========================================================================*/
 
-void yetty_vnc_client_set_on_frame(struct yetty_vnc_client *client, yetty_vnc_on_frame_fn callback,
+void yetty_yvnc_client_set_on_frame(struct yetty_yvnc_client *client, yetty_vnc_on_frame_fn callback,
                                    void *userdata)
 {
     if (!client) {
@@ -1317,7 +1317,7 @@ void yetty_vnc_client_set_on_frame(struct yetty_vnc_client *client, yetty_vnc_on
     client->on_frame_userdata = userdata;
 }
 
-void yetty_vnc_client_set_on_connected(struct yetty_vnc_client *client,
+void yetty_yvnc_client_set_on_connected(struct yetty_yvnc_client *client,
                                        yetty_vnc_on_connected_fn callback, void *userdata)
 {
     if (!client) {
@@ -1327,7 +1327,7 @@ void yetty_vnc_client_set_on_connected(struct yetty_vnc_client *client,
     client->on_connected_userdata = userdata;
 }
 
-void yetty_vnc_client_set_on_disconnected(struct yetty_vnc_client *client,
+void yetty_yvnc_client_set_on_disconnected(struct yetty_yvnc_client *client,
                                           yetty_vnc_on_disconnected_fn callback, void *userdata)
 {
     if (!client) {
@@ -1337,16 +1337,16 @@ void yetty_vnc_client_set_on_disconnected(struct yetty_vnc_client *client,
     client->on_disconnected_userdata = userdata;
 }
 
-struct yetty_vnc_client_stats yetty_vnc_client_get_stats(const struct yetty_vnc_client *client)
+struct yetty_yvnc_client_stats yetty_yvnc_client_get_stats(const struct yetty_yvnc_client *client)
 {
     if (!client) {
-        struct yetty_vnc_client_stats empty = {0};
+        struct yetty_yvnc_client_stats empty = {0};
         return empty;
     }
     return client->stats;
 }
 
-void yetty_vnc_client_set_reconnect_params(struct yetty_vnc_client *client, const char *host,
+void yetty_yvnc_client_set_reconnect_params(struct yetty_yvnc_client *client, const char *host,
                                            uint16_t port)
 {
     if (!client) {
@@ -1357,7 +1357,7 @@ void yetty_vnc_client_set_reconnect_params(struct yetty_vnc_client *client, cons
     client->reconnect_port = port;
 }
 
-struct yetty_ycore_void_result yetty_vnc_client_reconnect(struct yetty_vnc_client *client)
+struct yetty_ycore_void_result yetty_yvnc_client_reconnect(struct yetty_yvnc_client *client)
 {
     if (!client) {
         return YETTY_ERR(yetty_ycore_void, "null client");
@@ -1370,19 +1370,19 @@ struct yetty_ycore_void_result yetty_vnc_client_reconnect(struct yetty_vnc_clien
     client->wants_reconnect = 0;
 
     /* Reset recv state */
-    client->recv_state = RECV_FRAME_HEADER;
-    client->recv_needed = sizeof(struct vnc_frame_header);
+    client->recv_state = YETTY_YVNC_RECV_FRAME_HEADER;
+    client->recv_needed = sizeof(struct yetty_yvnc_vnc_frame_header);
     client->recv_offset = 0;
 
-    return yetty_vnc_client_connect(client, client->reconnect_host, client->reconnect_port);
+    return yetty_yvnc_client_connect(client, client->reconnect_host, client->reconnect_port);
 }
 
-int yetty_vnc_client_wants_reconnect(const struct yetty_vnc_client *client)
+int yetty_yvnc_client_wants_reconnect(const struct yetty_yvnc_client *client)
 {
     return client ? client->wants_reconnect : 0;
 }
 
-void yetty_vnc_client_clear_reconnect(struct yetty_vnc_client *client)
+void yetty_yvnc_client_clear_reconnect(struct yetty_yvnc_client *client)
 {
     if (client) {
         client->wants_reconnect = 0;

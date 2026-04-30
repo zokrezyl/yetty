@@ -10,10 +10,10 @@ extern "C" {
 #endif
 
 /* Monotonic clock in seconds (steady, epoch unspecified — differences only). */
-double ytime_monotonic_sec(void);
+double yetty_yplatform_ytime_monotonic_sec(void);
 
 /* Sleep for at least the given number of milliseconds. */
-void ytime_sleep_ms(unsigned ms);
+void yetty_yplatform_ytime_sleep_ms(unsigned ms);
 
 #ifdef __cplusplus
 }

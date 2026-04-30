@@ -25,18 +25,18 @@
 /* Must match the tile size used by the compute shader in tile-diff.c. */
 #define X11_TILE_SIZE 64
 
-struct render_target_x11_tile {
-    struct yetty_yrender_target base;
+struct yetty_yrender_render_target_x11_tile {
+    struct yetty_ypaint_core_target base;
 
     /* Inner texture target — renders offscreen, no WGPU surface. */
-    struct yetty_yrender_target *inner;
+    struct yetty_ypaint_core_target *inner;
 
     /* Tile-diff engine (shared with other potential sinks). */
     struct yetty_yrender_utils_tile_diff_engine *diff_engine;
 
     /* Event loop — used only to post a catch-up render after a dropped
      * present() (see on_engine_idle). */
-    struct yetty_ycore_event_loop *event_loop;
+    struct yetty_yplatform_event_loop *event_loop;
 
     /* X11 state. */
     Display *display;
@@ -75,7 +75,7 @@ static int xshm_error_handler(Display *dpy, XErrorEvent *ev)
     return 0;
 }
 
-static void teardown_shm_image(struct render_target_x11_tile *rt)
+static void teardown_shm_image(struct yetty_yrender_render_target_x11_tile *rt)
 {
     if (rt->shm_image) {
         if (rt->shm_attached) {
@@ -97,7 +97,7 @@ static void teardown_shm_image(struct render_target_x11_tile *rt)
     rt->shm_height = 0;
 }
 
-static int setup_shm_image(struct render_target_x11_tile *rt, uint32_t width, uint32_t height)
+static int setup_shm_image(struct yetty_yrender_render_target_x11_tile *rt, uint32_t width, uint32_t height)
 {
     if (rt->shm_width == width && rt->shm_height == height && rt->shm_image) {
         return 1;
@@ -167,7 +167,7 @@ static int setup_shm_image(struct render_target_x11_tile *rt, uint32_t width, ui
 
 static void x11_tile_sink(void *ctx, const struct yetty_yrender_utils_tile_diff_frame *frame)
 {
-    struct render_target_x11_tile *rt = ctx;
+    struct yetty_yrender_render_target_x11_tile *rt = ctx;
 
     if (!setup_shm_image(rt, frame->width, frame->height)) {
         return;
@@ -230,43 +230,43 @@ static void x11_tile_sink(void *ctx, const struct yetty_yrender_utils_tile_diff_
  * Target ops — most delegate to the inner texture target
  *===========================================================================*/
 
-static struct yetty_ycore_void_result x11_tile_clear(struct yetty_yrender_target *self)
+static struct yetty_ycore_void_result x11_tile_clear(struct yetty_ypaint_core_target *self)
 {
-    struct render_target_x11_tile *rt = (struct render_target_x11_tile *)self;
+    struct yetty_yrender_render_target_x11_tile *rt = (struct yetty_yrender_render_target_x11_tile *)self;
     return rt->inner->ops->clear(rt->inner);
 }
 
 static struct yetty_ycore_void_result x11_tile_render_layer(
-    struct yetty_yrender_target *self, struct yetty_yterm_terminal_layer *layer)
+    struct yetty_ypaint_core_target *self, struct yetty_yrender_terminal_layer *layer)
 {
-    struct render_target_x11_tile *rt = (struct render_target_x11_tile *)self;
+    struct yetty_yrender_render_target_x11_tile *rt = (struct yetty_yrender_render_target_x11_tile *)self;
     return rt->inner->ops->render_layer(rt->inner, layer);
 }
 
-static struct yetty_ycore_void_result x11_tile_blend(struct yetty_yrender_target *self,
-                                                     struct yetty_yrender_target **sources,
+static struct yetty_ycore_void_result x11_tile_blend(struct yetty_ypaint_core_target *self,
+                                                     struct yetty_ypaint_core_target **sources,
                                                      size_t count)
 {
-    struct render_target_x11_tile *rt = (struct render_target_x11_tile *)self;
+    struct yetty_yrender_render_target_x11_tile *rt = (struct yetty_yrender_render_target_x11_tile *)self;
     return rt->inner->ops->blend(rt->inner, sources, count);
 }
 
-static WGPUTextureView x11_tile_get_view(const struct yetty_yrender_target *self)
+static WGPUTextureView x11_tile_get_view(const struct yetty_ypaint_core_target *self)
 {
-    const struct render_target_x11_tile *rt = (const struct render_target_x11_tile *)self;
+    const struct yetty_yrender_render_target_x11_tile *rt = (const struct yetty_yrender_render_target_x11_tile *)self;
     return rt->inner->ops->get_view(rt->inner);
 }
 
-static WGPUTexture x11_tile_get_texture(const struct yetty_yrender_target *self)
+static WGPUTexture x11_tile_get_texture(const struct yetty_ypaint_core_target *self)
 {
-    const struct render_target_x11_tile *rt = (const struct render_target_x11_tile *)self;
+    const struct yetty_yrender_render_target_x11_tile *rt = (const struct yetty_yrender_render_target_x11_tile *)self;
     return rt->inner->ops->get_texture(rt->inner);
 }
 
-static struct yetty_ycore_void_result x11_tile_resize(struct yetty_yrender_target *self,
+static struct yetty_ycore_void_result x11_tile_resize(struct yetty_ypaint_core_target *self,
                                                       struct yetty_yrender_viewport viewport)
 {
-    struct render_target_x11_tile *rt = (struct render_target_x11_tile *)self;
+    struct yetty_yrender_render_target_x11_tile *rt = (struct yetty_yrender_render_target_x11_tile *)self;
     rt->base.viewport = viewport;
 
     /* Trigger XImage recreation on next present; the engine itself will
@@ -282,11 +282,11 @@ static struct yetty_ycore_void_result x11_tile_resize(struct yetty_yrender_targe
     return rt->inner->ops->resize(rt->inner, viewport);
 }
 
-static struct yetty_ycore_void_result x11_tile_set_visual_zoom(struct yetty_yrender_target *self,
+static struct yetty_ycore_void_result x11_tile_set_visual_zoom(struct yetty_ypaint_core_target *self,
                                                                float scale, float off_x,
                                                                float off_y)
 {
-    struct render_target_x11_tile *rt = (struct render_target_x11_tile *)self;
+    struct yetty_yrender_render_target_x11_tile *rt = (struct yetty_yrender_render_target_x11_tile *)self;
     if (rt->inner->ops->set_visual_zoom) {
         return rt->inner->ops->set_visual_zoom(rt->inner, scale, off_x, off_y);
     }
@@ -297,9 +297,9 @@ static struct yetty_ycore_void_result x11_tile_set_visual_zoom(struct yetty_yren
  * X window contents have been clobbered (by an overlapping window, unmap/
  * map, etc.), so we have to blit every tile even if the diff would say
  * nothing changed. */
-static void x11_tile_refresh_full(struct yetty_yrender_target *self)
+static void x11_tile_refresh_full(struct yetty_ypaint_core_target *self)
 {
-    struct render_target_x11_tile *rt = (struct render_target_x11_tile *)self;
+    struct yetty_yrender_render_target_x11_tile *rt = (struct yetty_yrender_render_target_x11_tile *)self;
     if (rt->diff_engine) {
         yetty_yrender_utils_tile_diff_engine_force_full(rt->diff_engine);
     }
@@ -311,27 +311,27 @@ static void x11_tile_refresh_full(struct yetty_yrender_target *self)
  * and engine_submit will pick up the latest inner-texture content. */
 static void on_engine_idle(void *ctx)
 {
-    struct render_target_x11_tile *rt = ctx;
+    struct yetty_yrender_render_target_x11_tile *rt = ctx;
     if (rt && rt->event_loop && rt->event_loop->ops->request_render) {
         rt->event_loop->ops->request_render(rt->event_loop);
     }
 }
 
-static bool x11_tile_is_busy(const struct yetty_yrender_target *self)
+static bool x11_tile_is_busy(const struct yetty_ypaint_core_target *self)
 {
-    const struct render_target_x11_tile *rt = (const struct render_target_x11_tile *)self;
+    const struct yetty_yrender_render_target_x11_tile *rt = (const struct yetty_yrender_render_target_x11_tile *)self;
     return yetty_yrender_utils_tile_diff_engine_is_busy(rt->diff_engine);
 }
 
-static void x11_tile_notify_render_skipped(struct yetty_yrender_target *self)
+static void x11_tile_notify_render_skipped(struct yetty_ypaint_core_target *self)
 {
-    struct render_target_x11_tile *rt = (struct render_target_x11_tile *)self;
+    struct yetty_yrender_render_target_x11_tile *rt = (struct yetty_yrender_render_target_x11_tile *)self;
     yetty_yrender_utils_tile_diff_engine_mark_redraw_pending(rt->diff_engine);
 }
 
-static struct yetty_ycore_void_result x11_tile_present(struct yetty_yrender_target *self)
+static struct yetty_ycore_void_result x11_tile_present(struct yetty_ypaint_core_target *self)
 {
-    struct render_target_x11_tile *rt = (struct render_target_x11_tile *)self;
+    struct yetty_yrender_render_target_x11_tile *rt = (struct yetty_yrender_render_target_x11_tile *)self;
 
     if (!rt->xshm_available) {
         return YETTY_ERR(yetty_ycore_void, "x11_tile: XShm not available");
@@ -349,9 +349,9 @@ static struct yetty_ycore_void_result x11_tile_present(struct yetty_yrender_targ
                                                        rt);
 }
 
-static void x11_tile_destroy(struct yetty_yrender_target *self)
+static void x11_tile_destroy(struct yetty_ypaint_core_target *self)
 {
-    struct render_target_x11_tile *rt = (struct render_target_x11_tile *)self;
+    struct yetty_yrender_render_target_x11_tile *rt = (struct yetty_yrender_render_target_x11_tile *)self;
 
     teardown_shm_image(rt);
 
@@ -392,13 +392,13 @@ static const struct yetty_yrender_target_ops x11_tile_ops = {
 /* Forward-declared from render-target-texture.c to avoid a circular header. */
 struct yetty_yrender_target_ptr_result yetty_yrender_target_texture_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat format,
-    struct yetty_yrender_gpu_allocator *allocator, WGPUSurface surface,
+    struct yetty_ypaint_core_gpu_allocator *allocator, WGPUSurface surface,
     struct yetty_yrender_viewport viewport);
 
 struct yetty_yrender_target_ptr_result yetty_yrender_target_x11_tile_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat format,
-    struct yetty_yrender_gpu_allocator *allocator, struct yplatform_wgpu *wgpu,
-    struct yetty_ycore_event_loop *event_loop, void *x11_display, unsigned long x11_window,
+    struct yetty_ypaint_core_gpu_allocator *allocator, struct yetty_yplatform_wgpu *wgpu,
+    struct yetty_yplatform_event_loop *event_loop, void *x11_display, unsigned long x11_window,
     struct yetty_yrender_viewport viewport)
 {
     if (!x11_display || x11_window == 0) {
@@ -421,7 +421,7 @@ struct yetty_yrender_target_ptr_result yetty_yrender_target_x11_tile_create(
         return YETTY_ERR(yetty_yrender_target_ptr, "x11_tile: unsupported X visual depth");
     }
 
-    struct render_target_x11_tile *rt = calloc(1, sizeof(*rt));
+    struct yetty_yrender_render_target_x11_tile *rt = calloc(1, sizeof(*rt));
     if (!rt) {
         return YETTY_ERR(yetty_yrender_target_ptr, "x11_tile: calloc failed");
     }

@@ -21,9 +21,9 @@
 #endif
 
 /* Fork PTY implementation */
-struct fork_pty {
-    struct yetty_yplatform_pty base;
-    struct yetty_yplatform_pty_pipe_source pipe_source;
+struct yetty_yplatform_fork_pty {
+    struct yetty_platform_pty base;
+    struct yetty_platform_pty_pipe_source pipe_source;
     int pty_master;
     pid_t child_pid;
     uint32_t cols;
@@ -32,19 +32,19 @@ struct fork_pty {
 };
 
 /* Forward declarations */
-static struct yetty_ycore_void_result fork_pty_destroy(struct yetty_yplatform_pty *self);
-static struct yetty_ycore_size_result fork_pty_read(struct yetty_yplatform_pty *self, char *buf,
+static struct yetty_ycore_void_result fork_pty_destroy(struct yetty_platform_pty *self);
+static struct yetty_ycore_size_result fork_pty_read(struct yetty_platform_pty *self, char *buf,
                                                     size_t max_len);
-static struct yetty_ycore_size_result fork_pty_write(struct yetty_yplatform_pty *self,
+static struct yetty_ycore_size_result fork_pty_write(struct yetty_platform_pty *self,
                                                      const char *data, size_t len);
-static struct yetty_ycore_void_result fork_pty_resize(struct yetty_yplatform_pty *self,
+static struct yetty_ycore_void_result fork_pty_resize(struct yetty_platform_pty *self,
                                                       uint32_t cols, uint32_t rows);
-static struct yetty_ycore_void_result fork_pty_stop(struct yetty_yplatform_pty *self);
-static struct yetty_yplatform_pty_pipe_source *fork_pty_pipe_source(
-    struct yetty_yplatform_pty *self);
+static struct yetty_ycore_void_result fork_pty_stop(struct yetty_platform_pty *self);
+static struct yetty_platform_pty_pipe_source *fork_pty_pipe_source(
+    struct yetty_platform_pty *self);
 
 /* Ops table */
-static const struct yetty_yplatform_pty_ops fork_pty_ops = {
+static const struct yetty_platform_pty_ops fork_pty_ops = {
     .destroy = fork_pty_destroy,
     .read = fork_pty_read,
     .write = fork_pty_write,
@@ -53,9 +53,9 @@ static const struct yetty_yplatform_pty_ops fork_pty_ops = {
     .pipe_source = fork_pty_pipe_source,
 };
 
-static struct yetty_ycore_void_result fork_pty_destroy(struct yetty_yplatform_pty *self)
+static struct yetty_ycore_void_result fork_pty_destroy(struct yetty_platform_pty *self)
 {
-    struct fork_pty *pty = container_of(self, struct fork_pty, base);
+    struct yetty_yplatform_fork_pty *pty = container_of(self, struct yetty_yplatform_fork_pty, base);
 
     struct yetty_ycore_void_result stop_r = fork_pty_stop(self);
     free(pty);
@@ -66,10 +66,10 @@ static struct yetty_ycore_void_result fork_pty_destroy(struct yetty_yplatform_pt
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_size_result fork_pty_read(struct yetty_yplatform_pty *self, char *buf,
+static struct yetty_ycore_size_result fork_pty_read(struct yetty_platform_pty *self, char *buf,
                                                     size_t max_len)
 {
-    struct fork_pty *pty = container_of(self, struct fork_pty, base);
+    struct yetty_yplatform_fork_pty *pty = container_of(self, struct yetty_yplatform_fork_pty, base);
     ssize_t n;
 
     if (pty->pty_master < 0) {
@@ -84,10 +84,10 @@ static struct yetty_ycore_size_result fork_pty_read(struct yetty_yplatform_pty *
     return YETTY_OK(yetty_ycore_size, (size_t)n);
 }
 
-static struct yetty_ycore_size_result fork_pty_write(struct yetty_yplatform_pty *self,
+static struct yetty_ycore_size_result fork_pty_write(struct yetty_platform_pty *self,
                                                      const char *data, size_t len)
 {
-    struct fork_pty *pty = container_of(self, struct fork_pty, base);
+    struct yetty_yplatform_fork_pty *pty = container_of(self, struct yetty_yplatform_fork_pty, base);
     ssize_t written;
 
     if (pty->pty_master < 0) {
@@ -106,10 +106,10 @@ static struct yetty_ycore_size_result fork_pty_write(struct yetty_yplatform_pty 
     return YETTY_OK(yetty_ycore_size, (size_t)written);
 }
 
-static struct yetty_ycore_void_result fork_pty_resize(struct yetty_yplatform_pty *self,
+static struct yetty_ycore_void_result fork_pty_resize(struct yetty_platform_pty *self,
                                                       uint32_t cols, uint32_t rows)
 {
-    struct fork_pty *pty = container_of(self, struct fork_pty, base);
+    struct yetty_yplatform_fork_pty *pty = container_of(self, struct yetty_yplatform_fork_pty, base);
     struct winsize ws;
 
     pty->cols = cols;
@@ -150,9 +150,9 @@ static int fork_pty_wait_ms(pid_t pid, int *status, int timeout_ms)
     return 0;
 }
 
-static struct yetty_ycore_void_result fork_pty_stop(struct yetty_yplatform_pty *self)
+static struct yetty_ycore_void_result fork_pty_stop(struct yetty_platform_pty *self)
 {
-    struct fork_pty *pty = container_of(self, struct fork_pty, base);
+    struct yetty_yplatform_fork_pty *pty = container_of(self, struct yetty_yplatform_fork_pty, base);
     int status;
 
     if (!pty->running) {
@@ -189,24 +189,24 @@ static struct yetty_ycore_void_result fork_pty_stop(struct yetty_yplatform_pty *
     return YETTY_OK_VOID();
 }
 
-static struct yetty_yplatform_pty_pipe_source *fork_pty_pipe_source(
-    struct yetty_yplatform_pty *self)
+static struct yetty_platform_pty_pipe_source *fork_pty_pipe_source(
+    struct yetty_platform_pty *self)
 {
-    struct fork_pty *pty = container_of(self, struct fork_pty, base);
+    struct yetty_yplatform_fork_pty *pty = container_of(self, struct yetty_yplatform_fork_pty, base);
     return &pty->pipe_source;
 }
 
 /* Create fork PTY with shell */
 
-struct yetty_yplatform_pty_result fork_pty_create(struct yetty_yconfig *config)
+struct yetty_yplatform_pty_result yetty_yplatform_fork_pty_create(struct yetty_yconfig *config)
 {
-    struct fork_pty *pty;
+    struct yetty_yplatform_fork_pty *pty;
     struct yetty_yconfig_shell_argv shellv;
     struct yetty_ycore_void_result argv_res;
     struct winsize ws;
     int flags;
 
-    pty = malloc(sizeof(struct fork_pty));
+    pty = malloc(sizeof(struct yetty_yplatform_fork_pty));
     if (!pty) {
         return YETTY_ERR(yetty_yplatform_pty, "failed to allocate pty");
     }

@@ -8,19 +8,19 @@
  * Theme Lifecycle
  *===========================================================================*/
 
-ygui_theme_t *ygui_theme_create(void)
+struct yetty_ygui_theme *yetty_ygui_theme_create(void)
 {
-    ygui_theme_t *theme = (ygui_theme_t *)calloc(1, sizeof(ygui_theme_t));
+    struct yetty_ygui_theme *theme = (struct yetty_ygui_theme *)calloc(1, sizeof(struct yetty_ygui_theme));
     if (!theme) {
-        ygui_set_error("Failed to allocate theme");
+        yetty_ygui_set_error("Failed to allocate theme");
         return NULL;
     }
     return theme;
 }
 
-ygui_theme_t *ygui_theme_create_default(void)
+struct yetty_ygui_theme *yetty_ygui_theme_create_default(void)
 {
-    ygui_theme_t *theme = ygui_theme_create();
+    struct yetty_ygui_theme *theme = yetty_ygui_theme_create();
     if (!theme) {
         return NULL;
     }
@@ -65,7 +65,7 @@ ygui_theme_t *ygui_theme_create_default(void)
     return theme;
 }
 
-void ygui_theme_destroy(ygui_theme_t *theme)
+void yetty_ygui_theme_destroy(struct yetty_ygui_theme *theme)
 {
     free(theme);
 }
@@ -74,7 +74,7 @@ void ygui_theme_destroy(ygui_theme_t *theme)
  * Theme Setters
  *===========================================================================*/
 
-void ygui_theme_set_padding(ygui_theme_t *theme, float sm, float med, float lg)
+void yetty_ygui_theme_set_padding(struct yetty_ygui_theme *theme, float sm, float med, float lg)
 {
     if (!theme) {
         return;
@@ -84,7 +84,7 @@ void ygui_theme_set_padding(ygui_theme_t *theme, float sm, float med, float lg)
     theme->pad_large = lg;
 }
 
-void ygui_theme_set_radius(ygui_theme_t *theme, float sm, float med, float lg)
+void yetty_ygui_theme_set_radius(struct yetty_ygui_theme *theme, float sm, float med, float lg)
 {
     if (!theme) {
         return;
@@ -94,7 +94,7 @@ void ygui_theme_set_radius(ygui_theme_t *theme, float sm, float med, float lg)
     theme->radius_large = lg;
 }
 
-void ygui_theme_set_row_height(ygui_theme_t *theme, float height)
+void yetty_ygui_theme_set_row_height(struct yetty_ygui_theme *theme, float height)
 {
     if (!theme) {
         return;
@@ -102,7 +102,7 @@ void ygui_theme_set_row_height(ygui_theme_t *theme, float height)
     theme->row_height = height;
 }
 
-void ygui_theme_set_font_size(ygui_theme_t *theme, float size)
+void yetty_ygui_theme_set_font_size(struct yetty_ygui_theme *theme, float size)
 {
     if (!theme) {
         return;
@@ -110,7 +110,7 @@ void ygui_theme_set_font_size(ygui_theme_t *theme, float size)
     theme->font_size = size;
 }
 
-void ygui_theme_set_scrollbar_size(ygui_theme_t *theme, float size)
+void yetty_ygui_theme_set_scrollbar_size(struct yetty_ygui_theme *theme, float size)
 {
     if (!theme) {
         return;
@@ -118,7 +118,7 @@ void ygui_theme_set_scrollbar_size(ygui_theme_t *theme, float size)
     theme->scrollbar_size = size;
 }
 
-void ygui_theme_set_bg_primary(ygui_theme_t *theme, uint32_t color)
+void yetty_ygui_theme_set_bg_primary(struct yetty_ygui_theme *theme, uint32_t color)
 {
     if (!theme) {
         return;
@@ -126,7 +126,7 @@ void ygui_theme_set_bg_primary(ygui_theme_t *theme, uint32_t color)
     theme->bg_primary = color;
 }
 
-void ygui_theme_set_bg_surface(ygui_theme_t *theme, uint32_t color)
+void yetty_ygui_theme_set_bg_surface(struct yetty_ygui_theme *theme, uint32_t color)
 {
     if (!theme) {
         return;
@@ -134,7 +134,7 @@ void ygui_theme_set_bg_surface(ygui_theme_t *theme, uint32_t color)
     theme->bg_surface = color;
 }
 
-void ygui_theme_set_bg_hover(ygui_theme_t *theme, uint32_t color)
+void yetty_ygui_theme_set_bg_hover(struct yetty_ygui_theme *theme, uint32_t color)
 {
     if (!theme) {
         return;
@@ -142,7 +142,7 @@ void ygui_theme_set_bg_hover(ygui_theme_t *theme, uint32_t color)
     theme->bg_hover = color;
 }
 
-void ygui_theme_set_text_primary(ygui_theme_t *theme, uint32_t color)
+void yetty_ygui_theme_set_text_primary(struct yetty_ygui_theme *theme, uint32_t color)
 {
     if (!theme) {
         return;
@@ -150,7 +150,7 @@ void ygui_theme_set_text_primary(ygui_theme_t *theme, uint32_t color)
     theme->text_primary = color;
 }
 
-void ygui_theme_set_text_muted(ygui_theme_t *theme, uint32_t color)
+void yetty_ygui_theme_set_text_muted(struct yetty_ygui_theme *theme, uint32_t color)
 {
     if (!theme) {
         return;
@@ -158,7 +158,7 @@ void ygui_theme_set_text_muted(ygui_theme_t *theme, uint32_t color)
     theme->text_muted = color;
 }
 
-void ygui_theme_set_accent(ygui_theme_t *theme, uint32_t color)
+void yetty_ygui_theme_set_accent(struct yetty_ygui_theme *theme, uint32_t color)
 {
     if (!theme) {
         return;
@@ -166,7 +166,7 @@ void ygui_theme_set_accent(ygui_theme_t *theme, uint32_t color)
     theme->accent = color;
 }
 
-void ygui_theme_set_border(ygui_theme_t *theme, uint32_t color)
+void yetty_ygui_theme_set_border(struct yetty_ygui_theme *theme, uint32_t color)
 {
     if (!theme) {
         return;
@@ -174,7 +174,7 @@ void ygui_theme_set_border(ygui_theme_t *theme, uint32_t color)
     theme->border = color;
 }
 
-void ygui_theme_set_border_muted(ygui_theme_t *theme, uint32_t color)
+void yetty_ygui_theme_set_border_muted(struct yetty_ygui_theme *theme, uint32_t color)
 {
     if (!theme) {
         return;
@@ -182,7 +182,7 @@ void ygui_theme_set_border_muted(ygui_theme_t *theme, uint32_t color)
     theme->border_muted = color;
 }
 
-void ygui_theme_set_bg_dropdown(ygui_theme_t *theme, uint32_t color)
+void yetty_ygui_theme_set_bg_dropdown(struct yetty_ygui_theme *theme, uint32_t color)
 {
     if (!theme) {
         return;
@@ -190,7 +190,7 @@ void ygui_theme_set_bg_dropdown(ygui_theme_t *theme, uint32_t color)
     theme->bg_dropdown = color;
 }
 
-void ygui_theme_set_overlay_modal(ygui_theme_t *theme, uint32_t color)
+void yetty_ygui_theme_set_overlay_modal(struct yetty_ygui_theme *theme, uint32_t color)
 {
     if (!theme) {
         return;
@@ -198,7 +198,7 @@ void ygui_theme_set_overlay_modal(ygui_theme_t *theme, uint32_t color)
     theme->overlay_modal = color;
 }
 
-void ygui_theme_set_shadow(ygui_theme_t *theme, uint32_t color)
+void yetty_ygui_theme_set_shadow(struct yetty_ygui_theme *theme, uint32_t color)
 {
     if (!theme) {
         return;
@@ -206,7 +206,7 @@ void ygui_theme_set_shadow(ygui_theme_t *theme, uint32_t color)
     theme->shadow = color;
 }
 
-void ygui_theme_set_tooltip_bg(ygui_theme_t *theme, uint32_t color)
+void yetty_ygui_theme_set_tooltip_bg(struct yetty_ygui_theme *theme, uint32_t color)
 {
     if (!theme) {
         return;
@@ -214,7 +214,7 @@ void ygui_theme_set_tooltip_bg(ygui_theme_t *theme, uint32_t color)
     theme->tooltip_bg = color;
 }
 
-void ygui_theme_set_selection_bg(ygui_theme_t *theme, uint32_t color)
+void yetty_ygui_theme_set_selection_bg(struct yetty_ygui_theme *theme, uint32_t color)
 {
     if (!theme) {
         return;

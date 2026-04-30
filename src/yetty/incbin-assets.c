@@ -140,7 +140,7 @@ static void get_marker_path(const char *cache_dir, char *out, size_t out_size)
  * as success. Only the final leaf must be a real success. */
 static int mkdir_one(const char *path)
 {
-    int rc = yplatform_mkdir(path);
+    int rc = yetty_yplatform_mkdir(path);
     int saved_errno = errno;
     if (rc == 0) {
         ydebug("mkdir_one: created '%s'", path);
@@ -483,7 +483,7 @@ int yetty_incbin_assets_extract_qemu_to(struct yetty_incbin_assets *assets, cons
 
     /* Make QEMU binary executable */
     snprintf(qemu_bin, sizeof(qemu_bin), "%s/qemu-system-riscv64", qemu_dir);
-    if (yplatform_chmod(qemu_bin, 0755) != 0) {
+    if (yetty_yplatform_chmod(qemu_bin, 0755) != 0) {
         ydebug("Failed to make QEMU executable: %s", strerror(errno));
     }
 

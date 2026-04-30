@@ -12,7 +12,7 @@ extern "C" {
  * abstract: fd on Unix (pty master), CRT fd on Windows (via _open_osfhandle)
  * Event loop does: uv_pipe_open(abstract) + uv_read_start(alloc_cb, read_cb)
  */
-struct yetty_yplatform_pty_pipe_source {
+struct yetty_platform_pty_pipe_source {
     uintptr_t abstract;
 };
 

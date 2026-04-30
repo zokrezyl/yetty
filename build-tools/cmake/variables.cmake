@@ -145,7 +145,7 @@ option(YETTY_ENABLE_TOOL_YTHORVG         "yetty-ythorvg CLI (SVG/Lottie -> OSC)"
 option(YETTY_ENABLE_TOOL_DECODE_YPAINT    "decode-ypaint diagnostic tool"     ON)
 
 # Auto-disable QA tools for cross-compilation (requires host LLVM/Clang libs)
-# Also disabled on macOS and Windows — qa-tools/custom/result-checker/CMakeLists.txt
+# Also disabled on macOS and Windows — qa-tools/analysis/result-checker/CMakeLists.txt
 # hardcodes Linux LLVM paths.
 if(YETTY_ENABLE_TOOL_QA)
     if(YETTY_ANDROID OR YETTY_IOS OR EMSCRIPTEN OR CMAKE_CROSSCOMPILING OR APPLE OR WIN32)

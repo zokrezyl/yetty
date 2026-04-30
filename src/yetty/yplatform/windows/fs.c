@@ -6,12 +6,12 @@
 #include <string.h>
 #include <stdio.h>
 
-int yplatform_mkdir(const char *path)
+int yetty_yplatform_mkdir(const char *path)
 {
     return _mkdir(path);
 }
 
-void yplatform_mkdir_p(const char *path)
+void yetty_yplatform_mkdir_p(const char *path)
 {
     char tmp[512];
     snprintf(tmp, sizeof(tmp), "%s", path);
@@ -31,17 +31,17 @@ void yplatform_mkdir_p(const char *path)
     _mkdir(tmp);
 }
 
-int yplatform_file_exists(const char *path)
+int yetty_yplatform_file_exists(const char *path)
 {
     return _access(path, 0) == 0;
 }
 
-int yplatform_unlink(const char *path)
+int yetty_yplatform_unlink(const char *path)
 {
     return _unlink(path);
 }
 
-int yplatform_chmod(const char *path, unsigned int mode)
+int yetty_yplatform_chmod(const char *path, unsigned int mode)
 {
     (void)path;
     (void)mode;

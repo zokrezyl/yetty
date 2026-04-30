@@ -52,12 +52,12 @@ static void cell_clear(ygui_grid_cell_t *cell)
     cell->count = 0;
 }
 
-static void cell_add(ygui_grid_cell_t *cell, ygui_widget_t *widget)
+static void cell_add(ygui_grid_cell_t *cell, struct yetty_ygui_widget *widget)
 {
     if (cell->count >= cell->capacity) {
         int new_cap = cell->capacity == 0 ? 4 : cell->capacity * 2;
-        ygui_widget_t **new_arr =
-            (ygui_widget_t **)realloc(cell->widgets, new_cap * sizeof(ygui_widget_t *));
+        struct yetty_ygui_widget **new_arr =
+            (struct yetty_ygui_widget **)realloc(cell->widgets, new_cap * sizeof(struct yetty_ygui_widget *));
         if (!new_arr) {
             return;
         }
@@ -67,7 +67,7 @@ static void cell_add(ygui_grid_cell_t *cell, ygui_widget_t *widget)
     cell->widgets[cell->count++] = widget;
 }
 
-static void cell_remove(ygui_grid_cell_t *cell, ygui_widget_t *widget)
+static void cell_remove(ygui_grid_cell_t *cell, struct yetty_ygui_widget *widget)
 {
     for (int i = 0; i < cell->count; i++) {
         if (cell->widgets[i] == widget) {
@@ -85,7 +85,7 @@ static void cell_remove(ygui_grid_cell_t *cell, ygui_widget_t *widget)
  * Grid Implementation
  *===========================================================================*/
 
-void ygui_grid_init(ygui_spatial_grid_t *grid, float width, float height, float cell_size)
+void yetty_ygui_grid_init(ygui_spatial_grid_t *grid, float width, float height, float cell_size)
 {
     grid->width = width;
     grid->height = height;
@@ -101,7 +101,7 @@ void ygui_grid_init(ygui_spatial_grid_t *grid, float width, float height, float 
     }
 }
 
-void ygui_grid_destroy(ygui_spatial_grid_t *grid)
+void yetty_ygui_grid_destroy(ygui_spatial_grid_t *grid)
 {
     if (!grid->cells) {
         return;
@@ -117,7 +117,7 @@ void ygui_grid_destroy(ygui_spatial_grid_t *grid)
     grid->rows = 0;
 }
 
-void ygui_grid_clear(ygui_spatial_grid_t *grid)
+void yetty_ygui_grid_clear(ygui_spatial_grid_t *grid)
 {
     if (!grid->cells) {
         return;
@@ -129,7 +129,7 @@ void ygui_grid_clear(ygui_spatial_grid_t *grid)
     }
 }
 
-void ygui_grid_insert(ygui_spatial_grid_t *grid, ygui_widget_t *widget)
+void yetty_ygui_grid_insert(ygui_spatial_grid_t *grid, struct yetty_ygui_widget *widget)
 {
     if (!grid->cells || !widget) {
         return;
@@ -161,14 +161,14 @@ void ygui_grid_insert(ygui_spatial_grid_t *grid, ygui_widget_t *widget)
     }
 
     /* Recursively insert children */
-    for (ygui_widget_t *child = widget->first_child; child; child = child->next_sibling) {
+    for (struct yetty_ygui_widget *child = widget->first_child; child; child = child->next_sibling) {
         if (child->was_rendered) {
-            ygui_grid_insert(grid, child);
+            yetty_ygui_grid_insert(grid, child);
         }
     }
 }
 
-void ygui_grid_remove(ygui_spatial_grid_t *grid, ygui_widget_t *widget)
+void yetty_ygui_grid_remove(ygui_spatial_grid_t *grid, struct yetty_ygui_widget *widget)
 {
     if (!grid->cells || !widget) {
         return;
@@ -197,12 +197,12 @@ void ygui_grid_remove(ygui_spatial_grid_t *grid, ygui_widget_t *widget)
     }
 
     /* Recursively remove children */
-    for (ygui_widget_t *child = widget->first_child; child; child = child->next_sibling) {
-        ygui_grid_remove(grid, child);
+    for (struct yetty_ygui_widget *child = widget->first_child; child; child = child->next_sibling) {
+        yetty_ygui_grid_remove(grid, child);
     }
 }
 
-ygui_widget_t *ygui_grid_query(const ygui_spatial_grid_t *grid, float x, float y)
+struct yetty_ygui_widget *yetty_ygui_grid_query(const ygui_spatial_grid_t *grid, float x, float y)
 {
     if (!grid->cells) {
         return NULL;
@@ -225,7 +225,7 @@ ygui_widget_t *ygui_grid_query(const ygui_spatial_grid_t *grid, float x, float y
 
     /* Return topmost widget (last in list) that contains the point */
     for (int i = cell->count - 1; i >= 0; i--) {
-        ygui_widget_t *w = cell->widgets[i];
+        struct yetty_ygui_widget *w = cell->widgets[i];
         int in_x = (x >= w->effective_x && x < w->effective_x + w->w);
         int in_y = (y >= w->effective_y && y < w->effective_y + w->h);
         GRID_LOG("  check %s: eff=(%.1f,%.1f) size=(%.1f,%.1f) in_x=%d in_y=%d flags=0x%x",
@@ -233,7 +233,7 @@ ygui_widget_t *ygui_grid_query(const ygui_spatial_grid_t *grid, float x, float y
                  w->flags);
         if (in_x && in_y) {
             /* Check visibility */
-            if (!(w->flags & YGUI_FLAG_VISIBLE) || (w->flags & YGUI_FLAG_DISABLED)) {
+            if (!(w->flags & YETTY_YGUI_FLAG_VISIBLE) || (w->flags & YETTY_YGUI_FLAG_DISABLED)) {
                 GRID_LOG("  -> skipped (not visible or disabled)");
                 continue;
             }

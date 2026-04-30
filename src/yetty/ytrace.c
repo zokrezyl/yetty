@@ -16,7 +16,7 @@
 /* Global state */
 static ytrace_point_t g_points[YTRACE_C_MAX_POINTS];
 static size_t g_point_count = 0;
-static ymutex_t *g_mutex = NULL;
+static struct yetty_yplatform_ymutex *g_mutex = NULL;
 static bool g_initialized = false;
 static bool g_default_enabled = false;
 
@@ -27,16 +27,16 @@ static size_t g_timer_count = 0;
 static void ensure_mutex(void)
 {
     if (!g_mutex) {
-        g_mutex = ymutex_create();
+        g_mutex = yetty_yplatform_ymutex_create();
     }
 }
 
 #define YTRACE_LOCK()                                                                              \
     do {                                                                                           \
         ensure_mutex();                                                                            \
-        ymutex_lock(g_mutex);                                                                      \
+        yetty_yplatform_ymutex_lock(g_mutex);                                                                      \
     } while (0)
-#define YTRACE_UNLOCK() ymutex_unlock(g_mutex)
+#define YTRACE_UNLOCK() yetty_yplatform_ymutex_unlock(g_mutex)
 
 /* ANSI color codes */
 #define ANSI_RESET "\033[0m"
@@ -59,7 +59,7 @@ static void check_color_support(void)
         return;
     }
 
-    g_use_colors = yplatform_stderr_supports_color();
+    g_use_colors = yetty_yplatform_stderr_supports_color();
 }
 
 static const char *level_color(const char *level)
@@ -172,7 +172,7 @@ void ytrace_output(const char *level, const char *file, int line, const char *fu
     va_end(args);
 
     /* Get timestamp with milliseconds */
-    yplatform_format_timestamp(time_buf, sizeof(time_buf));
+    yetty_yplatform_format_timestamp(time_buf, sizeof(time_buf));
 
     /* Extract basename from file path */
     const char *bname = strrchr(file, '/');

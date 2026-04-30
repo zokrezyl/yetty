@@ -76,7 +76,7 @@ typedef void (*yetty_yclient_task_cb)(void *user);
  * Lifecycle
  *===========================================================================*/
 
-struct yetty_yclient_event_loop_config {
+struct yetty_yclient_lib_event_loop_config {
     int in_fd;  /* if <0, defaults to STDIN_FILENO */
     void *user; /* opaque, passed to all callbacks */
 };
@@ -85,7 +85,7 @@ struct yetty_yclient_event_loop_config {
  * spins up a yface for stream decoding. Does NOT start running yet —
  * call run / poll. */
 struct yetty_yclient_event_loop *yetty_yclient_event_loop_create(
-    const struct yetty_yclient_event_loop_config *cfg);
+    const struct yetty_yclient_lib_event_loop_config *cfg);
 void yetty_yclient_event_loop_destroy(struct yetty_yclient_event_loop *loop);
 
 /*=============================================================================

@@ -15,7 +15,7 @@ struct rectangle_result yetty_ysdf_compute_aabb(const float *data, uint32_t word
     const float *geom = data + 5; // geometry args
     float stroke_width = data[4];
     float expand = stroke_width * 0.5f;
-    struct rectangle rect = {0};
+    struct yetty_ycore_rectangle rect = {0};
     (void)word_count;
 
     switch ((enum yetty_ysdf_type)type) {

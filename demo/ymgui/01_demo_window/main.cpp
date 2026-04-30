@@ -37,7 +37,7 @@ static void on_frame(void *user)
 {
     struct demo_state *S = (struct demo_state *)user;
 
-    ImGui_ImplYetty_BeginCardFrame(S->card_id);
+    yetty_ymgui_ImGui_ImplYetty_BeginCardFrame(S->card_id);
     ImGuiIO& io = ImGui::GetIO();
 
     /* Skip drawing until we know the card's pixel size from the server's
@@ -59,7 +59,7 @@ static void on_frame(void *user)
     ImGui::ShowDemoWindow(&S->window_open);
 
     ImGui::Render();
-    ImGui_ImplYetty_RenderCardDrawData(S->card_id, ImGui::GetDrawData());
+    yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(S->card_id, ImGui::GetDrawData());
 
     S->frames_rendered++;
     /* User clicked the [x] in the demo window — exit. */
@@ -83,13 +83,13 @@ int main(int argc, char **argv)
 
     IMGUI_CHECKVERSION();
 
-    if (!ImGui_ImplYetty_Init()) {
+    if (!yetty_ymgui_ImGui_ImplYetty_Init()) {
         fprintf(stderr, "ymgui: init failed\n");
         return 1;
     }
-    if (!ImGui_ImplYetty_PlatformInit()) {
+    if (!yetty_ymgui_ImGui_ImplYetty_PlatformInit()) {
         fprintf(stderr, "ymgui: platform init failed\n");
-        ImGui_ImplYetty_Shutdown();
+        yetty_ymgui_ImGui_ImplYetty_Shutdown();
         return 1;
     }
 
@@ -99,22 +99,22 @@ int main(int argc, char **argv)
 
     /* Card filling the whole pane (w_cells=0 → right edge dynamically;
      * h_cells=0 → bottom edge at placement time). */
-    state.card_id = ImGui_ImplYetty_CreateCard(
+    state.card_id = yetty_ymgui_ImGui_ImplYetty_CreateCard(
         /*card_id=*/0, /*col=*/0, /*row=*/0,
         /*w_cells=*/0, /*h_cells=*/0);
 
-    struct yetty_yclient_event_loop_config cfg = {};
+    struct yetty_yclient_lib_event_loop_config cfg = {};
     cfg.in_fd = -1;
     cfg.user  = &state;
     state.loop = yetty_yclient_event_loop_create(&cfg);
     if (!state.loop) {
         fprintf(stderr, "ymgui: event loop create failed\n");
-        ImGui_ImplYetty_PlatformShutdown();
-        ImGui_ImplYetty_Shutdown();
+        yetty_ymgui_ImGui_ImplYetty_PlatformShutdown();
+        yetty_ymgui_ImGui_ImplYetty_Shutdown();
         return 1;
     }
 
-    ImGui_ImplYetty_AttachEventLoop(state.loop);
+    yetty_ymgui_ImGui_ImplYetty_AttachEventLoop(state.loop);
     yetty_yclient_event_loop_set_user(state.loop, &state);
     yetty_yclient_event_loop_set_frame_cb(state.loop, on_frame);
 
@@ -123,9 +123,9 @@ int main(int argc, char **argv)
 
     yetty_yclient_event_loop_destroy(state.loop);
     /* Archive the last frame so it remains visible as scrollback. */
-    ImGui_ImplYetty_RemoveCard(state.card_id, /*keep_visible=*/true);
-    ImGui_ImplYetty_Clear(/*keep_visible=*/false);
-    ImGui_ImplYetty_PlatformShutdown();
-    ImGui_ImplYetty_Shutdown();
+    yetty_ymgui_ImGui_ImplYetty_RemoveCard(state.card_id, /*keep_visible=*/true);
+    yetty_ymgui_ImGui_ImplYetty_Clear(/*keep_visible=*/false);
+    yetty_ymgui_ImGui_ImplYetty_PlatformShutdown();
+    yetty_ymgui_ImGui_ImplYetty_Shutdown();
     return 0;
 }

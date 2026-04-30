@@ -26,10 +26,10 @@
 
 #include <webgpu/webgpu.h>
 
-struct yetty_ycore_event_loop;
-struct yplatform_wgpu;
+struct yetty_yplatform_event_loop;
+struct yetty_yplatform_wgpu;
 
-YETTY_YRESULT_DECLARE(yplatform_wgpu_ptr, struct yplatform_wgpu *);
+YETTY_YRESULT_DECLARE(yplatform_wgpu_ptr, struct yetty_yplatform_wgpu *);
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,21 +38,21 @@ extern "C" {
 /* Create the wgpu await machinery. Desktop registers a periodic
  * ProcessEvents tick on the loop thread; webasm has nothing to set up
  * (loop is kept in the signature only to match desktop). */
-struct yplatform_wgpu_ptr_result yplatform_wgpu_create(WGPUInstance instance,
-                                                       struct yetty_ycore_event_loop *loop);
+struct yplatform_wgpu_ptr_result yetty_yplatform_wgpu_create(WGPUInstance instance,
+                                                       struct yetty_yplatform_event_loop *loop);
 
 /* Destroy. Stops the desktop tick. Handles NULL. */
-void yplatform_wgpu_destroy(struct yplatform_wgpu *wgpu);
+void yetty_yplatform_wgpu_destroy(struct yetty_yplatform_wgpu *wgpu);
 
 /* Block until the buffer map completes. Desktop yields the calling
  * coroutine; webasm asyncify-suspends the C stack. Caller must
  * subsequently use wgpuBufferGetConstMappedRange / wgpuBufferUnmap. */
-struct yetty_ycore_void_result yplatform_wgpu_buffer_map_await(struct yplatform_wgpu *wgpu,
+struct yetty_ycore_void_result yetty_yplatform_wgpu_buffer_map_await(struct yetty_yplatform_wgpu *wgpu,
                                                                WGPUBuffer buffer, WGPUMapMode mode,
                                                                size_t offset, size_t size);
 
 /* Block until all currently-submitted work on the queue has finished. */
-struct yetty_ycore_void_result yplatform_wgpu_queue_done_await(struct yplatform_wgpu *wgpu,
+struct yetty_ycore_void_result yetty_yplatform_wgpu_queue_done_await(struct yetty_yplatform_wgpu *wgpu,
                                                                WGPUQueue queue);
 
 #ifdef __cplusplus

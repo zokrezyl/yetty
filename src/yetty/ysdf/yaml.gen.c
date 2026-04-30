@@ -50,7 +50,7 @@ static uint32_t parse_color(const char *str)
  * Parser context
  *===========================================================================*/
 
-struct ypaint_yaml_parse_ctx {
+struct yetty_ysdf_ypaint_yaml_parse_ctx {
     struct yetty_ypaint_core_buffer *buffer;
     uint32_t z_order;
     /* Current primitive state */
@@ -99,7 +99,7 @@ struct ypaint_yaml_parse_ctx {
     float array_vals[8];
 };
 
-static void reset_prim(struct ypaint_yaml_parse_ctx *yaml_parse_ctx)
+static void reset_prim(struct yetty_ysdf_ypaint_yaml_parse_ctx *yaml_parse_ctx)
 {
     yaml_parse_ctx->prim_type[0] = 0;
     yaml_parse_ctx->prop_key[0] = 0;
@@ -144,7 +144,7 @@ static void reset_prim(struct ypaint_yaml_parse_ctx *yaml_parse_ctx)
     yaml_parse_ctx->array_idx = 0;
 }
 
-static void store_array(struct ypaint_yaml_parse_ctx *yaml_parse_ctx)
+static void store_array(struct yetty_ysdf_ypaint_yaml_parse_ctx *yaml_parse_ctx)
 {
     const char *key = yaml_parse_ctx->prop_key;
     ydebug("store_array: key='%s' idx=%d vals=[%f,%f]", key, yaml_parse_ctx->array_idx,
@@ -184,7 +184,7 @@ static void store_array(struct ypaint_yaml_parse_ctx *yaml_parse_ctx)
     }
 }
 
-static struct yetty_ycore_void_result add_prim(struct ypaint_yaml_parse_ctx *yaml_parse_ctx)
+static struct yetty_ycore_void_result add_prim(struct yetty_ysdf_ypaint_yaml_parse_ctx *yaml_parse_ctx)
 {
     float data[16];
     uint32_t word_count = 0, tmp;
@@ -539,7 +539,7 @@ static struct yetty_ycore_void_result add_prim(struct ypaint_yaml_parse_ctx *yam
     }
 
     /* Add primitive to buffer */
-    struct yetty_ypaint_id_result r =
+    struct yetty_ypaint_core_id_result r =
         yetty_ypaint_core_buffer_add_prim(yaml_parse_ctx->buffer, data, word_count * sizeof(float));
     yaml_parse_ctx->z_order++;
     if (r.error != YPAINT_OK) {
@@ -555,9 +555,9 @@ static struct yetty_ycore_void_result add_prim(struct ypaint_yaml_parse_ctx *yam
 struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ypaint_core_buffer *buffer,
                                                      const char *yaml_str, size_t yaml_len)
 {
-    yaml_parser_t parser;
+    struct yaml_parser_s parser;
     yaml_event_t event;
-    struct ypaint_yaml_parse_ctx yaml_parse_ctx = {0};
+    struct yetty_ysdf_ypaint_yaml_parse_ctx yaml_parse_ctx = {0};
     int done = 0;
     int depth = 0;        /* mapping depth */
     int in_body = 0;      /* inside body sequence */

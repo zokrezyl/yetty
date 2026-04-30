@@ -18,7 +18,7 @@ extern "C" {
 #define YPAINT_ERR_ALLOC 3
 
 // Result from adding a primitive
-struct yetty_ypaint_id_result {
+struct yetty_ypaint_core_id_result {
     int error;
     uint32_t id; // byte offset in prims buffer
 };
@@ -38,7 +38,7 @@ struct yetty_ypaint_core_buffer_config {
 };
 
 // Create/destroy
-struct yetty_ypaint_core_buffer_result yetty_ypaint_core_buffer_create(
+struct yetty_ypaint_core_buffer_result yetty_ypaint_core_buffer_config_buffer_create(
     const struct yetty_ypaint_core_buffer_config *config);
 struct yetty_ypaint_core_buffer_result yetty_ypaint_core_buffer_create_from_base64(
     const struct yetty_ycore_buffer *base64_buf);
@@ -75,7 +75,7 @@ const struct yetty_ycore_buffer *yetty_ypaint_core_buffer_primitives(
     const struct yetty_ypaint_core_buffer *buf);
 
 // Add raw primitive data, returns byte offset
-struct yetty_ypaint_id_result yetty_ypaint_core_buffer_add_prim(
+struct yetty_ypaint_core_id_result yetty_ypaint_core_buffer_add_prim(
     struct yetty_ypaint_core_buffer *buf, const void *data, size_t size);
 
 // Read-only access to the accumulated primitive bytes — base64-encode these
@@ -98,16 +98,16 @@ void yetty_ypaint_core_buffer_set_scene_bounds(struct yetty_ypaint_core_buffer *
 
 // Primitive iterator
 struct yetty_ypaint_core_primitive_iter {
-    struct yetty_ypaint_prim_flyweight fw;
+    struct yetty_ypaint_core_prim_flyweight fw;
 };
 
 YETTY_YRESULT_DECLARE(yetty_ypaint_core_primitive_iter, struct yetty_ypaint_core_primitive_iter);
 
 struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_first(
-    const struct yetty_ypaint_core_buffer *buf, const struct yetty_ypaint_flyweight_registry *reg);
+    const struct yetty_ypaint_core_buffer *buf, const struct yetty_ypaint_core_flyweight_registry *reg);
 
 struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_next(
-    const struct yetty_ypaint_core_buffer *buf, const struct yetty_ypaint_flyweight_registry *reg,
+    const struct yetty_ypaint_core_buffer *buf, const struct yetty_ypaint_core_flyweight_registry *reg,
     const struct yetty_ypaint_core_primitive_iter *iter);
 
 /*=============================================================================

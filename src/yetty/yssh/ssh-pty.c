@@ -38,9 +38,9 @@
 #define SSH_PTY_READ_BUF 4096
 #define SSH_PTY_POLL_TIMEOUT_MS 500
 
-struct ssh_pty {
-    struct yetty_yplatform_pty base;
-    struct yetty_yplatform_pty_pipe_source pipe_source;
+struct yetty_yssh_ssh_pty {
+    struct yetty_platform_pty base;
+    struct yetty_platform_pty_pipe_source pipe_source;
 
     /* Network */
     int socket;
@@ -76,18 +76,18 @@ struct ssh_pty {
 };
 
 /* Forward declarations */
-static struct yetty_ycore_void_result ssh_pty_destroy(struct yetty_yplatform_pty *self);
-static struct yetty_ycore_size_result ssh_pty_read(struct yetty_yplatform_pty *self, char *buf,
+static struct yetty_ycore_void_result ssh_pty_destroy(struct yetty_platform_pty *self);
+static struct yetty_ycore_size_result ssh_pty_read(struct yetty_platform_pty *self, char *buf,
                                                    size_t max_len);
-static struct yetty_ycore_size_result ssh_pty_write(struct yetty_yplatform_pty *self,
+static struct yetty_ycore_size_result ssh_pty_write(struct yetty_platform_pty *self,
                                                     const char *data, size_t len);
-static struct yetty_ycore_void_result ssh_pty_resize(struct yetty_yplatform_pty *self,
+static struct yetty_ycore_void_result ssh_pty_resize(struct yetty_platform_pty *self,
                                                      uint32_t cols, uint32_t rows);
-static struct yetty_ycore_void_result ssh_pty_stop(struct yetty_yplatform_pty *self);
-static struct yetty_yplatform_pty_pipe_source *ssh_pty_pipe_source(
-    struct yetty_yplatform_pty *self);
+static struct yetty_ycore_void_result ssh_pty_stop(struct yetty_platform_pty *self);
+static struct yetty_platform_pty_pipe_source *ssh_pty_pipe_source(
+    struct yetty_platform_pty *self);
 
-static const struct yetty_yplatform_pty_ops ssh_pty_ops = {
+static const struct yetty_platform_pty_ops ssh_pty_ops = {
     .destroy = ssh_pty_destroy,
     .read = ssh_pty_read,
     .write = ssh_pty_write,
@@ -153,7 +153,7 @@ static int ssh_pty_tcp_connect(const char *host, uint16_t port)
 
 /* Wait for the socket to become ready for the direction libssh2 wants.
  * Returns 0 on readiness, -1 on error/timeout. */
-static int ssh_pty_wait_socket(struct ssh_pty *pty)
+static int ssh_pty_wait_socket(struct yetty_yssh_ssh_pty *pty)
 {
     struct pollfd pfd;
     int dir;
@@ -200,7 +200,7 @@ static int ssh_pty_wait_socket(struct ssh_pty *pty)
         _rc;                                                                                       \
     })
 
-static int ssh_pty_handshake(struct ssh_pty *pty)
+static int ssh_pty_handshake(struct yetty_yssh_ssh_pty *pty)
 {
     int rc = SSH_RUN_NB(pty, libssh2_session_handshake(pty->session, pty->socket));
     if (rc != 0) {
@@ -213,7 +213,7 @@ static int ssh_pty_handshake(struct ssh_pty *pty)
     return 0;
 }
 
-static int ssh_pty_authenticate(struct ssh_pty *pty)
+static int ssh_pty_authenticate(struct yetty_yssh_ssh_pty *pty)
 {
     int rc;
 
@@ -243,7 +243,7 @@ static int ssh_pty_authenticate(struct ssh_pty *pty)
     return -1;
 }
 
-static int ssh_pty_open_channel(struct ssh_pty *pty)
+static int ssh_pty_open_channel(struct yetty_yssh_ssh_pty *pty)
 {
     /* libssh2_channel_open_session returns NULL on error; EAGAIN via session */
     while (1) {
@@ -281,7 +281,7 @@ static int ssh_pty_open_channel(struct ssh_pty *pty)
 /* Reader thread — drains the channel into the output pipe. */
 static void *ssh_pty_reader_thread(void *arg)
 {
-    struct ssh_pty *pty = arg;
+    struct yetty_yssh_ssh_pty *pty = arg;
     char buf[SSH_PTY_READ_BUF];
 
     yinfo("ssh_reader: started");
@@ -350,9 +350,9 @@ static void *ssh_pty_reader_thread(void *arg)
 
 /* PTY ops */
 
-static struct yetty_ycore_void_result ssh_pty_destroy(struct yetty_yplatform_pty *self)
+static struct yetty_ycore_void_result ssh_pty_destroy(struct yetty_platform_pty *self)
 {
-    struct ssh_pty *pty = (struct ssh_pty *)self;
+    struct yetty_yssh_ssh_pty *pty = (struct yetty_yssh_ssh_pty *)self;
 
     struct yetty_ycore_void_result stop_r = ssh_pty_stop(self);
 
@@ -407,10 +407,10 @@ static struct yetty_ycore_void_result ssh_pty_destroy(struct yetty_yplatform_pty
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_size_result ssh_pty_read(struct yetty_yplatform_pty *self, char *buf,
+static struct yetty_ycore_size_result ssh_pty_read(struct yetty_platform_pty *self, char *buf,
                                                    size_t max_len)
 {
-    struct ssh_pty *pty = (struct ssh_pty *)self;
+    struct yetty_yssh_ssh_pty *pty = (struct yetty_yssh_ssh_pty *)self;
 
     if (max_len == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
@@ -424,10 +424,10 @@ static struct yetty_ycore_size_result ssh_pty_read(struct yetty_yplatform_pty *s
     return YETTY_OK(yetty_ycore_size, (size_t)n);
 }
 
-static struct yetty_ycore_size_result ssh_pty_write(struct yetty_yplatform_pty *self,
+static struct yetty_ycore_size_result ssh_pty_write(struct yetty_platform_pty *self,
                                                     const char *data, size_t len)
 {
-    struct ssh_pty *pty = (struct ssh_pty *)self;
+    struct yetty_yssh_ssh_pty *pty = (struct yetty_yssh_ssh_pty *)self;
 
     if (!pty->running || !pty->channel || len == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
@@ -453,10 +453,10 @@ static struct yetty_ycore_size_result ssh_pty_write(struct yetty_yplatform_pty *
     return YETTY_OK(yetty_ycore_size, written);
 }
 
-static struct yetty_ycore_void_result ssh_pty_resize(struct yetty_yplatform_pty *self,
+static struct yetty_ycore_void_result ssh_pty_resize(struct yetty_platform_pty *self,
                                                      uint32_t cols, uint32_t rows)
 {
-    struct ssh_pty *pty = (struct ssh_pty *)self;
+    struct yetty_yssh_ssh_pty *pty = (struct yetty_yssh_ssh_pty *)self;
 
     pty->cols = cols;
     pty->rows = rows;
@@ -476,9 +476,9 @@ static struct yetty_ycore_void_result ssh_pty_resize(struct yetty_yplatform_pty 
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result ssh_pty_stop(struct yetty_yplatform_pty *self)
+static struct yetty_ycore_void_result ssh_pty_stop(struct yetty_platform_pty *self)
 {
-    struct ssh_pty *pty = (struct ssh_pty *)self;
+    struct yetty_yssh_ssh_pty *pty = (struct yetty_yssh_ssh_pty *)self;
 
     if (!pty->running && !pty->reader_started) {
         return YETTY_OK_VOID();
@@ -499,17 +499,17 @@ static struct yetty_ycore_void_result ssh_pty_stop(struct yetty_yplatform_pty *s
     return YETTY_OK_VOID();
 }
 
-static struct yetty_yplatform_pty_pipe_source *ssh_pty_pipe_source(struct yetty_yplatform_pty *self)
+static struct yetty_platform_pty_pipe_source *ssh_pty_pipe_source(struct yetty_platform_pty *self)
 {
-    struct ssh_pty *pty = (struct ssh_pty *)self;
+    struct yetty_yssh_ssh_pty *pty = (struct yetty_yssh_ssh_pty *)self;
     return &pty->pipe_source;
 }
 
 /* Public entry point */
 
-struct yetty_yplatform_pty_result ssh_pty_create(struct yetty_yconfig *config)
+struct yetty_yplatform_pty_result yetty_yssh_ssh_pty_create(struct yetty_yconfig *config)
 {
-    struct ssh_pty *pty;
+    struct yetty_yssh_ssh_pty *pty;
     const char *host;
     int port_i;
     const char *username;
@@ -537,7 +537,7 @@ struct yetty_yplatform_pty_result ssh_pty_create(struct yetty_yconfig *config)
         return YETTY_ERR(yetty_yplatform_pty, "ssh: invalid ssh/port");
     }
 
-    pty = calloc(1, sizeof(struct ssh_pty));
+    pty = calloc(1, sizeof(struct yetty_yssh_ssh_pty));
     if (!pty) {
         return YETTY_ERR(yetty_yplatform_pty, "ssh: alloc failed");
     }

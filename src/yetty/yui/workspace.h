@@ -14,8 +14,8 @@ extern "C" {
 struct yetty_yui_workspace;
 struct yetty_yconfig;
 struct yetty_context;
-struct yetty_ycore_event;
-struct yetty_yrender_target;
+struct yetty_yui_event;
+struct yetty_ypaint_core_target;
 
 /* Result types */
 YETTY_YRESULT_DECLARE(yetty_yui_workspace_ptr, struct yetty_yui_workspace *);
@@ -27,7 +27,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_destroy(struct yetty_yui_work
 
 /* Core operations */
 struct yetty_ycore_void_result yetty_yui_workspace_render(
-    struct yetty_yui_workspace *ws, struct yetty_yrender_target *render_target);
+    struct yetty_yui_workspace *ws, struct yetty_ypaint_core_target *render_target);
 
 struct yetty_ycore_void_result yetty_yui_workspace_resize(struct yetty_yui_workspace *ws,
                                                           float width, float height);
@@ -57,7 +57,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
 
 /* Event handling - returns 1 if handled, 0 if not */
 struct yetty_ycore_int_result yetty_yui_workspace_on_event(struct yetty_yui_workspace *ws,
-                                                           const struct yetty_ycore_event *event);
+                                                           const struct yetty_yui_event *event);
 
 #ifdef __cplusplus
 }

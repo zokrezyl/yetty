@@ -36,13 +36,13 @@ WGPUSurface yetty_yplatform_create_surface_from_window(WGPUInstance instance,
                                                        ANativeWindow *window);
 
 /* App state */
-struct app_state {
+struct yetty_yplatform_app_state {
     struct android_app *app;
     ANativeWindow *window;
     struct yetty_yetty *yetty;
-    struct yetty_yplatform_input_pipe *pipe;
+    struct yetty_ycore_input_pipe *pipe;
     struct yetty_yconfig *config;
-    struct yetty_yplatform_pty_factory *pty_factory;
+    struct yetty_platform_pty_factory *pty_factory;
     WGPUInstance instance;
     WGPUSurface surface;
     pthread_t render_thread;
@@ -51,7 +51,7 @@ struct app_state {
 };
 
 /* Render thread args */
-struct render_thread_args {
+struct yetty_yplatform_render_thread_args {
     struct yetty_yetty *yetty;
     int *running;
 };
@@ -173,7 +173,7 @@ static void mkdir_p(const char *path)
 YETTY_EXTERNAL_CALLBACK
 static void *render_thread_func(void *arg)
 {
-    struct render_thread_args *args = arg;
+    struct yetty_yplatform_render_thread_args *args = arg;
     yetty_run(args->yetty);
     *(args->running) = 0;
     free(args);
@@ -181,7 +181,7 @@ static void *render_thread_func(void *arg)
 }
 
 YETTY_EXTERNAL_CALLBACK
-static void init_yetty(struct app_state *state)
+static void init_yetty(struct yetty_yplatform_app_state *state)
 {
     const char *cache_dir;
     const char *runtime_dir;
@@ -191,7 +191,7 @@ static void init_yetty(struct app_state *state)
     struct yetty_yplatform_pty_factory_result pty_result;
     struct yetty_app_context ctx;
     struct yetty_yetty_result yetty_result;
-    struct render_thread_args *args;
+    struct yetty_yplatform_render_thread_args *args;
     int32_t width, height;
 
     if (state->initialized || !state->window) {
@@ -248,7 +248,7 @@ static void init_yetty(struct app_state *state)
      * which Android's NativeActivity routes to /dev/null. */
     {
         struct yetty_ycore_void_result extract_result =
-            yetty_yplatform_extract_assets(state->config);
+            yetty_platform_extract_assets(state->config);
         if (!YETTY_IS_OK(extract_result)) {
             LOGE("Failed to extract assets: %s",
                  extract_result.error.msg ? extract_result.error.msg : "(no message)");
@@ -259,7 +259,7 @@ static void init_yetty(struct app_state *state)
     }
 
     /* Platform input pipe */
-    pipe_result = yetty_yplatform_input_pipe_create();
+    pipe_result = yetty_platform_input_pipe_create();
     if (!YETTY_IS_OK(pipe_result)) {
         LOGE("Failed to create input pipe");
         return;
@@ -267,7 +267,7 @@ static void init_yetty(struct app_state *state)
     state->pipe = pipe_result.value;
 
     /* PTY factory */
-    pty_result = yetty_yplatform_pty_factory_create(state->config, NULL);
+    pty_result = yetty_platform_pty_factory_create(state->config, NULL);
     if (!YETTY_IS_OK(pty_result)) {
         LOGE("Failed to create PTY factory");
         return;
@@ -314,7 +314,7 @@ static void init_yetty(struct app_state *state)
     state->running = 1;
 
     /* Start render thread */
-    args = malloc(sizeof(struct render_thread_args));
+    args = malloc(sizeof(struct yetty_yplatform_render_thread_args));
     args->yetty = state->yetty;
     args->running = &state->running;
     pthread_create(&state->render_thread, NULL, render_thread_func, args);
@@ -323,8 +323,8 @@ static void init_yetty(struct app_state *state)
      * size at startup (otherwise they stick at the libvterm default 80x24
      * until the user manually rotates the screen). Mirrors glfw-main.c. */
     {
-        struct yetty_ycore_event ev = {0};
-        ev.type = YETTY_EVENT_RESIZE;
+        struct yetty_yui_event ev = {0};
+        ev.type = YETTY_YCORE_RESIZE;
         ev.resize.width = (float)width;
         ev.resize.height = (float)height;
         state->pipe->ops->write(state->pipe, &ev, sizeof(ev));
@@ -339,7 +339,7 @@ static void init_yetty(struct app_state *state)
     LOGI("Yetty initialized successfully");
 }
 
-static struct yetty_ycore_void_result term_yetty(struct app_state *state)
+static struct yetty_ycore_void_result term_yetty(struct yetty_yplatform_app_state *state)
 {
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
@@ -574,11 +574,11 @@ static uint32_t akey_to_ascii(int akey, int32_t meta)
 
 static int32_t handle_input(struct android_app *app, AInputEvent *event)
 {
-    struct app_state *state = app->userData;
+    struct yetty_yplatform_app_state *state = app->userData;
     int32_t type;
     int32_t action;
     float x, y;
-    struct yetty_ycore_event ev = {0};
+    struct yetty_yui_event ev = {0};
 
     if (!state->pipe) {
         return 0;
@@ -603,7 +603,7 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event)
 
         if (kaction == AKEY_EVENT_ACTION_DOWN) {
             if (glfw_key) {
-                ev.type = YETTY_EVENT_KEY_DOWN;
+                ev.type = YETTY_YCORE_KEY_DOWN;
                 ev.key.key = glfw_key;
                 ev.key.mods = mods;
                 ev.key.scancode = AKeyEvent_getScanCode(event);
@@ -614,8 +614,8 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event)
              * KeyCharacterMap, which isn't exposed via the NDK input.h. */
             uint32_t unicode = akey_to_ascii(akey, meta);
             if (unicode > 0) {
-                struct yetty_ycore_event chev = {0};
-                chev.type = YETTY_EVENT_CHAR;
+                struct yetty_yui_event chev = {0};
+                chev.type = YETTY_YCORE_CHAR;
                 chev.chr.codepoint = unicode;
                 chev.chr.mods = mods;
                 state->pipe->ops->write(state->pipe, &chev, sizeof(chev));
@@ -624,7 +624,7 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event)
         }
         if (kaction == AKEY_EVENT_ACTION_UP) {
             if (glfw_key) {
-                ev.type = YETTY_EVENT_KEY_UP;
+                ev.type = YETTY_YCORE_KEY_UP;
                 ev.key.key = glfw_key;
                 ev.key.mods = mods;
                 ev.key.scancode = AKeyEvent_getScanCode(event);
@@ -645,7 +645,7 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event)
             /* Re-show the soft keyboard on tap — gives the user a way
              * back after dismissing it with the Back button. */
             show_soft_keyboard(app);
-            ev.type = YETTY_EVENT_MOUSE_DOWN;
+            ev.type = YETTY_YCORE_MOUSE_DOWN;
             ev.mouse.x = x;
             ev.mouse.y = y;
             ev.mouse.button = 0;
@@ -653,13 +653,13 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event)
             state->pipe->ops->write(state->pipe, &ev, sizeof(ev));
             return 1;
         case AMOTION_EVENT_ACTION_MOVE:
-            ev.type = YETTY_EVENT_MOUSE_MOVE;
+            ev.type = YETTY_YCORE_MOUSE_MOVE;
             ev.mouse.x = x;
             ev.mouse.y = y;
             state->pipe->ops->write(state->pipe, &ev, sizeof(ev));
             return 1;
         case AMOTION_EVENT_ACTION_UP:
-            ev.type = YETTY_EVENT_MOUSE_UP;
+            ev.type = YETTY_YCORE_MOUSE_UP;
             ev.mouse.x = x;
             ev.mouse.y = y;
             ev.mouse.button = 0;
@@ -675,7 +675,7 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event)
 YETTY_EXTERNAL_CALLBACK
 static void handle_cmd(struct android_app *app, int32_t cmd)
 {
-    struct app_state *state = app->userData;
+    struct yetty_yplatform_app_state *state = app->userData;
 
     switch (cmd) {
     case APP_CMD_INIT_WINDOW:
@@ -694,8 +694,8 @@ static void handle_cmd(struct android_app *app, int32_t cmd)
         if (state->pipe && state->window) {
             int32_t w = ANativeWindow_getWidth(state->window);
             int32_t h = ANativeWindow_getHeight(state->window);
-            struct yetty_ycore_event ev = {0};
-            ev.type = YETTY_EVENT_RESIZE;
+            struct yetty_yui_event ev = {0};
+            ev.type = YETTY_YCORE_RESIZE;
             ev.resize.width = (float)w;
             ev.resize.height = (float)h;
             state->pipe->ops->write(state->pipe, &ev, sizeof(ev));
@@ -762,9 +762,9 @@ static void redirect_stdio_to_logcat(void)
 }
 
 YETTY_EXTERNAL_CALLBACK
-void android_main(struct android_app *app)
+void yetty_yplatform_android_main(struct android_app *app)
 {
-    struct app_state state = {0};
+    struct yetty_yplatform_app_state state = {0};
 
     state.app = app;
     app->userData = &state;

@@ -90,7 +90,7 @@ static int spill_to_tempfile(const uint8_t *bytes, size_t len, char *path_out, s
 
 static struct yetty_ypaint_core_buffer_result render_from_path(const char *path)
 {
-    pdfio_file_t *pdf = pdfioFileOpen(path, NULL, NULL, NULL, NULL);
+    struct _pdfio_file_s *pdf = pdfioFileOpen(path, NULL, NULL, NULL, NULL);
     if (!pdf) {
         return YETTY_ERR(yetty_ypaint_core_buffer, "pdfioFileOpen failed");
     }
@@ -104,7 +104,7 @@ static struct yetty_ypaint_core_buffer_result render_from_path(const char *path)
     return YETTY_OK(yetty_ypaint_core_buffer, r.value.buffer);
 }
 
-struct yetty_ypaint_core_buffer_result ycat_handler_pdf(const uint8_t *bytes, size_t len,
+struct yetty_ypaint_core_buffer_result yetty_ycat_handler_pdf(const uint8_t *bytes, size_t len,
                                                         const char *path_hint,
                                                         const struct yetty_ycat_config *config)
 {

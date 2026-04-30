@@ -10,24 +10,24 @@
 extern "C" {
 #endif
 
-struct yetty_yplatform_pty;
+struct yetty_platform_pty;
 
 /* Pty ops */
-struct yetty_yplatform_pty_ops {
-    struct yetty_ycore_void_result (*destroy)(struct yetty_yplatform_pty *self);
-    struct yetty_ycore_size_result (*read)(struct yetty_yplatform_pty *self, char *buf,
+struct yetty_platform_pty_ops {
+    struct yetty_ycore_void_result (*destroy)(struct yetty_platform_pty *self);
+    struct yetty_ycore_size_result (*read)(struct yetty_platform_pty *self, char *buf,
                                            size_t max_len);
-    struct yetty_ycore_size_result (*write)(struct yetty_yplatform_pty *self, const char *data,
+    struct yetty_ycore_size_result (*write)(struct yetty_platform_pty *self, const char *data,
                                             size_t len);
-    struct yetty_ycore_void_result (*resize)(struct yetty_yplatform_pty *self, uint32_t cols,
+    struct yetty_ycore_void_result (*resize)(struct yetty_platform_pty *self, uint32_t cols,
                                              uint32_t rows);
-    struct yetty_ycore_void_result (*stop)(struct yetty_yplatform_pty *self);
-    struct yetty_yplatform_pty_pipe_source *(*pipe_source)(struct yetty_yplatform_pty *self);
+    struct yetty_ycore_void_result (*stop)(struct yetty_platform_pty *self);
+    struct yetty_platform_pty_pipe_source *(*pipe_source)(struct yetty_platform_pty *self);
 };
 
 /* Pty base */
-struct yetty_yplatform_pty {
-    const struct yetty_yplatform_pty_ops *ops;
+struct yetty_platform_pty {
+    const struct yetty_platform_pty_ops *ops;
 };
 
 #ifdef __cplusplus

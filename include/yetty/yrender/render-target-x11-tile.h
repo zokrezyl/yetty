@@ -29,9 +29,9 @@
 extern "C" {
 #endif
 
-struct yplatform_wgpu;
-struct yetty_yrender_gpu_allocator;
-struct yetty_ycore_event_loop;
+struct yetty_yplatform_wgpu;
+struct yetty_ypaint_core_gpu_allocator;
+struct yetty_yplatform_event_loop;
 
 /*
  * Create the X11-tile render target.
@@ -49,8 +49,8 @@ struct yetty_ycore_event_loop;
  */
 struct yetty_yrender_target_ptr_result yetty_yrender_target_x11_tile_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat format,
-    struct yetty_yrender_gpu_allocator *allocator, struct yplatform_wgpu *wgpu,
-    struct yetty_ycore_event_loop *event_loop, void *x11_display, unsigned long x11_window,
+    struct yetty_ypaint_core_gpu_allocator *allocator, struct yetty_yplatform_wgpu *wgpu,
+    struct yetty_yplatform_event_loop *event_loop, void *x11_display, unsigned long x11_window,
     struct yetty_yrender_viewport viewport);
 
 #ifdef __cplusplus

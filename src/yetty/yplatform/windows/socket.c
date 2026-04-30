@@ -13,7 +13,7 @@
 
 static int g_winsock_initialized = 0;
 
-int yetty_yplatform_socket_init(void)
+int yetty_platform_socket_init(void)
 {
     if (g_winsock_initialized) {
         return 1;
@@ -26,7 +26,7 @@ int yetty_yplatform_socket_init(void)
     return 1;
 }
 
-void yetty_yplatform_socket_cleanup(void)
+void yetty_platform_socket_cleanup(void)
 {
     if (g_winsock_initialized) {
         WSACleanup();
@@ -34,7 +34,7 @@ void yetty_yplatform_socket_cleanup(void)
     }
 }
 
-struct yetty_socket_fd_result yetty_yplatform_socket_create_tcp(void)
+struct yetty_socket_fd_result yetty_platform_socket_create_tcp(void)
 {
     SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (s == INVALID_SOCKET) {
@@ -50,7 +50,7 @@ void yetty_yplatform_socket_close(yetty_socket_fd fd)
     }
 }
 
-struct yetty_ycore_void_result yetty_yplatform_socket_set_nonblocking(yetty_socket_fd fd)
+struct yetty_ycore_void_result yetty_platform_socket_set_nonblocking(yetty_socket_fd fd)
 {
     u_long mode = 1;
     if (ioctlsocket((SOCKET)fd, FIONBIO, &mode) != 0) {
@@ -59,7 +59,7 @@ struct yetty_ycore_void_result yetty_yplatform_socket_set_nonblocking(yetty_sock
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yplatform_socket_set_nodelay(yetty_socket_fd fd, int enable)
+struct yetty_ycore_void_result yetty_platform_socket_set_nodelay(yetty_socket_fd fd, int enable)
 {
     BOOL val = enable ? TRUE : FALSE;
     if (setsockopt((SOCKET)fd, IPPROTO_TCP, TCP_NODELAY, (const char *)&val, sizeof(val)) != 0) {
@@ -68,7 +68,7 @@ struct yetty_ycore_void_result yetty_yplatform_socket_set_nodelay(yetty_socket_f
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yplatform_socket_set_reuseaddr(yetty_socket_fd fd, int enable)
+struct yetty_ycore_void_result yetty_platform_socket_set_reuseaddr(yetty_socket_fd fd, int enable)
 {
     BOOL val = enable ? TRUE : FALSE;
     if (setsockopt((SOCKET)fd, SOL_SOCKET, SO_REUSEADDR, (const char *)&val, sizeof(val)) != 0) {
@@ -77,7 +77,7 @@ struct yetty_ycore_void_result yetty_yplatform_socket_set_reuseaddr(yetty_socket
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yplatform_socket_bind(yetty_socket_fd fd, uint16_t port)
+struct yetty_ycore_void_result yetty_platform_socket_bind(yetty_socket_fd fd, uint16_t port)
 {
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
@@ -139,7 +139,7 @@ struct yetty_ycore_void_result yetty_yplatform_socket_connect(yetty_socket_fd fd
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yplatform_socket_connect_check(yetty_socket_fd fd)
+struct yetty_ycore_void_result yetty_platform_socket_connect_check(yetty_socket_fd fd)
 {
     int err = 0;
     int len = sizeof(err);
@@ -185,7 +185,7 @@ int yetty_yplatform_socket_would_block(void)
     return WSAGetLastError() == WSAEWOULDBLOCK;
 }
 
-int yetty_yplatform_socket_connect_in_progress(void)
+int yetty_platform_socket_connect_in_progress(void)
 {
     return WSAGetLastError() == WSAEWOULDBLOCK;
 }

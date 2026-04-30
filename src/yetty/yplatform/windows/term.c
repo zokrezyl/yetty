@@ -4,7 +4,7 @@
 #include <windows.h>
 #include <stdio.h>
 
-int yplatform_stderr_supports_color(void)
+int yetty_yplatform_stderr_supports_color(void)
 {
     HANDLE hErr = GetStdHandle(STD_ERROR_HANDLE);
     DWORD mode = 0;
@@ -15,7 +15,7 @@ int yplatform_stderr_supports_color(void)
     return 0;
 }
 
-void yplatform_format_timestamp(char *buf, size_t bufsize)
+void yetty_yplatform_format_timestamp(char *buf, size_t bufsize)
 {
     SYSTEMTIME st;
     GetLocalTime(&st);

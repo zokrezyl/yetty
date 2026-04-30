@@ -64,7 +64,7 @@ int main(int argc, char **argv)
 	bool dump = false;
 	const char *file_path = NULL;
 
-	static const struct option long_opts[] = {
+	static const struct yetty_yplatform_option long_opts[] = {
 		{ "file", required_argument, NULL, 'f' },
 		{ "dump", no_argument,       NULL, 'D' },
 		{ "help", no_argument,       NULL, 'h' },
@@ -72,9 +72,9 @@ int main(int argc, char **argv)
 	};
 
 	int c;
-	while ((c = getopt_long(argc, argv, "f:h", long_opts, NULL)) != -1) {
+	while ((c = yetty_yplatform_getopt_long(argc, argv, "f:h", long_opts, NULL)) != -1) {
 		switch (c) {
-		case 'f': file_path = optarg; break;
+		case 'f': file_path = yetty_yplatform_optarg; break;
 		case 'D': dump = true; break;
 		case 'h': usage(stdout, argv[0]); return 0;
 		default:  usage(stderr, argv[0]); return 2;
@@ -106,7 +106,7 @@ int main(int argc, char **argv)
 	bcfg.scene_max_x = yetty_yrich_document_content_width(&sheet->base);
 	bcfg.scene_max_y = yetty_yrich_document_content_height(&sheet->base);
 	struct yetty_ypaint_core_buffer_result br =
-		yetty_ypaint_core_buffer_create(&bcfg);
+		yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
 	if (YETTY_IS_ERR(br)) {
 		fprintf(stderr, "ysheet: %s\n", br.error.msg);
 		yetty_yrich_document_destroy(&sheet->base);

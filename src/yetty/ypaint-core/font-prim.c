@@ -22,12 +22,12 @@ static uint32_t font_payload_size(uint32_t name_len, uint32_t ttf_len)
     return align4(bare);
 }
 
-size_t yetty_ypaint_font_prim_size_for(uint32_t name_len, uint32_t ttf_len)
+size_t yetty_ypaint_core_font_prim_size_for(uint32_t name_len, uint32_t ttf_len)
 {
     return FONT_PRIM_HEADER + font_payload_size(name_len, ttf_len);
 }
 
-void yetty_ypaint_font_prim_write(uint8_t *out, int32_t font_id, const char *name,
+void yetty_ypaint_core_font_prim_write(uint8_t *out, int32_t font_id, const char *name,
                                   uint32_t name_len, const uint8_t *ttf, uint32_t ttf_len)
 {
     uint32_t payload_size = font_payload_size(name_len, ttf_len);
@@ -56,7 +56,7 @@ void yetty_ypaint_font_prim_write(uint8_t *out, int32_t font_id, const char *nam
     }
 }
 
-int yetty_ypaint_font_prim_parse(const uint32_t *prim, struct yetty_ypaint_font_prim_view *out)
+int yetty_ypaint_core_font_prim_parse(const uint32_t *prim, struct yetty_ypaint_core_font_prim_view *out)
 {
     if (!prim || !out) {
         return -1;
@@ -112,19 +112,19 @@ static struct yetty_ycore_size_result font_prim_size(const uint32_t *prim)
 static struct rectangle_result font_prim_aabb(const uint32_t *prim)
 {
     (void)prim;
-    struct rectangle r = {.min = {0, 0}, .max = {0, 0}};
+    struct yetty_ycore_rectangle r = {.min = {0, 0}, .max = {0, 0}};
     return YETTY_OK(rectangle, r);
 }
 
-static const struct yetty_ypaint_prim_base_ops g_font_prim_base_ops = {
+static const struct yetty_ypaint_core_prim_base_ops g_font_prim_base_ops = {
     .size = font_prim_size,
     .aabb = font_prim_aabb,
 };
 
-struct yetty_ypaint_prim_base_ops_ptr_result yetty_ypaint_font_prim_handler(uint32_t prim_type)
+struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_font_prim_handler(uint32_t prim_type)
 {
     if (prim_type == YETTY_YPAINT_TYPE_FONT) {
-        return YETTY_OK(yetty_ypaint_prim_base_ops_ptr, &g_font_prim_base_ops);
+        return YETTY_OK(yetty_ypaint_core_prim_base_ops_ptr, &g_font_prim_base_ops);
     }
-    return YETTY_ERR(yetty_ypaint_prim_base_ops_ptr, "not FONT");
+    return YETTY_ERR(yetty_ypaint_core_prim_base_ops_ptr, "not FONT");
 }

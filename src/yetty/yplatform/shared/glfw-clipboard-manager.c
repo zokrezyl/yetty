@@ -8,18 +8,18 @@
 #include <string.h>
 
 /* GLFW clipboard manager - embeds base as first member */
-struct glfw_clipboard_manager {
-    struct yetty_yplatform_clipboard_manager base;
+struct yetty_yplatform_glfw_clipboard_manager {
+    struct yetty_platform_clipboard_manager base;
 };
 
 /* Forward declarations */
-static void glfw_clipboard_destroy(struct yetty_yplatform_clipboard_manager *self);
-static const char *glfw_clipboard_get_text(struct yetty_yplatform_clipboard_manager *self);
-static void glfw_clipboard_set_text(struct yetty_yplatform_clipboard_manager *self,
+static void glfw_clipboard_destroy(struct yetty_platform_clipboard_manager *self);
+static const char *glfw_clipboard_get_text(struct yetty_platform_clipboard_manager *self);
+static void glfw_clipboard_set_text(struct yetty_platform_clipboard_manager *self,
                                     const char *text, size_t len);
 
 /* Ops table */
-static const struct yetty_yplatform_clipboard_manager_ops glfw_clipboard_ops = {
+static const struct yetty_platform_clipboard_manager_ops glfw_clipboard_ops = {
     .destroy = glfw_clipboard_destroy,
     .get_text = glfw_clipboard_get_text,
     .set_text = glfw_clipboard_set_text,
@@ -27,21 +27,21 @@ static const struct yetty_yplatform_clipboard_manager_ops glfw_clipboard_ops = {
 
 /* Implementation */
 
-static void glfw_clipboard_destroy(struct yetty_yplatform_clipboard_manager *self)
+static void glfw_clipboard_destroy(struct yetty_platform_clipboard_manager *self)
 {
-    struct glfw_clipboard_manager *manager;
+    struct yetty_yplatform_glfw_clipboard_manager *manager;
 
-    manager = container_of(self, struct glfw_clipboard_manager, base);
+    manager = container_of(self, struct yetty_yplatform_glfw_clipboard_manager, base);
     free(manager);
 }
 
-static const char *glfw_clipboard_get_text(struct yetty_yplatform_clipboard_manager *self)
+static const char *glfw_clipboard_get_text(struct yetty_platform_clipboard_manager *self)
 {
     (void)self;
     return glfwGetClipboardString(NULL);
 }
 
-static void glfw_clipboard_set_text(struct yetty_yplatform_clipboard_manager *self,
+static void glfw_clipboard_set_text(struct yetty_platform_clipboard_manager *self,
                                     const char *text, size_t len)
 {
     char *buf;
@@ -64,11 +64,11 @@ static void glfw_clipboard_set_text(struct yetty_yplatform_clipboard_manager *se
 
 /* Create function */
 
-struct yetty_yplatform_clipboard_manager_result yetty_yplatform_clipboard_manager_create(void)
+struct yetty_yplatform_clipboard_manager_result yetty_platform_clipboard_manager_create(void)
 {
-    struct glfw_clipboard_manager *manager;
+    struct yetty_yplatform_glfw_clipboard_manager *manager;
 
-    manager = malloc(sizeof(struct glfw_clipboard_manager));
+    manager = malloc(sizeof(struct yetty_yplatform_glfw_clipboard_manager));
     if (!manager) {
         return YETTY_ERR(yetty_yplatform_clipboard_manager, "failed to allocate clipboard manager");
     }

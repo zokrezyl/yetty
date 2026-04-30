@@ -17,13 +17,13 @@
 #define MAX_FACTORIES 64
 #define PRIMITIVE_TYPE_NAME_LEN 32
 
-struct factory_entry {
+struct yetty_ypaint_yaml_factory_entry {
     char primitive_type_name[PRIMITIVE_TYPE_NAME_LEN];
     yetty_ypaint_yaml_factory_fn factory;
 };
 
 struct yetty_ypaint_yaml_parser {
-    struct factory_entry entries[MAX_FACTORIES];
+    struct yetty_ypaint_yaml_factory_entry entries[MAX_FACTORIES];
     size_t count;
 };
 
@@ -83,7 +83,7 @@ struct yetty_ycore_void_result yetty_ypaint_yaml_parser_parse(
         return YETTY_ERR(yetty_ycore_void, "null argument");
     }
 
-    yaml_parser_t yaml_parser;
+    struct yaml_parser_s yaml_parser;
     yaml_event_t event;
     int done = 0, err = 0;
     int depth = 0;
@@ -237,7 +237,7 @@ static uint32_t parse_text_color(const char *str)
 }
 
 static struct yetty_ycore_void_result text_factory(struct yetty_ypaint_core_buffer *buffer,
-                                                   yaml_parser_t *yaml_parser,
+                                                   struct yaml_parser_s *yaml_parser,
                                                    const char *primitive_type_name)
 {
     (void)primitive_type_name;
@@ -343,7 +343,7 @@ struct yetty_ypaint_core_buffer_result yetty_ypaint_yaml_parse(const char *yaml,
         return YETTY_ERR(yetty_ypaint_core_buffer, "null or empty yaml");
     }
 
-    struct yetty_ypaint_core_buffer_result buf_res = yetty_ypaint_core_buffer_create(NULL);
+    struct yetty_ypaint_core_buffer_result buf_res = yetty_ypaint_core_buffer_config_buffer_create(NULL);
     if (YETTY_IS_ERR(buf_res)) {
         return buf_res;
     }

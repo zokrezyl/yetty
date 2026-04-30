@@ -10,19 +10,19 @@
 #include <string.h>
 
 /* Forward declarations */
-static struct yetty_ycore_void_result webasm_pty_destroy(struct yetty_yplatform_pty *self);
-static struct yetty_ycore_size_result webasm_pty_read(struct yetty_yplatform_pty *self, char *buf,
+static struct yetty_ycore_void_result webasm_pty_destroy(struct yetty_platform_pty *self);
+static struct yetty_ycore_size_result webasm_pty_read(struct yetty_platform_pty *self, char *buf,
                                                       size_t max_len);
-static struct yetty_ycore_size_result webasm_pty_write(struct yetty_yplatform_pty *self,
+static struct yetty_ycore_size_result webasm_pty_write(struct yetty_platform_pty *self,
                                                        const char *data, size_t len);
-static struct yetty_ycore_void_result webasm_pty_resize(struct yetty_yplatform_pty *self,
+static struct yetty_ycore_void_result webasm_pty_resize(struct yetty_platform_pty *self,
                                                         uint32_t cols, uint32_t rows);
-static struct yetty_ycore_void_result webasm_pty_stop(struct yetty_yplatform_pty *self);
-static struct yetty_yplatform_pty_pipe_source *webasm_pty_pipe_source(
-    struct yetty_yplatform_pty *self);
+static struct yetty_ycore_void_result webasm_pty_stop(struct yetty_platform_pty *self);
+static struct yetty_platform_pty_pipe_source *webasm_pty_pipe_source(
+    struct yetty_platform_pty *self);
 
 /* Ops table */
-static const struct yetty_yplatform_pty_ops webasm_pty_ops = {
+static const struct yetty_platform_pty_ops webasm_pty_ops = {
     .destroy = webasm_pty_destroy,
     .read = webasm_pty_read,
     .write = webasm_pty_write,
@@ -33,7 +33,7 @@ static const struct yetty_yplatform_pty_ops webasm_pty_ops = {
 
 /* Pipe source implementation */
 
-void webasm_pty_pipe_source_set_callback(struct webasm_pty_pipe_source *source,
+void yetty_yplatform_webasm_pty_pipe_source_set_callback(struct yetty_yplatform_webasm_pty_pipe_source *source,
                                          webasm_pty_notify_callback callback, void *user_data)
 {
     if (!source) {
@@ -43,7 +43,7 @@ void webasm_pty_pipe_source_set_callback(struct webasm_pty_pipe_source *source,
     source->notify_user_data = user_data;
 }
 
-void webasm_pty_pipe_source_notify(struct webasm_pty_pipe_source *source)
+void yetty_yplatform_webasm_pty_pipe_source_notify(struct yetty_yplatform_webasm_pty_pipe_source *source)
 {
     if (source && source->notify_callback) {
         source->notify_callback(source->notify_user_data);
@@ -52,9 +52,9 @@ void webasm_pty_pipe_source_notify(struct webasm_pty_pipe_source *source)
 
 /* PTY implementation */
 
-static struct yetty_ycore_void_result webasm_pty_destroy(struct yetty_yplatform_pty *self)
+static struct yetty_ycore_void_result webasm_pty_destroy(struct yetty_platform_pty *self)
 {
-    struct webasm_pty *pty = container_of(self, struct webasm_pty, base);
+    struct yetty_yplatform_webasm_pty *pty = container_of(self, struct yetty_yplatform_webasm_pty, base);
 
     struct yetty_ycore_void_result stop_r = webasm_pty_stop(self);
     free(pty);
@@ -65,10 +65,10 @@ static struct yetty_ycore_void_result webasm_pty_destroy(struct yetty_yplatform_
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_size_result webasm_pty_read(struct yetty_yplatform_pty *self, char *buf,
+static struct yetty_ycore_size_result webasm_pty_read(struct yetty_platform_pty *self, char *buf,
                                                       size_t max_len)
 {
-    struct webasm_pty *pty = container_of(self, struct webasm_pty, base);
+    struct yetty_yplatform_webasm_pty *pty = container_of(self, struct yetty_yplatform_webasm_pty, base);
     int bytes_read;
 
     if (!pty->running || max_len == 0) {
@@ -96,10 +96,10 @@ static struct yetty_ycore_size_result webasm_pty_read(struct yetty_yplatform_pty
     return YETTY_OK(yetty_ycore_size, (size_t)(bytes_read > 0 ? bytes_read : 0));
 }
 
-static struct yetty_ycore_size_result webasm_pty_write(struct yetty_yplatform_pty *self,
+static struct yetty_ycore_size_result webasm_pty_write(struct yetty_platform_pty *self,
                                                        const char *data, size_t len)
 {
-    struct webasm_pty *pty = container_of(self, struct webasm_pty, base);
+    struct yetty_yplatform_webasm_pty *pty = container_of(self, struct yetty_yplatform_webasm_pty, base);
 
     if (!pty->running || len == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
@@ -118,10 +118,10 @@ static struct yetty_ycore_size_result webasm_pty_write(struct yetty_yplatform_pt
     return YETTY_OK(yetty_ycore_size, len);
 }
 
-static struct yetty_ycore_void_result webasm_pty_resize(struct yetty_yplatform_pty *self,
+static struct yetty_ycore_void_result webasm_pty_resize(struct yetty_platform_pty *self,
                                                         uint32_t cols, uint32_t rows)
 {
-    struct webasm_pty *pty = container_of(self, struct webasm_pty, base);
+    struct yetty_yplatform_webasm_pty *pty = container_of(self, struct yetty_yplatform_webasm_pty, base);
 
     pty->cols = cols;
     pty->rows = rows;
@@ -146,9 +146,9 @@ static struct yetty_ycore_void_result webasm_pty_resize(struct yetty_yplatform_p
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result webasm_pty_stop(struct yetty_yplatform_pty *self)
+static struct yetty_ycore_void_result webasm_pty_stop(struct yetty_platform_pty *self)
 {
-    struct webasm_pty *pty = container_of(self, struct webasm_pty, base);
+    struct yetty_yplatform_webasm_pty *pty = container_of(self, struct yetty_yplatform_webasm_pty, base);
 
     if (!pty->running) {
         return YETTY_OK_VOID();
@@ -168,16 +168,16 @@ static struct yetty_ycore_void_result webasm_pty_stop(struct yetty_yplatform_pty
     return YETTY_OK_VOID();
 }
 
-static struct yetty_yplatform_pty_pipe_source *webasm_pty_pipe_source(
-    struct yetty_yplatform_pty *self)
+static struct yetty_platform_pty_pipe_source *webasm_pty_pipe_source(
+    struct yetty_platform_pty *self)
 {
-    struct webasm_pty *pty = container_of(self, struct webasm_pty, base);
+    struct yetty_yplatform_webasm_pty *pty = container_of(self, struct yetty_yplatform_webasm_pty, base);
     return &pty->pipe_source.base;
 }
 
 /* Initialize PTY */
 
-struct yetty_ycore_void_result webasm_pty_init(struct webasm_pty *pty, struct yetty_yconfig *config)
+struct yetty_ycore_void_result yetty_yplatform_webasm_pty_init(struct yetty_yplatform_webasm_pty *pty, struct yetty_yconfig *config)
 {
     pty->cols = (uint32_t)config->ops->get_int(config, "terminal/cols", 80);
     pty->rows = (uint32_t)config->ops->get_int(config, "terminal/rows", 24);
@@ -253,17 +253,17 @@ struct yetty_ycore_void_result webasm_pty_init(struct webasm_pty *pty, struct ye
 
 static struct yetty_yplatform_pty_result webasm_pty_create(struct yetty_yconfig *config)
 {
-    struct webasm_pty *pty;
+    struct yetty_yplatform_webasm_pty *pty;
     struct yetty_ycore_void_result res;
 
-    pty = calloc(1, sizeof(struct webasm_pty));
+    pty = calloc(1, sizeof(struct yetty_yplatform_webasm_pty));
     if (!pty) {
         return YETTY_ERR(yetty_yplatform_pty, "failed to allocate webasm pty");
     }
 
     pty->base.ops = &webasm_pty_ops;
 
-    res = webasm_pty_init(pty, config);
+    res = yetty_yplatform_webasm_pty_init(pty, config);
     if (!YETTY_IS_OK(res)) {
         free(pty);
         return YETTY_ERR(yetty_yplatform_pty, "failed to init webasm pty");
@@ -274,40 +274,40 @@ static struct yetty_yplatform_pty_result webasm_pty_create(struct yetty_yconfig 
 
 /* Factory implementation */
 
-struct webasm_pty_factory {
-    struct yetty_yplatform_pty_factory base;
+struct yetty_yplatform_webasm_pty_factory {
+    struct yetty_platform_pty_factory base;
     struct yetty_yconfig *config;
 };
 
-static void webasm_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
+static void webasm_pty_factory_destroy(struct yetty_platform_pty_factory *self)
 {
-    struct webasm_pty_factory *factory = container_of(self, struct webasm_pty_factory, base);
+    struct yetty_yplatform_webasm_pty_factory *factory = container_of(self, struct yetty_yplatform_webasm_pty_factory, base);
     free(factory);
 }
 
 static struct yetty_yplatform_pty_result webasm_pty_factory_create_pty(
-    struct yetty_yplatform_pty_factory *self, struct yetty_ycore_event_loop *event_loop)
+    struct yetty_platform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop)
 {
-    struct webasm_pty_factory *factory = container_of(self, struct webasm_pty_factory, base);
+    struct yetty_yplatform_webasm_pty_factory *factory = container_of(self, struct yetty_yplatform_webasm_pty_factory, base);
     (void)event_loop;
     return webasm_pty_create(factory->config);
 }
 
-static const struct yetty_yplatform_pty_factory_ops webasm_pty_factory_ops = {
+static const struct yetty_platform_pty_factory_ops webasm_pty_factory_ops = {
     .destroy = webasm_pty_factory_destroy,
     .create_pty = webasm_pty_factory_create_pty,
 };
 
 /* Factory creation - the public API */
 
-struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
+struct yetty_yplatform_pty_factory_result yetty_platform_pty_factory_create(
     struct yetty_yconfig *config, void *os_specific)
 {
-    struct webasm_pty_factory *factory;
+    struct yetty_yplatform_webasm_pty_factory *factory;
 
     (void)os_specific;
 
-    factory = calloc(1, sizeof(struct webasm_pty_factory));
+    factory = calloc(1, sizeof(struct yetty_yplatform_webasm_pty_factory));
     if (!factory) {
         return YETTY_ERR(yetty_yplatform_pty_factory, "failed to allocate webasm pty factory");
     }
@@ -321,9 +321,9 @@ struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
 /* C export - called by JS when data arrives in buffer */
 
 EMSCRIPTEN_KEEPALIVE
-void webpty_pipe_source_notify(struct webasm_pty_pipe_source *pipe_source)
+void yetty_yplatform_webasm_pty_pipe_source_webpty_pipe_source_notify(struct yetty_yplatform_webasm_pty_pipe_source *pipe_source)
 {
     if (pipe_source) {
-        webasm_pty_pipe_source_notify(pipe_source);
+        yetty_yplatform_webasm_pty_pipe_source_notify(pipe_source);
     }
 }

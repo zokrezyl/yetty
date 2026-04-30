@@ -32,23 +32,23 @@ extern "C" {
  *    1  message dropped (a previous emit's tail is still in flight)
  *   -1  hard error (write returned non-EAGAIN errno)
  */
-int ymgui_pending_write(int fd, const uint8_t *bytes, size_t len);
+int yetty_ymgui_pending_write(int fd, const uint8_t *bytes, size_t len);
 
 /* Try to drain the queued tail without blocking. Returns:
  *    0  drained or nothing queued
  *    1  still pending (would block)
  *   -1  hard error
  */
-int ymgui_pending_flush(int fd);
+int yetty_ymgui_pending_flush(int fd);
 
 /* True if a previous ymgui_pending_write left bytes queued. */
-int ymgui_pending_active(void);
+int yetty_ymgui_pending_active(void);
 
 /* Block (poll for POLLOUT, retry write) until the pending tail is
  * drained. Used after must-reach writes (atlas upload) so subsequent
  * fresh emits aren't silently dropped by the at-most-one-in-flight
  * rule. Returns 0 on success, -1 on hard error. */
-int ymgui_pending_drain_blocking(int fd);
+int yetty_ymgui_pending_drain_blocking(int fd);
 
 #ifdef __cplusplus
 }

@@ -30,28 +30,28 @@
 
 #include <stdlib.h>
 
-struct yplatform_wgpu {
+struct yetty_yplatform_wgpu {
     WGPUInstance instance;
     /* Kept only to match the desktop signature; webasm has no per-loop
      * state (no timer, no post_to_loop). */
-    struct yetty_ycore_event_loop *loop;
+    struct yetty_yplatform_event_loop *loop;
 };
 
 /* Local to a single _await call; lives on its caller's stack while
  * asyncify-suspended. The wgpu callback writes both fields. */
-struct ywgpu_await_state {
+struct yetty_yplatform_ywgpu_await_state {
     volatile int done;
     int status;
 };
 
-struct yplatform_wgpu_ptr_result yplatform_wgpu_create(WGPUInstance instance,
-                                                       struct yetty_ycore_event_loop *loop)
+struct yplatform_wgpu_ptr_result yetty_yplatform_wgpu_create(WGPUInstance instance,
+                                                       struct yetty_yplatform_event_loop *loop)
 {
     if (!instance) {
         return YETTY_ERR(yplatform_wgpu_ptr, "instance is NULL");
     }
 
-    struct yplatform_wgpu *wgpu = calloc(1, sizeof(struct yplatform_wgpu));
+    struct yetty_yplatform_wgpu *wgpu = calloc(1, sizeof(struct yetty_yplatform_wgpu));
     if (!wgpu) {
         return YETTY_ERR(yplatform_wgpu_ptr, "calloc failed");
     }
@@ -63,7 +63,7 @@ struct yplatform_wgpu_ptr_result yplatform_wgpu_create(WGPUInstance instance,
     return YETTY_OK(yplatform_wgpu_ptr, wgpu);
 }
 
-void yplatform_wgpu_destroy(struct yplatform_wgpu *wgpu)
+void yetty_yplatform_wgpu_destroy(struct yetty_yplatform_wgpu *wgpu)
 {
     if (!wgpu) {
         return;
@@ -75,14 +75,14 @@ static void map_callback(WGPUMapAsyncStatus status, WGPUStringView msg, void *us
                          void *userdata2)
 {
     (void)userdata2;
-    struct ywgpu_await_state *st = userdata1;
+    struct yetty_yplatform_ywgpu_await_state *st = userdata1;
     ydebug("ywebgpu: map_callback status=%d msg=\"%.*s\"", (int)status, (int)msg.length,
            msg.data ? msg.data : "");
     st->status = (int)status;
     st->done = 1;
 }
 
-struct yetty_ycore_void_result yplatform_wgpu_buffer_map_await(struct yplatform_wgpu *wgpu,
+struct yetty_ycore_void_result yetty_yplatform_wgpu_buffer_map_await(struct yetty_yplatform_wgpu *wgpu,
                                                                WGPUBuffer buffer, WGPUMapMode mode,
                                                                size_t offset, size_t size)
 {
@@ -90,7 +90,7 @@ struct yetty_ycore_void_result yplatform_wgpu_buffer_map_await(struct yplatform_
         return YETTY_ERR(yetty_ycore_void, "wgpu is NULL");
     }
 
-    struct ywgpu_await_state st = {0};
+    struct yetty_yplatform_ywgpu_await_state st = {0};
 
     WGPUBufferMapCallbackInfo cb = {0};
     cb.mode = WGPUCallbackMode_AllowSpontaneous;
@@ -117,21 +117,21 @@ static void queue_done_callback(WGPUQueueWorkDoneStatus status, WGPUStringView m
                                 void *userdata2)
 {
     (void)userdata2;
-    struct ywgpu_await_state *st = userdata1;
+    struct yetty_yplatform_ywgpu_await_state *st = userdata1;
     ydebug("ywebgpu: queue_done_callback status=%d msg=\"%.*s\"", (int)status, (int)msg.length,
            msg.data ? msg.data : "");
     st->status = (int)status;
     st->done = 1;
 }
 
-struct yetty_ycore_void_result yplatform_wgpu_queue_done_await(struct yplatform_wgpu *wgpu,
+struct yetty_ycore_void_result yetty_yplatform_wgpu_queue_done_await(struct yetty_yplatform_wgpu *wgpu,
                                                                WGPUQueue queue)
 {
     if (!wgpu) {
         return YETTY_ERR(yetty_ycore_void, "wgpu is NULL");
     }
 
-    struct ywgpu_await_state st = {0};
+    struct yetty_yplatform_ywgpu_await_state st = {0};
 
     WGPUQueueWorkDoneCallbackInfo cb = {0};
     cb.mode = WGPUCallbackMode_AllowSpontaneous;

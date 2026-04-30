@@ -17,8 +17,8 @@
  * Render Context
  *===========================================================================*/
 
-void ygui_render_ctx_init(ygui_render_ctx_t *ctx, struct yetty_ypaint_core_buffer *buffer,
-                          const ygui_theme_t *theme)
+void yetty_ygui_render_ctx_init(struct yetty_ygui_render_ctx *ctx, struct yetty_ypaint_core_buffer *buffer,
+                          const struct yetty_ygui_theme *theme)
 {
     ctx->buffer = buffer;
     ctx->theme = theme;
@@ -35,7 +35,7 @@ void ygui_render_ctx_init(ygui_render_ctx_t *ctx, struct yetty_ypaint_core_buffe
  * Drawing Functions
  *===========================================================================*/
 
-struct yetty_ycore_void_result ygui_render_box(ygui_render_ctx_t *ctx, float x, float y, float w,
+struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box(struct yetty_ygui_render_ctx *ctx, float x, float y, float w,
                                                float h, uint32_t color, float radius)
 {
     if (!ctx->buffer) {
@@ -49,7 +49,7 @@ struct yetty_ycore_void_result ygui_render_box(ygui_render_ctx_t *ctx, float x, 
     float hw = w * 0.5f;
     float hh = h * 0.5f;
 
-    struct yetty_ypaint_id_result r;
+    struct yetty_ypaint_core_id_result r;
     if (radius > 0) {
         struct yetty_ysdf_rounded_box geom = {
             .center_x = cx,
@@ -78,7 +78,7 @@ struct yetty_ycore_void_result ygui_render_box(ygui_render_ctx_t *ctx, float x, 
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result ygui_render_box_outline(ygui_render_ctx_t *ctx, float x, float y,
+struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box_outline(struct yetty_ygui_render_ctx *ctx, float x, float y,
                                                       float w, float h, uint32_t color,
                                                       float radius, float stroke_width)
 {
@@ -93,7 +93,7 @@ struct yetty_ycore_void_result ygui_render_box_outline(ygui_render_ctx_t *ctx, f
     float hw = w * 0.5f;
     float hh = h * 0.5f;
 
-    struct yetty_ypaint_id_result r;
+    struct yetty_ypaint_core_id_result r;
     if (radius > 0) {
         struct yetty_ysdf_rounded_box geom = {
             .center_x = cx,
@@ -122,7 +122,7 @@ struct yetty_ycore_void_result ygui_render_box_outline(ygui_render_ctx_t *ctx, f
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result ygui_render_text(ygui_render_ctx_t *ctx, const char *text, float x,
+struct yetty_ycore_void_result yetty_ygui_render_ctx_render_text(struct yetty_ygui_render_ctx *ctx, const char *text, float x,
                                                 float y, uint32_t color, float font_size)
 {
     if (!ctx->buffer || !text) {
@@ -149,7 +149,7 @@ struct yetty_ycore_void_result ygui_render_text(ygui_render_ctx_t *ctx, const ch
                                              /*rotation*/ 0.0f);
 }
 
-struct yetty_ycore_void_result ygui_render_circle(ygui_render_ctx_t *ctx, float cx, float cy,
+struct yetty_ycore_void_result yetty_ygui_render_ctx_render_circle(struct yetty_ygui_render_ctx *ctx, float cx, float cy,
                                                   float r, uint32_t color)
 {
     if (!ctx->buffer) {
@@ -160,14 +160,14 @@ struct yetty_ycore_void_result ygui_render_circle(ygui_render_ctx_t *ctx, float 
     float ay = cy + ctx->offset_y;
 
     struct yetty_ysdf_circle geom = {.center_x = ax, .center_y = ay, .radius = r};
-    struct yetty_ypaint_id_result rr = yetty_ysdf_add_circle(ctx->buffer, 0, color, 0, 0.0f, &geom);
+    struct yetty_ypaint_core_id_result rr = yetty_ysdf_add_circle(ctx->buffer, 0, color, 0, 0.0f, &geom);
     if (rr.error != YPAINT_OK) {
         return YETTY_ERR(yetty_ycore_void, "ygui_render_circle: add failed");
     }
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result ygui_render_circle_outline(ygui_render_ctx_t *ctx, float cx,
+struct yetty_ycore_void_result yetty_ygui_render_ctx_render_circle_outline(struct yetty_ygui_render_ctx *ctx, float cx,
                                                           float cy, float r, uint32_t color,
                                                           float stroke_width)
 {
@@ -179,7 +179,7 @@ struct yetty_ycore_void_result ygui_render_circle_outline(ygui_render_ctx_t *ctx
     float ay = cy + ctx->offset_y;
 
     struct yetty_ysdf_circle geom = {.center_x = ax, .center_y = ay, .radius = r};
-    struct yetty_ypaint_id_result rr =
+    struct yetty_ypaint_core_id_result rr =
         yetty_ysdf_add_circle(ctx->buffer, 0, 0, color, stroke_width, &geom);
     if (rr.error != YPAINT_OK) {
         return YETTY_ERR(yetty_ycore_void, "ygui_render_circle_outline: add failed");
@@ -187,7 +187,7 @@ struct yetty_ycore_void_result ygui_render_circle_outline(ygui_render_ctx_t *ctx
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result ygui_render_triangle(ygui_render_ctx_t *ctx, float x0, float y0,
+struct yetty_ycore_void_result yetty_ygui_render_ctx_render_triangle(struct yetty_ygui_render_ctx *ctx, float x0, float y0,
                                                     float x1, float y1, float x2, float y2,
                                                     uint32_t color)
 {
@@ -206,7 +206,7 @@ struct yetty_ycore_void_result ygui_render_triangle(ygui_render_ctx_t *ctx, floa
         .vertex_c_x = x2 + ox,
         .vertex_c_y = y2 + oy,
     };
-    struct yetty_ypaint_id_result rr =
+    struct yetty_ypaint_core_id_result rr =
         yetty_ysdf_add_triangle(ctx->buffer, 0, color, 0, 0.0f, &geom);
     if (rr.error != YPAINT_OK) {
         return YETTY_ERR(yetty_ycore_void, "ygui_render_triangle: add failed");

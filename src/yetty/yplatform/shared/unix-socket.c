@@ -11,16 +11,16 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-int yetty_yplatform_socket_init(void)
+int yetty_platform_socket_init(void)
 {
     return 1;
 }
 
-void yetty_yplatform_socket_cleanup(void)
+void yetty_platform_socket_cleanup(void)
 {
 }
 
-struct yetty_socket_fd_result yetty_yplatform_socket_create_tcp(void)
+struct yetty_socket_fd_result yetty_platform_socket_create_tcp(void)
 {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
@@ -36,7 +36,7 @@ void yetty_yplatform_socket_close(yetty_socket_fd fd)
     }
 }
 
-struct yetty_ycore_void_result yetty_yplatform_socket_set_nonblocking(yetty_socket_fd fd)
+struct yetty_ycore_void_result yetty_platform_socket_set_nonblocking(yetty_socket_fd fd)
 {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags < 0) {
@@ -48,7 +48,7 @@ struct yetty_ycore_void_result yetty_yplatform_socket_set_nonblocking(yetty_sock
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yplatform_socket_set_nodelay(yetty_socket_fd fd, int enable)
+struct yetty_ycore_void_result yetty_platform_socket_set_nodelay(yetty_socket_fd fd, int enable)
 {
     int val = enable ? 1 : 0;
     if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof(val)) < 0) {
@@ -57,7 +57,7 @@ struct yetty_ycore_void_result yetty_yplatform_socket_set_nodelay(yetty_socket_f
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yplatform_socket_set_reuseaddr(yetty_socket_fd fd, int enable)
+struct yetty_ycore_void_result yetty_platform_socket_set_reuseaddr(yetty_socket_fd fd, int enable)
 {
     int val = enable ? 1 : 0;
     if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val)) < 0) {
@@ -66,7 +66,7 @@ struct yetty_ycore_void_result yetty_yplatform_socket_set_reuseaddr(yetty_socket
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yplatform_socket_bind(yetty_socket_fd fd, uint16_t port)
+struct yetty_ycore_void_result yetty_platform_socket_bind(yetty_socket_fd fd, uint16_t port)
 {
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
@@ -127,7 +127,7 @@ struct yetty_ycore_void_result yetty_yplatform_socket_connect(yetty_socket_fd fd
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yplatform_socket_connect_check(yetty_socket_fd fd)
+struct yetty_ycore_void_result yetty_platform_socket_connect_check(yetty_socket_fd fd)
 {
     int err = 0;
     socklen_t len = sizeof(err);
@@ -171,7 +171,7 @@ int yetty_yplatform_socket_would_block(void)
     return errno == EAGAIN || errno == EWOULDBLOCK;
 }
 
-int yetty_yplatform_socket_connect_in_progress(void)
+int yetty_platform_socket_connect_in_progress(void)
 {
     return errno == EINPROGRESS;
 }

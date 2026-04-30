@@ -150,7 +150,7 @@ int main(int argc, char **argv)
 {
     struct yecho_opts opts = {0};
 
-    static const struct option long_opts[] = {
+    static const struct yetty_yplatform_option long_opts[] = {
         {"width",     required_argument, NULL, 'w'},
         {"height",    required_argument, NULL, 'H'},
         {"font-size", required_argument, NULL, OPT_FONT_SIZE},
@@ -162,11 +162,11 @@ int main(int argc, char **argv)
     };
 
     int c;
-    while ((c = getopt_long(argc, argv, "w:H:nlrh", long_opts, NULL)) != -1) {
+    while ((c = yetty_yplatform_getopt_long(argc, argv, "w:H:nlrh", long_opts, NULL)) != -1) {
         switch (c) {
-        case 'w':           opts.width_cells = atoi(optarg); break;
-        case 'H':           opts.height_cells = atoi(optarg); break;
-        case OPT_FONT_SIZE: opts.font_size = (float)atof(optarg); break;
+        case 'w':           opts.width_cells = atoi(yetty_yplatform_optarg); break;
+        case 'H':           opts.height_cells = atoi(yetty_yplatform_optarg); break;
+        case OPT_FONT_SIZE: opts.font_size = (float)atof(yetty_yplatform_optarg); break;
         case 'n':           opts.no_newline = true; break;
         case 'l':           opts.list_glyphs = true; break;
         case OPT_OSC:       opts.force_osc = true; break;
@@ -185,9 +185,9 @@ int main(int argc, char **argv)
     char *input = NULL;
     size_t input_len = 0;
 
-    if (optind < argc) {
+    if (yetty_yplatform_optind < argc) {
         size_t total = 0;
-        for (int i = optind; i < argc; i++) {
+        for (int i = yetty_yplatform_optind; i < argc; i++) {
             total += strlen(argv[i]) + 1;
         }
         input = malloc(total + 1);
@@ -196,8 +196,8 @@ int main(int argc, char **argv)
             return 1;
         }
         size_t pos = 0;
-        for (int i = optind; i < argc; i++) {
-            if (i > optind) {
+        for (int i = yetty_yplatform_optind; i < argc; i++) {
+            if (i > yetty_yplatform_optind) {
                 input[pos++] = ' ';
             }
             size_t l = strlen(argv[i]);

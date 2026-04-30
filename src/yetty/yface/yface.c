@@ -34,13 +34,13 @@
 #define ENC_SCRATCH_CAP_DEFAULT (64 * 1024) /* one LZ4 block worth */
 
 /* Stream scanner state — drives feed_bytes(). */
-enum yface_scan_state {
-    YFACE_SCAN_RAW = 0,      /* bytes outside an envelope → on_raw */
-    YFACE_SCAN_AFTER_ESC,    /* saw ESC; deciding if this opens an OSC */
-    YFACE_SCAN_OSC_CODE,     /* reading decimal vendor code */
-    YFACE_SCAN_OSC_ARGS,     /* collecting b64-args until 2nd ';' */
-    YFACE_SCAN_OSC_BODY,     /* feeding payload b64 through codec */
-    YFACE_SCAN_OSC_BODY_ESC, /* saw ESC inside body — could be ST */
+enum yetty_yface_scan_state {
+    YETTY_YFACE_SCAN_RAW = 0,      /* bytes outside an envelope → on_raw */
+    YETTY_YFACE_SCAN_AFTER_ESC,    /* saw ESC; deciding if this opens an OSC */
+    YETTY_YFACE_SCAN_OSC_CODE,     /* reading decimal vendor code */
+    YETTY_YFACE_SCAN_OSC_ARGS,     /* collecting b64-args until 2nd ';' */
+    YETTY_YFACE_SCAN_OSC_BODY,     /* feeding payload b64 through codec */
+    YETTY_YFACE_SCAN_OSC_BODY_ESC, /* saw ESC inside body — could be ST */
 };
 
 #define YFACE_ARGS_MAX_B64 1024 /* 768 bytes raw — enough for any meta */
@@ -69,7 +69,7 @@ struct yetty_yface {
     uint8_t dec_b64_carry_n;
 
     /* Stream scanner state. */
-    enum yface_scan_state scan_state;
+    enum yetty_yface_scan_state scan_state;
     int scan_osc_code;
     /* Raw b64 chars of the args slot — drained on second ';' into
      * scan_args_decoded. */
@@ -689,23 +689,23 @@ struct yetty_ycore_void_result yetty_yface_feed_bytes(struct yetty_yface *y, con
         char c = bytes[i];
 
         switch (y->scan_state) {
-        case YFACE_SCAN_RAW:
+        case YETTY_YFACE_SCAN_RAW:
             if (c == '\033') {
                 /* Flush any raw run up to here, then enter AFTER_ESC. */
                 scan_emit_raw(y, bytes + span_start, i - span_start);
-                y->scan_state = YFACE_SCAN_AFTER_ESC;
+                y->scan_state = YETTY_YFACE_SCAN_AFTER_ESC;
                 i++;
             } else {
                 i++;
             }
             break;
 
-        case YFACE_SCAN_AFTER_ESC:
+        case YETTY_YFACE_SCAN_AFTER_ESC:
             if (c == ']') {
                 y->scan_osc_code = 0;
                 y->scan_args_b64_len = 0;
                 y->scan_args_decoded_len = 0;
-                y->scan_state = YFACE_SCAN_OSC_CODE;
+                y->scan_state = YETTY_YFACE_SCAN_OSC_CODE;
                 i++;
             } else {
                 /* Not an OSC introducer — emit ESC + this byte as raw and
@@ -715,11 +715,11 @@ struct yetty_ycore_void_result yetty_yface_feed_bytes(struct yetty_yface *y, con
                     y->on_raw(y->handler_user, &esc, 1);
                 }
                 span_start = i; /* current byte goes back to RAW */
-                y->scan_state = YFACE_SCAN_RAW;
+                y->scan_state = YETTY_YFACE_SCAN_RAW;
             }
             break;
 
-        case YFACE_SCAN_OSC_CODE:
+        case YETTY_YFACE_SCAN_OSC_CODE:
             if (c >= '0' && c <= '9') {
                 y->scan_osc_code = y->scan_osc_code * 10 + (c - '0');
                 i++;
@@ -728,17 +728,17 @@ struct yetty_ycore_void_result yetty_yface_feed_bytes(struct yetty_yface *y, con
                  * payload codec yet — that happens at the second ';'
                  * once we've parsed args (which may carry the bin meta
                  * with the compressed flag). */
-                y->scan_state = YFACE_SCAN_OSC_ARGS;
+                y->scan_state = YETTY_YFACE_SCAN_OSC_ARGS;
                 i++;
             } else {
                 /* Malformed — drop and resume RAW from next byte. */
-                y->scan_state = YFACE_SCAN_RAW;
+                y->scan_state = YETTY_YFACE_SCAN_RAW;
                 span_start = i + 1;
                 i++;
             }
             break;
 
-        case YFACE_SCAN_OSC_ARGS:
+        case YETTY_YFACE_SCAN_OSC_ARGS:
             if (c == ';') {
                 /* End of args slot. b64-decode whatever we accumulated
                  * (might be empty), then open the payload codec. */
@@ -788,12 +788,12 @@ struct yetty_ycore_void_result yetty_yface_feed_bytes(struct yetty_yface *y, con
 
                 struct yetty_ycore_void_result r = yetty_yface_start_read(y, compressed);
                 if (!r.ok) {
-                    y->scan_state = YFACE_SCAN_RAW;
+                    y->scan_state = YETTY_YFACE_SCAN_RAW;
                     span_start = i + 1;
                     i++;
                     break;
                 }
-                y->scan_state = YFACE_SCAN_OSC_BODY;
+                y->scan_state = YETTY_YFACE_SCAN_OSC_BODY;
                 i++;
                 span_start = i;
             } else {
@@ -806,19 +806,19 @@ struct yetty_ycore_void_result yetty_yface_feed_bytes(struct yetty_yface *y, con
             }
             break;
 
-        case YFACE_SCAN_OSC_BODY:
+        case YETTY_YFACE_SCAN_OSC_BODY:
             if (c == '\033') {
                 /* Flush body run so far, then check for ST. */
                 struct yetty_ycore_void_result r =
                     scan_feed_body(y, bytes + span_start, i - span_start);
                 if (!r.ok) {
                     yetty_yface_finish_read(y);
-                    y->scan_state = YFACE_SCAN_RAW;
+                    y->scan_state = YETTY_YFACE_SCAN_RAW;
                     span_start = i + 1;
                     i++;
                     break;
                 }
-                y->scan_state = YFACE_SCAN_OSC_BODY_ESC;
+                y->scan_state = YETTY_YFACE_SCAN_OSC_BODY_ESC;
                 i++;
             } else if (c == '\007') {
                 /* BEL terminator (legacy OSC form). Flush, finalize, fire. */
@@ -826,7 +826,7 @@ struct yetty_ycore_void_result yetty_yface_feed_bytes(struct yetty_yface *y, con
                     scan_feed_body(y, bytes + span_start, i - span_start);
                 if (!r.ok) {
                     yetty_yface_finish_read(y);
-                    y->scan_state = YFACE_SCAN_RAW;
+                    y->scan_state = YETTY_YFACE_SCAN_RAW;
                     span_start = i + 1;
                     i++;
                     break;
@@ -836,7 +836,7 @@ struct yetty_ycore_void_result yetty_yface_feed_bytes(struct yetty_yface *y, con
                     y->on_osc(y->handler_user, y->scan_osc_code, y->scan_args_decoded,
                               y->scan_args_decoded_len, y->in_buf.data, y->in_buf.size);
                 }
-                y->scan_state = YFACE_SCAN_RAW;
+                y->scan_state = YETTY_YFACE_SCAN_RAW;
                 span_start = i + 1;
                 i++;
             } else {
@@ -844,7 +844,7 @@ struct yetty_ycore_void_result yetty_yface_feed_bytes(struct yetty_yface *y, con
             }
             break;
 
-        case YFACE_SCAN_OSC_BODY_ESC:
+        case YETTY_YFACE_SCAN_OSC_BODY_ESC:
             if (c == '\\') {
                 /* ST — envelope complete. Finalize codec + fire callback. */
                 yetty_yface_finish_read(y);
@@ -852,7 +852,7 @@ struct yetty_ycore_void_result yetty_yface_feed_bytes(struct yetty_yface *y, con
                     y->on_osc(y->handler_user, y->scan_osc_code, y->scan_args_decoded,
                               y->scan_args_decoded_len, y->in_buf.data, y->in_buf.size);
                 }
-                y->scan_state = YFACE_SCAN_RAW;
+                y->scan_state = YETTY_YFACE_SCAN_RAW;
                 span_start = i + 1;
                 i++;
             } else {
@@ -862,11 +862,11 @@ struct yetty_ycore_void_result yetty_yface_feed_bytes(struct yetty_yface *y, con
                 struct yetty_ycore_void_result r = scan_feed_body(y, "\033", 1);
                 if (!r.ok) {
                     yetty_yface_finish_read(y);
-                    y->scan_state = YFACE_SCAN_RAW;
+                    y->scan_state = YETTY_YFACE_SCAN_RAW;
                     span_start = i;
                     break;
                 }
-                y->scan_state = YFACE_SCAN_OSC_BODY;
+                y->scan_state = YETTY_YFACE_SCAN_OSC_BODY;
                 span_start = i; /* current char joins next span */
             }
             break;
@@ -874,9 +874,9 @@ struct yetty_ycore_void_result yetty_yface_feed_bytes(struct yetty_yface *y, con
     }
 
     /* End-of-buffer flush of any pending span. */
-    if (y->scan_state == YFACE_SCAN_RAW) {
+    if (y->scan_state == YETTY_YFACE_SCAN_RAW) {
         scan_emit_raw(y, bytes + span_start, n - span_start);
-    } else if (y->scan_state == YFACE_SCAN_OSC_BODY) {
+    } else if (y->scan_state == YETTY_YFACE_SCAN_OSC_BODY) {
         return scan_feed_body(y, bytes + span_start, n - span_start);
     }
 

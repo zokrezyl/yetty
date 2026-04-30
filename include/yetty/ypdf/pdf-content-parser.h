@@ -25,7 +25,6 @@
 
 /* Forward declare pdfio stream (C API). */
 struct _pdfio_stream_s;
-typedef struct _pdfio_stream_s pdfio_stream_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -91,7 +90,7 @@ struct yetty_ypdf_content_parser;
 
 YETTY_YRESULT_DECLARE(yetty_ypdf_content_parser_ptr, struct yetty_ypdf_content_parser *);
 
-struct yetty_ypdf_content_parser_ptr_result yetty_ypdf_content_parser_create(
+struct yetty_ypdf_content_parser_ptr_result yetty_ypdf_content_parser_callbacks_content_parser_create(
     const struct yetty_ypdf_content_parser_callbacks *cb);
 
 void yetty_ypdf_content_parser_destroy(struct yetty_ypdf_content_parser *p);
@@ -103,7 +102,7 @@ void yetty_ypdf_content_parser_set_page_height(struct yetty_ypdf_content_parser 
  * parser — state persists only for the lifetime of the current page's
  * streams (caller resets state between pages by creating a new parser). */
 struct yetty_ycore_void_result yetty_ypdf_content_parser_parse_stream(
-    struct yetty_ypdf_content_parser *p, pdfio_stream_t *stream);
+    struct yetty_ypdf_content_parser *p, struct _pdfio_stream_s *stream);
 
 #ifdef __cplusplus
 }

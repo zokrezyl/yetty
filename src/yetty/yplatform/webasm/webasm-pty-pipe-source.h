@@ -17,18 +17,18 @@ typedef void (*webasm_pty_notify_callback)(void *user_data);
  * On webasm there's no fd to poll. Instead, JS calls webasm_pty_pipe_source_notify()
  * when data arrives in the buffer, which triggers the callback.
  */
-struct webasm_pty_pipe_source {
-    struct yetty_yplatform_pty_pipe_source base;
+struct yetty_yplatform_webasm_pty_pipe_source {
+    struct yetty_platform_pty_pipe_source base;
     webasm_pty_notify_callback notify_callback;
     void *notify_user_data;
 };
 
 /* Set the notification callback - called by EventLoop during register_pty_pipe */
-void webasm_pty_pipe_source_set_callback(struct webasm_pty_pipe_source *source,
+void yetty_yplatform_webasm_pty_pipe_source_set_callback(struct yetty_yplatform_webasm_pty_pipe_source *source,
                                          webasm_pty_notify_callback callback, void *user_data);
 
 /* Notify that data is available - called by JS via C export */
-void webasm_pty_pipe_source_notify(struct webasm_pty_pipe_source *source);
+void yetty_yplatform_webasm_pty_pipe_source_notify(struct yetty_yplatform_webasm_pty_pipe_source *source);
 
 #ifdef __cplusplus
 }

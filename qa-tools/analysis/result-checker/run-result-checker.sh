@@ -4,7 +4,7 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 YETTY_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 BUILD_DIR="${YETTY_ROOT}/build-desktop-ytrace-release"
-CHECKER="${BUILD_DIR}/qa-tools/custom/result-checker/result-checker"
+CHECKER="${BUILD_DIR}/qa-tools/analysis/result-checker/result-checker"
 
 if [ ! -x "$CHECKER" ]; then
     echo "Error: result-checker not found at $CHECKER"

@@ -18,7 +18,7 @@ extern "C" {
 #endif
 
 // Forward declare gpu_resource_set result (defined in yrender/gpu-resource-set.h)
-struct yetty_yrender_gpu_resource_set;
+struct yetty_ypaint_core_gpu_resource_set;
 struct yetty_yrender_gpu_resource_set_result;
 
 //=============================================================================
@@ -26,7 +26,7 @@ struct yetty_yrender_gpu_resource_set_result;
 // Used by buffer iteration to get size and aabb
 //=============================================================================
 
-struct yetty_ypaint_prim_base_ops {
+struct yetty_ypaint_core_prim_base_ops {
     // Size in bytes (for buffer iteration)
     struct yetty_ycore_size_result (*size)(const uint32_t *prim);
 
@@ -39,9 +39,9 @@ struct yetty_ypaint_prim_base_ops {
 // Complex primitives use factory pattern instead
 //=============================================================================
 
-struct yetty_ypaint_prim_ops {
+struct yetty_ypaint_core_prim_ops {
     // Base ops (size, aabb) - MUST be first for C inheritance
-    struct yetty_ypaint_prim_base_ops base;
+    struct yetty_ypaint_core_prim_base_ops base;
 
     // Cleanup cached data (optional, may be NULL for simple prims)
     void (*destroy)(void *cache);
@@ -54,41 +54,41 @@ struct yetty_ypaint_prim_ops {
 
 // Flyweight - wraps pointer to primitive data + base ops
 // Works for ALL primitives (SDF and complex)
-struct yetty_ypaint_prim_flyweight {
+struct yetty_ypaint_core_prim_flyweight {
     const uint32_t *data;                         // type at data[0]
-    const struct yetty_ypaint_prim_base_ops *ops; // base ops (size, aabb)
+    const struct yetty_ypaint_core_prim_base_ops *ops; // base ops (size, aabb)
 };
 
-YETTY_YRESULT_DECLARE(yetty_ypaint_prim_base_ops_ptr, const struct yetty_ypaint_prim_base_ops *);
-YETTY_YRESULT_DECLARE(yetty_ypaint_prim_flyweight_ptr, struct yetty_ypaint_prim_flyweight *);
+YETTY_YRESULT_DECLARE(yetty_ypaint_core_prim_base_ops_ptr, const struct yetty_ypaint_core_prim_base_ops *);
+YETTY_YRESULT_DECLARE(yetty_ypaint_core_prim_flyweight_ptr, struct yetty_ypaint_core_prim_flyweight *);
 
 // Handler function - takes prim_type, returns base ops pointer or error
-typedef struct yetty_ypaint_prim_base_ops_ptr_result (*yetty_ypaint_prim_handler_fn)(
+typedef struct yetty_ypaint_core_prim_base_ops_ptr_result (*yetty_ypaint_prim_handler_fn)(
     uint32_t prim_type);
 
 // Flyweight registry instance (opaque)
-struct yetty_ypaint_flyweight_registry;
+struct yetty_ypaint_core_flyweight_registry;
 
-YETTY_YRESULT_DECLARE(yetty_ypaint_flyweight_registry_ptr,
-                      struct yetty_ypaint_flyweight_registry *);
+YETTY_YRESULT_DECLARE(yetty_ypaint_core_flyweight_registry_ptr,
+                      struct yetty_ypaint_core_flyweight_registry *);
 
 // Create/destroy registry instance
-struct yetty_ypaint_flyweight_registry_ptr_result yetty_ypaint_flyweight_registry_create(void);
+struct yetty_ypaint_core_flyweight_registry_ptr_result yetty_ypaint_core_flyweight_registry_create(void);
 
-void yetty_ypaint_flyweight_registry_destroy(struct yetty_ypaint_flyweight_registry *reg);
+void yetty_ypaint_core_flyweight_registry_destroy(struct yetty_ypaint_core_flyweight_registry *reg);
 
 // Set default handler (SDF) - called first, fast path
-void yetty_ypaint_flyweight_registry_set_default(struct yetty_ypaint_flyweight_registry *reg,
-                                                 yetty_ypaint_prim_handler_fn handler);
+void yetty_ypaint_core_flyweight_registry_set_default(struct yetty_ypaint_core_flyweight_registry *reg,
+                                                 struct yetty_ypaint_core_prim_base_ops_ptr_result (*handler)(uint32_t));
 
 // Register additional handler for type range [type_min, type_max]
-struct yetty_ycore_void_result yetty_ypaint_flyweight_registry_add(
-    struct yetty_ypaint_flyweight_registry *reg, uint32_t type_min, uint32_t type_max,
-    yetty_ypaint_prim_handler_fn handler);
+struct yetty_ycore_void_result yetty_ypaint_core_flyweight_registry_add(
+    struct yetty_ypaint_core_flyweight_registry *reg, uint32_t type_min, uint32_t type_max,
+    struct yetty_ypaint_core_prim_base_ops_ptr_result (*handler)(uint32_t));
 
 // Get flyweight for primitive (tries default first, then by type range)
-struct yetty_ypaint_prim_flyweight_ptr_result yetty_ypaint_flyweight_registry_get(
-    const struct yetty_ypaint_flyweight_registry *reg, uint32_t prim_type,
+struct yetty_ypaint_core_prim_flyweight_ptr_result yetty_ypaint_core_flyweight_registry_get(
+    const struct yetty_ypaint_core_flyweight_registry *reg, uint32_t prim_type,
     const uint32_t *prim_data);
 
 #ifdef __cplusplus

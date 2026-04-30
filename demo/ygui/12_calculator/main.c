@@ -8,8 +8,8 @@
 #include <string.h>
 #include "ygui.h"
 
-static ygui_engine_t* g_engine = NULL;
-static ygui_widget_t* g_display = NULL;
+static struct yetty_ygui_engine* g_engine = NULL;
+static struct yetty_ygui_widget* g_display = NULL;
 
 static char  g_current[64]  = "0";
 static char  g_previous[64] = "";
@@ -18,7 +18,7 @@ static char  g_operator     = 0;   /* 0 = none, otherwise '+' '-' 'x' '/' */
 static int   g_new_number   = 1;
 
 static void update_display(void) {
-    ygui_label_set_text(g_display, g_current);
+    yetty_ygui_widget_label_set_text(g_display, g_current);
 }
 
 static void format_result(double v) {
@@ -46,9 +46,9 @@ static void calculate(void) {
     g_operator = 0;
 }
 
-static void on_button(ygui_widget_t* w, void* u) {
+static void on_button(struct yetty_ygui_widget* w, void* u) {
     (void)u;
-    const char* key = ygui_button_get_label(w);
+    const char* key = yetty_ygui_widget_button_get_label(w);
     if (!key || !key[0]) return;
 
     char c = key[0];
@@ -106,21 +106,21 @@ static void on_button(ygui_widget_t* w, void* u) {
     update_display();
 }
 
-static void on_key(ygui_engine_t* e, uint32_t key, int mods, void* u) {
+static void on_key(struct yetty_ygui_engine* e, uint32_t key, int mods, void* u) {
     (void)mods; (void)u;
-    if (key == 'q' || key == 'Q') ygui_engine_stop(e);
+    if (key == 'q' || key == 'Q') yetty_ygui_engine_stop(e);
 }
 
 int main(void) {
     (void)freopen("/dev/null", "w", stderr);
 
-    if (ygui_init() != 0) return 1;
-    { struct ygui_engine_ptr_result _eng_r = ygui_engine_create_with_pixel_hint("calculator", 2, 2, 380.0f, 480.0f);
+    if (yetty_ygui_init() != 0) return 1;
+    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_engine_create_with_pixel_hint("calculator", 2, 2, 380.0f, 480.0f);
         if (YETTY_IS_ERR(_eng_r)) { yetty_ycore_error_destroy(_eng_r.error); return 1; }
         g_engine = _eng_r.value; }
-    if (!g_engine) { ygui_shutdown(); return 1; }
+    if (!g_engine) { yetty_ygui_shutdown(); return 1; }
 
-    g_display = ygui_label(g_engine, "display", 20, 20, "0");
+    g_display = yetty_ygui_engine_label(g_engine, "display", 20, 20, "0");
 
     static const char* layout[5][4] = {
         {"C",   "+/-", "%",  "/"},
@@ -145,16 +145,16 @@ int main(void) {
 
             char id[32];
             snprintf(id, sizeof(id), "btn_%d_%d", row, col);
-            ygui_widget_t* btn = ygui_button(g_engine, id, x, y, w, btn_h, lbl);
-            ygui_button_on_click(btn, on_button, NULL);
+            struct yetty_ygui_widget* btn = yetty_ygui_engine_button(g_engine, id, x, y, w, btn_h, lbl);
+            yetty_ygui_widget_button_on_click(btn, on_button, NULL);
         }
     }
 
-    ygui_engine_on_key(g_engine, on_key, NULL);
-    ygui_engine_show(g_engine);
-    ygui_engine_run(g_engine);
+    yetty_ygui_engine_on_key(g_engine, on_key, NULL);
+    yetty_ygui_engine_show(g_engine);
+    yetty_ygui_engine_run(g_engine);
 
-    ygui_engine_destroy(g_engine);
-    ygui_shutdown();
+    yetty_ygui_engine_destroy(g_engine);
+    yetty_ygui_shutdown();
     return 0;
 }

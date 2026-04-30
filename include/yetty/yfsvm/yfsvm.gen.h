@@ -19,48 +19,48 @@ extern "C" {
 #define YFSVM_MAX_EXECUTION_STEPS 1024u
 
 // Opcodes
-typedef enum YfsvmOpcode {
-    YFSVM_OP_NOP = 0x00,
-    YFSVM_OP_RET = 0x01,
-    YFSVM_OP_LOAD_C = 0x02,
-    YFSVM_OP_LOAD_X = 0x03,
-    YFSVM_OP_LOAD_T = 0x04,
-    YFSVM_OP_LOAD_S = 0x05,
-    YFSVM_OP_MOV = 0x06,
-    YFSVM_OP_ADD = 0x10,
-    YFSVM_OP_SUB = 0x11,
-    YFSVM_OP_MUL = 0x12,
-    YFSVM_OP_DIV = 0x13,
-    YFSVM_OP_NEG = 0x14,
-    YFSVM_OP_MOD = 0x15,
-    YFSVM_OP_SIN = 0x20,
-    YFSVM_OP_COS = 0x21,
-    YFSVM_OP_TAN = 0x22,
-    YFSVM_OP_ASIN = 0x23,
-    YFSVM_OP_ACOS = 0x24,
-    YFSVM_OP_ATAN = 0x25,
-    YFSVM_OP_ATAN2 = 0x26,
-    YFSVM_OP_SINH = 0x27,
-    YFSVM_OP_COSH = 0x28,
-    YFSVM_OP_TANH = 0x29,
-    YFSVM_OP_EXP = 0x30,
-    YFSVM_OP_EXP2 = 0x31,
-    YFSVM_OP_LOG = 0x32,
-    YFSVM_OP_LOG2 = 0x33,
-    YFSVM_OP_POW = 0x34,
-    YFSVM_OP_SQRT = 0x35,
-    YFSVM_OP_RSQRT = 0x36,
-    YFSVM_OP_ABS = 0x40,
-    YFSVM_OP_MIN = 0x41,
-    YFSVM_OP_MAX = 0x42,
-    YFSVM_OP_FLOOR = 0x43,
-    YFSVM_OP_CEIL = 0x44,
-    YFSVM_OP_ROUND = 0x45,
-    YFSVM_OP_FRACT = 0x46,
-    YFSVM_OP_SIGN = 0x47,
-    YFSVM_OP_CLAMP01 = 0x48,
-    YFSVM_OP_STEP = 0x49,
-    YFSVM_OP_MIX = 0x4A,
+typedef enum yetty_yfsvm_YfsvmOpcode {
+    YETTY_YFSVM_OP_NOP = 0x00,
+    YETTY_YFSVM_OP_RET = 0x01,
+    YETTY_YFSVM_OP_LOAD_C = 0x02,
+    YETTY_YFSVM_OP_LOAD_X = 0x03,
+    YETTY_YFSVM_OP_LOAD_T = 0x04,
+    YETTY_YFSVM_OP_LOAD_S = 0x05,
+    YETTY_YFSVM_OP_MOV = 0x06,
+    YETTY_YFSVM_OP_ADD = 0x10,
+    YETTY_YFSVM_OP_SUB = 0x11,
+    YETTY_YFSVM_OP_MUL = 0x12,
+    YETTY_YFSVM_OP_DIV = 0x13,
+    YETTY_YFSVM_OP_NEG = 0x14,
+    YETTY_YFSVM_OP_MOD = 0x15,
+    YETTY_YFSVM_OP_SIN = 0x20,
+    YETTY_YFSVM_OP_COS = 0x21,
+    YETTY_YFSVM_OP_TAN = 0x22,
+    YETTY_YFSVM_OP_ASIN = 0x23,
+    YETTY_YFSVM_OP_ACOS = 0x24,
+    YETTY_YFSVM_OP_ATAN = 0x25,
+    YETTY_YFSVM_OP_ATAN2 = 0x26,
+    YETTY_YFSVM_OP_SINH = 0x27,
+    YETTY_YFSVM_OP_COSH = 0x28,
+    YETTY_YFSVM_OP_TANH = 0x29,
+    YETTY_YFSVM_OP_EXP = 0x30,
+    YETTY_YFSVM_OP_EXP2 = 0x31,
+    YETTY_YFSVM_OP_LOG = 0x32,
+    YETTY_YFSVM_OP_LOG2 = 0x33,
+    YETTY_YFSVM_OP_POW = 0x34,
+    YETTY_YFSVM_OP_SQRT = 0x35,
+    YETTY_YFSVM_OP_RSQRT = 0x36,
+    YETTY_YFSVM_OP_ABS = 0x40,
+    YETTY_YFSVM_OP_MIN = 0x41,
+    YETTY_YFSVM_OP_MAX = 0x42,
+    YETTY_YFSVM_OP_FLOOR = 0x43,
+    YETTY_YFSVM_OP_CEIL = 0x44,
+    YETTY_YFSVM_OP_ROUND = 0x45,
+    YETTY_YFSVM_OP_FRACT = 0x46,
+    YETTY_YFSVM_OP_SIGN = 0x47,
+    YETTY_YFSVM_OP_CLAMP01 = 0x48,
+    YETTY_YFSVM_OP_STEP = 0x49,
+    YETTY_YFSVM_OP_MIX = 0x4A,
 } YfsvmOpcode;
 
 // Instruction format (32-bit):
@@ -104,87 +104,87 @@ static inline uint16_t yfsvm_decode_imm12(uint32_t instr)
 static inline const char *yfsvm_opcode_name(YfsvmOpcode op)
 {
     switch (op) {
-    case YFSVM_OP_NOP:
+    case YETTY_YFSVM_OP_NOP:
         return "NOP";
-    case YFSVM_OP_RET:
+    case YETTY_YFSVM_OP_RET:
         return "RET";
-    case YFSVM_OP_LOAD_C:
+    case YETTY_YFSVM_OP_LOAD_C:
         return "LOAD_C";
-    case YFSVM_OP_LOAD_X:
+    case YETTY_YFSVM_OP_LOAD_X:
         return "LOAD_X";
-    case YFSVM_OP_LOAD_T:
+    case YETTY_YFSVM_OP_LOAD_T:
         return "LOAD_T";
-    case YFSVM_OP_LOAD_S:
+    case YETTY_YFSVM_OP_LOAD_S:
         return "LOAD_S";
-    case YFSVM_OP_MOV:
+    case YETTY_YFSVM_OP_MOV:
         return "MOV";
-    case YFSVM_OP_ADD:
+    case YETTY_YFSVM_OP_ADD:
         return "ADD";
-    case YFSVM_OP_SUB:
+    case YETTY_YFSVM_OP_SUB:
         return "SUB";
-    case YFSVM_OP_MUL:
+    case YETTY_YFSVM_OP_MUL:
         return "MUL";
-    case YFSVM_OP_DIV:
+    case YETTY_YFSVM_OP_DIV:
         return "DIV";
-    case YFSVM_OP_NEG:
+    case YETTY_YFSVM_OP_NEG:
         return "NEG";
-    case YFSVM_OP_MOD:
+    case YETTY_YFSVM_OP_MOD:
         return "MOD";
-    case YFSVM_OP_SIN:
+    case YETTY_YFSVM_OP_SIN:
         return "SIN";
-    case YFSVM_OP_COS:
+    case YETTY_YFSVM_OP_COS:
         return "COS";
-    case YFSVM_OP_TAN:
+    case YETTY_YFSVM_OP_TAN:
         return "TAN";
-    case YFSVM_OP_ASIN:
+    case YETTY_YFSVM_OP_ASIN:
         return "ASIN";
-    case YFSVM_OP_ACOS:
+    case YETTY_YFSVM_OP_ACOS:
         return "ACOS";
-    case YFSVM_OP_ATAN:
+    case YETTY_YFSVM_OP_ATAN:
         return "ATAN";
-    case YFSVM_OP_ATAN2:
+    case YETTY_YFSVM_OP_ATAN2:
         return "ATAN2";
-    case YFSVM_OP_SINH:
+    case YETTY_YFSVM_OP_SINH:
         return "SINH";
-    case YFSVM_OP_COSH:
+    case YETTY_YFSVM_OP_COSH:
         return "COSH";
-    case YFSVM_OP_TANH:
+    case YETTY_YFSVM_OP_TANH:
         return "TANH";
-    case YFSVM_OP_EXP:
+    case YETTY_YFSVM_OP_EXP:
         return "EXP";
-    case YFSVM_OP_EXP2:
+    case YETTY_YFSVM_OP_EXP2:
         return "EXP2";
-    case YFSVM_OP_LOG:
+    case YETTY_YFSVM_OP_LOG:
         return "LOG";
-    case YFSVM_OP_LOG2:
+    case YETTY_YFSVM_OP_LOG2:
         return "LOG2";
-    case YFSVM_OP_POW:
+    case YETTY_YFSVM_OP_POW:
         return "POW";
-    case YFSVM_OP_SQRT:
+    case YETTY_YFSVM_OP_SQRT:
         return "SQRT";
-    case YFSVM_OP_RSQRT:
+    case YETTY_YFSVM_OP_RSQRT:
         return "RSQRT";
-    case YFSVM_OP_ABS:
+    case YETTY_YFSVM_OP_ABS:
         return "ABS";
-    case YFSVM_OP_MIN:
+    case YETTY_YFSVM_OP_MIN:
         return "MIN";
-    case YFSVM_OP_MAX:
+    case YETTY_YFSVM_OP_MAX:
         return "MAX";
-    case YFSVM_OP_FLOOR:
+    case YETTY_YFSVM_OP_FLOOR:
         return "FLOOR";
-    case YFSVM_OP_CEIL:
+    case YETTY_YFSVM_OP_CEIL:
         return "CEIL";
-    case YFSVM_OP_ROUND:
+    case YETTY_YFSVM_OP_ROUND:
         return "ROUND";
-    case YFSVM_OP_FRACT:
+    case YETTY_YFSVM_OP_FRACT:
         return "FRACT";
-    case YFSVM_OP_SIGN:
+    case YETTY_YFSVM_OP_SIGN:
         return "SIGN";
-    case YFSVM_OP_CLAMP01:
+    case YETTY_YFSVM_OP_CLAMP01:
         return "CLAMP01";
-    case YFSVM_OP_STEP:
+    case YETTY_YFSVM_OP_STEP:
         return "STEP";
-    case YFSVM_OP_MIX:
+    case YETTY_YFSVM_OP_MIX:
         return "MIX";
     default:
         return "UNKNOWN";

@@ -99,7 +99,7 @@ static struct yetty_ycore_void_result write_clear_and_bin(const uint8_t *data, u
     return r;
 }
 
-struct yetty_ycore_void_result ygui_osc_create_card(const char *name, int x, int y, int w, int h,
+struct yetty_ycore_void_result yetty_ygui_osc_create_card(const char *name, int x, int y, int w, int h,
                                                     const uint8_t *data, uint32_t size)
 {
     (void)name;
@@ -110,14 +110,14 @@ struct yetty_ycore_void_result ygui_osc_create_card(const char *name, int x, int
     return write_clear_and_bin(data, size);
 }
 
-struct yetty_ycore_void_result ygui_osc_update_card(const char *name, const uint8_t *data,
+struct yetty_ycore_void_result yetty_ygui_osc_update_card(const char *name, const uint8_t *data,
                                                     uint32_t size)
 {
     (void)name;
     return write_clear_and_bin(data, size);
 }
 
-void ygui_osc_kill_card(const char *name)
+void yetty_ygui_osc_kill_card(const char *name)
 {
     /* No named-card concept on this sink — kill = clear the canvas. */
     (void)name;
@@ -125,7 +125,7 @@ void ygui_osc_kill_card(const char *name)
     write_osc(clear_seq, sizeof(clear_seq) - 1);
 }
 
-void ygui_osc_subscribe_clicks(int enable)
+void yetty_ygui_osc_subscribe_clicks(int enable)
 {
     if (enable) {
         write_osc("\033[?1500h", 8);
@@ -134,7 +134,7 @@ void ygui_osc_subscribe_clicks(int enable)
     }
 }
 
-void ygui_osc_subscribe_moves(int enable)
+void yetty_ygui_osc_subscribe_moves(int enable)
 {
     if (enable) {
         write_osc("\033[?1501h", 8);
@@ -143,13 +143,13 @@ void ygui_osc_subscribe_moves(int enable)
     }
 }
 
-void ygui_osc_query_cell_size(void)
+void yetty_ygui_osc_query_cell_size(void)
 {
     /* CSI 16 t - request cell size in pixels */
     write_osc("\033[16t", 5);
 }
 
-void ygui_osc_subscribe_view_changes(int enable)
+void yetty_ygui_osc_subscribe_view_changes(int enable)
 {
     /* DEC mode 1502 - subscribe to card view change events */
     if (enable) {
@@ -164,10 +164,10 @@ void ygui_osc_subscribe_view_changes(int enable)
  * coords. Without this, the server's hit table has no entry for our UI and
  * no mouse traffic ever flows back. col/row/w_cells/h_cells are in grid
  * cells (matching ygui_engine_create's x,y,cols,rows). */
-struct yetty_ycore_void_result ygui_osc_card_place(uint32_t card_id, int col, int row,
+struct yetty_ycore_void_result yetty_ygui_osc_card_place(uint32_t card_id, int col, int row,
                                                    uint32_t w_cells, uint32_t h_cells)
 {
-    struct ymgui_wire_card_place msg = {
+    struct yetty_ymgui_wire_card_place msg = {
         .magic = YMGUI_WIRE_MAGIC_CARD_PLACE,
         .version = YMGUI_WIRE_VERSION,
         .card_id = card_id,
@@ -188,9 +188,9 @@ struct yetty_ycore_void_result ygui_osc_card_place(uint32_t card_id, int col, in
     return r;
 }
 
-struct yetty_ycore_void_result ygui_osc_card_remove(uint32_t card_id)
+struct yetty_ycore_void_result yetty_ygui_osc_card_remove(uint32_t card_id)
 {
-    struct ymgui_wire_card_remove msg = {
+    struct yetty_ymgui_wire_card_remove msg = {
         .magic = YMGUI_WIRE_MAGIC_CARD_REMOVE,
         .version = YMGUI_WIRE_VERSION,
         .card_id = card_id,
@@ -207,7 +207,7 @@ struct yetty_ycore_void_result ygui_osc_card_remove(uint32_t card_id)
     return r;
 }
 
-void ygui_osc_zoom_card(const char *name, float level)
+void yetty_ygui_osc_zoom_card(const char *name, float level)
 {
     char buf[256];
     int len = snprintf(buf, sizeof(buf), "\033]" VENDOR_ID ";zoom --name %s --level %.2f\033\\",
@@ -215,7 +215,7 @@ void ygui_osc_zoom_card(const char *name, float level)
     write_osc(buf, len);
 }
 
-void ygui_osc_scroll_card(const char *name, float x, float y, int absolute)
+void yetty_ygui_osc_scroll_card(const char *name, float x, float y, int absolute)
 {
     char buf[256];
     int len;
@@ -231,7 +231,7 @@ void ygui_osc_scroll_card(const char *name, float x, float y, int absolute)
     write_osc(buf, len);
 }
 
-void ygui_osc_scroll_card_delta(const char *name, float dx, float dy)
+void yetty_ygui_osc_scroll_card_delta(const char *name, float dx, float dy)
 {
-    ygui_osc_scroll_card(name, dx, dy, 0);
+    yetty_ygui_osc_scroll_card(name, dx, dy, 0);
 }

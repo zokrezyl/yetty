@@ -13,9 +13,9 @@ extern "C" {
  * size is derived as font_size * (1 + top + bottom) high and
  * font_size/hw_ratio * (1 + left + right) wide.
  */
-struct yetty_font_ms_font_result yetty_font_ms_msdf_font_create(
+struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
     const char *cdb_path, const char *shader_path, float font_size,
-    struct yetty_font_ms_padding padding);
+    struct yetty_yfont_ms_padding padding);
 
 #ifdef __cplusplus
 }

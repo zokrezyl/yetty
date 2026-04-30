@@ -41,7 +41,7 @@ void yetty_yvideo_encoder_config_defaults(struct yetty_yvideo_encoder_config *cf
  * Create an H.264 encoder. Width and height must be even (H.264 constraint);
  * callers should round down before passing them in.
  */
-struct yetty_yvideo_encoder_ptr_result yetty_yvideo_encoder_create(
+struct yetty_yvideo_encoder_ptr_result yetty_yvideo_encoder_config_encoder_create(
     const struct yetty_yvideo_encoder_config *cfg);
 
 void yetty_yvideo_encoder_destroy(struct yetty_yvideo_encoder *enc);

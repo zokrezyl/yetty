@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
 	fprintf(stderr, "  Size: %.0fpx\n", config.font_size);
 	fprintf(stderr, "  Pixel range: %.0f\n", config.pixel_range);
 
-	struct yetty_ycore_void_result res = yetty_ymsdf_gen_cpu_generate(&config);
+	struct yetty_ycore_void_result res = yetty_ymsdf_gen_config_cpu_generate(&config);
 	if (YETTY_IS_ERR(res)) {
 		fprintf(stderr, "Error: %s\n", res.error.msg);
 		return 1;

@@ -70,7 +70,7 @@ static inline uint32_t yetty_shader_glyph_id_from_codepoint(uint32_t cp)
  */
 struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
     uint32_t cols, uint32_t rows, float cell_width, float cell_height,
-    struct yetty_yterm_terminal_layer *text_layer, const struct yetty_context *context,
+    struct yetty_yrender_terminal_layer *text_layer, const struct yetty_context *context,
     yetty_yterm_request_render_fn request_render_fn, void *request_render_userdata,
     yetty_yterm_scroll_fn scroll_fn, void *scroll_userdata, yetty_yterm_cursor_fn cursor_fn,
     void *cursor_userdata);

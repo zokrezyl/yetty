@@ -30,15 +30,15 @@
 /* Per-glyph GPU metadata (24 bytes, 6 floats)
  * cell_idx stores the actual atlas cell (may differ from slot due to empty glyphs).
  */
-struct glyph_meta_gpu {
+struct yetty_yfont_glyph_meta_gpu {
     float size_x, size_y;       /* logical glyph size */
     float bearing_x, bearing_y; /* offset from pen position */
     float advance;              /* horizontal advance */
     float cell_idx;             /* atlas cell index for UV computation */
 };
 
-struct msdf_font {
-    struct yetty_font_font base;
+struct yetty_yfont_msdf_font {
+    struct yetty_ypaint_font base;
 
     struct yetty_ycdb_reader *cdb;
 
@@ -51,7 +51,7 @@ struct msdf_font {
     uint32_t atlas_cols; /* cells per row */
     uint32_t next_cell;  /* next cell index to use */
 
-    struct glyph_meta_gpu *meta;
+    struct yetty_yfont_glyph_meta_gpu *meta;
     uint32_t meta_capacity;
     uint32_t next_slot;
 
@@ -63,7 +63,7 @@ struct msdf_font {
     /* Shader code (owned) */
     struct yetty_ycore_buffer shader_code;
 
-    struct yetty_yrender_gpu_resource_set rs;
+    struct yetty_ypaint_core_gpu_resource_set rs;
     int dirty;
 };
 
@@ -71,7 +71,7 @@ struct msdf_font {
  * Atlas helpers
  *===========================================================================*/
 
-static void atlas_grow(struct msdf_font *f)
+static void atlas_grow(struct yetty_yfont_msdf_font *f)
 {
     /* Add more rows */
     uint32_t rows_to_add = 4;
@@ -92,7 +92,7 @@ static void atlas_grow(struct msdf_font *f)
     f->atlas_height = new_h;
 }
 
-static struct uint32_result load_one(struct msdf_font *f, uint32_t cp)
+static struct uint32_result load_one(struct yetty_yfont_msdf_font *f, uint32_t cp)
 {
     const uint32_t *existing = yetty_ycore_map_get(&f->glyph_map, cp);
     if (existing) {
@@ -131,7 +131,7 @@ static struct uint32_result load_one(struct msdf_font *f, uint32_t cp)
 
     if (slot >= f->meta_capacity) {
         uint32_t new_cap = f->meta_capacity * 2;
-        struct glyph_meta_gpu *new_meta = realloc(f->meta, new_cap * sizeof(struct glyph_meta_gpu));
+        struct yetty_yfont_glyph_meta_gpu *new_meta = realloc(f->meta, new_cap * sizeof(struct yetty_yfont_glyph_meta_gpu));
         if (!new_meta) {
             free(data);
             return YETTY_ERR(uint32, "meta realloc failed");
@@ -142,7 +142,7 @@ static struct uint32_result load_one(struct msdf_font *f, uint32_t cp)
 
     /* Empty glyph (space) — just metadata, no atlas pixels */
     if (hdr.width == 0 || hdr.height == 0) {
-        struct glyph_meta_gpu *m = &f->meta[slot];
+        struct yetty_yfont_glyph_meta_gpu *m = &f->meta[slot];
         memset(m, 0, sizeof(*m));
         m->advance = hdr.advance;
         m->cell_idx = -1.0f; /* No atlas cell for empty glyphs */
@@ -182,7 +182,7 @@ static struct uint32_result load_one(struct msdf_font *f, uint32_t cp)
     f->next_cell++;
 
     /* Fill metadata — cell_idx used by shader for UV computation */
-    struct glyph_meta_gpu *m = &f->meta[slot];
+    struct yetty_yfont_glyph_meta_gpu *m = &f->meta[slot];
     m->size_x = hdr.size_x;
     m->size_y = hdr.size_y;
     m->bearing_x = hdr.bearing_x;
@@ -201,9 +201,9 @@ static struct uint32_result load_one(struct msdf_font *f, uint32_t cp)
  * Vtable
  *===========================================================================*/
 
-static void msdf_destroy(struct yetty_font_font *self)
+static void msdf_destroy(struct yetty_ypaint_font *self)
 {
-    struct msdf_font *font = (struct msdf_font *)self;
+    struct yetty_yfont_msdf_font *font = (struct yetty_yfont_msdf_font *)self;
     if (!font) {
         return;
     }
@@ -215,26 +215,26 @@ static void msdf_destroy(struct yetty_font_font *self)
     free(font);
 }
 
-static struct uint32_result msdf_get_glyph_index(struct yetty_font_font *self, uint32_t cp)
+static struct uint32_result msdf_get_glyph_index(struct yetty_ypaint_font *self, uint32_t cp)
 {
-    struct msdf_font *f = (struct msdf_font *)self;
+    struct yetty_yfont_msdf_font *f = (struct yetty_yfont_msdf_font *)self;
     if (!f) {
         return YETTY_ERR(uint32, "font is NULL");
     }
     return load_one(f, cp);
 }
 
-static struct uint32_result msdf_get_glyph_index_styled(struct yetty_font_font *self, uint32_t cp,
-                                                        enum yetty_font_style style)
+static struct uint32_result msdf_get_glyph_index_styled(struct yetty_ypaint_font *self, uint32_t cp,
+                                                        enum yetty_yfont_style style)
 {
     (void)style;
     return msdf_get_glyph_index(self, cp);
 }
 
-static struct yetty_ycore_void_result msdf_load_glyphs(struct yetty_font_font *self,
+static struct yetty_ycore_void_result msdf_load_glyphs(struct yetty_ypaint_font *self,
                                                        const uint32_t *cps, size_t count)
 {
-    struct msdf_font *f = (struct msdf_font *)self;
+    struct yetty_yfont_msdf_font *f = (struct yetty_yfont_msdf_font *)self;
     if (!f) {
         return YETTY_ERR(yetty_ycore_void, "font is NULL");
     }
@@ -244,9 +244,9 @@ static struct yetty_ycore_void_result msdf_load_glyphs(struct yetty_font_font *s
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result msdf_load_basic_latin(struct yetty_font_font *self)
+static struct yetty_ycore_void_result msdf_load_basic_latin(struct yetty_ypaint_font *self)
 {
-    struct msdf_font *f = (struct msdf_font *)self;
+    struct yetty_yfont_msdf_font *f = (struct yetty_yfont_msdf_font *)self;
     if (!f) {
         return YETTY_ERR(yetty_ycore_void, "font is NULL");
     }
@@ -256,14 +256,14 @@ static struct yetty_ycore_void_result msdf_load_basic_latin(struct yetty_font_fo
     return YETTY_OK_VOID();
 }
 
-static float msdf_get_base_size(const struct yetty_font_font *self)
+static float msdf_get_base_size(const struct yetty_ypaint_font *self)
 {
-    const struct msdf_font *f = (const struct msdf_font *)self;
+    const struct yetty_yfont_msdf_font *f = (const struct yetty_yfont_msdf_font *)self;
     return f ? f->base_size : 32.0f;
 }
 
 /* Read only the glyph header from CDB (no atlas allocation). */
-static struct float_result msdf_read_advance_units(struct msdf_font *f, uint32_t cp)
+static struct float_result msdf_read_advance_units(struct yetty_yfont_msdf_font *f, uint32_t cp)
 {
     uint32_t key = cp;
     void *data = NULL;
@@ -288,10 +288,10 @@ static struct float_result msdf_read_advance_units(struct msdf_font *f, uint32_t
     return YETTY_OK(float, hdr.advance);
 }
 
-static struct float_result msdf_get_advance(struct yetty_font_font *self, uint32_t cp,
+static struct float_result msdf_get_advance(struct yetty_ypaint_font *self, uint32_t cp,
                                             float font_size)
 {
-    struct msdf_font *f = (struct msdf_font *)self;
+    struct yetty_yfont_msdf_font *f = (struct yetty_yfont_msdf_font *)self;
     if (!f) {
         return YETTY_ERR(float, "font is NULL");
     }
@@ -308,10 +308,10 @@ static struct float_result msdf_get_advance(struct yetty_font_font *self, uint32
     return YETTY_OK(float, adv.value *font_size / f->base_size);
 }
 
-static struct float_result msdf_measure_text(struct yetty_font_font *self, const char *utf8,
+static struct float_result msdf_measure_text(struct yetty_ypaint_font *self, const char *utf8,
                                              size_t len, float font_size)
 {
-    struct msdf_font *f = (struct msdf_font *)self;
+    struct yetty_yfont_msdf_font *f = (struct yetty_yfont_msdf_font *)self;
     if (!f) {
         return YETTY_ERR(float, "font is NULL");
     }
@@ -356,15 +356,15 @@ static struct float_result msdf_measure_text(struct yetty_font_font *self, const
     return YETTY_OK(float, total *font_size / f->base_size);
 }
 
-static int msdf_is_dirty(const struct yetty_font_font *self)
+static int msdf_is_dirty(const struct yetty_ypaint_font *self)
 {
-    return ((const struct msdf_font *)self)->dirty;
+    return ((const struct yetty_yfont_msdf_font *)self)->dirty;
 }
 
 static struct yetty_yrender_gpu_resource_set_result msdf_get_gpu_resource_set(
-    struct yetty_font_font *self)
+    struct yetty_ypaint_font *self)
 {
-    struct msdf_font *f = (struct msdf_font *)self;
+    struct yetty_yfont_msdf_font *f = (struct yetty_yfont_msdf_font *)self;
     if (!f) {
         return YETTY_ERR(yetty_yrender_gpu_resource_set, "font is NULL");
     }
@@ -376,7 +376,7 @@ static struct yetty_yrender_gpu_resource_set_result msdf_get_gpu_resource_set(
         f->rs.textures[0].dirty = 1;
 
         f->rs.buffers[0].data = (uint8_t *)f->meta;
-        f->rs.buffers[0].size = (size_t)f->next_slot * sizeof(struct glyph_meta_gpu);
+        f->rs.buffers[0].size = (size_t)f->next_slot * sizeof(struct yetty_yfont_glyph_meta_gpu);
         f->rs.buffers[0].dirty = 1;
 
         f->rs.uniforms[0].f32 = f->pixel_range;
@@ -390,7 +390,7 @@ static struct yetty_yrender_gpu_resource_set_result msdf_get_gpu_resource_set(
     return YETTY_OK(yetty_yrender_gpu_resource_set, &f->rs);
 }
 
-static const struct yetty_font_font_ops msdf_font_ops = {
+static const struct yetty_yfont_font_ops msdf_font_ops = {
     .destroy = msdf_destroy,
     .get_glyph_index = msdf_get_glyph_index,
     .get_glyph_index_styled = msdf_get_glyph_index_styled,
@@ -409,7 +409,7 @@ static const struct yetty_font_font_ops msdf_font_ops = {
 
 #define DEFAULT_CELL_SIZE 64
 
-struct yetty_font_font_result yetty_font_msdf_font_create(const char *cdb_path,
+struct yetty_font_font_result yetty_yfont_msdf_font_create(const char *cdb_path,
                                                           const char *shader_path)
 {
     if (!cdb_path) {
@@ -433,7 +433,7 @@ struct yetty_font_font_result yetty_font_msdf_font_create(const char *cdb_path,
         return YETTY_ERR(yetty_font_font, cdb_res.error.msg);
     }
 
-    struct msdf_font *font = calloc(1, sizeof(struct msdf_font));
+    struct yetty_yfont_msdf_font *font = calloc(1, sizeof(struct yetty_yfont_msdf_font));
     if (!font) {
         free(shader_res.value.data);
         yetty_ycdb_reader_close(cdb_res.value);
@@ -464,7 +464,7 @@ struct yetty_font_font_result yetty_font_msdf_font_create(const char *cdb_path,
     }
 
     font->meta_capacity = 256;
-    font->meta = calloc(font->meta_capacity, sizeof(struct glyph_meta_gpu));
+    font->meta = calloc(font->meta_capacity, sizeof(struct yetty_yfont_glyph_meta_gpu));
     if (!font->meta) {
         free(font->atlas_pixels);
         free(font->shader_code.data);

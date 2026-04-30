@@ -12,15 +12,15 @@ extern "C" {
 
 struct yetty_yterm_pty_reader;
 
-struct yetty_yterm_pty_reader_result yetty_yterm_pty_reader_create(struct yetty_yplatform_pty *pty);
+struct yetty_yterm_pty_reader_result yetty_yterm_pty_reader_create(struct yetty_platform_pty *pty);
 
 void yetty_yterm_pty_reader_destroy(struct yetty_yterm_pty_reader *reader);
 
 void yetty_yterm_pty_reader_register_default_sink(struct yetty_yterm_pty_reader *reader,
-                                                  struct yetty_yterm_terminal_layer *layer);
+                                                  struct yetty_yrender_terminal_layer *layer);
 
 void yetty_yterm_pty_reader_register_osc_sink(struct yetty_yterm_pty_reader *reader, int vendor_id,
-                                              struct yetty_yterm_terminal_layer *layer);
+                                              struct yetty_yrender_terminal_layer *layer);
 
 int yetty_yterm_pty_reader_read(struct yetty_yterm_pty_reader *reader);
 

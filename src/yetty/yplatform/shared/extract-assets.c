@@ -24,7 +24,7 @@ int yetty_incbin_assets_has_yemu(struct yetty_incbin_assets *assets);
 int yetty_incbin_assets_extract_qemu_to(struct yetty_incbin_assets *assets, const char *data_dir);
 int yetty_incbin_assets_has_qemu(struct yetty_incbin_assets *assets);
 
-struct yetty_ycore_void_result yetty_yplatform_extract_assets(struct yetty_yconfig *config)
+struct yetty_ycore_void_result yetty_platform_extract_assets(struct yetty_yconfig *config)
 {
     const char *data_dir;
     const char *config_dir;
@@ -70,7 +70,7 @@ struct yetty_ycore_void_result yetty_yplatform_extract_assets(struct yetty_yconf
     if (yetty_incbin_assets_has_yemu(assets)) {
         char yemu_kernel[512];
         snprintf(yemu_kernel, sizeof(yemu_kernel), "%s/yemu/kernel-riscv64.bin", data_dir);
-        if (!yplatform_file_exists(yemu_kernel)) {
+        if (!yetty_yplatform_file_exists(yemu_kernel)) {
             if (!yetty_incbin_assets_extract_yemu_to(assets, data_dir)) {
                 yetty_incbin_assets_destroy(assets);
                 return YETTY_ERR(yetty_ycore_void, "failed to extract yemu assets");
@@ -86,7 +86,7 @@ struct yetty_ycore_void_result yetty_yplatform_extract_assets(struct yetty_yconf
 #else
         snprintf(qemu_bin, sizeof(qemu_bin), "%s/qemu/qemu-system-riscv64", data_dir);
 #endif
-        if (!yplatform_file_exists(qemu_bin)) {
+        if (!yetty_yplatform_file_exists(qemu_bin)) {
             if (!yetty_incbin_assets_extract_qemu_to(assets, data_dir)) {
                 yetty_incbin_assets_destroy(assets);
                 return YETTY_ERR(yetty_ycore_void, "failed to extract qemu assets");

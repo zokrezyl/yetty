@@ -178,15 +178,15 @@ void yetty_ythorvg_renderer_set_target(struct yetty_ythorvg_renderer* r,
 }
 
 struct yetty_ycore_void_result
-yetty_ythorvg_render(struct yetty_ythorvg_renderer* r,
+yetty_ythorvg_renderer_render(struct yetty_ythorvg_renderer* r,
                      const void* data, size_t size,
                      const char* mimetype,
                      float* out_width, float* out_height) {
     if (!r || !r->render_method) {
-        return yetty_cpp_err("yetty_ythorvg_render: renderer is NULL");
+        return yetty_ycore_err("yetty_ythorvg_render: renderer is NULL");
     }
     if (!data || size == 0) {
-        return yetty_cpp_err("yetty_ythorvg_render: data is empty");
+        return yetty_ycore_err("yetty_ythorvg_render: data is empty");
     }
 
     if (!mimetype) { mimetype = detect_mimetype(data, size);
@@ -195,13 +195,13 @@ yetty_ythorvg_render(struct yetty_ythorvg_renderer* r,
     // Fresh Animation wrapper — replaces any previously loaded content.
     r->animation.reset(tvg::Animation::gen());
     if (!r->animation) {
-        return yetty_cpp_err("yetty_ythorvg_render: tvg::Animation::gen failed");
+        return yetty_ycore_err("yetty_ythorvg_render: tvg::Animation::gen failed");
     }
 
     r->picture = r->animation->picture();
     if (!r->picture) {
         r->animation.reset();
-        return yetty_cpp_err("yetty_ythorvg_render: Animation::picture() returned NULL");
+        return yetty_ycore_err("yetty_ythorvg_render: Animation::picture() returned NULL");
     }
 
     tvg::Result load_result;
@@ -212,7 +212,7 @@ yetty_ythorvg_render(struct yetty_ythorvg_renderer* r,
     if (load_result != tvg::Result::Success) {
         r->animation.reset();
         r->picture = nullptr;
-        return yetty_cpp_err("yetty_ythorvg_render: picture->load failed");
+        return yetty_ycore_err("yetty_ythorvg_render: picture->load failed");
     }
 
     if (is_lottie) {
@@ -237,23 +237,23 @@ yetty_ythorvg_render(struct yetty_ythorvg_renderer* r,
 }
 
 struct yetty_ycore_void_result
-yetty_ythorvg_render_frame(struct yetty_ythorvg_renderer* r, float frame) {
+yetty_ythorvg_renderer_render_frame(struct yetty_ythorvg_renderer* r, float frame) {
     if (!r || !r->render_method) {
-        return yetty_cpp_err("yetty_ythorvg_render_frame: renderer is NULL");
+        return yetty_ycore_err("yetty_ythorvg_render_frame: renderer is NULL");
     }
     if (!r->is_animation || !r->animation) {
-        return yetty_cpp_err("yetty_ythorvg_render_frame: no animation loaded");
+        return yetty_ycore_err("yetty_ythorvg_render_frame: no animation loaded");
     }
     r->animation->frame(frame);
     render_once(r);
     return YETTY_OK_VOID();
 }
 
-float yetty_ythorvg_total_frames(const struct yetty_ythorvg_renderer* r) {
+float yetty_ythorvg_renderer_total_frames(const struct yetty_ythorvg_renderer* r) {
     return r ? r->total_frames : 0.0f;
 }
 
-float yetty_ythorvg_duration(const struct yetty_ythorvg_renderer* r) {
+float yetty_ythorvg_renderer_duration(const struct yetty_ythorvg_renderer* r) {
     return r ? r->duration : 0.0f;
 }
 

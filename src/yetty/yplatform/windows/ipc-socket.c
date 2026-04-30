@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct yetty_ipc_socket {
+struct yetty_platform_socket {
     HANDLE handle;
     int is_listener;
     char pipe_name[YETTY_IPC_SOCKET_PATH_MAX];
@@ -19,9 +19,9 @@ static void get_default_path(char *path_out)
     snprintf(path_out, YETTY_IPC_SOCKET_PATH_MAX, "\\\\.\\pipe\\yetty-%lu", GetCurrentProcessId());
 }
 
-struct yetty_ipc_socket_result yetty_ipc_socket_listen(const char *path, char *path_out)
+struct yetty_ipc_socket_result yetty_platform_socket_listen(const char *path, char *path_out)
 {
-    struct yetty_ipc_socket *sock;
+    struct yetty_platform_socket *sock;
     char default_path[YETTY_IPC_SOCKET_PATH_MAX];
     HANDLE pipe;
 
@@ -38,7 +38,7 @@ struct yetty_ipc_socket_result yetty_ipc_socket_listen(const char *path, char *p
         return YETTY_ERR(yetty_ipc_socket, "failed to create named pipe");
     }
 
-    sock = calloc(1, sizeof(struct yetty_ipc_socket));
+    sock = calloc(1, sizeof(struct yetty_platform_socket));
     if (!sock) {
         CloseHandle(pipe);
         return YETTY_ERR(yetty_ipc_socket, "out of memory");
@@ -55,9 +55,9 @@ struct yetty_ipc_socket_result yetty_ipc_socket_listen(const char *path, char *p
     return YETTY_OK(yetty_ipc_socket, sock);
 }
 
-struct yetty_ipc_socket_result yetty_ipc_socket_connect(const char *path)
+struct yetty_ipc_socket_result yetty_platform_socket_connect(const char *path)
 {
-    struct yetty_ipc_socket *sock;
+    struct yetty_platform_socket *sock;
     HANDLE pipe;
 
     if (!path) {
@@ -71,7 +71,7 @@ struct yetty_ipc_socket_result yetty_ipc_socket_connect(const char *path)
         return YETTY_ERR(yetty_ipc_socket, "failed to connect to pipe");
     }
 
-    sock = calloc(1, sizeof(struct yetty_ipc_socket));
+    sock = calloc(1, sizeof(struct yetty_platform_socket));
     if (!sock) {
         CloseHandle(pipe);
         return YETTY_ERR(yetty_ipc_socket, "out of memory");
@@ -83,7 +83,7 @@ struct yetty_ipc_socket_result yetty_ipc_socket_connect(const char *path)
     return YETTY_OK(yetty_ipc_socket, sock);
 }
 
-void yetty_ipc_socket_close(yetty_ipc_socket_t sock)
+void yetty_platform_socket_close(yetty_ipc_socket_t sock)
 {
     if (!sock) {
         return;
@@ -99,9 +99,9 @@ void yetty_ipc_socket_close(yetty_ipc_socket_t sock)
     free(sock);
 }
 
-struct yetty_ipc_socket_result yetty_ipc_socket_accept(yetty_ipc_socket_t sock)
+struct yetty_ipc_socket_result yetty_platform_socket_accept(yetty_ipc_socket_t sock)
 {
-    struct yetty_ipc_socket *client;
+    struct yetty_platform_socket *client;
     HANDLE new_pipe;
 
     if (!sock || !sock->is_listener) {
@@ -121,7 +121,7 @@ struct yetty_ipc_socket_result yetty_ipc_socket_accept(yetty_ipc_socket_t sock)
     }
 
     /* Move current pipe to client, create new listener */
-    client = calloc(1, sizeof(struct yetty_ipc_socket));
+    client = calloc(1, sizeof(struct yetty_platform_socket));
     if (!client) {
         return YETTY_ERR(yetty_ipc_socket, "out of memory");
     }
@@ -146,7 +146,7 @@ struct yetty_ipc_socket_result yetty_ipc_socket_accept(yetty_ipc_socket_t sock)
     return YETTY_OK(yetty_ipc_socket, client);
 }
 
-struct yetty_ycore_size_result yetty_ipc_socket_send(yetty_ipc_socket_t sock, const void *data,
+struct yetty_ycore_size_result yetty_platform_socket_send(yetty_ipc_socket_t sock, const void *data,
                                                      size_t len)
 {
     DWORD written = 0;
@@ -162,7 +162,7 @@ struct yetty_ycore_size_result yetty_ipc_socket_send(yetty_ipc_socket_t sock, co
     return YETTY_OK(yetty_ycore_size, (size_t)written);
 }
 
-struct yetty_ycore_size_result yetty_ipc_socket_recv(yetty_ipc_socket_t sock, void *buf,
+struct yetty_ycore_size_result yetty_platform_socket_recv(yetty_ipc_socket_t sock, void *buf,
                                                      size_t max_len)
 {
     DWORD bytes_read = 0;
@@ -184,13 +184,13 @@ struct yetty_ycore_size_result yetty_ipc_socket_recv(yetty_ipc_socket_t sock, vo
     return YETTY_OK(yetty_ycore_size, (size_t)bytes_read);
 }
 
-int yetty_ipc_socket_would_block(void)
+int yetty_platform_socket_would_block(void)
 {
     DWORD err = GetLastError();
     return err == ERROR_IO_PENDING || err == ERROR_NO_DATA;
 }
 
-int yetty_ipc_socket_has_data(yetty_ipc_socket_t sock)
+int yetty_platform_socket_has_data(yetty_ipc_socket_t sock)
 {
     DWORD available = 0;
 
@@ -205,14 +205,14 @@ int yetty_ipc_socket_has_data(yetty_ipc_socket_t sock)
     return available > 0;
 }
 
-int yetty_ipc_socket_get_fd(yetty_ipc_socket_t sock)
+int yetty_platform_socket_get_fd(yetty_ipc_socket_t sock)
 {
     /* No fd on Windows, use has_data for polling */
     (void)sock;
     return -1;
 }
 
-void yetty_ipc_socket_unlink(const char *path)
+void yetty_platform_socket_unlink(const char *path)
 {
     /* No-op on Windows - named pipes are automatically cleaned up */
     (void)path;

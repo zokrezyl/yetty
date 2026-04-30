@@ -12,23 +12,23 @@ extern "C" {
 #endif
 
 /* Opaque thread handle */
-typedef struct ythread ythread_t;
+struct yetty_yplatform_ythread;
 
 /* Thread function signature: returns 0 on success */
 typedef int (*ythread_func_t)(void *arg);
 
 /* Thread */
-ythread_t *ythread_create(ythread_func_t func, void *arg);
-int ythread_join(ythread_t *thread);
+struct yetty_yplatform_ythread *yetty_yplatform_ythread_create(ythread_func_t func, void *arg);
+int yetty_yplatform_ythread_join(struct yetty_yplatform_ythread *thread);
 
 /* Opaque mutex handle */
-typedef struct ymutex ymutex_t;
+struct yetty_yplatform_ymutex;
 
 /* Mutex */
-ymutex_t *ymutex_create(void);
-void ymutex_destroy(ymutex_t *m);
-void ymutex_lock(ymutex_t *m);
-void ymutex_unlock(ymutex_t *m);
+struct yetty_yplatform_ymutex *yetty_yplatform_ymutex_create(void);
+void yetty_yplatform_ymutex_destroy(struct yetty_yplatform_ymutex *m);
+void yetty_yplatform_ymutex_lock(struct yetty_yplatform_ymutex *m);
+void yetty_yplatform_ymutex_unlock(struct yetty_yplatform_ymutex *m);
 
 #ifdef __cplusplus
 }

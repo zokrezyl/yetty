@@ -39,24 +39,24 @@
  * Parse tree (internal)
  *===========================================================================*/
 
-enum ymd_style {
-    YMD_REGULAR = 0,
-    YMD_BOLD = 1,
-    YMD_ITALIC = 2,
-    YMD_BOLD_ITALIC = 3,
+enum yetty_ymarkdown_ymd_style {
+    YETTY_YMARKDOWN_YMD_REGULAR = 0,
+    YETTY_YMARKDOWN_YMD_BOLD = 1,
+    YETTY_YMARKDOWN_YMD_ITALIC = 2,
+    YETTY_YMARKDOWN_YMD_BOLD_ITALIC = 3,
 };
 
-struct ymd_span {
+struct yetty_ymarkdown_ymd_span {
     const char *text; /* slice into owned line storage */
     size_t text_len;
-    enum ymd_style style;
+    enum yetty_ymarkdown_ymd_style style;
     uint8_t header_level; /* 0 = normal */
     bool is_code;
     bool is_bullet;
 };
 
-struct ymd_line {
-    struct ymd_span *spans;
+struct yetty_ymarkdown_ymd_line {
+    struct yetty_ymarkdown_ymd_span *spans;
     size_t span_count;
     size_t span_cap;
     float indent;
@@ -69,13 +69,13 @@ struct ymd_line {
     size_t raw_len;
 };
 
-struct ymd_doc {
-    struct ymd_line *lines;
+struct yetty_ymarkdown_ymd_doc {
+    struct yetty_ymarkdown_ymd_line *lines;
     size_t line_count;
     size_t line_cap;
 };
 
-static void ymd_line_destroy(struct ymd_line *line)
+static void ymd_line_destroy(struct yetty_ymarkdown_ymd_line *line)
 {
     if (!line) {
         return;
@@ -86,7 +86,7 @@ static void ymd_line_destroy(struct ymd_line *line)
     line->raw = NULL;
 }
 
-static void ymd_doc_destroy(struct ymd_doc *doc)
+static void ymd_doc_destroy(struct yetty_ymarkdown_ymd_doc *doc)
 {
     if (!doc) {
         return;
@@ -100,11 +100,11 @@ static void ymd_doc_destroy(struct ymd_doc *doc)
     doc->line_cap = 0;
 }
 
-static int ymd_line_push_span(struct ymd_line *line, struct ymd_span span)
+static int ymd_line_push_span(struct yetty_ymarkdown_ymd_line *line, struct yetty_ymarkdown_ymd_span span)
 {
     if (line->span_count == line->span_cap) {
         size_t new_cap = line->span_cap ? line->span_cap * 2 : 4;
-        struct ymd_span *ns = realloc(line->spans, new_cap * sizeof(*ns));
+        struct yetty_ymarkdown_ymd_span *ns = realloc(line->spans, new_cap * sizeof(*ns));
         if (!ns) {
             return -1;
         }
@@ -115,11 +115,11 @@ static int ymd_line_push_span(struct ymd_line *line, struct ymd_span span)
     return 0;
 }
 
-static int ymd_line_insert_span_front(struct ymd_line *line, struct ymd_span span)
+static int ymd_line_insert_span_front(struct yetty_ymarkdown_ymd_line *line, struct yetty_ymarkdown_ymd_span span)
 {
     if (line->span_count == line->span_cap) {
         size_t new_cap = line->span_cap ? line->span_cap * 2 : 4;
-        struct ymd_span *ns = realloc(line->spans, new_cap * sizeof(*ns));
+        struct yetty_ymarkdown_ymd_span *ns = realloc(line->spans, new_cap * sizeof(*ns));
         if (!ns) {
             return -1;
         }
@@ -132,11 +132,11 @@ static int ymd_line_insert_span_front(struct ymd_line *line, struct ymd_span spa
     return 0;
 }
 
-static int ymd_doc_push_line(struct ymd_doc *doc, struct ymd_line line)
+static int ymd_doc_push_line(struct yetty_ymarkdown_ymd_doc *doc, struct yetty_ymarkdown_ymd_line line)
 {
     if (doc->line_count == doc->line_cap) {
         size_t new_cap = doc->line_cap ? doc->line_cap * 2 : 16;
-        struct ymd_line *nl = realloc(doc->lines, new_cap * sizeof(*nl));
+        struct yetty_ymarkdown_ymd_line *nl = realloc(doc->lines, new_cap * sizeof(*nl));
         if (!nl) {
             return -1;
         }
@@ -151,13 +151,13 @@ static int ymd_doc_push_line(struct ymd_doc *doc, struct ymd_line line)
  * Arg parsing
  *===========================================================================*/
 
-struct ymd_params {
+struct yetty_ymarkdown_ymd_params {
     float font_size;
     float line_spacing;
     bool user_font_size;
 };
 
-static void ymd_params_init(struct ymd_params *p)
+static void ymd_params_init(struct yetty_ymarkdown_ymd_params *p)
 {
     p->font_size = YMD_DEFAULT_FONT_SIZE;
     p->line_spacing = YMD_DEFAULT_LINE_SPACING;
@@ -194,7 +194,7 @@ static bool starts_with(const char *s, size_t s_len, const char *prefix)
     return memcmp(s, prefix, pl) == 0;
 }
 
-static void ymd_parse_args(const char *args, size_t args_len, struct ymd_params *p)
+static void ymd_parse_args(const char *args, size_t args_len, struct yetty_ymarkdown_ymd_params *p)
 {
     if (!args || args_len == 0) {
         return;
@@ -279,9 +279,9 @@ static size_t find_char_from(const char *src, size_t src_len, size_t pos, const 
 }
 
 /* Parse a single line (without the newline). Appends to doc. */
-static int ymd_parse_line(struct ymd_doc *doc, const char *src, size_t src_len)
+static int ymd_parse_line(struct yetty_ymarkdown_ymd_doc *doc, const char *src, size_t src_len)
 {
-    struct ymd_line line = {0};
+    struct yetty_ymarkdown_ymd_line line = {0};
     line.scale = 1.0f;
 
     /* Copy source into a line-owned buffer; spans will slice it. We don't
@@ -331,11 +331,11 @@ static int ymd_parse_line(struct ymd_doc *doc, const char *src, size_t src_len)
         if (ln[pos] == '`') {
             size_t end = find_char_from(ln, len, pos + 1, "`");
             if (end != (size_t)-1) {
-                struct ymd_span s = {0};
+                struct yetty_ymarkdown_ymd_span s = {0};
                 s.text = ln + pos + 1;
                 s.text_len = end - pos - 1;
                 s.is_code = true;
-                s.style = YMD_REGULAR;
+                s.style = YETTY_YMARKDOWN_YMD_REGULAR;
                 if (ymd_line_push_span(&line, s) < 0) {
                     goto oom;
                 }
@@ -348,10 +348,10 @@ static int ymd_parse_line(struct ymd_doc *doc, const char *src, size_t src_len)
         if (pos + 2 < len && match_fixed(ln, len, pos, "***")) {
             size_t end = find_from(ln, len, pos + 3, "***");
             if (end != (size_t)-1) {
-                struct ymd_span s = {0};
+                struct yetty_ymarkdown_ymd_span s = {0};
                 s.text = ln + pos + 3;
                 s.text_len = end - pos - 3;
-                s.style = YMD_BOLD_ITALIC;
+                s.style = YETTY_YMARKDOWN_YMD_BOLD_ITALIC;
                 if (ymd_line_push_span(&line, s) < 0) {
                     goto oom;
                 }
@@ -364,10 +364,10 @@ static int ymd_parse_line(struct ymd_doc *doc, const char *src, size_t src_len)
         if (pos + 1 < len && match_fixed(ln, len, pos, "**")) {
             size_t end = find_from(ln, len, pos + 2, "**");
             if (end != (size_t)-1) {
-                struct ymd_span s = {0};
+                struct yetty_ymarkdown_ymd_span s = {0};
                 s.text = ln + pos + 2;
                 s.text_len = end - pos - 2;
-                s.style = YMD_BOLD;
+                s.style = YETTY_YMARKDOWN_YMD_BOLD;
                 if (ymd_line_push_span(&line, s) < 0) {
                     goto oom;
                 }
@@ -380,10 +380,10 @@ static int ymd_parse_line(struct ymd_doc *doc, const char *src, size_t src_len)
         if (ln[pos] == '*') {
             size_t end = find_char_from(ln, len, pos + 1, "*");
             if (end != (size_t)-1) {
-                struct ymd_span s = {0};
+                struct yetty_ymarkdown_ymd_span s = {0};
                 s.text = ln + pos + 1;
                 s.text_len = end - pos - 1;
-                s.style = YMD_ITALIC;
+                s.style = YETTY_YMARKDOWN_YMD_ITALIC;
                 if (ymd_line_push_span(&line, s) < 0) {
                     goto oom;
                 }
@@ -398,10 +398,10 @@ static int ymd_parse_line(struct ymd_doc *doc, const char *src, size_t src_len)
             next = len;
         }
         if (next > pos) {
-            struct ymd_span s = {0};
+            struct yetty_ymarkdown_ymd_span s = {0};
             s.text = ln + pos;
             s.text_len = next - pos;
-            s.style = (header_level > 0) ? YMD_BOLD : YMD_REGULAR;
+            s.style = (header_level > 0) ? YETTY_YMARKDOWN_YMD_BOLD : YETTY_YMARKDOWN_YMD_REGULAR;
             s.header_level = (uint8_t)header_level;
             if (ymd_line_push_span(&line, s) < 0) {
                 goto oom;
@@ -409,10 +409,10 @@ static int ymd_parse_line(struct ymd_doc *doc, const char *src, size_t src_len)
             pos = next;
         } else {
             /* isolated * or ` that didn't close — emit literally */
-            struct ymd_span s = {0};
+            struct yetty_ymarkdown_ymd_span s = {0};
             s.text = ln + pos;
             s.text_len = 1;
-            s.style = YMD_REGULAR;
+            s.style = YETTY_YMARKDOWN_YMD_REGULAR;
             if (ymd_line_push_span(&line, s) < 0) {
                 goto oom;
             }
@@ -424,10 +424,10 @@ static int ymd_parse_line(struct ymd_doc *doc, const char *src, size_t src_len)
         /* UTF-8 bullet "• " (E2 80 A2 20) — 4 bytes.
 		 * We point into a static literal; no alloc needed. */
         static const char bullet_text[] = "\xE2\x80\xA2 ";
-        struct ymd_span bullet = {0};
+        struct yetty_ymarkdown_ymd_span bullet = {0};
         bullet.text = bullet_text;
         bullet.text_len = sizeof(bullet_text) - 1;
-        bullet.style = YMD_REGULAR;
+        bullet.style = YETTY_YMARKDOWN_YMD_REGULAR;
         bullet.is_bullet = true;
         if (ymd_line_insert_span_front(&line, bullet) < 0) {
             goto oom;
@@ -435,10 +435,10 @@ static int ymd_parse_line(struct ymd_doc *doc, const char *src, size_t src_len)
     }
 
     if (line.span_count == 0) {
-        struct ymd_span empty = {0};
+        struct yetty_ymarkdown_ymd_span empty = {0};
         empty.text = "";
         empty.text_len = 0;
-        empty.style = YMD_REGULAR;
+        empty.style = YETTY_YMARKDOWN_YMD_REGULAR;
         if (ymd_line_push_span(&line, empty) < 0) {
             goto oom;
         }
@@ -454,7 +454,7 @@ oom:
     return -1;
 }
 
-static int ymd_parse(struct ymd_doc *doc, const char *content, size_t len)
+static int ymd_parse(struct yetty_ymarkdown_ymd_doc *doc, const char *content, size_t len)
 {
     size_t i = 0;
     while (i <= len) {
@@ -477,7 +477,7 @@ static int ymd_parse(struct ymd_doc *doc, const char *content, size_t len)
  * Primitive generation
  *===========================================================================*/
 
-static uint32_t ymd_span_color(const struct ymd_span *s)
+static uint32_t ymd_span_color(const struct yetty_ymarkdown_ymd_span *s)
 {
     if (s->is_code) {
         return YMD_COLOR_CODE;
@@ -485,28 +485,28 @@ static uint32_t ymd_span_color(const struct ymd_span *s)
     if (s->header_level > 0) {
         return YMD_COLOR_HEADER;
     }
-    if (s->style == YMD_BOLD || s->style == YMD_BOLD_ITALIC) {
+    if (s->style == YETTY_YMARKDOWN_YMD_BOLD || s->style == YETTY_YMARKDOWN_YMD_BOLD_ITALIC) {
         return YMD_COLOR_BOLD;
     }
     return YMD_COLOR_TEXT;
 }
 
 static struct yetty_ycore_void_result ymd_emit(struct yetty_ypaint_core_buffer *buf,
-                                               const struct ymd_doc *doc,
-                                               const struct ymd_params *p)
+                                               const struct yetty_ymarkdown_ymd_doc *doc,
+                                               const struct yetty_ymarkdown_ymd_params *p)
 {
     float cursor_y = 2.0f;
     float line_height = p->font_size * p->line_spacing;
 
     for (size_t li = 0; li < doc->line_count; li++) {
-        const struct ymd_line *line = &doc->lines[li];
+        const struct yetty_ymarkdown_ymd_line *line = &doc->lines[li];
         float cursor_x = 2.0f + line->indent;
         float scale = line->scale;
         float scaled_size = p->font_size * scale;
         float scaled_line_height = line_height * scale;
 
         for (size_t si = 0; si < line->span_count; si++) {
-            const struct ymd_span *span = &line->spans[si];
+            const struct yetty_ymarkdown_ymd_span *span = &line->spans[si];
             if (span->text_len == 0) {
                 continue;
             }
@@ -522,7 +522,7 @@ static struct yetty_ycore_void_result ymd_emit(struct yetty_ypaint_core_buffer *
                     .half_height = scaled_size * 0.5f + 0.5f,
                     .corner_radius = 0.0f,
                 };
-                struct yetty_ypaint_id_result r =
+                struct yetty_ypaint_core_id_result r =
                     yetty_ysdf_add_box(buf, 0, YMD_COLOR_CODE_BG, 0, 0.0f, &geom);
                 if (r.error != YPAINT_OK) {
                     return YETTY_ERR(yetty_ycore_void, "ymd_emit: code box add failed");
@@ -561,7 +561,7 @@ struct yetty_ymarkdown_render_result yetty_ymarkdown_render(
         return YETTY_ERR(yetty_ymarkdown_render, "content is NULL but content_len > 0");
     }
 
-    struct ymd_params params;
+    struct yetty_ymarkdown_ymd_params params;
     ymd_params_init(&params);
     ymd_parse_args(args, args_len, &params);
 
@@ -581,13 +581,13 @@ struct yetty_ymarkdown_render_result yetty_ymarkdown_render(
         .scene_max_x = scene_w,
         .scene_max_y = scene_h,
     };
-    struct yetty_ypaint_core_buffer_result br = yetty_ypaint_core_buffer_create(&bcfg);
+    struct yetty_ypaint_core_buffer_result br = yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         return YETTY_ERR(yetty_ymarkdown_render, br.error.msg);
     }
     struct yetty_ypaint_core_buffer *buf = br.value;
 
-    struct ymd_doc doc = {0};
+    struct yetty_ymarkdown_ymd_doc doc = {0};
     if (ymd_parse(&doc, content, content_len) < 0) {
         ymd_doc_destroy(&doc);
         yetty_ypaint_core_buffer_destroy(buf);

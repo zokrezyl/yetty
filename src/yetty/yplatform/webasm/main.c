@@ -236,8 +236,8 @@ static int wheel_mods_to_glfw(const EmscriptenWheelEvent *e)
 
 static EM_BOOL on_key_down(int event_type, const EmscriptenKeyboardEvent *e, void *user_data)
 {
-    struct yetty_yplatform_input_pipe *pipe = user_data;
-    struct yetty_ycore_event event = {0};
+    struct yetty_ycore_input_pipe *pipe = user_data;
+    struct yetty_yui_event event = {0};
     int key, mods;
 
     (void)event_type;
@@ -253,7 +253,7 @@ static EM_BOOL on_key_down(int event_type, const EmscriptenKeyboardEvent *e, voi
     /* Printable char with Ctrl/Alt -> charInputWithMods */
     if ((mods & (0x0002 | 0x0004)) && e->key[0] && !e->key[1]) {
         uint32_t ch = (uint32_t)(unsigned char)e->key[0];
-        event.type = YETTY_EVENT_CHAR;
+        event.type = YETTY_YCORE_CHAR;
         event.chr.codepoint = ch;
         event.chr.mods = mods;
         pipe->ops->write(pipe, &event, sizeof(event));
@@ -262,7 +262,7 @@ static EM_BOOL on_key_down(int event_type, const EmscriptenKeyboardEvent *e, voi
     }
 
     /* Key down event */
-    event.type = YETTY_EVENT_KEY_DOWN;
+    event.type = YETTY_YCORE_KEY_DOWN;
     event.key.key = key;
     event.key.mods = mods;
     event.key.scancode = 0;
@@ -272,7 +272,7 @@ static EM_BOOL on_key_down(int event_type, const EmscriptenKeyboardEvent *e, voi
     /* Printable char without Ctrl/Alt -> also send Char event */
     if (!(mods & (0x0002 | 0x0004)) && e->key[0] && !e->key[1]) {
         uint32_t ch = (uint32_t)(unsigned char)e->key[0];
-        event.type = YETTY_EVENT_CHAR;
+        event.type = YETTY_YCORE_CHAR;
         event.chr.codepoint = ch;
         event.chr.mods = 0;
         pipe->ops->write(pipe, &event, sizeof(event));
@@ -284,8 +284,8 @@ static EM_BOOL on_key_down(int event_type, const EmscriptenKeyboardEvent *e, voi
 
 static EM_BOOL on_key_up(int event_type, const EmscriptenKeyboardEvent *e, void *user_data)
 {
-    struct yetty_yplatform_input_pipe *pipe = user_data;
-    struct yetty_ycore_event event = {0};
+    struct yetty_ycore_input_pipe *pipe = user_data;
+    struct yetty_yui_event event = {0};
     int key, mods;
 
     (void)event_type;
@@ -297,7 +297,7 @@ static EM_BOOL on_key_up(int event_type, const EmscriptenKeyboardEvent *e, void 
     key = dom_key_to_glfw(e->code, e->key);
     mods = dom_mods_to_glfw(e);
 
-    event.type = YETTY_EVENT_KEY_UP;
+    event.type = YETTY_YCORE_KEY_UP;
     event.key.key = key;
     event.key.mods = mods;
     event.key.scancode = 0;
@@ -308,8 +308,8 @@ static EM_BOOL on_key_up(int event_type, const EmscriptenKeyboardEvent *e, void 
 
 static EM_BOOL on_mouse_down(int event_type, const EmscriptenMouseEvent *e, void *user_data)
 {
-    struct yetty_yplatform_input_pipe *pipe = user_data;
-    struct yetty_ycore_event event = {0};
+    struct yetty_ycore_input_pipe *pipe = user_data;
+    struct yetty_yui_event event = {0};
 
     (void)event_type;
 
@@ -317,7 +317,7 @@ static EM_BOOL on_mouse_down(int event_type, const EmscriptenMouseEvent *e, void
         return EM_FALSE;
     }
 
-    event.type = YETTY_EVENT_MOUSE_DOWN;
+    event.type = YETTY_YCORE_MOUSE_DOWN;
     event.mouse.x = (float)e->targetX;
     event.mouse.y = (float)e->targetY;
     event.mouse.button = (int)e->button;
@@ -329,8 +329,8 @@ static EM_BOOL on_mouse_down(int event_type, const EmscriptenMouseEvent *e, void
 
 static EM_BOOL on_mouse_up(int event_type, const EmscriptenMouseEvent *e, void *user_data)
 {
-    struct yetty_yplatform_input_pipe *pipe = user_data;
-    struct yetty_ycore_event event = {0};
+    struct yetty_ycore_input_pipe *pipe = user_data;
+    struct yetty_yui_event event = {0};
 
     (void)event_type;
 
@@ -338,7 +338,7 @@ static EM_BOOL on_mouse_up(int event_type, const EmscriptenMouseEvent *e, void *
         return EM_FALSE;
     }
 
-    event.type = YETTY_EVENT_MOUSE_UP;
+    event.type = YETTY_YCORE_MOUSE_UP;
     event.mouse.x = (float)e->targetX;
     event.mouse.y = (float)e->targetY;
     event.mouse.button = (int)e->button;
@@ -350,8 +350,8 @@ static EM_BOOL on_mouse_up(int event_type, const EmscriptenMouseEvent *e, void *
 
 static EM_BOOL on_mouse_move(int event_type, const EmscriptenMouseEvent *e, void *user_data)
 {
-    struct yetty_yplatform_input_pipe *pipe = user_data;
-    struct yetty_ycore_event event = {0};
+    struct yetty_ycore_input_pipe *pipe = user_data;
+    struct yetty_yui_event event = {0};
 
     (void)event_type;
 
@@ -359,7 +359,7 @@ static EM_BOOL on_mouse_move(int event_type, const EmscriptenMouseEvent *e, void
         return EM_FALSE;
     }
 
-    event.type = YETTY_EVENT_MOUSE_MOVE;
+    event.type = YETTY_YCORE_MOUSE_MOVE;
     event.mouse.x = (float)e->targetX;
     event.mouse.y = (float)e->targetY;
     event.mouse.mods = mouse_mods_to_glfw(e);
@@ -370,8 +370,8 @@ static EM_BOOL on_mouse_move(int event_type, const EmscriptenMouseEvent *e, void
 
 static EM_BOOL on_wheel(int event_type, const EmscriptenWheelEvent *e, void *user_data)
 {
-    struct yetty_yplatform_input_pipe *pipe = user_data;
-    struct yetty_ycore_event event = {0};
+    struct yetty_ycore_input_pipe *pipe = user_data;
+    struct yetty_yui_event event = {0};
     float dx, dy;
 
     (void)event_type;
@@ -383,7 +383,7 @@ static EM_BOOL on_wheel(int event_type, const EmscriptenWheelEvent *e, void *use
     dx = (float)(-e->deltaX / 100.0);
     dy = (float)(-e->deltaY / 100.0);
 
-    event.type = YETTY_EVENT_SCROLL;
+    event.type = YETTY_YCORE_SCROLL;
     event.scroll.x = (float)e->mouse.targetX;
     event.scroll.y = (float)e->mouse.targetY;
     event.scroll.dx = dx;
@@ -396,8 +396,8 @@ static EM_BOOL on_wheel(int event_type, const EmscriptenWheelEvent *e, void *use
 
 static EM_BOOL on_resize(int event_type, const EmscriptenUiEvent *e, void *user_data)
 {
-    struct yetty_yplatform_input_pipe *pipe = user_data;
-    struct yetty_ycore_event event = {0};
+    struct yetty_ycore_input_pipe *pipe = user_data;
+    struct yetty_yui_event event = {0};
     int width, height;
 
     (void)event_type;
@@ -411,7 +411,7 @@ static EM_BOOL on_resize(int event_type, const EmscriptenUiEvent *e, void *user_
     yetty_yplatform_webasm_update_canvas_size();
     yetty_yplatform_webasm_get_framebuffer_size(&width, &height);
 
-    event.type = YETTY_EVENT_RESIZE;
+    event.type = YETTY_YCORE_RESIZE;
     event.resize.width = (float)width;
     event.resize.height = (float)height;
     pipe->ops->write(pipe, &event, sizeof(event));
@@ -420,7 +420,7 @@ static EM_BOOL on_resize(int event_type, const EmscriptenUiEvent *e, void *user_
     return EM_FALSE;
 }
 
-static void setup_input_callbacks(struct yetty_yplatform_input_pipe *pipe)
+static void setup_input_callbacks(struct yetty_ycore_input_pipe *pipe)
 {
     const char *target = "#canvas";
 
@@ -451,16 +451,16 @@ int main(int argc, char **argv)
     struct yetty_yconfig_result config_result;
     struct yetty_yconfig *config;
     struct yetty_yplatform_input_pipe_result pipe_result;
-    struct yetty_yplatform_input_pipe *pipe;
+    struct yetty_ycore_input_pipe *pipe;
     struct yetty_yplatform_pty_factory_result pty_factory_result;
-    struct yetty_yplatform_pty_factory *pty_factory;
+    struct yetty_platform_pty_factory *pty_factory;
     WGPUInstance instance;
     WGPUSurface surface;
     int canvas_width, canvas_height;
     struct yetty_app_context app_context;
     struct yetty_yetty_result yetty_result;
     struct yetty_yetty *yetty;
-    struct yetty_ycore_event event = {0};
+    struct yetty_yui_event event = {0};
     int fb_width, fb_height;
     struct yetty_ycore_void_result run_result;
 
@@ -489,7 +489,7 @@ int main(int argc, char **argv)
      * brotli'd shaders / fonts / msdf-fonts / yemu blobs into /data/. */
     {
         struct yetty_ycore_void_result extract_result =
-            yetty_yplatform_extract_assets(config);
+            yetty_platform_extract_assets(config);
         if (!YETTY_IS_OK(extract_result)) {
             yerror("Failed to extract embedded assets: %s",
                    extract_result.error.msg ? extract_result.error.msg : "(no msg)");
@@ -508,7 +508,7 @@ int main(int argc, char **argv)
     ydebug("main: Window created");
 
     /* PlatformInputPipe */
-    pipe_result = yetty_yplatform_input_pipe_create();
+    pipe_result = yetty_platform_input_pipe_create();
     if (!YETTY_IS_OK(pipe_result)) {
         yerror("Failed to create PlatformInputPipe");
         yetty_yplatform_webasm_destroy_window();
@@ -522,7 +522,7 @@ int main(int argc, char **argv)
     setup_input_callbacks(pipe);
 
     /* PtyFactory */
-    pty_factory_result = yetty_yplatform_pty_factory_create(config, NULL);
+    pty_factory_result = yetty_platform_pty_factory_create(config, NULL);
     if (!YETTY_IS_OK(pty_factory_result)) {
         yerror("Failed to create PtyFactory");
         pipe->ops->destroy(pipe);
@@ -594,7 +594,7 @@ int main(int argc, char **argv)
 
     /* Initial resize event */
     yetty_yplatform_webasm_get_framebuffer_size(&fb_width, &fb_height);
-    event.type = YETTY_EVENT_RESIZE;
+    event.type = YETTY_YCORE_RESIZE;
     event.resize.width = (float)fb_width;
     event.resize.height = (float)fb_height;
     pipe->ops->write(pipe, &event, sizeof(event));

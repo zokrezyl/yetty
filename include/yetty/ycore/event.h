@@ -9,58 +9,58 @@ extern "C" {
 #endif
 
 enum yetty_ycore_event_type {
-    YETTY_EVENT_NONE = 0,
+    YETTY_YCORE_NONE = 0,
     /* Input events */
-    YETTY_EVENT_KEY_DOWN,
-    YETTY_EVENT_KEY_UP,
-    YETTY_EVENT_CHAR,
-    YETTY_EVENT_MOUSE_DOWN,
-    YETTY_EVENT_MOUSE_UP,
-    YETTY_EVENT_MOUSE_MOVE,
-    YETTY_EVENT_MOUSE_DRAG,
-    YETTY_EVENT_SCROLL,
+    YETTY_YCORE_KEY_DOWN,
+    YETTY_YCORE_KEY_UP,
+    YETTY_YCORE_CHAR,
+    YETTY_YCORE_MOUSE_DOWN,
+    YETTY_YCORE_MOUSE_UP,
+    YETTY_YCORE_MOUSE_MOVE,
+    YETTY_YCORE_MOUSE_DRAG,
+    YETTY_YCORE_SCROLL,
     /* Focus events */
-    YETTY_EVENT_SET_FOCUS,
+    YETTY_YCORE_SET_FOCUS,
     /* Resize */
-    YETTY_EVENT_RESIZE,
+    YETTY_YCORE_RESIZE,
     /* Poll */
-    YETTY_EVENT_POLL_READABLE,
-    YETTY_EVENT_POLL_WRITABLE,
+    YETTY_YCORE_POLL_READABLE,
+    YETTY_YCORE_POLL_WRITABLE,
     /* Timer */
-    YETTY_EVENT_TIMER,
+    YETTY_YCORE_TIMER,
     /* Context menu */
-    YETTY_EVENT_CONTEXT_MENU_ACTION,
+    YETTY_YCORE_CONTEXT_MENU_ACTION,
     /* Card-local events */
-    YETTY_EVENT_CARD_MOUSE_DOWN,
-    YETTY_EVENT_CARD_MOUSE_UP,
-    YETTY_EVENT_CARD_MOUSE_MOVE,
-    YETTY_EVENT_CARD_SCROLL,
-    YETTY_EVENT_CARD_KEY_DOWN,
-    YETTY_EVENT_CARD_CHAR,
+    YETTY_YCORE_CARD_MOUSE_DOWN,
+    YETTY_YCORE_CARD_MOUSE_UP,
+    YETTY_YCORE_CARD_MOUSE_MOVE,
+    YETTY_YCORE_CARD_SCROLL,
+    YETTY_YCORE_CARD_KEY_DOWN,
+    YETTY_YCORE_CARD_CHAR,
     /* Tree manipulation */
-    YETTY_EVENT_CLOSE,
-    YETTY_EVENT_SPLIT_PANE,
+    YETTY_YCORE_CLOSE,
+    YETTY_YCORE_SPLIT_PANE,
     /* Clipboard */
-    YETTY_EVENT_COPY,
-    YETTY_EVENT_PASTE,
+    YETTY_YCORE_COPY,
+    YETTY_YCORE_PASTE,
     /* Command mode */
-    YETTY_EVENT_COMMAND_KEY,
+    YETTY_YCORE_COMMAND_KEY,
     /* Cursor shape */
-    YETTY_EVENT_SET_CURSOR,
+    YETTY_YCORE_SET_CURSOR,
     /* Card repack */
-    YETTY_EVENT_CARD_BUFFER_REPACK,
-    YETTY_EVENT_CARD_TEXTURE_REPACK,
+    YETTY_YCORE_CARD_BUFFER_REPACK,
+    YETTY_YCORE_CARD_TEXTURE_REPACK,
     /* Frame rate */
-    YETTY_EVENT_SET_FRAME_RATE,
+    YETTY_YCORE_SET_FRAME_RATE,
     /* Render */
-    YETTY_EVENT_RENDER,
+    YETTY_YCORE_RENDER,
     /* Window contents need a full repaint (e.g. X11 Expose after being
      * uncovered). The texture-surface target just re-renders the whole
      * frame, but damage-aware targets (X11-tile) need to mark every tile
      * dirty or nothing gets blitted — the GPU content didn't change. */
-    YETTY_EVENT_WINDOW_REFRESH,
+    YETTY_YCORE_WINDOW_REFRESH,
     /* Shutdown - window close, propagates destroy */
-    YETTY_EVENT_SHUTDOWN,
+    YETTY_YCORE_SHUTDOWN,
     /* Named zoom events (produced from raw SCROLL + modifier combinations by
      * yetty_event_handler; decoupled so rpc/kb-mapping can inject them too).
      * ZOOM_VISUAL        = input: scale delta + anchor, consumed by yetty.
@@ -71,12 +71,12 @@ enum yetty_ycore_event_type {
      *                      stay crisp at any zoom level.
      * ZOOM_VISUAL_PAN    = pan the visually-zoomed view (drag translated).
      * ZOOM_CELL_SIZE     = structural zoom (changes cell pixel size → cols/rows). */
-    YETTY_EVENT_ZOOM_VISUAL,
-    YETTY_EVENT_ZOOM_VISUAL_APPLY,
-    YETTY_EVENT_ZOOM_VISUAL_PAN,
-    YETTY_EVENT_ZOOM_CELL_SIZE,
+    YETTY_YCORE_ZOOM_VISUAL,
+    YETTY_YCORE_ZOOM_VISUAL_APPLY,
+    YETTY_YCORE_ZOOM_VISUAL_PAN,
+    YETTY_YCORE_ZOOM_CELL_SIZE,
     /* Must be last - used for array sizing */
-    YETTY_EVENT_COUNT
+    YETTY_YCORE_COUNT
 };
 
 struct yetty_ycore_event_key {
@@ -208,7 +208,7 @@ struct yetty_ycore_event_zoom_cell_size {
     int reset;   /* non-zero -> restore baseline cell size */
 };
 
-struct yetty_ycore_event {
+struct yetty_yui_event {
     enum yetty_ycore_event_type type;
     union {
         struct yetty_ycore_event_key key;

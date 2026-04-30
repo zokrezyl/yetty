@@ -51,7 +51,7 @@ static uint32_t parse_color(const char *str)
  * Parse context
  *===========================================================================*/
 
-struct ysdf_parse_ctx {
+struct yetty_ysdf_parse_ctx {
     char prop_key[32];
     uint32_t fill_color;
     uint32_t stroke_color;
@@ -95,7 +95,7 @@ struct ysdf_parse_ctx {
     float array_vals[8];
 };
 
-static void store_array(struct ysdf_parse_ctx *ctx)
+static void store_array(struct yetty_ysdf_parse_ctx *ctx)
 {
     const char *key = ctx->prop_key;
     if (strcmp(key, "position") == 0 && ctx->array_idx >= 2) {
@@ -133,7 +133,7 @@ static void store_array(struct ysdf_parse_ctx *ctx)
 
 static struct yetty_ycore_void_result build_prim(struct yetty_ypaint_core_buffer *buffer,
                                                  const char *primitive_type_name,
-                                                 struct ysdf_parse_ctx *ctx)
+                                                 struct yetty_ysdf_parse_ctx *ctx)
 {
     float data[16];
     uint32_t word_count = 0, tmp;
@@ -483,7 +483,7 @@ static struct yetty_ycore_void_result build_prim(struct yetty_ypaint_core_buffer
     }
 
     if (word_count > 0) {
-        struct yetty_ypaint_id_result r =
+        struct yetty_ypaint_core_id_result r =
             yetty_ypaint_core_buffer_add_prim(buffer, data, word_count * sizeof(float));
         if (r.error != YPAINT_OK) {
             return YETTY_ERR(yetty_ycore_void, "ysdf build_prim: add_prim failed");
@@ -497,10 +497,10 @@ static struct yetty_ycore_void_result build_prim(struct yetty_ypaint_core_buffer
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_ysdf_yaml_factory(struct yetty_ypaint_core_buffer *buffer,
-                                                       yaml_parser_t *yaml_parser,
+                                                       struct yaml_parser_s *yaml_parser,
                                                        const char *primitive_type_name)
 {
-    struct ysdf_parse_ctx ctx = {0};
+    struct yetty_ysdf_parse_ctx ctx = {0};
     yaml_event_t event;
     int depth = 0;
     int expect_value = 0;

@@ -20,7 +20,7 @@ typedef uint64_t yetty_ycore_object_id;
  * Color
  *===========================================================================*/
 
-struct yetty_color_rgba {
+struct yetty_ycore_rgba {
     uint8_t r, g, b, a;
 };
 
@@ -62,7 +62,7 @@ struct yetty_ycore_named_buffer {
  * Font blob - named buffer containing TTF data
  *===========================================================================*/
 
-struct yetty_font_blob {
+struct yetty_ycore_blob {
     struct yetty_ycore_named_buffer named_buf;
     int32_t font_id;
 };
@@ -71,7 +71,7 @@ struct yetty_font_blob {
  * Image data - named buffer containing RGBA8 pixels
  *===========================================================================*/
 
-struct yetty_image_data {
+struct yetty_ycore_data {
     struct yetty_ycore_named_buffer named_buf;
     float x, y, w, h;
     uint32_t pixel_width;
@@ -84,45 +84,45 @@ struct yetty_image_data {
  * Text span - named buffer containing UTF-8 text
  *===========================================================================*/
 
-struct yetty_text_span {
+struct yetty_ycore_span {
     struct yetty_ycore_named_buffer named_buf;
     float x, y;
     float font_size;
     float rotation;
-    struct yetty_color_rgba color;
+    struct yetty_ycore_rgba color;
     uint32_t layer;
     int32_t font_id;
 };
 
-struct grid_size {
+struct yetty_ycore_grid_size {
     uint32_t rows;
     uint32_t cols;
 };
 
-struct pixel_size {
+struct yetty_ycore_pixel_size {
     float width;
     float height;
 };
 
-struct pixel_coord {
+struct yetty_ycore_pixel_coord {
     float x;
     float y;
 };
 
-struct grid_cursor_pos {
+struct yetty_ycore_grid_cursor_pos {
     uint32_t rows;
     uint32_t cols;
 };
 
-struct rectangle {
-    struct pixel_coord min;
-    struct pixel_coord max;
+struct yetty_ycore_rectangle {
+    struct yetty_ycore_pixel_coord min;
+    struct yetty_ycore_pixel_coord max;
 };
 
 YETTY_YRESULT_DECLARE(uint32, uint32_t);
 YETTY_YRESULT_DECLARE(float, float);
-YETTY_YRESULT_DECLARE(pixel_size, struct pixel_size);
-YETTY_YRESULT_DECLARE(rectangle, struct rectangle);
+YETTY_YRESULT_DECLARE(pixel_size, struct yetty_ycore_pixel_size);
+YETTY_YRESULT_DECLARE(rectangle, struct yetty_ycore_rectangle);
 
 #ifdef __cplusplus
 }

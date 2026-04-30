@@ -90,7 +90,7 @@ void yetty_yvideo_encoder_config_defaults(struct yetty_yvideo_encoder_config *cf
     cfg->screen_content = true;
 }
 
-struct yetty_yvideo_encoder_ptr_result yetty_yvideo_encoder_create(
+struct yetty_yvideo_encoder_ptr_result yetty_yvideo_encoder_config_encoder_create(
     const struct yetty_yvideo_encoder_config *cfg)
 {
     if (!cfg || cfg->width == 0 || cfg->height == 0 || (cfg->width & 1) || (cfg->height & 1)) {
@@ -151,7 +151,7 @@ struct yetty_yvideo_encoder_ptr_result yetty_yvideo_encoder_create(
     int prepend = 1;
     (*enc->h264)->SetOption(enc->h264, ENCODER_OPTION_SPS_PPS_ID_STRATEGY, &prepend);
 
-    enc->start_time_sec = ytime_monotonic_sec();
+    enc->start_time_sec = yetty_yplatform_ytime_monotonic_sec();
 
     yinfo("yvideo: encoder %ux%u @ %.1ffps, %u kbps, IDR every %u, screen=%d", cfg->width,
           cfg->height, cfg->frame_rate, cfg->bitrate / 1000, cfg->idr_interval,
@@ -216,7 +216,7 @@ struct yetty_ycore_void_result yetty_yvideo_encoder_encode(struct yetty_yvideo_e
     src.pData[1] = (uint8_t *)u_plane;
     src.pData[2] = (uint8_t *)v_plane;
 
-    double now = ytime_monotonic_sec();
+    double now = yetty_yplatform_ytime_monotonic_sec();
     uint64_t ts_us = (uint64_t)((now - enc->start_time_sec) * 1e6);
     src.uiTimeStamp = (long long)ts_us;
 

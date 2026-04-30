@@ -18,43 +18,43 @@
 // Internal structures
 //=============================================================================
 
-struct flat_buffer {
+struct yetty_yrender_flat_buffer {
     const char *ns;
     struct yetty_yrender_buffer *src;
     size_t mega_offset;
 };
 
-struct flat_texture {
+struct yetty_yrender_flat_texture {
     const char *ns;
     struct yetty_yrender_texture *src;
     uint32_t atlas_index;
 };
 
-struct flat_uniform {
+struct yetty_yrender_flat_uniform {
     const char *ns;
     struct yetty_yrender_uniform *src;
 };
 
-struct yetty_primitive_gpu_binder {
+struct yetty_yrender_gpu_binder {
     WGPUDevice device;
     WGPUQueue queue;
-    struct yetty_yrender_gpu_allocator *allocator;
+    struct yetty_ypaint_core_gpu_allocator *allocator;
 
     // Pre-compiled pipeline (from factory)
     WGPURenderPipeline pipeline;
 
     // Collected resource sets
-    const struct yetty_yrender_gpu_resource_set *resource_sets[MAX_RESOURCE_SETS];
+    const struct yetty_ypaint_core_gpu_resource_set *resource_sets[MAX_RESOURCE_SETS];
     size_t resource_set_count;
 
     // Flattened resources
-    struct flat_buffer flat_buffers[MAX_FLAT_BUFFERS];
+    struct yetty_yrender_flat_buffer flat_buffers[MAX_FLAT_BUFFERS];
     size_t flat_buffer_count;
 
-    struct flat_texture flat_textures[MAX_FLAT_TEXTURES];
+    struct yetty_yrender_flat_texture flat_textures[MAX_FLAT_TEXTURES];
     size_t flat_texture_count;
 
-    struct flat_uniform flat_uniforms[MAX_FLAT_UNIFORMS];
+    struct yetty_yrender_flat_uniform flat_uniforms[MAX_FLAT_UNIFORMS];
     size_t flat_uniform_count;
 
     // GPU resources
@@ -84,15 +84,15 @@ struct yetty_primitive_gpu_binder {
 // Lifecycle
 //=============================================================================
 
-struct yetty_primitive_gpu_binder_ptr_result yetty_primitive_gpu_binder_create(
-    WGPUDevice device, WGPUQueue queue, struct yetty_yrender_gpu_allocator *allocator)
+struct yetty_primitive_gpu_binder_ptr_result yetty_yrender_gpu_binder_create(
+    WGPUDevice device, WGPUQueue queue, struct yetty_ypaint_core_gpu_allocator *allocator)
 {
     if (!device || !queue) {
         return YETTY_ERR(yetty_primitive_gpu_binder_ptr, "device or queue is NULL");
     }
 
-    struct yetty_primitive_gpu_binder *binder =
-        calloc(1, sizeof(struct yetty_primitive_gpu_binder));
+    struct yetty_yrender_gpu_binder *binder =
+        calloc(1, sizeof(struct yetty_yrender_gpu_binder));
     if (!binder) {
         return YETTY_ERR(yetty_primitive_gpu_binder_ptr, "allocation failed");
     }
@@ -121,7 +121,7 @@ struct yetty_primitive_gpu_binder_ptr_result yetty_primitive_gpu_binder_create(
     return YETTY_OK(yetty_primitive_gpu_binder_ptr, binder);
 }
 
-void yetty_primitive_gpu_binder_destroy(struct yetty_primitive_gpu_binder *binder)
+void yetty_yrender_gpu_binder_destroy(struct yetty_yrender_gpu_binder *binder)
 {
     if (!binder) {
         return;
@@ -161,8 +161,8 @@ void yetty_primitive_gpu_binder_destroy(struct yetty_primitive_gpu_binder *binde
 // Pipeline management
 //=============================================================================
 
-struct yetty_ycore_void_result yetty_primitive_gpu_binder_set_pipeline(
-    struct yetty_primitive_gpu_binder *binder, WGPURenderPipeline pipeline)
+struct yetty_ycore_void_result yetty_yrender_gpu_binder_set_pipeline(
+    struct yetty_yrender_gpu_binder *binder, WGPURenderPipeline pipeline)
 {
     if (!binder) {
         return YETTY_ERR(yetty_ycore_void, "binder is NULL");
@@ -182,8 +182,8 @@ struct yetty_ycore_void_result yetty_primitive_gpu_binder_set_pipeline(
 // Resource collection
 //=============================================================================
 
-static void collect_resources_recursive(struct yetty_primitive_gpu_binder *binder,
-                                        const struct yetty_yrender_gpu_resource_set *rs)
+static void collect_resources_recursive(struct yetty_yrender_gpu_binder *binder,
+                                        const struct yetty_ypaint_core_gpu_resource_set *rs)
 {
     if (!rs) {
         return;
@@ -198,7 +198,7 @@ static void collect_resources_recursive(struct yetty_primitive_gpu_binder *binde
 
     // Collect buffers
     for (size_t i = 0; i < rs->buffer_count && binder->flat_buffer_count < MAX_FLAT_BUFFERS; i++) {
-        binder->flat_buffers[binder->flat_buffer_count++] = (struct flat_buffer){
+        binder->flat_buffers[binder->flat_buffer_count++] = (struct yetty_yrender_flat_buffer){
             .ns = rs->namespace,
             .src = (struct yetty_yrender_buffer *)&rs->buffers[i],
         };
@@ -207,7 +207,7 @@ static void collect_resources_recursive(struct yetty_primitive_gpu_binder *binde
     // Collect textures
     for (size_t i = 0; i < rs->texture_count && binder->flat_texture_count < MAX_FLAT_TEXTURES;
          i++) {
-        binder->flat_textures[binder->flat_texture_count++] = (struct flat_texture){
+        binder->flat_textures[binder->flat_texture_count++] = (struct yetty_yrender_flat_texture){
             .ns = rs->namespace,
             .src = (struct yetty_yrender_texture *)&rs->textures[i],
         };
@@ -216,15 +216,15 @@ static void collect_resources_recursive(struct yetty_primitive_gpu_binder *binde
     // Collect uniforms
     for (size_t i = 0; i < rs->uniform_count && binder->flat_uniform_count < MAX_FLAT_UNIFORMS;
          i++) {
-        binder->flat_uniforms[binder->flat_uniform_count++] = (struct flat_uniform){
+        binder->flat_uniforms[binder->flat_uniform_count++] = (struct yetty_yrender_flat_uniform){
             .ns = rs->namespace,
             .src = (struct yetty_yrender_uniform *)&rs->uniforms[i],
         };
     }
 }
 
-struct yetty_ycore_void_result yetty_primitive_gpu_binder_add_resource_set(
-    struct yetty_primitive_gpu_binder *binder, const struct yetty_yrender_gpu_resource_set *rs)
+struct yetty_ycore_void_result yetty_yrender_gpu_binder_add_resource_set(
+    struct yetty_yrender_gpu_binder *binder, const struct yetty_ypaint_core_gpu_resource_set *rs)
 {
     if (!binder) {
         return YETTY_ERR(yetty_ycore_void, "binder is NULL");
@@ -244,8 +244,8 @@ struct yetty_ycore_void_result yetty_primitive_gpu_binder_add_resource_set(
 // Finalize - create bind group (NO shader compilation)
 //=============================================================================
 
-struct yetty_ycore_void_result yetty_primitive_gpu_binder_finalize(
-    struct yetty_primitive_gpu_binder *binder)
+struct yetty_ycore_void_result yetty_yrender_gpu_binder_finalize(
+    struct yetty_yrender_gpu_binder *binder)
 {
     if (!binder) {
         return YETTY_ERR(yetty_ycore_void, "binder is NULL");
@@ -366,8 +366,8 @@ struct yetty_ycore_void_result yetty_primitive_gpu_binder_finalize(
 // Update - upload dirty data (NO recompilation ever)
 //=============================================================================
 
-struct yetty_ycore_void_result yetty_primitive_gpu_binder_update(
-    struct yetty_primitive_gpu_binder *binder)
+struct yetty_ycore_void_result yetty_yrender_gpu_binder_update(
+    struct yetty_yrender_gpu_binder *binder)
 {
     if (!binder) {
         return YETTY_ERR(yetty_ycore_void, "binder is NULL");
@@ -378,7 +378,7 @@ struct yetty_ycore_void_result yetty_primitive_gpu_binder_update(
 
     // Upload dirty buffers
     for (size_t i = 0; i < binder->flat_buffer_count; i++) {
-        struct flat_buffer *fb = &binder->flat_buffers[i];
+        struct yetty_yrender_flat_buffer *fb = &binder->flat_buffers[i];
         if (!fb->src->dirty) {
             continue;
         }
@@ -413,8 +413,8 @@ struct yetty_ycore_void_result yetty_primitive_gpu_binder_update(
 // Render
 //=============================================================================
 
-struct yetty_ycore_void_result yetty_primitive_gpu_binder_render(
-    struct yetty_primitive_gpu_binder *binder, WGPURenderPassEncoder pass, uint32_t instance_count)
+struct yetty_ycore_void_result yetty_yrender_gpu_binder_render(
+    struct yetty_yrender_gpu_binder *binder, WGPURenderPassEncoder pass, uint32_t instance_count)
 {
     if (!binder) {
         return YETTY_ERR(yetty_ycore_void, "binder is NULL");
@@ -443,7 +443,7 @@ struct yetty_ycore_void_result yetty_primitive_gpu_binder_render(
 // Reset
 //=============================================================================
 
-void yetty_primitive_gpu_binder_reset(struct yetty_primitive_gpu_binder *binder)
+void yetty_yrender_gpu_binder_reset(struct yetty_yrender_gpu_binder *binder)
 {
     if (!binder) {
         return;

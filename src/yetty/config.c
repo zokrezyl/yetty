@@ -257,9 +257,9 @@ static void node_set_value(struct config_node *parent, const char *key, const ch
 
 /* YAML loading */
 
-static void load_yaml_mapping(yaml_parser_t *parser, struct config_node *node);
+static void load_yaml_mapping(struct yaml_parser_s *parser, struct config_node *node);
 
-static void load_yaml_value(yaml_parser_t *parser, struct config_node *parent, const char *key)
+static void load_yaml_value(struct yaml_parser_s *parser, struct config_node *parent, const char *key)
 {
     yaml_event_t event;
 
@@ -293,7 +293,7 @@ static void load_yaml_value(yaml_parser_t *parser, struct config_node *parent, c
     }
 }
 
-static void load_yaml_mapping(yaml_parser_t *parser, struct config_node *node)
+static void load_yaml_mapping(struct yaml_parser_s *parser, struct config_node *node)
 {
     yaml_event_t event;
     char key[MAX_KEY_LEN] = {0};
@@ -321,7 +321,7 @@ static int load_yaml_file(struct config_node *root, const char *path)
         return 0;
     }
 
-    yaml_parser_t parser;
+    struct yaml_parser_s parser;
     if (!yaml_parser_initialize(&parser)) {
         fclose(file);
         return 0;
@@ -850,7 +850,7 @@ enum {
     OPT_SSH,
 };
 
-static struct option long_options[] = {
+static struct yetty_yplatform_option long_options[] = {
     {"config", required_argument, 0, 'c'},
     {"execute", required_argument, 0, 'e'},
     {"vnc-server", no_argument, 0, 's'},
@@ -924,16 +924,16 @@ static void set_config(struct config_impl *impl, const char *path, const char *v
  * On -h/--help or unknown args, prints usage and exits. */
 static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
 {
-    optreset = 1;
-    optind = 1;
+    yetty_yplatform_optreset = 1;
+    yetty_yplatform_optind = 1;
     int c;
-    while ((c = getopt_long(argc, argv, "c:e:sHp:C:r:h", long_options, NULL)) != -1) {
+    while ((c = yetty_yplatform_getopt_long(argc, argv, "c:e:sHp:C:r:h", long_options, NULL)) != -1) {
         switch (c) {
         case 'c':
             /* config file already loaded by try_load_config_file */
             break;
         case 'e':
-            set_config(impl, "shell/command", optarg);
+            set_config(impl, "shell/command", yetty_yplatform_optarg);
             break;
         case 's':
             set_config(impl, "vnc/server", "true");
@@ -942,16 +942,16 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             set_config(impl, "vnc/headless", "true");
             break;
         case 'p':
-            set_config(impl, "vnc/port", optarg);
+            set_config(impl, "vnc/port", yetty_yplatform_optarg);
             break;
         case 'C':
-            set_config(impl, "vnc/client", optarg);
+            set_config(impl, "vnc/client", yetty_yplatform_optarg);
             break;
         case OPT_VNC_RAW:
             set_config(impl, "vnc/raw", "true");
             break;
         case OPT_VNC_COMPRESSION_QUALITY:
-            set_config(impl, "vnc/compression-quality", optarg);
+            set_config(impl, "vnc/compression-quality", yetty_yplatform_optarg);
             break;
         case OPT_VNC_ALWAYS_FULL:
             set_config(impl, "vnc/always-full", "true");
@@ -963,22 +963,22 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             set_config(impl, "vnc/merge-rects", "true");
             break;
         case OPT_VNC_H264_BITRATE:
-            set_config(impl, "vnc/h264/bitrate", optarg);
+            set_config(impl, "vnc/h264/bitrate", yetty_yplatform_optarg);
             break;
         case OPT_VNC_H264_FRAMERATE:
-            set_config(impl, "vnc/h264/framerate", optarg);
+            set_config(impl, "vnc/h264/framerate", yetty_yplatform_optarg);
             break;
         case OPT_VNC_H264_IDR_INTERVAL:
-            set_config(impl, "vnc/h264/idr-interval", optarg);
+            set_config(impl, "vnc/h264/idr-interval", yetty_yplatform_optarg);
             break;
         case OPT_VNC_H264_SCREEN_CONTENT:
-            set_config(impl, "vnc/h264/screen-content", optarg);
+            set_config(impl, "vnc/h264/screen-content", yetty_yplatform_optarg);
             break;
         case OPT_RPC_HOST:
-            set_config(impl, YETTY_YCONFIG_KEY_RPC_HOST, optarg);
+            set_config(impl, YETTY_YCONFIG_KEY_RPC_HOST, yetty_yplatform_optarg);
             break;
         case 'r':
-            set_config(impl, YETTY_YCONFIG_KEY_RPC_PORT, optarg);
+            set_config(impl, YETTY_YCONFIG_KEY_RPC_PORT, yetty_yplatform_optarg);
             break;
         case OPT_TEMU:
             set_config(impl, YETTY_YCONFIG_KEY_TEMU, "true");
@@ -987,8 +987,8 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             set_config(impl, YETTY_YCONFIG_KEY_QEMU, "true");
             break;
         case OPT_SSH:
-            if (optarg) {
-                parse_ssh_target(impl, optarg);
+            if (yetty_yplatform_optarg) {
+                parse_ssh_target(impl, yetty_yplatform_optarg);
             }
             set_config(impl, YETTY_YCONFIG_KEY_SSH, "true");
             break;

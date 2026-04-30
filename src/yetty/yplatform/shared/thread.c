@@ -6,7 +6,7 @@
 
 /* Thread */
 
-struct ythread {
+struct yetty_yplatform_ythread {
     pthread_t handle;
     ythread_func_t func;
     void *arg;
@@ -14,14 +14,14 @@ struct ythread {
 
 static void *thread_wrapper(void *arg)
 {
-    struct ythread *t = arg;
+    struct yetty_yplatform_ythread *t = arg;
     t->func(t->arg);
     return NULL;
 }
 
-ythread_t *ythread_create(ythread_func_t func, void *arg)
+struct yetty_yplatform_ythread *yetty_yplatform_ythread_create(ythread_func_t func, void *arg)
 {
-    struct ythread *t = calloc(1, sizeof(*t));
+    struct yetty_yplatform_ythread *t = calloc(1, sizeof(*t));
     if (!t) {
         return NULL;
     }
@@ -36,7 +36,7 @@ ythread_t *ythread_create(ythread_func_t func, void *arg)
     return t;
 }
 
-int ythread_join(ythread_t *thread)
+int yetty_yplatform_ythread_join(struct yetty_yplatform_ythread *thread)
 {
     if (!thread) {
         return -1;
@@ -48,13 +48,13 @@ int ythread_join(ythread_t *thread)
 
 /* Mutex */
 
-struct ymutex {
+struct yetty_yplatform_ymutex {
     pthread_mutex_t handle;
 };
 
-ymutex_t *ymutex_create(void)
+struct yetty_yplatform_ymutex *yetty_yplatform_ymutex_create(void)
 {
-    struct ymutex *m = calloc(1, sizeof(*m));
+    struct yetty_yplatform_ymutex *m = calloc(1, sizeof(*m));
     if (!m) {
         return NULL;
     }
@@ -62,7 +62,7 @@ ymutex_t *ymutex_create(void)
     return m;
 }
 
-void ymutex_destroy(ymutex_t *m)
+void yetty_yplatform_ymutex_destroy(struct yetty_yplatform_ymutex *m)
 {
     if (!m) {
         return;
@@ -71,12 +71,12 @@ void ymutex_destroy(ymutex_t *m)
     free(m);
 }
 
-void ymutex_lock(ymutex_t *m)
+void yetty_yplatform_ymutex_lock(struct yetty_yplatform_ymutex *m)
 {
     pthread_mutex_lock(&m->handle);
 }
 
-void ymutex_unlock(ymutex_t *m)
+void yetty_yplatform_ymutex_unlock(struct yetty_yplatform_ymutex *m)
 {
     pthread_mutex_unlock(&m->handle);
 }

@@ -55,8 +55,14 @@ add_subdirectory(${YETTY_ROOT}/tools ${CMAKE_BINARY_DIR}/tools)
 
 # Custom QA / static-analysis tools (Clang LibTooling-based)
 if(YETTY_ENABLE_TOOL_QA)
-    add_subdirectory(${YETTY_ROOT}/qa-tools/custom/result-checker
-                     ${CMAKE_BINARY_DIR}/qa-tools/custom/result-checker)
+    add_subdirectory(${YETTY_ROOT}/qa-tools/lib/naming-convention
+                     ${CMAKE_BINARY_DIR}/qa-tools/lib/naming-convention)
+    add_subdirectory(${YETTY_ROOT}/qa-tools/analysis/result-checker
+                     ${CMAKE_BINARY_DIR}/qa-tools/analysis/result-checker)
+    add_subdirectory(${YETTY_ROOT}/qa-tools/analysis/naming-convention
+                     ${CMAKE_BINARY_DIR}/qa-tools/analysis/naming-convention)
+    add_subdirectory(${YETTY_ROOT}/qa-tools/refactoring/naming-convention
+                     ${CMAKE_BINARY_DIR}/qa-tools/refactoring/naming-convention)
 endif()
 
 # Demos

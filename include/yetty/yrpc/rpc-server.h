@@ -10,11 +10,11 @@
 extern "C" {
 #endif
 
-struct yetty_rpc_server;
-struct yetty_ycore_event_loop;
+struct yetty_yrpc_server;
+struct yetty_yplatform_event_loop;
 
 /* Result types */
-YETTY_YRESULT_DECLARE(yetty_rpc_server_ptr, struct yetty_rpc_server *);
+YETTY_YRESULT_DECLARE(yetty_rpc_server_ptr, struct yetty_yrpc_server *);
 
 /*
  * Handler result: success with optional response data, or error message.
@@ -49,7 +49,7 @@ struct yetty_rpc_handler_result {
  * RPC handler function type.
  * Receives parsed message and userdata, returns handler result.
  */
-typedef struct yetty_rpc_handler_result (*yetty_rpc_handler_fn)(const struct yetty_rpc_message *msg,
+typedef struct yetty_rpc_handler_result (*yetty_rpc_handler_fn)(const struct yetty_yrpc_message *msg,
                                                                 void *userdata);
 
 /*
@@ -57,46 +57,46 @@ typedef struct yetty_rpc_handler_result (*yetty_rpc_handler_fn)(const struct yet
  * Does not start listening until yetty_rpc_server_start() is called.
  * Registers built-in handlers for EventLoop channel automatically.
  */
-struct yetty_rpc_server_ptr_result yetty_rpc_server_create(
-    struct yetty_ycore_event_loop *event_loop);
+struct yetty_rpc_server_ptr_result yetty_yrpc_server_create(
+    struct yetty_yplatform_event_loop *event_loop);
 
 /*
  * Destroy RPC server.
  * Stops server if running, closes all connections.
  */
-struct yetty_ycore_void_result yetty_rpc_server_destroy(struct yetty_rpc_server *server);
+struct yetty_ycore_void_result yetty_yrpc_server_destroy(struct yetty_yrpc_server *server);
 
 /*
  * Start RPC server on TCP socket.
  * Host is the bind address (e.g., "127.0.0.1" or "0.0.0.0").
  * Port is the TCP port number.
  */
-struct yetty_ycore_void_result yetty_rpc_server_start(struct yetty_rpc_server *server,
+struct yetty_ycore_void_result yetty_yrpc_server_start(struct yetty_yrpc_server *server,
                                                       const char *host, int port);
 
 /*
  * Get the port the server is listening on.
  * Returns 0 if server is not running.
  */
-int yetty_rpc_server_get_port(const struct yetty_rpc_server *server);
+int yetty_yrpc_server_get_port(const struct yetty_yrpc_server *server);
 
 /*
  * Stop RPC server.
  * Closes listening socket and all client connections.
  */
-struct yetty_ycore_void_result yetty_rpc_server_stop(struct yetty_rpc_server *server);
+struct yetty_ycore_void_result yetty_yrpc_server_stop(struct yetty_yrpc_server *server);
 
 /*
  * Check if server is running.
  */
-int yetty_rpc_server_is_running(const struct yetty_rpc_server *server);
+int yetty_yrpc_server_is_running(const struct yetty_yrpc_server *server);
 
 /*
  * Register a handler for a specific channel and method.
  * Only one handler per (channel, method) pair.
  * Returns error if handler already registered.
  */
-struct yetty_ycore_void_result yetty_rpc_server_register_handler(struct yetty_rpc_server *server,
+struct yetty_ycore_void_result yetty_yrpc_server_register_handler(struct yetty_yrpc_server *server,
                                                                  uint32_t channel,
                                                                  const char *method,
                                                                  yetty_rpc_handler_fn handler,
@@ -105,14 +105,14 @@ struct yetty_ycore_void_result yetty_rpc_server_register_handler(struct yetty_rp
 /*
  * Unregister a handler.
  */
-struct yetty_ycore_void_result yetty_rpc_server_unregister_handler(struct yetty_rpc_server *server,
+struct yetty_ycore_void_result yetty_yrpc_server_unregister_handler(struct yetty_yrpc_server *server,
                                                                    uint32_t channel,
                                                                    const char *method);
 
 /*
  * Get the number of connected clients.
  */
-size_t yetty_rpc_server_client_count(const struct yetty_rpc_server *server);
+size_t yetty_yrpc_server_client_count(const struct yetty_yrpc_server *server);
 
 #ifdef __cplusplus
 }

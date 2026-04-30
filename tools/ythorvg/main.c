@@ -36,7 +36,7 @@ static void usage(const char *prog) {
 }
 
 int main(int argc, char **argv) {
-	static const struct option long_opts[] = {
+	static const struct yetty_yplatform_option long_opts[] = {
 	    {"svg",     no_argument,       NULL, 's'},
 	    {"lottie",  no_argument,       NULL, 'l'},
 	    {"frame",   required_argument, NULL, 'f'},
@@ -57,13 +57,13 @@ int main(int argc, char **argv) {
 	int         verbose  = 0;
 
 	int opt;
-	while ((opt = getopt_long(argc, argv, "w:h:f:vH", long_opts, NULL)) != -1) {
+	while ((opt = yetty_yplatform_getopt_long(argc, argv, "w:h:f:vH", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 's': mimetype   = "svg";    break;
 		case 'l': mimetype   = "lottie"; break;
-		case 'f': frame      = (float)atof(optarg); have_frame = 1; break;
-		case 'w': width      = (uint32_t)atoi(optarg); break;
-		case 'h': height     = (uint32_t)atoi(optarg); break;
+		case 'f': frame      = (float)atof(yetty_yplatform_optarg); have_frame = 1; break;
+		case 'w': width      = (uint32_t)atoi(yetty_yplatform_optarg); break;
+		case 'h': height     = (uint32_t)atoi(yetty_yplatform_optarg); break;
 		case 'c': do_clear   = 1; break;
 		case 'v': verbose    = 1; break;
 		case 'H': usage(argv[0]); return 0;
@@ -71,12 +71,12 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	if (optind >= argc) {
+	if (yetty_yplatform_optind >= argc) {
 		fprintf(stderr, "%s: missing input file\n", argv[0]);
 		usage(argv[0]);
 		return 1;
 	}
-	const char *input_path = argv[optind];
+	const char *input_path = argv[yetty_yplatform_optind];
 
 	/* Read the source file. */
 	struct yetty_ycore_buffer_result file_res = yetty_ycore_read_file(input_path);
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
 
 	/* Create the ypaint buffer + thorvg renderer. */
 	struct yetty_ypaint_core_buffer_result buf_res =
-	    yetty_ypaint_core_buffer_create(NULL);
+	    yetty_ypaint_core_buffer_config_buffer_create(NULL);
 	if (YETTY_IS_ERR(buf_res)) {
 		fprintf(stderr, "%s: buffer_create: %s\n", argv[0], buf_res.error.msg);
 		free(file_res.value.data);
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
 	/* Render (loads SVG/Lottie and emits primitives into buf). */
 	float content_w = 0.0f, content_h = 0.0f;
 	struct yetty_ycore_void_result rr =
-	    yetty_ythorvg_render(renderer, file_res.value.data, file_res.value.size,
+	    yetty_ythorvg_renderer_render(renderer, file_res.value.data, file_res.value.size,
 	                        mimetype, &content_w, &content_h);
 	free(file_res.value.data);
 	if (YETTY_IS_ERR(rr)) {
@@ -122,9 +122,9 @@ int main(int argc, char **argv) {
 	}
 
 	/* For Lottie, advance to the requested frame (no-op for static SVG). */
-	if (have_frame && yetty_ythorvg_total_frames(renderer) > 0.0f) {
+	if (have_frame && yetty_ythorvg_renderer_total_frames(renderer) > 0.0f) {
 		struct yetty_ycore_void_result fr =
-		    yetty_ythorvg_render_frame(renderer, frame);
+		    yetty_ythorvg_renderer_render_frame(renderer, frame);
 		if (YETTY_IS_ERR(fr)) {
 			fprintf(stderr, "%s: render_frame: %s\n", argv[0], fr.error.msg);
 			yetty_ythorvg_renderer_destroy(renderer);
@@ -136,10 +136,10 @@ int main(int argc, char **argv) {
 	if (verbose) {
 		fprintf(stderr, "ythorvg: %s content=%.0fx%.0f target=%ux%u",
 		        input_path, content_w, content_h, width, height);
-		float tf = yetty_ythorvg_total_frames(renderer);
+		float tf = yetty_ythorvg_renderer_total_frames(renderer);
 		if (tf > 0.0f)
 			fprintf(stderr, " frames=%.0f dur=%.3fs frame=%.2f",
-			        tf, yetty_ythorvg_duration(renderer), frame);
+			        tf, yetty_ythorvg_renderer_duration(renderer), frame);
 		fprintf(stderr, "\n");
 	}
 

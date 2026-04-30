@@ -35,7 +35,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct yplatform_coro {
+struct yetty_yplatform_coro {
     yplatform_coro_entry entry;
     void *arg;
     char *name;
@@ -44,10 +44,10 @@ struct yplatform_coro {
     int finished;
 };
 
-static struct yplatform_coro *g_current = NULL;
+static struct yetty_yplatform_coro *g_current = NULL;
 static atomic_uint g_next_id = 1;
 
-struct yplatform_coro_ptr_result yplatform_coro_spawn(yplatform_coro_entry entry, void *arg,
+struct yplatform_coro_ptr_result yetty_yplatform_coro_spawn(yplatform_coro_entry entry, void *arg,
                                                       size_t stack_hint, const char *name)
 {
     (void)stack_hint;
@@ -56,7 +56,7 @@ struct yplatform_coro_ptr_result yplatform_coro_spawn(yplatform_coro_entry entry
         return YETTY_ERR(yplatform_coro_ptr, "entry is NULL");
     }
 
-    struct yplatform_coro *coro = calloc(1, sizeof(struct yplatform_coro));
+    struct yetty_yplatform_coro *coro = calloc(1, sizeof(struct yetty_yplatform_coro));
     if (!coro) {
         return YETTY_ERR(yplatform_coro_ptr, "calloc failed");
     }
@@ -77,13 +77,13 @@ struct yplatform_coro_ptr_result yplatform_coro_spawn(yplatform_coro_entry entry
     return YETTY_OK(yplatform_coro_ptr, coro);
 }
 
-void yplatform_coro_resume(struct yplatform_coro *coro)
+void yetty_yplatform_coro_resume(struct yetty_yplatform_coro *coro)
 {
     if (!coro || coro->finished) {
         return;
     }
 
-    struct yplatform_coro *prev = g_current;
+    struct yetty_yplatform_coro *prev = g_current;
     g_current = coro;
     ydebug("resume coro %u (%s) — runs inline on webasm", coro->id,
            coro->name ? coro->name : "(anon)");
@@ -93,7 +93,7 @@ void yplatform_coro_resume(struct yplatform_coro *coro)
     ydebug("coro %u finished (webasm)", coro->id);
 }
 
-void yplatform_coro_yield(void)
+void yetty_yplatform_coro_yield(void)
 {
     /* On webasm the _await wrappers suspend via emscripten_sleep. yield
      * shouldn't be reachable from any code path that's expected to work
@@ -101,7 +101,7 @@ void yplatform_coro_yield(void)
     ywarn("yplatform_coro_yield called on webasm — no-op");
 }
 
-void yplatform_coro_destroy(struct yplatform_coro *coro)
+void yetty_yplatform_coro_destroy(struct yetty_yplatform_coro *coro)
 {
     if (!coro) {
         return;
@@ -112,34 +112,34 @@ void yplatform_coro_destroy(struct yplatform_coro *coro)
     free(coro);
 }
 
-struct yplatform_coro *yplatform_coro_current(void)
+struct yetty_yplatform_coro *yetty_yplatform_coro_current(void)
 {
     return g_current;
 }
 
-int yplatform_coro_is_finished(const struct yplatform_coro *coro)
+int yetty_yplatform_coro_is_finished(const struct yetty_yplatform_coro *coro)
 {
     return coro ? coro->finished : 1;
 }
 
-unsigned int yplatform_coro_id(const struct yplatform_coro *coro)
+unsigned int yetty_yplatform_coro_id(const struct yetty_yplatform_coro *coro)
 {
     return coro ? coro->id : 0;
 }
 
-const char *yplatform_coro_name(const struct yplatform_coro *coro)
+const char *yetty_yplatform_coro_name(const struct yetty_yplatform_coro *coro)
 {
     return coro && coro->name ? coro->name : "(anon)";
 }
 
-void yplatform_coro_set_status(struct yplatform_coro *coro, int status)
+void yetty_yplatform_coro_set_status(struct yetty_yplatform_coro *coro, int status)
 {
     if (coro) {
         coro->status = status;
     }
 }
 
-int yplatform_coro_get_status(const struct yplatform_coro *coro)
+int yetty_yplatform_coro_get_status(const struct yetty_yplatform_coro *coro)
 {
     return coro ? coro->status : 0;
 }

@@ -11,7 +11,7 @@ extern "C" {
 
 // SDF factory - handles all SDF primitive types
 struct yetty_ycore_void_result yetty_ysdf_yaml_factory(struct yetty_ypaint_core_buffer *buffer,
-                                                       yaml_parser_t *yaml_parser,
+                                                       struct yaml_parser_s *yaml_parser,
                                                        const char *primitive_type_name);
 
 // Register all SDF primitive types with the parser

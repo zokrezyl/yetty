@@ -21,11 +21,11 @@
 #endif
 
 /* Forward decls: handlers defined in handler-*.c files. */
-extern struct yetty_ypaint_core_buffer_result ycat_handler_markdown(
+extern struct yetty_ypaint_core_buffer_result yetty_ycat_handler_markdown(
     const uint8_t *bytes, size_t len, const char *path_hint,
     const struct yetty_ycat_config *config);
 
-extern struct yetty_ypaint_core_buffer_result ycat_handler_pdf(
+extern struct yetty_ypaint_core_buffer_result yetty_ycat_handler_pdf(
     const uint8_t *bytes, size_t len, const char *path_hint,
     const struct yetty_ycat_config *config);
 
@@ -81,8 +81,8 @@ static void init_handlers(void)
         return;
     }
     handlers_initialized = 1;
-    handlers[YETTY_YCAT_TYPE_MARKDOWN] = ycat_handler_markdown;
-    handlers[YETTY_YCAT_TYPE_PDF] = ycat_handler_pdf;
+    handlers[YETTY_YCAT_TYPE_MARKDOWN] = yetty_ycat_handler_markdown;
+    handlers[YETTY_YCAT_TYPE_PDF] = yetty_ycat_handler_pdf;
 }
 
 yetty_ycat_handler_fn yetty_ycat_get_handler(enum yetty_ycat_type type)

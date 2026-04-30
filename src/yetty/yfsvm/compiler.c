@@ -10,20 +10,20 @@ extern const unsigned int gyfsvm_shaderSize;
  * Instruction builder (internal)
  *===========================================================================*/
 
-struct builder {
+struct yetty_yfsvm_builder {
     struct yetty_yfsvm_program *prog;
     uint32_t current_func_start;
     uint16_t reg_alloc; /* bitmask of allocated registers */
     const char *error;
 };
 
-static void builder_init(struct builder *b, struct yetty_yfsvm_program *prog)
+static void builder_init(struct yetty_yfsvm_builder *b, struct yetty_yfsvm_program *prog)
 {
     memset(b, 0, sizeof(*b));
     b->prog = prog;
 }
 
-static uint8_t builder_alloc_reg(struct builder *b)
+static uint8_t builder_alloc_reg(struct yetty_yfsvm_builder *b)
 {
     for (uint8_t i = 1; i < YFSVM_MAX_REGISTERS; i++) {
         if (!(b->reg_alloc & (1u << i))) {
@@ -35,14 +35,14 @@ static uint8_t builder_alloc_reg(struct builder *b)
     return 0;
 }
 
-static void builder_free_reg(struct builder *b, uint8_t reg)
+static void builder_free_reg(struct yetty_yfsvm_builder *b, uint8_t reg)
 {
     if (reg > 0) {
         b->reg_alloc &= ~(1u << reg);
     }
 }
 
-static void builder_emit(struct builder *b, uint32_t instr)
+static void builder_emit(struct yetty_yfsvm_builder *b, uint32_t instr)
 {
     if (b->prog->code_count >= YFSVM_MAX_INSTRUCTIONS) {
         b->error = "too many instructions";
@@ -51,7 +51,7 @@ static void builder_emit(struct builder *b, uint32_t instr)
     b->prog->code[b->prog->code_count++] = instr;
 }
 
-static uint16_t builder_add_constant(struct builder *b, float value)
+static uint16_t builder_add_constant(struct yetty_yfsvm_builder *b, float value)
 {
     /* Check for existing constant */
     for (uint32_t i = 0; i < b->prog->constant_count; i++) {
@@ -70,21 +70,21 @@ static uint16_t builder_add_constant(struct builder *b, float value)
     return idx;
 }
 
-static uint8_t builder_load_const(struct builder *b, float value)
+static uint8_t builder_load_const(struct yetty_yfsvm_builder *b, float value)
 {
     uint16_t idx = builder_add_constant(b, value);
     uint8_t reg = builder_alloc_reg(b);
-    builder_emit(b, yfsvm_encode(YFSVM_OP_LOAD_C, reg, 0, 0, idx));
+    builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_LOAD_C, reg, 0, 0, idx));
     return reg;
 }
 
-static void builder_begin_function(struct builder *b)
+static void builder_begin_function(struct yetty_yfsvm_builder *b)
 {
     b->current_func_start = b->prog->code_count;
     b->reg_alloc = 1; /* r0 reserved for return */
 }
 
-static void builder_end_function(struct builder *b)
+static void builder_end_function(struct yetty_yfsvm_builder *b)
 {
     if (b->prog->function_count >= YFSVM_MAX_FUNCTIONS) {
         b->error = "too many functions";
@@ -99,27 +99,27 @@ static void builder_end_function(struct builder *b)
  * AST compilation
  *===========================================================================*/
 
-static uint8_t compile_node(struct builder *b, const struct yetty_yexpr_node *node);
+static uint8_t compile_node(struct yetty_yfsvm_builder *b, const struct yetty_yexpr_node *node);
 
-static uint8_t compile_number(struct builder *b, const struct yetty_yexpr_node *node)
+static uint8_t compile_number(struct yetty_yfsvm_builder *b, const struct yetty_yexpr_node *node)
 {
     return builder_load_const(b, (float)node->number);
 }
 
-static uint8_t compile_identifier(struct builder *b, const struct yetty_yexpr_node *node)
+static uint8_t compile_identifier(struct yetty_yfsvm_builder *b, const struct yetty_yexpr_node *node)
 {
     const char *name = node->ident;
 
     if (strcmp(name, "x") == 0) {
         uint8_t reg = builder_alloc_reg(b);
-        builder_emit(b, yfsvm_encode(YFSVM_OP_LOAD_X, reg, 0, 0, 0));
+        builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_LOAD_X, reg, 0, 0, 0));
         b->prog->uses_x = 1;
         return reg;
     }
 
     if (strcmp(name, "t") == 0 || strcmp(name, "time") == 0) {
         uint8_t reg = builder_alloc_reg(b);
-        builder_emit(b, yfsvm_encode(YFSVM_OP_LOAD_T, reg, 0, 0, 0));
+        builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_LOAD_T, reg, 0, 0, 0));
         b->prog->uses_time = 1;
         return reg;
     }
@@ -138,7 +138,7 @@ static uint8_t compile_identifier(struct builder *b, const struct yetty_yexpr_no
     if (name[0] == 's' && name[1] >= '0' && name[1] <= '7' && name[2] == '\0') {
         uint8_t idx = name[1] - '0';
         uint8_t reg = builder_alloc_reg(b);
-        builder_emit(b, yfsvm_encode(YFSVM_OP_LOAD_S, reg, 0, 0, idx));
+        builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_LOAD_S, reg, 0, 0, idx));
         return reg;
     }
 
@@ -146,7 +146,7 @@ static uint8_t compile_identifier(struct builder *b, const struct yetty_yexpr_no
     return 0;
 }
 
-static uint8_t compile_buffer_ref(struct builder *b, const struct yetty_yexpr_node *node)
+static uint8_t compile_buffer_ref(struct yetty_yfsvm_builder *b, const struct yetty_yexpr_node *node)
 {
     int sampler_idx = node->buffer_ref.index - 1;
     if (sampler_idx < 0 || sampler_idx > 7) {
@@ -154,11 +154,11 @@ static uint8_t compile_buffer_ref(struct builder *b, const struct yetty_yexpr_no
         return 0;
     }
     uint8_t reg = builder_alloc_reg(b);
-    builder_emit(b, yfsvm_encode(YFSVM_OP_LOAD_S, reg, 0, 0, (uint16_t)sampler_idx));
+    builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_LOAD_S, reg, 0, 0, (uint16_t)sampler_idx));
     return reg;
 }
 
-static uint8_t compile_binary_op(struct builder *b, const struct yetty_yexpr_node *node)
+static uint8_t compile_binary_op(struct yetty_yfsvm_builder *b, const struct yetty_yexpr_node *node)
 {
     uint8_t left = compile_node(b, node->binary.left);
     if (b->error) {
@@ -175,19 +175,19 @@ static uint8_t compile_binary_op(struct builder *b, const struct yetty_yexpr_nod
 
     switch (node->binary.op) {
     case YETTY_YEXPR_OP_ADD:
-        op = YFSVM_OP_ADD;
+        op = YETTY_YFSVM_OP_ADD;
         break;
     case YETTY_YEXPR_OP_SUB:
-        op = YFSVM_OP_SUB;
+        op = YETTY_YFSVM_OP_SUB;
         break;
     case YETTY_YEXPR_OP_MUL:
-        op = YFSVM_OP_MUL;
+        op = YETTY_YFSVM_OP_MUL;
         break;
     case YETTY_YEXPR_OP_DIV:
-        op = YFSVM_OP_DIV;
+        op = YETTY_YFSVM_OP_DIV;
         break;
     case YETTY_YEXPR_OP_POW:
-        op = YFSVM_OP_POW;
+        op = YETTY_YFSVM_OP_POW;
         break;
     }
 
@@ -197,7 +197,7 @@ static uint8_t compile_binary_op(struct builder *b, const struct yetty_yexpr_nod
     return dst;
 }
 
-static uint8_t compile_unary_op(struct builder *b, const struct yetty_yexpr_node *node)
+static uint8_t compile_unary_op(struct yetty_yfsvm_builder *b, const struct yetty_yexpr_node *node)
 {
     uint8_t operand = compile_node(b, node->unary.operand);
     if (b->error) {
@@ -205,53 +205,53 @@ static uint8_t compile_unary_op(struct builder *b, const struct yetty_yexpr_node
     }
 
     uint8_t dst = builder_alloc_reg(b);
-    builder_emit(b, yfsvm_encode(YFSVM_OP_NEG, dst, operand, 0, 0));
+    builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_NEG, dst, operand, 0, 0));
     builder_free_reg(b, operand);
     return dst;
 }
 
-struct func_map {
+struct yetty_yfsvm_func_map {
     const char *name;
     YfsvmOpcode op;
 };
 
-static const struct func_map funcs_1arg[] = {
-    {"sin", YFSVM_OP_SIN},
-    {"cos", YFSVM_OP_COS},
-    {"tan", YFSVM_OP_TAN},
-    {"asin", YFSVM_OP_ASIN},
-    {"acos", YFSVM_OP_ACOS},
-    {"atan", YFSVM_OP_ATAN},
-    {"sinh", YFSVM_OP_SINH},
-    {"cosh", YFSVM_OP_COSH},
-    {"tanh", YFSVM_OP_TANH},
-    {"exp", YFSVM_OP_EXP},
-    {"exp2", YFSVM_OP_EXP2},
-    {"log", YFSVM_OP_LOG},
-    {"ln", YFSVM_OP_LOG},
-    {"log2", YFSVM_OP_LOG2},
-    {"sqrt", YFSVM_OP_SQRT},
-    {"rsqrt", YFSVM_OP_RSQRT},
-    {"inverseSqrt", YFSVM_OP_RSQRT},
-    {"abs", YFSVM_OP_ABS},
-    {"floor", YFSVM_OP_FLOOR},
-    {"ceil", YFSVM_OP_CEIL},
-    {"round", YFSVM_OP_ROUND},
-    {"fract", YFSVM_OP_FRACT},
-    {"frac", YFSVM_OP_FRACT},
-    {"sign", YFSVM_OP_SIGN},
-    {"saturate", YFSVM_OP_CLAMP01},
+static const struct yetty_yfsvm_func_map funcs_1arg[] = {
+    {"sin", YETTY_YFSVM_OP_SIN},
+    {"cos", YETTY_YFSVM_OP_COS},
+    {"tan", YETTY_YFSVM_OP_TAN},
+    {"asin", YETTY_YFSVM_OP_ASIN},
+    {"acos", YETTY_YFSVM_OP_ACOS},
+    {"atan", YETTY_YFSVM_OP_ATAN},
+    {"sinh", YETTY_YFSVM_OP_SINH},
+    {"cosh", YETTY_YFSVM_OP_COSH},
+    {"tanh", YETTY_YFSVM_OP_TANH},
+    {"exp", YETTY_YFSVM_OP_EXP},
+    {"exp2", YETTY_YFSVM_OP_EXP2},
+    {"log", YETTY_YFSVM_OP_LOG},
+    {"ln", YETTY_YFSVM_OP_LOG},
+    {"log2", YETTY_YFSVM_OP_LOG2},
+    {"sqrt", YETTY_YFSVM_OP_SQRT},
+    {"rsqrt", YETTY_YFSVM_OP_RSQRT},
+    {"inverseSqrt", YETTY_YFSVM_OP_RSQRT},
+    {"abs", YETTY_YFSVM_OP_ABS},
+    {"floor", YETTY_YFSVM_OP_FLOOR},
+    {"ceil", YETTY_YFSVM_OP_CEIL},
+    {"round", YETTY_YFSVM_OP_ROUND},
+    {"fract", YETTY_YFSVM_OP_FRACT},
+    {"frac", YETTY_YFSVM_OP_FRACT},
+    {"sign", YETTY_YFSVM_OP_SIGN},
+    {"saturate", YETTY_YFSVM_OP_CLAMP01},
     {NULL, 0},
 };
 
-static const struct func_map funcs_2arg[] = {
-    {"pow", YFSVM_OP_POW},   {"atan2", YFSVM_OP_ATAN2},
-    {"min", YFSVM_OP_MIN},   {"max", YFSVM_OP_MAX},
-    {"mod", YFSVM_OP_MOD},   {"fmod", YFSVM_OP_MOD},
-    {"step", YFSVM_OP_STEP}, {NULL, 0},
+static const struct yetty_yfsvm_func_map funcs_2arg[] = {
+    {"pow", YETTY_YFSVM_OP_POW},   {"atan2", YETTY_YFSVM_OP_ATAN2},
+    {"min", YETTY_YFSVM_OP_MIN},   {"max", YETTY_YFSVM_OP_MAX},
+    {"mod", YETTY_YFSVM_OP_MOD},   {"fmod", YETTY_YFSVM_OP_MOD},
+    {"step", YETTY_YFSVM_OP_STEP}, {NULL, 0},
 };
 
-static uint8_t compile_call(struct builder *b, const struct yetty_yexpr_node *node)
+static uint8_t compile_call(struct yetty_yfsvm_builder *b, const struct yetty_yexpr_node *node)
 {
     const char *name = node->call.name;
     uint32_t argc = node->call.arg_count;
@@ -263,7 +263,7 @@ static uint8_t compile_call(struct builder *b, const struct yetty_yexpr_node *no
         }
         uint8_t dst = builder_alloc_reg(b);
 
-        for (const struct func_map *f = funcs_1arg; f->name; f++) {
+        for (const struct yetty_yfsvm_func_map *f = funcs_1arg; f->name; f++) {
             if (strcmp(name, f->name) == 0) {
                 builder_emit(b, yfsvm_encode(f->op, dst, arg, 0, 0));
                 builder_free_reg(b, arg);
@@ -289,7 +289,7 @@ static uint8_t compile_call(struct builder *b, const struct yetty_yexpr_node *no
         }
         uint8_t dst = builder_alloc_reg(b);
 
-        for (const struct func_map *f = funcs_2arg; f->name; f++) {
+        for (const struct yetty_yfsvm_func_map *f = funcs_2arg; f->name; f++) {
             if (strcmp(name, f->name) == 0) {
                 builder_emit(b, yfsvm_encode(f->op, dst, a0, a1, 0));
                 builder_free_reg(b, a0);
@@ -324,11 +324,11 @@ static uint8_t compile_call(struct builder *b, const struct yetty_yexpr_node *no
         uint8_t dst = builder_alloc_reg(b);
 
         if (strcmp(name, "mix") == 0 || strcmp(name, "lerp") == 0) {
-            builder_emit(b, yfsvm_encode(YFSVM_OP_MIX, dst, a0, a1, a2 & 0xF));
+            builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_MIX, dst, a0, a1, a2 & 0xF));
         } else if (strcmp(name, "clamp") == 0) {
             uint8_t tmp = builder_alloc_reg(b);
-            builder_emit(b, yfsvm_encode(YFSVM_OP_MAX, tmp, a0, a1, 0));
-            builder_emit(b, yfsvm_encode(YFSVM_OP_MIN, dst, tmp, a2, 0));
+            builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_MAX, tmp, a0, a1, 0));
+            builder_emit(b, yfsvm_encode(YETTY_YFSVM_OP_MIN, dst, tmp, a2, 0));
             builder_free_reg(b, tmp);
         } else {
             builder_free_reg(b, a0);
@@ -349,7 +349,7 @@ static uint8_t compile_call(struct builder *b, const struct yetty_yexpr_node *no
     return 0;
 }
 
-static uint8_t compile_node(struct builder *b, const struct yetty_yexpr_node *node)
+static uint8_t compile_node(struct yetty_yfsvm_builder *b, const struct yetty_yexpr_node *node)
 {
     if (!node) {
         b->error = "null node";
@@ -378,7 +378,7 @@ static uint8_t compile_node(struct builder *b, const struct yetty_yexpr_node *no
 static struct yetty_yfsvm_program_result compile_single(struct yetty_yfsvm_program *prog,
                                                         const struct yetty_yexpr_node *ast)
 {
-    struct builder b;
+    struct yetty_yfsvm_builder b;
     builder_init(&b, prog);
     builder_begin_function(&b);
 
@@ -388,11 +388,11 @@ static struct yetty_yfsvm_program_result compile_single(struct yetty_yfsvm_progr
     }
 
     if (result_reg != 0) {
-        builder_emit(&b, yfsvm_encode(YFSVM_OP_MOV, 0, result_reg, 0, 0));
+        builder_emit(&b, yfsvm_encode(YETTY_YFSVM_OP_MOV, 0, result_reg, 0, 0));
         builder_free_reg(&b, result_reg);
     }
 
-    builder_emit(&b, yfsvm_encode(YFSVM_OP_RET, 0, 0, 0, 0));
+    builder_emit(&b, yfsvm_encode(YETTY_YFSVM_OP_RET, 0, 0, 0, 0));
     builder_end_function(&b);
 
     if (b.error) {
@@ -436,7 +436,7 @@ struct yetty_yfsvm_program_result yetty_yfsvm_compile_multi(
     struct yetty_yfsvm_program prog = {0};
 
     for (uint32_t i = 0; i < plot->def_count; i++) {
-        struct builder b;
+        struct yetty_yfsvm_builder b;
         builder_init(&b, &prog);
         builder_begin_function(&b);
 
@@ -446,11 +446,11 @@ struct yetty_yfsvm_program_result yetty_yfsvm_compile_multi(
         }
 
         if (result_reg != 0) {
-            builder_emit(&b, yfsvm_encode(YFSVM_OP_MOV, 0, result_reg, 0, 0));
+            builder_emit(&b, yfsvm_encode(YETTY_YFSVM_OP_MOV, 0, result_reg, 0, 0));
             builder_free_reg(&b, result_reg);
         }
 
-        builder_emit(&b, yfsvm_encode(YFSVM_OP_RET, 0, 0, 0, 0));
+        builder_emit(&b, yfsvm_encode(YETTY_YFSVM_OP_RET, 0, 0, 0, 0));
         builder_end_function(&b);
 
         if (b.error) {
@@ -521,10 +521,10 @@ uint32_t yetty_yfsvm_program_serialize(const struct yetty_yfsvm_program *prog, u
  * Shader resource set (for ypaint integration)
  *===========================================================================*/
 
-static struct yetty_yrender_gpu_resource_set yfsvm_static_shader_rs;
+static struct yetty_ypaint_core_gpu_resource_set yfsvm_static_shader_rs;
 static bool yfsvm_static_shader_rs_initialized = false;
 
-const struct yetty_yrender_gpu_resource_set *yetty_yfsvm_get_shader_resource_set(void)
+const struct yetty_ypaint_core_gpu_resource_set *yetty_yfsvm_get_shader_resource_set(void)
 {
     if (!yfsvm_static_shader_rs_initialized) {
         memset(&yfsvm_static_shader_rs, 0, sizeof(yfsvm_static_shader_rs));

@@ -9,59 +9,59 @@
 #include <stdlib.h>
 #include "ygui.h"
 
-static ygui_engine_t* g_engine = NULL;
-static ygui_widget_t* g_status1 = NULL;
-static ygui_widget_t* g_status2 = NULL;
-static ygui_widget_t* g_counter = NULL;
+static struct yetty_ygui_engine* g_engine = NULL;
+static struct yetty_ygui_widget* g_status1 = NULL;
+static struct yetty_ygui_widget* g_status2 = NULL;
+static struct yetty_ygui_widget* g_counter = NULL;
 static int g_click_count = 0;
 
-static void on_test_click(ygui_widget_t* w, void* u) {
+static void on_test_click(struct yetty_ygui_widget* w, void* u) {
     (void)w; (void)u;
     g_click_count++;
     char buf[64];
-    ygui_label_set_text(g_status1, "Last event: Button CLICK");
-    ygui_label_set_text(g_status2, "Widget: test_btn");
+    yetty_ygui_widget_label_set_text(g_status1, "Last event: Button CLICK");
+    yetty_ygui_widget_label_set_text(g_status2, "Widget: test_btn");
     snprintf(buf, sizeof(buf), "Click count: %d", g_click_count);
-    ygui_label_set_text(g_counter, buf);
+    yetty_ygui_widget_label_set_text(g_counter, buf);
 }
 
-static void on_quit(ygui_widget_t* w, void* u) {
+static void on_quit(struct yetty_ygui_widget* w, void* u) {
     (void)w; (void)u;
-    ygui_engine_stop(g_engine);
+    yetty_ygui_engine_stop(g_engine);
 }
 
-static void on_key(ygui_engine_t* e, uint32_t key, int mods, void* u) {
+static void on_key(struct yetty_ygui_engine* e, uint32_t key, int mods, void* u) {
     (void)mods; (void)u;
-    if (key == 'q' || key == 'Q') ygui_engine_stop(e);
+    if (key == 'q' || key == 'Q') yetty_ygui_engine_stop(e);
 }
 
 int main(void) {
     (void)freopen("/dev/null", "w", stderr);
 
-    if (ygui_init() != 0) return 1;
+    if (yetty_ygui_init() != 0) return 1;
 
-    { struct ygui_engine_ptr_result _eng_r = ygui_engine_create_with_pixel_hint("debug-card", 2, 2, 500.0f, 300.0f);
+    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_engine_create_with_pixel_hint("debug-card", 2, 2, 500.0f, 300.0f);
         if (YETTY_IS_ERR(_eng_r)) { yetty_ycore_error_destroy(_eng_r.error); return 1; }
         g_engine = _eng_r.value; }
-    if (!g_engine) { ygui_shutdown(); return 1; }
+    if (!g_engine) { yetty_ygui_shutdown(); return 1; }
 
-    ygui_label(g_engine, "title",   20, 15, "Event Monitor");
-    g_status1 = ygui_label(g_engine, "status1", 20, 120, "Last event: None");
-    g_status2 = ygui_label(g_engine, "status2", 20, 150, "Widget: --");
-    g_counter = ygui_label(g_engine, "counter", 20, 200, "Click count: 0");
-    ygui_label(g_engine, "hint",    20, 260, "Press 'q' to quit");
+    yetty_ygui_engine_label(g_engine, "title",   20, 15, "Event Monitor");
+    g_status1 = yetty_ygui_engine_label(g_engine, "status1", 20, 120, "Last event: None");
+    g_status2 = yetty_ygui_engine_label(g_engine, "status2", 20, 150, "Widget: --");
+    g_counter = yetty_ygui_engine_label(g_engine, "counter", 20, 200, "Click count: 0");
+    yetty_ygui_engine_label(g_engine, "hint",    20, 260, "Press 'q' to quit");
 
-    ygui_widget_t* btn = ygui_button(g_engine, "test_btn", 20, 50, 200, 50, "Click Me!");
-    ygui_button_on_click(btn, on_test_click, NULL);
+    struct yetty_ygui_widget* btn = yetty_ygui_engine_button(g_engine, "test_btn", 20, 50, 200, 50, "Click Me!");
+    yetty_ygui_widget_button_on_click(btn, on_test_click, NULL);
 
-    ygui_widget_t* quit = ygui_button(g_engine, "quit_btn", 240, 50, 100, 50, "Quit");
-    ygui_button_on_click(quit, on_quit, NULL);
+    struct yetty_ygui_widget* quit = yetty_ygui_engine_button(g_engine, "quit_btn", 240, 50, 100, 50, "Quit");
+    yetty_ygui_widget_button_on_click(quit, on_quit, NULL);
 
-    ygui_engine_on_key(g_engine, on_key, NULL);
-    ygui_engine_show(g_engine);
-    ygui_engine_run(g_engine);
+    yetty_ygui_engine_on_key(g_engine, on_key, NULL);
+    yetty_ygui_engine_show(g_engine);
+    yetty_ygui_engine_run(g_engine);
 
-    ygui_engine_destroy(g_engine);
-    ygui_shutdown();
+    yetty_ygui_engine_destroy(g_engine);
+    yetty_ygui_shutdown();
     return 0;
 }

@@ -69,7 +69,7 @@ uint32_t yetty_yfsvm_program_serialize(const struct yetty_yfsvm_program *prog, u
                                        uint32_t buf_capacity);
 
 /* Get static shader-only resource set (for ypaint layer to include yfsvm_execute) */
-const struct yetty_yrender_gpu_resource_set *yetty_yfsvm_get_shader_resource_set(void);
+const struct yetty_ypaint_core_gpu_resource_set *yetty_yfsvm_get_shader_resource_set(void);
 
 #ifdef __cplusplus
 }

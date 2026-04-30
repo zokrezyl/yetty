@@ -11,19 +11,19 @@
 #define OSC_BUF_MAX (500 * 1024 * 1024) /* 500 MB */
 #define MAX_OSC_SINKS 64
 
-enum osc_state { OSC_STATE_NORMAL, OSC_STATE_ESC, OSC_STATE_IN_OSC, OSC_STATE_OSC_ESC_END };
+enum yetty_yterm_osc_state { YETTY_YTERM_OSC_STATE_NORMAL, YETTY_YTERM_OSC_STATE_ESC, YETTY_YTERM_OSC_STATE_IN_OSC, YETTY_YTERM_OSC_STATE_OSC_ESC_END };
 
-struct osc_sink {
+struct yetty_yterm_osc_sink {
     int vendor_id;
-    struct yetty_yterm_terminal_layer *layer;
+    struct yetty_yrender_terminal_layer *layer;
 };
 
 struct yetty_yterm_pty_reader {
-    struct yetty_yplatform_pty *pty;
-    struct yetty_yterm_terminal_layer *default_sink;
-    struct osc_sink osc_sinks[MAX_OSC_SINKS];
+    struct yetty_platform_pty *pty;
+    struct yetty_yrender_terminal_layer *default_sink;
+    struct yetty_yterm_osc_sink osc_sinks[MAX_OSC_SINKS];
     size_t osc_sink_count;
-    enum osc_state state;
+    enum yetty_yterm_osc_state state;
     char *osc_buf;
     size_t osc_buf_len;
     size_t osc_buf_cap;
@@ -51,7 +51,7 @@ static int osc_buf_append(struct yetty_yterm_pty_reader *r, char c)
     return 1;
 }
 
-static struct yetty_yterm_terminal_layer *find_osc_sink(struct yetty_yterm_pty_reader *r,
+static struct yetty_yrender_terminal_layer *find_osc_sink(struct yetty_yterm_pty_reader *r,
                                                         int vendor_id)
 {
     for (size_t i = 0; i < r->osc_sink_count; i++) {
@@ -91,7 +91,7 @@ static void dispatch_osc(struct yetty_yterm_pty_reader *r)
     }
 
     /* Find sink and dispatch payload (after semicolon) */
-    struct yetty_yterm_terminal_layer *layer = find_osc_sink(r, (int)vendor_id);
+    struct yetty_yrender_terminal_layer *layer = find_osc_sink(r, (int)vendor_id);
     if (layer && layer->ops && layer->ops->write) {
         const char *payload = semi + 1;
         size_t payload_len = r->osc_buf_len - id_len - 1;
@@ -115,7 +115,7 @@ static void process_data(struct yetty_yterm_pty_reader *r, const char *data, siz
         char c = data[i];
 
         switch (r->state) {
-        case OSC_STATE_NORMAL:
+        case YETTY_YTERM_OSC_STATE_NORMAL:
             if (c == '\033') {
                 /* Flush normal data before ESC */
                 if (i > normal_start && r->default_sink && r->default_sink->ops &&
@@ -124,22 +124,22 @@ static void process_data(struct yetty_yterm_pty_reader *r, const char *data, siz
                     r->default_sink->ops->write(r->default_sink, 0, data + normal_start,
                                                 i - normal_start);
                 }
-                r->state = OSC_STATE_ESC;
+                r->state = YETTY_YTERM_OSC_STATE_ESC;
                 i++;
             } else {
                 i++;
             }
             break;
 
-        case OSC_STATE_ESC:
+        case YETTY_YTERM_OSC_STATE_ESC:
             if (c == ']') {
-                r->state = OSC_STATE_IN_OSC;
+                r->state = YETTY_YTERM_OSC_STATE_IN_OSC;
                 r->osc_buf_len = 0;
                 normal_start = i + 1;
                 i++;
             } else {
                 /* Not OSC, send ESC + this char as normal */
-                r->state = OSC_STATE_NORMAL;
+                r->state = YETTY_YTERM_OSC_STATE_NORMAL;
                 if (r->default_sink && r->default_sink->ops && r->default_sink->ops->write) {
                     r->default_sink->ops->write(r->default_sink, 0, "\033", 1);
                 }
@@ -148,15 +148,15 @@ static void process_data(struct yetty_yterm_pty_reader *r, const char *data, siz
             }
             break;
 
-        case OSC_STATE_IN_OSC:
+        case YETTY_YTERM_OSC_STATE_IN_OSC:
             if (c == '\007') {
                 /* BEL terminator */
                 dispatch_osc(r);
-                r->state = OSC_STATE_NORMAL;
+                r->state = YETTY_YTERM_OSC_STATE_NORMAL;
                 normal_start = i + 1;
                 i++;
             } else if (c == '\033') {
-                r->state = OSC_STATE_OSC_ESC_END;
+                r->state = YETTY_YTERM_OSC_STATE_OSC_ESC_END;
                 i++;
             } else {
                 osc_buf_append(r, c);
@@ -164,11 +164,11 @@ static void process_data(struct yetty_yterm_pty_reader *r, const char *data, siz
             }
             break;
 
-        case OSC_STATE_OSC_ESC_END:
+        case YETTY_YTERM_OSC_STATE_OSC_ESC_END:
             if (c == '\\') {
                 /* ST terminator */
                 dispatch_osc(r);
-                r->state = OSC_STATE_NORMAL;
+                r->state = YETTY_YTERM_OSC_STATE_NORMAL;
                 normal_start = i + 1;
                 i++;
             } else if (c == '\033') {
@@ -179,7 +179,7 @@ static void process_data(struct yetty_yterm_pty_reader *r, const char *data, siz
                 /* ESC was data */
                 osc_buf_append(r, '\033');
                 osc_buf_append(r, c);
-                r->state = OSC_STATE_IN_OSC;
+                r->state = YETTY_YTERM_OSC_STATE_IN_OSC;
                 i++;
             }
             break;
@@ -187,7 +187,7 @@ static void process_data(struct yetty_yterm_pty_reader *r, const char *data, siz
     }
 
     /* Flush remaining normal data */
-    if (r->state == OSC_STATE_NORMAL && i > normal_start && r->default_sink &&
+    if (r->state == YETTY_YTERM_OSC_STATE_NORMAL && i > normal_start && r->default_sink &&
         r->default_sink->ops && r->default_sink->ops->write) {
         ydebug("pty_reader: tail flush %zu bytes -> default_sink", i - normal_start);
         r->default_sink->ops->write(r->default_sink, 0, data + normal_start, i - normal_start);
@@ -196,7 +196,7 @@ static void process_data(struct yetty_yterm_pty_reader *r, const char *data, siz
            normal_start, i);
 }
 
-struct yetty_yterm_pty_reader_result yetty_yterm_pty_reader_create(struct yetty_yplatform_pty *pty)
+struct yetty_yterm_pty_reader_result yetty_yterm_pty_reader_create(struct yetty_platform_pty *pty)
 {
     struct yetty_yterm_pty_reader *r;
 
@@ -210,7 +210,7 @@ struct yetty_yterm_pty_reader_result yetty_yterm_pty_reader_create(struct yetty_
     }
 
     r->pty = pty;
-    r->state = OSC_STATE_NORMAL;
+    r->state = YETTY_YTERM_OSC_STATE_NORMAL;
 
     return YETTY_OK(yetty_yterm_pty_reader, r);
 }
@@ -225,7 +225,7 @@ void yetty_yterm_pty_reader_destroy(struct yetty_yterm_pty_reader *reader)
 }
 
 void yetty_yterm_pty_reader_register_default_sink(struct yetty_yterm_pty_reader *reader,
-                                                  struct yetty_yterm_terminal_layer *layer)
+                                                  struct yetty_yrender_terminal_layer *layer)
 {
     if (reader) {
         reader->default_sink = layer;
@@ -233,7 +233,7 @@ void yetty_yterm_pty_reader_register_default_sink(struct yetty_yterm_pty_reader 
 }
 
 void yetty_yterm_pty_reader_register_osc_sink(struct yetty_yterm_pty_reader *reader, int vendor_id,
-                                              struct yetty_yterm_terminal_layer *layer)
+                                              struct yetty_yrender_terminal_layer *layer)
 {
     if (!reader || reader->osc_sink_count >= MAX_OSC_SINKS) {
         return;
@@ -269,7 +269,7 @@ int yetty_yterm_pty_reader_read(struct yetty_yterm_pty_reader *reader)
         total += res.value;
 
         /* Keep reading if in OSC (can be huge) */
-        if (reader->state != OSC_STATE_NORMAL) {
+        if (reader->state != YETTY_YTERM_OSC_STATE_NORMAL) {
             continue;
         }
 

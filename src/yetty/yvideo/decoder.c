@@ -226,7 +226,7 @@ void yetty_yvideo_decoder_reset(struct yetty_yvideo_decoder *dec)
  * YUV420 → BGRA8. Inverse of the encoder's BGRA→YUV helper. Fixed-point,
  * full-range output. Supports BT.601 and BT.709 coefficients.
  *-------------------------------------------------------------------------*/
-void yetty_yvideo_yuv420_to_bgra(const struct yetty_yvideo_yuv_frame *frame, uint8_t *bgra_out)
+void yetty_yvideo_yuv_frame_yuv420_to_bgra(const struct yetty_yvideo_yuv_frame *frame, uint8_t *bgra_out)
 {
     if (!frame || !bgra_out || !frame->y_plane || !frame->u_plane || !frame->v_plane) {
         return;

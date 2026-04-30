@@ -132,7 +132,7 @@ static int read_file_all(const char *path, char **out, size_t *out_len)
  * (we'll read one scalar OR a balanced collection). start_depth=1 means
  * the caller has already consumed a MAPPING_START / SEQUENCE_START and we
  * need to read events up to the matching END. */
-static int skip_node_at(yaml_parser_t *p, int start_depth)
+static int skip_node_at(struct yaml_parser_s *p, int start_depth)
 {
     yaml_event_t ev;
     int depth = start_depth;
@@ -169,20 +169,20 @@ static int skip_node_at(yaml_parser_t *p, int start_depth)
     }
 }
 
-static int skip_node(yaml_parser_t *p)
+static int skip_node(struct yaml_parser_s *p)
 {
     return skip_node_at(p, 0);
 }
 
 /* Caller consumed the opening MAPPING_START / SEQUENCE_START, we read up to
  * the matching END. */
-static int skip_collection_body(yaml_parser_t *p)
+static int skip_collection_body(struct yaml_parser_s *p)
 {
     return skip_node_at(p, 1);
 }
 
 /* Read the next event. Caller must yaml_event_delete(*ev). */
-static int next_event(yaml_parser_t *p, yaml_event_t *ev)
+static int next_event(struct yaml_parser_s *p, yaml_event_t *ev)
 {
     return yaml_parser_parse(p, ev) ? 0 : -1;
 }
@@ -236,7 +236,7 @@ static bool scalar_eq(const yaml_event_t *ev, const char *s)
 
 /* Parse one paragraph mapping. Currently supports keys: text, fontSize,
  * color, format. Other keys (runs, etc.) are skipped. */
-static struct yetty_ycore_void_result parse_ydoc_paragraph(yaml_parser_t *p,
+static struct yetty_ycore_void_result parse_ydoc_paragraph(struct yaml_parser_s *p,
                                                            struct yetty_yrich_ydoc *d)
 {
     char *text = NULL;
@@ -325,7 +325,7 @@ err:
     return YETTY_ERR(yetty_ycore_void, "yrich yaml: paragraph parse failed");
 }
 
-static struct yetty_ycore_void_result parse_ydoc_paragraphs(yaml_parser_t *p,
+static struct yetty_ycore_void_result parse_ydoc_paragraphs(struct yaml_parser_s *p,
                                                             struct yetty_yrich_ydoc *d)
 {
     yaml_event_t ev;
@@ -355,7 +355,7 @@ static struct yetty_ycore_void_result parse_ydoc_paragraphs(yaml_parser_t *p,
     }
 }
 
-static struct yetty_ycore_void_result parse_ydoc_document(yaml_parser_t *p,
+static struct yetty_ycore_void_result parse_ydoc_document(struct yaml_parser_s *p,
                                                           struct yetty_yrich_ydoc *d)
 {
     yaml_event_t ev;
@@ -419,7 +419,7 @@ struct yetty_yrich_ydoc_ptr_result yetty_yrich_ydoc_load_yaml(const char *yaml, 
     }
     struct yetty_yrich_ydoc *d = dr.value;
 
-    yaml_parser_t parser;
+    struct yaml_parser_s parser;
     yaml_parser_initialize(&parser);
     yaml_parser_set_input_string(&parser, (const unsigned char *)yaml, len);
 
@@ -499,7 +499,7 @@ struct yetty_yrich_ydoc_ptr_result yetty_yrich_ydoc_load_yaml_file(const char *p
  * yspreadsheet loader
  *===========================================================================*/
 
-static struct yetty_ycore_void_result parse_sheet_cells(yaml_parser_t *p,
+static struct yetty_ycore_void_result parse_sheet_cells(struct yaml_parser_s *p,
                                                         struct yetty_yrich_spreadsheet *s)
 {
     yaml_event_t ev;
@@ -553,7 +553,7 @@ static struct yetty_ycore_void_result parse_sheet_cells(yaml_parser_t *p,
     }
 }
 
-static int parse_sheet_col_widths(yaml_parser_t *p, struct yetty_yrich_spreadsheet *s)
+static int parse_sheet_col_widths(struct yaml_parser_s *p, struct yetty_yrich_spreadsheet *s)
 {
     yaml_event_t ev;
     if (next_event(p, &ev) < 0 || ev.type != YAML_SEQUENCE_START_EVENT) {
@@ -579,7 +579,7 @@ static int parse_sheet_col_widths(yaml_parser_t *p, struct yetty_yrich_spreadshe
     }
 }
 
-static struct yetty_ycore_void_result parse_sheet_body(yaml_parser_t *p,
+static struct yetty_ycore_void_result parse_sheet_body(struct yaml_parser_s *p,
                                                        struct yetty_yrich_spreadsheet *s)
 {
     yaml_event_t ev;
@@ -652,7 +652,7 @@ struct yetty_yrich_spreadsheet_ptr_result yetty_yrich_spreadsheet_load_yaml(cons
     }
     struct yetty_yrich_spreadsheet *s = sr.value;
 
-    yaml_parser_t parser;
+    struct yaml_parser_s parser;
     yaml_parser_initialize(&parser);
     yaml_parser_set_input_string(&parser, (const unsigned char *)yaml, len);
 
@@ -731,7 +731,7 @@ struct yetty_yrich_spreadsheet_ptr_result yetty_yrich_spreadsheet_load_yaml_file
  * yslides loader
  *===========================================================================*/
 
-struct shape_fields {
+struct yetty_yrich_shape_fields {
     uint32_t type; /* 0..5 */
     float x, y, w, h;
     float rotation;
@@ -754,7 +754,7 @@ struct shape_fields {
     char *image_source;
 };
 
-static void shape_fields_init(struct shape_fields *f)
+static void shape_fields_init(struct yetty_yrich_shape_fields *f)
 {
     memset(f, 0, sizeof(*f));
     f->w = 100.0f;
@@ -763,16 +763,16 @@ static void shape_fields_init(struct shape_fields *f)
     f->font_size = 24.0f;
 }
 
-static void shape_fields_free(struct shape_fields *f)
+static void shape_fields_free(struct yetty_yrich_shape_fields *f)
 {
     free(f->text);
     free(f->image_source);
 }
 
-static struct yetty_ycore_void_result parse_shape(yaml_parser_t *p,
+static struct yetty_ycore_void_result parse_shape(struct yaml_parser_s *p,
                                                   struct yetty_yrich_slides *s)
 {
-    struct shape_fields f;
+    struct yetty_yrich_shape_fields f;
     shape_fields_init(&f);
 
     yaml_event_t ev;
@@ -927,7 +927,7 @@ err:
     return YETTY_ERR(yetty_ycore_void, "yrich yaml: shape parse failed");
 }
 
-static struct yetty_ycore_void_result parse_slide(yaml_parser_t *p,
+static struct yetty_ycore_void_result parse_slide(struct yaml_parser_s *p,
                                                   struct yetty_yrich_slides *s)
 {
     yaml_event_t ev;
@@ -1026,7 +1026,7 @@ static struct yetty_ycore_void_result parse_slide(yaml_parser_t *p,
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result parse_slides_seq(yaml_parser_t *p,
+static struct yetty_ycore_void_result parse_slides_seq(struct yaml_parser_s *p,
                                                        struct yetty_yrich_slides *s)
 {
     yaml_event_t ev;
@@ -1055,7 +1055,7 @@ static struct yetty_ycore_void_result parse_slides_seq(yaml_parser_t *p,
     }
 }
 
-static struct yetty_ycore_void_result parse_presentation(yaml_parser_t *p,
+static struct yetty_ycore_void_result parse_presentation(struct yaml_parser_s *p,
                                                          struct yetty_yrich_slides *s)
 {
     yaml_event_t ev;
@@ -1123,7 +1123,7 @@ struct yetty_yrich_slides_ptr_result yetty_yrich_slides_load_yaml(const char *ya
     }
     struct yetty_yrich_slides *s = sr.value;
 
-    yaml_parser_t parser;
+    struct yaml_parser_s parser;
     yaml_parser_initialize(&parser);
     yaml_parser_set_input_string(&parser, (const unsigned char *)yaml, len);
 

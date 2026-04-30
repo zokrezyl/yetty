@@ -38,55 +38,55 @@
 #define U_COUNT 12
 
 /* Setters */
-static inline void set_grid_size(struct yetty_yrender_gpu_resource_set *rs, float cols, float rows)
+static inline void set_grid_size(struct yetty_ypaint_core_gpu_resource_set *rs, float cols, float rows)
 {
     rs->uniforms[U_GRID_SIZE].vec2[0] = cols;
     rs->uniforms[U_GRID_SIZE].vec2[1] = rows;
 }
-static inline void set_cell_size(struct yetty_yrender_gpu_resource_set *rs, float w, float h)
+static inline void set_cell_size(struct yetty_ypaint_core_gpu_resource_set *rs, float w, float h)
 {
     rs->uniforms[U_CELL_SIZE].vec2[0] = w;
     rs->uniforms[U_CELL_SIZE].vec2[1] = h;
 }
-static inline void set_cursor_pos(struct yetty_yrender_gpu_resource_set *rs, float col, float row)
+static inline void set_cursor_pos(struct yetty_ypaint_core_gpu_resource_set *rs, float col, float row)
 {
     rs->uniforms[U_CURSOR_POS].vec2[0] = col;
     rs->uniforms[U_CURSOR_POS].vec2[1] = row;
 }
-static inline void set_cursor_visible(struct yetty_yrender_gpu_resource_set *rs, float v)
+static inline void set_cursor_visible(struct yetty_ypaint_core_gpu_resource_set *rs, float v)
 {
     rs->uniforms[U_CURSOR_VISIBLE].f32 = v;
 }
-static inline void set_cursor_shape(struct yetty_yrender_gpu_resource_set *rs, float s)
+static inline void set_cursor_shape(struct yetty_ypaint_core_gpu_resource_set *rs, float s)
 {
     rs->uniforms[U_CURSOR_SHAPE].f32 = s;
 }
-static inline void set_scale(struct yetty_yrender_gpu_resource_set *rs, float s)
+static inline void set_scale(struct yetty_ypaint_core_gpu_resource_set *rs, float s)
 {
     rs->uniforms[U_SCALE].f32 = s;
 }
-static inline void set_default_fg(struct yetty_yrender_gpu_resource_set *rs, uint32_t c)
+static inline void set_default_fg(struct yetty_ypaint_core_gpu_resource_set *rs, uint32_t c)
 {
     rs->uniforms[U_DEFAULT_FG].u32 = c;
 }
-static inline void set_default_bg(struct yetty_yrender_gpu_resource_set *rs, uint32_t c)
+static inline void set_default_bg(struct yetty_ypaint_core_gpu_resource_set *rs, uint32_t c)
 {
     rs->uniforms[U_DEFAULT_BG].u32 = c;
 }
-static inline void set_visual_zoom(struct yetty_yrender_gpu_resource_set *rs, float scale,
+static inline void set_visual_zoom(struct yetty_ypaint_core_gpu_resource_set *rs, float scale,
                                    float off_x, float off_y)
 {
     rs->uniforms[U_VZ_SCALE].f32 = scale;
     rs->uniforms[U_VZ_OFF].vec2[0] = off_x;
     rs->uniforms[U_VZ_OFF].vec2[1] = off_y;
 }
-static inline void set_root_row(struct yetty_yrender_gpu_resource_set *rs, uint32_t r)
+static inline void set_root_row(struct yetty_ypaint_core_gpu_resource_set *rs, uint32_t r)
 {
     rs->uniforms[U_ROOT_ROW].u32 = r;
 }
 
 /* Init — names and types use the same constants */
-static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
+static void init_uniforms(struct yetty_ypaint_core_gpu_resource_set *rs)
 {
     rs->uniform_count = U_COUNT;
 
@@ -162,13 +162,13 @@ struct yetty_yterm_text_sb_arena {
 
 /* Text layer - embeds base as first member */
 struct yetty_yterm_terminal_text_layer {
-    struct yetty_yterm_terminal_layer base;
+    struct yetty_yrender_terminal_layer base;
     VTerm *vterm;
     VTermScreen *screen;
-    struct yetty_font_ms_font *font;
+    struct yetty_yfont_ms_font *font;
     uint32_t font_type; /* 0=msdf, 6=raster */
     struct yetty_ycore_buffer shader_code;
-    struct yetty_yrender_gpu_resource_set rs;
+    struct yetty_ypaint_core_gpu_resource_set rs;
     struct yetty_ycore_void_result pending_error; /* Error from vterm callbacks */
     /* DEC mode 1500/1501 — mirrored from libvterm via settermprop. The
      * terminal reads these (via base.mouse_sub_fn) to decide whether to
@@ -201,20 +201,20 @@ struct yetty_yterm_terminal_text_layer {
 };
 
 /* Forward declarations */
-static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yterm_terminal_layer *self);
-static struct yetty_ycore_void_result text_layer_write(struct yetty_yterm_terminal_layer *self,
+static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_terminal_layer *self);
+static struct yetty_ycore_void_result text_layer_write(struct yetty_yrender_terminal_layer *self,
                                                        int osc_code, const char *data, size_t len);
 static struct yetty_ycore_void_result text_layer_resize_grid(
-    struct yetty_yterm_terminal_layer *self, struct grid_size grid_size);
+    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size);
 static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_set(
-    const struct yetty_yterm_terminal_layer *self);
-static int text_layer_on_key(struct yetty_yterm_terminal_layer *self, int key, int mods);
-static int text_layer_on_char(struct yetty_yterm_terminal_layer *self, uint32_t codepoint,
+    const struct yetty_yrender_terminal_layer *self);
+static int text_layer_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods);
+static int text_layer_on_char(struct yetty_yrender_terminal_layer *self, uint32_t codepoint,
                               int mods);
-static struct yetty_ycore_void_result text_layer_render(struct yetty_yterm_terminal_layer *self,
-                                                        struct yetty_yrender_target *target);
-static uint32_t text_layer_get_live_anchor(const struct yetty_yterm_terminal_layer *self);
-static struct yetty_ycore_void_result text_layer_set_view_top(struct yetty_yterm_terminal_layer *self, int active, uint32_t view_top_total_idx);
+static struct yetty_ycore_void_result text_layer_render(struct yetty_yrender_terminal_layer *self,
+                                                        struct yetty_ypaint_core_target *target);
+static uint32_t text_layer_get_live_anchor(const struct yetty_yrender_terminal_layer *self);
+static struct yetty_ycore_void_result text_layer_set_view_top(struct yetty_yrender_terminal_layer *self, int active, uint32_t view_top_total_idx);
 static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer);
 
 /* VTerm callbacks */
@@ -255,7 +255,7 @@ static VTermResolvedGlyph resolve_glyph(const uint32_t *chars, int count, int bo
         return result;
     }
 
-    enum yetty_font_ms_style style = YETTY_YFONT_MS_STYLE_REGULAR;
+    enum yetty_yfont_ms_style style = YETTY_YFONT_MS_STYLE_REGULAR;
     if (bold && italic) {
         style = YETTY_YFONT_MS_STYLE_BOLD_ITALIC;
     } else if (bold) {
@@ -279,7 +279,7 @@ static VTermResolvedGlyph resolve_glyph(const uint32_t *chars, int count, int bo
 }
 
 /* Text layer always has content */
-static int text_layer_is_empty(const struct yetty_yterm_terminal_layer *self)
+static int text_layer_is_empty(const struct yetty_yrender_terminal_layer *self)
 {
     (void)self;
     return 0;
@@ -456,9 +456,9 @@ static void push_blank_sb_line(struct yetty_yterm_terminal_text_layer *layer, in
     if (cols <= 0) {
         return;
     }
-    enum { STACK_BLANK_CELLS = 4096 };
-    if (cols <= STACK_BLANK_CELLS) {
-        VTermScreenCell stack_blanks[STACK_BLANK_CELLS] = {0};
+    enum { YETTY_YTERM_STACK_BLANK_CELLS = 4096 };
+    if (cols <= YETTY_YTERM_STACK_BLANK_CELLS) {
+        VTermScreenCell stack_blanks[YETTY_YTERM_STACK_BLANK_CELLS] = {0};
         sb_arena_push(&layer->sb, stack_blanks, cols);
     } else {
         VTermScreenCell *blanks = calloc((size_t)cols, sizeof(VTermScreenCell));
@@ -482,7 +482,7 @@ static void push_blank_sb_line(struct yetty_yterm_terminal_text_layer *layer, in
  * Solution: cap the chunk vterm sees at rows-1 (so it always takes the slow,
  * sb-pushing path), and once vterm has emptied the screen, append blank
  * entries directly for the remainder. */
-static struct yetty_ycore_void_result text_layer_scroll(struct yetty_yterm_terminal_layer *self,
+static struct yetty_ycore_void_result text_layer_scroll(struct yetty_yrender_terminal_layer *self,
                                                         int lines)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
@@ -528,7 +528,7 @@ static struct yetty_ycore_void_result text_layer_scroll(struct yetty_yterm_termi
 }
 
 /* Receive cursor position from other layers (e.g., ypaint) */
-static struct yetty_ycore_void_result text_layer_set_cursor(struct yetty_yterm_terminal_layer *self, int col, int row)
+static struct yetty_ycore_void_result text_layer_set_cursor(struct yetty_yrender_terminal_layer *self, int col, int row)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
@@ -549,7 +549,7 @@ static struct yetty_ycore_void_result text_layer_set_cursor(struct yetty_yterm_t
 }
 
 static struct yetty_ycore_void_result text_layer_set_cell_size(
-    struct yetty_yterm_terminal_layer *self, struct pixel_size cell_size)
+    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_pixel_size cell_size)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
@@ -580,7 +580,7 @@ static struct yetty_ycore_void_result text_layer_set_cell_size(
 }
 
 static struct yetty_ycore_void_result text_layer_set_visual_zoom(
-    struct yetty_yterm_terminal_layer *self, float scale, float off_x, float off_y)
+    struct yetty_yrender_terminal_layer *self, float scale, float off_x, float off_y)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
@@ -749,7 +749,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
         /* Cell padding around the glyph, fractions of glyph dim. Default 0
          * = cell exactly wraps the glyph extent, which fixes the "glyph too
          * small in cell" feel introduced by the underscore fix. */
-        struct yetty_font_ms_padding padding = {
+        struct yetty_yfont_ms_padding padding = {
             .left = strtof(
                 config->ops->get_string(config, "terminal/text-layer/font/padding/left", "0.0"),
                 NULL),
@@ -764,9 +764,9 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
                 NULL),
         };
 
-        font_res = yetty_font_ms_msdf_font_create(cdb_path, shader_path, msdf_font_size, padding);
+        font_res = yetty_yfont_ms_msdf_font_create(cdb_path, shader_path, msdf_font_size, padding);
     } else {
-        font_res = yetty_font_ms_raster_font_create(config, text_layer->base.cell_size.width,
+        font_res = yetty_yfont_ms_raster_font_create(config, text_layer->base.cell_size.width,
                                                     text_layer->base.cell_size.height);
     }
     if (!YETTY_IS_OK(font_res)) {
@@ -846,7 +846,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
 
 /* Ops implementations */
 
-static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yterm_terminal_layer *self)
+static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_terminal_layer *self)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
@@ -863,7 +863,7 @@ static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yterm_term
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result text_layer_write(struct yetty_yterm_terminal_layer *self,
+static struct yetty_ycore_void_result text_layer_write(struct yetty_yrender_terminal_layer *self,
                                                        int osc_code, const char *data, size_t len)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
@@ -898,7 +898,7 @@ static struct yetty_ycore_void_result text_layer_write(struct yetty_yterm_termin
 }
 
 static struct yetty_ycore_void_result text_layer_resize_grid(
-    struct yetty_yterm_terminal_layer *self, struct grid_size grid_size)
+    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
@@ -996,7 +996,7 @@ static VTermKey glfw_key_to_vterm(int key)
     }
 }
 
-static int text_layer_on_key(struct yetty_yterm_terminal_layer *self, int key, int mods)
+static int text_layer_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
@@ -1015,7 +1015,7 @@ static int text_layer_on_key(struct yetty_yterm_terminal_layer *self, int key, i
     return 0; /* Not a special key */
 }
 
-static int text_layer_on_char(struct yetty_yterm_terminal_layer *self, uint32_t codepoint, int mods)
+static int text_layer_on_char(struct yetty_yrender_terminal_layer *self, uint32_t codepoint, int mods)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
@@ -1031,7 +1031,7 @@ static int text_layer_on_char(struct yetty_yterm_terminal_layer *self, uint32_t 
 }
 
 static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_set(
-    const struct yetty_yterm_terminal_layer *self)
+    const struct yetty_yrender_terminal_layer *self)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         (struct yetty_yterm_terminal_text_layer *)((const char *)self -
@@ -1072,7 +1072,7 @@ static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_
         struct yetty_yrender_gpu_resource_set_result font_rs =
             text_layer->font->ops->get_gpu_resource_set(text_layer->font);
         if (YETTY_IS_OK(font_rs)) {
-            text_layer->rs.children[0] = (struct yetty_yrender_gpu_resource_set *)font_rs.value;
+            text_layer->rs.children[0] = (struct yetty_ypaint_core_gpu_resource_set *)font_rs.value;
         }
     }
 
@@ -1080,8 +1080,8 @@ static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_
 }
 
 /* Render layer to target - delegate to render_target */
-static struct yetty_ycore_void_result text_layer_render(struct yetty_yterm_terminal_layer *self,
-                                                        struct yetty_yrender_target *target)
+static struct yetty_ycore_void_result text_layer_render(struct yetty_yrender_terminal_layer *self,
+                                                        struct yetty_ypaint_core_target *target)
 {
     return target->ops->render_layer(target, self);
 }
@@ -1090,11 +1090,11 @@ static struct yetty_ycore_void_result text_layer_render(struct yetty_yterm_termi
  * shader-glyph layer) that need to read the same grid as the text shader.
  * Returns the same pointer text-layer uploads — live screen in normal mode,
  * stitched scrollback view when view_active. */
-void yetty_yterm_terminal_text_layer_get_cells(const struct yetty_yterm_terminal_layer *self,
+void yetty_yterm_terminal_layer_terminal_text_layer_get_cells(const struct yetty_yrender_terminal_layer *self,
                                                const uint8_t **out_data, size_t *out_size)
 {
     const struct yetty_yterm_terminal_text_layer *text_layer = container_of(
-        (struct yetty_yterm_terminal_layer *)self, struct yetty_yterm_terminal_text_layer, base);
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yterm_terminal_text_layer, base);
 
     if (text_layer->view_active && text_layer->view_staging) {
         if (out_data) {
@@ -1144,7 +1144,7 @@ static int on_move_cursor(VTermPos pos, VTermPos oldpos, int visible, void *user
     if (text_layer->base.cursor_fn) {
         text_layer->base.cursor_fn(
             &text_layer->base,
-            (struct grid_cursor_pos){.cols = (uint32_t)pos.col, .rows = (uint32_t)pos.row},
+            (struct yetty_ycore_grid_cursor_pos){.cols = (uint32_t)pos.col, .rows = (uint32_t)pos.row},
             text_layer->base.cursor_userdata);
     }
     return 1;
@@ -1179,10 +1179,10 @@ static int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user)
 /* Live anchor — count of rows pushed off the top of the screen so far. The
  * terminal converts mouse-wheel deltas relative to this so view_top_total_idx
  * stays absolute and stable as new content keeps arriving during scrollback. */
-static uint32_t text_layer_get_live_anchor(const struct yetty_yterm_terminal_layer *self)
+static uint32_t text_layer_get_live_anchor(const struct yetty_yrender_terminal_layer *self)
 {
     const struct yetty_yterm_terminal_text_layer *text_layer = container_of(
-        (struct yetty_yterm_terminal_layer *)self, struct yetty_yterm_terminal_text_layer, base);
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yterm_terminal_text_layer, base);
     return text_layer->sb.lines_count;
 }
 
@@ -1260,7 +1260,7 @@ static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer)
  * live screen (active=0). When activating, hide the cursor and snap the GPU
  * buffer to the synthetic stitched view; on release, restore the cursor to
  * whatever vterm last reported and re-point the buffer at the live screen. */
-static struct yetty_ycore_void_result text_layer_set_view_top(struct yetty_yterm_terminal_layer *self, int active, uint32_t view_top_total_idx)
+static struct yetty_ycore_void_result text_layer_set_view_top(struct yetty_yrender_terminal_layer *self, int active, uint32_t view_top_total_idx)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);

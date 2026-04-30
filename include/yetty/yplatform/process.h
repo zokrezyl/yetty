@@ -18,7 +18,7 @@ extern "C" {
 #endif
 
 /* Opaque process handle. NULL == invalid. */
-typedef struct yprocess yprocess_t;
+struct yetty_yplatform_yprocess;
 
 #define YPROCESS_INVALID NULL
 
@@ -32,7 +32,7 @@ typedef struct yprocess yprocess_t;
  *                   null device.
  * Returns YPROCESS_INVALID on failure.
  */
-yprocess_t *yprocess_spawn(const char *const argv[], int detached, int stdio_to_null);
+struct yetty_yplatform_yprocess *yetty_yplatform_yprocess_spawn(const char *const argv[], int detached, int stdio_to_null);
 
 /*
  * Ask the child to terminate. POSIX sends SIGTERM, waits up to grace_ms,
@@ -40,10 +40,10 @@ yprocess_t *yprocess_spawn(const char *const argv[], int detached, int stdio_to_
  * up to grace_ms in case the child exits on its own, then TerminateProcess.
  * Always frees the handle (do not call yprocess_is_running afterwards).
  */
-void yprocess_terminate(yprocess_t *proc, unsigned grace_ms);
+void yetty_yplatform_yprocess_terminate(struct yetty_yplatform_yprocess *proc, unsigned grace_ms);
 
 /* 1 if still running, 0 if exited. Safe with NULL (returns 0). */
-int yprocess_is_running(yprocess_t *proc);
+int yetty_yplatform_yprocess_is_running(struct yetty_yplatform_yprocess *proc);
 
 #ifdef __cplusplus
 }

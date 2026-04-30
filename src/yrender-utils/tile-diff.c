@@ -57,7 +57,7 @@ static const char *DIFF_SHADER =
 struct yetty_yrender_utils_tile_diff_engine {
     WGPUDevice device;
     WGPUQueue queue;
-    struct yplatform_wgpu *wgpu;
+    struct yetty_yplatform_wgpu *wgpu;
 
     uint32_t tile_size;
 
@@ -401,7 +401,7 @@ static void submit_coro_entry(void *arg)
     /* Texture is no longer touched past this point — caller may release it. */
 
     if (!do_full) {
-        res = yplatform_wgpu_buffer_map_await(eng->wgpu, eng->dirty_flags_readback,
+        res = yetty_yplatform_wgpu_buffer_map_await(eng->wgpu, eng->dirty_flags_readback,
                                               WGPUMapMode_Read, 0, num_tiles * sizeof(uint32_t));
         if (!YETTY_IS_OK(res)) {
             ywarn("tile_diff: flags map failed: %s", res.error.msg);
@@ -416,7 +416,7 @@ static void submit_coro_entry(void *arg)
         wgpuBufferUnmap(eng->dirty_flags_readback);
     }
 
-    res = yplatform_wgpu_buffer_map_await(eng->wgpu, eng->tile_readback_buffer, WGPUMapMode_Read, 0,
+    res = yetty_yplatform_wgpu_buffer_map_await(eng->wgpu, eng->tile_readback_buffer, WGPUMapMode_Read, 0,
                                           full_buf_size);
     if (!YETTY_IS_OK(res)) {
         ywarn("tile_diff: pixels map failed: %s", res.error.msg);
@@ -458,7 +458,7 @@ static void submit_coro_entry(void *arg)
 }
 
 struct yetty_yrender_utils_tile_diff_engine_ptr_result yetty_yrender_utils_tile_diff_engine_create(
-    WGPUDevice device, WGPUQueue queue, struct yplatform_wgpu *wgpu, uint32_t tile_size)
+    WGPUDevice device, WGPUQueue queue, struct yetty_yplatform_wgpu *wgpu, uint32_t tile_size)
 {
     if (!device || !queue || !wgpu || tile_size == 0) {
         return YETTY_ERR(yetty_yrender_utils_tile_diff_engine_ptr, "invalid arguments");
@@ -579,16 +579,16 @@ struct yetty_ycore_void_result yetty_yrender_utils_tile_diff_engine_submit(
     args->sink_ctx = sink_ctx;
 
     struct yplatform_coro_ptr_result coro_res =
-        yplatform_coro_spawn(submit_coro_entry, args, 0, "tile-diff-submit");
+        yetty_yplatform_coro_spawn(submit_coro_entry, args, 0, "tile-diff-submit");
     if (!YETTY_IS_OK(coro_res)) {
         free(args);
         return YETTY_ERR(yetty_ycore_void, "tile_diff coro spawn failed");
     }
 
     eng->submit_in_flight = true;
-    yplatform_coro_resume(coro_res.value);
-    if (yplatform_coro_is_finished(coro_res.value)) {
-        yplatform_coro_destroy(coro_res.value);
+    yetty_yplatform_coro_resume(coro_res.value);
+    if (yetty_yplatform_coro_is_finished(coro_res.value)) {
+        yetty_yplatform_coro_destroy(coro_res.value);
     }
     /* Otherwise the coro yielded into the GPU await; resume_coro_on_loop
      * (in ywebgpu.c) destroys it once it finishes. Mirrors the old VNC path. */

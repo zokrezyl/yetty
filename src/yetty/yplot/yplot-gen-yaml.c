@@ -55,7 +55,7 @@ static const uint32_t YPLOT_COLOR_PALETTE[8] = {
 };
 
 static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ypaint_core_buffer *buffer,
-                                                         yaml_parser_t *yaml_parser,
+                                                         struct yaml_parser_s *yaml_parser,
                                                          const char *primitive_type_name)
 {
     (void)primitive_type_name;
@@ -211,20 +211,20 @@ static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ypaint_cor
         .bytecode_len = bc_count,
     };
 
-    size_t required = yetty_yplot_serialized_size(&uniforms, &bufs);
+    size_t required = yetty_yplot_uniforms_serialized_size(&uniforms, &bufs);
     uint8_t *prim_buf = malloc(required);
     if (!prim_buf) {
         return YETTY_ERR(yetty_ycore_void, "malloc failed");
     }
 
     struct yetty_ycore_size_result ser_res =
-        yetty_yplot_serialize(&uniforms, &bufs, prim_buf, required);
+        yetty_yplot_uniforms_serialize(&uniforms, &bufs, prim_buf, required);
     if (YETTY_IS_ERR(ser_res)) {
         free(prim_buf);
         return YETTY_ERR(yetty_ycore_void, ser_res.error.msg);
     }
 
-    struct yetty_ypaint_id_result id_res =
+    struct yetty_ypaint_core_id_result id_res =
         yetty_ypaint_core_buffer_add_prim(buffer, prim_buf, required);
     free(prim_buf);
 

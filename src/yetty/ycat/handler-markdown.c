@@ -9,7 +9,7 @@
 
 #include <yetty/ymarkdown/ymarkdown.h>
 
-struct yetty_ypaint_core_buffer_result ycat_handler_markdown(const uint8_t *bytes, size_t len,
+struct yetty_ypaint_core_buffer_result yetty_ycat_handler_markdown(const uint8_t *bytes, size_t len,
                                                              const char *path_hint,
                                                              const struct yetty_ycat_config *config)
 {

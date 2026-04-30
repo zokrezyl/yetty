@@ -23,7 +23,6 @@
 
 /* Forward declare pdfio file (C API). */
 struct _pdfio_file_s;
-typedef struct _pdfio_file_s pdfio_file_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,7 +40,7 @@ YETTY_YRESULT_DECLARE(yetty_ypdf_render, struct yetty_ypdf_render_output);
 
 /* Render pdf into a fresh ypaint buffer. On success the caller owns
  * result.value.buffer. */
-struct yetty_ypdf_render_result yetty_ypdf_render_pdf(pdfio_file_t *pdf);
+struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf);
 
 #ifdef __cplusplus
 }

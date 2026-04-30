@@ -12,12 +12,12 @@
 // Abstract factory internal structure
 //=============================================================================
 
-struct yetty_ypaint_complex_prim_factory {
+struct yetty_ypaint_core_complex_prim_factory {
     WGPUDevice device;
     WGPUQueue queue;
     WGPUTextureFormat target_format;
-    struct yetty_yrender_gpu_allocator *allocator;
-    struct yetty_ypaint_concrete_factory *factories[MAX_CONCRETE_FACTORIES];
+    struct yetty_ypaint_core_gpu_allocator *allocator;
+    struct yetty_ypaint_core_concrete_factory *factories[MAX_CONCRETE_FACTORIES];
     uint32_t count;
 };
 
@@ -25,7 +25,7 @@ struct yetty_ypaint_complex_prim_factory {
 // Helper functions
 //=============================================================================
 
-bool yetty_ypaint_is_complex_type(uint32_t type)
+bool yetty_ypaint_core_is_complex_type(uint32_t type)
 {
     return (type >= YETTY_YPAINT_COMPLEX_TYPE_BASE);
 }
@@ -36,32 +36,32 @@ bool yetty_ypaint_is_complex_type(uint32_t type)
 
 static struct yetty_ycore_size_result complex_prim_size_wrapper(const uint32_t *prim)
 {
-    size_t size = yetty_ypaint_complex_prim_size(prim);
+    size_t size = yetty_ypaint_core_complex_prim_size(prim);
     return YETTY_OK(yetty_ycore_size, size);
 }
 
 static struct rectangle_result complex_prim_aabb_wrapper(const uint32_t *prim)
 {
-    return yetty_ypaint_complex_prim_aabb(prim);
+    return yetty_ypaint_core_complex_prim_aabb(prim);
 }
 
-static const struct yetty_ypaint_prim_base_ops g_complex_prim_base_ops = {
+static const struct yetty_ypaint_core_prim_base_ops g_complex_prim_base_ops = {
     .size = complex_prim_size_wrapper,
     .aabb = complex_prim_aabb_wrapper,
 };
 
-struct yetty_ypaint_prim_base_ops_ptr_result yetty_ypaint_complex_prim_handler(uint32_t prim_type)
+struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_complex_prim_handler(uint32_t prim_type)
 {
-    if (yetty_ypaint_is_complex_type(prim_type)) {
-        return YETTY_OK(yetty_ypaint_prim_base_ops_ptr, &g_complex_prim_base_ops);
+    if (yetty_ypaint_core_is_complex_type(prim_type)) {
+        return YETTY_OK(yetty_ypaint_core_prim_base_ops_ptr, &g_complex_prim_base_ops);
     }
-    return YETTY_ERR(yetty_ypaint_prim_base_ops_ptr, "not a complex type");
+    return YETTY_ERR(yetty_ypaint_core_prim_base_ops_ptr, "not a complex type");
 }
 
-size_t yetty_ypaint_complex_prim_size(const void *data)
+size_t yetty_ypaint_core_complex_prim_size(const void *data)
 {
-    const struct yetty_ypaint_complex_prim *prim = data;
-    return sizeof(struct yetty_ypaint_complex_prim) + prim->payload_size;
+    const struct yetty_ypaint_core_complex_prim *prim = data;
+    return sizeof(struct yetty_ypaint_core_complex_prim) + prim->payload_size;
 }
 
 //=============================================================================
@@ -71,13 +71,13 @@ size_t yetty_ypaint_complex_prim_size(const void *data)
 
 #define COMPLEX_PRIM_BOUNDS_SIZE 16 /* 4 floats */
 
-struct rectangle_result yetty_ypaint_complex_prim_aabb(const void *data)
+struct rectangle_result yetty_ypaint_core_complex_prim_aabb(const void *data)
 {
     if (!data) {
         return YETTY_ERR(rectangle, "NULL data");
     }
 
-    const struct yetty_ypaint_complex_prim *prim = data;
+    const struct yetty_ypaint_core_complex_prim *prim = data;
     if (prim->payload_size < COMPLEX_PRIM_BOUNDS_SIZE) {
         return YETTY_ERR(rectangle, "payload too small for bounds");
     }
@@ -89,7 +89,7 @@ struct rectangle_result yetty_ypaint_complex_prim_aabb(const void *data)
     memcpy(&w, payload + 8, sizeof(float));
     memcpy(&h, payload + 12, sizeof(float));
 
-    struct rectangle rect = {.min = {.x = x, .y = y}, .max = {.x = x + w, .y = y + h}};
+    struct yetty_ycore_rectangle rect = {.min = {.x = x, .y = y}, .max = {.x = x + w, .y = y + h}};
     return YETTY_OK(rectangle, rect);
 }
 
@@ -97,14 +97,14 @@ struct rectangle_result yetty_ypaint_complex_prim_aabb(const void *data)
 // Abstract factory lifecycle
 //=============================================================================
 
-struct yetty_ypaint_complex_prim_factory_ptr_result yetty_ypaint_complex_prim_factory_create(
+struct yetty_ypaint_core_complex_prim_factory_ptr_result yetty_ypaint_core_complex_prim_factory_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat target_format,
-    struct yetty_yrender_gpu_allocator *allocator)
+    struct yetty_ypaint_core_gpu_allocator *allocator)
 {
-    struct yetty_ypaint_complex_prim_factory *factory =
-        calloc(1, sizeof(struct yetty_ypaint_complex_prim_factory));
+    struct yetty_ypaint_core_complex_prim_factory *factory =
+        calloc(1, sizeof(struct yetty_ypaint_core_complex_prim_factory));
     if (!factory) {
-        return YETTY_ERR(yetty_ypaint_complex_prim_factory_ptr, "allocation failed");
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_factory_ptr, "allocation failed");
     }
 
     factory->device = device;
@@ -112,10 +112,10 @@ struct yetty_ypaint_complex_prim_factory_ptr_result yetty_ypaint_complex_prim_fa
     factory->target_format = target_format;
     factory->allocator = allocator;
 
-    return YETTY_OK(yetty_ypaint_complex_prim_factory_ptr, factory);
+    return YETTY_OK(yetty_ypaint_core_complex_prim_factory_ptr, factory);
 }
 
-void yetty_ypaint_complex_prim_factory_destroy(struct yetty_ypaint_complex_prim_factory *factory)
+void yetty_ypaint_core_complex_prim_factory_destroy(struct yetty_ypaint_core_complex_prim_factory *factory)
 {
     if (!factory) {
         return;
@@ -128,9 +128,9 @@ void yetty_ypaint_complex_prim_factory_destroy(struct yetty_ypaint_complex_prim_
 // Abstract factory registration
 //=============================================================================
 
-struct yetty_ycore_void_result yetty_ypaint_complex_prim_factory_register(
-    struct yetty_ypaint_complex_prim_factory *factory,
-    struct yetty_ypaint_concrete_factory *concrete)
+struct yetty_ycore_void_result yetty_ypaint_core_complex_prim_factory_register(
+    struct yetty_ypaint_core_complex_prim_factory *factory,
+    struct yetty_ypaint_core_concrete_factory *concrete)
 {
     if (!factory) {
         return YETTY_ERR(yetty_ycore_void, "factory is NULL");
@@ -169,8 +169,8 @@ struct yetty_ycore_void_result yetty_ypaint_complex_prim_factory_register(
 // Abstract factory lookup
 //=============================================================================
 
-struct yetty_ypaint_concrete_factory *yetty_ypaint_complex_prim_factory_get(
-    struct yetty_ypaint_complex_prim_factory *factory, uint32_t type_id)
+struct yetty_ypaint_core_concrete_factory *yetty_ypaint_core_complex_prim_factory_get(
+    struct yetty_ypaint_core_complex_prim_factory *factory, uint32_t type_id)
 {
     if (!factory) {
         return NULL;
@@ -188,27 +188,27 @@ struct yetty_ypaint_concrete_factory *yetty_ypaint_complex_prim_factory_get(
 // Abstract factory instance creation
 //=============================================================================
 
-struct yetty_ypaint_complex_prim_instance_ptr_result
-yetty_ypaint_complex_prim_factory_create_instance(struct yetty_ypaint_complex_prim_factory *factory,
+struct yetty_ypaint_core_complex_prim_instance_ptr_result
+yetty_ypaint_core_complex_prim_factory_create_instance(struct yetty_ypaint_core_complex_prim_factory *factory,
                                                   const void *buffer_data, size_t size,
                                                   uint32_t rolling_row)
 {
     if (!factory) {
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "factory is NULL");
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "factory is NULL");
     }
-    if (!buffer_data || size < sizeof(struct yetty_ypaint_complex_prim)) {
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "invalid buffer data");
+    if (!buffer_data || size < sizeof(struct yetty_ypaint_core_complex_prim)) {
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "invalid buffer data");
     }
 
     // Read type from buffer
-    const struct yetty_ypaint_complex_prim *prim = buffer_data;
+    const struct yetty_ypaint_core_complex_prim *prim = buffer_data;
     uint32_t type_id = prim->type;
 
     // Get concrete factory
-    struct yetty_ypaint_concrete_factory *concrete =
-        yetty_ypaint_complex_prim_factory_get(factory, type_id);
+    struct yetty_ypaint_core_concrete_factory *concrete =
+        yetty_ypaint_core_complex_prim_factory_get(factory, type_id);
     if (!concrete) {
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "type not registered");
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "type not registered");
     }
 
     // Delegate to concrete factory
@@ -221,22 +221,22 @@ yetty_ypaint_complex_prim_factory_create_instance(struct yetty_ypaint_complex_pr
 // so its fragment shader can transform the incoming pixel at fs_main entry.
 //=============================================================================
 
-void yetty_ypaint_complex_prim_factory_set_visual_zoom(
-    struct yetty_ypaint_complex_prim_factory *factory, float scale, float offset_x, float offset_y)
+void yetty_ypaint_core_complex_prim_factory_set_visual_zoom(
+    struct yetty_ypaint_core_complex_prim_factory *factory, float scale, float offset_x, float offset_y)
 {
     if (!factory) {
         return;
     }
     for (uint32_t i = 0; i < factory->count; i++) {
-        struct yetty_ypaint_concrete_factory *cf = factory->factories[i];
+        struct yetty_ypaint_core_concrete_factory *cf = factory->factories[i];
         if (cf && cf->set_visual_zoom) {
             cf->set_visual_zoom(cf, scale, offset_x, offset_y);
         }
     }
 }
 
-void yetty_ypaint_complex_prim_factory_set_cell_zoom(
-    struct yetty_ypaint_complex_prim_factory *factory, float scale, float offset_x, float offset_y)
+void yetty_ypaint_core_complex_prim_factory_set_cell_zoom(
+    struct yetty_ypaint_core_complex_prim_factory *factory, float scale, float offset_x, float offset_y)
 {
     if (!factory) {
         ydebug("complex_prim_factory_set_cell_zoom: factory is NULL");
@@ -245,7 +245,7 @@ void yetty_ypaint_complex_prim_factory_set_cell_zoom(
     ydebug("complex_prim_factory_set_cell_zoom: scale=%.3f off=(%.1f,%.1f) factories=%u", scale,
            offset_x, offset_y, factory->count);
     for (uint32_t i = 0; i < factory->count; i++) {
-        struct yetty_ypaint_concrete_factory *cf = factory->factories[i];
+        struct yetty_ypaint_core_concrete_factory *cf = factory->factories[i];
         if (!cf) {
             continue;
         }
@@ -261,7 +261,7 @@ void yetty_ypaint_complex_prim_factory_set_cell_zoom(
 // Instance destruction (uses back-pointer)
 //=============================================================================
 
-void yetty_ypaint_complex_prim_instance_destroy(struct yetty_ypaint_complex_prim_instance *instance)
+void yetty_ypaint_core_complex_prim_instance_destroy(struct yetty_ypaint_core_complex_prim_instance *instance)
 {
     if (!instance) {
         return;

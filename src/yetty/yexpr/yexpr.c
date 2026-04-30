@@ -8,48 +8,48 @@
  * Lexer
  *===========================================================================*/
 
-enum token_type {
-    TOK_NUMBER,
-    TOK_IDENTIFIER,
-    TOK_HEX_COLOR,
-    TOK_STRING,
-    TOK_PLUS,
-    TOK_MINUS,
-    TOK_STAR,
-    TOK_SLASH,
-    TOK_CARET,
-    TOK_LPAREN,
-    TOK_RPAREN,
-    TOK_COMMA,
-    TOK_EQUALS,
-    TOK_AT,
-    TOK_DOT,
-    TOK_SEMICOLON,
-    TOK_EOF,
-    TOK_ERROR,
+enum yetty_yexpr_token_type {
+    YETTY_YEXPR_TOK_NUMBER,
+    YETTY_YEXPR_TOK_IDENTIFIER,
+    YETTY_YEXPR_TOK_HEX_COLOR,
+    YETTY_YEXPR_TOK_STRING,
+    YETTY_YEXPR_TOK_PLUS,
+    YETTY_YEXPR_TOK_MINUS,
+    YETTY_YEXPR_TOK_STAR,
+    YETTY_YEXPR_TOK_SLASH,
+    YETTY_YEXPR_TOK_CARET,
+    YETTY_YEXPR_TOK_LPAREN,
+    YETTY_YEXPR_TOK_RPAREN,
+    YETTY_YEXPR_TOK_COMMA,
+    YETTY_YEXPR_TOK_EQUALS,
+    YETTY_YEXPR_TOK_AT,
+    YETTY_YEXPR_TOK_DOT,
+    YETTY_YEXPR_TOK_SEMICOLON,
+    YETTY_YEXPR_TOK_EOF,
+    YETTY_YEXPR_TOK_ERROR,
 };
 
-struct token {
-    enum token_type type;
+struct yetty_yexpr_token {
+    enum yetty_yexpr_token_type type;
     const char *start;
     size_t len;
     double num_value;
 };
 
-struct lexer {
+struct yetty_yexpr_lexer {
     const char *source;
     size_t source_len;
     size_t pos;
 };
 
-static void lexer_init(struct lexer *lex, const char *source, size_t len)
+static void lexer_init(struct yetty_yexpr_lexer *lex, const char *source, size_t len)
 {
     lex->source = source;
     lex->source_len = len;
     lex->pos = 0;
 }
 
-static char lex_current(const struct lexer *lex)
+static char lex_current(const struct yetty_yexpr_lexer *lex)
 {
     if (lex->pos >= lex->source_len) {
         return '\0';
@@ -57,7 +57,7 @@ static char lex_current(const struct lexer *lex)
     return lex->source[lex->pos];
 }
 
-static char lex_advance(struct lexer *lex)
+static char lex_advance(struct yetty_yexpr_lexer *lex)
 {
     char c = lex_current(lex);
     if (c != '\0') {
@@ -66,7 +66,7 @@ static char lex_advance(struct lexer *lex)
     return c;
 }
 
-static char lex_peek_next(const struct lexer *lex)
+static char lex_peek_next(const struct yetty_yexpr_lexer *lex)
 {
     if (lex->pos + 1 >= lex->source_len) {
         return '\0';
@@ -74,23 +74,23 @@ static char lex_peek_next(const struct lexer *lex)
     return lex->source[lex->pos + 1];
 }
 
-static void lex_skip_whitespace(struct lexer *lex)
+static void lex_skip_whitespace(struct yetty_yexpr_lexer *lex)
 {
     while (lex->pos < lex->source_len && isspace((unsigned char)lex_current(lex))) {
         lex->pos++;
     }
 }
 
-static struct token lex_make(enum token_type type, const char *start, size_t len)
+static struct yetty_yexpr_token lex_make(enum yetty_yexpr_token_type type, const char *start, size_t len)
 {
-    struct token tok = {0};
+    struct yetty_yexpr_token tok = {0};
     tok.type = type;
     tok.start = start;
     tok.len = len;
     return tok;
 }
 
-static struct token lex_scan_number(struct lexer *lex)
+static struct yetty_yexpr_token lex_scan_number(struct yetty_yexpr_lexer *lex)
 {
     const char *start = lex->source + lex->pos;
 
@@ -116,7 +116,7 @@ static struct token lex_scan_number(struct lexer *lex)
     }
 
     size_t len = (lex->source + lex->pos) - start;
-    struct token tok = lex_make(TOK_NUMBER, start, len);
+    struct yetty_yexpr_token tok = lex_make(YETTY_YEXPR_TOK_NUMBER, start, len);
 
     char buf[64];
     size_t copy_len = len < sizeof(buf) - 1 ? len : sizeof(buf) - 1;
@@ -127,7 +127,7 @@ static struct token lex_scan_number(struct lexer *lex)
     return tok;
 }
 
-static struct token lex_scan_identifier(struct lexer *lex)
+static struct yetty_yexpr_token lex_scan_identifier(struct yetty_yexpr_lexer *lex)
 {
     const char *start = lex->source + lex->pos;
 
@@ -135,10 +135,10 @@ static struct token lex_scan_identifier(struct lexer *lex)
         lex_advance(lex);
     }
 
-    return lex_make(TOK_IDENTIFIER, start, (lex->source + lex->pos) - start);
+    return lex_make(YETTY_YEXPR_TOK_IDENTIFIER, start, (lex->source + lex->pos) - start);
 }
 
-static struct token lex_scan_string(struct lexer *lex)
+static struct yetty_yexpr_token lex_scan_string(struct yetty_yexpr_lexer *lex)
 {
     char quote = lex_advance(lex);
     const char *start = lex->source + lex->pos;
@@ -155,15 +155,15 @@ static struct token lex_scan_string(struct lexer *lex)
         lex_advance(lex);
     }
 
-    return lex_make(TOK_STRING, start, len);
+    return lex_make(YETTY_YEXPR_TOK_STRING, start, len);
 }
 
-static struct token lex_next(struct lexer *lex)
+static struct yetty_yexpr_token lex_next(struct yetty_yexpr_lexer *lex)
 {
     lex_skip_whitespace(lex);
 
     if (lex->pos >= lex->source_len) {
-        return lex_make(TOK_EOF, lex->source + lex->pos, 0);
+        return lex_make(YETTY_YEXPR_TOK_EOF, lex->source + lex->pos, 0);
     }
 
     char c = lex_current(lex);
@@ -172,40 +172,40 @@ static struct token lex_next(struct lexer *lex)
     switch (c) {
     case '+':
         lex_advance(lex);
-        return lex_make(TOK_PLUS, start, 1);
+        return lex_make(YETTY_YEXPR_TOK_PLUS, start, 1);
     case '-':
         lex_advance(lex);
-        return lex_make(TOK_MINUS, start, 1);
+        return lex_make(YETTY_YEXPR_TOK_MINUS, start, 1);
     case '*':
         lex_advance(lex);
-        return lex_make(TOK_STAR, start, 1);
+        return lex_make(YETTY_YEXPR_TOK_STAR, start, 1);
     case '/':
         lex_advance(lex);
-        return lex_make(TOK_SLASH, start, 1);
+        return lex_make(YETTY_YEXPR_TOK_SLASH, start, 1);
     case '^':
         lex_advance(lex);
-        return lex_make(TOK_CARET, start, 1);
+        return lex_make(YETTY_YEXPR_TOK_CARET, start, 1);
     case '(':
         lex_advance(lex);
-        return lex_make(TOK_LPAREN, start, 1);
+        return lex_make(YETTY_YEXPR_TOK_LPAREN, start, 1);
     case ')':
         lex_advance(lex);
-        return lex_make(TOK_RPAREN, start, 1);
+        return lex_make(YETTY_YEXPR_TOK_RPAREN, start, 1);
     case ',':
         lex_advance(lex);
-        return lex_make(TOK_COMMA, start, 1);
+        return lex_make(YETTY_YEXPR_TOK_COMMA, start, 1);
     case '=':
         lex_advance(lex);
-        return lex_make(TOK_EQUALS, start, 1);
+        return lex_make(YETTY_YEXPR_TOK_EQUALS, start, 1);
     case '@':
         lex_advance(lex);
-        return lex_make(TOK_AT, start, 1);
+        return lex_make(YETTY_YEXPR_TOK_AT, start, 1);
     case '.':
         lex_advance(lex);
-        return lex_make(TOK_DOT, start, 1);
+        return lex_make(YETTY_YEXPR_TOK_DOT, start, 1);
     case ';':
         lex_advance(lex);
-        return lex_make(TOK_SEMICOLON, start, 1);
+        return lex_make(YETTY_YEXPR_TOK_SEMICOLON, start, 1);
     case '"':
     case '\'':
         return lex_scan_string(lex);
@@ -214,7 +214,7 @@ static struct token lex_next(struct lexer *lex)
         while (isxdigit((unsigned char)lex_current(lex))) {
             lex_advance(lex);
         }
-        return lex_make(TOK_HEX_COLOR, start, (lex->source + lex->pos) - start);
+        return lex_make(YETTY_YEXPR_TOK_HEX_COLOR, start, (lex->source + lex->pos) - start);
     default:
         break;
     }
@@ -228,21 +228,21 @@ static struct token lex_next(struct lexer *lex)
     }
 
     lex_advance(lex);
-    return lex_make(TOK_ERROR, start, 1);
+    return lex_make(YETTY_YEXPR_TOK_ERROR, start, 1);
 }
 
 /*=============================================================================
  * Parser
  *===========================================================================*/
 
-struct parser {
-    struct lexer lex;
-    struct token current;
+struct yetty_yexpr_parser {
+    struct yetty_yexpr_lexer lex;
+    struct yetty_yexpr_token current;
     struct yetty_yexpr_arena *arena;
     const char *error;
 };
 
-static struct yetty_yexpr_node *alloc_node(struct parser *p)
+static struct yetty_yexpr_node *alloc_node(struct yetty_yexpr_parser *p)
 {
     if (p->arena->count >= YETTY_YEXPR_MAX_NODES) {
         p->error = "too many AST nodes";
@@ -253,17 +253,17 @@ static struct yetty_yexpr_node *alloc_node(struct parser *p)
     return n;
 }
 
-static void parser_advance(struct parser *p)
+static void parser_advance(struct yetty_yexpr_parser *p)
 {
     p->current = lex_next(&p->lex);
 }
 
-static int parser_check(const struct parser *p, enum token_type type)
+static int parser_check(const struct yetty_yexpr_parser *p, enum yetty_yexpr_token_type type)
 {
     return p->current.type == type;
 }
 
-static int parser_match(struct parser *p, enum token_type type)
+static int parser_match(struct yetty_yexpr_parser *p, enum yetty_yexpr_token_type type)
 {
     if (parser_check(p, type)) {
         parser_advance(p);
@@ -272,7 +272,7 @@ static int parser_match(struct parser *p, enum token_type type)
     return 0;
 }
 
-static void token_to_str(const struct token *tok, char *buf, size_t buf_size)
+static void token_to_str(const struct yetty_yexpr_token *tok, char *buf, size_t buf_size)
 {
     size_t copy_len = tok->len < buf_size - 1 ? tok->len : buf_size - 1;
     memcpy(buf, tok->start, copy_len);
@@ -280,22 +280,22 @@ static void token_to_str(const struct token *tok, char *buf, size_t buf_size)
 }
 
 /* Forward declarations */
-static struct yetty_yexpr_node *parse_expr(struct parser *p);
-static struct yetty_yexpr_node *parse_term(struct parser *p);
-static struct yetty_yexpr_node *parse_factor(struct parser *p);
-static struct yetty_yexpr_node *parse_unary(struct parser *p);
-static struct yetty_yexpr_node *parse_primary(struct parser *p);
+static struct yetty_yexpr_node *parse_expr(struct yetty_yexpr_parser *p);
+static struct yetty_yexpr_node *parse_term(struct yetty_yexpr_parser *p);
+static struct yetty_yexpr_node *parse_factor(struct yetty_yexpr_parser *p);
+static struct yetty_yexpr_node *parse_unary(struct yetty_yexpr_parser *p);
+static struct yetty_yexpr_node *parse_primary(struct yetty_yexpr_parser *p);
 
-static struct yetty_yexpr_node *parse_expr(struct parser *p)
+static struct yetty_yexpr_node *parse_expr(struct yetty_yexpr_parser *p)
 {
     struct yetty_yexpr_node *left = parse_term(p);
     if (!left) {
         return NULL;
     }
 
-    while (parser_check(p, TOK_PLUS) || parser_check(p, TOK_MINUS)) {
+    while (parser_check(p, YETTY_YEXPR_TOK_PLUS) || parser_check(p, YETTY_YEXPR_TOK_MINUS)) {
         enum yetty_yexpr_binary_op op =
-            parser_check(p, TOK_PLUS) ? YETTY_YEXPR_OP_ADD : YETTY_YEXPR_OP_SUB;
+            parser_check(p, YETTY_YEXPR_TOK_PLUS) ? YETTY_YEXPR_OP_ADD : YETTY_YEXPR_OP_SUB;
         parser_advance(p);
         struct yetty_yexpr_node *right = parse_term(p);
         if (!right) {
@@ -316,16 +316,16 @@ static struct yetty_yexpr_node *parse_expr(struct parser *p)
     return left;
 }
 
-static struct yetty_yexpr_node *parse_term(struct parser *p)
+static struct yetty_yexpr_node *parse_term(struct yetty_yexpr_parser *p)
 {
     struct yetty_yexpr_node *left = parse_factor(p);
     if (!left) {
         return NULL;
     }
 
-    while (parser_check(p, TOK_STAR) || parser_check(p, TOK_SLASH)) {
+    while (parser_check(p, YETTY_YEXPR_TOK_STAR) || parser_check(p, YETTY_YEXPR_TOK_SLASH)) {
         enum yetty_yexpr_binary_op op =
-            parser_check(p, TOK_STAR) ? YETTY_YEXPR_OP_MUL : YETTY_YEXPR_OP_DIV;
+            parser_check(p, YETTY_YEXPR_TOK_STAR) ? YETTY_YEXPR_OP_MUL : YETTY_YEXPR_OP_DIV;
         parser_advance(p);
         struct yetty_yexpr_node *right = parse_factor(p);
         if (!right) {
@@ -346,14 +346,14 @@ static struct yetty_yexpr_node *parse_term(struct parser *p)
     return left;
 }
 
-static struct yetty_yexpr_node *parse_factor(struct parser *p)
+static struct yetty_yexpr_node *parse_factor(struct yetty_yexpr_parser *p)
 {
     struct yetty_yexpr_node *left = parse_unary(p);
     if (!left) {
         return NULL;
     }
 
-    if (parser_check(p, TOK_CARET)) {
+    if (parser_check(p, YETTY_YEXPR_TOK_CARET)) {
         parser_advance(p);
         struct yetty_yexpr_node *right = parse_unary(p);
         if (!right) {
@@ -374,9 +374,9 @@ static struct yetty_yexpr_node *parse_factor(struct parser *p)
     return left;
 }
 
-static struct yetty_yexpr_node *parse_unary(struct parser *p)
+static struct yetty_yexpr_node *parse_unary(struct yetty_yexpr_parser *p)
 {
-    if (parser_check(p, TOK_MINUS)) {
+    if (parser_check(p, YETTY_YEXPR_TOK_MINUS)) {
         parser_advance(p);
         struct yetty_yexpr_node *operand = parse_unary(p);
         if (!operand) {
@@ -396,7 +396,7 @@ static struct yetty_yexpr_node *parse_unary(struct parser *p)
     return parse_primary(p);
 }
 
-static struct yetty_yexpr_node *parse_call(struct parser *p, const char *name, size_t name_len)
+static struct yetty_yexpr_node *parse_call(struct yetty_yexpr_parser *p, const char *name, size_t name_len)
 {
     parser_advance(p); /* consume '(' */
 
@@ -412,14 +412,14 @@ static struct yetty_yexpr_node *parse_call(struct parser *p, const char *name, s
     node->call.name[copy_len] = '\0';
     node->call.arg_count = 0;
 
-    if (!parser_check(p, TOK_RPAREN)) {
+    if (!parser_check(p, YETTY_YEXPR_TOK_RPAREN)) {
         struct yetty_yexpr_node *arg = parse_expr(p);
         if (!arg) {
             return NULL;
         }
         node->call.args[node->call.arg_count++] = arg;
 
-        while (parser_match(p, TOK_COMMA)) {
+        while (parser_match(p, YETTY_YEXPR_TOK_COMMA)) {
             if (node->call.arg_count >= YETTY_YEXPR_MAX_CALL_ARGS) {
                 p->error = "too many function arguments";
                 return NULL;
@@ -432,7 +432,7 @@ static struct yetty_yexpr_node *parse_call(struct parser *p, const char *name, s
         }
     }
 
-    if (!parser_match(p, TOK_RPAREN)) {
+    if (!parser_match(p, YETTY_YEXPR_TOK_RPAREN)) {
         p->error = "expected ')'";
         return NULL;
     }
@@ -440,10 +440,10 @@ static struct yetty_yexpr_node *parse_call(struct parser *p, const char *name, s
     return node;
 }
 
-static struct yetty_yexpr_node *parse_primary(struct parser *p)
+static struct yetty_yexpr_node *parse_primary(struct yetty_yexpr_parser *p)
 {
     /* Number */
-    if (parser_check(p, TOK_NUMBER)) {
+    if (parser_check(p, YETTY_YEXPR_TOK_NUMBER)) {
         struct yetty_yexpr_node *node = alloc_node(p);
         if (!node) {
             return NULL;
@@ -455,9 +455,9 @@ static struct yetty_yexpr_node *parse_primary(struct parser *p)
     }
 
     /* Buffer reference: @buffer1 */
-    if (parser_check(p, TOK_AT)) {
+    if (parser_check(p, YETTY_YEXPR_TOK_AT)) {
         parser_advance(p);
-        if (!parser_check(p, TOK_IDENTIFIER)) {
+        if (!parser_check(p, YETTY_YEXPR_TOK_IDENTIFIER)) {
             p->error = "expected identifier after '@'";
             return NULL;
         }
@@ -486,12 +486,12 @@ static struct yetty_yexpr_node *parse_primary(struct parser *p)
     }
 
     /* Identifier or function call */
-    if (parser_check(p, TOK_IDENTIFIER)) {
+    if (parser_check(p, YETTY_YEXPR_TOK_IDENTIFIER)) {
         const char *name = p->current.start;
         size_t name_len = p->current.len;
         parser_advance(p);
 
-        if (parser_check(p, TOK_LPAREN)) {
+        if (parser_check(p, YETTY_YEXPR_TOK_LPAREN)) {
             return parse_call(p, name, name_len);
         }
 
@@ -508,13 +508,13 @@ static struct yetty_yexpr_node *parse_primary(struct parser *p)
     }
 
     /* Parenthesized expression */
-    if (parser_check(p, TOK_LPAREN)) {
+    if (parser_check(p, YETTY_YEXPR_TOK_LPAREN)) {
         parser_advance(p);
         struct yetty_yexpr_node *expr = parse_expr(p);
         if (!expr) {
             return NULL;
         }
-        if (!parser_match(p, TOK_RPAREN)) {
+        if (!parser_match(p, YETTY_YEXPR_TOK_RPAREN)) {
             p->error = "expected ')'";
             return NULL;
         }
@@ -529,12 +529,12 @@ static struct yetty_yexpr_node *parse_primary(struct parser *p)
  * Plot expression parser
  *===========================================================================*/
 
-static struct yetty_yexpr_node *parse_bare_expr_from_ident(struct parser *p, const char *name,
+static struct yetty_yexpr_node *parse_bare_expr_from_ident(struct yetty_yexpr_parser *p, const char *name,
                                                            size_t name_len)
 {
     struct yetty_yexpr_node *expr;
 
-    if (parser_check(p, TOK_LPAREN)) {
+    if (parser_check(p, YETTY_YEXPR_TOK_LPAREN)) {
         expr = parse_call(p, name, name_len);
     } else {
         expr = alloc_node(p);
@@ -552,16 +552,16 @@ static struct yetty_yexpr_node *parse_bare_expr_from_ident(struct parser *p, con
     }
 
     /* Handle trailing operators */
-    while (parser_check(p, TOK_PLUS) || parser_check(p, TOK_MINUS) || parser_check(p, TOK_STAR) ||
-           parser_check(p, TOK_SLASH) || parser_check(p, TOK_CARET)) {
+    while (parser_check(p, YETTY_YEXPR_TOK_PLUS) || parser_check(p, YETTY_YEXPR_TOK_MINUS) || parser_check(p, YETTY_YEXPR_TOK_STAR) ||
+           parser_check(p, YETTY_YEXPR_TOK_SLASH) || parser_check(p, YETTY_YEXPR_TOK_CARET)) {
         enum yetty_yexpr_binary_op op;
-        if (parser_check(p, TOK_PLUS)) {
+        if (parser_check(p, YETTY_YEXPR_TOK_PLUS)) {
             op = YETTY_YEXPR_OP_ADD;
-        } else if (parser_check(p, TOK_MINUS)) {
+        } else if (parser_check(p, YETTY_YEXPR_TOK_MINUS)) {
             op = YETTY_YEXPR_OP_SUB;
-        } else if (parser_check(p, TOK_STAR)) {
+        } else if (parser_check(p, YETTY_YEXPR_TOK_STAR)) {
             op = YETTY_YEXPR_OP_MUL;
-        } else if (parser_check(p, TOK_SLASH)) {
+        } else if (parser_check(p, YETTY_YEXPR_TOK_SLASH)) {
             op = YETTY_YEXPR_OP_DIV;
         } else {
             op = YETTY_YEXPR_OP_POW;
@@ -587,11 +587,11 @@ static struct yetty_yexpr_node *parse_bare_expr_from_ident(struct parser *p, con
     return expr;
 }
 
-static int parse_plot_attr(struct parser *p, struct yetty_yexpr_plot_expr *plot)
+static int parse_plot_attr(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot_expr *plot)
 {
     parser_advance(p); /* consume '@' */
 
-    if (!parser_check(p, TOK_IDENTIFIER)) {
+    if (!parser_check(p, YETTY_YEXPR_TOK_IDENTIFIER)) {
         p->error = "expected identifier after '@'";
         return -1;
     }
@@ -599,12 +599,12 @@ static int parse_plot_attr(struct parser *p, struct yetty_yexpr_plot_expr *plot)
     token_to_str(&p->current, plot_name, sizeof(plot_name));
     parser_advance(p);
 
-    if (!parser_match(p, TOK_DOT)) {
+    if (!parser_match(p, YETTY_YEXPR_TOK_DOT)) {
         p->error = "expected '.' after plot name";
         return -1;
     }
 
-    if (!parser_check(p, TOK_IDENTIFIER)) {
+    if (!parser_check(p, YETTY_YEXPR_TOK_IDENTIFIER)) {
         p->error = "expected attribute name after '.'";
         return -1;
     }
@@ -612,14 +612,14 @@ static int parse_plot_attr(struct parser *p, struct yetty_yexpr_plot_expr *plot)
     token_to_str(&p->current, attr_name, sizeof(attr_name));
     parser_advance(p);
 
-    if (!parser_match(p, TOK_EQUALS)) {
+    if (!parser_match(p, YETTY_YEXPR_TOK_EQUALS)) {
         p->error = "expected '=' after attribute name";
         return -1;
     }
 
     char value[64] = {0};
-    if (parser_check(p, TOK_HEX_COLOR) || parser_check(p, TOK_STRING) ||
-        parser_check(p, TOK_IDENTIFIER)) {
+    if (parser_check(p, YETTY_YEXPR_TOK_HEX_COLOR) || parser_check(p, YETTY_YEXPR_TOK_STRING) ||
+        parser_check(p, YETTY_YEXPR_TOK_IDENTIFIER)) {
         size_t copy_len = p->current.len < sizeof(value) - 1 ? p->current.len : sizeof(value) - 1;
         memcpy(value, p->current.start, copy_len);
         value[copy_len] = '\0';
@@ -642,7 +642,7 @@ static int parse_plot_attr(struct parser *p, struct yetty_yexpr_plot_expr *plot)
     return 0;
 }
 
-static int add_plot_def(struct parser *p, struct yetty_yexpr_plot_expr *plot, const char *name,
+static int add_plot_def(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot_expr *plot, const char *name,
                         struct yetty_yexpr_node *expr)
 {
     if (plot->def_count >= YETTY_YEXPR_MAX_PLOT_DEFS) {
@@ -668,7 +668,7 @@ struct yetty_yexpr_parse_result yetty_yexpr_parse(const char *source, size_t len
     }
 
     struct yetty_yexpr_parse_output res = {0};
-    struct parser p = {0};
+    struct yetty_yexpr_parser p = {0};
     lexer_init(&p.lex, source, len);
     p.arena = &res.arena;
     parser_advance(&p);
@@ -688,32 +688,32 @@ struct yetty_yexpr_plot_parse_result yetty_yexpr_parse_plot(const char *source, 
     }
 
     struct yetty_yexpr_plot_parse_output res = {0};
-    struct parser p = {0};
+    struct yetty_yexpr_parser p = {0};
     lexer_init(&p.lex, source, len);
     p.arena = &res.arena;
     parser_advance(&p);
 
-    while (!parser_check(&p, TOK_EOF) && !p.error) {
+    while (!parser_check(&p, YETTY_YEXPR_TOK_EOF) && !p.error) {
         /* Skip semicolons */
-        while (parser_match(&p, TOK_SEMICOLON)) {
+        while (parser_match(&p, YETTY_YEXPR_TOK_SEMICOLON)) {
             ;
         }
-        if (parser_check(&p, TOK_EOF)) {
+        if (parser_check(&p, YETTY_YEXPR_TOK_EOF)) {
             break;
         }
 
-        if (parser_check(&p, TOK_AT)) {
+        if (parser_check(&p, YETTY_YEXPR_TOK_AT)) {
             /* Plot attribute: @name.attr = value */
             if (parse_plot_attr(&p, &res.plot) < 0) {
                 break;
             }
-        } else if (parser_check(&p, TOK_IDENTIFIER)) {
+        } else if (parser_check(&p, YETTY_YEXPR_TOK_IDENTIFIER)) {
             /* Could be: name = expr  OR  bare expression */
             const char *name = p.current.start;
             size_t name_len = p.current.len;
             parser_advance(&p);
 
-            if (parser_match(&p, TOK_EQUALS)) {
+            if (parser_match(&p, YETTY_YEXPR_TOK_EQUALS)) {
                 /* Named definition: name = expr */
                 struct yetty_yexpr_node *expr = parse_expr(&p);
                 if (!expr) {
@@ -738,8 +738,8 @@ struct yetty_yexpr_plot_parse_result yetty_yexpr_parse_plot(const char *source, 
                     break;
                 }
             }
-        } else if (parser_check(&p, TOK_NUMBER) || parser_check(&p, TOK_LPAREN) ||
-                   parser_check(&p, TOK_MINUS)) {
+        } else if (parser_check(&p, YETTY_YEXPR_TOK_NUMBER) || parser_check(&p, YETTY_YEXPR_TOK_LPAREN) ||
+                   parser_check(&p, YETTY_YEXPR_TOK_MINUS)) {
             /* Bare expression starting with number/paren/unary */
             struct yetty_yexpr_node *expr = parse_expr(&p);
             if (!expr) {
@@ -755,7 +755,7 @@ struct yetty_yexpr_plot_parse_result yetty_yexpr_parse_plot(const char *source, 
             break;
         }
 
-        parser_match(&p, TOK_SEMICOLON);
+        parser_match(&p, YETTY_YEXPR_TOK_SEMICOLON);
     }
 
     if (p.error) {

@@ -33,13 +33,13 @@ int yetty_ycat_is_url(const char *s)
 
 #ifdef YETTY_YCAT_HAS_LIBCURL
 
-struct growable {
+struct yetty_ycat_growable {
     uint8_t *data;
     size_t len;
     size_t cap;
 };
 
-static int growable_append(struct growable *b, const void *src, size_t n)
+static int growable_append(struct yetty_ycat_growable *b, const void *src, size_t n)
 {
     if (b->len + n > b->cap) {
         size_t nc = b->cap ? b->cap * 2 : 65536;
@@ -60,7 +60,7 @@ static int growable_append(struct growable *b, const void *src, size_t n)
 
 static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *ud)
 {
-    struct growable *g = (struct growable *)ud;
+    struct yetty_ycat_growable *g = (struct yetty_ycat_growable *)ud;
     size_t total = size * nmemb;
     if (growable_append(g, ptr, total) < 0) {
         return 0;
@@ -108,7 +108,7 @@ int yetty_ycat_fetch_url(const char *url, uint8_t **out, size_t *out_len, char *
         return -1;
     }
 
-    struct growable body = {0};
+    struct yetty_ycat_growable body = {0};
     curl_easy_setopt(c, CURLOPT_URL, url);
     curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(c, CURLOPT_MAXREDIRS, 10L);

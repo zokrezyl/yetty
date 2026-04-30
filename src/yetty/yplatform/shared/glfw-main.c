@@ -54,7 +54,7 @@ void yetty_yplatform_setup_window_callbacks(GLFWwindow *window);
 void yetty_yplatform_run_os_event_loop(GLFWwindow *window, int *running);
 
 /* Render thread args */
-struct render_thread_args {
+struct yetty_yplatform_render_thread_args {
     struct yetty_yetty *yetty;
     int *running;
     GLFWwindow *window;
@@ -64,7 +64,7 @@ struct render_thread_args {
 YETTY_EXTERNAL_CALLBACK
 static int render_thread_func(void *arg)
 {
-    struct render_thread_args *args = arg;
+    struct yetty_yplatform_render_thread_args *args = arg;
     struct yetty_ycore_void_result res = yetty_run(args->yetty);
 
     args->result = YETTY_IS_OK(res) ? 0 : 1;
@@ -100,10 +100,10 @@ int main(int argc, char **argv)
     snprintf(shaders_dir, sizeof(shaders_dir), "%s/shaders", data_dir);
     snprintf(fonts_dir, sizeof(fonts_dir), "%s/fonts", data_dir);
 
-    yplatform_mkdir_p(cache_dir);
-    yplatform_mkdir_p(data_dir);
-    yplatform_mkdir_p(runtime_dir);
-    yplatform_mkdir_p(fonts_dir);
+    yetty_yplatform_mkdir_p(cache_dir);
+    yetty_yplatform_mkdir_p(data_dir);
+    yetty_yplatform_mkdir_p(runtime_dir);
+    yetty_yplatform_mkdir_p(fonts_dir);
 
     struct yetty_yplatform_paths paths = {.shaders_dir = shaders_dir,
                                           .fonts_dir = fonts_dir,
@@ -120,7 +120,7 @@ int main(int argc, char **argv)
     struct yetty_yconfig *config = config_result.value;
 
     /* Extract assets */
-    yetty_yplatform_extract_assets(config);
+    yetty_platform_extract_assets(config);
     ydebug("main: assets extracted");
 
     /* Check for headless mode */
@@ -152,7 +152,7 @@ int main(int argc, char **argv)
     /* Platform input pipe */
     ydebug("main: creating platform input pipe");
     fflush(stderr);
-    struct yetty_yplatform_input_pipe_result pipe_result = yetty_yplatform_input_pipe_create();
+    struct yetty_yplatform_input_pipe_result pipe_result = yetty_platform_input_pipe_create();
     ydebug("main: platform input pipe created, ok=%d", pipe_result.ok);
     if (!YETTY_IS_OK(pipe_result)) {
         fprintf(stderr, "Failed to create platform input pipe\n");
@@ -163,7 +163,7 @@ int main(int argc, char **argv)
         glfwTerminate();
         return 1;
     }
-    struct yetty_yplatform_input_pipe *platform_input_pipe = pipe_result.value;
+    struct yetty_ycore_input_pipe *platform_input_pipe = pipe_result.value;
     if (window) {
         glfwSetWindowUserPointer(window, platform_input_pipe);
     }
@@ -171,7 +171,7 @@ int main(int argc, char **argv)
     /* PTY factory */
     ydebug("main: creating PTY factory");
     struct yetty_yplatform_pty_factory_result pty_factory_result =
-        yetty_yplatform_pty_factory_create(config, NULL);
+        yetty_platform_pty_factory_create(config, NULL);
     if (!YETTY_IS_OK(pty_factory_result)) {
         fprintf(stderr, "Failed to create PTY factory\n");
         platform_input_pipe->ops->destroy(platform_input_pipe);
@@ -182,7 +182,7 @@ int main(int argc, char **argv)
         glfwTerminate();
         return 1;
     }
-    struct yetty_yplatform_pty_factory *pty_factory = pty_factory_result.value;
+    struct yetty_platform_pty_factory *pty_factory = pty_factory_result.value;
 
     /* WebGPU instance */
     WGPUInstance instance = wgpuCreateInstance(NULL);
@@ -258,17 +258,17 @@ int main(int argc, char **argv)
 
     /* Render thread */
     int running = 1;
-    struct render_thread_args thread_args = {
+    struct yetty_yplatform_render_thread_args thread_args = {
         .yetty = yetty, .running = &running, .window = window, .result = 0};
 
-    ythread_t *render_thread = ythread_create(render_thread_func, &thread_args);
+    struct yetty_yplatform_ythread *render_thread = yetty_yplatform_ythread_create(render_thread_func, &thread_args);
 
     /* Initial resize event */
     if (window) {
         yetty_yplatform_get_framebuffer_size(window, &fb_width, &fb_height);
     }
-    struct yetty_ycore_event event = {
-        .type = YETTY_EVENT_RESIZE,
+    struct yetty_yui_event event = {
+        .type = YETTY_YCORE_RESIZE,
         .resize = {.width = (float)fb_width, .height = (float)fb_height}};
     platform_input_pipe->ops->write(platform_input_pipe, &event, sizeof(event));
 
@@ -278,10 +278,10 @@ int main(int argc, char **argv)
     } else {
         /* Headless mode: just wait for render thread to finish */
         while (running) {
-            ytime_sleep_ms(100);
+            yetty_yplatform_ytime_sleep_ms(100);
         }
     }
-    ythread_join(render_thread);
+    yetty_yplatform_ythread_join(render_thread);
 
     /* Cleanup - surface is released by yetty_destroy (yetty owns it after configure) */
     ydebug("main: cleanup starting");

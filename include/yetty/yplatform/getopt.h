@@ -17,22 +17,22 @@ extern "C" {
 #define required_argument 1
 #define optional_argument 2
 
-struct option {
+struct yetty_yplatform_option {
     const char *name;
     int has_arg;
     int *flag;
     int val;
 };
 
-extern char *optarg;
-extern int optind;
-extern int opterr;
-extern int optopt;
-extern int optreset;
+extern char *yetty_yplatform_optarg;
+extern int yetty_yplatform_optind;
+extern int yetty_yplatform_opterr;
+extern int yetty_yplatform_optopt;
+extern int yetty_yplatform_optreset;
 
-int getopt(int nargc, char *const *nargv, const char *options);
-int getopt_long(int nargc, char *const *nargv, const char *options,
-                const struct option *long_options, int *idx);
+int yetty_yplatform_getopt(int nargc, char *const *nargv, const char *options);
+int yetty_yplatform_getopt_long(int nargc, char *const *nargv, const char *options,
+                const struct yetty_yplatform_option *long_options, int *idx);
 
 #ifdef __cplusplus
 }

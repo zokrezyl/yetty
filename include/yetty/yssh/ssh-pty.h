@@ -33,7 +33,7 @@ struct yetty_yconfig;
  * @param config yetty config
  * @return PTY result
  */
-struct yetty_yplatform_pty_result ssh_pty_create(struct yetty_yconfig *config);
+struct yetty_yplatform_pty_result yetty_yssh_ssh_pty_create(struct yetty_yconfig *config);
 
 #ifdef __cplusplus
 }

@@ -37,7 +37,7 @@
 #define YPDF_TEST_PDF "test-comprehensive.pdf"
 #endif
 
-static bool error_cb(pdfio_file_t *f, const char *s, void *d) {
+static bool error_cb(struct _pdfio_file_s *f, const char *s, void *d) {
     (void)f; (void)d;
     fprintf(stderr, "pdfio: %s\n", s);
     return true;
@@ -50,7 +50,7 @@ struct prim_counts {
 };
 
 static struct prim_counts count_prims(struct yetty_ypaint_core_buffer *buf,
-                                      struct yetty_ypaint_flyweight_registry *reg)
+                                      struct yetty_ypaint_core_flyweight_registry *reg)
 {
     struct prim_counts c = {0};
     struct yetty_ypaint_core_primitive_iter_result ir =
@@ -73,7 +73,7 @@ static struct prim_counts count_prims(struct yetty_ypaint_core_buffer *buf,
 }
 
 int main(void) {
-    pdfio_file_t *pdf = pdfioFileOpen(YPDF_TEST_PDF, NULL, NULL,
+    struct _pdfio_file_s *pdf = pdfioFileOpen(YPDF_TEST_PDF, NULL, NULL,
                                       error_cb, NULL);
     REQUIRE(pdf, "pdfioFileOpen failed");
 
@@ -91,10 +91,10 @@ int main(void) {
     REQUIRE(sx == out->max_width, "scene max_x mismatch");
     REQUIRE(sy == out->total_height, "scene max_y mismatch");
 
-    struct yetty_ypaint_flyweight_registry_ptr_result rr =
+    struct yetty_ypaint_core_flyweight_registry_ptr_result rr =
         yetty_ypaint_flyweight_create();
     REQUIRE(YETTY_IS_OK(rr), "flyweight_create failed");
-    struct yetty_ypaint_flyweight_registry *reg = rr.value;
+    struct yetty_ypaint_core_flyweight_registry *reg = rr.value;
 
     struct prim_counts c = count_prims(out->buffer, reg);
     REQUIRE(c.fonts >= 1, "no FONT prims in buffer");
@@ -105,7 +105,7 @@ int main(void) {
            out->page_count, c.fonts, c.text_spans, c.other,
            out->total_height);
 
-    yetty_ypaint_flyweight_registry_destroy(reg);
+    yetty_ypaint_core_flyweight_registry_destroy(reg);
     yetty_ypaint_core_buffer_destroy(out->buffer);
     pdfioFileClose(pdf);
     return 0;

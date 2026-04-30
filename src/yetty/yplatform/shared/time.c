@@ -4,14 +4,14 @@
 #include <time.h>
 #include <unistd.h>
 
-double ytime_monotonic_sec(void)
+double yetty_yplatform_ytime_monotonic_sec(void)
 {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
 }
 
-void ytime_sleep_ms(unsigned ms)
+void yetty_yplatform_ytime_sleep_ms(unsigned ms)
 {
     usleep((useconds_t)ms * 1000U);
 }

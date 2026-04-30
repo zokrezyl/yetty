@@ -14,7 +14,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-struct yetty_ipc_socket {
+struct yetty_platform_socket {
     int fd;
     int is_listener;
 };
@@ -62,9 +62,9 @@ static void get_default_path(char *path_out)
              (int)getpid());
 }
 
-struct yetty_ipc_socket_result yetty_ipc_socket_listen(const char *path, char *path_out)
+struct yetty_ipc_socket_result yetty_platform_socket_listen(const char *path, char *path_out)
 {
-    struct yetty_ipc_socket *sock;
+    struct yetty_platform_socket *sock;
     struct sockaddr_un addr;
     char default_path[YETTY_IPC_SOCKET_PATH_MAX];
     int fd;
@@ -111,7 +111,7 @@ struct yetty_ipc_socket_result yetty_ipc_socket_listen(const char *path, char *p
         return YETTY_ERR(yetty_ipc_socket, "failed to listen");
     }
 
-    sock = calloc(1, sizeof(struct yetty_ipc_socket));
+    sock = calloc(1, sizeof(struct yetty_platform_socket));
     if (!sock) {
         close(fd);
         unlink(path);
@@ -128,9 +128,9 @@ struct yetty_ipc_socket_result yetty_ipc_socket_listen(const char *path, char *p
     return YETTY_OK(yetty_ipc_socket, sock);
 }
 
-struct yetty_ipc_socket_result yetty_ipc_socket_connect(const char *path)
+struct yetty_ipc_socket_result yetty_platform_socket_connect(const char *path)
 {
-    struct yetty_ipc_socket *sock;
+    struct yetty_platform_socket *sock;
     struct sockaddr_un addr;
     int fd;
 
@@ -163,7 +163,7 @@ struct yetty_ipc_socket_result yetty_ipc_socket_connect(const char *path)
         }
     }
 
-    sock = calloc(1, sizeof(struct yetty_ipc_socket));
+    sock = calloc(1, sizeof(struct yetty_platform_socket));
     if (!sock) {
         close(fd);
         return YETTY_ERR(yetty_ipc_socket, "out of memory");
@@ -175,7 +175,7 @@ struct yetty_ipc_socket_result yetty_ipc_socket_connect(const char *path)
     return YETTY_OK(yetty_ipc_socket, sock);
 }
 
-void yetty_ipc_socket_close(yetty_ipc_socket_t sock)
+void yetty_platform_socket_close(yetty_ipc_socket_t sock)
 {
     if (!sock) {
         return;
@@ -188,9 +188,9 @@ void yetty_ipc_socket_close(yetty_ipc_socket_t sock)
     free(sock);
 }
 
-struct yetty_ipc_socket_result yetty_ipc_socket_accept(yetty_ipc_socket_t sock)
+struct yetty_ipc_socket_result yetty_platform_socket_accept(yetty_ipc_socket_t sock)
 {
-    struct yetty_ipc_socket *client;
+    struct yetty_platform_socket *client;
     int client_fd;
 
     if (!sock || !sock->is_listener) {
@@ -210,7 +210,7 @@ struct yetty_ipc_socket_result yetty_ipc_socket_accept(yetty_ipc_socket_t sock)
         return YETTY_ERR(yetty_ipc_socket, "failed to set non-blocking");
     }
 
-    client = calloc(1, sizeof(struct yetty_ipc_socket));
+    client = calloc(1, sizeof(struct yetty_platform_socket));
     if (!client) {
         close(client_fd);
         return YETTY_ERR(yetty_ipc_socket, "out of memory");
@@ -222,7 +222,7 @@ struct yetty_ipc_socket_result yetty_ipc_socket_accept(yetty_ipc_socket_t sock)
     return YETTY_OK(yetty_ipc_socket, client);
 }
 
-struct yetty_ycore_size_result yetty_ipc_socket_send(yetty_ipc_socket_t sock, const void *data,
+struct yetty_ycore_size_result yetty_platform_socket_send(yetty_ipc_socket_t sock, const void *data,
                                                      size_t len)
 {
     ssize_t sent;
@@ -242,7 +242,7 @@ struct yetty_ycore_size_result yetty_ipc_socket_send(yetty_ipc_socket_t sock, co
     return YETTY_OK(yetty_ycore_size, (size_t)sent);
 }
 
-struct yetty_ycore_size_result yetty_ipc_socket_recv(yetty_ipc_socket_t sock, void *buf,
+struct yetty_ycore_size_result yetty_platform_socket_recv(yetty_ipc_socket_t sock, void *buf,
                                                      size_t max_len)
 {
     ssize_t received;
@@ -262,12 +262,12 @@ struct yetty_ycore_size_result yetty_ipc_socket_recv(yetty_ipc_socket_t sock, vo
     return YETTY_OK(yetty_ycore_size, (size_t)received);
 }
 
-int yetty_ipc_socket_would_block(void)
+int yetty_platform_socket_would_block(void)
 {
     return errno == EAGAIN || errno == EWOULDBLOCK;
 }
 
-int yetty_ipc_socket_has_data(yetty_ipc_socket_t sock)
+int yetty_platform_socket_has_data(yetty_ipc_socket_t sock)
 {
     fd_set readfds;
     struct timeval tv = {0, 0};
@@ -282,7 +282,7 @@ int yetty_ipc_socket_has_data(yetty_ipc_socket_t sock)
     return select(sock->fd + 1, &readfds, NULL, NULL, &tv) > 0;
 }
 
-int yetty_ipc_socket_get_fd(yetty_ipc_socket_t sock)
+int yetty_platform_socket_get_fd(yetty_ipc_socket_t sock)
 {
     if (!sock) {
         return -1;
@@ -290,7 +290,7 @@ int yetty_ipc_socket_get_fd(yetty_ipc_socket_t sock)
     return sock->fd;
 }
 
-void yetty_ipc_socket_unlink(const char *path)
+void yetty_platform_socket_unlink(const char *path)
 {
     if (path) {
         unlink(path);

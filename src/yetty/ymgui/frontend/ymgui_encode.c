@@ -23,12 +23,12 @@ typedef long long ssize_t;
 #define YMGUI_WRITE write
 #endif
 
-struct pending {
+struct yetty_ymgui_pending {
     uint8_t *data;
     size_t size;
     size_t off;
 };
-static struct pending g_pending = {NULL, 0, 0};
+static struct yetty_ymgui_pending g_pending = {NULL, 0, 0};
 
 static int try_drain_pending(int fd)
 {
@@ -52,7 +52,7 @@ static int try_drain_pending(int fd)
     return 0;
 }
 
-int ymgui_pending_flush(int fd)
+int yetty_ymgui_pending_flush(int fd)
 {
     if (!g_pending.data) {
         return 0;
@@ -60,12 +60,12 @@ int ymgui_pending_flush(int fd)
     return try_drain_pending(fd);
 }
 
-int ymgui_pending_active(void)
+int yetty_ymgui_pending_active(void)
 {
     return g_pending.data != NULL;
 }
 
-int ymgui_pending_drain_blocking(int fd)
+int yetty_ymgui_pending_drain_blocking(int fd)
 {
 #ifdef _WIN32
     /* Windows path is rarely exercised; rely on the kernel buffer being
@@ -99,7 +99,7 @@ int ymgui_pending_drain_blocking(int fd)
 #endif
 }
 
-int ymgui_pending_write(int fd, const uint8_t *bytes, size_t len)
+int yetty_ymgui_pending_write(int fd, const uint8_t *bytes, size_t len)
 {
     /* Drop new emit if previous one is still in flight — interleaving
      * would corrupt the OSC stream. */

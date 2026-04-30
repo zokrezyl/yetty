@@ -31,14 +31,14 @@
 
 int main(void) {
     struct yetty_font_font_result fr =
-        yetty_font_raster_font_create_from_file(YPDF_TEST_TTF, NULL, 32.0f);
+        yetty_yfont_raster_font_create_from_file(YPDF_TEST_TTF, NULL, 32.0f);
     if (YETTY_IS_ERR(fr)) {
         fprintf(stderr, "skipping: raster_font from '%s' failed: %s\n",
                 YPDF_TEST_TTF, fr.error.msg);
         return 77; /* skip */
     }
 
-    struct yetty_font_font *f = fr.value;
+    struct yetty_ypaint_font *f = fr.value;
     REQUIRE(f->ops && f->ops->measure_text, "measure_text missing");
 
     const char *sample = "Hello";

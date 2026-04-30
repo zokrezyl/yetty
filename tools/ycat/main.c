@@ -392,7 +392,7 @@ int main(int argc, char **argv)
 		.sleep_after_ms = 0,
 	};
 
-	static const struct option long_opts[] = {
+	static const struct yetty_yplatform_option long_opts[] = {
 		{ "width",       required_argument, NULL, 'w' },
 		{ "height",      required_argument, NULL, 'H' },
 		{ "x",           required_argument, NULL, 'x' },
@@ -408,18 +408,18 @@ int main(int argc, char **argv)
 	};
 
 	int c;
-	while ((c = getopt_long(argc, argv, "w:H:x:y:artc:h", long_opts, NULL))
+	while ((c = yetty_yplatform_getopt_long(argc, argv, "w:H:x:y:artc:h", long_opts, NULL))
 	       != -1) {
 		switch (c) {
-		case 'w': opts.width_cells = atoi(optarg); break;
-		case 'H': opts.height_cells = atoi(optarg); break;
-		case 'x': opts.x = atoi(optarg); break;
-		case 'y': opts.y = atoi(optarg); break;
+		case 'w': opts.width_cells = atoi(yetty_yplatform_optarg); break;
+		case 'H': opts.height_cells = atoi(yetty_yplatform_optarg); break;
+		case 'x': opts.x = atoi(yetty_yplatform_optarg); break;
+		case 'y': opts.y = atoi(yetty_yplatform_optarg); break;
 		case 'a': opts.absolute = true; break;
 		case 'r': opts.raw = true; break;
 		case 't': opts.force_ts = true; break;
-		case 'c': opts.force_type = optarg; break;
-		case OPT_SLEEP_AFTER: opts.sleep_after_ms = atoi(optarg); break;
+		case 'c': opts.force_type = yetty_yplatform_optarg; break;
+		case OPT_SLEEP_AFTER: opts.sleep_after_ms = atoi(yetty_yplatform_optarg); break;
 		case 'h': usage(stdout, argv[0]); return 0;
 		default:  usage(stderr, argv[0]); return 2;
 		}
@@ -429,11 +429,11 @@ int main(int argc, char **argv)
 		opts.width_cells = terminal_columns();
 
 	int rc = 0;
-	if (optind >= argc) {
+	if (yetty_yplatform_optind >= argc) {
 		if (process_one("-", &opts) < 0)
 			rc = 1;
 	} else {
-		for (int i = optind; i < argc; i++) {
+		for (int i = yetty_yplatform_optind; i < argc; i++) {
 			if (process_one(argv[i], &opts) < 0)
 				rc = 1;
 		}

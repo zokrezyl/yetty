@@ -3,7 +3,7 @@
 #include <yetty/yplatform/time.h>
 #include <windows.h>
 
-double ytime_monotonic_sec(void)
+double yetty_yplatform_ytime_monotonic_sec(void)
 {
     static LARGE_INTEGER freq;
     LARGE_INTEGER now;
@@ -16,7 +16,7 @@ double ytime_monotonic_sec(void)
     return (double)now.QuadPart / (double)freq.QuadPart;
 }
 
-void ytime_sleep_ms(unsigned ms)
+void yetty_yplatform_ytime_sleep_ms(unsigned ms)
 {
     Sleep((DWORD)ms);
 }

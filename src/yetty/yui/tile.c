@@ -36,11 +36,11 @@ struct yetty_yui_tile {
 struct yetty_yui_tile_ops {
     struct yetty_ycore_void_result (*destroy)(struct yetty_yui_tile *self);
     struct yetty_ycore_void_result (*render)(struct yetty_yui_tile *self,
-                                             struct yetty_yrender_target *render_target);
+                                             struct yetty_ypaint_core_target *render_target);
     struct yetty_ycore_void_result (*set_bounds)(struct yetty_yui_tile *self,
                                                  struct yetty_yui_rect bounds);
     struct yetty_ycore_int_result (*on_event)(struct yetty_yui_tile *self,
-                                              const struct yetty_ycore_event *event);
+                                              const struct yetty_yui_event *event);
 };
 
 struct yetty_yui_split {
@@ -53,7 +53,7 @@ struct yetty_yui_split {
 
 struct yetty_yui_pane {
     struct yetty_yui_tile base;
-    struct yetty_yui_view **views;
+    struct yetty_yterm_view **views;
     size_t view_count;
     size_t view_capacity;
     int focused;
@@ -94,7 +94,7 @@ static struct yetty_ycore_void_result split_destroy(struct yetty_yui_tile *self)
 }
 
 static struct yetty_ycore_void_result split_render(struct yetty_yui_tile *self,
-                                                   struct yetty_yrender_target *render_target)
+                                                   struct yetty_ypaint_core_target *render_target)
 {
     struct yetty_yui_split *split = (struct yetty_yui_split *)self;
     struct yetty_ycore_void_result res;
@@ -148,16 +148,16 @@ static struct yetty_ycore_void_result split_set_bounds(struct yetty_yui_tile *se
 }
 
 static struct yetty_ycore_int_result split_on_event(struct yetty_yui_tile *self,
-                                                    const struct yetty_ycore_event *event)
+                                                    const struct yetty_yui_event *event)
 {
     struct yetty_yui_split *split = (struct yetty_yui_split *)self;
 
-    if (event->type == YETTY_EVENT_RESIZE) {
+    if (event->type == YETTY_YCORE_RESIZE) {
         /* Calculate child bounds based on orientation and ratio */
         float w = event->resize.width;
         float h = event->resize.height;
-        struct yetty_ycore_event first_event = *event;
-        struct yetty_ycore_event second_event = *event;
+        struct yetty_yui_event first_event = *event;
+        struct yetty_yui_event second_event = *event;
 
         if (split->orientation == YETTY_YUI_HORIZONTAL) {
             float first_h = h * split->ratio;
@@ -254,7 +254,7 @@ static struct yetty_ycore_void_result pane_destroy(struct yetty_yui_tile *self)
 }
 
 static struct yetty_ycore_void_result pane_render(struct yetty_yui_tile *self,
-                                                  struct yetty_yrender_target *render_target)
+                                                  struct yetty_ypaint_core_target *render_target)
 {
     struct yetty_yui_pane *pane = (struct yetty_yui_pane *)self;
 
@@ -285,7 +285,7 @@ static struct yetty_ycore_void_result pane_set_bounds(struct yetty_yui_tile *sel
 }
 
 static struct yetty_ycore_int_result pane_on_event(struct yetty_yui_tile *self,
-                                                   const struct yetty_ycore_event *event)
+                                                   const struct yetty_yui_event *event)
 {
     struct yetty_yui_pane *pane = (struct yetty_yui_pane *)self;
 
@@ -336,7 +336,7 @@ struct yetty_ycore_void_result yetty_yui_tile_destroy(struct yetty_yui_tile *til
 }
 
 struct yetty_ycore_void_result yetty_yui_tile_render(struct yetty_yui_tile *tile,
-                                                     struct yetty_yrender_target *render_target)
+                                                     struct yetty_ypaint_core_target *render_target)
 {
     if (!tile) {
         return YETTY_ERR(yetty_ycore_void, "tile is NULL");
@@ -360,7 +360,7 @@ struct yetty_ycore_void_result yetty_yui_tile_set_bounds(struct yetty_yui_tile *
 }
 
 struct yetty_ycore_int_result yetty_yui_tile_on_event(struct yetty_yui_tile *tile,
-                                                      const struct yetty_ycore_event *event)
+                                                      const struct yetty_yui_event *event)
 {
     if (!tile) {
         return YETTY_ERR(yetty_ycore_int, "tile is NULL");
@@ -393,7 +393,7 @@ struct yetty_yui_rect yetty_yui_tile_bounds(const struct yetty_yui_tile *tile)
  * Split public API
  *===========================================================================*/
 
-struct yetty_ycore_void_result yetty_yui_split_set_first(struct yetty_yui_tile *tile,
+struct yetty_ycore_void_result yetty_yui_tile_split_set_first(struct yetty_yui_tile *tile,
                                                          struct yetty_yui_tile *child)
 {
     struct yetty_yui_split *split;
@@ -411,7 +411,7 @@ struct yetty_ycore_void_result yetty_yui_split_set_first(struct yetty_yui_tile *
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yui_split_set_second(struct yetty_yui_tile *tile,
+struct yetty_ycore_void_result yetty_yui_tile_split_set_second(struct yetty_yui_tile *tile,
                                                           struct yetty_yui_tile *child)
 {
     struct yetty_yui_split *split;
@@ -429,7 +429,7 @@ struct yetty_ycore_void_result yetty_yui_split_set_second(struct yetty_yui_tile 
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yui_split_set_ratio(struct yetty_yui_tile *tile, float ratio)
+struct yetty_ycore_void_result yetty_yui_tile_split_set_ratio(struct yetty_yui_tile *tile, float ratio)
 {
     struct yetty_yui_split *split;
 
@@ -446,7 +446,7 @@ struct yetty_ycore_void_result yetty_yui_split_set_ratio(struct yetty_yui_tile *
     return YETTY_OK_VOID();
 }
 
-struct yetty_yui_tile *yetty_yui_split_first(const struct yetty_yui_tile *tile)
+struct yetty_yui_tile *yetty_yui_tile_split_first(const struct yetty_yui_tile *tile)
 {
     if (!tile || tile->type != YETTY_YUI_TILE_SPLIT) {
         return NULL;
@@ -454,7 +454,7 @@ struct yetty_yui_tile *yetty_yui_split_first(const struct yetty_yui_tile *tile)
     return ((struct yetty_yui_split *)tile)->first;
 }
 
-struct yetty_yui_tile *yetty_yui_split_second(const struct yetty_yui_tile *tile)
+struct yetty_yui_tile *yetty_yui_tile_split_second(const struct yetty_yui_tile *tile)
 {
     if (!tile || tile->type != YETTY_YUI_TILE_SPLIT) {
         return NULL;
@@ -462,7 +462,7 @@ struct yetty_yui_tile *yetty_yui_split_second(const struct yetty_yui_tile *tile)
     return ((struct yetty_yui_split *)tile)->second;
 }
 
-float yetty_yui_split_ratio(const struct yetty_yui_tile *tile)
+float yetty_yui_tile_split_ratio(const struct yetty_yui_tile *tile)
 {
     if (!tile || tile->type != YETTY_YUI_TILE_SPLIT) {
         return 0.5f;
@@ -470,7 +470,7 @@ float yetty_yui_split_ratio(const struct yetty_yui_tile *tile)
     return ((struct yetty_yui_split *)tile)->ratio;
 }
 
-enum yetty_yui_orientation yetty_yui_split_orientation(const struct yetty_yui_tile *tile)
+enum yetty_yui_orientation yetty_yui_tile_split_orientation(const struct yetty_yui_tile *tile)
 {
     if (!tile || tile->type != YETTY_YUI_TILE_SPLIT) {
         return YETTY_YUI_HORIZONTAL;
@@ -482,8 +482,8 @@ enum yetty_yui_orientation yetty_yui_split_orientation(const struct yetty_yui_ti
  * Pane public API
  *===========================================================================*/
 
-struct yetty_ycore_void_result yetty_yui_pane_push_view(struct yetty_yui_tile *tile,
-                                                        struct yetty_yui_view *view)
+struct yetty_ycore_void_result yetty_yui_tile_pane_push_view(struct yetty_yui_tile *tile,
+                                                        struct yetty_yterm_view *view)
 {
     struct yetty_yui_pane *pane;
 
@@ -495,9 +495,9 @@ struct yetty_ycore_void_result yetty_yui_pane_push_view(struct yetty_yui_tile *t
 
     if (pane->view_count >= pane->view_capacity) {
         size_t new_cap = pane->view_capacity ? pane->view_capacity * 2 : 4;
-        struct yetty_yui_view **new_views;
+        struct yetty_yterm_view **new_views;
 
-        new_views = realloc(pane->views, new_cap * sizeof(struct yetty_yui_view *));
+        new_views = realloc(pane->views, new_cap * sizeof(struct yetty_yterm_view *));
         if (!new_views) {
             return YETTY_ERR(yetty_ycore_void, "allocation failed");
         }
@@ -516,7 +516,7 @@ struct yetty_ycore_void_result yetty_yui_pane_push_view(struct yetty_yui_tile *t
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yui_pane_pop_view(struct yetty_yui_tile *tile)
+struct yetty_ycore_void_result yetty_yui_tile_pane_pop_view(struct yetty_yui_tile *tile)
 {
     struct yetty_yui_pane *pane;
 
@@ -535,7 +535,7 @@ struct yetty_ycore_void_result yetty_yui_pane_pop_view(struct yetty_yui_tile *ti
     return YETTY_OK_VOID();
 }
 
-struct yetty_yui_view *yetty_yui_pane_active_view(const struct yetty_yui_tile *tile)
+struct yetty_yterm_view *yetty_yui_tile_pane_active_view(const struct yetty_yui_tile *tile)
 {
     const struct yetty_yui_pane *pane;
 
@@ -551,7 +551,7 @@ struct yetty_yui_view *yetty_yui_pane_active_view(const struct yetty_yui_tile *t
     return pane->views[pane->view_count - 1];
 }
 
-size_t yetty_yui_pane_view_count(const struct yetty_yui_tile *tile)
+size_t yetty_yui_tile_pane_view_count(const struct yetty_yui_tile *tile)
 {
     if (!tile || tile->type != YETTY_YUI_TILE_PANE) {
         return 0;
@@ -559,7 +559,7 @@ size_t yetty_yui_pane_view_count(const struct yetty_yui_tile *tile)
     return ((const struct yetty_yui_pane *)tile)->view_count;
 }
 
-int yetty_yui_pane_has_view(const struct yetty_yui_tile *tile, yetty_ycore_object_id view_id)
+int yetty_yui_tile_pane_has_view(const struct yetty_yui_tile *tile, yetty_ycore_object_id view_id)
 {
     const struct yetty_yui_pane *pane;
 
@@ -577,7 +577,7 @@ int yetty_yui_pane_has_view(const struct yetty_yui_tile *tile, yetty_ycore_objec
     return 0;
 }
 
-int yetty_yui_pane_focused(const struct yetty_yui_tile *tile)
+int yetty_yui_tile_pane_focused(const struct yetty_yui_tile *tile)
 {
     if (!tile || tile->type != YETTY_YUI_TILE_PANE) {
         return 0;
@@ -585,7 +585,7 @@ int yetty_yui_pane_focused(const struct yetty_yui_tile *tile)
     return ((const struct yetty_yui_pane *)tile)->focused;
 }
 
-void yetty_yui_pane_set_focused(struct yetty_yui_tile *tile, int focused)
+void yetty_yui_tile_pane_set_focused(struct yetty_yui_tile *tile, int focused)
 {
     if (!tile || tile->type != YETTY_YUI_TILE_PANE) {
         return;
@@ -741,7 +741,7 @@ void yetty_yui_tile_clear_focus(struct yetty_yui_tile *root)
     }
 
     if (root->type == YETTY_YUI_TILE_PANE) {
-        yetty_yui_pane_set_focused(root, 0);
+        yetty_yui_tile_pane_set_focused(root, 0);
         return;
     }
 
@@ -799,7 +799,7 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
         if (ratio > 0.9f) {
             ratio = 0.9f;
         }
-        yetty_yui_split_set_ratio(res.value, ratio);
+        yetty_yui_tile_split_set_ratio(res.value, ratio);
 
         /* Create first child */
         first_config = config->ops->get_node(config, "first");
@@ -809,7 +809,7 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
                 yetty_yui_tile_destroy(res.value);
                 return first_res;
             }
-            yetty_yui_split_set_first(res.value, first_res.value);
+            yetty_yui_tile_split_set_first(res.value, first_res.value);
         }
 
         /* Create second child */
@@ -820,7 +820,7 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
                 yetty_yui_tile_destroy(res.value);
                 return second_res;
             }
-            yetty_yui_split_set_second(res.value, second_res.value);
+            yetty_yui_tile_split_set_second(res.value, second_res.value);
         }
 
         return res;
@@ -859,18 +859,18 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
             }
 
             struct yetty_vnc_viewer_ptr_result vnc_res =
-                yetty_vnc_viewer_create(host, port, yetty_ctx);
+                yetty_yvnc_viewer_create(host, port, yetty_ctx);
             if (YETTY_IS_ERR(vnc_res)) {
                 yetty_yui_tile_destroy(res.value);
                 return YETTY_ERR(yetty_yui_tile_ptr, vnc_res.error.msg);
             }
 
-            yetty_yui_pane_push_view(res.value, yetty_vnc_viewer_as_view(vnc_res.value));
+            yetty_yui_tile_pane_push_view(res.value, yetty_yvnc_viewer_as_view(vnc_res.value));
         } else {
             /* Normal mode: create terminal */
             const char *view_type;
             struct yetty_yterm_terminal_result term_res;
-            struct grid_size grid_size = {.rows = 24, .cols = 80};
+            struct yetty_ycore_grid_size grid_size = {.rows = 24, .cols = 80};
 
             view_type = config->ops->get_string(config, "view", "terminal");
 
@@ -881,7 +881,7 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
                     return YETTY_ERR(yetty_yui_tile_ptr, term_res.error.msg);
                 }
 
-                yetty_yui_pane_push_view(res.value, yetty_yterm_terminal_as_view(term_res.value));
+                yetty_yui_tile_pane_push_view(res.value, yetty_yterm_terminal_as_view(term_res.value));
             }
         }
     }

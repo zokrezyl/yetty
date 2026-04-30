@@ -25,9 +25,9 @@
 
 #define YWEBGPU_TICK_MS 1
 
-struct yplatform_wgpu {
+struct yetty_yplatform_wgpu {
     WGPUInstance instance;
-    struct yetty_ycore_event_loop *loop;
+    struct yetty_yplatform_event_loop *loop;
     yetty_ycore_timer_id tick_timer_id;
     struct yetty_ycore_event_listener tick_listener;
     /* Number of in-flight _await calls. The ProcessEvents tick only runs
@@ -38,30 +38,30 @@ struct yplatform_wgpu {
 
 /* Per-await context; lives on the awaiting coroutine's stack while it's
  * yielded. Carries the wgpu pointer so the callback can find the loop. */
-struct ywgpu_await_ctx {
-    struct yplatform_coro *coro;
-    struct yplatform_wgpu *wgpu;
+struct yetty_yplatform_ywgpu_await_ctx {
+    struct yetty_yplatform_coro *coro;
+    struct yetty_yplatform_wgpu *wgpu;
 };
 
 /* The tick listener struct is embedded in struct yplatform_wgpu. We need to
  * recover the wgpu pointer in the handler — container_of pattern. */
-static inline struct yplatform_wgpu *wgpu_from_listener(struct yetty_ycore_event_listener *l)
+static inline struct yetty_yplatform_wgpu *wgpu_from_listener(struct yetty_ycore_event_listener *l)
 {
-    return (struct yplatform_wgpu *)((char *)l - offsetof(struct yplatform_wgpu, tick_listener));
+    return (struct yetty_yplatform_wgpu *)((char *)l - offsetof(struct yetty_yplatform_wgpu, tick_listener));
 }
 
 /* Runs on the loop thread every YWEBGPU_TICK_MS milliseconds. */
 static struct yetty_ycore_int_result on_wgpu_tick(struct yetty_ycore_event_listener *listener,
-                                                  const struct yetty_ycore_event *event)
+                                                  const struct yetty_yui_event *event)
 {
     (void)event;
-    struct yplatform_wgpu *wgpu = wgpu_from_listener(listener);
+    struct yetty_yplatform_wgpu *wgpu = wgpu_from_listener(listener);
     wgpuInstanceProcessEvents(wgpu->instance);
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-struct yplatform_wgpu_ptr_result yplatform_wgpu_create(WGPUInstance instance,
-                                                       struct yetty_ycore_event_loop *loop)
+struct yplatform_wgpu_ptr_result yetty_yplatform_wgpu_create(WGPUInstance instance,
+                                                       struct yetty_yplatform_event_loop *loop)
 {
     if (!instance || !loop) {
         return YETTY_ERR(yplatform_wgpu_ptr, "instance or loop is NULL");
@@ -70,7 +70,7 @@ struct yplatform_wgpu_ptr_result yplatform_wgpu_create(WGPUInstance instance,
         return YETTY_ERR(yplatform_wgpu_ptr, "event loop has no post_to_loop op");
     }
 
-    struct yplatform_wgpu *wgpu = calloc(1, sizeof(struct yplatform_wgpu));
+    struct yetty_yplatform_wgpu *wgpu = calloc(1, sizeof(struct yetty_yplatform_wgpu));
     if (!wgpu) {
         return YETTY_ERR(yplatform_wgpu_ptr, "calloc failed");
     }
@@ -112,7 +112,7 @@ struct yplatform_wgpu_ptr_result yplatform_wgpu_create(WGPUInstance instance,
 /* Ref-count the in-flight awaits; start/stop the ProcessEvents tick at the
  * 0→1 and 1→0 transitions. Called from the loop thread only (all awaits
  * originate in coroutines that run on the loop thread). */
-static void await_begin(struct yplatform_wgpu *wgpu)
+static void await_begin(struct yetty_yplatform_wgpu *wgpu)
 {
     wgpu->pending_awaits++;
     if (wgpu->pending_awaits == 1 && !wgpu->tick_running) {
@@ -122,7 +122,7 @@ static void await_begin(struct yplatform_wgpu *wgpu)
     }
 }
 
-static void await_end(struct yplatform_wgpu *wgpu)
+static void await_end(struct yetty_yplatform_wgpu *wgpu)
 {
     if (wgpu->pending_awaits > 0) {
         wgpu->pending_awaits--;
@@ -134,7 +134,7 @@ static void await_end(struct yplatform_wgpu *wgpu)
     }
 }
 
-void yplatform_wgpu_destroy(struct yplatform_wgpu *wgpu)
+void yetty_yplatform_wgpu_destroy(struct yetty_yplatform_wgpu *wgpu)
 {
     if (!wgpu) {
         return;
@@ -156,12 +156,12 @@ void yplatform_wgpu_destroy(struct yplatform_wgpu *wgpu)
  * coroutines own themselves once they yield into the GPU pipeline. */
 static void resume_coro_on_loop(void *arg)
 {
-    struct yplatform_coro *coro = arg;
-    ydebug("ywebgpu: resuming coro %u", yplatform_coro_id(coro));
-    yplatform_coro_resume(coro);
-    if (yplatform_coro_is_finished(coro)) {
-        ydebug("ywebgpu: coro %u finished, destroying", yplatform_coro_id(coro));
-        yplatform_coro_destroy(coro);
+    struct yetty_yplatform_coro *coro = arg;
+    ydebug("ywebgpu: resuming coro %u", yetty_yplatform_coro_id(coro));
+    yetty_yplatform_coro_resume(coro);
+    if (yetty_yplatform_coro_is_finished(coro)) {
+        ydebug("ywebgpu: coro %u finished, destroying", yetty_yplatform_coro_id(coro));
+        yetty_yplatform_coro_destroy(coro);
     }
 }
 
@@ -172,26 +172,26 @@ static void map_callback(WGPUMapAsyncStatus status, WGPUStringView msg, void *us
                          void *userdata2)
 {
     (void)userdata2;
-    struct ywgpu_await_ctx *ctx = userdata1;
+    struct yetty_yplatform_ywgpu_await_ctx *ctx = userdata1;
     ydebug("ywebgpu: map_callback status=%d coro=%u msg=\"%.*s\"", (int)status,
-           yplatform_coro_id(ctx->coro), (int)msg.length, msg.data ? msg.data : "");
-    yplatform_coro_set_status(ctx->coro, (int)status);
+           yetty_yplatform_coro_id(ctx->coro), (int)msg.length, msg.data ? msg.data : "");
+    yetty_yplatform_coro_set_status(ctx->coro, (int)status);
     ctx->wgpu->loop->ops->post_to_loop(ctx->wgpu->loop, resume_coro_on_loop, ctx->coro);
 }
 
-struct yetty_ycore_void_result yplatform_wgpu_buffer_map_await(struct yplatform_wgpu *wgpu,
+struct yetty_ycore_void_result yetty_yplatform_wgpu_buffer_map_await(struct yetty_yplatform_wgpu *wgpu,
                                                                WGPUBuffer buffer, WGPUMapMode mode,
                                                                size_t offset, size_t size)
 {
     if (!wgpu) {
         return YETTY_ERR(yetty_ycore_void, "wgpu is NULL");
     }
-    struct yplatform_coro *self = yplatform_coro_current();
+    struct yetty_yplatform_coro *self = yetty_yplatform_coro_current();
     if (!self) {
         return YETTY_ERR(yetty_ycore_void, "buffer_map_await called outside coroutine");
     }
 
-    struct ywgpu_await_ctx ctx = {.coro = self, .wgpu = wgpu};
+    struct yetty_yplatform_ywgpu_await_ctx ctx = {.coro = self, .wgpu = wgpu};
 
     WGPUBufferMapCallbackInfo cb = {0};
     cb.mode = WGPUCallbackMode_AllowSpontaneous;
@@ -199,13 +199,13 @@ struct yetty_ycore_void_result yplatform_wgpu_buffer_map_await(struct yplatform_
     cb.userdata1 = &ctx;
 
     ydebug("ywebgpu: buffer_map_await coro=%u buffer=%p offset=%zu size=%zu",
-           yplatform_coro_id(self), (void *)buffer, offset, size);
+           yetty_yplatform_coro_id(self), (void *)buffer, offset, size);
     await_begin(wgpu);
     wgpuBufferMapAsync(buffer, mode, offset, size, cb);
-    yplatform_coro_yield();
+    yetty_yplatform_coro_yield();
     await_end(wgpu);
 
-    int status = yplatform_coro_get_status(self);
+    int status = yetty_yplatform_coro_get_status(self);
     if (status != WGPUMapAsyncStatus_Success) {
         ywarn("buffer_map_await: status=%d", status);
         return YETTY_ERR(yetty_ycore_void, "buffer map failed");
@@ -217,38 +217,38 @@ static void queue_done_callback(WGPUQueueWorkDoneStatus status, WGPUStringView m
                                 void *userdata2)
 {
     (void)userdata2;
-    struct ywgpu_await_ctx *ctx = userdata1;
+    struct yetty_yplatform_ywgpu_await_ctx *ctx = userdata1;
     ydebug("ywebgpu: queue_done_callback status=%d coro=%u msg=\"%.*s\"", (int)status,
-           yplatform_coro_id(ctx->coro), (int)msg.length, msg.data ? msg.data : "");
-    yplatform_coro_set_status(ctx->coro, (int)status);
+           yetty_yplatform_coro_id(ctx->coro), (int)msg.length, msg.data ? msg.data : "");
+    yetty_yplatform_coro_set_status(ctx->coro, (int)status);
     ctx->wgpu->loop->ops->post_to_loop(ctx->wgpu->loop, resume_coro_on_loop, ctx->coro);
 }
 
-struct yetty_ycore_void_result yplatform_wgpu_queue_done_await(struct yplatform_wgpu *wgpu,
+struct yetty_ycore_void_result yetty_yplatform_wgpu_queue_done_await(struct yetty_yplatform_wgpu *wgpu,
                                                                WGPUQueue queue)
 {
     if (!wgpu) {
         return YETTY_ERR(yetty_ycore_void, "wgpu is NULL");
     }
-    struct yplatform_coro *self = yplatform_coro_current();
+    struct yetty_yplatform_coro *self = yetty_yplatform_coro_current();
     if (!self) {
         return YETTY_ERR(yetty_ycore_void, "queue_done_await called outside coroutine");
     }
 
-    struct ywgpu_await_ctx ctx = {.coro = self, .wgpu = wgpu};
+    struct yetty_yplatform_ywgpu_await_ctx ctx = {.coro = self, .wgpu = wgpu};
 
     WGPUQueueWorkDoneCallbackInfo cb = {0};
     cb.mode = WGPUCallbackMode_AllowSpontaneous;
     cb.callback = queue_done_callback;
     cb.userdata1 = &ctx;
 
-    ydebug("ywebgpu: queue_done_await coro=%u queue=%p", yplatform_coro_id(self), (void *)queue);
+    ydebug("ywebgpu: queue_done_await coro=%u queue=%p", yetty_yplatform_coro_id(self), (void *)queue);
     await_begin(wgpu);
     wgpuQueueOnSubmittedWorkDone(queue, cb);
-    yplatform_coro_yield();
+    yetty_yplatform_coro_yield();
     await_end(wgpu);
 
-    int status = yplatform_coro_get_status(self);
+    int status = yetty_yplatform_coro_get_status(self);
     if (status != WGPUQueueWorkDoneStatus_Success) {
         ywarn("queue_done_await: status=%d", status);
         return YETTY_ERR(yetty_ycore_void, "queue work done failed");

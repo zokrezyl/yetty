@@ -19,16 +19,16 @@ struct yetty_yconfig;
  * read() calls into JS to pull data from buffer via EM_ASM.
  * write() sends postMessage to iframe.
  */
-struct webasm_pty {
-    struct yetty_yplatform_pty base;
-    struct webasm_pty_pipe_source pipe_source;
+struct yetty_yplatform_webasm_pty {
+    struct yetty_platform_pty base;
+    struct yetty_yplatform_webasm_pty_pipe_source pipe_source;
     uint32_t cols;
     uint32_t rows;
     int running;
 };
 
 /* Initialize the PTY */
-struct yetty_ycore_void_result webasm_pty_init(struct webasm_pty *pty,
+struct yetty_ycore_void_result yetty_yplatform_webasm_pty_init(struct yetty_yplatform_webasm_pty *pty,
                                                struct yetty_yconfig *config);
 
 #ifdef __cplusplus

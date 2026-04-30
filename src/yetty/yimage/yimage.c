@@ -22,7 +22,7 @@ struct yetty_yimage {
     uint32_t filter;
 
     /* GPU resource set */
-    struct yetty_yrender_gpu_resource_set rs;
+    struct yetty_ypaint_core_gpu_resource_set rs;
     bool dirty;
 };
 

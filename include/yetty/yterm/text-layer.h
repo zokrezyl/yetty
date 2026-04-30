@@ -20,7 +20,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
  * Pointer is owned by the text layer (or libvterm). Valid only until the
  * next call into text-layer that mutates the screen — read inside one
  * get_gpu_resource_set / render call only. */
-void yetty_yterm_terminal_text_layer_get_cells(const struct yetty_yterm_terminal_layer *self,
+void yetty_yterm_terminal_layer_terminal_text_layer_get_cells(const struct yetty_yrender_terminal_layer *self,
                                                const uint8_t **out_data, size_t *out_size);
 
 #ifdef __cplusplus

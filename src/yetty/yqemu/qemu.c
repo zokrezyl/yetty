@@ -20,13 +20,13 @@ extern const char *yetty_yplatform_get_data_dir(void);
 extern const char *yetty_yplatform_get_config_dir(void);
 
 /* QEMU tunables, read from <config_dir>/qemu/qemu.cfg if present. */
-struct qemu_settings {
+struct yetty_yqemu_qemu_settings {
     unsigned int memory_mb;
     unsigned int smp;
     char extra_append[128];
 };
 
-static void qemu_settings_defaults(struct qemu_settings *s)
+static void qemu_settings_defaults(struct yetty_yqemu_qemu_settings *s)
 {
     s->memory_mb = 256;
     s->smp = 1;
@@ -47,7 +47,7 @@ static char *qemu_trim(char *s)
 }
 
 /* Parse simple "key = value" lines (# for comments). */
-static void qemu_settings_load(struct qemu_settings *s, const char *path)
+static void qemu_settings_load(struct yetty_yqemu_qemu_settings *s, const char *path)
 {
     FILE *f = fopen(path, "r");
     if (!f) {
@@ -83,7 +83,7 @@ static void qemu_settings_load(struct qemu_settings *s, const char *path)
 /* Ensure a default qemu.cfg exists so users can discover/tune settings. */
 static void qemu_settings_ensure_default(const char *path)
 {
-    if (yplatform_file_exists(path)) {
+    if (yetty_yplatform_file_exists(path)) {
         return;
     }
 
@@ -100,7 +100,7 @@ static void qemu_settings_ensure_default(const char *path)
     fclose(f);
 }
 
-yprocess_t *qemu_start(uint16_t port)
+struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t port)
 {
     const char *raw_data_dir = yetty_yplatform_get_data_dir();
     const char *raw_config_dir = yetty_yplatform_get_config_dir();
@@ -137,7 +137,7 @@ yprocess_t *qemu_start(uint16_t port)
     char fsdev_arg[640];
     char memory_arg[32];
     char smp_arg[16];
-    struct qemu_settings settings;
+    struct yetty_yqemu_qemu_settings settings;
 
     /* qemu binary is program-specific; shared runtime lives under yemu/.
      *
@@ -182,25 +182,25 @@ yprocess_t *qemu_start(uint16_t port)
     snprintf(qemu_cfg_dir, sizeof(qemu_cfg_dir), "%s/qemu", config_dir);
     snprintf(qemu_cfg_path, sizeof(qemu_cfg_path), "%s/qemu.cfg", qemu_cfg_dir);
     snprintf(share_path, sizeof(share_path), "%s/share", qemu_cfg_dir);
-    yplatform_mkdir_p(qemu_cfg_dir);
-    yplatform_mkdir_p(share_path);
+    yetty_yplatform_mkdir_p(qemu_cfg_dir);
+    yetty_yplatform_mkdir_p(share_path);
     qemu_settings_ensure_default(qemu_cfg_path);
     qemu_settings_defaults(&settings);
     qemu_settings_load(&settings, qemu_cfg_path);
 
-    if (!yplatform_file_exists(qemu_bin)) {
+    if (!yetty_yplatform_file_exists(qemu_bin)) {
         yerror("QEMU binary not found: %s", qemu_bin);
         return YPROCESS_INVALID;
     }
-    if (!yplatform_file_exists(bios_path)) {
+    if (!yetty_yplatform_file_exists(bios_path)) {
         yerror("OpenSBI not found: %s", bios_path);
         return YPROCESS_INVALID;
     }
-    if (!yplatform_file_exists(kernel_path)) {
+    if (!yetty_yplatform_file_exists(kernel_path)) {
         yerror("Kernel not found: %s", kernel_path);
         return YPROCESS_INVALID;
     }
-    if (!yplatform_file_exists(blk_path)) {
+    if (!yetty_yplatform_file_exists(blk_path)) {
         yerror("Block image not found: %s", blk_path);
         return YPROCESS_INVALID;
     }
@@ -282,7 +282,7 @@ yprocess_t *qemu_start(uint16_t port)
         NULL,
     };
 
-    yprocess_t *proc = yprocess_spawn(argv, /*detached=*/1, /*stdio_to_null=*/1);
+    struct yetty_yplatform_yprocess *proc = yetty_yplatform_yprocess_spawn(argv, /*detached=*/1, /*stdio_to_null=*/1);
     if (!proc) {
         yerror("Failed to spawn QEMU");
         return YPROCESS_INVALID;
@@ -292,26 +292,26 @@ yprocess_t *qemu_start(uint16_t port)
     return proc;
 }
 
-void qemu_stop(yprocess_t *proc)
+void yetty_yqemu_qemu_stop(struct yetty_yplatform_yprocess *proc)
 {
     if (!proc) {
         return;
     }
-    yprocess_terminate(proc, /*grace_ms=*/100);
+    yetty_yplatform_yprocess_terminate(proc, /*grace_ms=*/100);
 }
 
-struct yetty_ycore_void_result qemu_wait_ready(uint16_t port, int timeout_ms)
+struct yetty_ycore_void_result yetty_yqemu_qemu_wait_ready(uint16_t port, int timeout_ms)
 {
     /* Idempotent — wraps WSAStartup on Windows, no-op on POSIX. */
-    if (!yetty_yplatform_socket_init()) {
+    if (!yetty_platform_socket_init()) {
         yerror("qemu_wait_ready: socket subsystem init failed");
         return YETTY_ERR(yetty_ycore_void, "qemu_wait_ready: socket subsystem init failed");
     }
 
-    double start = ytime_monotonic_sec();
+    double start = yetty_yplatform_ytime_monotonic_sec();
 
     while (1) {
-        struct yetty_socket_fd_result fd_r = yetty_yplatform_socket_create_tcp();
+        struct yetty_socket_fd_result fd_r = yetty_platform_socket_create_tcp();
         if (fd_r.ok) {
             struct yetty_ycore_void_result cr =
                 yetty_yplatform_socket_connect(fd_r.value, "127.0.0.1", port);
@@ -325,12 +325,12 @@ struct yetty_ycore_void_result qemu_wait_ready(uint16_t port, int timeout_ms)
             yetty_ycore_error_destroy(fd_r.error);
         }
 
-        double elapsed_ms = (ytime_monotonic_sec() - start) * 1000.0;
+        double elapsed_ms = (yetty_yplatform_ytime_monotonic_sec() - start) * 1000.0;
         if (elapsed_ms >= (double)timeout_ms) {
             yerror("Timeout waiting for QEMU on port %u", port);
             return YETTY_ERR(yetty_ycore_void, "qemu_wait_ready: timeout");
         }
 
-        ytime_sleep_ms(100);
+        yetty_yplatform_ytime_sleep_ms(100);
     }
 }

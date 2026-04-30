@@ -46,14 +46,14 @@
 
 #define UNCONST(p) ((void *)(uintptr_t)(const void *)(p))
 
-int opterr = 1;   /* if error message should be printed */
-int optind = 1;   /* index into parent argv vector */
-int optopt = '?'; /* character checked for validity */
-int optreset = 0; /* reset getopt */
-char *optarg = NULL;
+int yetty_yplatform_opterr = 1;   /* if error message should be printed */
+int yetty_yplatform_optind = 1;   /* index into parent argv vector */
+int yetty_yplatform_optopt = '?'; /* character checked for validity */
+int yetty_yplatform_optreset = 0; /* reset getopt */
+char *yetty_yplatform_optarg = NULL;
 
 #define IGNORE_FIRST (*options == '-' || *options == '+')
-#define PRINT_ERROR ((opterr) && ((*options != ':') || (IGNORE_FIRST && options[1] != ':')))
+#define PRINT_ERROR ((yetty_yplatform_opterr) && ((*options != ':') || (IGNORE_FIRST && options[1] != ':')))
 #define IS_POSIXLY_CORRECT (getenv("POSIXLY_CORRECT") != NULL)
 #define PERMUTE (!IS_POSIXLY_CORRECT && !IGNORE_FIRST)
 #define IN_ORDER (!IS_POSIXLY_CORRECT && *options == '-')
@@ -133,50 +133,50 @@ static int getopt_internal(int nargc, char **nargv, const char *options)
     const char *oli;
     int optchar;
 
-    optarg = NULL;
+    yetty_yplatform_optarg = NULL;
 
-    if (optind == 0) {
-        optind = 1;
+    if (yetty_yplatform_optind == 0) {
+        yetty_yplatform_optind = 1;
     }
 
-    if (optreset) {
+    if (yetty_yplatform_optreset) {
         nonopt_start = nonopt_end = -1;
     }
 start:
-    if (optreset || !*place) {
-        optreset = 0;
-        if (optind >= nargc) {
+    if (yetty_yplatform_optreset || !*place) {
+        yetty_yplatform_optreset = 0;
+        if (yetty_yplatform_optind >= nargc) {
             place = EMSG;
             if (nonopt_end != -1) {
-                permute_args(nonopt_start, nonopt_end, optind, nargv);
-                optind -= nonopt_end - nonopt_start;
+                permute_args(nonopt_start, nonopt_end, yetty_yplatform_optind, nargv);
+                yetty_yplatform_optind -= nonopt_end - nonopt_start;
             } else if (nonopt_start != -1) {
-                optind = nonopt_start;
+                yetty_yplatform_optind = nonopt_start;
             }
             nonopt_start = nonopt_end = -1;
             return -1;
         }
-        if ((*(place = nargv[optind]) != '-') || (place[1] == '\0')) {
+        if ((*(place = nargv[yetty_yplatform_optind]) != '-') || (place[1] == '\0')) {
             place = EMSG;
             if (IN_ORDER) {
-                optarg = nargv[optind++];
+                yetty_yplatform_optarg = nargv[yetty_yplatform_optind++];
                 return INORDER;
             }
             if (!PERMUTE) {
                 return -1;
             }
             if (nonopt_start == -1) {
-                nonopt_start = optind;
+                nonopt_start = yetty_yplatform_optind;
             } else if (nonopt_end != -1) {
-                permute_args(nonopt_start, nonopt_end, optind, nargv);
-                nonopt_start = optind - (nonopt_end - nonopt_start);
+                permute_args(nonopt_start, nonopt_end, yetty_yplatform_optind, nargv);
+                nonopt_start = yetty_yplatform_optind - (nonopt_end - nonopt_start);
                 nonopt_end = -1;
             }
-            optind++;
+            yetty_yplatform_optind++;
             goto start;
         }
         if (nonopt_start != -1 && nonopt_end == -1) {
-            nonopt_end = optind;
+            nonopt_end = yetty_yplatform_optind;
         }
         if (place[1] && *++place == '-') {
             place++;
@@ -186,64 +186,64 @@ start:
     if ((optchar = (int)*place++) == (int)':' ||
         (oli = strchr(options + (IGNORE_FIRST ? 1 : 0), optchar)) == NULL) {
         if (!*place) {
-            ++optind;
+            ++yetty_yplatform_optind;
         }
         if (PRINT_ERROR) {
             fprintf(stderr, illoptchar, progname(), optchar);
         }
-        optopt = optchar;
+        yetty_yplatform_optopt = optchar;
         return BADCH;
     }
     if (optchar == 'W' && oli[1] == ';') {
         if (*place) {
             return -2;
         }
-        if (++optind >= nargc) {
+        if (++yetty_yplatform_optind >= nargc) {
             place = EMSG;
             if (PRINT_ERROR) {
                 fprintf(stderr, recargchar, progname(), optchar);
             }
-            optopt = optchar;
+            yetty_yplatform_optopt = optchar;
             return BADARG;
         } else {
-            place = nargv[optind];
+            place = nargv[yetty_yplatform_optind];
         }
         return -2;
     }
     if (*++oli != ':') {
         if (!*place) {
-            ++optind;
+            ++yetty_yplatform_optind;
         }
     } else {
-        optarg = NULL;
+        yetty_yplatform_optarg = NULL;
         if (*place) {
-            optarg = UNCONST(place);
+            yetty_yplatform_optarg = UNCONST(place);
         } else if (oli[1] != ':') {
-            if (++optind >= nargc) {
+            if (++yetty_yplatform_optind >= nargc) {
                 place = EMSG;
                 if (PRINT_ERROR) {
                     fprintf(stderr, recargchar, progname(), optchar);
                 }
-                optopt = optchar;
+                yetty_yplatform_optopt = optchar;
                 return BADARG;
             } else {
-                optarg = nargv[optind];
+                yetty_yplatform_optarg = nargv[yetty_yplatform_optind];
             }
         }
         place = EMSG;
-        ++optind;
+        ++yetty_yplatform_optind;
     }
     return optchar;
 }
 
-int getopt(int nargc, char *const *nargv, const char *options)
+int yetty_yplatform_getopt(int nargc, char *const *nargv, const char *options)
 {
     int retval = getopt_internal(nargc, UNCONST(nargv), options);
     if (retval == -2) {
-        ++optind;
+        ++yetty_yplatform_optind;
         if (nonopt_end != -1) {
-            permute_args(nonopt_start, nonopt_end, optind, UNCONST(nargv));
-            optind -= nonopt_end - nonopt_start;
+            permute_args(nonopt_start, nonopt_end, yetty_yplatform_optind, UNCONST(nargv));
+            yetty_yplatform_optind -= nonopt_end - nonopt_start;
         }
         nonopt_start = nonopt_end = -1;
         retval = -1;
@@ -251,8 +251,8 @@ int getopt(int nargc, char *const *nargv, const char *options)
     return retval;
 }
 
-int getopt_long(int nargc, char *const *nargv, const char *options,
-                const struct option *long_options, int *idx)
+int yetty_yplatform_getopt_long(int nargc, char *const *nargv, const char *options,
+                const struct yetty_yplatform_option *long_options, int *idx)
 {
     int retval;
 
@@ -271,13 +271,13 @@ int getopt_long(int nargc, char *const *nargv, const char *options,
         match = -1;
         ambiguous = 0;
 
-        optind++;
+        yetty_yplatform_optind++;
         place = EMSG;
 
         if (*current_argv == '\0') { /* found "--" */
             if (nonopt_end != -1) {
-                permute_args(nonopt_start, nonopt_end, optind, UNCONST(nargv));
-                optind -= nonopt_end - nonopt_start;
+                permute_args(nonopt_start, nonopt_end, yetty_yplatform_optind, UNCONST(nargv));
+                yetty_yplatform_optind -= nonopt_end - nonopt_start;
             }
             nonopt_start = nonopt_end = -1;
             return -1;
@@ -308,7 +308,7 @@ int getopt_long(int nargc, char *const *nargv, const char *options,
             if (PRINT_ERROR) {
                 fprintf(stderr, ambig, progname(), (int)current_argv_len, current_argv);
             }
-            optopt = 0;
+            yetty_yplatform_optopt = 0;
             return BADCH;
         }
         if (match != -1) {
@@ -317,37 +317,37 @@ int getopt_long(int nargc, char *const *nargv, const char *options,
                     fprintf(stderr, noarg, progname(), (int)current_argv_len, current_argv);
                 }
                 if (long_options[match].flag == NULL) {
-                    optopt = long_options[match].val;
+                    yetty_yplatform_optopt = long_options[match].val;
                 } else {
-                    optopt = 0;
+                    yetty_yplatform_optopt = 0;
                 }
                 return BADARG;
             }
             if (long_options[match].has_arg == required_argument ||
                 long_options[match].has_arg == optional_argument) {
                 if (has_equal) {
-                    optarg = has_equal;
+                    yetty_yplatform_optarg = has_equal;
                 } else if (long_options[match].has_arg == required_argument) {
-                    optarg = nargv[optind++];
+                    yetty_yplatform_optarg = nargv[yetty_yplatform_optind++];
                 }
             }
-            if ((long_options[match].has_arg == required_argument) && (optarg == NULL)) {
+            if ((long_options[match].has_arg == required_argument) && (yetty_yplatform_optarg == NULL)) {
                 if (PRINT_ERROR) {
                     fprintf(stderr, recargstring, progname(), current_argv);
                 }
                 if (long_options[match].flag == NULL) {
-                    optopt = long_options[match].val;
+                    yetty_yplatform_optopt = long_options[match].val;
                 } else {
-                    optopt = 0;
+                    yetty_yplatform_optopt = 0;
                 }
-                --optind;
+                --yetty_yplatform_optind;
                 return BADARG;
             }
         } else {
             if (PRINT_ERROR) {
                 fprintf(stderr, illoptstring, progname(), current_argv);
             }
-            optopt = 0;
+            yetty_yplatform_optopt = 0;
             return BADCH;
         }
         if (long_options[match].flag) {

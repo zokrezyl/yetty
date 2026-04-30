@@ -293,7 +293,7 @@ write_cdb(const char *path, const std::vector<glyph_result> &results)
 {
 	struct yetty_ycdb_writer_result wr = yetty_ycdb_writer_create(path);
 	if (YETTY_IS_ERR(wr)) {
-		return yetty_cpp_err( wr.error.msg);
+		return yetty_ycore_err( wr.error.msg);
 }
 
 	for (const auto &r : results) {
@@ -325,10 +325,10 @@ write_cdb(const char *path, const std::vector<glyph_result> &results)
  *===========================================================================*/
 
 extern "C" struct yetty_ycore_void_result
-yetty_ymsdf_gen_cpu_generate(const struct yetty_ymsdf_gen_config *config)
+yetty_ymsdf_gen_config_cpu_generate(const struct yetty_ymsdf_gen_config *config)
 {
 	if (!config || !config->ttf_path || !config->output_dir) {
-		return yetty_cpp_err( "invalid config");
+		return yetty_ycore_err( "invalid config");
 }
 
 	float font_size = config->font_size > 0 ? config->font_size : 32.0f;
@@ -350,7 +350,7 @@ yetty_ymsdf_gen_cpu_generate(const struct yetty_ymsdf_gen_config *config)
 }
 
 	if (charset.empty()) {
-		return yetty_cpp_err( "empty charset");
+		return yetty_ycore_err( "empty charset");
 }
 
 	/* Work queue */

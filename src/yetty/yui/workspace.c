@@ -62,7 +62,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_destroy(struct yetty_yui_work
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_yui_workspace_render(
-    struct yetty_yui_workspace *ws, struct yetty_yrender_target *render_target)
+    struct yetty_yui_workspace *ws, struct yetty_ypaint_core_target *render_target)
 {
     if (!ws) {
         return YETTY_ERR(yetty_ycore_void, "workspace is NULL");
@@ -178,14 +178,14 @@ struct yetty_ycore_void_result yetty_yui_workspace_split_pane(
     new_pane = new_pane_res.value;
 
     /* Set up split children */
-    res = yetty_yui_split_set_first(split, target);
+    res = yetty_yui_tile_split_set_first(split, target);
     if (YETTY_IS_ERR(res)) {
         yetty_yui_tile_destroy(split);
         yetty_yui_tile_destroy(new_pane);
         return res;
     }
 
-    res = yetty_yui_split_set_second(split, new_pane);
+    res = yetty_yui_tile_split_set_second(split, new_pane);
     if (YETTY_IS_ERR(res)) {
         yetty_yui_tile_destroy(split);
         yetty_yui_tile_destroy(new_pane);
@@ -205,10 +205,10 @@ struct yetty_ycore_void_result yetty_yui_workspace_split_pane(
         return YETTY_ERR(yetty_ycore_void, "parent split not found");
     }
 
-    if (yetty_yui_split_first(parent_split) == target) {
-        res = yetty_yui_split_set_first(parent_split, split);
+    if (yetty_yui_tile_split_first(parent_split) == target) {
+        res = yetty_yui_tile_split_set_first(parent_split, split);
     } else {
-        res = yetty_yui_split_set_second(parent_split, split);
+        res = yetty_yui_tile_split_set_second(parent_split, split);
     }
 
     if (YETTY_IS_ERR(res)) {
@@ -253,17 +253,17 @@ struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_w
     }
 
     /* Determine sibling */
-    if (yetty_yui_tile_id(yetty_yui_split_first(parent_split)) == tile_id) {
-        sibling = yetty_yui_split_second(parent_split);
+    if (yetty_yui_tile_id(yetty_yui_tile_split_first(parent_split)) == tile_id) {
+        sibling = yetty_yui_tile_split_second(parent_split);
     } else {
-        sibling = yetty_yui_split_first(parent_split);
+        sibling = yetty_yui_tile_split_first(parent_split);
     }
 
     /* Parent split is root? Promote sibling to root */
     if (ws->root == parent_split) {
         /* Clear parent's children to prevent double-free */
-        yetty_yui_split_set_first(parent_split, NULL);
-        yetty_yui_split_set_second(parent_split, NULL);
+        yetty_yui_tile_split_set_first(parent_split, NULL);
+        yetty_yui_tile_split_set_second(parent_split, NULL);
         yetty_yui_tile_destroy(parent_split);
 
         ws->root = sibling;
@@ -281,13 +281,13 @@ struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_w
     }
 
     /* Clear parent's children to prevent double-free */
-    yetty_yui_split_set_first(parent_split, NULL);
-    yetty_yui_split_set_second(parent_split, NULL);
+    yetty_yui_tile_split_set_first(parent_split, NULL);
+    yetty_yui_tile_split_set_second(parent_split, NULL);
 
-    if (yetty_yui_split_first(grandparent) == parent_split) {
-        res = yetty_yui_split_set_first(grandparent, sibling);
+    if (yetty_yui_tile_split_first(grandparent) == parent_split) {
+        res = yetty_yui_tile_split_set_first(grandparent, sibling);
     } else {
-        res = yetty_yui_split_set_second(grandparent, sibling);
+        res = yetty_yui_tile_split_set_second(grandparent, sibling);
     }
 
     yetty_yui_tile_destroy(parent_split);
@@ -362,18 +362,18 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
 
                 /* Create VNC viewer */
                 struct yetty_vnc_viewer_ptr_result vnc_res =
-                    yetty_vnc_viewer_create(host, port, yetty_ctx);
+                    yetty_yvnc_viewer_create(host, port, yetty_ctx);
                 if (YETTY_IS_ERR(vnc_res)) {
                     yetty_yui_tile_destroy(tile_res.value);
                     return YETTY_ERR(yetty_ycore_void, vnc_res.error.msg);
                 }
 
-                yetty_yui_pane_push_view(tile_res.value, yetty_vnc_viewer_as_view(vnc_res.value));
-                yetty_yui_pane_set_focused(tile_res.value, 1);
+                yetty_yui_tile_pane_push_view(tile_res.value, yetty_yvnc_viewer_as_view(vnc_res.value));
+                yetty_yui_tile_pane_set_focused(tile_res.value, 1);
             } else {
                 /* Create terminal */
                 struct yetty_yterm_terminal_result term_res;
-                struct grid_size grid_size = {.rows = 24, .cols = 80};
+                struct yetty_ycore_grid_size grid_size = {.rows = 24, .cols = 80};
 
                 term_res = yetty_yterm_terminal_create(grid_size, yetty_ctx);
                 if (YETTY_IS_ERR(term_res)) {
@@ -381,9 +381,9 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
                     return YETTY_ERR(yetty_ycore_void, term_res.error.msg);
                 }
 
-                yetty_yui_pane_push_view(tile_res.value,
+                yetty_yui_tile_pane_push_view(tile_res.value,
                                          yetty_yterm_terminal_as_view(term_res.value));
-                yetty_yui_pane_set_focused(tile_res.value, 1);
+                yetty_yui_tile_pane_set_focused(tile_res.value, 1);
             }
         }
     }
@@ -401,7 +401,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
     /* Focus the first pane in the tree */
     struct yetty_yui_tile *first_pane = yetty_yui_tile_find_first_pane(ws->root);
     if (first_pane) {
-        yetty_yui_pane_set_focused(first_pane, 1);
+        yetty_yui_tile_pane_set_focused(first_pane, 1);
     }
 
     return YETTY_OK_VOID();
@@ -412,7 +412,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
  *===========================================================================*/
 
 struct yetty_ycore_int_result yetty_yui_workspace_on_event(struct yetty_yui_workspace *ws,
-                                                           const struct yetty_ycore_event *event)
+                                                           const struct yetty_yui_event *event)
 {
     struct yetty_yui_tile *focused_pane;
     struct yetty_yui_tile *clicked_pane;
@@ -425,20 +425,20 @@ struct yetty_ycore_int_result yetty_yui_workspace_on_event(struct yetty_yui_work
     }
 
     /* Handle mouse down - update focus */
-    if (event->type == YETTY_EVENT_MOUSE_DOWN) {
+    if (event->type == YETTY_YCORE_MOUSE_DOWN) {
         ydebug("workspace: MOUSE_DOWN at (%.1f, %.1f)", event->mouse.x, event->mouse.y);
         clicked_pane = yetty_yui_tile_find_pane_at(ws->root, event->mouse.x, event->mouse.y);
         ydebug("workspace: clicked_pane=%p", (void *)clicked_pane);
         if (clicked_pane) {
             struct yetty_yui_rect b = yetty_yui_tile_bounds(clicked_pane);
             ydebug("workspace: pane bounds=(%.1f,%.1f,%.1f,%.1f) focused=%d", b.x, b.y, b.w, b.h,
-                   yetty_yui_pane_focused(clicked_pane));
+                   yetty_yui_tile_pane_focused(clicked_pane));
         }
-        if (clicked_pane && !yetty_yui_pane_focused(clicked_pane)) {
+        if (clicked_pane && !yetty_yui_tile_pane_focused(clicked_pane)) {
             ydebug("workspace: switching focus to pane %p", (void *)clicked_pane);
             /* Clear focus from all panes, set on clicked */
             yetty_yui_tile_clear_focus(ws->root);
-            yetty_yui_pane_set_focused(clicked_pane, 1);
+            yetty_yui_tile_pane_set_focused(clicked_pane, 1);
         }
         /* Pass event to clicked pane */
         if (clicked_pane) {
@@ -448,8 +448,8 @@ struct yetty_ycore_int_result yetty_yui_workspace_on_event(struct yetty_yui_work
     }
 
     /* Keyboard events go only to focused pane */
-    if (event->type == YETTY_EVENT_KEY_DOWN || event->type == YETTY_EVENT_KEY_UP ||
-        event->type == YETTY_EVENT_CHAR) {
+    if (event->type == YETTY_YCORE_KEY_DOWN || event->type == YETTY_YCORE_KEY_UP ||
+        event->type == YETTY_YCORE_CHAR) {
         focused_pane = yetty_yui_tile_find_focused_pane(ws->root);
         ydebug("workspace: keyboard event type=%d focused_pane=%p", event->type,
                (void *)focused_pane);
