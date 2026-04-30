@@ -85,13 +85,27 @@
             return params;
         }
 
+        // Variant -> (cpu, cfg) resolution. Mirrors the picker in index.html
+        // and the YETTY_JSLINUX_VARIANT env wired in webasm-pty.c. Anything
+        // unrecognised falls back to legacy. Explicit cpu/url query params
+        // (e.g. for direct dev links) still win over the variant default.
+        var VARIANTS = {
+            "legacy":               { cpu: "x86_64",  url: "alpine-x86_64.cfg" },
+            "alpine-disk":          { cpu: "riscv64", url: "alpine-disk.cfg" },
+            "alpine-extended-disk": { cpu: "riscv64", url: "alpine-extended-disk.cfg" }
+        };
+
         function start_vm() {
             var params = get_params();
-            var cpu = params["cpu"] || "x86_64";
-            var url = params["url"] || "alpine-x86_64.cfg";
+            var variant = params["variant"] || "legacy";
+            var v = VARIANTS[variant] || VARIANTS["legacy"];
+            var cpu = params["cpu"] || v.cpu;
+            var url = params["url"] || v.url;
             var mem = parseInt(params["mem"]) || 256;
             var cols = parseInt(params["cols"]) || 80;
             var rows = parseInt(params["rows"]) || 25;
+
+            window._yettyVariant = variant;
 
             term = new Term({
                 cols: cols,
@@ -116,9 +130,19 @@
 
             var cfg_url = new URL(url, window.location.href).href;
 
-            Module.preRun = function() {
-                initVM(cfg_url, mem, cols, rows);
-            };
+            // preRun seeds emscripten's ENV before main(); use array form so
+            // any earlier-registered hook (e.g. test harness setting
+            // YDEBUG=1) is preserved.
+            Module.preRun = (Module.preRun || []).concat([
+                function() {
+                    if (params["ydebug"]) {
+                        ENV.YDEBUG = params["ydebug"];
+                    }
+                },
+                function() {
+                    initVM(cfg_url, mem, cols, rows);
+                }
+            ]);
 
             var script = document.createElement('script');
             script.src = vm_url;
@@ -160,7 +184,11 @@
                     console_resize_event();
                     if (resizeCount >= 10) {
                         clearInterval(resizeInterval);
-                        importLocalFiles();
+                        if (window._yettyVariant === "legacy") {
+                            importLocalFiles();
+                        } else {
+                            log("Block-disk variant: skipping local-files import (no 9p import target)");
+                        }
                     }
                 }, 200);
             } catch(e) {

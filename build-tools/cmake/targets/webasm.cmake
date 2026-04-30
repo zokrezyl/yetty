@@ -178,9 +178,16 @@ add_custom_command(TARGET yetty POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${YETTY_ROOT}/assets/apple-touch-icon.jpg ${CMAKE_BINARY_DIR}/apple-touch-icon.jpg
 )
 
-# Copy JSLinux files to build output
+# Copy JSLinux files to build output.
+# Done as PRE_LINK on yetty so the files are in place before the verify-assets
+# step runs (which is part of yetty's link command line). add_dependencies on
+# jslinux-assets ensures the splitimg chunking + riscvemu64-wasm build run
+# before this copy. For incremental dev where yetty itself doesn't relink,
+# touch CMakeFiles/yetty.dir/build.make or rerun a clean build.
 if(YETTY_ENABLE_FEATURE_JSLINUX)
-    add_custom_command(TARGET yetty POST_BUILD
+    add_dependencies(yetty jslinux-assets)
+
+    add_custom_command(TARGET yetty PRE_LINK
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/jslinux
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/jslinux-build/jslinux ${CMAKE_BINARY_DIR}/jslinux
         COMMENT "Copying JSLinux files..."

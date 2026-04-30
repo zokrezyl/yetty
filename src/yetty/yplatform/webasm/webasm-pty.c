@@ -179,6 +179,8 @@ static struct yetty_platform_pty_pipe_source *webasm_pty_pipe_source(
 
 struct yetty_ycore_void_result yetty_yplatform_webasm_pty_init(struct yetty_yplatform_webasm_pty *pty, struct yetty_yconfig_config *config)
 {
+    const char *variant;
+
     pty->cols = (uint32_t)config->ops->get_int(config, "terminal/cols", 80);
     pty->rows = (uint32_t)config->ops->get_int(config, "terminal/rows", 24);
     pty->running = 1;
@@ -186,7 +188,17 @@ struct yetty_ycore_void_result yetty_yplatform_webasm_pty_init(struct yetty_ypla
     pty->pipe_source.notify_callback = NULL;
     pty->pipe_source.notify_user_data = NULL;
 
-    ydebug("webasm_pty: Starting (%ux%u)", pty->cols, pty->rows);
+    /* JSLinux boot variant — selected by index.html and forwarded via ENV.
+     * vm-bridge.html resolves variant -> (cpu, cfg url):
+     *   legacy               -> x86_64, alpine-x86_64.cfg (9p root)
+     *   alpine-disk          -> riscv64, alpine-disk.cfg (block root + 9p data)
+     *   alpine-extended-disk -> riscv64, alpine-extended-disk.cfg (block root + 9p data) */
+    variant = getenv("YETTY_JSLINUX_VARIANT");
+    if (!variant || !*variant) {
+        variant = "legacy";
+    }
+
+    ydebug("webasm_pty: Starting (%ux%u, variant=%s)", pty->cols, pty->rows, variant);
 
     /* Set up JS buffer and message listener in parent window,
 	 * then create iframe for JSLinux VM */
@@ -195,6 +207,7 @@ struct yetty_ycore_void_result yetty_yplatform_webasm_pty_init(struct yetty_ypla
             var pipeSourcePointer = $0;
             var cols = $1;
             var rows = $2;
+            var variant = UTF8ToString($3);
 
             /* Buffer in parent window (like kernel buffer on Unix) */
             window.ptyBuffer = "";
@@ -241,10 +254,10 @@ struct yetty_ycore_void_result yetty_yplatform_webasm_pty_init(struct yetty_ypla
             iframe.id = 'jslinux-pty';
             iframe.style.cssText = 'display:none;';
             iframe.src = 'jslinux/vm-bridge.html?' + 'cols=' + cols + '&rows=' + rows +
-                         '&cpu=x86_64&mem=256';
+                         '&mem=256&variant=' + encodeURIComponent(variant);
             document.body.appendChild(iframe);
         },
-        &pty->pipe_source, pty->cols, pty->rows);
+        &pty->pipe_source, pty->cols, pty->rows, variant);
 
     return YETTY_OK_VOID();
 }

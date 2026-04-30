@@ -1301,6 +1301,17 @@ static int riscv_machine_get_sleep_duration(VirtMachine *s1, int delay) {
     }
   }
 
+#ifdef EMSCRIPTEN
+  /* Single-threaded wasm: jsemu's mainloop only executes CPU cycles when
+   * sleep_duration returns 0 (delay==0). With pthread CPU threads stubbed
+   * out under emscripten without -pthread, returning a positive delay
+   * here means the CPU never runs. Force delay=0 whenever any CPU is
+   * runnable so virt_machine_interp drives it from the JS tick. */
+  if (!all_idle) {
+    return 0;
+  }
+#endif
+
   /* Cap delay to ensure timers fire promptly:
    * - During boot (first 10s): 1ms for CPU bringup
    * - After boot with active CPUs: 1ms for responsiveness
@@ -1337,9 +1348,31 @@ static int riscv_machine_get_sleep_duration(VirtMachine *s1, int delay) {
 }
 
 static void riscv_machine_interp(VirtMachine *s1, int max_exec_cycle) {
-  /* In SMP mode, CPUs run in their own threads */
+#ifdef EMSCRIPTEN
+  /* Single-threaded wasm: pthread_create on emscripten without -pthread
+   * does not actually run the thread, so the SMP thread loop never
+   * executes any CPU instructions. Drive the CPU directly from the
+   * mainloop instead. Mirrors the inner core of riscv_cpu_thread_func
+   * minus the pthread sleep/wakeup machinery (single CPU, no idle race
+   * to coordinate). */
+  RISCVMachine *s = (RISCVMachine *)s1;
+  int i;
+  for (i = 0; i < s->num_cpus; i++) {
+    RISCVCPUState *cpu = s->cpu_state[i];
+    if (riscv_cpu_get_power_down(cpu)) {
+      if (riscv_cpu_has_pending_irq(cpu)) {
+        riscv_cpu_set_power_down(cpu, FALSE);
+      } else {
+        continue; /* still halted, skip */
+      }
+    }
+    riscv_cpu_interp(cpu, max_exec_cycle);
+  }
+#else
+  /* Native build: CPUs run in their own pthreads via riscv_cpu_thread_func. */
   (void)s1;
   (void)max_exec_cycle;
+#endif
 }
 
 static void riscv_vm_send_key_event(VirtMachine *s1, BOOL is_down,
