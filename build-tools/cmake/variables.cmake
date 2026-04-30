@@ -128,6 +128,7 @@ option(YETTY_ENABLE_TOOL_YDRAW_GENERATOR "ydraw-generator tool"              OFF
 option(YETTY_ENABLE_TOOL_YPAINT_BENCH    "ypaint-bench tool"                 ON)
 option(YETTY_ENABLE_TOOL_YCAT            "ycat tool"                         ON)
 option(YETTY_ENABLE_TOOL_YECHO           "yecho tool"                        ON)
+option(YETTY_ENABLE_TOOL_YPLOT           "yplot tool"                        ON)
 option(YETTY_ENABLE_TOOL_YDRAW_MAZE      "ydraw-maze tool"                   OFF)
 option(YETTY_ENABLE_TOOL_YDRAW_ZOO       "ydraw-zoo tool"                    OFF)
 option(YETTY_ENABLE_TOOL_YMUX            "ymux tool"                         OFF)

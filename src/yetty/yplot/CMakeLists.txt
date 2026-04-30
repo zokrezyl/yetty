@@ -1,4 +1,5 @@
 add_library(yetty_yplot STATIC
+    yplot.c
     yplot-gen.c
     yplot-gen-yaml.c
 )
@@ -13,6 +14,7 @@ target_link_libraries(yetty_yplot PUBLIC
     yetty_ypaint_core
     yetty_yrender
     yetty_yfsvm
+    yetty_yface
 )
 
 # Embed shaders via incbin

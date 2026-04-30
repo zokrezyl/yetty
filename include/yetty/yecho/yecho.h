@@ -16,6 +16,7 @@
  *   color=#RRGGBB    text color (hex; #RGB also accepted)
  *   bg=#RRGGBB       background color (hex)
  *   style=bold       style (bold | italic | underline; combinable with '|')
+ *   font-size=N      text size in pixels for this block (default = config)
  *
  * Plot-block attributes (in addition to the keyword `plot`):
  *   w=N              width in pixels (default 400)

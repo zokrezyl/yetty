@@ -723,14 +723,6 @@ static struct yetty_ycore_void_result create_bind_group(struct gpu_resource_bind
     if (!impl->bind_group) {
         return YETTY_ERR(yetty_ycore_void, "failed to create bind group");
     }
-
-    /* DIAG: log bind_group + buffer handles so we can verify per-instance
-     * binders carry independent GPU state. Remove once two-tier rendering
-     * is verified end-to-end. */
-    yinfo("BIND DIAG: binder=%p bind_group=%p uniform_buf=%p storage_buf=%p external_pipeline=%p",
-          (void *)impl, (void *)impl->bind_group, (void *)impl->uniform_buffer,
-          (void *)impl->storage_buffer, (const void *)impl->external_pipeline);
-
     return YETTY_OK_VOID();
 }
 
@@ -1216,8 +1208,6 @@ static struct yetty_ycore_void_result binder_bind(struct yetty_yrender_gpu_resou
         return YETTY_ERR(yetty_ycore_void, "bind group is null");
     }
 
-    yinfo("BIND DIAG: setBindGroup binder=%p bind_group=%p group_index=%u", (void *)impl,
-          (void *)impl->bind_group, group_index);
     wgpuRenderPassEncoderSetBindGroup(pass, group_index, impl->bind_group, 0, NULL);
     return YETTY_OK_VOID();
 }

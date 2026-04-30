@@ -1009,6 +1009,11 @@ render_block(struct render_state *rs, const struct yetty_yecho_span *span)
     uint32_t color = rs->default_fg;
     uint32_t bg = 0;
     int has_bg = 0;
+    /* Save outer font_size + line_height so a font-size= block doesn't
+     * leak into the next span. */
+    float saved_font_size = rs->font_size;
+    float saved_line_height = rs->line_height;
+    int font_size_overridden = 0;
     for (size_t i = 0; i < span->attr_count; i++) {
         const char *k = span->attrs[i].key;
         const char *v = span->attrs[i].value;
@@ -1022,6 +1027,15 @@ render_block(struct render_state *rs, const struct yetty_yecho_span *span)
             if (parse_hex_color(v, &c)) {
                 bg = c;
                 has_bg = 1;
+            }
+        } else if ((strcmp(k, "font-size") == 0 || strcmp(k, "font_size") == 0) && v) {
+            float sz = strtof(v, NULL);
+            if (sz > 0.0f) {
+                rs->font_size = sz;
+                /* Keep the same line-spacing ratio as the outer text. */
+                float ratio = saved_line_height / saved_font_size;
+                rs->line_height = sz * (ratio > 0.0f ? ratio : YECHO_DEFAULT_LINE_SPACING);
+                font_size_overridden = 1;
             }
         }
         /* style= recorded in the doc but not applied here (no font-style
@@ -1064,8 +1078,13 @@ render_block(struct render_state *rs, const struct yetty_yecho_span *span)
         }
     }
 
-    return render_text_run(rs, span->text ? span->text : "", span->text ? strlen(span->text) : 0,
-                           color);
+    struct yetty_ycore_void_result tr = render_text_run(
+        rs, span->text ? span->text : "", span->text ? strlen(span->text) : 0, color);
+    if (font_size_overridden) {
+        rs->font_size = saved_font_size;
+        rs->line_height = saved_line_height;
+    }
+    return tr;
 }
 
 struct yetty_ypaint_core_buffer_result
