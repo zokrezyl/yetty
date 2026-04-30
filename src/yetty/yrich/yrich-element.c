@@ -46,13 +46,14 @@ bool yetty_yrich_element_hit_test(const struct yetty_yrich_element *e, float x, 
     return yetty_yrich_element_default_hit_test(e, x, y);
 }
 
-void yetty_yrich_element_render(struct yetty_yrich_element *e, struct yetty_ypaint_core_buffer *buf,
-                                uint32_t layer, bool selected)
+struct yetty_ycore_void_result yetty_yrich_element_render(struct yetty_yrich_element *e,
+                                                          struct yetty_ypaint_core_buffer *buf,
+                                                          uint32_t layer, bool selected)
 {
     if (!e || !e->ops || !e->ops->render) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yetty_yrich_element_render: NULL or no render");
     }
-    e->ops->render(e, buf, layer, selected);
+    return e->ops->render(e, buf, layer, selected);
 }
 
 bool yetty_yrich_element_is_editable(const struct yetty_yrich_element *e)

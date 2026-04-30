@@ -40,7 +40,7 @@ struct win_conpty {
 };
 
 /* Forward declarations */
-static void win_conpty_destroy(struct yetty_yplatform_pty *self);
+static struct yetty_ycore_void_result win_conpty_destroy(struct yetty_yplatform_pty *self);
 static struct yetty_ycore_size_result win_conpty_read(struct yetty_yplatform_pty *self, char *buf,
                                                       size_t max_len);
 static struct yetty_ycore_size_result win_conpty_write(struct yetty_yplatform_pty *self,
@@ -81,12 +81,17 @@ static const struct yetty_yplatform_pty_factory_ops win_pty_factory_ops = {
 
 /* PTY implementation */
 
-static void win_conpty_destroy(struct yetty_yplatform_pty *self)
+static struct yetty_ycore_void_result win_conpty_destroy(struct yetty_yplatform_pty *self)
 {
     struct win_conpty *pty = container_of(self, struct win_conpty, base);
 
-    win_conpty_stop(self);
+    struct yetty_ycore_void_result stop_r = win_conpty_stop(self);
     free(pty);
+
+    if (YETTY_IS_ERR(stop_r)) {
+        return YETTY_ERR(yetty_ycore_void, "win_conpty_destroy: stop failed", stop_r);
+    }
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_size_result win_conpty_read(struct yetty_yplatform_pty *self, char *buf,

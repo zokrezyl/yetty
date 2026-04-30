@@ -67,7 +67,9 @@ int main(void) {
     }
 
     /* Create engine with pixel hint - this enables SCALE_ON mode */
-    g_engine = ygui_engine_create_with_pixel_hint("btn-test", 1, 1, 500.0f, 300.0f);
+    { struct ygui_engine_ptr_result _eng_r = ygui_engine_create_with_pixel_hint("btn-test", 1, 1, 500.0f, 300.0f);
+        if (YETTY_IS_ERR(_eng_r)) { yetty_ycore_error_destroy(_eng_r.error); return 1; }
+        g_engine = _eng_r.value; }
     if (!g_engine) {
         fprintf(stderr, "[DEMO] Failed to create engine\n");
         ygui_shutdown();

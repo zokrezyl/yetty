@@ -23,7 +23,7 @@ YETTY_YRESULT_DECLARE(yetty_yui_workspace_ptr, struct yetty_yui_workspace *);
 /* Create/destroy */
 struct yetty_yui_workspace_ptr_result yetty_yui_workspace_create(void);
 
-void yetty_yui_workspace_destroy(struct yetty_yui_workspace *ws);
+struct yetty_ycore_void_result yetty_yui_workspace_destroy(struct yetty_yui_workspace *ws);
 
 /* Core operations */
 struct yetty_ycore_void_result yetty_yui_workspace_render(

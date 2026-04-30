@@ -235,7 +235,8 @@ static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ypaint_cor
     return YETTY_OK_VOID();
 }
 
-void yetty_yplot_register_yaml_factory(struct yetty_ypaint_yaml_parser *parser)
+struct yetty_ycore_void_result yetty_yplot_register_yaml_factory(
+    struct yetty_ypaint_yaml_parser *parser)
 {
-    yetty_ypaint_yaml_parser_register(parser, "yplot", yplot_yaml_factory);
+    return yetty_ypaint_yaml_parser_register(parser, "yplot", yplot_yaml_factory);
 }

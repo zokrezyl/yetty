@@ -34,7 +34,7 @@ struct yetty_yui_tile {
 };
 
 struct yetty_yui_tile_ops {
-    void (*destroy)(struct yetty_yui_tile *self);
+    struct yetty_ycore_void_result (*destroy)(struct yetty_yui_tile *self);
     struct yetty_ycore_void_result (*render)(struct yetty_yui_tile *self,
                                              struct yetty_yrender_target *render_target);
     struct yetty_ycore_void_result (*set_bounds)(struct yetty_yui_tile *self,
@@ -63,18 +63,34 @@ struct yetty_yui_pane {
  * Split implementation
  *===========================================================================*/
 
-static void split_destroy(struct yetty_yui_tile *self)
+static struct yetty_ycore_void_result split_destroy(struct yetty_yui_tile *self)
 {
     struct yetty_yui_split *split = (struct yetty_yui_split *)self;
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
     if (split->first) {
-        yetty_yui_tile_destroy(split->first);
+        struct yetty_ycore_void_result r = yetty_yui_tile_destroy(split->first);
+        if (YETTY_IS_ERR(r)) {
+            first_err = r;
+        }
     }
     if (split->second) {
-        yetty_yui_tile_destroy(split->second);
+        struct yetty_ycore_void_result r = yetty_yui_tile_destroy(split->second);
+        if (YETTY_IS_ERR(r)) {
+            if (YETTY_IS_OK(first_err)) {
+                first_err = r;
+            } else {
+                yetty_ycore_error_destroy(r.error);
+            }
+        }
     }
 
     free(split);
+
+    if (YETTY_IS_ERR(first_err)) {
+        return YETTY_ERR(yetty_ycore_void, "split_destroy: child failed", first_err);
+    }
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result split_render(struct yetty_yui_tile *self,
@@ -210,18 +226,31 @@ struct yetty_yui_tile_ptr_result yetty_yui_split_create(enum yetty_yui_orientati
  * Pane implementation
  *===========================================================================*/
 
-static void pane_destroy(struct yetty_yui_tile *self)
+static struct yetty_ycore_void_result pane_destroy(struct yetty_yui_tile *self)
 {
     struct yetty_yui_pane *pane = (struct yetty_yui_pane *)self;
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
     for (size_t i = 0; i < pane->view_count; i++) {
         if (pane->views[i]) {
-            yetty_yui_view_destroy(pane->views[i]);
+            struct yetty_ycore_void_result r = yetty_yui_view_destroy(pane->views[i]);
+            if (YETTY_IS_ERR(r)) {
+                if (YETTY_IS_OK(first_err)) {
+                    first_err = r;
+                } else {
+                    yetty_ycore_error_destroy(r.error);
+                }
+            }
         }
     }
 
     free(pane->views);
     free(pane);
+
+    if (YETTY_IS_ERR(first_err)) {
+        return YETTY_ERR(yetty_ycore_void, "pane_destroy: view destroy failed", first_err);
+    }
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result pane_render(struct yetty_yui_tile *self,
@@ -295,14 +324,15 @@ struct yetty_yui_tile_ptr_result yetty_yui_pane_create(void)
  * Tile public API
  *===========================================================================*/
 
-void yetty_yui_tile_destroy(struct yetty_yui_tile *tile)
+struct yetty_ycore_void_result yetty_yui_tile_destroy(struct yetty_yui_tile *tile)
 {
     if (!tile) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yetty_yui_tile_destroy: NULL tile");
     }
-    if (tile->ops && tile->ops->destroy) {
-        tile->ops->destroy(tile);
+    if (!tile->ops || !tile->ops->destroy) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_yui_tile_destroy: destroy not implemented");
     }
+    return tile->ops->destroy(tile);
 }
 
 struct yetty_ycore_void_result yetty_yui_tile_render(struct yetty_yui_tile *tile,

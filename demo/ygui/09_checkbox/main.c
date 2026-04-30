@@ -52,7 +52,9 @@ int main(void) {
     (void)freopen("/dev/null", "w", stderr);
 
     if (ygui_init() != 0) return 1;
-    g_engine = ygui_engine_create_with_pixel_hint("settings", 2, 2, 350.0f, 300.0f);
+    { struct ygui_engine_ptr_result _eng_r = ygui_engine_create_with_pixel_hint("settings", 2, 2, 350.0f, 300.0f);
+        if (YETTY_IS_ERR(_eng_r)) { yetty_ycore_error_destroy(_eng_r.error); return 1; }
+        g_engine = _eng_r.value; }
     if (!g_engine) { ygui_shutdown(); return 1; }
 
     ygui_label(g_engine, "title", 30, 20, "Notification Settings");

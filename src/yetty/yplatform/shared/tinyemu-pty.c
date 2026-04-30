@@ -58,7 +58,7 @@ extern const char *yetty_yplatform_get_data_dir(void);
 extern const char *yetty_yplatform_get_config_dir(void);
 
 /* Forward declarations */
-static void tinyemu_pty_destroy(struct yetty_yplatform_pty *self);
+static struct yetty_ycore_void_result tinyemu_pty_destroy(struct yetty_yplatform_pty *self);
 static struct yetty_ycore_size_result tinyemu_pty_read(struct yetty_yplatform_pty *self, char *buf,
                                                        size_t max_len);
 static struct yetty_ycore_size_result tinyemu_pty_write(struct yetty_yplatform_pty *self,
@@ -450,10 +450,10 @@ static int init_vm(struct tinyemu_pty *pty)
 
 /* PTY implementation */
 
-static void tinyemu_pty_destroy(struct yetty_yplatform_pty *self)
+static struct yetty_ycore_void_result tinyemu_pty_destroy(struct yetty_yplatform_pty *self)
 {
     struct tinyemu_pty *pty = container_of(self, struct tinyemu_pty, base);
-    tinyemu_pty_stop(self);
+    struct yetty_ycore_void_result stop_r = tinyemu_pty_stop(self);
 
     if (pty->os_input_pipe[0] >= 0) {
         close(pty->os_input_pipe[0]);
@@ -469,11 +469,15 @@ static void tinyemu_pty_destroy(struct yetty_yplatform_pty *self)
     }
 
     free(pty->config_path);
-    free(pty);
-
     if (g_pty == pty) {
         g_pty = NULL;
     }
+    free(pty);
+
+    if (YETTY_IS_ERR(stop_r)) {
+        return YETTY_ERR(yetty_ycore_void, "tinyemu_pty_destroy: stop failed", stop_r);
+    }
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_size_result tinyemu_pty_read(struct yetty_yplatform_pty *self, char *buf,

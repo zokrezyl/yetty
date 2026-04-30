@@ -201,7 +201,7 @@ struct yetty_yterm_terminal_text_layer {
 };
 
 /* Forward declarations */
-static void text_layer_destroy(struct yetty_yterm_terminal_layer *self);
+static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yterm_terminal_layer *self);
 static struct yetty_ycore_void_result text_layer_write(struct yetty_yterm_terminal_layer *self,
                                                        int osc_code, const char *data, size_t len);
 static struct yetty_ycore_void_result text_layer_resize_grid(
@@ -214,8 +214,7 @@ static int text_layer_on_char(struct yetty_yterm_terminal_layer *self, uint32_t 
 static struct yetty_ycore_void_result text_layer_render(struct yetty_yterm_terminal_layer *self,
                                                         struct yetty_yrender_target *target);
 static uint32_t text_layer_get_live_anchor(const struct yetty_yterm_terminal_layer *self);
-static void text_layer_set_view_top(struct yetty_yterm_terminal_layer *self, int active,
-                                    uint32_t view_top_total_idx);
+static struct yetty_ycore_void_result text_layer_set_view_top(struct yetty_yterm_terminal_layer *self, int active, uint32_t view_top_total_idx);
 static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer);
 
 /* VTerm callbacks */
@@ -529,7 +528,7 @@ static struct yetty_ycore_void_result text_layer_scroll(struct yetty_yterm_termi
 }
 
 /* Receive cursor position from other layers (e.g., ypaint) */
-static void text_layer_set_cursor(struct yetty_yterm_terminal_layer *self, int col, int row)
+static struct yetty_ycore_void_result text_layer_set_cursor(struct yetty_yterm_terminal_layer *self, int col, int row)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
@@ -538,7 +537,7 @@ static void text_layer_set_cursor(struct yetty_yterm_terminal_layer *self, int c
            (void *)text_layer->screen);
 
     if (!text_layer->screen) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "text_layer_set_cursor: NULL screen");
     }
 
     VTermPos pos = {.row = row, .col = col};
@@ -546,6 +545,7 @@ static void text_layer_set_cursor(struct yetty_yterm_terminal_layer *self, int c
     text_layer->base.dirty = 1;
 
     ydebug("text_layer_set_cursor EXIT: col=%d row=%d set", col, row);
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result text_layer_set_cell_size(
@@ -846,7 +846,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
 
 /* Ops implementations */
 
-static void text_layer_destroy(struct yetty_yterm_terminal_layer *self)
+static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yterm_terminal_layer *self)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
@@ -860,6 +860,7 @@ static void text_layer_destroy(struct yetty_yterm_terminal_layer *self)
 
     free(text_layer->shader_code.data);
     free(text_layer);
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result text_layer_write(struct yetty_yterm_terminal_layer *self,
@@ -1259,8 +1260,7 @@ static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer)
  * live screen (active=0). When activating, hide the cursor and snap the GPU
  * buffer to the synthetic stitched view; on release, restore the cursor to
  * whatever vterm last reported and re-point the buffer at the live screen. */
-static void text_layer_set_view_top(struct yetty_yterm_terminal_layer *self, int active,
-                                    uint32_t view_top_total_idx)
+static struct yetty_ycore_void_result text_layer_set_view_top(struct yetty_yterm_terminal_layer *self, int active, uint32_t view_top_total_idx)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
@@ -1278,6 +1278,7 @@ static void text_layer_set_view_top(struct yetty_yterm_terminal_layer *self, int
     if (text_layer->base.request_render_fn) {
         text_layer->base.request_render_fn(text_layer->base.request_render_userdata);
     }
+    return YETTY_OK_VOID();
 }
 
 /* vterm asks for a previously-pushed line back, e.g. when the screen grows

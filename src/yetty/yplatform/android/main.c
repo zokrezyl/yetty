@@ -170,6 +170,7 @@ static void mkdir_p(const char *path)
     mkdir(tmp, 0755);
 }
 
+YETTY_EXTERNAL_CALLBACK
 static void *render_thread_func(void *arg)
 {
     struct render_thread_args *args = arg;
@@ -179,6 +180,7 @@ static void *render_thread_func(void *arg)
     return NULL;
 }
 
+YETTY_EXTERNAL_CALLBACK
 static void init_yetty(struct app_state *state)
 {
     const char *cache_dir;
@@ -337,10 +339,12 @@ static void init_yetty(struct app_state *state)
     LOGI("Yetty initialized successfully");
 }
 
-static void term_yetty(struct app_state *state)
+static struct yetty_ycore_void_result term_yetty(struct app_state *state)
 {
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
+
     if (!state->initialized) {
-        return;
+        return YETTY_OK_VOID();
     }
 
     LOGI("Terminating yetty...");
@@ -352,7 +356,10 @@ static void term_yetty(struct app_state *state)
     }
 
     if (state->yetty) {
-        yetty_destroy(state->yetty);
+        struct yetty_ycore_void_result r = yetty_destroy(state->yetty);
+        if (YETTY_IS_ERR(r)) {
+            first_err = r;
+        }
         state->yetty = NULL;
     }
     if (state->surface) {
@@ -377,6 +384,11 @@ static void term_yetty(struct app_state *state)
     }
 
     state->initialized = 0;
+
+    if (YETTY_IS_ERR(first_err)) {
+        return YETTY_ERR(yetty_ycore_void, "term_yetty: yetty destroy failed", first_err);
+    }
+    return YETTY_OK_VOID();
 }
 
 /* Android AKEYCODE_* -> GLFW key code (the codes yetty's event handlers
@@ -660,6 +672,7 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event)
     return 0;
 }
 
+YETTY_EXTERNAL_CALLBACK
 static void handle_cmd(struct android_app *app, int32_t cmd)
 {
     struct app_state *state = app->userData;
@@ -748,6 +761,7 @@ static void redirect_stdio_to_logcat(void)
     pthread_detach(tid);
 }
 
+YETTY_EXTERNAL_CALLBACK
 void android_main(struct android_app *app)
 {
     struct app_state state = {0};

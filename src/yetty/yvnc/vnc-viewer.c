@@ -27,10 +27,11 @@ struct yetty_vnc_viewer {
  * Forward declarations for view ops
  *===========================================================================*/
 
-static void vnc_viewer_view_destroy(struct yetty_yui_view *view);
+static struct yetty_ycore_void_result vnc_viewer_view_destroy(struct yetty_yui_view *view);
 static struct yetty_ycore_void_result vnc_viewer_view_render(
     struct yetty_yui_view *view, struct yetty_yrender_target *render_target);
-static void vnc_viewer_view_set_bounds(struct yetty_yui_view *view, struct yetty_yui_rect bounds);
+static struct yetty_ycore_void_result vnc_viewer_view_set_bounds(struct yetty_yui_view *view,
+                                                                 struct yetty_yui_rect bounds);
 static struct yetty_ycore_int_result vnc_viewer_view_on_event(
     struct yetty_yui_view *view, const struct yetty_ycore_event *event);
 
@@ -70,17 +71,33 @@ static void on_disconnected_callback(void *userdata)
  * View ops implementation
  *===========================================================================*/
 
-static void vnc_viewer_view_destroy(struct yetty_yui_view *view)
+static struct yetty_ycore_void_result vnc_viewer_view_destroy(struct yetty_yui_view *view)
 {
     struct yetty_vnc_viewer *viewer = (struct yetty_vnc_viewer *)view;
+    struct yetty_ycore_void_result inner_err = YETTY_OK_VOID();
 
     if (viewer->client) {
-        yetty_vnc_client_disconnect(viewer->client);
-        yetty_vnc_client_destroy(viewer->client);
+        struct yetty_ycore_void_result disc_r = yetty_vnc_client_disconnect(viewer->client);
+        if (YETTY_IS_ERR(disc_r)) {
+            inner_err = disc_r;
+        }
+        struct yetty_ycore_void_result dest_r = yetty_vnc_client_destroy(viewer->client);
+        if (YETTY_IS_ERR(dest_r)) {
+            if (YETTY_IS_OK(inner_err)) {
+                inner_err = dest_r;
+            } else {
+                yetty_ycore_error_destroy(dest_r.error);
+            }
+        }
     }
 
     free(viewer->host);
     free(viewer);
+
+    if (YETTY_IS_ERR(inner_err)) {
+        return YETTY_ERR(yetty_ycore_void, "vnc_viewer_view_destroy failed", inner_err);
+    }
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result vnc_viewer_view_render(
@@ -177,17 +194,24 @@ static struct yetty_ycore_void_result vnc_viewer_view_render(
     return YETTY_OK_VOID();
 }
 
-static void vnc_viewer_view_set_bounds(struct yetty_yui_view *view, struct yetty_yui_rect bounds)
+static struct yetty_ycore_void_result vnc_viewer_view_set_bounds(struct yetty_yui_view *view,
+                                                                 struct yetty_yui_rect bounds)
 {
     struct yetty_vnc_viewer *viewer = (struct yetty_vnc_viewer *)view;
     viewer->view.bounds = bounds;
 
     /* Resize VNC if connected */
     if (viewer->client && yetty_vnc_client_is_connected(viewer->client)) {
-        yetty_vnc_client_send_resize(viewer->client, (uint16_t)bounds.w, (uint16_t)bounds.h);
+        struct yetty_ycore_void_result rr = yetty_vnc_client_send_resize(
+            viewer->client, (uint16_t)bounds.w, (uint16_t)bounds.h);
+        if (YETTY_IS_ERR(rr)) {
+            return YETTY_ERR(yetty_ycore_void, "vnc_viewer_view_set_bounds: send_resize failed",
+                             rr);
+        }
     }
 
     ydebug("vnc_viewer: set_bounds %.0fx%.0f", bounds.w, bounds.h);
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_int_result vnc_viewer_view_on_event(struct yetty_yui_view *view,
@@ -331,12 +355,12 @@ struct yetty_vnc_viewer_ptr_result yetty_vnc_viewer_create(const char *host, uin
     return YETTY_OK(yetty_vnc_viewer_ptr, viewer);
 }
 
-void yetty_vnc_viewer_destroy(struct yetty_vnc_viewer *viewer)
+struct yetty_ycore_void_result yetty_vnc_viewer_destroy(struct yetty_vnc_viewer *viewer)
 {
     if (!viewer) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yetty_vnc_viewer_destroy: NULL viewer");
     }
-    vnc_viewer_view_destroy(&viewer->view);
+    return vnc_viewer_view_destroy(&viewer->view);
 }
 
 struct yetty_yui_view *yetty_vnc_viewer_as_view(struct yetty_vnc_viewer *viewer)

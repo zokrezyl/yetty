@@ -10,7 +10,7 @@
 #include <string.h>
 
 /* Forward declarations */
-static void webasm_pty_destroy(struct yetty_yplatform_pty *self);
+static struct yetty_ycore_void_result webasm_pty_destroy(struct yetty_yplatform_pty *self);
 static struct yetty_ycore_size_result webasm_pty_read(struct yetty_yplatform_pty *self, char *buf,
                                                       size_t max_len);
 static struct yetty_ycore_size_result webasm_pty_write(struct yetty_yplatform_pty *self,
@@ -52,12 +52,17 @@ void webasm_pty_pipe_source_notify(struct webasm_pty_pipe_source *source)
 
 /* PTY implementation */
 
-static void webasm_pty_destroy(struct yetty_yplatform_pty *self)
+static struct yetty_ycore_void_result webasm_pty_destroy(struct yetty_yplatform_pty *self)
 {
     struct webasm_pty *pty = container_of(self, struct webasm_pty, base);
 
-    webasm_pty_stop(self);
+    struct yetty_ycore_void_result stop_r = webasm_pty_stop(self);
     free(pty);
+
+    if (YETTY_IS_ERR(stop_r)) {
+        return YETTY_ERR(yetty_ycore_void, "webasm_pty_destroy: stop failed", stop_r);
+    }
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_size_result webasm_pty_read(struct yetty_yplatform_pty *self, char *buf,

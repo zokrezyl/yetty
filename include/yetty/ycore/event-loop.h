@@ -74,7 +74,7 @@ struct yetty_ycore_event_listener {
 
 /* Event loop ops */
 struct yetty_ycore_event_loop_ops {
-    void (*destroy)(struct yetty_ycore_event_loop *self);
+    struct yetty_ycore_void_result (*destroy)(struct yetty_ycore_event_loop *self);
 
     struct yetty_ycore_void_result (*start)(struct yetty_ycore_event_loop *self);
     struct yetty_ycore_void_result (*stop)(struct yetty_ycore_event_loop *self);

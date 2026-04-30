@@ -564,18 +564,18 @@ static struct yetty_font_font_result ypaint_canvas_materialize_blob_font(
 // Canvas implementation
 //=============================================================================
 
-struct yetty_ypaint_canvas *yetty_ypaint_canvas_create(bool scrolling_mode,
-                                                       const struct yetty_context *context)
+struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
+    bool scrolling_mode, const struct yetty_context *context)
 {
     struct yetty_ypaint_canvas *canvas;
 
     if (!context) {
-        return NULL;
+        return YETTY_ERR(yetty_ypaint_canvas_ptr, "context is NULL");
     }
 
     canvas = calloc(1, sizeof(struct yetty_ypaint_canvas));
     if (!canvas) {
-        return NULL;
+        return YETTY_ERR(yetty_ypaint_canvas_ptr, "canvas alloc failed");
     }
 
     canvas->scrolling_mode = scrolling_mode;
@@ -590,7 +590,8 @@ struct yetty_ypaint_canvas *yetty_ypaint_canvas_create(bool scrolling_mode,
         yerror("ypaint_canvas: flyweight creation failed: %s", fw_res.error.msg);
         free(canvas->lines.lines);
         free(canvas);
-        return NULL;
+        return YETTY_ERR(yetty_ypaint_canvas_ptr, "ypaint_canvas: flyweight creation failed",
+                         fw_res);
     }
     canvas->flyweight_registry = fw_res.value;
 
@@ -604,7 +605,8 @@ struct yetty_ypaint_canvas *yetty_ypaint_canvas_create(bool scrolling_mode,
         yetty_ypaint_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
-        return NULL;
+        return YETTY_ERR(yetty_ypaint_canvas_ptr, "ypaint_canvas: factory creation failed",
+                         factory_res);
     }
     canvas->complex_prim_factory = factory_res.value;
 
@@ -616,7 +618,7 @@ struct yetty_ypaint_canvas *yetty_ypaint_canvas_create(bool scrolling_mode,
         yetty_ypaint_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
-        return NULL;
+        return YETTY_ERR(yetty_ypaint_canvas_ptr, "yplot factory creation failed");
     }
     struct yetty_ycore_void_result yplot_reg_res =
         yetty_ypaint_complex_prim_factory_register(canvas->complex_prim_factory, yplot_factory);
@@ -627,7 +629,8 @@ struct yetty_ypaint_canvas *yetty_ypaint_canvas_create(bool scrolling_mode,
         yetty_ypaint_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
-        return NULL;
+        return YETTY_ERR(yetty_ypaint_canvas_ptr, "ypaint_canvas: yplot registration failed",
+                         yplot_reg_res);
     }
 
     /* Create default font for text spans (font_id = -1).
@@ -660,10 +663,11 @@ struct yetty_ypaint_canvas *yetty_ypaint_canvas_create(bool scrolling_mode,
         /* lines buffer is empty here, no registry needed for cleanup */
         free(canvas->lines.lines);
         free(canvas);
-        return NULL;
+        return YETTY_ERR(yetty_ypaint_canvas_ptr, "ypaint_canvas: default font creation failed",
+                         font_res);
     }
 
-    return canvas;
+    return YETTY_OK(yetty_ypaint_canvas_ptr, canvas);
 }
 
 struct yetty_ycore_void_result yetty_ypaint_canvas_destroy(struct yetty_ypaint_canvas *canvas)
@@ -1000,9 +1004,9 @@ static struct yetty_font_font *font_map_get(const struct font_map *m, uint32_t i
 /* Expand a TEXT_SPAN view into per-glyph SDF primitives at the canvas's
  * current cursor. Returns the highest grid row touched (0 if no glyphs
  * placed). */
-static uint32_t expand_text_span_to_glyphs(struct yetty_ypaint_canvas *canvas,
-                                           const struct yetty_ypaint_text_span_prim_view *ts,
-                                           struct yetty_font_font *font)
+static struct uint32_result expand_text_span_to_glyphs(
+    struct yetty_ypaint_canvas *canvas, const struct yetty_ypaint_text_span_prim_view *ts,
+    struct yetty_font_font *font)
 {
     static uint32_t glyph_z_order = 0;
     float base_size = font->ops->get_base_size(font);
@@ -1150,7 +1154,7 @@ static uint32_t expand_text_span_to_glyphs(struct yetty_ypaint_canvas *canvas,
         cursor_x += advance * scale;
     }
 
-    return glyph_max_row;
+    return YETTY_OK(uint32, glyph_max_row);
 }
 
 /* Attach `font` to the grid line at `glyph_max_row`. If the same font
@@ -1293,11 +1297,17 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
                     font = canvas->default_font;
                 }
                 if (font) {
-                    uint32_t glyph_max_row = expand_text_span_to_glyphs(canvas, &tv, font);
-                    if (glyph_max_row > max_row_seen) {
-                        max_row_seen = glyph_max_row;
+                    struct uint32_result gmr_res =
+                        expand_text_span_to_glyphs(canvas, &tv, font);
+                    if (YETTY_IS_OK(gmr_res)) {
+                        uint32_t glyph_max_row = gmr_res.value;
+                        if (glyph_max_row > max_row_seen) {
+                            max_row_seen = glyph_max_row;
+                        }
+                        attach_font_to_line(canvas, font, tv.font_id, glyph_max_row, &fonts_map);
+                    } else {
+                        yetty_ycore_error_destroy(gmr_res.error);
                     }
-                    attach_font_to_line(canvas, font, tv.font_id, glyph_max_row, &fonts_map);
                 }
             }
         } else {
@@ -1681,14 +1691,12 @@ static struct yetty_ycore_void_result ensure_prim_staging(struct yetty_ypaint_ca
     return YETTY_OK_VOID();
 }
 
-const uint32_t *yetty_ypaint_canvas_build_prim_staging(struct yetty_ypaint_canvas *canvas,
-                                                       uint32_t *word_count)
+struct yetty_ypaint_prim_staging_result yetty_ypaint_canvas_build_prim_staging(
+    struct yetty_ypaint_canvas *canvas)
 {
     if (!canvas) {
-        if (word_count) {
-            *word_count = 0;
-        }
-        return NULL;
+        return YETTY_ERR(yetty_ypaint_prim_staging,
+                         "yetty_ypaint_canvas_build_prim_staging: NULL canvas");
     }
 
     // Count primitives and total words (+1 per prim for rolling_row)
@@ -1704,16 +1712,16 @@ const uint32_t *yetty_ypaint_canvas_build_prim_staging(struct yetty_ypaint_canva
 
     if (prim_count == 0) {
         canvas->prim_staging_count = 0;
-        if (word_count) {
-            *word_count = 0;
-        }
-        return NULL;
+        struct yetty_ypaint_prim_staging empty = {.data = NULL, .word_count = 0};
+        return YETTY_OK(yetty_ypaint_prim_staging, empty);
     }
 
     // Layout: [prim0_offset, prim1_offset, ...][rolling_row0,
     // prim0_data...][rolling_row1, prim1_data...]
     uint32_t total_size = prim_count + total_words;
-    ensure_prim_staging(canvas, total_size);
+    struct yetty_ycore_void_result eps = ensure_prim_staging(canvas, total_size);
+    YETTY_RETURN_IF_ERR(yetty_ypaint_prim_staging, eps,
+                        "yetty_ypaint_canvas_build_prim_staging: ensure_prim_staging failed");
 
     uint32_t data_offset = 0;
     uint32_t prim_idx = 0;
@@ -1740,10 +1748,9 @@ const uint32_t *yetty_ypaint_canvas_build_prim_staging(struct yetty_ypaint_canva
     }
 
     canvas->prim_staging_count = total_size;
-    if (word_count) {
-        *word_count = total_size;
-    }
-    return canvas->prim_staging;
+    struct yetty_ypaint_prim_staging out = {.data = canvas->prim_staging,
+                                            .word_count = total_size};
+    return YETTY_OK(yetty_ypaint_prim_staging, out);
 }
 
 uint32_t yetty_ypaint_canvas_prim_gpu_size(struct yetty_ypaint_canvas *canvas)

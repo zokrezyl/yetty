@@ -14,7 +14,7 @@ struct yetty_yplatform_pty;
 
 /* Pty ops */
 struct yetty_yplatform_pty_ops {
-    void (*destroy)(struct yetty_yplatform_pty *self);
+    struct yetty_ycore_void_result (*destroy)(struct yetty_yplatform_pty *self);
     struct yetty_ycore_size_result (*read)(struct yetty_yplatform_pty *self, char *buf,
                                            size_t max_len);
     struct yetty_ycore_size_result (*write)(struct yetty_yplatform_pty *self, const char *data,

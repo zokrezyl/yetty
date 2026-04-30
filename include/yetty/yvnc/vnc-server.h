@@ -52,7 +52,7 @@ struct yetty_vnc_server_ptr_result yetty_vnc_server_create(
     struct yetty_ycore_event_loop *event_loop, struct yplatform_wgpu *wgpu);
 
 /* Destroy server (handles NULL) */
-void yetty_vnc_server_destroy(struct yetty_vnc_server *server);
+struct yetty_ycore_void_result yetty_vnc_server_destroy(struct yetty_vnc_server *server);
 
 /* Start listening on port */
 struct yetty_ycore_void_result yetty_vnc_server_start(struct yetty_vnc_server *server,

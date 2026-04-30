@@ -64,7 +64,7 @@ struct yetty_rpc_server_ptr_result yetty_rpc_server_create(
  * Destroy RPC server.
  * Stops server if running, closes all connections.
  */
-void yetty_rpc_server_destroy(struct yetty_rpc_server *server);
+struct yetty_ycore_void_result yetty_rpc_server_destroy(struct yetty_rpc_server *server);
 
 /*
  * Start RPC server on TCP socket.

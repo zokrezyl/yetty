@@ -252,8 +252,10 @@ static uint32_t *compute_color_map(const TSLanguage *lang, const char *query_str
  * Emit per-line, per-color runs as text spans
  *===========================================================================*/
 
-static int emit_runs(struct yetty_ypaint_core_buffer *buf, const char *source, uint32_t source_len,
-                     const uint32_t *color_map, float font_size, float line_spacing)
+static struct yetty_ycore_void_result emit_runs(struct yetty_ypaint_core_buffer *buf,
+                                                const char *source, uint32_t source_len,
+                                                const uint32_t *color_map, float font_size,
+                                                float line_spacing)
 {
     float cursor_x = 2.0f;
     float cursor_y = 2.0f;
@@ -289,7 +291,7 @@ static int emit_runs(struct yetty_ypaint_core_buffer *buf, const char *source, u
                 struct yetty_ycore_void_result r = yetty_ypaint_core_buffer_add_text(
                     buf, x, cursor_y, &text, font_size, col, 0, -1, 0.0f);
                 if (YETTY_IS_ERR(r)) {
-                    return -1;
+                    return r;
                 }
 
                 x += advance_x * (float)run_len;
@@ -300,7 +302,7 @@ static int emit_runs(struct yetty_ypaint_core_buffer *buf, const char *source, u
             line_start = i + 1;
         }
     }
-    return 0;
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================
@@ -396,12 +398,13 @@ struct yetty_ypaint_core_buffer_result yetty_ycat_ts_render(const uint8_t *bytes
         return br;
     }
 
-    int rc = emit_runs(br.value, (const char *)bytes, (uint32_t)len, color_map, font_size, 1.2f);
+    struct yetty_ycore_void_result er =
+        emit_runs(br.value, (const char *)bytes, (uint32_t)len, color_map, font_size, 1.2f);
     ts_parse_done(parser, tree, color_map);
 
-    if (rc < 0) {
+    if (YETTY_IS_ERR(er)) {
         yetty_ypaint_core_buffer_destroy(br.value);
-        return YETTY_ERR(yetty_ypaint_core_buffer, "failed to emit text spans");
+        return YETTY_ERR(yetty_ypaint_core_buffer, "ts-highlight: emit_runs failed", er);
     }
     return br;
 }

@@ -62,6 +62,7 @@ static struct yetty_rpc_handler_entry *find_handler(struct yetty_rpc_server *ser
     return NULL;
 }
 
+YETTY_EXTERNAL_CALLBACK
 static void handle_message(struct rpc_conn_ctx *ctx, struct yetty_tcp_conn *conn,
                            const uint8_t *data, size_t len)
 {
@@ -222,14 +223,19 @@ struct yetty_rpc_server_ptr_result yetty_rpc_server_create(
     return YETTY_OK(yetty_rpc_server_ptr, server);
 }
 
-void yetty_rpc_server_destroy(struct yetty_rpc_server *server)
+struct yetty_ycore_void_result yetty_rpc_server_destroy(struct yetty_rpc_server *server)
 {
     if (!server) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yetty_rpc_server_destroy: NULL server");
     }
 
-    yetty_rpc_server_stop(server);
+    struct yetty_ycore_void_result stop_r = yetty_rpc_server_stop(server);
     free(server);
+
+    if (YETTY_IS_ERR(stop_r)) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_rpc_server_destroy: stop failed", stop_r);
+    }
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_rpc_server_start(struct yetty_rpc_server *server,

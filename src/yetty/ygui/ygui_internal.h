@@ -90,8 +90,10 @@ typedef void (*ygui_widget_check_fn)(ygui_widget_t *widget, int checked, void *u
  * Widget Function Pointers (internal rendering/events)
  *===========================================================================*/
 
-typedef void (*ygui_widget_render_fn)(ygui_widget_t *self, ygui_render_ctx_t *ctx);
-typedef void (*ygui_widget_render_all_fn)(ygui_widget_t *self, ygui_render_ctx_t *ctx);
+typedef struct yetty_ycore_void_result (*ygui_widget_render_fn)(ygui_widget_t *self,
+                                                                ygui_render_ctx_t *ctx);
+typedef struct yetty_ycore_void_result (*ygui_widget_render_all_fn)(ygui_widget_t *self,
+                                                                    ygui_render_ctx_t *ctx);
 typedef int (*ygui_widget_on_press_fn)(ygui_widget_t *self, float lx, float ly, ygui_event_t *out);
 typedef int (*ygui_widget_on_release_fn)(ygui_widget_t *self, float lx, float ly,
                                          ygui_event_t *out);
@@ -387,32 +389,39 @@ void ygui_widget_init_base(ygui_widget_t *widget, float x, float y, float w, flo
 /* Render context */
 void ygui_render_ctx_init(ygui_render_ctx_t *ctx, struct yetty_ypaint_core_buffer *buffer,
                           const ygui_theme_t *theme);
-void ygui_render_box(ygui_render_ctx_t *ctx, float x, float y, float w, float h, uint32_t color,
-                     float radius);
-void ygui_render_box_outline(ygui_render_ctx_t *ctx, float x, float y, float w, float h,
-                             uint32_t color, float radius, float stroke_width);
-void ygui_render_text(ygui_render_ctx_t *ctx, const char *text, float x, float y, uint32_t color,
-                      float font_size);
-void ygui_render_circle(ygui_render_ctx_t *ctx, float cx, float cy, float r, uint32_t color);
-void ygui_render_circle_outline(ygui_render_ctx_t *ctx, float cx, float cy, float r, uint32_t color,
-                                float stroke_width);
-void ygui_render_triangle(ygui_render_ctx_t *ctx, float x0, float y0, float x1, float y1, float x2,
-                          float y2, uint32_t color);
+struct yetty_ycore_void_result ygui_render_box(ygui_render_ctx_t *ctx, float x, float y, float w,
+                                               float h, uint32_t color, float radius);
+struct yetty_ycore_void_result ygui_render_box_outline(ygui_render_ctx_t *ctx, float x, float y,
+                                                      float w, float h, uint32_t color,
+                                                      float radius, float stroke_width);
+struct yetty_ycore_void_result ygui_render_text(ygui_render_ctx_t *ctx, const char *text, float x,
+                                                float y, uint32_t color, float font_size);
+struct yetty_ycore_void_result ygui_render_circle(ygui_render_ctx_t *ctx, float cx, float cy,
+                                                  float r, uint32_t color);
+struct yetty_ycore_void_result ygui_render_circle_outline(ygui_render_ctx_t *ctx, float cx,
+                                                          float cy, float r, uint32_t color,
+                                                          float stroke_width);
+struct yetty_ycore_void_result ygui_render_triangle(ygui_render_ctx_t *ctx, float x0, float y0,
+                                                    float x1, float y1, float x2, float y2,
+                                                    uint32_t color);
 
 /* Default widget functions */
-void ygui_widget_render_all_default(ygui_widget_t *self, ygui_render_ctx_t *ctx);
+struct yetty_ycore_void_result ygui_widget_render_all_default(ygui_widget_t *self,
+                                                              ygui_render_ctx_t *ctx);
 
 /* OSC output (ygui_osc.c) */
-void ygui_osc_create_card(const char *name, int x, int y, int w, int h, const uint8_t *data,
-                          uint32_t size);
-void ygui_osc_update_card(const char *name, const uint8_t *data, uint32_t size);
+struct yetty_ycore_void_result ygui_osc_create_card(const char *name, int x, int y, int w, int h,
+                                                    const uint8_t *data, uint32_t size);
+struct yetty_ycore_void_result ygui_osc_update_card(const char *name, const uint8_t *data,
+                                                    uint32_t size);
 void ygui_osc_kill_card(const char *name);
 void ygui_osc_subscribe_clicks(int enable);
 void ygui_osc_subscribe_moves(int enable);
 void ygui_osc_subscribe_view_changes(int enable);
 void ygui_osc_query_cell_size(void);
-void ygui_osc_card_place(uint32_t card_id, int col, int row, uint32_t w_cells, uint32_t h_cells);
-void ygui_osc_card_remove(uint32_t card_id);
+struct yetty_ycore_void_result ygui_osc_card_place(uint32_t card_id, int col, int row,
+                                                   uint32_t w_cells, uint32_t h_cells);
+struct yetty_ycore_void_result ygui_osc_card_remove(uint32_t card_id);
 void ygui_osc_zoom_card(const char *name, float level);
 void ygui_osc_scroll_card(const char *name, float x, float y, int absolute);
 void ygui_osc_scroll_card_delta(const char *name, float dx, float dy);

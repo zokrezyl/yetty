@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <yetty/ycore/result.h>
 
 /* Forward declare libuv types */
 typedef struct uv_loop_s uv_loop_t;
@@ -37,6 +38,7 @@ void ygui_shutdown(void);
  *===========================================================================*/
 
 typedef struct ygui_engine ygui_engine_t;
+YETTY_YRESULT_DECLARE(ygui_engine_ptr, ygui_engine_t *);
 typedef struct ygui_widget ygui_widget_t;
 typedef struct ygui_theme ygui_theme_t;
 
@@ -161,25 +163,27 @@ typedef void (*ygui_resize_callback_t)(ygui_engine_t *engine, void *userdata);
  * After show(), queries card pixel size (OSC 777780).
  * Canvas = actual card pixels (cols * cell_width, rows * cell_height).
  * Widgets are positioned in actual pixel coordinates. */
-ygui_engine_t *ygui_engine_create(const char *card_name, int x, int y, int cols, int rows);
+struct ygui_engine_ptr_result ygui_engine_create(const char *card_name, int x, int y, int cols,
+                                                 int rows);
 
 /* Create engine with pixel size hints.
  * x, y: card position in terminal cells
  * width_hint, height_hint: desired pixel size (calculates closest cols/rows)
  * Then same as ygui_engine_create: canvas = actual card pixels. */
-ygui_engine_t *ygui_engine_create_with_pixel_hint(const char *card_name, int x, int y,
-                                                  float width_hint, float height_hint);
+struct ygui_engine_ptr_result ygui_engine_create_with_pixel_hint(const char *card_name, int x,
+                                                                 int y, float width_hint,
+                                                                 float height_hint);
 
 /* Destroy engine (kills card, frees all resources) */
-void ygui_engine_destroy(ygui_engine_t *engine);
+struct yetty_ycore_void_result ygui_engine_destroy(ygui_engine_t *engine);
 
 /* Show card (creates it via OSC, queries pixel size).
  * Position and size were set in ygui_engine_create. */
-void ygui_engine_show(ygui_engine_t *engine);
+struct yetty_ycore_void_result ygui_engine_show(ygui_engine_t *engine);
 
 /* Render a frame (clear buffer → rebuild → serialize → send OSC)
  * Usually not needed - engine auto-renders when dirty. */
-void ygui_engine_render(ygui_engine_t *engine);
+struct yetty_ycore_void_result ygui_engine_render(ygui_engine_t *engine);
 
 /* Attach engine to user's libuv loop (for advanced usage) */
 void ygui_engine_attach(ygui_engine_t *engine, uv_loop_t *loop);

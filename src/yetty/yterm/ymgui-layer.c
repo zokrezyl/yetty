@@ -139,7 +139,7 @@ struct yetty_yterm_ymgui_layer {
  * Forward declarations
  *=========================================================================*/
 
-static void ymgui_destroy(struct yetty_yterm_terminal_layer *self);
+static struct yetty_ycore_void_result ymgui_destroy(struct yetty_yterm_terminal_layer *self);
 static struct yetty_ycore_void_result ymgui_write(struct yetty_yterm_terminal_layer *self,
                                                   int osc_code, const char *data, size_t len);
 static struct yetty_ycore_void_result ymgui_resize_grid(struct yetty_yterm_terminal_layer *self,
@@ -157,8 +157,8 @@ static int ymgui_on_key(struct yetty_yterm_terminal_layer *self, int key, int mo
 static int ymgui_on_char(struct yetty_yterm_terminal_layer *self, uint32_t cp, int mods);
 static struct yetty_ycore_void_result ymgui_scroll(struct yetty_yterm_terminal_layer *self,
                                                    int lines);
-static void ymgui_set_cursor(struct yetty_yterm_terminal_layer *self, int col, int row);
-static void ymgui_set_alt_screen(struct yetty_yterm_terminal_layer *self, int active);
+static struct yetty_ycore_void_result ymgui_set_cursor(struct yetty_yterm_terminal_layer *self, int col, int row);
+static struct yetty_ycore_void_result ymgui_set_alt_screen(struct yetty_yterm_terminal_layer *self, int active);
 
 static const struct yetty_yterm_terminal_layer_ops ymgui_ops = {
     .destroy = ymgui_destroy,
@@ -1421,7 +1421,7 @@ static struct yetty_ycore_void_result ymgui_scroll(struct yetty_yterm_terminal_l
     return YETTY_OK_VOID();
 }
 
-static void ymgui_set_cursor(struct yetty_yterm_terminal_layer *self, int col, int row)
+static struct yetty_ycore_void_result ymgui_set_cursor(struct yetty_yterm_terminal_layer *self, int col, int row)
 {
     struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)self;
     if (col < 0) {
@@ -1432,6 +1432,7 @@ static void ymgui_set_cursor(struct yetty_yterm_terminal_layer *self, int col, i
     }
     l->cursor_col = (uint32_t)col;
     l->cursor_row = (uint32_t)row;
+    return YETTY_OK_VOID();
 }
 
 /* Alt-screen entry/exit: swap the live cards[] with the saved set so
@@ -1439,12 +1440,12 @@ static void ymgui_set_cursor(struct yetty_yterm_terminal_layer *self, int col, i
  * restores the previously-saved state. The GPU resources tied to each
  * card (atlas, buffers, bind group) ride along with the card pointers
  * — no GPU work needed at toggle time. */
-static void ymgui_set_alt_screen(struct yetty_yterm_terminal_layer *self, int active)
+static struct yetty_ycore_void_result ymgui_set_alt_screen(struct yetty_yterm_terminal_layer *self, int active)
 {
     struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)self;
     int wanted = active ? 1 : 0;
     if (l->alt_active == wanted) {
-        return;
+        return YETTY_OK_VOID();
     }
 
     /* Drop focus emission for the about-to-be-saved card so the client
@@ -1478,6 +1479,7 @@ static void ymgui_set_alt_screen(struct yetty_yterm_terminal_layer *self, int ac
 
     ydebug("ymgui: alt_screen=%d (live=%zu cards, saved=%zu cards)", wanted, l->card_count,
            l->saved_card_count);
+    return YETTY_OK_VOID();
 }
 
 /*===========================================================================
@@ -1546,11 +1548,11 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ymgui_layer_create(
     return YETTY_OK(yetty_yterm_terminal_layer, &l->base);
 }
 
-static void ymgui_destroy(struct yetty_yterm_terminal_layer *self)
+static struct yetty_ycore_void_result ymgui_destroy(struct yetty_yterm_terminal_layer *self)
 {
     struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)self;
     if (!l) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "ymgui_destroy: NULL layer");
     }
     for (size_t i = 0; i < l->card_count; i++) {
         card_destroy(l->cards[i]);
@@ -1566,6 +1568,7 @@ static void ymgui_destroy(struct yetty_yterm_terminal_layer *self)
     }
     free(l->shader_code.data);
     free(l);
+    return YETTY_OK_VOID();
 }
 
 /*===========================================================================

@@ -70,12 +70,13 @@ static bool cell_is_editing(const struct yetty_yrich_element *e)
     return c->editing;
 }
 
-static void cell_render(struct yetty_yrich_element *e, struct yetty_ypaint_core_buffer *buf,
-                        uint32_t layer, bool selected)
+static struct yetty_ycore_void_result cell_render(struct yetty_yrich_element *e,
+                                                  struct yetty_ypaint_core_buffer *buf,
+                                                  uint32_t layer, bool selected)
 {
     struct yetty_yrich_cell *c = (struct yetty_yrich_cell *)e;
     if (!buf) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "cell_render: NULL buffer");
     }
 
     uint32_t fill = c->fill_color;
@@ -90,7 +91,11 @@ static void cell_render(struct yetty_yrich_element *e, struct yetty_ypaint_core_
         .half_height = c->bounds.h * 0.5f,
         .corner_radius = 0.0f,
     };
-    yetty_ysdf_add_box(buf, layer, fill, c->border.color, c->border.width, &body);
+    struct yetty_ypaint_id_result br =
+        yetty_ysdf_add_box(buf, layer, fill, c->border.color, c->border.width, &body);
+    if (br.error != YPAINT_OK) {
+        return YETTY_ERR(yetty_ycore_void, "cell_render: body box add failed");
+    }
 
     if (c->text_len > 0) {
         float text_x = c->bounds.x + 4.0f;
@@ -107,8 +112,10 @@ static void cell_render(struct yetty_yrich_element *e, struct yetty_ypaint_core_
             .size = c->text_len,
             .capacity = c->text_len,
         };
-        yetty_ypaint_core_buffer_add_text(buf, text_x, text_y, &text, c->style.font_size,
-                                          c->style.color, layer + 1, c->style.font_id, 0.0f);
+        struct yetty_ycore_void_result tr = yetty_ypaint_core_buffer_add_text(
+            buf, text_x, text_y, &text, c->style.font_size, c->style.color, layer + 1,
+            c->style.font_id, 0.0f);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "cell_render: add_text failed");
     }
 
     if (c->editing) {
@@ -119,13 +126,22 @@ static void cell_render(struct yetty_yrich_element *e, struct yetty_ypaint_core_
             .end_x = cursor_x,
             .end_y = c->bounds.y + c->bounds.h - 2.0f,
         };
-        yetty_ysdf_add_segment(buf, layer + 2, 0, YETTY_YRICH_COLOR_BLACK, 1.0f, &seg);
+        struct yetty_ypaint_id_result sr =
+            yetty_ysdf_add_segment(buf, layer + 2, 0, YETTY_YRICH_COLOR_BLACK, 1.0f, &seg);
+        if (sr.error != YPAINT_OK) {
+            return YETTY_ERR(yetty_ycore_void, "cell_render: cursor segment add failed");
+        }
     }
 
     if (selected) {
         struct yetty_ysdf_box border = body;
-        yetty_ysdf_add_box(buf, layer + 3, 0, YETTY_YRICH_RGBA(0, 100, 200, 255), 2.0f, &border);
+        struct yetty_ypaint_id_result br2 = yetty_ysdf_add_box(
+            buf, layer + 3, 0, YETTY_YRICH_RGBA(0, 100, 200, 255), 2.0f, &border);
+        if (br2.error != YPAINT_OK) {
+            return YETTY_ERR(yetty_ycore_void, "cell_render: selection border add failed");
+        }
     }
+    return YETTY_OK_VOID();
 }
 
 static void cell_insert_text(struct yetty_yrich_element *e, const char *text, size_t text_len)
@@ -580,19 +596,18 @@ struct yetty_yrich_cell_ptr_result yetty_yrich_spreadsheet_ensure_cell(
     return YETTY_OK(yetty_yrich_cell_ptr, cell);
 }
 
-void yetty_yrich_spreadsheet_set_cell_value(struct yetty_yrich_spreadsheet *s,
-                                            struct yetty_yrich_cell_addr addr, const char *value,
-                                            size_t value_len)
+struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_cell_value(
+    struct yetty_yrich_spreadsheet *s, struct yetty_yrich_cell_addr addr, const char *value,
+    size_t value_len)
 {
     if (!s) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yrich set_cell_value: NULL spreadsheet");
     }
     struct yetty_yrich_cell_ptr_result cr = yetty_yrich_spreadsheet_ensure_cell(s, addr);
-    if (YETTY_IS_ERR(cr)) {
-        return;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "yrich set_cell_value: ensure_cell failed");
     yetty_yrich_cell_set_text(cr.value, value, value_len);
     yetty_yrich_document_mark_dirty(&s->base);
+    return YETTY_OK_VOID();
 }
 
 const char *yetty_yrich_spreadsheet_cell_value(const struct yetty_yrich_spreadsheet *s,

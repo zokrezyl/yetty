@@ -46,7 +46,7 @@ struct yetty_yui_tile_ptr_result yetty_yui_pane_create(void);
 struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
     const struct yetty_yconfig *config, const struct yetty_context *yetty_ctx);
 
-void yetty_yui_tile_destroy(struct yetty_yui_tile *tile);
+struct yetty_ycore_void_result yetty_yui_tile_destroy(struct yetty_yui_tile *tile);
 
 /* Tile operations */
 struct yetty_ycore_void_result yetty_yui_tile_render(struct yetty_yui_tile *tile,

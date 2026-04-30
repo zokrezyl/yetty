@@ -39,32 +39,60 @@ int yetty_yrich_command_record_op(struct yetty_yrich_command *cmd, struct yetty_
     return 0;
 }
 
-void yetty_yrich_command_default_undo(struct yetty_yrich_command *cmd,
-                                      struct yetty_yrich_document *doc)
+struct yetty_ycore_void_result yetty_yrich_command_default_undo(struct yetty_yrich_command *cmd,
+                                                                struct yetty_yrich_document *doc)
 {
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
     if (!cmd) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "command_default_undo: NULL cmd");
     }
     /* Apply inverses in reverse order. */
     for (size_t i = cmd->recorded_count; i > 0; i--) {
-        struct yetty_yrich_operation *inv = yetty_yrich_operation_inverse(cmd->recorded[i - 1]);
-        if (!inv) {
+        struct yetty_yrich_operation_ptr_result inv_r =
+            yetty_yrich_operation_inverse(cmd->recorded[i - 1]);
+        if (YETTY_IS_ERR(inv_r)) {
+            if (YETTY_IS_OK(first_err)) {
+                first_err = YETTY_ERR(yetty_ycore_void, "command_default_undo: inverse failed",
+                                      inv_r);
+            } else {
+                yetty_ycore_error_destroy(inv_r.error);
+            }
             continue;
         }
-        yetty_yrich_document_apply_op(doc, inv, true);
-        yetty_yrich_operation_destroy(inv);
+        struct yetty_ycore_void_result ar = yetty_yrich_document_apply_op(doc, inv_r.value, true);
+        if (YETTY_IS_ERR(ar)) {
+            if (YETTY_IS_OK(first_err)) {
+                first_err = YETTY_ERR(yetty_ycore_void, "command_default_undo: apply_op failed",
+                                      ar);
+            } else {
+                yetty_ycore_error_destroy(ar.error);
+            }
+        }
+        yetty_yrich_operation_destroy(inv_r.value);
     }
+    return first_err;
 }
 
-void yetty_yrich_command_default_redo(struct yetty_yrich_command *cmd,
-                                      struct yetty_yrich_document *doc)
+struct yetty_ycore_void_result yetty_yrich_command_default_redo(struct yetty_yrich_command *cmd,
+                                                                struct yetty_yrich_document *doc)
 {
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
     if (!cmd) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "command_default_redo: NULL cmd");
     }
     for (size_t i = 0; i < cmd->recorded_count; i++) {
-        yetty_yrich_document_apply_op(doc, cmd->recorded[i], true);
+        struct yetty_ycore_void_result ar = yetty_yrich_document_apply_op(doc, cmd->recorded[i],
+                                                                          true);
+        if (YETTY_IS_ERR(ar)) {
+            if (YETTY_IS_OK(first_err)) {
+                first_err = YETTY_ERR(yetty_ycore_void, "command_default_redo: apply_op failed",
+                                      ar);
+            } else {
+                yetty_ycore_error_destroy(ar.error);
+            }
+        }
     }
+    return first_err;
 }
 
 void yetty_yrich_command_destroy(struct yetty_yrich_command *cmd)
@@ -198,45 +226,53 @@ struct yetty_ycore_void_result yetty_yrich_history_execute(struct yetty_yrich_hi
     return YETTY_OK_VOID();
 }
 
-void yetty_yrich_history_undo(struct yetty_yrich_history *h, struct yetty_yrich_document *doc)
+struct yetty_ycore_void_result yetty_yrich_history_undo(struct yetty_yrich_history *h,
+                                                        struct yetty_yrich_document *doc)
 {
     if (!h) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "history_undo: NULL history");
     }
     struct yetty_yrich_command *cmd = pop(h->undo_stack, &h->undo_count);
     if (!cmd) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "history_undo: stack empty");
     }
 
+    struct yetty_ycore_void_result undo_r;
     if (cmd->ops->undo) {
-        cmd->ops->undo(cmd, doc);
+        undo_r = cmd->ops->undo(cmd, doc);
     } else {
-        yetty_yrich_command_default_undo(cmd, doc);
+        undo_r = yetty_yrich_command_default_undo(cmd, doc);
     }
 
     if (push(&h->redo_stack, &h->redo_count, &h->redo_capacity, cmd) < 0) {
         /* On alloc failure, drop the command rather than leak. */
         yetty_yrich_command_destroy(cmd);
     }
+
+    return undo_r;
 }
 
-void yetty_yrich_history_redo(struct yetty_yrich_history *h, struct yetty_yrich_document *doc)
+struct yetty_ycore_void_result yetty_yrich_history_redo(struct yetty_yrich_history *h,
+                                                        struct yetty_yrich_document *doc)
 {
     if (!h) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "history_redo: NULL history");
     }
     struct yetty_yrich_command *cmd = pop(h->redo_stack, &h->redo_count);
     if (!cmd) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "history_redo: stack empty");
     }
 
+    struct yetty_ycore_void_result redo_r;
     if (cmd->ops->redo) {
-        cmd->ops->redo(cmd, doc);
+        redo_r = cmd->ops->redo(cmd, doc);
     } else {
-        yetty_yrich_command_default_redo(cmd, doc);
+        redo_r = yetty_yrich_command_default_redo(cmd, doc);
     }
 
     if (push(&h->undo_stack, &h->undo_count, &h->undo_capacity, cmd) < 0) {
         yetty_yrich_command_destroy(cmd);
     }
+
+    return redo_r;
 }

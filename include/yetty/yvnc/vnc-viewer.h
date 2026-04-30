@@ -19,7 +19,7 @@ struct yetty_vnc_viewer_ptr_result yetty_vnc_viewer_create(const char *host, uin
                                                            const struct yetty_context *yetty_ctx);
 
 /* Destroy viewer */
-void yetty_vnc_viewer_destroy(struct yetty_vnc_viewer *viewer);
+struct yetty_ycore_void_result yetty_vnc_viewer_destroy(struct yetty_vnc_viewer *viewer);
 
 /* Cast viewer to view (for use in tile pane) */
 struct yetty_yui_view *yetty_vnc_viewer_as_view(struct yetty_vnc_viewer *viewer);

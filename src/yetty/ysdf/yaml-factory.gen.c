@@ -131,8 +131,9 @@ static void store_array(struct ysdf_parse_ctx *ctx)
     }
 }
 
-static void build_prim(struct yetty_ypaint_core_buffer *buffer, const char *primitive_type_name,
-                       struct ysdf_parse_ctx *ctx)
+static struct yetty_ycore_void_result build_prim(struct yetty_ypaint_core_buffer *buffer,
+                                                 const char *primitive_type_name,
+                                                 struct ysdf_parse_ctx *ctx)
 {
     float data[16];
     uint32_t word_count = 0, tmp;
@@ -478,12 +479,17 @@ static void build_prim(struct yetty_ypaint_core_buffer *buffer, const char *prim
         data[7] = ctx->radius;
         word_count = 8;
     } else {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "ysdf build_prim: unknown primitive type");
     }
 
     if (word_count > 0) {
-        yetty_ypaint_core_buffer_add_prim(buffer, data, word_count * sizeof(float));
+        struct yetty_ypaint_id_result r =
+            yetty_ypaint_core_buffer_add_prim(buffer, data, word_count * sizeof(float));
+        if (r.error != YPAINT_OK) {
+            return YETTY_ERR(yetty_ycore_void, "ysdf build_prim: add_prim failed");
+        }
     }
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================
@@ -571,7 +577,10 @@ struct yetty_ycore_void_result yetty_ysdf_yaml_factory(struct yetty_ypaint_core_
         yaml_event_delete(&event);
     }
 
-    build_prim(buffer, primitive_type_name, &ctx);
+    struct yetty_ycore_void_result br = build_prim(buffer, primitive_type_name, &ctx);
+    if (YETTY_IS_ERR(br)) {
+        return br;
+    }
     return YETTY_OK_VOID();
 }
 

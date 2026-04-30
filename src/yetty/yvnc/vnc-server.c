@@ -363,13 +363,13 @@ struct yetty_vnc_server_ptr_result yetty_vnc_server_create(
     return YETTY_OK(yetty_vnc_server_ptr, server);
 }
 
-void yetty_vnc_server_destroy(struct yetty_vnc_server *server)
+struct yetty_ycore_void_result yetty_vnc_server_destroy(struct yetty_vnc_server *server)
 {
     if (!server) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yetty_vnc_server_destroy: NULL server");
     }
 
-    yetty_vnc_server_stop(server);
+    struct yetty_ycore_void_result stop_r = yetty_vnc_server_stop(server);
 
     if (server->diff_engine) {
         yetty_yrender_utils_tile_diff_engine_destroy(server->diff_engine);
@@ -389,6 +389,11 @@ void yetty_vnc_server_destroy(struct yetty_vnc_server *server)
     free(server->dirty_tiles);
     free(server->gpu_readback_pixels);
     free(server);
+
+    if (YETTY_IS_ERR(stop_r)) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_vnc_server_destroy: stop failed", stop_r);
+    }
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_vnc_server_start(struct yetty_vnc_server *server,
@@ -1365,6 +1370,7 @@ static void vnc_on_engine_idle(void *ctx)
  * (flat width*4 stride) and then defer to encode_and_send_dirty_tiles which
  * uses the existing encode_tile machinery.
  */
+YETTY_EXTERNAL_CALLBACK
 static void vnc_tile_diff_sink(void *ctx, const struct yetty_yrender_utils_tile_diff_frame *frame)
 {
     struct yetty_vnc_server *server = ctx;

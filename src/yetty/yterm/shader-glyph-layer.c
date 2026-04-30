@@ -113,20 +113,19 @@ static int glyph_entry_cmp(const void *a, const void *b)
     return (la > lb) - (la < lb);
 }
 
-/* Returns a malloc'd char buffer (NUL-terminated) and writes its size to
- * *out_size. Caller frees. NULL on error.
+/* Returns a yetty_ycore_buffer with the assembled WGSL (data is malloc'd,
+ * caller frees via free(buf.value.data)).
  *
  * Files starting with '_' are prelude libraries (e.g. _util.wgsl providing
  * util_hash, util_valueNoise, util_colorNoise - copied from yetty-poc). They
  * are concatenated FIRST, in name-sorted order, so glyph functions can call
  * their helpers. Files starting with '0x' are glyphs, sorted by local-id. */
-static char *assemble_glyph_shaders(const char *glyph_dir, size_t *out_size)
+static struct yetty_ycore_buffer_result assemble_glyph_shaders(const char *glyph_dir)
 {
-    *out_size = 0;
     DIR *d = opendir(glyph_dir);
     if (!d) {
         ywarn("glyph-shaders: opendir(%s) failed", glyph_dir);
-        return NULL;
+        return YETTY_ERR(yetty_ycore_buffer, "glyph-shaders: opendir failed");
     }
 
     struct glyph_entry *entries = NULL;
@@ -216,7 +215,7 @@ static char *assemble_glyph_shaders(const char *glyph_dir, size_t *out_size)
             free(entries[i].body);
         }
         free(entries);
-        return NULL;
+        return YETTY_ERR(yetty_ycore_buffer, "glyph-shaders: alloc failed");
     }
 
     size_t off = 0;
@@ -264,10 +263,14 @@ static char *assemble_glyph_shaders(const char *glyph_dir, size_t *out_size)
     }
     free(entries);
 
-    *out_size = off;
     ydebug("glyph-shaders: assembled %zu prelude + %zu glyphs, %zu bytes WGSL", prelude_count, n,
            off);
-    return out;
+    struct yetty_ycore_buffer outbuf = {
+        .data = (uint8_t *)out,
+        .size = off,
+        .capacity = total,
+    };
+    return YETTY_OK(yetty_ycore_buffer, outbuf);
 }
 
 /* Substitute the first occurrence of `marker` in `template` with `replacement`.
@@ -308,7 +311,7 @@ static char *splice_marker(const char *template, size_t template_size, const cha
 }
 
 /* Forward declarations */
-static void shader_glyph_destroy(struct yetty_yterm_terminal_layer *self);
+static struct yetty_ycore_void_result shader_glyph_destroy(struct yetty_yterm_terminal_layer *self);
 static struct yetty_ycore_void_result shader_glyph_write(struct yetty_yterm_terminal_layer *self,
                                                          int osc_code, const char *data,
                                                          size_t len);
@@ -330,7 +333,8 @@ static int shader_glyph_on_char(struct yetty_yterm_terminal_layer *self, uint32_
                                 int mods);
 static struct yetty_ycore_void_result shader_glyph_scroll(struct yetty_yterm_terminal_layer *self,
                                                           int lines);
-static void shader_glyph_set_cursor(struct yetty_yterm_terminal_layer *self, int col, int row);
+static struct yetty_ycore_void_result shader_glyph_set_cursor(
+    struct yetty_yterm_terminal_layer *self, int col, int row);
 
 static const struct yetty_yterm_terminal_layer_ops shader_glyph_layer_ops = {
     .destroy = shader_glyph_destroy,
@@ -375,13 +379,14 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
     }
 
     /* Assemble per-glyph .wgsl files + generated dispatcher. */
-    size_t glyph_size = 0;
-    char *glyph_blob = assemble_glyph_shaders(glyph_dir, &glyph_size);
-    if (!glyph_blob) {
+    struct yetty_ycore_buffer_result glyph_res = assemble_glyph_shaders(glyph_dir);
+    if (YETTY_IS_ERR(glyph_res)) {
         free(template_res.value.data);
-        return YETTY_ERR(yetty_yterm_terminal_layer,
-                         "shader-glyph-layer: failed to assemble glyph shaders");
+        return YETTY_ERR(yetty_yterm_terminal_layer, "shader-glyph-layer: assemble failed",
+                         glyph_res);
     }
+    char *glyph_blob = (char *)glyph_res.value.data;
+    size_t glyph_size = glyph_res.value.size;
 
     /* Splice the assembled blob into the template's marker. */
     size_t spliced_size = 0;
@@ -490,7 +495,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
     return YETTY_OK(yetty_yterm_terminal_layer, &layer->base);
 }
 
-static void shader_glyph_destroy(struct yetty_yterm_terminal_layer *self)
+static struct yetty_ycore_void_result shader_glyph_destroy(struct yetty_yterm_terminal_layer *self)
 {
     struct yetty_yterm_shader_glyph_layer *layer =
         container_of(self, struct yetty_yterm_shader_glyph_layer, base);
@@ -504,6 +509,7 @@ static void shader_glyph_destroy(struct yetty_yterm_terminal_layer *self)
     }
     free(layer->shader_source);
     free(layer);
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result shader_glyph_write(struct yetty_yterm_terminal_layer *self,
@@ -722,9 +728,11 @@ static struct yetty_ycore_void_result shader_glyph_scroll(struct yetty_yterm_ter
     return YETTY_OK_VOID();
 }
 
-static void shader_glyph_set_cursor(struct yetty_yterm_terminal_layer *self, int col, int row)
+static struct yetty_ycore_void_result shader_glyph_set_cursor(
+    struct yetty_yterm_terminal_layer *self, int col, int row)
 {
     (void)self;
     (void)col;
     (void)row;
+    return YETTY_OK_VOID();
 }

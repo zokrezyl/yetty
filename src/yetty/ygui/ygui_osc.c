@@ -67,14 +67,14 @@ static void write_osc(const char *data, size_t len)
  * ypaint primitives already carry absolute pixel coords. */
 #define VENDOR_ID "666674"
 
-static void write_clear_and_bin(const uint8_t *data, uint32_t size)
+static struct yetty_ycore_void_result write_clear_and_bin(const uint8_t *data, uint32_t size)
 {
     /* 1) Clear the ypaint canvas. Empty body, no args. */
     static const char clear_seq[] = "\033]600000;;\033\\";
     write_osc(clear_seq, sizeof(clear_seq) - 1);
 
     if (size == 0 || !data) {
-        return;
+        return YETTY_OK_VOID();
     }
 
     /* 2) Bin envelope: args = bin meta (compressed=1), payload = LZ4F'd
@@ -96,23 +96,25 @@ static void write_clear_and_bin(const uint8_t *data, uint32_t size)
         write_osc((const char *)out.data, out.size);
     }
     yetty_ycore_buffer_destroy(&out);
+    return r;
 }
 
-void ygui_osc_create_card(const char *name, int x, int y, int w, int h, const uint8_t *data,
-                          uint32_t size)
+struct yetty_ycore_void_result ygui_osc_create_card(const char *name, int x, int y, int w, int h,
+                                                    const uint8_t *data, uint32_t size)
 {
     (void)name;
     (void)x;
     (void)y;
     (void)w;
     (void)h;
-    write_clear_and_bin(data, size);
+    return write_clear_and_bin(data, size);
 }
 
-void ygui_osc_update_card(const char *name, const uint8_t *data, uint32_t size)
+struct yetty_ycore_void_result ygui_osc_update_card(const char *name, const uint8_t *data,
+                                                    uint32_t size)
 {
     (void)name;
-    write_clear_and_bin(data, size);
+    return write_clear_and_bin(data, size);
 }
 
 void ygui_osc_kill_card(const char *name)
@@ -162,7 +164,8 @@ void ygui_osc_subscribe_view_changes(int enable)
  * coords. Without this, the server's hit table has no entry for our UI and
  * no mouse traffic ever flows back. col/row/w_cells/h_cells are in grid
  * cells (matching ygui_engine_create's x,y,cols,rows). */
-void ygui_osc_card_place(uint32_t card_id, int col, int row, uint32_t w_cells, uint32_t h_cells)
+struct yetty_ycore_void_result ygui_osc_card_place(uint32_t card_id, int col, int row,
+                                                   uint32_t w_cells, uint32_t h_cells)
 {
     struct ymgui_wire_card_place msg = {
         .magic = YMGUI_WIRE_MAGIC_CARD_PLACE,
@@ -182,9 +185,10 @@ void ygui_osc_card_place(uint32_t card_id, int col, int row, uint32_t w_cells, u
         write_osc((const char *)out.data, out.size);
     }
     yetty_ycore_buffer_destroy(&out);
+    return r;
 }
 
-void ygui_osc_card_remove(uint32_t card_id)
+struct yetty_ycore_void_result ygui_osc_card_remove(uint32_t card_id)
 {
     struct ymgui_wire_card_remove msg = {
         .magic = YMGUI_WIRE_MAGIC_CARD_REMOVE,
@@ -200,6 +204,7 @@ void ygui_osc_card_remove(uint32_t card_id)
         write_osc((const char *)out.data, out.size);
     }
     yetty_ycore_buffer_destroy(&out);
+    return r;
 }
 
 void ygui_osc_zoom_card(const char *name, float level)

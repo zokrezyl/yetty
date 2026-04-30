@@ -300,12 +300,12 @@ void qemu_stop(yprocess_t *proc)
     yprocess_terminate(proc, /*grace_ms=*/100);
 }
 
-int qemu_wait_ready(uint16_t port, int timeout_ms)
+struct yetty_ycore_void_result qemu_wait_ready(uint16_t port, int timeout_ms)
 {
     /* Idempotent — wraps WSAStartup on Windows, no-op on POSIX. */
     if (!yetty_yplatform_socket_init()) {
         yerror("qemu_wait_ready: socket subsystem init failed");
-        return 0;
+        return YETTY_ERR(yetty_ycore_void, "qemu_wait_ready: socket subsystem init failed");
     }
 
     double start = ytime_monotonic_sec();
@@ -318,14 +318,17 @@ int qemu_wait_ready(uint16_t port, int timeout_ms)
             yetty_yplatform_socket_close(fd_r.value);
             if (cr.ok) {
                 yinfo("QEMU telnet ready on port %u", port);
-                return 1;
+                return YETTY_OK_VOID();
             }
+            yetty_ycore_error_destroy(cr.error);
+        } else {
+            yetty_ycore_error_destroy(fd_r.error);
         }
 
         double elapsed_ms = (ytime_monotonic_sec() - start) * 1000.0;
         if (elapsed_ms >= (double)timeout_ms) {
             yerror("Timeout waiting for QEMU on port %u", port);
-            return 0;
+            return YETTY_ERR(yetty_ycore_void, "qemu_wait_ready: timeout");
         }
 
         ytime_sleep_ms(100);

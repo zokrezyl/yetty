@@ -70,7 +70,7 @@ typedef void (*yetty_yterm_alt_screen_fn)(int active, void *userdata);
 
 /* Layer ops */
 struct yetty_yterm_terminal_layer_ops {
-    void (*destroy)(struct yetty_yterm_terminal_layer *self);
+    struct yetty_ycore_void_result (*destroy)(struct yetty_yterm_terminal_layer *self);
     /* OSC payload from pty-reader. `osc_code` lets the layer dispatch by
    * code (one layer can register for multiple codes); the body is the
    * full OSC payload after the leading "<code>;" — i.e. the yface body
@@ -104,7 +104,8 @@ struct yetty_yterm_terminal_layer_ops {
     /* Scroll - called when another layer scrolls, lines > 0 = scroll down */
     struct yetty_ycore_void_result (*scroll)(struct yetty_yterm_terminal_layer *self, int lines);
     /* Cursor - called when another layer moves cursor */
-    void (*set_cursor)(struct yetty_yterm_terminal_layer *self, int col, int row);
+    struct yetty_ycore_void_result (*set_cursor)(struct yetty_yterm_terminal_layer *self, int col,
+                                                 int row);
     /* Live anchor — absolute line index that represents "top of live viewport"
    * right now. Text-layer returns its scrollback row count (lines pushed off
    * the top of the screen); ypaint-layer returns its canvas rolling_row_0.
@@ -117,14 +118,15 @@ struct yetty_yterm_terminal_layer_ops {
    * `active` is non-zero. When active=0, return to live (track the live
    * anchor). The layer is expected to freeze its display at the given
    * historical position even as new content keeps arriving. Optional. */
-    void (*set_view_top)(struct yetty_yterm_terminal_layer *self, int active,
-                         uint32_t view_top_total_idx);
+    struct yetty_ycore_void_result (*set_view_top)(struct yetty_yterm_terminal_layer *self,
+                                                   int active, uint32_t view_top_total_idx);
     /* Switch in/out of alternate-screen mode. active=1 → save current
    * content and present a fresh empty surface; active=0 → drop the alt
    * content and restore what was saved. Mirrors libvterm's behavior on
    * DEC ?1047/?1049/?47. Optional — layers without persistent content
    * (text-layer, since libvterm itself owns the swap) may leave NULL. */
-    void (*set_alt_screen)(struct yetty_yterm_terminal_layer *self, int active);
+    struct yetty_ycore_void_result (*set_alt_screen)(struct yetty_yterm_terminal_layer *self,
+                                                     int active);
 };
 
 /* Layer base - embed as first member in subclasses */
@@ -172,7 +174,7 @@ struct yetty_yterm_terminal_context {
 /* Terminal creation/destruction */
 struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     struct grid_size grid_size, const struct yetty_context *yetty_context);
-void yetty_yterm_terminal_destroy(struct yetty_yterm_terminal *terminal);
+struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_terminal *terminal);
 
 /* Get terminal as yui view (for pushing into pane) */
 struct yetty_yui_view *yetty_yterm_terminal_as_view(struct yetty_yterm_terminal *terminal);

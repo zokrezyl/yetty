@@ -64,11 +64,11 @@ static bool shape_is_editing(const struct yetty_yrich_element *e)
     return s->editing;
 }
 
-static void emit_text(struct yetty_ypaint_core_buffer *buf, const struct yetty_yrich_shape *s,
-                      uint32_t layer)
+static struct yetty_ycore_void_result emit_text(struct yetty_ypaint_core_buffer *buf,
+                                                const struct yetty_yrich_shape *s, uint32_t layer)
 {
     if (s->text_len == 0 || !s->text) {
-        return;
+        return YETTY_OK_VOID();
     }
 
     float text_w = (float)s->text_len * s->text_style.font_size * 0.6f;
@@ -102,20 +102,23 @@ static void emit_text(struct yetty_ypaint_core_buffer *buf, const struct yetty_y
         .size = s->text_len,
         .capacity = s->text_len,
     };
-    yetty_ypaint_core_buffer_add_text(buf, text_x, text_y, &text, s->text_style.font_size,
-                                      s->text_style.color, layer + 1, s->text_style.font_id, 0.0f);
+    return yetty_ypaint_core_buffer_add_text(buf, text_x, text_y, &text, s->text_style.font_size,
+                                             s->text_style.color, layer + 1, s->text_style.font_id,
+                                             0.0f);
 }
 
-static void shape_render(struct yetty_yrich_element *e, struct yetty_ypaint_core_buffer *buf,
-                         uint32_t layer, bool selected)
+static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e,
+                                                   struct yetty_ypaint_core_buffer *buf,
+                                                   uint32_t layer, bool selected)
 {
     struct yetty_yrich_shape *s = (struct yetty_yrich_shape *)e;
     if (!buf) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "shape_render: NULL buffer");
     }
 
     float cx = s->bounds.x + s->bounds.w * 0.5f;
     float cy = s->bounds.y + s->bounds.h * 0.5f;
+    struct yetty_ypaint_id_result idr = {.error = YPAINT_OK, .id = 0};
 
     switch (s->kind) {
     case YETTY_YRICH_SHAPE_RECTANGLE:
@@ -128,9 +131,14 @@ static void shape_render(struct yetty_yrich_element *e, struct yetty_ypaint_core
             .half_height = s->bounds.h * 0.5f,
             .corner_radius = s->corner_radius,
         };
-        yetty_ysdf_add_box(buf, layer, s->fill_color, s->stroke_color, s->stroke_width, &body);
+        idr = yetty_ysdf_add_box(buf, layer, s->fill_color, s->stroke_color, s->stroke_width,
+                                 &body);
+        if (idr.error != YPAINT_OK) {
+            return YETTY_ERR(yetty_ycore_void, "shape_render: rect add failed");
+        }
         if (s->kind == YETTY_YRICH_SHAPE_TEXTBOX) {
-            emit_text(buf, s, layer);
+            struct yetty_ycore_void_result tr = emit_text(buf, s, layer);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "shape_render: emit_text failed");
         }
         break;
     }
@@ -141,7 +149,11 @@ static void shape_render(struct yetty_yrich_element *e, struct yetty_ypaint_core
             .radius_x = s->bounds.w * 0.5f,
             .radius_y = s->bounds.h * 0.5f,
         };
-        yetty_ysdf_add_ellipse(buf, layer, s->fill_color, s->stroke_color, s->stroke_width, &body);
+        idr = yetty_ysdf_add_ellipse(buf, layer, s->fill_color, s->stroke_color, s->stroke_width,
+                                     &body);
+        if (idr.error != YPAINT_OK) {
+            return YETTY_ERR(yetty_ycore_void, "shape_render: ellipse add failed");
+        }
         break;
     }
     case YETTY_YRICH_SHAPE_LINE:
@@ -152,7 +164,10 @@ static void shape_render(struct yetty_yrich_element *e, struct yetty_ypaint_core
             .end_x = s->bounds.x + s->bounds.w,
             .end_y = s->bounds.y + s->bounds.h,
         };
-        yetty_ysdf_add_segment(buf, layer, 0, s->stroke_color, s->stroke_width, &seg);
+        idr = yetty_ysdf_add_segment(buf, layer, 0, s->stroke_color, s->stroke_width, &seg);
+        if (idr.error != YPAINT_OK) {
+            return YETTY_ERR(yetty_ycore_void, "shape_render: segment add failed");
+        }
         break;
     }
     default:
@@ -167,8 +182,13 @@ static void shape_render(struct yetty_yrich_element *e, struct yetty_ypaint_core
             .half_height = s->bounds.h * 0.5f + 2.0f,
             .corner_radius = 0.0f,
         };
-        yetty_ysdf_add_box(buf, layer + 4, 0, YETTY_YRICH_RGBA(0, 100, 200, 255), 1.5f, &border);
+        idr = yetty_ysdf_add_box(buf, layer + 4, 0, YETTY_YRICH_RGBA(0, 100, 200, 255), 1.5f,
+                                 &border);
+        if (idr.error != YPAINT_OK) {
+            return YETTY_ERR(yetty_ycore_void, "shape_render: selection box add failed");
+        }
     }
+    return YETTY_OK_VOID();
 }
 
 static void shape_insert_text(struct yetty_yrich_element *e, const char *text, size_t text_len)
@@ -331,11 +351,11 @@ static float slides_content_height(const struct yetty_yrich_document *doc)
     return s->slide_height;
 }
 
-static void slides_render(struct yetty_yrich_document *doc)
+static struct yetty_ycore_void_result slides_render(struct yetty_yrich_document *doc)
 {
     struct yetty_yrich_slides *s = (struct yetty_yrich_slides *)doc;
     if (!doc->buffer) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "slides_render: NULL buffer");
     }
 
     yetty_ypaint_core_buffer_clear(doc->buffer);
@@ -345,7 +365,7 @@ static void slides_render(struct yetty_yrich_document *doc)
     struct yetty_yrich_slide *slide = yetty_yrich_slides_slide_at(s, s->current_slide);
     if (!slide) {
         doc->dirty = false;
-        return;
+        return YETTY_OK_VOID();
     }
 
     /* Background. */
@@ -356,17 +376,24 @@ static void slides_render(struct yetty_yrich_document *doc)
         .half_height = s->slide_height * 0.5f,
         .corner_radius = 0.0f,
     };
-    yetty_ysdf_add_box(doc->buffer, 0, slide->bg_color, 0, 0.0f, &bg);
+    struct yetty_ypaint_id_result br =
+        yetty_ysdf_add_box(doc->buffer, 0, slide->bg_color, 0, 0.0f, &bg);
+    if (br.error != YPAINT_OK) {
+        return YETTY_ERR(yetty_ycore_void, "slides_render: bg add failed");
+    }
 
     uint32_t layer = 1;
     for (size_t i = 0; i < slide->shape_count; i++) {
         struct yetty_yrich_shape *sh = slide->shapes[i];
         bool selected = yetty_yrich_document_is_selected(doc, sh->base.id);
-        yetty_yrich_element_render(&sh->base, doc->buffer, layer, selected);
+        struct yetty_ycore_void_result rr =
+            yetty_yrich_element_render(&sh->base, doc->buffer, layer, selected);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "slides_render: shape failed");
         layer += 5; /* leave room for shape's selection layer */
     }
 
     doc->dirty = false;
+    return YETTY_OK_VOID();
 }
 
 static void slides_destroy(struct yetty_yrich_document *doc)

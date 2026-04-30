@@ -55,7 +55,9 @@ int main(void) {
     }
 
     /* Create with pixel hint to trigger SCALE_ON mode */
-    g_engine = ygui_engine_create_with_pixel_hint("coord-dbg", 1, 1, 400.0f, 250.0f);
+    { struct ygui_engine_ptr_result _eng_r = ygui_engine_create_with_pixel_hint("coord-dbg", 1, 1, 400.0f, 250.0f);
+        if (YETTY_IS_ERR(_eng_r)) { yetty_ycore_error_destroy(_eng_r.error); return 1; }
+        g_engine = _eng_r.value; }
     if (!g_engine) {
         fprintf(stderr, "Failed to create engine\n");
         ygui_shutdown();

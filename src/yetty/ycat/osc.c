@@ -19,17 +19,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-size_t yetty_ycat_osc_bin_emit(const struct yetty_ypaint_core_buffer *buffer, FILE *out)
+struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(const struct yetty_ypaint_core_buffer *buffer,
+                                                       FILE *out)
 {
     if (!buffer || !out) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_size, "yetty_ycat_osc_bin_emit: NULL buffer or out");
     }
 
     const uint8_t *raw_bytes = NULL;
     size_t raw_size =
         yetty_ypaint_core_buffer_serialize((struct yetty_ypaint_core_buffer *)buffer, &raw_bytes);
     if (raw_size == 0 || !raw_bytes) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_size, "yetty_ycat_osc_bin_emit: serialize empty");
     }
 
     struct yetty_yface_bin_meta meta = {
@@ -46,7 +47,7 @@ size_t yetty_ycat_osc_bin_emit(const struct yetty_ypaint_core_buffer *buffer, FI
                          raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
-        return 0;
+        return YETTY_ERR(yetty_ycore_size, "yetty_ycat_osc_bin_emit: yface_emit failed", r);
     }
 
     size_t written = 0;
@@ -54,5 +55,5 @@ size_t yetty_ycat_osc_bin_emit(const struct yetty_ypaint_core_buffer *buffer, FI
         written = fwrite(envelope.data, 1, envelope.size, out);
     }
     yetty_ycore_buffer_destroy(&envelope);
-    return written;
+    return YETTY_OK(yetty_ycore_size, written);
 }

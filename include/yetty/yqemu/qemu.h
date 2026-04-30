@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 
+#include <yetty/ycore/result.h>
 #include <yetty/yplatform/process.h>
 
 #ifdef __cplusplus
@@ -31,9 +32,8 @@ void qemu_stop(yprocess_t *proc);
  *
  * @param port Telnet port
  * @param timeout_ms Timeout in milliseconds
- * @return 1 if ready, 0 on timeout
  */
-int qemu_wait_ready(uint16_t port, int timeout_ms);
+struct yetty_ycore_void_result qemu_wait_ready(uint16_t port, int timeout_ms);
 
 #ifdef __cplusplus
 }

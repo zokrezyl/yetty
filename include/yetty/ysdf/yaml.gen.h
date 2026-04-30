@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <yetty/ycore/result.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ypaint-core/buffer.h>
 #include <stddef.h>
@@ -16,9 +17,9 @@ extern "C" {
  * @param canvas Target canvas
  * @param yaml YAML string (null-terminated)
  * @param len Length of YAML string
- * @return 0 on success, -1 on error
  */
-int yetty_ysdf_yaml_parse(struct yetty_ypaint_core_buffer *canvas, const char *yaml, size_t len);
+struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ypaint_core_buffer *canvas,
+                                                     const char *yaml, size_t len);
 
 #ifdef __cplusplus
 }

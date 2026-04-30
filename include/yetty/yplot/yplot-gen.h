@@ -56,7 +56,8 @@ void yetty_yplot_factory_destroy(struct yetty_ypaint_concrete_factory *factory);
 //=============================================================================
 
 struct yetty_ypaint_yaml_parser;
-void yetty_yplot_register_yaml_factory(struct yetty_ypaint_yaml_parser *parser);
+struct yetty_ycore_void_result yetty_yplot_register_yaml_factory(
+    struct yetty_ypaint_yaml_parser *parser);
 
 #ifdef __cplusplus
 }

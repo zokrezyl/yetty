@@ -130,7 +130,7 @@ struct libuv_event_loop {
 };
 
 /* Forward declarations */
-static void libuv_destroy(struct yetty_ycore_event_loop *self);
+static struct yetty_ycore_void_result libuv_destroy(struct yetty_ycore_event_loop *self);
 static struct yetty_ycore_void_result libuv_start(struct yetty_ycore_event_loop *self);
 static struct yetty_ycore_void_result libuv_stop(struct yetty_ycore_event_loop *self);
 static struct yetty_ycore_void_result libuv_register_listener(
@@ -208,6 +208,7 @@ static const struct yetty_ycore_event_loop_ops libuv_ops = {
 /* Callbacks */
 
 #ifndef _WIN32
+YETTY_EXTERNAL_CALLBACK
 static void on_signal(uv_signal_t *handle, int signum)
 {
     struct libuv_event_loop *impl = handle->data;
@@ -225,6 +226,7 @@ static void on_signal(uv_signal_t *handle, int signum)
 }
 #endif
 
+YETTY_EXTERNAL_CALLBACK
 static void on_render_async(uv_async_t *handle)
 {
     struct libuv_event_loop *impl = handle->data;
@@ -275,6 +277,7 @@ static void on_input_pipe_alloc(uv_handle_t *handle, size_t suggested_size, uv_b
     buf->len = sizeof(input_pipe_buf);
 }
 
+YETTY_EXTERNAL_CALLBACK
 static void on_input_pipe_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
 {
     struct libuv_event_loop *impl = stream->data;
@@ -328,7 +331,7 @@ static void on_timer(uv_timer_t *handle)
 
 /* Implementation */
 
-static void libuv_destroy(struct yetty_ycore_event_loop *self)
+static struct yetty_ycore_void_result libuv_destroy(struct yetty_ycore_event_loop *self)
 {
     struct libuv_event_loop *impl = container_of(self, struct libuv_event_loop, base);
 
@@ -354,6 +357,7 @@ static void libuv_destroy(struct yetty_ycore_event_loop *self)
     uv_mutex_destroy(&impl->post_mutex);
 
     free(impl);
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result libuv_start(struct yetty_ycore_event_loop *self)

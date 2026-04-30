@@ -1,5 +1,6 @@
 # yetty core (C)
 add_library(yetty_ycore STATIC
+    result.c
     types.c
     util.c
 )

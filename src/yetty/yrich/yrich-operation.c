@@ -97,10 +97,15 @@ bool yetty_yrich_operation_is_presence(const struct yetty_yrich_operation *op)
  * inverse — swap directions / flip insert<->delete pairs
  *===========================================================================*/
 
-struct yetty_yrich_operation *yetty_yrich_operation_inverse(const struct yetty_yrich_operation *op)
+struct yetty_yrich_operation_ptr_result yetty_yrich_operation_inverse(
+    const struct yetty_yrich_operation *op)
 {
-    if (!op || yetty_yrich_operation_is_presence(op)) {
-        return NULL;
+    if (!op) {
+        return YETTY_ERR(yetty_yrich_operation_ptr, "yrich operation_inverse: NULL op");
+    }
+    if (yetty_yrich_operation_is_presence(op)) {
+        return YETTY_ERR(yetty_yrich_operation_ptr,
+                         "yrich operation_inverse: presence op has no inverse");
     }
 
     uint32_t inv_type = op->type;
@@ -123,9 +128,8 @@ struct yetty_yrich_operation *yetty_yrich_operation_inverse(const struct yetty_y
 
     struct yetty_yrich_operation_ptr_result r =
         yetty_yrich_operation_create(inv_type, op->timestamp, op->author);
-    if (YETTY_IS_ERR(r)) {
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_yrich_operation_ptr, r,
+                        "yrich operation_inverse: create failed");
     struct yetty_yrich_operation *inv = r.value;
 
     switch (op->type) {
@@ -171,7 +175,7 @@ struct yetty_yrich_operation *yetty_yrich_operation_inverse(const struct yetty_y
     default:
         break;
     }
-    return inv;
+    return YETTY_OK(yetty_yrich_operation_ptr, inv);
 }
 
 /*=============================================================================

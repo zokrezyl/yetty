@@ -67,7 +67,9 @@ int main(void) {
     (void)freopen("/dev/null", "w", stderr);
 
     if (ygui_init() != 0) return 1;
-    g_engine = ygui_engine_create_with_pixel_hint("color-mixer", 2, 2, 480.0f, 380.0f);
+    { struct ygui_engine_ptr_result _eng_r = ygui_engine_create_with_pixel_hint("color-mixer", 2, 2, 480.0f, 380.0f);
+        if (YETTY_IS_ERR(_eng_r)) { yetty_ycore_error_destroy(_eng_r.error); return 1; }
+        g_engine = _eng_r.value; }
     if (!g_engine) { ygui_shutdown(); return 1; }
 
     ygui_label(g_engine, "title", 30, 15, "RGB Color Mixer");

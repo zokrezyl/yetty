@@ -26,14 +26,15 @@ yetty_ycore_object_id yetty_yui_view_next_id(void)
  * View public API
  *===========================================================================*/
 
-void yetty_yui_view_destroy(struct yetty_yui_view *view)
+struct yetty_ycore_void_result yetty_yui_view_destroy(struct yetty_yui_view *view)
 {
     if (!view) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yetty_yui_view_destroy: NULL view");
     }
-    if (view->ops && view->ops->destroy) {
-        view->ops->destroy(view);
+    if (!view->ops || !view->ops->destroy) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_yui_view_destroy: destroy not implemented");
     }
+    return view->ops->destroy(view);
 }
 
 struct yetty_ycore_void_result yetty_yui_view_render(struct yetty_yui_view *view,
@@ -48,15 +49,17 @@ struct yetty_ycore_void_result yetty_yui_view_render(struct yetty_yui_view *view
     return view->ops->render(view, render_target);
 }
 
-void yetty_yui_view_set_bounds(struct yetty_yui_view *view, struct yetty_yui_rect bounds)
+struct yetty_ycore_void_result yetty_yui_view_set_bounds(struct yetty_yui_view *view,
+                                                         struct yetty_yui_rect bounds)
 {
     if (!view) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yetty_yui_view_set_bounds: NULL view");
     }
     view->bounds = bounds;
     if (view->ops && view->ops->set_bounds) {
-        view->ops->set_bounds(view, bounds);
+        return view->ops->set_bounds(view, bounds);
     }
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_int_result yetty_yui_view_on_event(struct yetty_yui_view *view,

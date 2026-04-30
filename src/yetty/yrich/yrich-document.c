@@ -124,11 +124,11 @@ struct yetty_ycore_void_result yetty_yrich_document_add_element(struct yetty_yri
     return YETTY_OK_VOID();
 }
 
-void yetty_yrich_document_remove_element(struct yetty_yrich_document *doc,
-                                         yetty_yrich_element_id id)
+struct yetty_ycore_void_result yetty_yrich_document_remove_element(
+    struct yetty_yrich_document *doc, yetty_yrich_element_id id)
 {
     if (!doc) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yrich remove_element: NULL doc");
     }
     for (size_t i = 0; i < doc->element_count; i++) {
         if (doc->elements[i]->id != id) {
@@ -151,12 +151,17 @@ void yetty_yrich_document_remove_element(struct yetty_yrich_document *doc,
         if (YETTY_IS_OK(op_r)) {
             op_r.value->u.del.id = id;
             yetty_yrich_op_log_append(&doc->op_log, op_r.value);
+        } else {
+            /* Element is already removed; op log is best-effort. Drop the
+             * error so we don't leak its chain. */
+            yetty_ycore_error_destroy(op_r.error);
         }
 
         yetty_yrich_element_destroy(e);
         yetty_yrich_document_mark_dirty(doc);
-        return;
+        return YETTY_OK_VOID();
     }
+    return YETTY_ERR(yetty_ycore_void, "yrich remove_element: id not found");
 }
 
 struct yetty_yrich_element *yetty_yrich_document_find(const struct yetty_yrich_document *doc,
@@ -256,10 +261,10 @@ static void clear_target(struct yetty_yrich_document *doc)
     yetty_ypaint_core_buffer_set_scene_bounds(doc->buffer, 0.0f, 0.0f, w, h);
 }
 
-void yetty_yrich_document_default_render(struct yetty_yrich_document *doc)
+struct yetty_ycore_void_result yetty_yrich_document_default_render(struct yetty_yrich_document *doc)
 {
     if (!doc || !doc->buffer) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yrich document_default_render: NULL doc/buffer");
     }
 
     clear_target(doc);
@@ -268,22 +273,24 @@ void yetty_yrich_document_default_render(struct yetty_yrich_document *doc)
     for (size_t i = 0; i < doc->element_count; i++) {
         struct yetty_yrich_element *e = doc->elements[i];
         bool selected = yetty_yrich_document_is_selected(doc, e->id);
-        yetty_yrich_element_render(e, doc->buffer, layer++, selected);
+        struct yetty_ycore_void_result r =
+            yetty_yrich_element_render(e, doc->buffer, layer++, selected);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yrich document_default_render: element failed");
     }
 
     doc->dirty = false;
+    return YETTY_OK_VOID();
 }
 
-void yetty_yrich_document_render(struct yetty_yrich_document *doc)
+struct yetty_ycore_void_result yetty_yrich_document_render(struct yetty_yrich_document *doc)
 {
     if (!doc) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yrich document_render: NULL doc");
     }
     if (doc->ops && doc->ops->render) {
-        doc->ops->render(doc);
-        return;
+        return doc->ops->render(doc);
     }
-    yetty_yrich_document_default_render(doc);
+    return yetty_yrich_document_default_render(doc);
 }
 
 float yetty_yrich_document_content_width(const struct yetty_yrich_document *doc)
@@ -343,11 +350,12 @@ struct yetty_yrich_operation_ptr_result yetty_yrich_document_create_op(
     return yetty_yrich_operation_create(op_type, ts, doc->session_id);
 }
 
-void yetty_yrich_document_apply_op(struct yetty_yrich_document *doc,
-                                   struct yetty_yrich_operation *op, bool local)
+struct yetty_ycore_void_result yetty_yrich_document_apply_op(struct yetty_yrich_document *doc,
+                                                             struct yetty_yrich_operation *op,
+                                                             bool local)
 {
     if (!doc || !op) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yetty_yrich_document_apply_op: NULL doc/op");
     }
 
     if (doc->ops && doc->ops->apply_op) {
@@ -364,6 +372,8 @@ void yetty_yrich_document_apply_op(struct yetty_yrich_document *doc,
             yetty_yrich_operation_create(op->type, op->timestamp, op->author);
         if (YETTY_IS_OK(r)) {
             yetty_yrich_op_log_append(&doc->op_log, r.value);
+        } else {
+            yetty_ycore_error_destroy(r.error);
         }
     }
 
@@ -373,6 +383,7 @@ void yetty_yrich_document_apply_op(struct yetty_yrich_document *doc,
     }
 
     yetty_yrich_document_mark_dirty(doc);
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_yrich_document_execute(struct yetty_yrich_document *doc,
@@ -384,22 +395,24 @@ struct yetty_ycore_void_result yetty_yrich_document_execute(struct yetty_yrich_d
     return yetty_yrich_history_execute(&doc->history, cmd, doc);
 }
 
-void yetty_yrich_document_undo(struct yetty_yrich_document *doc)
+struct yetty_ycore_void_result yetty_yrich_document_undo(struct yetty_yrich_document *doc)
 {
     if (!doc) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yetty_yrich_document_undo: NULL doc");
     }
-    yetty_yrich_history_undo(&doc->history, doc);
+    struct yetty_ycore_void_result r = yetty_yrich_history_undo(&doc->history, doc);
     yetty_yrich_document_mark_dirty(doc);
+    return r;
 }
 
-void yetty_yrich_document_redo(struct yetty_yrich_document *doc)
+struct yetty_ycore_void_result yetty_yrich_document_redo(struct yetty_yrich_document *doc)
 {
     if (!doc) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yetty_yrich_document_redo: NULL doc");
     }
-    yetty_yrich_history_redo(&doc->history, doc);
+    struct yetty_ycore_void_result r = yetty_yrich_history_redo(&doc->history, doc);
     yetty_yrich_document_mark_dirty(doc);
+    return r;
 }
 
 /*=============================================================================
@@ -434,25 +447,22 @@ void yetty_yrich_document_default_on_mouse_down(struct yetty_yrich_document *doc
     yetty_yrich_document_mark_dirty(doc);
 }
 
-void yetty_yrich_document_default_on_key_down(struct yetty_yrich_document *doc, uint32_t key,
-                                              struct yetty_yrich_input_mods mods)
+struct yetty_ycore_void_result yetty_yrich_document_default_on_key_down(
+    struct yetty_yrich_document *doc, uint32_t key, struct yetty_yrich_input_mods mods)
 {
     if (!doc) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "default_on_key_down: NULL doc");
     }
 
     if (mods.ctrl) {
         switch (key) {
         case YETTY_YRICH_KEY_Z:
             if (mods.shift) {
-                yetty_yrich_document_redo(doc);
-            } else {
-                yetty_yrich_document_undo(doc);
+                return yetty_yrich_document_redo(doc);
             }
-            return;
+            return yetty_yrich_document_undo(doc);
         case YETTY_YRICH_KEY_Y:
-            yetty_yrich_document_redo(doc);
-            return;
+            return yetty_yrich_document_redo(doc);
         default:
             break;
         }
@@ -462,6 +472,7 @@ void yetty_yrich_document_default_on_key_down(struct yetty_yrich_document *doc, 
         /* Subclass-specific deletion happens via apply_op; nothing
 		 * generic to do at the base. */
     }
+    return YETTY_OK_VOID();
 }
 
 /* Forwarders — pick the vtable override if present, otherwise the default. */
@@ -529,10 +540,17 @@ void yetty_yrich_document_on_mouse_double_click(struct yetty_yrich_document *doc
     }
 }
 
-void yetty_yrich_document_on_key_down(struct yetty_yrich_document *doc, uint32_t key,
-                                      struct yetty_yrich_input_mods mods)
+struct yetty_ycore_void_result yetty_yrich_document_on_key_down(
+    struct yetty_yrich_document *doc, uint32_t key, struct yetty_yrich_input_mods mods)
 {
-    DOC_FORWARD(on_key_down, yetty_yrich_document_default_on_key_down, doc, key, mods);
+    if (!doc) {
+        return YETTY_ERR(yetty_ycore_void, "document_on_key_down: NULL doc");
+    }
+    if (doc->ops && doc->ops->on_key_down) {
+        doc->ops->on_key_down(doc, key, mods);
+        return YETTY_OK_VOID();
+    }
+    return yetty_yrich_document_default_on_key_down(doc, key, mods);
 }
 
 void yetty_yrich_document_on_text_input(struct yetty_yrich_document *doc, const char *text,

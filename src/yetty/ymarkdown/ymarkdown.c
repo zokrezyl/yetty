@@ -491,8 +491,9 @@ static uint32_t ymd_span_color(const struct ymd_span *s)
     return YMD_COLOR_TEXT;
 }
 
-static int ymd_emit(struct yetty_ypaint_core_buffer *buf, const struct ymd_doc *doc,
-                    const struct ymd_params *p)
+static struct yetty_ycore_void_result ymd_emit(struct yetty_ypaint_core_buffer *buf,
+                                               const struct ymd_doc *doc,
+                                               const struct ymd_params *p)
 {
     float cursor_y = 2.0f;
     float line_height = p->font_size * p->line_spacing;
@@ -524,7 +525,7 @@ static int ymd_emit(struct yetty_ypaint_core_buffer *buf, const struct ymd_doc *
                 struct yetty_ypaint_id_result r =
                     yetty_ysdf_add_box(buf, 0, YMD_COLOR_CODE_BG, 0, 0.0f, &geom);
                 if (r.error != YPAINT_OK) {
-                    return -1;
+                    return YETTY_ERR(yetty_ycore_void, "ymd_emit: code box add failed");
                 }
             }
 
@@ -536,7 +537,7 @@ static int ymd_emit(struct yetty_ypaint_core_buffer *buf, const struct ymd_doc *
             struct yetty_ycore_void_result tr = yetty_ypaint_core_buffer_add_text(
                 buf, cursor_x, cursor_y, &text, scaled_size, color, 0, -1, 0.0f);
             if (YETTY_IS_ERR(tr)) {
-                return -1;
+                return tr;
             }
 
             cursor_x += (float)span->text_len * scaled_size * 0.6f;
@@ -545,7 +546,7 @@ static int ymd_emit(struct yetty_ypaint_core_buffer *buf, const struct ymd_doc *
         cursor_y += scaled_line_height;
     }
 
-    return 0;
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================
@@ -593,10 +594,11 @@ struct yetty_ymarkdown_render_result yetty_ymarkdown_render(
         return YETTY_ERR(yetty_ymarkdown_render, "parse failed");
     }
 
-    if (ymd_emit(buf, &doc, &params) < 0) {
+    struct yetty_ycore_void_result er = ymd_emit(buf, &doc, &params);
+    if (YETTY_IS_ERR(er)) {
         ymd_doc_destroy(&doc);
         yetty_ypaint_core_buffer_destroy(buf);
-        return YETTY_ERR(yetty_ymarkdown_render, "primitive emission failed");
+        return YETTY_ERR(yetty_ymarkdown_render, "ymarkdown: primitive emission failed", er);
     }
 
     ymd_doc_destroy(&doc);

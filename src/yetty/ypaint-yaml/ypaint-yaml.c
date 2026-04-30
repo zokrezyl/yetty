@@ -325,9 +325,10 @@ static struct yetty_ycore_void_result text_factory(struct yetty_ypaint_core_buff
     return YETTY_OK_VOID();
 }
 
-static void register_text_factory(struct yetty_ypaint_yaml_parser *parser)
+static struct yetty_ycore_void_result register_text_factory(
+    struct yetty_ypaint_yaml_parser *parser)
 {
-    yetty_ypaint_yaml_parser_register(parser, "text", text_factory);
+    return yetty_ypaint_yaml_parser_register(parser, "text", text_factory);
 }
 
 // yplot factory is generated - see yplot-gen-yaml.c
@@ -361,8 +362,14 @@ struct yetty_ypaint_core_buffer_result yetty_ypaint_yaml_parse(const char *yaml,
     } else {
         ydebug("ypaint_yaml: ysdf factories registered, count=%zu", parser->count);
     }
-    register_text_factory(parser);
-    yetty_yplot_register_yaml_factory(parser);
+    struct yetty_ycore_void_result text_reg_res = register_text_factory(parser);
+    if (YETTY_IS_ERR(text_reg_res)) {
+        ydebug("ypaint_yaml: text factory registration failed: %s", text_reg_res.error.msg);
+    }
+    struct yetty_ycore_void_result yplot_reg_res = yetty_yplot_register_yaml_factory(parser);
+    if (YETTY_IS_ERR(yplot_reg_res)) {
+        ydebug("ypaint_yaml: yplot factory registration failed: %s", yplot_reg_res.error.msg);
+    }
     ydebug("ypaint_yaml: text+yplot factories registered, total count=%zu", parser->count);
 
     struct yetty_ycore_void_result parse_res =

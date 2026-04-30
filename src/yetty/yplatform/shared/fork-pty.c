@@ -32,7 +32,7 @@ struct fork_pty {
 };
 
 /* Forward declarations */
-static void fork_pty_destroy(struct yetty_yplatform_pty *self);
+static struct yetty_ycore_void_result fork_pty_destroy(struct yetty_yplatform_pty *self);
 static struct yetty_ycore_size_result fork_pty_read(struct yetty_yplatform_pty *self, char *buf,
                                                     size_t max_len);
 static struct yetty_ycore_size_result fork_pty_write(struct yetty_yplatform_pty *self,
@@ -53,12 +53,17 @@ static const struct yetty_yplatform_pty_ops fork_pty_ops = {
     .pipe_source = fork_pty_pipe_source,
 };
 
-static void fork_pty_destroy(struct yetty_yplatform_pty *self)
+static struct yetty_ycore_void_result fork_pty_destroy(struct yetty_yplatform_pty *self)
 {
     struct fork_pty *pty = container_of(self, struct fork_pty, base);
 
-    fork_pty_stop(self);
+    struct yetty_ycore_void_result stop_r = fork_pty_stop(self);
     free(pty);
+
+    if (YETTY_IS_ERR(stop_r)) {
+        return YETTY_ERR(yetty_ycore_void, "fork_pty_destroy: stop failed", stop_r);
+    }
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_size_result fork_pty_read(struct yetty_yplatform_pty *self, char *buf,

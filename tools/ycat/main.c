@@ -286,11 +286,15 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
 			free(url_mime);
 			return -1;
 		}
-		size_t emitted = yetty_ycat_osc_bin_emit(r.value, stdout);
+		struct yetty_ycore_size_result em_r = yetty_ycat_osc_bin_emit(r.value, stdout);
 		yetty_ypaint_core_buffer_destroy(r.value);
 		byte_buf_free(&buf);
 		free(url_mime);
-		return emitted > 0 ? 0 : -1;
+		if (YETTY_IS_ERR(em_r)) {
+			yetty_ycore_error_destroy(em_r.error);
+			return -1;
+		}
+		return em_r.value > 0 ? 0 : -1;
 	}
 
 	/* Default path (no --ts, no --raw-alone). */
@@ -314,12 +318,16 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
 			struct yetty_ypaint_core_buffer_result r =
 				fn(buf.data, buf.len, path_hint, &cfg);
 			if (YETTY_IS_OK(r)) {
-				size_t emitted =
+				struct yetty_ycore_size_result em_r =
 					yetty_ycat_osc_bin_emit(r.value, stdout);
 				yetty_ypaint_core_buffer_destroy(r.value);
 				byte_buf_free(&buf);
 				free(url_mime);
-				return emitted > 0 ? 0 : -1;
+				if (YETTY_IS_ERR(em_r)) {
+					yetty_ycore_error_destroy(em_r.error);
+					return -1;
+				}
+				return em_r.value > 0 ? 0 : -1;
 			}
 			fprintf(stderr,
 				"ycat: %s: ypaint handler failed (%s), trying tree-sitter\n",
@@ -330,12 +338,16 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
 				yetty_ycat_ts_render(buf.data, buf.len,
 						     grammar, &cfg);
 			if (YETTY_IS_OK(r)) {
-				size_t emitted =
+				struct yetty_ycore_size_result em_r =
 					yetty_ycat_osc_bin_emit(r.value, stdout);
 				yetty_ypaint_core_buffer_destroy(r.value);
 				byte_buf_free(&buf);
 				free(url_mime);
-				return emitted > 0 ? 0 : -1;
+				if (YETTY_IS_ERR(em_r)) {
+					yetty_ycore_error_destroy(em_r.error);
+					return -1;
+				}
+				return em_r.value > 0 ? 0 : -1;
 			}
 		}
 	} else {

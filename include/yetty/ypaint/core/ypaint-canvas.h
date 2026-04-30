@@ -15,11 +15,13 @@ extern "C" {
 struct yetty_ypaint_canvas;
 struct yetty_context;
 
+YETTY_YRESULT_DECLARE(yetty_ypaint_canvas_ptr, struct yetty_ypaint_canvas *);
+
 // Create a canvas
 // @param scrolling_mode If true, primitives are cursor-relative and scroll
 // @param context Yetty context for config access (fonts path, etc.)
-struct yetty_ypaint_canvas *yetty_ypaint_canvas_create(bool scrolling_mode,
-                                                       const struct yetty_context *context);
+struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
+    bool scrolling_mode, const struct yetty_context *context);
 
 // Destroy a canvas
 struct yetty_ycore_void_result yetty_ypaint_canvas_destroy(struct yetty_ypaint_canvas *canvas);
@@ -147,10 +149,17 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_clear_staging(
 // Primitive staging for GPU
 //=============================================================================
 
-// Build primitive staging data for GPU upload
-// Returns pointer to staging buffer, sets word_count
-const uint32_t *yetty_ypaint_canvas_build_prim_staging(struct yetty_ypaint_canvas *canvas,
-                                                       uint32_t *word_count);
+// Pointer + size view returned by build_prim_staging.
+struct yetty_ypaint_prim_staging {
+    const uint32_t *data;
+    uint32_t word_count;
+};
+YETTY_YRESULT_DECLARE(yetty_ypaint_prim_staging, struct yetty_ypaint_prim_staging);
+
+// Build primitive staging data for GPU upload.
+// On success, returns the staging buffer view; word_count==0 on empty canvas.
+struct yetty_ypaint_prim_staging_result yetty_ypaint_canvas_build_prim_staging(
+    struct yetty_ypaint_canvas *canvas);
 
 // Get total GPU size for primitives (in bytes)
 uint32_t yetty_ypaint_canvas_prim_gpu_size(struct yetty_ypaint_canvas *canvas);

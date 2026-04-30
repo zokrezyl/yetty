@@ -35,11 +35,11 @@ void ygui_render_ctx_init(ygui_render_ctx_t *ctx, struct yetty_ypaint_core_buffe
  * Drawing Functions
  *===========================================================================*/
 
-void ygui_render_box(ygui_render_ctx_t *ctx, float x, float y, float w, float h, uint32_t color,
-                     float radius)
+struct yetty_ycore_void_result ygui_render_box(ygui_render_ctx_t *ctx, float x, float y, float w,
+                                               float h, uint32_t color, float radius)
 {
     if (!ctx->buffer) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "ygui_render_box: NULL buffer");
     }
 
     float ax = x + ctx->offset_x;
@@ -49,6 +49,7 @@ void ygui_render_box(ygui_render_ctx_t *ctx, float x, float y, float w, float h,
     float hw = w * 0.5f;
     float hh = h * 0.5f;
 
+    struct yetty_ypaint_id_result r;
     if (radius > 0) {
         struct yetty_ysdf_rounded_box geom = {
             .center_x = cx,
@@ -60,7 +61,7 @@ void ygui_render_box(ygui_render_ctx_t *ctx, float x, float y, float w, float h,
             .radius_top_left = radius,
             .radius_bottom_left = radius,
         };
-        yetty_ysdf_add_rounded_box(ctx->buffer, 0, color, 0, 0.0f, &geom);
+        r = yetty_ysdf_add_rounded_box(ctx->buffer, 0, color, 0, 0.0f, &geom);
     } else {
         struct yetty_ysdf_box geom = {
             .center_x = cx,
@@ -69,15 +70,20 @@ void ygui_render_box(ygui_render_ctx_t *ctx, float x, float y, float w, float h,
             .half_height = hh,
             .corner_radius = 0.0f,
         };
-        yetty_ysdf_add_box(ctx->buffer, 0, color, 0, 0.0f, &geom);
+        r = yetty_ysdf_add_box(ctx->buffer, 0, color, 0, 0.0f, &geom);
     }
+    if (r.error != YPAINT_OK) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_render_box: add failed");
+    }
+    return YETTY_OK_VOID();
 }
 
-void ygui_render_box_outline(ygui_render_ctx_t *ctx, float x, float y, float w, float h,
-                             uint32_t color, float radius, float stroke_width)
+struct yetty_ycore_void_result ygui_render_box_outline(ygui_render_ctx_t *ctx, float x, float y,
+                                                      float w, float h, uint32_t color,
+                                                      float radius, float stroke_width)
 {
     if (!ctx->buffer) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "ygui_render_box_outline: NULL buffer");
     }
 
     float ax = x + ctx->offset_x;
@@ -87,6 +93,7 @@ void ygui_render_box_outline(ygui_render_ctx_t *ctx, float x, float y, float w, 
     float hw = w * 0.5f;
     float hh = h * 0.5f;
 
+    struct yetty_ypaint_id_result r;
     if (radius > 0) {
         struct yetty_ysdf_rounded_box geom = {
             .center_x = cx,
@@ -98,7 +105,7 @@ void ygui_render_box_outline(ygui_render_ctx_t *ctx, float x, float y, float w, 
             .radius_top_left = radius,
             .radius_bottom_left = radius,
         };
-        yetty_ysdf_add_rounded_box(ctx->buffer, 0, 0, color, stroke_width, &geom);
+        r = yetty_ysdf_add_rounded_box(ctx->buffer, 0, 0, color, stroke_width, &geom);
     } else {
         struct yetty_ysdf_box geom = {
             .center_x = cx,
@@ -107,15 +114,19 @@ void ygui_render_box_outline(ygui_render_ctx_t *ctx, float x, float y, float w, 
             .half_height = hh,
             .corner_radius = 0.0f,
         };
-        yetty_ysdf_add_box(ctx->buffer, 0, 0, color, stroke_width, &geom);
+        r = yetty_ysdf_add_box(ctx->buffer, 0, 0, color, stroke_width, &geom);
     }
+    if (r.error != YPAINT_OK) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_render_box_outline: add failed");
+    }
+    return YETTY_OK_VOID();
 }
 
-void ygui_render_text(ygui_render_ctx_t *ctx, const char *text, float x, float y, uint32_t color,
-                      float font_size)
+struct yetty_ycore_void_result ygui_render_text(ygui_render_ctx_t *ctx, const char *text, float x,
+                                                float y, uint32_t color, float font_size)
 {
     if (!ctx->buffer || !text) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "ygui_render_text: NULL buffer or text");
     }
 
     float ax = x + ctx->offset_x;
@@ -132,44 +143,56 @@ void ygui_render_text(ygui_render_ctx_t *ctx, const char *text, float x, float y
         .size = tlen,
         .capacity = tlen,
     };
-    yetty_ypaint_core_buffer_add_text(ctx->buffer, ax, ay + font_size * 0.8f, &tbuf, font_size,
-                                      color,
-                                      /*layer*/ 0, /*font_id*/ -1,
-                                      /*rotation*/ 0.0f);
+    return yetty_ypaint_core_buffer_add_text(ctx->buffer, ax, ay + font_size * 0.8f, &tbuf,
+                                             font_size, color,
+                                             /*layer*/ 0, /*font_id*/ -1,
+                                             /*rotation*/ 0.0f);
 }
 
-void ygui_render_circle(ygui_render_ctx_t *ctx, float cx, float cy, float r, uint32_t color)
+struct yetty_ycore_void_result ygui_render_circle(ygui_render_ctx_t *ctx, float cx, float cy,
+                                                  float r, uint32_t color)
 {
     if (!ctx->buffer) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "ygui_render_circle: NULL buffer");
     }
 
     float ax = cx + ctx->offset_x;
     float ay = cy + ctx->offset_y;
 
     struct yetty_ysdf_circle geom = {.center_x = ax, .center_y = ay, .radius = r};
-    yetty_ysdf_add_circle(ctx->buffer, 0, color, 0, 0.0f, &geom);
+    struct yetty_ypaint_id_result rr = yetty_ysdf_add_circle(ctx->buffer, 0, color, 0, 0.0f, &geom);
+    if (rr.error != YPAINT_OK) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_render_circle: add failed");
+    }
+    return YETTY_OK_VOID();
 }
 
-void ygui_render_circle_outline(ygui_render_ctx_t *ctx, float cx, float cy, float r, uint32_t color,
-                                float stroke_width)
+struct yetty_ycore_void_result ygui_render_circle_outline(ygui_render_ctx_t *ctx, float cx,
+                                                          float cy, float r, uint32_t color,
+                                                          float stroke_width)
 {
     if (!ctx->buffer) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "ygui_render_circle_outline: NULL buffer");
     }
 
     float ax = cx + ctx->offset_x;
     float ay = cy + ctx->offset_y;
 
     struct yetty_ysdf_circle geom = {.center_x = ax, .center_y = ay, .radius = r};
-    yetty_ysdf_add_circle(ctx->buffer, 0, 0, color, stroke_width, &geom);
+    struct yetty_ypaint_id_result rr =
+        yetty_ysdf_add_circle(ctx->buffer, 0, 0, color, stroke_width, &geom);
+    if (rr.error != YPAINT_OK) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_render_circle_outline: add failed");
+    }
+    return YETTY_OK_VOID();
 }
 
-void ygui_render_triangle(ygui_render_ctx_t *ctx, float x0, float y0, float x1, float y1, float x2,
-                          float y2, uint32_t color)
+struct yetty_ycore_void_result ygui_render_triangle(ygui_render_ctx_t *ctx, float x0, float y0,
+                                                    float x1, float y1, float x2, float y2,
+                                                    uint32_t color)
 {
     if (!ctx->buffer) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "ygui_render_triangle: NULL buffer");
     }
 
     float ox = ctx->offset_x;
@@ -183,5 +206,10 @@ void ygui_render_triangle(ygui_render_ctx_t *ctx, float x0, float y0, float x1, 
         .vertex_c_x = x2 + ox,
         .vertex_c_y = y2 + oy,
     };
-    yetty_ysdf_add_triangle(ctx->buffer, 0, color, 0, 0.0f, &geom);
+    struct yetty_ypaint_id_result rr =
+        yetty_ysdf_add_triangle(ctx->buffer, 0, color, 0, 0.0f, &geom);
+    if (rr.error != YPAINT_OK) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_render_triangle: add failed");
+    }
+    return YETTY_OK_VOID();
 }

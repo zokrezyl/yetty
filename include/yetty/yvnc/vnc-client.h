@@ -35,7 +35,7 @@ struct yetty_vnc_client_ptr_result yetty_vnc_client_create(
     struct yetty_ycore_event_loop *event_loop, uint16_t width, uint16_t height);
 
 /* Destroy client (handles NULL) */
-void yetty_vnc_client_destroy(struct yetty_vnc_client *client);
+struct yetty_ycore_void_result yetty_vnc_client_destroy(struct yetty_vnc_client *client);
 
 /* Connect to server */
 struct yetty_ycore_void_result yetty_vnc_client_connect(struct yetty_vnc_client *client,

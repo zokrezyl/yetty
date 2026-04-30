@@ -40,7 +40,11 @@ static void set_cell(struct yetty_yrich_spreadsheet *s, int row, int col,
 		     const char *value)
 {
 	struct yetty_yrich_cell_addr addr = { row, col };
-	yetty_yrich_spreadsheet_set_cell_value(s, addr, value, strlen(value));
+	struct yetty_ycore_void_result r =
+		yetty_yrich_spreadsheet_set_cell_value(s, addr, value, strlen(value));
+	if (YETTY_IS_ERR(r)) {
+		yetty_ycore_error_destroy(r.error);
+	}
 }
 
 static void seed_demo(struct yetty_yrich_spreadsheet *s)

@@ -322,12 +322,17 @@ static int find_font_idx(const struct ypdf_font_info *fonts, size_t count, const
     return -1;
 }
 
-static void extract_page_fonts(pdfio_obj_t *page_obj, struct yetty_ypaint_core_buffer *buffer,
-                               struct ypdf_font_info *fonts, size_t *font_count)
+/* Per-font failures are intentionally absorbed (logged + continue). The
+ * Result return is structural (this function calls Result-returning
+ * APIs); it always reports OK. */
+static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
+                                                         struct yetty_ypaint_core_buffer *buffer,
+                                                         struct ypdf_font_info *fonts,
+                                                         size_t *font_count)
 {
     pdfio_dict_t *page_dict = pdfioObjGetDict(page_obj);
     if (!page_dict) {
-        return;
+        return YETTY_OK_VOID();
     }
 
     pdfio_dict_t *resources = pdfioDictGetDict(page_dict, "Resources");
@@ -338,7 +343,7 @@ static void extract_page_fonts(pdfio_obj_t *page_obj, struct yetty_ypaint_core_b
         }
     }
     if (!resources) {
-        return;
+        return YETTY_OK_VOID();
     }
 
     pdfio_dict_t *font_dict = pdfioDictGetDict(resources, "Font");
@@ -349,7 +354,7 @@ static void extract_page_fonts(pdfio_obj_t *page_obj, struct yetty_ypaint_core_b
         }
     }
     if (!font_dict) {
-        return;
+        return YETTY_OK_VOID();
     }
 
     size_t n = pdfioDictGetNumPairs(font_dict);
@@ -491,6 +496,7 @@ static void extract_page_fonts(pdfio_obj_t *page_obj, struct yetty_ypaint_core_b
         (*font_count)++;
         ydebug("ypdf: extracted font '%s' (%zu bytes) identityH=%d", tag, sz, (int)is_identity_h);
     }
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================
@@ -604,6 +610,7 @@ static struct float_result text_emit_cb(void *ud, const char *text, size_t text_
     return YETTY_OK(float, advance);
 }
 
+YETTY_EXTERNAL_CALLBACK
 static void rect_paint_cb(void *ud, float x, float y, float w, float h,
                           enum yetty_ypdf_paint_mode mode, float sr, float sg, float sb, float fr,
                           float fg, float fb, float line_width)
@@ -638,6 +645,7 @@ static void rect_paint_cb(void *ud, float x, float y, float w, float h,
     }
 }
 
+YETTY_EXTERNAL_CALLBACK
 static void line_paint_cb(void *ud, float x0, float y0, float x1, float y1, float r, float g,
                           float b, float line_width)
 {
@@ -750,7 +758,9 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(pdfio_file_t *pdf)
         }
         float ph = (float)(mb.y2 - mb.y1);
 
-        extract_page_fonts(page_obj, buffer, fonts, &font_count);
+        struct yetty_ycore_void_result fr =
+            extract_page_fonts(page_obj, buffer, fonts, &font_count);
+        (void)fr; /* per-font failures already logged inside */
 
         struct yetty_ypdf_content_parser_ptr_result pr = yetty_ypdf_content_parser_create(&cb);
         if (YETTY_IS_ERR(pr)) {

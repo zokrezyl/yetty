@@ -98,7 +98,7 @@ struct telnet_pty {
 };
 
 /* Forward declarations */
-static void telnet_pty_destroy(struct yetty_yplatform_pty *self);
+static struct yetty_ycore_void_result telnet_pty_destroy(struct yetty_yplatform_pty *self);
 static struct yetty_ycore_size_result telnet_pty_read(struct yetty_yplatform_pty *self, char *buf,
                                                       size_t max_len);
 static struct yetty_ycore_size_result telnet_pty_write(struct yetty_yplatform_pty *self,
@@ -515,11 +515,11 @@ static struct yetty_ycore_void_result telnet_pty_stop(struct yetty_yplatform_pty
     return YETTY_OK_VOID();
 }
 
-static void telnet_pty_destroy(struct yetty_yplatform_pty *self)
+static struct yetty_ycore_void_result telnet_pty_destroy(struct yetty_yplatform_pty *self)
 {
     struct telnet_pty *pty = (struct telnet_pty *)self;
 
-    telnet_pty_stop(self);
+    struct yetty_ycore_void_result stop_r = telnet_pty_stop(self);
 
     /* destroy_timer is independent of stop_timer — close the uv_timer_t. */
     pty->event_loop->ops->destroy_timer(pty->event_loop, pty->naws_timer_id);
@@ -531,6 +531,11 @@ static void telnet_pty_destroy(struct yetty_yplatform_pty *self)
 
     free(pty->host);
     free(pty);
+
+    if (YETTY_IS_ERR(stop_r)) {
+        return YETTY_ERR(yetty_ycore_void, "telnet_pty_destroy: stop failed", stop_r);
+    }
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_yplatform_pty_pipe_source *telnet_pty_pipe_source(

@@ -61,6 +61,7 @@ struct render_thread_args {
     int result;
 };
 
+YETTY_EXTERNAL_CALLBACK
 static int render_thread_func(void *arg)
 {
     struct render_thread_args *args = arg;

@@ -133,7 +133,8 @@ struct yetty_yterm_ypaint_layer {
 };
 
 /* Forward declarations */
-static void ypaint_layer_destroy(struct yetty_yterm_terminal_layer *self);
+static struct yetty_ycore_void_result ypaint_layer_destroy(
+    struct yetty_yterm_terminal_layer *self);
 static struct yetty_ycore_void_result ypaint_layer_write(struct yetty_yterm_terminal_layer *self,
                                                          int osc_code, const char *data,
                                                          size_t len);
@@ -147,13 +148,15 @@ static int ypaint_layer_on_char(struct yetty_yterm_terminal_layer *self, uint32_
 static int ypaint_layer_is_empty(const struct yetty_yterm_terminal_layer *self);
 static struct yetty_ycore_void_result ypaint_layer_scroll(struct yetty_yterm_terminal_layer *self,
                                                           int lines);
-static void ypaint_layer_set_cursor(struct yetty_yterm_terminal_layer *self, int col, int row);
+static struct yetty_ycore_void_result ypaint_layer_set_cursor(
+    struct yetty_yterm_terminal_layer *self, int col, int row);
 static struct yetty_ycore_void_result ypaint_layer_render(struct yetty_yterm_terminal_layer *self,
                                                           struct yetty_yrender_target *target);
 static uint32_t ypaint_layer_get_live_anchor(const struct yetty_yterm_terminal_layer *self);
-static void ypaint_layer_set_view_top(struct yetty_yterm_terminal_layer *self, int active,
-                                      uint32_t view_top_total_idx);
-static void ypaint_layer_set_alt_screen(struct yetty_yterm_terminal_layer *self, int active);
+static struct yetty_ycore_void_result ypaint_layer_set_view_top(
+    struct yetty_yterm_terminal_layer *self, int active, uint32_t view_top_total_idx);
+static struct yetty_ycore_void_result ypaint_layer_set_alt_screen(
+    struct yetty_yterm_terminal_layer *self, int active);
 
 /* Canvas scroll callback - propagate to other layers */
 static struct yetty_ycore_void_result on_canvas_scroll(struct yetty_ycore_void_result *user_data,
@@ -339,11 +342,14 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ypaint_layer_create(
         free(layer);
         return YETTY_ERR(yetty_yterm_terminal_layer, "context is NULL");
     }
-    layer->canvas = yetty_ypaint_canvas_create(scrolling_mode ? true : false, context);
-    if (!layer->canvas) {
+    struct yetty_ypaint_canvas_ptr_result canvas_res =
+        yetty_ypaint_canvas_create(scrolling_mode ? true : false, context);
+    if (YETTY_IS_ERR(canvas_res)) {
         free(layer);
-        return YETTY_ERR(yetty_yterm_terminal_layer, "failed to create ypaint canvas");
+        return YETTY_ERR(yetty_yterm_terminal_layer, "ypaint-layer: canvas create failed",
+                         canvas_res);
     }
+    layer->canvas = canvas_res.value;
 
     /* Configure canvas grid/cell dimensions */
     yetty_ypaint_canvas_set_cell_size(
@@ -409,23 +415,41 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ypaint_layer_create(
 }
 
 /* Destroy */
-static void ypaint_layer_destroy(struct yetty_yterm_terminal_layer *self)
+static struct yetty_ycore_void_result ypaint_layer_destroy(
+    struct yetty_yterm_terminal_layer *self)
 {
     struct yetty_yterm_ypaint_layer *layer = (struct yetty_yterm_ypaint_layer *)self;
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
     if (layer->yface) {
         yetty_yface_destroy(layer->yface);
     }
     if (layer->canvas) {
-        yetty_ypaint_canvas_destroy(layer->canvas);
+        struct yetty_ycore_void_result cr = yetty_ypaint_canvas_destroy(layer->canvas);
+        if (YETTY_IS_ERR(cr)) {
+            first_err = cr;
+        }
     }
     if (layer->saved_canvas) {
-        yetty_ypaint_canvas_destroy(layer->saved_canvas);
+        struct yetty_ycore_void_result cr = yetty_ypaint_canvas_destroy(layer->saved_canvas);
+        if (YETTY_IS_ERR(cr)) {
+            if (YETTY_IS_OK(first_err)) {
+                first_err = cr;
+            } else {
+                yetty_ycore_error_destroy(cr.error);
+            }
+        }
     }
 
     free(layer->shader_code.data);
     free(layer->sdf_lib_code.data);
     free(layer);
+
+    if (YETTY_IS_ERR(first_err)) {
+        return YETTY_ERR(yetty_ycore_void, "ypaint_layer_destroy: canvas destroy failed",
+                         first_err);
+    }
+    return YETTY_OK_VOID();
 }
 
 /* Split "<b64-args>;<b64-payload>" into the two slots. Returns 0 on
@@ -622,9 +646,16 @@ static struct yetty_yrender_gpu_resource_set_result ypaint_layer_get_gpu_resourc
         layer->rs.buffers[0].dirty = 1;
 
         /* Build primitive staging */
+        struct yetty_ypaint_prim_staging_result ps_r =
+            yetty_ypaint_canvas_build_prim_staging(layer->canvas);
+        const uint32_t *prim_data = NULL;
         uint32_t prim_word_count = 0;
-        const uint32_t *prim_data =
-            yetty_ypaint_canvas_build_prim_staging(layer->canvas, &prim_word_count);
+        if (YETTY_IS_OK(ps_r)) {
+            prim_data = ps_r.value.data;
+            prim_word_count = ps_r.value.word_count;
+        } else {
+            yetty_ycore_error_destroy(ps_r.error);
+        }
 
         layer->rs.buffers[1].data = (uint8_t *)prim_data;
         layer->rs.buffers[1].size = prim_word_count * sizeof(uint32_t);
@@ -750,18 +781,21 @@ static uint32_t ypaint_layer_get_live_anchor(const struct yetty_yterm_terminal_l
 }
 
 /* Pin / release the canvas's viewport for tmux-style scrollback view. */
-static void ypaint_layer_set_view_top(struct yetty_yterm_terminal_layer *self, int active,
-                                      uint32_t view_top_total_idx)
+static struct yetty_ycore_void_result ypaint_layer_set_view_top(
+    struct yetty_yterm_terminal_layer *self, int active, uint32_t view_top_total_idx)
 {
     struct yetty_yterm_ypaint_layer *layer = (struct yetty_yterm_ypaint_layer *)self;
     if (!layer->canvas) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "ypaint_layer_set_view_top: NULL canvas");
     }
-    yetty_ypaint_canvas_set_view_top(layer->canvas, active ? true : false, view_top_total_idx);
+    struct yetty_ycore_void_result vt =
+        yetty_ypaint_canvas_set_view_top(layer->canvas, active ? true : false, view_top_total_idx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vt, "ypaint_layer_set_view_top failed");
     layer->base.dirty = 1;
     if (layer->base.request_render_fn) {
         layer->base.request_render_fn(layer->base.request_render_userdata);
     }
+    return YETTY_OK_VOID();
 }
 
 /* Alt-screen entry/exit: swap the active canvas with a saved one. The
@@ -769,12 +803,13 @@ static void ypaint_layer_set_view_top(struct yetty_yterm_terminal_layer *self, i
  * never use it, so paying the cost up-front is wasteful. Each canvas
  * keeps its own primitives, fonts, and rolling-row state; toggling is
  * just a pointer swap (no GPU work, no data copy). */
-static void ypaint_layer_set_alt_screen(struct yetty_yterm_terminal_layer *self, int active)
+static struct yetty_ycore_void_result ypaint_layer_set_alt_screen(
+    struct yetty_yterm_terminal_layer *self, int active)
 {
     struct yetty_yterm_ypaint_layer *layer = (struct yetty_yterm_ypaint_layer *)self;
     int wanted = active ? 1 : 0;
     if (layer->alt_active == wanted) {
-        return;
+        return YETTY_OK_VOID();
     }
 
     /* Lazy-build the saved-side canvas the first time we toggle. The
@@ -782,19 +817,27 @@ static void ypaint_layer_set_alt_screen(struct yetty_yterm_terminal_layer *self,
    * and on the primary slot if for some reason we exit before having
    * entered (shouldn't happen, but cheap to handle). */
     if (!layer->saved_canvas && layer->create_context) {
-        layer->saved_canvas =
-            yetty_ypaint_canvas_create(layer->scrolling_mode ? true : false, layer->create_context);
-        if (layer->saved_canvas) {
-            yetty_ypaint_canvas_set_cell_size(layer->saved_canvas, layer->base.cell_size);
-            yetty_ypaint_canvas_set_grid_size(layer->saved_canvas, layer->base.grid_size);
-            yetty_ypaint_canvas_set_scroll_callback(layer->saved_canvas, on_canvas_scroll,
-                                                    (struct yetty_ycore_void_result *)layer);
-            yetty_ypaint_canvas_set_cursor_callback(layer->saved_canvas, on_canvas_cursor_set,
-                                                    (struct yetty_ycore_void_result *)layer);
+        struct yetty_ypaint_canvas_ptr_result saved_res = yetty_ypaint_canvas_create(
+            layer->scrolling_mode ? true : false, layer->create_context);
+        if (YETTY_IS_ERR(saved_res)) {
+            return YETTY_ERR(yetty_ycore_void, "ypaint_layer_set_alt_screen: canvas create failed",
+                             saved_res);
         }
+        layer->saved_canvas = saved_res.value;
+        struct yetty_ycore_void_result r;
+        r = yetty_ypaint_canvas_set_cell_size(layer->saved_canvas, layer->base.cell_size);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "set_alt_screen: set_cell_size failed");
+        r = yetty_ypaint_canvas_set_grid_size(layer->saved_canvas, layer->base.grid_size);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "set_alt_screen: set_grid_size failed");
+        r = yetty_ypaint_canvas_set_scroll_callback(layer->saved_canvas, on_canvas_scroll,
+                                                    (struct yetty_ycore_void_result *)layer);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "set_alt_screen: set_scroll_callback failed");
+        r = yetty_ypaint_canvas_set_cursor_callback(layer->saved_canvas, on_canvas_cursor_set,
+                                                    (struct yetty_ycore_void_result *)layer);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "set_alt_screen: set_cursor_callback failed");
     }
     if (!layer->saved_canvas) {
-        return;
+        return YETTY_OK_VOID();
     }
 
     struct yetty_ypaint_canvas *tmp = layer->canvas;
@@ -808,20 +851,24 @@ static void ypaint_layer_set_alt_screen(struct yetty_yterm_terminal_layer *self,
     }
 
     ydebug("ypaint: alt_screen=%d", wanted);
+    return YETTY_OK_VOID();
 }
 
 /* Set cursor - called when another layer moves cursor */
-static void ypaint_layer_set_cursor(struct yetty_yterm_terminal_layer *self, int col, int row)
+static struct yetty_ycore_void_result ypaint_layer_set_cursor(
+    struct yetty_yterm_terminal_layer *self, int col, int row)
 {
     struct yetty_yterm_ypaint_layer *layer = (struct yetty_yterm_ypaint_layer *)self;
 
     if (!layer->canvas) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "ypaint_layer_set_cursor: NULL canvas");
     }
 
-    yetty_ypaint_canvas_set_cursor_pos(
+    struct yetty_ycore_void_result r = yetty_ypaint_canvas_set_cursor_pos(
         layer->canvas, (struct grid_cursor_pos){.cols = (uint32_t)col, .rows = (uint32_t)row});
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ypaint_layer_set_cursor failed");
     ydebug("ypaint_layer_set_cursor: col=%d row=%d", col, row);
+    return YETTY_OK_VOID();
 }
 
 /* Render layer to target - simple prims + complex prims */

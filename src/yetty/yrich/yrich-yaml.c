@@ -236,7 +236,8 @@ static bool scalar_eq(const yaml_event_t *ev, const char *s)
 
 /* Parse one paragraph mapping. Currently supports keys: text, fontSize,
  * color, format. Other keys (runs, etc.) are skipped. */
-static int parse_ydoc_paragraph(yaml_parser_t *p, struct yetty_yrich_ydoc *d)
+static struct yetty_ycore_void_result parse_ydoc_paragraph(yaml_parser_t *p,
+                                                           struct yetty_yrich_ydoc *d)
 {
     char *text = NULL;
     size_t text_len = 0;
@@ -296,9 +297,7 @@ static int parse_ydoc_paragraph(yaml_parser_t *p, struct yetty_yrich_ydoc *d)
     struct yetty_yrich_paragraph_ptr_result pr =
         yetty_yrich_ydoc_add_paragraph(d, text ? text : "", text_len);
     free(text);
-    if (YETTY_IS_ERR(pr)) {
-        return -1;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "yrich yaml: add_paragraph failed");
     struct yetty_yrich_paragraph *para = pr.value;
     if (font_size > 0.0f) {
         para->style.font_size = font_size;
@@ -317,63 +316,66 @@ static int parse_ydoc_paragraph(yaml_parser_t *p, struct yetty_yrich_ydoc *d)
     if (format) {
         para->style.format = format;
     }
-    return 0;
+    return YETTY_OK_VOID();
 
 err_ev:
     yaml_event_delete(&ev);
 err:
     free(text);
-    return -1;
+    return YETTY_ERR(yetty_ycore_void, "yrich yaml: paragraph parse failed");
 }
 
-static int parse_ydoc_paragraphs(yaml_parser_t *p, struct yetty_yrich_ydoc *d)
+static struct yetty_ycore_void_result parse_ydoc_paragraphs(yaml_parser_t *p,
+                                                            struct yetty_yrich_ydoc *d)
 {
     yaml_event_t ev;
     if (next_event(p, &ev) < 0 || ev.type != YAML_SEQUENCE_START_EVENT) {
         yaml_event_delete(&ev);
-        return -1;
+        return YETTY_ERR(yetty_ycore_void, "yrich yaml: paragraphs expected sequence");
     }
     yaml_event_delete(&ev);
 
     for (;;) {
         if (next_event(p, &ev) < 0) {
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: paragraphs read failed");
         }
         if (ev.type == YAML_SEQUENCE_END_EVENT) {
             yaml_event_delete(&ev);
-            return 0;
+            return YETTY_OK_VOID();
         }
         if (ev.type != YAML_MAPPING_START_EVENT) {
             yaml_event_delete(&ev);
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: paragraphs expected mapping");
         }
         yaml_event_delete(&ev);
-        if (parse_ydoc_paragraph(p, d) < 0) {
-            return -1;
+        struct yetty_ycore_void_result pr = parse_ydoc_paragraph(p, d);
+        if (YETTY_IS_ERR(pr)) {
+            return pr;
         }
     }
 }
 
-static int parse_ydoc_document(yaml_parser_t *p, struct yetty_yrich_ydoc *d)
+static struct yetty_ycore_void_result parse_ydoc_document(yaml_parser_t *p,
+                                                          struct yetty_yrich_ydoc *d)
 {
     yaml_event_t ev;
     if (next_event(p, &ev) < 0 || ev.type != YAML_MAPPING_START_EVENT) {
         yaml_event_delete(&ev);
-        return -1;
+        return YETTY_ERR(yetty_ycore_void, "yrich yaml: document expected mapping");
     }
     yaml_event_delete(&ev);
 
     for (;;) {
         if (next_event(p, &ev) < 0) {
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: document read failed");
         }
         if (ev.type == YAML_MAPPING_END_EVENT) {
             yaml_event_delete(&ev);
-            return 0;
+            return YETTY_OK_VOID();
         }
         if (ev.type != YAML_SCALAR_EVENT) {
             yaml_event_delete(&ev);
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: document expected scalar key");
         }
         bool key_pw = scalar_eq(&ev, "pageWidth");
         bool key_mg = scalar_eq(&ev, "margin");
@@ -381,13 +383,14 @@ static int parse_ydoc_document(yaml_parser_t *p, struct yetty_yrich_ydoc *d)
         yaml_event_delete(&ev);
 
         if (key_pp) {
-            if (parse_ydoc_paragraphs(p, d) < 0) {
-                return -1;
+            struct yetty_ycore_void_result pr = parse_ydoc_paragraphs(p, d);
+            if (YETTY_IS_ERR(pr)) {
+                return pr;
             }
             continue;
         }
         if (next_event(p, &ev) < 0) {
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: document read failed");
         }
         if (key_pw && ev.type == YAML_SCALAR_EVENT) {
             yetty_yrich_ydoc_set_page_width(d, (float)scalar_to_d(&ev));
@@ -396,7 +399,7 @@ static int parse_ydoc_document(yaml_parser_t *p, struct yetty_yrich_ydoc *d)
         } else if (ev.type == YAML_MAPPING_START_EVENT || ev.type == YAML_SEQUENCE_START_EVENT) {
             yaml_event_delete(&ev);
             if (skip_collection_body(p) < 0) {
-                return -1;
+                return YETTY_ERR(yetty_ycore_void, "yrich yaml: skip failed");
             }
             continue;
         }
@@ -453,7 +456,8 @@ struct yetty_yrich_ydoc_ptr_result yetty_yrich_ydoc_load_yaml(const char *yaml, 
                 yaml_event_delete(&ev);
                 if (key) {
                     found_doc = true;
-                    if (parse_ydoc_document(&parser, d) < 0) {
+                    struct yetty_ycore_void_result dr = parse_ydoc_document(&parser, d);
+                    if (YETTY_IS_ERR(dr)) {
                         rc = -1;
                         goto done;
                     }
@@ -495,46 +499,52 @@ struct yetty_yrich_ydoc_ptr_result yetty_yrich_ydoc_load_yaml_file(const char *p
  * yspreadsheet loader
  *===========================================================================*/
 
-static int parse_sheet_cells(yaml_parser_t *p, struct yetty_yrich_spreadsheet *s)
+static struct yetty_ycore_void_result parse_sheet_cells(yaml_parser_t *p,
+                                                        struct yetty_yrich_spreadsheet *s)
 {
     yaml_event_t ev;
     if (next_event(p, &ev) < 0 || ev.type != YAML_MAPPING_START_EVENT) {
         yaml_event_delete(&ev);
-        return -1;
+        return YETTY_ERR(yetty_ycore_void, "yrich yaml: cells expected mapping");
     }
     yaml_event_delete(&ev);
 
     for (;;) {
         if (next_event(p, &ev) < 0) {
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: cells read failed");
         }
         if (ev.type == YAML_MAPPING_END_EVENT) {
             yaml_event_delete(&ev);
-            return 0;
+            return YETTY_OK_VOID();
         }
         if (ev.type != YAML_SCALAR_EVENT) {
             yaml_event_delete(&ev);
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: cells expected scalar key");
         }
         char *key = scalar_dup(&ev);
         yaml_event_delete(&ev);
 
         if (next_event(p, &ev) < 0) {
             free(key);
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: cells read failed");
         }
         if (ev.type == YAML_SCALAR_EVENT && key) {
             int32_t row, col;
             if (parse_cell_ref(key, &row, &col)) {
                 struct yetty_yrich_cell_addr addr = {row, col};
-                yetty_yrich_spreadsheet_set_cell_value(s, addr, (const char *)ev.data.scalar.value,
-                                                       ev.data.scalar.length);
+                struct yetty_ycore_void_result sr = yetty_yrich_spreadsheet_set_cell_value(
+                    s, addr, (const char *)ev.data.scalar.value, ev.data.scalar.length);
+                if (YETTY_IS_ERR(sr)) {
+                    yaml_event_delete(&ev);
+                    free(key);
+                    return YETTY_ERR(yetty_ycore_void, "yrich yaml: set_cell_value failed", sr);
+                }
             }
         } else if (ev.type == YAML_MAPPING_START_EVENT || ev.type == YAML_SEQUENCE_START_EVENT) {
             yaml_event_delete(&ev);
             free(key);
             if (skip_collection_body(p) < 0) {
-                return -1;
+                return YETTY_ERR(yetty_ycore_void, "yrich yaml: cells skip failed");
             }
             continue;
         }
@@ -569,28 +579,29 @@ static int parse_sheet_col_widths(yaml_parser_t *p, struct yetty_yrich_spreadshe
     }
 }
 
-static int parse_sheet_body(yaml_parser_t *p, struct yetty_yrich_spreadsheet *s)
+static struct yetty_ycore_void_result parse_sheet_body(yaml_parser_t *p,
+                                                       struct yetty_yrich_spreadsheet *s)
 {
     yaml_event_t ev;
     if (next_event(p, &ev) < 0 || ev.type != YAML_MAPPING_START_EVENT) {
         yaml_event_delete(&ev);
-        return -1;
+        return YETTY_ERR(yetty_ycore_void, "yrich yaml: sheet body expected mapping");
     }
     yaml_event_delete(&ev);
 
     int32_t rows = 100, cols = 26;
     for (;;) {
         if (next_event(p, &ev) < 0) {
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: sheet body read failed");
         }
         if (ev.type == YAML_MAPPING_END_EVENT) {
             yaml_event_delete(&ev);
             yetty_yrich_spreadsheet_set_grid_size(s, rows, cols);
-            return 0;
+            return YETTY_OK_VOID();
         }
         if (ev.type != YAML_SCALAR_EVENT) {
             yaml_event_delete(&ev);
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: sheet body expected scalar key");
         }
         bool key_rows = scalar_eq(&ev, "rows");
         bool key_cols = scalar_eq(&ev, "cols");
@@ -600,19 +611,18 @@ static int parse_sheet_body(yaml_parser_t *p, struct yetty_yrich_spreadsheet *s)
 
         if (key_cw) {
             if (parse_sheet_col_widths(p, s) < 0) {
-                return -1;
+                return YETTY_ERR(yetty_ycore_void, "yrich yaml: col widths parse failed");
             }
             continue;
         }
         if (key_cells) {
             yetty_yrich_spreadsheet_set_grid_size(s, rows, cols);
-            if (parse_sheet_cells(p, s) < 0) {
-                return -1;
-            }
+            struct yetty_ycore_void_result cr = parse_sheet_cells(p, s);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "yrich yaml: cells parse failed");
             continue;
         }
         if (next_event(p, &ev) < 0) {
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: sheet body read failed");
         }
         if (key_rows && ev.type == YAML_SCALAR_EVENT) {
             rows = (int32_t)scalar_to_l(&ev);
@@ -621,7 +631,7 @@ static int parse_sheet_body(yaml_parser_t *p, struct yetty_yrich_spreadsheet *s)
         } else if (ev.type == YAML_MAPPING_START_EVENT || ev.type == YAML_SEQUENCE_START_EVENT) {
             yaml_event_delete(&ev);
             if (skip_collection_body(p) < 0) {
-                return -1;
+                return YETTY_ERR(yetty_ycore_void, "yrich yaml: sheet body skip failed");
             }
             continue;
         }
@@ -678,7 +688,9 @@ struct yetty_yrich_spreadsheet_ptr_result yetty_yrich_spreadsheet_load_yaml(cons
                 yaml_event_delete(&ev);
                 if (key) {
                     found = true;
-                    if (parse_sheet_body(&parser, s) < 0) {
+                    struct yetty_ycore_void_result br = parse_sheet_body(&parser, s);
+                    if (YETTY_IS_ERR(br)) {
+                        yetty_ycore_error_destroy(br.error);
                         rc = -1;
                         goto done;
                     }
@@ -757,7 +769,8 @@ static void shape_fields_free(struct shape_fields *f)
     free(f->image_source);
 }
 
-static int parse_shape(yaml_parser_t *p, struct yetty_yrich_slides *s)
+static struct yetty_ycore_void_result parse_shape(yaml_parser_t *p,
+                                                  struct yetty_yrich_slides *s)
 {
     struct shape_fields f;
     shape_fields_init(&f);
@@ -908,13 +921,14 @@ static int parse_shape(yaml_parser_t *p, struct yetty_yrich_slides *s)
         f.image_source = NULL; /* handed off */
     }
     shape_fields_free(&f);
-    return 0;
+    return YETTY_OK_VOID();
 err:
     shape_fields_free(&f);
-    return -1;
+    return YETTY_ERR(yetty_ycore_void, "yrich yaml: shape parse failed");
 }
 
-static int parse_slide(yaml_parser_t *p, struct yetty_yrich_slides *s)
+static struct yetty_ycore_void_result parse_slide(yaml_parser_t *p,
+                                                  struct yetty_yrich_slides *s)
 {
     yaml_event_t ev;
     int32_t index = -1;
@@ -930,7 +944,7 @@ static int parse_slide(yaml_parser_t *p, struct yetty_yrich_slides *s)
 
     for (;;) {
         if (next_event(p, &ev) < 0) {
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: slide read failed");
         }
         if (ev.type == YAML_MAPPING_END_EVENT) {
             yaml_event_delete(&ev);
@@ -938,7 +952,7 @@ static int parse_slide(yaml_parser_t *p, struct yetty_yrich_slides *s)
         }
         if (ev.type != YAML_SCALAR_EVENT) {
             yaml_event_delete(&ev);
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: slide expected scalar key");
         }
         bool key_index = scalar_eq(&ev, "index");
         bool key_bg = scalar_eq(&ev, "bgColor");
@@ -959,16 +973,16 @@ static int parse_slide(yaml_parser_t *p, struct yetty_yrich_slides *s)
             }
 
             if (next_event(p, &ev) < 0) {
-                return -1;
+                return YETTY_ERR(yetty_ycore_void, "yrich yaml: slide shapes read failed");
             }
             if (ev.type != YAML_SEQUENCE_START_EVENT) {
                 yaml_event_delete(&ev);
-                return -1;
+                return YETTY_ERR(yetty_ycore_void, "yrich yaml: shapes expected sequence");
             }
             yaml_event_delete(&ev);
             for (;;) {
                 if (next_event(p, &ev) < 0) {
-                    return -1;
+                    return YETTY_ERR(yetty_ycore_void, "yrich yaml: shapes read failed");
                 }
                 if (ev.type == YAML_SEQUENCE_END_EVENT) {
                     yaml_event_delete(&ev);
@@ -976,18 +990,19 @@ static int parse_slide(yaml_parser_t *p, struct yetty_yrich_slides *s)
                 }
                 if (ev.type != YAML_MAPPING_START_EVENT) {
                     yaml_event_delete(&ev);
-                    return -1;
+                    return YETTY_ERR(yetty_ycore_void, "yrich yaml: shape expected mapping");
                 }
                 yaml_event_delete(&ev);
-                if (parse_shape(p, s) < 0) {
-                    return -1;
+                struct yetty_ycore_void_result sr = parse_shape(p, s);
+                if (YETTY_IS_ERR(sr)) {
+                    return sr;
                 }
             }
             continue;
         }
 
         if (next_event(p, &ev) < 0) {
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: slide read failed");
         }
         if (key_index && ev.type == YAML_SCALAR_EVENT) {
             index = (int32_t)scalar_to_l(&ev);
@@ -1001,66 +1016,69 @@ static int parse_slide(yaml_parser_t *p, struct yetty_yrich_slides *s)
         } else if (ev.type == YAML_MAPPING_START_EVENT || ev.type == YAML_SEQUENCE_START_EVENT) {
             yaml_event_delete(&ev);
             if (skip_collection_body(p) < 0) {
-                return -1;
+                return YETTY_ERR(yetty_ycore_void, "yrich yaml: slide skip failed");
             }
             continue;
         }
         yaml_event_delete(&ev);
     }
     (void)sbuf;
-    return 0;
+    return YETTY_OK_VOID();
 }
 
-static int parse_slides_seq(yaml_parser_t *p, struct yetty_yrich_slides *s)
+static struct yetty_ycore_void_result parse_slides_seq(yaml_parser_t *p,
+                                                       struct yetty_yrich_slides *s)
 {
     yaml_event_t ev;
     if (next_event(p, &ev) < 0 || ev.type != YAML_SEQUENCE_START_EVENT) {
         yaml_event_delete(&ev);
-        return -1;
+        return YETTY_ERR(yetty_ycore_void, "yrich yaml: slides expected sequence");
     }
     yaml_event_delete(&ev);
     for (;;) {
         if (next_event(p, &ev) < 0) {
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: slides read failed");
         }
         if (ev.type == YAML_SEQUENCE_END_EVENT) {
             yaml_event_delete(&ev);
-            return 0;
+            return YETTY_OK_VOID();
         }
         if (ev.type != YAML_MAPPING_START_EVENT) {
             yaml_event_delete(&ev);
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: slide expected mapping");
         }
         yaml_event_delete(&ev);
-        if (parse_slide(p, s) < 0) {
-            return -1;
+        struct yetty_ycore_void_result sr = parse_slide(p, s);
+        if (YETTY_IS_ERR(sr)) {
+            return sr;
         }
     }
 }
 
-static int parse_presentation(yaml_parser_t *p, struct yetty_yrich_slides *s)
+static struct yetty_ycore_void_result parse_presentation(yaml_parser_t *p,
+                                                         struct yetty_yrich_slides *s)
 {
     yaml_event_t ev;
     if (next_event(p, &ev) < 0 || ev.type != YAML_MAPPING_START_EVENT) {
         yaml_event_delete(&ev);
-        return -1;
+        return YETTY_ERR(yetty_ycore_void, "yrich yaml: presentation expected mapping");
     }
     yaml_event_delete(&ev);
 
     float w = 960.0f, h = 540.0f;
     for (;;) {
         if (next_event(p, &ev) < 0) {
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: presentation read failed");
         }
         if (ev.type == YAML_MAPPING_END_EVENT) {
             yaml_event_delete(&ev);
             yetty_yrich_slides_set_slide_size(s, w, h);
             yetty_yrich_slides_set_current(s, 0);
-            return 0;
+            return YETTY_OK_VOID();
         }
         if (ev.type != YAML_SCALAR_EVENT) {
             yaml_event_delete(&ev);
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: presentation expected scalar key");
         }
         bool key_w = scalar_eq(&ev, "slideWidth");
         bool key_h = scalar_eq(&ev, "slideHeight");
@@ -1069,13 +1087,14 @@ static int parse_presentation(yaml_parser_t *p, struct yetty_yrich_slides *s)
 
         if (key_s) {
             yetty_yrich_slides_set_slide_size(s, w, h);
-            if (parse_slides_seq(p, s) < 0) {
-                return -1;
+            struct yetty_ycore_void_result sr = parse_slides_seq(p, s);
+            if (YETTY_IS_ERR(sr)) {
+                return sr;
             }
             continue;
         }
         if (next_event(p, &ev) < 0) {
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich yaml: presentation read failed");
         }
         if (key_w && ev.type == YAML_SCALAR_EVENT) {
             w = (float)scalar_to_d(&ev);
@@ -1084,7 +1103,7 @@ static int parse_presentation(yaml_parser_t *p, struct yetty_yrich_slides *s)
         } else if (ev.type == YAML_MAPPING_START_EVENT || ev.type == YAML_SEQUENCE_START_EVENT) {
             yaml_event_delete(&ev);
             if (skip_collection_body(p) < 0) {
-                return -1;
+                return YETTY_ERR(yetty_ycore_void, "yrich yaml: presentation skip failed");
             }
             continue;
         }
@@ -1140,7 +1159,8 @@ struct yetty_yrich_slides_ptr_result yetty_yrich_slides_load_yaml(const char *ya
                 yaml_event_delete(&ev);
                 if (key) {
                     found = true;
-                    if (parse_presentation(&parser, s) < 0) {
+                    struct yetty_ycore_void_result pr = parse_presentation(&parser, s);
+                    if (YETTY_IS_ERR(pr)) {
                         rc = -1;
                         goto done;
                     }

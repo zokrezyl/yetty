@@ -25,10 +25,11 @@
 #define YETTY_YTERM_TERMINAL_MAX_LAYERS 256
 
 /* Forward declarations for view ops */
-static void terminal_view_destroy(struct yetty_yui_view *view);
+static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yui_view *view);
 static struct yetty_ycore_void_result terminal_view_render(
     struct yetty_yui_view *view, struct yetty_yrender_target *render_target);
-static void terminal_view_set_bounds(struct yetty_yui_view *view, struct yetty_yui_rect bounds);
+static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_view *view,
+                                                               struct yetty_yui_rect bounds);
 static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_view *view,
                                                             const struct yetty_ycore_event *event);
 
@@ -192,6 +193,7 @@ static void terminal_pty_write_raw(struct yetty_yterm_terminal *terminal, const 
 
 /* Build one yface envelope around `payload` and ship it to the inferior.
  * compressed=0 because input events are short — LZ4 framing would dominate. */
+YETTY_EXTERNAL_CALLBACK
 static void terminal_yface_emit(struct yetty_yterm_terminal *terminal, int osc_code,
                                 const void *payload, size_t len)
 {
@@ -879,18 +881,19 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     return YETTY_OK(yetty_yterm_terminal, terminal);
 }
 
-void yetty_yterm_terminal_destroy(struct yetty_yterm_terminal *terminal)
+struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_terminal *terminal)
 {
     size_t i;
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
     if (!terminal) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yetty_yterm_terminal_destroy: NULL terminal");
     }
 
     ydebug("terminal_destroy: starting");
 
     /* Destroy layer targets */
-    for (size_t i = 0; i < terminal->layer_count; i++) {
+    for (i = 0; i < terminal->layer_count; i++) {
         if (terminal->layer_targets[i] && terminal->layer_targets[i]->ops &&
             terminal->layer_targets[i]->ops->destroy) {
             ydebug("terminal_destroy: destroying layer_target %zu", i);
@@ -912,7 +915,11 @@ void yetty_yterm_terminal_destroy(struct yetty_yterm_terminal *terminal)
     if (terminal->context.pty && terminal->context.pty->ops &&
         terminal->context.pty->ops->destroy) {
         ydebug("terminal_destroy: destroying pty");
-        terminal->context.pty->ops->destroy(terminal->context.pty);
+        struct yetty_ycore_void_result pr =
+            terminal->context.pty->ops->destroy(terminal->context.pty);
+        if (YETTY_IS_ERR(pr)) {
+            first_err = pr;
+        }
     }
 
     /* event_loop is owned by yetty, not terminal - do not destroy */
@@ -933,6 +940,12 @@ void yetty_yterm_terminal_destroy(struct yetty_yterm_terminal *terminal)
     ydebug("terminal_destroy: freeing terminal struct");
     free(terminal);
     ydebug("terminal_destroy: done");
+
+    if (YETTY_IS_ERR(first_err)) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_yterm_terminal_destroy: pty destroy failed",
+                         first_err);
+    }
+    return YETTY_OK_VOID();
 }
 
 /* Terminal input */
@@ -1042,10 +1055,10 @@ struct yetty_yui_view *yetty_yterm_terminal_as_view(struct yetty_yterm_terminal 
     return terminal ? &terminal->view : NULL;
 }
 
-static void terminal_view_destroy(struct yetty_yui_view *view)
+static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yui_view *view)
 {
     struct yetty_yterm_terminal *terminal = container_of(view, struct yetty_yterm_terminal, view);
-    yetty_yterm_terminal_destroy(terminal);
+    return yetty_yterm_terminal_destroy(terminal);
 }
 
 static struct yetty_ycore_void_result terminal_view_render(
@@ -1056,7 +1069,8 @@ static struct yetty_ycore_void_result terminal_view_render(
     return terminal_render_frame(terminal, render_target);
 }
 
-static void terminal_view_set_bounds(struct yetty_yui_view *view, struct yetty_yui_rect bounds)
+static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_view *view,
+                                                               struct yetty_yui_rect bounds)
 {
     struct yetty_yterm_terminal *terminal = container_of(view, struct yetty_yterm_terminal, view);
 
@@ -1069,6 +1083,7 @@ static void terminal_view_set_bounds(struct yetty_yui_view *view, struct yetty_y
            bounds.y);
 
     (void)terminal;
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_view *view,

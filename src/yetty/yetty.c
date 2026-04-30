@@ -1213,10 +1213,12 @@ struct yetty_yetty_result yetty_create(const struct yetty_app_context *app_conte
     return YETTY_OK(yetty_yetty, yetty);
 }
 
-void yetty_destroy(struct yetty_yetty *yetty)
+struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty *yetty)
 {
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
+
     if (!yetty) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yetty_destroy: NULL yetty");
     }
 
     ydebug("yetty_destroy: starting");
@@ -1224,7 +1226,10 @@ void yetty_destroy(struct yetty_yetty *yetty)
     /* Destroy RPC server */
     if (yetty->rpc_server) {
         ydebug("yetty_destroy: destroying RPC server");
-        yetty_rpc_server_destroy(yetty->rpc_server);
+        struct yetty_ycore_void_result rr = yetty_rpc_server_destroy(yetty->rpc_server);
+        if (YETTY_IS_ERR(rr)) {
+            first_err = rr;
+        }
         yetty->rpc_server = NULL;
     }
 
@@ -1268,9 +1273,23 @@ void yetty_destroy(struct yetty_yetty *yetty)
     /* Destroy VNC server after render target (render target references it) */
     if (yetty->vnc_server) {
         ydebug("yetty_destroy: stopping VNC server");
-        yetty_vnc_server_stop(yetty->vnc_server);
+        struct yetty_ycore_void_result vsr = yetty_vnc_server_stop(yetty->vnc_server);
+        if (YETTY_IS_ERR(vsr)) {
+            if (YETTY_IS_OK(first_err)) {
+                first_err = vsr;
+            } else {
+                yetty_ycore_error_destroy(vsr.error);
+            }
+        }
         ydebug("yetty_destroy: destroying VNC server");
-        yetty_vnc_server_destroy(yetty->vnc_server);
+        struct yetty_ycore_void_result vdr = yetty_vnc_server_destroy(yetty->vnc_server);
+        if (YETTY_IS_ERR(vdr)) {
+            if (YETTY_IS_OK(first_err)) {
+                first_err = vdr;
+            } else {
+                yetty_ycore_error_destroy(vdr.error);
+            }
+        }
         yetty->vnc_server = NULL;
     }
 
@@ -1311,6 +1330,11 @@ void yetty_destroy(struct yetty_yetty *yetty)
     ydebug("yetty_destroy: freeing yetty struct");
     free(yetty);
     ydebug("yetty_destroy: done");
+
+    if (YETTY_IS_ERR(first_err)) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_destroy: subsystem destroy failed", first_err);
+    }
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_run(struct yetty_yetty *yetty)

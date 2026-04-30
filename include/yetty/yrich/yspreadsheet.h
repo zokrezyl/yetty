@@ -139,9 +139,9 @@ struct yetty_yrich_cell *yetty_yrich_spreadsheet_cell_at(const struct yetty_yric
 struct yetty_yrich_cell_ptr_result yetty_yrich_spreadsheet_ensure_cell(
     struct yetty_yrich_spreadsheet *s, struct yetty_yrich_cell_addr addr);
 
-void yetty_yrich_spreadsheet_set_cell_value(struct yetty_yrich_spreadsheet *s,
-                                            struct yetty_yrich_cell_addr addr, const char *value,
-                                            size_t value_len);
+struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_cell_value(
+    struct yetty_yrich_spreadsheet *s, struct yetty_yrich_cell_addr addr, const char *value,
+    size_t value_len);
 
 const char *yetty_yrich_spreadsheet_cell_value(const struct yetty_yrich_spreadsheet *s,
                                                struct yetty_yrich_cell_addr addr);

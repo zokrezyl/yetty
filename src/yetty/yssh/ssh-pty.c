@@ -76,7 +76,7 @@ struct ssh_pty {
 };
 
 /* Forward declarations */
-static void ssh_pty_destroy(struct yetty_yplatform_pty *self);
+static struct yetty_ycore_void_result ssh_pty_destroy(struct yetty_yplatform_pty *self);
 static struct yetty_ycore_size_result ssh_pty_read(struct yetty_yplatform_pty *self, char *buf,
                                                    size_t max_len);
 static struct yetty_ycore_size_result ssh_pty_write(struct yetty_yplatform_pty *self,
@@ -350,11 +350,11 @@ static void *ssh_pty_reader_thread(void *arg)
 
 /* PTY ops */
 
-static void ssh_pty_destroy(struct yetty_yplatform_pty *self)
+static struct yetty_ycore_void_result ssh_pty_destroy(struct yetty_yplatform_pty *self)
 {
     struct ssh_pty *pty = (struct ssh_pty *)self;
 
-    ssh_pty_stop(self);
+    struct yetty_ycore_void_result stop_r = ssh_pty_stop(self);
 
     pthread_mutex_lock(&pty->session_mutex);
     if (pty->channel) {
@@ -400,6 +400,11 @@ static void ssh_pty_destroy(struct yetty_yplatform_pty *self)
     }
     free(pty->term_type);
     free(pty);
+
+    if (YETTY_IS_ERR(stop_r)) {
+        return YETTY_ERR(yetty_ycore_void, "ssh_pty_destroy: stop failed", stop_r);
+    }
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_size_result ssh_pty_read(struct yetty_yplatform_pty *self, char *buf,

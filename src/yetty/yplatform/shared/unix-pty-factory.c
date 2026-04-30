@@ -70,10 +70,11 @@ static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
                 return YETTY_ERR(yetty_yplatform_pty, "failed to start QEMU");
             }
 
-            if (!qemu_wait_ready(QEMU_TELNET_PORT, 5000)) {
+            struct yetty_ycore_void_result wr = qemu_wait_ready(QEMU_TELNET_PORT, 5000);
+            if (YETTY_IS_ERR(wr)) {
                 qemu_stop(factory->qemu_proc);
                 factory->qemu_proc = NULL;
-                return YETTY_ERR(yetty_yplatform_pty, "QEMU telnet not ready");
+                return YETTY_ERR(yetty_yplatform_pty, "QEMU telnet not ready", wr);
             }
         }
         return telnet_pty_create("127.0.0.1", QEMU_TELNET_PORT, event_loop);

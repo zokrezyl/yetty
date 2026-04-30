@@ -66,7 +66,7 @@ YETTY_YRESULT_DECLARE(yetty_yetty, struct yetty_yetty *);
 struct yetty_yetty_result yetty_create(const struct yetty_app_context *app_context);
 
 /* Destroy yetty instance */
-void yetty_destroy(struct yetty_yetty *yetty);
+struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty *yetty);
 
 /* Run yetty (main loop integration) */
 struct yetty_ycore_void_result yetty_run(struct yetty_yetty *yetty);

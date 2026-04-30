@@ -139,9 +139,10 @@ void yetty_yrich_operation_destroy(struct yetty_yrich_operation *op);
 /* True for cursor / selection ops — these are not persisted in the log. */
 bool yetty_yrich_operation_is_presence(const struct yetty_yrich_operation *op);
 
-/* Build the inverse operation (for undo). Returns NULL on alloc failure or
- * for ops that have no inverse (presence). */
-struct yetty_yrich_operation *yetty_yrich_operation_inverse(const struct yetty_yrich_operation *op);
+/* Build the inverse operation (for undo). Errors on alloc failure or for
+ * ops that have no inverse (presence). */
+struct yetty_yrich_operation_ptr_result yetty_yrich_operation_inverse(
+    const struct yetty_yrich_operation *op);
 
 /*=============================================================================
  * Operation log — append-only history.

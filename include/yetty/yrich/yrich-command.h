@@ -34,10 +34,12 @@ struct yetty_yrich_command_ops {
                                               struct yetty_yrich_document *doc);
 
     /* Optional — default uses inverse(ops). */
-    void (*undo)(struct yetty_yrich_command *self, struct yetty_yrich_document *doc);
+    struct yetty_ycore_void_result (*undo)(struct yetty_yrich_command *self,
+                                           struct yetty_yrich_document *doc);
 
     /* Optional — default re-applies ops. */
-    void (*redo)(struct yetty_yrich_command *self, struct yetty_yrich_document *doc);
+    struct yetty_ycore_void_result (*redo)(struct yetty_yrich_command *self,
+                                           struct yetty_yrich_document *doc);
 
     bool (*can_merge_with)(const struct yetty_yrich_command *self,
                            const struct yetty_yrich_command *other);
@@ -60,10 +62,10 @@ int yetty_yrich_command_record_op(struct yetty_yrich_command *cmd,
                                   struct yetty_yrich_operation *op);
 
 /* Default helpers exported for vtables that don't customise undo/redo. */
-void yetty_yrich_command_default_undo(struct yetty_yrich_command *cmd,
-                                      struct yetty_yrich_document *doc);
-void yetty_yrich_command_default_redo(struct yetty_yrich_command *cmd,
-                                      struct yetty_yrich_document *doc);
+struct yetty_ycore_void_result yetty_yrich_command_default_undo(struct yetty_yrich_command *cmd,
+                                                                struct yetty_yrich_document *doc);
+struct yetty_ycore_void_result yetty_yrich_command_default_redo(struct yetty_yrich_command *cmd,
+                                                                struct yetty_yrich_document *doc);
 
 void yetty_yrich_command_destroy(struct yetty_yrich_command *cmd);
 
@@ -94,8 +96,10 @@ struct yetty_ycore_void_result yetty_yrich_history_execute(struct yetty_yrich_hi
 bool yetty_yrich_history_can_undo(const struct yetty_yrich_history *h);
 bool yetty_yrich_history_can_redo(const struct yetty_yrich_history *h);
 
-void yetty_yrich_history_undo(struct yetty_yrich_history *h, struct yetty_yrich_document *doc);
-void yetty_yrich_history_redo(struct yetty_yrich_history *h, struct yetty_yrich_document *doc);
+struct yetty_ycore_void_result yetty_yrich_history_undo(struct yetty_yrich_history *h,
+                                                        struct yetty_yrich_document *doc);
+struct yetty_ycore_void_result yetty_yrich_history_redo(struct yetty_yrich_history *h,
+                                                        struct yetty_yrich_document *doc);
 
 #ifdef __cplusplus
 }

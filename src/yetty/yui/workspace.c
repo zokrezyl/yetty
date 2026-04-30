@@ -36,17 +36,25 @@ struct yetty_yui_workspace_ptr_result yetty_yui_workspace_create(void)
     return YETTY_OK(yetty_yui_workspace_ptr, ws);
 }
 
-void yetty_yui_workspace_destroy(struct yetty_yui_workspace *ws)
+struct yetty_ycore_void_result yetty_yui_workspace_destroy(struct yetty_yui_workspace *ws)
 {
+    struct yetty_ycore_void_result root_err = YETTY_OK_VOID();
+
     if (!ws) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yetty_yui_workspace_destroy: NULL workspace");
     }
 
     if (ws->root) {
-        yetty_yui_tile_destroy(ws->root);
+        root_err = yetty_yui_tile_destroy(ws->root);
     }
 
     free(ws);
+
+    if (YETTY_IS_ERR(root_err)) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_yui_workspace_destroy: root destroy failed",
+                         root_err);
+    }
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================

@@ -95,7 +95,9 @@ int main(void) {
     srand((unsigned)time(NULL));
 
     if (ygui_init() != 0) return 1;
-    g_engine = ygui_engine_create_with_pixel_hint("dashboard", 1, 1, 800.0f, 550.0f);
+    { struct ygui_engine_ptr_result _eng_r = ygui_engine_create_with_pixel_hint("dashboard", 1, 1, 800.0f, 550.0f);
+        if (YETTY_IS_ERR(_eng_r)) { yetty_ycore_error_destroy(_eng_r.error); return 1; }
+        g_engine = _eng_r.value; }
     if (!g_engine) { ygui_shutdown(); return 1; }
 
     uint32_t panel_bg = rgba(45, 45, 50, 255);

@@ -20,10 +20,11 @@ YETTY_YRESULT_DECLARE(yetty_yui_view_ptr, struct yetty_yui_view *);
 
 /* View ops vtable */
 struct yetty_yui_view_ops {
-    void (*destroy)(struct yetty_yui_view *self);
+    struct yetty_ycore_void_result (*destroy)(struct yetty_yui_view *self);
     struct yetty_ycore_void_result (*render)(struct yetty_yui_view *self,
                                              struct yetty_yrender_target *render_target);
-    void (*set_bounds)(struct yetty_yui_view *self, struct yetty_yui_rect bounds);
+    struct yetty_ycore_void_result (*set_bounds)(struct yetty_yui_view *self,
+                                                 struct yetty_yui_rect bounds);
     struct yetty_ycore_int_result (*on_event)(struct yetty_yui_view *self,
                                               const struct yetty_ycore_event *event);
 };
@@ -36,12 +37,13 @@ struct yetty_yui_view {
 };
 
 /* View operations - dispatch through vtable */
-void yetty_yui_view_destroy(struct yetty_yui_view *view);
+struct yetty_ycore_void_result yetty_yui_view_destroy(struct yetty_yui_view *view);
 
 struct yetty_ycore_void_result yetty_yui_view_render(struct yetty_yui_view *view,
                                                      struct yetty_yrender_target *render_target);
 
-void yetty_yui_view_set_bounds(struct yetty_yui_view *view, struct yetty_yui_rect bounds);
+struct yetty_ycore_void_result yetty_yui_view_set_bounds(struct yetty_yui_view *view,
+                                                         struct yetty_yui_rect bounds);
 
 struct yetty_ycore_int_result yetty_yui_view_on_event(struct yetty_yui_view *view,
                                                       const struct yetty_ycore_event *event);

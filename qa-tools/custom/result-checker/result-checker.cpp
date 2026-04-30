@@ -11,6 +11,7 @@
 
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/ASTContext.h>
+#include <clang/AST/Attr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendAction.h>
@@ -134,6 +135,20 @@ public:
 		std::string func_name = func->getNameAsString();
 		if (func_name == "main")
 			return true;
+
+		/* Skip functions explicitly tagged as void-callback boundaries.
+		 * Use:
+		 *   __attribute__((annotate("yetty_external_callback")))
+		 * on functions whose signature is dictated by an external library
+		 * (libuv uv_*_cb, pthread start routine, emscripten loop, Android
+		 * NDK app callbacks, pdfio paint callbacks, etc.). The Result-
+		 * returning calls inside such a callback have nowhere to propagate
+		 * to; the annotation documents the boundary and silences the
+		 * checker. Use sparingly. */
+		for (const auto *attr : func->specific_attrs<AnnotateAttr>()) {
+			if (attr->getAnnotation() == "yetty_external_callback")
+				return true;
+		}
 
 		/* Check if this function already returns a Result type */
 		bool func_returns_result = returns_result_type(func);

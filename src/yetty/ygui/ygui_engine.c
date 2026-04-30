@@ -192,12 +192,13 @@ const char *ygui_version(void)
  *===========================================================================*/
 
 /* Internal helper to allocate and initialize common engine state */
-static ygui_engine_t *engine_alloc_init(const char *card_name, int x, int y, int cols, int rows)
+static struct ygui_engine_ptr_result engine_alloc_init(const char *card_name, int x, int y,
+                                                       int cols, int rows)
 {
     ygui_engine_t *engine = (ygui_engine_t *)calloc(1, sizeof(ygui_engine_t));
     if (!engine) {
         ygui_set_error("Failed to allocate engine");
-        return NULL;
+        return YETTY_ERR(ygui_engine_ptr, "engine_alloc_init: alloc failed");
     }
 
     /* Create ypaint-core buffer — widgets accumulate SDF primitives + text
@@ -207,7 +208,7 @@ static ygui_engine_t *engine_alloc_init(const char *card_name, int x, int y, int
     if (!YETTY_IS_OK(br)) {
         ygui_set_error("Failed to create ypaint buffer");
         free(engine);
-        return NULL;
+        return YETTY_ERR(ygui_engine_ptr, "engine_alloc_init: ypaint buffer create failed", br);
     }
     engine->buffer = br.value;
 
@@ -277,16 +278,18 @@ static ygui_engine_t *engine_alloc_init(const char *card_name, int x, int y, int
     /* Grid initialized after pixel size known */
     ygui_grid_init(&engine->grid, 1.0f, 1.0f, 1.0f);
 
-    return engine;
+    return YETTY_OK(ygui_engine_ptr, engine);
 }
 
-ygui_engine_t *ygui_engine_create(const char *card_name, int x, int y, int cols, int rows)
+struct ygui_engine_ptr_result ygui_engine_create(const char *card_name, int x, int y, int cols,
+                                                 int rows)
 {
     return engine_alloc_init(card_name, x, y, cols, rows);
 }
 
-ygui_engine_t *ygui_engine_create_with_pixel_hint(const char *card_name, int x, int y,
-                                                  float width_hint, float height_hint)
+struct ygui_engine_ptr_result ygui_engine_create_with_pixel_hint(const char *card_name, int x,
+                                                                 int y, float width_hint,
+                                                                 float height_hint)
 {
     /* TODO: Query cell size first to calculate cols/rows
      * For now, use reasonable defaults (10x16 cell size) */
@@ -299,27 +302,30 @@ ygui_engine_t *ygui_engine_create_with_pixel_hint(const char *card_name, int x, 
         rows = 1;
     }
 
-    ygui_engine_t *engine = engine_alloc_init(card_name, x, y, cols, rows);
-    if (engine) {
-        /* Store pixel hints as reference size for widget scaling */
-        engine->reference_w = width_hint;
-        engine->reference_h = height_hint;
-        engine->width = width_hint;
-        engine->height = height_hint;
-        engine->scale_mode = YGUI_SCALE_ON; /* Scale widgets from hint to actual */
-
-        /* Initialize grid with hint size */
-        ygui_grid_destroy(&engine->grid);
-        ygui_grid_init(&engine->grid, width_hint, height_hint,
-                       calc_grid_bucket_size(width_hint, height_hint));
+    struct ygui_engine_ptr_result r = engine_alloc_init(card_name, x, y, cols, rows);
+    if (YETTY_IS_ERR(r)) {
+        return r;
     }
-    return engine;
+    ygui_engine_t *engine = r.value;
+    /* Store pixel hints as reference size for widget scaling */
+    engine->reference_w = width_hint;
+    engine->reference_h = height_hint;
+    engine->width = width_hint;
+    engine->height = height_hint;
+    engine->scale_mode = YGUI_SCALE_ON; /* Scale widgets from hint to actual */
+
+    /* Initialize grid with hint size */
+    ygui_grid_destroy(&engine->grid);
+    ygui_grid_init(&engine->grid, width_hint, height_hint,
+                   calc_grid_bucket_size(width_hint, height_hint));
+    return r;
 }
 
-void ygui_engine_destroy(ygui_engine_t *engine)
+struct yetty_ycore_void_result ygui_engine_destroy(ygui_engine_t *engine)
 {
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
     if (!engine) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "ygui_engine_destroy: NULL engine");
     }
 
     /* Stop running if needed */
@@ -340,7 +346,10 @@ void ygui_engine_destroy(ygui_engine_t *engine)
 
     /* Drop the ymgui-layer card so the server stops routing mouse to us. */
     if (engine->card_id != 0) {
-        ygui_osc_card_remove(engine->card_id);
+        struct yetty_ycore_void_result r = ygui_osc_card_remove(engine->card_id);
+        if (YETTY_IS_ERR(r)) {
+            first_err = r;
+        }
     }
 
     /* Destroy yface */
@@ -383,6 +392,11 @@ void ygui_engine_destroy(ygui_engine_t *engine)
     free(engine->card_name);
 
     free(engine);
+
+    if (YETTY_IS_ERR(first_err)) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_engine_destroy failed", first_err);
+    }
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================
@@ -453,10 +467,11 @@ void ygui_engine_mark_dirty(ygui_engine_t *engine)
  * Rendering
  *===========================================================================*/
 
-static void engine_rebuild(ygui_engine_t *engine)
+static struct yetty_ycore_void_result engine_rebuild(ygui_engine_t *engine)
 {
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
     if (!engine || !engine->buffer) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "engine_rebuild: NULL engine or buffer");
     }
 
     /* Clear the grid */
@@ -469,10 +484,18 @@ static void engine_rebuild(ygui_engine_t *engine)
     /* Render all top-level widgets */
     for (ygui_widget_t *w = engine->first_widget; w; w = w->next_sibling) {
         w->was_rendered = 0;
+        struct yetty_ycore_void_result r;
         if (w->render_all) {
-            w->render_all(w, &ctx);
+            r = w->render_all(w, &ctx);
         } else {
-            ygui_widget_render_all_default(w, &ctx);
+            r = ygui_widget_render_all_default(w, &ctx);
+        }
+        if (YETTY_IS_ERR(r)) {
+            if (YETTY_IS_OK(first_err)) {
+                first_err = r;
+            } else {
+                yetty_ycore_error_destroy(r.error);
+            }
         }
     }
 
@@ -484,12 +507,17 @@ static void engine_rebuild(ygui_engine_t *engine)
     }
 
     engine->dirty = 0;
+
+    if (YETTY_IS_ERR(first_err)) {
+        return YETTY_ERR(yetty_ycore_void, "engine_rebuild: widget render failed", first_err);
+    }
+    return YETTY_OK_VOID();
 }
 
-void ygui_engine_render(ygui_engine_t *engine)
+struct yetty_ycore_void_result ygui_engine_render(ygui_engine_t *engine)
 {
     if (!engine || !engine->buffer) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "ygui_engine_render: NULL engine or buffer");
     }
 
     /* 0. Handle pending resize BEFORE rendering - keeps visual and hit-test in sync */
@@ -505,29 +533,33 @@ void ygui_engine_render(ygui_engine_t *engine)
     yetty_ypaint_core_buffer_set_scene_bounds(engine->buffer, 0, 0, engine->width, engine->height);
 
     /* 3. Rebuild UI */
-    engine_rebuild(engine);
+    struct yetty_ycore_void_result rb = engine_rebuild(engine);
+    if (YETTY_IS_ERR(rb)) {
+        yetty_ycore_error_destroy(rb.error);
+    }
 
     /* 4. Serialize (framed: prims + text_spans + scene_bounds) */
     const uint8_t *data = NULL;
     uint32_t size = (uint32_t)yetty_ypaint_core_buffer_serialize(engine->buffer, &data);
     if (size == 0 || !data) {
-        return;
+        return YETTY_OK_VOID();
     }
 
     /* 5. Send OSC */
     if (!engine->card_shown) {
-        ygui_osc_create_card(engine->card_name, engine->card_x, engine->card_y, engine->card_w,
-                             engine->card_h, data, size);
+        struct yetty_ycore_void_result r =
+            ygui_osc_create_card(engine->card_name, engine->card_x, engine->card_y,
+                                 engine->card_w, engine->card_h, data, size);
         engine->card_shown = 1;
-    } else {
-        ygui_osc_update_card(engine->card_name, data, size);
+        return r;
     }
+    return ygui_osc_update_card(engine->card_name, data, size);
 }
 
-void ygui_engine_show(ygui_engine_t *engine)
+struct yetty_ycore_void_result ygui_engine_show(ygui_engine_t *engine)
 {
     if (!engine) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "ygui_engine_show: NULL engine");
     }
 
     /* card_x, card_y, card_w, card_h already set in ygui_engine_create */
@@ -544,8 +576,10 @@ void ygui_engine_show(ygui_engine_t *engine)
     /* Register our card with the ymgui-layer so the server hit-tests the
      * cursor against our rect and emits YMGUI_OSC_SC_MOUSE with card-local
      * coordinates. Without this, mouse events have nowhere to go. */
-    ygui_osc_card_place(engine->card_id, engine->card_x, engine->card_y, (uint32_t)engine->card_w,
-                        (uint32_t)engine->card_h);
+    struct yetty_ycore_void_result place_r =
+        ygui_osc_card_place(engine->card_id, engine->card_x, engine->card_y,
+                            (uint32_t)engine->card_w, (uint32_t)engine->card_h);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, place_r, "ygui_engine_show: card_place failed");
 
     /* In CANVAS_FIT mode, create card with minimal data first to trigger OSC 777780.
      * The real render happens after we receive the actual pixel size.
@@ -558,16 +592,18 @@ void ygui_engine_show(ygui_engine_t *engine)
         const uint8_t *data = NULL;
         uint32_t size = (uint32_t)yetty_ypaint_core_buffer_serialize(engine->buffer, &data);
         if (size > 0 && data) {
-            ygui_osc_create_card(engine->card_name, engine->card_x, engine->card_y, engine->card_w,
-                                 engine->card_h, data, size);
+            struct yetty_ycore_void_result cr =
+                ygui_osc_create_card(engine->card_name, engine->card_x, engine->card_y,
+                                     engine->card_w, engine->card_h, data, size);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "ygui_engine_show: create_card failed");
             engine->card_shown = 1;
         }
         engine->dirty = 1; /* Real render after OSC 777780 */
         YGUI_LOG("CANVAS_FIT: created placeholder card, waiting for OSC 777780");
-    } else {
-        /* CANVAS_FIXED or already have pixel size: render immediately */
-        ygui_engine_render(engine);
+        return YETTY_OK_VOID();
     }
+    /* CANVAS_FIXED or already have pixel size: render immediately */
+    return ygui_engine_render(engine);
 }
 
 /*=============================================================================
@@ -1648,6 +1684,7 @@ static void yface_on_raw(void *user, const char *bytes, size_t n)
  * libuv Event Loop
  *===========================================================================*/
 
+YETTY_EXTERNAL_CALLBACK
 static void stdin_poll_cb(uv_poll_t *handle, int status, int events)
 {
     ygui_engine_t *engine = (ygui_engine_t *)handle->data;
@@ -1674,6 +1711,7 @@ static void stdin_poll_cb(uv_poll_t *handle, int status, int events)
     }
 }
 
+YETTY_EXTERNAL_CALLBACK
 static void prepare_cb(uv_prepare_t *handle)
 {
     ygui_engine_t *engine = (ygui_engine_t *)handle->data;
@@ -1925,9 +1963,9 @@ void ygui_engine_subscribe_moves(ygui_engine_t *engine, int enable)
 }
 
 /* Rebuild without render (for internal use) */
-void ygui_engine_rebuild(ygui_engine_t *engine)
+struct yetty_ycore_void_result ygui_engine_rebuild(ygui_engine_t *engine)
 {
-    engine_rebuild(engine);
+    return engine_rebuild(engine);
 }
 
 /*=============================================================================

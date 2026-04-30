@@ -184,7 +184,7 @@ static void store_array(struct ypaint_yaml_parse_ctx *yaml_parse_ctx)
     }
 }
 
-static void add_prim(struct ypaint_yaml_parse_ctx *yaml_parse_ctx)
+static struct yetty_ycore_void_result add_prim(struct ypaint_yaml_parse_ctx *yaml_parse_ctx)
 {
     float data[16];
     uint32_t word_count = 0, tmp;
@@ -535,25 +535,30 @@ static void add_prim(struct ypaint_yaml_parse_ctx *yaml_parse_ctx)
     } else {
         ydebug("ypaint_yaml: unknown type '%s'", yaml_parse_ctx->prim_type);
         yaml_parse_ctx->z_order++;
-        return;
+        return YETTY_ERR(yetty_ycore_void, "ysdf yaml: unknown primitive type");
     }
 
     /* Add primitive to buffer */
-    yetty_ypaint_core_buffer_add_prim(yaml_parse_ctx->buffer, data, word_count * sizeof(float));
+    struct yetty_ypaint_id_result r =
+        yetty_ypaint_core_buffer_add_prim(yaml_parse_ctx->buffer, data, word_count * sizeof(float));
     yaml_parse_ctx->z_order++;
+    if (r.error != YPAINT_OK) {
+        return YETTY_ERR(yetty_ycore_void, "ysdf yaml: add_prim failed");
+    }
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================
  * YAML event parser
  *===========================================================================*/
 
-int yetty_ysdf_yaml_parse(struct yetty_ypaint_core_buffer *buffer, const char *yaml_str,
-                          size_t yaml_len)
+struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ypaint_core_buffer *buffer,
+                                                     const char *yaml_str, size_t yaml_len)
 {
     yaml_parser_t parser;
     yaml_event_t event;
     struct ypaint_yaml_parse_ctx yaml_parse_ctx = {0};
-    int done = 0, err = 0;
+    int done = 0;
     int depth = 0;        /* mapping depth */
     int in_body = 0;      /* inside body sequence */
     int in_prim = 0;      /* inside primitive map */
@@ -561,19 +566,19 @@ int yetty_ysdf_yaml_parse(struct yetty_ypaint_core_buffer *buffer, const char *y
     int expect_value = 0;
 
     if (!buffer || !yaml_str) {
-        return -1;
+        return YETTY_ERR(yetty_ycore_void, "ysdf yaml_parse: NULL arg");
     }
     yaml_parse_ctx.buffer = buffer;
 
     if (!yaml_parser_initialize(&parser)) {
-        return -1;
+        return YETTY_ERR(yetty_ycore_void, "ysdf yaml_parse: parser init failed");
     }
     yaml_parser_set_input_string(&parser, (const unsigned char *)yaml_str, yaml_len);
 
-    while (!done && !err) {
+    while (!done) {
         if (!yaml_parser_parse(&parser, &event)) {
-            err = 1;
-            break;
+            yaml_parser_delete(&parser);
+            return YETTY_ERR(yetty_ycore_void, "ysdf yaml_parse: parser error");
         }
         switch (event.type) {
         case YAML_STREAM_END_EVENT:
@@ -590,7 +595,13 @@ int yetty_ysdf_yaml_parse(struct yetty_ypaint_core_buffer *buffer, const char *y
             break;
         case YAML_MAPPING_END_EVENT:
             if (in_prim_type) {
-                add_prim(&yaml_parse_ctx);
+                struct yetty_ycore_void_result ar = add_prim(&yaml_parse_ctx);
+                if (YETTY_IS_ERR(ar)) {
+                    yaml_event_delete(&event);
+                    yaml_parser_delete(&parser);
+                    return YETTY_ERR(yetty_ycore_void,
+                                     "ysdf yaml_parse: prim build failed", ar);
+                }
                 in_prim_type = 0;
                 in_prim = 0;
             }
@@ -670,7 +681,6 @@ int yetty_ysdf_yaml_parse(struct yetty_ypaint_core_buffer *buffer, const char *y
     }
     yaml_parser_delete(&parser);
 
-    /* Buffer is now populated with primitives */
     ydebug("ypaint_yaml: parsed %u primitives", yaml_parse_ctx.z_order);
-    return err ? -1 : 0;
+    return YETTY_OK_VOID();
 }

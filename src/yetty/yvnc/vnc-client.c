@@ -159,7 +159,7 @@ static void send_input(struct yetty_vnc_client *client, const void *data, size_t
  * Frame processing
  *===========================================================================*/
 
-static void process_tile_data(struct yetty_vnc_client *client)
+static struct yetty_ycore_void_result process_tile_data(struct yetty_vnc_client *client)
 {
     ydebug("vnc_client: tile (%u,%u) encoding=%u size=%u", client->current_tile.tile_x,
            client->current_tile.tile_y, client->current_tile.encoding,
@@ -223,9 +223,12 @@ static void process_tile_data(struct yetty_vnc_client *client)
             client->stats_frames_window++;
             client->recv_state = RECV_FRAME_HEADER;
             client->recv_needed = sizeof(struct vnc_frame_header);
-            yetty_vnc_client_send_frame_ack(client);
+            struct yetty_ycore_void_result ar = yetty_vnc_client_send_frame_ack(client);
+            if (YETTY_IS_ERR(ar)) {
+                yetty_ycore_error_destroy(ar.error);
+            }
         }
-        return;
+        return YETTY_OK_VOID();
     }
 
 #ifdef YETTY_HAS_YVIDEO
@@ -255,6 +258,7 @@ static void process_tile_data(struct yetty_vnc_client *client)
             struct yetty_yvideo_decoder_ptr_result dres = yetty_yvideo_decoder_create_h264();
             if (!YETTY_IS_OK(dres)) {
                 ywarn("vnc_client: H.264 decoder create failed: %s", dres.error.msg);
+                yetty_ycore_error_destroy(dres.error);
                 break;
             }
             client->h264_decoder = dres.value;
@@ -264,6 +268,7 @@ static void process_tile_data(struct yetty_vnc_client *client)
             yetty_yvideo_decoder_feed(client->h264_decoder, nal_data, nal_size);
         if (!YETTY_IS_OK(fres)) {
             ywarn("vnc_client: H.264 feed failed: %s", fres.error.msg);
+            yetty_ycore_error_destroy(fres.error);
             break;
         }
 
@@ -272,6 +277,7 @@ static void process_tile_data(struct yetty_vnc_client *client)
         fres = yetty_yvideo_decoder_get_frame(client->h264_decoder, &yuv, &got_frame);
         if (!YETTY_IS_OK(fres)) {
             ywarn("vnc_client: H.264 decode failed: %s", fres.error.msg);
+            yetty_ycore_error_destroy(fres.error);
             break;
         }
         if (!got_frame) {
@@ -316,9 +322,12 @@ static void process_tile_data(struct yetty_vnc_client *client)
             client->stats_frames_window++;
             client->recv_state = RECV_FRAME_HEADER;
             client->recv_needed = sizeof(struct vnc_frame_header);
-            yetty_vnc_client_send_frame_ack(client);
+            struct yetty_ycore_void_result ar = yetty_vnc_client_send_frame_ack(client);
+            if (YETTY_IS_ERR(ar)) {
+                yetty_ycore_error_destroy(ar.error);
+            }
         }
-        return;
+        return YETTY_OK_VOID();
     }
 #endif
 
@@ -364,14 +373,18 @@ static void process_tile_data(struct yetty_vnc_client *client)
         client->stats_frames_window++;
         client->recv_state = RECV_FRAME_HEADER;
         client->recv_needed = sizeof(struct vnc_frame_header);
-        yetty_vnc_client_send_frame_ack(client);
+        struct yetty_ycore_void_result ar = yetty_vnc_client_send_frame_ack(client);
+        if (YETTY_IS_ERR(ar)) {
+            yetty_ycore_error_destroy(ar.error);
+        }
     } else {
         client->recv_state = RECV_TILE_HEADER;
         client->recv_needed = sizeof(struct vnc_tile_header);
     }
+    return YETTY_OK_VOID();
 }
 
-static void process_rect_data(struct yetty_vnc_client *client)
+static struct yetty_ycore_void_result process_rect_data(struct yetty_vnc_client *client)
 {
     uint16_t px = client->current_rect.px_x;
     uint16_t py = client->current_rect.px_y;
@@ -380,7 +393,7 @@ static void process_rect_data(struct yetty_vnc_client *client)
 
     uint8_t *pixels = malloc(rw * rh * 4);
     if (!pixels) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "process_rect_data: alloc failed");
     }
 
     memset(pixels, 0, rw * rh * 4);
@@ -444,15 +457,19 @@ static void process_rect_data(struct yetty_vnc_client *client)
         client->recv_state = RECV_FRAME_HEADER;
         client->recv_needed = sizeof(struct vnc_frame_header);
         client->recv_offset = 0;
-        yetty_vnc_client_send_frame_ack(client);
+        struct yetty_ycore_void_result ar = yetty_vnc_client_send_frame_ack(client);
+        if (YETTY_IS_ERR(ar)) {
+            yetty_ycore_error_destroy(ar.error);
+        }
     } else {
         client->recv_state = RECV_RECT_HEADER;
         client->recv_needed = sizeof(struct vnc_rect_header);
         client->recv_offset = 0;
     }
+    return YETTY_OK_VOID();
 }
 
-static void process_received_data(struct yetty_vnc_client *client)
+static struct yetty_ycore_void_result process_received_data(struct yetty_vnc_client *client)
 {
     int tiles_received = 0;
 
@@ -466,7 +483,7 @@ static void process_received_data(struct yetty_vnc_client *client)
                 client->recv_state = RECV_FRAME_HEADER;
                 client->recv_needed = sizeof(struct vnc_frame_header);
                 client->recv_offset = 0;
-                return;
+                return YETTY_ERR(yetty_ycore_void, "vnc_client: protocol error or invalid frame");
             }
 
             if (client->current_frame.width == 0 || client->current_frame.height == 0 ||
@@ -476,7 +493,7 @@ static void process_received_data(struct yetty_vnc_client *client)
                 client->recv_state = RECV_FRAME_HEADER;
                 client->recv_needed = sizeof(struct vnc_frame_header);
                 client->recv_offset = 0;
-                return;
+                return YETTY_ERR(yetty_ycore_void, "vnc_client: protocol error or invalid frame");
             }
 
             ydebug("VNC client: frame %ux%u tiles=%u", client->current_frame.width,
@@ -516,7 +533,7 @@ static void process_received_data(struct yetty_vnc_client *client)
                 client->recv_state = RECV_FRAME_HEADER;
                 client->recv_needed = sizeof(struct vnc_frame_header);
                 client->recv_offset = 0;
-                return;
+                return YETTY_ERR(yetty_ycore_void, "vnc_client: protocol error or invalid frame");
             }
 
             size_t consumed = sizeof(struct vnc_tile_header);
@@ -532,7 +549,7 @@ static void process_received_data(struct yetty_vnc_client *client)
         }
 
         case RECV_TILE_DATA: {
-            process_tile_data(client);
+            { struct yetty_ycore_void_result _ptr = process_tile_data(client); if (YETTY_IS_ERR(_ptr)) yetty_ycore_error_destroy(_ptr.error); }
             tiles_received = 1;
 
             /* Consume tile data and shift remaining */
@@ -553,7 +570,7 @@ static void process_received_data(struct yetty_vnc_client *client)
                 client->recv_state = RECV_FRAME_HEADER;
                 client->recv_needed = sizeof(struct vnc_frame_header);
                 client->recv_offset = 0;
-                return;
+                return YETTY_ERR(yetty_ycore_void, "vnc_client: protocol error or invalid frame");
             }
 
             size_t consumed = sizeof(struct vnc_rect_header);
@@ -569,7 +586,7 @@ static void process_received_data(struct yetty_vnc_client *client)
         }
 
         case RECV_RECT_DATA: {
-            process_rect_data(client);
+            { struct yetty_ycore_void_result _prr = process_rect_data(client); if (YETTY_IS_ERR(_prr)) yetty_ycore_error_destroy(_prr.error); }
             tiles_received = 1;
 
             size_t consumed = client->current_rect.data_size;
@@ -586,6 +603,8 @@ static void process_received_data(struct yetty_vnc_client *client)
     if (tiles_received && client->on_frame_fn) {
         client->on_frame_fn(client->on_frame_userdata);
     }
+    return YETTY_OK_VOID();
+
 }
 
 /*===========================================================================
@@ -647,6 +666,7 @@ static void vnc_client_on_alloc(void *ctx, size_t suggested, char **buf, size_t 
     *len = client->recv_buffer_capacity - client->recv_offset;
 }
 
+YETTY_EXTERNAL_CALLBACK
 static void vnc_client_on_data(void *ctx, struct yetty_tcp_conn *conn, const char *data, long nread)
 {
     struct yetty_vnc_client *client = ctx;
@@ -664,7 +684,10 @@ static void vnc_client_on_data(void *ctx, struct yetty_tcp_conn *conn, const cha
 
     ydebug("VNC client: processing data, recv_offset=%zu, recv_needed=%zu", client->recv_offset,
            client->recv_needed);
-    process_received_data(client);
+    struct yetty_ycore_void_result pr = process_received_data(client);
+    if (YETTY_IS_ERR(pr)) {
+        yetty_ycore_error_destroy(pr.error);
+    }
 }
 
 static void vnc_client_on_disconnect(void *ctx)
@@ -756,13 +779,13 @@ struct yetty_vnc_client_ptr_result yetty_vnc_client_create(
     return YETTY_OK(yetty_vnc_client_ptr, client);
 }
 
-void yetty_vnc_client_destroy(struct yetty_vnc_client *client)
+struct yetty_ycore_void_result yetty_vnc_client_destroy(struct yetty_vnc_client *client)
 {
     if (!client) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yetty_vnc_client_destroy: NULL client");
     }
 
-    yetty_vnc_client_disconnect(client);
+    struct yetty_ycore_void_result disc_r = yetty_vnc_client_disconnect(client);
 
     if (client->jpeg_decompressor) {
         tjDestroy(client->jpeg_decompressor);
@@ -798,6 +821,11 @@ void yetty_vnc_client_destroy(struct yetty_vnc_client *client)
     free(client->tile_pixels);
     free(client->recv_buffer);
     free(client);
+
+    if (YETTY_IS_ERR(disc_r)) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_vnc_client_destroy: disconnect failed", disc_r);
+    }
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_vnc_client_connect(struct yetty_vnc_client *client,
