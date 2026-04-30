@@ -273,6 +273,32 @@
             '';
           };
 
+          # Asset-build shell for build-tools/3rdparty/alpine-extended-disk:
+          # Builds a raw ext4 RISC-V Alpine rootfs *with the JSLinux package
+          # set baked in*, by booting the freshly-laid-down disk in
+          # qemu-system-riscv64 and letting Alpine's own apk run inside the
+          # VM. So the shell needs:
+          #   - disk plumbing (mkfs.ext4, losetup, mount) + brotli + curl
+          #   - qemu-system-riscv64 to run the install VM
+          # The kernel for the install VM is fetched as a prebuilt artifact
+          # from this repo's `lib-linux-<ver>` releases — no cross-toolchain
+          # needed here (that's `assets-riscv`).
+          assets-alpine-extended = pkgs.mkShell {
+            buildInputs = with pkgs; [
+              curl
+              brotli
+              e2fsprogs
+              util-linux
+              gnutar
+              gzip
+              qemu
+            ];
+            shellHook = ''
+              echo "Yetty asset-build environment (alpine-extended-disk)"
+              echo "  qemu-system-riscv64: $(qemu-system-riscv64 --version | head -1)"
+            '';
+          };
+
           # Asset-build shell: host toolchain for building yetty-ymsdf-gen
           # and generating MSDF CDB font databases from TTFs.
           # Used by build-tools/assets/cdb/build.sh.

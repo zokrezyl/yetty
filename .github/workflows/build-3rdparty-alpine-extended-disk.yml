@@ -1,0 +1,71 @@
+name: Build 3rdparty — alpine-extended-disk
+
+# Raw ext4 RISC-V Alpine rootfs *with the JSLinux package set baked in*.
+# Built by booting the disk in qemu-system-riscv64 and letting Alpine's own
+# apk install the packages from inside the VM. Platform-independent
+# (.noarch) — the same disk image regardless of host. Triggered on
+# `lib-alpine-extended-disk-<version>` tags. Version source of truth:
+# build-tools/3rdparty/alpine-extended-disk/version.
+#
+# Dep: kernel-riscv64.bin from this repo's `linux` 3rdparty producer
+# (release tag lib-linux-<ver>). The producer downloads it from GitHub
+# Releases at build time — same convention as libpng <- zlib etc.
+#
+# Needs passwordless sudo (losetup/mount/umount) — ubuntu-latest runners
+# satisfy this out of the box. KVM is *not* required: qemu-system-riscv64
+# emulates the guest, so a plain x86_64 GitHub runner works.
+
+on:
+  push:
+    tags:
+      - 'lib-alpine-extended-disk-*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag:     ${{ steps.read.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          set -euo pipefail
+          V="$(tr -d '[:space:]' < build-tools/3rdparty/alpine-extended-disk/version)"
+          [ -n "$V" ] || { echo "version file is empty" >&2; exit 1; }
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            REF="${GITHUB_REF#refs/tags/}"
+            EXPECT="lib-alpine-extended-disk-$V"
+            if [ "$REF" != "$EXPECT" ]; then
+              echo "tag $REF does not match version file ($EXPECT)" >&2
+              exit 1
+            fi
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=lib-alpine-extended-disk-$V" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: resolve
+    runs-on: ubuntu-latest
+    # The in-VM apk install is the long pole. 60 minutes is generous;
+    # the script enforces its own QEMU_TIMEOUT_SEC (default 1800s).
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+      - run: mkdir -p out
+      - run: |
+          OUTPUT_DIR="$PWD/out" \
+          ./build-tools/3rdparty/alpine-extended-disk/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/alpine-extended-disk-*.tar.gz
+          fail_on_unmatched_files: true
