@@ -61,7 +61,9 @@ file(WRITE ${CONFIG_ALPINE_DISK} "/* alpine-disk variant: riscv64, ext4 root on 
     bios: \"opensbi-fw_jump.elf\",
     kernel: \"kernel-riscv64.bin\",
     cmdline: \"earlycon=sbi console=hvc0 root=/dev/vda rootfstype=ext4 rw init=/init TZ=\${TZ}\",
-    drive0: { file: \"alpine-disk-blocks/blk.txt\" },
+    drive0: { file: \"alpine-rootfs.img\" },
+    width: 1024,
+    height: 768,
     eth0: { driver: \"user\" },
 }
 ")
@@ -83,7 +85,9 @@ file(WRITE ${CONFIG_ALPINE_EXTENDED} "/* alpine-extended-disk variant: riscv64, 
     bios: \"opensbi-fw_jump.elf\",
     kernel: \"kernel-riscv64.bin\",
     cmdline: \"earlycon=sbi console=hvc0 root=/dev/vda rootfstype=ext4 rw init=/init TZ=\${TZ}\",
-    drive0: { file: \"${YETTY_ALPINE_EXTENDED_DISK_URL}\" },
+    drive0: { file: \"alpine-extended-rootfs.img\" },
+    width: 1024,
+    height: 768,
     eth0: { driver: \"user\" },
 }
 ")
@@ -121,6 +125,18 @@ if(_OPENSBI_SRC AND EXISTS "${_OPENSBI_SRC}")
     configure_file(${_OPENSBI_SRC} ${JSLINUX_DIR}/opensbi-fw_jump.elf COPYONLY)
 else()
     message(WARNING "jslinux: opensbi-fw_jump.elf not found at '${_OPENSBI_SRC}' — alpine-disk variants will not boot")
+endif()
+
+if(_ALPINE_DISK_IMG AND EXISTS "${_ALPINE_DISK_IMG}")
+    configure_file(${_ALPINE_DISK_IMG} ${JSLINUX_DIR}/alpine-rootfs.img COPYONLY)
+else()
+    message(WARNING "jslinux: alpine-rootfs.img not found at '${_ALPINE_DISK_IMG}' — alpine-disk variant will be unavailable")
+endif()
+
+if(_ALPINE_EXTENDED_IMG AND EXISTS "${_ALPINE_EXTENDED_IMG}")
+    configure_file(${_ALPINE_EXTENDED_IMG} ${JSLINUX_DIR}/alpine-extended-rootfs.img COPYONLY)
+else()
+    message(WARNING "jslinux: alpine-extended-rootfs.img not found at '${_ALPINE_EXTENDED_IMG}' — alpine-extended-disk variant will be unavailable")
 endif()
 
 # --- riscvemu64-wasm (built from yetty's src/tinyemu) ------------------------
@@ -176,73 +192,14 @@ add_custom_target(jslinux-riscvemu-wasm
 # emcc, so we drop down to a raw shell command using $HOSTCC (set by the
 # webasm build) or, failing that, any cc/gcc/clang on PATH.
 #
-# The upstream splitimg.c expects a CONFIG_VERSION string macro (used in its
-# usage banner). Rather than fight CMake/ninja quote escaping for a -D flag
-# that ends up as a string literal inside C, we wrap it: emit a tiny shim C
-# file that #defines CONFIG_VERSION and #includes the upstream source.
-set(_SPLITIMG_SRC "${YETTY_ROOT}/src/tinyemu/splitimg.c")
-set(_SPLITIMG_SHIM "${CMAKE_CURRENT_BINARY_DIR}/splitimg-shim.c")
-set(_SPLITIMG_BIN "${CMAKE_CURRENT_BINARY_DIR}/splitimg")
-file(WRITE ${_SPLITIMG_SHIM}
-    "#define CONFIG_VERSION \"jslinux\"\n#include \"${_SPLITIMG_SRC}\"\n")
-if(DEFINED ENV{HOSTCC})
-    set(_SPLITIMG_HOST_CC "$ENV{HOSTCC}")
-else()
-    find_program(_SPLITIMG_HOST_CC NAMES cc gcc clang REQUIRED)
-endif()
-add_custom_command(
-    OUTPUT ${_SPLITIMG_BIN}
-    COMMAND ${_SPLITIMG_HOST_CC} -O2 -o ${_SPLITIMG_BIN} ${_SPLITIMG_SHIM}
-    DEPENDS ${_SPLITIMG_SRC} ${_SPLITIMG_SHIM}
-    COMMENT "Building splitimg host tool (${_SPLITIMG_HOST_CC})"
-    VERBATIM
-)
+# splitimg no longer used — images are downloaded whole by browser
+# Simplified targets just verify the images exist
 
-# --- alpine-disk chunked image -----------------------------------------------
-# Run splitimg over the decompressed alpine-rootfs.img (already staged by the
-# 3rdparty/alpine-disk fetch). Output goes into jslinux/alpine-disk-blocks/
-# next to the cfg, so drive0 resolves relatively.
-set(_ALPINE_DISK_BLOCKS "${JSLINUX_DIR}/alpine-disk-blocks")
-if(_ALPINE_DISK_IMG AND EXISTS "${_ALPINE_DISK_IMG}")
-    add_custom_command(
-        OUTPUT ${_ALPINE_DISK_BLOCKS}/blk.txt
-        COMMAND ${CMAKE_COMMAND} -E rm -rf ${_ALPINE_DISK_BLOCKS}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${_ALPINE_DISK_BLOCKS}
-        COMMAND ${_SPLITIMG_BIN} ${_ALPINE_DISK_IMG} ${_ALPINE_DISK_BLOCKS} 8192
-        DEPENDS ${_SPLITIMG_BIN} ${_ALPINE_DISK_IMG}
-        COMMENT "splitimg: chunking alpine-rootfs.img -> alpine-disk-blocks/ (8 MiB chunks)"
-        VERBATIM
-    )
-    add_custom_target(jslinux-alpine-disk
-        DEPENDS ${_ALPINE_DISK_BLOCKS}/blk.txt
-    )
-else()
-    message(WARNING "jslinux: alpine-rootfs.img not found at '${_ALPINE_DISK_IMG}' — alpine-disk variant will be unavailable")
-    add_custom_target(jslinux-alpine-disk)
-endif()
+# --- alpine-disk image (downloaded whole) -----
+add_custom_target(jslinux-alpine-disk)
 
-# --- alpine-extended-disk chunked image ----------------------------------------
-# Run splitimg over the decompressed alpine-extended-rootfs.img. Output goes into
-# jslinux/alpine-extended-disk-blocks/ next to the cfg, so drive0 resolves relatively.
-set(_ALPINE_EXTENDED_BLOCKS "${JSLINUX_DIR}/alpine-extended-disk-blocks")
-if(_ALPINE_EXTENDED_IMG AND EXISTS "${_ALPINE_EXTENDED_IMG}")
-    add_custom_command(
-        OUTPUT ${_ALPINE_EXTENDED_BLOCKS}/blk.txt
-        COMMAND ${CMAKE_COMMAND} -E rm -rf ${_ALPINE_EXTENDED_BLOCKS}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${_ALPINE_EXTENDED_BLOCKS}
-        COMMAND ${_SPLITIMG_BIN} ${_ALPINE_EXTENDED_IMG} ${_ALPINE_EXTENDED_BLOCKS} 8192
-        DEPENDS ${_SPLITIMG_BIN} ${_ALPINE_EXTENDED_IMG}
-        COMMENT "splitimg: chunking alpine-extended-rootfs.img -> alpine-extended-disk-blocks/ (8 MiB chunks)"
-        VERBATIM
-    )
-    add_custom_target(jslinux-alpine-extended-disk
-        DEPENDS ${_ALPINE_EXTENDED_BLOCKS}/blk.txt
-    )
-else()
-    message(WARNING "jslinux: alpine-extended-rootfs.img not found at '${_ALPINE_EXTENDED_IMG}' — alpine-extended-disk variant will be unavailable")
-    add_custom_target(jslinux-alpine-extended-disk)
-endif()
-set(LOCAL_FILES_DIR "${JSLINUX_DIR}/local-files")
+# --- alpine-extended-disk image (downloaded whole) -----
+add_custom_target(jslinux-alpine-extended-disk)
 add_custom_command(
     OUTPUT ${LOCAL_FILES_DIR}/filelist.txt
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build-local-vfsync.sh ${CMAKE_BINARY_DIR}
