@@ -134,7 +134,7 @@ CMAKE_ARGS=(
     # LNK2038 at consumer link time. CMP0091 NEW is needed for the var to
     # be honored by upstream's cmake.
     -DCMAKE_POLICY_DEFAULT_CMP0091=NEW
-    "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL\$<\$<CONFIG:Debug>:Debug>"
+    "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded\$<\$<CONFIG:Debug>:Debug>DLL"
     "-DFREETYPE_INCLUDE_DIRS=$(_path "$_FT_INC");$(_path "$FT_PREFIX/include")"
     "-DFREETYPE_LIBRARY=$(_path "$_FT_LIB")"
     "-Dtinyxml2_INCLUDE_DIRS=$(_path "$TX_PREFIX/include")"
