@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/yrender/gpu-resource-set.h>
 
 #ifdef __cplusplus
@@ -84,6 +85,16 @@ struct yetty_ypaint_complex_prim_instance {
     struct rectangle bounds;
     uint32_t rolling_row;
     void *instance_data; // type-specific, managed by concrete factory
+
+    /* Per-instance GPU resources. The factory owns the shared
+     * yetty_yrender_pipeline (compiled once for the type); each instance
+     * owns its own resource_set (per-instance uniform/buffer values) and
+     * binder (its own GPU uniform_buffer, storage_buffer, bind_group).
+     * Both are heap-allocated and owned by the instance — destroyed in
+     * yetty_ypaint_complex_prim_instance_destroy. May be NULL during
+     * partial initialisation. */
+    struct yetty_yrender_gpu_resource_set *resource_set;
+    struct yetty_yrender_gpu_resource_binder *binder;
 
     // Render to target at x,y (canvas provides x,y for scrolling)
     struct yetty_ycore_void_result (*render)(struct yetty_ypaint_complex_prim_instance *self,

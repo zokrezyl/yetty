@@ -43,6 +43,12 @@ struct gpu_resource_binder_impl {
     WGPUTextureFormat surface_format;
     struct yetty_yrender_gpu_allocator *allocator;
 
+    /* If non-NULL, binder runs in two-tier mode: skips shader compile +
+     * pipeline create; uses pipeline's bind_group_layout to create its own
+     * bind_group; reads pipeline / quad VB through the pipeline accessors.
+     * Cached locally for fast path access. */
+    const struct yetty_yrender_pipeline *external_pipeline;
+
     /* Submitted resource sets (persistent pointers, submitted once) */
     struct yetty_yrender_gpu_resource_set *resource_sets[MAX_RESOURCE_SETS];
     size_t resource_set_count;
@@ -690,22 +696,40 @@ static struct yetty_ycore_void_result create_bind_group(struct gpu_resource_bind
         return YETTY_ERR(yetty_ycore_void, "no bindings");
     }
 
-    WGPUBindGroupLayoutDescriptor layout_desc = {0};
-    layout_desc.entryCount = count;
-    layout_desc.entries = layout_entries;
-    impl->bind_group_layout = wgpuDeviceCreateBindGroupLayout(impl->device, &layout_desc);
-    if (!impl->bind_group_layout) {
-        return YETTY_ERR(yetty_ycore_void, "failed to create bind group layout");
+    /* Layout: own if legacy mode, else borrow from the external pipeline. */
+    WGPUBindGroupLayout layout;
+    if (impl->external_pipeline) {
+        layout = yetty_yrender_pipeline_get_bind_group_layout(impl->external_pipeline);
+        if (!layout) {
+            return YETTY_ERR(yetty_ycore_void, "external pipeline has no bind_group_layout");
+        }
+        /* impl->bind_group_layout stays NULL — pipeline owns it. */
+    } else {
+        WGPUBindGroupLayoutDescriptor layout_desc = {0};
+        layout_desc.entryCount = count;
+        layout_desc.entries = layout_entries;
+        impl->bind_group_layout = wgpuDeviceCreateBindGroupLayout(impl->device, &layout_desc);
+        if (!impl->bind_group_layout) {
+            return YETTY_ERR(yetty_ycore_void, "failed to create bind group layout");
+        }
+        layout = impl->bind_group_layout;
     }
 
     WGPUBindGroupDescriptor group_desc = {0};
-    group_desc.layout = impl->bind_group_layout;
+    group_desc.layout = layout;
     group_desc.entryCount = count;
     group_desc.entries = group_entries;
     impl->bind_group = wgpuDeviceCreateBindGroup(impl->device, &group_desc);
     if (!impl->bind_group) {
         return YETTY_ERR(yetty_ycore_void, "failed to create bind group");
     }
+
+    /* DIAG: log bind_group + buffer handles so we can verify per-instance
+     * binders carry independent GPU state. Remove once two-tier rendering
+     * is verified end-to-end. */
+    yinfo("BIND DIAG: binder=%p bind_group=%p uniform_buf=%p storage_buf=%p external_pipeline=%p",
+          (void *)impl, (void *)impl->bind_group, (void *)impl->uniform_buffer,
+          (void *)impl->storage_buffer, (const void *)impl->external_pipeline);
 
     return YETTY_OK_VOID();
 }
@@ -1008,10 +1032,14 @@ static struct yetty_ycore_void_result binder_finalize(
         return res;
     }
 
-    /* Compile and create pipeline */
-    res = compile_and_create_pipeline(impl);
-    if (!YETTY_IS_OK(res)) {
-        return res;
+    /* Compile and create pipeline (only when binder owns it).
+     * In two-tier mode the pipeline is supplied externally and stays
+     * fixed across instances. */
+    if (!impl->external_pipeline) {
+        res = compile_and_create_pipeline(impl);
+        if (!YETTY_IS_OK(res)) {
+            return res;
+        }
     }
 
     impl->finalized = 1;
@@ -1188,19 +1216,29 @@ static struct yetty_ycore_void_result binder_bind(struct yetty_yrender_gpu_resou
         return YETTY_ERR(yetty_ycore_void, "bind group is null");
     }
 
+    yinfo("BIND DIAG: setBindGroup binder=%p bind_group=%p group_index=%u", (void *)impl,
+          (void *)impl->bind_group, group_index);
     wgpuRenderPassEncoderSetBindGroup(pass, group_index, impl->bind_group, 0, NULL);
     return YETTY_OK_VOID();
 }
 
 static WGPURenderPipeline binder_get_pipeline(const struct yetty_yrender_gpu_resource_binder *self)
 {
-    return ((const struct gpu_resource_binder_impl *)self)->pipeline;
+    const struct gpu_resource_binder_impl *impl = (const struct gpu_resource_binder_impl *)self;
+    if (impl->external_pipeline) {
+        return yetty_yrender_pipeline_get_pipeline(impl->external_pipeline);
+    }
+    return impl->pipeline;
 }
 
 static WGPUBuffer binder_get_quad_vertex_buffer(
     const struct yetty_yrender_gpu_resource_binder *self)
 {
-    return ((const struct gpu_resource_binder_impl *)self)->quad_vertex_buffer;
+    const struct gpu_resource_binder_impl *impl = (const struct gpu_resource_binder_impl *)self;
+    if (impl->external_pipeline) {
+        return yetty_yrender_pipeline_get_quad_vertex_buffer(impl->external_pipeline);
+    }
+    return impl->quad_vertex_buffer;
 }
 
 struct yetty_yrender_gpu_resource_binder_result yetty_yrender_gpu_resource_binder_create(
@@ -1227,6 +1265,40 @@ struct yetty_yrender_gpu_resource_binder_result yetty_yrender_gpu_resource_binde
     impl->queue = queue;
     impl->surface_format = surface_format;
     impl->allocator = allocator;
+
+    return YETTY_OK(yetty_yrender_gpu_resource_binder, &impl->base);
+}
+
+struct yetty_yrender_gpu_resource_binder_result
+yetty_yrender_gpu_resource_binder_create_with_pipeline(
+    WGPUDevice device, WGPUQueue queue,
+    struct yetty_yrender_gpu_allocator *allocator,
+    const struct yetty_yrender_pipeline *pipeline)
+{
+    if (!device) {
+        return YETTY_ERR(yetty_yrender_gpu_resource_binder, "device is null");
+    }
+    if (!queue) {
+        return YETTY_ERR(yetty_yrender_gpu_resource_binder, "queue is null");
+    }
+    if (!allocator) {
+        return YETTY_ERR(yetty_yrender_gpu_resource_binder, "allocator is null");
+    }
+    if (!pipeline) {
+        return YETTY_ERR(yetty_yrender_gpu_resource_binder, "pipeline is null");
+    }
+
+    struct gpu_resource_binder_impl *impl = calloc(1, sizeof(struct gpu_resource_binder_impl));
+    if (!impl) {
+        return YETTY_ERR(yetty_yrender_gpu_resource_binder, "failed to allocate");
+    }
+
+    impl->base.ops = &binder_ops;
+    impl->device = device;
+    impl->queue = queue;
+    /* surface_format unused in two-tier mode (pipeline encodes it) */
+    impl->allocator = allocator;
+    impl->external_pipeline = pipeline;
 
     return YETTY_OK(yetty_yrender_gpu_resource_binder, &impl->base);
 }

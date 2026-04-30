@@ -1,9 +1,22 @@
 // Auto-generated from yplot.yaml - DO NOT EDIT
+//
+// Two-tier complex-prim model:
+//   - factory owns ONE shared yetty_yrender_pipeline (compiled once at
+//     compile_pipeline time from a template resource_set; the pipeline
+//     carries the WGPUShaderModule + bind_group_layout + WGPURenderPipeline
+//     + shared quad VB).
+//   - each instance owns its OWN heap-allocated yetty_yrender_gpu_resource_set
+//     (per-instance uniform values + storage buffer pointer) and its own
+//     gpu_resource_binder (per-instance WGPUUniformBuffer + WGPUStorageBuffer
+//     + WGPUBindGroup), referencing the factory's pipeline by const pointer.
+//   - factory holds zoom state as plain floats; instances read it at render
+//     time and write into their own RS uniforms (no shared mutable RS).
 
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/gpu-allocator.h>
+#include <yetty/yrender/pipeline.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ypaint-core/complex-prim-types.h>
 #include <yetty/ytrace.h>
@@ -16,7 +29,8 @@ extern const unsigned int gyplot_shaderSize;
 extern const unsigned char gyplot_lib_shaderData[];
 extern const unsigned int gyplot_lib_shaderSize;
 
-/* Static resource set for accessor library (yplot-gen.wgsl) */
+/* Static resource set for accessor library (yplot-gen.wgsl).
+ * Read-only after init; safely shared across all instances as a child. */
 static struct yetty_yrender_gpu_resource_set yplot_lib_rs;
 static bool yplot_lib_rs_initialized = false;
 
@@ -33,10 +47,25 @@ static void yplot_init_lib_rs(void)
 
 struct yplot_factory {
     struct yetty_ypaint_concrete_factory base;
-    struct yetty_yrender_gpu_resource_set rs;
-    struct yetty_yrender_gpu_resource_binder *binder;
+    /* Shared, compiled once. NULL until compile_pipeline. */
+    struct yetty_yrender_pipeline *pipeline;
+    /* Template RS: shape definition for both the pipeline and per-instance
+     * RSes. Children point to the shared static library RSes. */
+    struct yetty_yrender_gpu_resource_set template_rs;
+    int template_initialized;
+
     WGPUDevice device;
     WGPUQueue queue;
+    struct yetty_yrender_gpu_allocator *allocator;
+
+    /* Zoom state — written by the canvas into the factory, read by each
+     * instance render() and pushed into the instance's own RS uniforms. */
+    float visual_zoom_scale;
+    float visual_zoom_off_x;
+    float visual_zoom_off_y;
+    float cell_zoom_scale;
+    float cell_zoom_off_x;
+    float cell_zoom_off_y;
 };
 
 static struct yplot_factory *yplot_factory_from_base(struct yetty_ypaint_concrete_factory *base)
@@ -95,17 +124,20 @@ struct yetty_ycore_size_result yetty_yplot_serialize(const struct yetty_yplot_un
 }
 
 //=============================================================================
-// Resource Set Setup
+// Resource Set Setup — populates a target RS with yplot's structure (uniform
+// names/types, buffer descriptor, library children + own shader code).
+// Same shape used for the factory's template_rs (pipeline-build) and for
+// each per-instance RS (binder-build) — they're memcpy clones of each other.
 //=============================================================================
 
-static void yplot_init_rs(struct yplot_factory *factory)
+static void yplot_populate_rs(struct yetty_yrender_gpu_resource_set *rs)
 {
     yplot_init_lib_rs();
 
-    struct yetty_yrender_gpu_resource_set *rs = &factory->rs;
     memset(rs, 0, sizeof(*rs));
     strncpy(rs->namespace, "yplot", YETTY_YRENDER_NAME_MAX - 1);
-    yetty_yrender_shader_code_set(&rs->shader, (const char *)gyplot_shaderData, gyplot_shaderSize);
+    yetty_yrender_shader_code_set(&rs->shader, (const char *)gyplot_shaderData,
+                                  gyplot_shaderSize);
 
     // Accessor library (generated uniforms accessors)
     rs->children[0] = (struct yetty_yrender_gpu_resource_set *)&yplot_lib_rs;
@@ -120,58 +152,40 @@ static void yplot_init_rs(struct yplot_factory *factory)
     // Setup uniforms (values set later during render)
     strncpy(rs->uniforms[0].name, "bounds_x", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[0].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[0].u32 = 0;
     strncpy(rs->uniforms[1].name, "bounds_y", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[1].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[1].u32 = 0;
     strncpy(rs->uniforms[2].name, "bounds_w", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[2].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[2].u32 = 0;
     strncpy(rs->uniforms[3].name, "bounds_h", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[3].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[3].u32 = 0;
     strncpy(rs->uniforms[4].name, "x_min", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[4].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[4].u32 = 0;
     strncpy(rs->uniforms[5].name, "x_max", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[5].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[5].u32 = 0;
     strncpy(rs->uniforms[6].name, "y_min", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[6].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[6].u32 = 0;
     strncpy(rs->uniforms[7].name, "y_max", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[7].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[7].u32 = 0;
     strncpy(rs->uniforms[8].name, "flags", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[8].type = YETTY_YRENDER_UNIFORM_U32;
-    rs->uniforms[8].u32 = 0;
     strncpy(rs->uniforms[9].name, "function_count", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[9].type = YETTY_YRENDER_UNIFORM_U32;
-    rs->uniforms[9].u32 = 0;
     strncpy(rs->uniforms[10].name, "colors_0", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[10].type = YETTY_YRENDER_UNIFORM_U32;
-    rs->uniforms[10].u32 = 0;
     strncpy(rs->uniforms[11].name, "colors_1", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[11].type = YETTY_YRENDER_UNIFORM_U32;
-    rs->uniforms[11].u32 = 0;
     strncpy(rs->uniforms[12].name, "colors_2", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[12].type = YETTY_YRENDER_UNIFORM_U32;
-    rs->uniforms[12].u32 = 0;
     strncpy(rs->uniforms[13].name, "colors_3", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[13].type = YETTY_YRENDER_UNIFORM_U32;
-    rs->uniforms[13].u32 = 0;
     strncpy(rs->uniforms[14].name, "colors_4", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[14].type = YETTY_YRENDER_UNIFORM_U32;
-    rs->uniforms[14].u32 = 0;
     strncpy(rs->uniforms[15].name, "colors_5", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[15].type = YETTY_YRENDER_UNIFORM_U32;
-    rs->uniforms[15].u32 = 0;
     strncpy(rs->uniforms[16].name, "colors_6", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[16].type = YETTY_YRENDER_UNIFORM_U32;
-    rs->uniforms[16].u32 = 0;
     strncpy(rs->uniforms[17].name, "colors_7", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[17].type = YETTY_YRENDER_UNIFORM_U32;
-    rs->uniforms[17].u32 = 0;
     strncpy(rs->uniforms[18].name, "visual_zoom_scale", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[18].type = YETTY_YRENDER_UNIFORM_F32;
     rs->uniforms[18].f32 = 1.0f;
@@ -186,16 +200,12 @@ static void yplot_init_rs(struct yplot_factory *factory)
     rs->uniforms[21].f32 = 1.0f;
     strncpy(rs->uniforms[22].name, "cell_zoom_off_x", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[22].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[22].f32 = 0.0f;
     strncpy(rs->uniforms[23].name, "cell_zoom_off_y", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[23].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[23].f32 = 0.0f;
     strncpy(rs->uniforms[24].name, "viewport_w", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[24].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[24].f32 = 0.0f;
     strncpy(rs->uniforms[25].name, "viewport_h", YETTY_YRENDER_NAME_MAX - 1);
     rs->uniforms[25].type = YETTY_YRENDER_UNIFORM_F32;
-    rs->uniforms[25].f32 = 0.0f;
     rs->uniform_count = 26;
 
     // Setup storage buffer for buffer data
@@ -206,7 +216,8 @@ static void yplot_init_rs(struct yplot_factory *factory)
 }
 
 //=============================================================================
-// Instance Rendering
+// Instance Rendering — uses self->resource_set + self->binder; the factory
+// supplies only the shared pipeline + zoom state.
 //=============================================================================
 
 static struct yetty_ycore_void_result yplot_instance_render(
@@ -216,19 +227,23 @@ static struct yetty_ycore_void_result yplot_instance_render(
     if (!self || !self->buffer_data || !self->factory) {
         return YETTY_ERR(yetty_ycore_void, "invalid instance");
     }
-
-    struct yplot_factory *factory = yplot_factory_from_base(self->factory);
-    if (!factory->binder) {
-        return YETTY_ERR(yetty_ycore_void, "binder not initialized");
+    if (!self->resource_set || !self->binder) {
+        return YETTY_ERR(yetty_ycore_void, "instance not finalised");
     }
 
-    struct yetty_yrender_gpu_resource_set *rs = &factory->rs;
+    struct yplot_factory *factory = yplot_factory_from_base(self->factory);
+    if (!factory->pipeline) {
+        return YETTY_ERR(yetty_ycore_void, "factory pipeline not initialized");
+    }
+
+    struct yetty_yrender_gpu_resource_set *rs = self->resource_set;
 
     // Parse wire format: [type_id][payload_size][uniforms...][buffer_lens...][buffer_data...]
     const uint32_t *data = (const uint32_t *)self->buffer_data;
     const uint32_t *payload = data + 2; // skip type_id and payload_size
 
-    // Update uniforms from wire format
+    // Update uniforms from wire format (values 0..17 = bounds + ranges + flags
+    // + function_count + colors_0..7).
     rs->uniforms[0].f32 = *(float *)&payload[0];
     rs->uniforms[1].f32 = *(float *)&payload[1];
     rs->uniforms[2].f32 = *(float *)&payload[2];
@@ -248,32 +263,37 @@ static struct yetty_ycore_void_result yplot_instance_render(
     rs->uniforms[16].u32 = payload[16];
     rs->uniforms[17].u32 = payload[17];
 
-    // Visual-zoom viewport — read from the target every frame so the zoom
-    // transform in the shader centers on the actual pane size (the zoom
-    // scale/offsets are pushed in separately via set_visual_zoom).
+    // Pull current zoom state from the factory into this instance's RS.
+    rs->uniforms[18].f32 = factory->visual_zoom_scale > 0.0f ? factory->visual_zoom_scale : 1.0f;
+    rs->uniforms[19].f32 = factory->visual_zoom_off_x;
+    rs->uniforms[20].f32 = factory->visual_zoom_off_y;
+    rs->uniforms[21].f32 = factory->cell_zoom_scale > 0.0f ? factory->cell_zoom_scale : 1.0f;
+    rs->uniforms[22].f32 = factory->cell_zoom_off_x;
+    rs->uniforms[23].f32 = factory->cell_zoom_off_y;
+
+    // Visual-zoom viewport — read from the target every frame.
     rs->uniforms[24].f32 = target->viewport.w;
     rs->uniforms[25].f32 = target->viewport.h;
 
     // Override bounds_x / bounds_y with the caller-provided screen position
     // (wire bounds are the pre-scroll origin; x,y are the post-scroll pane
-    // position the instance should render at). The shader's cull/zoom math
-    // uses these to place the plot rect correctly under scrolling.
+    // position the instance should render at).
     rs->uniforms[0].f32 = x;
     rs->uniforms[1].f32 = y;
 
-    // Get buffer data (after uniforms and length fields)
+    // Pump latest bytecode (the binder will queueWriteBuffer it).
     const uint32_t *buffer_data = payload + 19;
-    size_t buffer_words = payload[18]; // first buffer length
-
-    // Update storage buffer
+    size_t buffer_words = payload[18];
     rs->buffers[0].data = (uint8_t *)buffer_data;
     rs->buffers[0].size = buffer_words * sizeof(uint32_t);
     rs->buffers[0].dirty = 1;
 
-    // Update binder with new data
-    struct yetty_ycore_void_result res = factory->binder->ops->update(factory->binder);
+    // Update the per-instance binder. Each instance has its own GPU
+    // uniform_buffer / storage_buffer / bind_group, so concurrent renders
+    // of multiple yplot instances do NOT trample each other's data.
+    struct yetty_ycore_void_result res = self->binder->ops->update(self->binder);
     if (YETTY_IS_ERR(res)) {
-        return res;
+        return YETTY_ERR(yetty_ycore_void, "binder update failed", res);
     }
 
     // Get target view and create render pass
@@ -305,13 +325,6 @@ static struct yetty_ycore_void_result yplot_instance_render(
         return YETTY_ERR(yetty_ycore_void, "failed to begin render pass");
     }
 
-    // Viewport = full pane. The fragment shader applies the visual-zoom
-    // transform to its incoming pixel, checks if the transformed pixel is
-    // inside the plot's bounds rect, and either evaluates the SDF or
-    // discards. This way the SDF math runs per-fragment at the zoomed
-    // pixel — no bitmap stretching, edges stay sharp at any zoom.
-    // Instance position/size reach the shader via the bounds_* uniforms
-    // (bounds_x/y were overridden above with the scroll-adjusted x,y).
     wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, target->viewport.w, target->viewport.h, 0.0f,
                                      1.0f);
     wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, (uint32_t)target->viewport.w,
@@ -320,16 +333,14 @@ static struct yetty_ycore_void_result yplot_instance_render(
     float w = self->bounds.max.x - self->bounds.min.x;
     float h = self->bounds.max.y - self->bounds.min.y;
 
-    // Bind pipeline and draw
-    WGPURenderPipeline pipeline = factory->binder->ops->get_pipeline(factory->binder);
-    WGPUBuffer quad_vb = factory->binder->ops->get_quad_vertex_buffer(factory->binder);
-
-    if (pipeline && quad_vb) {
-        wgpuRenderPassEncoderSetPipeline(pass, pipeline);
-        factory->binder->ops->bind(factory->binder, pass, 0);
-        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, quad_vb, 0, WGPU_WHOLE_SIZE);
-        wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0); // fullscreen triangle
-    }
+    // Pipeline + quad VB are shared (factory). Bind group is per-instance.
+    yinfo("YPLOT DIAG: render inst=%p binder=%p rs=%p bounds=(%.0f,%.0f %.0fx%.0f) at (%.0f,%.0f)",
+          (void *)self, (void *)self->binder, (void *)self->resource_set,
+          self->bounds.min.x, self->bounds.min.y, self->bounds.max.x - self->bounds.min.x,
+          self->bounds.max.y - self->bounds.min.y, x, y);
+    yetty_yrender_pipeline_bind(factory->pipeline, pass);
+    self->binder->ops->bind(self->binder, pass, 0);
+    wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0); // fullscreen triangle
 
     wgpuRenderPassEncoderEnd(pass);
     wgpuRenderPassEncoderRelease(pass);
@@ -340,7 +351,8 @@ static struct yetty_ycore_void_result yplot_instance_render(
     wgpuCommandBufferRelease(cmd);
     wgpuCommandEncoderRelease(encoder);
 
-    ydebug("yplot_instance_render: rendered at (%.1f, %.1f) size (%.1f x %.1f)", x, y, w, h);
+    ydebug("yplot_instance_render: rendered at (%.1f, %.1f) size (%.1f x %.1f) inst=%p", x, y, w, h,
+           (void *)self);
     return YETTY_OK_VOID();
 }
 
@@ -354,50 +366,35 @@ static struct yetty_ycore_void_result yplot_compile_pipeline(
 {
     struct yplot_factory *factory = yplot_factory_from_base(self);
 
-    if (factory->binder) {
-        ydebug("yplot: factory already initialized");
+    if (factory->pipeline) {
+        ydebug("yplot: factory pipeline already initialized");
         return YETTY_OK_VOID();
     }
 
     factory->device = device;
     factory->queue = queue;
+    factory->allocator = allocator;
+    factory->visual_zoom_scale = 1.0f;
+    factory->cell_zoom_scale = 1.0f;
 
-    yplot_init_rs(factory);
+    yplot_populate_rs(&factory->template_rs);
+    factory->template_initialized = 1;
 
-    struct yetty_yrender_gpu_resource_binder_result binder_res =
-        yetty_yrender_gpu_resource_binder_create(device, queue, target_format, allocator);
-    if (YETTY_IS_ERR(binder_res)) {
-        return YETTY_ERR(yetty_ycore_void, binder_res.error.msg);
+    struct yetty_yrender_pipeline_ptr_result pr = yetty_yrender_pipeline_create(
+        device, target_format, allocator, &factory->template_rs);
+    if (YETTY_IS_ERR(pr)) {
+        return YETTY_ERR(yetty_ycore_void, "yplot pipeline_create failed", pr);
     }
+    factory->pipeline = pr.value;
 
-    factory->binder = binder_res.value;
-
-    struct yetty_ycore_void_result submit_res =
-        factory->binder->ops->submit(factory->binder, &factory->rs);
-    if (YETTY_IS_ERR(submit_res)) {
-        factory->binder->ops->destroy(factory->binder);
-        factory->binder = NULL;
-        return submit_res;
-    }
-
-    struct yetty_ycore_void_result finalize_res = factory->binder->ops->finalize(factory->binder);
-    if (YETTY_IS_ERR(finalize_res)) {
-        factory->binder->ops->destroy(factory->binder);
-        factory->binder = NULL;
-        return finalize_res;
-    }
-
-    yinfo("yplot: pipeline compiled (once for lifetime)");
+    yinfo("yplot: pipeline compiled (shared across all instances)");
     return YETTY_OK_VOID();
 }
 
 static WGPURenderPipeline yplot_get_pipeline(struct yetty_ypaint_concrete_factory *self)
 {
     struct yplot_factory *factory = yplot_factory_from_base(self);
-    if (!factory->binder) {
-        return NULL;
-    }
-    return factory->binder->ops->get_pipeline(factory->binder);
+    return factory->pipeline ? yetty_yrender_pipeline_get_pipeline(factory->pipeline) : NULL;
 }
 
 static struct yetty_ypaint_complex_prim_instance_ptr_result yplot_create_instance(
@@ -406,6 +403,12 @@ static struct yetty_ypaint_complex_prim_instance_ptr_result yplot_create_instanc
 {
     if (!buffer_data || size < sizeof(struct yetty_ypaint_complex_prim)) {
         return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "invalid buffer data");
+    }
+
+    struct yplot_factory *factory = yplot_factory_from_base(self);
+    if (!factory->pipeline) {
+        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr,
+                         "yplot factory pipeline not compiled");
     }
 
     struct yetty_ypaint_complex_prim_instance *instance =
@@ -419,7 +422,6 @@ static struct yetty_ypaint_complex_prim_instance_ptr_result yplot_create_instanc
         free(instance);
         return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "buffer alloc failed");
     }
-
     memcpy(instance->buffer_data, buffer_data, size);
     instance->buffer_size = size;
     instance->type = YETTY_YPLOT_TYPE_ID;
@@ -432,6 +434,69 @@ static struct yetty_ypaint_complex_prim_instance_ptr_result yplot_create_instanc
         instance->bounds = aabb_res.value;
     }
 
+    /* Per-instance RS. Same shape as the factory template (so the binder
+     * flattens to the same layout the pipeline was compiled against), but
+     * with per-instance buffer/uniform values (set later in render). */
+    instance->resource_set = malloc(sizeof(struct yetty_yrender_gpu_resource_set));
+    if (!instance->resource_set) {
+        free(instance->buffer_data);
+        free(instance);
+        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "rs alloc failed");
+    }
+    memcpy(instance->resource_set, &factory->template_rs,
+           sizeof(struct yetty_yrender_gpu_resource_set));
+
+    /* Point the storage buffer descriptor at this instance's bytecode now,
+     * so the binder's first finalize allocates a GPU buffer of the right
+     * size and queueWriteBuffers the data. The wire layout is:
+     *   [0..1]   header (type, payload_size)
+     *   [2..19]  uniforms (18 words)
+     *   [20]     buffer length in words
+     *   [21..]   buffer data */
+    {
+        const uint32_t *data = (const uint32_t *)instance->buffer_data;
+        const uint32_t *payload = data + 2;
+        size_t buffer_words = payload[18];
+        const uint32_t *buffer_payload = payload + 19;
+        instance->resource_set->buffers[0].data = (uint8_t *)buffer_payload;
+        instance->resource_set->buffers[0].size = buffer_words * sizeof(uint32_t);
+        instance->resource_set->buffers[0].dirty = 1;
+    }
+
+    /* Per-instance binder bound to the factory's shared pipeline. Owns
+     * its OWN uniform_buffer / storage_buffer / bind_group — so concurrent
+     * renders of sibling instances don't trample each other's GPU state. */
+    struct yetty_yrender_gpu_resource_binder_result br =
+        yetty_yrender_gpu_resource_binder_create_with_pipeline(
+            factory->device, factory->queue, factory->allocator, factory->pipeline);
+    if (YETTY_IS_ERR(br)) {
+        free(instance->resource_set);
+        free(instance->buffer_data);
+        free(instance);
+        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "instance binder create failed",
+                         br);
+    }
+    instance->binder = br.value;
+
+    struct yetty_ycore_void_result sr =
+        instance->binder->ops->submit(instance->binder, instance->resource_set);
+    if (YETTY_IS_ERR(sr)) {
+        instance->binder->ops->destroy(instance->binder);
+        free(instance->resource_set);
+        free(instance->buffer_data);
+        free(instance);
+        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "binder submit failed", sr);
+    }
+
+    struct yetty_ycore_void_result fr = instance->binder->ops->finalize(instance->binder);
+    if (YETTY_IS_ERR(fr)) {
+        instance->binder->ops->destroy(instance->binder);
+        free(instance->resource_set);
+        free(instance->buffer_data);
+        free(instance);
+        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "binder finalize failed", fr);
+    }
+
     return YETTY_OK(yetty_ypaint_complex_prim_instance_ptr, instance);
 }
 
@@ -442,6 +507,10 @@ static void yplot_destroy_instance(struct yetty_ypaint_concrete_factory *self,
     if (!instance) {
         return;
     }
+    if (instance->binder) {
+        instance->binder->ops->destroy(instance->binder);
+    }
+    free(instance->resource_set);
     free(instance->buffer_data);
     free(instance);
 }
@@ -449,21 +518,19 @@ static void yplot_destroy_instance(struct yetty_ypaint_concrete_factory *self,
 static struct yetty_yrender_gpu_resource_set *yplot_get_shared_rs(
     struct yetty_ypaint_concrete_factory *self)
 {
+    /* Returns the structural template, NOT a mutable per-instance RS.
+     * Kept for API compatibility — most callers should not rely on this. */
     struct yplot_factory *factory = yplot_factory_from_base(self);
-    return &factory->rs;
+    return factory->template_initialized ? &factory->template_rs : NULL;
 }
 
 static struct yetty_ycore_void_result yplot_set_visual_zoom(
     struct yetty_ypaint_concrete_factory *self, float scale, float off_x, float off_y)
 {
     struct yplot_factory *factory = yplot_factory_from_base(self);
-    /* All instances share this factory's rs, so writing here covers every
-     * already-created primitive. Shader transforms its pixel at fs_main entry
-     * using these values so SDF math inside plot bounds stays crisp at any
-     * zoom. */
-    factory->rs.uniforms[18].f32 = (scale > 0.0f) ? scale : 1.0f;
-    factory->rs.uniforms[19].f32 = off_x;
-    factory->rs.uniforms[20].f32 = off_y;
+    factory->visual_zoom_scale = (scale > 0.0f) ? scale : 1.0f;
+    factory->visual_zoom_off_x = off_x;
+    factory->visual_zoom_off_y = off_y;
     return YETTY_OK_VOID();
 }
 
@@ -471,10 +538,9 @@ static struct yetty_ycore_void_result yplot_set_cell_zoom(
     struct yetty_ypaint_concrete_factory *self, float scale, float off_x, float off_y)
 {
     struct yplot_factory *factory = yplot_factory_from_base(self);
-    /* Separate uniform pair from visual_zoom — the shader composes both. */
-    factory->rs.uniforms[21].f32 = (scale > 0.0f) ? scale : 1.0f;
-    factory->rs.uniforms[22].f32 = off_x;
-    factory->rs.uniforms[23].f32 = off_y;
+    factory->cell_zoom_scale = (scale > 0.0f) ? scale : 1.0f;
+    factory->cell_zoom_off_x = off_x;
+    factory->cell_zoom_off_y = off_y;
     ydebug("yplot_set_cell_zoom: scale=%.3f off=(%.1f,%.1f)", scale, off_x, off_y);
     return YETTY_OK_VOID();
 }
@@ -495,6 +561,9 @@ struct yetty_ypaint_concrete_factory *yetty_yplot_factory_create(void)
     factory->base.set_visual_zoom = yplot_set_visual_zoom;
     factory->base.set_cell_zoom = yplot_set_cell_zoom;
 
+    factory->visual_zoom_scale = 1.0f;
+    factory->cell_zoom_scale = 1.0f;
+
     return &factory->base;
 }
 
@@ -506,9 +575,8 @@ void yetty_yplot_factory_destroy(struct yetty_ypaint_concrete_factory *self)
 
     struct yplot_factory *factory = yplot_factory_from_base(self);
 
-    if (factory->binder) {
-        factory->binder->ops->destroy(factory->binder);
+    if (factory->pipeline) {
+        yetty_yrender_pipeline_destroy(factory->pipeline);
     }
-
     free(factory);
 }

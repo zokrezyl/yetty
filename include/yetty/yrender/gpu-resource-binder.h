@@ -3,6 +3,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/yrender/gpu-resource-set.h>
+#include <yetty/yrender/pipeline.h>
 #include <webgpu/webgpu.h>
 
 #ifdef __cplusplus
@@ -31,9 +32,24 @@ struct yetty_yrender_gpu_resource_binder {
 YETTY_YRESULT_DECLARE(yetty_yrender_gpu_resource_binder,
                       struct yetty_yrender_gpu_resource_binder *);
 
+/* Legacy: binder owns its pipeline (compiles its own shader at finalize).
+ * Used by render-target-texture / layer code where pipeline-per-binder is
+ * fine (no instance-sharing). */
 struct yetty_yrender_gpu_resource_binder_result yetty_yrender_gpu_resource_binder_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat surface_format,
     struct yetty_yrender_gpu_allocator *allocator);
+
+/* Two-tier: binder uses an externally-owned pipeline. The binder owns only
+ * the per-instance side (uniform_buffer, storage_buffer, bind_group). The
+ * pipeline (shader_module + pipeline + layouts + quad_vb) is shared across
+ * many binders. Used by complex prims (yplot, yimage, ...) so all instances
+ * of one type share the compiled shader.
+ *
+ * The supplied pipeline must outlive the binder. */
+struct yetty_yrender_gpu_resource_binder_result yetty_yrender_gpu_resource_binder_create_with_pipeline(
+    WGPUDevice device, WGPUQueue queue,
+    struct yetty_yrender_gpu_allocator *allocator,
+    const struct yetty_yrender_pipeline *pipeline);
 
 #ifdef __cplusplus
 }

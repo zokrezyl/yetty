@@ -1,6 +1,7 @@
 set(YETTY_YRENDER_SOURCES
     types.c
     gpu-allocator.c
+    pipeline.c
     gpu-resource-binder.c
     render-target-texture.c
     render-target-vnc.c
@@ -34,6 +35,7 @@ if(YETTY_YRENDER_X11_TILE)
     # X11 headers transitively via linkage.
     target_link_libraries(yetty_yrender PUBLIC
         webgpu
+        yetty_webgpu
         yetty_yrender_utils
         X11::X11
         X11::Xext
@@ -41,6 +43,7 @@ if(YETTY_YRENDER_X11_TILE)
 else()
     target_link_libraries(yetty_yrender
         webgpu
+        yetty_webgpu
     )
 endif()
 

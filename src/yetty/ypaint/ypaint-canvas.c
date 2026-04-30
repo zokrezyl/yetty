@@ -1360,12 +1360,19 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
    * visible viewport — that's fine, it'll get pulled into view by the
    * next text-mode scroll on the following emit. */
     if (canvas->scrolling_mode) {
+        /* Sparse-tail correction: PDF back-covers with a single page-number
+         * footer mark would otherwise pull the viewport too far down. Walk
+         * back past sparse lines, but STOP at any line carrying a complex
+         * primitive (yplot, yimage, yvideo, …) — a single complex prim is
+         * substantial content, not a footer mark. Without this, a yecho
+         * sequence like {plot}/text/{plot} parks the second plot below the
+         * viewport because its anchor line only has prims.count = 1. */
         const uint32_t MIN_DENSE_PRIMS = 10;
         uint32_t effective_max_row = max_row_seen;
         while (effective_max_row > initial_canvas_line) {
             struct yetty_ypaint_canvas_grid_line *l =
                 line_buffer_get(&canvas->lines, effective_max_row);
-            if (l && l->prims.count >= MIN_DENSE_PRIMS) {
+            if (l && (l->prims.count >= MIN_DENSE_PRIMS || l->complex_prim_count > 0)) {
                 break;
             }
             effective_max_row--;
