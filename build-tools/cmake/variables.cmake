@@ -73,7 +73,7 @@ option(YETTY_ENABLE_FEATURE_MSDF_WGSL "ymsdf-wgsl — MSDF shader lib"         O
 option(YETTY_ENABLE_FEATURE_MSDF_GEN  "ymsdf-gen — MSDF font generator"       OFF)
 
 # Terminal / display
-option(YETTY_ENABLE_FEATURE_YECHO     "yecho — echo/display"                 OFF)
+option(YETTY_ENABLE_FEATURE_YECHO     "yecho — echo/display"                 ON)
 option(YETTY_ENABLE_FEATURE_YGUI      "ygui — pure-C widget library"          ON)
 option(YETTY_ENABLE_FEATURE_YMGUI     "ymgui — Dear ImGui ↔ yetty bridge"    ON)
 
@@ -127,6 +127,7 @@ option(YETTY_ENABLE_TOOL_CARD_RUNNER     "card-runner tool"                  OFF
 option(YETTY_ENABLE_TOOL_YDRAW_GENERATOR "ydraw-generator tool"              OFF)
 option(YETTY_ENABLE_TOOL_YPAINT_BENCH    "ypaint-bench tool"                 ON)
 option(YETTY_ENABLE_TOOL_YCAT            "ycat tool"                         ON)
+option(YETTY_ENABLE_TOOL_YECHO           "yecho tool"                        ON)
 option(YETTY_ENABLE_TOOL_YDRAW_MAZE      "ydraw-maze tool"                   OFF)
 option(YETTY_ENABLE_TOOL_YDRAW_ZOO       "ydraw-zoo tool"                    OFF)
 option(YETTY_ENABLE_TOOL_YMUX            "ymux tool"                         OFF)

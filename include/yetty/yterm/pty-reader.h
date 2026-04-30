@@ -3,24 +3,12 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/platform/pty.h>
+#include <yetty/yterm/osc-codes.h>
 #include <yetty/yterm/terminal.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/* Yetty OSC vendor IDs.
- *
- * 6xxxxx = client → server (frontend / ygui / yrich / … emit toward yetty)
- * 7xxxxx = server → client (yetty terminal emits toward the inferior)
- *
- * Each code is its own message kind (no verbs in the OSC body). ypaint
- * lives at 600000–600003; ymgui's more custom shapes start at 610000.
- * Wire-format codes for ymgui (YMGUI_OSC_*) live in <yetty/ymgui/wire.h>. */
-#define YETTY_OSC_YPAINT_CLEAR 600000   /* empty body */
-#define YETTY_OSC_YPAINT_BIN 600001     /* args = yetty_yface_bin_meta */
-#define YETTY_OSC_YPAINT_YAML 600002    /* yaml text payload */
-#define YETTY_OSC_YPAINT_OVERLAY 600003 /* overlay variant */
 
 struct yetty_yterm_pty_reader;
 
