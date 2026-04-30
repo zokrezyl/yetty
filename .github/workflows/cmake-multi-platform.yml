@@ -26,7 +26,7 @@ env:
   BUILD_ANDROID_X86_64: false
   BUILD_IOS: false
   BUILD_IOS_X86_64: false
-  BUILD_WEB: false
+  BUILD_WEB: true
 
   RUN_CODEQL: false
   RUN_CODACY: false
@@ -495,9 +495,11 @@ jobs:
         cp ${{ env.BUILD_DIR }}/yetty.js site/
         cp ${{ env.BUILD_DIR }}/yetty.wasm site/
         cp ${{ env.BUILD_DIR }}/yetty.data site/
+        cp ${{ env.BUILD_DIR }}/favicon.ico site/
+        cp ${{ env.BUILD_DIR }}/apple-touch-icon.jpg site/
         cp -r ${{ env.BUILD_DIR }}/jslinux site/
         cp -r ${{ env.BUILD_DIR }}/vfsync site/
-        ls -la site/
+        du -sh site/* | sort -h
         ls -la site/vfsync/u/os/yetty-alpine/ || echo "vfsync structure check"
 
     - name: Upload WebAssembly artifacts
