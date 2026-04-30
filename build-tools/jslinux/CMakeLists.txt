@@ -192,14 +192,28 @@ add_custom_target(jslinux-riscvemu-wasm
 # emcc, so we drop down to a raw shell command using $HOSTCC (set by the
 # webasm build) or, failing that, any cc/gcc/clang on PATH.
 #
-# splitimg no longer used — images are downloaded whole by browser
-# Simplified targets just verify the images exist
+# NO splitimg — use raw images directly, like desktop tinyemu does
+# Browser downloads whole disk in ONE request
 
-# --- alpine-disk image (downloaded whole) -----
-add_custom_target(jslinux-alpine-disk)
+# --- alpine-disk (raw image) -----
+if(_ALPINE_DISK_IMG AND EXISTS "${_ALPINE_DISK_IMG}")
+    add_custom_target(jslinux-alpine-disk
+        DEPENDS ${_ALPINE_DISK_IMG}
+    )
+else()
+    message(WARNING "jslinux: alpine-rootfs.img not found at '${_ALPINE_DISK_IMG}' — alpine-disk variant will be unavailable")
+    add_custom_target(jslinux-alpine-disk)
+endif()
 
-# --- alpine-extended-disk image (downloaded whole) -----
-add_custom_target(jslinux-alpine-extended-disk)
+# --- alpine-extended-disk (raw image) -----
+if(_ALPINE_EXTENDED_IMG AND EXISTS "${_ALPINE_EXTENDED_IMG}")
+    add_custom_target(jslinux-alpine-extended-disk
+        DEPENDS ${_ALPINE_EXTENDED_IMG}
+    )
+else()
+    message(WARNING "jslinux: alpine-extended-rootfs.img not found at '${_ALPINE_EXTENDED_IMG}' — alpine-extended-disk variant will be unavailable")
+    add_custom_target(jslinux-alpine-extended-disk)
+endif()
 add_custom_command(
     OUTPUT ${LOCAL_FILES_DIR}/filelist.txt
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build-local-vfsync.sh ${CMAKE_BINARY_DIR}
@@ -230,3 +244,12 @@ add_custom_target(jslinux-assets
         local-files
     COMMENT "JSLinux assets ready"
 )
+
+# Export disk image paths for incbin embedding in webasm target
+set(JSLINUX_ALPINE_DISK_IMG "${JSLINUX_DIR}/alpine-rootfs.img" PARENT_SCOPE)
+set(JSLINUX_ALPINE_EXTENDED_IMG "${JSLINUX_DIR}/alpine-extended-rootfs.img" PARENT_SCOPE)
+set(JSLINUX_KERNEL_RISCV64 "${JSLINUX_DIR}/kernel-riscv64.bin" PARENT_SCOPE)
+set(JSLINUX_OPENSBI "${JSLINUX_DIR}/opensbi-fw_jump.elf" PARENT_SCOPE)
+set(JSLINUX_ALPINE_DISK_CFG "${JSLINUX_DIR}/alpine-disk.cfg" PARENT_SCOPE)
+set(JSLINUX_ALPINE_EXTENDED_CFG "${JSLINUX_DIR}/alpine-extended-disk.cfg" PARENT_SCOPE)
+set(JSLINUX_RISCVEMU_WASM "${JSLINUX_BUILD_DIR}/jslinux/riscvemu64-wasm.wasm" PARENT_SCOPE)

@@ -12,18 +12,27 @@
     <div id="term_container"></div>
     <script src="term-bridge.js"></script>
     <script>
-        // Modified jslinux loader for bridge mode
         "use strict";
 
         var term, console_write1, console_resize_event;
+        var net_state, net_write_packet, net_set_carrier;
+        var fs_import_file, fs_set_disk_buffer;
+        var diskData = null;
 
-        // Required by emulator WASM - must be global functions
+        function log(msg) {
+            console.log("[vm-bridge] " + msg);
+        }
+
+        function importLocalFiles() {
+            // Legacy 9p import for x86_64 variant (not used for block-disk)
+        }
+
         function term_get_size() {
             var size;
             if (term) {
                 size = term.getSize();
             } else {
-                size = [80, 25]; // fallback
+                size = [80, 25];
             }
             return size;
         }
@@ -33,45 +42,25 @@
                 term.write(str);
             }
         }
-        var net_state, net_write_packet, net_set_carrier;
-        var fs_import_file;
 
-        // Runtime state tracking
         var runtimeReady = false;
-        var pendingImports = [];
-
-        // Module object - Emscripten will populate this
         var Module = {};
 
         Module.onRuntimeInitialized = function() {
             log("Emscripten runtime initialized");
             runtimeReady = true;
-            processPendingImports();
         };
 
-        // Force setTimeout mode for faster input processing in iframe
         Module.postRun = function() {
             if (typeof Module.setMainLoopTiming === 'function') {
                 Module.setMainLoopTiming(0, 0);
             }
         };
 
-        function log(msg) {
-            console.log("[vm-bridge] " + msg);
-        }
-
         function term_handler(str) {
             for (var i = 0; i < str.length; i++) {
                 console_write1(str.charCodeAt(i));
             }
-        }
-
-        function update_downloading(flag) {
-            window.parent.postMessage({
-                type: 'vm-downloading',
-                ptyId: term ? term.ptyId : null,
-                downloading: flag
-            }, '*');
         }
 
         function get_params() {
@@ -85,17 +74,90 @@
             return params;
         }
 
-        // Variant -> (cpu, cfg) resolution. Mirrors the picker in index.html
-        // and the YETTY_JSLINUX_VARIANT env wired in webasm-pty.c. Anything
-        // unrecognised falls back to legacy. Explicit cpu/url query params
-        // (e.g. for direct dev links) still win over the variant default.
         var VARIANTS = {
             "legacy":               { cpu: "x86_64",  url: "alpine-x86_64.cfg" },
-            "alpine-disk":          { cpu: "riscv64", url: "alpine-disk.cfg" },
-            "alpine-extended-disk": { cpu: "riscv64", url: "alpine-extended-disk.cfg" }
+            "alpine-disk":          { cpu: "riscv64", url: "alpine-disk.cfg", disk: "alpine-rootfs.img" },
+            "alpine-extended-disk": { cpu: "riscv64", url: "alpine-extended-disk.cfg", disk: "alpine-extended-rootfs.img" }
         };
 
-        function start_vm() {
+        async function downloadDiskImage(imageName) {
+            try {
+                log("Downloading disk image: " + imageName);
+                const response = await fetch(imageName);
+                if (!response.ok) {
+                    throw new Error("HTTP " + response.status + ": " + response.statusText);
+                }
+                diskData = await response.arrayBuffer();
+                log("Disk image downloaded: " + (diskData.byteLength / 1024 / 1024).toFixed(1) + " MB");
+            } catch(e) {
+                log("Error downloading disk: " + e);
+                term_write("Error downloading disk: " + e + "\r\n");
+                throw e;
+            }
+        }
+
+        function initVM(cfg_url, mem, cols, rows) {
+            try {
+                console_write1 = Module.cwrap('console_queue_char', null, ['number']);
+                fs_import_file = Module.cwrap('fs_import_file', null, ['string', 'number', 'number']);
+                net_write_packet = Module.cwrap('net_write_packet', null, ['number', 'number']);
+                net_set_carrier = Module.cwrap('net_set_carrier', null, ['number']);
+                console_resize_event = Module.cwrap('console_resize_event', null, []);
+                fs_set_disk_buffer = Module.cwrap('fs_set_disk_buffer', null, ['number', 'number']);
+                log("All C functions wrapped successfully");
+
+                term.setResizeHandler(function(cols, rows) {
+                    if (console_resize_event) {
+                        console_resize_event();
+                    }
+                });
+            } catch(e) {
+                log("Error wrapping functions: " + e);
+                term.write("Error wrapping functions: " + e + "\r\n");
+                return;
+            }
+
+            // Set downloaded disk image for block-disk variants
+            if (diskData && (window._yettyVariant === "alpine-disk" || window._yettyVariant === "alpine-extended-disk")) {
+                try {
+                    var diskPtr = Module._malloc(diskData.byteLength);
+                    Module.HEAPU8.set(new Uint8Array(diskData), diskPtr);
+                    fs_set_disk_buffer(diskPtr, diskData.byteLength);
+                    log("Disk buffer set in tinyemu: " + diskPtr + " size: " + diskData.byteLength);
+                } catch(e) {
+                    log("Error setting disk buffer: " + e);
+                    term.write("Error setting disk buffer: " + e + "\r\n");
+                }
+            }
+
+            term.write("Starting VM...\r\n");
+
+            try {
+                Module.ccall('vm_start', null,
+                    ['string', 'number', 'string', 'string', 'number', 'number', 'number', 'string'],
+                    [cfg_url, mem, "", "", 0, 0, 0, ""]);
+
+                // Resize events during boot
+                var resizeCount = 0;
+                var resizeInterval = setInterval(function() {
+                    resizeCount++;
+                    console_resize_event();
+                    if (resizeCount >= 10) {
+                        clearInterval(resizeInterval);
+                        if (window._yettyVariant === "legacy") {
+                            importLocalFiles();
+                        } else {
+                            log("Block-disk variant: skipping local-files import (no 9p import target)");
+                        }
+                    }
+                }, 200);
+            } catch(e) {
+                log("Error starting VM: " + e.toString());
+                term.write("Error starting VM: " + e.toString() + "\r\n");
+            }
+        }
+
+        async function start_vm() {
             var params = get_params();
             var variant = params["variant"] || "legacy";
             var v = VARIANTS[variant] || VARIANTS["legacy"];
@@ -130,9 +192,18 @@
 
             var cfg_url = new URL(url, window.location.href).href;
 
-            // preRun seeds emscripten's ENV before main(); use array form so
-            // any earlier-registered hook (e.g. test harness setting
-            // YDEBUG=1) is preserved.
+            // Download disk image FIRST if needed
+            if (v.disk) {
+                var diskUrl = new URL(v.disk, window.location.href).href;
+                try {
+                    await downloadDiskImage(diskUrl);
+                    log("Disk image download complete");
+                } catch(e) {
+                    log("Disk download failed, will try HTTP fallback: " + e);
+                    // Continue anyway, tinyemu will try HTTP
+                }
+            }
+
             Module.preRun = (Module.preRun || []).concat([
                 function() {
                     if (params["ydebug"]) {
@@ -152,187 +223,8 @@
             document.body.appendChild(script);
         }
 
-        function initVM(cfg_url, mem, cols, rows) {
-            try {
-                console_write1 = Module.cwrap('console_queue_char', null, ['number']);
-                fs_import_file = Module.cwrap('fs_import_file', null, ['string', 'number', 'number']);
-                net_write_packet = Module.cwrap('net_write_packet', null, ['number', 'number']);
-                net_set_carrier = Module.cwrap('net_set_carrier', null, ['number']);
-                console_resize_event = Module.cwrap('console_resize_event', null, []);
-
-                term.setResizeHandler(function(cols, rows) {
-                    if (console_resize_event) {
-                        console_resize_event();
-                    }
-                });
-            } catch(e) {
-                term.write("Error wrapping functions: " + e + "\r\n");
-                return;
-            }
-
-            term.write("Starting VM...\r\n");
-
-            try {
-                Module.ccall('vm_start', null,
-                    ['string', 'number', 'string', 'string', 'number', 'number', 'number', 'string'],
-                    [cfg_url, mem, "", "", 0, 0, 0, ""]);
-
-                // Resize events during boot
-                var resizeCount = 0;
-                var resizeInterval = setInterval(function() {
-                    resizeCount++;
-                    console_resize_event();
-                    if (resizeCount >= 10) {
-                        clearInterval(resizeInterval);
-                        if (window._yettyVariant === "legacy") {
-                            importLocalFiles();
-                        } else {
-                            log("Block-disk variant: skipping local-files import (no 9p import target)");
-                        }
-                    }
-                }, 200);
-            } catch(e) {
-                term.write("Error starting VM: " + e + "\r\n");
-            }
-        }
-
-        // Check if WASM runtime is ready for memory operations
-        function isRuntimeReady() {
-            return runtimeReady &&
-                   typeof _malloc === 'function' &&
-                   typeof HEAPU8 !== 'undefined';
-        }
-
-        function processPendingImports() {
-            if (pendingImports.length > 0) {
-                log("Processing " + pendingImports.length + " queued imports");
-                pendingImports.forEach(function(fn) { fn(); });
-                pendingImports = [];
-            }
-        }
-
-        // Import a file into the VM
-        function doImportFile(vmPath, data) {
-            if (!isRuntimeReady()) {
-                pendingImports.push(function() {
-                    doImportFile(vmPath, data);
-                });
-                return false;
-            }
-
-            try {
-                var ptr = _malloc(data.length);
-                if (!ptr) {
-                    log("malloc failed for: " + vmPath);
-                    return false;
-                }
-                HEAPU8.set(data, ptr);
-                fs_import_file(vmPath, ptr, data.length);
-                _free(ptr);
-                log("Imported: " + vmPath + " (" + data.length + " bytes)");
-                return true;
-            } catch (e) {
-                log("Error importing " + vmPath + ": " + e);
-                return false;
-            }
-        }
-
-        // Import local files from manifest
-        function importLocalFiles() {
-            log("Checking for local files manifest...");
-            fetch('local-files/manifest.json')
-                .then(function(r) {
-                    if (!r.ok) {
-                        log("No local files manifest (normal for production)");
-                        return null;
-                    }
-                    return r.json();
-                })
-                .then(function(manifest) {
-                    if (!manifest || !manifest.files) return;
-                    log("Found " + manifest.files.length + " files to import");
-
-                    var imported = 0;
-                    var total = manifest.files.length;
-
-                    manifest.files.forEach(function(filePath) {
-                        fetch('local-files/' + filePath)
-                            .then(function(r) { return r.arrayBuffer(); })
-                            .then(function(buf) {
-                                var data = new Uint8Array(buf);
-                                // Import with original path - appears at /path in VM
-                                doImportFile(filePath, data);
-                                imported++;
-                                if (imported === total) {
-                                    log("Import complete: " + imported + " files");
-                                    setupYettyTools();
-                                }
-                            })
-                            .catch(function(e) {
-                                log("Failed to fetch " + filePath);
-                                imported++;
-                            });
-                    });
-                })
-                .catch(function(e) {
-                    log("Local files import skipped: " + e);
-                });
-        }
-
-        // Run setup commands in VM to make tools available
-        function setupYettyTools() {
-            // Send commands to VM via console input
-            // Files are at / with their import paths, e.g. /bin/ycat
-            // Need to make them executable and add to PATH
-            var cmds = [
-                "chmod +x /bin/* 2>/dev/null",
-                "export PATH=/bin:$PATH",
-                "echo 'Yetty tools loaded: ycat yecho ybrowser'"
-            ].join(" && ") + "\n";
-
-            for (var i = 0; i < cmds.length; i++) {
-                console_write1(cmds.charCodeAt(i));
-            }
-            log("Sent setup commands to VM");
-        }
-
-        // Handle messages from parent
-        window.addEventListener('message', function(e) {
-            if (e.data.type === 'term-resize') {
-                // Update term dimensions BEFORE calling console_resize_event
-                if (term && e.data.cols && e.data.rows) {
-                    term.cols = e.data.cols;
-                    term.rows = e.data.rows;
-                }
-                if (console_resize_event) {
-                    console_resize_event();
-                }
-            }
-            if (e.data.type === 'import-file') {
-                var path = e.data.path;
-                var data = e.data.data;
-                if (doImportFile(path, data)) {
-                    window.parent.postMessage({
-                        type: 'file-imported',
-                        path: path,
-                        size: data.length
-                    }, '*');
-                } else {
-                    window.parent.postMessage({
-                        type: 'file-import-error',
-                        path: path,
-                        error: 'import failed'
-                    }, '*');
-                }
-            }
-        });
-
-        // Start when DOM is ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', start_vm);
-        } else {
-            start_vm();
-        }
+        // Initialize
+        start_vm();
     </script>
 </body>
 </html>

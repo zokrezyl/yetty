@@ -61,6 +61,12 @@ static int global_height;
 static VirtMachine *global_vm;
 static BOOL global_carrier_state;
 
+// In-memory disk buffer (set by JavaScript)
+static struct {
+    uint8_t *data;
+    uint64_t size;
+} disk_buffer = {NULL, 0};
+
 static int console_read(void *opaque, uint8_t *buf, int len)
 {
     int out_len, l;
@@ -150,6 +156,13 @@ void net_set_carrier(BOOL carrier_state)
     }
 }
 
+/* called from JS: set disk buffer from downloaded image */
+void fs_set_disk_buffer(uint8_t *buf, uint64_t size)
+{
+    disk_buffer.data = buf;
+    disk_buffer.size = size;
+}
+
 static void fb_refresh1(FBDevice *fb_dev, void *opaque,
                         int x, int y, int w, int h)
 {
@@ -226,6 +239,79 @@ static void init_vm_fs(void *arg)
     }
 }
 
+// Check if filename is a local file (no "://" prefix, meaning not HTTP/HTTPS)
+static int is_local_file(const char *filename) {
+    return (filename && strstr(filename, "://") == NULL);
+}
+
+// BlockDevice for local Emscripten FS files (loaded by JavaScript)
+typedef struct {
+    uint8_t *data;
+    uint64_t size;
+} MemoryBlockDevice;
+
+static int64_t mem_block_get_sector_count(BlockDevice *bs)
+{
+    MemoryBlockDevice *mbd = bs->opaque;
+    return mbd->size / 512;
+}
+
+static int mem_block_read_async(BlockDevice *bs,
+                                uint64_t sector_num, uint8_t *buf, int n,
+                                BlockDeviceCompletionFunc *cb, void *opaque)
+{
+    MemoryBlockDevice *mbd = bs->opaque;
+    uint64_t offset = sector_num * 512;
+    uint64_t size = n * 512;
+    
+    if (offset + size > mbd->size) {
+        // Read error
+        if (cb) cb(opaque, -1);
+        return -1;
+    }
+    
+    memcpy(buf, mbd->data + offset, size);
+    
+    // Call callback immediately (synchronous read)
+    if (cb) cb(opaque, 0);
+    return 0;
+}
+
+static int mem_block_write_async(BlockDevice *bs,
+                                 uint64_t sector_num, const uint8_t *buf, int n,
+                                 BlockDeviceCompletionFunc *cb, void *opaque)
+{
+    // Write not supported for read-only memory block device
+    if (cb) cb(opaque, -1);
+    return -1;
+}
+
+static BlockDevice *block_device_init_memory(uint8_t *data, uint64_t size)
+{
+    BlockDevice *bs;
+    MemoryBlockDevice *mbd;
+    
+    mbd = malloc(sizeof(*mbd));
+    if (!mbd)
+        return NULL;
+    
+    mbd->data = data;
+    mbd->size = size;
+    
+    bs = malloc(sizeof(*bs));
+    if (!bs) {
+        free(mbd);
+        return NULL;
+    }
+    
+    bs->opaque = mbd;
+    bs->get_sector_count = mem_block_get_sector_count;
+    bs->read_async = mem_block_read_async;
+    bs->write_async = mem_block_write_async;
+    
+    return bs;
+}
+
 static void init_vm_drive(void *arg)
 {
     VMStartState *s = arg;
@@ -233,6 +319,41 @@ static void init_vm_drive(void *arg)
 
     if (p->drive_count > 0) {
         assert(p->drive_count == 1);
+        
+        // Check if this is a local file (loaded by JavaScript) or HTTP URL
+        if (is_local_file(p->tab_drive[0].filename)) {
+            // For block-disk variants, JavaScript sets disk_buffer directly
+            if (disk_buffer.data && disk_buffer.size > 0) {
+                p->tab_drive[0].block_dev = block_device_init_memory(disk_buffer.data, disk_buffer.size);
+                init_vm(s);
+                return;
+            }
+            
+            // Try to open and read the local file (fallback for desktop)
+            FILE *f = fopen(p->tab_drive[0].filename, "rb");
+            if (f) {
+                fseek(f, 0, SEEK_END);
+                uint64_t size = ftell(f);
+                fseek(f, 0, SEEK_SET);
+                
+                uint8_t *data = malloc(size);
+                if (data && fread(data, 1, size, f) == size) {
+                    p->tab_drive[0].block_dev = block_device_init_memory(data, size);
+                    fclose(f);
+                    init_vm(s);
+                    return;
+                }
+                
+                if (data) free(data);
+                fclose(f);
+                fprintf(stderr, "Failed to read disk image: %s\n", p->tab_drive[0].filename);
+            } else {
+                fprintf(stderr, "Could not open disk image: %s (disk_buffer not set by JavaScript yet)\n", p->tab_drive[0].filename);
+            }
+            // Fall through to HTTP (backward compatibility if file not found)
+        }
+        
+        // HTTP block device (default/fallback)
         p->tab_drive[0].block_dev =
             block_device_init_http(p->tab_drive[0].filename,
                                    131072,

@@ -82,11 +82,37 @@ target_include_directories(yetty PRIVATE ${YETTY_INCLUDES} ${YETTY_RENDERER_INCL
 # Logo + DefaultConfig are referenced by name; yetty_embed_assets adds
 # the bulk fonts / shaders / msdf-fonts / yemu (each pre-brotli'd; the
 # extract-assets startup path decompresses to MEMFS).
+# Also embed JSLinux components (kernel, opensbi, disk images, configs) so
+# tinyemu can be started as a thread with extracted file paths (same as desktop).
 if(YETTY_ENABLE_LIB_INCBIN)
     incbin_add_resources(yetty
         Logo "${YETTY_ROOT}/docs/logo-2.jpeg"
         DefaultConfig "${YETTY_ROOT}/assets/default-config.yaml"
     )
+    
+    # Add JSLinux files (set by jslinux subdirectory)
+    if(DEFINED JSLINUX_RISCVEMU_WASM AND EXISTS "${JSLINUX_RISCVEMU_WASM}")
+        incbin_add_resources(yetty JslinuxRiscvEmuWasm "${JSLINUX_RISCVEMU_WASM}")
+    endif()
+    if(DEFINED JSLINUX_ALPINE_DISK_IMG AND EXISTS "${JSLINUX_ALPINE_DISK_IMG}")
+        incbin_add_resources(yetty JslinuxAlpineDisk "${JSLINUX_ALPINE_DISK_IMG}")
+    endif()
+    if(DEFINED JSLINUX_ALPINE_EXTENDED_IMG AND EXISTS "${JSLINUX_ALPINE_EXTENDED_IMG}")
+        incbin_add_resources(yetty JslinuxAlpineExtended "${JSLINUX_ALPINE_EXTENDED_IMG}")
+    endif()
+    if(DEFINED JSLINUX_KERNEL_RISCV64 AND EXISTS "${JSLINUX_KERNEL_RISCV64}")
+        incbin_add_resources(yetty JslinuxKernelRiscv64 "${JSLINUX_KERNEL_RISCV64}")
+    endif()
+    if(DEFINED JSLINUX_OPENSBI AND EXISTS "${JSLINUX_OPENSBI}")
+        incbin_add_resources(yetty JslinuxOpenSbi "${JSLINUX_OPENSBI}")
+    endif()
+    if(DEFINED JSLINUX_ALPINE_DISK_CFG AND EXISTS "${JSLINUX_ALPINE_DISK_CFG}")
+        incbin_add_resources(yetty JslinuxAlpineDiskCfg "${JSLINUX_ALPINE_DISK_CFG}")
+    endif()
+    if(DEFINED JSLINUX_ALPINE_EXTENDED_CFG AND EXISTS "${JSLINUX_ALPINE_EXTENDED_CFG}")
+        incbin_add_resources(yetty JslinuxAlpineExtendedCfg "${JSLINUX_ALPINE_EXTENDED_CFG}")
+    endif()
+    
     yetty_embed_assets(yetty)
 endif()
 
