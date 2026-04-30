@@ -34,7 +34,7 @@ static void ensure_mutex(void)
 #define YTRACE_LOCK()                                                                              \
     do {                                                                                           \
         ensure_mutex();                                                                            \
-        yetty_yplatform_ymutex_lock(g_mutex);                                                                      \
+        yetty_yplatform_ymutex_lock(g_mutex);                                                      \
     } while (0)
 #define YTRACE_UNLOCK() yetty_yplatform_ymutex_unlock(g_mutex)
 

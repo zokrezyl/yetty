@@ -209,7 +209,7 @@ endif()
 # Reusable render utilities (GPU tile diff, …). Lives outside src/yetty so it
 # can be consumed by both the main yetty modules and standalone tools. Must
 # be declared before src/yetty so yetty_vnc (et al.) can link against it.
-add_subdirectory(${YETTY_ROOT}/src/yrender-utils ${CMAKE_BINARY_DIR}/src/yrender-utils)
+add_subdirectory(${YETTY_ROOT}/src/yetty/yrender-utils ${CMAKE_BINARY_DIR}/src/yetty/yrender-utils)
 
 # Shared client-side support (libuv event loop + yface bridge for ymgui /
 # ygui / yrich / ycat). Outside src/yetty for the same reason as
@@ -217,7 +217,7 @@ add_subdirectory(${YETTY_ROOT}/src/yrender-utils ${CMAKE_BINARY_DIR}/src/yrender
 # before src/yetty so the ymgui-layer (server side) and ymgui frontend
 # can both link it.
 if(NOT EMSCRIPTEN)
-    add_subdirectory(${YETTY_ROOT}/src/yclient-lib ${CMAKE_BINARY_DIR}/src/yclient-lib)
+    add_subdirectory(${YETTY_ROOT}/src/yetty/yclient ${CMAKE_BINARY_DIR}/src/yetty/yclient)
 endif()
 
 # Add src/yetty (populates YETTY_SOURCES, YETTY_CORE_SOURCES, builds feature libraries)

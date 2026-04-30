@@ -775,7 +775,7 @@ void yetty_yplatform_android_main(struct android_app *app)
     /* Make ytrace's debug/info/warn/error messages visible in logcat by
      * default. They route to stderr which our redirector pipes to the
      * `yetty.stdio` log tag. */
-    setenv("YTRACE_DEFAULT_ON", "yes", 1);
+    //setenv("YTRACE_DEFAULT_ON", "yes", 1);
 
     LOGI("Android main started");
 

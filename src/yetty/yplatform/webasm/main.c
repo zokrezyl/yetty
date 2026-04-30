@@ -445,7 +445,7 @@ int main(int argc, char **argv)
      * Chrome test (tools/test-chrome-headless.sh) and any browser-side
      * debugging see the full trace stream without env wiring on the JS
      * side. Mirrors `YTRACE_DEFAULT_ON=yes` on desktop. */
-    setenv("YTRACE_DEFAULT_ON", "yes", 1);
+    //setenv("YTRACE_DEFAULT_ON", "yes", 1);
 
     struct yetty_yplatform_paths paths;
     struct yetty_yconfig_result config_result;
@@ -488,8 +488,7 @@ int main(int argc, char **argv)
      * MEMFS is fresh per page load, so this runs every startup. Decompresses
      * brotli'd shaders / fonts / msdf-fonts / yemu blobs into /data/. */
     {
-        struct yetty_ycore_void_result extract_result =
-            yetty_platform_extract_assets(config);
+        struct yetty_ycore_void_result extract_result = yetty_platform_extract_assets(config);
         if (!YETTY_IS_OK(extract_result)) {
             yerror("Failed to extract embedded assets: %s",
                    extract_result.error.msg ? extract_result.error.msg : "(no msg)");

@@ -16,18 +16,19 @@
 
 #include "imgui.h"
 #include "imgui_impl_yetty.h"
-#include <yetty/yclient-lib/event-loop.h>
+#include <yetty/yclient/event-loop.h>
 
 struct demo_state {
     struct yetty_yclient_event_loop *loop;
     uint32_t card_id;
-    int      frames_rendered;
-    int      frames_max;
+    int frames_rendered;
+    int frames_max;
     uint64_t last_ns;
-    bool     window_open;
+    bool window_open;
 };
 
-static uint64_t now_ns(void) {
+static uint64_t now_ns(void)
+{
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
@@ -38,17 +39,23 @@ static void on_frame(void *user)
     struct demo_state *S = (struct demo_state *)user;
 
     yetty_ymgui_ImGui_ImplYetty_BeginCardFrame(S->card_id);
-    ImGuiIO& io = ImGui::GetIO();
+    ImGuiIO &io = ImGui::GetIO();
 
     /* Skip drawing until we know the card's pixel size from the server's
      * RESIZE confirmation (otherwise DisplaySize is the placeholder). */
-    if (io.DisplaySize.x <= 1.0f || io.DisplaySize.y <= 1.0f) return;
+    if (io.DisplaySize.x <= 1.0f || io.DisplaySize.y <= 1.0f) {
+        return;
+    }
 
     uint64_t now = now_ns();
-    if (S->last_ns == 0) S->last_ns = now;
+    if (S->last_ns == 0) {
+        S->last_ns = now;
+    }
     uint64_t dt_ns = now - S->last_ns;
     S->last_ns = now;
-    if (dt_ns == 0) dt_ns = 1;
+    if (dt_ns == 0) {
+        dt_ns = 1;
+    }
     io.DeltaTime = (float)((double)dt_ns / 1e9);
 
     ImGui::NewFrame();
@@ -63,18 +70,21 @@ static void on_frame(void *user)
 
     S->frames_rendered++;
     /* User clicked the [x] in the demo window — exit. */
-    if (!S->window_open)
+    if (!S->window_open) {
         yetty_yclient_event_loop_stop(S->loop);
-    if (S->frames_max > 0 && S->frames_rendered >= S->frames_max)
+    }
+    if (S->frames_max > 0 && S->frames_rendered >= S->frames_max) {
         yetty_yclient_event_loop_stop(S->loop);
+    }
 }
 
 int main(int argc, char **argv)
 {
     int frames_max = 0;
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--frames") == 0 && i + 1 < argc)
+        if (strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
             frames_max = atoi(argv[++i]);
+        }
     }
 
     /* Keep stderr off the PTY. */
@@ -94,7 +104,7 @@ int main(int argc, char **argv)
     }
 
     struct demo_state state = {};
-    state.frames_max  = frames_max;
+    state.frames_max = frames_max;
     state.window_open = true;
 
     /* Card filling the whole pane (w_cells=0 → right edge dynamically;
@@ -105,7 +115,7 @@ int main(int argc, char **argv)
 
     struct yetty_yclient_lib_event_loop_config cfg = {};
     cfg.in_fd = -1;
-    cfg.user  = &state;
+    cfg.user = &state;
     state.loop = yetty_yclient_event_loop_create(&cfg);
     if (!state.loop) {
         fprintf(stderr, "ymgui: event loop create failed\n");
