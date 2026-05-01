@@ -424,28 +424,106 @@ static void config_additional_file_load(VMConfigLoadState *s);
 static void config_additional_file_load_cb(void *opaque,
                                            uint8_t *buf, int buf_len);
 
+/* Expand $NAME and ${NAME} environment-variable references inside `in`.
+ * Returns a malloc'd string. Unknown vars expand to empty. A literal `$$`
+ * is preserved as a single `$`. Used by get_file_path so .cfg paths can
+ * reference platform locations like $YETTY_RUNTIME_DIR/yemu/kernel.bin. */
+static char *expand_env_vars(const char *in)
+{
+    size_t cap = strlen(in) + 1;
+    char *out = malloc(cap);
+    size_t len = 0;
+    const char *p = in;
+
+    while (*p) {
+        if (*p != '$') {
+            if (len + 1 >= cap) { cap *= 2; out = realloc(out, cap); }
+            out[len++] = *p++;
+            continue;
+        }
+        /* $$ -> $ */
+        if (p[1] == '$') {
+            if (len + 1 >= cap) { cap *= 2; out = realloc(out, cap); }
+            out[len++] = '$';
+            p += 2;
+            continue;
+        }
+        /* parse ${NAME} or $NAME */
+        const char *name_start;
+        const char *name_end;
+        const char *after;
+        if (p[1] == '{') {
+            name_start = p + 2;
+            name_end = strchr(name_start, '}');
+            if (!name_end) {
+                /* unterminated — copy literally */
+                if (len + 1 >= cap) { cap *= 2; out = realloc(out, cap); }
+                out[len++] = *p++;
+                continue;
+            }
+            after = name_end + 1;
+        } else {
+            name_start = p + 1;
+            name_end = name_start;
+            while (*name_end && (*name_end == '_' ||
+                   (*name_end >= 'A' && *name_end <= 'Z') ||
+                   (*name_end >= 'a' && *name_end <= 'z') ||
+                   (*name_end >= '0' && *name_end <= '9'))) {
+                name_end++;
+            }
+            if (name_end == name_start) {
+                /* lone $ followed by non-identifier — copy literally */
+                if (len + 1 >= cap) { cap *= 2; out = realloc(out, cap); }
+                out[len++] = *p++;
+                continue;
+            }
+            after = name_end;
+        }
+
+        char namebuf[128];
+        size_t nlen = name_end - name_start;
+        if (nlen >= sizeof(namebuf)) nlen = sizeof(namebuf) - 1;
+        memcpy(namebuf, name_start, nlen);
+        namebuf[nlen] = '\0';
+
+        const char *val = getenv(namebuf);
+        if (val) {
+            size_t vlen = strlen(val);
+            while (len + vlen + 1 >= cap) { cap *= 2; out = realloc(out, cap); }
+            memcpy(out + len, val, vlen);
+            len += vlen;
+        }
+        p = after;
+    }
+    out[len] = '\0';
+    return out;
+}
+
 /* XXX: win32, URL */
 char *get_file_path(const char *base_filename, const char *filename)
 {
     int len, len1;
     char *fname, *p;
-    
+    char *expanded = expand_env_vars(filename);
+    const char *in = expanded;
+
     if (!base_filename)
         goto done;
-    if (strchr(filename, ':'))
+    if (strchr(in, ':'))
         goto done; /* full URL */
-    if (filename[0] == '/')
+    if (in[0] == '/')
         goto done;
     p = strrchr(base_filename, '/');
     if (!p) {
     done:
-        return strdup(filename);
+        return expanded;
     }
     len = p + 1 - base_filename;
-    len1 = strlen(filename);
+    len1 = strlen(in);
     fname = malloc(len + len1 + 1);
     memcpy(fname, base_filename, len);
-    memcpy(fname + len, filename, len1 + 1);
+    memcpy(fname + len, in, len1 + 1);
+    free(expanded);
     return fname;
 }
 

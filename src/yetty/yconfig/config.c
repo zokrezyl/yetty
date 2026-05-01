@@ -35,6 +35,7 @@ struct config_impl {
     char fonts_dir[512];
     char runtime_dir[512];
     char bin_dir[512];
+    char config_dir[512];
 };
 
 /* Sub-config view - lightweight wrapper pointing to a sub-node */
@@ -651,6 +652,15 @@ static void store_platform_paths(struct config_impl *impl,
         struct config_node *parent = navigate_or_create(impl->root, "paths/bin", key);
         if (parent) {
             node_set_value(parent, key, paths->bin_dir);
+        }
+    }
+
+    if (paths->config_dir) {
+        strncpy(impl->config_dir, paths->config_dir, sizeof(impl->config_dir) - 1);
+        char key[MAX_KEY_LEN];
+        struct config_node *parent = navigate_or_create(impl->root, "paths/config", key);
+        if (parent) {
+            node_set_value(parent, key, paths->config_dir);
         }
     }
 }

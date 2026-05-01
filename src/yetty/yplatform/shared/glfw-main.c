@@ -94,6 +94,7 @@ int main(int argc, char **argv)
     const char *cache_dir = yetty_yplatform_get_cache_dir();
     const char *data_dir = yetty_yplatform_get_data_dir();
     const char *runtime_dir = yetty_yplatform_get_runtime_dir();
+    const char *config_dir = yetty_yplatform_get_config_dir();
 
     char shaders_dir[512];
     char fonts_dir[512];
@@ -104,11 +105,23 @@ int main(int argc, char **argv)
     yetty_yplatform_mkdir_p(data_dir);
     yetty_yplatform_mkdir_p(runtime_dir);
     yetty_yplatform_mkdir_p(fonts_dir);
+    yetty_yplatform_mkdir_p(config_dir);
 
     struct yetty_yplatform_paths paths = {.shaders_dir = shaders_dir,
                                           .fonts_dir = fonts_dir,
                                           .runtime_dir = runtime_dir,
-                                          .bin_dir = NULL};
+                                          .bin_dir = NULL,
+                                          .config_dir = config_dir};
+
+    /* Export platform paths as YETTY_* env vars so config files
+     * (e.g. tinyemu .cfg) can reference them via $YETTY_RUNTIME_DIR etc. */
+    setenv("YETTY_SHADERS_DIR", shaders_dir, 1);
+    setenv("YETTY_FONTS_DIR", fonts_dir, 1);
+    setenv("YETTY_RUNTIME_DIR", runtime_dir, 1);
+    setenv("YETTY_CONFIG_DIR", config_dir, 1);
+    if (paths.bin_dir) {
+        setenv("YETTY_BIN_DIR", paths.bin_dir, 1);
+    }
 
     /* Config */
     struct yetty_yconfig_result config_result = yetty_yconfig_create(argc, argv, &paths);
