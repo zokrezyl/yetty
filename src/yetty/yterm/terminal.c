@@ -5,7 +5,7 @@
 #include <yetty/platform/pty-factory.h>
 #include <yetty/platform/pty-pipe-source.h>
 #include <yetty/platform/pty.h>
-#include <yetty/yconfig.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/ycore/event-loop.h>
 #include <yetty/ycore/event.h>
 #include <yetty/yface/yface.h>
@@ -19,7 +19,7 @@
 #include <yetty/yterm/ypaint-layer.h>
 #include <yetty/yterm/ymgui-layer.h>
 #include <yetty/yterm/shader-glyph-layer.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <yetty/yui/view.h>
 
 #define YETTY_YTERM_TERMINAL_MAX_LAYERS 256
@@ -687,7 +687,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     terminal->listener.handler = terminal_event_handler;
 
     /* Create PTY */
-    struct yetty_platform_pty_factory *pty_factory = yetty_context->app_context.pty_factory;
+    struct yetty_yplatform_pty_factory *pty_factory = yetty_context->app_context.pty_factory;
     if (pty_factory && pty_factory->ops && pty_factory->ops->create_pty) {
         struct yetty_yplatform_pty_result pty_res =
             pty_factory->ops->create_pty(pty_factory, terminal->context.yetty_context.event_loop);
@@ -851,7 +851,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     }
 
     /* Create render targets for each layer */
-    const struct yetty_app_gpu_context *app_gpu = &yetty_context->gpu_context.app_gpu_context;
+    const struct yetty_yetty_app_gpu_context *app_gpu = &yetty_context->gpu_context.app_gpu_context;
     struct yetty_yrender_viewport layer_vp = {
         .x = 0, .y = 0, .w = (float)app_gpu->surface_width, .h = (float)app_gpu->surface_height};
     for (size_t i = 0; i < terminal->layer_count; i++) {

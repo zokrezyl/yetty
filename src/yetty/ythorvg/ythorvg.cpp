@@ -15,7 +15,7 @@
 
 #include "ydraw-render-method.hpp"
 
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 // ThorVG public + internal headers
 #include <thorvg.h>

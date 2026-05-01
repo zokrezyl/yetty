@@ -2,7 +2,7 @@
 
 #include <stdlib.h>
 #include <yetty/ypaint-core/flyweight.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #define FLYWEIGHT_MAX_HANDLERS 8
 

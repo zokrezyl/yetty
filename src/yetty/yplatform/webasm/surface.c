@@ -4,7 +4,7 @@
  */
 
 #include <webgpu/webgpu.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <emscripten/html5.h>
 
 WGPUSurface yetty_yplatform_webasm_create_surface(WGPUInstance instance)

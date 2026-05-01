@@ -4,7 +4,7 @@
 
 #include <yetty/platform/pty.h>
 #include <yetty/platform/pty-factory.h>
-#include <yetty/yconfig.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yqemu/qemu.h>
 #include <yetty/ytelnet/telnet-pty.h>
@@ -16,23 +16,23 @@
 
 /* Unix PTY factory */
 struct yetty_yplatform_unix_pty_factory {
-    struct yetty_platform_pty_factory base;
-    struct yetty_yconfig *config;
+    struct yetty_yplatform_pty_factory base;
+    struct yetty_yconfig_config *config;
     struct yetty_yplatform_yprocess *qemu_proc;
 };
 
 /* Forward declarations */
-static void unix_pty_factory_destroy(struct yetty_platform_pty_factory *self);
+static void unix_pty_factory_destroy(struct yetty_yplatform_pty_factory *self);
 static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
-    struct yetty_platform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop);
+    struct yetty_yplatform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop);
 
 /* Factory ops table */
-static const struct yetty_platform_pty_factory_ops unix_pty_factory_ops = {
+static const struct yetty_yplatform_pty_factory_ops unix_pty_factory_ops = {
     .destroy = unix_pty_factory_destroy,
     .create_pty = unix_pty_factory_create_pty,
 };
 
-static void unix_pty_factory_destroy(struct yetty_platform_pty_factory *self)
+static void unix_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
 {
     struct yetty_yplatform_unix_pty_factory *factory = (struct yetty_yplatform_unix_pty_factory *)self;
 
@@ -45,10 +45,10 @@ static void unix_pty_factory_destroy(struct yetty_platform_pty_factory *self)
 }
 
 static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
-    struct yetty_platform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop)
+    struct yetty_yplatform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop)
 {
     struct yetty_yplatform_unix_pty_factory *factory = (struct yetty_yplatform_unix_pty_factory *)self;
-    struct yetty_yconfig *config = factory->config;
+    struct yetty_yconfig_config *config = factory->config;
 
     /* --temu: TinyEMU RISC-V VM */
     if (config && config->ops->get_bool(config, YETTY_YCONFIG_KEY_TEMU, 0)) {
@@ -87,8 +87,8 @@ static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
 
 /* Factory creation - the public API */
 
-struct yetty_yplatform_pty_factory_result yetty_platform_pty_factory_create(
-    struct yetty_yconfig *config, void *os_specific)
+struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
+    struct yetty_yconfig_config *config, void *os_specific)
 {
     struct yetty_yplatform_unix_pty_factory *factory;
 

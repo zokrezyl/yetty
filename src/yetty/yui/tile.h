@@ -12,7 +12,7 @@ extern "C" {
 
 struct yetty_yui_tile;
 struct yetty_yterm_view;
-struct yetty_yconfig;
+struct yetty_yconfig_config;
 struct yetty_context;
 struct yetty_yui_event;
 struct yetty_ypaint_core_target;
@@ -44,7 +44,7 @@ struct yetty_yui_tile_ptr_result yetty_yui_pane_create(void);
 
 /* Create tile tree from config - recursively builds splits/panes */
 struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
-    const struct yetty_yconfig *config, const struct yetty_context *yetty_ctx);
+    const struct yetty_yconfig_config *config, const struct yetty_context *yetty_ctx);
 
 struct yetty_ycore_void_result yetty_yui_tile_destroy(struct yetty_yui_tile *tile);
 

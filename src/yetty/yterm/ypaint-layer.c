@@ -14,9 +14,9 @@
 #include <yetty/yterm/osc-args.h>
 #include <yetty/yterm/pty-reader.h> /* YETTY_OSC_YPAINT_* */
 #include <yetty/yterm/ypaint-layer.h>
-#include <yetty/yconfig.h>
-#include <yetty/yetty.h>
-#include <yetty/ytrace.h>
+#include <yetty/yconfig/config.h>
+#include <yetty/yetty/yetty.h>
+#include <yetty/ytrace/ytrace.h>
 
 /* Uniform positions */
 #define U_GRID_SIZE 0
@@ -285,7 +285,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ypaint_layer_create(
     struct yetty_yterm_ypaint_layer *layer;
 
     /* Load ypaint-layer shader from file */
-    struct yetty_yconfig *config = context->app_context.config;
+    struct yetty_yconfig_config *config = context->app_context.config;
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
     char shader_path[512];
     char sdf_lib_path[512];

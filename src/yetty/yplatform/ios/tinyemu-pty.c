@@ -2,9 +2,9 @@
 
 #include <yetty/platform/pty.h>
 #include <yetty/platform/pty-factory.h>
-#include <yetty/yconfig.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -499,7 +499,7 @@ static struct yetty_platform_pty_pipe_source *tinyemu_pty_pipe_source(
 }
 
 /* Create TinyEMU PTY */
-static struct yetty_yplatform_pty_result tinyemu_pty_create(struct yetty_yconfig *config)
+static struct yetty_yplatform_pty_result tinyemu_pty_create(struct yetty_yconfig_config *config)
 {
     struct yetty_yplatform_tinyemu_pty *pty;
 
@@ -638,32 +638,32 @@ static struct yetty_yplatform_pty_result tinyemu_pty_create(struct yetty_yconfig
 /* Factory implementation */
 
 struct yetty_yplatform_tinyemu_pty_factory {
-    struct yetty_platform_pty_factory base;
-    struct yetty_yconfig *config;
+    struct yetty_yplatform_pty_factory base;
+    struct yetty_yconfig_config *config;
 };
 
-static void tinyemu_pty_factory_destroy(struct yetty_platform_pty_factory *self)
+static void tinyemu_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
 {
     struct yetty_yplatform_tinyemu_pty_factory *factory = container_of(self, struct yetty_yplatform_tinyemu_pty_factory, base);
     free(factory);
 }
 
 static struct yetty_yplatform_pty_result tinyemu_pty_factory_create_pty(
-    struct yetty_platform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop)
+    struct yetty_yplatform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop)
 {
     struct yetty_yplatform_tinyemu_pty_factory *factory = container_of(self, struct yetty_yplatform_tinyemu_pty_factory, base);
     (void)event_loop;
     return tinyemu_pty_create(factory->config);
 }
 
-static const struct yetty_platform_pty_factory_ops tinyemu_pty_factory_ops = {
+static const struct yetty_yplatform_pty_factory_ops tinyemu_pty_factory_ops = {
     .destroy = tinyemu_pty_factory_destroy,
     .create_pty = tinyemu_pty_factory_create_pty,
 };
 
 /* Factory creation - the public API */
-struct yetty_yplatform_pty_factory_result yetty_platform_pty_factory_create(
-    struct yetty_yconfig *config, void *os_specific)
+struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
+    struct yetty_yconfig_config *config, void *os_specific)
 {
     struct yetty_yplatform_tinyemu_pty_factory *factory;
 

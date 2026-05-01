@@ -22,9 +22,9 @@
 #include <yetty/platform/platform-input-pipe.h>
 #include <yetty/ycore/event-loop.h>
 #include <yetty/ycore/event.h>
-#include <yetty/yconfig.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include "telnet-protocol.h"
 
@@ -640,12 +640,12 @@ struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(const char *ho
 /* Factory */
 
 struct yetty_ytelnet_telnet_pty_factory {
-    struct yetty_platform_pty_factory base;
+    struct yetty_yplatform_pty_factory base;
     char *host;
     uint16_t port;
 };
 
-static void telnet_pty_factory_destroy(struct yetty_platform_pty_factory *self)
+static void telnet_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
 {
     struct yetty_ytelnet_telnet_pty_factory *factory = (struct yetty_ytelnet_telnet_pty_factory *)self;
     free(factory->host);
@@ -653,13 +653,13 @@ static void telnet_pty_factory_destroy(struct yetty_platform_pty_factory *self)
 }
 
 static struct yetty_yplatform_pty_result telnet_pty_factory_create_pty(
-    struct yetty_platform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop)
+    struct yetty_yplatform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop)
 {
     struct yetty_ytelnet_telnet_pty_factory *factory = (struct yetty_ytelnet_telnet_pty_factory *)self;
     return yetty_ytelnet_telnet_pty_create(factory->host, factory->port, event_loop);
 }
 
-static const struct yetty_platform_pty_factory_ops telnet_pty_factory_ops = {
+static const struct yetty_yplatform_pty_factory_ops telnet_pty_factory_ops = {
     .destroy = telnet_pty_factory_destroy,
     .create_pty = telnet_pty_factory_create_pty,
 };

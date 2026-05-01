@@ -1,5 +1,5 @@
 #include <yetty/webgpu/error.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <string.h>
 
 /* Global error state */

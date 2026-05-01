@@ -2,8 +2,8 @@
  * yetty.c - Main yetty implementation
  */
 
-#include <yetty/yetty.h>
-#include <yetty/yconfig.h>
+#include <yetty/yetty/yetty.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/ycore/event-loop.h>
 #include <yetty/yplatform/ywebgpu.h>
 #include <yetty/ycore/event.h>
@@ -14,7 +14,7 @@
 #endif
 #include <yetty/yterm/terminal.h>
 #include <yetty/webgpu/error.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <yetty/yui/workspace.h>
 #include <yetty/yui/tile.h>
 #include <yetty/yui/view.h>
@@ -32,7 +32,7 @@
 #endif
 
 /* Yetty instance */
-struct yetty_yetty {
+struct yetty_yetty_yetty {
     struct yetty_context context;
     struct yetty_yui_workspace *workspace;
     struct yetty_yplatform_event_loop *event_loop;
@@ -97,7 +97,8 @@ static float yetty_clampf(float v, float lo, float hi)
  * This decouples the translation (e.g. Ctrl+Scroll → ZOOM_VISUAL) from the
  * handler, and gives rpc/keyboard-mapping paths one entry point to inject
  * the same named events. */
-static void yetty_post_event_async(struct yetty_yetty *yetty, const struct yetty_yui_event *event)
+static void yetty_post_event_async(struct yetty_yetty_yetty *yetty,
+                                   const struct yetty_yui_event *event)
 {
     struct yetty_ycore_input_pipe *pipe = yetty->context.app_context.platform_input_pipe;
     if (!pipe || !pipe->ops || !pipe->ops->write) {
@@ -114,7 +115,7 @@ static void yetty_post_event_async(struct yetty_yetty *yetty, const struct yetty
 static struct yetty_ycore_int_result yetty_event_handler(
     struct yetty_ycore_event_listener *listener, const struct yetty_yui_event *event)
 {
-    struct yetty_yetty *yetty = container_of(listener, struct yetty_yetty, listener);
+    struct yetty_yetty_yetty *yetty = container_of(listener, struct yetty_yetty_yetty, listener);
 
     /* X11 Expose / window-uncover: mark every tile dirty on damage-aware
      * targets so the next render actually repaints the window. Fall through
@@ -493,7 +494,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
-static struct yetty_ycore_void_result register_event_listeners(struct yetty_yetty *yetty)
+static struct yetty_ycore_void_result register_event_listeners(struct yetty_yetty_yetty *yetty)
 {
     struct yetty_yplatform_event_loop *el = yetty->event_loop;
     struct yetty_ycore_void_result res;
@@ -720,7 +721,7 @@ static uint64_t min_u64(uint64_t a, uint64_t b)
  * them the same way GLFW input would.
  *===========================================================================*/
 
-static void vnc_push_event(struct yetty_yetty *yetty, const struct yetty_yui_event *event)
+static void vnc_push_event(struct yetty_yetty_yetty *yetty, const struct yetty_yui_event *event)
 {
     struct yetty_ycore_input_pipe *pipe = yetty->context.app_context.platform_input_pipe;
     if (!pipe) {
@@ -731,7 +732,7 @@ static void vnc_push_event(struct yetty_yetty *yetty, const struct yetty_yui_eve
 
 static void vnc_on_mouse_move_cb(int16_t x, int16_t y, uint8_t mods, void *userdata)
 {
-    struct yetty_yetty *yetty = userdata;
+    struct yetty_yetty_yetty *yetty = userdata;
     struct yetty_yui_event event = {0};
     event.type = YETTY_YCORE_MOUSE_MOVE;
     event.mouse.x = (float)x;
@@ -743,7 +744,7 @@ static void vnc_on_mouse_move_cb(int16_t x, int16_t y, uint8_t mods, void *userd
 static void vnc_on_mouse_button_cb(int16_t x, int16_t y, uint8_t button, int pressed, uint8_t mods,
                                    void *userdata)
 {
-    struct yetty_yetty *yetty = userdata;
+    struct yetty_yetty_yetty *yetty = userdata;
     struct yetty_yui_event event = {0};
     event.type = pressed ? YETTY_YCORE_MOUSE_DOWN : YETTY_YCORE_MOUSE_UP;
     event.mouse.x = (float)x;
@@ -756,7 +757,7 @@ static void vnc_on_mouse_button_cb(int16_t x, int16_t y, uint8_t button, int pre
 static void vnc_on_mouse_scroll_cb(int16_t x, int16_t y, int16_t dx, int16_t dy, uint8_t mods,
                                    void *userdata)
 {
-    struct yetty_yetty *yetty = userdata;
+    struct yetty_yetty_yetty *yetty = userdata;
     struct yetty_yui_event event = {0};
     event.type = YETTY_YCORE_SCROLL;
     event.scroll.x = (float)x;
@@ -769,7 +770,7 @@ static void vnc_on_mouse_scroll_cb(int16_t x, int16_t y, int16_t dx, int16_t dy,
 
 static void vnc_on_key_down_cb(uint32_t keycode, uint32_t scancode, uint8_t mods, void *userdata)
 {
-    struct yetty_yetty *yetty = userdata;
+    struct yetty_yetty_yetty *yetty = userdata;
     struct yetty_yui_event event = {0};
     event.type = YETTY_YCORE_KEY_DOWN;
     event.key.key = (int)keycode;
@@ -780,7 +781,7 @@ static void vnc_on_key_down_cb(uint32_t keycode, uint32_t scancode, uint8_t mods
 
 static void vnc_on_key_up_cb(uint32_t keycode, uint32_t scancode, uint8_t mods, void *userdata)
 {
-    struct yetty_yetty *yetty = userdata;
+    struct yetty_yetty_yetty *yetty = userdata;
     struct yetty_yui_event event = {0};
     event.type = YETTY_YCORE_KEY_UP;
     event.key.key = (int)keycode;
@@ -791,7 +792,7 @@ static void vnc_on_key_up_cb(uint32_t keycode, uint32_t scancode, uint8_t mods, 
 
 static void vnc_on_char_cb(uint32_t codepoint, uint8_t mods, void *userdata)
 {
-    struct yetty_yetty *yetty = userdata;
+    struct yetty_yetty_yetty *yetty = userdata;
     struct yetty_yui_event event = {0};
     event.type = YETTY_YCORE_CHAR;
     event.chr.codepoint = codepoint;
@@ -801,7 +802,7 @@ static void vnc_on_char_cb(uint32_t codepoint, uint8_t mods, void *userdata)
 
 static void vnc_on_resize_cb(uint16_t width, uint16_t height, void *userdata)
 {
-    struct yetty_yetty *yetty = userdata;
+    struct yetty_yetty_yetty *yetty = userdata;
     struct yetty_yui_event event = {0};
     event.type = YETTY_YCORE_RESIZE;
     event.resize.width = (float)width;
@@ -809,7 +810,7 @@ static void vnc_on_resize_cb(uint16_t width, uint16_t height, void *userdata)
     vnc_push_event(yetty, &event);
 }
 
-static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty *yetty)
+static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yetty)
 {
     ydebug("initWebGPU: Starting...");
 
@@ -971,7 +972,7 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty *yetty)
     yetty->context.gpu_context.allocator = alloc_res.value;
 
     /* Check for VNC mode */
-    struct yetty_yconfig *config = yetty->context.app_context.config;
+    struct yetty_yconfig_config *config = yetty->context.app_context.config;
     const char *vnc_server_str = config->ops->get_string(config, "vnc/server", NULL);
     const char *vnc_headless_str = config->ops->get_string(config, "vnc/headless", NULL);
     int vnc_enabled = (vnc_server_str && strcmp(vnc_server_str, "true") == 0) ||
@@ -1112,13 +1113,13 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty *yetty)
  * Public API
  *===========================================================================*/
 
-struct yetty_yetty_result yetty_create(const struct yetty_app_context *app_context)
+struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_context *app_context)
 {
     ydebug("yetty_create: Starting...");
 
-    struct yetty_yetty *yetty = calloc(1, sizeof(struct yetty_yetty));
+    struct yetty_yetty_yetty *yetty = calloc(1, sizeof(struct yetty_yetty_yetty));
     if (!yetty) {
-        return YETTY_ERR(yetty_yetty, "Failed to allocate yetty");
+        return YETTY_ERR(yetty_yetty_yetty, "Failed to allocate yetty");
     }
     yetty->visual_zoom_scale = 1.0f;
     ydebug("yetty_create: Allocated yetty struct");
@@ -1132,7 +1133,7 @@ struct yetty_yetty_result yetty_create(const struct yetty_app_context *app_conte
     struct yetty_ycore_event_loop_result event_loop_res = yetty_ycore_event_loop_create(pipe);
     if (!YETTY_IS_OK(event_loop_res)) {
         free(yetty);
-        return YETTY_ERR(yetty_yetty, "failed to create event loop");
+        return YETTY_ERR(yetty_yetty_yetty, "failed to create event loop");
     }
     yetty->event_loop = event_loop_res.value;
     yetty->context.event_loop = yetty->event_loop;
@@ -1144,7 +1145,7 @@ struct yetty_yetty_result yetty_create(const struct yetty_app_context *app_conte
         yetty->context.app_context.app_gpu_context.instance, yetty->event_loop);
     if (!YETTY_IS_OK(wgpu_res)) {
         yetty_destroy(yetty);
-        return YETTY_ERR(yetty_yetty, "yplatform_wgpu_create failed");
+        return YETTY_ERR(yetty_yetty_yetty, "yplatform_wgpu_create failed");
     }
     yetty->wgpu = wgpu_res.value;
     ydebug("yetty_create: ywebgpu await machinery created");
@@ -1153,7 +1154,7 @@ struct yetty_yetty_result yetty_create(const struct yetty_app_context *app_conte
     struct yetty_ycore_void_result res = init_webgpu(yetty);
     if (!YETTY_IS_OK(res)) {
         yetty_destroy(yetty);
-        return YETTY_ERR(yetty_yetty, "WebGPU init failed");
+        return YETTY_ERR(yetty_yetty_yetty, "WebGPU init failed");
     }
     ydebug("yetty_create: WebGPU initialized");
 
@@ -1161,7 +1162,7 @@ struct yetty_yetty_result yetty_create(const struct yetty_app_context *app_conte
     res = register_event_listeners(yetty);
     if (!YETTY_IS_OK(res)) {
         yetty_destroy(yetty);
-        return YETTY_ERR(yetty_yetty, "failed to register event listeners");
+        return YETTY_ERR(yetty_yetty_yetty, "failed to register event listeners");
     }
 
     /* Create workspace */
@@ -1169,7 +1170,7 @@ struct yetty_yetty_result yetty_create(const struct yetty_app_context *app_conte
     struct yetty_yui_workspace_ptr_result ws_res = yetty_yui_workspace_create();
     if (!YETTY_IS_OK(ws_res)) {
         yetty_destroy(yetty);
-        return YETTY_ERR(yetty_yetty, "Failed to create workspace");
+        return YETTY_ERR(yetty_yetty_yetty, "Failed to create workspace");
     }
     yetty->workspace = ws_res.value;
     ydebug("yetty_create: Workspace created");
@@ -1180,7 +1181,7 @@ struct yetty_yetty_result yetty_create(const struct yetty_app_context *app_conte
         yetty_yui_workspace_load_layout(yetty->workspace, app_context->config, &yetty->context);
     if (!YETTY_IS_OK(layout_res)) {
         yetty_destroy(yetty);
-        return YETTY_ERR(yetty_yetty, layout_res.error.msg);
+        return YETTY_ERR(yetty_yetty_yetty, layout_res.error.msg);
     }
     ydebug("yetty_create: Layout loaded");
 
@@ -1210,10 +1211,10 @@ struct yetty_yetty_result yetty_create(const struct yetty_app_context *app_conte
     }
 
     ydebug("yetty_create: Complete");
-    return YETTY_OK(yetty_yetty, yetty);
+    return YETTY_OK(yetty_yetty_yetty, yetty);
 }
 
-struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty *yetty)
+struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty_yetty *yetty)
 {
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
@@ -1337,7 +1338,7 @@ struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty *yetty)
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_run(struct yetty_yetty *yetty)
+struct yetty_ycore_void_result yetty_run(struct yetty_yetty_yetty *yetty)
 {
     ydebug("yetty_run: Starting...");
 

@@ -9,8 +9,8 @@
 #include <yetty/ycore/event.h>
 #include <yetty/ycore/event-loop.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yetty.h>
-#include <yetty/ytrace.h>
+#include <yetty/yetty/yetty.h>
+#include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
 

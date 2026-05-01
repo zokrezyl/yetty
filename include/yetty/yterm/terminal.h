@@ -7,7 +7,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yrender/gpu-resource-set.h>
-#include <yetty/yetty.h>
+#include <yetty/yetty/yetty.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,7 +27,7 @@ struct yetty_ypaint_core_target;
  * Returns early with OK if layer is not dirty. */
 typedef struct yetty_ycore_void_result (*yetty_yrender_layer_fn)(
     struct yetty_yrender_terminal_layer *layer, WGPUTextureView target,
-    struct yetty_yrender_gpu_resource_binder *binder, struct yetty_gpu_context *gpu);
+    struct yetty_yrender_gpu_resource_binder *binder, struct yetty_yetty_gpu_context *gpu);
 
 /* Result types */
 YETTY_YRESULT_DECLARE(yetty_yterm_terminal, struct yetty_yterm_terminal *);

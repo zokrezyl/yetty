@@ -1,7 +1,7 @@
 /* extract-assets.c - Extract embedded assets to data and config directories */
 
 #include <yetty/platform/extract-assets.h>
-#include <yetty/yconfig.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/yplatform/fs.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,7 +24,7 @@ int yetty_incbin_assets_has_yemu(struct yetty_incbin_assets *assets);
 int yetty_incbin_assets_extract_qemu_to(struct yetty_incbin_assets *assets, const char *data_dir);
 int yetty_incbin_assets_has_qemu(struct yetty_incbin_assets *assets);
 
-struct yetty_ycore_void_result yetty_platform_extract_assets(struct yetty_yconfig *config)
+struct yetty_ycore_void_result yetty_platform_extract_assets(struct yetty_yconfig_config *config)
 {
     const char *data_dir;
     const char *config_dir;

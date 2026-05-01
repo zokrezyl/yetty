@@ -149,7 +149,7 @@ Key invariants:
 
 ### Wiring
 
-- `struct yetty_yetty` owns a `struct yplatform_wgpu *wgpu` member.
+- `struct yetty_yetty_yetty` owns a `struct yplatform_wgpu *wgpu` member.
 - Created in `yetty_create` **before** `init_webgpu` (so the VNC server
   picks it up), destroyed in `yetty_destroy` **before** the event loop.
 - `yetty_vnc_server_create` takes the `wgpu` pointer; the server stashes it

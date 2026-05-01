@@ -59,7 +59,7 @@ if(EMSCRIPTEN OR YETTY_ANDROID)
 endif()
 
 # Propagate log-level switches to the C ytrace implementation
-# (src/yetty/ytrace.c + include/yetty/ytrace.h). That header uses separate
+# (src/yetty/ytrace/ytrace.c + include/yetty/ytrace.h). That header uses separate
 # compile-time switches (YTRACE_C_ENABLE_*) from the external ytrace C++ lib,
 # so the YTRACE_ENABLE_* options above do not disable ydebug/ytrace in our C
 # macros by themselves. Emit project-wide compile definitions so every TU

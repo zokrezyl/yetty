@@ -9,7 +9,7 @@
 # (ygui/ypaint-core reference these symbols; they need to be in the final
 # exec object list, not hidden deeper in the archive chain).
 add_library(demo_ygui_support OBJECT
-    ${YETTY_ROOT}/src/yetty/ytrace.c
+    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/thread.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/term.c
 )

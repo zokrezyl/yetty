@@ -8,7 +8,7 @@
 
 #include <yetty/yrender/render-target.h>
 #include <yetty/yvnc/vnc-server.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 
 struct yetty_yrender_render_target_vnc {

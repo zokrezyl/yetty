@@ -5,10 +5,10 @@
 #include <yetty/yfont/ms-raster-font.h>
 #include <yetty/yfont/ms-font.h>
 #include <yetty/yrender/gpu-resource-set.h>
-#include <yetty/yconfig.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ycore/util.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <webgpu/webgpu.h>
 
 #include <ft2build.h>
@@ -514,7 +514,7 @@ static void raster_font_cleanup(struct yetty_yfont_raster_font *font)
  * Create
  *===========================================================================*/
 
-struct yetty_font_ms_font_result yetty_yfont_ms_raster_font_create(struct yetty_yconfig *config,
+struct yetty_font_ms_font_result yetty_yfont_ms_raster_font_create(struct yetty_yconfig_config *config,
                                                                   float cell_width,
                                                                   float cell_height)
 {

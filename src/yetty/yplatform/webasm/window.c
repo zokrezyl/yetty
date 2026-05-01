@@ -8,8 +8,8 @@
  * Single-threaded: all operations happen on the main (only) thread.
  */
 
-#include <yetty/yconfig.h>
-#include <yetty/ytrace.h>
+#include <yetty/yconfig/config.h>
+#include <yetty/ytrace/ytrace.h>
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
 #include <string.h>
@@ -18,7 +18,7 @@
 static int g_canvas_width = 0;
 static int g_canvas_height = 0;
 
-int yetty_yplatform_webasm_create_window(struct yetty_yconfig *config)
+int yetty_yplatform_webasm_create_window(struct yetty_yconfig_config *config)
 {
     int default_width;
     int default_height;

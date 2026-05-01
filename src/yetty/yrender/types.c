@@ -1,5 +1,5 @@
 #include <yetty/yrender/types.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <webgpu/webgpu.h>
 #include <stdlib.h>
 #include <string.h>

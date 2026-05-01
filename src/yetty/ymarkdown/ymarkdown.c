@@ -15,7 +15,7 @@
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <stdbool.h>
 #include <stdint.h>

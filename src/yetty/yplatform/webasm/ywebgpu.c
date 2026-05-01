@@ -23,7 +23,7 @@
 
 #include <yetty/yplatform/ywebgpu.h>
 #include <yetty/ycore/event-loop.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <emscripten/emscripten.h>
 #include <webgpu/webgpu.h>

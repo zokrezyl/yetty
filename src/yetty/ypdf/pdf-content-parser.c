@@ -21,7 +21,7 @@
  */
 
 #include <yetty/ypdf/pdf-content-parser.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <pdfio.h>
 

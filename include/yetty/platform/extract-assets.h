@@ -7,10 +7,10 @@
 extern "C" {
 #endif
 
-struct yetty_yconfig;
+struct yetty_yconfig_config;
 
 /* Extract embedded assets to cache directory */
-struct yetty_ycore_void_result yetty_platform_extract_assets(struct yetty_yconfig *config);
+struct yetty_ycore_void_result yetty_platform_extract_assets(struct yetty_yconfig_config *config);
 
 #ifdef __cplusplus
 }

@@ -6,7 +6,7 @@
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ypaint-core/complex-prim-types.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
 #include <yetty/yfsvm/compiler.h>

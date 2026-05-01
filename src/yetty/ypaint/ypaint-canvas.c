@@ -22,10 +22,10 @@
 #include <yetty/ymsdf-gen/ymsdf-gen.h>
 #endif
 #include <yetty/ysdf/types.gen.h>
-#include <yetty/yconfig.h>
-#include <yetty/yetty.h>
+#include <yetty/yconfig/config.h>
+#include <yetty/yetty/yetty.h>
 #include <yetty/yplot/yplot-gen.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 /* Provided per-platform (yplatform/{linux,macos,windows,android,ios,webasm}/
  * platform-paths.{c,m}). Returns a writable directory unique to the user. */
@@ -636,7 +636,7 @@ struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
     /* Create default font for text spans (font_id = -1).
    * Backend (MSDF vs raster) is selected via ypaint/font/render-method.
    * Default is "msdf" to preserve existing rendering. */
-    struct yetty_yconfig *config = context->app_context.config;
+    struct yetty_yconfig_config *config = context->app_context.config;
     const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
     const char *font_family = config->ops->font_family(config);

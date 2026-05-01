@@ -1,7 +1,7 @@
 /* pty-reader.c - PTY reader with OSC parsing and dispatch */
 
 #include <yetty/yterm/pty-reader.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
 

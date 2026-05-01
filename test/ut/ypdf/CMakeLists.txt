@@ -8,7 +8,7 @@ enable_testing()
 # Shared shim: pulls in the ytrace helpers + platform mutex/timestamp
 # symbols that yfont/yrender and ypdf reference internally.
 set(YPDF_TEST_SHIM_SOURCES
-    ${YETTY_ROOT}/src/yetty/ytrace.c
+    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
     ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 

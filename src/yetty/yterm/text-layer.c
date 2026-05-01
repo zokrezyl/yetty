@@ -5,10 +5,10 @@
 #include <yetty/yfont/ms-msdf-font.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yconfig.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ycore/util.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <vterm.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -685,7 +685,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
     struct yetty_yterm_terminal_text_layer *text_layer;
 
     /* Load text-layer shader from file */
-    struct yetty_yconfig *config = context->app_context.config;
+    struct yetty_yconfig_config *config = context->app_context.config;
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
     char shader_path[512];
     snprintf(shader_path, sizeof(shader_path), "%s/text-layer.wgsl", shaders_dir);

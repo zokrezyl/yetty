@@ -8,7 +8,7 @@
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yplatform/ywebgpu.h>
 #include <yetty/yrender-utils/tile-diff.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include "protocol.h"
 
 #include <stddef.h>

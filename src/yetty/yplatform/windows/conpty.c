@@ -2,9 +2,9 @@
 
 #include <yetty/platform/pty.h>
 #include <yetty/platform/pty-factory.h>
-#include <yetty/yconfig.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <yetty/yqemu/qemu.h>
 #include <yetty/ytelnet/telnet-pty.h>
 /* unix-pty.h is the common header that declares tinyemu_pty_create /
@@ -63,18 +63,18 @@ static const struct yetty_platform_pty_ops win_conpty_ops = {
 
 /* Windows PTY factory - embeds base as first member */
 struct yetty_yplatform_win_pty_factory {
-    struct yetty_platform_pty_factory base;
-    struct yetty_yconfig *config;
+    struct yetty_yplatform_pty_factory base;
+    struct yetty_yconfig_config *config;
     struct yetty_yplatform_yprocess *qemu_proc; /* spawned by qemu_start when --qemu is set */
 };
 
 /* Forward declarations for factory */
-static void win_pty_factory_destroy(struct yetty_platform_pty_factory *self);
+static void win_pty_factory_destroy(struct yetty_yplatform_pty_factory *self);
 static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
-    struct yetty_platform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop);
+    struct yetty_yplatform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop);
 
 /* Factory ops table */
-static const struct yetty_platform_pty_factory_ops win_pty_factory_ops = {
+static const struct yetty_yplatform_pty_factory_ops win_pty_factory_ops = {
     .destroy = win_pty_factory_destroy,
     .create_pty = win_pty_factory_create_pty,
 };
@@ -211,7 +211,7 @@ static struct yetty_platform_pty_pipe_source *win_conpty_pipe_source(
 
 /* Create ConPTY with shell */
 
-static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig *config)
+static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig_config *config)
 {
     struct yetty_yplatform_win_conpty *pty;
     HANDLE pipe_pty_in = INVALID_HANDLE_VALUE;
@@ -378,7 +378,7 @@ static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig 
 
 /* Factory implementation */
 
-static void win_pty_factory_destroy(struct yetty_platform_pty_factory *self)
+static void win_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
 {
     struct yetty_yplatform_win_pty_factory *factory = container_of(self, struct yetty_yplatform_win_pty_factory, base);
     if (factory->qemu_proc) {
@@ -389,10 +389,10 @@ static void win_pty_factory_destroy(struct yetty_platform_pty_factory *self)
 }
 
 static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
-    struct yetty_platform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop)
+    struct yetty_yplatform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop)
 {
     struct yetty_yplatform_win_pty_factory *factory = container_of(self, struct yetty_yplatform_win_pty_factory, base);
-    struct yetty_yconfig *config = factory->config;
+    struct yetty_yconfig_config *config = factory->config;
 
     /* --temu: in-process tinyemu RISC-V VM */
     if (config && config->ops->get_bool(config, YETTY_YCONFIG_KEY_TEMU, 0)) {
@@ -422,8 +422,8 @@ static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
 
 /* Factory creation - the public API */
 
-struct yetty_yplatform_pty_factory_result yetty_platform_pty_factory_create(
-    struct yetty_yconfig *config, void *os_specific)
+struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
+    struct yetty_yconfig_config *config, void *os_specific)
 {
     struct yetty_yplatform_win_pty_factory *factory;
 

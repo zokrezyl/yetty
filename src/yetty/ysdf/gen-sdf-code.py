@@ -420,7 +420,7 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
     lines.append('#include <yetty/ysdf/types.gen.h>')
     lines.append('#include <yetty/ypaint-core/buffer.h>')
     lines.append('#include <yetty/ypaint-yaml/ypaint-yaml.h>')
-    lines.append('#include <yetty/ytrace.h>')
+    lines.append('#include <yetty/ytrace/ytrace.h>')
     lines.append('#include <yaml.h>')
     lines.append('#include <stdlib.h>')
     lines.append('#include <string.h>')

@@ -4,21 +4,21 @@
  * HTML5 callbacks write events to PlatformInputPipe which notifies listeners.
  */
 
-#include <yetty/yetty.h>
-#include <yetty/yconfig.h>
+#include <yetty/yetty/yetty.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/ycore/event.h>
 #include <yetty/ycore/event-loop.h>
 #include <yetty/platform/extract-assets.h>
 #include <yetty/platform/platform-input-pipe.h>
 #include <yetty/platform/pty-factory.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <webgpu/webgpu.h>
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
 #include <string.h>
 
 /* Forward declarations for window.c and surface.c */
-int yetty_yplatform_webasm_create_window(struct yetty_yconfig *config);
+int yetty_yplatform_webasm_create_window(struct yetty_yconfig_config *config);
 void yetty_yplatform_webasm_destroy_window(void);
 void yetty_yplatform_webasm_get_framebuffer_size(int *width, int *height);
 int yetty_yplatform_webasm_update_canvas_size(void);
@@ -449,17 +449,17 @@ int main(int argc, char **argv)
 
     struct yetty_yplatform_paths paths;
     struct yetty_yconfig_result config_result;
-    struct yetty_yconfig *config;
+    struct yetty_yconfig_config *config;
     struct yetty_yplatform_input_pipe_result pipe_result;
     struct yetty_ycore_input_pipe *pipe;
     struct yetty_yplatform_pty_factory_result pty_factory_result;
-    struct yetty_platform_pty_factory *pty_factory;
+    struct yetty_yplatform_pty_factory *pty_factory;
     WGPUInstance instance;
     WGPUSurface surface;
     int canvas_width, canvas_height;
-    struct yetty_app_context app_context;
-    struct yetty_yetty_result yetty_result;
-    struct yetty_yetty *yetty;
+    struct yetty_yetty_app_context app_context;
+    struct yetty_yetty_yetty_result yetty_result;
+    struct yetty_yetty_yetty *yetty;
     struct yetty_yui_event event = {0};
     int fb_width, fb_height;
     struct yetty_ycore_void_result run_result;
@@ -521,7 +521,7 @@ int main(int argc, char **argv)
     setup_input_callbacks(pipe);
 
     /* PtyFactory */
-    pty_factory_result = yetty_platform_pty_factory_create(config, NULL);
+    pty_factory_result = yetty_yplatform_pty_factory_create(config, NULL);
     if (!YETTY_IS_OK(pty_factory_result)) {
         yerror("Failed to create PtyFactory");
         pipe->ops->destroy(pipe);

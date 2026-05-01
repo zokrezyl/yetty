@@ -1,7 +1,7 @@
 /* incbin-assets.c - Embedded asset management */
 
 #include <brotli/decode.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <yetty/yplatform/fs.h>
 
 #include <errno.h>

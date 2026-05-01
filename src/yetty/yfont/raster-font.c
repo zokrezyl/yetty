@@ -20,7 +20,7 @@
 #include <yetty/ycore/map.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yrender/gpu-resource-set.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <webgpu/webgpu.h>
 
 #include <ft2build.h>

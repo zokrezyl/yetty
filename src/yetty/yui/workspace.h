@@ -12,7 +12,7 @@ extern "C" {
 #endif
 
 struct yetty_yui_workspace;
-struct yetty_yconfig;
+struct yetty_yconfig_config;
 struct yetty_context;
 struct yetty_yui_event;
 struct yetty_ypaint_core_target;
@@ -52,7 +52,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_w
 
 /* Load layout from config - creates tile tree and sets as root */
 struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
-    struct yetty_yui_workspace *ws, const struct yetty_yconfig *config,
+    struct yetty_yui_workspace *ws, const struct yetty_yconfig_config *config,
     const struct yetty_context *yetty_ctx);
 
 /* Event handling - returns 1 if handled, 0 if not */

@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-struct yetty_yconfig;
+struct yetty_yconfig_config;
 
 /* WebASM PTY implementation using JSLinux iframe
  *
@@ -29,7 +29,7 @@ struct yetty_yplatform_webasm_pty {
 
 /* Initialize the PTY */
 struct yetty_ycore_void_result yetty_yplatform_webasm_pty_init(struct yetty_yplatform_webasm_pty *pty,
-                                               struct yetty_yconfig *config);
+                                               struct yetty_yconfig_config *config);
 
 #ifdef __cplusplus
 }

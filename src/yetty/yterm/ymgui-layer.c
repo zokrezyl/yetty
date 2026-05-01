@@ -33,8 +33,8 @@
 #include <webgpu/webgpu.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/util.h>
-#include <yetty/yconfig.h>
-#include <yetty/yetty.h>
+#include <yetty/yconfig/config.h>
+#include <yetty/yetty/yetty.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yrender/render-target.h>
@@ -42,7 +42,7 @@
 #include <yetty/yterm/pty-reader.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/yterm/ymgui-layer.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 /*===========================================================================
  * Card
@@ -1499,7 +1499,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ymgui_layer_create(
         return YETTY_ERR(yetty_yterm_terminal_layer, "gpu context is incomplete");
     }
 
-    struct yetty_yconfig *cfg = context->app_context.config;
+    struct yetty_yconfig_config *cfg = context->app_context.config;
     const char *shaders_dir = cfg->ops->get_string(cfg, "paths/shaders", "");
     char shader_path[512];
     snprintf(shader_path, sizeof(shader_path), "%s/ymgui-layer.wgsl", shaders_dir);

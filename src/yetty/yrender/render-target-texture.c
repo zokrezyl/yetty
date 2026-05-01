@@ -11,7 +11,7 @@
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/yterm/terminal.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 
 /* Shader embedded via incbin_add_resources (stubs on Emscripten) */

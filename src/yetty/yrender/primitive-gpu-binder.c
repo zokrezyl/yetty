@@ -4,7 +4,7 @@
 
 #include <yetty/yrender/primitive-gpu-binder.h>
 #include <yetty/yrender/gpu-allocator.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
 

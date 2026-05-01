@@ -16,9 +16,9 @@
 
 #include <yetty/platform/pty.h>
 #include <yetty/platform/pty-factory.h>
-#include <yetty/yconfig.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <libssh2.h>
 
@@ -507,7 +507,7 @@ static struct yetty_platform_pty_pipe_source *ssh_pty_pipe_source(struct yetty_p
 
 /* Public entry point */
 
-struct yetty_yplatform_pty_result yetty_yssh_ssh_pty_create(struct yetty_yconfig *config)
+struct yetty_yplatform_pty_result yetty_yssh_ssh_pty_create(struct yetty_yconfig_config *config)
 {
     struct yetty_yssh_ssh_pty *pty;
     const char *host;

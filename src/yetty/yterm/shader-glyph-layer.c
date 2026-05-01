@@ -4,15 +4,15 @@
 #include <string.h>
 #include <time.h>
 
-#include <yetty/yconfig.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/ycore/event-loop.h>
 #include <yetty/ycore/event.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/util.h>
-#include <yetty/yetty.h>
+#include <yetty/yetty/yetty.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <yetty/yterm/shader-glyph-layer.h>
 #include <yetty/yterm/text-layer.h>
 
@@ -366,7 +366,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
     }
 
     /* Load shader template from disk (matches text-layer / ypaint-layer pattern). */
-    struct yetty_yconfig *config = context->app_context.config;
+    struct yetty_yconfig_config *config = context->app_context.config;
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
     char shader_path[512];
     char glyph_dir[512];

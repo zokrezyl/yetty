@@ -6,7 +6,7 @@
  */
 
 #include <yetty/yvideo/decoder.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <wels/codec_api.h>
 

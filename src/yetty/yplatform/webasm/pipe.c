@@ -4,7 +4,7 @@
 #include <yetty/ycore/event-loop.h>
 #include <yetty/ycore/event.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
 

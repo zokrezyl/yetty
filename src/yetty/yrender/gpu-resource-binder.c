@@ -2,7 +2,7 @@
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/types.h>
 #include <yetty/webgpu/error.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

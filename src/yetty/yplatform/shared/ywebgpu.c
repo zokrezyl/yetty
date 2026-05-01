@@ -17,7 +17,7 @@
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ycore/event-loop.h>
 #include <yetty/ycore/event.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <webgpu/webgpu.h>
 

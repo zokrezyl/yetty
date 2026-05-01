@@ -3,7 +3,7 @@
 #include "unix-pty.h"
 
 #include <yetty/platform/pty.h>
-#include <yetty/yconfig.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
 
 #include <fcntl.h>
@@ -198,7 +198,7 @@ static struct yetty_platform_pty_pipe_source *fork_pty_pipe_source(
 
 /* Create fork PTY with shell */
 
-struct yetty_yplatform_pty_result yetty_yplatform_fork_pty_create(struct yetty_yconfig *config)
+struct yetty_yplatform_pty_result yetty_yplatform_fork_pty_create(struct yetty_yconfig_config *config)
 {
     struct yetty_yplatform_fork_pty *pty;
     struct yetty_yconfig_shell_argv shellv;

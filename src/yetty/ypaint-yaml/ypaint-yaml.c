@@ -5,7 +5,7 @@
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/ypaint-core/complex-prim-types.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <yaml.h>
 #include <stdlib.h>
 #include <string.h>

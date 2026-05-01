@@ -125,7 +125,7 @@ target_link_libraries(yetty_ymsdf_gen PUBLIC
     msdfgen::msdfgen-core msdfgen::msdfgen-ext ${FREETYPE_ALL_LIBS} yetty_ycdb)
 
 # ytrace (C implementation)
-add_library(ytrace_c STATIC ${YETTY_ROOT}/src/yetty/ytrace.c)
+add_library(ytrace_c STATIC ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c)
 target_include_directories(ytrace_c PUBLIC ${YETTY_ROOT}/include)
 
 # Platform thread/term/fs implementations for ytrace
@@ -148,7 +148,7 @@ endif()
 # msdf-gen tool
 add_executable(yetty-ymsdf-gen
     ${YETTY_ROOT}/tools/gen-msdf/main.c
-    ${YETTY_ROOT}/src/yetty/ytrace.c
+    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
     ${YETTY_HOST_PLATFORM_SOURCES}
 )
 target_include_directories(yetty-ymsdf-gen PRIVATE ${YETTY_ROOT}/include)

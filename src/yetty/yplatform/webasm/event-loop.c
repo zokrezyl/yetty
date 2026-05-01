@@ -4,7 +4,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/platform/platform-input-pipe.h>
 #include <yetty/platform/pty-pipe-source.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include "webasm-pty-pipe-source.h"
 #include "webasm-pty.h"
 #include <emscripten/emscripten.h>

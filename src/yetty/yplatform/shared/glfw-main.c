@@ -31,14 +31,14 @@ static void platform_get_x11_handles(GLFWwindow *win, void **disp, unsigned long
 }
 #endif
 
-#include <yetty/yetty.h>
-#include <yetty/yconfig.h>
+#include <yetty/yetty/yetty.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/ycore/event.h>
 #include <yetty/ycore/event-loop.h>
 #include <yetty/platform/platform-input-pipe.h>
 #include <yetty/platform/pty-factory.h>
 #include <yetty/platform/extract-assets.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 /* Forward declarations - implemented in other platform files */
 const char *yetty_yplatform_get_cache_dir(void);
@@ -55,7 +55,7 @@ void yetty_yplatform_run_os_event_loop(GLFWwindow *window, int *running);
 
 /* Render thread args */
 struct yetty_yplatform_render_thread_args {
-    struct yetty_yetty *yetty;
+    struct yetty_yetty_yetty *yetty;
     int *running;
     GLFWwindow *window;
     int result;
@@ -117,7 +117,7 @@ int main(int argc, char **argv)
         glfwTerminate();
         return 1;
     }
-    struct yetty_yconfig *config = config_result.value;
+    struct yetty_yconfig_config *config = config_result.value;
 
     /* Extract assets */
     yetty_platform_extract_assets(config);
@@ -171,7 +171,7 @@ int main(int argc, char **argv)
     /* PTY factory */
     ydebug("main: creating PTY factory");
     struct yetty_yplatform_pty_factory_result pty_factory_result =
-        yetty_platform_pty_factory_create(config, NULL);
+        yetty_yplatform_pty_factory_create(config, NULL);
     if (!YETTY_IS_OK(pty_factory_result)) {
         fprintf(stderr, "Failed to create PTY factory\n");
         platform_input_pipe->ops->destroy(platform_input_pipe);
@@ -182,7 +182,7 @@ int main(int argc, char **argv)
         glfwTerminate();
         return 1;
     }
-    struct yetty_platform_pty_factory *pty_factory = pty_factory_result.value;
+    struct yetty_yplatform_pty_factory *pty_factory = pty_factory_result.value;
 
     /* WebGPU instance */
     WGPUInstance instance = wgpuCreateInstance(NULL);
@@ -228,7 +228,7 @@ int main(int argc, char **argv)
     unsigned long x11_window = 0UL;
     platform_get_x11_handles(window, &x11_display, &x11_window);
 
-    struct yetty_app_context app_context = {
+    struct yetty_yetty_app_context app_context = {
         .app_gpu_context = {.instance = instance,
                             .surface = surface,
                             .surface_width = (uint32_t)fb_width,
@@ -240,7 +240,7 @@ int main(int argc, char **argv)
         .pty_factory = pty_factory};
 
     /* Yetty */
-    struct yetty_yetty_result yetty_result = yetty_create(&app_context);
+    struct yetty_yetty_yetty_result yetty_result = yetty_create(&app_context);
     if (!YETTY_IS_OK(yetty_result)) {
         yerror("Failed to create Yetty: %s", yetty_result.error.msg);
         /* Note: yetty_destroy already released surface if it was configured */
@@ -254,7 +254,7 @@ int main(int argc, char **argv)
         glfwTerminate();
         return 1;
     }
-    struct yetty_yetty *yetty = yetty_result.value;
+    struct yetty_yetty_yetty *yetty = yetty_result.value;
 
     /* Render thread */
     int running = 1;

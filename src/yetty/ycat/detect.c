@@ -13,7 +13,7 @@
 
 #include <yetty/ycat/ycat.h>
 
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <stdlib.h>
 #include <string.h>

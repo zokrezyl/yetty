@@ -13,7 +13,7 @@
 #include <yetty/ypaint-core/complex-prim-types.h>
 #include <yetty/ypaint-core/font-prim.h>
 #include <yetty/ypaint-core/text-span-prim.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 struct yetty_ypaint_core_flyweight_registry_ptr_result yetty_ypaint_flyweight_create(void)
 {

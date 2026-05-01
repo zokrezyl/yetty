@@ -12,7 +12,7 @@
 
 #include <yetty/yvideo/encoder.h>
 #include <yetty/yplatform/time.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <wels/codec_api.h>
 

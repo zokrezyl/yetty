@@ -5,7 +5,7 @@
 #include <yetty/ypaint-yaml/ypaint-yaml.h>
 #include <yetty/ypaint-core/buffer.h>
 #include <yetty/yfsvm/compiler.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <yaml.h>
 #include <stdlib.h>
 #include <string.h>

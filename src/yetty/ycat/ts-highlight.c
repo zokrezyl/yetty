@@ -16,7 +16,7 @@
 
 #include <yetty/ypaint-core/buffer.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <stdint.h>
 #include <stdlib.h>

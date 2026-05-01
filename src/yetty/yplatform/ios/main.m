@@ -8,13 +8,13 @@
 
 #include <webgpu/webgpu.h>
 #include <pthread.h>
-#include <yetty/yetty.h>
-#include <yetty/yconfig.h>
+#include <yetty/yetty/yetty.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/ycore/event.h>
 #include <yetty/platform/platform-input-pipe.h>
 #include <yetty/platform/pty-factory.h>
 #include <yetty/platform/extract-assets.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 /* Forward declarations */
 const char *yetty_yplatform_get_cache_dir(void);
@@ -53,7 +53,7 @@ WGPUSurface yetty_yplatform_create_surface_from_layer(WGPUInstance instance, CAM
 
 /* Render thread args */
 struct yetty_yplatform_render_thread_args {
-    struct yetty_yetty *yetty;
+    struct yetty_yetty_yetty *yetty;
     int *running;
 };
 
@@ -68,10 +68,10 @@ static void *render_thread_func(void *arg)
 /* YettyViewController - implements UIKeyInput for keyboard */
 @interface YettyViewController : UIViewController <UIKeyInput> {
     YettyMetalView *_metalView;
-    struct yetty_yetty *_yetty;
+    struct yetty_yetty_yetty *_yetty;
     struct yetty_ycore_input_pipe *_pipe;
-    struct yetty_yconfig *_config;
-    struct yetty_platform_pty_factory *_ptyFactory;
+    struct yetty_yconfig_config *_config;
+    struct yetty_yplatform_pty_factory *_ptyFactory;
     WGPUInstance _instance;
     WGPUSurface _surface;
     pthread_t _renderThread;
@@ -145,7 +145,7 @@ static void *render_thread_func(void *arg)
 
     /* PTY factory */
     ydebug("creating PTY factory");
-    struct yetty_yplatform_pty_factory_result pty_result = yetty_platform_pty_factory_create(_config, NULL);
+    struct yetty_yplatform_pty_factory_result pty_result = yetty_yplatform_pty_factory_create(_config, NULL);
     if (!YETTY_IS_OK(pty_result)) {
         yerror("failed to create PTY factory: %s", pty_result.error);
         return;
@@ -181,7 +181,7 @@ static void *render_thread_func(void *arg)
 
     /* Create Yetty */
     ydebug("creating yetty");
-    struct yetty_app_context ctx = {
+    struct yetty_yetty_app_context ctx = {
         .app_gpu_context = {
             .instance = _instance,
             .surface = _surface,
@@ -194,7 +194,7 @@ static void *render_thread_func(void *arg)
         .pty_factory = _ptyFactory
     };
 
-    struct yetty_yetty_result yetty_result = yetty_create(&ctx);
+    struct yetty_yetty_yetty_result yetty_result = yetty_create(&ctx);
     if (!YETTY_IS_OK(yetty_result)) {
         yerror("failed to create yetty: %s", yetty_result.error);
         return;

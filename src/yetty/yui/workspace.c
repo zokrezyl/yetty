@@ -1,12 +1,12 @@
 #include <yetty/yui/workspace.h>
 #include <yetty/yui/tile.h>
 #include <yetty/yui/view.h>
-#include <yetty/yconfig.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/ycore/event.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/yvnc/vnc-viewer.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -310,10 +310,10 @@ struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_w
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
-    struct yetty_yui_workspace *ws, const struct yetty_yconfig *config,
+    struct yetty_yui_workspace *ws, const struct yetty_yconfig_config *config,
     const struct yetty_context *yetty_ctx)
 {
-    struct yetty_yconfig *layout_config;
+    struct yetty_yconfig_config *layout_config;
     struct yetty_yui_tile_ptr_result tile_res;
 
     if (!ws) {

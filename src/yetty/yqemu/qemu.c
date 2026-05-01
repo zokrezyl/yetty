@@ -6,7 +6,7 @@
 #include <yetty/yplatform/fs.h>
 #include <yetty/yplatform/process.h>
 #include <yetty/yplatform/time.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #ifdef __ANDROID__
 #include <dlfcn.h>

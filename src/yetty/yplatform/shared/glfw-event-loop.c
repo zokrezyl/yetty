@@ -2,7 +2,7 @@
 
 #include <yetty/platform/platform-input-pipe.h>
 #include <yetty/ycore/event.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <GLFW/glfw3.h>
 
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)

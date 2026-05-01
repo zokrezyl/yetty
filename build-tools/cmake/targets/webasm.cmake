@@ -57,7 +57,7 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/ywebgpu.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/extract-assets.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/fs.c
-    ${YETTY_ROOT}/src/yetty/incbin-assets.c
+    ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/thread.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/term.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/time.c
@@ -113,7 +113,7 @@ target_compile_definitions(yetty PRIVATE
 
 # (removed dead `${ytrace_SOURCE_DIR}/include ${spdlog_SOURCE_DIR}/include`
 # — neither external lib is used by yetty's C source; the C ytrace impl
-# is in src/yetty/ytrace.c.)
+# is in src/yetty/ytrace/ytrace.c.)
 
 target_link_options(yetty PRIVATE
     -sUSE_GLFW=3

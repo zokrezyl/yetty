@@ -6,7 +6,7 @@
 
 #include <yetty/ypaint-core/buffer.h>
 #include <yetty/ysdf/funcs.gen.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <algorithm>
 #include <cmath>

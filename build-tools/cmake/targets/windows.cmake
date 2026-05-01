@@ -54,7 +54,7 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/windows/socket.c
     ${YETTY_ROOT}/src/yetty/yplatform/windows/process.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/extract-assets.c
-    ${YETTY_ROOT}/src/yetty/incbin-assets.c
+    ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
     ${YETTY_ROOT}/src/yetty/yplatform/windows/platform-paths.c
     ${YETTY_ROOT}/src/yetty/yplatform/windows/thread.c
     ${YETTY_ROOT}/src/yetty/yplatform/windows/term.c

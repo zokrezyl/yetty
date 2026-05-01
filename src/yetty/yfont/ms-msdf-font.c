@@ -13,7 +13,7 @@
 #include <yetty/ycdb/ycdb.h>
 #include <yetty/ycore/map.h>
 #include <yetty/ycore/util.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <webgpu/webgpu.h>
 
 #include <stdlib.h>

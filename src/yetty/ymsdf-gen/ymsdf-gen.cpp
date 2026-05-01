@@ -8,7 +8,7 @@
 
 #include <yetty/ymsdf-gen/ymsdf-gen.h>
 #include <yetty/ycdb/ycdb.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <msdfgen.h>
 #include <msdfgen-ext.h>

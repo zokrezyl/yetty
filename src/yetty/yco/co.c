@@ -7,7 +7,7 @@
  */
 
 #include <yetty/yco/co.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <libco.h>
 

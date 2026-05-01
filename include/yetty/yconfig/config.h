@@ -1,5 +1,5 @@
-#ifndef YETTY_YCONFIG_H
-#define YETTY_YCONFIG_H
+#ifndef YETTY_YCONFIG_CONFIG_H
+#define YETTY_YCONFIG_CONFIG_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-struct yetty_yconfig;
+struct yetty_yconfig_config;
 
 /* Platform-specific paths */
 struct yetty_yplatform_paths {
@@ -20,7 +20,7 @@ struct yetty_yplatform_paths {
 };
 
 /* Result type */
-YETTY_YRESULT_DECLARE(yetty_yconfig, struct yetty_yconfig *);
+YETTY_YRESULT_DECLARE(yetty_yconfig, struct yetty_yconfig_config *);
 
 /* Resolved shell argv for execvp.
  *
@@ -35,46 +35,46 @@ struct yetty_yconfig_shell_argv {
 };
 
 /* Config ops */
-struct yetty_yconfig_ops {
-    void (*destroy)(struct yetty_yconfig *self);
+struct yetty_yconfig_config_ops {
+    void (*destroy)(struct yetty_yconfig_config *self);
 
     /* Get string value by slash path */
-    const char *(*get_string)(const struct yetty_yconfig *self, const char *path,
+    const char *(*get_string)(const struct yetty_yconfig_config *self, const char *path,
                               const char *default_value);
     /* Get int value by slash path */
-    int (*get_int)(const struct yetty_yconfig *self, const char *path, int default_value);
+    int (*get_int)(const struct yetty_yconfig_config *self, const char *path, int default_value);
     /* Get bool value by slash path */
-    int (*get_bool)(const struct yetty_yconfig *self, const char *path, int default_value);
+    int (*get_bool)(const struct yetty_yconfig_config *self, const char *path, int default_value);
 
     /* Check if key exists */
-    int (*has)(const struct yetty_yconfig *self, const char *path);
+    int (*has)(const struct yetty_yconfig_config *self, const char *path);
 
     /* Set string value */
-    struct yetty_ycore_void_result (*set_string)(struct yetty_yconfig *self, const char *path,
+    struct yetty_ycore_void_result (*set_string)(struct yetty_yconfig_config *self, const char *path,
                                                  const char *value);
 
     /* Get sub-config at path (returns NULL if not found, no ownership transfer) */
-    struct yetty_yconfig *(*get_node)(const struct yetty_yconfig *self, const char *path);
+    struct yetty_yconfig_config *(*get_node)(const struct yetty_yconfig_config *self, const char *path);
 
     /* Resolve shell argv for execvp.
      *
      * If shell/command is set (via -e), tokenize it into argv (no shell
      * wrapper). Otherwise argv is { resolved_shell, NULL } where the shell
      * is $SHELL > shell/default > /bin/bash. */
-    struct yetty_ycore_void_result (*get_shell_argv)(const struct yetty_yconfig *self,
+    struct yetty_ycore_void_result (*get_shell_argv)(const struct yetty_yconfig_config *self,
                                                      struct yetty_yconfig_shell_argv *out);
 
     /* Legacy accessors */
-    int (*use_damage_tracking)(const struct yetty_yconfig *self);
-    int (*show_fps)(const struct yetty_yconfig *self);
-    int (*debug_damage_rects)(const struct yetty_yconfig *self);
-    uint32_t (*scrollback_lines)(const struct yetty_yconfig *self);
-    const char *(*font_family)(const struct yetty_yconfig *self);
+    int (*use_damage_tracking)(const struct yetty_yconfig_config *self);
+    int (*show_fps)(const struct yetty_yconfig_config *self);
+    int (*debug_damage_rects)(const struct yetty_yconfig_config *self);
+    uint32_t (*scrollback_lines)(const struct yetty_yconfig_config *self);
+    const char *(*font_family)(const struct yetty_yconfig_config *self);
 };
 
 /* Config base */
-struct yetty_yconfig {
-    const struct yetty_yconfig_ops *ops;
+struct yetty_yconfig_config {
+    const struct yetty_yconfig_config_ops *ops;
 };
 
 /* Common config keys */
@@ -100,4 +100,4 @@ struct yetty_yconfig_result yetty_yconfig_create(int argc, char *argv[],
 }
 #endif
 
-#endif /* YETTY_YCONFIG_H */
+#endif /* YETTY_YCONFIG_CONFIG_H */

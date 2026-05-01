@@ -5,7 +5,7 @@
 #include <yetty/yvnc/vnc-client.h>
 #include <yetty/ycore/event-loop.h>
 #include <yetty/yplatform/time.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include "protocol.h"
 
 #include <stddef.h>

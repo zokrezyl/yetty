@@ -15,7 +15,7 @@
 #include <yetty/ypaint-core/font-prim.h>
 #include <yetty/ypaint-core/text-span-prim.h>
 #include <yetty/ycore/util.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #define YPAINT_BUFFER_INITIAL_CAPACITY 1024
 

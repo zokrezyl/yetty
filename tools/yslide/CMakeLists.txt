@@ -1,7 +1,7 @@
 # yslide — interactive presentation editor (pure C, was yslides in poc).
 add_executable(yslide
     main.c
-    ${YETTY_ROOT}/src/yetty/ytrace.c
+    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
     ${YETTY_ROOT}/src/yetty/yplatform/getopt.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/thread.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/term.c

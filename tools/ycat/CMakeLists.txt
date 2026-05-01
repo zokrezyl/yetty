@@ -8,7 +8,7 @@
 
 add_executable(ycat
     main.c
-    ${YETTY_ROOT}/src/yetty/ytrace.c
+    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
     ${YETTY_ROOT}/src/yetty/yplatform/getopt.c
     ${YETTY_YPLATFORM_THREAD_SOURCES}
 )

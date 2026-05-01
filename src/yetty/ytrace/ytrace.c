@@ -2,7 +2,7 @@
  * ytrace-c: C implementation of switchable trace points
  */
 
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #if YTRACE_C_ENABLED
 

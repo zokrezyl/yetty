@@ -16,8 +16,8 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-#include <yetty/yetty.h>
-#include <yetty/yconfig.h>
+#include <yetty/yetty/yetty.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/platform/extract-assets.h>
 #include <yetty/ycore/event.h>
 #include <yetty/platform/platform-input-pipe.h>
@@ -39,10 +39,10 @@ WGPUSurface yetty_yplatform_create_surface_from_window(WGPUInstance instance,
 struct yetty_yplatform_app_state {
     struct android_app *app;
     ANativeWindow *window;
-    struct yetty_yetty *yetty;
+    struct yetty_yetty_yetty *yetty;
     struct yetty_ycore_input_pipe *pipe;
-    struct yetty_yconfig *config;
-    struct yetty_platform_pty_factory *pty_factory;
+    struct yetty_yconfig_config *config;
+    struct yetty_yplatform_pty_factory *pty_factory;
     WGPUInstance instance;
     WGPUSurface surface;
     pthread_t render_thread;
@@ -52,7 +52,7 @@ struct yetty_yplatform_app_state {
 
 /* Render thread args */
 struct yetty_yplatform_render_thread_args {
-    struct yetty_yetty *yetty;
+    struct yetty_yetty_yetty *yetty;
     int *running;
 };
 
@@ -189,8 +189,8 @@ static void init_yetty(struct yetty_yplatform_app_state *state)
     struct yetty_yconfig_result config_result;
     struct yetty_yplatform_input_pipe_result pipe_result;
     struct yetty_yplatform_pty_factory_result pty_result;
-    struct yetty_app_context ctx;
-    struct yetty_yetty_result yetty_result;
+    struct yetty_yetty_app_context ctx;
+    struct yetty_yetty_yetty_result yetty_result;
     struct yetty_yplatform_render_thread_args *args;
     int32_t width, height;
 
@@ -267,7 +267,7 @@ static void init_yetty(struct yetty_yplatform_app_state *state)
     state->pipe = pipe_result.value;
 
     /* PTY factory */
-    pty_result = yetty_platform_pty_factory_create(state->config, NULL);
+    pty_result = yetty_yplatform_pty_factory_create(state->config, NULL);
     if (!YETTY_IS_OK(pty_result)) {
         LOGE("Failed to create PTY factory");
         return;

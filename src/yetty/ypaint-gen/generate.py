@@ -272,7 +272,7 @@ def generate_c_source(schema, uniforms, buffers):
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ypaint-core/complex-prim-types.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
 {lib_includes}
@@ -752,7 +752,7 @@ def generate_yaml_parser(schema, uniforms, buffers):
 #include <yetty/ypaint-yaml/ypaint-yaml.h>
 #include <yetty/ypaint-core/buffer.h>
 #include <yetty/yfsvm/compiler.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <yaml.h>
 #include <stdlib.h>
 #include <string.h>

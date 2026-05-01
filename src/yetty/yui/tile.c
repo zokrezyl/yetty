@@ -1,12 +1,12 @@
 #include <yetty/yui/tile.h>
 #include <yetty/yui/view.h>
-#include <yetty/yconfig.h>
+#include <yetty/yconfig/config.h>
 #include <yetty/ycore/event.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yetty.h>
+#include <yetty/yetty/yetty.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/yvnc/vnc-viewer.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -755,7 +755,7 @@ void yetty_yui_tile_clear_focus(struct yetty_yui_tile *root)
  *===========================================================================*/
 
 struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
-    const struct yetty_yconfig *config, const struct yetty_context *yetty_ctx)
+    const struct yetty_yconfig_config *config, const struct yetty_context *yetty_ctx)
 {
     const char *type;
     struct yetty_yui_tile_ptr_result res;
@@ -773,8 +773,8 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
         const char *orient_str;
         enum yetty_yui_orientation orientation;
         float ratio;
-        struct yetty_yconfig *first_config;
-        struct yetty_yconfig *second_config;
+        struct yetty_yconfig_config *first_config;
+        struct yetty_yconfig_config *second_config;
         struct yetty_yui_tile_ptr_result first_res, second_res;
 
         /* Parse orientation */
@@ -835,7 +835,7 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
     /* Create view based on config or vnc/client override */
     {
         const char *vnc_client = NULL;
-        struct yetty_yconfig *app_config = yetty_ctx->app_context.config;
+        struct yetty_yconfig_config *app_config = yetty_ctx->app_context.config;
 
         if (app_config) {
             vnc_client = app_config->ops->get_string(app_config, "vnc/client", NULL);

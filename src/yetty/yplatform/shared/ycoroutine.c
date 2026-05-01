@@ -9,7 +9,7 @@
 
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yco/co.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <stdatomic.h>
 #include <stdlib.h>

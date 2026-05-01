@@ -14,7 +14,7 @@ extern "C" {
 struct yetty_ypaint_core_target;
 struct yetty_yrender_terminal_layer;
 struct yetty_ypaint_core_gpu_allocator;
-struct yetty_gpu_context;
+struct yetty_yetty_gpu_context;
 
 /* Result type */
 YETTY_YRESULT_DECLARE(yetty_yrender_target_ptr, struct yetty_ypaint_core_target *);

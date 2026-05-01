@@ -8,7 +8,7 @@
 
 #include <yetty/yrender-utils/tile-diff.h>
 #include <yetty/yplatform/ycoroutine.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
 

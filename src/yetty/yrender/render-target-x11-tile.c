@@ -13,7 +13,7 @@
 #include <yetty/yrender/render-target-x11-tile.h>
 #include <yetty/yrender-utils/tile-diff.h>
 #include <yetty/ycore/event-loop.h>
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/extensions/XShm.h>

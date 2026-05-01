@@ -9,7 +9,7 @@
 
 #include <yetty/ycat/ycat.h>
 
-#include <yetty/ytrace.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <stddef.h>
 #include <string.h>
