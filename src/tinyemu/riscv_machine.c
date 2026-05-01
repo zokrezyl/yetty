@@ -72,8 +72,7 @@ typedef struct RISCVMachine {
   _Atomic uint64_t timecmp[MAX_CPUS]; /* timer compare per CPU */
   /* PLIC */
   uint32_t plic_pending_irq;
-  uint32_t plic_served_irq[MAX_CPUS * 2];  /* per-context (M + S per CPU) */
-  uint32_t plic_enable[MAX_CPUS * 2];      /* per-context enable bits */
+  uint32_t plic_served_irq;
   IRQSignal plic_irq[32]; /* IRQ 0 is not used */
   /* HTIF */
   uint64_t htif_tohost, htif_fromhost;
@@ -335,37 +334,14 @@ static void clint_write(void *opaque, uint32_t offset, uint32_t val,
 
 static void plic_update_mip(RISCVMachine *s) {
   int i;
-  uint32_t m_pending, s_pending;
-  static uint64_t call_count = 0;
-  call_count++;
+  uint32_t mask;
+  mask = s->plic_pending_irq & ~s->plic_served_irq;
   for (i = 0; i < s->num_cpus; i++) {
-    int s_ctx = i * 2;
-    int m_ctx = i * 2 + 1;
-    m_pending = s->plic_pending_irq & s->plic_enable[m_ctx] & ~s->plic_served_irq[m_ctx];
-    s_pending = s->plic_pending_irq & s->plic_enable[s_ctx] & ~s->plic_served_irq[s_ctx];
-    uint32_t old_mip = riscv_cpu_get_mip(s->cpu_state[i]);
-    if ((call_count < 100) || (call_count % 10000) == 0 || m_pending || s_pending) {
-      ydebug("SYNC: PLIC_UPD cpu%d pend=0x%x en_s=0x%x en_m=0x%x srv_s=0x%x srv_m=0x%x m_pend=0x%x s_pend=0x%x",
-             i, s->plic_pending_irq, s->plic_enable[s_ctx], s->plic_enable[m_ctx],
-             s->plic_served_irq[s_ctx], s->plic_served_irq[m_ctx], m_pending, s_pending);
-    }
-    if (m_pending) {
-      riscv_cpu_set_mip(s->cpu_state[i], MIP_MEIP);
-      ydebug("SYNC: PLIC cpu%d MEIP SET pend=0x%x mip 0x%x->0x%x",
-             i, m_pending, old_mip, riscv_cpu_get_mip(s->cpu_state[i]));
-      ydebug("SYNC: PLIC cpu%d WAKEUP_MEIP pd=%d", i, riscv_cpu_get_power_down(s->cpu_state[i]));
+    if (mask) {
+      riscv_cpu_set_mip(s->cpu_state[i], MIP_MEIP | MIP_SEIP);
       smp_wakeup_cpu(s->smp, i);
     } else {
-      riscv_cpu_reset_mip(s->cpu_state[i], MIP_MEIP);
-    }
-    if (s_pending) {
-      riscv_cpu_set_mip(s->cpu_state[i], MIP_SEIP);
-      ydebug("SYNC: PLIC cpu%d SEIP SET pend=0x%x mip 0x%x->0x%x",
-             i, s_pending, old_mip, riscv_cpu_get_mip(s->cpu_state[i]));
-      ydebug("SYNC: PLIC cpu%d WAKEUP_SEIP pd=%d", i, riscv_cpu_get_power_down(s->cpu_state[i]));
-      smp_wakeup_cpu(s->smp, i);
-    } else {
-      riscv_cpu_reset_mip(s->cpu_state[i], MIP_SEIP);
+      riscv_cpu_reset_mip(s->cpu_state[i], MIP_MEIP | MIP_SEIP);
     }
   }
 }
@@ -373,56 +349,30 @@ static void plic_update_mip(RISCVMachine *s) {
 #define PLIC_HART_BASE 0x200000
 #define PLIC_HART_SIZE 0x1000
 
-#define PLIC_ENABLE_BASE 0x2000
-#define PLIC_ENABLE_STRIDE 0x80
-
 static uint32_t plic_read(void *opaque, uint32_t offset, int size_log2) {
   RISCVMachine *s = opaque;
   uint32_t val, mask;
-  int i, context, local_off;
+  int i;
   PLIC_LOCK();
   assert(size_log2 == 2);
-
-  /* Enable registers: 0x2000 + context * 0x80, each context has 32 words.
-   * TinyEMU only supports 31 IRQs, so only word 0 (offset 0) matters. */
-  if (offset >= PLIC_ENABLE_BASE && offset < PLIC_HART_BASE) {
-    uint32_t ctx_offset = offset - PLIC_ENABLE_BASE;
-    context = ctx_offset / PLIC_ENABLE_STRIDE;
-    uint32_t word_offset = (ctx_offset % PLIC_ENABLE_STRIDE) / 4;
-    if (context < s->num_cpus * 2 && word_offset == 0) {
-      val = s->plic_enable[context];
-    } else {
-      val = 0;  /* Out of bounds or word 1+ (no IRQs there) */
-    }
-  }
-  /* Per-hart context registers at 0x200000 + context * 0x1000 */
-  else if (offset >= PLIC_HART_BASE) {
-    context = (offset - PLIC_HART_BASE) / PLIC_HART_SIZE;
-    local_off = offset & (PLIC_HART_SIZE - 1);
-    if (context < s->num_cpus * 2) {
-      if (local_off == 0) {
-        /* Threshold register */
-        val = 0;
-      } else if (local_off == 4) {
-        /* Claim register - return highest pending IRQ for THIS context */
-        /* PLIC bit layout: bit N = interrupt source N, so return bit position directly */
-        mask = s->plic_pending_irq & s->plic_enable[context] & ~s->plic_served_irq[context];
-        if (mask != 0) {
-          i = ctz32(mask);
-          s->plic_served_irq[context] |= 1 << i;
-          plic_update_mip(s);
-          val = i;  /* bit N = IRQ N */
-        } else {
-          val = 0;
-        }
-      } else {
-        val = 0;
-      }
+  switch (offset) {
+  case PLIC_HART_BASE:
+    val = 0;
+    break;
+  case PLIC_HART_BASE + 4:
+    mask = s->plic_pending_irq & ~s->plic_served_irq;
+    if (mask != 0) {
+      i = ctz32(mask);
+      s->plic_served_irq |= 1 << i;
+      plic_update_mip(s);
+      val = i + 1;
     } else {
       val = 0;
     }
-  } else {
+    break;
+  default:
     val = 0;
+    break;
   }
   PLIC_UNLOCK();
   return val;
@@ -431,41 +381,19 @@ static uint32_t plic_read(void *opaque, uint32_t offset, int size_log2) {
 static void plic_write(void *opaque, uint32_t offset, uint32_t val,
                        int size_log2) {
   RISCVMachine *s = opaque;
-  int context, local_off;
 
   PLIC_LOCK();
   assert(size_log2 == 2);
-
-  /* Enable registers: 0x2000 + context * 0x80, each context has 32 words.
-   * TinyEMU only supports 31 IRQs, so only word 0 (offset 0) matters. */
-  if (offset >= PLIC_ENABLE_BASE && offset < PLIC_HART_BASE) {
-    uint32_t ctx_offset = offset - PLIC_ENABLE_BASE;
-    context = ctx_offset / PLIC_ENABLE_STRIDE;
-    uint32_t word_offset = (ctx_offset % PLIC_ENABLE_STRIDE) / 4;
-    ydebug("SYNC: PLIC_WR_EN off=0x%x ctx=%d word=%d val=0x%x", offset, context, word_offset, val);
-    if (context < s->num_cpus * 2 && word_offset == 0) {
-      s->plic_enable[context] = val;
-      ydebug("SYNC: PLIC_EN_SET ctx=%d val=0x%x", context, val);
+  switch (offset) {
+  case PLIC_HART_BASE + 4:
+    val--;
+    if (val < 32) {
+      s->plic_served_irq &= ~(1 << val);
       plic_update_mip(s);
     }
-    /* Ignore writes to word 1+ (no IRQs there for TinyEMU) */
-  }
-  /* Per-hart context registers at 0x200000 + context * 0x1000 */
-  else if (offset >= PLIC_HART_BASE) {
-    context = (offset - PLIC_HART_BASE) / PLIC_HART_SIZE;
-    local_off = offset & (PLIC_HART_SIZE - 1);
-    if (context < s->num_cpus * 2) {
-      if (local_off == 0) {
-        /* Threshold register - ignore */
-      } else if (local_off == 4) {
-        /* Complete register - mark IRQ as no longer being serviced */
-        /* PLIC bit layout: bit N = IRQ N, so use val directly (no decrement) */
-        if (val > 0 && val < 32) {
-          s->plic_served_irq[context] &= ~(1 << val);
-          plic_update_mip(s);
-        }
-      }
-    }
+    break;
+  default:
+    break;
   }
   PLIC_UNLOCK();
 }
@@ -475,9 +403,7 @@ static void plic_set_irq(void *opaque, int irq_num, int state) {
   uint32_t mask;
 
   PLIC_LOCK();
-  /* PLIC bit layout: bit N = interrupt source N (source 0 is reserved) */
-  mask = 1 << irq_num;
-  ydebug("PLIC: set_irq irq=%d state=%d pending=0x%x mask=0x%x", irq_num, state, s->plic_pending_irq, mask);
+  mask = 1 << (irq_num - 1);
   if (state)
     s->plic_pending_irq |= mask;
   else

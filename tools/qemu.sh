@@ -32,4 +32,4 @@ done
 content="$(sed -e 's/#.*$//' "$INI")"
 eval "args=( $content )"
 
-exec "$QEMU" "${args[@]}" "$@"
+sudo "$QEMU" "${args[@]}" "$@"
