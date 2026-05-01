@@ -88,7 +88,14 @@ android-arm64-v8a|android-x86_64)
         android-x86_64)    _T="x86_64-linux-android"  ;;
     esac
     CC="${_T}${ANDROID_API}-clang"; AR="llvm-ar" ;;
-webasm) CC=emcc; AR=emar ;;
+webasm|webasm-mt)
+    CC=emcc; AR=emar
+    if [ "$TARGET_PLATFORM" = "webasm-mt" ]; then
+        # -pthread enables atomics + bulk-memory; required for linking
+        # into yetty.wasm built with --shared-memory.
+        CFLAGS_EXTRA="$CFLAGS_EXTRA -pthread"
+    fi
+    ;;
 windows-x86_64)
     # Native MSVC — caller must have vcvarsall'd the shell. cl.exe + lib.exe.
     # MSYS2_ARG_CONV_EXCL='*' is applied locally on each cl/lib call

@@ -5,12 +5,13 @@
 #include <yetty/platform/platform-input-pipe.h>
 #include <yetty/platform/pty-pipe-source.h>
 #include <yetty/ytrace/ytrace.h>
-#include "webasm-pty-pipe-source.h"
-#include "webasm-pty.h"
 #include <emscripten/emscripten.h>
 #include <emscripten/threading.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 /* Forward declarations for webasm pipe functions (from pipe.c) */
 int yetty_yplatform_input_pipe_webasm_platform_input_pipe_has_pending(struct yetty_ycore_xthread_event_pipe *self);
@@ -22,11 +23,10 @@ void yetty_yplatform_input_pipe_webasm_platform_input_pipe_process(struct yetty_
 
 struct yetty_yplatform_webasm_event_loop;
 
-/* PTY pipe handle - stores callbacks for async data notification */
+/* PTY pipe handle - drains a real fd produced by tinyemu-pty */
 struct yetty_yplatform_pty_pipe_handle {
     int active;
-    int data_pending; /* Flag set by JS callback, read by main loop */
-    struct yetty_yplatform_webasm_pty_pipe_source *source;
+    int fd;
     yetty_pipe_alloc_cb alloc_cb;
     yetty_pipe_read_cb read_cb;
     void *cb_ctx;
@@ -133,9 +133,9 @@ static void main_loop_tick(void *arg)
         yetty_yplatform_input_pipe_webasm_platform_input_pipe_process(impl->platform_input_pipe);
     }
 
-    /* Process pending PTY data */
+    /* Drain any pending PTY data (non-blocking read of pty fds). */
     for (i = 0; i < MAX_PTY_PIPES; i++) {
-        if (impl->pty_pipes[i].data_pending) {
+        if (impl->pty_pipes[i].active) {
             process_pty_data(&impl->pty_pipes[i]);
         }
     }
@@ -322,56 +322,32 @@ static struct yetty_ycore_void_result webasm_broadcast(struct yetty_yplatform_ev
     return YETTY_OK_VOID();
 }
 
-/* PTY Pipe - callback-based on webasm (no fd polling) */
+/* PTY Pipe - drains the pty fd produced by tinyemu-pty (real pipe(2) fd).
+ * The VM thread writes to pty_pipe[1] from inside its libuv loop; we read
+ * pty_pipe[0] non-blockingly from the emscripten main-loop tick. */
 
-/* Callback from JS when data is available - just sets flag, main loop does read.
- * This avoids JS->C->JS call pattern that breaks Asyncify. */
-static void on_pty_data_available(void *user_data)
-{
-    struct yetty_yplatform_pty_pipe_handle *ph = user_data;
-
-    if (!ph->active) {
-        return;
-    }
-
-    /* Just set flag - main loop will read the data */
-    ph->data_pending = 1;
-    EM_ASM({ console.log('[pty] on_pty_data_available: data_pending set'); });
-}
-
-/* Called from main loop to process pending PTY data */
 static void process_pty_data(struct yetty_yplatform_pty_pipe_handle *ph)
 {
     char *buf = NULL;
     size_t buflen = 0;
-    struct yetty_ycore_size_result read_res;
-    struct yetty_yplatform_webasm_pty *pty;
+    ssize_t n;
 
-    if (!ph->active || !ph->data_pending || !ph->alloc_cb || !ph->read_cb || !ph->source) {
+    if (!ph->active || ph->fd < 0 || !ph->alloc_cb || !ph->read_cb) {
         return;
     }
 
-    ph->data_pending = 0;
-
-    /* Get PTY from pipe source using container_of */
-    pty = container_of(ph->source, struct yetty_yplatform_webasm_pty, pipe_source);
-
-    /* Call alloc_cb to get a buffer */
     ph->alloc_cb(ph->cb_ctx, 4096, &buf, &buflen);
     if (!buf || buflen == 0) {
         return;
     }
 
-    /* Read data from PTY into buffer */
-    read_res = pty->base.ops->read(&pty->base, buf, buflen);
-    if (!YETTY_IS_OK(read_res) || read_res.value == 0) {
+    n = read(ph->fd, buf, buflen);
+    if (n <= 0) {
+        /* EAGAIN/EWOULDBLOCK or eof - nothing to do this tick */
         return;
     }
 
-    EM_ASM({ console.log('[pty] process_pty_data: read ' + $0 + ' bytes'); }, (int)read_res.value);
-
-    /* Call read_cb with the data (like libuv's on_pty_pipe_read) */
-    ph->read_cb(ph->cb_ctx, buf, (long)read_res.value);
+    ph->read_cb(ph->cb_ctx, buf, (long)n);
 }
 
 static struct yetty_ycore_pipe_id_result webasm_register_pty_pipe(
@@ -379,9 +355,12 @@ static struct yetty_ycore_pipe_id_result webasm_register_pty_pipe(
     yetty_pipe_alloc_cb alloc_cb, yetty_pipe_read_cb read_cb, void *cb_ctx)
 {
     struct yetty_yplatform_webasm_event_loop *impl = container_of(self, struct yetty_yplatform_webasm_event_loop, base);
-    struct yetty_yplatform_webasm_pty_pipe_source *webasm_source;
     struct yetty_yplatform_pty_pipe_handle *ph;
-    int id;
+    int id, fd, flags;
+
+    if (!source || !alloc_cb || !read_cb) {
+        return YETTY_ERR(yetty_ycore_pipe_id, "invalid source or callbacks");
+    }
 
     /* Find free slot */
     for (id = 0; id < MAX_PTY_PIPES; id++) {
@@ -393,20 +372,23 @@ static struct yetty_ycore_pipe_id_result webasm_register_pty_pipe(
         return YETTY_ERR(yetty_ycore_pipe_id, "too many pty pipes");
     }
 
+    fd = (int)source->abstract;
+    /* Force non-blocking so process_pty_data never stalls the rAF tick. */
+    flags = fcntl(fd, F_GETFL, 0);
+    if (flags >= 0) {
+        (void)fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    }
+
     ph = &impl->pty_pipes[id];
     memset(ph, 0, sizeof(*ph));
     ph->active = 1;
+    ph->fd = fd;
     ph->alloc_cb = alloc_cb;
     ph->read_cb = read_cb;
     ph->cb_ctx = cb_ctx;
     ph->impl = impl;
 
-    /* Cast to WebASM pipe source and set callback */
-    webasm_source = (struct yetty_yplatform_webasm_pty_pipe_source *)source;
-    ph->source = webasm_source;
-    yetty_yplatform_webasm_pty_pipe_source_set_callback(webasm_source, on_pty_data_available, ph);
-
-    ydebug("webasm_event_loop: register_pty_pipe id=%d", id);
+    ydebug("webasm_event_loop: register_pty_pipe id=%d fd=%d", id, fd);
 
     return YETTY_OK(yetty_ycore_pipe_id, id);
 }
@@ -421,10 +403,8 @@ static struct yetty_ycore_void_result webasm_unregister_pty_pipe(
     }
 
     if (impl->pty_pipes[id].active) {
-        if (impl->pty_pipes[id].source) {
-            yetty_yplatform_webasm_pty_pipe_source_set_callback(impl->pty_pipes[id].source, NULL, NULL);
-        }
         impl->pty_pipes[id].active = 0;
+        impl->pty_pipes[id].fd = -1;
     }
 
     ydebug("webasm_event_loop: unregister_pty_pipe id=%d", id);

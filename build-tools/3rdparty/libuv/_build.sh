@@ -184,12 +184,47 @@ android-arm64-v8a|android-x86_64)
     )
     ;;
 
-webasm)
+webasm|webasm-mt)
     command -v emcmake >/dev/null 2>&1 || {
         echo "error: emcmake not found — source the .#3rdparty-webasm shell" >&2
         exit 1
     }
     EMCMAKE_PREFIX="emcmake"
+    if [ "$TARGET_PLATFORM" = "webasm-mt" ]; then
+        # -pthread on emscripten enables atomics + bulk-memory features
+        # so the resulting .a is link-compatible with yetty.wasm built
+        # with --shared-memory (USE_PTHREADS).
+        CMAKE_ARGS+=(
+            "-DCMAKE_C_FLAGS=-pthread"
+            "-DCMAKE_CXX_FLAGS=-pthread"
+        )
+    fi
+    # Upstream libuv has no Emscripten platform port: when emcmake sets
+    # CMAKE_SYSTEM_NAME=Emscripten, none of the unix backend sources
+    # (posix-poll, posix-hrtime, no-proctitle, …) get added, and
+    # core.c/loop.c end up with undefined symbols (uv__io_poll,
+    # uv__hrtime, uv__platform_loop_init, uv__process_title_cleanup, …).
+    # Bolt on an Emscripten platform clause via target_sources AFTER
+    # the upstream add_library, so it works regardless of upstream
+    # ordering between the per-system clauses and the add_library call.
+    if ! grep -q "yetty patch: emscripten" "$SRC_DIR/CMakeLists.txt"; then
+        cat >> "$SRC_DIR/CMakeLists.txt" <<'EOF'
+
+# yetty patch: emscripten platform sources (generic POSIX backend)
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  target_sources(uv_a PRIVATE
+       src/unix/no-fsevents.c
+       src/unix/no-proctitle.c
+       src/unix/posix-hrtime.c
+       src/unix/posix-poll.c)
+endif()
+EOF
+        # Also patch include/uv/unix.h so __EMSCRIPTEN__ pulls in the
+        # generic posix.h (which defines UV_PLATFORM_LOOP_FIELDS with the
+        # poll_fds members posix-poll.c relies on).
+        sed -i 's|#elif defined(__APPLE__)|#elif defined(__EMSCRIPTEN__)\n# include "uv/posix.h"\n#elif defined(__APPLE__)|' \
+            "$SRC_DIR/include/uv/unix.h"
+    fi
     ;;
 
 windows-x86_64)

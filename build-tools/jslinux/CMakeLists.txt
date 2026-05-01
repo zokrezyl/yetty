@@ -245,11 +245,6 @@ add_custom_target(jslinux-assets
     COMMENT "JSLinux assets ready"
 )
 
-# Export disk image paths for incbin embedding in webasm target
+# Export disk image path for incbin embedding in webasm target
 set(JSLINUX_ALPINE_DISK_IMG "${JSLINUX_DIR}/alpine-rootfs.img" PARENT_SCOPE)
-set(JSLINUX_ALPINE_EXTENDED_IMG "${JSLINUX_DIR}/alpine-extended-rootfs.img" PARENT_SCOPE)
-set(JSLINUX_KERNEL_RISCV64 "${JSLINUX_DIR}/kernel-riscv64.bin" PARENT_SCOPE)
-set(JSLINUX_OPENSBI "${JSLINUX_DIR}/opensbi-fw_jump.elf" PARENT_SCOPE)
 set(JSLINUX_ALPINE_DISK_CFG "${JSLINUX_DIR}/alpine-disk.cfg" PARENT_SCOPE)
-set(JSLINUX_ALPINE_EXTENDED_CFG "${JSLINUX_DIR}/alpine-extended-disk.cfg" PARENT_SCOPE)
-set(JSLINUX_RISCVEMU_WASM "${JSLINUX_BUILD_DIR}/jslinux/riscvemu64-wasm.wasm" PARENT_SCOPE)

@@ -164,7 +164,15 @@ android-arm64-v8a|android-x86_64)
         "-DANDROID_PLATFORM=android-${ANDROID_API}"
         "-DPNG_HARDWARE_OPTIMIZATIONS=OFF"
     ) ;;
-webasm) EMCMAKE_PREFIX="emcmake"; CMAKE_ARGS+=("-DPNG_HARDWARE_OPTIMIZATIONS=OFF") ;;
+webasm|webasm-mt)
+    EMCMAKE_PREFIX="emcmake"; CMAKE_ARGS+=("-DPNG_HARDWARE_OPTIMIZATIONS=OFF")
+    if [ "$TARGET_PLATFORM" = "webasm-mt" ]; then
+        # -pthread on emscripten enables atomics + bulk-memory wasm
+        # features so the resulting .a links into yetty.wasm built
+        # with --shared-memory (USE_PTHREADS).
+        CMAKE_ARGS+=("-DCMAKE_C_FLAGS=-pthread" "-DCMAKE_CXX_FLAGS=-pthread")
+    fi
+    ;;
 windows-x86_64)
     # Native MSVC — caller must have vcvarsall'd the shell. cmake auto-
     # detects cl.exe.

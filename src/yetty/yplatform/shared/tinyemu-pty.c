@@ -31,6 +31,10 @@
 #include <tinyemu/slirp/libslirp.h>
 #endif
 
+#if defined(__EMSCRIPTEN__)
+#include <uv.h>
+#endif
+
 /* TinyEMU PTY implementation */
 struct yetty_yplatform_tinyemu_pty {
     struct yetty_platform_pty base;
@@ -51,6 +55,16 @@ struct yetty_yplatform_tinyemu_pty {
 
     /* Config path */
     char *config_path;
+
+#if defined(__EMSCRIPTEN__)
+    /* Per-thread libuv loop driving the VM on WASM (no select() in WASM,
+     * so we use uv_pipe_t for input and uv_idle_t for VM cycles). */
+    uv_loop_t vm_loop;
+    uv_pipe_t vm_input_pipe;
+    uv_timer_t vm_cycle;
+    uv_timer_t vm_resize_timer;
+    int vm_loop_initialized;
+#endif
 };
 
 /* External: get data/config directories (platform-specific) */
@@ -273,8 +287,10 @@ static EthernetDevice *slirp_open(void)
     net->mac_addr[5] = 0x01;
     net->opaque = slirp_state;
     net->write_packet = slirp_write_packet;
+#if !defined(__EMSCRIPTEN__)
     net->select_fill = slirp_select_fill1;
     net->select_poll = slirp_select_poll1;
+#endif
 
     return net;
 }
@@ -284,6 +300,92 @@ static EthernetDevice *slirp_open(void)
 #define MAX_EXEC_CYCLE 500000
 #define MAX_SLEEP_TIME 10
 
+#if defined(__EMSCRIPTEN__)
+/* libuv allocator: per-pipe scratch buffer */
+static void on_vm_input_alloc(uv_handle_t *handle, size_t suggested, uv_buf_t *buf)
+{
+    static char scratch[4096];
+    (void)handle;
+    (void)suggested;
+    buf->base = scratch;
+    buf->len = sizeof(scratch);
+}
+
+/* Forward declaration so input handler can wake the cycle timer */
+static void on_vm_cycle(uv_timer_t *handle);
+
+/* Keyboard input arrived from the OS (terminal write side) */
+static void on_vm_input_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
+{
+    struct yetty_yplatform_tinyemu_pty *pty = stream->data;
+    VirtMachine *m = pty ? pty->vm : NULL;
+
+    if (nread <= 0 || !m || !m->console_dev) {
+        return;
+    }
+    if (!virtio_console_can_write_data(m->console_dev)) {
+        /* Drop input if VM console is not ready (matches select() path
+         * which simply wouldn't read in that case). */
+        return;
+    }
+
+    int can = virtio_console_get_write_len(m->console_dev);
+    int n = (int)nread;
+    if (n > can) n = can;
+    if (n > 0) {
+        virtio_console_write_data(m->console_dev, (uint8_t *)buf->base, n);
+    }
+
+    /* Wake the VM immediately so the keystroke is consumed in this
+     * loop iteration instead of waiting out the current sleep. */
+    if (pty->running) {
+        uv_timer_start(&pty->vm_cycle, on_vm_cycle, 0, 0);
+    }
+}
+
+/* uv_timer callback: step the VM, then re-arm to fire after the
+ * guest's next deadline. Mirrors the desktop loop's
+ *   delay = virt_machine_get_sleep_duration(...);
+ *   select(..., timeout=delay);
+ *   virt_machine_interp(...);
+ * pattern — without the host-time advance from the sleep, the guest
+ * sits in WFI forever waiting for a timer interrupt that never fires
+ * in guest-time. The render thread runs in a different worker, so
+ * blocking this thread between cycles is safe. */
+static void on_vm_cycle(uv_timer_t *handle)
+{
+    struct yetty_yplatform_tinyemu_pty *pty = handle->data;
+    if (!pty || !pty->running || !pty->vm) {
+        uv_timer_stop(handle);
+        if (pty) {
+            uv_stop(&pty->vm_loop);
+        }
+        return;
+    }
+    virt_machine_interp(pty->vm, MAX_EXEC_CYCLE);
+
+    int delay = virt_machine_get_sleep_duration(pty->vm, MAX_SLEEP_TIME);
+    if (delay < 0) delay = 0;
+    uv_timer_start(handle, on_vm_cycle, (uint64_t)delay, 0);
+}
+
+/* uv_timer callback: fires once after ~3s to re-deliver the initial
+ * cols/rows (see comment in vm_thread_func explaining the race). */
+static void on_vm_resize_redrive(uv_timer_t *handle)
+{
+    struct yetty_yplatform_tinyemu_pty *pty = handle->data;
+    if (!pty || !pty->vm) {
+        return;
+    }
+    VirtMachine *m = pty->vm;
+    if (m->console_dev && pty->cols > 0 && pty->rows > 0) {
+        virtio_console_resize_event(m->console_dev, (int)pty->cols, (int)pty->rows);
+        yinfo("tinyemu: re-fired resize %ux%u (timer)", pty->cols, pty->rows);
+    }
+}
+#endif /* EMSCRIPTEN */
+
+#if !defined(__EMSCRIPTEN__)
 static void vm_run_once(struct yetty_yplatform_tinyemu_pty *pty)
 {
     VirtMachine *m = pty->vm;
@@ -333,15 +435,53 @@ static void vm_run_once(struct yetty_yplatform_tinyemu_pty *pty)
 
     virt_machine_interp(m, MAX_EXEC_CYCLE);
 }
+#endif /* !EMSCRIPTEN */
 
 /* VM thread function */
 static void *vm_thread_func(void *arg)
 {
     struct yetty_yplatform_tinyemu_pty *pty = arg;
-    struct timespec start_ts;
-    int redrive_done = 0;
 
     yinfo("vm_thread_func: VM thread started");
+
+#if defined(__EMSCRIPTEN__)
+    /* Build a per-thread libuv loop driving the VM. uv_pipe_t handles
+     * keyboard input (os_input_pipe[0]); uv_idle_t steps the VM every
+     * loop iteration. No select(), no blocking read(). */
+    if (uv_loop_init(&pty->vm_loop) != 0) {
+        yerror("vm_thread_func: uv_loop_init failed");
+        return NULL;
+    }
+    pty->vm_loop_initialized = 1;
+
+    if (uv_pipe_init(&pty->vm_loop, &pty->vm_input_pipe, 0) != 0) {
+        yerror("vm_thread_func: uv_pipe_init failed");
+        uv_loop_close(&pty->vm_loop);
+        return NULL;
+    }
+    pty->vm_input_pipe.data = pty;
+
+    if (uv_pipe_open(&pty->vm_input_pipe, pty->os_input_pipe[0]) != 0) {
+        yerror("vm_thread_func: uv_pipe_open failed");
+    } else {
+        uv_read_start((uv_stream_t *)&pty->vm_input_pipe, on_vm_input_alloc, on_vm_input_read);
+    }
+
+    uv_timer_init(&pty->vm_loop, &pty->vm_cycle);
+    pty->vm_cycle.data = pty;
+    uv_timer_start(&pty->vm_cycle, on_vm_cycle, 0, 0);
+
+    uv_timer_init(&pty->vm_loop, &pty->vm_resize_timer);
+    pty->vm_resize_timer.data = pty;
+    uv_timer_start(&pty->vm_resize_timer, on_vm_resize_redrive, 3000, 0);
+
+    uv_run(&pty->vm_loop, UV_RUN_DEFAULT);
+
+    uv_loop_close(&pty->vm_loop);
+    pty->vm_loop_initialized = 0;
+#else
+    struct timespec start_ts;
+    int redrive_done = 0;
 
     clock_gettime(CLOCK_MONOTONIC, &start_ts);
 
@@ -372,6 +512,7 @@ static void *vm_thread_func(void *arg)
             }
         }
     }
+#endif
 
     yinfo("vm_thread_func: VM thread exiting");
     return NULL;
@@ -737,3 +878,16 @@ struct yetty_yplatform_pty_factory_result yetty_yplatform_tinyemu_pty_factory_cr
 
     return YETTY_OK(yetty_yplatform_pty_factory, &factory->base);
 }
+
+#if defined(__EMSCRIPTEN__)
+/* On the WebAssembly target the only pty implementation is the embedded
+ * tinyemu RISC-V VM, so the public yetty_yplatform_pty_factory_create
+ * symbol is just an alias of tinyemu_pty_factory_create (mirrors the
+ * iOS variant). */
+struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
+    struct yetty_yconfig *config, void *os_specific)
+{
+    (void)os_specific;
+    return tinyemu_pty_factory_create(config);
+}
+#endif

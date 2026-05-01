@@ -51,6 +51,7 @@ jobs:
           - android-arm64-v8a
           - android-x86_64
           - webasm
+          - webasm-mt
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main

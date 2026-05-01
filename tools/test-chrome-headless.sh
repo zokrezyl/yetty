@@ -271,7 +271,6 @@ $CHROME \
     --enable-features=Vulkan,WebGPU \
     --use-vulkan \
     --allow-insecure-localhost \
-    --disable-web-security \
     --user-data-dir="/tmp/yetty-chrome-prof.$$" \
     about:blank \
     > /tmp/yetty-chrome-stderr.log 2>&1 &

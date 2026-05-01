@@ -119,7 +119,7 @@ android-arm64-v8a|android-x86_64)
         "-DANDROID_ABI=${_ABI}"
         "-DANDROID_PLATFORM=android-${ANDROID_API}"
     ) ;;
-webasm)
+webasm|webasm-mt)
     EMCMAKE_PREFIX="emcmake"
     # functable.c (the runtime SIMD-vs-scalar dispatch) miscompiles
     # under emscripten 4.0.23 — produces wasm with i32 left on the
@@ -128,6 +128,11 @@ webasm)
     # to dispatch on wasm anyway (no SIMD/non-SIMD split for the
     # browser to pick from), so disable the dispatch entirely.
     CMAKE_ARGS+=("-DWITH_RUNTIME_CPU_DETECTION=OFF")
+    if [ "$TARGET_PLATFORM" = "webasm-mt" ]; then
+        # -pthread enables atomics + bulk-memory; required for linking
+        # into yetty.wasm built with --shared-memory.
+        CMAKE_ARGS+=("-DCMAKE_C_FLAGS=-pthread" "-DCMAKE_CXX_FLAGS=-pthread")
+    fi
     ;;
 windows-x86_64)
     # Native MSVC — caller must have vcvarsall'd the shell. cmake auto-

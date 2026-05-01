@@ -503,3 +503,4 @@ int yetty_incbin_assets_has_qemu(struct yetty_incbin_assets *assets)
     }
     return 0;
 }
+

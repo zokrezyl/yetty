@@ -121,10 +121,20 @@ android-arm64-v8a|android-x86_64)
         "-DANDROID_ABI=${_ABI}"
         "-DANDROID_PLATFORM=android-${ANDROID_API}"
     ) ;;
-webasm)
+webasm|webasm-mt)
     EMCMAKE_PREFIX="emcmake"
     # webasm has no SIMD path in libjpeg-turbo.
-    CMAKE_ARGS+=("-DWITH_SIMD=OFF") ;;
+    CMAKE_ARGS+=("-DWITH_SIMD=OFF")
+    if [ "$TARGET_PLATFORM" = "webasm-mt" ]; then
+        # -pthread on emscripten enables atomics + bulk-memory features
+        # so the resulting .a is link-compatible with yetty.wasm built
+        # with --shared-memory (USE_PTHREADS).
+        CMAKE_ARGS+=(
+            "-DCMAKE_C_FLAGS=-pthread"
+            "-DCMAKE_CXX_FLAGS=-pthread"
+        )
+    fi
+    ;;
 windows-x86_64)
     # Native MSVC — caller must have vcvarsall'd the shell.
     : # cmake's default Ninja+cl pickup is fine
