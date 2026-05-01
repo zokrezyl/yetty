@@ -13,8 +13,8 @@
 #include <string.h>
 
 /* Forward declarations for webasm pipe functions (from pipe.c) */
-int yetty_yplatform_input_pipe_webasm_platform_input_pipe_has_pending(struct yetty_ycore_input_pipe *self);
-void yetty_yplatform_input_pipe_webasm_platform_input_pipe_process(struct yetty_ycore_input_pipe *self);
+int yetty_yplatform_input_pipe_webasm_platform_input_pipe_has_pending(struct yetty_ycore_xthread_event_pipe *self);
+void yetty_yplatform_input_pipe_webasm_platform_input_pipe_process(struct yetty_ycore_xthread_event_pipe *self);
 
 #define MAX_LISTENERS_PER_TYPE 64
 #define MAX_PTY_PIPES 16
@@ -58,7 +58,7 @@ struct yetty_yplatform_webasm_event_loop {
     struct yetty_yplatform_timer_handle timers[MAX_TIMERS];
     int next_timer_id;
 
-    struct yetty_ycore_input_pipe *platform_input_pipe;
+    struct yetty_ycore_xthread_event_pipe *platform_input_pipe;
     int running;
 };
 
@@ -550,7 +550,7 @@ static void webasm_request_render(struct yetty_yplatform_event_loop *self)
 /* Factory */
 
 struct yetty_ycore_event_loop_result yetty_ycore_event_loop_create(
-    struct yetty_ycore_input_pipe *pipe)
+    struct yetty_ycore_xthread_event_pipe *pipe)
 {
     struct yetty_yplatform_webasm_event_loop *impl;
 

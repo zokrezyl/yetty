@@ -16,8 +16,8 @@ target_link_libraries(yetty_yecho PUBLIC
     yetty_yfont_shader_glyph
     yetty_yface
     # yplot brings yfsvm + yexpr + yrender transitively; needed for
-    # {plot: ...} blocks. yrender drags GPU-side refs (yetty_webgpu_error_*)
+    # {plot: ...} blocks. yrender drags GPU-side refs (yetty_ywebgpu_error_*)
     # that we don't actually call but the linker still wants resolved.
     yetty_yplot
-    yetty_webgpu
+    yetty_ywebgpu
 )

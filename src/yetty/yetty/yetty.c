@@ -14,6 +14,11 @@
 #endif
 #include <yetty/yterm/terminal.h>
 #include <yetty/webgpu/error.h>
+#include <yetty/ywebgpu/utils.h>
+#include <yetty/ywebgpu/limits.h>
+#include <yetty/ywebgpu/request.h>
+#include <yetty/ycore/math.h>
+#include <yetty/yevent/dispatch.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui/workspace.h>
 #include <yetty/yui/tile.h>
@@ -82,31 +87,9 @@ struct yetty_yetty_yetty {
 #define YETTY_MOD_CONTROL 0x0002
 
 /* Clamp helpers — no float.h dependency needed. */
-static float yetty_clampf(float v, float lo, float hi)
-{
-    if (v < lo) {
-        return lo;
-    }
-    if (v > hi) {
-        return hi;
-    }
-    return v;
-}
+/* yetty_clampf moved to <yetty/ycore/math.h> */
 
-/* Post an event asynchronously by writing it to the platform input pipe.
- * This decouples the translation (e.g. Ctrl+Scroll → ZOOM_VISUAL) from the
- * handler, and gives rpc/keyboard-mapping paths one entry point to inject
- * the same named events. */
-static void yetty_post_event_async(struct yetty_yetty_yetty *yetty,
-                                   const struct yetty_yui_event *event)
-{
-    struct yetty_ycore_input_pipe *pipe = yetty->context.app_context.platform_input_pipe;
-    if (!pipe || !pipe->ops || !pipe->ops->write) {
-        yerror("yetty_post_event_async: no input pipe available");
-        return;
-    }
-    pipe->ops->write(pipe, event, sizeof(*event));
-}
+/* Event posting / listener registration moved to <yetty/yevent/dispatch.h> */
 
 /*===========================================================================
  * Event handling
@@ -208,7 +191,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             struct yetty_yui_event ev = {0};
             ev.type = YETTY_YCORE_ZOOM_CELL_SIZE;
             ev.zoom_cell_size.delta = event->scroll.dy * 0.04f;
-            yetty_post_event_async(yetty, &ev);
+            yetty_yevent_post_async(yetty->context.app_context.platform_input_pipe, &ev);
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (ctrl) {
@@ -217,7 +200,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             ev.zoom_visual.delta = event->scroll.dy * 0.1f;
             ev.zoom_visual.anchor_x = event->scroll.x;
             ev.zoom_visual.anchor_y = event->scroll.y;
-            yetty_post_event_async(yetty, &ev);
+            yetty_yevent_post_async(yetty->context.app_context.platform_input_pipe, &ev);
             return YETTY_OK(yetty_ycore_int, 1);
         }
         /* No zoom modifier — fall through to workspace forwarding below. */
@@ -235,7 +218,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             struct yetty_yui_event ev = {0};
             ev.type = YETTY_YCORE_ZOOM_VISUAL;
             ev.zoom_visual.reset = 1;
-            yetty_post_event_async(yetty, &ev);
+            yetty_yevent_post_async(yetty->context.app_context.platform_input_pipe, &ev);
             ydebug("yetty: visual zoom EXIT (key=%d)", event->key.key);
         }
         return YETTY_OK(yetty_ycore_int, 1);
@@ -264,7 +247,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             ev.type = YETTY_YCORE_ZOOM_VISUAL_PAN;
             ev.zoom_visual_pan.dx = dx;
             ev.zoom_visual_pan.dy = dy;
-            yetty_post_event_async(yetty, &ev);
+            yetty_yevent_post_async(yetty->context.app_context.platform_input_pipe, &ev);
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
@@ -494,138 +477,18 @@ static struct yetty_ycore_int_result yetty_event_handler(
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
+/* Bind yetty's main listener to the event loop for all event types this
+ * dispatcher cares about. Thin wrapper over yetty_yevent_register_default_listeners
+ * that knows where the listener and event loop live on the yetty struct. */
 static struct yetty_ycore_void_result register_event_listeners(struct yetty_yetty_yetty *yetty)
 {
-    struct yetty_yplatform_event_loop *el = yetty->event_loop;
-    struct yetty_ycore_void_result res;
-
     yetty->listener.handler = yetty_event_handler;
-
-    /* Keyboard events */
-    res = el->ops->register_listener(el, YETTY_YCORE_KEY_DOWN, &yetty->listener, 0);
-    if (!YETTY_IS_OK(res)) {
-        return res;
-    }
-    res = el->ops->register_listener(el, YETTY_YCORE_KEY_UP, &yetty->listener, 0);
-    if (!YETTY_IS_OK(res)) {
-        return res;
-    }
-    res = el->ops->register_listener(el, YETTY_YCORE_CHAR, &yetty->listener, 0);
-    if (!YETTY_IS_OK(res)) {
-        return res;
-    }
-
-    /* Mouse events */
-    res = el->ops->register_listener(el, YETTY_YCORE_MOUSE_DOWN, &yetty->listener, 0);
-    if (!YETTY_IS_OK(res)) {
-        return res;
-    }
-    res = el->ops->register_listener(el, YETTY_YCORE_MOUSE_UP, &yetty->listener, 0);
-    if (!YETTY_IS_OK(res)) {
-        return res;
-    }
-    res = el->ops->register_listener(el, YETTY_YCORE_MOUSE_MOVE, &yetty->listener, 0);
-    if (!YETTY_IS_OK(res)) {
-        return res;
-    }
-    res = el->ops->register_listener(el, YETTY_YCORE_MOUSE_DRAG, &yetty->listener, 0);
-    if (!YETTY_IS_OK(res)) {
-        return res;
-    }
-    res = el->ops->register_listener(el, YETTY_YCORE_SCROLL, &yetty->listener, 0);
-    if (!YETTY_IS_OK(res)) {
-        return res;
-    }
-
-    /* Other events */
-    res = el->ops->register_listener(el, YETTY_YCORE_RESIZE, &yetty->listener, 0);
-    if (!YETTY_IS_OK(res)) {
-        return res;
-    }
-    res = el->ops->register_listener(el, YETTY_YCORE_RENDER, &yetty->listener, 0);
-    if (!YETTY_IS_OK(res)) {
-        return res;
-    }
-    res = el->ops->register_listener(el, YETTY_YCORE_WINDOW_REFRESH, &yetty->listener, 0);
-    if (!YETTY_IS_OK(res)) {
-        return res;
-    }
-    res = el->ops->register_listener(el, YETTY_YCORE_SHUTDOWN, &yetty->listener, 0);
-    if (!YETTY_IS_OK(res)) {
-        return res;
-    }
-
-    /* Named zoom events — consumed here (ZOOM_VISUAL / ZOOM_VISUAL_PAN) or
-     * forwarded to the workspace (ZOOM_CELL_SIZE). Same entry point for
-     * RPC / kb-map injection. */
-    res = el->ops->register_listener(el, YETTY_YCORE_ZOOM_VISUAL, &yetty->listener, 0);
-    if (!YETTY_IS_OK(res)) {
-        return res;
-    }
-    res = el->ops->register_listener(el, YETTY_YCORE_ZOOM_VISUAL_PAN, &yetty->listener, 0);
-    if (!YETTY_IS_OK(res)) {
-        return res;
-    }
-    /* ZOOM_VISUAL_APPLY is forwarded via workspace_on_event, not dispatched,
-     * but register a listener so the event-loop knows the type exists. */
-    res = el->ops->register_listener(el, YETTY_YCORE_ZOOM_VISUAL_APPLY, &yetty->listener, 0);
-    if (!YETTY_IS_OK(res)) {
-        return res;
-    }
-    res = el->ops->register_listener(el, YETTY_YCORE_ZOOM_CELL_SIZE, &yetty->listener, 0);
-    if (!YETTY_IS_OK(res)) {
-        return res;
-    }
-
-    ydebug("yetty: registered for all events");
-    return YETTY_OK_VOID();
+    return yetty_yevent_register_default_listeners(yetty->event_loop, &yetty->listener);
 }
 
 /*===========================================================================
  * WebGPU initialization
  *===========================================================================*/
-
-static const char *backend_type_name(WGPUBackendType t)
-{
-    switch (t) {
-    case WGPUBackendType_Undefined:
-        return "Undefined";
-    case WGPUBackendType_Null:
-        return "Null";
-    case WGPUBackendType_WebGPU:
-        return "WebGPU";
-    case WGPUBackendType_D3D11:
-        return "D3D11";
-    case WGPUBackendType_D3D12:
-        return "D3D12";
-    case WGPUBackendType_Metal:
-        return "Metal";
-    case WGPUBackendType_Vulkan:
-        return "Vulkan";
-    case WGPUBackendType_OpenGL:
-        return "OpenGL";
-    case WGPUBackendType_OpenGLES:
-        return "OpenGLES";
-    default:
-        return "Unknown";
-    }
-}
-
-static const char *adapter_type_name(WGPUAdapterType t)
-{
-    switch (t) {
-    case WGPUAdapterType_DiscreteGPU:
-        return "DiscreteGPU";
-    case WGPUAdapterType_IntegratedGPU:
-        return "IntegratedGPU";
-    case WGPUAdapterType_CPU:
-        return "CPU";
-    case WGPUAdapterType_Unknown:
-        return "Unknown";
-    default:
-        return "Unknown";
-    }
-}
 
 void yetty_log_gpu_info(WGPUAdapter adapter)
 {
@@ -634,180 +497,13 @@ void yetty_log_gpu_info(WGPUAdapter adapter)
         return;
     }
 
-    WGPUAdapterInfo info = {0};
-    if (wgpuAdapterGetInfo(adapter, &info) != WGPUStatus_Success) {
-        ywarn("yetty_log_gpu_info: wgpuAdapterGetInfo failed");
+    char *desc = yetty_ywebgpu_get_webgpu_description(adapter);
+    if (!desc) {
+        ywarn("yetty_log_gpu_info: failed to get WebGPU description");
         return;
     }
-
-    yinfo("GPU backend:     %s", backend_type_name(info.backendType));
-    yinfo("GPU adapter:     %s", adapter_type_name(info.adapterType));
-    yinfo("GPU vendor:      %.*s (vendorID=0x%04x)", (int)info.vendor.length,
-          info.vendor.data ? info.vendor.data : "", info.vendorID);
-    yinfo("GPU device:      %.*s (deviceID=0x%04x)", (int)info.device.length,
-          info.device.data ? info.device.data : "", info.deviceID);
-    yinfo("GPU arch:        %.*s", (int)info.architecture.length,
-          info.architecture.data ? info.architecture.data : "");
-    yinfo("GPU description: %.*s", (int)info.description.length,
-          info.description.data ? info.description.data : "");
-
-    wgpuAdapterInfoFreeMembers(info);
-
-    WGPULimits limits = {0};
-    if (wgpuAdapterGetLimits(adapter, &limits) == WGPUStatus_Success) {
-        yinfo("GPU limits:      maxTextureDimension2D=%u  maxBufferSize=%llu  "
-              "maxStorageBufferBindingSize=%llu  maxUniformBufferBindingSize=%llu",
-              limits.maxTextureDimension2D, (unsigned long long)limits.maxBufferSize,
-              (unsigned long long)limits.maxStorageBufferBindingSize,
-              (unsigned long long)limits.maxUniformBufferBindingSize);
-    }
-}
-
-/* Adapter callback data */
-struct adapter_callback_data {
-    WGPUAdapter *adapter_out;
-    int *ready;
-};
-
-static void adapter_callback(WGPURequestAdapterStatus status, WGPUAdapter adapter,
-                             WGPUStringView message, void *userdata1, void *userdata2)
-{
-    (void)message;
-    if (status == WGPURequestAdapterStatus_Success) {
-        *((WGPUAdapter *)userdata1) = adapter;
-    }
-    *((int *)userdata2) = 1;
-}
-
-/* Device callback data */
-struct device_callback_data {
-    char error_msg[256];
-    int ready;
-};
-
-static void device_callback(WGPURequestDeviceStatus status, WGPUDevice device,
-                            WGPUStringView message, void *userdata1, void *userdata2)
-{
-    struct device_callback_data *data = (struct device_callback_data *)userdata2;
-
-    if (status == WGPURequestDeviceStatus_Success) {
-        *((WGPUDevice *)userdata1) = device;
-    } else if (data) {
-        if (message.data && message.length > 0) {
-            size_t len = message.length < 255 ? message.length : 255;
-            memcpy(data->error_msg, message.data, len);
-            data->error_msg[len] = '\0';
-        }
-    }
-    if (data) {
-        data->ready = 1;
-    }
-}
-
-static uint32_t min_u32(uint32_t a, uint32_t b)
-{
-    return a < b ? a : b;
-}
-static uint64_t min_u64(uint64_t a, uint64_t b)
-{
-    return a < b ? a : b;
-}
-
-/*===========================================================================
- * VNC server -> platform_input_pipe shim
- *
- * Translates VNC input callbacks into struct yetty_ycore_event and pushes
- * them onto the platform input pipe so the main event loop dispatches
- * them the same way GLFW input would.
- *===========================================================================*/
-
-static void vnc_push_event(struct yetty_yetty_yetty *yetty, const struct yetty_yui_event *event)
-{
-    struct yetty_ycore_input_pipe *pipe = yetty->context.app_context.platform_input_pipe;
-    if (!pipe) {
-        return;
-    }
-    pipe->ops->write(pipe, event, sizeof(*event));
-}
-
-static void vnc_on_mouse_move_cb(int16_t x, int16_t y, uint8_t mods, void *userdata)
-{
-    struct yetty_yetty_yetty *yetty = userdata;
-    struct yetty_yui_event event = {0};
-    event.type = YETTY_YCORE_MOUSE_MOVE;
-    event.mouse.x = (float)x;
-    event.mouse.y = (float)y;
-    event.mouse.mods = mods;
-    vnc_push_event(yetty, &event);
-}
-
-static void vnc_on_mouse_button_cb(int16_t x, int16_t y, uint8_t button, int pressed, uint8_t mods,
-                                   void *userdata)
-{
-    struct yetty_yetty_yetty *yetty = userdata;
-    struct yetty_yui_event event = {0};
-    event.type = pressed ? YETTY_YCORE_MOUSE_DOWN : YETTY_YCORE_MOUSE_UP;
-    event.mouse.x = (float)x;
-    event.mouse.y = (float)y;
-    event.mouse.button = button;
-    event.mouse.mods = mods;
-    vnc_push_event(yetty, &event);
-}
-
-static void vnc_on_mouse_scroll_cb(int16_t x, int16_t y, int16_t dx, int16_t dy, uint8_t mods,
-                                   void *userdata)
-{
-    struct yetty_yetty_yetty *yetty = userdata;
-    struct yetty_yui_event event = {0};
-    event.type = YETTY_YCORE_SCROLL;
-    event.scroll.x = (float)x;
-    event.scroll.y = (float)y;
-    event.scroll.dx = (float)dx;
-    event.scroll.dy = (float)dy;
-    event.scroll.mods = mods;
-    vnc_push_event(yetty, &event);
-}
-
-static void vnc_on_key_down_cb(uint32_t keycode, uint32_t scancode, uint8_t mods, void *userdata)
-{
-    struct yetty_yetty_yetty *yetty = userdata;
-    struct yetty_yui_event event = {0};
-    event.type = YETTY_YCORE_KEY_DOWN;
-    event.key.key = (int)keycode;
-    event.key.scancode = (int)scancode;
-    event.key.mods = mods;
-    vnc_push_event(yetty, &event);
-}
-
-static void vnc_on_key_up_cb(uint32_t keycode, uint32_t scancode, uint8_t mods, void *userdata)
-{
-    struct yetty_yetty_yetty *yetty = userdata;
-    struct yetty_yui_event event = {0};
-    event.type = YETTY_YCORE_KEY_UP;
-    event.key.key = (int)keycode;
-    event.key.scancode = (int)scancode;
-    event.key.mods = mods;
-    vnc_push_event(yetty, &event);
-}
-
-static void vnc_on_char_cb(uint32_t codepoint, uint8_t mods, void *userdata)
-{
-    struct yetty_yetty_yetty *yetty = userdata;
-    struct yetty_yui_event event = {0};
-    event.type = YETTY_YCORE_CHAR;
-    event.chr.codepoint = codepoint;
-    event.chr.mods = mods;
-    vnc_push_event(yetty, &event);
-}
-
-static void vnc_on_resize_cb(uint16_t width, uint16_t height, void *userdata)
-{
-    struct yetty_yetty_yetty *yetty = userdata;
-    struct yetty_yui_event event = {0};
-    event.type = YETTY_YCORE_RESIZE;
-    event.resize.width = (float)width;
-    event.resize.height = (float)height;
-    vnc_push_event(yetty, &event);
+    yinfo("WebGPU adapter description:\n%s", desc);
+    free(desc);
 }
 
 static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yetty)
@@ -831,7 +527,7 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
     int adapter_ready = 0;
     WGPURequestAdapterCallbackInfo adapter_cb = {0};
     adapter_cb.mode = WGPUCallbackMode_AllowSpontaneous;
-    adapter_cb.callback = adapter_callback;
+    adapter_cb.callback = yetty_ywebgpu_adapter_request_callback;
     adapter_cb.userdata1 = &yetty->adapter;
     adapter_cb.userdata2 = &adapter_ready;
 
@@ -853,43 +549,15 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
     /* Log adapter info (backend, vendor, device, limits) at yinfo level */
     yetty_log_gpu_info(yetty->adapter);
 
-    /* Request device */
-    WGPULimits adapter_limits = {0};
-    wgpuAdapterGetLimits(yetty->adapter, &adapter_limits);
-
-    WGPULimits limits = {0};
-    limits.maxTextureDimension1D = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxTextureDimension2D = min_u32(16384u, adapter_limits.maxTextureDimension2D);
-    limits.maxTextureDimension3D = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxTextureArrayLayers = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxBindGroups = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxBindGroupsPlusVertexBuffers = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxBindingsPerBindGroup = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxDynamicUniformBuffersPerPipelineLayout = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxDynamicStorageBuffersPerPipelineLayout = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxSampledTexturesPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxSamplersPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxStorageBuffersPerShaderStage = 10;
-    limits.maxStorageTexturesPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxUniformBuffersPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxUniformBufferBindingSize = WGPU_LIMIT_U64_UNDEFINED;
-    limits.maxStorageBufferBindingSize =
-        min_u64(512ULL * 1024 * 1024, adapter_limits.maxStorageBufferBindingSize);
-    limits.minUniformBufferOffsetAlignment = WGPU_LIMIT_U32_UNDEFINED;
-    limits.minStorageBufferOffsetAlignment = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxVertexBuffers = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxBufferSize = min_u64(1024ULL * 1024 * 1024, adapter_limits.maxBufferSize);
-    limits.maxVertexAttributes = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxVertexBufferArrayStride = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxInterStageShaderVariables = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxColorAttachments = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxColorAttachmentBytesPerSample = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxComputeWorkgroupStorageSize = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxComputeInvocationsPerWorkgroup = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxComputeWorkgroupSizeX = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxComputeWorkgroupSizeY = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxComputeWorkgroupSizeZ = WGPU_LIMIT_U32_UNDEFINED;
-    limits.maxComputeWorkgroupsPerDimension = WGPU_LIMIT_U32_UNDEFINED;
+    /* Request device.
+     *
+     * NOTE: the `config` argument to fill_default_limits is currently IGNORED;
+     * the values are still hardcoded in yetty_ywebgpu_fill_default_limits().
+     * See https://github.com/zokrezyl/yetty/issues/138 for the plan to source
+     * these knobs from the yetty config file. */
+    WGPULimits limits;
+    yetty_ywebgpu_fill_default_limits(yetty->adapter,
+                                      yetty->context.app_context.config, &limits);
 
     WGPUStringView device_label = {.data = "yetty device", .length = 12};
     WGPUStringView queue_label = {.data = "default queue", .length = 13};
@@ -898,12 +566,12 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
     device_desc.label = device_label;
     device_desc.requiredLimits = &limits;
     device_desc.defaultQueue.label = queue_label;
-    device_desc.uncapturedErrorCallbackInfo = yetty_webgpu_get_error_callback_info();
+    device_desc.uncapturedErrorCallbackInfo = yetty_ywebgpu_get_error_callback_info();
 
-    struct device_callback_data device_cb_data = {{0}, 0};
+    struct yetty_ywebgpu_device_request_state device_cb_data = {{0}, 0};
     WGPURequestDeviceCallbackInfo device_cb = {0};
     device_cb.mode = WGPUCallbackMode_AllowSpontaneous;
-    device_cb.callback = device_callback;
+    device_cb.callback = yetty_ywebgpu_device_request_callback;
     device_cb.userdata1 = &yetty->device;
     device_cb.userdata2 = &device_cb_data;
 
@@ -981,7 +649,8 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
     /* Create VNC server if enabled */
     if (vnc_enabled) {
         struct yetty_vnc_server_ptr_result vnc_res = yetty_yvnc_server_create(
-            instance, yetty->device, yetty->queue, yetty->event_loop, yetty->wgpu);
+            instance, yetty->device, yetty->queue, yetty->event_loop, yetty->wgpu,
+            yetty->context.app_context.platform_input_pipe);
         if (!YETTY_IS_OK(vnc_res)) {
             return YETTY_ERR(yetty_ycore_void, "failed to create VNC server");
         }
@@ -1037,15 +706,6 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
             return YETTY_ERR(yetty_ycore_void, "failed to start VNC server");
         }
         yinfo("VNC server started on port %d", vnc_port);
-
-        /* Wire VNC input -> platform_input_pipe so events reach workspace */
-        yetty_yvnc_server_set_on_mouse_move(yetty->vnc_server, vnc_on_mouse_move_cb, yetty);
-        yetty_yvnc_server_set_on_mouse_button(yetty->vnc_server, vnc_on_mouse_button_cb, yetty);
-        yetty_yvnc_server_set_on_mouse_scroll(yetty->vnc_server, vnc_on_mouse_scroll_cb, yetty);
-        yetty_yvnc_server_set_on_key_down(yetty->vnc_server, vnc_on_key_down_cb, yetty);
-        yetty_yvnc_server_set_on_key_up(yetty->vnc_server, vnc_on_key_up_cb, yetty);
-        yetty_yvnc_server_set_on_char_with_mods(yetty->vnc_server, vnc_on_char_cb, yetty);
-        yetty_yvnc_server_set_on_resize(yetty->vnc_server, vnc_on_resize_cb, yetty);
     }
 
     /* Create render target */
@@ -1129,7 +789,7 @@ struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_contex
     ydebug("yetty_create: Copied app context");
 
     /* Create event loop early - needed by VNC in init_webgpu */
-    struct yetty_ycore_input_pipe *pipe = app_context->platform_input_pipe;
+    struct yetty_ycore_xthread_event_pipe *pipe = app_context->platform_input_pipe;
     struct yetty_ycore_event_loop_result event_loop_res = yetty_ycore_event_loop_create(pipe);
     if (!YETTY_IS_OK(event_loop_res)) {
         free(yetty);

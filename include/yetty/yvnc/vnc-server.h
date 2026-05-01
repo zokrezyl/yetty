@@ -37,19 +37,25 @@ typedef void (*yetty_vnc_on_key_down_fn)(uint32_t keycode, uint32_t scancode, ui
                                          void *userdata);
 typedef void (*yetty_vnc_on_key_up_fn)(uint32_t keycode, uint32_t scancode, uint8_t mods,
                                        void *userdata);
-typedef void (*yetty_vnc_on_text_input_fn)(const char *text, size_t len, void *userdata);
 typedef void (*yetty_vnc_on_resize_fn)(uint16_t width, uint16_t height, void *userdata);
-typedef void (*yetty_vnc_on_cell_size_fn)(uint8_t cell_height, void *userdata);
 typedef void (*yetty_vnc_on_char_with_mods_fn)(uint32_t codepoint, uint8_t mods, void *userdata);
-typedef void (*yetty_vnc_on_input_received_fn)(void *userdata);
 
 struct yetty_yplatform_wgpu;
+struct yetty_ycore_xthread_event_pipe;
 
 /* Create server. wgpu provides the coroutine-aware GPU await machinery used
- * by the readback path; must be non-NULL. */
+ * by the readback path; must be non-NULL.
+ *
+ * `hid_pipe` (optional, may be NULL) is the platform HID pipe into which
+ * remote-client input (mouse/keyboard/char/resize) will be translated and
+ * posted as struct yetty_yui_event records — the same pipe the platform
+ * (e.g. GLFW) writes into, making remote input indistinguishable from local
+ * input downstream. When NULL, no input translation is wired and callers
+ * may still install their own handlers via the public set_on_* setters. */
 struct yetty_vnc_server_ptr_result yetty_yvnc_server_create(
     WGPUInstance instance, WGPUDevice device, WGPUQueue queue,
-    struct yetty_yplatform_event_loop *event_loop, struct yetty_yplatform_wgpu *wgpu);
+    struct yetty_yplatform_event_loop *event_loop, struct yetty_yplatform_wgpu *wgpu,
+    struct yetty_ycore_xthread_event_pipe *hid_pipe);
 
 /* Destroy server (handles NULL) */
 struct yetty_ycore_void_result yetty_yvnc_server_destroy(struct yetty_yvnc_server *server);
@@ -126,29 +132,9 @@ struct yetty_ycore_void_result yetty_vnc_server_process_input(struct yetty_yvnc_
 /* Get stats */
 struct yetty_yvnc_server_stats yetty_yvnc_server_get_stats(const struct yetty_yvnc_server *server);
 
-/* Set input callbacks */
-void yetty_yvnc_server_set_on_mouse_move(struct yetty_yvnc_server *server,
-                                        yetty_vnc_on_mouse_move_fn callback, void *userdata);
-void yetty_yvnc_server_set_on_mouse_button(struct yetty_yvnc_server *server,
-                                          yetty_vnc_on_mouse_button_fn callback, void *userdata);
-void yetty_yvnc_server_set_on_mouse_scroll(struct yetty_yvnc_server *server,
-                                          yetty_vnc_on_mouse_scroll_fn callback, void *userdata);
-void yetty_yvnc_server_set_on_key_down(struct yetty_yvnc_server *server,
-                                      yetty_vnc_on_key_down_fn callback, void *userdata);
-void yetty_yvnc_server_set_on_key_up(struct yetty_yvnc_server *server,
-                                    yetty_vnc_on_key_up_fn callback, void *userdata);
-void yetty_yvnc_server_set_on_text_input(struct yetty_yvnc_server *server,
-                                        yetty_vnc_on_text_input_fn callback, void *userdata);
-void yetty_yvnc_server_set_on_resize(struct yetty_yvnc_server *server,
-                                    yetty_vnc_on_resize_fn callback, void *userdata);
-void yetty_yvnc_server_set_on_cell_size(struct yetty_yvnc_server *server,
-                                       yetty_vnc_on_cell_size_fn callback, void *userdata);
-void yetty_yvnc_server_set_on_char_with_mods(struct yetty_yvnc_server *server,
-                                            yetty_vnc_on_char_with_mods_fn callback,
-                                            void *userdata);
-void yetty_yvnc_server_set_on_input_received(struct yetty_yvnc_server *server,
-                                            yetty_vnc_on_input_received_fn callback,
-                                            void *userdata);
+/* HID input (mouse/keyboard/char/resize) is dispatched directly into the
+ * hid_pipe passed to yetty_yvnc_server_create. No callback setters are
+ * exposed. */
 
 #ifdef __cplusplus
 }

@@ -71,7 +71,7 @@ struct yetty_ytelnet_telnet_pty {
     uint16_t port;
 
     /* Decoded-output pipe — terminal-side reads via register_pty_pipe. */
-    struct yetty_ycore_input_pipe *output_pipe;
+    struct yetty_ycore_xthread_event_pipe *output_pipe;
 
     /* Read buffer for libuv on_alloc — only one read in flight at a time. */
     char read_buf[65536];

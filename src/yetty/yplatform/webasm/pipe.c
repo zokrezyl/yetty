@@ -12,7 +12,7 @@
 
 /* WebASM input pipe - uses an internal buffer instead of fd pipe */
 struct yetty_yplatform_webasm_platform_input_pipe {
-    struct yetty_ycore_input_pipe base;
+    struct yetty_ycore_xthread_event_pipe base;
     struct yetty_yplatform_event_loop *event_loop;
     char *buffer;
     size_t buffer_size;
@@ -21,15 +21,15 @@ struct yetty_yplatform_webasm_platform_input_pipe {
 };
 
 /* Forward declarations */
-static void webasm_pipe_destroy(struct yetty_ycore_input_pipe *self);
-static struct yetty_ycore_size_result webasm_pipe_write(struct yetty_ycore_input_pipe *self,
+static void webasm_pipe_destroy(struct yetty_ycore_xthread_event_pipe *self);
+static struct yetty_ycore_size_result webasm_pipe_write(struct yetty_ycore_xthread_event_pipe *self,
                                                         const void *data, size_t size);
-static struct yetty_ycore_size_result webasm_pipe_read(struct yetty_ycore_input_pipe *self,
+static struct yetty_ycore_size_result webasm_pipe_read(struct yetty_ycore_xthread_event_pipe *self,
                                                        void *data, size_t max_size);
 static struct yetty_ycore_int_result webasm_pipe_read_fd(
-    const struct yetty_ycore_input_pipe *self);
+    const struct yetty_ycore_xthread_event_pipe *self);
 static struct yetty_ycore_void_result webasm_pipe_set_event_loop(
-    struct yetty_ycore_input_pipe *self, struct yetty_yplatform_event_loop *loop);
+    struct yetty_ycore_xthread_event_pipe *self, struct yetty_yplatform_event_loop *loop);
 
 /* Ops table */
 static const struct yetty_platform_input_pipe_ops webasm_pipe_ops = {
@@ -41,7 +41,7 @@ static const struct yetty_platform_input_pipe_ops webasm_pipe_ops = {
 };
 
 /* Check if pipe has pending events - called from main loop tick */
-int yetty_yplatform_input_pipe_webasm_platform_input_pipe_has_pending(struct yetty_ycore_input_pipe *self)
+int yetty_yplatform_input_pipe_webasm_platform_input_pipe_has_pending(struct yetty_ycore_xthread_event_pipe *self)
 {
     struct yetty_yplatform_webasm_platform_input_pipe *pipe;
 
@@ -54,7 +54,7 @@ int yetty_yplatform_input_pipe_webasm_platform_input_pipe_has_pending(struct yet
 }
 
 /* Process pending events from main loop - avoids Asyncify issues */
-void yetty_yplatform_input_pipe_webasm_platform_input_pipe_process(struct yetty_ycore_input_pipe *self)
+void yetty_yplatform_input_pipe_webasm_platform_input_pipe_process(struct yetty_ycore_xthread_event_pipe *self)
 {
     struct yetty_yplatform_webasm_platform_input_pipe *pipe;
     struct yetty_yui_event event;
@@ -84,7 +84,7 @@ void yetty_yplatform_input_pipe_webasm_platform_input_pipe_process(struct yetty_
 
 /* Implementation */
 
-static void webasm_pipe_destroy(struct yetty_ycore_input_pipe *self)
+static void webasm_pipe_destroy(struct yetty_ycore_xthread_event_pipe *self)
 {
     struct yetty_yplatform_webasm_platform_input_pipe *pipe;
 
@@ -93,7 +93,7 @@ static void webasm_pipe_destroy(struct yetty_ycore_input_pipe *self)
     free(pipe);
 }
 
-static struct yetty_ycore_size_result webasm_pipe_write(struct yetty_ycore_input_pipe *self,
+static struct yetty_ycore_size_result webasm_pipe_write(struct yetty_ycore_xthread_event_pipe *self,
                                                         const void *data, size_t size)
 {
     struct yetty_yplatform_webasm_platform_input_pipe *pipe;
@@ -132,7 +132,7 @@ static struct yetty_ycore_size_result webasm_pipe_write(struct yetty_ycore_input
     return YETTY_OK(yetty_ycore_size, size);
 }
 
-static struct yetty_ycore_size_result webasm_pipe_read(struct yetty_ycore_input_pipe *self,
+static struct yetty_ycore_size_result webasm_pipe_read(struct yetty_ycore_xthread_event_pipe *self,
                                                        void *data, size_t max_size)
 {
     struct yetty_yplatform_webasm_platform_input_pipe *pipe;
@@ -153,14 +153,14 @@ static struct yetty_ycore_size_result webasm_pipe_read(struct yetty_ycore_input_
 }
 
 static struct yetty_ycore_int_result webasm_pipe_read_fd(
-    const struct yetty_ycore_input_pipe *self)
+    const struct yetty_ycore_xthread_event_pipe *self)
 {
     (void)self;
     return YETTY_OK(yetty_ycore_int, -1); /* No fd on webasm */
 }
 
 static struct yetty_ycore_void_result webasm_pipe_set_event_loop(
-    struct yetty_ycore_input_pipe *self, struct yetty_yplatform_event_loop *loop)
+    struct yetty_ycore_xthread_event_pipe *self, struct yetty_yplatform_event_loop *loop)
 {
     struct yetty_yplatform_webasm_platform_input_pipe *pipe;
 

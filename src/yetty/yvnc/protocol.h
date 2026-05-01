@@ -35,9 +35,7 @@ enum yetty_yvnc_vnc_input_type {
     YETTY_YVNC_VNC_INPUT_MOUSE_SCROLL = 2,
     YETTY_YVNC_VNC_INPUT_KEY_DOWN = 3,
     YETTY_YVNC_VNC_INPUT_KEY_UP = 4,
-    YETTY_YVNC_VNC_INPUT_TEXT = 5,
     YETTY_YVNC_VNC_INPUT_RESIZE = 6,
-    YETTY_YVNC_VNC_INPUT_CELL_SIZE = 7,
     YETTY_YVNC_VNC_INPUT_CHAR_WITH_MODS = 8,
     YETTY_YVNC_VNC_INPUT_FRAME_ACK = 9,
     YETTY_YVNC_VNC_INPUT_COMPRESSION_CONFIG = 10,
@@ -137,10 +135,6 @@ struct yetty_yvnc_vnc_char_with_mods_event {
 struct yetty_yvnc_vnc_resize_event {
     uint16_t width;
     uint16_t height;
-};
-
-struct yetty_yvnc_vnc_cell_size_event {
-    uint8_t cell_height;
 };
 
 struct yetty_yvnc_vnc_compression_config_event {

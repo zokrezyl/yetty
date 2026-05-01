@@ -11,22 +11,22 @@
 
 /* Windows input pipe - embeds base as first member */
 struct yetty_yplatform_win_platform_input_pipe {
-    struct yetty_ycore_input_pipe base;
+    struct yetty_ycore_xthread_event_pipe base;
     HANDLE read_handle;
     HANDLE write_handle;
     int read_fd; /* CRT fd for libuv */
 };
 
 /* Forward declarations */
-static void win_pipe_destroy(struct yetty_ycore_input_pipe *self);
-static struct yetty_ycore_size_result win_pipe_write(struct yetty_ycore_input_pipe *self,
+static void win_pipe_destroy(struct yetty_ycore_xthread_event_pipe *self);
+static struct yetty_ycore_size_result win_pipe_write(struct yetty_ycore_xthread_event_pipe *self,
                                                      const void *data, size_t size);
-static struct yetty_ycore_size_result win_pipe_read(struct yetty_ycore_input_pipe *self,
+static struct yetty_ycore_size_result win_pipe_read(struct yetty_ycore_xthread_event_pipe *self,
                                                     void *data, size_t max_size);
 static struct yetty_ycore_int_result win_pipe_read_fd(
-    const struct yetty_ycore_input_pipe *self);
+    const struct yetty_ycore_xthread_event_pipe *self);
 static struct yetty_ycore_void_result win_pipe_set_event_loop(
-    struct yetty_ycore_input_pipe *self, struct yetty_yplatform_event_loop *loop);
+    struct yetty_ycore_xthread_event_pipe *self, struct yetty_yplatform_event_loop *loop);
 
 /* Ops table */
 static const struct yetty_platform_input_pipe_ops win_pipe_ops = {
@@ -39,7 +39,7 @@ static const struct yetty_platform_input_pipe_ops win_pipe_ops = {
 
 /* Implementation */
 
-static void win_pipe_destroy(struct yetty_ycore_input_pipe *self)
+static void win_pipe_destroy(struct yetty_ycore_xthread_event_pipe *self)
 {
     struct yetty_yplatform_win_platform_input_pipe *pipe_impl;
 
@@ -58,7 +58,7 @@ static void win_pipe_destroy(struct yetty_ycore_input_pipe *self)
     free(pipe_impl);
 }
 
-static struct yetty_ycore_size_result win_pipe_write(struct yetty_ycore_input_pipe *self,
+static struct yetty_ycore_size_result win_pipe_write(struct yetty_ycore_xthread_event_pipe *self,
                                                      const void *data, size_t size)
 {
     struct yetty_yplatform_win_platform_input_pipe *pipe_impl =
@@ -80,7 +80,7 @@ static struct yetty_ycore_size_result win_pipe_write(struct yetty_ycore_input_pi
     return YETTY_OK(yetty_ycore_size, (size_t)bytes_written);
 }
 
-static struct yetty_ycore_size_result win_pipe_read(struct yetty_ycore_input_pipe *self,
+static struct yetty_ycore_size_result win_pipe_read(struct yetty_ycore_xthread_event_pipe *self,
                                                     void *data, size_t max_size)
 {
     struct yetty_yplatform_win_platform_input_pipe *pipe_impl;
@@ -109,7 +109,7 @@ static struct yetty_ycore_size_result win_pipe_read(struct yetty_ycore_input_pip
     return YETTY_OK(yetty_ycore_size, (size_t)bytes_read);
 }
 
-static struct yetty_ycore_int_result win_pipe_read_fd(const struct yetty_ycore_input_pipe *self)
+static struct yetty_ycore_int_result win_pipe_read_fd(const struct yetty_ycore_xthread_event_pipe *self)
 {
     struct yetty_yplatform_win_platform_input_pipe *pipe_impl =
         container_of(self, struct yetty_yplatform_win_platform_input_pipe, base);
@@ -117,7 +117,7 @@ static struct yetty_ycore_int_result win_pipe_read_fd(const struct yetty_ycore_i
 }
 
 static struct yetty_ycore_void_result win_pipe_set_event_loop(
-    struct yetty_ycore_input_pipe *self, struct yetty_yplatform_event_loop *loop)
+    struct yetty_ycore_xthread_event_pipe *self, struct yetty_yplatform_event_loop *loop)
 {
     /* TODO: integrate with Windows event loop when needed */
     (void)self;

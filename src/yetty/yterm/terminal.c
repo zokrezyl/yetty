@@ -158,7 +158,7 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
      * terminal support lands, this should walk the workspace tree and
      * only post SHUTDOWN if no other live terminal remains. */
         ydebug("terminal_pty_pipe_read: PTY EOF (nread=%ld), posting SHUTDOWN", nread);
-        struct yetty_ycore_input_pipe *pipe =
+        struct yetty_ycore_xthread_event_pipe *pipe =
             terminal->context.yetty_context.app_context.platform_input_pipe;
         if (pipe && pipe->ops && pipe->ops->write) {
             struct yetty_yui_event ev = {.type = YETTY_YCORE_SHUTDOWN};

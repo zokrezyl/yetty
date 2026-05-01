@@ -40,7 +40,7 @@ struct yetty_yplatform_app_state {
     struct android_app *app;
     ANativeWindow *window;
     struct yetty_yetty_yetty *yetty;
-    struct yetty_ycore_input_pipe *pipe;
+    struct yetty_ycore_xthread_event_pipe *pipe;
     struct yetty_yconfig_config *config;
     struct yetty_yplatform_pty_factory *pty_factory;
     WGPUInstance instance;

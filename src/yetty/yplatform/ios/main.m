@@ -69,7 +69,7 @@ static void *render_thread_func(void *arg)
 @interface YettyViewController : UIViewController <UIKeyInput> {
     YettyMetalView *_metalView;
     struct yetty_yetty_yetty *_yetty;
-    struct yetty_ycore_input_pipe *_pipe;
+    struct yetty_ycore_xthread_event_pipe *_pipe;
     struct yetty_yconfig_config *_config;
     struct yetty_yplatform_pty_factory *_ptyFactory;
     WGPUInstance _instance;

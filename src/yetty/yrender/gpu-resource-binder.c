@@ -755,13 +755,13 @@ static struct yetty_ycore_void_result compile_and_create_pipeline(
     shader_desc.label.length = 15;
     shader_desc.nextInChain = &wgsl_src.chain;
 
-    yetty_webgpu_error_clear();
+    yetty_ywebgpu_error_clear();
     impl->shader_module = wgpuDeviceCreateShaderModule(impl->device, &shader_desc);
     free(merged);
 
-    if (!impl->shader_module || yetty_webgpu_error_check()) {
-        return YETTY_ERR(yetty_ycore_void, yetty_webgpu_error.has_error
-                                               ? yetty_webgpu_error.message
+    if (!impl->shader_module || yetty_ywebgpu_error_check()) {
+        return YETTY_ERR(yetty_ycore_void, yetty_ywebgpu_error.has_error
+                                               ? yetty_ywebgpu_error.message
                                                : "failed to compile shader");
     }
 

@@ -332,9 +332,9 @@ if grep -q "processPackageData" "$CONSOLE_LOG"; then
     RESULT=1
 fi
 
-# WebGPU device validation errors come through yetty_webgpu_uncaptured_error_callback
+# WebGPU device validation errors come through yetty_ywebgpu_uncaptured_error_callback
 # which logs via ydebug as `[error]`. They look like:
-#   [error] error.c:55 (yetty_webgpu_uncaptured_error_callback): WebGPU Validation error: ...
+#   [error] error.c:55 (yetty_ywebgpu_uncaptured_error_callback): WebGPU Validation error: ...
 # A failed shader entry point or pipeline creation cascades into many
 # "Invalid RenderPipeline" / "Invalid CommandBuffer" follow-ups; those
 # are noise after the first real error. Surface the *root* cause first.

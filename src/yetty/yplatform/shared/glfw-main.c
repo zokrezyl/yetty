@@ -163,7 +163,7 @@ int main(int argc, char **argv)
         glfwTerminate();
         return 1;
     }
-    struct yetty_ycore_input_pipe *platform_input_pipe = pipe_result.value;
+    struct yetty_ycore_xthread_event_pipe *platform_input_pipe = pipe_result.value;
     if (window) {
         glfwSetWindowUserPointer(window, platform_input_pipe);
     }

@@ -83,12 +83,8 @@ struct yetty_ycore_void_result yetty_yvnc_client_send_key_up(struct yetty_yvnc_c
 struct yetty_ycore_void_result yetty_yvnc_client_send_char_with_mods(struct yetty_yvnc_client *client,
                                                                     uint32_t codepoint,
                                                                     uint8_t mods);
-struct yetty_ycore_void_result yetty_vnc_client_send_text_input(struct yetty_yvnc_client *client,
-                                                                const char *text, size_t len);
 struct yetty_ycore_void_result yetty_yvnc_client_send_resize(struct yetty_yvnc_client *client,
                                                             uint16_t width, uint16_t height);
-struct yetty_ycore_void_result yetty_vnc_client_send_cell_size(struct yetty_yvnc_client *client,
-                                                               uint8_t cell_height);
 struct yetty_ycore_void_result yetty_yvnc_client_send_frame_ack(struct yetty_yvnc_client *client);
 struct yetty_ycore_void_result yetty_vnc_client_send_compression_config(
     struct yetty_yvnc_client *client, int force_raw, uint8_t quality, int always_full,

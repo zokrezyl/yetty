@@ -110,7 +110,7 @@ struct yetty_yplatform_libuv_event_loop {
     struct yetty_yplatform_tcp_client_handle tcp_clients[MAX_TCP_CLIENTS];
     int next_tcp_client_id;
 
-    struct yetty_ycore_input_pipe *platform_input_pipe;
+    struct yetty_ycore_xthread_event_pipe *platform_input_pipe;
     uv_pipe_t input_pipe;
     int input_pipe_active;
 
@@ -1136,7 +1136,7 @@ static struct yetty_ycore_void_result libuv_tcp_close(struct yetty_ycore_conn *c
 }
 
 struct yetty_ycore_event_loop_result yetty_ycore_event_loop_create(
-    struct yetty_ycore_input_pipe *pipe)
+    struct yetty_ycore_xthread_event_pipe *pipe)
 {
     struct yetty_yplatform_libuv_event_loop *impl;
 

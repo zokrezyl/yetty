@@ -236,7 +236,7 @@ static int wheel_mods_to_glfw(const EmscriptenWheelEvent *e)
 
 static EM_BOOL on_key_down(int event_type, const EmscriptenKeyboardEvent *e, void *user_data)
 {
-    struct yetty_ycore_input_pipe *pipe = user_data;
+    struct yetty_ycore_xthread_event_pipe *pipe = user_data;
     struct yetty_yui_event event = {0};
     int key, mods;
 
@@ -284,7 +284,7 @@ static EM_BOOL on_key_down(int event_type, const EmscriptenKeyboardEvent *e, voi
 
 static EM_BOOL on_key_up(int event_type, const EmscriptenKeyboardEvent *e, void *user_data)
 {
-    struct yetty_ycore_input_pipe *pipe = user_data;
+    struct yetty_ycore_xthread_event_pipe *pipe = user_data;
     struct yetty_yui_event event = {0};
     int key, mods;
 
@@ -308,7 +308,7 @@ static EM_BOOL on_key_up(int event_type, const EmscriptenKeyboardEvent *e, void 
 
 static EM_BOOL on_mouse_down(int event_type, const EmscriptenMouseEvent *e, void *user_data)
 {
-    struct yetty_ycore_input_pipe *pipe = user_data;
+    struct yetty_ycore_xthread_event_pipe *pipe = user_data;
     struct yetty_yui_event event = {0};
 
     (void)event_type;
@@ -329,7 +329,7 @@ static EM_BOOL on_mouse_down(int event_type, const EmscriptenMouseEvent *e, void
 
 static EM_BOOL on_mouse_up(int event_type, const EmscriptenMouseEvent *e, void *user_data)
 {
-    struct yetty_ycore_input_pipe *pipe = user_data;
+    struct yetty_ycore_xthread_event_pipe *pipe = user_data;
     struct yetty_yui_event event = {0};
 
     (void)event_type;
@@ -350,7 +350,7 @@ static EM_BOOL on_mouse_up(int event_type, const EmscriptenMouseEvent *e, void *
 
 static EM_BOOL on_mouse_move(int event_type, const EmscriptenMouseEvent *e, void *user_data)
 {
-    struct yetty_ycore_input_pipe *pipe = user_data;
+    struct yetty_ycore_xthread_event_pipe *pipe = user_data;
     struct yetty_yui_event event = {0};
 
     (void)event_type;
@@ -370,7 +370,7 @@ static EM_BOOL on_mouse_move(int event_type, const EmscriptenMouseEvent *e, void
 
 static EM_BOOL on_wheel(int event_type, const EmscriptenWheelEvent *e, void *user_data)
 {
-    struct yetty_ycore_input_pipe *pipe = user_data;
+    struct yetty_ycore_xthread_event_pipe *pipe = user_data;
     struct yetty_yui_event event = {0};
     float dx, dy;
 
@@ -396,7 +396,7 @@ static EM_BOOL on_wheel(int event_type, const EmscriptenWheelEvent *e, void *use
 
 static EM_BOOL on_resize(int event_type, const EmscriptenUiEvent *e, void *user_data)
 {
-    struct yetty_ycore_input_pipe *pipe = user_data;
+    struct yetty_ycore_xthread_event_pipe *pipe = user_data;
     struct yetty_yui_event event = {0};
     int width, height;
 
@@ -420,7 +420,7 @@ static EM_BOOL on_resize(int event_type, const EmscriptenUiEvent *e, void *user_
     return EM_FALSE;
 }
 
-static void setup_input_callbacks(struct yetty_ycore_input_pipe *pipe)
+static void setup_input_callbacks(struct yetty_ycore_xthread_event_pipe *pipe)
 {
     const char *target = "#canvas";
 
@@ -451,7 +451,7 @@ int main(int argc, char **argv)
     struct yetty_yconfig_result config_result;
     struct yetty_yconfig_config *config;
     struct yetty_yplatform_input_pipe_result pipe_result;
-    struct yetty_ycore_input_pipe *pipe;
+    struct yetty_ycore_xthread_event_pipe *pipe;
     struct yetty_yplatform_pty_factory_result pty_factory_result;
     struct yetty_yplatform_pty_factory *pty_factory;
     WGPUInstance instance;

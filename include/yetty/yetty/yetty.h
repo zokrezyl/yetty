@@ -12,7 +12,7 @@ extern "C" {
 /* Forward declarations */
 struct yetty_yetty_yetty;
 struct yetty_yconfig_config;
-struct yetty_ycore_input_pipe;
+struct yetty_ycore_xthread_event_pipe;
 struct yetty_yetty_clipboard_manager;
 struct yetty_yplatform_pty_factory;
 struct yetty_yplatform_event_loop;
@@ -37,7 +37,7 @@ struct yetty_yetty_app_gpu_context {
 struct yetty_yetty_app_context {
     struct yetty_yetty_app_gpu_context app_gpu_context;
     struct yetty_yconfig_config *config;
-    struct yetty_ycore_input_pipe *platform_input_pipe;
+    struct yetty_ycore_xthread_event_pipe *platform_input_pipe;
     struct yetty_yetty_clipboard_manager *clipboard_manager;
     struct yetty_yplatform_pty_factory *pty_factory;
 };

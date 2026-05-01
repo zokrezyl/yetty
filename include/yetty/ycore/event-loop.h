@@ -149,10 +149,10 @@ struct yetty_yplatform_event_loop {
 };
 
 /* Event loop creation - platform_input_pipe can be NULL */
-struct yetty_ycore_input_pipe;
+struct yetty_ycore_xthread_event_pipe;
 YETTY_YRESULT_DECLARE(yetty_ycore_event_loop, struct yetty_yplatform_event_loop *);
 struct yetty_ycore_event_loop_result yetty_ycore_event_loop_create(
-    struct yetty_ycore_input_pipe *pipe);
+    struct yetty_ycore_xthread_event_pipe *pipe);
 
 #ifdef __cplusplus
 }
