@@ -11,6 +11,7 @@
 #include <yetty/yplatform/ywebgpu.h>
 #include <yetty/yrender-utils/tile-diff.h>
 #include <yetty/ytrace/ytrace.h>
+#include <yetty/yconfig/config.h>
 #include "protocol.h"
 
 #include <stddef.h>
@@ -137,7 +138,6 @@ struct yetty_yvnc_server {
     } current_stats;
 
     uint32_t frames_since_full_refresh;
-
 };
 
 /* Forward declarations */
@@ -347,8 +347,8 @@ static void hid_on_mouse_button(struct yetty_yvnc_server *server, int16_t x, int
     hid_push_event(server, &ev);
 }
 
-static void hid_on_mouse_scroll(struct yetty_yvnc_server *server, int16_t x, int16_t y,
-                                int16_t dx, int16_t dy, uint8_t mods)
+static void hid_on_mouse_scroll(struct yetty_yvnc_server *server, int16_t x, int16_t y, int16_t dx,
+                                int16_t dy, uint8_t mods)
 {
     struct yetty_yui_event ev = {0};
     ev.type = YETTY_YCORE_SCROLL;
@@ -400,10 +400,55 @@ static void hid_on_resize(struct yetty_yvnc_server *server, uint16_t width, uint
     hid_push_event(server, &ev);
 }
 
+static struct yetty_ycore_void_result config_vnc_server(struct yetty_yvnc_server *vnc_server,
+                                                        const struct yetty_yconfig_config *config)
+{
+    /* Apply per-flag compression / delta-tracking settings. Each config
+        * key comes from the matching --vnc-* CLI flag and tunes the VNC
+        * server's encode+send path. Setters are no-ops on NULL / unset. */
+    if (config->ops->get_bool(config, "vnc/raw", 0)) {
+        yetty_yvnc_server_set_force_raw(vnc_server, 1);
+    }
+    int jpeg_q = config->ops->get_int(config, "vnc/compression-quality", 0);
+    if (jpeg_q > 0) {
+        yetty_yvnc_server_set_jpeg_quality(vnc_server, (uint8_t)jpeg_q);
+    }
+    if (config->ops->get_bool(config, "vnc/always-full", 0)) {
+        yetty_yvnc_server_set_always_full_frame(vnc_server, 1);
+    }
+    if (config->ops->get_bool(config, "vnc/use-h264", 0)) {
+        yetty_yvnc_server_set_use_h264(vnc_server, 1);
+    }
+    if (config->ops->get_bool(config, "vnc/merge-rects", 0)) {
+        yetty_yvnc_server_set_merge_rectangles(vnc_server, 1);
+    }
+
+    /* H.264 tuning knobs — read from vnc/h264/... config keys. Each is
+        * optional; the server treats zero / unset as "use encoder defaults". */
+    int h264_bps = config->ops->get_int(config, "vnc/h264/bitrate", 0);
+    if (h264_bps > 0) {
+        yetty_yvnc_server_set_h264_bitrate(vnc_server, (uint32_t)h264_bps);
+    }
+    int h264_fps = config->ops->get_int(config, "vnc/h264/framerate", 0);
+    if (h264_fps > 0) {
+        yetty_yvnc_server_set_h264_framerate(vnc_server, (float)h264_fps);
+    }
+    int h264_idr = config->ops->get_int(config, "vnc/h264/idr-interval", 0);
+    if (h264_idr > 0) {
+        yetty_yvnc_server_set_h264_idr_interval(vnc_server, (uint32_t)h264_idr);
+    }
+    if (config->ops->has(config, "vnc/h264/screen-content")) {
+        yetty_yvnc_server_set_h264_screen_content(
+            vnc_server, config->ops->get_bool(config, "vnc/h264/screen-content", 1));
+    }
+
+    return YETTY_OK_VOID();
+}
+
 struct yetty_vnc_server_ptr_result yetty_yvnc_server_create(
     WGPUInstance instance, WGPUDevice device, WGPUQueue queue,
     struct yetty_yplatform_event_loop *event_loop, struct yetty_yplatform_wgpu *wgpu,
-    struct yetty_ycore_xthread_event_pipe *hid_pipe)
+    struct yetty_ycore_xthread_event_pipe *hid_pipe, const struct yetty_yconfig_config *config)
 {
     if (!event_loop) {
         return YETTY_ERR(yetty_vnc_server_ptr, "event_loop is NULL");
@@ -440,6 +485,8 @@ struct yetty_vnc_server_ptr_result yetty_yvnc_server_create(
 
     /* If a HID pipe was provided, register the internal translators so that
      * remote input is forwarded into the platform HID pipe as yui_events. */
+
+    struct yetty_ycore_void_result result = config_vnc_server(server, config);
 
     return YETTY_OK(yetty_vnc_server_ptr, server);
 }

@@ -5,7 +5,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "ygui.h"
+#include <yetty/ygui/ygui.h>
 
 static struct yetty_ygui_engine* g_engine = NULL;
 static struct yetty_ygui_widget* g_preview = NULL;

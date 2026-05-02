@@ -42,6 +42,7 @@ typedef void (*yetty_vnc_on_char_with_mods_fn)(uint32_t codepoint, uint8_t mods,
 
 struct yetty_yplatform_wgpu;
 struct yetty_ycore_xthread_event_pipe;
+struct yetty_yconfig_config;
 
 /* Create server. wgpu provides the coroutine-aware GPU await machinery used
  * by the readback path; must be non-NULL.
@@ -55,14 +56,14 @@ struct yetty_ycore_xthread_event_pipe;
 struct yetty_vnc_server_ptr_result yetty_yvnc_server_create(
     WGPUInstance instance, WGPUDevice device, WGPUQueue queue,
     struct yetty_yplatform_event_loop *event_loop, struct yetty_yplatform_wgpu *wgpu,
-    struct yetty_ycore_xthread_event_pipe *hid_pipe);
+    struct yetty_ycore_xthread_event_pipe *hid_pipe, const struct yetty_yconfig_config *config);
 
 /* Destroy server (handles NULL) */
 struct yetty_ycore_void_result yetty_yvnc_server_destroy(struct yetty_yvnc_server *server);
 
 /* Start listening on port */
 struct yetty_ycore_void_result yetty_yvnc_server_start(struct yetty_yvnc_server *server,
-                                                      uint16_t port);
+                                                       uint16_t port);
 
 /* Stop server */
 struct yetty_ycore_void_result yetty_yvnc_server_stop(struct yetty_yvnc_server *server);
@@ -114,14 +115,14 @@ void yetty_yvnc_server_force_h264_idr(struct yetty_yvnc_server *server);
 
 /* Send frame to all clients */
 struct yetty_ycore_void_result yetty_yvnc_server_send_frame(struct yetty_yvnc_server *server,
-                                                           WGPUTexture texture,
-                                                           const uint8_t *cpu_pixels,
-                                                           uint32_t width, uint32_t height);
+                                                            WGPUTexture texture,
+                                                            const uint8_t *cpu_pixels,
+                                                            uint32_t width, uint32_t height);
 
 /* Send frame (GPU-only, will read back dirty tiles) */
 struct yetty_ycore_void_result yetty_yvnc_server_send_frame_gpu(struct yetty_yvnc_server *server,
-                                                               WGPUTexture texture, uint32_t width,
-                                                               uint32_t height);
+                                                                WGPUTexture texture, uint32_t width,
+                                                                uint32_t height);
 
 /* Check for pending input */
 int yetty_vnc_server_has_pending_input(const struct yetty_yvnc_server *server);

@@ -556,8 +556,7 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
      * See https://github.com/zokrezyl/yetty/issues/138 for the plan to source
      * these knobs from the yetty config file. */
     WGPULimits limits;
-    yetty_ywebgpu_fill_default_limits(yetty->adapter,
-                                      yetty->context.app_context.config, &limits);
+    yetty_ywebgpu_fill_default_limits(yetty->adapter, yetty->context.app_context.config, &limits);
 
     WGPUStringView device_label = {.data = "yetty device", .length = 12};
     WGPUStringView queue_label = {.data = "default queue", .length = 13};
@@ -650,51 +649,12 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
     if (vnc_enabled) {
         struct yetty_vnc_server_ptr_result vnc_res = yetty_yvnc_server_create(
             instance, yetty->device, yetty->queue, yetty->event_loop, yetty->wgpu,
-            yetty->context.app_context.platform_input_pipe);
+            yetty->context.app_context.platform_input_pipe, config);
         if (!YETTY_IS_OK(vnc_res)) {
             return YETTY_ERR(yetty_ycore_void, "failed to create VNC server");
         }
         yetty->vnc_server = vnc_res.value;
         ydebug("initWebGPU: VNC server created");
-
-        /* Apply per-flag compression / delta-tracking settings. Each config
-         * key comes from the matching --vnc-* CLI flag and tunes the VNC
-         * server's encode+send path. Setters are no-ops on NULL / unset. */
-        if (config->ops->get_bool(config, "vnc/raw", 0)) {
-            yetty_yvnc_server_set_force_raw(yetty->vnc_server, 1);
-        }
-        int jpeg_q = config->ops->get_int(config, "vnc/compression-quality", 0);
-        if (jpeg_q > 0) {
-            yetty_yvnc_server_set_jpeg_quality(yetty->vnc_server, (uint8_t)jpeg_q);
-        }
-        if (config->ops->get_bool(config, "vnc/always-full", 0)) {
-            yetty_yvnc_server_set_always_full_frame(yetty->vnc_server, 1);
-        }
-        if (config->ops->get_bool(config, "vnc/use-h264", 0)) {
-            yetty_yvnc_server_set_use_h264(yetty->vnc_server, 1);
-        }
-        if (config->ops->get_bool(config, "vnc/merge-rects", 0)) {
-            yetty_yvnc_server_set_merge_rectangles(yetty->vnc_server, 1);
-        }
-
-        /* H.264 tuning knobs — read from vnc/h264/... config keys. Each is
-         * optional; the server treats zero / unset as "use encoder defaults". */
-        int h264_bps = config->ops->get_int(config, "vnc/h264/bitrate", 0);
-        if (h264_bps > 0) {
-            yetty_yvnc_server_set_h264_bitrate(yetty->vnc_server, (uint32_t)h264_bps);
-        }
-        int h264_fps = config->ops->get_int(config, "vnc/h264/framerate", 0);
-        if (h264_fps > 0) {
-            yetty_yvnc_server_set_h264_framerate(yetty->vnc_server, (float)h264_fps);
-        }
-        int h264_idr = config->ops->get_int(config, "vnc/h264/idr-interval", 0);
-        if (h264_idr > 0) {
-            yetty_yvnc_server_set_h264_idr_interval(yetty->vnc_server, (uint32_t)h264_idr);
-        }
-        if (config->ops->has(config, "vnc/h264/screen-content")) {
-            yetty_yvnc_server_set_h264_screen_content(
-                yetty->vnc_server, config->ops->get_bool(config, "vnc/h264/screen-content", 1));
-        }
 
         /* Start VNC server */
         int vnc_port = config->ops->get_int(config, "vnc/port", 5900);
@@ -703,7 +663,7 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
         if (!YETTY_IS_OK(start_res)) {
             yetty_yvnc_server_destroy(yetty->vnc_server);
             yetty->vnc_server = NULL;
-            return YETTY_ERR(yetty_ycore_void, "failed to start VNC server");
+            return YETTY_ERR(yetty_ycore_void, "failed to start VNC server", start_res);
         }
         yinfo("VNC server started on port %d", vnc_port);
     }

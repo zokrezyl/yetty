@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ygui.h"
+#include <yetty/ygui/ygui.h>
 
 #define MAX_TODOS 64
 #define START_Y   100
