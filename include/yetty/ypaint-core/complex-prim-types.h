@@ -68,7 +68,7 @@ struct yetty_ypaint_prim_base_ops_ptr_result yetty_ypaint_complex_prim_handler(u
 // Forward declarations
 //=============================================================================
 
-struct yetty_ypaint_concrete_factory;
+struct yetty_ypaint_core_concrete_factory;
 struct yetty_ypaint_complex_prim_instance;
 struct yetty_yrender_target;
 struct yetty_yrender_gpu_allocator;
@@ -79,7 +79,7 @@ struct yetty_yrender_gpu_allocator;
 
 struct yetty_ypaint_complex_prim_instance {
     uint32_t type;
-    struct yetty_ypaint_concrete_factory *factory; // back-pointer
+    struct yetty_ypaint_core_concrete_factory *factory; // back-pointer
     uint8_t *buffer_data;
     size_t buffer_size;
     struct rectangle bounds;
@@ -111,34 +111,34 @@ YETTY_YRESULT_DECLARE(yetty_ypaint_complex_prim_instance_ptr,
 
 #include <webgpu/webgpu.h>
 
-struct yetty_ypaint_concrete_factory {
+struct yetty_ypaint_core_concrete_factory {
     uint32_t type_id;
 
     // Compile pipeline (called once during registration)
     struct yetty_ycore_void_result (*compile_pipeline)(
-        struct yetty_ypaint_concrete_factory *self, WGPUDevice device, WGPUQueue queue,
+        struct yetty_ypaint_core_concrete_factory *self, WGPUDevice device, WGPUQueue queue,
         WGPUTextureFormat target_format, struct yetty_yrender_gpu_allocator *allocator);
 
     // Get pre-compiled pipeline
-    WGPURenderPipeline (*get_pipeline)(struct yetty_ypaint_concrete_factory *self);
+    WGPURenderPipeline (*get_pipeline)(struct yetty_ypaint_core_concrete_factory *self);
 
     // Create instance from buffer data
     struct yetty_ypaint_complex_prim_instance_ptr_result (*create_instance)(
-        struct yetty_ypaint_concrete_factory *self, const void *buffer_data, size_t size,
+        struct yetty_ypaint_core_concrete_factory *self, const void *buffer_data, size_t size,
         uint32_t rolling_row);
 
     // Destroy instance
-    void (*destroy_instance)(struct yetty_ypaint_concrete_factory *self,
+    void (*destroy_instance)(struct yetty_ypaint_core_concrete_factory *self,
                              struct yetty_ypaint_complex_prim_instance *instance);
 
     // Get shared RS (for buffer data access)
     struct yetty_yrender_gpu_resource_set *(*get_shared_rs)(
-        struct yetty_ypaint_concrete_factory *self);
+        struct yetty_ypaint_core_concrete_factory *self);
 
     // Push visual (shader-level) zoom state into this type's shared uniforms.
     // Optional — may be NULL if the type doesn't care about visual zoom.
     // Applies to all instances the factory has produced (they share the RS).
-    struct yetty_ycore_void_result (*set_visual_zoom)(struct yetty_ypaint_concrete_factory *self,
+    struct yetty_ycore_void_result (*set_visual_zoom)(struct yetty_ypaint_core_concrete_factory *self,
                                                       float scale, float offset_x, float offset_y);
 
     // Push "intrusive" cell-size zoom. Semantically SEPARATE from set_visual_zoom
@@ -146,7 +146,7 @@ struct yetty_ypaint_concrete_factory {
     // cell size, visual_zoom tracks Ctrl+Scroll mouse-anchored zoom. The shader
     // applies them as two independent transforms so they can be reset without
     // interfering with each other.
-    struct yetty_ycore_void_result (*set_cell_zoom)(struct yetty_ypaint_concrete_factory *self,
+    struct yetty_ycore_void_result (*set_cell_zoom)(struct yetty_ypaint_core_concrete_factory *self,
                                                     float scale, float offset_x, float offset_y);
 };
 
@@ -169,10 +169,10 @@ void yetty_ypaint_complex_prim_factory_destroy(struct yetty_ypaint_complex_prim_
 // Register concrete factory
 struct yetty_ycore_void_result yetty_ypaint_complex_prim_factory_register(
     struct yetty_ypaint_complex_prim_factory *factory,
-    struct yetty_ypaint_concrete_factory *concrete);
+    struct yetty_ypaint_core_concrete_factory *concrete);
 
 // Get concrete factory by type
-struct yetty_ypaint_concrete_factory *yetty_ypaint_complex_prim_factory_get(
+struct yetty_ypaint_core_concrete_factory *yetty_ypaint_complex_prim_factory_get(
     struct yetty_ypaint_complex_prim_factory *factory, uint32_t type_id);
 
 // Create instance (reads type from buffer_data, dispatches to concrete factory)

@@ -17,7 +17,7 @@ struct yetty_ypaint_complex_prim_factory {
     WGPUQueue queue;
     WGPUTextureFormat target_format;
     struct yetty_yrender_gpu_allocator *allocator;
-    struct yetty_ypaint_concrete_factory *factories[MAX_CONCRETE_FACTORIES];
+    struct yetty_ypaint_core_concrete_factory *factories[MAX_CONCRETE_FACTORIES];
     uint32_t count;
 };
 
@@ -130,7 +130,7 @@ void yetty_ypaint_complex_prim_factory_destroy(struct yetty_ypaint_complex_prim_
 
 struct yetty_ycore_void_result yetty_ypaint_complex_prim_factory_register(
     struct yetty_ypaint_complex_prim_factory *factory,
-    struct yetty_ypaint_concrete_factory *concrete)
+    struct yetty_ypaint_core_concrete_factory *concrete)
 {
     if (!factory) {
         return YETTY_ERR(yetty_ycore_void, "factory is NULL");
@@ -169,7 +169,7 @@ struct yetty_ycore_void_result yetty_ypaint_complex_prim_factory_register(
 // Abstract factory lookup
 //=============================================================================
 
-struct yetty_ypaint_concrete_factory *yetty_ypaint_complex_prim_factory_get(
+struct yetty_ypaint_core_concrete_factory *yetty_ypaint_complex_prim_factory_get(
     struct yetty_ypaint_complex_prim_factory *factory, uint32_t type_id)
 {
     if (!factory) {
@@ -205,7 +205,7 @@ yetty_ypaint_complex_prim_factory_create_instance(struct yetty_ypaint_complex_pr
     uint32_t type_id = prim->type;
 
     // Get concrete factory
-    struct yetty_ypaint_concrete_factory *concrete =
+    struct yetty_ypaint_core_concrete_factory *concrete =
         yetty_ypaint_complex_prim_factory_get(factory, type_id);
     if (!concrete) {
         return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "type not registered");
@@ -228,7 +228,7 @@ void yetty_ypaint_complex_prim_factory_set_visual_zoom(
         return;
     }
     for (uint32_t i = 0; i < factory->count; i++) {
-        struct yetty_ypaint_concrete_factory *cf = factory->factories[i];
+        struct yetty_ypaint_core_concrete_factory *cf = factory->factories[i];
         if (cf && cf->set_visual_zoom) {
             cf->set_visual_zoom(cf, scale, offset_x, offset_y);
         }
@@ -245,7 +245,7 @@ void yetty_ypaint_complex_prim_factory_set_cell_zoom(
     ydebug("complex_prim_factory_set_cell_zoom: scale=%.3f off=(%.1f,%.1f) factories=%u", scale,
            offset_x, offset_y, factory->count);
     for (uint32_t i = 0; i < factory->count; i++) {
-        struct yetty_ypaint_concrete_factory *cf = factory->factories[i];
+        struct yetty_ypaint_core_concrete_factory *cf = factory->factories[i];
         if (!cf) {
             continue;
         }

@@ -48,8 +48,8 @@ struct yetty_ycore_size_result yetty_yplot_serialize(const struct yetty_yplot_un
 // Factory API (creates binder with pre-compiled pipeline)
 //=============================================================================
 
-struct yetty_ypaint_concrete_factory *yetty_yplot_factory_create(void);
-void yetty_yplot_factory_destroy(struct yetty_ypaint_concrete_factory *factory);
+struct yetty_ypaint_core_concrete_factory *yetty_yetty_yplot_factory_create(void);
+void yetty_yetty_yplot_factory_destroy(struct yetty_ypaint_core_concrete_factory *factory);
 
 //=============================================================================
 // YAML parser registration

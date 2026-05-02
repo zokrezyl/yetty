@@ -126,8 +126,8 @@ struct yetty_ycore_size_result yetty_{name}_serialize(
 // Factory API (creates binder with pre-compiled pipeline)
 //=============================================================================
 
-struct yetty_ypaint_concrete_factory *yetty_{name}_factory_create(void);
-void yetty_{name}_factory_destroy(struct yetty_ypaint_concrete_factory *factory);
+struct yetty_ypaint_core_concrete_factory *yetty_{name}_factory_create(void);
+void yetty_{name}_factory_destroy(struct yetty_ypaint_core_concrete_factory *factory);
 
 //=============================================================================
 // YAML parser registration
@@ -312,7 +312,7 @@ static void {name}_init_lib_rs(void)
 }}
 
 struct {name}_factory {{
-    struct yetty_ypaint_concrete_factory base;
+    struct yetty_ypaint_core_concrete_factory base;
     /* Shared, compiled once. NULL until compile_pipeline. */
     struct yetty_yrender_pipeline *pipeline;
     /* Template RS: shape definition for both the pipeline and per-instance
@@ -334,7 +334,7 @@ struct {name}_factory {{
     float cell_zoom_off_y;
 }};
 
-static struct {name}_factory *{name}_factory_from_base(struct yetty_ypaint_concrete_factory *base)
+static struct {name}_factory *{name}_factory_from_base(struct yetty_ypaint_core_concrete_factory *base)
 {{
     return (struct {name}_factory *)base;
 }}
@@ -536,7 +536,7 @@ static struct yetty_ycore_void_result
 //=============================================================================
 
 static struct yetty_ycore_void_result
-{name}_compile_pipeline(struct yetty_ypaint_concrete_factory *self,
+{name}_compile_pipeline(struct yetty_ypaint_core_concrete_factory *self,
                         WGPUDevice device, WGPUQueue queue,
                         WGPUTextureFormat target_format,
                         struct yetty_yrender_gpu_allocator *allocator)
@@ -567,14 +567,14 @@ static struct yetty_ycore_void_result
     return YETTY_OK_VOID();
 }}
 
-static WGPURenderPipeline {name}_get_pipeline(struct yetty_ypaint_concrete_factory *self)
+static WGPURenderPipeline {name}_get_pipeline(struct yetty_ypaint_core_concrete_factory *self)
 {{
     struct {name}_factory *factory = {name}_factory_from_base(self);
     return factory->pipeline ? yetty_yrender_pipeline_get_pipeline(factory->pipeline) : NULL;
 }}
 
 static struct yetty_ypaint_complex_prim_instance_ptr_result
-{name}_create_instance(struct yetty_ypaint_concrete_factory *self,
+{name}_create_instance(struct yetty_ypaint_core_concrete_factory *self,
                        const void *buffer_data, size_t size, uint32_t rolling_row)
 {{
     if (!buffer_data || size < sizeof(struct yetty_ypaint_complex_prim))
@@ -669,7 +669,7 @@ static struct yetty_ypaint_complex_prim_instance_ptr_result
     return YETTY_OK(yetty_ypaint_complex_prim_instance_ptr, instance);
 }}
 
-static void {name}_destroy_instance(struct yetty_ypaint_concrete_factory *self,
+static void {name}_destroy_instance(struct yetty_ypaint_core_concrete_factory *self,
                                     struct yetty_ypaint_complex_prim_instance *instance)
 {{
     (void)self;
@@ -683,7 +683,7 @@ static void {name}_destroy_instance(struct yetty_ypaint_concrete_factory *self,
 }}
 
 static struct yetty_yrender_gpu_resource_set *{name}_get_shared_rs(
-    struct yetty_ypaint_concrete_factory *self)
+    struct yetty_ypaint_core_concrete_factory *self)
 {{
     /* Returns the structural template, NOT a mutable per-instance RS. */
     struct {name}_factory *factory = {name}_factory_from_base(self);
@@ -691,7 +691,7 @@ static struct yetty_yrender_gpu_resource_set *{name}_get_shared_rs(
 }}
 
 static struct yetty_ycore_void_result
-{name}_set_visual_zoom(struct yetty_ypaint_concrete_factory *self,
+{name}_set_visual_zoom(struct yetty_ypaint_core_concrete_factory *self,
                        float scale, float off_x, float off_y)
 {{
     struct {name}_factory *factory = {name}_factory_from_base(self);
@@ -702,7 +702,7 @@ static struct yetty_ycore_void_result
 }}
 
 static struct yetty_ycore_void_result
-{name}_set_cell_zoom(struct yetty_ypaint_concrete_factory *self,
+{name}_set_cell_zoom(struct yetty_ypaint_core_concrete_factory *self,
                      float scale, float off_x, float off_y)
 {{
     struct {name}_factory *factory = {name}_factory_from_base(self);
@@ -713,7 +713,7 @@ static struct yetty_ycore_void_result
     return YETTY_OK_VOID();
 }}
 
-struct yetty_ypaint_concrete_factory *yetty_{name}_factory_create(void)
+struct yetty_ypaint_core_concrete_factory *yetty_{name}_factory_create(void)
 {{
     struct {name}_factory *factory = calloc(1, sizeof(struct {name}_factory));
     if (!factory)
@@ -734,7 +734,7 @@ struct yetty_ypaint_concrete_factory *yetty_{name}_factory_create(void)
     return &factory->base;
 }}
 
-void yetty_{name}_factory_destroy(struct yetty_ypaint_concrete_factory *self)
+void yetty_{name}_factory_destroy(struct yetty_ypaint_core_concrete_factory *self)
 {{
     if (!self)
         return;

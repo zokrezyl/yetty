@@ -44,8 +44,8 @@ static void yplot_init_lib_rs(void)
     yplot_lib_rs_initialized = true;
 }
 
-struct yplot_factory {
-    struct yetty_ypaint_concrete_factory base;
+struct yetty_yplot_factory {
+    struct yetty_ypaint_core_concrete_factory base;
     /* Shared, compiled once. NULL until compile_pipeline. */
     struct yetty_yrender_pipeline *pipeline;
     /* Template RS: shape definition for both the pipeline and per-instance
@@ -67,9 +67,9 @@ struct yplot_factory {
     float cell_zoom_off_y;
 };
 
-static struct yplot_factory *yplot_factory_from_base(struct yetty_ypaint_concrete_factory *base)
+static struct yetty_yplot_factory *yetty_yplot_factory_from_base(struct yetty_ypaint_core_concrete_factory *base)
 {
-    return (struct yplot_factory *)base;
+    return (struct yetty_yplot_factory *)base;
 }
 
 //=============================================================================
@@ -249,7 +249,7 @@ yplot_instance_render(struct yetty_ypaint_complex_prim_instance *self,
     if (!self->resource_set || !self->binder)
         return YETTY_ERR(yetty_ycore_void, "instance not finalised");
 
-    struct yplot_factory *factory = yplot_factory_from_base(self->factory);
+    struct yetty_yplot_factory *factory = yetty_yplot_factory_from_base(self->factory);
     if (!factory->pipeline)
         return YETTY_ERR(yetty_ycore_void, "factory pipeline not initialized");
 
@@ -374,12 +374,12 @@ yplot_instance_render(struct yetty_ypaint_complex_prim_instance *self,
 //=============================================================================
 
 static struct yetty_ycore_void_result
-yplot_compile_pipeline(struct yetty_ypaint_concrete_factory *self,
+yplot_compile_pipeline(struct yetty_ypaint_core_concrete_factory *self,
                         WGPUDevice device, WGPUQueue queue,
                         WGPUTextureFormat target_format,
                         struct yetty_yrender_gpu_allocator *allocator)
 {
-    struct yplot_factory *factory = yplot_factory_from_base(self);
+    struct yetty_yplot_factory *factory = yetty_yplot_factory_from_base(self);
 
     if (factory->pipeline) {
         ydebug("yplot: factory pipeline already initialized");
@@ -405,20 +405,20 @@ yplot_compile_pipeline(struct yetty_ypaint_concrete_factory *self,
     return YETTY_OK_VOID();
 }
 
-static WGPURenderPipeline yplot_get_pipeline(struct yetty_ypaint_concrete_factory *self)
+static WGPURenderPipeline yplot_get_pipeline(struct yetty_ypaint_core_concrete_factory *self)
 {
-    struct yplot_factory *factory = yplot_factory_from_base(self);
+    struct yetty_yplot_factory *factory = yetty_yplot_factory_from_base(self);
     return factory->pipeline ? yetty_yrender_pipeline_get_pipeline(factory->pipeline) : NULL;
 }
 
 static struct yetty_ypaint_complex_prim_instance_ptr_result
-yplot_create_instance(struct yetty_ypaint_concrete_factory *self,
+yplot_create_instance(struct yetty_ypaint_core_concrete_factory *self,
                        const void *buffer_data, size_t size, uint32_t rolling_row)
 {
     if (!buffer_data || size < sizeof(struct yetty_ypaint_complex_prim))
         return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "invalid buffer data");
 
-    struct yplot_factory *factory = yplot_factory_from_base(self);
+    struct yetty_yplot_factory *factory = yetty_yplot_factory_from_base(self);
     if (!factory->pipeline)
         return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr,
                          "yplot factory pipeline not compiled");
@@ -507,7 +507,7 @@ yplot_create_instance(struct yetty_ypaint_concrete_factory *self,
     return YETTY_OK(yetty_ypaint_complex_prim_instance_ptr, instance);
 }
 
-static void yplot_destroy_instance(struct yetty_ypaint_concrete_factory *self,
+static void yplot_destroy_instance(struct yetty_ypaint_core_concrete_factory *self,
                                     struct yetty_ypaint_complex_prim_instance *instance)
 {
     (void)self;
@@ -521,18 +521,18 @@ static void yplot_destroy_instance(struct yetty_ypaint_concrete_factory *self,
 }
 
 static struct yetty_yrender_gpu_resource_set *yplot_get_shared_rs(
-    struct yetty_ypaint_concrete_factory *self)
+    struct yetty_ypaint_core_concrete_factory *self)
 {
     /* Returns the structural template, NOT a mutable per-instance RS. */
-    struct yplot_factory *factory = yplot_factory_from_base(self);
+    struct yetty_yplot_factory *factory = yetty_yplot_factory_from_base(self);
     return factory->template_initialized ? &factory->template_rs : NULL;
 }
 
 static struct yetty_ycore_void_result
-yplot_set_visual_zoom(struct yetty_ypaint_concrete_factory *self,
+yplot_set_visual_zoom(struct yetty_ypaint_core_concrete_factory *self,
                        float scale, float off_x, float off_y)
 {
-    struct yplot_factory *factory = yplot_factory_from_base(self);
+    struct yetty_yplot_factory *factory = yetty_yplot_factory_from_base(self);
     factory->visual_zoom_scale = (scale > 0.0f) ? scale : 1.0f;
     factory->visual_zoom_off_x = off_x;
     factory->visual_zoom_off_y = off_y;
@@ -540,10 +540,10 @@ yplot_set_visual_zoom(struct yetty_ypaint_concrete_factory *self,
 }
 
 static struct yetty_ycore_void_result
-yplot_set_cell_zoom(struct yetty_ypaint_concrete_factory *self,
+yplot_set_cell_zoom(struct yetty_ypaint_core_concrete_factory *self,
                      float scale, float off_x, float off_y)
 {
-    struct yplot_factory *factory = yplot_factory_from_base(self);
+    struct yetty_yplot_factory *factory = yetty_yplot_factory_from_base(self);
     factory->cell_zoom_scale = (scale > 0.0f) ? scale : 1.0f;
     factory->cell_zoom_off_x = off_x;
     factory->cell_zoom_off_y = off_y;
@@ -551,9 +551,9 @@ yplot_set_cell_zoom(struct yetty_ypaint_concrete_factory *self,
     return YETTY_OK_VOID();
 }
 
-struct yetty_ypaint_concrete_factory *yetty_yplot_factory_create(void)
+struct yetty_ypaint_core_concrete_factory *yetty_yetty_yplot_factory_create(void)
 {
-    struct yplot_factory *factory = calloc(1, sizeof(struct yplot_factory));
+    struct yetty_yplot_factory *factory = calloc(1, sizeof(struct yetty_yplot_factory));
     if (!factory)
         return NULL;
 
@@ -572,12 +572,12 @@ struct yetty_ypaint_concrete_factory *yetty_yplot_factory_create(void)
     return &factory->base;
 }
 
-void yetty_yplot_factory_destroy(struct yetty_ypaint_concrete_factory *self)
+void yetty_yetty_yplot_factory_destroy(struct yetty_ypaint_core_concrete_factory *self)
 {
     if (!self)
         return;
 
-    struct yplot_factory *factory = yplot_factory_from_base(self);
+    struct yetty_yplot_factory *factory = yetty_yplot_factory_from_base(self);
 
     if (factory->pipeline)
         yetty_yrender_pipeline_destroy(factory->pipeline);
