@@ -36,13 +36,13 @@ bool yetty_ypaint_is_complex_type(uint32_t type)
 
 static struct yetty_ycore_size_result complex_prim_size_wrapper(const uint32_t *prim)
 {
-    size_t size = yetty_ypaint_complex_prim_size(prim);
+    size_t size = yetty_ypaint_core_complex_prim_size(prim);
     return YETTY_OK(yetty_ycore_size, size);
 }
 
 static struct rectangle_result complex_prim_aabb_wrapper(const uint32_t *prim)
 {
-    return yetty_ypaint_complex_prim_aabb(prim);
+    return yetty_ypaint_core_complex_prim_aabb(prim);
 }
 
 static const struct yetty_ypaint_prim_base_ops g_complex_prim_base_ops = {
@@ -50,7 +50,7 @@ static const struct yetty_ypaint_prim_base_ops g_complex_prim_base_ops = {
     .aabb = complex_prim_aabb_wrapper,
 };
 
-struct yetty_ypaint_prim_base_ops_ptr_result yetty_ypaint_complex_prim_handler(uint32_t prim_type)
+struct yetty_ypaint_prim_base_ops_ptr_result yetty_ypaint_core_complex_prim_handler(uint32_t prim_type)
 {
     if (yetty_ypaint_is_complex_type(prim_type)) {
         return YETTY_OK(yetty_ypaint_prim_base_ops_ptr, &g_complex_prim_base_ops);
@@ -58,10 +58,10 @@ struct yetty_ypaint_prim_base_ops_ptr_result yetty_ypaint_complex_prim_handler(u
     return YETTY_ERR(yetty_ypaint_prim_base_ops_ptr, "not a complex type");
 }
 
-size_t yetty_ypaint_complex_prim_size(const void *data)
+size_t yetty_ypaint_core_complex_prim_size(const void *data)
 {
-    const struct yetty_ypaint_complex_prim *prim = data;
-    return sizeof(struct yetty_ypaint_complex_prim) + prim->payload_size;
+    const struct yetty_ypaint_core_complex_prim *prim = data;
+    return sizeof(struct yetty_ypaint_core_complex_prim) + prim->payload_size;
 }
 
 //=============================================================================
@@ -71,13 +71,13 @@ size_t yetty_ypaint_complex_prim_size(const void *data)
 
 #define COMPLEX_PRIM_BOUNDS_SIZE 16 /* 4 floats */
 
-struct rectangle_result yetty_ypaint_complex_prim_aabb(const void *data)
+struct rectangle_result yetty_ypaint_core_complex_prim_aabb(const void *data)
 {
     if (!data) {
         return YETTY_ERR(rectangle, "NULL data");
     }
 
-    const struct yetty_ypaint_complex_prim *prim = data;
+    const struct yetty_ypaint_core_complex_prim *prim = data;
     if (prim->payload_size < COMPLEX_PRIM_BOUNDS_SIZE) {
         return YETTY_ERR(rectangle, "payload too small for bounds");
     }
@@ -196,12 +196,12 @@ yetty_ypaint_core_complex_prim_factory_create_instance(struct yetty_ypaint_core_
     if (!factory) {
         return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "factory is NULL");
     }
-    if (!buffer_data || size < sizeof(struct yetty_ypaint_complex_prim)) {
+    if (!buffer_data || size < sizeof(struct yetty_ypaint_core_complex_prim)) {
         return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "invalid buffer data");
     }
 
     // Read type from buffer
-    const struct yetty_ypaint_complex_prim *prim = buffer_data;
+    const struct yetty_ypaint_core_complex_prim *prim = buffer_data;
     uint32_t type_id = prim->type;
 
     // Get concrete factory

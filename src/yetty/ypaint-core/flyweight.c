@@ -12,28 +12,28 @@ struct handler_reg {
     yetty_ypaint_prim_handler_fn handler;
 };
 
-struct yetty_ypaint_flyweight_registry {
+struct yetty_ypaint_core_flyweight_registry {
     yetty_ypaint_prim_handler_fn default_handler;
     struct handler_reg handlers[FLYWEIGHT_MAX_HANDLERS];
     size_t handler_count;
 };
 
-struct yetty_ypaint_flyweight_registry_ptr_result yetty_ypaint_flyweight_registry_create(void)
+struct yetty_ypaint_core_flyweight_registry_ptr_result yetty_ypaint_core_flyweight_registry_create(void)
 {
-    struct yetty_ypaint_flyweight_registry *reg =
-        calloc(1, sizeof(struct yetty_ypaint_flyweight_registry));
+    struct yetty_ypaint_core_flyweight_registry *reg =
+        calloc(1, sizeof(struct yetty_ypaint_core_flyweight_registry));
     if (!reg) {
-        return YETTY_ERR(yetty_ypaint_flyweight_registry_ptr, "calloc failed");
+        return YETTY_ERR(yetty_ypaint_core_flyweight_registry_ptr, "calloc failed");
     }
-    return YETTY_OK(yetty_ypaint_flyweight_registry_ptr, reg);
+    return YETTY_OK(yetty_ypaint_core_flyweight_registry_ptr, reg);
 }
 
-void yetty_ypaint_flyweight_registry_destroy(struct yetty_ypaint_flyweight_registry *reg)
+void yetty_ypaint_core_flyweight_registry_destroy(struct yetty_ypaint_core_flyweight_registry *reg)
 {
     free(reg);
 }
 
-void yetty_ypaint_flyweight_registry_set_default(struct yetty_ypaint_flyweight_registry *reg,
+void yetty_ypaint_core_flyweight_registry_set_default(struct yetty_ypaint_core_flyweight_registry *reg,
                                                  yetty_ypaint_prim_handler_fn handler)
 {
     if (reg) {
@@ -41,8 +41,8 @@ void yetty_ypaint_flyweight_registry_set_default(struct yetty_ypaint_flyweight_r
     }
 }
 
-struct yetty_ycore_void_result yetty_ypaint_flyweight_registry_add(
-    struct yetty_ypaint_flyweight_registry *reg, uint32_t type_min, uint32_t type_max,
+struct yetty_ycore_void_result yetty_ypaint_core_flyweight_registry_add(
+    struct yetty_ypaint_core_flyweight_registry *reg, uint32_t type_min, uint32_t type_max,
     yetty_ypaint_prim_handler_fn handler)
 {
     if (!reg) {
@@ -61,8 +61,8 @@ struct yetty_ycore_void_result yetty_ypaint_flyweight_registry_add(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ypaint_prim_flyweight_ptr_result yetty_ypaint_flyweight_registry_get(
-    const struct yetty_ypaint_flyweight_registry *reg, uint32_t prim_type,
+struct yetty_ypaint_prim_flyweight_ptr_result yetty_ypaint_core_flyweight_registry_get(
+    const struct yetty_ypaint_core_flyweight_registry *reg, uint32_t prim_type,
     const uint32_t *prim_data)
 {
     static struct yetty_ypaint_prim_flyweight fw;

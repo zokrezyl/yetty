@@ -39,7 +39,7 @@ extern "C" {
 // Complex primitive header (FAM wire format)
 //=============================================================================
 
-struct yetty_ypaint_complex_prim {
+struct yetty_ypaint_core_complex_prim {
     uint32_t type;
     uint32_t payload_size;
     uint8_t data[];
@@ -49,10 +49,10 @@ struct yetty_ypaint_complex_prim {
 bool yetty_ypaint_is_complex_type(uint32_t type);
 
 // Get total size (reads FAM header)
-size_t yetty_ypaint_complex_prim_size(const void *data);
+size_t yetty_ypaint_core_complex_prim_size(const void *data);
 
 // Get AABB (reads bounds from standard offset 0-15 in payload)
-struct rectangle_result yetty_ypaint_complex_prim_aabb(const void *data);
+struct rectangle_result yetty_ypaint_core_complex_prim_aabb(const void *data);
 
 //=============================================================================
 // Base ops for complex primitives (for flyweight registry)
@@ -62,7 +62,7 @@ struct rectangle_result yetty_ypaint_complex_prim_aabb(const void *data);
 #include <yetty/ypaint-core/flyweight.h>
 
 // Handler for complex prim types (>= 0x80000000)
-struct yetty_ypaint_prim_base_ops_ptr_result yetty_ypaint_complex_prim_handler(uint32_t prim_type);
+struct yetty_ypaint_prim_base_ops_ptr_result yetty_ypaint_core_complex_prim_handler(uint32_t prim_type);
 
 //=============================================================================
 // Forward declarations

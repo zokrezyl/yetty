@@ -577,7 +577,7 @@ static struct yetty_ypaint_core_complex_prim_instance_ptr_result
 {name}_create_instance(struct yetty_ypaint_core_concrete_factory *self,
                        const void *buffer_data, size_t size, uint32_t rolling_row)
 {{
-    if (!buffer_data || size < sizeof(struct yetty_ypaint_complex_prim))
+    if (!buffer_data || size < sizeof(struct yetty_ypaint_core_complex_prim))
         return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "invalid buffer data");
 
     struct {name}_factory *factory = {name}_factory_from_base(self);
@@ -602,7 +602,7 @@ static struct yetty_ypaint_core_complex_prim_instance_ptr_result
     instance->rolling_row = rolling_row;
     instance->render = {name}_instance_render;
 
-    struct rectangle_result aabb_res = yetty_ypaint_complex_prim_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ypaint_core_complex_prim_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res))
         instance->bounds = aabb_res.value;
 

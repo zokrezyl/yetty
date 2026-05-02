@@ -194,8 +194,8 @@ struct yetty_ypaint_core_complex_prim_instance *yetty_ypaint_canvas_get_complex_
     struct yetty_ypaint_canvas *canvas, uint32_t index);
 
 // Get flyweight registry (for SDF ops lookup)
-struct yetty_ypaint_flyweight_registry;
-const struct yetty_ypaint_flyweight_registry *yetty_ypaint_canvas_get_flyweight_registry(
+struct yetty_ypaint_core_flyweight_registry;
+const struct yetty_ypaint_core_flyweight_registry *yetty_ypaint_canvas_get_flyweight_registry(
     struct yetty_ypaint_canvas *canvas);
 
 // Get complex prim factory (for complex prim ops)
