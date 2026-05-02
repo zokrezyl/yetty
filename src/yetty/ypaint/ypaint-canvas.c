@@ -611,8 +611,8 @@ struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
     canvas->complex_prim_factory = factory_res.value;
 
     /* Create and register yplot factory */
-    struct yetty_ypaint_core_concrete_factory *yetty_yplot_factory = yetty_yetty_yplot_factory_create();
-    if (!yetty_yplot_factory) {
+    struct yetty_ypaint_core_concrete_factory *yplot_factory = yetty_yplot_factory_create();
+    if (!yplot_factory) {
         yerror("ypaint_canvas: yplot factory creation failed");
         yetty_ypaint_complex_prim_factory_destroy(canvas->complex_prim_factory);
         yetty_ypaint_flyweight_registry_destroy(canvas->flyweight_registry);
@@ -621,10 +621,10 @@ struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
         return YETTY_ERR(yetty_ypaint_canvas_ptr, "yplot factory creation failed");
     }
     struct yetty_ycore_void_result yplot_reg_res =
-        yetty_ypaint_complex_prim_factory_register(canvas->complex_prim_factory, yetty_yplot_factory);
+        yetty_ypaint_complex_prim_factory_register(canvas->complex_prim_factory, yplot_factory);
     if (YETTY_IS_ERR(yplot_reg_res)) {
         yerror("ypaint_canvas: yplot registration failed: %s", yplot_reg_res.error.msg);
-        yetty_yetty_yplot_factory_destroy(yetty_yplot_factory);
+        yetty_yplot_factory_destroy(yplot_factory);
         yetty_ypaint_complex_prim_factory_destroy(canvas->complex_prim_factory);
         yetty_ypaint_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
