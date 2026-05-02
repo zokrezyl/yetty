@@ -174,7 +174,7 @@ struct yetty_ypaint_canvas {
     char font_family[128];
 
     // Flyweight registry for primitive handlers (SDF prims)
-    struct yetty_ypaint_core_flyweight_registry *flyweight_registry;
+    struct yetty_ypaint_flyweight_registry *flyweight_registry;
 
     // Factory for complex primitive ops (yplot, yimage, etc.)
     struct yetty_ypaint_core_complex_prim_factory *complex_prim_factory;
@@ -279,7 +279,7 @@ static struct yetty_ycore_void_result grid_line_init(struct yetty_ypaint_canvas_
 }
 
 static struct yetty_ycore_void_result grid_line_free(
-    struct yetty_ypaint_canvas_grid_line *line, const struct yetty_ypaint_core_flyweight_registry *reg)
+    struct yetty_ypaint_canvas_grid_line *line, const struct yetty_ypaint_flyweight_registry *reg)
 {
     if (!reg) {
         return YETTY_ERR(yetty_ycore_void, "reg is NULL");
@@ -358,7 +358,7 @@ static void line_buffer_init(struct yetty_ypaint_canvas_line_buffer *buf)
 }
 
 static struct yetty_ycore_void_result line_buffer_free(
-    struct yetty_ypaint_canvas_line_buffer *buf, const struct yetty_ypaint_core_flyweight_registry *reg)
+    struct yetty_ypaint_canvas_line_buffer *buf, const struct yetty_ypaint_flyweight_registry *reg)
 {
     for (uint32_t i = 0; i < buf->count; i++) {
         struct yetty_ycore_void_result res = grid_line_free(&buf->lines[i], reg);
@@ -585,7 +585,7 @@ struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
     line_buffer_init(&canvas->lines);
 
     /* Create flyweight registry with all handlers (for SDF prims) */
-    struct yetty_ypaint_core_flyweight_registry_ptr_result fw_res = yetty_ypaint_flyweight_create();
+    struct yetty_ypaint_flyweight_registry_ptr_result fw_res = yetty_ypaint_flyweight_create();
     if (YETTY_IS_ERR(fw_res)) {
         yerror("ypaint_canvas: flyweight creation failed: %s", fw_res.error.msg);
         free(canvas->lines.lines);
@@ -602,7 +602,7 @@ struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
             context->gpu_context.surface_format, context->gpu_context.allocator);
     if (YETTY_IS_ERR(factory_res)) {
         yerror("ypaint_canvas: factory creation failed: %s", factory_res.error.msg);
-        yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        yetty_ypaint_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
         return YETTY_ERR(yetty_ypaint_canvas_ptr, "ypaint_canvas: factory creation failed",
@@ -615,7 +615,7 @@ struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
     if (!yetty_yplot_factory) {
         yerror("ypaint_canvas: yplot factory creation failed");
         yetty_ypaint_core_complex_prim_factory_destroy(canvas->complex_prim_factory);
-        yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        yetty_ypaint_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
         return YETTY_ERR(yetty_ypaint_canvas_ptr, "yplot factory creation failed");
@@ -626,7 +626,7 @@ struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
         yerror("ypaint_canvas: yplot registration failed: %s", yplot_reg_res.error.msg);
         yetty_yplot_factory_destroy(yetty_yplot_factory);
         yetty_ypaint_core_complex_prim_factory_destroy(canvas->complex_prim_factory);
-        yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        yetty_ypaint_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
         return YETTY_ERR(yetty_ypaint_canvas_ptr, "ypaint_canvas: yplot registration failed",
@@ -659,7 +659,7 @@ struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
         ydebug("ypaint_canvas: default font created");
     } else {
         yerror("ypaint_canvas: default font creation failed: %s", font_res.error.msg);
-        yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        yetty_ypaint_flyweight_registry_destroy(canvas->flyweight_registry);
         /* lines buffer is empty here, no registry needed for cleanup */
         free(canvas->lines.lines);
         free(canvas);
@@ -685,7 +685,7 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_destroy(struct yetty_ypaint_c
         return res;
     }
     yetty_ypaint_core_complex_prim_factory_destroy(canvas->complex_prim_factory);
-    yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);
+    yetty_ypaint_flyweight_registry_destroy(canvas->flyweight_registry);
     free(canvas->grid_staging);
     free(canvas->prim_staging);
     free(canvas);
@@ -1898,7 +1898,7 @@ struct yetty_ypaint_core_complex_prim_instance *yetty_ypaint_canvas_get_complex_
     return NULL;
 }
 
-const struct yetty_ypaint_core_flyweight_registry *yetty_ypaint_canvas_get_flyweight_registry(
+const struct yetty_ypaint_flyweight_registry *yetty_ypaint_canvas_get_flyweight_registry(
     struct yetty_ypaint_canvas *canvas)
 {
     return canvas ? canvas->flyweight_registry : NULL;

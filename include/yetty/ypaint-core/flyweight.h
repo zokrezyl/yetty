@@ -67,28 +67,28 @@ typedef struct yetty_ypaint_prim_base_ops_ptr_result (*yetty_ypaint_prim_handler
     uint32_t prim_type);
 
 // Flyweight registry instance (opaque)
-struct yetty_ypaint_core_flyweight_registry;
+struct yetty_ypaint_flyweight_registry;
 
-YETTY_YRESULT_DECLARE(yetty_ypaint_core_flyweight_registry_ptr,
-                      struct yetty_ypaint_core_flyweight_registry *);
+YETTY_YRESULT_DECLARE(yetty_ypaint_flyweight_registry_ptr,
+                      struct yetty_ypaint_flyweight_registry *);
 
 // Create/destroy registry instance
-struct yetty_ypaint_core_flyweight_registry_ptr_result yetty_ypaint_core_flyweight_registry_create(void);
+struct yetty_ypaint_flyweight_registry_ptr_result yetty_ypaint_flyweight_registry_create(void);
 
-void yetty_ypaint_core_flyweight_registry_destroy(struct yetty_ypaint_core_flyweight_registry *reg);
+void yetty_ypaint_flyweight_registry_destroy(struct yetty_ypaint_flyweight_registry *reg);
 
 // Set default handler (SDF) - called first, fast path
-void yetty_ypaint_core_flyweight_registry_set_default(struct yetty_ypaint_core_flyweight_registry *reg,
+void yetty_ypaint_flyweight_registry_set_default(struct yetty_ypaint_flyweight_registry *reg,
                                                  yetty_ypaint_prim_handler_fn handler);
 
 // Register additional handler for type range [type_min, type_max]
-struct yetty_ycore_void_result yetty_ypaint_core_flyweight_registry_add(
-    struct yetty_ypaint_core_flyweight_registry *reg, uint32_t type_min, uint32_t type_max,
+struct yetty_ycore_void_result yetty_ypaint_flyweight_registry_add(
+    struct yetty_ypaint_flyweight_registry *reg, uint32_t type_min, uint32_t type_max,
     yetty_ypaint_prim_handler_fn handler);
 
 // Get flyweight for primitive (tries default first, then by type range)
-struct yetty_ypaint_prim_flyweight_ptr_result yetty_ypaint_core_flyweight_registry_get(
-    const struct yetty_ypaint_core_flyweight_registry *reg, uint32_t prim_type,
+struct yetty_ypaint_prim_flyweight_ptr_result yetty_ypaint_flyweight_registry_get(
+    const struct yetty_ypaint_flyweight_registry *reg, uint32_t prim_type,
     const uint32_t *prim_data);
 
 #ifdef __cplusplus

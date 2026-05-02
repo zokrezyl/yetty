@@ -398,7 +398,7 @@ struct yetty_ypaint_id_result yetty_ypaint_core_buffer_add_prim(
 }
 
 struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_first(
-    const struct yetty_ypaint_core_buffer *buf, const struct yetty_ypaint_core_flyweight_registry *reg)
+    const struct yetty_ypaint_core_buffer *buf, const struct yetty_ypaint_flyweight_registry *reg)
 {
     if (!buf) {
         return YETTY_ERR(yetty_ypaint_core_primitive_iter, "buf is NULL");
@@ -413,7 +413,7 @@ struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_fir
     const uint32_t *prim = (const uint32_t *)buf->primitives.buf.data;
     uint32_t prim_type = prim[0];
     struct yetty_ypaint_prim_flyweight_ptr_result fw_res =
-        yetty_ypaint_core_flyweight_registry_get(reg, prim_type, prim);
+        yetty_ypaint_flyweight_registry_get(reg, prim_type, prim);
     if (YETTY_IS_ERR(fw_res)) {
         return YETTY_ERR(yetty_ypaint_core_primitive_iter, fw_res.error.msg);
     }
@@ -423,7 +423,7 @@ struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_fir
 }
 
 struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_next(
-    const struct yetty_ypaint_core_buffer *buf, const struct yetty_ypaint_core_flyweight_registry *reg,
+    const struct yetty_ypaint_core_buffer *buf, const struct yetty_ypaint_flyweight_registry *reg,
     const struct yetty_ypaint_core_primitive_iter *iter)
 {
     if (!buf) {
@@ -451,7 +451,7 @@ struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_nex
 
     uint32_t prim_type = next[0];
     struct yetty_ypaint_prim_flyweight_ptr_result fw_res =
-        yetty_ypaint_core_flyweight_registry_get(reg, prim_type, next);
+        yetty_ypaint_flyweight_registry_get(reg, prim_type, next);
     if (YETTY_IS_ERR(fw_res)) {
         return YETTY_ERR(yetty_ypaint_core_primitive_iter, fw_res.error.msg);
     }

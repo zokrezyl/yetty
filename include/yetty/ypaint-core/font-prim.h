@@ -56,7 +56,7 @@ void yetty_ypaint_font_prim_write(uint8_t *out, int32_t font_id, const char *nam
 int yetty_ypaint_font_prim_parse(const uint32_t *prim, struct yetty_ypaint_font_prim_view *out);
 
 /* Flyweight base ops handler. Returns ops only for type FONT. Register
- * via yetty_ypaint_core_flyweight_registry_add(reg, FONT, FONT, handler). */
+ * via yetty_ypaint_flyweight_registry_add(reg, FONT, FONT, handler). */
 struct yetty_ypaint_prim_base_ops_ptr_result yetty_ypaint_font_prim_handler(uint32_t prim_type);
 
 #ifdef __cplusplus

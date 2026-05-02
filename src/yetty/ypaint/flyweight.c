@@ -15,28 +15,28 @@
 #include <yetty/ypaint-core/text-span-prim.h>
 #include <yetty/ytrace.h>
 
-struct yetty_ypaint_core_flyweight_registry_ptr_result yetty_ypaint_flyweight_create(void)
+struct yetty_ypaint_flyweight_registry_ptr_result yetty_ypaint_flyweight_create(void)
 {
-    struct yetty_ypaint_core_flyweight_registry_ptr_result res =
-        yetty_ypaint_core_flyweight_registry_create();
+    struct yetty_ypaint_flyweight_registry_ptr_result res =
+        yetty_ypaint_flyweight_registry_create();
     if (YETTY_IS_ERR(res)) {
         return res;
     }
 
-    struct yetty_ypaint_core_flyweight_registry *reg = res.value;
+    struct yetty_ypaint_flyweight_registry *reg = res.value;
 
     // Default handler for SDF primitives (fast path, types 0-255)
-    yetty_ypaint_core_flyweight_registry_set_default(reg, yetty_ysdf_handler);
+    yetty_ypaint_flyweight_registry_set_default(reg, yetty_ysdf_handler);
 
     // Flyweight prims — one handler per type id, registered like SDF/complex
-    yetty_ypaint_core_flyweight_registry_add(reg, YETTY_YPAINT_TYPE_FONT, YETTY_YPAINT_TYPE_FONT,
+    yetty_ypaint_flyweight_registry_add(reg, YETTY_YPAINT_TYPE_FONT, YETTY_YPAINT_TYPE_FONT,
                                         yetty_ypaint_font_prim_handler);
-    yetty_ypaint_core_flyweight_registry_add(reg, YETTY_YPAINT_TYPE_TEXT_SPAN,
+    yetty_ypaint_flyweight_registry_add(reg, YETTY_YPAINT_TYPE_TEXT_SPAN,
                                         YETTY_YPAINT_TYPE_TEXT_SPAN,
                                         yetty_ypaint_text_span_prim_handler);
 
     // Complex prim handler (types >= 0x80000000)
-    yetty_ypaint_core_flyweight_registry_add(reg, YETTY_YPAINT_COMPLEX_TYPE_BASE, 0xFFFFFFFF,
+    yetty_ypaint_flyweight_registry_add(reg, YETTY_YPAINT_COMPLEX_TYPE_BASE, 0xFFFFFFFF,
                                         yetty_ypaint_core_complex_prim_handler);
 
     ydebug("flyweight_create: SDF default + FONT + TEXT_SPAN + complex");
