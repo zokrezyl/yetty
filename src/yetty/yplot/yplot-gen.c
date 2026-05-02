@@ -76,7 +76,7 @@ static struct yetty_yplot_factory *yetty_yplot_factory_from_base(struct yetty_yp
 // Serialization
 //=============================================================================
 
-size_t yetty_yplot_serialized_size(
+size_t yetty_yplot_uniforms_serialized_size(
     const struct yetty_yplot_uniforms *uniforms,
     const struct yetty_yplot_buffers *buffers)
 {
@@ -86,7 +86,7 @@ size_t yetty_yplot_serialized_size(
     return (2 + 18 + 1 + total_buf_words) * sizeof(uint32_t);
 }
 
-struct yetty_ycore_size_result yetty_yplot_serialize(
+struct yetty_ycore_size_result yetty_yplot_uniforms_serialize(
     const struct yetty_yplot_uniforms *uniforms,
     const struct yetty_yplot_buffers *buffers,
     uint8_t *out, size_t out_capacity)
@@ -241,7 +241,7 @@ static void yplot_populate_rs(struct yetty_yrender_gpu_resource_set *rs)
 //=============================================================================
 
 static struct yetty_ycore_void_result
-yplot_instance_render(struct yetty_ypaint_complex_prim_instance *self,
+yplot_instance_render(struct yetty_ypaint_core_complex_prim_instance *self,
                        struct yetty_yrender_target *target, float x, float y)
 {
     if (!self || !self->buffer_data || !self->factory)
@@ -411,27 +411,27 @@ static WGPURenderPipeline yplot_get_pipeline(struct yetty_ypaint_core_concrete_f
     return factory->pipeline ? yetty_yrender_pipeline_get_pipeline(factory->pipeline) : NULL;
 }
 
-static struct yetty_ypaint_complex_prim_instance_ptr_result
+static struct yetty_ypaint_core_complex_prim_instance_ptr_result
 yplot_create_instance(struct yetty_ypaint_core_concrete_factory *self,
                        const void *buffer_data, size_t size, uint32_t rolling_row)
 {
     if (!buffer_data || size < sizeof(struct yetty_ypaint_complex_prim))
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "invalid buffer data");
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "invalid buffer data");
 
     struct yetty_yplot_factory *factory = yetty_yplot_factory_from_base(self);
     if (!factory->pipeline)
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr,
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
                          "yplot factory pipeline not compiled");
 
-    struct yetty_ypaint_complex_prim_instance *instance =
-        calloc(1, sizeof(struct yetty_ypaint_complex_prim_instance));
+    struct yetty_ypaint_core_complex_prim_instance *instance =
+        calloc(1, sizeof(struct yetty_ypaint_core_complex_prim_instance));
     if (!instance)
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "allocation failed");
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "allocation failed");
 
     instance->buffer_data = malloc(size);
     if (!instance->buffer_data) {
         free(instance);
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "buffer alloc failed");
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "buffer alloc failed");
     }
     memcpy(instance->buffer_data, buffer_data, size);
     instance->buffer_size = size;
@@ -451,7 +451,7 @@ yplot_create_instance(struct yetty_ypaint_core_concrete_factory *self,
     if (!instance->resource_set) {
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "rs alloc failed");
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "rs alloc failed");
     }
     memcpy(instance->resource_set, &factory->template_rs,
            sizeof(struct yetty_yrender_gpu_resource_set));
@@ -478,7 +478,7 @@ yplot_create_instance(struct yetty_ypaint_core_concrete_factory *self,
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr,
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
                          "instance binder create failed", br);
     }
     instance->binder = br.value;
@@ -490,7 +490,7 @@ yplot_create_instance(struct yetty_ypaint_core_concrete_factory *self,
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr,
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
                          "binder submit failed", sr);
     }
 
@@ -500,15 +500,15 @@ yplot_create_instance(struct yetty_ypaint_core_concrete_factory *self,
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr,
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
                          "binder finalize failed", fr);
     }
 
-    return YETTY_OK(yetty_ypaint_complex_prim_instance_ptr, instance);
+    return YETTY_OK(yetty_ypaint_core_complex_prim_instance_ptr, instance);
 }
 
 static void yplot_destroy_instance(struct yetty_ypaint_core_concrete_factory *self,
-                                    struct yetty_ypaint_complex_prim_instance *instance)
+                                    struct yetty_ypaint_core_complex_prim_instance *instance)
 {
     (void)self;
     if (!instance)

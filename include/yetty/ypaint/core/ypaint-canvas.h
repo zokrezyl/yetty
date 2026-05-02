@@ -189,8 +189,8 @@ uint32_t yetty_ypaint_canvas_complex_prim_count(struct yetty_ypaint_canvas *canv
 
 // Get complex prim instance by index (0 to count-1)
 // Returns NULL if index out of range
-struct yetty_ypaint_complex_prim_instance;
-struct yetty_ypaint_complex_prim_instance *yetty_ypaint_canvas_get_complex_prim(
+struct yetty_ypaint_core_complex_prim_instance;
+struct yetty_ypaint_core_complex_prim_instance *yetty_ypaint_canvas_get_complex_prim(
     struct yetty_ypaint_canvas *canvas, uint32_t index);
 
 // Get flyweight registry (for SDF ops lookup)
@@ -199,8 +199,8 @@ const struct yetty_ypaint_flyweight_registry *yetty_ypaint_canvas_get_flyweight_
     struct yetty_ypaint_canvas *canvas);
 
 // Get complex prim factory (for complex prim ops)
-struct yetty_ypaint_complex_prim_factory;
-struct yetty_ypaint_complex_prim_factory *yetty_ypaint_canvas_get_complex_prim_factory(
+struct yetty_ypaint_core_complex_prim_factory;
+struct yetty_ypaint_core_complex_prim_factory *yetty_ypaint_canvas_get_complex_prim_factory(
     struct yetty_ypaint_canvas *canvas);
 
 #ifdef __cplusplus

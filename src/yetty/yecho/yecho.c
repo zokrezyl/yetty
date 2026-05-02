@@ -863,7 +863,7 @@ static int span_has_attr(const struct yetty_yecho_span *span, const char *key)
  *
  * Function definitions and per-plot color attrs are parsed by
  * yetty_yexpr_parse_plot; expressions are compiled by yfsvm; the result
- * is serialized via yetty_yplot_serialize and added as a primitive. */
+ * is serialized via yetty_yplot_uniforms_serialize and added as a primitive. */
 static struct yetty_ycore_void_result
 render_yplot_block(struct render_state *rs, const struct yetty_yecho_span *span)
 {
@@ -967,13 +967,13 @@ render_yplot_block(struct render_state *rs, const struct yetty_yecho_span *span)
         .bytecode_len = bc_len,
     };
 
-    size_t required = yetty_yplot_serialized_size(&u, &bufs);
+    size_t required = yetty_yplot_uniforms_serialized_size(&u, &bufs);
     uint8_t *prim_buf = malloc(required);
     if (!prim_buf) {
         return YETTY_ERR(yetty_ycore_void, "yplot prim alloc failed");
     }
     struct yetty_ycore_size_result ser =
-        yetty_yplot_serialize(&u, &bufs, prim_buf, required);
+        yetty_yplot_uniforms_serialize(&u, &bufs, prim_buf, required);
     if (YETTY_IS_ERR(ser)) {
         free(prim_buf);
         return YETTY_ERR(yetty_ycore_void, "yplot_serialize failed", ser);

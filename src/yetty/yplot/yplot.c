@@ -130,13 +130,13 @@ struct yetty_ypaint_core_buffer_result yetty_yplot_render(
     struct yetty_yplot_buffers bufs = {.bytecode = bc_buf, .bytecode_len = bc_len};
 
     /* Wire bytes for the prim. */
-    size_t required = yetty_yplot_serialized_size(&u, &bufs);
+    size_t required = yetty_yplot_uniforms_serialized_size(&u, &bufs);
     uint8_t *prim_buf = malloc(required);
     if (!prim_buf) {
         return YETTY_ERR(yetty_ypaint_core_buffer, "yplot: prim alloc failed");
     }
     struct yetty_ycore_size_result ser =
-        yetty_yplot_serialize(&u, &bufs, prim_buf, required);
+        yetty_yplot_uniforms_serialize(&u, &bufs, prim_buf, required);
     if (YETTY_IS_ERR(ser)) {
         free(prim_buf);
         return YETTY_ERR(yetty_ypaint_core_buffer, "yplot: serialize failed", ser);

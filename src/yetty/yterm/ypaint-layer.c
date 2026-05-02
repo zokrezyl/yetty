@@ -228,9 +228,9 @@ static struct yetty_ycore_void_result ypaint_layer_set_cell_size(
 
     /* Fan out to complex-prim factories so yplot and friends apply the
      * same transform in their own shaders. */
-    struct yetty_ypaint_complex_prim_factory *f =
+    struct yetty_ypaint_core_complex_prim_factory *f =
         yetty_ypaint_canvas_get_complex_prim_factory(layer->canvas);
-    yetty_ypaint_complex_prim_factory_set_cell_zoom(f, cz, 0.0f, 0.0f);
+    yetty_ypaint_core_complex_prim_factory_set_cell_zoom(f, cz, 0.0f, 0.0f);
 
     ydebug("ypaint_layer_set_cell_size: %.1fx%.1f cell_zoom=%.3f", cell_size.width,
            cell_size.height, cz);
@@ -249,9 +249,9 @@ static struct yetty_ycore_void_result ypaint_layer_set_visual_zoom(
      * ypaint-layer shader. Push the zoom into every concrete factory's shared
      * uniforms so each type's shader can apply the same transform. */
     if (layer->canvas) {
-        struct yetty_ypaint_complex_prim_factory *f =
+        struct yetty_ypaint_core_complex_prim_factory *f =
             yetty_ypaint_canvas_get_complex_prim_factory(layer->canvas);
-        yetty_ypaint_complex_prim_factory_set_visual_zoom(f, scale, off_x, off_y);
+        yetty_ypaint_core_complex_prim_factory_set_visual_zoom(f, scale, off_x, off_y);
     }
     return YETTY_OK_VOID();
 }
@@ -897,7 +897,7 @@ static struct yetty_ycore_void_result ypaint_layer_render(struct yetty_yterm_ter
     struct pixel_size cell_size = yetty_ypaint_canvas_cell_get_pixel_size(layer->canvas);
 
     for (uint32_t i = 0; i < count; i++) {
-        struct yetty_ypaint_complex_prim_instance *inst =
+        struct yetty_ypaint_core_complex_prim_instance *inst =
             yetty_ypaint_canvas_get_complex_prim(layer->canvas, i);
         if (!inst || !inst->render) {
             continue;

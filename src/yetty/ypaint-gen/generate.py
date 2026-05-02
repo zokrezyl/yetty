@@ -420,7 +420,7 @@ static void {name}_populate_rs(struct yetty_yrender_gpu_resource_set *rs)
 //=============================================================================
 
 static struct yetty_ycore_void_result
-{name}_instance_render(struct yetty_ypaint_complex_prim_instance *self,
+{name}_instance_render(struct yetty_ypaint_core_complex_prim_instance *self,
                        struct yetty_yrender_target *target, float x, float y)
 {{
     if (!self || !self->buffer_data || !self->factory)
@@ -573,27 +573,27 @@ static WGPURenderPipeline {name}_get_pipeline(struct yetty_ypaint_core_concrete_
     return factory->pipeline ? yetty_yrender_pipeline_get_pipeline(factory->pipeline) : NULL;
 }}
 
-static struct yetty_ypaint_complex_prim_instance_ptr_result
+static struct yetty_ypaint_core_complex_prim_instance_ptr_result
 {name}_create_instance(struct yetty_ypaint_core_concrete_factory *self,
                        const void *buffer_data, size_t size, uint32_t rolling_row)
 {{
     if (!buffer_data || size < sizeof(struct yetty_ypaint_complex_prim))
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "invalid buffer data");
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "invalid buffer data");
 
     struct {name}_factory *factory = {name}_factory_from_base(self);
     if (!factory->pipeline)
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr,
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
                          "{name} factory pipeline not compiled");
 
-    struct yetty_ypaint_complex_prim_instance *instance =
-        calloc(1, sizeof(struct yetty_ypaint_complex_prim_instance));
+    struct yetty_ypaint_core_complex_prim_instance *instance =
+        calloc(1, sizeof(struct yetty_ypaint_core_complex_prim_instance));
     if (!instance)
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "allocation failed");
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "allocation failed");
 
     instance->buffer_data = malloc(size);
     if (!instance->buffer_data) {{
         free(instance);
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "buffer alloc failed");
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "buffer alloc failed");
     }}
     memcpy(instance->buffer_data, buffer_data, size);
     instance->buffer_size = size;
@@ -613,7 +613,7 @@ static struct yetty_ypaint_complex_prim_instance_ptr_result
     if (!instance->resource_set) {{
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr, "rs alloc failed");
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "rs alloc failed");
     }}
     memcpy(instance->resource_set, &factory->template_rs,
            sizeof(struct yetty_yrender_gpu_resource_set));
@@ -640,7 +640,7 @@ static struct yetty_ypaint_complex_prim_instance_ptr_result
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr,
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
                          "instance binder create failed", br);
     }}
     instance->binder = br.value;
@@ -652,7 +652,7 @@ static struct yetty_ypaint_complex_prim_instance_ptr_result
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr,
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
                          "binder submit failed", sr);
     }}
 
@@ -662,15 +662,15 @@ static struct yetty_ypaint_complex_prim_instance_ptr_result
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ypaint_complex_prim_instance_ptr,
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
                          "binder finalize failed", fr);
     }}
 
-    return YETTY_OK(yetty_ypaint_complex_prim_instance_ptr, instance);
+    return YETTY_OK(yetty_ypaint_core_complex_prim_instance_ptr, instance);
 }}
 
 static void {name}_destroy_instance(struct yetty_ypaint_core_concrete_factory *self,
-                                    struct yetty_ypaint_complex_prim_instance *instance)
+                                    struct yetty_ypaint_core_complex_prim_instance *instance)
 {{
     (void)self;
     if (!instance)

@@ -185,13 +185,13 @@ yplot_yaml_factory(struct yetty_ypaint_core_buffer *buffer,
         .bytecode_len = bc_count,
     };
 
-    size_t required = yetty_yplot_serialized_size(&uniforms, &bufs);
+    size_t required = yetty_yplot_uniforms_serialized_size(&uniforms, &bufs);
     uint8_t *prim_buf = malloc(required);
     if (!prim_buf)
         return YETTY_ERR(yetty_ycore_void, "malloc failed");
 
     struct yetty_ycore_size_result ser_res =
-        yetty_yplot_serialize(&uniforms, &bufs, prim_buf, required);
+        yetty_yplot_uniforms_serialize(&uniforms, &bufs, prim_buf, required);
     if (YETTY_IS_ERR(ser_res)) {
         free(prim_buf);
         return YETTY_ERR(yetty_ycore_void, ser_res.error.msg);
