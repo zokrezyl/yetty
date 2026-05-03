@@ -4,8 +4,11 @@ set(YETTY_YRENDER_SOURCES
     pipeline.c
     gpu-resource-binder.c
     render-target-texture.c
-    render-target-vnc.c
 )
+
+if(YETTY_ENABLE_FEATURE_YVNC)
+    list(APPEND YETTY_YRENDER_SOURCES render-target-vnc.c)
+endif()
 
 # X11-tile render target is only useful on Linux/BSD with X11 + XShm.
 # Compiles out on macOS / Windows / Android / iOS / Emscripten.

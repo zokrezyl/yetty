@@ -99,7 +99,7 @@
 
 #define MAX_QUEUE 8
 #define MAX_CONFIG_SPACE_SIZE 256
-#define MAX_QUEUE_NUM 16
+#define MAX_QUEUE_NUM 256
 
 typedef struct {
     uint32_t ready; /* 0 or 1 */

@@ -204,6 +204,17 @@ elif [ "$TEST_MODE" = "vm-only" ]; then
     # Test VM only (without yetty) - useful for debugging VM boot issues
     TEST_URL="${BASE_URL}/jslinux/vm-bridge.html?ptyId=test1&url=yetty-alpine.cfg&cpu=x86_64&cols=80&rows=25&mem=256"
     echo "Testing JSLinux VM only (no yetty) at: $TEST_URL"
+elif [ "$TEST_MODE" = "alpine-disk" ]; then
+    # riscv64 alpine-disk variant: yetty-built tinyemu wasm + opensbi.elf +
+    # kernel-riscv64.bin + virtio-blk root. capture-chrome-console.py
+    # mirrors term-output postMessages -> [VM-OUT] console lines.
+    # ydebug=1 turns on tinyemu's [YDEBUG] traces (htif_write, copy_bios,
+    # SBI ECALL traces) — required to diagnose silent boot stalls.
+    TEST_URL="${BASE_URL}/jslinux/vm-bridge.html?ptyId=test1&url=alpine-disk.cfg&cpu=riscv64&cols=80&rows=25&mem=256&ydebug=1"
+    echo "Testing alpine-disk variant (riscv64, virtio-blk) at: $TEST_URL"
+elif [ "$TEST_MODE" = "alpine-extended-disk" ]; then
+    TEST_URL="${BASE_URL}/jslinux/vm-bridge.html?ptyId=test1&url=alpine-extended-disk.cfg&cpu=riscv64&cols=80&rows=25&mem=256&ydebug=1"
+    echo "Testing alpine-extended-disk variant (riscv64, virtio-blk) at: $TEST_URL"
 elif [ "$TEST_MODE" = "term-size" ]; then
     # Test terminal size initialization - use non-default size to verify kernel gets correct dimensions
     TEST_COLS="${4:-120}"
@@ -260,7 +271,6 @@ $CHROME \
     --enable-features=Vulkan,WebGPU \
     --use-vulkan \
     --allow-insecure-localhost \
-    --disable-web-security \
     --user-data-dir="/tmp/yetty-chrome-prof.$$" \
     about:blank \
     > /tmp/yetty-chrome-stderr.log 2>&1 &
@@ -378,7 +388,49 @@ if grep -q "^\[PAGE-EXCEPTION\]" "$CONSOLE_LOG"; then
     RESULT=1
 fi
 
-if [ "$TEST_MODE" = "jslinux" ] || [ "$TEST_MODE" = "jslinux-local" ]; then
+if [ "$TEST_MODE" = "alpine-disk" ] || [ "$TEST_MODE" = "alpine-extended-disk" ]; then
+    # riscv64 variants — vm-bridge.html mode, no parent yetty wasm. The
+    # python capture mirrors term-output postMessages to console as
+    # [VM-OUT] lines, so OpenSBI / kernel boot text shows up there.
+    echo ""
+    echo "=== JSLinux Bridge Output ==="
+    grep -E "\[vm-bridge\]|\[term-bridge\]|SMP:" "$CONSOLE_LOG" | head -30 || echo "(no bridge output)"
+
+    echo ""
+    echo "=== VM Console Output (last 60 lines) ==="
+    grep -E "^\[(CONSOLE log\] \[)?VM-OUT\]" "$CONSOLE_LOG" | tail -60 || echo "(no VM output)"
+
+    echo ""
+    echo "=== Boot Checkpoints ==="
+
+    # Each checkpoint maps to a substring grep against the console log.
+    # We look in [VM-OUT] lines for actual VM-side text. The order is
+    # roughly load -> bios -> kernel -> userspace.
+    declare -A CHECK_PATTERNS=(
+        [emcc-runtime]="\[vm-bridge\] Emscripten runtime initialized"
+        [smp-init]="SMP: Using"
+        [opensbi-banner]="OpenSBI"
+        [kernel-banner]="Linux version"
+        [kernel-cmdline]="Kernel command line"
+        [virtio-blk]="virtio_blk"
+        [ext4-mount]="EXT4-fs"
+        [init-running]="Welcome to|tinyemu|init "
+        [shell-prompt]="/ # |~ # |# $|\\$ $"
+    )
+    BOOT_FAIL=0
+    for k in emcc-runtime smp-init opensbi-banner kernel-banner kernel-cmdline virtio-blk ext4-mount init-running shell-prompt; do
+        if grep -qE "${CHECK_PATTERNS[$k]}" "$CONSOLE_LOG"; then
+            echo -e "${GREEN}OK: $k${NC}"
+        else
+            echo -e "${RED}MISSING: $k${NC}"
+            BOOT_FAIL=$((BOOT_FAIL + 1))
+        fi
+    done
+    if [ "$BOOT_FAIL" -gt 0 ]; then
+        echo -e "${RED}Boot incomplete — $BOOT_FAIL checkpoint(s) missing${NC}"
+        RESULT=1
+    fi
+elif [ "$TEST_MODE" = "jslinux" ] || [ "$TEST_MODE" = "jslinux-local" ]; then
     # JSLinux-specific checks
     echo ""
     echo "=== JSLinux Output ==="

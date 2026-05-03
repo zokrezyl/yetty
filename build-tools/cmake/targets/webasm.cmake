@@ -1,7 +1,6 @@
 # WebAssembly (Emscripten) build target
 
 # Disable desktop-only libraries
-set(YETTY_ENABLE_LIB_LIBUV OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_LIB_GLFW OFF CACHE BOOL "" FORCE)
 # libco is desktop-only. Webasm doesn't need a coroutine library: the
 # wgpu _await wrappers (src/yetty/yplatform/webasm/ywebgpu.c) suspend the
@@ -12,6 +11,24 @@ set(YETTY_ENABLE_LIB_LIBCO OFF CACHE BOOL "" FORCE)
 # qemu is not built for webasm — the webasm yetty build uses in-process
 # TinyEMU (compiled to wasm) instead of a prebuilt QEMU binary.
 set(YETTY_ENABLE_LIB_QEMU OFF CACHE BOOL "" FORCE)
+# libjpeg-turbo + YVNC re-enabled now that the webasm-mt 3rdparty variant
+# (built with -pthread → atomics + bulk-memory) is fetched on EMSCRIPTEN,
+# making the prebuilt .a link-compatible with --shared-memory yetty.wasm.
+
+# yetty.wasm is linked with -pthread (--shared-memory). Every .o that
+# enters the link must be built with -pthread too, so that wasm-ld sees
+# the atomics + bulk-memory features it requires. Apply globally so all
+# yetty static libs (yetty_yui, yetty_ymsdf_gen, libvterm, …) inherit it.
+add_compile_options(-pthread)
+add_link_options(-pthread)
+
+# emcc auto-defines both `EMSCRIPTEN` and `__EMSCRIPTEN__`. The bare
+# `EMSCRIPTEN` macro is jslinux-era and switches several upstream
+# tinyemu sources/headers into a stripped-down (single-CPU, no fopen,
+# fs_wget-only) variant we don't want. Yetty's webasm uses MEMFS + all
+# CPU variants, so undefine the legacy macro globally and rely on
+# `__EMSCRIPTEN__` (the canonical, modern spelling) where actually needed.
+add_compile_options(-UEMSCRIPTEN)
 
 # Drop the C++ prebuilt libs on webasm. Each one drags in libc++ (so
 # std::shared_ptr / std::atomic etc.), and the upstream prebuilt tarballs
@@ -32,6 +49,7 @@ set(YETTY_ENABLE_FEATURE_YTHORVG   OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_FEATURE_SSH       OFF CACHE BOOL "" FORCE)
 
 include(${YETTY_ROOT}/build-tools/cmake/targets/shared.cmake)
+include(${YETTY_ROOT}/build-tools/cmake/tinyemu.cmake)
 
 # Copy runtime assets (fonts, etc.) to build directory
 if(YETTY_ENABLE_FEATURE_ASSETS)
@@ -48,13 +66,13 @@ set(YETTY_SHADERS_DIR "/assets/shaders" CACHE STRING "Shader directory path")
 set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/main.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/surface.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webasm/webasm-pty.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/window.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/event-loop.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/pipe.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/platform-paths.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/ycoroutine.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/ywebgpu.c
+    ${YETTY_ROOT}/src/yetty/yplatform/shared/tinyemu-pty.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/extract-assets.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/fs.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
@@ -82,11 +100,17 @@ target_include_directories(yetty PRIVATE ${YETTY_INCLUDES} ${YETTY_RENDERER_INCL
 # Logo + DefaultConfig are referenced by name; yetty_embed_assets adds
 # the bulk fonts / shaders / msdf-fonts / yemu (each pre-brotli'd; the
 # extract-assets startup path decompresses to MEMFS).
+# Embed assets exactly like desktop: yetty_embed_assets() will include
+# kernel, opensbi, rootfs under yemu/ prefix (from shared.cmake 3rdparty fetches).
+# Same extraction code path as desktop (no jslinux custom code needed).
 if(YETTY_ENABLE_LIB_INCBIN)
     incbin_add_resources(yetty
         Logo "${YETTY_ROOT}/docs/logo-2.jpeg"
         DefaultConfig "${YETTY_ROOT}/assets/default-config.yaml"
     )
+    
+    # yetty_embed_assets() will embed shaders, fonts, config, and yemu/ directory
+    # (kernel, opensbi, rootfs) using the same pipeline as desktop.
     yetty_embed_assets(yetty)
 endif()
 
@@ -108,7 +132,7 @@ target_compile_definitions(yetty PRIVATE
     YTRACE_USE_SPDLOG=1
     YETTY_ASSETS_DIR="/assets"
     YETTY_SHADERS_DIR="/assets/shaders"
-    YETTY_HAS_VNC=1
+    CONFIG_SLIRP=1
 )
 
 # (removed dead `${ytrace_SOURCE_DIR}/include ${spdlog_SOURCE_DIR}/include`
@@ -126,14 +150,17 @@ target_link_options(yetty PRIVATE
     -sALLOW_MEMORY_GROWTH=1
     -sINITIAL_MEMORY=2048MB
     -sASSERTIONS=2
+    --emit-symbol-map
     -lwebsocket.js
+    -pthread
+    -sPTHREAD_POOL_SIZE=4
     # No --preload-file=assets — fonts/shaders/CDB/yemu are baked into
     # yetty.wasm via yetty_embed_assets() (incbin, brotli-compressed) and
     # decompressed into MEMFS at startup by yetty_yplatform_extract_assets.
     # Same flow as desktop targets.
     "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','FS','ENV','HEAPU8']"
     # "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_yetty_write','_yetty_key','_yetty_special_key','_yetty_read_input','_yetty_sync','_yetty_set_scale','_yetty_resize','_yetty_get_cols','_yetty_get_rows','_webpty_on_data']"
-    "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_webpty_pipe_source_notify']"
+    "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free']"
 )
 
 if(YETTY_ENABLE_FEATURE_DEMO)
@@ -143,12 +170,13 @@ if(YETTY_ENABLE_FEATURE_DEMO)
     )
 endif()
 
-target_compile_options(yetty PRIVATE --use-port=emdawnwebgpu -fexceptions)
+target_compile_options(yetty PRIVATE --use-port=emdawnwebgpu -fexceptions -pthread)
 target_link_options(yetty PRIVATE -fexceptions)
 set_target_properties(yetty PROPERTIES SUFFIX ".js")
 
 target_link_libraries(yetty PRIVATE
     ${YETTY_LIBS}
+    tinyemu
     Freetype::Freetype
 )
 
@@ -178,9 +206,16 @@ add_custom_command(TARGET yetty POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${YETTY_ROOT}/assets/apple-touch-icon.jpg ${CMAKE_BINARY_DIR}/apple-touch-icon.jpg
 )
 
-# Copy JSLinux files to build output
+# Copy JSLinux files to build output.
+# Done as PRE_LINK on yetty so the files are in place before the verify-assets
+# step runs (which is part of yetty's link command line). add_dependencies on
+# jslinux-assets ensures the splitimg chunking + riscvemu64-wasm build run
+# before this copy. For incremental dev where yetty itself doesn't relink,
+# touch CMakeFiles/yetty.dir/build.make or rerun a clean build.
 if(YETTY_ENABLE_FEATURE_JSLINUX)
-    add_custom_command(TARGET yetty POST_BUILD
+    add_dependencies(yetty jslinux-assets)
+
+    add_custom_command(TARGET yetty PRE_LINK
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/jslinux
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/jslinux-build/jslinux ${CMAKE_BINARY_DIR}/jslinux
         COMMENT "Copying JSLinux files..."

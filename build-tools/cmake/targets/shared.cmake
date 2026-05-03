@@ -59,6 +59,7 @@ if(YETTY_ENABLE_LIB_TINYEMU OR YETTY_ENABLE_LIB_QEMU)
     yetty_3rdparty_fetch(linux       _LINUX_DIR)
     yetty_3rdparty_fetch(opensbi     _OPENSBI_DIR)
     yetty_3rdparty_fetch(alpine-disk _ALPINE_DIR)
+    yetty_3rdparty_fetch(alpine-extended-disk _ALPINE_EXTENDED_DIR)
 
     # Path constants consumed by tinyemu-runtime.cmake (bundle copy at
     # build time) and any future runtime-path consumer. Point at the
@@ -74,6 +75,9 @@ if(YETTY_ENABLE_LIB_TINYEMU OR YETTY_ENABLE_LIB_QEMU)
         CACHE FILEPATH "" FORCE)
     set(TINYEMU_ROOTFS_IMG
         "${_ALPINE_DIR}/alpine-rootfs.img"
+        CACHE FILEPATH "" FORCE)
+    set(TINYEMU_ALPINE_EXTENDED_IMG
+        "${_ALPINE_EXTENDED_DIR}/alpine-extended-rootfs.img"
         CACHE FILEPATH "" FORCE)
 endif()
 

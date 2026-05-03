@@ -168,6 +168,17 @@ static CharacterDevice *console_init(void)
     return dev;
 }
 
+/* Called from JS (Module.cwrap('console_resize_event', null, [])) when the
+ * host terminal changes size; the actual virtio_console_resize_event is
+ * issued from virt_machine_run, which sees this flag flipped on the next
+ * tick. Bellard's prebuilt wasm exposed an equivalently-named symbol —
+ * yetty's vm-bridge.html / webasm-pty.c already cwrap it, so we keep the
+ * name when building from source. */
+void console_resize_event(void)
+{
+    console_resize_pending = TRUE;
+}
+
 typedef struct {
     VirtMachineParams *p;
     int ram_size;

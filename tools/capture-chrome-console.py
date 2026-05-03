@@ -71,6 +71,42 @@ def main() -> None:
     send("Runtime.enable")
     send("Log.enable")
     send("Page.enable")
+
+    # Mirror postMessage to console.log. vm-bridge.html dispatches VM
+    # console output as `window.parent.postMessage({type:'term-output',
+    # data:...}, '*')`. When the iframe is opened directly (no parent
+    # listener), or even when nested under index.html, those messages are
+    # invisible to CDP — they don't go through console.* and CDP can't
+    # observe postMessage traffic. Solution: inject a `message` listener
+    # on `window` (since `parent === window` for top-level navigation, the
+    # postMessage routes to self) that re-emits each event as a
+    # console.log line, prefixed so the surrounding test script can grep
+    # for it (e.g. `[VM-OUT]`, `[VM-MSG]`).
+    #
+    # Page.addScriptToEvaluateOnNewDocument registers the script for
+    # *every* document created from now on, and runs before the page's
+    # own JS — so we capture the very first byte the VM writes.
+    POSTMSG_MIRROR_JS = """
+(function() {
+    function fmt(d) {
+        if (d == null) return String(d);
+        if (typeof d === 'string') return d;
+        try { return JSON.stringify(d); } catch (e) { return String(d); }
+    }
+    window.addEventListener('message', function(e) {
+        var d = e.data;
+        if (d && d.type === 'term-output') {
+            // Pump VM bytes verbatim — grep-friendly. \\r/\\n in the data
+            // already form natural log breaks once console.log runs.
+            console.log('[VM-OUT] ' + (d.data == null ? '' : d.data));
+        } else if (d && d.type) {
+            console.log('[VM-MSG] ' + d.type + ' ' + fmt(d));
+        }
+    }, false);
+})();
+"""
+    send("Page.addScriptToEvaluateOnNewDocument", {"source": POSTMSG_MIRROR_JS})
+
     if navigate_url:
         send("Page.navigate", {"url": navigate_url})
 

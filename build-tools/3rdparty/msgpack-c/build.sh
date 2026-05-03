@@ -18,8 +18,8 @@ case "$TARGET_PLATFORM" in
     macos-x86_64|macos-arm64|\
     android-arm64-v8a|android-x86_64|\
     ios-arm64|ios-x86_64|tvos-arm64|tvos-x86_64|\
-    webasm)
-        SHELL_NAME="3rdparty-${TARGET_PLATFORM}"
+    webasm|webasm-mt)
+        SHELL_NAME="3rdparty-${TARGET_PLATFORM%-mt}"
         ;;
     windows-x86_64)
         # Native MSVC: caller must have vcvarsall'd the shell. qemu is the

@@ -678,13 +678,18 @@ static void fdt_prop_tab_str(FDTState *s, const char *prop_name, ...) {
   free(tab);
 }
 
-/* write the FDT to 'dst1'. return the FDT size in bytes */
-int fdt_output(FDTState *s, uint8_t *dst) {
+/* write the FDT to 'dst1'. return the FDT size in bytes.
+ * `reserve` is an array of `reserve_count` {addr,size} u64 pairs to emit
+ * in the /memreserve/ table — the kernel keeps its hands off these
+ * regions. Used to keep Linux's page allocator out of the OpenSBI
+ * runtime so virtio-blk DMA can't clobber it. */
+int fdt_output(FDTState *s, uint8_t *dst,
+               const uint64_t (*reserve)[2], int reserve_count) {
   struct fdt_header *h;
   struct fdt_reserve_entry *re;
   int dt_struct_size;
   int dt_strings_size;
-  int pos;
+  int pos, i;
 
   assert(s->open_node_count == 0);
 
@@ -712,8 +717,14 @@ int fdt_output(FDTState *s, uint8_t *dst) {
     dst[pos++] = 0;
   }
   h->off_mem_rsvmap = cpu_to_be32(pos);
+  for (i = 0; i < reserve_count; i++) {
+    put_be64(dst + pos,     reserve[i][0]);
+    put_be64(dst + pos + 8, reserve[i][1]);
+    pos += sizeof(struct fdt_reserve_entry);
+  }
+  /* terminator (zero address + zero size, big-endian — but zero is the same) */
   re = (struct fdt_reserve_entry *)(dst + pos);
-  re->address = 0; /* no reserved entry */
+  re->address = 0;
   re->size = 0;
   pos += sizeof(struct fdt_reserve_entry);
 
@@ -738,7 +749,8 @@ void fdt_end(FDTState *s) {
 
 static int riscv_build_fdt(RISCVMachine *m, uint8_t *dst, uint64_t kernel_start,
                            uint64_t kernel_size, uint64_t initrd_start,
-                           uint64_t initrd_size, const char *cmd_line) {
+                           uint64_t initrd_size, const char *cmd_line,
+                           uint64_t bios_addr, uint64_t bios_size) {
   FDTState *s;
   int size, max_xlen, i, j, cur_phandle, plic_phandle;
   int intc_phandle[MAX_CPUS];
@@ -907,7 +919,21 @@ static int riscv_build_fdt(RISCVMachine *m, uint8_t *dst, uint64_t kernel_start,
 
   fdt_end_node(s); /* / */
 
-  size = fdt_output(s, dst);
+  /* Reserve the entire pre-kernel region [bios_addr, kernel_start) via
+   * /memreserve/. Without this, Linux can hand a low physical address
+   * (e.g. 0x80000000) to a virtio-blk DMA target and clobber OpenSBI
+   * runtime code or scratch mid-flight — the next SBI ECALL (timer,
+   * IPI, console) then hangs the guest. Reproduced with the extended
+   * Alpine rootfs, whose larger binaries trigger 1.4 MB virtio-blk
+   * reads into contiguous bounce buffers. Reserving only the static
+   * bios image is not enough: OpenSBI's runtime scratch + stacks live
+   * just above the static image, so cover the full 2 MiB up to the
+   * kernel base. */
+  uint64_t reserve_size = (kernel_start > bios_addr) ?
+      (kernel_start - bios_addr) : bios_size;
+  uint64_t reserve_tab[1][2] = {{bios_addr, reserve_size}};
+  size = fdt_output(s, dst, bios_size > 0 ? reserve_tab : NULL,
+                    bios_size > 0 ? 1 : 0);
 #if 0
     {
         FILE *f;
@@ -1007,7 +1033,7 @@ static void copy_bios(RISCVMachine *s, const uint8_t *buf, int buf_len,
   ydebug("copy_bios: building FDT at 0x%lx", (unsigned long)fdt_addr);
   riscv_build_fdt(s, ram_ptr + fdt_addr, RAM_BASE_ADDR + kernel_base,
                   kernel_size, RAM_BASE_ADDR + initrd_base, initrd_size,
-                  cmd_line);
+                  cmd_line, RAM_BASE_ADDR + bios_base, bios_size);
 
   /* jump_addr = 0x80000000 */
   q = (uint32_t *)(ram_ptr + 0x1000);
@@ -1301,6 +1327,17 @@ static int riscv_machine_get_sleep_duration(VirtMachine *s1, int delay) {
     }
   }
 
+#ifdef EMSCRIPTEN
+  /* Single-threaded wasm: jsemu's mainloop only executes CPU cycles when
+   * sleep_duration returns 0 (delay==0). With pthread CPU threads stubbed
+   * out under emscripten without -pthread, returning a positive delay
+   * here means the CPU never runs. Force delay=0 whenever any CPU is
+   * runnable so virt_machine_interp drives it from the JS tick. */
+  if (!all_idle) {
+    return 0;
+  }
+#endif
+
   /* Cap delay to ensure timers fire promptly:
    * - During boot (first 10s): 1ms for CPU bringup
    * - After boot with active CPUs: 1ms for responsiveness
@@ -1337,9 +1374,31 @@ static int riscv_machine_get_sleep_duration(VirtMachine *s1, int delay) {
 }
 
 static void riscv_machine_interp(VirtMachine *s1, int max_exec_cycle) {
-  /* In SMP mode, CPUs run in their own threads */
+#ifdef EMSCRIPTEN
+  /* Single-threaded wasm: pthread_create on emscripten without -pthread
+   * does not actually run the thread, so the SMP thread loop never
+   * executes any CPU instructions. Drive the CPU directly from the
+   * mainloop instead. Mirrors the inner core of riscv_cpu_thread_func
+   * minus the pthread sleep/wakeup machinery (single CPU, no idle race
+   * to coordinate). */
+  RISCVMachine *s = (RISCVMachine *)s1;
+  int i;
+  for (i = 0; i < s->num_cpus; i++) {
+    RISCVCPUState *cpu = s->cpu_state[i];
+    if (riscv_cpu_get_power_down(cpu)) {
+      if (riscv_cpu_has_pending_irq(cpu)) {
+        riscv_cpu_set_power_down(cpu, FALSE);
+      } else {
+        continue; /* still halted, skip */
+      }
+    }
+    riscv_cpu_interp(cpu, max_exec_cycle);
+  }
+#else
+  /* Native build: CPUs run in their own pthreads via riscv_cpu_thread_func. */
   (void)s1;
   (void)max_exec_cycle;
+#endif
 }
 
 static void riscv_vm_send_key_event(VirtMachine *s1, BOOL is_down,

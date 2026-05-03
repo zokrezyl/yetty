@@ -338,10 +338,11 @@ static void vm_run_once(struct yetty_yplatform_tinyemu_pty *pty)
 static void *vm_thread_func(void *arg)
 {
     struct yetty_yplatform_tinyemu_pty *pty = arg;
-    struct timespec start_ts;
-    int redrive_done = 0;
 
     yinfo("vm_thread_func: VM thread started");
+
+    struct timespec start_ts;
+    int redrive_done = 0;
 
     clock_gettime(CLOCK_MONOTONIC, &start_ts);
 
@@ -737,3 +738,16 @@ struct yetty_yplatform_pty_factory_result yetty_yplatform_tinyemu_pty_factory_cr
 
     return YETTY_OK(yetty_yplatform_pty_factory, &factory->base);
 }
+
+#if defined(__EMSCRIPTEN__)
+/* On the WebAssembly target the only pty implementation is the embedded
+ * tinyemu RISC-V VM, so the public yetty_yplatform_pty_factory_create
+ * symbol is just an alias of tinyemu_pty_factory_create (mirrors the
+ * iOS variant). */
+struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
+    struct yetty_yconfig *config, void *os_specific)
+{
+    (void)os_specific;
+    return tinyemu_pty_factory_create(config);
+}
+#endif

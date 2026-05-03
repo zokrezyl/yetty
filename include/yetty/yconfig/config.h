@@ -17,6 +17,7 @@ struct yetty_yplatform_paths {
     const char *fonts_dir;
     const char *runtime_dir;
     const char *bin_dir;
+    const char *config_dir;
 };
 
 /* Result type */

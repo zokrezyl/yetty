@@ -111,7 +111,15 @@ android-arm64-v8a|android-x86_64)
         "-DANDROID_ABI=${_ABI}"
         "-DANDROID_PLATFORM=android-${ANDROID_API}"
     ) ;;
-webasm) EMCMAKE_PREFIX="emcmake" ;;
+webasm|webasm-mt)
+    EMCMAKE_PREFIX="emcmake"
+    if [ "$TARGET_PLATFORM" = "webasm-mt" ]; then
+        # -pthread on emscripten enables atomics + bulk-memory wasm
+        # features so the resulting .a links into yetty.wasm built
+        # with --shared-memory (USE_PTHREADS).
+        CMAKE_ARGS+=("-DCMAKE_C_FLAGS=-pthread" "-DCMAKE_CXX_FLAGS=-pthread")
+    fi
+    ;;
 windows-x86_64)
     # Native MSVC — caller must have vcvarsall'd the shell.
     : # cmake's default Ninja+cl pickup is fine

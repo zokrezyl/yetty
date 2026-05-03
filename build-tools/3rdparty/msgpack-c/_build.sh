@@ -182,12 +182,17 @@ android-arm64-v8a|android-x86_64)
     )
     ;;
 
-webasm)
+webasm|webasm-mt)
     command -v emcmake >/dev/null 2>&1 || {
         echo "error: emcmake not found — source the .#3rdparty-webasm shell" >&2
         exit 1
     }
     EMCMAKE_PREFIX="emcmake"
+    if [ "$TARGET_PLATFORM" = "webasm-mt" ]; then
+        # -pthread enables atomics + bulk-memory; required for linking
+        # into yetty.wasm built with --shared-memory.
+        CMAKE_ARGS+=("-DCMAKE_C_FLAGS=-pthread" "-DCMAKE_CXX_FLAGS=-pthread")
+    fi
     ;;
 
 windows-x86_64)
