@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["msgpack", "click"]
+# dependencies = ["msgpack", "click", "pyyaml"]
 # ///
 """
 Async RPC client for yetty terminal.
@@ -258,6 +258,162 @@ class Mods:
     SUPER = 0x0008
 
 
+# --- Script runner (YAML scenarios) ---
+
+import random
+
+
+_SPECIAL_CHARS = {
+    "ENTER": Keys.ENTER,
+    "TAB": Keys.TAB,
+    "BACKSPACE": Keys.BACKSPACE,
+    "ESCAPE": Keys.ESCAPE,
+}
+
+_DEFAULT_TYPING = {
+    "avg-speed": 5.0,        # chars/second
+    "speed-deviation": 0.2,  # fraction of mean delay (0.2 = ±20%)
+    "avg-typo": 0.0,         # probability per character [0..1]
+}
+
+
+def _merge_typing(defaults: dict, override: dict | None) -> dict:
+    """Per-step typing settings = defaults overridden by step-level keys."""
+    merged = dict(defaults)
+    if override:
+        for k in ("avg-speed", "speed-deviation", "avg-typo"):
+            if k in override:
+                merged[k] = override[k]
+    return merged
+
+
+def _char_delay(speed: float, deviation: float, rng: random.Random) -> float:
+    """Sample one inter-character delay (seconds) from the typing settings.
+
+    Mean = 1/speed. Jitter is uniform within ±(deviation * mean). Clamped
+    to ≥ 0 so a deviation > 1 can't yield negative delays."""
+    mean = 1.0 / max(speed, 0.001)
+    jitter = mean * deviation
+    return max(0.0, mean + rng.uniform(-jitter, jitter))
+
+
+def _typo_char(target: str, rng: random.Random) -> str:
+    """Pick a wrong-but-plausible character to stand in for `target`.
+
+    Simple model: random lowercase a-z, retried up to a few times to avoid
+    matching the target. Falls back to 'x' on the (vanishingly rare) case
+    of repeated collisions."""
+    for _ in range(5):
+        c = chr(rng.randrange(ord('a'), ord('z') + 1))
+        if c.lower() != target.lower():
+            return c
+    return 'x'
+
+
+def _mods_from_dict(d: dict) -> int:
+    """Translate {ctrl, shift, alt} flags into a GLFW modifier mask."""
+    mods = 0
+    if d.get("ctrl"):
+        mods |= Mods.CONTROL
+    if d.get("shift"):
+        mods |= Mods.SHIFT
+    if d.get("alt"):
+        mods |= Mods.ALT
+    return mods
+
+
+async def _play_type(client: RpcClient, text: str, typing: dict,
+                     rng: random.Random) -> None:
+    """Type `text` one char at a time with timing + typo simulation per
+    `typing` (avg-speed, speed-deviation, avg-typo)."""
+    speed = float(typing["avg-speed"])
+    deviation = float(typing["speed-deviation"])
+    typo_prob = float(typing["avg-typo"])
+
+    for ch in text:
+        # Typo simulation only on visible characters; whitespace gets typed
+        # straight through to keep the timing of long pauses (newlines in
+        # multiline `text:` blocks) predictable.
+        if ch.isprintable() and not ch.isspace() and rng.random() < typo_prob:
+            wrong = _typo_char(ch, rng)
+            await client.char_input(ord(wrong))
+            await asyncio.sleep(_char_delay(speed, deviation, rng))
+            await client.press_key(Keys.BACKSPACE)
+            await asyncio.sleep(_char_delay(speed, deviation, rng))
+
+        await client.char_input(ord(ch))
+        await asyncio.sleep(_char_delay(speed, deviation, rng))
+
+
+async def _play_step(client: RpcClient, step, defaults: dict,
+                     rng: random.Random) -> None:
+    """Dispatch a single script step. See SCRIPT.md / module docs for the
+    YAML grammar — every step is either a bare scalar (currently unused;
+    we kept all step types as mappings for now) or a single-key mapping."""
+    if not isinstance(step, dict) or len(step) != 1:
+        raise ValueError(f"each script step must be a single-key mapping, got: {step!r}")
+
+    (verb, payload), = step.items()
+
+    if verb == "sleep":
+        await asyncio.sleep(float(payload))
+        return
+
+    if verb == "char":
+        # Two forms: scalar 'c' (plain char) or {char, ctrl, shift, alt}.
+        if isinstance(payload, str):
+            if len(payload) != 1:
+                raise ValueError(f"char: scalar form expects a single character, got {payload!r}")
+            await client.char_input(ord(payload))
+            return
+        if isinstance(payload, dict):
+            ch = payload.get("char")
+            if not isinstance(ch, str) or len(ch) != 1:
+                raise ValueError(f"char: dict form requires single-char `char` field, got {payload!r}")
+            await client.char_input(ord(ch), _mods_from_dict(payload))
+            return
+        raise ValueError(f"char: unsupported payload type: {payload!r}")
+
+    if verb == "special-char":
+        name = str(payload).upper()
+        key = _SPECIAL_CHARS.get(name)
+        if key is None:
+            raise ValueError(f"special-char: unknown name {name!r} (allowed: {sorted(_SPECIAL_CHARS)})")
+        await client.press_key(key)
+        return
+
+    if verb == "type":
+        if isinstance(payload, str):
+            await _play_type(client, payload, defaults, rng)
+            return
+        if isinstance(payload, dict):
+            text = payload.get("text", "")
+            typing = _merge_typing(defaults, payload)
+            await _play_type(client, text, typing, rng)
+            return
+        raise ValueError(f"type: unsupported payload type: {payload!r}")
+
+    raise ValueError(f"unknown script verb: {verb!r}")
+
+
+async def play_script(client: RpcClient, doc: dict) -> None:
+    """Execute a parsed YAML script document against an open RpcClient."""
+    cfg = doc.get("config") or {}
+    defaults = _merge_typing(_DEFAULT_TYPING,
+                             (cfg.get("defaults") or {}).get("typing"))
+    steps = doc.get("script") or []
+    if not isinstance(steps, list):
+        raise ValueError("`script` must be a list of steps")
+
+    rng = random.Random()  # unseeded — reproducibility intentionally not a goal
+
+    for i, step in enumerate(steps):
+        try:
+            await _play_step(client, step, defaults, rng)
+        except Exception as e:
+            raise RuntimeError(f"script step {i}: {e}") from e
+
+
 # --- CLI ---
 
 def run_async(coro):
@@ -479,6 +635,22 @@ if click:
                     except KeyboardInterrupt:
                         await client.char_input(3, Mods.CONTROL)
                         click.echo("^C")
+        run_async(_run())
+
+    @cli.command()
+    @click.argument("script_file", type=click.Path(exists=True, dir_okay=False))
+    @click.pass_context
+    def plays(ctx, script_file):
+        """Play a YAML script of typing/key/sleep steps."""
+        import yaml
+        with open(script_file, "r", encoding="utf-8") as f:
+            doc = yaml.safe_load(f)
+        if not isinstance(doc, dict):
+            raise click.ClickException(f"{script_file}: expected a YAML mapping at top level")
+
+        async def _run():
+            async with RpcClient(ctx.obj["host"], ctx.obj["port"]) as client:
+                await play_script(client, doc)
         run_async(_run())
 
     @cli.command()

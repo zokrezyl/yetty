@@ -1,0 +1,48 @@
+# Modifiers + special-chars: type a long line then Ctrl+U to clear,
+# Ctrl+A/Ctrl+E to jump to start/end, Ctrl+C to bail. Exercises every
+# modifier path the script runner currently supports.
+
+config:
+  defaults:
+    typing:
+      avg-speed: 8
+      speed-deviation: 0.2
+      avg-typo: 0.0
+
+script:
+  - sleep: 0.5
+
+  # Type a line we'll then mangle with control keys.
+  - type: "this line will be cleared with ctrl+u"
+  - sleep: 0.6
+
+  # Ctrl+U — kill line back to prompt (readline default).
+  - char:
+      char: 'u'
+      ctrl: true
+  - sleep: 0.4
+
+  # Type something else and exercise navigation.
+  - type: "echo navigated"
+  - sleep: 0.4
+
+  # Ctrl+A — jump to start of line.
+  - char:
+      char: 'a'
+      ctrl: true
+  - sleep: 0.4
+
+  # Ctrl+E — jump to end of line.
+  - char:
+      char: 'e'
+      ctrl: true
+  - sleep: 0.4
+
+  - special-char: ENTER
+  - sleep: 0.6
+
+  # Ctrl+C to interrupt anything that ran.
+  - char:
+      char: 'c'
+      ctrl: true
+  - sleep: 0.4

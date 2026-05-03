@@ -1,0 +1,37 @@
+# Showcases the typing knobs: avg-speed, speed-deviation, avg-typo.
+# Each block uses different settings so you can see / hear the cadence change.
+
+config:
+  defaults:
+    typing:
+      avg-speed: 6
+      speed-deviation: 0.2
+      avg-typo: 0.0
+
+script:
+  # Slow, even rhythm — robotic.
+  - type:
+      text: "# slow and steady (3 cps, no jitter, no typos)"
+      avg-speed: 3
+      speed-deviation: 0.0
+      avg-typo: 0.0
+  - special-char: ENTER
+  - sleep: 0.6
+
+  # Fast burst with strong jitter — feels human.
+  - type:
+      text: "# faster with jitter (12 cps, ±40%, no typos)"
+      avg-speed: 12
+      speed-deviation: 0.4
+      avg-typo: 0.0
+  - special-char: ENTER
+  - sleep: 0.6
+
+  # Realistic rate with typo simulation — backspaces and retypes.
+  - type:
+      text: "# typing with mistakes (8 cps, 25% typo rate)"
+      avg-speed: 8
+      speed-deviation: 0.3
+      avg-typo: 0.25
+  - special-char: ENTER
+  - sleep: 1.0
