@@ -1,13 +1,12 @@
 labels:
   platform: darwin/*
 
-clone:
-  git:
-    depth: 50
-    lfs: false
+when:
+  - event: [push, manual, pull_request, tag]
 
 steps:
   build:
+    image: scratch
     commands:
       - git lfs install
       - git lfs fetch
