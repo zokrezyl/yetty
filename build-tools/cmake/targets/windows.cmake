@@ -1,5 +1,14 @@
 # Windows desktop build target
 
+# YETTY_ERR(...) in include/yetty/ycore/result.h uses __VA_ARGS__ count-based
+# dispatch, which MSVC's traditional preprocessor mishandles (it treats
+# __VA_ARGS__ as a single token when expanded into another macro call). The
+# conformant preprocessor ships in VS 2019 16.5+ and is a no-op rewrite for
+# code that doesn't rely on the legacy quirks.
+if(MSVC)
+    add_compile_options(/Zc:preprocessor)
+endif()
+
 # RISC-V emulator integrations on Windows. Both enabled.
 # - qemu:    uses the locally-built binary from build-windows-minimal/
 #            (see 3rdparty-fetch.cmake / qemu/_build.sh windows path).

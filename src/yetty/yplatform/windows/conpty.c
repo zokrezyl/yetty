@@ -296,6 +296,8 @@ static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig_
     CloseHandle(pipe_pty_in);
     CloseHandle(pipe_pty_out);
 
+    ydebug("win_conpty_create: CreatePseudoConsole hr=0x%08lx hpc=%p", (long)hr, (void *)pty->hpc);
+
     if (FAILED(hr)) {
         CloseHandle(pty->pipe_in);
         CloseHandle(pty->pipe_out);
@@ -341,8 +343,47 @@ static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig_
 
     ZeroMemory(&pi, sizeof(pi));
 
-    if (!CreateProcessW(NULL, cmd, NULL, NULL, FALSE, EXTENDED_STARTUPINFO_PRESENT, NULL, NULL,
-                        &si.StartupInfo, &pi)) {
+    /* Suppress std-handle leakage into cmd.exe.
+     *
+     * On Windows the std handles (stdin/stdout/stderr) propagate to a child
+     * process by a path independent of bInheritHandles. When yetty's parent
+     * (PowerShell `Start-Process -RedirectStandardOutput`, a `> file.log`
+     * redirect, etc.) hands yetty a redirected stdout handle, that handle
+     * leaks into cmd.exe even though we pass bInheritHandles=FALSE and have
+     * already FreeConsole'd. cmd.exe then sees its stdout as "redirected
+     * file" and switches to the redirected-mode behaviour: ANSI control
+     * sequences (the terminal init) go to CONOUT$ which is the conpty (we
+     * render those), but the banner and prompt text go straight to the
+     * inherited stdout file — bypassing the conpty entirely. The yetty
+     * window then renders an empty cleared screen and looks frozen.
+     *
+     * Fix: pass STARTF_USESTDHANDLES with all three std handles set to
+     * NULL. PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE then provides the actual
+     * std handles from the conpty, and cmd.exe sees them as a real
+     * console rather than a redirect, so banner + prompt + everything
+     * else flows through the pty pipe and we render it.
+     *
+     * Per CreateProcess docs, STARTF_USESTDHANDLES requires
+     * bInheritHandles=TRUE — but we still don't want any of yetty's other
+     * inheritable handles (libuv pipes, GLFW resources) to leak. The
+     * empty-handle-list trick (PROC_THREAD_ATTRIBUTE_HANDLE_LIST with a
+     * size of zero, expressed as a one-entry list pointing at the conpty
+     * itself which is already passed via PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE)
+     * isn't supported, so we accept that bInheritHandles=TRUE allows
+     * inheritable handles in. We mitigate by NOT marking yetty-internal
+     * handles as inheritable elsewhere. */
+    si.StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
+    si.StartupInfo.hStdInput = NULL;
+    si.StartupInfo.hStdOutput = NULL;
+    si.StartupInfo.hStdError = NULL;
+
+    BOOL cp_ok = CreateProcessW(NULL, cmd, NULL, NULL, TRUE, EXTENDED_STARTUPINFO_PRESENT, NULL,
+                                NULL, &si.StartupInfo, &pi);
+    DWORD cp_err = cp_ok ? 0 : GetLastError();
+    ydebug("win_conpty_create: CreateProcessW ok=%d err=%lu pid=%lu hProcess=%p hThread=%p",
+           (int)cp_ok, (unsigned long)cp_err, (unsigned long)pi.dwProcessId, (void *)pi.hProcess,
+           (void *)pi.hThread);
+    if (!cp_ok) {
         DeleteProcThreadAttributeList(attr_list);
         free(attr_list);
         ClosePseudoConsole(pty->hpc);
@@ -406,10 +447,12 @@ static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
             if (!factory->qemu_proc) {
                 return YETTY_ERR(yetty_yplatform_pty, "failed to start QEMU");
             }
-            if (!yetty_yqemu_qemu_wait_ready(QEMU_TELNET_PORT, 5000)) {
+            struct yetty_ycore_void_result wait_res =
+                yetty_yqemu_qemu_wait_ready(QEMU_TELNET_PORT, 5000);
+            if (YETTY_IS_ERR(wait_res)) {
                 yetty_yqemu_qemu_stop(factory->qemu_proc);
                 factory->qemu_proc = NULL;
-                return YETTY_ERR(yetty_yplatform_pty, "QEMU telnet not ready");
+                return YETTY_ERR(yetty_yplatform_pty, "QEMU telnet not ready", wait_res);
             }
         }
         return yetty_ytelnet_telnet_pty_create("127.0.0.1", QEMU_TELNET_PORT, event_loop);

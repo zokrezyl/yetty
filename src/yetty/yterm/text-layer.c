@@ -875,9 +875,9 @@ static struct yetty_ycore_void_result text_layer_write(struct yetty_yrender_term
     }
 
     if (len > 0) {
-        char hex[256] = {0};
-        char asc[128] = {0};
-        size_t dump_n = len > 40 ? 40 : len;
+        char hex[1024] = {0};
+        char asc[300] = {0};
+        size_t dump_n = len > 256 ? 256 : len;
         size_t hoff = 0, aoff = 0;
         for (size_t i = 0; i < dump_n; i++) {
             unsigned char c = (unsigned char)data[i];
