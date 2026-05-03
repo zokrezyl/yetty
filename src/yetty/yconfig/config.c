@@ -1061,15 +1061,28 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             }
             set_config(impl, YETTY_YCONFIG_KEY_SSH, "true");
             break;
-        case OPT_TELNET:
-            if (yetty_yplatform_optarg && !parse_telnet_target(impl, yetty_yplatform_optarg)) {
+        case OPT_TELNET: {
+            /* getopt's optional_argument only picks up `--telnet=VALUE`. To
+             * also accept the natural `--telnet VALUE` form (matches the
+             * `telnet HOST PORT`-style ergonomics users expect), peek at
+             * the next argv when no inline arg was given. */
+            const char *arg = yetty_yplatform_optarg;
+            if (!arg && yetty_yplatform_optind < argc) {
+                const char *next = argv[yetty_yplatform_optind];
+                if (next && next[0] != '-') {
+                    arg = next;
+                    yetty_yplatform_optind++;
+                }
+            }
+            if (arg && !parse_telnet_target(impl, arg)) {
                 fprintf(stderr,
                         "yetty: --telnet expects [HOST]:PORT or PORT (got '%s')\n",
-                        yetty_yplatform_optarg);
+                        arg);
                 exit(1);
             }
             set_config(impl, YETTY_YCONFIG_KEY_TELNET, "true");
             break;
+        }
         case 'h':
             print_usage(argv[0]);
             exit(0);

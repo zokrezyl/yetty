@@ -118,6 +118,7 @@ int main(int argc, char **argv)
     setenv("YETTY_SHADERS_DIR", shaders_dir, 1);
     setenv("YETTY_FONTS_DIR", fonts_dir, 1);
     setenv("YETTY_RUNTIME_DIR", runtime_dir, 1);
+    setenv("YETTY_DATA_DIR", data_dir, 1);
     setenv("YETTY_CONFIG_DIR", config_dir, 1);
     if (paths.bin_dir) {
         setenv("YETTY_BIN_DIR", paths.bin_dir, 1);

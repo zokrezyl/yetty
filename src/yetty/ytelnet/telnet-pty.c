@@ -33,11 +33,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* 3s grace after connect before injecting `stty cols X rows Y` for servers
- * that don't speak NAWS (QEMU's telnet chardev). Long enough for the guest
- * kernel to boot and the shell to print its prompt. */
-#define TELNET_NAWS_FALLBACK_MS 3000
-
 /* Telnet protocol state machine */
 enum yetty_ytelnet_telnet_state {
     YETTY_YTELNET_STATE_DATA,   /* Normal data */
@@ -60,11 +55,6 @@ struct yetty_ytelnet_telnet_pty {
     struct yetty_ycore_conn *conn; /* set in on_connect */
     int tcp_client_active;       /* create_tcp_client succeeded */
     int connected;               /* on_connect fired ok */
-
-    /* NAWS-fallback timer (one-shot, started in on_connect) */
-    yetty_ycore_timer_id naws_timer_id;
-    int naws_timer_active;
-    struct yetty_ycore_event_listener naws_listener;
 
     /* Endpoint */
     char *host;
@@ -89,12 +79,6 @@ struct yetty_ytelnet_telnet_pty {
     int naws_enabled;
     int binary_enabled;
     int sga_enabled;
-
-    /* QEMU's telnet chardev doesn't speak NAWS. Once the timer fires we
-     * inject `stty cols X rows Y\r` directly to the guest shell.
-     * stty_initial_sent flips on first inject; subsequent resizes inject
-     * immediately. */
-    int stty_initial_sent;
 };
 
 /* Forward declarations */
@@ -136,20 +120,6 @@ static void telnet_send_cmd(struct yetty_ytelnet_telnet_pty *pty, uint8_t cmd, u
 {
     uint8_t buf[3] = {TELNET_IAC, cmd, opt};
     telnet_send_raw(pty, buf, 3);
-}
-
-/* Inject `stty cols X rows Y\r` into the guest shell — NAWS fallback. */
-static void telnet_inject_stty(struct yetty_ytelnet_telnet_pty *pty)
-{
-    if (pty->cols == 0 || pty->rows == 0) {
-        return;
-    }
-    char cmd[80];
-    int n = snprintf(cmd, sizeof(cmd), "\rstty cols %u rows %u\r", pty->cols, pty->rows);
-    if (n > 0 && (size_t)n < sizeof(cmd)) {
-        telnet_send_raw(pty, (const uint8_t *)cmd, (size_t)n);
-    }
-    yinfo("telnet: injected stty cols %u rows %u (NAWS fallback)", pty->cols, pty->rows);
 }
 
 static void telnet_send_naws(struct yetty_ytelnet_telnet_pty *pty)
@@ -357,27 +327,6 @@ static void telnet_on_data(void *ctx, struct yetty_ycore_conn *conn, const char 
     }
 }
 
-static struct yetty_ycore_int_result telnet_naws_timer_handler(
-    struct yetty_ycore_event_listener *listener, const struct yetty_yui_event *event)
-{
-    (void)event;
-    struct yetty_ytelnet_telnet_pty *pty =
-        (struct yetty_ytelnet_telnet_pty *)((char *)listener - offsetof(struct yetty_ytelnet_telnet_pty, naws_listener));
-
-    /* One-shot: stop ourselves regardless of NAWS state. */
-    if (pty->naws_timer_active) {
-        pty->event_loop->ops->stop_timer(pty->event_loop, pty->naws_timer_id);
-        pty->naws_timer_active = 0;
-    }
-
-    if (!pty->naws_enabled && pty->connected) {
-        telnet_inject_stty(pty);
-        pty->stty_initial_sent = 1;
-    }
-
-    return YETTY_OK(yetty_ycore_int, 1);
-}
-
 static void telnet_on_connect(void *ctx, struct yetty_ycore_conn *conn)
 {
     struct yetty_ytelnet_telnet_pty *pty = ctx;
@@ -385,29 +334,8 @@ static void telnet_on_connect(void *ctx, struct yetty_ycore_conn *conn)
     pty->connected = 1;
 
     yinfo("telnet: connected to %s:%u", pty->host, pty->port);
-
-    /* Originally we proactively offered WILL NAWS here. We've dropped that
-     * because the qemu chardev is now a *raw* TCP socket (telnet=on
-     * segfaults in our MSYS2 CLANG64 build of QEMU 11.0.0-rc4). On a raw
-     * socket, the IAC bytes don't get parsed off — they arrive at the
-     * guest's virtio-console as input garbage. The NAWS-fallback timer
-     * below injects `stty cols X rows Y` after the boot grace period,
-     * which is what actually configures the guest tty. */
-
-    /* Arm the one-shot fallback timer. config_timer + start_timer set up
-     * a periodic timer; the handler stops it after the first fire. */
-    struct yetty_ycore_void_result vr = pty->event_loop->ops->config_timer(
-        pty->event_loop, pty->naws_timer_id, TELNET_NAWS_FALLBACK_MS);
-    if (vr.ok) {
-        vr = pty->event_loop->ops->start_timer(pty->event_loop, pty->naws_timer_id);
-        if (vr.ok) {
-            pty->naws_timer_active = 1;
-        } else {
-            yerror("telnet: start_timer failed: %s", vr.error.msg);
-        }
-    } else {
-        yerror("telnet: config_timer failed: %s", vr.error.msg);
-    }
+    /* Window size is shipped via NAWS once the server negotiates it
+     * (DO NAWS in the WILL/DO exchange below — see telnet_handle_do). */
 }
 
 static void telnet_on_connect_error(void *ctx, const char *error)
@@ -485,25 +413,15 @@ static struct yetty_ycore_void_result telnet_pty_resize(struct yetty_platform_pt
     if (!pty->connected) {
         return YETTY_OK_VOID();
     }
-
     if (pty->naws_enabled) {
         telnet_send_naws(pty);
-    } else if (pty->stty_initial_sent) {
-        telnet_inject_stty(pty);
     }
-    /* else: NAWS-fallback timer is still pending — first inject happens there. */
-
     return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result telnet_pty_stop(struct yetty_platform_pty *self)
 {
     struct yetty_ytelnet_telnet_pty *pty = (struct yetty_ytelnet_telnet_pty *)self;
-
-    if (pty->naws_timer_active) {
-        pty->event_loop->ops->stop_timer(pty->event_loop, pty->naws_timer_id);
-        pty->naws_timer_active = 0;
-    }
 
     if (pty->tcp_client_active) {
         pty->event_loop->ops->stop_tcp_client(pty->event_loop, pty->tcp_client_id);
@@ -520,9 +438,6 @@ static struct yetty_ycore_void_result telnet_pty_destroy(struct yetty_platform_p
     struct yetty_ytelnet_telnet_pty *pty = (struct yetty_ytelnet_telnet_pty *)self;
 
     struct yetty_ycore_void_result stop_r = telnet_pty_stop(self);
-
-    /* destroy_timer is independent of stop_timer — close the uv_timer_t. */
-    pty->event_loop->ops->destroy_timer(pty->event_loop, pty->naws_timer_id);
 
     if (pty->output_pipe) {
         pty->output_pipe->ops->destroy(pty->output_pipe);
@@ -562,7 +477,6 @@ struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(const char *ho
     pty->cols = 80;
     pty->rows = 24;
     pty->state = YETTY_YTELNET_STATE_DATA;
-    pty->naws_listener.handler = telnet_naws_timer_handler;
 
     pty->host = strdup(host);
     pty->port = port;
@@ -589,26 +503,6 @@ struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(const char *ho
     }
     pty->pipe_source.abstract = (uintptr_t)fdr.value;
 
-    /* NAWS-fallback timer (created up front, started in on_connect). */
-    struct yetty_ycore_timer_id_result tres = event_loop->ops->create_timer(event_loop);
-    if (!tres.ok) {
-        pty->output_pipe->ops->destroy(pty->output_pipe);
-        free(pty->host);
-        free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "create_timer failed");
-    }
-    pty->naws_timer_id = tres.value;
-
-    struct yetty_ycore_void_result vres = event_loop->ops->register_timer_listener(
-        event_loop, pty->naws_timer_id, &pty->naws_listener);
-    if (!vres.ok) {
-        event_loop->ops->destroy_timer(event_loop, pty->naws_timer_id);
-        pty->output_pipe->ops->destroy(pty->output_pipe);
-        free(pty->host);
-        free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "register_timer_listener failed");
-    }
-
     /* Kick off async TCP connect. on_connect / on_connect_error will fire
      * later on the loop thread; we return success now and the terminal
      * registers the pipe and renders an empty screen until data arrives. */
@@ -624,7 +518,6 @@ struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(const char *ho
     struct yetty_ycore_tcp_client_id_result cres =
         event_loop->ops->create_tcp_client(event_loop, host, (int)port, &callbacks);
     if (!cres.ok) {
-        event_loop->ops->destroy_timer(event_loop, pty->naws_timer_id);
         pty->output_pipe->ops->destroy(pty->output_pipe);
         free(pty->host);
         free(pty);
