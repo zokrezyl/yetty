@@ -90,6 +90,13 @@ struct yetty_yrender_target_ops {
 	 * becomes idle — without this the skip is silent and the display
 	 * lags behind by one event. NULL iff is_busy is NULL. */
     void (*notify_render_skipped)(struct yetty_ypaint_core_target *self);
+
+    /* When true, the next render_layer() calls use LoadOp_Load instead of
+	 * LoadOp_Clear so subsequent layers composite on top of the existing
+	 * content. Sticky until toggled off. Used for direct multi-layer
+	 * rendering into a single target (no per-layer RTs, no blend pass).
+	 * Optional — NULL means the target only supports clear-then-draw. */
+    void (*set_preserve_on_render_layer)(struct yetty_ypaint_core_target *self, bool preserve);
 };
 
 /* Render target base - embed as first member in subclasses */

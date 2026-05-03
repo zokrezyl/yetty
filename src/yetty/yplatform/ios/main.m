@@ -169,14 +169,7 @@ static void *render_thread_func(void *arg)
         return;
     }
     _config = config_result.value;
-    /* Force raster glyphs on tvOS — MSDF's per-fragment SDF re-evaluation
-     * pushes ~200 MB of texel R/W per frame at 4K through the GPU and
-     * appears to be a major bandwidth contributor; raster blits a
-     * pre-rendered atlas (single read-write per glyph). */
-    _config->ops->set_string(_config,
-                             YETTY_YCONFIG_KEY_TERMINAL_FONT_RENDER_METHOD,
-                             "raster");
-    ydebug("config created (font render-method forced to 'raster' on tvOS)");
+    ydebug("config created");
 
     /* Extract embedded assets (fonts, shaders) to cache */
     ydebug("extracting assets");

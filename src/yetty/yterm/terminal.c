@@ -580,25 +580,53 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
     ydebug("terminal_render_frame: starting");
     ytime_start(frame_render);
 
-    /* Render only the text layer (layer 0) directly into the provided
-     * big_target — no per-layer intermediate textures, no blend pass.
-     * This is for tvOS where the multi-layer blend round-trip (4 × 33 MB
-     * layer RTs + 33 MB blend output read/written every frame at 4K)
-     * appears to starve the display compositor. */
-    ytime_start(layers);
-    if (terminal->layer_count > 0 && terminal->layers[0]) {
-        ytime_start(text_layer);
-        struct yetty_ycore_void_result res =
-            terminal->layers[0]->ops->render(terminal->layers[0], target);
-        ytime_report(text_layer);
+    /* Render layers directly into the provided big_target — no per-layer
+     * intermediate textures, no blend pass. The multi-layer blend round-trip
+     * (4 × 33 MB layer RTs + 33 MB blend output read/written every frame at
+     * 4K) starves the display compositor on tvOS.
+     *
+     * Sequence: clear once → enable preserve mode → render layers in order.
+     * preserve=true makes render_layer use LoadOp_Load so each subsequent
+     * layer composites on top of the previous instead of clearing. */
+    ytime_start(clear);
+    {
+        struct yetty_ycore_void_result res = target->ops->clear(target);
         if (!YETTY_IS_OK(res)) {
-            yerror("terminal_render_frame: text layer render failed: %s", res.error.msg);
+            yerror("terminal_render_frame: clear failed: %s", res.error.msg);
+            return res;
+        }
+    }
+    ytime_report(clear);
+
+    if (target->ops->set_preserve_on_render_layer) {
+        target->ops->set_preserve_on_render_layer(target, true);
+    }
+
+    ytime_start(layers);
+    /* Render text (layer 0) and ypaint (layer 1) only for now. Other
+     * layers (shader-glyph, ymgui) will be re-added progressively. */
+    size_t max_layer = terminal->layer_count < 2 ? terminal->layer_count : 2;
+    for (size_t i = 0; i < max_layer; i++) {
+        struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
+        if (!layer) {
+            continue;
+        }
+        struct yetty_ycore_void_result res = layer->ops->render(layer, target);
+        if (!YETTY_IS_OK(res)) {
+            yerror("terminal_render_frame: layer %zu render failed: %s", i, res.error.msg);
+            if (target->ops->set_preserve_on_render_layer) {
+                target->ops->set_preserve_on_render_layer(target, false);
+            }
             return res;
         }
     }
     ytime_report(layers);
 
-    ydebug("terminal_render_frame: done (text-only direct, no blend)");
+    if (target->ops->set_preserve_on_render_layer) {
+        target->ops->set_preserve_on_render_layer(target, false);
+    }
+
+    ydebug("terminal_render_frame: done (text+ypaint direct, no blend)");
     ytime_report(frame_render);
     return YETTY_OK_VOID();
 }

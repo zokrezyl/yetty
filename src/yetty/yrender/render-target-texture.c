@@ -19,6 +19,17 @@ extern const unsigned char gblend_shaderData[];
 extern const unsigned int gblend_shaderSize;
 
 #define MAX_BLEND_SOURCES 4
+#define MAX_LAYER_BINDERS 8
+
+/* Per-layer binder cache entry. Each layer's resource_set tree concatenates
+ * its own shader (e.g. text-grid + msdf-font, ypaint-grid + ypaint-prims),
+ * and merging trees from different layers redeclares functions like
+ * median3. So when the same target serves multiple layers (direct
+ * multi-layer render, no per-layer RTs), each layer needs its own binder. */
+struct layer_binder_entry {
+    struct yetty_yrender_terminal_layer *layer;
+    struct yetty_yrender_gpu_resource_binder *binder;
+};
 
 struct yetty_yrender_render_target_texture {
     struct yetty_ypaint_core_target base; /* viewport stored here */
@@ -34,8 +45,10 @@ struct yetty_yrender_render_target_texture {
     /* Optional surface for present() - NULL for layer/terminal targets */
     WGPUSurface surface;
 
-    /* Binder for render_layer */
-    struct yetty_yrender_gpu_resource_binder *binder;
+    /* Per-layer binder cache for render_layer. Lazily populated — first
+     * call for a given layer creates and caches the binder. */
+    struct layer_binder_entry layer_binders[MAX_LAYER_BINDERS];
+    size_t layer_binder_count;
 
     /* Blend pipeline resources (also used for present) */
     WGPUShaderModule blend_shader;
@@ -53,6 +66,11 @@ struct yetty_yrender_render_target_texture {
     float visual_zoom_scale;
     float visual_zoom_offset_x;
     float visual_zoom_offset_y;
+
+    /* Sticky flag set by set_preserve_on_render_layer(). When true,
+	 * render_layer() uses LoadOp_Load so multiple layers can be drawn
+	 * directly into this target without each one wiping the previous. */
+    bool preserve_on_render_layer;
 };
 
 /*=============================================================================
@@ -76,10 +94,13 @@ static void render_target_texture_destroy(struct yetty_ypaint_core_target *self)
         }
         rt->texture = NULL;
     }
-    if (rt->binder) {
-        rt->binder->ops->destroy(rt->binder);
-        rt->binder = NULL;
+    for (size_t i = 0; i < rt->layer_binder_count; i++) {
+        if (rt->layer_binders[i].binder) {
+            rt->layer_binders[i].binder->ops->destroy(rt->layer_binders[i].binder);
+            rt->layer_binders[i].binder = NULL;
+        }
     }
+    rt->layer_binder_count = 0;
     if (rt->blend_pipeline) {
         wgpuRenderPipelineRelease(rt->blend_pipeline);
         rt->blend_pipeline = NULL;
@@ -272,9 +293,37 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
 
     const struct yetty_ypaint_core_gpu_resource_set *rs = rs_res.value;
 
+    /* Look up or create the per-layer binder. Multiple layers rendering
+     * into the same target each have their own resource-tree shader, and
+     * merging trees would redeclare common functions (e.g. median3). */
+    struct yetty_yrender_gpu_resource_binder *binder = NULL;
+    for (size_t i = 0; i < rt->layer_binder_count; i++) {
+        if (rt->layer_binders[i].layer == layer) {
+            binder = rt->layer_binders[i].binder;
+            break;
+        }
+    }
+    if (!binder) {
+        if (rt->layer_binder_count >= MAX_LAYER_BINDERS) {
+            return YETTY_ERR(yetty_ycore_void, "render_layer: layer binder cache full");
+        }
+        struct yetty_yrender_gpu_resource_binder_result binder_res =
+            yetty_yrender_gpu_resource_binder_create(rt->device, rt->queue, rt->format,
+                                                     rt->allocator);
+        if (!YETTY_IS_OK(binder_res)) {
+            return YETTY_ERR(yetty_ycore_void, binder_res.error.msg);
+        }
+        rt->layer_binders[rt->layer_binder_count].layer = layer;
+        rt->layer_binders[rt->layer_binder_count].binder = binder_res.value;
+        rt->layer_binder_count++;
+        binder = binder_res.value;
+        ydebug("render_target_texture: created binder for layer=%p (count=%zu)",
+               (void *)layer, rt->layer_binder_count);
+    }
+
     /* Submit to binder */
     ytime_start(rt_submit);
-    struct yetty_ycore_void_result res = rt->binder->ops->submit(rt->binder, rs);
+    struct yetty_ycore_void_result res = binder->ops->submit(binder, rs);
     ytime_report(rt_submit);
     if (!YETTY_IS_OK(res)) {
         return res;
@@ -282,7 +331,7 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
 
     /* Finalize (compile shader if needed) */
     ytime_start(rt_finalize);
-    res = rt->binder->ops->finalize(rt->binder);
+    res = binder->ops->finalize(binder);
     ytime_report(rt_finalize);
     if (!YETTY_IS_OK(res)) {
         return res;
@@ -290,7 +339,7 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
 
     /* Update uniforms/buffers */
     ytime_start(rt_update);
-    res = rt->binder->ops->update(rt->binder);
+    res = binder->ops->update(binder);
     ytime_report(rt_update);
     if (!YETTY_IS_OK(res)) {
         return res;
@@ -307,7 +356,7 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
 
     WGPURenderPassColorAttachment color_attachment = {0};
     color_attachment.view = rt->view;
-    color_attachment.loadOp = WGPULoadOp_Clear;
+    color_attachment.loadOp = rt->preserve_on_render_layer ? WGPULoadOp_Load : WGPULoadOp_Clear;
     color_attachment.storeOp = WGPUStoreOp_Store;
     color_attachment.clearValue = (WGPUColor){0.0, 0.0, 0.0, 0.0};
     color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
@@ -322,12 +371,12 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
         return YETTY_ERR(yetty_ycore_void, "failed to begin render pass");
     }
 
-    WGPURenderPipeline pipeline = rt->binder->ops->get_pipeline(rt->binder);
-    WGPUBuffer quad_vb = rt->binder->ops->get_quad_vertex_buffer(rt->binder);
+    WGPURenderPipeline pipeline = binder->ops->get_pipeline(binder);
+    WGPUBuffer quad_vb = binder->ops->get_quad_vertex_buffer(binder);
 
     if (pipeline && quad_vb) {
         wgpuRenderPassEncoderSetPipeline(pass, pipeline);
-        rt->binder->ops->bind(rt->binder, pass, 0);
+        binder->ops->bind(binder, pass, 0);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, quad_vb, 0, WGPU_WHOLE_SIZE);
         wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
     }
@@ -798,6 +847,13 @@ static struct yetty_ycore_void_result render_target_texture_set_visual_zoom(
     return YETTY_OK_VOID();
 }
 
+static void render_target_texture_set_preserve_on_render_layer(
+    struct yetty_ypaint_core_target *self, bool preserve)
+{
+    struct yetty_yrender_render_target_texture *rt = (struct yetty_yrender_render_target_texture *)self;
+    rt->preserve_on_render_layer = preserve;
+}
+
 static const struct yetty_yrender_target_ops render_target_texture_ops = {
     .destroy = render_target_texture_destroy,
     .clear = render_target_texture_clear,
@@ -808,6 +864,7 @@ static const struct yetty_yrender_target_ops render_target_texture_ops = {
     .get_texture = render_target_texture_get_texture,
     .resize = render_target_texture_resize,
     .set_visual_zoom = render_target_texture_set_visual_zoom,
+    .set_preserve_on_render_layer = render_target_texture_set_preserve_on_render_layer,
 };
 
 struct yetty_yrender_target_ptr_result yetty_yrender_target_texture_create(
@@ -828,19 +885,11 @@ struct yetty_yrender_target_ptr_result yetty_yrender_target_texture_create(
     rt->surface = surface; /* NULL for layer/terminal targets */
     rt->visual_zoom_scale = 1.0f;
 
-    /* Create binder */
-    struct yetty_yrender_gpu_resource_binder_result binder_res =
-        yetty_yrender_gpu_resource_binder_create(device, queue, format, allocator);
-    if (!YETTY_IS_OK(binder_res)) {
-        free(rt);
-        return YETTY_ERR(yetty_yrender_target_ptr, binder_res.error.msg);
-    }
-    rt->binder = binder_res.value;
+    /* Binders are created lazily per layer in render_layer(). */
 
     /* Create initial texture */
     struct yetty_ycore_void_result res = render_target_texture_resize(&rt->base, viewport);
     if (!YETTY_IS_OK(res)) {
-        rt->binder->ops->destroy(rt->binder);
         free(rt);
         return YETTY_ERR(yetty_yrender_target_ptr, res.error.msg);
     }
