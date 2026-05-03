@@ -63,20 +63,17 @@ fn yplot_draw_axes(bg: vec3<f32>, plotUV: vec2<f32>, xMin: f32, xMax: f32, yMin:
 // Main yplot render function - called by ypaint dispatcher
 // Uses generated uniform accessors: yplot_get_*()
 fn yplot_render(local_pos: vec2<f32>) -> vec4<f32> {
-    // Read bounds from uniforms
-    let bounds_x = yplot_get_bounds_x();
-    let bounds_y = yplot_get_bounds_y();
+    // `local_pos` is ALREADY relative to the plot's top-left — fs_main has
+    // subtracted bounds_x/y and discarded fragments outside [0..bounds_w] ×
+    // [0..bounds_h]. Do NOT re-subtract bounds_xy here. Doing so was the
+    // historic "second plot invisible" bug: when bounds_x = 320 (right
+    // plot in a side-by-side pair), the old `local_pos.x < bounds_x` check
+    // was true for every local_pos in [0..300] and the whole plot returned 0.
     let bounds_w = yplot_get_bounds_w();
     let bounds_h = yplot_get_bounds_h();
 
-    // Check if pixel is inside plot bounds
-    if (local_pos.x < bounds_x || local_pos.x >= bounds_x + bounds_w ||
-        local_pos.y < bounds_y || local_pos.y >= bounds_y + bounds_h) {
-        return vec4<f32>(0.0);
-    }
-
-    // Normalize to 0-1 within plot area
-    let plotUV = (local_pos - vec2<f32>(bounds_x, bounds_y)) / vec2<f32>(bounds_w, bounds_h);
+    // Normalize to 0-1 within plot area (local_pos already in [0..bounds_*]).
+    let plotUV = local_pos / vec2<f32>(bounds_w, bounds_h);
 
     // Read plot parameters from uniforms
     let flags = yplot_get_flags();

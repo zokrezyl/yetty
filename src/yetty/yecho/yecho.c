@@ -150,13 +150,13 @@ static int doc_push_error(struct yetty_yecho_doc *doc, const char *fmt, ...)
  * Growable byte buffer used while parsing
  *===========================================================================*/
 
-struct yetty_yecho_strbuf {
+struct strbuf {
     char *data;
     size_t len;
     size_t cap;
 };
 
-static int sb_push(struct yetty_yecho_strbuf *sb, char c)
+static int sb_push(struct strbuf *sb, char c)
 {
     if (sb->len + 1 >= sb->cap) {
         size_t nc = sb->cap ? sb->cap * 2 : 32;
@@ -172,7 +172,7 @@ static int sb_push(struct yetty_yecho_strbuf *sb, char c)
     return 0;
 }
 
-static char *sb_take(struct yetty_yecho_strbuf *sb)
+static char *sb_take(struct strbuf *sb)
 {
     /* Caller takes ownership; reset sb to empty. */
     if (!sb->data) {
@@ -185,7 +185,7 @@ static char *sb_take(struct yetty_yecho_strbuf *sb)
     return out;
 }
 
-static void sb_free(struct yetty_yecho_strbuf *sb)
+static void sb_free(struct strbuf *sb)
 {
     free(sb->data);
     sb->data = NULL;
@@ -246,7 +246,7 @@ parse_glyph(struct yetty_yecho_doc *doc, const char *input, size_t len, size_t *
 
 /* Resolve simple escapes (\@ \{ \} \\) into a strbuf, until end-marker
  * or close. Used for the content side of a block. Stops at *pos == end. */
-static int copy_escaped(const char *src, size_t start, size_t end, struct yetty_yecho_strbuf *out)
+static int copy_escaped(const char *src, size_t start, size_t end, struct strbuf *out)
 {
     for (size_t i = start; i < end; i++) {
         char c = src[i];
@@ -276,7 +276,7 @@ static int parse_attrs(const char *src, size_t start, size_t end,
     struct yetty_yecho_attr *attrs = NULL;
     size_t count = 0, cap = 0;
 
-    struct yetty_yecho_strbuf cur = {0};
+    struct strbuf cur = {0};
     int in_quotes = 0;
     char quote = 0;
 
@@ -470,7 +470,7 @@ static int parse_block(struct yetty_yecho_doc *doc, const char *input, size_t le
     }
 
     /* Content with escapes resolved. */
-    struct yetty_yecho_strbuf content = {0};
+    struct strbuf content = {0};
     if (copy_escaped(input, content_start, close, &content) < 0) {
         sb_free(&content);
         for (size_t j = 0; j < span->attr_count; j++) {
@@ -503,7 +503,7 @@ yetty_yecho_parse(const char *input, size_t len)
         return YETTY_ERR(yetty_yecho_doc_ptr, "alloc failed");
     }
 
-    struct yetty_yecho_strbuf text = {0};
+    struct strbuf text = {0};
     size_t pos = 0;
     while (pos < len) {
         char c = input[pos];
@@ -647,7 +647,7 @@ yetty_yecho_parse(const char *input, size_t len)
 #define YECHO_Y_ORIGIN 2.0f
 #define YECHO_GLYPH_ADVANCE 0.6f /* cell advance per char (proportional approx) */
 
-struct yetty_yecho_render_state {
+struct render_state {
     struct yetty_ypaint_core_buffer *buf;
     float cursor_x;
     float cursor_y;
@@ -707,7 +707,7 @@ static size_t utf8_codepoint_count(const char *s, size_t len)
 }
 
 static struct yetty_ycore_void_result
-render_text_run(struct yetty_yecho_render_state *rs, const char *s, size_t len, uint32_t color)
+render_text_run(struct render_state *rs, const char *s, size_t len, uint32_t color)
 {
     /* Walk by line — any '\n' starts a new line at x_origin. */
     size_t line_start = 0;
@@ -742,7 +742,7 @@ render_text_run(struct yetty_yecho_render_state *rs, const char *s, size_t len, 
     return YETTY_OK_VOID();
 }
 
-static int append_utf8(struct yetty_yecho_strbuf *sb, uint32_t cp)
+static int append_utf8(struct strbuf *sb, uint32_t cp)
 {
     if (cp < 0x80) {
         return sb_push(sb, (char)cp);
@@ -865,7 +865,7 @@ static int span_has_attr(const struct yetty_yecho_span *span, const char *key)
  * yetty_yexpr_parse_plot; expressions are compiled by yfsvm; the result
  * is serialized via yetty_yplot_uniforms_serialize and added as a primitive. */
 static struct yetty_ycore_void_result
-render_yplot_block(struct yetty_yecho_render_state *rs, const struct yetty_yecho_span *span)
+render_yplot_block(struct render_state *rs, const struct yetty_yecho_span *span)
 {
     struct yetty_yplot_uniforms u = {
         .bounds_x = rs->cursor_x,
@@ -1000,7 +1000,7 @@ render_yplot_block(struct yetty_yecho_render_state *rs, const struct yetty_yecho
 }
 
 static struct yetty_ycore_void_result
-render_block(struct yetty_yecho_render_state *rs, const struct yetty_yecho_span *span)
+render_block(struct render_state *rs, const struct yetty_yecho_span *span)
 {
     if (span_has_attr(span, "plot")) {
         return render_yplot_block(rs, span);
@@ -1009,6 +1009,11 @@ render_block(struct yetty_yecho_render_state *rs, const struct yetty_yecho_span 
     uint32_t color = rs->default_fg;
     uint32_t bg = 0;
     int has_bg = 0;
+    /* Save outer font_size + line_height so a font-size= block doesn't
+     * leak into the next span. */
+    float saved_font_size = rs->font_size;
+    float saved_line_height = rs->line_height;
+    int font_size_overridden = 0;
     for (size_t i = 0; i < span->attr_count; i++) {
         const char *k = span->attrs[i].key;
         const char *v = span->attrs[i].value;
@@ -1022,6 +1027,15 @@ render_block(struct yetty_yecho_render_state *rs, const struct yetty_yecho_span 
             if (parse_hex_color(v, &c)) {
                 bg = c;
                 has_bg = 1;
+            }
+        } else if ((strcmp(k, "font-size") == 0 || strcmp(k, "font_size") == 0) && v) {
+            float sz = strtof(v, NULL);
+            if (sz > 0.0f) {
+                rs->font_size = sz;
+                /* Keep the same line-spacing ratio as the outer text. */
+                float ratio = saved_line_height / saved_font_size;
+                rs->line_height = sz * (ratio > 0.0f ? ratio : YECHO_DEFAULT_LINE_SPACING);
+                font_size_overridden = 1;
             }
         }
         /* style= recorded in the doc but not applied here (no font-style
@@ -1064,12 +1078,17 @@ render_block(struct yetty_yecho_render_state *rs, const struct yetty_yecho_span 
         }
     }
 
-    return render_text_run(rs, span->text ? span->text : "", span->text ? strlen(span->text) : 0,
-                           color);
+    struct yetty_ycore_void_result tr = render_text_run(
+        rs, span->text ? span->text : "", span->text ? strlen(span->text) : 0, color);
+    if (font_size_overridden) {
+        rs->font_size = saved_font_size;
+        rs->line_height = saved_line_height;
+    }
+    return tr;
 }
 
 struct yetty_ypaint_core_buffer_result
-yetty_yecho_doc_render(const struct yetty_yecho_doc *doc,
+yetty_yecho_render(const struct yetty_yecho_doc *doc,
                    const struct yetty_yecho_render_config *config)
 {
     if (!doc) {
@@ -1097,7 +1116,7 @@ yetty_yecho_doc_render(const struct yetty_yecho_doc *doc,
         return YETTY_ERR(yetty_ypaint_core_buffer, "ypaint buffer create failed", br);
     }
 
-    struct yetty_yecho_render_state rs = {
+    struct render_state rs = {
         .buf = br.value,
         .cursor_x = YECHO_X_ORIGIN,
         .cursor_y = YECHO_Y_ORIGIN + font_size, /* baseline */
@@ -1131,7 +1150,7 @@ yetty_yecho_doc_render(const struct yetty_yecho_doc *doc,
             }
             if (cp == 0) {
                 /* Unknown glyph -> "[?name]" placeholder. */
-                struct yetty_yecho_strbuf fb = {0};
+                struct strbuf fb = {0};
                 if (sb_push(&fb, '[') < 0 || sb_push(&fb, '?') < 0) {
                     sb_free(&fb);
                     yetty_ypaint_core_buffer_destroy(rs.buf);
@@ -1158,7 +1177,7 @@ yetty_yecho_doc_render(const struct yetty_yecho_doc *doc,
                                      "glyph fallback emission failed", tr);
                 }
             } else {
-                struct yetty_yecho_strbuf u = {0};
+                struct strbuf u = {0};
                 if (append_utf8(&u, cp) < 0) {
                     sb_free(&u);
                     yetty_ypaint_core_buffer_destroy(rs.buf);
@@ -1200,7 +1219,7 @@ yetty_yecho_render_string(const char *input, size_t len,
     if (YETTY_IS_ERR(pr)) {
         return YETTY_ERR(yetty_ypaint_core_buffer, "parse failed", pr);
     }
-    struct yetty_ypaint_core_buffer_result rr = yetty_yecho_doc_render(pr.value, config);
+    struct yetty_ypaint_core_buffer_result rr = yetty_yecho_render(pr.value, config);
     yetty_yecho_doc_destroy(pr.value);
     return rr;
 }

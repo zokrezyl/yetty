@@ -1,6 +1,7 @@
 set(YETTY_YRENDER_SOURCES
     types.c
     gpu-allocator.c
+    pipeline.c
     gpu-resource-binder.c
     render-target-texture.c
     render-target-vnc.c
@@ -43,6 +44,13 @@ else()
         webgpu
     )
 endif()
+
+# pipeline.c (added on yrender-binder-refactor) and gpu-resource-binder.c
+# call into yetty_ywebgpu_error_*. Express the dep on the yrender target so
+# every transitive consumer (tools, demos, tests) picks up yetty_ywebgpu in
+# the right link order — main's link graph wired this implicitly via
+# higher-level libs that already pulled in yetty_ywebgpu.
+target_link_libraries(yetty_yrender PUBLIC yetty_ywebgpu)
 
 # Embed shaders via incbin (or stubs on Emscripten)
 incbin_add_resources(yetty_yrender
