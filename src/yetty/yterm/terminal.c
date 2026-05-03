@@ -591,7 +591,11 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
      * with LoadOp_Load so they composite on top of layer 0 instead of
      * wiping it. */
     ytime_start(layers);
-    for (size_t i = 0; i < terminal->layer_count; i++) {
+    /* Render text (0) + ypaint (1) + shader-glyph (2). ymgui (3) is
+     * skipped for now — its render() inlines a LoadOp_Clear pass that
+     * wipes earlier layers; needs a separate fix. */
+    size_t max_layer = terminal->layer_count < 3 ? terminal->layer_count : 3;
+    for (size_t i = 0; i < max_layer; i++) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
         if (!layer) {
             continue;
@@ -614,8 +618,8 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
         target->ops->set_preserve_on_render_layer(target, false);
     }
 
-    ydebug("terminal_render_frame: done (all %zu layers direct, no blend)",
-           terminal->layer_count);
+    ydebug("terminal_render_frame: done (%zu of %zu layers direct, no blend)",
+           max_layer, terminal->layer_count);
     ytime_report(frame_render);
     return YETTY_OK_VOID();
 }
