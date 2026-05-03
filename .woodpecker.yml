@@ -1,0 +1,6 @@
+pipeline:
+  win-build:
+    commands:
+      - make build-desktop-ytrace-release
+    when:
+      platform: linux/amd64
