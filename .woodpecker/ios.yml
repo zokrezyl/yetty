@@ -1,0 +1,15 @@
+labels:
+  platform: darwin/amd64
+
+when:
+  - event: [push, manual, pull_request, tag]
+
+steps:
+  build:
+    image: bash
+    commands:
+      - git lfs install
+      - git lfs fetch
+      - git lfs checkout
+      - cmake -B build-ios-ytrace-release -G Ninja -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 -DCMAKE_BUILD_TYPE=Release -DYETTY_IOS=ON -DYETTY_ENABLE_TOOL_QA=OFF -S .
+      - cmake --build build-ios-ytrace-release --config Release --parallel 4

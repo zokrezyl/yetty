@@ -32,9 +32,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <fcntl.h>
-#include <time.h>
-#include <unistd.h>
 
 /* Telnet protocol state machine */
 enum yetty_ytelnet_telnet_state {
@@ -375,24 +372,6 @@ static struct yetty_ycore_size_result telnet_pty_write(struct yetty_platform_pty
                                                        const char *data, size_t len)
 {
     struct yetty_ytelnet_telnet_pty *pty = (struct yetty_ytelnet_telnet_pty *)self;
-
-    /* iOS sandbox swallows stderr so ydebug isn't observable; mirror to
-     * the same input log the iOS keyboard tracer writes to. */
-    {
-        const char *home = getenv("HOME");
-        char path[1024];
-        snprintf(path, sizeof(path), "%s/tmp/yetty-input.log", home ? home : ".");
-        int fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0644);
-        if (fd >= 0) {
-            char buf[256];
-            int n = snprintf(buf, sizeof(buf),
-                             "%ld telnet_pty_write len=%zu connected=%d byte0=0x%02x\n",
-                             (long)time(NULL), len, pty->connected,
-                             len > 0 ? (unsigned char)data[0] : 0u);
-            write(fd, buf, n);
-            close(fd);
-        }
-    }
 
     if (len == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
