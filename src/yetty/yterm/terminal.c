@@ -580,36 +580,24 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
     ydebug("terminal_render_frame: starting");
     ytime_start(frame_render);
 
-    /* Render layers directly into the provided big_target — no per-layer
+    /* Render all layers directly into the provided big_target — no per-layer
      * intermediate textures, no blend pass. The multi-layer blend round-trip
      * (4 × 33 MB layer RTs + 33 MB blend output read/written every frame at
      * 4K) starves the display compositor on tvOS.
      *
-     * Sequence: clear once → enable preserve mode → render layers in order.
-     * preserve=true makes render_layer use LoadOp_Load so each subsequent
-     * layer composites on top of the previous instead of clearing. */
-    ytime_start(clear);
-    {
-        struct yetty_ycore_void_result res = target->ops->clear(target);
-        if (!YETTY_IS_OK(res)) {
-            yerror("terminal_render_frame: clear failed: %s", res.error.msg);
-            return res;
-        }
-    }
-    ytime_report(clear);
-
-    if (target->ops->set_preserve_on_render_layer) {
-        target->ops->set_preserve_on_render_layer(target, true);
-    }
-
+     * Layer 0 (text) renders with LoadOp_Clear so empty cells (alpha=0
+     * with the text-layer's blend state) can't leak the previous frame's
+     * pixels — that was the cause of scrolling artifacts. Layers 1+ render
+     * with LoadOp_Load so they composite on top of layer 0 instead of
+     * wiping it. */
     ytime_start(layers);
-    /* Render text (layer 0) and ypaint (layer 1) only for now. Other
-     * layers (shader-glyph, ymgui) will be re-added progressively. */
-    size_t max_layer = terminal->layer_count < 2 ? terminal->layer_count : 2;
-    for (size_t i = 0; i < max_layer; i++) {
+    for (size_t i = 0; i < terminal->layer_count; i++) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
         if (!layer) {
             continue;
+        }
+        if (target->ops->set_preserve_on_render_layer) {
+            target->ops->set_preserve_on_render_layer(target, i > 0);
         }
         struct yetty_ycore_void_result res = layer->ops->render(layer, target);
         if (!YETTY_IS_OK(res)) {
@@ -626,7 +614,8 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
         target->ops->set_preserve_on_render_layer(target, false);
     }
 
-    ydebug("terminal_render_frame: done (text+ypaint direct, no blend)");
+    ydebug("terminal_render_frame: done (all %zu layers direct, no blend)",
+           terminal->layer_count);
     ytime_report(frame_render);
     return YETTY_OK_VOID();
 }
