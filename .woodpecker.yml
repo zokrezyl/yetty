@@ -1,5 +1,5 @@
 labels:
-  platform: darwin/*
+  platform: darwin/amd64
 
 when:
   - event: [push, manual, pull_request, tag]
