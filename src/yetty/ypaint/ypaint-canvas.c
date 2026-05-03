@@ -611,8 +611,8 @@ struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
     canvas->complex_prim_factory = factory_res.value;
 
     /* Create and register yplot factory */
-    struct yetty_ypaint_core_concrete_factory *yplot_factory = yetty_yplot_factory_create();
-    if (!yplot_factory) {
+    struct yetty_ypaint_core_concrete_factory *yetty_yplot_factory = yetty_yplot_factory_create();
+    if (!yetty_yplot_factory) {
         yerror("ypaint_canvas: yplot factory creation failed");
         yetty_ypaint_core_complex_prim_factory_destroy(canvas->complex_prim_factory);
         yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);
@@ -621,10 +621,10 @@ struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
         return YETTY_ERR(yetty_ypaint_canvas_ptr, "yplot factory creation failed");
     }
     struct yetty_ycore_void_result yplot_reg_res =
-        yetty_ypaint_core_complex_prim_factory_register(canvas->complex_prim_factory, yplot_factory);
+        yetty_ypaint_core_complex_prim_factory_register(canvas->complex_prim_factory, yetty_yplot_factory);
     if (YETTY_IS_ERR(yplot_reg_res)) {
         yerror("ypaint_canvas: yplot registration failed: %s", yplot_reg_res.error.msg);
-        yetty_yplot_factory_destroy(yplot_factory);
+        yetty_yplot_factory_destroy(yetty_yplot_factory);
         yetty_ypaint_core_complex_prim_factory_destroy(canvas->complex_prim_factory);
         yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
@@ -969,18 +969,18 @@ static struct uint32_result add_primitive_internal(
  *
  * Capacity is grown on demand — text spans typically reference a small
  * set of font_ids but a single PDF can carry dozens. */
-struct yetty_ypaint_font_map {
+struct font_map {
     struct yetty_ypaint_font **fonts; /* fonts[i] for font_id == i, NULL if absent */
     uint32_t capacity;
 };
 
-static void font_map_init(struct yetty_ypaint_font_map *m)
+static void font_map_init(struct font_map *m)
 {
     m->fonts = NULL;
     m->capacity = 0;
 }
 
-static void font_map_grow(struct yetty_ypaint_font_map *m, uint32_t want)
+static void font_map_grow(struct font_map *m, uint32_t want)
 {
     if (want <= m->capacity) {
         return;
@@ -996,7 +996,7 @@ static void font_map_grow(struct yetty_ypaint_font_map *m, uint32_t want)
     m->capacity = new_cap;
 }
 
-static struct yetty_ypaint_font *font_map_get(const struct yetty_ypaint_font_map *m, uint32_t id)
+static struct yetty_ypaint_font *font_map_get(const struct font_map *m, uint32_t id)
 {
     return id < m->capacity ? m->fonts[id] : NULL;
 }
@@ -1161,7 +1161,7 @@ static struct uint32_result expand_text_span_to_glyphs(
  * was previously attached to a higher (older) line, migrate it down.
  * Skip when font is NULL or is the canvas's default font. */
 static void attach_font_to_line(struct yetty_ypaint_canvas *canvas, struct yetty_ypaint_font *font,
-                                int32_t font_id, uint32_t glyph_max_row, struct yetty_ypaint_font_map *fonts_map)
+                                int32_t font_id, uint32_t glyph_max_row, struct font_map *fonts_map)
 {
     if (!font || font == canvas->default_font || glyph_max_row == 0) {
         return;
@@ -1244,7 +1244,7 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
     uint32_t initial_canvas_line = canvas->rolling_row_0 + canvas->cursor_row;
     uint32_t max_row_seen = initial_canvas_line;
 
-    struct yetty_ypaint_font_map fonts_map;
+    struct font_map fonts_map;
     font_map_init(&fonts_map);
 
     struct yetty_ypaint_core_primitive_iter iter = iter_res.value;
@@ -1360,12 +1360,19 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
    * visible viewport — that's fine, it'll get pulled into view by the
    * next text-mode scroll on the following emit. */
     if (canvas->scrolling_mode) {
+        /* Sparse-tail correction: PDF back-covers with a single page-number
+         * footer mark would otherwise pull the viewport too far down. Walk
+         * back past sparse lines, but STOP at any line carrying a complex
+         * primitive (yplot, yimage, yvideo, …) — a single complex prim is
+         * substantial content, not a footer mark. Without this, a yecho
+         * sequence like {plot}/text/{plot} parks the second plot below the
+         * viewport because its anchor line only has prims.count = 1. */
         const uint32_t MIN_DENSE_PRIMS = 10;
         uint32_t effective_max_row = max_row_seen;
         while (effective_max_row > initial_canvas_line) {
             struct yetty_ypaint_canvas_grid_line *l =
                 line_buffer_get(&canvas->lines, effective_max_row);
-            if (l && l->prims.count >= MIN_DENSE_PRIMS) {
+            if (l && (l->prims.count >= MIN_DENSE_PRIMS || l->complex_prim_count > 0)) {
                 break;
             }
             effective_max_row--;

@@ -22,6 +22,10 @@ if(YETTY_ENABLE_TOOL_YECHO)
     add_subdirectory(yecho)
 endif()
 
+if(YETTY_ENABLE_TOOL_YPLOT)
+    add_subdirectory(yplot)
+endif()
+
 if(YETTY_ENABLE_TOOL_YDRAW_MAZE)
     add_subdirectory(ydraw-maze)
 endif()

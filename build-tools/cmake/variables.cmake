@@ -23,7 +23,7 @@ option(YETTY_ENABLE_LIB_STB         "stb — image loading"                   OF
 option(YETTY_ENABLE_LIB_YAML_CPP    "yaml-cpp — config parsing (C++)"       OFF)
 option(YETTY_ENABLE_LIB_LIBYAML     "libyaml — config parsing (C)"          ON)
 # spdlog + the upstream zokrezyl/ytrace C++ lib are unused — yetty's own
-# pure-C implementation in src/yetty/ytrace/ytrace.c (driven by include/yetty/ytrace.h)
+# pure-C implementation in src/yetty/ytrace.c (driven by include/yetty/ytrace.h)
 # provides the trace/log macros. Keeping these OFF avoids pulling C++ into
 # the build for nothing.
 option(YETTY_ENABLE_LIB_SPDLOG      "spdlog — logging backend (UNUSED)"     OFF)
@@ -128,6 +128,7 @@ option(YETTY_ENABLE_TOOL_YDRAW_GENERATOR "ydraw-generator tool"              OFF
 option(YETTY_ENABLE_TOOL_YPAINT_BENCH    "ypaint-bench tool"                 ON)
 option(YETTY_ENABLE_TOOL_YCAT            "ycat tool"                         ON)
 option(YETTY_ENABLE_TOOL_YECHO           "yecho tool"                        ON)
+option(YETTY_ENABLE_TOOL_YPLOT           "yplot tool"                        ON)
 option(YETTY_ENABLE_TOOL_YDRAW_MAZE      "ydraw-maze tool"                   OFF)
 option(YETTY_ENABLE_TOOL_YDRAW_ZOO       "ydraw-zoo tool"                    OFF)
 option(YETTY_ENABLE_TOOL_YMUX            "ymux tool"                         OFF)
@@ -145,7 +146,7 @@ option(YETTY_ENABLE_TOOL_YTHORVG         "yetty-ythorvg CLI (SVG/Lottie -> OSC)"
 option(YETTY_ENABLE_TOOL_DECODE_YPAINT    "decode-ypaint diagnostic tool"     ON)
 
 # Auto-disable QA tools for cross-compilation (requires host LLVM/Clang libs)
-# Also disabled on macOS and Windows — qa-tools/analysis/result-checker/CMakeLists.txt
+# Also disabled on macOS and Windows — qa-tools/custom/result-checker/CMakeLists.txt
 # hardcodes Linux LLVM paths.
 if(YETTY_ENABLE_TOOL_QA)
     if(YETTY_ANDROID OR YETTY_IOS OR EMSCRIPTEN OR CMAKE_CROSSCOMPILING OR APPLE OR WIN32)
