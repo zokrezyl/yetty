@@ -353,6 +353,69 @@ static int virt_machine_parse_config(VirtMachineParams *p,
                 goto tag_fail;
             p->tab_eth[p->eth_count].ifname = strdup(str);
         }
+
+        /* Optional hostfwd: ["tcp:HOST_PORT-:GUEST_PORT", ...] — qemu-style.
+         * host_addr is always 0.0.0.0 (any), guest_addr defaults to the
+         * DHCP-assigned slirp address (10.0.2.15). Only parsed for "user"
+         * (slirp) — meaningless for tap. */
+        JSONValue hf_arr = json_object_get(obj, "hostfwd");
+        if (!json_is_undefined(hf_arr)) {
+            if (strcmp(p->tab_eth[p->eth_count].driver, "user") != 0) {
+                vm_error("eth%d: 'hostfwd' only valid with driver=user\n",
+                         p->eth_count);
+                goto tag_fail;
+            }
+            if (hf_arr.type != JSON_ARRAY) {
+                vm_error("eth%d: 'hostfwd' must be an array of strings\n",
+                         p->eth_count);
+                goto tag_fail;
+            }
+            int n = hf_arr.u.array->len;
+            if (n > MAX_ETH_HOSTFWD) {
+                vm_error("eth%d: too many hostfwd entries (max %d)\n",
+                         p->eth_count, MAX_ETH_HOSTFWD);
+                goto tag_fail;
+            }
+            VMEthEntry *e = &p->tab_eth[p->eth_count];
+            for (int j = 0; j < n; j++) {
+                const char *s = json_get_str(json_array_get(hf_arr, j));
+                if (!s) {
+                    vm_error("eth%d: hostfwd[%d] must be a string\n",
+                             p->eth_count, j);
+                    goto tag_fail;
+                }
+                BOOL is_udp;
+                if (!strncmp(s, "tcp:", 4))
+                    is_udp = FALSE;
+                else if (!strncmp(s, "udp:", 4))
+                    is_udp = TRUE;
+                else {
+                    vm_error("eth%d: hostfwd '%s' must start with 'tcp:' or 'udp:'\n",
+                             p->eth_count, s);
+                    goto tag_fail;
+                }
+                const char *cur = s + 4;
+                char *end;
+                long hp = strtol(cur, &end, 10);
+                if (end == cur || end[0] != '-' || end[1] != ':') {
+                    vm_error("eth%d: hostfwd '%s' must be '<proto>:<host_port>-:<guest_port>'\n",
+                             p->eth_count, s);
+                    goto tag_fail;
+                }
+                cur = end + 2;
+                long gp = strtol(cur, &end, 10);
+                if (end == cur || *end != '\0' ||
+                    hp <= 0 || hp > 65535 || gp <= 0 || gp > 65535) {
+                    vm_error("eth%d: hostfwd '%s': bad port spec\n",
+                             p->eth_count, s);
+                    goto tag_fail;
+                }
+                e->hostfwd[e->hostfwd_count].is_udp = is_udp;
+                e->hostfwd[e->hostfwd_count].host_port = (int)hp;
+                e->hostfwd[e->hostfwd_count].guest_port = (int)gp;
+                e->hostfwd_count++;
+            }
+        }
         p->eth_count++;
     }
 

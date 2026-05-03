@@ -43,6 +43,7 @@ struct FBDevice {
 #define MAX_DRIVE_DEVICE 4
 #define MAX_FS_DEVICE 4
 #define MAX_ETH_DEVICE 1
+#define MAX_ETH_HOSTFWD 8
 
 #define VM_CONFIG_VERSION 1
 
@@ -75,8 +76,16 @@ typedef struct {
 } VMFSEntry;
 
 typedef struct {
+    BOOL is_udp;
+    int host_port;
+    int guest_port;
+} VMEthHostFwd;
+
+typedef struct {
     char *driver;
     char *ifname;
+    int hostfwd_count;
+    VMEthHostFwd hostfwd[MAX_ETH_HOSTFWD];
     EthernetDevice *net;
 } VMEthEntry;
 

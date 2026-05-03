@@ -153,9 +153,18 @@ sudo tar -C "$MNT" -xzpf "$ALPINE_TARBALL"
 # alpine-disk so this image is a drop-in replacement for tinyemu/qemu boot.
 sudo tee "$MNT/init" >/dev/null <<'INIT_EOF'
 #!/bin/sh
+# Kernel hands PID 1 an empty PATH; runsvdir uses execvp() to spawn runsv,
+# so without this it fails with "unable to start runsv <svc>: file does
+# not exist". Set it before doing anything else.
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
 mount -t proc proc /proc
 mount -t sysfs sys /sys
 mount -t devtmpfs dev /dev 2>/dev/null || true
+# devpts is required for ptmx/pts/N — without it busybox telnetd fails with
+# "can't find free pty" on every connection.
+mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts 2>/dev/null || true
 hostname tinyemu
 
 ip link set lo up
@@ -163,6 +172,11 @@ ip link set eth0 up 2>/dev/null
 ip addr add 10.0.2.15/24 dev eth0 2>/dev/null
 ip route add default via 10.0.2.2 2>/dev/null
 echo 'nameserver 10.0.2.3' > /etc/resolv.conf
+
+# runit service supervisor — runs in the background, supervises everything
+# under /etc/service (currently just telnetd). Keeping the interactive
+# shell on hvc0 means we don't need to make runit PID 1.
+[ -d /etc/service ] && /usr/bin/runsvdir /etc/service &
 
 exec /bin/sh
 INIT_EOF
@@ -198,7 +212,7 @@ EOF
 echo "==> apk update"
 apk update
 
-echo "==> apk add (JSLinux package set)"
+echo "==> apk add (package set)"
 apk add --no-cache \
     bash \
     zsh \
@@ -233,7 +247,24 @@ apk add --no-cache \
     strace \
     ncurses-terminfo-base \
     tree \
-    htop
+    htop \
+    runit \
+    busybox-extras
+
+# runit service tree. Each subdir under /etc/service is a service; its
+# `run` script must exec the daemon in the foreground so runit can
+# supervise it. Started from /init via `runsvdir /etc/service &`.
+echo "==> setting up runit services"
+mkdir -p /etc/service/telnetd
+cat > /etc/service/telnetd/run <<'TELNETD_RUN_EOF'
+#!/bin/sh
+# telnetd applet lives in busybox-extras (the stock /usr/bin/busybox in
+# Alpine doesn't ship it). The package installs /usr/sbin/telnetd as a
+# symlink to /bin/busybox-extras. -F = foreground (runit needs the
+# daemon to stay attached). -p 23 = port. -l /bin/sh = login shell.
+exec /usr/sbin/telnetd -F -p 23 -l /bin/sh
+TELNETD_RUN_EOF
+chmod +x /etc/service/telnetd/run
 
 # Drop apk's download cache + tmp scratch; it's just bytes the brotli pass
 # would carry around.
