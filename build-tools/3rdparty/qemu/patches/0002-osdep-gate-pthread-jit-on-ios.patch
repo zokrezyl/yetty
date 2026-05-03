@@ -1,0 +1,34 @@
+Subject: gate pthread_jit_write_protect_np for iOS / tvOS
+
+pthread_jit_write_protect_np is API-marked unavailable on iOS / tvOS (no
+JIT entitlement). Even an unreachable call site fails to compile, so the
+call must be removed entirely via a preprocessor gate keyed on
+TARGET_OS_IPHONE. Hits ios-arm64 and tvos-arm64.
+
+--- a/include/qemu/osdep.h	2026-04-14 23:54:32
++++ b/include/qemu/osdep.h	2026-05-03 18:14:42
+@@ -1,3 +1,7 @@
++/* YETTY_IOS_GUARD_PTHREAD_JIT — see build-tools/3rdparty/qemu/patches/ */
++#if defined(__APPLE__)
++#  include <TargetConditionals.h>
++#endif
+ /*
+  * OS includes and handling of OS dependencies
+  *
+@@ -841,12 +845,16 @@
+ #ifdef __APPLE__
+ static inline void qemu_thread_jit_execute(void)
+ {
++    #if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+     pthread_jit_write_protect_np(true);
++#endif
+ }
+ 
+ static inline void qemu_thread_jit_write(void)
+ {
++    #if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE
+     pthread_jit_write_protect_np(false);
++#endif
+ }
+ #else
+ static inline void qemu_thread_jit_write(void) {}

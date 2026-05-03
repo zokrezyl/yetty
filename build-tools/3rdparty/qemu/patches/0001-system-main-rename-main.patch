@@ -1,0 +1,17 @@
+Subject: rename system/main.c::main to yetty_qemu_main
+
+The iOS/tvOS UIKit harness in system/tvos-main.m owns the real main() and
+calls into qemu's entry point on a worker thread. Rename qemu's main so
+both can live in the same binary without a multiple-definition error.
+
+--- a/system/main.c
++++ b/system/main.c
+@@ -66,7 +66,7 @@
+ int (*qemu_main)(void) = os_darwin_cfrunloop_main;
+ #endif
+
+-int main(int argc, char **argv)
++int yetty_qemu_main(int argc, char **argv)
+ {
+     qemu_init(argc, argv);
+

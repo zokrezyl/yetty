@@ -545,10 +545,17 @@ strip      = '/usr/bin/strip'
 pkg-config = '$SYSROOT/bin/sysroot-pkg-config'
 
 [built-in options]
-c_args        = ['-arch', '$_ARCH', '-isysroot', '$_SDK', '$_MIN_FLAG', '-include', '$_IOS_STUBS_H']
-cpp_args      = ['-arch', '$_ARCH', '-isysroot', '$_SDK', '$_MIN_FLAG', '-include', '$_IOS_STUBS_H']
-c_link_args   = ['-arch', '$_ARCH', '-isysroot', '$_SDK', '$_MIN_FLAG']
-cpp_link_args = ['-arch', '$_ARCH', '-isysroot', '$_SDK', '$_MIN_FLAG']
+c_args         = ['-arch', '$_ARCH', '-isysroot', '$_SDK', '$_MIN_FLAG', '-include', '$_IOS_STUBS_H']
+cpp_args       = ['-arch', '$_ARCH', '-isysroot', '$_SDK', '$_MIN_FLAG', '-include', '$_IOS_STUBS_H']
+objc_args      = ['-arch', '$_ARCH', '-isysroot', '$_SDK', '$_MIN_FLAG', '-include', '$_IOS_STUBS_H']
+c_link_args    = ['-arch', '$_ARCH', '-isysroot', '$_SDK', '$_MIN_FLAG']
+cpp_link_args  = ['-arch', '$_ARCH', '-isysroot', '$_SDK', '$_MIN_FLAG']
+# Meson picks the objc linker for any executable that has .m sources.
+# Without objc_link_args the cross flags (-arch / -isysroot / min-version)
+# don't reach the link line and ld defaults to the host x86_64 → all qemu
+# arm64 .o files get rejected. UIKit + Foundation also belong here, not in
+# extra-ldflags, because qemu's link uses LINK_ARGS only for non-arch flags.
+objc_link_args = ['-arch', '$_ARCH', '-isysroot', '$_SDK', '$_MIN_FLAG', '-framework', 'UIKit', '-framework', 'Foundation']
 
 [properties]
 needs_exe_wrapper  = true
@@ -683,58 +690,33 @@ ZLIB_PC_EOF
     # wrapper), which surfaces host x86_64 zlib/glib regardless of LIBDIR.
     export PKG_CONFIG="$SYSROOT/bin/sysroot-pkg-config"
 
-    # Patch QEMU's osdep.h: pthread_jit_write_protect_np is API-marked
-    # unavailable on iOS / tvOS (no JIT entitlement). Even an unreachable
-    # call site fails to compile, so we have to remove the call entirely
-    # via a preprocessor gate. Hits ios-arm64 + tvos-arm64.
-    _IOS_OSDEP="$SRC_DIR/include/qemu/osdep.h"
-    if ! grep -q 'YETTY_IOS_GUARD_PTHREAD_JIT' "$_IOS_OSDEP"; then
-        echo "==> patching $_IOS_OSDEP: gate pthread_jit_write_protect_np"
-        /usr/bin/python3 - "$_IOS_OSDEP" <<'PYEOF'
-import sys, re, pathlib
-p = pathlib.Path(sys.argv[1])
-src = p.read_text()
-src = (
-    "/* YETTY_IOS_GUARD_PTHREAD_JIT — see build-tools/3rdparty/qemu/_build.sh */\n"
-    "#if defined(__APPLE__)\n"
-    "#  include <TargetConditionals.h>\n"
-    "#endif\n"
-) + src
-def gate(m):
-    return ("#if !defined(TARGET_OS_IPHONE) || !TARGET_OS_IPHONE\n"
-            "    " + m.group(0) + "\n"
-            "#endif")
-src = re.sub(r"pthread_jit_write_protect_np\([^;]*?\);", gate, src)
-p.write_text(src)
-PYEOF
-    fi
+    # ------------------------------------------------------------------
+    # Drop the iOS / tvOS UIKit harness and apply qemu source patches
+    # from build-tools/3rdparty/qemu/{tvos-main.m, patches/}.
+    # The patches:
+    #   0001 — system/main.c: rename main → yetty_qemu_main
+    #   0002 — include/qemu/osdep.h: gate pthread_jit_write_protect_np
+    #   0003 — block/file-posix.c: always include <sys/mount.h> on Apple
+    #   0004 — tcg/region.c: skip MAP_JIT under CONFIG_TCG_INTERPRETER
+    #   0005 — meson.build: add system/tvos-main.m + link_language='c'
+    # `patch -p1 -N --silent` is idempotent (re-applying = no-op exit 1
+    # which we ignore via `|| true`).
+    # ------------------------------------------------------------------
+    cp "$SCRIPT_DIR/tvos-main.m" "$SRC_DIR/system/tvos-main.m"
+    for _patch in "$SCRIPT_DIR"/patches/*.patch; do
+        echo "==> applying $(basename "$_patch")"
+        ( cd "$SRC_DIR" && patch -p1 -N --silent < "$_patch" ) || true
+    done
 
-    # Patch QEMU's block/file-posix.c: it uses `struct statfs` / `fstatfs()`
-    # but only includes <sys/mount.h> inside `__APPLE__ && HAVE_HOST_BLOCK_DEVICE`.
-    # iOS has no IOKit so HAVE_HOST_BLOCK_DEVICE stays undefined and the
-    # build dies with `'struct statfs' has incomplete type`. Pull
-    # <sys/mount.h> in for every Apple target.
-    _IOS_FILEPOSIX="$SRC_DIR/block/file-posix.c"
-    if ! grep -q 'YETTY_IOS_FILEPOSIX_MOUNT_INCLUDE' "$_IOS_FILEPOSIX"; then
-        echo "==> patching $_IOS_FILEPOSIX: always include <sys/mount.h> on Apple"
-        /usr/bin/python3 - "$_IOS_FILEPOSIX" <<'PYEOF'
-import sys, pathlib
-p = pathlib.Path(sys.argv[1])
-src = p.read_text()
-needle = '#if defined(__APPLE__) && (__MACH__)\n#include <sys/ioctl.h>\n'
-inject = (
-    '#if defined(__APPLE__) && (__MACH__)\n'
-    '/* YETTY_IOS_FILEPOSIX_MOUNT_INCLUDE — see build-tools/3rdparty/qemu/_build.sh */\n'
-    '#include <sys/mount.h>\n'
-    '#include <sys/ioctl.h>\n'
-)
-assert needle in src, "expected anchor not found — qemu version drift?"
-p.write_text(src.replace(needle, inject, 1))
-PYEOF
-    fi
 
     _CONFIGURE_ARGS+=(
         --enable-virtfs
+        # tvOS / iOS sandbox forbids mmap(PROT_WRITE|PROT_EXEC) — there's no
+        # JIT entitlement for sideloaded apps. Force TCG into interpreter
+        # mode (TCI) so qemu doesn't try to allocate an executable code-gen
+        # buffer at startup. Slower than JIT, but the only thing that runs
+        # in the iOS/tvOS sandbox.
+        --enable-tcg-interpreter
         --cc=/usr/bin/clang
         --cxx=/usr/bin/clang++
         --objcc=/usr/bin/clang
@@ -756,7 +738,9 @@ PYEOF
         --extra-cxxflags="$_DARWIN_CFLAGS -include $_IOS_STUBS_H -I$SYSROOT/include"
         --extra-objcflags="$_DARWIN_CFLAGS -include $_IOS_STUBS_H"
     )
-    _EXTRA_LDFLAGS="-Wl,-dead_strip $_DARWIN_CFLAGS -L$SYSROOT/lib"
+    # UIKit + Foundation pull in the tvos-main.m harness's runtime. UIKit is
+    # available on iOS, iOS-Simulator, tvOS and tvOS-Simulator SDKs.
+    _EXTRA_LDFLAGS="-Wl,-dead_strip $_DARWIN_CFLAGS -L$SYSROOT/lib -framework UIKit -framework Foundation"
     _QEMU_BINARY_NAME="qemu-system-riscv64-unsigned"
     _QEMU_OUTPUT_NAME="qemu-system-riscv64"
     ;;

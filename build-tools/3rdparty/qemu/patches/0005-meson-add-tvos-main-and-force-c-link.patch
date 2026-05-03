@@ -1,0 +1,37 @@
+Subject: meson.build — wire system/tvos-main.m and force C linker
+
+Adds the iOS / tvOS UIKit harness (system/tvos-main.m, dropped in by the
+build script) to the system-emulator executable's source list, and pins
+link_language='c' on the executable() call. Meson 1.10 picks objc_LINKER
+for any target that has .m sources, but its objc_LINKER's LINK_ARGS does
+not pull in the cross-file's c_link_args (where qemu's configure stores
+-arch / -isysroot / -mtvos-version-min / -framework UIKit). Without the
+hint, ld runs without arch flags and rejects the arm64 .o files.
+
+--- a/meson.build	2026-04-14 23:54:32
++++ b/meson.build	2026-05-03 18:15:33
+@@ -4406,14 +4406,14 @@
+     execs = [{
+       'name': 'qemu-system-' + target_name,
+       'win_subsystem': 'console',
+-      'sources': [main_rs, files('system/main.c')],
++      'sources': [main_rs, files('system/main.c', 'system/tvos-main.m')],
+       'dependencies': [sdl]
+     }]
+     if host_os == 'windows' and (sdl.found() or gtk.found())
+       execs += [{
+         'name': 'qemu-system-' + target_name + 'w',
+         'win_subsystem': 'windows',
+-        'sources': [main_rs, files('system/main.c')],
++        'sources': [main_rs, files('system/main.c', 'system/tvos-main.m')],
+         'dependencies': [sdl]
+       }]
+     endif
+@@ -4447,6 +4447,7 @@
+                objects: lib.extract_all_objects(recursive: true),
+                link_depends: [block_syms, qemu_syms],
+                link_args: link_args,
++               link_language: 'c',
+                win_subsystem: exe['win_subsystem'])
+ 
+     if host_os == 'darwin'

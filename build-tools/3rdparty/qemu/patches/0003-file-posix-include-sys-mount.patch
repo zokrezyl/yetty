@@ -1,0 +1,19 @@
+Subject: always include <sys/mount.h> on Apple in block/file-posix.c
+
+block/file-posix.c uses `struct statfs` / `fstatfs()` but only includes
+<sys/mount.h> inside `__APPLE__ && HAVE_HOST_BLOCK_DEVICE`. iOS / tvOS
+have no IOKit so HAVE_HOST_BLOCK_DEVICE stays undefined and the build
+dies with "'struct statfs' has incomplete type". Pull <sys/mount.h> in
+unconditionally for Apple targets.
+
+--- a/block/file-posix.c	2026-04-14 23:54:32
++++ b/block/file-posix.c	2026-05-03 18:15:03
+@@ -44,6 +44,8 @@
+ #include "scsi/utils.h"
+ 
+ #if defined(__APPLE__) && (__MACH__)
++/* YETTY_IOS_FILEPOSIX_MOUNT_INCLUDE — see patches/0003-... */
++#include <sys/mount.h>
+ #include <sys/ioctl.h>
+ #if defined(HAVE_HOST_BLOCK_DEVICE)
+ #include <paths.h>

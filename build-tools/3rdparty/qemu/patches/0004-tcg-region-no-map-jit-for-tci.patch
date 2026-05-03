@@ -1,0 +1,23 @@
+Subject: skip MAP_JIT in tcg/region.c when CONFIG_TCG_INTERPRETER is set
+
+tcg/region.c unconditionally OR's MAP_JIT into the code-gen buffer's
+mmap flags on Darwin. iOS / tvOS sandbox rejects MAP_JIT (EINVAL) for
+apps without the com.apple.security.cs.allow-jit entitlement — which
+sideloaded apps can't get. With --enable-tcg-interpreter the buffer is
+never executed (TCI interprets the IR), so MAP_JIT is unnecessary too.
+Gate the flag behind !CONFIG_TCG_INTERPRETER so the iOS/tvOS TCI build
+allocates a plain MAP_PRIVATE | MAP_ANONYMOUS buffer.
+
+--- a/tcg/region.c	2026-04-14 23:54:33
++++ b/tcg/region.c	2026-05-03 18:15:17
+@@ -699,8 +699,8 @@
+      */
+     prot = PROT_NONE;
+     flags = MAP_PRIVATE | MAP_ANONYMOUS;
+-#ifdef CONFIG_DARWIN
+-    /* Applicable to both iOS and macOS (Apple Silicon). */
++#if defined(CONFIG_DARWIN) && !defined(CONFIG_TCG_INTERPRETER)
++    /* YETTY_IOS_NO_MAP_JIT_FOR_TCI — see patches/0004-... */
+     if (!splitwx) {
+         flags |= MAP_JIT;
+     }
