@@ -1,6 +1,6 @@
 steps:
   build:
-    image: 'ubuntu:latest'
+    image: yetty-dev
     commands:
       - apt-get update
       - apt-get install -y git git-lfs make cmake
