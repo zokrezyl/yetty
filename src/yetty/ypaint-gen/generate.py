@@ -35,15 +35,40 @@ def load_schema(path):
         return yaml.safe_load(f)
 
 
+# Texture format -> (atlas_index, WGPU constant value, WGSL type, atlas binding name)
+# WGPUTextureFormat enum values from <webgpu/webgpu.h>: R8Unorm=0x01, RGBA8Unorm=0x12.
+TEXTURE_FORMATS = {
+    'r8':    ('R8Unorm',    'WGPUTextureFormat_R8Unorm',    'texture_2d<f32>', 'atlas_r8'),
+    'rgba8': ('RGBA8Unorm', 'WGPUTextureFormat_RGBA8Unorm', 'texture_2d<f32>', 'atlas_rgba8'),
+}
+
+SAMPLER_FILTERS = {
+    'linear':  1,  # WGPUFilterMode_Linear
+    'nearest': 0,  # WGPUFilterMode_Nearest
+}
+
+
 def calculate_layout(schema):
-    """Calculate layout for uniforms and buffers."""
+    """Calculate layout for uniforms, buffers, and textures.
+
+    Returns (uniforms, buffers, textures). Each buffer carries a
+    `diverted` flag — true when its bytes are routed into a texture and so
+    should NOT be exposed as a storage-buffer binding (pipeline + binder
+    skip it; wire format is unchanged). Each texture resolves its
+    `pixels_buffer` / `width_uniform` / `height_uniform` references to wire
+    offsets so the generated _create_instance can extract them in O(1).
+    """
     uniforms = []
     buffers = []
+    textures = []
 
     # Uniforms - go to GPU uniform buffer
+    uniform_wire_offset = {}  # name -> first word offset in wire payload
+    cursor = 0
     for u in schema.get('uniforms', []):
         count = u.get('count', 1)
         t = TYPES[u['type']]
+        uniform_wire_offset[u['name']] = cursor
         uniforms.append({
             'name': u['name'],
             'type': u['type'],
@@ -52,19 +77,74 @@ def calculate_layout(schema):
             'render_type': t[3],
             'count': count,
             'default': u.get('default'),
+            'wire_offset': cursor,
         })
+        cursor += count
 
-    # Buffers - go to GPU storage buffer(s)
+    # Buffers - some go to the GPU storage buffer, some are diverted to textures
     for b in schema.get('buffers', []):
         buffers.append({
             'name': b['name'],
             'element_type': b['element_type'],
+            'diverted': False,
         })
 
-    return uniforms, buffers
+    # Textures - declared in schema, resolved here against buffers + uniforms
+    schema_textures = schema.get('textures', []) or []
+    buffers_by_name = {b['name']: b for b in buffers}
+    for t in schema_textures:
+        fmt_key = t['format']
+        if fmt_key not in TEXTURE_FORMATS:
+            raise ValueError(f"unknown texture format '{fmt_key}' in '{t['name']}'")
+        fmt_short, fmt_const, wgsl_type, atlas_name = TEXTURE_FORMATS[fmt_key]
+        sampler_key = t.get('sampler', 'linear')
+        if sampler_key not in SAMPLER_FILTERS:
+            raise ValueError(f"unknown sampler '{sampler_key}' in texture '{t['name']}'")
+        sampler_filter = SAMPLER_FILTERS[sampler_key]
+
+        pixels_buffer_name = t.get('pixels_buffer')
+        if pixels_buffer_name is not None:
+            if pixels_buffer_name not in buffers_by_name:
+                raise ValueError(
+                    f"texture '{t['name']}': pixels_buffer '{pixels_buffer_name}' "
+                    f"is not declared in buffers:")
+            buffers_by_name[pixels_buffer_name]['diverted'] = True
+
+        width_uniform = t.get('width_uniform')
+        height_uniform = t.get('height_uniform')
+        if width_uniform is not None and width_uniform not in uniform_wire_offset:
+            raise ValueError(
+                f"texture '{t['name']}': width_uniform '{width_uniform}' is not declared")
+        if height_uniform is not None and height_uniform not in uniform_wire_offset:
+            raise ValueError(
+                f"texture '{t['name']}': height_uniform '{height_uniform}' is not declared")
+
+        textures.append({
+            'name': t['name'],
+            'format': fmt_key,
+            'format_const': fmt_const,
+            'wgsl_type': wgsl_type,
+            'atlas_name': atlas_name,
+            'sampler_filter': sampler_filter,
+            'pixels_buffer': pixels_buffer_name,
+            'width_uniform': width_uniform,
+            'height_uniform': height_uniform,
+            'width_wire_offset': uniform_wire_offset.get(width_uniform),
+            'height_wire_offset': uniform_wire_offset.get(height_uniform),
+        })
+
+    return uniforms, buffers, textures
 
 
-def generate_c_header(schema, uniforms, buffers):
+def yaml_factory_mode(schema):
+    """Return the yaml-factory mode: 'default' (current yfsvm-style) or 'none' (skip)."""
+    mode = schema.get('yaml_factory', 'default')
+    if mode in (None, False, 'none', 'skip'):
+        return 'none'
+    return 'default'
+
+
+def generate_c_header(schema, uniforms, buffers, textures, yaml_mode):
     name = schema['name']
     NAME = name.upper()
     type_id = schema['type_id']
@@ -84,6 +164,16 @@ def generate_c_header(schema, uniforms, buffers):
         buf_struct_fields.append(f'    const uint32_t *{b["name"]};')
         buf_struct_fields.append(f'    size_t {b["name"]}_len;')
     buf_struct_fields_str = '\n'.join(buf_struct_fields)
+
+    yaml_section = '' if yaml_mode == 'none' else f'''
+//=============================================================================
+// YAML parser registration
+//=============================================================================
+
+struct yetty_ypaint_yaml_parser;
+struct yetty_ycore_void_result yetty_{name}_register_yaml_factory(
+    struct yetty_ypaint_yaml_parser *parser);
+'''
 
     return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
 #pragma once
@@ -113,11 +203,11 @@ struct yetty_{name}_buffers {{
 // Serialization API
 //=============================================================================
 
-size_t yetty_{name}_serialized_size(
+size_t yetty_{name}_uniforms_serialized_size(
     const struct yetty_{name}_uniforms *uniforms,
     const struct yetty_{name}_buffers *buffers);
 
-struct yetty_ycore_size_result yetty_{name}_serialize(
+struct yetty_ycore_size_result yetty_{name}_uniforms_serialize(
     const struct yetty_{name}_uniforms *uniforms,
     const struct yetty_{name}_buffers *buffers,
     uint8_t *out, size_t out_capacity);
@@ -128,22 +218,14 @@ struct yetty_ycore_size_result yetty_{name}_serialize(
 
 struct yetty_ypaint_core_concrete_factory *yetty_{name}_factory_create(void);
 void yetty_{name}_factory_destroy(struct yetty_ypaint_core_concrete_factory *factory);
-
-//=============================================================================
-// YAML parser registration
-//=============================================================================
-
-struct yetty_ypaint_yaml_parser;
-struct yetty_ycore_void_result yetty_{name}_register_yaml_factory(
-    struct yetty_ypaint_yaml_parser *parser);
-
+{yaml_section}
 #ifdef __cplusplus
 }}
 #endif
 '''
 
 
-def generate_c_source(schema, uniforms, buffers):
+def generate_c_source(schema, uniforms, buffers, textures):
     name = schema['name']
     NAME = name.upper()
     libraries = schema.get('libraries', [])
@@ -151,6 +233,13 @@ def generate_c_source(schema, uniforms, buffers):
     # Calculate sizes
     uniforms_word_count = sum(u['count'] for u in uniforms)
     buffer_len_fields = len(buffers)
+
+    # Buffers exposed as a storage-buffer binding (not diverted into textures).
+    # Diverted buffers stay in the wire format but are routed to texture data
+    # in _create_instance — they don't appear in rs->buffers[].
+    storage_buffers = [b for b in buffers if not b.get('diverted')]
+    has_textures = len(textures) > 0
+    needs_webgpu_h = has_textures  # for WGPUTextureFormat_* constants
 
     lib_includes = '\n'.join([f'#include <yetty/{lib}/compiler.h>' for lib in libraries])
 
@@ -223,6 +312,21 @@ def generate_c_source(schema, uniforms, buffers):
     rs->uniforms[{vp_h_idx}].f32 = 0.0f;''')
     uniform_idx += 8
 
+    # Per-texture region uniform — vec4(u0, v0, u1, v1) of the atlas slice.
+    # The binder resolves atlas position at finalize time and writes the
+    # vec4 here BEFORE uploading the uniform buffer. Default (0,0,1,1)
+    # keeps the shader sane for primitives whose textures haven't been
+    # packed yet (e.g. during initial pipeline compile with placeholder
+    # 1x1 templates).
+    for t in textures:
+        uniform_setup.append(f'''    strncpy(rs->uniforms[{uniform_idx}].name, "{t["name"]}_region", YETTY_YRENDER_NAME_MAX - 1);
+    rs->uniforms[{uniform_idx}].type = YETTY_YRENDER_UNIFORM_VEC4;
+    rs->uniforms[{uniform_idx}].vec4[0] = 0.0f;
+    rs->uniforms[{uniform_idx}].vec4[1] = 0.0f;
+    rs->uniforms[{uniform_idx}].vec4[2] = 1.0f;
+    rs->uniforms[{uniform_idx}].vec4[3] = 1.0f;''')
+        uniform_idx += 1
+
     uniform_setup_str = '\n'.join(uniform_setup)
     total_uniform_count = uniform_idx
 
@@ -264,6 +368,181 @@ def generate_c_source(schema, uniforms, buffers):
         rs->children_count = {i + 2};
     }}''')
     lib_children = '\n'.join(lib_children_parts)
+
+    # ------------------------------------------------------------------
+    # Storage-buffer setup (template_rs / per-instance RS) -- only for
+    # buffers NOT diverted into textures. For yplot this is a single
+    # buffer; the current generator named it "buffer" generically so we
+    # keep the literal name for backwards compatibility.
+    # ------------------------------------------------------------------
+    if len(storage_buffers) == 0:
+        buffer_setup_str = '    // No storage buffers (all buffers diverted to textures)\n    rs->buffer_count = 0;'
+    else:
+        # Only the first storage buffer is wired today (matches existing
+        # yplot output). Multi-storage-buffer support can extend this.
+        buffer_setup_str = '''    // Setup storage buffer for buffer data
+    rs->buffer_count = 1;
+    strncpy(rs->buffers[0].name, "buffer", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(rs->buffers[0].wgsl_type, "array<u32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
+    rs->buffers[0].readonly = 1;'''
+
+    # ------------------------------------------------------------------
+    # Texture setup in the template -- placeholder dimensions (1x1, NULL
+    # data) so pipeline_create includes atlas bindings. The binder skips
+    # textures with width==0/height==0 in `collect`, so the placeholders
+    # MUST be > 0. data=NULL is safe: the upload path skips on NULL.
+    # Per-instance code below overwrites width/height/data with real
+    # values BEFORE binder->submit.
+    # ------------------------------------------------------------------
+    texture_setup_lines = []
+    for ti, t in enumerate(textures):
+        texture_setup_lines.append(f'''    /* Texture: {t["name"]} (format={t["format"]}, sampler={'linear' if t["sampler_filter"] == 1 else 'nearest'}) */
+    strncpy(rs->textures[{ti}].name, "{t["name"]}", YETTY_YRENDER_NAME_MAX - 1);
+    strncpy(rs->textures[{ti}].wgsl_type, "{t["wgsl_type"]}", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
+    rs->textures[{ti}].format = {t["format_const"]};
+    rs->textures[{ti}].sampler_filter = {t["sampler_filter"]};
+    rs->textures[{ti}].width = 1;   /* placeholder for pipeline compile; overwritten per-instance */
+    rs->textures[{ti}].height = 1;
+    rs->textures[{ti}].data = NULL;''')
+    if textures:
+        texture_setup_lines.append(f'    rs->texture_count = {len(textures)};')
+    texture_setup_str = '\n'.join(texture_setup_lines)
+    # Compose buffer + texture setup as a single block so that empty
+    # halves don't introduce stray blank lines (preserves bit-identical
+    # output for primitives without textures).
+    if texture_setup_str:
+        rs_resources_setup = buffer_setup_str + '\n\n' + texture_setup_str
+    else:
+        rs_resources_setup = buffer_setup_str
+
+    # ------------------------------------------------------------------
+    # Per-instance wire-format wiring for storage buffer + textures
+    # ------------------------------------------------------------------
+    # Storage-buffer wiring: existing single-buffer code path (yplot).
+    if len(storage_buffers) == 0:
+        instance_buffer_wiring = ''
+        render_buffer_wiring = ''
+    else:
+        # The first buffer in declaration order maps to rs->buffers[0].
+        # If buffers[0] is diverted (texture-only), we'd need to skip it
+        # — supported below by the wire-offset computation.
+        first_storage_idx = next(i for i, b in enumerate(buffers) if not b.get('diverted'))
+        # Wire offset of buffer N's data = buffer_data_offset + sum(payload[uwc..uwc+N-1])
+        if first_storage_idx == 0:
+            data_off_expr = f'payload + {buffer_data_offset}'
+            len_expr = f'payload[{uniforms_word_count}]'
+        else:
+            sum_terms = ' + '.join(f'payload[{uniforms_word_count + k}]' for k in range(first_storage_idx))
+            data_off_expr = f'payload + {buffer_data_offset} + ({sum_terms})'
+            len_expr = f'payload[{uniforms_word_count + first_storage_idx}]'
+        instance_buffer_wiring = f'''        size_t buffer_words = {len_expr};
+        const uint32_t *buffer_payload = {data_off_expr};
+        instance->resource_set->buffers[0].data = (uint8_t *)buffer_payload;
+        instance->resource_set->buffers[0].size = buffer_words * sizeof(uint32_t);
+        instance->resource_set->buffers[0].dirty = 1;'''
+        render_buffer_wiring = f'''    // Get buffer data (after uniforms and length fields)
+    const uint32_t *buffer_data = {data_off_expr};
+    size_t buffer_words = {len_expr};  // first buffer length
+
+    // Update storage buffer
+    rs->buffers[0].data = (uint8_t *)buffer_data;
+    rs->buffers[0].size = buffer_words * sizeof(uint32_t);
+    rs->buffers[0].dirty = 1;'''
+
+    # Texture wiring: for each texture with pixels_buffer, compute wire
+    # offsets at codegen time and emit a block setting data/width/height.
+    def texture_wire_block(t, ti, indent):
+        if t['pixels_buffer'] is None:
+            return ''  # texture with no pixel source — caller manages it
+        buf_idx = next(i for i, b in enumerate(buffers) if b['name'] == t['pixels_buffer'])
+        if buf_idx == 0:
+            data_expr = f'payload + {buffer_data_offset}'
+        else:
+            sum_terms = ' + '.join(f'payload[{uniforms_word_count + k}]' for k in range(buf_idx))
+            data_expr = f'payload + {buffer_data_offset} + ({sum_terms})'
+        w_off = t['width_wire_offset']
+        h_off = t['height_wire_offset']
+        ind = ' ' * indent
+        return f'''{ind}/* Texture '{t["name"]}' — pixels diverted from buffer '{t["pixels_buffer"]}'. */
+{ind}{{
+{ind}    const uint32_t *pixels_data = {data_expr};
+{ind}    uint32_t tex_w = payload[{w_off}];
+{ind}    uint32_t tex_h = payload[{h_off}];
+{ind}    instance->resource_set->textures[{ti}].data = (uint8_t *)pixels_data;
+{ind}    instance->resource_set->textures[{ti}].width = tex_w;
+{ind}    instance->resource_set->textures[{ti}].height = tex_h;
+{ind}    instance->resource_set->textures[{ti}].dirty = 1;
+{ind}}}'''
+
+    instance_texture_wiring = '\n'.join(
+        texture_wire_block(t, ti, 8) for ti, t in enumerate(textures))
+    if not instance_texture_wiring:
+        instance_texture_wiring = ''
+
+    # Same texture wiring for the per-frame render path. Uses `rs` instead
+    # of `instance->resource_set` (the variable name in _instance_render).
+    def texture_render_block(t, ti, indent):
+        if t['pixels_buffer'] is None:
+            return ''
+        buf_idx = next(i for i, b in enumerate(buffers) if b['name'] == t['pixels_buffer'])
+        if buf_idx == 0:
+            data_expr = f'payload + {buffer_data_offset}'
+        else:
+            sum_terms = ' + '.join(f'payload[{uniforms_word_count + k}]' for k in range(buf_idx))
+            data_expr = f'payload + {buffer_data_offset} + ({sum_terms})'
+        w_off = t['width_wire_offset']
+        h_off = t['height_wire_offset']
+        ind = ' ' * indent
+        return f'''{ind}/* Texture '{t["name"]}' — keep dimensions/data in sync with wire. */
+{ind}{{
+{ind}    const uint32_t *pixels_data = {data_expr};
+{ind}    uint32_t tex_w = payload[{w_off}];
+{ind}    uint32_t tex_h = payload[{h_off}];
+{ind}    rs->textures[{ti}].data = (uint8_t *)pixels_data;
+{ind}    rs->textures[{ti}].width = tex_w;
+{ind}    rs->textures[{ti}].height = tex_h;
+{ind}    rs->textures[{ti}].dirty = 1;
+{ind}}}'''
+
+    render_texture_wiring = '\n'.join(
+        texture_render_block(t, ti, 4) for ti, t in enumerate(textures))
+    if not render_texture_wiring:
+        render_texture_wiring = ''
+    # Compose render-side resource wiring as one block to avoid stray
+    # blank lines when textures are absent (yplot path).
+    if render_texture_wiring:
+        render_resources_wiring = render_buffer_wiring + '\n\n' + render_texture_wiring
+    else:
+        render_resources_wiring = render_buffer_wiring
+    if instance_buffer_wiring and instance_texture_wiring:
+        instance_inner = instance_buffer_wiring + '\n\n' + instance_texture_wiring
+    else:
+        instance_inner = instance_buffer_wiring or instance_texture_wiring
+    if instance_inner:
+        # Comment matches what's in the wiring: storage-buffer-only (yplot
+        # path) keeps the original wording so existing yplot output stays
+        # bit-identical after regen; texture-bearing primitives get the
+        # broader description.
+        if textures:
+            wiring_comment = '''    /* Wire the per-instance RS to this instance's payload. Storage
+     * buffers (if any) point into the wire bytes; textures whose
+     * pixels_buffer was diverted have their data + dimensions populated
+     * here BEFORE binder->submit so the first finalize sees real
+     * dimensions and atlas-packs accordingly. */'''
+        else:
+            wiring_comment = '''    /* Point the storage buffer descriptor at this instance's bytecode now,
+     * so the binder's first finalize allocates a GPU buffer of the right
+     * size and queueWriteBuffers the data. */'''
+        instance_resources_wiring = f'''{wiring_comment}
+    {{
+        const uint32_t *data = (const uint32_t *)instance->buffer_data;
+        const uint32_t *payload = data + 2;
+{instance_inner}
+    }}'''
+    else:
+        instance_resources_wiring = ''
+    # webgpu.h is already pulled in transitively via complex-prim-types.h,
+    # so no extra include is needed for the WGPUTextureFormat_* constants.
 
     return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
 //
@@ -311,7 +590,7 @@ static void {name}_init_lib_rs(void)
     {name}_lib_rs_initialized = true;
 }}
 
-struct {name}_factory {{
+struct yetty_{name}_factory {{
     struct yetty_ypaint_core_concrete_factory base;
     /* Shared, compiled once. NULL until compile_pipeline. */
     struct yetty_yrender_pipeline *pipeline;
@@ -334,16 +613,16 @@ struct {name}_factory {{
     float cell_zoom_off_y;
 }};
 
-static struct {name}_factory *{name}_factory_from_base(struct yetty_ypaint_core_concrete_factory *base)
+static struct yetty_{name}_factory *yetty_{name}_factory_from_base(struct yetty_ypaint_core_concrete_factory *base)
 {{
-    return (struct {name}_factory *)base;
+    return (struct yetty_{name}_factory *)base;
 }}
 
 //=============================================================================
 // Serialization
 //=============================================================================
 
-size_t yetty_{name}_serialized_size(
+size_t yetty_{name}_uniforms_serialized_size(
     const struct yetty_{name}_uniforms *uniforms,
     const struct yetty_{name}_buffers *buffers)
 {{
@@ -353,7 +632,7 @@ size_t yetty_{name}_serialized_size(
     return (2 + {uniforms_word_count} + {buffer_len_fields} + total_buf_words) * sizeof(uint32_t);
 }}
 
-struct yetty_ycore_size_result yetty_{name}_serialize(
+struct yetty_ycore_size_result yetty_{name}_uniforms_serialize(
     const struct yetty_{name}_uniforms *uniforms,
     const struct yetty_{name}_buffers *buffers,
     uint8_t *out, size_t out_capacity)
@@ -407,11 +686,7 @@ static void {name}_populate_rs(struct yetty_ypaint_core_gpu_resource_set *rs)
 {uniform_setup_str}
     rs->uniform_count = {total_uniform_count};
 
-    // Setup storage buffer for buffer data
-    rs->buffer_count = 1;
-    strncpy(rs->buffers[0].name, "buffer", YETTY_YRENDER_NAME_MAX - 1);
-    strncpy(rs->buffers[0].wgsl_type, "array<u32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
-    rs->buffers[0].readonly = 1;
+{rs_resources_setup}
 }}
 
 //=============================================================================
@@ -428,7 +703,7 @@ static struct yetty_ycore_void_result
     if (!self->resource_set || !self->binder)
         return YETTY_ERR(yetty_ycore_void, "instance not finalised");
 
-    struct {name}_factory *factory = {name}_factory_from_base(self->factory);
+    struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self->factory);
     if (!factory->pipeline)
         return YETTY_ERR(yetty_ycore_void, "factory pipeline not initialized");
 
@@ -461,14 +736,7 @@ static struct yetty_ycore_void_result
     rs->uniforms[0].f32 = x;
     rs->uniforms[1].f32 = y;
 
-    // Get buffer data (after uniforms and length fields)
-    const uint32_t *buffer_data = payload + {buffer_data_offset};
-    size_t buffer_words = payload[{uniforms_word_count}];  // first buffer length
-
-    // Update storage buffer
-    rs->buffers[0].data = (uint8_t *)buffer_data;
-    rs->buffers[0].size = buffer_words * sizeof(uint32_t);
-    rs->buffers[0].dirty = 1;
+{render_resources_wiring}
 
     // Update the per-instance binder. Each instance has its own GPU
     // uniform_buffer / storage_buffer / bind_group, so concurrent renders
@@ -541,7 +809,7 @@ static struct yetty_ycore_void_result
                         WGPUTextureFormat target_format,
                         struct yetty_ypaint_core_gpu_allocator *allocator)
 {{
-    struct {name}_factory *factory = {name}_factory_from_base(self);
+    struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
 
     if (factory->pipeline) {{
         ydebug("{name}: factory pipeline already initialized");
@@ -569,7 +837,7 @@ static struct yetty_ycore_void_result
 
 static WGPURenderPipeline {name}_get_pipeline(struct yetty_ypaint_core_concrete_factory *self)
 {{
-    struct {name}_factory *factory = {name}_factory_from_base(self);
+    struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
     return factory->pipeline ? yetty_yrender_pipeline_get_pipeline(factory->pipeline) : NULL;
 }}
 
@@ -580,7 +848,7 @@ static struct yetty_ypaint_core_complex_prim_instance_ptr_result
     if (!buffer_data || size < sizeof(struct yetty_ypaint_core_complex_prim))
         return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "invalid buffer data");
 
-    struct {name}_factory *factory = {name}_factory_from_base(self);
+    struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
     if (!factory->pipeline)
         return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
                          "{name} factory pipeline not compiled");
@@ -618,18 +886,7 @@ static struct yetty_ypaint_core_complex_prim_instance_ptr_result
     memcpy(instance->resource_set, &factory->template_rs,
            sizeof(struct yetty_ypaint_core_gpu_resource_set));
 
-    /* Point the storage buffer descriptor at this instance's bytecode now,
-     * so the binder's first finalize allocates a GPU buffer of the right
-     * size and queueWriteBuffers the data. */
-    {{
-        const uint32_t *data = (const uint32_t *)instance->buffer_data;
-        const uint32_t *payload = data + 2;
-        size_t buffer_words = payload[{uniforms_word_count}];
-        const uint32_t *buffer_payload = payload + {buffer_data_offset};
-        instance->resource_set->buffers[0].data = (uint8_t *)buffer_payload;
-        instance->resource_set->buffers[0].size = buffer_words * sizeof(uint32_t);
-        instance->resource_set->buffers[0].dirty = 1;
-    }}
+{instance_resources_wiring}
 
     /* Per-instance binder bound to the factory's shared pipeline. Owns
      * its OWN uniform_buffer / storage_buffer / bind_group. */
@@ -686,7 +943,7 @@ static struct yetty_ypaint_core_gpu_resource_set *{name}_get_shared_rs(
     struct yetty_ypaint_core_concrete_factory *self)
 {{
     /* Returns the structural template, NOT a mutable per-instance RS. */
-    struct {name}_factory *factory = {name}_factory_from_base(self);
+    struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
     return factory->template_initialized ? &factory->template_rs : NULL;
 }}
 
@@ -694,7 +951,7 @@ static struct yetty_ycore_void_result
 {name}_set_visual_zoom(struct yetty_ypaint_core_concrete_factory *self,
                        float scale, float off_x, float off_y)
 {{
-    struct {name}_factory *factory = {name}_factory_from_base(self);
+    struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
     factory->visual_zoom_scale = (scale > 0.0f) ? scale : 1.0f;
     factory->visual_zoom_off_x = off_x;
     factory->visual_zoom_off_y = off_y;
@@ -705,7 +962,7 @@ static struct yetty_ycore_void_result
 {name}_set_cell_zoom(struct yetty_ypaint_core_concrete_factory *self,
                      float scale, float off_x, float off_y)
 {{
-    struct {name}_factory *factory = {name}_factory_from_base(self);
+    struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
     factory->cell_zoom_scale = (scale > 0.0f) ? scale : 1.0f;
     factory->cell_zoom_off_x = off_x;
     factory->cell_zoom_off_y = off_y;
@@ -715,7 +972,7 @@ static struct yetty_ycore_void_result
 
 struct yetty_ypaint_core_concrete_factory *yetty_{name}_factory_create(void)
 {{
-    struct {name}_factory *factory = calloc(1, sizeof(struct {name}_factory));
+    struct yetty_{name}_factory *factory = calloc(1, sizeof(struct yetty_{name}_factory));
     if (!factory)
         return NULL;
 
@@ -739,7 +996,7 @@ void yetty_{name}_factory_destroy(struct yetty_ypaint_core_concrete_factory *sel
     if (!self)
         return;
 
-    struct {name}_factory *factory = {name}_factory_from_base(self);
+    struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
 
     if (factory->pipeline)
         yetty_yrender_pipeline_destroy(factory->pipeline);
@@ -992,13 +1249,13 @@ static struct yetty_ycore_void_result
         .bytecode_len = bc_count,
     }};
 
-    size_t required = yetty_{name}_serialized_size(&uniforms, &bufs);
+    size_t required = yetty_{name}_uniforms_serialized_size(&uniforms, &bufs);
     uint8_t *prim_buf = malloc(required);
     if (!prim_buf)
         return YETTY_ERR(yetty_ycore_void, "malloc failed");
 
     struct yetty_ycore_size_result ser_res =
-        yetty_{name}_serialize(&uniforms, &bufs, prim_buf, required);
+        yetty_{name}_uniforms_serialize(&uniforms, &bufs, prim_buf, required);
     if (YETTY_IS_ERR(ser_res)) {{
         free(prim_buf);
         return YETTY_ERR(yetty_ycore_void, ser_res.error.msg);
@@ -1029,7 +1286,8 @@ def main():
 
     schema_path = Path(sys.argv[1])
     schema = load_schema(schema_path)
-    uniforms, buffers = calculate_layout(schema)
+    uniforms, buffers, textures = calculate_layout(schema)
+    yaml_mode = yaml_factory_mode(schema)
 
     name = schema['name']
     src_dir = schema_path.parent
@@ -1039,21 +1297,29 @@ def main():
     include_dir = src_dir.parent.parent.parent / 'include' / 'yetty' / name
     include_dir.mkdir(parents=True, exist_ok=True)
 
-    header = generate_c_header(schema, uniforms, buffers)
-    source = generate_c_source(schema, uniforms, buffers)
+    header = generate_c_header(schema, uniforms, buffers, textures, yaml_mode)
+    source = generate_c_source(schema, uniforms, buffers, textures)
     wgsl = generate_wgsl_bindings(schema, uniforms, buffers)
-    yaml_parser = generate_yaml_parser(schema, uniforms, buffers)
 
     (include_dir / f'{name}-gen.h').write_text(header + '\n')
     (src_dir / f'{name}-gen.c').write_text(source + '\n')
     (src_dir / f'{name}-gen.wgsl').write_text(wgsl + '\n')
-    (src_dir / f'{name}-gen-yaml.c').write_text(yaml_parser + '\n')
 
     print(f'Generated:')
     print(f'  {include_dir / f"{name}-gen.h"}')
     print(f'  {src_dir / f"{name}-gen.c"}')
     print(f'  {src_dir / f"{name}-gen.wgsl"}')
-    print(f'  {src_dir / f"{name}-gen-yaml.c"}')
+
+    yaml_path = src_dir / f'{name}-gen-yaml.c'
+    if yaml_mode == 'none':
+        # Schema explicitly opts out — drop any stale generated file.
+        if yaml_path.exists():
+            yaml_path.unlink()
+        print(f'  (no yaml factory generated; yaml_factory: none)')
+    else:
+        yaml_parser = generate_yaml_parser(schema, uniforms, buffers)
+        yaml_path.write_text(yaml_parser + '\n')
+        print(f'  {yaml_path}')
 
 
 if __name__ == '__main__':

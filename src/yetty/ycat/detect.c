@@ -44,6 +44,12 @@ enum yetty_ycat_type yetty_ycat_type_from_mime(const char *mime)
     if (strcmp(mime, "text/markdown") == 0 || strcmp(mime, "text/x-markdown") == 0) {
         return YETTY_YCAT_TYPE_MARKDOWN;
     }
+    /* libmagic with MAGIC_MIME_TYPE returns "image/png", "image/jpeg", etc.
+     * stb_image decodes png/jpg/gif/bmp/tga/psd/hdr/pic/pnm; the handler
+     * surfaces stb's own error if the subtype isn't supported. */
+    if (strncmp(mime, "image/", 6) == 0) {
+        return YETTY_YCAT_TYPE_IMAGE;
+    }
     if (strncmp(mime, "text/", 5) == 0) {
         return YETTY_YCAT_TYPE_TEXT;
     }
@@ -86,6 +92,15 @@ enum yetty_ycat_type yetty_ycat_type_from_extension(const char *ext)
     }
     if (strcasecmp(noleading, "txt") == 0) {
         return YETTY_YCAT_TYPE_TEXT;
+    }
+    /* Image extensions stb_image can decode. */
+    if (strcasecmp(noleading, "png") == 0 || strcasecmp(noleading, "jpg") == 0 ||
+        strcasecmp(noleading, "jpeg") == 0 || strcasecmp(noleading, "gif") == 0 ||
+        strcasecmp(noleading, "bmp") == 0 || strcasecmp(noleading, "tga") == 0 ||
+        strcasecmp(noleading, "psd") == 0 || strcasecmp(noleading, "hdr") == 0 ||
+        strcasecmp(noleading, "pic") == 0 || strcasecmp(noleading, "ppm") == 0 ||
+        strcasecmp(noleading, "pgm") == 0) {
+        return YETTY_YCAT_TYPE_IMAGE;
     }
     return YETTY_YCAT_TYPE_UNKNOWN;
 }

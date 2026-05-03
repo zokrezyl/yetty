@@ -120,7 +120,7 @@ done
 echo ""
 echo "=== 4. Checking shader files ==="
 
-SHADERS="gpu-screen.wgsl cursor.wgsl msdf_gen.wgsl scale-image.wgsl"
+SHADERS="gpu-screen.wgsl cursor.wgsl msdf_gen.wgsl"
 for shader in $SHADERS; do
     if [ -f "assets/shaders/$shader" ]; then
         ok "assets/shaders/$shader"

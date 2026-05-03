@@ -19,7 +19,7 @@ option(YETTY_ENABLE_LIB_LZ4         "lz4 — compression"                      O
 option(YETTY_ENABLE_LIB_LIBUV       "libuv — event loop"                    ON)
 option(YETTY_ENABLE_LIB_LIBCO       "libco — stackful coroutines"           ON)
 option(YETTY_ENABLE_LIB_GLM         "glm — math"                            OFF)
-option(YETTY_ENABLE_LIB_STB         "stb — image loading"                   OFF)
+option(YETTY_ENABLE_LIB_STB         "stb — image loading"                   ON)
 option(YETTY_ENABLE_LIB_YAML_CPP    "yaml-cpp — config parsing (C++)"       OFF)
 option(YETTY_ENABLE_LIB_LIBYAML     "libyaml — config parsing (C)"          ON)
 # spdlog + the upstream zokrezyl/ytrace C++ lib are unused — yetty's own

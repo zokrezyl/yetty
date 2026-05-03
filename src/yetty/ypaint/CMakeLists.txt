@@ -9,6 +9,7 @@ add_library(yetty_ypaint STATIC
 target_link_libraries(yetty_ypaint PUBLIC
     yetty_ypaint_core
     yetty_ysdf
+    yetty_yimage
     $<$<BOOL:${YETTY_ENABLE_FEATURE_YMSDF_GEN}>:yetty_ymsdf_gen>
 )
 
