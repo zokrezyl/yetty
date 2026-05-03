@@ -1,3 +1,10 @@
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      depth: 50
+      lfs: false
+
 steps:
   build:
     image: ubuntu:latest
