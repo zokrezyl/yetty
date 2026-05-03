@@ -475,6 +475,15 @@ int main(int argc, char **argv)
     paths.runtime_dir = "/tmp";
     paths.bin_dir = NULL;
 
+    /* Export platform paths as YETTY_* env vars so config files
+     * (e.g. tinyemu .cfg) can reference them via $YETTY_DATA_DIR /
+     * $YETTY_RUNTIME_DIR / $YETTY_CONFIG_DIR. Mirrors glfw-main.c. */
+    setenv("YETTY_SHADERS_DIR", "/data/shaders", 1);
+    setenv("YETTY_FONTS_DIR", "/data/fonts", 1);
+    setenv("YETTY_RUNTIME_DIR", "/tmp", 1);
+    setenv("YETTY_DATA_DIR", "/data", 1);
+    setenv("YETTY_CONFIG_DIR", "/config", 1);
+
     /* Config */
     config_result = yetty_yconfig_create(argc, argv, &paths);
     if (!YETTY_IS_OK(config_result)) {
