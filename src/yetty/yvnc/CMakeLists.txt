@@ -22,4 +22,10 @@ target_link_libraries(yetty_vnc PUBLIC
 if(YETTY_ENABLE_LIB_OPENH264)
     target_compile_definitions(yetty_vnc PUBLIC YETTY_HAS_YVIDEO=1)
     target_link_libraries(yetty_vnc PUBLIC yetty_yvideo)
+
+    # MP4 recording (--record FILE) muxes encoded H.264 NALs into an MP4
+    # container. minimp4 is header-only; we instantiate the implementation
+    # in vnc-server.c via MINIMP4_IMPLEMENTATION.
+    include(${YETTY_ROOT}/build-tools/cmake/minimp4.cmake)
+    target_link_libraries(yetty_vnc PRIVATE minimp4)
 endif()

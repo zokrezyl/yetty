@@ -638,12 +638,18 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
     yetty->context.gpu_context.surface_format = yetty->surface_format;
     yetty->context.gpu_context.allocator = alloc_res.value;
 
-    /* Check for VNC mode */
+    /* Check for VNC mode. --record sets vnc/record-file: it spins up a vnc
+     * server (for the H.264 encode pipeline) without opening a TCP listener.
+     * Window mode is unaffected — recording is a passive sink alongside
+     * normal rendering. */
     struct yetty_yconfig_config *config = yetty->context.app_context.config;
     const char *vnc_server_str = config->ops->get_string(config, "vnc/server", NULL);
     const char *vnc_headless_str = config->ops->get_string(config, "vnc/headless", NULL);
-    int vnc_enabled = (vnc_server_str && strcmp(vnc_server_str, "true") == 0) ||
-                      (vnc_headless_str && strcmp(vnc_headless_str, "true") == 0);
+    const char *vnc_record_str = config->ops->get_string(config, "vnc/record-file", NULL);
+    int vnc_listen_enabled = (vnc_server_str && strcmp(vnc_server_str, "true") == 0) ||
+                             (vnc_headless_str && strcmp(vnc_headless_str, "true") == 0);
+    int vnc_record_enabled = vnc_record_str && vnc_record_str[0];
+    int vnc_enabled = vnc_listen_enabled || vnc_record_enabled;
 
     /* Create VNC server if enabled */
     if (vnc_enabled) {
@@ -656,16 +662,32 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
         yetty->vnc_server = vnc_res.value;
         ydebug("initWebGPU: VNC server created");
 
-        /* Start VNC server */
-        int vnc_port = config->ops->get_int(config, "vnc/port", 5900);
-        struct yetty_ycore_void_result start_res =
-            yetty_yvnc_server_start(yetty->vnc_server, (uint16_t)vnc_port);
-        if (!YETTY_IS_OK(start_res)) {
-            yetty_yvnc_server_destroy(yetty->vnc_server);
-            yetty->vnc_server = NULL;
-            return YETTY_ERR(yetty_ycore_void, "failed to start VNC server", start_res);
+        /* Start TCP listener only when explicitly asked for. --record alone
+         * keeps recording purely local. */
+        if (vnc_listen_enabled) {
+            int vnc_port = config->ops->get_int(config, "vnc/port", 5900);
+            struct yetty_ycore_void_result start_res =
+                yetty_yvnc_server_start(yetty->vnc_server, (uint16_t)vnc_port);
+            if (!YETTY_IS_OK(start_res)) {
+                yetty_yvnc_server_destroy(yetty->vnc_server);
+                yetty->vnc_server = NULL;
+                return YETTY_ERR(yetty_ycore_void, "failed to start VNC server", start_res);
+            }
+            yinfo("VNC server started on port %d", vnc_port);
+        } else {
+            /* Record-only: activate the encode pipeline without a TCP
+             * listener. send_frame_* will accept frames because the
+             * recording mux is registered as a consumer. */
+            struct yetty_ycore_void_result act_res =
+                yetty_yvnc_server_start_record_only(yetty->vnc_server);
+            if (!YETTY_IS_OK(act_res)) {
+                yetty_yvnc_server_destroy(yetty->vnc_server);
+                yetty->vnc_server = NULL;
+                return YETTY_ERR(yetty_ycore_void,
+                                 "failed to activate VNC record mode", act_res);
+            }
+            yinfo("VNC record mode: %s", vnc_record_str);
         }
-        yinfo("VNC server started on port %d", vnc_port);
     }
 
     /* Create render target */

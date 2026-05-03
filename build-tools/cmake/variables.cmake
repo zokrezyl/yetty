@@ -137,7 +137,6 @@ option(YETTY_ENABLE_TOOL_PDF2YDRAW       "pdf2ydraw tool"                    OFF
 option(YETTY_ENABLE_TOOL_HTML2YDRAW      "html2ydraw tool"                   OFF)
 option(YETTY_ENABLE_TOOL_YHTML_MACHINE   "yhtml-machine tool"                OFF)
 option(YETTY_ENABLE_TOOL_YBROWSER        "ybrowser tool"                     OFF)
-option(YETTY_ENABLE_TOOL_VNC_RECORDER    "vnc-recorder tool"                 OFF)
 option(YETTY_ENABLE_TOOL_YDOC            "ydoc tool"                         ON)
 option(YETTY_ENABLE_TOOL_YSHEET          "ysheet tool"                       ON)
 option(YETTY_ENABLE_TOOL_YSLIDE          "yslide tool"                       ON)

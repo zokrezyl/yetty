@@ -15,12 +15,15 @@
 #include "protocol.h"
 
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <turbojpeg.h>
 
 #ifdef YETTY_HAS_YVIDEO
 #include <yetty/yvideo/encoder.h>
+#define MINIMP4_IMPLEMENTATION
+#include <minimp4.h>
 #endif
 
 #define MAX_CLIENTS 16
@@ -121,6 +124,18 @@ struct yetty_yvnc_server {
     float h264_cfg_framerate;       /* <= 0 = default (30 fps) */
     uint32_t h264_cfg_idr_interval; /* 0 = default (60 frames) */
     int h264_cfg_screen_content;    /* -1 = default (1); 0/1 = explicit */
+
+    /* MP4 recording. When record_path is set, every encoded H.264 frame is
+   * also written to this file. The writer is opened lazily on the first
+   * frame so we know the resolution. record_prev_ts_ms is the previous
+   * frame's timestamp; sample duration is timestamp[i] - timestamp[i-1]. */
+    char *record_path;
+    FILE *record_file;
+    MP4E_mux_t *record_mux;
+    mp4_h26x_writer_t record_writer;
+    int record_writer_initialized;
+    uint32_t record_frames;
+    uint32_t record_prev_ts_ms;
 #endif
 
     /* Stats */
@@ -400,6 +415,19 @@ static void hid_on_resize(struct yetty_yvnc_server *server, uint16_t width, uint
     hid_push_event(server, &ev);
 }
 
+#ifdef YETTY_HAS_YVIDEO
+/* minimp4 file-write callback. `token` is the FILE *. */
+YETTY_EXTERNAL_CALLBACK
+static int vnc_record_write_cb(int64_t offset, const void *buffer, size_t size, void *token)
+{
+    FILE *f = token;
+    if (fseeko(f, (off_t)offset, SEEK_SET) != 0) {
+        return -1;
+    }
+    return fwrite(buffer, 1, size, f) != size ? -1 : 0;
+}
+#endif
+
 static struct yetty_ycore_void_result config_vnc_server(struct yetty_yvnc_server *vnc_server,
                                                         const struct yetty_yconfig_config *config)
 {
@@ -441,6 +469,33 @@ static struct yetty_ycore_void_result config_vnc_server(struct yetty_yvnc_server
         yetty_yvnc_server_set_h264_screen_content(
             vnc_server, config->ops->get_bool(config, "vnc/h264/screen-content", 1));
     }
+
+#ifdef YETTY_HAS_YVIDEO
+    /* MP4 recording: --record FILE sets vnc/record-file and forces use-h264.
+   * Open the file + muxer up front; the H.264 writer is set up on the first
+   * encoded frame (we need the encoder dimensions for it). */
+    const char *record_path = config->ops->get_string(config, "vnc/record-file", NULL);
+    if (record_path && record_path[0]) {
+        vnc_server->record_path = strdup(record_path);
+        if (!vnc_server->record_path) {
+            return YETTY_ERR(yetty_ycore_void, "vnc record: strdup failed");
+        }
+        vnc_server->record_file = fopen(vnc_server->record_path, "wb");
+        if (!vnc_server->record_file) {
+            yerror("VNC record: failed to open %s", vnc_server->record_path);
+            return YETTY_ERR(yetty_ycore_void, "vnc record: fopen failed");
+        }
+        vnc_server->record_mux =
+            MP4E_open(0, 0, vnc_server->record_file, vnc_record_write_cb);
+        if (!vnc_server->record_mux) {
+            fclose(vnc_server->record_file);
+            vnc_server->record_file = NULL;
+            return YETTY_ERR(yetty_ycore_void, "vnc record: MP4E_open failed");
+        }
+        yinfo("VNC record: opened %s (waiting for first H.264 frame)",
+              vnc_server->record_path);
+    }
+#endif
 
     return YETTY_OK_VOID();
 }
@@ -512,6 +567,22 @@ struct yetty_ycore_void_result yetty_yvnc_server_destroy(struct yetty_yvnc_serve
         yetty_yvideo_encoder_destroy(server->h264_encoder);
     }
     free(server->yuv_buf);
+
+    /* Finalize MP4 recording. Order matters: close the H.264 writer first,
+   * then the muxer (which writes indices), then the file. */
+    if (server->record_writer_initialized) {
+        mp4_h26x_write_close(&server->record_writer);
+    }
+    if (server->record_mux) {
+        MP4E_close(server->record_mux);
+    }
+    if (server->record_file) {
+        fclose(server->record_file);
+    }
+    if (server->record_path) {
+        yinfo("VNC record: saved %s (%u frames)", server->record_path, server->record_frames);
+        free(server->record_path);
+    }
 #endif
 
     free(server->dirty_tiles);
@@ -565,6 +636,19 @@ struct yetty_ycore_void_result yetty_yvnc_server_start(struct yetty_yvnc_server 
     server->running = 1;
 
     yinfo("VNC server listening on port %u", port);
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_yvnc_server_start_record_only(
+    struct yetty_yvnc_server *server)
+{
+    if (!server) {
+        return YETTY_ERR(yetty_ycore_void, "null server");
+    }
+    if (server->running) {
+        return YETTY_OK_VOID();
+    }
+    server->running = 1;
     return YETTY_OK_VOID();
 }
 
@@ -951,7 +1035,16 @@ struct yetty_ycore_void_result yetty_yvnc_server_send_frame_cpu(struct yetty_yvn
                                                                 const uint8_t *pixels,
                                                                 uint32_t width, uint32_t height)
 {
-    if (!server || !server->running || server->client_count == 0) {
+    /* Recording (record_mux non-NULL) acts as a phantom local consumer:
+   * even with no TCP clients we still need the encode pipeline to run so
+   * frames land in the MP4. */
+#ifdef YETTY_HAS_YVIDEO
+    int has_consumers = server && server->running &&
+                        (server->client_count > 0 || server->record_mux != NULL);
+#else
+    int has_consumers = server && server->running && server->client_count > 0;
+#endif
+    if (!has_consumers) {
         return YETTY_OK_VOID();
     }
 
@@ -1295,6 +1388,38 @@ static struct yetty_ycore_void_result h264_send_full_frame(struct yetty_yvnc_ser
     send_to_all_clients(server, &vhdr, sizeof(vhdr));
     send_to_all_clients(server, encoded.data, encoded.size);
 
+    /* MP4 recording: write the same NAL bytes to the file. The writer is
+   * created lazily on the first frame so it knows the encoder's actual
+   * dimensions (which may differ from the source by one row/col after the
+   * even-rounding above). */
+    if (server->record_mux) {
+        if (!server->record_writer_initialized) {
+            int err = mp4_h26x_write_init(&server->record_writer, server->record_mux,
+                                          (int)enc_w, (int)enc_h, 0);
+            if (err != MP4E_STATUS_OK) {
+                ywarn("VNC record: mp4_h26x_write_init failed: %d", err);
+            } else {
+                server->record_writer_initialized = 1;
+                yinfo("VNC record: %ux%u -> %s", enc_w, enc_h, server->record_path);
+            }
+        }
+        if (server->record_writer_initialized) {
+            uint32_t ts_ms = (uint32_t)(encoded.timestamp_us / 1000u);
+            uint32_t dur_ms = (server->record_frames == 0) ? 33u : (ts_ms - server->record_prev_ts_ms);
+            if (dur_ms == 0) {
+                dur_ms = 33u; /* fall back to ~30fps */
+            }
+            int err = mp4_h26x_write_nal(&server->record_writer, encoded.data, (int)encoded.size,
+                                         dur_ms * 90u);
+            if (err != MP4E_STATUS_OK) {
+                ywarn("VNC record: mp4_h26x_write_nal failed: %d", err);
+            } else {
+                server->record_prev_ts_ms = ts_ms;
+                server->record_frames++;
+            }
+        }
+    }
+
     /* H.264 path consumes the entire frame; clear dirty tracking so the
    * tile-mode fallback doesn't re-send the same pixels. */
     uint32_t num_tiles = server->tiles_x * server->tiles_y;
@@ -1535,7 +1660,13 @@ struct yetty_ycore_void_result yetty_yvnc_server_send_frame_gpu(struct yetty_yvn
                                                                 WGPUTexture texture, uint32_t width,
                                                                 uint32_t height)
 {
-    if (!server || !server->running || server->client_count == 0) {
+#ifdef YETTY_HAS_YVIDEO
+    int has_consumers = server && server->running &&
+                        (server->client_count > 0 || server->record_mux != NULL);
+#else
+    int has_consumers = server && server->running && server->client_count > 0;
+#endif
+    if (!has_consumers) {
         return YETTY_OK_VOID();
     }
 

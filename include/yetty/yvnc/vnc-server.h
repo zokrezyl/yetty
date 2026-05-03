@@ -65,6 +65,12 @@ struct yetty_ycore_void_result yetty_yvnc_server_destroy(struct yetty_yvnc_serve
 struct yetty_ycore_void_result yetty_yvnc_server_start(struct yetty_yvnc_server *server,
                                                        uint16_t port);
 
+/* Activate the encode/send pipeline without binding a TCP listener. Used by
+ * --record mode where the only consumer is the local MP4 writer. Idempotent
+ * w.r.t. yetty_yvnc_server_start (which also marks the server running). */
+struct yetty_ycore_void_result yetty_yvnc_server_start_record_only(
+    struct yetty_yvnc_server *server);
+
 /* Stop server */
 struct yetty_ycore_void_result yetty_yvnc_server_stop(struct yetty_yvnc_server *server);
 
