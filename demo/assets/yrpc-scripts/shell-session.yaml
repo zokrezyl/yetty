@@ -1,0 +1,45 @@
+# A scripted shell session that looks like someone is actually typing.
+# Pair this with `yetty --record session.mp4 --rpc-port=9999 -e bash` to
+# capture a reproducible recording.
+
+config:
+  defaults:
+    typing:
+      avg-speed: 7
+      speed-deviation: 0.3
+      avg-typo: 0.05
+
+script:
+  - sleep: 1.0
+
+  - type: "# yrpc-driven demo"
+  - special-char: ENTER
+  - sleep: 0.8
+
+  - type: "pwd"
+  - special-char: ENTER
+  - sleep: 0.8
+
+  - type: "ls -la"
+  - special-char: ENTER
+  - sleep: 1.2
+
+  - type: "echo 'recording demo via yrpc plays' > /tmp/yrpc-demo.txt"
+  - special-char: ENTER
+  - sleep: 0.6
+
+  - type: "cat /tmp/yrpc-demo.txt"
+  - special-char: ENTER
+  - sleep: 1.0
+
+  - type: "rm /tmp/yrpc-demo.txt"
+  - special-char: ENTER
+  - sleep: 0.5
+
+  # Demonstrate special-chars: ESC then real text.
+  - type: "vim --version | head -1"
+  - special-char: ENTER
+  - sleep: 1.0
+
+  - type: "exit"
+  - special-char: ENTER
