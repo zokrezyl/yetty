@@ -174,7 +174,12 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t port)
 #endif
     snprintf(bios_path, sizeof(bios_path), "%s/yemu/opensbi-fw_dynamic.bin", data_dir);
     snprintf(kernel_path, sizeof(kernel_path), "%s/yemu/kernel-riscv64.bin", data_dir);
-    snprintf(blk_path, sizeof(blk_path), "%s/yemu/alpine-rootfs.img", data_dir);
+    /* Use the extended rootfs (Alpine + runit + telnetd + nvim/git/python/
+     * ssh/strace/...) — same image yetty --temu boots, so behaviour is
+     * consistent across both backends. The small alpine-rootfs.img is the
+     * minirootfs and lacks runit/telnetd/etc. */
+    snprintf(blk_path, sizeof(blk_path), "%s/yemu/alpine-extended-rootfs.img",
+             data_dir);
 
     /* User-tunable qemu settings live under <config_dir>/qemu/.
      * <config_dir>/qemu/share/ is exposed to the guest over 9p as
@@ -261,7 +266,12 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t port)
         "virtio-9p-device,fsdev=fsdev0,mount_tag=hostshare",
 #endif
         "-netdev",
-        "user,id=net0",
+        /* hostfwd exposes the in-guest busybox telnetd (running under
+         * runit at /etc/service/telnetd) on host 127.0.0.1:2423.
+         * `yetty --temu` reserves 2323 for its own slirp_add_hostfwd, so
+         * --qemu uses 2423 to allow both VMs to coexist. Connect with
+         * `yetty --telnet 2423` to attach to a real pts inside this VM. */
+        "user,id=net0,hostfwd=tcp::2423-:23",
         "-device",
         "virtio-net-device,netdev=net0",
         "-device",

@@ -63,7 +63,7 @@ CACHE_DIR="${CACHE_DIR:-$HOME/.cache/yetty-3rdparty}"
 ALPINE_VERSION="${ALPINE_VERSION:-3.23}"
 ALPINE_RELEASE="${ALPINE_RELEASE:-3.23.4}"
 ALPINE_ARCH="${ALPINE_ARCH:-riscv64}"
-IMAGE_MIB="${IMAGE_MIB:-700}"
+IMAGE_MIB="${IMAGE_MIB:-300}"
 QEMU_TIMEOUT_SEC="${QEMU_TIMEOUT_SEC:-1800}"
 URL_BASE="${YETTY_3RDPARTY_URL_BASE:-https://github.com/zokrezyl/yetty/releases/download}"
 
@@ -212,7 +212,12 @@ EOF
 echo "==> apk update"
 apk update
 
-echo "==> apk add (package set)"
+echo "==> apk add (no toolchain — nvim/git/python/ssh/etc.)"
+# Drop the heavy build toolchain (build-base, cmake, linux-headers — they
+# alone took ~330 MB on the previous build) so the image fits the 300 MB
+# target. Keep general-purpose CLI + editor + python + ssh + tracing.
+# runit + busybox-extras supervise the in-guest telnetd that yetty
+# --telnet attaches to.
 apk add --no-cache \
     bash \
     zsh \
@@ -226,15 +231,12 @@ apk add --no-cache \
     less \
     file \
     util-linux \
-    build-base \
-    cmake \
-    binutils \
-    musl-dev \
-    linux-headers \
     neovim \
     git \
+    openssh \
     python3 \
     py3-pip \
+    net-tools \
     curl \
     wget \
     tar \
@@ -250,6 +252,11 @@ apk add --no-cache \
     htop \
     runit \
     busybox-extras
+
+# Belt-and-braces: --no-cache already keeps /var/cache/apk empty, but in
+# case any earlier `apk add` fell back to caching, drop the lot before
+# we pack the image.
+rm -rf /var/cache/apk/* /etc/apk/cache 2>/dev/null || true
 
 # runit service tree. Each subdir under /etc/service is a service; its
 # `run` script must exec the daemon in the foreground so runit can

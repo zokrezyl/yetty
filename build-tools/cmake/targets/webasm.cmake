@@ -152,8 +152,15 @@ target_link_options(yetty PRIVATE
     -sSTACK_SIZE=1048576
     -sWASM_BIGINT
     -sFILESYSTEM=1
-    -sALLOW_MEMORY_GROWTH=1
+    # `-pthread + -sALLOW_MEMORY_GROWTH=1` makes every libc syscall shim
+    # (pipe read/write, select, …) run on the slow JS-side path — emcc
+    # warns about the combo. The VM thread hammers these per cycle batch,
+    # which compounds into seconds of input/output latency. Fixed-size
+    # SharedArrayBuffer lets the JIT specialise the shims and the JS
+    # heap stays put. We already reserve 2 GiB; host has 16 GiB free.
+    -sALLOW_MEMORY_GROWTH=0
     -sINITIAL_MEMORY=2048MB
+    -sMAXIMUM_MEMORY=2048MB
     -sASSERTIONS=2
     --emit-symbol-map
     -lwebsocket.js
