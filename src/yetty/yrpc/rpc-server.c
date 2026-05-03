@@ -637,8 +637,8 @@ static struct yetty_rpc_handler_result handle_mouse_move(const struct yetty_yrpc
     return YETTY_YRPC_HANDLER_OK_BOOL(1);
 }
 
-static struct yetty_rpc_handler_result handle_scroll(const struct yetty_yrpc_message *msg,
-                                                     void *userdata)
+static struct yetty_rpc_handler_result handle_mouse_scroll(const struct yetty_yrpc_message *msg,
+                                                           void *userdata)
 {
     struct yetty_yrpc_server *server = userdata;
     struct yetty_yui_event event = {0};
@@ -660,12 +660,12 @@ static struct yetty_rpc_handler_result handle_scroll(const struct yetty_yrpc_mes
     }
     params = &unpacked.data;
 
-    event.type = YETTY_YCORE_SCROLL;
-    event.scroll.x = get_map_float(params, "x", 0);
-    event.scroll.y = get_map_float(params, "y", 0);
-    event.scroll.dx = get_map_float(params, "dx", 0);
-    event.scroll.dy = get_map_float(params, "dy", 0);
-    event.scroll.mods = get_map_int(params, "mods", 0);
+    event.type = YETTY_YCORE_MOUSE_SCROLL;
+    event.mouse_scroll.x = get_map_float(params, "x", 0);
+    event.mouse_scroll.y = get_map_float(params, "y", 0);
+    event.mouse_scroll.dx = get_map_float(params, "dx", 0);
+    event.mouse_scroll.dy = get_map_float(params, "dy", 0);
+    event.mouse_scroll.mods = get_map_int(params, "mods", 0);
 
     msgpack_unpacked_destroy(&unpacked);
     server->event_loop->ops->dispatch(server->event_loop, &event);
@@ -724,7 +724,7 @@ static struct yetty_ycore_void_result register_builtin_handlers(struct yetty_yrp
     REG("mouse_down", handle_mouse_down);
     REG("mouse_up", handle_mouse_up);
     REG("mouse_move", handle_mouse_move);
-    REG("scroll", handle_scroll);
+    REG("mouse_scroll", handle_mouse_scroll);
     REG("resize", handle_resize);
 
 #undef REG

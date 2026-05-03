@@ -1384,14 +1384,14 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_v
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
-    case YETTY_YCORE_SCROLL: {
+    case YETTY_YCORE_MOUSE_SCROLL: {
         /* dy==0 dropped: wire only carries wheel_dy. */
-        if (event->scroll.dy == 0.0f) {
+        if (event->mouse_scroll.dy == 0.0f) {
             return YETTY_OK(yetty_ycore_int, 0);
         }
 
-        float lx = event->scroll.x - view->bounds.x;
-        float ly = event->scroll.y - view->bounds.y;
+        float lx = event->mouse_scroll.x - view->bounds.x;
+        float ly = event->mouse_scroll.y - view->bounds.y;
         if (lx < 0.0f || ly < 0.0f || lx >= view->bounds.w || ly >= view->bounds.h) {
             return YETTY_OK(yetty_ycore_int, 0);
         }
@@ -1403,14 +1403,14 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_v
             struct yetty_yterm_ymgui_hit hit = terminal_resolve_card_hit(terminal, lx, ly, 0);
             if (hit.card_id != 0) {
                 terminal_emit_card_mouse_button(terminal, hit.card_id, hit.local_x, hit.local_y, 0,
-                                                0, event->scroll.dy);
+                                                0, event->mouse_scroll.dy);
                 return YETTY_OK(yetty_ycore_int, 1);
             }
         }
 
-        int lines = (int)(event->scroll.dy * YETTY_YTERM_WHEEL_LINES_PER_TICK);
-        if (lines == 0 && event->scroll.dy != 0.0f) {
-            lines = (event->scroll.dy > 0) ? 1 : -1;
+        int lines = (int)(event->mouse_scroll.dy * YETTY_YTERM_WHEEL_LINES_PER_TICK);
+        if (lines == 0 && event->mouse_scroll.dy != 0.0f) {
+            lines = (event->mouse_scroll.dy > 0) ? 1 : -1;
         }
         if (lines != 0) {
             terminal_scrollback_apply(terminal, lines);

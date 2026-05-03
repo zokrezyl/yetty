@@ -30,7 +30,7 @@ yetty_yevent_register_default_listeners(struct yetty_yplatform_event_loop *el,
         YETTY_YCORE_MOUSE_UP,
         YETTY_YCORE_MOUSE_MOVE,
         YETTY_YCORE_MOUSE_DRAG,
-        YETTY_YCORE_SCROLL,
+        YETTY_YCORE_MOUSE_SCROLL,
         /* Lifecycle / framing */
         YETTY_YCORE_RESIZE,
         YETTY_YCORE_RENDER,

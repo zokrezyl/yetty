@@ -383,12 +383,12 @@ static EM_BOOL on_wheel(int event_type, const EmscriptenWheelEvent *e, void *use
     dx = (float)(-e->deltaX / 100.0);
     dy = (float)(-e->deltaY / 100.0);
 
-    event.type = YETTY_YCORE_SCROLL;
-    event.scroll.x = (float)e->mouse.targetX;
-    event.scroll.y = (float)e->mouse.targetY;
-    event.scroll.dx = dx;
-    event.scroll.dy = dy;
-    event.scroll.mods = wheel_mods_to_glfw(e);
+    event.type = YETTY_YCORE_MOUSE_SCROLL;
+    event.mouse_scroll.x = (float)e->mouse.targetX;
+    event.mouse_scroll.y = (float)e->mouse.targetY;
+    event.mouse_scroll.dx = dx;
+    event.mouse_scroll.dy = dy;
+    event.mouse_scroll.mods = wheel_mods_to_glfw(e);
     pipe->ops->write(pipe, &event, sizeof(event));
 
     return EM_TRUE;

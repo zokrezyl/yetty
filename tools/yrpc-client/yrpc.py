@@ -192,9 +192,9 @@ class RpcClient:
         """Send mouse move event."""
         await self.notify(Channel.EventLoop, "mouse_move", {"x": x, "y": y})
 
-    async def scroll(self, x: float, y: float, dx: float, dy: float, mods: int = 0) -> None:
-        """Send scroll event."""
-        await self.notify(Channel.EventLoop, "scroll", {
+    async def mouse_scroll(self, x: float, y: float, dx: float, dy: float, mods: int = 0) -> None:
+        """Send mouse-wheel scroll event (cursor x/y + wheel dx/dy ticks)."""
+        await self.notify(Channel.EventLoop, "mouse_scroll", {
             "x": x, "y": y, "dx": dx, "dy": dy, "mods": mods
         })
 
@@ -393,6 +393,41 @@ async def _play_step(client: RpcClient, step, defaults: dict,
             return
         raise ValueError(f"type: unsupported payload type: {payload!r}")
 
+    if verb == "mouse-move":
+        if not isinstance(payload, dict):
+            raise ValueError(f"mouse-move: expected mapping {{x, y}}, got {payload!r}")
+        await client.mouse_move(float(payload["x"]), float(payload["y"]))
+        return
+
+    if verb in ("mouse-down", "mouse-up"):
+        if not isinstance(payload, dict):
+            raise ValueError(f"{verb}: expected mapping {{x, y, button?}}, got {payload!r}")
+        x = float(payload["x"])
+        y = float(payload["y"])
+        # button: 0=left, 1=middle, 2=right (matches GLFW mouse-button codes
+        # used elsewhere in the RPC). Default to left for ergonomics.
+        button = int(payload.get("button", 0))
+        if verb == "mouse-down":
+            await client.mouse_down(x, y, button)
+        else:
+            await client.mouse_up(x, y, button)
+        return
+
+    if verb == "mouse-scroll":
+        if not isinstance(payload, dict):
+            raise ValueError(f"mouse-scroll: expected mapping {{x, y, dx?, dy?, mods?}}, got {payload!r}")
+        x = float(payload["x"])
+        y = float(payload["y"])
+        # dx / dy are wheel ticks (positive = up/right, matching GLFW). At
+        # least one of them is needed for the event to do anything; we
+        # don't enforce it here so callers can send a zero-tick event if
+        # they have a reason to.
+        dx = float(payload.get("dx", 0))
+        dy = float(payload.get("dy", 0))
+        mods = int(payload.get("mods", 0))
+        await client.mouse_scroll(x, y, dx, dy, mods)
+        return
+
     raise ValueError(f"unknown script verb: {verb!r}")
 
 
@@ -516,18 +551,18 @@ if click:
                 await client.mouse_move(x, y)
         run_async(_run())
 
-    @cli.command()
+    @cli.command("mouse-scroll")
     @click.argument("x", type=float)
     @click.argument("y", type=float)
     @click.argument("dx", type=float)
     @click.argument("dy", type=float)
     @click.option("--mods", "-m", default=0, type=int)
     @click.pass_context
-    def scroll(ctx, x, y, dx, dy, mods):
-        """Send scroll event."""
+    def mouse_scroll_cmd(ctx, x, y, dx, dy, mods):
+        """Send mouse-wheel scroll event."""
         async def _run():
             async with RpcClient(ctx.obj["host"], ctx.obj["port"]) as client:
-                await client.scroll(x, y, dx, dy, mods)
+                await client.mouse_scroll(x, y, dx, dy, mods)
         run_async(_run())
 
     @cli.command()

@@ -130,12 +130,12 @@ static void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
         mods |= GLFW_MOD_ALT;
     }
 
-    event.type = YETTY_YCORE_SCROLL;
-    event.scroll.x = (float)x;
-    event.scroll.y = (float)y;
-    event.scroll.dx = (float)xoffset;
-    event.scroll.dy = (float)yoffset;
-    event.scroll.mods = mods;
+    event.type = YETTY_YCORE_MOUSE_SCROLL;
+    event.mouse_scroll.x = (float)x;
+    event.mouse_scroll.y = (float)y;
+    event.mouse_scroll.dx = (float)xoffset;
+    event.mouse_scroll.dy = (float)yoffset;
+    event.mouse_scroll.mods = mods;
 
     pipe->ops->write(pipe, &event, sizeof(event));
 }

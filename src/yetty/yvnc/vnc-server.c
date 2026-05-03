@@ -366,12 +366,12 @@ static void hid_on_mouse_scroll(struct yetty_yvnc_server *server, int16_t x, int
                                 int16_t dy, uint8_t mods)
 {
     struct yetty_yui_event ev = {0};
-    ev.type = YETTY_YCORE_SCROLL;
-    ev.scroll.x = (float)x;
-    ev.scroll.y = (float)y;
-    ev.scroll.dx = (float)dx;
-    ev.scroll.dy = (float)dy;
-    ev.scroll.mods = mods;
+    ev.type = YETTY_YCORE_MOUSE_SCROLL;
+    ev.mouse_scroll.x = (float)x;
+    ev.mouse_scroll.y = (float)y;
+    ev.mouse_scroll.dx = (float)dx;
+    ev.mouse_scroll.dy = (float)dy;
+    ev.mouse_scroll.mods = mods;
     hid_push_event(server, &ev);
 }
 

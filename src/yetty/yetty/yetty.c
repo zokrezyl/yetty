@@ -182,24 +182,24 @@ static struct yetty_ycore_int_result yetty_event_handler(
      * that wants to trigger zoom — RPC, keyboard remapping, macro replay — can
      * push the same ZOOM_VISUAL / ZOOM_CELL_SIZE event. The raw scroll keeps
      * flowing to the workspace unchanged when no zoom modifier is held. */
-    if (event->type == YETTY_YCORE_SCROLL) {
-        int mods = event->scroll.mods;
+    if (event->type == YETTY_YCORE_MOUSE_SCROLL) {
+        int mods = event->mouse_scroll.mods;
         bool ctrl = (mods & YETTY_MOD_CONTROL) != 0;
         bool shift = (mods & YETTY_MOD_SHIFT) != 0;
 
         if (ctrl && shift) {
             struct yetty_yui_event ev = {0};
             ev.type = YETTY_YCORE_ZOOM_CELL_SIZE;
-            ev.zoom_cell_size.delta = event->scroll.dy * 0.04f;
+            ev.zoom_cell_size.delta = event->mouse_scroll.dy * 0.04f;
             yetty_yevent_post_async(yetty->context.app_context.platform_input_pipe, &ev);
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (ctrl) {
             struct yetty_yui_event ev = {0};
             ev.type = YETTY_YCORE_ZOOM_VISUAL;
-            ev.zoom_visual.delta = event->scroll.dy * 0.1f;
-            ev.zoom_visual.anchor_x = event->scroll.x;
-            ev.zoom_visual.anchor_y = event->scroll.y;
+            ev.zoom_visual.delta = event->mouse_scroll.dy * 0.1f;
+            ev.zoom_visual.anchor_x = event->mouse_scroll.x;
+            ev.zoom_visual.anchor_y = event->mouse_scroll.y;
             yetty_yevent_post_async(yetty->context.app_context.platform_input_pipe, &ev);
             return YETTY_OK(yetty_ycore_int, 1);
         }
