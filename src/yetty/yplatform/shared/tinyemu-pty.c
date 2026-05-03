@@ -124,6 +124,16 @@ typedef struct {
     int64_t nb_sectors;
     BlockDeviceModeEnum mode;
     uint8_t **sector_table;
+#if defined(__EMSCRIPTEN__)
+    /* Wasm-only: the rootfs lives in MEMFS, and every fseek/fread call
+     * crosses the wasm↔JS boundary (≫1µs each). For workloads like
+     * `find /` that issue thousands of small reads, this dominates.
+     * Pre-read the whole image into a native buffer at init so reads
+     * become memcpy. ~700 MB on the extended rootfs — fits inside our
+     * fixed 2 GiB SharedArrayBuffer with room to spare. */
+    uint8_t *raw_data;
+    int64_t raw_size;
+#endif
 } BlockDeviceFile;
 
 static int64_t bf_get_sector_count(BlockDevice *bs)
@@ -136,6 +146,27 @@ static int bf_read_async(BlockDevice *bs, uint64_t sector_num, uint8_t *buf, int
                          BlockDeviceCompletionFunc *cb, void *opaque)
 {
     BlockDeviceFile *bf = bs->opaque;
+#if defined(__EMSCRIPTEN__)
+    /* Native-buffer fast path. Snapshot writes are still tracked in
+     * sector_table; reads prefer overrides, otherwise memcpy from the
+     * pre-loaded image. No JS boundary crossings on the read path. */
+    if (bf->raw_data) {
+        if (bf->mode == YETTY_YPLATFORM_BF_MODE_SNAPSHOT) {
+            for (int i = 0; i < n; i++) {
+                if (bf->sector_table[sector_num]) {
+                    memcpy(buf, bf->sector_table[sector_num], 512);
+                } else {
+                    memcpy(buf, bf->raw_data + sector_num * 512, 512);
+                }
+                sector_num++;
+                buf += 512;
+            }
+        } else {
+            memcpy(buf, bf->raw_data + sector_num * 512, (size_t)n * 512);
+        }
+        return 0;
+    }
+#endif
     if (bf->mode == YETTY_YPLATFORM_BF_MODE_SNAPSHOT) {
         for (int i = 0; i < n; i++) {
             if (!bf->sector_table[sector_num]) {
@@ -204,6 +235,33 @@ static BlockDevice *block_device_init(const char *filename, BlockDeviceModeEnum 
     if (mode == YETTY_YPLATFORM_BF_MODE_SNAPSHOT) {
         bf->sector_table = mallocz(sizeof(bf->sector_table[0]) * bf->nb_sectors);
     }
+
+#if defined(__EMSCRIPTEN__)
+    /* Slurp the whole image into a native buffer so per-sector reads
+     * never touch MEMFS. file_size is bounded by what we extracted (the
+     * 700 MiB extended rootfs, fits in our 2 GiB heap). On failure we
+     * leave raw_data NULL and fall back to fseek/fread. */
+    if (file_size > 0) {
+        bf->raw_data = malloc((size_t)file_size);
+        if (bf->raw_data) {
+            fseek(f, 0, SEEK_SET);
+            size_t got = fread(bf->raw_data, 1, (size_t)file_size, f);
+            if (got != (size_t)file_size) {
+                yerror("block_device_init: short read on %s (%zu/%lld)",
+                       filename, got, (long long)file_size);
+                free(bf->raw_data);
+                bf->raw_data = NULL;
+            } else {
+                bf->raw_size = file_size;
+                yinfo("block_device_init: cached %s (%lld bytes) in native buffer",
+                      filename, (long long)file_size);
+            }
+        } else {
+            ywarn("block_device_init: malloc(%lld) failed; falling back to MEMFS reads",
+                  (long long)file_size);
+        }
+    }
+#endif
 
     bs->opaque = bf;
     bs->get_sector_count = bf_get_sector_count;

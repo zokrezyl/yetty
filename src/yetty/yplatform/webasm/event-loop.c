@@ -328,26 +328,31 @@ static struct yetty_ycore_void_result webasm_broadcast(struct yetty_yplatform_ev
 
 static void process_pty_data(struct yetty_yplatform_pty_pipe_handle *ph)
 {
-    char *buf = NULL;
-    size_t buflen = 0;
-    ssize_t n;
-
     if (!ph->active || ph->fd < 0 || !ph->alloc_cb || !ph->read_cb) {
         return;
     }
 
-    ph->alloc_cb(ph->cb_ctx, 4096, &buf, &buflen);
-    if (!buf || buflen == 0) {
-        return;
+    /* Drain the pipe in a loop. The pipe is O_NONBLOCK so read returns
+     * with -1/EAGAIN once empty. Without this loop we'd take only one
+     * chunk per rAF tick (~16 ms), capping VM→terminal throughput at
+     * ~chunk_size × 60 Hz; on wasm that's noticeably starved when the
+     * kernel logs in bursts (e.g. boot, `find /`). */
+    for (;;) {
+        char *buf = NULL;
+        size_t buflen = 0;
+        ph->alloc_cb(ph->cb_ctx, 65536, &buf, &buflen);
+        if (!buf || buflen == 0) {
+            return;
+        }
+        ssize_t n = read(ph->fd, buf, buflen);
+        if (n <= 0) {
+            return;
+        }
+        ph->read_cb(ph->cb_ctx, buf, (long)n);
+        if ((size_t)n < buflen) {
+            return; /* short read → pipe empty for now */
+        }
     }
-
-    n = read(ph->fd, buf, buflen);
-    if (n <= 0) {
-        /* EAGAIN/EWOULDBLOCK or eof - nothing to do this tick */
-        return;
-    }
-
-    ph->read_cb(ph->cb_ctx, buf, (long)n);
 }
 
 static struct yetty_ycore_pipe_id_result webasm_register_pty_pipe(
