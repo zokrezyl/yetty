@@ -1,16 +1,14 @@
-clone:
-  git:
-    image: woodpeckerci/plugin-git
-    settings:
-      depth: 50
-      lfs: false
+labels:
+  platform: darwin/amd64
+
+when:
+  - event: [push, manual, pull_request, tag]
 
 steps:
   build:
-    image: yetty-build:latest
+    image: bash
     commands:
-      - apt-get update
-      - apt-get install -y git git-lfs make cmake
       - git lfs install
       - git lfs fetch
+      - git lfs checkout
       - make build-desktop-ytrace-release
