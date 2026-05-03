@@ -442,6 +442,15 @@ function(yetty_embed_assets TARGET)
     # Rename to config.yaml when extracted
     file(RENAME "${INCBIN_CONFIG_DIR}/${CONFIG_FILENAME}" "${INCBIN_CONFIG_DIR}/config.yaml")
 
+    # Stage tinyemu cfgs under yconfig/temu/ so extract-assets drops them at
+    # <config_dir>/temu/. tinyemu-pty.c reads <config_dir>/temu/yetty-temu-extended.cfg
+    # for --temu (the file is the source of truth — no in-process auto-gen).
+    file(MAKE_DIRECTORY "${INCBIN_CONFIG_DIR}/temu")
+    file(COPY
+        "${YETTY_ROOT}/assets/yemu/temu/yetty-temu.cfg"
+        "${YETTY_ROOT}/assets/yemu/temu/yetty-temu-extended.cfg"
+        DESTINATION "${INCBIN_CONFIG_DIR}/temu")
+
     # Embed config (not compressed)
     incbin_add_directory(${TARGET} "yconfig" "${INCBIN_CONFIG_DIR}" "*" FALSE)
 
@@ -463,7 +472,8 @@ function(yetty_embed_assets TARGET)
                 "${YETTY_3RDPARTY_linux_DIR}|kernel-riscv64.bin.br"
                 "${YETTY_3RDPARTY_opensbi_DIR}|opensbi-fw_jump.elf.br"
                 "${YETTY_3RDPARTY_opensbi_DIR}|opensbi-fw_dynamic.bin.br"
-                "${YETTY_3RDPARTY_alpine-disk_DIR}|alpine-rootfs.img.br")
+                "${YETTY_3RDPARTY_alpine-disk_DIR}|alpine-rootfs.img.br"
+                "${YETTY_3RDPARTY_alpine-extended-disk_DIR}|alpine-extended-rootfs.img.br")
             string(REPLACE "|" ";" _PARTS "${_PAIR}")
             list(GET _PARTS 0 _SRC_DIR)
             list(GET _PARTS 1 _F)

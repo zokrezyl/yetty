@@ -843,6 +843,54 @@ static int parse_ssh_target(struct config_impl *impl, const char *target)
     return 1;
 }
 
+/* Parse "[HOST]:PORT" or bare numeric PORT into telnet/{host,port}.
+ * Empty host => 127.0.0.1. Returns 1 on success, 0 on malformed input. */
+static int parse_telnet_target(struct config_impl *impl, const char *target)
+{
+    char host[MAX_VALUE_LEN];
+    char port[32];
+    const char *colon = strchr(target, ':');
+
+    if (colon) {
+        size_t host_len = (size_t)(colon - target);
+        if (host_len >= sizeof(host)) {
+            return 0;
+        }
+        if (host_len == 0) {
+            snprintf(host, sizeof(host), "%s", "127.0.0.1");
+        } else {
+            memcpy(host, target, host_len);
+            host[host_len] = '\0';
+        }
+        snprintf(port, sizeof(port), "%s", colon + 1);
+    } else {
+        /* Bare numeric port — convenience form. */
+        for (const char *p = target; *p; p++) {
+            if (*p < '0' || *p > '9') {
+                return 0;
+            }
+        }
+        snprintf(host, sizeof(host), "%s", "127.0.0.1");
+        snprintf(port, sizeof(port), "%s", target);
+    }
+
+    if (port[0] == '\0') {
+        return 0;
+    }
+
+    char key[MAX_KEY_LEN];
+    struct config_node *parent;
+    parent = navigate_or_create(impl->root, YETTY_YCONFIG_KEY_TELNET_HOST, key);
+    if (parent) {
+        node_set_value(parent, key, host);
+    }
+    parent = navigate_or_create(impl->root, YETTY_YCONFIG_KEY_TELNET_PORT, key);
+    if (parent) {
+        node_set_value(parent, key, port);
+    }
+    return 1;
+}
+
 /* Long-only option ids (above 255 to avoid colliding with short-form ASCII) */
 enum {
     OPT_VNC_RAW = 1000,
@@ -859,6 +907,7 @@ enum {
     OPT_TEMU,
     OPT_QEMU,
     OPT_SSH,
+    OPT_TELNET,
 };
 
 static struct yetty_yplatform_option long_options[] = {
@@ -883,6 +932,7 @@ static struct yetty_yplatform_option long_options[] = {
     {"temu", no_argument, 0, OPT_TEMU},
     {"qemu", no_argument, 0, OPT_QEMU},
     {"ssh", optional_argument, 0, OPT_SSH},
+    {"telnet", optional_argument, 0, OPT_TELNET},
     {"help", no_argument, 0, 'h'},
     {0, 0, 0, 0}};
 
@@ -919,6 +969,7 @@ static void print_usage(const char *prog)
     fprintf(stderr, "      --temu             Run in-process TinyEMU RISC-V VM\n");
     fprintf(stderr, "      --qemu             Run external QEMU RISC-V VM (via telnet)\n");
     fprintf(stderr, "      --ssh [USER@HOST[:PORT]]  Connect to SSH remote shell\n");
+    fprintf(stderr, "      --telnet [[HOST]:PORT]    Connect to a telnet server (default host 127.0.0.1)\n");
     fprintf(stderr, "  -h, --help             Show this help\n");
 }
 
@@ -1010,6 +1061,28 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             }
             set_config(impl, YETTY_YCONFIG_KEY_SSH, "true");
             break;
+        case OPT_TELNET: {
+            /* getopt's optional_argument only picks up `--telnet=VALUE`. To
+             * also accept the natural `--telnet VALUE` form (matches the
+             * `telnet HOST PORT`-style ergonomics users expect), peek at
+             * the next argv when no inline arg was given. */
+            const char *arg = yetty_yplatform_optarg;
+            if (!arg && yetty_yplatform_optind < argc) {
+                const char *next = argv[yetty_yplatform_optind];
+                if (next && next[0] != '-') {
+                    arg = next;
+                    yetty_yplatform_optind++;
+                }
+            }
+            if (arg && !parse_telnet_target(impl, arg)) {
+                fprintf(stderr,
+                        "yetty: --telnet expects [HOST]:PORT or PORT (got '%s')\n",
+                        arg);
+                exit(1);
+            }
+            set_config(impl, YETTY_YCONFIG_KEY_TELNET, "true");
+            break;
+        }
         case 'h':
             print_usage(argv[0]);
             exit(0);

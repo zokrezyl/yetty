@@ -50,6 +50,20 @@ static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
     struct yetty_yplatform_unix_pty_factory *factory = (struct yetty_yplatform_unix_pty_factory *)self;
     struct yetty_yconfig_config *config = factory->config;
 
+    /* --telnet: connect to an already-running telnet server (qemu chardev,
+     * a tinyemu+slirp hostfwd to in-guest telnetd, an external telnet
+     * daemon, etc.). Pure client — owns no server lifecycle. */
+    if (config && config->ops->get_bool(config, YETTY_YCONFIG_KEY_TELNET, 0)) {
+        const char *host = config->ops->get_string(
+            config, YETTY_YCONFIG_KEY_TELNET_HOST, "127.0.0.1");
+        int port = config->ops->get_int(config, YETTY_YCONFIG_KEY_TELNET_PORT, 0);
+        if (port <= 0 || port > 65535) {
+            return YETTY_ERR(yetty_yplatform_pty,
+                             "--telnet requires telnet/port (1..65535)");
+        }
+        return yetty_ytelnet_telnet_pty_create(host, (uint16_t)port, event_loop);
+    }
+
     /* --temu: TinyEMU RISC-V VM */
     if (config && config->ops->get_bool(config, YETTY_YCONFIG_KEY_TEMU, 0)) {
         return yetty_yplatform_tinyemu_pty_create(config);

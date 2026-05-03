@@ -12,7 +12,6 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
 
-#include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -249,7 +248,7 @@ static void slirp_select_poll1(EthernetDevice *net, fd_set *rfds, fd_set *wfds, 
     slirp_select_poll(slirp, rfds, wfds, efds, (select_ret <= 0));
 }
 
-static EthernetDevice *slirp_open(void)
+static EthernetDevice *slirp_open(const VMEthEntry *e)
 {
     EthernetDevice *net;
     struct in_addr net_addr = {.s_addr = htonl(0x0a000200)};
@@ -264,6 +263,28 @@ static EthernetDevice *slirp_open(void)
 
     net = mallocz(sizeof(*net));
     slirp_state = slirp_init(0, net_addr, mask, host, NULL, "", NULL, dhcp, dns, net);
+
+    /* Apply config-driven port forwards (qemu-style "tcp:HOST-:GUEST"). On
+     * the yetty side this typically exposes the in-guest telnetd at
+     * 127.0.0.1:2323 so a separate yetty --telnet 2323 (or any telnet
+     * client) can attach to a real pty inside the VM, while the primary
+     * yetty terminal continues to talk to hvc0 over the in-process pipe. */
+    if (e) {
+        struct in_addr any = {.s_addr = htonl(INADDR_ANY)};
+        struct in_addr guest_any = {.s_addr = 0};
+        for (int j = 0; j < e->hostfwd_count; j++) {
+            const VMEthHostFwd *hf = &e->hostfwd[j];
+            if (slirp_add_hostfwd(slirp_state, hf->is_udp ? 1 : 0, any,
+                                  hf->host_port, guest_any, hf->guest_port) < 0) {
+                yerror("slirp: failed to add hostfwd %s:%d -> guest:%d (port busy?)",
+                       hf->is_udp ? "udp" : "tcp", hf->host_port, hf->guest_port);
+                /* Non-fatal: VM still boots, the forward just isn't active. */
+            } else {
+                yinfo("slirp: hostfwd %s 0.0.0.0:%d -> 10.0.2.15:%d",
+                      hf->is_udp ? "udp" : "tcp", hf->host_port, hf->guest_port);
+            }
+        }
+    }
 
     net->mac_addr[0] = 0x02;
     net->mac_addr[1] = 0x00;
@@ -386,17 +407,23 @@ static int init_vm(struct yetty_yplatform_tinyemu_pty *pty)
     g_pty = pty;
 
     virt_machine_set_defaults(p);
+    yinfo("init_vm: loading cfg %s", pty->config_path);
     virt_machine_load_config_file(p, pty->config_path, NULL, NULL);
+    yinfo("init_vm: cfg loaded — drive_count=%d fs_count=%d eth_count=%d",
+          p->drive_count, p->fs_count, p->eth_count);
 
     /* Initialize block devices */
     for (int i = 0; i < p->drive_count; i++) {
         char *fname = get_file_path(p->cfg_filename, p->tab_drive[i].filename);
+        yinfo("init_vm: opening drive%d %s", i, fname);
         BlockDevice *drive = block_device_init(fname, YETTY_YPLATFORM_BF_MODE_SNAPSHOT);
-        free(fname);
         if (!drive) {
+            yerror("init_vm: drive%d open failed: %s", i, fname);
+            free(fname);
             virt_machine_free_config(p);
             return -1;
         }
+        free(fname);
         p->tab_drive[i].block_dev = drive;
     }
 
@@ -404,11 +431,13 @@ static int init_vm(struct yetty_yplatform_tinyemu_pty *pty)
     for (int i = 0; i < p->fs_count; i++) {
         char *fname = get_file_path(p->cfg_filename, p->tab_fs[i].filename);
         FSDevice *fs = fs_disk_init(fname);
-        free(fname);
         if (!fs) {
+            yerror("init_vm: fs%d init failed: %s", i, fname);
+            free(fname);
             virt_machine_free_config(p);
             return -1;
         }
+        free(fname);
         p->tab_fs[i].fs_dev = fs;
     }
 
@@ -416,7 +445,10 @@ static int init_vm(struct yetty_yplatform_tinyemu_pty *pty)
     for (int i = 0; i < p->eth_count; i++) {
 #ifdef CONFIG_SLIRP
         if (!strcmp(p->tab_eth[i].driver, "user")) {
-            p->tab_eth[i].net = slirp_open();
+            p->tab_eth[i].net = slirp_open(&p->tab_eth[i]);
+            if (!p->tab_eth[i].net) {
+                yerror("init_vm: slirp_open failed for eth%d", i);
+            }
         }
 #endif
     }
@@ -428,11 +460,14 @@ static int init_vm(struct yetty_yplatform_tinyemu_pty *pty)
     p->console = console;
     p->rtc_real_time = TRUE;
 
+    yinfo("init_vm: calling virt_machine_init");
     pty->vm = virt_machine_init(p);
     if (!pty->vm) {
+        yerror("init_vm: virt_machine_init returned NULL");
         virt_machine_free_config(p);
         return -1;
     }
+    yinfo("init_vm: VM created");
 
     virt_machine_free_config(p);
 
@@ -613,71 +648,26 @@ struct yetty_yplatform_pty_result yetty_yplatform_tinyemu_pty_create(struct yett
     /* Terminal polls pty_pipe[0] for VM output */
     pty->pipe_source.abstract = pty->pty_pipe[0];
 
-    /* Resolve VM config path under <config_dir>/temu/root-riscv64.cfg.
-     * The shared RISC-V runtime (kernel, opensbi, rootfs) lives in
-     * <data_dir>/yemu/. If the cfg does not exist yet, emit it with
-     * absolute paths so tinyemu's get_file_path() resolves them as-is. */
+    /* The cfg is shipped via incbin (assets/yemu/temu/yetty-temu-extended.cfg)
+     * and dropped at <config_dir>/temu/yetty-temu-extended.cfg by
+     * extract-assets at startup. Path references inside the cfg use
+     * $YETTY_RUNTIME_DIR which the platform layer exports (see glfw-main.c). */
     {
         const char *config_dir = yetty_yplatform_get_config_dir();
-        const char *data_dir = yetty_yplatform_get_data_dir();
-        char cfg_dir[512];
         char cfg_path[512];
-        int cfg_ready = 1;
-
-        snprintf(cfg_dir, sizeof(cfg_dir), "%s/temu", config_dir);
-        snprintf(cfg_path, sizeof(cfg_path), "%s/root-riscv64.cfg", cfg_dir);
-
-        /* mkdir -p <config_dir>/temu */
-        {
-            char tmp[512];
-            snprintf(tmp, sizeof(tmp), "%s", cfg_dir);
-            for (char *p = tmp + 1; *p && cfg_ready; p++) {
-                if (*p == '/') {
-                    *p = 0;
-                    if (mkdir(tmp, 0755) != 0 && errno != EEXIST) {
-                        cfg_ready = 0;
-                    }
-                    *p = '/';
-                }
-            }
-            if (cfg_ready && mkdir(tmp, 0755) != 0 && errno != EEXIST) {
-                cfg_ready = 0;
-            }
-        }
-
-        if (cfg_ready && access(cfg_path, F_OK) != 0) {
-            FILE *f = fopen(cfg_path, "w");
-            if (f) {
-                fprintf(f,
-                        "/* TinyEMU VM Configuration (auto-generated; edit to customize) */\n"
-                        "{\n"
-                        "    version: 1,\n"
-                        "    machine: \"riscv64\",\n"
-                        "    memory_size: 256,\n"
-                        "    bios: \"%s/yemu/opensbi-fw_jump.elf\",\n"
-                        "    kernel: \"%s/yemu/kernel-riscv64.bin\",\n"
-                        "    cmdline: \"earlycon=sbi console=hvc0 root=/dev/vda rootfstype=ext4 rw "
-                        "init=/init\",\n"
-                        "    drive0: { file: \"%s/yemu/alpine-rootfs.img\" },\n"
-                        "    eth0: { driver: \"user\" }\n"
-                        "}\n",
-                        data_dir, data_dir, data_dir);
-                fclose(f);
-                yinfo("tinyemu: wrote default cfg to %s", cfg_path);
-            } else {
-                cfg_ready = 0;
-            }
-        }
-
-        if (!cfg_ready) {
+        snprintf(cfg_path, sizeof(cfg_path),
+                 "%s/temu/yetty-temu-extended.cfg", config_dir);
+        if (access(cfg_path, F_OK) != 0) {
             close(pty->os_input_pipe[0]);
             close(pty->os_input_pipe[1]);
             close(pty->pty_pipe[0]);
             close(pty->pty_pipe[1]);
             free(pty);
-            return YETTY_ERR(yetty_yplatform_pty, "failed to prepare temu cfg under config dir");
+            yerror("tinyemu: missing cfg at %s — extract-assets did not run?",
+                   cfg_path);
+            return YETTY_ERR(yetty_yplatform_pty,
+                             "missing temu cfg under config dir");
         }
-
         pty->config_path = strdup(cfg_path);
     }
 

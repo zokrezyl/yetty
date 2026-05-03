@@ -729,7 +729,8 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
                 }
             }
         } else {
-            ydebug("terminal_create: failed to create PTY (non-fatal)");
+            ydebug("terminal_create: failed to create PTY (non-fatal): %s",
+                   pty_res.error.msg ? pty_res.error.msg : "(no msg)");
         }
     }
 

@@ -66,15 +66,28 @@ struct yetty_ycore_void_result yetty_platform_extract_assets(struct yetty_yconfi
     }
 
     /* Extract shared RISC-V runtime (kernel/opensbi/rootfs) to <data_dir>/yemu.
-     * Presence of the kernel is our gate — both --temu and --qemu need it. */
+     * Re-extract whenever any of the expected pieces is missing so an
+     * existing install picks up newly-bundled artifacts (e.g. the extended
+     * rootfs added later) without forcing the user to wipe the dir. */
     if (yetty_incbin_assets_has_yemu(assets)) {
-        char yemu_kernel[512];
-        snprintf(yemu_kernel, sizeof(yemu_kernel), "%s/yemu/kernel-riscv64.bin", data_dir);
-        if (!yetty_yplatform_file_exists(yemu_kernel)) {
-            if (!yetty_incbin_assets_extract_yemu_to(assets, data_dir)) {
-                yetty_incbin_assets_destroy(assets);
-                return YETTY_ERR(yetty_ycore_void, "failed to extract yemu assets");
+        const char *expected[] = {
+            "yemu/kernel-riscv64.bin",
+            "yemu/opensbi-fw_jump.elf",
+            "yemu/alpine-rootfs.img",
+            "yemu/alpine-extended-rootfs.img",
+        };
+        int need_extract = 0;
+        for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); i++) {
+            char path[512];
+            snprintf(path, sizeof(path), "%s/%s", data_dir, expected[i]);
+            if (!yetty_yplatform_file_exists(path)) {
+                need_extract = 1;
+                break;
             }
+        }
+        if (need_extract && !yetty_incbin_assets_extract_yemu_to(assets, data_dir)) {
+            yetty_incbin_assets_destroy(assets);
+            return YETTY_ERR(yetty_ycore_void, "failed to extract yemu assets");
         }
     }
 

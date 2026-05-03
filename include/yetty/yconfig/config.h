@@ -92,6 +92,9 @@ struct yetty_yconfig_config {
 #define YETTY_YCONFIG_KEY_TEMU "temu"
 #define YETTY_YCONFIG_KEY_QEMU "qemu"
 #define YETTY_YCONFIG_KEY_SSH "ssh/enabled"
+#define YETTY_YCONFIG_KEY_TELNET "telnet/enabled"
+#define YETTY_YCONFIG_KEY_TELNET_HOST "telnet/host"
+#define YETTY_YCONFIG_KEY_TELNET_PORT "telnet/port"
 
 /* Create config */
 struct yetty_yconfig_result yetty_yconfig_create(int argc, char *argv[],
