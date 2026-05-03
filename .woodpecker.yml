@@ -7,7 +7,6 @@ clone:
 
 steps:
   build:
-    image: ubuntu:latest
     commands:
       - apt-get update
       - apt-get install -y git git-lfs make cmake
