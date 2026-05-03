@@ -421,9 +421,15 @@ YETTY_EXTERNAL_CALLBACK
 static int vnc_record_write_cb(int64_t offset, const void *buffer, size_t size, void *token)
 {
     FILE *f = token;
+#ifdef _WIN32
+    if (_fseeki64(f, offset, SEEK_SET) != 0) {
+        return -1;
+    }
+#else
     if (fseeko(f, (off_t)offset, SEEK_SET) != 0) {
         return -1;
     }
+#endif
     return fwrite(buffer, 1, size, f) != size ? -1 : 0;
 }
 #endif
