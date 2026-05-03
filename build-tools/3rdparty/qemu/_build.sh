@@ -555,7 +555,7 @@ cpp_link_args  = ['-arch', '$_ARCH', '-isysroot', '$_SDK', '$_MIN_FLAG']
 # don't reach the link line and ld defaults to the host x86_64 → all qemu
 # arm64 .o files get rejected. UIKit + Foundation also belong here, not in
 # extra-ldflags, because qemu's link uses LINK_ARGS only for non-arch flags.
-objc_link_args = ['-arch', '$_ARCH', '-isysroot', '$_SDK', '$_MIN_FLAG', '-framework', 'UIKit', '-framework', 'Foundation']
+objc_link_args = ['-arch', '$_ARCH', '-isysroot', '$_SDK', '$_MIN_FLAG', '-framework', 'UIKit', '-framework', 'Foundation', '-framework', 'AVFoundation']
 
 [properties]
 needs_exe_wrapper  = true
@@ -691,8 +691,10 @@ ZLIB_PC_EOF
     export PKG_CONFIG="$SYSROOT/bin/sysroot-pkg-config"
 
     # ------------------------------------------------------------------
-    # Drop the iOS / tvOS UIKit harness and apply qemu source patches
-    # from build-tools/3rdparty/qemu/{tvos-main.m, patches/}.
+    # Drop the iOS / tvOS UIKit harness (canonical copy lives at
+    # build-tools/ios-tvos/yetty-qemu/tvos-main.m — same file driven
+    # through xcodegen for provisioning) and apply the qemu source
+    # patches from build-tools/3rdparty/qemu/patches/.
     # The patches:
     #   0001 — system/main.c: rename main → yetty_qemu_main
     #   0002 — include/qemu/osdep.h: gate pthread_jit_write_protect_np
@@ -702,7 +704,9 @@ ZLIB_PC_EOF
     # `patch -p1 -N --silent` is idempotent (re-applying = no-op exit 1
     # which we ignore via `|| true`).
     # ------------------------------------------------------------------
-    cp "$SCRIPT_DIR/tvos-main.m" "$SRC_DIR/system/tvos-main.m"
+    _TVOS_MAIN_SRC="$REPO_ROOT/build-tools/ios-tvos/yetty-qemu/tvos-main.m"
+    [ -f "$_TVOS_MAIN_SRC" ] || { echo "missing $_TVOS_MAIN_SRC" >&2; exit 1; }
+    cp "$_TVOS_MAIN_SRC" "$SRC_DIR/system/tvos-main.m"
     for _patch in "$SCRIPT_DIR"/patches/*.patch; do
         echo "==> applying $(basename "$_patch")"
         ( cd "$SRC_DIR" && patch -p1 -N --silent < "$_patch" ) || true
@@ -740,7 +744,7 @@ ZLIB_PC_EOF
     )
     # UIKit + Foundation pull in the tvos-main.m harness's runtime. UIKit is
     # available on iOS, iOS-Simulator, tvOS and tvOS-Simulator SDKs.
-    _EXTRA_LDFLAGS="-Wl,-dead_strip $_DARWIN_CFLAGS -L$SYSROOT/lib -framework UIKit -framework Foundation"
+    _EXTRA_LDFLAGS="-Wl,-dead_strip $_DARWIN_CFLAGS -L$SYSROOT/lib -framework UIKit -framework Foundation -framework AVFoundation"
     _QEMU_BINARY_NAME="qemu-system-riscv64-unsigned"
     _QEMU_OUTPUT_NAME="qemu-system-riscv64"
     ;;

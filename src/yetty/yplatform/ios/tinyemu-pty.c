@@ -4,6 +4,7 @@
 #include <yetty/platform/pty-factory.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ytelnet/telnet-pty.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <errno.h>
@@ -652,6 +653,26 @@ static struct yetty_yplatform_pty_result tinyemu_pty_factory_create_pty(
     struct yetty_yplatform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop)
 {
     struct yetty_yplatform_tinyemu_pty_factory *factory = container_of(self, struct yetty_yplatform_tinyemu_pty_factory, base);
+
+    /* --telnet: connect as a pure telnet client to an already-running
+     * server (e.g. the companion YettyQemu.app's qemu virtio-console
+     * chardev listening on 127.0.0.1:2323). No fork/exec, no qemu
+     * spawning — yetty just opens the TCP socket. */
+    if (factory->config &&
+        factory->config->ops->get_bool(factory->config,
+                                       YETTY_YCONFIG_KEY_TELNET, 0)) {
+        const char *host = factory->config->ops->get_string(
+            factory->config, YETTY_YCONFIG_KEY_TELNET_HOST, "127.0.0.1");
+        int port = factory->config->ops->get_int(
+            factory->config, YETTY_YCONFIG_KEY_TELNET_PORT, 0);
+        if (port <= 0 || port > 65535) {
+            return YETTY_ERR(yetty_yplatform_pty,
+                             "--telnet requires telnet/port (1..65535)");
+        }
+        return yetty_ytelnet_telnet_pty_create(host, (uint16_t)port, event_loop);
+    }
+
+    /* Fallback: TinyEMU (the original iOS / tvOS default). */
     (void)event_loop;
     return tinyemu_pty_create(factory->config);
 }

@@ -20,11 +20,14 @@
 #undef  __IOS_PROHIBITED
 #define __IOS_PROHIBITED __attribute__((unavailable("not available on iOS")))
 #import <UIKit/UIKit.h>
+#import <AVFoundation/AVFoundation.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <sched.h>
+#include <sys/qos.h>
 #include <fcntl.h>
 #include <sys/socket.h>
 
@@ -114,6 +117,20 @@ static void yq_block_atexit(void) {
 
 static void *yq_qemu_thread(void *arg) {
     yq_status("qemu_thread enter");
+
+    /* Pin this thread to SCHED_RR @ max priority so the scheduler hands
+     * it more CPU even when YettyQemu is in background (audio mode keeps
+     * us alive but the OS can still throttle non-audio threads). */
+    {
+        struct sched_param sp;
+        memset(&sp, 0, sizeof(sp));
+        sp.sched_priority = sched_get_priority_max(SCHED_RR);
+        int rc = pthread_setschedparam(pthread_self(), SCHED_RR, &sp);
+        char msg[64]; snprintf(msg, sizeof(msg), "sched_setschedparam rc=%d prio=%d", rc, sp.sched_priority);
+        yq_status(msg);
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
+    }
+
     int qemu_fd = (int)(intptr_t)arg;
     /* Redirect stdout/stderr through the same fd so qemu's own messages
      * (option parsing errors, OpenSBI banner if -serial chardev:char0) all
@@ -193,10 +210,16 @@ static void *yq_qemu_thread(void *arg) {
      * with console=ttyS0 makes init bail with "unable to open initial
      * console" → kernel panic. We lose the OpenSBI banner this way (no
      * UART chardev to render it), but kernel + init talk on hvc0. */
+    /* Slirp user-net + hostfwd: forward host TCP 2323 → guest TCP 23 so the
+     * companion yetty.app (--telnet 127.0.0.1:2323) reaches the in-guest
+     * telnetd on port 23. virtio-console (hvc0) stays as the kernel-boot
+     * console rendered into the local UITextView. */
     char *argv_with_disk[] = {
         (char *)"qemu-system-riscv64",
         (char *)"-machine", (char *)"virt",
         (char *)"-m",       (char *)"256",
+        /* Bigger TB cache = fewer re-translations of hot loops under TCI. */
+        (char *)"-accel",   (char *)"tcg,tb-size=128",
         (char *)"-bios",    bios_path,
         (char *)"-kernel",  kernel_path,
         (char *)"-append",  (char *)"earlycon=sbi console=hvc0 root=/dev/vda rw init=/init",
@@ -205,6 +228,8 @@ static void *yq_qemu_thread(void *arg) {
         (char *)"-device",  (char *)"virtio-serial-device",
         (char *)"-device",  (char *)"virtconsole,chardev=char0",
         (char *)"-chardev", chardev_arg,
+        (char *)"-netdev",  (char *)"user,id=net0,hostfwd=tcp::2323-:23",
+        (char *)"-device",  (char *)"virtio-net-device,netdev=net0",
         (char *)"-serial",  (char *)"none",
         (char *)"-display", (char *)"none",
         (char *)"-no-reboot",
@@ -233,11 +258,56 @@ static void *yq_qemu_thread(void *arg) {
     return NULL;
 }
 
+/* Keep YettyQemu alive while yetty.app is foreground.
+ *
+ * tvOS suspends background apps by default — qemu's slirp would die
+ * within a few seconds, dropping yetty's --telnet 127.0.0.1:2323 socket.
+ * The "audio" UIBackgroundMode (declared in Info.plist) lets a process
+ * stay scheduled as long as it's actively playing audio. We start an
+ * AVAudioEngine playing a silent buffer in a loop — the OS sees a
+ * media app, qemu keeps running, the listener stays open. */
+static AVAudioEngine *g_audio_engine;
+static AVAudioPlayerNode *g_audio_player;
+static void yq_keep_alive_with_silent_audio(void) {
+    NSError *err = nil;
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    [session setCategory:AVAudioSessionCategoryPlayback
+                   mode:AVAudioSessionModeDefault
+                options:AVAudioSessionCategoryOptionMixWithOthers
+                  error:&err];
+    if (err) yq_status([[NSString stringWithFormat:@"audio setCategory err: %@", err] UTF8String]);
+    [session setActive:YES error:&err];
+    if (err) yq_status([[NSString stringWithFormat:@"audio setActive err: %@", err] UTF8String]);
+
+    g_audio_engine = [[AVAudioEngine alloc] init];
+    g_audio_player = [[AVAudioPlayerNode alloc] init];
+    [g_audio_engine attachNode:g_audio_player];
+
+    AVAudioFormat *fmt = [[AVAudioFormat alloc]
+        initStandardFormatWithSampleRate:44100 channels:1];
+    [g_audio_engine connect:g_audio_player to:g_audio_engine.mainMixerNode format:fmt];
+
+    AVAudioPCMBuffer *buf = [[AVAudioPCMBuffer alloc]
+        initWithPCMFormat:fmt frameCapacity:44100];
+    buf.frameLength = 44100;
+    /* Already zeroed by AVAudioPCMBuffer; silence is what we want. */
+
+    [g_audio_engine startAndReturnError:&err];
+    if (err) yq_status([[NSString stringWithFormat:@"audio engine start err: %@", err] UTF8String]);
+    [g_audio_player scheduleBuffer:buf
+                            atTime:nil
+                           options:AVAudioPlayerNodeBufferLoops
+                 completionHandler:nil];
+    [g_audio_player play];
+    yq_status("silent-audio keep-alive started");
+}
+
 @implementation YQAppDelegate
 - (BOOL)application:(UIApplication *)application
     didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
     yq_status("didFinishLaunching enter");
+    yq_keep_alive_with_silent_audio();
     g_delegate = self;
     UIScreen *screen = UIScreen.mainScreen;
     yq_status(screen ? "got mainScreen" : "mainScreen is nil");
