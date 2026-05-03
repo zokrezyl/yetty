@@ -1,0 +1,15 @@
+labels:
+  platform: darwin/amd64
+
+when:
+  - event: [push, manual, pull_request, tag]
+
+steps:
+  build:
+    image: bash
+    commands:
+      - git lfs install
+      - git lfs fetch
+      - git lfs checkout
+      - cmake -B build-tvos_x86_64-ytrace-release -G Ninja -DCMAKE_SYSTEM_NAME=tvOS -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_SYSROOT=appletvsimulator -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0 -DCMAKE_BUILD_TYPE=Release -DYETTY_TVOS=ON -DYETTY_ENABLE_TOOL_QA=OFF -S .
+      - cmake --build build-tvos_x86_64-ytrace-release --config Release --parallel 4
