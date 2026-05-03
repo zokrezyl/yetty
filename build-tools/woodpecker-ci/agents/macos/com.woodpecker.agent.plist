@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+  <key>Label</key>
+  <string>com.woodpecker.agent</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/woodpecker-agent</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>WOODPECKER_SERVER</key>
+    <string>192.168.1.10:9000</string>
+
+    <key>WOODPECKER_AGENT_SECRET</key>
+    <string>your-secret</string>
+
+    <key>WOODPECKER_BACKEND</key>
+    <string>local</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/woodpecker-agent.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/woodpecker-agent.err.log</string>
+
+</dict>
+</plist>

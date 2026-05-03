@@ -1,0 +1,13 @@
+<service>
+  <id>woodpecker-agent</id>
+  <name>Woodpecker Agent</name>
+  <description>Woodpecker CI Agent</description>
+
+  <executable>C:\Users\misi\Downloads\woodpecker-agent.exe</executable>
+
+  <env name="WOODPECKER_SERVER" value="192.168.1.10:9000"/>
+  <env name="WOODPECKER_AGENT_SECRET" value="your-secret"/>
+  <env name="WOODPECKER_BACKEND" value="local"/>
+
+  <log mode="roll"/>
+</service>
