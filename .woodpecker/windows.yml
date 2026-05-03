@@ -12,5 +12,5 @@ steps:
       - git lfs fetch
       - git lfs checkout
       - call "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
-      - cmake -B build-windows-ytrace-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DWEBGPU_BACKEND=dawn -DYETTY_ENABLE_TOOL_QA=OFF -DCMAKE_TLS_CAINFO=C:/Strawberry/perl/vendor/lib/Mozilla/CA/cacert.pem -S .
+      - cmake -B build-windows-ytrace-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DWEBGPU_BACKEND=dawn -DYETTY_ENABLE_TOOL_QA=OFF -DCMAKE_TLS_CAINFO=C:/Strawberry/perl/vendor/lib/Mozilla/CA/cacert.pem -DCMAKE_C_FLAGS=/Zc:preprocessor -DCMAKE_CXX_FLAGS=/Zc:preprocessor -S .
       - cmake --build build-windows-ytrace-release --config Release --parallel
