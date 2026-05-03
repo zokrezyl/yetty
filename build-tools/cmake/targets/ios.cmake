@@ -97,6 +97,7 @@ find_library(COREFOUNDATION_LIBRARY CoreFoundation REQUIRED)
 find_library(COREGRAPHICS_LIBRARY CoreGraphics REQUIRED)
 find_library(METAL_LIBRARY Metal REQUIRED)
 find_library(QUARTZCORE_LIBRARY QuartzCore REQUIRED)
+find_library(GAMECONTROLLER_LIBRARY GameController REQUIRED)
 
 target_link_libraries(yetty PRIVATE
     ${YETTY_LIBS}
@@ -109,6 +110,7 @@ target_link_libraries(yetty PRIVATE
     ${UIKIT_LIBRARY}
     ${METAL_LIBRARY}
     ${QUARTZCORE_LIBRARY}
+    ${GAMECONTROLLER_LIBRARY}
 )
 
 # TinyEMU runtime (kernel, opensbi, alpine-rootfs.img) is embedded via incbin
