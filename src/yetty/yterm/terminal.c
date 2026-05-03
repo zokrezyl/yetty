@@ -580,54 +580,25 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
     ydebug("terminal_render_frame: starting");
     ytime_start(frame_render);
 
-    /*
-   * Render each layer to its target. Layer 0 is text_layer, layer 1 is
-   * ypaint_layer (see terminal_create). Time them separately so we can tell
-   * which layer dominates the frame cost.
-   */
+    /* Render only the text layer (layer 0) directly into the provided
+     * big_target — no per-layer intermediate textures, no blend pass.
+     * This is for tvOS where the multi-layer blend round-trip (4 × 33 MB
+     * layer RTs + 33 MB blend output read/written every frame at 4K)
+     * appears to starve the display compositor. */
     ytime_start(layers);
-    for (size_t i = 0; i < terminal->layer_count; i++) {
-        struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
-        struct yetty_ypaint_core_target *layer_target = terminal->layer_targets[i];
-
-        if (!layer || !layer_target) {
-            yerror("//TODO: THIS SHOULD BE FIXED!!!!!!! IF THIS CONDITION HAPPENS "
-                   "SHOULD RETURN ERROR");
-            continue;
-        }
-
-        struct yetty_ycore_void_result res;
-        if (i == 0) {
-            ytime_start(text_layer);
-            res = layer->ops->render(layer, layer_target);
-            ytime_report(text_layer);
-        } else if (i == 1) {
-            ytime_start(ypaint_layer);
-            res = layer->ops->render(layer, layer_target);
-            ytime_report(ypaint_layer);
-        } else {
-            res = layer->ops->render(layer, layer_target);
-        }
-
+    if (terminal->layer_count > 0 && terminal->layers[0]) {
+        ytime_start(text_layer);
+        struct yetty_ycore_void_result res =
+            terminal->layers[0]->ops->render(terminal->layers[0], target);
+        ytime_report(text_layer);
         if (!YETTY_IS_OK(res)) {
-            yerror("terminal_render_frame: layer %zu render failed: %s", i, res.error.msg);
+            yerror("terminal_render_frame: text layer render failed: %s", res.error.msg);
             return res;
         }
     }
     ytime_report(layers);
 
-    /* Blend all layer targets into the provided target (big_target from yetty) */
-    ytime_start(blend);
-    struct yetty_ycore_void_result res =
-        target->ops->blend(target, terminal->layer_targets, terminal->layer_count);
-    ytime_report(blend);
-
-    if (!YETTY_IS_OK(res)) {
-        yerror("terminal_render_frame: blend failed: %s", res.error.msg);
-        return res;
-    }
-
-    ydebug("terminal_render_frame: done, rendered %zu layers", terminal->layer_count);
+    ydebug("terminal_render_frame: done (text-only direct, no blend)");
     ytime_report(frame_render);
     return YETTY_OK_VOID();
 }

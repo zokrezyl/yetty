@@ -77,16 +77,6 @@ WGPUSurface yetty_yplatform_create_surface_from_layer(WGPUInstance instance, CAM
         self.metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
         self.metalLayer.framebufferOnly = YES;
         self.metalLayer.contentsScale = [UIScreen mainScreen].scale;
-        /* opaque + max drawable pool: tells the compositor it doesn't need
-         * to alpha-blend our output with what's behind, and gives the
-         * swapchain the full 3-deep ring buffer so `nextDrawable` returns
-         * immediately while a previously-rendered frame is still being
-         * shown. Both default values were leaving Apple TV's compositor
-         * holding drawables for 100s of ms. */
-        self.metalLayer.opaque = YES;
-        self.metalLayer.maximumDrawableCount = 3;
-        self.metalLayer.presentsWithTransaction = NO;
-        self.opaque = YES;
         self.backgroundColor = [UIColor blackColor];
     }
     return self;
@@ -179,7 +169,14 @@ static void *render_thread_func(void *arg)
         return;
     }
     _config = config_result.value;
-    ydebug("config created");
+    /* Force raster glyphs on tvOS — MSDF's per-fragment SDF re-evaluation
+     * pushes ~200 MB of texel R/W per frame at 4K through the GPU and
+     * appears to be a major bandwidth contributor; raster blits a
+     * pre-rendered atlas (single read-write per glyph). */
+    _config->ops->set_string(_config,
+                             YETTY_YCONFIG_KEY_TERMINAL_FONT_RENDER_METHOD,
+                             "raster");
+    ydebug("config created (font render-method forced to 'raster' on tvOS)");
 
     /* Extract embedded assets (fonts, shaders) to cache */
     ydebug("extracting assets");
@@ -351,29 +348,13 @@ static void *render_thread_func(void *arg)
         return;
     }
 
-    /* Printable: derive ASCII from keycode + shift. Shift detected via
-     * the GCKeyboardInput dictionary lookup. */
-    GCControllerButtonInput *lshift = [input buttonForKeyCode:GCKeyCodeLeftShift];
-    GCControllerButtonInput *rshift = [input buttonForKeyCode:GCKeyCodeRightShift];
-    BOOL shift = (lshift && lshift.pressed) || (rshift && rshift.pressed);
-    int ascii = 0;
-    if (keyCode >= GCKeyCodeKeyA && keyCode <= GCKeyCodeKeyZ) {
-        ascii = (shift ? 'A' : 'a') + (int)(keyCode - GCKeyCodeKeyA);
-    } else if (keyCode == GCKeyCodeSpacebar) {
-        ascii = ' ';
-    } else if (keyCode >= GCKeyCodeOne && keyCode <= GCKeyCodeNine) {
-        ascii = '1' + (int)(keyCode - GCKeyCodeOne);
-    } else if (keyCode == GCKeyCodeZero) {
-        ascii = '0';
-    }
-    if (ascii) {
-        yetty_kb_log("handleGCKey CHAR ascii=0x%02x ('%c')", ascii, ascii);
-        struct yetty_yui_event ev = {0};
-        ev.type = YETTY_YCORE_CHAR;
-        ev.chr.codepoint = (uint32_t)ascii;
-        ev.chr.mods = 0;
-        _pipe->ops->write(_pipe, &ev, sizeof(ev));
-    }
+    /* Printable characters are NOT handled here. GCKeyboard delivers raw
+     * HID positions only — no system-layout translation — so we'd ignore
+     * the user's tvOS keyboard-layout setting (Dvorak/QWERTY/etc.).
+     * pressesBegan: handles them instead via UIKey.characters, which is
+     * already layout-translated by the OS. (void) suppresses unused-arg
+     * warning on `input`. */
+    (void)input;
 }
 
 #pragma mark - UIKeyInput
@@ -463,17 +444,15 @@ static void *render_thread_func(void *arg)
             default: break;
         }
 
-        if (glfw_key) {
-            struct yetty_yui_event ev = {0};
-            ev.type = YETTY_YCORE_KEY_DOWN;
-            ev.key.key = glfw_key;
-            ev.key.mods = (uint32_t)key.modifierFlags;
-            ev.key.scancode = (int)key.keyCode;
-            _pipe->ops->write(_pipe, &ev, sizeof(ev));
-            continue;
-        }
+        /* Special keys (arrows, return, ...) are handled by GCKeyboard's
+         * keyChangedHandler — no need to forward them again here, that
+         * was the source of the doubled-character bug. We only forward
+         * printable characters from this path because UIKey.characters
+         * is the only API that gives us the OS-layout-translated string
+         * (e.g. Dvorak / QWERTY chosen in tvOS Settings). */
+        if (glfw_key) continue;
 
-        /* Plain printable character(s) — feed each as YETTY_EVENT_CHAR. */
+        /* Plain printable character(s) — feed each as YETTY_YCORE_CHAR. */
         for (NSUInteger i = 0; i < chars.length; i++) {
             unichar ch = [chars characterAtIndex:i];
             struct yetty_yui_event ev = {0};
