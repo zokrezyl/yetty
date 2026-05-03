@@ -6,10 +6,11 @@ when:
 
 steps:
   build:
-    image: powershell
+    image: cmd
     commands:
       - git lfs install
       - git lfs fetch
       - git lfs checkout
-      - cmake -B build-windows-ytrace-release -DCMAKE_BUILD_TYPE=Release -DWEBGPU_BACKEND=dawn -DYETTY_ENABLE_TOOL_QA=OFF -DCMAKE_TLS_CAINFO=C:/Strawberry/perl/vendor/lib/Mozilla/CA/cacert.pem -S .
+      - call "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
+      - cmake -B build-windows-ytrace-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DWEBGPU_BACKEND=dawn -DYETTY_ENABLE_TOOL_QA=OFF -DCMAKE_TLS_CAINFO=C:/Strawberry/perl/vendor/lib/Mozilla/CA/cacert.pem -S .
       - cmake --build build-windows-ytrace-release --config Release --parallel
