@@ -77,9 +77,16 @@ static void yq_append(NSString *s) {
 
 static void *yq_reader(void *arg) {
     int fd = (int)(intptr_t)arg;
+    /* Mirror everything the chardev/qemu sends to a logfile in the app
+     * sandbox so devicectl can pull it back even if qemu hangs/panics. */
+    char log_path[1024];
+    const char *home = getenv("HOME"); if (!home) home = ".";
+    snprintf(log_path, sizeof(log_path), "%s/tmp/yq-output.log", home);
+    int log_fd = open(log_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     char buf[2048];
     ssize_t n;
     while ((n = read(fd, buf, sizeof(buf) - 1)) > 0) {
+        if (log_fd >= 0) write(log_fd, buf, n);
         buf[n] = '\0';
         NSString *s = [[NSString alloc] initWithBytes:buf length:n
                                              encoding:NSUTF8StringEncoding];
@@ -89,6 +96,7 @@ static void *yq_reader(void *arg) {
         }
         yq_append(s);
     }
+    if (log_fd >= 0) close(log_fd);
     return NULL;
 }
 
@@ -132,16 +140,19 @@ static void *yq_qemu_thread(void *arg) {
      * the per-app container root. */
     const char *home = getenv("HOME");
     if (!home) home = ".";
-    static char bios_path[1024], kernel_path[1024];
+    static char bios_path[1024], kernel_path[1024], disk_path[1024];
     snprintf(bios_path, sizeof(bios_path),
              "%s/Library/Caches/yetty/yemu/opensbi-fw_dynamic.bin", home);
     snprintf(kernel_path, sizeof(kernel_path),
              "%s/Library/Caches/yetty/yemu/kernel-riscv64.bin", home);
+    snprintf(disk_path, sizeof(disk_path),
+             "%s/Library/Caches/yetty/yemu/alpine-rootfs.img", home);
     int has_bios = (access(bios_path, R_OK) == 0);
     int has_kernel = (access(kernel_path, R_OK) == 0);
-    fprintf(stdout, "[yetty] bios=%s (%s), kernel=%s (%s)\n",
-            bios_path, has_bios ? "found" : "missing",
-            kernel_path, has_kernel ? "found" : "missing");
+    int has_disk = (access(disk_path, R_OK) == 0);
+    fprintf(stdout, "[yetty] bios=%s (%s)\n", bios_path, has_bios ? "found" : "missing");
+    fprintf(stdout, "[yetty] kernel=%s (%s)\n", kernel_path, has_kernel ? "found" : "missing");
+    fprintf(stdout, "[yetty] disk=%s (%s)\n", disk_path, has_disk ? "found" : "missing");
     fflush(stdout);
 
     /* Wire qemu's UART (-serial) to the same socketpair fd; OpenSBI prints
@@ -149,6 +160,9 @@ static void *yq_qemu_thread(void *arg) {
     static char chardev_arg[128];
     snprintf(chardev_arg, sizeof(chardev_arg),
              "socket,id=char0,fd=%d,server=off", qemu_fd);
+    static char drive_arg[1280];
+    snprintf(drive_arg, sizeof(drive_arg),
+             "file=%s,if=none,format=raw,id=hd0", disk_path);
 
     char *argv_no_kernel[] = {
         (char *)"qemu-system-riscv64",
@@ -174,15 +188,41 @@ static void *yq_qemu_thread(void *arg) {
         (char *)"-no-shutdown",
         NULL,
     };
-    char **argv = has_kernel ? argv_with_kernel : argv_no_kernel;
-    int argc = 0; while (argv[argc]) argc++;
-    if (!has_bios) {
-        /* Fall back to -version so something visible still happens. */
+    /* Match yetty's qemu config: kernel console = virtio-console (hvc0),
+     * not the UART. The alpine-extended init expects /dev/hvc0 — booting
+     * with console=ttyS0 makes init bail with "unable to open initial
+     * console" → kernel panic. We lose the OpenSBI banner this way (no
+     * UART chardev to render it), but kernel + init talk on hvc0. */
+    char *argv_with_disk[] = {
+        (char *)"qemu-system-riscv64",
+        (char *)"-machine", (char *)"virt",
+        (char *)"-m",       (char *)"256",
+        (char *)"-bios",    bios_path,
+        (char *)"-kernel",  kernel_path,
+        (char *)"-append",  (char *)"earlycon=sbi console=hvc0 root=/dev/vda rw init=/init",
+        (char *)"-drive",   drive_arg,
+        (char *)"-device",  (char *)"virtio-blk-device,drive=hd0",
+        (char *)"-device",  (char *)"virtio-serial-device",
+        (char *)"-device",  (char *)"virtconsole,chardev=char0",
+        (char *)"-chardev", chardev_arg,
+        (char *)"-serial",  (char *)"none",
+        (char *)"-display", (char *)"none",
+        (char *)"-no-reboot",
+        (char *)"-no-shutdown",
+        NULL,
+    };
+    char **argv;
+    if (has_bios && has_kernel && has_disk)      argv = argv_with_disk;
+    else if (has_bios && has_kernel)             argv = argv_with_kernel;
+    else if (has_bios)                            argv = argv_no_kernel;
+    else {
         static char *argv_fallback[] = { (char *)"qemu-system-riscv64",
                                          (char *)"-version", NULL };
-        argv = argv_fallback; argc = 2;
+        argv = argv_fallback;
     }
-    yq_status(has_kernel ? "calling yetty_qemu_main (bios+kernel)" :
+    int argc = 0; while (argv[argc]) argc++;
+    yq_status(has_disk ? "calling yetty_qemu_main (bios+kernel+disk)" :
+              has_kernel ? "calling yetty_qemu_main (bios+kernel)" :
               has_bios ? "calling yetty_qemu_main (bios only)" :
               "calling yetty_qemu_main (-version fallback)");
     int rc = yetty_qemu_main(argc, argv);
