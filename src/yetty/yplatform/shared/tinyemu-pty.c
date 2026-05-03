@@ -302,8 +302,17 @@ static EthernetDevice *slirp_open(const VMEthEntry *e)
 #endif
 
 /* VM run loop */
+/* On wasm each RISC-V cycle is 5–20× slower than native (the interpreter
+ * runs through wasm). 500k cycles per batch becomes 50–100ms, which caps
+ * keystroke latency at one batch. Drop the batch size and the select
+ * timeout so the loop polls os_input_pipe[0] more often. */
+#if defined(__EMSCRIPTEN__)
+#define MAX_EXEC_CYCLE 50000
+#define MAX_SLEEP_TIME 2
+#else
 #define MAX_EXEC_CYCLE 500000
 #define MAX_SLEEP_TIME 10
+#endif
 
 static void vm_run_once(struct yetty_yplatform_tinyemu_pty *pty)
 {
