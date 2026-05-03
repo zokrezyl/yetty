@@ -451,8 +451,12 @@ static struct yetty_ycore_void_result config_vnc_server(struct yetty_yvnc_server
         yetty_yvnc_server_set_merge_rectangles(vnc_server, 1);
     }
 
+#ifdef YETTY_HAS_YVIDEO
     /* H.264 tuning knobs — read from vnc/h264/... config keys. Each is
-        * optional; the server treats zero / unset as "use encoder defaults". */
+        * optional; the server treats zero / unset as "use encoder defaults".
+        * Setters live behind YETTY_HAS_YVIDEO (line 726+), so the calls do
+        * too — otherwise this references undefined symbols when OpenH264 /
+        * yvideo is disabled (e.g. webasm). */
     int h264_bps = config->ops->get_int(config, "vnc/h264/bitrate", 0);
     if (h264_bps > 0) {
         yetty_yvnc_server_set_h264_bitrate(vnc_server, (uint32_t)h264_bps);
@@ -469,6 +473,7 @@ static struct yetty_ycore_void_result config_vnc_server(struct yetty_yvnc_server
         yetty_yvnc_server_set_h264_screen_content(
             vnc_server, config->ops->get_bool(config, "vnc/h264/screen-content", 1));
     }
+#endif
 
 #ifdef YETTY_HAS_YVIDEO
     /* MP4 recording: --record FILE sets vnc/record-file and forces use-h264.

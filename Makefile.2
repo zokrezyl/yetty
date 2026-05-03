@@ -218,7 +218,6 @@ else
 	$(PATH_CMD) cmake --build $(BUILD_DIR) --target yetty $(CMAKE_PARALLEL)
 endif
 	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR)/
-	@bash build-tools/jslinux/alpine/build-vfsync.sh $(BUILD_DIR)
 	@$(MAKE) -f Makefile.2 _verify-webasm
 
 .PHONY: _build-android _build-android_x86_64
@@ -248,9 +247,7 @@ _build-ios _build-ios_x86_64:
 _verify-webasm:
 	@echo "=== Post-build webasm verification ==="
 	@FAIL=0; \
-	for f in yetty.js yetty.wasm yetty.data index.html serve.py \
-	         jslinux/vm-bridge.html jslinux/term-bridge.js \
-	         vfsync/u/os/yetty-alpine/head; do \
+	for f in yetty.js yetty.wasm yetty.data index.html serve.py; do \
 		if [ ! -e "$(BUILD_DIR)/$$f" ]; then \
 			echo "MISSING: $$f"; \
 			FAIL=1; \

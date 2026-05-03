@@ -43,7 +43,7 @@ if(YETTY_YRENDER_X11_TILE)
         X11::Xext
     )
 else()
-    target_link_libraries(yetty_yrender
+    target_link_libraries(yetty_yrender PUBLIC
         webgpu
     )
 endif()

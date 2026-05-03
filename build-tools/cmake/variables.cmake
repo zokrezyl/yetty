@@ -239,8 +239,6 @@ if(YETTY_IOS OR YETTY_TVOS)
     endforeach()
 endif()
 
-option(YETTY_ENABLE_FEATURE_JSLINUX   "jslinux — JSLinux integration"        ON)
-
 # Desktop-only features
 option(YETTY_ENABLE_FEATURE_GPU       "gpu — GPU tools (desktop)"            OFF)
 option(YETTY_ENABLE_FEATURE_CLIENT    "client — client tools (desktop)"      OFF)

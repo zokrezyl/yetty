@@ -255,25 +255,10 @@
         <!-- Mode selection dialog -->
         <div id="mode-dialog">
             <h2>🖥️ yetty - WebGPU Terminal</h2>
-            <button class="mode-option" data-mode="jslinux">
-                <div class="mode-title">🐧 JSLinux VM</div>
-                <div class="mode-desc">Run Alpine Linux in-browser (no server required)</div>
+            <button class="mode-option" data-mode="vm">
+                <div class="mode-title">🐧 Embedded VM</div>
+                <div class="mode-desc">Boot Alpine Linux on RISC-V tinyemu inside yetty.wasm (no iframe, no server)</div>
             </button>
-            <div id="jslinux-variants" class="variant-config">
-                <label>Boot variant:</label>
-                <button class="variant-option" data-variant="legacy">
-                    <div class="variant-title">Legacy (9p root)</div>
-                    <div class="variant-desc">x86_64 minimal Alpine, root over vfsync 9p (current default)</div>
-                </button>
-                <button class="variant-option" data-variant="alpine-disk">
-                    <div class="variant-title">alpine-disk (block boot)</div>
-                    <div class="variant-desc">riscv64, ext4 root on virtio-blk; yetty-alpine vfsync mounted as secondary 9p</div>
-                </button>
-                <button class="variant-option" data-variant="alpine-extended-disk">
-                    <div class="variant-title">alpine-extended-disk (block boot)</div>
-                    <div class="variant-desc">riscv64, full Alpine + dev tools on virtio-blk; secondary 9p data mount</div>
-                </button>
-            </div>
             <button class="mode-option" data-mode="vnc">
                 <div class="mode-title">🖼️ VNC Client</div>
                 <div class="mode-desc">Connect to yetty VNC server via WebSocket proxy</div>
@@ -314,9 +299,9 @@ busybox telnetd -p 8023 -l /bin/bash
 
 # Connect with: ws://localhost:8024</pre>
                     <p><strong>URL Parameters:</strong></p>
-                    <pre>?mode=vnc&wsurl=ws://host:port
-?mode=telnet&wsurl=ws://host:port
-?mode=jslinux</pre>
+                    <pre>?mode=vm
+?mode=vnc&wsurl=ws://host:port
+?mode=telnet&wsurl=ws://host:port</pre>
                 </div>
             </details>
         </div>
@@ -326,7 +311,6 @@ busybox telnetd -p 8023 -l /bin/bash
         // Selected mode and config
         let selectedMode = null;
         let wsUrl = '';
-        let jslinuxVariant = 'legacy';
 
         // Mode selection handling
         function setupModeSelection() {
@@ -336,48 +320,34 @@ busybox telnetd -p 8023 -l /bin/bash
             const wsNote = document.getElementById('ws-note');
             const connectBtn = document.getElementById('connect-btn');
             const modeOptions = document.querySelectorAll('.mode-option');
-            const jslinuxVariants = document.getElementById('jslinux-variants');
-            const variantOptions = document.querySelectorAll('.variant-option');
-
-            variantOptions.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    jslinuxVariant = btn.dataset.variant;
-                    selectedMode = 'jslinux';
-                    modeDialog.style.display = 'none';
-                    launchYetty();
-                });
-            });
 
             modeOptions.forEach(btn => {
                 btn.addEventListener('click', () => {
                     const mode = btn.dataset.mode;
+                    selectedMode = mode;
 
-                    if (mode === 'jslinux') {
-                        // Show variant sub-picker; launch happens when a variant is chosen.
-                        modeOptions.forEach(b => b.style.borderColor = '#444');
-                        btn.style.borderColor = '#e94560';
+                    // Highlight selected mode
+                    modeOptions.forEach(b => b.style.borderColor = '#444');
+                    btn.style.borderColor = '#e94560';
+
+                    if (mode === 'vm') {
+                        // Embedded tinyemu — no extra config, launch immediately.
                         wsConfig.classList.remove('visible');
-                        jslinuxVariants.classList.add('visible');
-                    } else {
-                        // Show WebSocket config for VNC/telnet
-                        selectedMode = mode;
-                        wsConfig.classList.add('visible');
-                        jslinuxVariants.classList.remove('visible');
+                        modeDialog.style.display = 'none';
+                        launchYetty();
+                        return;
+                    }
 
-                        // Highlight selected mode
-                        modeOptions.forEach(b => b.style.borderColor = '#444');
-                        btn.style.borderColor = '#e94560';
-
-                        // Set default URL and note based on mode
-                        if (mode === 'vnc') {
-                            wsUrlInput.value = wsUrlInput.value || 'ws://localhost:5901';
-                            wsNote.innerHTML = 'Start VNC server: <code>./yetty --vnc-server</code><br>' +
-                                'Start WebSocket proxy: <code>./tools/vnc-websocket.sh</code>';
-                        } else if (mode === 'telnet') {
-                            wsUrlInput.value = wsUrlInput.value || 'ws://localhost:8024';
-                            wsNote.innerHTML = 'Start telnetd: <code>busybox telnetd -p 8023 -l /bin/bash</code><br>' +
-                                'Start WebSocket proxy: <code>./tools/telnet-websocket.sh</code>';
-                        }
+                    // VNC / telnet need a WebSocket URL.
+                    wsConfig.classList.add('visible');
+                    if (mode === 'vnc') {
+                        wsUrlInput.value = wsUrlInput.value || 'ws://localhost:5901';
+                        wsNote.innerHTML = 'Start VNC server: <code>./yetty --vnc-server</code><br>' +
+                            'Start WebSocket proxy: <code>./tools/vnc-websocket.sh</code>';
+                    } else if (mode === 'telnet') {
+                        wsUrlInput.value = wsUrlInput.value || 'ws://localhost:8024';
+                        wsNote.innerHTML = 'Start telnetd: <code>busybox telnetd -p 8023 -l /bin/bash</code><br>' +
+                            'Start WebSocket proxy: <code>./tools/telnet-websocket.sh</code>';
                     }
                 });
             });
@@ -474,11 +444,10 @@ busybox telnetd -p 8023 -l /bin/bash
         }
 
         const urlParams = getUrlParams();
-        const vmConfig = urlParams.vmconfig || 'alpine-x86_64.cfg';
 
         // Check if URL specifies mode directly (for bookmarking)
         // Examples:
-        //   ?mode=jslinux
+        //   ?mode=vm                              (embedded tinyemu VM)
         //   ?mode=vnc&wsurl=ws://localhost:5901
         //   ?mode=telnet&wsurl=ws://localhost:8024
         //   ?trace=1  (enable trace logging)
@@ -487,9 +456,6 @@ busybox telnetd -p 8023 -l /bin/bash
             if (urlParams.wsurl) {
                 wsUrl = urlParams.wsurl;
             }
-        }
-        if (urlParams.variant) {
-            jslinuxVariant = urlParams.variant;
         }
 
         // Set trace checkbox from URL param
@@ -510,10 +476,8 @@ busybox telnetd -p 8023 -l /bin/bash
                 env.YTRACE_DEFAULT_ON = 'yes';
             }
 
-            if (selectedMode === 'jslinux') {
-                env.YETTY_VM_CONFIG = vmConfig;
-                env.YETTY_MODE = 'jslinux';
-                env.YETTY_JSLINUX_VARIANT = jslinuxVariant;
+            if (selectedMode === 'vm') {
+                env.YETTY_MODE = 'vm';
             } else if (selectedMode === 'vnc') {
                 env.YETTY_MODE = 'vnc';
                 env.YETTY_VNC_CLIENT = wsUrl;

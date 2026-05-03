@@ -272,8 +272,6 @@ build-webasm-ytrace-debug: ## Build WebAssembly ytrace debug
 	@if [ ! -f "$(BUILD_DIR_WEBASM_YTRACE_DEBUG)/build.ninja" ]; then $(MAKE) config-webasm-ytrace-debug; fi
 	nix develop .#web --command bash -c 'cmake --build $(BUILD_DIR_WEBASM_YTRACE_DEBUG) --target yetty $(CMAKE_PARALLEL)'
 	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR_WEBASM_YTRACE_DEBUG)/
-	@$(MAKE) build-vm-tools BUILD_DIR=$(BUILD_DIR_WEBASM_YTRACE_DEBUG)
-	@bash build-tools/jslinux/alpine/build-vfsync.sh $(BUILD_DIR_WEBASM_YTRACE_DEBUG)
 	@$(MAKE) verify-webasm BUILD_DIR=$(BUILD_DIR_WEBASM_YTRACE_DEBUG)
 
 .PHONY: build-webasm-ytrace-release
@@ -281,8 +279,6 @@ build-webasm-ytrace-release: ## Build WebAssembly ytrace release (CDB generation
 	@if [ ! -f "$(BUILD_DIR_WEBASM_YTRACE_RELEASE)/build.ninja" ]; then $(MAKE) config-webasm-ytrace-release; fi
 	nix develop .#web --command bash -c 'cmake --build $(BUILD_DIR_WEBASM_YTRACE_RELEASE) --target yetty $(CMAKE_PARALLEL)'
 	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR_WEBASM_YTRACE_RELEASE)/
-	# @$(MAKE) build-vm-tools BUILD_DIR=$(BUILD_DIR_WEBASM_YTRACE_RELEASE)
-	@bash build-tools/jslinux/alpine/build-vfsync.sh $(BUILD_DIR_WEBASM_YTRACE_RELEASE)
 	@$(MAKE) verify-webasm BUILD_DIR=$(BUILD_DIR_WEBASM_YTRACE_RELEASE)
 
 .PHONY: config-webasm-yinfo-debug
@@ -298,8 +294,6 @@ build-webasm-yinfo-debug: ## Build WebAssembly yinfo debug (minimal logging)
 	@if [ ! -f "$(BUILD_DIR_WEBASM_YINFO_DEBUG)/build.ninja" ]; then $(MAKE) config-webasm-yinfo-debug; fi
 	nix develop .#web --command bash -c 'cmake --build $(BUILD_DIR_WEBASM_YINFO_DEBUG) --target yetty $(CMAKE_PARALLEL)'
 	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR_WEBASM_YINFO_DEBUG)/
-	@$(MAKE) build-vm-tools BUILD_DIR=$(BUILD_DIR_WEBASM_YINFO_DEBUG)
-	@bash build-tools/jslinux/alpine/build-vfsync.sh $(BUILD_DIR_WEBASM_YINFO_DEBUG)
 	@$(MAKE) verify-webasm BUILD_DIR=$(BUILD_DIR_WEBASM_YINFO_DEBUG)
 
 .PHONY: config-webasm-yinfo-release
@@ -315,18 +309,13 @@ build-webasm-yinfo-release: ## Build WebAssembly yinfo release (minimal logging)
 	@if [ ! -f "$(BUILD_DIR_WEBASM_YINFO_RELEASE)/build.ninja" ]; then $(MAKE) config-webasm-yinfo-release; fi
 	nix develop .#web --command bash -c 'cmake --build $(BUILD_DIR_WEBASM_YINFO_RELEASE) --target yetty $(CMAKE_PARALLEL)'
 	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR_WEBASM_YINFO_RELEASE)/
-	@$(MAKE) build-vm-tools BUILD_DIR=$(BUILD_DIR_WEBASM_YINFO_RELEASE)
-	@bash build-tools/jslinux/alpine/build-vfsync.sh $(BUILD_DIR_WEBASM_YINFO_RELEASE)
 	@$(MAKE) verify-webasm BUILD_DIR=$(BUILD_DIR_WEBASM_YINFO_RELEASE)
 
 .PHONY: verify-webasm
 verify-webasm: ## Post-build verification that all webasm artifacts are present
 	@echo "=== Post-build webasm verification ==="
-# TODO: add back when vm-tools ready: vm-tools/yecho vm-tools/ycat vm-tools/ybrowser
 	@FAIL=0; \
-	for f in yetty.js yetty.wasm yetty.data index.html serve.py \
-	         jslinux/vm-bridge.html jslinux/term-bridge.js \
-	         vfsync/u/os/yetty-alpine/head; do \
+	for f in yetty.js yetty.wasm yetty.data index.html serve.py; do \
 		if [ ! -e "$(BUILD_DIR)/$$f" ]; then \
 			echo "MISSING: $$f"; \
 			FAIL=1; \
@@ -337,10 +326,6 @@ verify-webasm: ## Post-build verification that all webasm artifacts are present
 		exit 1; \
 	fi; \
 	echo "All webasm artifacts verified OK"
-
-.PHONY: build-vm-tools
-build-vm-tools: ## Build static x86_64 tools for JSLinux VM via Docker Alpine
-	@bash build-tools/docker/build-vm-tools.sh $(BUILD_DIR)
 
 .PHONY: run-webasm-ytrace-debug
 run-webasm-ytrace-debug: build-webasm-ytrace-debug ## Serve WebAssembly ytrace debug build
