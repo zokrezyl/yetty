@@ -1,6 +1,6 @@
 steps:
   build:
-    image: yetty-dev
+    image: yetty-build
     commands:
       - apt-get update
       - apt-get install -y git git-lfs make cmake
