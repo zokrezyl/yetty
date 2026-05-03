@@ -72,7 +72,8 @@ typedef struct RISCVMachine {
   _Atomic uint64_t timecmp[MAX_CPUS]; /* timer compare per CPU */
   /* PLIC */
   uint32_t plic_pending_irq;
-  uint32_t plic_served_irq;
+  uint32_t plic_served_irq[MAX_CPUS * 2];  /* per-context (M + S per CPU) */
+  uint32_t plic_enable[MAX_CPUS * 2];      /* per-context enable bits */
   IRQSignal plic_irq[32]; /* IRQ 0 is not used */
   /* HTIF */
   uint64_t htif_tohost, htif_fromhost;
@@ -334,14 +335,37 @@ static void clint_write(void *opaque, uint32_t offset, uint32_t val,
 
 static void plic_update_mip(RISCVMachine *s) {
   int i;
-  uint32_t mask;
-  mask = s->plic_pending_irq & ~s->plic_served_irq;
+  uint32_t m_pending, s_pending;
+  static uint64_t call_count = 0;
+  call_count++;
   for (i = 0; i < s->num_cpus; i++) {
-    if (mask) {
-      riscv_cpu_set_mip(s->cpu_state[i], MIP_MEIP | MIP_SEIP);
+    int s_ctx = i * 2;
+    int m_ctx = i * 2 + 1;
+    m_pending = s->plic_pending_irq & s->plic_enable[m_ctx] & ~s->plic_served_irq[m_ctx];
+    s_pending = s->plic_pending_irq & s->plic_enable[s_ctx] & ~s->plic_served_irq[s_ctx];
+    uint32_t old_mip = riscv_cpu_get_mip(s->cpu_state[i]);
+    if ((call_count < 100) || (call_count % 10000) == 0 || m_pending || s_pending) {
+      ydebug("SYNC: PLIC_UPD cpu%d pend=0x%x en_s=0x%x en_m=0x%x srv_s=0x%x srv_m=0x%x m_pend=0x%x s_pend=0x%x",
+             i, s->plic_pending_irq, s->plic_enable[s_ctx], s->plic_enable[m_ctx],
+             s->plic_served_irq[s_ctx], s->plic_served_irq[m_ctx], m_pending, s_pending);
+    }
+    if (m_pending) {
+      riscv_cpu_set_mip(s->cpu_state[i], MIP_MEIP);
+      ydebug("SYNC: PLIC cpu%d MEIP SET pend=0x%x mip 0x%x->0x%x",
+             i, m_pending, old_mip, riscv_cpu_get_mip(s->cpu_state[i]));
+      ydebug("SYNC: PLIC cpu%d WAKEUP_MEIP pd=%d", i, riscv_cpu_get_power_down(s->cpu_state[i]));
       smp_wakeup_cpu(s->smp, i);
     } else {
-      riscv_cpu_reset_mip(s->cpu_state[i], MIP_MEIP | MIP_SEIP);
+      riscv_cpu_reset_mip(s->cpu_state[i], MIP_MEIP);
+    }
+    if (s_pending) {
+      riscv_cpu_set_mip(s->cpu_state[i], MIP_SEIP);
+      ydebug("SYNC: PLIC cpu%d SEIP SET pend=0x%x mip 0x%x->0x%x",
+             i, s_pending, old_mip, riscv_cpu_get_mip(s->cpu_state[i]));
+      ydebug("SYNC: PLIC cpu%d WAKEUP_SEIP pd=%d", i, riscv_cpu_get_power_down(s->cpu_state[i]));
+      smp_wakeup_cpu(s->smp, i);
+    } else {
+      riscv_cpu_reset_mip(s->cpu_state[i], MIP_SEIP);
     }
   }
 }
@@ -349,30 +373,56 @@ static void plic_update_mip(RISCVMachine *s) {
 #define PLIC_HART_BASE 0x200000
 #define PLIC_HART_SIZE 0x1000
 
+#define PLIC_ENABLE_BASE 0x2000
+#define PLIC_ENABLE_STRIDE 0x80
+
 static uint32_t plic_read(void *opaque, uint32_t offset, int size_log2) {
   RISCVMachine *s = opaque;
   uint32_t val, mask;
-  int i;
+  int i, context, local_off;
   PLIC_LOCK();
   assert(size_log2 == 2);
-  switch (offset) {
-  case PLIC_HART_BASE:
-    val = 0;
-    break;
-  case PLIC_HART_BASE + 4:
-    mask = s->plic_pending_irq & ~s->plic_served_irq;
-    if (mask != 0) {
-      i = ctz32(mask);
-      s->plic_served_irq |= 1 << i;
-      plic_update_mip(s);
-      val = i + 1;
+
+  /* Enable registers: 0x2000 + context * 0x80, each context has 32 words.
+   * TinyEMU only supports 31 IRQs, so only word 0 (offset 0) matters. */
+  if (offset >= PLIC_ENABLE_BASE && offset < PLIC_HART_BASE) {
+    uint32_t ctx_offset = offset - PLIC_ENABLE_BASE;
+    context = ctx_offset / PLIC_ENABLE_STRIDE;
+    uint32_t word_offset = (ctx_offset % PLIC_ENABLE_STRIDE) / 4;
+    if (context < s->num_cpus * 2 && word_offset == 0) {
+      val = s->plic_enable[context];
+    } else {
+      val = 0;  /* Out of bounds or word 1+ (no IRQs there) */
+    }
+  }
+  /* Per-hart context registers at 0x200000 + context * 0x1000 */
+  else if (offset >= PLIC_HART_BASE) {
+    context = (offset - PLIC_HART_BASE) / PLIC_HART_SIZE;
+    local_off = offset & (PLIC_HART_SIZE - 1);
+    if (context < s->num_cpus * 2) {
+      if (local_off == 0) {
+        /* Threshold register */
+        val = 0;
+      } else if (local_off == 4) {
+        /* Claim register - return highest pending IRQ for THIS context */
+        /* PLIC bit layout: bit N = interrupt source N, so return bit position directly */
+        mask = s->plic_pending_irq & s->plic_enable[context] & ~s->plic_served_irq[context];
+        if (mask != 0) {
+          i = ctz32(mask);
+          s->plic_served_irq[context] |= 1 << i;
+          plic_update_mip(s);
+          val = i;  /* bit N = IRQ N */
+        } else {
+          val = 0;
+        }
+      } else {
+        val = 0;
+      }
     } else {
       val = 0;
     }
-    break;
-  default:
+  } else {
     val = 0;
-    break;
   }
   PLIC_UNLOCK();
   return val;
@@ -381,19 +431,41 @@ static uint32_t plic_read(void *opaque, uint32_t offset, int size_log2) {
 static void plic_write(void *opaque, uint32_t offset, uint32_t val,
                        int size_log2) {
   RISCVMachine *s = opaque;
+  int context, local_off;
 
   PLIC_LOCK();
   assert(size_log2 == 2);
-  switch (offset) {
-  case PLIC_HART_BASE + 4:
-    val--;
-    if (val < 32) {
-      s->plic_served_irq &= ~(1 << val);
+
+  /* Enable registers: 0x2000 + context * 0x80, each context has 32 words.
+   * TinyEMU only supports 31 IRQs, so only word 0 (offset 0) matters. */
+  if (offset >= PLIC_ENABLE_BASE && offset < PLIC_HART_BASE) {
+    uint32_t ctx_offset = offset - PLIC_ENABLE_BASE;
+    context = ctx_offset / PLIC_ENABLE_STRIDE;
+    uint32_t word_offset = (ctx_offset % PLIC_ENABLE_STRIDE) / 4;
+    ydebug("SYNC: PLIC_WR_EN off=0x%x ctx=%d word=%d val=0x%x", offset, context, word_offset, val);
+    if (context < s->num_cpus * 2 && word_offset == 0) {
+      s->plic_enable[context] = val;
+      ydebug("SYNC: PLIC_EN_SET ctx=%d val=0x%x", context, val);
       plic_update_mip(s);
     }
-    break;
-  default:
-    break;
+    /* Ignore writes to word 1+ (no IRQs there for TinyEMU) */
+  }
+  /* Per-hart context registers at 0x200000 + context * 0x1000 */
+  else if (offset >= PLIC_HART_BASE) {
+    context = (offset - PLIC_HART_BASE) / PLIC_HART_SIZE;
+    local_off = offset & (PLIC_HART_SIZE - 1);
+    if (context < s->num_cpus * 2) {
+      if (local_off == 0) {
+        /* Threshold register - ignore */
+      } else if (local_off == 4) {
+        /* Complete register - mark IRQ as no longer being serviced */
+        /* PLIC bit layout: bit N = IRQ N, so use val directly (no decrement) */
+        if (val > 0 && val < 32) {
+          s->plic_served_irq[context] &= ~(1 << val);
+          plic_update_mip(s);
+        }
+      }
+    }
   }
   PLIC_UNLOCK();
 }
@@ -403,7 +475,9 @@ static void plic_set_irq(void *opaque, int irq_num, int state) {
   uint32_t mask;
 
   PLIC_LOCK();
-  mask = 1 << (irq_num - 1);
+  /* PLIC bit layout: bit N = interrupt source N (source 0 is reserved) */
+  mask = 1 << irq_num;
+  ydebug("PLIC: set_irq irq=%d state=%d pending=0x%x mask=0x%x", irq_num, state, s->plic_pending_irq, mask);
   if (state)
     s->plic_pending_irq |= mask;
   else
@@ -604,13 +678,18 @@ static void fdt_prop_tab_str(FDTState *s, const char *prop_name, ...) {
   free(tab);
 }
 
-/* write the FDT to 'dst1'. return the FDT size in bytes */
-int fdt_output(FDTState *s, uint8_t *dst) {
+/* write the FDT to 'dst1'. return the FDT size in bytes.
+ * `reserve` is an array of `reserve_count` {addr,size} u64 pairs to emit
+ * in the /memreserve/ table — the kernel keeps its hands off these
+ * regions. Used to keep Linux's page allocator out of the OpenSBI
+ * runtime so virtio-blk DMA can't clobber it. */
+int fdt_output(FDTState *s, uint8_t *dst,
+               const uint64_t (*reserve)[2], int reserve_count) {
   struct fdt_header *h;
   struct fdt_reserve_entry *re;
   int dt_struct_size;
   int dt_strings_size;
-  int pos;
+  int pos, i;
 
   assert(s->open_node_count == 0);
 
@@ -638,8 +717,14 @@ int fdt_output(FDTState *s, uint8_t *dst) {
     dst[pos++] = 0;
   }
   h->off_mem_rsvmap = cpu_to_be32(pos);
+  for (i = 0; i < reserve_count; i++) {
+    put_be64(dst + pos,     reserve[i][0]);
+    put_be64(dst + pos + 8, reserve[i][1]);
+    pos += sizeof(struct fdt_reserve_entry);
+  }
+  /* terminator (zero address + zero size, big-endian — but zero is the same) */
   re = (struct fdt_reserve_entry *)(dst + pos);
-  re->address = 0; /* no reserved entry */
+  re->address = 0;
   re->size = 0;
   pos += sizeof(struct fdt_reserve_entry);
 
@@ -664,7 +749,8 @@ void fdt_end(FDTState *s) {
 
 static int riscv_build_fdt(RISCVMachine *m, uint8_t *dst, uint64_t kernel_start,
                            uint64_t kernel_size, uint64_t initrd_start,
-                           uint64_t initrd_size, const char *cmd_line) {
+                           uint64_t initrd_size, const char *cmd_line,
+                           uint64_t bios_addr, uint64_t bios_size) {
   FDTState *s;
   int size, max_xlen, i, j, cur_phandle, plic_phandle;
   int intc_phandle[MAX_CPUS];
@@ -833,7 +919,21 @@ static int riscv_build_fdt(RISCVMachine *m, uint8_t *dst, uint64_t kernel_start,
 
   fdt_end_node(s); /* / */
 
-  size = fdt_output(s, dst);
+  /* Reserve the entire pre-kernel region [bios_addr, kernel_start) via
+   * /memreserve/. Without this, Linux can hand a low physical address
+   * (e.g. 0x80000000) to a virtio-blk DMA target and clobber OpenSBI
+   * runtime code or scratch mid-flight — the next SBI ECALL (timer,
+   * IPI, console) then hangs the guest. Reproduced with the extended
+   * Alpine rootfs, whose larger binaries trigger 1.4 MB virtio-blk
+   * reads into contiguous bounce buffers. Reserving only the static
+   * bios image is not enough: OpenSBI's runtime scratch + stacks live
+   * just above the static image, so cover the full 2 MiB up to the
+   * kernel base. */
+  uint64_t reserve_size = (kernel_start > bios_addr) ?
+      (kernel_start - bios_addr) : bios_size;
+  uint64_t reserve_tab[1][2] = {{bios_addr, reserve_size}};
+  size = fdt_output(s, dst, bios_size > 0 ? reserve_tab : NULL,
+                    bios_size > 0 ? 1 : 0);
 #if 0
     {
         FILE *f;
@@ -933,7 +1033,7 @@ static void copy_bios(RISCVMachine *s, const uint8_t *buf, int buf_len,
   ydebug("copy_bios: building FDT at 0x%lx", (unsigned long)fdt_addr);
   riscv_build_fdt(s, ram_ptr + fdt_addr, RAM_BASE_ADDR + kernel_base,
                   kernel_size, RAM_BASE_ADDR + initrd_base, initrd_size,
-                  cmd_line);
+                  cmd_line, RAM_BASE_ADDR + bios_base, bios_size);
 
   /* jump_addr = 0x80000000 */
   q = (uint32_t *)(ram_ptr + 0x1000);

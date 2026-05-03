@@ -641,10 +641,7 @@ FSDevice *fs_disk_init(const char *root_path)
     FSDeviceDisk *fs;
     struct stat st;
 
-    /* stat() (follows symlinks) so callers can point root_path at a
-     * symlink to the actual rootfs directory. */
-    if (stat(root_path, &st) != 0)
-        return NULL;
+    lstat(root_path, &st);
     if (!S_ISDIR(st.st_mode))
         return NULL;
 

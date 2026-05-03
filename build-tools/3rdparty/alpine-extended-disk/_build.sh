@@ -63,7 +63,7 @@ CACHE_DIR="${CACHE_DIR:-$HOME/.cache/yetty-3rdparty}"
 ALPINE_VERSION="${ALPINE_VERSION:-3.23}"
 ALPINE_RELEASE="${ALPINE_RELEASE:-3.23.4}"
 ALPINE_ARCH="${ALPINE_ARCH:-riscv64}"
-IMAGE_MIB="${IMAGE_MIB:-500}"
+IMAGE_MIB="${IMAGE_MIB:-600}"
 QEMU_TIMEOUT_SEC="${QEMU_TIMEOUT_SEC:-1800}"
 URL_BASE="${YETTY_3RDPARTY_URL_BASE:-https://github.com/zokrezyl/yetty/releases/download}"
 
@@ -335,7 +335,7 @@ mkdir -p "$STAGE"
 # .br up pre-compressed, runtime path mode gets a decompressed copy
 # alongside via 3rdparty-fetch.cmake. Raw ext4 with mostly-zeroed unused
 # blocks compresses very well even at this size.
-: "${BROTLI_QUALITY:=11}"
+: "${BROTLI_QUALITY:=6}"
 echo "==> brotli alpine-extended-rootfs.img (quality $BROTLI_QUALITY)"
 in_size="$(stat -c%s "$IMG" 2>/dev/null || stat -f%z "$IMG")"
 brotli -q "$BROTLI_QUALITY" -f -o "$STAGE/alpine-extended-rootfs.img.br" "$IMG"

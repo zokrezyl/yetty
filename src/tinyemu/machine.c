@@ -424,10 +424,10 @@ static void config_additional_file_load(VMConfigLoadState *s);
 static void config_additional_file_load_cb(void *opaque,
                                            uint8_t *buf, int buf_len);
 
-/* Expand $NAME and ${NAME} environment-variable references inside `in`.
- * Returns a malloc'd string. Unknown vars expand to empty. A literal `$$`
- * is preserved as a single `$`. Used by get_file_path so .cfg paths can
- * reference platform locations like $YETTY_RUNTIME_DIR/yemu/kernel.bin. */
+/* Expand $NAME and ${NAME} environment-variable references in `in`.
+ * Returns a malloc'd string. Unknown vars expand to empty. `$$` -> `$`.
+ * Lets .cfg paths reference platform locations like
+ * $YETTY_RUNTIME_DIR/yemu/kernel.bin (see assets/yemu/temu/temu-temu.cfg). */
 static char *expand_env_vars(const char *in)
 {
     size_t cap = strlen(in) + 1;
@@ -441,14 +441,12 @@ static char *expand_env_vars(const char *in)
             out[len++] = *p++;
             continue;
         }
-        /* $$ -> $ */
         if (p[1] == '$') {
             if (len + 1 >= cap) { cap *= 2; out = realloc(out, cap); }
             out[len++] = '$';
             p += 2;
             continue;
         }
-        /* parse ${NAME} or $NAME */
         const char *name_start;
         const char *name_end;
         const char *after;
@@ -456,7 +454,6 @@ static char *expand_env_vars(const char *in)
             name_start = p + 2;
             name_end = strchr(name_start, '}');
             if (!name_end) {
-                /* unterminated — copy literally */
                 if (len + 1 >= cap) { cap *= 2; out = realloc(out, cap); }
                 out[len++] = *p++;
                 continue;
@@ -472,7 +469,6 @@ static char *expand_env_vars(const char *in)
                 name_end++;
             }
             if (name_end == name_start) {
-                /* lone $ followed by non-identifier — copy literally */
                 if (len + 1 >= cap) { cap *= 2; out = realloc(out, cap); }
                 out[len++] = *p++;
                 continue;

@@ -441,95 +441,32 @@ static EthernetDevice *tun_open(const char *ifname) {
 
 static Slirp *slirp_state;
 
-/* Pending host->guest packet queue.
- *
- * Slirp delivers some replies (notably ARP, ICMP echo replies, TCP RSTs)
- * synchronously from inside slirp_input() — i.e. while we are still
- * executing the guest's QUEUE_NOTIFY MMIO write that triggered the
- * outbound packet. If we hand the reply straight to the virtio-net RX
- * queue, both the TX-completion irq and the RX-arrival irq would be
- * raised in the same MMIO tick, and our PLIC sees a single edge: the
- * guest ACKs once, processes whichever queue it polls first, and the
- * other event is silently lost (e.g. ARP replies disappear, networking
- * never gets going).
- *
- * Decoupling: slirp_output() enqueues here; the queue is drained from
- * slirp_select_poll1() — i.e. on the next main-loop iteration, after
- * the guest has had a chance to see and ACK the TX-completion irq. The
- * RX delivery then raises a fresh, distinct edge. */
-typedef struct PendingPkt {
-  struct PendingPkt *next;
-  int len;
-  uint8_t data[];
-} PendingPkt;
-
-static PendingPkt *pending_head;
-static PendingPkt *pending_tail;
-
-static void pending_push(const uint8_t *pkt, int len) {
-  PendingPkt *p = malloc(sizeof(*p) + len);
-  if (!p) return;
-  p->next = NULL;
-  p->len = len;
-  memcpy(p->data, pkt, len);
-  if (pending_tail) pending_tail->next = p;
-  else pending_head = p;
-  pending_tail = p;
-}
-
-static void pending_drain(EthernetDevice *net) {
-  while (pending_head && net->device_can_write_packet(net)) {
-    PendingPkt *p = pending_head;
-    pending_head = p->next;
-    if (!pending_head) pending_tail = NULL;
-    fprintf(stderr, "[slirp] DRAIN deliver len=%d proto=0x%04x\n", p->len,
-            (p->len >= 14) ? (p->data[12] << 8 | p->data[13]) : 0);
-    net->device_write_packet(net, p->data, p->len);
-    free(p);
-  }
-  if (pending_head) {
-    fprintf(stderr, "[slirp] DRAIN stuck, %d head, can_write=%d\n",
-            (int)(pending_head!=NULL),
-            net->device_can_write_packet(net));
-  }
-}
-
 static void slirp_write_packet(EthernetDevice *net, const uint8_t *buf,
                                int len) {
   Slirp *slirp_state = net->opaque;
-  fprintf(stderr, "[slirp] guest->host TX len=%d proto=0x%04x\n", len,
-          (len >= 14) ? (buf[12] << 8 | buf[13]) : 0);
   slirp_input(slirp_state, buf, len);
 }
 
 int slirp_can_output(void *opaque) {
-  /* Always accept — we buffer in pending_push() and drain later from
-   * slirp_select_poll1(). Returning the live virtio queue state would
-   * cause slirp to drop replies on the floor whenever the guest's RX
-   * ring momentarily lacks free descriptors (common right after a TX
-   * burst, before the guest has refilled). */
-  (void)opaque;
-  return 1;
+  EthernetDevice *net = opaque;
+  return net->device_can_write_packet(net);
 }
 
 void slirp_output(void *opaque, const uint8_t *pkt, int pkt_len) {
-  (void)opaque;
-  pending_push(pkt, pkt_len);
+  EthernetDevice *net = opaque;
+  return net->device_write_packet(net, pkt, pkt_len);
 }
 
 static void slirp_select_fill1(EthernetDevice *net, int *pfd_max, fd_set *rfds,
                                fd_set *wfds, fd_set *efds, int *pdelay) {
   Slirp *slirp_state = net->opaque;
   slirp_select_fill(slirp_state, pfd_max, rfds, wfds, efds);
-  /* Wake immediately if we still have queued packets to deliver. */
-  if (pending_head && *pdelay > 0) *pdelay = 0;
 }
 
 static void slirp_select_poll1(EthernetDevice *net, fd_set *rfds, fd_set *wfds,
                                fd_set *efds, int select_ret) {
   Slirp *slirp_state = net->opaque;
   slirp_select_poll(slirp_state, rfds, wfds, efds, (select_ret <= 0));
-  pending_drain(net);
 }
 
 static EthernetDevice *slirp_open(void) {
