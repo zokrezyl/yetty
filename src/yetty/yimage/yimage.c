@@ -1,279 +1,170 @@
+/*
+ * yimage.c — high-level convenience wrappers around the auto-generated
+ * yimage-gen.c API. See include/yetty/yimage/yimage.h for the contract.
+ *
+ * Compute-shader resampling is deferred (see scale-image.wgsl in this
+ * directory). Pixels go to the atlas at source resolution; the atlas
+ * sampler does the runtime bilinear at the displayed size.
+ */
+
 #include <yetty/yimage/yimage.h>
+
+#include <yetty/yface/yface.h>
+#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ycore/types.h>
+#include <yetty/yterm/osc-codes.h>
+
+#include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-/*=============================================================================
- * Internal struct
- *===========================================================================*/
+#include <stb_image.h>
 
-struct yetty_yimage {
-    /* Pixel data (RGBA8, owned) */
-    uint8_t *pixels;
-    uint32_t pixel_width;
-    uint32_t pixel_height;
-
-    /* Display bounds in ypaint coordinates */
-    float x, y, w, h;
-
-    /* View properties */
-    float zoom;
-    float center_x;
-    float center_y;
-    uint32_t filter;
-
-    /* GPU resource set */
-    struct yetty_ypaint_core_gpu_resource_set rs;
-    bool dirty;
-};
-
-/*=============================================================================
- * Lifecycle
- *===========================================================================*/
-
-struct yetty_yimage_result yetty_yimage_create(void)
+struct yetty_ypaint_core_buffer_result yetty_yimage_render(
+    const uint8_t *image_bytes, size_t len,
+    const struct yetty_yimage_render_config *config)
 {
-    struct yetty_yimage *img = calloc(1, sizeof(struct yetty_yimage));
-    if (!img) {
-        return YETTY_ERR(yetty_yimage, "allocation failed");
+    if (!image_bytes || len == 0) {
+        return YETTY_ERR(yetty_ypaint_core_buffer, "yimage: image_bytes is NULL/empty");
     }
 
-    img->zoom = 1.0f;
-    img->center_x = 0.5f;
-    img->center_y = 0.5f;
-    img->filter = YETTY_YIMAGE_FILTER_BILINEAR;
-    img->dirty = true;
-
-    /* Initialize gpu_resource_set */
-    strncpy(img->rs.namespace, "yimage", YETTY_YRENDER_NAME_MAX - 1);
-
-    /* Texture slot 0: image pixels */
-    struct yetty_yrender_texture *tex = &img->rs.textures[0];
-    strncpy(tex->name, "image_tex", YETTY_YRENDER_NAME_MAX - 1);
-    strncpy(tex->wgsl_type, "texture_2d<f32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
-    strncpy(tex->sampler_name, "image_sampler", YETTY_YRENDER_NAME_MAX - 1);
-    tex->format = 0x12;      /* WGPUTextureFormat_RGBA8Unorm */
-    tex->sampler_filter = 1; /* WGPUFilterMode_Linear */
-    img->rs.texture_count = 1;
-
-    /* Uniforms */
-    struct yetty_yrender_uniform *u;
-
-    u = &img->rs.uniforms[0];
-    strncpy(u->name, "image_bounds", YETTY_YRENDER_NAME_MAX - 1);
-    u->type = YETTY_YRENDER_UNIFORM_VEC4;
-
-    u = &img->rs.uniforms[1];
-    strncpy(u->name, "image_size", YETTY_YRENDER_NAME_MAX - 1);
-    u->type = YETTY_YRENDER_UNIFORM_VEC2;
-
-    u = &img->rs.uniforms[2];
-    strncpy(u->name, "image_zoom", YETTY_YRENDER_NAME_MAX - 1);
-    u->type = YETTY_YRENDER_UNIFORM_F32;
-    u->f32 = 1.0f;
-
-    u = &img->rs.uniforms[3];
-    strncpy(u->name, "image_center", YETTY_YRENDER_NAME_MAX - 1);
-    u->type = YETTY_YRENDER_UNIFORM_VEC2;
-    u->vec2[0] = 0.5f;
-    u->vec2[1] = 0.5f;
-
-    img->rs.uniform_count = 4;
-
-    return YETTY_OK(yetty_yimage, img);
-}
-
-void yetty_yimage_destroy(struct yetty_yimage *img)
-{
-    if (!img) {
-        return;
-    }
-    free(img->pixels);
-    free(img);
-}
-
-/*=============================================================================
- * Pixel data
- *===========================================================================*/
-
-struct yetty_ycore_void_result yetty_yimage_set_pixels(struct yetty_yimage *img,
-                                                       const uint8_t *pixels, uint32_t width,
-                                                       uint32_t height)
-{
-    if (!img) {
-        return YETTY_ERR(yetty_ycore_void, "img is NULL");
-    }
-    if (!pixels || width == 0 || height == 0) {
-        return YETTY_ERR(yetty_ycore_void, "invalid pixel data");
+    /* Decode via stb_image — force 4-channel RGBA8. */
+    int w = 0, h = 0, channels = 0;
+    stbi_uc *pixels = stbi_load_from_memory(image_bytes, (int)len, &w, &h, &channels, 4);
+    if (!pixels) {
+        return YETTY_ERR(yetty_ypaint_core_buffer, stbi_failure_reason());
     }
 
-    size_t size = (size_t)width * height * 4;
-    uint8_t *copy = realloc(img->pixels, size);
-    if (!copy) {
-        return YETTY_ERR(yetty_ycore_void, "allocation failed");
+    /* Resolve config defaults — fall back to source dimensions when caller
+     * didn't pin a display size. */
+    struct yetty_yimage_uniforms u = {0};
+    u.bounds_x = config ? config->bounds_x : 0.0f;
+    u.bounds_y = config ? config->bounds_y : 0.0f;
+    u.bounds_w = (config && config->bounds_w > 0.0f) ? config->bounds_w : (float)w;
+    u.bounds_h = (config && config->bounds_h > 0.0f) ? config->bounds_h : (float)h;
+    u.image_w = (uint32_t)w;
+    u.image_h = (uint32_t)h;
+
+    /* Pixels treated as packed RGBA8 u32 — one word per pixel, row-major. */
+    struct yetty_yimage_buffers bufs = {
+        .pixels = (const uint32_t *)pixels,
+        .pixels_len = (size_t)w * (size_t)h,
+    };
+
+    size_t required = yetty_yimage_uniforms_serialized_size(&u, &bufs);
+    uint8_t *prim_buf = malloc(required);
+    if (!prim_buf) {
+        stbi_image_free(pixels);
+        return YETTY_ERR(yetty_ypaint_core_buffer, "yimage: prim alloc failed");
+    }
+    struct yetty_ycore_size_result ser =
+        yetty_yimage_uniforms_serialize(&u, &bufs, prim_buf, required);
+    /* The serialize call has copied pixels into prim_buf; stbi data is no
+     * longer referenced. */
+    stbi_image_free(pixels);
+    if (YETTY_IS_ERR(ser)) {
+        free(prim_buf);
+        return YETTY_ERR(yetty_ypaint_core_buffer, "yimage: serialize failed", ser);
     }
 
-    memcpy(copy, pixels, size);
-    img->pixels = copy;
-    img->pixel_width = width;
-    img->pixel_height = height;
-    img->dirty = true;
-
-    return YETTY_OK_VOID();
-}
-
-uint32_t yetty_yimage_pixel_width(const struct yetty_yimage *img)
-{
-    return img ? img->pixel_width : 0;
-}
-
-uint32_t yetty_yimage_pixel_height(const struct yetty_yimage *img)
-{
-    return img ? img->pixel_height : 0;
-}
-
-/*=============================================================================
- * Spatial
- *===========================================================================*/
-
-void yetty_yimage_set_bounds(struct yetty_yimage *img, float x, float y, float width, float height)
-{
-    if (!img) {
-        return;
-    }
-    img->x = x;
-    img->y = y;
-    img->w = width;
-    img->h = height;
-    img->dirty = true;
-}
-
-void yetty_yimage_get_aabb(const struct yetty_yimage *img, float *min_x, float *min_y, float *max_x,
-                           float *max_y)
-{
-    if (!img) {
-        *min_x = *min_y = *max_x = *max_y = 0;
-        return;
-    }
-    *min_x = img->x;
-    *min_y = img->y;
-    *max_x = img->x + img->w;
-    *max_y = img->y + img->h;
-}
-
-/*=============================================================================
- * Display properties
- *===========================================================================*/
-
-void yetty_yimage_set_zoom(struct yetty_yimage *img, float zoom)
-{
-    if (!img) {
-        return;
-    }
-    img->zoom = zoom;
-    img->dirty = true;
-}
-
-float yetty_yimage_get_zoom(const struct yetty_yimage *img)
-{
-    return img ? img->zoom : 1.0f;
-}
-
-void yetty_yimage_set_pan(struct yetty_yimage *img, float center_x, float center_y)
-{
-    if (!img) {
-        return;
-    }
-    img->center_x = center_x;
-    img->center_y = center_y;
-    img->dirty = true;
-}
-
-void yetty_yimage_set_filter(struct yetty_yimage *img, uint32_t filter)
-{
-    if (!img) {
-        return;
-    }
-    img->filter = filter;
-    img->rs.textures[0].sampler_filter = (filter == YETTY_YIMAGE_FILTER_BILINEAR) ? 1 : 0;
-    img->dirty = true;
-}
-
-/*=============================================================================
- * GPU Resource Set
- *===========================================================================*/
-
-struct yetty_yrender_gpu_resource_set_result yetty_yimage_get_gpu_resource_set(
-    struct yetty_yimage *img)
-{
-    if (!img) {
-        return YETTY_ERR(yetty_yrender_gpu_resource_set, "img is NULL");
+    struct yetty_ypaint_core_buffer_config bcfg = {
+        .scene_min_x = 0.0f,
+        .scene_min_y = 0.0f,
+        .scene_max_x = u.bounds_x + u.bounds_w,
+        .scene_max_y = u.bounds_y + u.bounds_h,
+    };
+    struct yetty_ypaint_core_buffer_result br =
+        yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
+    if (YETTY_IS_ERR(br)) {
+        free(prim_buf);
+        return YETTY_ERR(yetty_ypaint_core_buffer, "yimage: ypaint buffer create failed", br);
     }
 
-    if (img->dirty) {
-        /* Update texture */
-        struct yetty_yrender_texture *tex = &img->rs.textures[0];
-        tex->data = img->pixels;
-        tex->width = img->pixel_width;
-        tex->height = img->pixel_height;
-        tex->dirty = 1;
-
-        /* Update uniforms */
-        img->rs.uniforms[0].vec4[0] = img->x;
-        img->rs.uniforms[0].vec4[1] = img->y;
-        img->rs.uniforms[0].vec4[2] = img->w;
-        img->rs.uniforms[0].vec4[3] = img->h;
-
-        img->rs.uniforms[1].vec2[0] = (float)img->pixel_width;
-        img->rs.uniforms[1].vec2[1] = (float)img->pixel_height;
-
-        img->rs.uniforms[2].f32 = img->zoom;
-
-        img->rs.uniforms[3].vec2[0] = img->center_x;
-        img->rs.uniforms[3].vec2[1] = img->center_y;
+    struct yetty_ypaint_core_id_result idr =
+        yetty_ypaint_core_buffer_add_prim(br.value, prim_buf, required);
+    free(prim_buf);
+    if (idr.error != YPAINT_OK) {
+        yetty_ypaint_core_buffer_destroy(br.value);
+        return YETTY_ERR(yetty_ypaint_core_buffer, "yimage: ypaint add_prim failed");
     }
 
-    return YETTY_OK(yetty_yrender_gpu_resource_set, &img->rs);
+    return YETTY_OK(yetty_ypaint_core_buffer, br.value);
 }
 
-bool yetty_yimage_is_dirty(const struct yetty_yimage *img)
+struct yetty_ypaint_core_buffer_result yetty_yimage_render_path(
+    const char *path, const struct yetty_yimage_render_config *config)
 {
-    return img ? img->dirty : false;
-}
-
-void yetty_yimage_clear_dirty(struct yetty_yimage *img)
-{
-    if (img) {
-        img->dirty = false;
-    }
-}
-
-/*=============================================================================
- * Primitive serialization
- *===========================================================================*/
-
-uint32_t yetty_yimage_serialize_prim_header(struct yetty_yimage *img, uint32_t image_index,
-                                            uint32_t col, uint32_t rolling_row, uint32_t z_order,
-                                            uint32_t *buffer, uint32_t buffer_capacity)
-{
-    if (!img || !buffer || buffer_capacity < YETTY_YIMAGE_PRIM_HEADER_WORDS) {
-        return 0;
+    if (!path) {
+        return YETTY_ERR(yetty_ypaint_core_buffer, "yimage_render_path: path is NULL");
     }
 
-    uint32_t packed_offset = col | (rolling_row << 16);
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return YETTY_ERR(yetty_ypaint_core_buffer, "yimage_render_path: fopen failed");
+    }
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return YETTY_ERR(yetty_ypaint_core_buffer, "yimage_render_path: fseek failed");
+    }
+    long size = ftell(f);
+    if (size <= 0) {
+        fclose(f);
+        return YETTY_ERR(yetty_ypaint_core_buffer, "yimage_render_path: empty or unreadable");
+    }
+    rewind(f);
+    uint8_t *bytes = malloc((size_t)size);
+    if (!bytes) {
+        fclose(f);
+        return YETTY_ERR(yetty_ypaint_core_buffer, "yimage_render_path: malloc failed");
+    }
+    size_t nread = fread(bytes, 1, (size_t)size, f);
+    fclose(f);
+    if (nread != (size_t)size) {
+        free(bytes);
+        return YETTY_ERR(yetty_ypaint_core_buffer, "yimage_render_path: short read");
+    }
 
-    buffer[0] = packed_offset;
+    struct yetty_ypaint_core_buffer_result r =
+        yetty_yimage_render(bytes, (size_t)size, config);
+    free(bytes);
+    return r;
+}
 
-    uint32_t type_id = YETTY_YIMAGE_PRIM_TYPE_ID;
-    memcpy(&buffer[1], &type_id, sizeof(type_id));
+struct yetty_ycore_size_result yetty_yimage_osc_bin_emit(
+    const struct yetty_ypaint_core_buffer *buffer, FILE *out)
+{
+    if (!buffer || !out) {
+        return YETTY_ERR(yetty_ycore_size, "yimage_osc_bin_emit: NULL buffer or out");
+    }
+    const uint8_t *raw = NULL;
+    size_t raw_size =
+        yetty_ypaint_core_buffer_serialize((struct yetty_ypaint_core_buffer *)buffer, &raw);
+    if (raw_size == 0 || !raw) {
+        return YETTY_ERR(yetty_ycore_size, "yimage_osc_bin_emit: empty serialize");
+    }
 
-    buffer[2] = z_order;
+    struct yetty_yface_bin_meta meta = {
+        .magic = YETTY_YFACE_BIN_MAGIC,
+        .version = YETTY_YFACE_BIN_VERSION,
+        .compressed = YETTY_YFACE_COMP_LZ4F,
+        .compression_algo = 0,
+        .raw_size = raw_size,
+        .reserved = {0, 0},
+    };
+    struct yetty_ycore_buffer envelope = {0};
+    struct yetty_ycore_void_result r = yetty_yface_emit(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
+                                                        &meta, sizeof(meta), raw, raw_size,
+                                                        &envelope);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_buffer_destroy(&envelope);
+        return YETTY_ERR(yetty_ycore_size, "yimage_osc_bin_emit: yface_emit failed", r);
+    }
 
-    memcpy(&buffer[3], &img->x, sizeof(float));
-    memcpy(&buffer[4], &img->y, sizeof(float));
-    memcpy(&buffer[5], &img->w, sizeof(float));
-    memcpy(&buffer[6], &img->h, sizeof(float));
-
-    buffer[7] = image_index;
-
-    return YETTY_YIMAGE_PRIM_HEADER_WORDS;
+    size_t written = 0;
+    if (envelope.size > 0) {
+        written = fwrite(envelope.data, 1, envelope.size, out);
+    }
+    yetty_ycore_buffer_destroy(&envelope);
+    return YETTY_OK(yetty_ycore_size, written);
 }

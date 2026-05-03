@@ -1,0 +1,64 @@
+# YImage complex primitive schema
+# Generator produces: C serializer, WGSL accessors, GPU resource set logic,
+# and routes the `pixels` buffer's bytes into the `image` texture (atlas-
+# packed, hardware-bilinear).
+#
+# Compute-shader resampling (scale-image.wgsl) is NOT wired today — the
+# shader samples the source-resolution texture directly. When the compute
+# pass is added back, it will pre-scale source pixels into a smaller
+# texture before the texture is fed to the atlas.
+
+name: yimage
+type_id: 0x80000004
+description: Image primitive — atlas-sampled RGBA8 texture inside an AABB
+
+# yimage has no shader-side custom code (no yfsvm, no other libraries).
+# libraries: []
+
+# yimage is fed via the C/OSC pipeline (yetty_yimage_render +
+# yetty_yimage_osc_bin_emit, mirroring yplot). YAML scene support can be
+# added later with a hand-written or generator-extended parser.
+yaml_factory: none
+
+uniforms:
+  # AABB in ypaint coordinates (pixels relative to cursor). bounds_x/y
+  # at offset 0/1 — _instance_render overrides these with the post-
+  # scroll screen position passed to render(x, y).
+  - name: bounds_x
+    type: f32
+    default: 0.0
+  - name: bounds_y
+    type: f32
+    default: 0.0
+  - name: bounds_w
+    type: f32
+    default: 100.0
+  - name: bounds_h
+    type: f32
+    default: 100.0
+
+  # Source pixel dimensions of the image. Used by _create_instance to
+  # populate rs->textures[0].width/height before binder submit; also
+  # available to the shader for any aspect-ratio math.
+  - name: image_w
+    type: u32
+    default: 0
+  - name: image_h
+    type: u32
+    default: 0
+
+# Pixel bytes — packed RGBA8 as u32 (little-endian: 0xAABBGGRR), one word
+# per pixel, row-major. Marked as the source for the `image` texture, so
+# the generator excludes it from the storage-buffer binding and instead
+# routes the bytes into rs->textures[0].data.
+buffers:
+  - name: pixels
+    element_type: u32
+
+textures:
+  - name: image
+    format: rgba8           # → RGBA8 atlas (atlas_rgba8 binding)
+    sampler: linear         # hardware bilinear via the atlas sampler
+    pixels_buffer: pixels   # diverts the buffer above into this texture
+    width_uniform: image_w
+    height_uniform: image_h

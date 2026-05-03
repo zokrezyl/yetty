@@ -103,7 +103,7 @@ static void usage(FILE *out, const char *prog)
 		"  -a, --absolute       absolute positioning (default: relative)\n"
 		"  -r, --raw            plain cat (no rendering)\n"
 		"  -t, --ts             force tree-sitter path (even for md/pdf)\n"
-		"  -c, --card=TYPE      force handler: markdown, pdf, text, source\n"
+		"  -c, --card=TYPE      force handler: markdown, pdf, image, text\n"
 		"      --sleep-after=N  after the OSC is written, sleep N ms before\n"
 		"                       exiting. Keeps the slave PTY open long enough\n"
 		"                       for the parent terminal to drain the master\n"

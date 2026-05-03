@@ -485,6 +485,49 @@ static struct yetty_ycore_void_result upload_all(struct yetty_yrender_gpu_resour
         wgpuQueueWriteTexture(impl->queue, &dest, ft->src->data, tex_size, &src_layout, &extent);
     }
 
+    /* Resolve atlas slice → vec4 uniform `<ns>_<texname>_region`. The
+     * generator declares this uniform per texture (default identity
+     * (0,0,1,1)); we overwrite it here so the shader can sample with
+     * `mix(region.xy, region.zw, local_uv)` against the shared atlas. */
+    for (size_t i = 0; i < impl->flat_texture_count; i++) {
+        const struct flat_texture *ft = &impl->flat_textures[i];
+        const struct texture_atlas *a = &impl->atlases[ft->atlas_index];
+        if (!a->texture || a->width == 0 || a->height == 0) {
+            continue;
+        }
+        char region_name[YETTY_YRENDER_NAME_MAX];
+        int rn = snprintf(region_name, sizeof(region_name), "%s_region", ft->src->name);
+        if (rn <= 0 || (size_t)rn >= sizeof(region_name)) {
+            continue;
+        }
+        for (size_t j = 0; j < impl->flat_uniform_count; j++) {
+            /* The binder's flat_uniform.src is `const` because most code
+             * paths only read it; here we legitimately mutate it (atlas
+             * position is binder-time information that flows back into
+             * the uniform). Cast away const at the single write site. */
+            struct yetty_yrender_uniform *u =
+                (struct yetty_yrender_uniform *)impl->flat_uniforms[j].src;
+            if (u->type != YETTY_YRENDER_UNIFORM_VEC4) {
+                continue;
+            }
+            if (strcmp(impl->flat_uniforms[j].ns, ft->ns) != 0) {
+                continue;
+            }
+            if (strcmp(u->name, region_name) != 0) {
+                continue;
+            }
+            float aw = (float)a->width;
+            float ah = (float)a->height;
+            u->vec4[0] = (float)ft->atlas_x / aw;
+            u->vec4[1] = (float)ft->atlas_y / ah;
+            u->vec4[2] = (float)(ft->atlas_x + ft->src->width) / aw;
+            u->vec4[3] = (float)(ft->atlas_y + ft->src->height) / ah;
+            ydebug("GpuResourceBinder: region '%s_%s' = (%.4f, %.4f, %.4f, %.4f)",
+                   ft->ns, region_name, u->vec4[0], u->vec4[1], u->vec4[2], u->vec4[3]);
+            break;
+        }
+    }
+
     /* Upload uniforms (with WGSL alignment) */
     if (impl->uniform_buffer && impl->flat_uniform_count > 0) {
         uint8_t packed[65536];

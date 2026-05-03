@@ -87,7 +87,6 @@ check_dir("${ASSETS_PREFIX}/shaders/post-effects" "Shader post-effects directory
 check_file("${ASSETS_PREFIX}/shaders/gpu-screen.wgsl" "Main GPU screen shader")
 check_file("${ASSETS_PREFIX}/shaders/cursor.wgsl" "Cursor shader")
 check_file("${ASSETS_PREFIX}/shaders/msdf_gen.wgsl" "MSDF generation shader")
-check_file("${ASSETS_PREFIX}/shaders/scale-image.wgsl" "Image scaling shader")
 
 # Card shaders
 check_file("${ASSETS_PREFIX}/shaders/cards/0x0000-texture.wgsl" "Texture card shader")

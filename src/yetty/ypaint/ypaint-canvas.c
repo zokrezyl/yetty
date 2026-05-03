@@ -25,6 +25,7 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yplot/yplot-gen.h>
+#include <yetty/yimage/yimage-gen.h>
 #include <yetty/ytrace/ytrace.h>
 
 /* Provided per-platform (yplatform/{linux,macos,windows,android,ios,webasm}/
@@ -631,6 +632,29 @@ struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
         free(canvas);
         return YETTY_ERR(yetty_ypaint_canvas_ptr, "ypaint_canvas: yplot registration failed",
                          yplot_reg_res);
+    }
+
+    /* Create and register yimage factory */
+    struct yetty_ypaint_core_concrete_factory *yetty_yimage_factory = yetty_yimage_factory_create();
+    if (!yetty_yimage_factory) {
+        yerror("ypaint_canvas: yimage factory creation failed");
+        yetty_ypaint_core_complex_prim_factory_destroy(canvas->complex_prim_factory);
+        yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        free(canvas->lines.lines);
+        free(canvas);
+        return YETTY_ERR(yetty_ypaint_canvas_ptr, "yimage factory creation failed");
+    }
+    struct yetty_ycore_void_result yimage_reg_res =
+        yetty_ypaint_core_complex_prim_factory_register(canvas->complex_prim_factory, yetty_yimage_factory);
+    if (YETTY_IS_ERR(yimage_reg_res)) {
+        yerror("ypaint_canvas: yimage registration failed: %s", yimage_reg_res.error.msg);
+        yetty_yimage_factory_destroy(yetty_yimage_factory);
+        yetty_ypaint_core_complex_prim_factory_destroy(canvas->complex_prim_factory);
+        yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        free(canvas->lines.lines);
+        free(canvas);
+        return YETTY_ERR(yetty_ypaint_canvas_ptr, "ypaint_canvas: yimage registration failed",
+                         yimage_reg_res);
     }
 
     /* Create default font for text spans (font_id = -1).

@@ -29,6 +29,10 @@ extern struct yetty_ypaint_core_buffer_result yetty_ycat_handler_pdf(
     const uint8_t *bytes, size_t len, const char *path_hint,
     const struct yetty_ycat_config *config);
 
+extern struct yetty_ypaint_core_buffer_result yetty_ycat_handler_image(
+    const uint8_t *bytes, size_t len, const char *path_hint,
+    const struct yetty_ycat_config *config);
+
 /*=============================================================================
  * Type name mapping
  *===========================================================================*/
@@ -41,6 +45,7 @@ static const struct {
     {YETTY_YCAT_TYPE_TEXT, "text"},
     {YETTY_YCAT_TYPE_MARKDOWN, "markdown"},
     {YETTY_YCAT_TYPE_PDF, "pdf"},
+    {YETTY_YCAT_TYPE_IMAGE, "image"},
 };
 
 const char *yetty_ycat_type_name(enum yetty_ycat_type type)
@@ -83,6 +88,7 @@ static void init_handlers(void)
     handlers_initialized = 1;
     handlers[YETTY_YCAT_TYPE_MARKDOWN] = yetty_ycat_handler_markdown;
     handlers[YETTY_YCAT_TYPE_PDF] = yetty_ycat_handler_pdf;
+    handlers[YETTY_YCAT_TYPE_IMAGE] = yetty_ycat_handler_image;
 }
 
 yetty_ycat_handler_fn yetty_ycat_get_handler(enum yetty_ycat_type type)
