@@ -1,16 +1,15 @@
+labels:
+  platform: darwin/*
+
 clone:
   git:
-    image: woodpeckerci/plugin-git
-    settings:
-      depth: 50
-      lfs: false
+    depth: 50
+    lfs: false
 
 steps:
   build:
-    image: yetty-build:latest
     commands:
-      - apt-get update
-      - apt-get install -y git git-lfs make cmake
       - git lfs install
       - git lfs fetch
+      - git lfs checkout
       - make build-desktop-ytrace-release
