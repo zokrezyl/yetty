@@ -653,22 +653,21 @@ static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yrender_t
 
     /* Animation timer gates only the animation tick — when there's nothing
      * on screen to animate, stop ticking so the input→render loop can
-     * idle. Otherwise, ensure the timer is ticking at target_fps; the
-     * existing tick already calls request_render. */
+     * idle. Otherwise, ensure the timer is ticking at target_fps. */
     if (shader_glyph_is_empty(self)) {
         anim_timer_stop(layer);
-    } else {
-        anim_timer_start(layer);
+        /* Direct-render-into-big_target path: big_target is fully redrawn
+         * every frame (text Clear + ypaint/shader-glyph Load), so there's
+         * no stale shader-glyph image to evict — just skip. The old
+         * "always render" workaround was for the per-layer-RT path, which
+         * needed an explicit clear on its dedicated RT; that path is no
+         * longer used by terminal_render_frame. */
+        return YETTY_OK_VOID();
     }
+    anim_timer_start(layer);
 
-    /* Always render — even when empty. render_layer's loadOp is Clear, and
-     * the fragment shader outputs transparent for every cell whose
-     * glyph_index is below SHADER_GLYPH_BASE, so an "empty" frame is
-     * functionally the clear we need to evict the previous non-empty
-     * frame from this layer's target. Skipping the render leaves the last
-     * shader-glyph image stuck on the target, which then bleeds through
-     * blend() — visible as the last shader-glyph "staying at the top"
-     * after its cell scrolls off the screen. */
+    /* Animations: force re-render every frame even if the cell buffer
+     * didn't change, so the time-driven shaders advance. */
     layer->base.dirty = 1;
     return target->ops->render_layer(target, self);
 }
