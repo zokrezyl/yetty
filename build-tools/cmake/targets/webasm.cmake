@@ -23,11 +23,11 @@ add_compile_options(-pthread)
 add_link_options(-pthread)
 
 # emcc auto-defines both `EMSCRIPTEN` and `__EMSCRIPTEN__`. The bare
-# `EMSCRIPTEN` macro is jslinux-era and switches several upstream
-# tinyemu sources/headers into a stripped-down (single-CPU, no fopen,
-# fs_wget-only) variant we don't want. Yetty's webasm uses MEMFS + all
-# CPU variants, so undefine the legacy macro globally and rely on
-# `__EMSCRIPTEN__` (the canonical, modern spelling) where actually needed.
+# `EMSCRIPTEN` macro switches several upstream tinyemu sources/headers
+# into a stripped-down (single-CPU, no fopen, fs_wget-only) variant we
+# don't want. Yetty's webasm uses MEMFS + all CPU variants, so undefine
+# the legacy macro globally and rely on `__EMSCRIPTEN__` (the canonical,
+# modern spelling) where actually needed.
 add_compile_options(-UEMSCRIPTEN)
 
 # Drop the C++ prebuilt libs on webasm. Each one drags in libc++ (so
@@ -40,6 +40,18 @@ add_compile_options(-UEMSCRIPTEN)
 set(YETTY_ENABLE_LIB_THORVG     OFF CACHE BOOL "" FORCE)  # vector graphics renderer (C++)
 set(YETTY_ENABLE_LIB_LIBSSH2    OFF CACHE BOOL "" FORCE)  # transitively pulls openssl libcrypto
 set(YETTY_ENABLE_LIB_OPENH264   OFF CACHE BOOL "" FORCE)  # H.264 decoder (C++)
+# pdfio + tree-sitter + imgui prebuilts for webasm-mt are not published
+# yet (404 on the *-webasm-mt-*.tar.gz release assets). Disable here
+# until the tarballs are built and uploaded; ypdf + ycat consume pdfio
+# (and ycat consumes tree-sitter), and ymgui pulls imgui — so those
+# features go too. ymgui-layer.c in yterm is pure C and doesn't link
+# imgui directly, so yterm builds fine without YMGUI.
+set(YETTY_ENABLE_LIB_PDFIO       OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_LIB_TREESITTER  OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_FEATURE_YPDF    OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_FEATURE_YCAT    OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_FEATURE_YMGUI   OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_TOOL_YCAT       OFF CACHE BOOL "" FORCE)
 # msdfgen + tinyxml2 stay ON: yetty_ypaint hard-depends on
 # yetty_ymsdf_gen, which in turn pulls msdfgen-core/msdfgen-ext +
 # tinyxml2. Unwinding that needs source surgery in ypaint.
@@ -89,20 +101,13 @@ add_executable(yetty
     ${YETTY_PLATFORM_SOURCES}
 )
 
-# JSLinux integration (downloads and copies files)
-if(YETTY_ENABLE_FEATURE_JSLINUX)
-    add_subdirectory(${YETTY_ROOT}/build-tools/jslinux ${CMAKE_BINARY_DIR}/jslinux-build)
-endif()
-
 target_include_directories(yetty PRIVATE ${YETTY_INCLUDES} ${YETTY_RENDERER_INCLUDES} ${JPEG_INCLUDE_DIRS})
 
 # Embed resources directly into yetty.wasm (same as desktop platforms).
 # Logo + DefaultConfig are referenced by name; yetty_embed_assets adds
 # the bulk fonts / shaders / msdf-fonts / yemu (each pre-brotli'd; the
 # extract-assets startup path decompresses to MEMFS).
-# Embed assets exactly like desktop: yetty_embed_assets() will include
-# kernel, opensbi, rootfs under yemu/ prefix (from shared.cmake 3rdparty fetches).
-# Same extraction code path as desktop (no jslinux custom code needed).
+# Same extraction code path as desktop.
 if(YETTY_ENABLE_LIB_INCBIN)
     incbin_add_resources(yetty
         Logo "${YETTY_ROOT}/docs/logo-2.jpeg"
@@ -205,22 +210,6 @@ add_custom_command(TARGET yetty POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${YETTY_ROOT}/assets/favicon.ico ${CMAKE_BINARY_DIR}/favicon.ico
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${YETTY_ROOT}/assets/apple-touch-icon.jpg ${CMAKE_BINARY_DIR}/apple-touch-icon.jpg
 )
-
-# Copy JSLinux files to build output.
-# Done as PRE_LINK on yetty so the files are in place before the verify-assets
-# step runs (which is part of yetty's link command line). add_dependencies on
-# jslinux-assets ensures the splitimg chunking + riscvemu64-wasm build run
-# before this copy. For incremental dev where yetty itself doesn't relink,
-# touch CMakeFiles/yetty.dir/build.make or rerun a clean build.
-if(YETTY_ENABLE_FEATURE_JSLINUX)
-    add_dependencies(yetty jslinux-assets)
-
-    add_custom_command(TARGET yetty PRE_LINK
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/jslinux
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/jslinux-build/jslinux ${CMAKE_BINARY_DIR}/jslinux
-        COMMENT "Copying JSLinux files..."
-    )
-endif()
 
 # Generate pre-computed demo script outputs
 if(YETTY_ENABLE_FEATURE_DEMO)

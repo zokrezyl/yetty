@@ -742,12 +742,12 @@ struct yetty_yplatform_pty_factory_result yetty_yplatform_tinyemu_pty_factory_cr
 #if defined(__EMSCRIPTEN__)
 /* On the WebAssembly target the only pty implementation is the embedded
  * tinyemu RISC-V VM, so the public yetty_yplatform_pty_factory_create
- * symbol is just an alias of tinyemu_pty_factory_create (mirrors the
- * iOS variant). */
+ * symbol is just an alias of yetty_yplatform_tinyemu_pty_factory_create
+ * (mirrors the iOS variant). */
 struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
-    struct yetty_yconfig *config, void *os_specific)
+    struct yetty_yconfig_config *config, void *os_specific)
 {
     (void)os_specific;
-    return tinyemu_pty_factory_create(config);
+    return yetty_yplatform_tinyemu_pty_factory_create(config);
 }
 #endif

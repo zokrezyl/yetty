@@ -13,7 +13,7 @@ set -e
 
 BUILD_DIR="${1:-build-webasm-ytrace-release}"
 PORT="${2:-8199}"
-TEST_MODE="${3:-full}"  # "full", "jslinux", "telnet", etc.
+TEST_MODE="${3:-full}"  # "full", "telnet"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 YETTY_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -108,41 +108,6 @@ if [ "$REMOTE_MODE" -eq 0 ]; then
 
     BUILD_RESULT=0
 
-    # Check vfsync filesystem
-    echo "Checking vfsync filesystem..."
-    if [ -d "$YETTY_ROOT/$BUILD_DIR/vfsync/u/os/yetty-alpine" ]; then
-        echo -e "${GREEN}OK: vfsync directory exists${NC}"
-        VFSYNC_FILES=$(ls "$YETTY_ROOT/$BUILD_DIR/vfsync/u/os/yetty-alpine/files/" 2>/dev/null | wc -l)
-        echo "  vfsync files: $VFSYNC_FILES"
-        if [ "$VFSYNC_FILES" -lt 100 ]; then
-            echo -e "${RED}ERROR: vfsync has too few files ($VFSYNC_FILES < 100)${NC}"
-            BUILD_RESULT=1
-        fi
-    else
-        echo -e "${RED}ERROR: vfsync directory missing${NC}"
-        BUILD_RESULT=1
-    fi
-
-    # Check vfsync head file for demo presence
-    if [ -f "$YETTY_ROOT/$BUILD_DIR/vfsync/u/os/yetty-alpine/head" ]; then
-        FS_COUNT=$(grep "FSFileCount:" "$YETTY_ROOT/$BUILD_DIR/vfsync/u/os/yetty-alpine/head" | awk '{print $2}')
-        echo "  FSFileCount: $FS_COUNT"
-    fi
-
-    # Check jslinux files
-    echo "Checking jslinux files..."
-    JSLINUX_DIR="$YETTY_ROOT/$BUILD_DIR/jslinux"
-    JSLINUX_OK=1
-    for file in vm-bridge.html term-bridge.js x86_64emu-wasm.js x86_64emu-wasm.wasm kernel-x86_64.bin; do
-        if [ -f "$JSLINUX_DIR/$file" ]; then
-            echo -e "  ${GREEN}OK: jslinux/$file${NC}"
-        else
-            echo -e "  ${RED}MISSING: jslinux/$file${NC}"
-            JSLINUX_OK=0
-            BUILD_RESULT=1
-        fi
-    done
-
     # Check shader glyphs
     echo "Checking shader glyphs..."
     GLYPH_DIR="$YETTY_ROOT/$BUILD_DIR/assets/shaders/glyphs"
@@ -192,37 +157,7 @@ else
 fi
 
 # Determine test URL
-if [ "$TEST_MODE" = "jslinux" ]; then
-    TEST_URL="${BASE_URL}/jslinux/vm-bridge.html?ptyId=test1&url=alpine-x86_64.cfg&cpu=x86_64&cols=80&rows=25&mem=256"
-    echo "Testing JSLinux (vfsync.org proxy) at: $TEST_URL"
-elif [ "$TEST_MODE" = "jslinux-local" ]; then
-    # Test full yetty with local VM config - this enables card creation testing
-    # The VM will boot, run card tests in init script, and yetty will process OSC sequences
-    TEST_URL="${BASE_URL}/?vmconfig=yetty-alpine.cfg"
-    echo "Testing yetty with local JSLinux VM at: $TEST_URL"
-elif [ "$TEST_MODE" = "vm-only" ]; then
-    # Test VM only (without yetty) - useful for debugging VM boot issues
-    TEST_URL="${BASE_URL}/jslinux/vm-bridge.html?ptyId=test1&url=yetty-alpine.cfg&cpu=x86_64&cols=80&rows=25&mem=256"
-    echo "Testing JSLinux VM only (no yetty) at: $TEST_URL"
-elif [ "$TEST_MODE" = "alpine-disk" ]; then
-    # riscv64 alpine-disk variant: yetty-built tinyemu wasm + opensbi.elf +
-    # kernel-riscv64.bin + virtio-blk root. capture-chrome-console.py
-    # mirrors term-output postMessages -> [VM-OUT] console lines.
-    # ydebug=1 turns on tinyemu's [YDEBUG] traces (htif_write, copy_bios,
-    # SBI ECALL traces) — required to diagnose silent boot stalls.
-    TEST_URL="${BASE_URL}/jslinux/vm-bridge.html?ptyId=test1&url=alpine-disk.cfg&cpu=riscv64&cols=80&rows=25&mem=256&ydebug=1"
-    echo "Testing alpine-disk variant (riscv64, virtio-blk) at: $TEST_URL"
-elif [ "$TEST_MODE" = "alpine-extended-disk" ]; then
-    TEST_URL="${BASE_URL}/jslinux/vm-bridge.html?ptyId=test1&url=alpine-extended-disk.cfg&cpu=riscv64&cols=80&rows=25&mem=256&ydebug=1"
-    echo "Testing alpine-extended-disk variant (riscv64, virtio-blk) at: $TEST_URL"
-elif [ "$TEST_MODE" = "term-size" ]; then
-    # Test terminal size initialization - use non-default size to verify kernel gets correct dimensions
-    TEST_COLS="${4:-120}"
-    TEST_ROWS="${5:-40}"
-    TEST_URL="${BASE_URL}/jslinux/vm-bridge.html?ptyId=test1&url=yetty-alpine.cfg&cpu=x86_64&cols=${TEST_COLS}&rows=${TEST_ROWS}&mem=256"
-    echo "Testing terminal size initialization at: $TEST_URL"
-    echo "Expected terminal size: ${TEST_COLS}x${TEST_ROWS}"
-elif [ "$TEST_MODE" = "telnet" ]; then
+if [ "$TEST_MODE" = "telnet" ]; then
     # Test telnet mode via WebSocket proxy
     # Usage: ./test-chrome-headless.sh telnet [WS_URL]
     # Requires: telnetd running, websocket proxy running
@@ -239,7 +174,7 @@ elif [ "$TEST_MODE" = "telnet" ]; then
     echo "  3. Start server:  cd build-webasm-dawn-release && python3 serve.py 8080"
     echo ""
 else
-    TEST_URL="${BASE_URL}/?mode=jslinux&trace=1"
+    TEST_URL="${BASE_URL}/?trace=1"
     echo "Testing full yetty at: $TEST_URL"
 fi
 
@@ -388,274 +323,65 @@ if grep -q "^\[PAGE-EXCEPTION\]" "$CONSOLE_LOG"; then
     RESULT=1
 fi
 
-if [ "$TEST_MODE" = "alpine-disk" ] || [ "$TEST_MODE" = "alpine-extended-disk" ]; then
-    # riscv64 variants — vm-bridge.html mode, no parent yetty wasm. The
-    # python capture mirrors term-output postMessages to console as
-    # [VM-OUT] lines, so OpenSBI / kernel boot text shows up there.
-    echo ""
-    echo "=== JSLinux Bridge Output ==="
-    grep -E "\[vm-bridge\]|\[term-bridge\]|SMP:" "$CONSOLE_LOG" | head -30 || echo "(no bridge output)"
+# Full yetty checks
+echo ""
+echo "=== Yetty Startup Verification ==="
 
-    echo ""
-    echo "=== VM Console Output (last 60 lines) ==="
-    grep -E "^\[(CONSOLE log\] \[)?VM-OUT\]" "$CONSOLE_LOG" | tail -60 || echo "(no VM output)"
-
-    echo ""
-    echo "=== Boot Checkpoints ==="
-
-    # Each checkpoint maps to a substring grep against the console log.
-    # We look in [VM-OUT] lines for actual VM-side text. The order is
-    # roughly load -> bios -> kernel -> userspace.
-    declare -A CHECK_PATTERNS=(
-        [emcc-runtime]="\[vm-bridge\] Emscripten runtime initialized"
-        [smp-init]="SMP: Using"
-        [opensbi-banner]="OpenSBI"
-        [kernel-banner]="Linux version"
-        [kernel-cmdline]="Kernel command line"
-        [virtio-blk]="virtio_blk"
-        [ext4-mount]="EXT4-fs"
-        [init-running]="Welcome to|tinyemu|init "
-        [shell-prompt]="/ # |~ # |# $|\\$ $"
-    )
-    BOOT_FAIL=0
-    for k in emcc-runtime smp-init opensbi-banner kernel-banner kernel-cmdline virtio-blk ext4-mount init-running shell-prompt; do
-        if grep -qE "${CHECK_PATTERNS[$k]}" "$CONSOLE_LOG"; then
-            echo -e "${GREEN}OK: $k${NC}"
-        else
-            echo -e "${RED}MISSING: $k${NC}"
-            BOOT_FAIL=$((BOOT_FAIL + 1))
-        fi
-    done
-    if [ "$BOOT_FAIL" -gt 0 ]; then
-        echo -e "${RED}Boot incomplete — $BOOT_FAIL checkpoint(s) missing${NC}"
-        RESULT=1
-    fi
-elif [ "$TEST_MODE" = "jslinux" ] || [ "$TEST_MODE" = "jslinux-local" ]; then
-    # JSLinux-specific checks
-    echo ""
-    echo "=== JSLinux Output ==="
-    grep -E "\[vm-bridge\]|\[term-bridge\]" "$CONSOLE_LOG" | head -50 || echo "(no vm-bridge output)"
-
-    # Check JSLinux checkpoints
-    echo ""
-    echo "=== JSLinux Checkpoints ==="
-
-    JSLINUX_CHECKPOINTS=(
-        "term-bridge.js loaded"
-        "Term constructor called"
-        "start_vm called"
-        "Loading emulator"
-        "Module.preRun called"
-        "vm_start returned successfully"
-    )
-
-    for checkpoint in "${JSLINUX_CHECKPOINTS[@]}"; do
-        if grep -q "$checkpoint" "$CONSOLE_LOG"; then
-            echo -e "${GREEN}OK: $checkpoint${NC}"
-        else
-            echo -e "${RED}MISSING: $checkpoint${NC}"
-            RESULT=1
-        fi
-    done
-
-    # Check if kernel was downloaded (shows emulator is running)
-    if grep -q "kernel-x86_64.bin" "$CONSOLE_LOG"; then
-        echo -e "${GREEN}OK: Kernel download started${NC}"
-    else
-        echo -e "${YELLOW}WARN: Kernel download not seen${NC}"
-    fi
-
-    # Check for successful VM boot
-    if grep -q "Welcome to JS/Linux" "$CONSOLE_LOG" || grep -q "Welcome to yetty Alpine" "$CONSOLE_LOG"; then
-        echo -e "${GREEN}OK: VM booted - Welcome message received${NC}"
-    else
-        echo -e "${RED}MISSING: VM boot welcome message${NC}"
-        RESULT=1
-    fi
-
-    if grep -q "localhost:~#" "$CONSOLE_LOG"; then
-        echo -e "${GREEN}OK: Shell prompt received${NC}"
-    else
-        echo -e "${YELLOW}WARN: Shell prompt not seen (may need more time)${NC}"
-    fi
-
-    # Terminal size verification (for term-size test mode)
-    if [ "$TEST_MODE" = "term-size" ]; then
-        echo ""
-        echo "=== Terminal Size Verification ==="
-        echo "JavaScript side:"
-        grep -E "term_get_size|_console_get_size|getSize|cols.*rows|URL params" "$CONSOLE_LOG" | head -20 || echo "(no JS size logs)"
-
-        echo ""
-        echo "Looking for stty output in boot messages..."
-        # The init script should run 'stty size' and output it
-        # Format is: "rows cols" e.g. "40 120"
-        if grep -qE "^[0-9]+ [0-9]+$" "$CONSOLE_LOG"; then
-            STTY_OUTPUT=$(grep -E "^[0-9]+ [0-9]+$" "$CONSOLE_LOG" | tail -1)
-            KERNEL_ROWS=$(echo "$STTY_OUTPUT" | awk '{print $1}')
-            KERNEL_COLS=$(echo "$STTY_OUTPUT" | awk '{print $2}')
-            echo "Kernel terminal size (stty): ${KERNEL_COLS}x${KERNEL_ROWS}"
-
-            if [ "$KERNEL_COLS" = "$TEST_COLS" ] && [ "$KERNEL_ROWS" = "$TEST_ROWS" ]; then
-                echo -e "${GREEN}OK: Kernel has correct terminal size${NC}"
-            else
-                echo -e "${RED}FAIL: Kernel has WRONG size! Expected ${TEST_COLS}x${TEST_ROWS}, got ${KERNEL_COLS}x${KERNEL_ROWS}${NC}"
-                RESULT=1
-            fi
-        else
-            echo -e "${YELLOW}WARN: No stty output found - checking term-output messages${NC}"
-        fi
-
-        # Also check term-output messages for any size indicators
-        echo ""
-        echo "Term output containing size info:"
-        grep -E "term-output.*[0-9]+.*[0-9]+" "$CONSOLE_LOG" | head -10 || echo "(none)"
-
-        # Show all resize events
-        echo ""
-        echo "Resize events:"
-        grep -E "resize|console_resize" "$CONSOLE_LOG" | head -20 || echo "(none)"
-    fi
-
-    # Check for demo directory in boot output
-    echo ""
-    echo "=== Demo Files Check ==="
-    if grep -q "/home/demo contents" "$CONSOLE_LOG"; then
-        echo -e "${GREEN}OK: Demo directory listing found in boot${NC}"
-        grep -A 20 "/home/demo contents" "$CONSOLE_LOG" | head -25 || true
-    else
-        echo -e "${YELLOW}WARN: Demo directory listing not in boot output${NC}"
-    fi
-
-    # Check for shader-glyphs.txt specifically
-    if grep -q "shader-glyphs.txt" "$CONSOLE_LOG"; then
-        echo -e "${GREEN}OK: shader-glyphs.txt found${NC}"
-    else
-        echo -e "${YELLOW}WARN: shader-glyphs.txt not seen in output${NC}"
-    fi
-
-    # Check for card creation from boot card tests
-    echo ""
-    echo "=== Card Creation Tests ==="
-    CARD_TEST_RESULT=0
-
-    # Check if card tests ran
-    if grep -q "CARD TESTS" "$CONSOLE_LOG"; then
-        echo -e "${GREEN}OK: Card tests executed in VM${NC}"
-
-        # Count created cards by type
-        CREATED_CARDS=$(grep -oP "CardFactory: created card '\K[^']+" "$CONSOLE_LOG" | sort | uniq -c | sort -rn)
-        TOTAL_CREATED=$(grep -c "CardFactory: created card" "$CONSOLE_LOG" || echo 0)
-        TOTAL_FAILED=$(grep -c "CardFactory: failed" "$CONSOLE_LOG" || echo 0)
-
-        echo "Cards created: $TOTAL_CREATED"
-        echo "Cards failed: $TOTAL_FAILED"
-
-        if [ -n "$CREATED_CARDS" ]; then
-            echo "Card types created:"
-            echo "$CREATED_CARDS" | head -15
-        fi
-
-        # Check minimum card types created
-        CARD_TYPES=(qrcode plot image ytext ydraw)
-        for ctype in "${CARD_TYPES[@]}"; do
-            if grep -q "CardFactory: created card '$ctype'" "$CONSOLE_LOG"; then
-                echo -e "${GREEN}OK: $ctype card created${NC}"
-            elif grep -q "CardFactory: creating card '$ctype'" "$CONSOLE_LOG"; then
-                echo -e "${YELLOW}PARTIAL: $ctype card creation started${NC}"
-            else
-                echo -e "${YELLOW}WARN: $ctype card not tested${NC}"
-            fi
-        done
-
-        # Check for OSC handling
-        if grep -q "handleCardOSCSequence: ENTERED" "$CONSOLE_LOG"; then
-            OSC_COUNT=$(grep -c "handleCardOSCSequence: ENTERED" "$CONSOLE_LOG" || echo 0)
-            echo -e "${GREEN}OK: $OSC_COUNT OSC sequences processed${NC}"
-        else
-            echo -e "${YELLOW}WARN: No OSC handling logged${NC}"
-        fi
-
-        # Fail if no cards created at all
-        if [ "$TOTAL_CREATED" -lt 2 ]; then
-            echo -e "${RED}FAIL: Too few cards created ($TOTAL_CREATED < 2)${NC}"
-            CARD_TEST_RESULT=1
-        fi
-
-        # Show failures if any
-        if [ "$TOTAL_FAILED" -gt 0 ]; then
-            echo -e "${YELLOW}Card creation failures:${NC}"
-            grep "CardFactory: failed" "$CONSOLE_LOG" | head -10
-        fi
-
-        if [ "$CARD_TEST_RESULT" -ne 0 ]; then
-            echo -e "${RED}Card creation tests failed${NC}"
-            RESULT=1
-        fi
-    else
-        echo -e "${YELLOW}WARN: Card tests not found in boot output${NC}"
-    fi
-else
-    # Full yetty checks
-    echo ""
-    echo "=== Yetty Startup Verification ==="
-
-    # Check for JavaScript errors first
-    if grep -qE "Uncaught|TypeError|ReferenceError|SyntaxError" "$CONSOLE_LOG"; then
-        echo -e "${RED}FAIL: JavaScript errors found${NC}"
-        grep -E "Uncaught|TypeError|ReferenceError|SyntaxError" "$CONSOLE_LOG" | head -10
-        RESULT=1
-    fi
-
-    # Check yetty.js was loaded (look for preRun or ENV setting)
-    if grep -q "preRun.*Setting ENV" "$CONSOLE_LOG" || grep -q "onRuntimeInitialized" "$CONSOLE_LOG"; then
-        echo -e "${GREEN}OK: yetty.js loaded${NC}"
-    else
-        echo -e "${RED}FAIL: yetty.js not loaded - check WebGPU availability${NC}"
-        RESULT=1
-    fi
-
-    # Check for C++ ytrace output (required checkpoints)
-    echo ""
-    echo "=== Required Checkpoints ==="
-    CHECKPOINTS=(
-        "main: WebASM starting"
-        "main: Config created"
-        "main: Window created"
-        "main: PlatformInputPipe created"
-        "main: PtyFactory created"
-        "main: WebGPU instance created"
-        "main: Yetty created"
-        "main: Starting Yetty"
-        "initWebGPU: Adapter obtained"
-        "initWebGPU: Device obtained"
-    )
-
-    CHECKPOINT_PASS=0
-    CHECKPOINT_FAIL=0
-    for checkpoint in "${CHECKPOINTS[@]}"; do
-        if grep -q "$checkpoint" "$CONSOLE_LOG"; then
-            echo -e "${GREEN}OK: $checkpoint${NC}"
-            CHECKPOINT_PASS=$((CHECKPOINT_PASS + 1))
-        else
-            echo -e "${RED}MISSING: $checkpoint${NC}"
-            CHECKPOINT_FAIL=$((CHECKPOINT_FAIL + 1))
-        fi
-    done
-
-    echo ""
-    echo "Checkpoints: $CHECKPOINT_PASS passed, $CHECKPOINT_FAIL failed"
-
-    if [ "$CHECKPOINT_FAIL" -gt 0 ]; then
-        echo -e "${RED}FAIL: Required checkpoints missing${NC}"
-        RESULT=1
-    fi
-
-    # Show all yetty console output
-    echo ""
-    echo "=== Yetty Console Output ==="
-    grep -E "\[yetty\]" "$CONSOLE_LOG" | head -50 || echo "(no [yetty] output)"
+# Check for JavaScript errors first
+if grep -qE "Uncaught|TypeError|ReferenceError|SyntaxError" "$CONSOLE_LOG"; then
+    echo -e "${RED}FAIL: JavaScript errors found${NC}"
+    grep -E "Uncaught|TypeError|ReferenceError|SyntaxError" "$CONSOLE_LOG" | head -10
+    RESULT=1
 fi
+
+# Check yetty.js was loaded (look for preRun or ENV setting)
+if grep -q "preRun.*Setting ENV" "$CONSOLE_LOG" || grep -q "onRuntimeInitialized" "$CONSOLE_LOG"; then
+    echo -e "${GREEN}OK: yetty.js loaded${NC}"
+else
+    echo -e "${RED}FAIL: yetty.js not loaded - check WebGPU availability${NC}"
+    RESULT=1
+fi
+
+# Check for C++ ytrace output (required checkpoints)
+echo ""
+echo "=== Required Checkpoints ==="
+CHECKPOINTS=(
+    "main: WebASM starting"
+    "main: Config created"
+    "main: Window created"
+    "main: PlatformInputPipe created"
+    "main: PtyFactory created"
+    "main: WebGPU instance created"
+    "main: Yetty created"
+    "main: Starting Yetty"
+    "initWebGPU: Adapter obtained"
+    "initWebGPU: Device obtained"
+)
+
+CHECKPOINT_PASS=0
+CHECKPOINT_FAIL=0
+for checkpoint in "${CHECKPOINTS[@]}"; do
+    if grep -q "$checkpoint" "$CONSOLE_LOG"; then
+        echo -e "${GREEN}OK: $checkpoint${NC}"
+        CHECKPOINT_PASS=$((CHECKPOINT_PASS + 1))
+    else
+        echo -e "${RED}MISSING: $checkpoint${NC}"
+        CHECKPOINT_FAIL=$((CHECKPOINT_FAIL + 1))
+    fi
+done
+
+echo ""
+echo "Checkpoints: $CHECKPOINT_PASS passed, $CHECKPOINT_FAIL failed"
+
+if [ "$CHECKPOINT_FAIL" -gt 0 ]; then
+    echo -e "${RED}FAIL: Required checkpoints missing${NC}"
+    RESULT=1
+fi
+
+# Show all yetty console output
+echo ""
+echo "=== Yetty Console Output ==="
+grep -E "\[yetty\]" "$CONSOLE_LOG" | head -50 || echo "(no [yetty] output)"
 
 # Show any errors
 echo ""
@@ -663,7 +389,7 @@ echo "=== Errors (if any) ==="
 grep -iE "error|failed|exception" "$CONSOLE_LOG" | grep -v "VERBOSE" | head -20 || echo "(no errors)"
 
 #=============================================================================
-# Card Rendering Tests - Inject OSC via JSLinux and verify YTRACE output
+# Card Rendering Tests — verify .out file OSC envelopes
 #=============================================================================
 echo ""
 echo "=== Card Rendering Tests ==="
@@ -671,68 +397,7 @@ echo "=== Card Rendering Tests ==="
 DEMO_OUTPUT_DIR="$YETTY_ROOT/$BUILD_DIR/demo-output"
 if [ "$REMOTE_MODE" -eq 1 ]; then
     echo -e "${YELLOW}SKIP: Card rendering file tests not available in remote mode${NC}"
-elif [ -d "$DEMO_OUTPUT_DIR" ] && [ "$TEST_MODE" = "jslinux-local" ]; then
-    # Test cards by catting .out files in JSLinux and checking yetty logs
-    # Expected YTRACE patterns when card is successfully created:
-    #   - "CardFactory: creating card '<type>'"
-    #   - "CardFactory: created card '<type>'"
-    #   - "GPUScreen: Created card '<type>'"
-
-    CARD_TESTS=(
-        "cards/qrcode.out:CardFactory: created card 'qrcode'"
-        "cards/plot.out:CardFactory: created card 'plot'"
-    )
-
-    CARD_RESULT=0
-
-    for test_spec in "${CARD_TESTS[@]}"; do
-        OUT_FILE="${test_spec%%:*}"
-        EXPECTED_LOG="${test_spec##*:}"
-
-        echo "Testing card: $OUT_FILE"
-        echo "  Expected YTRACE: $EXPECTED_LOG"
-
-        # Check if .out file exists and has valid OSC
-        if [ ! -s "$DEMO_OUTPUT_DIR/$OUT_FILE" ]; then
-            echo -e "  ${RED}FAIL: Output file missing or empty${NC}"
-            CARD_RESULT=1
-            continue
-        fi
-
-        if ! grep -qaP '\x1b\]666666' "$DEMO_OUTPUT_DIR/$OUT_FILE" 2>/dev/null; then
-            echo -e "  ${RED}FAIL: No OSC 666666 in output file${NC}"
-            CARD_RESULT=1
-            continue
-        fi
-
-        # The full test would boot JSLinux, run 'cat /home/demo/output/<file>'
-        # and check console for YTRACE card creation messages.
-        # For now, verify file structure only (full test in CI with longer timeout)
-        echo -e "  ${GREEN}OK: Valid OSC structure${NC}"
-    done
-
-    # Summary counts
-    TOTAL_OUT=$(find "$DEMO_OUTPUT_DIR" -name "*.out" -type f 2>/dev/null | wc -l)
-    VALID_OSC=$(grep -rlP '\x1b\]666666' "$DEMO_OUTPUT_DIR" --include="*.out" 2>/dev/null | wc -l)
-
-    echo ""
-    echo "Demo output summary:"
-    echo "  Total .out files: $TOTAL_OUT"
-    echo "  Valid OSC files: $VALID_OSC"
-
-    if [ "$VALID_OSC" -lt 50 ]; then
-        echo -e "${RED}ERROR: Too few valid OSC files ($VALID_OSC < 50)${NC}"
-        CARD_RESULT=1
-    fi
-
-    if [ "$CARD_RESULT" -ne 0 ]; then
-        echo -e "${RED}Card rendering tests FAILED${NC}"
-        RESULT=1
-    else
-        echo -e "${GREEN}Card rendering tests PASSED${NC}"
-    fi
 elif [ -d "$DEMO_OUTPUT_DIR" ]; then
-    # Just count files for non-jslinux mode
     TOTAL_OUT=$(find "$DEMO_OUTPUT_DIR" -name "*.out" -type f 2>/dev/null | wc -l)
     VALID_OSC=$(grep -rlP '\x1b\]666666' "$DEMO_OUTPUT_DIR" --include="*.out" 2>/dev/null | wc -l)
     echo "Demo outputs: $VALID_OSC/$TOTAL_OUT valid OSC files"

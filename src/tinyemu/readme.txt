@@ -172,14 +172,7 @@ addresses (0x40008000). A small modification was made in the
 display boot messages and to power off the virtual system. The OS
 should use the VirtIO console.
 
-4.4) Javascript version
-
-The Javascript version (JSLinux) can be compiled with Makefile.js and
-emscripten. A complete precompiled and preconfigured demo is available
-in the jslinux-yyyy-mm-dd.tar.gz archive (read the readme.txt file
-inside the archive).
-
-4.5) x86 emulator
+4.4) x86 emulator
 
 A small x86 emulator is included. It is not really an emulator because
 it uses the Linux KVM API to run the x86 code at near native

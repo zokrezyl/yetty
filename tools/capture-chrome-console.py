@@ -72,16 +72,9 @@ def main() -> None:
     send("Log.enable")
     send("Page.enable")
 
-    # Mirror postMessage to console.log. vm-bridge.html dispatches VM
-    # console output as `window.parent.postMessage({type:'term-output',
-    # data:...}, '*')`. When the iframe is opened directly (no parent
-    # listener), or even when nested under index.html, those messages are
-    # invisible to CDP — they don't go through console.* and CDP can't
-    # observe postMessage traffic. Solution: inject a `message` listener
-    # on `window` (since `parent === window` for top-level navigation, the
-    # postMessage routes to self) that re-emits each event as a
-    # console.log line, prefixed so the surrounding test script can grep
-    # for it (e.g. `[VM-OUT]`, `[VM-MSG]`).
+    # Mirror window postMessage traffic to console.log. CDP can't observe
+    # postMessage directly; this listener re-emits each event as a grep-
+    # friendly console.log line for the surrounding test script.
     #
     # Page.addScriptToEvaluateOnNewDocument registers the script for
     # *every* document created from now on, and runs before the page's

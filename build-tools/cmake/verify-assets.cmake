@@ -110,13 +110,6 @@ if(TARGET_TYPE STREQUAL "webasm")
     check_file("index.html" "Web index page")
     check_file("serve.py" "Development server")
 
-    # JSLinux files
-    check_dir("jslinux" "JSLinux directory")
-    check_file("jslinux/vm-bridge.html" "JSLinux VM bridge")
-    check_file("jslinux/term-bridge.js" "JSLinux terminal bridge")
-
-    # Note: vm-tools and vfsync are checked by Makefile verify-webasm target (built after cmake)
-
     # Note: demo directory is preloaded from source into yetty.data, not copied to build dir
 endif()
 
