@@ -1,0 +1,5 @@
+# xcodebuild derived data created by refresh-profiles.sh — pure cache.
+.build/
+
+# xcodegen output. Regenerated from each yetty-*/project.yml on demand.
+*.xcodeproj/

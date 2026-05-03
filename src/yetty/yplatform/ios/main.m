@@ -16,8 +16,41 @@
 #include <yetty/platform/extract-assets.h>
 #include <yetty/ytrace/ytrace.h>
 
+#include <fcntl.h>
+#include <unistd.h>
+#include <time.h>
+
 /* Forward declarations */
 const char *yetty_yplatform_get_cache_dir(void);
+
+/* Tiny on-disk trace so we can pull the input pipeline state from the
+ * device via devicectl after the app runs. iOS sandbox routes stderr
+ * to nowhere, so ytrace's fprintf(stderr) is invisible.
+ * File: $HOME/tmp/yetty-input.log. */
+static void yetty_kb_log(const char *fmt, ...)
+{
+    static char path[1024];
+    if (!path[0]) {
+        const char *home = getenv("HOME");
+        snprintf(path, sizeof(path), "%s/tmp/yetty-input.log", home ? home : ".");
+    }
+    int fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0644);
+    if (fd < 0) return;
+    char buf[512];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    if (n > 0) {
+        char ts[32];
+        time_t t = time(NULL);
+        int tn = snprintf(ts, sizeof(ts), "%ld ", (long)t);
+        write(fd, ts, tn);
+        write(fd, buf, n);
+        write(fd, "\n", 1);
+    }
+    close(fd);
+}
 const char *yetty_yplatform_get_data_dir(void);
 const char *yetty_yplatform_get_runtime_dir(void);
 WGPUSurface yetty_yplatform_create_surface_from_layer(WGPUInstance instance, CAMetalLayer *layer);
@@ -44,6 +77,16 @@ WGPUSurface yetty_yplatform_create_surface_from_layer(WGPUInstance instance, CAM
         self.metalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
         self.metalLayer.framebufferOnly = YES;
         self.metalLayer.contentsScale = [UIScreen mainScreen].scale;
+        /* opaque + max drawable pool: tells the compositor it doesn't need
+         * to alpha-blend our output with what's behind, and gives the
+         * swapchain the full 3-deep ring buffer so `nextDrawable` returns
+         * immediately while a previously-rendered frame is still being
+         * shown. Both default values were leaving Apple TV's compositor
+         * holding drawables for 100s of ms. */
+        self.metalLayer.opaque = YES;
+        self.metalLayer.maximumDrawableCount = 3;
+        self.metalLayer.presentsWithTransaction = NO;
+        self.opaque = YES;
         self.backgroundColor = [UIColor blackColor];
     }
     return self;
@@ -118,9 +161,19 @@ static void *render_thread_func(void *arg)
         .bin_dir = NULL
     };
 
-    /* Config */
-    ydebug("creating config");
-    struct yetty_yconfig_result config_result = yetty_yconfig_create(0, NULL, &paths);
+    /* Config — there's no shell command line on iOS / tvOS, so synthesize
+     * one. Connect to a telnet server (qemu-on-host or any reachable
+     * telnetd). Override at build via -DYETTY_TVOS_TELNET=\"host:port\".
+     * (Mirror Android's pattern, which fakes argv with `--temu`.) */
+#ifndef YETTY_TVOS_TELNET
+#define YETTY_TVOS_TELNET "192.168.1.10:2423"
+#endif
+    ydebug("creating config: --telnet %s", YETTY_TVOS_TELNET);
+    char *fake_argv[] = {(char *)"yetty", (char *)"--telnet",
+                         (char *)YETTY_TVOS_TELNET, NULL};
+    int fake_argc = 3;
+    struct yetty_yconfig_result config_result =
+        yetty_yconfig_create(fake_argc, fake_argv, &paths);
     if (!YETTY_IS_OK(config_result)) {
         yerror("failed to create config: %s", config_result.error);
         return;
@@ -260,8 +313,11 @@ static void *render_thread_func(void *arg)
      * __unsafe_unretained — view controller lives for app lifetime so
      * dangling-ref risk is nil. */
     __unsafe_unretained YettyViewController *self_ = self;
+    yetty_kb_log("attachKeyboard: kb=%p", (void *)kb);
     kb.keyboardInput.keyChangedHandler =
         ^(GCKeyboardInput *input, GCControllerButtonInput *btn, GCKeyCode keyCode, BOOL pressed) {
+            yetty_kb_log("GCK keyCode=%ld pressed=%d pipe=%p",
+                         (long)keyCode, pressed, (void *)(self_ ? self_->_pipe : NULL));
             if (!pressed || !self_ || !self_->_pipe) return;
             [self_ handleGCKey:keyCode input:input];
         };
@@ -311,6 +367,7 @@ static void *render_thread_func(void *arg)
         ascii = '0';
     }
     if (ascii) {
+        yetty_kb_log("handleGCKey CHAR ascii=0x%02x ('%c')", ascii, ascii);
         struct yetty_yui_event ev = {0};
         ev.type = YETTY_YCORE_CHAR;
         ev.chr.codepoint = (uint32_t)ascii;
@@ -330,6 +387,7 @@ static void *render_thread_func(void *arg)
 }
 
 - (void)insertText:(NSString *)text {
+    yetty_kb_log("insertText: '%s' pipe=%p", [text UTF8String], (void *)_pipe);
     if (!_pipe) return;
 
     ydebug("insertText: %s", [text UTF8String]);
@@ -338,8 +396,8 @@ static void *render_thread_func(void *arg)
     NSUInteger len = [text length];
     for (NSUInteger i = 0; i < len; i++) {
         unichar ch = [text characterAtIndex:i];
-        struct yetty_ycore_event ev = {0};
-        ev.type = YETTY_EVENT_CHAR;
+        struct yetty_yui_event ev = {0};
+        ev.type = YETTY_YCORE_CHAR;
         ev.chr.codepoint = (uint32_t)ch;
         ev.chr.mods = 0;
         _pipe->ops->write(_pipe, &ev, sizeof(ev));
@@ -368,6 +426,7 @@ static void *render_thread_func(void *arg)
  * Forward characters as YETTY_EVENT_CHAR; map a few control keys (BS, return,
  * arrows, escape) to GLFW-numbered YETTY_EVENT_KEY_DOWN. */
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    yetty_kb_log("pressesBegan: count=%lu pipe=%p", (unsigned long)presses.count, (void *)_pipe);
     if (!_pipe) {
         [super pressesBegan:presses withEvent:event];
         return;
@@ -417,8 +476,8 @@ static void *render_thread_func(void *arg)
         /* Plain printable character(s) — feed each as YETTY_EVENT_CHAR. */
         for (NSUInteger i = 0; i < chars.length; i++) {
             unichar ch = [chars characterAtIndex:i];
-            struct yetty_ycore_event ev = {0};
-            ev.type = YETTY_EVENT_CHAR;
+            struct yetty_yui_event ev = {0};
+            ev.type = YETTY_YCORE_CHAR;
             ev.chr.codepoint = (uint32_t)ch;
             ev.chr.mods = (uint32_t)key.modifierFlags;
             _pipe->ops->write(_pipe, &ev, sizeof(ev));
@@ -538,6 +597,22 @@ static void *render_thread_func(void *arg)
 
 /* main */
 int main(int argc, char *argv[]) {
+    /* iOS sandbox swallows stderr → ytrace_output's fprintf(stderr) goes
+     * nowhere. Redirect stderr to $HOME/tmp/yetty-trace.log so the trace
+     * stream is fetchable via devicectl. Enable all ytrace points so
+     * frame_render: / on_pty_pipe_read: / etc. all emit. */
+    {
+        const char *home = getenv("HOME");
+        char path[1024];
+        snprintf(path, sizeof(path), "%s/tmp/yetty-trace.log", home ? home : ".");
+        int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd >= 0) {
+            dup2(fd, STDERR_FILENO);
+            close(fd);
+            setvbuf(stderr, NULL, _IOLBF, 0);
+        }
+        setenv("YTRACE_DEFAULT_ON", "yes", 1);
+    }
     @autoreleasepool {
         return UIApplicationMain(argc, argv, nil, NSStringFromClass([YettyAppDelegate class]));
     }

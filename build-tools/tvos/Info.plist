@@ -29,5 +29,16 @@
         <string>arm64</string>
         <string>metal</string>
     </array>
+    <!-- Game Mode (tvOS 17+) — opt yetty into the OS scheduler's
+         higher-priority CPU/GPU bucket while it's foreground. The
+         display compositor also targets a higher frame rate, which
+         tends to lower the wgpuSurfaceGetCurrentTexture (CAMetalLayer
+         nextDrawable) latency at 4K. Note: this *deprioritizes*
+         background apps further, including YettyQemu's audio-mode
+         keep-alive — so if qemu reachability degrades, revisit. -->
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.games</string>
+    <key>GCSupportsGameMode</key>
+    <true/>
 </dict>
 </plist>
