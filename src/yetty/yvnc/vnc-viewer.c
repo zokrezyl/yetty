@@ -269,12 +269,12 @@ static struct yetty_ycore_int_result vnc_viewer_view_on_event(struct yetty_yterm
                                            (uint8_t)event->mouse.mods);
         return YETTY_OK(yetty_ycore_int, 1);
 
-    case YETTY_YCORE_SCROLL:
-        rel_x = event->scroll.x - b.x;
-        rel_y = event->scroll.y - b.y;
+    case YETTY_YCORE_MOUSE_SCROLL:
+        rel_x = event->mouse_scroll.x - b.x;
+        rel_y = event->mouse_scroll.y - b.y;
         yetty_yvnc_client_send_mouse_scroll(viewer->client, (int16_t)rel_x, (int16_t)rel_y,
-                                           (int16_t)event->scroll.dx, (int16_t)event->scroll.dy,
-                                           (uint8_t)event->scroll.mods);
+                                           (int16_t)event->mouse_scroll.dx, (int16_t)event->mouse_scroll.dy,
+                                           (uint8_t)event->mouse_scroll.mods);
         return YETTY_OK(yetty_ycore_int, 1);
 
     default:

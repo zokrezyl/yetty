@@ -18,7 +18,7 @@ enum yetty_ycore_event_type {
     YETTY_YCORE_MOUSE_UP,
     YETTY_YCORE_MOUSE_MOVE,
     YETTY_YCORE_MOUSE_DRAG,
-    YETTY_YCORE_SCROLL,
+    YETTY_YCORE_MOUSE_SCROLL,
     /* Focus events */
     YETTY_YCORE_SET_FOCUS,
     /* Resize */
@@ -97,7 +97,7 @@ struct yetty_ycore_event_mouse {
     int mods;
 };
 
-struct yetty_ycore_event_scroll {
+struct yetty_ycore_event_mouse_scroll {
     float x;
     float y;
     float dx;
@@ -214,7 +214,7 @@ struct yetty_yui_event {
         struct yetty_ycore_event_key key;
         struct yetty_ycore_event_char chr;
         struct yetty_ycore_event_mouse mouse;
-        struct yetty_ycore_event_scroll scroll;
+        struct yetty_ycore_event_mouse_scroll mouse_scroll;
         struct yetty_ycore_event_set_focus set_focus;
         struct yetty_ycore_event_resize resize;
         struct yetty_ycore_event_poll poll;
