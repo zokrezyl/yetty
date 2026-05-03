@@ -469,7 +469,7 @@ static void slirp_select_poll1(EthernetDevice *net, fd_set *rfds, fd_set *wfds,
   slirp_select_poll(slirp_state, rfds, wfds, efds, (select_ret <= 0));
 }
 
-static EthernetDevice *slirp_open(void) {
+static EthernetDevice *slirp_open(const VMEthEntry *e) {
   EthernetDevice *net;
   struct in_addr net_addr = {.s_addr = htonl(0x0a000200)}; /* 10.0.2.0 */
   struct in_addr mask = {.s_addr = htonl(0xffffff00)};     /* 255.255.255.0 */
@@ -488,6 +488,25 @@ static EthernetDevice *slirp_open(void) {
 
   slirp_state = slirp_init(restricted, net_addr, mask, host, vhostname, "",
                            bootfile, dhcp, dns, net);
+
+  /* Apply config-driven port forwards. host_addr=0 => bind on any host
+   * interface; guest_addr=0 => slirp uses vdhcp_startaddr (10.0.2.15). */
+  if (e) {
+    struct in_addr any = {.s_addr = htonl(INADDR_ANY)};
+    struct in_addr guest_any = {.s_addr = 0};
+    for (int j = 0; j < e->hostfwd_count; j++) {
+      const VMEthHostFwd *hf = &e->hostfwd[j];
+      if (slirp_add_hostfwd(slirp_state, hf->is_udp ? 1 : 0, any,
+                            hf->host_port, guest_any, hf->guest_port) < 0) {
+        fprintf(stderr,
+                "slirp: failed to add hostfwd %s:%d -> guest:%d (port busy?)\n",
+                hf->is_udp ? "udp" : "tcp", hf->host_port, hf->guest_port);
+        return NULL;
+      }
+      fprintf(stderr, "slirp: hostfwd %s 0.0.0.0:%d -> 10.0.2.15:%d\n",
+              hf->is_udp ? "udp" : "tcp", hf->host_port, hf->guest_port);
+    }
+  }
 
   net->mac_addr[0] = 0x02;
   net->mac_addr[1] = 0x00;
@@ -780,7 +799,7 @@ int main(int argc, char **argv) {
   for (i = 0; i < p->eth_count; i++) {
 #ifdef CONFIG_SLIRP
     if (!strcmp(p->tab_eth[i].driver, "user")) {
-      p->tab_eth[i].net = slirp_open();
+      p->tab_eth[i].net = slirp_open(&p->tab_eth[i]);
       if (!p->tab_eth[i].net)
         exit(1);
     } else
