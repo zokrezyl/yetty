@@ -6,7 +6,7 @@ when:
 
 steps:
   build:
-    image: scratch
+    image: bash
     commands:
       - git lfs install
       - git lfs fetch
