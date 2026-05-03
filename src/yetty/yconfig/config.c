@@ -844,6 +844,7 @@ enum {
     OPT_VNC_H264_FRAMERATE,
     OPT_VNC_H264_IDR_INTERVAL,
     OPT_VNC_H264_SCREEN_CONTENT,
+    OPT_RECORD,
     OPT_RPC_HOST,
     OPT_TEMU,
     OPT_QEMU,
@@ -866,6 +867,7 @@ static struct yetty_yplatform_option long_options[] = {
     {"vnc-h264-framerate", required_argument, 0, OPT_VNC_H264_FRAMERATE},
     {"vnc-h264-idr-interval", required_argument, 0, OPT_VNC_H264_IDR_INTERVAL},
     {"vnc-h264-screen-content", required_argument, 0, OPT_VNC_H264_SCREEN_CONTENT},
+    {"record", required_argument, 0, OPT_RECORD},
     {"rpc-host", required_argument, 0, OPT_RPC_HOST},
     {"rpc-port", required_argument, 0, 'r'},
     {"temu", no_argument, 0, OPT_TEMU},
@@ -900,6 +902,8 @@ static void print_usage(const char *prog)
     fprintf(
         stderr,
         "      --vnc-h264-screen-content 0|1  H.264 screen-content optimisation (default: 1)\n");
+    fprintf(stderr,
+            "      --record=FILE              Record session to MP4 (forces H.264 encoding)\n");
     fprintf(stderr, "      --rpc-host=HOST    RPC server host\n");
     fprintf(stderr, "  -r, --rpc-port=PORT    RPC server port\n");
     fprintf(stderr, "      --temu             Run in-process TinyEMU RISC-V VM\n");
@@ -973,6 +977,10 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             break;
         case OPT_VNC_H264_SCREEN_CONTENT:
             set_config(impl, "vnc/h264/screen-content", yetty_yplatform_optarg);
+            break;
+        case OPT_RECORD:
+            set_config(impl, "vnc/record-file", yetty_yplatform_optarg);
+            set_config(impl, "vnc/use-h264", "true");
             break;
         case OPT_RPC_HOST:
             set_config(impl, YETTY_YCONFIG_KEY_RPC_HOST, yetty_yplatform_optarg);

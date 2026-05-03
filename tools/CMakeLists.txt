@@ -58,10 +58,6 @@ if(YETTY_ENABLE_TOOL_YBROWSER)
     add_subdirectory(ybrowser)
 endif()
 
-if(YETTY_ENABLE_TOOL_VNC_RECORDER AND NOT WIN32)
-    add_subdirectory(vnc-recorder)
-endif()
-
 if(YETTY_ENABLE_TOOL_YDOC OR YETTY_ENABLE_TOOL_YSHEET OR YETTY_ENABLE_TOOL_YSLIDE)
     add_subdirectory(yrich-runner)
 endif()

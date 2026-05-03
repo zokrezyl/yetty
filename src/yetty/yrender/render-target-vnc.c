@@ -87,12 +87,10 @@ static struct yetty_ycore_void_result render_target_vnc_present(struct yetty_ypa
     struct yetty_yrender_render_target_vnc *rt = (struct yetty_yrender_render_target_vnc *)self;
     struct yetty_ycore_void_result res;
 
-    int has_clients = rt->vnc_server ? yetty_yvnc_server_has_clients(rt->vnc_server) : 0;
-    ytrace("vnc_render_target_present: vnc_server=%p has_clients=%d", (void *)rt->vnc_server,
-           has_clients);
-
-    /* Send frame to VNC clients if any connected */
-    if (rt->vnc_server && has_clients) {
+    /* Hand the texture to the server unconditionally: the server itself
+   * gates on its consumers (TCP clients and/or active recording) and
+   * early-outs cheaply when nothing wants the frame. */
+    if (rt->vnc_server) {
         WGPUTexture tex = rt->inner->ops->get_texture(rt->inner);
         uint32_t w = (uint32_t)rt->base.viewport.w;
         uint32_t h = (uint32_t)rt->base.viewport.h;
