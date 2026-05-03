@@ -2,4 +2,8 @@ steps:
   build:
     image: ubuntu
     commands:
+      - apt-get update
+      - apt-get install -y git git-lfs make
+      - git lfs install
+      - git lfs fetch
       - make build-desktop-ytrace-release
