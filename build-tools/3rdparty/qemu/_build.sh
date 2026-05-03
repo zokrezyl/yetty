@@ -108,6 +108,10 @@ _CONFIGURE_ARGS=(
     --disable-tools
     --disable-qom-cast-debug
     --disable-coroutine-pool
+    # No display surface — qemu's ui/console.c stubs out pixman_image_t when
+    # this is set. Without it, --without-default-features still leaves pixman
+    # as a hard link-time requirement for any softmmu target.
+    --disable-pixman
 )
 # virtfs is platform-specific: needs POSIX 9p machinery + xattr that doesn't
 # exist on Windows. Each platform block opts in below.
@@ -159,15 +163,14 @@ android-arm64-v8a|android-x86_64)
         exit 1
     }
 
-    # Build pcre2/libffi/glib/pixman into a per-ABI sysroot. nixpkgs
+    # Build pcre2/libffi/glib into a per-ABI sysroot. nixpkgs
     # pkgsCross.*-android hits a compiler-rt/pthread.h regression on
     # clang 19+, so avoid it entirely.
     PCRE2_VERSION="10.44"
     LIBFFI_VERSION="3.4.6"
     GLIB_VERSION="2.80.5"
-    PIXMAN_VERSION="0.44.0"
     SYSROOT="$WORK_DIR/android-sysroot-${TARGET_PLATFORM##android-}"
-    SYSROOT_STAMP="$SYSROOT/.built-$PCRE2_VERSION-$LIBFFI_VERSION-$GLIB_VERSION-$PIXMAN_VERSION"
+    SYSROOT_STAMP="$SYSROOT/.built-$PCRE2_VERSION-$LIBFFI_VERSION-$GLIB_VERSION"
     DEPS_DIR="$WORK_DIR/android-deps-src"
     mkdir -p "$SYSROOT" "$DEPS_DIR"
 
@@ -238,7 +241,7 @@ CROSS_EOF
     if [ -f "$SYSROOT_STAMP" ]; then
         echo "==> android sysroot already built: $SYSROOT"
     else
-        echo "==> building android sysroot (pcre2, libffi, glib, pixman) for $TARGET_PLATFORM"
+        echo "==> building android sysroot (pcre2, libffi, glib) for $TARGET_PLATFORM"
 
         # pcre2 — glib hard-dep. 10.44's tarball ships autotools only.
         _fetch "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE2_VERSION}/pcre2-${PCRE2_VERSION}.tar.bz2" \
@@ -275,14 +278,6 @@ CROSS_EOF
             -Dsysprof=disabled \
             -Doss_fuzz=disabled \
             -Dglib_debug=disabled
-
-        # pixman (meson).
-        _fetch "https://cairographics.org/releases/pixman-${PIXMAN_VERSION}.tar.gz" \
-            "pixman-${PIXMAN_VERSION}.tar.gz"
-        [ -d "$DEPS_DIR/pixman-${PIXMAN_VERSION}" ] || tar -C "$DEPS_DIR" -xzf "$DEPS_DIR/pixman-${PIXMAN_VERSION}.tar.gz"
-        _meson_build "pixman" "$DEPS_DIR/pixman-${PIXMAN_VERSION}" \
-            -Dtests=disabled \
-            -Ddemos=disabled
 
         touch "$SYSROOT_STAMP"
         echo "==> android sysroot ready: $SYSROOT"
@@ -376,7 +371,7 @@ int qemu_shm_alloc(size_t size, Error **errp)\
 
 macos-arm64|macos-x86_64)
     # Native on macOS runner. CI installs prereqs via brew
-    # (ninja meson pkg-config glib pixman).
+    # (ninja meson pkg-config glib).
     case "$TARGET_PLATFORM" in
         macos-arm64)  _ARCH="arm64"  ;;
         macos-x86_64) _ARCH="x86_64" ;;
@@ -710,7 +705,7 @@ PYEOF
 windows-x86_64)
     # Windows uses MSYS2 CLANG64 (clang + lld + mingw-w64 libs). Caller is
     # expected to be inside the CLANG64 environment with these packages:
-    #   mingw-w64-clang-x86_64-{clang,lld,glib2,pixman,libslirp,zlib,
+    #   mingw-w64-clang-x86_64-{clang,lld,glib2,libslirp,zlib,
     #                          ninja,meson,pkgconf,python}
     #   git diffutils
     # CI sets this up via msys2/setup-msys2 in build-3rdparty-qemu.yml.
@@ -832,7 +827,7 @@ cp "$BUILT" "$STAGE/$OUT_NAME"
 if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
     _CLANG64_BIN="/clang64/bin"
     for _dll in libglib-2.0-0.dll libintl-8.dll libiconv-2.dll \
-                libpcre2-8-0.dll libpixman-1-0.dll zlib1.dll \
+                libpcre2-8-0.dll zlib1.dll \
                 libwinpthread-1.dll libc++.dll libunwind.dll; do
         if [ -f "$_CLANG64_BIN/$_dll" ]; then
             cp "$_CLANG64_BIN/$_dll" "$STAGE/"

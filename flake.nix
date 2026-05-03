@@ -322,14 +322,15 @@
           };
 
           # Asset-build shells: one per QEMU target platform.
-          # Each carries the target-arch glib/pixman/pkg-config so QEMU's
-          # meson configure can find them via the cross pkg-config wrapper.
+          # Each carries the target-arch glib + zlib via pkg-config so QEMU's
+          # meson configure can find them. pixman is gone everywhere via
+          # qemu's --disable-pixman (see _build.sh _CONFIGURE_ARGS).
 
           assets-qemu-linux-x86_64 = pkgs.mkShell {
             buildInputs = with pkgs; [
               meson ninja pkg-config python3 bison flex gnumake perl
               curl gnutar xz gzip
-              gcc glib glib.dev pixman zlib zlib.static
+              gcc glib glib.dev zlib zlib.static
             ];
             shellHook = "echo 'Yetty asset-build (qemu linux-x86_64)'";
           };
@@ -345,7 +346,7 @@
               pkgsCross.aarch64-multiplatform.buildPackages.pkg-config
             ];
             buildInputs = with pkgs.pkgsCross.aarch64-multiplatform; [
-              glib pixman zlib
+              glib zlib
             ];
             shellHook = ''
               # QEMU configure defers pkg-config lookups to $PKG_CONFIG
@@ -373,7 +374,7 @@
           # android targets: use the Android NDK directly (same toolchain
           # yetty's own Android build uses via gradle). Sidesteps
           # pkgsCross.*-android, whose compiler-rt rebuild has been broken
-          # across clang-19/20/21. We build glib + pixman from source into
+          # across clang-19/20/21. We build glib from source into
           # a sysroot with NDK clang — see build-tools/assets/qemu/
           # platforms/android-*.sh.
           #
@@ -420,19 +421,15 @@
           # Darwin targets (macos/ios/tvos): run on a macOS host with nix
           # installed. Build tools come from nix; the Xcode SDKs for
           # iOS/tvOS still come from xcrun at script time.
-          # macos native uses the host's clang + nix-provided glib/pixman.
-          # iOS/tvOS use xcrun -sdk switches — they don't need glib/pixman
-          # cross-builds because the resulting binary is embedded (no
-          # dynamic glib dep) — but QEMU's configure still wants glib at
-          # build time. Supplying a native glib and pointing configure at
-          # it works because meson uses the same compiler for both host
-          # and target on darwin cross (the kludge path used in poc/qemu
-          # ios scripts).
+          # macos native uses the host's clang + nix-provided glib.
+          # pixman is gone everywhere via qemu's --disable-pixman.
+          # iOS/tvOS shells deliberately omit host glib too — _build.sh
+          # cross-builds glib into the sysroot.
           assets-qemu-macos-x86_64 = pkgs.mkShell {
             buildInputs = with pkgs; [
               meson ninja pkg-config python3 bison flex gnumake perl
               curl gnutar xz gzip
-              glib pixman
+              glib
             ];
             shellHook = "echo 'Yetty asset-build (qemu macos-x86_64)'";
           };
@@ -441,16 +438,19 @@
             buildInputs = with pkgs; [
               meson ninja pkg-config python3 bison flex gnumake perl
               curl gnutar xz gzip
-              glib pixman
+              glib
             ];
             shellHook = "echo 'Yetty asset-build (qemu macos-arm64)'";
           };
 
+          # ios/tvos shells: no host glib/pixman. _build.sh cross-builds glib
+          # into the sysroot; pixman is gone via --disable-pixman. Including
+          # host glib here leaks macOS libffi/zlib (transitive dev outputs)
+          # into the cross link via nix's pkg-config wrapper.
           assets-qemu-ios-arm64 = pkgs.mkShell {
             buildInputs = with pkgs; [
               meson ninja pkg-config python3 bison flex gnumake perl
               curl gnutar xz gzip
-              glib pixman
             ];
             shellHook = "echo 'Yetty asset-build (qemu ios-arm64)'";
           };
@@ -459,7 +459,6 @@
             buildInputs = with pkgs; [
               meson ninja pkg-config python3 bison flex gnumake perl
               curl gnutar xz gzip
-              glib pixman
             ];
             shellHook = "echo 'Yetty asset-build (qemu ios-x86_64 simulator)'";
           };
@@ -468,7 +467,6 @@
             buildInputs = with pkgs; [
               meson ninja pkg-config python3 bison flex gnumake perl
               curl gnutar xz gzip
-              glib pixman
             ];
             shellHook = "echo 'Yetty asset-build (qemu tvos-arm64)'";
           };
@@ -477,7 +475,6 @@
             buildInputs = with pkgs; [
               meson ninja pkg-config python3 bison flex gnumake perl
               curl gnutar xz gzip
-              glib pixman
             ];
             shellHook = "echo 'Yetty asset-build (qemu tvos-x86_64 simulator)'";
           };
