@@ -7,6 +7,8 @@ when:
 steps:
   build:
     image: powershell
+    environment:
+      CURL_CA_BUNDLE: C:\Strawberry\perl\vendor\lib\Mozilla\CA\cacert.pem
     commands:
       - git lfs install
       - git lfs fetch
