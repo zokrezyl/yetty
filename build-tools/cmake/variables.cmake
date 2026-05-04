@@ -106,6 +106,7 @@ option(YETTY_ENABLE_FEATURE_YEXPR     "yexpr — expression parser"            O
 option(YETTY_ENABLE_FEATURE_YFSVM     "yfsvm — fragment shader VM"           ON)
 option(YETTY_ENABLE_FEATURE_YIMAGE    "yimage — image complex primitive"     ON)
 option(YETTY_ENABLE_FEATURE_YMSDF_GEN "ymsdf-gen — MSDF glyph generator"    ON)
+option(YETTY_ENABLE_FEATURE_YMSDF_WGSL "ymsdf-wgsl — GPU MSDF glyph generator" ON)
 option(YETTY_ENABLE_FEATURE_YCAT      "ycat — MIME-dispatched cat for cards"  ON)
 option(YETTY_ENABLE_FEATURE_YPDF      "ypdf — PDF to ypaint buffer"          ON)
 option(YETTY_ENABLE_FEATURE_YMARKDOWN "ymarkdown — Markdown to ypaint buffer" ON)

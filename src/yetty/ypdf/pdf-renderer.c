@@ -30,6 +30,9 @@
 
 #include <pdfio.h>
 
+#include <ft2build.h>
+#include FT_FREETYPE_H
+
 #include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -302,6 +305,255 @@ static size_t remap_cid_text(const char *decoded, size_t decoded_len,
 }
 
 /*=============================================================================
+ * TTF hmtx patcher
+ *
+ * Many PDF subsetters strip or uniformise the embedded TTF's hmtx table —
+ * the authoritative widths live in the PDF font dict (/Widths for simple
+ * TTF, /W for CIDFontType2). FreeType reads advances out of hmtx, so a
+ * stripped hmtx propagates uniform stride into both the producer's
+ * measure_text and the receiver's CDB. We rewrite hmtx in-place from the
+ * PDF widths before the font bytes are handed to add_font / raster_font.
+ *
+ * No checksum recomputation: FreeType's normal load path doesn't validate
+ * head.checkSumAdjustment or per-table checksums.
+ *
+ * CFF (FontFile3) is left untouched — its advances live inside the
+ * CharString program, which is a much bigger patcher.
+ *===========================================================================*/
+
+#define TTF_TAG(a, b, c, d)                                                                        \
+    (((uint32_t)(a) << 24) | ((uint32_t)(b) << 16) | ((uint32_t)(c) << 8) | (uint32_t)(d))
+
+static uint16_t read_u16_be(const uint8_t *p)
+{
+    return (uint16_t)(((uint16_t)p[0] << 8) | p[1]);
+}
+
+static uint32_t read_u32_be(const uint8_t *p)
+{
+    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) |
+           (uint32_t)p[3];
+}
+
+static void write_u16_be(uint8_t *p, uint16_t v)
+{
+    p[0] = (uint8_t)(v >> 8);
+    p[1] = (uint8_t)(v & 0xFF);
+}
+
+static bool find_ttf_table(const uint8_t *ttf, size_t ttf_size, uint32_t tag, size_t *off,
+                           size_t *len)
+{
+    if (ttf_size < 12) {
+        return false;
+    }
+    uint16_t num_tables = read_u16_be(ttf + 4);
+    if (12 + (size_t)num_tables * 16 > ttf_size) {
+        return false;
+    }
+    for (uint16_t i = 0; i < num_tables; i++) {
+        const uint8_t *e = ttf + 12 + (size_t)i * 16;
+        if (read_u32_be(e) == tag) {
+            uint32_t toff = read_u32_be(e + 8);
+            uint32_t tlen = read_u32_be(e + 12);
+            if ((size_t)toff + tlen > ttf_size) {
+                return false;
+            }
+            *off = toff;
+            *len = tlen;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* round(width_pdf * units_per_em / 1000) clamped to uint16. */
+static uint16_t pdf_width_to_fu(double w_pdf, uint16_t units_per_em)
+{
+    double w_fu = (w_pdf * (double)units_per_em) / 1000.0;
+    if (w_fu < 0.0) {
+        w_fu = 0.0;
+    }
+    if (w_fu > 65535.0) {
+        w_fu = 65535.0;
+    }
+    return (uint16_t)(w_fu + 0.5);
+}
+
+/* Resolve dict[key] as an array, falling back to the indirect-object form. */
+static pdfio_array_t *dict_get_array(pdfio_dict_t *d, const char *key)
+{
+    pdfio_array_t *a = pdfioDictGetArray(d, key);
+    if (a) {
+        return a;
+    }
+    pdfio_obj_t *o = pdfioDictGetObj(d, key);
+    return o ? pdfioObjGetArray(o) : NULL;
+}
+
+static void patch_simple_widths(uint8_t *ttf_data, size_t ttf_size, size_t hmtx_off,
+                                uint16_t gid_limit, uint16_t units_per_em,
+                                pdfio_dict_t *font_obj_dict)
+{
+    pdfio_array_t *widths = dict_get_array(font_obj_dict, "Widths");
+    if (!widths) {
+        return;
+    }
+    size_t widths_len = pdfioArrayGetSize(widths);
+    if (widths_len == 0) {
+        return;
+    }
+    int first_char = (int)pdfioDictGetNumber(font_obj_dict, "FirstChar");
+    if (first_char < 0) {
+        first_char = 0;
+    }
+
+    /* Char code → glyph index lookup needs FreeType's cmap parser; rolling
+     * our own would mean handling cmap formats 0/4/6/12 and platform/encoding
+     * preference. FreeType is already a yfont dependency. */
+    FT_Library lib;
+    if (FT_Init_FreeType(&lib) != 0) {
+        return;
+    }
+    FT_Face face;
+    if (FT_New_Memory_Face(lib, ttf_data, (FT_Long)ttf_size, 0, &face) != 0) {
+        FT_Done_FreeType(lib);
+        return;
+    }
+
+    int patched = 0;
+    for (size_t i = 0; i < widths_len; i++) {
+        double w_pdf = pdfioArrayGetNumber(widths, i);
+        FT_ULong code = (FT_ULong)(first_char + (long)i);
+        FT_UInt gid = FT_Get_Char_Index(face, code);
+        if (gid == 0 || gid >= gid_limit) {
+            continue;
+        }
+        uint16_t w_fu = pdf_width_to_fu(w_pdf, units_per_em);
+        write_u16_be(ttf_data + hmtx_off + (size_t)gid * 4, w_fu);
+        patched++;
+    }
+
+    FT_Done_Face(face);
+    FT_Done_FreeType(lib);
+    ydebug("ypdf: hmtx patcher (simple): %d/%zu glyph advances rewritten", patched, widths_len);
+}
+
+/* Walk the sparse /W array. Two formats per entry:
+ *   c [w0 w1 ...]   — widths for c, c+1, c+2, ...
+ *   c1 c2 w         — single width w for CIDs c1..c2 inclusive
+ * Identity-H mapping: CID == glyph index. */
+static void patch_cid_widths(uint8_t *ttf_data, size_t hmtx_off, uint16_t gid_limit,
+                             uint16_t units_per_em, pdfio_dict_t *cid_font_dict)
+{
+    pdfio_array_t *w_arr = dict_get_array(cid_font_dict, "W");
+    if (!w_arr) {
+        return;
+    }
+    size_t w_len = pdfioArrayGetSize(w_arr);
+    int patched = 0;
+    size_t i = 0;
+    while (i < w_len) {
+        if (pdfioArrayGetType(w_arr, i) != PDFIO_VALTYPE_NUMBER || i + 1 >= w_len) {
+            break;
+        }
+        long c = (long)pdfioArrayGetNumber(w_arr, i);
+        pdfio_valtype_t t1 = pdfioArrayGetType(w_arr, i + 1);
+
+        if (t1 == PDFIO_VALTYPE_ARRAY) {
+            pdfio_array_t *inner = pdfioArrayGetArray(w_arr, i + 1);
+            size_t inner_len = inner ? pdfioArrayGetSize(inner) : 0;
+            for (size_t j = 0; j < inner_len; j++) {
+                long cid = c + (long)j;
+                if (cid < 0 || cid >= gid_limit) {
+                    continue;
+                }
+                uint16_t w_fu = pdf_width_to_fu(pdfioArrayGetNumber(inner, j), units_per_em);
+                write_u16_be(ttf_data + hmtx_off + (size_t)cid * 4, w_fu);
+                patched++;
+            }
+            i += 2;
+        } else if (t1 == PDFIO_VALTYPE_NUMBER && i + 2 < w_len &&
+                   pdfioArrayGetType(w_arr, i + 2) == PDFIO_VALTYPE_NUMBER) {
+            long c2 = (long)pdfioArrayGetNumber(w_arr, i + 1);
+            uint16_t w_fu = pdf_width_to_fu(pdfioArrayGetNumber(w_arr, i + 2), units_per_em);
+            for (long cid = c; cid <= c2; cid++) {
+                if (cid < 0 || cid >= gid_limit) {
+                    continue;
+                }
+                write_u16_be(ttf_data + hmtx_off + (size_t)cid * 4, w_fu);
+                patched++;
+            }
+            i += 3;
+        } else {
+            break;
+        }
+    }
+    ydebug("ypdf: hmtx patcher (CID): %d glyph advances rewritten", patched);
+}
+
+/* Rewrite the in-memory TTF's hmtx table from the PDF font dict's /Widths
+ * (simple) or descendant CIDFont's /W (Type0). cid_font_dict is NULL for
+ * simple fonts. Caller must have verified the FontFile is FontFile2 (TTF). */
+static void patch_ttf_with_pdf_widths(uint8_t *ttf_data, size_t ttf_size,
+                                      pdfio_dict_t *font_obj_dict, pdfio_dict_t *cid_font_dict)
+{
+    if (!ttf_data || ttf_size < 12) {
+        return;
+    }
+    /* Sniff the font flavour. TrueType: 0x00010000 or 'true'. CFF: 'OTTO'. */
+    uint32_t magic = read_u32_be(ttf_data);
+    if (magic != 0x00010000u && magic != TTF_TAG('t', 'r', 'u', 'e')) {
+        return;
+    }
+
+    size_t head_off, head_len, hhea_off, hhea_len, hmtx_off, hmtx_len, maxp_off, maxp_len;
+    if (!find_ttf_table(ttf_data, ttf_size, TTF_TAG('h', 'e', 'a', 'd'), &head_off, &head_len) ||
+        !find_ttf_table(ttf_data, ttf_size, TTF_TAG('h', 'h', 'e', 'a'), &hhea_off, &hhea_len) ||
+        !find_ttf_table(ttf_data, ttf_size, TTF_TAG('h', 'm', 't', 'x'), &hmtx_off, &hmtx_len) ||
+        !find_ttf_table(ttf_data, ttf_size, TTF_TAG('m', 'a', 'x', 'p'), &maxp_off, &maxp_len)) {
+        return;
+    }
+    if (head_len < 20 || hhea_len < 36 || maxp_len < 6) {
+        return;
+    }
+    uint16_t units_per_em = read_u16_be(ttf_data + head_off + 18);
+    uint16_t num_h_metrics = read_u16_be(ttf_data + hhea_off + 34);
+    uint16_t num_glyphs = read_u16_be(ttf_data + maxp_off + 4);
+    if (units_per_em == 0 || num_h_metrics == 0) {
+        return;
+    }
+    if (hmtx_off + (size_t)num_h_metrics * 4 > ttf_size) {
+        return;
+    }
+
+    /* Per the OpenType spec, glyphs at index >= numberOfHMetrics share the
+     * advance from the LAST hmtx record (numberOfHMetrics-1). If the
+     * subsetter set numberOfHMetrics < num_glyphs and we patched that
+     * shared record, we'd silently change every glyph that aliases it —
+     * worse than leaving the table alone. So when the table is collapsed,
+     * we only allow patching the strictly-private records [0 .. nHM-2].
+     * Properly fixing the collapsed case requires expanding hmtx and
+     * shifting downstream tables — out of scope per the issue. */
+    uint16_t patch_limit = num_h_metrics;
+    if (num_h_metrics < num_glyphs && patch_limit > 0) {
+        patch_limit -= 1;
+    }
+    ydebug("ypdf: hmtx patcher: upem=%u numberOfHMetrics=%u num_glyphs=%u patch_limit=%u (cid=%d)",
+           units_per_em, num_h_metrics, num_glyphs, patch_limit, cid_font_dict ? 1 : 0);
+    if (patch_limit == 0) {
+        return;
+    }
+
+    if (cid_font_dict) {
+        patch_cid_widths(ttf_data, hmtx_off, patch_limit, units_per_em, cid_font_dict);
+    } else {
+        patch_simple_widths(ttf_data, ttf_size, hmtx_off, patch_limit, units_per_em,
+                            font_obj_dict);
+    }
+}
+
+/*=============================================================================
  * Font extraction
  *===========================================================================*/
 
@@ -389,6 +641,9 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
             is_identity_h = true;
         }
 
+        /* Kept around for the hmtx patcher: for Type0 fonts the
+         * authoritative widths live in the descendant CIDFont's /W. */
+        pdfio_dict_t *cid_font_dict = NULL;
         if (!font_desc_obj) {
             pdfio_array_t *desc = pdfioDictGetArray(font_obj_dict, "DescendantFonts");
             if (!desc) {
@@ -400,9 +655,9 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
             if (desc && pdfioArrayGetSize(desc) > 0) {
                 pdfio_obj_t *cid_font_obj = pdfioArrayGetObj(desc, 0);
                 if (cid_font_obj) {
-                    pdfio_dict_t *cid_dict = pdfioObjGetDict(cid_font_obj);
-                    if (cid_dict) {
-                        font_desc_obj = pdfioDictGetObj(cid_dict, "FontDescriptor");
+                    cid_font_dict = pdfioObjGetDict(cid_font_obj);
+                    if (cid_font_dict) {
+                        font_desc_obj = pdfioDictGetObj(cid_font_dict, "FontDescriptor");
                     }
                 }
             }
@@ -416,9 +671,11 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
             continue;
         }
 
+        bool is_truetype = true;
         pdfio_obj_t *font_file_obj = pdfioDictGetObj(font_desc_dict, "FontFile2");
         if (!font_file_obj) {
             font_file_obj = pdfioDictGetObj(font_desc_dict, "FontFile3");
+            is_truetype = false;
         }
         if (!font_file_obj) {
             continue;
@@ -455,6 +712,13 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
         if (!bytes || sz == 0) {
             free(bytes);
             continue;
+        }
+
+        /* Many subsetters strip the TTF's hmtx. Rewrite it from the PDF's
+         * authoritative widths before any consumer (buffer or raster_font)
+         * sees the bytes; both downstream paths copy out of `bytes`. */
+        if (is_truetype) {
+            patch_ttf_with_pdf_widths(bytes, sz, font_obj_dict, cid_font_dict);
         }
 
         /* Store TTF in buffer. */

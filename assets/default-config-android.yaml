@@ -23,6 +23,15 @@ scrollback:
   lines: 5000
 
 # ─────────────────────────────────────────────────────────────────────────────
+# MSDF CDB Generation
+# ─────────────────────────────────────────────────────────────────────────────
+# Backend used to build MSDF font atlases on demand.
+#   gpu - WebGPU compute shader. Faster, minor curve artefacts.
+#   cpu - msdfgen library. Slower, artefact-free.
+msdf:
+  generator: "gpu"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Shell Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 shell:

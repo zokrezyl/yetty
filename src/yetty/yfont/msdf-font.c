@@ -18,6 +18,7 @@
 #include <yetty/ytrace/ytrace.h>
 #include <webgpu/webgpu.h>
 
+#include <stdio.h>  /* snprintf for namespace */
 #include <stdlib.h>
 #include <string.h>
 
@@ -410,13 +411,17 @@ static const struct yetty_yfont_font_ops msdf_font_ops = {
 #define DEFAULT_CELL_SIZE 64
 
 struct yetty_font_font_result yetty_yfont_msdf_font_create(const char *cdb_path,
-                                                          const char *shader_path)
+                                                          const char *shader_path,
+                                                          const char *namespace)
 {
     if (!cdb_path) {
         return YETTY_ERR(yetty_font_font, "cdb_path is NULL");
     }
     if (!shader_path) {
         return YETTY_ERR(yetty_font_font, "shader_path is NULL");
+    }
+    if (!namespace || !*namespace) {
+        namespace = "msdf_font";
     }
 
     ydebug("msdf_font: opening %s, shader %s", cdb_path, shader_path);
@@ -483,8 +488,15 @@ struct yetty_font_font_result yetty_yfont_msdf_font_create(const char *cdb_path,
         return YETTY_ERR(yetty_font_font, "map init failed");
     }
 
-    /* GPU resource set */
-    strncpy(font->rs.namespace, "msdf_font", YETTY_YRENDER_NAME_MAX - 1);
+    /* GPU resource set. The namespace must be unique among msdf-font
+     * instances attached to the same layer — the merged WGSL would
+     * otherwise have duplicate uniform fields, duplicate helper functions
+     * and duplicate `<ns>_buffer_offset` constants. Caller picks the
+     * namespace from a stable identifier (PDF: FNV1a hash of TTF bytes;
+     * default font: family name). The shader source uses `__NS__` as a
+     * placeholder; the pipeline binder substitutes it at shader-merge
+     * time. See shader_append + generate_wgsl_bindings in pipeline.c. */
+    snprintf(font->rs.namespace, YETTY_YRENDER_NAME_MAX, "msdf_%s", namespace);
 
     font->rs.texture_count = 1;
     struct yetty_yrender_texture *tex = &font->rs.textures[0];
@@ -500,7 +512,7 @@ struct yetty_font_font_result yetty_yfont_msdf_font_create(const char *cdb_path,
     strncpy(buf->wgsl_type, "array<f32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
     buf->readonly = 1;
 
-    font->rs.uniform_count = 4;
+    font->rs.uniform_count = 5;
     strncpy(font->rs.uniforms[0].name, "pixel_range", YETTY_YRENDER_NAME_MAX - 1);
     font->rs.uniforms[0].type = YETTY_YRENDER_UNIFORM_F32;
     font->rs.uniforms[0].f32 = font->pixel_range;
@@ -516,6 +528,13 @@ struct yetty_font_font_result yetty_yfont_msdf_font_create(const char *cdb_path,
     strncpy(font->rs.uniforms[3].name, "atlas_cols", YETTY_YRENDER_NAME_MAX - 1);
     font->rs.uniforms[3].type = YETTY_YRENDER_UNIFORM_U32;
     font->rs.uniforms[3].u32 = font->atlas_cols;
+
+    /* Atlas sub-region (u_min, v_min, u_max, v_max) inside the packed
+     * mega-atlas. Filled in by the binder at bind-group time — it sees a
+     * VEC4 uniform named `<texname>_region` and writes the texture's
+     * normalised position into it. We only need to declare it here. */
+    strncpy(font->rs.uniforms[4].name, "texture_region", YETTY_YRENDER_NAME_MAX - 1);
+    font->rs.uniforms[4].type = YETTY_YRENDER_UNIFORM_VEC4;
 
     yetty_yrender_shader_code_set(&font->rs.shader, (const char *)font->shader_code.data,
                                   font->shader_code.size);

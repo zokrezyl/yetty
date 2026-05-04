@@ -107,11 +107,18 @@ fn glyph_read_color(prim_offset: u32) -> u32 {
     return storage_buffer[prim_offset + 7u];
 }
 
-// The active font's shader (msdf-font.wgsl or raster-font.wgsl) is merged by
-// the binder and provides three helpers:
-//   font_base_size()   -> f32
-//   font_glyph_size(i) -> vec2<f32>  (in base-size pixels)
-//   font_glyph_sample(i, glyph_uv, pixel_scale) -> f32  (alpha 0..1)
+// The active fonts' shaders (msdf-font.wgsl × N) are merged by the binder.
+// Each instance contributes its own helpers — `<ns>_base_size`, `<ns>_glyph_size`,
+// `<ns>_glyph_sample` — namespaced by the binder's __NS__ substitution.
+//
+// ypaint-layer.c emits a per-canvas dispatcher block ABOVE this static
+// source that exposes:
+//   font_base_size(slot)            -> f32
+//   font_glyph_size(slot, i)        -> vec2<f32>
+//   font_glyph_sample(slot, i, uv, ps) -> f32
+// The dispatcher switches on `slot` and forwards to the right `<ns>_…`
+// helper. Slot 0 is the canvas's default font; 1..N are PDF-embedded
+// fonts in canvas->all_fonts order.
 
 // SDF evaluation: call the generated evaluate_sdf_2d() (from ysdf.gen.wgsl).
 // The ypaint prim stores rolling_row at word +0 and the raw ysdf record
@@ -220,12 +227,15 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             let font_size = glyph_read_font_size(prim_offset);
             let packed = glyph_read_packed(prim_offset);
             let glyph_index = packed & 0xFFFFu;
+            // High 16 bits hold (canvas_slot + 1). 0 means "default font".
+            let slot_plus_one = (packed >> 16u) & 0xFFFFu;
+            let font_slot = select(0u, slot_plus_one - 1u, slot_plus_one > 0u);
             let color_packed = glyph_read_color(prim_offset);
 
-            let base_size = font_base_size();
+            let base_size = font_base_size(font_slot);
             let pixel_scale = select(1.0, font_size / base_size, base_size > 0.0);
 
-            let glyph_size = font_glyph_size(glyph_index);
+            let glyph_size = font_glyph_size(font_slot, glyph_index);
             if (glyph_size.x <= 0.0 || glyph_size.y <= 0.0) {
                 continue;
             }
@@ -238,7 +248,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             }
 
             let glyph_uv = (local_pos - glyph_min) / (glyph_size * pixel_scale);
-            let glyph_alpha = font_glyph_sample(glyph_index, glyph_uv, pixel_scale);
+            let glyph_alpha = font_glyph_sample(font_slot, glyph_index, glyph_uv, pixel_scale);
 
             if (glyph_alpha > 0.0) {
                 let glyph_rgba = ypaint_unpack_color(color_packed);

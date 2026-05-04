@@ -83,13 +83,20 @@ struct flatten_state {
     size_t visited_count;
 };
 
+/* Append a shader fragment, substituting every literal occurrence of
+ * "__NS__" with `ns`. This lets a shader source file (e.g. msdf-font.wgsl)
+ * use `__NS___glyph_sample`, `uniforms.__NS___base_size` etc. and have the
+ * binder paste in the actual instance namespace at merge time, so multiple
+ * instances of the same shader type don't collide on identifier names. */
 static void shader_append(struct flatten_state *st,
                           const struct yetty_yrender_shader_code *sc, const char *ns)
 {
     if (!sc->data || sc->size == 0) {
         return;
     }
-    size_t needed = st->shader_size + sc->size + 2;
+    size_t ns_len = ns ? strlen(ns) : 0;
+    /* Worst case: every byte expands to ns_len bytes. Cheap upper bound. */
+    size_t needed = st->shader_size + sc->size * (ns_len > 7 ? ns_len : 7) / 7 + 2;
     if (needed > st->shader_capacity) {
         size_t new_cap = needed * 2;
         st->shader_data = realloc(st->shader_data, new_cap);
@@ -98,8 +105,19 @@ static void shader_append(struct flatten_state *st,
     if (st->shader_size > 0) {
         st->shader_data[st->shader_size++] = '\n';
     }
-    memcpy(st->shader_data + st->shader_size, sc->data, sc->size);
-    st->shader_size += sc->size;
+
+    const char *src = sc->data;
+    size_t i = 0;
+    while (i < sc->size) {
+        if (i + 6 <= sc->size && src[i] == '_' && src[i + 1] == '_' && src[i + 2] == 'N' &&
+            src[i + 3] == 'S' && src[i + 4] == '_' && src[i + 5] == '_' && ns) {
+            memcpy(st->shader_data + st->shader_size, ns, ns_len);
+            st->shader_size += ns_len;
+            i += 6;
+        } else {
+            st->shader_data[st->shader_size++] = src[i++];
+        }
+    }
     st->shader_data[st->shader_size] = '\0';
     ydebug("yrender_pipeline: shader +%zu bytes from '%s' (total %zu)", sc->size, ns,
            st->shader_size);

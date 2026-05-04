@@ -129,15 +129,23 @@ static const struct yetty_yrender_gpu_resource_binder_ops binder_ops = {
     .get_quad_vertex_buffer = binder_get_quad_vertex_buffer,
 };
 
-/* Append shader code to merged buffer */
+/* Append shader code to merged buffer, substituting every literal
+ * "__NS__" with `ns`. Lets a per-instance shader (e.g. msdf-font.wgsl)
+ * use `__NS___glyph_sample`, `uniforms.__NS___base_size` etc. and have
+ * the namespace pasted in here so multiple instances of the same shader
+ * type don't collide on identifier names. Mirrors shader_append in
+ * pipeline.c — both must do the substitution because the binder builds
+ * its own merged WGSL for the final shader module. */
 static void append_shader(struct yetty_yrender_gpu_resource_binder_impl *impl,
                           const struct yetty_yrender_shader_code *sc, const char *ns)
 {
     if (!sc->data || sc->size == 0) {
         return;
     }
-
-    size_t needed = impl->shader_code.size + sc->size + 2;
+    size_t ns_len = ns ? strlen(ns) : 0;
+    /* Cheap upper bound: every byte may expand to ns_len bytes. */
+    size_t expanded_max = sc->size + sc->size * (ns_len > 6 ? ns_len : 6) / 6;
+    size_t needed = impl->shader_code.size + expanded_max + 2;
     if (needed > impl->shader_code.capacity) {
         size_t new_cap = needed * 2;
         impl->shader_code.data = realloc(impl->shader_code.data, new_cap);
@@ -146,8 +154,19 @@ static void append_shader(struct yetty_yrender_gpu_resource_binder_impl *impl,
     if (impl->shader_code.size > 0) {
         impl->shader_code.data[impl->shader_code.size++] = '\n';
     }
-    memcpy(impl->shader_code.data + impl->shader_code.size, sc->data, sc->size);
-    impl->shader_code.size += sc->size;
+
+    const char *src = sc->data;
+    size_t i = 0;
+    while (i < sc->size) {
+        if (i + 6 <= sc->size && src[i] == '_' && src[i + 1] == '_' && src[i + 2] == 'N' &&
+            src[i + 3] == 'S' && src[i + 4] == '_' && src[i + 5] == '_' && ns) {
+            memcpy(impl->shader_code.data + impl->shader_code.size, ns, ns_len);
+            impl->shader_code.size += ns_len;
+            i += 6;
+        } else {
+            impl->shader_code.data[impl->shader_code.size++] = src[i++];
+        }
+    }
     impl->shader_code.data[impl->shader_code.size] = '\0';
     ydebug("GpuResourceBinder: shader +%zu bytes from '%s' (total %zu)", sc->size, ns,
            impl->shader_code.size);

@@ -67,6 +67,17 @@ ypaint:
     #   raster - FreeType-rasterized R8 atlas (baseline for comparison)
     render-method: "msdf"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# MSDF CDB Generation
+# ─────────────────────────────────────────────────────────────────────────────
+# Selects the backend used to build MSDF font atlases on demand (e.g. when
+# ypaint receives an embedded PDF font that hasn't been cached yet).
+#   gpu - WebGPU compute shader. Faster, but the shader still has minor
+#         artefacts on glyphs with curves.
+#   cpu - msdfgen library, multi-threaded. Slower but artefact-free.
+msdf:
+  generator: "gpu"
+
 scrollback:
   # Number of lines to keep in scrollback buffer
   lines: 10000

@@ -24,6 +24,7 @@
 #include <yetty/yui/tile.h>
 #include <yetty/yui/view.h>
 #include <yetty/yrpc/rpc-server.h>
+#include <yetty/ymsdf/generator.h>
 #include <yetty/yvnc/vnc-server.h>
 #include <yetty/platform/platform-input-pipe.h>
 
@@ -638,6 +639,25 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
     yetty->context.gpu_context.surface_format = yetty->surface_format;
     yetty->context.gpu_context.allocator = alloc_res.value;
 
+    /* MSDF CDB generator (cpu | gpu). Selected by `msdf/generator` config
+     * key. Created here so every consumer (currently ypaint-canvas font
+     * materialisation) can grab it off gpu_context. */
+    {
+        const char *shaders_dir = yetty->context.app_context.config->ops->get_string(
+            yetty->context.app_context.config, "paths/shaders", "");
+        struct yetty_ymsdf_generator_ptr_result gres =
+            yetty_ymsdf_generator_create_from_config(yetty->context.app_context.config,
+                                                     yetty->device,
+                                                     yetty->context.app_context.app_gpu_context.instance,
+                                                     shaders_dir);
+        if (YETTY_IS_ERR(gres)) {
+            return YETTY_ERR(yetty_ycore_void, "failed to create MSDF generator", gres);
+        }
+        yetty->context.gpu_context.msdf_generator = gres.value;
+        yinfo("ymsdf: generator = %s",
+              gres.value->ops->name(gres.value));
+    }
+
     /* Check for VNC mode. --record sets vnc/record-file: it spins up a vnc
      * server (for the H.264 encode pipeline) without opening a TCP listener.
      * Window mode is unaffected — recording is a passive sink alongside
@@ -934,6 +954,14 @@ struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty_yetty *yetty)
             }
         }
         yetty->vnc_server = NULL;
+    }
+
+    /* Destroy MSDF generator before the device (gpu impl borrows it). */
+    if (yetty->context.gpu_context.msdf_generator) {
+        ydebug("yetty_destroy: destroying MSDF generator");
+        yetty->context.gpu_context.msdf_generator->ops->destroy(
+            yetty->context.gpu_context.msdf_generator);
+        yetty->context.gpu_context.msdf_generator = NULL;
     }
 
     /* Destroy GPU allocator before device */
