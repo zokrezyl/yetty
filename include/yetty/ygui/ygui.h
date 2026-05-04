@@ -103,11 +103,68 @@ typedef enum {
     YETTY_YGUI_CANVAS_FIT    /* Canvas size = card pixel size (card_cells * cell_pixels) */
 } ygui_canvas_mode_t;
 
-/* Widget scale mode: how widgets respond to canvas size changes */
+/* Widget scale mode: how widgets respond to canvas size changes.
+ *
+ * NOTE: After the layout-engine rewrite, SCALE_ON is currently a no-op.
+ * Layout is recomputed from authored values on every resize instead of
+ * destructively scaling widget geometry. A future iteration may feed a
+ * scale factor back through the layout pass. */
 typedef enum {
     YETTY_YGUI_SCALE_OFF, /* Widgets keep positions/sizes (may clip) */
     YETTY_YGUI_SCALE_ON   /* Widgets scale proportionally with canvas */
 } ygui_scale_mode_t;
+
+/*=============================================================================
+ * Layout (flexbox-style)
+ *===========================================================================*/
+
+typedef enum {
+    YETTY_YGUI_LAYOUT_MANUAL = 0, /* default: children at authored x/y/w/h */
+    YETTY_YGUI_LAYOUT_FLEX        /* row/column flex container */
+} ygui_layout_mode_t;
+
+typedef enum {
+    YETTY_YGUI_FLEX_ROW = 0,
+    YETTY_YGUI_FLEX_COLUMN
+} ygui_flex_direction_t;
+
+typedef enum {
+    YETTY_YGUI_JUSTIFY_START = 0,
+    YETTY_YGUI_JUSTIFY_CENTER,
+    YETTY_YGUI_JUSTIFY_END,
+    YETTY_YGUI_JUSTIFY_SPACE_BETWEEN,
+    YETTY_YGUI_JUSTIFY_SPACE_AROUND,
+    YETTY_YGUI_JUSTIFY_SPACE_EVENLY
+} ygui_justify_t;
+
+typedef enum {
+    /* AUTO is the calloc-zero default. As align_items it behaves like START.
+     * As align_self it means "inherit parent's align_items". */
+    YETTY_YGUI_ALIGN_AUTO = 0,
+    YETTY_YGUI_ALIGN_START,
+    YETTY_YGUI_ALIGN_CENTER,
+    YETTY_YGUI_ALIGN_END,
+    YETTY_YGUI_ALIGN_STRETCH
+} ygui_align_t;
+
+struct yetty_ygui_layout {
+    ygui_layout_mode_t    mode;
+    ygui_flex_direction_t direction;
+    ygui_justify_t        justify_content;
+    ygui_align_t          align_items;
+    ygui_align_t          align_self;
+
+    float flex_grow;
+    float flex_shrink;
+    float flex_basis;       /* <= 0: use authored size on main axis */
+
+    float gap;
+    float padding_top, padding_right, padding_bottom, padding_left;
+    float margin_top, margin_right, margin_bottom, margin_left;
+
+    float min_w, min_h;     /* 0: unset */
+    float max_w, max_h;     /* 0: unset */
+};
 
 /*=============================================================================
  * Event Structure (for legacy callback)
@@ -150,8 +207,15 @@ typedef void (*ygui_change_callback_t)(struct yetty_ygui_widget *widget, float v
 typedef void (*ygui_text_callback_t)(struct yetty_ygui_widget *widget, const char *text, void *userdata);
 typedef void (*ygui_check_callback_t)(struct yetty_ygui_widget *widget, int checked, void *userdata);
 
-/* Resize callback - called when terminal resizes and new cell size is received */
-typedef void (*ygui_resize_callback_t)(struct yetty_ygui_engine *engine, void *userdata);
+/* Resize callback — called whenever the canvas size changes (terminal
+ * resize, cell-pixel-size change, or yetty_ygui_engine_set_size).
+ *
+ * The callback receives the new canvas size and the previous canvas size,
+ * so handlers can react to actual changes without having to remember state
+ * across calls. On the first call (initial size set after engine_show),
+ * prev_w / prev_h are 0. */
+typedef void (*ygui_resize_callback_t)(struct yetty_ygui_engine *engine, float new_w, float new_h,
+                                       float prev_w, float prev_h, void *userdata);
 
 /*=============================================================================
  * Engine API
@@ -185,6 +249,13 @@ struct yetty_ycore_void_result yetty_ygui_engine_show(struct yetty_ygui_engine *
  * Usually not needed - engine auto-renders when dirty. */
 struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine *engine);
 
+/* Run only the layout pass — no rendering, no OSC.
+ * After this call, every visible widget has resolved layout_x/y/w/h available
+ * through yetty_ygui_widget_get_layout_box(). Useful for tests, headless
+ * inspection, and tools that want to query post-flex geometry without
+ * triggering a render. */
+struct yetty_ycore_void_result yetty_ygui_engine_layout(struct yetty_ygui_engine *engine);
+
 /* Attach engine to user's libuv loop (for advanced usage) */
 void yetty_ygui_engine_attach(struct yetty_ygui_engine *engine, uv_loop_t *loop);
 
@@ -197,6 +268,7 @@ void yetty_ygui_engine_stop(struct yetty_ygui_engine *engine);
 
 /* Configuration */
 void yetty_ygui_engine_set_size(struct yetty_ygui_engine *engine, float width, float height);
+void yetty_ygui_engine_get_size(const struct yetty_ygui_engine *engine, float *width, float *height);
 void yetty_ygui_engine_set_theme(struct yetty_ygui_engine *engine, struct yetty_ygui_theme *theme);
 
 /* Keyboard callback */
@@ -328,6 +400,11 @@ void yetty_ygui_widget_get_position(const struct yetty_ygui_widget *widget, floa
 void yetty_ygui_widget_set_size(struct yetty_ygui_widget *widget, float w, float h);
 void yetty_ygui_widget_get_size(const struct yetty_ygui_widget *widget, float *w, float *h);
 
+/* Resolved (post-layout) absolute box. Valid after engine_layout() or
+ * engine_render() has run. Any of x/y/w/h may be NULL. */
+void yetty_ygui_widget_get_layout_box(const struct yetty_ygui_widget *widget, float *x, float *y,
+                                      float *w, float *h);
+
 void yetty_ygui_widget_set_visible(struct yetty_ygui_widget *widget, int visible);
 int yetty_ygui_widget_is_visible(const struct yetty_ygui_widget *widget);
 
@@ -340,6 +417,24 @@ uint32_t yetty_ygui_widget_get_flags(const struct yetty_ygui_widget *widget);
 void yetty_ygui_widget_set_bg_color(struct yetty_ygui_widget *widget, uint32_t color);
 void yetty_ygui_widget_set_fg_color(struct yetty_ygui_widget *widget, uint32_t color);
 void yetty_ygui_widget_set_accent_color(struct yetty_ygui_widget *widget, uint32_t color);
+
+/* Layout (flexbox) — see ygui_layout_mode_t et al. */
+void yetty_ygui_widget_set_layout_mode(struct yetty_ygui_widget *widget, ygui_layout_mode_t mode);
+void yetty_ygui_widget_set_flex_direction(struct yetty_ygui_widget *widget,
+                                          ygui_flex_direction_t direction);
+void yetty_ygui_widget_set_justify_content(struct yetty_ygui_widget *widget,
+                                           ygui_justify_t justify);
+void yetty_ygui_widget_set_align_items(struct yetty_ygui_widget *widget, ygui_align_t align);
+void yetty_ygui_widget_set_align_self(struct yetty_ygui_widget *widget, ygui_align_t align);
+void yetty_ygui_widget_set_flex(struct yetty_ygui_widget *widget, float grow, float shrink,
+                                float basis);
+void yetty_ygui_widget_set_gap(struct yetty_ygui_widget *widget, float gap);
+void yetty_ygui_widget_set_padding(struct yetty_ygui_widget *widget, float top, float right,
+                                   float bottom, float left);
+void yetty_ygui_widget_set_margin(struct yetty_ygui_widget *widget, float top, float right,
+                                  float bottom, float left);
+void yetty_ygui_widget_set_min_size(struct yetty_ygui_widget *widget, float min_w, float min_h);
+void yetty_ygui_widget_set_max_size(struct yetty_ygui_widget *widget, float max_w, float max_h);
 
 /*=============================================================================
  * Widget-Specific Properties

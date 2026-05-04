@@ -30,6 +30,10 @@ struct yetty_ygui_widget *yetty_ygui_engine_widget_alloc(struct yetty_ygui_engin
 
 void yetty_ygui_widget_init_base(struct yetty_ygui_widget *widget, float x, float y, float w, float h)
 {
+    widget->authored_x = x;
+    widget->authored_y = y;
+    widget->authored_w = w;
+    widget->authored_h = h;
     widget->x = x;
     widget->y = y;
     widget->w = w;
@@ -62,8 +66,13 @@ void yetty_ygui_widget_free(struct yetty_ygui_widget *widget)
 struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(struct yetty_ygui_widget *self,
                                                               struct yetty_ygui_render_ctx *ctx)
 {
-    self->effective_x = self->x + ctx->offset_x;
-    self->effective_y = self->y + ctx->offset_y;
+    /* Skip invisible widgets globally — was previously a per-container concern. */
+    if (!(self->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+        return YETTY_OK_VOID();
+    }
+
+    /* Layout pass already wrote effective_x/y and live x/y/w/h; nothing to
+     * recompute here. */
     self->was_rendered = 1;
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
@@ -74,21 +83,36 @@ struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(struct yetty
         }
     }
 
-    /* Render children */
-    for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
-        struct yetty_ycore_void_result r;
-        if (child->render_all) {
-            r = child->render_all(child, ctx);
-        } else {
-            r = yetty_ygui_widget_render_all_default(child, ctx);
-        }
-        if (YETTY_IS_ERR(r)) {
-            if (YETTY_IS_OK(first_err)) {
-                first_err = r;
+    /* Recurse into children with offset = self's absolute origin so each
+     * child can keep drawing at its own (relative) self->x / self->y. */
+    if (self->first_child) {
+        float old_offset_x = ctx->offset_x;
+        float old_offset_y = ctx->offset_y;
+        ctx->offset_x = self->layout_x;
+        ctx->offset_y = self->layout_y;
+
+        for (struct yetty_ygui_widget *child = self->first_child; child;
+             child = child->next_sibling) {
+            if (!(child->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+                continue;
+            }
+            struct yetty_ycore_void_result r;
+            if (child->render_all) {
+                r = child->render_all(child, ctx);
             } else {
-                yetty_ycore_error_destroy(r.error);
+                r = yetty_ygui_widget_render_all_default(child, ctx);
+            }
+            if (YETTY_IS_ERR(r)) {
+                if (YETTY_IS_OK(first_err)) {
+                    first_err = r;
+                } else {
+                    yetty_ycore_error_destroy(r.error);
+                }
             }
         }
+
+        ctx->offset_x = old_offset_x;
+        ctx->offset_y = old_offset_y;
     }
     return first_err;
 }
@@ -240,6 +264,8 @@ void yetty_ygui_widget_set_position(struct yetty_ygui_widget *widget, float x, f
     if (!widget) {
         return;
     }
+    widget->authored_x = x;
+    widget->authored_y = y;
     widget->x = x;
     widget->y = y;
     if (widget->engine) {
@@ -265,6 +291,8 @@ void yetty_ygui_widget_set_size(struct yetty_ygui_widget *widget, float w, float
     if (!widget) {
         return;
     }
+    widget->authored_w = w;
+    widget->authored_h = h;
     widget->w = w;
     widget->h = h;
     if (widget->engine) {
@@ -277,11 +305,32 @@ void yetty_ygui_widget_get_size(const struct yetty_ygui_widget *widget, float *w
     if (!widget) {
         return;
     }
+    /* Report authored size — the user-visible value, stable across resizes. */
     if (w) {
-        *w = widget->w;
+        *w = widget->authored_w;
     }
     if (h) {
-        *h = widget->h;
+        *h = widget->authored_h;
+    }
+}
+
+void yetty_ygui_widget_get_layout_box(const struct yetty_ygui_widget *widget, float *x, float *y,
+                                      float *w, float *h)
+{
+    if (!widget) {
+        return;
+    }
+    if (x) {
+        *x = widget->layout_x;
+    }
+    if (y) {
+        *y = widget->layout_y;
+    }
+    if (w) {
+        *w = widget->layout_w;
+    }
+    if (h) {
+        *h = widget->layout_h;
     }
 }
 
@@ -361,6 +410,131 @@ void yetty_ygui_widget_set_accent_color(struct yetty_ygui_widget *widget, uint32
     if (widget->engine) {
         widget->engine->dirty = 1;
     }
+}
+
+/*=============================================================================
+ * Layout setters (flexbox)
+ *===========================================================================*/
+
+static void layout_widget_dirty(struct yetty_ygui_widget *widget)
+{
+    if (widget && widget->engine) {
+        widget->engine->dirty = 1;
+    }
+}
+
+void yetty_ygui_widget_set_layout_mode(struct yetty_ygui_widget *widget, ygui_layout_mode_t mode)
+{
+    if (!widget) {
+        return;
+    }
+    widget->layout.mode = mode;
+    layout_widget_dirty(widget);
+}
+
+void yetty_ygui_widget_set_flex_direction(struct yetty_ygui_widget *widget,
+                                          ygui_flex_direction_t direction)
+{
+    if (!widget) {
+        return;
+    }
+    widget->layout.direction = direction;
+    layout_widget_dirty(widget);
+}
+
+void yetty_ygui_widget_set_justify_content(struct yetty_ygui_widget *widget,
+                                           ygui_justify_t justify)
+{
+    if (!widget) {
+        return;
+    }
+    widget->layout.justify_content = justify;
+    layout_widget_dirty(widget);
+}
+
+void yetty_ygui_widget_set_align_items(struct yetty_ygui_widget *widget, ygui_align_t align)
+{
+    if (!widget) {
+        return;
+    }
+    widget->layout.align_items = align;
+    layout_widget_dirty(widget);
+}
+
+void yetty_ygui_widget_set_align_self(struct yetty_ygui_widget *widget, ygui_align_t align)
+{
+    if (!widget) {
+        return;
+    }
+    widget->layout.align_self = align;
+    layout_widget_dirty(widget);
+}
+
+void yetty_ygui_widget_set_flex(struct yetty_ygui_widget *widget, float grow, float shrink,
+                                float basis)
+{
+    if (!widget) {
+        return;
+    }
+    widget->layout.flex_grow = grow;
+    widget->layout.flex_shrink = shrink;
+    widget->layout.flex_basis = basis;
+    layout_widget_dirty(widget);
+}
+
+void yetty_ygui_widget_set_gap(struct yetty_ygui_widget *widget, float gap)
+{
+    if (!widget) {
+        return;
+    }
+    widget->layout.gap = gap;
+    layout_widget_dirty(widget);
+}
+
+void yetty_ygui_widget_set_padding(struct yetty_ygui_widget *widget, float top, float right,
+                                   float bottom, float left)
+{
+    if (!widget) {
+        return;
+    }
+    widget->layout.padding_top = top;
+    widget->layout.padding_right = right;
+    widget->layout.padding_bottom = bottom;
+    widget->layout.padding_left = left;
+    layout_widget_dirty(widget);
+}
+
+void yetty_ygui_widget_set_margin(struct yetty_ygui_widget *widget, float top, float right,
+                                  float bottom, float left)
+{
+    if (!widget) {
+        return;
+    }
+    widget->layout.margin_top = top;
+    widget->layout.margin_right = right;
+    widget->layout.margin_bottom = bottom;
+    widget->layout.margin_left = left;
+    layout_widget_dirty(widget);
+}
+
+void yetty_ygui_widget_set_min_size(struct yetty_ygui_widget *widget, float min_w, float min_h)
+{
+    if (!widget) {
+        return;
+    }
+    widget->layout.min_w = min_w;
+    widget->layout.min_h = min_h;
+    layout_widget_dirty(widget);
+}
+
+void yetty_ygui_widget_set_max_size(struct yetty_ygui_widget *widget, float max_w, float max_h)
+{
+    if (!widget) {
+        return;
+    }
+    widget->layout.max_w = max_w;
+    widget->layout.max_h = max_h;
+    layout_widget_dirty(widget);
 }
 
 /*=============================================================================
@@ -1172,49 +1346,24 @@ void yetty_ygui_widget_textinput_set_placeholder(struct yetty_ygui_widget *widge
 }
 
 /*=============================================================================
- * HBox Widget - Horizontal layout container
+ * HBox / VBox — flex containers (row / column).
+ *
+ * Layout is computed in ygui_layout.c; rendering reuses the default
+ * render_all. Theme padding/gap are applied at construction time so
+ * existing callers see the same visual behavior they did before.
  *===========================================================================*/
 
-static struct yetty_ycore_void_result hbox_render_all(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static void box_apply_theme_layout(struct yetty_ygui_widget *box,
+                                   const struct yetty_ygui_theme *theme,
+                                   ygui_flex_direction_t direction)
 {
-    self->effective_x = self->x + ctx->offset_x;
-    self->effective_y = self->y + ctx->offset_y;
-    self->was_rendered = 1;
-
-    const struct yetty_ygui_theme *t = ctx->theme;
-    float spacing = t->pad_medium;
-    float padding = t->pad_medium;
-
-    /* Position children left-to-right */
-    float cursor_x = padding;
-    for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
-        if (!(child->flags & YETTY_YGUI_FLAG_VISIBLE)) {
-            continue;
-        }
-
-        /* Override child position */
-        child->x = cursor_x;
-        child->y = padding;
-
-        /* Render child with offset */
-        float old_offset_x = ctx->offset_x;
-        float old_offset_y = ctx->offset_y;
-        ctx->offset_x = self->effective_x;
-        ctx->offset_y = self->effective_y;
-
-        if (child->render_all) {
-            child->render_all(child, ctx);
-        } else {
-            yetty_ygui_widget_render_all_default(child, ctx);
-        }
-
-        ctx->offset_x = old_offset_x;
-        ctx->offset_y = old_offset_y;
-
-        cursor_x += child->w + spacing;
-    }
-    return YETTY_OK_VOID();
-
+    box->layout.mode = YETTY_YGUI_LAYOUT_FLEX;
+    box->layout.direction = direction;
+    box->layout.gap = theme->pad_medium;
+    box->layout.padding_top = theme->pad_medium;
+    box->layout.padding_right = theme->pad_medium;
+    box->layout.padding_bottom = theme->pad_medium;
+    box->layout.padding_left = theme->pad_medium;
 }
 
 struct yetty_ygui_widget *yetty_ygui_engine_hbox(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w, float h)
@@ -1224,55 +1373,9 @@ struct yetty_ygui_widget *yetty_ygui_engine_hbox(struct yetty_ygui_engine *engin
         return NULL;
     }
     yetty_ygui_widget_init_base(hbox, x, y, w, h);
-    hbox->render_all = hbox_render_all;
+    box_apply_theme_layout(hbox, engine->theme, YETTY_YGUI_FLEX_ROW);
     add_to_engine(engine, hbox);
     return hbox;
-}
-
-/*=============================================================================
- * VBox Widget - Vertical layout container
- *===========================================================================*/
-
-static struct yetty_ycore_void_result vbox_render_all(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
-{
-    self->effective_x = self->x + ctx->offset_x;
-    self->effective_y = self->y + ctx->offset_y;
-    self->was_rendered = 1;
-
-    const struct yetty_ygui_theme *t = ctx->theme;
-    float spacing = t->pad_medium;
-    float padding = t->pad_medium;
-
-    /* Position children top-to-bottom */
-    float cursor_y = padding;
-    for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
-        if (!(child->flags & YETTY_YGUI_FLAG_VISIBLE)) {
-            continue;
-        }
-
-        /* Override child position */
-        child->x = padding;
-        child->y = cursor_y;
-
-        /* Render child with offset */
-        float old_offset_x = ctx->offset_x;
-        float old_offset_y = ctx->offset_y;
-        ctx->offset_x = self->effective_x;
-        ctx->offset_y = self->effective_y;
-
-        if (child->render_all) {
-            child->render_all(child, ctx);
-        } else {
-            yetty_ygui_widget_render_all_default(child, ctx);
-        }
-
-        ctx->offset_x = old_offset_x;
-        ctx->offset_y = old_offset_y;
-
-        cursor_y += child->h + spacing;
-    }
-    return YETTY_OK_VOID();
-
 }
 
 struct yetty_ygui_widget *yetty_ygui_engine_vbox(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w, float h)
@@ -1282,7 +1385,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_vbox(struct yetty_ygui_engine *engin
         return NULL;
     }
     yetty_ygui_widget_init_base(vbox, x, y, w, h);
-    vbox->render_all = vbox_render_all;
+    box_apply_theme_layout(vbox, engine->theme, YETTY_YGUI_FLEX_COLUMN);
     add_to_engine(engine, vbox);
     return vbox;
 }
