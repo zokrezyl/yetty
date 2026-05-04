@@ -580,54 +580,42 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
     ydebug("terminal_render_frame: starting");
     ytime_start(frame_render);
 
-    /*
-   * Render each layer to its target. Layer 0 is text_layer, layer 1 is
-   * ypaint_layer (see terminal_create). Time them separately so we can tell
-   * which layer dominates the frame cost.
-   */
+    /* Render all layers directly into the provided big_target — no per-layer
+     * intermediate textures, no blend pass. The multi-layer blend round-trip
+     * (4 × 33 MB layer RTs + 33 MB blend output read/written every frame at
+     * 4K) starves the display compositor on tvOS.
+     *
+     * Layer 0 (text) renders with LoadOp_Clear so empty cells (alpha=0
+     * with the text-layer's blend state) can't leak the previous frame's
+     * pixels — that was the cause of scrolling artifacts. Layers 1+ render
+     * with LoadOp_Load so they composite on top of layer 0 instead of
+     * wiping it. */
     ytime_start(layers);
     for (size_t i = 0; i < terminal->layer_count; i++) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
-        struct yetty_ypaint_core_target *layer_target = terminal->layer_targets[i];
-
-        if (!layer || !layer_target) {
-            yerror("//TODO: THIS SHOULD BE FIXED!!!!!!! IF THIS CONDITION HAPPENS "
-                   "SHOULD RETURN ERROR");
+        if (!layer) {
             continue;
         }
-
-        struct yetty_ycore_void_result res;
-        if (i == 0) {
-            ytime_start(text_layer);
-            res = layer->ops->render(layer, layer_target);
-            ytime_report(text_layer);
-        } else if (i == 1) {
-            ytime_start(ypaint_layer);
-            res = layer->ops->render(layer, layer_target);
-            ytime_report(ypaint_layer);
-        } else {
-            res = layer->ops->render(layer, layer_target);
+        if (target->ops->set_preserve_on_render_layer) {
+            target->ops->set_preserve_on_render_layer(target, i > 0);
         }
-
+        struct yetty_ycore_void_result res = layer->ops->render(layer, target);
         if (!YETTY_IS_OK(res)) {
             yerror("terminal_render_frame: layer %zu render failed: %s", i, res.error.msg);
+            if (target->ops->set_preserve_on_render_layer) {
+                target->ops->set_preserve_on_render_layer(target, false);
+            }
             return res;
         }
     }
     ytime_report(layers);
 
-    /* Blend all layer targets into the provided target (big_target from yetty) */
-    ytime_start(blend);
-    struct yetty_ycore_void_result res =
-        target->ops->blend(target, terminal->layer_targets, terminal->layer_count);
-    ytime_report(blend);
-
-    if (!YETTY_IS_OK(res)) {
-        yerror("terminal_render_frame: blend failed: %s", res.error.msg);
-        return res;
+    if (target->ops->set_preserve_on_render_layer) {
+        target->ops->set_preserve_on_render_layer(target, false);
     }
 
-    ydebug("terminal_render_frame: done, rendered %zu layers", terminal->layer_count);
+    ydebug("terminal_render_frame: done (all %zu layers direct, no blend)",
+           terminal->layer_count);
     ytime_report(frame_render);
     return YETTY_OK_VOID();
 }

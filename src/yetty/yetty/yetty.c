@@ -413,11 +413,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             config.usage = WGPUTextureUsage_RenderAttachment;
             config.width = width;
             config.height = height;
-            /* Mailbox: never block on swapchain — newest rendered frame replaces
- * the queued one. Trades a tiny chance of dropped frames for not stalling
- * the libuv loop on `wgpuSurfaceGetCurrentTexture` (≈200 ms on tvOS in
- * Fifo mode). */
-config.presentMode = WGPUPresentMode_Mailbox;
+            config.presentMode = WGPUPresentMode_Fifo;
             wgpuSurfaceConfigure(surface, &config);
 
             yetty->context.app_context.app_gpu_context.surface_width = width;
@@ -619,8 +615,7 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
         surface_config.usage = WGPUTextureUsage_RenderAttachment;
         surface_config.width = yetty->context.app_context.app_gpu_context.surface_width;
         surface_config.height = yetty->context.app_context.app_gpu_context.surface_height;
-        /* Mailbox: never block on swapchain — see init-time configure above. */
-        surface_config.presentMode = WGPUPresentMode_Mailbox;
+        surface_config.presentMode = WGPUPresentMode_Fifo;
         wgpuSurfaceConfigure(surface, &surface_config);
         ydebug("initWebGPU: Surface configured %ux%u", surface_config.width, surface_config.height);
     } else {

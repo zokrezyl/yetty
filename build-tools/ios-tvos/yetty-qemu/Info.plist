@@ -35,7 +35,7 @@
 	<!-- Background "audio" mode keeps YettyQemu alive while yetty.app is
 	     foreground. tvos-main.m starts an AVAudioEngine playing a silent
 	     buffer on loop; the OS treats us as a media app and doesn't
-	     suspend the process, so qemu's slirp hostfwd 2323 stays open
+	     suspend the process, so qemu's slirp hostfwd 2423 stays open
 	     for yetty's telnet client. -->
 	<key>UIBackgroundModes</key>
 	<array>
