@@ -58,14 +58,14 @@ CMAKE_ARGS=(
 
 case "$TARGET_PLATFORM" in
 linux-x86_64|linux-aarch64|linux-riscv64)
-    # Wayland disabled — the 3rdparty-linux-* nix shells don't ship the
-    # wayland/xkbcommon -dev pkgconfigs glfw probes for. X11-only build
-    # still works on a Wayland desktop via XWayland; if a true Wayland
-    # native binary is needed later, add wayland-protocols + wayland +
-    # libxkbcommon to the relevant 3rdparty-linux-* shells in flake.nix.
+    # Both X11 and Wayland enabled. GLFW picks the backend at runtime
+    # (X11 if DISPLAY is set or XDG_SESSION_TYPE != "wayland", else
+    # Wayland). The 3rdparty-linux-* nix shells in flake.nix carry the
+    # wayland-protocols/wayland/libxkbcommon -dev pkgconfigs glfw probes
+    # for; tearing the comment further would lie if either side moves.
     CMAKE_ARGS+=(
         -DGLFW_BUILD_X11=ON
-        -DGLFW_BUILD_WAYLAND=OFF
+        -DGLFW_BUILD_WAYLAND=ON
     )
     # nix's cmake doesn't auto-resolve X11 via NIX_CFLAGS_COMPILE for
     # find_package(X11). pkg-config sees them; pull the paths from
@@ -194,6 +194,18 @@ for _D in lib lib64; do
         find "$INSTALL_DIR/$_D" -maxdepth 1 \
             \( -name 'libglfw*.a' -o -name 'glfw3.lib' -o -name 'glfw*.lib' \) \
             -exec cp -a {} "$STAGE/lib/" \;
+        # Stage upstream's exported cmake config + pkg-config so consumers
+        # can pull INTERFACE_LINK_LIBRARIES (X11/Wayland/xkbcommon/pthread/
+        # dl/m/rt) directly from glfw3Config.cmake instead of duplicating
+        # platform deps in build-tools/cmake/libs/glfw.cmake.
+        if [ -d "$INSTALL_DIR/$_D/cmake/glfw3" ]; then
+            mkdir -p "$STAGE/lib/cmake/glfw3"
+            cp -a "$INSTALL_DIR/$_D/cmake/glfw3/." "$STAGE/lib/cmake/glfw3/"
+        fi
+        if [ -d "$INSTALL_DIR/$_D/pkgconfig" ]; then
+            mkdir -p "$STAGE/lib/pkgconfig"
+            cp -a "$INSTALL_DIR/$_D/pkgconfig/." "$STAGE/lib/pkgconfig/"
+        fi
     fi
 done
 cp -a "$INSTALL_DIR/include/GLFW" "$STAGE/include/"

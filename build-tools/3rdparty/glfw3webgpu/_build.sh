@@ -100,9 +100,14 @@ PLATFORM_DEF=""
 
 case "$TARGET_PLATFORM" in
 linux-x86_64|linux-aarch64|linux-riscv64)
-    # X11 only — Wayland headers aren't in the 3rdparty-linux-* nix
-    # shells (see glfw producer for the same restriction).
-    PLATFORM_DEF="-D_GLFW_X11 -DWEBGPU_BACKEND_DAWN"
+    # Define both X11 and Wayland — glfw3webgpu's source has
+    # GLFW_EXPOSE_NATIVE_X11 + GLFW_EXPOSE_NATIVE_WAYLAND blocks gated
+    # on _GLFW_X11/_GLFW_WAYLAND, and at runtime picks the path that
+    # matches glfwGetPlatform(). Without _GLFW_WAYLAND the surface call
+    # returns NULL on a Wayland session and yetty bails with "Failed to
+    # create WebGPU surface". The 3rdparty-linux-* nix shells carry
+    # wayland/wayland-protocols/libxkbcommon (see flake.nix).
+    PLATFORM_DEF="-D_GLFW_X11 -D_GLFW_WAYLAND -DWEBGPU_BACKEND_DAWN"
     case "$TARGET_PLATFORM" in
         linux-x86_64) CC=gcc ;;
         linux-aarch64)
@@ -112,6 +117,22 @@ linux-x86_64|linux-aarch64|linux-riscv64)
             : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
             CC="${CROSS_PREFIX}gcc"; AR="${CROSS_PREFIX}ar" ;;
     esac
+    # GLFW_EXPOSE_NATIVE_WAYLAND pulls <wayland-client.h> through
+    # glfw3native.h. wayland-client.h isn't in default sysroot include
+    # paths on every distro, so add its pkg-config cflags. Same idea
+    # for the cross builds where the cross-prefixed pkg-config wrapper
+    # knows about the cross sysroot's PKG_CONFIG_PATH.
+    _PC=pkg-config
+    if [ "$TARGET_PLATFORM" = "linux-aarch64" ] && \
+       command -v "${CROSS_PREFIX:-aarch64-unknown-linux-gnu-}pkg-config" >/dev/null 2>&1; then
+        _PC="${CROSS_PREFIX:-aarch64-unknown-linux-gnu-}pkg-config"
+    elif [ "$TARGET_PLATFORM" = "linux-riscv64" ] && \
+         command -v "${CROSS_PREFIX:-riscv64-unknown-linux-gnu-}pkg-config" >/dev/null 2>&1; then
+        _PC="${CROSS_PREFIX:-riscv64-unknown-linux-gnu-}pkg-config"
+    fi
+    if command -v "$_PC" >/dev/null 2>&1 && "$_PC" --exists wayland-client; then
+        CFLAGS_EXTRA="$CFLAGS_EXTRA $($_PC --cflags wayland-client)"
+    fi
     ;;
 macos-x86_64|macos-arm64)
     PLATFORM_DEF="-D_GLFW_COCOA -DWEBGPU_BACKEND_DAWN"

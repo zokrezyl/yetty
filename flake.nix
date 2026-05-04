@@ -493,9 +493,12 @@
               pkg-config
               # X11 dev headers — glfw 3.4 build probes for these via
               # find_package(X11). Without them GLFW_BUILD_X11=ON fails.
-              # Wayland is intentionally OFF in the glfw producer.
               xorg.libX11 xorg.libXrandr xorg.libXinerama xorg.libXcursor
               xorg.libXi xorg.libXext xorg.xorgproto
+              # Wayland dev pkgconfigs — glfw 3.4 probes via pkg-config for
+              # wayland-client/wayland-cursor/wayland-egl/wayland-protocols/
+              # xkbcommon when GLFW_BUILD_WAYLAND=ON.
+              wayland wayland-protocols wayland-scanner libxkbcommon
             ];
             shellHook = "echo 'Yetty 3rdparty-build (linux-x86_64)'";
           };
@@ -516,6 +519,7 @@
             buildInputs = with pkgs.pkgsCross.aarch64-multiplatform; [
               xorg.libX11 xorg.libXrandr xorg.libXinerama
               xorg.libXcursor xorg.libXi xorg.libXext xorgproto
+              wayland wayland-protocols wayland-scanner libxkbcommon
             ];
             shellHook = ''
               export CROSS_PREFIX="aarch64-unknown-linux-gnu-"
@@ -540,6 +544,7 @@
             buildInputs = with pkgs.pkgsCross.riscv64; [
               xorg.libX11 xorg.libXrandr xorg.libXinerama
               xorg.libXcursor xorg.libXi xorg.libXext xorgproto
+              wayland wayland-protocols wayland-scanner libxkbcommon
             ];
             shellHook = ''
               export CROSS_PREFIX="riscv64-unknown-linux-gnu-"
