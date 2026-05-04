@@ -162,7 +162,7 @@ int main(void)
         if (t == YETTY_YPAINT_TYPE_TEXT_SPAN) {
             struct yetty_ypaint_core_text_span_prim_view v;
             if (yetty_ypaint_core_text_span_prim_parse(it.fw.data, &v) == 0) {
-                if (dump_count++ < 25) {
+                if (dump_count++ < 320) {
                     char snippet[64];
                     size_t n = v.text_len < sizeof(snippet) - 1 ? v.text_len : sizeof(snippet) - 1;
                     memcpy(snippet, v.text, n);
@@ -445,10 +445,10 @@ int main(void)
                 struct yetty_ypaint_font *f = fonts[v.font_id];
                 float cursor_x = v.x;
                 /* Walk UTF-8: decode each codepoint, advance the cursor
-                 * by the FULL multi-byte sequence's measure (so '®'
-                 * contributes its real width, not zero). Match against
-                 * mutool only for printable ASCII — the ground truth
-                 * filters non-ASCII. */
+                 * by the FULL multi-byte sequence's measure plus the PDF
+                 * Tc/Tw spacing the producer baked into the prim. The
+                 * canvas's expand_text_span_to_glyphs uses the same
+                 * formula, so this simulation matches what gets rendered. */
                 uint32_t k = 0;
                 while (k < v.text_len) {
                     unsigned char c0 = (unsigned char)v.text[k];
@@ -463,6 +463,10 @@ int main(void)
                     struct float_result r =
                         f->ops->measure_text(f, v.text + k, (size_t)seqlen, v.font_size);
                     float adv = r.ok ? r.value : 0.0f;
+                    adv += v.char_spacing;
+                    if (seqlen == 1 && c0 == 0x20) {
+                        adv += v.word_spacing;
+                    }
 
                     /* Match only printable ASCII against mutool. */
                     if (seqlen == 1 && c0 >= 0x21 && c0 < 0x7f) {
@@ -500,6 +504,59 @@ int main(void)
     fprintf(stderr, "per-char layout sim: %zu/%zu chars match mutool (%.1f%%)\n", matched_chars,
             total_chars, total_chars ? 100.0 * matched_chars / total_chars : 0.0);
 
+    /* Diagnostic dump: per-character cursor positions for any line whose
+     * spans concatenate to contain "smaller". Lets us see exactly where
+     * each glyph lands relative to mutool's ground truth — useful when
+     * the user reports a visible gap that the per-char match doesn't
+     * catch (e.g. wrong font_id pointing at a TTF with patched-to-zero
+     * advances). */
+    fprintf(stderr, "\n=== smaller-line diagnostic (per-char canvas-side cursor) ===\n");
+    struct yetty_ypaint_core_primitive_iter_result ir5 =
+        yetty_ypaint_core_buffer_prim_first(out->buffer, reg);
+    if (ir5.ok) {
+        struct yetty_ypaint_core_primitive_iter dit = ir5.value;
+        for (;;) {
+            if (dit.fw.data[0] == YETTY_YPAINT_TYPE_TEXT_SPAN) {
+                struct yetty_ypaint_core_text_span_prim_view dv;
+                if (yetty_ypaint_core_text_span_prim_parse(dit.fw.data, &dv) == 0 &&
+                    dv.text_len > 0 && dv.font_id >= 0 && dv.font_id < MAX_FONTS_LOCAL &&
+                    fonts[dv.font_id]) {
+                    int has_sma = 0;
+                    for (uint32_t k = 0; k + 3 <= dv.text_len; k++) {
+                        if (dv.text[k] == 's' && dv.text[k+1] == 'm' && dv.text[k+2] == 'a') {
+                            has_sma = 1;
+                            break;
+                        }
+                    }
+                    if (has_sma) {
+                        fprintf(stderr, "  span x=%.3f y=%.3f font_id=%d sz=%.2f Tc=%.4f Tw=%.4f text='",
+                                dv.x, dv.y, dv.font_id, dv.font_size, dv.char_spacing, dv.word_spacing);
+                        fwrite(dv.text, 1, dv.text_len, stderr);
+                        fprintf(stderr, "'\n");
+                        struct yetty_ypaint_font *f = fonts[dv.font_id];
+                        float cx = dv.x;
+                        for (uint32_t k = 0; k < dv.text_len; k++) {
+                            unsigned char c0 = (unsigned char)dv.text[k];
+                            if (c0 >= 0x80) continue;
+                            struct float_result mr =
+                                f->ops->measure_text(f, dv.text + k, 1, dv.font_size);
+                            float adv = mr.ok ? mr.value : 0.0f;
+                            fprintf(stderr, "    '%c' x=%.3f adv=%.3f Tc=%.3f%s\n",
+                                    (char)c0, cx, adv, dv.char_spacing,
+                                    c0 == 0x20 ? " (+Tw)" : "");
+                            cx += adv + dv.char_spacing + (c0 == 0x20 ? dv.word_spacing : 0.0f);
+                        }
+                    }
+                }
+            }
+            struct yetty_ypaint_core_primitive_iter_result nxd =
+                yetty_ypaint_core_buffer_prim_next(out->buffer, reg, &dit);
+            if (!nxd.ok) break;
+            dit = nxd.value;
+        }
+    }
+    fprintf(stderr, "=== end smaller-line diagnostic ===\n\n");
+
     /* Free the loaded fonts. */
     for (int i = 0; i < MAX_FONTS_LOCAL; i++) {
         if (fonts[i] && fonts[i]->ops && fonts[i]->ops->destroy) {
@@ -507,11 +564,14 @@ int main(void)
         }
     }
 
-    /* Require ≥85% per-char match. Slightly looser than per-line because
-     * substituted-font metrics differ per-character even when overall
-     * line metrics agree. */
-    if (total_chars > 0 && matched_chars * 100 < total_chars * 85) {
-        fprintf(stderr, "FAIL: per-char layout match %.1f%% < 85%% threshold\n",
+    /* Require ≥98% per-char match — when ypdf forwards Tc/Tw and the
+     * canvas applies them, this hits 100% on the sample PDF; the 2%
+     * margin absorbs occasional rounding outliers from substituted
+     * fonts. Anything below means a real position regression in ypdf
+     * or in the per-glyph layout, the kind that produces visible
+     * "first word OK, rest of line off". */
+    if (total_chars > 0 && matched_chars * 100 < total_chars * 98) {
+        fprintf(stderr, "FAIL: per-char layout match %.1f%% < 98%% threshold\n",
                 100.0 * matched_chars / total_chars);
         return 1;
     }

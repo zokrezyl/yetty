@@ -1314,7 +1314,16 @@ static struct uint32_result expand_text_span_to_glyphs(
             glyph_max_row = glyph_row_max;
         }
 
-        cursor_x += advance * scale;
+        /* Per-glyph displacement: font advance + PDF text-state Tc, plus
+         * Tw for ASCII space. ts->char_spacing/word_spacing are already
+         * in display pixels (ypdf does the unit conversion); add them
+         * straight to the cursor. The values are 0 for any producer that
+         * doesn't fill them in (default font in YAML, etc.), so this is
+         * a no-op for non-PDF text. */
+        cursor_x += advance * scale + ts->char_spacing;
+        if (cp == 0x20) {
+            cursor_x += ts->word_spacing;
+        }
     }
 
     return YETTY_OK(uint32, glyph_max_row);

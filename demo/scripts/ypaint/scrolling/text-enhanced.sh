@@ -47,5 +47,3 @@ PAYLOAD=$(printf '%s' "$YAML" | base64 -w0)
 # OSC 600002 = ypaint canvas (YAML payload).
 printf '\033]600002;;%s\007' "$PAYLOAD"
 
-# Hold the terminal open so you can read what rendered.
-sleep 30

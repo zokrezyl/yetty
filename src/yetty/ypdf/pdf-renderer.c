@@ -493,6 +493,17 @@ static void patch_simple_widths(uint8_t *ttf_data, size_t ttf_size, size_t hmtx_
     int patched = 0;
     for (size_t i = 0; i < widths_len; i++) {
         double w_pdf = pdfioArrayGetNumber(widths, i);
+        /* PDF subsetters often emit 0 in /Widths for char codes the document
+         * doesn't actually use. We're patching a SUBSTITUTED font (the user
+         * doesn't have the original), and that substitute already has correct
+         * default widths for those glyphs. Overwriting with 0 here would
+         * produce zero-advance glyphs the moment any text accidentally uses
+         * one (e.g. a font shared across italic + body, where the body span
+         * happens to reach a char the italic dict marked 0). Skip and let the
+         * substitute's intrinsic width through. */
+        if (w_pdf == 0.0) {
+            continue;
+        }
         long pdf_byte = first_char + (long)i;
         /* Translate PDF byte → Unicode codepoint via the encoding. For
          * WinAnsi this fixes 0x80-0x9F; for ASCII bytes it's identity. */
@@ -545,7 +556,14 @@ static void patch_cid_widths(uint8_t *ttf_data, size_t hmtx_off, uint16_t gid_li
                 if (cid < 0 || cid >= gid_limit) {
                     continue;
                 }
-                uint16_t w_fu = pdf_width_to_fu(pdfioArrayGetNumber(inner, j), units_per_em);
+                double w_pdf = pdfioArrayGetNumber(inner, j);
+                /* Same reasoning as patch_simple_widths: 0 in /W is "char
+                 * not used by this PDF", not "render with zero advance".
+                 * Don't clobber the substituted font's intrinsic width. */
+                if (w_pdf == 0.0) {
+                    continue;
+                }
+                uint16_t w_fu = pdf_width_to_fu(w_pdf, units_per_em);
                 write_u16_be(ttf_data + hmtx_off + (size_t)cid * 4, w_fu);
                 patched++;
             }
@@ -553,7 +571,12 @@ static void patch_cid_widths(uint8_t *ttf_data, size_t hmtx_off, uint16_t gid_li
         } else if (t1 == PDFIO_VALTYPE_NUMBER && i + 2 < w_len &&
                    pdfioArrayGetType(w_arr, i + 2) == PDFIO_VALTYPE_NUMBER) {
             long c2 = (long)pdfioArrayGetNumber(w_arr, i + 1);
-            uint16_t w_fu = pdf_width_to_fu(pdfioArrayGetNumber(w_arr, i + 2), units_per_em);
+            double w_pdf = pdfioArrayGetNumber(w_arr, i + 2);
+            if (w_pdf == 0.0) {
+                i += 3;
+                continue;
+            }
+            uint16_t w_fu = pdf_width_to_fu(w_pdf, units_per_em);
             for (long cid = c; cid <= c2; cid++) {
                 if (cid < 0 || cid >= gid_limit) {
                     continue;
@@ -1048,9 +1071,22 @@ static struct float_result text_emit_cb(void *ud, const char *text, size_t text_
     struct yetty_ycore_buffer tb = {(uint8_t *)(uintptr_t)emit_text_p, emit_text_len,
                                     emit_text_len};
     int32_t font_id = fi ? (int32_t)fi->buffer_font_id : -1;
-    (void)yetty_ypaint_core_buffer_add_text(
+    /* Forward PDF text-state Tc/Tw to the canvas in display pixels.
+     * effective_size is the apparent on-screen font size after the full
+     * trm transform; state->font_size is the unscaled Tfs. The text
+     * matrix already absorbed any non-uniform scale, so converting the
+     * Tc/Tw (which are in Tfs units per the PDF spec) by effective_size
+     * gives the on-screen pixel offsets the canvas should add per
+     * codepoint and per ASCII space. Without this, lines that contain
+     * spaces drift by ~1.2 px per space (mutool sees the actual on-page
+     * positions; canvas would otherwise sum only font advances). */
+    float h_scale_for_emit = state->horizontal_scaling / 100.0f;
+    float emit_char_spacing = state->char_spacing * effective_size * h_scale_for_emit;
+    float emit_word_spacing = state->word_spacing * effective_size * h_scale_for_emit;
+    (void)yetty_ypaint_core_buffer_add_text_full(
         c->buffer, sx, sy, &tb, effective_size, color, 0, font_id,
-        (fabsf(rotation_radians) > 0.001f) ? -rotation_radians : 0.0f);
+        (fabsf(rotation_radians) > 0.001f) ? -rotation_radians : 0.0f,
+        emit_char_spacing, emit_word_spacing);
 
     /* Measure advance at the PDF text-state font size (Tfs), which matches
      * the units of the text matrix. See PDF spec 9.4.4. */
