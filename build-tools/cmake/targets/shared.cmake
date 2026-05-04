@@ -157,6 +157,10 @@ if(YETTY_ENABLE_LIB_PDFIO)
     include(${YETTY_ROOT}/build-tools/cmake/libs/pdfio.cmake)
 endif()
 
+if(YETTY_ENABLE_LIB_NETSURF)
+    include(${YETTY_ROOT}/build-tools/cmake/libs/netsurf.cmake)
+endif()
+
 if(YETTY_ENABLE_LIB_LIBPNG)
     include(${YETTY_ROOT}/build-tools/cmake/libs/libpng.cmake)
 endif()

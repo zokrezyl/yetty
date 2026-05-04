@@ -85,3 +85,7 @@ endif()
 # cdb-viewer — read-only walker for yetty MSDF .cdb files. Pure C, no
 # library dependencies (parses CDB format directly), so it always builds.
 add_subdirectory(cdb-viewer)
+
+if(YETTY_ENABLE_TOOL_YNETSURF)
+    add_subdirectory(ynetsurf)
+endif()
