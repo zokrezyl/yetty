@@ -1,11 +1,9 @@
-# DISABLED: see linux.yml.
 labels:
   platform: linux/amd64
   backend: docker
 
 when:
   - event: [push, manual, pull_request, tag]
-    evaluate: 'false'
 
 steps:
   build:
