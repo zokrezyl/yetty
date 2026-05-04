@@ -280,8 +280,12 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
 {
     struct yetty_yrender_render_target_texture *rt = (struct yetty_yrender_render_target_texture *)self;
 
-    /* Early out if not dirty */
-    if (!layer->dirty) {
+    /* Early out if not dirty — but only when LoadOp_Load preserves prior
+     * content. With LoadOp_Clear (preserve_on_render_layer=false, e.g. layer
+     * 0 of every terminal), skipping the draw would leave the pane viewport
+     * with whatever the global clear() in yetty_event_handler put there
+     * (opaque black) — so non-dirty panes go black on every render tick. */
+    if (!layer->dirty && rt->preserve_on_render_layer) {
         return YETTY_OK_VOID();
     }
 
@@ -378,6 +382,16 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
         wgpuRenderPassEncoderSetPipeline(pass, pipeline);
         binder->ops->bind(binder, pass, 0);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, quad_vb, 0, WGPU_WHOLE_SIZE);
+
+        /* Confine the layer's full-NDC quad to its pane's rect, otherwise
+         * a pane's layer would draw across the whole texture and stomp
+         * neighboring panes. pane_render() in yui/tile.c writes the pane
+         * bounds into self->viewport before calling our render_layer. */
+        struct yetty_yrender_viewport vp = self->viewport;
+        wgpuRenderPassEncoderSetViewport(pass, vp.x, vp.y, vp.w, vp.h, 0.0f, 1.0f);
+        wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)vp.x, (uint32_t)vp.y,
+                                            (uint32_t)vp.w, (uint32_t)vp.h);
+
         wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
     }
 

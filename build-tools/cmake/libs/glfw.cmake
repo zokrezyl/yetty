@@ -13,40 +13,27 @@ endif()
 
 yetty_3rdparty_fetch(glfw _GLFW_DIR)
 
-if(WIN32)
-    set(_GLFW_LIB "${_GLFW_DIR}/lib/glfw3.lib")
-else()
-    set(_GLFW_LIB "${_GLFW_DIR}/lib/libglfw3.a")
+# Use upstream's exported cmake config — it already encodes the right
+# INTERFACE_LINK_LIBRARIES for whatever was enabled at build time
+# (X11 deps, Wayland deps, xkbcommon, pthread/dl/m/rt on linux; Cocoa/
+# IOKit/CoreFoundation/QuartzCore on macOS; gdi32/user32/shell32 on
+# Windows). Avoids duplicating that list — and getting it wrong — here.
+find_package(glfw3 CONFIG REQUIRED PATHS "${_GLFW_DIR}" NO_DEFAULT_PATH)
+
+if(NOT TARGET glfw)
+    message(FATAL_ERROR
+        "glfw: glfw3Config.cmake did not export the `glfw` target — \
+tarball layout changed? expected ${_GLFW_DIR}/lib/cmake/glfw3/")
 endif()
 
-if(NOT EXISTS "${_GLFW_LIB}")
-    message(FATAL_ERROR "glfw: archive not found at ${_GLFW_LIB} — tarball layout changed?")
-endif()
+# find_package's imported target defaults to directory scope. Promote it to
+# global so consumers in sibling directories (imgui.cmake, the top-level
+# yetty link list) resolve `glfw` to the imported lib instead of falling
+# through to the -lglfw library-search path (where libglfw doesn't exist —
+# we ship libglfw3 only).
+set_target_properties(glfw PROPERTIES IMPORTED_GLOBAL TRUE)
 
-add_library(glfw STATIC IMPORTED GLOBAL)
-set_target_properties(glfw PROPERTIES
-    IMPORTED_LOCATION "${_GLFW_LIB}"
-    INTERFACE_INCLUDE_DIRECTORIES "${_GLFW_DIR}/include"
-)
-# Platform link deps glfw needs from its consumers (mirrors what the
-# upstream cmake config exports as INTERFACE_LINK_LIBRARIES).
-if(APPLE)
-    set_target_properties(glfw PROPERTIES
-        INTERFACE_LINK_LIBRARIES "-framework Cocoa;-framework IOKit;-framework CoreFoundation;-framework QuartzCore"
-    )
-elseif(WIN32)
-    # System libs glfw needs on Windows (gdi32 for window creation, opengl32
-    # default loader, user32 for input, etc.). Mirrors upstream glfw3-config.
-    set_target_properties(glfw PROPERTIES
-        INTERFACE_LINK_LIBRARIES "gdi32;user32;shell32;opengl32"
-    )
-elseif(UNIX)
-    set_target_properties(glfw PROPERTIES
-        INTERFACE_LINK_LIBRARIES "pthread;dl;m;rt"
-    )
-endif()
-
-message(STATUS "glfw: prebuilt v${YETTY_3RDPARTY_glfw_VERSION} (${_GLFW_LIB})")
+message(STATUS "glfw: prebuilt v${YETTY_3RDPARTY_glfw_VERSION} (via glfw3Config)")
 
 #------------------------------------------------------------------------------
 # glfw3webgpu — adapter that creates a WGPUSurface from a glfw window.
