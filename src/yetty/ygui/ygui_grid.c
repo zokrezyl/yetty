@@ -135,13 +135,15 @@ void yetty_ygui_grid_insert(ygui_spatial_grid_t *grid, struct yetty_ygui_widget 
         return;
     }
 
-    float x0 = widget->effective_x;
-    float y0 = widget->effective_y;
-    float x1 = x0 + widget->w;
-    float y1 = y0 + widget->h;
+    /* Resolved (post-layout) absolute box. */
+    float x0 = widget->layout_x;
+    float y0 = widget->layout_y;
+    float x1 = x0 + widget->layout_w;
+    float y1 = y0 + widget->layout_h;
 
-    GRID_LOG("insert widget=%s pos=(%.1f,%.1f) size=(%.1f,%.1f) eff=(%.1f,%.1f)",
-             widget->id ? widget->id : "?", widget->x, widget->y, widget->w, widget->h, x0, y0);
+    GRID_LOG("insert widget=%s pos=(%.1f,%.1f) size=(%.1f,%.1f) lay=(%.1f,%.1f,%.1f,%.1f)",
+             widget->id ? widget->id : "?", widget->x, widget->y, widget->w, widget->h, x0, y0,
+             widget->layout_w, widget->layout_h);
 
     int col0 = (int)(x0 / grid->cell_size);
     int row0 = (int)(y0 / grid->cell_size);
@@ -174,10 +176,10 @@ void yetty_ygui_grid_remove(ygui_spatial_grid_t *grid, struct yetty_ygui_widget 
         return;
     }
 
-    float x0 = widget->effective_x;
-    float y0 = widget->effective_y;
-    float x1 = x0 + widget->w;
-    float y1 = y0 + widget->h;
+    float x0 = widget->layout_x;
+    float y0 = widget->layout_y;
+    float x1 = x0 + widget->layout_w;
+    float y1 = y0 + widget->layout_h;
 
     int col0 = (int)(x0 / grid->cell_size);
     int row0 = (int)(y0 / grid->cell_size);
@@ -226,11 +228,11 @@ struct yetty_ygui_widget *yetty_ygui_grid_query(const ygui_spatial_grid_t *grid,
     /* Return topmost widget (last in list) that contains the point */
     for (int i = cell->count - 1; i >= 0; i--) {
         struct yetty_ygui_widget *w = cell->widgets[i];
-        int in_x = (x >= w->effective_x && x < w->effective_x + w->w);
-        int in_y = (y >= w->effective_y && y < w->effective_y + w->h);
-        GRID_LOG("  check %s: eff=(%.1f,%.1f) size=(%.1f,%.1f) in_x=%d in_y=%d flags=0x%x",
-                 w->id ? w->id : "?", w->effective_x, w->effective_y, w->w, w->h, in_x, in_y,
-                 w->flags);
+        int in_x = (x >= w->layout_x && x < w->layout_x + w->layout_w);
+        int in_y = (y >= w->layout_y && y < w->layout_y + w->layout_h);
+        GRID_LOG("  check %s: lay=(%.1f,%.1f,%.1f,%.1f) in_x=%d in_y=%d flags=0x%x",
+                 w->id ? w->id : "?", w->layout_x, w->layout_y, w->layout_w, w->layout_h, in_x,
+                 in_y, w->flags);
         if (in_x && in_y) {
             /* Check visibility */
             if (!(w->flags & YETTY_YGUI_FLAG_VISIBLE) || (w->flags & YETTY_YGUI_FLAG_DISABLED)) {

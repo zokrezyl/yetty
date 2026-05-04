@@ -117,10 +117,24 @@ struct yetty_ygui_widget {
     char *id;
     ygui_widget_type_t type;
 
-    /* Geometry */
+    /* Authored geometry — input to the layout pass; set by constructors and
+     * by yetty_ygui_widget_set_position/set_size. Never mutated by the engine. */
+    float authored_x, authored_y, authored_w, authored_h;
+
+    /* Live geometry — output of the layout pass.
+     *   x, y      : relative to immediate parent (or absolute for top-level)
+     *   w, h      : resolved size after flex grow/shrink/stretch
+     *   layout_*  : absolute resolved box (used by spatial grid / hit test)
+     *   content_* : inner box after padding (for future scroll/clip)
+     *   effective_x, effective_y: legacy alias for layout_x/layout_y. */
     float x, y, w, h;
+    float layout_x, layout_y, layout_w, layout_h;
+    float content_x, content_y, content_w, content_h;
     float effective_x, effective_y;
     int was_rendered;
+
+    /* Layout (flexbox-style). Zero-initialized = MANUAL mode (default). */
+    struct yetty_ygui_layout layout;
 
     /* State */
     uint32_t flags;
@@ -304,8 +318,12 @@ struct yetty_ygui_engine {
     ygui_key_callback_t key_callback;
     void *key_userdata;
 
-    /* Size in pixels (widget coordinate system) */
+    /* Size in pixels (widget coordinate system).
+     * prev_width / prev_height carry the canvas size from before the most
+     * recent change so the resize callback can pass both old and new
+     * dimensions. They're 0 until the first resize lands. */
     float width, height;
+    float prev_width, prev_height;
     float cell_width, cell_height;
 
     /* Card info for OSC output */
@@ -418,6 +436,11 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_triangle(
 /* Default widget functions */
 struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(
     struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx);
+
+/* Layout pass — runs before rendering inside engine_rebuild. Resolves
+ * authored geometry into live geometry (x/y/w/h) plus absolute layout_*
+ * boxes that the spatial grid uses for hit testing. See ygui_layout.c. */
+struct yetty_ycore_void_result yetty_ygui_layout_compute_engine(struct yetty_ygui_engine *engine);
 
 /* OSC output (ygui_osc.c) */
 struct yetty_ycore_void_result yetty_ygui_osc_create_card(const char *name, int x, int y, int w,

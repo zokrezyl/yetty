@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <termios.h>
 #include <signal.h>
+#include <sys/ioctl.h>
 #endif
 
 /* Debug logging - set YGUI_C_LOG env var to enable */
@@ -415,6 +416,19 @@ void yetty_ygui_engine_set_size(struct yetty_ygui_engine *engine, float width, f
     engine->dirty = 1;
 }
 
+void yetty_ygui_engine_get_size(const struct yetty_ygui_engine *engine, float *width, float *height)
+{
+    if (!engine) {
+        return;
+    }
+    if (width) {
+        *width = engine->width;
+    }
+    if (height) {
+        *height = engine->height;
+    }
+}
+
 void yetty_ygui_engine_set_theme(struct yetty_ygui_engine *engine, struct yetty_ygui_theme *theme)
 {
     if (!engine) {
@@ -477,6 +491,15 @@ static struct yetty_ycore_void_result engine_rebuild(struct yetty_ygui_engine *e
     /* Clear the grid */
     yetty_ygui_grid_clear(&engine->grid);
 
+    /* Compute layout (resolves authored geometry into live + absolute boxes)
+     * before any rendering. Render and grid both consume the resolved values. */
+    {
+        struct yetty_ycore_void_result lr = yetty_ygui_layout_compute_engine(engine);
+        if (YETTY_IS_ERR(lr)) {
+            return YETTY_ERR(yetty_ycore_void, "engine_rebuild: layout failed", lr);
+        }
+    }
+
     /* Create render context */
     struct yetty_ygui_render_ctx ctx;
     yetty_ygui_render_ctx_init(&ctx, engine->buffer, engine->theme);
@@ -512,6 +535,18 @@ static struct yetty_ycore_void_result engine_rebuild(struct yetty_ygui_engine *e
         return YETTY_ERR(yetty_ycore_void, "engine_rebuild: widget render failed", first_err);
     }
     return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ygui_engine_layout(struct yetty_ygui_engine *engine)
+{
+    if (!engine) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_engine_layout: NULL engine");
+    }
+    if (engine->needs_resize) {
+        handle_resize(engine);
+        engine->needs_resize = 0;
+    }
+    return yetty_ygui_layout_compute_engine(engine);
 }
 
 struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine *engine)
@@ -1200,78 +1235,40 @@ static void handle_resize(struct yetty_ygui_engine *engine)
 
     YGUI_LOG("Resize: new display %.2fx%.2f", new_display_w, new_display_h);
 
+    /* Snapshot the size before mutation so the callback can report the
+     * previous canvas dims. */
+    float prev_w = engine->width;
+    float prev_h = engine->height;
+
     if (engine->canvas_mode == YETTY_YGUI_CANVAS_FIT) {
-        /* Canvas size matches display size */
-        float old_canvas_w = engine->width;
-        float old_canvas_h = engine->height;
+        /* Canvas size now tracks display size. Widget *authored* geometry is
+         * left untouched on purpose — the layout pass will recompute resolved
+         * boxes from authored values during the next render.
+         *
+         * NOTE: YETTY_YGUI_SCALE_ON is currently a no-op. Issue #41 calls out
+         * the old in-place scaling as drift-prone; layout-driven scaling is a
+         * follow-up. */
         engine->width = new_display_w;
         engine->height = new_display_h;
+        engine->had_first_resize = 1;
 
-        /* First resize AND subsequent resizes: scale widgets if SCALE_ON.
-         * Widgets were created at initial canvas coords, need to scale to match display. */
-        if (!engine->had_first_resize) {
-            engine->had_first_resize = 1;
-            if (engine->scale_mode == YETTY_YGUI_SCALE_ON && old_canvas_w > 0 && old_canvas_h > 0) {
-                float scale_x = new_display_w / old_canvas_w;
-                float scale_y = new_display_h / old_canvas_h;
-                YGUI_LOG("First resize: canvas %.0fx%.0f -> %.0fx%.0f scale=(%.4f,%.4f)",
-                         old_canvas_w, old_canvas_h, new_display_w, new_display_h, scale_x,
-                         scale_y);
-                for (struct yetty_ygui_widget *w = engine->first_widget; w; w = w->next_sibling) {
-                    w->x *= scale_x;
-                    w->y *= scale_y;
-                    w->w *= scale_x;
-                    w->h *= scale_y;
-                    w->effective_x = w->x;
-                    w->effective_y = w->y;
-                }
-            } else {
-                YGUI_LOG("First resize: canvas %.0fx%.0f -> %.0fx%.0f (no scaling)", old_canvas_w,
-                         old_canvas_h, new_display_w, new_display_h);
-                for (struct yetty_ygui_widget *w = engine->first_widget; w; w = w->next_sibling) {
-                    w->effective_x = w->x;
-                    w->effective_y = w->y;
-                }
-            }
-        } else if (engine->scale_mode == YETTY_YGUI_SCALE_ON && old_canvas_w > 0 && old_canvas_h > 0) {
-            /* Scale all widgets proportionally using FLOAT precision */
-            float scale_x = new_display_w / old_canvas_w;
-            float scale_y = new_display_h / old_canvas_h;
-
-            YGUI_LOG("Scaling widgets by %.4fx%.4f", scale_x, scale_y);
-
-            for (struct yetty_ygui_widget *w = engine->first_widget; w; w = w->next_sibling) {
-                /* Scale positions and sizes (all FLOAT) */
-                w->x *= scale_x;
-                w->y *= scale_y;
-                w->w *= scale_x;
-                w->h *= scale_y;
-
-                /* Update effective positions for hit testing */
-                w->effective_x = w->x;
-                w->effective_y = w->y;
-            }
-        }
-
-        /* Rebuild spatial grid with new canvas size */
+        /* Rebuild spatial grid for the new canvas size. The next engine_rebuild
+         * will re-insert widgets after running the layout pass. */
         yetty_ygui_grid_destroy(&engine->grid);
         yetty_ygui_grid_init(&engine->grid, engine->width, engine->height,
                        calc_grid_bucket_size(engine->width, engine->height));
-
-        /* Re-insert all widgets - they now have correct effective positions */
-        for (struct yetty_ygui_widget *w = engine->first_widget; w; w = w->next_sibling) {
-            if (w->was_rendered) {
-                yetty_ygui_grid_insert(&engine->grid, w);
-            }
-        }
 
         engine->dirty = 1;
     }
     /* YGUI_CANVAS_FIXED: canvas size unchanged, ydraw card handles zoom/scroll */
 
+    engine->prev_width = prev_w;
+    engine->prev_height = prev_h;
+
     /* Call user's resize callback */
     if (engine->resize_callback) {
-        engine->resize_callback(engine, engine->resize_userdata);
+        engine->resize_callback(engine, engine->width, engine->height, prev_w, prev_h,
+                                engine->resize_userdata);
     }
 }
 
@@ -1600,9 +1597,10 @@ static void yface_on_osc(void *user, int osc_code, const uint8_t *args, size_t a
         }
         engine->needs_resize = 1;
         engine->dirty = 1;
-        if (engine->resize_callback) {
-            engine->resize_callback(engine, engine->resize_userdata);
-        }
+        /* Don't fire resize_callback here — engine->width/height haven't
+         * been updated yet. handle_resize() runs on the next render (driven
+         * by needs_resize) and emits the callback once the canvas dims
+         * actually change. */
         break;
     }
     case YMGUI_OSC_SC_FOCUS: {
@@ -1719,9 +1717,43 @@ static void prepare_cb(uv_prepare_t *handle)
     /* Check for terminal resize */
     if (ygui_resize_pending) {
         ygui_resize_pending = 0;
-        YGUI_LOG("SIGWINCH received, re-querying cell size");
+        YGUI_LOG("SIGWINCH received, re-querying terminal size and cell size");
+#ifndef _WIN32
+        /* Pick up the new host-terminal cell count. Without this the card
+         * stays at its original cell dims, the cell pixel size also stays
+         * (no zoom), and handle_resize ends up with no delta — i.e. the
+         * resize event fires but nothing actually changes. */
+        struct winsize ws;
+        if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0) {
+            int new_w = ws.ws_col;
+            int new_h = ws.ws_row;
+            if (new_w != engine->card_w || new_h != engine->card_h) {
+                YGUI_LOG("SIGWINCH: card cells %dx%d -> %dx%d", engine->card_w,
+                         engine->card_h, new_w, new_h);
+                engine->card_w = new_w;
+                engine->card_h = new_h;
+                /* Tell the yetty side to re-place the card at the new cell
+                 * size. Yetty re-creates the card and sends back OSC 777780
+                 * with the new pixel size; that response sets
+                 * needs_resize/dirty and drives handle_resize on the next
+                 * render. We deliberately don't pre-compute pixel dims here
+                 * from cached cell_width — yetty may re-tile cells (which
+                 * changes the cell pixel size), and using a stale cached
+                 * value would cause a render at the wrong size that gets
+                 * corrected a frame later. */
+                struct yetty_ycore_void_result pr = yetty_ygui_osc_card_place(
+                    engine->card_id, engine->card_x, engine->card_y, (uint32_t)new_w,
+                    (uint32_t)new_h);
+                if (YETTY_IS_ERR(pr)) {
+                    yetty_ycore_error_destroy(pr.error);
+                }
+            }
+        }
+#endif
         yetty_ygui_osc_query_cell_size();
-        /* handle_resize will be called when CSI response arrives */
+        /* The CSI cell-size response and yetty's OSC 777780 reply will
+         * arrive shortly; the OSC 777780 parser sets needs_resize and
+         * dirty, which triggers handle_resize on the next render. */
     }
 
     /* Auto-render if dirty */

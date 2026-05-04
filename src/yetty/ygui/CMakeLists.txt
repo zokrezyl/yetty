@@ -8,6 +8,7 @@ set(YGUI_SOURCES
     ygui_render.c
     ygui_theme.c
     ygui_osc.c
+    ygui_layout.c
 )
 
 add_library(ygui STATIC ${YGUI_SOURCES})
