@@ -5,11 +5,14 @@ labels:
 when:
   - event: [push, manual, pull_request, tag]
 
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      lfs: true
+
 steps:
   build:
     image: yetty-build:latest
     commands:
-      - git lfs install
-      - git lfs fetch
-      - git lfs checkout
       - make build-android_x86_64-ytrace-release
