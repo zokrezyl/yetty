@@ -68,15 +68,21 @@ struct yetty_yfont_ms_msdf_font {
     /* Font sizing */
     float base_size;      /* CDB generation font size */
     float requested_size; /* user-requested font size */
-    float hw_ratio;       /* height/width ratio (from first glyph) */
     float pixel_range;
 
-    /* Font vertical metrics in CDB base-size units, tracked as glyphs load.
-	 * max_ascent  = max(bearing_y) — used to find baseline given glyph height.
-	 * max_descent = max(size_y - bearing_y) — used to scale glyph_height = max_ascent + max_descent
-	 * to the requested font_size in pixels. */
+    /* Font metrics in CDB base-size units, captured as glyphs load.
+	 *   max_ascent  = max(bearing_y)          — visible above baseline (padding-inflated)
+	 *   max_descent = max(size_y - bearing_y) — visible below baseline (padding-inflated)
+	 *   advance_cdb = horizontal pen step per glyph; identical for every
+	 *                 glyph in a monospace font, so the first one wins.
+	 *                 This is the designer's chosen letter spacing — what
+	 *                 alacritty et al. use for cell width.
+	 * max_ascent and max_descent include the msdfgen pixel_range pad on
+	 * each edge; strip pixel_range per edge to get the visible extent.
+	 * advance does NOT include any padding — it is a pure font metric. */
     float max_ascent;
     float max_descent;
+    float advance_cdb;
 
     /* Cell padding (fractions of glyph dimensions). Cell wraps the glyph
 	 * extent with padding on each side. */
@@ -152,12 +158,8 @@ static struct uint32_result load_one(struct yetty_yfont_ms_msdf_font *f, uint32_
         return YETTY_ERR(uint32, "glyph pixel data truncated");
     }
 
-    /* Compute hw_ratio from first real glyph with advance */
-    if (f->hw_ratio == 0.0f && hdr.advance > 0) {
-        f->hw_ratio = hdr.size_y / hdr.advance;
-    }
-
-    /* Track font vertical extents so the shader can derive baseline */
+    /* Track vertical extents (padding-inflated) so the shader can derive
+	 * the baseline. */
     if (hdr.size_y > 0.0f) {
         float ascent = hdr.bearing_y;               /* above baseline */
         float descent = hdr.size_y - hdr.bearing_y; /* below baseline */
@@ -167,6 +169,11 @@ static struct uint32_result load_one(struct yetty_yfont_ms_msdf_font *f, uint32_
         if (descent > f->max_descent) {
             f->max_descent = descent;
         }
+    }
+    /* Capture advance from the first glyph that has one — monospace, so
+	 * every glyph reports the same value. */
+    if (f->advance_cdb == 0.0f && hdr.advance > 0.0f) {
+        f->advance_cdb = hdr.advance;
     }
 
     /* Allocate slot */
@@ -285,11 +292,16 @@ static struct pixel_size_result ms_msdf_get_cell_size(const struct yetty_yfont_m
     if (!f) {
         return YETTY_ERR(pixel_size, "font is NULL");
     }
-    if (f->hw_ratio <= 0.0f) {
-        return YETTY_ERR(pixel_size, "hw_ratio not set");
+    float visible_h_cdb = (f->max_ascent + f->max_descent) - 2.0f * f->pixel_range;
+    if (visible_h_cdb <= 0.0f || f->advance_cdb <= 0.0f) {
+        return YETTY_ERR(pixel_size, "font metrics not yet known");
     }
+    /* font.size is the visible glyph extent in pixels (height). Cell
+	 * width = advance × same scale — i.e. the font designer's chosen
+	 * letter spacing, matching alacritty and other mainstream terminals. */
+    float scale = f->requested_size / visible_h_cdb;
     float glyph_h = f->requested_size;
-    float glyph_w = f->requested_size / f->hw_ratio;
+    float glyph_w = f->advance_cdb * scale;
     struct yetty_ycore_pixel_size sz;
     sz.height = glyph_h * (1.0f + f->padding.top + f->padding.bottom);
     sz.width = glyph_w * (1.0f + f->padding.left + f->padding.right);
@@ -395,12 +407,12 @@ static struct yetty_yrender_gpu_resource_set_result ms_msdf_get_gpu_resource_set
 		 * of the tallest ascender lands at top_pad_px, not below it.
 		 */
         float pad_cdb = f->pixel_range;
-        float visible_extent_cdb = (f->max_ascent + f->max_descent) - 2.0f * pad_cdb;
-        float scale = (visible_extent_cdb > 0.0f)
-            ? f->requested_size / visible_extent_cdb
+        float visible_h_cdb = (f->max_ascent + f->max_descent) - 2.0f * pad_cdb;
+        float scale = (visible_h_cdb > 0.0f)
+            ? f->requested_size / visible_h_cdb
             : f->requested_size / f->base_size;
+        float glyph_w = f->advance_cdb * scale;
         float top_pad_px = f->requested_size * f->padding.top;
-        float glyph_w = (f->hw_ratio > 0.0f) ? f->requested_size / f->hw_ratio : 0.0f;
         float left_pad_px = glyph_w * f->padding.left;
         float baseline_y = top_pad_px + (f->max_ascent - pad_cdb) * scale;
 
@@ -425,18 +437,11 @@ static struct yetty_ycore_void_result ms_msdf_set_cell_size(struct yetty_yfont_m
     if (cell_size.height <= 0.0f) {
         return YETTY_ERR(yetty_ycore_void, "invalid cell height");
     }
-    /* The caller hands us a cell size; back out the glyph dimensions by
-	 * subtracting the padding (so the cell-wrap stays consistent). */
+    /* Back out the requested glyph height from the cell height; ignore the
+	 * caller's width — cell width is derived from font geometry, not from
+	 * what the caller asks for. */
     float h_div = 1.0f + f->padding.top + f->padding.bottom;
-    float w_div = 1.0f + f->padding.left + f->padding.right;
-    float glyph_h = cell_size.height / h_div;
-    f->requested_size = glyph_h;
-    if (cell_size.width > 0.0f) {
-        float glyph_w = cell_size.width / w_div;
-        if (glyph_w > 0.0f) {
-            f->hw_ratio = glyph_h / glyph_w;
-        }
-    }
+    f->requested_size = cell_size.height / h_div;
     f->dirty = 1;
     return YETTY_OK_VOID();
 }
@@ -589,26 +594,26 @@ struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
     yetty_yrender_shader_code_set(&font->rs.shader, (const char *)font->shader_code.data,
                                   font->shader_code.size);
 
-    /* Pre-load Basic Latin so hw_ratio and the max_ascent/max_descent
-	 * extents are settled before the first frame. Otherwise the scale would
-	 * visibly shift as glyphs (especially descenders like underscore) load
-	 * on demand. */
+    /* Pre-load Basic Latin so the max_ascent / max_descent / max_glyph_w
+	 * extents are settled before the first frame. Otherwise the scale and
+	 * cell size would visibly shift as glyphs (especially descenders like
+	 * underscore, or wide glyphs) load on demand. */
     for (uint32_t cp = 0x20; cp <= 0x7E; cp++) {
         load_one(font, cp);
     }
-    if (font->hw_ratio <= 0.0f) {
+    if (font->max_ascent <= 0.0f || font->advance_cdb <= 0.0f) {
         free(font->meta);
         free(font->atlas_pixels);
         free(font->shader_code.data);
         yetty_ycore_map_destroy(&font->glyph_map);
         yetty_ycdb_reader_close(font->cdb);
         free(font);
-        return YETTY_ERR(yetty_font_ms_font, "failed to determine hw_ratio");
+        return YETTY_ERR(yetty_font_ms_font, "failed to determine font metrics");
     }
 
-    yinfo("ms_msdf_font: created from %s, size=%.0f, hw_ratio=%.3f, "
-          "ascent=%.2f, descent=%.2f",
-          cdb_path, font_size, font->hw_ratio, font->max_ascent, font->max_descent);
+    yinfo("ms_msdf_font: created from %s, size=%.0f, "
+          "ascent=%.2f, descent=%.2f, advance=%.2f",
+          cdb_path, font_size, font->max_ascent, font->max_descent, font->advance_cdb);
 
     return YETTY_OK(yetty_font_ms_font, &font->base);
 }
