@@ -11,14 +11,20 @@
 #                     ios-arm64 | ios-x86_64 |
 #                     tvos-arm64 | tvos-x86_64 |
 #                     windows-x86_64
-#   VERSION           e.g. 0.0.1
+#   VERSION           derived — read from ./version, used in tarball name
 #   OUTPUT_DIR        where the tarball is written
 # Optional env:
 #   WORK_DIR          default /tmp/yetty-asset-qemu-$TARGET_PLATFORM
 #   CACHE_DIR         default $HOME/.cache/yetty-qemu-assets
 #                     holds the QEMU source tarball so multi-target builds
 #                     share a single download
-#   QEMU_VERSION      default 11.0.0-rc4
+#
+# The `version` file format is <upstream>-<pkg-rev>, e.g. `11.0.0-rc4-1` —
+# single source of truth for both the upstream QEMU tarball fetched here
+# AND the lib-qemu-<version> release tag / qemu-<platform>-<version>.tar.gz
+# tarball name. Bump <pkg-rev> for packaging-only changes (configure-flag
+# tweaks, applied patches); bump <upstream> when moving to a new QEMU
+# release.
 #
 # QEMU configure flags are kept in sync with build-tools/cmake/qemu.cmake.
 
@@ -26,19 +32,25 @@ set -Eeuo pipefail
 trap 'rc=$?; echo "FAILED: rc=$rc line=$LINENO source=${BASH_SOURCE[0]} cmd: $BASH_COMMAND" >&2' ERR
 
 : "${TARGET_PLATFORM:?TARGET_PLATFORM is required}"
-# Version is read from ./version file — single source of truth (matches
-# the lib-<name>-<version> tag pushed via build-tools/push-3rdparty-tag.sh).
 VERSION_FILE="$(dirname "$0")/version"
 [ -f "$VERSION_FILE" ] || { echo "missing $VERSION_FILE" >&2; exit 1; }
 VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 [ -n "$VERSION" ] || { echo "$VERSION_FILE is empty" >&2; exit 1; }
 : "${OUTPUT_DIR:?OUTPUT_DIR is required}"
 
+# Split <upstream>-<pkg-rev>. QEMU upstream tags routinely contain `-`
+# (e.g. 11.0.0-rc4), so split off the last `-` component as the pkg rev.
+QEMU_VERSION="${VERSION%-*}"
+PKG_REV="${VERSION##*-}"
+[ "$QEMU_VERSION" != "$VERSION" ] && [ -n "$PKG_REV" ] || {
+    echo "$VERSION_FILE: expected <upstream>-<rev>, got '$VERSION'" >&2
+    exit 1
+}
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 WORK_DIR="${WORK_DIR:-/tmp/yetty-asset-qemu-$TARGET_PLATFORM}"
 CACHE_DIR="${CACHE_DIR:-$HOME/.cache/yetty-qemu-assets}"
-QEMU_VERSION="${QEMU_VERSION:-11.0.0-rc4}"
 NCPU="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 
 QEMU_URL="https://download.qemu.org/qemu-${QEMU_VERSION}.tar.xz"

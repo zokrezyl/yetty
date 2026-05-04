@@ -36,6 +36,7 @@ suffix:
 |----------------------|---------------------------------------|----------------------|
 | linux                | `<kernel>-<rev>`                      | `7.0-1`              |
 | opensbi              | `<opensbi>-<rev>`                     | `1.4-1`              |
+| qemu                 | `<qemu>-<rev>`                        | `11.0.0-rc4-1`       |
 | alpine-disk          | `<alpine-release>-<arch>-<rev>`       | `3.23.4-riscv64-1`   |
 | alpine-extended-disk | `<alpine-release>-<arch>-<rev>`       | `3.23.4-riscv64-1`   |
 
