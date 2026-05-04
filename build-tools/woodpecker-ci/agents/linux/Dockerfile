@@ -118,7 +118,8 @@ RUN userdel -r ubuntu 2>/dev/null; \
     groupadd -g 1005 vglusers && \
     groupadd -g 110 render 2>/dev/null; \
     groupadd -g 108 kvm 2>/dev/null; \
-    usermod -aG docker,video,render,vglusers,kvm misi
+    usermod -aG docker,video,render,vglusers,kvm misi && \
+    mkdir -m 0755 /nix && chown 1000:1000 /nix
 USER misi
 ENV HOME=/home/misi
 ENV USER=misi
@@ -130,5 +131,12 @@ RUN mkdir -p ~/.android && \
         -storepass android -alias androiddebugkey -keypass android \
         -keyalg RSA -keysize 2048 -validity 10000 \
         -dname "CN=Android Debug,O=Android,C=US"
+
+# Nix (single-user install, flakes enabled)
+RUN curl --proto '=https' --tlsv1.2 -sSf -L https://nixos.org/nix/install \
+        | sh -s -- --no-daemon && \
+    mkdir -p ~/.config/nix && \
+    echo "experimental-features = nix-command flakes" > ~/.config/nix/nix.conf
+ENV PATH=/home/misi/.nix-profile/bin:$PATH
 
 CMD ["zsh"]
