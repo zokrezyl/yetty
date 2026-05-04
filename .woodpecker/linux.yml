@@ -1,18 +1,18 @@
-# DISABLED: linux compose agent (next-af313aad34) is mismatched with server v3.14.0.
-# To re-enable: refresh the agent image, then remove `evaluate: 'false'` below.
 labels:
   platform: linux/amd64
   backend: docker
 
 when:
   - event: [push, manual, pull_request, tag]
-    evaluate: 'false'
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      lfs: true
 
 steps:
   build:
     image: yetty-build:latest
     commands:
-      - git lfs install
-      - git lfs fetch
-      - git lfs checkout
       - make build-desktop-ytrace-release
