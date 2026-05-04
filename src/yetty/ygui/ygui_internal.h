@@ -109,6 +109,38 @@ typedef int (*ygui_widget_on_key_fn)(struct yetty_ygui_widget *self, uint32_t ke
 typedef void (*ygui_widget_destroy_fn)(struct yetty_ygui_widget *self);
 
 /*=============================================================================
+ * Widget vtable — per-type behavior, shared across all instances of a type.
+ *
+ * Every field is optional (NULL = "no handler"). Each widget's `vtable`
+ * pointer is `NULL` for trivial types (e.g. hbox / vbox carry no custom
+ * behavior beyond the layout pass) or points to a single static
+ * `<type>_vtable` defined alongside the type's render functions in
+ * ygui_widgets.c.
+ *===========================================================================*/
+
+/* Distance from the widget's top edge to its first text baseline, in
+ * resolved pixels. Used by ALIGN_BASELINE in the flex layout pass.
+ * Widgets without text return their height (or anything sensible) — the
+ * layout falls back to start-alignment when only some children expose a
+ * baseline. */
+typedef float (*ygui_widget_baseline_fn)(const struct yetty_ygui_widget *self,
+                                         const struct yetty_ygui_theme *theme);
+
+struct yetty_ygui_widget_vtable {
+    ygui_widget_render_fn     render;
+    ygui_widget_render_all_fn render_all;
+    ygui_widget_on_press_fn   on_press;
+    ygui_widget_on_release_fn on_release;
+    ygui_widget_on_drag_fn    on_drag;
+    ygui_widget_on_scroll_fn  on_scroll;
+    ygui_widget_on_key_fn     on_key;
+    ygui_widget_destroy_fn    destroy;
+    /* Optional. NULL = widget has no meaningful baseline; layout falls
+     * back to ALIGN_START. */
+    ygui_widget_baseline_fn   baseline_offset;
+};
+
+/*=============================================================================
  * Widget Structure
  *===========================================================================*/
 
@@ -152,15 +184,13 @@ struct yetty_ygui_widget {
     struct yetty_ygui_widget *next_sibling;
     struct yetty_ygui_widget *prev_sibling;
 
-    /* Internal virtual functions */
-    ygui_widget_render_fn render;
-    ygui_widget_render_all_fn render_all;
-    ygui_widget_on_press_fn on_press;
-    ygui_widget_on_release_fn on_release;
-    ygui_widget_on_drag_fn on_drag;
-    ygui_widget_on_scroll_fn on_scroll;
-    ygui_widget_on_key_fn on_key;
-    ygui_widget_destroy_fn destroy;
+    /* Per-type behavior — points at one of the static <type>_vtable
+     * structs in ygui_widgets.c. NULL is allowed (e.g. layout-only
+     * containers like hbox / vbox). All eight type-level fn pointers used
+     * to live inline in the widget; folding them into a per-type vtable
+     * saved 56 bytes per instance and matches the project design rule of
+     * "vtable pattern with structural embedding". */
+    const struct yetty_ygui_widget_vtable *vtable;
 
     /* User callbacks */
     ygui_widget_click_fn click_callback;
