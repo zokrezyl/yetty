@@ -8,12 +8,15 @@
 # metadata rebuild). The actual grow-on-first-launch is a follow-up step.
 #
 # Env vars:
-#   VERSION         required — used in output filename
+#   VERSION         derived — read from ./version, used in output filename
 #   OUTPUT_DIR      required — where to place the tarball
 #   WORK_DIR        optional — intermediate build tree (default: /tmp/yetty-asset-alpine-disk)
-#   ALPINE_VERSION  optional — alpine minor (default: 3.23)
-#   ALPINE_RELEASE  optional — alpine full  (default: 3.23.4)
-#   ALPINE_ARCH     optional — alpine arch  (default: riscv64)
+#
+# The `version` file format is <alpine-release>-<arch>-<pkg-rev>, e.g.
+# `3.23.4-riscv64-1`. The whole string is the lib-tag suffix and tarball
+# version; the upstream Alpine release + arch are parsed out of it for
+# the minirootfs fetch URL. Bump <pkg-rev> for packaging-only changes
+# (e.g. /init tweaks); bump <alpine-release> for an Alpine point release.
 #
 # Needs: curl, tar, gzip, e2fsprogs, util-linux, and passwordless sudo
 # (for losetup/mount/umount). GitHub-hosted ubuntu-latest runners
@@ -21,18 +24,30 @@
 
 set -euo pipefail
 
-# Version is read from ./version file — single source of truth (matches
-# the lib-<name>-<version> tag pushed via build-tools/push-3rdparty-tag.sh).
 VERSION_FILE="$(dirname "$0")/version"
 [ -f "$VERSION_FILE" ] || { echo "missing $VERSION_FILE" >&2; exit 1; }
 VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 [ -n "$VERSION" ] || { echo "$VERSION_FILE is empty" >&2; exit 1; }
 : "${OUTPUT_DIR:?OUTPUT_DIR is required}"
 
+# Split <alpine-release>-<arch>-<pkg-rev>. e.g. 3.23.4-riscv64-1 →
+# release=3.23.4, arch=riscv64, rev=1. Two splits off the right.
+PKG_REV="${VERSION##*-}"
+_UPSTREAM="${VERSION%-*}"
+ALPINE_ARCH="${_UPSTREAM##*-}"
+ALPINE_RELEASE="${_UPSTREAM%-*}"
+[ "$ALPINE_RELEASE" != "$_UPSTREAM" ] \
+    && [ "$_UPSTREAM" != "$VERSION" ] \
+    && [ -n "$PKG_REV" ] \
+    && [ -n "$ALPINE_ARCH" ] \
+    || {
+    echo "$VERSION_FILE: expected <alpine-release>-<arch>-<rev>, got '$VERSION'" >&2
+    exit 1
+}
+# Alpine minor (3.23) is the dirname under /alpine/v<minor>/releases/.
+ALPINE_VERSION="${ALPINE_RELEASE%.*}"
+
 WORK_DIR="${WORK_DIR:-/tmp/yetty-asset-alpine-disk}"
-ALPINE_VERSION="${ALPINE_VERSION:-3.23}"
-ALPINE_RELEASE="${ALPINE_RELEASE:-3.23.4}"
-ALPINE_ARCH="${ALPINE_ARCH:-riscv64}"
 
 ALPINE_URL="https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VERSION}/releases/${ALPINE_ARCH}/alpine-minirootfs-${ALPINE_RELEASE}-${ALPINE_ARCH}.tar.gz"
 

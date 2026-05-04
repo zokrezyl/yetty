@@ -17,15 +17,12 @@
 # other inter-3rdparty deps (see libpng/_build.sh).
 #
 # Env vars:
-#   VERSION           required — read from ./version (used in output filename)
+#   VERSION           derived — read from ./version (used in output filename)
 #   OUTPUT_DIR        required — where to place the tarball
 #   WORK_DIR          optional — intermediate build tree
 #                                (default: /tmp/yetty-asset-alpine-extended-disk)
 #   CACHE_DIR         optional — download cache for fetched tarballs
 #                                (default: $HOME/.cache/yetty-3rdparty)
-#   ALPINE_VERSION    optional — alpine minor (default: 3.23)
-#   ALPINE_RELEASE    optional — alpine full  (default: 3.23.4)
-#   ALPINE_ARCH       optional — alpine arch  (default: riscv64)
 #   IMAGE_MIB         optional — initial raw disk size
 #                                (default: 2048; sized big to fit the package
 #                                set + apk metadata + headroom)
@@ -33,6 +30,12 @@
 #                                (default: 1800; protects CI)
 #   YETTY_3RDPARTY_URL_BASE  optional — release URL prefix for the linux dep
 #                                       (default: https://github.com/zokrezyl/yetty/releases/download)
+#
+# The `version` file format is <alpine-release>-<arch>-<pkg-rev>, e.g.
+# `3.23.4-riscv64-1`. Same scheme as alpine-disk; see that producer for
+# the rationale. The kernel for the install VM is fetched from the
+# `linux` 3rdparty release at whatever <pkg-version> is pinned in
+# build-tools/3rdparty/linux/version (full <upstream>-<rev> string).
 #
 # Needs: curl, brotli, e2fsprogs (mkfs.ext4), util-linux (losetup, mount),
 # tar, gzip, qemu-system-riscv64, and passwordless sudo (for losetup/mount/
@@ -53,22 +56,37 @@ VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 [ -n "$VERSION" ] || { echo "$VERSION_FILE is empty" >&2; exit 1; }
 : "${OUTPUT_DIR:?OUTPUT_DIR is required}"
 
+# Split <alpine-release>-<arch>-<pkg-rev>. Same scheme as alpine-disk.
+PKG_REV="${VERSION##*-}"
+_UPSTREAM="${VERSION%-*}"
+ALPINE_ARCH="${_UPSTREAM##*-}"
+ALPINE_RELEASE="${_UPSTREAM%-*}"
+[ "$ALPINE_RELEASE" != "$_UPSTREAM" ] \
+    && [ "$_UPSTREAM" != "$VERSION" ] \
+    && [ -n "$PKG_REV" ] \
+    && [ -n "$ALPINE_ARCH" ] \
+    || {
+    echo "$VERSION_FILE: expected <alpine-release>-<arch>-<rev>, got '$VERSION'" >&2
+    exit 1
+}
+ALPINE_VERSION="${ALPINE_RELEASE%.*}"
+
+# Pinned kernel version is the *whole* version string from linux/version
+# (e.g. `7.0-1`) — that's the lib-linux-* tag suffix and the tarball
+# infix simultaneously, so we use it verbatim in the URL.
 LINUX_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/linux/version"
 [ -f "$LINUX_VERSION_FILE" ] || { echo "missing $LINUX_VERSION_FILE" >&2; exit 1; }
-LINUX_VERSION="$(tr -d '[:space:]' < "$LINUX_VERSION_FILE")"
-[ -n "$LINUX_VERSION" ] || { echo "$LINUX_VERSION_FILE is empty" >&2; exit 1; }
+LINUX_PKG_VERSION="$(tr -d '[:space:]' < "$LINUX_VERSION_FILE")"
+[ -n "$LINUX_PKG_VERSION" ] || { echo "$LINUX_VERSION_FILE is empty" >&2; exit 1; }
 
 WORK_DIR="${WORK_DIR:-/tmp/yetty-asset-alpine-extended-disk}"
 CACHE_DIR="${CACHE_DIR:-$HOME/.cache/yetty-3rdparty}"
-ALPINE_VERSION="${ALPINE_VERSION:-3.23}"
-ALPINE_RELEASE="${ALPINE_RELEASE:-3.23.4}"
-ALPINE_ARCH="${ALPINE_ARCH:-riscv64}"
 IMAGE_MIB="${IMAGE_MIB:-700}"
 QEMU_TIMEOUT_SEC="${QEMU_TIMEOUT_SEC:-1800}"
 URL_BASE="${YETTY_3RDPARTY_URL_BASE:-https://github.com/zokrezyl/yetty/releases/download}"
 
 ALPINE_URL="https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VERSION}/releases/${ALPINE_ARCH}/alpine-minirootfs-${ALPINE_RELEASE}-${ALPINE_ARCH}.tar.gz"
-LINUX_TAR_URL="$URL_BASE/lib-linux-${LINUX_VERSION}/linux-${LINUX_VERSION}.tar.gz"
+LINUX_TAR_URL="$URL_BASE/lib-linux-${LINUX_PKG_VERSION}/linux-${LINUX_PKG_VERSION}.tar.gz"
 
 mkdir -p "$WORK_DIR" "$OUTPUT_DIR" "$CACHE_DIR"
 cd "$WORK_DIR"
@@ -95,10 +113,10 @@ fetch() {
 }
 
 ALPINE_TARBALL="$CACHE_DIR/alpine-minirootfs-${ALPINE_RELEASE}-${ALPINE_ARCH}.tar.gz"
-LINUX_TARBALL="$CACHE_DIR/linux-${LINUX_VERSION}.tar.gz"
+LINUX_TARBALL="$CACHE_DIR/linux-${LINUX_PKG_VERSION}.tar.gz"
 
 fetch "$ALPINE_URL"   "$ALPINE_TARBALL" "Alpine ${ALPINE_RELEASE} minirootfs (${ALPINE_ARCH})" alpine-extended-minirootfs
-fetch "$LINUX_TAR_URL" "$LINUX_TARBALL"  "linux ${LINUX_VERSION} (build-time dep, kernel for the install VM)" alpine-extended-linux
+fetch "$LINUX_TAR_URL" "$LINUX_TARBALL"  "linux ${LINUX_PKG_VERSION} (build-time dep, kernel for the install VM)" alpine-extended-linux
 
 # Extract the kernel image. linux-*.tar.gz is created with `tar -C STAGE .`,
 # so its members are stored with a `./` prefix (e.g. `./kernel-riscv64.bin.br`).

@@ -25,6 +25,27 @@ The `version` file value is used for **both**:
 There is **no** global 3rdparty version. Bumping one lib triggers only
 that lib's matrix.
 
+### Wrapper producers (linux, opensbi, alpine-disk, alpine-extended-disk)
+
+For producers that wrap *something else* (a kernel build, a firmware
+build, a rootfs install) instead of being the upstream themselves, the
+`version` file encodes the upstream version with a packaging revision
+suffix:
+
+| producer             | format                                | example              |
+|----------------------|---------------------------------------|----------------------|
+| linux                | `<kernel>-<rev>`                      | `7.0-1`              |
+| opensbi              | `<opensbi>-<rev>`                     | `1.4-1`              |
+| alpine-disk          | `<alpine-release>-<arch>-<rev>`       | `3.23.4-riscv64-1`   |
+| alpine-extended-disk | `<alpine-release>-<arch>-<rev>`       | `3.23.4-riscv64-1`   |
+
+The `_build.sh` parses the upstream component out of the version string
+to drive the source fetch — single source of truth for both the upstream
+that's actually compiled AND the `lib-<name>-<version>` release tag.
+Bump `<rev>` for packaging-only changes (config tweaks, bundled-rootfs
+bumps); bump the upstream component when moving to a new upstream
+release.
+
 ## Workflow per library
 
 `.github/workflows/build-3rdparty-<libname>.yml`, triggered by tags

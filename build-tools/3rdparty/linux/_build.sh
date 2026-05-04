@@ -5,34 +5,46 @@
 #   alpine-rootfs/...  (with /init pre-written for console boot)
 #
 # Env vars:
-#   VERSION         required — e.g. 0.0.1; used in output filename
+#   VERSION         derived — read from ./version, used in output filename
 #   OUTPUT_DIR      required — where to place the tarball
 #   REPO_ROOT       optional — yetty checkout root (default: ../../.. from this script)
 #   WORK_DIR        optional — intermediate build tree (default: /tmp/yetty-asset-linux)
-#   LINUX_VERSION   optional — kernel tag (default: 7.0)
-#   ALPINE_VERSION  optional — alpine minor (default: 3.23)
-#   ALPINE_RELEASE  optional — alpine full (default: 3.23.4)
 #   CROSS_COMPILE   optional — toolchain prefix (default: riscv64-unknown-linux-gnu-)
+#
+# The `version` file format is <upstream>-<pkg-rev>, e.g. `7.0-1` — single
+# source of truth for both the upstream kernel tag fetched here AND the
+# lib-linux-<version> release tag / linux-<version>.tar.gz tarball name.
+# Bump <pkg-rev> for packaging-only changes (e.g. bundled alpine bump,
+# kernel config tweaks); bump <upstream> when moving to a new kernel.
 #
 # Hermetic Linux build: needs make, RISC-V cross-toolchain, bc, bison,
 # flex, libssl-dev, libelf-dev, cpio, rsync, curl, tar.
 
 set -euo pipefail
 
-# Version is read from ./version file — single source of truth (matches
-# the lib-<name>-<version> tag pushed via build-tools/push-3rdparty-tag.sh).
 VERSION_FILE="$(dirname "$0")/version"
 [ -f "$VERSION_FILE" ] || { echo "missing $VERSION_FILE" >&2; exit 1; }
 VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 [ -n "$VERSION" ] || { echo "$VERSION_FILE is empty" >&2; exit 1; }
 : "${OUTPUT_DIR:?OUTPUT_DIR is required}"
 
+# Split <upstream>-<pkg-rev>. Upstream tags themselves can contain `-`
+# (e.g. 7.0-rc5), so split off the last `-` component as the pkg rev.
+LINUX_VERSION="${VERSION%-*}"
+PKG_REV="${VERSION##*-}"
+[ "$LINUX_VERSION" != "$VERSION" ] && [ -n "$PKG_REV" ] || {
+    echo "$VERSION_FILE: expected <upstream>-<rev>, got '$VERSION'" >&2
+    exit 1
+}
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="${REPO_ROOT:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
 WORK_DIR="${WORK_DIR:-/tmp/yetty-asset-linux}"
-LINUX_VERSION="${LINUX_VERSION:-7.0}"
-ALPINE_VERSION="${ALPINE_VERSION:-3.23}"
-ALPINE_RELEASE="${ALPINE_RELEASE:-3.23.4}"
+# Alpine minirootfs is incidental to the kernel asset (only used as a 9p
+# rootfs for tinyemu). Bumping it bumps the pkg rev, not the upstream
+# kernel version. Pinned here on purpose.
+ALPINE_VERSION="3.23"
+ALPINE_RELEASE="3.23.4"
 CROSS_COMPILE="${CROSS_COMPILE:-riscv64-unknown-linux-gnu-}"
 
 KERNEL_CONFIG="$REPO_ROOT/poc/qemu/configs/linux-kernel-${LINUX_VERSION}.config"

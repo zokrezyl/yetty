@@ -2,11 +2,16 @@
 # Build OpenSBI RISC-V firmware and produce opensbi-${VERSION}.tar.gz
 #
 # Env vars:
-#   VERSION      required — e.g. 0.0.1; used in output filename
+#   VERSION      derived — read from ./version, used in output filename
 #   OUTPUT_DIR   required — where to place the tarball
 #   WORK_DIR     optional — intermediate build tree (default: /tmp/yetty-asset-opensbi)
-#   OPENSBI_VERSION   optional — upstream tag (default: 1.4)
 #   CROSS_COMPILE     optional — toolchain prefix (default: riscv64-linux-gnu-)
+#
+# The `version` file format is <upstream>-<pkg-rev>, e.g. `1.4-1` — single
+# source of truth for both the upstream OpenSBI tag fetched here AND the
+# lib-opensbi-<version> release tag / opensbi-<version>.tar.gz tarball
+# name. Bump <pkg-rev> for packaging-only changes; bump <upstream> when
+# moving to a new OpenSBI release.
 #
 # Hermetic Linux build: needs only make, wget/curl, tar, and the RISC-V
 # cross-toolchain. No host-arch-specific output — the firmware is RISC-V
@@ -14,15 +19,23 @@
 
 set -euo pipefail
 
-# Version is read from ./version file — single source of truth (matches
-# the lib-<name>-<version> tag pushed via build-tools/push-3rdparty-tag.sh).
 VERSION_FILE="$(dirname "$0")/version"
 [ -f "$VERSION_FILE" ] || { echo "missing $VERSION_FILE" >&2; exit 1; }
 VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 [ -n "$VERSION" ] || { echo "$VERSION_FILE is empty" >&2; exit 1; }
 : "${OUTPUT_DIR:?OUTPUT_DIR is required}"
+
+# Split <upstream>-<pkg-rev>. Upstream OpenSBI tags don't contain `-`,
+# but split greedily off the right anyway for symmetry with sibling
+# producers and forwards-compat with rc tags.
+OPENSBI_VERSION="${VERSION%-*}"
+PKG_REV="${VERSION##*-}"
+[ "$OPENSBI_VERSION" != "$VERSION" ] && [ -n "$PKG_REV" ] || {
+    echo "$VERSION_FILE: expected <upstream>-<rev>, got '$VERSION'" >&2
+    exit 1
+}
+
 WORK_DIR="${WORK_DIR:-/tmp/yetty-asset-opensbi}"
-OPENSBI_VERSION="${OPENSBI_VERSION:-1.4}"
 CROSS_COMPILE="${CROSS_COMPILE:-riscv64-linux-gnu-}"
 
 NCPU="$(nproc 2>/dev/null || echo 4)"
