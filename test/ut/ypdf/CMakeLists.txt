@@ -29,6 +29,27 @@ target_compile_definitions(ypdf-render-test PRIVATE
 )
 add_test(NAME ypdf_render COMMAND ypdf-render-test)
 
+# Position test: ypdf rendering of a real-world PDF (pdf-sample.pdf).
+# Verifies that text spans land at the positions a reference PDF
+# renderer (mutool stext) would compute. Catches the "all spans at same
+# coordinate" bug that surfaces when measure_text returns errors and
+# text_matrix never advances.
+add_executable(ypdf-positions-test
+    ypdf-positions-test.c
+    ${YPDF_TEST_SHIM_SOURCES}
+)
+target_include_directories(ypdf-positions-test PRIVATE
+    ${YETTY_ROOT}/include
+    ${YETTY_ROOT}/src
+)
+target_link_libraries(ypdf-positions-test PRIVATE
+    yetty_ypdf yetty_ypaint yetty_ypaint_core yetty_yfont yetty_ycore
+    yetty_yrender pdfio_lib)
+target_compile_definitions(ypdf-positions-test PRIVATE
+    YPDF_TEST_PDF=\"${CMAKE_CURRENT_SOURCE_DIR}/pdf-sample.pdf\"
+)
+add_test(NAME ypdf_positions COMMAND ypdf-positions-test)
+
 # Font metrics test.
 add_executable(ypdf-font-test
     ypdf-font-test.c

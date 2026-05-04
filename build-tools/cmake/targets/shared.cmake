@@ -401,6 +401,12 @@ function(yetty_embed_assets TARGET)
     file(COPY "${YETTY_ROOT}/src/yetty/yfont/msdf-font.wgsl" DESTINATION "${INCBIN_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yfont/ms-raster-font.wgsl" DESTINATION "${INCBIN_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yfont/raster-font.wgsl" DESTINATION "${INCBIN_DATA_DIR}/shaders")
+    # GPU MSDF compute shader — used by the ymsdf-wgsl generator when the
+    # canvas materialises a font-blob FONT prim (PDF embedded / fontconfig
+    # substituted). Without this the GPU generator can't init its pipeline
+    # and every PDF font materialise fails → spans fall back to the
+    # default font → per-glyph layout broken.
+    file(COPY "${YETTY_ROOT}/src/yetty/ymsdf-wgsl/shaders/msdf_gen.wgsl" DESTINATION "${INCBIN_DATA_DIR}/shaders")
 
     # Shader-glyph layer + per-glyph procedurals. Layer reads the .wgsl
     # template AND scans glyph-shaders/*.wgsl at runtime, splices them into

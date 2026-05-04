@@ -7,8 +7,90 @@
 #include <yetty/ypaint-core/complex-prim-types.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yaml.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+
+#if YETTY_HAS_FONTCONFIG
+#include <fontconfig/fontconfig.h>
+#endif
+
+/* Resolve a font NAME (e.g. "DejaVu Serif", "Liberation Mono", "Arial") to
+ * an absolute TTF/OTF path via fontconfig. Returns a malloc'd string on
+ * success, NULL on miss / no fontconfig at build time. The exact match is
+ * fontconfig's "best match" — same as `fc-match <name>`. */
+static char *resolve_font_to_path(const char *name)
+{
+#if YETTY_HAS_FONTCONFIG
+    if (!name || !*name) {
+        return NULL;
+    }
+    static int s_fc_inited = 0;
+    if (!s_fc_inited) {
+        if (!FcInit()) {
+            ywarn("ypaint_yaml: FcInit failed");
+            return NULL;
+        }
+        s_fc_inited = 1;
+    }
+
+    FcPattern *pat = FcNameParse((const FcChar8 *)name);
+    if (!pat) {
+        return NULL;
+    }
+    FcConfigSubstitute(NULL, pat, FcMatchPattern);
+    FcDefaultSubstitute(pat);
+
+    FcResult result;
+    FcPattern *match = FcFontMatch(NULL, pat, &result);
+    char *out = NULL;
+    if (match) {
+        FcChar8 *file = NULL;
+        if (FcPatternGetString(match, FC_FILE, 0, &file) == FcResultMatch && file) {
+            out = strdup((const char *)file);
+        }
+        FcPatternDestroy(match);
+    }
+    FcPatternDestroy(pat);
+    return out;
+#else
+    (void)name;
+    return NULL;
+#endif
+}
+
+/* Read an entire file into a malloc'd buffer. Returns NULL on error. */
+static uint8_t *read_file_bytes(const char *path, size_t *out_len)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return NULL;
+    }
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return NULL;
+    }
+    long sz = ftell(f);
+    if (sz < 0) {
+        fclose(f);
+        return NULL;
+    }
+    rewind(f);
+    uint8_t *buf = malloc((size_t)sz);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+    if (fread(buf, 1, (size_t)sz, f) != (size_t)sz) {
+        free(buf);
+        fclose(f);
+        return NULL;
+    }
+    fclose(f);
+    *out_len = (size_t)sz;
+    return buf;
+}
 
 //=============================================================================
 // Registry
@@ -247,6 +329,12 @@ static struct yetty_ycore_void_result text_factory(struct yetty_ypaint_core_buff
     float font_size = 14.0f;
     uint32_t color = 0xFFFFFFFF;
     char content[1024] = {0};
+    /* Optional font name (resolved via fontconfig). When set, the parser
+     * adds a FONT prim with the resolved TTF blob and references it from
+     * the text span by font_id; downstream the canvas materialises the
+     * font through whichever MSDF generator is configured. NULL/empty
+     * means "use the canvas default font" (font_id = -1). */
+    char font_name[128] = {0};
     int expect_value = 0;
     int in_array = 0;
     int array_idx = 0;
@@ -300,6 +388,8 @@ static struct yetty_ycore_void_result text_factory(struct yetty_ypaint_core_buff
                     font_size = strtof(val, NULL);
                 } else if (strcmp(prop_key, "color") == 0) {
                     color = parse_text_color(val);
+                } else if (strcmp(prop_key, "font") == 0) {
+                    strncpy(font_name, val, sizeof(font_name) - 1);
                 }
                 expect_value = 0;
             }
@@ -312,10 +402,45 @@ static struct yetty_ycore_void_result text_factory(struct yetty_ypaint_core_buff
     }
 
     if (content[0] != 0) {
+        /* If a font name was given, resolve it via fontconfig, read the
+         * file, and emit a FONT prim. Failures (no fontconfig, name
+         * doesn't match any installed font, file read error) fall back
+         * silently to the canvas default font — same behaviour as
+         * leaving `font:` unset. */
+        int32_t font_id = -1;
+        if (font_name[0] != 0) {
+            char *path = resolve_font_to_path(font_name);
+            if (path) {
+                size_t ttf_len = 0;
+                uint8_t *ttf = read_file_bytes(path, &ttf_len);
+                if (ttf) {
+                    struct yetty_ycore_buffer ttf_buf = {
+                        .data = ttf, .size = ttf_len, .capacity = ttf_len};
+                    struct yetty_ycore_int_result fr =
+                        yetty_ypaint_core_buffer_add_font(buffer, &ttf_buf, font_name);
+                    if (YETTY_IS_OK(fr)) {
+                        font_id = fr.value;
+                        ydebug("ypaint_yaml: font '%s' -> %s (font_id=%d)", font_name, path,
+                               font_id);
+                    } else {
+                        ywarn("ypaint_yaml: add_font failed for '%s': %s", font_name,
+                              fr.error.msg);
+                    }
+                    free(ttf);
+                } else {
+                    ywarn("ypaint_yaml: cannot read font file '%s' for name '%s'", path,
+                          font_name);
+                }
+                free(path);
+            } else {
+                ywarn("ypaint_yaml: font '%s' not found via fontconfig", font_name);
+            }
+        }
+
         struct yetty_ycore_buffer text_buf = {
             .data = (uint8_t *)content, .size = strlen(content), .capacity = strlen(content)};
         struct yetty_ycore_void_result res = yetty_ypaint_core_buffer_add_text(
-            buffer, x, y, &text_buf, font_size, color, 0, -1, 0.0f);
+            buffer, x, y, &text_buf, font_size, color, 0, font_id, 0.0f);
         if (YETTY_IS_ERR(res)) {
             ydebug("ypaint_yaml: failed to add text: %s", res.error.msg);
             return res;

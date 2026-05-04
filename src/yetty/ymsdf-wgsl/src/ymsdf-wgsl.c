@@ -1056,8 +1056,8 @@ struct yetty_ycore_void_result yetty_ymsdf_wgsl_config_generate(
             continue;
         }
         if (sr == 1) {
-            /* Empty (e.g. space). Still record the codepoint with zero size
-             * so the CDB carries advance-only entries. */
+            /* Empty (e.g. space). No bitmap, no bearings — just the
+             * advance, matching how CPU msdfgen leaves an empty entry. */
             u32_vec_free(&gc.metadata);
             f32_vec_free(&gc.points);
             FT_Load_Char(face, cp, FT_LOAD_NO_SCALE);
@@ -1065,8 +1065,8 @@ struct yetty_ycore_void_result yetty_ymsdf_wgsl_config_generate(
             e->codepoint = cp;
             e->atlas_w = 0;
             e->atlas_h = 0;
-            e->bearing_x_px = (float)face->glyph->metrics.horiBearingX * us;
-            e->bearing_y_px = (float)face->glyph->metrics.horiBearingY * us;
+            e->bearing_x_px = 0.0f;
+            e->bearing_y_px = 0.0f;
             e->size_x_px = 0.0f;
             e->size_y_px = 0.0f;
             e->advance_px = (float)face->glyph->metrics.horiAdvance * us;
@@ -1097,14 +1097,29 @@ struct yetty_ycore_void_result yetty_ymsdf_wgsl_config_generate(
         e->atlas_y = (uint32_t)ay;
         e->atlas_w = (uint32_t)aw;
         e->atlas_h = (uint32_t)ah;
-        /* FT_LOAD_NO_SCALE returns metrics in raw font units.
-         * Pixel = funits * font_size / upem (us = font_size/upem). */
-        e->bearing_x_px = (float)face->glyph->metrics.horiBearingX * us;
-        e->bearing_y_px = (float)face->glyph->metrics.horiBearingY * us;
-        /* bw/bh come from FT_Outline_Get_CBox (font units / FT_SCALE in
-         * the helper above); restore to font units before scaling. */
-        e->size_x_px = bw * FT_SCALE * us;
-        e->size_y_px = bh * FT_SCALE * us;
+        /* CDB metadata convention (matches the CPU msdfgen path in
+         * src/yetty/ymsdf-gen/ymsdf-gen.cpp:135-140 — same downstream
+         * consumer in msdf-font.c expects identical semantics):
+         *
+         *   size_x / size_y  = the FULL atlas-bitmap dimensions, including
+         *                      the MSDF pixel-range padding on every side.
+         *                      The shader treats this as the glyph render
+         *                      rectangle and samples the entire region.
+         *   bearing_x        = (glyph-contour left in pixels) - padding
+         *                      so cursor_x + bearing_x lands at the
+         *                      bitmap's LEFT edge (not the glyph contour).
+         *   bearing_y        = (glyph-contour top in pixels) + padding
+         *                      so y - bearing_y lands at the bitmap's TOP.
+         *   advance          = horizontal advance in pixels.
+         *
+         * Earlier I stored the glyph-contour dims here, which made the
+         * shader sample only the inner glyph-contour-sized sub-rectangle
+         * of the actual bitmap — every glyph rendered shifted by
+         * `padding` and clipped at the right/bottom. */
+        e->size_x_px = (float)aw;
+        e->size_y_px = (float)ah;
+        e->bearing_x_px = b.min_x * FT_SCALE * us - (float)padding;
+        e->bearing_y_px = b.max_y * FT_SCALE * us + (float)padding;
         e->advance_px = (float)face->glyph->metrics.horiAdvance * us;
         e->meta_offset = (uint32_t)combined_meta.size;
         e->point_offset = (uint32_t)(combined_pts.size / 2);
