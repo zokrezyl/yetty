@@ -227,10 +227,12 @@ static void init_yetty(struct yetty_yplatform_app_state *state)
     paths.runtime_dir = runtime_dir;
     paths.bin_dir = NULL;
 
-    /* Config — default to --temu (in-process TinyEMU) on Android. There's
-     * no shell command line on Android, so synthesize one. */
+    /* Config — default to --qemu on Android (spawns external qemu loaded
+     * from nativeLibraryDir/libqemu-system-riscv64.so, then telnets to
+     * 127.0.0.1:QEMU_TELNET_PORT, same as desktop --qemu). There's no
+     * shell command line on Android, so synthesize one. */
     {
-        char *fake_argv[] = {(char *)"yetty", (char *)"--temu", NULL};
+        char *fake_argv[] = {(char *)"yetty", (char *)"--qemu", NULL};
         int fake_argc = 2;
         config_result = yetty_yconfig_create(fake_argc, fake_argv, &paths);
     }
@@ -762,7 +764,7 @@ static void redirect_stdio_to_logcat(void)
 }
 
 YETTY_EXTERNAL_CALLBACK
-void yetty_yplatform_android_main(struct android_app *app)
+void android_main(struct android_app *app)
 {
     struct yetty_yplatform_app_state state = {0};
 

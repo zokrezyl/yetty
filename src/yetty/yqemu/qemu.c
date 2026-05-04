@@ -153,7 +153,7 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t host_port)
 #ifdef __ANDROID__
     {
         Dl_info info;
-        if (dladdr((void *)qemu_start, &info) && info.dli_fname) {
+        if (dladdr((void *)yetty_yqemu_qemu_start, &info) && info.dli_fname) {
             char native_dir[512];
             const char *slash;
             snprintf(native_dir, sizeof(native_dir), "%s", info.dli_fname);
