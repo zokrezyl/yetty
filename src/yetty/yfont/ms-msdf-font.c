@@ -377,23 +377,32 @@ static struct yetty_yrender_gpu_resource_set_result ms_msdf_get_gpu_resource_set
 
         /* Compute pixel-domain placement values for the shader.
 		 *
-		 * scale maps CDB-units to cell pixels at em-square ratio. With
-		 * base_size as the divisor a font.size of N px makes the em-square
-		 * exactly N px tall — i.e. caps fit tightly within the row.
-		 * Descenders that extend below the em (e.g. underscore on fonts
-		 * like DejaVu) will overflow past the cell bottom; users who want
-		 * them visible add padding.bottom.
+		 * The CDB stores bearing_y and size_y with msdfgen's antialiasing
+		 * padding baked in (pixel_range CDB-units on each edge of every
+		 * glyph). So max_ascent = true_ascent + pixel_range and
+		 * max_descent = true_descent + pixel_range, and the visible glyph
+		 * extent in CDB-units is (max_ascent + max_descent - 2*pixel_range).
 		 *
-		 * Baseline is placed dynamically from the font's actual ascent —
-		 * this is the load-bearing piece of the underscore fix, kept here
-		 * because hard-coding 80% misplaces it on fonts whose ascender
-		 * isn't 80% of the em.
+		 * scale: maps CDB-units to cell pixels so that the visible glyph
+		 * extent matches font.size in pixels. With padding.top/bottom = 0
+		 * the cell wraps the visible extent tightly — tallest ascender at
+		 * cell top, lowest descender at cell bottom. The CDB-padding region
+		 * extends slightly outside the cell, which is fine: it only carries
+		 * MSDF antialiasing data and is sampled out of bounds in the shader.
+		 *
+		 * baseline_y: distance in pixels from cell top to the baseline. The
+		 * pixel_range subtraction undoes the CDB padding so the visible top
+		 * of the tallest ascender lands at top_pad_px, not below it.
 		 */
-        float scale = f->requested_size / f->base_size;
+        float pad_cdb = f->pixel_range;
+        float visible_extent_cdb = (f->max_ascent + f->max_descent) - 2.0f * pad_cdb;
+        float scale = (visible_extent_cdb > 0.0f)
+            ? f->requested_size / visible_extent_cdb
+            : f->requested_size / f->base_size;
         float top_pad_px = f->requested_size * f->padding.top;
         float glyph_w = (f->hw_ratio > 0.0f) ? f->requested_size / f->hw_ratio : 0.0f;
         float left_pad_px = glyph_w * f->padding.left;
-        float baseline_y = top_pad_px + f->max_ascent * scale;
+        float baseline_y = top_pad_px + (f->max_ascent - pad_cdb) * scale;
 
         f->rs.uniforms[0].f32 = f->pixel_range;
         f->rs.uniforms[1].f32 = scale;
@@ -564,7 +573,9 @@ struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
     font->rs.uniforms[1].f32 = 0.0f;
 
     /* baseline_y: distance in pixels from cell top to the font baseline.
-	 * Computed CPU-side from padding.top + max_ascent*scale. */
+	 * Computed CPU-side from padding.top + (max_ascent - pixel_range)*scale,
+	 * where the pixel_range subtraction strips the MSDF antialiasing pad
+	 * baked into bearing_y by the CDB generator. */
     strncpy(font->rs.uniforms[2].name, "baseline_y", YETTY_YRENDER_NAME_MAX - 1);
     font->rs.uniforms[2].type = YETTY_YRENDER_UNIFORM_F32;
     font->rs.uniforms[2].f32 = 0.0f;
