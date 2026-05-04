@@ -210,10 +210,11 @@ static void *yq_qemu_thread(void *arg) {
      * with console=ttyS0 makes init bail with "unable to open initial
      * console" → kernel panic. We lose the OpenSBI banner this way (no
      * UART chardev to render it), but kernel + init talk on hvc0. */
-    /* Slirp user-net + hostfwd: forward host TCP 2323 → guest TCP 23 so the
-     * companion yetty.app (--telnet 127.0.0.1:2323) reaches the in-guest
-     * telnetd on port 23. virtio-console (hvc0) stays as the kernel-boot
-     * console rendered into the local UITextView. */
+    /* Slirp user-net + hostfwd: forward host TCP 2423 → guest TCP 23 so the
+     * companion yetty.app (--telnet 127.0.0.1:2423) reaches the in-guest
+     * telnetd on port 23. Host port 2323 is reserved for the TinyEMU
+     * (--temu) build, so qemu uses 2423. virtio-console (hvc0) stays as
+     * the kernel-boot console rendered into the local UITextView. */
     char *argv_with_disk[] = {
         (char *)"qemu-system-riscv64",
         (char *)"-machine", (char *)"virt",
@@ -228,7 +229,7 @@ static void *yq_qemu_thread(void *arg) {
         (char *)"-device",  (char *)"virtio-serial-device",
         (char *)"-device",  (char *)"virtconsole,chardev=char0",
         (char *)"-chardev", chardev_arg,
-        (char *)"-netdev",  (char *)"user,id=net0,hostfwd=tcp::2323-:23",
+        (char *)"-netdev",  (char *)"user,id=net0,hostfwd=tcp::2423-:23",
         (char *)"-device",  (char *)"virtio-net-device,netdev=net0",
         (char *)"-serial",  (char *)"none",
         (char *)"-display", (char *)"none",
@@ -261,7 +262,7 @@ static void *yq_qemu_thread(void *arg) {
 /* Keep YettyQemu alive while yetty.app is foreground.
  *
  * tvOS suspends background apps by default — qemu's slirp would die
- * within a few seconds, dropping yetty's --telnet 127.0.0.1:2323 socket.
+ * within a few seconds, dropping yetty's --telnet 127.0.0.1:2423 socket.
  * The "audio" UIBackgroundMode (declared in Info.plist) lets a process
  * stay scheduled as long as it's actively playing audio. We start an
  * AVAudioEngine playing a silent buffer in a loop — the OS sees a

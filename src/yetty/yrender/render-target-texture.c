@@ -854,6 +854,13 @@ static void render_target_texture_set_preserve_on_render_layer(
     rt->preserve_on_render_layer = preserve;
 }
 
+static bool render_target_texture_get_preserve_on_render_layer(
+    const struct yetty_ypaint_core_target *self)
+{
+    const struct yetty_yrender_render_target_texture *rt = (const struct yetty_yrender_render_target_texture *)self;
+    return rt->preserve_on_render_layer;
+}
+
 static const struct yetty_yrender_target_ops render_target_texture_ops = {
     .destroy = render_target_texture_destroy,
     .clear = render_target_texture_clear,
@@ -865,6 +872,7 @@ static const struct yetty_yrender_target_ops render_target_texture_ops = {
     .resize = render_target_texture_resize,
     .set_visual_zoom = render_target_texture_set_visual_zoom,
     .set_preserve_on_render_layer = render_target_texture_set_preserve_on_render_layer,
+    .get_preserve_on_render_layer = render_target_texture_get_preserve_on_render_layer,
 };
 
 struct yetty_yrender_target_ptr_result yetty_yrender_target_texture_create(

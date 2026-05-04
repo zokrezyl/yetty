@@ -156,7 +156,7 @@ static void *render_thread_func(void *arg)
      * telnetd). Override at build via -DYETTY_TVOS_TELNET=\"host:port\".
      * (Mirror Android's pattern, which fakes argv with `--temu`.) */
 #ifndef YETTY_TVOS_TELNET
-#define YETTY_TVOS_TELNET "192.168.1.10:2423"
+#define YETTY_TVOS_TELNET "127.0.0.1:2423"
 #endif
     ydebug("creating config: --telnet %s", YETTY_TVOS_TELNET);
     char *fake_argv[] = {(char *)"yetty", (char *)"--telnet",
