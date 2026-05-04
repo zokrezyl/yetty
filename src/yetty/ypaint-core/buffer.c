@@ -523,9 +523,10 @@ struct yetty_ycore_int_result yetty_ypaint_core_buffer_add_font(
     return YETTY_OK(yetty_ycore_int, next_id);
 }
 
-struct yetty_ycore_void_result yetty_ypaint_core_buffer_add_text(
+struct yetty_ycore_void_result yetty_ypaint_core_buffer_add_text_full(
     struct yetty_ypaint_core_buffer *buf, float x, float y, const struct yetty_ycore_buffer *text,
-    float font_size, uint32_t color, uint32_t layer, int32_t font_id, float rotation)
+    float font_size, uint32_t color, uint32_t layer, int32_t font_id, float rotation,
+    float char_spacing, float word_spacing)
 {
     if (!buf) {
         return YETTY_ERR(yetty_ycore_void, "buf is NULL");
@@ -542,8 +543,9 @@ struct yetty_ycore_void_result yetty_ypaint_core_buffer_add_text(
         return YETTY_ERR(yetty_ycore_void, "alloc failed");
     }
 
-    yetty_ypaint_core_text_span_prim_write(staging, x, y, font_size, rotation, color, layer, font_id,
-                                      (const char *)text->data, text_len);
+    yetty_ypaint_core_text_span_prim_write_full(staging, x, y, font_size, rotation, color, layer,
+                                                font_id, (const char *)text->data, text_len,
+                                                char_spacing, word_spacing);
 
     struct yetty_ypaint_core_id_result r = yetty_ypaint_core_buffer_add_prim(buf, staging, prim_size);
     free(staging);
@@ -551,4 +553,12 @@ struct yetty_ycore_void_result yetty_ypaint_core_buffer_add_text(
         return YETTY_ERR(yetty_ycore_void, "add_prim failed");
     }
     return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ypaint_core_buffer_add_text(
+    struct yetty_ypaint_core_buffer *buf, float x, float y, const struct yetty_ycore_buffer *text,
+    float font_size, uint32_t color, uint32_t layer, int32_t font_id, float rotation)
+{
+    return yetty_ypaint_core_buffer_add_text_full(buf, x, y, text, font_size, color, layer,
+                                                  font_id, rotation, 0.0f, 0.0f);
 }

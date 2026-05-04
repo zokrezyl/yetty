@@ -17,6 +17,9 @@ set(MODULE_SHADERS
     ${YETTY_ROOT}/src/yetty/yterm/ypaint-layer.wgsl
     ${YETTY_ROOT}/src/yetty/yterm/shader-glyph-layer.wgsl
     ${YETTY_ROOT}/src/yetty/yrender/blend.wgsl
+    # GPU MSDF compute shader — staged so the gpu generator can find it
+    # at <shaders_dir>/msdf_gen.wgsl when materialising fonts on the fly.
+    ${YETTY_ROOT}/src/yetty/ymsdf-wgsl/shaders/msdf_gen.wgsl
 )
 
 # For Android: copy shaders at configure time to ANDROID_ASSETS_DIR

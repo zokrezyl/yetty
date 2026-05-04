@@ -20,6 +20,7 @@
 #include <yetty/yfont/raster-font.h>
 #if YETTY_HAS_YMSDF_GEN
 #include <yetty/ymsdf-gen/ymsdf-gen.h>
+#include <yetty/ymsdf/generator.h>
 #endif
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/yconfig/config.h>
@@ -179,6 +180,28 @@ struct yetty_ypaint_canvas {
 
     // Factory for complex primitive ops (yplot, yimage, etc.)
     struct yetty_ypaint_core_complex_prim_factory *complex_prim_factory;
+
+    // Polymorphic MSDF CDB generator (cpu | gpu) — borrowed from
+    // context->gpu_context. Used for on-demand CDB generation when a PDF
+    // (or any producer) sends a font blob whose CDB isn't cached yet.
+    // NULL if the host hasn't created one (e.g. tests that bypass yetty_create).
+    struct yetty_ymsdf_generator *msdf_generator;
+
+    // Canvas-owned, content-deduped registry of every font materialised
+    // from a producer's FONT prim. Lines reference these by raw pointer
+    // (non-owning) so a per-line cleanup never frees a font that other
+    // lines still reference, and the layer can attach all of them as
+    // resource-set children every frame in stable, well-known order.
+    //
+    // Key is the same hex hash that names the cached TTF/CDB on disk —
+    // identical font bytes across PDFs collapse to one entry, one shader
+    // namespace, one atlas region.
+    struct yetty_ypaint_canvas_font_reg_entry {
+        char key[40]; /* hex hash or family — long enough for fnv1a64 + slop */
+        struct yetty_ypaint_font *font;
+    } *all_fonts;
+    uint32_t all_fonts_count;
+    uint32_t all_fonts_capacity;
 };
 
 #define DEFAULT_MAX_PRIMS_PER_CELL 16
@@ -287,12 +310,10 @@ static struct yetty_ycore_void_result grid_line_free(
     }
 
     prim_data_array_free(&line->prims);
-    /* Destroy fonts owned by this line */
-    for (uint32_t i = 0; i < line->font_count; i++) {
-        if (line->fonts[i].font && line->fonts[i].font->ops) {
-            line->fonts[i].font->ops->destroy(line->fonts[i].font);
-        }
-    }
+    /* Lines hold non-owning references — fonts are owned by canvas->all_fonts.
+     * Just free the array of references; never destroy the fonts themselves
+     * (other lines may still reference them, and they're freed wholesale at
+     * canvas-destroy time). */
     free(line->fonts);
     line->fonts = NULL;
     line->font_count = 0;
@@ -460,7 +481,16 @@ static struct yetty_font_font_result ypaint_canvas_make_default_font(
              canvas->font_family);
     snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl", canvas->shaders_dir);
     ydebug("ypaint_canvas: default msdf font cdb='%s' shader='%s'", cdb_path, shader_path);
-    return yetty_yfont_msdf_font_create(cdb_path, shader_path);
+    /* Namespace from the family name keeps it stable & short. Sanitise
+     * non-identifier chars so it's safe to splice into WGSL identifiers. */
+    char ns[128];
+    size_t ni = 0;
+    for (const char *s = canvas->font_family; *s && ni + 1 < sizeof(ns); s++) {
+        char c = *s;
+        ns[ni++] = (c == '-' || c == ' ' || c == '.') ? '_' : c;
+    }
+    ns[ni] = '\0';
+    return yetty_yfont_msdf_font_create(cdb_path, shader_path, ns);
 }
 
 /* FNV-1a 64-bit hash — content-addressing for font cache filenames. */
@@ -474,14 +504,68 @@ static uint64_t fnv1a64(const uint8_t *data, size_t len)
     return h;
 }
 
-/* Materialize a buffer-supplied FONT prim into a yetty_font_font.
+/* Look up an entry in canvas->all_fonts by content key. Returns the
+ * existing font* on hit, NULL on miss. The registry is small (≤ low tens
+ * for realistic PDFs) so a linear scan is fine. */
+static struct yetty_ypaint_font *canvas_font_lookup(const struct yetty_ypaint_canvas *canvas,
+                                                    const char *key)
+{
+    for (uint32_t i = 0; i < canvas->all_fonts_count; i++) {
+        if (strcmp(canvas->all_fonts[i].key, key) == 0) {
+            return canvas->all_fonts[i].font;
+        }
+    }
+    return NULL;
+}
+
+/* Register a freshly-materialised font. Canvas takes ownership. Caller
+ * must have already verified that `key` isn't present (canvas_font_lookup).
+ * Returns the canvas-wide slot index, or -1 on alloc failure (in which
+ * case the caller still owns `font` and must destroy it). */
+static int canvas_font_register(struct yetty_ypaint_canvas *canvas, const char *key,
+                                struct yetty_ypaint_font *font)
+{
+    if (canvas->all_fonts_count == canvas->all_fonts_capacity) {
+        uint32_t nc = canvas->all_fonts_capacity ? canvas->all_fonts_capacity * 2 : 8;
+        void *nb = realloc(canvas->all_fonts,
+                           nc * sizeof(struct yetty_ypaint_canvas_font_reg_entry));
+        if (!nb) {
+            return -1;
+        }
+        canvas->all_fonts = nb;
+        canvas->all_fonts_capacity = nc;
+    }
+    struct yetty_ypaint_canvas_font_reg_entry *e = &canvas->all_fonts[canvas->all_fonts_count];
+    strncpy(e->key, key, sizeof(e->key) - 1);
+    e->key[sizeof(e->key) - 1] = '\0';
+    e->font = font;
+    return (int)canvas->all_fonts_count++;
+}
+
+/* Find the canvas-wide slot for a font pointer. Returns -1 if not in the
+ * registry (shouldn't happen for fonts that came through materialize). */
+static int canvas_font_slot_of(const struct yetty_ypaint_canvas *canvas,
+                               const struct yetty_ypaint_font *font)
+{
+    for (uint32_t i = 0; i < canvas->all_fonts_count; i++) {
+        if (canvas->all_fonts[i].font == font) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+/* Materialize a buffer-supplied FONT prim into a canvas-owned yetty_font_font.
  *
  * The TTF bytes travel inline in the prim payload — we hash them, write to
  * a content-addressed file under <cache>/ypaint-fonts/, generate the MSDF
- * CDB on cache miss via ymsdf-gen, then load the MSDF font. Subsequent
- * occurrences of the same font (same content hash) reuse the cached CDB. */
+ * CDB on cache miss via the canvas's MSDF generator, then load the font.
+ * Subsequent occurrences of the same font (same content hash) reuse the
+ * already-loaded font instance via the canvas's all_fonts registry, so
+ * each unique embedded font materialises exactly once per canvas lifetime
+ * regardless of how many buffers reference it. */
 static struct yetty_font_font_result ypaint_canvas_materialize_blob_font(
-    const struct yetty_ypaint_canvas *canvas, const uint8_t *ttf, uint32_t ttf_len,
+    struct yetty_ypaint_canvas *canvas, const uint8_t *ttf, uint32_t ttf_len,
     const char *hint_name)
 {
     if (!ttf || ttf_len == 0) {
@@ -491,6 +575,13 @@ static struct yetty_font_font_result ypaint_canvas_materialize_blob_font(
     uint64_t h = fnv1a64(ttf, ttf_len);
     char hex[17];
     snprintf(hex, sizeof(hex), "%016llx", (unsigned long long)h);
+
+    /* Cache hit: another buffer already materialised this exact font.
+     * Return the canvas-owned instance — caller must NOT destroy it. */
+    struct yetty_ypaint_font *existing = canvas_font_lookup(canvas, hex);
+    if (existing) {
+        return YETTY_OK(yetty_font_font, existing);
+    }
 
     const char *cache_dir = yetty_yplatform_get_cache_dir();
     if (!cache_dir || !*cache_dir) {
@@ -535,30 +626,45 @@ static struct yetty_font_font_result ypaint_canvas_materialize_blob_font(
     }
 
     if (!yetty_yplatform_file_exists(cdb_path)) {
-#if YETTY_HAS_YMSDF_GEN
-        struct yetty_ymsdf_gen_config gen = {0};
+        if (!canvas->msdf_generator) {
+            yerror("ypaint_canvas: CDB '%s' missing and no MSDF generator on "
+                   "the canvas — host must initialise gpu_context.msdf_generator "
+                   "(yetty_create does this from the `msdf/generator` config "
+                   "key) or pre-bake the CDB.", cdb_path);
+            return YETTY_ERR(yetty_font_font, "no MSDF generator available");
+        }
+        struct yetty_ymsdf_generator_config gen = {0};
         gen.ttf_path = ttf_path;
-        gen.output_dir = fonts_dir;
+        gen.cdb_path = cdb_path;
         gen.font_size = 32.0f;
         gen.pixel_range = 4.0f;
-        gen.thread_count = 0;
-        gen.all_glyphs = 1; /* PDFs may use any codepoint in the font */
-        struct yetty_ycore_void_result gr = yetty_ymsdf_gen_config_cpu_generate(&gen);
+        struct yetty_ycore_void_result gr =
+            canvas->msdf_generator->ops->generate(canvas->msdf_generator, &gen);
         if (YETTY_IS_ERR(gr)) {
-            yerror("ypaint_canvas: msdf-gen failed: %s", gr.error.msg);
+            yerror("ypaint_canvas: msdf generator (%s) failed: %s",
+                   canvas->msdf_generator->ops->name(canvas->msdf_generator), gr.error.msg);
             return YETTY_ERR(yetty_font_font, gr.error.msg);
         }
-        ydebug("ypaint_canvas: generated CDB '%s'", cdb_path);
-#else
-        yerror("ypaint_canvas: CDB '%s' missing and ymsdf-gen disabled at "
-               "build time — pre-bake the CDB or rebuild with "
-               "YETTY_ENABLE_FEATURE_YMSDF_GEN=ON.", cdb_path);
-        return YETTY_ERR(yetty_font_font, "ymsdf-gen disabled");
-#endif
+        ydebug("ypaint_canvas: generated CDB '%s' via %s generator", cdb_path,
+               canvas->msdf_generator->ops->name(canvas->msdf_generator));
     }
 
     snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl", canvas->shaders_dir);
-    return yetty_yfont_msdf_font_create(cdb_path, shader_path);
+    /* Namespace = the same content hash we used to name the cached files.
+     * Same TTF bytes → same hex → same shader namespace, so two PDFs that
+     * embed the same font reuse the same merged-shader entry. */
+    struct yetty_font_font_result fr =
+        yetty_yfont_msdf_font_create(cdb_path, shader_path, hex);
+    if (YETTY_IS_ERR(fr)) {
+        return fr;
+    }
+    /* Hand ownership to the canvas-level registry. The returned pointer
+     * is borrowed — callers must not destroy it. */
+    if (canvas_font_register(canvas, hex, fr.value) < 0) {
+        fr.value->ops->destroy(fr.value);
+        return YETTY_ERR(yetty_font_font, "canvas all_fonts registration failed");
+    }
+    return fr;
 }
 
 //=============================================================================
@@ -675,12 +781,26 @@ struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
     strncpy(canvas->font_family, font_family, sizeof(canvas->font_family) - 1);
     canvas->font_render_method = (strcmp(render_method, "raster") == 0) ? 1 : 0;
     canvas->raster_base_size = 32.0f;
+    canvas->msdf_generator = context->gpu_context.msdf_generator;
 
     ydebug("ypaint_canvas: font render_method='%s'", render_method);
     struct yetty_font_font_result font_res = ypaint_canvas_make_default_font(canvas);
     if (YETTY_IS_OK(font_res)) {
         canvas->default_font = font_res.value;
-        ydebug("ypaint_canvas: default font created");
+        /* Slot 0 in the canvas-wide registry is reserved for the default
+         * font. Producer font_id == -1 maps to slot 0; embedded fonts
+         * occupy 1..N. The layer attaches all_fonts as children in this
+         * order so the shader's dispatcher index matches. */
+        if (canvas_font_register(canvas, "default", canvas->default_font) != 0) {
+            yerror("ypaint_canvas: failed to register default font as slot 0");
+            canvas->default_font->ops->destroy(canvas->default_font);
+            yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);
+            free(canvas->lines.lines);
+            free(canvas);
+            return YETTY_ERR(yetty_ypaint_canvas_ptr,
+                             "ypaint_canvas: default font registration failed");
+        }
+        ydebug("ypaint_canvas: default font created and registered as slot 0");
     } else {
         yerror("ypaint_canvas: default font creation failed: %s", font_res.error.msg);
         yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);
@@ -700,14 +820,22 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_destroy(struct yetty_ypaint_c
         return YETTY_ERR(yetty_ycore_void, "canvas is NULL");
     }
 
-    if (canvas->default_font) {
-        canvas->default_font->ops->destroy(canvas->default_font);
-    }
+    /* Lines free their per-line refs but not the fonts themselves
+     * (non-owning). All fonts — default font and every materialised
+     * embedded font — live in canvas->all_fonts and are destroyed below. */
     struct yetty_ycore_void_result res =
         line_buffer_free(&canvas->lines, canvas->flyweight_registry);
     if (YETTY_IS_ERR(res)) {
         return res;
     }
+    /* Destroy every canvas-owned font (default + embedded). */
+    for (uint32_t i = 0; i < canvas->all_fonts_count; i++) {
+        struct yetty_ypaint_font *f = canvas->all_fonts[i].font;
+        if (f && f->ops && f->ops->destroy) {
+            f->ops->destroy(f);
+        }
+    }
+    free(canvas->all_fonts);
     yetty_ypaint_core_complex_prim_factory_destroy(canvas->complex_prim_factory);
     yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);
     free(canvas->grid_staging);
@@ -1115,7 +1243,18 @@ static struct uint32_result expand_text_span_to_glyphs(
         float gw = size_x * scale;
         float gh = size_y * scale;
 
-        /* Glyph SDF prim (7 words): type, z_order, x, y, font_size, packed, color */
+        /* Glyph SDF prim (7 words): type, z_order, x, y, font_size, packed, color
+         *
+         * `packed` carries (glyph_index in the low 16 bits, slot+1 in the
+         * high 16 bits). `slot` is the index into canvas->all_fonts — the
+         * same order in which the layer attaches fonts as resource-set
+         * children, so the shader's font dispatcher uses it directly.
+         * 0 in the high bits means "use slot 0" (the default font); we add
+         * +1 so producers can encode "no font" as 0 in pre-existing prims. */
+        int slot = canvas_font_slot_of(canvas, font);
+        if (slot < 0) {
+            slot = 0; /* unknown font — fall back to default (slot 0) */
+        }
         float glyph_data[YPAINT_GLYPH_WORDS];
         uint32_t tmp;
         tmp = YETTY_YSDF_GLYPH;
@@ -1126,7 +1265,7 @@ static struct uint32_result expand_text_span_to_glyphs(
         glyph_data[3] = gy;
         glyph_data[4] = ts->font_size;
         uint32_t packed_gf =
-            (glyph_index & 0xFFFF) | (((uint32_t)(ts->font_id + 1) & 0xFFFF) << 16);
+            (glyph_index & 0xFFFF) | (((uint32_t)(slot + 1) & 0xFFFF) << 16);
         memcpy(&glyph_data[5], &packed_gf, sizeof(float));
         memcpy(&glyph_data[6], &ts->color, sizeof(float));
 
@@ -1175,7 +1314,16 @@ static struct uint32_result expand_text_span_to_glyphs(
             glyph_max_row = glyph_row_max;
         }
 
-        cursor_x += advance * scale;
+        /* Per-glyph displacement: font advance + PDF text-state Tc, plus
+         * Tw for ASCII space. ts->char_spacing/word_spacing are already
+         * in display pixels (ypdf does the unit conversion); add them
+         * straight to the cursor. The values are 0 for any producer that
+         * doesn't fill them in (default font in YAML, etc.), so this is
+         * a no-op for non-PDF text. */
+        cursor_x += advance * scale + ts->char_spacing;
+        if (cp == 0x20) {
+            cursor_x += ts->word_spacing;
+        }
     }
 
     return YETTY_OK(uint32, glyph_max_row);
@@ -1224,14 +1372,12 @@ static void attach_font_to_line(struct yetty_ypaint_canvas *canvas, struct yetty
             target->font_capacity = new_cap;
         }
         struct yetty_ypaint_canvas_font_entry entry = {0};
-        entry.font = font;
+        entry.font = font; /* non-owning — canvas->all_fonts owns */
         entry.font_id = font_id;
         target->fonts[target->font_count++] = entry;
-        /* Ownership transferred to the line — drop from the local map so
-     * the post-loop cleanup doesn't double-free. */
-        if (font_id >= 0 && (uint32_t)font_id < fonts_map->capacity) {
-            fonts_map->fonts[font_id] = NULL;
-        }
+        /* Don't clear fonts_map[font_id] — both lines and the per-buffer
+         * map hold non-owning references and the canvas owns the font. */
+        (void)fonts_map;
     }
 }
 
@@ -1298,12 +1444,15 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
                           "%s — skipping, spans will use default font",
                           fv.font_id, hint, fr.error.msg);
                 } else if (fv.font_id >= 0) {
+                    /* Borrowed pointer — canvas owns. fonts_map is just the
+                     * per-buffer producer-id → canvas-font mapping for the
+                     * subsequent TEXT_SPAN lookups in this same buffer. */
                     font_map_grow(&fonts_map, (uint32_t)fv.font_id + 1);
                     fonts_map.fonts[fv.font_id] = fr.value;
-                } else {
-                    /* Producer didn't tag — drop it. */
-                    fr.value->ops->destroy(fr.value);
                 }
+                /* fv.font_id < 0: producer didn't tag the font; we still
+                 * registered it in canvas->all_fonts via materialize, but
+                 * no span can refer to it. Harmless. */
             }
         } else if (prim_type == YETTY_YPAINT_TYPE_TEXT_SPAN) {
             struct yetty_ypaint_core_text_span_prim_view tv;
@@ -1355,13 +1504,7 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
         iter = nx.value;
     }
 
-    /* Free fonts that didn't get attached to a grid line (typically fonts
-   * referenced only by spans we couldn't render, or none at all). */
-    for (uint32_t i = 0; i < fonts_map.capacity; i++) {
-        if (fonts_map.fonts[i] && fonts_map.fonts[i]->ops) {
-            fonts_map.fonts[i]->ops->destroy(fonts_map.fonts[i]);
-        }
-    }
+    /* fonts_map held borrowed pointers (canvas owns); just free the array. */
     free(fonts_map.fonts);
 
     if (YETTY_IS_ERR(final_status)) {
@@ -1860,6 +2003,20 @@ uint32_t yetty_ypaint_canvas_primitive_count(struct yetty_ypaint_canvas *canvas)
 struct yetty_ypaint_font *yetty_ypaint_canvas_get_default_font(struct yetty_ypaint_canvas *canvas)
 {
     return canvas ? canvas->default_font : NULL;
+}
+
+uint32_t yetty_ypaint_canvas_font_count(const struct yetty_ypaint_canvas *canvas)
+{
+    return canvas ? canvas->all_fonts_count : 0;
+}
+
+struct yetty_ypaint_font *yetty_ypaint_canvas_get_font_at(
+    const struct yetty_ypaint_canvas *canvas, uint32_t slot)
+{
+    if (!canvas || slot >= canvas->all_fonts_count) {
+        return NULL;
+    }
+    return canvas->all_fonts[slot].font;
 }
 
 //=============================================================================

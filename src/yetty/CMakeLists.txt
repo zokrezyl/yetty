@@ -185,8 +185,13 @@ if(YETTY_ENABLE_FEATURE_YMSDF_GEN)
     add_subdirectory(ymsdf-gen)
 endif()
 
-if(YETTY_ENABLE_FEATURE_MSDF_WGSL)
-    add_subdirectory(msdf-wgsl)
+if(YETTY_ENABLE_FEATURE_YMSDF_WGSL)
+    add_subdirectory(ymsdf-wgsl)
+endif()
+
+# Polymorphic MSDF generator wrapper (cpu | gpu) — depends on both impls.
+if(YETTY_ENABLE_FEATURE_YMSDF_GEN AND YETTY_ENABLE_FEATURE_YMSDF_WGSL)
+    add_subdirectory(ymsdf)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YSHADERS)

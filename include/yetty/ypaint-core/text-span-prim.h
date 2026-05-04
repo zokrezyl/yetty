@@ -39,6 +39,22 @@ struct yetty_ypaint_core_text_span_prim_view {
     int32_t font_id;
     const char *text; /* NOT NUL-terminated, len in text_len */
     uint32_t text_len;
+    /* PDF text-state spacing parameters that the producer (ypdf) read off
+     * the content stream. The canvas applies them per-character (Tc) and
+     * per-space (Tw) when expanding the span into glyph prims, so a Tj
+     * that contains internal spaces lays out at the same positions a
+     * reference PDF renderer would compute.
+     *
+     * Both values are in DISPLAY PIXELS (already multiplied by font_size
+     * and any horizontal scaling) — the canvas adds them straight to its
+     * cursor without further conversion.
+     *
+     * Producers that don't care leave them 0 (the buffer_add_text wrapper
+     * defaults both to 0). Older buffers without these trailing fields
+     * parse with both values defaulting to 0 — the prim payload size
+     * tells the parser whether the trailing fields are present. */
+    float char_spacing;
+    float word_spacing;
 };
 
 size_t yetty_ypaint_core_text_span_prim_size_for(uint32_t text_len);
@@ -46,6 +62,13 @@ size_t yetty_ypaint_core_text_span_prim_size_for(uint32_t text_len);
 void yetty_ypaint_core_text_span_prim_write(uint8_t *out, float x, float y, float font_size,
                                        float rotation, uint32_t color, uint32_t layer,
                                        int32_t font_id, const char *text, uint32_t text_len);
+
+/* Like _write, plus PDF Tc/Tw spacing. Tc adds per-codepoint, Tw per
+ * U+0020 only. Both in display pixels at the current font_size. */
+void yetty_ypaint_core_text_span_prim_write_full(
+    uint8_t *out, float x, float y, float font_size, float rotation, uint32_t color,
+    uint32_t layer, int32_t font_id, const char *text, uint32_t text_len,
+    float char_spacing, float word_spacing);
 
 int yetty_ypaint_core_text_span_prim_parse(const uint32_t *prim,
                                       struct yetty_ypaint_core_text_span_prim_view *out);

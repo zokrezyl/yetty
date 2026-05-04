@@ -30,8 +30,16 @@
 
 #include <pdfio.h>
 
+#include <ft2build.h>
+#include FT_FREETYPE_H
+
+#if YETTY_HAS_FONTCONFIG
+#include <fontconfig/fontconfig.h>
+#endif
+
 #include <math.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -302,8 +310,459 @@ static size_t remap_cid_text(const char *decoded, size_t decoded_len,
 }
 
 /*=============================================================================
+ * TTF hmtx patcher
+ *
+ * Many PDF subsetters strip or uniformise the embedded TTF's hmtx table —
+ * the authoritative widths live in the PDF font dict (/Widths for simple
+ * TTF, /W for CIDFontType2). FreeType reads advances out of hmtx, so a
+ * stripped hmtx propagates uniform stride into both the producer's
+ * measure_text and the receiver's CDB. We rewrite hmtx in-place from the
+ * PDF widths before the font bytes are handed to add_font / raster_font.
+ *
+ * No checksum recomputation: FreeType's normal load path doesn't validate
+ * head.checkSumAdjustment or per-table checksums.
+ *
+ * CFF (FontFile3) is left untouched — its advances live inside the
+ * CharString program, which is a much bigger patcher.
+ *===========================================================================*/
+
+#define TTF_TAG(a, b, c, d)                                                                        \
+    (((uint32_t)(a) << 24) | ((uint32_t)(b) << 16) | ((uint32_t)(c) << 8) | (uint32_t)(d))
+
+static uint16_t read_u16_be(const uint8_t *p)
+{
+    return (uint16_t)(((uint16_t)p[0] << 8) | p[1]);
+}
+
+static uint32_t read_u32_be(const uint8_t *p)
+{
+    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) |
+           (uint32_t)p[3];
+}
+
+static void write_u16_be(uint8_t *p, uint16_t v)
+{
+    p[0] = (uint8_t)(v >> 8);
+    p[1] = (uint8_t)(v & 0xFF);
+}
+
+static bool find_ttf_table(const uint8_t *ttf, size_t ttf_size, uint32_t tag, size_t *off,
+                           size_t *len)
+{
+    if (ttf_size < 12) {
+        return false;
+    }
+    uint16_t num_tables = read_u16_be(ttf + 4);
+    if (12 + (size_t)num_tables * 16 > ttf_size) {
+        return false;
+    }
+    for (uint16_t i = 0; i < num_tables; i++) {
+        const uint8_t *e = ttf + 12 + (size_t)i * 16;
+        if (read_u32_be(e) == tag) {
+            uint32_t toff = read_u32_be(e + 8);
+            uint32_t tlen = read_u32_be(e + 12);
+            if ((size_t)toff + tlen > ttf_size) {
+                return false;
+            }
+            *off = toff;
+            *len = tlen;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* round(width_pdf * units_per_em / 1000) clamped to uint16. */
+static uint16_t pdf_width_to_fu(double w_pdf, uint16_t units_per_em)
+{
+    double w_fu = (w_pdf * (double)units_per_em) / 1000.0;
+    if (w_fu < 0.0) {
+        w_fu = 0.0;
+    }
+    if (w_fu > 65535.0) {
+        w_fu = 65535.0;
+    }
+    return (uint16_t)(w_fu + 0.5);
+}
+
+/* Resolve dict[key] as an array, falling back to the indirect-object form. */
+static pdfio_array_t *dict_get_array(pdfio_dict_t *d, const char *key)
+{
+    pdfio_array_t *a = pdfioDictGetArray(d, key);
+    if (a) {
+        return a;
+    }
+    pdfio_obj_t *o = pdfioDictGetObj(d, key);
+    return o ? pdfioObjGetArray(o) : NULL;
+}
+
+/* PDF "WinAnsiEncoding" maps bytes 0x80-0x9F to specific Unicode chars
+ * that don't match Unicode 0x80-0x9F (which are control chars). Ditto a
+ * couple stragglers in 0xA0-0xFF. PDF spec Appendix D, Table D.2.
+ *
+ * Without this remap, the hmtx patcher looks up FT_Get_Char_Index(face, 0x95)
+ * — Unicode U+0095 is a control char that the font doesn't have a glyph
+ * for — and silently fails to patch the bullet's advance. The substituted
+ * font's intrinsic bullet width (which is *different* from what the PDF
+ * declares in /Widths) leaks through, and every char on every line that
+ * contains a bullet drifts.
+ *
+ * Only the 0x80-0x9F range and a couple of 0xA0-range exceptions need
+ * remapping; 0x00-0x7F and most of 0xA0-0xFF are direct-mapped to the
+ * same Unicode codepoints. */
+static uint32_t winansi_to_unicode(uint8_t b)
+{
+    /* Direct-mapped: 0x00-0x7F is ASCII, most of 0xA0-0xFF is Latin-1. */
+    if (b < 0x80) {
+        return b;
+    }
+    /* Sparse exceptions: 0x80-0x9F + a few high-range gaps. Anything not
+     * listed falls through to direct (b). */
+    switch (b) {
+    case 0x80: return 0x20AC; /* Euro */
+    case 0x82: return 0x201A; /* single low-9 quote */
+    case 0x83: return 0x0192; /* florin */
+    case 0x84: return 0x201E; /* double low-9 quote */
+    case 0x85: return 0x2026; /* ellipsis */
+    case 0x86: return 0x2020; /* dagger */
+    case 0x87: return 0x2021; /* double dagger */
+    case 0x88: return 0x02C6; /* circumflex */
+    case 0x89: return 0x2030; /* per mille */
+    case 0x8A: return 0x0160; /* S caron */
+    case 0x8B: return 0x2039; /* single left guillemet */
+    case 0x8C: return 0x0152; /* OE ligature */
+    case 0x8E: return 0x017D; /* Z caron */
+    case 0x91: return 0x2018; /* left single quote */
+    case 0x92: return 0x2019; /* right single quote */
+    case 0x93: return 0x201C; /* left double quote */
+    case 0x94: return 0x201D; /* right double quote */
+    case 0x95: return 0x2022; /* bullet */
+    case 0x96: return 0x2013; /* en dash */
+    case 0x97: return 0x2014; /* em dash */
+    case 0x98: return 0x02DC; /* small tilde */
+    case 0x99: return 0x2122; /* trademark */
+    case 0x9A: return 0x0161; /* s caron */
+    case 0x9B: return 0x203A; /* single right guillemet */
+    case 0x9C: return 0x0153; /* oe ligature */
+    case 0x9E: return 0x017E; /* z caron */
+    case 0x9F: return 0x0178; /* Y diaeresis */
+    default:   return b;       /* 0xA0-0xFF mostly Latin-1 direct-map */
+    }
+}
+
+static void patch_simple_widths(uint8_t *ttf_data, size_t ttf_size, size_t hmtx_off,
+                                uint16_t gid_limit, uint16_t units_per_em,
+                                pdfio_dict_t *font_obj_dict)
+{
+    pdfio_array_t *widths = dict_get_array(font_obj_dict, "Widths");
+    if (!widths) {
+        return;
+    }
+    size_t widths_len = pdfioArrayGetSize(widths);
+    if (widths_len == 0) {
+        return;
+    }
+    int first_char = (int)pdfioDictGetNumber(font_obj_dict, "FirstChar");
+    if (first_char < 0) {
+        first_char = 0;
+    }
+    /* Most non-CID PDF fonts use WinAnsiEncoding; treat as default when
+     * Encoding is missing. MacRomanEncoding / StandardEncoding are rare;
+     * those would need separate tables. The downstream is just the hmtx
+     * patcher — getting the codepoint wrong silently skips the patch
+     * (FT_Get_Char_Index returns 0 for U+0095 in any font), so the
+     * worst case for an unknown encoding is "behaves like before this
+     * fix" (drift on those few chars). */
+    const char *encoding = pdfioDictGetName(font_obj_dict, "Encoding");
+    int is_winansi = !encoding || strcmp(encoding, "WinAnsiEncoding") == 0 ||
+                     strcmp(encoding, "/WinAnsiEncoding") == 0;
+
+    /* Char code → glyph index lookup needs FreeType's cmap parser; rolling
+     * our own would mean handling cmap formats 0/4/6/12 and platform/encoding
+     * preference. FreeType is already a yfont dependency. */
+    FT_Library lib;
+    if (FT_Init_FreeType(&lib) != 0) {
+        return;
+    }
+    FT_Face face;
+    if (FT_New_Memory_Face(lib, ttf_data, (FT_Long)ttf_size, 0, &face) != 0) {
+        FT_Done_FreeType(lib);
+        return;
+    }
+
+    int patched = 0;
+    for (size_t i = 0; i < widths_len; i++) {
+        double w_pdf = pdfioArrayGetNumber(widths, i);
+        /* PDF subsetters often emit 0 in /Widths for char codes the document
+         * doesn't actually use. We're patching a SUBSTITUTED font (the user
+         * doesn't have the original), and that substitute already has correct
+         * default widths for those glyphs. Overwriting with 0 here would
+         * produce zero-advance glyphs the moment any text accidentally uses
+         * one (e.g. a font shared across italic + body, where the body span
+         * happens to reach a char the italic dict marked 0). Skip and let the
+         * substitute's intrinsic width through. */
+        if (w_pdf == 0.0) {
+            continue;
+        }
+        long pdf_byte = first_char + (long)i;
+        /* Translate PDF byte → Unicode codepoint via the encoding. For
+         * WinAnsi this fixes 0x80-0x9F; for ASCII bytes it's identity. */
+        FT_ULong code;
+        if (is_winansi && pdf_byte >= 0 && pdf_byte <= 0xFF) {
+            code = (FT_ULong)winansi_to_unicode((uint8_t)pdf_byte);
+        } else {
+            code = (FT_ULong)pdf_byte;
+        }
+        FT_UInt gid = FT_Get_Char_Index(face, code);
+        if (gid == 0 || gid >= gid_limit) {
+            continue;
+        }
+        uint16_t w_fu = pdf_width_to_fu(w_pdf, units_per_em);
+        write_u16_be(ttf_data + hmtx_off + (size_t)gid * 4, w_fu);
+        patched++;
+    }
+
+    FT_Done_Face(face);
+    FT_Done_FreeType(lib);
+    ydebug("ypdf: hmtx patcher (simple): %d/%zu glyph advances rewritten", patched, widths_len);
+}
+
+/* Walk the sparse /W array. Two formats per entry:
+ *   c [w0 w1 ...]   — widths for c, c+1, c+2, ...
+ *   c1 c2 w         — single width w for CIDs c1..c2 inclusive
+ * Identity-H mapping: CID == glyph index. */
+static void patch_cid_widths(uint8_t *ttf_data, size_t hmtx_off, uint16_t gid_limit,
+                             uint16_t units_per_em, pdfio_dict_t *cid_font_dict)
+{
+    pdfio_array_t *w_arr = dict_get_array(cid_font_dict, "W");
+    if (!w_arr) {
+        return;
+    }
+    size_t w_len = pdfioArrayGetSize(w_arr);
+    int patched = 0;
+    size_t i = 0;
+    while (i < w_len) {
+        if (pdfioArrayGetType(w_arr, i) != PDFIO_VALTYPE_NUMBER || i + 1 >= w_len) {
+            break;
+        }
+        long c = (long)pdfioArrayGetNumber(w_arr, i);
+        pdfio_valtype_t t1 = pdfioArrayGetType(w_arr, i + 1);
+
+        if (t1 == PDFIO_VALTYPE_ARRAY) {
+            pdfio_array_t *inner = pdfioArrayGetArray(w_arr, i + 1);
+            size_t inner_len = inner ? pdfioArrayGetSize(inner) : 0;
+            for (size_t j = 0; j < inner_len; j++) {
+                long cid = c + (long)j;
+                if (cid < 0 || cid >= gid_limit) {
+                    continue;
+                }
+                double w_pdf = pdfioArrayGetNumber(inner, j);
+                /* Same reasoning as patch_simple_widths: 0 in /W is "char
+                 * not used by this PDF", not "render with zero advance".
+                 * Don't clobber the substituted font's intrinsic width. */
+                if (w_pdf == 0.0) {
+                    continue;
+                }
+                uint16_t w_fu = pdf_width_to_fu(w_pdf, units_per_em);
+                write_u16_be(ttf_data + hmtx_off + (size_t)cid * 4, w_fu);
+                patched++;
+            }
+            i += 2;
+        } else if (t1 == PDFIO_VALTYPE_NUMBER && i + 2 < w_len &&
+                   pdfioArrayGetType(w_arr, i + 2) == PDFIO_VALTYPE_NUMBER) {
+            long c2 = (long)pdfioArrayGetNumber(w_arr, i + 1);
+            double w_pdf = pdfioArrayGetNumber(w_arr, i + 2);
+            if (w_pdf == 0.0) {
+                i += 3;
+                continue;
+            }
+            uint16_t w_fu = pdf_width_to_fu(w_pdf, units_per_em);
+            for (long cid = c; cid <= c2; cid++) {
+                if (cid < 0 || cid >= gid_limit) {
+                    continue;
+                }
+                write_u16_be(ttf_data + hmtx_off + (size_t)cid * 4, w_fu);
+                patched++;
+            }
+            i += 3;
+        } else {
+            break;
+        }
+    }
+    ydebug("ypdf: hmtx patcher (CID): %d glyph advances rewritten", patched);
+}
+
+/* Rewrite the in-memory TTF's hmtx table from the PDF font dict's /Widths
+ * (simple) or descendant CIDFont's /W (Type0). cid_font_dict is NULL for
+ * simple fonts. Caller must have verified the FontFile is FontFile2 (TTF). */
+static void patch_ttf_with_pdf_widths(uint8_t *ttf_data, size_t ttf_size,
+                                      pdfio_dict_t *font_obj_dict, pdfio_dict_t *cid_font_dict)
+{
+    if (!ttf_data || ttf_size < 12) {
+        return;
+    }
+    /* Sniff the font flavour. TrueType: 0x00010000 or 'true'. CFF: 'OTTO'. */
+    uint32_t magic = read_u32_be(ttf_data);
+    if (magic != 0x00010000u && magic != TTF_TAG('t', 'r', 'u', 'e')) {
+        return;
+    }
+
+    size_t head_off, head_len, hhea_off, hhea_len, hmtx_off, hmtx_len, maxp_off, maxp_len;
+    if (!find_ttf_table(ttf_data, ttf_size, TTF_TAG('h', 'e', 'a', 'd'), &head_off, &head_len) ||
+        !find_ttf_table(ttf_data, ttf_size, TTF_TAG('h', 'h', 'e', 'a'), &hhea_off, &hhea_len) ||
+        !find_ttf_table(ttf_data, ttf_size, TTF_TAG('h', 'm', 't', 'x'), &hmtx_off, &hmtx_len) ||
+        !find_ttf_table(ttf_data, ttf_size, TTF_TAG('m', 'a', 'x', 'p'), &maxp_off, &maxp_len)) {
+        return;
+    }
+    if (head_len < 20 || hhea_len < 36 || maxp_len < 6) {
+        return;
+    }
+    uint16_t units_per_em = read_u16_be(ttf_data + head_off + 18);
+    uint16_t num_h_metrics = read_u16_be(ttf_data + hhea_off + 34);
+    uint16_t num_glyphs = read_u16_be(ttf_data + maxp_off + 4);
+    if (units_per_em == 0 || num_h_metrics == 0) {
+        return;
+    }
+    if (hmtx_off + (size_t)num_h_metrics * 4 > ttf_size) {
+        return;
+    }
+
+    /* Per the OpenType spec, glyphs at index >= numberOfHMetrics share the
+     * advance from the LAST hmtx record (numberOfHMetrics-1). If the
+     * subsetter set numberOfHMetrics < num_glyphs and we patched that
+     * shared record, we'd silently change every glyph that aliases it —
+     * worse than leaving the table alone. So when the table is collapsed,
+     * we only allow patching the strictly-private records [0 .. nHM-2].
+     * Properly fixing the collapsed case requires expanding hmtx and
+     * shifting downstream tables — out of scope per the issue. */
+    uint16_t patch_limit = num_h_metrics;
+    if (num_h_metrics < num_glyphs && patch_limit > 0) {
+        patch_limit -= 1;
+    }
+    ydebug("ypdf: hmtx patcher: upem=%u numberOfHMetrics=%u num_glyphs=%u patch_limit=%u (cid=%d)",
+           units_per_em, num_h_metrics, num_glyphs, patch_limit, cid_font_dict ? 1 : 0);
+    if (patch_limit == 0) {
+        return;
+    }
+
+    if (cid_font_dict) {
+        patch_cid_widths(ttf_data, hmtx_off, patch_limit, units_per_em, cid_font_dict);
+    } else {
+        patch_simple_widths(ttf_data, ttf_size, hmtx_off, patch_limit, units_per_em,
+                            font_obj_dict);
+    }
+}
+
+/*=============================================================================
  * Font extraction
  *===========================================================================*/
+
+/* PDF "BaseFont" names sometimes carry a 6-letter random subset prefix
+ * followed by '+', e.g. "ABCDEF+Arial-BoldMT". Strip that for fontconfig
+ * lookup — we want the underlying family. */
+static const char *strip_pdf_subset_prefix(const char *name)
+{
+    if (!name || !*name) {
+        return name;
+    }
+    /* Skip leading '/' if pdfio leaked it. */
+    if (name[0] == '/') {
+        name++;
+    }
+    /* "AAAAAA+Foo" → "Foo". The prefix is exactly 6 uppercase letters. */
+    if (name[0] && name[1] && name[2] && name[3] && name[4] && name[5] && name[6] == '+') {
+        int all_upper = 1;
+        for (int i = 0; i < 6; i++) {
+            if (name[i] < 'A' || name[i] > 'Z') {
+                all_upper = 0;
+                break;
+            }
+        }
+        if (all_upper) {
+            name += 7;
+        }
+    }
+    return name;
+}
+
+/* Resolve a PDF font name (e.g. "Arial-BoldMT") to an absolute TTF path
+ * via fontconfig. Returns malloc'd string on hit, NULL on miss / no
+ * fontconfig at build time. Used to substitute system fonts when the PDF
+ * doesn't embed FontFile2/FontFile3 (very common for Arial / Times /
+ * Helvetica references in older PDFs). */
+static char *resolve_pdf_font_via_fontconfig(const char *base_font)
+{
+#if YETTY_HAS_FONTCONFIG
+    const char *name = strip_pdf_subset_prefix(base_font);
+    if (!name || !*name) {
+        return NULL;
+    }
+    static int s_fc_inited = 0;
+    if (!s_fc_inited) {
+        if (!FcInit()) {
+            return NULL;
+        }
+        s_fc_inited = 1;
+    }
+    /* PDF font names use '-' to glue family/style ("Arial-BoldMT"). For
+     * fontconfig, ',' or ' ' work better — try the raw name first, then
+     * a sanitised variant if needed. */
+    FcPattern *pat = FcNameParse((const FcChar8 *)name);
+    if (!pat) {
+        return NULL;
+    }
+    FcConfigSubstitute(NULL, pat, FcMatchPattern);
+    FcDefaultSubstitute(pat);
+
+    FcResult result;
+    FcPattern *match = FcFontMatch(NULL, pat, &result);
+    char *out = NULL;
+    if (match) {
+        FcChar8 *file = NULL;
+        if (FcPatternGetString(match, FC_FILE, 0, &file) == FcResultMatch && file) {
+            out = strdup((const char *)file);
+        }
+        FcPatternDestroy(match);
+    }
+    FcPatternDestroy(pat);
+    return out;
+#else
+    (void)base_font;
+    return NULL;
+#endif
+}
+
+/* Read entire file into a malloc'd buffer. NULL on error. */
+static uint8_t *load_font_file(const char *path, size_t *out_len)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return NULL;
+    }
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return NULL;
+    }
+    long sz = ftell(f);
+    if (sz <= 0) {
+        fclose(f);
+        return NULL;
+    }
+    rewind(f);
+    uint8_t *buf = malloc((size_t)sz);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+    if (fread(buf, 1, (size_t)sz, f) != (size_t)sz) {
+        free(buf);
+        fclose(f);
+        return NULL;
+    }
+    fclose(f);
+    *out_len = (size_t)sz;
+    return buf;
+}
 
 static int find_font_idx(const struct yetty_ypdf_font_info *fonts, size_t count, const char *tag)
 {
@@ -389,6 +848,9 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
             is_identity_h = true;
         }
 
+        /* Kept around for the hmtx patcher: for Type0 fonts the
+         * authoritative widths live in the descendant CIDFont's /W. */
+        pdfio_dict_t *cid_font_dict = NULL;
         if (!font_desc_obj) {
             pdfio_array_t *desc = pdfioDictGetArray(font_obj_dict, "DescendantFonts");
             if (!desc) {
@@ -400,9 +862,9 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
             if (desc && pdfioArrayGetSize(desc) > 0) {
                 pdfio_obj_t *cid_font_obj = pdfioArrayGetObj(desc, 0);
                 if (cid_font_obj) {
-                    pdfio_dict_t *cid_dict = pdfioObjGetDict(cid_font_obj);
-                    if (cid_dict) {
-                        font_desc_obj = pdfioDictGetObj(cid_dict, "FontDescriptor");
+                    cid_font_dict = pdfioObjGetDict(cid_font_obj);
+                    if (cid_font_dict) {
+                        font_desc_obj = pdfioDictGetObj(cid_font_dict, "FontDescriptor");
                     }
                 }
             }
@@ -416,24 +878,70 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
             continue;
         }
 
+        bool is_truetype = true;
         pdfio_obj_t *font_file_obj = pdfioDictGetObj(font_desc_dict, "FontFile2");
         if (!font_file_obj) {
             font_file_obj = pdfioDictGetObj(font_desc_dict, "FontFile3");
+            is_truetype = false;
         }
+
+        /* No FontFile in the descriptor means the PDF references this font
+         * by name and expects the reader to provide it from the system —
+         * standard practice for "core 14" fonts (Times, Helvetica, Arial,
+         * etc.) and any other font the producer assumed would be locally
+         * installed. Fall back to fontconfig: substitute a system TTF and
+         * proceed exactly as if the font were embedded.
+         *
+         * Without this, ypdf returns NULL for every text_emit_cb's
+         * measure_text path — the parser then doesn't advance the text
+         * matrix between Tj calls and every glyph stacks at the same
+         * coordinate, producing the "complete chaos" overlap pattern
+         * seen with sample.pdf and other PDFs that don't embed fonts. */
+        uint8_t *substituted_bytes = NULL;
+        size_t substituted_sz = 0;
         if (!font_file_obj) {
+            const char *base_font = pdfioDictGetName(font_obj_dict, "BaseFont");
+            if (!base_font) {
+                base_font = pdfioDictGetName(font_desc_dict, "FontName");
+            }
+            if (base_font) {
+                char *path = resolve_pdf_font_via_fontconfig(base_font);
+                if (path) {
+                    substituted_bytes = load_font_file(path, &substituted_sz);
+                    if (substituted_bytes) {
+                        is_truetype = true;
+                        ydebug("ypdf: substituting system font for '%s' from %s "
+                               "(%zu bytes)", base_font, path, substituted_sz);
+                    } else {
+                        ywarn("ypdf: fontconfig found '%s' at %s but read failed",
+                              base_font, path);
+                    }
+                    free(path);
+                } else {
+                    ywarn("ypdf: no FontFile and fontconfig miss for '%s' — "
+                          "spans using this font will fall back to default and "
+                          "may overlap (no measure_text)", base_font);
+                }
+            }
+        }
+        if (!font_file_obj && !substituted_bytes) {
             continue;
         }
 
-        struct _pdfio_stream_s *ff_stream = pdfioObjOpenStream(font_file_obj, true);
-        if (!ff_stream) {
-            continue;
+        struct _pdfio_stream_s *ff_stream = NULL;
+        if (font_file_obj) {
+            ff_stream = pdfioObjOpenStream(font_file_obj, true);
+            if (!ff_stream) {
+                free(substituted_bytes);
+                continue;
+            }
         }
 
-        uint8_t *bytes = NULL;
-        size_t sz = 0, cap = 0;
+        uint8_t *bytes = substituted_bytes;
+        size_t sz = substituted_sz, cap = substituted_sz;
         uint8_t chunk[8192];
         ssize_t rd;
-        while ((rd = pdfioStreamRead(ff_stream, chunk, sizeof(chunk))) > 0) {
+        while (ff_stream && (rd = pdfioStreamRead(ff_stream, chunk, sizeof(chunk))) > 0) {
             if (sz + (size_t)rd > cap) {
                 size_t nc = cap ? cap * 2 : 16384;
                 while (nc < sz + (size_t)rd) {
@@ -451,10 +959,19 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
             memcpy(bytes + sz, chunk, (size_t)rd);
             sz += (size_t)rd;
         }
-        pdfioStreamClose(ff_stream);
+        if (ff_stream) {
+            pdfioStreamClose(ff_stream);
+        }
         if (!bytes || sz == 0) {
             free(bytes);
             continue;
+        }
+
+        /* Many subsetters strip the TTF's hmtx. Rewrite it from the PDF's
+         * authoritative widths before any consumer (buffer or raster_font)
+         * sees the bytes; both downstream paths copy out of `bytes`. */
+        if (is_truetype) {
+            patch_ttf_with_pdf_widths(bytes, sz, font_obj_dict, cid_font_dict);
         }
 
         /* Store TTF in buffer. */
@@ -554,9 +1071,22 @@ static struct float_result text_emit_cb(void *ud, const char *text, size_t text_
     struct yetty_ycore_buffer tb = {(uint8_t *)(uintptr_t)emit_text_p, emit_text_len,
                                     emit_text_len};
     int32_t font_id = fi ? (int32_t)fi->buffer_font_id : -1;
-    (void)yetty_ypaint_core_buffer_add_text(
+    /* Forward PDF text-state Tc/Tw to the canvas in display pixels.
+     * effective_size is the apparent on-screen font size after the full
+     * trm transform; state->font_size is the unscaled Tfs. The text
+     * matrix already absorbed any non-uniform scale, so converting the
+     * Tc/Tw (which are in Tfs units per the PDF spec) by effective_size
+     * gives the on-screen pixel offsets the canvas should add per
+     * codepoint and per ASCII space. Without this, lines that contain
+     * spaces drift by ~1.2 px per space (mutool sees the actual on-page
+     * positions; canvas would otherwise sum only font advances). */
+    float h_scale_for_emit = state->horizontal_scaling / 100.0f;
+    float emit_char_spacing = state->char_spacing * effective_size * h_scale_for_emit;
+    float emit_word_spacing = state->word_spacing * effective_size * h_scale_for_emit;
+    (void)yetty_ypaint_core_buffer_add_text_full(
         c->buffer, sx, sy, &tb, effective_size, color, 0, font_id,
-        (fabsf(rotation_radians) > 0.001f) ? -rotation_radians : 0.0f);
+        (fabsf(rotation_radians) > 0.001f) ? -rotation_radians : 0.0f,
+        emit_char_spacing, emit_word_spacing);
 
     /* Measure advance at the PDF text-state font size (Tfs), which matches
      * the units of the text matrix. See PDF spec 9.4.4. */

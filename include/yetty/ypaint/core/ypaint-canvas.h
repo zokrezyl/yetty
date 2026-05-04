@@ -180,6 +180,18 @@ uint32_t yetty_ypaint_canvas_primitive_count(struct yetty_ypaint_canvas *canvas)
 // Get default font (for gpu resource set child inclusion)
 struct yetty_ypaint_font *yetty_ypaint_canvas_get_default_font(struct yetty_ypaint_canvas *canvas);
 
+// Number of fonts the canvas owns. Slot 0 is always the default font;
+// slots 1..N-1 are the embedded fonts materialised from FONT prims (in
+// the order they were first seen). The layer attaches all of these as
+// children of its resource set, in this exact order, so the slot index
+// here matches the dispatcher index in the merged shader.
+uint32_t yetty_ypaint_canvas_font_count(const struct yetty_ypaint_canvas *canvas);
+
+// Get font at slot. Returns NULL if slot out of range. Pointer is
+// canvas-owned — callers must not destroy it.
+struct yetty_ypaint_font *yetty_ypaint_canvas_get_font_at(
+    const struct yetty_ypaint_canvas *canvas, uint32_t slot);
+
 //=============================================================================
 // Complex primitive access (for atlas rendering)
 //=============================================================================

@@ -129,6 +129,18 @@ struct yetty_ycore_void_result yetty_ypaint_core_buffer_add_text(
     struct yetty_ypaint_core_buffer *buf, float x, float y, const struct yetty_ycore_buffer *text,
     float font_size, uint32_t color, uint32_t layer, int32_t font_id, float rotation);
 
+/* Like _add_text plus PDF-style per-character (Tc) and per-space (Tw)
+ * spacing. The canvas applies them inside expand_text_span_to_glyphs so
+ * a Tj with internal spaces (the common case for body text) lays out
+ * matching what a reference PDF renderer (mutool / pdf.js / Acrobat)
+ * computes. Both values are in display PIXELS at the current font_size
+ * — ypdf bakes the unit conversion. Producers without spacing pass the
+ * one-arg `add_text` which defaults Tc/Tw to 0. */
+struct yetty_ycore_void_result yetty_ypaint_core_buffer_add_text_full(
+    struct yetty_ypaint_core_buffer *buf, float x, float y, const struct yetty_ycore_buffer *text,
+    float font_size, uint32_t color, uint32_t layer, int32_t font_id, float rotation,
+    float char_spacing, float word_spacing);
+
 #ifdef __cplusplus
 }
 #endif
