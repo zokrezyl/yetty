@@ -84,7 +84,7 @@ static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
                 return YETTY_ERR(yetty_yplatform_pty, "failed to start QEMU");
             }
 
-            struct yetty_ycore_void_result wr = yetty_yqemu_qemu_wait_ready(QEMU_TELNET_PORT, 5000);
+            struct yetty_ycore_void_result wr = yetty_yqemu_qemu_wait_ready(QEMU_TELNET_PORT, 30000);
             if (YETTY_IS_ERR(wr)) {
                 yetty_yqemu_qemu_stop(factory->qemu_proc);
                 factory->qemu_proc = NULL;

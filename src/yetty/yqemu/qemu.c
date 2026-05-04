@@ -100,7 +100,7 @@ static void qemu_settings_ensure_default(const char *path)
     fclose(f);
 }
 
-struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t port)
+struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t host_port)
 {
     const char *raw_data_dir = yetty_yplatform_get_data_dir();
     const char *raw_config_dir = yetty_yplatform_get_config_dir();
@@ -131,6 +131,7 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t port)
     char share_path[512];
     char qemu_cfg_dir[512];
     char qemu_cfg_path[512];
+    char netdev_arg[128];
     char chardev_arg[128];
     char append_arg[384];
     char drive_arg[640];
@@ -174,7 +175,11 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t port)
 #endif
     snprintf(bios_path, sizeof(bios_path), "%s/yemu/opensbi-fw_dynamic.bin", data_dir);
     snprintf(kernel_path, sizeof(kernel_path), "%s/yemu/kernel-riscv64.bin", data_dir);
-    snprintf(blk_path, sizeof(blk_path), "%s/yemu/alpine-rootfs.img", data_dir);
+    /* alpine-extended ships busybox telnetd on tcp/23, which is what we
+     * connect to via the slirp hostfwd below. The plain alpine-rootfs.img
+     * has no telnetd, so it would boot but yetty's connect would never
+     * reach a server. */
+    snprintf(blk_path, sizeof(blk_path), "%s/yemu/alpine-extended-rootfs.img", data_dir);
 
     /* User-tunable qemu settings live under <config_dir>/qemu/.
      * <config_dir>/qemu/share/ is exposed to the guest over 9p as
@@ -205,14 +210,21 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t port)
         return YPROCESS_INVALID;
     }
 
-    /* Plain TCP socket — no `telnet=on`. The QEMU 11.0.0-rc4 build under
-     * MSYS2 CLANG64 segfaults inside the telnet chardev IAC parser shortly
-     * after a client connects, so we use a raw socket and let yetty's
-     * telnet_pty stream bytes as data. yetty doesn't send IAC negotiation
-     * proactively (see ytelnet/telnet-pty.c::telnet_on_connect), so the
-     * guest's virtio-console sees only data — no garbage input. */
+    /* Slirp hostfwd: host:HOST_PORT -> guest:23 (busybox telnetd on the
+     * extended rootfs). yetty connects to 127.0.0.1:HOST_PORT after the
+     * guest finishes booting and telnetd binds — see qemu_wait_ready. */
+    snprintf(netdev_arg, sizeof(netdev_arg),
+             "user,id=net0,hostfwd=tcp:127.0.0.1:%u-:23", host_port);
+
+    /* Kernel console chardev exposed on 127.0.0.1:2424 for debugging.
+     * yetty does NOT connect here (it talks to the in-guest telnetd via
+     * slirp hostfwd above). This socket is just a side channel: connect
+     * with `telnet 127.0.0.1 2424` (or any TCP client) to see the boot
+     * log and any kernel panic output that the slirp/telnetd path can't
+     * surface. server=on, wait=off so QEMU boots immediately and accepts
+     * a connection any time. */
     snprintf(chardev_arg, sizeof(chardev_arg),
-             "socket,id=char0,host=127.0.0.1,port=%u,server=on,wait=off", port);
+             "socket,id=char0,host=127.0.0.1,port=2424,server=on,wait=off");
 
     if (settings.extra_append[0]) {
         snprintf(append_arg, sizeof(append_arg),
@@ -228,7 +240,8 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t port)
     snprintf(memory_arg, sizeof(memory_arg), "%u", settings.memory_mb);
     snprintf(smp_arg, sizeof(smp_arg), "%u", settings.smp);
 
-    yinfo("Starting QEMU on port %u (mem=%uMB smp=%u)", port, settings.memory_mb, settings.smp);
+    yinfo("Starting QEMU (telnet hostfwd 127.0.0.1:%u -> guest:23, mem=%uMB smp=%u)", host_port,
+          settings.memory_mb, settings.smp);
 
     const char *argv[] = {
         qemu_bin,
@@ -261,9 +274,14 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t port)
         "virtio-9p-device,fsdev=fsdev0,mount_tag=hostshare",
 #endif
         "-netdev",
-        "user,id=net0",
+        netdev_arg,
         "-device",
         "virtio-net-device,netdev=net0",
+        /* virtio-console wired to a TCP socket chardev on 127.0.0.1:2424
+         * for *debugging only*. yetty does NOT connect here (the broken
+         * libuv-tcp ↔ socket-chardev interaction silently kills QEMU on
+         * the MSYS2 build). It's a side channel for `telnet 127.0.0.1
+         * 2424` so kernel boot log / panic output remains observable. */
         "-device",
         "virtio-serial-device",
         "-device",
