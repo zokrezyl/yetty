@@ -462,8 +462,13 @@ static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
             if (!factory->qemu_proc) {
                 return YETTY_ERR(yetty_yplatform_pty, "failed to start QEMU");
             }
+            /* 30 s: kernel boot + alpine init + telnetd bind from a cold
+             * start can run 5–15 s on slow hardware; 5 s used to be enough
+             * for the chardev path because QEMU bound the chardev port
+             * before the guest finished booting. The slirp hostfwd path
+             * needs the in-guest daemon up. */
             struct yetty_ycore_void_result wait_res =
-                yetty_yqemu_qemu_wait_ready(QEMU_TELNET_PORT, 5000);
+                yetty_yqemu_qemu_wait_ready(QEMU_TELNET_PORT, 30000);
             if (YETTY_IS_ERR(wait_res)) {
                 yetty_yqemu_qemu_stop(factory->qemu_proc);
                 factory->qemu_proc = NULL;
