@@ -1,0 +1,169 @@
+# README GIF — full tour.
+#
+# A self-narrating ~60s scenario meant to be screen-recorded into the
+# animated GIF for the project README. Each scene is introduced by a
+# bash # comment that the viewer reads as on-screen narration before
+# the demo runs.
+#
+# Scenes:
+#   1. MSDF text — runs the existing ypaint/scrolling/text.sh, then
+#      Ctrl+scroll-zooms in (soft visual zoom) so the viewer sees the
+#      MSDF-rendered glyphs stay sharp at any scale.
+#   2. Inline shader-rendered plot — yetty's shader VM draws a curve
+#      family directly into the scrolling layer. Same zoom dance.
+#   3. ycat README.md — markdown rendered inline as ypaint primitives
+#      (headings, lists, code blocks) instead of plain text.
+#
+# Prereq: in repo root, start yetty with
+#   ./build-desktop-ytrace-release/yetty --rpc-port=9999 -e bash
+# then run ./demo/scripts/yrpc-scripts/readme-tour.sh from another shell.
+#
+# Zoom anchor defaults to (500, 300). If your window is much smaller or
+# the anchor lands on an empty area, edit the x/y in the mouse-move /
+# mouse-scroll steps below.
+
+config:
+  defaults:
+    typing:
+      avg-speed: 16
+      speed-deviation: 0.25
+      avg-typo: 0.0
+
+script:
+  # --- scene 1: MSDF text + zoom -----------------------------------------
+  - sleep: 0.6
+
+  - type: "# MSDF text — shader-rendered, stays crisp at any zoom"
+  - special-char: ENTER
+  - sleep: 0.4
+
+  - type: "./demo/scripts/ypaint/scrolling/text.sh"
+  - special-char: ENTER
+  - sleep: 1.4
+
+  # Park the mouse at the zoom anchor BEFORE scrolling — Ctrl+scroll uses
+  # this position as the zoom center, so all ticks share the same (x, y).
+  - mouse-move: { x: 500, y: 300 }
+  - sleep: 0.2
+
+  # Ctrl = mods 2 → soft visual zoom (no grid resize). Eight +1 ticks ≈
+  # +0.8 zoom delta — enough to see MSDF resharpening clearly.
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 1.4
+
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.8
+
+  # --- scene 2: shader-VM plot + zoom ------------------------------------
+  - type: "# shader-rendered plot via yetty's shader VM — embedded inline"
+  - special-char: ENTER
+  - sleep: 0.4
+
+  - type: "./build-desktop-ytrace-release/tools/yplot/yplot -w 520 -H 200 --xrange=0..6.28 --yrange=-1..1 'a=sin(x)' 'b=sin(2*x)/2' 'sum=sin(x)+sin(2*x)/2+sin(3*x)/3' '@sum.color=#FCBF49' '@a.color=#FF6B6B' '@b.color=#4ECDC4'"
+  - special-char: ENTER
+  - sleep: 1.6
+
+  - mouse-move: { x: 500, y: 300 }
+  - sleep: 0.2
+
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 1.4
+
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.8
+
+  # --- scene 3: ycat README.md -------------------------------------------
+  - type: "# ycat — render markdown inline as ypaint primitives"
+  - special-char: ENTER
+  - sleep: 0.4
+
+  - type: "./build-desktop-ytrace-release/tools/ycat/ycat README.md"
+  - special-char: ENTER
+  - sleep: 2.0
+
+  # One last gentle zoom on the rendered README so the viewer sees the
+  # rich layout (headings, code blocks) hold up under magnification.
+  - mouse-move: { x: 500, y: 300 }
+  - sleep: 0.2
+
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - sleep: 1.6
+
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - sleep: 1.0
