@@ -655,6 +655,17 @@ static int on_settermprop(VTermProp prop, VTermValue *val, void *user)
         if (layer->base.alt_screen_fn) {
             layer->base.alt_screen_fn(val->boolean ? 1 : 0, layer->base.alt_screen_userdata);
         }
+    } else if (prop == VTERM_PROP_CURSORVISIBLE) {
+        /* DECTCEM (CSI ?25 h/l) only fires this prop — movecursor isn't
+         * called when visibility toggles without a move. nvim and friends
+         * routinely hide the cursor on startup and show it again when
+         * idle at the prompt; without this branch the GPU uniform stays
+         * stuck at the last movecursor's visibility. */
+        layer->vterm_cursor_visible = val->boolean ? 1.0f : 0.0f;
+        if (!layer->view_active) {
+            set_cursor_visible(&layer->rs, layer->vterm_cursor_visible);
+        }
+        layer->base.dirty = 1;
     }
 
     if (changed && layer->base.mouse_sub_fn) {
