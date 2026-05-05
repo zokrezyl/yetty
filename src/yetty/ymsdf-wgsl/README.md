@@ -27,37 +27,42 @@ Pipeline works end-to-end; the output now closely matches the CPU msdfgen refere
 ### Diff metrics (DejaVuSansMNerdFontMono-Regular @ 32px, range=4)
 
 Versus the CPU msdfgen-based reference, on the 1404 codepoints both
-methods cover (using `tools/cdb-diff/cdb-diff`):
+methods cover (using `tools/msdf/cdb-diff`):
 
-| metric                    | value     |
-|---------------------------|-----------|
-| glyphs with mean_diff <1% | 60%       |
-| glyphs with mean_diff <5% | 96%       |
-| bit-perfect matches       | 32 glyphs |
-| avg max_diff              | 0.60      |
-| avg mean_diff             | 0.014     |
-| avg bad-pixel %           | 2.4%      |
+| metric                       | value      |
+|------------------------------|------------|
+| glyphs with `max_diff` < 0.5 | **99.2%**  |
+| glyphs with `mean_diff` < 1% | **89%**    |
+| glyphs with `mean_diff` < 5% | **99.6%**  |
+| bit-perfect matches          | 32 glyphs  |
+| avg `max_diff`               | 0.24       |
+| avg `mean_diff`              | 0.005      |
+| avg bad-pixel %              | 1.4%       |
 
-`max_diff` reaching 1.0 on a glyph usually means a *single* corner pixel
-disagrees by 100% (edge band vs. far-out) — the bulk of the bitmap matches.
+Remaining differences on the worst 0.8% of glyphs are isolated
+single-pixel disagreements at curve anti-aliasing — f32 GPU math vs.
+msdfgen's f64 reference.
 
-### Remaining artefacts
+### MSDF error correction (winding-based)
 
-Some curved glyphs (most visibly **C**, **G**, **J**, **S**) still show a
-small triangular wedge of spurious "inside" pixels in concave openings.
-The cause is the same one msdfgen addresses with its MSDF error-correction
-pass — pixels where, due to a single channel picking a far segment with
-the "wrong" sign, the rendered `median3` lands on the wrong side of 0.5.
+The shader runs an in-pass error-correction step that kills the
+historic wedge artefacts on C/G/J/S/etc. concave openings. While
+walking the segments it accumulates two extra quantities per pixel:
 
-Two fixes would close the remaining gap:
+- a plain `min_abs_sdf` — the closest distance to *any* segment
+  (no edge-colour mask);
+- `winding_count` — signed crossings of the +x ray from the pixel
+  with each segment, computed on segments using the endpoint-side
+  convention `(p0.y > p.y) != (p_end.y > p.y)`. That correctly
+  ignores tangent kisses (which would otherwise double-count from
+  `disc≈0` in the quadratic root finder) and resolves shared
+  vertices on the ray with no double-count.
 
-1. Port msdfgen's `MSDFErrorCorrection::distanceField` post-pass — it
-   detects pixels where rendered `median3` disagrees with the winding-
-   expected sign and rewrites those pixel values.
-2. Add msdfgen-style pseudo-distance handling at corners. (A first
-   attempt regressed: without error correction the pseudo-distance also
-   leaks "near edge" values into far-outside pixels along tangent
-   extensions. Pseudo-distance and error correction need to ship together.)
+After the segment loop, sign-from-winding × `min_abs_sdf` gives a
+*geometrically* correct reference distance. When `median3(R,G,B)`
+disagrees with that reference's sign, RGB is overwritten with it.
+Pixels that already have the right sign are unchanged, so corner
+anti-aliasing from the per-channel MSDF is preserved.
 
 ## Suspected Issues
 
