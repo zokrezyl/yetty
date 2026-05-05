@@ -2,11 +2,26 @@ FROM ubuntu:latest
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Basic build tools
+# Chrome .deb fetched at build time so we don't need curl/gnupg pre-install
+# (which is the only reason Chrome would force a second apt-get update cycle).
+ADD https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb /tmp/chrome.deb
+
+# All apt installs in one shot — single update, single install, single cleanup.
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     ninja-build \
+    # LLVM/Clang — unversioned meta-packages provide /usr/bin/clang etc.
+    # On Ubuntu 24.04 these resolve to clang-18, matching the dev libs below.
+    # Several 3rdparty/_build.sh scripts call /usr/bin/clang directly.
+    clang \
+    clang-format \
+    clang-tidy \
+    # Dev libs needed by qa-tools/.../CMakeLists.txt:
+    #   /usr/lib/llvm-18/lib/cmake/llvm  (llvm-18-dev)
+    #   /usr/lib/cmake/clang-18          (libclang-18-dev)
+    llvm-18-dev \
+    libclang-18-dev \
     git \
     git-lfs \
     pkg-config \
@@ -62,11 +77,12 @@ RUN apt-get update && apt-get install -y \
     # Docker CLI
     docker.io \
     libsm-dev libice-dev \
-    nodejs \
-    npm \
     # Android build - JDK
     openjdk-17-jdk-headless \
-    && rm -rf /var/lib/apt/lists/*
+    # Browser for webasm/web tests (local .deb fetched via ADD above; apt
+    # resolves its dependencies from Ubuntu repos in the same install).
+    /tmp/chrome.deb \
+    && rm /tmp/chrome.deb && rm -rf /var/lib/apt/lists/*
 
 # Android SDK and NDK
 ENV ANDROID_HOME=/opt/android-sdk
@@ -88,7 +104,7 @@ RUN mkdir -p $ANDROID_HOME/cmdline-tools && \
         "cmake;3.22.1" \
         "emulator" \
         "system-images;android-34;google_apis;x86_64" && \
-    chmod -R a+rwx $ANDROID_HOME
+    chown -R 1000:1000 $ANDROID_HOME
 
 # Emscripten SDK
 ENV EMSDK=/opt/emsdk
@@ -99,16 +115,7 @@ RUN git clone https://github.com/emscripten-core/emsdk.git $EMSDK && \
     cd $EMSDK && \
     ./emsdk install latest && \
     ./emsdk activate latest && \
-    chmod -R a+rwx $EMSDK
-
-# Install Google Chrome
-RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
-    | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg && \
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
-    > /etc/apt/sources.list.d/google-chrome.list && \
-    apt-get update && apt-get install -y google-chrome-stable && \
-    rm -rf /var/lib/apt/lists/*
-
+    chown -R 1000:1000 $EMSDK
 
 # Run as host user
 RUN userdel -r ubuntu 2>/dev/null; \
