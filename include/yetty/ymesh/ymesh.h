@@ -1,0 +1,64 @@
+#ifndef YETTY_YMESH_YMESH_H
+#define YETTY_YMESH_YMESH_H
+
+/*
+ * ymesh — high-level API for producing a ymesh complex primitive from a
+ * glTF 2.0 (.glb) byte buffer or path.
+ *
+ * Pipeline:
+ *   cgltf_parse + cgltf_load_buffers (path or in-memory .glb)
+ *       → host-side mesh (positions, normals, indices, bbox)
+ *   yetty_ymesh_serialize_prim(uniforms, mesh) → wire bytes
+ *   yetty_ypaint_core_buffer_add_prim(buffer)  → attach to ypaint
+ *
+ * Wire format (all words u32 unless marked):
+ *   [type_id u32][payload_size u32]
+ *   [bounds_x f32][bounds_y f32][bounds_w f32][bounds_h f32]
+ *   [bbox_min_x/y/z f32 ×3][bbox_max_x/y/z f32 ×3]
+ *   [vertex_count u32][index_count u32][index_size u32]    # always 4 in MVP
+ *   [positions f32 × vertex_count×3]
+ *   [normals   f32 × vertex_count×3]
+ *   [indices   u32 × index_count]
+ *
+ * MVP scope: positions + normals + indices, single mesh / first primitive.
+ * No textures / UVs / materials yet.
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+
+#include <yetty/ycore/result.h>
+#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ymesh/ymesh-gen.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct yetty_ymesh_render_config {
+    float bounds_x;     /* overridden by canvas at render time */
+    float bounds_y;     /* overridden by canvas at render time */
+    float bounds_w;     /* when 0, defaults to a fixed display size */
+    float bounds_h;
+};
+
+/* Decode `glb_bytes` and produce a fresh ypaint-core buffer holding ONE
+ * ymesh complex prim. Caller frees with yetty_ypaint_core_buffer_destroy. */
+struct yetty_ypaint_core_buffer_result yetty_ymesh_render(
+    const uint8_t *glb_bytes, size_t len,
+    const struct yetty_ymesh_render_config *config);
+
+/* Convenience: read the file at `path` and call yetty_ymesh_render. */
+struct yetty_ypaint_core_buffer_result yetty_ymesh_render_path(
+    const char *path, const struct yetty_ymesh_render_config *config);
+
+/* OSC envelope (YETTY_OSC_YPAINT_BIN, same wire format as yimage). */
+struct yetty_ycore_size_result yetty_ymesh_osc_bin_emit(
+    const struct yetty_ypaint_core_buffer *buffer, FILE *out);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* YETTY_YMESH_YMESH_H */

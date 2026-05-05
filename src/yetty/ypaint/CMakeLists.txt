@@ -10,9 +10,16 @@ target_link_libraries(yetty_ypaint PUBLIC
     yetty_ypaint_core
     yetty_ysdf
     yetty_yimage
+    $<$<BOOL:${YETTY_ENABLE_FEATURE_YMESH}>:yetty_ymesh>
     $<$<BOOL:${YETTY_ENABLE_FEATURE_YMSDF_GEN}>:yetty_ymsdf_gen>
     $<$<AND:$<BOOL:${YETTY_ENABLE_FEATURE_YMSDF_GEN}>,$<BOOL:${YETTY_ENABLE_FEATURE_YMSDF_WGSL}>>:yetty_ymsdf>
 )
+
+if(YETTY_ENABLE_FEATURE_YMESH)
+    target_compile_definitions(yetty_ypaint PUBLIC YETTY_HAS_YMESH=1)
+else()
+    target_compile_definitions(yetty_ypaint PUBLIC YETTY_HAS_YMESH=0)
+endif()
 
 # YETTY_HAS_YMSDF_GEN gates ypaint-canvas.c's on-demand MSDF CDB generation
 # (uses yetty_ymsdf_gen_cpu_generate from yetty_ymsdf_gen). When the feature

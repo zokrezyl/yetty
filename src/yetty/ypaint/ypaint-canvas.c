@@ -27,6 +27,9 @@
 #include <yetty/yetty/yetty.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
+#if YETTY_HAS_YMESH
+#include <yetty/ymesh/ymesh-gen.h>
+#endif
 #include <yetty/ytrace/ytrace.h>
 
 /* Provided per-platform (yplatform/{linux,macos,windows,android,ios,webasm}/
@@ -762,6 +765,31 @@ struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
         return YETTY_ERR(yetty_ypaint_canvas_ptr, "ypaint_canvas: yimage registration failed",
                          yimage_reg_res);
     }
+
+#if YETTY_HAS_YMESH
+    /* Create and register ymesh factory (3D glTF mesh primitive). */
+    struct yetty_ypaint_core_concrete_factory *yetty_ymesh_factory = yetty_ymesh_factory_create();
+    if (!yetty_ymesh_factory) {
+        yerror("ypaint_canvas: ymesh factory creation failed");
+        yetty_ypaint_core_complex_prim_factory_destroy(canvas->complex_prim_factory);
+        yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        free(canvas->lines.lines);
+        free(canvas);
+        return YETTY_ERR(yetty_ypaint_canvas_ptr, "ymesh factory creation failed");
+    }
+    struct yetty_ycore_void_result ymesh_reg_res =
+        yetty_ypaint_core_complex_prim_factory_register(canvas->complex_prim_factory, yetty_ymesh_factory);
+    if (YETTY_IS_ERR(ymesh_reg_res)) {
+        yerror("ypaint_canvas: ymesh registration failed: %s", ymesh_reg_res.error.msg);
+        yetty_ymesh_factory_destroy(yetty_ymesh_factory);
+        yetty_ypaint_core_complex_prim_factory_destroy(canvas->complex_prim_factory);
+        yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        free(canvas->lines.lines);
+        free(canvas);
+        return YETTY_ERR(yetty_ypaint_canvas_ptr, "ypaint_canvas: ymesh registration failed",
+                         ymesh_reg_res);
+    }
+#endif
 
     /* Create default font for text spans (font_id = -1).
    * Backend (MSDF vs raster) is selected via ypaint/font/render-method.
