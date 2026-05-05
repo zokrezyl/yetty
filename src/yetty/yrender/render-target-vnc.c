@@ -47,6 +47,10 @@ static struct yetty_ycore_void_result render_target_vnc_render_layer(
     struct yetty_ypaint_core_target *self, struct yetty_yrender_terminal_layer *layer)
 {
     struct yetty_yrender_render_target_vnc *rt = (struct yetty_yrender_render_target_vnc *)self;
+    /* Propagate the outer viewport (set per-pane by pane_render) into the
+     * inner texture target — its render_layer reads its own viewport for
+     * setViewport+setScissorRect. */
+    rt->inner->viewport = self->viewport;
     return rt->inner->ops->render_layer(rt->inner, layer);
 }
 

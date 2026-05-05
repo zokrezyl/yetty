@@ -279,9 +279,13 @@ static struct yetty_ycore_void_result pane_render(struct yetty_yui_tile *self,
     struct yetty_yui_pane *pane = (struct yetty_yui_pane *)self;
 
     if (pane->view_count > 0 && pane->views[pane->view_count - 1]) {
-        /* Confine all this pane's draws to its bounds. Loadop is always
-         * Load now (set in render-target-texture), so other panes' pixels
-         * stay intact. */
+        /* Mutate render_target->viewport down to this pane's bounds for
+         * per-layer scissor, then restore on exit. The target's viewport
+         * is *also* read by present()/blend() to mean "full surface
+         * dimensions", so leaving it pointing at the last pane's bounds
+         * would make the X11/VNC sink only blit/diff a single pane-sized
+         * region (multi-pane symptom: only one pane's pixels survive). */
+        struct yetty_yrender_viewport saved_vp = render_target->viewport;
         struct yetty_yui_rect bounds = pane->base.bounds;
         render_target->viewport = (struct yetty_yrender_viewport){
             .x = bounds.x, .y = bounds.y, .w = bounds.w, .h = bounds.h};
@@ -289,16 +293,17 @@ static struct yetty_ycore_void_result pane_render(struct yetty_yui_tile *self,
         /* Pane background — opaque RGBA fill across the pane viewport,
          * rendered before the view. Provides the per-pane wipe so the
          * view's upper layers (alpha<1) don't ghost the previous frame. */
+        struct yetty_ycore_void_result res = YETTY_OK_VOID();
         if (pane->background_layer && pane->background_layer->ops &&
             pane->background_layer->ops->render) {
-            struct yetty_ycore_void_result r =
-                pane->background_layer->ops->render(pane->background_layer, render_target);
-            if (YETTY_IS_ERR(r)) {
-                return r;
-            }
+            res = pane->background_layer->ops->render(pane->background_layer, render_target);
+        }
+        if (YETTY_IS_OK(res)) {
+            res = yetty_yui_view_render(pane->views[pane->view_count - 1], render_target);
         }
 
-        return yetty_yui_view_render(pane->views[pane->view_count - 1], render_target);
+        render_target->viewport = saved_vp;
+        return res;
     }
 
     return YETTY_OK_VOID();

@@ -237,7 +237,7 @@ workspace:
         type: pane
         view: terminal
         background:
-          color: "#1a1f2e"
+          color: "#101820"
 
   # Two terminals top/bottom (horizontal split)
   default2:
@@ -254,7 +254,7 @@ workspace:
         type: pane
         view: terminal
         background:
-          color: "#1a1f2e"
+          color: "#101820"
 
   # IDE-style: left pane + right split top/bottom
   default3:
@@ -275,12 +275,12 @@ workspace:
           type: pane
           view: terminal
           background:
-            color: "#1a1f2e"
+            color: "#101820"
         second:
           type: pane
           view: terminal
           background:
-            color: "#202840"
+            color: "#101820"
 
   # Three columns
   default4:
@@ -301,12 +301,12 @@ workspace:
           type: pane
           view: terminal
           background:
-            color: "#1a1f2e"
+            color: "#101820"
         second:
           type: pane
           view: terminal
           background:
-            color: "#202840"
+            color: "#101820"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Debug Configuration

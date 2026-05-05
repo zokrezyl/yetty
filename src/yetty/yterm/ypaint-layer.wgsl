@@ -31,12 +31,27 @@ struct VertexInput {
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
+    // See text-layer.wgsl for the rationale: @builtin(position) in fragment
+    // is the framebuffer pixel, which doesn't match the grid origin once
+    // the pane viewport sits at offset (vp.x, vp.y) != (0,0). Map the NDC
+    // quad onto the grid's pixel area in the vertex shader so cell lookup
+    // is independent of where the pane sits in the big surface.
+    @location(0) @interpolate(linear) grid_pixel: vec2<f32>,
 };
 
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = vec4<f32>(input.position, 0.0, 1.0);
+
+    let grid_size = uniforms.ypaint_ypaint_grid_size;
+    let cell_size = uniforms.ypaint_ypaint_cell_size;
+    let grid_pixel_w = grid_size.x * cell_size.x;
+    let grid_pixel_h = grid_size.y * cell_size.y;
+    output.grid_pixel = vec2<f32>(
+        (input.position.x * 0.5 + 0.5) * grid_pixel_w,
+        (0.5 - input.position.y * 0.5) * grid_pixel_h
+    );
     return output;
 }
 
@@ -170,7 +185,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let cz_scale = uniforms.ypaint_ypaint_cell_zoom_scale;
     let cz_off   = uniforms.ypaint_ypaint_cell_zoom_off;
     let vz_center = vec2<f32>(grid_pixel_w * 0.5, grid_pixel_h * 0.5);
-    let after_visual = (input.position.xy - vz_center) / max(vz_scale, 0.0001)
+    let after_visual = (input.grid_pixel - vz_center) / max(vz_scale, 0.0001)
                      + vz_center + vz_off;
     let pixel_pos = after_visual / max(cz_scale, 0.0001) + cz_off;
 

@@ -19,13 +19,15 @@ extern const unsigned char gblend_shaderData[];
 extern const unsigned int gblend_shaderSize;
 
 #define MAX_BLEND_SOURCES 4
-#define MAX_LAYER_BINDERS 8
 
 /* Per-layer binder cache entry. Each layer's resource_set tree concatenates
  * its own shader (e.g. text-grid + msdf-font, ypaint-grid + ypaint-prims),
  * and merging trees from different layers redeclares functions like
  * median3. So when the same target serves multiple layers (direct
- * multi-layer render, no per-layer RTs), each layer needs its own binder. */
+ * multi-layer render, no per-layer RTs), each layer needs its own binder.
+ * Storage is a doubling-growth yetty_ycore_buffer used as a typed vector
+ * (entries stored back-to-back, count = size / sizeof(entry)) — there's
+ * no fixed cap, deeply nested split layouts grow it as panes are added. */
 struct layer_binder_entry {
     struct yetty_yrender_terminal_layer *layer;
     struct yetty_yrender_gpu_resource_binder *binder;
@@ -46,9 +48,9 @@ struct yetty_yrender_render_target_texture {
     WGPUSurface surface;
 
     /* Per-layer binder cache for render_layer. Lazily populated — first
-     * call for a given layer creates and caches the binder. */
-    struct layer_binder_entry layer_binders[MAX_LAYER_BINDERS];
-    size_t layer_binder_count;
+     * call for a given layer creates and caches the binder. Stored as a
+     * vector of `struct layer_binder_entry` inside the byte buffer. */
+    struct yetty_ycore_buffer layer_binders;
 
     /* Blend pipeline resources (also used for present) */
     WGPUShaderModule blend_shader;
@@ -89,13 +91,18 @@ static void render_target_texture_destroy(struct yetty_ypaint_core_target *self)
         }
         rt->texture = NULL;
     }
-    for (size_t i = 0; i < rt->layer_binder_count; i++) {
-        if (rt->layer_binders[i].binder) {
-            rt->layer_binders[i].binder->ops->destroy(rt->layer_binders[i].binder);
-            rt->layer_binders[i].binder = NULL;
+    {
+        struct layer_binder_entry *entries =
+            (struct layer_binder_entry *)rt->layer_binders.data;
+        size_t count = rt->layer_binders.size / sizeof(struct layer_binder_entry);
+        for (size_t i = 0; i < count; i++) {
+            if (entries[i].binder) {
+                entries[i].binder->ops->destroy(entries[i].binder);
+                entries[i].binder = NULL;
+            }
         }
+        yetty_ycore_buffer_destroy(&rt->layer_binders);
     }
-    rt->layer_binder_count = 0;
     if (rt->blend_pipeline) {
         wgpuRenderPipelineRelease(rt->blend_pipeline);
         rt->blend_pipeline = NULL;
@@ -306,28 +313,33 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
      * into the same target each have their own resource-tree shader, and
      * merging trees would redeclare common functions (e.g. median3). */
     struct yetty_yrender_gpu_resource_binder *binder = NULL;
-    for (size_t i = 0; i < rt->layer_binder_count; i++) {
-        if (rt->layer_binders[i].layer == layer) {
-            binder = rt->layer_binders[i].binder;
+    struct layer_binder_entry *entries =
+        (struct layer_binder_entry *)rt->layer_binders.data;
+    size_t entry_count = rt->layer_binders.size / sizeof(struct layer_binder_entry);
+    for (size_t i = 0; i < entry_count; i++) {
+        if (entries[i].layer == layer) {
+            binder = entries[i].binder;
             break;
         }
     }
     if (!binder) {
-        if (rt->layer_binder_count >= MAX_LAYER_BINDERS) {
-            return YETTY_ERR(yetty_ycore_void, "render_layer: layer binder cache full");
-        }
         struct yetty_yrender_gpu_resource_binder_result binder_res =
             yetty_yrender_gpu_resource_binder_create(rt->device, rt->queue, rt->format,
                                                      rt->allocator);
         if (!YETTY_IS_OK(binder_res)) {
             return YETTY_ERR(yetty_ycore_void, binder_res.error.msg);
         }
-        rt->layer_binders[rt->layer_binder_count].layer = layer;
-        rt->layer_binders[rt->layer_binder_count].binder = binder_res.value;
-        rt->layer_binder_count++;
+        struct layer_binder_entry new_entry = {.layer = layer, .binder = binder_res.value};
+        struct yetty_ycore_void_result wr =
+            yetty_ycore_buffer_write(&rt->layer_binders, &new_entry, sizeof(new_entry));
+        if (!YETTY_IS_OK(wr)) {
+            binder_res.value->ops->destroy(binder_res.value);
+            return YETTY_ERR(yetty_ycore_void, "render_layer: layer_binders grow failed", wr);
+        }
         binder = binder_res.value;
         ydebug("render_target_texture: created binder for layer=%p (count=%zu)",
-               (void *)layer, rt->layer_binder_count);
+               (void *)layer,
+               rt->layer_binders.size / sizeof(struct layer_binder_entry));
     }
 
     /* Submit to binder */
