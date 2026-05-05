@@ -12,6 +12,12 @@ clone:
       lfs: true
 
 steps:
+  # See android.yml for explanation.
+  fix-workspace-perms:
+    image: alpine
+    commands:
+      - chown -R 1000:1000 .
+
   build:
     image: yetty-build:latest
     commands:

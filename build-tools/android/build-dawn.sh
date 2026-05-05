@@ -109,19 +109,6 @@ else
 fi
 
 #-----------------------------------------------------------------------------
-# Toybox - build from source using build-toybox.sh
-#-----------------------------------------------------------------------------
-# Note: toybox is now built from source, not downloaded
-# The build-toybox.sh script handles this and puts it in assets/
-TOYBOX_BIN="$ASSETS_DIR/toybox"
-if [ -f "$TOYBOX_BIN" ]; then
-    echo "Toybox already exists: $TOYBOX_BIN"
-else
-    echo "Building toybox from source..."
-    ANDROID_ABI="$ANDROID_ABI" ANDROID_BUILD_DIR="$BUILD_DIR" bash "$SCRIPT_DIR/build-toybox.sh"
-fi
-
-#-----------------------------------------------------------------------------
 # Copy assets
 #-----------------------------------------------------------------------------
 if [ -d "$PROJECT_ROOT/assets" ]; then
@@ -144,6 +131,5 @@ fi
 echo ""
 echo "Android Dawn dependencies ready ($ANDROID_ABI):"
 echo "  Dawn:    $OUTPUT_DIR/$ANDROID_ABI/"
-echo "  toybox:  $TOYBOX_BIN"
 echo "  headers: $INCLUDE_DIR/"
 echo "  assets:  $ASSETS_DIR/"
