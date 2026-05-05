@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>yetty TinyEMU bridge</title>
+    <style>
+        html, body { margin: 0; padding: 0; background: #000; }
+        body { font-family: monospace; color: #888; padding: 8px; font-size: 11px; }
+    </style>
+</head>
+<body>
+    <!-- This iframe is intentionally invisible (display:none from the
+         parent). It hosts a single-threaded tinyemu.wasm instance whose
+         only job is running the RISC-V Linux VM. All terminal I/O is
+         shuttled to/from the parent yetty.wasm via window postMessage. -->
+    <div id="status">Loading TinyEMU…</div>
+    <script>
+        (function () {
+            // ---- URL params from parent ------------------------------
+            var params = (function () {
+                var out = {};
+                var q = window.location.search.substring(1);
+                if (!q) return out;
+                q.split('&').forEach(function (kv) {
+                    var p = kv.split('=');
+                    out[decodeURIComponent(p[0])] = decodeURIComponent(p[1] || '');
+                });
+                return out;
+            })();
+
+            var ptyId = parseInt(params.ptyId || '1', 10);
+            var initialCols = parseInt(params.cols || '80', 10);
+            var initialRows = parseInt(params.rows || '24', 10);
+
+            // ---- Status pump → parent overlay ------------------------
+            // Forward boot status to the parent's yettyStatus console.
+            // `tag` lets the parent update an existing line in place
+            // (used for download progress).
+            function postStatus(text, level, tag) {
+                try {
+                    window.parent.postMessage({
+                        type: 'yetty-status',
+                        text: '[vm] ' + text,
+                        level: level,
+                        tag: tag
+                    }, '*');
+                } catch (_) { /* parent gone — ignore */ }
+            }
+            postStatus('iframe loaded; fetching tinyemu.{js,wasm}…', 'phase');
+
+            // ---- Output / input wiring -------------------------------
+            // Buffer parent → iframe input until the wasm runtime is up.
+            var pendingInput = [];
+            var pendingResize = null;
+            var ready = false;
+            // Output buffering: yetty.wasm may not yet be running when
+            // the kernel boots and starts spitting log lines. Hold them
+            // in a tiny ring until the parent forwards a 'yetty-ready'
+            // message (sent by iframe-pty.c once its postMessage
+            // listener is installed). Then flush + stream live.
+            var outputBuffer = [];
+            var yettyAttached = false;
+            var BOOT_BUFFER_LIMIT = 256 * 1024; // bytes — generous; full Linux boot fits
+
+            window.addEventListener('message', function (e) {
+                if (!e.data) return;
+                if (e.data.type === 'yetty-ready') {
+                    yettyAttached = true;
+                    postStatus('yetty attached; flushing ' + outputBuffer.length +
+                               ' buffered output chunks', 'ok');
+                    for (var i = 0; i < outputBuffer.length; i++) {
+                        window.parent.postMessage({
+                            type: 'term-output',
+                            ptyId: ptyId,
+                            data: outputBuffer[i]
+                        }, '*');
+                    }
+                    outputBuffer = [];
+                    return;
+                }
+                if (e.data.ptyId !== ptyId) return;
+                if (e.data.type === 'term-input') {
+                    if (typeof e.data.data !== 'string' || e.data.data.length === 0) return;
+                    if (!ready) {
+                        pendingInput.push(e.data.data);
+                    } else {
+                        feedInput(e.data.data);
+                    }
+                } else if (e.data.type === 'term-resize') {
+                    var sz = { cols: e.data.cols | 0, rows: e.data.rows | 0 };
+                    if (!ready) {
+                        pendingResize = sz;
+                    } else {
+                        feedResize(sz.cols, sz.rows);
+                    }
+                }
+            });
+
+            function feedInput(str) {
+                var bytes = new TextEncoder().encode(str);
+                if (bytes.length === 0) return;
+                var ptr = Module._malloc(bytes.length);
+                if (ptr === 0) return;
+                Module.HEAPU8.set(bytes, ptr);
+                Module._tinyemu_bridge_input(ptr, bytes.length);
+                Module._free(ptr);
+            }
+
+            function feedResize(cols, rows) {
+                Module._tinyemu_bridge_resize(cols | 0, rows | 0);
+            }
+
+            // C → JS callback (tinyemu_console_write → EM_ASM).
+            // Two consumers: (1) yetty's terminal screen, via parent
+            // term-output postMessage; (2) the parent boot overlay,
+            // mirrored line-by-line so the user can verify the kernel
+            // is actually booting (printk → 'Booting Linux on physical
+            // CPU 0x0', '[    0.000000] OF: ...', etc.) without having
+            // to wait for yetty's terminal to be visible.
+            var bufferedBytes = 0;
+            var firstOutputSeen = false;
+            var kernelLineBuf = '';
+            // Cap the mirroring — once boot is past the noisy kernel
+            // phase the per-line postMessages become pure overhead.
+            // 4 KB ≈ first 60-80 lines of dmesg, plenty to confirm life.
+            var KERNEL_MIRROR_LIMIT = 64 * 1024;
+            var kernelMirroredBytes = 0;
+
+            function mirrorKernelOutput(str) {
+                if (kernelMirroredBytes >= KERNEL_MIRROR_LIMIT) return;
+                // Coarse ANSI strip — the kernel rarely uses colour
+                // sequences, but openrc / busybox sometimes do.
+                var clean = str.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '');
+                kernelLineBuf += clean;
+                var idx;
+                while ((idx = kernelLineBuf.indexOf('\n')) >= 0) {
+                    var line = kernelLineBuf.slice(0, idx).replace(/\r$/, '');
+                    kernelLineBuf = kernelLineBuf.slice(idx + 1);
+                    if (line.length === 0) continue;
+                    postStatus('| ' + line, 'dim');
+                    kernelMirroredBytes += line.length + 1;
+                    if (kernelMirroredBytes >= KERNEL_MIRROR_LIMIT) {
+                        postStatus('(further VM console output suppressed in overlay — see terminal)', 'dim');
+                        kernelLineBuf = '';
+                        return;
+                    }
+                }
+            }
+
+            function postOutput(ptr, len) {
+                if (len <= 0) return;
+                var bytes = Module.HEAPU8.subarray(ptr, ptr + len);
+                var str = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+                if (!str) return;
+                if (!firstOutputSeen) {
+                    firstOutputSeen = true;
+                    postStatus('first VM console output received', 'ok');
+                }
+                // Always mirror to overlay during the boot window —
+                // independent of whether yetty has attached yet.
+                mirrorKernelOutput(str);
+                if (yettyAttached) {
+                    window.parent.postMessage({
+                        type: 'term-output',
+                        ptyId: ptyId,
+                        data: str
+                    }, '*');
+                } else if (bufferedBytes < BOOT_BUFFER_LIMIT) {
+                    outputBuffer.push(str);
+                    bufferedBytes += str.length;
+                }
+            }
+
+            // Expose what tinyemu-bridge.c's EM_ASM looks for.
+            window.__yettyTinyemuPostOutput = postOutput;
+            window.__yettyTinyemuPtyId = ptyId;
+
+            // ---- Brotli decode via tinyemu.wasm's _yetty_brotli_decode
+            function brotliDecode(buf) {
+                var inBytes = new Uint8Array(buf);
+                var inPtr = Module._malloc(inBytes.length);
+                if (inPtr === 0) throw new Error('brotliDecode: input alloc failed');
+                Module.HEAPU8.set(inBytes, inPtr);
+                var scratch = Module._malloc(8);
+                if (scratch === 0) {
+                    Module._free(inPtr);
+                    throw new Error('brotliDecode: scratch alloc failed');
+                }
+                var outPtr = 0;
+                try {
+                    var ok = Module._yetty_brotli_decode(
+                        inPtr, inBytes.length, scratch, scratch + 4);
+                    if (!ok) throw new Error('brotliDecode: decoder rejected input');
+                    outPtr = Module.HEAPU32[scratch >> 2];
+                    var outLen = Module.HEAPU32[(scratch + 4) >> 2];
+                    return Module.HEAPU8.slice(outPtr, outPtr + outLen);
+                } finally {
+                    Module._free(inPtr);
+                    Module._free(scratch);
+                    if (outPtr !== 0) Module._free(outPtr);
+                }
+            }
+
+            // ---- VM asset preload ------------------------------------
+            // tinyemu-iframe.cmake stages 4 files under tinyemu-assets/.
+            // Fetch each (with rich progress for the rootfs since it's
+            // ~250 MB on the wire), brotli-decode if needed, FS.writeFile
+            // into MEMFS at the dest paths the cfg expects, then call
+            // _tinyemu_bridge_start.
+            var ASSET_BASE = 'tinyemu-assets/';
+
+            function fmtBytes(n) {
+                if (n < 1024) return n + 'B';
+                if (n < 1024 * 1024) return (n / 1024).toFixed(1) + 'K';
+                return (n / 1024 / 1024).toFixed(1) + 'M';
+            }
+
+            function mkdirsForFile(path) {
+                var parts = path.split('/').filter(Boolean);
+                var cur = '';
+                for (var i = 0; i < parts.length - 1; i++) {
+                    cur += '/' + parts[i];
+                    try { FS.mkdir(cur); } catch (e) { /* EEXIST is fine */ }
+                }
+            }
+
+            // Streaming fetch with chunked progress — each chunk fires a
+            // status update (tagged so the parent overlay updates one
+            // line in place). Without this the user sees nothing for
+            // minutes while the rootfs trickles in.
+            async function fetchWithProgress(url, statusTag, statusLabel) {
+                var resp = await fetch(url);
+                if (!resp.ok) {
+                    throw new Error(url + ' → HTTP ' + resp.status);
+                }
+                var totalHeader = resp.headers.get('Content-Length');
+                var total = totalHeader ? parseInt(totalHeader, 10) : 0;
+                if (!resp.body || !resp.body.getReader) {
+                    // Fallback: no streaming reader — single shot.
+                    var ab = await resp.arrayBuffer();
+                    postStatus(statusLabel + ' ' + fmtBytes(ab.byteLength) +
+                               ' (no stream)', null, statusTag);
+                    return ab;
+                }
+                var reader = resp.body.getReader();
+                var chunks = [];
+                var got = 0;
+                var lastTick = 0;
+                while (true) {
+                    var step = await reader.read();
+                    if (step.done) break;
+                    chunks.push(step.value);
+                    got += step.value.length;
+                    var now = performance.now();
+                    if (now - lastTick > 100 || total === 0) {
+                        var pct = total > 0
+                            ? (got * 100 / total).toFixed(1) + '%'
+                            : '';
+                        postStatus(statusLabel + ' ' + fmtBytes(got) +
+                                   (total > 0 ? ' / ' + fmtBytes(total) +
+                                                ' (' + pct + ')'
+                                              : ' (size unknown)'),
+                                   null, statusTag);
+                        lastTick = now;
+                    }
+                }
+                postStatus(statusLabel + ' ' + fmtBytes(got) + ' done', 'ok', statusTag);
+                // Concatenate chunks into one ArrayBuffer.
+                var out = new Uint8Array(got);
+                var off = 0;
+                for (var i = 0; i < chunks.length; i++) {
+                    out.set(chunks[i], off);
+                    off += chunks[i].length;
+                }
+                return out.buffer;
+            }
+
+            async function loadOne(entry) {
+                var url = ASSET_BASE + entry.url;
+                var label = 'fetching ' + entry.url;
+                var raw = await fetchWithProgress(url, 'dl-' + entry.url, label);
+                var bytes;
+                if (entry.brotli) {
+                    postStatus('decoding ' + entry.url + '…', null, 'dec-' + entry.url);
+                    bytes = brotliDecode(raw);
+                    postStatus('decoded ' + entry.url + ' → ' + fmtBytes(bytes.length),
+                               'ok', 'dec-' + entry.url);
+                } else {
+                    bytes = new Uint8Array(raw);
+                }
+                mkdirsForFile(entry.dest);
+                FS.writeFile(entry.dest, bytes);
+            }
+
+            async function preloadVMAssets() {
+                postStatus('fetching VM asset manifest…');
+                var mr = await fetch(ASSET_BASE + 'manifest.json');
+                if (!mr.ok) {
+                    throw new Error('manifest fetch failed: HTTP ' + mr.status);
+                }
+                var manifest = await mr.json();
+                var entries = manifest.entries || [];
+                postStatus('VM manifest: ' + entries.length + ' files', 'phase');
+                // Sequential — these are big, parallel fetches would
+                // multiply per-chunk progress display chaos, and the
+                // browser already saturates throughput on one stream.
+                for (var i = 0; i < entries.length; i++) {
+                    await loadOne(entries[i]);
+                }
+                postStatus('all VM assets installed in MEMFS', 'ok');
+            }
+
+            // ---- emscripten Module hookup ----------------------------
+            // noInitialRun=false: main() runs and signals "runtime up";
+            // it doesn't init the VM. The actual VM init (init_vm +
+            // emscripten_set_main_loop) happens when we call
+            // _tinyemu_bridge_start AFTER the asset preload completes.
+            window.Module = {
+                noInitialRun: false,
+                print: function (t) { console.log('[tinyemu]', t); },
+                printErr: function (t) { console.warn('[tinyemu]', t); },
+                preRun: [function () {
+                    // The cfg's $YETTY_DATA_DIR expands at virt_machine_load_config_file
+                    // time → point it at the MEMFS root we preloaded into.
+                    if (typeof ENV !== 'undefined') {
+                        ENV.YETTY_DATA_DIR = '/yetty-vm';
+                    }
+                }],
+                onRuntimeInitialized: function () {
+                    postStatus('tinyemu.wasm runtime ready', 'ok');
+                    preloadVMAssets().then(function () {
+                        postStatus('starting RISC-V Linux VM…', 'phase');
+                        var rc = Module._tinyemu_bridge_start();
+                        if (rc !== 0) {
+                            postStatus('VM init failed (rc=' + rc + ')', 'err');
+                            return;
+                        }
+                        ready = true;
+                        document.getElementById('status').textContent =
+                            'TinyEMU running (pty ' + ptyId + ')';
+                        // Push initial geometry once the VM is alive.
+                        feedResize(initialCols, initialRows);
+                        // Flush anything the parent sent during preload.
+                        for (var i = 0; i < pendingInput.length; i++) feedInput(pendingInput[i]);
+                        pendingInput = [];
+                        if (pendingResize) {
+                            feedResize(pendingResize.cols, pendingResize.rows);
+                            pendingResize = null;
+                        }
+                        // Tell the parent the VM is up so it can launch
+                        // yetty.js. yetty's iframe-pty.c will then post
+                        // 'yetty-ready' back here, which flushes any
+                        // term-output buffered during the gap.
+                        postStatus('VM up — signalling parent', 'ok');
+                        try {
+                            window.parent.postMessage({
+                                type: 'vm-ready',
+                                ptyId: ptyId
+                            }, '*');
+                        } catch (_) {}
+                    }).catch(function (e) {
+                        postStatus('VM preload failed: ' +
+                                   (e && e.message || e), 'err');
+                        document.getElementById('status').textContent =
+                            'VM preload failed: ' + (e && e.message || e);
+                    });
+                }
+            };
+
+            // ---- Load tinyemu.wasm runtime ---------------------------
+            postStatus('loading tinyemu.js…');
+            var s = document.createElement('script');
+            s.src = 'tinyemu.js';
+            s.onerror = function () {
+                postStatus('failed to load tinyemu.js', 'err');
+                document.getElementById('status').textContent =
+                    'Failed to load tinyemu.js';
+            };
+            document.head.appendChild(s);
+        })();
+    </script>
+</body>
+</html>

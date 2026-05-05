@@ -174,7 +174,11 @@ if [ "$TEST_MODE" = "telnet" ]; then
     echo "  3. Start server:  cd build-webasm-dawn-release && python3 serve.py 8080"
     echo ""
 else
-    TEST_URL="${BASE_URL}/?trace=1"
+    # mode=vm pre-selects the embedded VM mode so the headless run skips
+    # index.html's mode-selection dialog (otherwise it sits idle waiting
+    # for a click). trace=1 turns on YTRACE_DEFAULT_ON for the C log
+    # stream. Override via TEST_URL_OVERRIDE env to test other URLs.
+    TEST_URL="${TEST_URL_OVERRIDE:-${BASE_URL}/?mode=vm&trace=1}"
     echo "Testing full yetty at: $TEST_URL"
 fi
 
@@ -226,7 +230,11 @@ CDP_RC=$?
 
 kill "$CHROME_PID" 2>/dev/null || true
 wait "$CHROME_PID" 2>/dev/null || true
-rm -rf "/tmp/yetty-chrome-prof.$$"
+# Chrome may still be flushing files into its profile dir when we get
+# here — `rm -rf` then races and exits non-zero ("Directory not empty"),
+# which under `set -e` kills the whole test before the analysis section
+# even runs. The leftover dir is harmless, so swallow the failure.
+rm -rf "/tmp/yetty-chrome-prof.$$" 2>/dev/null || true
 if [ $CDP_RC -ne 0 ] && [ $CDP_RC -ne 124 ]; then
     echo "${YELLOW}WARN: CDP capture exited with $CDP_RC (chrome stderr below)${NC}"
     cat /tmp/yetty-chrome-stderr.log | tail -20
