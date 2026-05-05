@@ -39,6 +39,16 @@ struct glyph_set {
 	size_t cap;
 };
 
+/* Which metric drives the per-glyph ranking shown in the top-N table.
+ * Defaults to max_diff for backwards compat, but bad_pct is usually
+ * more useful for hunting visible artefacts (max_diff saturates at
+ * 1.0 for any single-pixel sign flip, so 100s of glyphs tie). */
+enum sort_by {
+	SORT_MAX  = 0, /* by max_diff   */
+	SORT_BAD  = 1, /* by bad_pct    */
+	SORT_MEAN = 2, /* by mean_diff  */
+};
+
 struct opts {
 	const char *path_a;
 	const char *path_b;
@@ -47,6 +57,7 @@ struct opts {
 	uint32_t cp_lo;
 	uint32_t cp_hi;
 	float bad_threshold;   /* pixel counts as "bad" if |Δmedian3| >= threshold */
+	enum sort_by sort_by;
 };
 
 static void usage(FILE *out, const char *prog)
@@ -61,9 +72,14 @@ static void usage(FILE *out, const char *prog)
 "  -p, --preview       ASCII side-by-side preview of top-N worst glyphs\n"
 "  -r, --range LO:HI   only compare codepoints in [LO,HI] (hex or dec)\n"
 "  -t, --threshold X   pixel is 'bad' if |Δmedian3| >= X (default 0.1)\n"
+"  -s, --sort KEY      rank by KEY descending: 'max' (default), 'bad', 'mean'.\n"
+"                      'bad'  = pct of pixels exceeding the threshold —\n"
+"                              best signal for visible artefacts since\n"
+"                              max saturates at 1.0 for any single sign-flip.\n"
+"                      'mean' = average per-pixel |Δmedian3| across the glyph.\n"
 "  -h, --help          this help\n"
 "\n"
-"output: header summary, then per-glyph rows sorted by max_diff descending.\n",
+"output: header summary, then per-glyph rows sorted by the chosen key.\n",
 		prog);
 }
 
@@ -265,6 +281,29 @@ static int cmp_row_max_desc(const void *a, const void *b)
 	return 0;
 }
 
+static int cmp_row_bad_desc(const void *a, const void *b)
+{
+	float fa = ((const struct diff_row *)a)->bad_pct;
+	float fb = ((const struct diff_row *)b)->bad_pct;
+	if (fa > fb) return -1;
+	if (fa < fb) return 1;
+	/* tie-break by max_diff so output is stable when many glyphs are 0% */
+	float ma = ((const struct diff_row *)a)->max_diff;
+	float mb = ((const struct diff_row *)b)->max_diff;
+	if (ma > mb) return -1;
+	if (ma < mb) return 1;
+	return 0;
+}
+
+static int cmp_row_mean_desc(const void *a, const void *b)
+{
+	float fa = ((const struct diff_row *)a)->mean_diff;
+	float fb = ((const struct diff_row *)b)->mean_diff;
+	if (fa > fb) return -1;
+	if (fa < fb) return 1;
+	return 0;
+}
+
 /* Render side-by-side ASCII previews of bitmap A | bitmap B | diff map.
  * Rows are halved for terminal aspect ratio. */
 static void render_side_by_side(const struct glyph *a, const struct glyph *b)
@@ -372,6 +411,15 @@ static int parse_args(int argc, char **argv, struct opts *o)
 		} else if (!strcmp(a, "-t") || !strcmp(a, "--threshold")) {
 			if (++i >= argc) return -1;
 			o->bad_threshold = (float)atof(argv[i]);
+		} else if (!strcmp(a, "-s") || !strcmp(a, "--sort")) {
+			if (++i >= argc) return -1;
+			if      (!strcmp(argv[i], "max"))  o->sort_by = SORT_MAX;
+			else if (!strcmp(argv[i], "bad"))  o->sort_by = SORT_BAD;
+			else if (!strcmp(argv[i], "mean")) o->sort_by = SORT_MEAN;
+			else {
+				fprintf(stderr, "%s: --sort takes max | bad | mean\n", argv[0]);
+				return -1;
+			}
 		} else if (a[0] == '-' && a[1] != '\0') {
 			fprintf(stderr, "%s: unknown option %s\n", argv[0], a);
 			return -1;
@@ -491,11 +539,15 @@ int main(int argc, char **argv)
 	}
 	printf("\n");
 
-	/* Sort by max_diff descending and print the top-N with detail. */
-	qsort(rows, rows_n, sizeof(*rows), cmp_row_max_desc);
+	/* Sort by the user-selected key (default: max_diff). */
+	int (*cmp)(const void *, const void *) = cmp_row_max_desc;
+	const char *sort_label = "max_diff";
+	if (o.sort_by == SORT_BAD)  { cmp = cmp_row_bad_desc;  sort_label = "bad_pct";  }
+	if (o.sort_by == SORT_MEAN) { cmp = cmp_row_mean_desc; sort_label = "mean_diff"; }
+	qsort(rows, rows_n, sizeof(*rows), cmp);
 
 	int top = o.top_n < (int)rows_n ? o.top_n : (int)rows_n;
-	printf("=== top %d glyphs by max_diff ===\n", top);
+	printf("=== top %d glyphs by %s ===\n", top, sort_label);
 	printf("%-10s  %-9s  %-11s  %-11s  %-9s  %-9s  %-9s\n",
 	       "cp", "char", "size_a", "size_b", "max_diff", "mean_diff", "bad_pct");
 	for (int i = 0; i < top; i++) {
