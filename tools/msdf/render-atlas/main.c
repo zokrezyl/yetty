@@ -51,7 +51,16 @@ struct atlas_glyph {
 };
 
 struct atlas {
-	float *pixels;             /* RGBA32Float, atlas_w * atlas_h * 4 */
+	/* RGBA8Unorm so the GPU sampler can do *linear filtering* on it.
+	 * That bilinear interpolation between atlas texels is what lets
+	 * the MSDF shader produce a smooth signed distance per *screen*
+	 * pixel — a Nearest-filtered RGBA32Float texture (the original
+	 * format here) keeps each texel blocky on zoom, the median has
+	 * no gradient inside a texel cluster, and MSDF rendering can't
+	 * recover the sharp edge. RGBA8 is also what the production font
+	 * shader (yfont/ms-msdf-font.wgsl) samples, so the viewer now
+	 * matches it bit-for-bit. */
+	uint8_t *pixels;           /* RGBA8Unorm, atlas_w * atlas_h * 4 */
 	int width, height;
 	struct atlas_glyph *glyphs;
 	int glyph_count;
@@ -79,11 +88,11 @@ static int atlas_grow_glyphs(struct atlas *a)
 static int atlas_grow_pixels(struct atlas *a, int new_h)
 {
 	if (new_h <= a->height) return 0;
-	size_t old_floats = (size_t)a->width * a->height * 4;
-	size_t new_floats = (size_t)a->width * new_h * 4;
-	float *nb = realloc(a->pixels, new_floats * sizeof(float));
+	size_t old_bytes = (size_t)a->width * a->height * 4;
+	size_t new_bytes = (size_t)a->width * new_h * 4;
+	uint8_t *nb = realloc(a->pixels, new_bytes);
 	if (!nb) return -1;
-	memset(nb + old_floats, 0, (new_floats - old_floats) * sizeof(float));
+	memset(nb + old_bytes, 0, new_bytes - old_bytes);
 	a->pixels = nb;
 	a->height = new_h;
 	return 0;
@@ -93,14 +102,8 @@ static void atlas_blit_rgba8(struct atlas *a, int dst_x, int dst_y,
 			     const uint8_t *src, int w, int h)
 {
 	for (int y = 0; y < h; y++) {
-		float *dst = a->pixels + ((size_t)(dst_y + y) * a->width + dst_x) * 4;
-		const uint8_t *row = src + (size_t)y * w * 4;
-		for (int x = 0; x < w; x++) {
-			dst[x * 4 + 0] = row[x * 4 + 0] / 255.0f;
-			dst[x * 4 + 1] = row[x * 4 + 1] / 255.0f;
-			dst[x * 4 + 2] = row[x * 4 + 2] / 255.0f;
-			dst[x * 4 + 3] = row[x * 4 + 3] / 255.0f;
-		}
+		uint8_t *dst = a->pixels + ((size_t)(dst_y + y) * a->width + dst_x) * 4;
+		memcpy(dst, src + (size_t)y * w * 4, (size_t)w * 4);
 	}
 }
 
@@ -259,13 +262,16 @@ static int gridCols = 80;
 static int chR = 1, chG = 1, chB = 1, chA = 1;
 
 /* Display mode (cycled with the c key):
- *   0 = median3 of the MSDF (default — what the font shader actually uses)
+ *   0 = median3 of the MSDF (raw signed-distance value as greyscale)
  *   1 = raw RGB of the atlas (so you can see which channels disagree)
  *   2 = R only / 3 = G only / 4 = B only (one channel as greyscale)
+ *   5 = "real MSDF" — anti-aliased glyph rendering using the same
+ *       smoothstep(0.5 ± screenPxRange) the production font shader
+ *       uses; this is what the glyph actually looks like on screen.
  * Channel masks apply on top — e.g. raw RGB with G off shows R+B only. */
 static int displayMode = 0;
-static const char *DISPLAY_MODE_NAMES[5] = {
-	"median3", "raw RGB", "R only", "G only", "B only"
+static const char *DISPLAY_MODE_NAMES[6] = {
+	"median3", "raw RGB", "R only", "G only", "B only", "real MSDF"
 };
 
 /* Set by the SIGINT handler so Ctrl+C from the terminal exits cleanly
@@ -339,6 +345,28 @@ static const char *shaderCode =
 "    else if mode == 2u { base = vec4<f32>(msdf.r, msdf.r, msdf.r, 1.0); }       // R only\n"
 "    else if mode == 3u { base = vec4<f32>(msdf.g, msdf.g, msdf.g, 1.0); }       // G only\n"
 "    else if mode == 4u { base = vec4<f32>(msdf.b, msdf.b, msdf.b, 1.0); }       // B only\n"
+"    else if mode == 5u {\n"
+"        // Real MSDF rendering — bit-for-bit the production font shader\n"
+"        // formula from src/yetty/yfont/ms-msdf-font.wgsl (lines 73-74):\n"
+"        //\n"
+"        //   screen_px_range = pixel_range * scale\n"
+"        //   alpha = clamp((sd - 0.5) * screen_px_range + 0.5, 0, 1)\n"
+"        //\n"
+"        // where `scale` = screen pixels per atlas texel. In the\n"
+"        // production shader that comes from the CPU as a uniform; here\n"
+"        // we derive it from screen-space derivatives of the atlas UV\n"
+"        // — which is exactly the same number, computed per-pixel.\n"
+"        // Result: AA band is *one screen pixel* wide at any zoom,\n"
+"        // edges stay sharp when zoomed in and stay readable when out.\n"
+"        let pixel_range = 4.0;\n"
+"        let texels_per_screen_px = fwidth(atlasUV) *\n"
+"                                   vec2<f32>(uniforms.atlasW, uniforms.atlasH);\n"
+"        let scale = 1.0 / max(min(texels_per_screen_px.x,\n"
+"                                  texels_per_screen_px.y), 1e-6);\n"
+"        let screen_px_range = pixel_range * scale;\n"
+"        let alpha = clamp((median - 0.5) * screen_px_range + 0.5, 0.0, 1.0);\n"
+"        base = vec4<f32>(alpha, alpha, alpha, 1.0);\n"
+"    }\n"
 "    let glyph_color = vec4<f32>(\n"
 "        base.r * uniforms.chR,\n"
 "        base.g * uniforms.chG,\n"
@@ -462,15 +490,18 @@ static int initWebGPU(GLFWwindow *window)
 	return 1;
 }
 
-/* Allocate and upload the RGBA32Float atlas texture from g_atlas.pixels.
- * Replaces what the C++ tool got from msdf::Atlas::getTextureView(). */
+/* Upload the atlas as RGBA8Unorm. The texture is filterable (production
+ * font shader uses linear filtering on the same format) so the MSDF
+ * median is bilinearly interpolated between atlas texels and the SDF
+ * stays continuous per screen pixel — that's what makes MSDF rendering
+ * crisp at any zoom level. */
 static int initAtlasTexture(void)
 {
 	WGPUTextureDescriptor td = {0};
 	td.size.width = g_atlas.width;
 	td.size.height = g_atlas.height;
 	td.size.depthOrArrayLayers = 1;
-	td.format = WGPUTextureFormat_RGBA32Float;
+	td.format = WGPUTextureFormat_RGBA8Unorm;
 	td.dimension = WGPUTextureDimension_2D;
 	td.mipLevelCount = 1;
 	td.sampleCount = 1;
@@ -482,11 +513,11 @@ static int initAtlasTexture(void)
 	WGPUTexelCopyTextureInfo dst = {0};
 	dst.texture = atlasTexture;
 	WGPUTexelCopyBufferLayout layout = {0};
-	layout.bytesPerRow = (uint32_t)g_atlas.width * 16u; /* RGBA32Float */
+	layout.bytesPerRow = (uint32_t)g_atlas.width * 4u; /* RGBA8 */
 	layout.rowsPerImage = (uint32_t)g_atlas.height;
 	WGPUExtent3D ext = {(uint32_t)g_atlas.width, (uint32_t)g_atlas.height, 1};
 	wgpuQueueWriteTexture(queue, &dst, g_atlas.pixels,
-			      (size_t)g_atlas.width * g_atlas.height * 4 * sizeof(float),
+			      (size_t)g_atlas.width * g_atlas.height * 4,
 			      &layout, &ext);
 	return 1;
 }
@@ -524,8 +555,8 @@ static int initRendering(void)
 	WGPUShaderModule shaderModule = wgpuDeviceCreateShaderModule(device, &shaderDesc);
 
 	WGPUSamplerDescriptor samplerDesc = {0};
-	samplerDesc.magFilter = WGPUFilterMode_Nearest;
-	samplerDesc.minFilter = WGPUFilterMode_Nearest;
+	samplerDesc.magFilter = WGPUFilterMode_Linear;
+	samplerDesc.minFilter = WGPUFilterMode_Linear;
 	samplerDesc.addressModeU = WGPUAddressMode_ClampToEdge;
 	samplerDesc.addressModeV = WGPUAddressMode_ClampToEdge;
 	samplerDesc.maxAnisotropy = 1;
@@ -544,10 +575,10 @@ static int initRendering(void)
 	layoutEntries[0].buffer.type = WGPUBufferBindingType_Uniform;
 	layoutEntries[1].binding = 1;
 	layoutEntries[1].visibility = WGPUShaderStage_Fragment;
-	layoutEntries[1].sampler.type = WGPUSamplerBindingType_NonFiltering;
+	layoutEntries[1].sampler.type = WGPUSamplerBindingType_Filtering;
 	layoutEntries[2].binding = 2;
 	layoutEntries[2].visibility = WGPUShaderStage_Fragment;
-	layoutEntries[2].texture.sampleType = WGPUTextureSampleType_UnfilterableFloat;
+	layoutEntries[2].texture.sampleType = WGPUTextureSampleType_Float;
 	layoutEntries[2].texture.viewDimension = WGPUTextureViewDimension_2D;
 	layoutEntries[3].binding = 3;
 	layoutEntries[3].visibility = WGPUShaderStage_Fragment;
@@ -789,7 +820,7 @@ static void charCallback(GLFWwindow *window, unsigned int codepoint)
 		/* Advance the cycle and reset channel masks so each stop is a
 		 * clean view — leftover r/g/b/a toggles from earlier inspection
 		 * would otherwise tint the median or single-channel modes. */
-		displayMode = (displayMode + 1) % 5;
+		displayMode = (displayMode + 1) % 6;
 		chR = chG = chB = chA = 1;
 		fprintf(stderr, "[mode] %d (%s)  [ch reset: R=1 G=1 B=1 A=1]\n",
 			displayMode, DISPLAY_MODE_NAMES[displayMode]);
@@ -842,7 +873,8 @@ static void printUsage(const char *prog)
 	       "  Ctrl+wheel         Zoom to cursor\n"
 	       "  mouse drag         Pan the view\n"
 	       "  r / g / b / a      Toggle red / green / blue / alpha channel\n"
-	       "  c                  Cycle display mode (median3 / raw RGB / R / G / B)\n"
+	       "  c                  Cycle display mode\n"
+	       "                     (median3 / raw RGB / R / G / B / real MSDF)\n"
 	       "  esc                Reset view\n"
 	       "  Ctrl+C             Exit\n",
 	       prog);

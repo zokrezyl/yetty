@@ -26,6 +26,17 @@ target_link_libraries(ycat PRIVATE
     Threads::Threads
 )
 
+# Re-link brotli at the end of the link line. libcurl.a needs Brotli*
+# symbols for HTTP `Content-Encoding: br`, but Brotli is *also* a
+# transitive dep of freetype (woff2). CMake collapses each library to
+# its first occurrence, which puts Brotli early — by the time the
+# linker reaches libcurl, Brotli's symbols have already been dropped.
+# Appending the targets here on the executable forces a second
+# occurrence at the very end where libcurl can resolve against them.
+if(YETTY_ENABLE_LIB_LIBCURL AND TARGET CURL::libcurl AND TARGET brotlidec)
+    target_link_libraries(ycat PRIVATE brotlidec brotlicommon)
+endif()
+
 if(NOT MSVC)
     target_compile_options(ycat PRIVATE -Wall -Wextra)
 endif()
