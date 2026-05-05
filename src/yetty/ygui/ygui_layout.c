@@ -679,8 +679,6 @@ static void layout_widget(struct yetty_ygui_widget *w, float parent_abs_x, float
  * an `intrinsic_size` vtable hook later if more widgets need it.
  *===========================================================================*/
 
-#define LAYOUT_TREE_HEADER_H 24.0f
-
 static void preflight_intrinsic_size(struct yetty_ygui_widget *w)
 {
     /* Recurse first (bottom-up). */
@@ -692,10 +690,14 @@ static void preflight_intrinsic_size(struct yetty_ygui_widget *w)
         return;
     }
 
-    float h = LAYOUT_TREE_HEADER_H;
-    if (w->layout.padding_top > h) {
-        /* User overrode header height via padding_top; trust it. */
-        h = w->layout.padding_top;
+    /* Header height = theme->row_height (set by the constructor as
+     * padding_top). The constructor seeds padding_top = row_height; the
+     * engine pre-flight just trusts that value. */
+    float h = w->layout.padding_top;
+    if (h <= 0.0f) {
+        const struct yetty_ygui_theme *theme = layout_theme(w);
+        h = theme ? theme->row_height : 24.0f;
+        w->layout.padding_top = h;
     }
 
     if (w->data.tree_node.expanded && w->data.tree_node.children_list) {

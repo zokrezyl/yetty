@@ -2939,59 +2939,50 @@ void yetty_ygui_widget_list_on_select(struct yetty_ygui_widget *list,
  * Tree Node Widget — chevron + label header + auto-allocated children list.
  *===========================================================================*/
 
-#define TREE_HEADER_H_DEFAULT  24.0f
 #define TREE_CHEVRON_W         16.0f
 #define TREE_CHEVRON_PAD       4.0f
 #define TREE_INDENT_DEFAULT    20.0f
 
-static int tree_node_has_visible_children(const struct yetty_ygui_widget *self)
+/* Header height scales with the theme's row_height. The pre-flight in
+ * ygui_layout.c also queries this, so it must work without a render
+ * context — caller supplies the theme. */
+static float tree_node_header_h(const struct yetty_ygui_widget *self,
+                                const struct yetty_ygui_theme *theme)
 {
-    const struct yetty_ygui_widget *kids = self->data.tree_node.children_list;
-    if (!kids) {
-        return 0;
-    }
-    for (const struct yetty_ygui_widget *c = kids->first_child; c; c = c->next_sibling) {
-        if (c->flags & YETTY_YGUI_FLAG_VISIBLE) {
-            return 1;
-        }
-    }
-    return 0;
+    (void)self;
+    return theme ? theme->row_height : 24.0f;
 }
 
 static struct yetty_ycore_void_result tree_node_render(struct yetty_ygui_widget *self,
                                                        struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
-    int has_children = tree_node_has_visible_children(self);
     int expanded = self->data.tree_node.expanded;
     int hovered = (self->flags & YETTY_YGUI_FLAG_HOVER) != 0;
     int pressed = (self->flags & YETTY_YGUI_FLAG_PRESSED) != 0;
 
-    float header_h = TREE_HEADER_H_DEFAULT;
+    float header_h = tree_node_header_h(self, t);
 
-    /* Optional row hover highlight (selection background is drawn by the
-     * parent list when applicable, so we only need hover here). */
     if (hovered || pressed) {
         uint32_t bg = pressed ? t->bg_header : t->bg_hover;
         yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, header_h, bg,
                                          t->radius_small);
     }
 
-    /* Chevron — only when there are children to show. */
-    if (has_children) {
-        float cx = self->x + TREE_CHEVRON_PAD;
-        float cy = self->y + header_h * 0.5f;
-        float r = 4.0f;
-        if (expanded) {
-            /* Down-pointing triangle. */
-            yetty_ygui_render_ctx_render_triangle(ctx, cx, cy - r * 0.6f, cx + r * 2.0f,
-                                                  cy - r * 0.6f, cx + r, cy + r * 0.8f,
-                                                  t->text_primary);
-        } else {
-            /* Right-pointing triangle. */
-            yetty_ygui_render_ctx_render_triangle(ctx, cx, cy - r, cx, cy + r, cx + r * 1.2f, cy,
-                                                  t->text_primary);
-        }
+    /* Chevron — always rendered. tree_node represents a folder; whether
+     * it currently has children loaded is irrelevant (lazy loading is
+     * common). The triangle scales gently with header height. */
+    float cx = self->x + TREE_CHEVRON_PAD;
+    float cy = self->y + header_h * 0.5f;
+    float r = header_h * 0.18f;
+    if (r < 4.0f) r = 4.0f;
+    if (expanded) {
+        yetty_ygui_render_ctx_render_triangle(ctx, cx, cy - r * 0.6f, cx + r * 2.0f,
+                                              cy - r * 0.6f, cx + r, cy + r * 0.8f,
+                                              t->text_primary);
+    } else {
+        yetty_ygui_render_ctx_render_triangle(ctx, cx, cy - r, cx, cy + r, cx + r * 1.2f, cy,
+                                              t->text_primary);
     }
 
     /* Label */
@@ -3060,15 +3051,15 @@ static struct yetty_ycore_void_result tree_node_render_all(struct yetty_ygui_wid
 static int tree_node_on_press(struct yetty_ygui_widget *self, float lx, float ly,
                               ygui_event_t *out)
 {
-    /* Click on chevron zone (left ~20px) and we have children → toggle.
-     * Click on rest of header → fire a "select" event (parent list will
-     * pick it up via its own on_press, but we still own the event so
-     * propagate that). */
-    int has_children = tree_node_has_visible_children(self);
-    int on_chevron = (lx <= TREE_CHEVRON_W + TREE_CHEVRON_PAD) && (ly <= TREE_HEADER_H_DEFAULT);
-    int on_header = (ly <= TREE_HEADER_H_DEFAULT);
+    const struct yetty_ygui_theme *theme = self->engine ? self->engine->theme : NULL;
+    float header_h = tree_node_header_h(self, theme);
+    int on_chevron = (lx <= TREE_CHEVRON_W + TREE_CHEVRON_PAD) && (ly <= header_h);
+    int on_header  = (ly <= header_h);
 
-    if (has_children && on_chevron) {
+    /* tree_node represents a folder. The chevron always toggles, even
+     * if children haven't been loaded yet (lazy expansion: on_toggle
+     * fires and the user populates inside the callback). */
+    if (on_chevron) {
         self->data.tree_node.expanded = !self->data.tree_node.expanded;
         if (self->data.tree_node.children_list) {
             yetty_ygui_widget_set_visible(self->data.tree_node.children_list,
@@ -3109,22 +3100,23 @@ struct yetty_ygui_widget *yetty_ygui_engine_tree_node(struct yetty_ygui_engine *
         return NULL;
     }
     /* Authored size: full width is filled by parent flex (align: stretch).
-     * Height: header by default; the children list contributes to the
-     * total via flex. We use FLEX/COLUMN so layout naturally places the
-     * children list directly below the header. */
-    yetty_ygui_widget_init_base(node, 0, 0, 200.0f, TREE_HEADER_H_DEFAULT);
+     * Height: just the header at construction; the pre-flight in
+     * ygui_layout.c grows authored_h on every layout pass to fit the
+     * currently-visible children. We use FLEX/COLUMN so the layout
+     * places the children list directly below the header. */
+    float header_h = engine && engine->theme ? engine->theme->row_height : 24.0f;
+    yetty_ygui_widget_init_base(node, 0, 0, 200.0f, header_h);
     node->data.tree_node.label = ygui_strdup(label);
     node->data.tree_node.expanded = 0;
     node->data.tree_node.children_list = NULL;
 
-    /* Layout: flex column. The header occupies the top TREE_HEADER_H_DEFAULT
-     * pixels (rendered by tree_node_render at y=0). The children list is
-     * placed below via the layout pass. We use top-padding equal to
-     * header height so the first child lands beneath. */
+    /* Layout: flex column. The header occupies the top `header_h`
+     * pixels (rendered by tree_node_render at y=0). The children list
+     * lives in the content box thanks to padding_top = header_h. */
     node->layout.mode = YETTY_YGUI_LAYOUT_FLEX;
     node->layout.direction = YETTY_YGUI_FLEX_COLUMN;
     node->layout.align_items = YETTY_YGUI_ALIGN_STRETCH;
-    node->layout.padding_top = TREE_HEADER_H_DEFAULT;
+    node->layout.padding_top = header_h;
 
     static const struct yetty_ygui_widget_vtable tree_node_vtable = {
         .render     = tree_node_render,
