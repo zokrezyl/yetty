@@ -48,6 +48,20 @@ fn cross2d(a: vec2<f32>, b: vec2<f32>) -> f32 {
     return a.x * b.y - a.y * b.x;
 }
 
+// Like sign() but never returns 0 — matches msdfgen's `nonZeroSign`.
+// Used to determine the SDF sign from cross(tangent, origin-closest):
+// when the cross product is *exactly* 0 (origin lies on the tangent line
+// through a segment endpoint, common at axis-aligned wave/cap geometry),
+// WGSL's sign() returns 0, making signed_dist evaluate to 0 even though
+// the actual distance is non-zero. That hit min_abs_X to 0 *once* per
+// channel and froze the channel at "right on the edge" (= rgba8 value
+// 127) for every pixel in that row, producing the visible horizontal
+// stripe across glyphs like ~ / ⌒ / U+25EE.
+fn nz_sign(x: f32) -> f32 {
+    if x >= 0.0 { return 1.0; }
+    return -1.0;
+}
+
 // Signed distance to a line segment.
 // Convention: negative = inside (left of CCW tangent), positive = outside.
 //
@@ -67,7 +81,7 @@ fn distance_to_line(p0: vec2<f32>, p1: vec2<f32>, origin: vec2<f32>) -> vec3<f32
     let t = clamp(dot(aq, ab) / dot(ab, ab), 0.0, 1.0);
     let closest = p0 + t * ab;
     let to_origin = origin - closest;
-    let sign_val = -sign(cross2d(ab, to_origin));
+    let sign_val = -nz_sign(cross2d(ab, to_origin));
     return vec3<f32>(sign_val * length(to_origin), 0.0, t);
 }
 
@@ -138,11 +152,11 @@ fn distance_to_quad(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, origin: vec2<f3
     // visible MSDF artefacts at corners where one segment's t=0 met the
     // previous segment's t=1 on a closed contour.
     let aq = -qa;                 // origin - p0
-    var min_dist = -sign(cross2d(ab, aq)) * length(qa);
+    var min_dist = -nz_sign(cross2d(ab, aq)) * length(qa);
     var param = 0.0;
 
     let qc = p2 - origin;
-    let dist_end = -sign(cross2d(p2 - p1, -qc)) * length(qc);
+    let dist_end = -nz_sign(cross2d(p2 - p1, -qc)) * length(qc);
     if abs(dist_end) < abs(min_dist) {
         min_dist = dist_end;
         param = 1.0;
@@ -155,7 +169,7 @@ fn distance_to_quad(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, origin: vec2<f3
             let point_on_curve = p0 + ab * 2.0 * t + br * t * t;
             let to_origin = origin - point_on_curve;
             let tangent = ab + br * t;
-            let dist = -sign(cross2d(tangent, to_origin)) * length(to_origin);
+            let dist = -nz_sign(cross2d(tangent, to_origin)) * length(to_origin);
             if abs(dist) < abs(min_dist) {
                 min_dist = dist;
                 param = t;
