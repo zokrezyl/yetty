@@ -20,8 +20,9 @@ extern "C" {
 
 #define YETTY_YMESH_TYPE_ID 0x80000005u
 
-/* Public-facing config-style uniforms (the GPU-side has more — model/view/
- * proj matrices are derived from the mesh's bbox at create_instance time). */
+/* Public-facing config-style uniforms. The GPU-side derives MVP from the
+ * bbox + camera fields at instance create time (and re-derives them when
+ * the wire bytes change in the interactive viewer). */
 struct yetty_ymesh_uniforms {
     float bounds_x;
     float bounds_y;
@@ -29,7 +30,19 @@ struct yetty_ymesh_uniforms {
     float bounds_h;
     float bbox_min[3];
     float bbox_max[3];
+
+    /* Camera + render mode. See ymesh.h for semantics + defaults. */
+    float azimuth;
+    float elevation;
+    float dist_factor;
+    float pan_x;
+    float pan_y;
+    uint32_t mode;
 };
+
+/* Render mode values for yetty_ymesh_uniforms.mode. */
+#define YETTY_YMESH_MODE_SOLID     0u
+#define YETTY_YMESH_MODE_WIREFRAME 1u
 
 /* Factory create / destroy — registered with the abstract complex-prim
  * factory in ypaint-canvas.c. */

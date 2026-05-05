@@ -15,12 +15,20 @@
  *   [type_id u32][payload_size u32]
  *   [bounds_x f32][bounds_y f32][bounds_w f32][bounds_h f32]
  *   [bbox_min_x/y/z f32 ×3][bbox_max_x/y/z f32 ×3]
- *   [vertex_count u32][index_count u32][index_size u32]    # always 4 in MVP
+ *   [azimuth f32][elevation f32][dist_factor f32]    # camera orbit + dolly
+ *   [pan_x f32][pan_y f32][mode u32]                 # screen-space pan + render-mode
+ *   [vertex_count u32][index_count u32][index_size u32]
  *   [positions f32 × vertex_count×3]
  *   [normals   f32 × vertex_count×3]
  *   [indices   u32 × index_count]
  *
- * MVP scope: positions + normals + indices, single mesh / first primitive.
+ * Camera semantics:
+ *   azimuth, elevation : radians around bbox-centered orbit (Y-up).
+ *   dist_factor        : camera distance = bbox_radius * dist_factor.
+ *   pan_x, pan_y       : screen-space camera offset in pixels (post-projection).
+ *   mode               : 0=solid (Lambert), 1=wireframe (line list).
+ *
+ * Mesh scope: positions + normals + indices, single mesh / first primitive.
  * No textures / UVs / materials yet.
  */
 
@@ -41,6 +49,16 @@ struct yetty_ymesh_render_config {
     float bounds_y;     /* overridden by canvas at render time */
     float bounds_w;     /* when 0, defaults to a fixed display size */
     float bounds_h;
+
+    /* Camera state. Defaults applied when fields are zero (azimuth/elev/pan)
+     * or non-positive (dist_factor): azimuth=0.7rad, elevation=0.5rad,
+     * dist_factor=3.0, pan=(0,0). mode 0=solid, 1=wireframe. */
+    float azimuth;
+    float elevation;
+    float dist_factor;
+    float pan_x;
+    float pan_y;
+    uint32_t mode;
 };
 
 /* Decode `glb_bytes` and produce a fresh ypaint-core buffer holding ONE

@@ -88,7 +88,8 @@ struct yetty_ymesh_factory {
     WGPUPipelineLayout layout_3d;
     WGPUPipelineLayout layout_blit;
 
-    WGPURenderPipeline pipeline_3d;
+    WGPURenderPipeline pipeline_3d;            /* solid: TriangleList + cull back */
+    WGPURenderPipeline pipeline_3d_wireframe;  /* lines: LineList + no cull */
     WGPURenderPipeline pipeline_blit;
 
     WGPUSampler linear_sampler;
@@ -110,9 +111,19 @@ struct ymesh_instance_data {
     /* Mesh GPU buffers. */
     WGPUBuffer pos_vb;
     WGPUBuffer nrm_vb;
-    WGPUBuffer index_buf;
+    WGPUBuffer index_buf;        /* triangle indices (TriangleList) */
     uint32_t   index_count;
-    uint32_t   index_size;   /* 2 or 4; MVP always 4 */
+    uint32_t   index_size;       /* 2 or 4; MVP always 4 */
+
+    /* Wireframe — line-list indices derived from the triangle indices
+     * at create_instance time. NULL when the mesh wasn't loaded with
+     * wireframe support (currently all meshes get both). */
+    WGPUBuffer line_index_buf;
+    uint32_t   line_index_count; /* number of u32 indices in line buffer */
+
+    /* Render mode read from wire (YETTY_YMESH_MODE_*). render() picks
+     * pipeline + index-buffer accordingly. */
+    uint32_t mode;
 
     /* 3D-pass uniform buffer + bind group. */
     WGPUBuffer ub_3d;
@@ -161,9 +172,21 @@ static uint32_t ymesh_clamp_offscreen_dim(float v)
  * Instance render
  *===========================================================================*/
 
+/* Camera state passed in from the wire. Defaults applied here when the
+ * caller left fields zeroed (one-shot mode emits zero camera fields and
+ * relies on these). */
+struct ymesh_camera {
+    float azimuth;
+    float elevation;
+    float dist_factor;
+    float pan_x;
+    float pan_y;
+};
+
 static struct yetty_ycore_void_result
 ymesh_compute_3d_uniforms(const float bbox_min[3], const float bbox_max[3],
-                          float aspect, struct ymesh_3d_uniforms *out)
+                          float aspect, const struct ymesh_camera *cam,
+                          struct ymesh_3d_uniforms *out)
 {
     /* Centre + radius from the bbox. */
     struct yetty_ymesh_vec3 center = {
@@ -178,21 +201,67 @@ ymesh_compute_3d_uniforms(const float bbox_min[3], const float bbox_max[3],
     if (radius < 1e-4f)
         radius = 1.0f;
 
-    /* Camera orbits the centre at ~3× radius, slight elevation. */
-    float dist = radius * 3.0f;
-    struct yetty_ymesh_vec3 eye = {
-        center.x + dist * 0.7f,
-        center.y + dist * 0.5f,
-        center.z + dist * 0.7f,
+    /* Apply defaults — zero camera == "no override" → use the auto-fit
+     * orbital pose (matches the original one-shot framing). */
+    float az = cam->azimuth;
+    float el = cam->elevation;
+    float df = cam->dist_factor;
+    int defaults = (az == 0.0f && el == 0.0f && df <= 0.0f);
+    if (defaults) {
+        az = 0.7f;
+        el = 0.5f;
+        df = 3.0f;
+    } else if (df <= 0.0f) {
+        df = 3.0f;
+    }
+    /* Clamp elevation to avoid gimbal lock at the poles. */
+    const float kPi2 = 1.55f;  /* slightly under π/2 */
+    if (el >  kPi2) el =  kPi2;
+    if (el < -kPi2) el = -kPi2;
+
+    /* Spherical-to-cartesian eye position around the bbox centre. */
+    float dist = radius * df;
+    float ce = cosf(el), se = sinf(el);
+    float ca = cosf(az), sa = sinf(az);
+    struct yetty_ymesh_vec3 eye_local = {
+        dist * ce * sa,
+        dist * se,
+        dist * ce * ca,
     };
     struct yetty_ymesh_vec3 up = {0.0f, 1.0f, 0.0f};
 
+    /* Pan: shift centre + eye in the camera's right/up plane. Pixels mapped
+     * to world via radius/100 — the visual pan-per-pixel scales with the
+     * mesh size so big and small meshes both pan at a comfortable rate. */
+    float pan_scale = radius / 100.0f;
+    struct yetty_ymesh_vec3 forward = {-eye_local.x, -eye_local.y, -eye_local.z};
+    struct yetty_ymesh_vec3 right = yetty_ymesh_vec3_normalize(
+        yetty_ymesh_vec3_cross(forward, up));
+    struct yetty_ymesh_vec3 up_axis = yetty_ymesh_vec3_normalize(
+        yetty_ymesh_vec3_cross(right, forward));
+    struct yetty_ymesh_vec3 pan_world = {
+        right.x * cam->pan_x * pan_scale + up_axis.x * cam->pan_y * pan_scale,
+        right.y * cam->pan_x * pan_scale + up_axis.y * cam->pan_y * pan_scale,
+        right.z * cam->pan_x * pan_scale + up_axis.z * cam->pan_y * pan_scale,
+    };
+
+    struct yetty_ymesh_vec3 eye = {
+        center.x + eye_local.x + pan_world.x,
+        center.y + eye_local.y + pan_world.y,
+        center.z + eye_local.z + pan_world.z,
+    };
+    struct yetty_ymesh_vec3 panned_center = {
+        center.x + pan_world.x,
+        center.y + pan_world.y,
+        center.z + pan_world.z,
+    };
+
     struct yetty_ymesh_mat4 model = yetty_ymesh_mat4_identity();
-    struct yetty_ymesh_mat4 view = yetty_ymesh_mat4_lookat(eye, center, up);
+    struct yetty_ymesh_mat4 view = yetty_ymesh_mat4_lookat(eye, panned_center, up);
     struct yetty_ymesh_mat4 proj = yetty_ymesh_mat4_perspective(
-        45.0f * 3.14159265f / 180.0f, aspect, radius * 0.1f, dist + radius * 4.0f);
+        45.0f * 3.14159265f / 180.0f, aspect, radius * 0.1f,
+        dist + radius * 4.0f + 1.0f);
     struct yetty_ymesh_mat4 mvp = yetty_ymesh_mat4_mul(proj, yetty_ymesh_mat4_mul(view, model));
-    /* model is identity → normal_matrix = identity too. */
 
     memcpy(out->mvp, mvp.m, sizeof(mvp.m));
     memcpy(out->model, model.m, sizeof(model.m));
@@ -263,14 +332,22 @@ ymesh_instance_render(struct yetty_ypaint_core_complex_prim_instance *self,
         wgpuCommandEncoderRelease(encoder);
         return YETTY_ERR(yetty_ycore_void, "ymesh: 3d pass begin failed");
     }
-    wgpuRenderPassEncoderSetPipeline(p1, factory->pipeline_3d);
+    int wireframe = (inst->mode == YETTY_YMESH_MODE_WIREFRAME);
+    WGPURenderPipeline pipe = wireframe ? factory->pipeline_3d_wireframe
+                                        : factory->pipeline_3d;
+    WGPUBuffer ib = wireframe ? inst->line_index_buf : inst->index_buf;
+    uint32_t ic  = wireframe ? inst->line_index_count : inst->index_count;
+    /* Wireframe always uses uint32; triangle indices follow the wire's
+     * declared index_size. */
+    WGPUIndexFormat ifmt = (wireframe || inst->index_size == 4)
+        ? WGPUIndexFormat_Uint32 : WGPUIndexFormat_Uint16;
+
+    wgpuRenderPassEncoderSetPipeline(p1, pipe);
     wgpuRenderPassEncoderSetBindGroup(p1, 0, inst->bg_3d, 0, NULL);
     wgpuRenderPassEncoderSetVertexBuffer(p1, 0, inst->pos_vb, 0, WGPU_WHOLE_SIZE);
     wgpuRenderPassEncoderSetVertexBuffer(p1, 1, inst->nrm_vb, 0, WGPU_WHOLE_SIZE);
-    wgpuRenderPassEncoderSetIndexBuffer(p1, inst->index_buf,
-        inst->index_size == 2 ? WGPUIndexFormat_Uint16 : WGPUIndexFormat_Uint32,
-        0, WGPU_WHOLE_SIZE);
-    wgpuRenderPassEncoderDrawIndexed(p1, inst->index_count, 1, 0, 0, 0);
+    wgpuRenderPassEncoderSetIndexBuffer(p1, ib, ifmt, 0, WGPU_WHOLE_SIZE);
+    wgpuRenderPassEncoderDrawIndexed(p1, ic, 1, 0, 0, 0);
     wgpuRenderPassEncoderEnd(p1);
     wgpuRenderPassEncoderRelease(p1);
 
@@ -433,6 +510,18 @@ ymesh_build_3d_pipeline(struct yetty_ymesh_factory *f)
     f->pipeline_3d = wgpuDeviceCreateRenderPipeline(f->device, &rp);
     if (!f->pipeline_3d)
         return YETTY_ERR(yetty_ycore_void, "ymesh: 3d pipeline create failed");
+
+    /* Wireframe variant — same descriptor with LineList topology + no
+     * culling so both sides of every triangle's edges render. Shader is
+     * identical (it works on per-vertex normals, which are still valid
+     * for line rasterisation; the resulting Lambert shading on lines
+     * gives the wires depth cues). */
+    rp.label = YMS_STR("ymesh_3d_pipeline_wireframe");
+    rp.primitive.topology = WGPUPrimitiveTopology_LineList;
+    rp.primitive.cullMode = WGPUCullMode_None;
+    f->pipeline_3d_wireframe = wgpuDeviceCreateRenderPipeline(f->device, &rp);
+    if (!f->pipeline_3d_wireframe)
+        return YETTY_ERR(yetty_ycore_void, "ymesh: wireframe pipeline create failed");
     return YETTY_OK_VOID();
 }
 
@@ -583,6 +672,7 @@ static void ymesh_instance_data_destroy(struct ymesh_instance_data *d)
     if (d->color_tex)  wgpuTextureRelease(d->color_tex);
     if (d->depth_view) wgpuTextureViewRelease(d->depth_view);
     if (d->depth_tex)  wgpuTextureRelease(d->depth_tex);
+    if (d->line_index_buf) wgpuBufferRelease(d->line_index_buf);
     if (d->index_buf)  wgpuBufferRelease(d->index_buf);
     if (d->nrm_vb)     wgpuBufferRelease(d->nrm_vb);
     if (d->pos_vb)     wgpuBufferRelease(d->pos_vb);
@@ -602,7 +692,8 @@ ymesh_create_instance(struct yetty_ypaint_core_concrete_factory *self,
         return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
                          "ymesh: factory not initialized");
 
-    /* Parse wire layout. */
+    /* Parse wire layout. See include/yetty/ymesh/ymesh.h for the canonical
+     * field order; offsets here must stay in lockstep. */
     const uint32_t *data = (const uint32_t *)buffer_data;
     const uint32_t *payload = data + 2;
 
@@ -616,9 +707,18 @@ ymesh_create_instance(struct yetty_ypaint_core_concrete_factory *self,
     memcpy(bbox_min, &payload[4], 3 * sizeof(float));
     memcpy(bbox_max, &payload[7], 3 * sizeof(float));
 
-    uint32_t vcount    = payload[10];
-    uint32_t icount    = payload[11];
-    uint32_t isize     = payload[12];
+    struct ymesh_camera cam = {
+        .azimuth     = *(const float *)&payload[10],
+        .elevation   = *(const float *)&payload[11],
+        .dist_factor = *(const float *)&payload[12],
+        .pan_x       = *(const float *)&payload[13],
+        .pan_y       = *(const float *)&payload[14],
+    };
+    uint32_t mode = payload[15];
+
+    uint32_t vcount    = payload[16];
+    uint32_t icount    = payload[17];
+    uint32_t isize     = payload[18];
     if (isize != 4 && isize != 2)
         return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
                          "ymesh: bad index_size");
@@ -626,7 +726,7 @@ ymesh_create_instance(struct yetty_ypaint_core_concrete_factory *self,
         return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
                          "ymesh: empty mesh");
 
-    const float *positions = (const float *)(payload + 13);
+    const float *positions = (const float *)(payload + 19);
     const float *normals   = positions + vcount * 3;
     const void  *indices   = (const void *)(normals + vcount * 3);
 
@@ -663,6 +763,7 @@ ymesh_create_instance(struct yetty_ypaint_core_concrete_factory *self,
     /* GPU buffers — uploaded once, reused per frame. */
     d->index_count = icount;
     d->index_size = isize;
+    d->mode = mode;
     d->pos_vb = ymesh_create_buffer_with_data(factory->device, factory->queue,
         WGPUBufferUsage_Vertex, positions, vcount * 3 * sizeof(float));
     d->nrm_vb = ymesh_create_buffer_with_data(factory->device, factory->queue,
@@ -675,6 +776,52 @@ ymesh_create_instance(struct yetty_ypaint_core_concrete_factory *self,
         free(inst);
         return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
                          "ymesh: vertex/index buffer alloc failed");
+    }
+
+    /* Build the line-list index buffer from the triangle indices.
+     * Each tri (a,b,c) becomes 3 line segments → 6 indices. Always built
+     * (small overhead vs the triangle indices) so the user can flip
+     * solid ↔ wireframe interactively without re-uploading. */
+    {
+        size_t tri_count = icount / 3;
+        size_t line_idx_count = tri_count * 6;
+        uint32_t *line_idx = malloc(line_idx_count * sizeof(uint32_t));
+        if (!line_idx) {
+            ymesh_instance_data_destroy(d);
+            free(inst->buffer_data);
+            free(inst);
+            return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
+                             "ymesh: line index alloc failed");
+        }
+        if (isize == 4) {
+            const uint32_t *src = (const uint32_t *)indices;
+            for (size_t t = 0; t < tri_count; t++) {
+                uint32_t a = src[t * 3 + 0], b = src[t * 3 + 1], c = src[t * 3 + 2];
+                line_idx[t * 6 + 0] = a; line_idx[t * 6 + 1] = b;
+                line_idx[t * 6 + 2] = b; line_idx[t * 6 + 3] = c;
+                line_idx[t * 6 + 4] = c; line_idx[t * 6 + 5] = a;
+            }
+        } else {
+            const uint16_t *src = (const uint16_t *)indices;
+            for (size_t t = 0; t < tri_count; t++) {
+                uint32_t a = src[t * 3 + 0], b = src[t * 3 + 1], c = src[t * 3 + 2];
+                line_idx[t * 6 + 0] = a; line_idx[t * 6 + 1] = b;
+                line_idx[t * 6 + 2] = b; line_idx[t * 6 + 3] = c;
+                line_idx[t * 6 + 4] = c; line_idx[t * 6 + 5] = a;
+            }
+        }
+        d->line_index_count = (uint32_t)line_idx_count;
+        d->line_index_buf = ymesh_create_buffer_with_data(
+            factory->device, factory->queue, WGPUBufferUsage_Index,
+            line_idx, line_idx_count * sizeof(uint32_t));
+        free(line_idx);
+        if (!d->line_index_buf) {
+            ymesh_instance_data_destroy(d);
+            free(inst->buffer_data);
+            free(inst);
+            return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
+                             "ymesh: line index buffer alloc failed");
+        }
     }
 
     /* Offscreen render textures. */
@@ -709,11 +856,14 @@ ymesh_create_instance(struct yetty_ypaint_core_concrete_factory *self,
     d->color_view = wgpuTextureCreateView(d->color_tex, NULL);
     d->depth_view = wgpuTextureCreateView(d->depth_tex, NULL);
 
-    /* 3D uniform buffer — populated once (static camera). */
+    /* 3D uniform buffer — populated once. The camera state is baked here
+     * from the wire-supplied azimuth/elev/dist/pan; the interactive
+     * viewer drives changes by emitting OSC clear+bin with new wire
+     * bytes, which destroys this instance and creates a fresh one. */
     struct ymesh_3d_uniforms uniforms_3d = {0};
     float aspect = (float)d->off_w / (float)d->off_h;
     struct yetty_ycore_void_result mr =
-        ymesh_compute_3d_uniforms(bbox_min, bbox_max, aspect, &uniforms_3d);
+        ymesh_compute_3d_uniforms(bbox_min, bbox_max, aspect, &cam, &uniforms_3d);
     (void)mr;
     d->ub_3d = ymesh_create_buffer_with_data(factory->device, factory->queue,
         WGPUBufferUsage_Uniform, &uniforms_3d, sizeof(uniforms_3d));
@@ -827,6 +977,7 @@ void yetty_ymesh_factory_destroy(struct yetty_ypaint_core_concrete_factory *self
 
     if (f->linear_sampler) wgpuSamplerRelease(f->linear_sampler);
     if (f->pipeline_blit)  wgpuRenderPipelineRelease(f->pipeline_blit);
+    if (f->pipeline_3d_wireframe) wgpuRenderPipelineRelease(f->pipeline_3d_wireframe);
     if (f->pipeline_3d)    wgpuRenderPipelineRelease(f->pipeline_3d);
     if (f->layout_blit)    wgpuPipelineLayoutRelease(f->layout_blit);
     if (f->layout_3d)      wgpuPipelineLayoutRelease(f->layout_3d);
