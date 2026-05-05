@@ -10,4 +10,6 @@ target_include_directories(cdb-viewer PRIVATE
     ${YETTY_ROOT}/include
 )
 
-target_compile_options(cdb-viewer PRIVATE -Wall -Wextra)
+if(NOT MSVC)
+    target_compile_options(cdb-viewer PRIVATE -Wall -Wextra)
+endif()

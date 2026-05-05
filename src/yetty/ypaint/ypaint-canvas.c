@@ -629,6 +629,7 @@ static struct yetty_font_font_result ypaint_canvas_materialize_blob_font(
     }
 
     if (!yetty_yplatform_file_exists(cdb_path)) {
+#if YETTY_HAS_YMSDF_GEN
         if (!canvas->msdf_generator) {
             yerror("ypaint_canvas: CDB '%s' missing and no MSDF generator on "
                    "the canvas — host must initialise gpu_context.msdf_generator "
@@ -650,6 +651,11 @@ static struct yetty_font_font_result ypaint_canvas_materialize_blob_font(
         }
         ydebug("ypaint_canvas: generated CDB '%s' via %s generator", cdb_path,
                canvas->msdf_generator->ops->name(canvas->msdf_generator));
+#else
+        yerror("ypaint_canvas: CDB '%s' missing and ymsdf-gen is disabled in "
+               "this build — pre-bake the CDB.", cdb_path);
+        return YETTY_ERR(yetty_font_font, "ymsdf-gen disabled in this build");
+#endif
     }
 
     snprintf(shader_path, sizeof(shader_path), "%s/msdf-font.wgsl", canvas->shaders_dir);

@@ -11,5 +11,7 @@ target_include_directories(cdb-diff PRIVATE
     ${YETTY_ROOT}/include
 )
 
-target_compile_options(cdb-diff PRIVATE -Wall -Wextra)
-target_link_libraries(cdb-diff PRIVATE m)
+if(NOT MSVC)
+    target_compile_options(cdb-diff PRIVATE -Wall -Wextra)
+    target_link_libraries(cdb-diff PRIVATE m)
+endif()

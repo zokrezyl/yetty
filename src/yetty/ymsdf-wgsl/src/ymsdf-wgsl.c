@@ -35,7 +35,11 @@
 #include <string.h>
 #include <time.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <unistd.h>
+#endif
 
 #define FT_SCALE 64.0f
 
@@ -779,6 +783,23 @@ static char *read_file(const char *path, size_t *out_size)
 
 static void exe_dir(char *out, size_t out_size)
 {
+#ifdef _WIN32
+    DWORD n = GetModuleFileNameA(NULL, out, (DWORD)out_size);
+    if (n == 0 || n >= out_size) {
+        snprintf(out, out_size, ".");
+        return;
+    }
+    out[n] = '\0';
+    char *slash = strrchr(out, '\\');
+    if (!slash) {
+        slash = strrchr(out, '/');
+    }
+    if (slash) {
+        *slash = '\0';
+    } else {
+        snprintf(out, out_size, ".");
+    }
+#else
     ssize_t n = readlink("/proc/self/exe", out, out_size - 1);
     if (n <= 0) {
         snprintf(out, out_size, ".");
@@ -791,6 +812,7 @@ static void exe_dir(char *out, size_t out_size)
     } else {
         snprintf(out, out_size, ".");
     }
+#endif
 }
 
 /* Returns malloc'd path to a readable shader, or NULL. */

@@ -17,8 +17,12 @@ add_subdirectory(cdb-viewer)
 # Same direct CDB walk as cdb-viewer; always built.
 add_subdirectory(cdb-diff)
 
-# CPU MSDF generator CLI (msdfgen library).
-add_subdirectory(gen-msdf)
+# CPU MSDF generator CLI (msdfgen library). Skipped where the
+# msdfgen lib is disabled (e.g. Windows: prebuilt msdfgen ships /MT
+# while the rest of the Windows 3rdparty libs are /MD).
+if(YETTY_ENABLE_FEATURE_YMSDF_GEN)
+    add_subdirectory(gen-msdf)
+endif()
 
 # GPU MSDF generator CLI (WGSL compute shader). Headless — no window.
 add_subdirectory(gen-msdf-gpu)

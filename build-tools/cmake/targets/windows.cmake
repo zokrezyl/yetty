@@ -27,6 +27,10 @@ set(YETTY_ENABLE_LIB_QEMU    ON CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_FEATURE_YMSDF_GEN OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_LIB_MSDFGEN       OFF CACHE BOOL "" FORCE)
 
+# ymesh tool — uses POSIX termios/select for raw-mode stdin in its
+# interactive watch loop. No Windows port today; disable on Windows.
+set(YETTY_ENABLE_TOOL_YMESH        OFF CACHE BOOL "" FORCE)
+
 include(${YETTY_ROOT}/build-tools/cmake/targets/shared.cmake)
 
 # Windows-specific libraries (guarded by variables.cmake)
