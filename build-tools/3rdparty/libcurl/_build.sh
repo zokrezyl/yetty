@@ -217,13 +217,15 @@ CMAKE_ARGS=(
     -DZLIB_INCLUDE_DIR="$ZLIB_DIR/include"
     -DZLIB_LIBRARY="$_ZLIB_LIB"
 
-    # brotli (br) — curl's FindBrotli reads BROTLI_INCLUDE_DIR plus the
-    # two LIBRARY_* paths. Decoder + common are enough for incoming
-    # responses (curl never *encodes* request bodies as br).
+    # brotli (br) — curl 8.x's CMake/FindBrotli.cmake reads
+    # BROTLI_INCLUDE_DIR + BROTLIDEC_LIBRARY + BROTLICOMMON_LIBRARY
+    # (note: NO underscore between BROTLI and DEC/COMMON — easy to
+    # miswrite). Decoder + common are enough for incoming responses
+    # (curl never *encodes* request bodies as br).
     -DCURL_BROTLI=ON
     -DBROTLI_INCLUDE_DIR="$BROTLI_DIR/include"
-    -DBROTLI_LIBRARY_DEC="$_BROTLI_DEC"
-    -DBROTLI_LIBRARY_COMMON="$_BROTLI_COMMON"
+    -DBROTLIDEC_LIBRARY="$_BROTLI_DEC"
+    -DBROTLICOMMON_LIBRARY="$_BROTLI_COMMON"
 
     # Flag-name conventions are mixed in curl 8.x: CURL_USE_* for some,
     # USE_* for others (libidn2, nghttp2, librtmp). Audit confirmed

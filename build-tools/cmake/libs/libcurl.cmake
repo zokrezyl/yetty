@@ -90,7 +90,15 @@ set_target_properties(CURL::libcurl PROPERTIES
 )
 
 # Per-platform link deps that libcurl requires.
-set(_LIBCURL_DEPS "${_OSSL_SSL};${_OSSL_CRYPTO}")
+#
+# `ZLIB::ZLIB`, `brotlidec` (transitively `brotlicommon`) come from the
+# include() lines at the top — they satisfy libcurl.a's unresolved
+# zlib + brotli symbols.
+set(_LIBCURL_DEPS
+    "${_OSSL_SSL}" "${_OSSL_CRYPTO}"
+    ZLIB::ZLIB
+    brotlidec
+)
 if(WIN32)
     list(APPEND _LIBCURL_DEPS ws2_32 crypt32 bcrypt advapi32 user32)
 elseif(APPLE)
