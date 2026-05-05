@@ -128,7 +128,16 @@ static void u8_vec_free(struct u8_vec *v)  { free(v->data); v->data = NULL; v->s
  * with the next segment's first.
  *===========================================================================*/
 
-enum { COLOR_WHITE = 7 };
+enum {
+    COLOR_BLACK   = 0,
+    COLOR_RED     = 1,
+    COLOR_GREEN   = 2,
+    COLOR_BLUE    = 4,
+    COLOR_YELLOW  = 3, /* RED|GREEN */
+    COLOR_MAGENTA = 5, /* RED|BLUE */
+    COLOR_CYAN    = 6, /* GREEN|BLUE */
+    COLOR_WHITE   = 7,
+};
 
 struct glyph_ctx {
     struct u32_vec metadata;
@@ -327,6 +336,221 @@ static void glyph_ctx_compute_windings(struct glyph_ctx *ctx)
     }
 }
 
+/*=============================================================================
+ * Edge coloring — port of msdfgen's edgeColoringSimple.
+ *
+ * Without this, every segment is COLOR_WHITE, every channel sees every
+ * segment, and median3 produces a single-channel SDF (corners come out
+ * rounded, plus sign discontinuities at sharp corners leak across the
+ * whole field). Proper MSDF assigns each segment one of YELLOW/MAGENTA/
+ * CYAN such that adjacent runs across a corner share exactly one channel
+ * — at the corner that shared channel stays "on" and median3 picks it.
+ *===========================================================================*/
+
+static void normalize_dir(float *vx, float *vy)
+{
+    float d = sqrtf((*vx) * (*vx) + (*vy) * (*vy));
+    if (d > 1e-12f) {
+        *vx /= d;
+        *vy /= d;
+    }
+}
+
+static int is_corner(float ax, float ay, float bx, float by, float cross_threshold)
+{
+    /* msdfgen: corner iff dot(a,b) <= 0 OR |cross(a,b)| > sin(threshold). */
+    float dotp = ax * bx + ay * by;
+    if (dotp <= 0.0f) {
+        return 1;
+    }
+    float crossp = ax * by - ay * bx;
+    if (crossp < 0.0f) {
+        crossp = -crossp;
+    }
+    return crossp > cross_threshold ? 1 : 0;
+}
+
+static uint32_t advance_color(uint32_t cur, uint32_t banned)
+{
+    /* msdfgen's switchColor reduced to its YELLOW/MAGENTA/CYAN cycle: pick the
+     * next of the three non-WHITE 2-channel colors that isn't `cur` and isn't
+     * `banned` (banned!=0 only for the wrap-around between the last and first
+     * run, to keep the loop alternating). */
+    static const uint32_t cycle[3] = {COLOR_YELLOW, COLOR_MAGENTA, COLOR_CYAN};
+    int idx_cur = 0;
+    for (int i = 0; i < 3; i++) {
+        if (cycle[i] == cur) {
+            idx_cur = i;
+            break;
+        }
+    }
+    uint32_t next1 = cycle[(idx_cur + 1) % 3];
+    uint32_t next2 = cycle[(idx_cur + 2) % 3];
+    if (banned != 0 && next1 == banned) {
+        return next2;
+    }
+    return next1;
+}
+
+/* Walks the metadata array contour-by-contour, identifies corners using each
+ * segment's begin/end tangent direction, then writes the proper YELLOW/
+ * MAGENTA/CYAN color into each segment's color slot. Mirrors the structure of
+ * glyph_ctx_compute_windings so the metadata indexing stays in sync. */
+static void apply_edge_coloring(struct glyph_ctx *ctx)
+{
+    /* msdfgen's default: angleThreshold = 3.0 rad ⇒ crossThreshold = sin(3.0). */
+    const float cross_threshold = 0.14112f; /* sinf(3.0f) */
+
+    size_t midx = 1; /* skip contour count */
+    size_t point_idx = 0;
+    uint32_t ncontours = ctx->metadata.data[0];
+
+    /* Scratch buffer reused across contours for begin/end tangent dirs. */
+    struct seg_dir {
+        float bx, by;     /* begin direction (normalized) */
+        float ex, ey;     /* end direction (normalized) */
+        size_t color_idx; /* metadata slot to write the assigned color into */
+    };
+    struct seg_dir *segs = NULL;
+    size_t segs_cap = 0;
+
+    for (uint32_t ci = 0; ci < ncontours; ci++) {
+        midx++; /* skip winding */
+        uint32_t nseg = ctx->metadata.data[midx++];
+        if (nseg == 0) {
+            point_idx++; /* the lone moveTo point */
+            continue;
+        }
+        if (nseg > segs_cap) {
+            struct seg_dir *nb = realloc(segs, nseg * sizeof(*nb));
+            if (!nb) {
+                free(segs);
+                return; /* leave previous WHITE coloring on OOM */
+            }
+            segs = nb;
+            segs_cap = nseg;
+        }
+
+        size_t seg_meta = midx;
+        size_t seg_pt = point_idx;
+        for (uint32_t s = 0; s < nseg; s++) {
+            uint32_t color_slot = (uint32_t)midx;
+            uint32_t color = ctx->metadata.data[midx++]; (void)color;
+            uint32_t np = ctx->metadata.data[midx++];
+
+            float p0x = ctx->points.data[point_idx * 2 + 0];
+            float p0y = ctx->points.data[point_idx * 2 + 1];
+            if (np == 2u) {
+                float p1x = ctx->points.data[(point_idx + 1) * 2 + 0];
+                float p1y = ctx->points.data[(point_idx + 1) * 2 + 1];
+                float dx = p1x - p0x;
+                float dy = p1y - p0y;
+                normalize_dir(&dx, &dy);
+                segs[s].bx = dx;
+                segs[s].by = dy;
+                segs[s].ex = dx;
+                segs[s].ey = dy;
+            } else {
+                /* Quadratic — begin tangent = p1-p0, end tangent = p2-p1.
+                 * Falls back to the chord when a control point coincides
+                 * with an endpoint. */
+                float p1x = ctx->points.data[(point_idx + 1) * 2 + 0];
+                float p1y = ctx->points.data[(point_idx + 1) * 2 + 1];
+                float p2x = ctx->points.data[(point_idx + 2) * 2 + 0];
+                float p2y = ctx->points.data[(point_idx + 2) * 2 + 1];
+                float bdx = p1x - p0x;
+                float bdy = p1y - p0y;
+                if (bdx * bdx + bdy * bdy < 1e-20f) {
+                    bdx = p2x - p0x;
+                    bdy = p2y - p0y;
+                }
+                float edx = p2x - p1x;
+                float edy = p2y - p1y;
+                if (edx * edx + edy * edy < 1e-20f) {
+                    edx = p2x - p0x;
+                    edy = p2y - p0y;
+                }
+                normalize_dir(&bdx, &bdy);
+                normalize_dir(&edx, &edy);
+                segs[s].bx = bdx;
+                segs[s].by = bdy;
+                segs[s].ex = edx;
+                segs[s].ey = edy;
+            }
+            segs[s].color_idx = color_slot;
+            point_idx += np - 1;
+        }
+
+        /* Identify corners: index i is a corner when the previous segment's
+         * end tangent is non-collinear with seg[i]'s begin tangent. */
+        int corner_count = 0;
+        int corners[256];
+        if (nseg <= sizeof(corners) / sizeof(corners[0])) {
+            for (uint32_t s = 0; s < nseg; s++) {
+                uint32_t prev = (s == 0u) ? (nseg - 1u) : (s - 1u);
+                if (is_corner(segs[prev].ex, segs[prev].ey,
+                              segs[s].bx, segs[s].by, cross_threshold)) {
+                    corners[corner_count++] = (int)s;
+                }
+            }
+        } else {
+            /* Pathological glyph (>256 segments per contour). Fall back to
+             * everything-WHITE — better than reading off the stack. */
+            corner_count = 0;
+        }
+
+        if (corner_count == 0) {
+            /* Smooth contour — single channel pattern produces a regular SDF
+             * but that's the right behaviour for a teardrop/circle. */
+            for (uint32_t s = 0; s < nseg; s++) {
+                ctx->metadata.data[segs[s].color_idx] = COLOR_WHITE;
+            }
+        } else if (corner_count == 1) {
+            /* Teardrop case from msdfgen — split the contour into 3 runs at
+             * the single corner, alternating colors, with a WHITE middle run
+             * when there are enough segments to give it dedicated room. */
+            uint32_t colors[3] = {COLOR_MAGENTA, COLOR_WHITE, COLOR_YELLOW};
+            int corner = corners[0];
+            for (uint32_t s = 0; s < nseg; s++) {
+                int rel = ((int)s - corner + (int)nseg) % (int)nseg;
+                int phase;
+                if (nseg >= 3u) {
+                    phase = (rel * 3 + (int)nseg / 2) / (int)nseg;
+                } else {
+                    phase = rel; /* nseg=1 or 2 — no middle run */
+                }
+                if (phase < 0) phase = 0;
+                if (phase > 2) phase = 2;
+                ctx->metadata.data[segs[s].color_idx] = colors[phase];
+            }
+        } else {
+            /* ≥2 corners — cycle YELLOW/MAGENTA/CYAN, switching at each corner.
+             * The last switch bans the initial color so the run wrapping back
+             * around to the start of the loop differs from the first run. */
+            uint32_t color = COLOR_YELLOW;
+            uint32_t initial_color = color;
+            int spline = 0;
+            int start = corners[0];
+            int m = (int)nseg;
+            for (int i = 0; i < m; i++) {
+                int index = (start + i) % m;
+                if (spline + 1 < corner_count && corners[spline + 1] == index) {
+                    spline++;
+                    uint32_t banned = (spline == corner_count - 1) ? initial_color : 0;
+                    color = advance_color(color, banned);
+                }
+                ctx->metadata.data[segs[index].color_idx] = color;
+            }
+        }
+
+        (void)seg_meta;
+        (void)seg_pt;
+        point_idx++; /* closing point shared with start */
+    }
+
+    free(segs);
+}
+
 /* Returns 0 on success (and leaves ctx populated), 1 if the glyph is empty
  * (no contours or no points), -1 on a real error. Caller frees ctx. */
 static int serialize_glyph(FT_Face face, uint32_t codepoint, struct glyph_ctx *ctx)
@@ -360,6 +584,7 @@ static int serialize_glyph(FT_Face face, uint32_t codepoint, struct glyph_ctx *c
         return 1;
     }
     glyph_ctx_compute_windings(ctx);
+    apply_edge_coloring(ctx);
     return 0;
 }
 

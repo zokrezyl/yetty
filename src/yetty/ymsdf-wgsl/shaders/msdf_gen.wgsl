@@ -48,29 +48,27 @@ fn cross2d(a: vec2<f32>, b: vec2<f32>) -> f32 {
     return a.x * b.y - a.y * b.x;
 }
 
-// Signed distance to a line segment
-// Convention: negative = inside, positive = outside
+// Signed distance to a line segment.
+// Convention: negative = inside (left of CCW tangent), positive = outside.
+//
+// Returns vec3<f32>(signed_dist, _unused, t):
+//   signed_dist  signed Euclidean distance to the segment (closest point in [0,1])
+//   _unused      reserved (was orthogonality, now unused by main)
+//   t            clamped projection along ab in [0,1]
+//
+// Pseudo-distance correction (msdfgen's
+// EdgeSegment::distanceToPseudoDistance) is intentionally NOT applied
+// here. Without msdfgen's per-pixel error-correction pass it leaks
+// near-edge pseudo values into far-outside pixels along tangent
+// extensions and produces a *worse* MSDF than plain true-distance.
 fn distance_to_line(p0: vec2<f32>, p1: vec2<f32>, origin: vec2<f32>) -> vec3<f32> {
     let aq = origin - p0;
     let ab = p1 - p0;
     let t = clamp(dot(aq, ab) / dot(ab, ab), 0.0, 1.0);
     let closest = p0 + t * ab;
     let to_origin = origin - closest;
-    let dist = length(to_origin);
-
-    // Use cross product with vector from closest point to origin for correct sign
-    // Negate because: positive cross = left of edge = inside CCW contour = should be negative
     let sign_val = -sign(cross2d(ab, to_origin));
-
-    // Return: signed distance, orthogonality (0 at endpoints), parameter t
-    var ortho = 0.0;
-    if t <= 0.0 {
-        ortho = abs(dot(normalize(ab), normalize(aq)));
-    } else if t >= 1.0 {
-        ortho = abs(dot(normalize(ab), normalize(origin - p1)));
-    }
-
-    return vec3<f32>(sign_val * dist, ortho, t);
+    return vec3<f32>(sign_val * length(to_origin), 0.0, t);
 }
 
 // Signed distance to a quadratic bezier curve
@@ -132,12 +130,17 @@ fn distance_to_quad(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, origin: vec2<f3
         num_solutions = 1;
     }
 
-    // Find minimum distance (negate sign: negative = inside, positive = outside)
-    // Start with endpoint p0 (t=0), tangent at t=0 is ab
-    var min_dist = -sign(cross2d(ab, qa)) * length(qa);
+    // Find min distance with sign convention -sign(cross(tangent, origin-closest))
+    // — same convention as distance_to_line and the interior case below.
+    // The original p0 sign expression `-sign(cross(ab, qa))` was inverted
+    // relative to that convention; that flipped sign at any pixel whose
+    // closest point on a quad segment was its t=0 endpoint, producing the
+    // visible MSDF artefacts at corners where one segment's t=0 met the
+    // previous segment's t=1 on a closed contour.
+    let aq = -qa;                 // origin - p0
+    var min_dist = -sign(cross2d(ab, aq)) * length(qa);
     var param = 0.0;
 
-    // Check endpoint p2 (t=1), tangent at t=1 is (p2-p1)
     let qc = p2 - origin;
     let dist_end = -sign(cross2d(p2 - p1, -qc)) * length(qc);
     if abs(dist_end) < abs(min_dist) {
@@ -145,14 +148,12 @@ fn distance_to_quad(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, origin: vec2<f3
         param = 1.0;
     }
 
-    // Check interior solutions
     for (var i = 0; i < num_solutions; i = i + 1) {
         let t = solutions[i];
         if t > 0.0 && t < 1.0 {
-            // Point on curve: B(t) = p0 + 2*t*ab + t^2*br
+            // B(t) = p0 + 2*t*ab + t^2*br ;  B'(t)/2 = ab + t*br
             let point_on_curve = p0 + ab * 2.0 * t + br * t * t;
             let to_origin = origin - point_on_curve;
-            // Tangent at t: B'(t) = 2*(ab + t*br)
             let tangent = ab + br * t;
             let dist = -sign(cross2d(tangent, to_origin)) * length(to_origin);
             if abs(dist) < abs(min_dist) {
@@ -162,15 +163,7 @@ fn distance_to_quad(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, origin: vec2<f3
         }
     }
 
-    var ortho = 0.0;
-    if param > 1.0 {
-        ortho = abs(dot(normalize(p2 - p1), normalize(p2 - origin)));
-    }
-    if param < 0.0 {
-        ortho = abs(dot(normalize(ab), normalize(qa)));
-    }
-
-    return vec3<f32>(min_dist, ortho, param);
+    return vec3<f32>(min_dist, 0.0, param);
 }
 
 // Get direction of segment at parameter t
@@ -269,7 +262,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             let signed_dist = d.x;
             let abs_dist = abs(signed_dist);
 
-            // Update per-channel minimum distances
             if (color & RED) != 0u {
                 if abs_dist < min_abs_r {
                     min_abs_r = abs_dist;

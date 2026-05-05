@@ -85,3 +85,11 @@ endif()
 # cdb-viewer — read-only walker for yetty MSDF .cdb files. Pure C, no
 # library dependencies (parses CDB format directly), so it always builds.
 add_subdirectory(cdb-viewer)
+
+# cdb-diff — pairwise comparison of two .cdb files (CPU vs GPU MSDF
+# generator output). Same direct CDB walk as cdb-viewer; always builds.
+add_subdirectory(cdb-diff)
+
+# yetty-ymsdf-gen-gpu — GPU MSDF generator CLI (WGSL compute shader).
+# Counterpart to yetty-ymsdf-gen (CPU/msdfgen). Headless — no window.
+add_subdirectory(gen-msdf-gpu)
