@@ -1,0 +1,21 @@
+# MSDF tooling — generators, viewers, and diff utilities for yetty .cdb
+# files. Grouped together so the whole MSDF toolbox can be enabled or
+# disabled with a single switch.
+
+# Read-only walker for .cdb files (pure C, no library deps — parses the
+# CDB file format directly). Always built.
+add_subdirectory(cdb-viewer)
+
+# Pairwise diff of two .cdb files, ranks glyphs by per-pixel divergence.
+# Same direct CDB walk as cdb-viewer; always built.
+add_subdirectory(cdb-diff)
+
+# CPU MSDF generator CLI (msdfgen library).
+add_subdirectory(gen-msdf)
+
+# GPU MSDF generator CLI (WGSL compute shader). Headless — no window.
+add_subdirectory(gen-msdf-gpu)
+
+# Atlas viewer — opens a window and renders all glyphs in a CDB so you
+# can visually inspect quality. Reuses the same CDB walker.
+add_subdirectory(render-atlas)

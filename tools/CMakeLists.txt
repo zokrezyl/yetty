@@ -82,6 +82,6 @@ if(YETTY_ENABLE_TOOL_DECODE_YPAINT)
     add_subdirectory(decode-ypaint)
 endif()
 
-# cdb-viewer — read-only walker for yetty MSDF .cdb files. Pure C, no
-# library dependencies (parses CDB format directly), so it always builds.
-add_subdirectory(cdb-viewer)
+# MSDF toolbox — CDB viewers/diff/generators/atlas-viewer. Pure C
+# tooling, always built (the bits that need WGPU bring it in themselves).
+add_subdirectory(msdf)
