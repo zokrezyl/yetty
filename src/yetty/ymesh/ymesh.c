@@ -24,9 +24,10 @@
  *   2  : type_id, payload_size
  *   4  : bounds_x/y/w/h
  *   6  : bbox_min[3], bbox_max[3]
+ *   6  : azimuth, elevation, dist_factor, pan_x, pan_y, mode
  *   3  : vertex_count, index_count, index_size
  */
-#define YMESH_HEADER_WORDS  (2 + 4 + 6 + 3)
+#define YMESH_HEADER_WORDS  (2 + 4 + 6 + 6 + 3)
 
 static size_t ymesh_serialized_size(const struct yetty_ymesh_glb_data *mesh)
 {
@@ -58,6 +59,14 @@ static struct yetty_ycore_size_result ymesh_serialize_prim(
     /* bbox */
     memcpy(p, u->bbox_min, 3 * sizeof(float)); p += 3;
     memcpy(p, u->bbox_max, 3 * sizeof(float)); p += 3;
+
+    /* camera + mode */
+    memcpy(p, &u->azimuth, sizeof(float)); p++;
+    memcpy(p, &u->elevation, sizeof(float)); p++;
+    memcpy(p, &u->dist_factor, sizeof(float)); p++;
+    memcpy(p, &u->pan_x, sizeof(float)); p++;
+    memcpy(p, &u->pan_y, sizeof(float)); p++;
+    *p++ = u->mode;
 
     /* counts */
     *p++ = (uint32_t)mesh->vertex_count;
@@ -94,6 +103,17 @@ struct yetty_ypaint_core_buffer_result yetty_ymesh_render(
     u.bounds_h = (config && config->bounds_h > 0.0f) ? config->bounds_h : 400.0f;
     memcpy(u.bbox_min, mesh.bbox_min, 3 * sizeof(float));
     memcpy(u.bbox_max, mesh.bbox_max, 3 * sizeof(float));
+
+    /* Camera + mode: pass through whatever the caller set, leaving zero/
+     * default sentinels for the gen.c camera-builder to interpret. */
+    if (config) {
+        u.azimuth     = config->azimuth;
+        u.elevation   = config->elevation;
+        u.dist_factor = config->dist_factor;
+        u.pan_x       = config->pan_x;
+        u.pan_y       = config->pan_y;
+        u.mode        = config->mode;
+    }
 
     size_t required = ymesh_serialized_size(&mesh);
     uint8_t *prim_buf = malloc(required);
