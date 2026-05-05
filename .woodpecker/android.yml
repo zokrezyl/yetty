@@ -8,6 +8,9 @@ when:
 clone:
   git:
     image: woodpeckerci/plugin-git
+    backend_options:
+      docker:
+        user: "1000:1000"
     settings:
       lfs: true
 
