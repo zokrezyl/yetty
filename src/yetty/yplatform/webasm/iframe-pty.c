@@ -364,6 +364,15 @@ struct yetty_yplatform_pty_result yetty_yplatform_iframe_pty_create(struct yetty
         } else {
             attach();
         }
+        // Yetty is fully wired up to the VM now. Schedule the boot
+        // console to auto-close — give the user a few seconds to
+        // glance at the final boot lines before it disappears. The
+        // 'x' button in the overlay also dismisses it instantly, and
+        // the userDismissed latch in index.html means status messages
+        // arriving after this point won't pop it back open.
+        if (window.yettyStatus && window.yettyStatus.autoHide) {
+            window.yettyStatus.autoHide(5000);
+        }
     }, pty->pty_id, (int)pty->cols, (int)pty->rows);
 
     yinfo("iframe_pty: created pty_id=%u", pty->pty_id);

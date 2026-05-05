@@ -38,15 +38,14 @@
         /* Boot console — append-only log of each preload step, the VM
          * download, and the yetty startup phases. Stays on top of the
          * canvas so the user can watch progress on slow links (the
-         * tinyemu rootfs alone is 707 MB). Auto-fades after the
-         * terminal has had time to render. */
+         * tinyemu rootfs alone is 700 MB raw / 153 MB on the wire).
+         * Auto-fades after iframe-pty.c attaches yetty to the VM. */
         #yetty-status {
             position: fixed;
             top: 8px;
             left: 8px;
             right: 8px;
             max-height: 60vh;
-            overflow-y: auto;
             background: rgba(0, 0, 0, 0.78);
             color: #ddd;
             font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
@@ -58,16 +57,31 @@
             z-index: 200;
             pointer-events: none;
             transition: opacity 0.4s ease;
+            /* Reserve space for the close button at the top-right and
+             * keep the scrollable log area separate (see #yetty-status-log
+             * below) so the button never scrolls out of view. */
+            display: flex;
+            flex-direction: column;
+        }
+        #yetty-status-log {
+            overflow-y: auto;
+            flex: 1 1 auto;
+            min-height: 0;
         }
         #yetty-status .line { white-space: pre-wrap; word-break: break-all; }
         #yetty-status .line.phase { color: #e94560; font-weight: bold; }
         #yetty-status .line.ok    { color: #6c6; }
         #yetty-status .line.err   { color: #f55; font-weight: bold; }
         #yetty-status .line.dim   { color: #888; }
-        #yetty-status.hidden { display: none; }
+        /* Use `!important` so the class beats the inline `display:flex`
+         * the JS sets on first append. Without this, hide() silently
+         * lost the race against subsequent kernel-boot append()s. */
+        #yetty-status.hidden { display: none !important; }
         /* Manual-dismiss button — overlay's parent has
          * pointer-events:none so the canvas underneath stays
-         * clickable; the close button re-enables them just for itself. */
+         * clickable; the close button re-enables them just for itself.
+         * Lives OUTSIDE #yetty-status-log (its sibling), so scrolling
+         * the log doesn't slide the button out of the visible area. */
         #yetty-status-close {
             position: absolute;
             top: 4px;
@@ -85,6 +99,7 @@
             font-family: inherit;
             pointer-events: auto;
             user-select: none;
+            z-index: 1;
         }
         #yetty-status-close:hover { background: #e94560; color: #fff; }
         #loading .spinner {
@@ -300,12 +315,10 @@
     <div id="canvas-container">
         <canvas id="canvas" width="1024" height="768" tabindex="0"></canvas>
         <!-- Boot console — populated by yettyStatus.append() from
-             preload, iframe, and the launchYetty flow. The 'x'
-             button manually dismisses the overlay until we have a
-             smarter "the terminal is healthy, hide me" trigger. -->
-        <div id="yetty-status" style="display: none;">
-            <button id="yetty-status-close" type="button" title="Close log">&times;</button>
-        </div>
+             preload, iframe, and the launchYetty flow. The close
+             button is a sibling of the scrollable log so it never
+             slides out of view as the log fills up. -->
+        <div id="yetty-status" style="display: none;"><button id="yetty-status-close" type="button" title="Close log">&times;</button><div id="yetty-status-log"></div></div>
         <div id="loading" style="display: none;">
             <div class="spinner"></div>
             <div>Loading WebGPU...</div>
