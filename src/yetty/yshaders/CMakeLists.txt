@@ -17,6 +17,12 @@ set(MODULE_SHADERS
     ${YETTY_ROOT}/src/yetty/yterm/ypaint-layer.wgsl
     ${YETTY_ROOT}/src/yetty/yterm/shader-glyph-layer.wgsl
     ${YETTY_ROOT}/src/yetty/yrender/blend.wgsl
+    # Generated SDF dispatcher + sdf_* functions (gen-sdf-code.py output).
+    # ypaint-layer attaches it as a child resource set at runtime; merging
+    # happens in the binder so the WGSL needs to be staged alongside the
+    # other module shaders. Keep this in sync with the file(COPY) in
+    # build-tools/cmake/targets/shared.cmake which seeds incbin-data.
+    ${YETTY_ROOT}/src/yetty/ysdf/ysdf.gen.wgsl
     # GPU MSDF compute shader — staged so the gpu generator can find it
     # at <shaders_dir>/msdf_gen.wgsl when materialising fonts on the fly.
     ${YETTY_ROOT}/src/yetty/ymsdf-wgsl/shaders/msdf_gen.wgsl

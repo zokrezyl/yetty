@@ -187,6 +187,126 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_circle_outline(struc
     return YETTY_OK_VOID();
 }
 
+/* Mix the alpha channel of a 0xAARRGGBB color by a 0..1 scalar. */
+static uint32_t color_scale_alpha(uint32_t color, float scale)
+{
+    if (scale <= 0.0f) {
+        return color & 0x00FFFFFFu;
+    }
+    if (scale >= 1.0f) {
+        return color;
+    }
+    uint32_t a = (color >> 24) & 0xFFu;
+    uint32_t scaled = (uint32_t)((float)a * scale);
+    if (scaled > 0xFFu) scaled = 0xFFu;
+    return (color & 0x00FFFFFFu) | (scaled << 24);
+}
+
+struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box_shadow(
+    struct yetty_ygui_render_ctx *ctx, float x, float y, float w, float h, float radius,
+    float elevation, uint32_t shadow_color, float alpha_mul)
+{
+    if (!ctx->buffer) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_render_box_shadow: NULL buffer");
+    }
+    if (elevation <= 0.0f || alpha_mul <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+
+    /* Three-layer fake gaussian:
+     *   layer 0: largest spread, faintest        (outer halo)
+     *   layer 1: mid spread, mid alpha           (core shadow)
+     *   layer 2: small spread, near-full alpha   (sharp contact)
+     * Each layer is offset down by `elevation` and outset by an amount
+     * proportional to its layer index. The SDF box's antialiased edge
+     * does the soft-falloff work for us. */
+    struct {
+        float spread;     /* added to each side */
+        float alpha_mul;  /* relative to alpha_mul argument */
+    } layers[] = {
+        {elevation * 1.50f, 0.30f},
+        {elevation * 0.85f, 0.55f},
+        {elevation * 0.35f, 1.00f},
+    };
+
+    for (size_t i = 0; i < sizeof layers / sizeof layers[0]; i++) {
+        float s = layers[i].spread;
+        float lx = x - s;
+        float ly = y - s + elevation;
+        float lw = w + 2.0f * s;
+        float lh = h + 2.0f * s;
+        float lr = radius + s;
+        uint32_t color = color_scale_alpha(shadow_color, alpha_mul * layers[i].alpha_mul);
+        struct yetty_ycore_void_result r =
+            yetty_ygui_render_ctx_render_box(ctx, lx, ly, lw, lh, color, lr);
+        if (YETTY_IS_ERR(r)) {
+            return r;
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box_linear_gradient(
+    struct yetty_ygui_render_ctx *ctx, float x, float y, float w, float h, float radius,
+    float gx0, float gy0, float gx1, float gy1, uint32_t color0, uint32_t color1)
+{
+    if (!ctx->buffer) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_render_box_linear_gradient: NULL buffer");
+    }
+
+    float ax = x + ctx->offset_x;
+    float ay = y + ctx->offset_y;
+    struct yetty_ysdf_linear_gradient_box geom = {
+        .center_x = ax + w * 0.5f,
+        .center_y = ay + h * 0.5f,
+        .half_width = w * 0.5f,
+        .half_height = h * 0.5f,
+        .corner_radius = radius,
+        .grad_x0 = gx0 + ctx->offset_x,
+        .grad_y0 = gy0 + ctx->offset_y,
+        .grad_x1 = gx1 + ctx->offset_x,
+        .grad_y1 = gy1 + ctx->offset_y,
+        .color0 = color0,
+        .color1 = color1,
+    };
+    struct yetty_ypaint_core_id_result r =
+        yetty_ysdf_add_linear_gradient_box(ctx->buffer, 0, /*fill=*/0, 0, 0.0f, &geom);
+    if (r.error != YPAINT_OK) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_render_box_linear_gradient: add failed");
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box_radial_gradient(
+    struct yetty_ygui_render_ctx *ctx, float x, float y, float w, float h, float radius,
+    float cx, float cy, float gradient_radius, uint32_t color_inner, uint32_t color_outer)
+{
+    if (!ctx->buffer) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_render_box_radial_gradient: NULL buffer");
+    }
+
+    float ax = x + ctx->offset_x;
+    float ay = y + ctx->offset_y;
+    struct yetty_ysdf_radial_gradient_box geom = {
+        .center_x = ax + w * 0.5f,
+        .center_y = ay + h * 0.5f,
+        .half_width = w * 0.5f,
+        .half_height = h * 0.5f,
+        .corner_radius = radius,
+        .grad_cx = cx + ctx->offset_x,
+        .grad_cy = cy + ctx->offset_y,
+        .grad_radius = gradient_radius,
+        .color_inner = color_inner,
+        .color_outer = color_outer,
+    };
+    struct yetty_ypaint_core_id_result r =
+        yetty_ysdf_add_radial_gradient_box(ctx->buffer, 0, /*fill=*/0, 0, 0.0f, &geom);
+    if (r.error != YPAINT_OK) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_render_box_radial_gradient: add failed");
+    }
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ycore_void_result yetty_ygui_render_ctx_render_triangle(struct yetty_ygui_render_ctx *ctx, float x0, float y0,
                                                     float x1, float y1, float x2, float y2,
                                                     uint32_t color)

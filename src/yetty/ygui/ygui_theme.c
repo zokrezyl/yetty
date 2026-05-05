@@ -42,6 +42,13 @@ struct yetty_ygui_theme *yetty_ygui_theme_create_default(void)
     theme->font_size = 14.0f;
     theme->separator_size = 1.0f;
 
+    /* Elevation (Material-style soft shadows). */
+    theme->elevation_low = 1.5f;
+    theme->elevation_medium = 4.0f;
+    theme->elevation_high = 8.0f;
+    theme->elevation_alpha = 0.55f;
+    theme->enable_gradient = 1;
+
     /* Colors (ABGR format) */
     theme->bg_primary = 0xFF1A1A2E;
     theme->bg_secondary = 0xFF222233;
@@ -220,4 +227,24 @@ void yetty_ygui_theme_set_selection_bg(struct yetty_ygui_theme *theme, uint32_t 
         return;
     }
     theme->selection_bg = color;
+}
+
+void yetty_ygui_theme_set_elevation(struct yetty_ygui_theme *theme, float low, float medium,
+                                    float high, float alpha)
+{
+    if (!theme) {
+        return;
+    }
+    theme->elevation_low = low;
+    theme->elevation_medium = medium;
+    theme->elevation_high = high;
+    theme->elevation_alpha = alpha;
+}
+
+void yetty_ygui_theme_set_gradient(struct yetty_ygui_theme *theme, int enable)
+{
+    if (!theme) {
+        return;
+    }
+    theme->enable_gradient = enable ? 1 : 0;
 }

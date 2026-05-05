@@ -612,6 +612,15 @@ void yetty_ygui_theme_set_shadow(struct yetty_ygui_theme *theme, uint32_t color)
 void yetty_ygui_theme_set_tooltip_bg(struct yetty_ygui_theme *theme, uint32_t color);
 void yetty_ygui_theme_set_selection_bg(struct yetty_ygui_theme *theme, uint32_t color);
 
+/* Soft-elevation shadow tuning. low / medium / high are vertical offsets
+ * in pixels (set to 0 to disable shadows of that level). alpha is a 0..1
+ * multiplier on theme.shadow's alpha channel (set to 0 to disable
+ * shadows globally without zeroing each level). enable_gradient toggles
+ * the subtle top-edge highlight on buttons. */
+void yetty_ygui_theme_set_elevation(struct yetty_ygui_theme *theme, float low, float medium,
+                                    float high, float alpha);
+void yetty_ygui_theme_set_gradient(struct yetty_ygui_theme *theme, int enable);
+
 /*=============================================================================
  * Testing API
  *===========================================================================*/

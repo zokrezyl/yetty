@@ -214,7 +214,7 @@ def generate_sdf_aabb(prims: list[dict], out: Path) -> None:
     lines.append(f"    const float *geom = data + {GEOMETRY_OFFSET};  // geometry args")
     lines.append("    float stroke_width = data[4];")
     lines.append("    float expand = stroke_width * 0.5f;")
-    lines.append("    struct rectangle rect = {0};")
+    lines.append("    struct yetty_ycore_rectangle rect = {0};")
     lines.append("    (void)word_count;")
     lines.append("")
     lines.append("    switch ((enum yetty_ysdf_type)type) {")
@@ -281,6 +281,10 @@ def generate_sdf_wgsl(prims: list[dict], out: Path) -> None:
     def _f32(expr):
         return f"bitcast<f32>(storage_buffer[{expr}])"
 
+    def _arg_access(arg: dict, idx: int) -> str:
+        offset = f"prim_offset + {GEOMETRY_OFFSET + idx}u"
+        return _u32(offset) if arg["type"] != "f32" else _f32(offset)
+
     # Generate dispatcher for 2D
     sdf2d = [p for p in prims if p["category"] == "sdf2d"]
     if sdf2d:
@@ -290,7 +294,7 @@ def generate_sdf_wgsl(prims: list[dict], out: Path) -> None:
         for p in sdf2d:
             name = p["name"]
             args = p.get("args", [])
-            arg_accesses = [_f32(f"prim_offset + {GEOMETRY_OFFSET + i}u") for i in range(len(args))]
+            arg_accesses = [_arg_access(arg, i) for i, arg in enumerate(args)]
             lines.append(f"        case {p['type']}u: {{ return sdf_{name}(sample_pos, {', '.join(arg_accesses)}); }}")
         lines.append("        default: { return 1e10; }")
         lines.append("    }")
@@ -306,7 +310,7 @@ def generate_sdf_wgsl(prims: list[dict], out: Path) -> None:
         for p in sdf3d:
             name = p["name"]
             args = p.get("args", [])
-            arg_accesses = [_f32(f"prim_offset + {GEOMETRY_OFFSET + i}u") for i in range(len(args))]
+            arg_accesses = [_arg_access(arg, i) for i, arg in enumerate(args)]
             lines.append(f"        case {p['type']}u: {{ return sdf_{name}(sample_pos, {', '.join(arg_accesses)}); }}")
         lines.append("        default: { return 1e10; }")
         lines.append("    }")
@@ -320,6 +324,82 @@ def generate_sdf_wgsl(prims: list[dict], out: Path) -> None:
     lines.append(f"        {_u32('prim_offset + 3u')},  // stroke_color")
     lines.append(f"        {_u32('prim_offset + 4u')}   // stroke_width as bits")
     lines.append("    );")
+    lines.append("}")
+    lines.append("")
+
+    # =========================================================================
+    # Gradient evaluation: emitted only for primitives whose name starts with
+    # "linear_gradient_" or "radial_gradient_". Each one's args layout follows
+    # the convention: geometry first, then 4 (linear) or 3 (radial) gradient-
+    # geometry floats, then 2 colors as u32.
+    # =========================================================================
+
+    def is_linear_gradient(p):
+        return p["name"].startswith("linear_gradient_")
+
+    def is_radial_gradient(p):
+        return p["name"].startswith("radial_gradient_")
+
+    def is_any_gradient(p):
+        return is_linear_gradient(p) or is_radial_gradient(p)
+
+    grads_2d = [p for p in sdf2d if is_any_gradient(p)]
+
+    lines.append("fn yetty_ysdf_is_gradient_2d(prim_type: u32) -> bool {")
+    if grads_2d:
+        lines.append("    switch (prim_type) {")
+        for p in grads_2d:
+            lines.append(f"        case {p['type']}u: {{ return true; }}")
+        lines.append("        default: { return false; }")
+        lines.append("    }")
+    else:
+        lines.append("    return false;")
+    lines.append("}")
+    lines.append("")
+
+    # Fallback unpack if the consumer hasn't defined one. Matches
+    # ypaint-layer.wgsl's ypaint_unpack_color (RGBA in low->high bytes).
+    lines.append("fn yetty_ysdf_unpack_color(packed: u32) -> vec4<f32> {")
+    lines.append("    return vec4<f32>(")
+    lines.append("        f32(packed & 0xFFu) / 255.0,")
+    lines.append("        f32((packed >> 8u) & 0xFFu) / 255.0,")
+    lines.append("        f32((packed >> 16u) & 0xFFu) / 255.0,")
+    lines.append("        f32((packed >> 24u) & 0xFFu) / 255.0,")
+    lines.append("    );")
+    lines.append("}")
+    lines.append("")
+
+    lines.append("fn yetty_ysdf_eval_gradient_color_2d(prim_offset: u32, sample_pos: vec2<f32>) -> vec4<f32> {")
+    lines.append(f"    let prim_type = {_u32('prim_offset')};")
+    lines.append("    switch (prim_type) {")
+    for p in grads_2d:
+        args = p.get("args", [])
+        # Find argument indices by name so the layout stays in lockstep with YAML.
+        idx = {arg["name"]: GEOMETRY_OFFSET + i for i, arg in enumerate(args)}
+        def f32_at(name):
+            return _f32(f"prim_offset + {idx[name]}u")
+        def u32_at(name):
+            return _u32(f"prim_offset + {idx[name]}u")
+        lines.append(f"        case {p['type']}u: {{")
+        if is_linear_gradient(p):
+            lines.append(f"            let g0 = vec2<f32>({f32_at('grad_x0')}, {f32_at('grad_y0')});")
+            lines.append(f"            let g1 = vec2<f32>({f32_at('grad_x1')}, {f32_at('grad_y1')});")
+            lines.append(f"            let c0 = yetty_ysdf_unpack_color({u32_at('color0')});")
+            lines.append(f"            let c1 = yetty_ysdf_unpack_color({u32_at('color1')});")
+            lines.append("            let dir = g1 - g0;")
+            lines.append("            let len2 = dot(dir, dir);")
+            lines.append("            let t = select(0.0, clamp(dot(sample_pos - g0, dir) / len2, 0.0, 1.0), len2 > 0.0);")
+            lines.append("            return mix(c0, c1, t);")
+        else:  # radial
+            lines.append(f"            let gc = vec2<f32>({f32_at('grad_cx')}, {f32_at('grad_cy')});")
+            lines.append(f"            let gr = {f32_at('grad_radius')};")
+            lines.append(f"            let ci = yetty_ysdf_unpack_color({u32_at('color_inner')});")
+            lines.append(f"            let co = yetty_ysdf_unpack_color({u32_at('color_outer')});")
+            lines.append("            let t = select(0.0, clamp(length(sample_pos - gc) / gr, 0.0, 1.0), gr > 0.0);")
+            lines.append("            return mix(ci, co, t);")
+        lines.append("        }")
+    lines.append("        default: { return vec4<f32>(0.0); }")
+    lines.append("    }")
     lines.append("}")
 
     out.parent.mkdir(parents=True, exist_ok=True)

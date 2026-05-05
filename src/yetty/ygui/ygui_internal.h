@@ -56,6 +56,18 @@ struct yetty_ygui_theme {
     float font_size;
     float separator_size;
 
+    /* Elevation (Material-inspired soft drop shadow).
+     *
+     * Each level is the vertical offset of the cast shadow in pixels;
+     * shadow_alpha is its base opacity. Set elevation_* to 0 to fall back
+     * to the legacy flat look. The actual shadow color is `shadow` —
+     * elevation_alpha multiplies its alpha channel. */
+    float    elevation_low;     /* default 1.5px — buttons, list rows */
+    float    elevation_medium;  /* default 4.0px — dropdowns, tooltips */
+    float    elevation_high;    /* default 8.0px — popups, modals */
+    float    elevation_alpha;   /* default 0.55 — global multiplier on shadow.alpha */
+    int      enable_gradient;   /* 0 = flat surface, 1 = subtle vertical gradient on buttons */
+
     /* Colors (ABGR format) */
     uint32_t bg_primary;
     uint32_t bg_secondary;
@@ -462,6 +474,33 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_circle_outline(
 struct yetty_ycore_void_result yetty_ygui_render_ctx_render_triangle(
     struct yetty_ygui_render_ctx *ctx, float x0, float y0, float x1, float y1, float x2, float y2,
     uint32_t color);
+
+/* Soft drop shadow: stacks three slightly larger, semi-transparent rounded
+ * boxes behind the surface to fake gaussian falloff using only the existing
+ * SDF box primitive. `elevation` is the vertical offset of the deepest
+ * shadow layer (in pixels) — use one of theme->elevation_low/medium/high.
+ * `alpha_mul` multiplies theme->shadow's alpha channel (typically
+ * theme->elevation_alpha; pass 0 to disable the shadow entirely). */
+struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box_shadow(
+    struct yetty_ygui_render_ctx *ctx, float x, float y, float w, float h, float radius,
+    float elevation, uint32_t shadow_color, float alpha_mul);
+
+/* Linear-gradient rounded box. The gradient axis is defined in the same
+ * (x,y) coordinate system as the box itself: (gx0, gy0) → (gx1, gy1).
+ * For a vertical top→bottom gradient on a button, pass
+ * (gx0, gy0) = (0, y) and (gx1, gy1) = (0, y + h). color0 is sampled at
+ * the start of the axis, color1 at the end; pixels off-axis are
+ * projected. Both colors must be ABGR (same packing as fill_color). */
+struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box_linear_gradient(
+    struct yetty_ygui_render_ctx *ctx, float x, float y, float w, float h, float radius,
+    float gx0, float gy0, float gx1, float gy1, uint32_t color0, uint32_t color1);
+
+/* Radial gradient inside a rounded box. The gradient origin is at
+ * (cx, cy) and fades over `gradient_radius` pixels. `color_inner` is
+ * sampled at the origin, `color_outer` at the radius; both clamped. */
+struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box_radial_gradient(
+    struct yetty_ygui_render_ctx *ctx, float x, float y, float w, float h, float radius,
+    float cx, float cy, float gradient_radius, uint32_t color_inner, uint32_t color_outer);
 
 /* Default widget functions */
 struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(

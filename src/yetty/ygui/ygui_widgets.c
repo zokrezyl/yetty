@@ -612,19 +612,77 @@ void yetty_ygui_widget_set_max_size_percent(struct yetty_ygui_widget *widget, fl
 static struct yetty_ycore_void_result button_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
-    uint32_t bg = (self->flags & YETTY_YGUI_FLAG_PRESSED) ? self->accent_color : self->bg_color;
+    int pressed = (self->flags & YETTY_YGUI_FLAG_PRESSED) != 0;
+    int hovered = (self->flags & YETTY_YGUI_FLAG_HOVER) != 0;
+    int focused = (self->flags & YETTY_YGUI_FLAG_FOCUSED) != 0;
 
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, bg, t->radius_medium);
-    if (self->data.button.label) {
-        yetty_ygui_render_ctx_render_text(ctx, self->data.button.label, self->x + t->pad_large,
-                         self->y + t->pad_medium, self->fg_color, t->font_size);
+    /* Surface base color: hover brightens, press goes to accent. */
+    uint32_t surface = pressed ? self->accent_color
+                               : (hovered ? t->bg_hover : self->bg_color);
+
+    /* Material-style elevation: low when idle, drops to ~0 when pressed
+     * so the button looks "depressed" against the page. */
+    float elev = pressed ? 0.0f : t->elevation_low;
+    /* Press also nudges the surface down 1px to give tactile feedback. */
+    float press_offset = pressed ? 1.0f : 0.0f;
+
+    /* Drop shadow first (skipped in pressed state). */
+    yetty_ygui_render_ctx_render_box_shadow(ctx, self->x, self->y, self->w, self->h,
+                                            t->radius_medium, elev, t->shadow,
+                                            t->elevation_alpha);
+
+    /* Surface — flat color, or a real linear gradient when the theme
+     * opts in. Using the SDF gradient primitive (ported from yetty-poc):
+     * top edge is `surface` lightened, bottom edge is `surface` darkened,
+     * giving a subtle convex feel without painting an obvious overlay. */
+    if (t->enable_gradient && !pressed) {
+        uint32_t top = surface;
+        uint32_t bot = surface;
+        /* Bias top by +10% white, bottom by -10% black, alpha-preserving. */
+        uint8_t r = (uint8_t)(surface & 0xFF);
+        uint8_t g = (uint8_t)((surface >> 8) & 0xFF);
+        uint8_t b = (uint8_t)((surface >> 16) & 0xFF);
+        uint8_t a = (uint8_t)((surface >> 24) & 0xFF);
+        uint8_t lr = (uint8_t)((r * 230 + 255 * 25) / 255);
+        uint8_t lg = (uint8_t)((g * 230 + 255 * 25) / 255);
+        uint8_t lb = (uint8_t)((b * 230 + 255 * 25) / 255);
+        uint8_t dr = (uint8_t)(r * 230 / 255);
+        uint8_t dg = (uint8_t)(g * 230 / 255);
+        uint8_t db = (uint8_t)(b * 230 / 255);
+        top = (uint32_t)a << 24 | (uint32_t)lb << 16 | (uint32_t)lg << 8 | lr;
+        bot = (uint32_t)a << 24 | (uint32_t)db << 16 | (uint32_t)dg << 8 | dr;
+        yetty_ygui_render_ctx_render_box_linear_gradient(
+            ctx, self->x, self->y + press_offset, self->w, self->h, t->radius_medium,
+            /*gx0,gy0=*/ self->x, self->y + press_offset,
+            /*gx1,gy1=*/ self->x, self->y + press_offset + self->h,
+            top, bot);
+    } else {
+        yetty_ygui_render_ctx_render_box(ctx, self->x, self->y + press_offset, self->w, self->h,
+                                         surface, t->radius_medium);
     }
-    if (self->flags & YETTY_YGUI_FLAG_HOVER) {
-        yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h, self->accent_color,
-                                t->radius_medium, 2.0f);
+
+    /* Focus ring: visible offset outline for keyboard navigation. */
+    if (focused) {
+        float r = t->radius_medium + 2.0f;
+        yetty_ygui_render_ctx_render_box_outline(ctx, self->x - 2.0f,
+                                                 self->y - 2.0f + press_offset,
+                                                 self->w + 4.0f, self->h + 4.0f,
+                                                 self->accent_color, r, 2.0f);
+    } else if (hovered && !pressed) {
+        /* Soft hover halo — inset, accent-colored. */
+        yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y + press_offset, self->w,
+                                                 self->h, self->accent_color, t->radius_medium,
+                                                 1.5f);
+    }
+
+    /* Label. */
+    if (self->data.button.label) {
+        yetty_ygui_render_ctx_render_text(ctx, self->data.button.label,
+                                          self->x + t->pad_large,
+                                          self->y + t->pad_medium + press_offset,
+                                          self->fg_color, t->font_size);
     }
     return YETTY_OK_VOID();
-
 }
 
 static int button_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
@@ -1041,6 +1099,10 @@ static struct yetty_ycore_void_result panel_render(struct yetty_ygui_widget *sel
     const struct yetty_ygui_theme *t = ctx->theme;
     float radius =
         self->data.panel.corner_radius > 0 ? self->data.panel.corner_radius : t->radius_large;
+
+    /* Soft elevation underneath. Panels use medium elevation by default. */
+    yetty_ygui_render_ctx_render_box_shadow(ctx, self->x, self->y, self->w, self->h, radius,
+                                            t->elevation_medium, t->shadow, t->elevation_alpha);
 
     /* Background */
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, self->bg_color, radius);
@@ -1511,6 +1573,11 @@ static struct yetty_ycore_void_result dropdown_render(struct yetty_ygui_widget *
     const struct yetty_ygui_theme *t = ctx->theme;
     int is_open = self->data.dropdown.open;
 
+    /* Low elevation when closed; the open list itself takes medium below. */
+    yetty_ygui_render_ctx_render_box_shadow(ctx, self->x, self->y, self->w, self->h,
+                                            t->radius_medium, t->elevation_low, t->shadow,
+                                            t->elevation_alpha);
+
     /* Main button area */
     uint32_t bg = (self->flags & YETTY_YGUI_FLAG_HOVER) ? t->bg_hover : self->bg_color;
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, bg, t->radius_medium);
@@ -1932,9 +1999,10 @@ static struct yetty_ycore_void_result popup_render(struct yetty_ygui_widget *sel
                         t->overlay_modal, 0);
     }
 
-    /* Drop shadow */
-    yetty_ygui_render_ctx_render_box(ctx, self->x + t->pad_medium, self->y + t->pad_medium, self->w, self->h,
-                    t->shadow, t->radius_large);
+    /* Soft drop shadow (high elevation — popups float above everything). */
+    yetty_ygui_render_ctx_render_box_shadow(ctx, self->x, self->y, self->w, self->h,
+                                            t->radius_large, t->elevation_high, t->shadow,
+                                            t->elevation_alpha);
 
     /* Body + outline */
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, self->bg_color, t->radius_large);
@@ -2264,6 +2332,9 @@ static struct yetty_ycore_void_result tooltip_render(struct yetty_ygui_widget *s
         return YETTY_OK_VOID();
     }
     const struct yetty_ygui_theme *t = ctx->theme;
+    yetty_ygui_render_ctx_render_box_shadow(ctx, self->x, self->y, self->w, self->h,
+                                            t->radius_medium, t->elevation_medium, t->shadow,
+                                            t->elevation_alpha);
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, t->tooltip_bg, t->radius_medium);
     yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h, t->border_muted,
                             t->radius_medium, 1.0f);

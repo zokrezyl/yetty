@@ -262,10 +262,22 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         // Evaluate SDF for non-glyph primitives
         let d = evaluate_sdf_2d(prim_offset + 1u, local_pos);
 
-        // Render fill
-        let fill_color = ypaint_read_fill_color(prim_offset);
-        if (d < 0.0 && fill_color != 0u) {
-            let fill_rgba = ypaint_unpack_color(fill_color);
+        // Resolve the fill color. Gradient primitives compute their color
+        // from per-pixel position; everything else reads the single
+        // packed fill_color word.
+        let prim_type_for_color = ypaint_read_prim_type(prim_offset);
+        var fill_rgba: vec4<f32>;
+        var has_fill: bool;
+        if (yetty_ysdf_is_gradient_2d(prim_type_for_color)) {
+            fill_rgba = yetty_ysdf_eval_gradient_color_2d(prim_offset + 1u, local_pos);
+            has_fill = fill_rgba.a > 0.0;
+        } else {
+            let fill_color = ypaint_read_fill_color(prim_offset);
+            fill_rgba = ypaint_unpack_color(fill_color);
+            has_fill = fill_color != 0u;
+        }
+
+        if (d < 0.0 && has_fill) {
             let edge_alpha = clamp(-d * 2.0, 0.0, 1.0);
             let alpha = edge_alpha * fill_rgba.a;
             result_color = mix(result_color, fill_rgba.rgb, alpha);
