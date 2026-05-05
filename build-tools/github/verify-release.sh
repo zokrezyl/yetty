@@ -146,11 +146,6 @@ if [ -f yetty-webasm.zip ]; then
     check_file "$wasm_root" "yetty.wasm"    "yetty.wasm binary"
     check_file "$wasm_root" "yetty.data"    "yetty.data (preloaded assets)"
 
-    info "[WebAssembly] JSLinux VM"
-    check_dir  "$wasm_root" "jslinux"                  "JSLinux directory"
-    check_file "$wasm_root" "jslinux/vm-bridge.html"   "VM bridge page"
-    check_file "$wasm_root" "jslinux/term-bridge.js"   "Terminal bridge JS"
-
     info "[WebAssembly] vfsync Alpine filesystem"
     check_dir  "$wasm_root" "vfsync"                          "vfsync directory"
     check_dir  "$wasm_root" "vfsync/u/os/yetty-alpine"        "Alpine rootfs"

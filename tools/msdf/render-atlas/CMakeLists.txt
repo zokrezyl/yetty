@@ -20,7 +20,7 @@ target_link_libraries(msdf-render-atlas PRIVATE
     glfw
     glfw3webgpu
     webgpu
-    m
+    $<$<NOT:$<C_COMPILER_ID:MSVC>>:m>
 )
 
 # Dawn (libwebgpu_dawn.a) is C++ — force the C++ stdlib at link time
