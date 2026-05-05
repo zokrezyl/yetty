@@ -107,9 +107,6 @@ script:
   - type: "# this is a plot demo"
   - special-char: ENTER
   - sleep: 0.3
-  - type: "# this is a demo written in yaml"
-  - special-char: ENTER
-  - sleep: 0.4
 
   # ycat with tree-sitter highlighting on the source file.
   - type: "./build-desktop-ytrace-release/tools/ycat/ycat ./demo/scripts/yecho/plot.sh"
@@ -376,3 +373,9 @@ script:
   - sleep: 0.07
   - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 1.5
+
+  # End-of-tour: hold the final frame for a beat, then tell yetty to exit.
+  # The shutdown event closes any --record session cleanly so the recorded
+  # MP4 is finalised (last frame ~= the ymgui demo on screen).
+  - sleep: 1.0
+  - shutdown:

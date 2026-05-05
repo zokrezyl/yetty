@@ -45,9 +45,24 @@ YETTY_YRESULT_DECLARE(yetty_rpc_message, struct yetty_yrpc_message);
 
 /*
  * Parse a msgpack-RPC message from raw bytes.
- * The returned message borrows pointers into the input buffer.
+ *
+ * Streaming-safe: TCP can deliver multiple framed messages in one read
+ * (especially when the loop is stalled by GPU work like recording), or
+ * truncate one across two reads. The caller must loop and track buffer
+ * progress via *out_consumed:
+ *
+ *   - YETTY_OK + *out_consumed > 0: one full message parsed; advance
+ *       the input cursor by *out_consumed and parse again from there.
+ *   - YETTY_OK + *out_consumed == 0: buffer holds only a partial message;
+ *       the returned struct is unpopulated. Wait for more bytes.
+ *   - YETTY_ERR: malformed bytes; close the connection.
+ *
+ * The returned message borrows method/method_len pointers into the
+ * input buffer. msg.params is heap-allocated (re-packed) and must be
+ * freed by the caller.
  */
-struct yetty_rpc_message_result yetty_yrpc_message_parse(const uint8_t *data, size_t len);
+struct yetty_rpc_message_result
+yetty_yrpc_message_parse(const uint8_t *data, size_t len, size_t *out_consumed);
 
 /*
  * Write buffer for serializing responses.

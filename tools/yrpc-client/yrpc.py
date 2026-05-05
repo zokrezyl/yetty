@@ -204,6 +204,10 @@ class RpcClient:
             "width": width, "height": height
         })
 
+    async def shutdown(self) -> None:
+        """Tell yetty to stop its event loop and exit cleanly."""
+        await self.notify(Channel.EventLoop, "shutdown", {})
+
     async def ui_tree(self) -> str:
         """Get UI tree (request, returns string)."""
         return await self.request(Channel.EventLoop, "ui_tree", {})
@@ -426,6 +430,12 @@ async def _play_step(client: RpcClient, step, defaults: dict,
         dy = float(payload.get("dy", 0))
         mods = int(payload.get("mods", 0))
         await client.mouse_scroll(x, y, dx, dy, mods)
+        return
+
+    if verb == "shutdown":
+        # Payload is ignored. Use as the last step in a script when you
+        # want yetty (and any --record video output) to wind down cleanly.
+        await client.shutdown()
         return
 
     raise ValueError(f"unknown script verb: {verb!r}")
