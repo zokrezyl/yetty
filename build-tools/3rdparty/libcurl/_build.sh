@@ -1,11 +1,18 @@
 #!/bin/bash
 # Builds libcurl (curl/curl) for $TARGET_PLATFORM using the upstream
-# CMake project, statically linked against OpenSSL 4 (from the
-# `lib-openssl-new-<ver>` GitHub release — fetched here at build time).
+# CMake project, statically linked against three prebuilt yetty 3rdparty
+# tarballs fetched from GitHub releases at build time:
+#   - openssl-new   (TLS backend; lib-openssl-new-<ver>)
+#   - zlib          (gzip Content-Encoding;  lib-zlib-<ver>)
+#   - brotli        (br   Content-Encoding;  lib-brotli-<ver>)
+# All three are *also* consumed independently by yetty's main build
+# (build-tools/cmake/libs/{openssl-new,zlib,brotli}.cmake) — same
+# tarballs, single source of truth via each subdir's `version` file.
 #
-# Replaces the per-yetty-configure `find_package(CURL)` system-libcurl
-# fallback in build-tools/cmake/libs/libcurl.cmake. Removes the
-# Windows/cross "no system libcurl available" gap.
+# The output tarball ships ONLY `lib/libcurl.a` + headers; the static
+# archive carries unresolved zlib + brotli + openssl symbols, which the
+# yetty consumer side resolves transitively via libcurl.cmake's link
+# interface (which includes the matching libs/{zlib,brotli}.cmake).
 #
 # Required env:
 #   TARGET_PLATFORM   linux-x86_64 | linux-aarch64 |
@@ -15,10 +22,9 @@
 #                     webasm | windows-x86_64
 #   OUTPUT_DIR        where the tarball is written
 #
-# Version is read from this directory's `version` file. The OpenSSL
-# version pin used as TLS backend comes from
-# build-tools/3rdparty/openssl-new/version (single source of truth so
-# bumping openssl-new + libcurl together stays consistent).
+# libcurl version is read from this directory's `version` file. The
+# OpenSSL/zlib/brotli pins come from each library's own
+# `build-tools/3rdparty/<lib>/version` file.
 #
 # Optional env:
 #   WORK_DIR          default /tmp/yetty-3rdparty-libcurl-$TARGET_PLATFORM
@@ -52,6 +58,22 @@ OPENSSL_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/openssl-new/version"
 OPENSSL_NEW_VERSION="$(tr -d '[:space:]' < "$OPENSSL_VERSION_FILE")"
 [ -n "$OPENSSL_NEW_VERSION" ] || { echo "$OPENSSL_VERSION_FILE is empty" >&2; exit 1; }
 
+# zlib + brotli versions come from their respective 3rdparty version
+# files — single source of truth so bumping them propagates everywhere.
+# These are the same prebuilt tarballs yetty's main build consumes via
+# build-tools/cmake/libs/{zlib,brotli}.cmake; we link the same archives
+# into libcurl so symbol resolution at the final yetty link stage finds
+# only one copy.
+ZLIB_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/zlib/version"
+[ -f "$ZLIB_VERSION_FILE" ] || { echo "missing $ZLIB_VERSION_FILE" >&2; exit 1; }
+ZLIB_VERSION="$(tr -d '[:space:]' < "$ZLIB_VERSION_FILE")"
+[ -n "$ZLIB_VERSION" ] || { echo "$ZLIB_VERSION_FILE is empty" >&2; exit 1; }
+
+BROTLI_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/brotli/version"
+[ -f "$BROTLI_VERSION_FILE" ] || { echo "missing $BROTLI_VERSION_FILE" >&2; exit 1; }
+BROTLI_VERSION="$(tr -d '[:space:]' < "$BROTLI_VERSION_FILE")"
+[ -n "$BROTLI_VERSION" ] || { echo "$BROTLI_VERSION_FILE is empty" >&2; exit 1; }
+
 WORK_DIR="${WORK_DIR:-/tmp/yetty-3rdparty-libcurl-$TARGET_PLATFORM}"
 CACHE_DIR="${CACHE_DIR:-$HOME/.cache/yetty-3rdparty}"
 GH_RELEASE_BASE="${GH_RELEASE_BASE:-https://github.com/zokrezyl/yetty/releases/download}"
@@ -74,42 +96,72 @@ OSSL_TARBALL="$CACHE_DIR/$OSSL_FILENAME"
 OSSL_URL="${GH_RELEASE_BASE}/lib-openssl-new-${OPENSSL_NEW_VERSION}/${OSSL_FILENAME}"
 OSSL_DIR="$WORK_DIR/openssl-new-${OPENSSL_NEW_VERSION}"
 
+ZLIB_FILENAME="zlib-${TARGET_PLATFORM}-${ZLIB_VERSION}.tar.gz"
+ZLIB_TARBALL="$CACHE_DIR/$ZLIB_FILENAME"
+ZLIB_URL="${GH_RELEASE_BASE}/lib-zlib-${ZLIB_VERSION}/${ZLIB_FILENAME}"
+ZLIB_DIR="$WORK_DIR/zlib-${ZLIB_VERSION}"
+
+BROTLI_FILENAME="brotli-${TARGET_PLATFORM}-${BROTLI_VERSION}.tar.gz"
+BROTLI_TARBALL="$CACHE_DIR/$BROTLI_FILENAME"
+BROTLI_URL="${GH_RELEASE_BASE}/lib-brotli-${BROTLI_VERSION}/${BROTLI_FILENAME}"
+BROTLI_DIR="$WORK_DIR/brotli-${BROTLI_VERSION}"
+
 mkdir -p "$WORK_DIR" "$OUTPUT_DIR" "$CACHE_DIR"
 
+# fetch_3rdparty <name> <tarball-cache-path> <url> <extract-dir>
+fetch_3rdparty() {
+    local _name="$1" _cache="$2" _url="$3" _dir="$4"
+    if [ ! -f "$_cache" ]; then
+        local _part="$_cache.part.$$"
+        (
+            if command -v flock >/dev/null 2>&1; then flock -x 9; fi
+            if [ ! -f "$_cache" ]; then
+                echo "==> downloading $_name for ${TARGET_PLATFORM}"
+                echo "    $_url"
+                curl -fL --retry 8 --retry-delay 5 --retry-all-errors \
+                    -o "$_part" "$_url"
+                mv "$_part" "$_cache"
+            fi
+        ) 9>"$CACHE_DIR/.${_name}-download.lock"
+        rm -f "$_part"
+    fi
+    if [ ! -d "$_dir" ]; then
+        echo "==> extracting $_name -> $_dir"
+        mkdir -p "$_dir"
+        tar -C "$_dir" -xzf "$_cache"
+    fi
+}
+
 #-----------------------------------------------------------------------------
-# Fetch OpenSSL prebuilt for this target
+# Fetch prebuilt deps (OpenSSL TLS, zlib for gzip, brotli for br)
 #-----------------------------------------------------------------------------
-if [ ! -f "$OSSL_TARBALL" ]; then
-    _part="$OSSL_TARBALL.part.$$"
-    (
-        if command -v flock >/dev/null 2>&1; then flock -x 9; fi
-        if [ ! -f "$OSSL_TARBALL" ]; then
-            echo "==> downloading openssl-new ${OPENSSL_NEW_VERSION} for ${TARGET_PLATFORM}"
-            echo "    $OSSL_URL"
-            curl -fL --retry 8 --retry-delay 5 --retry-all-errors \
-                -o "$_part" "$OSSL_URL"
-            mv "$_part" "$OSSL_TARBALL"
-        fi
-    ) 9>"$CACHE_DIR/.openssl-new-download.lock"
-    rm -f "$_part"
-fi
-if [ ! -d "$OSSL_DIR" ]; then
-    echo "==> extracting openssl-new -> $OSSL_DIR"
-    mkdir -p "$OSSL_DIR"
-    tar -C "$OSSL_DIR" -xzf "$OSSL_TARBALL"
-fi
+fetch_3rdparty openssl-new "$OSSL_TARBALL"   "$OSSL_URL"   "$OSSL_DIR"
+fetch_3rdparty zlib        "$ZLIB_TARBALL"   "$ZLIB_URL"   "$ZLIB_DIR"
+fetch_3rdparty brotli      "$BROTLI_TARBALL" "$BROTLI_URL" "$BROTLI_DIR"
+
 # Windows MSVC build of openssl-new ships libssl.lib + libcrypto.lib;
 # everywhere else the convention is libssl.a + libcrypto.a.
 if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
     _OSSL_SSL="$OSSL_DIR/lib/libssl.lib"
     _OSSL_CRYPTO="$OSSL_DIR/lib/libcrypto.lib"
+    _ZLIB_LIB="$ZLIB_DIR/lib/zlibstatic.lib"
+    _BROTLI_DEC="$BROTLI_DIR/lib/brotlidec.lib"
+    _BROTLI_COMMON="$BROTLI_DIR/lib/brotlicommon.lib"
 else
     _OSSL_SSL="$OSSL_DIR/lib/libssl.a"
     _OSSL_CRYPTO="$OSSL_DIR/lib/libcrypto.a"
+    _ZLIB_LIB="$ZLIB_DIR/lib/libz.a"
+    _BROTLI_DEC="$BROTLI_DIR/lib/libbrotlidec.a"
+    _BROTLI_COMMON="$BROTLI_DIR/lib/libbrotlicommon.a"
 fi
-[ -f "$_OSSL_SSL"    ] || { echo "openssl-new: missing $(basename "$_OSSL_SSL")"    >&2; exit 1; }
-[ -f "$_OSSL_CRYPTO" ] || { echo "openssl-new: missing $(basename "$_OSSL_CRYPTO")" >&2; exit 1; }
-[ -f "$OSSL_DIR/include/openssl/ssl.h" ] || { echo "openssl-new: missing ssl.h" >&2; exit 1; }
+[ -f "$_OSSL_SSL"      ] || { echo "openssl-new: missing $(basename "$_OSSL_SSL")"     >&2; exit 1; }
+[ -f "$_OSSL_CRYPTO"   ] || { echo "openssl-new: missing $(basename "$_OSSL_CRYPTO")"  >&2; exit 1; }
+[ -f "$OSSL_DIR/include/openssl/ssl.h"   ] || { echo "openssl-new: missing ssl.h"     >&2; exit 1; }
+[ -f "$_ZLIB_LIB"      ] || { echo "zlib: missing $(basename "$_ZLIB_LIB")"            >&2; exit 1; }
+[ -f "$ZLIB_DIR/include/zlib.h"          ] || { echo "zlib: missing zlib.h"            >&2; exit 1; }
+[ -f "$_BROTLI_DEC"    ] || { echo "brotli: missing $(basename "$_BROTLI_DEC")"        >&2; exit 1; }
+[ -f "$_BROTLI_COMMON" ] || { echo "brotli: missing $(basename "$_BROTLI_COMMON")"     >&2; exit 1; }
+[ -f "$BROTLI_DIR/include/brotli/decode.h" ] || { echo "brotli: missing decode.h"      >&2; exit 1; }
 
 #-----------------------------------------------------------------------------
 # Fetch curl
@@ -160,6 +212,19 @@ CMAKE_ARGS=(
     -DOPENSSL_SSL_LIBRARY="$_OSSL_SSL"
     -DOPENSSL_CRYPTO_LIBRARY="$_OSSL_CRYPTO"
 
+    # zlib (gzip) — curl's FindZLIB reads ZLIB_INCLUDE_DIR + ZLIB_LIBRARY.
+    -DCURL_ZLIB=ON
+    -DZLIB_INCLUDE_DIR="$ZLIB_DIR/include"
+    -DZLIB_LIBRARY="$_ZLIB_LIB"
+
+    # brotli (br) — curl's FindBrotli reads BROTLI_INCLUDE_DIR plus the
+    # two LIBRARY_* paths. Decoder + common are enough for incoming
+    # responses (curl never *encodes* request bodies as br).
+    -DCURL_BROTLI=ON
+    -DBROTLI_INCLUDE_DIR="$BROTLI_DIR/include"
+    -DBROTLI_LIBRARY_DEC="$_BROTLI_DEC"
+    -DBROTLI_LIBRARY_COMMON="$_BROTLI_COMMON"
+
     # Flag-name conventions are mixed in curl 8.x: CURL_USE_* for some,
     # USE_* for others (libidn2, nghttp2, librtmp). Audit confirmed
     # against curl 8.19.0's CMakeLists.txt option() declarations.
@@ -172,9 +237,7 @@ CMAKE_ARGS=(
     -DCURL_USE_BEARSSL=OFF
     -DCURL_DISABLE_LDAP=ON
     -DCURL_DISABLE_LDAPS=ON
-    -DCURL_BROTLI=OFF
     -DCURL_ZSTD=OFF
-    -DCURL_ZLIB=OFF
     -DUSE_NGHTTP2=OFF
     -DUSE_NGTCP2=OFF
     -DUSE_QUICHE=OFF
@@ -187,8 +250,6 @@ CMAKE_ARGS=(
     -DCMAKE_DISABLE_FIND_PACKAGE_NGHTTP2=ON
     -DCMAKE_DISABLE_FIND_PACKAGE_LibPSL=ON
     -DCMAKE_DISABLE_FIND_PACKAGE_LibSSH2=ON
-    -DCMAKE_DISABLE_FIND_PACKAGE_ZLIB=ON
-    -DCMAKE_DISABLE_FIND_PACKAGE_BROTLI=ON
     -DCMAKE_DISABLE_FIND_PACKAGE_ZSTD=ON
 )
 EMCMAKE_PREFIX=""
