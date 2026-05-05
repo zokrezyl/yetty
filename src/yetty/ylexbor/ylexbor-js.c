@@ -170,6 +170,33 @@ static void report_exception(JSContext *ctx, const char *url)
 	JS_FreeValue(ctx, ex);
 }
 
+/* Print the line of `src` containing 1-based byte offset `line_no`,
+ * with a caret pointing at column `col_no` (1-based). For diagnostic
+ * dumps when JS throws — easier than re-fetching source by URL. */
+static void print_src_at(const char *src, size_t slen,
+			 int line_no, int col_no)
+{
+	int line = 1;
+	const char *line_start = src;
+	const char *p = src;
+	const char *end = src + slen;
+	while (p < end && line < line_no) {
+		if (*p == '\n') { line++; line_start = p + 1; }
+		p++;
+	}
+	const char *line_end = line_start;
+	while (line_end < end && *line_end != '\n') line_end++;
+	int len = (int)(line_end - line_start);
+	if (len > 240) len = 240;
+	fprintf(stderr, "  source: %.*s\n", len, line_start);
+	if (col_no > 0 && col_no <= 240) {
+		fprintf(stderr, "         ");
+		for (int i = 1; i < col_no; i++) fputc('-', stderr);
+		fputc('^', stderr);
+		fputc('\n', stderr);
+	}
+}
+
 /* Eval a UTF-8 source buffer in the global scope. `url` is the file
  * label used in stack traces. */
 static void eval_buf(struct yetty_ylexbor *r, JSContext *ctx,
@@ -178,7 +205,47 @@ static void eval_buf(struct yetty_ylexbor *r, JSContext *ctx,
 	JSValue v = JS_Eval(ctx, src, slen,
 		url ? url : "<inline>", JS_EVAL_TYPE_GLOBAL);
 	if (JS_IsException(v)) {
-		report_exception(ctx, url ? url : "<inline>");
+		/* Pull the line+col out of the stack frame so we can show
+		 * the offending source line. We re-extract here (after
+		 * report_exception) by re-getting the exception, which
+		 * was already cleared. Skip if YLEXBOR_DEBUG_JS isn't on. */
+		if (getenv("YLEXBOR_DEBUG_JS")) {
+			JSValue ex0 = JS_GetException(ctx);
+			const char *m = JS_ToCString(ctx, ex0);
+			fprintf(stderr, "[js:exception] %s: %s\n",
+				url ? url : "<inline>", m ? m : "?");
+			if (m) JS_FreeCString(ctx, m);
+			JSValue stack = JS_GetPropertyStr(ctx, ex0, "stack");
+			const char *st = JS_ToCString(ctx, stack);
+			if (st) fprintf(stderr, "%s\n", st);
+			/* Parse the *first* (deepest) frame. Lines look like
+			 *   "    at <anonymous> (<inline>:2:64)\n" */
+			int line = 0, col = 0;
+			if (st) {
+				const char *p = strstr(st, "<inline>:");
+				if (!p) p = strchr(st, ':');
+				if (p) {
+					p = strchr(p, ':');
+					if (p) {
+						line = atoi(p + 1);
+						const char *q = strchr(p + 1, ':');
+						if (q) col = atoi(q + 1);
+					}
+				}
+				JS_FreeCString(ctx, st);
+			}
+			JS_FreeValue(ctx, stack);
+			JS_FreeValue(ctx, ex0);
+			if (line > 0) {
+				/* Show line ±1 around the failure for context. */
+				if (line > 1)
+					print_src_at(src, slen, line - 1, 0);
+				print_src_at(src, slen, line, col);
+				print_src_at(src, slen, line + 1, 0);
+			}
+		} else {
+			report_exception(ctx, url ? url : "<inline>");
+		}
 		r->js_error_count++;
 	}
 	JS_FreeValue(ctx, v);

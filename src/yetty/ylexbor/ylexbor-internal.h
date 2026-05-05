@@ -109,10 +109,31 @@ struct JSContext;
  * ylexbor-js-web.c. */
 struct yetty_ylexbor_timer;
 
+/* CSS custom-property entry — populated from `:root { --foo: bar; }`
+ * (and equivalent) declarations in every stylesheet we load. lexbor's
+ * cascade only assigns IDs to custom-property names; the *values* are
+ * not substituted into `var(--foo)` references during cascade. We
+ * collect them ourselves and resolve var() inside our color/length
+ * readers (see ylexbor-css-vars.c). */
+struct yetty_ylexbor_custom_prop {
+	char *name;       /* e.g. "--bgColor-default" — without trailing : */
+	char *value;      /* serialized value, e.g. "#0d1117" or "var(--x)" */
+};
+
+struct yetty_ylexbor_customs {
+	struct yetty_ylexbor_custom_prop *data;
+	int size, cap;
+};
+
 struct yetty_ylexbor {
 	/* lexbor objects — owned. */
 	lxb_html_document_t *document;
 	lxb_css_parser_t    *css_parser;
+
+	/* CSS custom-property table populated by yetty_ylexbor_css_vars_*
+	 * as stylesheets get added. Read by read_inline_color / similar
+	 * to substitute `var(--foo)` references. */
+	struct yetty_ylexbor_customs customs;
 
 	/* Base URL of the loaded document — used to resolve relative
 	 * src= for external <script>, fetch(), XHR. NULL for HTML loaded
@@ -174,6 +195,29 @@ const char *yetty_ylexbor_arena_dup(struct yetty_ylexbor *r,
 /* Naive text width: glyph_count(s) * font_size * 0.55. Same shortcut
  * ynetsurf uses; will be replaced by FreeType-driven metrics later. */
 float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size);
+
+/* ===========================================================================
+ * CSS custom-property resolver (ylexbor-css-vars.c) — fills the gap left
+ * by lexbor's cascade for `var(--foo)` lookups. After every stylesheet
+ * is added, scan its source for `--name: value;` declarations that live
+ * in :root / html / * rules and store the name→value mapping. When
+ * reading an attribute value, call resolve_vars to substitute.
+ * ===========================================================================*/
+
+/* Scan `css_source` for custom-property declarations rooted at :root /
+ * html / *  and merge them into r->customs. Idempotent — later defs
+ * overwrite earlier (closest to spec for our purposes). */
+void yetty_ylexbor_css_vars_scan(struct yetty_ylexbor *r,
+				  const char *css_source, size_t len);
+
+/* Resolve every `var(--name [, fallback])` reference in `value`. Returns
+ * a freshly malloc'd NUL-terminated string the caller must free.
+ * Returns a copy of the input on no-vars / OOM. */
+char *yetty_ylexbor_css_vars_resolve(struct yetty_ylexbor *r,
+				      const char *value, size_t len);
+
+/* Drop the customs table — called from destroy. */
+void yetty_ylexbor_css_vars_destroy(struct yetty_ylexbor *r);
 
 /* Internal box-vector growth — implemented in ylexbor.c. */
 struct yetty_ycore_void_result _yetty_ylexbor_box_vec_reserve(

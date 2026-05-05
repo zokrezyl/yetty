@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <stdio.h>
 #include <lexbor/css/css.h>
 #include <lexbor/style/style.h>
 #include <lexbor/html/html.h>
@@ -140,6 +141,7 @@ struct yetty_ycore_void_result yetty_ylexbor_destroy(struct yetty_ylexbor *r)
 	box_vec_destroy(&r->boxes);
 	free(r->text_arena);
 	free(r->base_url);
+	yetty_ylexbor_css_vars_destroy(r);
 	free(r);
 	return YETTY_OK_VOID();
 }
@@ -271,6 +273,19 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(
 	/* Run inline + external <script> blocks. */
 	(void)yetty_ylexbor_js_run_inline_scripts(r);
 
+	if (getenv("YLEXBOR_DEBUG_CSS")) {
+		fprintf(stderr,
+		    "[ylexbor:css] sheets ext=%d inline=%d failed=%d "
+		    "customs=%d\n",
+		    g_css_loaded, g_css_inline, g_css_failed,
+		    r->customs.size);
+		for (int i = 0; i < r->customs.size; i++) {
+			fprintf(stderr, "[ylexbor:css]   %s = %s\n",
+				r->customs.data[i].name,
+				r->customs.data[i].value);
+		}
+	}
+
 	struct yetty_ycore_void_result br = yetty_ylexbor_box_build(r);
 	if (YETTY_IS_ERR(br)) return br;
 
@@ -286,6 +301,10 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css(
 {
 	if (r == NULL || css == NULL)
 		return YETTY_ERR(yetty_ycore_void, "ylexbor_add_css: null");
+
+	/* Pre-scan for `:root { --x: y; }` etc. before lexbor parses,
+	 * so var() lookups see the latest definitions. */
+	yetty_ylexbor_css_vars_scan(r, css, css_len);
 
 	lxb_css_stylesheet_t *sheet = lxb_css_stylesheet_create(NULL);
 	if (sheet == NULL)

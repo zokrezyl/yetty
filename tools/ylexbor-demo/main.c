@@ -26,6 +26,7 @@
 #include <sys/select.h>
 #include <sys/stat.h>
 #include <termios.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <yetty/ylexbor/ylexbor.h>
@@ -446,6 +447,38 @@ int main(int argc, char **argv)
 	if (YETTY_IS_ERR(lr)) {
 		fprintf(stderr, "load_html: %s\n", lr.error.msg);
 		yetty_ylexbor_destroy(yl); free(html); return 1;
+	}
+
+	/* SPA boot: most modern pages render their initial body via
+	 * setTimeout(fn, 0) / queueMicrotask / requestAnimationFrame
+	 * chains that haven't fired by the time load_html returns. Pump
+	 * the timer queue for a bounded budget (default 2s wall-clock)
+	 * so the actual content has a chance to land in the DOM before
+	 * we paint. Skip in interactive mode — the loop pumps anyway. */
+	if (!interactive) {
+		long budget_ms = 2000;
+		const char *e = getenv("YLEXBOR_BOOT_BUDGET_MS");
+		if (e) budget_ms = atol(e);
+		struct timespec t0;
+		clock_gettime(CLOCK_MONOTONIC, &t0);
+		while (budget_ms > 0) {
+			int wait_ms = yetty_ylexbor_pump_timers(yl);
+			if (wait_ms < 0) break;  /* no more timers */
+			if (wait_ms > 50) wait_ms = 50;
+			struct timespec ts = {
+				.tv_sec  = wait_ms / 1000,
+				.tv_nsec = (wait_ms % 1000) * 1000000L,
+			};
+			nanosleep(&ts, NULL);
+			struct timespec t1;
+			clock_gettime(CLOCK_MONOTONIC, &t1);
+			long elapsed = (t1.tv_sec - t0.tv_sec) * 1000 +
+				       (t1.tv_nsec - t0.tv_nsec) / 1000000;
+			if (elapsed >= budget_ms) break;
+		}
+		if (yetty_ylexbor_dom_dirty(yl)) {
+			(void)yetty_ylexbor_relayout(yl);
+		}
 	}
 
 	int rc;

@@ -14,6 +14,7 @@ add_library(yetty_ylexbor STATIC
     ylexbor-box.c
     ylexbor-layout.c
     ylexbor-paint.c
+    ylexbor-css-vars.c
     ylexbor-js.c
     ylexbor-js-dom.c
     ylexbor-js-web.c

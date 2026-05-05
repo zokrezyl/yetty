@@ -350,6 +350,101 @@ static JSValue js_el_querySelectorAll(JSContext *ctx, JSValueConst this_val,
 	return arr;
 }
 
+/* getElementsByTagName / -ClassName / -Name — implemented as
+ * querySelectorAll under the hood. The DOM spec asks for "live"
+ * collections that auto-update on mutation; we return a plain Array
+ * snapshot since the rest of our DOM bindings don't model liveness
+ * either. Callers iterate via .length / [i] / forEach which all work. */
+static JSValue js_el_getElementsByTagName(JSContext *ctx,
+	JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	if (argc < 1) return JS_NewArray(ctx);
+	lxb_dom_node_t *root = unwrap_node(this_val);
+	if (!root) return JS_NewArray(ctx);
+	size_t slen;
+	const char *tag = JS_ToCStringLen(ctx, &slen, argv[0]);
+	if (!tag) return JS_NewArray(ctx);
+	/* `*` matches any element. */
+	struct sel_collect_ctx c = {0};
+	(void)run_selector(root, tag, slen, &c, /*first_only=*/0);
+	JS_FreeCString(ctx, tag);
+	JSValue arr = JS_NewArray(ctx);
+	for (size_t i = 0; i < c.count; i++) {
+		JS_SetPropertyUint32(ctx, arr, (uint32_t)i,
+			wrap_element(ctx, c.elements[i]));
+	}
+	JS_SetPropertyStr(ctx, arr, "item",
+		JS_Eval(ctx, "(function(i){return this[i]||null;})", 36,
+			"<gebtn-item>", JS_EVAL_TYPE_GLOBAL));
+	free(c.elements);
+	return arr;
+}
+
+static JSValue js_el_getElementsByClassName(JSContext *ctx,
+	JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	if (argc < 1) return JS_NewArray(ctx);
+	lxb_dom_node_t *root = unwrap_node(this_val);
+	if (!root) return JS_NewArray(ctx);
+	size_t slen;
+	const char *cls = JS_ToCStringLen(ctx, &slen, argv[0]);
+	if (!cls) return JS_NewArray(ctx);
+	/* class names may be space-separated; treat as a compound class
+	 * selector ".a.b.c". */
+	char buf[512];
+	size_t off = 0;
+	const char *p = cls, *end = cls + slen;
+	while (p < end && off + 1 < sizeof(buf)) {
+		while (p < end && (*p == ' ' || *p == '\t')) p++;
+		if (p >= end) break;
+		if (off + 1 >= sizeof(buf)) break;
+		buf[off++] = '.';
+		while (p < end && *p != ' ' && *p != '\t' &&
+		       off + 1 < sizeof(buf)) {
+			buf[off++] = *p++;
+		}
+	}
+	struct sel_collect_ctx c = {0};
+	if (off > 0) {
+		(void)run_selector(root, buf, off, &c, /*first_only=*/0);
+	}
+	JS_FreeCString(ctx, cls);
+	JSValue arr = JS_NewArray(ctx);
+	for (size_t i = 0; i < c.count; i++) {
+		JS_SetPropertyUint32(ctx, arr, (uint32_t)i,
+			wrap_element(ctx, c.elements[i]));
+	}
+	free(c.elements);
+	return arr;
+}
+
+static JSValue js_el_getElementsByName(JSContext *ctx,
+	JSValueConst this_val, int argc, JSValueConst *argv)
+{
+	if (argc < 1) return JS_NewArray(ctx);
+	lxb_dom_node_t *root = unwrap_node(this_val);
+	if (!root) return JS_NewArray(ctx);
+	size_t nlen;
+	const char *name = JS_ToCStringLen(ctx, &nlen, argv[0]);
+	if (!name) return JS_NewArray(ctx);
+	/* Build attribute selector [name="..."]. */
+	char buf[256];
+	int off = snprintf(buf, sizeof(buf), "[name=\"%.*s\"]",
+		(int)(nlen > 200 ? 200 : nlen), name);
+	struct sel_collect_ctx c = {0};
+	if (off > 0) {
+		(void)run_selector(root, buf, (size_t)off, &c, /*first_only=*/0);
+	}
+	JS_FreeCString(ctx, name);
+	JSValue arr = JS_NewArray(ctx);
+	for (size_t i = 0; i < c.count; i++) {
+		JS_SetPropertyUint32(ctx, arr, (uint32_t)i,
+			wrap_element(ctx, c.elements[i]));
+	}
+	free(c.elements);
+	return arr;
+}
+
 /* getElementById — Document-only convenience. Walks the tree comparing
  * `id` attribute. */
 static lxb_dom_element_t *find_by_id(lxb_dom_node_t *node,
@@ -536,6 +631,131 @@ static JSValue js_el_className_set(JSContext *ctx, JSValueConst this_val, JSValu
 	}
 	return JS_UNDEFINED;
 }
+
+/* IDL-attribute mirrors. Many DOM properties (`src`, `href`, `name`,
+ * `value`, `type`, `alt`, `title`, `placeholder`, `action`, `method`)
+ * read/write the corresponding HTML attribute as a string. The spec
+ * resolves `src` / `href` to an *absolute URL* on read — without that,
+ * webpack's runtime publicPath detection bails with
+ *   Error: Automatic publicPath is not supported in this browser
+ * because `scripts[scripts.length - 1].src` returned a relative path.
+ *
+ * Setter is plain string. The `urlish` flag tells the getter to push
+ * the value through the base-URL resolver so `<script src="foo.js">`
+ * resolves to "https://host/path/foo.js" from JS. */
+static JSValue idl_attr_get(JSContext *ctx, JSValueConst this_val,
+			    const char *attr, size_t alen, int urlish)
+{
+	lxb_dom_element_t *el = unwrap_element(this_val);
+	if (!el) return JS_NewString(ctx, "");
+	size_t vlen;
+	const lxb_char_t *v = lxb_dom_element_get_attribute(el,
+		(const lxb_char_t *)attr, alen, &vlen);
+	if (!v) return JS_NewString(ctx, "");
+	if (urlish) {
+		struct yetty_ylexbor *r = runtime_ylex(ctx);
+		char *raw = malloc(vlen + 1);
+		if (!raw)
+			return JS_NewStringLen(ctx, (const char *)v, vlen);
+		memcpy(raw, v, vlen); raw[vlen] = '\0';
+		char *abs = r ? yetty_ylexbor_resolve_url(r, raw) : NULL;
+		free(raw);
+		if (abs) {
+			JSValue out = JS_NewString(ctx, abs);
+			free(abs);
+			return out;
+		}
+	}
+	return JS_NewStringLen(ctx, (const char *)v, vlen);
+}
+
+static JSValue idl_attr_set(JSContext *ctx, JSValueConst this_val,
+			    JSValueConst val,
+			    const char *attr, size_t alen)
+{
+	lxb_dom_element_t *el = unwrap_element(this_val);
+	if (!el) return JS_UNDEFINED;
+	size_t slen;
+	const char *s = JS_ToCStringLen(ctx, &slen, val);
+	if (s) {
+		lxb_dom_element_set_attribute(el,
+			(const lxb_char_t *)attr, alen,
+			(const lxb_char_t *)s, slen);
+		JS_FreeCString(ctx, s);
+		mark_dirty(ctx);
+	}
+	return JS_UNDEFINED;
+}
+
+#define IDL_ATTR(prop, attr, urlish)                                       \
+	static JSValue js_el_##prop##_get(JSContext *ctx, JSValueConst tv) \
+	{ return idl_attr_get(ctx, tv, attr, sizeof(attr) - 1, urlish); }  \
+	static JSValue js_el_##prop##_set(JSContext *ctx, JSValueConst tv, \
+					  JSValueConst val)                \
+	{ return idl_attr_set(ctx, tv, val, attr, sizeof(attr) - 1); }
+
+/* nodeType — DOM constants:
+ *   1  = ELEMENT_NODE
+ *   3  = TEXT_NODE
+ *   8  = COMMENT_NODE
+ *   9  = DOCUMENT_NODE
+ *   11 = DOCUMENT_FRAGMENT_NODE
+ * Real libraries gate cascades of behaviour on this (`if (e.nodeType
+ * === 9) ...` is the canonical "is this a document?" check). */
+static JSValue js_el_nodeType_get(JSContext *ctx, JSValueConst this_val)
+{
+	if (JS_GetOpaque(this_val, class_document_id))
+		return JS_NewInt32(ctx, 9);
+	if (JS_GetOpaque(this_val, class_element_id))
+		return JS_NewInt32(ctx, 1);
+	return JS_NewInt32(ctx, 0);
+}
+
+static JSValue js_el_nodeName_get(JSContext *ctx, JSValueConst this_val)
+{
+	if (JS_GetOpaque(this_val, class_document_id))
+		return JS_NewString(ctx, "#document");
+	lxb_dom_element_t *el = unwrap_element(this_val);
+	if (!el) return JS_NewString(ctx, "");
+	size_t len = 0;
+	const lxb_char_t *n = lxb_dom_element_local_name(el, &len);
+	if (!n) return JS_NewString(ctx, "");
+	char buf[64];
+	size_t out = len < sizeof(buf) ? len : sizeof(buf);
+	for (size_t i = 0; i < out; i++) {
+		char c = (char)n[i];
+		buf[i] = (c >= 'a' && c <= 'z') ? (char)(c - 32) : c;
+	}
+	return JS_NewStringLen(ctx, buf, out);
+}
+
+/* ownerDocument — for any wrapped element this is the document we
+ * minted document_obj for. We don't have a direct handle, so look it
+ * up from the runtime opaque. Document's own ownerDocument is null per
+ * spec. */
+static JSValue js_el_ownerDocument_get(JSContext *ctx, JSValueConst this_val)
+{
+	if (JS_GetOpaque(this_val, class_document_id))
+		return JS_NULL;
+	if (!JS_GetOpaque(this_val, class_element_id))
+		return JS_NULL;
+	struct yetty_ylexbor *r = runtime_ylex(ctx);
+	if (!r) return JS_NULL;
+	return wrap_document(ctx, r->document);
+}
+
+IDL_ATTR(src,         "src",         1)
+IDL_ATTR(href,        "href",        1)
+IDL_ATTR(action,      "action",      1)
+IDL_ATTR(name,        "name",        0)
+IDL_ATTR(value,       "value",       0)
+IDL_ATTR(type,        "type",        0)
+IDL_ATTR(alt,         "alt",         0)
+IDL_ATTR(title,       "title",       0)
+IDL_ATTR(placeholder, "placeholder", 0)
+IDL_ATTR(method,      "method",      0)
+IDL_ATTR(rel,         "rel",         0)
+IDL_ATTR(target,      "target",      0)
 
 /* parentElement / firstElementChild / nextElementSibling / children */
 
@@ -946,24 +1166,191 @@ static JSValue js_el_addEventListener(JSContext *ctx, JSValueConst this_val,
  * Class registration + globalThis.document install.
  * ===========================================================================*/
 
+/* Lightweight predicate / no-op stubs for the long tail of DOM methods
+ * SPAs reach for. None of these affect rendering; they exist purely
+ * so existence checks like `if (typeof el.matches === "function")`
+ * pass and the boot path continues. */
+static JSValue js_el_undef_stub(JSContext *ctx, JSValueConst this_val,
+				int argc, JSValueConst *argv)
+{ (void)ctx; (void)this_val; (void)argc; (void)argv; return JS_UNDEFINED; }
+
+static JSValue js_el_contains_stub(JSContext *ctx, JSValueConst this_val,
+				   int argc, JSValueConst *argv)
+{
+	(void)this_val;
+	if (argc < 1) return JS_FALSE;
+	/* Best-effort: walk argv[0]'s parent chain looking for `this`. */
+	void *self_p = JS_GetOpaque(this_val, class_element_id);
+	if (!self_p) self_p = JS_GetOpaque(this_val, class_document_id);
+	void *other_p = JS_GetOpaque(argv[0], class_element_id);
+	if (!self_p || !other_p) return JS_FALSE;
+	lxb_dom_node_t *target = (lxb_dom_node_t *)other_p;
+	for (lxb_dom_node_t *n = target; n; n = n->parent) {
+		if ((void *)n == self_p) return JS_TRUE;
+	}
+	return JS_FALSE;
+}
+
+static JSValue js_el_matches_stub(JSContext *ctx, JSValueConst this_val,
+				  int argc, JSValueConst *argv)
+{
+	(void)ctx; (void)this_val; (void)argc; (void)argv;
+	/* Pessimistic: false — usually less harmful than a fake true. */
+	return JS_FALSE;
+}
+
+static JSValue js_el_hasChildNodes_stub(JSContext *ctx, JSValueConst this_val,
+					int argc, JSValueConst *argv)
+{
+	(void)ctx; (void)argc; (void)argv;
+	lxb_dom_node_t *n = unwrap_node(this_val);
+	return JS_NewBool(ctx, n && n->first_child != NULL);
+}
+
+static JSValue js_el_hasAttributes_stub(JSContext *ctx, JSValueConst this_val,
+					int argc, JSValueConst *argv)
+{
+	(void)argc; (void)argv;
+	lxb_dom_element_t *el = unwrap_element(this_val);
+	if (!el) return JS_FALSE;
+	return JS_NewBool(ctx, el->first_attr != NULL);
+}
+
+static JSValue js_el_getAttributeNames_stub(JSContext *ctx, JSValueConst this_val,
+					    int argc, JSValueConst *argv)
+{
+	(void)argc; (void)argv;
+	lxb_dom_element_t *el = unwrap_element(this_val);
+	JSValue arr = JS_NewArray(ctx);
+	if (!el) return arr;
+	uint32_t i = 0;
+	for (lxb_dom_attr_t *a = el->first_attr; a; a = a->next) {
+		size_t nlen = 0;
+		const lxb_char_t *nm = lxb_dom_attr_qualified_name(a, &nlen);
+		if (nm) {
+			JS_SetPropertyUint32(ctx, arr, i++,
+				JS_NewStringLen(ctx, (const char *)nm, nlen));
+		}
+	}
+	return arr;
+}
+
+static JSValue js_el_cloneNode_stub(JSContext *ctx, JSValueConst this_val,
+				    int argc, JSValueConst *argv)
+{
+	(void)ctx; (void)argc; (void)argv;
+	/* Return same node — close enough for code that just wants a
+	 * "node-like thing" back. */
+	return JS_DupValue(ctx, this_val);
+}
+
+static JSValue js_el_clientRect_stub(JSContext *ctx, JSValueConst this_val,
+				     int argc, JSValueConst *argv)
+{
+	(void)this_val; (void)argc; (void)argv;
+	JSValue r = JS_NewObject(ctx);
+	JS_SetPropertyStr(ctx, r, "x", JS_NewFloat64(ctx, 0));
+	JS_SetPropertyStr(ctx, r, "y", JS_NewFloat64(ctx, 0));
+	JS_SetPropertyStr(ctx, r, "width", JS_NewFloat64(ctx, 0));
+	JS_SetPropertyStr(ctx, r, "height", JS_NewFloat64(ctx, 0));
+	JS_SetPropertyStr(ctx, r, "top", JS_NewFloat64(ctx, 0));
+	JS_SetPropertyStr(ctx, r, "left", JS_NewFloat64(ctx, 0));
+	JS_SetPropertyStr(ctx, r, "right", JS_NewFloat64(ctx, 0));
+	JS_SetPropertyStr(ctx, r, "bottom", JS_NewFloat64(ctx, 0));
+	return r;
+}
+
+static JSValue js_el_clientRects_stub(JSContext *ctx, JSValueConst this_val,
+				      int argc, JSValueConst *argv)
+{ (void)this_val; (void)argc; (void)argv; return JS_NewArray(ctx); }
+
+static JSValue js_el_dispatchEvent_stub(JSContext *ctx, JSValueConst this_val,
+					int argc, JSValueConst *argv)
+{ (void)ctx; (void)this_val; (void)argc; (void)argv; return JS_TRUE; }
+
+static JSValue js_el_toggleAttr_stub(JSContext *ctx, JSValueConst this_val,
+				     int argc, JSValueConst *argv)
+{
+	if (argc < 1) return JS_FALSE;
+	lxb_dom_element_t *el = unwrap_element(this_val);
+	if (!el) return JS_FALSE;
+	size_t nlen;
+	const char *name = JS_ToCStringLen(ctx, &nlen, argv[0]);
+	if (!name) return JS_FALSE;
+	int has = lxb_dom_element_has_attribute(el,
+		(const lxb_char_t *)name, nlen);
+	if (has) {
+		lxb_dom_element_remove_attribute(el,
+			(const lxb_char_t *)name, nlen);
+	} else {
+		lxb_dom_element_set_attribute(el,
+			(const lxb_char_t *)name, nlen,
+			(const lxb_char_t *)"", 0);
+	}
+	JS_FreeCString(ctx, name);
+	mark_dirty(ctx);
+	return JS_NewBool(ctx, !has);
+}
+
 static const JSCFunctionListEntry document_funcs[] = {
-	JS_CFUNC_DEF("getElementById",    1, js_doc_getElementById),
-	JS_CFUNC_DEF("querySelector",     1, js_el_querySelector),
-	JS_CFUNC_DEF("querySelectorAll",  1, js_el_querySelectorAll),
-	JS_CFUNC_DEF("createElement",     1, js_doc_createElement),
-	JS_CFUNC_DEF("addEventListener",  2, js_el_addEventListener),
+	JS_CFUNC_DEF("getElementById",         1, js_doc_getElementById),
+	JS_CFUNC_DEF("getElementsByTagName",   1, js_el_getElementsByTagName),
+	JS_CFUNC_DEF("getElementsByClassName", 1, js_el_getElementsByClassName),
+	JS_CFUNC_DEF("getElementsByName",      1, js_el_getElementsByName),
+	JS_CFUNC_DEF("querySelector",          1, js_el_querySelector),
+	JS_CFUNC_DEF("querySelectorAll",       1, js_el_querySelectorAll),
+	JS_CFUNC_DEF("createElement",          1, js_doc_createElement),
+	JS_CFUNC_DEF("addEventListener",       2, js_el_addEventListener),
+	JS_CGETSET_DEF("nodeType",             js_el_nodeType_get, NULL),
+	JS_CGETSET_DEF("nodeName",             js_el_nodeName_get, NULL),
+	JS_CGETSET_DEF("ownerDocument",        js_el_ownerDocument_get, NULL),
 };
 
 static const JSCFunctionListEntry element_funcs[] = {
-	JS_CFUNC_DEF("getAttribute",      1, js_el_getAttribute),
-	JS_CFUNC_DEF("setAttribute",      2, js_el_setAttribute),
-	JS_CFUNC_DEF("removeAttribute",   1, js_el_removeAttribute),
-	JS_CFUNC_DEF("hasAttribute",      1, js_el_hasAttribute),
-	JS_CFUNC_DEF("appendChild",       1, js_el_appendChild),
-	JS_CFUNC_DEF("removeChild",       1, js_el_removeChild),
-	JS_CFUNC_DEF("querySelector",     1, js_el_querySelector),
-	JS_CFUNC_DEF("querySelectorAll",  1, js_el_querySelectorAll),
-	JS_CFUNC_DEF("addEventListener",  2, js_el_addEventListener),
+	JS_CFUNC_DEF("getAttribute",           1, js_el_getAttribute),
+	JS_CFUNC_DEF("setAttribute",           2, js_el_setAttribute),
+	JS_CFUNC_DEF("removeAttribute",        1, js_el_removeAttribute),
+	JS_CFUNC_DEF("hasAttribute",           1, js_el_hasAttribute),
+	JS_CFUNC_DEF("appendChild",            1, js_el_appendChild),
+	JS_CFUNC_DEF("removeChild",            1, js_el_removeChild),
+	JS_CFUNC_DEF("querySelector",          1, js_el_querySelector),
+	JS_CFUNC_DEF("querySelectorAll",       1, js_el_querySelectorAll),
+	JS_CFUNC_DEF("getElementsByTagName",   1, js_el_getElementsByTagName),
+	JS_CFUNC_DEF("getElementsByClassName", 1, js_el_getElementsByClassName),
+	JS_CFUNC_DEF("addEventListener",       2, js_el_addEventListener),
+	/* ChildNode/ParentNode mutators that legitimately share the
+	 * appendChild path (single-arg insertion). The spec's full
+	 * variadic signature degrades to the single-node case under
+	 * production code 99% of the time. */
+	JS_CFUNC_DEF("prepend",                1, js_el_appendChild),
+	JS_CFUNC_DEF("append",                 1, js_el_appendChild),
+	JS_CFUNC_DEF("insertBefore",           2, js_el_appendChild),
+	JS_CFUNC_DEF("replaceChild",           2, js_el_appendChild),
+	JS_CFUNC_DEF("replaceWith",            1, js_el_appendChild),
+	JS_CFUNC_DEF("before",                 1, js_el_appendChild),
+	JS_CFUNC_DEF("after",                  1, js_el_appendChild),
+	JS_CFUNC_DEF("remove",                 0, js_el_removeChild),
+	JS_CFUNC_DEF("closest",                1, js_el_querySelector),
+	/* Predicates / accessors that need a typed return. We give them
+	 * a tiny dedicated stub each below so they don't masquerade as
+	 * mutators. */
+	JS_CFUNC_DEF("contains",               1, js_el_contains_stub),
+	JS_CFUNC_DEF("matches",                1, js_el_matches_stub),
+	JS_CFUNC_DEF("hasChildNodes",          0, js_el_hasChildNodes_stub),
+	JS_CFUNC_DEF("hasAttributes",          0, js_el_hasAttributes_stub),
+	JS_CFUNC_DEF("getAttributeNames",      0, js_el_getAttributeNames_stub),
+	JS_CFUNC_DEF("cloneNode",              1, js_el_cloneNode_stub),
+	JS_CFUNC_DEF("getBoundingClientRect",  0, js_el_clientRect_stub),
+	JS_CFUNC_DEF("getClientRects",         0, js_el_clientRects_stub),
+	/* True no-ops — return undefined. */
+	JS_CFUNC_DEF("scrollIntoView",         0, js_el_undef_stub),
+	JS_CFUNC_DEF("focus",                  0, js_el_undef_stub),
+	JS_CFUNC_DEF("blur",                   0, js_el_undef_stub),
+	JS_CFUNC_DEF("click",                  0, js_el_undef_stub),
+	JS_CFUNC_DEF("normalize",              0, js_el_undef_stub),
+	JS_CFUNC_DEF("dispatchEvent",          1, js_el_dispatchEvent_stub),
+	JS_CFUNC_DEF("removeEventListener",    2, js_el_undef_stub),
+	JS_CFUNC_DEF("toggleAttribute",        1, js_el_toggleAttr_stub),
 	JS_CGETSET_DEF("textContent",        js_el_textContent_get, js_el_textContent_set),
 	JS_CGETSET_DEF("tagName",            js_el_tagName_get, NULL),
 	JS_CGETSET_DEF("id",                 js_el_id_get, js_el_id_set),
@@ -974,6 +1361,21 @@ static const JSCFunctionListEntry element_funcs[] = {
 	JS_CGETSET_DEF("children",           js_el_children_get, NULL),
 	JS_CGETSET_DEF("style",              js_el_style_get, NULL),
 	JS_CGETSET_DEF("classList",          js_el_classList_get, NULL),
+	JS_CGETSET_DEF("nodeType",           js_el_nodeType_get, NULL),
+	JS_CGETSET_DEF("nodeName",           js_el_nodeName_get, NULL),
+	JS_CGETSET_DEF("ownerDocument",      js_el_ownerDocument_get, NULL),
+	JS_CGETSET_DEF("src",                js_el_src_get, js_el_src_set),
+	JS_CGETSET_DEF("href",               js_el_href_get, js_el_href_set),
+	JS_CGETSET_DEF("action",             js_el_action_get, js_el_action_set),
+	JS_CGETSET_DEF("name",               js_el_name_get, js_el_name_set),
+	JS_CGETSET_DEF("value",              js_el_value_get, js_el_value_set),
+	JS_CGETSET_DEF("type",               js_el_type_get, js_el_type_set),
+	JS_CGETSET_DEF("alt",                js_el_alt_get, js_el_alt_set),
+	JS_CGETSET_DEF("title",              js_el_title_get, js_el_title_set),
+	JS_CGETSET_DEF("placeholder",        js_el_placeholder_get, js_el_placeholder_set),
+	JS_CGETSET_DEF("method",             js_el_method_get, js_el_method_set),
+	JS_CGETSET_DEF("rel",                js_el_rel_get, js_el_rel_set),
+	JS_CGETSET_DEF("target",             js_el_target_get, js_el_target_set),
 };
 
 void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
@@ -1049,7 +1451,44 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
 			wrap_element(ctx, lxb_dom_interface_element(head)));
 	}
 
+	/* Webpack's runtime publicPath probe reads:
+	 *   document.currentScript || document.getElementsByTagName("script")[N-1]
+	 * Provide both: currentScript=null is acceptable; the GEBTN
+	 * fallback then works because we now expose .src on elements. */
+	JS_SetPropertyStr(ctx, doc_obj, "currentScript", JS_NULL);
+
+	/* document.defaultView === window. Many libraries reach window
+	 * via document.defaultView (and via element.ownerDocument
+	 * .defaultView), so expose it explicitly. */
+	JS_SetPropertyStr(ctx, doc_obj, "defaultView", JS_DupValue(ctx, global));
+
+	/* Global aliases — `window`, `self`, `top`, `parent`, `frames`,
+	 * and `globalThis` (already-set by QuickJS) all point at the
+	 * same global object in a non-iframed page. SPAs reference
+	 * any of these interchangeably. */
 	JS_SetPropertyStr(ctx, global, "window", JS_DupValue(ctx, global));
+	JS_SetPropertyStr(ctx, global, "self",   JS_DupValue(ctx, global));
+	JS_SetPropertyStr(ctx, global, "top",    JS_DupValue(ctx, global));
+	JS_SetPropertyStr(ctx, global, "parent", JS_DupValue(ctx, global));
+	JS_SetPropertyStr(ctx, global, "frames", JS_DupValue(ctx, global));
+
+	/* window.addEventListener / removeEventListener / dispatchEvent —
+	 * many libs do `window.addEventListener("popstate", ...)`. Route
+	 * through the same listener storage as Element.addEventListener
+	 * (target=NULL, fired by yetty_ylexbor_js_dispatch_event_type
+	 * with target=NULL). */
+	JS_SetPropertyStr(ctx, global, "addEventListener",
+		JS_NewCFunction(ctx, js_el_addEventListener,
+			"addEventListener", 2));
+	/* No-op stoppers — full removal would require per-listener IDs. */
+	const char *noopdef = "(function(){})";
+	JSValue noop = JS_Eval(ctx, noopdef, strlen(noopdef),
+		"<noop>", JS_EVAL_TYPE_GLOBAL);
+	JS_SetPropertyStr(ctx, global, "removeEventListener",
+		JS_DupValue(ctx, noop));
+	JS_SetPropertyStr(ctx, global, "dispatchEvent",
+		JS_DupValue(ctx, noop));
+	JS_FreeValue(ctx, noop);
 	JS_FreeValue(ctx, global);
 }
 
@@ -1129,6 +1568,13 @@ void yetty_ylexbor_js_dispatch_event_type(struct yetty_ylexbor *r,
 	JSContext *ctx = (JSContext *)r->js_ctx;
 	lxb_dom_element_t *only = (lxb_dom_element_t *)target_element_ptr_or_null;
 
+	/* Default target for global events (load, DOMContentLoaded) is
+	 * document. Real handlers reach for event.target.tagName etc.,
+	 * so we need a non-null object there. */
+	JSValue global = JS_GetGlobalObject(ctx);
+	JSValue doc_target = JS_GetPropertyStr(ctx, global, "document");
+	JS_FreeValue(ctx, global);
+
 	for (int i = 0; i < g_listener_count; i++) {
 		if (only && g_listeners[i].el != only) continue;
 		if (strcmp(g_listeners[i].type, type) != 0) continue;
@@ -1136,6 +1582,15 @@ void yetty_ylexbor_js_dispatch_event_type(struct yetty_ylexbor *r,
 		JS_SetPropertyStr(ctx, ev, "type", JS_NewString(ctx, type));
 		JS_SetPropertyStr(ctx, ev, "bubbles", JS_FALSE);
 		JS_SetPropertyStr(ctx, ev, "cancelable", JS_FALSE);
+		JS_SetPropertyStr(ctx, ev, "defaultPrevented", JS_FALSE);
+		JS_SetPropertyStr(ctx, ev, "timeStamp", JS_NewInt32(ctx, 0));
+		JSValue tgt = only
+			? wrap_element(ctx, only)
+			: JS_DupValue(ctx, doc_target);
+		JS_SetPropertyStr(ctx, ev, "target",        JS_DupValue(ctx, tgt));
+		JS_SetPropertyStr(ctx, ev, "currentTarget", JS_DupValue(ctx, tgt));
+		JS_SetPropertyStr(ctx, ev, "srcElement",    JS_DupValue(ctx, tgt));
+		JS_FreeValue(ctx, tgt);
 		JSValueConst args[] = { ev };
 		JSValue ret = JS_Call(ctx, g_listeners[i].handler,
 			JS_UNDEFINED, 1, args);
@@ -1150,6 +1605,7 @@ void yetty_ylexbor_js_dispatch_event_type(struct yetty_ylexbor *r,
 		JS_FreeValue(ctx, ret);
 		JS_FreeValue(ctx, ev);
 	}
+	JS_FreeValue(ctx, doc_target);
 }
 
 #else /* !YETTY_HAVE_QUICKJS */

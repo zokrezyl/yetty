@@ -379,14 +379,27 @@ static int parse_css_color(const char *s, size_t len,
 }
 
 /* Look up `key` in an inline-style attribute, parse it as a CSS color,
- * write to *out on success. Returns 1 iff found+parsed. */
-static int read_inline_color(const lxb_char_t *style, size_t slen,
+ * write to *out on success. Returns 1 iff found+parsed.
+ *
+ * `r` provides the custom-property table for var() substitution; pass
+ * NULL to skip resolution (e.g. when re-reading the inline `style=`
+ * attribute as a fallback). */
+static int read_inline_color(struct yetty_ylexbor *r,
+			     const lxb_char_t *style, size_t slen,
 			     const char *key, size_t klen,
 			     struct yetty_ylexbor_color *out)
 {
 	size_t vlen = 0;
 	const char *v = find_inline_decl(style, slen, key, klen, &vlen);
 	if (!v) return 0;
+	if (r != NULL) {
+		char *resolved = yetty_ylexbor_css_vars_resolve(r, v, vlen);
+		if (resolved) {
+			int ok = parse_css_color(resolved, strlen(resolved), out);
+			free(resolved);
+			return ok;
+		}
+	}
 	return parse_css_color(v, vlen, out);
 }
 
@@ -519,6 +532,21 @@ static void walk(struct yetty_ylexbor *r,
 			char *cstyle = NULL;
 			size_t cstyle_len = 0;
 			(void)read_computed_style(el, &cstyle, &cstyle_len);
+			static int dbg_cstyle = -1;
+			if (dbg_cstyle < 0)
+				dbg_cstyle = getenv("YLEXBOR_DEBUG_CSTYLE") ? 1 : 0;
+			if (dbg_cstyle && cstyle && cstyle_len > 0) {
+				size_t cls_len = 0;
+				const lxb_char_t *cls = lxb_dom_element_get_attribute(el,
+					(const lxb_char_t *)"class", 5, &cls_len);
+				fprintf(stderr,
+				    "[ylexbor:cstyle] tag=%s class=\"%.*s\" cstyle=\"%.*s\"\n",
+				    (const char *)lxb_dom_element_local_name(el, NULL),
+				    (int)(cls_len > 60 ? 60 : cls_len),
+				    (const char *)(cls ? cls : (const lxb_char_t *)""),
+				    (int)(cstyle_len > 200 ? 200 : cstyle_len),
+				    cstyle);
+			}
 
 			/* Inline style attribute — used as a fallback when
 			 * lexbor's cascade returned nothing (e.g. when the
@@ -529,27 +557,27 @@ static void walk(struct yetty_ylexbor *r,
 
 			struct yetty_ylexbor_color c;
 			int got = 0;
-			if (cstyle && read_inline_color((const lxb_char_t *)cstyle,
+			if (cstyle && read_inline_color(r, (const lxb_char_t *)cstyle,
 					cstyle_len, "color", 5, &c)) {
 				s.fg = c; got = 1;
 			}
-			if (!got && istyle && read_inline_color(istyle, istylen,
+			if (!got && istyle && read_inline_color(r, istyle, istylen,
 					"color", 5, &c)) {
 				s.fg = c;
 			}
 			style_to_box(b, &s);
 
 			got = 0;
-			if (cstyle && (read_inline_color((const lxb_char_t *)cstyle,
+			if (cstyle && (read_inline_color(r, (const lxb_char_t *)cstyle,
 					cstyle_len, "background-color", 16, &c) ||
-				       read_inline_color((const lxb_char_t *)cstyle,
+				       read_inline_color(r, (const lxb_char_t *)cstyle,
 					cstyle_len, "background", 10, &c))) {
 				b->bg = c; got = 1;
 			}
 			if (!got && istyle &&
-			    (read_inline_color(istyle, istylen,
+			    (read_inline_color(r, istyle, istylen,
 					"background-color", 16, &c) ||
-			     read_inline_color(istyle, istylen,
+			     read_inline_color(r, istyle, istylen,
 					"background", 10, &c))) {
 				b->bg = c;
 				got = 1;
