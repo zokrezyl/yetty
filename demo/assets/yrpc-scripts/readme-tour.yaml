@@ -6,21 +6,31 @@
 # the demo runs.
 #
 # Scenes:
+#   0. Cold open — type a single fast command to ycat the project logo
+#      JPEG. No narration; the image lands as the GIF's first impression.
 #   1. MSDF text — runs the existing ypaint/scrolling/text.sh, then
 #      Ctrl+scroll-zooms in (soft visual zoom) so the viewer sees the
 #      MSDF-rendered glyphs stay sharp at any scale.
-#   2. Inline shader-rendered plot — yetty's shader VM draws a curve
-#      family directly into the scrolling layer. Same zoom dance.
+#   2. Plot demo — ycat the plot.sh source (rendered with tree-sitter
+#      highlighting), zoom; then actually run plot.sh and zoom on the
+#      rendered curves. Ctrl+C bails the trailing `sleep 600`.
 #   3. ycat README.md — markdown rendered inline as ypaint primitives
 #      (headings, lists, code blocks) instead of plain text.
+#   4. ygui flex dashboard — fullscreen flexbox layout demo with native
+#      widgets. Press `q` to quit between scenes.
+#   5. ygui tree view — interactive tree widget.
+#   6. ymgui demo window — Dear ImGui running on yetty's GPU rendering
+#      backend (one ImGui window inside the terminal, not a multi-window
+#      manager). The script leaves it on screen as the GIF's final frame.
 #
 # Prereq: in repo root, start yetty with
 #   ./build-desktop-ytrace-release/yetty --rpc-port=9999 -e bash
 # then run ./demo/scripts/yrpc-scripts/readme-tour.sh from another shell.
 #
-# Zoom anchor defaults to (500, 300). If your window is much smaller or
-# the anchor lands on an empty area, edit the x/y in the mouse-move /
-# mouse-scroll steps below.
+# Zoom anchor is parked at the bottom-left of the window (x=5, y=700) so
+# Ctrl+scroll grows content up-and-right from the prompt area instead of
+# bulging out from the middle of the screen. Bump y if your recording
+# window is much taller than ~720px.
 
 config:
   defaults:
@@ -30,9 +40,20 @@ config:
       avg-typo: 0.0
 
 script:
-  # --- scene 1: MSDF text + zoom -----------------------------------------
-  - sleep: 0.6
+  # --- scene 0: cold open — show the logo --------------------------------
+  - sleep: 0.4
 
+  # Fast typing (40 cps, no jitter) — the logo command flies onto the
+  # screen and the JPEG lands almost instantly. Sets the tone.
+  - type:
+      text: "./build-desktop-ytrace-release/tools/ycat/ycat docs/logo-2.jpeg"
+      avg-speed: 40
+      speed-deviation: 0.0
+      avg-typo: 0.0
+  - special-char: ENTER
+  - sleep: 2.0
+
+  # --- scene 1: MSDF text + zoom -----------------------------------------
   - type: "# MSDF text — shader-rendered, stays crisp at any zoom"
   - special-char: ENTER
   - sleep: 0.4
@@ -43,90 +64,141 @@ script:
 
   # Park the mouse at the zoom anchor BEFORE scrolling — Ctrl+scroll uses
   # this position as the zoom center, so all ticks share the same (x, y).
-  - mouse-move: { x: 500, y: 300 }
+  - mouse-move: { x: 5, y: 700 }
   - sleep: 0.2
 
   # Ctrl = mods 2 → soft visual zoom (no grid resize). Eight +1 ticks ≈
   # +0.8 zoom delta — enough to see MSDF resharpening clearly.
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 1.4
 
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.8
 
-  # --- scene 2: shader-VM plot + zoom ------------------------------------
-  - type: "# shader-rendered plot via yetty's shader VM — embedded inline"
+  # --- scene 2: plot demo source — ycat (rendered) vs. cat (plain) -------
+  - type: "# this is a plot demo"
+  - special-char: ENTER
+  - sleep: 0.3
+  - type: "# this is a demo written in yaml"
   - special-char: ENTER
   - sleep: 0.4
 
-  - type: "./build-desktop-ytrace-release/tools/yplot/yplot -w 520 -H 200 --xrange=0..6.28 --yrange=-1..1 'a=sin(x)' 'b=sin(2*x)/2' 'sum=sin(x)+sin(2*x)/2+sin(3*x)/3' '@sum.color=#FCBF49' '@a.color=#FF6B6B' '@b.color=#4ECDC4'"
+  # ycat with tree-sitter highlighting on the source file.
+  - type: "./build-desktop-ytrace-release/tools/ycat/ycat ./demo/scripts/yecho/plot.sh"
   - special-char: ENTER
   - sleep: 1.6
 
-  - mouse-move: { x: 500, y: 300 }
+  - mouse-move: { x: 5, y: 700 }
   - sleep: 0.2
 
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 1.4
 
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.8
+
+  # Now actually run the demo — plot.sh emits the yplot OSC envelopes
+  # and the curves render in the scrolling layer.
+  - type: "./demo/scripts/yecho/plot.sh"
+  - special-char: ENTER
+  - sleep: 2.0
+
+  - mouse-move: { x: 5, y: 700 }
+  - sleep: 0.2
+
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 1.4
+
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.6
+
+  # plot.sh ends with `sleep 600`; Ctrl+C bails so scene 3 starts at a prompt.
+  - char: { char: 'c', ctrl: true }
+  - sleep: 0.4
 
   # --- scene 3: ycat README.md -------------------------------------------
   - type: "# ycat — render markdown inline as ypaint primitives"
@@ -139,31 +211,168 @@ script:
 
   # One last gentle zoom on the rendered README so the viewer sees the
   # rich layout (headings, code blocks) hold up under magnification.
-  - mouse-move: { x: 500, y: 300 }
+  - mouse-move: { x: 5, y: 700 }
   - sleep: 0.2
 
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: 1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 1.6
 
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
-  - mouse-scroll: { x: 500, y: 300, dy: -1, mods: 2 }
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 1.0
+
+  # --- scene 4: ygui flex dashboard --------------------------------------
+  - type: "# ygui — flexbox layout engine, native widgets in the terminal"
+  - special-char: ENTER
+  - sleep: 0.4
+
+  - type: "./build-desktop-ytrace-release/demo/ygui/19_flex_dashboard/demo-ygui-19-flex-dashboard"
+  - special-char: ENTER
+  - sleep: 1.6
+
+  - mouse-move: { x: 5, y: 700 }
+  - sleep: 0.2
+
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 1.4
+
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.8
+
+  # `q` quits the demo and drops back to the bash prompt.
+  - char: 'q'
+  - sleep: 0.6
+
+  # --- scene 5: ygui tree view -------------------------------------------
+  - type: "# ygui — interactive tree view widget"
+  - special-char: ENTER
+  - sleep: 0.4
+
+  - type: "./build-desktop-ytrace-release/demo/ygui/20_tree_view/demo-ygui-20-tree-view"
+  - special-char: ENTER
+  - sleep: 1.6
+
+  - mouse-move: { x: 5, y: 700 }
+  - sleep: 0.2
+
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 1.4
+
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.8
+
+  - char: 'q'
+  - sleep: 0.6
+
+  # --- scene 6: ymgui demo window (final, leave on screen) ---------------
+  - type: "# ymgui — Dear ImGui rendered through yetty's GPU backend"
+  - special-char: ENTER
+  - sleep: 0.4
+
+  - type: "./build-desktop-ytrace-release/demo/ymgui/01_demo_window/demo-ymgui-01-demo-window"
+  - special-char: ENTER
+  - sleep: 1.8
+
+  - mouse-move: { x: 5, y: 700 }
+  - sleep: 0.2
+
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 1.6
+
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 1.5
