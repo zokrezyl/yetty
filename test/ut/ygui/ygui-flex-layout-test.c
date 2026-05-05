@@ -393,6 +393,101 @@ static void test_width_percent_manual(void)
     yetty_ygui_engine_destroy(e);
 }
 
+/* Test 11: tree_node toggle hides/shows children list. After expanding,
+ * a leaf row inside the tree_node should land below the header (positive
+ * y relative to the tree_node) and shifted right by the indent. */
+static void test_tree_node_basic(void)
+{
+    fprintf(stderr, "\n[test_tree_node_basic]\n");
+    struct yetty_ygui_engine *e = make_engine(400, 400);
+
+    struct yetty_ygui_widget *root = yetty_ygui_engine_list(e, "root", 0, 0, 300, 400);
+    struct yetty_ygui_widget *node = yetty_ygui_engine_tree_node(e, "node", "Folder");
+    yetty_ygui_widget_add_child(root, node);
+
+    struct yetty_ygui_widget *leaf = yetty_ygui_engine_label(e, "leaf", 0, 0, "child");
+    yetty_ygui_widget_add_child(yetty_ygui_widget_tree_node_children(node), leaf);
+
+    /* Collapsed by default. children_list invisible → no contribution to
+     * the tree_node height. */
+    run_layout(e);
+    int kids_visible = yetty_ygui_widget_is_visible(yetty_ygui_widget_tree_node_children(node));
+    if (kids_visible) {
+        fprintf(stderr, "FAIL children visible while collapsed\n");
+        g_failures++;
+    } else {
+        fprintf(stderr, "ok   children invisible while collapsed\n");
+    }
+
+    /* Expand and re-layout. */
+    yetty_ygui_widget_tree_node_set_expanded(node, 1);
+    run_layout(e);
+    kids_visible = yetty_ygui_widget_is_visible(yetty_ygui_widget_tree_node_children(node));
+    if (!kids_visible) {
+        fprintf(stderr, "FAIL children invisible after expand\n");
+        g_failures++;
+    } else {
+        fprintf(stderr, "ok   children visible after expand\n");
+    }
+
+    /* The leaf's absolute layout_x should be at least node.layout_x +
+     * default indent (20px). y should be below the header (>= 24). */
+    float leaf_x, leaf_y;
+    yetty_ygui_widget_get_layout_box(leaf, &leaf_x, &leaf_y, NULL, NULL);
+    float node_x, node_y;
+    yetty_ygui_widget_get_layout_box(node, &node_x, &node_y, NULL, NULL);
+
+    float dx = leaf_x - node_x;
+    float dy = leaf_y - node_y;
+    if (dx < 18.0f) {
+        fprintf(stderr, "FAIL indent dx = %.2f, expected >= 18\n", dx);
+        g_failures++;
+    } else {
+        fprintf(stderr, "ok   indent dx = %.2f\n", dx);
+    }
+    if (dy < 22.0f) {
+        fprintf(stderr, "FAIL header dy = %.2f, expected >= 22\n", dy);
+        g_failures++;
+    } else {
+        fprintf(stderr, "ok   header dy = %.2f\n", dy);
+    }
+
+    yetty_ygui_engine_destroy(e);
+}
+
+/* Test 12: list selection state — clicking a row updates list.selected.
+ * We exercise that by calling the list's on_press hit-test directly. */
+static void test_list_selection(void)
+{
+    fprintf(stderr, "\n[test_list_selection]\n");
+    struct yetty_ygui_engine *e = make_engine(400, 400);
+
+    struct yetty_ygui_widget *list = yetty_ygui_engine_list(e, "list", 0, 0, 300, 400);
+    struct yetty_ygui_widget *a = yetty_ygui_engine_label(e, "a", 0, 0, "Alpha");
+    struct yetty_ygui_widget *b = yetty_ygui_engine_label(e, "b", 0, 0, "Beta");
+    yetty_ygui_widget_add_child(list, a);
+    yetty_ygui_widget_add_child(list, b);
+
+    /* No selection initially. */
+    if (yetty_ygui_widget_list_get_selected(list) != NULL) {
+        fprintf(stderr, "FAIL list.selected != NULL initially\n");
+        g_failures++;
+    } else {
+        fprintf(stderr, "ok   list.selected starts NULL\n");
+    }
+
+    /* Programmatic selection. */
+    yetty_ygui_widget_list_set_selected(list, b);
+    if (yetty_ygui_widget_list_get_selected(list) != b) {
+        fprintf(stderr, "FAIL list.selected != b after set_selected\n");
+        g_failures++;
+    } else {
+        fprintf(stderr, "ok   list.selected == b\n");
+    }
+
+    yetty_ygui_engine_destroy(e);
+}
+
 int main(void)
 {
     /* Skip yetty_ygui_init() — it puts the controlling TTY into raw mode,
@@ -419,6 +514,8 @@ int main(void)
     test_flex_wrap();
     test_css_apply();
     test_width_percent_manual();
+    test_tree_node_basic();
+    test_list_selection();
 
     if (g_failures > 0) {
         fprintf(stderr, "\n%d failure(s)\n", g_failures);

@@ -313,6 +313,70 @@ column-stretch, justify-space-between, padding, and manual-mode no-drift.
 Build with `make build-desktop-ytrace-release`; binaries land at
 `build-desktop-ytrace-release/demo/ygui/<name>/<binary>`.
 
+## Lists and trees
+
+`list` and `tree_node` work together for hierarchical UIs. Both are
+flexbox containers underneath, so layout is governed by the same engine
+as everything else.
+
+**`list`** — a row-aware vertical container. Children are arbitrary
+widgets; the list:
+
+- Tracks a single **selected** child (pointer, not index — survives
+  insertions / removals of siblings).
+- Paints the selection background (`theme->selection_bg`) behind the
+  selected child.
+- Fires an `on_select` callback when a row is clicked.
+- Lays children out as `flex column, align-items: stretch` so each row
+  fills the list's content width.
+
+```c
+struct yetty_ygui_widget *list =
+    yetty_ygui_engine_list(engine, "left-pane", 8, 8, 240, 600);
+yetty_ygui_widget_apply_css(list, "padding: 6px; gap: 2px;");
+yetty_ygui_widget_list_on_select(list, on_row_click, NULL);
+
+yetty_ygui_widget_add_child(list, yetty_ygui_engine_button(engine, "ok",  0, 0, 0, 32, "OK"));
+yetty_ygui_widget_add_child(list, yetty_ygui_engine_label (engine, "msg", 0, 0, "or click me"));
+```
+
+**`tree_node`** — a row that owns a **collapsible children list**:
+
+- The header (chevron + label) is rendered inline by `tree_node_render`.
+- The auto-allocated children list is a regular `list` widget — get it
+  with `yetty_ygui_widget_tree_node_children(node)` and add anything
+  inside (more `tree_node`s for nesting, or any widget).
+- Indent comes from the children list's CSS `padding-left` (default
+  20 px). Override per-instance via `apply_css`.
+- A `tree_node` with no children renders without a chevron, behaving as
+  a leaf row — same widget covers ImGui's `Selectable` and `TreeNode`
+  duality.
+
+```c
+struct yetty_ygui_widget *tree =
+    yetty_ygui_engine_list(engine, "tree", 8, 8, 300, 600);
+
+struct yetty_ygui_widget *src = yetty_ygui_engine_tree_node(engine, "src",  "src/");
+yetty_ygui_widget_add_child(tree, src);
+
+struct yetty_ygui_widget *yetty_ = yetty_ygui_engine_tree_node(engine, "yetty", "yetty/");
+yetty_ygui_widget_add_child(yetty_ygui_widget_tree_node_children(src), yetty_);
+
+yetty_ygui_widget_add_child(yetty_ygui_widget_tree_node_children(yetty_),
+                             yetty_ygui_engine_label(engine, "main_c", 0, 0, "main.c"));
+
+/* Customise the indent and row spacing on this branch only: */
+yetty_ygui_widget_apply_css(yetty_ygui_widget_tree_node_children(src),
+                             "padding-left: 32px; gap: 1px;");
+
+yetty_ygui_widget_tree_node_set_expanded(src, 1);   /* open by default */
+yetty_ygui_widget_tree_node_on_toggle(src, on_folder_toggle, NULL);
+```
+
+Click handling: chevron zone toggles expand; row body fires the parent
+list's `on_select`. So a list-of-tree_nodes naturally supports both
+folder expand/collapse and row selection.
+
 ## Adding a new widget
 
 1. Pick a `ygui_widget_type_t` value (`include/yetty/ygui/ygui.h`) — add a

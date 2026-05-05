@@ -299,6 +299,27 @@ struct yetty_ygui_widget {
         struct {
             float value; /* 0..1 */
         } scrollbar;
+
+        struct {
+            /* selected child (pointer; not an index, so it survives
+             * insertion/removal of other children). NULL = no selection. */
+            struct yetty_ygui_widget *selected;
+            ygui_widget_click_fn on_select_internal;  /* unused for now */
+            ygui_widget_click_fn on_select;
+            void *on_select_userdata;
+        } list;
+
+        struct {
+            char *label;
+            int expanded;
+            /* The auto-allocated children list. Always present (created
+             * in the constructor); rendered only when `expanded` AND it
+             * has visible children. Owned via the normal child-widget
+             * hierarchy so destroy/free propagates. */
+            struct yetty_ygui_widget *children_list;
+            ygui_widget_check_fn on_toggle;
+            void *on_toggle_userdata;
+        } tree_node;
     } data;
 };
 

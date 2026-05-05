@@ -70,6 +70,18 @@ typedef enum {
     YETTY_YGUI_WIDGET_CHOICEBOX,
     YETTY_YGUI_WIDGET_VSCROLLBAR,
     YETTY_YGUI_WIDGET_HSCROLLBAR,
+    /* Generic vertical container with row-aware semantics: tracks a
+     * selected child and fires on_select when a row is clicked. Children
+     * can be anything — buttons, hboxes, tree_nodes, custom composites.
+     * CSS controls layout (gap, padding). */
+    YETTY_YGUI_WIDGET_LIST,
+    /* Tree-style row: chevron + label header, plus an auto-allocated
+     * children list that's only visible when expanded. A tree_node with
+     * zero children renders without a chevron and acts as a leaf row
+     * (covers ImGui's Selectable + TreeNode duality with a single
+     * widget). Indent is controlled by CSS padding-left on the children
+     * list returned by yetty_ygui_widget_tree_node_children(). */
+    YETTY_YGUI_WIDGET_TREE_NODE,
     YETTY_YGUI_WIDGET_CUSTOM,
 } ygui_widget_type_t;
 
@@ -381,6 +393,19 @@ struct yetty_ygui_widget *yetty_ygui_engine_vscrollbar(struct yetty_ygui_engine 
 struct yetty_ygui_widget *yetty_ygui_engine_hscrollbar(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w,
                                float h);
 
+/* List — generic row-aware vertical container. Children are arbitrary
+ * widgets; the list tracks a selected child and fires on_select on
+ * click. CSS configures layout (gap, padding). */
+struct yetty_ygui_widget *yetty_ygui_engine_list(struct yetty_ygui_engine *engine, const char *id,
+                                                  float x, float y, float w, float h);
+
+/* Tree node — a row with a chevron + label header and an auto-allocated
+ * children list. add_child(tree_node_children(node), …) populates the
+ * sub-rows. set_expanded toggles visibility of the children list (which
+ * already participates in flex layout). */
+struct yetty_ygui_widget *yetty_ygui_engine_tree_node(struct yetty_ygui_engine *engine,
+                                                      const char *id, const char *label);
+
 /*=============================================================================
  * Widget Callbacks
  *===========================================================================*/
@@ -576,6 +601,26 @@ int yetty_ygui_widget_choicebox_get_selected(const struct yetty_ygui_widget *wid
 /* Scrollbars (V/H share the same value 0..1) */
 void yetty_ygui_widget_scrollbar_set_value(struct yetty_ygui_widget *widget, float value);
 float yetty_ygui_widget_scrollbar_get_value(const struct yetty_ygui_widget *widget);
+
+/* List */
+void yetty_ygui_widget_list_set_selected(struct yetty_ygui_widget *list,
+                                          struct yetty_ygui_widget *child);
+struct yetty_ygui_widget *
+yetty_ygui_widget_list_get_selected(const struct yetty_ygui_widget *list);
+void yetty_ygui_widget_list_on_select(struct yetty_ygui_widget *list,
+                                       ygui_click_callback_t cb, void *userdata);
+
+/* Tree node */
+void yetty_ygui_widget_tree_node_set_label(struct yetty_ygui_widget *node, const char *label);
+const char *yetty_ygui_widget_tree_node_get_label(const struct yetty_ygui_widget *node);
+void yetty_ygui_widget_tree_node_set_expanded(struct yetty_ygui_widget *node, int expanded);
+int  yetty_ygui_widget_tree_node_is_expanded(const struct yetty_ygui_widget *node);
+/* Auto-allocated children list (a YETTY_YGUI_WIDGET_LIST). Use as the
+ * parent for sub-tree_nodes or any other widgets. */
+struct yetty_ygui_widget *
+yetty_ygui_widget_tree_node_children(struct yetty_ygui_widget *node);
+void yetty_ygui_widget_tree_node_on_toggle(struct yetty_ygui_widget *node,
+                                            ygui_check_callback_t cb, void *userdata);
 
 /*=============================================================================
  * Widget Lookup

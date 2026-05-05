@@ -2788,3 +2788,393 @@ float yetty_ygui_widget_scrollbar_get_value(const struct yetty_ygui_widget *widg
     }
     return widget->data.scrollbar.value;
 }
+
+/*=============================================================================
+ * List Widget — generic row-aware vertical container with selection.
+ *===========================================================================*/
+
+static struct yetty_ycore_void_result list_render(struct yetty_ygui_widget *self,
+                                                  struct yetty_ygui_render_ctx *ctx)
+{
+    /* The list itself draws nothing decorative — children render their
+     * own surfaces. We do paint a soft selection background behind the
+     * currently-selected child so any leaf-row child gets selected
+     * styling for free. */
+    const struct yetty_ygui_theme *t = ctx->theme;
+    struct yetty_ygui_widget *sel = self->data.list.selected;
+    if (sel) {
+        yetty_ygui_render_ctx_render_box(ctx, sel->x, sel->y, sel->w, sel->h, t->selection_bg,
+                                         t->radius_small);
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Find the nearest child that contains (lx, ly) in this widget's local
+ * coordinate space. Returns NULL if no hit. */
+static struct yetty_ygui_widget *list_child_at(struct yetty_ygui_widget *self, float lx, float ly)
+{
+    /* Children's x/y are relative to parent (self). */
+    for (struct yetty_ygui_widget *c = self->first_child; c; c = c->next_sibling) {
+        if (!(c->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+            continue;
+        }
+        if (lx >= c->x && lx < c->x + c->w && ly >= c->y && ly < c->y + c->h) {
+            return c;
+        }
+    }
+    return NULL;
+}
+
+static int list_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
+{
+    struct yetty_ygui_widget *child = list_child_at(self, lx, ly);
+    if (!child) {
+        return 0;
+    }
+    if (self->data.list.selected != child) {
+        self->data.list.selected = child;
+        if (self->engine) {
+            self->engine->dirty = 1;
+        }
+    }
+    if (self->data.list.on_select) {
+        self->data.list.on_select(child, self->data.list.on_select_userdata);
+    }
+    out->widget_id = self->id;
+    out->type = YETTY_YGUI_EVENT_CHANGE;
+    return 1;
+}
+
+struct yetty_ygui_widget *yetty_ygui_engine_list(struct yetty_ygui_engine *engine, const char *id,
+                                                  float x, float y, float w, float h)
+{
+    struct yetty_ygui_widget *lst =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_LIST, id);
+    if (!lst) {
+        return NULL;
+    }
+    yetty_ygui_widget_init_base(lst, x, y, w, h);
+    /* Default layout: flex column with theme gap; children stretched on
+     * the cross axis so each row spans the list width. */
+    lst->layout.mode = YETTY_YGUI_LAYOUT_FLEX;
+    lst->layout.direction = YETTY_YGUI_FLEX_COLUMN;
+    lst->layout.align_items = YETTY_YGUI_ALIGN_STRETCH;
+    lst->layout.gap = engine->theme->pad_small;
+    static const struct yetty_ygui_widget_vtable list_vtable = {
+        .render   = list_render,
+        .on_press = list_on_press,
+    };
+    lst->vtable = &list_vtable;
+    add_to_engine(engine, lst);
+    return lst;
+}
+
+void yetty_ygui_widget_list_set_selected(struct yetty_ygui_widget *list,
+                                          struct yetty_ygui_widget *child)
+{
+    if (!list || list->type != YETTY_YGUI_WIDGET_LIST) {
+        return;
+    }
+    list->data.list.selected = child;
+    if (list->engine) {
+        list->engine->dirty = 1;
+    }
+}
+
+struct yetty_ygui_widget *yetty_ygui_widget_list_get_selected(const struct yetty_ygui_widget *list)
+{
+    if (!list || list->type != YETTY_YGUI_WIDGET_LIST) {
+        return NULL;
+    }
+    return list->data.list.selected;
+}
+
+void yetty_ygui_widget_list_on_select(struct yetty_ygui_widget *list,
+                                       ygui_click_callback_t cb, void *userdata)
+{
+    if (!list || list->type != YETTY_YGUI_WIDGET_LIST) {
+        return;
+    }
+    list->data.list.on_select = cb;
+    list->data.list.on_select_userdata = userdata;
+}
+
+/*=============================================================================
+ * Tree Node Widget — chevron + label header + auto-allocated children list.
+ *===========================================================================*/
+
+#define TREE_HEADER_H_DEFAULT  24.0f
+#define TREE_CHEVRON_W         16.0f
+#define TREE_CHEVRON_PAD       4.0f
+#define TREE_INDENT_DEFAULT    20.0f
+
+static int tree_node_has_visible_children(const struct yetty_ygui_widget *self)
+{
+    const struct yetty_ygui_widget *kids = self->data.tree_node.children_list;
+    if (!kids) {
+        return 0;
+    }
+    for (const struct yetty_ygui_widget *c = kids->first_child; c; c = c->next_sibling) {
+        if (c->flags & YETTY_YGUI_FLAG_VISIBLE) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static struct yetty_ycore_void_result tree_node_render(struct yetty_ygui_widget *self,
+                                                       struct yetty_ygui_render_ctx *ctx)
+{
+    const struct yetty_ygui_theme *t = ctx->theme;
+    int has_children = tree_node_has_visible_children(self);
+    int expanded = self->data.tree_node.expanded;
+    int hovered = (self->flags & YETTY_YGUI_FLAG_HOVER) != 0;
+    int pressed = (self->flags & YETTY_YGUI_FLAG_PRESSED) != 0;
+
+    float header_h = TREE_HEADER_H_DEFAULT;
+
+    /* Optional row hover highlight (selection background is drawn by the
+     * parent list when applicable, so we only need hover here). */
+    if (hovered || pressed) {
+        uint32_t bg = pressed ? t->bg_header : t->bg_hover;
+        yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, header_h, bg,
+                                         t->radius_small);
+    }
+
+    /* Chevron — only when there are children to show. */
+    if (has_children) {
+        float cx = self->x + TREE_CHEVRON_PAD;
+        float cy = self->y + header_h * 0.5f;
+        float r = 4.0f;
+        if (expanded) {
+            /* Down-pointing triangle. */
+            yetty_ygui_render_ctx_render_triangle(ctx, cx, cy - r * 0.6f, cx + r * 2.0f,
+                                                  cy - r * 0.6f, cx + r, cy + r * 0.8f,
+                                                  t->text_primary);
+        } else {
+            /* Right-pointing triangle. */
+            yetty_ygui_render_ctx_render_triangle(ctx, cx, cy - r, cx, cy + r, cx + r * 1.2f, cy,
+                                                  t->text_primary);
+        }
+    }
+
+    /* Label */
+    if (self->data.tree_node.label) {
+        float label_x = self->x + TREE_CHEVRON_W + TREE_CHEVRON_PAD;
+        float label_y = self->y + (header_h - t->font_size) * 0.5f;
+        yetty_ygui_render_ctx_render_text(ctx, self->data.tree_node.label, label_x, label_y,
+                                          self->fg_color, t->font_size);
+    }
+    return YETTY_OK_VOID();
+}
+
+/* tree_node has two layout sections: a fixed-height header row plus the
+ * children list. Easiest way to express that with our flex engine is to
+ * make tree_node itself a flex column where:
+ *   - the header is "implicit" (rendered by tree_node_render at y=0 with
+ *     a fixed height TREE_HEADER_H_DEFAULT — the layout pass sees the
+ *     header as the widget's own first content_h slot)
+ *   - the children list lives at y = header_h
+ *
+ * To get the children list to sit below the header, we lay it out
+ * manually here in a custom render_all (similar to panel_render_all).
+ * The children list is the only child widget; we render the header
+ * background/chevron/label first, then recurse into the list. */
+static struct yetty_ycore_void_result tree_node_render_all(struct yetty_ygui_widget *self,
+                                                           struct yetty_ygui_render_ctx *ctx)
+{
+    if (!(self->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+        return YETTY_OK_VOID();
+    }
+    self->was_rendered = 1;
+
+    /* Always render the header. */
+    struct yetty_ycore_void_result first_err = tree_node_render(self, ctx);
+    if (YETTY_IS_ERR(first_err)) {
+        return first_err;
+    }
+
+    /* Render the children list below the header when expanded. The
+     * layout pass already placed children_list at the right position
+     * because we set its authored x/y in the constructor. */
+    struct yetty_ygui_widget *kids = self->data.tree_node.children_list;
+    if (!kids || !self->data.tree_node.expanded) {
+        return YETTY_OK_VOID();
+    }
+    if (!(kids->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+        return YETTY_OK_VOID();
+    }
+
+    /* Push offset so kids->x/y are interpreted relative to self. */
+    float old_offset_x = ctx->offset_x;
+    float old_offset_y = ctx->offset_y;
+    ctx->offset_x = self->layout_x;
+    ctx->offset_y = self->layout_y;
+    struct yetty_ycore_void_result r;
+    if (kids->vtable && kids->vtable->render_all) {
+        r = kids->vtable->render_all(kids, ctx);
+    } else {
+        r = yetty_ygui_widget_render_all_default(kids, ctx);
+    }
+    ctx->offset_x = old_offset_x;
+    ctx->offset_y = old_offset_y;
+    return r;
+}
+
+static int tree_node_on_press(struct yetty_ygui_widget *self, float lx, float ly,
+                              ygui_event_t *out)
+{
+    /* Click on chevron zone (left ~20px) and we have children → toggle.
+     * Click on rest of header → fire a "select" event (parent list will
+     * pick it up via its own on_press, but we still own the event so
+     * propagate that). */
+    int has_children = tree_node_has_visible_children(self);
+    int on_chevron = (lx <= TREE_CHEVRON_W + TREE_CHEVRON_PAD) && (ly <= TREE_HEADER_H_DEFAULT);
+    int on_header = (ly <= TREE_HEADER_H_DEFAULT);
+
+    if (has_children && on_chevron) {
+        self->data.tree_node.expanded = !self->data.tree_node.expanded;
+        if (self->data.tree_node.children_list) {
+            yetty_ygui_widget_set_visible(self->data.tree_node.children_list,
+                                          self->data.tree_node.expanded);
+        }
+        if (self->data.tree_node.on_toggle) {
+            self->data.tree_node.on_toggle(self, self->data.tree_node.expanded,
+                                           self->data.tree_node.on_toggle_userdata);
+        }
+        if (self->engine) {
+            self->engine->dirty = 1;
+        }
+        out->widget_id = self->id;
+        out->type = YETTY_YGUI_EVENT_CHANGE;
+        return 1;
+    }
+    if (on_header) {
+        out->widget_id = self->id;
+        out->type = YETTY_YGUI_EVENT_PRESS;
+        return 1;
+    }
+    return 0;
+}
+
+static void tree_node_destroy(struct yetty_ygui_widget *self)
+{
+    free(self->data.tree_node.label);
+    /* children_list is in the regular child widget hierarchy; the
+     * engine's recursive destroy handles it. Nothing to do here. */
+}
+
+struct yetty_ygui_widget *yetty_ygui_engine_tree_node(struct yetty_ygui_engine *engine,
+                                                      const char *id, const char *label)
+{
+    struct yetty_ygui_widget *node =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_TREE_NODE, id);
+    if (!node) {
+        return NULL;
+    }
+    /* Authored size: full width is filled by parent flex (align: stretch).
+     * Height: header by default; the children list contributes to the
+     * total via flex. We use FLEX/COLUMN so layout naturally places the
+     * children list directly below the header. */
+    yetty_ygui_widget_init_base(node, 0, 0, 200.0f, TREE_HEADER_H_DEFAULT);
+    node->data.tree_node.label = ygui_strdup(label);
+    node->data.tree_node.expanded = 0;
+    node->data.tree_node.children_list = NULL;
+
+    /* Layout: flex column. The header occupies the top TREE_HEADER_H_DEFAULT
+     * pixels (rendered by tree_node_render at y=0). The children list is
+     * placed below via the layout pass. We use top-padding equal to
+     * header height so the first child lands beneath. */
+    node->layout.mode = YETTY_YGUI_LAYOUT_FLEX;
+    node->layout.direction = YETTY_YGUI_FLEX_COLUMN;
+    node->layout.align_items = YETTY_YGUI_ALIGN_STRETCH;
+    node->layout.padding_top = TREE_HEADER_H_DEFAULT;
+
+    static const struct yetty_ygui_widget_vtable tree_node_vtable = {
+        .render     = tree_node_render,
+        .render_all = tree_node_render_all,
+        .on_press   = tree_node_on_press,
+        .destroy    = tree_node_destroy,
+    };
+    node->vtable = &tree_node_vtable;
+
+    /* Auto-allocate the children list. It's added as a normal child
+     * widget — the layout pass places it inside the content box (below
+     * the header thanks to padding_top), and it's hidden by default
+     * (expanded = 0). */
+    char child_id[256];
+    snprintf(child_id, sizeof(child_id), "%s.children", id ? id : "tree_node");
+    struct yetty_ygui_widget *kids = yetty_ygui_engine_list(engine, child_id, 0, 0, 0, 0);
+    if (kids) {
+        /* Indent: CSS padding-left on the children list. Users can
+         * override with apply_css. */
+        kids->layout.padding_left = TREE_INDENT_DEFAULT;
+        yetty_ygui_widget_set_visible(kids, 0);
+        yetty_ygui_widget_add_child(node, kids);
+        node->data.tree_node.children_list = kids;
+    }
+
+    add_to_engine(engine, node);
+    return node;
+}
+
+void yetty_ygui_widget_tree_node_set_label(struct yetty_ygui_widget *node, const char *label)
+{
+    if (!node || node->type != YETTY_YGUI_WIDGET_TREE_NODE) {
+        return;
+    }
+    free(node->data.tree_node.label);
+    node->data.tree_node.label = ygui_strdup(label);
+    if (node->engine) {
+        node->engine->dirty = 1;
+    }
+}
+
+const char *yetty_ygui_widget_tree_node_get_label(const struct yetty_ygui_widget *node)
+{
+    if (!node || node->type != YETTY_YGUI_WIDGET_TREE_NODE) {
+        return NULL;
+    }
+    return node->data.tree_node.label;
+}
+
+void yetty_ygui_widget_tree_node_set_expanded(struct yetty_ygui_widget *node, int expanded)
+{
+    if (!node || node->type != YETTY_YGUI_WIDGET_TREE_NODE) {
+        return;
+    }
+    node->data.tree_node.expanded = expanded ? 1 : 0;
+    if (node->data.tree_node.children_list) {
+        yetty_ygui_widget_set_visible(node->data.tree_node.children_list, expanded);
+    }
+    if (node->engine) {
+        node->engine->dirty = 1;
+    }
+}
+
+int yetty_ygui_widget_tree_node_is_expanded(const struct yetty_ygui_widget *node)
+{
+    if (!node || node->type != YETTY_YGUI_WIDGET_TREE_NODE) {
+        return 0;
+    }
+    return node->data.tree_node.expanded;
+}
+
+struct yetty_ygui_widget *
+yetty_ygui_widget_tree_node_children(struct yetty_ygui_widget *node)
+{
+    if (!node || node->type != YETTY_YGUI_WIDGET_TREE_NODE) {
+        return NULL;
+    }
+    return node->data.tree_node.children_list;
+}
+
+void yetty_ygui_widget_tree_node_on_toggle(struct yetty_ygui_widget *node,
+                                            ygui_check_callback_t cb, void *userdata)
+{
+    if (!node || node->type != YETTY_YGUI_WIDGET_TREE_NODE) {
+        return;
+    }
+    node->data.tree_node.on_toggle = cb;
+    node->data.tree_node.on_toggle_userdata = userdata;
+}
