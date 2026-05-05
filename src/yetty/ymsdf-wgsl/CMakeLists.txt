@@ -20,6 +20,14 @@ target_link_libraries(yetty_ymsdf_wgsl PUBLIC
     ${FREETYPE_ALL_LIBS}
 )
 
+# src/ymsdf-wgsl.c uses <stdatomic.h>. MSVC sets __STDC_NO_ATOMICS__ by
+# default and only clears it when both /std:clatest (or /std:c11) and
+# /experimental:c11atomics are passed. Same incantation as the main
+# yetty target in build-tools/cmake/targets/windows.cmake.
+target_compile_options(yetty_ymsdf_wgsl PRIVATE
+    $<$<AND:$<C_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:C>>:/std:clatest>
+    $<$<AND:$<C_COMPILER_ID:MSVC>,$<COMPILE_LANGUAGE:C>>:/experimental:c11atomics>)
+
 # Stage the compute shader next to consumers' executables so find_shader_path()
 # can pick it up via the exe-dir / exe-dir/shaders fallbacks. Final placement
 # is handled by the assets pipeline (build-tools/cmake/asset-staging.cmake);

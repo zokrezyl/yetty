@@ -497,7 +497,6 @@ jobs:
         cp ${{ env.BUILD_DIR }}/yetty.data site/
         cp ${{ env.BUILD_DIR }}/favicon.ico site/
         cp ${{ env.BUILD_DIR }}/apple-touch-icon.jpg site/
-        cp -r ${{ env.BUILD_DIR }}/jslinux site/
         cp -r ${{ env.BUILD_DIR }}/vfsync site/
         du -sh site/* | sort -h
         ls -la site/vfsync/u/os/yetty-alpine/ || echo "vfsync structure check"
@@ -539,8 +538,6 @@ jobs:
       run: |
         echo "=== Site structure ==="
         ls -la site/
-        echo "=== jslinux directory ==="
-        ls -la site/jslinux/ || echo "jslinux not found"
         echo "=== vfsync directory ==="
         ls -la site/vfsync/u/os/yetty-alpine/ || echo "vfsync not found"
 
