@@ -146,4 +146,10 @@ RUN curl --proto '=https' --tlsv1.2 -sSf -L https://nixos.org/nix/install \
     echo "experimental-features = nix-command flakes" > ~/.config/nix/nix.conf
 ENV PATH=/home/misi/.nix-profile/bin:$PATH
 
+# Woodpecker's clone container runs as root, build container as misi (uid
+# 1000) — the workspace ends up root-owned. Both git and libgit2 (used by
+# nix to evaluate `git+file://` flake inputs) refuse repos owned by a
+# different uid. Opt out of that check for misi's gitconfig.
+RUN git config --global --add safe.directory '*'
+
 CMD ["zsh"]
