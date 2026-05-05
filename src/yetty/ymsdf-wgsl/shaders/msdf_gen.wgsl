@@ -298,63 +298,82 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 min_abs_sdf = abs_dist;
             }
 
-            // Winding contribution: count signed crossings of the +x ray
-            // from `p` with this segment. Half-open t-interval [0, 1) so
-            // shared endpoints between adjacent segments aren't counted
-            // twice.
+            // Winding contribution: signed crossings of the +x ray from
+            // (p.x, ray_y) with this segment. We perturb the ray's y by
+            // a sub-pixel irrational amount so the ray never coincides
+            // exactly with a contour vertex — without that, a vertex
+            // sitting on the integer pixel-grid produces ambiguous
+            // counts (one segment "starts at the ray", the next "ends
+            // at the ray", and the strict `>` gate flips state in a
+            // way that depends on which root the cubic finds first),
+            // visible as horizontal stripes one row deep on glyphs with
+            // axis-aligned vertices (waves like ≈, U+25EE, …). The
+            // perturbation only shifts the ray's notional y; the pixel
+            // we're shading is unchanged, so distance & MSDF outputs
+            // are bit-identical.
+            let ray_y = p.y + 0.0007111111;
+            //
+            // Why endpoint-side gate, not "find roots in [0,1)":
+            //   • A quadratic kissing the ray at its y-extremum has two
+            //     roots that collapse together; with f32 they slip just
+            //     above or just below 0 unpredictably and the [0,1) loop
+            //     either double-counts or misses, producing horizontal
+            //     stripes at exactly the y-row of the extremum (visible
+            //     on glyphs with sinusoidal motifs: ≈, ⊁, ▷, U+25EE…).
+            //   • Curves where both endpoints are on the same side but
+            //     the curve dips through the ray contribute 2 crossings
+            //     of *opposite* y-direction that cancel — net 0, same as
+            //     skipping. So gating on endpoint sides is mathematically
+            //     equivalent for those cases too.
+            //   • Shared-endpoint vertices that happen to land exactly on
+            //     the ray collapse to false on `> ray` (strict greater),
+            //     so a single vertex hit is counted once across the two
+            //     sharing segments — never zero, never double.
             if npoints == 2u {
                 let p0 = get_point(point_idx);
                 let p1 = get_point(point_idx + 1u);
-                let dy = p1.y - p0.y;
-                if abs(dy) > 1e-10 {
-                    let t = (p.y - p0.y) / dy;
-                    if t >= 0.0 && t < 1.0 {
-                        let xi = p0.x + t * (p1.x - p0.x);
-                        if xi > p.x {
-                            if dy > 0.0 { winding_count = winding_count + 1; }
-                            else        { winding_count = winding_count - 1; }
-                        }
+                let above0 = p0.y > ray_y;
+                let above1 = p1.y > ray_y;
+                if above0 != above1 {
+                    let dy = p1.y - p0.y;
+                    let t = (ray_y - p0.y) / dy;
+                    let xi = p0.x + t * (p1.x - p0.x);
+                    if xi > p.x {
+                        if above1 { winding_count = winding_count + 1; }
+                        else      { winding_count = winding_count - 1; }
                     }
                 }
             } else {
                 let p0 = get_point(point_idx);
                 let p1 = get_point(point_idx + 1u);
                 let p2 = get_point(point_idx + 2u);
-                // y(t) = (p0.y - 2 p1.y + p2.y) t² + 2(p1.y - p0.y) t + p0.y
-                let A = p0.y - 2.0 * p1.y + p2.y;
-                let B = 2.0 * (p1.y - p0.y);
-                let C = p0.y - p.y;
-                if abs(A) < 1e-10 {
-                    if abs(B) > 1e-10 {
-                        let t = -C / B;
-                        if t >= 0.0 && t < 1.0 {
-                            let omt = 1.0 - t;
-                            let xi = omt*omt*p0.x + 2.0*t*omt*p1.x + t*t*p2.x;
-                            if xi > p.x {
-                                let dydt = B + 2.0 * A * t;
-                                if dydt > 0.0 { winding_count = winding_count + 1; }
-                                else if dydt < 0.0 { winding_count = winding_count - 1; }
-                            }
+                let above0 = p0.y > ray_y;
+                let above2 = p2.y > ray_y;
+                if above0 != above2 {
+                    // Endpoints differ ⇒ exactly one crossing in [0,1].
+                    let A = p0.y - 2.0 * p1.y + p2.y;
+                    let B = 2.0 * (p1.y - p0.y);
+                    let C = p0.y - ray_y;
+                    var t_cross = -1.0;
+                    if abs(A) < 1e-10 {
+                        if abs(B) > 1e-10 { t_cross = -C / B; }
+                    } else {
+                        let disc = B * B - 4.0 * A * C;
+                        if disc >= 0.0 {
+                            let sq = sqrt(disc);
+                            let t0 = (-B - sq) / (2.0 * A);
+                            let t1 = (-B + sq) / (2.0 * A);
+                            if t0 >= 0.0 && t0 <= 1.0 { t_cross = t0; }
+                            if t1 >= 0.0 && t1 <= 1.0 { t_cross = t1; }
                         }
                     }
-                } else {
-                    let disc = B * B - 4.0 * A * C;
-                    if disc >= 0.0 {
-                        let sq = sqrt(disc);
-                        let t0 = (-B - sq) / (2.0 * A);
-                        let t1 = (-B + sq) / (2.0 * A);
-                        // Two roots — process each that lies in [0, 1).
-                        for (var rk = 0; rk < 2; rk = rk + 1) {
-                            let tr = select(t1, t0, rk == 0);
-                            if tr >= 0.0 && tr < 1.0 {
-                                let omt = 1.0 - tr;
-                                let xi = omt*omt*p0.x + 2.0*tr*omt*p1.x + tr*tr*p2.x;
-                                if xi > p.x {
-                                    let dydt = B + 2.0 * A * tr;
-                                    if dydt > 0.0 { winding_count = winding_count + 1; }
-                                    else if dydt < 0.0 { winding_count = winding_count - 1; }
-                                }
-                            }
+                    if t_cross >= 0.0 && t_cross <= 1.0 {
+                        let omt = 1.0 - t_cross;
+                        let xi = omt*omt*p0.x + 2.0*t_cross*omt*p1.x +
+                                 t_cross*t_cross*p2.x;
+                        if xi > p.x {
+                            if above2 { winding_count = winding_count + 1; }
+                            else      { winding_count = winding_count - 1; }
                         }
                     }
                 }
