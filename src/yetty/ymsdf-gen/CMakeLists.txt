@@ -19,7 +19,7 @@ target_link_libraries(yetty_ymsdf_gen PUBLIC
 
 # CLI tool
 add_executable(yetty-ymsdf-gen
-    ${YETTY_ROOT}/tools/gen-msdf/main.c
+    ${YETTY_ROOT}/tools/msdf/gen-msdf/main.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
     ${YETTY_YPLATFORM_THREAD_SOURCES}
 )

@@ -1,20 +1,28 @@
-add_executable(msdf-render-atlas main.cpp)
+# msdf-render-atlas — interactive atlas viewer for yetty MSDF .cdb files.
+#
+# Pure C; reads the CDB directly (same format walker idea as cdb-viewer
+# and cdb-diff), packs every glyph into a single RGBA8 atlas texture and
+# draws the grid through a fragment shader. Useful for visually QA-ing
+# the output of either generator (yetty-ymsdf-gen / yetty-ymsdf-gen-gpu).
 
-target_link_libraries(msdf-render-atlas PRIVATE
-    msdf-wgsl
-    glfw
-    glfw3webgpu
-    webgpu
-    ${FREETYPE_ALL_LIBS}
+add_executable(msdf-render-atlas
+    main.c
+    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
+    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
 target_include_directories(msdf-render-atlas PRIVATE
     ${YETTY_ROOT}/include
 )
 
-# Copy shader next to executable
-add_custom_command(TARGET msdf-render-atlas POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${CMAKE_CURRENT_SOURCE_DIR}/../shaders/msdf_gen.wgsl
-        $<TARGET_FILE_DIR:msdf-render-atlas>/msdf_gen.wgsl
+target_link_libraries(msdf-render-atlas PRIVATE
+    yetty_ywebgpu
+    glfw
+    glfw3webgpu
+    webgpu
+    m
 )
+
+# Dawn (libwebgpu_dawn.a) is C++ — force the C++ stdlib at link time
+# even though all our sources here are C.
+set_target_properties(msdf-render-atlas PROPERTIES LINKER_LANGUAGE CXX)
