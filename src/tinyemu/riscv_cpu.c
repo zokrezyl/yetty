@@ -549,14 +549,12 @@ struct __attribute__((packed)) unaligned_u32 {
     uint32_t u32;
 };
 
-/* unaligned access at an address known to be a multiple of 2 */
+/* unaligned access at an address known to be a multiple of 2.
+ * The packed-struct path works under emcc too (LLVM emits the right
+ * load), so the upstream EMSCRIPTEN-only two-halfword variant is gone. */
 static uint32_t get_insn32(uint8_t *ptr)
 {
-#if defined(EMSCRIPTEN)
-    return ((uint16_t *)ptr)[0] | (((uint16_t *)ptr)[1] << 16);
-#else
     return ((struct unaligned_u32 *)ptr)->u32;
-#endif
 }
 
 /* return 0 if OK, != 0 if exception */
@@ -1500,13 +1498,12 @@ const RISCVCPUClass glue(riscv_cpu_class, MAX_XLEN) = {
 RISCVCPUState *riscv_cpu_init(PhysMemoryMap *mem_map, int max_xlen)
 {
     const RISCVCPUClass *c;
+    /* Yetty's tinyemu fork compiles ALL three XLEN variants (riscv_cpu.c
+     * is included three times via wrappers — see tinyemu.cmake). The
+     * upstream EMSCRIPTEN-only single-variant code path produced
+     * conflicting definitions when paired with our 3-wrapper build, so
+     * it's gone. Always dispatch on max_xlen. */
     switch(max_xlen) {
-        /* with emscripten we compile a single CPU */
-#if defined(EMSCRIPTEN)
-    case MAX_XLEN:
-        c = &glue(riscv_cpu_class, MAX_XLEN);
-        break;
-#else
     case 32:
         c = &riscv_cpu_class32;
         break;
@@ -1518,7 +1515,6 @@ RISCVCPUState *riscv_cpu_init(PhysMemoryMap *mem_map, int max_xlen)
         c = &riscv_cpu_class128;
         break;
 #endif
-#endif /* !EMSCRIPTEN */
     default:
         return NULL;
     }

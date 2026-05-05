@@ -87,14 +87,16 @@ struct EthernetDevice {
     void (*write_packet)(EthernetDevice *net,
                          const uint8_t *buf, int len);
     void *opaque;
-#if !defined(EMSCRIPTEN)
+    /* select-based net poll callbacks. Yetty's tinyemu fork keeps these
+     * always-present (the upstream EMSCRIPTEN gate that hid them was
+     * tied to the legacy fs_wget-only mode, which we don't use — the
+     * iframe tinyemu wasm uses slirp + select() directly). */
     void (*select_fill)(EthernetDevice *net, int *pfd_max,
                         fd_set *rfds, fd_set *wfds, fd_set *efds,
                         int *pdelay);
-    void (*select_poll)(EthernetDevice *net, 
+    void (*select_poll)(EthernetDevice *net,
                         fd_set *rfds, fd_set *wfds, fd_set *efds,
                         int select_ret);
-#endif
     /* the following is set by the device */
     void *device_opaque;
     BOOL (*device_can_write_packet)(EthernetDevice *net);

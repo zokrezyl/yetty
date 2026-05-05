@@ -45,11 +45,11 @@ void __attribute__((format(printf, 1, 2))) vm_error(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-#ifdef EMSCRIPTEN
-    vprintf(fmt, ap);
-#else
+    /* Always to stderr — yetty's tinyemu fork dropped the upstream
+     * EMSCRIPTEN-only "vprintf to stdout" variant. The wasm side now
+     * uses Module.printErr (which the iframe page maps to console.warn)
+     * for VM diagnostics; bridge_console_write handles VM console I/O. */
     vfprintf(stderr, fmt, ap);
-#endif
     va_end(ap);
 }
 
@@ -194,14 +194,7 @@ static BOOL find_name(const char *name, const char *name_list)
 }
 
 static const VirtMachineClass *virt_machine_list[] = {
-#if defined(EMSCRIPTEN)
-    /* only a single machine in the EMSCRIPTEN target */
-#ifndef CONFIG_X86EMU
     &riscv_machine_class,
-#endif    
-#else
-    &riscv_machine_class,
-#endif /* !EMSCRIPTEN */
 #ifdef CONFIG_X86EMU
     &pc_machine_class,
 #endif
@@ -587,19 +580,19 @@ char *get_file_path(const char *base_filename, const char *filename)
 }
 
 
-#ifdef EMSCRIPTEN
-static int load_file(uint8_t **pbuf, const char *filename)
-{
-    abort();
-}
-#else
-/* return -1 if error. */
+/* return -1 if error.
+ *
+ * Yetty's tinyemu fork dropped the upstream EMSCRIPTEN-only abort()
+ * variant — that was tied to the legacy "stripped-down, fs_wget-only"
+ * wasm mode. Our wasm path uses MEMFS-backed fopen/fread (kernel /
+ * opensbi / rootfs are written to MEMFS by the iframe pre-js), so the
+ * normal POSIX path works on every platform we target. */
 static int load_file(uint8_t **pbuf, const char *filename)
 {
     FILE *f;
     int size;
     uint8_t *buf;
-    
+
     f = fopen(filename, "rb");
     if (!f) {
         perror(filename);
@@ -617,7 +610,6 @@ static int load_file(uint8_t **pbuf, const char *filename)
     *pbuf = buf;
     return size;
 }
-#endif
 
 #ifdef CONFIG_FS_NET
 static void config_load_file_cb(void *opaque, int err, void *data, size_t size)

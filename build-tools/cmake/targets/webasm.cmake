@@ -15,20 +15,24 @@ set(YETTY_ENABLE_LIB_QEMU OFF CACHE BOOL "" FORCE)
 # (built with -pthread → atomics + bulk-memory) is fetched on EMSCRIPTEN,
 # making the prebuilt .a link-compatible with --shared-memory yetty.wasm.
 
-# yetty.wasm is linked with -pthread (--shared-memory). Every .o that
-# enters the link must be built with -pthread too, so that wasm-ld sees
-# the atomics + bulk-memory features it requires. Apply globally so all
-# yetty static libs (yetty_yui, yetty_ymsdf_gen, libvterm, …) inherit it.
-add_compile_options(-pthread)
-add_link_options(-pthread)
+# yetty.wasm is single-threaded. The Linux VM (TinyEMU) runs in a
+# separate iframe wasm (build-tools/cmake/tinyemu-iframe.cmake), wired
+# via postMessage through src/yetty/yplatform/webasm/iframe-pty.c. This
+# eliminates the per-syscall pthread shim cost the in-process pthread
+# variant used to pay on emscripten — see iframe-pty.c for the rationale.
+# No -pthread / --shared-memory anywhere; all 3rdparty libs come from
+# the non-mt webasm prebuilt variant.
 
-# emcc auto-defines both `EMSCRIPTEN` and `__EMSCRIPTEN__`. The bare
-# `EMSCRIPTEN` macro switches several upstream tinyemu sources/headers
-# into a stripped-down (single-CPU, no fopen, fs_wget-only) variant we
-# don't want. Yetty's webasm uses MEMFS + all CPU variants, so undefine
-# the legacy macro globally and rely on `__EMSCRIPTEN__` (the canonical,
-# modern spelling) where actually needed.
-add_compile_options(-UEMSCRIPTEN)
+# Both `EMSCRIPTEN` and `__EMSCRIPTEN__` are kept defined (emcc default).
+# We previously undefined `EMSCRIPTEN` because upstream tinyemu used it
+# to switch into a stripped-down (single-CPU, no-fopen, fs_wget-only)
+# variant we don't want. Our fork has dropped those legacy paths
+# (machine.c::vm_error / virt_machine_list / load_file, and
+# riscv_cpu.c::riscv_cpu_init's single-class case) — so the macro now
+# means simply "we target wasm via emcc", which is exactly what
+# riscv_machine.c::riscv_machine_get_sleep_duration / _interp need to
+# enable their single-thread CPU drive paths so the kernel actually
+# runs.
 
 # Drop the C++ prebuilt libs on webasm. Each one drags in libc++ (so
 # std::shared_ptr / std::atomic etc.), and the upstream prebuilt tarballs
@@ -62,6 +66,7 @@ set(YETTY_ENABLE_FEATURE_SSH       OFF CACHE BOOL "" FORCE)
 
 include(${YETTY_ROOT}/build-tools/cmake/targets/shared.cmake)
 include(${YETTY_ROOT}/build-tools/cmake/tinyemu.cmake)
+include(${YETTY_ROOT}/build-tools/cmake/tinyemu-iframe.cmake)
 
 # Copy runtime assets (fonts, etc.) to build directory
 if(YETTY_ENABLE_FEATURE_ASSETS)
@@ -84,7 +89,8 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/platform-paths.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/ycoroutine.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/ywebgpu.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/tinyemu-pty.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webasm/iframe-pty.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webasm/brotli-glue.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/extract-assets.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/fs.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
@@ -103,21 +109,19 @@ add_executable(yetty
 
 target_include_directories(yetty PRIVATE ${YETTY_INCLUDES} ${YETTY_RENDERER_INCLUDES} ${JPEG_INCLUDE_DIRS})
 
-# Embed resources directly into yetty.wasm (same as desktop platforms).
-# Logo + DefaultConfig are referenced by name; yetty_embed_assets adds
-# the bulk fonts / shaders / msdf-fonts / yemu (each pre-brotli'd; the
-# extract-assets startup path decompresses to MEMFS).
-# Same extraction code path as desktop.
-if(YETTY_ENABLE_LIB_INCBIN)
-    incbin_add_resources(yetty
-        Logo "${YETTY_ROOT}/docs/logo-2.jpeg"
-        DefaultConfig "${YETTY_ROOT}/assets/default-config.yaml"
-    )
-    
-    # yetty_embed_assets() will embed shaders, fonts, config, and yemu/ directory
-    # (kernel, opensbi, rootfs) using the same pipeline as desktop.
-    yetty_embed_assets(yetty)
-endif()
+# Asset delivery: webasm does NOT use incbin. The desktop pipeline
+# (yetty_embed_assets) bakes ~200 MB of shaders / fonts / msdf CDBs /
+# kernel / rootfs into the binary via incbin, which on emscripten means
+# clang has to chew through a 240 MB yetty_data_data.c — the link runs
+# multi-GB, hangs the host, and doubles the wasm size needlessly.
+# Instead we stage every asset as a standalone file under
+# build/yetty-assets/ and let the runtime fetch them at startup
+# (build-tools/web/yetty-assets-preload.js, wired below as --pre-js).
+# Decompression uses the browser's DecompressionStream('br') so no JS
+# brotli library is needed. Kernel/opensbi/rootfs are NOT here — they
+# moved to tinyemu.data, owned by the iframe wasm.
+include(${YETTY_ROOT}/build-tools/cmake/webasm-stage-assets.cmake)
+yetty_stage_webasm_assets()
 
 if(YETTY_ENABLE_FEATURE_ASSETS)
     add_dependencies(yetty copy-assets)
@@ -152,27 +156,30 @@ target_link_options(yetty PRIVATE
     -sSTACK_SIZE=1048576
     -sWASM_BIGINT
     -sFILESYSTEM=1
-    # `-pthread + -sALLOW_MEMORY_GROWTH=1` makes every libc syscall shim
-    # (pipe read/write, select, …) run on the slow JS-side path — emcc
-    # warns about the combo. The VM thread hammers these per cycle batch,
-    # which compounds into seconds of input/output latency. Fixed-size
-    # SharedArrayBuffer lets the JIT specialise the shims and the JS
-    # heap stays put. We already reserve 2 GiB; host has 16 GiB free.
-    -sALLOW_MEMORY_GROWTH=0
-    -sINITIAL_MEMORY=2048MB
-    -sMAXIMUM_MEMORY=2048MB
+    # Single-threaded build now that TinyEMU lives in its own iframe
+    # wasm. Without -pthread the libc syscall shims are direct (no
+    # pthread-proxy round-trip, no Atomics.wait), so memory growth no
+    # longer pessimises them and we can let the heap expand naturally.
+    -sALLOW_MEMORY_GROWTH=1
+    -sINITIAL_MEMORY=256MB
     -sASSERTIONS=2
     --emit-symbol-map
     -lwebsocket.js
-    -pthread
-    -sPTHREAD_POOL_SIZE=4
-    # No --preload-file=assets — fonts/shaders/CDB/yemu are baked into
-    # yetty.wasm via yetty_embed_assets() (incbin, brotli-compressed) and
-    # decompressed into MEMFS at startup by yetty_yplatform_extract_assets.
-    # Same flow as desktop targets.
-    "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','FS','ENV','HEAPU8']"
-    # "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_yetty_write','_yetty_key','_yetty_special_key','_yetty_read_input','_yetty_sync','_yetty_set_scale','_yetty_resize','_yetty_get_cols','_yetty_get_rows','_webpty_on_data']"
-    "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free']"
+    # Asset preload: fetch + brotli-decompress + FS.writeFile in
+    # Module.preRun. Manifest + files are produced by
+    # yetty_stage_webasm_assets() above and copied next to yetty.wasm at
+    # POST_BUILD time. Module.addRunDependency keeps main() blocked
+    # until every asset is in MEMFS.
+    "--pre-js=${YETTY_ROOT}/build-tools/web/yetty-assets-preload.js"
+    # callMain — yetty-assets-preload.js sets Module.noInitialRun and
+    # invokes main() manually after asset preload finishes; without
+    # callMain in the runtime exports, Module.callMain is undefined.
+    "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','FS','ENV','HEAPU8','HEAPU32','callMain']"
+    # Exported wasm symbols:
+    #   _iframe_pty_on_data — JS message listener pushes VM output here.
+    #   _yetty_brotli_decode — asset preload shim calls this to
+    #     decompress *.br assets in MEMFS before main() runs.
+    "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_iframe_pty_on_data','_yetty_brotli_decode']"
 )
 
 if(YETTY_ENABLE_FEATURE_DEMO)
@@ -182,15 +189,28 @@ if(YETTY_ENABLE_FEATURE_DEMO)
     )
 endif()
 
-target_compile_options(yetty PRIVATE --use-port=emdawnwebgpu -fexceptions -pthread)
+target_compile_options(yetty PRIVATE --use-port=emdawnwebgpu -fexceptions)
 target_link_options(yetty PRIVATE -fexceptions)
 set_target_properties(yetty PROPERTIES SUFFIX ".js")
+
+# brotli decoder is consumed by webasm/brotli-glue.c, exported as
+# _yetty_brotli_decode for the asset preload shim. Single-threaded
+# webasm prebuilt — see build-tools/cmake/libs/brotli.cmake.
+include(${YETTY_ROOT}/build-tools/cmake/libs/brotli.cmake)
 
 target_link_libraries(yetty PRIVATE
     ${YETTY_LIBS}
     tinyemu
     Freetype::Freetype
+    brotlidec
+    brotlicommon
 )
+
+# Force the iframe wasm artifact (tinyemu.{js,wasm,data}) to build whenever
+# yetty.{js,wasm} is built — they ship together, the iframe is useless
+# without it. The Makefile's `cmake --build … --target yetty` invocation
+# walks this dependency.
+add_dependencies(yetty tinyemu_vm)
 
 # Copy demo and source tree to build directory for preloading
 if(YETTY_ENABLE_FEATURE_DEMO)
@@ -210,9 +230,14 @@ add_custom_command(TARGET yetty PRE_LINK
     COMMENT "(no 3rdparty staging — assets are embedded via incbin and extracted at startup)"
 )
 
-# Copy web files
+# Copy web files. yetty-assets/ already lives under ${CMAKE_BINARY_DIR}
+# (yetty_stage_webasm_assets writes there), so it's automatically
+# alongside yetty.{js,wasm} and tinyemu.{js,wasm,data} — no extra copy
+# step needed. The pre-js shim fetches yetty-assets/manifest.json with
+# a relative URL, which works for both serve.py and any static-file CDN.
 add_custom_command(TARGET yetty POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${YETTY_ROOT}/build-tools/web/index.html ${CMAKE_BINARY_DIR}/index.html
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${YETTY_ROOT}/build-tools/web/tinyemu-iframe.html ${CMAKE_BINARY_DIR}/tinyemu-iframe.html
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${YETTY_ROOT}/build-tools/web/serve.py ${CMAKE_BINARY_DIR}/serve.py
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${YETTY_ROOT}/assets/favicon.ico ${CMAKE_BINARY_DIR}/favicon.ico
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${YETTY_ROOT}/assets/apple-touch-icon.jpg ${CMAKE_BINARY_DIR}/apple-touch-icon.jpg

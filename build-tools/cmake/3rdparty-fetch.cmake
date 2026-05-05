@@ -73,12 +73,13 @@ function(yetty_3rdparty_target_platform OUT_VAR)
             set(_P "ios-arm64")
         endif()
     elseif(EMSCRIPTEN)
-        # All webasm libs are linked into yetty.wasm, which is built with
-        # -pthread (--shared-memory). wasm-ld rejects any object lacking
-        # the atomics+bulk-memory features, so we always pull the -mt
-        # variant (built with -pthread by build-tools/3rdparty/*/_build.sh
-        # under TARGET_PLATFORM=webasm-mt).
-        set(_P "webasm-mt")
+        # yetty.wasm is single-threaded — TinyEMU now runs in its own
+        # iframe wasm (see tinyemu-iframe.cmake) so we no longer need
+        # -pthread / --shared-memory in the parent. Pull the non-mt
+        # webasm variant; the -mt prebuilts have atomics+bulk-memory
+        # features that wasm-ld rejects when the parent lacks
+        # shared-memory.
+        set(_P "webasm")
     elseif(APPLE)
         if(CMAKE_OSX_ARCHITECTURES)
             set(_ARCHS "${CMAKE_OSX_ARCHITECTURES}")

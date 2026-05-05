@@ -35,6 +35,58 @@
             color: #eee;
             font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
         }
+        /* Boot console — append-only log of each preload step, the VM
+         * download, and the yetty startup phases. Stays on top of the
+         * canvas so the user can watch progress on slow links (the
+         * tinyemu rootfs alone is 707 MB). Auto-fades after the
+         * terminal has had time to render. */
+        #yetty-status {
+            position: fixed;
+            top: 8px;
+            left: 8px;
+            right: 8px;
+            max-height: 60vh;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.78);
+            color: #ddd;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 12px;
+            line-height: 1.45;
+            padding: 8px 12px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            z-index: 200;
+            pointer-events: none;
+            transition: opacity 0.4s ease;
+        }
+        #yetty-status .line { white-space: pre-wrap; word-break: break-all; }
+        #yetty-status .line.phase { color: #e94560; font-weight: bold; }
+        #yetty-status .line.ok    { color: #6c6; }
+        #yetty-status .line.err   { color: #f55; font-weight: bold; }
+        #yetty-status .line.dim   { color: #888; }
+        #yetty-status.hidden { display: none; }
+        /* Manual-dismiss button — overlay's parent has
+         * pointer-events:none so the canvas underneath stays
+         * clickable; the close button re-enables them just for itself. */
+        #yetty-status-close {
+            position: absolute;
+            top: 4px;
+            right: 8px;
+            width: 22px;
+            height: 22px;
+            line-height: 20px;
+            text-align: center;
+            color: #ddd;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid #444;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 14px;
+            font-family: inherit;
+            pointer-events: auto;
+            user-select: none;
+        }
+        #yetty-status-close:hover { background: #e94560; color: #fff; }
         #loading .spinner {
             width: 40px;
             height: 40px;
@@ -247,6 +299,13 @@
 <body>
     <div id="canvas-container">
         <canvas id="canvas" width="1024" height="768" tabindex="0"></canvas>
+        <!-- Boot console — populated by yettyStatus.append() from
+             preload, iframe, and the launchYetty flow. The 'x'
+             button manually dismisses the overlay until we have a
+             smarter "the terminal is healthy, hide me" trigger. -->
+        <div id="yetty-status" style="display: none;">
+            <button id="yetty-status-close" type="button" title="Close log">&times;</button>
+        </div>
         <div id="loading" style="display: none;">
             <div class="spinner"></div>
             <div>Loading WebGPU...</div>
@@ -308,6 +367,118 @@ busybox telnetd -p 8023 -l /bin/bash
     </div>
 
     <script>
+        // ---- Boot status console -----------------------------------------
+        // window.yettyStatus.append(text, level?) appends a line to the
+        // overlay above the canvas. Forwarded `yetty-status` postMessages
+        // from the tinyemu iframe also land here, so the user sees a
+        // single unified boot log (downloads → decode → VM → terminal).
+        (function () {
+            const el = document.getElementById('yetty-status');
+            const MAX_LINES = 300;
+            let hideTimer = null;
+            // Once the user clicks 'x', subsequent status messages
+            // mustn't pop the overlay back open. They still get
+            // console.log'd and recorded in the DOM (so re-show
+            // someday will surface them), just no auto-display.
+            let userDismissed = false;
+            // Tag → DOM line map so callers can update an existing line
+            // in place (e.g. download progress %) instead of appending
+            // a fresh row every event.
+            const tagged = Object.create(null);
+
+            function alsoLog(text) {
+                // Mirror to console so the headless test capture and
+                // dev-tools both see boot status, not just the overlay.
+                try { console.log('[yetty-status]', text); } catch (_) {}
+            }
+            function showIfNotDismissed() {
+                if (!el) return;
+                if (userDismissed) return;
+                el.classList.remove('hidden');
+                el.style.display = 'block';
+            }
+            function makeLine(text, level) {
+                const line = document.createElement('div');
+                line.className = 'line' + (level ? ' ' + level : '');
+                line.textContent = text;
+                return line;
+            }
+            function append(text, level) {
+                alsoLog(text);
+                if (!el) return;
+                showIfNotDismissed();
+                el.appendChild(makeLine(text, level));
+                while (el.childElementCount > MAX_LINES) {
+                    // Skip the close button when trimming.
+                    const first = el.firstChild;
+                    if (first && first.id === 'yetty-status-close') {
+                        const second = first.nextSibling;
+                        if (second) el.removeChild(second);
+                        else break;
+                    } else {
+                        el.removeChild(first);
+                    }
+                }
+                el.scrollTop = el.scrollHeight;
+            }
+            // Append a tagged line on first call; on subsequent calls
+            // with the same tag, replace its text in place. Keeps the
+            // 707 MB rootfs download to a single updating row instead
+            // of hundreds of progress lines.
+            function update(tag, text, level) {
+                alsoLog(text);
+                if (!el) return;
+                showIfNotDismissed();
+                let line = tagged[tag];
+                if (!line || !line.parentNode) {
+                    line = makeLine(text, level);
+                    tagged[tag] = line;
+                    el.appendChild(line);
+                } else {
+                    line.textContent = text;
+                    if (level) line.className = 'line ' + level;
+                }
+                el.scrollTop = el.scrollHeight;
+            }
+            function hide() {
+                userDismissed = true;
+                el && el.classList.add('hidden');
+            }
+            function autoHide(ms) {
+                clearTimeout(hideTimer);
+                hideTimer = setTimeout(hide, ms);
+            }
+
+            window.yettyStatus = {
+                append: append,
+                update: update,
+                hide: hide,
+                autoHide: autoHide
+            };
+
+            // Wire the close button so the user can dismiss the overlay
+            // when they're tired of the boot log. Re-opening currently
+            // requires a page reload — that's fine until we have a
+            // hotkey / corner widget to bring it back.
+            const closeBtn = document.getElementById('yetty-status-close');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function () { hide(); });
+            }
+
+            // Iframe → parent status pump (tinyemu-iframe.html sends these
+            // for VM download / boot phases). `tag` lets the iframe ask
+            // for in-place updates (download progress).
+            window.addEventListener('message', function (e) {
+                if (!e.data || e.data.type !== 'yetty-status') return;
+                if (typeof e.data.text !== 'string') return;
+                if (e.data.tag) {
+                    update(e.data.tag, e.data.text, e.data.level);
+                } else {
+                    append(e.data.text, e.data.level);
+                }
+            });
+        })();
+
         // Selected mode and config
         let selectedMode = null;
         let wsUrl = '';
@@ -558,18 +729,96 @@ busybox telnetd -p 8023 -l /bin/bash
             }
         }
 
+        // Wait for the VM iframe to post {type:'vm-ready', ptyId} before
+        // resolving. Times out so we never deadlock the page.
+        function awaitVmReady(ptyId, timeoutMs) {
+            return new Promise(function (resolve, reject) {
+                let done = false;
+                const handler = function (e) {
+                    if (done) return;
+                    if (!e.data) return;
+                    if (e.data.type !== 'vm-ready') return;
+                    if (e.data.ptyId !== ptyId) return;
+                    done = true;
+                    window.removeEventListener('message', handler);
+                    resolve();
+                };
+                window.addEventListener('message', handler);
+                setTimeout(function () {
+                    if (done) return;
+                    done = true;
+                    window.removeEventListener('message', handler);
+                    reject(new Error('VM did not become ready within ' +
+                        (timeoutMs / 1000) + 's'));
+                }, timeoutMs);
+            });
+        }
+
+        // Spawn the hidden VM iframe. Returns the element. The iframe's
+        // own pre-js (in tinyemu-iframe.html) takes over from there:
+        // fetches tinyemu-assets/, decompresses with brotli linked into
+        // tinyemu.wasm, FS.writeFile into /yetty-vm/, calls
+        // _tinyemu_bridge_start, then posts 'vm-ready'.
+        function spawnVMIframe(ptyId, cols, rows) {
+            const id = 'yetty-vm-pty-' + ptyId;
+            let iframe = document.getElementById(id);
+            if (iframe) {
+                // Already there (e.g. soft re-launch) — don't blow it away.
+                return iframe;
+            }
+            iframe = document.createElement('iframe');
+            iframe.id = id;
+            iframe.style.cssText = 'display:none; width:0; height:0; border:0;';
+            iframe.src = 'tinyemu-iframe.html?ptyId=' + ptyId +
+                         '&cols=' + cols + '&rows=' + rows;
+            document.body.appendChild(iframe);
+            return iframe;
+        }
+
         async function launchYetty() {
             const loading = document.getElementById('loading');
             loading.style.display = 'block';
 
             console.log('[yetty] Launching with mode:', selectedMode, 'wsUrl:', wsUrl);
+            window.yettyStatus.append('mode: ' + selectedMode, 'phase');
 
             resizeCanvas();
+            window.yettyStatus.append('checking WebGPU…');
             const hasWebGPU = await checkWebGPU();
-
-            if (hasWebGPU) {
-                await initYetty();
+            if (!hasWebGPU) {
+                window.yettyStatus.append('WebGPU not available — aborting', 'err');
+                return;
             }
+            window.yettyStatus.append('WebGPU ready', 'ok');
+
+            // VM-ONLY mode: bring the iframe up FIRST and only start
+            // yetty once the VM signals ready. This avoids yetty
+            // rendering an empty terminal for 30+ seconds while the
+            // VM rootfs streams down. Other modes (vnc/telnet) skip
+            // straight to yetty.
+            if (selectedMode === 'vm') {
+                const PTY_ID = 1;
+                window.yettyStatus.append(
+                    'spawning VM iframe (pty ' + PTY_ID + ')…', 'phase');
+                spawnVMIframe(PTY_ID, 80, 24);
+                window.yettyStatus.append(
+                    'waiting for VM to be ready (kernel+rootfs download + boot)…');
+                try {
+                    // 10 minutes is ridiculous but the rootfs is ~250 MB
+                    // brotli'd over potentially-slow links + the brotli
+                    // decode itself takes seconds. Better an eventual
+                    // success than a spurious timeout.
+                    await awaitVmReady(PTY_ID, 10 * 60 * 1000);
+                } catch (e) {
+                    window.yettyStatus.append(
+                        'VM never signaled ready: ' + e.message, 'err');
+                    return;
+                }
+                window.yettyStatus.append('VM is ready', 'ok');
+            }
+
+            window.yettyStatus.append('loading yetty.js…');
+            await initYetty();
         }
 
         async function init() {
