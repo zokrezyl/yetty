@@ -369,7 +369,10 @@ static struct yetty_ycore_void_result ymaze_build_prims(struct yetty_ymaze *m,
 	uint32_t z = 0;
 
 	/* Walls — emit S+E for every cell, plus N for row 0 and W for col 0,
-	 * which avoids drawing each shared wall twice. */
+	 * which avoids drawing each shared wall twice. Segments have no
+	 * interior; the visible band comes from the stroke (stroke_color +
+	 * stroke_width), not the fill, so wall_color goes into the stroke
+	 * slot. */
 	for (uint32_t row = 0; row < m->config.rows; row++) {
 		for (uint32_t col = 0; col < m->config.cols; col++) {
 			uint8_t w = *ymaze_cell(m, col, row);
@@ -382,23 +385,27 @@ static struct yetty_ycore_void_result ymaze_build_prims(struct yetty_ymaze *m,
 
 			if ((w & YMAZE_WALL_N) && row == 0) {
 				seg = (struct yetty_ysdf_segment){x0, y0, x1, y0};
-				yetty_ysdf_add_segment(buf, z++, m->config.wall_color,
-						       0u, m->config.wall_width, &seg);
+				yetty_ysdf_add_segment(buf, z++, 0u,
+						       m->config.wall_color,
+						       m->config.wall_width, &seg);
 			}
 			if (w & YMAZE_WALL_S) {
 				seg = (struct yetty_ysdf_segment){x0, y1, x1, y1};
-				yetty_ysdf_add_segment(buf, z++, m->config.wall_color,
-						       0u, m->config.wall_width, &seg);
+				yetty_ysdf_add_segment(buf, z++, 0u,
+						       m->config.wall_color,
+						       m->config.wall_width, &seg);
 			}
 			if ((w & YMAZE_WALL_W) && col == 0) {
 				seg = (struct yetty_ysdf_segment){x0, y0, x0, y1};
-				yetty_ysdf_add_segment(buf, z++, m->config.wall_color,
-						       0u, m->config.wall_width, &seg);
+				yetty_ysdf_add_segment(buf, z++, 0u,
+						       m->config.wall_color,
+						       m->config.wall_width, &seg);
 			}
 			if (w & YMAZE_WALL_E) {
 				seg = (struct yetty_ysdf_segment){x1, y0, x1, y1};
-				yetty_ysdf_add_segment(buf, z++, m->config.wall_color,
-						       0u, m->config.wall_width, &seg);
+				yetty_ysdf_add_segment(buf, z++, 0u,
+						       m->config.wall_color,
+						       m->config.wall_width, &seg);
 			}
 		}
 	}
@@ -451,7 +458,8 @@ static struct yetty_ycore_void_result ymaze_build_prims(struct yetty_ymaze *m,
 				.end_x   = ymaze_cell_x(m, m->path[i + 1].col),
 				.end_y   = ymaze_cell_y(m, m->path[i + 1].row),
 			};
-			yetty_ysdf_add_segment(buf, z++, trail_color, 0u,
+			/* Segment has no interior — paint via stroke. */
+			yetty_ysdf_add_segment(buf, z++, 0u, trail_color,
 					       trail_width, &seg);
 		}
 	}
