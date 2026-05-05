@@ -89,3 +89,7 @@ add_subdirectory(msdf)
 if(YETTY_ENABLE_TOOL_YNETSURF)
     add_subdirectory(ynetsurf)
 endif()
+
+if(YETTY_ENABLE_TOOL_YLEXBOR_DEMO)
+    add_subdirectory(ylexbor-demo)
+endif()

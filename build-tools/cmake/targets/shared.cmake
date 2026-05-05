@@ -161,6 +161,10 @@ if(YETTY_ENABLE_LIB_NETSURF)
     include(${YETTY_ROOT}/build-tools/cmake/libs/netsurf.cmake)
 endif()
 
+if(YETTY_ENABLE_LIB_LEXBOR)
+    include(${YETTY_ROOT}/build-tools/cmake/libs/lexbor.cmake)
+endif()
+
 if(YETTY_ENABLE_LIB_LIBPNG)
     include(${YETTY_ROOT}/build-tools/cmake/libs/libpng.cmake)
 endif()

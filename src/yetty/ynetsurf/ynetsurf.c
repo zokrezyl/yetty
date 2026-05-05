@@ -579,8 +579,14 @@ struct yetty_ycore_void_result yetty_ynetsurf_set_size(
 	if (ns->gw != NULL) {
 		ns->gw->width = width;
 		ns->gw->height = height;
+		/* Don't call browser_window_set_dimensions here — that one
+		 * hits assert(0) in NetSurf 3.11 (browser_window.c:4050)
+		 * whenever bw->window != NULL, which is the case for any
+		 * top-level browsing context with a real frontend gui_window.
+		 * The protocol is: we update gw->width/height (so the
+		 * get_dimensions callback returns the new value), then ask
+		 * core to re-flow. Core re-queries via get_dimensions. */
 		if (ns->gw->bw != NULL) {
-			browser_window_set_dimensions(ns->gw->bw, width, height);
 			browser_window_schedule_reformat(ns->gw->bw);
 		}
 	}
