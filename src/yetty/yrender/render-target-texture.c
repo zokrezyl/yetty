@@ -280,14 +280,24 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
 {
     struct yetty_yrender_render_target_texture *rt = (struct yetty_yrender_render_target_texture *)self;
 
-    /* Early out if not dirty — but only when LoadOp_Load preserves prior
-     * content. With LoadOp_Clear (preserve_on_render_layer=false, e.g. layer
-     * 0 of every terminal), skipping the draw would leave the pane viewport
-     * with whatever the global clear() in yetty_event_handler put there
-     * (opaque black) — so non-dirty panes go black on every render tick. */
-    if (!layer->dirty && rt->preserve_on_render_layer) {
-        return YETTY_OK_VOID();
-    }
+    /* No per-layer dirty early-out here.
+     *
+     * The texture state at the start of this layer's pass depends on what
+     * earlier layers in the same frame did:
+     *   - layer 0 renders with LoadOp_Clear → wipes the entire attachment,
+     *     so any non-dirty upper layer (ypaint, ymgui, …) skipping its draw
+     *     would lose its previous-frame pixels — its content disappears.
+     *   - layers above 0 with non-opaque pixels (alpha<1) would also leave
+     *     ghosts of upper layers that didn't redraw, since LoadOp_Load
+     *     keeps stale pixels under any transparent area.
+     *
+     * Frame-level gating already ensures this function only runs when
+     * something requested a render. The cheap save-some-GPU optimisation
+     * for non-dirty upper layers is not safe given the current compositing
+     * model — terminal_render_frame skips empty layers, which is enough.
+     * Anything more selective needs per-layer offscreen targets so each
+     * layer's pixels are owned by it and not stomped by another layer's
+     * pass. */
 
     /* Get gpu_resource_set from layer */
     struct yetty_yrender_gpu_resource_set_result rs_res = layer->ops->get_gpu_resource_set(layer);

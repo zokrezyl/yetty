@@ -596,6 +596,12 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
         if (!layer) {
             continue;
         }
+        /* Skip layers with nothing to draw. ypaint/ymgui report empty
+         * when their canvas has no primitives — paying the binder/draw
+         * cost for them on every text-layer redraw is pure overhead. */
+        if (layer->ops->is_empty && layer->ops->is_empty(layer)) {
+            continue;
+        }
         if (target->ops->set_preserve_on_render_layer) {
             target->ops->set_preserve_on_render_layer(target, i > 0);
         }
