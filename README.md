@@ -2,7 +2,7 @@
 
 
 <p align="center">
-  <img src="docs/logo-2.jpeg" alt="Yetty Logo" width="200">
+  <img src="docs/pres.gif" alt="Yetty demo — MSDF text, inline plots, ycat README, ygui/ymgui" width="900">
 </p>
 
 # Yetty

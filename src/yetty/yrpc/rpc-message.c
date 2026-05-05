@@ -13,7 +13,8 @@
  *   Notification: [2, channel, method, params]
  */
 
-struct yetty_rpc_message_result yetty_yrpc_message_parse(const uint8_t *data, size_t len)
+struct yetty_rpc_message_result
+yetty_yrpc_message_parse(const uint8_t *data, size_t len, size_t *out_consumed)
 {
     msgpack_unpacked unpacked;
     msgpack_unpack_return ret;
@@ -21,9 +22,22 @@ struct yetty_rpc_message_result yetty_yrpc_message_parse(const uint8_t *data, si
     struct yetty_yrpc_message msg = {0};
     size_t array_size;
     int type;
+    size_t off = 0;
+
+    if (out_consumed) {
+        *out_consumed = 0;
+    }
 
     msgpack_unpacked_init(&unpacked);
-    ret = msgpack_unpack_next(&unpacked, (const char *)data, len, NULL);
+    ret = msgpack_unpack_next(&unpacked, (const char *)data, len, &off);
+
+    /* Partial message — caller should wait for more bytes. Return OK
+     * with consumed == 0 so the caller's parse loop terminates without
+     * dropping the connection. */
+    if (ret == MSGPACK_UNPACK_CONTINUE) {
+        msgpack_unpacked_destroy(&unpacked);
+        return YETTY_OK(yetty_rpc_message, msg);
+    }
 
     if (ret != MSGPACK_UNPACK_SUCCESS) {
         msgpack_unpacked_destroy(&unpacked);
@@ -127,6 +141,9 @@ struct yetty_rpc_message_result yetty_yrpc_message_parse(const uint8_t *data, si
         return YETTY_ERR(yetty_rpc_message, "unknown message type");
     }
 
+    if (out_consumed) {
+        *out_consumed = off;
+    }
     msgpack_unpacked_destroy(&unpacked);
     return YETTY_OK(yetty_rpc_message, msg);
 }

@@ -26,10 +26,19 @@ struct yetty_yrpc_handler_entry {
     void *userdata;
 };
 
-/* Per-connection context */
+/* Per-connection context.
+ *
+ * read_buf is a streaming accumulator: each libuv read appends to
+ * read_buf[buffered..]; the parse loop in rpc_on_data consumes whole
+ * messages from the front and memmoves the trailing partial (if any)
+ * back to offset 0. This is the streaming-correct model — the previous
+ * "parse one message per read" code dropped extra messages whenever
+ * the loop stalled (e.g. under --record's GPU encode load) and the
+ * kernel coalesced multiple framed RPCs into one read. */
 struct yetty_yrpc_rpc_conn_ctx {
     struct yetty_yrpc_server *server;
     char read_buf[READ_BUFFER_SIZE];
+    size_t buffered;        /* bytes carried over from previous read(s) */
     uint8_t response_buf[RESPONSE_BUFFER_SIZE];
 };
 
@@ -62,24 +71,16 @@ static struct yetty_yrpc_handler_entry *find_handler(struct yetty_yrpc_server *s
     return NULL;
 }
 
-YETTY_EXTERNAL_CALLBACK
-static void handle_message(struct yetty_yrpc_rpc_conn_ctx *ctx, struct yetty_ycore_conn *conn,
-                           const uint8_t *data, size_t len)
+/* Dispatch a single already-parsed message: find handler, invoke it,
+ * write any response back. Owns msg.params (frees it on return). */
+static void dispatch_message(struct yetty_yrpc_rpc_conn_ctx *ctx,
+                             struct yetty_ycore_conn *conn,
+                             struct yetty_yrpc_message msg)
 {
     struct yetty_yrpc_server *server = ctx->server;
-    struct yetty_rpc_message_result parse_res;
-    struct yetty_yrpc_message msg;
     struct yetty_yrpc_handler_entry *handler;
     struct yetty_rpc_handler_result result;
     struct yetty_yrpc_write_buffer wbuf;
-
-    parse_res = yetty_yrpc_message_parse(data, len);
-    if (YETTY_IS_ERR(parse_res)) {
-        ytrace("yrpc: failed to parse message: %s", parse_res.error.msg);
-        return;
-    }
-
-    msg = parse_res.value;
 
     ytrace("yrpc: received %s: channel=%u method=%.*s msgid=%u",
            msg.type == YETTY_YRPC_MSG_REQUEST        ? "request"
@@ -87,14 +88,12 @@ static void handle_message(struct yetty_yrpc_rpc_conn_ctx *ctx, struct yetty_yco
                                                      : "response",
            msg.channel, (int)msg.method_len, msg.method, msg.msgid);
 
-    /* Find handler */
     handler = find_handler(server, msg.channel, msg.method, msg.method_len);
     if (!handler) {
         ytrace("yrpc: no handler for channel=%u method=%.*s", msg.channel, (int)msg.method_len,
                msg.method);
 
         if (msg.type == YETTY_YRPC_MSG_REQUEST) {
-            /* Send error response */
             yetty_yrpc_write_buffer_init(&wbuf, ctx->response_buf, RESPONSE_BUFFER_SIZE);
             yetty_yrpc_write_response_error(&wbuf, msg.msgid, "method not found");
             server->event_loop->ops->tcp_send(conn, wbuf.data, wbuf.len);
@@ -103,10 +102,8 @@ static void handle_message(struct yetty_yrpc_rpc_conn_ctx *ctx, struct yetty_yco
         return;
     }
 
-    /* Call handler */
     result = handler->handler(&msg, handler->userdata);
 
-    /* Send response for requests */
     if (msg.type == YETTY_YRPC_MSG_REQUEST) {
         yetty_yrpc_write_buffer_init(&wbuf, ctx->response_buf, RESPONSE_BUFFER_SIZE);
 
@@ -155,9 +152,12 @@ static void rpc_on_alloc(void *conn_ctx_ptr, size_t suggested, char **buf, size_
 
     (void)suggested;
 
-    if (ctx) {
-        *buf = ctx->read_buf;
-        *len = READ_BUFFER_SIZE;
+    /* Hand libuv the slot just past the carried-over partial. The new
+     * read fills in starting at &read_buf[buffered]; the parse loop
+     * then sees ctx->read_buf[0..buffered+nread]. */
+    if (ctx && ctx->buffered < READ_BUFFER_SIZE) {
+        *buf = ctx->read_buf + ctx->buffered;
+        *len = READ_BUFFER_SIZE - ctx->buffered;
     } else {
         *buf = NULL;
         *len = 0;
@@ -168,12 +168,52 @@ static void rpc_on_data(void *conn_ctx_ptr, struct yetty_ycore_conn *conn, const
                         long nread)
 {
     struct yetty_yrpc_rpc_conn_ctx *ctx = conn_ctx_ptr;
+    size_t total;
+    size_t off;
+
+    /* libuv read into ctx->read_buf + ctx->buffered (see rpc_on_alloc),
+     * so `data` is just an alias into our own buffer. We work directly
+     * off ctx->read_buf to keep the leftover memmove simple. */
+    (void)data;
 
     if (!ctx || nread <= 0) {
         return;
     }
 
-    handle_message(ctx, conn, (const uint8_t *)data, (size_t)nread);
+    total = ctx->buffered + (size_t)nread;
+    off = 0;
+
+    /* Drain whole messages from the front of the buffer. The kernel
+     * cheerfully coalesces N small RPCs into a single TCP read whenever
+     * we stall the loop (recording, heavy GPU work) — drop one and we
+     * lose typed characters. */
+    while (off < total) {
+        size_t consumed = 0;
+        struct yetty_rpc_message_result pres = yetty_yrpc_message_parse(
+            (const uint8_t *)ctx->read_buf + off, total - off, &consumed);
+
+        if (YETTY_IS_ERR(pres)) {
+            ytrace("yrpc: parse error, dropping connection buffer: %s", pres.error.msg);
+            ctx->buffered = 0;
+            return;
+        }
+        if (consumed == 0) {
+            /* Partial trailing message — wait for next read. */
+            break;
+        }
+
+        dispatch_message(ctx, conn, pres.value);
+        off += consumed;
+    }
+
+    /* Carry the unparsed tail to the front so the next read appends to it. */
+    if (off < total) {
+        size_t leftover = total - off;
+        memmove(ctx->read_buf, ctx->read_buf + off, leftover);
+        ctx->buffered = leftover;
+    } else {
+        ctx->buffered = 0;
+    }
 }
 
 static void rpc_on_disconnect(void *conn_ctx_ptr)
@@ -672,6 +712,26 @@ static struct yetty_rpc_handler_result handle_mouse_scroll(const struct yetty_yr
     return YETTY_YRPC_HANDLER_OK_BOOL(1);
 }
 
+/* Notification: tear yetty down. Dispatches the same SHUTDOWN event the
+ * SIGINT/SIGTERM signal handler uses (see libuv-event-loop.c on_signal),
+ * which the top-level listener handles by stopping the event loop —
+ * ending recording cleanly and exiting the process. No params. */
+static struct yetty_rpc_handler_result handle_shutdown(const struct yetty_yrpc_message *msg,
+                                                       void *userdata)
+{
+    struct yetty_yrpc_server *server = userdata;
+    struct yetty_yui_event event = {.type = YETTY_YCORE_SHUTDOWN};
+
+    (void)msg;
+
+    if (!server->event_loop) {
+        return YETTY_YRPC_HANDLER_ERR("no event loop");
+    }
+
+    server->event_loop->ops->dispatch(server->event_loop, &event);
+    return YETTY_YRPC_HANDLER_OK_BOOL(1);
+}
+
 static struct yetty_rpc_handler_result handle_resize(const struct yetty_yrpc_message *msg,
                                                      void *userdata)
 {
@@ -726,6 +786,7 @@ static struct yetty_ycore_void_result register_builtin_handlers(struct yetty_yrp
     REG("mouse_move", handle_mouse_move);
     REG("mouse_scroll", handle_mouse_scroll);
     REG("resize", handle_resize);
+    REG("shutdown", handle_shutdown);
 
 #undef REG
 
