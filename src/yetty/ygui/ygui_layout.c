@@ -667,10 +667,70 @@ static void layout_widget(struct yetty_ygui_widget *w, float parent_abs_x, float
     }
 }
 
+/*=============================================================================
+ * Pre-flight: intrinsic sizing for widgets that don't have a meaningful
+ * authored height (currently tree_node).
+ *
+ * Walks bottom-up so a parent's intrinsic size sees its children's
+ * already-computed sizes. Updates `authored_h` in place so the regular
+ * flex pass that follows can use it as basis on the main axis.
+ *
+ * Only tree_node participates today, but the structure is generic — add
+ * an `intrinsic_size` vtable hook later if more widgets need it.
+ *===========================================================================*/
+
+static void preflight_intrinsic_size(struct yetty_ygui_widget *w)
+{
+    /* Recurse first (bottom-up). */
+    for (struct yetty_ygui_widget *c = w->first_child; c; c = c->next_sibling) {
+        preflight_intrinsic_size(c);
+    }
+
+    if (w->type != YETTY_YGUI_WIDGET_TREE_NODE) {
+        return;
+    }
+
+    /* Header height = theme->row_height (set by the constructor as
+     * padding_top). The constructor seeds padding_top = row_height; the
+     * engine pre-flight just trusts that value. */
+    float h = w->layout.padding_top;
+    if (h <= 0.0f) {
+        const struct yetty_ygui_theme *theme = layout_theme(w);
+        h = theme ? theme->row_height : 24.0f;
+        w->layout.padding_top = h;
+    }
+
+    if (w->data.tree_node.expanded && w->data.tree_node.children_list) {
+        struct yetty_ygui_widget *kids = w->data.tree_node.children_list;
+        float sum = 0.0f;
+        int count = 0;
+        for (struct yetty_ygui_widget *c = kids->first_child; c; c = c->next_sibling) {
+            if (!layout_is_visible(c)) {
+                continue;
+            }
+            sum += c->authored_h;
+            count++;
+        }
+        if (count > 1) {
+            sum += (float)(count - 1) * kids->layout.gap;
+        }
+        sum += kids->layout.padding_top + kids->layout.padding_bottom;
+        h += sum;
+    }
+
+    w->authored_h = h;
+}
+
 struct yetty_ycore_void_result yetty_ygui_layout_compute_engine(struct yetty_ygui_engine *engine)
 {
     if (!engine) {
         return YETTY_ERR(yetty_ycore_void, "ygui_layout_compute_engine: NULL engine");
+    }
+
+    /* Pre-flight: update intrinsic sizes (tree_node h grows with expanded
+     * children). Walk all top-level subtrees. */
+    for (struct yetty_ygui_widget *w = engine->first_widget; w; w = w->next_sibling) {
+        preflight_intrinsic_size(w);
     }
 
     /* Top-level widgets: parent_abs is (0, 0) so authored x/y are absolute. */
