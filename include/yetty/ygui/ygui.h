@@ -144,26 +144,48 @@ typedef enum {
     YETTY_YGUI_ALIGN_START,
     YETTY_YGUI_ALIGN_CENTER,
     YETTY_YGUI_ALIGN_END,
-    YETTY_YGUI_ALIGN_STRETCH
+    YETTY_YGUI_ALIGN_STRETCH,
+    YETTY_YGUI_ALIGN_BASELINE   /* cross-axis: line up children by text baseline */
 } ygui_align_t;
+
+typedef enum {
+    YETTY_YGUI_FLEX_NOWRAP = 0,
+    YETTY_YGUI_FLEX_WRAP        /* break to new line when children overflow */
+} ygui_flex_wrap_t;
+
+typedef enum {
+    YETTY_YGUI_POSITION_RELATIVE = 0, /* default — participates in flex flow */
+    YETTY_YGUI_POSITION_ABSOLUTE      /* skipped by flex; positioned at authored x/y */
+} ygui_position_t;
 
 struct yetty_ygui_layout {
     ygui_layout_mode_t    mode;
     ygui_flex_direction_t direction;
+    ygui_flex_wrap_t      wrap;
     ygui_justify_t        justify_content;
     ygui_align_t          align_items;
     ygui_align_t          align_self;
+    ygui_align_t          align_content;   /* multi-line cross-axis alignment */
+    ygui_position_t       position;
 
     float flex_grow;
     float flex_shrink;
-    float flex_basis;       /* <= 0: use authored size on main axis */
+    float flex_basis;           /* <= 0: use authored size on main axis */
+    float flex_basis_percent;   /* > 0: percent of parent's main content size (overrides flex_basis) */
 
     float gap;
     float padding_top, padding_right, padding_bottom, padding_left;
     float margin_top, margin_right, margin_bottom, margin_left;
 
-    float min_w, min_h;     /* 0: unset */
-    float max_w, max_h;     /* 0: unset */
+    float min_w, min_h;             /* 0: unset (absolute pixels) */
+    float max_w, max_h;
+    float min_w_percent, min_h_percent; /* 0: unset (% of parent content) */
+    float max_w_percent, max_h_percent;
+
+    /* Optional explicit width/height as percent of parent's content box.
+     * 0 = unset. Applies on the *cross axis* for flex children, and on
+     * both axes in MANUAL mode. */
+    float width_percent, height_percent;
 };
 
 /*=============================================================================
@@ -435,6 +457,42 @@ void yetty_ygui_widget_set_margin(struct yetty_ygui_widget *widget, float top, f
                                   float bottom, float left);
 void yetty_ygui_widget_set_min_size(struct yetty_ygui_widget *widget, float min_w, float min_h);
 void yetty_ygui_widget_set_max_size(struct yetty_ygui_widget *widget, float max_w, float max_h);
+void yetty_ygui_widget_set_flex_wrap(struct yetty_ygui_widget *widget, ygui_flex_wrap_t wrap);
+void yetty_ygui_widget_set_align_content(struct yetty_ygui_widget *widget, ygui_align_t align);
+void yetty_ygui_widget_set_position_mode(struct yetty_ygui_widget *widget, ygui_position_t position);
+void yetty_ygui_widget_set_flex_basis_percent(struct yetty_ygui_widget *widget, float pct);
+void yetty_ygui_widget_set_size_percent(struct yetty_ygui_widget *widget, float w_pct, float h_pct);
+void yetty_ygui_widget_set_min_size_percent(struct yetty_ygui_widget *widget,
+                                            float min_w_pct, float min_h_pct);
+void yetty_ygui_widget_set_max_size_percent(struct yetty_ygui_widget *widget,
+                                            float max_w_pct, float max_h_pct);
+
+/* Apply a CSS-like one-shot string to a widget's layout. Recognized
+ * properties (each terminated by ';' or end-of-string):
+ *
+ *   display:        flex | manual
+ *   flex-direction: row | column
+ *   flex-wrap:      nowrap | wrap
+ *   justify-content: start | center | end | space-between | space-around | space-evenly
+ *   align-items:    auto | start | center | end | stretch | baseline
+ *   align-self:     auto | start | center | end | stretch | baseline
+ *   align-content:  auto | start | center | end | stretch | space-between | space-around | space-evenly
+ *   position:       relative | absolute
+ *   flex:           <grow> [<shrink> [<basis>]]
+ *   flex-grow:      <number>
+ *   flex-shrink:    <number>
+ *   flex-basis:     <number>[px|%] | auto
+ *   gap:            <number>[px]
+ *   padding:        <t> [<r> [<b> [<l>]]]   (each <number>[px])
+ *   margin:         same shorthand as padding
+ *   width:          <number>%
+ *   height:         <number>%
+ *   min-width / min-height / max-width / max-height: <number>[px|%]
+ *
+ * Returns ok or an error result. Unknown properties are reported but do
+ * not abort parsing of the rest of the string. */
+struct yetty_ycore_void_result yetty_ygui_widget_apply_css(struct yetty_ygui_widget *widget,
+                                                            const char *css);
 
 /*=============================================================================
  * Widget-Specific Properties
@@ -553,6 +611,15 @@ void yetty_ygui_theme_set_overlay_modal(struct yetty_ygui_theme *theme, uint32_t
 void yetty_ygui_theme_set_shadow(struct yetty_ygui_theme *theme, uint32_t color);
 void yetty_ygui_theme_set_tooltip_bg(struct yetty_ygui_theme *theme, uint32_t color);
 void yetty_ygui_theme_set_selection_bg(struct yetty_ygui_theme *theme, uint32_t color);
+
+/* Soft-elevation shadow tuning. low / medium / high are vertical offsets
+ * in pixels (set to 0 to disable shadows of that level). alpha is a 0..1
+ * multiplier on theme.shadow's alpha channel (set to 0 to disable
+ * shadows globally without zeroing each level). enable_gradient toggles
+ * the subtle top-edge highlight on buttons. */
+void yetty_ygui_theme_set_elevation(struct yetty_ygui_theme *theme, float low, float medium,
+                                    float high, float alpha);
+void yetty_ygui_theme_set_gradient(struct yetty_ygui_theme *theme, int enable);
 
 /*=============================================================================
  * Testing API

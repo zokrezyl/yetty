@@ -10,15 +10,16 @@ extern "C" {
 #endif
 
 // SDF factory - handles all SDF primitive types
-struct yetty_ycore_void_result yetty_ysdf_yaml_factory(struct yetty_ypaint_core_buffer *buffer,
-                                                       struct yaml_parser_s *yaml_parser,
-                                                       const char *primitive_type_name);
+struct yetty_ycore_void_result
+yetty_ysdf_yaml_factory(struct yetty_ypaint_core_buffer *buffer,
+                        struct yaml_parser_s *yaml_parser,
+                        const char *primitive_type_name);
 
 // Register all SDF primitive types with the parser
-// Supported types: circle, box, segment, triangle, ellipse, arc, rounded_box, rhombus, pentagon, hexagon, star, pie, ring, heart, cross, rounded_x, capsule, moon, egg, octogon, hexagram, pentagram
+// Supported types: circle, box, segment, triangle, ellipse, arc, rounded_box, rhombus, pentagon, hexagon, star, pie, ring, heart, cross, rounded_x, capsule, moon, egg, octogon, hexagram, pentagram, linear_gradient_box, radial_gradient_box
 struct yetty_ypaint_yaml_parser;
-struct yetty_ycore_void_result yetty_ysdf_register_yaml_factories(
-    struct yetty_ypaint_yaml_parser *parser);
+struct yetty_ycore_void_result
+yetty_ysdf_register_yaml_factories(struct yetty_ypaint_yaml_parser *parser);
 
 #ifdef __cplusplus
 }

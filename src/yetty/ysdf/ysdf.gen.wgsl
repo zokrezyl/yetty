@@ -236,6 +236,22 @@ fn sdf_pentagram(sample_pos: vec2<f32>, center_x: f32, center_y: f32, radius: f3
     return length(pos - v3 * clamp(dot(pos, v3), 0.0, k1z * radius)) * sign(pos.y * v3.x - pos.x * v3.y);
 }
 
+fn sdf_linear_gradient_box(sample_pos: vec2<f32>, center_x: f32, center_y: f32, half_width: f32, half_height: f32, corner_radius: f32, grad_x0: f32, grad_y0: f32, grad_x1: f32, grad_y1: f32, color0: u32, color1: u32) -> f32 {
+    // Geometry only — color args are unused here; the fragment shader
+    // reads them via yetty_ysdf_eval_gradient_color_2d().
+    let _g0 = grad_x0; let _g1 = grad_y0; let _g2 = grad_x1; let _g3 = grad_y1;
+    let _c0 = color0;  let _c1 = color1;
+    let d = abs(sample_pos - vec2<f32>(center_x, center_y)) - vec2<f32>(half_width, half_height) + corner_radius;
+    return length(max(d, vec2<f32>(0.0))) + min(max(d.x, d.y), 0.0) - corner_radius;
+}
+
+fn sdf_radial_gradient_box(sample_pos: vec2<f32>, center_x: f32, center_y: f32, half_width: f32, half_height: f32, corner_radius: f32, grad_cx: f32, grad_cy: f32, grad_radius: f32, color_inner: u32, color_outer: u32) -> f32 {
+    let _gx = grad_cx; let _gy = grad_cy; let _gr = grad_radius;
+    let _ci = color_inner; let _co = color_outer;
+    let d = abs(sample_pos - vec2<f32>(center_x, center_y)) - vec2<f32>(half_width, half_height) + corner_radius;
+    return length(max(d, vec2<f32>(0.0))) + min(max(d.x, d.y), 0.0) - corner_radius;
+}
+
 fn sdf_sphere_3d(sample_pos: vec3<f32>, position_x: f32, position_y: f32, position_z: f32, radius: f32) -> f32 {
     return length(sample_pos - vec3<f32>(position_x, position_y, position_z)) - radius;
 }
@@ -282,6 +298,8 @@ fn evaluate_sdf_2d(prim_offset: u32, sample_pos: vec2<f32>) -> f32 {
         case 28u: { return sdf_octogon(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
         case 29u: { return sdf_hexagram(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
         case 30u: { return sdf_pentagram(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
+        case 130u: { return sdf_linear_gradient_box(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u]), bitcast<f32>(storage_buffer[prim_offset + 10u]), bitcast<f32>(storage_buffer[prim_offset + 11u]), bitcast<f32>(storage_buffer[prim_offset + 12u]), bitcast<f32>(storage_buffer[prim_offset + 13u]), bitcast<u32>(storage_buffer[prim_offset + 14u]), bitcast<u32>(storage_buffer[prim_offset + 15u])); }
+        case 131u: { return sdf_radial_gradient_box(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u]), bitcast<f32>(storage_buffer[prim_offset + 10u]), bitcast<f32>(storage_buffer[prim_offset + 11u]), bitcast<f32>(storage_buffer[prim_offset + 12u]), bitcast<u32>(storage_buffer[prim_offset + 13u]), bitcast<u32>(storage_buffer[prim_offset + 14u])); }
         default: { return 1e10; }
     }
 }
@@ -303,4 +321,46 @@ fn get_sdf_prim_style(prim_offset: u32) -> vec3<u32> {
         bitcast<u32>(storage_buffer[prim_offset + 3u]),  // stroke_color
         bitcast<u32>(storage_buffer[prim_offset + 4u])   // stroke_width as bits
     );
+}
+
+fn yetty_ysdf_is_gradient_2d(prim_type: u32) -> bool {
+    switch (prim_type) {
+        case 130u: { return true; }
+        case 131u: { return true; }
+        default: { return false; }
+    }
+}
+
+fn yetty_ysdf_unpack_color(packed: u32) -> vec4<f32> {
+    return vec4<f32>(
+        f32(packed & 0xFFu) / 255.0,
+        f32((packed >> 8u) & 0xFFu) / 255.0,
+        f32((packed >> 16u) & 0xFFu) / 255.0,
+        f32((packed >> 24u) & 0xFFu) / 255.0,
+    );
+}
+
+fn yetty_ysdf_eval_gradient_color_2d(prim_offset: u32, sample_pos: vec2<f32>) -> vec4<f32> {
+    let prim_type = bitcast<u32>(storage_buffer[prim_offset]);
+    switch (prim_type) {
+        case 130u: {
+            let g0 = vec2<f32>(bitcast<f32>(storage_buffer[prim_offset + 10u]), bitcast<f32>(storage_buffer[prim_offset + 11u]));
+            let g1 = vec2<f32>(bitcast<f32>(storage_buffer[prim_offset + 12u]), bitcast<f32>(storage_buffer[prim_offset + 13u]));
+            let c0 = yetty_ysdf_unpack_color(bitcast<u32>(storage_buffer[prim_offset + 14u]));
+            let c1 = yetty_ysdf_unpack_color(bitcast<u32>(storage_buffer[prim_offset + 15u]));
+            let dir = g1 - g0;
+            let len2 = dot(dir, dir);
+            let t = select(0.0, clamp(dot(sample_pos - g0, dir) / len2, 0.0, 1.0), len2 > 0.0);
+            return mix(c0, c1, t);
+        }
+        case 131u: {
+            let gc = vec2<f32>(bitcast<f32>(storage_buffer[prim_offset + 10u]), bitcast<f32>(storage_buffer[prim_offset + 11u]));
+            let gr = bitcast<f32>(storage_buffer[prim_offset + 12u]);
+            let ci = yetty_ysdf_unpack_color(bitcast<u32>(storage_buffer[prim_offset + 13u]));
+            let co = yetty_ysdf_unpack_color(bitcast<u32>(storage_buffer[prim_offset + 14u]));
+            let t = select(0.0, clamp(length(sample_pos - gc) / gr, 0.0, 1.0), gr > 0.0);
+            return mix(ci, co, t);
+        }
+        default: { return vec4<f32>(0.0); }
+    }
 }

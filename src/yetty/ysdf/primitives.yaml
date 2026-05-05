@@ -594,6 +594,75 @@
       *max_y = geom[1] + total_radius;
 
 # =============================================================================
+# Gradient primitives (ported from yetty-poc/src/yetty/ypaint/ypaint-primitives.yaml).
+# The SDF returns the same distance as the equivalent solid primitive — only
+# the fill-color resolution path differs. The fragment shader detects gradient
+# types via yetty_ysdf_is_gradient_2d() and computes the color from the args
+# instead of reading a single fill_color word.
+# =============================================================================
+
+- name: linear_gradient_box
+  type: 130
+  category: sdf2d
+  args:
+    - { name: center_x,      type: f32 }
+    - { name: center_y,      type: f32 }
+    - { name: half_width,    type: f32 }
+    - { name: half_height,   type: f32 }
+    - { name: corner_radius, type: f32 }
+    - { name: grad_x0,       type: f32 }
+    - { name: grad_y0,       type: f32 }
+    - { name: grad_x1,       type: f32 }
+    - { name: grad_y1,       type: f32 }
+    - { name: color0,        type: u32 }
+    - { name: color1,        type: u32 }
+  shader:
+    code: |
+      // Geometry only — color args are unused here; the fragment shader
+      // reads them via yetty_ysdf_eval_gradient_color_2d().
+      let _g0 = grad_x0; let _g1 = grad_y0; let _g2 = grad_x1; let _g3 = grad_y1;
+      let _c0 = color0;  let _c1 = color1;
+      let d = abs(sample_pos - vec2<f32>(center_x, center_y)) - vec2<f32>(half_width, half_height) + corner_radius;
+      return length(max(d, vec2<f32>(0.0))) + min(max(d.x, d.y), 0.0) - corner_radius;
+  aabb:
+    code: |
+      float hw = geom[2] + geom[4] + expand;
+      float hh = geom[3] + geom[4] + expand;
+      *min_x = geom[0] - hw;
+      *min_y = geom[1] - hh;
+      *max_x = geom[0] + hw;
+      *max_y = geom[1] + hh;
+
+- name: radial_gradient_box
+  type: 131
+  category: sdf2d
+  args:
+    - { name: center_x,      type: f32 }
+    - { name: center_y,      type: f32 }
+    - { name: half_width,    type: f32 }
+    - { name: half_height,   type: f32 }
+    - { name: corner_radius, type: f32 }
+    - { name: grad_cx,       type: f32 }
+    - { name: grad_cy,       type: f32 }
+    - { name: grad_radius,   type: f32 }
+    - { name: color_inner,   type: u32 }
+    - { name: color_outer,   type: u32 }
+  shader:
+    code: |
+      let _gx = grad_cx; let _gy = grad_cy; let _gr = grad_radius;
+      let _ci = color_inner; let _co = color_outer;
+      let d = abs(sample_pos - vec2<f32>(center_x, center_y)) - vec2<f32>(half_width, half_height) + corner_radius;
+      return length(max(d, vec2<f32>(0.0))) + min(max(d.x, d.y), 0.0) - corner_radius;
+  aabb:
+    code: |
+      float hw = geom[2] + geom[4] + expand;
+      float hh = geom[3] + geom[4] + expand;
+      *min_x = geom[0] - hw;
+      *min_y = geom[1] - hh;
+      *max_x = geom[0] + hw;
+      *max_y = geom[1] + hh;
+
+# =============================================================================
 # 3D SDF Primitives (AABB returns zero - not used for 2D grid)
 # =============================================================================
 

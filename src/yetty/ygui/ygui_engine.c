@@ -508,8 +508,8 @@ static struct yetty_ycore_void_result engine_rebuild(struct yetty_ygui_engine *e
     for (struct yetty_ygui_widget *w = engine->first_widget; w; w = w->next_sibling) {
         w->was_rendered = 0;
         struct yetty_ycore_void_result r;
-        if (w->render_all) {
-            r = w->render_all(w, &ctx);
+        if (w->vtable && w->vtable->render_all) {
+            r = w->vtable->render_all(w, &ctx);
         } else {
             r = yetty_ygui_widget_render_all_default(w, &ctx);
         }
@@ -674,11 +674,11 @@ void yetty_ygui_engine_mouse_move(struct yetty_ygui_engine *engine, float x, flo
     }
 
     /* Handle drag */
-    if (engine->pressed && engine->pressed->on_drag) {
+    if (engine->pressed && engine->pressed->vtable && engine->pressed->vtable->on_drag) {
         float lx = x - engine->pressed->effective_x;
         float ly = y - engine->pressed->effective_y;
         ygui_event_t event = {0};
-        if (engine->pressed->on_drag(engine->pressed, lx, ly, &event)) {
+        if (engine->pressed->vtable->on_drag(engine->pressed, lx, ly, &event)) {
             emit_event(engine, &event);
             engine->dirty = 1;
         }
@@ -710,11 +710,11 @@ void yetty_ygui_engine_mouse_down(struct yetty_ygui_engine *engine, float x, flo
             engine->focused = hit;
         }
 
-        if (hit->on_press) {
+        if (hit->vtable && hit->vtable->on_press) {
             float lx = x - hit->effective_x;
             float ly = y - hit->effective_y;
             ygui_event_t event = {0};
-            if (hit->on_press(hit, lx, ly, &event)) {
+            if (hit->vtable->on_press(hit, lx, ly, &event)) {
                 emit_event(engine, &event);
             }
         }
@@ -751,11 +751,11 @@ void yetty_ygui_engine_mouse_up(struct yetty_ygui_engine *engine, float x, float
             emit_event(engine, &event);
         }
 
-        if (widget->on_release) {
+        if (widget->vtable && widget->vtable->on_release) {
             float lx = x - widget->effective_x;
             float ly = y - widget->effective_y;
             ygui_event_t event = {0};
-            if (widget->on_release(widget, lx, ly, &event)) {
+            if (widget->vtable->on_release(widget, lx, ly, &event)) {
                 emit_event(engine, &event);
             }
         }
@@ -772,9 +772,9 @@ void yetty_ygui_engine_mouse_scroll(struct yetty_ygui_engine *engine, float x, f
 
     struct yetty_ygui_widget *hit = yetty_ygui_grid_query(&engine->grid, x, y);
 
-    if (hit && hit->on_scroll) {
+    if (hit && hit->vtable && hit->vtable->on_scroll) {
         ygui_event_t event = {0};
-        if (hit->on_scroll(hit, dx, dy, &event)) {
+        if (hit->vtable->on_scroll(hit, dx, dy, &event)) {
             emit_event(engine, &event);
             engine->dirty = 1;
         }
@@ -793,9 +793,9 @@ void yetty_ygui_engine_key_down(struct yetty_ygui_engine *engine, uint32_t key, 
     }
 
     /* Also try focused widget */
-    if (engine->focused && engine->focused->on_key) {
+    if (engine->focused && engine->focused->vtable && engine->focused->vtable->on_key) {
         ygui_event_t event = {0};
-        if (engine->focused->on_key(engine->focused, key, mods, &event)) {
+        if (engine->focused->vtable->on_key(engine->focused, key, mods, &event)) {
             emit_event(engine, &event);
             engine->dirty = 1;
         }

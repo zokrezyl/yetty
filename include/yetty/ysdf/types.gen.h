@@ -33,6 +33,8 @@ enum yetty_ysdf_type {
     YETTY_YSDF_OCTOGON = 28,
     YETTY_YSDF_HEXAGRAM = 29,
     YETTY_YSDF_PENTAGRAM = 30,
+    YETTY_YSDF_LINEAR_GRADIENT_BOX = 130,
+    YETTY_YSDF_RADIAL_GRADIENT_BOX = 131,
     YETTY_YSDF_SPHERE_3D = 100,
     YETTY_YSDF_BOX_3D = 101,
     YETTY_YSDF_TORUS_3D = 103,
@@ -202,6 +204,33 @@ struct yetty_ysdf_pentagram {
     float radius;
 };
 
+struct yetty_ysdf_linear_gradient_box {
+    float center_x;
+    float center_y;
+    float half_width;
+    float half_height;
+    float corner_radius;
+    float grad_x0;
+    float grad_y0;
+    float grad_x1;
+    float grad_y1;
+    uint32_t color0;
+    uint32_t color1;
+};
+
+struct yetty_ysdf_radial_gradient_box {
+    float center_x;
+    float center_y;
+    float half_width;
+    float half_height;
+    float corner_radius;
+    float grad_cx;
+    float grad_cy;
+    float grad_radius;
+    uint32_t color_inner;
+    uint32_t color_outer;
+};
+
 struct yetty_ysdf_sphere_3d {
     float position_x;
     float position_y;
@@ -235,69 +264,42 @@ struct yetty_ysdf_cylinder_3d {
 };
 
 // Word count per SDF primitive type
-static inline uint32_t yetty_ysdf_word_count(enum yetty_ysdf_type type)
-{
+static inline uint32_t yetty_ysdf_word_count(enum yetty_ysdf_type type) {
     switch (type) {
-    case YETTY_YSDF_CIRCLE:
-        return 8u;
-    case YETTY_YSDF_BOX:
-        return 10u;
-    case YETTY_YSDF_SEGMENT:
-        return 9u;
-    case YETTY_YSDF_TRIANGLE:
-        return 11u;
-    case YETTY_YSDF_ELLIPSE:
-        return 9u;
-    case YETTY_YSDF_ARC:
-        return 11u;
-    case YETTY_YSDF_ROUNDED_BOX:
-        return 13u;
-    case YETTY_YSDF_RHOMBUS:
-        return 9u;
-    case YETTY_YSDF_PENTAGON:
-        return 8u;
-    case YETTY_YSDF_HEXAGON:
-        return 8u;
-    case YETTY_YSDF_STAR:
-        return 10u;
-    case YETTY_YSDF_PIE:
-        return 10u;
-    case YETTY_YSDF_RING:
-        return 11u;
-    case YETTY_YSDF_HEART:
-        return 8u;
-    case YETTY_YSDF_CROSS:
-        return 10u;
-    case YETTY_YSDF_ROUNDED_X:
-        return 9u;
-    case YETTY_YSDF_CAPSULE:
-        return 10u;
-    case YETTY_YSDF_MOON:
-        return 10u;
-    case YETTY_YSDF_EGG:
-        return 9u;
-    case YETTY_YSDF_OCTOGON:
-        return 8u;
-    case YETTY_YSDF_HEXAGRAM:
-        return 8u;
-    case YETTY_YSDF_PENTAGRAM:
-        return 8u;
-    case YETTY_YSDF_SPHERE_3D:
-        return 9u;
-    case YETTY_YSDF_BOX_3D:
-        return 11u;
-    case YETTY_YSDF_TORUS_3D:
-        return 10u;
-    case YETTY_YSDF_CYLINDER_3D:
-        return 10u;
-    default:
-        return 0u;
+        case YETTY_YSDF_CIRCLE: return 8u;
+        case YETTY_YSDF_BOX: return 10u;
+        case YETTY_YSDF_SEGMENT: return 9u;
+        case YETTY_YSDF_TRIANGLE: return 11u;
+        case YETTY_YSDF_ELLIPSE: return 9u;
+        case YETTY_YSDF_ARC: return 11u;
+        case YETTY_YSDF_ROUNDED_BOX: return 13u;
+        case YETTY_YSDF_RHOMBUS: return 9u;
+        case YETTY_YSDF_PENTAGON: return 8u;
+        case YETTY_YSDF_HEXAGON: return 8u;
+        case YETTY_YSDF_STAR: return 10u;
+        case YETTY_YSDF_PIE: return 10u;
+        case YETTY_YSDF_RING: return 11u;
+        case YETTY_YSDF_HEART: return 8u;
+        case YETTY_YSDF_CROSS: return 10u;
+        case YETTY_YSDF_ROUNDED_X: return 9u;
+        case YETTY_YSDF_CAPSULE: return 10u;
+        case YETTY_YSDF_MOON: return 10u;
+        case YETTY_YSDF_EGG: return 9u;
+        case YETTY_YSDF_OCTOGON: return 8u;
+        case YETTY_YSDF_HEXAGRAM: return 8u;
+        case YETTY_YSDF_PENTAGRAM: return 8u;
+        case YETTY_YSDF_LINEAR_GRADIENT_BOX: return 16u;
+        case YETTY_YSDF_RADIAL_GRADIENT_BOX: return 15u;
+        case YETTY_YSDF_SPHERE_3D: return 9u;
+        case YETTY_YSDF_BOX_3D: return 11u;
+        case YETTY_YSDF_TORUS_3D: return 10u;
+        case YETTY_YSDF_CYLINDER_3D: return 10u;
+        default: return 0u;
     }
 }
 
 // Primitive size in bytes - use as yetty_ypaint_core_primitive_size_fn callback
-static inline size_t yetty_ysdf_primitive_size(uint32_t type)
-{
+static inline size_t yetty_ysdf_primitive_size(uint32_t type) {
     return yetty_ysdf_word_count((enum yetty_ysdf_type)type) * sizeof(float);
 }
 

@@ -104,16 +104,22 @@ are pre-configured row / column flex containers).
 Per-widget `struct yetty_ygui_layout` fields:
 
 ```c
-ygui_layout_mode_t    mode;            /* MANUAL | FLEX */
-ygui_flex_direction_t direction;       /* ROW | COLUMN */
-ygui_justify_t        justify_content; /* main-axis distribution */
-ygui_align_t          align_items;     /* cross-axis alignment, all children */
-ygui_align_t          align_self;      /* per-child override (AUTO = inherit) */
+ygui_layout_mode_t    mode;             /* MANUAL | FLEX */
+ygui_flex_direction_t direction;        /* ROW | COLUMN */
+ygui_flex_wrap_t      wrap;             /* NOWRAP | WRAP */
+ygui_justify_t        justify_content;  /* main-axis distribution */
+ygui_align_t          align_items;      /* cross-axis alignment, all children */
+ygui_align_t          align_self;       /* per-child override (AUTO = inherit) */
+ygui_align_t          align_content;    /* multi-line cross-axis distribution */
+ygui_position_t       position;         /* RELATIVE (default) | ABSOLUTE */
 float flex_grow, flex_shrink, flex_basis;
+float flex_basis_percent;               /* 0..100, overrides flex_basis */
 float gap;
 float padding_top, padding_right, padding_bottom, padding_left;
 float margin_top,  margin_right,  margin_bottom,  margin_left;
 float min_w, min_h, max_w, max_h;
+float min_w_percent, min_h_percent, max_w_percent, max_h_percent;
+float width_percent, height_percent;    /* 0..100, applied to cross axis or both */
 ```
 
 Setters mirror those fields:
@@ -121,10 +127,17 @@ Setters mirror those fields:
 ```c
 yetty_ygui_widget_set_layout_mode(w, YETTY_YGUI_LAYOUT_FLEX);
 yetty_ygui_widget_set_flex_direction(w, YETTY_YGUI_FLEX_ROW);
+yetty_ygui_widget_set_flex_wrap(w, YETTY_YGUI_FLEX_WRAP);
 yetty_ygui_widget_set_justify_content(w, YETTY_YGUI_JUSTIFY_SPACE_BETWEEN);
 yetty_ygui_widget_set_align_items(w, YETTY_YGUI_ALIGN_STRETCH);
 yetty_ygui_widget_set_align_self(child, YETTY_YGUI_ALIGN_CENTER);
+yetty_ygui_widget_set_align_content(w, YETTY_YGUI_ALIGN_STRETCH);
+yetty_ygui_widget_set_position_mode(child, YETTY_YGUI_POSITION_ABSOLUTE);
 yetty_ygui_widget_set_flex(child, /*grow*/ 1, /*shrink*/ 0, /*basis*/ 0);
+yetty_ygui_widget_set_flex_basis_percent(child, 25.0f);
+yetty_ygui_widget_set_size_percent(child, /*w%*/ 50, /*h%*/ 0);
+yetty_ygui_widget_set_min_size_percent(child, 25, 0);
+yetty_ygui_widget_set_max_size_percent(child, 75, 0);
 yetty_ygui_widget_set_gap(w, 12.0f);
 yetty_ygui_widget_set_padding(w, top, right, bottom, left);
 yetty_ygui_widget_set_margin(w, top, right, bottom, left);
@@ -132,28 +145,57 @@ yetty_ygui_widget_set_min_size(w, min_w, min_h);
 yetty_ygui_widget_set_max_size(w, max_w, max_h);
 ```
 
-Single-line flexbox semantics:
+Or apply a CSS-like one-shot string:
+
+```c
+yetty_ygui_widget_apply_css(row,
+    "display: flex; flex-direction: row; flex-wrap: wrap;"
+    "justify-content: space-between; align-items: center;"
+    "padding: 12px; gap: 10px;");
+yetty_ygui_widget_apply_css(child,
+    "flex: 1 0 25%; align-self: stretch; min-width: 100px;");
+```
+
+Recognized properties: `display`, `flex-direction`, `flex-wrap`,
+`justify-content`, `align-items`, `align-self`, `align-content`,
+`position`, `flex` (1–3 values), `flex-grow`, `flex-shrink`,
+`flex-basis` (`<n>px`, `<n>%`, or `auto`), `gap`, `padding` (1–4
+values), `margin` (1–4 values), `width`, `height`, `min-width`,
+`min-height`, `max-width`, `max-height`. Unknown properties don't abort
+parsing — the function returns the first issue in the result's error
+chain but applies everything else.
+
+Flex semantics:
 
 - **Main axis** is X for `ROW`, Y for `COLUMN`.
-- Each child's main-axis size starts at `flex_basis`, falling back to the
-  authored size on the main axis when `flex_basis <= 0`.
+- Each child's main-axis size starts at `flex_basis_percent` (if > 0)
+  resolved against parent's main content size, then `flex_basis`,
+  falling back to the authored main-axis size when both are unset.
 - Free space along the main axis is distributed via `flex_grow` (when
   positive) or `flex_shrink * basis` (when negative).
-- `justify_content` adds leading offset and inter-child spacing for the
+- `justify_content` adds leading offset and inter-child spacing for any
   unused remainder.
-- Cross-axis size = authored size, or the container's content cross-size
-  when the resolved align is `STRETCH`.
-- Resolved sizes are clamped to `[min_*, max_*]`.
-
-**Not implemented yet (deferred per issue #41):** wrapping, baseline
-alignment, percent sizing, absolute-positioned children inside flex
-containers, CSS parser.
+- Cross-axis size = authored / `*_percent` size; `STRETCH` fills the
+  flex line (which equals the container's content cross-size in
+  single-line mode).
+- `BASELINE` aligns text-bearing children by their baselines (uses each
+  widget's `vtable.baseline_offset`).
+- `wrap = WRAP` breaks children to a new line when the next item would
+  overflow; `align_content` distributes any leftover cross-axis space
+  between lines.
+- `position = ABSOLUTE` removes the child from the flex flow; it sits at
+  authored x/y inside the parent's content box. `width_percent` /
+  `height_percent` resolve against the parent's content box.
+- Resolved sizes are clamped to `[min_*, max_*]` (px) and `[min_*_percent,
+  max_*_percent]` (% of parent content), whichever is more restrictive.
 
 ### Manual mode
 
 In `MANUAL`, children render at `parent.layout + (child.authored_x,
-child.authored_y)` with `child.authored_w/h` size. No padding / gap
-handling — the parent's `padding_*` is ignored. Use this for
+child.authored_y)` with their authored `w/h` (with `width_percent` /
+`height_percent` overriding the size when set). The parent's `padding_*`
+shifts the content box and percent references; gap is ignored. Absolute
+children behave the same in MANUAL and FLEX. Use this for
 absolute-positioned widgets (the default).
 
 ## Rendering pipeline
@@ -232,7 +274,8 @@ struct, never `.error.msg` (see `~/.claude/yetty-new/rules/07-error-handling.md`
 | File              | Role                                                     |
 |-------------------|----------------------------------------------------------|
 | `ygui_engine.c`   | Engine lifecycle, libuv loop, SIGWINCH, OSC parsing      |
-| `ygui_layout.c`   | Flexbox layout pass                                      |
+| `ygui_layout.c`   | Flexbox layout pass (wrap, baseline, percent, absolute)  |
+| `ygui_css.c`      | One-shot CSS-like property parser → `apply_css`          |
 | `ygui_widgets.c`  | Widget allocation, hierarchy, all built-in widget types  |
 | `ygui_render.c`   | Render-context drawing helpers (boxes, text, circles)    |
 | `ygui_grid.c`     | Spatial grid for O(1) hit testing                        |
