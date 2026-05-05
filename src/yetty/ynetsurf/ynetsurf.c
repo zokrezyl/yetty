@@ -510,6 +510,15 @@ struct yetty_ynetsurf_ptr_result yetty_ynetsurf_create(
 	const char *log_filter = getenv("YNETSURF_LOG");
 	nslog_set_filter(log_filter != NULL ? log_filter : "level:WARNING");
 
+	/* Load per-language Messages so error titles, dialog text and the
+	 * built-in chrome (about:query/fetcherror, …) come out as real
+	 * strings instead of raw message keys like "FetchErrorTitle". The
+	 * file is generated at build time by libs/netsurf-messages.cmake
+	 * from NetSurf's resources/FatMessages. */
+#ifdef YETTY_NETSURF_MESSAGES_FILE
+	(void)messages_add_from_file(YETTY_NETSURF_MESSAGES_FILE);
+#endif
+
 	err = netsurf_init(NULL);
 	if (err != NSERROR_OK) {
 		free(ns); g_ynetsurf = NULL;

@@ -54,6 +54,30 @@ endforeach()
 file(MAKE_DIRECTORY "${_NS_INST}/include" "${_NS_INST}/lib")
 
 set(_NS_CORE_ARCHIVE "${CMAKE_CURRENT_BINARY_DIR}/libnetsurf_core.a")
+set(_NS_MESSAGES_EN  "${CMAKE_CURRENT_BINARY_DIR}/netsurf-Messages-en")
+
+# Patch NetSurf's curl handler to NOT request `Accept-Encoding: gzip` —
+# our prebuilt libcurl is built with -DCURL_ZLIB=OFF (and no brotli /
+# zstd), so any gzip response trips CURLE_BAD_CONTENT_ENCODING. Idempotent
+# (the marker comment after the patch makes a second sed a no-op).
+set(_NS_CURL_C "${_NS_CORE}/content/fetchers/curl.c")
+if(EXISTS "${_NS_CURL_C}")
+    execute_process(
+        COMMAND grep -q "yetty: gzip disabled" "${_NS_CURL_C}"
+        RESULT_VARIABLE _patched)
+    if(NOT _patched EQUAL 0)
+        execute_process(
+            COMMAND sed -i
+                "s|SETOPT(CURLOPT_ENCODING, \"gzip\");|SETOPT(CURLOPT_ENCODING, \"\"); /* yetty: gzip disabled — prebuilt libcurl has no zlib */|"
+                "${_NS_CURL_C}"
+            RESULT_VARIABLE _rc)
+        if(NOT _rc EQUAL 0)
+            message(WARNING "ynetsurf: failed to patch curl.c gzip request")
+        else()
+            message(STATUS "ynetsurf: patched ${_NS_CURL_C} to drop gzip Accept-Encoding")
+        endif()
+    endif()
+endif()
 
 # NetSurf's per-target build dir lives at netsurf/build/<friendly>-monkey
 # (e.g. Linux-monkey, Darwin-monkey). The exact friendly name is computed
@@ -88,8 +112,21 @@ add_custom_command(
     COMMENT "Packaging NetSurf core objects → libnetsurf_core.a"
     VERBATIM)
 
+# 3) Generate per-language Messages from FatMessages using the host-built
+#    split-messages tool that `make TARGET=monkey` produces under build/.
+add_custom_command(
+    OUTPUT "${_NS_MESSAGES_EN}"
+    DEPENDS ${_NS_LIB_FILES}
+    COMMAND ${CMAKE_COMMAND}
+        -DBUILDPARENT=${_NS_BUILDPARENT}
+        -DFATMESSAGES=${_NS_CORE}/resources/FatMessages
+        -DOUTPUT=${_NS_MESSAGES_EN}
+        -P "${YETTY_ROOT}/build-tools/cmake/libs/netsurf-messages.cmake"
+    COMMENT "Generating NetSurf Messages (en)"
+    VERBATIM)
+
 add_custom_target(netsurf_built ALL
-    DEPENDS ${_NS_LIB_FILES} "${_NS_CORE_ARCHIVE}")
+    DEPENDS ${_NS_LIB_FILES} "${_NS_CORE_ARCHIVE}" "${_NS_MESSAGES_EN}")
 
 # 3) Imported targets for the helper libs.
 foreach(l IN LISTS _NS_LIB_NAMES)
