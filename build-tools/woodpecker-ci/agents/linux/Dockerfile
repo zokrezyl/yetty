@@ -11,15 +11,17 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     ninja-build \
-    # LLVM/Clang — unversioned meta-packages provide /usr/bin/clang etc.
-    # On Ubuntu 24.04 these resolve to clang-18, matching the dev libs below.
-    # Several 3rdparty/_build.sh scripts call /usr/bin/clang directly.
-    clang \
-    clang-format \
-    clang-tidy \
-    # Dev libs needed by qa-tools/.../CMakeLists.txt:
+    # LLVM/Clang 18 explicitly. The unversioned `clang` meta-package on
+    # current Ubuntu noble pulls clang-21, which collides with the
+    # qa-tools' hardcoded LLVM 18 paths and leaves an incomplete clang-21
+    # cmake config that find_package(Clang) latches onto first.
+    # Hardcoded paths in qa-tools/.../CMakeLists.txt:
     #   /usr/lib/llvm-18/lib/cmake/llvm  (llvm-18-dev)
     #   /usr/lib/cmake/clang-18          (libclang-18-dev)
+    # update-alternatives below provides /usr/bin/clang for 3rdparty scripts.
+    clang-18 \
+    clang-format-18 \
+    clang-tidy-18 \
     llvm-18-dev \
     libclang-18-dev \
     git \
@@ -82,7 +84,13 @@ RUN apt-get update && apt-get install -y \
     # Browser for webasm/web tests (local .deb fetched via ADD above; apt
     # resolves its dependencies from Ubuntu repos in the same install).
     /tmp/chrome.deb \
-    && rm /tmp/chrome.deb && rm -rf /var/lib/apt/lists/*
+    && rm /tmp/chrome.deb && rm -rf /var/lib/apt/lists/* && \
+    # Provide unversioned /usr/bin/clang etc. pointing at the -18 binaries
+    # (3rdparty/_build.sh scripts hardcode `/usr/bin/clang` / `clang++`).
+    update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100 \
+        --slave /usr/bin/clang++ clang++ /usr/bin/clang++-18 \
+        --slave /usr/bin/clang-format clang-format /usr/bin/clang-format-18 \
+        --slave /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-18
 
 # Android SDK and NDK
 ENV ANDROID_HOME=/opt/android-sdk
