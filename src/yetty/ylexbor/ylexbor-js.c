@@ -116,11 +116,27 @@ struct yetty_ycore_void_result yetty_ylexbor_js_init(struct yetty_ylexbor *r)
 
 	r->js_rt = (struct JSRuntime *)rt;
 	r->js_ctx = (struct JSContext *)ctx;
+
+	/* Install DOM bindings (document, Element, classList, style, …). */
+	yetty_ylexbor_js_dom_install(r);
+	/* Install WebAPI surface (fetch, timers, navigator, location,
+	 * localStorage, crypto, plus a big JS stub blob for Worker /
+	 * AbortController / MutationObserver / XMLHttpRequest etc). Must
+	 * run AFTER dom_install so it can bolt accessors onto document. */
+	yetty_ylexbor_js_web_install(r);
 	return YETTY_OK_VOID();
 }
 
 void yetty_ylexbor_js_destroy(struct yetty_ylexbor *r)
 {
+	/* Drop pending timers first (they hold JSValue refs). The timer
+	 * struct's full layout lives in ylexbor-js-web.c. */
+	yetty_ylexbor_js_web_shutdown(r);
+	if (r->js_rt) {
+		void *opaque = JS_GetRuntimeOpaque((JSRuntime *)r->js_rt);
+		free(opaque);
+		JS_SetRuntimeOpaque((JSRuntime *)r->js_rt, NULL);
+	}
 	if (r->js_ctx) JS_FreeContext((JSContext *)r->js_ctx);
 	if (r->js_rt)  JS_FreeRuntime((JSRuntime *)r->js_rt);
 	r->js_ctx = NULL;
@@ -154,9 +170,65 @@ static void report_exception(JSContext *ctx, const char *url)
 	JS_FreeValue(ctx, ex);
 }
 
-/* Iterate <script> elements in document order. lexbor doesn't expose a
- * direct iterator, so we walk the tree. Skip elements with `src` (no
- * external fetcher yet) and those with non-JS `type`. */
+/* Eval a UTF-8 source buffer in the global scope. `url` is the file
+ * label used in stack traces. */
+static void eval_buf(struct yetty_ylexbor *r, JSContext *ctx,
+		     const char *src, size_t slen, const char *url)
+{
+	JSValue v = JS_Eval(ctx, src, slen,
+		url ? url : "<inline>", JS_EVAL_TYPE_GLOBAL);
+	if (JS_IsException(v)) {
+		report_exception(ctx, url ? url : "<inline>");
+		r->js_error_count++;
+	}
+	JS_FreeValue(ctx, v);
+	yetty_ylexbor_js_drain_jobs(r);
+}
+
+/* Concatenate text-node children of a <script> element into a freshly
+ * malloc'd buffer. NUL-terminates. *out_len is the byte length without
+ * the NUL. Returns NULL on OOM or empty body. */
+static char *collect_script_text(lxb_dom_node_t *script_node, size_t *out_len)
+{
+	char  *src  = NULL;
+	size_t slen = 0, scap = 0;
+	for (lxb_dom_node_t *t = script_node->first_child; t; t = t->next) {
+		if (t->type != LXB_DOM_NODE_TYPE_TEXT) continue;
+		lxb_dom_text_t *tn = lxb_dom_interface_text(t);
+		size_t n = tn->char_data.data.length;
+		const lxb_char_t *p = tn->char_data.data.data;
+		if (slen + n + 1 > scap) {
+			size_t nc = scap ? scap * 2 : 256;
+			while (nc < slen + n + 1) nc *= 2;
+			char *np = realloc(src, nc);
+			if (!np) { free(src); return NULL; }
+			src = np; scap = nc;
+		}
+		memcpy(src + slen, p, n);
+		slen += n;
+	}
+	if (slen == 0) { free(src); return NULL; }
+	src[slen] = '\0';
+	if (out_len) *out_len = slen;
+	return src;
+}
+
+/* True iff the type= attribute (if any) names a JS MIME type. Empty /
+ * missing / "module" all count as JS. */
+static int is_js_script_type(lxb_dom_element_t *el)
+{
+	size_t tlen = 0;
+	const lxb_char_t *type = lxb_dom_element_get_attribute(el,
+		(const lxb_char_t *)"type", 4, &tlen);
+	if (!type || tlen == 0) return 1;
+	if (tlen >= 15 &&
+	    strncmp((const char *)type, "text/javascript", 15) == 0) return 1;
+	if (tlen == 22 &&
+	    strncmp((const char *)type, "application/javascript", 22) == 0) return 1;
+	if (tlen == 6 && strncmp((const char *)type, "module", 6) == 0) return 1;
+	return 0;
+}
+
 static void run_scripts_recursive(struct yetty_ylexbor *r,
 				  JSContext *ctx,
 				  lxb_dom_node_t *node)
@@ -166,59 +238,43 @@ static void run_scripts_recursive(struct yetty_ylexbor *r,
 		    c->local_name == LXB_TAG_SCRIPT) {
 
 			lxb_dom_element_t *el = lxb_dom_interface_element(c);
-			size_t attr_len = 0;
-			(void)attr_len;
-			if (lxb_dom_element_has_attribute(el,
-				(const lxb_char_t *)"src", 3)) {
-				continue;  /* external script — TODO */
-			}
-			/* Type filter: accept missing, "", or text/javascript* */
-			size_t tlen = 0;
-			const lxb_char_t *type =
+			if (!is_js_script_type(el)) continue;
+
+			/* External script: fetch + eval. */
+			size_t srclen = 0;
+			const lxb_char_t *src_attr =
 				lxb_dom_element_get_attribute(el,
-					(const lxb_char_t *)"type", 4, &tlen);
-			if (type && tlen > 0) {
-				if (!(tlen >= 15 &&
-				      strncmp((const char *)type,
-					      "text/javascript", 15) == 0) &&
-				    !(tlen == 16 &&
-				      strncmp((const char *)type,
-					      "application/javascript", 16) == 0)) {
-					continue;
+					(const lxb_char_t *)"src", 3, &srclen);
+			if (src_attr && srclen > 0) {
+				char *href = malloc(srclen + 1);
+				if (!href) continue;
+				memcpy(href, src_attr, srclen);
+				href[srclen] = '\0';
+				char *url = yetty_ylexbor_resolve_url(r, href);
+				free(href);
+				if (!url) continue;
+				size_t blen = 0;
+				long status = 0;
+				char *body = yetty_ylexbor_http_get(url, &blen, &status);
+				if (body && status >= 200 && status < 300) {
+					eval_buf(r, ctx, body, blen, url);
+				} else {
+					fprintf(stderr,
+						"[js:script-load] %s status=%ld\n",
+						url, status);
 				}
+				free(body);
+				free(url);
+				continue;
 			}
 
-			/* Concatenate the script's text-node children. */
-			char  *src  = NULL;
-			size_t slen = 0, scap = 0;
-			for (lxb_dom_node_t *t = c->first_child; t; t = t->next) {
-				if (t->type != LXB_DOM_NODE_TYPE_TEXT) continue;
-				lxb_dom_text_t *tn = lxb_dom_interface_text(t);
-				size_t n = tn->char_data.data.length;
-				const lxb_char_t *p = tn->char_data.data.data;
-				if (slen + n + 1 > scap) {
-					size_t nc = scap ? scap * 2 : 256;
-					while (nc < slen + n + 1) nc *= 2;
-					char *np = realloc(src, nc);
-					if (!np) { free(src); src = NULL; break; }
-					src = np; scap = nc;
-				}
-				if (!src) break;
-				memcpy(src + slen, p, n);
-				slen += n;
+			/* Inline script. */
+			size_t slen = 0;
+			char *src = collect_script_text(c, &slen);
+			if (src) {
+				eval_buf(r, ctx, src, slen, "<inline>");
+				free(src);
 			}
-			if (src && slen > 0) {
-				src[slen] = '\0';
-				JSValue v = JS_Eval(ctx, src, slen,
-					"<inline>",
-					JS_EVAL_TYPE_GLOBAL);
-				if (JS_IsException(v)) {
-					report_exception(ctx, "<inline>");
-					r->js_error_count++;
-				}
-				JS_FreeValue(ctx, v);
-			}
-			free(src);
 			continue;  /* don't recurse into <script> children */
 		}
 		if (c->first_child) {
@@ -230,6 +286,12 @@ static void run_scripts_recursive(struct yetty_ylexbor *r,
 struct yetty_ycore_void_result yetty_ylexbor_js_run_inline_scripts(
 	struct yetty_ylexbor *r)
 {
+	return yetty_ylexbor_js_run_all_scripts(r);
+}
+
+struct yetty_ycore_void_result yetty_ylexbor_js_run_all_scripts(
+	struct yetty_ylexbor *r)
+{
 	if (r == NULL || r->document == NULL) return YETTY_OK_VOID();
 
 	struct yetty_ycore_void_result ir = yetty_ylexbor_js_init(r);
@@ -237,6 +299,15 @@ struct yetty_ycore_void_result yetty_ylexbor_js_run_inline_scripts(
 
 	run_scripts_recursive(r, (JSContext *)r->js_ctx,
 		lxb_dom_interface_node(r->document));
+
+	/* Fire DOMContentLoaded + load on document — many SPAs gate boot
+	 * on these. We synthesise both right after script execution
+	 * because the parse is already complete by the time we get
+	 * here. */
+	yetty_ylexbor_js_dispatch_event_type(r, "DOMContentLoaded", NULL);
+	yetty_ylexbor_js_dispatch_event_type(r, "load", NULL);
+	yetty_ylexbor_js_drain_jobs(r);
+
 	return YETTY_OK_VOID();
 }
 
@@ -248,6 +319,11 @@ struct yetty_ycore_void_result yetty_ylexbor_js_init(struct yetty_ylexbor *r)
 }
 void yetty_ylexbor_js_destroy(struct yetty_ylexbor *r) { (void)r; }
 struct yetty_ycore_void_result yetty_ylexbor_js_run_inline_scripts(
+	struct yetty_ylexbor *r)
+{
+	(void)r; return YETTY_OK_VOID();
+}
+struct yetty_ycore_void_result yetty_ylexbor_js_run_all_scripts(
 	struct yetty_ylexbor *r)
 {
 	(void)r; return YETTY_OK_VOID();

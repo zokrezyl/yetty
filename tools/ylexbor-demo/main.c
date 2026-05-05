@@ -265,10 +265,22 @@ static void on_osc(void *user, int osc_code,
 		}
 		return;
 	}
-	/* Other input is informational for the demo — re-render so users
-	 * see it react. */
 	if (osc_code == YMGUI_OSC_SC_TERM_MOUSE ||
-	    osc_code == YMGUI_OSC_SC_TERM_KEY) {
+	    osc_code == YMGUI_OSC_SC_MOUSE) {
+		if (payload_len < sizeof(struct yetty_ymgui_wire_input_mouse))
+			return;
+		const struct yetty_ymgui_wire_input_mouse *m =
+			(const struct yetty_ymgui_wire_input_mouse *)payload;
+		/* Click → fire JS handlers attached at (x,y). The handlers
+		 * may mutate the DOM; ylexbor's dom_dirty flag tells us so
+		 * the main loop knows to relayout before the next paint. */
+		if (m->kind == YETTY_YMGUI_INPUT_MOUSE_BUTTON && m->pressed) {
+			yetty_ylexbor_dispatch_click(st->yl, m->x, m->y);
+			st->dirty = 1;
+		}
+		return;
+	}
+	if (osc_code == YMGUI_OSC_SC_TERM_KEY) {
 		st->dirty = 1;
 	}
 }
@@ -312,7 +324,16 @@ static int interactive_loop(struct yetty_ylexbor *yl)
 	char buf[4096];
 	while (!signal_quit && !st.want_quit) {
 		fd_set rfds; FD_ZERO(&rfds); FD_SET(STDIN_FILENO, &rfds);
-		struct timeval tv = { .tv_sec = 0, .tv_usec = 100 * 1000 };
+		/* Cap the select timeout at whatever JS timer fires next.
+		 * pump_timers returns -1 when there are none — fall back to
+		 * 100ms so we still relayout if the JS loop posts work via
+		 * setTimeout(0,...) right after our last drain. */
+		int wait_ms = yetty_ylexbor_pump_timers(yl);
+		if (wait_ms < 0 || wait_ms > 100) wait_ms = 100;
+		struct timeval tv = {
+			.tv_sec  = wait_ms / 1000,
+			.tv_usec = (wait_ms % 1000) * 1000,
+		};
 		int rc = select(STDIN_FILENO + 1, &rfds, NULL, NULL, &tv);
 		if (rc < 0) { if (errno == EINTR) continue; break; }
 
@@ -325,7 +346,15 @@ static int interactive_loop(struct yetty_ylexbor *yl)
 				break;
 			}
 		}
-		if (st.dirty) (void)redraw_and_push(yl);
+		/* Tick timers again after handling input — JS timers, click
+		 * handlers and DOMContentLoaded may all have queued work. */
+		(void)yetty_ylexbor_pump_timers(yl);
+		if (st.dirty || yetty_ylexbor_dom_dirty(yl)) {
+			if (yetty_ylexbor_dom_dirty(yl)) {
+				(void)yetty_ylexbor_relayout(yl);
+			}
+			(void)redraw_and_push(yl);
+		}
 	}
 
 	term_input_subscribe(0);
@@ -405,6 +434,12 @@ int main(int argc, char **argv)
 		free(html); return 1;
 	}
 	struct yetty_ylexbor *yl = r.value;
+
+	/* Tell ylexbor where the document came from so JS fetch() and
+	 * external <script src=...> can resolve relative URLs. */
+	if (looks_like_url(src)) {
+		(void)yetty_ylexbor_set_base_url(yl, src);
+	}
 
 	struct yetty_ycore_void_result lr =
 		yetty_ylexbor_load_html(yl, html, html_len);

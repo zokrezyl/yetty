@@ -33,14 +33,32 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(
 	if (r == NULL || buf == NULL)
 		return YETTY_ERR(yetty_ycore_void, "ylexbor_paint: null");
 
+	const int debug = getenv("YLEXBOR_DEBUG_PAINT") != NULL;
 	uint32_t z = 0;
 
+	if (debug) {
+		fprintf(stderr, "[ylexbor:paint] total boxes=%u\n",
+			r->boxes.size);
+	}
 	for (uint32_t i = 0; i < r->boxes.size; i++) {
 		struct yetty_ylexbor_box *b = &r->boxes.data[i];
-		if (b->w <= 0 || b->h <= 0) continue;
+		if (b->w <= 0 || b->h <= 0) {
+			if (debug) {
+				fprintf(stderr,
+				    "[ylexbor:paint] skip  i=%u kind=%d xy=%.0f,%.0f wh=%.0fx%.0f\n",
+				    i, b->kind, b->x, b->y, b->w, b->h);
+			}
+			continue;
+		}
 
 		switch (b->kind) {
 		case YL_BOX_BLOCK: {
+			if (debug) {
+				fprintf(stderr,
+				    "[ylexbor:paint] block i=%u xy=%.0f,%.0f wh=%.0fx%.0f bg=%02x%02x%02x%02x\n",
+				    i, b->x, b->y, b->w, b->h,
+				    b->bg.r, b->bg.g, b->bg.b, b->bg.a);
+			}
 			/* Skip transparent backgrounds — most blocks. */
 			if (b->bg.a == 0) break;
 			struct yetty_ysdf_box box = {
@@ -69,6 +87,14 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(
 		}
 
 		case YL_BOX_INLINE_TEXT: {
+			if (debug && b->text_len) {
+				int n = b->text_len > 40 ? 40 : (int)b->text_len;
+				fprintf(stderr,
+				    "[ylexbor:paint] text  i=%u xy=%.0f,%.0f wh=%.0fx%.0f fg=%02x%02x%02x%02x \"%.*s\"\n",
+				    i, b->x, b->y, b->w, b->h,
+				    b->fg.r, b->fg.g, b->fg.b, b->fg.a,
+				    n, b->text);
+			}
 			if (b->text == NULL || b->text_len == 0) break;
 			struct yetty_ycore_buffer txt = {
 				.data = (uint8_t *)b->text,

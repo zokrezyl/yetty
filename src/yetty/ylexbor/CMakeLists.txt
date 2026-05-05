@@ -15,6 +15,8 @@ add_library(yetty_ylexbor STATIC
     ylexbor-layout.c
     ylexbor-paint.c
     ylexbor-js.c
+    ylexbor-js-dom.c
+    ylexbor-js-web.c
 )
 
 target_include_directories(yetty_ylexbor PUBLIC
@@ -39,6 +41,19 @@ if(TARGET qjs)
 else()
     target_compile_definitions(yetty_ylexbor PRIVATE YETTY_HAVE_QUICKJS=0)
     message(STATUS "yetty_ylexbor: QuickJS disabled (qjs target missing)")
+endif()
+
+# libcurl — used by the JS WebAPI layer for fetch() / XHR / external
+# script src=. Only required when QuickJS is enabled; when missing, we
+# fall back to NULL fetches (the stubs still compile).
+find_package(CURL QUIET)
+if(CURL_FOUND)
+    target_link_libraries(yetty_ylexbor PUBLIC CURL::libcurl)
+    target_compile_definitions(yetty_ylexbor PRIVATE YETTY_HAVE_CURL=1)
+    message(STATUS "yetty_ylexbor: libcurl enabled")
+else()
+    target_compile_definitions(yetty_ylexbor PRIVATE YETTY_HAVE_CURL=0)
+    message(STATUS "yetty_ylexbor: libcurl missing — fetch() will fail")
 endif()
 
 target_compile_options(yetty_ylexbor PRIVATE -Wall -Wno-unused-parameter)
