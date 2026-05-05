@@ -116,18 +116,20 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
     let glyph = read_cell_glyph(cell_index);
     let fg_color = read_cell_fg(cell_index);
+    let bg_color = read_cell_bg(cell_index);
 
-    // Glyph alpha — 0 if no glyph (empty cell or shader-glyph cell), else
-    // the font's coverage for this fragment.
     var glyph_alpha = 0.0;
     if (glyph != 0u && glyph < 0x80000000u) {
         glyph_alpha = font_sample(glyph, local_px, cell_size);
     }
 
-    var out_color = fg_color;
-    var out_alpha = glyph_alpha;
+    // Composed cell pixel: cell's bg with the glyph blended in by coverage.
+    // The pane background-clear layer underneath us has already painted the
+    // terminal area, so we draw fully opaque on top.
+    var out_color = mix(bg_color, fg_color, glyph_alpha);
 
-    // Cursor — opaque inverted block / underline / bar at the cell.
+    // Cursor — invert the composed cell pixel (per-fragment), so the cursor
+    // contrasts against whatever is actually drawn here.
     let cursor_pos = uniforms.text_grid_cursor_pos;
     if (uniforms.text_grid_cursor_visible > 0.5 &&
         u32(cell_col) == u32(cursor_pos.x) &&
@@ -135,6 +137,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let local_uv = local_px / cell_size;
         let shape = i32(uniforms.text_grid_cursor_shape);
         var draw_cursor = false;
+        // vterm shapes: 1=block, 2=underline, 3=bar (DECSCUSR).
         if (shape == 2) {
             draw_cursor = local_uv.y > 0.85;
         } else if (shape == 3) {
@@ -143,13 +146,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             draw_cursor = true;
         }
         if (draw_cursor) {
-            out_color = vec3<f32>(1.0, 1.0, 1.0) - fg_color;
-            out_alpha = 1.0;
+            out_color = vec3<f32>(1.0, 1.0, 1.0) - out_color;
         }
     }
 
-    // Empty / non-glyph fragments output alpha=0 so the pane background
-    // layer composites underneath. With alpha=1 we'd overwrite everything
-    // below and the pane bg would never be visible.
-    return vec4<f32>(out_color, out_alpha);
+    return vec4<f32>(out_color, 1.0);
 }

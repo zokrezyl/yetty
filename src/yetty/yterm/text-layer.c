@@ -666,6 +666,11 @@ static int on_settermprop(VTermProp prop, VTermValue *val, void *user)
             set_cursor_visible(&layer->rs, layer->vterm_cursor_visible);
         }
         layer->base.dirty = 1;
+    } else if (prop == VTERM_PROP_CURSORSHAPE) {
+        /* DECSCUSR (CSI <n> SP q): vterm reports 1=block, 2=underline,
+         * 3=bar. The shader's cursor branch matches these directly. */
+        set_cursor_shape(&layer->rs, (float)val->number);
+        layer->base.dirty = 1;
     }
 
     if (changed && layer->base.mouse_sub_fn) {
