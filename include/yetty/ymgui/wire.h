@@ -83,11 +83,28 @@ extern "C" {
 #define YMGUI_OSC_CS_CARD_PLACE 610003  /* ymgui_wire_card_place,   comp=0 */
 #define YMGUI_OSC_CS_CARD_REMOVE 610004 /* ymgui_wire_card_remove,  comp=0 */
 
+/* Terminal-wide input subscription — independent of the card hit table.
+ * Programs that aren't ymgui-shaped (browser, file manager, anything that
+ * draws its own UI directly into the pane) subscribe via this OSC and
+ * receive YMGUI_OSC_SC_TERM_* events tagged with card_id=0 and pane-local
+ * pixel coords. The card path is unchanged: cards keep getting their own
+ * card-tagged events; both fan out simultaneously when both subscriptions
+ * are active. */
+#define YMGUI_OSC_CS_TERM_INPUT_SUB 610010 /* ymgui_wire_term_input_sub, comp=0 */
+
 /* server → client (yetty terminal → frontend / ygui / yrich) */
 #define YMGUI_OSC_SC_MOUSE 700000  /* ymgui_wire_input_mouse,  comp=0 */
 #define YMGUI_OSC_SC_RESIZE 700001 /* ymgui_wire_input_resize, comp=0 */
 #define YMGUI_OSC_SC_FOCUS 700002  /* ymgui_wire_input_focus,  comp=0 */
 #define YMGUI_OSC_SC_KEY 700003    /* ymgui_wire_input_key,    comp=0 */
+
+/* Terminal-wide variants — same wire structs as the card-tagged events
+ * (ymgui_wire_input_mouse / _key / _resize), but card_id=0 and x/y are in
+ * pane-local pixels (origin = pane top-left). Sent only to the
+ * foreground PTY reader that subscribed via YMGUI_OSC_CS_TERM_INPUT_SUB. */
+#define YMGUI_OSC_SC_TERM_MOUSE  700010 /* ymgui_wire_input_mouse,  comp=0 */
+#define YMGUI_OSC_SC_TERM_RESIZE 700011 /* ymgui_wire_input_resize, comp=0 */
+#define YMGUI_OSC_SC_TERM_KEY    700012 /* ymgui_wire_input_key,    comp=0 */
 
 /*=============================================================================
  * Magic numbers + versioning
@@ -101,8 +118,26 @@ extern "C" {
 #define YMGUI_WIRE_MAGIC_INPUT_RESIZE 0x4D52534Du /* "MSRM" reversed: "MRSM" */
 #define YMGUI_WIRE_MAGIC_INPUT_FOCUS 0x4D434F46u  /* "FOCM" */
 #define YMGUI_WIRE_MAGIC_INPUT_KEY 0x4D59454Bu    /* "KEYM" */
+#define YMGUI_WIRE_MAGIC_TERM_INPUT_SUB 0x53504954u /* "TIPS" */
 
 #define YMGUI_WIRE_VERSION 2u
+
+/*=============================================================================
+ * Terminal-wide input subscription flags (YMGUI_OSC_CS_TERM_INPUT_SUB).
+ * Bitmask of which event categories to forward as YMGUI_OSC_SC_TERM_*.
+ * Sending flags=0 unsubscribes from all of them.
+ *===========================================================================*/
+#define YETTY_YMGUI_TERM_SUB_MOUSE_CLICK (1u << 0)
+#define YETTY_YMGUI_TERM_SUB_MOUSE_MOVE  (1u << 1)
+#define YETTY_YMGUI_TERM_SUB_MOUSE_WHEEL (1u << 2)
+#define YETTY_YMGUI_TERM_SUB_KEY         (1u << 3)
+
+struct yetty_ymgui_wire_term_input_sub {
+    uint32_t magic;   /* YMGUI_WIRE_MAGIC_TERM_INPUT_SUB */
+    uint32_t version; /* YMGUI_WIRE_VERSION */
+    uint32_t flags;   /* bitmask of YETTY_YMGUI_TERM_SUB_* */
+    uint32_t _pad0;
+};
 
 /* Texture IDs. Per-card namespace: each card has its own tex_id space.
  * tex_id=1 = that card's font atlas. User textures (v2) allocate 2..N

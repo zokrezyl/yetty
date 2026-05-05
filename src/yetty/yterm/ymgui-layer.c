@@ -967,6 +967,27 @@ static struct yetty_ycore_void_result ymgui_write(struct yetty_yrender_terminal_
         return handle_card_remove(l, in->data, in->size);
     case YMGUI_OSC_CS_CLEAR:
         return handle_clear(l, in->data, in->size);
+    case YMGUI_OSC_CS_TERM_INPUT_SUB: {
+        /* Terminal-wide input subscription — independent from card hit-test.
+         * We don't store anything in the ymgui layer itself; the bitmask
+         * lives on the parent terminal (via term_input_sub_fn callback)
+         * which gates the actual emit paths in its event handlers. */
+        if (in->size < sizeof(struct yetty_ymgui_wire_term_input_sub)) {
+            return YETTY_ERR(yetty_ycore_void, "ymgui: malformed TERM_INPUT_SUB");
+        }
+        const struct yetty_ymgui_wire_term_input_sub *s =
+            (const struct yetty_ymgui_wire_term_input_sub *)in->data;
+        if (s->magic != YMGUI_WIRE_MAGIC_TERM_INPUT_SUB) {
+            return YETTY_ERR(yetty_ycore_void, "ymgui: bad TERM_INPUT_SUB magic");
+        }
+        if (s->version != YMGUI_WIRE_VERSION) {
+            return YETTY_ERR(yetty_ycore_void, "ymgui: TERM_INPUT_SUB version mismatch");
+        }
+        if (l->base.term_input_sub_fn) {
+            l->base.term_input_sub_fn(s->flags, l->base.term_input_sub_userdata);
+        }
+        return YETTY_OK_VOID();
+    }
     default:
         return YETTY_ERR(yetty_ycore_void, "ymgui: unexpected OSC code");
     }
