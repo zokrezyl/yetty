@@ -14,6 +14,8 @@
 #      rendered curves. Ctrl+C bails the trailing `sleep 600`.
 #   3. ycat README.md — markdown rendered inline as ypaint primitives
 #      (headings, lists, code blocks) instead of plain text.
+#   3b. ycat <pdf> — same tool, different MIME: a real PDF (pdfio →
+#      ypaint primitives) lives in the scrolling layer. Zoom dance.
 #   4. ygui flex dashboard — fullscreen flexbox layout demo with native
 #      widgets. Press `q` to quit between scenes.
 #   5. ygui tree view — interactive tree widget.
@@ -225,6 +227,55 @@ script:
   - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 1.6
 
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 1.0
+
+  # --- scene 3b: ycat a real PDF -----------------------------------------
+  # Same ycat, different MIME — pdfio decodes pages into ypaint primitives
+  # so the PDF renders inline alongside text. The killer demo: a real
+  # technical PDF lives in the scrolling layer like any other content.
+  - type: "# ycat — and the SAME tool renders a real PDF inline"
+  - special-char: ENTER
+  - sleep: 0.4
+
+  - type: "./build-desktop-ytrace-release/tools/ycat/ycat $HOME/tmp/optimizing_cpp.pdf"
+  - special-char: ENTER
+  - sleep: 3.0
+
+  - mouse-move: { x: 5, y: 700 }
+  - sleep: 0.2
+
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 1.8
+
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
   - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
   - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
