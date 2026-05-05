@@ -171,7 +171,11 @@ struct yetty_yterm_terminal_context {
     struct yetty_platform_pty *pty;
 };
 
-/* Terminal creation/destruction */
+/* Terminal creation/destruction.
+ *
+ * The pane background colour is read from the config in yetty_context as
+ * "terminal/background-color" (hex string: "#RGB", "#RGBA", "#RRGGBB" or
+ * "#RRGGBBAA"). Default when unset or unparseable is opaque black. */
 struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     struct yetty_ycore_grid_size grid_size, const struct yetty_context *yetty_context);
 struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_terminal *terminal);

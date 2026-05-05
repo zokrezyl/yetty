@@ -3,6 +3,7 @@
 #include <yetty/ycore/util.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* Base64 decode table */
 static const signed char b64_table[256] = {
@@ -154,4 +155,65 @@ struct yetty_ycore_buffer_result yetty_ycore_read_file(const char *path)
     buffer.capacity = (size_t)len + 1;
 
     return YETTY_OK(yetty_ycore_buffer, buffer);
+}
+
+static int hex_nibble(char c)
+{
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'a' && c <= 'f') {
+        return 10 + (c - 'a');
+    }
+    if (c >= 'A' && c <= 'F') {
+        return 10 + (c - 'A');
+    }
+    return -1;
+}
+
+int yetty_ycore_parse_hex_color(const char *s, uint32_t *out)
+{
+    if (!s || !out) {
+        return 0;
+    }
+    if (*s == '#') {
+        s++;
+    }
+
+    size_t len = strlen(s);
+    int per_channel; /* 1 = short form, 2 = long form */
+    int has_alpha;
+    switch (len) {
+    case 3: per_channel = 1; has_alpha = 0; break;
+    case 4: per_channel = 1; has_alpha = 1; break;
+    case 6: per_channel = 2; has_alpha = 0; break;
+    case 8: per_channel = 2; has_alpha = 1; break;
+    default: return 0;
+    }
+
+    int n_channels = has_alpha ? 4 : 3;
+    int byte[4] = {0, 0, 0, 0xFF};
+    for (int c = 0; c < n_channels; c++) {
+        int b = 0;
+        for (int d = 0; d < per_channel; d++) {
+            int n = hex_nibble(s[c * per_channel + d]);
+            if (n < 0) {
+                return 0;
+            }
+            b = (b << 4) | n;
+        }
+        if (per_channel == 1) {
+            b = (b << 4) | b; /* "f" → 0xff */
+        }
+        byte[c] = b;
+    }
+
+    /* Pack as the canonical yetty layout: byte 0 = R, byte 1 = G,
+     * byte 2 = B, byte 3 = A. As a u32 on little-endian:
+     *   (A << 24) | (B << 16) | (G << 8) | R
+     * Matches WGSL `ypaint_unpack_color` and the existing yplot/yecho
+     * conventions. */
+    *out = ((uint32_t)byte[3] << 24) | ((uint32_t)byte[2] << 16) |
+           ((uint32_t)byte[1] << 8) | (uint32_t)byte[0];
+    return 1;
 }

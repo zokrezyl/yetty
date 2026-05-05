@@ -585,34 +585,30 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
      * (4 × 33 MB layer RTs + 33 MB blend output read/written every frame at
      * 4K) starves the display compositor on tvOS.
      *
-     * Layer 0 (text) renders with LoadOp_Clear so empty cells (alpha=0
-     * with the text-layer's blend state) can't leak the previous frame's
-     * pixels — that was the cause of scrolling artifacts. Layers 1+ render
-     * with LoadOp_Load so they composite on top of layer 0 instead of
-     * wiping it. */
+     * Every layer pass uses LoadOp_Load (hardcoded in render-target-texture
+     * render_layer). The single per-frame wipe is the global clear() in
+     * yetty_event_handler. No layer pass ever clears, so multiple panes
+     * sharing the big target can't stomp each other — loadOp ignores
+     * scissor, so a Clear would have wiped every other pane. */
     ytime_start(layers);
     for (size_t i = 0; i < terminal->layer_count; i++) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
         if (!layer) {
             continue;
         }
-        if (target->ops->set_preserve_on_render_layer) {
-            target->ops->set_preserve_on_render_layer(target, i > 0);
+        /* Skip layers with nothing to draw. ypaint/ymgui report empty
+         * when their canvas has no primitives — paying the binder/draw
+         * cost for them on every text-layer redraw is pure overhead. */
+        if (layer->ops->is_empty && layer->ops->is_empty(layer)) {
+            continue;
         }
         struct yetty_ycore_void_result res = layer->ops->render(layer, target);
         if (!YETTY_IS_OK(res)) {
             yerror("terminal_render_frame: layer %zu render failed: %s", i, res.error.msg);
-            if (target->ops->set_preserve_on_render_layer) {
-                target->ops->set_preserve_on_render_layer(target, false);
-            }
             return res;
         }
     }
     ytime_report(layers);
-
-    if (target->ops->set_preserve_on_render_layer) {
-        target->ops->set_preserve_on_render_layer(target, false);
-    }
 
     ydebug("terminal_render_frame: done (all %zu layers direct, no blend)",
            terminal->layer_count);

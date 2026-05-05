@@ -392,6 +392,7 @@ function(yetty_embed_assets TARGET)
     file(COPY "${YETTY_ROOT}/src/yetty/yterm/text-layer.wgsl" DESTINATION "${INCBIN_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yterm/ypaint-layer.wgsl" DESTINATION "${INCBIN_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yterm/ymgui-layer.wgsl" DESTINATION "${INCBIN_DATA_DIR}/shaders")
+    file(COPY "${YETTY_ROOT}/src/yetty/yterm/background-layer.wgsl" DESTINATION "${INCBIN_DATA_DIR}/shaders")
     # Generated SDF dispatcher + sdf_* functions — attached at runtime as a
     # child resource set of ypaint-layer; see src/yetty/ysdf/gen-sdf-code.py.
     file(COPY "${YETTY_ROOT}/src/yetty/ysdf/ysdf.gen.wgsl" DESTINATION "${INCBIN_DATA_DIR}/shaders")

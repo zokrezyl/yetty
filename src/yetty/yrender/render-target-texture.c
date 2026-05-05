@@ -66,11 +66,6 @@ struct yetty_yrender_render_target_texture {
     float visual_zoom_scale;
     float visual_zoom_offset_x;
     float visual_zoom_offset_y;
-
-    /* Sticky flag set by set_preserve_on_render_layer(). When true,
-	 * render_layer() uses LoadOp_Load so multiple layers can be drawn
-	 * directly into this target without each one wiping the previous. */
-    bool preserve_on_render_layer;
 };
 
 /*=============================================================================
@@ -280,14 +275,24 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
 {
     struct yetty_yrender_render_target_texture *rt = (struct yetty_yrender_render_target_texture *)self;
 
-    /* Early out if not dirty — but only when LoadOp_Load preserves prior
-     * content. With LoadOp_Clear (preserve_on_render_layer=false, e.g. layer
-     * 0 of every terminal), skipping the draw would leave the pane viewport
-     * with whatever the global clear() in yetty_event_handler put there
-     * (opaque black) — so non-dirty panes go black on every render tick. */
-    if (!layer->dirty && rt->preserve_on_render_layer) {
-        return YETTY_OK_VOID();
-    }
+    /* No per-layer dirty early-out here.
+     *
+     * The texture state at the start of this layer's pass depends on what
+     * earlier layers in the same frame did:
+     *   - layer 0 renders with LoadOp_Clear → wipes the entire attachment,
+     *     so any non-dirty upper layer (ypaint, ymgui, …) skipping its draw
+     *     would lose its previous-frame pixels — its content disappears.
+     *   - layers above 0 with non-opaque pixels (alpha<1) would also leave
+     *     ghosts of upper layers that didn't redraw, since LoadOp_Load
+     *     keeps stale pixels under any transparent area.
+     *
+     * Frame-level gating already ensures this function only runs when
+     * something requested a render. The cheap save-some-GPU optimisation
+     * for non-dirty upper layers is not safe given the current compositing
+     * model — terminal_render_frame skips empty layers, which is enough.
+     * Anything more selective needs per-layer offscreen targets so each
+     * layer's pixels are owned by it and not stomped by another layer's
+     * pass. */
 
     /* Get gpu_resource_set from layer */
     struct yetty_yrender_gpu_resource_set_result rs_res = layer->ops->get_gpu_resource_set(layer);
@@ -360,7 +365,10 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
 
     WGPURenderPassColorAttachment color_attachment = {0};
     color_attachment.view = rt->view;
-    color_attachment.loadOp = rt->preserve_on_render_layer ? WGPULoadOp_Load : WGPULoadOp_Clear;
+    /* Always Load. The single per-frame wipe is the global clear() in
+     * yetty_event_handler; layer-pass loadOp is never Clear, so multiple
+     * panes drawing into the shared big target can't stomp each other. */
+    color_attachment.loadOp = WGPULoadOp_Load;
     color_attachment.storeOp = WGPUStoreOp_Store;
     color_attachment.clearValue = (WGPUColor){0.0, 0.0, 0.0, 0.0};
     color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
@@ -861,20 +869,6 @@ static struct yetty_ycore_void_result render_target_texture_set_visual_zoom(
     return YETTY_OK_VOID();
 }
 
-static void render_target_texture_set_preserve_on_render_layer(
-    struct yetty_ypaint_core_target *self, bool preserve)
-{
-    struct yetty_yrender_render_target_texture *rt = (struct yetty_yrender_render_target_texture *)self;
-    rt->preserve_on_render_layer = preserve;
-}
-
-static bool render_target_texture_get_preserve_on_render_layer(
-    const struct yetty_ypaint_core_target *self)
-{
-    const struct yetty_yrender_render_target_texture *rt = (const struct yetty_yrender_render_target_texture *)self;
-    return rt->preserve_on_render_layer;
-}
-
 static const struct yetty_yrender_target_ops render_target_texture_ops = {
     .destroy = render_target_texture_destroy,
     .clear = render_target_texture_clear,
@@ -885,8 +879,6 @@ static const struct yetty_yrender_target_ops render_target_texture_ops = {
     .get_texture = render_target_texture_get_texture,
     .resize = render_target_texture_resize,
     .set_visual_zoom = render_target_texture_set_visual_zoom,
-    .set_preserve_on_render_layer = render_target_texture_set_preserve_on_render_layer,
-    .get_preserve_on_render_layer = render_target_texture_get_preserve_on_render_layer,
 };
 
 struct yetty_yrender_target_ptr_result yetty_yrender_target_texture_create(

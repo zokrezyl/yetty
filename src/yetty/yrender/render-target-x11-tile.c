@@ -370,24 +370,6 @@ static void x11_tile_destroy(struct yetty_ypaint_core_target *self)
     free(rt);
 }
 
-static void x11_tile_set_preserve_on_render_layer(struct yetty_ypaint_core_target *self,
-                                                   bool preserve)
-{
-    struct yetty_yrender_render_target_x11_tile *rt = (struct yetty_yrender_render_target_x11_tile *)self;
-    if (rt->inner && rt->inner->ops && rt->inner->ops->set_preserve_on_render_layer) {
-        rt->inner->ops->set_preserve_on_render_layer(rt->inner, preserve);
-    }
-}
-
-static bool x11_tile_get_preserve_on_render_layer(const struct yetty_ypaint_core_target *self)
-{
-    const struct yetty_yrender_render_target_x11_tile *rt = (const struct yetty_yrender_render_target_x11_tile *)self;
-    if (rt->inner && rt->inner->ops && rt->inner->ops->get_preserve_on_render_layer) {
-        return rt->inner->ops->get_preserve_on_render_layer(rt->inner);
-    }
-    return false;
-}
-
 static const struct yetty_yrender_target_ops x11_tile_ops = {
     .destroy = x11_tile_destroy,
     .clear = x11_tile_clear,
@@ -401,8 +383,6 @@ static const struct yetty_yrender_target_ops x11_tile_ops = {
     .refresh_full = x11_tile_refresh_full,
     .is_busy = x11_tile_is_busy,
     .notify_render_skipped = x11_tile_notify_render_skipped,
-    .set_preserve_on_render_layer = x11_tile_set_preserve_on_render_layer,
-    .get_preserve_on_render_layer = x11_tile_get_preserve_on_render_layer,
 };
 
 /*=============================================================================
