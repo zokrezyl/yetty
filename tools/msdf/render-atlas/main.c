@@ -27,6 +27,7 @@
 #include <webgpu/webgpu.h>
 
 #include <errno.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -249,22 +250,40 @@ static double lastMouseX = 0, lastMouseY = 0;
 
 static int gridCols = 80;
 
-/* Display mode (cycled with the D key):
+/* Per-channel visibility toggles. When a channel is OFF, the shader
+ * masks the matching output component to 0, so you can see exactly
+ * which channels contribute to a given pixel — handy for tracking down
+ * MSDF artefacts where the median3 hides whose sign is wrong. CLI flags
+ * --red/--green/--blue/--alpha override the default (everything on)
+ * and r/g/b/a keys toggle them at runtime. */
+static int chR = 1, chG = 1, chB = 1, chA = 1;
+
+/* Display mode (cycled with the c key):
  *   0 = median3 of the MSDF (default — what the font shader actually uses)
  *   1 = raw RGB of the atlas (so you can see which channels disagree)
- *   2 = R only / 3 = G only / 4 = B only (one channel as greyscale) */
+ *   2 = R only / 3 = G only / 4 = B only (one channel as greyscale)
+ * Channel masks apply on top — e.g. raw RGB with G off shows R+B only. */
 static int displayMode = 0;
-static int dKeyPrev = 0;
 static const char *DISPLAY_MODE_NAMES[5] = {
-	"median3", "raw RGB", "R channel", "G channel", "B channel"
+	"median3", "raw RGB", "R only", "G only", "B only"
 };
+
+/* Set by the SIGINT handler so Ctrl+C from the terminal exits cleanly
+ * (rather than killing the process mid-frame and skipping WGPU cleanup). */
+static volatile sig_atomic_t g_should_exit = 0;
+static void on_sigint(int sig)
+{
+	(void)sig;
+	g_should_exit = 1;
+}
 
 /* Shader — verbatim from the original tool. Greyscale = median3 of MSDF. */
 static const char *shaderCode =
 "struct Uniforms {\n"
 "    panX: f32, panY: f32, zoom: f32, aspect: f32,\n"
 "    atlasW: f32, atlasH: f32, scrollY: f32, cols: f32,\n"
-"    totalGlyphs: f32, displayMode: f32, _pad2: f32, _pad3: f32,\n"
+"    totalGlyphs: f32, chR: f32, chG: f32, chB: f32,\n"
+"    chA: f32, displayMode: f32, _pad2: f32, _pad3: f32,\n"
 "};\n"
 "struct GlyphRect { x: f32, y: f32, w: f32, h: f32, };\n"
 "@group(0) @binding(0) var<uniform> uniforms: Uniforms;\n"
@@ -312,12 +331,19 @@ static const char *shaderCode =
 "        (glyph.y + clamp(innerUV.y, 0.0, 1.0) * glyphH) / uniforms.atlasH);\n"
 "    let msdf = textureSample(atlasTexture, atlasSampler, atlasUV);\n"
 "    let median = max(min(msdf.r, msdf.g), min(max(msdf.r, msdf.g), msdf.b));\n"
-"    var glyph_color = vec4<f32>(median, median, median, 1.0);\n"
+"    // displayMode picks the base colour; channel masks then gate each\n"
+"    // RGB output bit so you can see exactly which channels contribute.\n"
+"    var base = vec4<f32>(median, median, median, 1.0);\n"
 "    let mode = u32(uniforms.displayMode + 0.5);\n"
-"    if mode == 1u { glyph_color = vec4<f32>(msdf.rgb, 1.0); }              // raw RGB\n"
-"    else if mode == 2u { glyph_color = vec4<f32>(msdf.r, msdf.r, msdf.r, 1.0); } // R only\n"
-"    else if mode == 3u { glyph_color = vec4<f32>(msdf.g, msdf.g, msdf.g, 1.0); } // G only\n"
-"    else if mode == 4u { glyph_color = vec4<f32>(msdf.b, msdf.b, msdf.b, 1.0); } // B only\n"
+"    if mode == 1u { base = vec4<f32>(msdf.rgb, 1.0); }                          // raw RGB\n"
+"    else if mode == 2u { base = vec4<f32>(msdf.r, msdf.r, msdf.r, 1.0); }       // R only\n"
+"    else if mode == 3u { base = vec4<f32>(msdf.g, msdf.g, msdf.g, 1.0); }       // G only\n"
+"    else if mode == 4u { base = vec4<f32>(msdf.b, msdf.b, msdf.b, 1.0); }       // B only\n"
+"    let glyph_color = vec4<f32>(\n"
+"        base.r * uniforms.chR,\n"
+"        base.g * uniforms.chG,\n"
+"        base.b * uniforms.chB,\n"
+"        uniforms.chA);\n"
 "    let edgeX = min(localUV.x, 1.0 - localUV.x);\n"
 "    let edgeY = min(localUV.y, 1.0 - localUV.y);\n"
 "    let edge = min(edgeX, edgeY);\n"
@@ -505,8 +531,10 @@ static int initRendering(void)
 	samplerDesc.maxAnisotropy = 1;
 	sampler = wgpuDeviceCreateSampler(device, &samplerDesc);
 
+	/* 16 floats = 64 bytes — uniforms grew to carry the 4 channel-mask
+	 * floats plus the original layout. */
 	WGPUBufferDescriptor uniformDesc = {0};
-	uniformDesc.size = 48;
+	uniformDesc.size = 64;
 	uniformDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
 	uniformBuffer = wgpuDeviceCreateBuffer(device, &uniformDesc);
 
@@ -533,7 +561,7 @@ static int initRendering(void)
 	WGPUBindGroupEntry bindEntries[4] = {0};
 	bindEntries[0].binding = 0;
 	bindEntries[0].buffer = uniformBuffer;
-	bindEntries[0].size = 48;
+	bindEntries[0].size = 64;
 	bindEntries[1].binding = 1;
 	bindEntries[1].sampler = sampler;
 	bindEntries[2].binding = 2;
@@ -594,6 +622,7 @@ static void updateUniforms(void)
 		float scrollY;
 		float cols;
 		float totalGlyphs;
+		float chR, chG, chB, chA;
 		float displayMode;
 		float _pad2, _pad3;
 	} u = {
@@ -602,10 +631,11 @@ static void updateUniforms(void)
 		scrollY,
 		(float)gridCols,
 		(float)g_atlas.glyph_count,
+		(float)chR, (float)chG, (float)chB, (float)chA,
 		(float)displayMode,
 		0, 0
 	};
-	wgpuQueueWriteBuffer(queue, uniformBuffer, 0, &u, 48);
+	wgpuQueueWriteBuffer(queue, uniformBuffer, 0, &u, 64);
 }
 
 static void render(void)
@@ -731,6 +761,56 @@ static void mouseButtonCallback(GLFWwindow *window, int button, int action, int 
 	}
 }
 
+/* GLFW char callback delivers the *layout-translated* codepoint the user
+ * actually typed, not a physical scancode — so the r/g/b/a/c shortcuts
+ * follow the user's keyboard layout (Dvorak, AZERTY, etc.). Polling
+ * glfwGetKey(GLFW_KEY_R) instead would always check the QWERTY-R slot. */
+static void charCallback(GLFWwindow *window, unsigned int codepoint)
+{
+	(void)window;
+	switch (codepoint) {
+	case 'r': case 'R':
+		chR = !chR;
+		fprintf(stderr, "[ch] R=%d G=%d B=%d A=%d\n", chR, chG, chB, chA);
+		break;
+	case 'g': case 'G':
+		chG = !chG;
+		fprintf(stderr, "[ch] R=%d G=%d B=%d A=%d\n", chR, chG, chB, chA);
+		break;
+	case 'b': case 'B':
+		chB = !chB;
+		fprintf(stderr, "[ch] R=%d G=%d B=%d A=%d\n", chR, chG, chB, chA);
+		break;
+	case 'a': case 'A':
+		chA = !chA;
+		fprintf(stderr, "[ch] R=%d G=%d B=%d A=%d\n", chR, chG, chB, chA);
+		break;
+	case 'c': case 'C':
+		/* Advance the cycle and reset channel masks so each stop is a
+		 * clean view — leftover r/g/b/a toggles from earlier inspection
+		 * would otherwise tint the median or single-channel modes. */
+		displayMode = (displayMode + 1) % 5;
+		chR = chG = chB = chA = 1;
+		fprintf(stderr, "[mode] %d (%s)  [ch reset: R=1 G=1 B=1 A=1]\n",
+			displayMode, DISPLAY_MODE_NAMES[displayMode]);
+		break;
+	default:
+		break;
+	}
+}
+
+/* Key callback handles non-printable keys that have no character — only
+ * ESC for now (reset view). Letter shortcuts go through charCallback so
+ * they respect the user's keyboard layout. */
+static void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods)
+{
+	(void)window; (void)scancode; (void)mods;
+	if (action != GLFW_PRESS) return;
+	if (key == GLFW_KEY_ESCAPE) {
+		resetView();
+	}
+}
+
 static void cursorPosCallback(GLFWwindow *window, double xpos, double ypos)
 {
 	(void)window;
@@ -747,30 +827,42 @@ static void cursorPosCallback(GLFWwindow *window, double xpos, double ypos)
 
 static void printUsage(const char *prog)
 {
-	printf("MSDF-WGSL Atlas Viewer (Grid Mode)\n\n"
+	printf("MSDF Atlas Viewer (Grid Mode)\n\n"
 	       "Usage: %s [options] <path-to.cdb>\n\n"
 	       "Options:\n"
-	       "  -c, --cols N       Grid columns (default: 80)\n"
+	       "      --cols N       Grid columns (default: 80)\n"
+	       "      --red          Show only the red channel (combine with --green etc.)\n"
+	       "      --green        Show only the green channel\n"
+	       "      --blue         Show only the blue channel\n"
+	       "      --alpha        Show only the alpha channel\n"
+	       "                     (no channel flag = all channels visible)\n"
 	       "  -h, --help         Show this help\n\n"
-	       "Controls:\n"
-	       "  Mouse wheel        Scroll through glyphs\n"
+	       "Controls (lowercase keys, no shift needed):\n"
+	       "  mouse wheel        Scroll through glyphs\n"
 	       "  Ctrl+wheel         Zoom to cursor\n"
-	       "  Mouse drag         Pan the view\n"
-	       "  R                  Reset view\n"
-	       "  D                  Cycle display mode (median3 / raw RGB / R / G / B)\n"
-	       "  ESC                Exit\n",
+	       "  mouse drag         Pan the view\n"
+	       "  r / g / b / a      Toggle red / green / blue / alpha channel\n"
+	       "  c                  Cycle display mode (median3 / raw RGB / R / G / B)\n"
+	       "  esc                Reset view\n"
+	       "  Ctrl+C             Exit\n",
 	       prog);
 }
 
 int main(int argc, char *argv[])
 {
 	const char *cdbPath = NULL;
+	int channelFlagSeen = 0;
+	int wantR = 0, wantG = 0, wantB = 0, wantA = 0;
 	for (int i = 1; i < argc; i++) {
 		const char *arg = argv[i];
-		if ((!strcmp(arg, "-c") || !strcmp(arg, "--cols")) && i + 1 < argc) {
+		if (!strcmp(arg, "--cols") && i + 1 < argc) {
 			gridCols = atoi(argv[++i]);
 			if (gridCols < 1) gridCols = 1;
-		} else if (!strcmp(arg, "-h") || !strcmp(arg, "--help")) {
+		} else if (!strcmp(arg, "--red"))   { wantR = 1; channelFlagSeen = 1; }
+		else if (!strcmp(arg, "--green")) { wantG = 1; channelFlagSeen = 1; }
+		else if (!strcmp(arg, "--blue"))  { wantB = 1; channelFlagSeen = 1; }
+		else if (!strcmp(arg, "--alpha")) { wantA = 1; channelFlagSeen = 1; }
+		else if (!strcmp(arg, "-h") || !strcmp(arg, "--help")) {
 			printUsage(argv[0]);
 			return 0;
 		} else if (arg[0] == '-' && arg[1] != '\0') {
@@ -788,6 +880,15 @@ int main(int argc, char *argv[])
 		printUsage(argv[0]);
 		return 2;
 	}
+	/* If any channel flag was passed, enable only those; otherwise all on. */
+	if (channelFlagSeen) {
+		chR = wantR; chG = wantG; chB = wantB; chA = wantA;
+	}
+
+	/* Trap SIGINT so Ctrl+C from the terminal exits the loop cleanly
+	 * (otherwise the default handler kills the process mid-frame and
+	 * skips the WGPU/GLFW cleanup paths). */
+	signal(SIGINT, on_sigint);
 
 	printf("========================================\n"
 	       "MSDF Atlas Viewer (Grid Mode)\n"
@@ -817,6 +918,8 @@ int main(int argc, char *argv[])
 	glfwSetScrollCallback(window, scrollCallback);
 	glfwSetMouseButtonCallback(window, mouseButtonCallback);
 	glfwSetCursorPosCallback(window, cursorPosCallback);
+	glfwSetCharCallback(window, charCallback);
+	glfwSetKeyCallback(window, keyCallback);
 
 	if (!initWebGPU(window)) {
 		fprintf(stderr, "Failed to initialize WebGPU\n");
@@ -840,25 +943,11 @@ int main(int argc, char *argv[])
 	fprintf(stderr, "[Main] Starting render loop... "
 		"(scroll, ctrl+scroll, drag, R, ESC)\n");
 
-	while (!glfwWindowShouldClose(window)) {
+	while (!glfwWindowShouldClose(window) && !g_should_exit) {
+		/* Layout-aware: r/g/b/a/c go through glfwSetCharCallback, ESC
+		 * through glfwSetKeyCallback (no character to translate).
+		 * Both fire from inside glfwPollEvents — no polling here. */
 		glfwPollEvents();
-
-		if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-			glfwSetWindowShouldClose(window, GLFW_TRUE);
-		}
-		if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
-			resetView();
-		}
-		/* D cycles display mode; rising-edge detected so a single
-		 * keypress only advances by one. */
-		int dKeyNow = (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS);
-		if (dKeyNow && !dKeyPrev) {
-			displayMode = (displayMode + 1) % 5;
-			fprintf(stderr, "[display] mode = %d (%s)\n",
-				displayMode, DISPLAY_MODE_NAMES[displayMode]);
-		}
-		dKeyPrev = dKeyNow;
-
 		render();
 	}
 
