@@ -8,13 +8,20 @@ when:
 clone:
   git:
     image: woodpeckerci/plugin-git
-    backend_options:
-      docker:
-        user: "1000:1000"
     settings:
       lfs: true
 
 steps:
+  # Plugin-git's clone container runs as root, so the workspace ends up
+  # root-owned. The build container runs as misi (uid 1000), and libgit2
+  # (used by `nix develop` to evaluate the git+file:// flake input) refuses
+  # repos owned by a different uid. Chown the workspace to 1000:1000 here
+  # so the build step + nix see a misi-owned repo.
+  fix-workspace-perms:
+    image: alpine
+    commands:
+      - chown -R 1000:1000 .
+
   build:
     image: yetty-build:latest
     commands:
