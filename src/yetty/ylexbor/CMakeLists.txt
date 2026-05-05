@@ -14,6 +14,7 @@ add_library(yetty_ylexbor STATIC
     ylexbor-box.c
     ylexbor-layout.c
     ylexbor-paint.c
+    ylexbor-js.c
 )
 
 target_include_directories(yetty_ylexbor PUBLIC
@@ -27,5 +28,17 @@ target_link_libraries(yetty_ylexbor
         yetty_ysdf
         yetty_ycore
 )
+
+# QuickJS is opt-in — when present, ylexbor's <script> walker calls
+# JS_Eval per inline script block. When absent, ylexbor-js.c compiles
+# to no-op stubs so the rest of the lib stays the same shape.
+if(TARGET qjs)
+    target_link_libraries(yetty_ylexbor PUBLIC qjs)
+    target_compile_definitions(yetty_ylexbor PRIVATE YETTY_HAVE_QUICKJS=1)
+    message(STATUS "yetty_ylexbor: QuickJS enabled")
+else()
+    target_compile_definitions(yetty_ylexbor PRIVATE YETTY_HAVE_QUICKJS=0)
+    message(STATUS "yetty_ylexbor: QuickJS disabled (qjs target missing)")
+endif()
 
 target_compile_options(yetty_ylexbor PRIVATE -Wall -Wno-unused-parameter)

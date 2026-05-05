@@ -130,6 +130,7 @@ struct yetty_ylexbor_ptr_result yetty_ylexbor_create(
 struct yetty_ycore_void_result yetty_ylexbor_destroy(struct yetty_ylexbor *r)
 {
 	if (r == NULL) return YETTY_OK_VOID();
+	yetty_ylexbor_js_destroy(r);
 	if (r->css_parser)
 		lxb_css_parser_destroy(r->css_parser, true);
 	if (r->document)
@@ -155,6 +156,12 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(
 		r->document, (const lxb_char_t *)html, html_len);
 	if (s != LXB_STATUS_OK)
 		return YETTY_ERR(yetty_ycore_void, "html_document_parse failed");
+
+	/* Run inline <script> blocks (no DOM bindings yet — scripts can
+	 * console.log, do math, manipulate JS objects, but can't yet see
+	 * or modify the DOM). Keep going on JS errors so they don't
+	 * tank the rest of the page. */
+	(void)yetty_ylexbor_js_run_inline_scripts(r);
 
 	struct yetty_ycore_void_result br = yetty_ylexbor_box_build(r);
 	if (YETTY_IS_ERR(br)) return br;

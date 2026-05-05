@@ -78,10 +78,23 @@ struct yetty_ylexbor_box_vec {
 	uint32_t size, cap;
 };
 
+/* Forward decls for the optional JS runtime — concrete types live in
+ * <quickjs.h>; keeping them opaque here avoids leaking the QuickJS
+ * include into every .c that just touches the box / layout state. */
+struct JSRuntime;
+struct JSContext;
+
 struct yetty_ylexbor {
 	/* lexbor objects — owned. */
 	lxb_html_document_t *document;
 	lxb_css_parser_t    *css_parser;
+
+	/* QuickJS — created lazily on the first <script> seen. NULL if
+	 * QuickJS isn't compiled in (YETTY_HAVE_QUICKJS=0) or no scripts
+	 * have been encountered yet. */
+	struct JSRuntime *js_rt;
+	struct JSContext *js_ctx;
+	int js_error_count;        /* uncaught exceptions encountered */
 
 	int viewport_w, viewport_h;
 	float default_font_size;
@@ -128,5 +141,22 @@ float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size)
 /* Internal box-vector growth — implemented in ylexbor.c. */
 struct yetty_ycore_void_result _yetty_ylexbor_box_vec_reserve(
 	struct yetty_ylexbor_box_vec *v, uint32_t want);
+
+/* ===========================================================================
+ * JavaScript (ylexbor-js.c) — optional, gated on YETTY_HAVE_QUICKJS.
+ *
+ * MVP wiring: walk the freshly-parsed DOM, find every <script> with no
+ * `src` attribute (external script fetching is a follow-up), eval the
+ * inline text. Console output via a minimal `console.log` /
+ * `console.error` binding that prints to stderr. No DOM bindings, no
+ * timers, no network — those are the long tail.
+ *
+ * When YETTY_HAVE_QUICKJS=0 these are no-op stubs so the rest of the
+ * lib doesn't have to ifdef everywhere.
+ * ===========================================================================*/
+struct yetty_ycore_void_result yetty_ylexbor_js_init(struct yetty_ylexbor *r);
+void yetty_ylexbor_js_destroy(struct yetty_ylexbor *r);
+struct yetty_ycore_void_result yetty_ylexbor_js_run_inline_scripts(
+	struct yetty_ylexbor *r);
 
 #endif

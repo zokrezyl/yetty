@@ -169,6 +169,10 @@ if(YETTY_ENABLE_LIB_LEXBOR)
     include(${YETTY_ROOT}/build-tools/cmake/libs/lexbor.cmake)
 endif()
 
+if(YETTY_ENABLE_LIB_QUICKJS)
+    include(${YETTY_ROOT}/build-tools/cmake/libs/quickjs.cmake)
+endif()
+
 if(YETTY_ENABLE_LIB_LIBPNG)
     include(${YETTY_ROOT}/build-tools/cmake/libs/libpng.cmake)
 endif()
