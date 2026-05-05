@@ -135,6 +135,14 @@ if(YETTY_ENABLE_FEATURE_YPAINT)
     add_subdirectory(ypaint)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YNETSURF)
+    add_subdirectory(ynetsurf)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YLEXBOR)
+    add_subdirectory(ylexbor)
+endif()
+
 if(YETTY_ENABLE_FEATURE_DIAGRAM)
     add_subdirectory(diagram)
 endif()

@@ -85,3 +85,11 @@ endif()
 # MSDF toolbox — CDB viewers/diff/generators/atlas-viewer. Pure C
 # tooling, always built (the bits that need WGPU bring it in themselves).
 add_subdirectory(msdf)
+
+if(YETTY_ENABLE_TOOL_YNETSURF)
+    add_subdirectory(ynetsurf)
+endif()
+
+if(YETTY_ENABLE_TOOL_YLEXBOR_DEMO)
+    add_subdirectory(ylexbor-demo)
+endif()

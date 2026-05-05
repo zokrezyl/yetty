@@ -55,6 +55,12 @@ typedef void (*yetty_yterm_cursor_fn)(struct yetty_yrender_terminal_layer *sourc
  * fires this whenever either changes. */
 typedef void (*yetty_yterm_mouse_sub_fn)(int click_enabled, int move_enabled, void *userdata);
 
+/* Terminal-wide input subscription callback — fired when a layer
+ * receives YMGUI_OSC_CS_TERM_INPUT_SUB from the inferior. `flags` is the
+ * new (post-update) bitmask of YETTY_YMGUI_TERM_SUB_* bits. flags == 0
+ * means full unsubscribe. */
+typedef void (*yetty_yterm_term_input_sub_fn)(uint32_t flags, void *userdata);
+
 /* OSC emit callback - fires when a layer needs to send an OSC envelope
  * back to the client app (PTY child). Used by ymgui-layer to deliver
  * focus events, by future bidirectional layers, etc. The terminal
@@ -152,6 +158,10 @@ struct yetty_yrender_terminal_layer {
     /* Mouse-subscription callback - set by creator. Optional. */
     yetty_yterm_mouse_sub_fn mouse_sub_fn;
     void *mouse_sub_userdata;
+    /* Terminal-wide input subscription callback - set by creator. Optional.
+     * Fired when a layer receives YMGUI_OSC_CS_TERM_INPUT_SUB. */
+    yetty_yterm_term_input_sub_fn term_input_sub_fn;
+    void *term_input_sub_userdata;
     /* OSC emit callback - set by creator. Optional. Used by layers that
    * need to send envelopes back to the PTY child (e.g. ymgui-layer for
    * focus events). */

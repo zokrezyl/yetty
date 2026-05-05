@@ -2,13 +2,20 @@
 #
 # Consumes a prebuilt static lib + headers from the 3rdparty release
 # tarball published by build-3rdparty-libcurl.yml. The tarball was built
-# statically against OpenSSL 4 (lib-openssl-new — see
-# build-tools/3rdparty/libcurl/_build.sh for the exact link recipe).
+# statically against three other yetty 3rdparty prebuilts (see
+# build-tools/3rdparty/libcurl/_build.sh):
+#   - openssl-new  (TLS backend)
+#   - zlib         (gzip Content-Encoding)
+#   - brotli       (br   Content-Encoding)
+#
+# libcurl.a's unresolved zlib/brotli/openssl symbols are satisfied here
+# via the matching libs/{zlib,brotli}.cmake includes — the same tarballs
+# yetty's main build already consumes elsewhere. So linking the same
+# yetty binary against both libcurl AND (say) freetype pulls in only one
+# copy of zlib.
 #
 # Exposes `CURL::libcurl` (the find_package(CURL) target name yetty + cpr
-# expect). The interface link list pulls in the matching openssl-new
-# static archives directly so downstream code links against the SAME
-# OpenSSL 4 used at libcurl build time.
+# expect).
 #
 # WARNING / SCOPE:
 # At time of writing, libssh2 still links the OLD janbar 1.1.1w openssl
@@ -24,6 +31,14 @@ include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
 if(TARGET CURL::libcurl)
     return()
 endif()
+
+# zlib + brotli must be resolved before us — libcurl.a has unresolved
+# symbols from both. We pull in the same prebuilts curl was linked
+# against at 3rdparty-build time. Order matters only for find_package
+# style consumers; the actual link order is chosen by the linker from
+# INTERFACE_LINK_LIBRARIES below.
+include(${YETTY_ROOT}/build-tools/cmake/libs/zlib.cmake)
+include(${YETTY_ROOT}/build-tools/cmake/libs/brotli.cmake)
 
 #-----------------------------------------------------------------------------
 # Fetch libcurl prebuilt + the openssl-new prebuilt it was built against.
@@ -75,7 +90,15 @@ set_target_properties(CURL::libcurl PROPERTIES
 )
 
 # Per-platform link deps that libcurl requires.
-set(_LIBCURL_DEPS "${_OSSL_SSL};${_OSSL_CRYPTO}")
+#
+# `ZLIB::ZLIB`, `brotlidec` (transitively `brotlicommon`) come from the
+# include() lines at the top — they satisfy libcurl.a's unresolved
+# zlib + brotli symbols.
+set(_LIBCURL_DEPS
+    "${_OSSL_SSL}" "${_OSSL_CRYPTO}"
+    ZLIB::ZLIB
+    brotlidec
+)
 if(WIN32)
     list(APPEND _LIBCURL_DEPS ws2_32 crypt32 bcrypt advapi32 user32)
 elseif(APPLE)

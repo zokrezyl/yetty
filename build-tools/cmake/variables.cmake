@@ -54,6 +54,8 @@ option(YETTY_ENABLE_LIB_GLFW        "glfw — windowing (desktop only)"       ON
 option(YETTY_ENABLE_LIB_LIBMAGIC    "libmagic — file type detection"         ON)
 option(YETTY_ENABLE_LIB_LIBCURL     "libcurl — HTTP(S) fetching"             ON)
 option(YETTY_ENABLE_LIB_PDFIO       "pdfio — PDF parsing (C)"                ON)
+option(YETTY_ENABLE_LIB_NETSURF     "netsurf-3.11 — NetSurf core+libs"      ON)
+option(YETTY_ENABLE_LIB_LEXBOR      "lexbor — Apache-2.0 HTML/CSS engine"   ON)
 
 # Virtual machine (--virtual flag: run shell in RISC-V Linux VM)
 option(YETTY_ENABLE_LIB_TINYEMU     "tinyemu — RISC-V emulator for --virtual" ON)
@@ -144,6 +146,10 @@ option(YETTY_ENABLE_TOOL_YSLIDE          "yslide tool"                       ON)
 option(YETTY_ENABLE_TOOL_QA              "qa static analysis tools"          ON)
 option(YETTY_ENABLE_TOOL_YTHORVG         "yetty-ythorvg CLI (SVG/Lottie -> OSC)" ON)
 option(YETTY_ENABLE_TOOL_DECODE_YPAINT    "decode-ypaint diagnostic tool"     ON)
+option(YETTY_ENABLE_FEATURE_YNETSURF     "ynetsurf — NetSurf frontend lib"   ON)
+option(YETTY_ENABLE_TOOL_YNETSURF        "ynetsurf browser tool"             ON)
+option(YETTY_ENABLE_FEATURE_YLEXBOR      "ylexbor — lexbor-based HTML lib"   ON)
+option(YETTY_ENABLE_TOOL_YLEXBOR_DEMO    "ylexbor-demo CLI tool"             ON)
 
 # Auto-disable QA tools for cross-compilation (requires host LLVM/Clang libs)
 # Also disabled on macOS and Windows — qa-tools/custom/result-checker/CMakeLists.txt

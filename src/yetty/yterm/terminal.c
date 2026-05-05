@@ -66,6 +66,14 @@ struct yetty_yterm_terminal {
     int mouse_move_subscribed;
     int mouse_buttons_held; /* OR of (1 << button) for currently-down buttons */
 
+    /* Terminal-wide input subscription (YMGUI_OSC_CS_TERM_INPUT_SUB).
+     * Independent from the card-aware path above: when set, every mouse /
+     * key event ALSO fans out as YMGUI_OSC_SC_TERM_* tagged with card_id=0
+     * and pane-local pixel coords. Programs that draw their own UI
+     * directly into the pane (browser, file manager) subscribe via this
+     * channel instead of registering a card. */
+    uint32_t term_input_sub_flags;
+
     /* Long-lived yface for emitting input events to the inferior over the
    * PTY. Reused across every emit; out_buf is cleared after each write. */
     struct yetty_yface *emit_yface;
@@ -280,6 +288,96 @@ static void terminal_emit_card_mouse_move(struct yetty_yterm_terminal *terminal,
     terminal_yface_emit(terminal, YMGUI_OSC_SC_MOUSE, &msg, sizeof(msg));
 }
 
+/* Terminal-wide variants — same wire structs, card_id=0, pane-local px.
+ * Each is gated on a bit of terminal->term_input_sub_flags so an
+ * uninterested subscriber doesn't receive (e.g.) wheel events when it
+ * only asked for clicks + moves. */
+static void terminal_emit_term_mouse_button(struct yetty_yterm_terminal *terminal,
+                                            float lx, float ly, int button, int press,
+                                            float wheel_dy)
+{
+    int is_wheel = (wheel_dy != 0.0f);
+    uint32_t need = is_wheel ? YETTY_YMGUI_TERM_SUB_MOUSE_WHEEL
+                             : YETTY_YMGUI_TERM_SUB_MOUSE_CLICK;
+    if (!(terminal->term_input_sub_flags & need)) {
+        return;
+    }
+    struct yetty_ymgui_wire_input_mouse msg = {
+        .magic = YMGUI_WIRE_MAGIC_INPUT_MOUSE,
+        .version = YMGUI_WIRE_VERSION,
+        .card_id = 0,
+        .x = lx,
+        .y = ly,
+    };
+    if (is_wheel) {
+        msg.kind = YETTY_YMGUI_INPUT_MOUSE_WHEEL;
+        msg.button = -1;
+        msg.wheel_dy = wheel_dy;
+    } else {
+        msg.kind = YETTY_YMGUI_INPUT_MOUSE_BUTTON;
+        msg.button = button;
+        msg.pressed = press;
+    }
+    terminal_yface_emit(terminal, YMGUI_OSC_SC_TERM_MOUSE, &msg, sizeof(msg));
+}
+
+static void terminal_emit_term_mouse_move(struct yetty_yterm_terminal *terminal,
+                                          float lx, float ly, int buttons_held)
+{
+    if (!(terminal->term_input_sub_flags & YETTY_YMGUI_TERM_SUB_MOUSE_MOVE)) {
+        return;
+    }
+    struct yetty_ymgui_wire_input_mouse msg = {
+        .magic = YMGUI_WIRE_MAGIC_INPUT_MOUSE,
+        .version = YMGUI_WIRE_VERSION,
+        .card_id = 0,
+        .kind = YETTY_YMGUI_INPUT_MOUSE_POS,
+        .button = -1,
+        .buttons_held = (uint32_t)buttons_held,
+        .x = lx,
+        .y = ly,
+    };
+    terminal_yface_emit(terminal, YMGUI_OSC_SC_TERM_MOUSE, &msg, sizeof(msg));
+}
+
+/* Pane pixel size — emitted on subscribe (rising edge) and on resize so
+ * subscribers can size their canvases. card_id=0 = pane-wide. */
+static void terminal_emit_term_resize(struct yetty_yterm_terminal *terminal,
+                                      float w_px, float h_px)
+{
+    if (!terminal->term_input_sub_flags) {
+        return;
+    }
+    struct yetty_ymgui_wire_input_resize msg = {
+        .magic = YMGUI_WIRE_MAGIC_INPUT_RESIZE,
+        .version = YMGUI_WIRE_VERSION,
+        .card_id = 0,
+        .width = w_px,
+        .height = h_px,
+    };
+    terminal_yface_emit(terminal, YMGUI_OSC_SC_TERM_RESIZE, &msg, sizeof(msg));
+}
+
+/* Term-wide keyboard. Sent for any key (including with no card focused),
+ * so console programs can do their own focus tracking. card_id=0. */
+static void terminal_emit_term_key(struct yetty_yterm_terminal *terminal, uint32_t kind,
+                                   int key, int mods, uint32_t codepoint)
+{
+    if (!(terminal->term_input_sub_flags & YETTY_YMGUI_TERM_SUB_KEY)) {
+        return;
+    }
+    struct yetty_ymgui_wire_input_key msg = {
+        .magic = YMGUI_WIRE_MAGIC_INPUT_KEY,
+        .version = YMGUI_WIRE_VERSION,
+        .card_id = 0,
+        .kind = kind,
+        .key = key,
+        .mods = mods,
+        .codepoint = codepoint,
+    };
+    terminal_yface_emit(terminal, YMGUI_OSC_SC_TERM_KEY, &msg, sizeof(msg));
+}
+
 /* Resolve the pane-pixel point (lx, ly) to a card-local hit. If a card
  * is "captured" (drag in progress), the captured card always wins and
  * coords are reported as-if-projected into that card's local space.
@@ -458,6 +556,27 @@ static void terminal_mouse_sub_callback(int click_enabled, int move_enabled, voi
     terminal->mouse_click_subscribed = click_enabled;
     terminal->mouse_move_subscribed = move_enabled;
     ydebug("terminal: mouse_sub click=%d move=%d", click_enabled, move_enabled);
+}
+
+/* YMGUI_OSC_CS_TERM_INPUT_SUB arrived (forwarded by ymgui-layer). Latch
+ * the new flag bitmask, and on the rising edge of any subscription emit
+ * a YMGUI_OSC_SC_TERM_RESIZE so the subscriber knows the pane pixel
+ * size before the first event arrives. */
+static void terminal_term_input_sub_callback(uint32_t flags, void *userdata)
+{
+    struct yetty_yterm_terminal *terminal = userdata;
+    uint32_t prev = terminal->term_input_sub_flags;
+    terminal->term_input_sub_flags = flags;
+    ydebug("terminal: term_input_sub flags=0x%x (was 0x%x)", flags, prev);
+
+    /* Rising edge → emit pane pixel size now so the subscriber can size
+     * its canvas before the first event arrives. Bounds come from the
+     * view already used by the mouse handlers above (terminal->view). */
+    if (flags && !prev) {
+        terminal_emit_term_resize(terminal,
+                                  terminal->view.bounds.w,
+                                  terminal->view.bounds.h);
+    }
 }
 
 /* Alt-screen toggle from text-layer (libvterm). Broadcast to every
@@ -816,6 +935,11 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
        * events through this terminal's emit_yface. */
             ymgui_res.value->emit_osc_fn = terminal_layer_emit_osc;
             ymgui_res.value->emit_osc_userdata = terminal;
+            /* Terminal-wide input subscription updates flow through the
+             * same layer (it owns the OSC parser); the layer just forwards
+             * the new bitmask to us. */
+            ymgui_res.value->term_input_sub_fn = terminal_term_input_sub_callback;
+            ymgui_res.value->term_input_sub_userdata = terminal;
             if (terminal->pty_reader) {
                 yetty_yterm_pty_reader_register_osc_sink(terminal->pty_reader, YMGUI_OSC_CS_CLEAR,
                                                          ymgui_res.value);
@@ -827,7 +951,9 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
                                                          YMGUI_OSC_CS_CARD_PLACE, ymgui_res.value);
                 yetty_yterm_pty_reader_register_osc_sink(terminal->pty_reader,
                                                          YMGUI_OSC_CS_CARD_REMOVE, ymgui_res.value);
-                ydebug("terminal_create: ymgui layer registered for OSC 610000-610004");
+                yetty_yterm_pty_reader_register_osc_sink(terminal->pty_reader,
+                                                         YMGUI_OSC_CS_TERM_INPUT_SUB, ymgui_res.value);
+                ydebug("terminal_create: ymgui layer registered for OSC 610000-610004 + 610010");
             }
         } else {
             ydebug("terminal_create: failed to create ymgui layer (non-fatal): %s",
@@ -1060,6 +1186,7 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yter
     struct yetty_yterm_terminal *terminal = container_of(view, struct yetty_yterm_terminal, view);
 
     /* Store bounds in view */
+    int changed = (view->bounds.w != bounds.w) || (view->bounds.h != bounds.h);
     view->bounds = bounds;
 
     /* Terminal handles resize via YETTY_EVENT_RESIZE from event loop */
@@ -1067,7 +1194,13 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yter
     ydebug("terminal_view_set_bounds: %.0fx%.0f at (%.0f,%.0f)", bounds.w, bounds.h, bounds.x,
            bounds.y);
 
-    (void)terminal;
+    /* Fan out the new pane pixel size to any terminal-wide subscriber.
+     * Card-aware subscribers get their per-card resize through a separate
+     * path (ymgui-layer's CARD_PLACE → SC_RESIZE). */
+    if (changed && terminal->term_input_sub_flags) {
+        terminal_emit_term_resize(terminal, bounds.w, bounds.h);
+    }
+
     return YETTY_OK_VOID();
 }
 
@@ -1091,6 +1224,13 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_v
                 return YETTY_OK(yetty_ycore_int, 1);
             }
         }
+        /* Terminal-wide keyboard fan-out — opt-in via TERM_INPUT_SUB. Fires
+         * BEFORE the focused-card path so subscribers see every key the
+         * pane received, regardless of card focus. Subscribers that also
+         * want libvterm-formatted bytes get those via stdin as usual; this
+         * channel just adds structured (key+mods+codepoint) info on top. */
+        terminal_emit_term_key(terminal, YETTY_YMGUI_INPUT_KEY_DOWN,
+                               event->key.key, event->key.mods, 0);
         /* If a ymgui card has focus, route the keystroke to it as an OSC
      * envelope and DO NOT also feed libvterm — otherwise the shell
      * would see the keystroke alongside the card. */
@@ -1110,6 +1250,8 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_v
 
     case YETTY_YCORE_KEY_UP:
         ydebug("terminal: KEY_UP key=%d mods=%d", event->key.key, event->key.mods);
+        terminal_emit_term_key(terminal, YETTY_YMGUI_INPUT_KEY_UP,
+                               event->key.key, event->key.mods, 0);
         if (terminal_emit_card_key(terminal, YETTY_YMGUI_INPUT_KEY_UP, event->key.key, event->key.mods,
                                    0)) {
             return YETTY_OK(yetty_ycore_int, 1);
@@ -1121,6 +1263,8 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_v
         if (terminal->scrollback_active) {
             terminal_scrollback_exit(terminal);
         }
+        terminal_emit_term_key(terminal, YETTY_YMGUI_INPUT_KEY_CHAR,
+                               -1, event->chr.mods, event->chr.codepoint);
         /* See KEY_DOWN: focused card consumes the codepoint. */
         if (terminal_emit_card_key(terminal, YETTY_YMGUI_INPUT_KEY_CHAR, -1, event->chr.mods,
                                    event->chr.codepoint)) {
@@ -1301,11 +1445,14 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_v
     case YETTY_YCORE_MOUSE_DOWN:
     case YETTY_YCORE_MOUSE_UP: {
         ydebug("terminal: MOUSE_%s win=(%.1f,%.1f) bounds=(%.0fx%.0f@%.0f,%.0f) "
-               "click_sub=%d",
+               "click_sub=%d term_sub=0x%x",
                event->type == YETTY_YCORE_MOUSE_DOWN ? "DOWN" : "UP", event->mouse.x,
                event->mouse.y, view->bounds.w, view->bounds.h, view->bounds.x, view->bounds.y,
-               terminal->mouse_click_subscribed);
-        if (!terminal->mouse_click_subscribed) {
+               terminal->mouse_click_subscribed, terminal->term_input_sub_flags);
+
+        int term_wants = (terminal->term_input_sub_flags &
+                          YETTY_YMGUI_TERM_SUB_MOUSE_CLICK) != 0;
+        if (!terminal->mouse_click_subscribed && !term_wants) {
             return YETTY_OK(yetty_ycore_int, 0);
         }
         float lx = event->mouse.x - view->bounds.x;
@@ -1321,32 +1468,41 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_v
             terminal->mouse_buttons_held &= ~(1 << btn);
         }
 
-        uint32_t focused =
-            terminal->ymgui_layer ? yetty_yterm_terminal_layer_ymgui_layer_focused_card(terminal->ymgui_layer) : 0;
-        /* On release, route to the captured (focused) card so the client
-     * sees a paired down/up. On press, hit-test the cursor. */
-        struct yetty_yterm_ymgui_hit hit;
-        if (press) {
-            hit = terminal_resolve_card_hit(terminal, lx, ly, 0);
-            /* Click-focus: update focus to whoever was clicked (incl. 0). */
-            if (terminal->ymgui_layer) {
-                yetty_yterm_terminal_layer_ymgui_layer_set_focus(terminal->ymgui_layer, hit.card_id);
+        /* Card-aware path (unchanged). */
+        if (terminal->mouse_click_subscribed) {
+            uint32_t focused =
+                terminal->ymgui_layer ? yetty_yterm_terminal_layer_ymgui_layer_focused_card(terminal->ymgui_layer) : 0;
+            struct yetty_yterm_ymgui_hit hit;
+            if (press) {
+                hit = terminal_resolve_card_hit(terminal, lx, ly, 0);
+                if (terminal->ymgui_layer) {
+                    yetty_yterm_terminal_layer_ymgui_layer_set_focus(terminal->ymgui_layer, hit.card_id);
+                }
+            } else {
+                hit = terminal_resolve_card_hit(terminal, lx, ly, focused);
             }
-        } else {
-            hit = terminal_resolve_card_hit(terminal, lx, ly, focused);
+            if (hit.card_id != 0) {
+                terminal_emit_card_mouse_button(terminal, hit.card_id, hit.local_x, hit.local_y,
+                                                btn, press, 0.0f);
+            }
         }
-        if (hit.card_id != 0) {
-            terminal_emit_card_mouse_button(terminal, hit.card_id, hit.local_x, hit.local_y, btn,
-                                            press, 0.0f);
-        }
+
+        /* Terminal-wide fan-out — fires regardless of card hit, with
+         * pane-local pixel coords. */
+        terminal_emit_term_mouse_button(terminal, lx, ly, btn, press, 0.0f);
+
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG: {
-        ydebug("terminal: MOUSE_MOVE win=(%.1f,%.1f) move_sub=%d", event->mouse.x, event->mouse.y,
-               terminal->mouse_move_subscribed);
-        if (!terminal->mouse_move_subscribed) {
+        ydebug("terminal: MOUSE_MOVE win=(%.1f,%.1f) move_sub=%d term_sub=0x%x",
+               event->mouse.x, event->mouse.y,
+               terminal->mouse_move_subscribed, terminal->term_input_sub_flags);
+
+        int term_wants = (terminal->term_input_sub_flags &
+                          YETTY_YMGUI_TERM_SUB_MOUSE_MOVE) != 0;
+        if (!terminal->mouse_move_subscribed && !term_wants) {
             return YETTY_OK(yetty_ycore_int, 0);
         }
         float lx = event->mouse.x - view->bounds.x;
@@ -1355,17 +1511,23 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_v
             return YETTY_OK(yetty_ycore_int, 0);
         }
 
-        /* Capture during drag → route to focused card; otherwise topmost
-     * under cursor. */
-        uint32_t captured = 0;
-        if (terminal->mouse_buttons_held && terminal->ymgui_layer) {
-            captured = yetty_yterm_terminal_layer_ymgui_layer_focused_card(terminal->ymgui_layer);
+        /* Card-aware path (unchanged). */
+        if (terminal->mouse_move_subscribed) {
+            uint32_t captured = 0;
+            if (terminal->mouse_buttons_held && terminal->ymgui_layer) {
+                captured = yetty_yterm_terminal_layer_ymgui_layer_focused_card(terminal->ymgui_layer);
+            }
+            struct yetty_yterm_ymgui_hit hit =
+                terminal_resolve_card_hit(terminal, lx, ly, captured);
+            if (hit.card_id != 0) {
+                terminal_emit_card_mouse_move(terminal, hit.card_id, hit.local_x, hit.local_y,
+                                              terminal->mouse_buttons_held);
+            }
         }
-        struct yetty_yterm_ymgui_hit hit = terminal_resolve_card_hit(terminal, lx, ly, captured);
-        if (hit.card_id != 0) {
-            terminal_emit_card_mouse_move(terminal, hit.card_id, hit.local_x, hit.local_y,
-                                          terminal->mouse_buttons_held);
-        }
+
+        /* Terminal-wide fan-out. */
+        terminal_emit_term_mouse_move(terminal, lx, ly, terminal->mouse_buttons_held);
+
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
@@ -1382,13 +1544,29 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_v
         }
 
         /* Once in scrollback view, wheel always drives history. Otherwise
-     * if a card is under the cursor (or if a subscribed-but-cardless
-     * client is listening) the wheel goes outbound; else scrollback. */
-        if (!terminal->scrollback_active && terminal->mouse_click_subscribed) {
-            struct yetty_yterm_ymgui_hit hit = terminal_resolve_card_hit(terminal, lx, ly, 0);
-            if (hit.card_id != 0) {
-                terminal_emit_card_mouse_button(terminal, hit.card_id, hit.local_x, hit.local_y, 0,
-                                                0, event->mouse_scroll.dy);
+     * if a card is under the cursor OR a terminal-wide wheel subscriber
+     * is listening, the wheel goes outbound; else scrollback. */
+        int term_wheel_wants = (terminal->term_input_sub_flags &
+                                YETTY_YMGUI_TERM_SUB_MOUSE_WHEEL) != 0;
+        if (!terminal->scrollback_active &&
+            (terminal->mouse_click_subscribed || term_wheel_wants)) {
+            int delivered = 0;
+            if (terminal->mouse_click_subscribed) {
+                struct yetty_yterm_ymgui_hit hit =
+                    terminal_resolve_card_hit(terminal, lx, ly, 0);
+                if (hit.card_id != 0) {
+                    terminal_emit_card_mouse_button(terminal, hit.card_id,
+                                                    hit.local_x, hit.local_y,
+                                                    0, 0, event->mouse_scroll.dy);
+                    delivered = 1;
+                }
+            }
+            if (term_wheel_wants) {
+                terminal_emit_term_mouse_button(terminal, lx, ly, 0, 0,
+                                                event->mouse_scroll.dy);
+                delivered = 1;
+            }
+            if (delivered) {
                 return YETTY_OK(yetty_ycore_int, 1);
             }
         }
