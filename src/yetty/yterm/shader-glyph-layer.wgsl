@@ -23,12 +23,28 @@
 // RENDER_LAYER_BINDINGS_PLACEHOLDER
 
 struct VertexInput  { @location(0) position: vec2<f32>, };
-struct VertexOutput { @builtin(position) position: vec4<f32>, };
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    // Grid-local pixel position. See text-layer.wgsl for the rationale —
+    // @builtin(position) in fragment is in framebuffer space and doesn't
+    // line up with the grid origin once the pane viewport sits at
+    // (vp.x, vp.y) != (0,0).
+    @location(0) @interpolate(linear) grid_pixel: vec2<f32>,
+};
 
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = vec4<f32>(input.position, 0.0, 1.0);
+
+    let grid_size = uniforms.shader_glyph_grid_size;
+    let cell_size = uniforms.shader_glyph_cell_size;
+    let grid_pixel_w = grid_size.x * cell_size.x;
+    let grid_pixel_h = grid_size.y * cell_size.y;
+    output.grid_pixel = vec2<f32>(
+        (input.position.x * 0.5 + 0.5) * grid_pixel_w,
+        (0.5 - input.position.y * 0.5) * grid_pixel_h
+    );
     return output;
 }
 
@@ -77,7 +93,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let vz_scale = uniforms.shader_glyph_visual_zoom_scale;
     let vz_off   = uniforms.shader_glyph_visual_zoom_off;
     let vz_center = vec2<f32>(grid_pixel_w * 0.5, grid_pixel_h * 0.5);
-    let pixel_pos = (input.position.xy - vz_center) / max(vz_scale, 0.0001)
+    let pixel_pos = (input.grid_pixel - vz_center) / max(vz_scale, 0.0001)
                   + vz_center + vz_off;
 
     if (pixel_pos.x < 0.0 || pixel_pos.y < 0.0 ||

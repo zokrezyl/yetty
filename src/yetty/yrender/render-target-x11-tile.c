@@ -240,6 +240,11 @@ static struct yetty_ycore_void_result x11_tile_render_layer(
     struct yetty_ypaint_core_target *self, struct yetty_yrender_terminal_layer *layer)
 {
     struct yetty_yrender_render_target_x11_tile *rt = (struct yetty_yrender_render_target_x11_tile *)self;
+    /* Propagate the outer viewport (set per-pane by pane_render) into the
+     * inner texture target — its render_layer reads its own viewport for
+     * setViewport+setScissorRect, and without this every layer would draw
+     * across the inner's full-surface viewport regardless of pane bounds. */
+    rt->inner->viewport = self->viewport;
     return rt->inner->ops->render_layer(rt->inner, layer);
 }
 

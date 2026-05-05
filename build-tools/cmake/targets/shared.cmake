@@ -393,6 +393,19 @@ function(yetty_embed_assets TARGET)
     file(MAKE_DIRECTORY "${INCBIN_DATA_DIR}/fonts")
     file(MAKE_DIRECTORY "${INCBIN_DATA_DIR}/msdf-fonts")
 
+    # Stamp a fresh version on every cmake configure so the runtime's
+    # asset-extract marker check (yetty_incbin_assets_needs_extraction)
+    # actually re-extracts after a rebuild that changed an embedded
+    # shader / asset. The marker is per-install (~/.local/share/yetty/
+    # .yetty-assets/version on Linux); without a per-build version it
+    # stays at "dev" forever and the deployed shaders silently rot out
+    # of sync with the binary's incbin'd ones — an editor change to
+    # text-layer.wgsl never reaches the runtime until the user wipes
+    # ~/.local/share/yetty/.yetty-assets/ by hand.
+    string(TIMESTAMP YETTY_BUILD_STAMP "%Y%m%d%H%M%S")
+    target_compile_definitions(${TARGET} PRIVATE
+        YETTY_BUILD_VERSION="${YETTY_BUILD_STAMP}")
+
     # Copy logo
     file(COPY "${YETTY_ROOT}/docs/logo-2.jpeg" DESTINATION "${INCBIN_DATA_DIR}")
 
