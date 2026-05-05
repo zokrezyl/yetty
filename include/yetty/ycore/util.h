@@ -41,6 +41,23 @@ size_t yetty_ycore_base64_decode(const char *in, size_t in_len, char *out, size_
  */
 struct yetty_ycore_buffer_result yetty_ycore_base64_encode(const void *in, size_t in_len);
 
+/**
+ * Parse a hex colour string into a packed RGBA uint32. Accepted formats:
+ *   "#RGB"       (3 hex digits, alpha defaults to 0xFF)
+ *   "#RGBA"      (4 hex digits)
+ *   "#RRGGBB"    (6 hex digits, alpha defaults to 0xFF)
+ *   "#RRGGBBAA"  (8 hex digits)
+ * The leading '#' is optional. Output layout is the canonical yetty packed
+ * RGBA (matches the WGSL `ypaint_unpack_color` and existing yplot/yecho
+ * conventions): byte 0 = R, byte 1 = G, byte 2 = B, byte 3 = A. As a u32
+ * that's `(A << 24) | (B << 16) | (G << 8) | R`.
+ *
+ * @param s   Input string (may start with '#'); NULL → fail.
+ * @param out Receives the packed colour on success; untouched on failure.
+ * @return 1 on success, 0 on parse failure.
+ */
+int yetty_ycore_parse_hex_color(const char *s, uint32_t *out);
+
 #ifdef __cplusplus
 }
 #endif

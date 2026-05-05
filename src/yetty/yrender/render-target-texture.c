@@ -66,11 +66,6 @@ struct yetty_yrender_render_target_texture {
     float visual_zoom_scale;
     float visual_zoom_offset_x;
     float visual_zoom_offset_y;
-
-    /* Sticky flag set by set_preserve_on_render_layer(). When true,
-	 * render_layer() uses LoadOp_Load so multiple layers can be drawn
-	 * directly into this target without each one wiping the previous. */
-    bool preserve_on_render_layer;
 };
 
 /*=============================================================================
@@ -370,7 +365,10 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
 
     WGPURenderPassColorAttachment color_attachment = {0};
     color_attachment.view = rt->view;
-    color_attachment.loadOp = rt->preserve_on_render_layer ? WGPULoadOp_Load : WGPULoadOp_Clear;
+    /* Always Load. The single per-frame wipe is the global clear() in
+     * yetty_event_handler; layer-pass loadOp is never Clear, so multiple
+     * panes drawing into the shared big target can't stomp each other. */
+    color_attachment.loadOp = WGPULoadOp_Load;
     color_attachment.storeOp = WGPUStoreOp_Store;
     color_attachment.clearValue = (WGPUColor){0.0, 0.0, 0.0, 0.0};
     color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
@@ -871,20 +869,6 @@ static struct yetty_ycore_void_result render_target_texture_set_visual_zoom(
     return YETTY_OK_VOID();
 }
 
-static void render_target_texture_set_preserve_on_render_layer(
-    struct yetty_ypaint_core_target *self, bool preserve)
-{
-    struct yetty_yrender_render_target_texture *rt = (struct yetty_yrender_render_target_texture *)self;
-    rt->preserve_on_render_layer = preserve;
-}
-
-static bool render_target_texture_get_preserve_on_render_layer(
-    const struct yetty_ypaint_core_target *self)
-{
-    const struct yetty_yrender_render_target_texture *rt = (const struct yetty_yrender_render_target_texture *)self;
-    return rt->preserve_on_render_layer;
-}
-
 static const struct yetty_yrender_target_ops render_target_texture_ops = {
     .destroy = render_target_texture_destroy,
     .clear = render_target_texture_clear,
@@ -895,8 +879,6 @@ static const struct yetty_yrender_target_ops render_target_texture_ops = {
     .get_texture = render_target_texture_get_texture,
     .resize = render_target_texture_resize,
     .set_visual_zoom = render_target_texture_set_visual_zoom,
-    .set_preserve_on_render_layer = render_target_texture_set_preserve_on_render_layer,
-    .get_preserve_on_render_layer = render_target_texture_get_preserve_on_render_layer,
 };
 
 struct yetty_yrender_target_ptr_result yetty_yrender_target_texture_create(

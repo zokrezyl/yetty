@@ -45,17 +45,17 @@ terminal:
       # Font size in pixels — the visual height of the glyph extent (top of
       # tallest ascender to bottom of lowest descender). Cell height/width
       # are derived from this plus the padding below.
-      size: 20
+      size: 18
       # Cell padding around the glyph, as fractions of the glyph dimensions:
       #   cell_height = size           * (1 + top  + bottom)
       #   cell_width  = size / hwratio * (1 + left + right)
       # Defaults of 0 give a tight cell — the cell exactly wraps the glyph
       # extent, with no "small glyph in cell" gap.
       padding:
-        left:   0.0
-        right:  0.0
+        left:   -0.05
+        right:  -0.05
         top:    0.0
-        bottom: 0.4
+        bottom: 0.0
 
 # ─────────────────────────────────────────────────────────────────────────────
 # YPaint (non-monospace font used for ypaint text spans)
@@ -208,12 +208,19 @@ shaders:
 #
 # Pane tiles have:
 #   - view: the view type (currently only "terminal")
+#   - background (optional): opaque RGBA fill rendered before the view
+#     - color: hex string, accepts "#RGB", "#RGBA", "#RRGGBB" or "#RRGGBBAA"
+#       (alpha defaults to FF when omitted). Without a background block the
+#       pane has no per-pane wipe — its area falls back to whatever the
+#       global frame clear left behind.
 workspace:
   # Single terminal (rename to 'default' to use)
   default:
     layout:
       type: pane
       view: terminal
+      background:
+        color: "#101820"
 
   # Two terminals side by side (vertical split)
   default1:
@@ -224,9 +231,13 @@ workspace:
       first:
         type: pane
         view: terminal
+        background:
+          color: "#101820"
       second:
         type: pane
         view: terminal
+        background:
+          color: "#1a1f2e"
 
   # Two terminals top/bottom (horizontal split)
   default2:
@@ -237,9 +248,13 @@ workspace:
       first:
         type: pane
         view: terminal
+        background:
+          color: "#101820"
       second:
         type: pane
         view: terminal
+        background:
+          color: "#1a1f2e"
 
   # IDE-style: left pane + right split top/bottom
   default3:
@@ -250,6 +265,8 @@ workspace:
       first:
         type: pane
         view: terminal
+        background:
+          color: "#101820"
       second:
         type: split
         orientation: horizontal
@@ -257,9 +274,13 @@ workspace:
         first:
           type: pane
           view: terminal
+          background:
+            color: "#1a1f2e"
         second:
           type: pane
           view: terminal
+          background:
+            color: "#202840"
 
   # Three columns
   default4:
@@ -270,6 +291,8 @@ workspace:
       first:
         type: pane
         view: terminal
+        background:
+          color: "#101820"
       second:
         type: split
         orientation: vertical
@@ -277,9 +300,13 @@ workspace:
         first:
           type: pane
           view: terminal
+          background:
+            color: "#1a1f2e"
         second:
           type: pane
           view: terminal
+          background:
+            color: "#202840"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Debug Configuration

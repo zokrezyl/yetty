@@ -2,13 +2,16 @@
 #include <yetty/yui/view.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/event.h>
+#include <yetty/ycore/util.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yterm/terminal.h>
+#include <yetty/yterm/background-layer.h>
 #include <yetty/yvnc/vnc-viewer.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
+
 
 /*=============================================================================
  * Object ID generation
@@ -57,6 +60,13 @@ struct yetty_yui_pane {
     size_t view_count;
     size_t view_capacity;
     int focused;
+
+    /* Per-pane background — opaque RGBA fill rendered before the view's
+     * own layers. Owned by the pane; created lazily by
+     * tile_create_from_config when the pane is built from YAML. NULL means
+     * "no background" (other panes' previous-frame pixels show through —
+     * effectively the pre-bg-layer behaviour). */
+    struct yetty_yrender_terminal_layer *background_layer;
 };
 
 /*=============================================================================
@@ -231,6 +241,16 @@ static struct yetty_ycore_void_result pane_destroy(struct yetty_yui_tile *self)
     struct yetty_yui_pane *pane = (struct yetty_yui_pane *)self;
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
+    if (pane->background_layer && pane->background_layer->ops &&
+        pane->background_layer->ops->destroy) {
+        struct yetty_ycore_void_result r =
+            pane->background_layer->ops->destroy(pane->background_layer);
+        if (YETTY_IS_ERR(r)) {
+            first_err = r;
+        }
+        pane->background_layer = NULL;
+    }
+
     for (size_t i = 0; i < pane->view_count; i++) {
         if (pane->views[i]) {
             struct yetty_ycore_void_result r = yetty_yui_view_destroy(pane->views[i]);
@@ -259,10 +279,25 @@ static struct yetty_ycore_void_result pane_render(struct yetty_yui_tile *self,
     struct yetty_yui_pane *pane = (struct yetty_yui_pane *)self;
 
     if (pane->view_count > 0 && pane->views[pane->view_count - 1]) {
-        /* Set viewport on render_target based on our bounds for scissored rendering */
+        /* Confine all this pane's draws to its bounds. Loadop is always
+         * Load now (set in render-target-texture), so other panes' pixels
+         * stay intact. */
         struct yetty_yui_rect bounds = pane->base.bounds;
         render_target->viewport = (struct yetty_yrender_viewport){
             .x = bounds.x, .y = bounds.y, .w = bounds.w, .h = bounds.h};
+
+        /* Pane background — opaque RGBA fill across the pane viewport,
+         * rendered before the view. Provides the per-pane wipe so the
+         * view's upper layers (alpha<1) don't ghost the previous frame. */
+        if (pane->background_layer && pane->background_layer->ops &&
+            pane->background_layer->ops->render) {
+            struct yetty_ycore_void_result r =
+                pane->background_layer->ops->render(pane->background_layer, render_target);
+            if (YETTY_IS_ERR(r)) {
+                return r;
+            }
+        }
+
         return yetty_yui_view_render(pane->views[pane->view_count - 1], render_target);
     }
 
@@ -830,6 +865,42 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
     res = yetty_yui_pane_create();
     if (YETTY_IS_ERR(res)) {
         return res;
+    }
+
+    /* Optional pane background — sibling of `view` in the layout YAML, e.g.
+     *   background:
+     *     color: "#101020"
+     * Accepted formats: #RGB / #RGBA / #RRGGBB / #RRGGBBAA. */
+    {
+        struct yetty_yconfig_config *bg_node = config->ops->get_node(config, "background");
+        if (bg_node) {
+            const char *color_str = bg_node->ops->get_string(bg_node, "color", NULL);
+            uint32_t packed = 0;
+            if (color_str && yetty_ycore_parse_hex_color(color_str, &packed)) {
+                float rgba[4] = {
+                    (float)(packed & 0xFFu) / 255.0f,
+                    (float)((packed >> 8) & 0xFFu) / 255.0f,
+                    (float)((packed >> 16) & 0xFFu) / 255.0f,
+                    (float)((packed >> 24) & 0xFFu) / 255.0f,
+                };
+                struct yetty_yterm_terminal_layer_result bg_res =
+                    yetty_yterm_background_layer_create(yetty_ctx, rgba);
+                if (YETTY_IS_OK(bg_res)) {
+                    ((struct yetty_yui_pane *)res.value)->background_layer = bg_res.value;
+                    ydebug("tile: pane background '%s' -> (%.2f, %.2f, %.2f, %.2f)",
+                           color_str, rgba[0], rgba[1], rgba[2], rgba[3]);
+                } else {
+                    ywarn("tile: pane background create failed: %s — pane will draw "
+                          "without an opaque base",
+                          bg_res.error.msg);
+                }
+            } else if (color_str) {
+                ywarn("tile: pane background color '%s' unparseable "
+                      "(expected #RGB / #RGBA / #RRGGBB / #RRGGBBAA), "
+                      "no pane background will be drawn",
+                      color_str);
+            }
+        }
     }
 
     /* Create view based on config or vnc/client override */

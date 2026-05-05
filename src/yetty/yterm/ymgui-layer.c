@@ -1329,19 +1329,16 @@ static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal
         return YETTY_ERR(yetty_ycore_void, "ymgui: target view is NULL");
     }
 
-    /* Default: LoadOp_Clear so the layer texture has known transparent
-     * contents whether or not any card draws. When the target is in
-     * preserve mode (direct multi-layer render into one target), use Load
-     * instead — otherwise we'd wipe everything earlier layers drew. */
+    /* LoadOp_Load: every pass into the shared big target preserves prior
+     * pixels. The single per-frame wipe is the global clear() in
+     * yetty_event_handler. ymgui draws on top of whatever earlier layers
+     * (text, ypaint, shader-glyph) put down. */
     WGPUCommandEncoderDescriptor ed = {0};
     WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(l->device, &ed);
 
-    bool preserve = target->ops->get_preserve_on_render_layer &&
-                    target->ops->get_preserve_on_render_layer(target);
-
     WGPURenderPassColorAttachment ca = {0};
     ca.view = view;
-    ca.loadOp = preserve ? WGPULoadOp_Load : WGPULoadOp_Clear;
+    ca.loadOp = WGPULoadOp_Load;
     ca.storeOp = WGPUStoreOp_Store;
     ca.clearValue = (WGPUColor){0, 0, 0, 0};
     ca.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
