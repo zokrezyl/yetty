@@ -2793,20 +2793,56 @@ float yetty_ygui_widget_scrollbar_get_value(const struct yetty_ygui_widget *widg
  * List Widget — generic row-aware vertical container with selection.
  *===========================================================================*/
 
-static struct yetty_ycore_void_result list_render(struct yetty_ygui_widget *self,
-                                                  struct yetty_ygui_render_ctx *ctx)
+/* Custom render_all so the selection background lands at the correct
+ * absolute position. The default render_all_default calls render() while
+ * ctx->offset still points at the *parent's* origin — wrong frame for
+ * drawing a box at a *child's* relative coords. We instead push offset
+ * to self->layout_x/y first, paint the selection rect, then recurse
+ * normally. The list draws nothing else decorative; children render
+ * their own surfaces. */
+static struct yetty_ycore_void_result list_render_all(struct yetty_ygui_widget *self,
+                                                      struct yetty_ygui_render_ctx *ctx)
 {
-    /* The list itself draws nothing decorative — children render their
-     * own surfaces. We do paint a soft selection background behind the
-     * currently-selected child so any leaf-row child gets selected
-     * styling for free. */
+    if (!(self->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+        return YETTY_OK_VOID();
+    }
+    self->was_rendered = 1;
     const struct yetty_ygui_theme *t = ctx->theme;
+
+    float old_offset_x = ctx->offset_x;
+    float old_offset_y = ctx->offset_y;
+    ctx->offset_x = self->layout_x;
+    ctx->offset_y = self->layout_y;
+
+    /* Selection background — drawn before children so they sit on top. */
     struct yetty_ygui_widget *sel = self->data.list.selected;
-    if (sel) {
+    if (sel && (sel->flags & YETTY_YGUI_FLAG_VISIBLE)) {
         yetty_ygui_render_ctx_render_box(ctx, sel->x, sel->y, sel->w, sel->h, t->selection_bg,
                                          t->radius_small);
     }
-    return YETTY_OK_VOID();
+
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
+    for (struct yetty_ygui_widget *child = self->first_child; child;
+         child = child->next_sibling) {
+        if (!(child->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+            continue;
+        }
+        struct yetty_ycore_void_result r;
+        if (child->vtable && child->vtable->render_all) {
+            r = child->vtable->render_all(child, ctx);
+        } else {
+            r = yetty_ygui_widget_render_all_default(child, ctx);
+        }
+        if (YETTY_IS_ERR(r) && YETTY_IS_OK(first_err)) {
+            first_err = r;
+        } else if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
+    }
+
+    ctx->offset_x = old_offset_x;
+    ctx->offset_y = old_offset_y;
+    return first_err;
 }
 
 /* Find the nearest child that contains (lx, ly) in this widget's local
@@ -2861,8 +2897,8 @@ struct yetty_ygui_widget *yetty_ygui_engine_list(struct yetty_ygui_engine *engin
     lst->layout.align_items = YETTY_YGUI_ALIGN_STRETCH;
     lst->layout.gap = engine->theme->pad_small;
     static const struct yetty_ygui_widget_vtable list_vtable = {
-        .render   = list_render,
-        .on_press = list_on_press,
+        .render_all = list_render_all,
+        .on_press   = list_on_press,
     };
     lst->vtable = &list_vtable;
     add_to_engine(engine, lst);
@@ -3109,6 +3145,10 @@ struct yetty_ygui_widget *yetty_ygui_engine_tree_node(struct yetty_ygui_engine *
         /* Indent: CSS padding-left on the children list. Users can
          * override with apply_css. */
         kids->layout.padding_left = TREE_INDENT_DEFAULT;
+        /* Grow to fill whatever the layout pre-flight reserves for us
+         * inside the tree_node's content box (everything below the
+         * padding_top header strip). */
+        kids->layout.flex_grow = 1.0f;
         yetty_ygui_widget_set_visible(kids, 0);
         yetty_ygui_widget_add_child(node, kids);
         node->data.tree_node.children_list = kids;
