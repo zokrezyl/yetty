@@ -65,16 +65,13 @@ fn nz_sign(x: f32) -> f32 {
 // Signed distance to a line segment.
 // Convention: negative = inside (left of CCW tangent), positive = outside.
 //
-// Returns vec3<f32>(signed_dist, _unused, t):
-//   signed_dist  signed Euclidean distance to the segment (closest point in [0,1])
-//   _unused      reserved (was orthogonality, now unused by main)
-//   t            clamped projection along ab in [0,1]
-//
-// Pseudo-distance correction (msdfgen's
-// EdgeSegment::distanceToPseudoDistance) is intentionally NOT applied
-// here. Without msdfgen's per-pixel error-correction pass it leaks
-// near-edge pseudo values into far-outside pixels along tangent
-// extensions and produces a *worse* MSDF than plain true-distance.
+// We *don't* apply pseudo-distance here. msdfgen does — it gives smoother
+// AA at corners — but it relies on msdfgen's separate per-pixel error
+// correction pass to catch the near-edge values pseudo otherwise leaks
+// into far-outside pixels along tangent extensions. The sign-only
+// winding correction we have in main() catches sign flips, not magnitude
+// leaks, so adding pseudo-distance without proper error correction
+// makes the MSDF *worse* (verified empirically — bad_pct went 0.65→5%).
 fn distance_to_line(p0: vec2<f32>, p1: vec2<f32>, origin: vec2<f32>) -> vec3<f32> {
     let aq = origin - p0;
     let ab = p1 - p0;
@@ -144,13 +141,11 @@ fn distance_to_quad(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, origin: vec2<f3
         num_solutions = 1;
     }
 
-    // Find min distance with sign convention -sign(cross(tangent, origin-closest))
-    // — same convention as distance_to_line and the interior case below.
-    // The original p0 sign expression `-sign(cross(ab, qa))` was inverted
-    // relative to that convention; that flipped sign at any pixel whose
-    // closest point on a quad segment was its t=0 endpoint, producing the
-    // visible MSDF artefacts at corners where one segment's t=0 met the
-    // previous segment's t=1 on a closed contour.
+    // Find min |true distance| with the sign convention
+    //   sign = -nz_sign(cross(tangent, origin-closest))
+    // — same as distance_to_line. Pseudo-distance intentionally omitted
+    // (see distance_to_line) — would need msdfgen's full per-pixel
+    // error-correction pass to compose safely.
     let aq = -qa;                 // origin - p0
     var min_dist = -nz_sign(cross2d(ab, aq)) * length(qa);
     var param = 0.0;
