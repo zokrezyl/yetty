@@ -30,6 +30,10 @@ if(YETTY_ENABLE_TOOL_YMESH)
     add_subdirectory(ymesh)
 endif()
 
+if(YETTY_ENABLE_TOOL_YMAZE)
+    add_subdirectory(ymaze)
+endif()
+
 if(YETTY_ENABLE_TOOL_YDRAW_MAZE)
     add_subdirectory(ydraw-maze)
 endif()

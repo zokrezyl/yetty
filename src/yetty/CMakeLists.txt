@@ -193,6 +193,10 @@ if(YETTY_ENABLE_FEATURE_YMESH)
     add_subdirectory(ymesh)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YMAZE)
+    add_subdirectory(ymaze)
+endif()
+
 if(YETTY_ENABLE_FEATURE_YMSDF_GEN)
     add_subdirectory(ymsdf-gen)
 endif()
