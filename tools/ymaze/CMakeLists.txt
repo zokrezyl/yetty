@@ -1,0 +1,24 @@
+# ymaze tool — animated maze frontend, emits ypaint OSC envelopes.
+# Pure C frontend over the yetty_ymaze library.
+
+add_executable(ymaze
+    main.c
+    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
+    ${YETTY_YPLATFORM_THREAD_SOURCES}
+)
+
+target_include_directories(ymaze PRIVATE
+    ${YETTY_ROOT}/include
+    ${YETTY_ROOT}/src
+)
+
+find_package(Threads REQUIRED)
+target_link_libraries(ymaze PRIVATE
+    yetty_ymaze
+    yetty_yface
+    Threads::Threads
+)
+
+if(NOT MSVC)
+    target_compile_options(ymaze PRIVATE -Wall -Wextra)
+endif()
