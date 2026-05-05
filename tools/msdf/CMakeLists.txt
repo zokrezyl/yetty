@@ -2,6 +2,13 @@
 # files. Grouped together so the whole MSDF toolbox can be enabled or
 # disabled with a single switch.
 
+# Desktop-only: these are host-side CLI/GUI utilities (some run at build
+# time to generate CDBs, the atlas viewer needs GLFW). They are never
+# shipped with mobile/web builds.
+if(EMSCRIPTEN OR YETTY_ANDROID OR YETTY_IOS)
+    return()
+endif()
+
 # Read-only walker for .cdb files (pure C, no library deps — parses the
 # CDB file format directly). Always built.
 add_subdirectory(cdb-viewer)
