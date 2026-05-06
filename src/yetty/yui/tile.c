@@ -940,6 +940,10 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
             struct yetty_ydvnc_viewer_ptr_result dv_res =
                 yetty_ydvnc_viewer_create(host, port, yetty_ctx);
             if (YETTY_IS_ERR(dv_res)) {
+                yerror("ydvnc viewer create failed: %s", dv_res.error.msg);
+                if (dv_res.error.cause) {
+                    yerror("  caused by: %s", dv_res.error.cause->msg);
+                }
                 yetty_yui_tile_destroy(res.value);
                 return YETTY_ERR(yetty_yui_tile_ptr, "ydvnc viewer create failed", dv_res);
             }
