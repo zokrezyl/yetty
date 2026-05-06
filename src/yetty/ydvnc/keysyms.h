@@ -2,30 +2,24 @@
 #define YETTY_YDVNC_KEYSYMS_H
 
 /*
- * Translates yetty key codes (GLFW-style; produced by the platform input
- * layer) and Unicode codepoints into X11 keysyms suitable for sending in an
- * RFB KeyEvent.
+ * Translates yetty key codes (GLFW-style) and Unicode codepoints into X11
+ * keysyms for the RFB KeyEvent message.
  *
- * The keysym numerical values are the canonical ones from X.org's
- * keysymdef.h. They are protocol identifiers — not copyrightable — and the
- * naming is the standard X11 one.
+ * Layout note: GLFW reports physical-position key codes (layout-independent,
+ * US-QWERTY identifiers) for KEY_DOWN/KEY_UP, plus separate CHAR events for
+ * the layout-resolved Unicode codepoint. To preserve the user's local layout
+ * (e.g. Dvorak), the viewer should:
  *
- * Layout note: GLFW reports physical-position key codes (i.e. layout-
- * independent, US-QWERTY identifiers) for KEY_DOWN/KEY_UP, plus separate
- * CHAR events for the layout-resolved Unicode codepoint. To preserve the
- * user's local layout (e.g. Dvorak), the viewer should:
+ *   - For modifier keys (Shift/Ctrl/Alt/Super): send the modifier keysym on
+ *     press/release (use yetty_ydvnc_keysym_from_glfw_key).
+ *   - For non-printable special keys (Esc, Arrow, F-keys, ...): send the
+ *     keysym from the GLFW key code on press/release.
+ *   - For printable keys: ignore KEY_DOWN/KEY_UP (those carry the QWERTY
+ *     position glyph). Use CHAR events instead and emit press+release of
+ *     yetty_ydvnc_keysym_from_codepoint(codepoint).
  *
- *   - For modifier keys (Shift/Ctrl/Alt/Super): send the modifier keysym
- *     on press/release (use yetty_ydvnc_keysym_from_glfw_key).
- *   - For non-printable special keys (Esc, Arrow, F-keys, ...):
- *     send the keysym from the GLFW key code on press/release.
- *   - For printable keys: ignore KEY_DOWN/KEY_UP (would yield the QWERTY
- *     glyph). Instead handle CHAR events: emit press+release of the keysym
- *     derived from the Unicode codepoint via yetty_ydvnc_keysym_from_codepoint.
- *
- * On Wayland/X11 platforms with Dvorak active, this means RFB KeyEvents
- * carry the user's intended characters (XK_apostrophe rather than XK_q
- * for the Dvorak ' key).
+ * Result: with Dvorak active, RFB KeyEvents carry the user's intended
+ * characters.
  */
 
 #include <stdint.h>

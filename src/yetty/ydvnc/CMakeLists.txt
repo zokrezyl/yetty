@@ -1,8 +1,4 @@
-# ydvnc — desktop VNC client (RFB protocol, talks to TigerVNC/TurboVNC).
-#
-# Implemented from the public RFB spec (RFC 6143 + github.com/rfbproto). NO
-# code from TigerVNC, TurboVNC, libvncclient, or noVNC was consulted. See
-# build-tools/check-ydvnc-originality.sh for the verification tripwire.
+# ydvnc — desktop VNC client (RFB 3.8).
 
 add_library(yetty_ydvnc STATIC
     rfb-client.c

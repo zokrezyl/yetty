@@ -1,9 +1,5 @@
 /*
  * keysyms.c — yetty key/char → X11 keysym translation.
- *
- * GLFW key constants (the values yetty's input layer reports) are listed in
- * GLFW/glfw3.h. The X11 keysym numerical constants come from X.org's
- * keysymdef.h. Both are public protocol identifiers.
  */
 
 #include "keysyms.h"

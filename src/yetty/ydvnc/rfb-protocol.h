@@ -4,11 +4,6 @@
 /*
  * RFB wire protocol — internal to ydvnc.
  *
- * Sources:
- *   - RFC 6143 (The Remote Framebuffer Protocol)
- *   - https://github.com/rfbproto/rfbproto (community extensions: Tight,
- *     pseudo-encodings)
- *
  * All on-the-wire integers are big-endian. We use `htons/htonl/ntohs/ntohl`
  * at the encode/decode boundary; structs here are declared as packed for
  * direct reads but every multi-byte field is byte-swapped on access.

@@ -948,7 +948,7 @@ static void print_usage(const char *prog)
     fprintf(stderr, "  -H, --vnc-headless     Run VNC server (headless - no window)\n");
     fprintf(stderr, "  -p, --vnc-port=PORT    VNC server port (default: 5900)\n");
     fprintf(stderr, "  -C, --vnc-client=HOST  Connect as VNC client to HOST[:PORT]\n");
-    fprintf(stderr, "      --desktop-vnc-client=HOST[:PORT]  Connect as RFB client to TigerVNC/TurboVNC server\n");
+    fprintf(stderr, "      --desktop-vnc-client=HOST[:PORT]  Connect as RFB (RFC 6143) client\n");
     fprintf(stderr, "      --vnc-raw                  Disable JPEG, send raw BGRA tiles\n");
     fprintf(stderr, "      --vnc-compression-quality Q  JPEG quality 1-100 (default: 80)\n");
     fprintf(stderr, "      --vnc-always-full          Disable delta, send full frame every time\n");

@@ -1,21 +1,16 @@
 /*
- * rfb-client.c — RFB protocol state machine, framebuffer management, GPU
- * upload + render. Implemented from RFC 6143 (RFB 3.8) and the rfbproto
- * community spec for pseudo-encodings.
+ * rfb-client.c — RFB protocol state machine, framebuffer, GPU upload/render.
  *
  * State machine:
  *   PROTO_VERSION   : recv 12 bytes server version, send our version
  *   SECURITY_TYPES  : recv u8 N + N security types, pick one, send 1 byte back
  *   SECURITY_REASON : recv u32 reason length + reason string (only if N==0)
  *   AUTH_RESULT     : recv u32 status (and optional reason on failure)
- *   SERVER_INIT     : recv ServerInit, send ClientInit (already sent), send
- *                     SetEncodings, SetPixelFormat, FramebufferUpdateRequest
+ *   SERVER_INIT     : recv ServerInit, then SetEncodings + SetPixelFormat +
+ *                     initial FramebufferUpdateRequest
  *   MAIN            : recv messages (FramebufferUpdate / Bell / etc.)
  *
- * Auth supported in this initial pass:
- *   - None (security type 1)
- *   VNC-password (DES) is a follow-up; servers configured with `SecurityTypes
- *   None` connect immediately. TigerVNC: `vncserver -SecurityTypes None`.
+ * Currently negotiates security type None only.
  */
 
 #include "rfb-client.h"
@@ -59,7 +54,11 @@ static const char *YDVNC_QUAD_WGSL =
     "@group(0) @binding(1) var fb_smp: sampler;\n"
     "@fragment\n"
     "fn fs_main(in: VsOut) -> @location(0) vec4<f32> {\n"
-    "    return textureSample(fb_tex, fb_smp, in.uv);\n"
+    /* RFB pixels are 32-bit, but only 24 bits of colour are defined; the
+     * fourth byte is unspecified padding. Force opaque alpha so it doesn't
+     * leak through as transparency. */
+    "    let s = textureSample(fb_tex, fb_smp, in.uv);\n"
+    "    return vec4<f32>(s.rgb, 1.0);\n"
     "}\n";
 
 /*=============================================================================
@@ -565,6 +564,9 @@ static struct yetty_ycore_void_result handle_main(struct yetty_ydvnc_rfb_client 
                 c->current_rect.width = ntohs(c->current_rect.width);
                 c->current_rect.height = ntohs(c->current_rect.height);
                 c->current_rect.encoding = (int32_t)ntohl((uint32_t)c->current_rect.encoding);
+                ydebug("ydvnc: rect %ux%u@(%u,%u) enc=%d",
+                       c->current_rect.width, c->current_rect.height,
+                       c->current_rect.x, c->current_rect.y, c->current_rect.encoding);
             }
 
             int32_t enc = c->current_rect.encoding;
@@ -606,6 +608,9 @@ static struct yetty_ycore_void_result handle_main(struct yetty_ydvnc_rfb_client 
                 continue;
             }
 
+            yerror("ydvnc: server sent unsupported encoding %d for rect %ux%u — "
+                  "framing is now lost, disconnecting", enc,
+                  c->current_rect.width, c->current_rect.height);
             return YETTY_ERR(yetty_ycore_void,
                             "ydvnc: server sent unsupported encoding (Tight/Cursor not yet wired)");
         }
@@ -629,6 +634,7 @@ static struct yetty_ycore_void_result handle_main(struct yetty_ydvnc_rfb_client 
         c->fb_rects_remaining = ntohs(h.num_rectangles);
         c->in_fb_update = 1;
         c->have_rect_header = 0;
+        ydebug("ydvnc: FramebufferUpdate: %u rects", c->fb_rects_remaining);
         return YETTY_OK_VOID();
     }
     case YETTY_YDVNC_RFB_S2C_BELL:
@@ -781,6 +787,24 @@ static struct yetty_ycore_void_result resize_framebuffer(struct yetty_ydvnc_rfb_
     c->fb_view = wgpuTextureCreateView(c->fb_texture, NULL);
     if (!c->fb_view) {
         return YETTY_ERR(yetty_ycore_void, "ydvnc: createTextureView failed");
+    }
+
+    /* Clear texture to opaque black so unwritten regions don't show GPU
+     * garbage before the first FramebufferUpdate lands. */
+    {
+        size_t row = (size_t)w * 4u;
+        size_t bytes = row * (size_t)h;
+        uint8_t *clr = calloc(1, bytes);
+        if (clr) {
+            WGPUTexelCopyTextureInfo dst = {0};
+            dst.texture = c->fb_texture;
+            WGPUTexelCopyBufferLayout layout = {0};
+            layout.bytesPerRow = (uint32_t)row;
+            layout.rowsPerImage = h;
+            WGPUExtent3D extent = {w, h, 1};
+            wgpuQueueWriteTexture(c->queue, &dst, clr, bytes, &layout, &extent);
+            free(clr);
+        }
     }
 
     YETTY_RETURN_IF_ERR(yetty_ycore_void, ensure_gpu_pipeline(c), "ensure_gpu_pipeline failed");

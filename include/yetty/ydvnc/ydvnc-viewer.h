@@ -2,13 +2,7 @@
 #define YETTY_YDVNC_VIEWER_H
 
 /*
- * ydvnc — desktop VNC client speaking the standard RFB protocol (RFC 6143)
- * with the Tight encoding (TurboJPEG sub-encoding). Talks to TigerVNC /
- * TurboVNC servers.
- *
- * Implemented from the public RFB spec (RFC 6143 + github.com/rfbproto).
- * No code from TigerVNC, TurboVNC, libvncclient, or noVNC was consulted.
- * Use build-tools/check-ydvnc-originality.sh as a tripwire before committing.
+ * ydvnc — desktop VNC client (RFB 3.8 / RFC 6143).
  */
 
 #include <stdint.h>

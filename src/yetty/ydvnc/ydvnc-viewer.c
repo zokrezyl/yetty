@@ -1,7 +1,6 @@
 /*
  * ydvnc-viewer.c — wraps the RFB client as a yetty view, plugged into a tile
- * pane. Mirrors the shape of yvnc/vnc-viewer.c (yetty's own protocol viewer)
- * intentionally so first-pane wiring follows the same pattern.
+ * pane.
  *
  * Input handling for layout-respecting Dvorak: see keysyms.h for the rule —
  * KEY_DOWN/KEY_UP for non-printables, CHAR for printables, modifiers tracked
