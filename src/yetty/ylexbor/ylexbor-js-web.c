@@ -166,7 +166,16 @@ static size_t fetch_write_cb(char *p, size_t sz, size_t n, void *ud)
 	return add;
 }
 
+char *yetty_ylexbor_http_get_referer(const char *url, const char *referer,
+				     size_t *out_len, long *out_status);
+
 char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status)
+{
+	return yetty_ylexbor_http_get_referer(url, NULL, out_len, out_status);
+}
+
+char *yetty_ylexbor_http_get_referer(const char *url, const char *referer,
+				     size_t *out_len, long *out_status)
 {
 	if (!url) {
 		if (out_len)    *out_len    = 0;
@@ -203,16 +212,47 @@ char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status)
 	curl_easy_setopt(c, CURLOPT_URL, url);
 	curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(c, CURLOPT_MAXREDIRS, 10L);
-	curl_easy_setopt(c, CURLOPT_USERAGENT,
-		"Mozilla/5.0 (X11; Linux x86_64) ylexbor/0.1");
+	/* Send a standard Chrome User-Agent so CDNs treat us as a real
+	 * browser. Wikimedia's bot-throttling, news.google.com's image
+	 * gate, and several CloudFlare WAFs all behave very differently
+	 * for unidentified vs browser UAs. The env var lets ops override
+	 * for cases where bot-identifying UAs are required by ToS. */
+	const char *ua = getenv("YETTY_USER_AGENT");
+	if (!ua || !*ua) {
+		ua = "Mozilla/5.0 (X11; Linux x86_64) "
+		     "AppleWebKit/537.36 (KHTML, like Gecko) "
+		     "Chrome/120.0.0.0 Safari/537.36";
+	}
+	curl_easy_setopt(c, CURLOPT_USERAGENT, ua);
 	curl_easy_setopt(c, CURLOPT_TIMEOUT, 30L);
 	curl_easy_setopt(c, CURLOPT_CONNECTTIMEOUT, 10L);
 	curl_easy_setopt(c, CURLOPT_ACCEPT_ENCODING, "");
 	curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, fetch_write_cb);
 	curl_easy_setopt(c, CURLOPT_WRITEDATA, &b);
+	/* Browser-like header set: image-prioritised Accept, sec-fetch
+	 * hints (Chrome/Firefox always send these), and a Referer when
+	 * the caller knows the document URL — gstatic / Cloudflare WAF
+	 * / many CDN image endpoints 404 or 403 on fetches that lack
+	 * it. */
+	struct curl_slist *headers = NULL;
+	/* IMPORTANT: do NOT advertise webp/avif/apng — content-negotiating
+	 * CDNs (notably Wikimedia) will serve those formats over PNG/JPEG
+	 * when the URL itself ends in .png. We can't decode webp/avif/apng
+	 * (no libwebp / libavif / libapng linked), so claiming support
+	 * means every Wikimedia thumb comes back as a webp blob and our
+	 * decoder rejects it. Restrict to formats we actually handle. */
+	headers = curl_slist_append(headers, "Accept: image/png,image/jpeg,image/gif,image/svg+xml,image/*;q=0.5,*/*;q=0.1");
+	headers = curl_slist_append(headers, "Accept-Language: en-US,en;q=0.9");
+	headers = curl_slist_append(headers, "Sec-Fetch-Dest: image");
+	headers = curl_slist_append(headers, "Sec-Fetch-Mode: no-cors");
+	headers = curl_slist_append(headers, "Sec-Fetch-Site: cross-site");
+	if (referer && *referer)
+		curl_easy_setopt(c, CURLOPT_REFERER, referer);
+	if (headers) curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
 	CURLcode rc = curl_easy_perform(c);
 	long status = 0;
 	curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &status);
+	if (headers) curl_slist_free_all(headers);
 	curl_easy_cleanup(c);
 	if (rc != CURLE_OK) { free(b.data); return NULL; }
 	if (out_len) *out_len = b.size;

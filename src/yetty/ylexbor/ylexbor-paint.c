@@ -151,6 +151,110 @@ static int decode_other(const uint8_t *bytes, size_t len,
 	return 1;
 }
 
+/* SVG sniff — parse width/height/viewBox from the XML header so the
+ * placeholder we emit lands at the correct aspect ratio, even without
+ * a real SVG rasterizer. We render a small grey/checker pattern as
+ * the actual pixels so users can tell where SVGs would go. */
+static float parse_svg_length(const char *s, size_t len)
+{
+	while (len > 0 && (*s == ' ' || *s == '\t')) { s++; len--; }
+	if (len == 0) return 0;
+	char buf[32];
+	size_t n = len < sizeof(buf) - 1 ? len : sizeof(buf) - 1;
+	memcpy(buf, s, n); buf[n] = 0;
+	return (float)atof(buf);
+}
+
+static int sniff_svg_dimensions(const uint8_t *bytes, size_t len,
+				int *out_w, int *out_h)
+{
+	if (len < 4) return 0;
+	const char *p = (const char *)bytes;
+	const char *end = p + len;
+	/* Skip leading XML declaration / DOCTYPE / whitespace; cap at
+	 * the first 4 KB so we don't scan an entire file. */
+	if (end - p > 4096) end = p + 4096;
+	const char *svg = NULL;
+	for (const char *q = p; q + 4 <= end; q++) {
+		if (q[0] == '<' && q[1] == 's' && q[2] == 'v' && q[3] == 'g' &&
+		    (q[4] == ' ' || q[4] == '\t' || q[4] == '\n' ||
+		     q[4] == '\r' || q[4] == '>')) {
+			svg = q + 4;
+			break;
+		}
+	}
+	if (!svg) return 0;
+	const char *gt = memchr(svg, '>', (size_t)(end - svg));
+	if (!gt) gt = end;
+	float w = 0, h = 0, vb_w = 0, vb_h = 0;
+	/* width="..." */
+	const char *q = svg;
+	while (q < gt) {
+		if (gt - q >= 7 && memcmp(q, "width=\"", 7) == 0) {
+			const char *e2 = memchr(q + 7, '"', (size_t)(gt - q - 7));
+			if (e2) w = parse_svg_length(q + 7, e2 - q - 7);
+		}
+		if (gt - q >= 8 && memcmp(q, "height=\"", 8) == 0) {
+			const char *e2 = memchr(q + 8, '"', (size_t)(gt - q - 8));
+			if (e2) h = parse_svg_length(q + 8, e2 - q - 8);
+		}
+		if (gt - q >= 9 && memcmp(q, "viewBox=\"", 9) == 0) {
+			const char *e2 = memchr(q + 9, '"', (size_t)(gt - q - 9));
+			if (e2) {
+				/* "minx miny width height" — pick last 2. */
+				char vb[64];
+				size_t vlen = (size_t)(e2 - q - 9);
+				if (vlen < sizeof(vb)) {
+					memcpy(vb, q + 9, vlen); vb[vlen] = 0;
+					float a, b, c, d;
+					if (sscanf(vb, "%f %f %f %f", &a, &b, &c, &d) == 4) {
+						vb_w = c; vb_h = d;
+					}
+				}
+			}
+		}
+		q++;
+	}
+	if (w <= 0) w = vb_w;
+	if (h <= 0) h = vb_h;
+	if (w > 0 && h > 0) {
+		*out_w = (int)w;
+		*out_h = (int)h;
+		return 1;
+	}
+	return 0;
+}
+
+/* Render a tiny checker-pattern placeholder for SVGs we can't fully
+ * rasterize — at least the user sees there's an image there at the
+ * right aspect ratio rather than a blank slot. */
+static int decode_svg_placeholder(const uint8_t *bytes, size_t len,
+				  uint32_t **out_pixels, int *out_w, int *out_h)
+{
+	int w = 0, h = 0;
+	if (!sniff_svg_dimensions(bytes, len, &w, &h)) {
+		w = 24; h = 24;
+	}
+	/* Cap the placeholder to keep memory + GPU upload sensible. */
+	if (w > 256) { h = (int)((float)h * 256.0f / (float)w); w = 256; }
+	if (h > 256) { w = (int)((float)w * 256.0f / (float)h); h = 256; }
+	if (w <= 0) w = 1;
+	if (h <= 0) h = 1;
+	uint32_t *px = malloc((size_t)w * (size_t)h * 4);
+	if (!px) return 0;
+	uint32_t a = 0xFFD0D0D0u, b = 0xFFE8E8E8u;
+	for (int y = 0; y < h; y++) {
+		for (int x = 0; x < w; x++) {
+			int cx = x / 8, cy = y / 8;
+			px[y * w + x] = ((cx ^ cy) & 1) ? a : b;
+		}
+	}
+	*out_pixels = px;
+	*out_w = w;
+	*out_h = h;
+	return 1;
+}
+
 /* Identify image format by magic bytes and dispatch to the right
  * decoder. Returns 1 on success. */
 static int decode_image(const uint8_t *bytes, size_t len,
@@ -174,6 +278,18 @@ static int decode_image(const uint8_t *bytes, size_t len,
 		if (decode_jpeg(bytes, len, out_pixels, out_w, out_h)) return 1;
 #endif
 		return decode_other(bytes, len, out_pixels, out_w, out_h);
+	}
+	/* SVG / XML payloads — no rasterizer linked, so emit a sized
+	 * checker-pattern placeholder. The geometry is sniffed from the
+	 * SVG XML so the box ends up at the right aspect ratio. */
+	if (len >= 5 && (memcmp(bytes, "<?xml", 5) == 0 ||
+			 memcmp(bytes, "<svg ", 5) == 0 ||
+			 memcmp(bytes, "<svg>", 5) == 0)) {
+		return decode_svg_placeholder(bytes, len, out_pixels, out_w, out_h);
+	}
+	if (len >= 1 && bytes[0] == '<') {
+		/* Generic XML/HTML — treat as SVG-ish. */
+		return decode_svg_placeholder(bytes, len, out_pixels, out_w, out_h);
 	}
 	return decode_other(bytes, len, out_pixels, out_w, out_h);
 }
@@ -293,12 +409,18 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(
 		bytes = data_uri_decode(url, &blen);
 		status = bytes ? 200 : 0;
 	} else {
-		bytes = yetty_ylexbor_http_get(url, &blen, &status);
+		/* Pass the document's base URL as Referer — CDNs route
+		 * image-fetch authorisation through this. Without it,
+		 * gstatic's faviconV2 endpoints return 404, several
+		 * image hot-link blockers return 403, and Cloudflare's
+		 * "verifying you are human" page returns 503. */
+		bytes = yetty_ylexbor_http_get_referer(url, r->base_url,
+						       &blen, &status);
 	}
 	if (!bytes || blen == 0 || (status != 0 && status != 200)) {
 		if (debug_img) {
 			fprintf(stderr,
-			    "[ylexbor:img] FETCH FAIL status=%ld len=%zu url=%.120s\n",
+			    "[ylexbor:img] FETCH FAIL status=%ld len=%zu url=%s\n",
 			    status, blen, url);
 		}
 		free(bytes);
@@ -391,9 +513,12 @@ char *yetty_ylexbor_img_pick_url(struct yetty_ylexbor *r, lxb_dom_element_t *el)
 	if (!lazy) lazy = attr_strdup(el, "data-original", 13);
 	if (!lazy) lazy = attr_strdup(el, "data-lazy-src", 13);
 
-	/* srcset — pick the first candidate URL (before the first space
-	 * or comma after the URL). Ignores descriptor (`1x`/`2x`/`100w`),
-	 * always picks the head of the list. */
+	/* srcset — pick the first candidate URL. Per spec, srcset is a
+	 * comma-separated list of `<url> <descriptor>` pairs, and the
+	 * URL stops at the first whitespace. Sites embed bare commas
+	 * inside the URL itself (Google's gstatic faviconV2 has
+	 * `fallback_opts=TYPE,SIZE,URL`), so we MUST stop only at
+	 * whitespace, never at `,`. */
 	char *srcset_url = NULL;
 	{
 		size_t l = 0;
@@ -403,9 +528,10 @@ char *yetty_ylexbor_img_pick_url(struct yetty_ylexbor *r, lxb_dom_element_t *el)
 			const char *p = (const char *)ss;
 			const char *end = p + l;
 			while (p < end && (*p == ' ' || *p == '\t' ||
-					   *p == ',' || *p == '\n')) p++;
+					   *p == '\n')) p++;
 			const char *start = p;
-			while (p < end && *p != ' ' && *p != ',') p++;
+			while (p < end && *p != ' ' && *p != '\t' &&
+			       *p != '\n') p++;
 			if (p > start)
 				srcset_url = strndup(start, p - start);
 		}

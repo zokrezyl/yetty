@@ -318,6 +318,11 @@ char *yetty_ylexbor_resolve_url(struct yetty_ylexbor *r, const char *href);
 /* Synchronous HTTP(S) fetch — used by the script loader and fetch()
  * binding. Returns body bytes (caller frees) and HTTP status. */
 char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status);
+/* Variant that sends a Referer header — needed for many CDN image
+ * endpoints that 403/404 fetches without it (gstatic, cloudflare WAFs,
+ * news-site image proxies). */
+char *yetty_ylexbor_http_get_referer(const char *url, const char *referer,
+				     size_t *out_len, long *out_status);
 
 /* Dispatch a click event to the JS handlers attached to the element
  * whose box contains (x,y) in pane-local pixels. Returns 1 if a handler
