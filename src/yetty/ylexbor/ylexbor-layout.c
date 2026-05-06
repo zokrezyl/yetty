@@ -213,7 +213,21 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx,
 		return layout_flex_row(r, idx, origin_x, origin_y, content_w);
 	}
 
-	float cursor_y = origin_y;
+	/* Inset the children's content rectangle by this block's padding
+	 * and horizontal margin. The padding/margin values were resolved
+	 * at box-production time from the cascade; layout just wires them
+	 * into the origin and content width. */
+	struct yetty_ylexbor_box *self = &r->boxes.data[idx];
+	float pad_left   = self->padding_left;
+	float pad_right  = self->padding_right;
+	float pad_top    = self->padding_top;
+	float pad_bottom = self->padding_bottom;
+	float content_origin_x = origin_x + pad_left;
+	float content_origin_y = origin_y + pad_top;
+	float content_width    = content_w - pad_left - pad_right;
+	if (content_width < 0) content_width = 0;
+
+	float cursor_y = content_origin_y;
 	float prev_margin_bottom = 0;  /* for adjacent-sibling collapsing */
 	int   has_prev = 0;
 
@@ -228,11 +242,14 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx,
 				: mt;
 			cursor_y += collapsed;
 
-			c->x = origin_x;
+			float child_origin_x = content_origin_x + c->margin_left;
+			float child_w = content_width - c->margin_left - c->margin_right;
+			if (child_w < 0) child_w = 0;
+			c->x = child_origin_x;
 			c->y = cursor_y;
-			c->w = content_w;
-			float child_h = layout_block(r, cidx, origin_x,
-						     cursor_y, content_w);
+			c->w = child_w;
+			float child_h = layout_block(r, cidx, child_origin_x,
+						     cursor_y, child_w);
 			/* Re-fetch — vector may have relocated. */
 			c = &r->boxes.data[cidx];
 			c->h = child_h;
@@ -246,8 +263,8 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx,
 			 * appending new line-fragment boxes to `idx`. Our
 			 * loop walks `next_sibling` so it picks them up
 			 * naturally. */
-			float h = wrap_inline_box(r, cidx, origin_x,
-						   cursor_y, content_w);
+			float h = wrap_inline_box(r, cidx, content_origin_x,
+						   cursor_y, content_width);
 			cursor_y += h;
 			prev_margin_bottom = 0;
 			has_prev = 1;
@@ -255,7 +272,7 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx,
 		} else if (c->kind == YL_BOX_INLINE_IMAGE) {
 			/* Placeholder — fixed 100x100 grey box. Real image
 			 * decoding is a TODO. */
-			c->x = origin_x;
+			c->x = content_origin_x;
 			c->y = cursor_y;
 			c->w = 100;
 			c->h = 100;
@@ -267,7 +284,11 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx,
 		cidx = r->boxes.data[cidx].next_sibling;
 	}
 
-	return cursor_y - origin_y;
+	/* Total consumed height includes our own padding-top + content +
+	 * padding-bottom. The caller stored origin_y as our top, so
+	 * (cursor_y - origin_y) already counts pad_top + content; just
+	 * add pad_bottom. */
+	return (cursor_y - origin_y) + pad_bottom;
 }
 
 /* ===========================================================================

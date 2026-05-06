@@ -378,6 +378,113 @@ static int parse_css_color(const char *s, size_t len,
 	return 0;
 }
 
+/* Parse a CSS length into pixels. Handles:
+ *   - <number>px (most common)
+ *   - <number>em / rem  (relative to font_size)
+ *   - bare <number>  (treat as px — leniency for typo'd values)
+ *   - <number>% relative to `pct_basis` (only used for padding/margin
+ *     where percentages resolve against the *containing-block width*)
+ * Returns 1 on success, 0 otherwise. */
+static int parse_css_length(const char *s, size_t len, float font_size,
+			    float pct_basis, float *out_px)
+{
+	while (len > 0 && (*s == ' ' || *s == '\t')) { s++; len--; }
+	if (len == 0) return 0;
+	char *end = NULL;
+	double v = strtod(s, &end);
+	if (end == s) return 0;
+	const char *u = end;
+	size_t ulen = len - (size_t)(end - s);
+	while (ulen > 0 && (*u == ' ' || *u == '\t')) { u++; ulen--; }
+	float scale = 1.0f;
+	if (ulen >= 2 && (u[0] == 'p' || u[0] == 'P') &&
+	                  (u[1] == 'x' || u[1] == 'X')) {
+		scale = 1.0f;
+	} else if (ulen >= 2 && (u[0] == 'e' || u[0] == 'E') &&
+	                         (u[1] == 'm' || u[1] == 'M')) {
+		scale = font_size;
+	} else if (ulen >= 3 && (u[0] == 'r' || u[0] == 'R') &&
+	                         (u[1] == 'e' || u[1] == 'E') &&
+	                         (u[2] == 'm' || u[2] == 'M')) {
+		scale = font_size;
+	} else if (ulen >= 1 && u[0] == '%') {
+		scale = pct_basis * 0.01f;
+	} else if (ulen == 0) {
+		scale = 1.0f;
+	} else {
+		return 0;
+	}
+	*out_px = (float)(v * scale);
+	return 1;
+}
+
+/* Read padding-<side> / margin-<side> with shorthand fallback. The CSS
+ * shorthand `padding: A` / `padding: A B` / `padding: A B C` /
+ * `padding: A B C D` defines all four sides — see CSS 2.1 §8.4. We
+ * implement the shorthand parse here so e.g. github's `padding: 16px 24px`
+ * propagates to all four sides correctly.
+ *
+ * Returns 1 if the requested side was set on the inline-style block. */
+static int read_inline_box_lengths(const lxb_char_t *style, size_t slen,
+				   const char *prop, size_t prop_len,
+				   float font_size, float pct_basis,
+				   float *out_top, float *out_right,
+				   float *out_bottom, float *out_left)
+{
+	int any = 0;
+	/* Shorthand: padding / margin with 1..4 values. */
+	size_t vlen = 0;
+	const char *v = find_inline_decl(style, slen, prop, prop_len, &vlen);
+	if (v && vlen) {
+		float vals[4] = {0};
+		int n = 0;
+		size_t i = 0;
+		while (i < vlen && n < 4) {
+			while (i < vlen && (v[i] == ' ' || v[i] == '\t')) i++;
+			if (i >= vlen) break;
+			size_t j = i;
+			while (j < vlen && v[j] != ' ' && v[j] != '\t') j++;
+			float px = 0;
+			if (parse_css_length(v + i, j - i, font_size, pct_basis, &px)) {
+				vals[n++] = px;
+			}
+			i = j;
+		}
+		if (n > 0) {
+			float t = vals[0];
+			float right = (n >= 2) ? vals[1] : t;
+			float bottom = (n >= 3) ? vals[2] : t;
+			float left = (n >= 4) ? vals[3] : right;
+			if (out_top)    *out_top    = t;
+			if (out_right)  *out_right  = right;
+			if (out_bottom) *out_bottom = bottom;
+			if (out_left)   *out_left   = left;
+			any = 1;
+		}
+	}
+	/* Per-side overrides (padding-top / margin-left / …) take
+	 * precedence over the shorthand — same as the cascade. */
+	const char *sides[4] = { "-top", "-right", "-bottom", "-left" };
+	float *targets[4] = { out_top, out_right, out_bottom, out_left };
+	for (int s = 0; s < 4; s++) {
+		char buf[32];
+		size_t prefix = prop_len < sizeof(buf) - 8 ? prop_len : sizeof(buf) - 8;
+		memcpy(buf, prop, prefix);
+		size_t side_len = strlen(sides[s]);
+		memcpy(buf + prefix, sides[s], side_len);
+		size_t key_len = prefix + side_len;
+		size_t plen = 0;
+		const char *p = find_inline_decl(style, slen, buf, key_len, &plen);
+		if (!p) continue;
+		float px = 0;
+		if (parse_css_length(p, plen, font_size, pct_basis, &px)) {
+			if (targets[s]) *targets[s] = px;
+			any = 1;
+		}
+	}
+	return any;
+}
+
 /* Look up `key` in an inline-style attribute, parse it as a CSS color,
  * write to *out on success. Returns 1 iff found+parsed.
  *
@@ -620,9 +727,38 @@ static void walk(struct yetty_ylexbor *r,
 					b->bg.a = 0xff;
 				}
 			}
-			free(cstyle);
 			b->margin_top    = d->margin_top_em    * s.font_size;
 			b->margin_bottom = d->margin_bottom_em * s.font_size;
+			/* Pull padding / horizontal margins from the cascade
+			 * (computed style, then inline `style=`). Without
+			 * these every block stuck to x=0 and visually looked
+			 * "all left-aligned with no gaps" — which is exactly
+			 * what most modern sites, including github.com, look
+			 * like in our renderer right now. */
+			float pct_basis = s.font_size * 16.0f;	/* coarse — refined when content_w is known */
+			if (cstyle) {
+				read_inline_box_lengths(
+					(const lxb_char_t *)cstyle, cstyle_len,
+					"padding", 7, s.font_size, pct_basis,
+					&b->padding_top, &b->padding_right,
+					&b->padding_bottom, &b->padding_left);
+				read_inline_box_lengths(
+					(const lxb_char_t *)cstyle, cstyle_len,
+					"margin", 6, s.font_size, pct_basis,
+					&b->margin_top, &b->margin_right,
+					&b->margin_bottom, &b->margin_left);
+			}
+			if (istyle) {
+				read_inline_box_lengths(istyle, istylen,
+					"padding", 7, s.font_size, pct_basis,
+					&b->padding_top, &b->padding_right,
+					&b->padding_bottom, &b->padding_left);
+				read_inline_box_lengths(istyle, istylen,
+					"margin", 6, s.font_size, pct_basis,
+					&b->margin_top, &b->margin_right,
+					&b->margin_bottom, &b->margin_left);
+			}
+			free(cstyle);
 			b->layout_mode   = layout_mode_for(el);
 			link_child(r, parent_idx, bidx);
 
