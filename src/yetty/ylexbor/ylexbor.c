@@ -141,6 +141,11 @@ struct yetty_ycore_void_result yetty_ylexbor_destroy(struct yetty_ylexbor *r)
 	box_vec_destroy(&r->boxes);
 	free(r->text_arena);
 	free(r->base_url);
+	for (int i = 0; i < r->img_cache_count; i++) {
+		free(r->img_cache[i].url);
+		free(r->img_cache[i].pixels);
+	}
+	free(r->img_cache);
 	yetty_ylexbor_css_vars_destroy(r);
 	free(r);
 	return YETTY_OK_VOID();

@@ -165,7 +165,27 @@ struct yetty_ylexbor {
 	 * documents. */
 	char *text_arena;
 	size_t text_arena_size, text_arena_cap;
+
+	/* Decoded image cache. Each entry holds the RGBA8 pixels for a
+	 * resolved <img src=> URL so the paint pass can emit the
+	 * pixels without re-fetching/re-decoding on every redraw.
+	 * The pixel buffer is malloc'd and freed at destroy time. */
+	struct yetty_ylexbor_img_cache_entry *img_cache;
+	int img_cache_count, img_cache_cap;
 };
+
+struct yetty_ylexbor_img_cache_entry {
+	char    *url;     /* owned */
+	uint32_t *pixels; /* RGBA8 row-major; owned */
+	int      w, h;    /* source pixel dims */
+	int      failed;  /* fetch/decode failed — don't retry */
+};
+
+/* Defined in ylexbor-paint.c so the fetch/decode plumbing lives next
+ * to the prim-emission code. Box-build calls this eagerly to learn
+ * each <img>'s natural pixel size for layout. */
+struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(
+	struct yetty_ylexbor *r, const char *url);
 
 /* ===========================================================================
  * box generation (ylexbor-box.c) — DOM + computed style → box vector.

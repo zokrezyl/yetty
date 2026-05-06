@@ -270,13 +270,24 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx,
 			has_prev = 1;
 
 		} else if (c->kind == YL_BOX_INLINE_IMAGE) {
-			/* Placeholder — fixed 100x100 grey box. Real image
-			 * decoding is a TODO. */
+			/* The box producer fills c->w / c->h from HTML
+			 * width/height attrs or the decoded natural pixel
+			 * size. Fall back to a 100x100 placeholder only if
+			 * neither was available. Cap width to the content
+			 * area so an oversized image doesn't punch through
+			 * the right edge. */
+			float img_w = c->w > 0 ? c->w : 100;
+			float img_h = c->h > 0 ? c->h : 100;
+			if (img_w > content_width && content_width > 0) {
+				float scale = content_width / img_w;
+				img_w = content_width;
+				img_h *= scale;
+			}
 			c->x = content_origin_x;
 			c->y = cursor_y;
-			c->w = 100;
-			c->h = 100;
-			cursor_y += 100;
+			c->w = img_w;
+			c->h = img_h;
+			cursor_y += img_h;
 			prev_margin_bottom = 0;
 			has_prev = 1;
 		}

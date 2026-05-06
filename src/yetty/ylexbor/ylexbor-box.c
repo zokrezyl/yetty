@@ -769,9 +769,11 @@ static void walk(struct yetty_ylexbor *r,
 			flush_inline(r, &s, bidx, &ib);
 			free(ib.buf);
 		} else {
-			/* <img>: emit an inline-image placeholder (grey box).
-			 * No actual decoding — we just want it visible in
-			 * the flow so the page layout reads correctly. */
+			/* <img>: pre-decode (or hit the cache) so the box's
+			 * geometry reflects natural pixel dimensions, with
+			 * `width` / `height` HTML attributes overriding when
+			 * present. The placeholder fallback (grey box) kicks
+			 * in if the fetch or decode failed. */
 			if (child->local_name == LXB_TAG_IMG) {
 				flush_inline(r, parent_style, parent_idx,
 					     inline_collect);
@@ -780,6 +782,48 @@ static void walk(struct yetty_ylexbor *r,
 				struct yetty_ylexbor_box *ib = &r->boxes.data[iidx];
 				ib->kind = YL_BOX_INLINE_IMAGE;
 				ib->element = el;
+
+				/* Resolve src + decode into the cache so layout
+				 * has natural dimensions to fall back on. */
+				struct yetty_ylexbor_img_cache_entry *cached = NULL;
+				size_t srclen = 0;
+				const lxb_char_t *src = lxb_dom_element_get_attribute(
+					el, (const lxb_char_t *)"src", 3, &srclen);
+				if (src && srclen > 0) {
+					char *raw = strndup((const char *)src, srclen);
+					char *abs = raw ? yetty_ylexbor_resolve_url(r, raw) : NULL;
+					free(raw);
+					if (abs) {
+						cached = yetty_ylexbor_img_cache_get_or_load(r, abs);
+						free(abs);
+					}
+				}
+
+				/* HTML width/height attrs (in px) take priority
+				 * — the spec calls these the "presentation
+				 * hints"; sites use them to reserve space
+				 * without waiting for decode. */
+				int attr_w = -1, attr_h = -1;
+				size_t alen = 0;
+				const lxb_char_t *aw = lxb_dom_element_get_attribute(
+					el, (const lxb_char_t *)"width", 5, &alen);
+				if (aw && alen > 0) attr_w = atoi((const char *)aw);
+				const lxb_char_t *ah = lxb_dom_element_get_attribute(
+					el, (const lxb_char_t *)"height", 6, &alen);
+				if (ah && alen > 0) attr_h = atoi((const char *)ah);
+
+				int nat_w = (cached && !cached->failed) ? cached->w : 0;
+				int nat_h = (cached && !cached->failed) ? cached->h : 0;
+				if (attr_w > 0)      ib->w = (float)attr_w;
+				else if (nat_w > 0)  ib->w = (float)nat_w;
+				if (attr_h > 0)      ib->h = (float)attr_h;
+				else if (nat_h > 0)  ib->h = (float)nat_h;
+				/* If only one dimension is known, preserve aspect ratio. */
+				if (ib->w > 0 && ib->h <= 0 && nat_w > 0 && nat_h > 0)
+					ib->h = ib->w * (float)nat_h / (float)nat_w;
+				if (ib->h > 0 && ib->w <= 0 && nat_w > 0 && nat_h > 0)
+					ib->w = ib->h * (float)nat_w / (float)nat_h;
+
 				link_child(r, parent_idx, iidx);
 				continue;
 			}
