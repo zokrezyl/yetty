@@ -11,6 +11,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <yetty/ycore/ffi-annotations.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yrender/gpu-resource-binder.h>
@@ -47,9 +48,6 @@ struct yetty_ypaint_core_complex_prim {
 
 // Check if type uses FAM format
 bool yetty_ypaint_core_is_complex_type(uint32_t type);
-
-// Get total size (reads FAM header)
-size_t yetty_ypaint_core_complex_prim_size(const void *data);
 
 // Get AABB (reads bounds from standard offset 0-15 in payload)
 struct rectangle_result yetty_ypaint_core_complex_prim_aabb(const void *data);
@@ -160,30 +158,30 @@ YETTY_YRESULT_DECLARE(yetty_ypaint_core_complex_prim_factory_ptr,
                       struct yetty_ypaint_core_complex_prim_factory *);
 
 // Create (after device/queue available) / destroy
+YETTY_RETURNS_OWNED
 struct yetty_ypaint_core_complex_prim_factory_ptr_result yetty_ypaint_core_complex_prim_factory_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat target_format,
     struct yetty_ypaint_core_gpu_allocator *allocator);
 
-void yetty_ypaint_core_complex_prim_factory_destroy(struct yetty_ypaint_core_complex_prim_factory *factory);
+void yetty_ypaint_core_complex_prim_factory_destroy(
+    struct yetty_ypaint_core_complex_prim_factory *factory YETTY_CONSUMES);
 
 // Register concrete factory
 struct yetty_ycore_void_result yetty_ypaint_core_complex_prim_factory_register(
     struct yetty_ypaint_core_complex_prim_factory *factory,
     struct yetty_ypaint_core_concrete_factory *concrete);
 
-// Get concrete factory by type
-struct yetty_ypaint_core_concrete_factory *yetty_ypaint_core_complex_prim_factory_get(
-    struct yetty_ypaint_core_complex_prim_factory *factory, uint32_t type_id);
-
 // Create instance (reads type from buffer_data, dispatches to concrete factory)
+YETTY_RETURNS_OWNED
 struct yetty_ypaint_core_complex_prim_instance_ptr_result
-yetty_ypaint_core_complex_prim_factory_create_instance(struct yetty_ypaint_core_complex_prim_factory *factory,
-                                                  const void *buffer_data, size_t size,
-                                                  uint32_t rolling_row);
+yetty_ypaint_core_complex_prim_factory_create_instance(
+    struct yetty_ypaint_core_complex_prim_factory *factory,
+    const void *buffer_data YETTY_ARRAY(size), size_t size,
+    uint32_t rolling_row);
 
 // Destroy instance (uses instance->factory back-pointer)
 void yetty_ypaint_core_complex_prim_instance_destroy(
-    struct yetty_ypaint_core_complex_prim_instance *instance);
+    struct yetty_ypaint_core_complex_prim_instance *instance YETTY_CONSUMES);
 
 // Fan out visual-zoom state to every registered concrete factory (yplot,
 // yimage, ...). Safe to call with no registrations. Concrete factories that

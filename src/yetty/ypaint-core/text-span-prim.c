@@ -3,6 +3,7 @@
  */
 
 #include <yetty/ypaint-core/text-span-prim.h>
+#include "text-span-prim-internal.h"
 
 #include <math.h>
 #include <string.h>

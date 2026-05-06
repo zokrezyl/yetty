@@ -10,6 +10,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <yetty/ycore/ffi-annotations.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
@@ -62,10 +63,6 @@ struct yetty_ypaint_core_prim_flyweight {
 YETTY_YRESULT_DECLARE(yetty_ypaint_core_prim_base_ops_ptr, const struct yetty_ypaint_core_prim_base_ops *);
 YETTY_YRESULT_DECLARE(yetty_ypaint_core_prim_flyweight_ptr, struct yetty_ypaint_core_prim_flyweight *);
 
-// Handler function - takes prim_type, returns base ops pointer or error
-typedef struct yetty_ypaint_core_prim_base_ops_ptr_result (*yetty_ypaint_prim_handler_fn)(
-    uint32_t prim_type);
-
 // Flyweight registry instance (opaque)
 struct yetty_ypaint_core_flyweight_registry;
 
@@ -73,9 +70,11 @@ YETTY_YRESULT_DECLARE(yetty_ypaint_core_flyweight_registry_ptr,
                       struct yetty_ypaint_core_flyweight_registry *);
 
 // Create/destroy registry instance
+YETTY_RETURNS_OWNED
 struct yetty_ypaint_core_flyweight_registry_ptr_result yetty_ypaint_core_flyweight_registry_create(void);
 
-void yetty_ypaint_core_flyweight_registry_destroy(struct yetty_ypaint_core_flyweight_registry *reg);
+void yetty_ypaint_core_flyweight_registry_destroy(
+    struct yetty_ypaint_core_flyweight_registry *reg YETTY_CONSUMES);
 
 // Set default handler (SDF) - called first, fast path
 void yetty_ypaint_core_flyweight_registry_set_default(struct yetty_ypaint_core_flyweight_registry *reg,
@@ -85,11 +84,6 @@ void yetty_ypaint_core_flyweight_registry_set_default(struct yetty_ypaint_core_f
 struct yetty_ycore_void_result yetty_ypaint_core_flyweight_registry_add(
     struct yetty_ypaint_core_flyweight_registry *reg, uint32_t type_min, uint32_t type_max,
     struct yetty_ypaint_core_prim_base_ops_ptr_result (*handler)(uint32_t));
-
-// Get flyweight for primitive (tries default first, then by type range)
-struct yetty_ypaint_core_prim_flyweight_ptr_result yetty_ypaint_core_flyweight_registry_get(
-    const struct yetty_ypaint_core_flyweight_registry *reg, uint32_t prim_type,
-    const uint32_t *prim_data);
 
 #ifdef __cplusplus
 }

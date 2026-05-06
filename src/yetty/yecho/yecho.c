@@ -982,9 +982,7 @@ render_yplot_block(struct render_state *rs, const struct yetty_yecho_span *span)
     struct yetty_ypaint_core_id_result idr =
         yetty_ypaint_core_buffer_add_prim(rs->buf, prim_buf, required);
     free(prim_buf);
-    if (idr.error != YPAINT_OK) {
-        return YETTY_ERR(yetty_ycore_void, "yplot add_prim failed");
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, idr, "yplot add_prim failed");
 
     /* Advance the cursor past the plot. The plot is a block element; the
      * next text run starts on a fresh line below it. */
@@ -1065,9 +1063,7 @@ render_block(struct render_state *rs, const struct yetty_yecho_span *span)
                     };
                     struct yetty_ypaint_core_id_result br =
                         yetty_ysdf_add_box(rs->buf, 0, bg, 0, 0.0f, &geom);
-                    if (br.error != YPAINT_OK) {
-                        return YETTY_ERR(yetty_ycore_void, "ysdf_add_box failed");
-                    }
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "ysdf_add_box failed");
                 }
                 if (i < len && s[i] == '\n') {
                     save_x = YECHO_X_ORIGIN;

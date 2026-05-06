@@ -15,6 +15,7 @@
 #include <yetty/ypaint-core/text-span-prim.h>
 #include <yetty/ypaint/flyweight.h>
 #include <yetty/ypaint/core/ypaint-canvas.h>
+#include "canvas-internal.h"
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yfont/raster-font.h>

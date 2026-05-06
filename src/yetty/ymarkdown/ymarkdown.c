@@ -524,9 +524,7 @@ static struct yetty_ycore_void_result ymd_emit(struct yetty_ypaint_core_buffer *
                 };
                 struct yetty_ypaint_core_id_result r =
                     yetty_ysdf_add_box(buf, 0, YMD_COLOR_CODE_BG, 0, 0.0f, &geom);
-                if (r.error != YPAINT_OK) {
-                    return YETTY_ERR(yetty_ycore_void, "ymd_emit: code box add failed");
-                }
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ymd_emit: code box add failed");
             }
 
             struct yetty_ycore_buffer text = {

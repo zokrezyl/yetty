@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "complex-prim-types-internal.h"
+
 #define MAX_CONCRETE_FACTORIES 32
 
 //=============================================================================

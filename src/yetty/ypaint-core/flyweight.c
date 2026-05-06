@@ -4,6 +4,8 @@
 #include <yetty/ypaint-core/flyweight.h>
 #include <yetty/ytrace/ytrace.h>
 
+#include "flyweight-internal.h"
+
 #define FLYWEIGHT_MAX_HANDLERS 8
 
 struct yetty_ypaint_core_handler_reg {

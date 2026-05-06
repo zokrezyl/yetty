@@ -3,6 +3,7 @@
  */
 
 #include <yetty/ypaint-core/font-prim.h>
+#include "font-prim-internal.h"
 
 #include <string.h>
 

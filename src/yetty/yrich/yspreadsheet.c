@@ -93,9 +93,7 @@ static struct yetty_ycore_void_result cell_render(struct yetty_yrich_element *e,
     };
     struct yetty_ypaint_core_id_result br =
         yetty_ysdf_add_box(buf, layer, fill, c->border.color, c->border.width, &body);
-    if (br.error != YPAINT_OK) {
-        return YETTY_ERR(yetty_ycore_void, "cell_render: body box add failed");
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "cell_render: body box add failed");
 
     if (c->text_len > 0) {
         float text_x = c->bounds.x + 4.0f;
@@ -128,18 +126,14 @@ static struct yetty_ycore_void_result cell_render(struct yetty_yrich_element *e,
         };
         struct yetty_ypaint_core_id_result sr =
             yetty_ysdf_add_segment(buf, layer + 2, 0, YETTY_YRICH_COLOR_BLACK, 1.0f, &seg);
-        if (sr.error != YPAINT_OK) {
-            return YETTY_ERR(yetty_ycore_void, "cell_render: cursor segment add failed");
-        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "cell_render: cursor segment add failed");
     }
 
     if (selected) {
         struct yetty_ysdf_box border = body;
         struct yetty_ypaint_core_id_result br2 = yetty_ysdf_add_box(
             buf, layer + 3, 0, YETTY_YRICH_RGBA(0, 100, 200, 255), 2.0f, &border);
-        if (br2.error != YPAINT_OK) {
-            return YETTY_ERR(yetty_ycore_void, "cell_render: selection border add failed");
-        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, br2, "cell_render: selection border add failed");
     }
     return YETTY_OK_VOID();
 }
