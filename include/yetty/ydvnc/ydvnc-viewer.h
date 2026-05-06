@@ -18,8 +18,10 @@ struct yetty_context;
 
 YETTY_YRESULT_DECLARE(yetty_ydvnc_viewer_ptr, struct yetty_ydvnc_viewer *);
 
+/* Password may be NULL — only None-auth servers will then connect. */
 struct yetty_ydvnc_viewer_ptr_result yetty_ydvnc_viewer_create(
-    const char *host, uint16_t port, const struct yetty_context *yetty_ctx);
+    const char *host, uint16_t port, const char *password,
+    const struct yetty_context *yetty_ctx);
 
 struct yetty_ycore_void_result yetty_ydvnc_viewer_destroy(struct yetty_ydvnc_viewer *viewer);
 

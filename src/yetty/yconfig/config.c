@@ -909,6 +909,7 @@ enum {
     OPT_SSH,
     OPT_TELNET,
     OPT_DESKTOP_VNC_CLIENT,
+    OPT_YDVNC_PASSWORD,
 };
 
 static struct yetty_yplatform_option long_options[] = {
@@ -919,6 +920,7 @@ static struct yetty_yplatform_option long_options[] = {
     {"vnc-port", required_argument, 0, 'p'},
     {"vnc-client", required_argument, 0, 'C'},
     {"desktop-vnc-client", required_argument, 0, OPT_DESKTOP_VNC_CLIENT},
+    {"ydvnc-password", required_argument, 0, OPT_YDVNC_PASSWORD},
     {"vnc-raw", no_argument, 0, OPT_VNC_RAW},
     {"vnc-compression-quality", required_argument, 0, OPT_VNC_COMPRESSION_QUALITY},
     {"vnc-always-full", no_argument, 0, OPT_VNC_ALWAYS_FULL},
@@ -949,6 +951,7 @@ static void print_usage(const char *prog)
     fprintf(stderr, "  -p, --vnc-port=PORT    VNC server port (default: 5900)\n");
     fprintf(stderr, "  -C, --vnc-client=HOST  Connect as VNC client to HOST[:PORT]\n");
     fprintf(stderr, "      --desktop-vnc-client=HOST[:PORT]  Connect as RFB (RFC 6143) client\n");
+    fprintf(stderr, "      --ydvnc-password=PASSWORD         VNC password for --desktop-vnc-client (or env YDVNC_PASSWORD)\n");
     fprintf(stderr, "      --vnc-raw                  Disable JPEG, send raw BGRA tiles\n");
     fprintf(stderr, "      --vnc-compression-quality Q  JPEG quality 1-100 (default: 80)\n");
     fprintf(stderr, "      --vnc-always-full          Disable delta, send full frame every time\n");
@@ -1017,6 +1020,9 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             break;
         case OPT_DESKTOP_VNC_CLIENT:
             set_config(impl, "vnc/desktop-client", yetty_yplatform_optarg);
+            break;
+        case OPT_YDVNC_PASSWORD:
+            set_config(impl, "vnc/ydvnc-password", yetty_yplatform_optarg);
             break;
         case OPT_VNC_RAW:
             set_config(impl, "vnc/raw", "true");

@@ -29,6 +29,13 @@ struct yetty_ydvnc_rfb_client_ptr_result yetty_ydvnc_rfb_client_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat surface_format,
     struct yetty_yplatform_event_loop *event_loop);
 
+/* Optional VNC-auth password. NULL means no password — the client will
+ * decline servers that don't offer security type None. Up to 8 chars are
+ * meaningful; longer passwords are silently truncated, per the legacy VNC
+ * protocol. Must be called before yetty_ydvnc_rfb_client_connect(). */
+void yetty_ydvnc_rfb_client_set_password(struct yetty_ydvnc_rfb_client *client,
+                                         const char *password);
+
 struct yetty_ycore_void_result yetty_ydvnc_rfb_client_destroy(
     struct yetty_ydvnc_rfb_client *client);
 

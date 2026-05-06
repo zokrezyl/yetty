@@ -365,8 +365,13 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
                     strncpy(host, desktop_vnc_client, sizeof(host) - 1);
                 }
 
+                const char *password =
+                    config->ops->get_string(config, "vnc/ydvnc-password", NULL);
+                if (!password || !password[0]) {
+                    password = getenv("YDVNC_PASSWORD");
+                }
                 struct yetty_ydvnc_viewer_ptr_result dv_res =
-                    yetty_ydvnc_viewer_create(host, port, yetty_ctx);
+                    yetty_ydvnc_viewer_create(host, port, password, yetty_ctx);
                 if (YETTY_IS_ERR(dv_res)) {
                     yetty_yui_tile_destroy(tile_res.value);
                     return YETTY_ERR(yetty_ycore_void, "ydvnc viewer create failed", dv_res);

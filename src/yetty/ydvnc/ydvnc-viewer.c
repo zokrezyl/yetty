@@ -348,7 +348,8 @@ static const struct yetty_yui_view_ops VIEWER_OPS = {
  *===========================================================================*/
 
 struct yetty_ydvnc_viewer_ptr_result yetty_ydvnc_viewer_create(
-    const char *host, uint16_t port, const struct yetty_context *yetty_ctx)
+    const char *host, uint16_t port, const char *password,
+    const struct yetty_context *yetty_ctx)
 {
     if (!host || !yetty_ctx) {
         return YETTY_ERR(yetty_ydvnc_viewer_ptr, "ydvnc: NULL host or context");
@@ -378,6 +379,7 @@ struct yetty_ydvnc_viewer_ptr_result yetty_ydvnc_viewer_create(
     }
     v->client = cres.value;
 
+    yetty_ydvnc_rfb_client_set_password(v->client, password);
     yetty_ydvnc_rfb_client_set_on_frame(v->client, on_frame, v);
     yetty_ydvnc_rfb_client_set_on_connected(v->client, on_connected, v);
     yetty_ydvnc_rfb_client_set_on_disconnected(v->client, on_disconnected, v);

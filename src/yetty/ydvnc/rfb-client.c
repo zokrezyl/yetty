@@ -25,6 +25,7 @@
 
 #include "rfb-protocol.h"
 #include "transport.h"
+#include "vnc-auth.h"
 
 #define YDVNC_RECV_BUF_INITIAL (1u * 1024u * 1024u)
 #define YDVNC_RECV_BUF_MAX     (64u * 1024u * 1024u)
@@ -70,7 +71,9 @@ enum ydvnc_state {
     YDVNC_ST_PROTO_VERSION,
     YDVNC_ST_SECURITY_TYPES,
     YDVNC_ST_SECURITY_REASON,
+    YDVNC_ST_AUTH_CHALLENGE,
     YDVNC_ST_AUTH_RESULT,
+    YDVNC_ST_AUTH_FAIL_REASON,
     YDVNC_ST_SERVER_INIT,
     YDVNC_ST_MAIN,
 };
@@ -128,6 +131,10 @@ struct yetty_ydvnc_rfb_client {
     /* Rect data scratch — Raw/CopyRect/etc. assembled here. */
     uint8_t *rect_buf;
     size_t rect_buf_cap;
+
+    /* Optional password for VNC auth (security type 2). NULL → only
+     * security type None is accepted. */
+    char *password;
 };
 
 /*=============================================================================
@@ -141,7 +148,9 @@ static struct yetty_ycore_void_result process_recv(struct yetty_ydvnc_rfb_client
 static struct yetty_ycore_void_result handle_proto_version(struct yetty_ydvnc_rfb_client *c);
 static struct yetty_ycore_void_result handle_security_types(struct yetty_ydvnc_rfb_client *c);
 static struct yetty_ycore_void_result handle_security_reason(struct yetty_ydvnc_rfb_client *c);
+static struct yetty_ycore_void_result handle_auth_challenge(struct yetty_ydvnc_rfb_client *c);
 static struct yetty_ycore_void_result handle_auth_result(struct yetty_ydvnc_rfb_client *c);
+static struct yetty_ycore_void_result handle_auth_fail_reason(struct yetty_ydvnc_rfb_client *c);
 static struct yetty_ycore_void_result handle_server_init(struct yetty_ydvnc_rfb_client *c);
 static struct yetty_ycore_void_result handle_main(struct yetty_ydvnc_rfb_client *c);
 static struct yetty_ycore_void_result send_client_init(struct yetty_ydvnc_rfb_client *c);
@@ -271,9 +280,17 @@ static struct yetty_ycore_void_result process_recv(struct yetty_ydvnc_rfb_client
             YETTY_RETURN_IF_ERR(yetty_ycore_void, handle_security_reason(c),
                                 "security reason handler failed");
             break;
+        case YDVNC_ST_AUTH_CHALLENGE:
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, handle_auth_challenge(c),
+                                "auth challenge handler failed");
+            break;
         case YDVNC_ST_AUTH_RESULT:
             YETTY_RETURN_IF_ERR(yetty_ycore_void, handle_auth_result(c),
                                 "auth result handler failed");
+            break;
+        case YDVNC_ST_AUTH_FAIL_REASON:
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, handle_auth_fail_reason(c),
+                                "auth fail reason handler failed");
             break;
         case YDVNC_ST_SERVER_INIT:
             YETTY_RETURN_IF_ERR(yetty_ycore_void, handle_server_init(c),
@@ -342,26 +359,39 @@ static struct yetty_ycore_void_result handle_security_types(struct yetty_ydvnc_r
         return YETTY_OK_VOID();
     }
 
-    int picked_none = 0;
+    int has_none = 0;
+    int has_vnc = 0;
     for (uint8_t i = 0; i < n; i++) {
-        if (c->rb[1 + i] == YETTY_YDVNC_RFB_SEC_NONE) {
-            picked_none = 1;
-            break;
-        }
+        uint8_t t = c->rb[1 + i];
+        if (t == YETTY_YDVNC_RFB_SEC_NONE) has_none = 1;
+        if (t == YETTY_YDVNC_RFB_SEC_VNC_AUTH) has_vnc = 1;
     }
     consume(c, (size_t)1 + n);
 
-    if (!picked_none) {
-        /* For now we only support None. VNC-password (DES) is a follow-up. */
+    /* Prefer None if offered (saves a round-trip). Otherwise fall back to
+     * VNC password auth if we have one. */
+    uint8_t chosen;
+    enum ydvnc_state next;
+    if (has_none) {
+        chosen = YETTY_YDVNC_RFB_SEC_NONE;
+        next = YDVNC_ST_AUTH_RESULT;
+    } else if (has_vnc && c->password) {
+        chosen = YETTY_YDVNC_RFB_SEC_VNC_AUTH;
+        next = YDVNC_ST_AUTH_CHALLENGE;
+    } else if (has_vnc) {
         return YETTY_ERR(yetty_ycore_void,
-                        "ydvnc: server requires authentication, but only None is supported in this build");
+                        "ydvnc: server requires VNC password but none was provided "
+                        "(use --ydvnc-password)");
+    } else {
+        return YETTY_ERR(yetty_ycore_void,
+                        "ydvnc: no compatible security type offered (need None or VNC auth)");
     }
 
-    uint8_t chosen = YETTY_YDVNC_RFB_SEC_NONE;
     YETTY_RETURN_IF_ERR(yetty_ycore_void, transport_send(c, &chosen, 1),
                        "sending chosen security type failed");
-
-    c->state = YDVNC_ST_AUTH_RESULT;
+    yinfo("ydvnc: security type chosen: %s",
+          chosen == YETTY_YDVNC_RFB_SEC_NONE ? "None" : "VNC (DES)");
+    c->state = next;
     return YETTY_OK_VOID();
 }
 
@@ -389,6 +419,28 @@ static struct yetty_ycore_void_result handle_security_reason(struct yetty_ydvnc_
 }
 
 /*=============================================================================
+ * Handshake: VNC auth challenge → response
+ *===========================================================================*/
+
+static struct yetty_ycore_void_result handle_auth_challenge(struct yetty_ydvnc_rfb_client *c)
+{
+    if (c->rb_off < YETTY_YDVNC_RFB_VNC_AUTH_CHALLENGE_LEN) {
+        return YETTY_OK_VOID();
+    }
+    uint8_t challenge[YETTY_YDVNC_RFB_VNC_AUTH_CHALLENGE_LEN];
+    memcpy(challenge, c->rb, sizeof(challenge));
+    consume(c, sizeof(challenge));
+
+    uint8_t response[YETTY_YDVNC_RFB_VNC_AUTH_CHALLENGE_LEN];
+    yetty_ydvnc_vnc_auth_response(c->password, challenge, response);
+
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, transport_send(c, response, sizeof(response)),
+                       "VNC auth response send failed");
+    c->state = YDVNC_ST_AUTH_RESULT;
+    return YETTY_OK_VOID();
+}
+
+/*=============================================================================
  * Handshake: SecurityResult
  *===========================================================================*/
 
@@ -401,13 +453,38 @@ static struct yetty_ycore_void_result handle_auth_result(struct yetty_ydvnc_rfb_
     consume(c, 4);
 
     if (status != YETTY_YDVNC_RFB_SECRESULT_OK) {
-        /* RFB 3.8: a reason string follows on failure. We surface and bail. */
-        return YETTY_ERR(yetty_ycore_void, "ydvnc: server returned auth-failed");
+        /* RFB 3.8: a reason string follows on failure. Read it so we can
+         * surface a useful error. */
+        c->state = YDVNC_ST_AUTH_FAIL_REASON;
+        return YETTY_OK_VOID();
     }
 
     YETTY_RETURN_IF_ERR(yetty_ycore_void, send_client_init(c), "send_client_init failed");
     c->state = YDVNC_ST_SERVER_INIT;
     return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result handle_auth_fail_reason(struct yetty_ydvnc_rfb_client *c)
+{
+    if (c->rb_off < 4) {
+        return YETTY_OK_VOID();
+    }
+    uint32_t reason_len = ntohl(*(const uint32_t *)c->rb);
+    if (reason_len > 4096) {
+        return YETTY_ERR(yetty_ycore_void, "ydvnc: implausible auth-failed reason length");
+    }
+    if (c->rb_off < 4 + reason_len) {
+        return YETTY_OK_VOID();
+    }
+    char buf[4097];
+    if (reason_len) {
+        memcpy(buf, c->rb + 4, reason_len);
+    }
+    buf[reason_len] = 0;
+    consume(c, 4 + reason_len);
+
+    yerror("ydvnc: server auth failed: %s", buf);
+    return YETTY_ERR(yetty_ycore_void, "ydvnc: VNC authentication rejected");
 }
 
 /*=============================================================================
@@ -964,10 +1041,28 @@ struct yetty_ycore_void_result yetty_ydvnc_rfb_client_destroy(struct yetty_ydvnc
     if (c->fb_view) wgpuTextureViewRelease(c->fb_view);
     if (c->fb_texture) wgpuTextureRelease(c->fb_texture);
 
+    if (c->password) {
+        /* Best-effort scrub before free. */
+        memset(c->password, 0, strlen(c->password));
+        free(c->password);
+    }
     free(c->rect_buf);
     free(c->rb);
     free(c);
     return YETTY_OK_VOID();
+}
+
+void yetty_ydvnc_rfb_client_set_password(struct yetty_ydvnc_rfb_client *c, const char *password)
+{
+    if (!c) return;
+    if (c->password) {
+        memset(c->password, 0, strlen(c->password));
+        free(c->password);
+        c->password = NULL;
+    }
+    if (password && password[0]) {
+        c->password = strdup(password);
+    }
 }
 
 struct yetty_ycore_void_result yetty_ydvnc_rfb_client_connect(

@@ -4,6 +4,8 @@ add_library(yetty_ydvnc STATIC
     rfb-client.c
     transport-tcp.c
     keysyms.c
+    des.c
+    vnc-auth.c
     ydvnc-viewer.c
 )
 
