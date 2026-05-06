@@ -221,10 +221,21 @@ PY=/usr/bin/python3
 
 # Connect CDP, enable Runtime/Log/Page domains BEFORE navigating to
 # $TEST_URL — otherwise we miss the earliest console.log calls (e.g.
-# yetty's index.html boot logs and emcc's preRun output). 90s capture
-# window.
-timeout 110 "$PY" "$YETTY_ROOT/tools/capture-chrome-console.py" \
-    "$DEBUG_PORT" 90 "$TEST_URL" \
+# yetty's index.html boot logs and emcc's preRun output).
+#
+# Capture window default is 90 s — fine for "yetty render checkpoints
+# pass" but NOT enough for the alpine-extended rootfs to finish init
+# (~30 s rootfs download + brotli decode + ~30 s kernel boot + ~30 s
+# alpine OpenRC + busybox-extras telnetd bind = north of 90 s on
+# headless). Set CAPTURE_SECS=180 or higher to verify the full
+# telnet-over-iframe path including telnetd accept. The default of
+# 360 s reflects the realistic upper bound observed locally for the
+# wasm-interpreter VM to reach `session_backend_send` (i.e. an
+# actual guest TCP byte coming back).
+CAPTURE_SECS="${CAPTURE_SECS:-360}"
+TIMEOUT_SECS=$((CAPTURE_SECS + 20))
+timeout "$TIMEOUT_SECS" "$PY" "$YETTY_ROOT/tools/capture-chrome-console.py" \
+    "$DEBUG_PORT" "$CAPTURE_SECS" "$TEST_URL" \
     2>/tmp/yetty-cdp-stderr.log | tee "$CONSOLE_LOG"
 CDP_RC=$?
 

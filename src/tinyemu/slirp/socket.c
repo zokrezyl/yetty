@@ -9,7 +9,8 @@
 #include "ip_icmp.h"
 
 static void sofcantrcvmore(struct socket *so);
-static void sofcantsendmore(struct socket *so);
+/* Promoted from static so chr-backend.c can call it on close. */
+void sofcantsendmore(struct socket *so);
 
 struct socket *
 solookup(struct socket *head, struct in_addr laddr, u_int lport,
@@ -687,7 +688,7 @@ sofcantrcvmore(struct socket *so)
 	}
 }
 
-static void
+void
 sofcantsendmore(struct socket *so)
 {
 	if ((so->so_state & SS_NOFDREF) == 0) {

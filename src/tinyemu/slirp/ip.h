@@ -179,7 +179,25 @@ struct	ip_timestamp {
 
 #define	IP_MSS		576		/* default maximum segment size */
 
-#if SIZEOF_CHAR_P == 4
+/* `struct ipovly` overlays `struct ip` (both 20 bytes). For that overlay
+ * to work, `struct mbuf_ptr` must be 8 bytes — exactly the space taken
+ * by `ip_v:4|ip_hl:4 + ip_tos + ip_len + ip_id + ip_off` in the real
+ * IP header. On 64-bit hosts a bare pointer is already 8 bytes; on
+ * 32-bit hosts (including wasm32!) we need to pad with a uint32_t to
+ * reach 8 bytes.
+ *
+ * The previous `#if SIZEOF_CHAR_P == 4` gate relied on `HOST_LONG_BITS`
+ * being defined elsewhere. It never was — so `SIZEOF_CHAR_P` expanded
+ * to `(0 / 8) == 0`, the `#else` branch was always taken, and on
+ * wasm32 the resulting 4-byte mbuf_ptr made ipovly 16 bytes while
+ * struct ip stayed 20. tcp_output's memcpy of t_template then placed
+ * ti_pr / ti_src / ti_dst at the WRONG offsets (off by 4) within the
+ * eventual IP header, producing SYN packets with proto=0, ip_src=guest,
+ * ip_dst=garbage — packets the guest's TCP stack silently dropped.
+ *
+ * Switch to `__SIZEOF_POINTER__` which both gcc and clang define and
+ * which is always correct for the build target. */
+#if __SIZEOF_POINTER__ == 4
 struct mbuf_ptr {
 	struct mbuf *mptr;
 	uint32_t dummy;

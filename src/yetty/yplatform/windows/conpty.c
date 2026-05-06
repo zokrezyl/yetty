@@ -447,7 +447,7 @@ static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
             return YETTY_ERR(yetty_yplatform_pty,
                              "--telnet requires telnet/port (1..65535)");
         }
-        return yetty_ytelnet_telnet_pty_create(host, (uint16_t)port, event_loop);
+        return yetty_ytelnet_telnet_pty_create_tcp(host, (uint16_t)port, event_loop);
     }
 
     /* --temu: in-process tinyemu RISC-V VM */
@@ -475,7 +475,7 @@ static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
                 return YETTY_ERR(yetty_yplatform_pty, "QEMU telnet not ready", wait_res);
             }
         }
-        return yetty_ytelnet_telnet_pty_create("127.0.0.1", QEMU_TELNET_PORT, event_loop);
+        return yetty_ytelnet_telnet_pty_create_tcp("127.0.0.1", QEMU_TELNET_PORT, event_loop);
     }
 
     /* Default: native ConPTY (cmd.exe / pwsh) */

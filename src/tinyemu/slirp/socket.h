@@ -80,6 +80,11 @@ void sofree(struct socket *);
 int soread(struct socket *);
 void sorecvoob(struct socket *);
 int sosendoob(struct socket *);
+/* Promoted from a static in socket.c so chr-backend.c can drive a
+ * clean half-close of synthetic sockets. Skipped the shutdown(2)
+ * branch internally when so->so_state has SS_NOFDREF (which the
+ * chr sockets always do). */
+void sofcantsendmore(struct socket *);
 int sowrite(struct socket *);
 void sorecvfrom(struct socket *);
 int sosendto(struct socket *, struct mbuf *);

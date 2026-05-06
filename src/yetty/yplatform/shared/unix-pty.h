@@ -17,10 +17,15 @@ struct yetty_yplatform_pty_result yetty_yplatform_fork_pty_create(struct yetty_y
 /* TinyEMU PTY - RISC-V VM */
 struct yetty_yplatform_pty_result yetty_yplatform_tinyemu_pty_create(struct yetty_yconfig_config *config);
 
-/* Telnet PTY - TCP telnet connection (libuv-driven, async connect) */
-struct yetty_yplatform_event_loop;
-struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(const char *host, uint16_t port,
-                                                    struct yetty_yplatform_event_loop *event_loop);
+/* Telnet PTY — TCP telnet (libuv-driven, async connect). After the
+ * transport-polymorphic refactor (ytelnet/telnet-pty.h), the bare
+ * yetty_ytelnet_telnet_pty_create takes a transport. The TCP
+ * convenience helper kept here matches the pre-refactor signature so
+ * the existing forwarders below don't change. */
+#include <yetty/ycore/event-loop.h>
+struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create_tcp(
+    const char *host, uint16_t port,
+    struct yetty_yplatform_event_loop *event_loop);
 
 #ifdef __cplusplus
 }

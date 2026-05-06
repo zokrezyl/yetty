@@ -22,6 +22,7 @@
  * THE SOFTWARE.
  */
 #include "slirp.h"
+#include "chr-backend.h"
 
 /* host loopback address */
 struct in_addr loopback_addr;
@@ -634,6 +635,18 @@ void slirp_input(Slirp *slirp, const uint8_t *pkt, int pkt_len)
         return;
 
     proto = ntohs(*(uint16_t *)(pkt + 12));
+    {
+        static int n_in;
+        if (n_in++ < 12) {
+            fprintf(stderr,
+                "[slirp slirp_input #%d] proto=0x%04x len=%d "
+                "src_mac=%02x:%02x:%02x:%02x:%02x:%02x "
+                "dst_mac=%02x:%02x:%02x:%02x:%02x:%02x\n",
+                n_in, proto, pkt_len,
+                pkt[6], pkt[7], pkt[8], pkt[9], pkt[10], pkt[11],
+                pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5]);
+        }
+    }
     switch(proto) {
     case ETH_P_ARP:
         arp_input(slirp, pkt, pkt_len);
@@ -667,7 +680,47 @@ void if_encap(Slirp *slirp, const uint8_t *ip_data, int ip_data_len)
 
     if (ip_data_len + ETH_HLEN > sizeof(buf))
         return;
-    
+
+    {
+        static int n_arp_path, n_encap_path;
+        int is_arp = !memcmp(slirp->client_ethaddr, zero_ethaddr, ETH_ALEN);
+        if (is_arp) n_arp_path++; else n_encap_path++;
+        if ((is_arp ? n_arp_path : n_encap_path) <= 3 && ip_data_len >= 40) {
+            const struct ip *iph = (const struct ip *)ip_data;
+            fprintf(stderr,
+                "[slirp if_encap] sizeof(ip)=%d ihl=%d ver=%d proto=%d "
+                "ip->src=%u.%u.%u.%u ip->dst=%u.%u.%u.%u "
+                "client_mac=%02x:%02x:%02x:%02x:%02x:%02x %s (#%d/%d)\n",
+                (int)sizeof(struct ip), iph->ip_hl, iph->ip_v, iph->ip_p,
+                ((uint8_t *)&iph->ip_src)[0], ((uint8_t *)&iph->ip_src)[1],
+                ((uint8_t *)&iph->ip_src)[2], ((uint8_t *)&iph->ip_src)[3],
+                ((uint8_t *)&iph->ip_dst)[0], ((uint8_t *)&iph->ip_dst)[1],
+                ((uint8_t *)&iph->ip_dst)[2], ((uint8_t *)&iph->ip_dst)[3],
+                slirp->client_ethaddr[0], slirp->client_ethaddr[1],
+                slirp->client_ethaddr[2], slirp->client_ethaddr[3],
+                slirp->client_ethaddr[4], slirp->client_ethaddr[5],
+                is_arp ? "ARP-bcast" : "encap-direct",
+                n_arp_path, n_encap_path);
+            fprintf(stderr,
+                "[slirp if_encap raw0..40]"
+                " %02x %02x %02x %02x %02x %02x %02x %02x"
+                " %02x %02x %02x %02x %02x %02x %02x %02x"
+                " %02x %02x %02x %02x %02x %02x %02x %02x"
+                " %02x %02x %02x %02x %02x %02x %02x %02x"
+                " %02x %02x %02x %02x %02x %02x %02x %02x\n",
+                ip_data[0], ip_data[1], ip_data[2], ip_data[3],
+                ip_data[4], ip_data[5], ip_data[6], ip_data[7],
+                ip_data[8], ip_data[9], ip_data[10], ip_data[11],
+                ip_data[12], ip_data[13], ip_data[14], ip_data[15],
+                ip_data[16], ip_data[17], ip_data[18], ip_data[19],
+                ip_data[20], ip_data[21], ip_data[22], ip_data[23],
+                ip_data[24], ip_data[25], ip_data[26], ip_data[27],
+                ip_data[28], ip_data[29], ip_data[30], ip_data[31],
+                ip_data[32], ip_data[33], ip_data[34], ip_data[35],
+                ip_data[36], ip_data[37], ip_data[38], ip_data[39]);
+        }
+    }
+
     if (!memcmp(slirp->client_ethaddr, zero_ethaddr, ETH_ALEN)) {
         uint8_t arp_req[ETH_HLEN + sizeof(struct arphdr)];
         struct ethhdr *reh = (struct ethhdr *)arp_req;
@@ -753,6 +806,20 @@ int slirp_add_hostfwd(Slirp *slirp, int is_udp, struct in_addr host_addr,
     return 0;
 }
 
+/* Public API — see libslirp.h for the rationale. The webasm chr-backend
+ * path needs this because the alpine /init uses static IP (no DHCP),
+ * so slirp never learns the guest MAC by the time we inject a
+ * synthetic SYN. */
+void slirp_set_client_mac(Slirp *slirp, const uint8_t mac[6])
+{
+    if (slirp && mac) {
+        memcpy(slirp->client_ethaddr, mac, 6);
+        fprintf(stderr,
+            "[slirp slirp_set_client_mac] %02x:%02x:%02x:%02x:%02x:%02x\n",
+            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    }
+}
+
 int slirp_add_exec(Slirp *slirp, int do_pty, const void *args,
                    struct in_addr *guest_addr, int guest_port)
 {
@@ -772,13 +839,20 @@ int slirp_add_exec(Slirp *slirp, int do_pty, const void *args,
 
 ssize_t slirp_send(struct socket *so, const void *buf, size_t len, int flags)
 {
-#if 0
+    /* chr-backend path: synthetic socket without an OS fd, attached
+     * via slirp_chr_open() (chr-backend.c). The ops->send callback
+     * receives the bytes directly — used by yetty's webasm tinyemu
+     * bridge to ferry guest TCP output through postMessage to a
+     * yetty terminal session, with no real socket involved.
+     *
+     * Strictly additive — backend-less sockets (every desktop user)
+     * have so->s != -1 so this branch is never taken. */
     if (so->s == -1 && so->extra) {
-		qemu_chr_write(so->extra, buf, len);
-		return len;
-	}
-#endif
-	return send(so->s, buf, len, flags);
+        struct slirp_chr_backend *cb = (struct slirp_chr_backend *)so->extra;
+        cb->ops->send(cb->ctx, buf, len);
+        return (ssize_t)len;
+    }
+    return send(so->s, buf, len, flags);
 }
 
 static struct socket *

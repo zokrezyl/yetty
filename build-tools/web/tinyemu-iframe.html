@@ -32,11 +32,19 @@
             var initialCols = parseInt(params.cols || '80', 10);
             var initialRows = parseInt(params.rows || '24', 10);
 
-            // ---- Status pump → parent overlay ------------------------
+            // ---- Status pump → parent overlay + iframe console ----------
             // Forward boot status to the parent's yettyStatus console.
             // `tag` lets the parent update an existing line in place
             // (used for download progress).
+            //
+            // ALSO console.log inside this iframe so events show up
+            // in DevTools when you "Inspect" the (display:none)
+            // iframe directly. Without this, the iframe's own
+            // console stays silent and the only signal is the
+            // parent overlay — making it impossible to tell whether
+            // a setTimeout retry actually fired or not.
             function postStatus(text, level, tag) {
+                try { console.log('[vm-iframe]', text); } catch (_) {}
                 try {
                     window.parent.postMessage({
                         type: 'yetty-status',
@@ -64,6 +72,17 @@
 
             window.addEventListener('message', function (e) {
                 if (!e.data) return;
+                /* LOUD logging — every parent → iframe message we
+                 * receive, with type and clientSid (when present), so
+                 * we can see in DevTools whether the bridge is even
+                 * getting the events from yetty. */
+                console.log('[vm-iframe] RX msg from parent type=' + e.data.type +
+                            (e.data.clientSid !== undefined ?
+                                ' clientSid=' + e.data.clientSid : '') +
+                            (e.data.data !== undefined ?
+                                ' dataLen=' +
+                                  (e.data.data.length || e.data.data.byteLength || 0)
+                                : ''));
                 if (e.data.type === 'yetty-ready') {
                     yettyAttached = true;
                     postStatus('yetty attached; flushing ' + outputBuffer.length +
@@ -78,6 +97,26 @@
                     outputBuffer = [];
                     return;
                 }
+                /* ---- Session messages — telnet over slirp injection ---- */
+                if (e.data.type === 'session-open') {
+                    console.log('[vm-iframe] → handleSessionOpen clientSid=' +
+                                e.data.clientSid + ' port=' + e.data.port);
+                    handleSessionOpen(e.data.clientSid, e.data.port);
+                    return;
+                }
+                if (e.data.type === 'session-tx') {
+                    console.log('[vm-iframe] → handleSessionTx clientSid=' +
+                                e.data.clientSid + ' bytes=' +
+                                (e.data.data ? (e.data.data.length || e.data.data.byteLength) : 0));
+                    handleSessionTx(e.data.clientSid, e.data.data);
+                    return;
+                }
+                if (e.data.type === 'session-close') {
+                    console.log('[vm-iframe] → handleSessionClose clientSid=' + e.data.clientSid);
+                    handleSessionClose(e.data.clientSid);
+                    return;
+                }
+
                 if (e.data.ptyId !== ptyId) return;
                 if (e.data.type === 'term-input') {
                     if (typeof e.data.data !== 'string' || e.data.data.length === 0) return;
@@ -95,6 +134,159 @@
                     }
                 }
             });
+
+            /* clientSid (parent's, stable) ↔ wasm sid (allocated by
+             * Module._tinyemu_session_open) maps. Defer-open queue
+             * holds session-open requests that arrive before the VM
+             * is ready (preload + boot can take 30+ seconds and the
+             * parent has no idea when telnetd will accept). */
+            var sessionToWasm = Object.create(null);  /* clientSid → wasm sid */
+            var wasmToClient  = Object.create(null);  /* wasm sid   → clientSid */
+            var sessionPort   = Object.create(null);  /* clientSid → port (for retries) */
+            var sessionRxBytes = Object.create(null); /* wasm sid → cumulative byte count */
+            var sessionConnected = Object.create(null); /* clientSid → bool: any rx ever */
+            var pendingSessionOpens = [];
+
+            /* Slirp injection — single open, no JS-side retry.
+             *
+             * Earlier this had a 4 s retry watchdog that closed and
+             * reopened the slirp socket if no bytes had arrived. That
+             * was actively harmful: SYN-ACK round-trips during boot
+             * easily exceed 4 s on the slow wasm interpreter, and
+             * each close+reopen tore down the socket JUST as the
+             * SYN-ACK was about to land — solookup couldn't find the
+             * destroyed 4-tuple, dropped the segment, and we'd never
+             * establish.
+             *
+             * Now: open ONCE. Slirp's own TCP retransmission timer
+             * (TCPT_REXMT, exponential backoff, ~7 min total) drives
+             * the SYN until the in-VM telnetd binds port 23. The
+             * TCPT_KEEP "give up" timeout that would have killed the
+             * SYN-SENT socket at 75 s is suppressed in chr-backend.c
+             * (slirp_chr_open sets t_timer[TCPT_KEEP] = 0). */
+
+            function handleSessionOpen(clientSid, port) {
+                console.log('[vm-iframe] handleSessionOpen ENTER clientSid=' +
+                            clientSid + ' port=' + port + ' ready=' + ready);
+                if (clientSid === undefined || port === undefined) {
+                    console.warn('[vm-iframe] handleSessionOpen: bad args');
+                    return;
+                }
+                if (!ready) {
+                    pendingSessionOpens.push({ clientSid: clientSid, port: port });
+                    postStatus('queued session ' + clientSid + ' (port ' + port +
+                               ') — VM not ready yet');
+                    return;
+                }
+                console.log('[vm-iframe] calling Module._tinyemu_session_open(' + port + ')');
+                var wasmSid = Module._tinyemu_session_open(port | 0);
+                console.log('[vm-iframe] tinyemu_session_open returned wasmSid=' + wasmSid);
+                if (wasmSid < 0) {
+                    postStatus('session-open ' + clientSid + ' port ' + port +
+                               ' FAILED', 'err');
+                    window.parent.postMessage({
+                        type: 'session-opened',
+                        clientSid: clientSid,
+                        ok: false,
+                        error: 'tinyemu_session_open returned ' + wasmSid
+                    }, '*');
+                    return;
+                }
+                sessionToWasm[clientSid] = wasmSid;
+                wasmToClient[wasmSid] = clientSid;
+                sessionPort[clientSid] = port;
+                sessionRxBytes[wasmSid] = 0;
+                sessionConnected[clientSid] = false;
+                postStatus('session ' + clientSid + ' → wasm sid ' + wasmSid +
+                           ' (port ' + port +
+                           ') — slirp will retransmit SYN until telnetd binds', 'ok');
+                console.log('[vm-iframe] posting session-opened ack to parent for clientSid=' + clientSid);
+                window.parent.postMessage({
+                    type: 'session-opened',
+                    clientSid: clientSid,
+                    ok: true
+                }, '*');
+            }
+
+            function handleSessionTx(clientSid, data) {
+                var wasmSid = sessionToWasm[clientSid];
+                console.log('[vm-iframe] handleSessionTx clientSid=' + clientSid +
+                            ' wasmSid=' + wasmSid +
+                            ' bytes=' + (data ? (data.length || data.byteLength) : 0));
+                if (wasmSid === undefined) {
+                    console.warn('[vm-iframe] handleSessionTx: no wasmSid for clientSid=' + clientSid);
+                    return;
+                }
+                /* data is a Uint8Array (or any TypedArray). Coerce. */
+                var bytes = data;
+                if (!(bytes instanceof Uint8Array)) {
+                    if (bytes && bytes.buffer) {
+                        bytes = new Uint8Array(bytes.buffer, bytes.byteOffset,
+                                               bytes.byteLength);
+                    } else if (bytes && bytes.length !== undefined) {
+                        bytes = new Uint8Array(bytes);
+                    } else {
+                        return;
+                    }
+                }
+                if (bytes.length === 0) return;
+                var ptr = Module._malloc(bytes.length);
+                if (ptr === 0) return;
+                Module.HEAPU8.set(bytes, ptr);
+                Module._tinyemu_session_send(wasmSid, ptr, bytes.length);
+                Module._free(ptr);
+            }
+
+            function handleSessionClose(clientSid) {
+                var wasmSid = sessionToWasm[clientSid];
+                if (wasmSid === undefined) return;
+                Module._tinyemu_session_close(wasmSid);
+                delete sessionToWasm[clientSid];
+                delete wasmToClient[wasmSid];
+                delete sessionPort[clientSid];        /* stops the retry watchdog */
+                delete sessionConnected[clientSid];
+                delete sessionRxBytes[wasmSid];
+                postStatus('session ' + clientSid + ' closed');
+            }
+
+            /* C → JS callback (tinyemu_session_send target). Slirp
+             * received bytes from the guest for `wasm_sid`; route them
+             * back to the originating yetty terminal via the parent
+             * window. Posted as a copy of HEAPU8 (.slice) so the
+             * Uint8Array survives across the postMessage boundary
+             * without aliasing the live wasm heap. */
+            window.__yettyTinyemuPostSessionRx = function (wasm_sid, ptr, len) {
+                /* THIS IS THE BIG ONE — fires when slirp delivers
+                 * guest bytes (telnetd output) to our chr-backend.
+                 * If we never see this log, the SYN-ACK never came
+                 * back from the guest (telnetd not bound yet, or
+                 * arp/routing/etc. is broken). */
+                console.log('[vm-iframe] __yettyTinyemuPostSessionRx wasm_sid=' +
+                            wasm_sid + ' len=' + len);
+                if (len <= 0) return;
+                var clientSid = wasmToClient[wasm_sid];
+                /* First byte from the guest = TCP handshake completed,
+                 * telnetd is talking. Mark the session "connected" so
+                 * the SYN-retry watchdog stops recycling the slirp
+                 * socket out from under us. */
+                if (clientSid !== undefined && !sessionConnected[clientSid]) {
+                    sessionConnected[clientSid] = true;
+                    postStatus('session ' + clientSid +
+                               ' guest TCP established (first rx)', 'ok');
+                }
+                sessionRxTotalBytes += len;
+                sessionRxTotalEvents++;
+                if (clientSid !== undefined) {
+                    sessionRxBytes[wasm_sid] = (sessionRxBytes[wasm_sid] || 0) + len;
+                }
+                if (clientSid === undefined) return;
+                var copy = Module.HEAPU8.slice(ptr, ptr + len);
+                window.parent.postMessage({
+                    type: 'session-rx',
+                    clientSid: clientSid,
+                    data: copy
+                }, '*');
+            };
 
             function feedInput(str) {
                 var bytes = new TextEncoder().encode(str);
@@ -122,9 +314,20 @@
             var kernelLineBuf = '';
             // Cap the mirroring — once boot is past the noisy kernel
             // phase the per-line postMessages become pure overhead.
-            // 4 KB ≈ first 60-80 lines of dmesg, plenty to confirm life.
-            var KERNEL_MIRROR_LIMIT = 64 * 1024;
+            // 1 MiB covers kernel boot AND alpine /init AND background
+            // runsvdir+telnetd startup so we see telnetd binding port 23
+            // in the boot overlay (essential when diagnosing "yetty
+            // terminal blank" — usually means telnetd hasn't bound yet).
+            var KERNEL_MIRROR_LIMIT = 1024 * 1024;
             var kernelMirroredBytes = 0;
+            // Cumulative byte/event counters used by the heartbeat below
+            // so we can see at a glance whether the VM is actually
+            // making progress (printing kernel/userspace output) or
+            // stuck. They also tell us whether any guest → host TCP
+            // bytes ever arrived (sessionRxTotal).
+            var consoleBytesTotal = 0;
+            var sessionRxTotalBytes = 0;
+            var sessionRxTotalEvents = 0;
 
             function mirrorKernelOutput(str) {
                 if (kernelMirroredBytes >= KERNEL_MIRROR_LIMIT) return;
@@ -149,6 +352,7 @@
 
             function postOutput(ptr, len) {
                 if (len <= 0) return;
+                consoleBytesTotal += len;
                 var bytes = Module.HEAPU8.subarray(ptr, ptr + len);
                 var str = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
                 if (!str) return;
@@ -338,6 +542,95 @@
                         ready = true;
                         document.getElementById('status').textContent =
                             'TinyEMU running (pty ' + ptyId + ')';
+                        /* Heartbeat — every 3 s log a one-liner summary
+                         * of VM activity. Without this, when nothing
+                         * shows up in the parent overlay (e.g. /init
+                         * silently configuring eth0 + waiting on
+                         * runsvdir to start telnetd) you can't tell
+                         * whether the iframe is alive at all or has
+                         * been throttled to a halt by the browser.
+                         *
+                         * Reports:
+                         *   wall   — seconds since heartbeat started
+                         *   con    — total console bytes seen (kernel +
+                         *            userspace via bridge_console_write)
+                         *   conΔ   — bytes in the last interval
+                         *   srx    — total session-rx bytes (guest TCP
+                         *            replies — should be 0 until the
+                         *            telnet SYN is acked)
+                         *   srxN   — total session-rx events
+                         *   sess   — count of open sessions */
+                        var hbStart = performance.now();
+                        var hbLastCon = 0;
+                        var hbLastSrx = 0;
+                        var probesSent = 0;
+                        /* When the VM goes completely silent for too
+                         * long after /init has exec'd /bin/sh, we have
+                         * no way to tell whether telnetd actually
+                         * bound port 23 — the SYN may be retransmitting
+                         * forever against a guest that's not listening.
+                         * Inject a probe via the kernel's hvc0 console
+                         * (PID-1 shell) to dump network state and
+                         * service status. The probe output goes back
+                         * through the same bridge_console_write path
+                         * we already mirror, so it shows up in the
+                         * `[vm-iframe] | …` overlay lines. */
+                        function sendShellProbe(label) {
+                            probesSent++;
+                            console.log('[vm-iframe] sending shell probe #' +
+                                        probesSent + ' (' + label + ')');
+                            /* Wrap markers so we can find the probe
+                             * output cleanly even if the kernel emits
+                             * other lines while our commands run. */
+                            var script =
+                                '\n' +
+                                'echo "===PROBE' + probesSent + '_BEGIN ' + label + '==="\n' +
+                                'echo "eth0 mac:"; cat /sys/class/net/eth0/address 2>&1\n' +
+                                'echo "eth0 ip:"; ip -4 addr show eth0 2>&1\n' +
+                                'echo "listening:"; netstat -ltn 2>/dev/null || ss -ltn 2>&1\n' +
+                                'echo "arp:"; arp -an 2>&1 || ip neigh show 2>&1\n' +
+                                'echo "rx-stats:"; cat /sys/class/net/eth0/statistics/rx_packets /sys/class/net/eth0/statistics/rx_dropped 2>&1\n' +
+                                'echo "tx-stats:"; cat /sys/class/net/eth0/statistics/tx_packets /sys/class/net/eth0/statistics/tx_dropped 2>&1\n' +
+                                'echo "===PROBE' + probesSent + '_END==="\n';
+                            feedInput(script);
+                        }
+                        setInterval(function () {
+                            var wall = ((performance.now() - hbStart) / 1000).toFixed(1);
+                            var sessCount = 0;
+                            for (var k in sessionToWasm) sessCount++;
+                            var dCon = consoleBytesTotal - hbLastCon;
+                            var dSrx = sessionRxTotalBytes - hbLastSrx;
+                            hbLastCon = consoleBytesTotal;
+                            hbLastSrx = sessionRxTotalBytes;
+                            console.log('[vm-iframe HB] wall=' + wall + 's' +
+                                ' con=' + consoleBytesTotal +
+                                ' conΔ=' + dCon +
+                                ' srx=' + sessionRxTotalBytes +
+                                ' srxN=' + sessionRxTotalEvents +
+                                ' sess=' + sessCount +
+                                ' probes=' + probesSent +
+                                (sessCount > 0 ? ' connected=' +
+                                    Object.keys(sessionConnected)
+                                        .map(function (s) {
+                                            return s + ':' +
+                                                (sessionConnected[s] ? 'Y' : 'N');
+                                        }).join(',')
+                                    : ''));
+                            /* Probe schedule:
+                             *   - first probe at wall ≈ 9 s (kernel had
+                             *     a few ticks past /init, /bin/sh has
+                             *     definitely exec'd by then)
+                             *   - then every 60 s of continued silence
+                             * Stops once we observe any session-rx (we
+                             * don't want to keep injecting into a live
+                             * shell after the user has connected). */
+                            var wallNum = parseFloat(wall);
+                            if (sessionRxTotalBytes === 0 &&
+                                ((probesSent === 0 && wallNum >= 9) ||
+                                 (probesSent > 0 && wallNum >= probesSent * 60 + 9))) {
+                                sendShellProbe('hb-' + wallNum.toFixed(0) + 's');
+                            }
+                        }, 3000);
                         // Push initial geometry once the VM is alive.
                         feedResize(initialCols, initialRows);
                         // Flush anything the parent sent during preload.
@@ -347,6 +640,22 @@
                             feedResize(pendingResize.cols, pendingResize.rows);
                             pendingResize = null;
                         }
+                        // Drain queued session-open requests that were
+                        // posted while the VM was still booting. Each
+                        // open will flow through handleSessionOpen and
+                        // ack the parent with session-opened. Note:
+                        // telnetd inside the VM may still take seconds
+                        // to come up — slirp_chr_open succeeds
+                        // immediately (returns the synthetic socket)
+                        // but the SYN may RST until telnetd binds.
+                        // Yetty's telnet-pty handles reconnect upstream
+                        // if needed.
+                        for (var i = 0; i < pendingSessionOpens.length; i++) {
+                            handleSessionOpen(
+                                pendingSessionOpens[i].clientSid,
+                                pendingSessionOpens[i].port);
+                        }
+                        pendingSessionOpens = [];
                         // Tell the parent the VM is up so it can launch
                         // yetty.js. yetty's iframe-pty.c will then post
                         // 'yetty-ready' back here, which flushes any

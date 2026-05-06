@@ -1,7 +1,4 @@
-/* Telnet PTY - TCP/Telnet as PTY backend
- *
- * Provides a PTY interface over TCP using telnet protocol.
- * Used for connecting to QEMU or other telnet servers.
+/* Telnet PTY — telnet protocol over a polymorphic byte transport.
  *
  * Implements:
  * - RFC 854  - Telnet protocol
@@ -9,23 +6,34 @@
  * - RFC 858  - Suppress Go Ahead
  * - RFC 1073 - NAWS (window size)
  *
- * Networking is driven entirely by libuv via the platform event loop's
- * TCP client API (create_tcp_client / tcp_send / tcp_close). Connect is
- * asynchronous: telnet_pty_create returns immediately and on_connect
- * fires later on the loop thread. Decoded bytes are written to a
- * yetty_yplatform_input_pipe whose read fd is registered with the loop
- * via register_pty_pipe — same path that fork-pty / conpty use.
+ * The protocol code (NAWS / IAC / options) is transport-agnostic.
+ * The byte transport is supplied at construction time:
+ *
+ *   - desktop / iOS / android: a TCP transport (libuv-backed) wrapping
+ *     the event loop's create_tcp_client / tcp_send / tcp_close.
+ *   - webasm: an iframe-postMessage transport that ferries bytes to
+ *     a slirp-injected connection inside the tinyemu wasm, allowing
+ *     multiple yetty terminals to multiplex onto one in-VM telnetd.
+ *
+ * Connect is asynchronous: telnet_pty_create returns immediately after
+ * kicking off transport->open(); the connection completes when the
+ * underlying transport fires on_connect. Decoded bytes are written to
+ * a yetty_yplatform_input_pipe whose read fd is registered with the
+ * loop via register_pty_pipe — same path that fork-pty / conpty use.
  */
 
 #include <yetty/platform/pty.h>
 #include <yetty/platform/pty-factory.h>
 #include <yetty/platform/platform-input-pipe.h>
+#include <yetty/ycore/conn-transport.h>
 #include <yetty/ycore/event-loop.h>
 #include <yetty/ycore/event.h>
+#include <yetty/ycore/tcp-transport.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
 
+#include "telnet-pty.h"
 #include "telnet-protocol.h"
 
 #include <stddef.h>
@@ -49,21 +57,21 @@ struct yetty_ytelnet_telnet_pty {
     struct yetty_platform_pty base;
     struct yetty_platform_pty_pipe_source pipe_source;
 
-    /* Loop + libuv handles */
-    struct yetty_yplatform_event_loop *event_loop;
-    yetty_ycore_tcp_client_id tcp_client_id;
-    struct yetty_ycore_conn *conn; /* set in on_connect */
-    int tcp_client_active;       /* create_tcp_client succeeded */
-    int connected;               /* on_connect fired ok */
+    /* Owned. The transport encapsulates the endpoint binding (host+port
+     * for TCP, sessionId for the webasm iframe transport, etc.) so we
+     * don't need to know any of those details here. */
+    struct yetty_yconn_transport *transport;
 
-    /* Endpoint */
-    char *host;
-    uint16_t port;
+    /* Connection handle handed to us by transport via on_connect.
+     * NULL until on_connect fires; reset to NULL on disconnect / stop. */
+    struct yetty_ycore_conn *conn;
+    int transport_open;          /* transport->open() succeeded */
+    int connected;               /* on_connect fired ok */
 
     /* Decoded-output pipe — terminal-side reads via register_pty_pipe. */
     struct yetty_ycore_xthread_event_pipe *output_pipe;
 
-    /* Read buffer for libuv on_alloc — only one read in flight at a time. */
+    /* Read buffer for transport on_alloc — only one read in flight at a time. */
     char read_buf[65536];
 
     /* Terminal size (latest known, latched until we can ship it) */
@@ -102,14 +110,15 @@ static const struct yetty_platform_pty_ops telnet_pty_ops = {
     .pipe_source = telnet_pty_pipe_source,
 };
 
-/* Send raw bytes on the libuv TCP connection. Drops if not yet connected. */
+/* Send raw bytes on the underlying transport. Drops if not yet connected. */
 static int telnet_send_raw(struct yetty_ytelnet_telnet_pty *pty, const uint8_t *data, size_t len)
 {
-    if (!pty->connected || !pty->conn) {
+    if (!pty->connected || !pty->conn || !pty->transport) {
         return -1;
     }
 
-    struct yetty_ycore_size_result r = pty->event_loop->ops->tcp_send(pty->conn, data, len);
+    struct yetty_ycore_size_result r =
+        pty->transport->ops->send(pty->transport, pty->conn, data, len);
     if (!r.ok) {
         return -1;
     }
@@ -220,6 +229,12 @@ static void telnet_handle_subneg(struct yetty_ytelnet_telnet_pty *pty)
 
 static void telnet_emit_byte(struct yetty_ytelnet_telnet_pty *pty, uint8_t byte)
 {
+    static int n_emit;
+    n_emit++;
+    if (n_emit <= 8 || (n_emit % 64) == 0) {
+        ydebug("telnet: emit byte #%d 0x%02x ('%c') -> output_pipe",
+               n_emit, byte, (byte >= 32 && byte < 127) ? byte : '.');
+    }
     pty->output_pipe->ops->write(pty->output_pipe, &byte, 1);
 }
 
@@ -322,6 +337,8 @@ static void telnet_on_data(void *ctx, struct yetty_ycore_conn *conn, const char 
     if (nread <= 0) {
         return;
     }
+    ydebug("telnet: on_data nread=%ld first=0x%02x last=0x%02x",
+           nread, (uint8_t)data[0], (uint8_t)data[nread - 1]);
     for (long i = 0; i < nread; i++) {
         telnet_process_byte(pty, (uint8_t)data[i]);
     }
@@ -333,7 +350,7 @@ static void telnet_on_connect(void *ctx, struct yetty_ycore_conn *conn)
     pty->conn = conn;
     pty->connected = 1;
 
-    yinfo("telnet: connected to %s:%u", pty->host, pty->port);
+    yinfo("telnet: transport connected");
     /* Window size is shipped via NAWS once the server negotiates it
      * (DO NAWS in the WILL/DO exchange below — see telnet_handle_do). */
 }
@@ -341,15 +358,14 @@ static void telnet_on_connect(void *ctx, struct yetty_ycore_conn *conn)
 static void telnet_on_connect_error(void *ctx, const char *error)
 {
     struct yetty_ytelnet_telnet_pty *pty = ctx;
-    yerror("telnet: connect to %s:%u failed: %s", pty->host, pty->port,
-           error ? error : "(unknown)");
-    pty->tcp_client_active = 0;
+    yerror("telnet: transport connect failed: %s", error ? error : "(unknown)");
+    pty->transport_open = 0;
 }
 
 static void telnet_on_disconnect(void *ctx)
 {
     struct yetty_ytelnet_telnet_pty *pty = ctx;
-    yinfo("telnet: disconnected from %s:%u", pty->host, pty->port);
+    yinfo("telnet: transport disconnected");
     pty->connected = 0;
     pty->conn = NULL;
 }
@@ -423,9 +439,9 @@ static struct yetty_ycore_void_result telnet_pty_stop(struct yetty_platform_pty 
 {
     struct yetty_ytelnet_telnet_pty *pty = (struct yetty_ytelnet_telnet_pty *)self;
 
-    if (pty->tcp_client_active) {
-        pty->event_loop->ops->stop_tcp_client(pty->event_loop, pty->tcp_client_id);
-        pty->tcp_client_active = 0;
+    if (pty->transport_open && pty->transport) {
+        pty->transport->ops->close(pty->transport, pty->conn);
+        pty->transport_open = 0;
         pty->connected = 0;
         pty->conn = NULL;
     }
@@ -444,7 +460,11 @@ static struct yetty_ycore_void_result telnet_pty_destroy(struct yetty_platform_p
         pty->output_pipe = NULL;
     }
 
-    free(pty->host);
+    if (pty->transport) {
+        pty->transport->ops->destroy(pty->transport);
+        pty->transport = NULL;
+    }
+
     free(pty);
 
     if (YETTY_IS_ERR(stop_r)) {
@@ -460,35 +480,31 @@ static struct yetty_platform_pty_pipe_source *telnet_pty_pipe_source(
     return &pty->pipe_source;
 }
 
-struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(const char *host, uint16_t port,
-                                                    struct yetty_yplatform_event_loop *event_loop)
+struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(
+    struct yetty_yconn_transport *transport)
 {
-    if (!event_loop || !event_loop->ops) {
-        return YETTY_ERR(yetty_yplatform_pty, "telnet_pty_create: event_loop required");
+    if (!transport || !transport->ops) {
+        return YETTY_ERR(yetty_yplatform_pty, "telnet_pty_create: transport required");
     }
 
     struct yetty_ytelnet_telnet_pty *pty = calloc(1, sizeof(struct yetty_ytelnet_telnet_pty));
     if (!pty) {
+        /* The caller passed ownership of `transport` to us; free it on
+         * failure paths so they don't leak on every error return. */
+        transport->ops->destroy(transport);
         return YETTY_ERR(yetty_yplatform_pty, "failed to allocate telnet pty");
     }
 
     pty->base.ops = &telnet_pty_ops;
-    pty->event_loop = event_loop;
+    pty->transport = transport;
     pty->cols = 80;
     pty->rows = 24;
     pty->state = YETTY_YTELNET_STATE_DATA;
 
-    pty->host = strdup(host);
-    pty->port = port;
-    if (!pty->host) {
-        free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "failed to allocate host string");
-    }
-
     /* Decoded-output pipe — terminal reads its fd via register_pty_pipe. */
     struct yetty_yplatform_input_pipe_result pr = yetty_platform_input_pipe_create();
     if (!pr.ok) {
-        free(pty->host);
+        transport->ops->destroy(transport);
         free(pty);
         return YETTY_ERR(yetty_yplatform_pty, "failed to create output pipe");
     }
@@ -497,15 +513,17 @@ struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(const char *ho
     struct yetty_ycore_int_result fdr = pty->output_pipe->ops->read_fd(pty->output_pipe);
     if (!fdr.ok) {
         pty->output_pipe->ops->destroy(pty->output_pipe);
-        free(pty->host);
+        transport->ops->destroy(transport);
         free(pty);
         return YETTY_ERR(yetty_yplatform_pty, "failed to obtain pipe read fd");
     }
     pty->pipe_source.abstract = (uintptr_t)fdr.value;
 
-    /* Kick off async TCP connect. on_connect / on_connect_error will fire
-     * later on the loop thread; we return success now and the terminal
-     * registers the pipe and renders an empty screen until data arrives. */
+    /* Kick off async transport open. on_connect / on_connect_error will
+     * fire later (loop-thread under TCP, postMessage-handler thread
+     * under iframe-transport — both single-threaded relative to the
+     * pty); we return success now and the terminal registers the pipe
+     * and renders an empty screen until data arrives. */
     struct yetty_ycore_client_callbacks callbacks = {
         .ctx = pty,
         .on_connect = telnet_on_connect,
@@ -515,22 +533,37 @@ struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(const char *ho
         .on_disconnect = telnet_on_disconnect,
     };
 
-    struct yetty_ycore_tcp_client_id_result cres =
-        event_loop->ops->create_tcp_client(event_loop, host, (int)port, &callbacks);
-    if (!cres.ok) {
+    if (transport->ops->open(transport, &callbacks) != 0) {
         pty->output_pipe->ops->destroy(pty->output_pipe);
-        free(pty->host);
+        transport->ops->destroy(transport);
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "create_tcp_client failed");
+        return YETTY_ERR(yetty_yplatform_pty, "transport open failed");
     }
-    pty->tcp_client_id = cres.value;
-    pty->tcp_client_active = 1;
+    pty->transport_open = 1;
 
-    yinfo("telnet: connecting to %s:%u (async)", host, port);
+    yinfo("telnet: transport open (async connect in flight)");
     return YETTY_OK(yetty_yplatform_pty, &pty->base);
 }
 
-/* Factory */
+struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create_tcp(
+    const char *host, uint16_t port,
+    struct yetty_yplatform_event_loop *event_loop)
+{
+    struct yetty_yconn_transport *transport =
+        yetty_ycore_tcp_transport_create(host, port, event_loop);
+    if (!transport) {
+        return YETTY_ERR(yetty_yplatform_pty,
+                         "telnet_pty_create_tcp: tcp_transport_create failed");
+    }
+    return yetty_ytelnet_telnet_pty_create(transport);
+}
+
+/* Convenience factory — desktop telnet path. Mints a TCP transport
+ * from (host, port, event_loop) per create_pty call, then hands it to
+ * the transport-polymorphic yetty_ytelnet_telnet_pty_create. The
+ * webasm telnet path will skip this factory entirely — its
+ * platform-specific factory builds an iframe-transport instead and
+ * calls telnet_pty_create directly. */
 
 struct yetty_ytelnet_telnet_pty_factory {
     struct yetty_yplatform_pty_factory base;
@@ -549,7 +582,16 @@ static struct yetty_yplatform_pty_result telnet_pty_factory_create_pty(
     struct yetty_yplatform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop)
 {
     struct yetty_ytelnet_telnet_pty_factory *factory = (struct yetty_ytelnet_telnet_pty_factory *)self;
-    return yetty_ytelnet_telnet_pty_create(factory->host, factory->port, event_loop);
+
+    struct yetty_yconn_transport *transport =
+        yetty_ycore_tcp_transport_create(factory->host, factory->port, event_loop);
+    if (!transport) {
+        return YETTY_ERR(yetty_yplatform_pty,
+                         "telnet_pty_factory_create_pty: tcp_transport_create failed");
+    }
+    /* Ownership of `transport` is transferred to telnet_pty_create —
+     * it destroys on every failure path, so no leak here either way. */
+    return yetty_ytelnet_telnet_pty_create(transport);
 }
 
 static const struct yetty_yplatform_pty_factory_ops telnet_pty_factory_ops = {

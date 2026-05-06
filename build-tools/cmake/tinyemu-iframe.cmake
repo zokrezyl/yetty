@@ -68,7 +68,10 @@ target_link_options(tinyemu_vm PRIVATE
     # (src/yetty/yplatform/webasm/brotli-glue.c) — used by the iframe's
     # runtime preload to decompress kernel / opensbi / rootfs from
     # tinyemu-assets/.
-    "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_tinyemu_bridge_input','_tinyemu_bridge_resize','_tinyemu_bridge_start','_yetty_brotli_decode']"
+    # Session API (tinyemu_session_open / send / close) lets the
+    # iframe page fan out multiple yetty terminals onto one in-VM
+    # telnetd via slirp's chr-backend hook. See tinyemu-bridge.c.
+    "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_tinyemu_bridge_input','_tinyemu_bridge_resize','_tinyemu_bridge_start','_tinyemu_session_open','_tinyemu_session_send','_tinyemu_session_close','_yetty_brotli_decode']"
 )
 
 # VM runtime assets are NOT bundled into a tinyemu.data sidecar

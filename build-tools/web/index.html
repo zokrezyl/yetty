@@ -36,30 +36,29 @@
             font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
         }
         /* Boot console — append-only log of each preload step, the VM
-         * download, and the yetty startup phases. Stays on top of the
-         * canvas so the user can watch progress on slow links (the
-         * tinyemu rootfs alone is 700 MB raw / 153 MB on the wire).
-         * Auto-fades after iframe-pty.c attaches yetty to the VM. */
+         * download, kernel boot mirror, and yetty startup phases.
+         * Full-viewport overlay so the user can see and scroll
+         * through everything (the tinyemu rootfs alone is 700 MB
+         * raw / 153 MB on the wire, plus full kernel dmesg, plus
+         * userspace boot traces). Closed manually via the × button
+         * once the user is ready to interact with the terminal. */
         #yetty-status {
             position: fixed;
-            top: 8px;
-            left: 8px;
-            right: 8px;
-            max-height: 60vh;
-            background: rgba(0, 0, 0, 0.78);
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.92);
             color: #ddd;
             font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
             font-size: 12px;
             line-height: 1.45;
-            padding: 8px 12px;
-            border: 1px solid #333;
-            border-radius: 4px;
+            padding: 28px 16px 16px 16px;   /* top padding leaves room for × */
             z-index: 200;
-            pointer-events: none;
-            transition: opacity 0.4s ease;
-            /* Reserve space for the close button at the top-right and
-             * keep the scrollable log area separate (see #yetty-status-log
-             * below) so the button never scrolls out of view. */
+            pointer-events: auto;            /* let the user wheel-scroll the log */
+            /* Two-row flex layout: log fills, close button is absolute
+             * (lives outside the scroll container so it never slides
+             * out of view as the log grows). */
             display: flex;
             flex-direction: column;
         }
@@ -67,7 +66,13 @@
             overflow-y: auto;
             flex: 1 1 auto;
             min-height: 0;
+            padding-right: 4px;              /* leave room for scrollbar */
         }
+        /* Custom scrollbar so dark-on-dark stays readable. */
+        #yetty-status-log::-webkit-scrollbar { width: 10px; }
+        #yetty-status-log::-webkit-scrollbar-track { background: #1a1a2e; }
+        #yetty-status-log::-webkit-scrollbar-thumb { background: #444; border-radius: 5px; }
+        #yetty-status-log::-webkit-scrollbar-thumb:hover { background: #666; }
         #yetty-status .line { white-space: pre-wrap; word-break: break-all; }
         #yetty-status .line.phase { color: #e94560; font-weight: bold; }
         #yetty-status .line.ok    { color: #6c6; }
@@ -77,25 +82,24 @@
          * the JS sets on first append. Without this, hide() silently
          * lost the race against subsequent kernel-boot append()s. */
         #yetty-status.hidden { display: none !important; }
-        /* Manual-dismiss button — overlay's parent has
-         * pointer-events:none so the canvas underneath stays
-         * clickable; the close button re-enables them just for itself.
-         * Lives OUTSIDE #yetty-status-log (its sibling), so scrolling
-         * the log doesn't slide the button out of the visible area. */
+        /* Manual-dismiss button — sits in the top-right corner of the
+         * full-screen overlay. Outside the scroll container (its
+         * sibling), so it stays put even as the log grows past the
+         * viewport. */
         #yetty-status-close {
             position: absolute;
-            top: 4px;
-            right: 8px;
-            width: 22px;
-            height: 22px;
-            line-height: 20px;
+            top: 6px;
+            right: 10px;
+            width: 28px;
+            height: 28px;
+            line-height: 24px;
             text-align: center;
             color: #ddd;
             background: rgba(255, 255, 255, 0.08);
             border: 1px solid #444;
-            border-radius: 3px;
+            border-radius: 4px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 18px;
             font-family: inherit;
             pointer-events: auto;
             user-select: none;
@@ -386,8 +390,17 @@ busybox telnetd -p 8023 -l /bin/bash
         // from the tinyemu iframe also land here, so the user sees a
         // single unified boot log (downloads → decode → VM → terminal).
         (function () {
-            const el = document.getElementById('yetty-status');
-            const MAX_LINES = 300;
+            const el  = document.getElementById('yetty-status');
+            // CRITICAL: lines append into #yetty-status-log (the
+            // overflow:auto child) — NOT into #yetty-status itself.
+            // The parent is a flex container; growing it doesn't
+            // scroll, it just stretches off-screen. The log child
+            // is the actual scrollable region.
+            const log = document.getElementById('yetty-status-log');
+            const MAX_LINES = 2000;          /* generous cap so the
+                                                user can scroll back
+                                                through full kernel
+                                                boot + alpine init. */
             let hideTimer = null;
             // Once the user clicks 'x', subsequent status messages
             // mustn't pop the overlay back open. They still get
@@ -408,7 +421,7 @@ busybox telnetd -p 8023 -l /bin/bash
                 if (!el) return;
                 if (userDismissed) return;
                 el.classList.remove('hidden');
-                el.style.display = 'block';
+                el.style.display = 'flex';   /* matches the CSS rule */
             }
             function makeLine(text, level) {
                 const line = document.createElement('div');
@@ -418,21 +431,13 @@ busybox telnetd -p 8023 -l /bin/bash
             }
             function append(text, level) {
                 alsoLog(text);
-                if (!el) return;
+                if (!log) return;
                 showIfNotDismissed();
-                el.appendChild(makeLine(text, level));
-                while (el.childElementCount > MAX_LINES) {
-                    // Skip the close button when trimming.
-                    const first = el.firstChild;
-                    if (first && first.id === 'yetty-status-close') {
-                        const second = first.nextSibling;
-                        if (second) el.removeChild(second);
-                        else break;
-                    } else {
-                        el.removeChild(first);
-                    }
+                log.appendChild(makeLine(text, level));
+                while (log.childElementCount > MAX_LINES) {
+                    log.removeChild(log.firstChild);
                 }
-                el.scrollTop = el.scrollHeight;
+                log.scrollTop = log.scrollHeight;
             }
             // Append a tagged line on first call; on subsequent calls
             // with the same tag, replace its text in place. Keeps the
@@ -440,18 +445,18 @@ busybox telnetd -p 8023 -l /bin/bash
             // of hundreds of progress lines.
             function update(tag, text, level) {
                 alsoLog(text);
-                if (!el) return;
+                if (!log) return;
                 showIfNotDismissed();
                 let line = tagged[tag];
                 if (!line || !line.parentNode) {
                     line = makeLine(text, level);
                     tagged[tag] = line;
-                    el.appendChild(line);
+                    log.appendChild(line);
                 } else {
                     line.textContent = text;
                     if (level) line.className = 'line ' + level;
                 }
-                el.scrollTop = el.scrollHeight;
+                log.scrollTop = log.scrollHeight;
             }
             function hide() {
                 userDismissed = true;
@@ -681,7 +686,13 @@ busybox telnetd -p 8023 -l /bin/bash
             // This is where we inject environment variables into Emscripten's ENV
             preRun: [function() {
                 const envVars = buildEnvVars();
-                console.log('[yetty] preRun: Setting ENV vars:', envVars);
+                /* JSON.stringify here on purpose — emscripten's print()
+                 * implementation in some configurations stringifies an
+                 * object argument as the literal "Object", which made
+                 * it impossible to verify whether YTRACE_DEFAULT_ON was
+                 * actually wired in from ?trace=1. */
+                console.log('[yetty] preRun: Setting ENV vars: ' +
+                            JSON.stringify(envVars));
                 // Emscripten's ENV is a global variable in yetty.js, not Module.ENV
                 Object.keys(envVars).forEach(key => {
                     ENV[key] = envVars[key];
@@ -781,7 +792,18 @@ busybox telnetd -p 8023 -l /bin/bash
             }
             iframe = document.createElement('iframe');
             iframe.id = id;
-            iframe.style.cssText = 'display:none; width:0; height:0; border:0;';
+            /* Off-screen rather than display:none. Chrome heavily
+             * throttles timers in display:none iframes (sometimes
+             * down to ~1 Hz), which kept the wasm-interpreter VM
+             * inside from booting fast enough for telnetd to come
+             * up before the test capture window expired. Pinning
+             * it at left:-99999px keeps it visible to the
+             * scheduler (no throttling) but invisible to the
+             * user. width/height stay 1px so layout cost is nil. */
+            iframe.style.cssText =
+                'position:absolute; left:-99999px; top:-99999px;' +
+                ' width:1px; height:1px; border:0;' +
+                ' visibility:hidden; pointer-events:none;';
             iframe.src = 'tinyemu-iframe.html?ptyId=' + ptyId +
                          '&cols=' + cols + '&rows=' + rows;
             document.body.appendChild(iframe);
