@@ -908,6 +908,7 @@ enum {
     OPT_QEMU,
     OPT_SSH,
     OPT_TELNET,
+    OPT_DESKTOP_VNC_CLIENT,
 };
 
 static struct yetty_yplatform_option long_options[] = {
@@ -917,6 +918,7 @@ static struct yetty_yplatform_option long_options[] = {
     {"vnc-headless", no_argument, 0, 'H'},
     {"vnc-port", required_argument, 0, 'p'},
     {"vnc-client", required_argument, 0, 'C'},
+    {"desktop-vnc-client", required_argument, 0, OPT_DESKTOP_VNC_CLIENT},
     {"vnc-raw", no_argument, 0, OPT_VNC_RAW},
     {"vnc-compression-quality", required_argument, 0, OPT_VNC_COMPRESSION_QUALITY},
     {"vnc-always-full", no_argument, 0, OPT_VNC_ALWAYS_FULL},
@@ -946,6 +948,7 @@ static void print_usage(const char *prog)
     fprintf(stderr, "  -H, --vnc-headless     Run VNC server (headless - no window)\n");
     fprintf(stderr, "  -p, --vnc-port=PORT    VNC server port (default: 5900)\n");
     fprintf(stderr, "  -C, --vnc-client=HOST  Connect as VNC client to HOST[:PORT]\n");
+    fprintf(stderr, "      --desktop-vnc-client=HOST[:PORT]  Connect as RFB client to TigerVNC/TurboVNC server\n");
     fprintf(stderr, "      --vnc-raw                  Disable JPEG, send raw BGRA tiles\n");
     fprintf(stderr, "      --vnc-compression-quality Q  JPEG quality 1-100 (default: 80)\n");
     fprintf(stderr, "      --vnc-always-full          Disable delta, send full frame every time\n");
@@ -1011,6 +1014,9 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             break;
         case 'C':
             set_config(impl, "vnc/client", yetty_yplatform_optarg);
+            break;
+        case OPT_DESKTOP_VNC_CLIENT:
+            set_config(impl, "vnc/desktop-client", yetty_yplatform_optarg);
             break;
         case OPT_VNC_RAW:
             set_config(impl, "vnc/raw", "true");
