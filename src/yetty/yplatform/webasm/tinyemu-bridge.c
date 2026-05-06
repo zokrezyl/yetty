@@ -604,13 +604,28 @@ static void bridge_main_loop_tick(void)
         }
     }
 
-    /* Burn through interp until we've used our wall-clock budget for
-     * this tick. Each call is bounded by BRIDGE_MAX_EXEC_CYCLES so we
-     * can revisit the input pump and stay responsive to keystrokes. */
+    /* Always run interp at least once — select_poll above may have
+     * just delivered a network packet that wakes the kernel out of
+     * WFI, so the pre-select `delay` is stale and we have to give
+     * the CPU a chance to handle it. Matches the desktop flow,
+     * which unconditionally calls virt_machine_interp after
+     * select_poll. When the CPU is in WFI this returns essentially
+     * for free (just re-checks the power-down flag). */
+    virt_machine_interp(g_vm, BRIDGE_MAX_EXEC_CYCLES);
+
+    /* Keep stepping while the CPU has runnable work and we still
+     * have wall-clock budget for this tick. The moment
+     * virt_machine_get_sleep_duration reports any positive idle
+     * window — meaning all CPUs are powered down waiting for a
+     * timer — we stop. Without this gate we'd spin interp for the
+     * full 8 ms budget (= 80 % CPU) every tick even when the kernel
+     * has nothing to step; with it, idle CPU drops to ~zero,
+     * matching the desktop's blocking-select behaviour. */
     double tick_start = emscripten_get_now();
-    do {
+    while (virt_machine_get_sleep_duration(g_vm, BRIDGE_MAX_SLEEP_MS) == 0 &&
+           emscripten_get_now() - tick_start < BRIDGE_TICK_BUDGET_MS) {
         virt_machine_interp(g_vm, BRIDGE_MAX_EXEC_CYCLES);
-    } while (emscripten_get_now() - tick_start < BRIDGE_TICK_BUDGET_MS);
+    }
 
     /* Decide how long the VM can idle now that we've drained pending
      * work. virt_machine_get_sleep_duration returns 0 when there's
