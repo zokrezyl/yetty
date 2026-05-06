@@ -783,20 +783,16 @@ static void walk(struct yetty_ylexbor *r,
 				ib->kind = YL_BOX_INLINE_IMAGE;
 				ib->element = el;
 
-				/* Resolve src + decode into the cache so layout
-				 * has natural dimensions to fall back on. */
+				/* Resolve src/srcset/data-* + decode into the
+				 * cache so layout has natural dimensions to
+				 * fall back on. yetty_ylexbor_img_pick_url
+				 * handles lazy-loading patterns where the
+				 * real URL isn't in `src`. */
 				struct yetty_ylexbor_img_cache_entry *cached = NULL;
-				size_t srclen = 0;
-				const lxb_char_t *src = lxb_dom_element_get_attribute(
-					el, (const lxb_char_t *)"src", 3, &srclen);
-				if (src && srclen > 0) {
-					char *raw = strndup((const char *)src, srclen);
-					char *abs = raw ? yetty_ylexbor_resolve_url(r, raw) : NULL;
-					free(raw);
-					if (abs) {
-						cached = yetty_ylexbor_img_cache_get_or_load(r, abs);
-						free(abs);
-					}
+				char *abs = yetty_ylexbor_img_pick_url(r, el);
+				if (abs) {
+					cached = yetty_ylexbor_img_cache_get_or_load(r, abs);
+					free(abs);
 				}
 
 				/* HTML width/height attrs (in px) take priority

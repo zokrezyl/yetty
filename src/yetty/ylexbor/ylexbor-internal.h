@@ -187,6 +187,13 @@ struct yetty_ylexbor_img_cache_entry {
 struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(
 	struct yetty_ylexbor *r, const char *url);
 
+/* Pick the most likely "real" URL out of an <img>'s src/srcset/data-*
+ * attributes — sites use lazy-loading patterns where `src` is a tiny
+ * placeholder and the actual URL lives in `data-src`/`data-original`/
+ * `srcset`. Caller frees the returned absolute URL with free(). */
+char *yetty_ylexbor_img_pick_url(struct yetty_ylexbor *r,
+				 lxb_dom_element_t *el);
+
 /* ===========================================================================
  * box generation (ylexbor-box.c) — DOM + computed style → box vector.
  * ===========================================================================*/

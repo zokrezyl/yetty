@@ -178,6 +178,79 @@ static int decode_image(const uint8_t *bytes, size_t len,
 	return decode_other(bytes, len, out_pixels, out_w, out_h);
 }
 
+/* Base64 decoder for data: URIs. Tolerates whitespace and `=` padding.
+ * Returns decoded length, 0 on bad input. `out` must be at least
+ * (in_len * 3 / 4 + 4) bytes. */
+static size_t b64_decode(const char *in, size_t in_len, uint8_t *out)
+{
+	static const int8_t T[256] = {
+		[0 ... 255] = -1,
+		['A']=0,['B']=1,['C']=2,['D']=3,['E']=4,['F']=5,['G']=6,
+		['H']=7,['I']=8,['J']=9,['K']=10,['L']=11,['M']=12,['N']=13,
+		['O']=14,['P']=15,['Q']=16,['R']=17,['S']=18,['T']=19,['U']=20,
+		['V']=21,['W']=22,['X']=23,['Y']=24,['Z']=25,
+		['a']=26,['b']=27,['c']=28,['d']=29,['e']=30,['f']=31,['g']=32,
+		['h']=33,['i']=34,['j']=35,['k']=36,['l']=37,['m']=38,['n']=39,
+		['o']=40,['p']=41,['q']=42,['r']=43,['s']=44,['t']=45,['u']=46,
+		['v']=47,['w']=48,['x']=49,['y']=50,['z']=51,
+		['0']=52,['1']=53,['2']=54,['3']=55,['4']=56,['5']=57,['6']=58,
+		['7']=59,['8']=60,['9']=61,['+']=62,['/']=63,
+		['-']=62,['_']=63,	/* URL-safe variant */
+	};
+	size_t n = 0;
+	uint32_t bits = 0;
+	int have = 0;
+	for (size_t i = 0; i < in_len; i++) {
+		unsigned char c = (unsigned char)in[i];
+		if (c == ' ' || c == '\t' || c == '\n' || c == '\r' ||
+		    c == '=') continue;
+		int v = T[c];
+		if (v < 0) return 0;
+		bits = (bits << 6) | (uint32_t)v;
+		have += 6;
+		if (have >= 8) {
+			have -= 8;
+			out[n++] = (uint8_t)((bits >> have) & 0xFF);
+		}
+	}
+	return n;
+}
+
+/* Decode a `data:[<mime>][;base64],<payload>` URI. Caller frees. NULL
+ * on malformed input. Sites use `data:image/png;base64,...` or
+ * `data:image/svg+xml;...` heavily for icons / sprites; libcurl rejects
+ * these so we have to handle them ourselves. */
+static char *data_uri_decode(const char *url, size_t *out_len)
+{
+	if (strncmp(url, "data:", 5) != 0) return NULL;
+	const char *p = url + 5;
+	const char *comma = strchr(p, ',');
+	if (!comma) return NULL;
+	int is_b64 = 0;
+	for (const char *s = p; s + 7 <= comma; s++) {
+		if (strncmp(s, ";base64", 7) == 0) { is_b64 = 1; break; }
+	}
+	const char *payload = comma + 1;
+	size_t plen = strlen(payload);
+	if (is_b64) {
+		uint8_t *buf = malloc(plen * 3 / 4 + 4);
+		if (!buf) return NULL;
+		size_t n = b64_decode(payload, plen, buf);
+		if (n == 0) { free(buf); return NULL; }
+		*out_len = n;
+		return (char *)buf;
+	}
+	/* URL-encoded text payload (e.g. inline SVG). Pass through —
+	 * full %XX decoding isn't worth the complexity for a path
+	 * stb/libpng can't decode anyway. */
+	char *buf = malloc(plen + 1);
+	if (!buf) return NULL;
+	memcpy(buf, payload, plen);
+	buf[plen] = 0;
+	*out_len = plen;
+	return buf;
+}
+
 /* Look up `url` in the document's image cache. Returns the cache slot
  * (existing or freshly allocated) or NULL on alloc failure. The slot
  * may have failed=1 to indicate a previous fetch/decode error — caller
@@ -210,26 +283,70 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(
 		return NULL;
 	}
 
+	const int debug_img = getenv("YLEXBOR_DEBUG_IMG") != NULL ||
+			      getenv("YLEXBOR_DEBUG_PAINT") != NULL;
+
 	long status = 0;
 	size_t blen = 0;
-	char *bytes = yetty_ylexbor_http_get(url, &blen, &status);
+	char *bytes = NULL;
+	if (strncmp(url, "data:", 5) == 0) {
+		bytes = data_uri_decode(url, &blen);
+		status = bytes ? 200 : 0;
+	} else {
+		bytes = yetty_ylexbor_http_get(url, &blen, &status);
+	}
 	if (!bytes || blen == 0 || (status != 0 && status != 200)) {
+		if (debug_img) {
+			fprintf(stderr,
+			    "[ylexbor:img] FETCH FAIL status=%ld len=%zu url=%.120s\n",
+			    status, blen, url);
+		}
 		free(bytes);
 		e->failed = 1;
 		return e;
 	}
 
+	/* Identify the format from the magic bytes for the log. */
+	const char *fmt = "unknown";
+	if (blen >= 8 && (uint8_t)bytes[0] == 0x89 && bytes[1] == 'P' &&
+	    bytes[2] == 'N' && bytes[3] == 'G')                fmt = "PNG";
+	else if (blen >= 3 && (uint8_t)bytes[0] == 0xFF &&
+	         (uint8_t)bytes[1] == 0xD8 && (uint8_t)bytes[2] == 0xFF)
+	                                                       fmt = "JPEG";
+	else if (blen >= 6 && bytes[0] == 'G' && bytes[1] == 'I' &&
+	         bytes[2] == 'F' && bytes[3] == '8')           fmt = "GIF";
+	else if (blen >= 12 && bytes[0] == 'R' && bytes[1] == 'I' &&
+	         bytes[2] == 'F' && bytes[3] == 'F' &&
+	         bytes[8] == 'W' && bytes[9] == 'E' &&
+	         bytes[10] == 'B' && bytes[11] == 'P')         fmt = "WEBP";
+	else if (blen >= 4 && bytes[0] == '<')                 fmt = "SVG/HTML";
+	else if (blen >= 5 && memcmp(bytes, "data:", 5) == 0)  fmt = "DATA-URI";
+
 	uint32_t *pixels = NULL;
 	int w = 0, h = 0;
 	int ok = decode_image((const uint8_t *)bytes, blen, &pixels, &w, &h);
-	free(bytes);
 	if (!ok) {
-		if (getenv("YLEXBOR_DEBUG_PAINT")) {
+		if (debug_img) {
 			fprintf(stderr,
-			    "[ylexbor:paint] image decode failed: %s\n", url);
+			    "[ylexbor:img] DECODE FAIL fmt=%s len=%zu first8=%02x%02x%02x%02x%02x%02x%02x%02x url=%s\n",
+			    fmt, blen,
+			    (uint8_t)bytes[0], (uint8_t)bytes[1],
+			    (uint8_t)bytes[2], (uint8_t)bytes[3],
+			    blen >= 5 ? (uint8_t)bytes[4] : 0,
+			    blen >= 6 ? (uint8_t)bytes[5] : 0,
+			    blen >= 7 ? (uint8_t)bytes[6] : 0,
+			    blen >= 8 ? (uint8_t)bytes[7] : 0,
+			    url);
 		}
+		free(bytes);
 		e->failed = 1;
 		return e;
+	}
+	free(bytes);
+	if (debug_img) {
+		fprintf(stderr,
+		    "[ylexbor:img] DECODE OK   fmt=%s wh=%dx%d url=%s\n",
+		    fmt, w, h, url);
 	}
 	e->pixels = pixels;
 	e->w = w;
@@ -237,20 +354,82 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(
 	return e;
 }
 
-/* Read `<img>`'s `src=` and produce an absolute URL by combining with
- * the document base. Returns NULL when the element has no src or the
- * URL can't be resolved. Caller frees with free(). */
-static char *img_src_url(struct yetty_ylexbor *r, lxb_dom_element_t *el)
+/* Pick the best URL out of an `<img>`'s flock of source-ish attributes.
+ *
+ * Modern sites rarely put the real image URL in `src`. Common patterns:
+ *
+ *   <img src="data:image/gif;base64,..1px-placeholder.." data-src="real.png">
+ *   <img loading="lazy" data-original="real.png">
+ *   <img srcset="img-1x.png 1x, img-2x.png 2x"> with no `src` at all
+ *   <picture><source srcset="..."><img src="fallback.png"></picture>
+ *
+ * We pick, in order:
+ *   1. `data-src` / `data-original` / `data-lazy-src` (lazy-load attrs)
+ *   2. first URL out of `srcset`
+ *   3. plain `src`
+ * but only swap when (1)/(2) actually exist; otherwise `src` stays.
+ *
+ * If `src` is a tiny data: URI (< 200 bytes — almost always a 1×1
+ * placeholder) AND there's a non-empty `data-*` candidate, the lazy
+ * attr wins regardless of order. */
+static char *attr_strdup(lxb_dom_element_t *el, const char *name, size_t namelen)
+{
+	size_t l = 0;
+	const lxb_char_t *v = lxb_dom_element_get_attribute(el,
+		(const lxb_char_t *)name, namelen, &l);
+	if (!v || l == 0) return NULL;
+	return strndup((const char *)v, l);
+}
+
+char *yetty_ylexbor_img_pick_url(struct yetty_ylexbor *r, lxb_dom_element_t *el);
+
+char *yetty_ylexbor_img_pick_url(struct yetty_ylexbor *r, lxb_dom_element_t *el)
 {
 	if (!el) return NULL;
-	size_t slen = 0;
-	const lxb_char_t *src = lxb_dom_element_get_attribute(el,
-		(const lxb_char_t *)"src", 3, &slen);
-	if (!src || slen == 0) return NULL;
-	char *raw = strndup((const char *)src, slen);
-	if (!raw) return NULL;
-	char *abs = yetty_ylexbor_resolve_url(r, raw);
-	free(raw);
+	char *src = attr_strdup(el, "src", 3);
+	char *lazy = attr_strdup(el, "data-src", 8);
+	if (!lazy) lazy = attr_strdup(el, "data-original", 13);
+	if (!lazy) lazy = attr_strdup(el, "data-lazy-src", 13);
+
+	/* srcset — pick the first candidate URL (before the first space
+	 * or comma after the URL). Ignores descriptor (`1x`/`2x`/`100w`),
+	 * always picks the head of the list. */
+	char *srcset_url = NULL;
+	{
+		size_t l = 0;
+		const lxb_char_t *ss = lxb_dom_element_get_attribute(el,
+			(const lxb_char_t *)"srcset", 6, &l);
+		if (ss && l > 0) {
+			const char *p = (const char *)ss;
+			const char *end = p + l;
+			while (p < end && (*p == ' ' || *p == '\t' ||
+					   *p == ',' || *p == '\n')) p++;
+			const char *start = p;
+			while (p < end && *p != ' ' && *p != ',') p++;
+			if (p > start)
+				srcset_url = strndup(start, p - start);
+		}
+	}
+
+	const char *pick = NULL;
+	if (lazy) pick = lazy;
+	else if (srcset_url) pick = srcset_url;
+	else if (src) pick = src;
+
+	/* If we picked plain `src` but it's a tiny data: URI placeholder,
+	 * promote a lazy/srcset URL when available. */
+	if (pick == src && src) {
+		size_t srclen = strlen(src);
+		if (strncmp(src, "data:", 5) == 0 && srclen < 200) {
+			if (lazy) pick = lazy;
+			else if (srcset_url) pick = srcset_url;
+		}
+	}
+
+	char *abs = pick ? yetty_ylexbor_resolve_url(r, pick) : NULL;
+	free(src);
+	free(lazy);
+	free(srcset_url);
 	return abs;
 }
 
@@ -315,7 +494,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(
 		}
 
 		case YL_BOX_INLINE_IMAGE: {
-			char *url = img_src_url(r, b->element);
+			char *url = yetty_ylexbor_img_pick_url(r, b->element);
 			struct yetty_ylexbor_img_cache_entry *cached = NULL;
 			if (url) cached = yetty_ylexbor_img_cache_get_or_load(r, url);
 			free(url);
