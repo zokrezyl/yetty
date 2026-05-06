@@ -36,6 +36,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yterm/osc-codes.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <curl/curl.h>
 
@@ -426,9 +427,8 @@ int main(int argc, char **argv)
 	if (probe_terminal_size(&term_w, &term_h)) {
 		width = term_w;
 		height = term_h;
-		fprintf(stderr,
-		    "ylexbor-demo: detected terminal viewport %dx%d\n",
-		    width, height);
+		ydebug("ylexbor-demo: detected terminal viewport %dx%d",
+		       width, height);
 	}
 	float font_size = 16.0f;
 	const char *path = NULL;

@@ -66,9 +66,30 @@ struct yetty_ylexbor_box {
 	enum yetty_ylexbor_layout_mode layout_mode;
 
 	/* Margins (block boxes only). Margin collapsing is done at layout
-	 * time, not stored here. */
+	 * time, not stored here. The `_auto` flags carry CSS `margin: auto`
+	 * so the layout pass can implement horizontal centering when both
+	 * left+right are auto and a fixed width is set. */
 	float margin_top, margin_right, margin_bottom, margin_left;
+	bool  margin_left_auto, margin_right_auto;
 	float padding_top, padding_right, padding_bottom, padding_left;
+
+	/* Optional explicit width / max-width / min-width from CSS. Zero
+	 * means "not specified" (use the parent's content area). The
+	 * layout pass clamps `child_w` to [min_width, max_width] and pins
+	 * to width when set. */
+	float css_width, css_max_width, css_min_width;
+	float css_height;	/* explicit height — placeholder for tables/img */
+
+	/* Text alignment for the block's inline children. Values:
+	 *   0 = left (default), 1 = center, 2 = right, 3 = justify. */
+	int text_align;
+
+	/* Border. We render a solid rectangle outline as a ysdf box pair
+	 * (outer fill + inner cutout) sized by `border_width`. Stored
+	 * once per side because top/right/bottom/left can differ. */
+	float border_top, border_right, border_bottom, border_left;
+	float border_radius;
+	struct yetty_ylexbor_color border_color;
 
 	/* Borrowed pointer to the originating element — keeps anchors for
 	 * later (link-target hit-testing, hover, …). NULL for anonymous

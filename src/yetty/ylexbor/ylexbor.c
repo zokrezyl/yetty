@@ -15,6 +15,8 @@
 #include <lexbor/dom/dom.h>
 #include <lexbor/tag/const.h>
 
+#include <yetty/ytrace/ytrace.h>
+
 
 /* ===========================================================================
  * Box vector — small dynamic array.
@@ -289,17 +291,13 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(
 	/* Run inline + external <script> blocks. */
 	(void)yetty_ylexbor_js_run_inline_scripts(r);
 
-	if (getenv("YLEXBOR_DEBUG_CSS")) {
-		fprintf(stderr,
-		    "[ylexbor:css] sheets ext=%d inline=%d failed=%d "
-		    "customs=%d\n",
-		    g_css_loaded, g_css_inline, g_css_failed,
-		    r->customs.size);
-		for (int i = 0; i < r->customs.size; i++) {
-			fprintf(stderr, "[ylexbor:css]   %s = %s\n",
-				r->customs.data[i].name,
-				r->customs.data[i].value);
-		}
+	ydebug("css sheets ext=%d inline=%d failed=%d customs=%d",
+	       g_css_loaded, g_css_inline, g_css_failed,
+	       r->customs.size);
+	for (int i = 0; i < r->customs.size; i++) {
+		ydebug("css   %s = %s",
+		       r->customs.data[i].name,
+		       r->customs.data[i].value);
 	}
 
 	struct yetty_ycore_void_result br = yetty_ylexbor_box_build(r);

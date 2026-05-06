@@ -68,6 +68,8 @@
 #  include <curl/curl.h>
 #endif
 
+#include <yetty/ytrace/ytrace.h>
+
 
 /* ===========================================================================
  * Helpers
@@ -402,7 +404,7 @@ void yetty_ylexbor_js_drain_jobs(struct yetty_ylexbor *r)
 	if (n < 0) {
 		JSValue ex = JS_GetException(ctx);
 		const char *m = JS_ToCString(ctx, ex);
-		fprintf(stderr, "[js:job-exception] %s\n", m ? m : "?");
+		ydebug("js job-exception: %s", m ? m : "?");
 		if (m) JS_FreeCString(ctx, m);
 		JS_FreeValue(ctx, ex);
 		r->js_error_count++;
@@ -448,7 +450,7 @@ int yetty_ylexbor_pump(struct yetty_ylexbor *r)
 		if (JS_IsException(ret)) {
 			JSValue ex = JS_GetException(ctx);
 			const char *m = JS_ToCString(ctx, ex);
-			fprintf(stderr, "[js:timer] %s\n", m ? m : "?");
+			ydebug("js timer: %s", m ? m : "?");
 			if (m) JS_FreeCString(ctx, m);
 			JS_FreeValue(ctx, ex);
 			r->js_error_count++;
@@ -1258,7 +1260,7 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
 	if (JS_IsException(stub_v)) {
 		JSValue ex = JS_GetException(ctx);
 		const char *m = JS_ToCString(ctx, ex);
-		fprintf(stderr, "[js:webapi-stub] %s\n", m ? m : "?");
+		ydebug("js webapi-stub: %s", m ? m : "?");
 		if (m) JS_FreeCString(ctx, m);
 		JS_FreeValue(ctx, ex);
 	}

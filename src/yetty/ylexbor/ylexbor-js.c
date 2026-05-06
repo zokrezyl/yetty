@@ -42,6 +42,8 @@
 #include <lexbor/html/html.h>
 #include <lexbor/tag/const.h>
 
+#include <yetty/ytrace/ytrace.h>
+
 
 /* ===========================================================================
  * console.* binding — one C function per level.
@@ -162,28 +164,10 @@ void yetty_ylexbor_js_destroy(struct yetty_ylexbor *r)
  * Run all inline <script> elements once.
  * ===========================================================================*/
 
-static void report_exception(JSContext *ctx, const char *url)
-{
-	JSValue ex = JS_GetException(ctx);
-	int is_err = JS_IsError(ex);
-	const char *msg = JS_ToCString(ctx, ex);
-	fprintf(stderr, "[js:exception] %s: %s\n",
-		url ? url : "<inline>", msg ? msg : "?");
-	if (msg) JS_FreeCString(ctx, msg);
-
-	if (is_err) {
-		JSValue stack = JS_GetPropertyStr(ctx, ex, "stack");
-		if (!JS_IsUndefined(stack)) {
-			const char *st = JS_ToCString(ctx, stack);
-			if (st) {
-				fprintf(stderr, "%s\n", st);
-				JS_FreeCString(ctx, st);
-			}
-		}
-		JS_FreeValue(ctx, stack);
-	}
-	JS_FreeValue(ctx, ex);
-}
+/* Inlined into eval_buf — kept here as a static no-op shim so the
+ * symbol exists for any future call site. */
+__attribute__((unused))
+static void report_exception(JSContext *ctx, const char *url) { (void)ctx; (void)url; }
 
 /* Print the line of `src` containing 1-based byte offset `line_no`,
  * with a caret pointing at column `col_no` (1-based). For diagnostic
@@ -203,12 +187,14 @@ static void print_src_at(const char *src, size_t slen,
 	while (line_end < end && *line_end != '\n') line_end++;
 	int len = (int)(line_end - line_start);
 	if (len > 240) len = 240;
-	fprintf(stderr, "  source: %.*s\n", len, line_start);
+	ydebug("js source: %.*s", len, line_start);
 	if (col_no > 0 && col_no <= 240) {
-		fprintf(stderr, "         ");
-		for (int i = 1; i < col_no; i++) fputc('-', stderr);
-		fputc('^', stderr);
-		fputc('\n', stderr);
+		char caret[244];
+		int n = 0;
+		for (int i = 1; i < col_no && n < 240; i++) caret[n++] = '-';
+		caret[n++] = '^';
+		caret[n] = 0;
+		ydebug("js        %s", caret);
 	}
 }
 
@@ -221,18 +207,18 @@ static void eval_buf(struct yetty_ylexbor *r, JSContext *ctx,
 		url ? url : "<inline>", JS_EVAL_TYPE_GLOBAL);
 	if (JS_IsException(v)) {
 		/* Pull the line+col out of the stack frame so we can show
-		 * the offending source line. We re-extract here (after
-		 * report_exception) by re-getting the exception, which
-		 * was already cleared. Skip if YLEXBOR_DEBUG_JS isn't on. */
-		if (getenv("YLEXBOR_DEBUG_JS")) {
+		 * the offending source line. ydebug fires only when the
+		 * trace point is enabled (default off in non-ytrace
+		 * builds) so this no-ops in production. */
+		{
 			JSValue ex0 = JS_GetException(ctx);
 			const char *m = JS_ToCString(ctx, ex0);
-			fprintf(stderr, "[js:exception] %s: %s\n",
-				url ? url : "<inline>", m ? m : "?");
+			ydebug("js exception %s: %s",
+			       url ? url : "<inline>", m ? m : "?");
 			if (m) JS_FreeCString(ctx, m);
 			JSValue stack = JS_GetPropertyStr(ctx, ex0, "stack");
 			const char *st = JS_ToCString(ctx, stack);
-			if (st) fprintf(stderr, "%s\n", st);
+			if (st) ydebug("js stack:\n%s", st);
 			/* Parse the *first* (deepest) frame. Lines look like
 			 *   "    at <anonymous> (<inline>:2:64)\n" */
 			int line = 0, col = 0;
@@ -258,8 +244,6 @@ static void eval_buf(struct yetty_ylexbor *r, JSContext *ctx,
 				print_src_at(src, slen, line, col);
 				print_src_at(src, slen, line + 1, 0);
 			}
-		} else {
-			report_exception(ctx, url ? url : "<inline>");
 		}
 		r->js_error_count++;
 	}
@@ -341,9 +325,8 @@ static void run_scripts_recursive(struct yetty_ylexbor *r,
 				if (body && status >= 200 && status < 300) {
 					eval_buf(r, ctx, body, blen, url);
 				} else {
-					fprintf(stderr,
-						"[js:script-load] %s status=%ld\n",
-						url, status);
+					ydebug("js script-load %s status=%ld",
+					       url, status);
 				}
 				free(body);
 				free(url);

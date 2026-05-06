@@ -35,6 +35,7 @@
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/yimage/yimage-gen.h>
+#include <yetty/ytrace/ytrace.h>
 
 
 static uint32_t pack_rgba(struct yetty_ylexbor_color c)
@@ -399,9 +400,6 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(
 		return NULL;
 	}
 
-	const int debug_img = getenv("YLEXBOR_DEBUG_IMG") != NULL ||
-			      getenv("YLEXBOR_DEBUG_PAINT") != NULL;
-
 	long status = 0;
 	size_t blen = 0;
 	char *bytes = NULL;
@@ -418,11 +416,8 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(
 						       &blen, &status);
 	}
 	if (!bytes || blen == 0 || (status != 0 && status != 200)) {
-		if (debug_img) {
-			fprintf(stderr,
-			    "[ylexbor:img] FETCH FAIL status=%ld len=%zu url=%s\n",
-			    status, blen, url);
-		}
+		ydebug("img FETCH FAIL status=%ld len=%zu url=%s",
+		       status, blen, url);
 		free(bytes);
 		e->failed = 1;
 		return e;
@@ -448,28 +443,21 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(
 	int w = 0, h = 0;
 	int ok = decode_image((const uint8_t *)bytes, blen, &pixels, &w, &h);
 	if (!ok) {
-		if (debug_img) {
-			fprintf(stderr,
-			    "[ylexbor:img] DECODE FAIL fmt=%s len=%zu first8=%02x%02x%02x%02x%02x%02x%02x%02x url=%s\n",
-			    fmt, blen,
-			    (uint8_t)bytes[0], (uint8_t)bytes[1],
-			    (uint8_t)bytes[2], (uint8_t)bytes[3],
-			    blen >= 5 ? (uint8_t)bytes[4] : 0,
-			    blen >= 6 ? (uint8_t)bytes[5] : 0,
-			    blen >= 7 ? (uint8_t)bytes[6] : 0,
-			    blen >= 8 ? (uint8_t)bytes[7] : 0,
-			    url);
-		}
+		ydebug("img DECODE FAIL fmt=%s len=%zu first8=%02x%02x%02x%02x%02x%02x%02x%02x url=%s",
+		       fmt, blen,
+		       (uint8_t)bytes[0], (uint8_t)bytes[1],
+		       (uint8_t)bytes[2], (uint8_t)bytes[3],
+		       blen >= 5 ? (uint8_t)bytes[4] : 0,
+		       blen >= 6 ? (uint8_t)bytes[5] : 0,
+		       blen >= 7 ? (uint8_t)bytes[6] : 0,
+		       blen >= 8 ? (uint8_t)bytes[7] : 0,
+		       url);
 		free(bytes);
 		e->failed = 1;
 		return e;
 	}
 	free(bytes);
-	if (debug_img) {
-		fprintf(stderr,
-		    "[ylexbor:img] DECODE OK   fmt=%s wh=%dx%d url=%s\n",
-		    fmt, w, h, url);
-	}
+	ydebug("img DECODE OK   fmt=%s wh=%dx%d url=%s", fmt, w, h, url);
 	e->pixels = pixels;
 	e->w = w;
 	e->h = h;
@@ -565,7 +553,6 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(
 	if (r == NULL || buf == NULL)
 		return YETTY_ERR(yetty_ycore_void, "ylexbor_paint: null");
 
-	const int debug = getenv("YLEXBOR_DEBUG_PAINT") != NULL;
 	uint32_t z = 0;
 	/* Track the maximum X/Y extent of every emitted prim so we can
 	 * set the buffer's scene bounds at the end. Without this the
@@ -575,18 +562,12 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(
 	 * prims and their pixel data are present in the wire bytes. */
 	float scene_max_x = 0.0f, scene_max_y = 0.0f;
 
-	if (debug) {
-		fprintf(stderr, "[ylexbor:paint] total boxes=%u\n",
-			r->boxes.size);
-	}
+	ydebug("paint total boxes=%u", r->boxes.size);
 	for (uint32_t i = 0; i < r->boxes.size; i++) {
 		struct yetty_ylexbor_box *b = &r->boxes.data[i];
 		if (b->w <= 0 || b->h <= 0) {
-			if (debug) {
-				fprintf(stderr,
-				    "[ylexbor:paint] skip  i=%u kind=%d xy=%.0f,%.0f wh=%.0fx%.0f\n",
-				    i, b->kind, b->x, b->y, b->w, b->h);
-			}
+			ydebug("paint skip  i=%u kind=%d xy=%.0f,%.0f wh=%.0fx%.0f",
+			       i, b->kind, b->x, b->y, b->w, b->h);
 			continue;
 		}
 		/* Grow scene extents to cover this box. We extend even
@@ -599,23 +580,72 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(
 
 		switch (b->kind) {
 		case YL_BOX_BLOCK: {
-			if (debug) {
-				fprintf(stderr,
-				    "[ylexbor:paint] block i=%u xy=%.0f,%.0f wh=%.0fx%.0f bg=%02x%02x%02x%02x\n",
-				    i, b->x, b->y, b->w, b->h,
-				    b->bg.r, b->bg.g, b->bg.b, b->bg.a);
+			ydebug("paint block i=%u xy=%.0f,%.0f wh=%.0fx%.0f bg=%02x%02x%02x%02x bw=%.1f/%.1f/%.1f/%.1f bc=%02x%02x%02x%02x",
+			       i, b->x, b->y, b->w, b->h,
+			       b->bg.r, b->bg.g, b->bg.b, b->bg.a,
+			       b->border_top, b->border_right,
+			       b->border_bottom, b->border_left,
+			       b->border_color.r, b->border_color.g,
+			       b->border_color.b, b->border_color.a);
+			/* Background fill (skip if transparent — most blocks). */
+			if (b->bg.a != 0) {
+				struct yetty_ysdf_box box = {
+					.center_x = b->x + b->w * 0.5f,
+					.center_y = b->y + b->h * 0.5f,
+					.half_width = b->w * 0.5f,
+					.half_height = b->h * 0.5f,
+					.corner_radius = b->border_radius,
+				};
+				(void)yetty_ysdf_add_box(buf, z++,
+					pack_rgba(b->bg), 0, 0, &box);
 			}
-			/* Skip transparent backgrounds — most blocks. */
-			if (b->bg.a == 0) break;
-			struct yetty_ysdf_box box = {
-				.center_x = b->x + b->w * 0.5f,
-				.center_y = b->y + b->h * 0.5f,
-				.half_width = b->w * 0.5f,
-				.half_height = b->h * 0.5f,
-				.corner_radius = 0,
-			};
-			(void)yetty_ysdf_add_box(buf, z++,
-				pack_rgba(b->bg), 0, 0, &box);
+			/* Borders — render each present side as a thin ysdf
+			 * rect of the border color. ysdf can't draw a
+			 * stroked rounded box natively, so for now corner
+			 * radius is honored on the bg fill but borders are
+			 * straight rectangles. Good enough to read as a
+			 * visible "card" outline. */
+			if (b->border_color.a != 0 &&
+			    (b->border_top > 0 || b->border_right > 0 ||
+			     b->border_bottom > 0 || b->border_left > 0)) {
+				uint32_t bc = pack_rgba(b->border_color);
+				if (b->border_top > 0) {
+					struct yetty_ysdf_box bx = {
+						.center_x = b->x + b->w * 0.5f,
+						.center_y = b->y + b->border_top * 0.5f,
+						.half_width = b->w * 0.5f,
+						.half_height = b->border_top * 0.5f,
+					};
+					(void)yetty_ysdf_add_box(buf, z++, bc, 0, 0, &bx);
+				}
+				if (b->border_bottom > 0) {
+					struct yetty_ysdf_box bx = {
+						.center_x = b->x + b->w * 0.5f,
+						.center_y = b->y + b->h - b->border_bottom * 0.5f,
+						.half_width = b->w * 0.5f,
+						.half_height = b->border_bottom * 0.5f,
+					};
+					(void)yetty_ysdf_add_box(buf, z++, bc, 0, 0, &bx);
+				}
+				if (b->border_left > 0) {
+					struct yetty_ysdf_box bx = {
+						.center_x = b->x + b->border_left * 0.5f,
+						.center_y = b->y + b->h * 0.5f,
+						.half_width = b->border_left * 0.5f,
+						.half_height = b->h * 0.5f,
+					};
+					(void)yetty_ysdf_add_box(buf, z++, bc, 0, 0, &bx);
+				}
+				if (b->border_right > 0) {
+					struct yetty_ysdf_box bx = {
+						.center_x = b->x + b->w - b->border_right * 0.5f,
+						.center_y = b->y + b->h * 0.5f,
+						.half_width = b->border_right * 0.5f,
+						.half_height = b->h * 0.5f,
+					};
+					(void)yetty_ysdf_add_box(buf, z++, bc, 0, 0, &bx);
+				}
+			}
 			break;
 		}
 
@@ -638,11 +668,8 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(
 				};
 				(void)yetty_ysdf_add_box(buf, z++,
 					0xc0c0c0ffu, 0, 0, &box);
-				if (debug) {
-					fprintf(stderr,
-					    "[ylexbor:paint] image (placeholder) i=%u xy=%.0f,%.0f wh=%.0fx%.0f\n",
-					    i, b->x, b->y, b->w, b->h);
-				}
+				ydebug("paint image (placeholder) i=%u xy=%.0f,%.0f wh=%.0fx%.0f",
+				       i, b->x, b->y, b->w, b->h);
 				break;
 			}
 
@@ -676,23 +703,19 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(
 			(void)yetty_ypaint_core_buffer_add_prim(buf, prim, need);
 			free(prim);
 			z++;
-			if (debug) {
-				fprintf(stderr,
-				    "[ylexbor:paint] image i=%u xy=%.0f,%.0f wh=%.0fx%.0f src=%dx%d\n",
-				    i, b->x, b->y, b->w, b->h,
-				    cached->w, cached->h);
-			}
+			ydebug("paint image i=%u xy=%.0f,%.0f wh=%.0fx%.0f src=%dx%d",
+			       i, b->x, b->y, b->w, b->h,
+			       cached->w, cached->h);
 			break;
 		}
 
 		case YL_BOX_INLINE_TEXT: {
-			if (debug && b->text_len) {
+			if (b->text_len) {
 				int n = b->text_len > 40 ? 40 : (int)b->text_len;
-				fprintf(stderr,
-				    "[ylexbor:paint] text  i=%u xy=%.0f,%.0f wh=%.0fx%.0f fg=%02x%02x%02x%02x \"%.*s\"\n",
-				    i, b->x, b->y, b->w, b->h,
-				    b->fg.r, b->fg.g, b->fg.b, b->fg.a,
-				    n, b->text);
+				ydebug("paint text  i=%u xy=%.0f,%.0f wh=%.0fx%.0f fg=%02x%02x%02x%02x \"%.*s\"",
+				       i, b->x, b->y, b->w, b->h,
+				       b->fg.r, b->fg.g, b->fg.b, b->fg.a,
+				       n, b->text);
 			}
 			if (b->text == NULL || b->text_len == 0) break;
 			struct yetty_ycore_buffer txt = {
@@ -719,11 +742,8 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(
 	if (scene_max_x < min_w) scene_max_x = min_w;
 	yetty_ypaint_core_buffer_set_scene_bounds(buf,
 		0.0f, 0.0f, scene_max_x, scene_max_y);
-	if (debug) {
-		fprintf(stderr,
-		    "[ylexbor:paint] scene bounds = (0,0)-(%.0f,%.0f)\n",
-		    scene_max_x, scene_max_y);
-	}
+	ydebug("paint scene bounds = (0,0)-(%.0f,%.0f)",
+	       scene_max_x, scene_max_y);
 
 	return YETTY_OK_VOID();
 }
