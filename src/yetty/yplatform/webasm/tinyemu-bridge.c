@@ -62,6 +62,19 @@ static int g_running = 0;
 static int g_pending_cols = 0;
 static int g_pending_rows = 0;
 
+/* Wall-clock time (emscripten_get_now()) we should NOT run the
+ * interpreter before. Set after each productive tick to "now +
+ * virt_machine_get_sleep_duration()" — the same idle window the
+ * desktop spends inside select(). While this is in the future,
+ * bridge_main_loop_tick early-returns, dropping CPU usage from the
+ * old "always burn 8 ms / 10 ms tick" (= 80 %) to near zero when the
+ * VM is HLT'd waiting for its next timer.
+ *
+ * Cleared to 0 from tinyemu_bridge_input / tinyemu_session_send so a
+ * keystroke or injected network packet triggers an immediate wake on
+ * the next emscripten tick instead of waiting out the idle window. */
+static double g_idle_until_ms = 0.0;
+
 static size_t input_ring_push(const uint8_t *data, size_t len)
 {
     size_t avail = INPUT_RING_CAPACITY - g_input.size;
@@ -463,6 +476,11 @@ void tinyemu_session_send(int sid, const uint8_t *data, int len)
     EM_ASM({
         console.log('[bridge] slirp_chr_input consumed=' + $0 + '/' + $1);
     }, (int)consumed, len);
+    /* Wake the VM so slirp's TCP output drains on the next tick
+     * instead of sitting up to BRIDGE_MAX_SLEEP_MS in the idle window.
+     * Same rationale as tinyemu_bridge_input — keep injected traffic
+     * responsive. */
+    g_idle_until_ms = 0.0;
 }
 
 /* Half-close the connection from the host side. The guest sees a
@@ -501,12 +519,26 @@ void tinyemu_session_close(int sid)
  * pthread loop by burning up to BRIDGE_TICK_BUDGET_MS of wall clock per
  * tick on a tight inner interp loop. ~30M cycles/sec target. */
 #define BRIDGE_MAX_EXEC_CYCLES 50000
-#define BRIDGE_MAX_SLEEP_MS    2
+/* MAX_SLEEP_MS caps how long virt_machine_get_sleep_duration may
+ * report as the idle window. Matches the desktop pattern (10 ms in
+ * shared/tinyemu-pty.c) so even when the VM is deeply idle we wake
+ * at least every 10 ms to drain the input ring and slirp's queues. */
+#define BRIDGE_MAX_SLEEP_MS    10
 #define BRIDGE_TICK_BUDGET_MS  8.0
 
 static void bridge_main_loop_tick(void)
 {
     if (!g_running || !g_vm) {
+        return;
+    }
+
+    /* VM-idle short-circuit. emscripten still calls us at 100 Hz, but
+     * if the VM told us last time around that it has nothing to do
+     * for the next N ms, we just return — no select, no interp, no
+     * wake of the slirp/console state machinery. CPU drops to whatever
+     * the empty function-call costs. */
+    double now = emscripten_get_now();
+    if (now < g_idle_until_ms) {
         return;
     }
 
@@ -529,7 +561,6 @@ static void bridge_main_loop_tick(void)
     struct timeval tv = { .tv_sec = 0, .tv_usec = 0 };
 
     int delay = virt_machine_get_sleep_duration(g_vm, BRIDGE_MAX_SLEEP_MS);
-    (void)delay; /* setTimeout drives our outer cadence; we don't sleep here */
 
     FD_ZERO(&rfds);
     FD_ZERO(&wfds);
@@ -573,13 +604,37 @@ static void bridge_main_loop_tick(void)
         }
     }
 
-    /* Burn through interp until we've used our wall-clock budget for
-     * this tick. Each call is bounded by BRIDGE_MAX_EXEC_CYCLES so we
-     * can revisit the input pump and stay responsive to keystrokes. */
+    /* Always run interp at least once — select_poll above may have
+     * just delivered a network packet that wakes the kernel out of
+     * WFI, so the pre-select `delay` is stale and we have to give
+     * the CPU a chance to handle it. Matches the desktop flow,
+     * which unconditionally calls virt_machine_interp after
+     * select_poll. When the CPU is in WFI this returns essentially
+     * for free (just re-checks the power-down flag). */
+    virt_machine_interp(g_vm, BRIDGE_MAX_EXEC_CYCLES);
+
+    /* Keep stepping while the CPU has runnable work and we still
+     * have wall-clock budget for this tick. The moment
+     * virt_machine_get_sleep_duration reports any positive idle
+     * window — meaning all CPUs are powered down waiting for a
+     * timer — we stop. Without this gate we'd spin interp for the
+     * full 8 ms budget (= 80 % CPU) every tick even when the kernel
+     * has nothing to step; with it, idle CPU drops to ~zero,
+     * matching the desktop's blocking-select behaviour. */
     double tick_start = emscripten_get_now();
-    do {
+    while (virt_machine_get_sleep_duration(g_vm, BRIDGE_MAX_SLEEP_MS) == 0 &&
+           emscripten_get_now() - tick_start < BRIDGE_TICK_BUDGET_MS) {
         virt_machine_interp(g_vm, BRIDGE_MAX_EXEC_CYCLES);
-    } while (emscripten_get_now() - tick_start < BRIDGE_TICK_BUDGET_MS);
+    }
+
+    /* Decide how long the VM can idle now that we've drained pending
+     * work. virt_machine_get_sleep_duration returns 0 when there's
+     * something pending immediately (busy boot, active I/O), or up to
+     * BRIDGE_MAX_SLEEP_MS when the kernel is in WFI/HLT. The cap
+     * matches desktop's MAX_SLEEP_TIME so we still wake at least every
+     * 10 ms to poll input even when deeply idle. */
+    int post_delay = virt_machine_get_sleep_duration(g_vm, BRIDGE_MAX_SLEEP_MS);
+    g_idle_until_ms = emscripten_get_now() + (double)post_delay;
 }
 
 /* ---- VM initialization ---- */
@@ -657,6 +712,10 @@ void tinyemu_bridge_input(const uint8_t *data, int len)
         return;
     }
     input_ring_push(data, (size_t)len);
+    /* Wake the VM on the next emscripten tick — otherwise the
+     * keystroke could sit in the input ring for up to
+     * BRIDGE_MAX_SLEEP_MS while the bridge is in its idle window. */
+    g_idle_until_ms = 0.0;
 }
 
 EMSCRIPTEN_KEEPALIVE
