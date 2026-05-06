@@ -158,13 +158,13 @@ YETTY_YRESULT_DECLARE(yetty_ypaint_core_complex_prim_factory_ptr,
                       struct yetty_ypaint_core_complex_prim_factory *);
 
 // Create (after device/queue available) / destroy
-YETTY_RETURNS_OWNED
+YETTY_ANNOT_CALLER_OWNED
 struct yetty_ypaint_core_complex_prim_factory_ptr_result yetty_ypaint_core_complex_prim_factory_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat target_format,
     struct yetty_ypaint_core_gpu_allocator *allocator);
 
 void yetty_ypaint_core_complex_prim_factory_destroy(
-    struct yetty_ypaint_core_complex_prim_factory *factory YETTY_CONSUMES);
+    struct yetty_ypaint_core_complex_prim_factory *factory YETTY_ANNOT_CALLEE_OWNED);
 
 // Register concrete factory
 struct yetty_ycore_void_result yetty_ypaint_core_complex_prim_factory_register(
@@ -172,16 +172,16 @@ struct yetty_ycore_void_result yetty_ypaint_core_complex_prim_factory_register(
     struct yetty_ypaint_core_concrete_factory *concrete);
 
 // Create instance (reads type from buffer_data, dispatches to concrete factory)
-YETTY_RETURNS_OWNED
+YETTY_ANNOT_CALLER_OWNED
 struct yetty_ypaint_core_complex_prim_instance_ptr_result
 yetty_ypaint_core_complex_prim_factory_create_instance(
     struct yetty_ypaint_core_complex_prim_factory *factory,
-    const void *buffer_data YETTY_ARRAY(size), size_t size,
+    const void *buffer_data YETTY_ANNOT_ARRAY(size), size_t size,
     uint32_t rolling_row);
 
 // Destroy instance (uses instance->factory back-pointer)
 void yetty_ypaint_core_complex_prim_instance_destroy(
-    struct yetty_ypaint_core_complex_prim_instance *instance YETTY_CONSUMES);
+    struct yetty_ypaint_core_complex_prim_instance *instance YETTY_ANNOT_CALLEE_OWNED);
 
 // Fan out visual-zoom state to every registered concrete factory (yplot,
 // yimage, ...). Safe to call with no registrations. Concrete factories that

@@ -185,6 +185,14 @@ const char *yetty_ygui_get_error(void)
 
 const char *yetty_ygui_version(void)
 {
+    /* Pinned to the enum in include/yetty/ygui/ygui.h — if someone bumps
+     * one without the other, this fails at compile time. Stringification
+     * (#) is preprocessor-only, so it can't see enum constants — hence the
+     * literal here plus the assert. */
+    _Static_assert(YETTY_YGUI_VERSION_MAJOR == 0
+                   && YETTY_YGUI_VERSION_MINOR == 2
+                   && YETTY_YGUI_VERSION_PATCH == 0,
+                   "ygui version string must match enum constants");
     return "0.2.0";
 }
 

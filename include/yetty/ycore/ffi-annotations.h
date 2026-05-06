@@ -5,10 +5,13 @@
  * the annotated declaration, and emits the matching role/ownership/lifetime
  * fact into build/ffi/metadata.yaml.
  *
- * Day-one shipping set (per docs/ffi-gen.md): YETTY_OUT, YETTY_ARRAY(len),
- * YETTY_RETURNS_OWNED, YETTY_CONSUMES. The remaining annotations document
- * intent today and become load-bearing once the relevant binding target
- * lands.
+ * All flavor macros are prefixed `YETTY_ANNOT_` so any annotation is visually
+ * grouped at a glance and `grep YETTY_ANNOT_` finds the full surface.
+ *
+ * Day-one shipping set (per docs/ffi-gen.md): YETTY_ANNOT_OUT,
+ * YETTY_ANNOT_ARRAY(len), YETTY_ANNOT_CALLER_OWNED, YETTY_ANNOT_CALLEE_OWNED.
+ * The remaining annotations document intent today and become load-bearing
+ * once the relevant binding target lands.
  */
 #ifndef YETTY_YCORE_FFI_ANNOTATIONS_H
 #define YETTY_YCORE_FFI_ANNOTATIONS_H
@@ -20,23 +23,34 @@
 #endif
 
 /* Parameter roles */
-#define YETTY_OUT            YETTY_ANNOTATE("yetty:out")
-#define YETTY_INOUT          YETTY_ANNOTATE("yetty:inout")
-#define YETTY_ARRAY(len)     YETTY_ANNOTATE("yetty:array:" #len)
+#define YETTY_ANNOT_OUT            YETTY_ANNOTATE("yetty:out")
+#define YETTY_ANNOT_INOUT          YETTY_ANNOTATE("yetty:inout")
+#define YETTY_ANNOT_ARRAY(len)     YETTY_ANNOTATE("yetty:array:" #len)
 
-/* Ownership */
-#define YETTY_OWNED          YETTY_ANNOTATE("yetty:owned")
-#define YETTY_BORROWED       YETTY_ANNOTATE("yetty:borrowed")
-#define YETTY_CONSUMES       YETTY_ANNOTATE("yetty:consumes")
-#define YETTY_RETURNS_OWNED  YETTY_ANNOTATE("yetty:returns_owned")
+/* Ownership.
+ *
+ * Names who owns the resource at the call boundary the annotation tags:
+ *
+ *   on a return  — who owns the returned pointer after the call returns?
+ *   on a param   — who owns the pointer after the call returns?
+ *
+ *   YETTY_ANNOT_CALLER_OWNED  on return  → caller must destroy.
+ *   YETTY_ANNOT_CALLEE_OWNED  on return  → caller borrows; must NOT destroy.
+ *   YETTY_ANNOT_CALLEE_OWNED  on param   → ownership transferred in;
+ *                                          caller must not use the pointer
+ *                                          afterwards (matches *_destroy).
+ *   YETTY_ANNOT_CALLER_OWNED  on param   → just a borrow (= default).
+ */
+#define YETTY_ANNOT_CALLER_OWNED   YETTY_ANNOTATE("yetty:caller_owned")
+#define YETTY_ANNOT_CALLEE_OWNED   YETTY_ANNOTATE("yetty:callee_owned")
 
 /* Nullability and strings */
-#define YETTY_NULLABLE       YETTY_ANNOTATE("yetty:nullable")
-#define YETTY_NONNULL        YETTY_ANNOTATE("yetty:nonnull")
-#define YETTY_CSTRING        YETTY_ANNOTATE("yetty:cstring")
+#define YETTY_ANNOT_NULLABLE       YETTY_ANNOTATE("yetty:nullable")
+#define YETTY_ANNOT_NONNULL        YETTY_ANNOTATE("yetty:nonnull")
+#define YETTY_ANNOT_CSTRING        YETTY_ANNOTATE("yetty:cstring")
 
 /* Callback lifetime */
-#define YETTY_CB_CALL_ONLY   YETTY_ANNOTATE("yetty:cb_call_only")
-#define YETTY_CB_RETAINED    YETTY_ANNOTATE("yetty:cb_retained")
+#define YETTY_ANNOT_CB_CALL_ONLY   YETTY_ANNOTATE("yetty:cb_call_only")
+#define YETTY_ANNOT_CB_RETAINED    YETTY_ANNOTATE("yetty:cb_retained")
 
 #endif /* YETTY_YCORE_FFI_ANNOTATIONS_H */

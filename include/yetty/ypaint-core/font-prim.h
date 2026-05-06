@@ -46,7 +46,7 @@ struct yetty_ypaint_core_font_prim_view {
 /* Parse a FONT prim. The view points into the prim payload — lifetime is
  * tied to the underlying buffer. Returns 0 on success, -1 on malformed. */
 int yetty_ypaint_core_font_prim_parse(const uint32_t *prim,
-                                      struct yetty_ypaint_core_font_prim_view *out YETTY_OUT);
+                                      struct yetty_ypaint_core_font_prim_view *out YETTY_ANNOT_OUT);
 
 /* Flyweight base ops handler. Returns ops only for type FONT. Register
  * via yetty_ypaint_core_flyweight_registry_add(reg, FONT, FONT, handler). */

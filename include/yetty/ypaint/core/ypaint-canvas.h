@@ -21,13 +21,13 @@ YETTY_YRESULT_DECLARE(yetty_ypaint_canvas_ptr, struct yetty_ypaint_canvas *);
 // Create a canvas
 // @param scrolling_mode If true, primitives are cursor-relative and scroll
 // @param context Yetty context for config access (fonts path, etc.)
-YETTY_RETURNS_OWNED
+YETTY_ANNOT_CALLER_OWNED
 struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
     bool scrolling_mode, const struct yetty_context *context);
 
 // Destroy a canvas
 struct yetty_ycore_void_result yetty_ypaint_canvas_destroy(
-    struct yetty_ypaint_canvas *canvas YETTY_CONSUMES);
+    struct yetty_ypaint_canvas *canvas YETTY_ANNOT_CALLEE_OWNED);
 
 //=============================================================================
 // Configuration

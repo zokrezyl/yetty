@@ -70,11 +70,11 @@ YETTY_YRESULT_DECLARE(yetty_ypaint_core_flyweight_registry_ptr,
                       struct yetty_ypaint_core_flyweight_registry *);
 
 // Create/destroy registry instance
-YETTY_RETURNS_OWNED
+YETTY_ANNOT_CALLER_OWNED
 struct yetty_ypaint_core_flyweight_registry_ptr_result yetty_ypaint_core_flyweight_registry_create(void);
 
 void yetty_ypaint_core_flyweight_registry_destroy(
-    struct yetty_ypaint_core_flyweight_registry *reg YETTY_CONSUMES);
+    struct yetty_ypaint_core_flyweight_registry *reg YETTY_ANNOT_CALLEE_OWNED);
 
 // Set default handler (SDF) - called first, fast path
 void yetty_ypaint_core_flyweight_registry_set_default(struct yetty_ypaint_core_flyweight_registry *reg,

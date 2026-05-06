@@ -60,7 +60,7 @@ struct yetty_ypaint_core_text_span_prim_view {
 
 int yetty_ypaint_core_text_span_prim_parse(
     const uint32_t *prim,
-    struct yetty_ypaint_core_text_span_prim_view *out YETTY_OUT);
+    struct yetty_ypaint_core_text_span_prim_view *out YETTY_ANNOT_OUT);
 
 struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_text_span_prim_handler(
     uint32_t prim_type);

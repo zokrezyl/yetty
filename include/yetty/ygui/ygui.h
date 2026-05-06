@@ -701,9 +701,11 @@ const char *yetty_ygui_get_error(void);
  * Version
  *===========================================================================*/
 
-#define YGUI_VERSION_MAJOR 0
-#define YGUI_VERSION_MINOR 2
-#define YGUI_VERSION_PATCH 0
+enum {
+    YETTY_YGUI_VERSION_MAJOR = 0,
+    YETTY_YGUI_VERSION_MINOR = 2,
+    YETTY_YGUI_VERSION_PATCH = 0,
+};
 
 const char *yetty_ygui_version(void);
 

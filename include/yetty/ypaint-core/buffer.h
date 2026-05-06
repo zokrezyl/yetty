@@ -30,20 +30,20 @@ struct yetty_ypaint_core_buffer_config {
 };
 
 // Create/destroy
-YETTY_RETURNS_OWNED
+YETTY_ANNOT_CALLER_OWNED
 struct yetty_ypaint_core_buffer_result yetty_ypaint_core_buffer_config_buffer_create(
-    const struct yetty_ypaint_core_buffer_config *config YETTY_NULLABLE);
+    const struct yetty_ypaint_core_buffer_config *config YETTY_ANNOT_NULLABLE);
 
 /* Build a ypaint buffer directly from already-decoded raw bytes (bare
  * primitive stream OR magic-tagged framed payload). Used by callers that
  * have done their own decompression / decoding (e.g. the ypaint-layer's
  * yface-driven path: base64 + LZ4F decompression happens upstream, the
  * decompressed bytes land here). */
-YETTY_RETURNS_OWNED
+YETTY_ANNOT_CALLER_OWNED
 struct yetty_ypaint_core_buffer_result yetty_ypaint_core_buffer_create_from_bytes(
-    const uint8_t *data YETTY_ARRAY(len), size_t len);
+    const uint8_t *data YETTY_ANNOT_ARRAY(len), size_t len);
 
-void yetty_ypaint_core_buffer_destroy(struct yetty_ypaint_core_buffer *buf YETTY_CONSUMES);
+void yetty_ypaint_core_buffer_destroy(struct yetty_ypaint_core_buffer *buf YETTY_ANNOT_CALLEE_OWNED);
 
 // Scene bounds accessors (populated from config at create time, 0s otherwise)
 float yetty_ypaint_core_buffer_scene_max_x(const struct yetty_ypaint_core_buffer *buf);
@@ -54,7 +54,7 @@ void yetty_ypaint_core_buffer_clear(struct yetty_ypaint_core_buffer *buf);
 
 // Add raw primitive data, returns byte offset
 struct yetty_ypaint_core_id_result yetty_ypaint_core_buffer_add_prim(
-    struct yetty_ypaint_core_buffer *buf, const void *data YETTY_ARRAY(size), size_t size);
+    struct yetty_ypaint_core_buffer *buf, const void *data YETTY_ANNOT_ARRAY(size), size_t size);
 
 /* Serialize the whole buffer (scene_bounds + primitives + text_spans) into
  * a single binary blob, tagged with a magic header. The receiver passes the
@@ -62,7 +62,7 @@ struct yetty_ypaint_core_id_result yetty_ypaint_core_buffer_add_prim(
  * sections. Lifetime of *out_data = until next serialize/clear/destroy.
  * Returns byte count. */
 size_t yetty_ypaint_core_buffer_serialize(struct yetty_ypaint_core_buffer *buf,
-                                          const uint8_t **out_data YETTY_OUT);
+                                          const uint8_t **out_data YETTY_ANNOT_OUT);
 
 // Update scene bounds on an existing buffer.
 void yetty_ypaint_core_buffer_set_scene_bounds(struct yetty_ypaint_core_buffer *buf, float min_x,
@@ -93,7 +93,7 @@ struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_nex
  * id. */
 struct yetty_ycore_int_result yetty_ypaint_core_buffer_add_font(
     struct yetty_ypaint_core_buffer *buf, const struct yetty_ycore_buffer *ttf_data,
-    const char *name YETTY_CSTRING);
+    const char *name YETTY_ANNOT_CSTRING);
 
 /* Pack a TEXT_SPAN primitive (text-span-prim.h). font_id must match a
  * previously-added FONT prim's id, or be -1 to use the canvas default. */
