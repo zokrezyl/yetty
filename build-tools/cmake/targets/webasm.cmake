@@ -90,6 +90,8 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/ycoroutine.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/ywebgpu.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/iframe-pty.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webasm/iframe-transport.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webasm/telnet-iframe-pty-factory.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/brotli-glue.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/extract-assets.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/fs.c
@@ -179,7 +181,10 @@ target_link_options(yetty PRIVATE
     #   _iframe_pty_on_data — JS message listener pushes VM output here.
     #   _yetty_brotli_decode — asset preload shim calls this to
     #     decompress *.br assets in MEMFS before main() runs.
-    "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_iframe_pty_on_data','_yetty_brotli_decode']"
+    #   _yetty_iframe_transport_on_{opened,rx,closed} — postMessage
+    #     listener (iframe-transport.c) routes session events from
+    #     the tinyemu iframe to the right transport instance.
+    "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_iframe_pty_on_data','_yetty_brotli_decode','_yetty_iframe_transport_on_opened','_yetty_iframe_transport_on_rx','_yetty_iframe_transport_on_closed']"
 )
 
 if(YETTY_ENABLE_FEATURE_DEMO)
@@ -235,13 +240,49 @@ add_custom_command(TARGET yetty PRE_LINK
 # alongside yetty.{js,wasm} and tinyemu.{js,wasm,data} — no extra copy
 # step needed. The pre-js shim fetches yetty-assets/manifest.json with
 # a relative URL, which works for both serve.py and any static-file CDN.
-add_custom_command(TARGET yetty POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${YETTY_ROOT}/build-tools/web/index.html ${CMAKE_BINARY_DIR}/index.html
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${YETTY_ROOT}/build-tools/web/tinyemu-iframe.html ${CMAKE_BINARY_DIR}/tinyemu-iframe.html
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${YETTY_ROOT}/build-tools/web/serve.py ${CMAKE_BINARY_DIR}/serve.py
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${YETTY_ROOT}/assets/favicon.ico ${CMAKE_BINARY_DIR}/favicon.ico
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${YETTY_ROOT}/assets/apple-touch-icon.jpg ${CMAKE_BINARY_DIR}/apple-touch-icon.jpg
+#
+# IMPORTANT: a POST_BUILD on TARGET yetty alone is NOT enough — when
+# only the HTML or pre-js changes (no C touched), ninja sees yetty as
+# up-to-date and the POST_BUILD never fires. The user then tests with
+# stale HTML and wonders why "the JS changes don't take effect". To
+# fix this we ALSO declare a phony target with output-file dependencies
+# so ninja re-runs the copies whenever any source HTML/JS changes.
+set(_WEB_COPY_FILES
+    ${CMAKE_BINARY_DIR}/index.html
+    ${CMAKE_BINARY_DIR}/tinyemu-iframe.html
+    ${CMAKE_BINARY_DIR}/serve.py
+    ${CMAKE_BINARY_DIR}/favicon.ico
+    ${CMAKE_BINARY_DIR}/apple-touch-icon.jpg
 )
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/index.html
+    COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/build-tools/web/index.html ${CMAKE_BINARY_DIR}/index.html
+    DEPENDS ${YETTY_ROOT}/build-tools/web/index.html
+    COMMENT "Copy web/index.html → build dir"
+)
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/tinyemu-iframe.html
+    COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/build-tools/web/tinyemu-iframe.html ${CMAKE_BINARY_DIR}/tinyemu-iframe.html
+    DEPENDS ${YETTY_ROOT}/build-tools/web/tinyemu-iframe.html
+    COMMENT "Copy web/tinyemu-iframe.html → build dir"
+)
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/serve.py
+    COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/build-tools/web/serve.py ${CMAKE_BINARY_DIR}/serve.py
+    DEPENDS ${YETTY_ROOT}/build-tools/web/serve.py
+)
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/favicon.ico
+    COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/assets/favicon.ico ${CMAKE_BINARY_DIR}/favicon.ico
+    DEPENDS ${YETTY_ROOT}/assets/favicon.ico
+)
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/apple-touch-icon.jpg
+    COMMAND ${CMAKE_COMMAND} -E copy ${YETTY_ROOT}/assets/apple-touch-icon.jpg ${CMAKE_BINARY_DIR}/apple-touch-icon.jpg
+    DEPENDS ${YETTY_ROOT}/assets/apple-touch-icon.jpg
+)
+add_custom_target(yetty_web_files ALL DEPENDS ${_WEB_COPY_FILES})
+add_dependencies(yetty yetty_web_files)
 
 # Generate pre-computed demo script outputs
 if(YETTY_ENABLE_FEATURE_DEMO)

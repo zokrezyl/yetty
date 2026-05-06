@@ -42,6 +42,7 @@
 #include <tinyemu/fs.h>
 #ifdef CONFIG_SLIRP
 #include <tinyemu/slirp/libslirp.h>
+#include <tinyemu/slirp/chr-backend.h>
 #endif
 
 /* ---- Console input ring ---- */
@@ -313,6 +314,15 @@ static EthernetDevice *bridge_slirp_open(const VMEthEntry *e)
     net->mac_addr[3] = 0x00;
     net->mac_addr[4] = 0x00;
     net->mac_addr[5] = 0x01;
+    /* Prime slirp's ARP cache with the MAC virtio-net will advertise
+     * to the guest via VIRTIO_NET_F_MAC. Without this, the chr-backend
+     * SYN injected on session-open would hit if_encap with an empty
+     * cache, broadcast an ARP request, and drop the SYN — recovery
+     * waits on TCPT_REXMT *and* a guest-side ARP reply, which never
+     * comes back reliably because the alpine /init uses static IP and
+     * never originates outbound traffic. With the cache primed up
+     * front, the very first SYN reaches the guest. */
+    slirp_set_client_mac(g_slirp, net->mac_addr);
     net->opaque = g_slirp;
     net->write_packet = slirp_write_packet;
     net->select_fill = slirp_select_fill1;
@@ -320,6 +330,165 @@ static EthernetDevice *bridge_slirp_open(const VMEthEntry *e)
     return net;
 }
 #endif
+
+/* ---- Session table — JS-multiplexed slirp injections ---------------
+ *
+ * Each yetty terminal opens an independent connection to the in-VM
+ * telnetd via tinyemu_session_open(port). We use slirp's chr-backend
+ * hook (slirp/chr-backend.{h,c}) to manufacture a synthetic inbound
+ * TCP connection — no OS socket involved. Multiple sessions share
+ * one slirp instance and one VM telnetd; each gets its own forked
+ * shell with its own tty geometry (telnet NAWS handles resize per
+ * session).
+ *
+ * sids are small ints (slot index in g_sessions). They're returned
+ * to JS by tinyemu_session_open and used as the lookup key for
+ * tinyemu_session_send / tinyemu_session_close. The iframe page
+ * keeps a parallel map of {parent's clientSid → wasm sid}. */
+
+#ifdef CONFIG_SLIRP
+#define BRIDGE_MAX_SESSIONS 32
+
+struct bridge_session {
+    int in_use;
+    int wasm_sid;                       /* duplicates the array index. */
+    struct slirp_chr_backend backend;
+    struct socket *so;                  /* slirp's chr socket — invalid after close */
+};
+
+static struct bridge_session g_sessions[BRIDGE_MAX_SESSIONS];
+
+/* Slirp delivers guest output here (via slirp_send → backend->ops->send).
+ * Forward to the iframe page, which then postMessages to the parent
+ * yetty.wasm where the right telnet-pty's on_data fires.
+ *
+ * THIS IS THE FIRST POINT THAT FIRES WHEN GUEST TELNETD ANSWERS. If
+ * we never see this log, the SYN never got SYN-ACK'd by the guest. */
+static void session_backend_send(void *ctx, const void *buf, size_t len)
+{
+    struct bridge_session *s = (struct bridge_session *)ctx;
+    EM_ASM({
+        console.log('[bridge] session_backend_send sid=' + $0 +
+                    ' len=' + $1 + ' (guest → host)');
+    }, s ? s->wasm_sid : -1, (int)len);
+    if (!s || !s->in_use || len == 0) {
+        return;
+    }
+    EM_ASM({
+        if (window.__yettyTinyemuPostSessionRx) {
+            window.__yettyTinyemuPostSessionRx($0, $1, $2);
+        } else {
+            console.error('[bridge] window.__yettyTinyemuPostSessionRx MISSING');
+        }
+    }, s->wasm_sid, buf, (int)len);
+}
+
+static const struct slirp_chr_backend_ops session_backend_ops = {
+    .send = session_backend_send,
+};
+
+/* Mint a synthetic inbound connection to (slirp-default-guest-IP,
+ * port). Returns the sid (>=0) on success, -1 on failure. */
+EMSCRIPTEN_KEEPALIVE
+int tinyemu_session_open(int port)
+{
+    EM_ASM({
+        console.log('[bridge] tinyemu_session_open port=' + $0 +
+                    ' g_slirp=' + ($1 ? 'OK' : 'NULL') +
+                    ' g_running=' + $2);
+    }, port, !!g_slirp, g_running);
+    if (!g_slirp || !g_running || port <= 0 || port > 65535) {
+        return -1;
+    }
+
+    int sid = -1;
+    for (int i = 0; i < BRIDGE_MAX_SESSIONS; i++) {
+        if (!g_sessions[i].in_use) {
+            sid = i;
+            break;
+        }
+    }
+    if (sid < 0) {
+        fprintf(stderr, "tinyemu-bridge: session table full (>%d)\n",
+                BRIDGE_MAX_SESSIONS);
+        return -1;
+    }
+
+    struct bridge_session *s = &g_sessions[sid];
+    memset(s, 0, sizeof(*s));
+    s->in_use = 1;
+    s->wasm_sid = sid;
+    s->backend.ops = &session_backend_ops;
+    s->backend.ctx = s;
+
+    /* Slirp's default guest gets 10.0.2.15 from the built-in DHCP.
+     * We hard-code that here — matches the slirp_init() addresses
+     * in this file (net=10.0.2.0/24, vhost=10.0.2.2, dhcp=10.0.2.15).
+     * If the cfg ever changes the network, this needs to read the
+     * actual guest IP back from slirp. */
+    struct in_addr guest_addr;
+    guest_addr.s_addr = htonl(0x0a00020fu);  /* 10.0.2.15 */
+
+    s->so = slirp_chr_open(g_slirp, guest_addr, port, &s->backend);
+    if (!s->so) {
+        fprintf(stderr, "tinyemu-bridge: slirp_chr_open(port=%d) failed\n", port);
+        s->in_use = 0;
+        return -1;
+    }
+    fprintf(stderr, "tinyemu-bridge: session %d → 10.0.2.15:%d open\n",
+            sid, port);
+    return sid;
+}
+
+/* Push host bytes (yetty's telnet output) into the synthetic
+ * connection's send buffer. Caller responsible for chunking. */
+EMSCRIPTEN_KEEPALIVE
+void tinyemu_session_send(int sid, const uint8_t *data, int len)
+{
+    EM_ASM({
+        console.log('[bridge] tinyemu_session_send sid=' + $0 + ' len=' + $1);
+    }, sid, len);
+    if (sid < 0 || sid >= BRIDGE_MAX_SESSIONS || len <= 0 || !data) {
+        return;
+    }
+    struct bridge_session *s = &g_sessions[sid];
+    if (!s->in_use || !s->so) {
+        EM_ASM({
+            console.warn('[bridge] tinyemu_session_send: sid=' + $0 +
+                         ' not in_use OR so==NULL — DROPPING');
+        }, sid);
+        return;
+    }
+    size_t consumed = slirp_chr_input(s->so, data, (size_t)len);
+    EM_ASM({
+        console.log('[bridge] slirp_chr_input consumed=' + $0 + '/' + $1);
+    }, (int)consumed, len);
+}
+
+/* Half-close the connection from the host side. The guest sees a
+ * FIN; once it ACKs and closes its end, slirp tears the socket
+ * down — at which point we reset the slot. The chr backend's
+ * pointer is cleared on the slirp side immediately so any further
+ * guest bytes drop on the floor instead of dispatching to a freed
+ * session. */
+EMSCRIPTEN_KEEPALIVE
+void tinyemu_session_close(int sid)
+{
+    if (sid < 0 || sid >= BRIDGE_MAX_SESSIONS) {
+        return;
+    }
+    struct bridge_session *s = &g_sessions[sid];
+    if (!s->in_use) {
+        return;
+    }
+    fprintf(stderr, "tinyemu-bridge: session %d close\n", sid);
+    if (s->so) {
+        slirp_chr_close(s->so);
+        s->so = NULL;
+    }
+    s->in_use = 0;
+}
+#endif /* CONFIG_SLIRP */
 
 /* ---- VM main loop tick ---- */
 

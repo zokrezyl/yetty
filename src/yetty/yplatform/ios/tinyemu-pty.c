@@ -669,7 +669,7 @@ static struct yetty_yplatform_pty_result tinyemu_pty_factory_create_pty(
             return YETTY_ERR(yetty_yplatform_pty,
                              "--telnet requires telnet/port (1..65535)");
         }
-        return yetty_ytelnet_telnet_pty_create(host, (uint16_t)port, event_loop);
+        return yetty_ytelnet_telnet_pty_create_tcp(host, (uint16_t)port, event_loop);
     }
 
     /* Fallback: TinyEMU (the original iOS / tvOS default). */

@@ -38,6 +38,16 @@ int slirp_remove_hostfwd(Slirp *slirp, int is_udp,
 int slirp_add_exec(Slirp *slirp, int do_pty, const void *args,
                    struct in_addr *guest_addr, int guest_port);
 
+/* Pre-populate slirp's guest-MAC ARP cache. Without this, the very
+ * first packet slirp tries to deliver to the guest is dropped by
+ * if_encap (broadcast ARP request sent in its place); recovery relies
+ * on the TCP retransmit timer AND the guest replying to the broadcast
+ * ARP, which is brittle if the guest has done no outbound traffic yet
+ * (e.g. static-IP /init that never DHCPs). The caller passes the same
+ * MAC the virtio-net config advertises to the guest, so the cache
+ * matches what eth0 will use. */
+void slirp_set_client_mac(Slirp *slirp, const uint8_t mac[6]);
+
 void slirp_socket_recv(Slirp *slirp, struct in_addr guest_addr,
                        int guest_port, const uint8_t *buf, int size);
 size_t slirp_socket_can_recv(Slirp *slirp, struct in_addr guest_addr,

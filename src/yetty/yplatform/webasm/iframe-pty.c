@@ -335,7 +335,14 @@ struct yetty_yplatform_pty_result yetty_yplatform_iframe_pty_create(struct yetty
             }
             iframe = document.createElement('iframe');
             iframe.id = 'yetty-vm-pty-' + ptyId;
-            iframe.style.cssText = 'display:none; width:0; height:0; border:0;';
+            /* Off-screen, not display:none — Chrome throttles
+             * timers in display:none iframes, slowing the
+             * wasm-interpreted VM enough that boot/telnetd
+             * doesn't finish in any reasonable time. */
+            iframe.style.cssText =
+                'position:absolute; left:-99999px; top:-99999px;' +
+                ' width:1px; height:1px; border:0;' +
+                ' visibility:hidden; pointer-events:none;';
             iframe.src = 'tinyemu-iframe.html?ptyId=' + ptyId +
                          '&cols=' + cols + '&rows=' + rows;
             document.body.appendChild(iframe);
@@ -364,61 +371,19 @@ struct yetty_yplatform_pty_result yetty_yplatform_iframe_pty_create(struct yetty
         } else {
             attach();
         }
-        // Yetty is fully wired up to the VM now. Schedule the boot
-        // console to auto-close — give the user a few seconds to
-        // glance at the final boot lines before it disappears. The
-        // 'x' button in the overlay also dismisses it instantly, and
-        // the userDismissed latch in index.html means status messages
-        // arriving after this point won't pop it back open.
-        if (window.yettyStatus && window.yettyStatus.autoHide) {
-            window.yettyStatus.autoHide(5000);
-        }
+        // No auto-hide. The boot console is full-screen and
+        // scrollable — the user reads it (kernel boot, openrc,
+        // telnetd bringup) and dismisses manually via the × button.
+        // Hiding it under their cursor mid-scroll would be hostile.
     }, pty->pty_id, (int)pty->cols, (int)pty->rows);
 
     yinfo("iframe_pty: created pty_id=%u", pty->pty_id);
     return YETTY_OK(yetty_yplatform_pty, &pty->base);
 }
 
-/* Factory */
-
-struct yetty_yplatform_iframe_pty_factory {
-    struct yetty_yplatform_pty_factory base;
-    struct yetty_yconfig_config *config;
-};
-
-static void iframe_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
-{
-    struct yetty_yplatform_iframe_pty_factory *factory = container_of(self, struct yetty_yplatform_iframe_pty_factory, base);
-    free(factory);
-}
-
-static struct yetty_yplatform_pty_result iframe_pty_factory_create_pty(
-    struct yetty_yplatform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop)
-{
-    struct yetty_yplatform_iframe_pty_factory *factory = container_of(self, struct yetty_yplatform_iframe_pty_factory, base);
-    (void)event_loop;
-    return yetty_yplatform_iframe_pty_create(factory->config);
-}
-
-static const struct yetty_yplatform_pty_factory_ops iframe_pty_factory_ops = {
-    .destroy = iframe_pty_factory_destroy,
-    .create_pty = iframe_pty_factory_create_pty,
-};
-
-struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
-    struct yetty_yconfig_config *config, void *os_specific)
-{
-    struct yetty_yplatform_iframe_pty_factory *factory;
-
-    (void)os_specific;
-
-    factory = malloc(sizeof(*factory));
-    if (!factory) {
-        return YETTY_ERR(yetty_yplatform_pty_factory, "failed to allocate iframe pty factory");
-    }
-
-    factory->base.ops = &iframe_pty_factory_ops;
-    factory->config = config;
-
-    return YETTY_OK(yetty_yplatform_pty_factory, &factory->base);
-}
+/* The yetty_yplatform_pty_factory_create symbol is now owned by
+ * webasm/telnet-iframe-pty-factory.c (default = telnet-over-iframe).
+ * The iframe-pty (virtio-console hvc0) backend in this file stays
+ * compiled and reachable via yetty_yplatform_iframe_pty_create() if
+ * anyone wants to attach yetty to the boot console for debugging,
+ * but it's not the default factory anymore. */

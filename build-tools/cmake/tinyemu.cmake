@@ -50,6 +50,7 @@ if(NOT WIN32)
         ${TINYEMU_DIR}/slirp/sbuf.c
         ${TINYEMU_DIR}/slirp/tcp_input.c
         ${TINYEMU_DIR}/slirp/tcp_timer.c
+        ${TINYEMU_DIR}/slirp/chr-backend.c
     )
 else()
     set(TINYEMU_SLIRP_SOURCES "")
@@ -130,6 +131,12 @@ endforeach()
 file(MAKE_DIRECTORY ${TINYEMU_INCLUDE_WRAPPER}/tinyemu/slirp)
 if(EXISTS ${TINYEMU_DIR}/slirp/libslirp.h)
     configure_file(${TINYEMU_DIR}/slirp/libslirp.h ${TINYEMU_INCLUDE_WRAPPER}/tinyemu/slirp/libslirp.h COPYONLY)
+endif()
+# Yetty addition: chr-backend header is part of slirp's public surface
+# now (used by tinyemu-bridge.c on wasm to inject inbound TCP without
+# an OS socket — see slirp/chr-backend.{h,c}).
+if(EXISTS ${TINYEMU_DIR}/slirp/chr-backend.h)
+    configure_file(${TINYEMU_DIR}/slirp/chr-backend.h ${TINYEMU_INCLUDE_WRAPPER}/tinyemu/slirp/chr-backend.h COPYONLY)
 endif()
 
 target_include_directories(tinyemu PUBLIC
