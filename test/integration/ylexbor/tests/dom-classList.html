@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<body>
+<div id="t" class="a b c"></div>
+<script>
+test(() => {
+  const el = document.getElementById("t");
+  assert_true(el.classList.contains("a"));
+  assert_true(el.classList.contains("b"));
+  assert_false(el.classList.contains("z"));
+}, "classList.contains");
+
+test(() => {
+  const el = document.getElementById("t");
+  el.classList.add("d");
+  assert_true(el.classList.contains("d"));
+}, "classList.add");
+
+test(() => {
+  const el = document.getElementById("t");
+  el.classList.remove("a");
+  assert_false(el.classList.contains("a"));
+}, "classList.remove");
+</script>
+</body>
+</html>

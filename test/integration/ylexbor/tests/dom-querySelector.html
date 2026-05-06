@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head><title>querySelector</title></head>
+<body>
+<div id="hdr" class="header">H</div>
+<div class="row"><span class="cell">c1</span><span class="cell">c2</span></div>
+<script>
+test(() => {
+  const el = document.querySelector(".header");
+  assert_true(el !== null);
+  assert_equals(el.id, "hdr");
+}, "querySelector by class");
+
+test(() => {
+  const list = document.querySelectorAll(".cell");
+  assert_equals(list.length, 2);
+}, "querySelectorAll length");
+
+test(() => {
+  const el = document.querySelector("#hdr");
+  assert_equals(el.tagName, "DIV");
+}, "tagName is uppercase");
+
+test(() => {
+  const el = document.querySelector(".header");
+  assert_equals(el.className, "header");
+}, "className reads class attribute");
+</script>
+</body>
+</html>

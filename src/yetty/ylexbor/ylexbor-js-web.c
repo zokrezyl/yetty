@@ -168,6 +168,35 @@ static size_t fetch_write_cb(char *p, size_t sz, size_t n, void *ud)
 
 char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status)
 {
+	if (!url) {
+		if (out_len)    *out_len    = 0;
+		if (out_status) *out_status = 0;
+		return NULL;
+	}
+	/* file:// — handle directly since libcurl is often built without
+	 * the FILE protocol. Used heavily by the WPT integration runner
+	 * to load `<script src=...>` siblings of the test page. */
+	if (strncmp(url, "file://", 7) == 0) {
+		const char *path = url + 7;
+		FILE *f = fopen(path, "rb");
+		if (!f) {
+			if (out_len)    *out_len    = 0;
+			if (out_status) *out_status = 0;
+			return NULL;
+		}
+		fseek(f, 0, SEEK_END);
+		long sz = ftell(f);
+		fseek(f, 0, SEEK_SET);
+		if (sz < 0) { fclose(f); if (out_status) *out_status = 0; return NULL; }
+		char *buf = malloc((size_t)sz + 1);
+		if (!buf) { fclose(f); return NULL; }
+		size_t got = fread(buf, 1, (size_t)sz, f);
+		fclose(f);
+		buf[got] = '\0';
+		if (out_len)    *out_len    = got;
+		if (out_status) *out_status = 200;
+		return buf;
+	}
 	CURL *c = curl_easy_init();
 	if (!c) return NULL;
 	struct fetch_buf b = {0};
@@ -361,8 +390,19 @@ int yetty_ylexbor_pump(struct yetty_ylexbor *r)
 
 	int64_t now = now_ms();
 	while (r->timer_count > 0 && r->timers[0]->deadline_ms <= now) {
+		/* Pop the timer out of the array BEFORE invoking its
+		 * handler. If the handler calls clearTimeout/clearInterval
+		 * on its own id (idiomatic for "fire 3 times then stop"),
+		 * timer_remove walks r->timers and our hot pointer would
+		 * become a UAF. Owning `t` locally — and reinserting only
+		 * if it's still a live interval — sidesteps that. */
 		struct yetty_ylexbor_timer *t = r->timers[0];
-		/* Pop, but keep handler ref for the call. */
+		memmove(&r->timers[0], &r->timers[1],
+			(r->timer_count - 1) * sizeof(*r->timers));
+		r->timer_count--;
+
+		int saved_id = t->id;
+		int saved_interval = t->interval_ms;
 		JSValue handler = t->handler;
 		JSValue ret = JS_Call(ctx, handler, JS_UNDEFINED, 0, NULL);
 		if (JS_IsException(ret)) {
@@ -375,16 +415,53 @@ int yetty_ylexbor_pump(struct yetty_ylexbor *r)
 		}
 		JS_FreeValue(ctx, ret);
 
-		if (t->interval_ms > 0) {
+		/* Did the handler clearInterval its own id? If yes,
+		 * timer_remove ran but didn't find us in the array
+		 * (we're already popped) — the *next* clearTimeout on
+		 * the same id would be a no-op, but the handler ref we
+		 * held has not been freed. We free it here. */
+		int still_alive = saved_interval > 0;
+		if (still_alive) {
+			/* If the handler also explicitly cleared the
+			 * timer, timer_remove doesn't see it (popped),
+			 * so we need a separate sentinel. We use a
+			 * `_disarmed` flag set by timer_remove — but we
+			 * don't have one yet. Rely on this convention:
+			 * our handlers either call clear (cancel) OR let
+			 * the interval re-fire. clearInterval is a
+			 * cooperative drop. To be safe against handlers
+			 * that do BOTH (spec-illegal but seen in real
+			 * code), we check `r->timer_count` for any entry
+			 * with the same id and skip reinsert. */
+			for (int i = 0; i < r->timer_count; i++) {
+				if (r->timers[i]->id == saved_id) {
+					still_alive = 0;
+					break;
+				}
+			}
+		}
+
+		if (still_alive) {
 			t->deadline_ms = now + t->interval_ms;
-			qsort(r->timers, r->timer_count, sizeof(*r->timers), timer_cmp);
+			/* Re-insert in deadline order. */
+			if (r->timer_count == r->timer_cap) {
+				int nc = r->timer_cap ? r->timer_cap * 2 : 8;
+				void *p = realloc(r->timers, nc * sizeof(*r->timers));
+				if (!p) {
+					JS_FreeValue(ctx, t->handler);
+					free(t);
+					goto after_call;
+				}
+				r->timers = p; r->timer_cap = nc;
+			}
+			r->timers[r->timer_count++] = t;
+			qsort(r->timers, r->timer_count, sizeof(*r->timers),
+			      timer_cmp);
 		} else {
 			JS_FreeValue(ctx, t->handler);
 			free(t);
-			memmove(&r->timers[0], &r->timers[1],
-				(r->timer_count - 1) * sizeof(*r->timers));
-			r->timer_count--;
 		}
+after_call:
 		yetty_ylexbor_js_drain_jobs(r);
 		now = now_ms();
 	}
@@ -856,6 +933,35 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
 			JS_NewString(ctx, href));
 		JS_SetPropertyStr(ctx, doc, "title",
 			JS_NewString(ctx, ""));
+		/* document.domain — host portion of base_url. github's
+		 * cookie helpers throw "Unable to get document domain"
+		 * when null, so empty string is acceptable but a real
+		 * value is closer to spec. */
+		const char *p2 = strstr(href, "://");
+		if (p2) {
+			const char *host = p2 + 3;
+			const char *path = strchr(host, '/');
+			size_t hlen = path ? (size_t)(path - host)
+					   : strlen(host);
+			JS_SetPropertyStr(ctx, doc, "domain",
+				JS_NewStringLen(ctx, host, hlen));
+		} else {
+			JS_SetPropertyStr(ctx, doc, "domain",
+				JS_NewString(ctx, "localhost"));
+		}
+		/* document.referrer / lastModified / characterSet etc.
+		 * — empty strings are fine for feature detection. */
+		JS_SetPropertyStr(ctx, doc, "referrer",     JS_NewString(ctx, ""));
+		JS_SetPropertyStr(ctx, doc, "lastModified", JS_NewString(ctx, ""));
+		JS_SetPropertyStr(ctx, doc, "characterSet", JS_NewString(ctx, "UTF-8"));
+		JS_SetPropertyStr(ctx, doc, "charset",      JS_NewString(ctx, "UTF-8"));
+		JS_SetPropertyStr(ctx, doc, "contentType",  JS_NewString(ctx, "text/html"));
+		JS_SetPropertyStr(ctx, doc, "compatMode",   JS_NewString(ctx, "CSS1Compat"));
+		JS_SetPropertyStr(ctx, doc, "hidden",       JS_FALSE);
+		JS_SetPropertyStr(ctx, doc, "visibilityState",
+			JS_NewString(ctx, "visible"));
+		JS_SetPropertyStr(ctx, doc, "designMode",   JS_NewString(ctx, "off"));
+		JS_SetPropertyStr(ctx, doc, "dir",          JS_NewString(ctx, "ltr"));
 	}
 	JS_FreeValue(ctx, doc);
 

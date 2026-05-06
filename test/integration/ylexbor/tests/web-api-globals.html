@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<body>
+<script>
+test(() => {
+  assert_equals(typeof window, "object");
+  assert_equals(typeof self,   "object");
+  assert_true(window === self);
+  assert_true(window === globalThis);
+}, "window / self / globalThis are aliases");
+
+test(() => {
+  assert_equals(typeof location, "object");
+  assert_equals(typeof location.protocol, "string");
+  assert_equals(typeof location.host,     "string");
+  assert_equals(typeof location.pathname, "string");
+  assert_equals(typeof location.search,   "string");
+}, "location has the standard properties");
+
+test(() => {
+  assert_equals(typeof document.location, "object");
+  assert_true(document.location === location);
+}, "document.location aliases window.location");
+
+test(() => {
+  assert_equals(typeof navigator,            "object");
+  assert_equals(typeof navigator.userAgent,  "string");
+  assert_equals(typeof navigator.language,   "string");
+  assert_true(Array.isArray(navigator.languages));
+}, "navigator surface");
+
+test(() => {
+  assert_equals(typeof history,             "object");
+  assert_equals(typeof history.pushState,   "function");
+}, "history surface");
+
+test(() => {
+  assert_equals(typeof localStorage,         "object");
+  localStorage.setItem("k", "v");
+  assert_equals(localStorage.getItem("k"), "v");
+  localStorage.removeItem("k");
+  assert_equals(localStorage.getItem("k"), null);
+}, "localStorage round-trip");
+
+test(() => {
+  assert_equals(typeof crypto,                       "object");
+  assert_equals(typeof crypto.getRandomValues,       "function");
+  assert_equals(typeof crypto.randomUUID,            "function");
+  const u = crypto.randomUUID();
+  assert_regexp_match(u, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+}, "crypto.randomUUID format");
+
+test(() => {
+  assert_equals(typeof fetch,             "function");
+  assert_equals(typeof XMLHttpRequest,    "function");
+  assert_equals(typeof Headers,           "function");
+  assert_equals(typeof Request,           "function");
+  assert_equals(typeof Response,          "function");
+}, "fetch + XHR globals");
+
+test(() => {
+  assert_equals(typeof MutationObserver,    "function");
+  assert_equals(typeof IntersectionObserver,"function");
+  assert_equals(typeof ResizeObserver,      "function");
+  assert_equals(typeof PerformanceObserver, "function");
+}, "observer constructors");
+
+test(() => {
+  assert_equals(typeof Element,         "function");
+  assert_equals(typeof Node,            "function");
+  assert_equals(typeof Document,        "function");
+  assert_equals(typeof EventTarget,     "function");
+  assert_equals(typeof Event,           "function");
+  assert_equals(typeof CustomEvent,     "function");
+}, "DOM/event constructors");
+
+test(() => {
+  assert_equals(document.nodeType, 9);
+  assert_equals(document.nodeName, "#document");
+}, "document.nodeType is DOCUMENT_NODE (9)");
+
+test(() => {
+  const el = document.createElement("div");
+  assert_equals(el.nodeType, 1);
+}, "element.nodeType is ELEMENT_NODE (1)");
+</script>
+</body>
+</html>

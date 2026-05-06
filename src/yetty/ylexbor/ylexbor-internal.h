@@ -249,6 +249,12 @@ struct yetty_ycore_void_result yetty_ylexbor_js_run_inline_scripts(
 /* DOM-bindings install (called from js_init). */
 void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r);
 
+/* Reset DOM-side global state held across runtime lifecycles —
+ * specifically the static `g_listeners` array, whose JSValues belong
+ * to the runtime that's about to be destroyed. Called from
+ * yetty_ylexbor_js_destroy. */
+void yetty_ylexbor_js_dom_reset(struct yetty_ylexbor *r);
+
 /* Web-API bindings (fetch/XHR/timers/window/navigator/location/history/
  * storage/getComputedStyle/matchMedia/requestAnimationFrame). Installed
  * right after the DOM bindings. */

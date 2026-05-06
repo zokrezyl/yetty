@@ -129,9 +129,24 @@ struct yetty_ycore_void_result yetty_ylexbor_js_init(struct yetty_ylexbor *r)
 
 void yetty_ylexbor_js_destroy(struct yetty_ylexbor *r)
 {
-	/* Drop pending timers first (they hold JSValue refs). The timer
-	 * struct's full layout lives in ylexbor-js-web.c. */
+	/* Order of teardown:
+	 *   1. Drain any pending jobs/microtasks so they fire while
+	 *      our handlers and timer queue are still live.
+	 *   2. Drop our timer queue (handler JSValues) — these are owned
+	 *      by the dying context and would otherwise leak.
+	 *   3. Reset the static DOM listener pool so the next runtime
+	 *      doesn't iterate stale handlers.
+	 *   4. Then free QuickJS state, finally the opaque blob.
+	 *
+	 * Skipping #1 made the integration runner crash inside
+	 * js_closure during the pump of the *next* test — pending
+	 * promise-then jobs were carrying references that got freed
+	 * out from under them when JS_FreeRuntime ran the GC. */
+	if (r->js_rt && r->js_ctx) {
+		yetty_ylexbor_js_drain_jobs(r);
+	}
 	yetty_ylexbor_js_web_shutdown(r);
+	yetty_ylexbor_js_dom_reset(r);
 	if (r->js_rt) {
 		void *opaque = JS_GetRuntimeOpaque((JSRuntime *)r->js_rt);
 		free(opaque);

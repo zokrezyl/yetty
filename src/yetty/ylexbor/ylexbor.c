@@ -160,6 +160,17 @@ int yetty_ylexbor_pump_timers(struct yetty_ylexbor *r)
 	return yetty_ylexbor_pump(r);
 }
 
+/* Internal accessor — the WPT integration runner needs the raw
+ * JSContext to read back results from globalThis.
+ *
+ * NOT part of the public ylexbor API; the test runner is the only
+ * legitimate caller. Anyone else reaching for this should add a real
+ * read-back function rather than poking JS state directly. */
+void *yetty_ylexbor_internal_get_js_ctx(struct yetty_ylexbor *r)
+{
+	return r ? r->js_ctx : NULL;
+}
+
 static int g_css_loaded = 0, g_css_failed = 0, g_css_inline = 0;
 
 /* Walk the DOM, find every <link rel="stylesheet" href="..."> and
