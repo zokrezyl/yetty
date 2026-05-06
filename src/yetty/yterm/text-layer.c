@@ -331,11 +331,25 @@ static void sb_arena_drop_newest(struct yetty_yterm_text_sb_arena *a)
     a->lines_count--;
 }
 
-/* Read cols cells from the ring at byte offset into dst, handling wrap. */
+/* Read cols cells from the ring at byte offset into dst, handling wrap.
+ * Defensive: garbage line records (uninit/stale) have shown up under heavy
+ * ypaint scrollback. Bail with a loud yerror rather than memcpy from a
+ * bogus pointer — the caller has already filled dst with blank if needed. */
 static void sb_arena_read(const struct yetty_yterm_text_sb_arena *a, size_t offset, int cols,
                           VTermScreenCell *dst)
 {
+    if (cols <= 0) {
+        return;
+    }
     size_t bytes = (size_t)cols * sizeof(VTermScreenCell);
+    if (offset >= a->cells_cap || bytes > a->cells_cap) {
+        yerror("sb_arena_read: invalid args offset=%zu cols=%d bytes=%zu "
+               "cells_cap=%zu cells_head=%zu cells_tail=%zu cells_used=%zu "
+               "lines_cap=%u lines_head=%u lines_tail=%u lines_count=%u",
+               offset, cols, bytes, a->cells_cap, a->cells_head, a->cells_tail,
+               a->cells_used, a->lines_cap, a->lines_head, a->lines_tail, a->lines_count);
+        return;
+    }
     if (offset + bytes <= a->cells_cap) {
         memcpy(dst, a->cells + offset, bytes);
     } else {
@@ -1250,6 +1264,23 @@ static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer)
 
         if (total_idx < layer->sb.lines_count) {
             const struct yetty_yterm_text_sb_line_rec *rec = sb_arena_peek(&layer->sb, total_idx);
+            /* Sanity-check the record. If anything looks off (uninit slot,
+             * stale offset, negative cols), fill blank and shout. Without
+             * this we segfault deep in memcpy with no breadcrumbs. */
+            if (!rec || rec->cols <= 0 || rec->offset >= layer->sb.cells_cap ||
+                (size_t)rec->cols * sizeof(VTermScreenCell) > layer->sb.cells_cap) {
+                yerror("build_view: bogus rec total_idx=%u view_top=%u gpu_y=%u "
+                       "lines_count=%u lines_cap=%u lines_tail=%u rec=%p "
+                       "rec->cols=%d rec->offset=%zu cells_cap=%zu",
+                       total_idx, layer->view_top_total_idx, gpu_y,
+                       layer->sb.lines_count, layer->sb.lines_cap, layer->sb.lines_tail,
+                       (const void *)rec, rec ? rec->cols : 0,
+                       rec ? rec->offset : (size_t)0, layer->sb.cells_cap);
+                for (uint32_t c = 0; c < cols; c++) {
+                    dst[c] = blank;
+                }
+                continue;
+            }
             int copy = (rec->cols < (int)cols) ? rec->cols : (int)cols;
             sb_arena_read(&layer->sb, rec->offset, copy, dst);
             for (int c = copy; c < (int)cols; c++) {

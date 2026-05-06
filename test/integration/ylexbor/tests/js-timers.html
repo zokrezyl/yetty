@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<body>
+<script>
+setup({ explicit_done: true });
+
+async_test(t => {
+  setTimeout(t.step_func_done(() => {
+    assert_true(true);
+  }), 0);
+}, "setTimeout(0) fires");
+
+async_test(t => {
+  let n = 0;
+  const id = setInterval(() => {
+    n++;
+    if (n >= 3) {
+      clearInterval(id);
+      t.step(() => assert_true(n >= 3));
+      t.done();
+    }
+  }, 5);
+}, "setInterval ticks");
+
+promise_test(async () => {
+  const v = await Promise.resolve(42);
+  assert_equals(v, 42);
+}, "Promise microtask drains");
+
+promise_test(async () => {
+  let r;
+  const p = new Promise(resolve => { r = resolve; });
+  setTimeout(() => r("done"), 1);
+  const v = await p;
+  assert_equals(v, "done");
+}, "Promise + setTimeout cooperate");
+
+/* Without explicit done() the suite would auto-complete on the first
+ * microtask drain — fine for sync-only tests but premature when we
+ * have async in flight. Schedule a final done() on a tail timeout. */
+setTimeout(() => done(), 200);
+</script>
+</body>
+</html>

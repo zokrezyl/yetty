@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<body>
+<a id="lnk" href="/foo" data-x="1">link</a>
+<input id="inp" type="text" value="hello" />
+<script>
+test(() => {
+  const el = document.getElementById("lnk");
+  assert_equals(el.getAttribute("href"), "/foo");
+}, "getAttribute reads href");
+
+test(() => {
+  const el = document.getElementById("lnk");
+  el.setAttribute("href", "/bar");
+  assert_equals(el.getAttribute("href"), "/bar");
+}, "setAttribute writes href");
+
+test(() => {
+  const el = document.getElementById("lnk");
+  assert_true(el.hasAttribute("data-x"));
+  assert_false(el.hasAttribute("data-z"));
+}, "hasAttribute matches presence");
+
+test(() => {
+  const el = document.getElementById("inp");
+  assert_equals(el.type, "text");
+  assert_equals(el.value, "hello");
+}, "IDL attrs mirror element attributes");
+
+test(() => {
+  const el = document.getElementById("lnk");
+  el.removeAttribute("data-x");
+  assert_false(el.hasAttribute("data-x"));
+}, "removeAttribute drops it");
+</script>
+</body>
+</html>

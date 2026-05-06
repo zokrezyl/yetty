@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head><title>document.getElementById</title></head>
+<body>
+<div id="a">a-content</div>
+<div id="b" class="cls"></div>
+<script>
+test(() => {
+  assert_true(typeof document.getElementById === "function");
+}, "getElementById exists");
+
+test(() => {
+  const el = document.getElementById("a");
+  assert_true(el !== null, "found");
+  assert_equals(el.id, "a");
+}, "getElementById returns the right element by id");
+
+test(() => {
+  const el = document.getElementById("missing");
+  assert_equals(el, null);
+}, "getElementById returns null for missing id");
+
+test(() => {
+  const list = document.getElementsByTagName("div");
+  assert_true(list.length >= 2);
+}, "getElementsByTagName finds tags");
+
+test(() => {
+  const list = document.getElementsByClassName("cls");
+  assert_true(list.length >= 1);
+}, "getElementsByClassName finds classes");
+</script>
+</body>
+</html>

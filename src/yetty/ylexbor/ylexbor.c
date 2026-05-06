@@ -8,9 +8,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <stdio.h>
 #include <lexbor/css/css.h>
 #include <lexbor/style/style.h>
 #include <lexbor/html/html.h>
+#include <lexbor/dom/dom.h>
+#include <lexbor/tag/const.h>
 
 
 /* ===========================================================================
@@ -130,14 +133,133 @@ struct yetty_ylexbor_ptr_result yetty_ylexbor_create(
 struct yetty_ycore_void_result yetty_ylexbor_destroy(struct yetty_ylexbor *r)
 {
 	if (r == NULL) return YETTY_OK_VOID();
+	yetty_ylexbor_js_destroy(r);
 	if (r->css_parser)
 		lxb_css_parser_destroy(r->css_parser, true);
 	if (r->document)
 		lxb_html_document_destroy(r->document);
 	box_vec_destroy(&r->boxes);
 	free(r->text_arena);
+	free(r->base_url);
+	for (int i = 0; i < r->img_cache_count; i++) {
+		free(r->img_cache[i].url);
+		free(r->img_cache[i].pixels);
+	}
+	free(r->img_cache);
+	yetty_ylexbor_css_vars_destroy(r);
 	free(r);
 	return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ylexbor_set_base_url(
+	struct yetty_ylexbor *r, const char *url)
+{
+	if (r == NULL) return YETTY_ERR(yetty_ycore_void, "ylexbor_set_base_url: null r");
+	free(r->base_url);
+	r->base_url = url ? strdup(url) : NULL;
+	return YETTY_OK_VOID();
+}
+
+int yetty_ylexbor_pump_timers(struct yetty_ylexbor *r)
+{
+	return yetty_ylexbor_pump(r);
+}
+
+/* Internal accessor — the WPT integration runner needs the raw
+ * JSContext to read back results from globalThis.
+ *
+ * NOT part of the public ylexbor API; the test runner is the only
+ * legitimate caller. Anyone else reaching for this should add a real
+ * read-back function rather than poking JS state directly. */
+void *yetty_ylexbor_internal_get_js_ctx(struct yetty_ylexbor *r)
+{
+	return r ? r->js_ctx : NULL;
+}
+
+static int g_css_loaded = 0, g_css_failed = 0, g_css_inline = 0;
+
+/* Walk the DOM, find every <link rel="stylesheet" href="..."> and
+ * <style>...</style>, fetch external sheets via http_get, parse, and
+ * attach to the document. Internal <style> blocks are normally already
+ * processed by lexbor's HTML parser, but we re-attach them defensively
+ * so the cascade fires for css class/id selectors used by the boxes
+ * we'll later read computed style from. */
+static void load_external_stylesheets(struct yetty_ylexbor *r,
+				      lxb_dom_node_t *node)
+{
+	for (lxb_dom_node_t *c = node->first_child; c != NULL; c = c->next) {
+		if (c->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+			lxb_dom_element_t *el = lxb_dom_interface_element(c);
+			if (c->local_name == LXB_TAG_LINK) {
+				size_t rl = 0;
+				const lxb_char_t *rel = lxb_dom_element_get_attribute(el,
+					(const lxb_char_t *)"rel", 3, &rl);
+				if (rel && rl == 10 &&
+				    strncasecmp((const char *)rel, "stylesheet", 10) == 0) {
+					size_t hl = 0;
+					const lxb_char_t *href = lxb_dom_element_get_attribute(el,
+						(const lxb_char_t *)"href", 4, &hl);
+					if (href && hl > 0) {
+						char *h = malloc(hl + 1);
+						if (h) {
+							memcpy(h, href, hl);
+							h[hl] = '\0';
+							char *url = yetty_ylexbor_resolve_url(r, h);
+							free(h);
+							if (url) {
+								size_t blen = 0;
+								long status = 0;
+								char *body = yetty_ylexbor_http_get(url, &blen, &status);
+								if (body && status >= 200 && status < 300) {
+									struct yetty_ycore_void_result ar =
+										yetty_ylexbor_add_css(r, body, blen);
+									if (YETTY_IS_ERR(ar)) g_css_failed++;
+									else g_css_loaded++;
+								} else {
+									g_css_failed++;
+								}
+								free(body);
+								free(url);
+							}
+						}
+					}
+				}
+			} else if (c->local_name == LXB_TAG_STYLE) {
+				/* Concatenate text-node children for the
+				 * <style> block. lexbor normally does this
+				 * automatically; the explicit attach is a
+				 * belt-and-braces measure for cases where
+				 * the parser's auto-attach didn't run. */
+				size_t total = 0;
+				for (lxb_dom_node_t *t = c->first_child; t; t = t->next) {
+					if (t->type == LXB_DOM_NODE_TYPE_TEXT) {
+						total += lxb_dom_interface_text(t)
+							->char_data.data.length;
+					}
+				}
+				if (total > 0) {
+					char *css = malloc(total + 1);
+					if (css) {
+						size_t off = 0;
+						for (lxb_dom_node_t *t = c->first_child; t; t = t->next) {
+							if (t->type != LXB_DOM_NODE_TYPE_TEXT) continue;
+							lxb_dom_text_t *tn = lxb_dom_interface_text(t);
+							size_t n = tn->char_data.data.length;
+							memcpy(css + off, tn->char_data.data.data, n);
+							off += n;
+						}
+						css[off] = '\0';
+						struct yetty_ycore_void_result ar =
+							yetty_ylexbor_add_css(r, css, off);
+						if (YETTY_IS_ERR(ar)) g_css_failed++;
+						else g_css_inline++;
+						free(css);
+					}
+				}
+			}
+		}
+		if (c->first_child) load_external_stylesheets(r, c);
+	}
 }
 
 struct yetty_ycore_void_result yetty_ylexbor_load_html(
@@ -156,6 +278,30 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(
 	if (s != LXB_STATUS_OK)
 		return YETTY_ERR(yetty_ycore_void, "html_document_parse failed");
 
+	/* Pull every external CSS referenced via <link rel=stylesheet>
+	 * into the cascade. Done before scripts run so getComputedStyle
+	 * reads make sense; done before box-build so colored backgrounds
+	 * land on the boxes we paint. Skipped silently when libcurl is
+	 * unavailable or a fetch errors. */
+	load_external_stylesheets(r,
+		lxb_dom_interface_node(r->document));
+
+	/* Run inline + external <script> blocks. */
+	(void)yetty_ylexbor_js_run_inline_scripts(r);
+
+	if (getenv("YLEXBOR_DEBUG_CSS")) {
+		fprintf(stderr,
+		    "[ylexbor:css] sheets ext=%d inline=%d failed=%d "
+		    "customs=%d\n",
+		    g_css_loaded, g_css_inline, g_css_failed,
+		    r->customs.size);
+		for (int i = 0; i < r->customs.size; i++) {
+			fprintf(stderr, "[ylexbor:css]   %s = %s\n",
+				r->customs.data[i].name,
+				r->customs.data[i].value);
+		}
+	}
+
 	struct yetty_ycore_void_result br = yetty_ylexbor_box_build(r);
 	if (YETTY_IS_ERR(br)) return br;
 
@@ -171,6 +317,10 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css(
 {
 	if (r == NULL || css == NULL)
 		return YETTY_ERR(yetty_ycore_void, "ylexbor_add_css: null");
+
+	/* Pre-scan for `:root { --x: y; }` etc. before lexbor parses,
+	 * so var() lookups see the latest definitions. */
+	yetty_ylexbor_css_vars_scan(r, css, css_len);
 
 	lxb_css_stylesheet_t *sheet = lxb_css_stylesheet_create(NULL);
 	if (sheet == NULL)
@@ -213,6 +363,23 @@ struct yetty_ycore_void_result yetty_ylexbor_render(
 int yetty_ylexbor_content_height(const struct yetty_ylexbor *r)
 {
 	return r ? r->content_height : 0;
+}
+
+int yetty_ylexbor_dom_dirty(const struct yetty_ylexbor *r)
+{
+	return r ? r->dom_dirty : 0;
+}
+
+/* Re-resolve box tree + layout from the (possibly mutated) DOM.
+ * Used by the host after a JS turn that flipped r->dom_dirty, OR
+ * directly after a viewport change. */
+struct yetty_ycore_void_result yetty_ylexbor_relayout(struct yetty_ylexbor *r)
+{
+	if (r == NULL) return YETTY_ERR(yetty_ycore_void, "null");
+	r->dom_dirty = 0;
+	struct yetty_ycore_void_result br = yetty_ylexbor_box_build(r);
+	if (YETTY_IS_ERR(br)) return br;
+	return yetty_ylexbor_layout(r);
 }
 
 /* Make box_vec_reserve visible to box-build. Static-but-shared via

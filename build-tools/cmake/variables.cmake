@@ -57,6 +57,7 @@ option(YETTY_ENABLE_LIB_LIBCURL     "libcurl — HTTP(S) fetching"             O
 option(YETTY_ENABLE_LIB_PDFIO       "pdfio — PDF parsing (C)"                ON)
 option(YETTY_ENABLE_LIB_NETSURF     "netsurf-3.11 — NetSurf core+libs"      ON)
 option(YETTY_ENABLE_LIB_LEXBOR      "lexbor — Apache-2.0 HTML/CSS engine"   ON)
+option(YETTY_ENABLE_LIB_QUICKJS     "quickjs-ng — MIT JavaScript engine"    ON)
 
 # Virtual machine (--virtual flag: run shell in RISC-V Linux VM)
 option(YETTY_ENABLE_LIB_TINYEMU     "tinyemu — RISC-V emulator for --virtual" ON)

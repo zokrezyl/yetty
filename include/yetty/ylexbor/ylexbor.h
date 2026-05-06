@@ -78,6 +78,31 @@ struct yetty_ycore_void_result yetty_ylexbor_render(
 /* Total content height after layout, in px. Useful for scrollbars. */
 int yetty_ylexbor_content_height(const struct yetty_ylexbor *r);
 
+/* Dispatch a synthetic 'click' event to JS handlers attached at (x,y).
+ * Returns 1 if any handler fired. Caller should check
+ * yetty_ylexbor_dom_dirty() afterwards and call _relayout() if set. */
+int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y);
+
+/* True iff JS mutated the DOM since the last relayout. Cleared by
+ * yetty_ylexbor_relayout. */
+int yetty_ylexbor_dom_dirty(const struct yetty_ylexbor *r);
+
+/* Re-run box-build + layout. Cheap-ish (~ms for small docs). Called by
+ * the host after a JS turn that mutated the DOM, or after a viewport
+ * resize. Render() reads the same boxes. */
+struct yetty_ycore_void_result yetty_ylexbor_relayout(struct yetty_ylexbor *r);
+
+/* Set the base URL the loaded document was fetched from. Used to
+ * resolve relative src= on external <script> and fetch() calls.
+ * Optional — if not set, only absolute URLs work. */
+struct yetty_ycore_void_result yetty_ylexbor_set_base_url(
+	struct yetty_ylexbor *r, const char *url);
+
+/* Run any pending timers whose deadline has elapsed and drain Promise
+ * microtasks. Returns milliseconds until the next timer fires (-1 if
+ * none). The host calls this from its event loop. */
+int yetty_ylexbor_pump_timers(struct yetty_ylexbor *r);
+
 #ifdef __cplusplus
 }
 #endif

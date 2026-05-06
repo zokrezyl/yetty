@@ -169,6 +169,10 @@ if(YETTY_ENABLE_LIB_LEXBOR)
     include(${YETTY_ROOT}/build-tools/cmake/libs/lexbor.cmake)
 endif()
 
+if(YETTY_ENABLE_LIB_QUICKJS)
+    include(${YETTY_ROOT}/build-tools/cmake/libs/quickjs.cmake)
+endif()
+
 if(YETTY_ENABLE_LIB_LIBPNG)
     include(${YETTY_ROOT}/build-tools/cmake/libs/libpng.cmake)
 endif()
@@ -249,6 +253,10 @@ if(YETTY_ENABLE_FEATURE_TESTS)
         add_subdirectory(${YETTY_ROOT}/test/ut/ypdf ${CMAKE_BINARY_DIR}/test/ut/ypdf)
     endif()
     add_subdirectory(${YETTY_ROOT}/test/ut/ygui ${CMAKE_BINARY_DIR}/test/ut/ygui)
+    # Integration: ylexbor harness driver. Self-skips when QuickJS or
+    # the ylexbor target isn't built.
+    add_subdirectory(${YETTY_ROOT}/test/integration/ylexbor
+                     ${CMAKE_BINARY_DIR}/test/integration/ylexbor)
 endif()
 
 # Common include directories

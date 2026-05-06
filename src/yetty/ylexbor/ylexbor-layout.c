@@ -29,10 +29,13 @@
 #include <string.h>
 
 
-/* Forward decl — recursive. */
+/* Forward decls — recursive. */
 static float layout_block(struct yetty_ylexbor *r, uint32_t idx,
 			  float origin_x, float origin_y,
 			  float content_w);
+static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx,
+			     float origin_x, float origin_y,
+			     float content_w);
 
 /* ---------------------------------------------------------------------------
  * Wrap one inline-text box into one-or-more lines. Replaces the original
@@ -56,13 +59,14 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx,
 
 	/* Walk the string, splitting at the last space whose end fits.
 	 * Each split produces one line. We keep the very first line in
-	 * the original box (idx) and append subsequent lines as new
-	 * boxes in the parent. */
+	 * the original box (idx) and splice subsequent line boxes into
+	 * the parent's sibling chain right after `idx`, preserving
+	 * whatever followed.  */
 
 	float y = origin_y;
 	int   first = 1;
-	uint32_t parent_box_count = b->kind == YL_BOX_INLINE_TEXT ? 0 : 0;
-	(void)parent_box_count;
+	uint32_t orig_next = b->next_sibling;
+	uint32_t prev_idx  = idx;
 
 	/* `cursor` walks the original string. For each line we find the
 	 * largest prefix [cursor..end) whose visual width fits in
@@ -120,6 +124,12 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx,
 			target->font_weight = b->font_weight;
 			target->font_italic = b->font_italic;
 			target->fg = b->fg;
+			/* Splice into the parent's sibling chain right after
+			 * the previously emitted line (originally `idx`,
+			 * then the prior line). */
+			r->boxes.data[prev_idx].next_sibling = new_idx;
+			target->next_sibling = orig_next;
+			prev_idx = new_idx;
 		}
 
 		target->text = text + cursor;
@@ -144,6 +154,51 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx,
 }
 
 /* ---------------------------------------------------------------------------
+ * Flex row — split content_w evenly across each block-level child,
+ * stacking inline text into one truncated line per child slot. This is
+ * deliberately the cheapest possible flex implementation: no flex-grow,
+ * no flex-basis, no wrap, no main/cross axis distinction beyond row vs
+ * column. It exists so that "header bar with logo + nav + user menu"
+ * doesn't render as three vertically-stacked rows that overflow the
+ * page. Real flex semantics are a follow-up.
+ * -------------------------------------------------------------------------*/
+
+static float layout_flex_row(struct yetty_ylexbor *r, uint32_t idx,
+			     float origin_x, float origin_y,
+			     float content_w)
+{
+	uint32_t slots = r->boxes.data[idx].child_count;
+	if (slots == 0) return 0;
+
+	float slot_w = content_w / (float)slots;
+	if (slot_w < 1.0f) slot_w = 1.0f;
+
+	float row_h = 0;
+	float cursor_x = origin_x;
+	for (uint32_t cidx = r->boxes.data[idx].first_child; cidx != 0;
+	     cidx = r->boxes.data[cidx].next_sibling) {
+		struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
+		c->x = cursor_x;
+		c->y = origin_y;
+		c->w = slot_w;
+		float h = 0;
+		if (c->kind == YL_BOX_BLOCK) {
+			h = layout_block(r, cidx, cursor_x, origin_y, slot_w);
+		} else if (c->kind == YL_BOX_INLINE_TEXT) {
+			h = wrap_inline_box(r, cidx, cursor_x, origin_y, slot_w);
+		} else if (c->kind == YL_BOX_INLINE_IMAGE) {
+			h = 100;
+			c->w = slot_w; c->h = h;
+		}
+		c = &r->boxes.data[cidx];  /* refetch */
+		c->h = h;
+		if (h > row_h) row_h = h;
+		cursor_x += slot_w;
+	}
+	return row_h;
+}
+
+/* ---------------------------------------------------------------------------
  * Lay out a block box and its children. Returns the height consumed.
  * -------------------------------------------------------------------------*/
 
@@ -151,18 +206,33 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx,
 			  float origin_x, float origin_y,
 			  float content_w)
 {
-	/* Snapshot the box header — vector may relocate during recursion
-	 * if children's text boxes need to grow the array. We re-fetch
-	 * after each child loop. */
-	uint32_t first_child = r->boxes.data[idx].first_child;
-	uint32_t child_count = r->boxes.data[idx].child_count;
+	/* Flex row goes through its own splitter. Flex column degrades
+	 * to plain block stacking — same vertical flow, just gated by
+	 * the explicit display:flex; flex-direction:column author intent. */
+	if (r->boxes.data[idx].layout_mode == YL_LAYOUT_FLEX_ROW) {
+		return layout_flex_row(r, idx, origin_x, origin_y, content_w);
+	}
 
-	float cursor_y = origin_y;
+	/* Inset the children's content rectangle by this block's padding
+	 * and horizontal margin. The padding/margin values were resolved
+	 * at box-production time from the cascade; layout just wires them
+	 * into the origin and content width. */
+	struct yetty_ylexbor_box *self = &r->boxes.data[idx];
+	float pad_left   = self->padding_left;
+	float pad_right  = self->padding_right;
+	float pad_top    = self->padding_top;
+	float pad_bottom = self->padding_bottom;
+	float content_origin_x = origin_x + pad_left;
+	float content_origin_y = origin_y + pad_top;
+	float content_width    = content_w - pad_left - pad_right;
+	if (content_width < 0) content_width = 0;
+
+	float cursor_y = content_origin_y;
 	float prev_margin_bottom = 0;  /* for adjacent-sibling collapsing */
 	int   has_prev = 0;
 
-	for (uint32_t i = 0; i < child_count; i++) {
-		uint32_t cidx = first_child + i;
+	uint32_t cidx = r->boxes.data[idx].first_child;
+	while (cidx != 0) {
 		struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
 
 		if (c->kind == YL_BOX_BLOCK) {
@@ -172,11 +242,14 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx,
 				: mt;
 			cursor_y += collapsed;
 
-			c->x = origin_x;
+			float child_origin_x = content_origin_x + c->margin_left;
+			float child_w = content_width - c->margin_left - c->margin_right;
+			if (child_w < 0) child_w = 0;
+			c->x = child_origin_x;
 			c->y = cursor_y;
-			c->w = content_w;
-			float child_h = layout_block(r, cidx, origin_x,
-						     cursor_y, content_w);
+			c->w = child_w;
+			float child_h = layout_block(r, cidx, child_origin_x,
+						     cursor_y, child_w);
 			/* Re-fetch — vector may have relocated. */
 			c = &r->boxes.data[cidx];
 			c->h = child_h;
@@ -185,37 +258,48 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx,
 			has_prev = 1;
 
 		} else if (c->kind == YL_BOX_INLINE_TEXT) {
-			/* Inline text wraps into one-or-more lines. The wrap
-			 * function may grow the vector (extra-line siblings),
-			 * which moves first_child if our parent was relocated.
-			 * Refetch first_child / child_count from `idx` after
-			 * the wrap. */
-			float h = wrap_inline_box(r, cidx, origin_x,
-						   cursor_y, content_w);
+			/* Inline text wraps into one-or-more lines. The
+			 * wrap function may extend the sibling chain by
+			 * appending new line-fragment boxes to `idx`. Our
+			 * loop walks `next_sibling` so it picks them up
+			 * naturally. */
+			float h = wrap_inline_box(r, cidx, content_origin_x,
+						   cursor_y, content_width);
 			cursor_y += h;
-			/* If wrap added new sibling boxes, account for them
-			 * in this block's child_count so subsequent paints
-			 * see them. */
-			if (r->boxes.data[idx].child_count != child_count) {
-				child_count = r->boxes.data[idx].child_count;
-			}
 			prev_margin_bottom = 0;
 			has_prev = 1;
 
 		} else if (c->kind == YL_BOX_INLINE_IMAGE) {
-			/* Placeholder — fixed 100x100 grey box. Real image
-			 * decoding is a TODO. */
-			c->x = origin_x;
+			/* The box producer fills c->w / c->h from HTML
+			 * width/height attrs or the decoded natural pixel
+			 * size. Fall back to a 100x100 placeholder only if
+			 * neither was available. Cap width to the content
+			 * area so an oversized image doesn't punch through
+			 * the right edge. */
+			float img_w = c->w > 0 ? c->w : 100;
+			float img_h = c->h > 0 ? c->h : 100;
+			if (img_w > content_width && content_width > 0) {
+				float scale = content_width / img_w;
+				img_w = content_width;
+				img_h *= scale;
+			}
+			c->x = content_origin_x;
 			c->y = cursor_y;
-			c->w = 100;
-			c->h = 100;
-			cursor_y += 100;
+			c->w = img_w;
+			c->h = img_h;
+			cursor_y += img_h;
 			prev_margin_bottom = 0;
 			has_prev = 1;
 		}
+
+		cidx = r->boxes.data[cidx].next_sibling;
 	}
 
-	return cursor_y - origin_y;
+	/* Total consumed height includes our own padding-top + content +
+	 * padding-bottom. The caller stored origin_y as our top, so
+	 * (cursor_y - origin_y) already counts pad_top + content; just
+	 * add pad_bottom. */
+	return (cursor_y - origin_y) + pad_bottom;
 }
 
 /* ===========================================================================
