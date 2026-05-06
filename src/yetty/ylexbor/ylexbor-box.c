@@ -23,6 +23,8 @@
 #include <lexbor/style/style.h>
 #include <lexbor/core/str.h>
 
+#include <yetty/ytrace/ytrace.h>
+
 
 /* ===========================================================================
  * Built-in user-agent style table.
@@ -115,6 +117,7 @@ struct yl_style_state {
 	int   font_weight;
 	bool  font_italic;
 	struct yetty_ylexbor_color fg;
+	int   text_align;	/* inherited; 0=left, 1=center, 2=right, 3=justify */
 };
 
 static struct yetty_ylexbor_color rgb_to_color(uint32_t rgb, uint8_t a)
@@ -485,6 +488,75 @@ static int read_inline_box_lengths(const lxb_char_t *style, size_t slen,
 	return any;
 }
 
+/* Read a single CSS length value (no shorthand). Returns 1 on success. */
+static int read_inline_length(const lxb_char_t *style, size_t slen,
+			      const char *key, size_t klen,
+			      float font_size, float pct_basis,
+			      float *out_px)
+{
+	size_t vlen = 0;
+	const char *v = find_inline_decl(style, slen, key, klen, &vlen);
+	if (!v || vlen == 0) return 0;
+	return parse_css_length(v, vlen, font_size, pct_basis, out_px);
+}
+
+/* Read an enum-like keyword property and match against `*choices`
+ * (NULL-terminated). Returns the matched index (0-based), or -1. */
+static int read_inline_keyword(const lxb_char_t *style, size_t slen,
+			       const char *key, size_t klen,
+			       const char *const *choices)
+{
+	size_t vlen = 0;
+	const char *v = find_inline_decl(style, slen, key, klen, &vlen);
+	if (!v || vlen == 0) return -1;
+	while (vlen > 0 && (*v == ' ' || *v == '\t')) { v++; vlen--; }
+	for (int i = 0; choices[i]; i++) {
+		size_t cl = strlen(choices[i]);
+		if (vlen >= cl && strncasecmp(v, choices[i], cl) == 0) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+/* Forward decl — read_computed_style is defined further down. */
+static int read_computed_style(lxb_dom_element_t *el,
+			       char **out_data, size_t *out_len);
+
+/* `display: none` check — the cheap path for hiding entire subtrees.
+ * Returns 1 if the element should be entirely skipped at box-build. */
+static int is_display_none(lxb_dom_element_t *el)
+{
+	if (!el) return 0;
+	/* Computed style first — covers stylesheet rules. */
+	char *cstyle = NULL;
+	size_t cstyle_len = 0;
+	if (read_computed_style(el, &cstyle, &cstyle_len)) {
+		size_t vlen = 0;
+		const char *d = find_inline_decl(
+			(const lxb_char_t *)cstyle, cstyle_len,
+			"display", 7, &vlen);
+		int hidden = d && vlen >= 4 && strncasecmp(d, "none", 4) == 0;
+		free(cstyle);
+		if (hidden) return 1;
+	}
+	/* Inline style. */
+	size_t slen = 0;
+	const lxb_char_t *style = lxb_dom_element_get_attribute(el,
+		(const lxb_char_t *)"style", 5, &slen);
+	if (style && slen > 0) {
+		size_t vlen = 0;
+		const char *d = find_inline_decl(style, slen, "display", 7, &vlen);
+		if (d && vlen >= 4 && strncasecmp(d, "none", 4) == 0) return 1;
+	}
+	/* `hidden` HTML attribute also hides the element per spec. */
+	size_t hl = 0;
+	const lxb_char_t *h = lxb_dom_element_get_attribute(el,
+		(const lxb_char_t *)"hidden", 6, &hl);
+	if (h) return 1;
+	return 0;
+}
+
 /* Look up `key` in an inline-style attribute, parse it as a CSS color,
  * write to *out on success. Returns 1 iff found+parsed.
  *
@@ -614,6 +686,11 @@ static void walk(struct yetty_ylexbor *r,
 		const struct yl_default_style *d = default_for(child->local_name);
 		if (d->disp == YL_DISP_NONE) continue;
 
+		/* Honor `display: none` and the `hidden` HTML attribute —
+		 * cuts out off-screen menus, dropdowns, and hidden footers
+		 * that would otherwise overlap real content. */
+		if (is_display_none(el)) continue;
+
 		struct yl_style_state s = apply_default(parent_style, d);
 
 		if (d->disp == YL_DISP_BLOCK) {
@@ -639,20 +716,16 @@ static void walk(struct yetty_ylexbor *r,
 			char *cstyle = NULL;
 			size_t cstyle_len = 0;
 			(void)read_computed_style(el, &cstyle, &cstyle_len);
-			static int dbg_cstyle = -1;
-			if (dbg_cstyle < 0)
-				dbg_cstyle = getenv("YLEXBOR_DEBUG_CSTYLE") ? 1 : 0;
-			if (dbg_cstyle && cstyle && cstyle_len > 0) {
+			if (cstyle && cstyle_len > 0) {
 				size_t cls_len = 0;
 				const lxb_char_t *cls = lxb_dom_element_get_attribute(el,
 					(const lxb_char_t *)"class", 5, &cls_len);
-				fprintf(stderr,
-				    "[ylexbor:cstyle] tag=%s class=\"%.*s\" cstyle=\"%.*s\"\n",
-				    (const char *)lxb_dom_element_local_name(el, NULL),
-				    (int)(cls_len > 60 ? 60 : cls_len),
-				    (const char *)(cls ? cls : (const lxb_char_t *)""),
-				    (int)(cstyle_len > 200 ? 200 : cstyle_len),
-				    cstyle);
+				ydebug("cstyle tag=%s class=\"%.*s\" cstyle=\"%.*s\"",
+				       (const char *)lxb_dom_element_local_name(el, NULL),
+				       (int)(cls_len > 60 ? 60 : cls_len),
+				       (const char *)(cls ? cls : (const lxb_char_t *)""),
+				       (int)(cstyle_len > 200 ? 200 : cstyle_len),
+				       cstyle);
 			}
 
 			/* Inline style attribute — used as a fallback when
@@ -758,6 +831,213 @@ static void walk(struct yetty_ylexbor *r,
 					&b->margin_top, &b->margin_right,
 					&b->margin_bottom, &b->margin_left);
 			}
+			/* Width / max-width / min-width — clamp the box's
+			 * content area in the layout pass. */
+			if (cstyle) {
+				read_inline_length((const lxb_char_t *)cstyle, cstyle_len,
+					"width", 5, s.font_size, pct_basis,
+					&b->css_width);
+				read_inline_length((const lxb_char_t *)cstyle, cstyle_len,
+					"max-width", 9, s.font_size, pct_basis,
+					&b->css_max_width);
+				read_inline_length((const lxb_char_t *)cstyle, cstyle_len,
+					"min-width", 9, s.font_size, pct_basis,
+					&b->css_min_width);
+				read_inline_length((const lxb_char_t *)cstyle, cstyle_len,
+					"height", 6, s.font_size, pct_basis,
+					&b->css_height);
+			}
+			if (istyle) {
+				read_inline_length(istyle, istylen,
+					"width", 5, s.font_size, pct_basis,
+					&b->css_width);
+				read_inline_length(istyle, istylen,
+					"max-width", 9, s.font_size, pct_basis,
+					&b->css_max_width);
+				read_inline_length(istyle, istylen,
+					"min-width", 9, s.font_size, pct_basis,
+					&b->css_min_width);
+				read_inline_length(istyle, istylen,
+					"height", 6, s.font_size, pct_basis,
+					&b->css_height);
+			}
+
+			/* `margin: 0 auto` / `margin: auto` — common centering
+			 * idiom. We mark the auto sides on the box and let
+			 * layout center it within the parent's content area. */
+			static const char *const auto_choices[] = { "auto", NULL };
+			if (cstyle) {
+				if (read_inline_keyword((const lxb_char_t *)cstyle, cstyle_len,
+				    "margin-left", 11, auto_choices) == 0)
+					b->margin_left_auto = true;
+				if (read_inline_keyword((const lxb_char_t *)cstyle, cstyle_len,
+				    "margin-right", 12, auto_choices) == 0)
+					b->margin_right_auto = true;
+			}
+			if (istyle) {
+				if (read_inline_keyword(istyle, istylen,
+				    "margin-left", 11, auto_choices) == 0)
+					b->margin_left_auto = true;
+				if (read_inline_keyword(istyle, istylen,
+				    "margin-right", 12, auto_choices) == 0)
+					b->margin_right_auto = true;
+			}
+			/* `margin: 0 auto` shorthand — second value is auto. We
+			 * detect by looking for `auto` in the margin shorthand
+			 * value's tokens; if it appears, set both auto flags. */
+			{
+				size_t mvlen = 0;
+				const char *mv = NULL;
+				if (cstyle) mv = find_inline_decl(
+					(const lxb_char_t *)cstyle, cstyle_len,
+					"margin", 6, &mvlen);
+				if (!mv && istyle) mv = find_inline_decl(
+					istyle, istylen, "margin", 6, &mvlen);
+				if (mv && mvlen >= 4) {
+					/* Token-scan for "auto" — naive but
+					 * good enough for the common
+					 * `margin: 0 auto` / `margin: auto`. */
+					for (size_t qi = 0; qi + 4 <= mvlen; qi++) {
+						if (strncasecmp(mv + qi, "auto", 4) == 0 &&
+						    (qi == 0 || mv[qi-1] == ' ' || mv[qi-1] == '\t') &&
+						    (qi + 4 == mvlen || mv[qi+4] == ' ' || mv[qi+4] == '\t' || mv[qi+4] == ';')) {
+							b->margin_left_auto = true;
+							b->margin_right_auto = true;
+							break;
+						}
+					}
+				}
+			}
+
+			/* text-align — left/center/right/justify. We honor it
+			 * in wrap_inline_box so each line shifts within the
+			 * content area. */
+			static const char *const ta_choices[] = {
+				"left", "center", "right", "justify", NULL };
+			int ta = -1;
+			if (cstyle) ta = read_inline_keyword(
+				(const lxb_char_t *)cstyle, cstyle_len,
+				"text-align", 10, ta_choices);
+			if (ta < 0 && istyle) ta = read_inline_keyword(
+				istyle, istylen, "text-align", 10, ta_choices);
+			if (ta < 0 && parent_style != NULL)
+				ta = parent_style->text_align;	/* inherit */
+			b->text_align = ta < 0 ? 0 : ta;
+			s.text_align = b->text_align;
+
+			if (cstyle && memmem(cstyle, cstyle_len, "border", 6)) {
+				/* Dump computed style for any block with the
+				 * `border` keyword in its CSS, so we can see
+				 * what lexbor actually serializes. */
+				ydebug("css tag=%d cstyle=\"%.*s\"",
+				       (int)el->node.local_name,
+				       (int)cstyle_len, cstyle);
+			}
+			/* Border. Lexbor's cascade expands `border: 2px solid
+			 * #336` into per-side longhand (border-top-width,
+			 * border-top-style, border-top-color, …), so we read
+			 * the longhand first. The shorthand `border:` is only
+			 * present in inline `style=`; both paths feed the
+			 * same per-side fields. */
+			static const char *const SIDE_W[4] = {
+				"border-top-width", "border-right-width",
+				"border-bottom-width", "border-left-width",
+			};
+			static const char *const SIDE_C[4] = {
+				"border-top-color", "border-right-color",
+				"border-bottom-color", "border-left-color",
+			};
+			float *side_w[4] = {
+				&b->border_top, &b->border_right,
+				&b->border_bottom, &b->border_left,
+			};
+			struct yetty_ylexbor_color side_color = {0};
+			for (int side = 0; side < 4; side++) {
+				size_t kl = strlen(SIDE_W[side]);
+				if (cstyle) read_inline_length(
+					(const lxb_char_t *)cstyle, cstyle_len,
+					SIDE_W[side], kl,
+					s.font_size, pct_basis, side_w[side]);
+				if (istyle) read_inline_length(istyle, istylen,
+					SIDE_W[side], kl,
+					s.font_size, pct_basis, side_w[side]);
+				kl = strlen(SIDE_C[side]);
+				struct yetty_ylexbor_color sc = {0};
+				if ((cstyle && read_inline_color(r,
+				    (const lxb_char_t *)cstyle, cstyle_len,
+				    SIDE_C[side], kl, &sc)) ||
+				    (istyle && read_inline_color(r,
+				    istyle, istylen, SIDE_C[side], kl, &sc))) {
+					/* Take the first non-transparent
+					 * side color as the box color. */
+					if (sc.a != 0 && side_color.a == 0)
+						side_color = sc;
+				}
+			}
+			/* Plain `border: 2px solid #336` shorthand. Lexbor's
+			 * cascade preserves this verbatim (it does NOT expand
+			 * to longhand), so we tokenize each whitespace-
+			 * separated chunk: the first numeric token is the
+			 * width, the last colour-shaped token is the colour. */
+			float bw = 0;
+			if (b->border_top == 0 && b->border_right == 0 &&
+			    b->border_bottom == 0 && b->border_left == 0) {
+				size_t mvlen = 0;
+				const char *mv = NULL;
+				if (cstyle) mv = find_inline_decl(
+					(const lxb_char_t *)cstyle, cstyle_len,
+					"border", 6, &mvlen);
+				if (!mv && istyle) mv = find_inline_decl(
+					istyle, istylen, "border", 6, &mvlen);
+				if (mv && mvlen) {
+					size_t qi = 0;
+					while (qi < mvlen) {
+						while (qi < mvlen && (mv[qi] == ' ' || mv[qi] == '\t')) qi++;
+						size_t qs = qi;
+						while (qi < mvlen && mv[qi] != ' ' && mv[qi] != '\t') qi++;
+						if (qi == qs) break;
+						/* Try as length first; fall
+						 * through to colour if it
+						 * doesn't parse. */
+						float bw_try = 0;
+						if (parse_css_length(mv + qs, qi - qs,
+						    s.font_size, pct_basis, &bw_try) &&
+						    bw_try > 0 && bw == 0) {
+							bw = bw_try;
+							continue;
+						}
+						struct yetty_ylexbor_color cc = {0};
+						if (parse_css_color(mv + qs, qi - qs, &cc) &&
+						    cc.a != 0 && side_color.a == 0) {
+							side_color = cc;
+						}
+						/* Otherwise it's `solid`, `dotted`,
+						 * etc. — we don't honor styles, ignore. */
+					}
+				}
+			}
+			read_inline_length((const lxb_char_t *)cstyle ? : (const lxb_char_t *)"",
+				cstyle ? cstyle_len : 0,
+				"border-radius", 13, s.font_size, pct_basis,
+				&b->border_radius);
+			if (istyle)
+				read_inline_length(istyle, istylen,
+					"border-radius", 13,
+					s.font_size, pct_basis,
+					&b->border_radius);
+			if (bw > 0 && b->border_top == 0) {
+				b->border_top = b->border_right =
+				b->border_bottom = b->border_left = bw;
+			}
+			if (b->border_color.a == 0 && side_color.a != 0) {
+				b->border_color = side_color;
+			} else if ((b->border_top || b->border_right ||
+				    b->border_bottom || b->border_left) &&
+				   b->border_color.a == 0) {
+				/* Default border color is currentColor — fg. */
+				b->border_color = s.fg;
+			}
+
 			free(cstyle);
 			b->layout_mode   = layout_mode_for(el);
 			link_child(r, parent_idx, bidx);

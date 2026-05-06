@@ -35,7 +35,8 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx,
 			  float content_w);
 static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx,
 			     float origin_x, float origin_y,
-			     float content_w);
+			     float content_w,
+			     int text_align);
 
 /* ---------------------------------------------------------------------------
  * Wrap one inline-text box into one-or-more lines. Replaces the original
@@ -45,7 +46,8 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx,
 
 static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx,
 			     float origin_x, float origin_y,
-			     float content_w)
+			     float content_w,
+			     int text_align)
 {
 	struct yetty_ylexbor_box *b = &r->boxes.data[idx];
 	const char *text = b->text;
@@ -134,11 +136,20 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx,
 
 		target->text = text + cursor;
 		target->text_len = line_len;
-		target->x = origin_x;
+		float line_w = yetty_ylexbor_naive_text_width(
+			target->text, target->text_len, target->font_size);
+		/* Honor text-align by shifting the line within the
+		 * content area. The wrap algorithm is greedy left-to-right;
+		 * with center/right alignment we just translate. justify
+		 * (text_align==3) falls through to left for now — would
+		 * need per-word spacing pass. */
+		float line_x = origin_x;
+		if (text_align == 1)        line_x = origin_x + (content_w - line_w) * 0.5f;
+		else if (text_align == 2)   line_x = origin_x + (content_w - line_w);
+		if (line_x < origin_x) line_x = origin_x;
+		target->x = line_x;
 		target->y = y;
-		target->w = yetty_ylexbor_naive_text_width(target->text,
-							    target->text_len,
-							    target->font_size);
+		target->w = line_w;
 		target->h = line_height;
 
 		y += line_height;
@@ -185,7 +196,8 @@ static float layout_flex_row(struct yetty_ylexbor *r, uint32_t idx,
 		if (c->kind == YL_BOX_BLOCK) {
 			h = layout_block(r, cidx, cursor_x, origin_y, slot_w);
 		} else if (c->kind == YL_BOX_INLINE_TEXT) {
-			h = wrap_inline_box(r, cidx, cursor_x, origin_y, slot_w);
+			h = wrap_inline_box(r, cidx, cursor_x, origin_y,
+					    slot_w, /*text_align=*/0);
 		} else if (c->kind == YL_BOX_INLINE_IMAGE) {
 			h = 100;
 			c->w = slot_w; c->h = h;
@@ -242,9 +254,34 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx,
 				: mt;
 			cursor_y += collapsed;
 
-			float child_origin_x = content_origin_x + c->margin_left;
-			float child_w = content_width - c->margin_left - c->margin_right;
-			if (child_w < 0) child_w = 0;
+			/* Resolve the child's effective width:
+			 *   - explicit `width: <px>` pins it,
+			 *   - `max-width` clamps from above,
+			 *   - `min-width` clamps from below.
+			 * The default is the parent's content area minus the
+			 * child's left+right margins. */
+			float avail = content_width - c->margin_left - c->margin_right;
+			if (avail < 0) avail = 0;
+			float child_w = c->css_width > 0 ? c->css_width : avail;
+			if (c->css_max_width > 0 && child_w > c->css_max_width)
+				child_w = c->css_max_width;
+			if (c->css_min_width > 0 && child_w < c->css_min_width)
+				child_w = c->css_min_width;
+			if (child_w > avail) child_w = avail;
+
+			/* Horizontal margin auto handling — center the box
+			 * within the parent's content area when both sides
+			 * are auto and there's room. */
+			float lead = c->margin_left;
+			if (c->margin_left_auto && c->margin_right_auto) {
+				lead = (avail - child_w) * 0.5f;
+				if (lead < 0) lead = 0;
+			} else if (c->margin_left_auto) {
+				lead = avail - child_w - c->margin_right;
+				if (lead < 0) lead = 0;
+			}
+
+			float child_origin_x = content_origin_x + lead;
 			c->x = child_origin_x;
 			c->y = cursor_y;
 			c->w = child_w;
@@ -252,6 +289,9 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx,
 						     cursor_y, child_w);
 			/* Re-fetch — vector may have relocated. */
 			c = &r->boxes.data[cidx];
+			/* `height: <px>` from CSS pins; otherwise content
+			 * height wins. */
+			if (c->css_height > 0) child_h = c->css_height;
 			c->h = child_h;
 			cursor_y += child_h;
 			prev_margin_bottom = c->margin_bottom;
@@ -262,9 +302,10 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx,
 			 * wrap function may extend the sibling chain by
 			 * appending new line-fragment boxes to `idx`. Our
 			 * loop walks `next_sibling` so it picks them up
-			 * naturally. */
+			 * naturally. text_align comes from the parent block. */
 			float h = wrap_inline_box(r, cidx, content_origin_x,
-						   cursor_y, content_width);
+						   cursor_y, content_width,
+						   self->text_align);
 			cursor_y += h;
 			prev_margin_bottom = 0;
 			has_prev = 1;

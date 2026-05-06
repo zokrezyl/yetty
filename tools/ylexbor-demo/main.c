@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/select.h>
 #include <sys/stat.h>
 #include <termios.h>
@@ -35,6 +36,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yterm/osc-codes.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <curl/curl.h>
 
@@ -382,11 +384,52 @@ static void usage(const char *argv0)
 		"                one-shot otherwise.\n", argv0);
 }
 
+/* Probe the terminal for its pixel viewport via TIOCGWINSZ. ws_xpixel /
+ * ws_ypixel is the field xterm/yetty/most modern terminals fill with
+ * their drawable area in pixels. If the terminal reports cell counts
+ * but not pixels (e.g. tmux, screen), we approximate from the cell
+ * grid using a ~9x18 default cell — close enough that pages don't
+ * get squished into 80px viewports.
+ *
+ * Returns 1 and writes (*w_out, *h_out) on success, 0 if no TTY. */
+static int probe_terminal_size(int *w_out, int *h_out)
+{
+	int fds[] = { STDOUT_FILENO, STDERR_FILENO, STDIN_FILENO };
+	for (size_t i = 0; i < sizeof(fds)/sizeof(fds[0]); i++) {
+		if (!isatty(fds[i])) continue;
+		struct winsize ws = {0};
+		if (ioctl(fds[i], TIOCGWINSZ, &ws) != 0) continue;
+		if (ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
+			*w_out = ws.ws_xpixel;
+			*h_out = ws.ws_ypixel;
+			return 1;
+		}
+		if (ws.ws_col > 0 && ws.ws_row > 0) {
+			/* Cells only — approximate pixel viewport. Most
+			 * monospaced fonts end up around 9×18 px at the
+			 * default size. Better than the hardcoded 1024×768
+			 * for narrow terminals. */
+			*w_out = (int)ws.ws_col * 9;
+			*h_out = (int)ws.ws_row * 18;
+			return 1;
+		}
+	}
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	int interactive = isatty(STDIN_FILENO) && isatty(STDOUT_FILENO);
 	int osc = isatty(STDOUT_FILENO) ? 1 : 0;
+	/* Detect the viewport from the terminal. -w / -H still override. */
 	int width = 1024, height = 768;
+	int term_w = 0, term_h = 0;
+	if (probe_terminal_size(&term_w, &term_h)) {
+		width = term_w;
+		height = term_h;
+		ydebug("ylexbor-demo: detected terminal viewport %dx%d",
+		       width, height);
+	}
 	float font_size = 16.0f;
 	const char *path = NULL;
 

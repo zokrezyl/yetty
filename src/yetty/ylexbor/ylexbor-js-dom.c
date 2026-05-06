@@ -52,6 +52,8 @@
 #include <lexbor/css/css.h>
 #include <lexbor/tag/const.h>
 
+#include <yetty/ytrace/ytrace.h>
+
 
 /* ===========================================================================
  * Class registration
@@ -2829,7 +2831,7 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
 			if (JS_IsException(ret)) {
 				JSValue ex = JS_GetException(ctx);
 				const char *m = JS_ToCString(ctx, ex);
-				fprintf(stderr, "[js:click-handler] %s\n", m ? m : "?");
+				ydebug("js click-handler: %s", m ? m : "?");
 				if (m) JS_FreeCString(ctx, m);
 				JS_FreeValue(ctx, ex);
 				r->js_error_count++;
@@ -2924,7 +2926,7 @@ void yetty_ylexbor_js_dispatch_event_type(struct yetty_ylexbor *r,
 		if (JS_IsException(ret)) {
 			JSValue ex = JS_GetException(ctx);
 			const char *m = JS_ToCString(ctx, ex);
-			fprintf(stderr, "[js:event:%s] %s\n", type, m ? m : "?");
+			ydebug("js event:%s: %s", type, m ? m : "?");
 			if (m) JS_FreeCString(ctx, m);
 			JS_FreeValue(ctx, ex);
 			r->js_error_count++;
