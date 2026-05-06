@@ -6,8 +6,6 @@
 # the demo runs.
 #
 # Scenes:
-#   0. Cold open — type a single fast command to ycat the project logo
-#      JPEG. No narration; the image lands as the GIF's first impression.
 #   1. MSDF text — runs the existing ypaint/scrolling/text.sh, then
 #      Ctrl+scroll-zooms in (soft visual zoom) so the viewer sees the
 #      MSDF-rendered glyphs stay sharp at any scale.
@@ -16,6 +14,8 @@
 #      rendered curves. Ctrl+C bails the trailing `sleep 600`.
 #   3. ycat README.md — markdown rendered inline as ypaint primitives
 #      (headings, lists, code blocks) instead of plain text.
+#   3b. ycat <pdf> — same tool, different MIME: a real PDF (pdfio →
+#      ypaint primitives) lives in the scrolling layer. Zoom dance.
 #   4. ygui flex dashboard — fullscreen flexbox layout demo with native
 #      widgets. Press `q` to quit between scenes.
 #   5. ygui tree view — interactive tree widget.
@@ -30,6 +30,7 @@
 # Zoom anchor is parked at the bottom-left of the window (x=5, y=700) so
 # Ctrl+scroll grows content up-and-right from the prompt area instead of
 # bulging out from the middle of the screen. Bump y if your recording
+# window is much taller than ~720px.
 # window is much taller than ~720px.
 
 config:
@@ -54,6 +55,8 @@ script:
   - sleep: 2.0
 
   # --- scene 1: MSDF text + zoom -----------------------------------------
+  - sleep: 0.6
+
   - type: "# MSDF text — shader-rendered, stays crisp at any zoom"
   - special-char: ENTER
   - sleep: 0.4
@@ -224,6 +227,55 @@ script:
   - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
   - sleep: 1.6
 
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 1.0
+
+  # --- scene 3b: ycat a real PDF -----------------------------------------
+  # Same ycat, different MIME — pdfio decodes pages into ypaint primitives
+  # so the PDF renders inline alongside text. The killer demo: a real
+  # technical PDF lives in the scrolling layer like any other content.
+  - type: "# ycat — and the SAME tool renders a real PDF inline"
+  - special-char: ENTER
+  - sleep: 0.4
+
+  - type: "./build-desktop-ytrace-release/tools/ycat/ycat $HOME/tmp/optimizing_cpp.pdf"
+  - special-char: ENTER
+  - sleep: 3.0
+
+  - mouse-move: { x: 5, y: 700 }
+  - sleep: 0.2
+
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: 1, mods: 2 }
+  - sleep: 1.8
+
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
+  - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
+  - sleep: 0.07
   - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
   - sleep: 0.07
   - mouse-scroll: { x: 5, y: 700, dy: -1, mods: 2 }
