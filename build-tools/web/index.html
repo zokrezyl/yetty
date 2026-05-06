@@ -78,15 +78,14 @@
         #yetty-status .line.ok    { color: #6c6; }
         #yetty-status .line.err   { color: #f55; font-weight: bold; }
         #yetty-status .line.dim   { color: #888; }
-        /* Use `!important` so the class beats the inline `display:flex`
-         * the JS sets on first append. Without this, hide() silently
-         * lost the race against subsequent kernel-boot append()s. */
-        #yetty-status.hidden { display: none !important; }
-        /* Manual-dismiss button — sits in the top-right corner of the
-         * full-screen overlay. Outside the scroll container (its
-         * sibling), so it stays put even as the log grows past the
-         * viewport. */
-        #yetty-status-close {
+        /* `!important` so the class beats the inline `display:flex`
+         * the JS sets on first append. */
+        #yetty-status.minimized { display: none !important; }
+        /* Minimize button — sits in the top-right corner of the
+         * full-screen overlay. Hides the overlay (without losing it)
+         * and reveals the restore pill below; the log keeps growing
+         * in the background so re-opening shows full scroll-back. */
+        #yetty-status-minimize {
             position: absolute;
             top: 6px;
             right: 10px;
@@ -105,7 +104,31 @@
             user-select: none;
             z-index: 1;
         }
-        #yetty-status-close:hover { background: #e94560; color: #fff; }
+        #yetty-status-minimize:hover { background: #e94560; color: #fff; }
+        /* Pill-shaped restore button — visible only while the overlay
+         * is minimized. Clicking re-expands the overlay. */
+        #yetty-status-restore {
+            position: fixed;
+            top: 8px;
+            right: 8px;
+            display: none;
+            padding: 6px 12px;
+            color: #ddd;
+            background: rgba(20, 20, 31, 0.92);
+            border: 1px solid #444;
+            border-radius: 14px;
+            cursor: pointer;
+            font-size: 12px;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            user-select: none;
+            z-index: 201;
+        }
+        #yetty-status-restore.visible { display: block; }
+        #yetty-status-restore:hover {
+            background: #e94560;
+            color: #fff;
+            border-color: #e94560;
+        }
         #loading .spinner {
             width: 40px;
             height: 40px;
@@ -322,7 +345,9 @@
              preload, iframe, and the launchYetty flow. The close
              button is a sibling of the scrollable log so it never
              slides out of view as the log fills up. -->
-        <div id="yetty-status" style="display: none;"><button id="yetty-status-close" type="button" title="Close log">&times;</button><div id="yetty-status-log"></div></div>
+        <div id="yetty-status" style="display: none;"><button id="yetty-status-minimize" type="button" title="Minimize boot console">&minus;</button><div id="yetty-status-log"></div></div>
+        <button id="yetty-status-restore" type="button"
+                title="Show boot console">&#9707; console</button>
         <div id="loading" style="display: none;">
             <div class="spinner"></div>
             <div>Loading WebGPU...</div>
@@ -402,11 +427,12 @@ busybox telnetd -p 8023 -l /bin/bash
                                                 through full kernel
                                                 boot + alpine init. */
             let hideTimer = null;
-            // Once the user clicks 'x', subsequent status messages
-            // mustn't pop the overlay back open. They still get
-            // console.log'd and recorded in the DOM (so re-show
-            // someday will surface them), just no auto-display.
-            let userDismissed = false;
+            // True once the user has minimized. Subsequent appends
+            // keep filling the (hidden) log so when they click the
+            // restore pill they see complete scroll-back, but the
+            // overlay does NOT auto-pop back open on its own.
+            let userMinimized = false;
+            const restoreBtn = document.getElementById('yetty-status-restore');
             // Tag → DOM line map so callers can update an existing line
             // in place (e.g. download progress %) instead of appending
             // a fresh row every event.
@@ -419,8 +445,8 @@ busybox telnetd -p 8023 -l /bin/bash
             }
             function showIfNotDismissed() {
                 if (!el) return;
-                if (userDismissed) return;
-                el.classList.remove('hidden');
+                if (userMinimized) return;       /* keep filling, don't pop */
+                el.classList.remove('minimized');
                 el.style.display = 'flex';   /* matches the CSS rule */
             }
             function makeLine(text, level) {
@@ -458,29 +484,46 @@ busybox telnetd -p 8023 -l /bin/bash
                 }
                 log.scrollTop = log.scrollHeight;
             }
-            function hide() {
-                userDismissed = true;
-                el && el.classList.add('hidden');
+            function minimize() {
+                userMinimized = true;
+                if (el) el.classList.add('minimized');
+                if (restoreBtn) restoreBtn.classList.add('visible');
+            }
+            function restore() {
+                userMinimized = false;
+                if (el) {
+                    el.classList.remove('minimized');
+                    el.style.display = 'flex';
+                }
+                if (restoreBtn) restoreBtn.classList.remove('visible');
+                if (log) log.scrollTop = log.scrollHeight;
             }
             function autoHide(ms) {
                 clearTimeout(hideTimer);
-                hideTimer = setTimeout(hide, ms);
+                hideTimer = setTimeout(minimize, ms);
             }
 
             window.yettyStatus = {
                 append: append,
                 update: update,
-                hide: hide,
+                minimize: minimize,
+                restore: restore,
+                /* Back-compat shim — old callers used hide(); now it
+                 * minimizes. The overlay never fully closes anymore. */
+                hide: minimize,
                 autoHide: autoHide
             };
 
-            // Wire the close button so the user can dismiss the overlay
-            // when they're tired of the boot log. Re-opening currently
-            // requires a page reload — that's fine until we have a
-            // hotkey / corner widget to bring it back.
-            const closeBtn = document.getElementById('yetty-status-close');
-            if (closeBtn) {
-                closeBtn.addEventListener('click', function () { hide(); });
+            // Top-right minimize button collapses the overlay; the
+            // restore pill (top-right, only visible when minimized)
+            // brings it back. Log content keeps appending while
+            // minimized, so re-opening shows full scroll-back.
+            const minBtn = document.getElementById('yetty-status-minimize');
+            if (minBtn) {
+                minBtn.addEventListener('click', minimize);
+            }
+            if (restoreBtn) {
+                restoreBtn.addEventListener('click', restore);
             }
 
             // Iframe → parent status pump (tinyemu-iframe.html sends these
