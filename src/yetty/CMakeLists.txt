@@ -218,6 +218,10 @@ if(YETTY_ENABLE_FEATURE_YVNC)
     add_subdirectory(yvnc)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YDVNC)
+    add_subdirectory(ydvnc)
+endif()
+
 if(YETTY_ENABLE_FEATURE_TELNET)
     add_subdirectory(ytelnet)
 endif()

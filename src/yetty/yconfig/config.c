@@ -891,41 +891,51 @@ static int parse_telnet_target(struct config_impl *impl, const char *target)
     return 1;
 }
 
-/* Long-only option ids (above 255 to avoid colliding with short-form ASCII) */
+/* Long-only option ids (above 255 to avoid colliding with short-form ASCII).
+ * yvnc/ydvnc are deliberately distinct prefixes from "vnc" so the flags can't
+ * be mistaken for a generic VNC client/server. */
 enum {
-    OPT_VNC_RAW = 1000,
-    OPT_VNC_COMPRESSION_QUALITY,
-    OPT_VNC_ALWAYS_FULL,
-    OPT_VNC_USE_H264,
-    OPT_VNC_MERGE_RECTS,
-    OPT_VNC_H264_BITRATE,
-    OPT_VNC_H264_FRAMERATE,
-    OPT_VNC_H264_IDR_INTERVAL,
-    OPT_VNC_H264_SCREEN_CONTENT,
+    OPT_YVNC_SERVER = 1000,
+    OPT_YVNC_HEADLESS,
+    OPT_YVNC_PORT,
+    OPT_YVNC_CLIENT,
+    OPT_YVNC_RAW,
+    OPT_YVNC_COMPRESSION_QUALITY,
+    OPT_YVNC_ALWAYS_FULL,
+    OPT_YVNC_USE_H264,
+    OPT_YVNC_MERGE_RECTS,
+    OPT_YVNC_H264_BITRATE,
+    OPT_YVNC_H264_FRAMERATE,
+    OPT_YVNC_H264_IDR_INTERVAL,
+    OPT_YVNC_H264_SCREEN_CONTENT,
     OPT_RECORD,
     OPT_RPC_HOST,
     OPT_TEMU,
     OPT_QEMU,
     OPT_SSH,
     OPT_TELNET,
+    OPT_YDVNC_CLIENT,
+    OPT_YDVNC_PASSWORD,
 };
 
 static struct yetty_yplatform_option long_options[] = {
     {"config", required_argument, 0, 'c'},
     {"execute", required_argument, 0, 'e'},
-    {"vnc-server", no_argument, 0, 's'},
-    {"vnc-headless", no_argument, 0, 'H'},
-    {"vnc-port", required_argument, 0, 'p'},
-    {"vnc-client", required_argument, 0, 'C'},
-    {"vnc-raw", no_argument, 0, OPT_VNC_RAW},
-    {"vnc-compression-quality", required_argument, 0, OPT_VNC_COMPRESSION_QUALITY},
-    {"vnc-always-full", no_argument, 0, OPT_VNC_ALWAYS_FULL},
-    {"vnc-use-h264", no_argument, 0, OPT_VNC_USE_H264},
-    {"vnc-merge-rects", no_argument, 0, OPT_VNC_MERGE_RECTS},
-    {"vnc-h264-bitrate", required_argument, 0, OPT_VNC_H264_BITRATE},
-    {"vnc-h264-framerate", required_argument, 0, OPT_VNC_H264_FRAMERATE},
-    {"vnc-h264-idr-interval", required_argument, 0, OPT_VNC_H264_IDR_INTERVAL},
-    {"vnc-h264-screen-content", required_argument, 0, OPT_VNC_H264_SCREEN_CONTENT},
+    {"yvnc-server", no_argument, 0, OPT_YVNC_SERVER},
+    {"yvnc-headless", no_argument, 0, OPT_YVNC_HEADLESS},
+    {"yvnc-port", required_argument, 0, OPT_YVNC_PORT},
+    {"yvnc-client", required_argument, 0, OPT_YVNC_CLIENT},
+    {"ydvnc-client", required_argument, 0, OPT_YDVNC_CLIENT},
+    {"ydvnc-password", required_argument, 0, OPT_YDVNC_PASSWORD},
+    {"yvnc-raw", no_argument, 0, OPT_YVNC_RAW},
+    {"yvnc-compression-quality", required_argument, 0, OPT_YVNC_COMPRESSION_QUALITY},
+    {"yvnc-always-full", no_argument, 0, OPT_YVNC_ALWAYS_FULL},
+    {"yvnc-use-h264", no_argument, 0, OPT_YVNC_USE_H264},
+    {"yvnc-merge-rects", no_argument, 0, OPT_YVNC_MERGE_RECTS},
+    {"yvnc-h264-bitrate", required_argument, 0, OPT_YVNC_H264_BITRATE},
+    {"yvnc-h264-framerate", required_argument, 0, OPT_YVNC_H264_FRAMERATE},
+    {"yvnc-h264-idr-interval", required_argument, 0, OPT_YVNC_H264_IDR_INTERVAL},
+    {"yvnc-h264-screen-content", required_argument, 0, OPT_YVNC_H264_SCREEN_CONTENT},
     {"record", required_argument, 0, OPT_RECORD},
     {"rpc-host", required_argument, 0, OPT_RPC_HOST},
     {"rpc-port", required_argument, 0, 'r'},
@@ -940,37 +950,31 @@ static void print_usage(const char *prog)
 {
     fprintf(stderr, "Usage: %s [options]\n", prog);
     fprintf(stderr, "Options:\n");
-    fprintf(stderr, "  -c, --config=FILE      Load config from FILE\n");
-    fprintf(stderr, "  -e, --execute=CMD      Execute CMD in terminal\n");
-    fprintf(stderr, "  -s, --vnc-server       Run VNC server (mirror mode - window + VNC)\n");
-    fprintf(stderr, "  -H, --vnc-headless     Run VNC server (headless - no window)\n");
-    fprintf(stderr, "  -p, --vnc-port=PORT    VNC server port (default: 5900)\n");
-    fprintf(stderr, "  -C, --vnc-client=HOST  Connect as VNC client to HOST[:PORT]\n");
-    fprintf(stderr, "      --vnc-raw                  Disable JPEG, send raw BGRA tiles\n");
-    fprintf(stderr, "      --vnc-compression-quality Q  JPEG quality 1-100 (default: 80)\n");
-    fprintf(stderr, "      --vnc-always-full          Disable delta, send full frame every time\n");
-    fprintf(
-        stderr,
-        "      --vnc-use-h264             Use H.264 encoder instead of JPEG (requires openh264)\n");
-    fprintf(stderr,
-            "      --vnc-merge-rects          Merge adjacent dirty tiles into bigger rectangles\n");
-    fprintf(stderr, "      --vnc-h264-bitrate BPS     H.264 target bitrate in bps (default: "
-                    "auto-scales with resolution)\n");
-    fprintf(stderr, "      --vnc-h264-framerate FPS   H.264 encode framerate (default: 30)\n");
-    fprintf(stderr, "      --vnc-h264-idr-interval N  Frames between H.264 keyframes (default: 60 "
-                    "— 2s at 30 fps)\n");
-    fprintf(
-        stderr,
-        "      --vnc-h264-screen-content 0|1  H.264 screen-content optimisation (default: 1)\n");
-    fprintf(stderr,
-            "      --record=FILE              Record session to MP4 (forces H.264 encoding)\n");
-    fprintf(stderr, "      --rpc-host=HOST    RPC server host\n");
-    fprintf(stderr, "  -r, --rpc-port=PORT    RPC server port\n");
-    fprintf(stderr, "      --temu             Run in-process TinyEMU RISC-V VM\n");
-    fprintf(stderr, "      --qemu             Run external QEMU RISC-V VM (via telnet)\n");
-    fprintf(stderr, "      --ssh [USER@HOST[:PORT]]  Connect to SSH remote shell\n");
-    fprintf(stderr, "      --telnet [[HOST]:PORT]    Connect to a telnet server (default host 127.0.0.1)\n");
-    fprintf(stderr, "  -h, --help             Show this help\n");
+    fprintf(stderr, "  -c, --config=FILE                  Load config from FILE\n");
+    fprintf(stderr, "  -e, --execute=CMD                  Execute CMD in terminal\n");
+    fprintf(stderr, "      --yvnc-server                  Run yvnc server (mirror mode - window + yvnc)\n");
+    fprintf(stderr, "      --yvnc-headless                Run yvnc server (headless - no window)\n");
+    fprintf(stderr, "      --yvnc-port=PORT               yvnc server port (default: 5900)\n");
+    fprintf(stderr, "      --yvnc-client=HOST[:PORT]      Connect as yvnc client to HOST\n");
+    fprintf(stderr, "      --yvnc-raw                     Disable JPEG, send raw BGRA tiles\n");
+    fprintf(stderr, "      --yvnc-compression-quality Q   JPEG quality 1-100 (default: 80)\n");
+    fprintf(stderr, "      --yvnc-always-full             Disable delta, send full frame every time\n");
+    fprintf(stderr, "      --yvnc-use-h264                Use H.264 encoder instead of JPEG (requires openh264)\n");
+    fprintf(stderr, "      --yvnc-merge-rects             Merge adjacent dirty tiles into bigger rectangles\n");
+    fprintf(stderr, "      --yvnc-h264-bitrate BPS        H.264 target bitrate in bps (default: auto-scales with resolution)\n");
+    fprintf(stderr, "      --yvnc-h264-framerate FPS      H.264 encode framerate (default: 30)\n");
+    fprintf(stderr, "      --yvnc-h264-idr-interval N     Frames between H.264 keyframes (default: 60 — 2s at 30 fps)\n");
+    fprintf(stderr, "      --yvnc-h264-screen-content 0|1 H.264 screen-content optimisation (default: 1)\n");
+    fprintf(stderr, "      --ydvnc-client=HOST[:PORT]     Connect as RFB (RFC 6143) client\n");
+    fprintf(stderr, "      --ydvnc-password=PASSWORD      VNC password for --ydvnc-client (or env YDVNC_PASSWORD)\n");
+    fprintf(stderr, "      --record=FILE                  Record session to MP4 (forces H.264 encoding)\n");
+    fprintf(stderr, "      --rpc-host=HOST                RPC server host\n");
+    fprintf(stderr, "  -r, --rpc-port=PORT                RPC server port\n");
+    fprintf(stderr, "      --temu                         Run in-process TinyEMU RISC-V VM\n");
+    fprintf(stderr, "      --qemu                         Run external QEMU RISC-V VM (via telnet)\n");
+    fprintf(stderr, "      --ssh [USER@HOST[:PORT]]       Connect to SSH remote shell\n");
+    fprintf(stderr, "      --telnet [[HOST]:PORT]         Connect to a telnet server (default host 127.0.0.1)\n");
+    fprintf(stderr, "  -h, --help                         Show this help\n");
 }
 
 static void set_config(struct config_impl *impl, const char *path, const char *value)
@@ -992,7 +996,7 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
     yetty_yplatform_optreset = 1;
     yetty_yplatform_optind = 1;
     int c;
-    while ((c = yetty_yplatform_getopt_long(argc, argv, "c:e:sHp:C:r:h", long_options, NULL)) != -1) {
+    while ((c = yetty_yplatform_getopt_long(argc, argv, "c:e:r:h", long_options, NULL)) != -1) {
         switch (c) {
         case 'c':
             /* config file already loaded by try_load_config_file */
@@ -1000,43 +1004,49 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
         case 'e':
             set_config(impl, "shell/command", yetty_yplatform_optarg);
             break;
-        case 's':
+        case OPT_YVNC_SERVER:
             set_config(impl, "vnc/server", "true");
             break;
-        case 'H':
+        case OPT_YVNC_HEADLESS:
             set_config(impl, "vnc/headless", "true");
             break;
-        case 'p':
+        case OPT_YVNC_PORT:
             set_config(impl, "vnc/port", yetty_yplatform_optarg);
             break;
-        case 'C':
+        case OPT_YVNC_CLIENT:
             set_config(impl, "vnc/client", yetty_yplatform_optarg);
             break;
-        case OPT_VNC_RAW:
+        case OPT_YDVNC_CLIENT:
+            set_config(impl, "vnc/desktop-client", yetty_yplatform_optarg);
+            break;
+        case OPT_YDVNC_PASSWORD:
+            set_config(impl, "vnc/ydvnc-password", yetty_yplatform_optarg);
+            break;
+        case OPT_YVNC_RAW:
             set_config(impl, "vnc/raw", "true");
             break;
-        case OPT_VNC_COMPRESSION_QUALITY:
+        case OPT_YVNC_COMPRESSION_QUALITY:
             set_config(impl, "vnc/compression-quality", yetty_yplatform_optarg);
             break;
-        case OPT_VNC_ALWAYS_FULL:
+        case OPT_YVNC_ALWAYS_FULL:
             set_config(impl, "vnc/always-full", "true");
             break;
-        case OPT_VNC_USE_H264:
+        case OPT_YVNC_USE_H264:
             set_config(impl, "vnc/use-h264", "true");
             break;
-        case OPT_VNC_MERGE_RECTS:
+        case OPT_YVNC_MERGE_RECTS:
             set_config(impl, "vnc/merge-rects", "true");
             break;
-        case OPT_VNC_H264_BITRATE:
+        case OPT_YVNC_H264_BITRATE:
             set_config(impl, "vnc/h264/bitrate", yetty_yplatform_optarg);
             break;
-        case OPT_VNC_H264_FRAMERATE:
+        case OPT_YVNC_H264_FRAMERATE:
             set_config(impl, "vnc/h264/framerate", yetty_yplatform_optarg);
             break;
-        case OPT_VNC_H264_IDR_INTERVAL:
+        case OPT_YVNC_H264_IDR_INTERVAL:
             set_config(impl, "vnc/h264/idr-interval", yetty_yplatform_optarg);
             break;
-        case OPT_VNC_H264_SCREEN_CONTENT:
+        case OPT_YVNC_H264_SCREEN_CONTENT:
             set_config(impl, "vnc/h264/screen-content", yetty_yplatform_optarg);
             break;
         case OPT_RECORD:

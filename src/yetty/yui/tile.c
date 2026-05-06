@@ -8,6 +8,7 @@
 #include <yetty/yterm/terminal.h>
 #include <yetty/yterm/background-layer.h>
 #include <yetty/yvnc/vnc-viewer.h>
+#include <yetty/ydvnc/ydvnc-viewer.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
@@ -908,16 +909,48 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
         }
     }
 
-    /* Create view based on config or vnc/client override */
+    /* Create view based on config or vnc/client / vnc/desktop-client override */
     {
         const char *vnc_client = NULL;
+        const char *desktop_vnc_client = NULL;
         struct yetty_yconfig_config *app_config = yetty_ctx->app_context.config;
 
         if (app_config) {
             vnc_client = app_config->ops->get_string(app_config, "vnc/client", NULL);
+            desktop_vnc_client = app_config->ops->get_string(app_config, "vnc/desktop-client",
+                                                             NULL);
         }
 
-        if (vnc_client && strlen(vnc_client) > 0) {
+        if (desktop_vnc_client && strlen(desktop_vnc_client) > 0) {
+            char host[256] = {0};
+            uint16_t port = 5900;
+            const char *colon = strchr(desktop_vnc_client, ':');
+
+            if (colon) {
+                size_t host_len = (size_t)(colon - desktop_vnc_client);
+                if (host_len >= sizeof(host)) {
+                    host_len = sizeof(host) - 1;
+                }
+                memcpy(host, desktop_vnc_client, host_len);
+                port = (uint16_t)atoi(colon + 1);
+            } else {
+                strncpy(host, desktop_vnc_client, sizeof(host) - 1);
+            }
+
+            const char *password =
+                app_config->ops->get_string(app_config, "vnc/ydvnc-password", NULL);
+            if (!password || !password[0]) {
+                password = getenv("YDVNC_PASSWORD");
+            }
+            struct yetty_ydvnc_viewer_ptr_result dv_res =
+                yetty_ydvnc_viewer_create(host, port, password, yetty_ctx);
+            if (YETTY_IS_ERR(dv_res)) {
+                yetty_yui_tile_destroy(res.value);
+                return YETTY_ERR(yetty_yui_tile_ptr, "ydvnc viewer create failed", dv_res);
+            }
+
+            yetty_yui_tile_pane_push_view(res.value, yetty_ydvnc_viewer_as_view(dv_res.value));
+        } else if (vnc_client && strlen(vnc_client) > 0) {
             /* VNC client mode: create VNC viewer */
             char host[256] = {0};
             uint16_t port = 5900;
