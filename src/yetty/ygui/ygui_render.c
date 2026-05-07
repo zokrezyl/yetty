@@ -72,9 +72,7 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box(struct yetty_ygu
         };
         r = yetty_ysdf_add_box(ctx->buffer, 0, color, 0, 0.0f, &geom);
     }
-    if (r.error != YPAINT_OK) {
-        return YETTY_ERR(yetty_ycore_void, "ygui_render_box: add failed");
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ygui_render_box: add failed");
     return YETTY_OK_VOID();
 }
 
@@ -116,9 +114,7 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box_outline(struct y
         };
         r = yetty_ysdf_add_box(ctx->buffer, 0, 0, color, stroke_width, &geom);
     }
-    if (r.error != YPAINT_OK) {
-        return YETTY_ERR(yetty_ycore_void, "ygui_render_box_outline: add failed");
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ygui_render_box_outline: add failed");
     return YETTY_OK_VOID();
 }
 
@@ -161,9 +157,7 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_circle(struct yetty_
 
     struct yetty_ysdf_circle geom = {.center_x = ax, .center_y = ay, .radius = r};
     struct yetty_ypaint_core_id_result rr = yetty_ysdf_add_circle(ctx->buffer, 0, color, 0, 0.0f, &geom);
-    if (rr.error != YPAINT_OK) {
-        return YETTY_ERR(yetty_ycore_void, "ygui_render_circle: add failed");
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ygui_render_circle: add failed");
     return YETTY_OK_VOID();
 }
 
@@ -181,9 +175,7 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_circle_outline(struc
     struct yetty_ysdf_circle geom = {.center_x = ax, .center_y = ay, .radius = r};
     struct yetty_ypaint_core_id_result rr =
         yetty_ysdf_add_circle(ctx->buffer, 0, 0, color, stroke_width, &geom);
-    if (rr.error != YPAINT_OK) {
-        return YETTY_ERR(yetty_ycore_void, "ygui_render_circle_outline: add failed");
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ygui_render_circle_outline: add failed");
     return YETTY_OK_VOID();
 }
 
@@ -271,9 +263,7 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box_linear_gradient(
     };
     struct yetty_ypaint_core_id_result r =
         yetty_ysdf_add_linear_gradient_box(ctx->buffer, 0, /*fill=*/0, 0, 0.0f, &geom);
-    if (r.error != YPAINT_OK) {
-        return YETTY_ERR(yetty_ycore_void, "ygui_render_box_linear_gradient: add failed");
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ygui_render_box_linear_gradient: add failed");
     return YETTY_OK_VOID();
 }
 
@@ -301,9 +291,7 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box_radial_gradient(
     };
     struct yetty_ypaint_core_id_result r =
         yetty_ysdf_add_radial_gradient_box(ctx->buffer, 0, /*fill=*/0, 0, 0.0f, &geom);
-    if (r.error != YPAINT_OK) {
-        return YETTY_ERR(yetty_ycore_void, "ygui_render_box_radial_gradient: add failed");
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ygui_render_box_radial_gradient: add failed");
     return YETTY_OK_VOID();
 }
 
@@ -328,8 +316,6 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_triangle(struct yett
     };
     struct yetty_ypaint_core_id_result rr =
         yetty_ysdf_add_triangle(ctx->buffer, 0, color, 0, 0.0f, &geom);
-    if (rr.error != YPAINT_OK) {
-        return YETTY_ERR(yetty_ycore_void, "ygui_render_triangle: add failed");
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ygui_render_triangle: add failed");
     return YETTY_OK_VOID();
 }

@@ -610,6 +610,52 @@ yetty_ygui_widget_list_get_selected(const struct yetty_ygui_widget *list);
 void yetty_ygui_widget_list_on_select(struct yetty_ygui_widget *list,
                                        ygui_click_callback_t cb, void *userdata);
 
+/* Table — header row + N data rows × N columns of strings.
+ *
+ * Construction:
+ *   t = yetty_ygui_engine_table(engine, "procs", x, y, w, h);
+ *   const char *names[]   = {"PID", "USER",  "%CPU", "COMMAND"};
+ *   const float widths[]  = {  60,    100,      60,        0  };  // 0 = stretch
+ *   yetty_ygui_widget_table_set_columns(t, names, widths, 4);
+ *
+ *   const char *cells[] = {"1", "root", "0.0", "/sbin/init"};
+ *   yetty_ygui_widget_table_add_row(t, cells, 4);
+ *
+ * Cells are duplicated on insertion; the table owns them. set_row replaces
+ * an existing row's contents; clear_rows wipes everything but keeps the
+ * column configuration. on_select fires when a non-header row is clicked. */
+typedef void (*yetty_ygui_table_select_fn)(struct yetty_ygui_widget *table, int row,
+                                           void *userdata);
+
+struct yetty_ygui_widget *yetty_ygui_engine_table(struct yetty_ygui_engine *engine,
+                                                  const char *id,
+                                                  float x, float y, float w, float h);
+
+void yetty_ygui_widget_table_set_columns(struct yetty_ygui_widget *table,
+                                         const char *const *names,
+                                         const float *widths, int n_columns);
+
+void yetty_ygui_widget_table_clear_rows(struct yetty_ygui_widget *table);
+
+/* Append a row of n_cells strings (must equal the column count). */
+void yetty_ygui_widget_table_add_row(struct yetty_ygui_widget *table,
+                                     const char *const *cells, int n_cells);
+
+/* Replace contents of an existing row. No-op if row index is out of range. */
+void yetty_ygui_widget_table_set_row(struct yetty_ygui_widget *table, int row,
+                                     const char *const *cells, int n_cells);
+
+int yetty_ygui_widget_table_row_count(const struct yetty_ygui_widget *table);
+
+void yetty_ygui_widget_table_set_selected(struct yetty_ygui_widget *table, int row);
+int yetty_ygui_widget_table_get_selected(const struct yetty_ygui_widget *table);
+
+void yetty_ygui_widget_table_on_select(struct yetty_ygui_widget *table,
+                                       yetty_ygui_table_select_fn cb, void *userdata);
+
+/* 0 = use theme->row_height. */
+void yetty_ygui_widget_table_set_row_height(struct yetty_ygui_widget *table, float h);
+
 /* Tree node */
 void yetty_ygui_widget_tree_node_set_label(struct yetty_ygui_widget *node, const char *label);
 const char *yetty_ygui_widget_tree_node_get_label(const struct yetty_ygui_widget *node);
@@ -701,9 +747,11 @@ const char *yetty_ygui_get_error(void);
  * Version
  *===========================================================================*/
 
-#define YGUI_VERSION_MAJOR 0
-#define YGUI_VERSION_MINOR 2
-#define YGUI_VERSION_PATCH 0
+enum {
+    YETTY_YGUI_VERSION_MAJOR = 0,
+    YETTY_YGUI_VERSION_MINOR = 2,
+    YETTY_YGUI_VERSION_PATCH = 0,
+};
 
 const char *yetty_ygui_version(void);
 

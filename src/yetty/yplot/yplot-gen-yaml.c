@@ -194,16 +194,13 @@ yplot_yaml_factory(struct yetty_ypaint_core_buffer *buffer,
         yetty_yplot_uniforms_serialize(&uniforms, &bufs, prim_buf, required);
     if (YETTY_IS_ERR(ser_res)) {
         free(prim_buf);
-        return YETTY_ERR(yetty_ycore_void, ser_res.error.msg);
+        return YETTY_ERR(yetty_ycore_void, "yplot uniforms serialize failed", ser_res);
     }
 
     struct yetty_ypaint_core_id_result id_res =
         yetty_ypaint_core_buffer_add_prim(buffer, prim_buf, required);
     free(prim_buf);
-
-    if (id_res.error)
-        return YETTY_ERR(yetty_ycore_void, "add_prim failed");
-
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yplot yaml: add_prim failed");
     return YETTY_OK_VOID();
 }
 

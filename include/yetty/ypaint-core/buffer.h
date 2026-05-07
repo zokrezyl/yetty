@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <yetty/ycore/ffi-annotations.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ypaint-core/flyweight.h>
@@ -11,19 +12,10 @@
 extern "C" {
 #endif
 
-// Error codes
-#define YPAINT_OK 0
-#define YPAINT_ERR_NULL 1
-#define YPAINT_ERR_OVERFLOW 2
-#define YPAINT_ERR_ALLOC 3
-
-// Result from adding a primitive
-struct yetty_ypaint_core_id_result {
-    int error;
-    uint32_t id; // byte offset in prims buffer
-};
-
 struct yetty_ypaint_core_buffer;
+
+/* Result from adding a primitive: value is the byte offset in the prims buffer. */
+YETTY_YRESULT_DECLARE(yetty_ypaint_core_id, uint32_t);
 
 YETTY_YRESULT_DECLARE(yetty_ypaint_core_buffer, struct yetty_ypaint_core_buffer *);
 
@@ -38,59 +30,39 @@ struct yetty_ypaint_core_buffer_config {
 };
 
 // Create/destroy
+YETTY_ANNOT_CALLER_OWNED
 struct yetty_ypaint_core_buffer_result yetty_ypaint_core_buffer_config_buffer_create(
-    const struct yetty_ypaint_core_buffer_config *config);
-struct yetty_ypaint_core_buffer_result yetty_ypaint_core_buffer_create_from_base64(
-    const struct yetty_ycore_buffer *base64_buf);
+    const struct yetty_ypaint_core_buffer_config *config YETTY_ANNOT_NULLABLE);
 
 /* Build a ypaint buffer directly from already-decoded raw bytes (bare
- * primitive stream OR magic-tagged framed payload — same shape that
- * _create_from_base64 sees after base64 decoding). Used by callers that
+ * primitive stream OR magic-tagged framed payload). Used by callers that
  * have done their own decompression / decoding (e.g. the ypaint-layer's
  * yface-driven path: base64 + LZ4F decompression happens upstream, the
  * decompressed bytes land here). */
+YETTY_ANNOT_CALLER_OWNED
 struct yetty_ypaint_core_buffer_result yetty_ypaint_core_buffer_create_from_bytes(
-    const uint8_t *data, size_t len);
+    const uint8_t *data YETTY_ANNOT_ARRAY(len), size_t len);
 
-/* Base64-encode the buffer's raw primitive bytes. Allocates the output —
- * caller owns result.value.data and must free() it. Symmetric inverse of
- * yetty_ypaint_core_buffer_create_from_base64. */
-struct yetty_ycore_buffer_result yetty_ypaint_core_buffer_to_base64(
-    const struct yetty_ypaint_core_buffer *buf);
-void yetty_ypaint_core_buffer_destroy(struct yetty_ypaint_core_buffer *buf);
+void yetty_ypaint_core_buffer_destroy(struct yetty_ypaint_core_buffer *buf YETTY_ANNOT_CALLEE_OWNED);
 
 // Scene bounds accessors (populated from config at create time, 0s otherwise)
-float yetty_ypaint_core_buffer_scene_min_x(const struct yetty_ypaint_core_buffer *buf);
-float yetty_ypaint_core_buffer_scene_min_y(const struct yetty_ypaint_core_buffer *buf);
 float yetty_ypaint_core_buffer_scene_max_x(const struct yetty_ypaint_core_buffer *buf);
 float yetty_ypaint_core_buffer_scene_max_y(const struct yetty_ypaint_core_buffer *buf);
 
 // Clear all data (keeps allocation)
 void yetty_ypaint_core_buffer_clear(struct yetty_ypaint_core_buffer *buf);
 
-// Read-only view into the primitives payload. Used by serializers that base64-
-// encode the raw primitive bytes (the wire format accepted by
-// yetty_ypaint_core_buffer_create_from_base64). NULL on invalid buf.
-const struct yetty_ycore_buffer *yetty_ypaint_core_buffer_primitives(
-    const struct yetty_ypaint_core_buffer *buf);
-
 // Add raw primitive data, returns byte offset
 struct yetty_ypaint_core_id_result yetty_ypaint_core_buffer_add_prim(
-    struct yetty_ypaint_core_buffer *buf, const void *data, size_t size);
-
-// Read-only access to the accumulated primitive bytes — base64-encode these
-// and the receiver's yetty_ypaint_core_buffer_create_from_base64() rebuilds
-// an equivalent buffer. Lifetime = until next add/clear on this buffer.
-const void *yetty_ypaint_core_buffer_data(const struct yetty_ypaint_core_buffer *buf);
-size_t yetty_ypaint_core_buffer_size(const struct yetty_ypaint_core_buffer *buf);
+    struct yetty_ypaint_core_buffer *buf, const void *data YETTY_ANNOT_ARRAY(size), size_t size);
 
 /* Serialize the whole buffer (scene_bounds + primitives + text_spans) into
- * a single binary blob, tagged with a magic header. Pass the raw bytes into
- * create_from_base64() after base64-encoding on the sender; the receiver
- * recognises the magic and restores all sections. Lifetime of *out_data =
- * until next serialize/clear/destroy. Returns byte count. */
+ * a single binary blob, tagged with a magic header. The receiver passes the
+ * raw bytes into create_from_bytes() and recognises the magic to restore all
+ * sections. Lifetime of *out_data = until next serialize/clear/destroy.
+ * Returns byte count. */
 size_t yetty_ypaint_core_buffer_serialize(struct yetty_ypaint_core_buffer *buf,
-                                          const uint8_t **out_data);
+                                          const uint8_t **out_data YETTY_ANNOT_OUT);
 
 // Update scene bounds on an existing buffer.
 void yetty_ypaint_core_buffer_set_scene_bounds(struct yetty_ypaint_core_buffer *buf, float min_x,
@@ -121,7 +93,7 @@ struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_nex
  * id. */
 struct yetty_ycore_int_result yetty_ypaint_core_buffer_add_font(
     struct yetty_ypaint_core_buffer *buf, const struct yetty_ycore_buffer *ttf_data,
-    const char *name);
+    const char *name YETTY_ANNOT_CSTRING);
 
 /* Pack a TEXT_SPAN primitive (text-span-prim.h). font_id must match a
  * previously-added FONT prim's id, or be -1 to use the canvas default. */

@@ -276,30 +276,30 @@ fn sdf_cylinder_3d(sample_pos: vec3<f32>, position_x: f32, position_y: f32, posi
 fn evaluate_sdf_2d(prim_offset: u32, sample_pos: vec2<f32>) -> f32 {
     let prim_type = bitcast<u32>(storage_buffer[prim_offset]);
     switch (prim_type) {
-        case 0u: { return sdf_circle(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
-        case 1u: { return sdf_box(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u])); }
-        case 2u: { return sdf_segment(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u])); }
-        case 3u: { return sdf_triangle(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u]), bitcast<f32>(storage_buffer[prim_offset + 10u])); }
-        case 6u: { return sdf_ellipse(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u])); }
-        case 7u: { return sdf_arc(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u]), bitcast<f32>(storage_buffer[prim_offset + 10u])); }
-        case 8u: { return sdf_rounded_box(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u]), bitcast<f32>(storage_buffer[prim_offset + 10u]), bitcast<f32>(storage_buffer[prim_offset + 11u]), bitcast<f32>(storage_buffer[prim_offset + 12u])); }
-        case 9u: { return sdf_rhombus(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u])); }
-        case 10u: { return sdf_pentagon(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
-        case 11u: { return sdf_hexagon(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
-        case 12u: { return sdf_star(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u])); }
-        case 13u: { return sdf_pie(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u])); }
-        case 14u: { return sdf_ring(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u]), bitcast<f32>(storage_buffer[prim_offset + 10u])); }
-        case 15u: { return sdf_heart(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
-        case 16u: { return sdf_cross(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u])); }
-        case 17u: { return sdf_rounded_x(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u])); }
-        case 18u: { return sdf_capsule(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u])); }
-        case 19u: { return sdf_moon(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u])); }
-        case 20u: { return sdf_egg(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u])); }
-        case 28u: { return sdf_octogon(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
-        case 29u: { return sdf_hexagram(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
-        case 30u: { return sdf_pentagram(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
-        case 130u: { return sdf_linear_gradient_box(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u]), bitcast<f32>(storage_buffer[prim_offset + 10u]), bitcast<f32>(storage_buffer[prim_offset + 11u]), bitcast<f32>(storage_buffer[prim_offset + 12u]), bitcast<f32>(storage_buffer[prim_offset + 13u]), bitcast<u32>(storage_buffer[prim_offset + 14u]), bitcast<u32>(storage_buffer[prim_offset + 15u])); }
-        case 131u: { return sdf_radial_gradient_box(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u]), bitcast<f32>(storage_buffer[prim_offset + 10u]), bitcast<f32>(storage_buffer[prim_offset + 11u]), bitcast<f32>(storage_buffer[prim_offset + 12u]), bitcast<u32>(storage_buffer[prim_offset + 13u]), bitcast<u32>(storage_buffer[prim_offset + 14u])); }
+        case 0x10000000u: { return sdf_circle(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
+        case 0x10000001u: { return sdf_box(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u])); }
+        case 0x10000002u: { return sdf_segment(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u])); }
+        case 0x10000003u: { return sdf_triangle(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u]), bitcast<f32>(storage_buffer[prim_offset + 10u])); }
+        case 0x10000006u: { return sdf_ellipse(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u])); }
+        case 0x10000007u: { return sdf_arc(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u]), bitcast<f32>(storage_buffer[prim_offset + 10u])); }
+        case 0x10000008u: { return sdf_rounded_box(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u]), bitcast<f32>(storage_buffer[prim_offset + 10u]), bitcast<f32>(storage_buffer[prim_offset + 11u]), bitcast<f32>(storage_buffer[prim_offset + 12u])); }
+        case 0x10000009u: { return sdf_rhombus(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u])); }
+        case 0x1000000Au: { return sdf_pentagon(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
+        case 0x1000000Bu: { return sdf_hexagon(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
+        case 0x1000000Cu: { return sdf_star(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u])); }
+        case 0x1000000Du: { return sdf_pie(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u])); }
+        case 0x1000000Eu: { return sdf_ring(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u]), bitcast<f32>(storage_buffer[prim_offset + 10u])); }
+        case 0x1000000Fu: { return sdf_heart(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
+        case 0x10000010u: { return sdf_cross(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u])); }
+        case 0x10000011u: { return sdf_rounded_x(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u])); }
+        case 0x10000012u: { return sdf_capsule(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u])); }
+        case 0x10000013u: { return sdf_moon(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u])); }
+        case 0x10000014u: { return sdf_egg(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u])); }
+        case 0x1000001Cu: { return sdf_octogon(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
+        case 0x1000001Du: { return sdf_hexagram(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
+        case 0x1000001Eu: { return sdf_pentagram(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u])); }
+        case 0x10000082u: { return sdf_linear_gradient_box(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u]), bitcast<f32>(storage_buffer[prim_offset + 10u]), bitcast<f32>(storage_buffer[prim_offset + 11u]), bitcast<f32>(storage_buffer[prim_offset + 12u]), bitcast<f32>(storage_buffer[prim_offset + 13u]), bitcast<u32>(storage_buffer[prim_offset + 14u]), bitcast<u32>(storage_buffer[prim_offset + 15u])); }
+        case 0x10000083u: { return sdf_radial_gradient_box(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u]), bitcast<f32>(storage_buffer[prim_offset + 10u]), bitcast<f32>(storage_buffer[prim_offset + 11u]), bitcast<f32>(storage_buffer[prim_offset + 12u]), bitcast<u32>(storage_buffer[prim_offset + 13u]), bitcast<u32>(storage_buffer[prim_offset + 14u])); }
         default: { return 1e10; }
     }
 }
@@ -307,10 +307,10 @@ fn evaluate_sdf_2d(prim_offset: u32, sample_pos: vec2<f32>) -> f32 {
 fn evaluate_sdf_3d(prim_offset: u32, sample_pos: vec3<f32>) -> f32 {
     let prim_type = bitcast<u32>(storage_buffer[prim_offset]);
     switch (prim_type) {
-        case 100u: { return sdf_sphere_3d(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u])); }
-        case 101u: { return sdf_box_3d(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u]), bitcast<f32>(storage_buffer[prim_offset + 10u])); }
-        case 103u: { return sdf_torus_3d(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u])); }
-        case 105u: { return sdf_cylinder_3d(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u])); }
+        case 0x10000064u: { return sdf_sphere_3d(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u])); }
+        case 0x10000065u: { return sdf_box_3d(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u]), bitcast<f32>(storage_buffer[prim_offset + 10u])); }
+        case 0x10000067u: { return sdf_torus_3d(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u])); }
+        case 0x10000069u: { return sdf_cylinder_3d(sample_pos, bitcast<f32>(storage_buffer[prim_offset + 5u]), bitcast<f32>(storage_buffer[prim_offset + 6u]), bitcast<f32>(storage_buffer[prim_offset + 7u]), bitcast<f32>(storage_buffer[prim_offset + 8u]), bitcast<f32>(storage_buffer[prim_offset + 9u])); }
         default: { return 1e10; }
     }
 }
@@ -325,8 +325,8 @@ fn get_sdf_prim_style(prim_offset: u32) -> vec3<u32> {
 
 fn yetty_ysdf_is_gradient_2d(prim_type: u32) -> bool {
     switch (prim_type) {
-        case 130u: { return true; }
-        case 131u: { return true; }
+        case 0x10000082u: { return true; }
+        case 0x10000083u: { return true; }
         default: { return false; }
     }
 }
@@ -343,7 +343,7 @@ fn yetty_ysdf_unpack_color(packed: u32) -> vec4<f32> {
 fn yetty_ysdf_eval_gradient_color_2d(prim_offset: u32, sample_pos: vec2<f32>) -> vec4<f32> {
     let prim_type = bitcast<u32>(storage_buffer[prim_offset]);
     switch (prim_type) {
-        case 130u: {
+        case 0x10000082u: {
             let g0 = vec2<f32>(bitcast<f32>(storage_buffer[prim_offset + 10u]), bitcast<f32>(storage_buffer[prim_offset + 11u]));
             let g1 = vec2<f32>(bitcast<f32>(storage_buffer[prim_offset + 12u]), bitcast<f32>(storage_buffer[prim_offset + 13u]));
             let c0 = yetty_ysdf_unpack_color(bitcast<u32>(storage_buffer[prim_offset + 14u]));
@@ -353,7 +353,7 @@ fn yetty_ysdf_eval_gradient_color_2d(prim_offset: u32, sample_pos: vec2<f32>) ->
             let t = select(0.0, clamp(dot(sample_pos - g0, dir) / len2, 0.0, 1.0), len2 > 0.0);
             return mix(c0, c1, t);
         }
-        case 131u: {
+        case 0x10000083u: {
             let gc = vec2<f32>(bitcast<f32>(storage_buffer[prim_offset + 10u]), bitcast<f32>(storage_buffer[prim_offset + 11u]));
             let gr = bitcast<f32>(storage_buffer[prim_offset + 12u]);
             let ci = yetty_ysdf_unpack_color(bitcast<u32>(storage_buffer[prim_offset + 13u]));

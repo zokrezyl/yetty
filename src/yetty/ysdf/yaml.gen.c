@@ -542,9 +542,7 @@ static struct yetty_ycore_void_result add_prim(struct yetty_ysdf_ypaint_yaml_par
     struct yetty_ypaint_core_id_result r =
         yetty_ypaint_core_buffer_add_prim(yaml_parse_ctx->buffer, data, word_count * sizeof(float));
     yaml_parse_ctx->z_order++;
-    if (r.error != YPAINT_OK) {
-        return YETTY_ERR(yetty_ycore_void, "ysdf yaml: add_prim failed");
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ysdf yaml: add_prim failed");
     return YETTY_OK_VOID();
 }
 

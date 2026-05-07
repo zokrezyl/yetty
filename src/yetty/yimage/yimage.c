@@ -84,9 +84,9 @@ struct yetty_ypaint_core_buffer_result yetty_yimage_render(
     struct yetty_ypaint_core_id_result idr =
         yetty_ypaint_core_buffer_add_prim(br.value, prim_buf, required);
     free(prim_buf);
-    if (idr.error != YPAINT_OK) {
+    if (YETTY_IS_ERR(idr)) {
         yetty_ypaint_core_buffer_destroy(br.value);
-        return YETTY_ERR(yetty_ypaint_core_buffer, "yimage: ypaint add_prim failed");
+        return YETTY_ERR(yetty_ypaint_core_buffer, "yimage: ypaint add_prim failed", idr);
     }
 
     return YETTY_OK(yetty_ypaint_core_buffer, br.value);

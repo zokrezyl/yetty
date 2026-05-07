@@ -2936,6 +2936,419 @@ void yetty_ygui_widget_list_on_select(struct yetty_ygui_widget *list,
 }
 
 /*=============================================================================
+ * Table Widget — header row + N×M cell grid of plain strings.
+ *
+ * Self-rendered (no child widgets). Cells own their string copies and are
+ * freed on destroy / clear_rows. Click on a data row fires on_select(row).
+ *===========================================================================*/
+
+static char *strdup_or_null(const char *s)
+{
+    if (!s) {
+        return NULL;
+    }
+    size_t n = strlen(s);
+    char *r = malloc(n + 1);
+    if (!r) {
+        return NULL;
+    }
+    memcpy(r, s, n + 1);
+    return r;
+}
+
+static void table_free_row(char **row, int n_cells)
+{
+    if (!row) {
+        return;
+    }
+    for (int c = 0; c < n_cells; c++) {
+        free(row[c]);
+    }
+    free(row);
+}
+
+static char **table_dup_row(const char *const *cells, int n_cells)
+{
+    char **row = calloc((size_t)n_cells, sizeof(char *));
+    if (!row) {
+        return NULL;
+    }
+    for (int c = 0; c < n_cells; c++) {
+        row[c] = strdup_or_null(cells[c] ? cells[c] : "");
+    }
+    return row;
+}
+
+/* Resolved per-column widths in pixels. Stretch columns share the leftover
+ * space evenly. Caller provides an out array sized n_columns. */
+static void table_resolve_widths(const struct yetty_ygui_widget *self, float *out)
+{
+    int n = self->data.table.n_columns;
+    if (n <= 0) {
+        return;
+    }
+    float total_fixed = 0.0f;
+    int stretch_count = 0;
+    for (int c = 0; c < n; c++) {
+        float w = self->data.table.column_widths[c];
+        if (w > 0.0f) {
+            total_fixed += w;
+        } else {
+            stretch_count++;
+        }
+    }
+    float stretch_w = 0.0f;
+    if (stretch_count > 0) {
+        float leftover = self->w - total_fixed;
+        if (leftover < 0.0f) {
+            leftover = 0.0f;
+        }
+        stretch_w = leftover / (float)stretch_count;
+    }
+    for (int c = 0; c < n; c++) {
+        float w = self->data.table.column_widths[c];
+        out[c] = (w > 0.0f) ? w : stretch_w;
+    }
+}
+
+static struct yetty_ycore_void_result table_render(struct yetty_ygui_widget *self,
+                                                   struct yetty_ygui_render_ctx *ctx)
+{
+    const struct yetty_ygui_theme *t = ctx->theme;
+    int n = self->data.table.n_columns;
+    if (n <= 0) {
+        /* No columns set yet — just paint the surface and bail. */
+        yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h,
+                                         t->bg_surface, t->radius_small);
+        return YETTY_OK_VOID();
+    }
+    float row_h = self->data.table.row_height > 0.0f
+                      ? self->data.table.row_height
+                      : t->row_height;
+    if (row_h <= 0.0f) {
+        row_h = 24.0f;
+    }
+    float font_size = t->font_size > 0.0f ? t->font_size : 12.0f;
+    float text_pad_x = 6.0f;
+    float text_y_off = (row_h - font_size) * 0.5f;
+
+    float widths[64];   /* practical cap; heroic tables can grow this */
+    if (n > (int)(sizeof(widths) / sizeof(widths[0]))) {
+        n = (int)(sizeof(widths) / sizeof(widths[0]));
+    }
+    table_resolve_widths(self, widths);
+
+    /* Surface. */
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h,
+                                     t->bg_surface, t->radius_small);
+
+    /* Header row. */
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, row_h,
+                                     t->bg_header, t->radius_small);
+    {
+        float cx = self->x;
+        for (int c = 0; c < n; c++) {
+            const char *name = self->data.table.column_names[c]
+                                   ? self->data.table.column_names[c]
+                                   : "";
+            yetty_ygui_render_ctx_render_text(ctx, name, cx + text_pad_x, self->y + text_y_off,
+                                              t->text_primary, font_size);
+            cx += widths[c];
+            /* Vertical separator after every column except the last. */
+            if (c < n - 1) {
+                yetty_ygui_render_ctx_render_box(ctx, cx, self->y, 1.0f, self->h,
+                                                 t->border_muted, 0.0f);
+            }
+        }
+    }
+    /* Header / data divider. */
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y + row_h, self->w, 1.0f,
+                                     t->border, 0.0f);
+
+    /* Data rows. */
+    int rows = self->data.table.n_rows;
+    int sel = self->data.table.selected_row;
+    for (int r = 0; r < rows; r++) {
+        float row_y = self->y + row_h + (float)r * row_h;
+        if (row_y + row_h > self->y + self->h) {
+            /* Clip — table is too short for this row. Stop drawing. */
+            break;
+        }
+        if (r == sel) {
+            yetty_ygui_render_ctx_render_box(ctx, self->x, row_y, self->w, row_h,
+                                             t->selection_bg, 0.0f);
+        } else if ((r & 1) == 1 && t->bg_secondary != 0u) {
+            /* Zebra striping for odd-indexed rows when the theme provides
+             * a distinct secondary surface. */
+            yetty_ygui_render_ctx_render_box(ctx, self->x, row_y, self->w, row_h,
+                                             t->bg_secondary, 0.0f);
+        }
+        float cx = self->x;
+        char **row = self->data.table.rows[r];
+        for (int c = 0; c < n; c++) {
+            const char *txt = row ? row[c] : NULL;
+            if (txt) {
+                yetty_ygui_render_ctx_render_text(ctx, txt, cx + text_pad_x,
+                                                  row_y + text_y_off,
+                                                  t->text_primary, font_size);
+            }
+            cx += widths[c];
+        }
+    }
+
+    /* Outer border last so it sits above the rows. */
+    yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h,
+                                             t->border, t->radius_small, 1.0f);
+    return YETTY_OK_VOID();
+}
+
+static int table_on_press(struct yetty_ygui_widget *self, float lx, float ly,
+                          ygui_event_t *out)
+{
+    const struct yetty_ygui_theme *t = self->engine ? self->engine->theme : NULL;
+    if (!t) {
+        return 0;
+    }
+    float row_h = self->data.table.row_height > 0.0f
+                      ? self->data.table.row_height
+                      : t->row_height;
+    if (row_h <= 0.0f) {
+        row_h = 24.0f;
+    }
+    /* Header row swallows clicks but doesn't change selection. Future:
+     * sortable headers. */
+    if (ly < row_h) {
+        return 0;
+    }
+    int row = (int)((ly - row_h) / row_h);
+    if (row < 0 || row >= self->data.table.n_rows) {
+        return 0;
+    }
+    if (self->data.table.selected_row != row) {
+        self->data.table.selected_row = row;
+        if (self->engine) {
+            self->engine->dirty = 1;
+        }
+    }
+    if (self->data.table.on_select) {
+        self->data.table.on_select(self, row, self->data.table.on_select_userdata);
+    }
+    if (out) {
+        out->widget_id = self->id;
+        out->type = YETTY_YGUI_EVENT_CHANGE;
+    }
+    return 1;
+}
+
+static void table_destroy(struct yetty_ygui_widget *self)
+{
+    int n_cols = self->data.table.n_columns;
+    for (int r = 0; r < self->data.table.n_rows; r++) {
+        table_free_row(self->data.table.rows[r], n_cols);
+    }
+    free(self->data.table.rows);
+    for (int c = 0; c < n_cols; c++) {
+        free(self->data.table.column_names[c]);
+    }
+    free(self->data.table.column_names);
+    free(self->data.table.column_widths);
+    self->data.table.rows = NULL;
+    self->data.table.column_names = NULL;
+    self->data.table.column_widths = NULL;
+    self->data.table.n_columns = 0;
+    self->data.table.n_rows = 0;
+    self->data.table.row_capacity = 0;
+}
+
+struct yetty_ygui_widget *yetty_ygui_engine_table(struct yetty_ygui_engine *engine,
+                                                  const char *id, float x, float y,
+                                                  float w, float h)
+{
+    struct yetty_ygui_widget *tbl =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_TABLE, id);
+    if (!tbl) {
+        return NULL;
+    }
+    yetty_ygui_widget_init_base(tbl, x, y, w, h);
+    tbl->data.table.selected_row = -1;
+    static const struct yetty_ygui_widget_vtable table_vtable = {
+        .render   = table_render,
+        .on_press = table_on_press,
+        .destroy  = table_destroy,
+    };
+    tbl->vtable = &table_vtable;
+    add_to_engine(engine, tbl);
+    return tbl;
+}
+
+void yetty_ygui_widget_table_set_columns(struct yetty_ygui_widget *table,
+                                         const char *const *names,
+                                         const float *widths, int n_columns)
+{
+    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE || n_columns <= 0) {
+        return;
+    }
+    /* Wipe existing column metadata + any rows (cell counts must match). */
+    int old_cols = table->data.table.n_columns;
+    for (int r = 0; r < table->data.table.n_rows; r++) {
+        table_free_row(table->data.table.rows[r], old_cols);
+    }
+    free(table->data.table.rows);
+    table->data.table.rows = NULL;
+    table->data.table.n_rows = 0;
+    table->data.table.row_capacity = 0;
+    for (int c = 0; c < old_cols; c++) {
+        free(table->data.table.column_names[c]);
+    }
+    free(table->data.table.column_names);
+    free(table->data.table.column_widths);
+
+    table->data.table.column_names = calloc((size_t)n_columns, sizeof(char *));
+    table->data.table.column_widths = calloc((size_t)n_columns, sizeof(float));
+    if (!table->data.table.column_names || !table->data.table.column_widths) {
+        free(table->data.table.column_names);
+        free(table->data.table.column_widths);
+        table->data.table.column_names = NULL;
+        table->data.table.column_widths = NULL;
+        table->data.table.n_columns = 0;
+        return;
+    }
+    for (int c = 0; c < n_columns; c++) {
+        table->data.table.column_names[c] = strdup_or_null(names && names[c] ? names[c] : "");
+        table->data.table.column_widths[c] = widths ? widths[c] : 0.0f;
+    }
+    table->data.table.n_columns = n_columns;
+    if (table->engine) {
+        table->engine->dirty = 1;
+    }
+}
+
+void yetty_ygui_widget_table_clear_rows(struct yetty_ygui_widget *table)
+{
+    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) {
+        return;
+    }
+    for (int r = 0; r < table->data.table.n_rows; r++) {
+        table_free_row(table->data.table.rows[r], table->data.table.n_columns);
+        table->data.table.rows[r] = NULL;
+    }
+    table->data.table.n_rows = 0;
+    table->data.table.selected_row = -1;
+    if (table->engine) {
+        table->engine->dirty = 1;
+    }
+}
+
+void yetty_ygui_widget_table_add_row(struct yetty_ygui_widget *table,
+                                     const char *const *cells, int n_cells)
+{
+    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) {
+        return;
+    }
+    if (n_cells != table->data.table.n_columns) {
+        return; /* row arity must match column count */
+    }
+    /* Grow the rows array if needed. */
+    if (table->data.table.n_rows >= table->data.table.row_capacity) {
+        int new_cap = table->data.table.row_capacity > 0
+                          ? table->data.table.row_capacity * 2
+                          : 8;
+        char ***bigger = realloc(table->data.table.rows,
+                                 (size_t)new_cap * sizeof(char **));
+        if (!bigger) {
+            return;
+        }
+        for (int i = table->data.table.row_capacity; i < new_cap; i++) {
+            bigger[i] = NULL;
+        }
+        table->data.table.rows = bigger;
+        table->data.table.row_capacity = new_cap;
+    }
+    char **row = table_dup_row(cells, n_cells);
+    if (!row) {
+        return;
+    }
+    table->data.table.rows[table->data.table.n_rows++] = row;
+    if (table->engine) {
+        table->engine->dirty = 1;
+    }
+}
+
+void yetty_ygui_widget_table_set_row(struct yetty_ygui_widget *table, int row,
+                                     const char *const *cells, int n_cells)
+{
+    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) {
+        return;
+    }
+    if (row < 0 || row >= table->data.table.n_rows) {
+        return;
+    }
+    if (n_cells != table->data.table.n_columns) {
+        return;
+    }
+    char **new_row = table_dup_row(cells, n_cells);
+    if (!new_row) {
+        return;
+    }
+    table_free_row(table->data.table.rows[row], n_cells);
+    table->data.table.rows[row] = new_row;
+    if (table->engine) {
+        table->engine->dirty = 1;
+    }
+}
+
+int yetty_ygui_widget_table_row_count(const struct yetty_ygui_widget *table)
+{
+    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) {
+        return 0;
+    }
+    return table->data.table.n_rows;
+}
+
+void yetty_ygui_widget_table_set_selected(struct yetty_ygui_widget *table, int row)
+{
+    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) {
+        return;
+    }
+    if (row < -1 || row >= table->data.table.n_rows) {
+        return;
+    }
+    table->data.table.selected_row = row;
+    if (table->engine) {
+        table->engine->dirty = 1;
+    }
+}
+
+int yetty_ygui_widget_table_get_selected(const struct yetty_ygui_widget *table)
+{
+    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) {
+        return -1;
+    }
+    return table->data.table.selected_row;
+}
+
+void yetty_ygui_widget_table_on_select(struct yetty_ygui_widget *table,
+                                       yetty_ygui_table_select_fn cb, void *userdata)
+{
+    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) {
+        return;
+    }
+    table->data.table.on_select = cb;
+    table->data.table.on_select_userdata = userdata;
+}
+
+void yetty_ygui_widget_table_set_row_height(struct yetty_ygui_widget *table, float h)
+{
+    if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) {
+        return;
+    }
+    table->data.table.row_height = h;
+    if (table->engine) {
+        table->engine->dirty = 1;
+    }
+}
+
+/*=============================================================================
  * Tree Node Widget — chevron + label header + auto-allocated children list.
  *===========================================================================*/
 

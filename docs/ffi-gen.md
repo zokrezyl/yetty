@@ -143,25 +143,39 @@ New header: `include/yetty/ycore/ffi-annotations.h`.
 #  define YETTY_ANNOTATE(s)
 #endif
 
-/* Parameter roles */
-#define YETTY_OUT            YETTY_ANNOTATE("yetty:out")
-#define YETTY_INOUT          YETTY_ANNOTATE("yetty:inout")
-#define YETTY_ARRAY(len)     YETTY_ANNOTATE("yetty:array:" #len)
+/* All flavor macros are prefixed `YETTY_ANNOT_` so any annotation is
+ * visually grouped at a glance and `grep YETTY_ANNOT_` finds the surface. */
 
-/* Ownership */
-#define YETTY_OWNED          YETTY_ANNOTATE("yetty:owned")
-#define YETTY_BORROWED       YETTY_ANNOTATE("yetty:borrowed")
-#define YETTY_CONSUMES       YETTY_ANNOTATE("yetty:consumes")
-#define YETTY_RETURNS_OWNED  YETTY_ANNOTATE("yetty:returns_owned")
+/* Parameter roles */
+#define YETTY_ANNOT_OUT            YETTY_ANNOTATE("yetty:out")
+#define YETTY_ANNOT_INOUT          YETTY_ANNOTATE("yetty:inout")
+#define YETTY_ANNOT_ARRAY(len)     YETTY_ANNOTATE("yetty:array:" #len)
+
+/* Ownership.
+ *
+ * Names who owns the resource at the call boundary the annotation tags:
+ *
+ *   on a return  — who owns the returned pointer after the call returns?
+ *   on a param   — who owns the pointer after the call returns?
+ *
+ *   YETTY_ANNOT_CALLER_OWNED  on return  → caller must destroy.
+ *   YETTY_ANNOT_CALLEE_OWNED  on return  → caller borrows; must NOT destroy.
+ *   YETTY_ANNOT_CALLEE_OWNED  on param   → ownership transferred in;
+ *                                          caller must not use the pointer
+ *                                          afterwards (matches *_destroy).
+ *   YETTY_ANNOT_CALLER_OWNED  on param   → just a borrow (= default).
+ */
+#define YETTY_ANNOT_CALLER_OWNED   YETTY_ANNOTATE("yetty:caller_owned")
+#define YETTY_ANNOT_CALLEE_OWNED   YETTY_ANNOTATE("yetty:callee_owned")
 
 /* Nullability and strings */
-#define YETTY_NULLABLE       YETTY_ANNOTATE("yetty:nullable")
-#define YETTY_NONNULL        YETTY_ANNOTATE("yetty:nonnull")
-#define YETTY_CSTRING        YETTY_ANNOTATE("yetty:cstring")
+#define YETTY_ANNOT_NULLABLE       YETTY_ANNOTATE("yetty:nullable")
+#define YETTY_ANNOT_NONNULL        YETTY_ANNOTATE("yetty:nonnull")
+#define YETTY_ANNOT_CSTRING        YETTY_ANNOTATE("yetty:cstring")
 
 /* Callback lifetime */
-#define YETTY_CB_CALL_ONLY   YETTY_ANNOTATE("yetty:cb_call_only")
-#define YETTY_CB_RETAINED    YETTY_ANNOTATE("yetty:cb_retained")
+#define YETTY_ANNOT_CB_CALL_ONLY   YETTY_ANNOTATE("yetty:cb_call_only")
+#define YETTY_ANNOT_CB_RETAINED    YETTY_ANNOTATE("yetty:cb_retained")
 
 #endif
 ```
@@ -179,29 +193,29 @@ Example — `include/yetty/yterm/terminal.h`:
 ```c
 #include <yetty/ycore/ffi-annotations.h>
 
-YETTY_RETURNS_OWNED
+YETTY_ANNOT_CALLER_OWNED
 struct yetty_term_terminal_ptr_result
-yetty_term_terminal_create(const struct yetty_term_config *config YETTY_BORROWED);
+yetty_term_terminal_create(const struct yetty_term_config *config);
 
 void
-yetty_term_terminal_destroy(struct yetty_term_terminal *term YETTY_CONSUMES);
+yetty_term_terminal_destroy(struct yetty_term_terminal *term YETTY_ANNOT_CALLEE_OWNED);
 
 struct yetty_core_void_result
 yetty_term_terminal_write(struct yetty_term_terminal *term,
-                          const char *data YETTY_ARRAY(len),
+                          const char *data YETTY_ANNOT_ARRAY(len),
                           size_t len);
 
 struct yetty_core_void_result
 yetty_term_terminal_get_size(struct yetty_term_terminal *term,
-                             uint32_t *cols YETTY_OUT,
-                             uint32_t *rows YETTY_OUT);
+                             uint32_t *cols YETTY_ANNOT_OUT,
+                             uint32_t *rows YETTY_ANNOT_OUT);
 ```
 
 ### Annotation placement rules
 
 - On a **parameter**: describes that parameter (in/out/array/nullable/owning).
 - On a **function**: describes the return value or the function as a whole
-  (`YETTY_RETURNS_OWNED`).
+  (`YETTY_ANNOT_CALLER_OWNED`).
 - On a **struct field**: describes that field.
 - On a **typedef**: applies wherever the type is used.
 
@@ -209,12 +223,12 @@ yetty_term_terminal_get_size(struct yetty_term_terminal *term,
 
 | C signature | Without annotation | With annotation |
 |---|---|---|
-| `uint32_t *cols` | Rust: `*mut u32`, user handles it | `YETTY_OUT` → function returns the value in a tuple |
-| `const char *data, size_t len` | Two params, caller passes len | `YETTY_ARRAY(len)` → one `&[u8]` / `bytes` / `[]byte` param |
-| `const char *name` | `*const c_char` | `YETTY_CSTRING` → `&str` / `str`, NUL handled |
-| Returned `struct foo *` | Opaque pointer, unclear lifetime | `YETTY_RETURNS_OWNED` → RAII wrapper / `Drop` / finalizer |
-| `yetty_x_destroy(struct x *)` | Public function | `YETTY_CONSUMES` → becomes `Drop` / `__del__`; destroy hidden from public API |
-| Callback param `struct cb *cb` | Raw pointer | `YETTY_CB_RETAINED` → binding keeps closure alive until a counterpart "unregister" |
+| `uint32_t *cols` | Rust: `*mut u32`, user handles it | `YETTY_ANNOT_OUT` → function returns the value in a tuple |
+| `const char *data, size_t len` | Two params, caller passes len | `YETTY_ANNOT_ARRAY(len)` → one `&[u8]` / `bytes` / `[]byte` param |
+| `const char *name` | `*const c_char` | `YETTY_ANNOT_CSTRING` → `&str` / `str`, NUL handled |
+| Returned `struct foo *` | Opaque pointer, unclear lifetime | `YETTY_ANNOT_CALLER_OWNED` → RAII wrapper / `Drop` / finalizer |
+| `yetty_x_destroy(struct x *)` | Public function | `YETTY_ANNOT_CALLEE_OWNED` → becomes `Drop` / `__del__`; destroy hidden from public API |
+| Callback param `struct cb *cb` | Raw pointer | `YETTY_ANNOT_CB_RETAINED` → binding keeps closure alive until a counterpart "unregister" |
 
 ## Default reasoning for unannotated code
 
@@ -424,10 +438,10 @@ didn't care about.
 
 Of the macros listed above, the four with the highest payoff are:
 
-- `YETTY_OUT`
-- `YETTY_ARRAY(len)`
-- `YETTY_RETURNS_OWNED`
-- `YETTY_CONSUMES`
+- `YETTY_ANNOT_OUT`
+- `YETTY_ANNOT_ARRAY(len)`
+- `YETTY_ANNOT_CALLER_OWNED`
+- `YETTY_ANNOT_CALLEE_OWNED`
 
 Everything else can wait until a binding target asks for it.
 

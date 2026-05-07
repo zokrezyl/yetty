@@ -473,7 +473,7 @@ void YDrawRenderMethod::emitMeshPolygon(uint32_t vertexCount, const float* verti
             tri.vertex_c_x = vertices[(i + 1) * 2];
             tri.vertex_c_y = vertices[(i + 1) * 2 + 1];
             auto r = yetty_ysdf_add_triangle(_buffer, 0, fillColor, 0, 0.0f, &tri);
-            if (r.error == YPAINT_OK) { _nextPrimId++;
+            if (YETTY_IS_OK(r)) { _nextPrimId++;
 }
         }
     }
@@ -487,7 +487,7 @@ void YDrawRenderMethod::emitMeshPolygon(uint32_t vertexCount, const float* verti
             seg.end_x = vertices[j * 2];
             seg.end_y = vertices[j * 2 + 1];
             auto r = yetty_ysdf_add_segment(_buffer, 0, 0, strokeColor, strokeWidth, &seg);
-            if (r.error == YPAINT_OK) { _nextPrimId++;
+            if (YETTY_IS_OK(r)) { _nextPrimId++;
 }
         }
     }
@@ -559,7 +559,7 @@ bool YDrawRenderMethod::tryRenderAsEllipse(YDrawRenderData* rd) {
 
     yetty_ysdf_ellipse geom{cx, cy, rx, ry};
     auto result = yetty_ysdf_add_ellipse(_buffer, 0, fillColor, strokeColor, rd->strokeWidth, &geom);
-    if (result.error == YPAINT_OK) { _nextPrimId++;
+    if (YETTY_IS_OK(result)) { _nextPrimId++;
 }
     return true;
 }
@@ -656,7 +656,7 @@ bool YDrawRenderMethod::tryRenderAsBox(YDrawRenderData* rd) {
 
     yetty_ysdf_box geom{cx, cy, hw, hh, cornerRadius};
     auto result = yetty_ysdf_add_box(_buffer, 0, fillColor, strokeColor, rd->strokeWidth, &geom);
-    if (result.error == YPAINT_OK) { _nextPrimId++;
+    if (YETTY_IS_OK(result)) { _nextPrimId++;
 }
     return true;
 }
@@ -890,7 +890,7 @@ void YDrawRenderMethod::renderPath(YDrawRenderData* rd) {
                 } else {
                     yetty_ysdf_segment seg{current.x, current.y, next.x, next.y};
                     auto r = yetty_ysdf_add_segment(_buffer, 0, 0, strokeColor, rd->strokeWidth, &seg);
-                    if (r.error == YPAINT_OK) { _nextPrimId++;
+                    if (YETTY_IS_OK(r)) { _nextPrimId++;
 }
                 }
                 current = next;
@@ -916,7 +916,7 @@ void YDrawRenderMethod::renderPath(YDrawRenderData* rd) {
                 for (size_t k = 2; k + 1 < flat.size(); k += 2) {
                     yetty_ysdf_segment seg{flat[k - 2], flat[k - 1], flat[k], flat[k + 1]};
                     auto r = yetty_ysdf_add_segment(_buffer, 0, 0, strokeColor, rd->strokeWidth, &seg);
-                    if (r.error == YPAINT_OK) { _nextPrimId++;
+                    if (YETTY_IS_OK(r)) { _nextPrimId++;
 }
                 }
                 current = end;
@@ -963,7 +963,7 @@ void YDrawRenderMethod::renderDashedSegment(float x0, float y0, float x1, float 
             float ey = y0 + uy * (pos + advance);
             yetty_ysdf_segment seg{sx, sy, ex, ey};
             auto r = yetty_ysdf_add_segment(_buffer, 0, 0, strokeColor, strokeWidth, &seg);
-            if (r.error == YPAINT_OK) { _nextPrimId++;
+            if (YETTY_IS_OK(r)) { _nextPrimId++;
 }
         }
 
@@ -1077,13 +1077,13 @@ bool YDrawRenderMethod::tryRenderAsGradientBox(YDrawRenderData* rd) {
     if (isLinear) {
         yetty_ysdf_box geom{cx, cy, hw, hh, 0.0f};
         auto result = yetty_ysdf_add_box(_buffer, 0, gradColor1, strokeColor, rd->strokeWidth, &geom);
-        if (result.error == YPAINT_OK) { _nextPrimId++;
+        if (YETTY_IS_OK(result)) { _nextPrimId++;
 }
     } else {
         float r = std::max(hw, hh);
         yetty_ysdf_ellipse geom{cx, cy, r, r};
         auto result = yetty_ysdf_add_ellipse(_buffer, 0, gradColor1, strokeColor, rd->strokeWidth, &geom);
-        if (result.error == YPAINT_OK) { _nextPrimId++;
+        if (YETTY_IS_OK(result)) { _nextPrimId++;
 }
     }
 

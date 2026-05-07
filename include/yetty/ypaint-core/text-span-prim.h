@@ -22,6 +22,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <yetty/ycore/ffi-annotations.h>
 #include <yetty/ypaint-core/flyweight.h>
 
 #ifdef __cplusplus
@@ -57,21 +58,9 @@ struct yetty_ypaint_core_text_span_prim_view {
     float word_spacing;
 };
 
-size_t yetty_ypaint_core_text_span_prim_size_for(uint32_t text_len);
-
-void yetty_ypaint_core_text_span_prim_write(uint8_t *out, float x, float y, float font_size,
-                                       float rotation, uint32_t color, uint32_t layer,
-                                       int32_t font_id, const char *text, uint32_t text_len);
-
-/* Like _write, plus PDF Tc/Tw spacing. Tc adds per-codepoint, Tw per
- * U+0020 only. Both in display pixels at the current font_size. */
-void yetty_ypaint_core_text_span_prim_write_full(
-    uint8_t *out, float x, float y, float font_size, float rotation, uint32_t color,
-    uint32_t layer, int32_t font_id, const char *text, uint32_t text_len,
-    float char_spacing, float word_spacing);
-
-int yetty_ypaint_core_text_span_prim_parse(const uint32_t *prim,
-                                      struct yetty_ypaint_core_text_span_prim_view *out);
+int yetty_ypaint_core_text_span_prim_parse(
+    const uint32_t *prim,
+    struct yetty_ypaint_core_text_span_prim_view *out YETTY_ANNOT_OUT);
 
 struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_text_span_prim_handler(
     uint32_t prim_type);

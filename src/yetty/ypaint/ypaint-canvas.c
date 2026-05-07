@@ -10,11 +10,13 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ypaint-core/buffer.h>
+#include <yetty/ypaint-core/cmds.h>
 #include <yetty/ypaint-core/complex-prim-types.h>
 #include <yetty/ypaint-core/font-prim.h>
 #include <yetty/ypaint-core/text-span-prim.h>
 #include <yetty/ypaint/flyweight.h>
 #include <yetty/ypaint/core/ypaint-canvas.h>
+#include "canvas-internal.h"
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yfont/raster-font.h>
@@ -1457,7 +1459,25 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
     while (1) {
         uint32_t prim_type = iter.fw.data[0];
 
-        if (prim_type == YETTY_YPAINT_TYPE_FONT) {
+        /* Cmd tier (control, no rendering). Apply side effects on the
+         * canvas, fall through the per-type handlers without storing
+         * anything. */
+        if (prim_type <= YETTY_YPAINT_CMD_END) {
+            if (prim_type == YETTY_YPAINT_CMD_ZERO) {
+                ydebug("add_buffer: CMD_ZERO — clearing canvas + cursor (0,0)");
+                yetty_ypaint_canvas_clear(canvas);
+                struct yetty_ycore_grid_cursor_pos pos = {.cols = 0, .rows = 0};
+                struct yetty_ycore_void_result cr =
+                    yetty_ypaint_canvas_set_cursor_pos(canvas, pos);
+                if (YETTY_IS_ERR(cr)) {
+                    yetty_ycore_error_destroy(cr.error);
+                }
+                /* Re-read cursor anchor since clear+reset moved us. */
+                initial_canvas_line = canvas->rolling_row_0 + canvas->cursor_row;
+                max_row_seen = initial_canvas_line;
+            }
+            /* Future cmds (cursor-set, …) dispatch here. */
+        } else if (prim_type == YETTY_YPAINT_TYPE_FONT) {
             struct yetty_ypaint_core_font_prim_view fv;
             if (yetty_ypaint_core_font_prim_parse(iter.fw.data, &fv) == 0) {
                 char hint[YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH];

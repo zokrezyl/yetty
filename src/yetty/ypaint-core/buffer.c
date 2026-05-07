@@ -17,6 +17,11 @@
 #include <yetty/ycore/util.h>
 #include <yetty/ytrace/ytrace.h>
 
+#include "buffer-internal.h"
+#include "flyweight-internal.h"
+#include "font-prim-internal.h"
+#include "text-span-prim-internal.h"
+
 #define YPAINT_BUFFER_INITIAL_CAPACITY 1024
 
 struct yetty_ypaint_core_buffer {
@@ -357,17 +362,11 @@ const struct yetty_ycore_buffer *yetty_ypaint_core_buffer_primitives(
 struct yetty_ypaint_core_id_result yetty_ypaint_core_buffer_add_prim(
     struct yetty_ypaint_core_buffer *buf, const void *data, size_t size)
 {
-    struct yetty_ypaint_core_id_result result = {0, 0};
-
     if (!buf) {
-        yerror("yetty_ypaint_core_buffer_add_prim: buf is NULL");
-        result.error = YPAINT_ERR_NULL;
-        return result;
+        return YETTY_ERR(yetty_ypaint_core_id, "buf is NULL");
     }
     if (!data) {
-        yerror("yetty_ypaint_core_buffer_add_prim: data is NULL");
-        result.error = YPAINT_ERR_NULL;
-        return result;
+        return YETTY_ERR(yetty_ypaint_core_id, "data is NULL");
     }
 
     size_t new_size = buf->primitives.buf.size + size;
@@ -381,20 +380,18 @@ struct yetty_ypaint_core_id_result yetty_ypaint_core_buffer_add_prim(
 
         uint8_t *new_data = realloc(buf->primitives.buf.data, new_capacity);
         if (!new_data) {
-            yerror("yetty_ypaint_core_buffer_add_prim: realloc failed for %zu bytes", new_capacity);
-            result.error = YPAINT_ERR_ALLOC;
-            return result;
+            return YETTY_ERR(yetty_ypaint_core_id, "realloc failed");
         }
 
         buf->primitives.buf.data = new_data;
         buf->primitives.buf.capacity = new_capacity;
     }
 
-    result.id = (uint32_t)buf->primitives.buf.size;
+    uint32_t id = (uint32_t)buf->primitives.buf.size;
     memcpy(buf->primitives.buf.data + buf->primitives.buf.size, data, size);
     buf->primitives.buf.size = new_size;
 
-    return result;
+    return YETTY_OK(yetty_ypaint_core_id, id);
 }
 
 struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_first(
@@ -414,9 +411,7 @@ struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_fir
     uint32_t prim_type = prim[0];
     struct yetty_ypaint_core_prim_flyweight_ptr_result fw_res =
         yetty_ypaint_core_flyweight_registry_get(reg, prim_type, prim);
-    if (YETTY_IS_ERR(fw_res)) {
-        return YETTY_ERR(yetty_ypaint_core_primitive_iter, fw_res.error.msg);
-    }
+    YETTY_RETURN_IF_ERR(yetty_ypaint_core_primitive_iter, fw_res, "prim_first: registry lookup failed");
 
     struct yetty_ypaint_core_primitive_iter iter = {.fw = *fw_res.value};
     return YETTY_OK(yetty_ypaint_core_primitive_iter, iter);
@@ -439,9 +434,7 @@ struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_nex
     const uint8_t *base = buf->primitives.buf.data;
     size_t buf_size = buf->primitives.buf.size;
     struct yetty_ycore_size_result size_res = iter->fw.ops->size(iter->fw.data);
-    if (YETTY_IS_ERR(size_res)) {
-        return YETTY_ERR(yetty_ypaint_core_primitive_iter, size_res.error.msg);
-    }
+    YETTY_RETURN_IF_ERR(yetty_ypaint_core_primitive_iter, size_res, "prim_next: size op failed");
     const uint32_t *next = (const uint32_t *)((const uint8_t *)iter->fw.data + size_res.value);
     size_t offset = (const uint8_t *)next - base;
 
@@ -452,9 +445,7 @@ struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_nex
     uint32_t prim_type = next[0];
     struct yetty_ypaint_core_prim_flyweight_ptr_result fw_res =
         yetty_ypaint_core_flyweight_registry_get(reg, prim_type, next);
-    if (YETTY_IS_ERR(fw_res)) {
-        return YETTY_ERR(yetty_ypaint_core_primitive_iter, fw_res.error.msg);
-    }
+    YETTY_RETURN_IF_ERR(yetty_ypaint_core_primitive_iter, fw_res, "prim_next: registry lookup failed");
 
     struct yetty_ypaint_core_primitive_iter new_iter = {.fw = *fw_res.value};
     return YETTY_OK(yetty_ypaint_core_primitive_iter, new_iter);
@@ -517,9 +508,7 @@ struct yetty_ycore_int_result yetty_ypaint_core_buffer_add_font(
 
     struct yetty_ypaint_core_id_result r = yetty_ypaint_core_buffer_add_prim(buf, staging, prim_size);
     free(staging);
-    if (r.error) {
-        return YETTY_ERR(yetty_ycore_int, "add_prim failed");
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "add_font: add_prim failed");
     return YETTY_OK(yetty_ycore_int, next_id);
 }
 
@@ -549,9 +538,7 @@ struct yetty_ycore_void_result yetty_ypaint_core_buffer_add_text_full(
 
     struct yetty_ypaint_core_id_result r = yetty_ypaint_core_buffer_add_prim(buf, staging, prim_size);
     free(staging);
-    if (r.error) {
-        return YETTY_ERR(yetty_ycore_void, "add_prim failed");
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "add_text: add_prim failed");
     return YETTY_OK_VOID();
 }
 

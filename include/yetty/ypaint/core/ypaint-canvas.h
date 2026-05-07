@@ -5,6 +5,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <yetty/ycore/ffi-annotations.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
@@ -20,11 +21,13 @@ YETTY_YRESULT_DECLARE(yetty_ypaint_canvas_ptr, struct yetty_ypaint_canvas *);
 // Create a canvas
 // @param scrolling_mode If true, primitives are cursor-relative and scroll
 // @param context Yetty context for config access (fonts path, etc.)
+YETTY_ANNOT_CALLER_OWNED
 struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
     bool scrolling_mode, const struct yetty_context *context);
 
 // Destroy a canvas
-struct yetty_ycore_void_result yetty_ypaint_canvas_destroy(struct yetty_ypaint_canvas *canvas);
+struct yetty_ycore_void_result yetty_ypaint_canvas_destroy(
+    struct yetty_ypaint_canvas *canvas YETTY_ANNOT_CALLEE_OWNED);
 
 //=============================================================================
 // Configuration
@@ -41,13 +44,9 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_set_grid_size(struct yetty_yp
 // Accessors
 //=============================================================================
 
-bool yetty_ypaint_canvas_scrolling_mode(struct yetty_ypaint_canvas *canvas);
-
 struct yetty_ycore_pixel_size yetty_ypaint_canvas_cell_get_pixel_size(struct yetty_ypaint_canvas *canvas);
 
 struct yetty_ycore_grid_size yetty_ypaint_canvas_get_grid_size(struct yetty_ypaint_canvas *canvas);
-
-uint32_t yetty_ypaint_canvas_line_count(struct yetty_ypaint_canvas *canvas);
 
 //=============================================================================
 // Cursor (scrolling mode only)
@@ -128,9 +127,6 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_scroll_lines(struct yetty_ypa
 // Packed GPU format
 //=============================================================================
 
-// Mark grid as dirty (needs rebuild)
-struct yetty_ycore_void_result yetty_ypaint_canvas_mark_dirty(struct yetty_ypaint_canvas *canvas);
-
 // Check if grid needs rebuild
 bool yetty_ypaint_canvas_is_dirty(struct yetty_ypaint_canvas *canvas);
 
@@ -140,10 +136,6 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_rebuild_grid(struct yetty_ypa
 // Get packed grid data for GPU upload
 const uint32_t *yetty_ypaint_canvas_grid_data(struct yetty_ypaint_canvas *canvas);
 uint32_t yetty_ypaint_canvas_grid_word_count(struct yetty_ypaint_canvas *canvas);
-
-// Clear packed grid staging
-struct yetty_ycore_void_result yetty_ypaint_canvas_clear_staging(
-    struct yetty_ypaint_canvas *canvas);
 
 //=============================================================================
 // Primitive staging for GPU
@@ -161,9 +153,6 @@ YETTY_YRESULT_DECLARE(yetty_ypaint_prim_staging, struct yetty_ypaint_prim_stagin
 struct yetty_ypaint_prim_staging_result yetty_ypaint_canvas_build_prim_staging(
     struct yetty_ypaint_canvas *canvas);
 
-// Get total GPU size for primitives (in bytes)
-uint32_t yetty_ypaint_canvas_prim_gpu_size(struct yetty_ypaint_canvas *canvas);
-
 //=============================================================================
 // State management
 //=============================================================================
@@ -171,14 +160,8 @@ uint32_t yetty_ypaint_canvas_prim_gpu_size(struct yetty_ypaint_canvas *canvas);
 // Clear all lines and primitives
 struct yetty_ycore_void_result yetty_ypaint_canvas_clear(struct yetty_ypaint_canvas *canvas);
 
-// Check if canvas has any content
-bool yetty_ypaint_canvas_empty(struct yetty_ypaint_canvas *canvas);
-
 // Get total primitive count across all lines
 uint32_t yetty_ypaint_canvas_primitive_count(struct yetty_ypaint_canvas *canvas);
-
-// Get default font (for gpu resource set child inclusion)
-struct yetty_ypaint_font *yetty_ypaint_canvas_get_default_font(struct yetty_ypaint_canvas *canvas);
 
 // Number of fonts the canvas owns. Slot 0 is always the default font;
 // slots 1..N-1 are the embedded fonts materialised from FONT prims (in
@@ -204,11 +187,6 @@ uint32_t yetty_ypaint_canvas_complex_prim_count(struct yetty_ypaint_canvas *canv
 struct yetty_ypaint_core_complex_prim_instance;
 struct yetty_ypaint_core_complex_prim_instance *yetty_ypaint_canvas_get_complex_prim(
     struct yetty_ypaint_canvas *canvas, uint32_t index);
-
-// Get flyweight registry (for SDF ops lookup)
-struct yetty_ypaint_core_flyweight_registry;
-const struct yetty_ypaint_core_flyweight_registry *yetty_ypaint_canvas_get_flyweight_registry(
-    struct yetty_ypaint_canvas *canvas);
 
 // Get complex prim factory (for complex prim ops)
 struct yetty_ypaint_core_complex_prim_factory;

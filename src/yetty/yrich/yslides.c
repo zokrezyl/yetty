@@ -118,7 +118,6 @@ static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e
 
     float cx = s->bounds.x + s->bounds.w * 0.5f;
     float cy = s->bounds.y + s->bounds.h * 0.5f;
-    struct yetty_ypaint_core_id_result idr = {.error = YPAINT_OK, .id = 0};
 
     switch (s->kind) {
     case YETTY_YRICH_SHAPE_RECTANGLE:
@@ -131,11 +130,9 @@ static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e
             .half_height = s->bounds.h * 0.5f,
             .corner_radius = s->corner_radius,
         };
-        idr = yetty_ysdf_add_box(buf, layer, s->fill_color, s->stroke_color, s->stroke_width,
-                                 &body);
-        if (idr.error != YPAINT_OK) {
-            return YETTY_ERR(yetty_ycore_void, "shape_render: rect add failed");
-        }
+        struct yetty_ypaint_core_id_result idr =
+            yetty_ysdf_add_box(buf, layer, s->fill_color, s->stroke_color, s->stroke_width, &body);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, idr, "shape_render: rect add failed");
         if (s->kind == YETTY_YRICH_SHAPE_TEXTBOX) {
             struct yetty_ycore_void_result tr = emit_text(buf, s, layer);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "shape_render: emit_text failed");
@@ -149,11 +146,10 @@ static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e
             .radius_x = s->bounds.w * 0.5f,
             .radius_y = s->bounds.h * 0.5f,
         };
-        idr = yetty_ysdf_add_ellipse(buf, layer, s->fill_color, s->stroke_color, s->stroke_width,
-                                     &body);
-        if (idr.error != YPAINT_OK) {
-            return YETTY_ERR(yetty_ycore_void, "shape_render: ellipse add failed");
-        }
+        struct yetty_ypaint_core_id_result idr =
+            yetty_ysdf_add_ellipse(buf, layer, s->fill_color, s->stroke_color, s->stroke_width,
+                                   &body);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, idr, "shape_render: ellipse add failed");
         break;
     }
     case YETTY_YRICH_SHAPE_LINE:
@@ -164,10 +160,9 @@ static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e
             .end_x = s->bounds.x + s->bounds.w,
             .end_y = s->bounds.y + s->bounds.h,
         };
-        idr = yetty_ysdf_add_segment(buf, layer, 0, s->stroke_color, s->stroke_width, &seg);
-        if (idr.error != YPAINT_OK) {
-            return YETTY_ERR(yetty_ycore_void, "shape_render: segment add failed");
-        }
+        struct yetty_ypaint_core_id_result idr =
+            yetty_ysdf_add_segment(buf, layer, 0, s->stroke_color, s->stroke_width, &seg);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, idr, "shape_render: segment add failed");
         break;
     }
     default:
@@ -182,11 +177,10 @@ static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e
             .half_height = s->bounds.h * 0.5f + 2.0f,
             .corner_radius = 0.0f,
         };
-        idr = yetty_ysdf_add_box(buf, layer + 4, 0, YETTY_YRICH_RGBA(0, 100, 200, 255), 1.5f,
-                                 &border);
-        if (idr.error != YPAINT_OK) {
-            return YETTY_ERR(yetty_ycore_void, "shape_render: selection box add failed");
-        }
+        struct yetty_ypaint_core_id_result idr =
+            yetty_ysdf_add_box(buf, layer + 4, 0, YETTY_YRICH_RGBA(0, 100, 200, 255), 1.5f,
+                               &border);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, idr, "shape_render: selection box add failed");
     }
     return YETTY_OK_VOID();
 }
@@ -378,9 +372,7 @@ static struct yetty_ycore_void_result slides_render(struct yetty_yrich_document 
     };
     struct yetty_ypaint_core_id_result br =
         yetty_ysdf_add_box(doc->buffer, 0, slide->bg_color, 0, 0.0f, &bg);
-    if (br.error != YPAINT_OK) {
-        return YETTY_ERR(yetty_ycore_void, "slides_render: bg add failed");
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "slides_render: bg add failed");
 
     uint32_t layer = 1;
     for (size_t i = 0; i < slide->shape_count; i++) {

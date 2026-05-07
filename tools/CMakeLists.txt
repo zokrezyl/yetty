@@ -26,6 +26,10 @@ if(YETTY_ENABLE_TOOL_YPLOT)
     add_subdirectory(yplot)
 endif()
 
+if(YETTY_ENABLE_TOOL_YTOP)
+    add_subdirectory(ytop)
+endif()
+
 if(YETTY_ENABLE_TOOL_YMESH)
     add_subdirectory(ymesh)
 endif()
