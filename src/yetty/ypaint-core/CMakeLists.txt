@@ -1,5 +1,6 @@
 add_library(yetty_ypaint_core STATIC
     buffer.c
+    cmds.c
     complex-prim-types.c
     flyweight.c
     font-prim.c

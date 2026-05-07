@@ -1,14 +1,13 @@
 """ygui ctypes bindings — auto-generated.
 
 DO NOT EDIT. Regenerate with:
-    tools/ffi-codegen/.venv/bin/python tools/ffi-codegen/emit/python/ygui/generate.py
+    tools/ffi-codegen/.venv/bin/python tools/ffi-codegen/emit/python/generate.py ygui
 
 Source: build/ffi/ygui.yaml
 Header: include/yetty/ygui/ygui.h
 
 Library loading is deferred — call ygui.load(path) once at startup, or set
-the YGUI_LIB env var to a shared library path and the module loads it on
-import.
+the YGUI_LIB env var to a shared library path and the module loads it on import.
 """
 
 from __future__ import annotations
@@ -243,6 +242,9 @@ class _yetty_anon_218_9(Structure):
 class _yetty_anon_221_9(Structure):
     pass
 
+class _yetty_anon_40_1(Union):
+    pass
+
 class _yetty_anon_41_1(Union):
     pass
 
@@ -276,15 +278,6 @@ class ygui_event_t(Structure):
 # ---------------------------------------------------------------------------
 # Struct / union field layouts
 # ---------------------------------------------------------------------------
-
-_yetty_anon_41_1._fields_ = [
-    ('value', POINTER(yetty_ygui_engine)),
-    ('error', yetty_ycore_error),
-]
-
-ygui_engine_ptr_result._fields_ = [
-    ('ok', c_int),
-]
 
 yetty_ygui_layout._fields_ = [
     ('mode', c_int),
@@ -341,16 +334,43 @@ _yetty_anon_210_5._fields_ = [
     ('float_value', c_float),
     ('int_value', c_int),
     ('bool_value', c_int),
-    ('string_value', POINTER(c_char)),
+    ('string_value', c_char_p),
     ('color', _yetty_anon_215_9),
     ('scroll', _yetty_anon_218_9),
     ('key', _yetty_anon_221_9),
 ]
 
 ygui_event_t._fields_ = [
-    ('widget_id', POINTER(c_char)),
+    ('widget_id', c_char_p),
     ('type', c_int),
     ('data', _yetty_anon_210_5),
+]
+
+yetty_ycore_error._fields_ = [
+    ('msg', c_char_p),
+    ('cause', POINTER(yetty_ycore_error)),
+]
+
+_yetty_anon_40_1._fields_ = [
+    ('value', c_int),
+    ('error', yetty_ycore_error),
+]
+
+yetty_ycore_void_result._anonymous_ = ('_anon_40_1',)
+yetty_ycore_void_result._fields_ = [
+    ('ok', c_int),
+    ('_anon_40_1', _yetty_anon_40_1),
+]
+
+_yetty_anon_41_1._fields_ = [
+    ('value', POINTER(yetty_ygui_engine)),
+    ('error', yetty_ycore_error),
+]
+
+ygui_engine_ptr_result._anonymous_ = ('_anon_41_1',)
+ygui_engine_ptr_result._fields_ = [
+    ('ok', c_int),
+    ('_anon_41_1', _yetty_anon_41_1),
 ]
 
 # ---------------------------------------------------------------------------
@@ -365,9 +385,9 @@ def _bind_functions() -> None:
     _lib.yetty_ygui_init.restype = c_int
     _lib.yetty_ygui_shutdown.argtypes = []
     _lib.yetty_ygui_shutdown.restype = None
-    _lib.yetty_ygui_engine_create.argtypes = [POINTER(c_char), c_int, c_int, c_int, c_int]
+    _lib.yetty_ygui_engine_create.argtypes = [c_char_p, c_int, c_int, c_int, c_int]
     _lib.yetty_ygui_engine_create.restype = ygui_engine_ptr_result
-    _lib.yetty_ygui_engine_create_with_pixel_hint.argtypes = [POINTER(c_char), c_int, c_int, c_float, c_float]
+    _lib.yetty_ygui_engine_create_with_pixel_hint.argtypes = [c_char_p, c_int, c_int, c_float, c_float]
     _lib.yetty_ygui_engine_create_with_pixel_hint.restype = ygui_engine_ptr_result
     _lib.yetty_ygui_engine_destroy.argtypes = [POINTER(yetty_ygui_engine)]
     _lib.yetty_ygui_engine_destroy.restype = yetty_ycore_void_result
@@ -389,9 +409,9 @@ def _bind_functions() -> None:
     _lib.yetty_ygui_engine_get_size.restype = None
     _lib.yetty_ygui_engine_set_theme.argtypes = [POINTER(yetty_ygui_engine), POINTER(yetty_ygui_theme)]
     _lib.yetty_ygui_engine_set_theme.restype = None
-    _lib.yetty_ygui_engine_on_key.argtypes = [POINTER(yetty_ygui_engine), POINTER(CFUNCTYPE(None, POINTER(yetty_ygui_engine), c_uint, c_int, c_void_p)), c_void_p]
+    _lib.yetty_ygui_engine_on_key.argtypes = [POINTER(yetty_ygui_engine), CFUNCTYPE(None, POINTER(yetty_ygui_engine), c_uint, c_int, c_void_p), c_void_p]
     _lib.yetty_ygui_engine_on_key.restype = None
-    _lib.yetty_ygui_engine_set_event_callback.argtypes = [POINTER(yetty_ygui_engine), POINTER(CFUNCTYPE(None, POINTER(ygui_event_t), c_void_p)), c_void_p]
+    _lib.yetty_ygui_engine_set_event_callback.argtypes = [POINTER(yetty_ygui_engine), CFUNCTYPE(None, POINTER(ygui_event_t), c_void_p), c_void_p]
     _lib.yetty_ygui_engine_set_event_callback.restype = None
     _lib.yetty_ygui_engine_is_dirty.argtypes = [POINTER(yetty_ygui_engine)]
     _lib.yetty_ygui_engine_is_dirty.restype = c_int
@@ -401,7 +421,7 @@ def _bind_functions() -> None:
     _lib.yetty_ygui_engine_set_canvas_mode.restype = None
     _lib.yetty_ygui_engine_set_scale_mode.argtypes = [POINTER(yetty_ygui_engine), c_int]
     _lib.yetty_ygui_engine_set_scale_mode.restype = None
-    _lib.yetty_ygui_engine_on_resize.argtypes = [POINTER(yetty_ygui_engine), POINTER(CFUNCTYPE(None, POINTER(yetty_ygui_engine), c_float, c_float, c_float, c_float, c_void_p)), c_void_p]
+    _lib.yetty_ygui_engine_on_resize.argtypes = [POINTER(yetty_ygui_engine), CFUNCTYPE(None, POINTER(yetty_ygui_engine), c_float, c_float, c_float, c_float, c_void_p), c_void_p]
     _lib.yetty_ygui_engine_on_resize.restype = None
     _lib.yetty_ygui_engine_get_zoom.argtypes = [POINTER(yetty_ygui_engine)]
     _lib.yetty_ygui_engine_get_zoom.restype = c_float
@@ -417,55 +437,55 @@ def _bind_functions() -> None:
     _lib.yetty_ygui_engine_scroll_to.restype = None
     _lib.yetty_ygui_engine_scroll_by.argtypes = [POINTER(yetty_ygui_engine), c_float, c_float]
     _lib.yetty_ygui_engine_scroll_by.restype = None
-    _lib.yetty_ygui_engine_button.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float, POINTER(c_char)]
+    _lib.yetty_ygui_engine_button.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float, c_char_p]
     _lib.yetty_ygui_engine_button.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_label.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, POINTER(c_char)]
+    _lib.yetty_ygui_engine_label.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_char_p]
     _lib.yetty_ygui_engine_label.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_slider.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float, c_float, c_float, c_float]
+    _lib.yetty_ygui_engine_slider.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float, c_float, c_float, c_float]
     _lib.yetty_ygui_engine_slider.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_checkbox.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float, POINTER(c_char), c_int]
+    _lib.yetty_ygui_engine_checkbox.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float, c_char_p, c_int]
     _lib.yetty_ygui_engine_checkbox.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_textinput.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float, POINTER(c_char)]
+    _lib.yetty_ygui_engine_textinput.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float, c_char_p]
     _lib.yetty_ygui_engine_textinput.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_panel.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float]
+    _lib.yetty_ygui_engine_panel.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float]
     _lib.yetty_ygui_engine_panel.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_hbox.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float]
+    _lib.yetty_ygui_engine_hbox.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float]
     _lib.yetty_ygui_engine_hbox.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_vbox.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float]
+    _lib.yetty_ygui_engine_vbox.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float]
     _lib.yetty_ygui_engine_vbox.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_dropdown.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float, POINTER(POINTER(c_char)), c_int]
+    _lib.yetty_ygui_engine_dropdown.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float, POINTER(c_char_p), c_int]
     _lib.yetty_ygui_engine_dropdown.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_progress.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float, c_float]
+    _lib.yetty_ygui_engine_progress.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float, c_float]
     _lib.yetty_ygui_engine_progress.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_separator.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float]
+    _lib.yetty_ygui_engine_separator.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float]
     _lib.yetty_ygui_engine_separator.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_colorpicker.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float]
+    _lib.yetty_ygui_engine_colorpicker.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float]
     _lib.yetty_ygui_engine_colorpicker.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_popup.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float, POINTER(c_char)]
+    _lib.yetty_ygui_engine_popup.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float, c_char_p]
     _lib.yetty_ygui_engine_popup.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_collapsing_header.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float, POINTER(c_char)]
+    _lib.yetty_ygui_engine_collapsing_header.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float, c_char_p]
     _lib.yetty_ygui_engine_collapsing_header.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_tooltip.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float, POINTER(c_char)]
+    _lib.yetty_ygui_engine_tooltip.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float, c_char_p]
     _lib.yetty_ygui_engine_tooltip.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_selectable.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float, POINTER(c_char)]
+    _lib.yetty_ygui_engine_selectable.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float, c_char_p]
     _lib.yetty_ygui_engine_selectable.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_choicebox.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float, POINTER(POINTER(c_char)), c_int]
+    _lib.yetty_ygui_engine_choicebox.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float, POINTER(c_char_p), c_int]
     _lib.yetty_ygui_engine_choicebox.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_vscrollbar.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float]
+    _lib.yetty_ygui_engine_vscrollbar.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float]
     _lib.yetty_ygui_engine_vscrollbar.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_hscrollbar.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float]
+    _lib.yetty_ygui_engine_hscrollbar.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float]
     _lib.yetty_ygui_engine_hscrollbar.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_list.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), c_float, c_float, c_float, c_float]
+    _lib.yetty_ygui_engine_list.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_float, c_float, c_float, c_float]
     _lib.yetty_ygui_engine_list.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_engine_tree_node.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char), POINTER(c_char)]
+    _lib.yetty_ygui_engine_tree_node.argtypes = [POINTER(yetty_ygui_engine), c_char_p, c_char_p]
     _lib.yetty_ygui_engine_tree_node.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_widget_button_on_click.argtypes = [POINTER(yetty_ygui_widget), POINTER(CFUNCTYPE(None, POINTER(yetty_ygui_widget), c_void_p)), c_void_p]
+    _lib.yetty_ygui_widget_button_on_click.argtypes = [POINTER(yetty_ygui_widget), CFUNCTYPE(None, POINTER(yetty_ygui_widget), c_void_p), c_void_p]
     _lib.yetty_ygui_widget_button_on_click.restype = None
-    _lib.yetty_ygui_widget_slider_on_change.argtypes = [POINTER(yetty_ygui_widget), POINTER(CFUNCTYPE(None, POINTER(yetty_ygui_widget), c_float, c_void_p)), c_void_p]
+    _lib.yetty_ygui_widget_slider_on_change.argtypes = [POINTER(yetty_ygui_widget), CFUNCTYPE(None, POINTER(yetty_ygui_widget), c_float, c_void_p), c_void_p]
     _lib.yetty_ygui_widget_slider_on_change.restype = None
-    _lib.yetty_ygui_widget_checkbox_on_change.argtypes = [POINTER(yetty_ygui_widget), POINTER(CFUNCTYPE(None, POINTER(yetty_ygui_widget), c_int, c_void_p)), c_void_p]
+    _lib.yetty_ygui_widget_checkbox_on_change.argtypes = [POINTER(yetty_ygui_widget), CFUNCTYPE(None, POINTER(yetty_ygui_widget), c_int, c_void_p), c_void_p]
     _lib.yetty_ygui_widget_checkbox_on_change.restype = None
-    _lib.yetty_ygui_widget_textinput_on_change.argtypes = [POINTER(yetty_ygui_widget), POINTER(CFUNCTYPE(None, POINTER(yetty_ygui_widget), POINTER(c_char), c_void_p)), c_void_p]
+    _lib.yetty_ygui_widget_textinput_on_change.argtypes = [POINTER(yetty_ygui_widget), CFUNCTYPE(None, POINTER(yetty_ygui_widget), c_char_p, c_void_p), c_void_p]
     _lib.yetty_ygui_widget_textinput_on_change.restype = None
     _lib.yetty_ygui_widget_add_child.argtypes = [POINTER(yetty_ygui_widget), POINTER(yetty_ygui_widget)]
     _lib.yetty_ygui_widget_add_child.restype = None
@@ -480,7 +500,7 @@ def _bind_functions() -> None:
     _lib.yetty_ygui_widget_next_sibling.argtypes = [POINTER(yetty_ygui_widget)]
     _lib.yetty_ygui_widget_next_sibling.restype = POINTER(yetty_ygui_widget)
     _lib.yetty_ygui_widget_id.argtypes = [POINTER(yetty_ygui_widget)]
-    _lib.yetty_ygui_widget_id.restype = POINTER(c_char)
+    _lib.yetty_ygui_widget_id.restype = c_char_p
     _lib.yetty_ygui_widget_type.argtypes = [POINTER(yetty_ygui_widget)]
     _lib.yetty_ygui_widget_type.restype = c_int
     _lib.yetty_ygui_widget_set_position.argtypes = [POINTER(yetty_ygui_widget), c_float, c_float]
@@ -545,16 +565,16 @@ def _bind_functions() -> None:
     _lib.yetty_ygui_widget_set_min_size_percent.restype = None
     _lib.yetty_ygui_widget_set_max_size_percent.argtypes = [POINTER(yetty_ygui_widget), c_float, c_float]
     _lib.yetty_ygui_widget_set_max_size_percent.restype = None
-    _lib.yetty_ygui_widget_apply_css.argtypes = [POINTER(yetty_ygui_widget), POINTER(c_char)]
+    _lib.yetty_ygui_widget_apply_css.argtypes = [POINTER(yetty_ygui_widget), c_char_p]
     _lib.yetty_ygui_widget_apply_css.restype = yetty_ycore_void_result
-    _lib.yetty_ygui_widget_button_set_label.argtypes = [POINTER(yetty_ygui_widget), POINTER(c_char)]
+    _lib.yetty_ygui_widget_button_set_label.argtypes = [POINTER(yetty_ygui_widget), c_char_p]
     _lib.yetty_ygui_widget_button_set_label.restype = None
     _lib.yetty_ygui_widget_button_get_label.argtypes = [POINTER(yetty_ygui_widget)]
-    _lib.yetty_ygui_widget_button_get_label.restype = POINTER(c_char)
-    _lib.yetty_ygui_widget_label_set_text.argtypes = [POINTER(yetty_ygui_widget), POINTER(c_char)]
+    _lib.yetty_ygui_widget_button_get_label.restype = c_char_p
+    _lib.yetty_ygui_widget_label_set_text.argtypes = [POINTER(yetty_ygui_widget), c_char_p]
     _lib.yetty_ygui_widget_label_set_text.restype = None
     _lib.yetty_ygui_widget_label_get_text.argtypes = [POINTER(yetty_ygui_widget)]
-    _lib.yetty_ygui_widget_label_get_text.restype = POINTER(c_char)
+    _lib.yetty_ygui_widget_label_get_text.restype = c_char_p
     _lib.yetty_ygui_widget_label_set_font_size.argtypes = [POINTER(yetty_ygui_widget), c_float]
     _lib.yetty_ygui_widget_label_set_font_size.restype = None
     _lib.yetty_ygui_widget_slider_set_value.argtypes = [POINTER(yetty_ygui_widget), c_float]
@@ -567,13 +587,13 @@ def _bind_functions() -> None:
     _lib.yetty_ygui_widget_checkbox_set_checked.restype = None
     _lib.yetty_ygui_widget_checkbox_get_checked.argtypes = [POINTER(yetty_ygui_widget)]
     _lib.yetty_ygui_widget_checkbox_get_checked.restype = c_int
-    _lib.yetty_ygui_widget_checkbox_set_label.argtypes = [POINTER(yetty_ygui_widget), POINTER(c_char)]
+    _lib.yetty_ygui_widget_checkbox_set_label.argtypes = [POINTER(yetty_ygui_widget), c_char_p]
     _lib.yetty_ygui_widget_checkbox_set_label.restype = None
-    _lib.yetty_ygui_widget_textinput_set_text.argtypes = [POINTER(yetty_ygui_widget), POINTER(c_char)]
+    _lib.yetty_ygui_widget_textinput_set_text.argtypes = [POINTER(yetty_ygui_widget), c_char_p]
     _lib.yetty_ygui_widget_textinput_set_text.restype = None
     _lib.yetty_ygui_widget_textinput_get_text.argtypes = [POINTER(yetty_ygui_widget)]
-    _lib.yetty_ygui_widget_textinput_get_text.restype = POINTER(c_char)
-    _lib.yetty_ygui_widget_textinput_set_placeholder.argtypes = [POINTER(yetty_ygui_widget), POINTER(c_char)]
+    _lib.yetty_ygui_widget_textinput_get_text.restype = c_char_p
+    _lib.yetty_ygui_widget_textinput_set_placeholder.argtypes = [POINTER(yetty_ygui_widget), c_char_p]
     _lib.yetty_ygui_widget_textinput_set_placeholder.restype = None
     _lib.yetty_ygui_widget_panel_set_scroll.argtypes = [POINTER(yetty_ygui_widget), c_float, c_float]
     _lib.yetty_ygui_widget_panel_set_scroll.restype = None
@@ -587,7 +607,7 @@ def _bind_functions() -> None:
     _lib.yetty_ygui_widget_progress_set_value.restype = None
     _lib.yetty_ygui_widget_progress_get_value.argtypes = [POINTER(yetty_ygui_widget)]
     _lib.yetty_ygui_widget_progress_get_value.restype = c_float
-    _lib.yetty_ygui_widget_dropdown_set_options.argtypes = [POINTER(yetty_ygui_widget), POINTER(POINTER(c_char)), c_int]
+    _lib.yetty_ygui_widget_dropdown_set_options.argtypes = [POINTER(yetty_ygui_widget), POINTER(c_char_p), c_int]
     _lib.yetty_ygui_widget_dropdown_set_options.restype = None
     _lib.yetty_ygui_widget_dropdown_set_selected.argtypes = [POINTER(yetty_ygui_widget), c_int]
     _lib.yetty_ygui_widget_dropdown_set_selected.restype = None
@@ -597,10 +617,10 @@ def _bind_functions() -> None:
     _lib.yetty_ygui_widget_colorpicker_set_color.restype = None
     _lib.yetty_ygui_widget_colorpicker_get_color.argtypes = [POINTER(yetty_ygui_widget), POINTER(c_float), POINTER(c_float), POINTER(c_float), POINTER(c_float)]
     _lib.yetty_ygui_widget_colorpicker_get_color.restype = None
-    _lib.yetty_ygui_widget_popup_set_label.argtypes = [POINTER(yetty_ygui_widget), POINTER(c_char)]
+    _lib.yetty_ygui_widget_popup_set_label.argtypes = [POINTER(yetty_ygui_widget), c_char_p]
     _lib.yetty_ygui_widget_popup_set_label.restype = None
     _lib.yetty_ygui_widget_popup_get_label.argtypes = [POINTER(yetty_ygui_widget)]
-    _lib.yetty_ygui_widget_popup_get_label.restype = POINTER(c_char)
+    _lib.yetty_ygui_widget_popup_get_label.restype = c_char_p
     _lib.yetty_ygui_widget_popup_set_modal.argtypes = [POINTER(yetty_ygui_widget), c_int]
     _lib.yetty_ygui_widget_popup_set_modal.restype = None
     _lib.yetty_ygui_widget_popup_is_modal.argtypes = [POINTER(yetty_ygui_widget)]
@@ -613,27 +633,27 @@ def _bind_functions() -> None:
     _lib.yetty_ygui_widget_popup_set_scene_size.restype = None
     _lib.yetty_ygui_widget_popup_set_header_color.argtypes = [POINTER(yetty_ygui_widget), c_uint]
     _lib.yetty_ygui_widget_popup_set_header_color.restype = None
-    _lib.yetty_ygui_widget_collapsing_header_set_label.argtypes = [POINTER(yetty_ygui_widget), POINTER(c_char)]
+    _lib.yetty_ygui_widget_collapsing_header_set_label.argtypes = [POINTER(yetty_ygui_widget), c_char_p]
     _lib.yetty_ygui_widget_collapsing_header_set_label.restype = None
     _lib.yetty_ygui_widget_collapsing_header_get_label.argtypes = [POINTER(yetty_ygui_widget)]
-    _lib.yetty_ygui_widget_collapsing_header_get_label.restype = POINTER(c_char)
+    _lib.yetty_ygui_widget_collapsing_header_get_label.restype = c_char_p
     _lib.yetty_ygui_widget_collapsing_header_set_open.argtypes = [POINTER(yetty_ygui_widget), c_int]
     _lib.yetty_ygui_widget_collapsing_header_set_open.restype = None
     _lib.yetty_ygui_widget_collapsing_header_is_open.argtypes = [POINTER(yetty_ygui_widget)]
     _lib.yetty_ygui_widget_collapsing_header_is_open.restype = c_int
-    _lib.yetty_ygui_widget_tooltip_set_label.argtypes = [POINTER(yetty_ygui_widget), POINTER(c_char)]
+    _lib.yetty_ygui_widget_tooltip_set_label.argtypes = [POINTER(yetty_ygui_widget), c_char_p]
     _lib.yetty_ygui_widget_tooltip_set_label.restype = None
     _lib.yetty_ygui_widget_tooltip_get_label.argtypes = [POINTER(yetty_ygui_widget)]
-    _lib.yetty_ygui_widget_tooltip_get_label.restype = POINTER(c_char)
-    _lib.yetty_ygui_widget_selectable_set_label.argtypes = [POINTER(yetty_ygui_widget), POINTER(c_char)]
+    _lib.yetty_ygui_widget_tooltip_get_label.restype = c_char_p
+    _lib.yetty_ygui_widget_selectable_set_label.argtypes = [POINTER(yetty_ygui_widget), c_char_p]
     _lib.yetty_ygui_widget_selectable_set_label.restype = None
     _lib.yetty_ygui_widget_selectable_get_label.argtypes = [POINTER(yetty_ygui_widget)]
-    _lib.yetty_ygui_widget_selectable_get_label.restype = POINTER(c_char)
+    _lib.yetty_ygui_widget_selectable_get_label.restype = c_char_p
     _lib.yetty_ygui_widget_selectable_set_checked.argtypes = [POINTER(yetty_ygui_widget), c_int]
     _lib.yetty_ygui_widget_selectable_set_checked.restype = None
     _lib.yetty_ygui_widget_selectable_is_checked.argtypes = [POINTER(yetty_ygui_widget)]
     _lib.yetty_ygui_widget_selectable_is_checked.restype = c_int
-    _lib.yetty_ygui_widget_choicebox_set_options.argtypes = [POINTER(yetty_ygui_widget), POINTER(POINTER(c_char)), c_int]
+    _lib.yetty_ygui_widget_choicebox_set_options.argtypes = [POINTER(yetty_ygui_widget), POINTER(c_char_p), c_int]
     _lib.yetty_ygui_widget_choicebox_set_options.restype = None
     _lib.yetty_ygui_widget_choicebox_set_selected.argtypes = [POINTER(yetty_ygui_widget), c_int]
     _lib.yetty_ygui_widget_choicebox_set_selected.restype = None
@@ -647,21 +667,21 @@ def _bind_functions() -> None:
     _lib.yetty_ygui_widget_list_set_selected.restype = None
     _lib.yetty_ygui_widget_list_get_selected.argtypes = [POINTER(yetty_ygui_widget)]
     _lib.yetty_ygui_widget_list_get_selected.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_widget_list_on_select.argtypes = [POINTER(yetty_ygui_widget), POINTER(CFUNCTYPE(None, POINTER(yetty_ygui_widget), c_void_p)), c_void_p]
+    _lib.yetty_ygui_widget_list_on_select.argtypes = [POINTER(yetty_ygui_widget), CFUNCTYPE(None, POINTER(yetty_ygui_widget), c_void_p), c_void_p]
     _lib.yetty_ygui_widget_list_on_select.restype = None
-    _lib.yetty_ygui_widget_tree_node_set_label.argtypes = [POINTER(yetty_ygui_widget), POINTER(c_char)]
+    _lib.yetty_ygui_widget_tree_node_set_label.argtypes = [POINTER(yetty_ygui_widget), c_char_p]
     _lib.yetty_ygui_widget_tree_node_set_label.restype = None
     _lib.yetty_ygui_widget_tree_node_get_label.argtypes = [POINTER(yetty_ygui_widget)]
-    _lib.yetty_ygui_widget_tree_node_get_label.restype = POINTER(c_char)
+    _lib.yetty_ygui_widget_tree_node_get_label.restype = c_char_p
     _lib.yetty_ygui_widget_tree_node_set_expanded.argtypes = [POINTER(yetty_ygui_widget), c_int]
     _lib.yetty_ygui_widget_tree_node_set_expanded.restype = None
     _lib.yetty_ygui_widget_tree_node_is_expanded.argtypes = [POINTER(yetty_ygui_widget)]
     _lib.yetty_ygui_widget_tree_node_is_expanded.restype = c_int
     _lib.yetty_ygui_widget_tree_node_children.argtypes = [POINTER(yetty_ygui_widget)]
     _lib.yetty_ygui_widget_tree_node_children.restype = POINTER(yetty_ygui_widget)
-    _lib.yetty_ygui_widget_tree_node_on_toggle.argtypes = [POINTER(yetty_ygui_widget), POINTER(CFUNCTYPE(None, POINTER(yetty_ygui_widget), c_int, c_void_p)), c_void_p]
+    _lib.yetty_ygui_widget_tree_node_on_toggle.argtypes = [POINTER(yetty_ygui_widget), CFUNCTYPE(None, POINTER(yetty_ygui_widget), c_int, c_void_p), c_void_p]
     _lib.yetty_ygui_widget_tree_node_on_toggle.restype = None
-    _lib.yetty_ygui_engine_find.argtypes = [POINTER(yetty_ygui_engine), POINTER(c_char)]
+    _lib.yetty_ygui_engine_find.argtypes = [POINTER(yetty_ygui_engine), c_char_p]
     _lib.yetty_ygui_engine_find.restype = POINTER(yetty_ygui_widget)
     _lib.yetty_ygui_engine_widget_at.argtypes = [POINTER(yetty_ygui_engine), c_float, c_float]
     _lib.yetty_ygui_engine_widget_at.restype = POINTER(yetty_ygui_widget)
@@ -724,9 +744,9 @@ def _bind_functions() -> None:
     _lib.yetty_ygui_engine_poll.argtypes = [POINTER(yetty_ygui_engine)]
     _lib.yetty_ygui_engine_poll.restype = c_int
     _lib.yetty_ygui_get_error.argtypes = []
-    _lib.yetty_ygui_get_error.restype = POINTER(c_char)
+    _lib.yetty_ygui_get_error.restype = c_char_p
     _lib.yetty_ygui_version.argtypes = []
-    _lib.yetty_ygui_version.restype = POINTER(c_char)
+    _lib.yetty_ygui_version.restype = c_char_p
 
 def yetty_ygui_init():
     return _check_loaded().yetty_ygui_init()

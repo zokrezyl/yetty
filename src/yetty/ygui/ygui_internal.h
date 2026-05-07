@@ -320,6 +320,19 @@ struct yetty_ygui_widget {
             ygui_widget_check_fn on_toggle;
             void *on_toggle_userdata;
         } tree_node;
+
+        struct {
+            int n_columns;
+            char **column_names;          /* size n_columns */
+            float *column_widths;         /* size n_columns; 0 = stretch */
+            int n_rows;
+            int row_capacity;
+            char ***rows;                 /* rows[i][j] (owned strings) */
+            int selected_row;             /* -1 = none */
+            float row_height;             /* 0 = use theme->row_height */
+            void (*on_select)(struct yetty_ygui_widget *table, int row, void *userdata);
+            void *on_select_userdata;
+        } table;
     } data;
 };
 

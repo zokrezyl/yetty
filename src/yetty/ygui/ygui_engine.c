@@ -4,6 +4,7 @@
 
 #include "ygui_internal.h"
 #include <yetty/ypaint-core/buffer.h>
+#include <yetty/ypaint-core/cmds.h>
 #include <yetty/yfont/raster-font.h>
 #include <yetty/ymgui/wire.h>
 #include <stdio.h>
@@ -571,6 +572,18 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
 
     /* 1. Clear buffer */
     yetty_ypaint_core_buffer_clear(engine->buffer);
+
+    /* 1a. Prepend a CMD_ZERO so the receiver clears its canvas + resets
+     * cursor in the SAME OSC envelope that carries this frame's prims —
+     * eliminates the inter-write flash that the separate YPAINT_CLEAR
+     * envelope used to cause. */
+    {
+        struct yetty_ycore_void_result zr =
+            yetty_ypaint_core_buffer_add_cmd_zero(engine->buffer);
+        if (YETTY_IS_ERR(zr)) {
+            yetty_ycore_error_destroy(zr.error);
+        }
+    }
 
     /* 2. Set explicit scene bounds to match full canvas */
     yetty_ypaint_core_buffer_set_scene_bounds(engine->buffer, 0, 0, engine->width, engine->height);

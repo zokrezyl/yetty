@@ -1,15 +1,17 @@
 // YPaint Flyweight - creates configured flyweight registry for ALL primitives.
 //
-// Three tiers, see complex-prim-types.h for the type-id ranges:
-//   1. SDF default handler                   types [0x00, 0xFF]
-//   2. FONT      flyweight handler           type   0x40000001
-//   3. TEXT_SPAN flyweight handler           type   0x40000002
-//   4. Complex prim handler (factory-based)  types [0x80000000, 0xFFFFFFFF]
+// Type-id space (see ypaint-core/cmds.h for the canonical layout):
+//   1. CMD tier handler                      types [0x00000000, 0x0000FFFF]
+//   2. SDF default handler                   types [0x10000000, 0x1FFFFFFF]
+//   3. FONT      flyweight handler           type   0x40000001
+//   4. TEXT_SPAN flyweight handler           type   0x40000002
+//   5. Complex prim handler (factory-based)  types [0x80000000, 0xFFFFFFFF]
 //
 // All return base ops (size, aabb) for buffer iteration.
 
 #include <yetty/ypaint/flyweight.h>
 #include <yetty/ysdf/handler.h>
+#include <yetty/ypaint-core/cmds.h>
 #include <yetty/ypaint-core/complex-prim-types.h>
 #include <yetty/ypaint-core/font-prim.h>
 #include <yetty/ypaint-core/text-span-prim.h>
@@ -25,8 +27,12 @@ struct yetty_ypaint_core_flyweight_registry_ptr_result yetty_ypaint_flyweight_cr
 
     struct yetty_ypaint_core_flyweight_registry *reg = res.value;
 
-    // Default handler for SDF primitives (fast path, types 0-255)
+    // Default handler for SDF primitives (tier [0x10000000, 0x1FFFFFFF])
     yetty_ypaint_core_flyweight_registry_set_default(reg, yetty_ysdf_handler);
+
+    // Cmd tier — control commands at the bottom of the id space.
+    yetty_ypaint_core_flyweight_registry_add(reg, YETTY_YPAINT_CMD_BASE, YETTY_YPAINT_CMD_END,
+                                        yetty_ypaint_core_cmd_handler);
 
     // Flyweight prims — one handler per type id, registered like SDF/complex
     yetty_ypaint_core_flyweight_registry_add(reg, YETTY_YPAINT_TYPE_FONT, YETTY_YPAINT_TYPE_FONT,
@@ -39,6 +45,6 @@ struct yetty_ypaint_core_flyweight_registry_ptr_result yetty_ypaint_flyweight_cr
     yetty_ypaint_core_flyweight_registry_add(reg, YETTY_YPAINT_COMPLEX_TYPE_BASE, 0xFFFFFFFF,
                                         yetty_ypaint_core_complex_prim_handler);
 
-    ydebug("flyweight_create: SDF default + FONT + TEXT_SPAN + complex");
+    ydebug("flyweight_create: cmd + SDF default + FONT + TEXT_SPAN + complex");
     return res;
 }

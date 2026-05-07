@@ -49,6 +49,25 @@ HEADER_WGSL = """// Auto-generated from sdf-primitives.yaml - DO NOT EDIT
 
 GEOMETRY_OFFSET = 5
 
+# Tier base for SDF wire IDs. The YAML's `type:` field is the per-tier slot
+# (0..N); the actual wire / dispatch id is SDF_TIER_BASE | slot. The space
+# layout for ypaint primitive types is:
+#     [0x00000000, 0x0000FFFF]  cmds
+#     [0x10000000, 0x1FFFFFFF]  SDF                    ← this generator
+#     [0x40000000, 0x7FFFFFFF]  flyweight (FONT, TEXT_SPAN)
+#     [0x80000000, 0xFFFFFFFF]  complex
+SDF_TIER_BASE = 0x10000000
+
+
+def wire_id(p):
+    """Wire/dispatch id for a primitive: SDF tier base OR'd with the YAML slot."""
+    return SDF_TIER_BASE | p["type"]
+
+
+def wire_lit(p):
+    """Wire id formatted as a hex C/WGSL literal (with `u` suffix)."""
+    return f"0x{wire_id(p):08X}u"
+
 
 def to_upper(name: str) -> str:
     """snake_case -> UPPER_SNAKE_CASE"""
@@ -69,10 +88,10 @@ def generate_sdf_types(prims: list[dict], out: Path) -> None:
     """Generate ypaint-sdf-types.gen.h - enums and geometry structs for SDF primitives"""
     lines = [HEADER_C, "#pragma once", "", "#include <stddef.h>", "#include <stdint.h>", "", "#ifdef __cplusplus", 'extern "C" {', "#endif", ""]
 
-    # Enum for SDF primitive types
+    # Enum for SDF primitive types. Values are the WIRE ids (tier-base | slot).
     lines.append("enum yetty_ysdf_type {")
     for p in prims:
-        lines.append(f"    YETTY_YSDF_{to_upper(p['name'])} = {p['type']},")
+        lines.append(f"    YETTY_YSDF_{to_upper(p['name'])} = {wire_lit(p)},")
     lines.append("};")
     lines.append("")
 
@@ -295,7 +314,7 @@ def generate_sdf_wgsl(prims: list[dict], out: Path) -> None:
             name = p["name"]
             args = p.get("args", [])
             arg_accesses = [_arg_access(arg, i) for i, arg in enumerate(args)]
-            lines.append(f"        case {p['type']}u: {{ return sdf_{name}(sample_pos, {', '.join(arg_accesses)}); }}")
+            lines.append(f"        case {wire_lit(p)}: {{ return sdf_{name}(sample_pos, {', '.join(arg_accesses)}); }}")
         lines.append("        default: { return 1e10; }")
         lines.append("    }")
         lines.append("}")
@@ -311,7 +330,7 @@ def generate_sdf_wgsl(prims: list[dict], out: Path) -> None:
             name = p["name"]
             args = p.get("args", [])
             arg_accesses = [_arg_access(arg, i) for i, arg in enumerate(args)]
-            lines.append(f"        case {p['type']}u: {{ return sdf_{name}(sample_pos, {', '.join(arg_accesses)}); }}")
+            lines.append(f"        case {wire_lit(p)}: {{ return sdf_{name}(sample_pos, {', '.join(arg_accesses)}); }}")
         lines.append("        default: { return 1e10; }")
         lines.append("    }")
         lines.append("}")
@@ -349,7 +368,7 @@ def generate_sdf_wgsl(prims: list[dict], out: Path) -> None:
     if grads_2d:
         lines.append("    switch (prim_type) {")
         for p in grads_2d:
-            lines.append(f"        case {p['type']}u: {{ return true; }}")
+            lines.append(f"        case {wire_lit(p)}: {{ return true; }}")
         lines.append("        default: { return false; }")
         lines.append("    }")
     else:
@@ -380,7 +399,7 @@ def generate_sdf_wgsl(prims: list[dict], out: Path) -> None:
             return _f32(f"prim_offset + {idx[name]}u")
         def u32_at(name):
             return _u32(f"prim_offset + {idx[name]}u")
-        lines.append(f"        case {p['type']}u: {{")
+        lines.append(f"        case {wire_lit(p)}: {{")
         if is_linear_gradient(p):
             lines.append(f"            let g0 = vec2<f32>({f32_at('grad_x0')}, {f32_at('grad_y0')});")
             lines.append(f"            let g1 = vec2<f32>({f32_at('grad_x1')}, {f32_at('grad_y1')});")

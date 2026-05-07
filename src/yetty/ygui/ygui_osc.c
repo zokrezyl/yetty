@@ -57,27 +57,24 @@ static void write_osc(const char *data, size_t len)
 
 /* Vendor ID = yetty ypaint-layer OSC sink (see terminal.c register_osc_sink).
  * The layer's write() handler accepts:
- *   \033]666674;--clear\033\     — empty the canvas
  *   \033]666674;--bin;<base64>\033\ — append a base64 ypaint buffer
  *
- * ygui's semantics are "the whole UI is re-rendered every tick". We map
- * that onto the layer by sending --clear followed by --bin on every
- * create_card / update_card — the canvas ends up holding exactly the
- * latest UI each frame. Positioning args (-x/-y/-w/-h) are ignored: the
- * ypaint primitives already carry absolute pixel coords. */
+ * ygui's semantics are "the whole UI is re-rendered every tick". The
+ * buffer's first prim is CMD_ZERO (set by ygui_engine_render), which the
+ * receiver applies inline — clearing the canvas + cursor reset in the
+ * same envelope as the rest of the frame. This eliminates the inter-write
+ * flicker that a separate YPAINT_CLEAR envelope used to cause. */
 #define VENDOR_ID "666674"
 
-static struct yetty_ycore_void_result write_clear_and_bin(const uint8_t *data, uint32_t size)
+static struct yetty_ycore_void_result write_bin(const uint8_t *data, uint32_t size)
 {
-    /* 1) Clear the ypaint canvas. Empty body, no args. */
-    static const char clear_seq[] = "\033]600000;;\033\\";
-    write_osc(clear_seq, sizeof(clear_seq) - 1);
-
     if (size == 0 || !data) {
+        /* Nothing to send. The receiver keeps last frame; intentional
+         * "no-op tick" rather than a clear. */
         return YETTY_OK_VOID();
     }
 
-    /* 2) Bin envelope: args = bin meta (compressed=1), payload = LZ4F'd
+    /* Bin envelope: args = bin meta (compressed=1), payload = LZ4F'd
      * + b64'd ypaint serialized buffer. yetty_yface_emit builds the
      * whole envelope into out_buf and we push it via the blocking
      * write helper. */
@@ -107,14 +104,14 @@ struct yetty_ycore_void_result yetty_ygui_osc_create_card(const char *name, int 
     (void)y;
     (void)w;
     (void)h;
-    return write_clear_and_bin(data, size);
+    return write_bin(data, size);
 }
 
 struct yetty_ycore_void_result yetty_ygui_osc_update_card(const char *name, const uint8_t *data,
                                                     uint32_t size)
 {
     (void)name;
-    return write_clear_and_bin(data, size);
+    return write_bin(data, size);
 }
 
 void yetty_ygui_osc_kill_card(const char *name)

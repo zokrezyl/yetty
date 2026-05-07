@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
-"""ygui FFI Stage-1 extractor.
+"""FFI Stage-1 extractor.
 
-Walks include/yetty/ygui/ygui.h with libclang and emits the raw type / decl
+Walks a public yetty header with libclang and emits the raw type / decl
 facts as YAML. No class / method / property inference yet — that lives in a
 later stage. Just the bare AST translated into a portable representation.
 
 Run:
-    tools/ffi-codegen/.venv/bin/python tools/ffi-codegen/parse/ygui/parse.py
+    tools/ffi-codegen/.venv/bin/python tools/ffi-codegen/parse/parse.py <module>
+    # e.g. ygui, yface, ypaint-core
 
-Output:
-    build/ffi/ygui.yaml
+The module name selects:
+  - header   include/yetty/<module>/<module>.h  (override with --header)
+  - scope    include/yetty/<module>/             (override with --scope)
+  - output   build/ffi/<module>.yaml             (override with --out)
 """
 
 from __future__ import annotations
 
+import argparse
 import pathlib
 import sys
 
@@ -21,9 +25,7 @@ import yaml
 from clang import cindex
 
 
-REPO = pathlib.Path(__file__).resolve().parents[4]
-HEADER = REPO / "include/yetty/ygui/ygui.h"
-OUT = REPO / "build/ffi/ygui.yaml"
+REPO = pathlib.Path(__file__).resolve().parents[3]
 
 # Compile flags should mirror the real build. For day-one we hand-pick the
 # include roots and the C standard. A future iteration will read these from
@@ -109,11 +111,16 @@ def render_type(t: cindex.Type) -> dict:
     if t.kind == cindex.TypeKind.INCOMPLETEARRAY:
         return {"array": render_type(t.get_array_element_type()), "size": 0}
 
-    # Record (struct or union)
+    # Record (struct or union). Include size/align so the emitter can
+    # synthesise opaque-with-known-size for types declared outside the
+    # module's scope (e.g. struct yetty_ycore_error referenced from a
+    # ypaint-core result type but defined in ycore).
     if t.kind == cindex.TypeKind.RECORD:
         decl = t.get_declaration()
         kind = "union" if decl.kind == cindex.CursorKind.UNION_DECL else "struct"
-        return {kind: _record_name(decl)}
+        return {kind: _record_name(decl),
+                "size": t.get_size(),
+                "align": t.get_align()}
 
     # Enum
     if t.kind == cindex.TypeKind.ENUM:
@@ -139,16 +146,57 @@ def render_type(t: cindex.Type) -> dict:
 
 def visit_struct(cursor: cindex.Cursor, nested_out: list[dict]) -> dict:
     """Emit a struct/union decl. Recurses into nested anonymous records and
-    appends them to `nested_out` so the emitter sees them before the parent."""
+    appends them to `nested_out`. Distinguishes the two anonymous-record
+    forms in C:
+
+      union { float a; int b; } data;    ← named field; emit FIELD_DECL only
+      union { ptr value; error error; }; ← TRANSPARENT; libclang produces
+                                            INDIRECT_FIELD_DECL children on
+                                            the parent. Synthesise a field
+                                            with anonymous=true so emitters
+                                            can flatten via ctypes
+                                            `_anonymous_` / Rust flat-fields
+                                            / etc.
+    """
     fields = []
+    # Anonymous record decls that have a corresponding INDIRECT_FIELD_DECL
+    # are transparent — they need a synthesised field. Anonymous records
+    # that DON'T have an indirect field are named (their type is referenced
+    # by a regular FIELD_DECL by name); we just emit them and let the
+    # FIELD_DECL refer to them.
+    transparent_anon_decls: dict[int, cindex.Cursor] = {}
     for c in cursor.get_children():
-        # Nested anonymous record types declared inline — emit them first
-        # under their synthesised name so the parent's field can reference.
+        if c.kind == cindex.CursorKind.FIELD_DECL:
+            # If this field references the type of a sibling anonymous
+            # record, that record is NAMED (not transparent).
+            pass
+    for c in cursor.get_children():
+        if c.kind == cindex.CursorKind.STRUCT_DECL or c.kind == cindex.CursorKind.UNION_DECL:
+            if c.is_anonymous() and c.is_definition():
+                transparent_anon_decls[c.hash] = c
+    # Subtract any anonymous record that's referenced by a regular field —
+    # those are the `union { … } name;` form.
+    for c in cursor.get_children():
+        if c.kind == cindex.CursorKind.FIELD_DECL:
+            field_decl = c.type.get_declaration()
+            if field_decl is not None and field_decl.hash in transparent_anon_decls:
+                transparent_anon_decls.pop(field_decl.hash, None)
+
+    for c in cursor.get_children():
         if c.kind in (cindex.CursorKind.STRUCT_DECL, cindex.CursorKind.UNION_DECL) \
                 and c.is_anonymous() and c.is_definition():
             sub = visit_struct(c, nested_out)
             sub["kind"] = "union" if c.kind == cindex.CursorKind.UNION_DECL else "struct"
             nested_out.append(sub)
+            # Only synthesise a field if this anonymous record is
+            # transparent (no FIELD_DECL pulls it in).
+            if c.hash in transparent_anon_decls:
+                fields.append({
+                    "name": _anon_field_name(c),
+                    "type": {sub["kind"]: sub["name"]},
+                    "offset": 0,  # transparent anon members start at 0
+                    "anonymous": True,
+                })
             continue
         if c.kind != cindex.CursorKind.FIELD_DECL:
             continue
@@ -167,6 +215,11 @@ def visit_struct(cursor: cindex.Cursor, nested_out: list[dict]) -> dict:
         "loc": {"file": str(cursor.location.file),
                 "line": cursor.location.line},
     }
+
+
+def _anon_field_name(cursor: cindex.Cursor) -> str:
+    """Synthetic field name for a transparent anonymous record embedding."""
+    return f"_anon_{cursor.location.line}_{cursor.location.column}"
 
 
 def visit_enum(cursor: cindex.Cursor) -> dict:
@@ -217,25 +270,75 @@ def visit_function(cursor: cindex.Cursor) -> dict:
     return out
 
 
-def in_scope(cursor: cindex.Cursor) -> bool:
-    """True if the cursor was declared in include/yetty/ygui/."""
-    if cursor.location.file is None:
-        return False
-    p = pathlib.Path(cursor.location.file.name).resolve()
-    try:
-        p.relative_to(REPO / "include/yetty/ygui")
-    except ValueError:
-        return False
-    return True
+def _collect_referenced_record_names(decl: dict, out: set[str]) -> None:
+    """Walk a decl's types and record any struct/union name referenced."""
+    def walk(t: dict | None) -> None:
+        if t is None:
+            return
+        if "ptr" in t:
+            walk(t["ptr"])
+        elif "array" in t:
+            walk(t["array"])
+        elif "struct" in t:
+            out.add(t["struct"])
+        elif "union" in t:
+            out.add(t["union"])
+        elif "fn" in t:
+            walk(t["fn"]["returns"])
+            for p in t["fn"]["params"]:
+                walk(p)
+    if decl["kind"] in ("struct", "union"):
+        for f in decl.get("fields", []):
+            walk(f["type"])
+    elif decl["kind"] == "function":
+        walk(decl["returns"])
+        for p in decl["params"]:
+            walk(p["type"])
+    elif decl["kind"] == "typedef":
+        walk(decl["type"])
+
+
+def make_in_scope(scope: pathlib.Path):
+    scope = scope.resolve()
+    def in_scope(cursor: cindex.Cursor) -> bool:
+        if cursor.location.file is None:
+            return False
+        p = pathlib.Path(cursor.location.file.name).resolve()
+        try:
+            p.relative_to(scope)
+        except ValueError:
+            return False
+        return True
+    return in_scope
 
 
 def main() -> int:
-    if not HEADER.exists():
-        print(f"missing header: {HEADER}", file=sys.stderr)
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("module",
+                    help="Module name, e.g. 'ygui' or 'yface'")
+    ap.add_argument("--header",
+                    help="Public header path (default: include/yetty/<module>/<module>.h)")
+    ap.add_argument("--scope",
+                    help="Directory to count as in-scope for emitted decls "
+                         "(default: include/yetty/<module>/)")
+    ap.add_argument("--out",
+                    help="YAML output path (default: build/ffi/<module>.yaml)")
+    args = ap.parse_args()
+
+    header = pathlib.Path(args.header) if args.header \
+        else REPO / "include/yetty" / args.module / f"{args.module}.h"
+    scope = pathlib.Path(args.scope) if args.scope \
+        else REPO / "include/yetty" / args.module
+    out = pathlib.Path(args.out) if args.out \
+        else REPO / "build/ffi" / f"{args.module}.yaml"
+
+    if not header.exists():
+        print(f"missing header: {header}", file=sys.stderr)
         return 1
 
     index = cindex.Index.create()
-    tu = index.parse(str(HEADER), args=CFLAGS,
+    tu = index.parse(str(header), args=CFLAGS,
                      options=cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD
                      | cindex.TranslationUnit.PARSE_INCOMPLETE)
 
@@ -246,6 +349,7 @@ def main() -> int:
                   file=sys.stderr)
         return 2
 
+    in_scope = make_in_scope(scope)
     decls: list[dict] = []
     seen: set[tuple] = set()
 
@@ -283,13 +387,56 @@ def main() -> int:
             push(sub)
         push(rec)
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    with OUT.open("w") as f:
+    # Pass 2: pull in record decls from outside our scope that are referenced
+    # by an in-scope decl. Without this, cross-module result types like
+    # yetty_ycore_void_result are opaque in our YAML and downstream emitters
+    # can't generate working bindings (libffi rejects struct-returns when
+    # the size is unknown). We walk the AST once to find every record decl
+    # by spelling, then emit any that are referenced.
+    referenced: set[str] = set()
+    for d in decls:
+        _collect_referenced_record_names(d, referenced)
+    emitted = {(d["kind"], d["name"]) for d in decls}
+
+    record_decls: dict[str, cindex.Cursor] = {}
+    def collect_records(cursor: cindex.Cursor) -> None:
+        if cursor.kind in (cindex.CursorKind.STRUCT_DECL, cindex.CursorKind.UNION_DECL) \
+                and cursor.is_definition():
+            name = _record_name(cursor)
+            record_decls.setdefault(name, cursor)
+        for ch in cursor.get_children():
+            collect_records(ch)
+    collect_records(tu.cursor)
+
+    deferred = list(referenced - {n for k, n in emitted if k in ("struct", "union")})
+    while deferred:
+        new_refs: set[str] = set()
+        for name in sorted(deferred):
+            cur = record_decls.get(name)
+            if cur is None:
+                continue
+            sub_nested: list[dict] = []
+            rec = visit_struct(cur, sub_nested)
+            if cur.kind == cindex.CursorKind.UNION_DECL:
+                rec["kind"] = "union"
+            for sub in sub_nested:
+                if (sub["kind"], sub["name"]) not in emitted:
+                    push(sub)
+                    emitted.add((sub["kind"], sub["name"]))
+                    _collect_referenced_record_names(sub, new_refs)
+            if (rec["kind"], rec["name"]) not in emitted:
+                push(rec)
+                emitted.add((rec["kind"], rec["name"]))
+                _collect_referenced_record_names(rec, new_refs)
+        deferred = list(new_refs - {n for k, n in emitted if k in ("struct", "union")})
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w") as f:
         yaml.safe_dump(
             {
                 "schema_version": 1,
-                "module": "ygui",
-                "header": str(HEADER.relative_to(REPO)),
+                "module": args.module,
+                "header": str(header.relative_to(REPO)),
                 "decls": decls,
             },
             f,
@@ -300,7 +447,7 @@ def main() -> int:
     counts: dict[str, int] = {}
     for d in decls:
         counts[d["kind"]] = counts.get(d["kind"], 0) + 1
-    print(f"wrote {OUT.relative_to(REPO)}  ({sum(counts.values())} decls: "
+    print(f"wrote {out.relative_to(REPO)}  ({sum(counts.values())} decls: "
           + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())) + ")")
     return 0
 
