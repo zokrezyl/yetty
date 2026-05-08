@@ -3,6 +3,12 @@
 # calls yetty_ymsdf_wgsl_config_generate(). Output CDB is byte-compatible
 # with yetty-ymsdf-gen (CPU/msdfgen) so cdb-diff can compare them.
 
+# main.c uses nanosleep + struct timespec (POSIX). The yetty_ymsdf_wgsl
+# library is portable; only this tool driver isn't. Skip on Windows.
+if(WIN32)
+    return()
+endif()
+
 add_executable(yetty-ymsdf-gen-gpu
     main.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c

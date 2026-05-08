@@ -9,6 +9,11 @@ if(MSVC)
     add_compile_options(/Zc:preprocessor)
 endif()
 
+# Embedded asset bytes ride into the binary as RCDATA resources on Windows
+# (see incbin.cmake's MSVC branch). enable_language(RC) lets CMake/Ninja
+# pick up the generated .rc file as a regular source and run rc.exe.
+enable_language(RC)
+
 # RISC-V emulator integrations on Windows. Both enabled.
 # - qemu:    uses the locally-built binary from build-windows-minimal/
 #            (see 3rdparty-fetch.cmake / qemu/_build.sh windows path).
@@ -30,6 +35,11 @@ set(YETTY_ENABLE_LIB_MSDFGEN       OFF CACHE BOOL "" FORCE)
 # ymesh tool — uses POSIX termios/select for raw-mode stdin in its
 # interactive watch loop. No Windows port today; disable on Windows.
 set(YETTY_ENABLE_TOOL_YMESH        OFF CACHE BOOL "" FORCE)
+
+# ymaze tool driver — same story (sys/select for raw-mode watch loop).
+# The yetty_ymaze library itself is portable; only the standalone tool
+# main.c isn't.
+set(YETTY_ENABLE_TOOL_YMAZE        OFF CACHE BOOL "" FORCE)
 
 include(${YETTY_ROOT}/build-tools/cmake/targets/shared.cmake)
 

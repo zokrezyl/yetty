@@ -13,6 +13,14 @@ if exist "C:\Program Files (x86)\GnuWin32\bin" set PATH=C:\Program Files (x86)\G
 if exist "C:\Program Files\NASM" set PATH=C:\Program Files\NASM;%PATH%
 if exist "%LOCALAPPDATA%\bin\NASM" set PATH=%LOCALAPPDATA%\bin\NASM;%PATH%
 
+REM brotli.exe ships with Git for Windows under mingw64\bin. Without it on
+REM PATH the configure-time find_program(BROTLI_EXECUTABLE) in incbin.cmake
+REM fails and the data/ prefix gets embedded raw (~40 MB of shaders+fonts
+REM instead of ~6 MB compressed). The runtime already decompresses brotli
+REM at asset-extract time (decompress_brotli in incbin-assets.c).
+if exist "C:\Program Files\Git\mingw64\bin\brotli.exe" set PATH=C:\Program Files\Git\mingw64\bin;%PATH%
+if exist "C:\Program Files\Git\usr\bin\brotli.exe" set PATH=C:\Program Files\Git\usr\bin;%PATH%
+
 :parse_args
 if "%1"=="" goto :start
 if /i "%1"=="debug" (

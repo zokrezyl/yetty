@@ -197,7 +197,7 @@ function(qemu_embed_runtime TARGET)
         include(${YETTY_ROOT}/build-tools/cmake/incbin.cmake)
     endif()
 
-    set(_STAGING "${CMAKE_BINARY_DIR}/incbin-qemu")
+    set(_STAGING "${CMAKE_BINARY_DIR}/embed-qemu")
     file(MAKE_DIRECTORY "${_STAGING}")
 
     # Pick binary name. Windows ships qemu-system-riscv64.exe alongside a set
