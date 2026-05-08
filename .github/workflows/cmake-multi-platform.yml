@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      BUILD_DIR: build-desktop-ytrace-release-nix
+      BUILD_DIR: build-desktop-ytrace-release
 
     steps:
     - uses: actions/checkout@v4
@@ -104,7 +104,7 @@ jobs:
         nix_path: nixpkgs=channel:nixos-unstable
 
     - name: Build Linux
-      run: make -f Makefile.2 build PLATFORM=desktop LOGLEVEL=ytrace BUILDTYPE=release USE_NIX=yes
+      run: make build-desktop-ytrace-release
 
     - name: Upload Linux artifacts
       uses: actions/upload-artifact@v4
