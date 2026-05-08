@@ -10,7 +10,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <webgpu/webgpu.h>
-#include <yetty/ycore/event-loop.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/ycore/result.h>
 
 #ifdef __cplusplus
@@ -27,7 +27,7 @@ typedef void (*yetty_ydvnc_on_disconnected_fn)(void *userdata, const char *reaso
 
 struct yetty_ydvnc_rfb_client_ptr_result yetty_ydvnc_rfb_client_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat surface_format,
-    struct yetty_yplatform_event_loop *event_loop);
+    struct yetty_yevent_event_loop *event_loop);
 
 /* Optional VNC-auth password. NULL means no password — the client will
  * decline servers that don't offer security type None. Up to 8 chars are

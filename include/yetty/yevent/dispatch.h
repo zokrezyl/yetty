@@ -1,7 +1,7 @@
 #ifndef YETTY_YEVENT_DISPATCH_H
 #define YETTY_YEVENT_DISPATCH_H
 
-#include <yetty/ycore/event-loop.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/ycore/result.h>
 
 #ifdef __cplusplus
@@ -22,8 +22,8 @@ struct yetty_ycore_xthread_event_pipe;
  * tear down via event-loop destroy).
  */
 struct yetty_ycore_void_result
-yetty_yevent_register_default_listeners(struct yetty_yplatform_event_loop *el,
-                                        struct yetty_ycore_event_listener *listener);
+yetty_yevent_register_default_listeners(struct yetty_yevent_event_loop *el,
+                                        struct yetty_yevent_event_listener *listener);
 
 /*
  * Post an event into the platform input pipe. Used by translation code paths

@@ -93,18 +93,32 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      BUILD_DIR: build-desktop-ytrace-release-nix
+      BUILD_DIR: build-desktop-ytrace-release
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Nix
-      uses: cachix/install-nix-action@v27
-      with:
-        nix_path: nixpkgs=channel:nixos-unstable
+    - name: Install Linux dependencies
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          automake autoconf libtool \
+          meson ninja-build nasm \
+          brotli \
+          libfontconfig1-dev \
+          libxrandr-dev \
+          libxinerama-dev \
+          libxcursor-dev \
+          libxi-dev \
+          libxext-dev \
+          libx11-dev \
+          libgl1-mesa-dev \
+          libwayland-dev \
+          libxkbcommon-dev
 
     - name: Build Linux
-      run: make -f Makefile.2 build PLATFORM=desktop LOGLEVEL=ytrace BUILDTYPE=release USE_NIX=yes
+      run: make build-desktop-ytrace-release
 
     - name: Upload Linux artifacts
       uses: actions/upload-artifact@v4

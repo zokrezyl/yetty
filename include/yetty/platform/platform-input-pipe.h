@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 struct yetty_ycore_xthread_event_pipe;
-struct yetty_yplatform_event_loop;
+struct yetty_yevent_event_loop;
 
 /* Result type */
 YETTY_YRESULT_DECLARE(yetty_yplatform_input_pipe, struct yetty_ycore_xthread_event_pipe *);
@@ -23,7 +23,7 @@ struct yetty_platform_input_pipe_ops {
                                            size_t max_size);
     struct yetty_ycore_int_result (*read_fd)(const struct yetty_ycore_xthread_event_pipe *self);
     struct yetty_ycore_void_result (*set_event_loop)(struct yetty_ycore_xthread_event_pipe *self,
-                                                     struct yetty_yplatform_event_loop *loop);
+                                                     struct yetty_yevent_event_loop *loop);
 };
 
 /* Platform input pipe base */

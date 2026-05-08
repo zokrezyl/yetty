@@ -33,8 +33,8 @@ static void platform_get_x11_handles(GLFWwindow *win, void **disp, unsigned long
 
 #include <yetty/yetty/yetty.h>
 #include <yetty/yconfig/config.h>
-#include <yetty/ycore/event.h>
-#include <yetty/ycore/event-loop.h>
+#include <yetty/yevent/event.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/platform/platform-input-pipe.h>
 #include <yetty/platform/pty-factory.h>
 #include <yetty/platform/extract-assets.h>
@@ -258,6 +258,7 @@ int main(int argc, char **argv)
 
     void *x11_display = NULL;
     unsigned long x11_window = 0UL;
+    // TODO we should detect if we are on wayland. If wayland, then do not trigger any Xwindows related stuff
     platform_get_x11_handles(window, &x11_display, &x11_window);
 
     struct yetty_yetty_app_context app_context = {
@@ -293,7 +294,8 @@ int main(int argc, char **argv)
     struct yetty_yplatform_render_thread_args thread_args = {
         .yetty = yetty, .running = &running, .window = window, .result = 0};
 
-    struct yetty_yplatform_ythread *render_thread = yetty_yplatform_ythread_create(render_thread_func, &thread_args);
+    struct yetty_yplatform_ythread *render_thread =
+        yetty_yplatform_ythread_create(render_thread_func, &thread_args);
 
     /* Initial resize event */
     if (window) {

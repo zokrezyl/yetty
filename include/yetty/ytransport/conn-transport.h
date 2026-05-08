@@ -1,4 +1,4 @@
-/* yetty_yconn_transport — polymorphic transport for byte-stream PTYs.
+/* yetty_ytransport_conn_transport — polymorphic transport for byte-stream PTYs.
  *
  * Pulls the network/IPC details out of the application-level protocol
  * code (currently ytelnet/telnet-pty.c). A "transport" represents a
@@ -23,10 +23,10 @@
  * (NAWS, IAC, options) is transport-agnostic.
  */
 
-#ifndef YETTY_YCORE_CONN_TRANSPORT_H
-#define YETTY_YCORE_CONN_TRANSPORT_H
+#ifndef YETTY_YTRANSPORT_CONN_TRANSPORT_H
+#define YETTY_YTRANSPORT_CONN_TRANSPORT_H
 
-#include <yetty/ycore/event-loop.h>   /* yetty_ycore_conn, client_callbacks */
+#include <yetty/yevent/event-loop.h>   /* yetty_yevent_conn, client_callbacks */
 #include <yetty/ycore/result.h>
 #include <stddef.h>
 
@@ -34,41 +34,41 @@
 extern "C" {
 #endif
 
-struct yetty_yconn_transport;
+struct yetty_ytransport_conn_transport;
 
-struct yetty_yconn_transport_ops {
+struct yetty_ytransport_conn_transport_ops {
     /* Begin opening the connection. Returns 0 on success (the connect
      * is in flight; callbacks will fire later) or -1 on synchronous
      * setup failure. The transport keeps a *copy* of `cb` for the
      * lifetime of the connection. */
-    int (*open)(struct yetty_yconn_transport *self,
-                const struct yetty_ycore_client_callbacks *cb);
+    int (*open)(struct yetty_ytransport_conn_transport *self,
+                const struct yetty_yevent_tcp_client_callbacks *cb);
 
     /* Send `len` bytes on the connection. Same return contract as
      * the event-loop's tcp_send: ok with bytes_sent on success,
      * err on failure (e.g. not yet connected). */
-    struct yetty_ycore_size_result (*send)(struct yetty_yconn_transport *self,
-                                           struct yetty_ycore_conn *conn,
+    struct yetty_ycore_size_result (*send)(struct yetty_ytransport_conn_transport *self,
+                                           struct yetty_yevent_conn *conn,
                                            const void *data, size_t len);
 
     /* Close + tear down the in-flight connection. on_disconnect may
      * fire as a side-effect (transport's choice). After this returns
      * the conn handle is invalid; subsequent callbacks (if any) must
      * be ignored by the caller. */
-    struct yetty_ycore_void_result (*close)(struct yetty_yconn_transport *self,
-                                            struct yetty_ycore_conn *conn);
+    struct yetty_ycore_void_result (*close)(struct yetty_ytransport_conn_transport *self,
+                                            struct yetty_yevent_conn *conn);
 
     /* Free the transport itself. Implies close() if open() succeeded
      * and the connection is still live. */
-    void (*destroy)(struct yetty_yconn_transport *self);
+    void (*destroy)(struct yetty_ytransport_conn_transport *self);
 };
 
-struct yetty_yconn_transport {
-    const struct yetty_yconn_transport_ops *ops;
+struct yetty_ytransport_conn_transport {
+    const struct yetty_ytransport_conn_transport_ops *ops;
 };
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* YETTY_YCORE_CONN_TRANSPORT_H */
+#endif /* YETTY_YTRANSPORT_CONN_TRANSPORT_H */

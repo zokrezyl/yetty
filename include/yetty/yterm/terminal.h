@@ -17,7 +17,7 @@ extern "C" {
 struct yetty_yterm_terminal;
 struct yetty_yrender_terminal_layer;
 struct yetty_yterm_terminal_layer_ops;
-struct yetty_yplatform_event_loop;
+struct yetty_yevent_event_loop;
 struct yetty_platform_pty;
 struct yetty_yterm_view;
 struct yetty_yrender_gpu_resource_binder;

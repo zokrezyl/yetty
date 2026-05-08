@@ -127,7 +127,7 @@ Key invariants:
 
 ### Event loop additions
 
-- `include/yetty/ycore/event-loop.h` — added `post_to_loop` op:
+- `include/yetty/yevent/event-loop.h` — added `post_to_loop` op:
   `void (*post_to_loop)(struct yetty_ycore_event_loop *self,
                         void (*fn)(void *), void *arg)`.
   Thread-safe; may be called from any thread; `fn(arg)` runs on the loop
@@ -278,7 +278,7 @@ build-tools/cmake/targets/webasm.cmake        forces LIBCO OFF
 build-tools/cmake/targets/linux.cmake         adds new sources, links yetty_yco
 
 include/yetty/yco/co.h                        libco wrapper API
-include/yetty/ycore/event-loop.h              + post_to_loop op
+include/yetty/yevent/event-loop.h              + post_to_loop op
 include/yetty/yplatform/ycoroutine.h          coroutine API
 include/yetty/yplatform/ywebgpu.h             wgpu await API
 include/yetty/yvnc/vnc-server.h               + wgpu param to create

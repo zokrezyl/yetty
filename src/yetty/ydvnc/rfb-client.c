@@ -20,7 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <yetty/ycore/event-loop.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include "rfb-protocol.h"
@@ -92,7 +92,7 @@ struct yetty_ydvnc_rfb_client {
     WGPURenderPipeline pipeline;
 
     /* Transport */
-    struct yetty_yplatform_event_loop *event_loop;
+    struct yetty_yevent_event_loop *event_loop;
     struct yetty_ydvnc_transport *transport;
     int transport_owned;
 
@@ -989,7 +989,7 @@ static struct yetty_ycore_void_result ensure_gpu_pipeline(struct yetty_ydvnc_rfb
 
 struct yetty_ydvnc_rfb_client_ptr_result yetty_ydvnc_rfb_client_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat surface_format,
-    struct yetty_yplatform_event_loop *event_loop)
+    struct yetty_yevent_event_loop *event_loop)
 {
     if (!event_loop) {
         return YETTY_ERR(yetty_ydvnc_rfb_client_ptr, "ydvnc: event_loop is NULL");

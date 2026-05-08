@@ -768,7 +768,7 @@ static void tinyemu_pty_factory_destroy(struct yetty_yplatform_pty_factory *self
 }
 
 static struct yetty_yplatform_pty_result tinyemu_pty_factory_create_pty(
-    struct yetty_yplatform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop)
+    struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop)
 {
     struct yetty_yplatform_tinyemu_pty_factory *factory = container_of(self, struct yetty_yplatform_tinyemu_pty_factory, base);
     (void)event_loop;

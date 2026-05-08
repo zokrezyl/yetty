@@ -11,7 +11,7 @@ extern "C" {
 #endif
 
 struct yetty_yrpc_server;
-struct yetty_yplatform_event_loop;
+struct yetty_yevent_event_loop;
 
 /* Result types */
 YETTY_YRESULT_DECLARE(yetty_rpc_server_ptr, struct yetty_yrpc_server *);
@@ -58,7 +58,7 @@ typedef struct yetty_rpc_handler_result (*yetty_rpc_handler_fn)(const struct yet
  * Registers built-in handlers for EventLoop channel automatically.
  */
 struct yetty_rpc_server_ptr_result yetty_yrpc_server_create(
-    struct yetty_yplatform_event_loop *event_loop);
+    struct yetty_yevent_event_loop *event_loop);
 
 /*
  * Destroy RPC server.

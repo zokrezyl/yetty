@@ -6,8 +6,8 @@
 
 #include <yetty/yetty/yetty.h>
 #include <yetty/yconfig/config.h>
-#include <yetty/ycore/event.h>
-#include <yetty/ycore/event-loop.h>
+#include <yetty/yevent/event.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/platform/extract-assets.h>
 #include <yetty/platform/platform-input-pipe.h>
 #include <yetty/platform/pty-factory.h>

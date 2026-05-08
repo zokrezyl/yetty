@@ -2,7 +2,7 @@
 #include <yetty/yui/tile.h>
 #include <yetty/yui/view.h>
 #include <yetty/yconfig/config.h>
-#include <yetty/ycore/event.h>
+#include <yetty/yevent/event.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/yvnc/vnc-viewer.h>

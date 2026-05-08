@@ -3,8 +3,8 @@
  */
 
 #include <yetty/yvnc/vnc-server.h>
-#include <yetty/ycore/event-loop.h>
-#include <yetty/ycore/event.h>
+#include <yetty/yevent/event-loop.h>
+#include <yetty/yevent/event.h>
 #include <yetty/platform/platform-input-pipe.h>
 #include <yetty/webgpu/error.h>
 #include <yetty/yplatform/ycoroutine.h>
@@ -33,7 +33,7 @@
 /* Per-client context */
 struct yetty_yvnc_vnc_client_ctx {
     struct yetty_yvnc_server *server;
-    struct yetty_ycore_conn *conn;
+    struct yetty_yevent_conn *conn;
     int slot;
 
     /* Input buffer */
@@ -52,8 +52,8 @@ struct yetty_yvnc_server {
     struct yetty_yplatform_wgpu *wgpu;
 
     /* Event loop for async I/O */
-    struct yetty_yplatform_event_loop *event_loop;
-    yetty_ycore_tcp_server_id tcp_server_id;
+    struct yetty_yevent_event_loop *event_loop;
+    yetty_yevent_tcp_server_id tcp_server_id;
 
     /* Optional HID pipe: when non-NULL, remote-client input is translated
      * here into struct yetty_yui_event records (same path as local GLFW
@@ -170,7 +170,7 @@ static struct yetty_ycore_void_result encode_and_send_dirty_tiles(struct yetty_y
  * TCP Server Callbacks
  *===========================================================================*/
 
-static void *vnc_server_on_connect(void *ctx, struct yetty_ycore_conn *conn)
+static void *vnc_server_on_connect(void *ctx, struct yetty_yevent_conn *conn)
 {
     struct yetty_yvnc_server *server = ctx;
 
@@ -241,7 +241,7 @@ static void vnc_server_on_alloc(void *conn_ctx, size_t suggested, char **buf, si
     *len = space;
 }
 
-static void vnc_server_on_data(void *conn_ctx, struct yetty_ycore_conn *conn, const char *data,
+static void vnc_server_on_data(void *conn_ctx, struct yetty_yevent_conn *conn, const char *data,
                                long nread)
 {
     struct yetty_yvnc_vnc_client_ctx *client_ctx = conn_ctx;
@@ -513,7 +513,7 @@ static struct yetty_ycore_void_result config_vnc_server(struct yetty_yvnc_server
 
 struct yetty_vnc_server_ptr_result yetty_yvnc_server_create(
     WGPUInstance instance, WGPUDevice device, WGPUQueue queue,
-    struct yetty_yplatform_event_loop *event_loop, struct yetty_yplatform_wgpu *wgpu,
+    struct yetty_yevent_event_loop *event_loop, struct yetty_yplatform_wgpu *wgpu,
     struct yetty_ycore_xthread_event_pipe *hid_pipe, const struct yetty_yconfig_config *config)
 {
     if (!event_loop) {
@@ -618,7 +618,7 @@ struct yetty_ycore_void_result yetty_yvnc_server_start(struct yetty_yvnc_server 
     }
 
     /* Setup TCP server callbacks */
-    struct yetty_ycore_server_callbacks callbacks = {
+    struct yetty_yevent_tcp_server_callbacks callbacks = {
         .ctx = server,
         .on_connect = vnc_server_on_connect,
         .on_alloc = vnc_server_on_alloc,
@@ -627,7 +627,7 @@ struct yetty_ycore_void_result yetty_yvnc_server_start(struct yetty_yvnc_server 
     };
 
     /* Create TCP server */
-    struct yetty_ycore_tcp_server_id_result id_res =
+    struct yetty_yevent_tcp_server_id_result id_res =
         server->event_loop->ops->create_tcp_server(server->event_loop, "0.0.0.0", port, &callbacks);
     if (!YETTY_IS_OK(id_res)) {
         return YETTY_ERR(yetty_ycore_void, "failed to create TCP server");

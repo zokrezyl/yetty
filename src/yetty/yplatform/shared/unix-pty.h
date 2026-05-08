@@ -22,10 +22,10 @@ struct yetty_yplatform_pty_result yetty_yplatform_tinyemu_pty_create(struct yett
  * yetty_ytelnet_telnet_pty_create takes a transport. The TCP
  * convenience helper kept here matches the pre-refactor signature so
  * the existing forwarders below don't change. */
-#include <yetty/ycore/event-loop.h>
+#include <yetty/yevent/event-loop.h>
 struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create_tcp(
     const char *host, uint16_t port,
-    struct yetty_yplatform_event_loop *event_loop);
+    struct yetty_yevent_event_loop *event_loop);
 
 #ifdef __cplusplus
 }

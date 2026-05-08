@@ -9,7 +9,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <yetty/ycore/event-loop.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/ycore/result.h>
 
 #ifdef __cplusplus
@@ -45,7 +45,7 @@ struct yetty_ydvnc_transport {
 
 /* Concrete TCP transport — uses the platform event loop's tcp_client API. */
 struct yetty_ydvnc_transport_ptr_result yetty_ydvnc_transport_tcp_create(
-    struct yetty_yplatform_event_loop *event_loop);
+    struct yetty_yevent_event_loop *event_loop);
 
 #ifdef __cplusplus
 }

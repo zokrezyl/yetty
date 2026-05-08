@@ -71,7 +71,7 @@ struct yetty_yplatform_win_pty_factory {
 /* Forward declarations for factory */
 static void win_pty_factory_destroy(struct yetty_yplatform_pty_factory *self);
 static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
-    struct yetty_yplatform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop);
+    struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop);
 
 /* Factory ops table */
 static const struct yetty_yplatform_pty_factory_ops win_pty_factory_ops = {
@@ -430,7 +430,7 @@ static void win_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
 }
 
 static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
-    struct yetty_yplatform_pty_factory *self, struct yetty_yplatform_event_loop *event_loop)
+    struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop)
 {
     struct yetty_yplatform_win_pty_factory *factory = container_of(self, struct yetty_yplatform_win_pty_factory, base);
     struct yetty_yconfig_config *config = factory->config;

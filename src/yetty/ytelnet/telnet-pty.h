@@ -5,14 +5,14 @@
 
 #include <yetty/platform/pty.h>
 #include <yetty/platform/pty-factory.h>
-#include <yetty/ycore/conn-transport.h>
+#include <yetty/ytransport/conn-transport.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct yetty_yplatform_event_loop;
+struct yetty_yevent_event_loop;
 
 /**
  * Create a telnet PTY on top of an arbitrary byte transport.
@@ -31,7 +31,7 @@ struct yetty_yplatform_event_loop;
  * @return PTY result
  */
 struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(
-    struct yetty_yconn_transport *transport);
+    struct yetty_ytransport_conn_transport *transport);
 
 /**
  * Convenience helper for the TCP case: builds a tcp_transport from
@@ -42,7 +42,7 @@ struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(
  */
 struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create_tcp(
     const char *host, uint16_t port,
-    struct yetty_yplatform_event_loop *event_loop);
+    struct yetty_yevent_event_loop *event_loop);
 
 /**
  * Convenience factory for the desktop telnet path: builds a TCP

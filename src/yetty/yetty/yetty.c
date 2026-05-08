@@ -4,9 +4,9 @@
 
 #include <yetty/yetty/yetty.h>
 #include <yetty/yconfig/config.h>
-#include <yetty/ycore/event-loop.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/ywebgpu.h>
-#include <yetty/ycore/event.h>
+#include <yetty/yevent/event.h>
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/render-target.h>
 #ifdef YETTY_HAS_X11_TILE
@@ -41,8 +41,8 @@
 struct yetty_yetty_yetty {
     struct yetty_context context;
     struct yetty_yui_workspace *workspace;
-    struct yetty_yplatform_event_loop *event_loop;
-    struct yetty_ycore_event_listener listener;
+    struct yetty_yevent_event_loop *event_loop;
+    struct yetty_yevent_event_listener listener;
 
     /* WebGPU state (owned by Yetty) */
     WGPUAdapter adapter;
@@ -59,8 +59,8 @@ struct yetty_yetty_yetty {
 
     /* RPC server (optional, enabled via -r/--rpc-socket) */
     struct yetty_yrpc_server *rpc_server;
-    yetty_ycore_timer_id rpc_timer_id;
-    struct yetty_ycore_event_listener rpc_timer_listener;
+    yetty_yevent_timer_id rpc_timer_id;
+    struct yetty_yevent_event_listener rpc_timer_listener;
 
     /* VNC server (optional, for --vnc-server or --vnc-headless) */
     struct yetty_yvnc_server *vnc_server;
@@ -97,7 +97,7 @@ struct yetty_yetty_yetty {
  *===========================================================================*/
 
 static struct yetty_ycore_int_result yetty_event_handler(
-    struct yetty_ycore_event_listener *listener, const struct yetty_yui_event *event)
+    struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *event)
 {
     struct yetty_yetty_yetty *yetty = container_of(listener, struct yetty_yetty_yetty, listener);
 
@@ -645,17 +645,14 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
     {
         const char *shaders_dir = yetty->context.app_context.config->ops->get_string(
             yetty->context.app_context.config, "paths/shaders", "");
-        struct yetty_ymsdf_generator_ptr_result gres =
-            yetty_ymsdf_generator_create_from_config(yetty->context.app_context.config,
-                                                     yetty->device,
-                                                     yetty->context.app_context.app_gpu_context.instance,
-                                                     shaders_dir);
+        struct yetty_ymsdf_generator_ptr_result gres = yetty_ymsdf_generator_create_from_config(
+            yetty->context.app_context.config, yetty->device,
+            yetty->context.app_context.app_gpu_context.instance, shaders_dir);
         if (YETTY_IS_ERR(gres)) {
             return YETTY_ERR(yetty_ycore_void, "failed to create MSDF generator", gres);
         }
         yetty->context.gpu_context.msdf_generator = gres.value;
-        yinfo("ymsdf: generator = %s",
-              gres.value->ops->name(gres.value));
+        yinfo("ymsdf: generator = %s", gres.value->ops->name(gres.value));
     }
 
     /* Check for VNC mode. --record sets vnc/record-file: it spins up a vnc
@@ -703,8 +700,7 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
             if (!YETTY_IS_OK(act_res)) {
                 yetty_yvnc_server_destroy(yetty->vnc_server);
                 yetty->vnc_server = NULL;
-                return YETTY_ERR(yetty_ycore_void,
-                                 "failed to activate VNC record mode", act_res);
+                return YETTY_ERR(yetty_ycore_void, "failed to activate VNC record mode", act_res);
             }
             yinfo("VNC record mode: %s", vnc_record_str);
         }
