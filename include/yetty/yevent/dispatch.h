@@ -23,7 +23,7 @@ struct yetty_ycore_xthread_event_pipe;
  */
 struct yetty_ycore_void_result
 yetty_yevent_register_default_listeners(struct yetty_yevent_event_loop *el,
-                                        struct yetty_ycore_event_listener *listener);
+                                        struct yetty_yevent_event_listener *listener);
 
 /*
  * Post an event into the platform input pipe. Used by translation code paths

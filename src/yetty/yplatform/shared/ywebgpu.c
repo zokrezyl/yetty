@@ -29,7 +29,7 @@ struct yetty_yplatform_wgpu {
     WGPUInstance instance;
     struct yetty_yevent_event_loop *loop;
     yetty_yevent_timer_id tick_timer_id;
-    struct yetty_ycore_event_listener tick_listener;
+    struct yetty_yevent_event_listener tick_listener;
     /* Number of in-flight _await calls. The ProcessEvents tick only runs
      * while this is > 0, so Dawn isn't pumped during regular rendering. */
     int pending_awaits;
@@ -45,13 +45,13 @@ struct yetty_yplatform_ywgpu_await_ctx {
 
 /* The tick listener struct is embedded in struct yplatform_wgpu. We need to
  * recover the wgpu pointer in the handler — container_of pattern. */
-static inline struct yetty_yplatform_wgpu *wgpu_from_listener(struct yetty_ycore_event_listener *l)
+static inline struct yetty_yplatform_wgpu *wgpu_from_listener(struct yetty_yevent_event_listener *l)
 {
     return (struct yetty_yplatform_wgpu *)((char *)l - offsetof(struct yetty_yplatform_wgpu, tick_listener));
 }
 
 /* Runs on the loop thread every YWEBGPU_TICK_MS milliseconds. */
-static struct yetty_ycore_int_result on_wgpu_tick(struct yetty_ycore_event_listener *listener,
+static struct yetty_ycore_int_result on_wgpu_tick(struct yetty_yevent_event_listener *listener,
                                                   const struct yetty_yui_event *event)
 {
     (void)event;

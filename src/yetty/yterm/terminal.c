@@ -42,7 +42,7 @@ static const struct yetty_yui_view_ops terminal_view_ops = {
 
 struct yetty_yterm_terminal {
     struct yetty_yterm_view view; /* MUST be first - allows cast to view */
-    struct yetty_ycore_event_listener listener;
+    struct yetty_yevent_event_listener listener;
     struct yetty_yterm_terminal_context context;
     uint32_t cols;
     uint32_t rows;
@@ -670,7 +670,7 @@ static void terminal_cursor_callback(struct yetty_yrender_terminal_layer *source
 /* Event handler - only for PTY poll events registered directly with event loop
  */
 static struct yetty_ycore_int_result terminal_event_handler(
-    struct yetty_ycore_event_listener *listener, const struct yetty_yui_event *event)
+    struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *event)
 {
     struct yetty_yterm_terminal *terminal =
         container_of(listener, struct yetty_yterm_terminal, listener);
