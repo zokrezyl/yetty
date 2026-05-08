@@ -10,6 +10,7 @@ static char data_dir_buf[512];
 static char runtime_dir_buf[512];
 static char config_dir_buf[512];
 
+// TODO: unify the platform-paths.c for all platform into one
 const char *yetty_yplatform_get_cache_dir(void)
 {
     const char *home = getenv("HOME");
