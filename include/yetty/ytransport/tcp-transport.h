@@ -1,4 +1,4 @@
-/* tcp-transport — yetty_yconn_transport implementation backed by the
+/* tcp-transport — yetty_ytransport_conn_transport implementation backed by the
  * platform event loop's TCP client API (libuv on desktop / iOS / etc).
  *
  * One transport instance binds to one (host, port, event_loop) tuple
@@ -6,11 +6,11 @@
  * the desktop telnet PTY factory.
  */
 
-#ifndef YETTY_YCORE_TCP_TRANSPORT_H
-#define YETTY_YCORE_TCP_TRANSPORT_H
+#ifndef YETTY_YTRANSPORT_TCP_TRANSPORT_H
+#define YETTY_YTRANSPORT_TCP_TRANSPORT_H
 
-#include <yetty/ycore/conn-transport.h>
-#include <yetty/ycore/event-loop.h>
+#include <yetty/ytransport/conn-transport.h>
+#include <yetty/yevent/event-loop.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -19,12 +19,12 @@ extern "C" {
 
 /* Allocate a new TCP transport. Returns NULL on out-of-memory or on
  * invalid arguments. The transport stores its own copy of `host`. */
-struct yetty_yconn_transport *yetty_ycore_tcp_transport_create(
+struct yetty_ytransport_conn_transport *yetty_ytransport_tcp_transport_create(
     const char *host, uint16_t port,
-    struct yetty_yplatform_event_loop *event_loop);
+    struct yetty_yevent_event_loop *event_loop);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* YETTY_YCORE_TCP_TRANSPORT_H */
+#endif /* YETTY_YTRANSPORT_TCP_TRANSPORT_H */

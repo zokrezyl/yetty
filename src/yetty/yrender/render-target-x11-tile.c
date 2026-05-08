@@ -12,7 +12,7 @@
 
 #include <yetty/yrender/render-target-x11-tile.h>
 #include <yetty/yrender-utils/tile-diff.h>
-#include <yetty/ycore/event-loop.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/ytrace/ytrace.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -36,7 +36,7 @@ struct yetty_yrender_render_target_x11_tile {
 
     /* Event loop — used only to post a catch-up render after a dropped
      * present() (see on_engine_idle). */
-    struct yetty_yplatform_event_loop *event_loop;
+    struct yetty_yevent_event_loop *event_loop;
 
     /* X11 state. */
     Display *display;
@@ -403,7 +403,7 @@ struct yetty_yrender_target_ptr_result yetty_yrender_target_texture_create(
 struct yetty_yrender_target_ptr_result yetty_yrender_target_x11_tile_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat format,
     struct yetty_ypaint_core_gpu_allocator *allocator, struct yetty_yplatform_wgpu *wgpu,
-    struct yetty_yplatform_event_loop *event_loop, void *x11_display, unsigned long x11_window,
+    struct yetty_yevent_event_loop *event_loop, void *x11_display, unsigned long x11_window,
     struct yetty_yrender_viewport viewport)
 {
     if (!x11_display || x11_window == 0) {

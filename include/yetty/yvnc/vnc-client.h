@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <webgpu/webgpu.h>
-#include <yetty/ycore/event-loop.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/ycore/result.h>
 
 #ifdef __cplusplus
@@ -32,7 +32,7 @@ typedef void (*yetty_vnc_on_disconnected_fn)(void *userdata);
 /* Create client - event_loop used for async socket I/O */
 struct yetty_vnc_client_ptr_result yetty_yvnc_client_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat surface_format,
-    struct yetty_yplatform_event_loop *event_loop, uint16_t width, uint16_t height);
+    struct yetty_yevent_event_loop *event_loop, uint16_t width, uint16_t height);
 
 /* Destroy client (handles NULL) */
 struct yetty_ycore_void_result yetty_yvnc_client_destroy(struct yetty_yvnc_client *client);

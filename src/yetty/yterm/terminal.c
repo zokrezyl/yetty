@@ -6,8 +6,8 @@
 #include <yetty/platform/pty-pipe-source.h>
 #include <yetty/platform/pty.h>
 #include <yetty/yconfig/config.h>
-#include <yetty/ycore/event-loop.h>
-#include <yetty/ycore/event.h>
+#include <yetty/yevent/event-loop.h>
+#include <yetty/yevent/event.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yrender/gpu-allocator.h>
@@ -48,7 +48,7 @@ struct yetty_yterm_terminal {
     uint32_t rows;
     struct yetty_yrender_terminal_layer *layers[YETTY_YTERM_TERMINAL_MAX_LAYERS];
     size_t layer_count;
-    yetty_ycore_pipe_id pty_pipe_id;
+    yetty_yevent_pipe_id pty_pipe_id;
     /* Render targets - one per layer for render_layer */
     struct yetty_ypaint_core_target *layer_targets[YETTY_YTERM_TERMINAL_MAX_LAYERS];
     int shutting_down;
@@ -822,7 +822,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
             struct yetty_platform_pty_pipe_source *pipe_source =
                 terminal->context.pty->ops->pipe_source(terminal->context.pty);
             if (pipe_source && terminal->pty_reader) {
-                struct yetty_ycore_pipe_id_result pipe_res =
+                struct yetty_yevent_pipe_id_result pipe_res =
                     terminal->context.yetty_context.event_loop->ops->register_pty_pipe(
                         terminal->context.yetty_context.event_loop, pipe_source,
                         terminal_pty_pipe_alloc, terminal_pty_pipe_read, terminal);

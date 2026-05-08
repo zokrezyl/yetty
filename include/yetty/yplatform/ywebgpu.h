@@ -26,7 +26,7 @@
 
 #include <webgpu/webgpu.h>
 
-struct yetty_yplatform_event_loop;
+struct yetty_yevent_event_loop;
 struct yetty_yplatform_wgpu;
 
 YETTY_YRESULT_DECLARE(yplatform_wgpu_ptr, struct yetty_yplatform_wgpu *);
@@ -39,7 +39,7 @@ extern "C" {
  * ProcessEvents tick on the loop thread; webasm has nothing to set up
  * (loop is kept in the signature only to match desktop). */
 struct yplatform_wgpu_ptr_result yetty_yplatform_wgpu_create(WGPUInstance instance,
-                                                       struct yetty_yplatform_event_loop *loop);
+                                                       struct yetty_yevent_event_loop *loop);
 
 /* Destroy. Stops the desktop tick. Handles NULL. */
 void yetty_yplatform_wgpu_destroy(struct yetty_yplatform_wgpu *wgpu);

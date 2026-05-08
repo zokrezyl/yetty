@@ -14,8 +14,8 @@
 #include <string.h>
 
 #include <webgpu/webgpu.h>
-#include <yetty/ycore/event.h>
-#include <yetty/ycore/event-loop.h>
+#include <yetty/yevent/event.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>

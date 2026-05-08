@@ -15,7 +15,7 @@ struct yetty_yconfig_config;
 struct yetty_ycore_xthread_event_pipe;
 struct yetty_yetty_clipboard_manager;
 struct yetty_yplatform_pty_factory;
-struct yetty_yplatform_event_loop;
+struct yetty_yevent_event_loop;
 struct yetty_ypaint_core_gpu_allocator;
 struct yetty_ymsdf_generator;
 
@@ -63,7 +63,7 @@ struct yetty_yetty_gpu_context {
 struct yetty_context {
     struct yetty_yetty_app_context app_context;
     struct yetty_yetty_gpu_context gpu_context;
-    struct yetty_yplatform_event_loop *event_loop;
+    struct yetty_yevent_event_loop *event_loop;
 };
 
 /* Result type */

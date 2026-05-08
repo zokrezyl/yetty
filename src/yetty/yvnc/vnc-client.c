@@ -3,7 +3,7 @@
  */
 
 #include <yetty/yvnc/vnc-client.h>
-#include <yetty/ycore/event-loop.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/ytrace/ytrace.h>
 #include "protocol.h"
@@ -69,9 +69,9 @@ struct yetty_yvnc_client {
     WGPUTextureFormat surface_format;
 
     /* Event loop for async I/O */
-    struct yetty_yplatform_event_loop *event_loop;
-    yetty_ycore_tcp_client_id tcp_client_id;
-    struct yetty_ycore_conn *conn;
+    struct yetty_yevent_event_loop *event_loop;
+    yetty_yevent_tcp_client_id tcp_client_id;
+    struct yetty_yevent_conn *conn;
 
     /* Connection state */
     int connected;
@@ -611,7 +611,7 @@ static struct yetty_ycore_void_result process_received_data(struct yetty_yvnc_cl
  * TCP Client Callbacks
  *===========================================================================*/
 
-static void vnc_client_on_connect(void *ctx, struct yetty_ycore_conn *conn)
+static void vnc_client_on_connect(void *ctx, struct yetty_yevent_conn *conn)
 {
     struct yetty_yvnc_client *client = ctx;
     ydebug("VNC client: on_connect callback fired, conn=%p", (void *)conn);
@@ -667,7 +667,7 @@ static void vnc_client_on_alloc(void *ctx, size_t suggested, char **buf, size_t 
 }
 
 YETTY_EXTERNAL_CALLBACK
-static void vnc_client_on_data(void *ctx, struct yetty_ycore_conn *conn, const char *data, long nread)
+static void vnc_client_on_data(void *ctx, struct yetty_yevent_conn *conn, const char *data, long nread)
 {
     struct yetty_yvnc_client *client = ctx;
     (void)conn;
@@ -712,7 +712,7 @@ static void vnc_client_on_disconnect(void *ctx)
 
 struct yetty_vnc_client_ptr_result yetty_yvnc_client_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat surface_format,
-    struct yetty_yplatform_event_loop *event_loop, uint16_t width, uint16_t height)
+    struct yetty_yevent_event_loop *event_loop, uint16_t width, uint16_t height)
 {
     ydebug("VNC client: create called, device=%p queue=%p event_loop=%p %ux%u", (void *)device,
            (void *)queue, (void *)event_loop, width, height);
@@ -847,7 +847,7 @@ struct yetty_ycore_void_result yetty_yvnc_client_connect(struct yetty_yvnc_clien
 
     /* Setup TCP client callbacks */
     ydebug("VNC client: setting up TCP callbacks");
-    struct yetty_ycore_client_callbacks callbacks = {
+    struct yetty_yevent_tcp_client_callbacks callbacks = {
         .ctx = client,
         .on_connect = vnc_client_on_connect,
         .on_connect_error = vnc_client_on_connect_error,
@@ -858,7 +858,7 @@ struct yetty_ycore_void_result yetty_yvnc_client_connect(struct yetty_yvnc_clien
 
     /* Create TCP client (starts connecting immediately) */
     ydebug("VNC client: calling event_loop->create_tcp_client");
-    struct yetty_ycore_tcp_client_id_result id_res =
+    struct yetty_yevent_tcp_client_id_result id_res =
         client->event_loop->ops->create_tcp_client(client->event_loop, host, port, &callbacks);
     if (!YETTY_IS_OK(id_res)) {
         ydebug("VNC client: create_tcp_client failed: %s", id_res.error.msg);

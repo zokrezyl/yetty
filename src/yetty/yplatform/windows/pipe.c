@@ -26,7 +26,7 @@ static struct yetty_ycore_size_result win_pipe_read(struct yetty_ycore_xthread_e
 static struct yetty_ycore_int_result win_pipe_read_fd(
     const struct yetty_ycore_xthread_event_pipe *self);
 static struct yetty_ycore_void_result win_pipe_set_event_loop(
-    struct yetty_ycore_xthread_event_pipe *self, struct yetty_yplatform_event_loop *loop);
+    struct yetty_ycore_xthread_event_pipe *self, struct yetty_yevent_event_loop *loop);
 
 /* Ops table */
 static const struct yetty_platform_input_pipe_ops win_pipe_ops = {
@@ -117,7 +117,7 @@ static struct yetty_ycore_int_result win_pipe_read_fd(const struct yetty_ycore_x
 }
 
 static struct yetty_ycore_void_result win_pipe_set_event_loop(
-    struct yetty_ycore_xthread_event_pipe *self, struct yetty_yplatform_event_loop *loop)
+    struct yetty_ycore_xthread_event_pipe *self, struct yetty_yevent_event_loop *loop)
 {
     /* TODO: integrate with Windows event loop when needed */
     (void)self;

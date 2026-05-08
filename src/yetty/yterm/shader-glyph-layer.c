@@ -5,8 +5,8 @@
 #include <time.h>
 
 #include <yetty/yconfig/config.h>
-#include <yetty/ycore/event-loop.h>
-#include <yetty/ycore/event.h>
+#include <yetty/yevent/event-loop.h>
+#include <yetty/yevent/event.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yetty/yetty.h>
@@ -83,8 +83,8 @@ struct yetty_yterm_shader_glyph_layer {
      * any shader-glyph cell on screen; stays stopped (zero-cost) on idle
      * terminals so the input→render loop can quiesce. Borrowed event loop;
      * timer_id valid only when timer_created. */
-    struct yetty_yplatform_event_loop *event_loop;
-    yetty_ycore_timer_id timer_id;
+    struct yetty_yevent_event_loop *event_loop;
+    yetty_yevent_timer_id timer_id;
     int timer_created;
     int timer_running;
     struct yetty_ycore_event_listener listener;
@@ -475,7 +475,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
             period_ms = 1;
         }
 
-        struct yetty_ycore_timer_id_result tres =
+        struct yetty_yevent_timer_id_result tres =
             layer->event_loop->ops->create_timer(layer->event_loop);
         if (YETTY_IS_OK(tres)) {
             layer->timer_id = tres.value;

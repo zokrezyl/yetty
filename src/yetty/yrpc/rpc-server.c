@@ -1,8 +1,8 @@
 /* RPC server implementation using event loop TCP server */
 
 #include <yetty/yrpc/rpc-server.h>
-#include <yetty/ycore/event-loop.h>
-#include <yetty/ycore/event.h>
+#include <yetty/yevent/event-loop.h>
+#include <yetty/yevent/event.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <msgpack.h>
@@ -44,8 +44,8 @@ struct yetty_yrpc_rpc_conn_ctx {
 
 /* RPC server */
 struct yetty_yrpc_server {
-    struct yetty_yplatform_event_loop *event_loop;
-    yetty_ycore_tcp_server_id server_id;
+    struct yetty_yevent_event_loop *event_loop;
+    yetty_yevent_tcp_server_id server_id;
     int port;
     int running;
 
@@ -74,7 +74,7 @@ static struct yetty_yrpc_handler_entry *find_handler(struct yetty_yrpc_server *s
 /* Dispatch a single already-parsed message: find handler, invoke it,
  * write any response back. Owns msg.params (frees it on return). */
 static void dispatch_message(struct yetty_yrpc_rpc_conn_ctx *ctx,
-                             struct yetty_ycore_conn *conn,
+                             struct yetty_yevent_conn *conn,
                              struct yetty_yrpc_message msg)
 {
     struct yetty_yrpc_server *server = ctx->server;
@@ -125,7 +125,7 @@ static void dispatch_message(struct yetty_yrpc_rpc_conn_ctx *ctx,
 
 /* TCP server callbacks */
 
-static void *rpc_on_connect(void *ctx, struct yetty_ycore_conn *conn)
+static void *rpc_on_connect(void *ctx, struct yetty_yevent_conn *conn)
 {
     struct yetty_yrpc_server *server = ctx;
     struct yetty_yrpc_rpc_conn_ctx *conn_ctx;
@@ -164,7 +164,7 @@ static void rpc_on_alloc(void *conn_ctx_ptr, size_t suggested, char **buf, size_
     }
 }
 
-static void rpc_on_data(void *conn_ctx_ptr, struct yetty_ycore_conn *conn, const char *data,
+static void rpc_on_data(void *conn_ctx_ptr, struct yetty_yevent_conn *conn, const char *data,
                         long nread)
 {
     struct yetty_yrpc_rpc_conn_ctx *ctx = conn_ctx_ptr;
@@ -237,7 +237,7 @@ static void rpc_on_disconnect(void *conn_ctx_ptr)
 static struct yetty_ycore_void_result register_builtin_handlers(struct yetty_yrpc_server *server);
 
 struct yetty_rpc_server_ptr_result yetty_yrpc_server_create(
-    struct yetty_yplatform_event_loop *event_loop)
+    struct yetty_yevent_event_loop *event_loop)
 {
     struct yetty_yrpc_server *server;
     struct yetty_ycore_void_result res;
@@ -281,9 +281,9 @@ struct yetty_ycore_void_result yetty_yrpc_server_destroy(struct yetty_yrpc_serve
 struct yetty_ycore_void_result yetty_yrpc_server_start(struct yetty_yrpc_server *server,
                                                       const char *host, int port)
 {
-    struct yetty_ycore_tcp_server_id_result id_res;
+    struct yetty_yevent_tcp_server_id_result id_res;
     struct yetty_ycore_void_result res;
-    struct yetty_ycore_server_callbacks callbacks;
+    struct yetty_yevent_tcp_server_callbacks callbacks;
 
     if (!server) {
         return YETTY_ERR(yetty_ycore_void, "server is NULL");

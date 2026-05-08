@@ -7,16 +7,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <yetty/ycore/event-loop.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/ytrace/ytrace.h>
 
 #define RECV_BUF_INITIAL (64u * 1024u)
 
 struct tcp_transport {
     struct yetty_ydvnc_transport base;
-    struct yetty_yplatform_event_loop *event_loop;
-    yetty_ycore_tcp_client_id client_id;
-    struct yetty_ycore_conn *conn;
+    struct yetty_yevent_event_loop *event_loop;
+    yetty_yevent_tcp_client_id client_id;
+    struct yetty_yevent_conn *conn;
 
     struct yetty_ydvnc_transport_callbacks cbs;
     int connected;
@@ -32,7 +32,7 @@ struct tcp_transport {
  * Event-loop callback adapters
  *===========================================================================*/
 
-static void cb_on_connect(void *ctx, struct yetty_ycore_conn *conn)
+static void cb_on_connect(void *ctx, struct yetty_yevent_conn *conn)
 {
     struct tcp_transport *self = ctx;
     self->conn = conn;
@@ -75,7 +75,7 @@ static void cb_on_alloc(void *ctx, size_t suggested, char **buf, size_t *len)
 }
 
 YETTY_EXTERNAL_CALLBACK
-static void cb_on_data(void *ctx, struct yetty_ycore_conn *conn, const char *data, long nread)
+static void cb_on_data(void *ctx, struct yetty_yevent_conn *conn, const char *data, long nread)
 {
     struct tcp_transport *self = ctx;
     (void)conn;
@@ -116,7 +116,7 @@ static struct yetty_ycore_void_result tcp_op_connect(
 
     self->cbs = *cbs;
 
-    struct yetty_ycore_client_callbacks loop_cbs = {
+    struct yetty_yevent_tcp_client_callbacks loop_cbs = {
         .ctx = self,
         .on_connect = cb_on_connect,
         .on_connect_error = cb_on_connect_error,
@@ -125,7 +125,7 @@ static struct yetty_ycore_void_result tcp_op_connect(
         .on_disconnect = cb_on_disconnect,
     };
 
-    struct yetty_ycore_tcp_client_id_result id_res =
+    struct yetty_yevent_tcp_client_id_result id_res =
         self->event_loop->ops->create_tcp_client(self->event_loop, host, (int)port, &loop_cbs);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "ydvnc tcp transport: create_tcp_client failed");
 
@@ -185,7 +185,7 @@ static const struct yetty_ydvnc_transport_ops tcp_ops = {
 };
 
 struct yetty_ydvnc_transport_ptr_result yetty_ydvnc_transport_tcp_create(
-    struct yetty_yplatform_event_loop *event_loop)
+    struct yetty_yevent_event_loop *event_loop)
 {
     if (!event_loop) {
         return YETTY_ERR(yetty_ydvnc_transport_ptr, "ydvnc tcp transport: event_loop is NULL");

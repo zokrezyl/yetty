@@ -1,5 +1,5 @@
-#ifndef YETTY_YCORE_EVENT_H
-#define YETTY_YCORE_EVENT_H
+#ifndef YETTY_YEVENT_EVENT_H
+#define YETTY_YEVENT_EVENT_H
 
 #include <stdint.h>
 #include <yetty/ycore/types.h>
@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-enum yetty_ycore_event_type {
+enum yetty_yevent_event_type {
     YETTY_YCORE_NONE = 0,
     /* Input events */
     YETTY_YCORE_KEY_DOWN,
@@ -209,7 +209,7 @@ struct yetty_ycore_event_zoom_cell_size {
 };
 
 struct yetty_yui_event {
-    enum yetty_ycore_event_type type;
+    enum yetty_yevent_event_type type;
     union {
         struct yetty_ycore_event_key key;
         struct yetty_ycore_event_char chr;
@@ -242,4 +242,4 @@ struct yetty_yui_event {
 }
 #endif
 
-#endif /* YETTY_YCORE_EVENT_H */
+#endif /* YETTY_YEVENT_EVENT_H */

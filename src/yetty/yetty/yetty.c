@@ -4,9 +4,9 @@
 
 #include <yetty/yetty/yetty.h>
 #include <yetty/yconfig/config.h>
-#include <yetty/ycore/event-loop.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/ywebgpu.h>
-#include <yetty/ycore/event.h>
+#include <yetty/yevent/event.h>
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/render-target.h>
 #ifdef YETTY_HAS_X11_TILE
@@ -41,7 +41,7 @@
 struct yetty_yetty_yetty {
     struct yetty_context context;
     struct yetty_yui_workspace *workspace;
-    struct yetty_yplatform_event_loop *event_loop;
+    struct yetty_yevent_event_loop *event_loop;
     struct yetty_ycore_event_listener listener;
 
     /* WebGPU state (owned by Yetty) */
@@ -59,7 +59,7 @@ struct yetty_yetty_yetty {
 
     /* RPC server (optional, enabled via -r/--rpc-socket) */
     struct yetty_yrpc_server *rpc_server;
-    yetty_ycore_timer_id rpc_timer_id;
+    yetty_yevent_timer_id rpc_timer_id;
     struct yetty_ycore_event_listener rpc_timer_listener;
 
     /* VNC server (optional, for --vnc-server or --vnc-headless) */

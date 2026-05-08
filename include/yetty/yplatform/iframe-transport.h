@@ -1,4 +1,4 @@
-/* iframe-transport — webasm-only yetty_yconn_transport implementation
+/* iframe-transport — webasm-only yetty_ytransport_conn_transport implementation
  * that ferries bytes to/from the tinyemu iframe via postMessage. The
  * iframe injects them into slirp's chr-backend, which surfaces them
  * as a synthetic inbound TCP connection inside the VM.
@@ -17,7 +17,7 @@
 #ifndef YETTY_YPLATFORM_IFRAME_TRANSPORT_H
 #define YETTY_YPLATFORM_IFRAME_TRANSPORT_H
 
-#include <yetty/ycore/conn-transport.h>
+#include <yetty/ytransport/conn-transport.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -27,7 +27,7 @@ extern "C" {
 /* Allocate a new iframe transport that will, on open(), tell the
  * tinyemu iframe to inject an inbound connection to (guest, port).
  * Returns NULL on out-of-memory. */
-struct yetty_yconn_transport *yetty_yplatform_iframe_transport_create(uint16_t port);
+struct yetty_ytransport_conn_transport *yetty_yplatform_iframe_transport_create(uint16_t port);
 
 #ifdef __cplusplus
 }

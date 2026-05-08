@@ -1,4 +1,4 @@
-/* iframe-transport.c — webasm-only yetty_yconn_transport over postMessage.
+/* iframe-transport.c — webasm-only yetty_ytransport_conn_transport over postMessage.
  *
  * Each transport instance represents a single yetty terminal session.
  * On open(), it:
@@ -9,7 +9,7 @@
  *
  * The iframe responds with {type:'session-opened', clientSid, ok}.
  * On `ok=true` we fire the caller's on_connect with our private
- * struct yetty_ycore_conn (which is just our handle pointer plus
+ * struct yetty_yevent_conn (which is just our handle pointer plus
  * the clientSid). All subsequent {type:'session-rx', clientSid, data}
  * messages are routed to the matching transport's on_data callback.
  *
@@ -17,14 +17,14 @@
  * with the clientSid; the iframe's demux finds the wasm sid and
  * calls _tinyemu_session_send / _close on the slirp chr-backend.
  *
- * Concrete struct yetty_ycore_conn — webasm doesn't link
+ * Concrete struct yetty_yevent_conn — webasm doesn't link
  * libuv-event-loop.c, so we own this typedef without symbol clash.
  * Each transport allocates exactly one conn (1:1 with the
  * connection lifecycle).
  */
 
-#include <yetty/ycore/conn-transport.h>
-#include <yetty/ycore/event-loop.h>
+#include <yetty/ytransport/conn-transport.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/ycore/result.h>
 #include <yetty/yplatform/iframe-transport.h>
 #include <yetty/ytrace/ytrace.h>
@@ -38,7 +38,7 @@
  * around. Same name as the libuv-event-loop.c struct, but webasm
  * doesn't compile that file so there's no collision. Concrete fields
  * are ours alone. */
-struct yetty_ycore_conn {
+struct yetty_yevent_conn {
     uint32_t clientSid;
     /* Back-pointer to the transport that owns this conn — used by
      * the routing layer when an inbound session-rx arrives. */
@@ -46,7 +46,7 @@ struct yetty_ycore_conn {
 };
 
 struct iframe_transport {
-    struct yetty_yconn_transport base;
+    struct yetty_ytransport_conn_transport base;
 
     uint16_t port;
     uint32_t clientSid;
@@ -54,12 +54,12 @@ struct iframe_transport {
     int connected;  /* iframe acked session-opened ok */
 
     /* Caller-supplied callbacks. Stored verbatim; .ctx is opaque to us. */
-    struct yetty_ycore_client_callbacks cb;
+    struct yetty_yevent_tcp_client_callbacks cb;
 
     /* The single conn we hand back via on_connect. Allocated lazily
      * inside dispatch_opened so on_connect always sees a valid
      * pointer; freed in close()/destroy(). */
-    struct yetty_ycore_conn *conn;
+    struct yetty_yevent_conn *conn;
 };
 
 /* ---- Routing table -----------------------------------------------
@@ -249,8 +249,8 @@ static void install_listener_once(void)
 
 /* ---- Transport ops ---------------------------------------------- */
 
-static int iframe_transport_open(struct yetty_yconn_transport *self,
-                                 const struct yetty_ycore_client_callbacks *cb)
+static int iframe_transport_open(struct yetty_ytransport_conn_transport *self,
+                                 const struct yetty_yevent_tcp_client_callbacks *cb)
 {
     struct iframe_transport *t = (struct iframe_transport *)self;
     EM_ASM({
@@ -297,7 +297,7 @@ static int iframe_transport_open(struct yetty_yconn_transport *self,
 }
 
 static struct yetty_ycore_size_result iframe_transport_send(
-    struct yetty_yconn_transport *self, struct yetty_ycore_conn *conn,
+    struct yetty_ytransport_conn_transport *self, struct yetty_yevent_conn *conn,
     const void *data, size_t len)
 {
     struct iframe_transport *t = (struct iframe_transport *)self;
@@ -338,7 +338,7 @@ static struct yetty_ycore_size_result iframe_transport_send(
 }
 
 static struct yetty_ycore_void_result iframe_transport_close(
-    struct yetty_yconn_transport *self, struct yetty_ycore_conn *conn)
+    struct yetty_ytransport_conn_transport *self, struct yetty_yevent_conn *conn)
 {
     struct iframe_transport *t = (struct iframe_transport *)self;
     (void)conn;
@@ -365,7 +365,7 @@ static struct yetty_ycore_void_result iframe_transport_close(
     return YETTY_OK_VOID();
 }
 
-static void iframe_transport_destroy(struct yetty_yconn_transport *self)
+static void iframe_transport_destroy(struct yetty_ytransport_conn_transport *self)
 {
     struct iframe_transport *t = (struct iframe_transport *)self;
     if (!t) {
@@ -380,14 +380,14 @@ static void iframe_transport_destroy(struct yetty_yconn_transport *self)
     free(t);
 }
 
-static const struct yetty_yconn_transport_ops iframe_transport_ops = {
+static const struct yetty_ytransport_conn_transport_ops iframe_transport_ops = {
     .open    = iframe_transport_open,
     .send    = iframe_transport_send,
     .close   = iframe_transport_close,
     .destroy = iframe_transport_destroy,
 };
 
-struct yetty_yconn_transport *yetty_yplatform_iframe_transport_create(uint16_t port)
+struct yetty_ytransport_conn_transport *yetty_yplatform_iframe_transport_create(uint16_t port)
 {
     struct iframe_transport *t = calloc(1, sizeof(*t));
     if (!t) {

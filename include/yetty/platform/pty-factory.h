@@ -10,7 +10,7 @@ extern "C" {
 
 struct yetty_yplatform_pty_factory;
 struct yetty_yconfig_config;
-struct yetty_yplatform_event_loop;
+struct yetty_yevent_event_loop;
 
 /* Result types */
 YETTY_YRESULT_DECLARE(yetty_yplatform_pty_factory, struct yetty_yplatform_pty_factory *);
@@ -20,7 +20,7 @@ YETTY_YRESULT_DECLARE(yetty_yplatform_pty, struct yetty_platform_pty *);
 struct yetty_yplatform_pty_factory_ops {
     void (*destroy)(struct yetty_yplatform_pty_factory *self);
     struct yetty_yplatform_pty_result (*create_pty)(struct yetty_yplatform_pty_factory *self,
-                                                    struct yetty_yplatform_event_loop *event_loop);
+                                                    struct yetty_yevent_event_loop *event_loop);
 };
 
 /* Pty factory base */

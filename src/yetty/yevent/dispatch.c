@@ -9,18 +9,18 @@
 #include <yetty/yevent/dispatch.h>
 
 #include <yetty/platform/platform-input-pipe.h>
-#include <yetty/ycore/event.h>
+#include <yetty/yevent/event.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <stddef.h>
 
 struct yetty_ycore_void_result
-yetty_yevent_register_default_listeners(struct yetty_yplatform_event_loop *el,
+yetty_yevent_register_default_listeners(struct yetty_yevent_event_loop *el,
                                         struct yetty_ycore_event_listener *listener)
 {
     struct yetty_ycore_void_result res;
 
-    static const enum yetty_ycore_event_type kTypes[] = {
+    static const enum yetty_yevent_event_type kTypes[] = {
         /* Keyboard */
         YETTY_YCORE_KEY_DOWN,
         YETTY_YCORE_KEY_UP,

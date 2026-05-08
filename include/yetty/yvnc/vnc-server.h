@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <webgpu/webgpu.h>
-#include <yetty/ycore/event-loop.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/ycore/result.h>
 
 #ifdef __cplusplus
@@ -55,7 +55,7 @@ struct yetty_yconfig_config;
  * may still install their own handlers via the public set_on_* setters. */
 struct yetty_vnc_server_ptr_result yetty_yvnc_server_create(
     WGPUInstance instance, WGPUDevice device, WGPUQueue queue,
-    struct yetty_yplatform_event_loop *event_loop, struct yetty_yplatform_wgpu *wgpu,
+    struct yetty_yevent_event_loop *event_loop, struct yetty_yplatform_wgpu *wgpu,
     struct yetty_ycore_xthread_event_pipe *hid_pipe, const struct yetty_yconfig_config *config);
 
 /* Destroy server (handles NULL) */

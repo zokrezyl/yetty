@@ -22,7 +22,7 @@
  */
 
 #include <yetty/yplatform/ywebgpu.h>
-#include <yetty/ycore/event-loop.h>
+#include <yetty/yevent/event-loop.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <emscripten/emscripten.h>
@@ -34,7 +34,7 @@ struct yetty_yplatform_wgpu {
     WGPUInstance instance;
     /* Kept only to match the desktop signature; webasm has no per-loop
      * state (no timer, no post_to_loop). */
-    struct yetty_yplatform_event_loop *loop;
+    struct yetty_yevent_event_loop *loop;
 };
 
 /* Local to a single _await call; lives on its caller's stack while
@@ -45,7 +45,7 @@ struct yetty_yplatform_ywgpu_await_state {
 };
 
 struct yplatform_wgpu_ptr_result yetty_yplatform_wgpu_create(WGPUInstance instance,
-                                                       struct yetty_yplatform_event_loop *loop)
+                                                       struct yetty_yevent_event_loop *loop)
 {
     if (!instance) {
         return YETTY_ERR(yplatform_wgpu_ptr, "instance is NULL");

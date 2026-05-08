@@ -23,8 +23,8 @@
  *    instead of memcpy out of an internal buffer. */
 
 #include <yetty/platform/platform-input-pipe.h>
-#include <yetty/ycore/event-loop.h>
-#include <yetty/ycore/event.h>
+#include <yetty/yevent/event-loop.h>
+#include <yetty/yevent/event.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -36,7 +36,7 @@
 
 struct yetty_yplatform_webasm_platform_input_pipe {
     struct yetty_ycore_xthread_event_pipe base;
-    struct yetty_yplatform_event_loop *event_loop;
+    struct yetty_yevent_event_loop *event_loop;
     int read_fd;
     int write_fd;
 };
@@ -49,7 +49,7 @@ static struct yetty_ycore_size_result webasm_pipe_read(
 static struct yetty_ycore_int_result webasm_pipe_read_fd(
     const struct yetty_ycore_xthread_event_pipe *self);
 static struct yetty_ycore_void_result webasm_pipe_set_event_loop(
-    struct yetty_ycore_xthread_event_pipe *self, struct yetty_yplatform_event_loop *loop);
+    struct yetty_ycore_xthread_event_pipe *self, struct yetty_yevent_event_loop *loop);
 
 static const struct yetty_platform_input_pipe_ops webasm_pipe_ops = {
     .destroy = webasm_pipe_destroy,
@@ -170,7 +170,7 @@ static struct yetty_ycore_int_result webasm_pipe_read_fd(
 }
 
 static struct yetty_ycore_void_result webasm_pipe_set_event_loop(
-    struct yetty_ycore_xthread_event_pipe *self, struct yetty_yplatform_event_loop *loop)
+    struct yetty_ycore_xthread_event_pipe *self, struct yetty_yevent_event_loop *loop)
 {
     struct yetty_yplatform_webasm_platform_input_pipe *pipe;
 

@@ -28,7 +28,7 @@
 #include <yetty/platform/pty.h>
 #include <yetty/platform/pty-factory.h>
 #include <yetty/yconfig/config.h>
-#include <yetty/ycore/conn-transport.h>
+#include <yetty/ytransport/conn-transport.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yplatform/iframe-transport.h>
@@ -57,7 +57,7 @@ static void factory_destroy(struct yetty_yplatform_pty_factory *self)
 
 static struct yetty_yplatform_pty_result factory_create_pty(
     struct yetty_yplatform_pty_factory *self,
-    struct yetty_yplatform_event_loop *event_loop)
+    struct yetty_yevent_event_loop *event_loop)
 {
     struct webasm_telnet_factory *f = (struct webasm_telnet_factory *)self;
     (void)f;
@@ -70,7 +70,7 @@ static struct yetty_yplatform_pty_result factory_create_pty(
      * via the postMessage listener, no event loop involvement. */
     (void)event_loop;
 
-    struct yetty_yconn_transport *transport =
+    struct yetty_ytransport_conn_transport *transport =
         yetty_yplatform_iframe_transport_create(YETTY_VM_TELNET_PORT);
     if (!transport) {
         return YETTY_ERR(yetty_yplatform_pty,
