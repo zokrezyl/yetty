@@ -4,10 +4,6 @@
 # Apache-2.0 lexbor + yetty's own code, so it can be linked directly
 # into the main yetty binary without license conflict.
 
-if(NOT TARGET lexbor_static)
-    message(STATUS "yetty_ylexbor: lexbor_static target missing — skipping")
-    return()
-endif()
 
 add_library(yetty_ylexbor STATIC
     ylexbor.c
