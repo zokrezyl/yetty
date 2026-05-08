@@ -115,7 +115,9 @@ jobs:
           libx11-dev \
           libgl1-mesa-dev \
           libwayland-dev \
-          libxkbcommon-dev
+          libxkbcommon-dev \
+          libclang-18-dev llvm-18-dev
+
 
     - name: Build Linux
       run: make build-desktop-ytrace-release
