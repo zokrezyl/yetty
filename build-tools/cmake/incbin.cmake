@@ -23,7 +23,7 @@ if(DEFINED ENV{BROTLI_QUALITY})
 else()
     set(BROTLI_QUALITY 6)
 endif()
-message(STATUS "incbin: Brotli quality level: ${BROTLI_QUALITY}")
+message(STATUS "embed: Brotli quality level: ${BROTLI_QUALITY}")
 
 # Fetch incbin (noarch tarball) from the 3rdparty release published by
 # .github/workflows/build-3rdparty-incbin.yml. Tarball layout:
@@ -34,7 +34,7 @@ yetty_3rdparty_fetch(incbin _INCBIN_DIR)
 
 if(NOT EXISTS "${_INCBIN_DIR}/include/incbin.h")
     message(FATAL_ERROR
-        "incbin: incbin.h not found in ${_INCBIN_DIR}/include/ — tarball layout changed?")
+        "embed: incbin.h not found in ${_INCBIN_DIR}/include/ — tarball layout changed?")
 endif()
 
 # Export incbin include directory (consumers expect the directory that
@@ -47,7 +47,7 @@ set(INCBIN_INCLUDE_DIR "${_INCBIN_DIR}/include" CACHE INTERNAL "incbin include d
 if(MSVC)
     if(NOT EXISTS "${_INCBIN_DIR}/src/incbin.c")
         message(FATAL_ERROR
-            "incbin: src/incbin.c missing in tarball — needed for MSVC code path")
+            "embed: src/incbin.c missing in tarball — needed for MSVC code path")
     endif()
     add_executable(incbin_tool "${_INCBIN_DIR}/src/incbin.c")
     set_target_properties(incbin_tool PROPERTIES
@@ -63,14 +63,14 @@ endif()
 if(EMSCRIPTEN)
     if(NOT EXISTS "${_INCBIN_DIR}/src/incbin.c")
         message(FATAL_ERROR
-            "incbin: src/incbin.c missing in tarball — needed for Emscripten code path")
+            "embed: src/incbin.c missing in tarball — needed for Emscripten code path")
     endif()
     set(INCBIN_TOOL_HOST "${CMAKE_BINARY_DIR}/tools/incbin_tool")
     if(NOT EXISTS "${INCBIN_TOOL_HOST}")
         file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/tools")
         find_program(_HOST_CC NAMES cc gcc clang REQUIRED
             HINTS ENV PATH NO_CMAKE_FIND_ROOT_PATH)
-        message(STATUS "incbin: building host incbin_tool with ${_HOST_CC}")
+        message(STATUS "embed: building host incbin_tool with ${_HOST_CC}")
         execute_process(
             COMMAND "${_HOST_CC}" -O2 -o "${INCBIN_TOOL_HOST}" "${_INCBIN_DIR}/src/incbin.c"
             RESULT_VARIABLE _RC
@@ -78,7 +78,7 @@ if(EMSCRIPTEN)
             ERROR_VARIABLE  _ERR
         )
         if(NOT _RC EQUAL 0)
-            message(FATAL_ERROR "incbin: host build of incbin_tool failed: ${_ERR}")
+            message(FATAL_ERROR "embed: host build of incbin_tool failed: ${_ERR}")
         endif()
     endif()
     # Mimic the imported-target shape so the rest of this file can call
@@ -95,7 +95,7 @@ endif()
 #-----------------------------------------------------------------------------
 function(incbin_add_resources TARGET)
     # Debug: Show platform detection
-    message(STATUS "incbin: TARGET=${TARGET} MSVC=${MSVC} EMSCRIPTEN=${EMSCRIPTEN} CMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}")
+    message(STATUS "embed: TARGET=${TARGET} MSVC=${MSVC} EMSCRIPTEN=${EMSCRIPTEN} CMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}")
 
     # Parse arguments as name-file pairs
     set(RESOURCES ${ARGN})
@@ -242,12 +242,13 @@ function(incbin_add_directory TARGET PREFIX DIR)
 
     # Sanitize PREFIX for C++ identifiers (replace - with _)
     string(REPLACE "-" "_" PREFIX_SAFE "${PREFIX}")
+    string(TOUPPER "${PREFIX_SAFE}" PREFIX_UPPER)
 
     # Find brotli for compression
     if(COMPRESS)
         find_program(BROTLI_EXECUTABLE brotli)
         if(NOT BROTLI_EXECUTABLE)
-            message(WARNING "incbin: brotli not found, embedding uncompressed files")
+            message(WARNING "embed: brotli not found, embedding uncompressed files")
             set(COMPRESS FALSE)
         endif()
     endif()
@@ -261,7 +262,7 @@ function(incbin_add_directory TARGET PREFIX DIR)
     endif()
 
     list(LENGTH FILES FILE_COUNT)
-    message(STATUS "incbin: Packing ${FILE_COUNT} files from ${DIR} with prefix '${PREFIX}'")
+    message(STATUS "embed: Packing ${FILE_COUNT} files from ${DIR} with prefix '${PREFIX}'")
 
     # Build resource list
     set(MANIFEST_ENTRIES "")
@@ -275,12 +276,129 @@ function(incbin_add_directory TARGET PREFIX DIR)
         file(MAKE_DIRECTORY "${COMPRESSED_DIR}")
     endif()
 
-    if(MSVC OR EMSCRIPTEN)
-        # MSVC and Emscripten: Use incbin_tool to generate a C source with
-        # plain `static const unsigned char[]` arrays. Both targets reject
-        # the `.incbin` inline-asm path used elsewhere (clang's wasm
-        # backend rejects data symbols in text sections; MSVC has no
-        # inline asm at all).
+    if(MSVC)
+        # Embed via Win32 RCDATA resources. rc.exe streams each input file
+        # straight into the PE's .rsrc section; cl.exe never sees the bytes,
+        # so we avoid the multi-GB working set + minutes per TU that the
+        # incbin_tool C-array path costs (each byte → "0xXX, " token →
+        # AST node held until the initializer-list is closed). The runtime
+        # reads bytes back via FindResourceA / LoadResource / LockResource;
+        # the manifest-registration function is generated alongside the
+        # .rc so callers stay on the same `register_<prefix>_assets_c(cb)`
+        # surface they use on every other platform.
+        enable_language(RC)
+        set(RC_FILE    "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_${PREFIX_SAFE}.rc")
+        set(REGISTER_C "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_${PREFIX_SAFE}_register.c")
+
+        file(WRITE ${RC_FILE}
+"// Auto-generated by incbin.cmake (RCDATA path) - DO NOT EDIT
+")
+        file(WRITE ${REGISTER_C}
+"// Auto-generated by incbin.cmake (RCDATA path) - DO NOT EDIT
+#ifndef WIN32_LEAN_AND_MEAN
+#  define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <stdint.h>
+#include <stddef.h>
+
+typedef void (*${PREFIX_SAFE}_asset_callback_t)(const char* name, const uint8_t* data, size_t size, int compressed);
+
+void register_${PREFIX_SAFE}_assets_c(${PREFIX_SAFE}_asset_callback_t cb)
+{
+    HMODULE _m = GetModuleHandleW(NULL);
+    HRSRC _h;
+    HGLOBAL _g;
+    DWORD _sz;
+    const void *_p;
+")
+
+        foreach(FILE ${FILES})
+            file(RELATIVE_PATH REL_PATH "${DIR}" "${FILE}")
+            set(_PRECOMPRESSED FALSE)
+            if(REL_PATH MATCHES "\\.br$")
+                set(_PRECOMPRESSED TRUE)
+                string(REGEX REPLACE "\\.br$" "" REL_PATH "${REL_PATH}")
+            endif()
+            string(MAKE_C_IDENTIFIER "${REL_PATH}" SAFE_NAME)
+            set(SYMBOL_NAME "${PREFIX_SAFE}_${SAFE_NAME}")
+            set(ASSET_NAME "${PREFIX}/${REL_PATH}")
+            string(TOUPPER "${SYMBOL_NAME}" RC_NAME)
+
+            if(_PRECOMPRESSED)
+                set(_FILE_TO_EMBED "${FILE}")
+                set(_IS_COMPRESSED 1)
+            elseif(COMPRESS)
+                get_filename_component(FILE_NAME "${FILE}" NAME)
+                set(COMPRESSED_FILE "${COMPRESSED_DIR}/${FILE_NAME}.br")
+                execute_process(
+                    COMMAND ${BROTLI_EXECUTABLE} -q ${BROTLI_QUALITY} -f -o "${COMPRESSED_FILE}" "${FILE}"
+                    RESULT_VARIABLE BROTLI_RESULT
+                )
+                if(BROTLI_RESULT EQUAL 0)
+                    set(_FILE_TO_EMBED "${COMPRESSED_FILE}")
+                    set(_IS_COMPRESSED 1)
+                else()
+                    message(WARNING "embed: Failed to compress ${FILE_NAME}, embedding raw")
+                    set(_FILE_TO_EMBED "${FILE}")
+                    set(_IS_COMPRESSED 0)
+                endif()
+            else()
+                set(_FILE_TO_EMBED "${FILE}")
+                set(_IS_COMPRESSED 0)
+            endif()
+
+            list(APPEND MANIFEST_ENTRIES "${SYMBOL_NAME}|${ASSET_NAME}|${_IS_COMPRESSED}")
+            file(APPEND ${RC_FILE} "${RC_NAME} RCDATA \"${_FILE_TO_EMBED}\"\n")
+            file(APPEND ${REGISTER_C}
+"    _h = FindResourceA(_m, \"${RC_NAME}\", (LPCSTR)RT_RCDATA);
+    if (_h) {
+        _sz = SizeofResource(_m, _h);
+        _g = LoadResource(_m, _h);
+        if (_g) {
+            _p = LockResource(_g);
+            if (_p && _sz) cb(\"${ASSET_NAME}\", (const uint8_t *)_p, (size_t)_sz, ${_IS_COMPRESSED});
+        }
+    }
+")
+        endforeach()
+        file(APPEND ${REGISTER_C} "}\n")
+
+        target_sources(${TARGET} PRIVATE ${RC_FILE} ${REGISTER_C})
+
+        set(MANIFEST_HEADER "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_${PREFIX}_manifest.h")
+        file(WRITE ${MANIFEST_HEADER}
+"// Auto-generated by incbin.cmake (RCDATA path) - DO NOT EDIT
+#pragma once
+
+#ifdef __cplusplus
+#include <cstdint>
+#include <cstddef>
+extern \"C\" {
+#else
+#include <stdint.h>
+#include <stddef.h>
+#endif
+
+typedef void (*${PREFIX_SAFE}_asset_callback_t)(const char* name, const uint8_t* data, size_t size, int compressed);
+
+void register_${PREFIX_SAFE}_assets_c(${PREFIX_SAFE}_asset_callback_t cb);
+
+#ifdef __cplusplus
+}
+#endif
+")
+        set(EMBED_${PREFIX}_MANIFEST ${MANIFEST_HEADER} PARENT_SCOPE)
+        target_compile_definitions(${TARGET} PRIVATE HAS_${PREFIX_UPPER}_MANIFEST=1)
+        message(STATUS "embed: RCDATA manifest ${MANIFEST_HEADER}")
+        return()
+    endif()
+
+    if(EMSCRIPTEN)
+        # Emscripten: Use incbin_tool to generate a C source with plain
+        # `static const unsigned char[]` arrays. clang's wasm backend
+        # rejects the `.incbin` inline-asm path (data symbols in text
+        # sections aren't allowed).
         set(INCBIN_INPUT "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_${PREFIX_SAFE}_incbin_input.c")
         set(INCBIN_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_${PREFIX_SAFE}_data.c")
 
@@ -385,7 +503,7 @@ extern const unsigned int g${SYMBOL_NAME}Size;
             if(_PRECOMPRESSED)
                 file(APPEND ${RESOURCE_SOURCE} "INCBIN(${SYMBOL_NAME}, \"${FILE}\");\n")
                 list(APPEND MANIFEST_ENTRIES "${SYMBOL_NAME}|${ASSET_NAME}|1")
-                message(STATUS "incbin: Embed pre-compressed ${ASSET_NAME}")
+                message(STATUS "embed: Embed pre-compressed ${ASSET_NAME}")
             elseif(COMPRESS)
                 get_filename_component(FILE_NAME "${FILE}" NAME)
                 set(COMPRESSED_FILE "${COMPRESSED_DIR}/${FILE_NAME}.br")
@@ -396,9 +514,9 @@ extern const unsigned int g${SYMBOL_NAME}Size;
                 if(BROTLI_RESULT EQUAL 0)
                     file(APPEND ${RESOURCE_SOURCE} "INCBIN(${SYMBOL_NAME}, \"${COMPRESSED_FILE}\");\n")
                     list(APPEND MANIFEST_ENTRIES "${SYMBOL_NAME}|${ASSET_NAME}|1")
-                    message(STATUS "incbin: Compressed ${FILE_NAME}")
+                    message(STATUS "embed: Compressed ${FILE_NAME}")
                 else()
-                    message(WARNING "incbin: Failed to compress ${FILE_NAME}, using uncompressed")
+                    message(WARNING "embed: Failed to compress ${FILE_NAME}, using uncompressed")
                     file(APPEND ${RESOURCE_SOURCE} "INCBIN(${SYMBOL_NAME}, \"${FILE}\");\n")
                     list(APPEND MANIFEST_ENTRIES "${SYMBOL_NAME}|${ASSET_NAME}|0")
                 endif()
@@ -511,13 +629,12 @@ static inline void register_${PREFIX_SAFE}_assets_c(${PREFIX_SAFE}_asset_callbac
 ")
 
     # Export manifest path for the target
-    set(INCBIN_${PREFIX}_MANIFEST ${MANIFEST_HEADER} PARENT_SCOPE)
+    set(EMBED_${PREFIX}_MANIFEST ${MANIFEST_HEADER} PARENT_SCOPE)
 
     # Add compile definition so the code knows this manifest exists
-    string(TOUPPER "${PREFIX_SAFE}" PREFIX_UPPER)
     target_compile_definitions(${TARGET} PRIVATE HAS_${PREFIX_UPPER}_MANIFEST=1)
 
-    message(STATUS "incbin: Generated manifest ${MANIFEST_HEADER}")
+    message(STATUS "embed: Generated manifest ${MANIFEST_HEADER}")
 endfunction()
 
-message(STATUS "incbin: Ready for resource embedding")
+message(STATUS "embed: Ready for resource embedding")

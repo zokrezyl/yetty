@@ -36,6 +36,11 @@
 #include <time.h>
 
 #ifdef _WIN32
+#  define WIN32_LEAN_AND_MEAN
+#  include <windows.h>
+#endif
+
+#ifdef _WIN32
 #include <windows.h>
 #else
 #include <unistd.h>
@@ -846,8 +851,15 @@ static char *find_shader_path(const char *user_path)
 
 static void usleep_short(void)
 {
+#ifdef _WIN32
+    /* Sleep(0) yields the rest of this quantum to any same-priority ready
+     * thread — the closest Win32 equivalent to a 100us nanosleep when used
+     * inside a polling loop (Sleep(1) actually waits 1–15ms). */
+    Sleep(0);
+#else
     struct timespec ts = {0, 100000}; /* 100us */
     nanosleep(&ts, NULL);
+#endif
 }
 
 static void queue_done_cb(WGPUQueueWorkDoneStatus status, WGPUStringView msg, void *u1, void *u2)

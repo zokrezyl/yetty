@@ -10,11 +10,12 @@
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
+#include <yetty/yplatform/time.h>
+
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 /*=============================================================================
  * Wall-flag bits (cell holds an OR of N/S/E/W walls still standing).
@@ -96,9 +97,8 @@ static uint32_t ymaze_rng_uint(struct yetty_ymaze *m, uint32_t bound)
 
 static uint64_t ymaze_seed_from_clock(void)
 {
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	uint64_t s = (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+	double t = yetty_yplatform_ytime_monotonic_sec();
+	uint64_t s = (uint64_t)(t * 1.0e9);
 	if (s == 0)
 		s = 1;
 	return s;
