@@ -5,7 +5,7 @@
 # Desktop-only: these are host-side CLI/GUI utilities (some run at build
 # time to generate CDBs, the atlas viewer needs GLFW). They are never
 # shipped with mobile/web builds.
-if(EMSCRIPTEN OR YETTY_ANDROID OR YETTY_IOS)
+if(EMSCRIPTEN OR YETTY_ANDROID OR YETTY_IOS OR YETTY_TVOS OR YETT_WINDOWS)
     return()
 endif()
 
