@@ -14,6 +14,8 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+//TODO: merge this into socket/default.c
+
 struct yetty_platform_socket {
     int fd;
     int is_listener;

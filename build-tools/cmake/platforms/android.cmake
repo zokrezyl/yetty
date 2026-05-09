@@ -41,13 +41,13 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/paths/android.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/android.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/ycoroutine.c
+    ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/ywebgpu.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/fork-pty.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/unix-pty-factory.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/process/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/unix-socket.c
+    ${YETTY_ROOT}/src/yetty/yplatform/socket/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
     ${YETTY_YPLATFORM_THREAD_SOURCES}

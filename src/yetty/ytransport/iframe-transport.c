@@ -117,12 +117,12 @@ static void unregister_transport(struct iframe_transport *t)
  * below in install_listener_once() can reach them. */
 
 EMSCRIPTEN_KEEPALIVE
-void yetty_iframe_transport_on_opened(uint32_t clientSid, int ok)
+void yetty_ytransport_iframe_transport_on_opened(uint32_t clientSid, int ok)
 {
     EM_ASM(
         {
-            console.log('[yetty-side] yetty_iframe_transport_on_opened clientSid=' + $0 + ' ok=' +
-                        $1);
+            console.log('[yetty-side] yetty_ytransport_iframe_transport_on_opened clientSid=' + $0 +
+                        ' ok=' + $1);
         },
         clientSid, ok);
     struct iframe_transport *t = find_transport(clientSid);
@@ -154,7 +154,7 @@ void yetty_iframe_transport_on_opened(uint32_t clientSid, int ok)
 }
 
 EMSCRIPTEN_KEEPALIVE
-void yetty_iframe_transport_on_rx(uint32_t clientSid, const char *data, int nread)
+void yetty_ytransport_iframe_transport_on_rx(uint32_t clientSid, const char *data, int nread)
 {
     EM_ASM(
         {
@@ -190,7 +190,7 @@ void yetty_iframe_transport_on_rx(uint32_t clientSid, const char *data, int nrea
 }
 
 EMSCRIPTEN_KEEPALIVE
-void yetty_iframe_transport_on_closed(uint32_t clientSid)
+void yetty_ytransport_iframe_transport_on_closed(uint32_t clientSid)
 {
     struct iframe_transport *t = find_transport(clientSid);
     if (!t) {
@@ -225,7 +225,7 @@ static void install_listener_once(void)
             }
             var sid = e.data.clientSid >>> 0;
             if (e.data.type == = 'session-opened') {
-                Module._yetty_iframe_transport_on_opened(sid, e.data.ok ? 1 : 0);
+                Module._yetty_ytransport_iframe_transport_on_opened(sid, e.data.ok ? 1 : 0);
                 return;
             }
             if (e.data.type == = 'session-rx') {
@@ -250,12 +250,12 @@ static void install_listener_once(void)
                     return;
                 }
                 Module.HEAPU8.set(bytes, ptr);
-                Module._yetty_iframe_transport_on_rx(sid, ptr, bytes.length);
+                Module._yetty_ytransport_iframe_transport_on_rx(sid, ptr, bytes.length);
                 Module._free(ptr);
                 return;
             }
             if (e.data.type == = 'session-closed') {
-                Module._yetty_iframe_transport_on_closed(sid);
+                Module._yetty_ytransport_iframe_transport_on_closed(sid);
                 return;
             }
         };

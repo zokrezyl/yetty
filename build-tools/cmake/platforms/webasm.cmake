@@ -87,7 +87,7 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/paths/webasm.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webasm/ycoroutine.c
+    ${YETTY_ROOT}/src/yetty/yplatform/coroutine/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/ywebgpu.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/iframe-pty.c
     ${YETTY_ROOT}/src/yetty/ytransport/iframe-transport.c
@@ -184,7 +184,7 @@ target_link_options(yetty PRIVATE
     #   _yetty_iframe_transport_on_{opened,rx,closed} — postMessage
     #     listener (iframe-transport.c) routes session events from
     #     the tinyemu iframe to the right transport instance.
-    "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_iframe_pty_on_data','_yetty_brotli_decode','_yetty_iframe_transport_on_opened','_yetty_iframe_transport_on_rx','_yetty_iframe_transport_on_closed']"
+    "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_iframe_pty_on_data','_yetty_brotli_decode','_yetty_ytransport_iframe_transport_on_opened','_yetty_ytransport_iframe_transport_on_rx','_yetty_ytransport_iframe_transport_on_closed']"
 )
 
 if(YETTY_ENABLE_FEATURE_DEMO)
