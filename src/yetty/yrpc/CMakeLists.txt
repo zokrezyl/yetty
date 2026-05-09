@@ -17,10 +17,10 @@ target_link_libraries(yetty_yrpc PUBLIC
 # Platform-specific IPC socket implementation
 if(WIN32)
     target_sources(yetty_yrpc PRIVATE
-        ${YETTY_ROOT}/src/yetty/yplatform/windows/ipc-socket.c
+        ${YETTY_ROOT}/src/yetty/yplatform/ipc-socket/windows.c
     )
 else()
     target_sources(yetty_yrpc PRIVATE
-        ${YETTY_ROOT}/src/yetty/yplatform/shared/ipc-socket.c
+        ${YETTY_ROOT}/src/yetty/yplatform/ipc-socket/default.c
     )
 endif()

@@ -1,7 +1,7 @@
 /* Windows ConPTY implementation */
 
-#include <yetty/platform/pty.h>
-#include <yetty/platform/pty-factory.h>
+#include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/pty.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
@@ -70,7 +70,7 @@ struct yetty_yplatform_win_pty_factory {
 
 /* Forward declarations for factory */
 static void win_pty_factory_destroy(struct yetty_yplatform_pty_factory *self);
-static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
+static struct yetty_yplatform_pty_ptr_result win_pty_factory_create_pty(
     struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop);
 
 /* Factory ops table */
@@ -217,7 +217,7 @@ static struct yetty_platform_pty_pipe_source *win_conpty_pipe_source(
 
 /* Create ConPTY with shell */
 
-static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig_config *config)
+static struct yetty_yplatform_pty_ptr_result win_conpty_create(struct yetty_yconfig_config *config)
 {
     struct yetty_yplatform_win_conpty *pty;
     HANDLE pipe_pty_in = INVALID_HANDLE_VALUE;
@@ -234,7 +234,7 @@ static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig_
 
     pty = malloc(sizeof(struct yetty_yplatform_win_conpty));
     if (!pty) {
-        return YETTY_ERR(yetty_yplatform_pty, "failed to allocate conpty");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to allocate conpty");
     }
 
     pty->base.ops = &win_conpty_ops;
@@ -252,7 +252,7 @@ static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig_
     /* Create input pipe (we write, ConPTY reads) — regular pipe is fine */
     if (!CreatePipe(&pipe_pty_in, &pty->pipe_in, NULL, 0)) {
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "CreatePipe for input failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "CreatePipe for input failed");
     }
 
     /* Create output pipe (ConPTY writes, we read via libuv uv_pipe_t)
@@ -270,7 +270,7 @@ static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig_
             CloseHandle(pipe_pty_in);
             CloseHandle(pty->pipe_in);
             free(pty);
-            return YETTY_ERR(yetty_yplatform_pty, "CreateNamedPipe for output failed");
+            return YETTY_ERR(yetty_yplatform_pty_ptr, "CreateNamedPipe for output failed");
         }
 
         pipe_pty_out = CreateFileA(pipe_name, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
@@ -280,7 +280,7 @@ static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig_
             CloseHandle(pipe_pty_in);
             CloseHandle(pty->pipe_in);
             free(pty);
-            return YETTY_ERR(yetty_yplatform_pty, "CreateFile for output pipe failed");
+            return YETTY_ERR(yetty_yplatform_pty_ptr, "CreateFile for output pipe failed");
         }
     }
 
@@ -308,7 +308,7 @@ static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig_
         CloseHandle(pty->pipe_in);
         CloseHandle(pty->pipe_out);
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "CreatePseudoConsole failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "CreatePseudoConsole failed");
     }
 
     /* Create process with pseudo console */
@@ -322,7 +322,7 @@ static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig_
         CloseHandle(pty->pipe_in);
         CloseHandle(pty->pipe_out);
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "failed to allocate attribute list");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to allocate attribute list");
     }
 
     if (!InitializeProcThreadAttributeList(attr_list, 1, 0, &attr_size)) {
@@ -331,7 +331,7 @@ static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig_
         CloseHandle(pty->pipe_in);
         CloseHandle(pty->pipe_out);
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "InitializeProcThreadAttributeList failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "InitializeProcThreadAttributeList failed");
     }
 
     if (!UpdateProcThreadAttribute(attr_list, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, pty->hpc,
@@ -342,7 +342,7 @@ static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig_
         CloseHandle(pty->pipe_in);
         CloseHandle(pty->pipe_out);
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "UpdateProcThreadAttribute failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "UpdateProcThreadAttribute failed");
     }
 
     si.lpAttributeList = attr_list;
@@ -396,7 +396,7 @@ static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig_
         CloseHandle(pty->pipe_in);
         CloseHandle(pty->pipe_out);
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "CreateProcessW failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "CreateProcessW failed");
     }
 
     DeleteProcThreadAttributeList(attr_list);
@@ -415,12 +415,12 @@ static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig_
         CloseHandle(pty->pipe_in);
         CloseHandle(pty->pipe_out);
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "_open_osfhandle failed for pty output");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "_open_osfhandle failed for pty output");
     }
     pty->pipe_source.base.abstract = (uintptr_t)pty->pipe_source.crt_fd;
     pty->running = 1;
 
-    return YETTY_OK(yetty_yplatform_pty, &pty->base);
+    return YETTY_OK(yetty_yplatform_pty_ptr, &pty->base);
 }
 
 /* Factory implementation */
@@ -436,7 +436,7 @@ static void win_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
     free(factory);
 }
 
-static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
+static struct yetty_yplatform_pty_ptr_result win_pty_factory_create_pty(
     struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop)
 {
     struct yetty_yplatform_win_pty_factory *factory =
@@ -452,7 +452,7 @@ static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
             config->ops->get_string(config, YETTY_YCONFIG_KEY_TELNET_HOST, "127.0.0.1");
         int port = config->ops->get_int(config, YETTY_YCONFIG_KEY_TELNET_PORT, 0);
         if (port <= 0 || port > 65535) {
-            return YETTY_ERR(yetty_yplatform_pty, "--telnet requires telnet/port (1..65535)");
+            return YETTY_ERR(yetty_yplatform_pty_ptr, "--telnet requires telnet/port (1..65535)");
         }
         return yetty_ytelnet_telnet_pty_create_tcp(host, (uint16_t)port, event_loop);
     }
@@ -467,7 +467,7 @@ static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
         if (!factory->qemu_proc) {
             factory->qemu_proc = yetty_yqemu_qemu_start(QEMU_TELNET_PORT);
             if (!factory->qemu_proc) {
-                return YETTY_ERR(yetty_yplatform_pty, "failed to start QEMU");
+                return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to start QEMU");
             }
             /* 30 s: kernel boot + alpine init + telnetd bind from a cold
              * start can run 5–15 s on slow hardware; 5 s used to be enough
@@ -479,7 +479,7 @@ static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
             if (YETTY_IS_ERR(wait_res)) {
                 yetty_yqemu_qemu_stop(factory->qemu_proc);
                 factory->qemu_proc = NULL;
-                return YETTY_ERR(yetty_yplatform_pty, "QEMU telnet not ready", wait_res);
+                return YETTY_ERR(yetty_yplatform_pty_ptr, "QEMU telnet not ready", wait_res);
             }
         }
         return yetty_ytelnet_telnet_pty_create_tcp("127.0.0.1", QEMU_TELNET_PORT, event_loop);
@@ -492,7 +492,7 @@ static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
 
 /* Factory creation - the public API */
 
-struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
+struct yetty_yplatform_pty_factory_ptr_result yetty_yplatform_pty_factory_create(
     struct yetty_yconfig_config *config, void *os_specific)
 {
     struct yetty_yplatform_win_pty_factory *factory;
@@ -501,11 +501,11 @@ struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
 
     factory = calloc(1, sizeof(struct yetty_yplatform_win_pty_factory));
     if (!factory) {
-        return YETTY_ERR(yetty_yplatform_pty_factory, "failed to allocate pty factory");
+        return YETTY_ERR(yetty_yplatform_pty_factory_ptr, "failed to allocate pty factory");
     }
 
     factory->base.ops = &win_pty_factory_ops;
     factory->config = config;
 
-    return YETTY_OK(yetty_yplatform_pty_factory, &factory->base);
+    return YETTY_OK(yetty_yplatform_pty_factory_ptr, &factory->base);
 }

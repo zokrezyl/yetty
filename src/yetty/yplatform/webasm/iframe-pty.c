@@ -18,8 +18,7 @@
  * downstream code path is unchanged.
  */
 
-#include <yetty/platform/pty.h>
-#include <yetty/platform/pty-factory.h>
+#include <yetty/yplatform/pty.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
@@ -152,23 +151,26 @@ static struct yetty_ycore_size_result iframe_pty_write(struct yetty_platform_pty
         return YETTY_OK(yetty_ycore_size, 0);
     }
 
+    // clang-format off
     /* Forward keystrokes / pasted text to the iframe. Treat as raw bytes —
      * the iframe's term-bridge decodes UTF-8 and feeds the VM console. */
-    EM_ASM(
-        {
-            var ptyId = $0;
-            var ptr = $1;
-            var len = $2;
-            var bytes = HEAPU8.subarray(ptr, ptr + len);
-            var data = new TextDecoder('utf-8', {fatal : false}).decode(bytes);
-            var iframe = document.getElementById('yetty-vm-pty-' + ptyId);
-            if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.postMessage({type : 'term-input', ptyId : ptyId, data : data},
-                                                 '*');
-            }
-        },
-        pty->pty_id, data, (int)len);
+    EM_ASM({
+        var ptyId = $0;
+        var ptr = $1;
+        var len = $2;
+        var bytes = HEAPU8.subarray(ptr, ptr + len);
+        var data = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+        var iframe = document.getElementById('yetty-vm-pty-' + ptyId);
+        if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage({
+                type: 'term-input',
+                ptyId: ptyId,
+                data: data
+            }, '*');
+        }
+    }, pty->pty_id, data, (int)len);
 
+    // clang-format on
     return YETTY_OK(yetty_ycore_size, len);
 }
 
@@ -181,19 +183,23 @@ static struct yetty_ycore_void_result iframe_pty_resize(struct yetty_platform_pt
     pty->cols = cols;
     pty->rows = rows;
 
-    EM_ASM(
-        {
-            var ptyId = $0;
-            var cols = $1;
-            var rows = $2;
-            var iframe = document.getElementById('yetty-vm-pty-' + ptyId);
-            if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.postMessage(
-                    {type : 'term-resize', ptyId : ptyId, cols : cols, rows : rows}, '*');
-            }
-        },
-        pty->pty_id, (int)cols, (int)rows);
+    // clang-format off
+    EM_ASM({
+        var ptyId = $0;
+        var cols = $1;
+        var rows = $2;
+        var iframe = document.getElementById('yetty-vm-pty-' + ptyId);
+        if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage({
+                type: 'term-resize',
+                ptyId: ptyId,
+                cols: cols,
+                rows: rows
+            }, '*');
+        }
+    }, pty->pty_id, (int)cols, (int)rows);
 
+    // clang-format on
     yinfo("iframe_pty: resize %ux%u (pty_id=%u)", cols, rows, pty->pty_id);
     return YETTY_OK_VOID();
 }
@@ -208,16 +214,16 @@ static struct yetty_ycore_void_result iframe_pty_stop(struct yetty_platform_pty 
     }
     pty->running = 0;
 
-    EM_ASM(
-        {
-            var ptyId = $0;
-            var iframe = document.getElementById('yetty-vm-pty-' + ptyId);
-            if (iframe) {
-                iframe.remove();
-            }
-        },
-        pty->pty_id);
+    // clang-format off
+    EM_ASM({
+        var ptyId = $0;
+        var iframe = document.getElementById('yetty-vm-pty-' + ptyId);
+        if (iframe) {
+            iframe.remove();
+        }
+    }, pty->pty_id);
 
+    // clang-format on
     return YETTY_OK_VOID();
 }
 
@@ -235,17 +241,18 @@ static struct yetty_platform_pty_pipe_source *iframe_pty_pipe_source(
  * exists by checking g_iframe_pty. */
 __attribute__((constructor)) static void iframe_pty_install_message_listener(void)
 {
+    // clang-format off
+
     EM_ASM({
         if (window.__yettyIframePtyListener) {
             return;
         }
-        window.__yettyIframePtyListener = function(e)
-        {
-            if (!e.data || e.data.type != = 'term-output' || e.data.ptyId == = undefined) {
+        window.__yettyIframePtyListener = function(e) {
+            if (!e.data || e.data.type !== 'term-output' || e.data.ptyId === undefined) {
                 return;
             }
             var data = e.data.data;
-            if (typeof data != = 'string' || data.length == = 0) {
+            if (typeof data !== 'string' || data.length === 0) {
                 return;
             }
             var ptyId = parseInt(e.data.ptyId, 10);
@@ -253,11 +260,11 @@ __attribute__((constructor)) static void iframe_pty_install_message_listener(voi
                 return;
             }
             var bytes = new TextEncoder().encode(data);
-            if (bytes.length == = 0) {
+            if (bytes.length === 0) {
                 return;
             }
             var ptr = Module._malloc(bytes.length);
-            if (ptr == = 0) {
+            if (ptr === 0) {
                 return;
             }
             Module.HEAPU8.set(bytes, ptr);
@@ -266,11 +273,13 @@ __attribute__((constructor)) static void iframe_pty_install_message_listener(voi
         };
         window.addEventListener('message', window.__yettyIframePtyListener);
     });
+
+    // clang-format on
 }
 
 /* Pty creation */
 
-struct yetty_yplatform_pty_result yetty_yplatform_iframe_pty_create(
+struct yetty_yplatform_pty_ptr_result yetty_yplatform_iframe_pty_create(
     struct yetty_yconfig_config *config)
 {
     struct yetty_yplatform_iframe_pty *pty;
@@ -278,12 +287,12 @@ struct yetty_yplatform_pty_result yetty_yplatform_iframe_pty_create(
     (void)config;
 
     if (g_iframe_pty) {
-        return YETTY_ERR(yetty_yplatform_pty, "iframe pty already created (singleton)");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "iframe pty already created (singleton)");
     }
 
     pty = calloc(1, sizeof(*pty));
     if (!pty) {
-        return YETTY_ERR(yetty_yplatform_pty, "failed to allocate iframe pty");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to allocate iframe pty");
     }
 
     pty->base.ops = &iframe_pty_ops;
@@ -296,7 +305,7 @@ struct yetty_yplatform_pty_result yetty_yplatform_iframe_pty_create(
 
     if (pipe(pty->vm_output_pipe) < 0) {
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "failed to create vm_output_pipe");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to create vm_output_pipe");
     }
     fcntl(pty->vm_output_pipe[0], F_SETFL, O_NONBLOCK);
     fcntl(pty->vm_output_pipe[1], F_SETFL, O_NONBLOCK);
@@ -327,64 +336,68 @@ struct yetty_yplatform_pty_result yetty_yplatform_iframe_pty_create(
      * for term-output messages — it flushes its internal output
      * buffer so the kernel boot lines (which arrived BEFORE yetty
      * loaded) are still delivered to the terminal. */
-    EM_ASM(
-        {
-            var ptyId = $0;
-            var cols = $1;
-            var rows = $2;
-            var iframe = document.getElementById('yetty-vm-pty-' + ptyId);
-            var spawned = false;
-            if (!iframe) {
-                if (window.yettyStatus) {
-                    window.yettyStatus.append('spawning tinyemu iframe (pty ' + ptyId + ', ' +
-                                                  cols + 'x' + rows + ') — fallback path',
-                                              'phase');
-                }
-                iframe = document.createElement('iframe');
-                iframe.id = 'yetty-vm-pty-' + ptyId;
-                /* Off-screen, not display:none — Chrome throttles
+
+    // clang-format off
+    EM_ASM({
+        var ptyId = $0;
+        var cols = $1;
+        var rows = $2;
+        var iframe = document.getElementById('yetty-vm-pty-' + ptyId);
+        var spawned = false;
+        if (!iframe) {
+            if (window.yettyStatus) {
+                window.yettyStatus.append(
+                    'spawning tinyemu iframe (pty ' + ptyId + ', ' +
+                    cols + 'x' + rows + ') — fallback path', 'phase');
+            }
+            iframe = document.createElement('iframe');
+            iframe.id = 'yetty-vm-pty-' + ptyId;
+            /* Off-screen, not display:none — Chrome throttles
              * timers in display:none iframes, slowing the
              * wasm-interpreted VM enough that boot/telnetd
              * doesn't finish in any reasonable time. */
-                iframe.style.cssText = 'position:absolute; left:-99999px; top:-99999px;' +
-                                       ' width:1px; height:1px; border:0;' +
-                                       ' visibility:hidden; pointer-events:none;';
-                iframe.src =
-                    'tinyemu-iframe.html?ptyId=' + ptyId + '&cols=' + cols + '&rows=' + rows;
-                document.body.appendChild(iframe);
-                spawned = true;
-            } else {
-                if (window.yettyStatus) {
-                    window.yettyStatus.append('connected to existing VM iframe (pty ' + ptyId + ')',
-                                              'ok');
-                }
+            iframe.style.cssText =
+                'position:absolute; left:-99999px; top:-99999px;' +
+                ' width:1px; height:1px; border:0;' +
+                ' visibility:hidden; pointer-events:none;';
+            iframe.src = 'tinyemu-iframe.html?ptyId=' + ptyId +
+                         '&cols=' + cols + '&rows=' + rows;
+            document.body.appendChild(iframe);
+            spawned = true;
+        } else {
+            if (window.yettyStatus) {
+                window.yettyStatus.append(
+                    'connected to existing VM iframe (pty ' + ptyId + ')', 'ok');
             }
-            // Tell the iframe yetty is now attached so it can flush any
-            // term-output it buffered while yetty was still loading.
-            // contentWindow is null until the iframe's first navigation
-            // commits — when we just spawned it, defer the post until
-            // 'load' fires.
-            var attach = function()
-            {
-                try {
-                    iframe.contentWindow.postMessage({type : 'yetty-ready', ptyId : ptyId}, '*');
-                } catch (_) {
-                }
-            };
-            if (spawned) {
-                iframe.addEventListener('load', attach);
-            } else {
-                attach();
-            }
-            // No auto-hide. The boot console is full-screen and
-            // scrollable — the user reads it (kernel boot, openrc,
-            // telnetd bringup) and dismisses manually via the × button.
-            // Hiding it under their cursor mid-scroll would be hostile.
-        },
-        pty->pty_id, (int)pty->cols, (int)pty->rows);
+        }
+        // Tell the iframe yetty is now attached so it can flush any
+        // term-output it buffered while yetty was still loading.
+        // contentWindow is null until the iframe's first navigation
+        // commits — when we just spawned it, defer the post until
+        // 'load' fires.
+        var attach = function () {
+            try {
+                iframe.contentWindow.postMessage({
+                    type: 'yetty-ready',
+                    ptyId: ptyId
+                }, '*');
+            } catch (_) {}
+        };
+        if (spawned) {
+            iframe.addEventListener('load', attach);
+        } else {
+            attach();
+        }
+        // No auto-hide. The boot console is full-screen and
+        // scrollable — the user reads it (kernel boot, openrc,
+        // telnetd bringup) and dismisses manually via the × button.
+        // Hiding it under their cursor mid-scroll would be hostile.
+    }, pty->pty_id, (int)pty->cols, (int)pty->rows);
+
+    // clang-format on
 
     yinfo("iframe_pty: created pty_id=%u", pty->pty_id);
-    return YETTY_OK(yetty_yplatform_pty, &pty->base);
+    return YETTY_OK(yetty_yplatform_pty_ptr, &pty->base);
 }
 
 /* The yetty_yplatform_pty_factory_create symbol is now owned by

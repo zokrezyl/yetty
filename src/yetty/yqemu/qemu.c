@@ -2,7 +2,7 @@
 
 #include <yetty/yqemu/qemu.h>
 
-#include <yetty/platform/socket.h>
+#include <yetty/yplatform/socket.h>
 #include <yetty/yplatform/fs.h>
 #include <yetty/yplatform/process.h>
 #include <yetty/yplatform/time.h>

@@ -14,8 +14,8 @@
 
 #include <yetty/yssh/ssh-pty.h>
 
-#include <yetty/platform/pty.h>
-#include <yetty/platform/pty-factory.h>
+#include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/pty.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
@@ -506,7 +506,7 @@ static struct yetty_platform_pty_pipe_source *ssh_pty_pipe_source(struct yetty_p
 
 /* Public entry point */
 
-struct yetty_yplatform_pty_result yetty_yssh_ssh_pty_create(struct yetty_yconfig_config *config)
+struct yetty_yplatform_pty_ptr_result yetty_yssh_ssh_pty_create(struct yetty_yconfig_config *config)
 {
     struct yetty_yssh_ssh_pty *pty;
     const char *host;
@@ -518,7 +518,7 @@ struct yetty_yplatform_pty_result yetty_yssh_ssh_pty_create(struct yetty_yconfig
     const char *term_type;
 
     if (!config || !config->ops) {
-        return YETTY_ERR(yetty_yplatform_pty, "ssh: missing yconfig");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: missing yconfig");
     }
 
     host = config->ops->get_string(config, "ssh/host", "127.0.0.1");
@@ -530,15 +530,15 @@ struct yetty_yplatform_pty_result yetty_yssh_ssh_pty_create(struct yetty_yconfig
     term_type = config->ops->get_string(config, "ssh/term-type", "xterm-256color");
 
     if (!username || !username[0]) {
-        return YETTY_ERR(yetty_yplatform_pty, "ssh: ssh/username is required");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: ssh/username is required");
     }
     if (port_i <= 0 || port_i > 65535) {
-        return YETTY_ERR(yetty_yplatform_pty, "ssh: invalid ssh/port");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: invalid ssh/port");
     }
 
     pty = calloc(1, sizeof(struct yetty_yssh_ssh_pty));
     if (!pty) {
-        return YETTY_ERR(yetty_yplatform_pty, "ssh: alloc failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: alloc failed");
     }
 
     pty->base.ops = &ssh_pty_ops;
@@ -551,7 +551,7 @@ struct yetty_yplatform_pty_result yetty_yssh_ssh_pty_create(struct yetty_yconfig
 
     if (pthread_mutex_init(&pty->session_mutex, NULL) != 0) {
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "ssh: mutex init failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: mutex init failed");
     }
 
     pty->host = strdup(host);
@@ -563,18 +563,18 @@ struct yetty_yplatform_pty_result yetty_yssh_ssh_pty_create(struct yetty_yconfig
 
     if (!pty->host || !pty->username || !pty->term_type) {
         ssh_pty_destroy(&pty->base);
-        return YETTY_ERR(yetty_yplatform_pty, "ssh: string alloc failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: string alloc failed");
     }
 
     if (!pty->password && !pty->private_key_path) {
         ssh_pty_destroy(&pty->base);
-        return YETTY_ERR(yetty_yplatform_pty, "ssh: ssh/password or ssh/private-key-path required");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: ssh/password or ssh/private-key-path required");
     }
 
     /* Output pipe (non-blocking both ends) */
     if (pipe(pty->output_pipe) < 0) {
         ssh_pty_destroy(&pty->base);
-        return YETTY_ERR(yetty_yplatform_pty, "ssh: pipe failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: pipe failed");
     }
     fcntl(pty->output_pipe[0], F_SETFL, O_NONBLOCK);
     fcntl(pty->output_pipe[1], F_SETFL, O_NONBLOCK);
@@ -583,7 +583,7 @@ struct yetty_yplatform_pty_result yetty_yssh_ssh_pty_create(struct yetty_yconfig
     /* libssh2 init */
     if (libssh2_init(0) != 0) {
         ssh_pty_destroy(&pty->base);
-        return YETTY_ERR(yetty_yplatform_pty, "ssh: libssh2_init failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: libssh2_init failed");
     }
     pty->libssh2_initialized = 1;
 
@@ -591,30 +591,30 @@ struct yetty_yplatform_pty_result yetty_yssh_ssh_pty_create(struct yetty_yconfig
     pty->socket = ssh_pty_tcp_connect(pty->host, pty->port);
     if (pty->socket < 0) {
         ssh_pty_destroy(&pty->base);
-        return YETTY_ERR(yetty_yplatform_pty, "ssh: TCP connect failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: TCP connect failed");
     }
 
     /* Session + non-blocking */
     pty->session = libssh2_session_init();
     if (!pty->session) {
         ssh_pty_destroy(&pty->base);
-        return YETTY_ERR(yetty_yplatform_pty, "ssh: session init failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: session init failed");
     }
     libssh2_session_set_blocking(pty->session, 0);
 
     if (ssh_pty_handshake(pty) < 0) {
         ssh_pty_destroy(&pty->base);
-        return YETTY_ERR(yetty_yplatform_pty, "ssh: handshake failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: handshake failed");
     }
 
     if (ssh_pty_authenticate(pty) < 0) {
         ssh_pty_destroy(&pty->base);
-        return YETTY_ERR(yetty_yplatform_pty, "ssh: authentication failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: authentication failed");
     }
 
     if (ssh_pty_open_channel(pty) < 0) {
         ssh_pty_destroy(&pty->base);
-        return YETTY_ERR(yetty_yplatform_pty, "ssh: channel setup failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: channel setup failed");
     }
 
     /* Make the socket non-blocking for the reader's poll-then-read loop */
@@ -625,10 +625,10 @@ struct yetty_yplatform_pty_result yetty_yssh_ssh_pty_create(struct yetty_yconfig
     if (pthread_create(&pty->reader_thread, NULL, ssh_pty_reader_thread, pty) != 0) {
         pty->running = 0;
         ssh_pty_destroy(&pty->base);
-        return YETTY_ERR(yetty_yplatform_pty, "ssh: reader thread failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: reader thread failed");
     }
     pty->reader_started = 1;
 
     yinfo("ssh: PTY ready (%s@%s:%u)", pty->username, pty->host, pty->port);
-    return YETTY_OK(yetty_yplatform_pty, &pty->base);
+    return YETTY_OK(yetty_yplatform_pty_ptr, &pty->base);
 }

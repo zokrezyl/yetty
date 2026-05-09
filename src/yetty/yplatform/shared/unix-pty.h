@@ -3,7 +3,7 @@
 #ifndef YETTY_UNIX_PTY_H
 #define YETTY_UNIX_PTY_H
 
-#include <yetty/platform/pty-factory.h>
+#include <yetty/yplatform/pty.h>
 #include <yetty/yconfig/config.h>
 #include <stdint.h>
 
@@ -12,11 +12,11 @@ extern "C" {
 #endif
 
 /* Fork PTY - native forkpty based */
-struct yetty_yplatform_pty_result yetty_yplatform_fork_pty_create(
+struct yetty_yplatform_pty_ptr_result yetty_yplatform_fork_pty_create(
     struct yetty_yconfig_config *config);
 
 /* TinyEMU PTY - RISC-V VM */
-struct yetty_yplatform_pty_result yetty_yplatform_tinyemu_pty_create(
+struct yetty_yplatform_pty_ptr_result yetty_yplatform_tinyemu_pty_create(
     struct yetty_yconfig_config *config);
 
 /* Telnet PTY — TCP telnet (libuv-driven, async connect). After the
@@ -25,7 +25,7 @@ struct yetty_yplatform_pty_result yetty_yplatform_tinyemu_pty_create(
  * convenience helper kept here matches the pre-refactor signature so
  * the existing forwarders below don't change. */
 #include <yetty/yevent/event-loop.h>
-struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create_tcp(
+struct yetty_yplatform_pty_ptr_result yetty_ytelnet_telnet_pty_create_tcp(
     const char *host, uint16_t port, struct yetty_yevent_event_loop *event_loop);
 
 #ifdef __cplusplus

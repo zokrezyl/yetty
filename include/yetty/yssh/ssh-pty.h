@@ -3,7 +3,7 @@
 #ifndef YETTY_YSSH_PTY_H
 #define YETTY_YSSH_PTY_H
 
-#include <yetty/platform/pty.h>
+#include <yetty/yplatform/pty.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,7 +33,7 @@ struct yetty_yconfig_config;
  * @param config yetty config
  * @return PTY result
  */
-struct yetty_yplatform_pty_result yetty_yssh_ssh_pty_create(struct yetty_yconfig_config *config);
+struct yetty_yplatform_pty_ptr_result yetty_yssh_ssh_pty_create(struct yetty_yconfig_config *config);
 
 #ifdef __cplusplus
 }

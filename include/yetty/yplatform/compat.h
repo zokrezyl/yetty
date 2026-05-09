@@ -5,6 +5,7 @@
 #ifndef YETTY_YPLATFORM_COMPAT_H
 #define YETTY_YPLATFORM_COMPAT_H
 
+//TODO: extract functions that need platform specific implementation into the right header
 #ifdef _MSC_VER
 #include <stdlib.h>
 #include <string.h>

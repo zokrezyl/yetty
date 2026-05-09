@@ -13,7 +13,7 @@
  *     event loop's TCP client API (libuv on desktop). Used by the
  *     desktop / iOS / Android telnet factory.
  *
- *   - iframe-transport (src/yetty/yplatform/webasm/iframe-transport.c
+ *   - iframe-transport (src/yetty/ytransport/iframe-transport.c
  *     — coming next) — uses postMessage to talk to the tinyemu iframe
  *     wasm, which then injects the bytes into slirp's TCP machinery
  *     so multiple yetty terminals can share one in-VM telnetd. No

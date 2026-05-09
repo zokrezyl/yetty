@@ -138,10 +138,10 @@ if(WIN32)
     )
 else()
     set(YETTY_HOST_PLATFORM_SOURCES
-        ${YETTY_ROOT}/src/yetty/yplatform/shared/thread.c
-        ${YETTY_ROOT}/src/yetty/yplatform/shared/term.c
-        ${YETTY_ROOT}/src/yetty/yplatform/shared/fs.c
-        ${YETTY_ROOT}/src/yetty/yplatform/shared/time.c
+        ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
+        ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
+        ${YETTY_ROOT}/src/yetty/yplatform/fs/default.c
+        ${YETTY_ROOT}/src/yetty/yplatform/time/default.c
     )
 endif()
 
