@@ -106,7 +106,8 @@ static uint8_t compile_number(struct yetty_yfsvm_builder *b, const struct yetty_
     return builder_load_const(b, (float)node->number);
 }
 
-static uint8_t compile_identifier(struct yetty_yfsvm_builder *b, const struct yetty_yexpr_node *node)
+static uint8_t compile_identifier(struct yetty_yfsvm_builder *b,
+                                  const struct yetty_yexpr_node *node)
 {
     const char *name = node->ident;
 
@@ -146,7 +147,8 @@ static uint8_t compile_identifier(struct yetty_yfsvm_builder *b, const struct ye
     return 0;
 }
 
-static uint8_t compile_buffer_ref(struct yetty_yfsvm_builder *b, const struct yetty_yexpr_node *node)
+static uint8_t compile_buffer_ref(struct yetty_yfsvm_builder *b,
+                                  const struct yetty_yexpr_node *node)
 {
     int sampler_idx = node->buffer_ref.index - 1;
     if (sampler_idx < 0 || sampler_idx > 7) {

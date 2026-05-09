@@ -182,7 +182,8 @@ static struct uint32_result load_one(struct yetty_yfont_ms_msdf_font *f, uint32_
     /* Grow metadata buffer if needed */
     if (slot >= f->meta_capacity) {
         uint32_t new_cap = f->meta_capacity * 2;
-        struct yetty_yfont_glyph_meta_gpu *new_meta = realloc(f->meta, new_cap * sizeof(struct yetty_yfont_glyph_meta_gpu));
+        struct yetty_yfont_glyph_meta_gpu *new_meta =
+            realloc(f->meta, new_cap * sizeof(struct yetty_yfont_glyph_meta_gpu));
         if (!new_meta) {
             free(data);
             return YETTY_ERR(uint32, "meta realloc failed");
@@ -408,9 +409,8 @@ static struct yetty_yrender_gpu_resource_set_result ms_msdf_get_gpu_resource_set
 		 */
         float pad_cdb = f->pixel_range;
         float visible_h_cdb = (f->max_ascent + f->max_descent) - 2.0f * pad_cdb;
-        float scale = (visible_h_cdb > 0.0f)
-            ? f->requested_size / visible_h_cdb
-            : f->requested_size / f->base_size;
+        float scale = (visible_h_cdb > 0.0f) ? f->requested_size / visible_h_cdb
+                                             : f->requested_size / f->base_size;
         float glyph_w = f->advance_cdb * scale;
         float top_pad_px = f->requested_size * f->padding.top;
         float left_pad_px = glyph_w * f->padding.left;

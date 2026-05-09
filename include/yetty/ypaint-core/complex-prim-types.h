@@ -60,7 +60,8 @@ struct rectangle_result yetty_ypaint_core_complex_prim_aabb(const void *data);
 #include <yetty/ypaint-core/flyweight.h>
 
 // Handler for complex prim types (>= 0x80000000)
-struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_complex_prim_handler(uint32_t prim_type);
+struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_complex_prim_handler(
+    uint32_t prim_type);
 
 //=============================================================================
 // Forward declarations
@@ -96,7 +97,8 @@ struct yetty_ypaint_core_complex_prim_instance {
 
     // Render to target at x,y (canvas provides x,y for scrolling)
     struct yetty_ycore_void_result (*render)(struct yetty_ypaint_core_complex_prim_instance *self,
-                                             struct yetty_ypaint_core_target *target, float x, float y);
+                                             struct yetty_ypaint_core_target *target, float x,
+                                             float y);
 };
 
 YETTY_YRESULT_DECLARE(yetty_ypaint_core_complex_prim_instance_ptr,
@@ -136,8 +138,9 @@ struct yetty_ypaint_core_concrete_factory {
     // Push visual (shader-level) zoom state into this type's shared uniforms.
     // Optional — may be NULL if the type doesn't care about visual zoom.
     // Applies to all instances the factory has produced (they share the RS).
-    struct yetty_ycore_void_result (*set_visual_zoom)(struct yetty_ypaint_core_concrete_factory *self,
-                                                      float scale, float offset_x, float offset_y);
+    struct yetty_ycore_void_result (*set_visual_zoom)(
+        struct yetty_ypaint_core_concrete_factory *self, float scale, float offset_x,
+        float offset_y);
 
     // Push "intrusive" cell-size zoom. Semantically SEPARATE from set_visual_zoom
     // — cell_zoom tracks the cumulative ratio between the current and baseline
@@ -159,9 +162,10 @@ YETTY_YRESULT_DECLARE(yetty_ypaint_core_complex_prim_factory_ptr,
 
 // Create (after device/queue available) / destroy
 YETTY_ANNOT_CALLER_OWNED
-struct yetty_ypaint_core_complex_prim_factory_ptr_result yetty_ypaint_core_complex_prim_factory_create(
-    WGPUDevice device, WGPUQueue queue, WGPUTextureFormat target_format,
-    struct yetty_ypaint_core_gpu_allocator *allocator);
+struct yetty_ypaint_core_complex_prim_factory_ptr_result
+yetty_ypaint_core_complex_prim_factory_create(WGPUDevice device, WGPUQueue queue,
+                                              WGPUTextureFormat target_format,
+                                              struct yetty_ypaint_core_gpu_allocator *allocator);
 
 void yetty_ypaint_core_complex_prim_factory_destroy(
     struct yetty_ypaint_core_complex_prim_factory *factory YETTY_ANNOT_CALLEE_OWNED);
@@ -176,8 +180,7 @@ YETTY_ANNOT_CALLER_OWNED
 struct yetty_ypaint_core_complex_prim_instance_ptr_result
 yetty_ypaint_core_complex_prim_factory_create_instance(
     struct yetty_ypaint_core_complex_prim_factory *factory,
-    const void *buffer_data YETTY_ANNOT_ARRAY(size), size_t size,
-    uint32_t rolling_row);
+    const void *buffer_data YETTY_ANNOT_ARRAY(size), size_t size, uint32_t rolling_row);
 
 // Destroy instance (uses instance->factory back-pointer)
 void yetty_ypaint_core_complex_prim_instance_destroy(
@@ -187,12 +190,14 @@ void yetty_ypaint_core_complex_prim_instance_destroy(
 // yimage, ...). Safe to call with no registrations. Concrete factories that
 // don't implement set_visual_zoom are silently skipped.
 void yetty_ypaint_core_complex_prim_factory_set_visual_zoom(
-    struct yetty_ypaint_core_complex_prim_factory *factory, float scale, float offset_x, float offset_y);
+    struct yetty_ypaint_core_complex_prim_factory *factory, float scale, float offset_x,
+    float offset_y);
 
 // Fan out "intrusive" cell-zoom state the same way (separate uniforms,
 // separate semantics — see set_cell_zoom in the concrete factory ops).
 void yetty_ypaint_core_complex_prim_factory_set_cell_zoom(
-    struct yetty_ypaint_core_complex_prim_factory *factory, float scale, float offset_x, float offset_y);
+    struct yetty_ypaint_core_complex_prim_factory *factory, float scale, float offset_x,
+    float offset_y);
 
 #ifdef __cplusplus
 }

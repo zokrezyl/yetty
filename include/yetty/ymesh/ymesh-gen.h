@@ -41,7 +41,7 @@ struct yetty_ymesh_uniforms {
 };
 
 /* Render mode values for yetty_ymesh_uniforms.mode. */
-#define YETTY_YMESH_MODE_SOLID     0u
+#define YETTY_YMESH_MODE_SOLID 0u
 #define YETTY_YMESH_MODE_WIREFRAME 1u
 
 /* Factory create / destroy — registered with the abstract complex-prim

@@ -10,7 +10,8 @@
 
 struct yetty_ygui_theme *yetty_ygui_theme_create(void)
 {
-    struct yetty_ygui_theme *theme = (struct yetty_ygui_theme *)calloc(1, sizeof(struct yetty_ygui_theme));
+    struct yetty_ygui_theme *theme =
+        (struct yetty_ygui_theme *)calloc(1, sizeof(struct yetty_ygui_theme));
     if (!theme) {
         yetty_ygui_set_error("Failed to allocate theme");
         return NULL;

@@ -28,21 +28,21 @@
 extern "C" {
 #endif
 
-#define YETTY_YPLOT_FLAG_GRID   0x1u
-#define YETTY_YPLOT_FLAG_AXES   0x2u
+#define YETTY_YPLOT_FLAG_GRID 0x1u
+#define YETTY_YPLOT_FLAG_AXES 0x2u
 #define YETTY_YPLOT_FLAG_LABELS 0x4u
 
 /* Geometry + axis configuration. NULL fields fall back to defaults. */
 struct yetty_yplot_render_config {
-    float bounds_x;     /* 0   — overridden by canvas at render time */
-    float bounds_y;     /* 0   — overridden by canvas at render time */
-    float bounds_w;     /* 400 — width in pixels */
-    float bounds_h;     /* 200 — height in pixels */
-    float x_min;        /* -3.14159 */
-    float x_max;        /*  3.14159 */
-    float y_min;        /* -1.5 */
-    float y_max;        /*  1.5 */
-    uint32_t flags;     /* YETTY_YPLOT_FLAG_* (default = grid|axes|labels) */
+    float bounds_x; /* 0   — overridden by canvas at render time */
+    float bounds_y; /* 0   — overridden by canvas at render time */
+    float bounds_w; /* 400 — width in pixels */
+    float bounds_h; /* 200 — height in pixels */
+    float x_min;    /* -3.14159 */
+    float x_max;    /*  3.14159 */
+    float y_min;    /* -1.5 */
+    float y_max;    /*  1.5 */
+    uint32_t flags; /* YETTY_YPLOT_FLAG_* (default = grid|axes|labels) */
 };
 
 /* Render `source` (multi-plot-expression syntax — see yexpr_parse_plot)

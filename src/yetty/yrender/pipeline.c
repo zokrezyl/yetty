@@ -88,8 +88,8 @@ struct flatten_state {
  * use `__NS___glyph_sample`, `uniforms.__NS___base_size` etc. and have the
  * binder paste in the actual instance namespace at merge time, so multiple
  * instances of the same shader type don't collide on identifier names. */
-static void shader_append(struct flatten_state *st,
-                          const struct yetty_yrender_shader_code *sc, const char *ns)
+static void shader_append(struct flatten_state *st, const struct yetty_yrender_shader_code *sc,
+                          const char *ns)
 {
     if (!sc->data || sc->size == 0) {
         return;
@@ -195,16 +195,25 @@ static void generate_wgsl_bindings(const struct flatten_state *st, char *out, si
 
     if (st->uniform_count > 0) {
         n = snprintf(p, rem, "struct Uniforms {\n");
-        if (n > 0 && (size_t)n < rem) { p += n; rem -= n; }
+        if (n > 0 && (size_t)n < rem) {
+            p += n;
+            rem -= n;
+        }
         for (size_t i = 0; i < st->uniform_count; i++) {
             const struct flat_uniform_view *fu = &st->uniforms[i];
             const char *wgsl_type = yetty_yrender_uniform_type_wgsl(fu->src->type);
             n = snprintf(p, rem, "    %s_%s: %s,\n", fu->ns, fu->src->name, wgsl_type);
-            if (n > 0 && (size_t)n < rem) { p += n; rem -= n; }
+            if (n > 0 && (size_t)n < rem) {
+                p += n;
+                rem -= n;
+            }
         }
         n = snprintf(p, rem, "};\n@group(0) @binding(%u) var<uniform> uniforms: Uniforms;\n",
                      binding++);
-        if (n > 0 && (size_t)n < rem) { p += n; rem -= n; }
+        if (n > 0 && (size_t)n < rem) {
+            p += n;
+            rem -= n;
+        }
     }
 
     /* Atlas textures (declared even if empty in template — per-instance
@@ -213,24 +222,36 @@ static void generate_wgsl_bindings(const struct flatten_state *st, char *out, si
         if (!st->atlas_present[ai]) {
             continue;
         }
-        n = snprintf(p, rem, "@group(0) @binding(%u) var %s_texture: texture_2d<f32>;\n",
-                     binding++, atlas_names[ai]);
-        if (n > 0 && (size_t)n < rem) { p += n; rem -= n; }
-        n = snprintf(p, rem, "@group(0) @binding(%u) var %s_sampler: sampler;\n",
-                     binding++, atlas_names[ai]);
-        if (n > 0 && (size_t)n < rem) { p += n; rem -= n; }
+        n = snprintf(p, rem, "@group(0) @binding(%u) var %s_texture: texture_2d<f32>;\n", binding++,
+                     atlas_names[ai]);
+        if (n > 0 && (size_t)n < rem) {
+            p += n;
+            rem -= n;
+        }
+        n = snprintf(p, rem, "@group(0) @binding(%u) var %s_sampler: sampler;\n", binding++,
+                     atlas_names[ai]);
+        if (n > 0 && (size_t)n < rem) {
+            p += n;
+            rem -= n;
+        }
     }
 
     if (st->buffer_count > 0) {
         n = snprintf(p, rem,
                      "@group(0) @binding(%u) var<storage, read> storage_buffer: array<u32>;\n",
                      binding++);
-        if (n > 0 && (size_t)n < rem) { p += n; rem -= n; }
+        if (n > 0 && (size_t)n < rem) {
+            p += n;
+            rem -= n;
+        }
         for (size_t i = 0; i < st->buffer_count; i++) {
             const struct flat_buffer_view *fb = &st->buffers[i];
             n = snprintf(p, rem, "const %s_%s_offset: u32 = %uu;\n", fb->ns, fb->src->name,
                          (uint32_t)(fb->mega_offset / 4));
-            if (n > 0 && (size_t)n < rem) { p += n; rem -= n; }
+            if (n > 0 && (size_t)n < rem) {
+                p += n;
+                rem -= n;
+            }
         }
     }
     (void)binding;
@@ -259,8 +280,8 @@ struct yetty_yrender_pipeline {
     int has_storage;
 };
 
-static struct yetty_ycore_void_result create_bind_group_layout(
-    struct yetty_yrender_pipeline *p, const struct flatten_state *st)
+static struct yetty_ycore_void_result create_bind_group_layout(struct yetty_yrender_pipeline *p,
+                                                               const struct flatten_state *st)
 {
     WGPUBindGroupLayoutEntry entries[8];
     size_t count = 0;
@@ -338,8 +359,8 @@ static struct yetty_ycore_void_result create_quad_vb(struct yetty_yrender_pipeli
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result create_pipeline(
-    struct yetty_yrender_pipeline *p, const struct flatten_state *st)
+static struct yetty_ycore_void_result create_pipeline(struct yetty_yrender_pipeline *p,
+                                                      const struct flatten_state *st)
 {
     if (st->shader_size == 0) {
         return YETTY_ERR(yetty_ycore_void, "no shader code in template");
@@ -373,9 +394,9 @@ static struct yetty_ycore_void_result create_pipeline(
     free(merged);
 
     if (!p->shader_module || yetty_ywebgpu_error_check()) {
-        return YETTY_ERR(yetty_ycore_void,
-                         yetty_ywebgpu_error.has_error ? yetty_ywebgpu_error.message
-                                                      : "shader compile failed");
+        return YETTY_ERR(yetty_ycore_void, yetty_ywebgpu_error.has_error
+                                               ? yetty_ywebgpu_error.message
+                                               : "shader compile failed");
     }
 
     /* Pipeline layout */

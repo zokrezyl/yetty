@@ -39,7 +39,7 @@ extern "C" {
  * ProcessEvents tick on the loop thread; webasm has nothing to set up
  * (loop is kept in the signature only to match desktop). */
 struct yplatform_wgpu_ptr_result yetty_yplatform_wgpu_create(WGPUInstance instance,
-                                                       struct yetty_yevent_event_loop *loop);
+                                                             struct yetty_yevent_event_loop *loop);
 
 /* Destroy. Stops the desktop tick. Handles NULL. */
 void yetty_yplatform_wgpu_destroy(struct yetty_yplatform_wgpu *wgpu);
@@ -47,13 +47,13 @@ void yetty_yplatform_wgpu_destroy(struct yetty_yplatform_wgpu *wgpu);
 /* Block until the buffer map completes. Desktop yields the calling
  * coroutine; webasm asyncify-suspends the C stack. Caller must
  * subsequently use wgpuBufferGetConstMappedRange / wgpuBufferUnmap. */
-struct yetty_ycore_void_result yetty_yplatform_wgpu_buffer_map_await(struct yetty_yplatform_wgpu *wgpu,
-                                                               WGPUBuffer buffer, WGPUMapMode mode,
-                                                               size_t offset, size_t size);
+struct yetty_ycore_void_result yetty_yplatform_wgpu_buffer_map_await(
+    struct yetty_yplatform_wgpu *wgpu, WGPUBuffer buffer, WGPUMapMode mode, size_t offset,
+    size_t size);
 
 /* Block until all currently-submitted work on the queue has finished. */
-struct yetty_ycore_void_result yetty_yplatform_wgpu_queue_done_await(struct yetty_yplatform_wgpu *wgpu,
-                                                               WGPUQueue queue);
+struct yetty_ycore_void_result yetty_yplatform_wgpu_queue_done_await(
+    struct yetty_yplatform_wgpu *wgpu, WGPUQueue queue);
 
 #ifdef __cplusplus
 }

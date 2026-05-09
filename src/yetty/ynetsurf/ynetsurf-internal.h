@@ -19,41 +19,41 @@ struct browser_window;
 struct yetty_ypaint_core_buffer;
 
 struct yetty_ynetsurf_schedule_entry {
-	int64_t deadline_ms;
-	void (*cb)(void *p);
-	void *p;
-	struct yetty_ynetsurf_schedule_entry *next;
+    int64_t deadline_ms;
+    void (*cb)(void *p);
+    void *p;
+    struct yetty_ynetsurf_schedule_entry *next;
 };
 
 struct gui_window {
-	struct yetty_ynetsurf *owner;
-	struct browser_window *bw;
-	int width, height;
-	int scroll_x, scroll_y;
-	bool needs_redraw;
-	char *title;
+    struct yetty_ynetsurf *owner;
+    struct browser_window *bw;
+    int width, height;
+    int scroll_x, scroll_y;
+    bool needs_redraw;
+    char *title;
 };
 
 struct yetty_ynetsurf {
-	struct gui_window *gw;
-	struct yetty_ynetsurf_schedule_entry *schedule_head;
+    struct gui_window *gw;
+    struct yetty_ynetsurf_schedule_entry *schedule_head;
 
-	/* Viewport set via yetty_ynetsurf_set_size before the bw / gw
+    /* Viewport set via yetty_ynetsurf_set_size before the bw / gw
 	 * exists. ns_win_create() reads this when NetSurf first calls
 	 * back to mint the window. */
-	int pending_width;
-	int pending_height;
+    int pending_width;
+    int pending_height;
 
-	/* Current redraw target (set by yetty_ynetsurf_redraw, read by plotter
+    /* Current redraw target (set by yetty_ynetsurf_redraw, read by plotter
 	 * callbacks via redraw_context.priv). */
-	struct yetty_ypaint_core_buffer *cur_buf;
+    struct yetty_ypaint_core_buffer *cur_buf;
 
-	/* Current clip rect (CPU-tracked, used to AABB-cull primitives). */
-	struct rect cur_clip;
+    /* Current clip rect (CPU-tracked, used to AABB-cull primitives). */
+    struct rect cur_clip;
 
-	/* Default font id registered into cur_buf. -1 means "none yet". */
-	int32_t default_font_id;
-	uint32_t z_counter;
+    /* Default font id registered into cur_buf. -1 means "none yet". */
+    int32_t default_font_id;
+    uint32_t z_counter;
 };
 
 extern const struct plotter_table yetty_ynetsurf_plotters;

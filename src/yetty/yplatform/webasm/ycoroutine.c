@@ -48,7 +48,7 @@ static struct yetty_yplatform_coro *g_current = NULL;
 static atomic_uint g_next_id = 1;
 
 struct yplatform_coro_ptr_result yetty_yplatform_coro_spawn(yplatform_coro_entry entry, void *arg,
-                                                      size_t stack_hint, const char *name)
+                                                            size_t stack_hint, const char *name)
 {
     (void)stack_hint;
 
@@ -72,8 +72,7 @@ struct yplatform_coro_ptr_result yetty_yplatform_coro_spawn(yplatform_coro_entry
         }
     }
 
-    ydebug("coro spawn id=%u name=%s (webasm stub)", coro->id,
-           coro->name ? coro->name : "(anon)");
+    ydebug("coro spawn id=%u name=%s (webasm stub)", coro->id, coro->name ? coro->name : "(anon)");
     return YETTY_OK(yplatform_coro_ptr, coro);
 }
 
@@ -106,8 +105,8 @@ void yetty_yplatform_coro_destroy(struct yetty_yplatform_coro *coro)
     if (!coro) {
         return;
     }
-    ydebug("coro destroy id=%u name=%s finished=%d", coro->id,
-           coro->name ? coro->name : "(anon)", coro->finished);
+    ydebug("coro destroy id=%u name=%s finished=%d", coro->id, coro->name ? coro->name : "(anon)",
+           coro->finished);
     free(coro->name);
     free(coro);
 }

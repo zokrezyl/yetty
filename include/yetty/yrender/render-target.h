@@ -46,7 +46,8 @@ struct yetty_yrender_target_ops {
 
     /* Blend multiple source targets into this target */
     struct yetty_ycore_void_result (*blend)(struct yetty_ypaint_core_target *self,
-                                            struct yetty_ypaint_core_target **sources, size_t count);
+                                            struct yetty_ypaint_core_target **sources,
+                                            size_t count);
 
     /* Present this target's content to final destination (surface/vnc/ymux) */
     struct yetty_ycore_void_result (*present)(struct yetty_ypaint_core_target *self);

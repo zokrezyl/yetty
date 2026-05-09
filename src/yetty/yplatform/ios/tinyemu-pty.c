@@ -395,7 +395,8 @@ static int init_vm(struct yetty_yplatform_tinyemu_pty *pty)
 
 static struct yetty_ycore_void_result tinyemu_pty_destroy(struct yetty_platform_pty *self)
 {
-    struct yetty_yplatform_tinyemu_pty *pty = container_of(self, struct yetty_yplatform_tinyemu_pty, base);
+    struct yetty_yplatform_tinyemu_pty *pty =
+        container_of(self, struct yetty_yplatform_tinyemu_pty, base);
     struct yetty_ycore_void_result stop_r = tinyemu_pty_stop(self);
 
     if (pty->os_input_pipe[0] >= 0) {
@@ -426,7 +427,8 @@ static struct yetty_ycore_void_result tinyemu_pty_destroy(struct yetty_platform_
 static struct yetty_ycore_size_result tinyemu_pty_read(struct yetty_platform_pty *self, char *buf,
                                                        size_t max_len)
 {
-    struct yetty_yplatform_tinyemu_pty *pty = container_of(self, struct yetty_yplatform_tinyemu_pty, base);
+    struct yetty_yplatform_tinyemu_pty *pty =
+        container_of(self, struct yetty_yplatform_tinyemu_pty, base);
 
     if (!pty->running || max_len == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
@@ -444,7 +446,8 @@ static struct yetty_ycore_size_result tinyemu_pty_read(struct yetty_platform_pty
 static struct yetty_ycore_size_result tinyemu_pty_write(struct yetty_platform_pty *self,
                                                         const char *data, size_t len)
 {
-    struct yetty_yplatform_tinyemu_pty *pty = container_of(self, struct yetty_yplatform_tinyemu_pty, base);
+    struct yetty_yplatform_tinyemu_pty *pty =
+        container_of(self, struct yetty_yplatform_tinyemu_pty, base);
 
     if (!pty->running || len == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
@@ -462,7 +465,8 @@ static struct yetty_ycore_size_result tinyemu_pty_write(struct yetty_platform_pt
 static struct yetty_ycore_void_result tinyemu_pty_resize(struct yetty_platform_pty *self,
                                                          uint32_t cols, uint32_t rows)
 {
-    struct yetty_yplatform_tinyemu_pty *pty = container_of(self, struct yetty_yplatform_tinyemu_pty, base);
+    struct yetty_yplatform_tinyemu_pty *pty =
+        container_of(self, struct yetty_yplatform_tinyemu_pty, base);
     pty->cols = cols;
     pty->rows = rows;
     /* TODO: Send resize to VM via virtio-console if supported */
@@ -471,7 +475,8 @@ static struct yetty_ycore_void_result tinyemu_pty_resize(struct yetty_platform_p
 
 static struct yetty_ycore_void_result tinyemu_pty_stop(struct yetty_platform_pty *self)
 {
-    struct yetty_yplatform_tinyemu_pty *pty = container_of(self, struct yetty_yplatform_tinyemu_pty, base);
+    struct yetty_yplatform_tinyemu_pty *pty =
+        container_of(self, struct yetty_yplatform_tinyemu_pty, base);
 
     if (!pty->running) {
         return YETTY_OK_VOID();
@@ -495,7 +500,8 @@ static struct yetty_ycore_void_result tinyemu_pty_stop(struct yetty_platform_pty
 static struct yetty_platform_pty_pipe_source *tinyemu_pty_pipe_source(
     struct yetty_platform_pty *self)
 {
-    struct yetty_yplatform_tinyemu_pty *pty = container_of(self, struct yetty_yplatform_tinyemu_pty, base);
+    struct yetty_yplatform_tinyemu_pty *pty =
+        container_of(self, struct yetty_yplatform_tinyemu_pty, base);
     return &pty->pipe_source;
 }
 
@@ -645,29 +651,28 @@ struct yetty_yplatform_tinyemu_pty_factory {
 
 static void tinyemu_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
 {
-    struct yetty_yplatform_tinyemu_pty_factory *factory = container_of(self, struct yetty_yplatform_tinyemu_pty_factory, base);
+    struct yetty_yplatform_tinyemu_pty_factory *factory =
+        container_of(self, struct yetty_yplatform_tinyemu_pty_factory, base);
     free(factory);
 }
 
 static struct yetty_yplatform_pty_result tinyemu_pty_factory_create_pty(
     struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop)
 {
-    struct yetty_yplatform_tinyemu_pty_factory *factory = container_of(self, struct yetty_yplatform_tinyemu_pty_factory, base);
+    struct yetty_yplatform_tinyemu_pty_factory *factory =
+        container_of(self, struct yetty_yplatform_tinyemu_pty_factory, base);
 
     /* --telnet: connect as a pure telnet client to an already-running
      * server (e.g. the companion YettyQemu.app's qemu virtio-console
      * chardev listening on 127.0.0.1:2323). No fork/exec, no qemu
      * spawning — yetty just opens the TCP socket. */
     if (factory->config &&
-        factory->config->ops->get_bool(factory->config,
-                                       YETTY_YCONFIG_KEY_TELNET, 0)) {
+        factory->config->ops->get_bool(factory->config, YETTY_YCONFIG_KEY_TELNET, 0)) {
         const char *host = factory->config->ops->get_string(
             factory->config, YETTY_YCONFIG_KEY_TELNET_HOST, "127.0.0.1");
-        int port = factory->config->ops->get_int(
-            factory->config, YETTY_YCONFIG_KEY_TELNET_PORT, 0);
+        int port = factory->config->ops->get_int(factory->config, YETTY_YCONFIG_KEY_TELNET_PORT, 0);
         if (port <= 0 || port > 65535) {
-            return YETTY_ERR(yetty_yplatform_pty,
-                             "--telnet requires telnet/port (1..65535)");
+            return YETTY_ERR(yetty_yplatform_pty, "--telnet requires telnet/port (1..65535)");
         }
         return yetty_ytelnet_telnet_pty_create_tcp(host, (uint16_t)port, event_loop);
     }

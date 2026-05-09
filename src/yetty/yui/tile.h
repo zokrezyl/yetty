@@ -49,8 +49,8 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
 struct yetty_ycore_void_result yetty_yui_tile_destroy(struct yetty_yui_tile *tile);
 
 /* Tile operations */
-struct yetty_ycore_void_result yetty_yui_tile_render(struct yetty_yui_tile *tile,
-                                                     struct yetty_ypaint_core_target *render_target);
+struct yetty_ycore_void_result yetty_yui_tile_render(
+    struct yetty_yui_tile *tile, struct yetty_ypaint_core_target *render_target);
 
 struct yetty_ycore_void_result yetty_yui_tile_set_bounds(struct yetty_yui_tile *tile,
                                                          struct yetty_yui_rect bounds);
@@ -66,12 +66,13 @@ struct yetty_yui_rect yetty_yui_tile_bounds(const struct yetty_yui_tile *tile);
 
 /* Split-specific */
 struct yetty_ycore_void_result yetty_yui_tile_split_set_first(struct yetty_yui_tile *split,
-                                                         struct yetty_yui_tile *tile);
+                                                              struct yetty_yui_tile *tile);
 
 struct yetty_ycore_void_result yetty_yui_tile_split_set_second(struct yetty_yui_tile *split,
-                                                          struct yetty_yui_tile *tile);
+                                                               struct yetty_yui_tile *tile);
 
-struct yetty_ycore_void_result yetty_yui_tile_split_set_ratio(struct yetty_yui_tile *split, float ratio);
+struct yetty_ycore_void_result yetty_yui_tile_split_set_ratio(struct yetty_yui_tile *split,
+                                                              float ratio);
 
 struct yetty_yui_tile *yetty_yui_tile_split_first(const struct yetty_yui_tile *split);
 struct yetty_yui_tile *yetty_yui_tile_split_second(const struct yetty_yui_tile *split);
@@ -80,7 +81,7 @@ enum yetty_yui_orientation yetty_yui_tile_split_orientation(const struct yetty_y
 
 /* Pane-specific */
 struct yetty_ycore_void_result yetty_yui_tile_pane_push_view(struct yetty_yui_tile *pane,
-                                                        struct yetty_yterm_view *view);
+                                                             struct yetty_yterm_view *view);
 
 struct yetty_ycore_void_result yetty_yui_tile_pane_pop_view(struct yetty_yui_tile *pane);
 

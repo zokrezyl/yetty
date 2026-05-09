@@ -30,11 +30,11 @@ struct yetty_ydvnc_transport_callbacks {
 };
 
 struct yetty_ydvnc_transport_ops {
-    struct yetty_ycore_void_result (*connect)(struct yetty_ydvnc_transport *self,
-                                              const char *host, uint16_t port,
+    struct yetty_ycore_void_result (*connect)(struct yetty_ydvnc_transport *self, const char *host,
+                                              uint16_t port,
                                               const struct yetty_ydvnc_transport_callbacks *cbs);
-    struct yetty_ycore_void_result (*send)(struct yetty_ydvnc_transport *self,
-                                           const void *data, size_t nbytes);
+    struct yetty_ycore_void_result (*send)(struct yetty_ydvnc_transport *self, const void *data,
+                                           size_t nbytes);
     struct yetty_ycore_void_result (*disconnect)(struct yetty_ydvnc_transport *self);
     struct yetty_ycore_void_result (*destroy)(struct yetty_ydvnc_transport *self);
 };

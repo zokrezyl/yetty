@@ -23,8 +23,8 @@
 extern "C" {
 #endif
 
-#define YETTY_YPAINT_CMD_BASE  0x00000000u
-#define YETTY_YPAINT_CMD_END   0x0000FFFFu
+#define YETTY_YPAINT_CMD_BASE 0x00000000u
+#define YETTY_YPAINT_CMD_END 0x0000FFFFu
 
 /* CMD_ZERO: clear the receiving ypaint canvas AND reset the cursor to
  * (col=0, row=0). The canvas's cursor-set callback fires on the reset, so
@@ -35,7 +35,7 @@ extern "C" {
  * Empty payload. Use at the start of every full-redraw frame buffer in
  * GUI / fullscreen producers (ygui sends one CMD_ZERO + the new prims per
  * frame, eliminating the separate YPAINT_CLEAR OSC envelope). */
-#define YETTY_YPAINT_CMD_ZERO  0x00000000u
+#define YETTY_YPAINT_CMD_ZERO 0x00000000u
 
 struct yetty_ypaint_core_buffer;
 
@@ -50,8 +50,7 @@ struct yetty_ycore_void_result yetty_ypaint_core_buffer_add_cmd_zero(
  *       YETTY_YPAINT_CMD_BASE, YETTY_YPAINT_CMD_END,
  *       yetty_ypaint_core_cmd_handler);
  */
-struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_cmd_handler(
-    uint32_t prim_type);
+struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_cmd_handler(uint32_t prim_type);
 
 #ifdef __cplusplus
 }

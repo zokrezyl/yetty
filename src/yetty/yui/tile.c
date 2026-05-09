@@ -13,7 +13,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 /*=============================================================================
  * Object ID generation
  *===========================================================================*/
@@ -435,7 +434,7 @@ struct yetty_yui_rect yetty_yui_tile_bounds(const struct yetty_yui_tile *tile)
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_yui_tile_split_set_first(struct yetty_yui_tile *tile,
-                                                         struct yetty_yui_tile *child)
+                                                              struct yetty_yui_tile *child)
 {
     struct yetty_yui_split *split;
 
@@ -453,7 +452,7 @@ struct yetty_ycore_void_result yetty_yui_tile_split_set_first(struct yetty_yui_t
 }
 
 struct yetty_ycore_void_result yetty_yui_tile_split_set_second(struct yetty_yui_tile *tile,
-                                                          struct yetty_yui_tile *child)
+                                                               struct yetty_yui_tile *child)
 {
     struct yetty_yui_split *split;
 
@@ -470,7 +469,8 @@ struct yetty_ycore_void_result yetty_yui_tile_split_set_second(struct yetty_yui_
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yui_tile_split_set_ratio(struct yetty_yui_tile *tile, float ratio)
+struct yetty_ycore_void_result yetty_yui_tile_split_set_ratio(struct yetty_yui_tile *tile,
+                                                              float ratio)
 {
     struct yetty_yui_split *split;
 
@@ -524,7 +524,7 @@ enum yetty_yui_orientation yetty_yui_tile_split_orientation(const struct yetty_y
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_yui_tile_pane_push_view(struct yetty_yui_tile *tile,
-                                                        struct yetty_yterm_view *view)
+                                                             struct yetty_yterm_view *view)
 {
     struct yetty_yui_pane *pane;
 
@@ -893,8 +893,8 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
                     yetty_yterm_background_layer_create(yetty_ctx, rgba);
                 if (YETTY_IS_OK(bg_res)) {
                     ((struct yetty_yui_pane *)res.value)->background_layer = bg_res.value;
-                    ydebug("tile: pane background '%s' -> (%.2f, %.2f, %.2f, %.2f)",
-                           color_str, rgba[0], rgba[1], rgba[2], rgba[3]);
+                    ydebug("tile: pane background '%s' -> (%.2f, %.2f, %.2f, %.2f)", color_str,
+                           rgba[0], rgba[1], rgba[2], rgba[3]);
                 } else {
                     ywarn("tile: pane background create failed: %s — pane will draw "
                           "without an opaque base",
@@ -917,8 +917,8 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
 
         if (app_config) {
             vnc_client = app_config->ops->get_string(app_config, "vnc/client", NULL);
-            desktop_vnc_client = app_config->ops->get_string(app_config, "vnc/desktop-client",
-                                                             NULL);
+            desktop_vnc_client =
+                app_config->ops->get_string(app_config, "vnc/desktop-client", NULL);
         }
 
         if (desktop_vnc_client && strlen(desktop_vnc_client) > 0) {
@@ -990,7 +990,8 @@ struct yetty_yui_tile_ptr_result yetty_yui_tile_create_from_config(
                     return YETTY_ERR(yetty_yui_tile_ptr, term_res.error.msg);
                 }
 
-                yetty_yui_tile_pane_push_view(res.value, yetty_yterm_terminal_as_view(term_res.value));
+                yetty_yui_tile_pane_push_view(res.value,
+                                              yetty_yterm_terminal_as_view(term_res.value));
             }
         }
     }

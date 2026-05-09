@@ -96,8 +96,8 @@ static struct yetty_ycore_void_result write_bin(const uint8_t *data, uint32_t si
     return r;
 }
 
-struct yetty_ycore_void_result yetty_ygui_osc_create_card(const char *name, int x, int y, int w, int h,
-                                                    const uint8_t *data, uint32_t size)
+struct yetty_ycore_void_result yetty_ygui_osc_create_card(const char *name, int x, int y, int w,
+                                                          int h, const uint8_t *data, uint32_t size)
 {
     (void)name;
     (void)x;
@@ -108,7 +108,7 @@ struct yetty_ycore_void_result yetty_ygui_osc_create_card(const char *name, int 
 }
 
 struct yetty_ycore_void_result yetty_ygui_osc_update_card(const char *name, const uint8_t *data,
-                                                    uint32_t size)
+                                                          uint32_t size)
 {
     (void)name;
     return write_bin(data, size);
@@ -162,7 +162,7 @@ void yetty_ygui_osc_subscribe_view_changes(int enable)
  * no mouse traffic ever flows back. col/row/w_cells/h_cells are in grid
  * cells (matching ygui_engine_create's x,y,cols,rows). */
 struct yetty_ycore_void_result yetty_ygui_osc_card_place(uint32_t card_id, int col, int row,
-                                                   uint32_t w_cells, uint32_t h_cells)
+                                                         uint32_t w_cells, uint32_t h_cells)
 {
     struct yetty_ymgui_wire_card_place msg = {
         .magic = YMGUI_WIRE_MAGIC_CARD_PLACE,

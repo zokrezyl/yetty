@@ -56,9 +56,15 @@ static int css_eqi(const char *a, size_t alen, const char *lit)
     for (size_t i = 0; i < alen; i++) {
         char ca = a[i];
         char cb = lit[i];
-        if (ca >= 'A' && ca <= 'Z') ca = (char)(ca - 'A' + 'a');
-        if (cb >= 'A' && cb <= 'Z') cb = (char)(cb - 'A' + 'a');
-        if (ca != cb) return 0;
+        if (ca >= 'A' && ca <= 'Z') {
+            ca = (char)(ca - 'A' + 'a');
+        }
+        if (cb >= 'A' && cb <= 'Z') {
+            cb = (char)(cb - 'A' + 'a');
+        }
+        if (ca != cb) {
+            return 0;
+        }
     }
     return 1;
 }
@@ -103,7 +109,9 @@ static struct css_num css_parse_num(const char **p, size_t *len)
     size_t i = 0;
     int sign = 1;
     if (i < *len && (s[i] == '+' || s[i] == '-')) {
-        if (s[i] == '-') sign = -1;
+        if (s[i] == '-') {
+            sign = -1;
+        }
         i++;
     }
     int saw_digit = 0;
@@ -132,7 +140,8 @@ static struct css_num css_parse_num(const char **p, size_t *len)
     if (i < *len && s[i] == '%') {
         r.unit = CSS_UNIT_PCT;
         i++;
-    } else if (i + 2 <= *len && (s[i] == 'p' || s[i] == 'P') && (s[i + 1] == 'x' || s[i + 1] == 'X')) {
+    } else if (i + 2 <= *len && (s[i] == 'p' || s[i] == 'P') &&
+               (s[i + 1] == 'x' || s[i + 1] == 'X')) {
         r.unit = CSS_UNIT_PX;
         i += 2;
     }
@@ -149,9 +158,13 @@ static int css_parse_num_list(const char *p, size_t len, struct css_num out[4])
     int n = 0;
     while (n < 4) {
         css_trim(&p, &len);
-        if (len == 0) break;
+        if (len == 0) {
+            break;
+        }
         out[n] = css_parse_num(&p, &len);
-        if (!out[n].ok) break;
+        if (!out[n].ok) {
+            break;
+        }
         n++;
     }
     return n;
@@ -207,7 +220,9 @@ struct css_diag {
 static void diag_add(struct css_diag *d, const char *msg, const char *prop, size_t prop_len,
                      const char *val, size_t val_len)
 {
-    if (d->has_msg) return; /* report only the first issue */
+    if (d->has_msg) {
+        return; /* report only the first issue */
+    }
     int n = snprintf(d->buf, sizeof d->buf, "%s [%.*s: %.*s]", msg, (int)prop_len, prop,
                      (int)val_len, val);
     (void)n;
@@ -220,10 +235,10 @@ struct align_kw {
 };
 
 static const struct align_kw align_keywords[] = {
-    {"auto", YETTY_YGUI_ALIGN_AUTO},     {"start", YETTY_YGUI_ALIGN_START},
+    {"auto", YETTY_YGUI_ALIGN_AUTO},        {"start", YETTY_YGUI_ALIGN_START},
     {"flex-start", YETTY_YGUI_ALIGN_START}, {"center", YETTY_YGUI_ALIGN_CENTER},
-    {"end", YETTY_YGUI_ALIGN_END},       {"flex-end", YETTY_YGUI_ALIGN_END},
-    {"stretch", YETTY_YGUI_ALIGN_STRETCH}, {"baseline", YETTY_YGUI_ALIGN_BASELINE},
+    {"end", YETTY_YGUI_ALIGN_END},          {"flex-end", YETTY_YGUI_ALIGN_END},
+    {"stretch", YETTY_YGUI_ALIGN_STRETCH},  {"baseline", YETTY_YGUI_ALIGN_BASELINE},
 };
 
 static int parse_align(const char *v, size_t vlen, ygui_align_t *out)
@@ -321,9 +336,15 @@ static void apply_one(struct yetty_ygui_widget *w, const char *prop, size_t plen
         css_eqi(prop, plen, "align-content")) {
         ygui_align_t a;
         if (parse_align(val, vlen, &a)) {
-            if (css_eqi(prop, plen, "align-items"))   w->layout.align_items = a;
-            if (css_eqi(prop, plen, "align-self"))    w->layout.align_self = a;
-            if (css_eqi(prop, plen, "align-content")) w->layout.align_content = a;
+            if (css_eqi(prop, plen, "align-items")) {
+                w->layout.align_items = a;
+            }
+            if (css_eqi(prop, plen, "align-self")) {
+                w->layout.align_self = a;
+            }
+            if (css_eqi(prop, plen, "align-content")) {
+                w->layout.align_content = a;
+            }
         } else {
             diag_add(diag, "unknown align value", prop, plen, val, vlen);
         }
@@ -345,8 +366,12 @@ static void apply_one(struct yetty_ygui_widget *w, const char *prop, size_t plen
         /* "<grow> [<shrink> [<basis>]]". A single number means grow=N. */
         struct css_num nums[4];
         int n = css_parse_num_list(val, vlen, nums);
-        if (n >= 1) w->layout.flex_grow = nums[0].value;
-        if (n >= 2) w->layout.flex_shrink = nums[1].value;
+        if (n >= 1) {
+            w->layout.flex_grow = nums[0].value;
+        }
+        if (n >= 2) {
+            w->layout.flex_shrink = nums[1].value;
+        }
         if (n >= 3) {
             if (nums[2].unit == CSS_UNIT_PCT) {
                 w->layout.flex_basis = 0.0f;
@@ -371,8 +396,12 @@ static void apply_one(struct yetty_ygui_widget *w, const char *prop, size_t plen
             diag_add(diag, "could not parse number", prop, plen, val, vlen);
             return;
         }
-        if (css_eqi(prop, plen, "flex-grow"))   w->layout.flex_grow = nv.value;
-        if (css_eqi(prop, plen, "flex-shrink")) w->layout.flex_shrink = nv.value;
+        if (css_eqi(prop, plen, "flex-grow")) {
+            w->layout.flex_grow = nv.value;
+        }
+        if (css_eqi(prop, plen, "flex-shrink")) {
+            w->layout.flex_shrink = nv.value;
+        }
         return;
     }
 
@@ -461,9 +490,9 @@ static void apply_one(struct yetty_ygui_widget *w, const char *prop, size_t plen
         float *px;
         float *pct;
     } size_props[] = {
-        {"min-width",  &w->layout.min_w, &w->layout.min_w_percent},
+        {"min-width", &w->layout.min_w, &w->layout.min_w_percent},
         {"min-height", &w->layout.min_h, &w->layout.min_h_percent},
-        {"max-width",  &w->layout.max_w, &w->layout.max_w_percent},
+        {"max-width", &w->layout.max_w, &w->layout.max_w_percent},
         {"max-height", &w->layout.max_h, &w->layout.max_h_percent},
     };
     for (size_t i = 0; i < sizeof size_props / sizeof size_props[0]; i++) {
@@ -493,7 +522,7 @@ static void apply_one(struct yetty_ygui_widget *w, const char *prop, size_t plen
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_ygui_widget_apply_css(struct yetty_ygui_widget *widget,
-                                                            const char *css)
+                                                           const char *css)
 {
     if (!widget) {
         return YETTY_ERR(yetty_ycore_void, "apply_css: NULL widget");
@@ -521,7 +550,9 @@ struct yetty_ycore_void_result yetty_ygui_widget_apply_css(struct yetty_ygui_wid
         }
         if (p >= end || *p != ':') {
             /* Malformed declaration (no colon) — skip to next ';'. */
-            while (p < end && *p != ';') p++;
+            while (p < end && *p != ';') {
+                p++;
+            }
             continue;
         }
         size_t plen = (size_t)(p - prop_start);

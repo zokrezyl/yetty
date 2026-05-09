@@ -110,9 +110,9 @@ static struct yetty_ycore_void_result cell_render(struct yetty_yrich_element *e,
             .size = c->text_len,
             .capacity = c->text_len,
         };
-        struct yetty_ycore_void_result tr = yetty_ypaint_core_buffer_add_text(
-            buf, text_x, text_y, &text, c->style.font_size, c->style.color, layer + 1,
-            c->style.font_id, 0.0f);
+        struct yetty_ycore_void_result tr =
+            yetty_ypaint_core_buffer_add_text(buf, text_x, text_y, &text, c->style.font_size,
+                                              c->style.color, layer + 1, c->style.font_id, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "cell_render: add_text failed");
     }
 

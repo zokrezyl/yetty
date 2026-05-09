@@ -43,7 +43,8 @@ YETTY_ANNOT_CALLER_OWNED
 struct yetty_ypaint_core_buffer_result yetty_ypaint_core_buffer_create_from_bytes(
     const uint8_t *data YETTY_ANNOT_ARRAY(len), size_t len);
 
-void yetty_ypaint_core_buffer_destroy(struct yetty_ypaint_core_buffer *buf YETTY_ANNOT_CALLEE_OWNED);
+void yetty_ypaint_core_buffer_destroy(
+    struct yetty_ypaint_core_buffer *buf YETTY_ANNOT_CALLEE_OWNED);
 
 // Scene bounds accessors (populated from config at create time, 0s otherwise)
 float yetty_ypaint_core_buffer_scene_max_x(const struct yetty_ypaint_core_buffer *buf);
@@ -76,10 +77,12 @@ struct yetty_ypaint_core_primitive_iter {
 YETTY_YRESULT_DECLARE(yetty_ypaint_core_primitive_iter, struct yetty_ypaint_core_primitive_iter);
 
 struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_first(
-    const struct yetty_ypaint_core_buffer *buf, const struct yetty_ypaint_core_flyweight_registry *reg);
+    const struct yetty_ypaint_core_buffer *buf,
+    const struct yetty_ypaint_core_flyweight_registry *reg);
 
 struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_next(
-    const struct yetty_ypaint_core_buffer *buf, const struct yetty_ypaint_core_flyweight_registry *reg,
+    const struct yetty_ypaint_core_buffer *buf,
+    const struct yetty_ypaint_core_flyweight_registry *reg,
     const struct yetty_ypaint_core_primitive_iter *iter);
 
 /*=============================================================================

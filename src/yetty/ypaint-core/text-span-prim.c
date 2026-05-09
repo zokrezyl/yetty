@@ -32,10 +32,11 @@ size_t yetty_ypaint_core_text_span_prim_size_for(uint32_t text_len)
     return TEXT_SPAN_PRIM_HEADER + text_span_payload_size(text_len);
 }
 
-void yetty_ypaint_core_text_span_prim_write_full(
-    uint8_t *out, float x, float y, float font_size, float rotation, uint32_t color,
-    uint32_t layer, int32_t font_id, const char *text, uint32_t text_len,
-    float char_spacing, float word_spacing)
+void yetty_ypaint_core_text_span_prim_write_full(uint8_t *out, float x, float y, float font_size,
+                                                 float rotation, uint32_t color, uint32_t layer,
+                                                 int32_t font_id, const char *text,
+                                                 uint32_t text_len, float char_spacing,
+                                                 float word_spacing)
 {
     uint32_t payload_size = text_span_payload_size(text_len);
     size_t total = TEXT_SPAN_PRIM_HEADER + payload_size;
@@ -46,31 +47,41 @@ void yetty_ypaint_core_text_span_prim_write_full(
     memcpy(out + 4, &payload_size, 4);
 
     uint8_t *p = out + TEXT_SPAN_PRIM_HEADER;
-    memcpy(p, &x, 4);                p += 4;
-    memcpy(p, &y, 4);                p += 4;
-    memcpy(p, &font_size, 4);        p += 4;
-    memcpy(p, &rotation, 4);         p += 4;
-    memcpy(p, &color, 4);            p += 4;
-    memcpy(p, &layer, 4);            p += 4;
-    memcpy(p, &font_id, 4);          p += 4;
-    memcpy(p, &text_len, 4);         p += 4;
-    memcpy(p, &char_spacing, 4);     p += 4;
-    memcpy(p, &word_spacing, 4);     p += 4;
+    memcpy(p, &x, 4);
+    p += 4;
+    memcpy(p, &y, 4);
+    p += 4;
+    memcpy(p, &font_size, 4);
+    p += 4;
+    memcpy(p, &rotation, 4);
+    p += 4;
+    memcpy(p, &color, 4);
+    p += 4;
+    memcpy(p, &layer, 4);
+    p += 4;
+    memcpy(p, &font_id, 4);
+    p += 4;
+    memcpy(p, &text_len, 4);
+    p += 4;
+    memcpy(p, &char_spacing, 4);
+    p += 4;
+    memcpy(p, &word_spacing, 4);
+    p += 4;
     if (text_len) {
         memcpy(p, text, text_len);
     }
 }
 
 void yetty_ypaint_core_text_span_prim_write(uint8_t *out, float x, float y, float font_size,
-                                       float rotation, uint32_t color, uint32_t layer,
-                                       int32_t font_id, const char *text, uint32_t text_len)
+                                            float rotation, uint32_t color, uint32_t layer,
+                                            int32_t font_id, const char *text, uint32_t text_len)
 {
     yetty_ypaint_core_text_span_prim_write_full(out, x, y, font_size, rotation, color, layer,
                                                 font_id, text, text_len, 0.0f, 0.0f);
 }
 
 int yetty_ypaint_core_text_span_prim_parse(const uint32_t *prim,
-                                      struct yetty_ypaint_core_text_span_prim_view *out)
+                                           struct yetty_ypaint_core_text_span_prim_view *out)
 {
     if (!prim || !out) {
         return -1;
@@ -92,17 +103,27 @@ int yetty_ypaint_core_text_span_prim_parse(const uint32_t *prim,
     const uint8_t *p = (const uint8_t *)prim + TEXT_SPAN_PRIM_HEADER;
     const uint8_t *end = p + payload_size;
 
-    memcpy(&out->x, p, 4);                  p += 4;
-    memcpy(&out->y, p, 4);                  p += 4;
-    memcpy(&out->font_size, p, 4);          p += 4;
-    memcpy(&out->rotation, p, 4);           p += 4;
-    memcpy(&out->color, p, 4);              p += 4;
-    memcpy(&out->layer, p, 4);              p += 4;
-    memcpy(&out->font_id, p, 4);            p += 4;
-    memcpy(&out->text_len, p, 4);           p += 4;
+    memcpy(&out->x, p, 4);
+    p += 4;
+    memcpy(&out->y, p, 4);
+    p += 4;
+    memcpy(&out->font_size, p, 4);
+    p += 4;
+    memcpy(&out->rotation, p, 4);
+    p += 4;
+    memcpy(&out->color, p, 4);
+    p += 4;
+    memcpy(&out->layer, p, 4);
+    p += 4;
+    memcpy(&out->font_id, p, 4);
+    p += 4;
+    memcpy(&out->text_len, p, 4);
+    p += 4;
     if (has_spacing) {
-        memcpy(&out->char_spacing, p, 4);   p += 4;
-        memcpy(&out->word_spacing, p, 4);   p += 4;
+        memcpy(&out->char_spacing, p, 4);
+        p += 4;
+        memcpy(&out->word_spacing, p, 4);
+        p += 4;
     } else {
         out->char_spacing = 0.0f;
         out->word_spacing = 0.0f;
@@ -152,7 +173,8 @@ static const struct yetty_ypaint_core_prim_base_ops g_text_span_prim_base_ops = 
     .aabb = text_span_prim_aabb,
 };
 
-struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_text_span_prim_handler(uint32_t prim_type)
+struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_text_span_prim_handler(
+    uint32_t prim_type)
 {
     if (prim_type == YETTY_YPAINT_TYPE_TEXT_SPAN) {
         return YETTY_OK(yetty_ypaint_core_prim_base_ops_ptr, &g_text_span_prim_base_ops);

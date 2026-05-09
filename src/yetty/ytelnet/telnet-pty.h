@@ -41,8 +41,7 @@ struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(
  * (unix-pty-factory.c, ios/tinyemu-pty.c, windows/conpty.c, …).
  */
 struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create_tcp(
-    const char *host, uint16_t port,
-    struct yetty_yevent_event_loop *event_loop);
+    const char *host, uint16_t port, struct yetty_yevent_event_loop *event_loop);
 
 /**
  * Convenience factory for the desktop telnet path: builds a TCP
@@ -53,8 +52,8 @@ struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create_tcp(
  * factory->ops->create_pty(factory, event_loop) — same shape as
  * before the transport refactor, so existing callers don't change.
  */
-struct yetty_yplatform_pty_factory_result yetty_ytelnet_telnet_pty_factory_create(
-    const char *host, uint16_t port);
+struct yetty_yplatform_pty_factory_result yetty_ytelnet_telnet_pty_factory_create(const char *host,
+                                                                                  uint16_t port);
 
 #ifdef __cplusplus
 }

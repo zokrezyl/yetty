@@ -51,9 +51,9 @@
 
 struct input_ring {
     uint8_t buf[INPUT_RING_CAPACITY];
-    size_t head;  /* write index */
-    size_t tail;  /* read index */
-    size_t size;  /* bytes in flight */
+    size_t head; /* write index */
+    size_t tail; /* read index */
+    size_t size; /* bytes in flight */
 };
 
 static struct input_ring g_input;
@@ -109,11 +109,13 @@ static void bridge_console_write(void *opaque, const uint8_t *buf, int len)
     /* Hand the bytes straight to JS — no copy on the C side beyond what
      * EM_ASM already does to expose ptr/len. tinyemu-iframe.html's
      * __yettyTinyemuPostOutput then UTF-8 decodes and postMessages. */
-    EM_ASM({
-        if (window.__yettyTinyemuPostOutput) {
-            window.__yettyTinyemuPostOutput($0, $1);
-        }
-    }, buf, len);
+    EM_ASM(
+        {
+            if (window.__yettyTinyemuPostOutput) {
+                window.__yettyTinyemuPostOutput($0, $1);
+            }
+        },
+        buf, len);
 }
 
 static int bridge_console_read(void *opaque, uint8_t *buf, int len)
@@ -152,7 +154,8 @@ static int bridge_bf_read_async(BlockDevice *bs, uint64_t sector_num, uint8_t *b
                                 BlockDeviceCompletionFunc *cb, void *opaque)
 {
     BridgeBlockFile *bf = bs->opaque;
-    (void)cb; (void)opaque;
+    (void)cb;
+    (void)opaque;
     if (bf->raw_data) {
         if (bf->mode == BRIDGE_BF_MODE_SNAPSHOT) {
             for (int i = 0; i < n; i++) {
@@ -192,7 +195,8 @@ static int bridge_bf_write_async(BlockDevice *bs, uint64_t sector_num, const uin
                                  BlockDeviceCompletionFunc *cb, void *opaque)
 {
     BridgeBlockFile *bf = bs->opaque;
-    (void)cb; (void)opaque;
+    (void)cb;
+    (void)opaque;
     switch (bf->mode) {
     case BRIDGE_BF_MODE_RO:
         return -1;
@@ -316,8 +320,8 @@ static EthernetDevice *bridge_slirp_open(const VMEthEntry *e)
         struct in_addr guest_any = {.s_addr = 0};
         for (int j = 0; j < e->hostfwd_count; j++) {
             const VMEthHostFwd *hf = &e->hostfwd[j];
-            slirp_add_hostfwd(g_slirp, hf->is_udp ? 1 : 0, any, hf->host_port,
-                              guest_any, hf->guest_port);
+            slirp_add_hostfwd(g_slirp, hf->is_udp ? 1 : 0, any, hf->host_port, guest_any,
+                              hf->guest_port);
         }
     }
 
@@ -364,9 +368,9 @@ static EthernetDevice *bridge_slirp_open(const VMEthEntry *e)
 
 struct bridge_session {
     int in_use;
-    int wasm_sid;                       /* duplicates the array index. */
+    int wasm_sid; /* duplicates the array index. */
     struct slirp_chr_backend backend;
-    struct socket *so;                  /* slirp's chr socket — invalid after close */
+    struct socket *so; /* slirp's chr socket — invalid after close */
 };
 
 static struct bridge_session g_sessions[BRIDGE_MAX_SESSIONS];
@@ -380,20 +384,24 @@ static struct bridge_session g_sessions[BRIDGE_MAX_SESSIONS];
 static void session_backend_send(void *ctx, const void *buf, size_t len)
 {
     struct bridge_session *s = (struct bridge_session *)ctx;
-    EM_ASM({
-        console.log('[bridge] session_backend_send sid=' + $0 +
-                    ' len=' + $1 + ' (guest → host)');
-    }, s ? s->wasm_sid : -1, (int)len);
+    EM_ASM(
+        {
+            console.log('[bridge] session_backend_send sid=' + $0 + ' len=' + $1 +
+                        ' (guest → host)');
+        },
+        s ? s->wasm_sid : -1, (int)len);
     if (!s || !s->in_use || len == 0) {
         return;
     }
-    EM_ASM({
-        if (window.__yettyTinyemuPostSessionRx) {
-            window.__yettyTinyemuPostSessionRx($0, $1, $2);
-        } else {
-            console.error('[bridge] window.__yettyTinyemuPostSessionRx MISSING');
-        }
-    }, s->wasm_sid, buf, (int)len);
+    EM_ASM(
+        {
+            if (window.__yettyTinyemuPostSessionRx) {
+                window.__yettyTinyemuPostSessionRx($0, $1, $2);
+            } else {
+                console.error('[bridge] window.__yettyTinyemuPostSessionRx MISSING');
+            }
+        },
+        s->wasm_sid, buf, (int)len);
 }
 
 static const struct slirp_chr_backend_ops session_backend_ops = {
@@ -405,11 +413,12 @@ static const struct slirp_chr_backend_ops session_backend_ops = {
 EMSCRIPTEN_KEEPALIVE
 int tinyemu_session_open(int port)
 {
-    EM_ASM({
-        console.log('[bridge] tinyemu_session_open port=' + $0 +
-                    ' g_slirp=' + ($1 ? 'OK' : 'NULL') +
-                    ' g_running=' + $2);
-    }, port, !!g_slirp, g_running);
+    EM_ASM(
+        {
+            console.log('[bridge] tinyemu_session_open port=' + $0 + ' g_slirp=' +
+                        ($1 ? 'OK' : 'NULL') + ' g_running=' + $2);
+        },
+        port, !!g_slirp, g_running);
     if (!g_slirp || !g_running || port <= 0 || port > 65535) {
         return -1;
     }
@@ -422,8 +431,7 @@ int tinyemu_session_open(int port)
         }
     }
     if (sid < 0) {
-        fprintf(stderr, "tinyemu-bridge: session table full (>%d)\n",
-                BRIDGE_MAX_SESSIONS);
+        fprintf(stderr, "tinyemu-bridge: session table full (>%d)\n", BRIDGE_MAX_SESSIONS);
         return -1;
     }
 
@@ -440,7 +448,7 @@ int tinyemu_session_open(int port)
      * If the cfg ever changes the network, this needs to read the
      * actual guest IP back from slirp. */
     struct in_addr guest_addr;
-    guest_addr.s_addr = htonl(0x0a00020fu);  /* 10.0.2.15 */
+    guest_addr.s_addr = htonl(0x0a00020fu); /* 10.0.2.15 */
 
     s->so = slirp_chr_open(g_slirp, guest_addr, port, &s->backend);
     if (!s->so) {
@@ -448,8 +456,7 @@ int tinyemu_session_open(int port)
         s->in_use = 0;
         return -1;
     }
-    fprintf(stderr, "tinyemu-bridge: session %d → 10.0.2.15:%d open\n",
-            sid, port);
+    fprintf(stderr, "tinyemu-bridge: session %d → 10.0.2.15:%d open\n", sid, port);
     return sid;
 }
 
@@ -458,24 +465,23 @@ int tinyemu_session_open(int port)
 EMSCRIPTEN_KEEPALIVE
 void tinyemu_session_send(int sid, const uint8_t *data, int len)
 {
-    EM_ASM({
-        console.log('[bridge] tinyemu_session_send sid=' + $0 + ' len=' + $1);
-    }, sid, len);
+    EM_ASM({ console.log('[bridge] tinyemu_session_send sid=' + $0 + ' len=' + $1); }, sid, len);
     if (sid < 0 || sid >= BRIDGE_MAX_SESSIONS || len <= 0 || !data) {
         return;
     }
     struct bridge_session *s = &g_sessions[sid];
     if (!s->in_use || !s->so) {
-        EM_ASM({
-            console.warn('[bridge] tinyemu_session_send: sid=' + $0 +
-                         ' not in_use OR so==NULL — DROPPING');
-        }, sid);
+        EM_ASM(
+            {
+                console.warn('[bridge] tinyemu_session_send: sid=' + $0 +
+                             ' not in_use OR so==NULL — DROPPING');
+            },
+            sid);
         return;
     }
     size_t consumed = slirp_chr_input(s->so, data, (size_t)len);
-    EM_ASM({
-        console.log('[bridge] slirp_chr_input consumed=' + $0 + '/' + $1);
-    }, (int)consumed, len);
+    EM_ASM(
+        { console.log('[bridge] slirp_chr_input consumed=' + $0 + '/' + $1); }, (int)consumed, len);
     /* Wake the VM so slirp's TCP output drains on the next tick
      * instead of sitting up to BRIDGE_MAX_SLEEP_MS in the idle window.
      * Same rationale as tinyemu_bridge_input — keep injected traffic
@@ -523,8 +529,8 @@ void tinyemu_session_close(int sid)
  * report as the idle window. Matches the desktop pattern (10 ms in
  * shared/tinyemu-pty.c) so even when the VM is deeply idle we wake
  * at least every 10 ms to drain the input ring and slirp's queues. */
-#define BRIDGE_MAX_SLEEP_MS    10
-#define BRIDGE_TICK_BUDGET_MS  8.0
+#define BRIDGE_MAX_SLEEP_MS 10
+#define BRIDGE_TICK_BUDGET_MS 8.0
 
 static void bridge_main_loop_tick(void)
 {
@@ -558,7 +564,7 @@ static void bridge_main_loop_tick(void)
      * a tick that never arrives. */
     fd_set rfds, wfds, efds;
     int fd_max = -1;
-    struct timeval tv = { .tv_sec = 0, .tv_usec = 0 };
+    struct timeval tv = {.tv_sec = 0, .tv_usec = 0};
 
     int delay = virt_machine_get_sleep_duration(g_vm, BRIDGE_MAX_SLEEP_MS);
 
@@ -580,9 +586,7 @@ static void bridge_main_loop_tick(void)
     }
 #endif
 
-    int sret = (fd_max >= 0)
-        ? select(fd_max + 1, &rfds, &wfds, &efds, &tv)
-        : 0;
+    int sret = (fd_max >= 0) ? select(fd_max + 1, &rfds, &wfds, &efds, &tv) : 0;
 
 #ifdef CONFIG_SLIRP
     if (g_vm->net) {
@@ -591,8 +595,7 @@ static void bridge_main_loop_tick(void)
 #endif
 
     /* Feed buffered keyboard input. */
-    if (g_vm->console_dev && g_input.size > 0 &&
-        virtio_console_can_write_data(g_vm->console_dev)) {
+    if (g_vm->console_dev && g_input.size > 0 && virtio_console_can_write_data(g_vm->console_dev)) {
         uint8_t buf[256];
         int max = virtio_console_get_write_len(g_vm->console_dev);
         if (max > (int)sizeof(buf)) {
@@ -646,8 +649,8 @@ static int bridge_init_vm(const char *cfg_path)
     virt_machine_set_defaults(p);
     fprintf(stderr, "tinyemu-bridge: loading cfg %s\n", cfg_path);
     virt_machine_load_config_file(p, cfg_path, NULL, NULL);
-    fprintf(stderr, "tinyemu-bridge: cfg loaded — drives=%d fs=%d eth=%d\n",
-            p->drive_count, p->fs_count, p->eth_count);
+    fprintf(stderr, "tinyemu-bridge: cfg loaded — drives=%d fs=%d eth=%d\n", p->drive_count,
+            p->fs_count, p->eth_count);
 
     for (int i = 0; i < p->drive_count; i++) {
         char *fname = get_file_path(p->cfg_filename, p->tab_drive[i].filename);

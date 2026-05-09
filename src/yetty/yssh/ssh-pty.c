@@ -81,11 +81,10 @@ static struct yetty_ycore_size_result ssh_pty_read(struct yetty_platform_pty *se
                                                    size_t max_len);
 static struct yetty_ycore_size_result ssh_pty_write(struct yetty_platform_pty *self,
                                                     const char *data, size_t len);
-static struct yetty_ycore_void_result ssh_pty_resize(struct yetty_platform_pty *self,
-                                                     uint32_t cols, uint32_t rows);
+static struct yetty_ycore_void_result ssh_pty_resize(struct yetty_platform_pty *self, uint32_t cols,
+                                                     uint32_t rows);
 static struct yetty_ycore_void_result ssh_pty_stop(struct yetty_platform_pty *self);
-static struct yetty_platform_pty_pipe_source *ssh_pty_pipe_source(
-    struct yetty_platform_pty *self);
+static struct yetty_platform_pty_pipe_source *ssh_pty_pipe_source(struct yetty_platform_pty *self);
 
 static const struct yetty_platform_pty_ops ssh_pty_ops = {
     .destroy = ssh_pty_destroy,
@@ -453,8 +452,8 @@ static struct yetty_ycore_size_result ssh_pty_write(struct yetty_platform_pty *s
     return YETTY_OK(yetty_ycore_size, written);
 }
 
-static struct yetty_ycore_void_result ssh_pty_resize(struct yetty_platform_pty *self,
-                                                     uint32_t cols, uint32_t rows)
+static struct yetty_ycore_void_result ssh_pty_resize(struct yetty_platform_pty *self, uint32_t cols,
+                                                     uint32_t rows)
 {
     struct yetty_yssh_ssh_pty *pty = (struct yetty_yssh_ssh_pty *)self;
 

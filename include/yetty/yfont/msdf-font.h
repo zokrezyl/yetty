@@ -24,8 +24,8 @@ extern "C" {
  * NULL is allowed only when no other msdf-font shares the layer.
  */
 struct yetty_font_font_result yetty_yfont_msdf_font_create(const char *cdb_path,
-                                                          const char *shader_path,
-                                                          const char *namespace);
+                                                           const char *shader_path,
+                                                           const char *namespace);
 
 #ifdef __cplusplus
 }

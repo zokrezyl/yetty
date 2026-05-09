@@ -47,7 +47,8 @@ typedef struct yetty_ycore_void_result (*yetty_yterm_scroll_fn)(
 /* Cursor callback - called when layer moves cursor, passes source layer and
  * position */
 typedef void (*yetty_yterm_cursor_fn)(struct yetty_yrender_terminal_layer *source,
-                                      struct yetty_ycore_grid_cursor_pos cursor_pos, void *userdata);
+                                      struct yetty_ycore_grid_cursor_pos cursor_pos,
+                                      void *userdata);
 
 /* Mouse-subscription callback - fired when libvterm flips DEC mode 1500
  * (card click, click_enabled) or 1501 (card move, move_enabled). The two

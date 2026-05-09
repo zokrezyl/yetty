@@ -39,8 +39,8 @@ static struct yetty_ycore_void_result bg_destroy(struct yetty_yrender_terminal_l
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result bg_resize_grid(
-    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size)
+static struct yetty_ycore_void_result bg_resize_grid(struct yetty_yrender_terminal_layer *self,
+                                                     struct yetty_ycore_grid_size grid_size)
 {
     struct yetty_yterm_background_layer *layer =
         container_of(self, struct yetty_yterm_background_layer, base);
@@ -51,8 +51,8 @@ static struct yetty_ycore_void_result bg_resize_grid(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result bg_set_cell_size(
-    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_pixel_size cell_size)
+static struct yetty_ycore_void_result bg_set_cell_size(struct yetty_yrender_terminal_layer *self,
+                                                       struct yetty_ycore_pixel_size cell_size)
 {
     struct yetty_yterm_background_layer *layer =
         container_of(self, struct yetty_yterm_background_layer, base);
@@ -117,8 +117,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_background_layer_create(
     snprintf(shader_path, sizeof(shader_path), "%s/background-layer.wgsl", shaders_dir);
     struct yetty_ycore_buffer_result br = yetty_ycore_read_file(shader_path);
     if (YETTY_IS_ERR(br)) {
-        return YETTY_ERR(yetty_yterm_terminal_layer,
-                         "background_layer: shader read failed", br);
+        return YETTY_ERR(yetty_yterm_terminal_layer, "background_layer: shader read failed", br);
     }
 
     struct yetty_yterm_background_layer *layer = calloc(1, sizeof(*layer));
@@ -151,8 +150,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_background_layer_create(
         layer->rs.uniforms[U_COLOR].vec4[3] = 1.0f;
     }
 
-    yetty_yrender_shader_code_set(&layer->rs.shader,
-                                  (const char *)layer->shader_code.data,
+    yetty_yrender_shader_code_set(&layer->rs.shader, (const char *)layer->shader_code.data,
                                   layer->shader_code.size);
 
     ydebug("background_layer: created color=(%.2f,%.2f,%.2f,%.2f)",

@@ -395,7 +395,8 @@ struct yetty_ypaint_core_id_result yetty_ypaint_core_buffer_add_prim(
 }
 
 struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_first(
-    const struct yetty_ypaint_core_buffer *buf, const struct yetty_ypaint_core_flyweight_registry *reg)
+    const struct yetty_ypaint_core_buffer *buf,
+    const struct yetty_ypaint_core_flyweight_registry *reg)
 {
     if (!buf) {
         return YETTY_ERR(yetty_ypaint_core_primitive_iter, "buf is NULL");
@@ -411,14 +412,16 @@ struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_fir
     uint32_t prim_type = prim[0];
     struct yetty_ypaint_core_prim_flyweight_ptr_result fw_res =
         yetty_ypaint_core_flyweight_registry_get(reg, prim_type, prim);
-    YETTY_RETURN_IF_ERR(yetty_ypaint_core_primitive_iter, fw_res, "prim_first: registry lookup failed");
+    YETTY_RETURN_IF_ERR(yetty_ypaint_core_primitive_iter, fw_res,
+                        "prim_first: registry lookup failed");
 
     struct yetty_ypaint_core_primitive_iter iter = {.fw = *fw_res.value};
     return YETTY_OK(yetty_ypaint_core_primitive_iter, iter);
 }
 
 struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_next(
-    const struct yetty_ypaint_core_buffer *buf, const struct yetty_ypaint_core_flyweight_registry *reg,
+    const struct yetty_ypaint_core_buffer *buf,
+    const struct yetty_ypaint_core_flyweight_registry *reg,
     const struct yetty_ypaint_core_primitive_iter *iter)
 {
     if (!buf) {
@@ -445,7 +448,8 @@ struct yetty_ypaint_core_primitive_iter_result yetty_ypaint_core_buffer_prim_nex
     uint32_t prim_type = next[0];
     struct yetty_ypaint_core_prim_flyweight_ptr_result fw_res =
         yetty_ypaint_core_flyweight_registry_get(reg, prim_type, next);
-    YETTY_RETURN_IF_ERR(yetty_ypaint_core_primitive_iter, fw_res, "prim_next: registry lookup failed");
+    YETTY_RETURN_IF_ERR(yetty_ypaint_core_primitive_iter, fw_res,
+                        "prim_next: registry lookup failed");
 
     struct yetty_ypaint_core_primitive_iter new_iter = {.fw = *fw_res.value};
     return YETTY_OK(yetty_ypaint_core_primitive_iter, new_iter);
@@ -504,9 +508,10 @@ struct yetty_ycore_int_result yetty_ypaint_core_buffer_add_font(
     }
 
     yetty_ypaint_core_font_prim_write(staging, (int32_t)next_id, name, name_len, ttf_data->data,
-                                 ttf_len);
+                                      ttf_len);
 
-    struct yetty_ypaint_core_id_result r = yetty_ypaint_core_buffer_add_prim(buf, staging, prim_size);
+    struct yetty_ypaint_core_id_result r =
+        yetty_ypaint_core_buffer_add_prim(buf, staging, prim_size);
     free(staging);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "add_font: add_prim failed");
     return YETTY_OK(yetty_ycore_int, next_id);
@@ -536,7 +541,8 @@ struct yetty_ycore_void_result yetty_ypaint_core_buffer_add_text_full(
                                                 font_id, (const char *)text->data, text_len,
                                                 char_spacing, word_spacing);
 
-    struct yetty_ypaint_core_id_result r = yetty_ypaint_core_buffer_add_prim(buf, staging, prim_size);
+    struct yetty_ypaint_core_id_result r =
+        yetty_ypaint_core_buffer_add_prim(buf, staging, prim_size);
     free(staging);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "add_text: add_prim failed");
     return YETTY_OK_VOID();
@@ -546,6 +552,6 @@ struct yetty_ycore_void_result yetty_ypaint_core_buffer_add_text(
     struct yetty_ypaint_core_buffer *buf, float x, float y, const struct yetty_ycore_buffer *text,
     float font_size, uint32_t color, uint32_t layer, int32_t font_id, float rotation)
 {
-    return yetty_ypaint_core_buffer_add_text_full(buf, x, y, text, font_size, color, layer,
-                                                  font_id, rotation, 0.0f, 0.0f);
+    return yetty_ypaint_core_buffer_add_text_full(buf, x, y, text, font_size, color, layer, font_id,
+                                                  rotation, 0.0f, 0.0f);
 }

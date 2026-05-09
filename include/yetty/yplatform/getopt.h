@@ -32,7 +32,7 @@ extern int yetty_yplatform_optreset;
 
 int yetty_yplatform_getopt(int nargc, char *const *nargv, const char *options);
 int yetty_yplatform_getopt_long(int nargc, char *const *nargv, const char *options,
-                const struct yetty_yplatform_option *long_options, int *idx);
+                                const struct yetty_yplatform_option *long_options, int *idx);
 
 #ifdef __cplusplus
 }

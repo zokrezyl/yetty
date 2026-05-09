@@ -9,9 +9,11 @@
  * Widget Base Functions
  *===========================================================================*/
 
-struct yetty_ygui_widget *yetty_ygui_engine_widget_alloc(struct yetty_ygui_engine *engine, ygui_widget_type_t type, const char *id)
+struct yetty_ygui_widget *yetty_ygui_engine_widget_alloc(struct yetty_ygui_engine *engine,
+                                                         ygui_widget_type_t type, const char *id)
 {
-    struct yetty_ygui_widget *w = (struct yetty_ygui_widget *)calloc(1, sizeof(struct yetty_ygui_widget));
+    struct yetty_ygui_widget *w =
+        (struct yetty_ygui_widget *)calloc(1, sizeof(struct yetty_ygui_widget));
     if (!w) {
         yetty_ygui_set_error("Failed to allocate widget");
         return NULL;
@@ -28,7 +30,8 @@ struct yetty_ygui_widget *yetty_ygui_engine_widget_alloc(struct yetty_ygui_engin
     return w;
 }
 
-void yetty_ygui_widget_init_base(struct yetty_ygui_widget *widget, float x, float y, float w, float h)
+void yetty_ygui_widget_init_base(struct yetty_ygui_widget *widget, float x, float y, float w,
+                                 float h)
 {
     widget->authored_x = x;
     widget->authored_y = y;
@@ -63,8 +66,8 @@ void yetty_ygui_widget_free(struct yetty_ygui_widget *widget)
     free(widget);
 }
 
-struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(struct yetty_ygui_widget *self,
-                                                              struct yetty_ygui_render_ctx *ctx)
+struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
 {
     /* Skip invisible widgets globally — was previously a per-container concern. */
     if (!(self->flags & YETTY_YGUI_FLAG_VISIBLE)) {
@@ -176,7 +179,8 @@ void yetty_ygui_widget_add_child(struct yetty_ygui_widget *parent, struct yetty_
     }
 }
 
-void yetty_ygui_widget_remove_child(struct yetty_ygui_widget *parent, struct yetty_ygui_widget *child)
+void yetty_ygui_widget_remove_child(struct yetty_ygui_widget *parent,
+                                    struct yetty_ygui_widget *child)
 {
     if (!parent || !child || child->parent != parent) {
         return;
@@ -442,8 +446,7 @@ void yetty_ygui_widget_set_flex_direction(struct yetty_ygui_widget *widget,
     layout_widget_dirty(widget);
 }
 
-void yetty_ygui_widget_set_justify_content(struct yetty_ygui_widget *widget,
-                                           ygui_justify_t justify)
+void yetty_ygui_widget_set_justify_content(struct yetty_ygui_widget *widget, ygui_justify_t justify)
 {
     if (!widget) {
         return;
@@ -609,7 +612,8 @@ void yetty_ygui_widget_set_max_size_percent(struct yetty_ygui_widget *widget, fl
  * Button Widget
  *===========================================================================*/
 
-static struct yetty_ycore_void_result button_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result button_render(struct yetty_ygui_widget *self,
+                                                    struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
     int pressed = (self->flags & YETTY_YGUI_FLAG_PRESSED) != 0;
@@ -617,8 +621,7 @@ static struct yetty_ycore_void_result button_render(struct yetty_ygui_widget *se
     int focused = (self->flags & YETTY_YGUI_FLAG_FOCUSED) != 0;
 
     /* Surface base color: hover brightens, press goes to accent. */
-    uint32_t surface = pressed ? self->accent_color
-                               : (hovered ? t->bg_hover : self->bg_color);
+    uint32_t surface = pressed ? self->accent_color : (hovered ? t->bg_hover : self->bg_color);
 
     /* Material-style elevation: low when idle, drops to ~0 when pressed
      * so the button looks "depressed" against the page. */
@@ -628,8 +631,7 @@ static struct yetty_ycore_void_result button_render(struct yetty_ygui_widget *se
 
     /* Drop shadow first (skipped in pressed state). */
     yetty_ygui_render_ctx_render_box_shadow(ctx, self->x, self->y, self->w, self->h,
-                                            t->radius_medium, elev, t->shadow,
-                                            t->elevation_alpha);
+                                            t->radius_medium, elev, t->shadow, t->elevation_alpha);
 
     /* Surface — flat color, or a real linear gradient when the theme
      * opts in. Using the SDF gradient primitive (ported from yetty-poc):
@@ -653,9 +655,8 @@ static struct yetty_ycore_void_result button_render(struct yetty_ygui_widget *se
         bot = (uint32_t)a << 24 | (uint32_t)db << 16 | (uint32_t)dg << 8 | dr;
         yetty_ygui_render_ctx_render_box_linear_gradient(
             ctx, self->x, self->y + press_offset, self->w, self->h, t->radius_medium,
-            /*gx0,gy0=*/ self->x, self->y + press_offset,
-            /*gx1,gy1=*/ self->x, self->y + press_offset + self->h,
-            top, bot);
+            /*gx0,gy0=*/self->x, self->y + press_offset,
+            /*gx1,gy1=*/self->x, self->y + press_offset + self->h, top, bot);
     } else {
         yetty_ygui_render_ctx_render_box(ctx, self->x, self->y + press_offset, self->w, self->h,
                                          surface, t->radius_medium);
@@ -664,10 +665,9 @@ static struct yetty_ycore_void_result button_render(struct yetty_ygui_widget *se
     /* Focus ring: visible offset outline for keyboard navigation. */
     if (focused) {
         float r = t->radius_medium + 2.0f;
-        yetty_ygui_render_ctx_render_box_outline(ctx, self->x - 2.0f,
-                                                 self->y - 2.0f + press_offset,
-                                                 self->w + 4.0f, self->h + 4.0f,
-                                                 self->accent_color, r, 2.0f);
+        yetty_ygui_render_ctx_render_box_outline(ctx, self->x - 2.0f, self->y - 2.0f + press_offset,
+                                                 self->w + 4.0f, self->h + 4.0f, self->accent_color,
+                                                 r, 2.0f);
     } else if (hovered && !pressed) {
         /* Soft hover halo — inset, accent-colored. */
         yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y + press_offset, self->w,
@@ -677,10 +677,9 @@ static struct yetty_ycore_void_result button_render(struct yetty_ygui_widget *se
 
     /* Label. */
     if (self->data.button.label) {
-        yetty_ygui_render_ctx_render_text(ctx, self->data.button.label,
-                                          self->x + t->pad_large,
-                                          self->y + t->pad_medium + press_offset,
-                                          self->fg_color, t->font_size);
+        yetty_ygui_render_ctx_render_text(ctx, self->data.button.label, self->x + t->pad_large,
+                                          self->y + t->pad_medium + press_offset, self->fg_color,
+                                          t->font_size);
     }
     return YETTY_OK_VOID();
 }
@@ -718,10 +717,12 @@ static float button_baseline(const struct yetty_ygui_widget *self,
     return theme->pad_medium + theme->font_size * 0.8f;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_button(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w,
-                           float h, const char *label)
+struct yetty_ygui_widget *yetty_ygui_engine_button(struct yetty_ygui_engine *engine, const char *id,
+                                                   float x, float y, float w, float h,
+                                                   const char *label)
 {
-    struct yetty_ygui_widget *btn = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_BUTTON, id);
+    struct yetty_ygui_widget *btn =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_BUTTON, id);
     if (!btn) {
         return NULL;
     }
@@ -729,10 +730,10 @@ struct yetty_ygui_widget *yetty_ygui_engine_button(struct yetty_ygui_engine *eng
     yetty_ygui_widget_init_base(btn, x, y, w, h);
     btn->data.button.label = ygui_strdup(label);
     static const struct yetty_ygui_widget_vtable button_vtable = {
-        .render          = button_render,
-        .on_press        = button_on_press,
-        .on_release      = button_on_release,
-        .destroy         = button_destroy,
+        .render = button_render,
+        .on_press = button_on_press,
+        .on_release = button_on_release,
+        .destroy = button_destroy,
         .baseline_offset = button_baseline,
     };
     btn->vtable = &button_vtable;
@@ -765,15 +766,16 @@ const char *yetty_ygui_widget_button_get_label(const struct yetty_ygui_widget *w
  * Label Widget
  *===========================================================================*/
 
-static struct yetty_ycore_void_result label_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result label_render(struct yetty_ygui_widget *self,
+                                                   struct yetty_ygui_render_ctx *ctx)
 {
     if (self->data.label.text) {
         float font_size =
             self->data.label.font_size > 0 ? self->data.label.font_size : ctx->theme->font_size;
-        yetty_ygui_render_ctx_render_text(ctx, self->data.label.text, self->x, self->y, self->fg_color, font_size);
+        yetty_ygui_render_ctx_render_text(ctx, self->data.label.text, self->x, self->y,
+                                          self->fg_color, font_size);
     }
     return YETTY_OK_VOID();
-
 }
 
 static void label_destroy(struct yetty_ygui_widget *self)
@@ -790,9 +792,11 @@ static float label_baseline(const struct yetty_ygui_widget *self,
     return fs * 0.8f;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_label(struct yetty_ygui_engine *engine, const char *id, float x, float y, const char *text)
+struct yetty_ygui_widget *yetty_ygui_engine_label(struct yetty_ygui_engine *engine, const char *id,
+                                                  float x, float y, const char *text)
 {
-    struct yetty_ygui_widget *lbl = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_LABEL, id);
+    struct yetty_ygui_widget *lbl =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_LABEL, id);
     if (!lbl) {
         return NULL;
     }
@@ -802,8 +806,8 @@ struct yetty_ygui_widget *yetty_ygui_engine_label(struct yetty_ygui_engine *engi
     lbl->data.label.text = ygui_strdup(text);
     lbl->data.label.font_size = 0; /* Use theme default */
     static const struct yetty_ygui_widget_vtable label_vtable = {
-        .render          = label_render,
-        .destroy         = label_destroy,
+        .render = label_render,
+        .destroy = label_destroy,
         .baseline_offset = label_baseline,
     };
     lbl->vtable = &label_vtable;
@@ -847,27 +851,30 @@ void yetty_ygui_widget_label_set_font_size(struct yetty_ygui_widget *widget, flo
  * Slider Widget
  *===========================================================================*/
 
-static struct yetty_ycore_void_result slider_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result slider_render(struct yetty_ygui_widget *self,
+                                                    struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
     float track_h = t->pad_medium;
     float track_y = self->y + (self->h - track_h) / 2;
 
     /* Track background */
-    yetty_ygui_render_ctx_render_box(ctx, self->x, track_y, self->w, track_h, self->bg_color, t->radius_small);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, track_y, self->w, track_h, self->bg_color,
+                                     t->radius_small);
 
     /* Filled portion */
     float range = self->data.slider.max_val - self->data.slider.min_val;
     float pct = range > 0 ? (self->data.slider.value - self->data.slider.min_val) / range : 0;
     float fill_w = pct * self->w;
-    yetty_ygui_render_ctx_render_box(ctx, self->x, track_y, fill_w, track_h, self->accent_color, t->radius_small);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, track_y, fill_w, track_h, self->accent_color,
+                                     t->radius_small);
 
     /* Handle */
     float handle_w = t->scrollbar_size;
     float handle_x = self->x + fill_w - handle_w / 2;
-    yetty_ygui_render_ctx_render_box(ctx, handle_x, self->y, handle_w, self->h, self->accent_color, handle_w / 2);
+    yetty_ygui_render_ctx_render_box(ctx, handle_x, self->y, handle_w, self->h, self->accent_color,
+                                     handle_w / 2);
     return YETTY_OK_VOID();
-
 }
 
 static void slider_update_value(struct yetty_ygui_widget *self, float local_x)
@@ -922,10 +929,12 @@ static int slider_on_scroll(struct yetty_ygui_widget *self, float dx, float dy, 
     return 1;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_slider(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w,
-                           float h, float min_val, float max_val, float value)
+struct yetty_ygui_widget *yetty_ygui_engine_slider(struct yetty_ygui_engine *engine, const char *id,
+                                                   float x, float y, float w, float h,
+                                                   float min_val, float max_val, float value)
 {
-    struct yetty_ygui_widget *sld = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_SLIDER, id);
+    struct yetty_ygui_widget *sld =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_SLIDER, id);
     if (!sld) {
         return NULL;
     }
@@ -935,9 +944,9 @@ struct yetty_ygui_widget *yetty_ygui_engine_slider(struct yetty_ygui_engine *eng
     sld->data.slider.max_val = max_val;
     sld->data.slider.value = ygui_clamp(value, min_val, max_val);
     static const struct yetty_ygui_widget_vtable slider_vtable = {
-        .render    = slider_render,
-        .on_press  = slider_on_press,
-        .on_drag   = slider_on_drag,
+        .render = slider_render,
+        .on_press = slider_on_press,
+        .on_drag = slider_on_drag,
         .on_scroll = slider_on_scroll,
     };
     sld->vtable = &slider_vtable;
@@ -966,7 +975,8 @@ float yetty_ygui_widget_slider_get_value(const struct yetty_ygui_widget *widget)
     return widget->data.slider.value;
 }
 
-void yetty_ygui_widget_slider_set_range(struct yetty_ygui_widget *widget, float min_val, float max_val)
+void yetty_ygui_widget_slider_set_range(struct yetty_ygui_widget *widget, float min_val,
+                                        float max_val)
 {
     if (!widget || widget->type != YETTY_YGUI_WIDGET_SLIDER) {
         return;
@@ -983,7 +993,8 @@ void yetty_ygui_widget_slider_set_range(struct yetty_ygui_widget *widget, float 
  * Checkbox Widget
  *===========================================================================*/
 
-static struct yetty_ycore_void_result checkbox_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result checkbox_render(struct yetty_ygui_widget *self,
+                                                      struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
     float box_size = self->h - t->pad_small * 2;
@@ -991,9 +1002,10 @@ static struct yetty_ycore_void_result checkbox_render(struct yetty_ygui_widget *
 
     /* Box background */
     uint32_t box_color = self->data.checkbox.checked ? self->accent_color : self->bg_color;
-    yetty_ygui_render_ctx_render_box(ctx, self->x, box_y, box_size, box_size, box_color, t->radius_small);
-    yetty_ygui_render_ctx_render_box_outline(ctx, self->x, box_y, box_size, box_size, t->border, t->radius_small,
-                            1.5f);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, box_y, box_size, box_size, box_color,
+                                     t->radius_small);
+    yetty_ygui_render_ctx_render_box_outline(ctx, self->x, box_y, box_size, box_size, t->border,
+                                             t->radius_small, 1.5f);
 
     /* Checkmark (simple cross for now) */
     if (self->data.checkbox.checked) {
@@ -1007,14 +1019,14 @@ static struct yetty_ycore_void_result checkbox_render(struct yetty_ygui_widget *
     /* Label */
     if (self->data.checkbox.label) {
         float text_x = self->x + box_size + t->pad_medium;
-        yetty_ygui_render_ctx_render_text(ctx, self->data.checkbox.label, text_x, self->y + t->pad_medium,
-                         self->fg_color, t->font_size);
+        yetty_ygui_render_ctx_render_text(ctx, self->data.checkbox.label, text_x,
+                                          self->y + t->pad_medium, self->fg_color, t->font_size);
     }
     return YETTY_OK_VOID();
-
 }
 
-static int checkbox_on_release(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
+static int checkbox_on_release(struct yetty_ygui_widget *self, float lx, float ly,
+                               ygui_event_t *out)
 {
     if (lx >= 0 && lx < self->w && ly >= 0 && ly < self->h) {
         self->data.checkbox.checked = !self->data.checkbox.checked;
@@ -1037,10 +1049,12 @@ static void checkbox_destroy(struct yetty_ygui_widget *self)
     free(self->data.checkbox.label);
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_checkbox(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w,
-                             float h, const char *label, int checked)
+struct yetty_ygui_widget *yetty_ygui_engine_checkbox(struct yetty_ygui_engine *engine,
+                                                     const char *id, float x, float y, float w,
+                                                     float h, const char *label, int checked)
 {
-    struct yetty_ygui_widget *chk = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_CHECKBOX, id);
+    struct yetty_ygui_widget *chk =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_CHECKBOX, id);
     if (!chk) {
         return NULL;
     }
@@ -1049,9 +1063,9 @@ struct yetty_ygui_widget *yetty_ygui_engine_checkbox(struct yetty_ygui_engine *e
     chk->data.checkbox.label = ygui_strdup(label);
     chk->data.checkbox.checked = checked;
     static const struct yetty_ygui_widget_vtable checkbox_vtable = {
-        .render     = checkbox_render,
+        .render = checkbox_render,
         .on_release = checkbox_on_release,
-        .destroy    = checkbox_destroy,
+        .destroy = checkbox_destroy,
     };
     chk->vtable = &checkbox_vtable;
 
@@ -1094,7 +1108,8 @@ void yetty_ygui_widget_checkbox_set_label(struct yetty_ygui_widget *widget, cons
  * Panel Widget
  *===========================================================================*/
 
-static struct yetty_ycore_void_result panel_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result panel_render(struct yetty_ygui_widget *self,
+                                                   struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
     float radius =
@@ -1105,7 +1120,8 @@ static struct yetty_ycore_void_result panel_render(struct yetty_ygui_widget *sel
                                             t->elevation_medium, t->shadow, t->elevation_alpha);
 
     /* Background */
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, self->bg_color, radius);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, self->bg_color,
+                                     radius);
 
     /* Scrollbar if needed */
     float scrollable_h = self->h - self->data.panel.header_h;
@@ -1117,7 +1133,8 @@ static struct yetty_ycore_void_result panel_render(struct yetty_ygui_widget *sel
         float track_h = scrollable_h;
 
         /* Track */
-        yetty_ygui_render_ctx_render_box(ctx, track_x, track_y, sb_w, track_h, t->bg_secondary, sb_w / 2);
+        yetty_ygui_render_ctx_render_box(ctx, track_x, track_y, sb_w, track_h, t->bg_secondary,
+                                         sb_w / 2);
 
         /* Thumb */
         float max_scroll = content_h - scrollable_h;
@@ -1125,14 +1142,14 @@ static struct yetty_ycore_void_result panel_render(struct yetty_ygui_widget *sel
         float thumb_range = track_h - thumb_h;
         float thumb_y =
             track_y + (max_scroll > 0 ? (self->data.panel.scroll_y / max_scroll) * thumb_range : 0);
-        yetty_ygui_render_ctx_render_box(ctx, track_x + t->pad_small, thumb_y, sb_w - t->pad_medium, thumb_h,
-                        t->thumb_normal, (sb_w - t->pad_medium) / 2);
+        yetty_ygui_render_ctx_render_box(ctx, track_x + t->pad_small, thumb_y, sb_w - t->pad_medium,
+                                         thumb_h, t->thumb_normal, (sb_w - t->pad_medium) / 2);
     }
     return YETTY_OK_VOID();
-
 }
 
-static struct yetty_ycore_void_result panel_render_all(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result panel_render_all(struct yetty_ygui_widget *self,
+                                                       struct yetty_ygui_render_ctx *ctx)
 {
     self->effective_x = self->x + ctx->offset_x;
     self->effective_y = self->y + ctx->offset_y;
@@ -1182,7 +1199,6 @@ static struct yetty_ycore_void_result panel_render_all(struct yetty_ygui_widget 
     ctx->offset_x = old_offset_x;
     ctx->offset_y = old_offset_y;
     return YETTY_OK_VOID();
-
 }
 
 static int panel_on_scroll(struct yetty_ygui_widget *self, float dx, float dy, ygui_event_t *out)
@@ -1201,9 +1217,11 @@ static int panel_on_scroll(struct yetty_ygui_widget *self, float dx, float dy, y
     return 1;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_panel(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w, float h)
+struct yetty_ygui_widget *yetty_ygui_engine_panel(struct yetty_ygui_engine *engine, const char *id,
+                                                  float x, float y, float w, float h)
 {
-    struct yetty_ygui_widget *pnl = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_PANEL, id);
+    struct yetty_ygui_widget *pnl =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_PANEL, id);
     if (!pnl) {
         return NULL;
     }
@@ -1216,9 +1234,9 @@ struct yetty_ygui_widget *yetty_ygui_engine_panel(struct yetty_ygui_engine *engi
     pnl->data.panel.header_h = 0;
     pnl->data.panel.corner_radius = 0;
     static const struct yetty_ygui_widget_vtable panel_vtable = {
-        .render     = panel_render,
+        .render = panel_render,
         .render_all = panel_render_all,
-        .on_scroll  = panel_on_scroll,
+        .on_scroll = panel_on_scroll,
     };
     pnl->vtable = &panel_vtable;
 
@@ -1278,28 +1296,31 @@ void yetty_ygui_widget_panel_set_header_height(struct yetty_ygui_widget *widget,
  * Progress Widget
  *===========================================================================*/
 
-static struct yetty_ycore_void_result progress_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result progress_render(struct yetty_ygui_widget *self,
+                                                      struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
 
     /* Background track */
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, self->bg_color, t->radius_small);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, self->bg_color,
+                                     t->radius_small);
 
     /* Filled portion */
     float pct = ygui_clamp(self->data.progress.value, 0, 1);
     float fill_w = pct * self->w;
     if (fill_w > 0) {
         yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, fill_w, self->h, self->accent_color,
-                        t->radius_small);
+                                         t->radius_small);
     }
     return YETTY_OK_VOID();
-
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_progress(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w,
-                             float h, float value)
+struct yetty_ygui_widget *yetty_ygui_engine_progress(struct yetty_ygui_engine *engine,
+                                                     const char *id, float x, float y, float w,
+                                                     float h, float value)
 {
-    struct yetty_ygui_widget *prg = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_PROGRESS, id);
+    struct yetty_ygui_widget *prg =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_PROGRESS, id);
     if (!prg) {
         return NULL;
     }
@@ -1338,17 +1359,20 @@ float yetty_ygui_widget_progress_get_value(const struct yetty_ygui_widget *widge
  * Separator Widget
  *===========================================================================*/
 
-static struct yetty_ycore_void_result separator_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result separator_render(struct yetty_ygui_widget *self,
+                                                       struct yetty_ygui_render_ctx *ctx)
 {
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, ctx->theme->border, 0);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, ctx->theme->border,
+                                     0);
     return YETTY_OK_VOID();
-
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_separator(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w,
-                              float h)
+struct yetty_ygui_widget *yetty_ygui_engine_separator(struct yetty_ygui_engine *engine,
+                                                      const char *id, float x, float y, float w,
+                                                      float h)
 {
-    struct yetty_ygui_widget *sep = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_SEPARATOR, id);
+    struct yetty_ygui_widget *sep =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_SEPARATOR, id);
     if (!sep) {
         return NULL;
     }
@@ -1372,17 +1396,20 @@ struct yetty_ygui_widget *yetty_ygui_engine_separator(struct yetty_ygui_engine *
  * TextInput Widget
  *===========================================================================*/
 
-static struct yetty_ycore_void_result textinput_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result textinput_render(struct yetty_ygui_widget *self,
+                                                       struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
 
     /* Background */
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, self->bg_color, t->radius_small);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, self->bg_color,
+                                     t->radius_small);
 
     /* Border - accent if focused, normal otherwise */
-    uint32_t border_color = (self->flags & YETTY_YGUI_FLAG_FOCUSED) ? self->accent_color : t->border;
-    yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h, border_color, t->radius_small,
-                            1.5f);
+    uint32_t border_color =
+        (self->flags & YETTY_YGUI_FLAG_FOCUSED) ? self->accent_color : t->border;
+    yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h, border_color,
+                                             t->radius_small, 1.5f);
 
     /* Text or placeholder */
     const char *display_text = self->data.textinput.text;
@@ -1394,8 +1421,8 @@ static struct yetty_ycore_void_result textinput_render(struct yetty_ygui_widget 
     }
 
     if (display_text) {
-        yetty_ygui_render_ctx_render_text(ctx, display_text, self->x + t->pad_large, self->y + t->pad_medium,
-                         text_color, t->font_size);
+        yetty_ygui_render_ctx_render_text(ctx, display_text, self->x + t->pad_large,
+                                          self->y + t->pad_medium, text_color, t->font_size);
     }
 
     /* Cursor if focused */
@@ -1407,13 +1434,14 @@ static struct yetty_ycore_void_result textinput_render(struct yetty_ygui_widget 
         }
         float cursor_y = self->y + t->pad_small;
         float cursor_h = self->h - t->pad_small * 2;
-        yetty_ygui_render_ctx_render_box(ctx, cursor_x, cursor_y, 2.0f, cursor_h, self->accent_color, 0);
+        yetty_ygui_render_ctx_render_box(ctx, cursor_x, cursor_y, 2.0f, cursor_h,
+                                         self->accent_color, 0);
     }
     return YETTY_OK_VOID();
-
 }
 
-static int textinput_on_key(struct yetty_ygui_widget *self, uint32_t key, int mods, ygui_event_t *out)
+static int textinput_on_key(struct yetty_ygui_widget *self, uint32_t key, int mods,
+                            ygui_event_t *out)
 {
     (void)mods;
     char *text = self->data.textinput.text;
@@ -1464,10 +1492,12 @@ static void textinput_destroy(struct yetty_ygui_widget *self)
     free(self->data.textinput.placeholder);
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_textinput(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w,
-                              float h, const char *placeholder)
+struct yetty_ygui_widget *yetty_ygui_engine_textinput(struct yetty_ygui_engine *engine,
+                                                      const char *id, float x, float y, float w,
+                                                      float h, const char *placeholder)
 {
-    struct yetty_ygui_widget *txt = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_TEXTINPUT, id);
+    struct yetty_ygui_widget *txt =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_TEXTINPUT, id);
     if (!txt) {
         return NULL;
     }
@@ -1477,8 +1507,8 @@ struct yetty_ygui_widget *yetty_ygui_engine_textinput(struct yetty_ygui_engine *
     txt->data.textinput.placeholder = ygui_strdup(placeholder);
     txt->data.textinput.cursor_pos = 0;
     static const struct yetty_ygui_widget_vtable textinput_vtable = {
-        .render  = textinput_render,
-        .on_key  = textinput_on_key,
+        .render = textinput_render,
+        .on_key = textinput_on_key,
         .destroy = textinput_destroy,
     };
     txt->vtable = &textinput_vtable;
@@ -1540,9 +1570,11 @@ static void box_apply_theme_layout(struct yetty_ygui_widget *box,
     box->layout.padding_left = theme->pad_medium;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_hbox(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w, float h)
+struct yetty_ygui_widget *yetty_ygui_engine_hbox(struct yetty_ygui_engine *engine, const char *id,
+                                                 float x, float y, float w, float h)
 {
-    struct yetty_ygui_widget *hbox = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_HBOX, id);
+    struct yetty_ygui_widget *hbox =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_HBOX, id);
     if (!hbox) {
         return NULL;
     }
@@ -1552,9 +1584,11 @@ struct yetty_ygui_widget *yetty_ygui_engine_hbox(struct yetty_ygui_engine *engin
     return hbox;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_vbox(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w, float h)
+struct yetty_ygui_widget *yetty_ygui_engine_vbox(struct yetty_ygui_engine *engine, const char *id,
+                                                 float x, float y, float w, float h)
 {
-    struct yetty_ygui_widget *vbox = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_VBOX, id);
+    struct yetty_ygui_widget *vbox =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_VBOX, id);
     if (!vbox) {
         return NULL;
     }
@@ -1568,7 +1602,8 @@ struct yetty_ygui_widget *yetty_ygui_engine_vbox(struct yetty_ygui_engine *engin
  * Dropdown Widget
  *===========================================================================*/
 
-static struct yetty_ycore_void_result dropdown_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result dropdown_render(struct yetty_ygui_widget *self,
+                                                      struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
     int is_open = self->data.dropdown.open;
@@ -1581,8 +1616,8 @@ static struct yetty_ycore_void_result dropdown_render(struct yetty_ygui_widget *
     /* Main button area */
     uint32_t bg = (self->flags & YETTY_YGUI_FLAG_HOVER) ? t->bg_hover : self->bg_color;
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, bg, t->radius_medium);
-    yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h, t->border, t->radius_medium,
-                            1.0f);
+    yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h, t->border,
+                                             t->radius_medium, 1.0f);
 
     /* Selected text */
     const char *selected_text = NULL;
@@ -1591,8 +1626,8 @@ static struct yetty_ycore_void_result dropdown_render(struct yetty_ygui_widget *
         selected_text = self->data.dropdown.options[self->data.dropdown.selected];
     }
     if (selected_text) {
-        yetty_ygui_render_ctx_render_text(ctx, selected_text, self->x + t->pad_large, self->y + t->pad_medium,
-                         self->fg_color, t->font_size);
+        yetty_ygui_render_ctx_render_text(ctx, selected_text, self->x + t->pad_large,
+                                          self->y + t->pad_medium, self->fg_color, t->font_size);
     }
 
     /* Arrow indicator */
@@ -1600,12 +1635,12 @@ static struct yetty_ycore_void_result dropdown_render(struct yetty_ygui_widget *
     float arrow_y = self->y + self->h / 2;
     if (is_open) {
         /* Up arrow */
-        yetty_ygui_render_ctx_render_triangle(ctx, arrow_x, arrow_y + 3, arrow_x + 8, arrow_y + 3, arrow_x + 4,
-                             arrow_y - 3, self->fg_color);
+        yetty_ygui_render_ctx_render_triangle(ctx, arrow_x, arrow_y + 3, arrow_x + 8, arrow_y + 3,
+                                              arrow_x + 4, arrow_y - 3, self->fg_color);
     } else {
         /* Down arrow */
-        yetty_ygui_render_ctx_render_triangle(ctx, arrow_x, arrow_y - 3, arrow_x + 8, arrow_y - 3, arrow_x + 4,
-                             arrow_y + 3, self->fg_color);
+        yetty_ygui_render_ctx_render_triangle(ctx, arrow_x, arrow_y - 3, arrow_x + 8, arrow_y - 3,
+                                              arrow_x + 4, arrow_y + 3, self->fg_color);
     }
 
     /* Dropdown list when open */
@@ -1615,26 +1650,28 @@ static struct yetty_ycore_void_result dropdown_render(struct yetty_ygui_widget *
         float list_h = self->data.dropdown.option_count * item_h;
 
         /* List background */
-        yetty_ygui_render_ctx_render_box(ctx, self->x, list_y, self->w, list_h, t->bg_surface, t->radius_medium);
-        yetty_ygui_render_ctx_render_box_outline(ctx, self->x, list_y, self->w, list_h, t->border, t->radius_medium,
-                                1.0f);
+        yetty_ygui_render_ctx_render_box(ctx, self->x, list_y, self->w, list_h, t->bg_surface,
+                                         t->radius_medium);
+        yetty_ygui_render_ctx_render_box_outline(ctx, self->x, list_y, self->w, list_h, t->border,
+                                                 t->radius_medium, 1.0f);
 
         /* Options */
         for (int i = 0; i < self->data.dropdown.option_count; i++) {
             float opt_y = list_y + i * item_h;
             if (i == self->data.dropdown.selected) {
-                yetty_ygui_render_ctx_render_box(ctx, self->x + 2, opt_y + 2, self->w - 4, item_h - 4,
-                                self->accent_color, t->radius_small);
+                yetty_ygui_render_ctx_render_box(ctx, self->x + 2, opt_y + 2, self->w - 4,
+                                                 item_h - 4, self->accent_color, t->radius_small);
             }
-            yetty_ygui_render_ctx_render_text(ctx, self->data.dropdown.options[i], self->x + t->pad_large,
-                             opt_y + t->pad_small, self->fg_color, t->font_size);
+            yetty_ygui_render_ctx_render_text(ctx, self->data.dropdown.options[i],
+                                              self->x + t->pad_large, opt_y + t->pad_small,
+                                              self->fg_color, t->font_size);
         }
     }
     return YETTY_OK_VOID();
-
 }
 
-static int dropdown_on_release(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
+static int dropdown_on_release(struct yetty_ygui_widget *self, float lx, float ly,
+                               ygui_event_t *out)
 {
     const struct yetty_ygui_theme *t = self->engine->theme;
 
@@ -1696,10 +1733,13 @@ static void dropdown_destroy(struct yetty_ygui_widget *self)
     dropdown_free_options(self);
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_dropdown(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w,
-                             float h, const char **options, int option_count)
+struct yetty_ygui_widget *yetty_ygui_engine_dropdown(struct yetty_ygui_engine *engine,
+                                                     const char *id, float x, float y, float w,
+                                                     float h, const char **options,
+                                                     int option_count)
 {
-    struct yetty_ygui_widget *dd = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_DROPDOWN, id);
+    struct yetty_ygui_widget *dd =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_DROPDOWN, id);
     if (!dd) {
         return NULL;
     }
@@ -1710,16 +1750,17 @@ struct yetty_ygui_widget *yetty_ygui_engine_dropdown(struct yetty_ygui_engine *e
     dd->data.dropdown.open = 0;
     dropdown_copy_options(dd, options, option_count);
     static const struct yetty_ygui_widget_vtable dropdown_vtable = {
-        .render     = dropdown_render,
+        .render = dropdown_render,
         .on_release = dropdown_on_release,
-        .destroy    = dropdown_destroy,
+        .destroy = dropdown_destroy,
     };
     dd->vtable = &dropdown_vtable;
     add_to_engine(engine, dd);
     return dd;
 }
 
-void yetty_ygui_widget_dropdown_set_options(struct yetty_ygui_widget *widget, const char **options, int count)
+void yetty_ygui_widget_dropdown_set_options(struct yetty_ygui_widget *widget, const char **options,
+                                            int count)
 {
     if (!widget || widget->type != YETTY_YGUI_WIDGET_DROPDOWN) {
         return;
@@ -1838,7 +1879,8 @@ static uint32_t make_color_abgr(float r, float g, float b, float a)
     return ((uint32_t)ai << 24) | ((uint32_t)bi << 16) | ((uint32_t)gi << 8) | ri;
 }
 
-static struct yetty_ycore_void_result colorpicker_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result colorpicker_render(struct yetty_ygui_widget *self,
+                                                         struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
     float hue = self->data.colorpicker.hue;
@@ -1867,24 +1909,27 @@ static struct yetty_ycore_void_result colorpicker_render(struct yetty_ygui_widge
 
     /* Hue slider bar */
     float hue_y = self->y + sv_h + t->pad_medium;
-    yetty_ygui_render_ctx_render_box(ctx, self->x, hue_y, sv_w, hue_bar_h, t->bg_surface, t->radius_small);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, hue_y, sv_w, hue_bar_h, t->bg_surface,
+                                     t->radius_small);
 
     /* Hue indicator */
     float hue_ind_x = self->x + hue * sv_w;
-    yetty_ygui_render_ctx_render_box(ctx, hue_ind_x - 3, hue_y, 6, hue_bar_h, 0xFFFFFFFF, t->radius_small);
+    yetty_ygui_render_ctx_render_box(ctx, hue_ind_x - 3, hue_y, 6, hue_bar_h, 0xFFFFFFFF,
+                                     t->radius_small);
 
     /* Color preview */
     float preview_x = self->x + sv_w + t->pad_medium;
     hsv_to_rgb(hue, sat, val, &r, &g, &b);
     uint32_t preview_color = make_color_abgr(r, g, b, self->data.colorpicker.alpha);
-    yetty_ygui_render_ctx_render_box(ctx, preview_x, self->y, preview_w, self->h, preview_color, t->radius_medium);
+    yetty_ygui_render_ctx_render_box(ctx, preview_x, self->y, preview_w, self->h, preview_color,
+                                     t->radius_medium);
     yetty_ygui_render_ctx_render_box_outline(ctx, preview_x, self->y, preview_w, self->h, t->border,
-                            t->radius_medium, 1.5f);
+                                             t->radius_medium, 1.5f);
     return YETTY_OK_VOID();
-
 }
 
-static int colorpicker_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
+static int colorpicker_on_press(struct yetty_ygui_widget *self, float lx, float ly,
+                                ygui_event_t *out)
 {
     const struct yetty_ygui_theme *t = self->engine->theme;
     float hue_bar_h = 20.0f;
@@ -1906,15 +1951,18 @@ static int colorpicker_on_press(struct yetty_ygui_widget *self, float lx, float 
     return 1;
 }
 
-static int colorpicker_on_drag(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
+static int colorpicker_on_drag(struct yetty_ygui_widget *self, float lx, float ly,
+                               ygui_event_t *out)
 {
     return colorpicker_on_press(self, lx, ly, out);
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_colorpicker(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w,
-                                float h)
+struct yetty_ygui_widget *yetty_ygui_engine_colorpicker(struct yetty_ygui_engine *engine,
+                                                        const char *id, float x, float y, float w,
+                                                        float h)
 {
-    struct yetty_ygui_widget *cp = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_COLORPICKER, id);
+    struct yetty_ygui_widget *cp =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_COLORPICKER, id);
     if (!cp) {
         return NULL;
     }
@@ -1924,16 +1972,17 @@ struct yetty_ygui_widget *yetty_ygui_engine_colorpicker(struct yetty_ygui_engine
     cp->data.colorpicker.val = 1;
     cp->data.colorpicker.alpha = 1;
     static const struct yetty_ygui_widget_vtable colorpicker_vtable = {
-        .render   = colorpicker_render,
+        .render = colorpicker_render,
         .on_press = colorpicker_on_press,
-        .on_drag  = colorpicker_on_drag,
+        .on_drag = colorpicker_on_drag,
     };
     cp->vtable = &colorpicker_vtable;
     add_to_engine(engine, cp);
     return cp;
 }
 
-void yetty_ygui_widget_colorpicker_set_color(struct yetty_ygui_widget *widget, float r, float g, float b, float a)
+void yetty_ygui_widget_colorpicker_set_color(struct yetty_ygui_widget *widget, float r, float g,
+                                             float b, float a)
 {
     if (!widget || widget->type != YETTY_YGUI_WIDGET_COLORPICKER) {
         return;
@@ -1946,7 +1995,8 @@ void yetty_ygui_widget_colorpicker_set_color(struct yetty_ygui_widget *widget, f
     }
 }
 
-void yetty_ygui_widget_colorpicker_get_color(const struct yetty_ygui_widget *widget, float *r, float *g, float *b, float *a)
+void yetty_ygui_widget_colorpicker_get_color(const struct yetty_ygui_widget *widget, float *r,
+                                             float *g, float *b, float *a)
 {
     if (!widget || widget->type != YETTY_YGUI_WIDGET_COLORPICKER) {
         if (r) {
@@ -1987,7 +2037,8 @@ void yetty_ygui_widget_colorpicker_get_color(const struct yetty_ygui_widget *wid
  * when the popup is open. Press toggles open state.
  *===========================================================================*/
 
-static struct yetty_ycore_void_result popup_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result popup_render(struct yetty_ygui_widget *self,
+                                                   struct yetty_ygui_render_ctx *ctx)
 {
     if (!(self->flags & YETTY_YGUI_FLAG_OPEN)) {
         return YETTY_OK_VOID();
@@ -1995,8 +2046,8 @@ static struct yetty_ycore_void_result popup_render(struct yetty_ygui_widget *sel
     const struct yetty_ygui_theme *t = ctx->theme;
 
     if (self->data.popup.modal) {
-        yetty_ygui_render_ctx_render_box(ctx, 0, 0, self->data.popup.scene_w, self->data.popup.scene_h,
-                        t->overlay_modal, 0);
+        yetty_ygui_render_ctx_render_box(ctx, 0, 0, self->data.popup.scene_w,
+                                         self->data.popup.scene_h, t->overlay_modal, 0);
     }
 
     /* Soft drop shadow (high elevation — popups float above everything). */
@@ -2005,24 +2056,26 @@ static struct yetty_ycore_void_result popup_render(struct yetty_ygui_widget *sel
                                             t->elevation_alpha);
 
     /* Body + outline */
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, self->bg_color, t->radius_large);
-    yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h, self->accent_color,
-                            t->radius_large, 2.0f);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, self->bg_color,
+                                     t->radius_large);
+    yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h,
+                                             self->accent_color, t->radius_large, 2.0f);
 
     /* Header */
     const char *label = self->data.popup.label;
     if (label && label[0]) {
         uint32_t hdr = self->data.popup.header_color ? self->data.popup.header_color : t->bg_header;
         float hdr_h = t->row_height + t->pad_medium;
-        yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, hdr_h, hdr, t->radius_large);
-        yetty_ygui_render_ctx_render_text(ctx, label, self->x + t->pad_large, self->y + t->pad_large - 2,
-                         self->fg_color, t->font_size);
+        yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, hdr_h, hdr,
+                                         t->radius_large);
+        yetty_ygui_render_ctx_render_text(ctx, label, self->x + t->pad_large,
+                                          self->y + t->pad_large - 2, self->fg_color, t->font_size);
     }
     return YETTY_OK_VOID();
-
 }
 
-static struct yetty_ycore_void_result popup_render_all(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result popup_render_all(struct yetty_ygui_widget *self,
+                                                       struct yetty_ygui_render_ctx *ctx)
 {
     self->effective_x = self->x + ctx->offset_x;
     self->effective_y = self->y + ctx->offset_y;
@@ -2031,7 +2084,8 @@ static struct yetty_ycore_void_result popup_render_all(struct yetty_ygui_widget 
     popup_render(self, ctx);
 
     if (self->flags & YETTY_YGUI_FLAG_OPEN) {
-        for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
+        for (struct yetty_ygui_widget *child = self->first_child; child;
+             child = child->next_sibling) {
             if (child->vtable && child->vtable->render_all) {
                 child->vtable->render_all(child, ctx);
             } else {
@@ -2040,7 +2094,6 @@ static struct yetty_ycore_void_result popup_render_all(struct yetty_ygui_widget 
         }
     }
     return YETTY_OK_VOID();
-
 }
 
 static int popup_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
@@ -2059,10 +2112,12 @@ static void popup_destroy(struct yetty_ygui_widget *self)
     free(self->data.popup.label);
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_popup(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w, float h,
-                          const char *label)
+struct yetty_ygui_widget *yetty_ygui_engine_popup(struct yetty_ygui_engine *engine, const char *id,
+                                                  float x, float y, float w, float h,
+                                                  const char *label)
 {
-    struct yetty_ygui_widget *p = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_POPUP, id);
+    struct yetty_ygui_widget *p =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_POPUP, id);
     if (!p) {
         return NULL;
     }
@@ -2073,10 +2128,10 @@ struct yetty_ygui_widget *yetty_ygui_engine_popup(struct yetty_ygui_engine *engi
     p->data.popup.scene_w = engine->width;
     p->data.popup.scene_h = engine->height;
     static const struct yetty_ygui_widget_vtable popup_vtable = {
-        .render     = popup_render,
+        .render = popup_render,
         .render_all = popup_render_all,
-        .on_press   = popup_on_press,
-        .destroy    = popup_destroy,
+        .on_press = popup_on_press,
+        .destroy = popup_destroy,
     };
     p->vtable = &popup_vtable;
     add_to_engine(engine, p);
@@ -2175,40 +2230,43 @@ void yetty_ygui_widget_popup_set_header_color(struct yetty_ygui_widget *widget, 
  * children out vertically below the header.
  *===========================================================================*/
 
-static struct yetty_ycore_void_result collapsing_header_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result collapsing_header_render(struct yetty_ygui_widget *self,
+                                                               struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, self->bg_color, t->radius_medium);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, self->bg_color,
+                                     t->radius_medium);
 
     float arrow_size = t->pad_large;
     float arrow_x = self->x + t->pad_large + 2;
     float arrow_y = self->y + self->h * 0.5f;
     if (self->flags & YETTY_YGUI_FLAG_OPEN) {
         /* Down-pointing triangle */
-        yetty_ygui_render_ctx_render_triangle(ctx, arrow_x, arrow_y - arrow_size / 3.0f, arrow_x + arrow_size,
-                             arrow_y - arrow_size / 3.0f, arrow_x + arrow_size / 2,
-                             arrow_y + arrow_size / 3.0f, self->fg_color);
+        yetty_ygui_render_ctx_render_triangle(ctx, arrow_x, arrow_y - arrow_size / 3.0f,
+                                              arrow_x + arrow_size, arrow_y - arrow_size / 3.0f,
+                                              arrow_x + arrow_size / 2, arrow_y + arrow_size / 3.0f,
+                                              self->fg_color);
     } else {
         /* Right-pointing triangle */
         yetty_ygui_render_ctx_render_triangle(ctx, arrow_x, arrow_y - arrow_size / 2.0f, arrow_x,
-                             arrow_y + arrow_size / 2.0f, arrow_x + arrow_size * 0.7f, arrow_y,
-                             self->fg_color);
+                                              arrow_y + arrow_size / 2.0f,
+                                              arrow_x + arrow_size * 0.7f, arrow_y, self->fg_color);
     }
 
     if (self->data.collapsing_header.label) {
         yetty_ygui_render_ctx_render_text(ctx, self->data.collapsing_header.label,
-                         self->x + arrow_size + t->pad_large * 2 + 2, self->y + t->pad_medium,
-                         self->fg_color, t->font_size);
+                                          self->x + arrow_size + t->pad_large * 2 + 2,
+                                          self->y + t->pad_medium, self->fg_color, t->font_size);
     }
     if (self->flags & YETTY_YGUI_FLAG_HOVER) {
-        yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h, self->accent_color,
-                                t->radius_medium, 1.5f);
+        yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h,
+                                                 self->accent_color, t->radius_medium, 1.5f);
     }
     return YETTY_OK_VOID();
-
 }
 
-static struct yetty_ycore_void_result collapsing_header_render_all(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result collapsing_header_render_all(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
 {
     self->effective_x = self->x + ctx->offset_x;
     self->effective_y = self->y + ctx->offset_y;
@@ -2240,10 +2298,10 @@ static struct yetty_ycore_void_result collapsing_header_render_all(struct yetty_
     ctx->offset_x = old_offset_x;
     ctx->offset_y = old_offset_y;
     return YETTY_OK_VOID();
-
 }
 
-static int collapsing_header_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
+static int collapsing_header_on_press(struct yetty_ygui_widget *self, float lx, float ly,
+                                      ygui_event_t *out)
 {
     (void)lx;
     (void)ly;
@@ -2259,27 +2317,30 @@ static void collapsing_header_destroy(struct yetty_ygui_widget *self)
     free(self->data.collapsing_header.label);
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_collapsing_header(struct yetty_ygui_engine *engine, const char *id, float x, float y,
-                                      float w, float h, const char *label)
+struct yetty_ygui_widget *yetty_ygui_engine_collapsing_header(struct yetty_ygui_engine *engine,
+                                                              const char *id, float x, float y,
+                                                              float w, float h, const char *label)
 {
-    struct yetty_ygui_widget *c = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_COLLAPSING_HEADER, id);
+    struct yetty_ygui_widget *c =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_COLLAPSING_HEADER, id);
     if (!c) {
         return NULL;
     }
     yetty_ygui_widget_init_base(c, x, y, w, h);
     c->data.collapsing_header.label = ygui_strdup(label);
     static const struct yetty_ygui_widget_vtable collapsing_header_vtable = {
-        .render     = collapsing_header_render,
+        .render = collapsing_header_render,
         .render_all = collapsing_header_render_all,
-        .on_press   = collapsing_header_on_press,
-        .destroy    = collapsing_header_destroy,
+        .on_press = collapsing_header_on_press,
+        .destroy = collapsing_header_destroy,
     };
     c->vtable = &collapsing_header_vtable;
     add_to_engine(engine, c);
     return c;
 }
 
-void yetty_ygui_widget_collapsing_header_set_label(struct yetty_ygui_widget *widget, const char *label)
+void yetty_ygui_widget_collapsing_header_set_label(struct yetty_ygui_widget *widget,
+                                                   const char *label)
 {
     if (!widget || widget->type != YETTY_YGUI_WIDGET_COLLAPSING_HEADER) {
         return;
@@ -2326,7 +2387,8 @@ int yetty_ygui_widget_collapsing_header_is_open(const struct yetty_ygui_widget *
  * Tooltip Widget
  *===========================================================================*/
 
-static struct yetty_ycore_void_result tooltip_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result tooltip_render(struct yetty_ygui_widget *self,
+                                                     struct yetty_ygui_render_ctx *ctx)
 {
     if (!self->data.tooltip.label || !self->data.tooltip.label[0]) {
         return YETTY_OK_VOID();
@@ -2335,13 +2397,13 @@ static struct yetty_ycore_void_result tooltip_render(struct yetty_ygui_widget *s
     yetty_ygui_render_ctx_render_box_shadow(ctx, self->x, self->y, self->w, self->h,
                                             t->radius_medium, t->elevation_medium, t->shadow,
                                             t->elevation_alpha);
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, t->tooltip_bg, t->radius_medium);
-    yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h, t->border_muted,
-                            t->radius_medium, 1.0f);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, t->tooltip_bg,
+                                     t->radius_medium);
+    yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h,
+                                             t->border_muted, t->radius_medium, 1.0f);
     yetty_ygui_render_ctx_render_text(ctx, self->data.tooltip.label, self->x + t->pad_large - 2,
-                     self->y + t->pad_medium, self->fg_color, t->font_size);
+                                      self->y + t->pad_medium, self->fg_color, t->font_size);
     return YETTY_OK_VOID();
-
 }
 
 static void tooltip_destroy(struct yetty_ygui_widget *self)
@@ -2349,17 +2411,19 @@ static void tooltip_destroy(struct yetty_ygui_widget *self)
     free(self->data.tooltip.label);
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_tooltip(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w,
-                            float h, const char *label)
+struct yetty_ygui_widget *yetty_ygui_engine_tooltip(struct yetty_ygui_engine *engine,
+                                                    const char *id, float x, float y, float w,
+                                                    float h, const char *label)
 {
-    struct yetty_ygui_widget *tt = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_TOOLTIP, id);
+    struct yetty_ygui_widget *tt =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_TOOLTIP, id);
     if (!tt) {
         return NULL;
     }
     yetty_ygui_widget_init_base(tt, x, y, w, h);
     tt->data.tooltip.label = ygui_strdup(label);
     static const struct yetty_ygui_widget_vtable tooltip_vtable = {
-        .render  = tooltip_render,
+        .render = tooltip_render,
         .destroy = tooltip_destroy,
     };
     tt->vtable = &tooltip_vtable;
@@ -2393,24 +2457,26 @@ const char *yetty_ygui_widget_tooltip_get_label(const struct yetty_ygui_widget *
  * List item that toggles its checked state on press.
  *===========================================================================*/
 
-static struct yetty_ycore_void_result selectable_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result selectable_render(struct yetty_ygui_widget *self,
+                                                        struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
     if (self->flags & YETTY_YGUI_FLAG_CHECKED) {
-        yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, self->accent_color,
-                        t->radius_small);
+        yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h,
+                                         self->accent_color, t->radius_small);
     } else if (self->flags & YETTY_YGUI_FLAG_HOVER) {
-        yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, t->bg_hover, t->radius_small);
+        yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, t->bg_hover,
+                                         t->radius_small);
     }
     if (self->data.selectable.label) {
         yetty_ygui_render_ctx_render_text(ctx, self->data.selectable.label, self->x + t->pad_large,
-                         self->y + t->pad_medium, self->fg_color, t->font_size);
+                                          self->y + t->pad_medium, self->fg_color, t->font_size);
     }
     return YETTY_OK_VOID();
-
 }
 
-static int selectable_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
+static int selectable_on_press(struct yetty_ygui_widget *self, float lx, float ly,
+                               ygui_event_t *out)
 {
     (void)lx;
     (void)ly;
@@ -2426,19 +2492,21 @@ static void selectable_destroy(struct yetty_ygui_widget *self)
     free(self->data.selectable.label);
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_selectable(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w,
-                               float h, const char *label)
+struct yetty_ygui_widget *yetty_ygui_engine_selectable(struct yetty_ygui_engine *engine,
+                                                       const char *id, float x, float y, float w,
+                                                       float h, const char *label)
 {
-    struct yetty_ygui_widget *s = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_SELECTABLE, id);
+    struct yetty_ygui_widget *s =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_SELECTABLE, id);
     if (!s) {
         return NULL;
     }
     yetty_ygui_widget_init_base(s, x, y, w, h);
     s->data.selectable.label = ygui_strdup(label);
     static const struct yetty_ygui_widget_vtable selectable_vtable = {
-        .render   = selectable_render,
+        .render = selectable_render,
         .on_press = selectable_on_press,
-        .destroy  = selectable_destroy,
+        .destroy = selectable_destroy,
     };
     s->vtable = &selectable_vtable;
     add_to_engine(engine, s);
@@ -2522,7 +2590,8 @@ static void choicebox_copy_options(struct yetty_ygui_widget *self, const char **
     self->data.choicebox.option_count = count;
 }
 
-static struct yetty_ycore_void_result choicebox_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result choicebox_render(struct yetty_ygui_widget *self,
+                                                       struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
     float opt_h = t->row_height;
@@ -2534,23 +2603,25 @@ static struct yetty_ycore_void_result choicebox_render(struct yetty_ygui_widget 
         float center_x = self->x + radio_size * 0.5f;
         float center_y = cy + t->pad_medium + radio_size * 0.5f;
 
-        yetty_ygui_render_ctx_render_circle_outline(ctx, center_x, center_y, radio_size * 0.5f,
-                                   is_hovered ? self->accent_color : t->border_muted, 1.5f);
+        yetty_ygui_render_ctx_render_circle_outline(
+            ctx, center_x, center_y, radio_size * 0.5f,
+            is_hovered ? self->accent_color : t->border_muted, 1.5f);
         if (is_selected) {
-            yetty_ygui_render_ctx_render_circle(ctx, center_x, center_y, radio_size * 0.25f, self->accent_color);
+            yetty_ygui_render_ctx_render_circle(ctx, center_x, center_y, radio_size * 0.25f,
+                                                self->accent_color);
         } else if (is_hovered) {
-            yetty_ygui_render_ctx_render_circle(ctx, center_x, center_y, radio_size / 6.0f, t->thumb_hover);
+            yetty_ygui_render_ctx_render_circle(ctx, center_x, center_y, radio_size / 6.0f,
+                                                t->thumb_hover);
         }
 
         if (self->data.choicebox.options[i]) {
             yetty_ygui_render_ctx_render_text(ctx, self->data.choicebox.options[i],
-                             self->x + radio_size + t->pad_large, cy + t->pad_medium,
-                             self->fg_color, t->font_size);
+                                              self->x + radio_size + t->pad_large,
+                                              cy + t->pad_medium, self->fg_color, t->font_size);
         }
         cy += opt_h;
     }
     return YETTY_OK_VOID();
-
 }
 
 static int choicebox_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
@@ -2574,10 +2645,13 @@ static void choicebox_destroy(struct yetty_ygui_widget *self)
     choicebox_free_options(self);
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_choicebox(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w,
-                              float h, const char **options, int option_count)
+struct yetty_ygui_widget *yetty_ygui_engine_choicebox(struct yetty_ygui_engine *engine,
+                                                      const char *id, float x, float y, float w,
+                                                      float h, const char **options,
+                                                      int option_count)
 {
-    struct yetty_ygui_widget *c = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_CHOICEBOX, id);
+    struct yetty_ygui_widget *c =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_CHOICEBOX, id);
     if (!c) {
         return NULL;
     }
@@ -2588,16 +2662,17 @@ struct yetty_ygui_widget *yetty_ygui_engine_choicebox(struct yetty_ygui_engine *
     c->data.choicebox.hover_index = -1;
     choicebox_copy_options(c, options, option_count);
     static const struct yetty_ygui_widget_vtable choicebox_vtable = {
-        .render   = choicebox_render,
+        .render = choicebox_render,
         .on_press = choicebox_on_press,
-        .destroy  = choicebox_destroy,
+        .destroy = choicebox_destroy,
     };
     c->vtable = &choicebox_vtable;
     add_to_engine(engine, c);
     return c;
 }
 
-void yetty_ygui_widget_choicebox_set_options(struct yetty_ygui_widget *widget, const char **options, int count)
+void yetty_ygui_widget_choicebox_set_options(struct yetty_ygui_widget *widget, const char **options,
+                                             int count)
 {
     if (!widget || widget->type != YETTY_YGUI_WIDGET_CHOICEBOX) {
         return;
@@ -2636,22 +2711,24 @@ int yetty_ygui_widget_choicebox_get_selected(const struct yetty_ygui_widget *wid
  * Standalone scrollbar; drag thumb to set value in [0..1].
  *===========================================================================*/
 
-static struct yetty_ycore_void_result vscrollbar_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result vscrollbar_render(struct yetty_ygui_widget *self,
+                                                        struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
     float track_w = self->w > 0 ? self->w : t->scrollbar_size;
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, track_w, self->h, t->bg_secondary, track_w * 0.5f);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, track_w, self->h, t->bg_secondary,
+                                     track_w * 0.5f);
 
     float thumb_h = ygui_max(20.0f, self->h * 0.2f);
     float track_range = self->h - thumb_h;
     float thumb_y = self->y + self->data.scrollbar.value * track_range;
-    uint32_t thumb_color = (self->flags & YETTY_YGUI_FLAG_PRESSED)
-                               ? self->accent_color
-                               : (self->flags & YETTY_YGUI_FLAG_HOVER ? t->thumb_hover : t->thumb_normal);
-    yetty_ygui_render_ctx_render_box(ctx, self->x + t->pad_small, thumb_y, track_w - t->pad_medium, thumb_h,
-                    thumb_color, (track_w - t->pad_medium) * 0.5f);
+    uint32_t thumb_color =
+        (self->flags & YETTY_YGUI_FLAG_PRESSED)
+            ? self->accent_color
+            : (self->flags & YETTY_YGUI_FLAG_HOVER ? t->thumb_hover : t->thumb_normal);
+    yetty_ygui_render_ctx_render_box(ctx, self->x + t->pad_small, thumb_y, track_w - t->pad_medium,
+                                     thumb_h, thumb_color, (track_w - t->pad_medium) * 0.5f);
     return YETTY_OK_VOID();
-
 }
 
 static int vscrollbar_update(struct yetty_ygui_widget *self, float ly, ygui_event_t *out)
@@ -2669,7 +2746,8 @@ static int vscrollbar_update(struct yetty_ygui_widget *self, float ly, ygui_even
     return 1;
 }
 
-static int vscrollbar_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
+static int vscrollbar_on_press(struct yetty_ygui_widget *self, float lx, float ly,
+                               ygui_event_t *out)
 {
     (void)lx;
     return vscrollbar_update(self, ly, out);
@@ -2681,41 +2759,46 @@ static int vscrollbar_on_drag(struct yetty_ygui_widget *self, float lx, float ly
     return vscrollbar_update(self, ly, out);
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_vscrollbar(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w,
-                               float h)
+struct yetty_ygui_widget *yetty_ygui_engine_vscrollbar(struct yetty_ygui_engine *engine,
+                                                       const char *id, float x, float y, float w,
+                                                       float h)
 {
-    struct yetty_ygui_widget *sb = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_VSCROLLBAR, id);
+    struct yetty_ygui_widget *sb =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_VSCROLLBAR, id);
     if (!sb) {
         return NULL;
     }
     yetty_ygui_widget_init_base(sb, x, y, w, h);
     sb->data.scrollbar.value = 0;
     static const struct yetty_ygui_widget_vtable vscrollbar_vtable = {
-        .render   = vscrollbar_render,
+        .render = vscrollbar_render,
         .on_press = vscrollbar_on_press,
-        .on_drag  = vscrollbar_on_drag,
+        .on_drag = vscrollbar_on_drag,
     };
     sb->vtable = &vscrollbar_vtable;
     add_to_engine(engine, sb);
     return sb;
 }
 
-static struct yetty_ycore_void_result hscrollbar_render(struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
+static struct yetty_ycore_void_result hscrollbar_render(struct yetty_ygui_widget *self,
+                                                        struct yetty_ygui_render_ctx *ctx)
 {
     const struct yetty_ygui_theme *t = ctx->theme;
     float track_h = self->h > 0 ? self->h : t->scrollbar_size;
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, track_h, t->bg_secondary, track_h * 0.5f);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, track_h, t->bg_secondary,
+                                     track_h * 0.5f);
 
     float thumb_w = ygui_max(20.0f, self->w * 0.2f);
     float track_range = self->w - thumb_w;
     float thumb_x = self->x + self->data.scrollbar.value * track_range;
-    uint32_t thumb_color = (self->flags & YETTY_YGUI_FLAG_PRESSED)
-                               ? self->accent_color
-                               : (self->flags & YETTY_YGUI_FLAG_HOVER ? t->thumb_hover : t->thumb_normal);
-    yetty_ygui_render_ctx_render_box(ctx, thumb_x, self->y + t->pad_small, thumb_w, track_h - t->pad_medium,
-                    thumb_color, (track_h - t->pad_medium) * 0.5f);
+    uint32_t thumb_color =
+        (self->flags & YETTY_YGUI_FLAG_PRESSED)
+            ? self->accent_color
+            : (self->flags & YETTY_YGUI_FLAG_HOVER ? t->thumb_hover : t->thumb_normal);
+    yetty_ygui_render_ctx_render_box(ctx, thumb_x, self->y + t->pad_small, thumb_w,
+                                     track_h - t->pad_medium, thumb_color,
+                                     (track_h - t->pad_medium) * 0.5f);
     return YETTY_OK_VOID();
-
 }
 
 static int hscrollbar_update(struct yetty_ygui_widget *self, float lx, ygui_event_t *out)
@@ -2733,7 +2816,8 @@ static int hscrollbar_update(struct yetty_ygui_widget *self, float lx, ygui_even
     return 1;
 }
 
-static int hscrollbar_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
+static int hscrollbar_on_press(struct yetty_ygui_widget *self, float lx, float ly,
+                               ygui_event_t *out)
 {
     (void)ly;
     return hscrollbar_update(self, lx, out);
@@ -2745,19 +2829,21 @@ static int hscrollbar_on_drag(struct yetty_ygui_widget *self, float lx, float ly
     return hscrollbar_update(self, lx, out);
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_hscrollbar(struct yetty_ygui_engine *engine, const char *id, float x, float y, float w,
-                               float h)
+struct yetty_ygui_widget *yetty_ygui_engine_hscrollbar(struct yetty_ygui_engine *engine,
+                                                       const char *id, float x, float y, float w,
+                                                       float h)
 {
-    struct yetty_ygui_widget *sb = yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_HSCROLLBAR, id);
+    struct yetty_ygui_widget *sb =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_HSCROLLBAR, id);
     if (!sb) {
         return NULL;
     }
     yetty_ygui_widget_init_base(sb, x, y, w, h);
     sb->data.scrollbar.value = 0;
     static const struct yetty_ygui_widget_vtable hscrollbar_vtable = {
-        .render   = hscrollbar_render,
+        .render = hscrollbar_render,
         .on_press = hscrollbar_on_press,
-        .on_drag  = hscrollbar_on_drag,
+        .on_drag = hscrollbar_on_drag,
     };
     sb->vtable = &hscrollbar_vtable;
     add_to_engine(engine, sb);
@@ -2769,7 +2855,8 @@ void yetty_ygui_widget_scrollbar_set_value(struct yetty_ygui_widget *widget, flo
     if (!widget) {
         return;
     }
-    if (widget->type != YETTY_YGUI_WIDGET_VSCROLLBAR && widget->type != YETTY_YGUI_WIDGET_HSCROLLBAR) {
+    if (widget->type != YETTY_YGUI_WIDGET_VSCROLLBAR &&
+        widget->type != YETTY_YGUI_WIDGET_HSCROLLBAR) {
         return;
     }
     widget->data.scrollbar.value = ygui_clamp(value, 0.0f, 1.0f);
@@ -2783,7 +2870,8 @@ float yetty_ygui_widget_scrollbar_get_value(const struct yetty_ygui_widget *widg
     if (!widget) {
         return 0;
     }
-    if (widget->type != YETTY_YGUI_WIDGET_VSCROLLBAR && widget->type != YETTY_YGUI_WIDGET_HSCROLLBAR) {
+    if (widget->type != YETTY_YGUI_WIDGET_VSCROLLBAR &&
+        widget->type != YETTY_YGUI_WIDGET_HSCROLLBAR) {
         return 0;
     }
     return widget->data.scrollbar.value;
@@ -2822,8 +2910,7 @@ static struct yetty_ycore_void_result list_render_all(struct yetty_ygui_widget *
     }
 
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
-    for (struct yetty_ygui_widget *child = self->first_child; child;
-         child = child->next_sibling) {
+    for (struct yetty_ygui_widget *child = self->first_child; child; child = child->next_sibling) {
         if (!(child->flags & YETTY_YGUI_FLAG_VISIBLE)) {
             continue;
         }
@@ -2882,7 +2969,7 @@ static int list_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygu
 }
 
 struct yetty_ygui_widget *yetty_ygui_engine_list(struct yetty_ygui_engine *engine, const char *id,
-                                                  float x, float y, float w, float h)
+                                                 float x, float y, float w, float h)
 {
     struct yetty_ygui_widget *lst =
         yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_LIST, id);
@@ -2898,7 +2985,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_list(struct yetty_ygui_engine *engin
     lst->layout.gap = engine->theme->pad_small;
     static const struct yetty_ygui_widget_vtable list_vtable = {
         .render_all = list_render_all,
-        .on_press   = list_on_press,
+        .on_press = list_on_press,
     };
     lst->vtable = &list_vtable;
     add_to_engine(engine, lst);
@@ -2906,7 +2993,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_list(struct yetty_ygui_engine *engin
 }
 
 void yetty_ygui_widget_list_set_selected(struct yetty_ygui_widget *list,
-                                          struct yetty_ygui_widget *child)
+                                         struct yetty_ygui_widget *child)
 {
     if (!list || list->type != YETTY_YGUI_WIDGET_LIST) {
         return;
@@ -2925,8 +3012,8 @@ struct yetty_ygui_widget *yetty_ygui_widget_list_get_selected(const struct yetty
     return list->data.list.selected;
 }
 
-void yetty_ygui_widget_list_on_select(struct yetty_ygui_widget *list,
-                                       ygui_click_callback_t cb, void *userdata)
+void yetty_ygui_widget_list_on_select(struct yetty_ygui_widget *list, ygui_click_callback_t cb,
+                                      void *userdata)
 {
     if (!list || list->type != YETTY_YGUI_WIDGET_LIST) {
         return;
@@ -3018,13 +3105,11 @@ static struct yetty_ycore_void_result table_render(struct yetty_ygui_widget *sel
     int n = self->data.table.n_columns;
     if (n <= 0) {
         /* No columns set yet — just paint the surface and bail. */
-        yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h,
-                                         t->bg_surface, t->radius_small);
+        yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, t->bg_surface,
+                                         t->radius_small);
         return YETTY_OK_VOID();
     }
-    float row_h = self->data.table.row_height > 0.0f
-                      ? self->data.table.row_height
-                      : t->row_height;
+    float row_h = self->data.table.row_height > 0.0f ? self->data.table.row_height : t->row_height;
     if (row_h <= 0.0f) {
         row_h = 24.0f;
     }
@@ -3032,38 +3117,36 @@ static struct yetty_ycore_void_result table_render(struct yetty_ygui_widget *sel
     float text_pad_x = 6.0f;
     float text_y_off = (row_h - font_size) * 0.5f;
 
-    float widths[64];   /* practical cap; heroic tables can grow this */
+    float widths[64]; /* practical cap; heroic tables can grow this */
     if (n > (int)(sizeof(widths) / sizeof(widths[0]))) {
         n = (int)(sizeof(widths) / sizeof(widths[0]));
     }
     table_resolve_widths(self, widths);
 
     /* Surface. */
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h,
-                                     t->bg_surface, t->radius_small);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, t->bg_surface,
+                                     t->radius_small);
 
     /* Header row. */
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, row_h,
-                                     t->bg_header, t->radius_small);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, row_h, t->bg_header,
+                                     t->radius_small);
     {
         float cx = self->x;
         for (int c = 0; c < n; c++) {
-            const char *name = self->data.table.column_names[c]
-                                   ? self->data.table.column_names[c]
-                                   : "";
+            const char *name =
+                self->data.table.column_names[c] ? self->data.table.column_names[c] : "";
             yetty_ygui_render_ctx_render_text(ctx, name, cx + text_pad_x, self->y + text_y_off,
                                               t->text_primary, font_size);
             cx += widths[c];
             /* Vertical separator after every column except the last. */
             if (c < n - 1) {
-                yetty_ygui_render_ctx_render_box(ctx, cx, self->y, 1.0f, self->h,
-                                                 t->border_muted, 0.0f);
+                yetty_ygui_render_ctx_render_box(ctx, cx, self->y, 1.0f, self->h, t->border_muted,
+                                                 0.0f);
             }
         }
     }
     /* Header / data divider. */
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y + row_h, self->w, 1.0f,
-                                     t->border, 0.0f);
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y + row_h, self->w, 1.0f, t->border, 0.0f);
 
     /* Data rows. */
     int rows = self->data.table.n_rows;
@@ -3075,21 +3158,20 @@ static struct yetty_ycore_void_result table_render(struct yetty_ygui_widget *sel
             break;
         }
         if (r == sel) {
-            yetty_ygui_render_ctx_render_box(ctx, self->x, row_y, self->w, row_h,
-                                             t->selection_bg, 0.0f);
+            yetty_ygui_render_ctx_render_box(ctx, self->x, row_y, self->w, row_h, t->selection_bg,
+                                             0.0f);
         } else if ((r & 1) == 1 && t->bg_secondary != 0u) {
             /* Zebra striping for odd-indexed rows when the theme provides
              * a distinct secondary surface. */
-            yetty_ygui_render_ctx_render_box(ctx, self->x, row_y, self->w, row_h,
-                                             t->bg_secondary, 0.0f);
+            yetty_ygui_render_ctx_render_box(ctx, self->x, row_y, self->w, row_h, t->bg_secondary,
+                                             0.0f);
         }
         float cx = self->x;
         char **row = self->data.table.rows[r];
         for (int c = 0; c < n; c++) {
             const char *txt = row ? row[c] : NULL;
             if (txt) {
-                yetty_ygui_render_ctx_render_text(ctx, txt, cx + text_pad_x,
-                                                  row_y + text_y_off,
+                yetty_ygui_render_ctx_render_text(ctx, txt, cx + text_pad_x, row_y + text_y_off,
                                                   t->text_primary, font_size);
             }
             cx += widths[c];
@@ -3097,21 +3179,18 @@ static struct yetty_ycore_void_result table_render(struct yetty_ygui_widget *sel
     }
 
     /* Outer border last so it sits above the rows. */
-    yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h,
-                                             t->border, t->radius_small, 1.0f);
+    yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y, self->w, self->h, t->border,
+                                             t->radius_small, 1.0f);
     return YETTY_OK_VOID();
 }
 
-static int table_on_press(struct yetty_ygui_widget *self, float lx, float ly,
-                          ygui_event_t *out)
+static int table_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
 {
     const struct yetty_ygui_theme *t = self->engine ? self->engine->theme : NULL;
     if (!t) {
         return 0;
     }
-    float row_h = self->data.table.row_height > 0.0f
-                      ? self->data.table.row_height
-                      : t->row_height;
+    float row_h = self->data.table.row_height > 0.0f ? self->data.table.row_height : t->row_height;
     if (row_h <= 0.0f) {
         row_h = 24.0f;
     }
@@ -3160,9 +3239,8 @@ static void table_destroy(struct yetty_ygui_widget *self)
     self->data.table.row_capacity = 0;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_table(struct yetty_ygui_engine *engine,
-                                                  const char *id, float x, float y,
-                                                  float w, float h)
+struct yetty_ygui_widget *yetty_ygui_engine_table(struct yetty_ygui_engine *engine, const char *id,
+                                                  float x, float y, float w, float h)
 {
     struct yetty_ygui_widget *tbl =
         yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_TABLE, id);
@@ -3172,17 +3250,16 @@ struct yetty_ygui_widget *yetty_ygui_engine_table(struct yetty_ygui_engine *engi
     yetty_ygui_widget_init_base(tbl, x, y, w, h);
     tbl->data.table.selected_row = -1;
     static const struct yetty_ygui_widget_vtable table_vtable = {
-        .render   = table_render,
+        .render = table_render,
         .on_press = table_on_press,
-        .destroy  = table_destroy,
+        .destroy = table_destroy,
     };
     tbl->vtable = &table_vtable;
     add_to_engine(engine, tbl);
     return tbl;
 }
 
-void yetty_ygui_widget_table_set_columns(struct yetty_ygui_widget *table,
-                                         const char *const *names,
+void yetty_ygui_widget_table_set_columns(struct yetty_ygui_widget *table, const char *const *names,
                                          const float *widths, int n_columns)
 {
     if (!table || table->type != YETTY_YGUI_WIDGET_TABLE || n_columns <= 0) {
@@ -3239,8 +3316,8 @@ void yetty_ygui_widget_table_clear_rows(struct yetty_ygui_widget *table)
     }
 }
 
-void yetty_ygui_widget_table_add_row(struct yetty_ygui_widget *table,
-                                     const char *const *cells, int n_cells)
+void yetty_ygui_widget_table_add_row(struct yetty_ygui_widget *table, const char *const *cells,
+                                     int n_cells)
 {
     if (!table || table->type != YETTY_YGUI_WIDGET_TABLE) {
         return;
@@ -3250,11 +3327,8 @@ void yetty_ygui_widget_table_add_row(struct yetty_ygui_widget *table,
     }
     /* Grow the rows array if needed. */
     if (table->data.table.n_rows >= table->data.table.row_capacity) {
-        int new_cap = table->data.table.row_capacity > 0
-                          ? table->data.table.row_capacity * 2
-                          : 8;
-        char ***bigger = realloc(table->data.table.rows,
-                                 (size_t)new_cap * sizeof(char **));
+        int new_cap = table->data.table.row_capacity > 0 ? table->data.table.row_capacity * 2 : 8;
+        char ***bigger = realloc(table->data.table.rows, (size_t)new_cap * sizeof(char **));
         if (!bigger) {
             return;
         }
@@ -3352,9 +3426,9 @@ void yetty_ygui_widget_table_set_row_height(struct yetty_ygui_widget *table, flo
  * Tree Node Widget — chevron + label header + auto-allocated children list.
  *===========================================================================*/
 
-#define TREE_CHEVRON_W         16.0f
-#define TREE_CHEVRON_PAD       4.0f
-#define TREE_INDENT_DEFAULT    20.0f
+#define TREE_CHEVRON_W 16.0f
+#define TREE_CHEVRON_PAD 4.0f
+#define TREE_INDENT_DEFAULT 20.0f
 
 /* Header height scales with the theme's row_height. The pre-flight in
  * ygui_layout.c also queries this, so it must work without a render
@@ -3388,11 +3462,12 @@ static struct yetty_ycore_void_result tree_node_render(struct yetty_ygui_widget 
     float cx = self->x + TREE_CHEVRON_PAD;
     float cy = self->y + header_h * 0.5f;
     float r = header_h * 0.18f;
-    if (r < 4.0f) r = 4.0f;
+    if (r < 4.0f) {
+        r = 4.0f;
+    }
     if (expanded) {
-        yetty_ygui_render_ctx_render_triangle(ctx, cx, cy - r * 0.6f, cx + r * 2.0f,
-                                              cy - r * 0.6f, cx + r, cy + r * 0.8f,
-                                              t->text_primary);
+        yetty_ygui_render_ctx_render_triangle(ctx, cx, cy - r * 0.6f, cx + r * 2.0f, cy - r * 0.6f,
+                                              cx + r, cy + r * 0.8f, t->text_primary);
     } else {
         yetty_ygui_render_ctx_render_triangle(ctx, cx, cy - r, cx, cy + r, cx + r * 1.2f, cy,
                                               t->text_primary);
@@ -3461,13 +3536,12 @@ static struct yetty_ycore_void_result tree_node_render_all(struct yetty_ygui_wid
     return r;
 }
 
-static int tree_node_on_press(struct yetty_ygui_widget *self, float lx, float ly,
-                              ygui_event_t *out)
+static int tree_node_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
 {
     const struct yetty_ygui_theme *theme = self->engine ? self->engine->theme : NULL;
     float header_h = tree_node_header_h(self, theme);
     int on_chevron = (lx <= TREE_CHEVRON_W + TREE_CHEVRON_PAD) && (ly <= header_h);
-    int on_header  = (ly <= header_h);
+    int on_header = (ly <= header_h);
 
     /* tree_node represents a folder. The chevron always toggles, even
      * if children haven't been loaded yet (lazy expansion: on_toggle
@@ -3532,10 +3606,10 @@ struct yetty_ygui_widget *yetty_ygui_engine_tree_node(struct yetty_ygui_engine *
     node->layout.padding_top = header_h;
 
     static const struct yetty_ygui_widget_vtable tree_node_vtable = {
-        .render     = tree_node_render,
+        .render = tree_node_render,
         .render_all = tree_node_render_all,
-        .on_press   = tree_node_on_press,
-        .destroy    = tree_node_destroy,
+        .on_press = tree_node_on_press,
+        .destroy = tree_node_destroy,
     };
     node->vtable = &tree_node_vtable;
 
@@ -3605,8 +3679,7 @@ int yetty_ygui_widget_tree_node_is_expanded(const struct yetty_ygui_widget *node
     return node->data.tree_node.expanded;
 }
 
-struct yetty_ygui_widget *
-yetty_ygui_widget_tree_node_children(struct yetty_ygui_widget *node)
+struct yetty_ygui_widget *yetty_ygui_widget_tree_node_children(struct yetty_ygui_widget *node)
 {
     if (!node || node->type != YETTY_YGUI_WIDGET_TREE_NODE) {
         return NULL;
@@ -3614,8 +3687,8 @@ yetty_ygui_widget_tree_node_children(struct yetty_ygui_widget *node)
     return node->data.tree_node.children_list;
 }
 
-void yetty_ygui_widget_tree_node_on_toggle(struct yetty_ygui_widget *node,
-                                            ygui_check_callback_t cb, void *userdata)
+void yetty_ygui_widget_tree_node_on_toggle(struct yetty_ygui_widget *node, ygui_check_callback_t cb,
+                                           void *userdata)
 {
     if (!node || node->type != YETTY_YGUI_WIDGET_TREE_NODE) {
         return;

@@ -16,7 +16,7 @@ YETTY_YRESULT_DECLARE(yetty_vnc_viewer_ptr, struct yetty_yvnc_viewer *);
 
 /* Create VNC viewer - connects to host:port */
 struct yetty_vnc_viewer_ptr_result yetty_yvnc_viewer_create(const char *host, uint16_t port,
-                                                           const struct yetty_context *yetty_ctx);
+                                                            const struct yetty_context *yetty_ctx);
 
 /* Destroy viewer */
 struct yetty_ycore_void_result yetty_yvnc_viewer_destroy(struct yetty_yvnc_viewer *viewer);

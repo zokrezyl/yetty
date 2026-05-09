@@ -6,8 +6,7 @@
 #include <yetty/ycore/math.h>
 
 void yetty_ywebgpu_fill_default_limits(WGPUAdapter adapter,
-                                       const struct yetty_yconfig_config *config,
-                                       WGPULimits *out)
+                                       const struct yetty_yconfig_config *config, WGPULimits *out)
 {
     /* config is intentionally unused for now; see issue #138
      * (https://github.com/zokrezyl/yetty/issues/138). */

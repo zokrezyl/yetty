@@ -33,8 +33,7 @@ static const struct yetty_ypaint_core_prim_base_ops cmd_base_ops = {
     .aabb = cmd_prim_aabb,
 };
 
-struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_cmd_handler(
-    uint32_t prim_type)
+struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_cmd_handler(uint32_t prim_type)
 {
     if (prim_type <= YETTY_YPAINT_CMD_END) {
         return YETTY_OK(yetty_ypaint_core_prim_base_ops_ptr, &cmd_base_ops);
@@ -46,7 +45,7 @@ struct yetty_ycore_void_result yetty_ypaint_core_buffer_add_cmd_zero(
     struct yetty_ypaint_core_buffer *buf)
 {
     /* FAM header only: type=ZERO, payload_size=0. */
-    uint32_t header[2] = { YETTY_YPAINT_CMD_ZERO, 0u };
+    uint32_t header[2] = {YETTY_YPAINT_CMD_ZERO, 0u};
     struct yetty_ypaint_core_id_result r =
         yetty_ypaint_core_buffer_add_prim(buf, header, sizeof(header));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "add_cmd_zero: add_prim failed");

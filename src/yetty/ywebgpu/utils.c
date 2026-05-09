@@ -65,23 +65,19 @@ char *yetty_ywebgpu_get_webgpu_description(WGPUAdapter adapter)
     int has_limits = (wgpuAdapterGetLimits(adapter, &limits) == WGPUStatus_Success);
 
     /* Two-pass: measure with snprintf(NULL), then allocate and format. */
-    int n = snprintf(NULL, 0,
-                     "GPU backend:     %s\n"
-                     "GPU adapter:     %s\n"
-                     "GPU vendor:      %.*s (vendorID=0x%04x)\n"
-                     "GPU device:      %.*s (deviceID=0x%04x)\n"
-                     "GPU arch:        %.*s\n"
-                     "GPU description: %.*s\n",
-                     backend_type_name(info.backendType),
-                     adapter_type_name(info.adapterType),
-                     (int)info.vendor.length, info.vendor.data ? info.vendor.data : "",
-                     info.vendorID,
-                     (int)info.device.length, info.device.data ? info.device.data : "",
-                     info.deviceID,
-                     (int)info.architecture.length,
-                     info.architecture.data ? info.architecture.data : "",
-                     (int)info.description.length,
-                     info.description.data ? info.description.data : "");
+    int n = snprintf(
+        NULL, 0,
+        "GPU backend:     %s\n"
+        "GPU adapter:     %s\n"
+        "GPU vendor:      %.*s (vendorID=0x%04x)\n"
+        "GPU device:      %.*s (deviceID=0x%04x)\n"
+        "GPU arch:        %.*s\n"
+        "GPU description: %.*s\n",
+        backend_type_name(info.backendType), adapter_type_name(info.adapterType),
+        (int)info.vendor.length, info.vendor.data ? info.vendor.data : "", info.vendorID,
+        (int)info.device.length, info.device.data ? info.device.data : "", info.deviceID,
+        (int)info.architecture.length, info.architecture.data ? info.architecture.data : "",
+        (int)info.description.length, info.description.data ? info.description.data : "");
 
     int n_limits = 0;
     if (has_limits) {
@@ -90,8 +86,7 @@ char *yetty_ywebgpu_get_webgpu_description(WGPUAdapter adapter)
                             "maxBufferSize=%llu  "
                             "maxStorageBufferBindingSize=%llu  "
                             "maxUniformBufferBindingSize=%llu\n",
-                            limits.maxTextureDimension2D,
-                            (unsigned long long)limits.maxBufferSize,
+                            limits.maxTextureDimension2D, (unsigned long long)limits.maxBufferSize,
                             (unsigned long long)limits.maxStorageBufferBindingSize,
                             (unsigned long long)limits.maxUniformBufferBindingSize);
     }
@@ -108,23 +103,19 @@ char *yetty_ywebgpu_get_webgpu_description(WGPUAdapter adapter)
         return NULL;
     }
 
-    int w = snprintf(out, total,
-                     "GPU backend:     %s\n"
-                     "GPU adapter:     %s\n"
-                     "GPU vendor:      %.*s (vendorID=0x%04x)\n"
-                     "GPU device:      %.*s (deviceID=0x%04x)\n"
-                     "GPU arch:        %.*s\n"
-                     "GPU description: %.*s\n",
-                     backend_type_name(info.backendType),
-                     adapter_type_name(info.adapterType),
-                     (int)info.vendor.length, info.vendor.data ? info.vendor.data : "",
-                     info.vendorID,
-                     (int)info.device.length, info.device.data ? info.device.data : "",
-                     info.deviceID,
-                     (int)info.architecture.length,
-                     info.architecture.data ? info.architecture.data : "",
-                     (int)info.description.length,
-                     info.description.data ? info.description.data : "");
+    int w = snprintf(
+        out, total,
+        "GPU backend:     %s\n"
+        "GPU adapter:     %s\n"
+        "GPU vendor:      %.*s (vendorID=0x%04x)\n"
+        "GPU device:      %.*s (deviceID=0x%04x)\n"
+        "GPU arch:        %.*s\n"
+        "GPU description: %.*s\n",
+        backend_type_name(info.backendType), adapter_type_name(info.adapterType),
+        (int)info.vendor.length, info.vendor.data ? info.vendor.data : "", info.vendorID,
+        (int)info.device.length, info.device.data ? info.device.data : "", info.deviceID,
+        (int)info.architecture.length, info.architecture.data ? info.architecture.data : "",
+        (int)info.description.length, info.description.data ? info.description.data : "");
 
     if (has_limits && w >= 0) {
         snprintf(out + w, total - (size_t)w,
@@ -132,8 +123,7 @@ char *yetty_ywebgpu_get_webgpu_description(WGPUAdapter adapter)
                  "maxBufferSize=%llu  "
                  "maxStorageBufferBindingSize=%llu  "
                  "maxUniformBufferBindingSize=%llu\n",
-                 limits.maxTextureDimension2D,
-                 (unsigned long long)limits.maxBufferSize,
+                 limits.maxTextureDimension2D, (unsigned long long)limits.maxBufferSize,
                  (unsigned long long)limits.maxStorageBufferBindingSize,
                  (unsigned long long)limits.maxUniformBufferBindingSize);
     }

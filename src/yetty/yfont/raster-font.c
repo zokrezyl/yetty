@@ -131,7 +131,8 @@ static struct uint32_result load_one(struct yetty_yfont_raster_font *f, uint32_t
     uint32_t slot = f->next_slot;
     if (slot >= f->meta_capacity) {
         uint32_t new_cap = f->meta_capacity * 2;
-        struct yetty_yfont_glyph_meta_gpu *nm = realloc(f->meta, new_cap * sizeof(struct yetty_yfont_glyph_meta_gpu));
+        struct yetty_yfont_glyph_meta_gpu *nm =
+            realloc(f->meta, new_cap * sizeof(struct yetty_yfont_glyph_meta_gpu));
         if (!nm) {
             return YETTY_ERR(uint32, "meta realloc failed");
         }
@@ -244,8 +245,8 @@ static struct uint32_result raster_get_glyph_index(struct yetty_ypaint_font *sel
     return load_one(f, cp);
 }
 
-static struct uint32_result raster_get_glyph_index_styled(struct yetty_ypaint_font *self, uint32_t cp,
-                                                          enum yetty_yfont_style style)
+static struct uint32_result raster_get_glyph_index_styled(struct yetty_ypaint_font *self,
+                                                          uint32_t cp, enum yetty_yfont_style style)
 {
     (void)style;
     return raster_get_glyph_index(self, cp);
@@ -511,8 +512,8 @@ static struct yetty_font_font_result raster_font_finalise(struct yetty_yfont_ras
 }
 
 struct yetty_font_font_result yetty_yfont_raster_font_create_from_file(const char *ttf_path,
-                                                                      const char *shader_path,
-                                                                      float base_size)
+                                                                       const char *shader_path,
+                                                                       float base_size)
 {
     if (!ttf_path) {
         return YETTY_ERR(yetty_font_font, "ttf_path is NULL");
@@ -538,10 +539,10 @@ struct yetty_font_font_result yetty_yfont_raster_font_create_from_file(const cha
 }
 
 struct yetty_font_font_result yetty_yfont_raster_font_create_from_data(const uint8_t *ttf_data,
-                                                                      size_t ttf_size,
-                                                                      const char *name,
-                                                                      const char *shader_path,
-                                                                      float base_size)
+                                                                       size_t ttf_size,
+                                                                       const char *name,
+                                                                       const char *shader_path,
+                                                                       float base_size)
 {
     (void)name;
     if (!ttf_data || ttf_size == 0) {

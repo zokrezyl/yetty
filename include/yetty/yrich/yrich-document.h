@@ -136,8 +136,8 @@ struct yetty_ycore_void_result yetty_yrich_document_add_element(struct yetty_yri
                                                                 struct yetty_yrich_element *e);
 
 /* Remove + destroy element matching id. Generates a Delete op. */
-struct yetty_ycore_void_result yetty_yrich_document_remove_element(
-    struct yetty_yrich_document *doc, yetty_yrich_element_id id);
+struct yetty_ycore_void_result yetty_yrich_document_remove_element(struct yetty_yrich_document *doc,
+                                                                   yetty_yrich_element_id id);
 
 struct yetty_yrich_element *yetty_yrich_document_find(const struct yetty_yrich_document *doc,
                                                       yetty_yrich_element_id id);
@@ -196,7 +196,8 @@ struct yetty_yrich_operation_ptr_result yetty_yrich_document_create_op(
  * appends non-presence ops to the log, calls subclass apply_op, and notifies
  * the sync callback when local=true. */
 struct yetty_ycore_void_result yetty_yrich_document_apply_op(struct yetty_yrich_document *doc,
-                                   struct yetty_yrich_operation *op, bool local);
+                                                             struct yetty_yrich_operation *op,
+                                                             bool local);
 
 /* Run a command and push it onto the history. Takes ownership of cmd. */
 struct yetty_ycore_void_result yetty_yrich_document_execute(struct yetty_yrich_document *doc,
@@ -220,7 +221,7 @@ void yetty_yrich_document_on_mouse_double_click(struct yetty_yrich_document *doc
                                                 struct yetty_yrich_input_mods mods);
 struct yetty_ycore_void_result yetty_yrich_document_on_key_down(struct yetty_yrich_document *doc,
                                                                 uint32_t key,
-                                      struct yetty_yrich_input_mods mods);
+                                                                struct yetty_yrich_input_mods mods);
 void yetty_yrich_document_on_text_input(struct yetty_yrich_document *doc, const char *text,
                                         size_t text_len);
 
@@ -229,8 +230,7 @@ void yetty_yrich_document_default_on_mouse_down(struct yetty_yrich_document *doc
                                                 uint32_t button,
                                                 struct yetty_yrich_input_mods mods);
 struct yetty_ycore_void_result yetty_yrich_document_default_on_key_down(
-    struct yetty_yrich_document *doc, uint32_t key,
-                                              struct yetty_yrich_input_mods mods);
+    struct yetty_yrich_document *doc, uint32_t key, struct yetty_yrich_input_mods mods);
 
 #ifdef __cplusplus
 }

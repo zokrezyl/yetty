@@ -124,8 +124,8 @@ struct yetty_ycore_void_result yetty_yrich_document_add_element(struct yetty_yri
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yrich_document_remove_element(
-    struct yetty_yrich_document *doc, yetty_yrich_element_id id)
+struct yetty_ycore_void_result yetty_yrich_document_remove_element(struct yetty_yrich_document *doc,
+                                                                   yetty_yrich_element_id id)
 {
     if (!doc) {
         return YETTY_ERR(yetty_ycore_void, "yrich remove_element: NULL doc");
@@ -540,8 +540,9 @@ void yetty_yrich_document_on_mouse_double_click(struct yetty_yrich_document *doc
     }
 }
 
-struct yetty_ycore_void_result yetty_yrich_document_on_key_down(
-    struct yetty_yrich_document *doc, uint32_t key, struct yetty_yrich_input_mods mods)
+struct yetty_ycore_void_result yetty_yrich_document_on_key_down(struct yetty_yrich_document *doc,
+                                                                uint32_t key,
+                                                                struct yetty_yrich_input_mods mods)
 {
     if (!doc) {
         return YETTY_ERR(yetty_ycore_void, "document_on_key_down: NULL doc");

@@ -40,9 +40,9 @@
 #define YMS_STR(s) ((WGPUStringView){.data = (s), .length = sizeof(s) - 1})
 
 extern const unsigned char gymesh_3d_shaderData[];
-extern const unsigned int  gymesh_3d_shaderSize;
+extern const unsigned int gymesh_3d_shaderSize;
 extern const unsigned char gymesh_blit_shaderData[];
-extern const unsigned int  gymesh_blit_shaderSize;
+extern const unsigned int gymesh_blit_shaderSize;
 
 /* Cap the offscreen render texture so a huge bounds_w/h doesn't allocate
  * a multi-megabyte target. The blit pass scales with linear sampling. */
@@ -64,8 +64,8 @@ struct ymesh_3d_uniforms {
 /* Blit-pass uniforms. vec4 + vec2 + vec2 padding = 32 bytes; exceeds the
  * 16-byte uniform-buffer min alignment WebGPU requires. */
 struct ymesh_blit_uniforms {
-    float bounds[4];     /* x, y, w, h */
-    float viewport[2];   /* w, h */
+    float bounds[4];   /* x, y, w, h */
+    float viewport[2]; /* w, h */
     float _pad[2];
 };
 
@@ -88,8 +88,8 @@ struct yetty_ymesh_factory {
     WGPUPipelineLayout layout_3d;
     WGPUPipelineLayout layout_blit;
 
-    WGPURenderPipeline pipeline_3d;            /* solid: TriangleList + cull back */
-    WGPURenderPipeline pipeline_3d_wireframe;  /* lines: LineList + no cull */
+    WGPURenderPipeline pipeline_3d;           /* solid: TriangleList + cull back */
+    WGPURenderPipeline pipeline_3d_wireframe; /* lines: LineList + no cull */
     WGPURenderPipeline pipeline_blit;
 
     WGPUSampler linear_sampler;
@@ -97,8 +97,8 @@ struct yetty_ymesh_factory {
     int initialized;
 };
 
-static struct yetty_ymesh_factory *
-ymesh_factory_from_base(struct yetty_ypaint_core_concrete_factory *base)
+static struct yetty_ymesh_factory *ymesh_factory_from_base(
+    struct yetty_ypaint_core_concrete_factory *base)
 {
     return (struct yetty_ymesh_factory *)base;
 }
@@ -111,15 +111,15 @@ struct ymesh_instance_data {
     /* Mesh GPU buffers. */
     WGPUBuffer pos_vb;
     WGPUBuffer nrm_vb;
-    WGPUBuffer index_buf;        /* triangle indices (TriangleList) */
-    uint32_t   index_count;
-    uint32_t   index_size;       /* 2 or 4; MVP always 4 */
+    WGPUBuffer index_buf; /* triangle indices (TriangleList) */
+    uint32_t index_count;
+    uint32_t index_size; /* 2 or 4; MVP always 4 */
 
     /* Wireframe — line-list indices derived from the triangle indices
      * at create_instance time. NULL when the mesh wasn't loaded with
      * wireframe support (currently all meshes get both). */
     WGPUBuffer line_index_buf;
-    uint32_t   line_index_count; /* number of u32 indices in line buffer */
+    uint32_t line_index_count; /* number of u32 indices in line buffer */
 
     /* Render mode read from wire (YETTY_YMESH_MODE_*). render() picks
      * pipeline + index-buffer accordingly. */
@@ -145,26 +145,32 @@ struct ymesh_instance_data {
  * Helpers
  *===========================================================================*/
 
-static WGPUBuffer ymesh_create_buffer_with_data(
-    WGPUDevice device, WGPUQueue queue, WGPUBufferUsage usage,
-    const void *data, size_t size)
+static WGPUBuffer ymesh_create_buffer_with_data(WGPUDevice device, WGPUQueue queue,
+                                                WGPUBufferUsage usage, const void *data,
+                                                size_t size)
 {
     WGPUBufferDescriptor desc = {0};
     desc.usage = usage | WGPUBufferUsage_CopyDst;
-    desc.size = (size + 3) & ~(size_t)3;  /* WebGPU requires 4-byte alignment */
+    desc.size = (size + 3) & ~(size_t)3; /* WebGPU requires 4-byte alignment */
     desc.mappedAtCreation = false;
     WGPUBuffer buf = wgpuDeviceCreateBuffer(device, &desc);
-    if (!buf)
+    if (!buf) {
         return NULL;
-    if (data && size > 0)
+    }
+    if (data && size > 0) {
         wgpuQueueWriteBuffer(queue, buf, 0, data, (size + 3) & ~(size_t)3);
+    }
     return buf;
 }
 
 static uint32_t ymesh_clamp_offscreen_dim(float v)
 {
-    if (v < (float)YMESH_OFFSCREEN_MIN) return YMESH_OFFSCREEN_MIN;
-    if (v > (float)YMESH_OFFSCREEN_MAX) return YMESH_OFFSCREEN_MAX;
+    if (v < (float)YMESH_OFFSCREEN_MIN) {
+        return YMESH_OFFSCREEN_MIN;
+    }
+    if (v > (float)YMESH_OFFSCREEN_MAX) {
+        return YMESH_OFFSCREEN_MAX;
+    }
     return (uint32_t)v;
 }
 
@@ -183,10 +189,11 @@ struct ymesh_camera {
     float pan_y;
 };
 
-static struct yetty_ycore_void_result
-ymesh_compute_3d_uniforms(const float bbox_min[3], const float bbox_max[3],
-                          float aspect, const struct ymesh_camera *cam,
-                          struct ymesh_3d_uniforms *out)
+static struct yetty_ycore_void_result ymesh_compute_3d_uniforms(const float bbox_min[3],
+                                                                const float bbox_max[3],
+                                                                float aspect,
+                                                                const struct ymesh_camera *cam,
+                                                                struct ymesh_3d_uniforms *out)
 {
     /* Centre + radius from the bbox. */
     struct yetty_ymesh_vec3 center = {
@@ -198,8 +205,9 @@ ymesh_compute_3d_uniforms(const float bbox_min[3], const float bbox_max[3],
     float dy = bbox_max[1] - bbox_min[1];
     float dz = bbox_max[2] - bbox_min[2];
     float radius = 0.5f * sqrtf(dx * dx + dy * dy + dz * dz);
-    if (radius < 1e-4f)
+    if (radius < 1e-4f) {
         radius = 1.0f;
+    }
 
     /* Apply defaults — zero camera == "no override" → use the auto-fit
      * orbital pose (matches the original one-shot framing). */
@@ -215,9 +223,13 @@ ymesh_compute_3d_uniforms(const float bbox_min[3], const float bbox_max[3],
         df = 3.0f;
     }
     /* Clamp elevation to avoid gimbal lock at the poles. */
-    const float kPi2 = 1.55f;  /* slightly under π/2 */
-    if (el >  kPi2) el =  kPi2;
-    if (el < -kPi2) el = -kPi2;
+    const float kPi2 = 1.55f; /* slightly under π/2 */
+    if (el > kPi2) {
+        el = kPi2;
+    }
+    if (el < -kPi2) {
+        el = -kPi2;
+    }
 
     /* Spherical-to-cartesian eye position around the bbox centre. */
     float dist = radius * df;
@@ -235,10 +247,9 @@ ymesh_compute_3d_uniforms(const float bbox_min[3], const float bbox_max[3],
      * mesh size so big and small meshes both pan at a comfortable rate. */
     float pan_scale = radius / 100.0f;
     struct yetty_ymesh_vec3 forward = {-eye_local.x, -eye_local.y, -eye_local.z};
-    struct yetty_ymesh_vec3 right = yetty_ymesh_vec3_normalize(
-        yetty_ymesh_vec3_cross(forward, up));
-    struct yetty_ymesh_vec3 up_axis = yetty_ymesh_vec3_normalize(
-        yetty_ymesh_vec3_cross(right, forward));
+    struct yetty_ymesh_vec3 right = yetty_ymesh_vec3_normalize(yetty_ymesh_vec3_cross(forward, up));
+    struct yetty_ymesh_vec3 up_axis =
+        yetty_ymesh_vec3_normalize(yetty_ymesh_vec3_cross(right, forward));
     struct yetty_ymesh_vec3 pan_world = {
         right.x * cam->pan_x * pan_scale + up_axis.x * cam->pan_y * pan_scale,
         right.y * cam->pan_x * pan_scale + up_axis.y * cam->pan_y * pan_scale,
@@ -259,30 +270,38 @@ ymesh_compute_3d_uniforms(const float bbox_min[3], const float bbox_max[3],
     struct yetty_ymesh_mat4 model = yetty_ymesh_mat4_identity();
     struct yetty_ymesh_mat4 view = yetty_ymesh_mat4_lookat(eye, panned_center, up);
     struct yetty_ymesh_mat4 proj = yetty_ymesh_mat4_perspective(
-        45.0f * 3.14159265f / 180.0f, aspect, radius * 0.1f,
-        dist + radius * 4.0f + 1.0f);
+        45.0f * 3.14159265f / 180.0f, aspect, radius * 0.1f, dist + radius * 4.0f + 1.0f);
     struct yetty_ymesh_mat4 mvp = yetty_ymesh_mat4_mul(proj, yetty_ymesh_mat4_mul(view, model));
 
     memcpy(out->mvp, mvp.m, sizeof(mvp.m));
     memcpy(out->model, model.m, sizeof(model.m));
     memcpy(out->normal_matrix, model.m, sizeof(model.m));
-    out->light_dir[0] = -0.4f; out->light_dir[1] = 0.8f; out->light_dir[2] = -0.5f; out->light_dir[3] = 0.0f;
-    out->base_color[0] = 0.85f; out->base_color[1] = 0.85f; out->base_color[2] = 0.95f; out->base_color[3] = 1.0f;
+    out->light_dir[0] = -0.4f;
+    out->light_dir[1] = 0.8f;
+    out->light_dir[2] = -0.5f;
+    out->light_dir[3] = 0.0f;
+    out->base_color[0] = 0.85f;
+    out->base_color[1] = 0.85f;
+    out->base_color[2] = 0.95f;
+    out->base_color[3] = 1.0f;
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result
-ymesh_instance_render(struct yetty_ypaint_core_complex_prim_instance *self,
-                      struct yetty_ypaint_core_target *target, float x, float y)
+static struct yetty_ycore_void_result ymesh_instance_render(
+    struct yetty_ypaint_core_complex_prim_instance *self, struct yetty_ypaint_core_target *target,
+    float x, float y)
 {
-    if (!self || !self->buffer_data || !self->factory)
+    if (!self || !self->buffer_data || !self->factory) {
         return YETTY_ERR(yetty_ycore_void, "ymesh: invalid instance");
+    }
     struct yetty_ymesh_factory *factory = ymesh_factory_from_base(self->factory);
-    if (!factory->initialized)
+    if (!factory->initialized) {
         return YETTY_ERR(yetty_ycore_void, "ymesh: factory not initialized");
+    }
     struct ymesh_instance_data *inst = (struct ymesh_instance_data *)self->instance_data;
-    if (!inst)
+    if (!inst) {
         return YETTY_ERR(yetty_ycore_void, "ymesh: instance data missing");
+    }
 
     /* Wire bounds (w/h come from wire; x/y are passed in by the canvas). */
     const uint32_t *data = (const uint32_t *)self->buffer_data;
@@ -303,8 +322,9 @@ ymesh_instance_render(struct yetty_ypaint_core_complex_prim_instance *self,
     /* --- pass 1: 3D into offscreen --- */
     WGPUCommandEncoderDescriptor enc_desc = {0};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(factory->device, &enc_desc);
-    if (!encoder)
+    if (!encoder) {
         return YETTY_ERR(yetty_ycore_void, "ymesh: encoder create failed");
+    }
 
     WGPURenderPassColorAttachment off_color = {0};
     off_color.view = inst->color_view;
@@ -333,14 +353,13 @@ ymesh_instance_render(struct yetty_ypaint_core_complex_prim_instance *self,
         return YETTY_ERR(yetty_ycore_void, "ymesh: 3d pass begin failed");
     }
     int wireframe = (inst->mode == YETTY_YMESH_MODE_WIREFRAME);
-    WGPURenderPipeline pipe = wireframe ? factory->pipeline_3d_wireframe
-                                        : factory->pipeline_3d;
+    WGPURenderPipeline pipe = wireframe ? factory->pipeline_3d_wireframe : factory->pipeline_3d;
     WGPUBuffer ib = wireframe ? inst->line_index_buf : inst->index_buf;
-    uint32_t ic  = wireframe ? inst->line_index_count : inst->index_count;
+    uint32_t ic = wireframe ? inst->line_index_count : inst->index_count;
     /* Wireframe always uses uint32; triangle indices follow the wire's
      * declared index_size. */
-    WGPUIndexFormat ifmt = (wireframe || inst->index_size == 4)
-        ? WGPUIndexFormat_Uint32 : WGPUIndexFormat_Uint16;
+    WGPUIndexFormat ifmt =
+        (wireframe || inst->index_size == 4) ? WGPUIndexFormat_Uint32 : WGPUIndexFormat_Uint16;
 
     wgpuRenderPassEncoderSetPipeline(p1, pipe);
     wgpuRenderPassEncoderSetBindGroup(p1, 0, inst->bg_3d, 0, NULL);
@@ -373,10 +392,10 @@ ymesh_instance_render(struct yetty_ypaint_core_complex_prim_instance *self,
         wgpuCommandEncoderRelease(encoder);
         return YETTY_ERR(yetty_ycore_void, "ymesh: blit pass begin failed");
     }
-    wgpuRenderPassEncoderSetViewport(p2, 0.0f, 0.0f,
-        target->viewport.w, target->viewport.h, 0.0f, 1.0f);
-    wgpuRenderPassEncoderSetScissorRect(p2, 0, 0,
-        (uint32_t)target->viewport.w, (uint32_t)target->viewport.h);
+    wgpuRenderPassEncoderSetViewport(p2, 0.0f, 0.0f, target->viewport.w, target->viewport.h, 0.0f,
+                                     1.0f);
+    wgpuRenderPassEncoderSetScissorRect(p2, 0, 0, (uint32_t)target->viewport.w,
+                                        (uint32_t)target->viewport.h);
     wgpuRenderPassEncoderSetPipeline(p2, factory->pipeline_blit);
     wgpuRenderPassEncoderSetBindGroup(p2, 0, inst->bg_blit, 0, NULL);
     wgpuRenderPassEncoderDraw(p2, 3, 1, 0, 0);
@@ -389,8 +408,8 @@ ymesh_instance_render(struct yetty_ypaint_core_complex_prim_instance *self,
     wgpuCommandBufferRelease(cmd);
     wgpuCommandEncoderRelease(encoder);
 
-    ydebug("ymesh_render: at (%.1f,%.1f) size %.1fx%.1f indices=%u",
-           x, y, bw, bh, inst->index_count);
+    ydebug("ymesh_render: at (%.1f,%.1f) size %.1fx%.1f indices=%u", x, y, bw, bh,
+           inst->index_count);
     return YETTY_OK_VOID();
 }
 
@@ -398,13 +417,13 @@ ymesh_instance_render(struct yetty_ypaint_core_complex_prim_instance *self,
  * Pipeline / layout creation
  *===========================================================================*/
 
-static WGPUShaderModule
-ymesh_create_shader(WGPUDevice device, const char *label,
-                    const unsigned char *src, unsigned int len)
+static WGPUShaderModule ymesh_create_shader(WGPUDevice device, const char *label,
+                                            const unsigned char *src, unsigned int len)
 {
     char *code = malloc(len + 1);
-    if (!code)
+    if (!code) {
         return NULL;
+    }
     memcpy(code, src, len);
     code[len] = '\0';
 
@@ -423,8 +442,7 @@ ymesh_create_shader(WGPUDevice device, const char *label,
     return mod;
 }
 
-static struct yetty_ycore_void_result
-ymesh_build_3d_pipeline(struct yetty_ymesh_factory *f)
+static struct yetty_ycore_void_result ymesh_build_3d_pipeline(struct yetty_ymesh_factory *f)
 {
     /* Bind group layout: one uniform buffer at binding 0, vertex+fragment vis. */
     WGPUBindGroupLayoutEntry bgl_entries[1] = {0};
@@ -439,16 +457,18 @@ ymesh_build_3d_pipeline(struct yetty_ymesh_factory *f)
     bgl_desc.entryCount = 1;
     bgl_desc.entries = bgl_entries;
     f->bgl_3d = wgpuDeviceCreateBindGroupLayout(f->device, &bgl_desc);
-    if (!f->bgl_3d)
+    if (!f->bgl_3d) {
         return YETTY_ERR(yetty_ycore_void, "ymesh: bgl_3d failed");
+    }
 
     WGPUPipelineLayoutDescriptor pl_desc = {0};
     pl_desc.label = YMS_STR("ymesh_3d_layout");
     pl_desc.bindGroupLayoutCount = 1;
     pl_desc.bindGroupLayouts = &f->bgl_3d;
     f->layout_3d = wgpuDeviceCreatePipelineLayout(f->device, &pl_desc);
-    if (!f->layout_3d)
+    if (!f->layout_3d) {
         return YETTY_ERR(yetty_ycore_void, "ymesh: layout_3d failed");
+    }
 
     /* Vertex layout: two buffers (positions, normals), each vec3 f32. */
     WGPUVertexAttribute attr_pos = {0};
@@ -472,7 +492,7 @@ ymesh_build_3d_pipeline(struct yetty_ymesh_factory *f)
     vb_layouts[1].attributes = &attr_nrm;
 
     WGPUColorTargetState color_target = {0};
-    color_target.format = WGPUTextureFormat_RGBA8Unorm;  /* offscreen color */
+    color_target.format = WGPUTextureFormat_RGBA8Unorm; /* offscreen color */
     color_target.writeMask = WGPUColorWriteMask_All;
     /* No blending — overwrite (offscreen is cleared each pass). */
 
@@ -508,8 +528,9 @@ ymesh_build_3d_pipeline(struct yetty_ymesh_factory *f)
     rp.fragment = &frag;
 
     f->pipeline_3d = wgpuDeviceCreateRenderPipeline(f->device, &rp);
-    if (!f->pipeline_3d)
+    if (!f->pipeline_3d) {
         return YETTY_ERR(yetty_ycore_void, "ymesh: 3d pipeline create failed");
+    }
 
     /* Wireframe variant — same descriptor with LineList topology + no
      * culling so both sides of every triangle's edges render. Shader is
@@ -520,13 +541,13 @@ ymesh_build_3d_pipeline(struct yetty_ymesh_factory *f)
     rp.primitive.topology = WGPUPrimitiveTopology_LineList;
     rp.primitive.cullMode = WGPUCullMode_None;
     f->pipeline_3d_wireframe = wgpuDeviceCreateRenderPipeline(f->device, &rp);
-    if (!f->pipeline_3d_wireframe)
+    if (!f->pipeline_3d_wireframe) {
         return YETTY_ERR(yetty_ycore_void, "ymesh: wireframe pipeline create failed");
+    }
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result
-ymesh_build_blit_pipeline(struct yetty_ymesh_factory *f)
+static struct yetty_ycore_void_result ymesh_build_blit_pipeline(struct yetty_ymesh_factory *f)
 {
     WGPUBindGroupLayoutEntry bgl_entries[3] = {0};
     bgl_entries[0].binding = 0;
@@ -549,16 +570,18 @@ ymesh_build_blit_pipeline(struct yetty_ymesh_factory *f)
     bgl_desc.entryCount = 3;
     bgl_desc.entries = bgl_entries;
     f->bgl_blit = wgpuDeviceCreateBindGroupLayout(f->device, &bgl_desc);
-    if (!f->bgl_blit)
+    if (!f->bgl_blit) {
         return YETTY_ERR(yetty_ycore_void, "ymesh: bgl_blit failed");
+    }
 
     WGPUPipelineLayoutDescriptor pl_desc = {0};
     pl_desc.label = YMS_STR("ymesh_blit_layout");
     pl_desc.bindGroupLayoutCount = 1;
     pl_desc.bindGroupLayouts = &f->bgl_blit;
     f->layout_blit = wgpuDeviceCreatePipelineLayout(f->device, &pl_desc);
-    if (!f->layout_blit)
+    if (!f->layout_blit) {
         return YETTY_ERR(yetty_ycore_void, "ymesh: layout_blit failed");
+    }
 
     /* Composite over the layer target — premultiplied-alpha blend. */
     WGPUBlendState blend = {0};
@@ -593,34 +616,36 @@ ymesh_build_blit_pipeline(struct yetty_ymesh_factory *f)
     rp.fragment = &frag;
 
     f->pipeline_blit = wgpuDeviceCreateRenderPipeline(f->device, &rp);
-    if (!f->pipeline_blit)
+    if (!f->pipeline_blit) {
         return YETTY_ERR(yetty_ycore_void, "ymesh: blit pipeline create failed");
+    }
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result
-ymesh_compile_pipeline(struct yetty_ypaint_core_concrete_factory *self,
-                       WGPUDevice device, WGPUQueue queue,
-                       WGPUTextureFormat target_format,
-                       struct yetty_ypaint_core_gpu_allocator *allocator)
+static struct yetty_ycore_void_result ymesh_compile_pipeline(
+    struct yetty_ypaint_core_concrete_factory *self, WGPUDevice device, WGPUQueue queue,
+    WGPUTextureFormat target_format, struct yetty_ypaint_core_gpu_allocator *allocator)
 {
     (void)allocator;
     struct yetty_ymesh_factory *f = ymesh_factory_from_base(self);
-    if (f->initialized)
+    if (f->initialized) {
         return YETTY_OK_VOID();
+    }
 
     f->device = device;
     f->queue = queue;
     f->target_format = target_format;
 
-    f->shader_3d = ymesh_create_shader(device, "ymesh_3d",
-        gymesh_3d_shaderData, gymesh_3d_shaderSize);
-    if (!f->shader_3d)
+    f->shader_3d =
+        ymesh_create_shader(device, "ymesh_3d", gymesh_3d_shaderData, gymesh_3d_shaderSize);
+    if (!f->shader_3d) {
         return YETTY_ERR(yetty_ycore_void, "ymesh: 3d shader compile failed");
-    f->shader_blit = ymesh_create_shader(device, "ymesh_blit",
-        gymesh_blit_shaderData, gymesh_blit_shaderSize);
-    if (!f->shader_blit)
+    }
+    f->shader_blit =
+        ymesh_create_shader(device, "ymesh_blit", gymesh_blit_shaderData, gymesh_blit_shaderSize);
+    if (!f->shader_blit) {
         return YETTY_ERR(yetty_ycore_void, "ymesh: blit shader compile failed");
+    }
 
     struct yetty_ycore_void_result r = ymesh_build_3d_pipeline(f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ymesh: 3d pipeline build");
@@ -639,16 +664,16 @@ ymesh_compile_pipeline(struct yetty_ypaint_core_concrete_factory *self,
     smp_desc.lodMaxClamp = 1.0f;
     smp_desc.maxAnisotropy = 1;
     f->linear_sampler = wgpuDeviceCreateSampler(device, &smp_desc);
-    if (!f->linear_sampler)
+    if (!f->linear_sampler) {
         return YETTY_ERR(yetty_ycore_void, "ymesh: sampler create failed");
+    }
 
     f->initialized = 1;
     yinfo("ymesh: pipelines compiled (3d + blit)");
     return YETTY_OK_VOID();
 }
 
-static WGPURenderPipeline
-ymesh_get_pipeline(struct yetty_ypaint_core_concrete_factory *self)
+static WGPURenderPipeline ymesh_get_pipeline(struct yetty_ypaint_core_concrete_factory *self)
 {
     /* Returned only for informational use by the abstract factory. The
      * blit pipeline is the one that actually draws into the layer. */
@@ -662,35 +687,61 @@ ymesh_get_pipeline(struct yetty_ypaint_core_concrete_factory *self)
 
 static void ymesh_instance_data_destroy(struct ymesh_instance_data *d)
 {
-    if (!d)
+    if (!d) {
         return;
-    if (d->bg_blit)    wgpuBindGroupRelease(d->bg_blit);
-    if (d->bg_3d)      wgpuBindGroupRelease(d->bg_3d);
-    if (d->ub_blit)    wgpuBufferRelease(d->ub_blit);
-    if (d->ub_3d)      wgpuBufferRelease(d->ub_3d);
-    if (d->color_view) wgpuTextureViewRelease(d->color_view);
-    if (d->color_tex)  wgpuTextureRelease(d->color_tex);
-    if (d->depth_view) wgpuTextureViewRelease(d->depth_view);
-    if (d->depth_tex)  wgpuTextureRelease(d->depth_tex);
-    if (d->line_index_buf) wgpuBufferRelease(d->line_index_buf);
-    if (d->index_buf)  wgpuBufferRelease(d->index_buf);
-    if (d->nrm_vb)     wgpuBufferRelease(d->nrm_vb);
-    if (d->pos_vb)     wgpuBufferRelease(d->pos_vb);
+    }
+    if (d->bg_blit) {
+        wgpuBindGroupRelease(d->bg_blit);
+    }
+    if (d->bg_3d) {
+        wgpuBindGroupRelease(d->bg_3d);
+    }
+    if (d->ub_blit) {
+        wgpuBufferRelease(d->ub_blit);
+    }
+    if (d->ub_3d) {
+        wgpuBufferRelease(d->ub_3d);
+    }
+    if (d->color_view) {
+        wgpuTextureViewRelease(d->color_view);
+    }
+    if (d->color_tex) {
+        wgpuTextureRelease(d->color_tex);
+    }
+    if (d->depth_view) {
+        wgpuTextureViewRelease(d->depth_view);
+    }
+    if (d->depth_tex) {
+        wgpuTextureRelease(d->depth_tex);
+    }
+    if (d->line_index_buf) {
+        wgpuBufferRelease(d->line_index_buf);
+    }
+    if (d->index_buf) {
+        wgpuBufferRelease(d->index_buf);
+    }
+    if (d->nrm_vb) {
+        wgpuBufferRelease(d->nrm_vb);
+    }
+    if (d->pos_vb) {
+        wgpuBufferRelease(d->pos_vb);
+    }
     free(d);
 }
 
-static struct yetty_ypaint_core_complex_prim_instance_ptr_result
-ymesh_create_instance(struct yetty_ypaint_core_concrete_factory *self,
-                      const void *buffer_data, size_t size, uint32_t rolling_row)
+static struct yetty_ypaint_core_complex_prim_instance_ptr_result ymesh_create_instance(
+    struct yetty_ypaint_core_concrete_factory *self, const void *buffer_data, size_t size,
+    uint32_t rolling_row)
 {
-    if (!buffer_data || size < sizeof(struct yetty_ypaint_core_complex_prim))
-        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
-                         "ymesh: invalid buffer data");
+    if (!buffer_data || size < sizeof(struct yetty_ypaint_core_complex_prim)) {
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "ymesh: invalid buffer data");
+    }
 
     struct yetty_ymesh_factory *factory = ymesh_factory_from_base(self);
-    if (!factory->initialized)
+    if (!factory->initialized) {
         return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
                          "ymesh: factory not initialized");
+    }
 
     /* Parse wire layout. See include/yetty/ymesh/ymesh.h for the canonical
      * field order; offsets here must stay in lockstep. */
@@ -701,40 +752,42 @@ ymesh_create_instance(struct yetty_ypaint_core_concrete_factory *self,
     float by = *(const float *)&payload[1];
     float bw = *(const float *)&payload[2];
     float bh = *(const float *)&payload[3];
-    (void)bx; (void)by;
+    (void)bx;
+    (void)by;
 
     float bbox_min[3], bbox_max[3];
     memcpy(bbox_min, &payload[4], 3 * sizeof(float));
     memcpy(bbox_max, &payload[7], 3 * sizeof(float));
 
     struct ymesh_camera cam = {
-        .azimuth     = *(const float *)&payload[10],
-        .elevation   = *(const float *)&payload[11],
+        .azimuth = *(const float *)&payload[10],
+        .elevation = *(const float *)&payload[11],
         .dist_factor = *(const float *)&payload[12],
-        .pan_x       = *(const float *)&payload[13],
-        .pan_y       = *(const float *)&payload[14],
+        .pan_x = *(const float *)&payload[13],
+        .pan_y = *(const float *)&payload[14],
     };
     uint32_t mode = payload[15];
 
-    uint32_t vcount    = payload[16];
-    uint32_t icount    = payload[17];
-    uint32_t isize     = payload[18];
-    if (isize != 4 && isize != 2)
-        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
-                         "ymesh: bad index_size");
-    if (vcount == 0 || icount == 0)
-        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr,
-                         "ymesh: empty mesh");
+    uint32_t vcount = payload[16];
+    uint32_t icount = payload[17];
+    uint32_t isize = payload[18];
+    if (isize != 4 && isize != 2) {
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "ymesh: bad index_size");
+    }
+    if (vcount == 0 || icount == 0) {
+        return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "ymesh: empty mesh");
+    }
 
     const float *positions = (const float *)(payload + 19);
-    const float *normals   = positions + vcount * 3;
-    const void  *indices   = (const void *)(normals + vcount * 3);
+    const float *normals = positions + vcount * 3;
+    const void *indices = (const void *)(normals + vcount * 3);
 
     /* Allocate instance + per-instance data. */
     struct yetty_ypaint_core_complex_prim_instance *inst =
         calloc(1, sizeof(struct yetty_ypaint_core_complex_prim_instance));
-    if (!inst)
+    if (!inst) {
         return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "ymesh: inst alloc failed");
+    }
     struct ymesh_instance_data *d = calloc(1, sizeof(struct ymesh_instance_data));
     if (!d) {
         free(inst);
@@ -755,21 +808,23 @@ ymesh_create_instance(struct yetty_ypaint_core_concrete_factory *self,
     inst->render = ymesh_instance_render;
     inst->instance_data = d;
 
-    struct rectangle_result aabb_res =
-        yetty_ypaint_core_complex_prim_aabb(buffer_data);
-    if (YETTY_IS_OK(aabb_res))
+    struct rectangle_result aabb_res = yetty_ypaint_core_complex_prim_aabb(buffer_data);
+    if (YETTY_IS_OK(aabb_res)) {
         inst->bounds = aabb_res.value;
+    }
 
     /* GPU buffers — uploaded once, reused per frame. */
     d->index_count = icount;
     d->index_size = isize;
     d->mode = mode;
-    d->pos_vb = ymesh_create_buffer_with_data(factory->device, factory->queue,
-        WGPUBufferUsage_Vertex, positions, vcount * 3 * sizeof(float));
-    d->nrm_vb = ymesh_create_buffer_with_data(factory->device, factory->queue,
-        WGPUBufferUsage_Vertex, normals, vcount * 3 * sizeof(float));
+    d->pos_vb =
+        ymesh_create_buffer_with_data(factory->device, factory->queue, WGPUBufferUsage_Vertex,
+                                      positions, vcount * 3 * sizeof(float));
+    d->nrm_vb =
+        ymesh_create_buffer_with_data(factory->device, factory->queue, WGPUBufferUsage_Vertex,
+                                      normals, vcount * 3 * sizeof(float));
     d->index_buf = ymesh_create_buffer_with_data(factory->device, factory->queue,
-        WGPUBufferUsage_Index, indices, icount * isize);
+                                                 WGPUBufferUsage_Index, indices, icount * isize);
     if (!d->pos_vb || !d->nrm_vb || !d->index_buf) {
         ymesh_instance_data_destroy(d);
         free(inst->buffer_data);
@@ -797,23 +852,29 @@ ymesh_create_instance(struct yetty_ypaint_core_concrete_factory *self,
             const uint32_t *src = (const uint32_t *)indices;
             for (size_t t = 0; t < tri_count; t++) {
                 uint32_t a = src[t * 3 + 0], b = src[t * 3 + 1], c = src[t * 3 + 2];
-                line_idx[t * 6 + 0] = a; line_idx[t * 6 + 1] = b;
-                line_idx[t * 6 + 2] = b; line_idx[t * 6 + 3] = c;
-                line_idx[t * 6 + 4] = c; line_idx[t * 6 + 5] = a;
+                line_idx[t * 6 + 0] = a;
+                line_idx[t * 6 + 1] = b;
+                line_idx[t * 6 + 2] = b;
+                line_idx[t * 6 + 3] = c;
+                line_idx[t * 6 + 4] = c;
+                line_idx[t * 6 + 5] = a;
             }
         } else {
             const uint16_t *src = (const uint16_t *)indices;
             for (size_t t = 0; t < tri_count; t++) {
                 uint32_t a = src[t * 3 + 0], b = src[t * 3 + 1], c = src[t * 3 + 2];
-                line_idx[t * 6 + 0] = a; line_idx[t * 6 + 1] = b;
-                line_idx[t * 6 + 2] = b; line_idx[t * 6 + 3] = c;
-                line_idx[t * 6 + 4] = c; line_idx[t * 6 + 5] = a;
+                line_idx[t * 6 + 0] = a;
+                line_idx[t * 6 + 1] = b;
+                line_idx[t * 6 + 2] = b;
+                line_idx[t * 6 + 3] = c;
+                line_idx[t * 6 + 4] = c;
+                line_idx[t * 6 + 5] = a;
             }
         }
         d->line_index_count = (uint32_t)line_idx_count;
-        d->line_index_buf = ymesh_create_buffer_with_data(
-            factory->device, factory->queue, WGPUBufferUsage_Index,
-            line_idx, line_idx_count * sizeof(uint32_t));
+        d->line_index_buf =
+            ymesh_create_buffer_with_data(factory->device, factory->queue, WGPUBufferUsage_Index,
+                                          line_idx, line_idx_count * sizeof(uint32_t));
         free(line_idx);
         if (!d->line_index_buf) {
             ymesh_instance_data_destroy(d);
@@ -865,15 +926,16 @@ ymesh_create_instance(struct yetty_ypaint_core_concrete_factory *self,
     struct yetty_ycore_void_result mr =
         ymesh_compute_3d_uniforms(bbox_min, bbox_max, aspect, &cam, &uniforms_3d);
     (void)mr;
-    d->ub_3d = ymesh_create_buffer_with_data(factory->device, factory->queue,
-        WGPUBufferUsage_Uniform, &uniforms_3d, sizeof(uniforms_3d));
+    d->ub_3d =
+        ymesh_create_buffer_with_data(factory->device, factory->queue, WGPUBufferUsage_Uniform,
+                                      &uniforms_3d, sizeof(uniforms_3d));
 
     /* Blit uniform buffer — refilled per frame with current bounds. */
     struct ymesh_blit_uniforms init_blit = {0};
     init_blit.bounds[2] = bw;
     init_blit.bounds[3] = bh;
-    d->ub_blit = ymesh_create_buffer_with_data(factory->device, factory->queue,
-        WGPUBufferUsage_Uniform, &init_blit, sizeof(init_blit));
+    d->ub_blit = ymesh_create_buffer_with_data(
+        factory->device, factory->queue, WGPUBufferUsage_Uniform, &init_blit, sizeof(init_blit));
 
     if (!d->ub_3d || !d->ub_blit) {
         ymesh_instance_data_destroy(d);
@@ -922,25 +984,25 @@ ymesh_create_instance(struct yetty_ypaint_core_concrete_factory *self,
                          "ymesh: bind group create failed");
     }
 
-    yinfo("ymesh: instance created vcount=%u icount=%u off=%ux%u",
-          vcount, icount, d->off_w, d->off_h);
+    yinfo("ymesh: instance created vcount=%u icount=%u off=%ux%u", vcount, icount, d->off_w,
+          d->off_h);
     return YETTY_OK(yetty_ypaint_core_complex_prim_instance_ptr, inst);
 }
 
-static void
-ymesh_destroy_instance(struct yetty_ypaint_core_concrete_factory *self,
-                       struct yetty_ypaint_core_complex_prim_instance *instance)
+static void ymesh_destroy_instance(struct yetty_ypaint_core_concrete_factory *self,
+                                   struct yetty_ypaint_core_complex_prim_instance *instance)
 {
     (void)self;
-    if (!instance)
+    if (!instance) {
         return;
+    }
     ymesh_instance_data_destroy((struct ymesh_instance_data *)instance->instance_data);
     free(instance->buffer_data);
     free(instance);
 }
 
-static struct yetty_ypaint_core_gpu_resource_set *
-ymesh_get_shared_rs(struct yetty_ypaint_core_concrete_factory *self)
+static struct yetty_ypaint_core_gpu_resource_set *ymesh_get_shared_rs(
+    struct yetty_ypaint_core_concrete_factory *self)
 {
     /* ymesh doesn't use the framework RS. The abstract factory tolerates
      * NULL — it only consults this for buffer-data introspection that
@@ -956,8 +1018,9 @@ ymesh_get_shared_rs(struct yetty_ypaint_core_concrete_factory *self)
 struct yetty_ypaint_core_concrete_factory *yetty_ymesh_factory_create(void)
 {
     struct yetty_ymesh_factory *f = calloc(1, sizeof(struct yetty_ymesh_factory));
-    if (!f)
+    if (!f) {
         return NULL;
+    }
     f->base.type_id = YETTY_YMESH_TYPE_ID;
     f->base.compile_pipeline = ymesh_compile_pipeline;
     f->base.get_pipeline = ymesh_get_pipeline;
@@ -971,19 +1034,40 @@ struct yetty_ypaint_core_concrete_factory *yetty_ymesh_factory_create(void)
 
 void yetty_ymesh_factory_destroy(struct yetty_ypaint_core_concrete_factory *self)
 {
-    if (!self)
+    if (!self) {
         return;
+    }
     struct yetty_ymesh_factory *f = ymesh_factory_from_base(self);
 
-    if (f->linear_sampler) wgpuSamplerRelease(f->linear_sampler);
-    if (f->pipeline_blit)  wgpuRenderPipelineRelease(f->pipeline_blit);
-    if (f->pipeline_3d_wireframe) wgpuRenderPipelineRelease(f->pipeline_3d_wireframe);
-    if (f->pipeline_3d)    wgpuRenderPipelineRelease(f->pipeline_3d);
-    if (f->layout_blit)    wgpuPipelineLayoutRelease(f->layout_blit);
-    if (f->layout_3d)      wgpuPipelineLayoutRelease(f->layout_3d);
-    if (f->bgl_blit)       wgpuBindGroupLayoutRelease(f->bgl_blit);
-    if (f->bgl_3d)         wgpuBindGroupLayoutRelease(f->bgl_3d);
-    if (f->shader_blit)    wgpuShaderModuleRelease(f->shader_blit);
-    if (f->shader_3d)      wgpuShaderModuleRelease(f->shader_3d);
+    if (f->linear_sampler) {
+        wgpuSamplerRelease(f->linear_sampler);
+    }
+    if (f->pipeline_blit) {
+        wgpuRenderPipelineRelease(f->pipeline_blit);
+    }
+    if (f->pipeline_3d_wireframe) {
+        wgpuRenderPipelineRelease(f->pipeline_3d_wireframe);
+    }
+    if (f->pipeline_3d) {
+        wgpuRenderPipelineRelease(f->pipeline_3d);
+    }
+    if (f->layout_blit) {
+        wgpuPipelineLayoutRelease(f->layout_blit);
+    }
+    if (f->layout_3d) {
+        wgpuPipelineLayoutRelease(f->layout_3d);
+    }
+    if (f->bgl_blit) {
+        wgpuBindGroupLayoutRelease(f->bgl_blit);
+    }
+    if (f->bgl_3d) {
+        wgpuBindGroupLayoutRelease(f->bgl_3d);
+    }
+    if (f->shader_blit) {
+        wgpuShaderModuleRelease(f->shader_blit);
+    }
+    if (f->shader_3d) {
+        wgpuShaderModuleRelease(f->shader_3d);
+    }
     free(f);
 }

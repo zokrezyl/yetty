@@ -46,14 +46,14 @@ void yetty_ythorvg_renderer_set_target(struct yetty_ythorvg_renderer *r, uint32_
  * intrinsic size. For Lottie animations this renders frame 0; use
  * yetty_ythorvg_render_frame to advance. */
 struct yetty_ycore_void_result yetty_ythorvg_renderer_render(struct yetty_ythorvg_renderer *r,
-                                                    const void *data, size_t size,
-                                                    const char *mimetype, float *out_width,
-                                                    float *out_height);
+                                                             const void *data, size_t size,
+                                                             const char *mimetype, float *out_width,
+                                                             float *out_height);
 
 /* Advance a previously-loaded Lottie animation to `frame` (0..total_frames)
  * and re-render into the buffer. No-op if no animation is loaded. */
 struct yetty_ycore_void_result yetty_ythorvg_renderer_render_frame(struct yetty_ythorvg_renderer *r,
-                                                          float frame);
+                                                                   float frame);
 
 /* Query the last-loaded animation's frame count / duration. Returns 0 if no
  * animation is loaded or the content is a static SVG. */

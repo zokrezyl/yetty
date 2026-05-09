@@ -100,7 +100,8 @@ static void ymd_doc_destroy(struct yetty_ymarkdown_ymd_doc *doc)
     doc->line_cap = 0;
 }
 
-static int ymd_line_push_span(struct yetty_ymarkdown_ymd_line *line, struct yetty_ymarkdown_ymd_span span)
+static int ymd_line_push_span(struct yetty_ymarkdown_ymd_line *line,
+                              struct yetty_ymarkdown_ymd_span span)
 {
     if (line->span_count == line->span_cap) {
         size_t new_cap = line->span_cap ? line->span_cap * 2 : 4;
@@ -115,7 +116,8 @@ static int ymd_line_push_span(struct yetty_ymarkdown_ymd_line *line, struct yett
     return 0;
 }
 
-static int ymd_line_insert_span_front(struct yetty_ymarkdown_ymd_line *line, struct yetty_ymarkdown_ymd_span span)
+static int ymd_line_insert_span_front(struct yetty_ymarkdown_ymd_line *line,
+                                      struct yetty_ymarkdown_ymd_span span)
 {
     if (line->span_count == line->span_cap) {
         size_t new_cap = line->span_cap ? line->span_cap * 2 : 4;
@@ -132,7 +134,8 @@ static int ymd_line_insert_span_front(struct yetty_ymarkdown_ymd_line *line, str
     return 0;
 }
 
-static int ymd_doc_push_line(struct yetty_ymarkdown_ymd_doc *doc, struct yetty_ymarkdown_ymd_line line)
+static int ymd_doc_push_line(struct yetty_ymarkdown_ymd_doc *doc,
+                             struct yetty_ymarkdown_ymd_line line)
 {
     if (doc->line_count == doc->line_cap) {
         size_t new_cap = doc->line_cap ? doc->line_cap * 2 : 16;
@@ -579,7 +582,8 @@ struct yetty_ymarkdown_render_result yetty_ymarkdown_render(
         .scene_max_x = scene_w,
         .scene_max_y = scene_h,
     };
-    struct yetty_ypaint_core_buffer_result br = yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
+    struct yetty_ypaint_core_buffer_result br =
+        yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         return YETTY_ERR(yetty_ymarkdown_render, br.error.msg);
     }

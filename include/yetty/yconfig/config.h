@@ -51,11 +51,12 @@ struct yetty_yconfig_config_ops {
     int (*has)(const struct yetty_yconfig_config *self, const char *path);
 
     /* Set string value */
-    struct yetty_ycore_void_result (*set_string)(struct yetty_yconfig_config *self, const char *path,
-                                                 const char *value);
+    struct yetty_ycore_void_result (*set_string)(struct yetty_yconfig_config *self,
+                                                 const char *path, const char *value);
 
     /* Get sub-config at path (returns NULL if not found, no ownership transfer) */
-    struct yetty_yconfig_config *(*get_node)(const struct yetty_yconfig_config *self, const char *path);
+    struct yetty_yconfig_config *(*get_node)(const struct yetty_yconfig_config *self,
+                                             const char *path);
 
     /* Resolve shell argv for execvp.
      *

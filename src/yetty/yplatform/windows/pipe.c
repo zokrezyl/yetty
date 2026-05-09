@@ -109,7 +109,8 @@ static struct yetty_ycore_size_result win_pipe_read(struct yetty_ycore_xthread_e
     return YETTY_OK(yetty_ycore_size, (size_t)bytes_read);
 }
 
-static struct yetty_ycore_int_result win_pipe_read_fd(const struct yetty_ycore_xthread_event_pipe *self)
+static struct yetty_ycore_int_result win_pipe_read_fd(
+    const struct yetty_ycore_xthread_event_pipe *self)
 {
     struct yetty_yplatform_win_platform_input_pipe *pipe_impl =
         container_of(self, struct yetty_yplatform_win_platform_input_pipe, base);

@@ -190,9 +190,8 @@ const char *yetty_ygui_version(void)
      * one without the other, this fails at compile time. Stringification
      * (#) is preprocessor-only, so it can't see enum constants — hence the
      * literal here plus the assert. */
-    _Static_assert(YETTY_YGUI_VERSION_MAJOR == 0
-                   && YETTY_YGUI_VERSION_MINOR == 2
-                   && YETTY_YGUI_VERSION_PATCH == 0,
+    _Static_assert(YETTY_YGUI_VERSION_MAJOR == 0 && YETTY_YGUI_VERSION_MINOR == 2 &&
+                       YETTY_YGUI_VERSION_PATCH == 0,
                    "ygui version string must match enum constants");
     return "0.2.0";
 }
@@ -205,7 +204,8 @@ const char *yetty_ygui_version(void)
 static struct ygui_engine_ptr_result engine_alloc_init(const char *card_name, int x, int y,
                                                        int cols, int rows)
 {
-    struct yetty_ygui_engine *engine = (struct yetty_ygui_engine *)calloc(1, sizeof(struct yetty_ygui_engine));
+    struct yetty_ygui_engine *engine =
+        (struct yetty_ygui_engine *)calloc(1, sizeof(struct yetty_ygui_engine));
     if (!engine) {
         yetty_ygui_set_error("Failed to allocate engine");
         return YETTY_ERR(ygui_engine_ptr, "engine_alloc_init: alloc failed");
@@ -291,15 +291,15 @@ static struct ygui_engine_ptr_result engine_alloc_init(const char *card_name, in
     return YETTY_OK(ygui_engine_ptr, engine);
 }
 
-struct ygui_engine_ptr_result yetty_ygui_engine_create(const char *card_name, int x, int y, int cols,
-                                                 int rows)
+struct ygui_engine_ptr_result yetty_ygui_engine_create(const char *card_name, int x, int y,
+                                                       int cols, int rows)
 {
     return engine_alloc_init(card_name, x, y, cols, rows);
 }
 
 struct ygui_engine_ptr_result yetty_ygui_engine_create_with_pixel_hint(const char *card_name, int x,
-                                                                 int y, float width_hint,
-                                                                 float height_hint)
+                                                                       int y, float width_hint,
+                                                                       float height_hint)
 {
     /* TODO: Query cell size first to calculate cols/rows
      * For now, use reasonable defaults (10x16 cell size) */
@@ -327,7 +327,7 @@ struct ygui_engine_ptr_result yetty_ygui_engine_create_with_pixel_hint(const cha
     /* Initialize grid with hint size */
     yetty_ygui_grid_destroy(&engine->grid);
     yetty_ygui_grid_init(&engine->grid, width_hint, height_hint,
-                   calc_grid_bucket_size(width_hint, height_hint));
+                         calc_grid_bucket_size(width_hint, height_hint));
     return r;
 }
 
@@ -451,8 +451,8 @@ void yetty_ygui_engine_set_theme(struct yetty_ygui_engine *engine, struct yetty_
     engine->dirty = 1;
 }
 
-void yetty_ygui_engine_set_event_callback(struct yetty_ygui_engine *engine, ygui_event_callback_t callback,
-                                    void *userdata)
+void yetty_ygui_engine_set_event_callback(struct yetty_ygui_engine *engine,
+                                          ygui_event_callback_t callback, void *userdata)
 {
     if (!engine) {
         return;
@@ -461,7 +461,8 @@ void yetty_ygui_engine_set_event_callback(struct yetty_ygui_engine *engine, ygui
     engine->event_userdata = userdata;
 }
 
-void yetty_ygui_engine_on_key(struct yetty_ygui_engine *engine, ygui_key_callback_t callback, void *userdata)
+void yetty_ygui_engine_on_key(struct yetty_ygui_engine *engine, ygui_key_callback_t callback,
+                              void *userdata)
 {
     if (!engine) {
         return;
@@ -578,8 +579,7 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
      * eliminates the inter-write flash that the separate YPAINT_CLEAR
      * envelope used to cause. */
     {
-        struct yetty_ycore_void_result zr =
-            yetty_ypaint_core_buffer_add_cmd_zero(engine->buffer);
+        struct yetty_ycore_void_result zr = yetty_ypaint_core_buffer_add_cmd_zero(engine->buffer);
         if (YETTY_IS_ERR(zr)) {
             yetty_ycore_error_destroy(zr.error);
         }
@@ -605,7 +605,7 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
     if (!engine->card_shown) {
         struct yetty_ycore_void_result r =
             yetty_ygui_osc_create_card(engine->card_name, engine->card_x, engine->card_y,
-                                 engine->card_w, engine->card_h, data, size);
+                                       engine->card_w, engine->card_h, data, size);
         engine->card_shown = 1;
         return r;
     }
@@ -634,7 +634,7 @@ struct yetty_ycore_void_result yetty_ygui_engine_show(struct yetty_ygui_engine *
      * coordinates. Without this, mouse events have nowhere to go. */
     struct yetty_ycore_void_result place_r =
         yetty_ygui_osc_card_place(engine->card_id, engine->card_x, engine->card_y,
-                            (uint32_t)engine->card_w, (uint32_t)engine->card_h);
+                                  (uint32_t)engine->card_w, (uint32_t)engine->card_h);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, place_r, "ygui_engine_show: card_place failed");
 
     /* In CANVAS_FIT mode, create card with minimal data first to trigger OSC 777780.
@@ -650,7 +650,7 @@ struct yetty_ycore_void_result yetty_ygui_engine_show(struct yetty_ygui_engine *
         if (size > 0 && data) {
             struct yetty_ycore_void_result cr =
                 yetty_ygui_osc_create_card(engine->card_name, engine->card_x, engine->card_y,
-                                     engine->card_w, engine->card_h, data, size);
+                                           engine->card_w, engine->card_h, data, size);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "ygui_engine_show: create_card failed");
             engine->card_shown = 1;
         }
@@ -785,7 +785,8 @@ void yetty_ygui_engine_mouse_up(struct yetty_ygui_engine *engine, float x, float
     }
 }
 
-void yetty_ygui_engine_mouse_scroll(struct yetty_ygui_engine *engine, float x, float y, float dx, float dy)
+void yetty_ygui_engine_mouse_scroll(struct yetty_ygui_engine *engine, float x, float y, float dx,
+                                    float dy)
 {
     if (!engine) {
         return;
@@ -906,7 +907,8 @@ struct yetty_ygui_widget *yetty_ygui_engine_find(struct yetty_ygui_engine *engin
     return NULL;
 }
 
-struct yetty_ygui_widget *yetty_ygui_engine_widget_at(struct yetty_ygui_engine *engine, float x, float y)
+struct yetty_ygui_widget *yetty_ygui_engine_widget_at(struct yetty_ygui_engine *engine, float x,
+                                                      float y)
 {
     if (!engine) {
         return NULL;
@@ -1277,7 +1279,7 @@ static void handle_resize(struct yetty_ygui_engine *engine)
          * will re-insert widgets after running the layout pass. */
         yetty_ygui_grid_destroy(&engine->grid);
         yetty_ygui_grid_init(&engine->grid, engine->width, engine->height,
-                       calc_grid_bucket_size(engine->width, engine->height));
+                             calc_grid_bucket_size(engine->width, engine->height));
 
         engine->dirty = 1;
     }
@@ -1572,7 +1574,8 @@ static void yface_on_osc(void *user, int osc_code, const uint8_t *args, size_t a
         if (payload_len < sizeof(struct yetty_ymgui_wire_input_mouse)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_mouse *m = (const struct yetty_ymgui_wire_input_mouse *)payload;
+        const struct yetty_ymgui_wire_input_mouse *m =
+            (const struct yetty_ymgui_wire_input_mouse *)payload;
         if (m->magic != YMGUI_WIRE_MAGIC_INPUT_MOUSE) {
             return;
         }
@@ -1601,7 +1604,8 @@ static void yface_on_osc(void *user, int osc_code, const uint8_t *args, size_t a
         if (payload_len < sizeof(struct yetty_ymgui_wire_input_resize)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_resize *r = (const struct yetty_ymgui_wire_input_resize *)payload;
+        const struct yetty_ymgui_wire_input_resize *r =
+            (const struct yetty_ymgui_wire_input_resize *)payload;
         if (r->magic != YMGUI_WIRE_MAGIC_INPUT_RESIZE) {
             return;
         }
@@ -1631,7 +1635,8 @@ static void yface_on_osc(void *user, int osc_code, const uint8_t *args, size_t a
         if (payload_len < sizeof(struct yetty_ymgui_wire_input_focus)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_focus *f = (const struct yetty_ymgui_wire_input_focus *)payload;
+        const struct yetty_ymgui_wire_input_focus *f =
+            (const struct yetty_ymgui_wire_input_focus *)payload;
         if (f->magic != YMGUI_WIRE_MAGIC_INPUT_FOCUS) {
             return;
         }
@@ -1645,7 +1650,8 @@ static void yface_on_osc(void *user, int osc_code, const uint8_t *args, size_t a
         if (payload_len < sizeof(struct yetty_ymgui_wire_input_key)) {
             return;
         }
-        const struct yetty_ymgui_wire_input_key *k = (const struct yetty_ymgui_wire_input_key *)payload;
+        const struct yetty_ymgui_wire_input_key *k =
+            (const struct yetty_ymgui_wire_input_key *)payload;
         if (k->magic != YMGUI_WIRE_MAGIC_INPUT_KEY) {
             return;
         }
@@ -1749,8 +1755,8 @@ static void prepare_cb(uv_prepare_t *handle)
             int new_w = ws.ws_col;
             int new_h = ws.ws_row;
             if (new_w != engine->card_w || new_h != engine->card_h) {
-                YGUI_LOG("SIGWINCH: card cells %dx%d -> %dx%d", engine->card_w,
-                         engine->card_h, new_w, new_h);
+                YGUI_LOG("SIGWINCH: card cells %dx%d -> %dx%d", engine->card_w, engine->card_h,
+                         new_w, new_h);
                 engine->card_w = new_w;
                 engine->card_h = new_h;
                 /* Tell the yetty side to re-place the card at the new cell
@@ -1762,9 +1768,9 @@ static void prepare_cb(uv_prepare_t *handle)
                  * changes the cell pixel size), and using a stale cached
                  * value would cause a render at the wrong size that gets
                  * corrected a frame later. */
-                struct yetty_ycore_void_result pr = yetty_ygui_osc_card_place(
-                    engine->card_id, engine->card_x, engine->card_y, (uint32_t)new_w,
-                    (uint32_t)new_h);
+                struct yetty_ycore_void_result pr =
+                    yetty_ygui_osc_card_place(engine->card_id, engine->card_x, engine->card_y,
+                                              (uint32_t)new_w, (uint32_t)new_h);
                 if (YETTY_IS_ERR(pr)) {
                     yetty_ycore_error_destroy(pr.error);
                 }
@@ -1875,7 +1881,8 @@ void yetty_ygui_engine_set_card_size(struct yetty_ygui_engine *engine, int card_
     }
 }
 
-void yetty_ygui_engine_set_display_pixel_size(struct yetty_ygui_engine *engine, float width, float height)
+void yetty_ygui_engine_set_display_pixel_size(struct yetty_ygui_engine *engine, float width,
+                                              float height)
 {
     if (!engine) {
         return;
@@ -1917,7 +1924,8 @@ int yetty_ygui_engine_poll(struct yetty_ygui_engine *engine)
  * Widget Callbacks
  *===========================================================================*/
 
-void yetty_ygui_widget_button_on_click(struct yetty_ygui_widget *button, ygui_click_callback_t callback, void *userdata)
+void yetty_ygui_widget_button_on_click(struct yetty_ygui_widget *button,
+                                       ygui_click_callback_t callback, void *userdata)
 {
     if (!button || button->type != YETTY_YGUI_WIDGET_BUTTON) {
         return;
@@ -1926,7 +1934,8 @@ void yetty_ygui_widget_button_on_click(struct yetty_ygui_widget *button, ygui_cl
     button->click_userdata = userdata;
 }
 
-void yetty_ygui_widget_slider_on_change(struct yetty_ygui_widget *slider, ygui_change_callback_t callback, void *userdata)
+void yetty_ygui_widget_slider_on_change(struct yetty_ygui_widget *slider,
+                                        ygui_change_callback_t callback, void *userdata)
 {
     if (!slider || slider->type != YETTY_YGUI_WIDGET_SLIDER) {
         return;
@@ -1935,8 +1944,8 @@ void yetty_ygui_widget_slider_on_change(struct yetty_ygui_widget *slider, ygui_c
     slider->change_userdata = userdata;
 }
 
-void yetty_ygui_widget_checkbox_on_change(struct yetty_ygui_widget *checkbox, ygui_check_callback_t callback,
-                             void *userdata)
+void yetty_ygui_widget_checkbox_on_change(struct yetty_ygui_widget *checkbox,
+                                          ygui_check_callback_t callback, void *userdata)
 {
     if (!checkbox || checkbox->type != YETTY_YGUI_WIDGET_CHECKBOX) {
         return;
@@ -1945,7 +1954,8 @@ void yetty_ygui_widget_checkbox_on_change(struct yetty_ygui_widget *checkbox, yg
     checkbox->check_userdata = userdata;
 }
 
-void yetty_ygui_widget_textinput_on_change(struct yetty_ygui_widget *input, ygui_text_callback_t callback, void *userdata)
+void yetty_ygui_widget_textinput_on_change(struct yetty_ygui_widget *input,
+                                           ygui_text_callback_t callback, void *userdata)
 {
     if (!input || input->type != YETTY_YGUI_WIDGET_TEXTINPUT) {
         return;
@@ -2039,7 +2049,8 @@ void yetty_ygui_engine_set_scale_mode(struct yetty_ygui_engine *engine, ygui_sca
     }
 }
 
-void yetty_ygui_engine_on_resize(struct yetty_ygui_engine *engine, ygui_resize_callback_t callback, void *userdata)
+void yetty_ygui_engine_on_resize(struct yetty_ygui_engine *engine, ygui_resize_callback_t callback,
+                                 void *userdata)
 {
     if (!engine) {
         return;

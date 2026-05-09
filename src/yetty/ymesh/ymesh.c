@@ -27,45 +27,56 @@
  *   6  : azimuth, elevation, dist_factor, pan_x, pan_y, mode
  *   3  : vertex_count, index_count, index_size
  */
-#define YMESH_HEADER_WORDS  (2 + 4 + 6 + 6 + 3)
+#define YMESH_HEADER_WORDS (2 + 4 + 6 + 6 + 3)
 
 static size_t ymesh_serialized_size(const struct yetty_ymesh_glb_data *mesh)
 {
     size_t pos_words = mesh->vertex_count * 3;
     size_t nrm_words = mesh->vertex_count * 3;
-    size_t idx_words = mesh->index_count;  /* index_size always 4 in MVP */
+    size_t idx_words = mesh->index_count; /* index_size always 4 in MVP */
     return (YMESH_HEADER_WORDS + pos_words + nrm_words + idx_words) * sizeof(uint32_t);
 }
 
-static struct yetty_ycore_size_result ymesh_serialize_prim(
-    const struct yetty_ymesh_uniforms *u,
-    const struct yetty_ymesh_glb_data *mesh,
-    uint8_t *out, size_t out_capacity)
+static struct yetty_ycore_size_result ymesh_serialize_prim(const struct yetty_ymesh_uniforms *u,
+                                                           const struct yetty_ymesh_glb_data *mesh,
+                                                           uint8_t *out, size_t out_capacity)
 {
     size_t required = ymesh_serialized_size(mesh);
-    if (out_capacity < required)
+    if (out_capacity < required) {
         return YETTY_ERR(yetty_ycore_size, "ymesh: out buffer too small");
+    }
 
     uint32_t *p = (uint32_t *)out;
     *p++ = YETTY_YMESH_TYPE_ID;
     *p++ = (uint32_t)(required - 2 * sizeof(uint32_t));
 
     /* bounds */
-    memcpy(p, &u->bounds_x, sizeof(float)); p++;
-    memcpy(p, &u->bounds_y, sizeof(float)); p++;
-    memcpy(p, &u->bounds_w, sizeof(float)); p++;
-    memcpy(p, &u->bounds_h, sizeof(float)); p++;
+    memcpy(p, &u->bounds_x, sizeof(float));
+    p++;
+    memcpy(p, &u->bounds_y, sizeof(float));
+    p++;
+    memcpy(p, &u->bounds_w, sizeof(float));
+    p++;
+    memcpy(p, &u->bounds_h, sizeof(float));
+    p++;
 
     /* bbox */
-    memcpy(p, u->bbox_min, 3 * sizeof(float)); p += 3;
-    memcpy(p, u->bbox_max, 3 * sizeof(float)); p += 3;
+    memcpy(p, u->bbox_min, 3 * sizeof(float));
+    p += 3;
+    memcpy(p, u->bbox_max, 3 * sizeof(float));
+    p += 3;
 
     /* camera + mode */
-    memcpy(p, &u->azimuth, sizeof(float)); p++;
-    memcpy(p, &u->elevation, sizeof(float)); p++;
-    memcpy(p, &u->dist_factor, sizeof(float)); p++;
-    memcpy(p, &u->pan_x, sizeof(float)); p++;
-    memcpy(p, &u->pan_y, sizeof(float)); p++;
+    memcpy(p, &u->azimuth, sizeof(float));
+    p++;
+    memcpy(p, &u->elevation, sizeof(float));
+    p++;
+    memcpy(p, &u->dist_factor, sizeof(float));
+    p++;
+    memcpy(p, &u->pan_x, sizeof(float));
+    p++;
+    memcpy(p, &u->pan_y, sizeof(float));
+    p++;
     *p++ = u->mode;
 
     /* counts */
@@ -85,15 +96,16 @@ static struct yetty_ycore_size_result ymesh_serialize_prim(
 }
 
 struct yetty_ypaint_core_buffer_result yetty_ymesh_render(
-    const uint8_t *glb_bytes, size_t len,
-    const struct yetty_ymesh_render_config *config)
+    const uint8_t *glb_bytes, size_t len, const struct yetty_ymesh_render_config *config)
 {
-    if (!glb_bytes || len == 0)
+    if (!glb_bytes || len == 0) {
         return YETTY_ERR(yetty_ypaint_core_buffer, "ymesh: glb_bytes is NULL/empty");
+    }
 
     struct yetty_ymesh_glb_data_result mr = yetty_ymesh_glb_parse(glb_bytes, len);
-    if (YETTY_IS_ERR(mr))
+    if (YETTY_IS_ERR(mr)) {
         return YETTY_ERR(yetty_ypaint_core_buffer, "ymesh: glb parse failed", mr);
+    }
     struct yetty_ymesh_glb_data mesh = mr.value;
 
     struct yetty_ymesh_uniforms u = {0};
@@ -107,12 +119,12 @@ struct yetty_ypaint_core_buffer_result yetty_ymesh_render(
     /* Camera + mode: pass through whatever the caller set, leaving zero/
      * default sentinels for the gen.c camera-builder to interpret. */
     if (config) {
-        u.azimuth     = config->azimuth;
-        u.elevation   = config->elevation;
+        u.azimuth = config->azimuth;
+        u.elevation = config->elevation;
         u.dist_factor = config->dist_factor;
-        u.pan_x       = config->pan_x;
-        u.pan_y       = config->pan_y;
-        u.mode        = config->mode;
+        u.pan_x = config->pan_x;
+        u.pan_y = config->pan_y;
+        u.mode = config->mode;
     }
 
     size_t required = ymesh_serialized_size(&mesh);
@@ -156,12 +168,14 @@ struct yetty_ypaint_core_buffer_result yetty_ymesh_render(
 struct yetty_ypaint_core_buffer_result yetty_ymesh_render_path(
     const char *path, const struct yetty_ymesh_render_config *config)
 {
-    if (!path)
+    if (!path) {
         return YETTY_ERR(yetty_ypaint_core_buffer, "ymesh_render_path: path is NULL");
+    }
 
     FILE *f = fopen(path, "rb");
-    if (!f)
+    if (!f) {
         return YETTY_ERR(yetty_ypaint_core_buffer, "ymesh_render_path: fopen failed");
+    }
     if (fseek(f, 0, SEEK_END) != 0) {
         fclose(f);
         return YETTY_ERR(yetty_ypaint_core_buffer, "ymesh_render_path: fseek failed");
@@ -184,8 +198,7 @@ struct yetty_ypaint_core_buffer_result yetty_ymesh_render_path(
         return YETTY_ERR(yetty_ypaint_core_buffer, "ymesh_render_path: short read");
     }
 
-    struct yetty_ypaint_core_buffer_result r =
-        yetty_ymesh_render(bytes, (size_t)size, config);
+    struct yetty_ypaint_core_buffer_result r = yetty_ymesh_render(bytes, (size_t)size, config);
     free(bytes);
     return r;
 }
@@ -193,14 +206,16 @@ struct yetty_ypaint_core_buffer_result yetty_ymesh_render_path(
 struct yetty_ycore_size_result yetty_ymesh_osc_bin_emit(
     const struct yetty_ypaint_core_buffer *buffer, FILE *out)
 {
-    if (!buffer || !out)
+    if (!buffer || !out) {
         return YETTY_ERR(yetty_ycore_size, "ymesh_osc_bin_emit: NULL buffer or out");
+    }
 
     const uint8_t *raw = NULL;
     size_t raw_size =
         yetty_ypaint_core_buffer_serialize((struct yetty_ypaint_core_buffer *)buffer, &raw);
-    if (raw_size == 0 || !raw)
+    if (raw_size == 0 || !raw) {
         return YETTY_ERR(yetty_ycore_size, "ymesh_osc_bin_emit: empty serialize");
+    }
 
     struct yetty_yface_bin_meta meta = {
         .magic = YETTY_YFACE_BIN_MAGIC,
@@ -211,17 +226,17 @@ struct yetty_ycore_size_result yetty_ymesh_osc_bin_emit(
         .reserved = {0, 0},
     };
     struct yetty_ycore_buffer envelope = {0};
-    struct yetty_ycore_void_result r =
-        yetty_yface_emit(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
-                         &meta, sizeof(meta), raw, raw_size, &envelope);
+    struct yetty_ycore_void_result r = yetty_yface_emit(
+        YETTY_OSC_YPAINT_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
         return YETTY_ERR(yetty_ycore_size, "ymesh_osc_bin_emit: yface_emit failed", r);
     }
 
     size_t written = 0;
-    if (envelope.size > 0)
+    if (envelope.size > 0) {
         written = fwrite(envelope.data, 1, envelope.size, out);
+    }
     yetty_ycore_buffer_destroy(&envelope);
     return YETTY_OK(yetty_ycore_size, written);
 }

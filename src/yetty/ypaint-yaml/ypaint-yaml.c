@@ -423,13 +423,11 @@ static struct yetty_ycore_void_result text_factory(struct yetty_ypaint_core_buff
                         ydebug("ypaint_yaml: font '%s' -> %s (font_id=%d)", font_name, path,
                                font_id);
                     } else {
-                        ywarn("ypaint_yaml: add_font failed for '%s': %s", font_name,
-                              fr.error.msg);
+                        ywarn("ypaint_yaml: add_font failed for '%s': %s", font_name, fr.error.msg);
                     }
                     free(ttf);
                 } else {
-                    ywarn("ypaint_yaml: cannot read font file '%s' for name '%s'", path,
-                          font_name);
+                    ywarn("ypaint_yaml: cannot read font file '%s' for name '%s'", path, font_name);
                 }
                 free(path);
             } else {
@@ -450,8 +448,7 @@ static struct yetty_ycore_void_result text_factory(struct yetty_ypaint_core_buff
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result register_text_factory(
-    struct yetty_ypaint_yaml_parser *parser)
+static struct yetty_ycore_void_result register_text_factory(struct yetty_ypaint_yaml_parser *parser)
 {
     return yetty_ypaint_yaml_parser_register(parser, "text", text_factory);
 }
@@ -468,7 +465,8 @@ struct yetty_ypaint_core_buffer_result yetty_ypaint_yaml_parse(const char *yaml,
         return YETTY_ERR(yetty_ypaint_core_buffer, "null or empty yaml");
     }
 
-    struct yetty_ypaint_core_buffer_result buf_res = yetty_ypaint_core_buffer_config_buffer_create(NULL);
+    struct yetty_ypaint_core_buffer_result buf_res =
+        yetty_ypaint_core_buffer_config_buffer_create(NULL);
     if (YETTY_IS_ERR(buf_res)) {
         return buf_res;
     }

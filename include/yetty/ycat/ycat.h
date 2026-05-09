@@ -127,8 +127,8 @@ int yetty_ycat_fetch_url(const char *url, uint8_t **out, size_t *out_len, char *
 /* Emit an OSC 666674 (YPAINT_SCROLL) sequence wrapping the buffer's primitive
  * bytes (base64-encoded, `--bin` format) to `out`. Returns number of bytes
  * written, 0 on failure. */
-struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(const struct yetty_ypaint_core_buffer *buffer,
-                                                       FILE *out);
+struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(
+    const struct yetty_ypaint_core_buffer *buffer, FILE *out);
 
 #ifdef __cplusplus
 }

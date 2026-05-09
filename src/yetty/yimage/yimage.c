@@ -22,8 +22,7 @@
 #include <stb_image.h>
 
 struct yetty_ypaint_core_buffer_result yetty_yimage_render(
-    const uint8_t *image_bytes, size_t len,
-    const struct yetty_yimage_render_config *config)
+    const uint8_t *image_bytes, size_t len, const struct yetty_yimage_render_config *config)
 {
     if (!image_bytes || len == 0) {
         return YETTY_ERR(yetty_ypaint_core_buffer, "yimage: image_bytes is NULL/empty");
@@ -125,8 +124,7 @@ struct yetty_ypaint_core_buffer_result yetty_yimage_render_path(
         return YETTY_ERR(yetty_ypaint_core_buffer, "yimage_render_path: short read");
     }
 
-    struct yetty_ypaint_core_buffer_result r =
-        yetty_yimage_render(bytes, (size_t)size, config);
+    struct yetty_ypaint_core_buffer_result r = yetty_yimage_render(bytes, (size_t)size, config);
     free(bytes);
     return r;
 }
@@ -153,9 +151,8 @@ struct yetty_ycore_size_result yetty_yimage_osc_bin_emit(
         .reserved = {0, 0},
     };
     struct yetty_ycore_buffer envelope = {0};
-    struct yetty_ycore_void_result r = yetty_yface_emit(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
-                                                        &meta, sizeof(meta), raw, raw_size,
-                                                        &envelope);
+    struct yetty_ycore_void_result r = yetty_yface_emit(
+        YETTY_OSC_YPAINT_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
         return YETTY_ERR(yetty_ycore_size, "yimage_osc_bin_emit: yface_emit failed", r);

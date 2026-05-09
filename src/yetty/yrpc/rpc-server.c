@@ -38,7 +38,7 @@ struct yetty_yrpc_handler_entry {
 struct yetty_yrpc_rpc_conn_ctx {
     struct yetty_yrpc_server *server;
     char read_buf[READ_BUFFER_SIZE];
-    size_t buffered;        /* bytes carried over from previous read(s) */
+    size_t buffered; /* bytes carried over from previous read(s) */
     uint8_t response_buf[RESPONSE_BUFFER_SIZE];
 };
 
@@ -58,8 +58,8 @@ struct yetty_yrpc_server {
 };
 
 static struct yetty_yrpc_handler_entry *find_handler(struct yetty_yrpc_server *server,
-                                                    uint32_t channel, const char *method,
-                                                    size_t method_len)
+                                                     uint32_t channel, const char *method,
+                                                     size_t method_len)
 {
     for (size_t i = 0; i < server->handler_count; i++) {
         struct yetty_yrpc_handler_entry *e = &server->handlers[i];
@@ -73,8 +73,7 @@ static struct yetty_yrpc_handler_entry *find_handler(struct yetty_yrpc_server *s
 
 /* Dispatch a single already-parsed message: find handler, invoke it,
  * write any response back. Owns msg.params (frees it on return). */
-static void dispatch_message(struct yetty_yrpc_rpc_conn_ctx *ctx,
-                             struct yetty_yevent_conn *conn,
+static void dispatch_message(struct yetty_yrpc_rpc_conn_ctx *ctx, struct yetty_yevent_conn *conn,
                              struct yetty_yrpc_message msg)
 {
     struct yetty_yrpc_server *server = ctx->server;
@@ -189,8 +188,8 @@ static void rpc_on_data(void *conn_ctx_ptr, struct yetty_yevent_conn *conn, cons
      * lose typed characters. */
     while (off < total) {
         size_t consumed = 0;
-        struct yetty_rpc_message_result pres = yetty_yrpc_message_parse(
-            (const uint8_t *)ctx->read_buf + off, total - off, &consumed);
+        struct yetty_rpc_message_result pres =
+            yetty_yrpc_message_parse((const uint8_t *)ctx->read_buf + off, total - off, &consumed);
 
         if (YETTY_IS_ERR(pres)) {
             ytrace("yrpc: parse error, dropping connection buffer: %s", pres.error.msg);
@@ -279,7 +278,7 @@ struct yetty_ycore_void_result yetty_yrpc_server_destroy(struct yetty_yrpc_serve
 }
 
 struct yetty_ycore_void_result yetty_yrpc_server_start(struct yetty_yrpc_server *server,
-                                                      const char *host, int port)
+                                                       const char *host, int port)
 {
     struct yetty_yevent_tcp_server_id_result id_res;
     struct yetty_ycore_void_result res;
@@ -357,10 +356,10 @@ int yetty_yrpc_server_is_running(const struct yetty_yrpc_server *server)
 }
 
 struct yetty_ycore_void_result yetty_yrpc_server_register_handler(struct yetty_yrpc_server *server,
-                                                                 uint32_t channel,
-                                                                 const char *method,
-                                                                 yetty_rpc_handler_fn handler,
-                                                                 void *userdata)
+                                                                  uint32_t channel,
+                                                                  const char *method,
+                                                                  yetty_rpc_handler_fn handler,
+                                                                  void *userdata)
 {
     struct yetty_yrpc_handler_entry *entry;
 
@@ -392,9 +391,8 @@ struct yetty_ycore_void_result yetty_yrpc_server_register_handler(struct yetty_y
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yrpc_server_unregister_handler(struct yetty_yrpc_server *server,
-                                                                   uint32_t channel,
-                                                                   const char *method)
+struct yetty_ycore_void_result yetty_yrpc_server_unregister_handler(
+    struct yetty_yrpc_server *server, uint32_t channel, const char *method)
 {
     struct yetty_yrpc_handler_entry *entry;
 
@@ -773,8 +771,8 @@ static struct yetty_ycore_void_result register_builtin_handlers(struct yetty_yrp
     }
 
 #define REG(method, handler)                                                                       \
-    res = yetty_yrpc_server_register_handler(server, YETTY_YRPC_CHANNEL_EVENT_LOOP, method,         \
-                                            handler, server);                                      \
+    res = yetty_yrpc_server_register_handler(server, YETTY_YRPC_CHANNEL_EVENT_LOOP, method,        \
+                                             handler, server);                                     \
     if (YETTY_IS_ERR(res))                                                                         \
         return res;
 

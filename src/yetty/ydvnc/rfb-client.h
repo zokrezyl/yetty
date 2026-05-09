@@ -39,8 +39,8 @@ void yetty_ydvnc_rfb_client_set_password(struct yetty_ydvnc_rfb_client *client,
 struct yetty_ycore_void_result yetty_ydvnc_rfb_client_destroy(
     struct yetty_ydvnc_rfb_client *client);
 
-struct yetty_ycore_void_result yetty_ydvnc_rfb_client_connect(
-    struct yetty_ydvnc_rfb_client *client, const char *host, uint16_t port);
+struct yetty_ycore_void_result yetty_ydvnc_rfb_client_connect(struct yetty_ydvnc_rfb_client *client,
+                                                              const char *host, uint16_t port);
 
 struct yetty_ycore_void_result yetty_ydvnc_rfb_client_disconnect(
     struct yetty_ydvnc_rfb_client *client);
@@ -52,8 +52,8 @@ uint16_t yetty_ydvnc_rfb_client_height(const struct yetty_ydvnc_rfb_client *clie
 
 /* Render the current framebuffer texture onto the supplied render pass.
  * The pass viewport / scissor must already be set by the caller. */
-struct yetty_ycore_void_result yetty_ydvnc_rfb_client_render(
-    struct yetty_ydvnc_rfb_client *client, WGPURenderPassEncoder pass);
+struct yetty_ycore_void_result yetty_ydvnc_rfb_client_render(struct yetty_ydvnc_rfb_client *client,
+                                                             WGPURenderPassEncoder pass);
 
 /* Callbacks */
 void yetty_ydvnc_rfb_client_set_on_frame(struct yetty_ydvnc_rfb_client *client,

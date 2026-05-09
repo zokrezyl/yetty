@@ -32,7 +32,8 @@ struct yetty_yplatform_yprocess;
  *                   null device.
  * Returns YPROCESS_INVALID on failure.
  */
-struct yetty_yplatform_yprocess *yetty_yplatform_yprocess_spawn(const char *const argv[], int detached, int stdio_to_null);
+struct yetty_yplatform_yprocess *yetty_yplatform_yprocess_spawn(const char *const argv[],
+                                                                int detached, int stdio_to_null);
 
 /*
  * Ask the child to terminate. POSIX sends SIGTERM, waits up to grace_ms,

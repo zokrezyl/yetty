@@ -20,7 +20,8 @@ struct yetty_ypaint_core_flyweight_registry {
     size_t handler_count;
 };
 
-struct yetty_ypaint_core_flyweight_registry_ptr_result yetty_ypaint_core_flyweight_registry_create(void)
+struct yetty_ypaint_core_flyweight_registry_ptr_result yetty_ypaint_core_flyweight_registry_create(
+    void)
 {
     struct yetty_ypaint_core_flyweight_registry *reg =
         calloc(1, sizeof(struct yetty_ypaint_core_flyweight_registry));
@@ -35,8 +36,8 @@ void yetty_ypaint_core_flyweight_registry_destroy(struct yetty_ypaint_core_flywe
     free(reg);
 }
 
-void yetty_ypaint_core_flyweight_registry_set_default(struct yetty_ypaint_core_flyweight_registry *reg,
-                                                 yetty_ypaint_prim_handler_fn handler)
+void yetty_ypaint_core_flyweight_registry_set_default(
+    struct yetty_ypaint_core_flyweight_registry *reg, yetty_ypaint_prim_handler_fn handler)
 {
     if (reg) {
         reg->default_handler = handler;

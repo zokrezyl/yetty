@@ -28,7 +28,7 @@
 #include "vnc-auth.h"
 
 #define YDVNC_RECV_BUF_INITIAL (1u * 1024u * 1024u)
-#define YDVNC_RECV_BUF_MAX     (64u * 1024u * 1024u)
+#define YDVNC_RECV_BUF_MAX (64u * 1024u * 1024u)
 
 /* Fullscreen quad shader — copy of the well-known WebGPU pattern: emit six
  * vertices spanning [-1,1]^2 with matching uv [0,1]^2, sample one texture
@@ -117,7 +117,7 @@ struct yetty_ydvnc_rfb_client {
      * Tight uses variable-length payloads, so we keep buffering until we
      * have a full message before advancing the state machine. */
     uint8_t *rb;
-    size_t rb_off;     /* offset into rb where the next byte arrives */
+    size_t rb_off; /* offset into rb where the next byte arrives */
     size_t rb_cap;
 
     /* Callbacks */
@@ -159,9 +159,9 @@ static struct yetty_ycore_void_result send_set_encodings(struct yetty_ydvnc_rfb_
 static struct yetty_ycore_void_result send_full_fb_update_request(struct yetty_ydvnc_rfb_client *c,
                                                                   int incremental);
 static struct yetty_ycore_void_result decode_raw_rect(struct yetty_ydvnc_rfb_client *c,
-                                                     const uint8_t *data, size_t data_size);
+                                                      const uint8_t *data, size_t data_size);
 static struct yetty_ycore_void_result decode_copyrect(struct yetty_ydvnc_rfb_client *c,
-                                                     const uint8_t *data, size_t data_size);
+                                                      const uint8_t *data, size_t data_size);
 
 static void consume(struct yetty_ydvnc_rfb_client *c, size_t n);
 static struct yetty_ycore_void_result transport_send(struct yetty_ydvnc_rfb_client *c,
@@ -328,10 +328,10 @@ static struct yetty_ycore_void_result handle_proto_version(struct yetty_ydvnc_rf
     yinfo("ydvnc: server version: %.*s", YETTY_YDVNC_RFB_PROTO_VERSION_LEN - 1, server_version);
 
     /* Always reply 003.008 — that's what every modern server supports. */
-    YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                       transport_send(c, YETTY_YDVNC_RFB_PROTO_VERSION_38,
-                                       YETTY_YDVNC_RFB_PROTO_VERSION_LEN),
-                       "sending client version failed");
+    YETTY_RETURN_IF_ERR(
+        yetty_ycore_void,
+        transport_send(c, YETTY_YDVNC_RFB_PROTO_VERSION_38, YETTY_YDVNC_RFB_PROTO_VERSION_LEN),
+        "sending client version failed");
 
     c->state = YDVNC_ST_SECURITY_TYPES;
     return YETTY_OK_VOID();
@@ -363,8 +363,12 @@ static struct yetty_ycore_void_result handle_security_types(struct yetty_ydvnc_r
     int has_vnc = 0;
     for (uint8_t i = 0; i < n; i++) {
         uint8_t t = c->rb[1 + i];
-        if (t == YETTY_YDVNC_RFB_SEC_NONE) has_none = 1;
-        if (t == YETTY_YDVNC_RFB_SEC_VNC_AUTH) has_vnc = 1;
+        if (t == YETTY_YDVNC_RFB_SEC_NONE) {
+            has_none = 1;
+        }
+        if (t == YETTY_YDVNC_RFB_SEC_VNC_AUTH) {
+            has_vnc = 1;
+        }
     }
     consume(c, (size_t)1 + n);
 
@@ -380,15 +384,15 @@ static struct yetty_ycore_void_result handle_security_types(struct yetty_ydvnc_r
         next = YDVNC_ST_AUTH_CHALLENGE;
     } else if (has_vnc) {
         return YETTY_ERR(yetty_ycore_void,
-                        "ydvnc: server requires VNC password but none was provided "
-                        "(use --ydvnc-password)");
+                         "ydvnc: server requires VNC password but none was provided "
+                         "(use --ydvnc-password)");
     } else {
         return YETTY_ERR(yetty_ycore_void,
-                        "ydvnc: no compatible security type offered (need None or VNC auth)");
+                         "ydvnc: no compatible security type offered (need None or VNC auth)");
     }
 
     YETTY_RETURN_IF_ERR(yetty_ycore_void, transport_send(c, &chosen, 1),
-                       "sending chosen security type failed");
+                        "sending chosen security type failed");
     yinfo("ydvnc: security type chosen: %s",
           chosen == YETTY_YDVNC_RFB_SEC_NONE ? "None" : "VNC (DES)");
     c->state = next;
@@ -435,7 +439,7 @@ static struct yetty_ycore_void_result handle_auth_challenge(struct yetty_ydvnc_r
     yetty_ydvnc_vnc_auth_response(c->password, challenge, response);
 
     YETTY_RETURN_IF_ERR(yetty_ycore_void, transport_send(c, response, sizeof(response)),
-                       "VNC auth response send failed");
+                        "VNC auth response send failed");
     c->state = YDVNC_ST_AUTH_RESULT;
     return YETTY_OK_VOID();
 }
@@ -524,21 +528,18 @@ static struct yetty_ycore_void_result handle_server_init(struct yetty_ydvnc_rfb_
 
     yinfo("ydvnc: server init: %ux%u \"%s\"", w, h, name);
 
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, resize_framebuffer(c, w, h),
-                       "framebuffer resize failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, resize_framebuffer(c, w, h), "framebuffer resize failed");
 
     /* Tell server we want native BGRA8 little-endian — straight memcpy
      * into a WGPU BGRA8Unorm texture. */
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, send_set_pixel_format(c),
-                       "SetPixelFormat send failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, send_set_pixel_format(c), "SetPixelFormat send failed");
 
     /* Advertise encodings (POC: Raw + CopyRect + DesktopSize). */
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, send_set_encodings(c),
-                       "SetEncodings send failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, send_set_encodings(c), "SetEncodings send failed");
 
     /* Initial full update request. */
     YETTY_RETURN_IF_ERR(yetty_ycore_void, send_full_fb_update_request(c, 0),
-                       "initial FramebufferUpdateRequest send failed");
+                        "initial FramebufferUpdateRequest send failed");
 
     c->state = YDVNC_ST_MAIN;
     if (c->on_connected) {
@@ -591,7 +592,7 @@ static struct yetty_ycore_void_result send_set_encodings(struct yetty_ydvnc_rfb_
     memcpy(header + 2, &n_be, 2);
 
     YETTY_RETURN_IF_ERR(yetty_ycore_void, transport_send(c, header, sizeof(header)),
-                       "SetEncodings header send failed");
+                        "SetEncodings header send failed");
     return transport_send(c, encs, sizeof(int32_t) * n);
 }
 
@@ -621,7 +622,7 @@ static struct yetty_ycore_void_result handle_main(struct yetty_ydvnc_rfb_client 
                 c->in_fb_update = 0;
                 /* Ask for the next incremental update. */
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, send_full_fb_update_request(c, 1),
-                                   "incremental FramebufferUpdateRequest failed");
+                                    "incremental FramebufferUpdateRequest failed");
                 if (c->on_frame) {
                     c->on_frame(c->on_frame_userdata);
                 }
@@ -641,31 +642,30 @@ static struct yetty_ycore_void_result handle_main(struct yetty_ydvnc_rfb_client 
                 c->current_rect.width = ntohs(c->current_rect.width);
                 c->current_rect.height = ntohs(c->current_rect.height);
                 c->current_rect.encoding = (int32_t)ntohl((uint32_t)c->current_rect.encoding);
-                ydebug("ydvnc: rect %ux%u@(%u,%u) enc=%d",
-                       c->current_rect.width, c->current_rect.height,
-                       c->current_rect.x, c->current_rect.y, c->current_rect.encoding);
+                ydebug("ydvnc: rect %ux%u@(%u,%u) enc=%d", c->current_rect.width,
+                       c->current_rect.height, c->current_rect.x, c->current_rect.y,
+                       c->current_rect.encoding);
             }
 
             int32_t enc = c->current_rect.encoding;
             if (enc == YETTY_YDVNC_RFB_PSEUDO_DESKTOP_SIZE) {
                 /* No payload — width/height are in the rect header itself. */
-                YETTY_RETURN_IF_ERR(yetty_ycore_void,
-                                   resize_framebuffer(c, c->current_rect.width,
-                                                      c->current_rect.height),
-                                   "DesktopSize: resize_framebuffer failed");
+                YETTY_RETURN_IF_ERR(
+                    yetty_ycore_void,
+                    resize_framebuffer(c, c->current_rect.width, c->current_rect.height),
+                    "DesktopSize: resize_framebuffer failed");
                 c->have_rect_header = 0;
                 c->fb_rects_remaining--;
                 continue;
             }
 
             if (enc == YETTY_YDVNC_RFB_ENC_RAW) {
-                size_t needed = (size_t)c->current_rect.width *
-                                (size_t)c->current_rect.height * 4u;
+                size_t needed = (size_t)c->current_rect.width * (size_t)c->current_rect.height * 4u;
                 if (c->rb_off < needed) {
                     return YETTY_OK_VOID();
                 }
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, decode_raw_rect(c, c->rb, needed),
-                                   "Raw decode failed");
+                                    "Raw decode failed");
                 consume(c, needed);
                 c->have_rect_header = 0;
                 c->fb_rects_remaining--;
@@ -678,7 +678,7 @@ static struct yetty_ycore_void_result handle_main(struct yetty_ydvnc_rfb_client 
                     return YETTY_OK_VOID();
                 }
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, decode_copyrect(c, c->rb, 4),
-                                   "CopyRect decode failed");
+                                    "CopyRect decode failed");
                 consume(c, 4);
                 c->have_rect_header = 0;
                 c->fb_rects_remaining--;
@@ -686,10 +686,11 @@ static struct yetty_ycore_void_result handle_main(struct yetty_ydvnc_rfb_client 
             }
 
             yerror("ydvnc: server sent unsupported encoding %d for rect %ux%u — "
-                  "framing is now lost, disconnecting", enc,
-                  c->current_rect.width, c->current_rect.height);
-            return YETTY_ERR(yetty_ycore_void,
-                            "ydvnc: server sent unsupported encoding (Tight/Cursor not yet wired)");
+                   "framing is now lost, disconnecting",
+                   enc, c->current_rect.width, c->current_rect.height);
+            return YETTY_ERR(
+                yetty_ycore_void,
+                "ydvnc: server sent unsupported encoding (Tight/Cursor not yet wired)");
         }
         return YETTY_OK_VOID();
     }
@@ -735,7 +736,7 @@ static struct yetty_ycore_void_result handle_main(struct yetty_ydvnc_rfb_client 
     case YETTY_YDVNC_RFB_S2C_SET_COLOUR_MAP_ENTRIES:
         /* We negotiated TrueColour; this should never arrive. Bail. */
         return YETTY_ERR(yetty_ycore_void,
-                        "ydvnc: server sent SetColourMapEntries despite TrueColour pixel format");
+                         "ydvnc: server sent SetColourMapEntries despite TrueColour pixel format");
     default:
         return YETTY_ERR(yetty_ycore_void, "ydvnc: unknown server message type");
     }
@@ -746,7 +747,7 @@ static struct yetty_ycore_void_result handle_main(struct yetty_ydvnc_rfb_client 
  *===========================================================================*/
 
 static struct yetty_ycore_void_result decode_raw_rect(struct yetty_ydvnc_rfb_client *c,
-                                                     const uint8_t *data, size_t data_size)
+                                                      const uint8_t *data, size_t data_size)
 {
     uint16_t x = c->current_rect.x;
     uint16_t y = c->current_rect.y;
@@ -776,7 +777,7 @@ static struct yetty_ycore_void_result decode_raw_rect(struct yetty_ydvnc_rfb_cli
 }
 
 static struct yetty_ycore_void_result decode_copyrect(struct yetty_ydvnc_rfb_client *c,
-                                                     const uint8_t *data, size_t data_size)
+                                                      const uint8_t *data, size_t data_size)
 {
     if (data_size != 4) {
         return YETTY_ERR(yetty_ycore_void, "ydvnc: CopyRect data_size != 4");
@@ -815,7 +816,8 @@ static struct yetty_ycore_void_result decode_copyrect(struct yetty_ydvnc_rfb_cli
      * we maintain a CPU shadow buffer separately. For POC we skip and just
      * leave the destination unchanged (the server will catch up via a Raw
      * update on the next frame for that region). Log a warn. */
-    ywarn("ydvnc: CopyRect requested (%u,%u)->(%u,%u) %ux%u — POC: not blitted, awaiting server raw redraw",
+    ywarn("ydvnc: CopyRect requested (%u,%u)->(%u,%u) %ux%u — POC: not blitted, awaiting server "
+          "raw redraw",
           src_x, src_y, dst_x, dst_y, w, h);
 
     return YETTY_OK_VOID();
@@ -1010,8 +1012,7 @@ struct yetty_ydvnc_rfb_client_ptr_result yetty_ydvnc_rfb_client_create(
         return YETTY_ERR(yetty_ydvnc_rfb_client_ptr, "ydvnc: recv buffer alloc failed");
     }
 
-    struct yetty_ydvnc_transport_ptr_result t_res =
-        yetty_ydvnc_transport_tcp_create(event_loop);
+    struct yetty_ydvnc_transport_ptr_result t_res = yetty_ydvnc_transport_tcp_create(event_loop);
     if (YETTY_IS_ERR(t_res)) {
         free(c->rb);
         free(c);
@@ -1034,12 +1035,24 @@ struct yetty_ycore_void_result yetty_ydvnc_rfb_client_destroy(struct yetty_ydvnc
             yetty_ycore_error_destroy(r.error);
         }
     }
-    if (c->bind_group) wgpuBindGroupRelease(c->bind_group);
-    if (c->bgl) wgpuBindGroupLayoutRelease(c->bgl);
-    if (c->pipeline) wgpuRenderPipelineRelease(c->pipeline);
-    if (c->sampler) wgpuSamplerRelease(c->sampler);
-    if (c->fb_view) wgpuTextureViewRelease(c->fb_view);
-    if (c->fb_texture) wgpuTextureRelease(c->fb_texture);
+    if (c->bind_group) {
+        wgpuBindGroupRelease(c->bind_group);
+    }
+    if (c->bgl) {
+        wgpuBindGroupLayoutRelease(c->bgl);
+    }
+    if (c->pipeline) {
+        wgpuRenderPipelineRelease(c->pipeline);
+    }
+    if (c->sampler) {
+        wgpuSamplerRelease(c->sampler);
+    }
+    if (c->fb_view) {
+        wgpuTextureViewRelease(c->fb_view);
+    }
+    if (c->fb_texture) {
+        wgpuTextureRelease(c->fb_texture);
+    }
 
     if (c->password) {
         /* Best-effort scrub before free. */
@@ -1054,7 +1067,9 @@ struct yetty_ycore_void_result yetty_ydvnc_rfb_client_destroy(struct yetty_ydvnc
 
 void yetty_ydvnc_rfb_client_set_password(struct yetty_ydvnc_rfb_client *c, const char *password)
 {
-    if (!c) return;
+    if (!c) {
+        return;
+    }
     if (c->password) {
         memset(c->password, 0, strlen(c->password));
         free(c->password);
@@ -1065,8 +1080,8 @@ void yetty_ydvnc_rfb_client_set_password(struct yetty_ydvnc_rfb_client *c, const
     }
 }
 
-struct yetty_ycore_void_result yetty_ydvnc_rfb_client_connect(
-    struct yetty_ydvnc_rfb_client *c, const char *host, uint16_t port)
+struct yetty_ycore_void_result yetty_ydvnc_rfb_client_connect(struct yetty_ydvnc_rfb_client *c,
+                                                              const char *host, uint16_t port)
 {
     if (!c || !host) {
         return YETTY_ERR(yetty_ycore_void, "ydvnc: NULL client or host");
@@ -1122,33 +1137,44 @@ struct yetty_ycore_void_result yetty_ydvnc_rfb_client_render(struct yetty_ydvnc_
 void yetty_ydvnc_rfb_client_set_on_frame(struct yetty_ydvnc_rfb_client *c,
                                          yetty_ydvnc_on_frame_fn cb, void *ud)
 {
-    if (!c) return;
+    if (!c) {
+        return;
+    }
     c->on_frame = cb;
     c->on_frame_userdata = ud;
 }
 void yetty_ydvnc_rfb_client_set_on_connected(struct yetty_ydvnc_rfb_client *c,
                                              yetty_ydvnc_on_connected_fn cb, void *ud)
 {
-    if (!c) return;
+    if (!c) {
+        return;
+    }
     c->on_connected = cb;
     c->on_connected_userdata = ud;
 }
 void yetty_ydvnc_rfb_client_set_on_disconnected(struct yetty_ydvnc_rfb_client *c,
                                                 yetty_ydvnc_on_disconnected_fn cb, void *ud)
 {
-    if (!c) return;
+    if (!c) {
+        return;
+    }
     c->on_disconnected = cb;
     c->on_disconnected_userdata = ud;
 }
 
-struct yetty_ycore_void_result yetty_ydvnc_rfb_client_send_pointer(
-    struct yetty_ydvnc_rfb_client *c, int16_t x, int16_t y, uint8_t button_mask)
+struct yetty_ycore_void_result yetty_ydvnc_rfb_client_send_pointer(struct yetty_ydvnc_rfb_client *c,
+                                                                   int16_t x, int16_t y,
+                                                                   uint8_t button_mask)
 {
     if (!c || c->state != YDVNC_ST_MAIN) {
         return YETTY_OK_VOID();
     }
-    if (x < 0) x = 0;
-    if (y < 0) y = 0;
+    if (x < 0) {
+        x = 0;
+    }
+    if (y < 0) {
+        y = 0;
+    }
     struct yetty_ydvnc_rfb_pointer_event_msg msg = {0};
     msg.message_type = YETTY_YDVNC_RFB_C2S_POINTER_EVENT;
     msg.button_mask = button_mask;
@@ -1157,8 +1183,8 @@ struct yetty_ycore_void_result yetty_ydvnc_rfb_client_send_pointer(
     return transport_send(c, &msg, sizeof(msg));
 }
 
-struct yetty_ycore_void_result yetty_ydvnc_rfb_client_send_key(
-    struct yetty_ydvnc_rfb_client *c, uint32_t keysym, int down)
+struct yetty_ycore_void_result yetty_ydvnc_rfb_client_send_key(struct yetty_ydvnc_rfb_client *c,
+                                                               uint32_t keysym, int down)
 {
     if (!c || c->state != YDVNC_ST_MAIN) {
         return YETTY_OK_VOID();

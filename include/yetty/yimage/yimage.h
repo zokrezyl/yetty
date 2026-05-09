@@ -34,18 +34,17 @@ extern "C" {
 
 /* Geometry config. NULL fields fall back to defaults. */
 struct yetty_yimage_render_config {
-    float bounds_x;     /* 0   — overridden by canvas at render time */
-    float bounds_y;     /* 0   — overridden by canvas at render time */
-    float bounds_w;     /* 0   — when 0, defaults to source width  */
-    float bounds_h;     /* 0   — when 0, defaults to source height */
+    float bounds_x; /* 0   — overridden by canvas at render time */
+    float bounds_y; /* 0   — overridden by canvas at render time */
+    float bounds_w; /* 0   — when 0, defaults to source width  */
+    float bounds_h; /* 0   — when 0, defaults to source height */
 };
 
 /* Decode `image_bytes` (PNG/JPG/...) and produce a fresh ypaint-core
  * buffer holding ONE yimage complex prim. Caller frees the buffer with
  * yetty_ypaint_core_buffer_destroy. */
 struct yetty_ypaint_core_buffer_result yetty_yimage_render(
-    const uint8_t *image_bytes, size_t len,
-    const struct yetty_yimage_render_config *config);
+    const uint8_t *image_bytes, size_t len, const struct yetty_yimage_render_config *config);
 
 /* Convenience: read the file at `path` and call yetty_yimage_render. */
 struct yetty_ypaint_core_buffer_result yetty_yimage_render_path(

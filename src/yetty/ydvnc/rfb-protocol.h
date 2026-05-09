@@ -48,7 +48,7 @@ struct yetty_ydvnc_rfb_pixel_format {
     uint8_t depth;
     uint8_t big_endian_flag;
     uint8_t true_colour_flag;
-    uint16_t red_max;       /* big-endian on the wire */
+    uint16_t red_max; /* big-endian on the wire */
     uint16_t green_max;
     uint16_t blue_max;
     uint8_t red_shift;
@@ -146,17 +146,17 @@ struct yetty_ydvnc_rfb_rectangle_header {
  * Encoding type IDs (RFC 6143 §7.7 + community)
  *===========================================================================*/
 
-#define YETTY_YDVNC_RFB_ENC_RAW       0
-#define YETTY_YDVNC_RFB_ENC_COPYRECT  1
-#define YETTY_YDVNC_RFB_ENC_RRE       2
-#define YETTY_YDVNC_RFB_ENC_HEXTILE   5
-#define YETTY_YDVNC_RFB_ENC_TIGHT     7
-#define YETTY_YDVNC_RFB_ENC_ZRLE      16
+#define YETTY_YDVNC_RFB_ENC_RAW 0
+#define YETTY_YDVNC_RFB_ENC_COPYRECT 1
+#define YETTY_YDVNC_RFB_ENC_RRE 2
+#define YETTY_YDVNC_RFB_ENC_HEXTILE 5
+#define YETTY_YDVNC_RFB_ENC_TIGHT 7
+#define YETTY_YDVNC_RFB_ENC_ZRLE 16
 
 /* Pseudo-encodings — negative IDs requested in SetEncodings to signal client
  * capabilities. Server then uses them as encoding IDs in special rectangles. */
-#define YETTY_YDVNC_RFB_PSEUDO_CURSOR        (-239)
-#define YETTY_YDVNC_RFB_PSEUDO_DESKTOP_SIZE  (-223)
+#define YETTY_YDVNC_RFB_PSEUDO_CURSOR (-239)
+#define YETTY_YDVNC_RFB_PSEUDO_DESKTOP_SIZE (-223)
 
 /*=============================================================================
  * Tight encoding (rfbproto §6.7)
@@ -185,15 +185,15 @@ struct yetty_ydvnc_rfb_rectangle_header {
  *===========================================================================*/
 
 #define YETTY_YDVNC_RFB_TIGHT_RESET_STREAM(n) (1u << (n))
-#define YETTY_YDVNC_RFB_TIGHT_RESET_MASK     0x0fu
+#define YETTY_YDVNC_RFB_TIGHT_RESET_MASK 0x0fu
 #define YETTY_YDVNC_RFB_TIGHT_EXPLICIT_FILTER 0x40u
-#define YETTY_YDVNC_RFB_TIGHT_FILL            0x80u
-#define YETTY_YDVNC_RFB_TIGHT_JPEG            0x90u
-#define YETTY_YDVNC_RFB_TIGHT_STREAM_MASK     0x30u
-#define YETTY_YDVNC_RFB_TIGHT_STREAM_SHIFT    4
+#define YETTY_YDVNC_RFB_TIGHT_FILL 0x80u
+#define YETTY_YDVNC_RFB_TIGHT_JPEG 0x90u
+#define YETTY_YDVNC_RFB_TIGHT_STREAM_MASK 0x30u
+#define YETTY_YDVNC_RFB_TIGHT_STREAM_SHIFT 4
 
-#define YETTY_YDVNC_RFB_TIGHT_FILTER_COPY     0
-#define YETTY_YDVNC_RFB_TIGHT_FILTER_PALETTE  1
+#define YETTY_YDVNC_RFB_TIGHT_FILTER_COPY 0
+#define YETTY_YDVNC_RFB_TIGHT_FILTER_PALETTE 1
 #define YETTY_YDVNC_RFB_TIGHT_FILTER_GRADIENT 2
 
 #define YETTY_YDVNC_RFB_TIGHT_NUM_STREAMS 4

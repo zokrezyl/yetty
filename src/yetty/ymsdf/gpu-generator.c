@@ -58,8 +58,9 @@ static const struct yetty_ymsdf_generator_ops GPU_OPS = {
     .destroy = gpu_destroy,
 };
 
-struct yetty_ymsdf_generator_ptr_result yetty_ymsdf_generator_create_gpu(
-    void *device, void *instance, const char *shader_path)
+struct yetty_ymsdf_generator_ptr_result yetty_ymsdf_generator_create_gpu(void *device,
+                                                                         void *instance,
+                                                                         const char *shader_path)
 {
     if (!device || !instance) {
         return YETTY_ERR(yetty_ymsdf_generator_ptr,

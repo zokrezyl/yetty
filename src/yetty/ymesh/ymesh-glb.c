@@ -8,8 +8,9 @@
 static cgltf_attribute *find_attribute(cgltf_primitive *prim, cgltf_attribute_type type)
 {
     for (cgltf_size i = 0; i < prim->attributes_count; i++) {
-        if (prim->attributes[i].type == type)
+        if (prim->attributes[i].type == type) {
             return &prim->attributes[i];
+        }
     }
     return NULL;
 }
@@ -17,23 +18,25 @@ static cgltf_attribute *find_attribute(cgltf_primitive *prim, cgltf_attribute_ty
 static int read_vec3_accessor(const cgltf_accessor *acc, float *out, size_t count)
 {
     for (size_t i = 0; i < count; i++) {
-        if (!cgltf_accessor_read_float(acc, i, &out[i * 3], 3))
+        if (!cgltf_accessor_read_float(acc, i, &out[i * 3], 3)) {
             return 0;
+        }
     }
     return 1;
 }
 
-struct yetty_ymesh_glb_data_result yetty_ymesh_glb_parse(
-    const uint8_t *bytes, size_t len)
+struct yetty_ymesh_glb_data_result yetty_ymesh_glb_parse(const uint8_t *bytes, size_t len)
 {
-    if (!bytes || len == 0)
+    if (!bytes || len == 0) {
         return YETTY_ERR(yetty_ymesh_glb_data, "ymesh_glb: empty input");
+    }
 
     cgltf_options options = {0};
     cgltf_data *gltf = NULL;
     cgltf_result pres = cgltf_parse(&options, bytes, len, &gltf);
-    if (pres != cgltf_result_success)
+    if (pres != cgltf_result_success) {
         return YETTY_ERR(yetty_ymesh_glb_data, "ymesh_glb: cgltf_parse failed");
+    }
 
     cgltf_result lres = cgltf_load_buffers(&options, gltf, NULL);
     if (lres != cgltf_result_success) {
@@ -51,8 +54,7 @@ struct yetty_ymesh_glb_data_result yetty_ymesh_glb_parse(
     cgltf_attribute *nrm_attr = find_attribute(prim, cgltf_attribute_type_normal);
     if (!pos_attr || !nrm_attr) {
         cgltf_free(gltf);
-        return YETTY_ERR(yetty_ymesh_glb_data,
-                         "ymesh_glb: primitive missing POSITION or NORMAL");
+        return YETTY_ERR(yetty_ymesh_glb_data, "ymesh_glb: primitive missing POSITION or NORMAL");
     }
     if (!prim->indices) {
         cgltf_free(gltf);
@@ -65,8 +67,7 @@ struct yetty_ymesh_glb_data_result yetty_ymesh_glb_parse(
 
     if (pos_acc->count != nrm_acc->count) {
         cgltf_free(gltf);
-        return YETTY_ERR(yetty_ymesh_glb_data,
-                         "ymesh_glb: POSITION/NORMAL vertex counts differ");
+        return YETTY_ERR(yetty_ymesh_glb_data, "ymesh_glb: POSITION/NORMAL vertex counts differ");
     }
 
     size_t vcount = pos_acc->count;
@@ -121,8 +122,12 @@ struct yetty_ymesh_glb_data_result yetty_ymesh_glb_parse(
         for (size_t i = 1; i < vcount; i++) {
             for (int j = 0; j < 3; j++) {
                 float v = out.positions[i * 3 + j];
-                if (v < out.bbox_min[j]) out.bbox_min[j] = v;
-                if (v > out.bbox_max[j]) out.bbox_max[j] = v;
+                if (v < out.bbox_min[j]) {
+                    out.bbox_min[j] = v;
+                }
+                if (v > out.bbox_max[j]) {
+                    out.bbox_max[j] = v;
+                }
             }
         }
     }
@@ -133,8 +138,9 @@ struct yetty_ymesh_glb_data_result yetty_ymesh_glb_parse(
 
 void yetty_ymesh_glb_destroy(struct yetty_ymesh_glb_data *data)
 {
-    if (!data)
+    if (!data) {
         return;
+    }
     free(data->positions);
     free(data->normals);
     free(data->indices);

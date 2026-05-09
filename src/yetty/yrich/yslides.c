@@ -146,9 +146,8 @@ static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e
             .radius_x = s->bounds.w * 0.5f,
             .radius_y = s->bounds.h * 0.5f,
         };
-        struct yetty_ypaint_core_id_result idr =
-            yetty_ysdf_add_ellipse(buf, layer, s->fill_color, s->stroke_color, s->stroke_width,
-                                   &body);
+        struct yetty_ypaint_core_id_result idr = yetty_ysdf_add_ellipse(
+            buf, layer, s->fill_color, s->stroke_color, s->stroke_width, &body);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, idr, "shape_render: ellipse add failed");
         break;
     }
@@ -177,9 +176,8 @@ static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e
             .half_height = s->bounds.h * 0.5f + 2.0f,
             .corner_radius = 0.0f,
         };
-        struct yetty_ypaint_core_id_result idr =
-            yetty_ysdf_add_box(buf, layer + 4, 0, YETTY_YRICH_RGBA(0, 100, 200, 255), 1.5f,
-                               &border);
+        struct yetty_ypaint_core_id_result idr = yetty_ysdf_add_box(
+            buf, layer + 4, 0, YETTY_YRICH_RGBA(0, 100, 200, 255), 1.5f, &border);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, idr, "shape_render: selection box add failed");
     }
     return YETTY_OK_VOID();

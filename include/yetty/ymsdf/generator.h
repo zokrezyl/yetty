@@ -67,8 +67,9 @@ struct yetty_ymsdf_generator_ptr_result yetty_ymsdf_generator_create_cpu(void);
  * msdf_gen.wgsl compute shader; if NULL the impl falls back to its
  * exe-dir + ./shaders search chain. device + instance are typed as void *
  * to keep webgpu.h out of this header. */
-struct yetty_ymsdf_generator_ptr_result yetty_ymsdf_generator_create_gpu(
-    void *device, void *instance, const char *shader_path);
+struct yetty_ymsdf_generator_ptr_result yetty_ymsdf_generator_create_gpu(void *device,
+                                                                         void *instance,
+                                                                         const char *shader_path);
 
 /* Resolve the generator selector from a config (`msdf/generator`,
  * default "gpu") and build the matching impl. shaders_dir is the

@@ -40,7 +40,7 @@ typedef void (*yplatform_coro_entry)(void *arg);
  * stack_hint of 0 means use the platform default. name is copied internally
  * and used in trace output; may be NULL. */
 struct yplatform_coro_ptr_result yetty_yplatform_coro_spawn(yplatform_coro_entry entry, void *arg,
-                                                      size_t stack_hint, const char *name);
+                                                            size_t stack_hint, const char *name);
 
 /* Suspend the currently-running coroutine. Returns when somebody resumes it.
  * Must be called from inside a coroutine (not the main stack). */
