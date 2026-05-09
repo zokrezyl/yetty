@@ -402,7 +402,7 @@ static const struct yetty_ytransport_conn_transport_ops iframe_transport_ops = {
     .destroy = iframe_transport_destroy,
 };
 
-struct yetty_ytransport_conn_transport *yetty_yplatform_iframe_transport_create(uint16_t port)
+struct yetty_ytransport_conn_transport *yetty_ytransport_iframe_transport_create(uint16_t port)
 {
     struct iframe_transport *t = calloc(1, sizeof(*t));
     if (!t) {

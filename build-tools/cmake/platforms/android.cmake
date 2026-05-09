@@ -38,15 +38,15 @@ file(MAKE_DIRECTORY ${ANDROID_ASSETS_DIR})
 # Platform sources — Android-specific + shared Unix components (all C)
 set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ymain/android.c
-    ${YETTY_ROOT}/src/yetty/yplatform/android/platform-paths.c
-    ${YETTY_ROOT}/src/yetty/yplatform/android/surface.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/libuv-event-loop.c
+    ${YETTY_ROOT}/src/yetty/yplatform/paths/android.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/android.c
+    ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/ycoroutine.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/ywebgpu.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/fork-pty.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/unix-pty-factory.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/unix-process.c
+    ${YETTY_ROOT}/src/yetty/yplatform/process/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/unix-socket.c
     ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c

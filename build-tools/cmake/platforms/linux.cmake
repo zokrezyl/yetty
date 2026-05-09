@@ -55,7 +55,7 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/unix-socket.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/unix-process.c
+    ${YETTY_ROOT}/src/yetty/yplatform/process/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
     ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/term/default.c

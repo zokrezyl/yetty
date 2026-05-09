@@ -84,8 +84,8 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ymain/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/window/webasm.c
-    ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/webasm.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webasm/pipe.c
+    ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/webasm.c
+    ${YETTY_ROOT}/src/yetty/yplatform/pipe/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/paths/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/ycoroutine.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/ywebgpu.c
