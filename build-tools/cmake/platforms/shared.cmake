@@ -277,7 +277,7 @@ endif()
 # Common libraries to link (only include what's enabled)
 set(YETTY_LIBS "")
 
-# Third-party library link targets
+# Third-party library link platforms
 if(YETTY_ENABLE_LIB_WEBGPU)
     list(APPEND YETTY_LIBS webgpu)
 endif()
@@ -336,7 +336,7 @@ endif()
 # Note: yetty_yui comes first because it depends on yetty_term
 list(APPEND YETTY_LIBS yetty_yui yetty_yterm yetty_yrender yetty_yrender_utils yetty_ywebgpu yetty_yevent)
 
-# Feature library link targets
+# Feature library link platforms
 if(YETTY_ENABLE_FEATURE_BASE)
     list(APPEND YETTY_LIBS yetty_base)
 endif()

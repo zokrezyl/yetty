@@ -64,7 +64,7 @@ set(YETTY_ENABLE_FEATURE_YMSDF_GEN ON  CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_FEATURE_YTHORVG   OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_FEATURE_SSH       OFF CACHE BOOL "" FORCE)
 
-include(${YETTY_ROOT}/build-tools/cmake/targets/shared.cmake)
+include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
 include(${YETTY_ROOT}/build-tools/cmake/tinyemu.cmake)
 include(${YETTY_ROOT}/build-tools/cmake/tinyemu-iframe.cmake)
 
@@ -73,7 +73,7 @@ if(YETTY_ENABLE_FEATURE_ASSETS)
     add_subdirectory(${YETTY_ROOT}/assets ${CMAKE_BINARY_DIR}/assets-build)
 endif()
 
-# Global definitions for all webasm targets (applied before add_subdirectory)
+# Global definitions for all webasm platforms (applied before add_subdirectory)
 add_compile_definitions(YETTY_WEB=1 YETTY_ANDROID=0)
 
 # Set shader directory path for web (used by card libraries)
@@ -81,7 +81,7 @@ set(YETTY_SHADERS_DIR "/assets/shaders" CACHE STRING "Shader directory path")
 
 # Platform sources
 set(YETTY_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/yplatform/webasm/main.c
+    ${YETTY_ROOT}/src/yetty/ymain/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/surface.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/window.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/event-loop.c

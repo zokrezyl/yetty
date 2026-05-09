@@ -3,7 +3,7 @@
 # Disable desktop-only libraries
 set(YETTY_ENABLE_LIB_GLFW OFF CACHE BOOL "" FORCE)
 
-include(${YETTY_ROOT}/build-tools/cmake/targets/shared.cmake)
+include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
 
 # TinyEMU - in-process RISC-V emulator for --virtual flag. Not part of
 # src/yetty, so shared.cmake doesn't pull it in; include explicitly like
@@ -37,7 +37,7 @@ file(MAKE_DIRECTORY ${ANDROID_ASSETS_DIR})
 
 # Platform sources — Android-specific + shared Unix components (all C)
 set(YETTY_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/yplatform/android/main.c
+    ${YETTY_ROOT}/src/yetty/ymain/android.c
     ${YETTY_ROOT}/src/yetty/yplatform/android/platform-paths.c
     ${YETTY_ROOT}/src/yetty/yplatform/android/surface.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/libuv-event-loop.c
@@ -73,7 +73,7 @@ target_include_directories(yetty PRIVATE ${YETTY_INCLUDES} ${YETTY_RENDERER_INCL
 # Embed all assets (logo, shaders, fonts, CDB files)
 yetty_embed_assets(yetty)
 
-# Dummy targets for dependency tracking (legacy)
+# Dummy platforms for dependency tracking (legacy)
 add_custom_target(copy-shaders-for-incbin)
 add_custom_target(copy-fonts-for-incbin)
 

@@ -10,7 +10,7 @@
 set(YETTY_ENABLE_LIB_GLFW OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_LIB_QEMU OFF CACHE BOOL "" FORCE)
 
-include(${YETTY_ROOT}/build-tools/cmake/targets/shared.cmake)
+include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
 
 # TinyEMU - RISC-V emulator for iOS (provides PTY via Linux VM)
 include(${YETTY_ROOT}/build-tools/cmake/tinyemu.cmake)
@@ -54,7 +54,7 @@ target_include_directories(yetty PRIVATE ${YETTY_INCLUDES} ${YETTY_RENDERER_INCL
 # Embed all assets (logo, shaders, fonts, CDB files)
 yetty_embed_assets(yetty)
 
-# Dummy targets for dependency tracking (legacy)
+# Dummy platforms for dependency tracking (legacy)
 add_custom_target(copy-shaders-for-incbin)
 add_custom_target(copy-fonts-for-incbin)
 

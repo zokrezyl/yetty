@@ -32,22 +32,22 @@ include(${YETTY_ROOT}/build-tools/cmake/CPM.cmake)
 # Detect platform and include appropriate target.
 # tvOS check comes BEFORE iOS — tvOS sets YETTY_IOS=1 internally to share
 # the iOS code paths in src/yetty/yplatform/ios/, but the build target
-# selection itself must pick targets/tvos.cmake.
+# selection itself must pick platforms/tvos.cmake.
 if(YETTY_ANDROID)
-    include(${YETTY_ROOT}/build-tools/cmake/targets/android.cmake)
+    include(${YETTY_ROOT}/build-tools/cmake/platforms/android.cmake)
 elseif(YETTY_TVOS OR CMAKE_SYSTEM_NAME STREQUAL "tvOS")
-    include(${YETTY_ROOT}/build-tools/cmake/targets/tvos.cmake)
+    include(${YETTY_ROOT}/build-tools/cmake/platforms/tvos.cmake)
 elseif(YETTY_IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
-    include(${YETTY_ROOT}/build-tools/cmake/targets/ios.cmake)
+    include(${YETTY_ROOT}/build-tools/cmake/platforms/ios.cmake)
 elseif(EMSCRIPTEN)
-    include(${YETTY_ROOT}/build-tools/cmake/targets/webasm.cmake)
+    include(${YETTY_ROOT}/build-tools/cmake/platforms/webasm.cmake)
 elseif(WIN32)
-    include(${YETTY_ROOT}/build-tools/cmake/targets/windows.cmake)
+    include(${YETTY_ROOT}/build-tools/cmake/platforms/windows.cmake)
 elseif(APPLE)
-    include(${YETTY_ROOT}/build-tools/cmake/targets/macos.cmake)
+    include(${YETTY_ROOT}/build-tools/cmake/platforms/macos.cmake)
 else()
     # Linux and other Unix
-    include(${YETTY_ROOT}/build-tools/cmake/targets/linux.cmake)
+    include(${YETTY_ROOT}/build-tools/cmake/platforms/linux.cmake)
 endif()
 
 # Tools

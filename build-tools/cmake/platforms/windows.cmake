@@ -41,7 +41,7 @@ set(YETTY_ENABLE_TOOL_YMESH        OFF CACHE BOOL "" FORCE)
 # main.c isn't.
 set(YETTY_ENABLE_TOOL_YMAZE        OFF CACHE BOOL "" FORCE)
 
-include(${YETTY_ROOT}/build-tools/cmake/targets/shared.cmake)
+include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
 
 # Windows-specific libraries (guarded by variables.cmake)
 if(YETTY_ENABLE_LIB_GLFW)
@@ -114,7 +114,7 @@ target_include_directories(yetty PRIVATE ${YETTY_INCLUDES} ${YETTY_RENDERER_INCL
 # Embed all assets (logo, shaders, fonts, CDB files)
 yetty_embed_assets(yetty)
 
-# Dummy targets for dependency tracking (legacy)
+# Dummy platforms for dependency tracking (legacy)
 add_custom_target(copy-shaders-for-incbin)
 add_custom_target(copy-fonts-for-incbin)
 

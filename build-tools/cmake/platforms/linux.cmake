@@ -2,7 +2,7 @@
 
 # Libraries consumed by feature subdirs must be included BEFORE shared.cmake —
 # shared.cmake's add_subdirectory(src/yetty) processes those subdirs, and
-# their `if(TARGET ...)` guards only see targets declared before that point.
+# their `if(TARGET ...)` guards only see platforms declared before that point.
 # (Tree-sitter is already wired via shared.cmake → TreeSitter.cmake.)
 if(YETTY_ENABLE_LIB_LIBMAGIC)
     include(${YETTY_ROOT}/build-tools/cmake/Libmagic.cmake)
@@ -11,7 +11,7 @@ if(YETTY_ENABLE_LIB_LIBCURL)
     include(${YETTY_ROOT}/build-tools/cmake/libs/libcurl.cmake)
 endif()
 
-include(${YETTY_ROOT}/build-tools/cmake/targets/shared.cmake)
+include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
 
 # Linux-specific libraries needed only by the main yetty executable.
 if(YETTY_ENABLE_LIB_GLFW)
@@ -41,7 +41,7 @@ endif()
 
 # Platform sources — linux-specific + shared GLFW/Unix (C)
 set(YETTY_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/glfw-main.c
+    ${YETTY_ROOT}/src/yetty/ymain/glfw.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/glfw-surface.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/glfw-event-loop.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/glfw-window.c
@@ -85,7 +85,7 @@ target_include_directories(yetty PRIVATE ${YETTY_INCLUDES} ${YETTY_RENDERER_INCL
 # already been fetched at configure time in shared.cmake.
 yetty_embed_assets(yetty)
 
-# Dummy targets for dependency tracking (legacy)
+# Dummy platforms for dependency tracking (legacy)
 add_custom_target(copy-shaders-for-incbin)
 add_custom_target(copy-fonts-for-incbin)
 
@@ -153,7 +153,7 @@ endif()
 
 # Verify all required assets are present.
 # CDB is NOT checked for desktop — the binary embeds it via incbin and
-# there's no separate runtime asset dir to verify (other targets stage
+# there's no separate runtime asset dir to verify (other platforms stage
 # into APK/bundle/wasm-fs locations and check those). If incbin can't
 # find a cdb file at link time it fails the build directly, so the
 # embed pipeline is its own implicit check.

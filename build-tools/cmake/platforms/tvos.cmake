@@ -1,4 +1,4 @@
-# tvOS build target — mirrors targets/ios.cmake. Reuses iOS Objective-C
+# tvOS build target — mirrors platforms/ios.cmake. Reuses iOS Objective-C
 # platform sources (UIKit subset that exists on tvOS); only the bundle
 # metadata + deployment-target attributes differ. YETTY_IOS=1 is set so
 # any `#if YETTY_IOS` branches in the platform code stay active; YETTY_TVOS=1
@@ -8,7 +8,7 @@
 set(YETTY_ENABLE_LIB_GLFW OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_LIB_QEMU OFF CACHE BOOL "" FORCE)
 
-include(${YETTY_ROOT}/build-tools/cmake/targets/shared.cmake)
+include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
 
 include(${YETTY_ROOT}/build-tools/cmake/tinyemu.cmake)
 include(${YETTY_ROOT}/build-tools/cmake/tinyemu-runtime.cmake)
@@ -21,7 +21,7 @@ file(MAKE_DIRECTORY ${TVOS_ASSETS_DIR})
 # tvOS-specific override is needed later, add it under yplatform/tvos/ and
 # branch here on YETTY_TVOS.
 set(YETTY_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/yplatform/ios/main.m
+    ${YETTY_ROOT}/src/yetty/ymain/ios-tvos.m
     ${YETTY_ROOT}/src/yetty/yplatform/ios/platform-paths.m
     ${YETTY_ROOT}/src/yetty/yplatform/ios/surface.m
     ${YETTY_ROOT}/src/yetty/yplatform/ios/tinyemu-pty.c
