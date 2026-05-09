@@ -119,12 +119,15 @@ static void unregister_transport(struct iframe_transport *t)
 EMSCRIPTEN_KEEPALIVE
 void yetty_ytransport_iframe_transport_on_opened(uint32_t clientSid, int ok)
 {
-    EM_ASM(
-        {
-            console.log('[yetty-side] yetty_ytransport_iframe_transport_on_opened clientSid=' + $0 +
-                        ' ok=' + $1);
-        },
-        clientSid, ok);
+
+    // clang-format off
+
+    EM_ASM({
+        console.log('[yetty-side] yetty_ytransport_iframe_transport_on_opened clientSid=' +
+                    $0 + ' ok=' + $1);
+    }, clientSid, ok);
+
+    // clang-format on
     struct iframe_transport *t = find_transport(clientSid);
     if (!t) {
         ywarn("iframe-transport: stray session-opened for clientSid=%u", clientSid);
@@ -156,20 +159,25 @@ void yetty_ytransport_iframe_transport_on_opened(uint32_t clientSid, int ok)
 EMSCRIPTEN_KEEPALIVE
 void yetty_ytransport_iframe_transport_on_rx(uint32_t clientSid, const char *data, int nread)
 {
-    EM_ASM(
-        {
-            console.log('[yetty-side] yetty_iframe_transport_on_rx clientSid=' + $0 + ' nread=' +
-                        $1);
-        },
-        clientSid, nread);
+
+    // clang-format off
+    EM_ASM({
+        console.log('[yetty-side] yetty_iframe_transport_on_rx clientSid=' +
+                    $0 + ' nread=' + $1);
+    }, clientSid, nread);
+
+    // clang-format on
+
     struct iframe_transport *t = find_transport(clientSid);
     if (!t || !t->connected || nread <= 0) {
-        EM_ASM(
-            {
-                console.warn('[yetty-side] on_rx DROPPED — t=' + ($0 ? 'ok' : 'NULL') +
-                             ' connected=' + $1 + ' nread=' + $2);
-            },
-            !!t, t ? t->connected : 0, nread);
+
+        // clang-format off
+        EM_ASM({
+            console.warn('[yetty-side] on_rx DROPPED — t=' + ($0 ? 'ok' : 'NULL') +
+                         ' connected=' + $1 + ' nread=' + $2);
+        }, !!t, t ? t->connected : 0, nread);
+
+        // clang-format on
         return;
     }
     /* on_alloc isn't strictly required by telnet-pty (it allocates
@@ -214,53 +222,47 @@ static void install_listener_once(void)
         return;
     }
     g_listener_installed = 1;
+
+    // clang-format off
     EM_ASM({
-        if (window.__yettyIframeTransportListener) {
-            return;
-        }
-        window.__yettyIframeTransportListener = function(e)
-        {
-            if (!e.data || typeof e.data.clientSid != = 'number') {
-                return;
-            }
+        if (window.__yettyIframeTransportListener) return;
+        window.__yettyIframeTransportListener = function (e) {
+            if (!e.data || typeof e.data.clientSid !== 'number') return;
             var sid = e.data.clientSid >>> 0;
-            if (e.data.type == = 'session-opened') {
+            if (e.data.type === 'session-opened') {
                 Module._yetty_ytransport_iframe_transport_on_opened(sid, e.data.ok ? 1 : 0);
                 return;
             }
-            if (e.data.type == = 'session-rx') {
+            if (e.data.type === 'session-rx') {
                 /* data is a Uint8Array-ish (postMessage structured
                  * clone preserves typed arrays). Copy into wasm
                  * heap as a transient buffer for the on_data call. */
                 var bytes = e.data.data;
                 if (!(bytes instanceof Uint8Array)) {
                     if (bytes && bytes.buffer) {
-                        bytes = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-                    } else if (bytes &&bytes.length != = undefined) {
+                        bytes = new Uint8Array(bytes.buffer, bytes.byteOffset,
+                                               bytes.byteLength);
+                    } else if (bytes && bytes.length !== undefined) {
                         bytes = new Uint8Array(bytes);
-                    } else {
-                        return;
-                    }
+                    } else { return; }
                 }
-                if (bytes.length == = 0) {
-                    return;
-                }
+                if (bytes.length === 0) return;
                 var ptr = Module._malloc(bytes.length);
-                if (ptr == = 0) {
-                    return;
-                }
+                if (ptr === 0) return;
                 Module.HEAPU8.set(bytes, ptr);
                 Module._yetty_ytransport_iframe_transport_on_rx(sid, ptr, bytes.length);
                 Module._free(ptr);
                 return;
             }
-            if (e.data.type == = 'session-closed') {
+            if (e.data.type === 'session-closed') {
                 Module._yetty_ytransport_iframe_transport_on_closed(sid);
                 return;
             }
         };
         window.addEventListener('message', window.__yettyIframeTransportListener);
     });
+
+    // clang-format on
 }
 
 /* ---- Transport ops ---------------------------------------------- */
@@ -269,9 +271,14 @@ static int iframe_transport_open(struct yetty_ytransport_conn_transport *self,
                                  const struct yetty_yevent_tcp_client_callbacks *cb)
 {
     struct iframe_transport *t = (struct iframe_transport *)self;
-    EM_ASM(
-        { console.log('[yetty-side] iframe_transport_open clientSid=' + $0 + ' port=' + $1); },
-        t->clientSid, (int)t->port);
+
+    // clang-format off
+    EM_ASM({
+        console.log('[yetty-side] iframe_transport_open clientSid=' + $0 +
+                    ' port=' + $1);
+    }, t->clientSid, (int)t->port);
+
+    // clang-format on
     if (!cb) {
         return -1;
     }
@@ -294,17 +301,22 @@ static int iframe_transport_open(struct yetty_ytransport_conn_transport *self,
      * once it's called Module._tinyemu_session_open and got a wasm
      * sid back (or queued the open if VM isn't ready yet — it will
      * still ack eventually, possibly with ok=false). */
-    EM_ASM(
-        {
-            var clientSid = $0;
-            var port = $1;
-            var iframe = document.getElementById('yetty-vm-pty-1');
-            if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.postMessage(
-                    {type : 'session-open', clientSid : clientSid, port : port}, '*');
-            }
-        },
-        t->clientSid, (int)t->port);
+
+    // clang-format off
+    EM_ASM({
+        var clientSid = $0;
+        var port = $1;
+        var iframe = document.getElementById('yetty-vm-pty-1');
+        if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage({
+                type: 'session-open',
+                clientSid: clientSid,
+                port: port
+            }, '*');
+        }
+    }, t->clientSid, (int)t->port);
+
+    // clang-format on
 
     yinfo("iframe-transport: posted session-open clientSid=%u port=%u", t->clientSid, t->port);
     return 0;
@@ -317,12 +329,12 @@ static struct yetty_ycore_size_result iframe_transport_send(
     struct iframe_transport *t = (struct iframe_transport *)self;
     (void)conn;
 
-    EM_ASM(
-        {
-            console.log('[yetty-side] iframe_transport_send clientSid=' + $0 + ' connected=' + $1 +
-                        ' len=' + $2);
-        },
-        t->clientSid, t->connected, (int)len);
+    // clang-format off
+    EM_ASM({
+        console.log('[yetty-side] iframe_transport_send clientSid=' + $0 +
+                    ' connected=' + $1 + ' len=' + $2);
+    }, t->clientSid, t->connected, (int)len);
+    // clang-format on
 
     if (!t->connected) {
         return YETTY_ERR(yetty_ycore_size, "iframe-transport: send before connected");
@@ -333,21 +345,26 @@ static struct yetty_ycore_size_result iframe_transport_send(
 
     /* Post raw bytes as a Uint8Array (copy on JS side). postMessage's
      * structured clone preserves the typed array. */
-    EM_ASM(
-        {
-            var clientSid = $0;
-            var ptr = $1;
-            var len = $2;
-            /* slice() copies — the wasm buffer may be reused by the
+
+    // clang-format off
+    EM_ASM({
+        var clientSid = $0;
+        var ptr = $1;
+        var len = $2;
+        /* slice() copies — the wasm buffer may be reused by the
          * caller as soon as send() returns. */
-            var bytes = HEAPU8.slice(ptr, ptr + len);
-            var iframe = document.getElementById('yetty-vm-pty-1');
-            if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.postMessage(
-                    {type : 'session-tx', clientSid : clientSid, data : bytes}, '*');
-            }
-        },
-        t->clientSid, data, (int)len);
+        var bytes = HEAPU8.slice(ptr, ptr + len);
+        var iframe = document.getElementById('yetty-vm-pty-1');
+        if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage({
+                type: 'session-tx',
+                clientSid: clientSid,
+                data: bytes
+            }, '*');
+        }
+    }, t->clientSid, data, (int)len);
+
+    // clang-format on
 
     return YETTY_OK(yetty_ycore_size, len);
 }
@@ -362,16 +379,18 @@ static struct yetty_ycore_void_result iframe_transport_close(
         return YETTY_OK_VOID();
     }
 
-    EM_ASM(
-        {
-            var clientSid = $0;
-            var iframe = document.getElementById('yetty-vm-pty-1');
-            if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.postMessage({type : 'session-close', clientSid : clientSid},
-                                                 '*');
-            }
-        },
-        t->clientSid);
+    // clang-format off
+    EM_ASM({
+        var clientSid = $0;
+        var iframe = document.getElementById('yetty-vm-pty-1');
+        if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage({
+                type: 'session-close',
+                clientSid: clientSid
+            }, '*');
+        }
+    }, t->clientSid);
+    // clang-format on
 
     t->connected = 0;
     /* Keep the slot registered until destroy() — late session-rx
