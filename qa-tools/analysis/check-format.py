@@ -36,8 +36,10 @@ from _common import (  # noqa: E402
 )
 
 CLANG_FORMAT_CANDIDATES = (
-    "clang-format",
+    "clang-format-20",
+    "clang-format-21",
     "clang-format-18",
+    "clang-format-19",
     "clang-format-17",
     "clang-format-15",
     "clang-format-14",
