@@ -88,10 +88,10 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/paths/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/webasm.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webasm/ywebgpu.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webasm/iframe-pty.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webgpu/webasm.c
+    ${YETTY_ROOT}/src/yetty/ypty/iframepty.c
     ${YETTY_ROOT}/src/yetty/ytransport/iframe-transport.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webasm/telnet-iframe-pty-factory.c
+    ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/brotli-glue.c
     ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/fs/default.c

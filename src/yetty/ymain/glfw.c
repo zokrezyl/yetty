@@ -109,6 +109,7 @@ int main(int argc, char **argv)
     }
 
     /* Platform paths */
+    //TODO adapt path reading using the new api that reads a struct
     const char *cache_dir = yetty_yplatform_get_cache_dir();
     const char *data_dir = yetty_yplatform_get_data_dir();
     const char *runtime_dir = yetty_yplatform_get_runtime_dir();
@@ -125,6 +126,7 @@ int main(int argc, char **argv)
     yetty_yplatform_mkdir_p(fonts_dir);
     yetty_yplatform_mkdir_p(config_dir);
 
+    //TODO: adapt path reading directly to yetty_yplatform_paths!
     struct yetty_yplatform_paths paths = {.shaders_dir = shaders_dir,
                                           .fonts_dir = fonts_dir,
                                           .runtime_dir = runtime_dir,
@@ -143,6 +145,8 @@ int main(int argc, char **argv)
     }
 
     /* Config */
+    //TODO: creating the config should be a step after unpacking at first run the assets
+    //the config is comming from the unpacked assets when first run
     struct yetty_yconfig_result config_result = yetty_yconfig_create(argc, argv, &paths);
     if (!YETTY_IS_OK(config_result)) {
         fprintf(stderr, "Failed to create config\n");
@@ -152,6 +156,7 @@ int main(int argc, char **argv)
     struct yetty_yconfig_config *config = config_result.value;
 
     /* Extract assets */
+    //TODO: extract assets should depend only on the paths, see above! reading the config should happen after extract assets
     yetty_platform_extract_assets(config);
     ydebug("main: assets extracted");
 
@@ -184,6 +189,8 @@ int main(int argc, char **argv)
     /* Platform input pipe */
     ydebug("main: creating platform input pipe");
     fflush(stderr);
+
+    //TODO: fix inconsistency between the result type and the type itself, see below
     struct yetty_yplatform_input_pipe_result pipe_result = yetty_platform_input_pipe_create();
     ydebug("main: platform input pipe created, ok=%d", pipe_result.ok);
     if (!YETTY_IS_OK(pipe_result)) {
