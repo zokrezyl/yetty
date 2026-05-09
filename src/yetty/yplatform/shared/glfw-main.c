@@ -35,9 +35,9 @@ static void platform_get_x11_handles(GLFWwindow *win, void **disp, unsigned long
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
-#include <yetty/platform/platform-input-pipe.h>
-#include <yetty/platform/pty-factory.h>
-#include <yetty/platform/extract-assets.h>
+#include <yetty/yplatform/platform-input-pipe.h>
+#include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/extract-assets.h>
 #include <yetty/ytrace/ytrace.h>
 
 /* Forward declarations - implemented in other platform files */

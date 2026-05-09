@@ -18,10 +18,10 @@
 
 #include <yetty/yetty/yetty.h>
 #include <yetty/yconfig/config.h>
-#include <yetty/platform/extract-assets.h>
+#include <yetty/yplatform/extract-assets.h>
 #include <yetty/yevent/event.h>
-#include <yetty/platform/platform-input-pipe.h>
-#include <yetty/platform/pty-factory.h>
+#include <yetty/yplatform/platform-input-pipe.h>
+#include <yetty/yplatform/pty.h>
 
 #define LOG_TAG "yetty"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)

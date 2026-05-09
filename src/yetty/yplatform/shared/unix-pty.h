@@ -3,7 +3,7 @@
 #ifndef YETTY_UNIX_PTY_H
 #define YETTY_UNIX_PTY_H
 
-#include <yetty/platform/pty-factory.h>
+#include <yetty/yplatform/pty.h>
 #include <yetty/yconfig/config.h>
 #include <stdint.h>
 

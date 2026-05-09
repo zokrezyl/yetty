@@ -5,7 +5,7 @@
 #include <yetty/yvnc/vnc-server.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yevent/event.h>
-#include <yetty/platform/platform-input-pipe.h>
+#include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/webgpu/error.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yplatform/ywebgpu.h>

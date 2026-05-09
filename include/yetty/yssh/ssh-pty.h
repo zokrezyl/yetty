@@ -3,7 +3,7 @@
 #ifndef YETTY_YSSH_PTY_H
 #define YETTY_YSSH_PTY_H
 
-#include <yetty/platform/pty.h>
+#include <yetty/yplatform/pty.h>
 
 #ifdef __cplusplus
 extern "C" {

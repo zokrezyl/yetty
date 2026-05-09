@@ -3,7 +3,7 @@
 #ifndef YETTY_TELNET_PTY_H
 #define YETTY_TELNET_PTY_H
 
-#include <yetty/platform/pty.h>
+#include <yetty/yplatform/pty.h>
 #include <stdint.h>
 
 #ifdef __cplusplus

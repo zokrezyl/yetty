@@ -22,9 +22,9 @@
  * loop via register_pty_pipe — same path that fork-pty / conpty use.
  */
 
-#include <yetty/platform/pty.h>
-#include <yetty/platform/pty-factory.h>
-#include <yetty/platform/platform-input-pipe.h>
+#include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/ytransport/conn-transport.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yevent/event.h>

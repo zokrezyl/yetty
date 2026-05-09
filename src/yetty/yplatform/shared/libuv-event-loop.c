@@ -8,8 +8,8 @@
 
 #include <yetty/yevent/event-loop.h>
 #include <yetty/ycore/types.h>
-#include <yetty/platform/platform-input-pipe.h>
-#include <yetty/platform/pty-pipe-source.h>
+#include <yetty/yplatform/platform-input-pipe.h>
+#include <yetty/yplatform/pty-pipe-source.h>
 #include <yetty/ytrace/ytrace.h>
 #include <uv.h>
 #include <stdlib.h>

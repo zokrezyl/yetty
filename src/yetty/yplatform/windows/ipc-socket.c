@@ -1,6 +1,6 @@
 /* Windows named pipe implementation for RPC */
 
-#include <yetty/platform/ipc-socket.h>
+#include <yetty/yplatform/ipc-socket.h>
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>

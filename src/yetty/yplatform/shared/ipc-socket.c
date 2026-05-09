@@ -1,6 +1,6 @@
 /* Unix domain socket implementation for Linux/macOS */
 
-#include <yetty/platform/ipc-socket.h>
+#include <yetty/yplatform/ipc-socket.h>
 
 #include <errno.h>
 #include <fcntl.h>

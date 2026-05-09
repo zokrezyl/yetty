@@ -153,6 +153,6 @@ Platform-specific code is isolated behind ops interfaces:
 - **Event loop** — libuv poll on Unix, emscripten_async on WebASM
 - **Input pipe** — fd-based notification on Unix, callback on WebASM
 
-The shared code (GLFW window, libuv loop) lives in `src/yetty/platform/shared/`. Platform dirs contain only what differs.
+The shared code (GLFW window, libuv loop) lives in `src/yetty/yplatform/shared/`. Platform dirs contain only what differs.
 
 See [Platform](platform.md), [Platform PTY](platform-pty.md), and [Platform Pipe](platform-pipe.md) for the abstraction layers and per-platform implementations.

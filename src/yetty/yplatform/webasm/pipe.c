@@ -22,7 +22,7 @@
  *    platform-input-pipe use case, but now via read() on the fd
  *    instead of memcpy out of an internal buffer. */
 
-#include <yetty/platform/platform-input-pipe.h>
+#include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yevent/event.h>
 #include <yetty/ycore/types.h>

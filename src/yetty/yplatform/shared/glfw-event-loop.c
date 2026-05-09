@@ -1,6 +1,6 @@
 /* glfw-event-loop.c - OS event loop using GLFW */
 
-#include <yetty/platform/platform-input-pipe.h>
+#include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yevent/event.h>
 #include <yetty/ytrace/ytrace.h>
 #include <GLFW/glfw3.h>

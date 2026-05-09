@@ -11,9 +11,9 @@
 #include <yetty/yetty/yetty.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
-#include <yetty/platform/platform-input-pipe.h>
-#include <yetty/platform/pty-factory.h>
-#include <yetty/platform/extract-assets.h>
+#include <yetty/yplatform/platform-input-pipe.h>
+#include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/extract-assets.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <fcntl.h>

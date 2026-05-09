@@ -14,8 +14,8 @@
 
 #include <yetty/yssh/ssh-pty.h>
 
-#include <yetty/platform/pty.h>
-#include <yetty/platform/pty-factory.h>
+#include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/pty.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>

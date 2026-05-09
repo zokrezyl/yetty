@@ -8,7 +8,7 @@
 
 #include <yetty/yevent/dispatch.h>
 
-#include <yetty/platform/platform-input-pipe.h>
+#include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yevent/event.h>
 #include <yetty/ytrace/ytrace.h>
 

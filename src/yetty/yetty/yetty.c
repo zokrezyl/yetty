@@ -26,7 +26,7 @@
 #include <yetty/yrpc/rpc-server.h>
 #include <yetty/ymsdf/generator.h>
 #include <yetty/yvnc/vnc-server.h>
-#include <yetty/platform/platform-input-pipe.h>
+#include <yetty/yplatform/platform-input-pipe.h>
 
 #include <stdbool.h>
 #include <stdlib.h>

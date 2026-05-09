@@ -1,6 +1,6 @@
 /* extract-assets.c - Extract embedded assets to data and config directories */
 
-#include <yetty/platform/extract-assets.h>
+#include <yetty/yplatform/extract-assets.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yplatform/fs.h>
 #include <stdio.h>

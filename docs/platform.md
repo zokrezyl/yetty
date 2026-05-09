@@ -41,7 +41,7 @@ Only WebASM needs a different implementation (emscripten requestAnimationFrame).
 ## File Structure
 
 ```
-src/yetty/platform/
+src/yetty/yplatform/
 ├── shared/                      # Reusable code across platforms
 │   ├── glfw-main.cpp            # main() for GLFW platforms (Linux, macOS, Windows)
 │   ├── glfw-window.cpp          # Window creation
@@ -116,7 +116,7 @@ Unix platforms have file descriptors. libuv polls them. WebASM has no fds - uses
 **PTY Polling:**
 
 ```
-include/yetty/platform/pty-poll-source.hpp   <- Base class (opaque handle)
+include/yetty/yplatform/pty-poll-source.hpp   <- Base class (opaque handle)
 shared/fd-pty-poll-source.hpp                <- Unix: wraps PTY master fd
 webasm/pty-io.cpp (WebasmPtyPollSource)      <- WebASM: buffer + JS interop
 ```

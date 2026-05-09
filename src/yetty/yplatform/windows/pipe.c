@@ -1,6 +1,6 @@
 /* Windows platform input pipe implementation */
 
-#include <yetty/platform/platform-input-pipe.h>
+#include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/ycore/types.h>
 
 #define WIN32_LEAN_AND_MEAN

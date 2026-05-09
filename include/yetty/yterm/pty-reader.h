@@ -2,7 +2,7 @@
 #define YETTY_YTERM_PTY_READER_H
 
 #include <yetty/ycore/result.h>
-#include <yetty/platform/pty.h>
+#include <yetty/yplatform/pty.h>
 #include <yetty/yterm/osc-codes.h>
 #include <yetty/yterm/terminal.h>
 

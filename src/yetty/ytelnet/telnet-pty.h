@@ -3,8 +3,8 @@
 #ifndef YETTY_TELNET_PTY_H
 #define YETTY_TELNET_PTY_H
 
-#include <yetty/platform/pty.h>
-#include <yetty/platform/pty-factory.h>
+#include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/pty.h>
 #include <yetty/ytransport/conn-transport.h>
 #include <stdint.h>
 

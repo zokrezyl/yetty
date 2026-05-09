@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <yetty/platform/platform-input-pipe.h>
-#include <yetty/platform/pty-factory.h>
-#include <yetty/platform/pty-pipe-source.h>
-#include <yetty/platform/pty.h>
+#include <yetty/yplatform/platform-input-pipe.h>
+#include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/pty-pipe-source.h>
+#include <yetty/yplatform/pty.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yevent/event.h>

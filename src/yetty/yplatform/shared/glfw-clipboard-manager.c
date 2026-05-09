@@ -1,6 +1,6 @@
 /* GLFW clipboard manager implementation */
 
-#include <yetty/platform/clipboard-manager.h>
+#include <yetty/yplatform/clipboard-manager.h>
 #include <yetty/ycore/types.h>
 
 #include <GLFW/glfw3.h>
