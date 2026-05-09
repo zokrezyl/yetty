@@ -42,23 +42,18 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/android.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/ywebgpu.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/fork-pty.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/unix-pty-factory.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
+    ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
+    ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/process/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/socket/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
+    ${YETTY_ROOT}/src/yetty/ypty/temu-pty.c
     ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
-# TinyEMU PTY source (for --virtual flag)
-if(YETTY_ENABLE_LIB_TINYEMU)
-    list(APPEND YETTY_PLATFORM_SOURCES
-        ${YETTY_ROOT}/src/yetty/yplatform/temu-pty/default.c
-    )
-endif()
 
 # Create shared library with core sources + android platform
 add_library(yetty SHARED

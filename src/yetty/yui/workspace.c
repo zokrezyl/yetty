@@ -316,7 +316,8 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
 {
     struct yetty_yconfig_config *layout_config;
     struct yetty_yui_tile_ptr_result tile_res;
-
+    //TDOO: refactor the layout creation. It should be passed recursivelly to the splits/panes
+    //the pane should create the right view based on the config passed to it
     if (!ws) {
         return YETTY_ERR(yetty_ycore_void, "workspace is NULL");
     }

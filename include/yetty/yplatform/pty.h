@@ -30,9 +30,15 @@ struct yetty_platform_pty_ops {
 struct yetty_platform_pty {
     const struct yetty_platform_pty_ops *ops;
 };
+struct yetty_yconfig_config;
+
+struct yetty_yplatform_pty_ptr_result yetty_yplatform_fork_pty_create(
+    struct yetty_yconfig_config *config);
+
+struct yetty_yplatform_pty_ptr_result yetty_yplatform_tinyemu_pty_create(
+    struct yetty_yconfig_config *config);
 
 struct yetty_yplatform_pty_factory;
-struct yetty_yconfig_config;
 struct yetty_yevent_event_loop;
 
 /* Result types */

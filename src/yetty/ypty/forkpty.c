@@ -1,7 +1,5 @@
 /* Fork PTY - PTY using forkpty(), shared by Linux and macOS */
 
-#include "unix-pty.h"
-
 #include <yetty/yplatform/pty.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>

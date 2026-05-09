@@ -1,8 +1,5 @@
 /* Unix PTY Factory - creates PTY based on config */
 
-#include "unix-pty.h"
-
-#include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
