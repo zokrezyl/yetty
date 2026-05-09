@@ -39,7 +39,12 @@ from _common import (  # noqa: E402
 )
 
 CLANG_TIDY_CANDIDATES = (
-    "clang-tidy", "clang-tidy-21", "clang-tidy-18", "clang-tidy-17",
+    "clang-tidy", 
+    "clang-tidy-21", 
+    "clang-tidy-20", 
+    "clang-tidy-19", 
+    "clang-tidy-18", 
+    "clang-tidy-17",
     "clang-tidy-15", "clang-tidy-14",
 )
 RUN_CLANG_TIDY_CANDIDATES = (
