@@ -25,8 +25,8 @@ int yetty_ywebgpu_error_check(void);
 
 /* Uncaptured error callback - stores error in yetty_ywebgpu_error */
 void yetty_ywebgpu_uncaptured_error_callback(WGPUDevice const *device, WGPUErrorType type,
-                                            WGPUStringView message, void *userdata1,
-                                            void *userdata2);
+                                             WGPUStringView message, void *userdata1,
+                                             void *userdata2);
 
 /* Get callback info struct ready to use in device descriptor */
 WGPUUncapturedErrorCallbackInfo yetty_ywebgpu_get_error_callback_info(void);

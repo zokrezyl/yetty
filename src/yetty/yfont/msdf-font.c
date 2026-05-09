@@ -18,7 +18,7 @@
 #include <yetty/ytrace/ytrace.h>
 #include <webgpu/webgpu.h>
 
-#include <stdio.h>  /* snprintf for namespace */
+#include <stdio.h> /* snprintf for namespace */
 #include <stdlib.h>
 #include <string.h>
 
@@ -132,7 +132,8 @@ static struct uint32_result load_one(struct yetty_yfont_msdf_font *f, uint32_t c
 
     if (slot >= f->meta_capacity) {
         uint32_t new_cap = f->meta_capacity * 2;
-        struct yetty_yfont_glyph_meta_gpu *new_meta = realloc(f->meta, new_cap * sizeof(struct yetty_yfont_glyph_meta_gpu));
+        struct yetty_yfont_glyph_meta_gpu *new_meta =
+            realloc(f->meta, new_cap * sizeof(struct yetty_yfont_glyph_meta_gpu));
         if (!new_meta) {
             free(data);
             return YETTY_ERR(uint32, "meta realloc failed");
@@ -411,8 +412,8 @@ static const struct yetty_yfont_font_ops msdf_font_ops = {
 #define DEFAULT_CELL_SIZE 64
 
 struct yetty_font_font_result yetty_yfont_msdf_font_create(const char *cdb_path,
-                                                          const char *shader_path,
-                                                          const char *namespace)
+                                                           const char *shader_path,
+                                                           const char *namespace)
 {
     if (!cdb_path) {
         return YETTY_ERR(yetty_font_font, "cdb_path is NULL");

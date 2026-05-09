@@ -26,7 +26,7 @@
 #ifndef YETTY_YTRANSPORT_CONN_TRANSPORT_H
 #define YETTY_YTRANSPORT_CONN_TRANSPORT_H
 
-#include <yetty/yevent/event-loop.h>   /* yetty_yevent_conn, client_callbacks */
+#include <yetty/yevent/event-loop.h> /* yetty_yevent_conn, client_callbacks */
 #include <yetty/ycore/result.h>
 #include <stddef.h>
 
@@ -48,8 +48,8 @@ struct yetty_ytransport_conn_transport_ops {
      * the event-loop's tcp_send: ok with bytes_sent on success,
      * err on failure (e.g. not yet connected). */
     struct yetty_ycore_size_result (*send)(struct yetty_ytransport_conn_transport *self,
-                                           struct yetty_yevent_conn *conn,
-                                           const void *data, size_t len);
+                                           struct yetty_yevent_conn *conn, const void *data,
+                                           size_t len);
 
     /* Close + tear down the in-flight connection. on_disconnect may
      * fire as a side-effect (transport's choice). After this returns

@@ -50,8 +50,8 @@ struct iframe_transport {
 
     uint16_t port;
     uint32_t clientSid;
-    int opened;     /* open() succeeded; transport in the route table */
-    int connected;  /* iframe acked session-opened ok */
+    int opened;    /* open() succeeded; transport in the route table */
+    int connected; /* iframe acked session-opened ok */
 
     /* Caller-supplied callbacks. Stored verbatim; .ctx is opaque to us. */
     struct yetty_yevent_tcp_client_callbacks cb;
@@ -119,10 +119,12 @@ static void unregister_transport(struct iframe_transport *t)
 EMSCRIPTEN_KEEPALIVE
 void yetty_iframe_transport_on_opened(uint32_t clientSid, int ok)
 {
-    EM_ASM({
-        console.log('[yetty-side] yetty_iframe_transport_on_opened clientSid=' +
-                    $0 + ' ok=' + $1);
-    }, clientSid, ok);
+    EM_ASM(
+        {
+            console.log('[yetty-side] yetty_iframe_transport_on_opened clientSid=' + $0 + ' ok=' +
+                        $1);
+        },
+        clientSid, ok);
     struct iframe_transport *t = find_transport(clientSid);
     if (!t) {
         ywarn("iframe-transport: stray session-opened for clientSid=%u", clientSid);
@@ -154,16 +156,20 @@ void yetty_iframe_transport_on_opened(uint32_t clientSid, int ok)
 EMSCRIPTEN_KEEPALIVE
 void yetty_iframe_transport_on_rx(uint32_t clientSid, const char *data, int nread)
 {
-    EM_ASM({
-        console.log('[yetty-side] yetty_iframe_transport_on_rx clientSid=' +
-                    $0 + ' nread=' + $1);
-    }, clientSid, nread);
+    EM_ASM(
+        {
+            console.log('[yetty-side] yetty_iframe_transport_on_rx clientSid=' + $0 + ' nread=' +
+                        $1);
+        },
+        clientSid, nread);
     struct iframe_transport *t = find_transport(clientSid);
     if (!t || !t->connected || nread <= 0) {
-        EM_ASM({
-            console.warn('[yetty-side] on_rx DROPPED — t=' + ($0 ? 'ok' : 'NULL') +
-                         ' connected=' + $1 + ' nread=' + $2);
-        }, !!t, t ? t->connected : 0, nread);
+        EM_ASM(
+            {
+                console.warn('[yetty-side] on_rx DROPPED — t=' + ($0 ? 'ok' : 'NULL') +
+                             ' connected=' + $1 + ' nread=' + $2);
+            },
+            !!t, t ? t->connected : 0, nread);
         return;
     }
     /* on_alloc isn't strictly required by telnet-pty (it allocates
@@ -209,36 +215,46 @@ static void install_listener_once(void)
     }
     g_listener_installed = 1;
     EM_ASM({
-        if (window.__yettyIframeTransportListener) return;
-        window.__yettyIframeTransportListener = function (e) {
-            if (!e.data || typeof e.data.clientSid !== 'number') return;
+        if (window.__yettyIframeTransportListener) {
+            return;
+        }
+        window.__yettyIframeTransportListener = function(e)
+        {
+            if (!e.data || typeof e.data.clientSid != = 'number') {
+                return;
+            }
             var sid = e.data.clientSid >>> 0;
-            if (e.data.type === 'session-opened') {
+            if (e.data.type == = 'session-opened') {
                 Module._yetty_iframe_transport_on_opened(sid, e.data.ok ? 1 : 0);
                 return;
             }
-            if (e.data.type === 'session-rx') {
+            if (e.data.type == = 'session-rx') {
                 /* data is a Uint8Array-ish (postMessage structured
                  * clone preserves typed arrays). Copy into wasm
                  * heap as a transient buffer for the on_data call. */
                 var bytes = e.data.data;
                 if (!(bytes instanceof Uint8Array)) {
                     if (bytes && bytes.buffer) {
-                        bytes = new Uint8Array(bytes.buffer, bytes.byteOffset,
-                                               bytes.byteLength);
-                    } else if (bytes && bytes.length !== undefined) {
+                        bytes = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+                    } else if (bytes &&bytes.length != = undefined) {
                         bytes = new Uint8Array(bytes);
-                    } else { return; }
+                    } else {
+                        return;
+                    }
                 }
-                if (bytes.length === 0) return;
+                if (bytes.length == = 0) {
+                    return;
+                }
                 var ptr = Module._malloc(bytes.length);
-                if (ptr === 0) return;
+                if (ptr == = 0) {
+                    return;
+                }
                 Module.HEAPU8.set(bytes, ptr);
                 Module._yetty_iframe_transport_on_rx(sid, ptr, bytes.length);
                 Module._free(ptr);
                 return;
             }
-            if (e.data.type === 'session-closed') {
+            if (e.data.type == = 'session-closed') {
                 Module._yetty_iframe_transport_on_closed(sid);
                 return;
             }
@@ -253,11 +269,12 @@ static int iframe_transport_open(struct yetty_ytransport_conn_transport *self,
                                  const struct yetty_yevent_tcp_client_callbacks *cb)
 {
     struct iframe_transport *t = (struct iframe_transport *)self;
-    EM_ASM({
-        console.log('[yetty-side] iframe_transport_open clientSid=' + $0 +
-                    ' port=' + $1);
-    }, t->clientSid, (int)t->port);
-    if (!cb) return -1;
+    EM_ASM(
+        { console.log('[yetty-side] iframe_transport_open clientSid=' + $0 + ' port=' + $1); },
+        t->clientSid, (int)t->port);
+    if (!cb) {
+        return -1;
+    }
     if (t->opened) {
         ywarn("iframe-transport: open() called twice (clientSid=%u)", t->clientSid);
         return -1;
@@ -268,8 +285,7 @@ static int iframe_transport_open(struct yetty_ytransport_conn_transport *self,
     install_listener_once();
 
     if (register_transport(t) != 0) {
-        yerror("iframe-transport: route table full (>%d sessions)",
-               YETTY_IFRAME_MAX_TRANSPORTS);
+        yerror("iframe-transport: route table full (>%d sessions)", YETTY_IFRAME_MAX_TRANSPORTS);
         return -1;
     }
     t->opened = 1;
@@ -278,35 +294,35 @@ static int iframe_transport_open(struct yetty_ytransport_conn_transport *self,
      * once it's called Module._tinyemu_session_open and got a wasm
      * sid back (or queued the open if VM isn't ready yet — it will
      * still ack eventually, possibly with ok=false). */
-    EM_ASM({
-        var clientSid = $0;
-        var port = $1;
-        var iframe = document.getElementById('yetty-vm-pty-1');
-        if (iframe && iframe.contentWindow) {
-            iframe.contentWindow.postMessage({
-                type: 'session-open',
-                clientSid: clientSid,
-                port: port
-            }, '*');
-        }
-    }, t->clientSid, (int)t->port);
+    EM_ASM(
+        {
+            var clientSid = $0;
+            var port = $1;
+            var iframe = document.getElementById('yetty-vm-pty-1');
+            if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage(
+                    {type : 'session-open', clientSid : clientSid, port : port}, '*');
+            }
+        },
+        t->clientSid, (int)t->port);
 
-    yinfo("iframe-transport: posted session-open clientSid=%u port=%u",
-          t->clientSid, t->port);
+    yinfo("iframe-transport: posted session-open clientSid=%u port=%u", t->clientSid, t->port);
     return 0;
 }
 
 static struct yetty_ycore_size_result iframe_transport_send(
-    struct yetty_ytransport_conn_transport *self, struct yetty_yevent_conn *conn,
-    const void *data, size_t len)
+    struct yetty_ytransport_conn_transport *self, struct yetty_yevent_conn *conn, const void *data,
+    size_t len)
 {
     struct iframe_transport *t = (struct iframe_transport *)self;
     (void)conn;
 
-    EM_ASM({
-        console.log('[yetty-side] iframe_transport_send clientSid=' + $0 +
-                    ' connected=' + $1 + ' len=' + $2);
-    }, t->clientSid, t->connected, (int)len);
+    EM_ASM(
+        {
+            console.log('[yetty-side] iframe_transport_send clientSid=' + $0 + ' connected=' + $1 +
+                        ' len=' + $2);
+        },
+        t->clientSid, t->connected, (int)len);
 
     if (!t->connected) {
         return YETTY_ERR(yetty_ycore_size, "iframe-transport: send before connected");
@@ -317,22 +333,21 @@ static struct yetty_ycore_size_result iframe_transport_send(
 
     /* Post raw bytes as a Uint8Array (copy on JS side). postMessage's
      * structured clone preserves the typed array. */
-    EM_ASM({
-        var clientSid = $0;
-        var ptr = $1;
-        var len = $2;
-        /* slice() copies — the wasm buffer may be reused by the
+    EM_ASM(
+        {
+            var clientSid = $0;
+            var ptr = $1;
+            var len = $2;
+            /* slice() copies — the wasm buffer may be reused by the
          * caller as soon as send() returns. */
-        var bytes = HEAPU8.slice(ptr, ptr + len);
-        var iframe = document.getElementById('yetty-vm-pty-1');
-        if (iframe && iframe.contentWindow) {
-            iframe.contentWindow.postMessage({
-                type: 'session-tx',
-                clientSid: clientSid,
-                data: bytes
-            }, '*');
-        }
-    }, t->clientSid, data, (int)len);
+            var bytes = HEAPU8.slice(ptr, ptr + len);
+            var iframe = document.getElementById('yetty-vm-pty-1');
+            if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage(
+                    {type : 'session-tx', clientSid : clientSid, data : bytes}, '*');
+            }
+        },
+        t->clientSid, data, (int)len);
 
     return YETTY_OK(yetty_ycore_size, len);
 }
@@ -347,16 +362,16 @@ static struct yetty_ycore_void_result iframe_transport_close(
         return YETTY_OK_VOID();
     }
 
-    EM_ASM({
-        var clientSid = $0;
-        var iframe = document.getElementById('yetty-vm-pty-1');
-        if (iframe && iframe.contentWindow) {
-            iframe.contentWindow.postMessage({
-                type: 'session-close',
-                clientSid: clientSid
-            }, '*');
-        }
-    }, t->clientSid);
+    EM_ASM(
+        {
+            var clientSid = $0;
+            var iframe = document.getElementById('yetty-vm-pty-1');
+            if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({type : 'session-close', clientSid : clientSid},
+                                                 '*');
+            }
+        },
+        t->clientSid);
 
     t->connected = 0;
     /* Keep the slot registered until destroy() — late session-rx
@@ -381,9 +396,9 @@ static void iframe_transport_destroy(struct yetty_ytransport_conn_transport *sel
 }
 
 static const struct yetty_ytransport_conn_transport_ops iframe_transport_ops = {
-    .open    = iframe_transport_open,
-    .send    = iframe_transport_send,
-    .close   = iframe_transport_close,
+    .open = iframe_transport_open,
+    .send = iframe_transport_send,
+    .close = iframe_transport_close,
     .destroy = iframe_transport_destroy,
 };
 

@@ -36,31 +36,27 @@ struct yetty_ynetsurf;
 YETTY_YRESULT_DECLARE(yetty_ynetsurf_ptr, struct yetty_ynetsurf *);
 
 struct yetty_ynetsurf_config {
-	int width;
-	int height;
-	const char *resource_path;  /* colon-separated; may be NULL */
+    int width;
+    int height;
+    const char *resource_path; /* colon-separated; may be NULL */
 };
 
-struct yetty_ynetsurf_ptr_result yetty_ynetsurf_create(
-	const struct yetty_ynetsurf_config *cfg);
+struct yetty_ynetsurf_ptr_result yetty_ynetsurf_create(const struct yetty_ynetsurf_config *cfg);
 
-struct yetty_ycore_void_result yetty_ynetsurf_destroy(
-	struct yetty_ynetsurf *ns);
+struct yetty_ycore_void_result yetty_ynetsurf_destroy(struct yetty_ynetsurf *ns);
 
-struct yetty_ycore_void_result yetty_ynetsurf_navigate(
-	struct yetty_ynetsurf *ns, const char *url);
+struct yetty_ycore_void_result yetty_ynetsurf_navigate(struct yetty_ynetsurf *ns, const char *url);
 
-struct yetty_ycore_void_result yetty_ynetsurf_set_size(
-	struct yetty_ynetsurf *ns, int width, int height);
+struct yetty_ycore_void_result yetty_ynetsurf_set_size(struct yetty_ynetsurf *ns, int width,
+                                                       int height);
 
-struct yetty_ycore_void_result yetty_ynetsurf_set_scroll(
-	struct yetty_ynetsurf *ns, int sx, int sy);
+struct yetty_ycore_void_result yetty_ynetsurf_set_scroll(struct yetty_ynetsurf *ns, int sx, int sy);
 
 /* Drain the current page into buf. Caller owns buf; this function
  * appends primitives. Returns NSERROR-translated error on plotter
  * faults (rare; bail-on-first-error). */
-struct yetty_ycore_void_result yetty_ynetsurf_redraw(
-	struct yetty_ynetsurf *ns, struct yetty_ypaint_core_buffer *buf);
+struct yetty_ycore_void_result yetty_ynetsurf_redraw(struct yetty_ynetsurf *ns,
+                                                     struct yetty_ypaint_core_buffer *buf);
 
 /* Run any pending scheduled callbacks whose deadline has elapsed.
  * Call this from the host event loop. Returns the milliseconds until

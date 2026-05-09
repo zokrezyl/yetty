@@ -15,7 +15,8 @@ struct yetty_yplatform_yprocess {
     pid_t pid;
 };
 
-struct yetty_yplatform_yprocess *yetty_yplatform_yprocess_spawn(const char *const argv[], int detached, int stdio_to_null)
+struct yetty_yplatform_yprocess *yetty_yplatform_yprocess_spawn(const char *const argv[],
+                                                                int detached, int stdio_to_null)
 {
     if (!argv || !argv[0]) {
         return YPROCESS_INVALID;

@@ -46,9 +46,9 @@ struct yetty_yrender_gpu_resource_binder_result yetty_yrender_gpu_resource_binde
  * of one type share the compiled shader.
  *
  * The supplied pipeline must outlive the binder. */
-struct yetty_yrender_gpu_resource_binder_result yetty_yrender_gpu_resource_binder_create_with_pipeline(
-    WGPUDevice device, WGPUQueue queue,
-    struct yetty_ypaint_core_gpu_allocator *allocator,
+struct yetty_yrender_gpu_resource_binder_result
+yetty_yrender_gpu_resource_binder_create_with_pipeline(
+    WGPUDevice device, WGPUQueue queue, struct yetty_ypaint_core_gpu_allocator *allocator,
     const struct yetty_yrender_pipeline *pipeline);
 
 #ifdef __cplusplus

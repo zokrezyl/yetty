@@ -41,10 +41,8 @@ static const struct {
     enum yetty_ycat_type type;
     const char *name;
 } type_names[] = {
-    {YETTY_YCAT_TYPE_UNKNOWN, "unknown"},
-    {YETTY_YCAT_TYPE_TEXT, "text"},
-    {YETTY_YCAT_TYPE_MARKDOWN, "markdown"},
-    {YETTY_YCAT_TYPE_PDF, "pdf"},
+    {YETTY_YCAT_TYPE_UNKNOWN, "unknown"},   {YETTY_YCAT_TYPE_TEXT, "text"},
+    {YETTY_YCAT_TYPE_MARKDOWN, "markdown"}, {YETTY_YCAT_TYPE_PDF, "pdf"},
     {YETTY_YCAT_TYPE_IMAGE, "image"},
 };
 

@@ -34,7 +34,8 @@ static const struct yetty_yplatform_pty_factory_ops unix_pty_factory_ops = {
 
 static void unix_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
 {
-    struct yetty_yplatform_unix_pty_factory *factory = (struct yetty_yplatform_unix_pty_factory *)self;
+    struct yetty_yplatform_unix_pty_factory *factory =
+        (struct yetty_yplatform_unix_pty_factory *)self;
 
     if (factory->qemu_proc) {
         yetty_yqemu_qemu_stop(factory->qemu_proc);
@@ -47,19 +48,19 @@ static void unix_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
 static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
     struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop)
 {
-    struct yetty_yplatform_unix_pty_factory *factory = (struct yetty_yplatform_unix_pty_factory *)self;
+    struct yetty_yplatform_unix_pty_factory *factory =
+        (struct yetty_yplatform_unix_pty_factory *)self;
     struct yetty_yconfig_config *config = factory->config;
 
     /* --telnet: connect to an already-running telnet server (qemu chardev,
      * a tinyemu+slirp hostfwd to in-guest telnetd, an external telnet
      * daemon, etc.). Pure client — owns no server lifecycle. */
     if (config && config->ops->get_bool(config, YETTY_YCONFIG_KEY_TELNET, 0)) {
-        const char *host = config->ops->get_string(
-            config, YETTY_YCONFIG_KEY_TELNET_HOST, "127.0.0.1");
+        const char *host =
+            config->ops->get_string(config, YETTY_YCONFIG_KEY_TELNET_HOST, "127.0.0.1");
         int port = config->ops->get_int(config, YETTY_YCONFIG_KEY_TELNET_PORT, 0);
         if (port <= 0 || port > 65535) {
-            return YETTY_ERR(yetty_yplatform_pty,
-                             "--telnet requires telnet/port (1..65535)");
+            return YETTY_ERR(yetty_yplatform_pty, "--telnet requires telnet/port (1..65535)");
         }
         return yetty_ytelnet_telnet_pty_create_tcp(host, (uint16_t)port, event_loop);
     }
@@ -84,7 +85,8 @@ static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
                 return YETTY_ERR(yetty_yplatform_pty, "failed to start QEMU");
             }
 
-            struct yetty_ycore_void_result wr = yetty_yqemu_qemu_wait_ready(QEMU_TELNET_PORT, 30000);
+            struct yetty_ycore_void_result wr =
+                yetty_yqemu_qemu_wait_ready(QEMU_TELNET_PORT, 30000);
             if (YETTY_IS_ERR(wr)) {
                 yetty_yqemu_qemu_stop(factory->qemu_proc);
                 factory->qemu_proc = NULL;

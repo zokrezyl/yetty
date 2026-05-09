@@ -65,8 +65,8 @@ struct yetty_ytelnet_telnet_pty {
     /* Connection handle handed to us by transport via on_connect.
      * NULL until on_connect fires; reset to NULL on disconnect / stop. */
     struct yetty_yevent_conn *conn;
-    int transport_open;          /* transport->open() succeeded */
-    int connected;               /* on_connect fired ok */
+    int transport_open; /* transport->open() succeeded */
+    int connected;      /* on_connect fired ok */
 
     /* Decoded-output pipe — terminal-side reads via register_pty_pipe. */
     struct yetty_ycore_xthread_event_pipe *output_pipe;
@@ -232,8 +232,8 @@ static void telnet_emit_byte(struct yetty_ytelnet_telnet_pty *pty, uint8_t byte)
     static int n_emit;
     n_emit++;
     if (n_emit <= 8 || (n_emit % 64) == 0) {
-        ydebug("telnet: emit byte #%d 0x%02x ('%c') -> output_pipe",
-               n_emit, byte, (byte >= 32 && byte < 127) ? byte : '.');
+        ydebug("telnet: emit byte #%d 0x%02x ('%c') -> output_pipe", n_emit, byte,
+               (byte >= 32 && byte < 127) ? byte : '.');
     }
     pty->output_pipe->ops->write(pty->output_pipe, &byte, 1);
 }
@@ -337,8 +337,8 @@ static void telnet_on_data(void *ctx, struct yetty_yevent_conn *conn, const char
     if (nread <= 0) {
         return;
     }
-    ydebug("telnet: on_data nread=%ld first=0x%02x last=0x%02x",
-           nread, (uint8_t)data[0], (uint8_t)data[nread - 1]);
+    ydebug("telnet: on_data nread=%ld first=0x%02x last=0x%02x", nread, (uint8_t)data[0],
+           (uint8_t)data[nread - 1]);
     for (long i = 0; i < nread; i++) {
         telnet_process_byte(pty, (uint8_t)data[i]);
     }
@@ -546,14 +546,12 @@ struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(
 }
 
 struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create_tcp(
-    const char *host, uint16_t port,
-    struct yetty_yevent_event_loop *event_loop)
+    const char *host, uint16_t port, struct yetty_yevent_event_loop *event_loop)
 {
     struct yetty_ytransport_conn_transport *transport =
         yetty_ytransport_tcp_transport_create(host, port, event_loop);
     if (!transport) {
-        return YETTY_ERR(yetty_yplatform_pty,
-                         "telnet_pty_create_tcp: tcp_transport_create failed");
+        return YETTY_ERR(yetty_yplatform_pty, "telnet_pty_create_tcp: tcp_transport_create failed");
     }
     return yetty_ytelnet_telnet_pty_create(transport);
 }
@@ -573,7 +571,8 @@ struct yetty_ytelnet_telnet_pty_factory {
 
 static void telnet_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
 {
-    struct yetty_ytelnet_telnet_pty_factory *factory = (struct yetty_ytelnet_telnet_pty_factory *)self;
+    struct yetty_ytelnet_telnet_pty_factory *factory =
+        (struct yetty_ytelnet_telnet_pty_factory *)self;
     free(factory->host);
     free(factory);
 }
@@ -581,7 +580,8 @@ static void telnet_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
 static struct yetty_yplatform_pty_result telnet_pty_factory_create_pty(
     struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop)
 {
-    struct yetty_ytelnet_telnet_pty_factory *factory = (struct yetty_ytelnet_telnet_pty_factory *)self;
+    struct yetty_ytelnet_telnet_pty_factory *factory =
+        (struct yetty_ytelnet_telnet_pty_factory *)self;
 
     struct yetty_ytransport_conn_transport *transport =
         yetty_ytransport_tcp_transport_create(factory->host, factory->port, event_loop);
@@ -599,7 +599,8 @@ static const struct yetty_yplatform_pty_factory_ops telnet_pty_factory_ops = {
     .create_pty = telnet_pty_factory_create_pty,
 };
 
-struct yetty_yplatform_pty_factory_result yetty_ytelnet_telnet_pty_factory_create(const char *host, uint16_t port)
+struct yetty_yplatform_pty_factory_result yetty_ytelnet_telnet_pty_factory_create(const char *host,
+                                                                                  uint16_t port)
 {
     struct yetty_ytelnet_telnet_pty_factory *factory;
 

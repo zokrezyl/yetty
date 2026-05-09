@@ -14,9 +14,8 @@
 
 #include <stddef.h>
 
-struct yetty_ycore_void_result
-yetty_yevent_register_default_listeners(struct yetty_yevent_event_loop *el,
-                                        struct yetty_yevent_event_listener *listener)
+struct yetty_ycore_void_result yetty_yevent_register_default_listeners(
+    struct yetty_yevent_event_loop *el, struct yetty_yevent_event_listener *listener)
 {
     struct yetty_ycore_void_result res;
 
@@ -53,8 +52,7 @@ yetty_yevent_register_default_listeners(struct yetty_yevent_event_loop *el,
         }
     }
 
-    ydebug("yevent: registered default listeners (%zu types)",
-           sizeof(kTypes) / sizeof(kTypes[0]));
+    ydebug("yevent: registered default listeners (%zu types)", sizeof(kTypes) / sizeof(kTypes[0]));
     return YETTY_OK_VOID();
 }
 

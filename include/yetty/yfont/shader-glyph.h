@@ -35,8 +35,8 @@ extern "C" {
 #define YETTY_YFONT_SHADER_GLYPH_PUA_BASE 0x0000E000u
 
 struct yetty_yfont_shader_glyph_entry {
-    const char *name;     /* NUL-terminated, owned by the static table */
-    uint32_t codepoint;   /* PUA_BASE + local_id */
+    const char *name;   /* NUL-terminated, owned by the static table */
+    uint32_t codepoint; /* PUA_BASE + local_id */
 };
 
 /* Pointer to the static, sorted-by-name table. Lifetime = program. */

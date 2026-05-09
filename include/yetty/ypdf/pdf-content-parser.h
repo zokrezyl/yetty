@@ -90,7 +90,8 @@ struct yetty_ypdf_content_parser;
 
 YETTY_YRESULT_DECLARE(yetty_ypdf_content_parser_ptr, struct yetty_ypdf_content_parser *);
 
-struct yetty_ypdf_content_parser_ptr_result yetty_ypdf_content_parser_callbacks_content_parser_create(
+struct yetty_ypdf_content_parser_ptr_result
+yetty_ypdf_content_parser_callbacks_content_parser_create(
     const struct yetty_ypdf_content_parser_callbacks *cb);
 
 void yetty_ypdf_content_parser_destroy(struct yetty_ypdf_content_parser *p);

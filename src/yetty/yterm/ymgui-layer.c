@@ -146,8 +146,8 @@ static struct yetty_ycore_void_result ymgui_resize_grid(struct yetty_yrender_ter
                                                         struct yetty_ycore_grid_size gs);
 static struct yetty_ycore_void_result ymgui_set_cell_size(struct yetty_yrender_terminal_layer *self,
                                                           struct yetty_ycore_pixel_size cs);
-static struct yetty_ycore_void_result ymgui_set_visual_zoom(struct yetty_yrender_terminal_layer *self,
-                                                            float scale, float off_x, float off_y);
+static struct yetty_ycore_void_result ymgui_set_visual_zoom(
+    struct yetty_yrender_terminal_layer *self, float scale, float off_x, float off_y);
 static struct yetty_yrender_gpu_resource_set_result ymgui_get_gpu_resource_set(
     const struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal_layer *self,
@@ -157,8 +157,10 @@ static int ymgui_on_key(struct yetty_yrender_terminal_layer *self, int key, int 
 static int ymgui_on_char(struct yetty_yrender_terminal_layer *self, uint32_t cp, int mods);
 static struct yetty_ycore_void_result ymgui_scroll(struct yetty_yrender_terminal_layer *self,
                                                    int lines);
-static struct yetty_ycore_void_result ymgui_set_cursor(struct yetty_yrender_terminal_layer *self, int col, int row);
-static struct yetty_ycore_void_result ymgui_set_alt_screen(struct yetty_yrender_terminal_layer *self, int active);
+static struct yetty_ycore_void_result ymgui_set_cursor(struct yetty_yrender_terminal_layer *self,
+                                                       int col, int row);
+static struct yetty_ycore_void_result ymgui_set_alt_screen(
+    struct yetty_yrender_terminal_layer *self, int active);
 
 static const struct yetty_yterm_terminal_layer_ops ymgui_ops = {
     .destroy = ymgui_destroy,
@@ -180,7 +182,8 @@ static const struct yetty_yterm_terminal_layer_ops ymgui_ops = {
  * Card lookup / lifecycle
  *=========================================================================*/
 
-static struct yetty_yterm_ymgui_card *card_find(const struct yetty_yterm_ymgui_layer *l, uint32_t id)
+static struct yetty_yterm_ymgui_card *card_find(const struct yetty_yterm_ymgui_layer *l,
+                                                uint32_t id)
 {
     for (size_t i = 0; i < l->card_count; i++) {
         if (l->cards[i]->id == id) {
@@ -194,7 +197,8 @@ static struct yetty_yterm_ymgui_card *card_alloc(struct yetty_yterm_ymgui_layer 
 {
     if (l->card_count == l->card_cap) {
         size_t cap = l->card_cap ? l->card_cap * 2u : 4u;
-        struct yetty_yterm_ymgui_card **n = (struct yetty_yterm_ymgui_card **)realloc(l->cards, cap * sizeof(*n));
+        struct yetty_yterm_ymgui_card **n =
+            (struct yetty_yterm_ymgui_card **)realloc(l->cards, cap * sizeof(*n));
         if (!n) {
             return NULL;
         }
@@ -280,29 +284,34 @@ static uint32_t card_effective_w_cells(const struct yetty_yterm_ymgui_layer *l,
     return l->base.grid_size.cols - (uint32_t)col;
 }
 
-static float card_pixel_w(const struct yetty_yterm_ymgui_layer *l, const struct yetty_yterm_ymgui_card *c)
+static float card_pixel_w(const struct yetty_yterm_ymgui_layer *l,
+                          const struct yetty_yterm_ymgui_card *c)
 {
     return (float)card_effective_w_cells(l, c) * l->base.cell_size.width;
 }
 
-static float card_pixel_h(const struct yetty_yterm_ymgui_layer *l, const struct yetty_yterm_ymgui_card *c)
+static float card_pixel_h(const struct yetty_yterm_ymgui_layer *l,
+                          const struct yetty_yterm_ymgui_card *c)
 {
     return (float)c->h_cells * l->base.cell_size.height;
 }
 
-static float card_origin_x(const struct yetty_yterm_ymgui_layer *l, const struct yetty_yterm_ymgui_card *c)
+static float card_origin_x(const struct yetty_yterm_ymgui_layer *l,
+                           const struct yetty_yterm_ymgui_card *c)
 {
     int32_t col = c->col < 0 ? 0 : c->col;
     return (float)col * l->base.cell_size.width;
 }
 
-static float card_origin_y(const struct yetty_yterm_ymgui_layer *l, const struct yetty_yterm_ymgui_card *c)
+static float card_origin_y(const struct yetty_yterm_ymgui_layer *l,
+                           const struct yetty_yterm_ymgui_card *c)
 {
     /* int32 to allow temporarily negative when scrolled off the top. */
     return (float)((int32_t)c->rolling_row - (int32_t)l->row0_absolute) * l->base.cell_size.height;
 }
 
-static int card_visible(const struct yetty_yterm_ymgui_layer *l, const struct yetty_yterm_ymgui_card *c)
+static int card_visible(const struct yetty_yterm_ymgui_layer *l,
+                        const struct yetty_yterm_ymgui_card *c)
 {
     uint32_t row0 = l->row0_absolute;
     uint32_t rows = l->base.grid_size.rows;
@@ -471,7 +480,8 @@ static int ensure_card_uniform(struct yetty_yterm_ymgui_layer *l, struct yetty_y
     return c->uniform_buffer != NULL;
 }
 
-static void rebuild_card_bind_group(struct yetty_yterm_ymgui_layer *l, struct yetty_yterm_ymgui_card *c)
+static void rebuild_card_bind_group(struct yetty_yterm_ymgui_layer *l,
+                                    struct yetty_yterm_ymgui_card *c)
 {
     if (c->bind_group) {
         wgpuBindGroupRelease(c->bind_group);
@@ -600,7 +610,8 @@ static int upload_card_atlas(struct yetty_yterm_ymgui_layer *l, struct yetty_yte
  * Wire validators
  *=========================================================================*/
 
-static int validate_frame(const uint8_t *data, size_t size, const struct yetty_ymgui_wire_frame **out_hdr)
+static int validate_frame(const uint8_t *data, size_t size,
+                          const struct yetty_ymgui_wire_frame **out_hdr)
 {
     if (size < sizeof(struct yetty_ymgui_wire_frame)) {
         return -1;
@@ -619,7 +630,8 @@ static int validate_frame(const uint8_t *data, size_t size, const struct yetty_y
     return 0;
 }
 
-static int validate_tex(const uint8_t *data, size_t size, const struct yetty_ymgui_wire_tex **out_hdr)
+static int validate_tex(const uint8_t *data, size_t size,
+                        const struct yetty_ymgui_wire_tex **out_hdr)
 {
     if (size < sizeof(struct yetty_ymgui_wire_tex)) {
         return -1;
@@ -778,7 +790,8 @@ static struct yetty_ycore_void_result handle_card_remove(struct yetty_yterm_ymgu
     if (size < sizeof(struct yetty_ymgui_wire_card_remove)) {
         return YETTY_ERR(yetty_ycore_void, "ymgui: malformed CARD_REMOVE");
     }
-    const struct yetty_ymgui_wire_card_remove *cr = (const struct yetty_ymgui_wire_card_remove *)raw;
+    const struct yetty_ymgui_wire_card_remove *cr =
+        (const struct yetty_ymgui_wire_card_remove *)raw;
     if (cr->magic != YMGUI_WIRE_MAGIC_CARD_REMOVE) {
         return YETTY_ERR(yetty_ycore_void, "ymgui: bad CARD_REMOVE magic");
     }
@@ -1052,8 +1065,8 @@ static struct yetty_ycore_void_result ymgui_set_cell_size(struct yetty_yrender_t
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result ymgui_set_visual_zoom(struct yetty_yrender_terminal_layer *self,
-                                                            float scale, float off_x, float off_y)
+static struct yetty_ycore_void_result ymgui_set_visual_zoom(
+    struct yetty_yrender_terminal_layer *self, float scale, float off_x, float off_y)
 {
     /* Visual zoom is not yet wired through this layer. Accept silently. */
     (void)self;
@@ -1083,8 +1096,8 @@ struct yetty_yterm_cl_offsets {
     uint32_t vtx_count;
 };
 
-static int frame_measure(const struct yetty_yterm_ymgui_card *c, size_t *out_vtx_bytes, size_t *out_idx_bytes,
-                         int *out_idx32)
+static int frame_measure(const struct yetty_yterm_ymgui_card *c, size_t *out_vtx_bytes,
+                         size_t *out_idx_bytes, int *out_idx32)
 {
     const struct yetty_ymgui_wire_frame *fh = (const struct yetty_ymgui_wire_frame *)c->frame_bytes;
     const uint8_t *cur = c->frame_bytes + sizeof(*fh);
@@ -1130,7 +1143,8 @@ static int frame_measure(const struct yetty_yterm_ymgui_card *c, size_t *out_vtx
 }
 
 static int frame_upload(struct yetty_yterm_ymgui_layer *l, struct yetty_yterm_ymgui_card *c,
-                        struct yetty_yterm_cl_offsets *cls, size_t cls_max, size_t *cls_count, int idx32)
+                        struct yetty_yterm_cl_offsets *cls, size_t cls_max, size_t *cls_count,
+                        int idx32)
 {
     const struct yetty_ymgui_wire_frame *fh = (const struct yetty_ymgui_wire_frame *)c->frame_bytes;
     const uint8_t *cur = c->frame_bytes + sizeof(*fh);
@@ -1209,8 +1223,9 @@ static int frame_upload(struct yetty_yterm_ymgui_layer *l, struct yetty_yterm_ym
 }
 
 static struct yetty_ycore_void_result draw_card(struct yetty_yterm_ymgui_layer *l,
-                                                struct yetty_yterm_ymgui_card *c, WGPURenderPassEncoder pass,
-                                                float pane_w, float pane_h)
+                                                struct yetty_yterm_ymgui_card *c,
+                                                WGPURenderPassEncoder pass, float pane_w,
+                                                float pane_h)
 {
     if (!c->has_frame || !c->atlas_ready || !c->bind_group) {
         return YETTY_OK_VOID();
@@ -1444,7 +1459,8 @@ static struct yetty_ycore_void_result ymgui_scroll(struct yetty_yrender_terminal
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result ymgui_set_cursor(struct yetty_yrender_terminal_layer *self, int col, int row)
+static struct yetty_ycore_void_result ymgui_set_cursor(struct yetty_yrender_terminal_layer *self,
+                                                       int col, int row)
 {
     struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)self;
     if (col < 0) {
@@ -1463,7 +1479,8 @@ static struct yetty_ycore_void_result ymgui_set_cursor(struct yetty_yrender_term
  * restores the previously-saved state. The GPU resources tied to each
  * card (atlas, buffers, bind group) ride along with the card pointers
  * — no GPU work needed at toggle time. */
-static struct yetty_ycore_void_result ymgui_set_alt_screen(struct yetty_yrender_terminal_layer *self, int active)
+static struct yetty_ycore_void_result ymgui_set_alt_screen(
+    struct yetty_yrender_terminal_layer *self, int active)
 {
     struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)self;
     int wanted = active ? 1 : 0;
@@ -1627,7 +1644,8 @@ struct yetty_yterm_ymgui_hit yetty_yterm_terminal_layer_ymgui_layer_hit_test(
     return h;
 }
 
-uint32_t yetty_yterm_terminal_layer_ymgui_layer_focused_card(const struct yetty_yrender_terminal_layer *layer)
+uint32_t yetty_yterm_terminal_layer_ymgui_layer_focused_card(
+    const struct yetty_yrender_terminal_layer *layer)
 {
     if (!layer || layer->ops != &ymgui_ops) {
         return 0;
@@ -1636,7 +1654,8 @@ uint32_t yetty_yterm_terminal_layer_ymgui_layer_focused_card(const struct yetty_
     return l->focused_card_id;
 }
 
-void yetty_yterm_terminal_layer_ymgui_layer_set_focus(struct yetty_yrender_terminal_layer *layer, uint32_t card_id)
+void yetty_yterm_terminal_layer_ymgui_layer_set_focus(struct yetty_yrender_terminal_layer *layer,
+                                                      uint32_t card_id)
 {
     if (!layer || layer->ops != &ymgui_ops) {
         return;

@@ -247,14 +247,14 @@ static BlockDevice *block_device_init(const char *filename, BlockDeviceModeEnum 
             fseek(f, 0, SEEK_SET);
             size_t got = fread(bf->raw_data, 1, (size_t)file_size, f);
             if (got != (size_t)file_size) {
-                yerror("block_device_init: short read on %s (%zu/%lld)",
-                       filename, got, (long long)file_size);
+                yerror("block_device_init: short read on %s (%zu/%lld)", filename, got,
+                       (long long)file_size);
                 free(bf->raw_data);
                 bf->raw_data = NULL;
             } else {
                 bf->raw_size = file_size;
-                yinfo("block_device_init: cached %s (%lld bytes) in native buffer",
-                      filename, (long long)file_size);
+                yinfo("block_device_init: cached %s (%lld bytes) in native buffer", filename,
+                      (long long)file_size);
             }
         } else {
             ywarn("block_device_init: malloc(%lld) failed; falling back to MEMFS reads",
@@ -332,14 +332,14 @@ static EthernetDevice *slirp_open(const VMEthEntry *e)
         struct in_addr guest_any = {.s_addr = 0};
         for (int j = 0; j < e->hostfwd_count; j++) {
             const VMEthHostFwd *hf = &e->hostfwd[j];
-            if (slirp_add_hostfwd(slirp_state, hf->is_udp ? 1 : 0, any,
-                                  hf->host_port, guest_any, hf->guest_port) < 0) {
+            if (slirp_add_hostfwd(slirp_state, hf->is_udp ? 1 : 0, any, hf->host_port, guest_any,
+                                  hf->guest_port) < 0) {
                 yerror("slirp: failed to add hostfwd %s:%d -> guest:%d (port busy?)",
                        hf->is_udp ? "udp" : "tcp", hf->host_port, hf->guest_port);
                 /* Non-fatal: VM still boots, the forward just isn't active. */
             } else {
-                yinfo("slirp: hostfwd %s 0.0.0.0:%d -> 10.0.2.15:%d",
-                      hf->is_udp ? "udp" : "tcp", hf->host_port, hf->guest_port);
+                yinfo("slirp: hostfwd %s 0.0.0.0:%d -> 10.0.2.15:%d", hf->is_udp ? "udp" : "tcp",
+                      hf->host_port, hf->guest_port);
             }
         }
     }
@@ -476,8 +476,8 @@ static int init_vm(struct yetty_yplatform_tinyemu_pty *pty)
     virt_machine_set_defaults(p);
     yinfo("init_vm: loading cfg %s", pty->config_path);
     virt_machine_load_config_file(p, pty->config_path, NULL, NULL);
-    yinfo("init_vm: cfg loaded — drive_count=%d fs_count=%d eth_count=%d",
-          p->drive_count, p->fs_count, p->eth_count);
+    yinfo("init_vm: cfg loaded — drive_count=%d fs_count=%d eth_count=%d", p->drive_count,
+          p->fs_count, p->eth_count);
 
     /* Initialize block devices */
     for (int i = 0; i < p->drive_count; i++) {
@@ -555,7 +555,8 @@ static int init_vm(struct yetty_yplatform_tinyemu_pty *pty)
 
 static struct yetty_ycore_void_result tinyemu_pty_destroy(struct yetty_platform_pty *self)
 {
-    struct yetty_yplatform_tinyemu_pty *pty = container_of(self, struct yetty_yplatform_tinyemu_pty, base);
+    struct yetty_yplatform_tinyemu_pty *pty =
+        container_of(self, struct yetty_yplatform_tinyemu_pty, base);
     struct yetty_ycore_void_result stop_r = tinyemu_pty_stop(self);
 
     if (pty->os_input_pipe[0] >= 0) {
@@ -586,7 +587,8 @@ static struct yetty_ycore_void_result tinyemu_pty_destroy(struct yetty_platform_
 static struct yetty_ycore_size_result tinyemu_pty_read(struct yetty_platform_pty *self, char *buf,
                                                        size_t max_len)
 {
-    struct yetty_yplatform_tinyemu_pty *pty = container_of(self, struct yetty_yplatform_tinyemu_pty, base);
+    struct yetty_yplatform_tinyemu_pty *pty =
+        container_of(self, struct yetty_yplatform_tinyemu_pty, base);
 
     if (!pty->running || max_len == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
@@ -604,7 +606,8 @@ static struct yetty_ycore_size_result tinyemu_pty_read(struct yetty_platform_pty
 static struct yetty_ycore_size_result tinyemu_pty_write(struct yetty_platform_pty *self,
                                                         const char *data, size_t len)
 {
-    struct yetty_yplatform_tinyemu_pty *pty = container_of(self, struct yetty_yplatform_tinyemu_pty, base);
+    struct yetty_yplatform_tinyemu_pty *pty =
+        container_of(self, struct yetty_yplatform_tinyemu_pty, base);
 
     if (!pty->running || len == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
@@ -622,7 +625,8 @@ static struct yetty_ycore_size_result tinyemu_pty_write(struct yetty_platform_pt
 static struct yetty_ycore_void_result tinyemu_pty_resize(struct yetty_platform_pty *self,
                                                          uint32_t cols, uint32_t rows)
 {
-    struct yetty_yplatform_tinyemu_pty *pty = container_of(self, struct yetty_yplatform_tinyemu_pty, base);
+    struct yetty_yplatform_tinyemu_pty *pty =
+        container_of(self, struct yetty_yplatform_tinyemu_pty, base);
     pty->cols = cols;
     pty->rows = rows;
     /* Push the new size into the guest via virtio-console.
@@ -645,7 +649,8 @@ static struct yetty_ycore_void_result tinyemu_pty_resize(struct yetty_platform_p
 
 static struct yetty_ycore_void_result tinyemu_pty_stop(struct yetty_platform_pty *self)
 {
-    struct yetty_yplatform_tinyemu_pty *pty = container_of(self, struct yetty_yplatform_tinyemu_pty, base);
+    struct yetty_yplatform_tinyemu_pty *pty =
+        container_of(self, struct yetty_yplatform_tinyemu_pty, base);
 
     if (!pty->running) {
         return YETTY_OK_VOID();
@@ -669,12 +674,14 @@ static struct yetty_ycore_void_result tinyemu_pty_stop(struct yetty_platform_pty
 static struct yetty_platform_pty_pipe_source *tinyemu_pty_pipe_source(
     struct yetty_platform_pty *self)
 {
-    struct yetty_yplatform_tinyemu_pty *pty = container_of(self, struct yetty_yplatform_tinyemu_pty, base);
+    struct yetty_yplatform_tinyemu_pty *pty =
+        container_of(self, struct yetty_yplatform_tinyemu_pty, base);
     return &pty->pipe_source;
 }
 
 /* Create TinyEMU PTY */
-struct yetty_yplatform_pty_result yetty_yplatform_tinyemu_pty_create(struct yetty_yconfig_config *config)
+struct yetty_yplatform_pty_result yetty_yplatform_tinyemu_pty_create(
+    struct yetty_yconfig_config *config)
 {
     struct yetty_yplatform_tinyemu_pty *pty;
 
@@ -722,18 +729,15 @@ struct yetty_yplatform_pty_result yetty_yplatform_tinyemu_pty_create(struct yett
     {
         const char *config_dir = yetty_yplatform_get_config_dir();
         char cfg_path[512];
-        snprintf(cfg_path, sizeof(cfg_path),
-                 "%s/temu/yetty-temu-extended.cfg", config_dir);
+        snprintf(cfg_path, sizeof(cfg_path), "%s/temu/yetty-temu-extended.cfg", config_dir);
         if (access(cfg_path, F_OK) != 0) {
             close(pty->os_input_pipe[0]);
             close(pty->os_input_pipe[1]);
             close(pty->pty_pipe[0]);
             close(pty->pty_pipe[1]);
             free(pty);
-            yerror("tinyemu: missing cfg at %s — extract-assets did not run?",
-                   cfg_path);
-            return YETTY_ERR(yetty_yplatform_pty,
-                             "missing temu cfg under config dir");
+            yerror("tinyemu: missing cfg at %s — extract-assets did not run?", cfg_path);
+            return YETTY_ERR(yetty_yplatform_pty, "missing temu cfg under config dir");
         }
         pty->config_path = strdup(cfg_path);
     }
@@ -763,14 +767,16 @@ struct yetty_yplatform_tinyemu_pty_factory {
 
 static void tinyemu_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
 {
-    struct yetty_yplatform_tinyemu_pty_factory *factory = container_of(self, struct yetty_yplatform_tinyemu_pty_factory, base);
+    struct yetty_yplatform_tinyemu_pty_factory *factory =
+        container_of(self, struct yetty_yplatform_tinyemu_pty_factory, base);
     free(factory);
 }
 
 static struct yetty_yplatform_pty_result tinyemu_pty_factory_create_pty(
     struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop)
 {
-    struct yetty_yplatform_tinyemu_pty_factory *factory = container_of(self, struct yetty_yplatform_tinyemu_pty_factory, base);
+    struct yetty_yplatform_tinyemu_pty_factory *factory =
+        container_of(self, struct yetty_yplatform_tinyemu_pty_factory, base);
     (void)event_loop;
     return yetty_yplatform_tinyemu_pty_create(factory->config);
 }
@@ -781,7 +787,8 @@ static const struct yetty_yplatform_pty_factory_ops tinyemu_pty_factory_ops = {
 };
 
 /* Factory creation - called when --virtual flag is set */
-struct yetty_yplatform_pty_factory_result yetty_yplatform_tinyemu_pty_factory_create(struct yetty_yconfig_config *config)
+struct yetty_yplatform_pty_factory_result yetty_yplatform_tinyemu_pty_factory_create(
+    struct yetty_yconfig_config *config)
 {
     struct yetty_yplatform_tinyemu_pty_factory *factory;
 

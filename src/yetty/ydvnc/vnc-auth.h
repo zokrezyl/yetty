@@ -10,8 +10,7 @@
 
 #include <stdint.h>
 
-void yetty_ydvnc_vnc_auth_response(const char *password,
-                                   const uint8_t challenge[16],
+void yetty_ydvnc_vnc_auth_response(const char *password, const uint8_t challenge[16],
                                    uint8_t response[16]);
 
 #endif /* YETTY_YDVNC_VNC_AUTH_H */

@@ -53,7 +53,8 @@ int yetty_yplatform_optreset = 0; /* reset getopt */
 char *yetty_yplatform_optarg = NULL;
 
 #define IGNORE_FIRST (*options == '-' || *options == '+')
-#define PRINT_ERROR ((yetty_yplatform_opterr) && ((*options != ':') || (IGNORE_FIRST && options[1] != ':')))
+#define PRINT_ERROR                                                                                \
+    ((yetty_yplatform_opterr) && ((*options != ':') || (IGNORE_FIRST && options[1] != ':')))
 #define IS_POSIXLY_CORRECT (getenv("POSIXLY_CORRECT") != NULL)
 #define PERMUTE (!IS_POSIXLY_CORRECT && !IGNORE_FIRST)
 #define IN_ORDER (!IS_POSIXLY_CORRECT && *options == '-')
@@ -252,7 +253,7 @@ int yetty_yplatform_getopt(int nargc, char *const *nargv, const char *options)
 }
 
 int yetty_yplatform_getopt_long(int nargc, char *const *nargv, const char *options,
-                const struct yetty_yplatform_option *long_options, int *idx)
+                                const struct yetty_yplatform_option *long_options, int *idx)
 {
     int retval;
 
@@ -331,7 +332,8 @@ int yetty_yplatform_getopt_long(int nargc, char *const *nargv, const char *optio
                     yetty_yplatform_optarg = nargv[yetty_yplatform_optind++];
                 }
             }
-            if ((long_options[match].has_arg == required_argument) && (yetty_yplatform_optarg == NULL)) {
+            if ((long_options[match].has_arg == required_argument) &&
+                (yetty_yplatform_optarg == NULL)) {
                 if (PRINT_ERROR) {
                     fprintf(stderr, recargstring, progname(), current_argv);
                 }

@@ -39,8 +39,8 @@ struct yetty_yterm_view {
 /* View operations - dispatch through vtable */
 struct yetty_ycore_void_result yetty_yui_view_destroy(struct yetty_yterm_view *view);
 
-struct yetty_ycore_void_result yetty_yui_view_render(struct yetty_yterm_view *view,
-                                                     struct yetty_ypaint_core_target *render_target);
+struct yetty_ycore_void_result yetty_yui_view_render(
+    struct yetty_yterm_view *view, struct yetty_ypaint_core_target *render_target);
 
 struct yetty_ycore_void_result yetty_yui_view_set_bounds(struct yetty_yterm_view *view,
                                                          struct yetty_yui_rect bounds);

@@ -57,9 +57,9 @@ extern "C" {
  *===========================================================================*/
 
 enum yetty_yecho_style {
-    YETTY_YECHO_STYLE_NONE      = 0,
-    YETTY_YECHO_STYLE_BOLD      = 1u << 0,
-    YETTY_YECHO_STYLE_ITALIC    = 1u << 1,
+    YETTY_YECHO_STYLE_NONE = 0,
+    YETTY_YECHO_STYLE_BOLD = 1u << 0,
+    YETTY_YECHO_STYLE_ITALIC = 1u << 1,
     YETTY_YECHO_STYLE_UNDERLINE = 1u << 2,
 };
 
@@ -101,14 +101,12 @@ YETTY_YRESULT_DECLARE(yetty_yecho_doc_ptr, struct yetty_yecho_doc *);
 
 /* Parse `input` (length `len`) into a document. Unknown glyph names are
  * collected in the doc's error list but do not fail the parse. */
-struct yetty_yecho_doc_ptr_result
-yetty_yecho_parse(const char *input, size_t len);
+struct yetty_yecho_doc_ptr_result yetty_yecho_parse(const char *input, size_t len);
 
 void yetty_yecho_doc_destroy(struct yetty_yecho_doc *doc);
 
 size_t yetty_yecho_doc_span_count(const struct yetty_yecho_doc *doc);
-const struct yetty_yecho_span *
-yetty_yecho_doc_span(const struct yetty_yecho_doc *doc, size_t idx);
+const struct yetty_yecho_span *yetty_yecho_doc_span(const struct yetty_yecho_doc *doc, size_t idx);
 
 size_t yetty_yecho_doc_error_count(const struct yetty_yecho_doc *doc);
 const char *yetty_yecho_doc_error(const struct yetty_yecho_doc *doc, size_t idx);
@@ -133,14 +131,12 @@ struct yetty_yecho_render_config {
 
 /* Render `doc` into a fresh ypaint-core buffer. Caller frees with
  * yetty_ypaint_core_buffer_destroy. */
-struct yetty_ypaint_core_buffer_result
-yetty_yecho_render(const struct yetty_yecho_doc *doc,
-                   const struct yetty_yecho_render_config *config);
+struct yetty_ypaint_core_buffer_result yetty_yecho_render(
+    const struct yetty_yecho_doc *doc, const struct yetty_yecho_render_config *config);
 
 /* Convenience: parse + render in one call. */
-struct yetty_ypaint_core_buffer_result
-yetty_yecho_render_string(const char *input, size_t len,
-                          const struct yetty_yecho_render_config *config);
+struct yetty_ypaint_core_buffer_result yetty_yecho_render_string(
+    const char *input, size_t len, const struct yetty_yecho_render_config *config);
 
 /*=============================================================================
  * OSC emission — wraps a ypaint buffer in a YETTY_OSC_YPAINT_BIN envelope
@@ -148,8 +144,8 @@ yetty_yecho_render_string(const char *input, size_t len,
  * success.
  *===========================================================================*/
 
-struct yetty_ycore_size_result
-yetty_yecho_osc_bin_emit(const struct yetty_ypaint_core_buffer *buffer, FILE *out);
+struct yetty_ycore_size_result yetty_yecho_osc_bin_emit(
+    const struct yetty_ypaint_core_buffer *buffer, FILE *out);
 
 #ifdef __cplusplus
 }

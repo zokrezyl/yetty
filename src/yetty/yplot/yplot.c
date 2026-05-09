@@ -19,8 +19,7 @@
 
 /* Default 8-color palette — matches the yaml factory and the demo plots. */
 static const uint32_t YPLOT_PALETTE[8] = {
-    0xFFFF6B6B, 0xFF4ECDC4, 0xFFFFE66D, 0xFF95E1D3,
-    0xFFF38181, 0xFFAA96DA, 0xFF72D6C9, 0xFFFCBF49,
+    0xFFFF6B6B, 0xFF4ECDC4, 0xFFFFE66D, 0xFF95E1D3, 0xFFF38181, 0xFFAA96DA, 0xFF72D6C9, 0xFFFCBF49,
 };
 
 static int parse_hex_color(const char *s, uint32_t *out)
@@ -32,9 +31,12 @@ static int parse_hex_color(const char *s, uint32_t *out)
     size_t hl = strlen(h);
     char buf[7];
     if (hl == 3) {
-        buf[0] = h[0]; buf[1] = h[0];
-        buf[2] = h[1]; buf[3] = h[1];
-        buf[4] = h[2]; buf[5] = h[2];
+        buf[0] = h[0];
+        buf[1] = h[0];
+        buf[2] = h[1];
+        buf[3] = h[1];
+        buf[4] = h[2];
+        buf[5] = h[2];
         buf[6] = '\0';
     } else if (hl == 6) {
         memcpy(buf, h, 6);
@@ -81,9 +83,9 @@ struct yetty_ypaint_core_buffer_result yetty_yplot_render(
         u.y_min = -1.5f;
         u.y_max = 1.5f;
     }
-    u.flags = config && config->flags ? config->flags
-                                      : (YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES |
-                                         YETTY_YPLOT_FLAG_LABELS);
+    u.flags = config && config->flags
+                  ? config->flags
+                  : (YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS);
 
     for (int i = 0; i < 8; i++) {
         u.colors[i] = YPLOT_PALETTE[i];
@@ -151,7 +153,8 @@ struct yetty_ypaint_core_buffer_result yetty_yplot_render(
         .scene_max_x = u.bounds_x + u.bounds_w,
         .scene_max_y = u.bounds_y + u.bounds_h,
     };
-    struct yetty_ypaint_core_buffer_result br = yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
+    struct yetty_ypaint_core_buffer_result br =
+        yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         free(prim_buf);
         return YETTY_ERR(yetty_ypaint_core_buffer, "yplot: ypaint buffer create failed", br);
@@ -190,9 +193,8 @@ struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(
         .reserved = {0, 0},
     };
     struct yetty_ycore_buffer envelope = {0};
-    struct yetty_ycore_void_result r = yetty_yface_emit(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
-                                                        &meta, sizeof(meta), raw, raw_size,
-                                                        &envelope);
+    struct yetty_ycore_void_result r = yetty_yface_emit(
+        YETTY_OSC_YPAINT_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
         return YETTY_ERR(yetty_ycore_size, "yplot_osc_bin_emit: yface_emit failed", r);

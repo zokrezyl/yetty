@@ -32,18 +32,18 @@ struct yetty_ypaint_core_flyweight_registry_ptr_result yetty_ypaint_flyweight_cr
 
     // Cmd tier — control commands at the bottom of the id space.
     yetty_ypaint_core_flyweight_registry_add(reg, YETTY_YPAINT_CMD_BASE, YETTY_YPAINT_CMD_END,
-                                        yetty_ypaint_core_cmd_handler);
+                                             yetty_ypaint_core_cmd_handler);
 
     // Flyweight prims — one handler per type id, registered like SDF/complex
     yetty_ypaint_core_flyweight_registry_add(reg, YETTY_YPAINT_TYPE_FONT, YETTY_YPAINT_TYPE_FONT,
-                                        yetty_ypaint_core_font_prim_handler);
+                                             yetty_ypaint_core_font_prim_handler);
     yetty_ypaint_core_flyweight_registry_add(reg, YETTY_YPAINT_TYPE_TEXT_SPAN,
-                                        YETTY_YPAINT_TYPE_TEXT_SPAN,
-                                        yetty_ypaint_core_text_span_prim_handler);
+                                             YETTY_YPAINT_TYPE_TEXT_SPAN,
+                                             yetty_ypaint_core_text_span_prim_handler);
 
     // Complex prim handler (types >= 0x80000000)
     yetty_ypaint_core_flyweight_registry_add(reg, YETTY_YPAINT_COMPLEX_TYPE_BASE, 0xFFFFFFFF,
-                                        yetty_ypaint_core_complex_prim_handler);
+                                             yetty_ypaint_core_complex_prim_handler);
 
     ydebug("flyweight_create: cmd + SDF default + FONT + TEXT_SPAN + complex");
     return res;

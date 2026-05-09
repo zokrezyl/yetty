@@ -41,16 +41,16 @@ struct yetty_ymsdf_wgsl_glyph_header {
 };
 
 struct yetty_ymsdf_wgsl_config {
-    const char *ttf_path;        /* input TTF (required) */
-    const char *cdb_path;        /* output CDB full path (required) */
-    float font_size;             /* default 32 px */
-    float pixel_range;           /* default 4 px */
+    const char *ttf_path; /* input TTF (required) */
+    const char *cdb_path; /* output CDB full path (required) */
+    float font_size;      /* default 32 px */
+    float pixel_range;    /* default 4 px */
 
     /* WGPU resources to reuse. Both required. The generator submits to
      * `device`'s queue and pumps `instance` (via wgpuInstanceProcessEvents)
      * while waiting for completion + buffer mapping. */
-    void *device;                /* WGPUDevice — opaque to keep webgpu.h out */
-    void *instance;              /* WGPUInstance */
+    void *device;   /* WGPUDevice — opaque to keep webgpu.h out */
+    void *instance; /* WGPUInstance */
 
     /* Path to the compute shader (msdf_gen.wgsl). NULL ⇒ try
      * <exe_dir>/msdf_gen.wgsl, then <exe_dir>/shaders/msdf_gen.wgsl,

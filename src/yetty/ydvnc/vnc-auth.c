@@ -13,8 +13,7 @@ static uint8_t reverse_byte(uint8_t b)
     return b;
 }
 
-void yetty_ydvnc_vnc_auth_response(const char *password,
-                                   const uint8_t challenge[16],
+void yetty_ydvnc_vnc_auth_response(const char *password, const uint8_t challenge[16],
                                    uint8_t response[16])
 {
     uint8_t key[8] = {0};
@@ -29,6 +28,6 @@ void yetty_ydvnc_vnc_auth_response(const char *password,
         key[i] = reverse_byte(key[i]);
     }
 
-    yetty_ydvnc_des_encrypt(key, challenge,     response);
+    yetty_ydvnc_des_encrypt(key, challenge, response);
     yetty_ydvnc_des_encrypt(key, challenge + 8, response + 8);
 }

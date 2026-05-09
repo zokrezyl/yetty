@@ -13,8 +13,8 @@
  *   Notification: [2, channel, method, params]
  */
 
-struct yetty_rpc_message_result
-yetty_yrpc_message_parse(const uint8_t *data, size_t len, size_t *out_consumed)
+struct yetty_rpc_message_result yetty_yrpc_message_parse(const uint8_t *data, size_t len,
+                                                         size_t *out_consumed)
 {
     msgpack_unpacked unpacked;
     msgpack_unpack_return ret;
@@ -149,7 +149,7 @@ yetty_yrpc_message_parse(const uint8_t *data, size_t len, size_t *out_consumed)
 }
 
 void yetty_yrpc_write_buffer_init(struct yetty_yrpc_write_buffer *buf, uint8_t *storage,
-                                 size_t capacity)
+                                  size_t capacity)
 {
     buf->data = storage;
     buf->len = 0;
@@ -174,8 +174,8 @@ static int buffer_write(void *data, const char *buf, size_t len)
 }
 
 struct yetty_ycore_void_result yetty_yrpc_write_response_ok(struct yetty_yrpc_write_buffer *buf,
-                                                           uint32_t msgid, const uint8_t *result,
-                                                           size_t result_len)
+                                                            uint32_t msgid, const uint8_t *result,
+                                                            size_t result_len)
 {
     msgpack_packer pk;
 
@@ -203,7 +203,8 @@ struct yetty_ycore_void_result yetty_yrpc_write_response_ok(struct yetty_yrpc_wr
 }
 
 struct yetty_ycore_void_result yetty_yrpc_write_response_error(struct yetty_yrpc_write_buffer *buf,
-                                                              uint32_t msgid, const char *error_msg)
+                                                               uint32_t msgid,
+                                                               const char *error_msg)
 {
     msgpack_packer pk;
     size_t error_len;
@@ -227,7 +228,7 @@ struct yetty_ycore_void_result yetty_yrpc_write_response_error(struct yetty_yrpc
 }
 
 struct yetty_ycore_void_result yetty_yrpc_write_response_bool(struct yetty_yrpc_write_buffer *buf,
-                                                             uint32_t msgid, int value)
+                                                              uint32_t msgid, int value)
 {
     msgpack_packer pk;
 

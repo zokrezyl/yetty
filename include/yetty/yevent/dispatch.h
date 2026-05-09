@@ -21,9 +21,8 @@ struct yetty_ycore_xthread_event_pipe;
  * leaves any previously-registered slots in place (caller is expected to
  * tear down via event-loop destroy).
  */
-struct yetty_ycore_void_result
-yetty_yevent_register_default_listeners(struct yetty_yevent_event_loop *el,
-                                        struct yetty_yevent_event_listener *listener);
+struct yetty_ycore_void_result yetty_yevent_register_default_listeners(
+    struct yetty_yevent_event_loop *el, struct yetty_yevent_event_listener *listener);
 
 /*
  * Post an event into the platform input pipe. Used by translation code paths

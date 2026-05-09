@@ -34,17 +34,18 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_destroy(
 //=============================================================================
 
 // Set grid cell size (pixels)
-struct yetty_ycore_void_result yetty_ypaint_canvas_set_cell_size(struct yetty_ypaint_canvas *canvas,
-                                                                 struct yetty_ycore_pixel_size pixel_size);
+struct yetty_ycore_void_result yetty_ypaint_canvas_set_cell_size(
+    struct yetty_ypaint_canvas *canvas, struct yetty_ycore_pixel_size pixel_size);
 // Set grid dimensions (cols/rows)
-struct yetty_ycore_void_result yetty_ypaint_canvas_set_grid_size(struct yetty_ypaint_canvas *canvas,
-                                                                 struct yetty_ycore_grid_size grid_size);
+struct yetty_ycore_void_result yetty_ypaint_canvas_set_grid_size(
+    struct yetty_ypaint_canvas *canvas, struct yetty_ycore_grid_size grid_size);
 
 //=============================================================================
 // Accessors
 //=============================================================================
 
-struct yetty_ycore_pixel_size yetty_ypaint_canvas_cell_get_pixel_size(struct yetty_ypaint_canvas *canvas);
+struct yetty_ycore_pixel_size yetty_ypaint_canvas_cell_get_pixel_size(
+    struct yetty_ypaint_canvas *canvas);
 
 struct yetty_ycore_grid_size yetty_ypaint_canvas_get_grid_size(struct yetty_ypaint_canvas *canvas);
 
@@ -172,8 +173,8 @@ uint32_t yetty_ypaint_canvas_font_count(const struct yetty_ypaint_canvas *canvas
 
 // Get font at slot. Returns NULL if slot out of range. Pointer is
 // canvas-owned — callers must not destroy it.
-struct yetty_ypaint_font *yetty_ypaint_canvas_get_font_at(
-    const struct yetty_ypaint_canvas *canvas, uint32_t slot);
+struct yetty_ypaint_font *yetty_ypaint_canvas_get_font_at(const struct yetty_ypaint_canvas *canvas,
+                                                          uint32_t slot);
 
 //=============================================================================
 // Complex primitive access (for atlas rendering)

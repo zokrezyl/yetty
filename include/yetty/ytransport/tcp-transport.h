@@ -20,8 +20,7 @@ extern "C" {
 /* Allocate a new TCP transport. Returns NULL on out-of-memory or on
  * invalid arguments. The transport stores its own copy of `host`. */
 struct yetty_ytransport_conn_transport *yetty_ytransport_tcp_transport_create(
-    const char *host, uint16_t port,
-    struct yetty_yevent_event_loop *event_loop);
+    const char *host, uint16_t port, struct yetty_yevent_event_loop *event_loop);
 
 #ifdef __cplusplus
 }

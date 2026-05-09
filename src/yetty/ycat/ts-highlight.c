@@ -392,7 +392,8 @@ struct yetty_ypaint_core_buffer_result yetty_ycat_ts_render(const uint8_t *bytes
         .scene_max_x = scene_w,
         .scene_max_y = scene_h,
     };
-    struct yetty_ypaint_core_buffer_result br = yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
+    struct yetty_ypaint_core_buffer_result br =
+        yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         ts_parse_done(parser, tree, color_map);
         return br;

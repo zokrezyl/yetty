@@ -29,7 +29,7 @@ size_t yetty_ypaint_core_font_prim_size_for(uint32_t name_len, uint32_t ttf_len)
 }
 
 void yetty_ypaint_core_font_prim_write(uint8_t *out, int32_t font_id, const char *name,
-                                  uint32_t name_len, const uint8_t *ttf, uint32_t ttf_len)
+                                       uint32_t name_len, const uint8_t *ttf, uint32_t ttf_len)
 {
     uint32_t payload_size = font_payload_size(name_len, ttf_len);
     size_t total = FONT_PRIM_HEADER + payload_size;
@@ -57,7 +57,8 @@ void yetty_ypaint_core_font_prim_write(uint8_t *out, int32_t font_id, const char
     }
 }
 
-int yetty_ypaint_core_font_prim_parse(const uint32_t *prim, struct yetty_ypaint_core_font_prim_view *out)
+int yetty_ypaint_core_font_prim_parse(const uint32_t *prim,
+                                      struct yetty_ypaint_core_font_prim_view *out)
 {
     if (!prim || !out) {
         return -1;
@@ -122,7 +123,8 @@ static const struct yetty_ypaint_core_prim_base_ops g_font_prim_base_ops = {
     .aabb = font_prim_aabb,
 };
 
-struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_font_prim_handler(uint32_t prim_type)
+struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_font_prim_handler(
+    uint32_t prim_type)
 {
     if (prim_type == YETTY_YPAINT_TYPE_FONT) {
         return YETTY_OK(yetty_ypaint_core_prim_base_ops_ptr, &g_font_prim_base_ops);

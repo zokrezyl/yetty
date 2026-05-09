@@ -56,8 +56,7 @@ static void factory_destroy(struct yetty_yplatform_pty_factory *self)
 }
 
 static struct yetty_yplatform_pty_result factory_create_pty(
-    struct yetty_yplatform_pty_factory *self,
-    struct yetty_yevent_event_loop *event_loop)
+    struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop)
 {
     struct webasm_telnet_factory *f = (struct webasm_telnet_factory *)self;
     (void)f;
@@ -98,7 +97,6 @@ struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
     }
     f->base.ops = &factory_ops;
     f->config = config;
-    yinfo("webasm: pty factory = telnet-over-iframe-transport (port=%d)",
-          YETTY_VM_TELNET_PORT);
+    yinfo("webasm: pty factory = telnet-over-iframe-transport (port=%d)", YETTY_VM_TELNET_PORT);
     return YETTY_OK(yetty_yplatform_pty_factory, &f->base);
 }

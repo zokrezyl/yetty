@@ -56,12 +56,14 @@ struct yetty_ypaint_core_prim_ops {
 // Flyweight - wraps pointer to primitive data + base ops
 // Works for ALL primitives (SDF and complex)
 struct yetty_ypaint_core_prim_flyweight {
-    const uint32_t *data;                         // type at data[0]
+    const uint32_t *data;                              // type at data[0]
     const struct yetty_ypaint_core_prim_base_ops *ops; // base ops (size, aabb)
 };
 
-YETTY_YRESULT_DECLARE(yetty_ypaint_core_prim_base_ops_ptr, const struct yetty_ypaint_core_prim_base_ops *);
-YETTY_YRESULT_DECLARE(yetty_ypaint_core_prim_flyweight_ptr, struct yetty_ypaint_core_prim_flyweight *);
+YETTY_YRESULT_DECLARE(yetty_ypaint_core_prim_base_ops_ptr,
+                      const struct yetty_ypaint_core_prim_base_ops *);
+YETTY_YRESULT_DECLARE(yetty_ypaint_core_prim_flyweight_ptr,
+                      struct yetty_ypaint_core_prim_flyweight *);
 
 // Flyweight registry instance (opaque)
 struct yetty_ypaint_core_flyweight_registry;
@@ -71,14 +73,16 @@ YETTY_YRESULT_DECLARE(yetty_ypaint_core_flyweight_registry_ptr,
 
 // Create/destroy registry instance
 YETTY_ANNOT_CALLER_OWNED
-struct yetty_ypaint_core_flyweight_registry_ptr_result yetty_ypaint_core_flyweight_registry_create(void);
+struct yetty_ypaint_core_flyweight_registry_ptr_result yetty_ypaint_core_flyweight_registry_create(
+    void);
 
 void yetty_ypaint_core_flyweight_registry_destroy(
     struct yetty_ypaint_core_flyweight_registry *reg YETTY_ANNOT_CALLEE_OWNED);
 
 // Set default handler (SDF) - called first, fast path
-void yetty_ypaint_core_flyweight_registry_set_default(struct yetty_ypaint_core_flyweight_registry *reg,
-                                                 struct yetty_ypaint_core_prim_base_ops_ptr_result (*handler)(uint32_t));
+void yetty_ypaint_core_flyweight_registry_set_default(
+    struct yetty_ypaint_core_flyweight_registry *reg,
+    struct yetty_ypaint_core_prim_base_ops_ptr_result (*handler)(uint32_t));
 
 // Register additional handler for type range [type_min, type_max]
 struct yetty_ycore_void_result yetty_ypaint_core_flyweight_registry_add(

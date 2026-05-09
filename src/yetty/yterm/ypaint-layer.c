@@ -30,7 +30,8 @@
 #define U_COUNT 8
 
 /* Setters */
-static inline void set_grid_size(struct yetty_ypaint_core_gpu_resource_set *rs, float cols, float rows)
+static inline void set_grid_size(struct yetty_ypaint_core_gpu_resource_set *rs, float cols,
+                                 float rows)
 {
     rs->uniforms[U_GRID_SIZE].vec2[0] = cols;
     rs->uniforms[U_GRID_SIZE].vec2[1] = rows;
@@ -40,7 +41,8 @@ static inline void set_cell_size(struct yetty_ypaint_core_gpu_resource_set *rs, 
     rs->uniforms[U_CELL_SIZE].vec2[0] = w;
     rs->uniforms[U_CELL_SIZE].vec2[1] = h;
 }
-static inline void set_rolling_row_0(struct yetty_ypaint_core_gpu_resource_set *rs, uint32_t row_origin)
+static inline void set_rolling_row_0(struct yetty_ypaint_core_gpu_resource_set *rs,
+                                     uint32_t row_origin)
 {
     rs->uniforms[U_ROLLING_ROW_0].u32 = row_origin;
 }
@@ -206,7 +208,8 @@ static struct yetty_ycore_void_result on_canvas_cursor_set(
         yerror("on_canvas_cursor_set: cursor_fn is NULL");
         return YETTY_ERR(yetty_ycore_void, "cursor_fn is NULL");
     }
-    layer->base.cursor_fn(&layer->base, (struct yetty_ycore_grid_cursor_pos){.cols = 0, .rows = new_row},
+    layer->base.cursor_fn(&layer->base,
+                          (struct yetty_ycore_grid_cursor_pos){.cols = 0, .rows = new_row},
                           layer->base.cursor_userdata);
     ydebug("on_canvas_cursor_set EXIT: new_row=%u", new_row);
     return YETTY_OK_VOID();
@@ -737,43 +740,42 @@ static struct yetty_yrender_gpu_resource_set_result ypaint_layer_get_gpu_resourc
                     continue;
                 }
                 off += (size_t)snprintf(buf + off, cap - off,
-                                        "        case %uu: { return uniforms.%s_base_size; }\n",
-                                        s, font_rss[s]->namespace);
+                                        "        case %uu: { return uniforms.%s_base_size; }\n", s,
+                                        font_rss[s]->namespace);
             }
             off += (size_t)snprintf(buf + off, cap - off,
                                     "        default: { return 1.0; }\n    }\n}\n");
 
             /* font_glyph_size(slot, glyph_index) */
-            off += (size_t)snprintf(
-                buf + off, cap - off,
-                "fn font_glyph_size(slot: u32, glyph_index: u32) -> vec2<f32> {\n"
-                "    switch slot {\n");
+            off +=
+                (size_t)snprintf(buf + off, cap - off,
+                                 "fn font_glyph_size(slot: u32, glyph_index: u32) -> vec2<f32> {\n"
+                                 "    switch slot {\n");
             for (uint32_t s = 0; s < font_count; s++) {
                 if (!font_rss[s]) {
                     continue;
                 }
-                off += (size_t)snprintf(
-                    buf + off, cap - off,
-                    "        case %uu: { return %s_glyph_size(glyph_index); }\n",
-                    s, font_rss[s]->namespace);
+                off +=
+                    (size_t)snprintf(buf + off, cap - off,
+                                     "        case %uu: { return %s_glyph_size(glyph_index); }\n",
+                                     s, font_rss[s]->namespace);
             }
             off += (size_t)snprintf(buf + off, cap - off,
                                     "        default: { return vec2<f32>(0.0, 0.0); }\n    }\n}\n");
 
             /* font_glyph_sample(slot, glyph_index, uv, ps) */
-            off += (size_t)snprintf(
-                buf + off, cap - off,
-                "fn font_glyph_sample(slot: u32, glyph_index: u32, "
-                "uv: vec2<f32>, ps: f32) -> f32 {\n"
-                "    switch slot {\n");
+            off += (size_t)snprintf(buf + off, cap - off,
+                                    "fn font_glyph_sample(slot: u32, glyph_index: u32, "
+                                    "uv: vec2<f32>, ps: f32) -> f32 {\n"
+                                    "    switch slot {\n");
             for (uint32_t s = 0; s < font_count; s++) {
                 if (!font_rss[s]) {
                     continue;
                 }
                 off += (size_t)snprintf(
                     buf + off, cap - off,
-                    "        case %uu: { return %s_glyph_sample(glyph_index, uv, ps); }\n",
-                    s, font_rss[s]->namespace);
+                    "        case %uu: { return %s_glyph_sample(glyph_index, uv, ps); }\n", s,
+                    font_rss[s]->namespace);
             }
             off += (size_t)snprintf(buf + off, cap - off,
                                     "        default: { return 0.0; }\n    }\n}\n\n");
@@ -918,8 +920,8 @@ static struct yetty_ycore_void_result ypaint_layer_set_alt_screen(
    * and on the primary slot if for some reason we exit before having
    * entered (shouldn't happen, but cheap to handle). */
     if (!layer->saved_canvas && layer->create_context) {
-        struct yetty_ypaint_canvas_ptr_result saved_res = yetty_ypaint_canvas_create(
-            layer->scrolling_mode ? true : false, layer->create_context);
+        struct yetty_ypaint_canvas_ptr_result saved_res =
+            yetty_ypaint_canvas_create(layer->scrolling_mode ? true : false, layer->create_context);
         if (YETTY_IS_ERR(saved_res)) {
             return YETTY_ERR(yetty_ycore_void, "ypaint_layer_set_alt_screen: canvas create failed",
                              saved_res);
@@ -966,7 +968,8 @@ static struct yetty_ycore_void_result ypaint_layer_set_cursor(
     }
 
     struct yetty_ycore_void_result r = yetty_ypaint_canvas_set_cursor_pos(
-        layer->canvas, (struct yetty_ycore_grid_cursor_pos){.cols = (uint32_t)col, .rows = (uint32_t)row});
+        layer->canvas,
+        (struct yetty_ycore_grid_cursor_pos){.cols = (uint32_t)col, .rows = (uint32_t)row});
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ypaint_layer_set_cursor failed");
     ydebug("ypaint_layer_set_cursor: col=%d row=%d", col, row);
     return YETTY_OK_VOID();
@@ -995,7 +998,8 @@ static struct yetty_ycore_void_result ypaint_layer_render(struct yetty_yrender_t
     }
 
     uint32_t row0 = yetty_ypaint_canvas_rolling_row_0(layer->canvas);
-    struct yetty_ycore_pixel_size cell_size = yetty_ypaint_canvas_cell_get_pixel_size(layer->canvas);
+    struct yetty_ycore_pixel_size cell_size =
+        yetty_ypaint_canvas_cell_get_pixel_size(layer->canvas);
 
     for (uint32_t i = 0; i < count; i++) {
         struct yetty_ypaint_core_complex_prim_instance *inst =

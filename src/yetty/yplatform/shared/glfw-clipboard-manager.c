@@ -15,8 +15,8 @@ struct yetty_yplatform_glfw_clipboard_manager {
 /* Forward declarations */
 static void glfw_clipboard_destroy(struct yetty_platform_clipboard_manager *self);
 static const char *glfw_clipboard_get_text(struct yetty_platform_clipboard_manager *self);
-static void glfw_clipboard_set_text(struct yetty_platform_clipboard_manager *self,
-                                    const char *text, size_t len);
+static void glfw_clipboard_set_text(struct yetty_platform_clipboard_manager *self, const char *text,
+                                    size_t len);
 
 /* Ops table */
 static const struct yetty_platform_clipboard_manager_ops glfw_clipboard_ops = {
@@ -41,8 +41,8 @@ static const char *glfw_clipboard_get_text(struct yetty_platform_clipboard_manag
     return glfwGetClipboardString(NULL);
 }
 
-static void glfw_clipboard_set_text(struct yetty_platform_clipboard_manager *self,
-                                    const char *text, size_t len)
+static void glfw_clipboard_set_text(struct yetty_platform_clipboard_manager *self, const char *text,
+                                    size_t len)
 {
     char *buf;
 

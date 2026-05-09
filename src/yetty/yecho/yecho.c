@@ -79,8 +79,7 @@ size_t yetty_yecho_doc_span_count(const struct yetty_yecho_doc *doc)
     return doc ? doc->span_count : 0;
 }
 
-const struct yetty_yecho_span *
-yetty_yecho_doc_span(const struct yetty_yecho_doc *doc, size_t idx)
+const struct yetty_yecho_span *yetty_yecho_doc_span(const struct yetty_yecho_doc *doc, size_t idx)
 {
     if (!doc || idx >= doc->span_count) {
         return NULL;
@@ -206,8 +205,8 @@ static int is_glyph_name_char(char c)
  *   ok=1, value=1: glyph consumed (span pushed, *pos advanced)
  *   ok=1, value=0: not a glyph here (caller treats '@' as literal text)
  *   ok=0:          hard error (alloc failure) */
-static struct yetty_ycore_int_result
-parse_glyph(struct yetty_yecho_doc *doc, const char *input, size_t len, size_t *pos)
+static struct yetty_ycore_int_result parse_glyph(struct yetty_yecho_doc *doc, const char *input,
+                                                 size_t len, size_t *pos)
 {
     size_t start = *pos + 1; /* skip '@' */
     size_t end = start;
@@ -270,8 +269,8 @@ static int copy_escaped(const char *src, size_t start, size_t end, struct strbuf
 /* Parse semicolon-separated `key=value` pairs from [start, end).
  * Quotes are honoured (no '; inside "..." or '...'). Empty / trim-only
  * statements are skipped. Returns 0 on success. */
-static int parse_attrs(const char *src, size_t start, size_t end,
-                       struct yetty_yecho_attr **out, size_t *out_count)
+static int parse_attrs(const char *src, size_t start, size_t end, struct yetty_yecho_attr **out,
+                       size_t *out_count)
 {
     struct yetty_yecho_attr *attrs = NULL;
     size_t count = 0, cap = 0;
@@ -491,8 +490,7 @@ static int parse_block(struct yetty_yecho_doc *doc, const char *input, size_t le
  * Public parse entry point
  *===========================================================================*/
 
-struct yetty_yecho_doc_ptr_result
-yetty_yecho_parse(const char *input, size_t len)
+struct yetty_yecho_doc_ptr_result yetty_yecho_parse(const char *input, size_t len)
 {
     if (!input && len > 0) {
         return YETTY_ERR(yetty_yecho_doc_ptr, "input is NULL but len > 0");
@@ -706,8 +704,8 @@ static size_t utf8_codepoint_count(const char *s, size_t len)
     return n;
 }
 
-static struct yetty_ycore_void_result
-render_text_run(struct render_state *rs, const char *s, size_t len, uint32_t color)
+static struct yetty_ycore_void_result render_text_run(struct render_state *rs, const char *s,
+                                                      size_t len, uint32_t color)
 {
     /* Walk by line — any '\n' starts a new line at x_origin. */
     size_t line_start = 0;
@@ -864,8 +862,8 @@ static int span_has_attr(const struct yetty_yecho_span *span, const char *key)
  * Function definitions and per-plot color attrs are parsed by
  * yetty_yexpr_parse_plot; expressions are compiled by yfsvm; the result
  * is serialized via yetty_yplot_uniforms_serialize and added as a primitive. */
-static struct yetty_ycore_void_result
-render_yplot_block(struct render_state *rs, const struct yetty_yecho_span *span)
+static struct yetty_ycore_void_result render_yplot_block(struct render_state *rs,
+                                                         const struct yetty_yecho_span *span)
 {
     struct yetty_yplot_uniforms u = {
         .bounds_x = rs->cursor_x,
@@ -921,8 +919,7 @@ render_yplot_block(struct render_state *rs, const struct yetty_yecho_span *span)
     /* Parse the content with yexpr's plot syntax (handles f=expr; @f.color=...). */
     const char *content = span->text ? span->text : "";
     size_t content_len = strlen(content);
-    struct yetty_yexpr_plot_parse_result pr =
-        yetty_yexpr_parse_plot(content, content_len);
+    struct yetty_yexpr_plot_parse_result pr = yetty_yexpr_parse_plot(content, content_len);
     if (YETTY_IS_ERR(pr)) {
         return YETTY_ERR(yetty_ycore_void, "plot parse failed", pr);
     }
@@ -997,8 +994,8 @@ render_yplot_block(struct render_state *rs, const struct yetty_yecho_span *span)
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result
-render_block(struct render_state *rs, const struct yetty_yecho_span *span)
+static struct yetty_ycore_void_result render_block(struct render_state *rs,
+                                                   const struct yetty_yecho_span *span)
 {
     if (span_has_attr(span, "plot")) {
         return render_yplot_block(rs, span);
@@ -1074,8 +1071,8 @@ render_block(struct render_state *rs, const struct yetty_yecho_span *span)
         }
     }
 
-    struct yetty_ycore_void_result tr = render_text_run(
-        rs, span->text ? span->text : "", span->text ? strlen(span->text) : 0, color);
+    struct yetty_ycore_void_result tr = render_text_run(rs, span->text ? span->text : "",
+                                                        span->text ? strlen(span->text) : 0, color);
     if (font_size_overridden) {
         rs->font_size = saved_font_size;
         rs->line_height = saved_line_height;
@@ -1083,9 +1080,8 @@ render_block(struct render_state *rs, const struct yetty_yecho_span *span)
     return tr;
 }
 
-struct yetty_ypaint_core_buffer_result
-yetty_yecho_render(const struct yetty_yecho_doc *doc,
-                   const struct yetty_yecho_render_config *config)
+struct yetty_ypaint_core_buffer_result yetty_yecho_render(
+    const struct yetty_yecho_doc *doc, const struct yetty_yecho_render_config *config)
 {
     if (!doc) {
         return YETTY_ERR(yetty_ypaint_core_buffer, "doc is NULL");
@@ -1107,7 +1103,8 @@ yetty_yecho_render(const struct yetty_yecho_doc *doc,
         .scene_max_x = (float)(width_cells * cell_w),
         .scene_max_y = (float)cell_h * 2.0f, /* updated as content grows */
     };
-    struct yetty_ypaint_core_buffer_result br = yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
+    struct yetty_ypaint_core_buffer_result br =
+        yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         return YETTY_ERR(yetty_ypaint_core_buffer, "ypaint buffer create failed", br);
     }
@@ -1169,8 +1166,8 @@ yetty_yecho_render(const struct yetty_yecho_doc *doc,
                 sb_free(&fb);
                 if (YETTY_IS_ERR(tr)) {
                     yetty_ypaint_core_buffer_destroy(rs.buf);
-                    return YETTY_ERR(yetty_ypaint_core_buffer,
-                                     "glyph fallback emission failed", tr);
+                    return YETTY_ERR(yetty_ypaint_core_buffer, "glyph fallback emission failed",
+                                     tr);
                 }
             } else {
                 struct strbuf u = {0};
@@ -1207,9 +1204,8 @@ yetty_yecho_render(const struct yetty_yecho_doc *doc,
     return YETTY_OK(yetty_ypaint_core_buffer, rs.buf);
 }
 
-struct yetty_ypaint_core_buffer_result
-yetty_yecho_render_string(const char *input, size_t len,
-                          const struct yetty_yecho_render_config *config)
+struct yetty_ypaint_core_buffer_result yetty_yecho_render_string(
+    const char *input, size_t len, const struct yetty_yecho_render_config *config)
 {
     struct yetty_yecho_doc_ptr_result pr = yetty_yecho_parse(input, len);
     if (YETTY_IS_ERR(pr)) {
@@ -1229,8 +1225,8 @@ yetty_yecho_render_string(const char *input, size_t len,
 #include <yetty/yface/yface.h>
 #include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YPAINT_BIN */
 
-struct yetty_ycore_size_result
-yetty_yecho_osc_bin_emit(const struct yetty_ypaint_core_buffer *buffer, FILE *out)
+struct yetty_ycore_size_result yetty_yecho_osc_bin_emit(
+    const struct yetty_ypaint_core_buffer *buffer, FILE *out)
 {
     if (!buffer || !out) {
         return YETTY_ERR(yetty_ycore_size, "yetty_yecho_osc_bin_emit: NULL buffer or out");
@@ -1251,9 +1247,8 @@ yetty_yecho_osc_bin_emit(const struct yetty_ypaint_core_buffer *buffer, FILE *ou
         .reserved = {0, 0},
     };
     struct yetty_ycore_buffer envelope = {0};
-    struct yetty_ycore_void_result r = yetty_yface_emit(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
-                                                        &meta, sizeof(meta), raw, raw_size,
-                                                        &envelope);
+    struct yetty_ycore_void_result r = yetty_yface_emit(
+        YETTY_OSC_YPAINT_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
         return YETTY_ERR(yetty_ycore_size, "yetty_yecho_osc_bin_emit: yface_emit failed", r);

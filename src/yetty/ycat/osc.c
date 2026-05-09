@@ -19,8 +19,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(const struct yetty_ypaint_core_buffer *buffer,
-                                                       FILE *out)
+struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(
+    const struct yetty_ypaint_core_buffer *buffer, FILE *out)
 {
     if (!buffer || !out) {
         return YETTY_ERR(yetty_ycore_size, "yetty_ycat_osc_bin_emit: NULL buffer or out");

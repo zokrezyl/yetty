@@ -53,8 +53,8 @@ static float resolve_percent(float pct, float reference)
     return reference * (pct / 100.0f);
 }
 
-static float clamp_size_with_percent(float v, float min_v, float min_pct, float max_v, float max_pct,
-                                     float reference)
+static float clamp_size_with_percent(float v, float min_v, float min_pct, float max_v,
+                                     float max_pct, float reference)
 {
     float min_resolved = min_v;
     float pct_min = resolve_percent(min_pct, reference);
@@ -258,22 +258,22 @@ static float align_content_leading(ygui_align_t a, float free_cross, int n_lines
 
 struct flex_item {
     struct yetty_ygui_widget *child;
-    float main_size;   /* resolved main-axis size (post grow/shrink + clamp) */
-    float cross_size;  /* resolved cross-axis size (post stretch + clamp) */
+    float main_size;  /* resolved main-axis size (post grow/shrink + clamp) */
+    float cross_size; /* resolved cross-axis size (post stretch + clamp) */
     float main_margin_lead;
     float main_margin_trail;
     float cross_margin_lead;
     float cross_margin_trail;
-    float baseline;    /* distance from item top to its baseline (cross-axis) */
+    float baseline; /* distance from item top to its baseline (cross-axis) */
 };
 
 struct flex_line {
-    int   first;          /* index into items array */
-    int   count;
-    float main_used;      /* sum of main_size + main margins + (count-1)*gap */
-    float cross_size;     /* tallest cross_size + margins in this line */
-    float baseline_max;   /* max baseline among items that have one */
-    int   has_baseline;   /* any item exposed a baseline */
+    int first; /* index into items array */
+    int count;
+    float main_used;    /* sum of main_size + main margins + (count-1)*gap */
+    float cross_size;   /* tallest cross_size + margins in this line */
+    float baseline_max; /* max baseline among items that have one */
+    int has_baseline;   /* any item exposed a baseline */
 };
 
 static float item_baseline(struct yetty_ygui_widget *c, ygui_flex_direction_t dir,
@@ -447,8 +447,7 @@ static void layout_flex(struct yetty_ygui_widget *parent)
     if (total_n == 0) {
         /* still need to lay out absolute children */
         for (struct yetty_ygui_widget *c = parent->first_child; c; c = c->next_sibling) {
-            if (layout_is_visible(c) &&
-                c->layout.position == YETTY_YGUI_POSITION_ABSOLUTE) {
+            if (layout_is_visible(c) && c->layout.position == YETTY_YGUI_POSITION_ABSOLUTE) {
                 layout_absolute_child(parent, c);
             }
         }
@@ -504,15 +503,17 @@ static void layout_flex(struct yetty_ygui_widget *parent)
         if (max_lines > lines_cap_static) {
             lines = (struct flex_line *)calloc((size_t)max_lines, sizeof *lines);
             if (!lines) {
-                if (items_heap) free(items);
+                if (items_heap) {
+                    free(items);
+                }
                 return;
             }
             lines_heap = 1;
         }
         struct flex_line cur = {.first = 0, .count = 0, .main_used = 0.0f};
         for (int i = 0; i < total_n; i++) {
-            float item_main = items[i].main_size + items[i].main_margin_lead +
-                              items[i].main_margin_trail;
+            float item_main =
+                items[i].main_size + items[i].main_margin_lead + items[i].main_margin_trail;
             float candidate = cur.main_used + (cur.count > 0 ? gap : 0.0f) + item_main;
             if (cur.count > 0 && candidate > content_main) {
                 lines[n_lines++] = cur;
@@ -617,8 +618,12 @@ static void layout_flex(struct yetty_ygui_widget *parent)
         }
     }
 
-    if (items_heap) free(items);
-    if (lines_heap) free(lines);
+    if (items_heap) {
+        free(items);
+    }
+    if (lines_heap) {
+        free(lines);
+    }
 }
 
 /*=============================================================================

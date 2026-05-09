@@ -18,9 +18,8 @@ struct yetty_ymsdf_generator_ptr_result yetty_ymsdf_generator_create_from_config
     void *config_ptr, void *device, void *instance, const char *shaders_dir)
 {
     struct yetty_yconfig_config *config = (struct yetty_yconfig_config *)config_ptr;
-    const char *kind = config && config->ops
-                           ? config->ops->get_string(config, "msdf/generator", "gpu")
-                           : "gpu";
+    const char *kind =
+        config && config->ops ? config->ops->get_string(config, "msdf/generator", "gpu") : "gpu";
     if (!kind) {
         kind = "gpu";
     }
@@ -41,6 +40,5 @@ struct yetty_ymsdf_generator_ptr_result yetty_ymsdf_generator_create_from_config
         return yetty_ymsdf_generator_create_gpu(device, instance, sp);
     }
     yerror("ymsdf: unknown msdf/generator value '%s' (expected 'cpu' or 'gpu')", kind);
-    return YETTY_ERR(yetty_ymsdf_generator_ptr,
-                     "ymsdf: msdf/generator must be 'cpu' or 'gpu'");
+    return YETTY_ERR(yetty_ymsdf_generator_ptr, "ymsdf: msdf/generator must be 'cpu' or 'gpu'");
 }

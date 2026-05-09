@@ -128,8 +128,7 @@ struct yetty_yrich_operation_ptr_result yetty_yrich_operation_inverse(
 
     struct yetty_yrich_operation_ptr_result r =
         yetty_yrich_operation_create(inv_type, op->timestamp, op->author);
-    YETTY_RETURN_IF_ERR(yetty_yrich_operation_ptr, r,
-                        "yrich operation_inverse: create failed");
+    YETTY_RETURN_IF_ERR(yetty_yrich_operation_ptr, r, "yrich operation_inverse: create failed");
     struct yetty_yrich_operation *inv = r.value;
 
     switch (op->type) {

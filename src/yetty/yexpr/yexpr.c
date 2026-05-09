@@ -81,7 +81,8 @@ static void lex_skip_whitespace(struct yetty_yexpr_lexer *lex)
     }
 }
 
-static struct yetty_yexpr_token lex_make(enum yetty_yexpr_token_type type, const char *start, size_t len)
+static struct yetty_yexpr_token lex_make(enum yetty_yexpr_token_type type, const char *start,
+                                         size_t len)
 {
     struct yetty_yexpr_token tok = {0};
     tok.type = type;
@@ -396,7 +397,8 @@ static struct yetty_yexpr_node *parse_unary(struct yetty_yexpr_parser *p)
     return parse_primary(p);
 }
 
-static struct yetty_yexpr_node *parse_call(struct yetty_yexpr_parser *p, const char *name, size_t name_len)
+static struct yetty_yexpr_node *parse_call(struct yetty_yexpr_parser *p, const char *name,
+                                           size_t name_len)
 {
     parser_advance(p); /* consume '(' */
 
@@ -529,8 +531,8 @@ static struct yetty_yexpr_node *parse_primary(struct yetty_yexpr_parser *p)
  * Plot expression parser
  *===========================================================================*/
 
-static struct yetty_yexpr_node *parse_bare_expr_from_ident(struct yetty_yexpr_parser *p, const char *name,
-                                                           size_t name_len)
+static struct yetty_yexpr_node *parse_bare_expr_from_ident(struct yetty_yexpr_parser *p,
+                                                           const char *name, size_t name_len)
 {
     struct yetty_yexpr_node *expr;
 
@@ -552,8 +554,9 @@ static struct yetty_yexpr_node *parse_bare_expr_from_ident(struct yetty_yexpr_pa
     }
 
     /* Handle trailing operators */
-    while (parser_check(p, YETTY_YEXPR_TOK_PLUS) || parser_check(p, YETTY_YEXPR_TOK_MINUS) || parser_check(p, YETTY_YEXPR_TOK_STAR) ||
-           parser_check(p, YETTY_YEXPR_TOK_SLASH) || parser_check(p, YETTY_YEXPR_TOK_CARET)) {
+    while (parser_check(p, YETTY_YEXPR_TOK_PLUS) || parser_check(p, YETTY_YEXPR_TOK_MINUS) ||
+           parser_check(p, YETTY_YEXPR_TOK_STAR) || parser_check(p, YETTY_YEXPR_TOK_SLASH) ||
+           parser_check(p, YETTY_YEXPR_TOK_CARET)) {
         enum yetty_yexpr_binary_op op;
         if (parser_check(p, YETTY_YEXPR_TOK_PLUS)) {
             op = YETTY_YEXPR_OP_ADD;
@@ -642,8 +645,8 @@ static int parse_plot_attr(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot
     return 0;
 }
 
-static int add_plot_def(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot_expr *plot, const char *name,
-                        struct yetty_yexpr_node *expr)
+static int add_plot_def(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot_expr *plot,
+                        const char *name, struct yetty_yexpr_node *expr)
 {
     if (plot->def_count >= YETTY_YEXPR_MAX_PLOT_DEFS) {
         p->error = "too many plot definitions";
@@ -738,7 +741,8 @@ struct yetty_yexpr_plot_parse_result yetty_yexpr_parse_plot(const char *source, 
                     break;
                 }
             }
-        } else if (parser_check(&p, YETTY_YEXPR_TOK_NUMBER) || parser_check(&p, YETTY_YEXPR_TOK_LPAREN) ||
+        } else if (parser_check(&p, YETTY_YEXPR_TOK_NUMBER) ||
+                   parser_check(&p, YETTY_YEXPR_TOK_LPAREN) ||
                    parser_check(&p, YETTY_YEXPR_TOK_MINUS)) {
             /* Bare expression starting with number/paren/unary */
             struct yetty_yexpr_node *expr = parse_expr(&p);

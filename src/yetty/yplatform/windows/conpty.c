@@ -83,7 +83,8 @@ static const struct yetty_yplatform_pty_factory_ops win_pty_factory_ops = {
 
 static struct yetty_ycore_void_result win_conpty_destroy(struct yetty_platform_pty *self)
 {
-    struct yetty_yplatform_win_conpty *pty = container_of(self, struct yetty_yplatform_win_conpty, base);
+    struct yetty_yplatform_win_conpty *pty =
+        container_of(self, struct yetty_yplatform_win_conpty, base);
 
     struct yetty_ycore_void_result stop_r = win_conpty_stop(self);
     free(pty);
@@ -97,7 +98,8 @@ static struct yetty_ycore_void_result win_conpty_destroy(struct yetty_platform_p
 static struct yetty_ycore_size_result win_conpty_read(struct yetty_platform_pty *self, char *buf,
                                                       size_t max_len)
 {
-    struct yetty_yplatform_win_conpty *pty = container_of(self, struct yetty_yplatform_win_conpty, base);
+    struct yetty_yplatform_win_conpty *pty =
+        container_of(self, struct yetty_yplatform_win_conpty, base);
     DWORD bytes_read = 0;
     DWORD available = 0;
 
@@ -120,7 +122,8 @@ static struct yetty_ycore_size_result win_conpty_read(struct yetty_platform_pty 
 static struct yetty_ycore_size_result win_conpty_write(struct yetty_platform_pty *self,
                                                        const char *data, size_t len)
 {
-    struct yetty_yplatform_win_conpty *pty = container_of(self, struct yetty_yplatform_win_conpty, base);
+    struct yetty_yplatform_win_conpty *pty =
+        container_of(self, struct yetty_yplatform_win_conpty, base);
     DWORD bytes_written = 0;
 
     if (pty->pipe_in == INVALID_HANDLE_VALUE) {
@@ -141,7 +144,8 @@ static struct yetty_ycore_size_result win_conpty_write(struct yetty_platform_pty
 static struct yetty_ycore_void_result win_conpty_resize(struct yetty_platform_pty *self,
                                                         uint32_t cols, uint32_t rows)
 {
-    struct yetty_yplatform_win_conpty *pty = container_of(self, struct yetty_yplatform_win_conpty, base);
+    struct yetty_yplatform_win_conpty *pty =
+        container_of(self, struct yetty_yplatform_win_conpty, base);
     COORD size;
     HRESULT hr;
 
@@ -165,7 +169,8 @@ static struct yetty_ycore_void_result win_conpty_resize(struct yetty_platform_pt
 
 static struct yetty_ycore_void_result win_conpty_stop(struct yetty_platform_pty *self)
 {
-    struct yetty_yplatform_win_conpty *pty = container_of(self, struct yetty_yplatform_win_conpty, base);
+    struct yetty_yplatform_win_conpty *pty =
+        container_of(self, struct yetty_yplatform_win_conpty, base);
 
     if (!pty->running) {
         return YETTY_OK_VOID();
@@ -205,7 +210,8 @@ static struct yetty_ycore_void_result win_conpty_stop(struct yetty_platform_pty 
 static struct yetty_platform_pty_pipe_source *win_conpty_pipe_source(
     struct yetty_platform_pty *self)
 {
-    struct yetty_yplatform_win_conpty *pty = container_of(self, struct yetty_yplatform_win_conpty, base);
+    struct yetty_yplatform_win_conpty *pty =
+        container_of(self, struct yetty_yplatform_win_conpty, base);
     return &pty->pipe_source.base;
 }
 
@@ -421,7 +427,8 @@ static struct yetty_yplatform_pty_result win_conpty_create(struct yetty_yconfig_
 
 static void win_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
 {
-    struct yetty_yplatform_win_pty_factory *factory = container_of(self, struct yetty_yplatform_win_pty_factory, base);
+    struct yetty_yplatform_win_pty_factory *factory =
+        container_of(self, struct yetty_yplatform_win_pty_factory, base);
     if (factory->qemu_proc) {
         yetty_yqemu_qemu_stop(factory->qemu_proc);
         factory->qemu_proc = NULL;
@@ -432,7 +439,8 @@ static void win_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
 static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
     struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop)
 {
-    struct yetty_yplatform_win_pty_factory *factory = container_of(self, struct yetty_yplatform_win_pty_factory, base);
+    struct yetty_yplatform_win_pty_factory *factory =
+        container_of(self, struct yetty_yplatform_win_pty_factory, base);
     struct yetty_yconfig_config *config = factory->config;
 
     /* --telnet: connect to an already-running telnet server (qemu chardev,
@@ -440,12 +448,11 @@ static struct yetty_yplatform_pty_result win_pty_factory_create_pty(
      * daemon, etc.). Pure client — owns no server lifecycle. Mirrors
      * unix-pty-factory.c. */
     if (config && config->ops->get_bool(config, YETTY_YCONFIG_KEY_TELNET, 0)) {
-        const char *host = config->ops->get_string(
-            config, YETTY_YCONFIG_KEY_TELNET_HOST, "127.0.0.1");
+        const char *host =
+            config->ops->get_string(config, YETTY_YCONFIG_KEY_TELNET_HOST, "127.0.0.1");
         int port = config->ops->get_int(config, YETTY_YCONFIG_KEY_TELNET_PORT, 0);
         if (port <= 0 || port > 65535) {
-            return YETTY_ERR(yetty_yplatform_pty,
-                             "--telnet requires telnet/port (1..65535)");
+            return YETTY_ERR(yetty_yplatform_pty, "--telnet requires telnet/port (1..65535)");
         }
         return yetty_ytelnet_telnet_pty_create_tcp(host, (uint16_t)port, event_loop);
     }

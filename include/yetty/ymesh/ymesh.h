@@ -45,9 +45,9 @@ extern "C" {
 #endif
 
 struct yetty_ymesh_render_config {
-    float bounds_x;     /* overridden by canvas at render time */
-    float bounds_y;     /* overridden by canvas at render time */
-    float bounds_w;     /* when 0, defaults to a fixed display size */
+    float bounds_x; /* overridden by canvas at render time */
+    float bounds_y; /* overridden by canvas at render time */
+    float bounds_w; /* when 0, defaults to a fixed display size */
     float bounds_h;
 
     /* Camera state. Defaults applied when fields are zero (azimuth/elev/pan)
@@ -64,8 +64,7 @@ struct yetty_ymesh_render_config {
 /* Decode `glb_bytes` and produce a fresh ypaint-core buffer holding ONE
  * ymesh complex prim. Caller frees with yetty_ypaint_core_buffer_destroy. */
 struct yetty_ypaint_core_buffer_result yetty_ymesh_render(
-    const uint8_t *glb_bytes, size_t len,
-    const struct yetty_ymesh_render_config *config);
+    const uint8_t *glb_bytes, size_t len, const struct yetty_ymesh_render_config *config);
 
 /* Convenience: read the file at `path` and call yetty_ymesh_render. */
 struct yetty_ypaint_core_buffer_result yetty_ymesh_render_path(

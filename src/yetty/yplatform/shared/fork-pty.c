@@ -40,8 +40,7 @@ static struct yetty_ycore_size_result fork_pty_write(struct yetty_platform_pty *
 static struct yetty_ycore_void_result fork_pty_resize(struct yetty_platform_pty *self,
                                                       uint32_t cols, uint32_t rows);
 static struct yetty_ycore_void_result fork_pty_stop(struct yetty_platform_pty *self);
-static struct yetty_platform_pty_pipe_source *fork_pty_pipe_source(
-    struct yetty_platform_pty *self);
+static struct yetty_platform_pty_pipe_source *fork_pty_pipe_source(struct yetty_platform_pty *self);
 
 /* Ops table */
 static const struct yetty_platform_pty_ops fork_pty_ops = {
@@ -55,7 +54,8 @@ static const struct yetty_platform_pty_ops fork_pty_ops = {
 
 static struct yetty_ycore_void_result fork_pty_destroy(struct yetty_platform_pty *self)
 {
-    struct yetty_yplatform_fork_pty *pty = container_of(self, struct yetty_yplatform_fork_pty, base);
+    struct yetty_yplatform_fork_pty *pty =
+        container_of(self, struct yetty_yplatform_fork_pty, base);
 
     struct yetty_ycore_void_result stop_r = fork_pty_stop(self);
     free(pty);
@@ -69,7 +69,8 @@ static struct yetty_ycore_void_result fork_pty_destroy(struct yetty_platform_pty
 static struct yetty_ycore_size_result fork_pty_read(struct yetty_platform_pty *self, char *buf,
                                                     size_t max_len)
 {
-    struct yetty_yplatform_fork_pty *pty = container_of(self, struct yetty_yplatform_fork_pty, base);
+    struct yetty_yplatform_fork_pty *pty =
+        container_of(self, struct yetty_yplatform_fork_pty, base);
     ssize_t n;
 
     if (pty->pty_master < 0) {
@@ -87,7 +88,8 @@ static struct yetty_ycore_size_result fork_pty_read(struct yetty_platform_pty *s
 static struct yetty_ycore_size_result fork_pty_write(struct yetty_platform_pty *self,
                                                      const char *data, size_t len)
 {
-    struct yetty_yplatform_fork_pty *pty = container_of(self, struct yetty_yplatform_fork_pty, base);
+    struct yetty_yplatform_fork_pty *pty =
+        container_of(self, struct yetty_yplatform_fork_pty, base);
     ssize_t written;
 
     if (pty->pty_master < 0) {
@@ -109,7 +111,8 @@ static struct yetty_ycore_size_result fork_pty_write(struct yetty_platform_pty *
 static struct yetty_ycore_void_result fork_pty_resize(struct yetty_platform_pty *self,
                                                       uint32_t cols, uint32_t rows)
 {
-    struct yetty_yplatform_fork_pty *pty = container_of(self, struct yetty_yplatform_fork_pty, base);
+    struct yetty_yplatform_fork_pty *pty =
+        container_of(self, struct yetty_yplatform_fork_pty, base);
     struct winsize ws;
 
     pty->cols = cols;
@@ -152,7 +155,8 @@ static int fork_pty_wait_ms(pid_t pid, int *status, int timeout_ms)
 
 static struct yetty_ycore_void_result fork_pty_stop(struct yetty_platform_pty *self)
 {
-    struct yetty_yplatform_fork_pty *pty = container_of(self, struct yetty_yplatform_fork_pty, base);
+    struct yetty_yplatform_fork_pty *pty =
+        container_of(self, struct yetty_yplatform_fork_pty, base);
     int status;
 
     if (!pty->running) {
@@ -189,16 +193,17 @@ static struct yetty_ycore_void_result fork_pty_stop(struct yetty_platform_pty *s
     return YETTY_OK_VOID();
 }
 
-static struct yetty_platform_pty_pipe_source *fork_pty_pipe_source(
-    struct yetty_platform_pty *self)
+static struct yetty_platform_pty_pipe_source *fork_pty_pipe_source(struct yetty_platform_pty *self)
 {
-    struct yetty_yplatform_fork_pty *pty = container_of(self, struct yetty_yplatform_fork_pty, base);
+    struct yetty_yplatform_fork_pty *pty =
+        container_of(self, struct yetty_yplatform_fork_pty, base);
     return &pty->pipe_source;
 }
 
 /* Create fork PTY with shell */
 
-struct yetty_yplatform_pty_result yetty_yplatform_fork_pty_create(struct yetty_yconfig_config *config)
+struct yetty_yplatform_pty_result yetty_yplatform_fork_pty_create(
+    struct yetty_yconfig_config *config)
 {
     struct yetty_yplatform_fork_pty *pty;
     struct yetty_yconfig_shell_argv shellv;

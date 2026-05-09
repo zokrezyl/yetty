@@ -91,8 +91,7 @@ struct yetty_primitive_gpu_binder_ptr_result yetty_yrender_gpu_binder_create(
         return YETTY_ERR(yetty_primitive_gpu_binder_ptr, "device or queue is NULL");
     }
 
-    struct yetty_yrender_gpu_binder *binder =
-        calloc(1, sizeof(struct yetty_yrender_gpu_binder));
+    struct yetty_yrender_gpu_binder *binder = calloc(1, sizeof(struct yetty_yrender_gpu_binder));
     if (!binder) {
         return YETTY_ERR(yetty_primitive_gpu_binder_ptr, "allocation failed");
     }

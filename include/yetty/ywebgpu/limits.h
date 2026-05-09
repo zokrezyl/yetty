@@ -26,8 +26,7 @@ struct yetty_yconfig_config;
  *   See: https://github.com/zokrezyl/yetty/issues/138
  */
 void yetty_ywebgpu_fill_default_limits(WGPUAdapter adapter,
-                                       const struct yetty_yconfig_config *config,
-                                       WGPULimits *out);
+                                       const struct yetty_yconfig_config *config, WGPULimits *out);
 
 #ifdef __cplusplus
 }

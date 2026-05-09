@@ -147,7 +147,7 @@ struct yetty_ipc_socket_result yetty_platform_socket_accept(yetty_ipc_socket_t s
 }
 
 struct yetty_ycore_size_result yetty_platform_socket_send(yetty_ipc_socket_t sock, const void *data,
-                                                     size_t len)
+                                                          size_t len)
 {
     DWORD written = 0;
 
@@ -163,7 +163,7 @@ struct yetty_ycore_size_result yetty_platform_socket_send(yetty_ipc_socket_t soc
 }
 
 struct yetty_ycore_size_result yetty_platform_socket_recv(yetty_ipc_socket_t sock, void *buf,
-                                                     size_t max_len)
+                                                          size_t max_len)
 {
     DWORD bytes_read = 0;
     DWORD available = 0;

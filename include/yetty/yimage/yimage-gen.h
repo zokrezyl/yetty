@@ -32,13 +32,11 @@ struct yetty_yimage_buffers {
 // Serialization API
 //=============================================================================
 
-size_t yetty_yimage_uniforms_serialized_size(
-    const struct yetty_yimage_uniforms *uniforms,
-    const struct yetty_yimage_buffers *buffers);
+size_t yetty_yimage_uniforms_serialized_size(const struct yetty_yimage_uniforms *uniforms,
+                                             const struct yetty_yimage_buffers *buffers);
 
 struct yetty_ycore_size_result yetty_yimage_uniforms_serialize(
-    const struct yetty_yimage_uniforms *uniforms,
-    const struct yetty_yimage_buffers *buffers,
+    const struct yetty_yimage_uniforms *uniforms, const struct yetty_yimage_buffers *buffers,
     uint8_t *out, size_t out_capacity);
 
 //=============================================================================
@@ -51,4 +49,3 @@ void yetty_yimage_factory_destroy(struct yetty_ypaint_core_concrete_factory *fac
 #ifdef __cplusplus
 }
 #endif
-

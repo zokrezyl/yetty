@@ -2,10 +2,9 @@
 
 #include <string.h>
 
-void yetty_ywebgpu_adapter_request_callback(WGPURequestAdapterStatus status,
-                                            WGPUAdapter adapter,
-                                            WGPUStringView message,
-                                            void *userdata1, void *userdata2)
+void yetty_ywebgpu_adapter_request_callback(WGPURequestAdapterStatus status, WGPUAdapter adapter,
+                                            WGPUStringView message, void *userdata1,
+                                            void *userdata2)
 {
     (void)message;
     if (status == WGPURequestAdapterStatus_Success) {
@@ -14,10 +13,8 @@ void yetty_ywebgpu_adapter_request_callback(WGPURequestAdapterStatus status,
     *((int *)userdata2) = 1;
 }
 
-void yetty_ywebgpu_device_request_callback(WGPURequestDeviceStatus status,
-                                           WGPUDevice device,
-                                           WGPUStringView message,
-                                           void *userdata1, void *userdata2)
+void yetty_ywebgpu_device_request_callback(WGPURequestDeviceStatus status, WGPUDevice device,
+                                           WGPUStringView message, void *userdata1, void *userdata2)
 {
     struct yetty_ywebgpu_device_request_state *state = userdata2;
 

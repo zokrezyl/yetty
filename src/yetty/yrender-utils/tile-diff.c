@@ -402,7 +402,8 @@ static void submit_coro_entry(void *arg)
 
     if (!do_full) {
         res = yetty_yplatform_wgpu_buffer_map_await(eng->wgpu, eng->dirty_flags_readback,
-                                              WGPUMapMode_Read, 0, num_tiles * sizeof(uint32_t));
+                                                    WGPUMapMode_Read, 0,
+                                                    num_tiles * sizeof(uint32_t));
         if (!YETTY_IS_OK(res)) {
             ywarn("tile_diff: flags map failed: %s", res.error.msg);
             submit_coro_finish(eng);
@@ -416,8 +417,8 @@ static void submit_coro_entry(void *arg)
         wgpuBufferUnmap(eng->dirty_flags_readback);
     }
 
-    res = yetty_yplatform_wgpu_buffer_map_await(eng->wgpu, eng->tile_readback_buffer, WGPUMapMode_Read, 0,
-                                          full_buf_size);
+    res = yetty_yplatform_wgpu_buffer_map_await(eng->wgpu, eng->tile_readback_buffer,
+                                                WGPUMapMode_Read, 0, full_buf_size);
     if (!YETTY_IS_OK(res)) {
         ywarn("tile_diff: pixels map failed: %s", res.error.msg);
         submit_coro_finish(eng);

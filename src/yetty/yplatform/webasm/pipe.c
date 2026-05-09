@@ -42,10 +42,10 @@ struct yetty_yplatform_webasm_platform_input_pipe {
 };
 
 static void webasm_pipe_destroy(struct yetty_ycore_xthread_event_pipe *self);
-static struct yetty_ycore_size_result webasm_pipe_write(
-    struct yetty_ycore_xthread_event_pipe *self, const void *data, size_t size);
-static struct yetty_ycore_size_result webasm_pipe_read(
-    struct yetty_ycore_xthread_event_pipe *self, void *data, size_t max_size);
+static struct yetty_ycore_size_result webasm_pipe_write(struct yetty_ycore_xthread_event_pipe *self,
+                                                        const void *data, size_t size);
+static struct yetty_ycore_size_result webasm_pipe_read(struct yetty_ycore_xthread_event_pipe *self,
+                                                       void *data, size_t max_size);
 static struct yetty_ycore_int_result webasm_pipe_read_fd(
     const struct yetty_ycore_xthread_event_pipe *self);
 static struct yetty_ycore_void_result webasm_pipe_set_event_loop(
@@ -114,8 +114,8 @@ static void webasm_pipe_destroy(struct yetty_ycore_xthread_event_pipe *self)
     free(pipe);
 }
 
-static struct yetty_ycore_size_result webasm_pipe_write(
-    struct yetty_ycore_xthread_event_pipe *self, const void *data, size_t size)
+static struct yetty_ycore_size_result webasm_pipe_write(struct yetty_ycore_xthread_event_pipe *self,
+                                                        const void *data, size_t size)
 {
     struct yetty_yplatform_webasm_platform_input_pipe *pipe;
     ssize_t n;
@@ -134,8 +134,8 @@ static struct yetty_ycore_size_result webasm_pipe_write(
     return YETTY_OK(yetty_ycore_size, (size_t)n);
 }
 
-static struct yetty_ycore_size_result webasm_pipe_read(
-    struct yetty_ycore_xthread_event_pipe *self, void *data, size_t max_size)
+static struct yetty_ycore_size_result webasm_pipe_read(struct yetty_ycore_xthread_event_pipe *self,
+                                                       void *data, size_t max_size)
 {
     struct yetty_yplatform_webasm_platform_input_pipe *pipe;
     ssize_t n;

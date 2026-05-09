@@ -365,8 +365,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
                     strncpy(host, desktop_vnc_client, sizeof(host) - 1);
                 }
 
-                const char *password =
-                    config->ops->get_string(config, "vnc/ydvnc-password", NULL);
+                const char *password = config->ops->get_string(config, "vnc/ydvnc-password", NULL);
                 if (!password || !password[0]) {
                     password = getenv("YDVNC_PASSWORD");
                 }
@@ -404,7 +403,8 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
                     return YETTY_ERR(yetty_ycore_void, vnc_res.error.msg);
                 }
 
-                yetty_yui_tile_pane_push_view(tile_res.value, yetty_yvnc_viewer_as_view(vnc_res.value));
+                yetty_yui_tile_pane_push_view(tile_res.value,
+                                              yetty_yvnc_viewer_as_view(vnc_res.value));
                 yetty_yui_tile_pane_set_focused(tile_res.value, 1);
             } else {
                 /* Create terminal */
@@ -418,7 +418,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_load_layout(
                 }
 
                 yetty_yui_tile_pane_push_view(tile_res.value,
-                                         yetty_yterm_terminal_as_view(term_res.value));
+                                              yetty_yterm_terminal_as_view(term_res.value));
                 yetty_yui_tile_pane_set_focused(tile_res.value, 1);
             }
         }

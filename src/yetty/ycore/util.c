@@ -184,11 +184,24 @@ int yetty_ycore_parse_hex_color(const char *s, uint32_t *out)
     int per_channel; /* 1 = short form, 2 = long form */
     int has_alpha;
     switch (len) {
-    case 3: per_channel = 1; has_alpha = 0; break;
-    case 4: per_channel = 1; has_alpha = 1; break;
-    case 6: per_channel = 2; has_alpha = 0; break;
-    case 8: per_channel = 2; has_alpha = 1; break;
-    default: return 0;
+    case 3:
+        per_channel = 1;
+        has_alpha = 0;
+        break;
+    case 4:
+        per_channel = 1;
+        has_alpha = 1;
+        break;
+    case 6:
+        per_channel = 2;
+        has_alpha = 0;
+        break;
+    case 8:
+        per_channel = 2;
+        has_alpha = 1;
+        break;
+    default:
+        return 0;
     }
 
     int n_channels = has_alpha ? 4 : 3;
@@ -213,7 +226,7 @@ int yetty_ycore_parse_hex_color(const char *s, uint32_t *out)
      *   (A << 24) | (B << 16) | (G << 8) | R
      * Matches WGSL `ypaint_unpack_color` and the existing yplot/yecho
      * conventions. */
-    *out = ((uint32_t)byte[3] << 24) | ((uint32_t)byte[2] << 16) |
-           ((uint32_t)byte[1] << 8) | (uint32_t)byte[0];
+    *out = ((uint32_t)byte[3] << 24) | ((uint32_t)byte[2] << 16) | ((uint32_t)byte[1] << 8) |
+           (uint32_t)byte[0];
     return 1;
 }

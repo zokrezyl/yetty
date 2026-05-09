@@ -36,8 +36,7 @@
  * MB, so 1–3 reallocs at worst.
  */
 EMSCRIPTEN_KEEPALIVE
-int yetty_brotli_decode(const uint8_t *in, size_t in_len,
-                        uint8_t **out_ptr, size_t *out_len)
+int yetty_brotli_decode(const uint8_t *in, size_t in_len, uint8_t **out_ptr, size_t *out_len)
 {
     BrotliDecoderState *st = BrotliDecoderCreateInstance(NULL, NULL, NULL);
     if (!st) {
@@ -62,8 +61,8 @@ int yetty_brotli_decode(const uint8_t *in, size_t in_len,
         size_t avail_out = cap - total_out;
         uint8_t *next_out = buf + total_out;
 
-        BrotliDecoderResult r = BrotliDecoderDecompressStream(
-            st, &avail_in, &next_in, &avail_out, &next_out, NULL);
+        BrotliDecoderResult r =
+            BrotliDecoderDecompressStream(st, &avail_in, &next_in, &avail_out, &next_out, NULL);
 
         total_out = (size_t)(next_out - buf);
 

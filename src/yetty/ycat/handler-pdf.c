@@ -104,9 +104,8 @@ static struct yetty_ypaint_core_buffer_result render_from_path(const char *path)
     return YETTY_OK(yetty_ypaint_core_buffer, r.value.buffer);
 }
 
-struct yetty_ypaint_core_buffer_result yetty_ycat_handler_pdf(const uint8_t *bytes, size_t len,
-                                                        const char *path_hint,
-                                                        const struct yetty_ycat_config *config)
+struct yetty_ypaint_core_buffer_result yetty_ycat_handler_pdf(
+    const uint8_t *bytes, size_t len, const char *path_hint, const struct yetty_ycat_config *config)
 {
     (void)config;
 

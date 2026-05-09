@@ -271,7 +271,8 @@ void ytime_timer_reset_all(void);
 #define ytime_report(name)                                                                         \
     do {                                                                                           \
         static struct ytime_timer _ytime_timer_##name;                                             \
-        double _ytime_elapsed_ms_ = (yetty_yplatform_ytime_monotonic_sec() - ytime_##name) * 1000.0;               \
+        double _ytime_elapsed_ms_ =                                                                \
+            (yetty_yplatform_ytime_monotonic_sec() - ytime_##name) * 1000.0;                       \
         ytime_timer_observe(&_ytime_timer_##name, #name, __FILE__, __LINE__, __func__,             \
                             _ytime_elapsed_ms_);                                                   \
         yinfo(#name ": %.3f ms  (avg %.3f ms, min %.3f, max %.3f, n=%llu)", _ytime_elapsed_ms_,    \

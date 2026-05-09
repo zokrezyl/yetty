@@ -79,10 +79,9 @@ struct yetty_yevent_event_loop_ops {
     struct yetty_ycore_void_result (*start)(struct yetty_yevent_event_loop *self);
     struct yetty_ycore_void_result (*stop)(struct yetty_yevent_event_loop *self);
 
-    struct yetty_ycore_void_result (*register_listener)(struct yetty_yevent_event_loop *self,
-                                                        enum yetty_yevent_event_type type,
-                                                        struct yetty_yevent_event_listener *listener,
-                                                        int priority);
+    struct yetty_ycore_void_result (*register_listener)(
+        struct yetty_yevent_event_loop *self, enum yetty_yevent_event_type type,
+        struct yetty_yevent_event_listener *listener, int priority);
     struct yetty_ycore_void_result (*deregister_listener)(
         struct yetty_yevent_event_loop *self, enum yetty_yevent_event_type type,
         struct yetty_yevent_event_listener *listener);

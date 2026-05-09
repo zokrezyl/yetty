@@ -36,8 +36,8 @@
 #include <time.h>
 
 #ifdef _WIN32
-#  define WIN32_LEAN_AND_MEAN
-#  include <windows.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #endif
 
 #ifdef _WIN32
@@ -116,9 +116,24 @@ static int u8_vec_reserve(struct u8_vec *v, size_t n)
     return 0;
 }
 
-static void u32_vec_free(struct u32_vec *v) { free(v->data); v->data = NULL; v->size = v->cap = 0; }
-static void f32_vec_free(struct f32_vec *v) { free(v->data); v->data = NULL; v->size = v->cap = 0; }
-static void u8_vec_free(struct u8_vec *v)  { free(v->data); v->data = NULL; v->size = v->cap = 0; }
+static void u32_vec_free(struct u32_vec *v)
+{
+    free(v->data);
+    v->data = NULL;
+    v->size = v->cap = 0;
+}
+static void f32_vec_free(struct f32_vec *v)
+{
+    free(v->data);
+    v->data = NULL;
+    v->size = v->cap = 0;
+}
+static void u8_vec_free(struct u8_vec *v)
+{
+    free(v->data);
+    v->data = NULL;
+    v->size = v->cap = 0;
+}
 
 /*=============================================================================
  * FreeType outline → packed buffers (mirrors poc serializer namespace).
@@ -138,22 +153,22 @@ static void u8_vec_free(struct u8_vec *v)  { free(v->data); v->data = NULL; v->s
  *===========================================================================*/
 
 enum {
-    COLOR_BLACK   = 0,
-    COLOR_RED     = 1,
-    COLOR_GREEN   = 2,
-    COLOR_BLUE    = 4,
-    COLOR_YELLOW  = 3, /* RED|GREEN */
+    COLOR_BLACK = 0,
+    COLOR_RED = 1,
+    COLOR_GREEN = 2,
+    COLOR_BLUE = 4,
+    COLOR_YELLOW = 3,  /* RED|GREEN */
     COLOR_MAGENTA = 5, /* RED|BLUE */
-    COLOR_CYAN    = 6, /* GREEN|BLUE */
-    COLOR_WHITE   = 7,
+    COLOR_CYAN = 6,    /* GREEN|BLUE */
+    COLOR_WHITE = 7,
 };
 
 struct glyph_ctx {
     struct u32_vec metadata;
     struct f32_vec points;
-    int current_contour_index;  /* -1 until first moveTo */
+    int current_contour_index; /* -1 until first moveTo */
     float last_x, last_y;
-    int oom;                    /* sticky out-of-memory flag */
+    int oom; /* sticky out-of-memory flag */
 };
 
 static void glyph_ctx_close_contour(struct glyph_ctx *ctx);
@@ -165,7 +180,7 @@ static int decompose_move_to(const FT_Vector *to, void *user)
     glyph_ctx_close_contour(ctx);
 
     ctx->current_contour_index++;
-    ctx->metadata.data[0]++;  /* contour count */
+    ctx->metadata.data[0]++;                   /* contour count */
     if (u32_vec_push(&ctx->metadata, 1) < 0 || /* winding placeholder */
         u32_vec_push(&ctx->metadata, 0) < 0) { /* segment count */
         ctx->oom = 1;
@@ -202,8 +217,7 @@ static int decompose_line_to(const FT_Vector *to, void *user)
     }
 
     ctx->metadata.data[current_seg_count_idx(ctx)]++;
-    if (u32_vec_push(&ctx->metadata, COLOR_WHITE) < 0 ||
-        u32_vec_push(&ctx->metadata, 2) < 0) {
+    if (u32_vec_push(&ctx->metadata, COLOR_WHITE) < 0 || u32_vec_push(&ctx->metadata, 2) < 0) {
         ctx->oom = 1;
         return 0;
     }
@@ -227,8 +241,7 @@ static int decompose_conic_to(const FT_Vector *ctrl, const FT_Vector *to, void *
     }
 
     ctx->metadata.data[current_seg_count_idx(ctx)]++;
-    if (u32_vec_push(&ctx->metadata, COLOR_WHITE) < 0 ||
-        u32_vec_push(&ctx->metadata, 3) < 0) {
+    if (u32_vec_push(&ctx->metadata, COLOR_WHITE) < 0 || u32_vec_push(&ctx->metadata, 3) < 0) {
         ctx->oom = 1;
         return 0;
     }
@@ -245,8 +258,8 @@ static int decompose_conic_to(const FT_Vector *ctrl, const FT_Vector *to, void *
     return 0;
 }
 
-static int decompose_cubic_to(const FT_Vector *ctrl1, const FT_Vector *ctrl2,
-                              const FT_Vector *to, void *user)
+static int decompose_cubic_to(const FT_Vector *ctrl1, const FT_Vector *ctrl2, const FT_Vector *to,
+                              void *user)
 {
     /* TTF cubics aren't supported by the shader; degrade to a single conic
      * using ctrl1 as the control point. Same compromise as the poc. */
@@ -290,10 +303,8 @@ static void glyph_ctx_close_contour(struct glyph_ctx *ctx)
     }
     /* Increment seg count for current contour, append closing line. */
     ctx->metadata.data[current_seg_count_idx(ctx)]++;
-    if (u32_vec_push(&ctx->metadata, COLOR_WHITE) < 0 ||
-        u32_vec_push(&ctx->metadata, 2) < 0 ||
-        f32_vec_push(&ctx->points, sx) < 0 ||
-        f32_vec_push(&ctx->points, sy) < 0) {
+    if (u32_vec_push(&ctx->metadata, COLOR_WHITE) < 0 || u32_vec_push(&ctx->metadata, 2) < 0 ||
+        f32_vec_push(&ctx->points, sx) < 0 || f32_vec_push(&ctx->points, sy) < 0) {
         ctx->oom = 1;
         return;
     }
@@ -444,7 +455,8 @@ static void apply_edge_coloring(struct glyph_ctx *ctx)
         size_t seg_pt = point_idx;
         for (uint32_t s = 0; s < nseg; s++) {
             uint32_t color_slot = (uint32_t)midx;
-            uint32_t color = ctx->metadata.data[midx++]; (void)color;
+            uint32_t color = ctx->metadata.data[midx++];
+            (void)color;
             uint32_t np = ctx->metadata.data[midx++];
 
             float p0x = ctx->points.data[point_idx * 2 + 0];
@@ -497,8 +509,8 @@ static void apply_edge_coloring(struct glyph_ctx *ctx)
         if (nseg <= sizeof(corners) / sizeof(corners[0])) {
             for (uint32_t s = 0; s < nseg; s++) {
                 uint32_t prev = (s == 0u) ? (nseg - 1u) : (s - 1u);
-                if (is_corner(segs[prev].ex, segs[prev].ey,
-                              segs[s].bx, segs[s].by, cross_threshold)) {
+                if (is_corner(segs[prev].ex, segs[prev].ey, segs[s].bx, segs[s].by,
+                              cross_threshold)) {
                     corners[corner_count++] = (int)s;
                 }
             }
@@ -528,8 +540,12 @@ static void apply_edge_coloring(struct glyph_ctx *ctx)
                 } else {
                     phase = rel; /* nseg=1 or 2 — no middle run */
                 }
-                if (phase < 0) phase = 0;
-                if (phase > 2) phase = 2;
+                if (phase < 0) {
+                    phase = 0;
+                }
+                if (phase > 2) {
+                    phase = 2;
+                }
                 ctx->metadata.data[segs[s].color_idx] = colors[phase];
             }
         } else {
@@ -1120,7 +1136,8 @@ static struct yetty_ycore_void_result write_cdb_file(const char *cdb_path,
         memcpy(val.data, &h, sizeof(h));
 
         for (uint32_t y = 0; y < g->atlas_h; y++) {
-            const uint8_t *src = atlas_rgba8 + ((size_t)(g->atlas_y + y) * atlas_w + g->atlas_x) * 4;
+            const uint8_t *src =
+                atlas_rgba8 + ((size_t)(g->atlas_y + y) * atlas_w + g->atlas_x) * 4;
             uint8_t *dst = val.data + sizeof(h) + (size_t)y * g->atlas_w * 4;
             memcpy(dst, src, (size_t)g->atlas_w * 4);
         }
@@ -1225,8 +1242,7 @@ static uint8_t *atlas_readback_rgba8(struct atlas *a, WGPUInstance instance)
 struct yetty_ycore_void_result yetty_ymsdf_wgsl_config_generate(
     const struct yetty_ymsdf_wgsl_config *config)
 {
-    if (!config || !config->ttf_path || !config->cdb_path || !config->device ||
-        !config->instance) {
+    if (!config || !config->ttf_path || !config->cdb_path || !config->device || !config->instance) {
         return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: invalid config");
     }
 

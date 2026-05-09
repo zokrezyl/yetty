@@ -102,22 +102,22 @@ extern "C" {
  * (ymgui_wire_input_mouse / _key / _resize), but card_id=0 and x/y are in
  * pane-local pixels (origin = pane top-left). Sent only to the
  * foreground PTY reader that subscribed via YMGUI_OSC_CS_TERM_INPUT_SUB. */
-#define YMGUI_OSC_SC_TERM_MOUSE  700010 /* ymgui_wire_input_mouse,  comp=0 */
+#define YMGUI_OSC_SC_TERM_MOUSE 700010  /* ymgui_wire_input_mouse,  comp=0 */
 #define YMGUI_OSC_SC_TERM_RESIZE 700011 /* ymgui_wire_input_resize, comp=0 */
-#define YMGUI_OSC_SC_TERM_KEY    700012 /* ymgui_wire_input_key,    comp=0 */
+#define YMGUI_OSC_SC_TERM_KEY 700012    /* ymgui_wire_input_key,    comp=0 */
 
 /*=============================================================================
  * Magic numbers + versioning
  *===========================================================================*/
-#define YMGUI_WIRE_MAGIC_FRAME 0x4D47494Fu        /* 'OIGM' → "YMGI" */
-#define YMGUI_WIRE_MAGIC_TEX 0x4D58544Fu          /* 'OTXM' → "YMTX" */
-#define YMGUI_WIRE_MAGIC_CLEAR 0x4D4C4359u        /* "YCLM" */
-#define YMGUI_WIRE_MAGIC_CARD_PLACE 0x4D504443u   /* "CDPM" */
-#define YMGUI_WIRE_MAGIC_CARD_REMOVE 0x4D524443u  /* "CDRM" */
-#define YMGUI_WIRE_MAGIC_INPUT_MOUSE 0x4D49534Du  /* "MSIM" reversed: "MISM" */
-#define YMGUI_WIRE_MAGIC_INPUT_RESIZE 0x4D52534Du /* "MSRM" reversed: "MRSM" */
-#define YMGUI_WIRE_MAGIC_INPUT_FOCUS 0x4D434F46u  /* "FOCM" */
-#define YMGUI_WIRE_MAGIC_INPUT_KEY 0x4D59454Bu    /* "KEYM" */
+#define YMGUI_WIRE_MAGIC_FRAME 0x4D47494Fu          /* 'OIGM' → "YMGI" */
+#define YMGUI_WIRE_MAGIC_TEX 0x4D58544Fu            /* 'OTXM' → "YMTX" */
+#define YMGUI_WIRE_MAGIC_CLEAR 0x4D4C4359u          /* "YCLM" */
+#define YMGUI_WIRE_MAGIC_CARD_PLACE 0x4D504443u     /* "CDPM" */
+#define YMGUI_WIRE_MAGIC_CARD_REMOVE 0x4D524443u    /* "CDRM" */
+#define YMGUI_WIRE_MAGIC_INPUT_MOUSE 0x4D49534Du    /* "MSIM" reversed: "MISM" */
+#define YMGUI_WIRE_MAGIC_INPUT_RESIZE 0x4D52534Du   /* "MSRM" reversed: "MRSM" */
+#define YMGUI_WIRE_MAGIC_INPUT_FOCUS 0x4D434F46u    /* "FOCM" */
+#define YMGUI_WIRE_MAGIC_INPUT_KEY 0x4D59454Bu      /* "KEYM" */
 #define YMGUI_WIRE_MAGIC_TERM_INPUT_SUB 0x53504954u /* "TIPS" */
 
 #define YMGUI_WIRE_VERSION 2u
@@ -128,9 +128,9 @@ extern "C" {
  * Sending flags=0 unsubscribes from all of them.
  *===========================================================================*/
 #define YETTY_YMGUI_TERM_SUB_MOUSE_CLICK (1u << 0)
-#define YETTY_YMGUI_TERM_SUB_MOUSE_MOVE  (1u << 1)
+#define YETTY_YMGUI_TERM_SUB_MOUSE_MOVE (1u << 1)
 #define YETTY_YMGUI_TERM_SUB_MOUSE_WHEEL (1u << 2)
-#define YETTY_YMGUI_TERM_SUB_KEY         (1u << 3)
+#define YETTY_YMGUI_TERM_SUB_KEY (1u << 3)
 
 struct yetty_ymgui_wire_term_input_sub {
     uint32_t magic;   /* YMGUI_WIRE_MAGIC_TERM_INPUT_SUB */

@@ -53,7 +53,7 @@ static void coro_trampoline(void)
 }
 
 struct yplatform_coro_ptr_result yetty_yplatform_coro_spawn(yplatform_coro_entry entry, void *arg,
-                                                      size_t stack_hint, const char *name)
+                                                            size_t stack_hint, const char *name)
 {
     if (!entry) {
         return YETTY_ERR(yplatform_coro_ptr, "entry is NULL");

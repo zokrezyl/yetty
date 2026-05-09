@@ -37,7 +37,8 @@ struct yetty_yfont_font_ops {
 
     /* Glyph lookup — loads on demand, returns glyph index */
     struct uint32_result (*get_glyph_index)(struct yetty_ypaint_font *self, uint32_t codepoint);
-    struct uint32_result (*get_glyph_index_styled)(struct yetty_ypaint_font *self, uint32_t codepoint,
+    struct uint32_result (*get_glyph_index_styled)(struct yetty_ypaint_font *self,
+                                                   uint32_t codepoint,
                                                    enum yetty_yfont_style style);
 
     /* Glyph loading */
@@ -55,8 +56,8 @@ struct yetty_yfont_font_ops {
 	 * Must not require glyph rasterization, atlas placement, or shader.
 	 * Implementations may override to handle kerning/shaping; the default
 	 * behaviour is to sum get_advance() over codepoints. */
-    struct float_result (*measure_text)(struct yetty_ypaint_font *self, const char *utf8, size_t len,
-                                        float font_size);
+    struct float_result (*measure_text)(struct yetty_ypaint_font *self, const char *utf8,
+                                        size_t len, float font_size);
 
     /* Base size the CDB was generated at */
     float (*get_base_size)(const struct yetty_ypaint_font *self);

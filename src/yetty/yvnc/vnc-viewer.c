@@ -32,8 +32,8 @@ static struct yetty_ycore_void_result vnc_viewer_view_render(
     struct yetty_yterm_view *view, struct yetty_ypaint_core_target *render_target);
 static struct yetty_ycore_void_result vnc_viewer_view_set_bounds(struct yetty_yterm_view *view,
                                                                  struct yetty_yui_rect bounds);
-static struct yetty_ycore_int_result vnc_viewer_view_on_event(
-    struct yetty_yterm_view *view, const struct yetty_yui_event *event);
+static struct yetty_ycore_int_result vnc_viewer_view_on_event(struct yetty_yterm_view *view,
+                                                              const struct yetty_yui_event *event);
 
 static const struct yetty_yui_view_ops vnc_viewer_view_ops = {
     .destroy = vnc_viewer_view_destroy,
@@ -202,8 +202,8 @@ static struct yetty_ycore_void_result vnc_viewer_view_set_bounds(struct yetty_yt
 
     /* Resize VNC if connected */
     if (viewer->client && yetty_yvnc_client_is_connected(viewer->client)) {
-        struct yetty_ycore_void_result rr = yetty_yvnc_client_send_resize(
-            viewer->client, (uint16_t)bounds.w, (uint16_t)bounds.h);
+        struct yetty_ycore_void_result rr =
+            yetty_yvnc_client_send_resize(viewer->client, (uint16_t)bounds.w, (uint16_t)bounds.h);
         if (YETTY_IS_ERR(rr)) {
             return YETTY_ERR(yetty_ycore_void, "vnc_viewer_view_set_bounds: send_resize failed",
                              rr);
@@ -233,48 +233,48 @@ static struct yetty_ycore_int_result vnc_viewer_view_on_event(struct yetty_yterm
     switch (event->type) {
     case YETTY_YCORE_KEY_DOWN:
         yetty_yvnc_client_send_key_down(viewer->client, event->key.key, event->key.scancode,
-                                       event->key.mods);
+                                        event->key.mods);
         return YETTY_OK(yetty_ycore_int, 1);
 
     case YETTY_YCORE_KEY_UP:
         yetty_yvnc_client_send_key_up(viewer->client, event->key.key, event->key.scancode,
-                                     event->key.mods);
+                                      event->key.mods);
         return YETTY_OK(yetty_ycore_int, 1);
 
     case YETTY_YCORE_CHAR:
         yetty_yvnc_client_send_char_with_mods(viewer->client, event->chr.codepoint,
-                                             (uint8_t)event->chr.mods);
+                                              (uint8_t)event->chr.mods);
         return YETTY_OK(yetty_ycore_int, 1);
 
     case YETTY_YCORE_MOUSE_MOVE:
         rel_x = event->mouse.x - b.x;
         rel_y = event->mouse.y - b.y;
         yetty_yvnc_client_send_mouse_move(viewer->client, (int16_t)rel_x, (int16_t)rel_y,
-                                         (uint8_t)event->mouse.mods);
+                                          (uint8_t)event->mouse.mods);
         return YETTY_OK(yetty_ycore_int, 1);
 
     case YETTY_YCORE_MOUSE_DOWN:
         rel_x = event->mouse.x - b.x;
         rel_y = event->mouse.y - b.y;
         yetty_yvnc_client_send_mouse_button(viewer->client, (int16_t)rel_x, (int16_t)rel_y,
-                                           (uint8_t)event->mouse.button, 1,
-                                           (uint8_t)event->mouse.mods);
+                                            (uint8_t)event->mouse.button, 1,
+                                            (uint8_t)event->mouse.mods);
         return YETTY_OK(yetty_ycore_int, 1);
 
     case YETTY_YCORE_MOUSE_UP:
         rel_x = event->mouse.x - b.x;
         rel_y = event->mouse.y - b.y;
         yetty_yvnc_client_send_mouse_button(viewer->client, (int16_t)rel_x, (int16_t)rel_y,
-                                           (uint8_t)event->mouse.button, 0,
-                                           (uint8_t)event->mouse.mods);
+                                            (uint8_t)event->mouse.button, 0,
+                                            (uint8_t)event->mouse.mods);
         return YETTY_OK(yetty_ycore_int, 1);
 
     case YETTY_YCORE_MOUSE_SCROLL:
         rel_x = event->mouse_scroll.x - b.x;
         rel_y = event->mouse_scroll.y - b.y;
-        yetty_yvnc_client_send_mouse_scroll(viewer->client, (int16_t)rel_x, (int16_t)rel_y,
-                                           (int16_t)event->mouse_scroll.dx, (int16_t)event->mouse_scroll.dy,
-                                           (uint8_t)event->mouse_scroll.mods);
+        yetty_yvnc_client_send_mouse_scroll(
+            viewer->client, (int16_t)rel_x, (int16_t)rel_y, (int16_t)event->mouse_scroll.dx,
+            (int16_t)event->mouse_scroll.dy, (uint8_t)event->mouse_scroll.mods);
         return YETTY_OK(yetty_ycore_int, 1);
 
     default:
@@ -289,7 +289,7 @@ static struct yetty_ycore_int_result vnc_viewer_view_on_event(struct yetty_yterm
  *===========================================================================*/
 
 struct yetty_vnc_viewer_ptr_result yetty_yvnc_viewer_create(const char *host, uint16_t port,
-                                                           const struct yetty_context *yetty_ctx)
+                                                            const struct yetty_context *yetty_ctx)
 {
     struct yetty_yvnc_viewer *viewer;
 
@@ -328,8 +328,8 @@ struct yetty_vnc_viewer_ptr_result yetty_yvnc_viewer_create(const char *host, ui
     uint16_t initial_w = 800;
     uint16_t initial_h = 600;
 
-    struct yetty_vnc_client_ptr_result client_res =
-        yetty_yvnc_client_create(device, queue, format, yetty_ctx->event_loop, initial_w, initial_h);
+    struct yetty_vnc_client_ptr_result client_res = yetty_yvnc_client_create(
+        device, queue, format, yetty_ctx->event_loop, initial_w, initial_h);
     if (!YETTY_IS_OK(client_res)) {
         free(viewer->host);
         free(viewer);

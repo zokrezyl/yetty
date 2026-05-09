@@ -23,15 +23,13 @@ struct yetty_ywebgpu_device_request_state {
     int ready;           /* set to 1 on completion */
 };
 
-void yetty_ywebgpu_adapter_request_callback(WGPURequestAdapterStatus status,
-                                            WGPUAdapter adapter,
-                                            WGPUStringView message,
-                                            void *userdata1, void *userdata2);
+void yetty_ywebgpu_adapter_request_callback(WGPURequestAdapterStatus status, WGPUAdapter adapter,
+                                            WGPUStringView message, void *userdata1,
+                                            void *userdata2);
 
-void yetty_ywebgpu_device_request_callback(WGPURequestDeviceStatus status,
-                                           WGPUDevice device,
-                                           WGPUStringView message,
-                                           void *userdata1, void *userdata2);
+void yetty_ywebgpu_device_request_callback(WGPURequestDeviceStatus status, WGPUDevice device,
+                                           WGPUStringView message, void *userdata1,
+                                           void *userdata2);
 
 #ifdef __cplusplus
 }

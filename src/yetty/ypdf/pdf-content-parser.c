@@ -50,7 +50,8 @@ static struct yetty_ypdf_pdf_matrix mat_identity(void)
     return m;
 }
 
-static struct yetty_ypdf_pdf_matrix mat_mul(struct yetty_ypdf_pdf_matrix x, struct yetty_ypdf_pdf_matrix y)
+static struct yetty_ypdf_pdf_matrix mat_mul(struct yetty_ypdf_pdf_matrix x,
+                                            struct yetty_ypdf_pdf_matrix y)
 {
     struct yetty_ypdf_pdf_matrix r;
     r.a = x.a * y.a + x.b * y.c;
@@ -734,7 +735,8 @@ static void handle_curveto_v(struct yetty_ypdf_content_parser *p)
     int base = p->operand_count - 4;
     float x2 = ops_float(p, base + 0), y2 = ops_float(p, base + 1);
     float x3 = ops_float(p, base + 2), y3 = ops_float(p, base + 3);
-    struct yetty_ypdf_pdf_path_point pt = {YETTY_YPDF_PDF_PATH_CURVE_TO, x3, y3, p->current_x, p->current_y, x2, y2};
+    struct yetty_ypdf_pdf_path_point pt = {
+        YETTY_YPDF_PDF_PATH_CURVE_TO, x3, y3, p->current_x, p->current_y, x2, y2};
     path_push(p, pt);
     p->current_x = x3;
     p->current_y = y3;
@@ -784,7 +786,8 @@ static void handle_rect(struct yetty_ypdf_content_parser *p)
 
 static void handle_closepath(struct yetty_ypdf_content_parser *p)
 {
-    struct yetty_ypdf_pdf_path_point pt = {YETTY_YPDF_PDF_PATH_CLOSE, p->subpath_start_x, p->subpath_start_y, 0, 0, 0, 0};
+    struct yetty_ypdf_pdf_path_point pt = {
+        YETTY_YPDF_PDF_PATH_CLOSE, p->subpath_start_x, p->subpath_start_y, 0, 0, 0, 0};
     path_push(p, pt);
     p->current_x = p->subpath_start_x;
     p->current_y = p->subpath_start_y;
@@ -836,8 +839,10 @@ static void paint_path(struct yetty_ypdf_content_parser *p, enum yetty_ypdf_pain
 
     /* Axis-aligned rectangle path from re + S/f/B: M L L L h */
     if (p->path_count == 5 && p->path[0].op == YETTY_YPDF_PDF_PATH_MOVE_TO &&
-        p->path[1].op == YETTY_YPDF_PDF_PATH_LINE_TO && p->path[2].op == YETTY_YPDF_PDF_PATH_LINE_TO &&
-        p->path[3].op == YETTY_YPDF_PDF_PATH_LINE_TO && p->path[4].op == YETTY_YPDF_PDF_PATH_CLOSE) {
+        p->path[1].op == YETTY_YPDF_PDF_PATH_LINE_TO &&
+        p->path[2].op == YETTY_YPDF_PDF_PATH_LINE_TO &&
+        p->path[3].op == YETTY_YPDF_PDF_PATH_LINE_TO &&
+        p->path[4].op == YETTY_YPDF_PDF_PATH_CLOSE) {
 
         float x0 = p->path[0].x, y0 = p->path[0].y;
         float x1 = p->path[1].x, y1 = p->path[1].y;
@@ -1145,7 +1150,8 @@ static void dispatch(struct yetty_ypdf_content_parser *p, const char *op)
  * Public API
  *===========================================================================*/
 
-struct yetty_ypdf_content_parser_ptr_result yetty_ypdf_content_parser_callbacks_content_parser_create(
+struct yetty_ypdf_content_parser_ptr_result
+yetty_ypdf_content_parser_callbacks_content_parser_create(
     const struct yetty_ypdf_content_parser_callbacks *cb)
 {
     if (!cb) {

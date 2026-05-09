@@ -52,8 +52,8 @@ struct yetty_ycore_void_result yetty_yrich_command_default_undo(struct yetty_yri
             yetty_yrich_operation_inverse(cmd->recorded[i - 1]);
         if (YETTY_IS_ERR(inv_r)) {
             if (YETTY_IS_OK(first_err)) {
-                first_err = YETTY_ERR(yetty_ycore_void, "command_default_undo: inverse failed",
-                                      inv_r);
+                first_err =
+                    YETTY_ERR(yetty_ycore_void, "command_default_undo: inverse failed", inv_r);
             } else {
                 yetty_ycore_error_destroy(inv_r.error);
             }
@@ -62,8 +62,8 @@ struct yetty_ycore_void_result yetty_yrich_command_default_undo(struct yetty_yri
         struct yetty_ycore_void_result ar = yetty_yrich_document_apply_op(doc, inv_r.value, true);
         if (YETTY_IS_ERR(ar)) {
             if (YETTY_IS_OK(first_err)) {
-                first_err = YETTY_ERR(yetty_ycore_void, "command_default_undo: apply_op failed",
-                                      ar);
+                first_err =
+                    YETTY_ERR(yetty_ycore_void, "command_default_undo: apply_op failed", ar);
             } else {
                 yetty_ycore_error_destroy(ar.error);
             }
@@ -81,12 +81,12 @@ struct yetty_ycore_void_result yetty_yrich_command_default_redo(struct yetty_yri
         return YETTY_ERR(yetty_ycore_void, "command_default_redo: NULL cmd");
     }
     for (size_t i = 0; i < cmd->recorded_count; i++) {
-        struct yetty_ycore_void_result ar = yetty_yrich_document_apply_op(doc, cmd->recorded[i],
-                                                                          true);
+        struct yetty_ycore_void_result ar =
+            yetty_yrich_document_apply_op(doc, cmd->recorded[i], true);
         if (YETTY_IS_ERR(ar)) {
             if (YETTY_IS_OK(first_err)) {
-                first_err = YETTY_ERR(yetty_ycore_void, "command_default_redo: apply_op failed",
-                                      ar);
+                first_err =
+                    YETTY_ERR(yetty_ycore_void, "command_default_redo: apply_op failed", ar);
             } else {
                 yetty_ycore_error_destroy(ar.error);
             }

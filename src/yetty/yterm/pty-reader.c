@@ -11,7 +11,12 @@
 #define OSC_BUF_MAX (500 * 1024 * 1024) /* 500 MB */
 #define MAX_OSC_SINKS 64
 
-enum yetty_yterm_osc_state { YETTY_YTERM_OSC_STATE_NORMAL, YETTY_YTERM_OSC_STATE_ESC, YETTY_YTERM_OSC_STATE_IN_OSC, YETTY_YTERM_OSC_STATE_OSC_ESC_END };
+enum yetty_yterm_osc_state {
+    YETTY_YTERM_OSC_STATE_NORMAL,
+    YETTY_YTERM_OSC_STATE_ESC,
+    YETTY_YTERM_OSC_STATE_IN_OSC,
+    YETTY_YTERM_OSC_STATE_OSC_ESC_END
+};
 
 struct yetty_yterm_osc_sink {
     int vendor_id;
@@ -52,7 +57,7 @@ static int osc_buf_append(struct yetty_yterm_pty_reader *r, char c)
 }
 
 static struct yetty_yrender_terminal_layer *find_osc_sink(struct yetty_yterm_pty_reader *r,
-                                                        int vendor_id)
+                                                          int vendor_id)
 {
     for (size_t i = 0; i < r->osc_sink_count; i++) {
         if (r->osc_sinks[i].vendor_id == vendor_id) {

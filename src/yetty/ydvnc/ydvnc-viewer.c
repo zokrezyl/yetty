@@ -25,12 +25,12 @@
 #include "rfb-client.h"
 
 /* RFB pointer button bits (RFC 6143 §7.5.5). */
-#define BTN_BIT_LEFT    0x01u
-#define BTN_BIT_MIDDLE  0x02u
-#define BTN_BIT_RIGHT   0x04u
-#define BTN_BIT_WHEEL_UP    0x08u
-#define BTN_BIT_WHEEL_DOWN  0x10u
-#define BTN_BIT_WHEEL_LEFT  0x20u
+#define BTN_BIT_LEFT 0x01u
+#define BTN_BIT_MIDDLE 0x02u
+#define BTN_BIT_RIGHT 0x04u
+#define BTN_BIT_WHEEL_UP 0x08u
+#define BTN_BIT_WHEEL_DOWN 0x10u
+#define BTN_BIT_WHEEL_LEFT 0x20u
 #define BTN_BIT_WHEEL_RIGHT 0x40u
 
 struct yetty_ydvnc_viewer {
@@ -68,10 +68,18 @@ static void map_xy(const struct yetty_ydvnc_viewer *v, float screen_x, float scr
     }
     float rx = (screen_x - b.x) / b.w;
     float ry = (screen_y - b.y) / b.h;
-    if (rx < 0.0f) rx = 0.0f;
-    if (rx > 1.0f) rx = 1.0f;
-    if (ry < 0.0f) ry = 0.0f;
-    if (ry > 1.0f) ry = 1.0f;
+    if (rx < 0.0f) {
+        rx = 0.0f;
+    }
+    if (rx > 1.0f) {
+        rx = 1.0f;
+    }
+    if (ry < 0.0f) {
+        ry = 0.0f;
+    }
+    if (ry > 1.0f) {
+        ry = 1.0f;
+    }
     *fb_x = (int16_t)(rx * (float)fw);
     *fb_y = (int16_t)(ry * (float)fh);
 }
@@ -238,7 +246,9 @@ static struct yetty_ycore_int_result viewer_on_event(struct yetty_yterm_view *vi
         uint32_t ks = yetty_ydvnc_keysym_from_glfw_key(event->key.key);
         if (ks) {
             struct yetty_ycore_void_result r = yetty_ydvnc_rfb_client_send_key(v->client, ks, 1);
-            if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+            if (YETTY_IS_ERR(r)) {
+                yetty_ycore_error_destroy(r.error);
+            }
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
@@ -251,7 +261,9 @@ static struct yetty_ycore_int_result viewer_on_event(struct yetty_yterm_view *vi
         uint32_t ks = yetty_ydvnc_keysym_from_glfw_key(event->key.key);
         if (ks) {
             struct yetty_ycore_void_result r = yetty_ydvnc_rfb_client_send_key(v->client, ks, 0);
-            if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+            if (YETTY_IS_ERR(r)) {
+                yetty_ycore_error_destroy(r.error);
+            }
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
@@ -260,9 +272,13 @@ static struct yetty_ycore_int_result viewer_on_event(struct yetty_yterm_view *vi
         uint32_t ks = yetty_ydvnc_keysym_from_codepoint(event->chr.codepoint);
         if (ks) {
             struct yetty_ycore_void_result d = yetty_ydvnc_rfb_client_send_key(v->client, ks, 1);
-            if (YETTY_IS_ERR(d)) yetty_ycore_error_destroy(d.error);
+            if (YETTY_IS_ERR(d)) {
+                yetty_ycore_error_destroy(d.error);
+            }
             struct yetty_ycore_void_result u = yetty_ydvnc_rfb_client_send_key(v->client, ks, 0);
-            if (YETTY_IS_ERR(u)) yetty_ycore_error_destroy(u.error);
+            if (YETTY_IS_ERR(u)) {
+                yetty_ycore_error_destroy(u.error);
+            }
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
@@ -273,7 +289,9 @@ static struct yetty_ycore_int_result viewer_on_event(struct yetty_yterm_view *vi
         v->last_y = fb_y;
         struct yetty_ycore_void_result r =
             yetty_ydvnc_rfb_client_send_pointer(v->client, fb_x, fb_y, v->button_mask);
-        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
@@ -284,10 +302,18 @@ static struct yetty_ycore_int_result viewer_on_event(struct yetty_yterm_view *vi
         v->last_y = fb_y;
         uint8_t bit = 0;
         switch (event->mouse.button) {
-        case 0: bit = BTN_BIT_LEFT; break;
-        case 1: bit = BTN_BIT_RIGHT; break;
-        case 2: bit = BTN_BIT_MIDDLE; break;
-        default: bit = 0; break;
+        case 0:
+            bit = BTN_BIT_LEFT;
+            break;
+        case 1:
+            bit = BTN_BIT_RIGHT;
+            break;
+        case 2:
+            bit = BTN_BIT_MIDDLE;
+            break;
+        default:
+            bit = 0;
+            break;
         }
         if (event->type == YETTY_YCORE_MOUSE_DOWN) {
             v->button_mask |= bit;
@@ -296,7 +322,9 @@ static struct yetty_ycore_int_result viewer_on_event(struct yetty_yterm_view *vi
         }
         struct yetty_ycore_void_result r =
             yetty_ydvnc_rfb_client_send_pointer(v->client, fb_x, fb_y, v->button_mask);
-        if (YETTY_IS_ERR(r)) yetty_ycore_error_destroy(r.error);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
@@ -306,18 +334,27 @@ static struct yetty_ycore_int_result viewer_on_event(struct yetty_yterm_view *vi
         v->last_y = fb_y;
         /* Wheel events: press the scroll button, then immediately release. */
         uint8_t wheel = 0;
-        if (event->mouse_scroll.dy > 0) wheel = BTN_BIT_WHEEL_UP;
-        else if (event->mouse_scroll.dy < 0) wheel = BTN_BIT_WHEEL_DOWN;
-        else if (event->mouse_scroll.dx > 0) wheel = BTN_BIT_WHEEL_RIGHT;
-        else if (event->mouse_scroll.dx < 0) wheel = BTN_BIT_WHEEL_LEFT;
+        if (event->mouse_scroll.dy > 0) {
+            wheel = BTN_BIT_WHEEL_UP;
+        } else if (event->mouse_scroll.dy < 0) {
+            wheel = BTN_BIT_WHEEL_DOWN;
+        } else if (event->mouse_scroll.dx > 0) {
+            wheel = BTN_BIT_WHEEL_RIGHT;
+        } else if (event->mouse_scroll.dx < 0) {
+            wheel = BTN_BIT_WHEEL_LEFT;
+        }
         if (wheel) {
             uint8_t pressed = (uint8_t)(v->button_mask | wheel);
             struct yetty_ycore_void_result r1 =
                 yetty_ydvnc_rfb_client_send_pointer(v->client, fb_x, fb_y, pressed);
-            if (YETTY_IS_ERR(r1)) yetty_ycore_error_destroy(r1.error);
+            if (YETTY_IS_ERR(r1)) {
+                yetty_ycore_error_destroy(r1.error);
+            }
             struct yetty_ycore_void_result r2 =
                 yetty_ydvnc_rfb_client_send_pointer(v->client, fb_x, fb_y, v->button_mask);
-            if (YETTY_IS_ERR(r2)) yetty_ycore_error_destroy(r2.error);
+            if (YETTY_IS_ERR(r2)) {
+                yetty_ycore_error_destroy(r2.error);
+            }
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
@@ -348,8 +385,7 @@ static const struct yetty_yui_view_ops VIEWER_OPS = {
  *===========================================================================*/
 
 struct yetty_ydvnc_viewer_ptr_result yetty_ydvnc_viewer_create(
-    const char *host, uint16_t port, const char *password,
-    const struct yetty_context *yetty_ctx)
+    const char *host, uint16_t port, const char *password, const struct yetty_context *yetty_ctx)
 {
     if (!host || !yetty_ctx) {
         return YETTY_ERR(yetty_ydvnc_viewer_ptr, "ydvnc: NULL host or context");
@@ -369,9 +405,9 @@ struct yetty_ydvnc_viewer_ptr_result yetty_ydvnc_viewer_create(
         return YETTY_ERR(yetty_ydvnc_viewer_ptr, "ydvnc: strdup failed");
     }
 
-    struct yetty_ydvnc_rfb_client_ptr_result cres = yetty_ydvnc_rfb_client_create(
-        yetty_ctx->gpu_context.device, yetty_ctx->gpu_context.queue,
-        yetty_ctx->gpu_context.surface_format, yetty_ctx->event_loop);
+    struct yetty_ydvnc_rfb_client_ptr_result cres =
+        yetty_ydvnc_rfb_client_create(yetty_ctx->gpu_context.device, yetty_ctx->gpu_context.queue,
+                                      yetty_ctx->gpu_context.surface_format, yetty_ctx->event_loop);
     if (YETTY_IS_ERR(cres)) {
         free(v->host);
         free(v);
@@ -387,7 +423,9 @@ struct yetty_ydvnc_viewer_ptr_result yetty_ydvnc_viewer_create(
     struct yetty_ycore_void_result conn = yetty_ydvnc_rfb_client_connect(v->client, host, port);
     if (YETTY_IS_ERR(conn)) {
         struct yetty_ycore_void_result d = yetty_ydvnc_rfb_client_destroy(v->client);
-        if (YETTY_IS_ERR(d)) yetty_ycore_error_destroy(d.error);
+        if (YETTY_IS_ERR(d)) {
+            yetty_ycore_error_destroy(d.error);
+        }
         free(v->host);
         free(v);
         return YETTY_ERR(yetty_ydvnc_viewer_ptr, "ydvnc: connect failed", conn);

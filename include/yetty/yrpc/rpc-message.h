@@ -61,8 +61,8 @@ YETTY_YRESULT_DECLARE(yetty_rpc_message, struct yetty_yrpc_message);
  * input buffer. msg.params is heap-allocated (re-packed) and must be
  * freed by the caller.
  */
-struct yetty_rpc_message_result
-yetty_yrpc_message_parse(const uint8_t *data, size_t len, size_t *out_consumed);
+struct yetty_rpc_message_result yetty_yrpc_message_parse(const uint8_t *data, size_t len,
+                                                         size_t *out_consumed);
 
 /*
  * Write buffer for serializing responses.
@@ -75,24 +75,24 @@ struct yetty_yrpc_write_buffer {
 
 /* Initialize write buffer (caller owns memory) */
 void yetty_yrpc_write_buffer_init(struct yetty_yrpc_write_buffer *buf, uint8_t *storage,
-                                 size_t capacity);
+                                  size_t capacity);
 
 /* Reset buffer for reuse */
 void yetty_yrpc_write_buffer_reset(struct yetty_yrpc_write_buffer *buf);
 
 /* Serialize success response: [1, msgid, nil, result] */
 struct yetty_ycore_void_result yetty_yrpc_write_response_ok(struct yetty_yrpc_write_buffer *buf,
-                                                           uint32_t msgid, const uint8_t *result,
-                                                           size_t result_len);
+                                                            uint32_t msgid, const uint8_t *result,
+                                                            size_t result_len);
 
 /* Serialize error response: [1, msgid, error_msg, nil] */
 struct yetty_ycore_void_result yetty_yrpc_write_response_error(struct yetty_yrpc_write_buffer *buf,
-                                                              uint32_t msgid,
-                                                              const char *error_msg);
+                                                               uint32_t msgid,
+                                                               const char *error_msg);
 
 /* Serialize bool result (common case) */
 struct yetty_ycore_void_result yetty_yrpc_write_response_bool(struct yetty_yrpc_write_buffer *buf,
-                                                             uint32_t msgid, int value);
+                                                              uint32_t msgid, int value);
 
 #ifdef __cplusplus
 }

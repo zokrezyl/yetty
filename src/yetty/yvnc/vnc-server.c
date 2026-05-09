@@ -496,15 +496,13 @@ static struct yetty_ycore_void_result config_vnc_server(struct yetty_yvnc_server
             yerror("VNC record: failed to open %s", vnc_server->record_path);
             return YETTY_ERR(yetty_ycore_void, "vnc record: fopen failed");
         }
-        vnc_server->record_mux =
-            MP4E_open(0, 0, vnc_server->record_file, vnc_record_write_cb);
+        vnc_server->record_mux = MP4E_open(0, 0, vnc_server->record_file, vnc_record_write_cb);
         if (!vnc_server->record_mux) {
             fclose(vnc_server->record_file);
             vnc_server->record_file = NULL;
             return YETTY_ERR(yetty_ycore_void, "vnc record: MP4E_open failed");
         }
-        yinfo("VNC record: opened %s (waiting for first H.264 frame)",
-              vnc_server->record_path);
+        yinfo("VNC record: opened %s (waiting for first H.264 frame)", vnc_server->record_path);
     }
 #endif
 
@@ -650,8 +648,7 @@ struct yetty_ycore_void_result yetty_yvnc_server_start(struct yetty_yvnc_server 
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yvnc_server_start_record_only(
-    struct yetty_yvnc_server *server)
+struct yetty_ycore_void_result yetty_yvnc_server_start_record_only(struct yetty_yvnc_server *server)
 {
     if (!server) {
         return YETTY_ERR(yetty_ycore_void, "null server");
@@ -1050,8 +1047,8 @@ struct yetty_ycore_void_result yetty_yvnc_server_send_frame_cpu(struct yetty_yvn
    * even with no TCP clients we still need the encode pipeline to run so
    * frames land in the MP4. */
 #ifdef YETTY_HAS_YVIDEO
-    int has_consumers = server && server->running &&
-                        (server->client_count > 0 || server->record_mux != NULL);
+    int has_consumers =
+        server && server->running && (server->client_count > 0 || server->record_mux != NULL);
 #else
     int has_consumers = server && server->running && server->client_count > 0;
 #endif
@@ -1405,8 +1402,8 @@ static struct yetty_ycore_void_result h264_send_full_frame(struct yetty_yvnc_ser
    * even-rounding above). */
     if (server->record_mux) {
         if (!server->record_writer_initialized) {
-            int err = mp4_h26x_write_init(&server->record_writer, server->record_mux,
-                                          (int)enc_w, (int)enc_h, 0);
+            int err = mp4_h26x_write_init(&server->record_writer, server->record_mux, (int)enc_w,
+                                          (int)enc_h, 0);
             if (err != MP4E_STATUS_OK) {
                 ywarn("VNC record: mp4_h26x_write_init failed: %d", err);
             } else {
@@ -1416,7 +1413,8 @@ static struct yetty_ycore_void_result h264_send_full_frame(struct yetty_yvnc_ser
         }
         if (server->record_writer_initialized) {
             uint32_t ts_ms = (uint32_t)(encoded.timestamp_us / 1000u);
-            uint32_t dur_ms = (server->record_frames == 0) ? 33u : (ts_ms - server->record_prev_ts_ms);
+            uint32_t dur_ms =
+                (server->record_frames == 0) ? 33u : (ts_ms - server->record_prev_ts_ms);
             if (dur_ms == 0) {
                 dur_ms = 33u; /* fall back to ~30fps */
             }
@@ -1672,8 +1670,8 @@ struct yetty_ycore_void_result yetty_yvnc_server_send_frame_gpu(struct yetty_yvn
                                                                 uint32_t height)
 {
 #ifdef YETTY_HAS_YVIDEO
-    int has_consumers = server && server->running &&
-                        (server->client_count > 0 || server->record_mux != NULL);
+    int has_consumers =
+        server && server->running && (server->client_count > 0 || server->record_mux != NULL);
 #else
     int has_consumers = server && server->running && server->client_count > 0;
 #endif

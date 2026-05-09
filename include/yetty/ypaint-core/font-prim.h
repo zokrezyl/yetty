@@ -50,7 +50,8 @@ int yetty_ypaint_core_font_prim_parse(const uint32_t *prim,
 
 /* Flyweight base ops handler. Returns ops only for type FONT. Register
  * via yetty_ypaint_core_flyweight_registry_add(reg, FONT, FONT, handler). */
-struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_font_prim_handler(uint32_t prim_type);
+struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_font_prim_handler(
+    uint32_t prim_type);
 
 #ifdef __cplusplus
 }

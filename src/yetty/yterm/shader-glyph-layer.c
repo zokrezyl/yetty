@@ -1,4 +1,4 @@
-#include <yetty/yplatform/compat.h>  /* dirent on POSIX, Win32 shim on MSVC */
+#include <yetty/yplatform/compat.h> /* dirent on POSIX, Win32 shim on MSVC */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,7 +24,8 @@
 #define U_VZ_OFF 4
 #define U_COUNT 5
 
-static inline void set_grid_size(struct yetty_ypaint_core_gpu_resource_set *rs, float cols, float rows)
+static inline void set_grid_size(struct yetty_ypaint_core_gpu_resource_set *rs, float cols,
+                                 float rows)
 {
     rs->uniforms[U_GRID_SIZE].vec2[0] = cols;
     rs->uniforms[U_GRID_SIZE].vec2[1] = rows;
@@ -311,7 +312,8 @@ static char *splice_marker(const char *template, size_t template_size, const cha
 }
 
 /* Forward declarations */
-static struct yetty_ycore_void_result shader_glyph_destroy(struct yetty_yrender_terminal_layer *self);
+static struct yetty_ycore_void_result shader_glyph_destroy(
+    struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result shader_glyph_write(struct yetty_yrender_terminal_layer *self,
                                                          int osc_code, const char *data,
                                                          size_t len);
@@ -495,7 +497,8 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
     return YETTY_OK(yetty_yterm_terminal_layer, &layer->base);
 }
 
-static struct yetty_ycore_void_result shader_glyph_destroy(struct yetty_yrender_terminal_layer *self)
+static struct yetty_ycore_void_result shader_glyph_destroy(
+    struct yetty_yrender_terminal_layer *self)
 {
     struct yetty_yterm_shader_glyph_layer *layer =
         container_of(self, struct yetty_yterm_shader_glyph_layer, base);
@@ -575,7 +578,8 @@ static struct yetty_yrender_gpu_resource_set_result shader_glyph_get_gpu_resourc
      * vterm screen and stitched scrollback view between frames. */
     const uint8_t *cells_data = NULL;
     size_t cells_size = 0;
-    yetty_yterm_terminal_layer_terminal_text_layer_get_cells(layer->text_layer, &cells_data, &cells_size);
+    yetty_yterm_terminal_layer_terminal_text_layer_get_cells(layer->text_layer, &cells_data,
+                                                             &cells_size);
     if ((const uint8_t *)layer->rs.buffers[0].data != cells_data ||
         layer->rs.buffers[0].size != cells_size) {
         layer->rs.buffers[0].data = (uint8_t *)cells_data;

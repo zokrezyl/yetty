@@ -184,7 +184,8 @@ static void store_array(struct yetty_ysdf_ypaint_yaml_parse_ctx *yaml_parse_ctx)
     }
 }
 
-static struct yetty_ycore_void_result add_prim(struct yetty_ysdf_ypaint_yaml_parse_ctx *yaml_parse_ctx)
+static struct yetty_ycore_void_result add_prim(
+    struct yetty_ysdf_ypaint_yaml_parse_ctx *yaml_parse_ctx)
 {
     float data[16];
     uint32_t word_count = 0, tmp;
@@ -597,8 +598,7 @@ struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ypaint_core_bu
                 if (YETTY_IS_ERR(ar)) {
                     yaml_event_delete(&event);
                     yaml_parser_delete(&parser);
-                    return YETTY_ERR(yetty_ycore_void,
-                                     "ysdf yaml_parse: prim build failed", ar);
+                    return YETTY_ERR(yetty_ycore_void, "ysdf yaml_parse: prim build failed", ar);
                 }
                 in_prim_type = 0;
                 in_prim = 0;

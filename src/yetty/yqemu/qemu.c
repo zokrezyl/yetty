@@ -116,8 +116,16 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t host_port)
     static char config_dir_buf[512];
     snprintf(data_dir_buf, sizeof(data_dir_buf), "%s", raw_data_dir);
     snprintf(config_dir_buf, sizeof(config_dir_buf), "%s", raw_config_dir);
-    for (char *p = data_dir_buf; *p; p++) if (*p == '\\') *p = '/';
-    for (char *p = config_dir_buf; *p; p++) if (*p == '\\') *p = '/';
+    for (char *p = data_dir_buf; *p; p++) {
+        if (*p == '\\') {
+            *p = '/';
+        }
+    }
+    for (char *p = config_dir_buf; *p; p++) {
+        if (*p == '\\') {
+            *p = '/';
+        }
+    }
     const char *data_dir = data_dir_buf;
     const char *config_dir = config_dir_buf;
 #else
@@ -213,8 +221,8 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t host_port)
     /* Slirp hostfwd: host:HOST_PORT -> guest:23 (busybox telnetd on the
      * extended rootfs). yetty connects to 127.0.0.1:HOST_PORT after the
      * guest finishes booting and telnetd binds — see qemu_wait_ready. */
-    snprintf(netdev_arg, sizeof(netdev_arg),
-             "user,id=net0,hostfwd=tcp:127.0.0.1:%u-:23", host_port);
+    snprintf(netdev_arg, sizeof(netdev_arg), "user,id=net0,hostfwd=tcp:127.0.0.1:%u-:23",
+             host_port);
 
     /* Kernel console chardev exposed on 127.0.0.1:2424 for debugging.
      * yetty does NOT connect here (it talks to the in-guest telnetd via
@@ -300,7 +308,8 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t host_port)
         NULL,
     };
 
-    struct yetty_yplatform_yprocess *proc = yetty_yplatform_yprocess_spawn(argv, /*detached=*/1, /*stdio_to_null=*/1);
+    struct yetty_yplatform_yprocess *proc =
+        yetty_yplatform_yprocess_spawn(argv, /*detached=*/1, /*stdio_to_null=*/1);
     if (!proc) {
         yerror("Failed to spawn QEMU");
         return YPROCESS_INVALID;

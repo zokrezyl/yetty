@@ -62,11 +62,11 @@ struct yetty_ygui_theme {
      * shadow_alpha is its base opacity. Set elevation_* to 0 to fall back
      * to the legacy flat look. The actual shadow color is `shadow` —
      * elevation_alpha multiplies its alpha channel. */
-    float    elevation_low;     /* default 1.5px — buttons, list rows */
-    float    elevation_medium;  /* default 4.0px — dropdowns, tooltips */
-    float    elevation_high;    /* default 8.0px — popups, modals */
-    float    elevation_alpha;   /* default 0.55 — global multiplier on shadow.alpha */
-    int      enable_gradient;   /* 0 = flat surface, 1 = subtle vertical gradient on buttons */
+    float elevation_low;    /* default 1.5px — buttons, list rows */
+    float elevation_medium; /* default 4.0px — dropdowns, tooltips */
+    float elevation_high;   /* default 8.0px — popups, modals */
+    float elevation_alpha;  /* default 0.55 — global multiplier on shadow.alpha */
+    int enable_gradient;    /* 0 = flat surface, 1 = subtle vertical gradient on buttons */
 
     /* Colors (ABGR format) */
     uint32_t bg_primary;
@@ -139,17 +139,17 @@ typedef float (*ygui_widget_baseline_fn)(const struct yetty_ygui_widget *self,
                                          const struct yetty_ygui_theme *theme);
 
 struct yetty_ygui_widget_vtable {
-    ygui_widget_render_fn     render;
+    ygui_widget_render_fn render;
     ygui_widget_render_all_fn render_all;
-    ygui_widget_on_press_fn   on_press;
+    ygui_widget_on_press_fn on_press;
     ygui_widget_on_release_fn on_release;
-    ygui_widget_on_drag_fn    on_drag;
-    ygui_widget_on_scroll_fn  on_scroll;
-    ygui_widget_on_key_fn     on_key;
-    ygui_widget_destroy_fn    destroy;
+    ygui_widget_on_drag_fn on_drag;
+    ygui_widget_on_scroll_fn on_scroll;
+    ygui_widget_on_key_fn on_key;
+    ygui_widget_destroy_fn destroy;
     /* Optional. NULL = widget has no meaningful baseline; layout falls
      * back to ALIGN_START. */
-    ygui_widget_baseline_fn   baseline_offset;
+    ygui_widget_baseline_fn baseline_offset;
 };
 
 /*=============================================================================
@@ -304,7 +304,7 @@ struct yetty_ygui_widget {
             /* selected child (pointer; not an index, so it survives
              * insertion/removal of other children). NULL = no selection. */
             struct yetty_ygui_widget *selected;
-            ygui_widget_click_fn on_select_internal;  /* unused for now */
+            ygui_widget_click_fn on_select_internal; /* unused for now */
             ygui_widget_click_fn on_select;
             void *on_select_userdata;
         } list;
@@ -323,13 +323,13 @@ struct yetty_ygui_widget {
 
         struct {
             int n_columns;
-            char **column_names;          /* size n_columns */
-            float *column_widths;         /* size n_columns; 0 = stretch */
+            char **column_names;  /* size n_columns */
+            float *column_widths; /* size n_columns; 0 = stretch */
             int n_rows;
             int row_capacity;
-            char ***rows;                 /* rows[i][j] (owned strings) */
-            int selected_row;             /* -1 = none */
-            float row_height;             /* 0 = use theme->row_height */
+            char ***rows;     /* rows[i][j] (owned strings) */
+            int selected_row; /* -1 = none */
+            float row_height; /* 0 = use theme->row_height */
             void (*on_select)(struct yetty_ygui_widget *table, int row, void *userdata);
             void *on_select_userdata;
         } table;
@@ -526,15 +526,15 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box_shadow(
  * the start of the axis, color1 at the end; pixels off-axis are
  * projected. Both colors must be ABGR (same packing as fill_color). */
 struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box_linear_gradient(
-    struct yetty_ygui_render_ctx *ctx, float x, float y, float w, float h, float radius,
-    float gx0, float gy0, float gx1, float gy1, uint32_t color0, uint32_t color1);
+    struct yetty_ygui_render_ctx *ctx, float x, float y, float w, float h, float radius, float gx0,
+    float gy0, float gx1, float gy1, uint32_t color0, uint32_t color1);
 
 /* Radial gradient inside a rounded box. The gradient origin is at
  * (cx, cy) and fades over `gradient_radius` pixels. `color_inner` is
  * sampled at the origin, `color_outer` at the radius; both clamped. */
 struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box_radial_gradient(
-    struct yetty_ygui_render_ctx *ctx, float x, float y, float w, float h, float radius,
-    float cx, float cy, float gradient_radius, uint32_t color_inner, uint32_t color_outer);
+    struct yetty_ygui_render_ctx *ctx, float x, float y, float w, float h, float radius, float cx,
+    float cy, float gradient_radius, uint32_t color_inner, uint32_t color_outer);
 
 /* Default widget functions */
 struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(

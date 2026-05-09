@@ -48,8 +48,7 @@ static int tcp_transport_open(struct yetty_ytransport_conn_transport *self,
     t->cb = *cb;
 
     struct yetty_yevent_tcp_client_id_result res =
-        t->event_loop->ops->create_tcp_client(t->event_loop, t->host,
-                                              (int)t->port, &t->cb);
+        t->event_loop->ops->create_tcp_client(t->event_loop, t->host, (int)t->port, &t->cb);
     if (!res.ok) {
         return -1;
     }
@@ -59,8 +58,8 @@ static int tcp_transport_open(struct yetty_ytransport_conn_transport *self,
 }
 
 static struct yetty_ycore_size_result tcp_transport_send(
-    struct yetty_ytransport_conn_transport *self, struct yetty_yevent_conn *conn,
-    const void *data, size_t len)
+    struct yetty_ytransport_conn_transport *self, struct yetty_yevent_conn *conn, const void *data,
+    size_t len)
 {
     struct tcp_transport *t = (struct tcp_transport *)self;
     return t->event_loop->ops->tcp_send(conn, data, len);
@@ -96,15 +95,14 @@ static void tcp_transport_destroy(struct yetty_ytransport_conn_transport *self)
 }
 
 static const struct yetty_ytransport_conn_transport_ops tcp_transport_ops = {
-    .open    = tcp_transport_open,
-    .send    = tcp_transport_send,
-    .close   = tcp_transport_close,
+    .open = tcp_transport_open,
+    .send = tcp_transport_send,
+    .close = tcp_transport_close,
     .destroy = tcp_transport_destroy,
 };
 
 struct yetty_ytransport_conn_transport *yetty_ytransport_tcp_transport_create(
-    const char *host, uint16_t port,
-    struct yetty_yevent_event_loop *event_loop)
+    const char *host, uint16_t port, struct yetty_yevent_event_loop *event_loop)
 {
     if (!host || !event_loop || !event_loop->ops) {
         return NULL;

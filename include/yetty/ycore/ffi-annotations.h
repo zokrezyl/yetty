@@ -17,15 +17,15 @@
 #define YETTY_YCORE_FFI_ANNOTATIONS_H
 
 #if defined(__clang__) || defined(__GNUC__)
-#  define YETTY_ANNOTATE(s) __attribute__((annotate(s)))
+#define YETTY_ANNOTATE(s) __attribute__((annotate(s)))
 #else
-#  define YETTY_ANNOTATE(s)
+#define YETTY_ANNOTATE(s)
 #endif
 
 /* Parameter roles */
-#define YETTY_ANNOT_OUT            YETTY_ANNOTATE("yetty:out")
-#define YETTY_ANNOT_INOUT          YETTY_ANNOTATE("yetty:inout")
-#define YETTY_ANNOT_ARRAY(len)     YETTY_ANNOTATE("yetty:array:" #len)
+#define YETTY_ANNOT_OUT YETTY_ANNOTATE("yetty:out")
+#define YETTY_ANNOT_INOUT YETTY_ANNOTATE("yetty:inout")
+#define YETTY_ANNOT_ARRAY(len) YETTY_ANNOTATE("yetty:array:" #len)
 
 /* Ownership.
  *
@@ -41,16 +41,16 @@
  *                                          afterwards (matches *_destroy).
  *   YETTY_ANNOT_CALLER_OWNED  on param   → just a borrow (= default).
  */
-#define YETTY_ANNOT_CALLER_OWNED   YETTY_ANNOTATE("yetty:caller_owned")
-#define YETTY_ANNOT_CALLEE_OWNED   YETTY_ANNOTATE("yetty:callee_owned")
+#define YETTY_ANNOT_CALLER_OWNED YETTY_ANNOTATE("yetty:caller_owned")
+#define YETTY_ANNOT_CALLEE_OWNED YETTY_ANNOTATE("yetty:callee_owned")
 
 /* Nullability and strings */
-#define YETTY_ANNOT_NULLABLE       YETTY_ANNOTATE("yetty:nullable")
-#define YETTY_ANNOT_NONNULL        YETTY_ANNOTATE("yetty:nonnull")
-#define YETTY_ANNOT_CSTRING        YETTY_ANNOTATE("yetty:cstring")
+#define YETTY_ANNOT_NULLABLE YETTY_ANNOTATE("yetty:nullable")
+#define YETTY_ANNOT_NONNULL YETTY_ANNOTATE("yetty:nonnull")
+#define YETTY_ANNOT_CSTRING YETTY_ANNOTATE("yetty:cstring")
 
 /* Callback lifetime */
-#define YETTY_ANNOT_CB_CALL_ONLY   YETTY_ANNOTATE("yetty:cb_call_only")
-#define YETTY_ANNOT_CB_RETAINED    YETTY_ANNOTATE("yetty:cb_retained")
+#define YETTY_ANNOT_CB_CALL_ONLY YETTY_ANNOTATE("yetty:cb_call_only")
+#define YETTY_ANNOT_CB_RETAINED YETTY_ANNOTATE("yetty:cb_retained")
 
 #endif /* YETTY_YCORE_FFI_ANNOTATIONS_H */

@@ -78,8 +78,7 @@ void yetty_ycore_error_destroy(struct yetty_ycore_error err);
 
 #define YETTY_ERR_3(type, err_msg, prev_res)                                                       \
     ((struct type##_result){                                                                       \
-        .ok = 0,                                                                                   \
-        .error = {.msg = (err_msg), .cause = yetty_ycore_error_chain((prev_res).error)}})
+        .ok = 0, .error = {.msg = (err_msg), .cause = yetty_ycore_error_chain((prev_res).error)}})
 
 /* Check result */
 #define YETTY_IS_OK(res) ((res).ok)

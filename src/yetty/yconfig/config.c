@@ -52,8 +52,10 @@ static int g_subconfig_count = 0;
 static void config_destroy(struct yetty_yconfig_config *self);
 static const char *config_get_string(const struct yetty_yconfig_config *self, const char *path,
                                      const char *default_value);
-static int config_get_int(const struct yetty_yconfig_config *self, const char *path, int default_value);
-static int config_get_bool(const struct yetty_yconfig_config *self, const char *path, int default_value);
+static int config_get_int(const struct yetty_yconfig_config *self, const char *path,
+                          int default_value);
+static int config_get_bool(const struct yetty_yconfig_config *self, const char *path,
+                           int default_value);
 static int config_has(const struct yetty_yconfig_config *self, const char *path);
 static struct yetty_ycore_void_result config_set_string(struct yetty_yconfig_config *self,
                                                         const char *path, const char *value);
@@ -63,7 +65,8 @@ static int config_debug_damage_rects(const struct yetty_yconfig_config *self);
 static uint32_t config_scrollback_lines(const struct yetty_yconfig_config *self);
 static const char *config_font_family(const struct yetty_yconfig_config *self);
 
-static struct yetty_yconfig_config *config_get_node(const struct yetty_yconfig_config *self, const char *path);
+static struct yetty_yconfig_config *config_get_node(const struct yetty_yconfig_config *self,
+                                                    const char *path);
 static struct yetty_ycore_void_result config_get_shell_argv(const struct yetty_yconfig_config *self,
                                                             struct yetty_yconfig_shell_argv *out);
 
@@ -260,7 +263,8 @@ static void node_set_value(struct config_node *parent, const char *key, const ch
 
 static void load_yaml_mapping(struct yaml_parser_s *parser, struct config_node *node);
 
-static void load_yaml_value(struct yaml_parser_s *parser, struct config_node *parent, const char *key)
+static void load_yaml_value(struct yaml_parser_s *parser, struct config_node *parent,
+                            const char *key)
 {
     yaml_event_t event;
 
@@ -376,7 +380,8 @@ static const char *config_get_string(const struct yetty_yconfig_config *self, co
     return node->value;
 }
 
-static int config_get_int(const struct yetty_yconfig_config *self, const char *path, int default_value)
+static int config_get_int(const struct yetty_yconfig_config *self, const char *path,
+                          int default_value)
 {
     struct config_impl *impl = container_of(self, struct config_impl, base);
     char key[MAX_KEY_LEN] = {0};
@@ -394,7 +399,8 @@ static int config_get_int(const struct yetty_yconfig_config *self, const char *p
     return node->int_value;
 }
 
-static int config_get_bool(const struct yetty_yconfig_config *self, const char *path, int default_value)
+static int config_get_bool(const struct yetty_yconfig_config *self, const char *path,
+                           int default_value)
 {
     struct config_impl *impl = container_of(self, struct config_impl, base);
     char key[MAX_KEY_LEN] = {0};
@@ -494,7 +500,8 @@ static const char *subnode_get_string(const struct yetty_yconfig_config *self, c
     return node->value;
 }
 
-static int subnode_get_int(const struct yetty_yconfig_config *self, const char *path, int default_value)
+static int subnode_get_int(const struct yetty_yconfig_config *self, const char *path,
+                           int default_value)
 {
     struct config_subnode *sub = (struct config_subnode *)self;
     char key[MAX_KEY_LEN] = {0};
@@ -512,7 +519,8 @@ static int subnode_get_int(const struct yetty_yconfig_config *self, const char *
     return node->int_value;
 }
 
-static int subnode_get_bool(const struct yetty_yconfig_config *self, const char *path, int default_value)
+static int subnode_get_bool(const struct yetty_yconfig_config *self, const char *path,
+                            int default_value)
 {
     struct config_subnode *sub = (struct config_subnode *)self;
     char key[MAX_KEY_LEN] = {0};
@@ -552,7 +560,8 @@ static struct yetty_ycore_void_result subnode_set_string(struct yetty_yconfig_co
     return YETTY_ERR(yetty_ycore_void, "cannot set on subnode");
 }
 
-static struct yetty_yconfig_config *subnode_get_node(const struct yetty_yconfig_config *self, const char *path);
+static struct yetty_yconfig_config *subnode_get_node(const struct yetty_yconfig_config *self,
+                                                     const char *path);
 
 static const struct yetty_yconfig_config_ops subnode_ops = {
     .destroy = subnode_destroy,
@@ -582,7 +591,8 @@ static struct yetty_yconfig_config *create_subconfig(struct config_node *node)
     return &sub->base;
 }
 
-static struct yetty_yconfig_config *config_get_node(const struct yetty_yconfig_config *self, const char *path)
+static struct yetty_yconfig_config *config_get_node(const struct yetty_yconfig_config *self,
+                                                    const char *path)
 {
     struct config_impl *impl = container_of(self, struct config_impl, base);
     char key[MAX_KEY_LEN] = {0};
@@ -596,7 +606,8 @@ static struct yetty_yconfig_config *config_get_node(const struct yetty_yconfig_c
     return create_subconfig(node);
 }
 
-static struct yetty_yconfig_config *subnode_get_node(const struct yetty_yconfig_config *self, const char *path)
+static struct yetty_yconfig_config *subnode_get_node(const struct yetty_yconfig_config *self,
+                                                     const char *path)
 {
     struct config_subnode *sub = (struct config_subnode *)self;
     char key[MAX_KEY_LEN] = {0};
@@ -952,28 +963,42 @@ static void print_usage(const char *prog)
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "  -c, --config=FILE                  Load config from FILE\n");
     fprintf(stderr, "  -e, --execute=CMD                  Execute CMD in terminal\n");
-    fprintf(stderr, "      --yvnc-server                  Run yvnc server (mirror mode - window + yvnc)\n");
-    fprintf(stderr, "      --yvnc-headless                Run yvnc server (headless - no window)\n");
+    fprintf(stderr,
+            "      --yvnc-server                  Run yvnc server (mirror mode - window + yvnc)\n");
+    fprintf(stderr,
+            "      --yvnc-headless                Run yvnc server (headless - no window)\n");
     fprintf(stderr, "      --yvnc-port=PORT               yvnc server port (default: 5900)\n");
     fprintf(stderr, "      --yvnc-client=HOST[:PORT]      Connect as yvnc client to HOST\n");
     fprintf(stderr, "      --yvnc-raw                     Disable JPEG, send raw BGRA tiles\n");
     fprintf(stderr, "      --yvnc-compression-quality Q   JPEG quality 1-100 (default: 80)\n");
-    fprintf(stderr, "      --yvnc-always-full             Disable delta, send full frame every time\n");
-    fprintf(stderr, "      --yvnc-use-h264                Use H.264 encoder instead of JPEG (requires openh264)\n");
-    fprintf(stderr, "      --yvnc-merge-rects             Merge adjacent dirty tiles into bigger rectangles\n");
-    fprintf(stderr, "      --yvnc-h264-bitrate BPS        H.264 target bitrate in bps (default: auto-scales with resolution)\n");
+    fprintf(stderr,
+            "      --yvnc-always-full             Disable delta, send full frame every time\n");
+    fprintf(stderr, "      --yvnc-use-h264                Use H.264 encoder instead of JPEG "
+                    "(requires openh264)\n");
+    fprintf(
+        stderr,
+        "      --yvnc-merge-rects             Merge adjacent dirty tiles into bigger rectangles\n");
+    fprintf(stderr, "      --yvnc-h264-bitrate BPS        H.264 target bitrate in bps (default: "
+                    "auto-scales with resolution)\n");
     fprintf(stderr, "      --yvnc-h264-framerate FPS      H.264 encode framerate (default: 30)\n");
-    fprintf(stderr, "      --yvnc-h264-idr-interval N     Frames between H.264 keyframes (default: 60 — 2s at 30 fps)\n");
-    fprintf(stderr, "      --yvnc-h264-screen-content 0|1 H.264 screen-content optimisation (default: 1)\n");
+    fprintf(stderr, "      --yvnc-h264-idr-interval N     Frames between H.264 keyframes (default: "
+                    "60 — 2s at 30 fps)\n");
+    fprintf(
+        stderr,
+        "      --yvnc-h264-screen-content 0|1 H.264 screen-content optimisation (default: 1)\n");
     fprintf(stderr, "      --ydvnc-client=HOST[:PORT]     Connect as RFB (RFC 6143) client\n");
-    fprintf(stderr, "      --ydvnc-password=PASSWORD      VNC password for --ydvnc-client (or env YDVNC_PASSWORD)\n");
-    fprintf(stderr, "      --record=FILE                  Record session to MP4 (forces H.264 encoding)\n");
+    fprintf(stderr, "      --ydvnc-password=PASSWORD      VNC password for --ydvnc-client (or env "
+                    "YDVNC_PASSWORD)\n");
+    fprintf(stderr,
+            "      --record=FILE                  Record session to MP4 (forces H.264 encoding)\n");
     fprintf(stderr, "      --rpc-host=HOST                RPC server host\n");
     fprintf(stderr, "  -r, --rpc-port=PORT                RPC server port\n");
     fprintf(stderr, "      --temu                         Run in-process TinyEMU RISC-V VM\n");
-    fprintf(stderr, "      --qemu                         Run external QEMU RISC-V VM (via telnet)\n");
+    fprintf(stderr,
+            "      --qemu                         Run external QEMU RISC-V VM (via telnet)\n");
     fprintf(stderr, "      --ssh [USER@HOST[:PORT]]       Connect to SSH remote shell\n");
-    fprintf(stderr, "      --telnet [[HOST]:PORT]         Connect to a telnet server (default host 127.0.0.1)\n");
+    fprintf(stderr, "      --telnet [[HOST]:PORT]         Connect to a telnet server (default host "
+                    "127.0.0.1)\n");
     fprintf(stderr, "  -h, --help                         Show this help\n");
 }
 
@@ -1085,9 +1110,7 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
                 }
             }
             if (arg && !parse_telnet_target(impl, arg)) {
-                fprintf(stderr,
-                        "yetty: --telnet expects [HOST]:PORT or PORT (got '%s')\n",
-                        arg);
+                fprintf(stderr, "yetty: --telnet expects [HOST]:PORT or PORT (got '%s')\n", arg);
                 exit(1);
             }
             set_config(impl, YETTY_YCONFIG_KEY_TELNET, "true");

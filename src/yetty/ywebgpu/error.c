@@ -18,8 +18,8 @@ int yetty_ywebgpu_error_check(void)
 }
 
 void yetty_ywebgpu_uncaptured_error_callback(WGPUDevice const *device, WGPUErrorType type,
-                                            WGPUStringView message, void *userdata1,
-                                            void *userdata2)
+                                             WGPUStringView message, void *userdata1,
+                                             void *userdata2)
 {
     (void)device;
     (void)userdata1;

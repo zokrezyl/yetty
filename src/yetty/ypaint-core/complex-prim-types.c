@@ -52,7 +52,8 @@ static const struct yetty_ypaint_core_prim_base_ops g_complex_prim_base_ops = {
     .aabb = complex_prim_aabb_wrapper,
 };
 
-struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_complex_prim_handler(uint32_t prim_type)
+struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ypaint_core_complex_prim_handler(
+    uint32_t prim_type)
 {
     if (yetty_ypaint_core_is_complex_type(prim_type)) {
         return YETTY_OK(yetty_ypaint_core_prim_base_ops_ptr, &g_complex_prim_base_ops);
@@ -99,9 +100,10 @@ struct rectangle_result yetty_ypaint_core_complex_prim_aabb(const void *data)
 // Abstract factory lifecycle
 //=============================================================================
 
-struct yetty_ypaint_core_complex_prim_factory_ptr_result yetty_ypaint_core_complex_prim_factory_create(
-    WGPUDevice device, WGPUQueue queue, WGPUTextureFormat target_format,
-    struct yetty_ypaint_core_gpu_allocator *allocator)
+struct yetty_ypaint_core_complex_prim_factory_ptr_result
+yetty_ypaint_core_complex_prim_factory_create(WGPUDevice device, WGPUQueue queue,
+                                              WGPUTextureFormat target_format,
+                                              struct yetty_ypaint_core_gpu_allocator *allocator)
 {
     struct yetty_ypaint_core_complex_prim_factory *factory =
         calloc(1, sizeof(struct yetty_ypaint_core_complex_prim_factory));
@@ -117,7 +119,8 @@ struct yetty_ypaint_core_complex_prim_factory_ptr_result yetty_ypaint_core_compl
     return YETTY_OK(yetty_ypaint_core_complex_prim_factory_ptr, factory);
 }
 
-void yetty_ypaint_core_complex_prim_factory_destroy(struct yetty_ypaint_core_complex_prim_factory *factory)
+void yetty_ypaint_core_complex_prim_factory_destroy(
+    struct yetty_ypaint_core_complex_prim_factory *factory)
 {
     if (!factory) {
         return;
@@ -191,9 +194,9 @@ struct yetty_ypaint_core_concrete_factory *yetty_ypaint_core_complex_prim_factor
 //=============================================================================
 
 struct yetty_ypaint_core_complex_prim_instance_ptr_result
-yetty_ypaint_core_complex_prim_factory_create_instance(struct yetty_ypaint_core_complex_prim_factory *factory,
-                                                  const void *buffer_data, size_t size,
-                                                  uint32_t rolling_row)
+yetty_ypaint_core_complex_prim_factory_create_instance(
+    struct yetty_ypaint_core_complex_prim_factory *factory, const void *buffer_data, size_t size,
+    uint32_t rolling_row)
 {
     if (!factory) {
         return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "factory is NULL");
@@ -224,7 +227,8 @@ yetty_ypaint_core_complex_prim_factory_create_instance(struct yetty_ypaint_core_
 //=============================================================================
 
 void yetty_ypaint_core_complex_prim_factory_set_visual_zoom(
-    struct yetty_ypaint_core_complex_prim_factory *factory, float scale, float offset_x, float offset_y)
+    struct yetty_ypaint_core_complex_prim_factory *factory, float scale, float offset_x,
+    float offset_y)
 {
     if (!factory) {
         return;
@@ -238,7 +242,8 @@ void yetty_ypaint_core_complex_prim_factory_set_visual_zoom(
 }
 
 void yetty_ypaint_core_complex_prim_factory_set_cell_zoom(
-    struct yetty_ypaint_core_complex_prim_factory *factory, float scale, float offset_x, float offset_y)
+    struct yetty_ypaint_core_complex_prim_factory *factory, float scale, float offset_x,
+    float offset_y)
 {
     if (!factory) {
         ydebug("complex_prim_factory_set_cell_zoom: factory is NULL");
@@ -263,7 +268,8 @@ void yetty_ypaint_core_complex_prim_factory_set_cell_zoom(
 // Instance destruction (uses back-pointer)
 //=============================================================================
 
-void yetty_ypaint_core_complex_prim_instance_destroy(struct yetty_ypaint_core_complex_prim_instance *instance)
+void yetty_ypaint_core_complex_prim_instance_destroy(
+    struct yetty_ypaint_core_complex_prim_instance *instance)
 {
     if (!instance) {
         return;

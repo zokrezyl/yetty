@@ -46,34 +46,33 @@ struct yetty_ylexbor;
 YETTY_YRESULT_DECLARE(yetty_ylexbor_ptr, struct yetty_ylexbor *);
 
 struct yetty_ylexbor_config {
-	int viewport_width;   /* px */
-	int viewport_height;  /* px (unused by current layout — content height is computed) */
-	float default_font_size;  /* px; falls back to 16 if 0 */
+    int viewport_width;      /* px */
+    int viewport_height;     /* px (unused by current layout — content height is computed) */
+    float default_font_size; /* px; falls back to 16 if 0 */
 };
 
-struct yetty_ylexbor_ptr_result yetty_ylexbor_create(
-	const struct yetty_ylexbor_config *cfg);
+struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_config *cfg);
 struct yetty_ycore_void_result yetty_ylexbor_destroy(struct yetty_ylexbor *r);
 
 /* Set / replace the document. UTF-8 HTML; safe to call repeatedly to
  * replace previous content. */
-struct yetty_ycore_void_result yetty_ylexbor_load_html(
-	struct yetty_ylexbor *r, const char *html, size_t html_len);
+struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, const char *html,
+                                                       size_t html_len);
 
 /* Append additional CSS that takes precedence over the document's own
  * <style>/<link> rules (origin = author). Handy for injecting a
  * theme. */
-struct yetty_ycore_void_result yetty_ylexbor_add_css(
-	struct yetty_ylexbor *r, const char *css, size_t css_len);
+struct yetty_ycore_void_result yetty_ylexbor_add_css(struct yetty_ylexbor *r, const char *css,
+                                                     size_t css_len);
 
 /* Resize the viewport — invalidates the layout. */
-struct yetty_ycore_void_result yetty_ylexbor_set_viewport(
-	struct yetty_ylexbor *r, int width, int height);
+struct yetty_ycore_void_result yetty_ylexbor_set_viewport(struct yetty_ylexbor *r, int width,
+                                                          int height);
 
 /* Drain the laid-out document into a ypaint buffer. Caller owns buf;
  * this function appends primitives. */
-struct yetty_ycore_void_result yetty_ylexbor_render(
-	struct yetty_ylexbor *r, struct yetty_ypaint_core_buffer *buf);
+struct yetty_ycore_void_result yetty_ylexbor_render(struct yetty_ylexbor *r,
+                                                    struct yetty_ypaint_core_buffer *buf);
 
 /* Total content height after layout, in px. Useful for scrollbars. */
 int yetty_ylexbor_content_height(const struct yetty_ylexbor *r);
@@ -95,8 +94,7 @@ struct yetty_ycore_void_result yetty_ylexbor_relayout(struct yetty_ylexbor *r);
 /* Set the base URL the loaded document was fetched from. Used to
  * resolve relative src= on external <script> and fetch() calls.
  * Optional — if not set, only absolute URLs work. */
-struct yetty_ycore_void_result yetty_ylexbor_set_base_url(
-	struct yetty_ylexbor *r, const char *url);
+struct yetty_ycore_void_result yetty_ylexbor_set_base_url(struct yetty_ylexbor *r, const char *url);
 
 /* Run any pending timers whose deadline has elapsed and drain Promise
  * microtasks. Returns milliseconds until the next timer fires (-1 if

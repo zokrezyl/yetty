@@ -51,8 +51,8 @@
  *===========================================================================*/
 
 struct yetty_ypdf_font_info {
-    char tag[64];                     /* e.g. "/F1" or "F1" */
-    int buffer_font_id;               /* yetty_ypaint_core_buffer font index */
+    char tag[64];                       /* e.g. "/F1" or "F1" */
+    int buffer_font_id;                 /* yetty_ypaint_core_buffer font index */
     struct yetty_ypaint_font *raw_font; /* non-atlas metrics source */
     bool is_identity_h;
     struct yetty_ycore_map to_unicode; /* CID → Unicode */
@@ -336,8 +336,7 @@ static uint16_t read_u16_be(const uint8_t *p)
 
 static uint32_t read_u32_be(const uint8_t *p)
 {
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) |
-           (uint32_t)p[3];
+    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | (uint32_t)p[3];
 }
 
 static void write_u16_be(uint8_t *p, uint16_t v)
@@ -419,34 +418,62 @@ static uint32_t winansi_to_unicode(uint8_t b)
     /* Sparse exceptions: 0x80-0x9F + a few high-range gaps. Anything not
      * listed falls through to direct (b). */
     switch (b) {
-    case 0x80: return 0x20AC; /* Euro */
-    case 0x82: return 0x201A; /* single low-9 quote */
-    case 0x83: return 0x0192; /* florin */
-    case 0x84: return 0x201E; /* double low-9 quote */
-    case 0x85: return 0x2026; /* ellipsis */
-    case 0x86: return 0x2020; /* dagger */
-    case 0x87: return 0x2021; /* double dagger */
-    case 0x88: return 0x02C6; /* circumflex */
-    case 0x89: return 0x2030; /* per mille */
-    case 0x8A: return 0x0160; /* S caron */
-    case 0x8B: return 0x2039; /* single left guillemet */
-    case 0x8C: return 0x0152; /* OE ligature */
-    case 0x8E: return 0x017D; /* Z caron */
-    case 0x91: return 0x2018; /* left single quote */
-    case 0x92: return 0x2019; /* right single quote */
-    case 0x93: return 0x201C; /* left double quote */
-    case 0x94: return 0x201D; /* right double quote */
-    case 0x95: return 0x2022; /* bullet */
-    case 0x96: return 0x2013; /* en dash */
-    case 0x97: return 0x2014; /* em dash */
-    case 0x98: return 0x02DC; /* small tilde */
-    case 0x99: return 0x2122; /* trademark */
-    case 0x9A: return 0x0161; /* s caron */
-    case 0x9B: return 0x203A; /* single right guillemet */
-    case 0x9C: return 0x0153; /* oe ligature */
-    case 0x9E: return 0x017E; /* z caron */
-    case 0x9F: return 0x0178; /* Y diaeresis */
-    default:   return b;       /* 0xA0-0xFF mostly Latin-1 direct-map */
+    case 0x80:
+        return 0x20AC; /* Euro */
+    case 0x82:
+        return 0x201A; /* single low-9 quote */
+    case 0x83:
+        return 0x0192; /* florin */
+    case 0x84:
+        return 0x201E; /* double low-9 quote */
+    case 0x85:
+        return 0x2026; /* ellipsis */
+    case 0x86:
+        return 0x2020; /* dagger */
+    case 0x87:
+        return 0x2021; /* double dagger */
+    case 0x88:
+        return 0x02C6; /* circumflex */
+    case 0x89:
+        return 0x2030; /* per mille */
+    case 0x8A:
+        return 0x0160; /* S caron */
+    case 0x8B:
+        return 0x2039; /* single left guillemet */
+    case 0x8C:
+        return 0x0152; /* OE ligature */
+    case 0x8E:
+        return 0x017D; /* Z caron */
+    case 0x91:
+        return 0x2018; /* left single quote */
+    case 0x92:
+        return 0x2019; /* right single quote */
+    case 0x93:
+        return 0x201C; /* left double quote */
+    case 0x94:
+        return 0x201D; /* right double quote */
+    case 0x95:
+        return 0x2022; /* bullet */
+    case 0x96:
+        return 0x2013; /* en dash */
+    case 0x97:
+        return 0x2014; /* em dash */
+    case 0x98:
+        return 0x02DC; /* small tilde */
+    case 0x99:
+        return 0x2122; /* trademark */
+    case 0x9A:
+        return 0x0161; /* s caron */
+    case 0x9B:
+        return 0x203A; /* single right guillemet */
+    case 0x9C:
+        return 0x0153; /* oe ligature */
+    case 0x9E:
+        return 0x017E; /* z caron */
+    case 0x9F:
+        return 0x0178; /* Y diaeresis */
+    default:
+        return b; /* 0xA0-0xFF mostly Latin-1 direct-map */
     }
 }
 
@@ -648,8 +675,7 @@ static void patch_ttf_with_pdf_widths(uint8_t *ttf_data, size_t ttf_size,
     if (cid_font_dict) {
         patch_cid_widths(ttf_data, hmtx_off, patch_limit, units_per_em, cid_font_dict);
     } else {
-        patch_simple_widths(ttf_data, ttf_size, hmtx_off, patch_limit, units_per_em,
-                            font_obj_dict);
+        patch_simple_widths(ttf_data, ttf_size, hmtx_off, patch_limit, units_per_em, font_obj_dict);
     }
 }
 
@@ -911,16 +937,17 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
                     if (substituted_bytes) {
                         is_truetype = true;
                         ydebug("ypdf: substituting system font for '%s' from %s "
-                               "(%zu bytes)", base_font, path, substituted_sz);
+                               "(%zu bytes)",
+                               base_font, path, substituted_sz);
                     } else {
-                        ywarn("ypdf: fontconfig found '%s' at %s but read failed",
-                              base_font, path);
+                        ywarn("ypdf: fontconfig found '%s' at %s but read failed", base_font, path);
                     }
                     free(path);
                 } else {
                     ywarn("ypdf: no FontFile and fontconfig miss for '%s' — "
                           "spans using this font will fall back to default and "
-                          "may overlap (no measure_text)", base_font);
+                          "may overlap (no measure_text)",
+                          base_font);
                 }
             }
         }
@@ -1085,8 +1112,8 @@ static struct float_result text_emit_cb(void *ud, const char *text, size_t text_
     float emit_word_spacing = state->word_spacing * effective_size * h_scale_for_emit;
     (void)yetty_ypaint_core_buffer_add_text_full(
         c->buffer, sx, sy, &tb, effective_size, color, 0, font_id,
-        (fabsf(rotation_radians) > 0.001f) ? -rotation_radians : 0.0f,
-        emit_char_spacing, emit_word_spacing);
+        (fabsf(rotation_radians) > 0.001f) ? -rotation_radians : 0.0f, emit_char_spacing,
+        emit_word_spacing);
 
     /* Measure advance at the PDF text-state font size (Tfs), which matches
      * the units of the text matrix. See PDF spec 9.4.4. */
@@ -1292,7 +1319,8 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf)
             extract_page_fonts(page_obj, buffer, fonts, &font_count);
         (void)fr; /* per-font failures already logged inside */
 
-        struct yetty_ypdf_content_parser_ptr_result pr = yetty_ypdf_content_parser_callbacks_content_parser_create(&cb);
+        struct yetty_ypdf_content_parser_ptr_result pr =
+            yetty_ypdf_content_parser_callbacks_content_parser_create(&cb);
         if (YETTY_IS_ERR(pr)) {
             yetty_ypaint_core_buffer_destroy(buffer);
             return YETTY_ERR(yetty_ypdf_render, pr.error.msg);

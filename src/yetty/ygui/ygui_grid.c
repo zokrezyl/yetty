@@ -56,8 +56,8 @@ static void cell_add(ygui_grid_cell_t *cell, struct yetty_ygui_widget *widget)
 {
     if (cell->count >= cell->capacity) {
         int new_cap = cell->capacity == 0 ? 4 : cell->capacity * 2;
-        struct yetty_ygui_widget **new_arr =
-            (struct yetty_ygui_widget **)realloc(cell->widgets, new_cap * sizeof(struct yetty_ygui_widget *));
+        struct yetty_ygui_widget **new_arr = (struct yetty_ygui_widget **)realloc(
+            cell->widgets, new_cap * sizeof(struct yetty_ygui_widget *));
         if (!new_arr) {
             return;
         }
@@ -163,7 +163,8 @@ void yetty_ygui_grid_insert(ygui_spatial_grid_t *grid, struct yetty_ygui_widget 
     }
 
     /* Recursively insert children */
-    for (struct yetty_ygui_widget *child = widget->first_child; child; child = child->next_sibling) {
+    for (struct yetty_ygui_widget *child = widget->first_child; child;
+         child = child->next_sibling) {
         if (child->was_rendered) {
             yetty_ygui_grid_insert(grid, child);
         }
@@ -199,7 +200,8 @@ void yetty_ygui_grid_remove(ygui_spatial_grid_t *grid, struct yetty_ygui_widget 
     }
 
     /* Recursively remove children */
-    for (struct yetty_ygui_widget *child = widget->first_child; child; child = child->next_sibling) {
+    for (struct yetty_ygui_widget *child = widget->first_child; child;
+         child = child->next_sibling) {
         yetty_ygui_grid_remove(grid, child);
     }
 }

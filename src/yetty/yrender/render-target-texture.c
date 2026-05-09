@@ -76,7 +76,8 @@ struct yetty_yrender_render_target_texture {
 
 static void render_target_texture_destroy(struct yetty_ypaint_core_target *self)
 {
-    struct yetty_yrender_render_target_texture *rt = (struct yetty_yrender_render_target_texture *)self;
+    struct yetty_yrender_render_target_texture *rt =
+        (struct yetty_yrender_render_target_texture *)self;
 
     if (rt->view) {
         wgpuTextureViewRelease(rt->view);
@@ -92,8 +93,7 @@ static void render_target_texture_destroy(struct yetty_ypaint_core_target *self)
         rt->texture = NULL;
     }
     {
-        struct layer_binder_entry *entries =
-            (struct layer_binder_entry *)rt->layer_binders.data;
+        struct layer_binder_entry *entries = (struct layer_binder_entry *)rt->layer_binders.data;
         size_t count = rt->layer_binders.size / sizeof(struct layer_binder_entry);
         for (size_t i = 0; i < count; i++) {
             if (entries[i].binder) {
@@ -141,9 +141,11 @@ static void render_target_texture_destroy(struct yetty_ypaint_core_target *self)
  * Clear
  *===========================================================================*/
 
-static struct yetty_ycore_void_result render_target_texture_clear(struct yetty_ypaint_core_target *self)
+static struct yetty_ycore_void_result render_target_texture_clear(
+    struct yetty_ypaint_core_target *self)
 {
-    struct yetty_yrender_render_target_texture *rt = (struct yetty_yrender_render_target_texture *)self;
+    struct yetty_yrender_render_target_texture *rt =
+        (struct yetty_yrender_render_target_texture *)self;
 
     WGPUCommandEncoderDescriptor enc_desc = {0};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(rt->device, &enc_desc);
@@ -187,7 +189,8 @@ static struct yetty_ycore_void_result render_target_texture_clear(struct yetty_y
 static struct yetty_ycore_void_result render_target_texture_resize(
     struct yetty_ypaint_core_target *self, struct yetty_yrender_viewport viewport)
 {
-    struct yetty_yrender_render_target_texture *rt = (struct yetty_yrender_render_target_texture *)self;
+    struct yetty_yrender_render_target_texture *rt =
+        (struct yetty_yrender_render_target_texture *)self;
     uint32_t width = (uint32_t)viewport.w;
     uint32_t height = (uint32_t)viewport.h;
 
@@ -263,13 +266,15 @@ static struct yetty_ycore_void_result render_target_texture_resize(
 
 static WGPUTextureView render_target_texture_get_view(const struct yetty_ypaint_core_target *self)
 {
-    const struct yetty_yrender_render_target_texture *rt = (const struct yetty_yrender_render_target_texture *)self;
+    const struct yetty_yrender_render_target_texture *rt =
+        (const struct yetty_yrender_render_target_texture *)self;
     return rt->view;
 }
 
 static WGPUTexture render_target_texture_get_texture(const struct yetty_ypaint_core_target *self)
 {
-    const struct yetty_yrender_render_target_texture *rt = (const struct yetty_yrender_render_target_texture *)self;
+    const struct yetty_yrender_render_target_texture *rt =
+        (const struct yetty_yrender_render_target_texture *)self;
     return rt->texture;
 }
 
@@ -280,7 +285,8 @@ static WGPUTexture render_target_texture_get_texture(const struct yetty_ypaint_c
 static struct yetty_ycore_void_result render_target_texture_render_layer(
     struct yetty_ypaint_core_target *self, struct yetty_yrender_terminal_layer *layer)
 {
-    struct yetty_yrender_render_target_texture *rt = (struct yetty_yrender_render_target_texture *)self;
+    struct yetty_yrender_render_target_texture *rt =
+        (struct yetty_yrender_render_target_texture *)self;
 
     /* No per-layer dirty early-out here.
      *
@@ -313,8 +319,7 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
      * into the same target each have their own resource-tree shader, and
      * merging trees would redeclare common functions (e.g. median3). */
     struct yetty_yrender_gpu_resource_binder *binder = NULL;
-    struct layer_binder_entry *entries =
-        (struct layer_binder_entry *)rt->layer_binders.data;
+    struct layer_binder_entry *entries = (struct layer_binder_entry *)rt->layer_binders.data;
     size_t entry_count = rt->layer_binders.size / sizeof(struct layer_binder_entry);
     for (size_t i = 0; i < entry_count; i++) {
         if (entries[i].layer == layer) {
@@ -337,8 +342,7 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
             return YETTY_ERR(yetty_ycore_void, "render_layer: layer_binders grow failed", wr);
         }
         binder = binder_res.value;
-        ydebug("render_target_texture: created binder for layer=%p (count=%zu)",
-               (void *)layer,
+        ydebug("render_target_texture: created binder for layer=%p (count=%zu)", (void *)layer,
                rt->layer_binders.size / sizeof(struct layer_binder_entry));
     }
 
@@ -409,8 +413,8 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
          * bounds into self->viewport before calling our render_layer. */
         struct yetty_yrender_viewport vp = self->viewport;
         wgpuRenderPassEncoderSetViewport(pass, vp.x, vp.y, vp.w, vp.h, 0.0f, 1.0f);
-        wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)vp.x, (uint32_t)vp.y,
-                                            (uint32_t)vp.w, (uint32_t)vp.h);
+        wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)vp.x, (uint32_t)vp.y, (uint32_t)vp.w,
+                                            (uint32_t)vp.h);
 
         wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
     }
@@ -439,7 +443,8 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
  * blend - blend multiple source targets into this target
  *===========================================================================*/
 
-static struct yetty_ycore_void_result create_blend_pipeline(struct yetty_yrender_render_target_texture *rt)
+static struct yetty_ycore_void_result create_blend_pipeline(
+    struct yetty_yrender_render_target_texture *rt)
 {
     /* Shader module */
     WGPUShaderSourceWGSL wgsl_src = {0};
@@ -587,7 +592,8 @@ static struct yetty_ycore_void_result create_blend_pipeline(struct yetty_yrender
 static struct yetty_ycore_void_result render_target_texture_blend(
     struct yetty_ypaint_core_target *self, struct yetty_ypaint_core_target **sources, size_t count)
 {
-    struct yetty_yrender_render_target_texture *rt = (struct yetty_yrender_render_target_texture *)self;
+    struct yetty_yrender_render_target_texture *rt =
+        (struct yetty_yrender_render_target_texture *)self;
 
     if (count == 0) {
         return YETTY_OK_VOID();
@@ -720,7 +726,8 @@ static struct yetty_ycore_void_result render_target_texture_blend(
 static struct yetty_ycore_void_result render_target_texture_present(
     struct yetty_ypaint_core_target *self)
 {
-    struct yetty_yrender_render_target_texture *rt = (struct yetty_yrender_render_target_texture *)self;
+    struct yetty_yrender_render_target_texture *rt =
+        (struct yetty_yrender_render_target_texture *)self;
 
     if (!rt->surface) {
         return YETTY_ERR(yetty_ycore_void, "no surface configured for present");
@@ -869,7 +876,8 @@ static struct yetty_ycore_void_result render_target_texture_present(
 static struct yetty_ycore_void_result render_target_texture_set_visual_zoom(
     struct yetty_ypaint_core_target *self, float scale, float offset_x, float offset_y)
 {
-    struct yetty_yrender_render_target_texture *rt = (struct yetty_yrender_render_target_texture *)self;
+    struct yetty_yrender_render_target_texture *rt =
+        (struct yetty_yrender_render_target_texture *)self;
     if (!(scale > 0.0f)) {
         scale = 1.0f;
     }

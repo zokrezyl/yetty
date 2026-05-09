@@ -45,7 +45,7 @@ struct yetty_yplatform_ywgpu_await_state {
 };
 
 struct yplatform_wgpu_ptr_result yetty_yplatform_wgpu_create(WGPUInstance instance,
-                                                       struct yetty_yevent_event_loop *loop)
+                                                             struct yetty_yevent_event_loop *loop)
 {
     if (!instance) {
         return YETTY_ERR(yplatform_wgpu_ptr, "instance is NULL");
@@ -82,9 +82,9 @@ static void map_callback(WGPUMapAsyncStatus status, WGPUStringView msg, void *us
     st->done = 1;
 }
 
-struct yetty_ycore_void_result yetty_yplatform_wgpu_buffer_map_await(struct yetty_yplatform_wgpu *wgpu,
-                                                               WGPUBuffer buffer, WGPUMapMode mode,
-                                                               size_t offset, size_t size)
+struct yetty_ycore_void_result yetty_yplatform_wgpu_buffer_map_await(
+    struct yetty_yplatform_wgpu *wgpu, WGPUBuffer buffer, WGPUMapMode mode, size_t offset,
+    size_t size)
 {
     if (!wgpu) {
         return YETTY_ERR(yetty_ycore_void, "wgpu is NULL");
@@ -124,8 +124,8 @@ static void queue_done_callback(WGPUQueueWorkDoneStatus status, WGPUStringView m
     st->done = 1;
 }
 
-struct yetty_ycore_void_result yetty_yplatform_wgpu_queue_done_await(struct yetty_yplatform_wgpu *wgpu,
-                                                               WGPUQueue queue)
+struct yetty_ycore_void_result yetty_yplatform_wgpu_queue_done_await(
+    struct yetty_yplatform_wgpu *wgpu, WGPUQueue queue)
 {
     if (!wgpu) {
         return YETTY_ERR(yetty_ycore_void, "wgpu is NULL");

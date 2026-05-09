@@ -65,7 +65,8 @@ void yetty_yvideo_decoder_reset(struct yetty_yvideo_decoder *dec);
  * Convert a YUV420 frame to BGRA8. Output buffer must hold `width*height*4`
  * bytes; its stride equals `width*4`. Picks coefficients from frame->color_matrix.
  */
-void yetty_yvideo_yuv_frame_yuv420_to_bgra(const struct yetty_yvideo_yuv_frame *frame, uint8_t *bgra_out);
+void yetty_yvideo_yuv_frame_yuv420_to_bgra(const struct yetty_yvideo_yuv_frame *frame,
+                                           uint8_t *bgra_out);
 
 #ifdef __cplusplus
 }
