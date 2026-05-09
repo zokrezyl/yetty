@@ -452,7 +452,7 @@ int main(int argc, char **argv)
     struct yetty_yconfig_config *config;
     struct yetty_yplatform_input_pipe_result pipe_result;
     struct yetty_ycore_xthread_event_pipe *pipe;
-    struct yetty_yplatform_pty_factory_result pty_factory_result;
+    struct yetty_yplatform_pty_factory_ptr_result pty_factory_result;
     struct yetty_yplatform_pty_factory *pty_factory;
     WGPUInstance instance;
     WGPUSurface surface;

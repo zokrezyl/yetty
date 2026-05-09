@@ -202,7 +202,7 @@ static struct yetty_platform_pty_pipe_source *fork_pty_pipe_source(struct yetty_
 
 /* Create fork PTY with shell */
 
-struct yetty_yplatform_pty_result yetty_yplatform_fork_pty_create(
+struct yetty_yplatform_pty_ptr_result yetty_yplatform_fork_pty_create(
     struct yetty_yconfig_config *config)
 {
     struct yetty_yplatform_fork_pty *pty;
@@ -213,7 +213,7 @@ struct yetty_yplatform_pty_result yetty_yplatform_fork_pty_create(
 
     pty = malloc(sizeof(struct yetty_yplatform_fork_pty));
     if (!pty) {
-        return YETTY_ERR(yetty_yplatform_pty, "failed to allocate pty");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to allocate pty");
     }
 
     pty->base.ops = &fork_pty_ops;
@@ -227,7 +227,7 @@ struct yetty_yplatform_pty_result yetty_yplatform_fork_pty_create(
     argv_res = config->ops->get_shell_argv(config, &shellv);
     if (!YETTY_IS_OK(argv_res)) {
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "failed to resolve shell argv");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to resolve shell argv");
     }
 
     ws.ws_row = (unsigned short)pty->rows;
@@ -239,7 +239,7 @@ struct yetty_yplatform_pty_result yetty_yplatform_fork_pty_create(
 
     if (pty->child_pid < 0) {
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "forkpty failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "forkpty failed");
     }
 
     if (pty->child_pid == 0) {
@@ -260,5 +260,5 @@ struct yetty_yplatform_pty_result yetty_yplatform_fork_pty_create(
     pty->pipe_source.abstract = pty->pty_master;
     pty->running = 1;
 
-    return YETTY_OK(yetty_yplatform_pty, &pty->base);
+    return YETTY_OK(yetty_yplatform_pty_ptr, &pty->base);
 }

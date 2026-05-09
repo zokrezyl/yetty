@@ -270,7 +270,7 @@ __attribute__((constructor)) static void iframe_pty_install_message_listener(voi
 
 /* Pty creation */
 
-struct yetty_yplatform_pty_result yetty_yplatform_iframe_pty_create(
+struct yetty_yplatform_pty_ptr_result yetty_yplatform_iframe_pty_create(
     struct yetty_yconfig_config *config)
 {
     struct yetty_yplatform_iframe_pty *pty;
@@ -278,12 +278,12 @@ struct yetty_yplatform_pty_result yetty_yplatform_iframe_pty_create(
     (void)config;
 
     if (g_iframe_pty) {
-        return YETTY_ERR(yetty_yplatform_pty, "iframe pty already created (singleton)");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "iframe pty already created (singleton)");
     }
 
     pty = calloc(1, sizeof(*pty));
     if (!pty) {
-        return YETTY_ERR(yetty_yplatform_pty, "failed to allocate iframe pty");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to allocate iframe pty");
     }
 
     pty->base.ops = &iframe_pty_ops;
@@ -296,7 +296,7 @@ struct yetty_yplatform_pty_result yetty_yplatform_iframe_pty_create(
 
     if (pipe(pty->vm_output_pipe) < 0) {
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "failed to create vm_output_pipe");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to create vm_output_pipe");
     }
     fcntl(pty->vm_output_pipe[0], F_SETFL, O_NONBLOCK);
     fcntl(pty->vm_output_pipe[1], F_SETFL, O_NONBLOCK);
@@ -384,7 +384,7 @@ struct yetty_yplatform_pty_result yetty_yplatform_iframe_pty_create(
         pty->pty_id, (int)pty->cols, (int)pty->rows);
 
     yinfo("iframe_pty: created pty_id=%u", pty->pty_id);
-    return YETTY_OK(yetty_yplatform_pty, &pty->base);
+    return YETTY_OK(yetty_yplatform_pty_ptr, &pty->base);
 }
 
 /* The yetty_yplatform_pty_factory_create symbol is now owned by

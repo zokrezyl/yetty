@@ -55,7 +55,7 @@ static void factory_destroy(struct yetty_yplatform_pty_factory *self)
     free(f);
 }
 
-static struct yetty_yplatform_pty_result factory_create_pty(
+static struct yetty_yplatform_pty_ptr_result factory_create_pty(
     struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop)
 {
     struct webasm_telnet_factory *f = (struct webasm_telnet_factory *)self;
@@ -72,7 +72,7 @@ static struct yetty_yplatform_pty_result factory_create_pty(
     struct yetty_ytransport_conn_transport *transport =
         yetty_yplatform_iframe_transport_create(YETTY_VM_TELNET_PORT);
     if (!transport) {
-        return YETTY_ERR(yetty_yplatform_pty,
+        return YETTY_ERR(yetty_yplatform_pty_ptr,
                          "telnet-iframe factory: iframe_transport_create failed");
     }
     /* telnet_pty_create takes ownership of the transport — it will
@@ -85,18 +85,18 @@ static const struct yetty_yplatform_pty_factory_ops factory_ops = {
     .create_pty = factory_create_pty,
 };
 
-struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
+struct yetty_yplatform_pty_factory_ptr_result yetty_yplatform_pty_factory_create(
     struct yetty_yconfig_config *config, void *os_specific)
 {
     (void)os_specific;
 
     struct webasm_telnet_factory *f = calloc(1, sizeof(*f));
     if (!f) {
-        return YETTY_ERR(yetty_yplatform_pty_factory,
+        return YETTY_ERR(yetty_yplatform_pty_factory_ptr,
                          "failed to allocate telnet-iframe pty factory");
     }
     f->base.ops = &factory_ops;
     f->config = config;
     yinfo("webasm: pty factory = telnet-over-iframe-transport (port=%d)", YETTY_VM_TELNET_PORT);
-    return YETTY_OK(yetty_yplatform_pty_factory, &f->base);
+    return YETTY_OK(yetty_yplatform_pty_factory_ptr, &f->base);
 }

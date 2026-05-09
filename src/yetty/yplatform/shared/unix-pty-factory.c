@@ -23,7 +23,7 @@ struct yetty_yplatform_unix_pty_factory {
 
 /* Forward declarations */
 static void unix_pty_factory_destroy(struct yetty_yplatform_pty_factory *self);
-static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
+static struct yetty_yplatform_pty_ptr_result unix_pty_factory_create_pty(
     struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop);
 
 /* Factory ops table */
@@ -45,7 +45,7 @@ static void unix_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
     free(factory);
 }
 
-static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
+static struct yetty_yplatform_pty_ptr_result unix_pty_factory_create_pty(
     struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop)
 {
     struct yetty_yplatform_unix_pty_factory *factory =
@@ -60,7 +60,7 @@ static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
             config->ops->get_string(config, YETTY_YCONFIG_KEY_TELNET_HOST, "127.0.0.1");
         int port = config->ops->get_int(config, YETTY_YCONFIG_KEY_TELNET_PORT, 0);
         if (port <= 0 || port > 65535) {
-            return YETTY_ERR(yetty_yplatform_pty, "--telnet requires telnet/port (1..65535)");
+            return YETTY_ERR(yetty_yplatform_pty_ptr, "--telnet requires telnet/port (1..65535)");
         }
         return yetty_ytelnet_telnet_pty_create_tcp(host, (uint16_t)port, event_loop);
     }
@@ -82,7 +82,7 @@ static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
         if (!factory->qemu_proc) {
             factory->qemu_proc = yetty_yqemu_qemu_start(QEMU_TELNET_PORT);
             if (!factory->qemu_proc) {
-                return YETTY_ERR(yetty_yplatform_pty, "failed to start QEMU");
+                return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to start QEMU");
             }
 
             struct yetty_ycore_void_result wr =
@@ -90,7 +90,7 @@ static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
             if (YETTY_IS_ERR(wr)) {
                 yetty_yqemu_qemu_stop(factory->qemu_proc);
                 factory->qemu_proc = NULL;
-                return YETTY_ERR(yetty_yplatform_pty, "QEMU telnet not ready", wr);
+                return YETTY_ERR(yetty_yplatform_pty_ptr, "QEMU telnet not ready", wr);
             }
         }
         return yetty_ytelnet_telnet_pty_create_tcp("127.0.0.1", QEMU_TELNET_PORT, event_loop);
@@ -103,7 +103,7 @@ static struct yetty_yplatform_pty_result unix_pty_factory_create_pty(
 
 /* Factory creation - the public API */
 
-struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
+struct yetty_yplatform_pty_factory_ptr_result yetty_yplatform_pty_factory_create(
     struct yetty_yconfig_config *config, void *os_specific)
 {
     struct yetty_yplatform_unix_pty_factory *factory;
@@ -112,11 +112,11 @@ struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
 
     factory = calloc(1, sizeof(struct yetty_yplatform_unix_pty_factory));
     if (!factory) {
-        return YETTY_ERR(yetty_yplatform_pty_factory, "failed to allocate pty factory");
+        return YETTY_ERR(yetty_yplatform_pty_factory_ptr, "failed to allocate pty factory");
     }
 
     factory->base.ops = &unix_pty_factory_ops;
     factory->config = config;
 
-    return YETTY_OK(yetty_yplatform_pty_factory, &factory->base);
+    return YETTY_OK(yetty_yplatform_pty_factory_ptr, &factory->base);
 }

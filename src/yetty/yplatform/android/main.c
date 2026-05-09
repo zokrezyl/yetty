@@ -188,7 +188,7 @@ static void init_yetty(struct yetty_yplatform_app_state *state)
     struct yetty_yplatform_paths paths;
     struct yetty_yconfig_result config_result;
     struct yetty_yplatform_input_pipe_result pipe_result;
-    struct yetty_yplatform_pty_factory_result pty_result;
+    struct yetty_yplatform_pty_factory_ptr_result pty_result;
     struct yetty_yetty_app_context ctx;
     struct yetty_yetty_yetty_result yetty_result;
     struct yetty_yplatform_render_thread_args *args;

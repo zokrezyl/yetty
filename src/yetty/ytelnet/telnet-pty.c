@@ -480,11 +480,11 @@ static struct yetty_platform_pty_pipe_source *telnet_pty_pipe_source(
     return &pty->pipe_source;
 }
 
-struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(
+struct yetty_yplatform_pty_ptr_result yetty_ytelnet_telnet_pty_create(
     struct yetty_ytransport_conn_transport *transport)
 {
     if (!transport || !transport->ops) {
-        return YETTY_ERR(yetty_yplatform_pty, "telnet_pty_create: transport required");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "telnet_pty_create: transport required");
     }
 
     struct yetty_ytelnet_telnet_pty *pty = calloc(1, sizeof(struct yetty_ytelnet_telnet_pty));
@@ -492,7 +492,7 @@ struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(
         /* The caller passed ownership of `transport` to us; free it on
          * failure paths so they don't leak on every error return. */
         transport->ops->destroy(transport);
-        return YETTY_ERR(yetty_yplatform_pty, "failed to allocate telnet pty");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to allocate telnet pty");
     }
 
     pty->base.ops = &telnet_pty_ops;
@@ -506,7 +506,7 @@ struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(
     if (!pr.ok) {
         transport->ops->destroy(transport);
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "failed to create output pipe");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to create output pipe");
     }
     pty->output_pipe = pr.value;
 
@@ -515,7 +515,7 @@ struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(
         pty->output_pipe->ops->destroy(pty->output_pipe);
         transport->ops->destroy(transport);
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "failed to obtain pipe read fd");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to obtain pipe read fd");
     }
     pty->pipe_source.abstract = (uintptr_t)fdr.value;
 
@@ -537,21 +537,22 @@ struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create(
         pty->output_pipe->ops->destroy(pty->output_pipe);
         transport->ops->destroy(transport);
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "transport open failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "transport open failed");
     }
     pty->transport_open = 1;
 
     yinfo("telnet: transport open (async connect in flight)");
-    return YETTY_OK(yetty_yplatform_pty, &pty->base);
+    return YETTY_OK(yetty_yplatform_pty_ptr, &pty->base);
 }
 
-struct yetty_yplatform_pty_result yetty_ytelnet_telnet_pty_create_tcp(
+struct yetty_yplatform_pty_ptr_result yetty_ytelnet_telnet_pty_create_tcp(
     const char *host, uint16_t port, struct yetty_yevent_event_loop *event_loop)
 {
     struct yetty_ytransport_conn_transport *transport =
         yetty_ytransport_tcp_transport_create(host, port, event_loop);
     if (!transport) {
-        return YETTY_ERR(yetty_yplatform_pty, "telnet_pty_create_tcp: tcp_transport_create failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr,
+                         "telnet_pty_create_tcp: tcp_transport_create failed");
     }
     return yetty_ytelnet_telnet_pty_create(transport);
 }
@@ -577,7 +578,7 @@ static void telnet_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
     free(factory);
 }
 
-static struct yetty_yplatform_pty_result telnet_pty_factory_create_pty(
+static struct yetty_yplatform_pty_ptr_result telnet_pty_factory_create_pty(
     struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop)
 {
     struct yetty_ytelnet_telnet_pty_factory *factory =
@@ -586,7 +587,7 @@ static struct yetty_yplatform_pty_result telnet_pty_factory_create_pty(
     struct yetty_ytransport_conn_transport *transport =
         yetty_ytransport_tcp_transport_create(factory->host, factory->port, event_loop);
     if (!transport) {
-        return YETTY_ERR(yetty_yplatform_pty,
+        return YETTY_ERR(yetty_yplatform_pty_ptr,
                          "telnet_pty_factory_create_pty: tcp_transport_create failed");
     }
     /* Ownership of `transport` is transferred to telnet_pty_create —
@@ -599,14 +600,14 @@ static const struct yetty_yplatform_pty_factory_ops telnet_pty_factory_ops = {
     .create_pty = telnet_pty_factory_create_pty,
 };
 
-struct yetty_yplatform_pty_factory_result yetty_ytelnet_telnet_pty_factory_create(const char *host,
-                                                                                  uint16_t port)
+struct yetty_yplatform_pty_factory_ptr_result yetty_ytelnet_telnet_pty_factory_create(
+    const char *host, uint16_t port)
 {
     struct yetty_ytelnet_telnet_pty_factory *factory;
 
     factory = calloc(1, sizeof(struct yetty_ytelnet_telnet_pty_factory));
     if (!factory) {
-        return YETTY_ERR(yetty_yplatform_pty_factory, "failed to allocate telnet pty factory");
+        return YETTY_ERR(yetty_yplatform_pty_factory_ptr, "failed to allocate telnet pty factory");
     }
 
     factory->base.ops = &telnet_pty_factory_ops;
@@ -615,8 +616,8 @@ struct yetty_yplatform_pty_factory_result yetty_ytelnet_telnet_pty_factory_creat
 
     if (!factory->host) {
         free(factory);
-        return YETTY_ERR(yetty_yplatform_pty_factory, "failed to allocate host string");
+        return YETTY_ERR(yetty_yplatform_pty_factory_ptr, "failed to allocate host string");
     }
 
-    return YETTY_OK(yetty_yplatform_pty_factory, &factory->base);
+    return YETTY_OK(yetty_yplatform_pty_factory_ptr, &factory->base);
 }

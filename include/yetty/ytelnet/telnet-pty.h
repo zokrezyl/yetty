@@ -21,7 +21,7 @@ struct yetty_ycore_event_loop;
  * @param event_loop Loop on which the libuv TCP client and timer run
  * @return PTY result
  */
-struct yetty_yplatform_pty_result telnet_pty_create(const char *host, uint16_t port,
+struct yetty_yplatform_pty_ptr_result telnet_pty_create(const char *host, uint16_t port,
                                                     struct yetty_ycore_event_loop *event_loop);
 
 #ifdef __cplusplus

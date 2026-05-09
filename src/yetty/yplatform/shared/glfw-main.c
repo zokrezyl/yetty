@@ -202,7 +202,7 @@ int main(int argc, char **argv)
 
     /* PTY factory */
     ydebug("main: creating PTY factory");
-    struct yetty_yplatform_pty_factory_result pty_factory_result =
+    struct yetty_yplatform_pty_factory_ptr_result pty_factory_result =
         yetty_yplatform_pty_factory_create(config, NULL);
     if (!YETTY_IS_OK(pty_factory_result)) {
         fprintf(stderr, "Failed to create PTY factory\n");

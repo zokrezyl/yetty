@@ -506,13 +506,13 @@ static struct yetty_platform_pty_pipe_source *tinyemu_pty_pipe_source(
 }
 
 /* Create TinyEMU PTY */
-static struct yetty_yplatform_pty_result tinyemu_pty_create(struct yetty_yconfig_config *config)
+static struct yetty_yplatform_pty_ptr_result tinyemu_pty_create(struct yetty_yconfig_config *config)
 {
     struct yetty_yplatform_tinyemu_pty *pty;
 
     pty = malloc(sizeof(struct yetty_yplatform_tinyemu_pty));
     if (!pty) {
-        return YETTY_ERR(yetty_yplatform_pty, "failed to allocate tinyemu pty");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to allocate tinyemu pty");
     }
 
     memset(pty, 0, sizeof(*pty));
@@ -527,7 +527,7 @@ static struct yetty_yplatform_pty_result tinyemu_pty_create(struct yetty_yconfig
     /* Create os_input_pipe: terminal writes [1], VM reads [0] */
     if (pipe(pty->os_input_pipe) < 0) {
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "failed to create os_input_pipe");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to create os_input_pipe");
     }
 
     /* Create pty_pipe: VM writes [1], terminal reads [0] */
@@ -535,7 +535,7 @@ static struct yetty_yplatform_pty_result tinyemu_pty_create(struct yetty_yconfig
         close(pty->os_input_pipe[0]);
         close(pty->os_input_pipe[1]);
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "failed to create pty_pipe");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to create pty_pipe");
     }
 
     /* Set non-blocking */
@@ -620,7 +620,7 @@ static struct yetty_yplatform_pty_result tinyemu_pty_create(struct yetty_yconfig
             close(pty->pty_pipe[0]);
             close(pty->pty_pipe[1]);
             free(pty);
-            return YETTY_ERR(yetty_yplatform_pty, "failed to prepare temu cfg under config dir");
+            return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to prepare temu cfg under config dir");
         }
 
         pty->config_path = strdup(cfg_path);
@@ -629,17 +629,17 @@ static struct yetty_yplatform_pty_result tinyemu_pty_create(struct yetty_yconfig
     /* Initialize VM */
     if (init_vm(pty) < 0) {
         tinyemu_pty_destroy(&pty->base);
-        return YETTY_ERR(yetty_yplatform_pty, "failed to initialize VM");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to initialize VM");
     }
 
     /* Start VM thread */
     pty->running = 1;
     if (pthread_create(&pty->vm_thread, NULL, vm_thread_func, pty) != 0) {
         tinyemu_pty_destroy(&pty->base);
-        return YETTY_ERR(yetty_yplatform_pty, "failed to start VM thread");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to start VM thread");
     }
 
-    return YETTY_OK(yetty_yplatform_pty, &pty->base);
+    return YETTY_OK(yetty_yplatform_pty_ptr, &pty->base);
 }
 
 /* Factory implementation */
@@ -656,7 +656,7 @@ static void tinyemu_pty_factory_destroy(struct yetty_yplatform_pty_factory *self
     free(factory);
 }
 
-static struct yetty_yplatform_pty_result tinyemu_pty_factory_create_pty(
+static struct yetty_yplatform_pty_ptr_result tinyemu_pty_factory_create_pty(
     struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop)
 {
     struct yetty_yplatform_tinyemu_pty_factory *factory =
@@ -672,7 +672,7 @@ static struct yetty_yplatform_pty_result tinyemu_pty_factory_create_pty(
             factory->config, YETTY_YCONFIG_KEY_TELNET_HOST, "127.0.0.1");
         int port = factory->config->ops->get_int(factory->config, YETTY_YCONFIG_KEY_TELNET_PORT, 0);
         if (port <= 0 || port > 65535) {
-            return YETTY_ERR(yetty_yplatform_pty, "--telnet requires telnet/port (1..65535)");
+            return YETTY_ERR(yetty_yplatform_pty_ptr, "--telnet requires telnet/port (1..65535)");
         }
         return yetty_ytelnet_telnet_pty_create_tcp(host, (uint16_t)port, event_loop);
     }
@@ -688,7 +688,7 @@ static const struct yetty_yplatform_pty_factory_ops tinyemu_pty_factory_ops = {
 };
 
 /* Factory creation - the public API */
-struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
+struct yetty_yplatform_pty_factory_ptr_result yetty_yplatform_pty_factory_create(
     struct yetty_yconfig_config *config, void *os_specific)
 {
     struct yetty_yplatform_tinyemu_pty_factory *factory;
@@ -697,11 +697,11 @@ struct yetty_yplatform_pty_factory_result yetty_yplatform_pty_factory_create(
 
     factory = malloc(sizeof(struct yetty_yplatform_tinyemu_pty_factory));
     if (!factory) {
-        return YETTY_ERR(yetty_yplatform_pty_factory, "failed to allocate tinyemu pty factory");
+        return YETTY_ERR(yetty_yplatform_pty_factory_ptr, "failed to allocate tinyemu pty factory");
     }
 
     factory->base.ops = &tinyemu_pty_factory_ops;
     factory->config = config;
 
-    return YETTY_OK(yetty_yplatform_pty_factory, &factory->base);
+    return YETTY_OK(yetty_yplatform_pty_factory_ptr, &factory->base);
 }

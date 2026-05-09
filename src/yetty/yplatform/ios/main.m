@@ -188,7 +188,7 @@ static void *render_thread_func(void *arg)
 
     /* PTY factory */
     ydebug("creating PTY factory");
-    struct yetty_yplatform_pty_factory_result pty_result = yetty_yplatform_pty_factory_create(_config, NULL);
+    struct yetty_yplatform_pty_factory_ptr_result pty_result = yetty_yplatform_pty_factory_create(_config, NULL);
     if (!YETTY_IS_OK(pty_result)) {
         yerror("failed to create PTY factory: %s", pty_result.error);
         return;

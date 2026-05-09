@@ -788,7 +788,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     /* Create PTY */
     struct yetty_yplatform_pty_factory *pty_factory = yetty_context->app_context.pty_factory;
     if (pty_factory && pty_factory->ops && pty_factory->ops->create_pty) {
-        struct yetty_yplatform_pty_result pty_res =
+        struct yetty_yplatform_pty_ptr_result pty_res =
             pty_factory->ops->create_pty(pty_factory, terminal->context.yetty_context.event_loop);
         if (YETTY_IS_OK(pty_res)) {
             terminal->context.pty = pty_res.value;
