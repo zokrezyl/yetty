@@ -14,8 +14,8 @@
  * returned by tinyemu_session_open().
  */
 
-#ifndef YETTY_YPLATFORM_IFRAME_TRANSPORT_H
-#define YETTY_YPLATFORM_IFRAME_TRANSPORT_H
+#ifndef YETTY_YTRANSPORT_IFRAME_TRANSPORT_H
+#define YETTY_YTRANSPORT_IFRAME_TRANSPORT_H
 
 #include <yetty/ytransport/conn-transport.h>
 #include <stdint.h>
@@ -27,10 +27,10 @@ extern "C" {
 /* Allocate a new iframe transport that will, on open(), tell the
  * tinyemu iframe to inject an inbound connection to (guest, port).
  * Returns NULL on out-of-memory. */
-struct yetty_ytransport_conn_transport *yetty_yplatform_iframe_transport_create(uint16_t port);
+struct yetty_ytransport_conn_transport *yetty_ytransport_iframe_transport_create(uint16_t port);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* YETTY_YPLATFORM_IFRAME_TRANSPORT_H */
+#endif /* YETTY_YTRANSPORT_IFRAME_TRANSPORT_H */

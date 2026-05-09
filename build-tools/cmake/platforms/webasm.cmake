@@ -82,23 +82,23 @@ set(YETTY_SHADERS_DIR "/assets/shaders" CACHE STRING "Shader directory path")
 # Platform sources
 set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ymain/webasm.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webasm/surface.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webasm/window.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webasm/event-loop.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/webasm.c
+    ${YETTY_ROOT}/src/yetty/yplatform/window/webasm.c
+    ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/pipe.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webasm/platform-paths.c
+    ${YETTY_ROOT}/src/yetty/yplatform/paths/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/ycoroutine.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/ywebgpu.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/iframe-pty.c
-    ${YETTY_ROOT}/src/yetty/yplatform/webasm/iframe-transport.c
+    ${YETTY_ROOT}/src/yetty/ytransport/iframe-transport.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/telnet-iframe-pty-factory.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/brotli-glue.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/extract-assets.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/fs.c
+    ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/fs/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/thread.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/term.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/time.c
+    ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/time/default.c
 )
 
 # Create executable with core sources + web platform

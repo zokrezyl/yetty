@@ -319,6 +319,8 @@ static void init_yetty(struct yetty_yplatform_app_state *state)
     args = malloc(sizeof(struct yetty_yplatform_render_thread_args));
     args->yetty = state->yetty;
     args->running = &state->running;
+
+    //TODO: use the platform abstraction yetty_yplatform_pthread_create() so that we can try to unify the main functions
     pthread_create(&state->render_thread, NULL, render_thread_func, args);
 
     /* Initial RESIZE event so the terminal/kernel get the real surface

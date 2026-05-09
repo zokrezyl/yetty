@@ -67,7 +67,7 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/shared/glfw-main.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/glfw-surface.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/glfw-event-loop.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/glfw-window.c
+    ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/glfw-clipboard-manager.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/libuv-event-loop.c
     ${YETTY_ROOT}/src/yetty/yplatform/shared/ywebgpu.c
@@ -76,7 +76,7 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/windows/pipe.c
     ${YETTY_ROOT}/src/yetty/yplatform/windows/socket.c
     ${YETTY_ROOT}/src/yetty/yplatform/windows/process.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/extract-assets.c
+    ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
     ${YETTY_ROOT}/src/yetty/yplatform/windows/platform-paths.c
     ${YETTY_ROOT}/src/yetty/yplatform/windows/thread.c

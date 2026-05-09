@@ -50,7 +50,7 @@ struct yetty_yplatform_tinyemu_pty {
 /* External platform-paths from platform-paths.m. Assets live under data_dir
  * (extracted from incbin by yetty_yplatform_extract_assets at startup); the
  * VM cfg is auto-generated under config_dir/temu/ — same model as Linux
- * desktop (src/yetty/yplatform/shared/tinyemu-pty.c). */
+ * desktop (src/yetty/yplatform/temu-pty/default.c). */
 extern const char *yetty_yplatform_get_config_dir(void);
 extern const char *yetty_yplatform_get_data_dir(void);
 
@@ -603,7 +603,7 @@ static struct yetty_yplatform_pty_ptr_result tinyemu_pty_create(struct yetty_yco
                         /* eth0 is required even though we don't use the network: without
                      * a virtio-net device the kernel wedges at PLIC init and never
                      * reaches console=hvc0 switch. Same shape as the shared cfg in
-                     * src/yetty/yplatform/shared/tinyemu-pty.c. */
+                     * src/yetty/yplatform/temu-pty/default.c. */
                         "    eth0: { driver: \"user\" }\n"
                         "}\n",
                         data_dir, data_dir, data_dir);

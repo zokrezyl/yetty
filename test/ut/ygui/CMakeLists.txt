@@ -7,8 +7,8 @@ enable_testing()
 
 set(YGUI_TEST_SHIM_SOURCES
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/thread.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/term.c
+    ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
 )
 
 add_executable(ygui-flex-layout-test

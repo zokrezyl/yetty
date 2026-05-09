@@ -7,6 +7,8 @@
 #include <libgen.h>
 #include <limits.h>
 
+#include <yetty/yplatform/paths.h>
+
 static char cache_dir_buf[512];
 static char data_dir_buf[512];
 static char runtime_dir_buf[512];
@@ -98,4 +100,18 @@ const char *yetty_yplatform_get_assets_dir(void)
 
     /* Fallback to current directory */
     return "./assets";
+}
+
+struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths()
+{
+
+    struct yetty_yplatform_paths_ptr_result res;
+    return res;
+}
+
+struct yetty_ycore_void_result yetty_yplatform_paths_destroy(struct yetty_yplatform_paths *paths)
+{
+
+    struct yetty_ycore_void_result res;
+    return res;
 }

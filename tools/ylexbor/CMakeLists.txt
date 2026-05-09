@@ -7,8 +7,8 @@
 add_executable(ylexbor
     main.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/thread.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/term.c
+    ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
 )
 
 target_include_directories(ylexbor PRIVATE

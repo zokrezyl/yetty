@@ -16,7 +16,9 @@ WITH="$2"
 # Find and replace in source files, excluding build dirs and .git
 find . \
     -type f \( -name '*.cpp' -o -name '*.c' -o -name '*.h' -o -name '*.md' -o -name '*.txt' -o -name 'CMakeLists.txt' -o -name '*.cmake' -o -name 'Makefile' -o -name '*.py' -o -name '*.mm' -o -name '*.m' \) \
-    ! -path './build*' \
+    ! -path './build-desktop*' \
+    ! -path './build-android*' \
+    ! -path './build-webasm*' \
     ! -path './.git/*' \
     ! -path './tmp/*' \
     -exec grep -l "$WHAT" {} \; 2>/dev/null | while read -r file; do

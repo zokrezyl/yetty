@@ -31,8 +31,8 @@
 #include <yetty/ytransport/conn-transport.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
-#include <yetty/yplatform/iframe-transport.h>
-#include "../../ytelnet/telnet-pty.h"
+#include <yetty/ytransport/iframe-transport.h>
+#include <yetty/ytelnet/telnet-pty.h>
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -70,7 +70,7 @@ static struct yetty_yplatform_pty_ptr_result factory_create_pty(
     (void)event_loop;
 
     struct yetty_ytransport_conn_transport *transport =
-        yetty_yplatform_iframe_transport_create(YETTY_VM_TELNET_PORT);
+        yetty_ytransport_iframe_transport_create(YETTY_VM_TELNET_PORT);
     if (!transport) {
         return YETTY_ERR(yetty_yplatform_pty_ptr,
                          "telnet-iframe factory: iframe_transport_create failed");

@@ -53,8 +53,8 @@ if(YETTY_BUILD_YGUI_SHARED AND NOT EMSCRIPTEN)
     add_library(ygui_shared SHARED
         ${YGUI_SOURCES}
         ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-        ${YETTY_ROOT}/src/yetty/yplatform/shared/term.c
-        ${YETTY_ROOT}/src/yetty/yplatform/shared/thread.c
+        ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
+        ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
     )
 
     target_include_directories(ygui_shared PUBLIC

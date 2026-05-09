@@ -26,7 +26,7 @@
 #include <yetty/ytransport/conn-transport.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/ycore/result.h>
-#include <yetty/yplatform/iframe-transport.h>
+#include <yetty/ytransport/iframe-transport.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <emscripten/emscripten.h>
