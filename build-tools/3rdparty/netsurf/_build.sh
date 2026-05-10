@@ -212,6 +212,16 @@ for _PC in "$OSSL_DIR"/lib/pkgconfig/*.pc; do
     rm -f "$_PC.bak"
 done
 
+# nix's macOS pkg-config wrapper strips `-L<path>` for paths outside
+# the nix store, so `pkg-config openssl --libs` returns only
+# `-lssl -lcrypto` and the linker can't find the .a files in
+# $OSSL_DIR/lib. We can't pass `LDFLAGS=-L$OSSL_DIR/lib` to make —
+# that hard-overrides NetSurf's internal LDFLAGS which carry the
+# in-tree -lwapcaplet -ldom -lnslog etc. Instead use the
+# gcc/clang-native LIBRARY_PATH env var: it's appended to the search
+# path implicitly, without touching make's LDFLAGS calculation.
+NS_LIBRARY_PATH="$OSSL_DIR/lib"
+
 #-----------------------------------------------------------------------------
 # Fetch + extract NetSurf source
 #-----------------------------------------------------------------------------
@@ -290,6 +300,7 @@ env \
     "${_unset_args[@]}" \
     PKG_CONFIG_PATH="$INST_DIR/lib/pkgconfig:$OSSL_DIR/lib/pkgconfig:${PKG_CONFIG_PATH:-}" \
     PKG_CONFIG_PATH_FOR_TARGET="$INST_DIR/lib/pkgconfig:$OSSL_DIR/lib/pkgconfig:${PKG_CONFIG_PATH_FOR_TARGET:-}" \
+    LIBRARY_PATH="${NS_LIBRARY_PATH}${LIBRARY_PATH:+:$LIBRARY_PATH}" \
     CFLAGS="$NS_CFLAGS" \
     make "${_make_args[@]}"
 
