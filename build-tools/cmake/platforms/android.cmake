@@ -3,6 +3,10 @@
 # Disable desktop-only libraries
 set(YETTY_ENABLE_LIB_GLFW OFF CACHE BOOL "" FORCE)
 
+if(YETTY_ENABLE_LIB_LIBCURL)
+    include(${YETTY_ROOT}/build-tools/cmake/libs/libcurl.cmake)
+endif()
+
 include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
 
 # TinyEMU - in-process RISC-V emulator for --virtual flag. Not part of
