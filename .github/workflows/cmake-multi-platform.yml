@@ -123,7 +123,8 @@ jobs:
           libx11-dev \
           libgl1-mesa-dev \
           libwayland-dev \
-          libxkbcommon-dev
+          libxkbcommon-dev \
+          libwebp-dev
 
     - name: Build Linux
       run: make build-desktop-ytrace-release
@@ -149,18 +150,32 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      BUILD_DIR: build-desktop-ytrace-asan-nix
+      BUILD_DIR: build-desktop-ytrace-asan
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Nix
-      uses: cachix/install-nix-action@v27
-      with:
-        nix_path: nixpkgs=channel:nixos-unstable
+    - name: Install Linux dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          automake autoconf libtool \
+          meson ninja-build nasm \
+          brotli \
+          libfontconfig1-dev \
+          libxrandr-dev \
+          libxinerama-dev \
+          libxcursor-dev \
+          libxi-dev \
+          libxext-dev \
+          libx11-dev \
+          libgl1-mesa-dev \
+          libwayland-dev \
+          libxkbcommon-dev \
+          libwebp-dev
 
     - name: Build with ASAN
-      run: make -f Makefile.2 build PLATFORM=desktop LOGLEVEL=ytrace BUILDTYPE=asan USE_NIX=yes
+      run: make build-desktop-ytrace-asan
 
     - name: Run ASAN smoke test
       run: |
@@ -268,6 +283,7 @@ jobs:
     - name: Configure CMake
       run: >
         cmake -B ${{ env.BUILD_DIR }}
+        -G Ninja
         -DCMAKE_BUILD_TYPE=Release
         -DYETTY_ENABLE_TOOL_QA=OFF
         -S ${{ github.workspace }}
@@ -311,6 +327,7 @@ jobs:
     - name: Configure CMake
       run: >
         cmake -B ${{ env.BUILD_DIR }}
+        -G Ninja
         -DCMAKE_BUILD_TYPE=Release
         -DWEBGPU_BACKEND=dawn
         -DYETTY_ENABLE_TOOL_QA=OFF
@@ -362,7 +379,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      BUILD_DIR: build-android-ytrace-release-nix
+      BUILD_DIR: build-android-ytrace-release
 
     steps:
     - uses: actions/checkout@v4
@@ -381,7 +398,7 @@ jobs:
           -dname "CN=Android Debug,O=Android,C=US"
 
     - name: Build Android APK
-      run: make -f Makefile.2 build PLATFORM=android LOGLEVEL=ytrace BUILDTYPE=release USE_NIX=yes
+      run: make build-android-ytrace-release
 
     - name: Upload Android APK
       uses: actions/upload-artifact@v4
@@ -399,7 +416,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      BUILD_DIR: build-android_x86_64-ytrace-release-nix
+      BUILD_DIR: build-android_x86_64-ytrace-release
 
     steps:
     - uses: actions/checkout@v4
@@ -418,7 +435,7 @@ jobs:
           -dname "CN=Android Debug,O=Android,C=US"
 
     - name: Build Android x86_64 APK
-      run: make -f Makefile.2 build PLATFORM=android_x86_64 LOGLEVEL=ytrace BUILDTYPE=release USE_NIX=yes
+      run: make build-android_x86_64-ytrace-release
 
     - name: Upload Android x86_64 APK
       uses: actions/upload-artifact@v4
