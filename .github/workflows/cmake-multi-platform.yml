@@ -597,6 +597,7 @@ jobs:
         cp ${{ env.BUILD_DIR }}/tinyemu.js site/
         cp ${{ env.BUILD_DIR }}/tinyemu.wasm site/
         cp -r ${{ env.BUILD_DIR }}/tinyemu-assets site/
+        cp -r ${{ env.BUILD_DIR }}/yetty-assets site/
         du -sh site/* | sort -h
 
     - name: Upload WebAssembly artifacts
