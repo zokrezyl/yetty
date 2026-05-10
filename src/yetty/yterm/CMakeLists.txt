@@ -7,6 +7,7 @@ add_library(yetty_yterm
     background-layer.c
     pty-reader.c
     osc-args.c
+    osc-statemachine.c
 )
 
 target_include_directories(yetty_yterm PUBLIC
@@ -22,6 +23,7 @@ target_link_libraries(yetty_yterm
     yetty_yfont_core
     yetty_yui
     yetty_yface
+    lz4_static
 )
 
 # Embed shaders via incbin (or stubs on Emscripten)
