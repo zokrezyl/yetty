@@ -116,6 +116,7 @@ struct yetty_ypaint_canvas_line_buffer {
     struct yetty_ypaint_canvas_grid_line *lines;
     uint32_t capacity;
     uint32_t count;
+    int32_t base_index; /* logical canvas-line index of lines[0]; 0 initially */
 };
 
 // Canvas structure
@@ -967,11 +968,23 @@ static struct uint32_result add_primitive_internal(
         aabb.max.y = tmp;
     }
 
-    uint32_t primitive_max_in_rows = (uint32_t)floorf(aabb.max.y / canvas->cell_size.height);
-
     /* cursor_row is a screen-row index relative to the viewport top
    * (rolling_row_0). The cursor's absolute canvas-line is the sum. */
     uint32_t cursor_canvas_line = canvas->rolling_row_0 + canvas->cursor_row;
+
+    /* Cap the storage AABB so that canvas-line indices never go below 0.
+     * A bezier (or any prim) whose AABB extends above the absolute canvas
+     * origin would produce a row index < 0, which cast to uint32_t wraps to
+     * ~4 billion and hangs canvas_ensure_lines.  The primitive's actual
+     * coordinate data is untouched; only the indexing bounding box is clamped. */
+    float min_valid_y = -(float)cursor_canvas_line * canvas->cell_size.height;
+    if (aabb.max.y < min_valid_y)
+        aabb.max.y = min_valid_y;
+    if (aabb.min.y < min_valid_y)
+        aabb.min.y = min_valid_y;
+
+    uint32_t primitive_max_in_rows = (uint32_t)floorf(aabb.max.y / canvas->cell_size.height);
+
     uint32_t primitive_grid_line = cursor_canvas_line + primitive_max_in_rows;
     uint32_t primitive_rolling_row = cursor_canvas_line;
 

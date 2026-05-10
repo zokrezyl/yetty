@@ -38,12 +38,12 @@ if(YETTY_ENABLE_TOOL_YMAZE)
     add_subdirectory(ymaze)
 endif()
 
-if(YETTY_ENABLE_TOOL_YDRAW_MAZE)
-    add_subdirectory(ydraw-maze)
+if(YETTY_ENABLE_TOOL_YZOO)
+    add_subdirectory(yzoo)
 endif()
 
-if(YETTY_ENABLE_TOOL_YDRAW_ZOO)
-    add_subdirectory(ydraw-zoo)
+if(YETTY_ENABLE_TOOL_YDRAW_MAZE)
+    add_subdirectory(ydraw-maze)
 endif()
 
 if(YETTY_ENABLE_TOOL_YMUX)
