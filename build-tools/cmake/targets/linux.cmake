@@ -70,6 +70,13 @@ if(YETTY_ENABLE_LIB_TINYEMU)
     )
 endif()
 
+# The main `yetty` exec needs WebGPU/Dawn, GLFW, X11/Wayland, fontconfig
+# etc. — all the GUI stack. Skip declaring the target entirely when WebGPU
+# is disabled (e.g. linux-riscv64 cross-build, where we only build demos
+# and non-GUI tools). That also avoids configure-time pkg_check_modules
+# / find_library calls below for libs the cross sysroot doesn't have.
+if(YETTY_ENABLE_LIB_WEBGPU)
+
 # Create executable with core sources + platform
 add_executable(yetty
     ${YETTY_SOURCES}
@@ -163,4 +170,6 @@ if(YETTY_ENABLE_FEATURE_ASSETS)
         COMMENT "Verifying build assets..."
     )
 endif()
+
+endif()  # YETTY_ENABLE_LIB_WEBGPU
 
