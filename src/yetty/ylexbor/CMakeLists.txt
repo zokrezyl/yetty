@@ -74,4 +74,6 @@ else()
     message(STATUS "yetty_ylexbor: libcurl missing — fetch() will fail")
 endif()
 
-target_compile_options(yetty_ylexbor PRIVATE -Wall -Wno-unused-parameter)
+if(NOT MSVC)
+    target_compile_options(yetty_ylexbor PRIVATE -Wall -Wno-unused-parameter)
+endif()

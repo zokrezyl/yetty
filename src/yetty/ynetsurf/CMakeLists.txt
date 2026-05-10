@@ -25,7 +25,9 @@ target_link_libraries(yetty_ynetsurf
         yetty_ysdf
 )
 
-target_compile_options(yetty_ynetsurf PRIVATE -Wall -Wno-unused-parameter)
+if(NOT MSVC)
+    target_compile_options(yetty_ynetsurf PRIVATE -Wall -Wno-unused-parameter)
+endif()
 
 # NetSurf core asks the frontend for its built-in stylesheets via URLs
 # like resource:default.css. Bake the unpacked source's resources/ dir
