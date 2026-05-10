@@ -227,6 +227,24 @@ static void init_yetty(struct yetty_yplatform_app_state *state)
     paths.runtime_dir = runtime_dir;
     paths.bin_dir = NULL;
 
+    /* Extract embedded assets (kernel, opensbi, alpine rootfs, qemu binary,
+     * cdb fonts, config.yaml...) onto disk where tinyemu / qemu / fontloader
+     * / config-loader can read them. Must run BEFORE yetty_yconfig_create
+     * so the bundled config.yaml is on disk on first launch. Without this,
+     * tinyemu_pty_create() also fails to open kernel-riscv64.bin and the
+     * process silently exits because ytrace logs go to stderr, which
+     * Android's NativeActivity routes to /dev/null. */
+    {
+        struct yetty_ycore_void_result extract_result = yetty_platform_extract_assets();
+        if (!YETTY_IS_OK(extract_result)) {
+            LOGE("Failed to extract assets: %s",
+                 extract_result.error.msg ? extract_result.error.msg : "(no message)");
+            /* Fatal — without assets nothing will work. */
+            return;
+        }
+        LOGI("Assets extracted to runtime dir");
+    }
+
     /* Config — default to --qemu on Android (spawns external qemu loaded
      * from nativeLibraryDir/libqemu-system-riscv64.so, then telnets to
      * 127.0.0.1:QEMU_TELNET_PORT, same as desktop --qemu). There's no
@@ -241,24 +259,6 @@ static void init_yetty(struct yetty_yplatform_app_state *state)
         return;
     }
     state->config = config_result.value;
-
-    /* Extract embedded assets (kernel, opensbi, alpine rootfs, qemu binary,
-     * cdb fonts...) onto disk where tinyemu / qemu / fontloader can read
-     * them. glfw-main.c (linux/macos) and ios/main.m do this too.
-     * Without this, tinyemu_pty_create() fails to open kernel-riscv64.bin
-     * and the process silently exits because ytrace logs go to stderr,
-     * which Android's NativeActivity routes to /dev/null. */
-    {
-        struct yetty_ycore_void_result extract_result =
-            yetty_platform_extract_assets(state->config);
-        if (!YETTY_IS_OK(extract_result)) {
-            LOGE("Failed to extract assets: %s",
-                 extract_result.error.msg ? extract_result.error.msg : "(no message)");
-            /* Fatal — without assets nothing will work. */
-            return;
-        }
-        LOGI("Assets extracted to runtime dir");
-    }
 
     /* Platform input pipe */
     pipe_result = yetty_platform_input_pipe_create();

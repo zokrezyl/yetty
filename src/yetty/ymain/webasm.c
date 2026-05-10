@@ -484,6 +484,21 @@ int main(int argc, char **argv)
     setenv("YETTY_DATA_DIR", "/data", 1);
     setenv("YETTY_CONFIG_DIR", "/config", 1);
 
+    /* Extract incbin'd assets into MEMFS BEFORE config. Always "first time"
+     * on web — MEMFS is fresh per page load, so this runs every startup.
+     * Decompresses brotli'd shaders / fonts / msdf-fonts / yemu / config
+     * blobs into /data/ and /config/, so yetty_yconfig_create can then read
+     * the bundled config.yaml from disk. */
+    {
+        struct yetty_ycore_void_result extract_result = yetty_platform_extract_assets();
+        if (!YETTY_IS_OK(extract_result)) {
+            yerror("Failed to extract embedded assets: %s",
+                   extract_result.error.msg ? extract_result.error.msg : "(no msg)");
+            return 1;
+        }
+        ydebug("main: Embedded assets extracted to /data/");
+    }
+
     /* Config */
     config_result = yetty_yconfig_create(argc, argv, &paths);
     if (!YETTY_IS_OK(config_result)) {
@@ -492,20 +507,6 @@ int main(int argc, char **argv)
     }
     config = config_result.value;
     ydebug("main: Config created");
-
-    /* Extract incbin'd assets into MEMFS. Always "first time" on web —
-     * MEMFS is fresh per page load, so this runs every startup. Decompresses
-     * brotli'd shaders / fonts / msdf-fonts / yemu blobs into /data/. */
-    {
-        struct yetty_ycore_void_result extract_result = yetty_platform_extract_assets(config);
-        if (!YETTY_IS_OK(extract_result)) {
-            yerror("Failed to extract embedded assets: %s",
-                   extract_result.error.msg ? extract_result.error.msg : "(no msg)");
-            config->ops->destroy(config);
-            return 1;
-        }
-        ydebug("main: Embedded assets extracted to /data/");
-    }
 
     /* Window (canvas) */
     if (!yetty_yplatform_webasm_create_window(config)) {

@@ -11,14 +11,21 @@
 #include <string.h>
 
 /* Native X11 handles — only on Linux when yrender was built with X11-tile
- * support (which also pulls in X11 headers via the yetty_yrender link). On
- * Wayland, glfwGetX11Display() / glfwGetX11Window() return NULL/0, which is
- * exactly what yetty_create expects when the X11-tile path isn't usable. */
+ * support (which also pulls in X11 headers via the yetty_yrender link). The
+ * native accessors are only safe to call when the runtime platform actually
+ * is X11 — under Wayland (or NULL platform) we must not touch them, so we
+ * gate on glfwGetPlatform() and return NULL/0 otherwise. yetty_create reads
+ * NULL/0 as "X11-tile path unavailable". */
 #if defined(__linux__) && defined(YETTY_HAS_X11_TILE)
 #define GLFW_EXPOSE_NATIVE_X11
 #include <GLFW/glfw3native.h>
 static void platform_get_x11_handles(GLFWwindow *win, void **disp, unsigned long *xwin)
 {
+    *disp = NULL;
+    *xwin = 0UL;
+    if (glfwGetPlatform() != GLFW_PLATFORM_X11) {
+        return;
+    }
     *disp = (void *)glfwGetX11Display();
     *xwin = win ? (unsigned long)glfwGetX11Window(win) : 0UL;
 }
@@ -144,9 +151,23 @@ int main(int argc, char **argv)
         setenv("YETTY_BIN_DIR", paths.bin_dir, 1);
     }
 
+    /* Extract bundled assets into data/config dirs BEFORE loading config —
+     * on first launch the config file lives inside the bundle and only
+     * exists on disk after this step. Depends only on the platform paths,
+     * not on config. */
+    {
+        struct yetty_ycore_void_result extract_result = yetty_platform_extract_assets();
+        if (!YETTY_IS_OK(extract_result)) {
+            fprintf(stderr, "Failed to extract assets: %s\n",
+                    extract_result.error.msg ? extract_result.error.msg : "(no msg)");
+            yetty_ycore_error_destroy(extract_result.error);
+            glfwTerminate();
+            return 1;
+        }
+    }
+    ydebug("main: assets extracted");
+
     /* Config */
-    //TODO: creating the config should be a step after unpacking at first run the assets
-    //the config is comming from the unpacked assets when first run
     struct yetty_yconfig_result config_result = yetty_yconfig_create(argc, argv, &paths);
     if (!YETTY_IS_OK(config_result)) {
         fprintf(stderr, "Failed to create config\n");
@@ -154,11 +175,6 @@ int main(int argc, char **argv)
         return 1;
     }
     struct yetty_yconfig_config *config = config_result.value;
-
-    /* Extract assets */
-    //TODO: extract assets should depend only on the paths, see above! reading the config should happen after extract assets
-    yetty_platform_extract_assets(config);
-    ydebug("main: assets extracted");
 
     /* Check for headless mode */
     const char *vnc_headless = config->ops->get_string(config, "vnc/headless", NULL);
@@ -265,7 +281,6 @@ int main(int argc, char **argv)
 
     void *x11_display = NULL;
     unsigned long x11_window = 0UL;
-    // TODO we should detect if we are on wayland. If wayland, then do not trigger any Xwindows related stuff
     platform_get_x11_handles(window, &x11_display, &x11_window);
 
     struct yetty_yetty_app_context app_context = {

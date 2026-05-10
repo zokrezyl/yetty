@@ -158,6 +158,12 @@ static void *render_thread_func(void *arg)
 #ifndef YETTY_TVOS_TELNET
 #define YETTY_TVOS_TELNET "127.0.0.1:2423"
 #endif
+    /* Extract embedded assets BEFORE config — first launch needs the
+     * bundled config.yaml on disk for yetty_yconfig_create to read. */
+    ydebug("extracting assets");
+    yetty_platform_extract_assets();
+    ydebug("assets extracted");
+
     ydebug("creating config: --telnet %s", YETTY_TVOS_TELNET);
     char *fake_argv[] = {(char *)"yetty", (char *)"--telnet",
                          (char *)YETTY_TVOS_TELNET, NULL};
@@ -170,11 +176,6 @@ static void *render_thread_func(void *arg)
     }
     _config = config_result.value;
     ydebug("config created");
-
-    /* Extract embedded assets (fonts, shaders) to cache */
-    ydebug("extracting assets");
-    yetty_platform_extract_assets(_config);
-    ydebug("assets extracted");
 
     /* Platform input pipe */
     ydebug("creating input pipe");

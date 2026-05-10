@@ -14,8 +14,8 @@ endif()
 # Compiles out on macOS / Windows / Android / iOS / Emscripten.
 set(YETTY_YRENDER_X11_TILE OFF)
 if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN AND NOT YETTY_ANDROID AND NOT YETTY_IOS)
-    find_package(X11 QUIET COMPONENTS Xext)
-    if(X11_FOUND AND X11_Xext_FOUND)
+    include(${YETTY_ROOT}/build-tools/cmake/x11-static.cmake)
+    if(YETTY_X11_STATIC_LIBS)
         list(APPEND YETTY_YRENDER_SOURCES render-target-x11-tile.c)
         set(YETTY_YRENDER_X11_TILE ON)
     endif()
@@ -36,11 +36,11 @@ if(YETTY_YRENDER_X11_TILE)
     target_compile_definitions(yetty_yrender PUBLIC YETTY_HAS_X11_TILE=1)
     # PUBLIC so consumers (e.g. glfw-main.c's native-X11 bridge) pick up
     # X11 headers transitively via linkage.
+    target_include_directories(yetty_yrender PUBLIC ${YETTY_X11_STATIC_INCLUDE_DIR})
     target_link_libraries(yetty_yrender PUBLIC
         webgpu
         yetty_yrender_utils
-        X11::X11
-        X11::Xext
+        ${YETTY_X11_STATIC_LIBS}
     )
 else()
     target_link_libraries(yetty_yrender PUBLIC
