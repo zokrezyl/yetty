@@ -41,6 +41,10 @@ set(YETTY_ENABLE_TOOL_YMESH        OFF CACHE BOOL "" FORCE)
 # main.c isn't.
 set(YETTY_ENABLE_TOOL_YMAZE        OFF CACHE BOOL "" FORCE)
 
+# yzoo tool driver — same story (sys/select + termios). Library is
+# portable; only the tool main.c isn't.
+set(YETTY_ENABLE_TOOL_YZOO         OFF CACHE BOOL "" FORCE)
+
 include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
 
 # Windows-specific libraries (guarded by variables.cmake)
