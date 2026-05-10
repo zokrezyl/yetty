@@ -957,49 +957,52 @@ static struct yetty_yplatform_option long_options[] = {
     {"help", no_argument, 0, 'h'},
     {0, 0, 0, 0}};
 
-static void print_usage(const char *prog)
+/* Usage destination follows GNU conventions:
+ *  - explicit -h/--help → stdout (so `yetty --help | less` works)
+ *  - usage shown on flag error → stderr (it's a diagnostic) */
+static void print_usage(FILE *out, const char *prog)
 {
-    fprintf(stderr, "Usage: %s [options]\n", prog);
-    fprintf(stderr, "Options:\n");
-    fprintf(stderr, "  -c, --config=FILE                  Load config from FILE\n");
-    fprintf(stderr, "  -e, --execute=CMD                  Execute CMD in terminal\n");
-    fprintf(stderr,
+    fprintf(out, "Usage: %s [options]\n", prog);
+    fprintf(out, "Options:\n");
+    fprintf(out, "  -c, --config=FILE                  Load config from FILE\n");
+    fprintf(out, "  -e, --execute=CMD                  Execute CMD in terminal\n");
+    fprintf(out,
             "      --yvnc-server                  Run yvnc server (mirror mode - window + yvnc)\n");
-    fprintf(stderr,
+    fprintf(out,
             "      --yvnc-headless                Run yvnc server (headless - no window)\n");
-    fprintf(stderr, "      --yvnc-port=PORT               yvnc server port (default: 5900)\n");
-    fprintf(stderr, "      --yvnc-client=HOST[:PORT]      Connect as yvnc client to HOST\n");
-    fprintf(stderr, "      --yvnc-raw                     Disable JPEG, send raw BGRA tiles\n");
-    fprintf(stderr, "      --yvnc-compression-quality Q   JPEG quality 1-100 (default: 80)\n");
-    fprintf(stderr,
+    fprintf(out, "      --yvnc-port=PORT               yvnc server port (default: 5900)\n");
+    fprintf(out, "      --yvnc-client=HOST[:PORT]      Connect as yvnc client to HOST\n");
+    fprintf(out, "      --yvnc-raw                     Disable JPEG, send raw BGRA tiles\n");
+    fprintf(out, "      --yvnc-compression-quality Q   JPEG quality 1-100 (default: 80)\n");
+    fprintf(out,
             "      --yvnc-always-full             Disable delta, send full frame every time\n");
-    fprintf(stderr, "      --yvnc-use-h264                Use H.264 encoder instead of JPEG "
-                    "(requires openh264)\n");
+    fprintf(out, "      --yvnc-use-h264                Use H.264 encoder instead of JPEG "
+                 "(requires openh264)\n");
     fprintf(
-        stderr,
+        out,
         "      --yvnc-merge-rects             Merge adjacent dirty tiles into bigger rectangles\n");
-    fprintf(stderr, "      --yvnc-h264-bitrate BPS        H.264 target bitrate in bps (default: "
-                    "auto-scales with resolution)\n");
-    fprintf(stderr, "      --yvnc-h264-framerate FPS      H.264 encode framerate (default: 30)\n");
-    fprintf(stderr, "      --yvnc-h264-idr-interval N     Frames between H.264 keyframes (default: "
-                    "60 — 2s at 30 fps)\n");
+    fprintf(out, "      --yvnc-h264-bitrate BPS        H.264 target bitrate in bps (default: "
+                 "auto-scales with resolution)\n");
+    fprintf(out, "      --yvnc-h264-framerate FPS      H.264 encode framerate (default: 30)\n");
+    fprintf(out, "      --yvnc-h264-idr-interval N     Frames between H.264 keyframes (default: "
+                 "60 — 2s at 30 fps)\n");
     fprintf(
-        stderr,
+        out,
         "      --yvnc-h264-screen-content 0|1 H.264 screen-content optimisation (default: 1)\n");
-    fprintf(stderr, "      --ydvnc-client=HOST[:PORT]     Connect as RFB (RFC 6143) client\n");
-    fprintf(stderr, "      --ydvnc-password=PASSWORD      VNC password for --ydvnc-client (or env "
-                    "YDVNC_PASSWORD)\n");
-    fprintf(stderr,
+    fprintf(out, "      --ydvnc-client=HOST[:PORT]     Connect as RFB (RFC 6143) client\n");
+    fprintf(out, "      --ydvnc-password=PASSWORD      VNC password for --ydvnc-client (or env "
+                 "YDVNC_PASSWORD)\n");
+    fprintf(out,
             "      --record=FILE                  Record session to MP4 (forces H.264 encoding)\n");
-    fprintf(stderr, "      --rpc-host=HOST                RPC server host\n");
-    fprintf(stderr, "  -r, --rpc-port=PORT                RPC server port\n");
-    fprintf(stderr, "      --temu                         Run in-process TinyEMU RISC-V VM\n");
-    fprintf(stderr,
+    fprintf(out, "      --rpc-host=HOST                RPC server host\n");
+    fprintf(out, "  -r, --rpc-port=PORT                RPC server port\n");
+    fprintf(out, "      --temu                         Run in-process TinyEMU RISC-V VM\n");
+    fprintf(out,
             "      --qemu                         Run external QEMU RISC-V VM (via telnet)\n");
-    fprintf(stderr, "      --ssh [USER@HOST[:PORT]]       Connect to SSH remote shell\n");
-    fprintf(stderr, "      --telnet [[HOST]:PORT]         Connect to a telnet server (default host "
-                    "127.0.0.1)\n");
-    fprintf(stderr, "  -h, --help                         Show this help\n");
+    fprintf(out, "      --ssh [USER@HOST[:PORT]]       Connect to SSH remote shell\n");
+    fprintf(out, "      --telnet [[HOST]:PORT]         Connect to a telnet server (default host "
+                 "127.0.0.1)\n");
+    fprintf(out, "  -h, --help                         Show this help\n");
 }
 
 static void set_config(struct config_impl *impl, const char *path, const char *value)
@@ -1117,10 +1120,10 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             break;
         }
         case 'h':
-            print_usage(argv[0]);
+            print_usage(stdout, argv[0]);
             exit(0);
         default:
-            print_usage(argv[0]);
+            print_usage(stderr, argv[0]);
             exit(1);
         }
     }

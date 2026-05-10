@@ -92,29 +92,6 @@ int main(int argc, char **argv)
      * plain ANSI). Done here at the top of main so every fork inherits it. */
     setenv("TERM_PROGRAM", "yetty", 1);
 
-#if defined(__linux__) && !defined(__ANDROID__)
-    /* On linux GLFW 3.4 picks Wayland if WAYLAND_DISPLAY is set, else X11.
-     * Native Wayland also requires the Dawn prebuilt to accept
-     * SurfaceSourceWaylandSurface — Google's official ubuntu-latest Dawn
-     * release does NOT (validation aborts with "Unsupported sType"), so on
-     * a Wayland session the surface ends up invalid and yetty renders
-     * nothing. Default to X11 (XWayland on Wayland sessions); the user can
-     * opt into native Wayland with YETTY_GLFW_PLATFORM=wayland once Dawn
-     * gains the missing backend support. */
-    const char *_yetty_glfw_platform = getenv("YETTY_GLFW_PLATFORM");
-    if (!_yetty_glfw_platform || strcmp(_yetty_glfw_platform, "x11") == 0) {
-        glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
-    } else if (strcmp(_yetty_glfw_platform, "wayland") == 0) {
-        glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
-    }
-    /* Any other value: leave GLFW's auto-pick alone. */
-#endif
-
-    if (!glfwInit()) {
-        fprintf(stderr, "Failed to initialize GLFW\n");
-        return 1;
-    }
-
     /* Platform paths */
     //TODO adapt path reading using the new api that reads a struct
     const char *cache_dir = yetty_yplatform_get_cache_dir();
@@ -161,24 +138,57 @@ int main(int argc, char **argv)
             fprintf(stderr, "Failed to extract assets: %s\n",
                     extract_result.error.msg ? extract_result.error.msg : "(no msg)");
             yetty_ycore_error_destroy(extract_result.error);
-            glfwTerminate();
             return 1;
         }
     }
     ydebug("main: assets extracted");
 
-    /* Config */
+    /* Config — parses argv. -h/--help and unknown-flag errors exit() from
+     * inside yetty_yconfig_create, so anything that needs a display server
+     * (glfwInit, window, surface) MUST come after this point. Otherwise
+     * `yetty --help` over SSH without DISPLAY would die in glfwInit before
+     * ever printing usage. */
     struct yetty_yconfig_result config_result = yetty_yconfig_create(argc, argv, &paths);
     if (!YETTY_IS_OK(config_result)) {
         fprintf(stderr, "Failed to create config\n");
-        glfwTerminate();
         return 1;
     }
     struct yetty_yconfig_config *config = config_result.value;
 
-    /* Check for headless mode */
+    /* Check for headless mode — gates glfwInit. Headless is the
+     * --yvnc-headless path: VNC server runs without a window, so there is
+     * no display server to talk to and glfwInit must not be called (it
+     * would fail on a TTY-only host like a remote SSH session). */
     const char *vnc_headless = config->ops->get_string(config, "vnc/headless", NULL);
     int headless = vnc_headless && strcmp(vnc_headless, "true") == 0;
+
+    if (!headless) {
+#if defined(__linux__) && !defined(__ANDROID__)
+        /* On linux GLFW 3.4 picks Wayland if WAYLAND_DISPLAY is set, else X11.
+         * Native Wayland also requires the Dawn prebuilt to accept
+         * SurfaceSourceWaylandSurface — Google's official ubuntu-latest Dawn
+         * release does NOT (validation aborts with "Unsupported sType"), so on
+         * a Wayland session the surface ends up invalid and yetty renders
+         * nothing. Default to X11 (XWayland on Wayland sessions); the user can
+         * opt into native Wayland with YETTY_GLFW_PLATFORM=wayland once Dawn
+         * gains the missing backend support. */
+        const char *_yetty_glfw_platform = getenv("YETTY_GLFW_PLATFORM");
+        if (!_yetty_glfw_platform || strcmp(_yetty_glfw_platform, "x11") == 0) {
+            glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+        } else if (strcmp(_yetty_glfw_platform, "wayland") == 0) {
+            glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
+        }
+        /* Any other value: leave GLFW's auto-pick alone. */
+#endif
+
+        if (!glfwInit()) {
+            fprintf(stderr, "Failed to initialize GLFW\n");
+            config->ops->destroy(config);
+            return 1;
+        }
+    } else {
+        ydebug("main: headless mode, skipping glfwInit");
+    }
 
     /* Window dimensions */
     int width = config->ops->get_int(config, "window/width", 1280);
@@ -215,7 +225,9 @@ int main(int argc, char **argv)
             yetty_yplatform_destroy_window(window);
         }
         config->ops->destroy(config);
-        glfwTerminate();
+        if (!headless) {
+            glfwTerminate();
+        }
         return 1;
     }
     struct yetty_ycore_xthread_event_pipe *platform_input_pipe = pipe_result.value;
@@ -234,7 +246,9 @@ int main(int argc, char **argv)
             yetty_yplatform_destroy_window(window);
         }
         config->ops->destroy(config);
-        glfwTerminate();
+        if (!headless) {
+            glfwTerminate();
+        }
         return 1;
     }
     struct yetty_yplatform_pty_factory *pty_factory = pty_factory_result.value;
@@ -249,7 +263,9 @@ int main(int argc, char **argv)
             yetty_yplatform_destroy_window(window);
         }
         config->ops->destroy(config);
-        glfwTerminate();
+        if (!headless) {
+            glfwTerminate();
+        }
         return 1;
     }
 
@@ -306,7 +322,9 @@ int main(int argc, char **argv)
             yetty_yplatform_destroy_window(window);
         }
         config->ops->destroy(config);
-        glfwTerminate();
+        if (!headless) {
+            glfwTerminate();
+        }
         return 1;
     }
     struct yetty_yetty_yetty *yetty = yetty_result.value;
@@ -359,8 +377,10 @@ int main(int argc, char **argv)
         yetty_yplatform_destroy_window(window);
         ydebug("main: window destroyed");
     }
-    ydebug("main: calling glfwTerminate");
-    glfwTerminate();
+    if (!headless) {
+        ydebug("main: calling glfwTerminate");
+        glfwTerminate();
+    }
     ydebug("main: cleanup complete");
 
     return thread_args.result;
