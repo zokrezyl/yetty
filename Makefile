@@ -308,6 +308,12 @@ config-linux-riscv-ytrace-release: ## Configure Linux riscv64 cross-build (relea
 build-linux-riscv-ytrace-release: ## Build Linux riscv64 demos+tools (NOT yetty exec — Dawn missing)
 	@if [ ! -f "$(BUILD_DIR_LINUX_RISCV_YTRACE_RELEASE)/build.ninja" ]; then $(MAKE) config-linux-riscv-ytrace-release; fi
 	$(CMAKE) --build $(BUILD_DIR_LINUX_RISCV_YTRACE_RELEASE) $(CMAKE_PARALLEL) --target $(LINUX_RISCV_TARGETS)
+	$(MAKE) disk-linux-riscv-ytrace-release
+
+.PHONY: disk-linux-riscv-ytrace-release
+disk-linux-riscv-ytrace-release: ## Build minimum-size ext4 disk image with riscv64 binaries + repo HEAD checkout
+	BUILD_DIR=$(CURDIR)/$(BUILD_DIR_LINUX_RISCV_YTRACE_RELEASE) \
+		build-tools/yemu/make-riscv-disk.sh
 
 #=============================================================================
 # Android - ytrace (full logging)
