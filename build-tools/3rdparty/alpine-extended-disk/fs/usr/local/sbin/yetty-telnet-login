@@ -1,0 +1,7 @@
+#!/bin/sh
+# Wrapper invoked by `telnetd -l` on every connection.
+#
+# busybox telnetd's -l takes a single program path, not argv — so we can't
+# pass `-f yetty` to login directly. This script bridges that gap: every
+# telnet session lands as the `yetty` user with no password prompt.
+exec /bin/login -f yetty
