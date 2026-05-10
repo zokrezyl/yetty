@@ -927,6 +927,10 @@ enum {
     OPT_TELNET,
     OPT_YDVNC_CLIENT,
     OPT_YDVNC_PASSWORD,
+    OPT_CMD,
+    OPT_POWERSHELL,
+    OPT_PWSH,
+    OPT_WSL,
 };
 
 static struct yetty_yplatform_option long_options[] = {
@@ -954,6 +958,10 @@ static struct yetty_yplatform_option long_options[] = {
     {"qemu", no_argument, 0, OPT_QEMU},
     {"ssh", optional_argument, 0, OPT_SSH},
     {"telnet", optional_argument, 0, OPT_TELNET},
+    {"cmd", no_argument, 0, OPT_CMD},
+    {"powershell", no_argument, 0, OPT_POWERSHELL},
+    {"pwsh", no_argument, 0, OPT_PWSH},
+    {"wsl", optional_argument, 0, OPT_WSL},
     {"help", no_argument, 0, 'h'},
     {0, 0, 0, 0}};
 
@@ -1002,7 +1010,18 @@ static void print_usage(FILE *out, const char *prog)
     fprintf(out, "      --ssh [USER@HOST[:PORT]]       Connect to SSH remote shell\n");
     fprintf(out, "      --telnet [[HOST]:PORT]         Connect to a telnet server (default host "
                  "127.0.0.1)\n");
+    fprintf(out, "      --cmd                          Launch cmd.exe as the shell (Windows)\n");
+    fprintf(out,
+            "      --powershell                   Launch Windows PowerShell 5.x as the shell\n");
+    fprintf(out,
+            "      --pwsh                         Launch PowerShell 7+ (pwsh.exe) as the shell\n");
+    fprintf(
+        out,
+        "      --wsl [DISTRO]                 Launch a WSL session (optionally a named distro)\n");
     fprintf(out, "  -h, --help                         Show this help\n");
+    fprintf(out, "\n");
+    fprintf(out, "Session-mode flags are mutually exclusive:\n");
+    fprintf(out, "  --cmd, --powershell, --pwsh, --wsl, --ssh, --telnet, --temu, --qemu\n");
 }
 
 static void set_config(struct config_impl *impl, const char *path, const char *value)
@@ -1014,15 +1033,30 @@ static void set_config(struct config_impl *impl, const char *path, const char *v
     }
 }
 
+/* Reject more than one session-mode flag in a single invocation.
+ * The mutually-exclusive set is: --cmd, --powershell, --pwsh, --wsl, --ssh,
+ * --telnet, --temu, --qemu. The first one parsed wins; any second one prints
+ * a clear diagnostic naming both flags and exits non-zero. */
+static void claim_session_mode(const char **slot, const char *flag)
+{
+    if (*slot) {
+        fprintf(stderr, "yetty: --%s and --%s are mutually exclusive\n", *slot, flag);
+        exit(1);
+    }
+    *slot = flag;
+}
+
 /* Parse the command line into config. Recognises -c/--config (already loaded
  * by try_load_config_file before we get here), -e command, VNC flags, RPC
- * host/port, --temu/--qemu, and --ssh [user@host[:port]].
+ * host/port, --temu/--qemu, --ssh [user@host[:port]], --telnet, and the
+ * Windows session-mode flags --cmd / --powershell / --pwsh / --wsl.
  *
  * On -h/--help or unknown args, prints usage and exits. */
 static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
 {
     yetty_yplatform_optreset = 1;
     yetty_yplatform_optind = 1;
+    const char *session_mode = NULL;
     int c;
     while ((c = yetty_yplatform_getopt_long(argc, argv, "c:e:r:h", long_options, NULL)) != -1) {
         switch (c) {
@@ -1088,18 +1122,22 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             set_config(impl, YETTY_YCONFIG_KEY_RPC_PORT, yetty_yplatform_optarg);
             break;
         case OPT_TEMU:
+            claim_session_mode(&session_mode, "temu");
             set_config(impl, YETTY_YCONFIG_KEY_TEMU, "true");
             break;
         case OPT_QEMU:
+            claim_session_mode(&session_mode, "qemu");
             set_config(impl, YETTY_YCONFIG_KEY_QEMU, "true");
             break;
         case OPT_SSH:
+            claim_session_mode(&session_mode, "ssh");
             if (yetty_yplatform_optarg) {
                 parse_ssh_target(impl, yetty_yplatform_optarg);
             }
             set_config(impl, YETTY_YCONFIG_KEY_SSH, "true");
             break;
         case OPT_TELNET: {
+            claim_session_mode(&session_mode, "telnet");
             /* getopt's optional_argument only picks up `--telnet=VALUE`. To
              * also accept the natural `--telnet VALUE` form (matches the
              * `telnet HOST PORT`-style ergonomics users expect), peek at
@@ -1117,6 +1155,39 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
                 exit(1);
             }
             set_config(impl, YETTY_YCONFIG_KEY_TELNET, "true");
+            break;
+        }
+        case OPT_CMD:
+            claim_session_mode(&session_mode, "cmd");
+            set_config(impl, "shell/command", "cmd.exe");
+            break;
+        case OPT_POWERSHELL:
+            claim_session_mode(&session_mode, "powershell");
+            set_config(impl, "shell/command", "powershell.exe");
+            break;
+        case OPT_PWSH:
+            claim_session_mode(&session_mode, "pwsh");
+            set_config(impl, "shell/command", "pwsh.exe");
+            break;
+        case OPT_WSL: {
+            claim_session_mode(&session_mode, "wsl");
+            /* Accept both --wsl=DISTRO and --wsl DISTRO (matching --telnet's
+             * peek-next-argv pattern). Bare --wsl uses the default distro. */
+            const char *distro = yetty_yplatform_optarg;
+            if (!distro && yetty_yplatform_optind < argc) {
+                const char *next = argv[yetty_yplatform_optind];
+                if (next && next[0] != '-') {
+                    distro = next;
+                    yetty_yplatform_optind++;
+                }
+            }
+            if (distro) {
+                char buf[256];
+                snprintf(buf, sizeof(buf), "wsl.exe -d %s", distro);
+                set_config(impl, "shell/command", buf);
+            } else {
+                set_config(impl, "shell/command", "wsl.exe");
+            }
             break;
         }
         case 'h':

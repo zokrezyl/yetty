@@ -223,9 +223,6 @@ static struct yetty_yplatform_pty_ptr_result win_conpty_create(struct yetty_ycon
     PROCESS_INFORMATION pi;
     SIZE_T attr_size = 0;
     LPPROC_THREAD_ATTRIBUTE_LIST attr_list = NULL;
-    wchar_t cmd[] = L"cmd.exe";
-
-    (void)config;
 
     pty = malloc(sizeof(struct yetty_yplatform_win_conpty));
     if (!pty) {
@@ -378,9 +375,42 @@ static struct yetty_yplatform_pty_ptr_result win_conpty_create(struct yetty_ycon
     si.StartupInfo.hStdOutput = NULL;
     si.StartupInfo.hStdError = NULL;
 
+    /* Read the command line from config (set by --cmd / --powershell / --pwsh /
+     * --wsl, by -e/--execute, or in a config file). Default: cmd.exe.
+     * CreateProcessW needs a writable wide-char buffer (it may modify the
+     * string in place), so build one from the UTF-8 config value and free it
+     * after the spawn. */
+    const char *shell_cmd = "cmd.exe";
+    if (config && config->ops) {
+        const char *cfg_cmd = config->ops->get_string(config, "shell/command", "cmd.exe");
+        if (cfg_cmd && *cfg_cmd) {
+            shell_cmd = cfg_cmd;
+        }
+    }
+    wchar_t *cmd = NULL;
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, shell_cmd, -1, NULL, 0);
+    if (wlen > 0) {
+        cmd = malloc((size_t)wlen * sizeof(wchar_t));
+        if (cmd && MultiByteToWideChar(CP_UTF8, 0, shell_cmd, -1, cmd, wlen) <= 0) {
+            free(cmd);
+            cmd = NULL;
+        }
+    }
+    if (!cmd) {
+        DeleteProcThreadAttributeList(attr_list);
+        free(attr_list);
+        ClosePseudoConsole(pty->hpc);
+        CloseHandle(pty->pipe_in);
+        CloseHandle(pty->pipe_out);
+        free(pty);
+        return YETTY_ERR(yetty_yplatform_pty, "failed to convert shell command to wide-char");
+    }
+    ydebug("win_conpty_create: spawning shell '%s'", shell_cmd);
+
     BOOL cp_ok = CreateProcessW(NULL, cmd, NULL, NULL, TRUE, EXTENDED_STARTUPINFO_PRESENT, NULL,
                                 NULL, &si.StartupInfo, &pi);
     DWORD cp_err = cp_ok ? 0 : GetLastError();
+    free(cmd);
     ydebug("win_conpty_create: CreateProcessW ok=%d err=%lu pid=%lu hProcess=%p hThread=%p",
            (int)cp_ok, (unsigned long)cp_err, (unsigned long)pi.dwProcessId, (void *)pi.hProcess,
            (void *)pi.hThread);
