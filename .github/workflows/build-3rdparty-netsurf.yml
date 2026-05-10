@@ -1,0 +1,73 @@
+name: Build 3rdparty — netsurf
+
+# Triggered on `lib-netsurf-<version>` tags. Builds NetSurf-all 3.11
+# (libcss, libdom, libhubbub, libwapcaplet, libparserutils, libnsutils,
+# libnsbmp, libnsgif, libnslog, libnspsl, libsvgtiny, libutf8proc, plus
+# a synthesized libnetsurf_core.a containing the core .o files —
+# frontends/* excluded so yetty plugs ynetsurf in over it) using
+# NetSurf's own Make-driven build with TARGET=monkey.
+#
+# Linux-x86_64 only. NetSurf's monkey TARGET doesn't cross-compile
+# cleanly so the matrix is intentionally narrow — yetty's build-tools
+# guard skips netsurf on every other platform via the same check in
+# build-tools/3rdparty/netsurf/build.sh and build-tools/cmake/libs/netsurf.cmake.
+#
+# Version source of truth: build-tools/3rdparty/netsurf/version.
+
+on:
+  push:
+    tags:
+      - 'lib-netsurf-*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag:     ${{ steps.read.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          set -euo pipefail
+          V="$(tr -d '[:space:]' < build-tools/3rdparty/netsurf/version)"
+          [ -n "$V" ] || { echo "version file is empty" >&2; exit 1; }
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            REF="${GITHUB_REF#refs/tags/}"
+            EXPECT="lib-netsurf-$V"
+            if [ "$REF" != "$EXPECT" ]; then
+              echo "tag $REF does not match version file ($EXPECT)" >&2
+              exit 1
+            fi
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=lib-netsurf-$V" >> "$GITHUB_OUTPUT"
+
+  build-linux-x86_64:
+    needs: resolve
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - linux-x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="${{ matrix.target }}" \
+          OUTPUT_DIR="$PWD/out" \
+          ./build-tools/3rdparty/netsurf/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/netsurf-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true
