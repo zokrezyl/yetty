@@ -31,3 +31,12 @@ src/tinyemu/Untitled
 node_modules/
 package-lock.json
 package.json
+
+# Re-include the alpine-extended-disk fs/ overlay tree. The `*.d` rule
+# above is meant to catch Make/Ninja dependency files (foo.c.d), but
+# also matches /etc/sudoers.d/ and /etc/profile.d/ inside the produced
+# rootfs. Both `**/` (dirs) and `**` (files) — git can't re-include a
+# file under a directory that's still excluded, so the dir negation
+# must come first.
+!/build-tools/3rdparty/*/fs/**/
+!/build-tools/3rdparty/*/fs/**
