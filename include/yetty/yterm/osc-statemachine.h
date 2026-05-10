@@ -9,29 +9,27 @@
  *
  * Two-buffer model:
  *
- *   producer side  ─── feed(bytes, n) ───▶  ring buffer
- *                                              │
- *                                       cursor (read_pos)
- *                                              │
- *   consumer side  ◀── step()  ── envelope SM + b64 + LZ4F decode
- *                                              │
- *                                       on_payload(decoded, n) → pause?
+ *   producer side  ─── feed / read_pty ───▶  ring buffer
+ *                                                │
+ *                                         cursor (read_pos)
+ *                                                │
+ *   consumer side  ◀── process()  ── envelope SM + b64 + LZ4F decode
+ *                                                │
+ *                                          on_envelope(user, sm)
+ *                                          on_raw(user, sm)
  *
  * The cursor (read_pos) marks where the SM is currently processing. Bytes
  * between the cursor and the producer's write_pos are pending input. The
  * ring buffer grows on overflow (doubling realloc) so the producer never
- * blocks while the consumer is paused. When the consumer pauses (typically
- * because a layer wants to render the partial state before continuing),
- * the cursor stays put; codec state (b64 carry, LZ4F context, envelope
- * state) lives on the SM struct so a later step() resumes byte-for-byte.
+ * blocks while the consumer is stalled. State (b64 carry, LZ4F context,
+ * envelope state, accumulated payload) lives on the SM struct so the SM
+ * can be paused at any byte boundary and resumed later (the streaming
+ * payload hook returning 1 sets the pause).
  *
  * Codec is per-OSC-code:
- *   YETTY_YTERM_OSC_CODEC_NONE      raw bytes pass straight to on_payload
+ *   YETTY_YTERM_OSC_CODEC_NONE      raw bytes pass straight to the consumer
  *   YETTY_YTERM_OSC_CODEC_B64       streaming b64 decode
- *   YETTY_YTERM_OSC_CODEC_B64_LZ4   streaming b64 decode + LZ4F decompress
- *
- * Out-of-envelope bytes (RAW state) go to the on_raw handler — same shape
- * as yface.
+ *   YETTY_YTERM_OSC_CODEC_B64_LZ4   streaming b64 decode + LZ4F
  */
 
 #ifndef YETTY_YTERM_OSC_STATEMACHINE_H
@@ -46,6 +44,7 @@ extern "C" {
 #endif
 
 struct yetty_yterm_osc_sm;
+struct yetty_platform_pty;
 
 YETTY_YRESULT_DECLARE(yetty_yterm_osc_sm_ptr, struct yetty_yterm_osc_sm *);
 
@@ -55,59 +54,89 @@ enum yetty_yterm_osc_codec {
     YETTY_YTERM_OSC_CODEC_B64_LZ4 = 2, /* streaming b64 decode + LZ4F */
 };
 
-/* Fired at the second `;` (end of args slot), once for each OSC envelope.
- * `args` points into SM-owned scratch valid only for this call. */
-typedef void (*yetty_yterm_osc_on_begin_cb)(void *user, int code, const uint8_t *args,
-                                            size_t args_len);
+/* View into the SM's current envelope. Valid only while an on_envelope
+ * callback is on the stack. Pulled via yetty_yterm_osc_sm_envelope(). */
+struct yetty_yterm_osc_sm_envelope {
+    int code;
+    const uint8_t *args;
+    size_t args_len;
+    const uint8_t *payload;
+    size_t payload_len;
+};
 
-/* Fired as decoded body bytes become available. Caller may consume in place
- * — the pointer is into SM-owned scratch valid only for this call. Return
- * 0 to keep going, 1 to pause: the SM stops advancing the cursor and step()
- * returns. The cursor is preserved at the byte boundary right after the
- * batch that produced this chunk; call step() again to resume. */
-typedef int (*yetty_yterm_osc_on_payload_cb)(void *user, const uint8_t *decoded, size_t n);
+/* View into the SM's current out-of-envelope byte span. Valid only while
+ * an on_raw callback is on the stack. Pulled via yetty_yterm_osc_sm_raw(). */
+struct yetty_yterm_osc_sm_raw {
+    const char *bytes;
+    size_t len;
+};
 
-/* Fired at the envelope terminator (BEL or ESC \\). The codec is finalised
- * (LZ4F context reset, b64 carry drained) before this fires. */
-typedef void (*yetty_yterm_osc_on_end_cb)(void *user, int code);
+YETTY_YRESULT_DECLARE(yetty_yterm_osc_sm_envelope, struct yetty_yterm_osc_sm_envelope);
+YETTY_YRESULT_DECLARE(yetty_yterm_osc_sm_raw, struct yetty_yterm_osc_sm_raw);
 
-/* Fired for any byte stream outside an OSC envelope. */
-typedef void (*yetty_yterm_osc_on_raw_cb)(void *user, const char *bytes, size_t n);
+/* Fired once per complete envelope at the terminator. Pull args/payload
+ * via yetty_yterm_osc_sm_envelope(sm). */
+typedef struct yetty_ycore_void_result (*yetty_yterm_osc_on_envelope_cb)(
+    void *user, struct yetty_yterm_osc_sm *sm);
+
+/* Fired for byte spans outside an OSC envelope. Pull bytes via
+ * yetty_yterm_osc_sm_raw(sm). */
+typedef struct yetty_ycore_void_result (*yetty_yterm_osc_on_raw_cb)(
+    void *user, struct yetty_yterm_osc_sm *sm);
+
+/*-----------------------------------------------------------------------------
+ * Lifecycle
+ *---------------------------------------------------------------------------*/
 
 struct yetty_yterm_osc_sm_ptr_result yetty_yterm_osc_sm_create(void);
 
-void yetty_yterm_osc_sm_destroy(struct yetty_yterm_osc_sm *sm);
+struct yetty_ycore_void_result yetty_yterm_osc_sm_destroy(struct yetty_yterm_osc_sm *sm);
 
-/* Register a handler for one OSC code. Subsequent envelopes whose decimal
- * code matches will route to this handler with the configured codec.
- * Re-registering the same code overwrites the previous handler. Pass NULL
- * for callbacks you don't care about. */
+/*-----------------------------------------------------------------------------
+ * Registration
+ *---------------------------------------------------------------------------*/
+
+/* Register a handler for one OSC code. Re-registering overwrites. */
 struct yetty_ycore_void_result yetty_yterm_osc_sm_register(
     struct yetty_yterm_osc_sm *sm, int code, enum yetty_yterm_osc_codec codec,
-    yetty_yterm_osc_on_begin_cb on_begin, yetty_yterm_osc_on_payload_cb on_payload,
-    yetty_yterm_osc_on_end_cb on_end, void *user);
+    yetty_yterm_osc_on_envelope_cb on_envelope, void *user);
 
 /* Set the handler for bytes outside any OSC envelope. */
-void yetty_yterm_osc_sm_set_raw_handler(struct yetty_yterm_osc_sm *sm,
-                                        yetty_yterm_osc_on_raw_cb on_raw, void *user);
+struct yetty_ycore_void_result yetty_yterm_osc_sm_set_raw_handler(
+    struct yetty_yterm_osc_sm *sm, yetty_yterm_osc_on_raw_cb on_raw, void *user);
 
-/* Append bytes to the input ring. Grows on overflow. Doesn't process. */
+/*-----------------------------------------------------------------------------
+ * Input
+ *---------------------------------------------------------------------------*/
+
+/* Append bytes to the input ring. Grows on overflow. Doesn't process.
+ * For pty input, prefer read_pty() — it avoids the intermediate copy. */
 struct yetty_ycore_void_result yetty_yterm_osc_sm_feed(struct yetty_yterm_osc_sm *sm,
                                                        const char *bytes, size_t n);
 
-/* Advance the cursor through pending input. Returns when:
- *   - the cursor catches the producer (no more bytes), or
- *   - an on_payload callback returned 1 (pause).
- *
- * Calling step() repeatedly is idempotent when no new input has arrived. */
-struct yetty_ycore_void_result yetty_yterm_osc_sm_step(struct yetty_yterm_osc_sm *sm);
+/* Read directly from `pty` into the ring's writable region — zero-copy.
+ * Returns the number of bytes read; 0 on EAGAIN/EOF. Doesn't process. */
+struct yetty_ycore_size_result yetty_yterm_osc_sm_read_pty(struct yetty_yterm_osc_sm *sm,
+                                                           struct yetty_platform_pty *pty);
 
-/* True iff the last step() returned because an on_payload callback paused.
- * Cleared on the next step(). Useful for debug / driver code. */
-int yetty_yterm_osc_sm_paused(const struct yetty_yterm_osc_sm *sm);
+/*-----------------------------------------------------------------------------
+ * Drive
+ *---------------------------------------------------------------------------*/
 
-/* Bytes currently sitting in the ring waiting to be processed. */
-size_t yetty_yterm_osc_sm_pending(const struct yetty_yterm_osc_sm *sm);
+/* Advance the cursor through pending input. Returns when the cursor
+ * catches the producer (no more bytes). */
+struct yetty_ycore_void_result yetty_yterm_osc_sm_process(struct yetty_yterm_osc_sm *sm);
+
+/*-----------------------------------------------------------------------------
+ * Pull-mode access — only valid inside on_envelope / on_raw callbacks.
+ * Errors when called outside a callback (no current view).
+ *---------------------------------------------------------------------------*/
+
+struct yetty_yterm_osc_sm_envelope_result yetty_yterm_osc_sm_envelope(
+    const struct yetty_yterm_osc_sm *sm);
+
+struct yetty_yterm_osc_sm_raw_result yetty_yterm_osc_sm_raw(
+    const struct yetty_yterm_osc_sm *sm);
 
 #ifdef __cplusplus
 }

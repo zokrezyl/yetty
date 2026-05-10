@@ -17,6 +17,7 @@ extern "C" {
 struct yetty_yterm_terminal;
 struct yetty_yrender_terminal_layer;
 struct yetty_yterm_terminal_layer_ops;
+struct yetty_yterm_osc_sm;
 struct yetty_yevent_event_loop;
 struct yetty_platform_pty;
 struct yetty_yterm_view;
@@ -78,12 +79,19 @@ typedef void (*yetty_yterm_alt_screen_fn)(int active, void *userdata);
 /* Layer ops */
 struct yetty_yterm_terminal_layer_ops {
     struct yetty_ycore_void_result (*destroy)(struct yetty_yrender_terminal_layer *self);
-    /* OSC payload from pty-reader. `osc_code` lets the layer dispatch by
-   * code (one layer can register for multiple codes); the body is the
-   * full OSC payload after the leading "<code>;" — i.e. the yface body
-   * "<flag>;<base64...>" for yface-encoded messages. */
-    struct yetty_ycore_void_result (*write)(struct yetty_yrender_terminal_layer *self, int osc_code,
-                                            const char *data, size_t len);
+    /* Pull-mode dispatch from the OSC state machine. Called by the SM
+   * inside one of its callbacks: for an OSC envelope (when a layer
+   * registered for the matching code), or for a raw byte span (when
+   * the layer is the SM's raw handler). The layer pulls what it needs
+   * via the osc_sm_current_* accessors:
+   *
+   *   - osc_sm_current_code(sm)        — 0 for raw, the code for OSC
+   *   - osc_sm_current_args(sm), _len  — decoded args (OSC only)
+   *   - osc_sm_current_payload(sm), _len — fully-decoded body (OSC only)
+   *   - osc_sm_current_raw(sm), _len   — byte span (raw only)
+   */
+    struct yetty_ycore_void_result (*process)(struct yetty_yrender_terminal_layer *self,
+                                              struct yetty_yterm_osc_sm *sm);
     struct yetty_ycore_void_result (*resize_grid)(struct yetty_yrender_terminal_layer *self,
                                                   struct yetty_ycore_grid_size grid_size);
     /* Change the layer's cell pixel size. Implementations must also push the

@@ -1,5 +1,6 @@
 #include <yetty/yterm/text-layer.h>
 #include <yetty/yterm/shader-glyph-layer.h>
+#include <yetty/yterm/osc-statemachine.h>
 #include <yetty/yfont/ms-font.h>
 #include <yetty/yfont/ms-raster-font.h>
 #include <yetty/yfont/ms-msdf-font.h>
@@ -204,8 +205,8 @@ struct yetty_yterm_terminal_text_layer {
 
 /* Forward declarations */
 static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_terminal_layer *self);
-static struct yetty_ycore_void_result text_layer_write(struct yetty_yrender_terminal_layer *self,
-                                                       int osc_code, const char *data, size_t len);
+static struct yetty_ycore_void_result text_layer_process(struct yetty_yrender_terminal_layer *self,
+                                                         struct yetty_yterm_osc_sm *sm);
 static struct yetty_ycore_void_result text_layer_resize_grid(
     struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size);
 static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_set(
@@ -610,7 +611,7 @@ static struct yetty_ycore_void_result text_layer_set_visual_zoom(
 /* Ops */
 static const struct yetty_yterm_terminal_layer_ops text_layer_ops = {
     .destroy = text_layer_destroy,
-    .write = text_layer_write,
+    .process = text_layer_process,
     .resize_grid = text_layer_resize_grid,
     .set_cell_size = text_layer_set_cell_size,
     .set_visual_zoom = text_layer_set_visual_zoom,
@@ -897,37 +898,25 @@ static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_te
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result text_layer_write(struct yetty_yrender_terminal_layer *self,
-                                                       int osc_code, const char *data, size_t len)
+/* Process — pulled by the SM with a span of out-of-envelope bytes (the
+ * SM is registered with text_layer as its raw handler). */
+static struct yetty_ycore_void_result text_layer_process(struct yetty_yrender_terminal_layer *self,
+                                                         struct yetty_yterm_osc_sm *sm)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
-    (void)osc_code; /* text-layer is the default sink — no OSC dispatch */
 
     if (!text_layer->vterm) {
         return YETTY_ERR(yetty_ycore_void, "vterm is NULL");
     }
 
-    if (len > 0) {
-        char hex[1024] = {0};
-        char asc[300] = {0};
-        size_t dump_n = len > 256 ? 256 : len;
-        size_t hoff = 0, aoff = 0;
-        for (size_t i = 0; i < dump_n; i++) {
-            unsigned char c = (unsigned char)data[i];
-            if (hoff + 4 < sizeof(hex)) {
-                hoff += (size_t)snprintf(hex + hoff, sizeof(hex) - hoff, "%02x ", c);
-            }
-            if (aoff + 2 < sizeof(asc)) {
-                asc[aoff++] = (c >= 0x20 && c < 0x7f) ? (char)c : '.';
-            }
-        }
-        ydebug("text_layer_write: len=%zu dump=[%s] ascii=[%s] -> vterm_input_write", len, hex,
-               asc);
-        vterm_input_write(text_layer->vterm, data, len);
-        ydebug("text_layer_write: vterm_input_write returned; dirty=%d", text_layer->base.dirty);
-    }
+    struct yetty_yterm_osc_sm_raw_result rr = yetty_yterm_osc_sm_raw(sm);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "text_layer: not in raw span");
+    struct yetty_yterm_osc_sm_raw raw = rr.value;
 
+    if (raw.len > 0) {
+        vterm_input_write(text_layer->vterm, raw.bytes, raw.len);
+    }
     return YETTY_OK_VOID();
 }
 
