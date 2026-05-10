@@ -520,7 +520,33 @@
               expat libxml2 libjpeg libpng libwebp
               curl.dev openssl.dev zlib.dev
             ];
-            shellHook = "echo 'Yetty 3rdparty-build (netsurf — Linux x86_64 only)'";
+            shellHook = "echo 'Yetty 3rdparty-build (netsurf — linux-x86_64 native)'";
+          };
+
+          # macOS native — Apple's bundled bison is 2.3 (BSD-licensed
+          # legacy); NetSurf 3.11's libnslog .y file needs bison 3+
+          # for `%type` declarations. Pull a fresh nix bison/flex/gperf
+          # so the macOS system tools don't get picked up first.
+          "3rdparty-netsurf-macos-arm64" = pkgs.mkShell {
+            buildInputs = with pkgs; [
+              gnumake perl python3 flex bison gperf
+              autoconf automake libtool
+              curl gnutar xz gzip
+              pkg-config
+              expat libxml2 libjpeg libpng libwebp
+            ];
+            shellHook = "echo 'Yetty 3rdparty-build (netsurf — macos-arm64)'";
+          };
+
+          "3rdparty-netsurf-macos-x86_64" = pkgs.mkShell {
+            buildInputs = with pkgs; [
+              gnumake perl python3 flex bison gperf
+              autoconf automake libtool
+              curl gnutar xz gzip
+              pkg-config
+              expat libxml2 libjpeg libpng libwebp
+            ];
+            shellHook = "echo 'Yetty 3rdparty-build (netsurf — macos-x86_64)'";
           };
 
           # Cross to aarch64 Linux: pkgsCross.*.mkShell so nativeBuildInputs

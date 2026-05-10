@@ -64,6 +64,7 @@ mkdir -p "$WORK_DIR" "$OUTPUT_DIR" "$CACHE_DIR"
 # the produced binaries (relevant for split-messages pre-generation).
 #-----------------------------------------------------------------------------
 NS_HOST=""
+NS_BUILD=""
 NS_CC=""
 NS_CXX=""
 NS_AR=""
@@ -71,29 +72,18 @@ NS_RANLIB=""
 NS_NATIVE=0
 NS_EXTRA_CFLAGS=""
 NS_EXTRA_LDFLAGS=""
+# Disable Duktape (NetSurf's JS engine) for cross builds — its build
+# requires nsgenbind to RUN on the build host, but our top-level
+# CC=cross-gcc override propagates into nsgenbind's sub-make and
+# produces a target-arch nsgenbind binary that can't exec on the build
+# machine. yetty doesn't use NetSurf's JS path anyway (its own quickjs
+# binding lives in src/yetty/ylexbor — independent of NetSurf core).
+NS_USE_DUKTAPE="YES"
 
 case "$TARGET_PLATFORM" in
 
 linux-x86_64)
     NS_NATIVE=1
-    ;;
-
-linux-aarch64)
-    : "${CROSS_PREFIX:=aarch64-unknown-linux-gnu-}"
-    NS_HOST="aarch64-unknown-linux-gnu"
-    NS_CC="${CROSS_PREFIX}gcc"
-    NS_CXX="${CROSS_PREFIX}g++"
-    NS_AR="${CROSS_PREFIX}ar"
-    NS_RANLIB="${CROSS_PREFIX}ranlib"
-    ;;
-
-linux-riscv64)
-    : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
-    NS_HOST="riscv64-unknown-linux-gnu"
-    NS_CC="${CROSS_PREFIX}gcc"
-    NS_CXX="${CROSS_PREFIX}g++"
-    NS_AR="${CROSS_PREFIX}ar"
-    NS_RANLIB="${CROSS_PREFIX}ranlib"
     ;;
 
 macos-x86_64)
@@ -108,48 +98,52 @@ macos-arm64)
     NS_EXTRA_LDFLAGS="-arch arm64"
     ;;
 
-android-arm64-v8a|android-x86_64)
-    : "${ANDROID_NDK_HOME:?ANDROID_NDK_HOME not set — source the .#3rdparty-${TARGET_PLATFORM} shell}"
-    : "${ANDROID_API:=26}"
-    case "$TARGET_PLATFORM" in
-        android-arm64-v8a) _NDK_TRIPLE="aarch64-linux-android"; NS_HOST="aarch64-linux-android" ;;
-        android-x86_64)    _NDK_TRIPLE="x86_64-linux-android";  NS_HOST="x86_64-linux-android" ;;
-    esac
-    _NDK_HOST_TAG="$(uname -s | tr A-Z a-z)-x86_64"
-    _NDK_TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$_NDK_HOST_TAG"
-    NS_CC="$_NDK_TOOLCHAIN/bin/${_NDK_TRIPLE}${ANDROID_API}-clang"
-    NS_CXX="$_NDK_TOOLCHAIN/bin/${_NDK_TRIPLE}${ANDROID_API}-clang++"
-    NS_AR="$_NDK_TOOLCHAIN/bin/llvm-ar"
-    NS_RANLIB="$_NDK_TOOLCHAIN/bin/llvm-ranlib"
-    ;;
-
-ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64|webasm|windows-x86_64)
+linux-aarch64|linux-riscv64|\
+android-arm64-v8a|android-x86_64|\
+ios-arm64|ios-x86_64|tvos-x86_64|tvos-arm64|\
+webasm|windows-x86_64)
     # NetSurf monkey TARGET assumes a POSIX environment (forks, dlfcn,
-    # POSIX file APIs) and a Unix-style toolchain. iOS/tvOS frontends
-    # exist upstream but build via Xcode projects, not the monkey
-    # Makefile we drive here. Webasm and Windows-MSVC are flat-out
-    # incompatible with NetSurf's build system.
+    # POSIX file APIs) and a Unix-style toolchain. The remaining
+    # tarball-target platforms either:
+    #   - Android: would need NDK-cross builds of expat/libxml2/jpeg/
+    #     png/webp + a netsurf-aware NDK toolchain pkgconf path. Real
+    #     cross-compile is feasible but a separate workstream — for now
+    #     the matrix entry is here for shape parity with lexbor.
+    #   - iOS / tvOS: upstream frontend lives in an Xcode project, not
+    #     the monkey Makefile we drive here.
+    #   - WebAssembly: POSIX socket / dlfcn assumptions in netsurf core.
+    #   - Windows MSVC: Unix-style Makefile, mingw-only upstream.
     #
-    # Document the limitation, ship an empty-but-valid placeholder
-    # tarball so the matrix entry doesn't poison the GitHub release
-    # step (and so consumers see a 0-byte sentinel rather than a
-    # missing-file error).
-    echo "netsurf: $TARGET_PLATFORM is not supported by NetSurf's monkey TARGET" >&2
+    # Ship a placeholder tarball carrying only an UNSUPPORTED marker
+    # so the matrix entry doesn't poison the GitHub release step.
+    # consumer-side netsurf.cmake detects the marker and skips silently.
+    echo "netsurf: $TARGET_PLATFORM is not built (see UNSUPPORTED in tarball)" >&2
     rm -rf "$STAGE"
     mkdir -p "$STAGE"
     cat > "$STAGE/UNSUPPORTED" <<EOF
 netsurf-all $VERSION is not built for $TARGET_PLATFORM.
 
 NetSurf's TARGET=monkey build system assumes a POSIX environment with
-a Unix-style toolchain. It cannot cross-compile to:
-  - Windows-MSVC (Unix-style Makefile, mingw-only upstream)
-  - WebAssembly  (POSIX socket / dlfcn assumptions)
-  - iOS / tvOS   (frontend lives in an Xcode project, not the
-                  monkey build)
+a Unix-style toolchain. The platforms left out of the real build are:
+  - linux-aarch64, linux-riscv64
+        nix's cross glibc 2.40 ships clang-only fortify macros
+        (__fortify_clang_overload_arg in bits/inet-fortified.h) that
+        gcc 15 cross-compilers can't parse. Outside the scope of what
+        the build script can paper over — needs upstream nixpkgs fix
+        or a switch to clang-cross.
+  - android-arm64-v8a, android-x86_64
+        Cross-compile via NDK is feasible but requires NDK-built
+        expat/libxml2/jpeg/png/webp — separate workstream.
+  - ios-arm64, ios-x86_64, tvos-arm64, tvos-x86_64
+        Upstream frontend is an Xcode project, not the monkey Makefile.
+  - webasm
+        POSIX socket / dlfcn assumptions in netsurf core.
+  - windows-x86_64
+        Unix-style Makefile; upstream supports mingw, not native MSVC.
 
 The yetty consumer side (build-tools/cmake/libs/netsurf.cmake) detects
-the absence of a real lib/ tree and skips netsurf_core silently on
-these platforms — the rest of yetty configures unaffected.
+this UNSUPPORTED marker and skips netsurf_core silently on these
+platforms — the rest of yetty configures unaffected.
 EOF
     tar -C "$STAGE" -czf "$TARBALL" .
     echo "netsurf $VERSION ($TARGET_PLATFORM) — placeholder tarball written:"
@@ -221,8 +215,10 @@ while IFS= read -r _v; do
 done < <(env | sed -n 's/^\(NIX_PKG_CONFIG_WRAPPER_FLAGS_SET_[^=]*\)=.*$/\1/p')
 
 # Compose make command line. NetSurf's Makefile honours the standard
-# CC/HOST/AR/RANLIB overrides for cross-compile.
-_make_args=(-C "$SRC_DIR" "-j${NCPU}" TARGET=monkey)
+# CC/HOST/AR/RANLIB overrides for cross-compile, plus BUILD for the
+# build-host triple (used by host-side tools like nsgenbind).
+_make_args=(-C "$SRC_DIR" "-j${NCPU}" TARGET=monkey "NETSURF_USE_DUKTAPE=$NS_USE_DUKTAPE")
+[ -n "$NS_BUILD"  ] && _make_args+=("BUILD=$NS_BUILD")
 [ -n "$NS_HOST"   ] && _make_args+=("HOST=$NS_HOST")
 [ -n "$NS_CC"     ] && _make_args+=("CC=$NS_CC")
 [ -n "$NS_CXX"    ] && _make_args+=("CXX=$NS_CXX")
