@@ -14,26 +14,17 @@
 #   ns_svgtiny ns_utf8proc
 #   netsurf_core   — ar'd from netsurf core .o files (frontends/* excluded)
 #
-# NetSurf is currently built only for linux-x86_64
-# (see build-tools/3rdparty/netsurf/build.sh — monkey TARGET doesn't
-# cross-compile cleanly). On any other platform the fetch is skipped
-# silently and consumers fall through their `if(NOT TARGET netsurf_core)`
-# guards.
+# Cross-platform: the 3rdparty tarball is published for every yetty
+# target via build-3rdparty-netsurf.yml. NetSurf's monkey TARGET only
+# truly compiles on linux + macOS; for windows-MSVC / webasm /
+# iOS / tvOS the upstream tarball is a placeholder containing only an
+# UNSUPPORTED marker. We detect that here and skip target creation —
+# the rest of yetty (including ylexbor) configures unaffected.
 
 include_guard(GLOBAL)
 include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
 
 if(TARGET netsurf_core)
-    return()
-endif()
-
-#-----------------------------------------------------------------------------
-# Platform gate — netsurf prebuilt is linux-x86_64 only. On any other
-# target, leave netsurf_core undefined; callers handle it.
-#-----------------------------------------------------------------------------
-yetty_3rdparty_target_platform(_NS_PLATFORM)
-if(NOT _NS_PLATFORM STREQUAL "linux-x86_64")
-    message(STATUS "netsurf: ${_NS_PLATFORM} not supported — skipping (linux-x86_64 only)")
     return()
 endif()
 
@@ -50,7 +41,18 @@ set(YETTY_NETSURF_ROOT "${_NS_DIR}" CACHE PATH "" FORCE)
 set(_NS_INST "${_NS_DIR}/inst-monkey")
 set(_NS_CORE "${_NS_DIR}/netsurf")
 
-# Sanity-check tarball layout.
+# Detect the placeholder tarball that build-3rdparty-netsurf.yml
+# publishes for platforms NetSurf can't build for. Skip silently —
+# consumer CMakeLists guard via `if(NOT TARGET netsurf_core) return()`.
+if(EXISTS "${_NS_DIR}/UNSUPPORTED")
+    yetty_3rdparty_target_platform(_NS_PLATFORM)
+    message(STATUS
+        "netsurf: ${_NS_PLATFORM} not supported by NetSurf's monkey \
+TARGET — skipping (see ${_NS_DIR}/UNSUPPORTED)")
+    return()
+endif()
+
+# Sanity-check tarball layout (real builds only).
 foreach(_F
     "${_NS_INST}/lib/libnetsurf_core.a"
     "${_NS_INST}/lib/libcss.a"
@@ -59,8 +61,7 @@ foreach(_F
     "${_NS_CORE}/desktop/gui_table.h"
     "${_NS_CORE}/utils/log.h"
     "${_NS_CORE}/content/fetch.h"
-    "${_NS_CORE}/resources/default.css"
-    "${_NS_DIR}/Messages-en")
+    "${_NS_CORE}/resources/default.css")
     if(NOT EXISTS "${_F}")
         message(FATAL_ERROR
             "netsurf: missing ${_F} — tarball layout changed? \
@@ -68,15 +69,38 @@ foreach(_F
     endif()
 endforeach()
 
-# Mirror the in-tree consumer's expectation: a Messages-en file at
-# ${CMAKE_BINARY_DIR}/netsurf-Messages-en. The tarball ships it
-# pre-split from FatMessages; just copy into place at configure time
-# so src/yetty/ynetsurf/CMakeLists.txt's compile definition stays the
-# untouched ${CMAKE_BINARY_DIR}/netsurf-Messages-en literal.
-configure_file(
-    "${_NS_DIR}/Messages-en"
-    "${CMAKE_BINARY_DIR}/netsurf-Messages-en"
-    COPYONLY)
+# Messages-en is pre-split on native builds (build-host == target). For
+# cross builds the tarball ships only FatMessages; cmake splits it
+# locally if a system `split-messages` binary is on PATH, otherwise
+# the consumer falls back to FatMessages-as-text.
+if(EXISTS "${_NS_DIR}/Messages-en")
+    configure_file(
+        "${_NS_DIR}/Messages-en"
+        "${CMAKE_BINARY_DIR}/netsurf-Messages-en"
+        COPYONLY)
+elseif(EXISTS "${_NS_CORE}/resources/FatMessages")
+    find_program(_NS_SPLIT_MESSAGES split-messages)
+    if(_NS_SPLIT_MESSAGES)
+        execute_process(
+            COMMAND "${_NS_SPLIT_MESSAGES}" -l en -p any -f messages
+                    -o "${CMAKE_BINARY_DIR}/netsurf-Messages-en"
+                    "${_NS_CORE}/resources/FatMessages"
+            RESULT_VARIABLE _NS_SPLIT_RC)
+        if(NOT _NS_SPLIT_RC EQUAL 0)
+            configure_file(
+                "${_NS_CORE}/resources/FatMessages"
+                "${CMAKE_BINARY_DIR}/netsurf-Messages-en"
+                COPYONLY)
+        endif()
+    else()
+        # No split-messages on PATH — ship FatMessages as-is. NetSurf's
+        # `messages_load` will treat unrecognised lines as no-ops.
+        configure_file(
+            "${_NS_CORE}/resources/FatMessages"
+            "${CMAKE_BINARY_DIR}/netsurf-Messages-en"
+            COPYONLY)
+    endif()
+endif()
 
 #-----------------------------------------------------------------------------
 # Helper-lib IMPORTED targets. Same names + properties as the old
@@ -138,4 +162,5 @@ target_include_directories(netsurf_core INTERFACE
     ${_NS_LIBPNG_INCLUDE_DIRS}
     ${_NS_LIBWEBP_INCLUDE_DIRS})
 
+yetty_3rdparty_target_platform(_NS_PLATFORM)
 message(STATUS "netsurf: prebuilt v${YETTY_3RDPARTY_netsurf_VERSION} (${_NS_PLATFORM})")
