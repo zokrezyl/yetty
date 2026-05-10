@@ -56,7 +56,58 @@ NS_CORE="$SRC_DIR/netsurf"
 STAGE="$WORK_DIR/stage-${TARGET_PLATFORM}"
 TARBALL="$OUTPUT_DIR/netsurf-${TARGET_PLATFORM}-${VERSION}.tar.gz"
 
+# Transitive prebuilt dep: openssl-new — same tarball libcurl is built
+# against. NetSurf's content/fetchers/about/certificate.c and
+# content/fetchers/curl.c reference OpenSSL APIs (BIO_*, ASN1_*,
+# EVP_PKEY_*, X509_*); these libs supply the symbols at link time, and
+# the .pc files we sed-patch below let NetSurf's pkg-config find them.
+OPENSSL_VERSION_FILE="$SCRIPT_DIR/../openssl-new/version"
+[ -f "$OPENSSL_VERSION_FILE" ] || { echo "missing $OPENSSL_VERSION_FILE" >&2; exit 1; }
+OPENSSL_NEW_VERSION="$(tr -d '[:space:]' < "$OPENSSL_VERSION_FILE")"
+GH_RELEASE_BASE="${GH_RELEASE_BASE:-https://github.com/zokrezyl/yetty/releases/download}"
+OSSL_FILENAME="openssl-new-${TARGET_PLATFORM}-${OPENSSL_NEW_VERSION}.tar.gz"
+OSSL_TARBALL="$CACHE_DIR/$OSSL_FILENAME"
+OSSL_URL="${GH_RELEASE_BASE}/lib-openssl-new-${OPENSSL_NEW_VERSION}/${OSSL_FILENAME}"
+OSSL_DIR="$WORK_DIR/openssl-new-${OPENSSL_NEW_VERSION}"
+
 mkdir -p "$WORK_DIR" "$OUTPUT_DIR" "$CACHE_DIR"
+
+#-----------------------------------------------------------------------------
+# Fetch openssl-new prebuilt + patch its pkg-config files so the
+# absolute prefix encoded at openssl build-time gets remapped to the
+# extraction dir on this build host. (Without the sed-patch, NetSurf's
+# `pkg-config openssl --libs` returns -L pointing at a path from the
+# openssl-new build runner that doesn't exist here.)
+#-----------------------------------------------------------------------------
+if [ ! -f "$OSSL_TARBALL" ]; then
+    _part="$OSSL_TARBALL.part.$$"
+    (
+        if command -v flock >/dev/null 2>&1; then flock -x 9; fi
+        if [ ! -f "$OSSL_TARBALL" ]; then
+            echo "==> downloading openssl-new ${OPENSSL_NEW_VERSION} for ${TARGET_PLATFORM}"
+            echo "    $OSSL_URL"
+            curl -fL --retry 8 --retry-delay 5 --retry-all-errors -o "$_part" "$OSSL_URL"
+            mv "$_part" "$OSSL_TARBALL"
+        fi
+    ) 9>"$CACHE_DIR/.openssl-new-download.lock"
+    rm -f "$_part"
+fi
+if [ ! -d "$OSSL_DIR" ]; then
+    echo "==> extracting openssl-new -> $OSSL_DIR"
+    mkdir -p "$OSSL_DIR"
+    tar -C "$OSSL_DIR" -xzf "$OSSL_TARBALL"
+fi
+[ -f "$OSSL_DIR/lib/libssl.a"           ] || { echo "openssl-new: missing libssl.a"   >&2; exit 1; }
+[ -f "$OSSL_DIR/lib/libcrypto.a"        ] || { echo "openssl-new: missing libcrypto.a">&2; exit 1; }
+[ -f "$OSSL_DIR/include/openssl/ssl.h"  ] || { echo "openssl-new: missing ssl.h"      >&2; exit 1; }
+
+# Rewrite the .pc files in place so `prefix=...` points at the actual
+# extraction dir, not the openssl-new build-time path.
+for _PC in "$OSSL_DIR"/lib/pkgconfig/*.pc; do
+    [ -f "$_PC" ] || continue
+    sed -i.bak -E "s|^prefix=.*$|prefix=${OSSL_DIR}|" "$_PC"
+    rm -f "$_PC.bak"
+done
 
 #-----------------------------------------------------------------------------
 # Per-platform setup. NS_HOST/NS_CC/NS_AR are passed to NetSurf's Makefile
@@ -225,7 +276,8 @@ done < <(env | sed -n 's/^\(NIX_PKG_CONFIG_WRAPPER_FLAGS_SET_[^=]*\)=.*$/\1/p')
 # Compose make command line. NetSurf's Makefile honours the standard
 # CC/HOST/AR/RANLIB overrides for cross-compile, plus BUILD for the
 # build-host triple (used by host-side tools like nsgenbind).
-_make_args=(-C "$SRC_DIR" "-j${NCPU}" TARGET=monkey "NETSURF_USE_DUKTAPE=$NS_USE_DUKTAPE")
+_make_args=(-C "$SRC_DIR" "-j${NCPU}" TARGET=monkey \
+    "NETSURF_USE_DUKTAPE=$NS_USE_DUKTAPE")
 [ -n "$NS_BUILD"  ] && _make_args+=("BUILD=$NS_BUILD")
 [ -n "$NS_HOST"   ] && _make_args+=("HOST=$NS_HOST")
 [ -n "$NS_CC"     ] && _make_args+=("CC=$NS_CC")
@@ -237,8 +289,8 @@ _make_args=(-C "$SRC_DIR" "-j${NCPU}" TARGET=monkey "NETSURF_USE_DUKTAPE=$NS_USE
 echo "==> building netsurf-all ${VERSION} (TARGET=monkey, host=${NS_HOST:-native}, -j${NCPU})"
 env \
     "${_unset_args[@]}" \
-    PKG_CONFIG_PATH="$INST_DIR/lib/pkgconfig:${PKG_CONFIG_PATH:-}" \
-    PKG_CONFIG_PATH_FOR_TARGET="$INST_DIR/lib/pkgconfig:${PKG_CONFIG_PATH_FOR_TARGET:-}" \
+    PKG_CONFIG_PATH="$INST_DIR/lib/pkgconfig:$OSSL_DIR/lib/pkgconfig:${PKG_CONFIG_PATH:-}" \
+    PKG_CONFIG_PATH_FOR_TARGET="$INST_DIR/lib/pkgconfig:$OSSL_DIR/lib/pkgconfig:${PKG_CONFIG_PATH_FOR_TARGET:-}" \
     CFLAGS="$NS_CFLAGS" \
     make "${_make_args[@]}"
 
