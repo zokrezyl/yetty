@@ -571,7 +571,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      BUILD_DIR: build-webasm-ytrace-release-nix
+      BUILD_DIR: build-webasm-ytrace-release
 
     steps:
     - uses: actions/checkout@v4
@@ -582,7 +582,7 @@ jobs:
         nix_path: nixpkgs=channel:nixos-unstable
 
     - name: Build WebAssembly with Nix
-      run: make -f Makefile.2 build PLATFORM=webasm LOGLEVEL=ytrace BUILDTYPE=release USE_NIX=yes
+      run: make build-webasm-ytrace-release
 
     - name: Prepare site directory
       run: |
@@ -593,9 +593,11 @@ jobs:
         cp ${{ env.BUILD_DIR }}/yetty.data site/
         cp ${{ env.BUILD_DIR }}/favicon.ico site/
         cp ${{ env.BUILD_DIR }}/apple-touch-icon.jpg site/
-        cp -r ${{ env.BUILD_DIR }}/vfsync site/
+        cp ${{ env.BUILD_DIR }}/tinyemu-iframe.html site/
+        cp ${{ env.BUILD_DIR }}/tinyemu.js site/
+        cp ${{ env.BUILD_DIR }}/tinyemu.wasm site/
+        cp -r ${{ env.BUILD_DIR }}/tinyemu-assets site/
         du -sh site/* | sort -h
-        ls -la site/vfsync/u/os/yetty-alpine/ || echo "vfsync structure check"
 
     - name: Upload WebAssembly artifacts
       uses: actions/upload-artifact@v4
@@ -634,8 +636,7 @@ jobs:
       run: |
         echo "=== Site structure ==="
         ls -la site/
-        echo "=== vfsync directory ==="
-        ls -la site/vfsync/u/os/yetty-alpine/ || echo "vfsync not found"
+        du -sh site/* | sort -h
 
     - name: Setup Pages
       uses: actions/configure-pages@v4
