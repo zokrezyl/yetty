@@ -88,13 +88,21 @@ linux-x86_64)
 
 macos-x86_64)
     NS_NATIVE=1
-    NS_EXTRA_CFLAGS="-arch x86_64"
+    # _DARWIN_C_SOURCE bumps __DARWIN_C_LEVEL to __DARWIN_C_FULL which
+    # exposes BSD-only declarations in <arpa/inet.h> (inet_aton in
+    # particular — netsurf's content/urldb.c calls it). Without it,
+    # clang's C99-strict default rejects the call as implicit.
+    # Also: nsgenbind-generated WebIDL bindings (canvas_rendering_*)
+    # call strcasecmp without including <strings.h>; downgrade
+    # implicit-function-declaration from error to warning so those
+    # generated files compile.
+    NS_EXTRA_CFLAGS="-arch x86_64 -D_DARWIN_C_SOURCE -Wno-error=implicit-function-declaration"
     NS_EXTRA_LDFLAGS="-arch x86_64"
     ;;
 
 macos-arm64)
     NS_NATIVE=1
-    NS_EXTRA_CFLAGS="-arch arm64"
+    NS_EXTRA_CFLAGS="-arch arm64 -D_DARWIN_C_SOURCE -Wno-error=implicit-function-declaration"
     NS_EXTRA_LDFLAGS="-arch arm64"
     ;;
 
