@@ -72,6 +72,7 @@ struct yetty_ycore_void_result yetty_platform_extract_assets(void)
             "yemu/opensbi-fw_jump.elf",
             "yemu/alpine-rootfs.img",
             "yemu/alpine-extended-rootfs.img",
+            "yemu/yetty-riscv-disk.img",
         };
         int need_extract = 0;
         for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); i++) {
