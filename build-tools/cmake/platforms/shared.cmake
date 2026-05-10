@@ -27,10 +27,10 @@ endif()
 # Platform abstraction sources (thread, term, fs, time)
 if(WIN32)
     set(YETTY_YPLATFORM_THREAD_SOURCES
-        ${YETTY_ROOT}/src/yetty/yplatform/windows/thread.c
-        ${YETTY_ROOT}/src/yetty/yplatform/windows/term.c
-        ${YETTY_ROOT}/src/yetty/yplatform/windows/fs.c
-        ${YETTY_ROOT}/src/yetty/yplatform/windows/time.c
+        ${YETTY_ROOT}/src/yetty/yplatform/thread/windows.c
+        ${YETTY_ROOT}/src/yetty/yplatform/term/windows.c
+        ${YETTY_ROOT}/src/yetty/yplatform/fs/windows.c
+        ${YETTY_ROOT}/src/yetty/yplatform/time/windows.c
     )
 else()
     set(YETTY_YPLATFORM_THREAD_SOURCES

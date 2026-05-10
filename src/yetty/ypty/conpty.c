@@ -1,16 +1,11 @@
 /* Windows ConPTY implementation */
 
 #include <yetty/yplatform/pty.h>
-#include <yetty/yplatform/pty.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yqemu/qemu.h>
 #include <yetty/ytelnet/telnet-pty.h>
-/* unix-pty.h is the common header that declares tinyemu_pty_create /
- * telnet_pty_create / fork_pty_create. Despite the name, the declarations
- * are platform-neutral. */
-#include "../shared/unix-pty.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>

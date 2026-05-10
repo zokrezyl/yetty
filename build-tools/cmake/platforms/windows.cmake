@@ -64,35 +64,35 @@ endif()
 # Platform sources — Windows-specific + shared GLFW (C)
 # Windows uses GLFW for window/surface but ConPTY for terminal and Windows pipes
 set(YETTY_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/glfw-main.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/glfw-surface.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/glfw-event-loop.c
+    ${YETTY_ROOT}/src/yetty/ymain/glfw.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/glfw-clipboard-manager.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/libuv-event-loop.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/ywebgpu.c
-    ${YETTY_ROOT}/src/yetty/yplatform/shared/ycoroutine.c
-    ${YETTY_ROOT}/src/yetty/yplatform/windows/conpty.c
-    ${YETTY_ROOT}/src/yetty/yplatform/windows/pipe.c
-    ${YETTY_ROOT}/src/yetty/yplatform/windows/socket.c
-    ${YETTY_ROOT}/src/yetty/yplatform/windows/process.c
+    ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
+    ${YETTY_ROOT}/src/yetty/ypty/conpty.c
+    ${YETTY_ROOT}/src/yetty/yplatform/pipe/windows.c
+    ${YETTY_ROOT}/src/yetty/yplatform/socket/windows.c
+    ${YETTY_ROOT}/src/yetty/yplatform/process/windows.c
     ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
-    ${YETTY_ROOT}/src/yetty/yplatform/windows/platform-paths.c
-    ${YETTY_ROOT}/src/yetty/yplatform/windows/thread.c
-    ${YETTY_ROOT}/src/yetty/yplatform/windows/term.c
-    ${YETTY_ROOT}/src/yetty/yplatform/windows/fs.c
-    ${YETTY_ROOT}/src/yetty/yplatform/windows/time.c
+    ${YETTY_ROOT}/src/yetty/yplatform/paths/windows.c
+    ${YETTY_ROOT}/src/yetty/yplatform/thread/windows.c
+    ${YETTY_ROOT}/src/yetty/yplatform/term/windows.c
+    ${YETTY_ROOT}/src/yetty/yplatform/fs/windows.c
+    ${YETTY_ROOT}/src/yetty/yplatform/time/windows.c
 )
 
 # tinyemu PTY bridge (yetty <-> tinyemu lib) — only when LIB_TINYEMU is on.
-# We use the Windows-specific port at yplatform/windows/tinyemu-pty.c (it
-# differs from the POSIX one in the VM-thread main loop: select() doesn't
-# work on Win32 CRT pipe fds, so the Windows version uses Sleep() for the
-# timer pump and PeekNamedPipe for non-blocking input). Both still need the
+# We use the Windows-specific port at ypty/windows-temu-pty.c (it differs
+# from the POSIX one in the VM-thread main loop: select() doesn't work on
+# Win32 CRT pipe fds, so the Windows version uses Sleep() for the timer
+# pump and PeekNamedPipe for non-blocking input). Both still need the
 # tinyemu win32-compat shim force-included.
 if(YETTY_ENABLE_LIB_TINYEMU)
-    set(_TINYEMU_PTY_SRC ${YETTY_ROOT}/src/yetty/yplatform/windows/tinyemu-pty.c)
+    set(_TINYEMU_PTY_SRC ${YETTY_ROOT}/src/yetty/ypty/windows-temu-pty.c)
     list(APPEND YETTY_PLATFORM_SOURCES ${_TINYEMU_PTY_SRC})
     if(MSVC)
         set_source_files_properties(${_TINYEMU_PTY_SRC} PROPERTIES
