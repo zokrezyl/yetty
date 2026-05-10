@@ -403,7 +403,8 @@ static struct yetty_yplatform_pty_ptr_result win_conpty_create(struct yetty_ycon
         CloseHandle(pty->pipe_in);
         CloseHandle(pty->pipe_out);
         free(pty);
-        return YETTY_ERR(yetty_yplatform_pty, "failed to convert shell command to wide-char");
+        return YETTY_ERR(yetty_yplatform_pty_ptr,
+                         "failed to convert shell command to wide-char");
     }
     ydebug("win_conpty_create: spawning shell '%s'", shell_cmd);
 

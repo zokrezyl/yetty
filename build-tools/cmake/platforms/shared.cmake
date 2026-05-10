@@ -3,6 +3,57 @@
 
 # Note: variables.cmake is included from root CMakeLists.txt
 
+# Compute YETTY_BUILD_VERSION_STR once per configure: a stable identifier of
+# the current source state. Used by yetty_embed_assets() below to bake the
+# value into each target so the runtime asset-extract check can detect a
+# version change and re-extract.
+#
+# Algorithm: git short SHA (12 chars) + "-dirty" if the working tree has
+# uncommitted changes; falls back to a YYYYMMDDHHMMSS timestamp when .git
+# is absent (source tarball builds).
+function(yetty_compute_build_version)
+    if(DEFINED CACHE{YETTY_BUILD_VERSION_STR})
+        return()
+    endif()
+    set(_v "")
+    if(EXISTS "${YETTY_ROOT}/.git")
+        find_package(Git QUIET)
+        if(Git_FOUND)
+            execute_process(
+                COMMAND "${GIT_EXECUTABLE}" -C "${YETTY_ROOT}" rev-parse --short=12 HEAD
+                OUTPUT_VARIABLE _sha
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                RESULT_VARIABLE _rc
+                ERROR_QUIET)
+            if(_rc EQUAL 0 AND _sha)
+                execute_process(
+                    COMMAND "${GIT_EXECUTABLE}" -C "${YETTY_ROOT}" status --porcelain
+                    OUTPUT_VARIABLE _dirty
+                    OUTPUT_STRIP_TRAILING_WHITESPACE
+                    ERROR_QUIET)
+                if(_dirty)
+                    set(_v "${_sha}-dirty")
+                else()
+                    set(_v "${_sha}")
+                endif()
+            endif()
+            # Make CMake reconfigure when the commit moves (.git/HEAD on
+            # commit / checkout / reset; .git/index on `git add`). Without
+            # this, the baked-in value stays stale until something else
+            # triggers a reconfigure.
+            set_property(DIRECTORY "${CMAKE_SOURCE_DIR}" APPEND PROPERTY
+                CMAKE_CONFIGURE_DEPENDS
+                "${YETTY_ROOT}/.git/HEAD"
+                "${YETTY_ROOT}/.git/index")
+        endif()
+    endif()
+    if(NOT _v)
+        string(TIMESTAMP _v "%Y%m%d%H%M%S")
+    endif()
+    set(YETTY_BUILD_VERSION_STR "${_v}" CACHE INTERNAL "yetty source-state stamp")
+    message(STATUS "yetty: build version = ${_v}")
+endfunction()
+
 # Determine platform name for config file selection
 # tvOS check before iOS — tvos.cmake doesn't set YETTY_IOS at cmake level,
 # but APPLE is true for tvOS so without an explicit branch it would fall
@@ -411,18 +462,24 @@ function(yetty_embed_assets TARGET)
     file(MAKE_DIRECTORY "${EMBED_DATA_DIR}/fonts")
     file(MAKE_DIRECTORY "${EMBED_DATA_DIR}/msdf-fonts")
 
-    # Stamp a fresh version on every cmake configure so the runtime's
+    # Stamp a per-source version baked into the binary so the runtime's
     # asset-extract marker check (yetty_incbin_assets_needs_extraction)
-    # actually re-extracts after a rebuild that changed an embedded
-    # shader / asset. The marker is per-install (~/.local/share/yetty/
-    # .yetty-assets/version on Linux); without a per-build version it
-    # stays at "dev" forever and the deployed shaders silently rot out
-    # of sync with the binary's incbin'd ones — an editor change to
-    # text-layer.wgsl never reaches the runtime until the user wipes
-    # ~/.local/share/yetty/.yetty-assets/ by hand.
-    string(TIMESTAMP YETTY_BUILD_STAMP "%Y%m%d%H%M%S")
+    # re-extracts whenever the embedded shaders / fonts could have changed.
+    # The marker lives under the per-install data dir (~/.local/share/yetty
+    # on Linux, %LOCALAPPDATA%\yetty\data on Windows); without a per-build
+    # version it stays at "dev" forever and an editor change to text-layer.wgsl
+    # never reaches the runtime until the user wipes the data dir by hand.
+    #
+    # Prefer the git HEAD short hash (+ "-dirty" when there are uncommitted
+    # changes) over a wall-clock timestamp: same commit reconfigured a second
+    # time keeps the same version, so incidental reconfigures (editing an
+    # unrelated CMakeLists, deleting build.ninja) no longer force a 950 MB
+    # asset re-extraction. Tied to .git/HEAD + .git/index so CMake reconfigures
+    # on commit / checkout / `git add`. Falls back to the timestamp in source
+    # tarball builds where .git is absent.
+    yetty_compute_build_version()
     target_compile_definitions(${TARGET} PRIVATE
-        YETTY_BUILD_VERSION="${YETTY_BUILD_STAMP}")
+        YETTY_BUILD_VERSION="${YETTY_BUILD_VERSION_STR}")
 
     # Copy logo
     file(COPY "${YETTY_ROOT}/docs/logo-2.jpeg" DESTINATION "${EMBED_DATA_DIR}")

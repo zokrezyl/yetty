@@ -185,6 +185,11 @@ if(WIN32)
         YETTY_ENABLE_TOOL_YSHEET       # uses yrich-runner — same POSIX TTY deps
         YETTY_ENABLE_TOOL_YSLIDE       # uses yrich-runner — same POSIX TTY deps
         YETTY_ENABLE_LIB_LIBMAGIC      # upstream autotools-only; no MSVC port (libmagic.cmake's ExternalProject runs ./configure + make).
+        YETTY_ENABLE_LIB_LIBCURL       # libcurl Windows port would need OpenSSL+zlib 3rdparty; no Windows consumer right now besides ylexbor.
+        YETTY_ENABLE_FEATURE_YLEXBOR   # src/yetty/ylexbor uses GCC `[low...high]` array initializers and POSIX <strings.h>.
+        YETTY_ENABLE_TOOL_YLEXBOR      # depends on YLEXBOR; also links CURL::libcurl + POSIX yplatform sources.
+        YETTY_ENABLE_FEATURE_YNETSURF  # NetSurf prebuilt is non-Windows; the wrapper has no NetSurf::Windows port today.
+        YETTY_ENABLE_TOOL_YNETSURF     # depends on YNETSURF; also hardcodes POSIX yplatform/* sources.
     )
         if(${_f})
             message(STATUS "Disabling ${_f} on Windows (sources not ported)")
