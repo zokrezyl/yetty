@@ -56,58 +56,7 @@ NS_CORE="$SRC_DIR/netsurf"
 STAGE="$WORK_DIR/stage-${TARGET_PLATFORM}"
 TARBALL="$OUTPUT_DIR/netsurf-${TARGET_PLATFORM}-${VERSION}.tar.gz"
 
-# Transitive prebuilt dep: openssl-new — same tarball libcurl is built
-# against. NetSurf's content/fetchers/about/certificate.c and
-# content/fetchers/curl.c reference OpenSSL APIs (BIO_*, ASN1_*,
-# EVP_PKEY_*, X509_*); these libs supply the symbols at link time, and
-# the .pc files we sed-patch below let NetSurf's pkg-config find them.
-OPENSSL_VERSION_FILE="$SCRIPT_DIR/../openssl-new/version"
-[ -f "$OPENSSL_VERSION_FILE" ] || { echo "missing $OPENSSL_VERSION_FILE" >&2; exit 1; }
-OPENSSL_NEW_VERSION="$(tr -d '[:space:]' < "$OPENSSL_VERSION_FILE")"
-GH_RELEASE_BASE="${GH_RELEASE_BASE:-https://github.com/zokrezyl/yetty/releases/download}"
-OSSL_FILENAME="openssl-new-${TARGET_PLATFORM}-${OPENSSL_NEW_VERSION}.tar.gz"
-OSSL_TARBALL="$CACHE_DIR/$OSSL_FILENAME"
-OSSL_URL="${GH_RELEASE_BASE}/lib-openssl-new-${OPENSSL_NEW_VERSION}/${OSSL_FILENAME}"
-OSSL_DIR="$WORK_DIR/openssl-new-${OPENSSL_NEW_VERSION}"
-
 mkdir -p "$WORK_DIR" "$OUTPUT_DIR" "$CACHE_DIR"
-
-#-----------------------------------------------------------------------------
-# Fetch openssl-new prebuilt + patch its pkg-config files so the
-# absolute prefix encoded at openssl build-time gets remapped to the
-# extraction dir on this build host. (Without the sed-patch, NetSurf's
-# `pkg-config openssl --libs` returns -L pointing at a path from the
-# openssl-new build runner that doesn't exist here.)
-#-----------------------------------------------------------------------------
-if [ ! -f "$OSSL_TARBALL" ]; then
-    _part="$OSSL_TARBALL.part.$$"
-    (
-        if command -v flock >/dev/null 2>&1; then flock -x 9; fi
-        if [ ! -f "$OSSL_TARBALL" ]; then
-            echo "==> downloading openssl-new ${OPENSSL_NEW_VERSION} for ${TARGET_PLATFORM}"
-            echo "    $OSSL_URL"
-            curl -fL --retry 8 --retry-delay 5 --retry-all-errors -o "$_part" "$OSSL_URL"
-            mv "$_part" "$OSSL_TARBALL"
-        fi
-    ) 9>"$CACHE_DIR/.openssl-new-download.lock"
-    rm -f "$_part"
-fi
-if [ ! -d "$OSSL_DIR" ]; then
-    echo "==> extracting openssl-new -> $OSSL_DIR"
-    mkdir -p "$OSSL_DIR"
-    tar -C "$OSSL_DIR" -xzf "$OSSL_TARBALL"
-fi
-[ -f "$OSSL_DIR/lib/libssl.a"           ] || { echo "openssl-new: missing libssl.a"   >&2; exit 1; }
-[ -f "$OSSL_DIR/lib/libcrypto.a"        ] || { echo "openssl-new: missing libcrypto.a">&2; exit 1; }
-[ -f "$OSSL_DIR/include/openssl/ssl.h"  ] || { echo "openssl-new: missing ssl.h"      >&2; exit 1; }
-
-# Rewrite the .pc files in place so `prefix=...` points at the actual
-# extraction dir, not the openssl-new build-time path.
-for _PC in "$OSSL_DIR"/lib/pkgconfig/*.pc; do
-    [ -f "$_PC" ] || continue
-    sed -i.bak -E "s|^prefix=.*$|prefix=${OSSL_DIR}|" "$_PC"
-    rm -f "$_PC.bak"
-done
 
 #-----------------------------------------------------------------------------
 # Per-platform setup. NS_HOST/NS_CC/NS_AR are passed to NetSurf's Makefile
@@ -214,7 +163,57 @@ EOF
 esac
 
 #-----------------------------------------------------------------------------
-# Fetch + extract
+# Transitive prebuilt dep: openssl-new — same tarball libcurl is built
+# against. NetSurf's content/fetchers/about/certificate.c and
+# content/fetchers/curl.c reference OpenSSL APIs (BIO_*, ASN1_*,
+# EVP_PKEY_*, X509_*) and pkg-config on this build host has to resolve
+# them. Only needed for real-build platforms — placeholder branches
+# exit above. Linux/macOS ship libssl.a + libcrypto.a; we don't fetch
+# openssl-new for the placeholder platforms (Windows uses .lib, but
+# we never reach this for windows-x86_64 anyway).
+#-----------------------------------------------------------------------------
+OPENSSL_VERSION_FILE="$SCRIPT_DIR/../openssl-new/version"
+[ -f "$OPENSSL_VERSION_FILE" ] || { echo "missing $OPENSSL_VERSION_FILE" >&2; exit 1; }
+OPENSSL_NEW_VERSION="$(tr -d '[:space:]' < "$OPENSSL_VERSION_FILE")"
+GH_RELEASE_BASE="${GH_RELEASE_BASE:-https://github.com/zokrezyl/yetty/releases/download}"
+OSSL_FILENAME="openssl-new-${TARGET_PLATFORM}-${OPENSSL_NEW_VERSION}.tar.gz"
+OSSL_TARBALL="$CACHE_DIR/$OSSL_FILENAME"
+OSSL_URL="${GH_RELEASE_BASE}/lib-openssl-new-${OPENSSL_NEW_VERSION}/${OSSL_FILENAME}"
+OSSL_DIR="$WORK_DIR/openssl-new-${OPENSSL_NEW_VERSION}"
+
+if [ ! -f "$OSSL_TARBALL" ]; then
+    _part="$OSSL_TARBALL.part.$$"
+    (
+        if command -v flock >/dev/null 2>&1; then flock -x 9; fi
+        if [ ! -f "$OSSL_TARBALL" ]; then
+            echo "==> downloading openssl-new ${OPENSSL_NEW_VERSION} for ${TARGET_PLATFORM}"
+            echo "    $OSSL_URL"
+            curl -fL --retry 8 --retry-delay 5 --retry-all-errors -o "$_part" "$OSSL_URL"
+            mv "$_part" "$OSSL_TARBALL"
+        fi
+    ) 9>"$CACHE_DIR/.openssl-new-download.lock"
+    rm -f "$_part"
+fi
+if [ ! -d "$OSSL_DIR" ]; then
+    echo "==> extracting openssl-new -> $OSSL_DIR"
+    mkdir -p "$OSSL_DIR"
+    tar -C "$OSSL_DIR" -xzf "$OSSL_TARBALL"
+fi
+[ -f "$OSSL_DIR/lib/libssl.a"           ] || { echo "openssl-new: missing libssl.a"   >&2; exit 1; }
+[ -f "$OSSL_DIR/lib/libcrypto.a"        ] || { echo "openssl-new: missing libcrypto.a">&2; exit 1; }
+[ -f "$OSSL_DIR/include/openssl/ssl.h"  ] || { echo "openssl-new: missing ssl.h"      >&2; exit 1; }
+
+# Rewrite the .pc files in place so `prefix=...` points at the actual
+# extraction dir, not the openssl-new build-time path encoded by the
+# openssl-new release runner.
+for _PC in "$OSSL_DIR"/lib/pkgconfig/*.pc; do
+    [ -f "$_PC" ] || continue
+    sed -i.bak -E "s|^prefix=.*$|prefix=${OSSL_DIR}|" "$_PC"
+    rm -f "$_PC.bak"
+done
+
+#-----------------------------------------------------------------------------
+# Fetch + extract NetSurf source
 #-----------------------------------------------------------------------------
 if [ ! -f "$TARBALL_CACHE" ]; then
     _part="$TARBALL_CACHE.part.$$"
