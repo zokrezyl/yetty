@@ -7,10 +7,11 @@
 extern "C" {
 #endif
 
-struct yetty_yconfig_config;
-
-/* Extract embedded assets to cache directory */
-struct yetty_ycore_void_result yetty_platform_extract_assets(struct yetty_yconfig_config *config);
+/* Extract embedded assets to data/config directories. Resolves the target
+ * dirs via the platform path getters (yetty_yplatform_get_data_dir() etc.),
+ * so it must run AFTER those are valid but BEFORE the config is loaded —
+ * on first launch the bundled config.yaml is what the loader reads. */
+struct yetty_ycore_void_result yetty_platform_extract_assets(void);
 
 #ifdef __cplusplus
 }
