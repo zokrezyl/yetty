@@ -43,6 +43,8 @@ struct yetty_ycore_void_result yetty_yevent_register_default_listeners(
         YETTY_YCORE_ZOOM_VISUAL_PAN,
         YETTY_YCORE_ZOOM_VISUAL_APPLY,
         YETTY_YCORE_ZOOM_CELL_SIZE,
+        /* Capture: yetty handles via the screenshot module. */
+        YETTY_YCORE_SCREENSHOT,
     };
 
     for (size_t i = 0; i < sizeof(kTypes) / sizeof(kTypes[0]); ++i) {

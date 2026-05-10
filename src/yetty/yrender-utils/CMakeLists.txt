@@ -3,6 +3,7 @@
 
 add_library(yetty_yrender_utils STATIC
     tile-diff.c
+    screenshot.c
 )
 
 target_include_directories(yetty_yrender_utils PUBLIC
