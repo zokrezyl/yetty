@@ -1,19 +1,14 @@
 #!/bin/bash
 # Builds imgui (ocornut/imgui) for $TARGET_PLATFORM. We compile the
-# 5 platform-independent core .cpp files into libimgui_core.a, and
-# ship the backend SOURCES (imgui_impl_glfw.cpp, imgui_impl_wgpu.cpp)
-# so the yetty consumer can compile them with its specific
-# WEBGPU_BACKEND / GLFW / Cocoa flags. Same idea libpng's prebuilt
-# ships zlib-linked .a but keeps zlib symbols unresolved — backends are
-# inherently target-flag-specific, prebuilding them per-host doesn't
-# match yetty's 12-axis flag matrix.
+# 5 platform-independent core .cpp files into libimgui_core.a. The
+# tarball is pure imgui core — no GLFW / WebGPU backend sources, no
+# X11. Consumers that need a platform/renderer backend (yetty's main
+# desktop exec) bring their own.
 #
 # Output tarball layout (consumed by build-tools/cmake/libs/imgui.cmake):
 #   lib/libimgui_core.a          — the 5 core .cpp prebuilt
 #   include/imgui.h              — public headers (imgui.h, imgui_internal.h,
 #                                  imconfig.h, imstb_*.h)
-#   src-backends/imgui_impl_glfw.{cpp,h}
-#   src-backends/imgui_impl_wgpu.{cpp,h}
 
 set -Eeuo pipefail
 trap 'rc=$?; echo "FAILED: rc=$rc line=$LINENO source=${BASH_SOURCE[0]} cmd: $BASH_COMMAND" >&2' ERR
@@ -49,7 +44,7 @@ if [ ! -f "$TARBALL_CACHE" ]; then
 fi
 if [ ! -d "$SRC_DIR" ]; then tar -C "$WORK_DIR" -xzf "$TARBALL_CACHE"; fi
 rm -rf "$STAGE"
-mkdir -p "$STAGE/lib" "$STAGE/include" "$STAGE/src-backends"
+mkdir -p "$STAGE/lib" "$STAGE/include"
 
 #-----------------------------------------------------------------------------
 # Per-platform compiler.
@@ -150,15 +145,10 @@ else
 fi
 
 #-----------------------------------------------------------------------------
-# Stage public headers + backend source files.
+# Stage public headers only — pure imgui core, no GLFW/WebGPU backends.
 #-----------------------------------------------------------------------------
 for _h in imgui.h imgui_internal.h imconfig.h imstb_rectpack.h imstb_textedit.h imstb_truetype.h; do
     [ -f "$SRC_DIR/$_h" ] && cp "$SRC_DIR/$_h" "$STAGE/include/" || true
-done
-# Backend sources for yetty's consumer to compile against its own
-# platform flags (WEBGPU_BACKEND etc.).
-for _b in imgui_impl_glfw.cpp imgui_impl_glfw.h imgui_impl_wgpu.cpp imgui_impl_wgpu.h; do
-    [ -f "$SRC_DIR/backends/$_b" ] && cp "$SRC_DIR/backends/$_b" "$STAGE/src-backends/" || true
 done
 
 if [ ! -f "$STAGE/lib/libimgui_core.a" ] && [ ! -f "$STAGE/lib/libimgui_core.lib" ]; then
@@ -166,7 +156,6 @@ if [ ! -f "$STAGE/lib/libimgui_core.a" ] && [ ! -f "$STAGE/lib/libimgui_core.lib
     exit 1
 fi
 [ -f "$STAGE/include/imgui.h" ]                     || { echo "missing imgui.h"                   >&2; exit 1; }
-[ -f "$STAGE/src-backends/imgui_impl_wgpu.cpp" ]    || { echo "missing imgui_impl_wgpu.cpp"        >&2; exit 1; }
 
 tar -C "$STAGE" -czf "$TARBALL" .
 echo "imgui $VERSION ($TARGET_PLATFORM) ready:"
