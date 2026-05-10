@@ -9,6 +9,7 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/render-target.h>
+#include <yetty/yrender-utils/screenshot.h>
 #ifdef YETTY_HAS_X11_TILE
 #include <yetty/yrender/render-target-x11-tile.h>
 #endif
@@ -27,11 +28,14 @@
 #include <yetty/ymsdf/generator.h>
 #include <yetty/yvnc/vnc-server.h>
 #include <yetty/yplatform/platform-input-pipe.h>
+#include <yetty/yplatform/fs.h>
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <time.h>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
@@ -381,6 +385,60 @@ static struct yetty_ycore_int_result yetty_event_handler(
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
+    /* SCREENSHOT — capture the current render target's texture to disk.
+     *
+     * Triggered today by an explicit YETTY_YCORE_SCREENSHOT event (RPC, test
+     * harness, or future keybinding). We grab the last-rendered texture
+     * straight off the target — no extra render pass, no extra GPU allocation
+     * beyond a one-shot mappable readback buffer inside the screenshot
+     * coroutine. If the path field is empty, fall back to a default under
+     * /tmp so the user always gets *something* on disk. */
+    if (event->type == YETTY_YCORE_SCREENSHOT) {
+        if (!yetty->render_target || !yetty->render_target->ops->get_texture) {
+            yerror("yetty: SCREENSHOT but no render_target/get_texture");
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+        WGPUTexture tex = yetty->render_target->ops->get_texture(yetty->render_target);
+        if (!tex) {
+            yerror("yetty: SCREENSHOT: render target has no texture");
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+
+        const char *path = event->screenshot.path;
+        char default_path[512];
+        if (!path || !*path) {
+            /* XDG-compliant default: $XDG_DATA_HOME/yetty/screenshots/ on
+             * Linux (~/.local/share/yetty/screenshots/), platform-equivalent
+             * elsewhere. The data dir itself is already mkdir_p'd at startup
+             * (ymain/glfw.c); the screenshots subdir we create here on
+             * demand. The env var was exported alongside it. */
+            const char *data_dir = getenv("YETTY_DATA_DIR");
+            if (!data_dir || !*data_dir) {
+                yerror("yetty: SCREENSHOT: YETTY_DATA_DIR unset");
+                return YETTY_OK(yetty_ycore_int, 1);
+            }
+            char dir[384];
+            snprintf(dir, sizeof(dir), "%s/screenshots", data_dir);
+            yetty_yplatform_mkdir_p(dir);
+
+            time_t now = time(NULL);
+            struct tm tm_buf;
+            localtime_r(&now, &tm_buf);
+            char ts[32];
+            strftime(ts, sizeof(ts), "%Y%m%d-%H%M%S", &tm_buf);
+            snprintf(default_path, sizeof(default_path), "%s/yetty-%s.ppm", dir, ts);
+            path = default_path;
+        }
+
+        struct yetty_ycore_void_result sr = yetty_yrender_utils_screenshot_capture(
+            yetty->device, yetty->queue, yetty->wgpu, tex, path);
+        if (!YETTY_IS_OK(sr)) {
+            yerror("yetty: SCREENSHOT failed: %s", sr.error.msg);
+            yetty_ycore_error_destroy(sr.error);
+        }
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+
     /* ZOOM_CELL_SIZE — structural zoom. Forward to the workspace so the
      * active terminal can scale its layers' cell_size and recompute cols/rows.
      * See terminal.c for the actual restructuring. */
@@ -467,6 +525,20 @@ static struct yetty_ycore_int_result yetty_event_handler(
         if (yetty->event_loop && yetty->event_loop->ops->stop) {
             yetty->event_loop->ops->stop(yetty->event_loop);
         }
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+
+    /* Global key shortcuts. Translated into named events here (not in the
+     * platform layer) so RPC / kb-mapping / tests can inject the same event
+     * directly. Re-posted async so the readback work runs from a fresh loop
+     * iteration and doesn't reenter this handler. Ctrl+F1 is reserved for a
+     * help-context overlay; Ctrl+F2 captures a screenshot. */
+    if (event->type == YETTY_YCORE_KEY_DOWN && (event->key.mods & YETTY_MOD_CONTROL) &&
+        event->key.key == 291 /* GLFW_KEY_F2 */) {
+        struct yetty_yui_event ev = {0};
+        ev.type = YETTY_YCORE_SCREENSHOT;
+        yetty_yevent_post_async(yetty->context.app_context.platform_input_pipe, &ev);
+        ydebug("yetty: Ctrl+F2 -> SCREENSHOT");
         return YETTY_OK(yetty_ycore_int, 1);
     }
 

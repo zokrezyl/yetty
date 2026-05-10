@@ -75,6 +75,10 @@ enum yetty_yevent_event_type {
     YETTY_YCORE_ZOOM_VISUAL_APPLY,
     YETTY_YCORE_ZOOM_VISUAL_PAN,
     YETTY_YCORE_ZOOM_CELL_SIZE,
+    /* Capture the rendered window contents to a file. Triggered today by an
+     * event-loop event (later wired to a keyboard shortcut). The path is
+     * inline for simple cases; an empty string means "auto-pick a default". */
+    YETTY_YCORE_SCREENSHOT,
     /* Must be last - used for array sizing */
     YETTY_YCORE_COUNT
 };
@@ -208,6 +212,12 @@ struct yetty_ycore_event_zoom_cell_size {
     int reset;   /* non-zero -> restore baseline cell size */
 };
 
+struct yetty_ycore_event_screenshot {
+    /* Output path. Empty string => use a default location. The fixed-size
+     * inline buffer keeps the event POD-copyable through the input pipe. */
+    char path[256];
+};
+
 struct yetty_yui_event {
     enum yetty_yevent_event_type type;
     union {
@@ -234,6 +244,7 @@ struct yetty_yui_event {
         struct yetty_ycore_event_zoom_visual_apply zoom_visual_apply;
         struct yetty_ycore_event_zoom_visual_pan zoom_visual_pan;
         struct yetty_ycore_event_zoom_cell_size zoom_cell_size;
+        struct yetty_ycore_event_screenshot screenshot;
     };
     void *payload; /* optional heap-allocated data (copy/paste text) */
 };
