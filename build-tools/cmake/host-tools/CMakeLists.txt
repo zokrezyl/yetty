@@ -131,10 +131,10 @@ target_include_directories(ytrace_c PUBLIC ${YETTY_ROOT}/include)
 # Platform thread/term/fs implementations for ytrace
 if(WIN32)
     set(YETTY_HOST_PLATFORM_SOURCES
-        ${YETTY_ROOT}/src/yetty/yplatform/windows/thread.c
-        ${YETTY_ROOT}/src/yetty/yplatform/windows/term.c
-        ${YETTY_ROOT}/src/yetty/yplatform/windows/fs.c
-        ${YETTY_ROOT}/src/yetty/yplatform/windows/time.c
+        ${YETTY_ROOT}/src/yetty/yplatform/thread/windows.c
+        ${YETTY_ROOT}/src/yetty/yplatform/term/windows.c
+        ${YETTY_ROOT}/src/yetty/yplatform/fs/windows.c
+        ${YETTY_ROOT}/src/yetty/yplatform/time/windows.c
     )
 else()
     set(YETTY_HOST_PLATFORM_SOURCES

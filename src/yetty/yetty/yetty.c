@@ -423,7 +423,11 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
             time_t now = time(NULL);
             struct tm tm_buf;
+#ifdef _WIN32
+            localtime_s(&tm_buf, &now);
+#else
             localtime_r(&now, &tm_buf);
+#endif
             char ts[32];
             strftime(ts, sizeof(ts), "%Y%m%d-%H%M%S", &tm_buf);
             snprintf(default_path, sizeof(default_path), "%s/yetty-%s.ppm", dir, ts);

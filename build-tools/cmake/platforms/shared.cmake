@@ -27,10 +27,10 @@ endif()
 # Platform abstraction sources (thread, term, fs, time)
 if(WIN32)
     set(YETTY_YPLATFORM_THREAD_SOURCES
-        ${YETTY_ROOT}/src/yetty/yplatform/windows/thread.c
-        ${YETTY_ROOT}/src/yetty/yplatform/windows/term.c
-        ${YETTY_ROOT}/src/yetty/yplatform/windows/fs.c
-        ${YETTY_ROOT}/src/yetty/yplatform/windows/time.c
+        ${YETTY_ROOT}/src/yetty/yplatform/thread/windows.c
+        ${YETTY_ROOT}/src/yetty/yplatform/term/windows.c
+        ${YETTY_ROOT}/src/yetty/yplatform/fs/windows.c
+        ${YETTY_ROOT}/src/yetty/yplatform/time/windows.c
     )
 else()
     set(YETTY_YPLATFORM_THREAD_SOURCES
@@ -372,8 +372,8 @@ if(YETTY_ENABLE_FEATURE_SSH)
 endif()
 if(YETTY_ENABLE_FEATURE_YMSDF_WGSL)
     list(APPEND YETTY_LIBS yetty_ymsdf_wgsl)
-endif()
-if(YETTY_ENABLE_FEATURE_YMSDF_GEN AND YETTY_ENABLE_FEATURE_YMSDF_WGSL)
+    # Polymorphic ymsdf wrapper now builds with WGSL alone (cpu backend
+    # gated by YMSDF_GEN inside ymsdf/CMakeLists.txt).
     list(APPEND YETTY_LIBS yetty_ymsdf)
 endif()
 if(YETTY_ENABLE_FEATURE_GPU)
