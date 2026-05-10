@@ -127,22 +127,45 @@ configure_file("${_ROOTFS_BR}"
 configure_file("${YETTY_ROOT}/assets/yemu/temu/yetty-temu-extended.cfg"
     "${YETTY_TINYEMU_ASSETS_DIR}/yetty-temu-extended.cfg" COPYONLY)
 
+# riscv tools disk — optional (warn-and-skip if not yet fetched).
+set(_RISCV_DISK_BR "")
+if(YETTY_TOOLS_RISCV_IMG AND EXISTS "${YETTY_TOOLS_RISCV_IMG}.br")
+    set(_RISCV_DISK_BR "${YETTY_TOOLS_RISCV_IMG}.br")
+    configure_file("${_RISCV_DISK_BR}"
+        "${YETTY_TINYEMU_ASSETS_DIR}/yetty-riscv-disk.img.br" COPYONLY)
+else()
+    message(WARNING
+        "tinyemu-iframe: yetty-riscv-disk.img.br not found — "
+        "tools disk will be absent from webasm VM. "
+        "Fetch yetty-tools-riscv asset or build disk-linux-riscv-ytrace-release.")
+endif()
+
 # Manifest. dest paths match BRIDGE_CFG_PATH ("/yetty-vm/...") in
 # tinyemu-bridge.c and the cfg's $YETTY_DATA_DIR expansion.
 string(TIMESTAMP _BUILD_STAMP "%Y%m%d%H%M%S")
+if(_RISCV_DISK_BR)
+    set(_RISCV_DISK_ENTRY
+        "    { \"url\": \"yetty-riscv-disk.img.br\", \"dest\": \"/yetty-vm/yemu/yetty-riscv-disk.img\", \"brotli\": true  },\n")
+else()
+    set(_RISCV_DISK_ENTRY "")
+endif()
 file(WRITE "${YETTY_TINYEMU_ASSETS_DIR}/manifest.json"
 "{
   \"version\": \"${_BUILD_STAMP}\",
   \"entries\": [
-    { \"url\": \"kernel-riscv64.bin.br\",       \"dest\": \"/yetty-vm/yemu/kernel-riscv64.bin\",       \"brotli\": true  },
-    { \"url\": \"opensbi-fw_jump.elf.br\",      \"dest\": \"/yetty-vm/yemu/opensbi-fw_jump.elf\",      \"brotli\": true  },
+    { \"url\": \"kernel-riscv64.bin.br\",         \"dest\": \"/yetty-vm/yemu/kernel-riscv64.bin\",         \"brotli\": true  },
+    { \"url\": \"opensbi-fw_jump.elf.br\",        \"dest\": \"/yetty-vm/yemu/opensbi-fw_jump.elf\",        \"brotli\": true  },
     { \"url\": \"alpine-extended-rootfs.img.br\", \"dest\": \"/yetty-vm/yemu/alpine-extended-rootfs.img\", \"brotli\": true  },
-    { \"url\": \"yetty-temu-extended.cfg\",     \"dest\": \"/yetty-vm/yetty-temu-extended.cfg\",       \"brotli\": false }
+${_RISCV_DISK_ENTRY}    { \"url\": \"yetty-temu-extended.cfg\",       \"dest\": \"/yetty-vm/yetty-temu-extended.cfg\",       \"brotli\": false }
   ]
 }
 ")
 
-message(STATUS "tinyemu-iframe: staged 4 VM assets in ${YETTY_TINYEMU_ASSETS_DIR}")
+if(_RISCV_DISK_BR)
+    message(STATUS "tinyemu-iframe: staged 5 VM assets (incl. riscv tools disk) in ${YETTY_TINYEMU_ASSETS_DIR}")
+else()
+    message(STATUS "tinyemu-iframe: staged 4 VM assets in ${YETTY_TINYEMU_ASSETS_DIR}")
+endif()
 
 # Place tinyemu.{js,wasm,data} next to yetty.{js,wasm} so tinyemu-iframe.html
 # can load them with relative URLs.
