@@ -191,6 +191,16 @@ ip addr add 10.0.2.15/24 dev eth0 2>/dev/null
 ip route add default via 10.0.2.2 2>/dev/null
 echo 'nameserver 10.0.2.3' > /etc/resolv.conf
 
+# yetty-tools-riscv: yetty attaches a second virtio-blk drive (drive1) at
+# /dev/vdb carrying riscv64 demos+tools and a repo HEAD checkout. Mount RO
+# at /opt/yetty when present. Skipped silently otherwise so this image
+# still boots in plain qemu/tinyemu invocations that don't pass a second
+# disk.
+if [ -b /dev/vdb ]; then
+    mkdir -p /opt/yetty
+    mount -o ro /dev/vdb /opt/yetty 2>/dev/null
+fi
+
 # runit service supervisor — runs in the background, supervises everything
 # under /etc/service (currently just telnetd). Keeping the interactive
 # shell on hvc0 means we don't need to make runit PID 1.
