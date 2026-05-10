@@ -20,6 +20,10 @@ BUILD_DIR_DESKTOP_YTRACE_RELEASE := build-desktop-ytrace-release
 BUILD_DIR_DESKTOP_YTRACE_ASAN := build-desktop-ytrace-asan
 BUILD_DIR_DESKTOP_YINFO_RELEASE := build-desktop-yinfo-release
 
+# Linux cross-compile (from x86_64 host using nix cross shells)
+BUILD_DIR_LINUX_AARCH64_YTRACE_RELEASE := build-linux-aarch64-ytrace-release
+BUILD_DIR_LINUX_RISCV_YTRACE_RELEASE := build-linux-riscv-ytrace-release
+
 BUILD_DIR_ANDROID_YTRACE_DEBUG := build-android-ytrace-debug
 BUILD_DIR_ANDROID_YTRACE_RELEASE := build-android-ytrace-release
 BUILD_DIR_ANDROID_YINFO_RELEASE := build-android-yinfo-release
@@ -192,6 +196,118 @@ test-desktop-yinfo-release: ## Run desktop yinfo release tests
 	@if [ ! -f "$(BUILD_DIR_DESKTOP_YINFO_RELEASE)/build.ninja" ]; then $(MAKE) config-desktop-yinfo-release; fi
 	PATH="$(SYSTEM_PATH)" $(CMAKE) --build $(BUILD_DIR_DESKTOP_YINFO_RELEASE) --target yetty_tests $(CMAKE_PARALLEL)
 	./$(BUILD_DIR_DESKTOP_YINFO_RELEASE)/test/ut/yetty_tests
+
+#=============================================================================
+# Linux cross-compile (aarch64 / riscv64) — host x86_64 → target Linux ARM64/RISC-V
+# NO nix. Uses Ubuntu/Debian's stock cross toolchain + multiarch dev packages.
+#
+# One-time host setup (Ubuntu 24.04 / Debian 12):
+#
+#   sudo apt-get update
+#   sudo apt-get install -y \
+#       cmake ninja-build pkg-config \
+#       gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+#       gcc-riscv64-linux-gnu g++-riscv64-linux-gnu
+#
+#   # Multiarch: pull arm64/riscv64 dev packages from ports.ubuntu.com
+#   sudo dpkg --add-architecture arm64
+#   sudo dpkg --add-architecture riscv64
+#
+#   # Restrict default sources to amd64 (so apt doesn't try to fetch
+#   # arm64/riscv64 from us.archive — which doesn't have them):
+#   sudo sed -i -E 's|^deb |deb [arch=amd64] |' /etc/apt/sources.list \
+#       /etc/apt/sources.list.d/*.list 2>/dev/null || true
+#
+#   # Add ports for arm64/riscv64 (replace `noble` with your codename):
+#   . /etc/os-release
+#   echo "deb [arch=arm64,riscv64] http://ports.ubuntu.com/ubuntu-ports $${VERSION_CODENAME} main universe" \
+#       | sudo tee /etc/apt/sources.list.d/ports.list
+#   echo "deb [arch=arm64,riscv64] http://ports.ubuntu.com/ubuntu-ports $${VERSION_CODENAME}-updates main universe" \
+#       | sudo tee -a /etc/apt/sources.list.d/ports.list
+#
+#   sudo apt-get update
+#
+#   # Cross dev packages (aarch64). Build of the main `yetty` exec needs
+#   # X11/wayland/GL/fontconfig; the riscv64 target builds demos+tools only
+#   # so it's a smaller list — but we install the same set for symmetry.
+#   sudo apt-get install -y \
+#       libx11-dev:arm64 libxrandr-dev:arm64 libxinerama-dev:arm64 \
+#       libxcursor-dev:arm64 libxi-dev:arm64 libxext-dev:arm64 \
+#       libxkbcommon-dev:arm64 libwayland-dev:arm64 wayland-protocols \
+#       libgl-dev:arm64 libfontconfig-dev:arm64 \
+#       libexpat1-dev:arm64 uuid-dev:arm64 \
+#       \
+#       libx11-dev:riscv64 libxrandr-dev:riscv64 libxinerama-dev:riscv64 \
+#       libxcursor-dev:riscv64 libxi-dev:riscv64 libxext-dev:riscv64 \
+#       libxkbcommon-dev:riscv64 libwayland-dev:riscv64 \
+#       libgl-dev:riscv64 libfontconfig-dev:riscv64 \
+#       libexpat1-dev:riscv64 uuid-dev:riscv64
+#
+# riscv64 note: the main `yetty` executable links Dawn/WebGPU which has no
+# riscv64 prebuilt — `build-linux-riscv-ytrace-release` therefore builds
+# only the demos + non-GPU tools (passes -DYETTY_ENABLE_LIB_WEBGPU=OFF and
+# selects specific ninja targets), not `yetty` itself.
+#=============================================================================
+
+# Cross flags. CMAKE_LIBRARY_ARCHITECTURE makes find_library/find_package(X11)
+# pick libs from /usr/lib/<arch>-linux-gnu/ first, ahead of the host /usr/lib.
+CMAKE_CROSS_AARCH64 := \
+	-DCMAKE_SYSTEM_NAME=Linux \
+	-DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+	-DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
+	-DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+	-DCMAKE_LIBRARY_ARCHITECTURE=aarch64-linux-gnu
+
+CMAKE_CROSS_RISCV := \
+	-DCMAKE_SYSTEM_NAME=Linux \
+	-DCMAKE_SYSTEM_PROCESSOR=riscv64 \
+	-DCMAKE_C_COMPILER=riscv64-linux-gnu-gcc \
+	-DCMAKE_CXX_COMPILER=riscv64-linux-gnu-g++ \
+	-DCMAKE_LIBRARY_ARCHITECTURE=riscv64-linux-gnu \
+	-DYETTY_ENABLE_LIB_WEBGPU=OFF \
+	-DYETTY_ENABLE_LIB_GLFW=OFF \
+	-DYETTY_ENABLE_LIB_QEMU=OFF
+
+# Scope pkg-config to the multiarch .pc dir so `pkg_check_modules(fontconfig)`
+# doesn't pick up host-x86_64 metadata. PKG_CONFIG_LIBDIR replaces the default
+# search path (PKG_CONFIG_PATH only prepends).
+PKG_CFG_AARCH64 := PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+PKG_CFG_RISCV := PKG_CONFIG_LIBDIR=/usr/lib/riscv64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+
+# riscv64 target list (no `yetty` — Dawn unavailable for riscv64).
+# Tools/demos that link yrender, ywebgpu, or ypaint-core (which all
+# include <webgpu/webgpu.h> directly) are excluded — that rules out
+# ycat, yecho, yplot, ymesh, ymaze, ydoc, ysheet, yslide, yetty-ythorvg,
+# yetty-ymsdf-gen-gpu, msdf-render-atlas, and every demo-ygui-*. What
+# remains: pure CDB / msdf / ypaint-decode / ymgui-imgui_core / TinyEMU.
+LINUX_RISCV_TARGETS := \
+    decode-ypaint \
+    yetty-ymsdf-gen yetty-msdf-gen \
+    cdb-viewer cdb-diff \
+    temu \
+    demo-ymgui-01-demo-window
+
+.PHONY: config-linux-aarch64-ytrace-release
+config-linux-aarch64-ytrace-release: ## Configure Linux aarch64 cross-build (release)
+	$(PKG_CFG_AARCH64) \
+		$(CMAKE) -B $(BUILD_DIR_LINUX_AARCH64_YTRACE_RELEASE) $(CMAKE_GENERATOR) \
+			$(CMAKE_RELEASE) $(CMAKE_LOGLEVEL_YTRACE) $(CMAKE_CROSS_AARCH64) $(CMAKE_COMPILER_LAUNCHER)
+
+.PHONY: build-linux-aarch64-ytrace-release
+build-linux-aarch64-ytrace-release: ## Build Linux aarch64 cross-compiled (release)
+	@if [ ! -f "$(BUILD_DIR_LINUX_AARCH64_YTRACE_RELEASE)/build.ninja" ]; then $(MAKE) config-linux-aarch64-ytrace-release; fi
+	$(CMAKE) --build $(BUILD_DIR_LINUX_AARCH64_YTRACE_RELEASE) $(CMAKE_PARALLEL)
+
+.PHONY: config-linux-riscv-ytrace-release
+config-linux-riscv-ytrace-release: ## Configure Linux riscv64 cross-build (release, no GPU)
+	$(PKG_CFG_RISCV) \
+		$(CMAKE) -B $(BUILD_DIR_LINUX_RISCV_YTRACE_RELEASE) $(CMAKE_GENERATOR) \
+			$(CMAKE_RELEASE) $(CMAKE_LOGLEVEL_YTRACE) $(CMAKE_CROSS_RISCV) $(CMAKE_COMPILER_LAUNCHER)
+
+.PHONY: build-linux-riscv-ytrace-release
+build-linux-riscv-ytrace-release: ## Build Linux riscv64 demos+tools (NOT yetty exec — Dawn missing)
+	@if [ ! -f "$(BUILD_DIR_LINUX_RISCV_YTRACE_RELEASE)/build.ninja" ]; then $(MAKE) config-linux-riscv-ytrace-release; fi
+	$(CMAKE) --build $(BUILD_DIR_LINUX_RISCV_YTRACE_RELEASE) $(CMAKE_PARALLEL) --target $(LINUX_RISCV_TARGETS)
 
 #=============================================================================
 # Android - ytrace (full logging)
