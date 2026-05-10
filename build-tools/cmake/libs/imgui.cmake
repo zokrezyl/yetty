@@ -52,22 +52,30 @@ set(_IMGUI_BACKEND_SOURCES "")
 
 # imgui_impl_wgpu.cpp: skip on iOS/tvOS — the backend unconditionally
 # includes <Cocoa/Cocoa.h> in its __APPLE__ branch, which doesn't exist
-# on iOS/tvOS. Same exclusion the from-source consumer had.
+# on iOS/tvOS. Same exclusion the from-source consumer had. Also skip
+# when WebGPU is disabled (e.g. linux-riscv64 cross-build) or when the
+# backend file isn't present in the tarball (pure-core builds).
 if(NOT (YETTY_IOS OR YETTY_TVOS
         OR CMAKE_SYSTEM_NAME STREQUAL "iOS"
-        OR CMAKE_SYSTEM_NAME STREQUAL "tvOS"))
+        OR CMAKE_SYSTEM_NAME STREQUAL "tvOS")
+        AND YETTY_ENABLE_LIB_WEBGPU
+        AND EXISTS "${_IMGUI_DIR}/src-backends/imgui_impl_wgpu.cpp")
     list(APPEND _IMGUI_BACKEND_SOURCES "${_IMGUI_DIR}/src-backends/imgui_impl_wgpu.cpp")
 endif()
 
 # Platform backend: GLFW on desktop + emscripten (USE_GLFW=3 stub),
-# none on iOS/tvOS/Android (custom yetty backend).
+# none on iOS/tvOS/Android (custom yetty backend). Skip when GLFW is
+# disabled or the backend file isn't shipped (pure-core tarballs).
 if(EMSCRIPTEN)
-    list(APPEND _IMGUI_BACKEND_SOURCES "${_IMGUI_DIR}/src-backends/imgui_impl_glfw.cpp")
+    if(EXISTS "${_IMGUI_DIR}/src-backends/imgui_impl_glfw.cpp")
+        list(APPEND _IMGUI_BACKEND_SOURCES "${_IMGUI_DIR}/src-backends/imgui_impl_glfw.cpp")
+    endif()
 elseif(YETTY_ANDROID OR YETTY_IOS OR YETTY_TVOS
         OR CMAKE_SYSTEM_NAME STREQUAL "iOS"
         OR CMAKE_SYSTEM_NAME STREQUAL "tvOS")
     # no platform backend
-else()
+elseif(YETTY_ENABLE_LIB_GLFW
+        AND EXISTS "${_IMGUI_DIR}/src-backends/imgui_impl_glfw.cpp")
     list(APPEND _IMGUI_BACKEND_SOURCES "${_IMGUI_DIR}/src-backends/imgui_impl_glfw.cpp")
 endif()
 
@@ -118,7 +126,7 @@ elseif(YETTY_ANDROID)
     else()
         target_compile_definitions(imgui PUBLIC IMGUI_IMPL_WEBGPU_BACKEND_DAWN=1)
     endif()
-else()
+elseif(_IMGUI_BACKEND_SOURCES)
     # Desktop: glfw + webgpu, plus Obj-C++ flag for wgpu impl on macOS.
     include(${CMAKE_CURRENT_LIST_DIR}/glfw.cmake)
     if(APPLE)
@@ -141,5 +149,7 @@ else()
         target_compile_definitions(imgui PUBLIC IMGUI_IMPL_WEBGPU_BACKEND_DAWN=1)
     endif()
 endif()
+# else: pure-core INTERFACE imgui (no backends, no X11/GLFW/WebGPU deps) —
+# used by cross-builds (linux-riscv64) that consume only imgui_core.
 
 message(STATUS "imgui: prebuilt v${YETTY_3RDPARTY_imgui_VERSION} (core: ${_IMGUI_DIR}/lib/libimgui_core.a)")

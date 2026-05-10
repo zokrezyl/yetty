@@ -1,0 +1,51 @@
+#!/bin/sh
+# Runtime PID 1. Does only what genuinely belongs in init: mount the
+# kernel-managed pseudo-filesystems (proc/sys/dev/devpts), bring up the
+# network *kernel state* (ip link/addr/route — these can't be files),
+# and chain into runit + a login shell.
+#
+# Everything that's actually a *config file* lives under fs/ and is
+# already on the rootfs by the time we run:
+#   /etc/hostname              — applied via `hostname -F`
+#   /etc/resolv.conf           — DNS server (static)
+#   /etc/apk/repositories      — apk repos
+#   /etc/service/telnetd/run   — runit-supervised telnetd
+#   /opt/yetty                 — mountpoint for the yetty-tools-riscv disk
+#
+# /dev/pts is the one mkdir we *can't* avoid: /dev is a kernel-managed
+# devtmpfs, so static dirs in fs/dev/ get hidden the moment devtmpfs is
+# mounted. The pts subdir has to be created at runtime, after devtmpfs.
+
+# Kernel hands PID 1 an empty PATH; runsvdir uses execvp() to spawn runsv,
+# so without this it fails with "unable to start runsv <svc>: file does
+# not exist". Set it before doing anything else.
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+mount -t proc proc /proc
+mount -t sysfs sys /sys
+mount -t devtmpfs dev /dev 2>/dev/null || true
+# devpts is required for ptmx/pts/N — without it busybox telnetd fails with
+# "can't find free pty" on every connection.
+mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts 2>/dev/null || true
+
+hostname -F /etc/hostname
+
+ip link set lo up
+ip link set eth0 up 2>/dev/null
+ip addr add 10.0.2.15/24 dev eth0 2>/dev/null
+ip route add default via 10.0.2.2 2>/dev/null
+
+# yetty-tools-riscv: yetty attaches a second virtio-blk drive (drive1) at
+# /dev/vdb carrying riscv64 demos+tools and a repo HEAD checkout. Mount RO
+# at /opt/yetty when present. Skipped silently otherwise so this image
+# still boots in plain qemu/tinyemu invocations that don't pass a second
+# disk. /opt/yetty is a static empty dir from the fs/ overlay.
+[ -b /dev/vdb ] && mount -o ro /dev/vdb /opt/yetty 2>/dev/null
+
+# runit service supervisor — runs in the background, supervises everything
+# under /etc/service (currently just telnetd). Keeping the interactive
+# shell on hvc0 means we don't need to make runit PID 1.
+[ -d /etc/service ] && /usr/bin/runsvdir /etc/service &
+
+exec /bin/sh

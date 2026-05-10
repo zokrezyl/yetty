@@ -1,0 +1,9 @@
+#!/bin/sh
+# runit run-script — supervised by /usr/bin/runsvdir spawned by /init.
+#
+# telnetd applet lives in busybox-extras (the stock /usr/bin/busybox in
+# Alpine doesn't ship it). The package installs /usr/sbin/telnetd as a
+# symlink to /bin/busybox-extras. -F = foreground (runit needs the
+# daemon to stay attached). -p 23 = port. -l <wrapper> auto-logins as
+# yetty (see /usr/local/sbin/yetty-telnet-login from the fs/ overlay).
+exec /usr/sbin/telnetd -F -p 23 -l /usr/local/sbin/yetty-telnet-login

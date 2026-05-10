@@ -167,162 +167,49 @@ sudo mount "$LOOP_DEV" "$MNT"
 echo "==> extracting Alpine minirootfs into image"
 sudo tar -C "$MNT" -xzpf "$ALPINE_TARBALL"
 
-# /init for the *runtime* boot (post-install) — same console-shell pattern as
-# alpine-disk so this image is a drop-in replacement for tinyemu/qemu boot.
-sudo tee "$MNT/init" >/dev/null <<'INIT_EOF'
-#!/bin/sh
-# Kernel hands PID 1 an empty PATH; runsvdir uses execvp() to spawn runsv,
-# so without this it fails with "unable to start runsv <svc>: file does
-# not exist". Set it before doing anything else.
-export PATH=/usr/sbin:/usr/bin:/sbin:/bin
-
-mount -t proc proc /proc
-mount -t sysfs sys /sys
-mount -t devtmpfs dev /dev 2>/dev/null || true
-# devpts is required for ptmx/pts/N — without it busybox telnetd fails with
-# "can't find free pty" on every connection.
-mkdir -p /dev/pts
-mount -t devpts devpts /dev/pts 2>/dev/null || true
-hostname tinyemu
-
-ip link set lo up
-ip link set eth0 up 2>/dev/null
-ip addr add 10.0.2.15/24 dev eth0 2>/dev/null
-ip route add default via 10.0.2.2 2>/dev/null
-echo 'nameserver 10.0.2.3' > /etc/resolv.conf
-
-# runit service supervisor — runs in the background, supervises everything
-# under /etc/service (currently just telnetd). Keeping the interactive
-# shell on hvc0 means we don't need to make runit PID 1.
-[ -d /etc/service ] && /usr/bin/runsvdir /etc/service &
-
-exec /bin/sh
-INIT_EOF
-sudo chmod 755 "$MNT/init"
-sudo chown 0:0 "$MNT/init"
-
-# /install.sh — one-shot init that the install VM boots into (init=/install.sh
-# on the kernel cmdline). Brings up slirp networking, points apk at main +
-# community, installs the JSLinux package set, removes itself, poweroffs.
-# poweroff -f makes qemu (started with -no-reboot) exit cleanly.
+# Apply the fs/ overlay BEFORE the install VM boots. This lays down
+# everything the install needs:
+#   /init                                  — runtime PID 1 (used post-install)
+#   /install.sh                            — one-shot init for the install VM
+#   /etc/sudoers.d/wheel-nopasswd          — referenced by install.sh / sudo pkg
+#   /etc/service/telnetd/run               — runit service supervised by /init
+#   /etc/profile.d/yetty.sh                — TERM/TERM_PROGRAM defaults
+#   /home/yetty/.bashrc                    — user shell defaults (DROPPED on
+#                                            this pass; adduser inside the VM
+#                                            won't see /home/yetty as already
+#                                            existing-and-root-owned, which
+#                                            confuses skel-copy logic; the
+#                                            second pass after the VM lays it
+#                                            down on top of the freshly
+#                                            adduser'd home dir.)
+#   /usr/local/sbin/yetty-telnetd-login    — telnetd wrapper that auto-logins
+#                                            as yetty
 #
-# Repos are http:// to avoid TLS cert validation in the bare minirootfs (it
-# ships ca-certificates-bundle but skipping TLS keeps this hermetic).
-sudo tee "$MNT/install.sh" >/dev/null <<'INSTALL_EOF'
-#!/bin/sh
-set -e
+# Strategy: tar-pipe the overlay into MNT, excluding /home (and also
+# excluding /install.sh on the *post-VM* pass — see below). tar is in the
+# nix shell; rsync isn't.
+FS_OVERLAY="$SCRIPT_DIR/fs"
+[ -d "$FS_OVERLAY" ] || { echo "missing $FS_OVERLAY" >&2; exit 1; }
 
-mount -t proc proc /proc
-mount -t sysfs sys /sys
-mount -t devtmpfs dev /dev 2>/dev/null || true
+apply_fs_overlay() {
+    # $1 = list of --exclude args (space-separated). cp -a doesn't have
+    # --exclude; tar pipe does. Preserves mode (incl. +x), timestamps,
+    # symlinks; maps owner to root. set -eo pipefail inside sudo bash -c
+    # so a failing source-tar (missing dir, broken read) trips the build
+    # instead of silently producing an empty image overlay.
+    local excludes="$1"
+    sudo bash -c "
+        set -eo pipefail
+        cd '$FS_OVERLAY'
+        tar $excludes --owner=0 --group=0 -cf - . | tar -C '$MNT' -xpf -
+    "
+}
 
-ip link set lo up
-ip link set eth0 up
-ip addr add 10.0.2.15/24 dev eth0
-ip route add default via 10.0.2.2
-echo 'nameserver 10.0.2.3' > /etc/resolv.conf
-
-cat > /etc/apk/repositories <<EOF
-http://dl-cdn.alpinelinux.org/alpine/v3.23/main
-http://dl-cdn.alpinelinux.org/alpine/v3.23/community
-EOF
-
-echo "==> apk update"
-apk update
-
-echo "==> apk add (no toolchain — nvim/git/python/ssh/etc.)"
-# Drop the heavy build toolchain (build-base, cmake, linux-headers — they
-# alone took ~330 MB on the previous build) so the image fits the 300 MB
-# target. Keep general-purpose CLI + editor + python + ssh + tracing.
-# runit + busybox-extras supervise the in-guest telnetd that yetty
-# --telnet attaches to.
-apk add --no-cache \
-    bash \
-    zsh \
-    coreutils \
-    findutils \
-    grep \
-    sed \
-    gawk \
-    diffutils \
-    patch \
-    less \
-    file \
-    util-linux \
-    neovim \
-    git \
-    openssh \
-    python3 \
-    py3-pip \
-    net-tools \
-    curl \
-    wget \
-    tar \
-    gzip \
-    xz \
-    zip \
-    unzip \
-    man-pages \
-    mandoc \
-    strace \
-    ncurses-terminfo-base \
-    tree \
-    htop \
-    runit \
-    busybox-extras \
-    sudo \
-    shadow
-
-# yetty user/group — uid/gid 1000 so host-mounted shares (9p) line up
-# with the typical desktop user. wheel group + NOPASSWD sudoers makes
-# this a friction-free dev VM. Locked password (-D) is fine because
-# the only entry point (telnetd) auto-logins as yetty (see fs/ overlay
-# applied by the host-side _build.sh after this VM exits).
-echo "==> creating yetty user (uid/gid 1000, wheel/sudo)"
-addgroup -g 1000 yetty
-adduser -D -u 1000 -G yetty -s /bin/bash yetty
-addgroup yetty wheel
-mkdir -p /etc/sudoers.d
-cat > /etc/sudoers.d/wheel-nopasswd <<'SUDOERS_EOF'
-%wheel ALL=(ALL:ALL) NOPASSWD: ALL
-SUDOERS_EOF
-chmod 0440 /etc/sudoers.d/wheel-nopasswd
-
-# Belt-and-braces: --no-cache already keeps /var/cache/apk empty, but in
-# case any earlier `apk add` fell back to caching, drop the lot before
-# we pack the image.
-rm -rf /var/cache/apk/* /etc/apk/cache 2>/dev/null || true
-
-# runit service tree. Each subdir under /etc/service is a service; its
-# `run` script must exec the daemon in the foreground so runit can
-# supervise it. Started from /init via `runsvdir /etc/service &`.
-echo "==> setting up runit services"
-mkdir -p /etc/service/telnetd
-cat > /etc/service/telnetd/run <<'TELNETD_RUN_EOF'
-#!/bin/sh
-# telnetd applet lives in busybox-extras (the stock /usr/bin/busybox in
-# Alpine doesn't ship it). The package installs /usr/sbin/telnetd as a
-# symlink to /bin/busybox-extras. -F = foreground (runit needs the
-# daemon to stay attached). -p 23 = port. -l <wrapper> auto-logins as
-# yetty (see /usr/local/sbin/yetty-telnet-login from the fs/ overlay).
-exec /usr/sbin/telnetd -F -p 23 -l /usr/local/sbin/yetty-telnet-login
-TELNETD_RUN_EOF
-chmod +x /etc/service/telnetd/run
-
-# Drop apk's download cache + tmp scratch; it's just bytes the brotli pass
-# would carry around.
-rm -rf /var/cache/apk/* /tmp/* /var/tmp/* 2>/dev/null || true
-
-# Self-erase so the produced image only carries the runtime /init.
-rm -f /install.sh
-
-sync
-echo "==> install complete, powering off"
-# Older busybox poweroff sometimes hangs without -f; force it.
-poweroff -f
-INSTALL_EOF
-sudo chmod 755 "$MNT/install.sh"
-sudo chown 0:0 "$MNT/install.sh"
+echo "==> applying fs overlay (pre-install, sans /home/yetty)"
+apply_fs_overlay "--exclude=./home/yetty"
+sudo chmod 755 "$MNT/init" "$MNT/install.sh"
+sudo chmod 0440 "$MNT/etc/sudoers.d/wheel-nopasswd"
+sudo chmod +x "$MNT/etc/service/telnetd/run" "$MNT/usr/local/sbin/yetty-telnet-login"
 
 sync
 sudo umount "$MNT"
@@ -394,24 +281,23 @@ fi
 INSTALLED_COUNT="$(sudo find "$MNT" -path "$MNT/proc" -prune -o -path "$MNT/sys" -prune -o -type f -print 2>/dev/null | wc -l)"
 echo "==> install VM completed: ${INSTALLED_COUNT} files in image"
 
-# Apply the host-side fs/ skeleton overlay LAST, so the files committed
-# in this repo win over anything apk laid down inside the VM. This is
-# how we ship things like /etc/profile.d/yetty.sh (TERM defaults) and
-# /usr/local/sbin/yetty-telnet-login (auto-login wrapper) without
-# generating them inline. Anything new dropped in fs/ gets carried in
-# automatically — no _build.sh changes needed.
-FS_OVERLAY="$SCRIPT_DIR/fs"
-if [ -d "$FS_OVERLAY" ]; then
-    echo "==> applying fs overlay from $FS_OVERLAY"
-    # cp -a preserves mode (incl. +x bits), timestamps, and symlinks.
-    # `--no-target-directory` + trailing /. semantics: copy *contents*
-    # of fs/ over MNT, not fs/ itself.
-    sudo cp -a "$FS_OVERLAY/." "$MNT/"
-    # Per-user dirs need correct ownership — adduser created /home/yetty
-    # owned by uid/gid 1000, but our overlay just stomped on it as root.
-    if [ -d "$MNT/home/yetty" ]; then
-        sudo chown -R 1000:1000 "$MNT/home/yetty"
-    fi
+# Re-apply the fs/ overlay AFTER the install VM, so anything apk
+# clobbered (or that adduser stamped fresh from /etc/skel into
+# /home/yetty/) is overwritten by the repo-committed truth. This pass
+# excludes /install.sh — the VM self-deleted it, and we don't want to
+# re-stage it into the shipped image.
+echo "==> applying fs overlay (post-install, sans /install.sh)"
+apply_fs_overlay "--exclude=./install.sh"
+# Re-assert the executable + 0440 bits the tar pipe carries from the
+# repo's own modes (in case the host repo lost the +x somewhere; cheap
+# to do unconditionally).
+sudo chmod 755 "$MNT/init"
+sudo chmod 0440 "$MNT/etc/sudoers.d/wheel-nopasswd"
+sudo chmod +x "$MNT/etc/service/telnetd/run" "$MNT/usr/local/sbin/yetty-telnet-login"
+# Per-user dirs need correct ownership — adduser created /home/yetty
+# owned by uid/gid 1000, but our overlay just stomped on it as root.
+if [ -d "$MNT/home/yetty" ]; then
+    sudo chown -R 1000:1000 "$MNT/home/yetty"
 fi
 
 sudo umount "$MNT"

@@ -159,6 +159,20 @@ option(YETTY_ENABLE_TOOL_YNETSURF        "ynetsurf browser tool"             ON)
 option(YETTY_ENABLE_FEATURE_YLEXBOR      "ylexbor — lexbor-based HTML lib"   ON)
 option(YETTY_ENABLE_TOOL_YLEXBOR    "ylexbor-demo CLI tool"             ON)
 
+# Auto-disable ylexbor on webasm, iOS, tvOS: lexbor uses POSIX file I/O and
+# threading APIs not available on these targets.
+if(EMSCRIPTEN OR YETTY_IOS OR YETTY_TVOS)
+    foreach(_f
+        YETTY_ENABLE_FEATURE_YLEXBOR
+        YETTY_ENABLE_TOOL_YLEXBOR
+    )
+        if(${_f})
+            message(STATUS "Disabling ${_f} on webasm/iOS/tvOS (lexbor not supported)")
+            set(${_f} OFF CACHE BOOL "" FORCE)
+        endif()
+    endforeach()
+endif()
+
 # Auto-disable QA tools for cross-compilation (requires host LLVM/Clang libs)
 # Also disabled on macOS and Windows — qa-tools/custom/result-checker/CMakeLists.txt
 # hardcodes Linux LLVM paths.

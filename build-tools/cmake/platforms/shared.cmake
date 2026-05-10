@@ -112,6 +112,12 @@ if(YETTY_ENABLE_LIB_TINYEMU OR YETTY_ENABLE_LIB_QEMU)
     yetty_3rdparty_fetch(alpine-disk _ALPINE_DIR)
     yetty_3rdparty_fetch(alpine-extended-disk _ALPINE_EXTENDED_DIR)
 
+    # First-party yetty asset (not lib-) — riscv64 demos+tools + repo
+    # checkout packed as a brotli ext4 image. Mounted RO at /opt/yetty
+    # inside --temu and --qemu guests via virtio-blk drive1.
+    include(${YETTY_ROOT}/build-tools/cmake/yetty-asset-fetch.cmake)
+    yetty_asset_fetch(yetty-tools-riscv _YETTY_TOOLS_RISCV_DIR)
+
     # Path constants consumed by tinyemu-runtime.cmake (bundle copy at
     # build time) and any future runtime-path consumer. Point at the
     # auto-decompressed RAW files; 3rdparty-fetch keeps the .br alongside.
@@ -129,6 +135,9 @@ if(YETTY_ENABLE_LIB_TINYEMU OR YETTY_ENABLE_LIB_QEMU)
         CACHE FILEPATH "" FORCE)
     set(TINYEMU_ALPINE_EXTENDED_IMG
         "${_ALPINE_EXTENDED_DIR}/alpine-extended-rootfs.img"
+        CACHE FILEPATH "" FORCE)
+    set(YETTY_TOOLS_RISCV_IMG
+        "${_YETTY_TOOLS_RISCV_DIR}/yetty-riscv-disk.img"
         CACHE FILEPATH "" FORCE)
 endif()
 
@@ -580,7 +589,8 @@ function(yetty_embed_assets TARGET)
                 "${YETTY_3RDPARTY_opensbi_DIR}|opensbi-fw_jump.elf.br"
                 "${YETTY_3RDPARTY_opensbi_DIR}|opensbi-fw_dynamic.bin.br"
                 "${YETTY_3RDPARTY_alpine-disk_DIR}|alpine-rootfs.img.br"
-                "${YETTY_3RDPARTY_alpine-extended-disk_DIR}|alpine-extended-rootfs.img.br")
+                "${YETTY_3RDPARTY_alpine-extended-disk_DIR}|alpine-extended-rootfs.img.br"
+                "${YETTY_ASSET_yetty-tools-riscv_DIR}|yetty-riscv-disk.img.br")
             string(REPLACE "|" ";" _PARTS "${_PAIR}")
             list(GET _PARTS 0 _SRC_DIR)
             list(GET _PARTS 1 _F)
