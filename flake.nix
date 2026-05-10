@@ -527,6 +527,12 @@
           # legacy); NetSurf 3.11's libnslog .y file needs bison 3+
           # for `%type` declarations. Pull a fresh nix bison/flex/gperf
           # so the macOS system tools don't get picked up first.
+          # OpenSSL goes in too: NetSurf's content/fetchers/curl.c and
+          # content/fetchers/about/certificate.c reference OpenSSL APIs
+          # directly (BIO_*, ASN1_*, EVP_PKEY_*, X509_*) — without it
+          # the final monkey-binary link fails with "Undefined symbols
+          # for architecture arm64". Same .a files we ship; the
+          # placeholder doesn't need to actually run.
           "3rdparty-netsurf-macos-arm64" = pkgs.mkShell {
             buildInputs = with pkgs; [
               gnumake perl python3 flex bison gperf
@@ -534,6 +540,7 @@
               curl gnutar xz gzip
               pkg-config
               expat libxml2 libjpeg libpng libwebp
+              openssl.dev curl.dev zlib.dev
             ];
             shellHook = "echo 'Yetty 3rdparty-build (netsurf — macos-arm64)'";
           };
@@ -545,6 +552,7 @@
               curl gnutar xz gzip
               pkg-config
               expat libxml2 libjpeg libpng libwebp
+              openssl.dev curl.dev zlib.dev
             ];
             shellHook = "echo 'Yetty 3rdparty-build (netsurf — macos-x86_64)'";
           };
