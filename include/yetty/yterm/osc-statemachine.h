@@ -1,37 +1,31 @@
 /*
- * yetty_yterm_osc_sm - Streaming OSC state machine with cursor-driven
- *                      decode and pause/resume semantics.
+ * yetty_yterm_osc_statemachine — OSC framer + decode stack + dispatcher.
  *
- * Wire shape (matches yface's existing protocol):
+ * Wire shape:
  *
  *     ESC ] <decimal-code> ; <b64-args> ; <b64-payload> ESC \\
  *     ESC ] <decimal-code> ; <b64-args> ; <b64-payload> BEL
  *
- * Two-buffer model:
+ * Pipeline:
  *
- *   producer side  ─── feed / read_pty ───▶  ring buffer
- *                                                │
- *                                         cursor (read_pos)
- *                                                │
- *   consumer side  ◀── process()  ── envelope SM + b64 + LZ4F decode
- *                                                │
- *                                          on_envelope(user, sm)
- *                                          on_raw(user, sm)
+ *   PTY  →  ring  →  framer  →  [b64]  →  [lz4]  →  read()  →  layer
  *
- * The cursor (read_pos) marks where the SM is currently processing. Bytes
- * between the cursor and the producer's write_pos are pending input. The
- * ring buffer grows on overflow (doubling realloc) so the producer never
- * blocks while the consumer is stalled. State (b64 carry, LZ4F context,
- * envelope state, accumulated payload) lives on the SM struct so the SM
- * can be paused at any byte boundary and resumed later (the streaming
- * payload hook returning 1 sets the pause).
+ * The SM owns the full decode stack. Layers register against codes and
+ * pull decoded bytes via osc_statemachine_read(). Layers have zero
+ * knowledge of b64 / lz4 — codec is fixed by protocol (args = b64,
+ * payload = b64+lz4).
  *
- * Codec is per-OSC-code:
- *   YETTY_YTERM_OSC_CODEC_NONE      raw bytes pass straight to the consumer
- *   YETTY_YTERM_OSC_CODEC_B64       streaming b64 decode
- *   YETTY_YTERM_OSC_CODEC_B64_LZ4   streaming b64 decode + LZ4F
+ * Byte source: the SM holds the PTY pointer it was created with and
+ * pulls bytes itself via pty->ops->read inside process(). There is no
+ * external feed function. Async-delivery platforms (libuv) are expected
+ * to buffer inside the PTY abstraction so ops->read returns when called.
+ *
+ * Mid-envelope return: the layer's process_input may return at any byte
+ * boundary. The SM keeps current_layer + scan position + decode state
+ * across calls; the next process() cycle re-dispatches the same layer
+ * and the layer resumes pulling bytes seamlessly. This is what enables
+ * scroll-yielding in ypaint-layer.
  */
-
 #ifndef YETTY_YTERM_OSC_STATEMACHINE_H
 #define YETTY_YTERM_OSC_STATEMACHINE_H
 
@@ -43,100 +37,130 @@
 extern "C" {
 #endif
 
-struct yetty_yterm_osc_sm;
+struct yetty_yterm_osc_statemachine;
 struct yetty_platform_pty;
+struct yetty_yrender_terminal_layer;
 
-YETTY_YRESULT_DECLARE(yetty_yterm_osc_sm_ptr, struct yetty_yterm_osc_sm *);
+YETTY_YRESULT_DECLARE(yetty_yterm_osc_statemachine_ptr,
+                     struct yetty_yterm_osc_statemachine *);
 
-enum yetty_yterm_osc_codec {
-    YETTY_YTERM_OSC_CODEC_NONE = 0,    /* body bytes pass through verbatim */
-    YETTY_YTERM_OSC_CODEC_B64 = 1,     /* streaming b64 decode */
-    YETTY_YTERM_OSC_CODEC_B64_LZ4 = 2, /* streaming b64 decode + LZ4F */
-};
+/*
+ * Construct the SM. Stores `pty` as a non-owning pointer; the SM uses
+ * it as its only byte source via pty->ops->read. Lazy init for the ring
+ * and decode stack. Called once at terminal startup, by pty-reader.
+ */
+struct yetty_yterm_osc_statemachine_ptr_result
+yetty_yterm_osc_statemachine_create(struct yetty_platform_pty *pty);
 
-/* View into the SM's current envelope. Valid only while an on_envelope
- * callback is on the stack. Pulled via yetty_yterm_osc_sm_envelope(). */
-struct yetty_yterm_osc_sm_envelope {
-    int code;
-    const uint8_t *args;
-    size_t args_len;
-    const uint8_t *payload;
-    size_t payload_len;
-};
+/*
+ * Destroy. Frees the ring, decode-stack state (b64 carry, LZ4F context,
+ * args + output carry), and the per-code registry. Does NOT touch the
+ * PTY (non-owning) or any registered layers (also non-owning).
+ */
+struct yetty_ycore_void_result yetty_yterm_osc_statemachine_destroy(
+    struct yetty_yterm_osc_statemachine *osc_statemachine);
 
-/* View into the SM's current out-of-envelope byte span. Valid only while
- * an on_raw callback is on the stack. Pulled via yetty_yterm_osc_sm_raw(). */
-struct yetty_yterm_osc_sm_raw {
-    const char *bytes;
+/*
+ * Bind `layer` to OSC `code`. When the framer recognises ESC ] code ;
+ * <args> ;, the SM sets current_layer = layer and calls
+ * layer->ops->process_input(layer, osc_statemachine). Re-registering
+ * the same code overwrites. No codec parameter — the decode pipeline
+ * is fixed by protocol (args = b64, payload = b64 + lz4).
+ */
+struct yetty_ycore_void_result yetty_yterm_osc_statemachine_register(
+    struct yetty_yterm_osc_statemachine *osc_statemachine, int code,
+    struct yetty_yrender_terminal_layer *layer);
+
+/*
+ * Bind the layer that consumes bytes outside any OSC envelope (raw
+ * passthrough — terminal text into vterm). Same dispatch contract as
+ * register(), but its process_input fires while the framer is in
+ * SCAN_RAW. There is no decode stack on this path; bytes the layer
+ * reads via osc_statemachine_read are wire bytes verbatim.
+ */
+struct yetty_ycore_void_result yetty_yterm_osc_statemachine_set_default(
+    struct yetty_yterm_osc_statemachine *osc_statemachine,
+    struct yetty_yrender_terminal_layer *layer);
+
+/*
+ * Platform integration only — async-delivery PTY backends (libuv) push
+ * bytes here from their read callback because the SM cannot pull them
+ * synchronously. Sync-read backends never call this. Bytes go straight
+ * into the SM's input ring; processing happens on the next process()
+ * call.
+ *
+ * NOT a layer-facing API.
+ */
+struct yetty_ycore_void_result yetty_yterm_osc_statemachine_feed(
+    struct yetty_yterm_osc_statemachine *osc_statemachine,
+    const char *bytes, size_t n);
+
+/*
+ * Drive the SM. Reads PTY bytes into the ring (via pty->ops->read for
+ * sync-read backends; otherwise the bytes are already there from
+ * platform feed), advances the framer scanner, and calls
+ * layer->ops->process_input zero or more times. Returns when the ring
+ * is drained or a layer voluntarily returned mid-envelope.
+ *
+ * Called by the terminal's event loop whenever the PTY pipe signals
+ * readability, and again after every render frame to drain residual
+ * bytes that arrived while we were rendering.
+ */
+struct yetty_ycore_void_result yetty_yterm_osc_statemachine_process(
+    struct yetty_yterm_osc_statemachine *osc_statemachine);
+
+/*
+ * Pull up to `n` DECODED bytes from the SM into `dst`. Returns the
+ * number of bytes actually copied. The SM reads as much wire as needed,
+ * runs the bytes through the decode stack (b64 + lz4 for payload, no
+ * decode for raw), copies decoded bytes out, and stashes any decoder
+ * excess in its output carry for the next call.
+ *
+ * Stops at the envelope terminator without consuming it: from then on
+ * returns 0 with at_end() == true until the layer's process_input
+ * returns.
+ *
+ * Called from inside layer->ops->process_input (and only there).
+ */
+struct yetty_ycore_size_result yetty_yterm_osc_statemachine_read(
+    struct yetty_yterm_osc_statemachine *osc_statemachine, uint8_t *dst, size_t n);
+
+/*
+ * View into the decoded args slot for the envelope currently being
+ * dispatched (filled when the framer crosses the second `;`). Returns
+ * (NULL, 0) outside an OSC dispatch or before the args slot is ready.
+ *
+ * Args are tiny by protocol (e.g. yetty_yface_bin_meta is 32 B), so
+ * the SM holds them in a small fixed buffer and exposes a pointer
+ * view. Used by ypaint-layer / ymgui-layer to read meta headers.
+ */
+struct yetty_yterm_osc_statemachine_args {
+    const uint8_t *bytes;
     size_t len;
 };
+struct yetty_yterm_osc_statemachine_args yetty_yterm_osc_statemachine_args(
+    const struct yetty_yterm_osc_statemachine *osc_statemachine);
 
-YETTY_YRESULT_DECLARE(yetty_yterm_osc_sm_envelope, struct yetty_yterm_osc_sm_envelope);
-YETTY_YRESULT_DECLARE(yetty_yterm_osc_sm_raw, struct yetty_yterm_osc_sm_raw);
+/*
+ * True iff the framer has reached the envelope terminator (BEL or
+ * ESC \\) for the envelope currently being dispatched. After this
+ * flips, osc_statemachine_read returns 0 for the rest of this dispatch.
+ * Layers use it as the "envelope ended, finalise" signal.
+ *
+ * Always 0 outside an OSC dispatch.
+ */
+int yetty_yterm_osc_statemachine_at_end(
+    const struct yetty_yterm_osc_statemachine *osc_statemachine);
 
-/* Fired once per complete envelope at the terminator. Pull args/payload
- * via yetty_yterm_osc_sm_envelope(sm). */
-typedef struct yetty_ycore_void_result (*yetty_yterm_osc_on_envelope_cb)(
-    void *user, struct yetty_yterm_osc_sm *sm);
-
-/* Fired for byte spans outside an OSC envelope. Pull bytes via
- * yetty_yterm_osc_sm_raw(sm). */
-typedef struct yetty_ycore_void_result (*yetty_yterm_osc_on_raw_cb)(
-    void *user, struct yetty_yterm_osc_sm *sm);
-
-/*-----------------------------------------------------------------------------
- * Lifecycle
- *---------------------------------------------------------------------------*/
-
-struct yetty_yterm_osc_sm_ptr_result yetty_yterm_osc_sm_create(void);
-
-struct yetty_ycore_void_result yetty_yterm_osc_sm_destroy(struct yetty_yterm_osc_sm *sm);
-
-/*-----------------------------------------------------------------------------
- * Registration
- *---------------------------------------------------------------------------*/
-
-/* Register a handler for one OSC code. Re-registering overwrites. */
-struct yetty_ycore_void_result yetty_yterm_osc_sm_register(
-    struct yetty_yterm_osc_sm *sm, int code, enum yetty_yterm_osc_codec codec,
-    yetty_yterm_osc_on_envelope_cb on_envelope, void *user);
-
-/* Set the handler for bytes outside any OSC envelope. */
-struct yetty_ycore_void_result yetty_yterm_osc_sm_set_raw_handler(
-    struct yetty_yterm_osc_sm *sm, yetty_yterm_osc_on_raw_cb on_raw, void *user);
-
-/*-----------------------------------------------------------------------------
- * Input
- *---------------------------------------------------------------------------*/
-
-/* Append bytes to the input ring. Grows on overflow. Doesn't process.
- * For pty input, prefer read_pty() — it avoids the intermediate copy. */
-struct yetty_ycore_void_result yetty_yterm_osc_sm_feed(struct yetty_yterm_osc_sm *sm,
-                                                       const char *bytes, size_t n);
-
-/* Read directly from `pty` into the ring's writable region — zero-copy.
- * Returns the number of bytes read; 0 on EAGAIN/EOF. Doesn't process. */
-struct yetty_ycore_size_result yetty_yterm_osc_sm_read_pty(struct yetty_yterm_osc_sm *sm,
-                                                           struct yetty_platform_pty *pty);
-
-/*-----------------------------------------------------------------------------
- * Drive
- *---------------------------------------------------------------------------*/
-
-/* Advance the cursor through pending input. Returns when the cursor
- * catches the producer (no more bytes). */
-struct yetty_ycore_void_result yetty_yterm_osc_sm_process(struct yetty_yterm_osc_sm *sm);
-
-/*-----------------------------------------------------------------------------
- * Pull-mode access — only valid inside on_envelope / on_raw callbacks.
- * Errors when called outside a callback (no current view).
- *---------------------------------------------------------------------------*/
-
-struct yetty_yterm_osc_sm_envelope_result yetty_yterm_osc_sm_envelope(
-    const struct yetty_yterm_osc_sm *sm);
-
-struct yetty_yterm_osc_sm_raw_result yetty_yterm_osc_sm_raw(
-    const struct yetty_yterm_osc_sm *sm);
+/*
+ * Return the OSC code (e.g. 600001 for ypaint BIN) of the envelope
+ * currently being dispatched. 0 outside any OSC dispatch.
+ *
+ * Used by layers that own multiple codes — ypaint-layer is registered
+ * for CLEAR/BIN/YAML/OVERLAY and dispatches by this value.
+ */
+int yetty_yterm_osc_statemachine_code(
+    const struct yetty_yterm_osc_statemachine *osc_statemachine);
 
 #ifdef __cplusplus
 }

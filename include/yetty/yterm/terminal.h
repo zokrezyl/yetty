@@ -17,7 +17,7 @@ extern "C" {
 struct yetty_yterm_terminal;
 struct yetty_yrender_terminal_layer;
 struct yetty_yterm_terminal_layer_ops;
-struct yetty_yterm_osc_sm;
+struct yetty_yterm_osc_statemachine;
 struct yetty_yevent_event_loop;
 struct yetty_platform_pty;
 struct yetty_yterm_view;
@@ -80,18 +80,30 @@ typedef void (*yetty_yterm_alt_screen_fn)(int active, void *userdata);
 struct yetty_yterm_terminal_layer_ops {
     struct yetty_ycore_void_result (*destroy)(struct yetty_yrender_terminal_layer *self);
     /* Pull-mode dispatch from the OSC state machine. Called by the SM
-   * inside one of its callbacks: for an OSC envelope (when a layer
-   * registered for the matching code), or for a raw byte span (when
-   * the layer is the SM's raw handler). The layer pulls what it needs
-   * via the osc_sm_current_* accessors:
+   * either as the registered owner of an OSC code or as the default
+   * sink (raw bytes outside any envelope). The layer pulls decoded
+   * bytes via osc_statemachine_read and runs its own framing on top.
+   * Accessors usable inside this call:
    *
-   *   - osc_sm_current_code(sm)        — 0 for raw, the code for OSC
-   *   - osc_sm_current_args(sm), _len  — decoded args (OSC only)
-   *   - osc_sm_current_payload(sm), _len — fully-decoded body (OSC only)
-   *   - osc_sm_current_raw(sm), _len   — byte span (raw only)
+   *   - yetty_yterm_osc_statemachine_read(osc_statemachine, dst, n)
+   *       — copy up to n DECODED bytes (b64+lz4 already applied for
+   *         payloads; passthrough for raw); returns count copied.
+   *   - yetty_yterm_osc_statemachine_at_end(osc_statemachine)
+   *       — true once the framer reached the envelope terminator;
+   *         read() returns 0 forever in this dispatch.
+   *   - yetty_yterm_osc_statemachine_code(osc_statemachine)
+   *       — 0 for the default sink, the OSC code for an envelope
+   *         dispatch (e.g. 600001 = ypaint BIN).
+   *   - yetty_yterm_osc_statemachine_args(osc_statemachine)
+   *       — decoded args view (envelope dispatch only).
+   *
+   * The layer may return early at any byte boundary; the SM keeps
+   * its current_layer + scan position + decode state, so the next
+   * cycle re-enters this op and the layer resumes seamlessly.
    */
-    struct yetty_ycore_void_result (*process)(struct yetty_yrender_terminal_layer *self,
-                                              struct yetty_yterm_osc_sm *sm);
+    struct yetty_ycore_void_result (*process_input)(
+        struct yetty_yrender_terminal_layer *self,
+        struct yetty_yterm_osc_statemachine *osc_statemachine);
     struct yetty_ycore_void_result (*resize_grid)(struct yetty_yrender_terminal_layer *self,
                                                   struct yetty_ycore_grid_size grid_size);
     /* Change the layer's cell pixel size. Implementations must also push the

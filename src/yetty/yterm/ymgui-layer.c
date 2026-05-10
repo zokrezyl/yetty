@@ -114,7 +114,15 @@ struct yetty_yterm_ymgui_layer {
     size_t card_cap;
 
     /* Streaming OSC decoder (b64 + LZ4F). Reused across all uploads. */
+    /* yface — kept for OUTGOING emit only. Incoming decode lives in
+     * the OSC SM. */
     struct yetty_yface *yface;
+
+    /* Per-envelope decoded-payload accumulator (see ypaint-layer for
+     * the same pattern). */
+    struct yetty_ycore_buffer accum;
+    int parse_code;
+    int parse_active;
 
     /* Scrolling / cursor tracking. */
     uint32_t row0_absolute;
@@ -141,8 +149,9 @@ struct yetty_yterm_ymgui_layer {
  *=========================================================================*/
 
 static struct yetty_ycore_void_result ymgui_destroy(struct yetty_yrender_terminal_layer *self);
-static struct yetty_ycore_void_result ymgui_process(struct yetty_yrender_terminal_layer *self,
-                                                    struct yetty_yterm_osc_sm *sm);
+static struct yetty_ycore_void_result ymgui_process_input(
+    struct yetty_yrender_terminal_layer *self,
+    struct yetty_yterm_osc_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result ymgui_resize_grid(struct yetty_yrender_terminal_layer *self,
                                                         struct yetty_ycore_grid_size gs);
 static struct yetty_ycore_void_result ymgui_set_cell_size(struct yetty_yrender_terminal_layer *self,
@@ -165,7 +174,7 @@ static struct yetty_ycore_void_result ymgui_set_alt_screen(
 
 static const struct yetty_yterm_terminal_layer_ops ymgui_ops = {
     .destroy = ymgui_destroy,
-    .process = ymgui_process,
+    .process_input = ymgui_process_input,
     .resize_grid = ymgui_resize_grid,
     .set_cell_size = ymgui_set_cell_size,
     .set_visual_zoom = ymgui_set_visual_zoom,
@@ -922,35 +931,28 @@ static struct yetty_ycore_void_result handle_tex(struct yetty_yterm_ymgui_layer 
  * write — OSC dispatch
  *=========================================================================*/
 
-/* Process — pulled by the SM after a complete envelope. The SM has
- * b64-decoded (and, for FRAME/TEX, LZ4-decompressed) the body; we just
- * dispatch by code on the already-decoded bytes. */
-static struct yetty_ycore_void_result ymgui_process(struct yetty_yrender_terminal_layer *self,
-                                                    struct yetty_yterm_osc_sm *sm)
+/* Process — pulls already-decoded bytes from the OSC SM into the
+ * per-envelope accumulator. On at_end the layer dispatches by code. */
+static struct yetty_ycore_void_result ymgui_dispatch_atomic(
+    struct yetty_yterm_ymgui_layer *l, int code, const uint8_t *payload, size_t payload_len)
 {
-    struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)self;
-
-    struct yetty_yterm_osc_sm_envelope_result er = yetty_yterm_osc_sm_envelope(sm);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "ymgui: not in envelope");
-    struct yetty_yterm_osc_sm_envelope env = er.value;
-
-    switch (env.code) {
+    switch (code) {
     case YMGUI_OSC_CS_FRAME:
-        return handle_frame(l, env.payload, env.payload_len);
+        return handle_frame(l, payload, payload_len);
     case YMGUI_OSC_CS_TEX:
-        return handle_tex(l, env.payload, env.payload_len);
+        return handle_tex(l, payload, payload_len);
     case YMGUI_OSC_CS_CARD_PLACE:
-        return handle_card_place(l, env.payload, env.payload_len);
+        return handle_card_place(l, payload, payload_len);
     case YMGUI_OSC_CS_CARD_REMOVE:
-        return handle_card_remove(l, env.payload, env.payload_len);
+        return handle_card_remove(l, payload, payload_len);
     case YMGUI_OSC_CS_CLEAR:
-        return handle_clear(l, env.payload, env.payload_len);
+        return handle_clear(l, payload, payload_len);
     case YMGUI_OSC_CS_TERM_INPUT_SUB: {
-        if (env.payload_len < sizeof(struct yetty_ymgui_wire_term_input_sub)) {
+        if (payload_len < sizeof(struct yetty_ymgui_wire_term_input_sub)) {
             return YETTY_ERR(yetty_ycore_void, "ymgui: malformed TERM_INPUT_SUB");
         }
         const struct yetty_ymgui_wire_term_input_sub *s =
-            (const struct yetty_ymgui_wire_term_input_sub *)env.payload;
+            (const struct yetty_ymgui_wire_term_input_sub *)payload;
         if (s->magic != YMGUI_WIRE_MAGIC_TERM_INPUT_SUB) {
             return YETTY_ERR(yetty_ycore_void, "ymgui: bad TERM_INPUT_SUB magic");
         }
@@ -965,6 +967,48 @@ static struct yetty_ycore_void_result ymgui_process(struct yetty_yrender_termina
     default:
         return YETTY_ERR(yetty_ycore_void, "ymgui: unexpected OSC code");
     }
+}
+
+static struct yetty_ycore_void_result ymgui_process_input(
+    struct yetty_yrender_terminal_layer *self,
+    struct yetty_yterm_osc_statemachine *osc_statemachine)
+{
+    struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)self;
+
+    if (!l->parse_active) {
+        l->parse_code = yetty_yterm_osc_statemachine_code(osc_statemachine);
+        yetty_ycore_buffer_clear(&l->accum);
+        l->parse_active = 1;
+    }
+
+    uint8_t buf[4096];
+    for (;;) {
+        struct yetty_ycore_size_result rr =
+            yetty_yterm_osc_statemachine_read(osc_statemachine, buf, sizeof(buf));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ymgui: osc read");
+        if (rr.value == 0) {
+            break;
+        }
+        struct yetty_ycore_void_result wr =
+            yetty_ycore_buffer_write(&l->accum, buf, rr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "ymgui: accum write");
+    }
+
+    if (!yetty_yterm_osc_statemachine_at_end(osc_statemachine)) {
+        return YETTY_OK_VOID();
+    }
+
+    int code = l->parse_code;
+    const uint8_t *payload = l->accum.data;
+    size_t payload_len = l->accum.size;
+
+    struct yetty_ycore_void_result r = ymgui_dispatch_atomic(l, code, payload, payload_len);
+
+    yetty_ycore_buffer_clear(&l->accum);
+    l->parse_active = 0;
+    l->parse_code = 0;
+
+    return r;
 }
 
 /*===========================================================================
@@ -1567,6 +1611,7 @@ static struct yetty_ycore_void_result ymgui_destroy(struct yetty_yrender_termina
     if (l->yface) {
         yetty_yface_destroy(l->yface);
     }
+    free(l->accum.data);
     free(l->shader_code.data);
     free(l);
     return YETTY_OK_VOID();

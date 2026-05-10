@@ -1,8 +1,13 @@
 /*
- * osc-statemachine.c — streaming OSC state machine with cursor-driven
- * decode and pause/resume. See osc-statemachine.h for the model.
+ * osc-statemachine.c — OSC framer + decode stack + dispatcher.
+ *
+ * Pipeline:
+ *
+ *   PTY → ring → framer → [b64 (args)] | [b64 → lz4 (payload)] → read() → layer
+ *
+ * SM owns the full decode stack. Layers register against codes and pull
+ * decoded bytes via osc_statemachine_read. See header for the contract.
  */
-
 #include <yetty/yterm/osc-statemachine.h>
 
 #include <lz4frame.h>
@@ -11,103 +16,92 @@
 #include <string.h>
 
 #include <yetty/yplatform/pty.h>
+#include <yetty/yterm/terminal.h>
 #include <yetty/ytrace/ytrace.h>
 
-/*===========================================================================
- * Internal types
- *=========================================================================*/
-
-#define OSC_SM_RING_INITIAL_CAP 4096u /* must be power of 2 */
-#define OSC_SM_BODY_BATCH 256u
-#define OSC_SM_LZ4_OUT_CAP (16u * 1024u)
-#define OSC_SM_ARGS_B64_MAX 1024u
-#define OSC_SM_ARGS_RAW_MAX (OSC_SM_ARGS_B64_MAX * 3u / 4u)
-#define OSC_SM_HANDLERS_INITIAL_CAP 4u
-#define OSC_SM_PAYLOAD_INITIAL_CAP 4096u
+#define OSC_RING_INITIAL_CAP 4096u    /* must be power of 2 */
+#define OSC_HANDLERS_INITIAL_CAP 4u
+#define OSC_ARGS_B64_MAX 1024u
+#define OSC_ARGS_RAW_MAX (OSC_ARGS_B64_MAX * 3u / 4u)
+#define OSC_OUT_CARRY_CAP (256u * 1024u) /* fits a 64KB LZ4F block + amplification */
 
 enum scan_state {
-    SCAN_RAW = 0,
-    SCAN_AFTER_ESC,
-    SCAN_OSC_CODE,
-    SCAN_OSC_ARGS,
-    SCAN_OSC_BODY,
-    SCAN_OSC_BODY_ESC,
+    SCAN_RAW = 0,        /* outside any envelope; default_layer dispatch */
+    SCAN_AFTER_ESC,      /* saw ESC in RAW; next byte decides */
+    SCAN_OSC_CODE,       /* parsing decimal code digits */
+    SCAN_OSC_ARGS,       /* between first `;` and second `;` (b64-args) */
+    SCAN_OSC_BODY,       /* after second `;`; current_layer dispatch */
+    SCAN_OSC_BODY_ESC,   /* saw ESC inside body; next byte decides terminator */
 };
 
-enum view_kind {
-    VIEW_NONE = 0,
-    VIEW_ENVELOPE,
-    VIEW_RAW,
-};
-
-struct osc_sm_handler {
+struct osc_handler {
     int code;
-    enum yetty_yterm_osc_codec codec;
-    yetty_yterm_osc_on_envelope_cb on_envelope;
-    void *user;
+    struct yetty_yrender_terminal_layer *layer;
 };
 
-struct yetty_yterm_osc_sm {
-    /* Ring buffer (power-of-2 cap, monotonic indices, masked addressing). */
-    uint8_t *buf;
-    size_t cap;
+struct yetty_yterm_osc_statemachine {
+    /* Non-owning. */
+    struct yetty_platform_pty *pty;
+
+    /* Input ring (power-of-2 cap; monotonic positions; mask on access). */
+    uint8_t *ring;
+    size_t ring_cap;
     size_t read_pos;
     size_t write_pos;
 
-    /* Envelope state machine. */
+    /* Framer state. */
     enum scan_state state;
-    int code;
+    int current_code;
+    struct yetty_yrender_terminal_layer *current_layer;
 
-    /* Args slot — accumulated b64, decoded once at the second `;`. */
-    char args_b64[OSC_SM_ARGS_B64_MAX];
-    size_t args_b64_len;
-    uint8_t args_decoded[OSC_SM_ARGS_RAW_MAX];
-    size_t args_decoded_len;
+    /* Default sink for SCAN_RAW. */
+    struct yetty_yrender_terminal_layer *default_layer;
 
-    /* Resolved handler for the current envelope. */
-    const struct osc_sm_handler *current_handler;
-
-    /* b64 streaming carry. */
-    uint8_t b64_carry[4];
-    uint8_t b64_carry_n;
-
-    /* LZ4F decompression — lazy alloc, reset between envelopes. */
-    LZ4F_decompressionContext_t lz4_ctx;
-
-    /* Buffered envelope payload — accumulated across body batches and
-     * surfaced to on_envelope at the terminator. */
-    uint8_t *payload_buf;
-    size_t payload_len;
-    size_t payload_cap;
-
-    /* What the SM is currently delivering to a callback. Set just before
-     * the callback fires; cleared right after. */
-    enum view_kind view;
-    int view_code;
-    const uint8_t *view_args;
-    size_t view_args_len;
-    const uint8_t *view_payload;
-    size_t view_payload_len;
-    const char *view_raw;
-    size_t view_raw_len;
-
-    /* Per-code handler registry. */
-    struct osc_sm_handler *handlers;
+    /* code → layer registry (linear scan; small N). */
+    struct osc_handler *handlers;
     size_t handler_count;
     size_t handler_cap;
 
-    /* Out-of-envelope handler. */
-    yetty_yterm_osc_on_raw_cb on_raw;
-    void *raw_user;
+    /* Args slot. Raw b64 chars accumulate here until the second `;`,
+     * then we b64-decode once into args_decoded. Tiny by protocol. */
+    char args_b64[OSC_ARGS_B64_MAX];
+    size_t args_b64_len;
+    uint8_t args_decoded[OSC_ARGS_RAW_MAX];
+    size_t args_decoded_len;
+
+    /* Payload decode pipeline: streaming b64 then optional LZ4F.
+     * lz4_mode is decided once the first chunk of b64-decoded bytes is
+     * available, by sniffing the LZ4F frame magic (0x184D2204). YAML /
+     * CLEAR payloads are b64-only and pass straight through. */
+    uint8_t b64_carry[4];
+    uint8_t b64_carry_n;
+    LZ4F_decompressionContext_t lz4_ctx; /* lazy alloc, reset per envelope */
+    int lz4_mode;                        /* 1 if first 4 decoded bytes were LZ4 magic */
+    int lz4_mode_known;                  /* 0 until first decoded byte arrives */
+    int lz4_drain_done;                  /* set once LZ4F drain has finished */
+    int b64_eos;                         /* saw `=` in payload b64 stream */
+
+    /* Decoded-output carry: bytes the decoder produced but the layer
+     * hasn't pulled yet. Drained first by osc_statemachine_read. */
+    uint8_t out_carry[OSC_OUT_CARRY_CAP];
+    size_t out_carry_head;
+    size_t out_carry_tail;
+
+    /* True while a layer's process_input is on the stack. */
+    int dispatching;
+
+    /* Scratch flag: scanner consumed the terminator while inside a
+     * read(). Set inside read(), checked by process() after dispatch. */
+    int terminator_seen;
 };
 
 /*===========================================================================
- * Ring buffer helpers
+ * Ring helpers
  *=========================================================================*/
 
-static size_t ring_avail(const struct yetty_yterm_osc_sm *sm)
+static size_t ring_avail(const struct yetty_yterm_osc_statemachine *statemachine)
 {
-    return sm->write_pos - sm->read_pos;
+    return statemachine->write_pos - statemachine->read_pos;
 }
 
 static size_t round_pow2(size_t n)
@@ -119,69 +113,96 @@ static size_t round_pow2(size_t n)
     return r;
 }
 
-static struct yetty_ycore_void_result ring_grow_to(struct yetty_yterm_osc_sm *sm, size_t new_min)
+static struct yetty_ycore_void_result ring_grow_to(
+    struct yetty_yterm_osc_statemachine *statemachine, size_t new_min)
 {
-    size_t avail = ring_avail(sm);
-    size_t new_cap = sm->cap ? sm->cap : OSC_SM_RING_INITIAL_CAP;
+    size_t avail = ring_avail(statemachine);
+    size_t new_cap = statemachine->ring_cap ? statemachine->ring_cap : OSC_RING_INITIAL_CAP;
     if (new_cap < new_min) {
         new_cap = round_pow2(new_min);
     }
-    if (new_cap == sm->cap && sm->buf) {
+    if (new_cap == statemachine->ring_cap && statemachine->ring) {
         return YETTY_OK_VOID();
     }
-
     uint8_t *nb = malloc(new_cap);
     if (!nb) {
-        return YETTY_ERR(yetty_ycore_void, "osc_sm: ring grow malloc failed");
+        return YETTY_ERR(yetty_ycore_void, "osc_statemachine: ring grow malloc failed");
     }
-    if (sm->buf && avail > 0) {
-        size_t mask = sm->cap - 1;
-        size_t off = sm->read_pos & mask;
-        size_t first = sm->cap - off;
+    if (statemachine->ring && avail > 0) {
+        size_t mask = statemachine->ring_cap - 1;
+        size_t off = statemachine->read_pos & mask;
+        size_t first = statemachine->ring_cap - off;
         if (first >= avail) {
-            memcpy(nb, sm->buf + off, avail);
+            memcpy(nb, statemachine->ring + off, avail);
         } else {
-            memcpy(nb, sm->buf + off, first);
-            memcpy(nb + first, sm->buf, avail - first);
+            memcpy(nb, statemachine->ring + off, first);
+            memcpy(nb + first, statemachine->ring, avail - first);
         }
     }
-    free(sm->buf);
-    sm->buf = nb;
-    sm->cap = new_cap;
-    sm->read_pos = 0;
-    sm->write_pos = avail;
+    free(statemachine->ring);
+    statemachine->ring = nb;
+    statemachine->ring_cap = new_cap;
+    statemachine->read_pos = 0;
+    statemachine->write_pos = avail;
     return YETTY_OK_VOID();
 }
 
-static uint8_t ring_at(const struct yetty_yterm_osc_sm *sm, size_t pos)
+static uint8_t ring_at(const struct yetty_yterm_osc_statemachine *statemachine, size_t pos)
 {
-    return sm->buf[pos & (sm->cap - 1)];
+    return statemachine->ring[pos & (statemachine->ring_cap - 1)];
 }
 
-static void ring_read_into(const struct yetty_yterm_osc_sm *sm, size_t start, size_t n,
-                           uint8_t *dst)
+/*===========================================================================
+ * Out-carry (decoded bytes produced but not yet pulled)
+ *=========================================================================*/
+
+static size_t out_carry_avail(const struct yetty_yterm_osc_statemachine *statemachine)
 {
-    size_t mask = sm->cap - 1;
-    size_t off = start & mask;
-    size_t first = sm->cap - off;
-    if (first >= n) {
-        memcpy(dst, sm->buf + off, n);
-    } else {
-        memcpy(dst, sm->buf + off, first);
-        memcpy(dst + first, sm->buf, n - first);
+    return statemachine->out_carry_tail - statemachine->out_carry_head;
+}
+
+static void out_carry_reset(struct yetty_yterm_osc_statemachine *statemachine)
+{
+    statemachine->out_carry_head = 0;
+    statemachine->out_carry_tail = 0;
+}
+
+static size_t out_carry_drain(struct yetty_yterm_osc_statemachine *statemachine,
+                              uint8_t *dst, size_t n)
+{
+    size_t have = out_carry_avail(statemachine);
+    size_t take = have < n ? have : n;
+    if (take == 0) {
+        return 0;
     }
+    memcpy(dst, statemachine->out_carry + statemachine->out_carry_head, take);
+    statemachine->out_carry_head += take;
+    if (statemachine->out_carry_head == statemachine->out_carry_tail) {
+        out_carry_reset(statemachine);
+    }
+    return take;
 }
 
-static size_t ring_find2(const struct yetty_yterm_osc_sm *sm, size_t start, size_t end, uint8_t a,
-                         uint8_t b)
+/* Append `n` decoded bytes to the carry. Caller must have called
+ * out_carry_avail and ensured space (carry is sized for one LZ4F block). */
+static struct yetty_ycore_void_result out_carry_append(
+    struct yetty_yterm_osc_statemachine *statemachine, const uint8_t *src, size_t n)
 {
-    for (size_t i = start; i < end; i++) {
-        uint8_t c = ring_at(sm, i);
-        if (c == a || c == b) {
-            return i;
+    if (statemachine->out_carry_tail + n > sizeof(statemachine->out_carry)) {
+        /* Compact: shift live bytes to start. */
+        size_t live = out_carry_avail(statemachine);
+        if (live > 0) {
+            memmove(statemachine->out_carry, statemachine->out_carry + statemachine->out_carry_head, live);
+        }
+        statemachine->out_carry_head = 0;
+        statemachine->out_carry_tail = live;
+        if (live + n > sizeof(statemachine->out_carry)) {
+            return YETTY_ERR(yetty_ycore_void, "osc_statemachine: out carry overflow");
         }
     }
-    return end;
+    memcpy(statemachine->out_carry + statemachine->out_carry_tail, src, n);
+    statemachine->out_carry_tail += n;
+    return YETTY_OK_VOID();
 }
 
 /*===========================================================================
@@ -220,173 +241,156 @@ static int b64_decode_quartet(const char chars[4], uint8_t triple[3])
     return 1;
 }
 
-/*===========================================================================
- * Handler registry / payload buffer
- *=========================================================================*/
-
-static const struct osc_sm_handler *find_handler(const struct yetty_yterm_osc_sm *sm, int code)
+/* Decode the accumulated args_b64 into args_decoded (one shot). */
+static void decode_args_slot(struct yetty_yterm_osc_statemachine *statemachine)
 {
-    for (size_t i = 0; i < sm->handler_count; i++) {
-        if (sm->handlers[i].code == code) {
-            return &sm->handlers[i];
-        }
-    }
-    return NULL;
-}
-
-static struct yetty_ycore_void_result payload_reserve(struct yetty_yterm_osc_sm *sm, size_t extra)
-{
-    size_t need = sm->payload_len + extra;
-    if (need <= sm->payload_cap) {
-        return YETTY_OK_VOID();
-    }
-    size_t nc = sm->payload_cap ? sm->payload_cap : OSC_SM_PAYLOAD_INITIAL_CAP;
-    while (nc < need) {
-        nc *= 2;
-    }
-    uint8_t *nb = realloc(sm->payload_buf, nc);
-    if (!nb) {
-        return YETTY_ERR(yetty_ycore_void, "osc_sm: payload realloc failed");
-    }
-    sm->payload_buf = nb;
-    sm->payload_cap = nc;
-    return YETTY_OK_VOID();
-}
-
-/*===========================================================================
- * Args + codec setup
- *=========================================================================*/
-
-static void decode_args(struct yetty_yterm_osc_sm *sm)
-{
-    sm->args_decoded_len = 0;
-    size_t b64n = sm->args_b64_len;
-    while (b64n > 0 && sm->args_b64[b64n - 1] == '=') {
+    statemachine->args_decoded_len = 0;
+    size_t b64n = statemachine->args_b64_len;
+    while (b64n > 0 && statemachine->args_b64[b64n - 1] == '=') {
         b64n--;
     }
     size_t pos = 0;
     while (pos + 4 <= b64n) {
         uint8_t triple[3];
-        if (!b64_decode_quartet(sm->args_b64 + pos, triple)) {
+        if (!b64_decode_quartet(statemachine->args_b64 + pos, triple)) {
             break;
         }
-        if (sm->args_decoded_len + 3 > sizeof(sm->args_decoded)) {
+        if (statemachine->args_decoded_len + 3 > sizeof(statemachine->args_decoded)) {
             break;
         }
-        memcpy(sm->args_decoded + sm->args_decoded_len, triple, 3);
-        sm->args_decoded_len += 3;
+        memcpy(statemachine->args_decoded + statemachine->args_decoded_len, triple, 3);
+        statemachine->args_decoded_len += 3;
         pos += 4;
     }
-    if (b64n - pos >= 2 && sm->args_decoded_len + 2 <= sizeof(sm->args_decoded)) {
-        char tail[4] = {sm->args_b64[pos], sm->args_b64[pos + 1],
-                        b64n - pos >= 3 ? sm->args_b64[pos + 2] : 'A', 'A'};
+    if (b64n - pos >= 2 && statemachine->args_decoded_len + 2 <= sizeof(statemachine->args_decoded)) {
+        char tail[4] = {
+            statemachine->args_b64[pos], statemachine->args_b64[pos + 1],
+            b64n - pos >= 3 ? statemachine->args_b64[pos + 2] : 'A', 'A',
+        };
         uint8_t triple[3];
         if (b64_decode_quartet(tail, triple)) {
-            sm->args_decoded[sm->args_decoded_len++] = triple[0];
+            statemachine->args_decoded[statemachine->args_decoded_len++] = triple[0];
             if (b64n - pos >= 3) {
-                sm->args_decoded[sm->args_decoded_len++] = triple[1];
+                statemachine->args_decoded[statemachine->args_decoded_len++] = triple[1];
             }
         }
     }
 }
 
-static struct yetty_ycore_void_result open_codec(struct yetty_yterm_osc_sm *sm)
+/*===========================================================================
+ * Handler registry
+ *=========================================================================*/
+
+static struct yetty_yrender_terminal_layer *find_layer(
+    const struct yetty_yterm_osc_statemachine *statemachine, int code)
 {
-    sm->b64_carry_n = 0;
-    sm->payload_len = 0;
-    if (!sm->current_handler) {
+    for (size_t i = 0; i < statemachine->handler_count; i++) {
+        if (statemachine->handlers[i].code == code) {
+            return statemachine->handlers[i].layer;
+        }
+    }
+    return NULL;
+}
+
+/*===========================================================================
+ * Body decode: pump payload bytes from the ring through b64 + lz4 into
+ * out_carry. Stops at the body terminator. Returns OK; statemachine->terminator_seen
+ * is set when the terminator is consumed.
+ *=========================================================================*/
+
+#define LZ4F_FRAME_MAGIC 0x184D2204u
+
+/* Pull ONE chunk of output out of LZ4F (no more input) into out_carry.
+ * Sets lz4_drain_done when LZ4F has nothing left. The caller (body_pump)
+ * loops on this so the layer can drain out_carry between iterations
+ * — large frames decompress to many MB and would overflow the carry
+ * if drained in one shot. */
+static struct yetty_ycore_void_result lz4_drain_one(
+    struct yetty_yterm_osc_statemachine *statemachine)
+{
+    if (!statemachine->lz4_ctx) {
+        statemachine->lz4_drain_done = 1;
         return YETTY_OK_VOID();
     }
-    if (sm->current_handler->codec == YETTY_YTERM_OSC_CODEC_B64_LZ4) {
-        if (!sm->lz4_ctx) {
-            LZ4F_errorCode_t err = LZ4F_createDecompressionContext(&sm->lz4_ctx, LZ4F_VERSION);
-            if (LZ4F_isError(err)) {
-                return YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(err));
-            }
-        } else {
-            LZ4F_resetDecompressionContext(sm->lz4_ctx);
-        }
+    /* Don't run drain if carry can't fit a full chunk — let the layer
+     * pull bytes first. */
+    size_t free = sizeof(statemachine->out_carry) - out_carry_avail(statemachine);
+    if (free < 8192) {
+        return YETTY_OK_VOID();
+    }
+    uint8_t out[8192];
+    size_t in_left = 0;
+    size_t out_left = sizeof(out);
+    size_t r = LZ4F_decompress(statemachine->lz4_ctx, out, &out_left, NULL,
+                               &in_left, NULL);
+    if (LZ4F_isError(r)) {
+        return YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(r));
+    }
+    if (out_left > 0) {
+        struct yetty_ycore_void_result rr =
+            out_carry_append(statemachine, out, out_left);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr,
+                            "osc_statemachine: lz4 drain append");
+    } else {
+        statemachine->lz4_drain_done = 1;
     }
     return YETTY_OK_VOID();
 }
 
-/*===========================================================================
- * Body decode
- *=========================================================================*/
-
-static struct yetty_ycore_void_result body_process_batch(struct yetty_yterm_osc_sm *sm,
-                                                         size_t start, size_t n)
+/* Push `n` bytes of b64-decoded payload through the per-envelope
+ * pipeline (lz4 or passthrough) into out_carry. */
+static struct yetty_ycore_void_result push_decoded(
+    struct yetty_yterm_osc_statemachine *statemachine, const uint8_t *decoded, size_t n)
 {
-    if (n == 0 || !sm->current_handler) {
+    if (n == 0) {
         return YETTY_OK_VOID();
     }
-    if (n > OSC_SM_BODY_BATCH) {
-        n = OSC_SM_BODY_BATCH;
+    /* Sniff lz4 magic on the first decoded byte. */
+    if (!statemachine->lz4_mode_known && n >= 4) {
+        uint32_t magic = (uint32_t)decoded[0] | ((uint32_t)decoded[1] << 8) |
+                         ((uint32_t)decoded[2] << 16) | ((uint32_t)decoded[3] << 24);
+        statemachine->lz4_mode = (magic == LZ4F_FRAME_MAGIC);
+        statemachine->lz4_mode_known = 1;
+    }
+    if (!statemachine->lz4_mode_known) {
+        /* Not enough bytes yet to decide — passthrough is wrong if it's
+         * actually lz4'd. Hold the bytes in b64_carry path? Simpler: if
+         * we got <4 bytes, just buffer; once the next chunk arrives
+         * we'll decide. But the only way <4 happens here is if the
+         * envelope body is genuinely tiny. Treat as passthrough — yaml
+         * payloads are always larger than 4 bytes so this is a no-op
+         * for compressed streams. */
+        statemachine->lz4_mode_known = 1;
     }
 
-    uint8_t batch[OSC_SM_BODY_BATCH];
-    ring_read_into(sm, start, n, batch);
-
-    /* Combine carry + new chars; drop everything from first '=' (b64 EOS). */
-    char full[OSC_SM_BODY_BATCH + 4];
-    size_t full_n = 0;
-    for (size_t i = 0; i < sm->b64_carry_n; i++) {
-        full[full_n++] = (char)sm->b64_carry[i];
+    if (!statemachine->lz4_mode) {
+        /* Passthrough: b64-decoded bytes are the final payload. */
+        return out_carry_append(statemachine, decoded, n);
     }
-    size_t valid_n = 0;
-    while (valid_n < n && batch[valid_n] != '=') {
-        valid_n++;
-    }
-    memcpy(full + full_n, batch, valid_n);
-    full_n += valid_n;
 
-    uint8_t decoded[(OSC_SM_BODY_BATCH + 4) * 3 / 4 + 4];
-    size_t decoded_n = 0;
-    size_t quartets = full_n / 4;
-    for (size_t q = 0; q < quartets; q++) {
-        uint8_t triple[3];
-        if (b64_decode_quartet(full + q * 4, triple)) {
-            memcpy(decoded + decoded_n, triple, 3);
-            decoded_n += 3;
+    /* LZ4F frame mode. Lazy-alloc context. */
+    if (!statemachine->lz4_ctx) {
+        LZ4F_errorCode_t err =
+            LZ4F_createDecompressionContext(&statemachine->lz4_ctx, LZ4F_VERSION);
+        if (LZ4F_isError(err)) {
+            return YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(err));
         }
     }
-
-    sm->b64_carry_n = (uint8_t)(full_n - quartets * 4);
-    for (size_t i = 0; i < sm->b64_carry_n; i++) {
-        sm->b64_carry[i] = (uint8_t)full[quartets * 4 + i];
-    }
-
-    if (decoded_n == 0) {
-        return YETTY_OK_VOID();
-    }
-
-    if (sm->current_handler->codec == YETTY_YTERM_OSC_CODEC_NONE ||
-        sm->current_handler->codec == YETTY_YTERM_OSC_CODEC_B64) {
-        struct yetty_ycore_void_result r = payload_reserve(sm, decoded_n);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_sm: payload reserve");
-        memcpy(sm->payload_buf + sm->payload_len, decoded, decoded_n);
-        sm->payload_len += decoded_n;
-        return YETTY_OK_VOID();
-    }
-
-    /* B64_LZ4 */
-    if (!sm->lz4_ctx) {
-        return YETTY_ERR(yetty_ycore_void, "osc_sm: LZ4 ctx missing for compressed body");
-    }
-    uint8_t out[OSC_SM_LZ4_OUT_CAP];
     size_t in_pos = 0;
-    while (in_pos < decoded_n) {
-        size_t in_left = decoded_n - in_pos;
+    while (in_pos < n) {
+        uint8_t out[OSC_OUT_CARRY_CAP];
+        size_t in_left = n - in_pos;
         size_t out_left = sizeof(out);
-        size_t r = LZ4F_decompress(sm->lz4_ctx, out, &out_left, decoded + in_pos, &in_left, NULL);
+        size_t r = LZ4F_decompress(statemachine->lz4_ctx, out, &out_left,
+                                   decoded + in_pos, &in_left, NULL);
         if (LZ4F_isError(r)) {
             return YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(r));
         }
         if (out_left > 0) {
-            struct yetty_ycore_void_result rr = payload_reserve(sm, out_left);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "osc_sm: payload reserve");
-            memcpy(sm->payload_buf + sm->payload_len, out, out_left);
-            sm->payload_len += out_left;
+            struct yetty_ycore_void_result rr =
+                out_carry_append(statemachine, out, out_left);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, rr,
+                                "osc_statemachine: out_carry append");
         }
         in_pos += in_left;
         if (in_left == 0 && out_left == 0) {
@@ -396,444 +400,537 @@ static struct yetty_ycore_void_result body_process_batch(struct yetty_yterm_osc_
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result finalize_body(struct yetty_yterm_osc_sm *sm)
+/* Pump up to `want` decoded bytes into out_carry from the body. Stops
+ * at the envelope terminator (BEL or ESC \\). Advances read_pos past
+ * consumed wire bytes. */
+static struct yetty_ycore_void_result body_pump(
+    struct yetty_yterm_osc_statemachine *statemachine, size_t want)
 {
-    if (!sm->current_handler) {
-        return YETTY_OK_VOID();
-    }
-    if (sm->current_handler->codec != YETTY_YTERM_OSC_CODEC_B64_LZ4 || !sm->lz4_ctx) {
-        return YETTY_OK_VOID();
-    }
-    uint8_t out[OSC_SM_LZ4_OUT_CAP];
-    for (;;) {
-        size_t in_left = 0;
-        size_t out_left = sizeof(out);
-        size_t r = LZ4F_decompress(sm->lz4_ctx, out, &out_left, NULL, &in_left, NULL);
-        if (LZ4F_isError(r)) {
-            return YETTY_ERR(yetty_ycore_void, LZ4F_getErrorName(r));
+    while (out_carry_avail(statemachine) < want) {
+        if (statemachine->terminator_seen) {
+            /* Bytes after terminator: drain LZ4F incrementally — one
+             * chunk per call so the layer has a chance to drain the
+             * carry between iterations. */
+            if (statemachine->lz4_mode && !statemachine->lz4_drain_done) {
+                struct yetty_ycore_void_result dr = lz4_drain_one(statemachine);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, dr,
+                                    "osc_statemachine: lz4 drain step");
+                if (statemachine->lz4_drain_done) {
+                    return YETTY_OK_VOID();
+                }
+                /* If drain produced 0 bytes (carry full), exit so
+                 * layer can drain. */
+                if (out_carry_avail(statemachine) >= want) {
+                    return YETTY_OK_VOID();
+                }
+                continue;
+            }
+            return YETTY_OK_VOID();
         }
-        if (out_left > 0) {
-            struct yetty_ycore_void_result rr = payload_reserve(sm, out_left);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "osc_sm: payload reserve");
-            memcpy(sm->payload_buf + sm->payload_len, out, out_left);
-            sm->payload_len += out_left;
+        if (statemachine->read_pos >= statemachine->write_pos) {
+            return YETTY_OK_VOID(); /* need more wire input */
         }
-        if (out_left == 0) {
-            break;
+
+        /* Step 1: collect up to 256 wire b64 chars, stopping at terminator. */
+        uint8_t batch[256];
+        size_t batch_n = 0;
+        int hit_terminator = 0;
+        while (batch_n < sizeof(batch) && statemachine->read_pos < statemachine->write_pos) {
+            uint8_t c = ring_at(statemachine, statemachine->read_pos);
+            if (c == '\007') {
+                statemachine->read_pos++;
+                hit_terminator = 1;
+                break;
+            }
+            if (c == '\033') {
+                if (statemachine->read_pos + 1 >= statemachine->write_pos) {
+                    /* Don't know yet — leave ESC for next pump. */
+                    goto out;
+                }
+                if (ring_at(statemachine, statemachine->read_pos + 1) == '\\') {
+                    statemachine->read_pos += 2;
+                    hit_terminator = 1;
+                    break;
+                }
+                /* Stray ESC inside body — skip it and continue. */
+                statemachine->read_pos++;
+                continue;
+            }
+            batch[batch_n++] = c;
+            statemachine->read_pos++;
+        }
+out:
+        if (batch_n == 0 && !hit_terminator) {
+            return YETTY_OK_VOID();
+        }
+
+        /* Step 2: b64-decode batch with carry from previous call. */
+        char full[sizeof(batch) + 4];
+        size_t full_n = 0;
+        for (size_t i = 0; i < statemachine->b64_carry_n; i++) {
+            full[full_n++] = (char)statemachine->b64_carry[i];
+        }
+        size_t valid_n = 0;
+        while (valid_n < batch_n && batch[valid_n] != '=') {
+            valid_n++;
+        }
+        if (valid_n < batch_n) {
+            statemachine->b64_eos = 1;
+        }
+        memcpy(full + full_n, batch, valid_n);
+        full_n += valid_n;
+
+        uint8_t decoded[(sizeof(batch) + 4) * 3 / 4 + 4];
+        size_t decoded_n = 0;
+        size_t quartets = full_n / 4;
+        for (size_t q = 0; q < quartets; q++) {
+            uint8_t triple[3];
+            if (b64_decode_quartet(full + q * 4, triple)) {
+                memcpy(decoded + decoded_n, triple, 3);
+                decoded_n += 3;
+            }
+        }
+        statemachine->b64_carry_n = (uint8_t)(full_n - quartets * 4);
+        for (size_t i = 0; i < statemachine->b64_carry_n; i++) {
+            statemachine->b64_carry[i] = (uint8_t)full[quartets * 4 + i];
+        }
+
+        /* Step 3: push the decoded chunk through the pipeline. */
+        struct yetty_ycore_void_result pr = push_decoded(statemachine, decoded, decoded_n);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "osc_statemachine: push_decoded");
+
+        /* Step 4: terminator just hit — flush trailing b64 carry (1-3
+         * chars left over that decode to 1-2 bytes), then let the outer
+         * loop drive incremental lz4 drain on subsequent iterations. */
+        if (hit_terminator) {
+            if (statemachine->b64_carry_n >= 2) {
+                char tail[4] = {
+                    (char)statemachine->b64_carry[0],
+                    (char)statemachine->b64_carry[1],
+                    statemachine->b64_carry_n >= 3 ? (char)statemachine->b64_carry[2] : 'A',
+                    'A',
+                };
+                uint8_t triple[3];
+                if (b64_decode_quartet(tail, triple)) {
+                    uint8_t out_bytes[2] = {triple[0], triple[1]};
+                    size_t out_n = statemachine->b64_carry_n >= 3 ? 2 : 1;
+                    struct yetty_ycore_void_result fr =
+                        push_decoded(statemachine, out_bytes, out_n);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, fr,
+                                        "osc_statemachine: flush b64 tail");
+                }
+            }
+            statemachine->b64_carry_n = 0;
+            statemachine->terminator_seen = 1;
+            if (!statemachine->lz4_mode) {
+                statemachine->lz4_drain_done = 1;
+            }
         }
     }
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result dispatch_envelope(struct yetty_yterm_osc_sm *sm)
+/* Pump raw (non-decoded) bytes from the ring into out_carry up to `want`
+ * decoded bytes available — for SCAN_RAW. Stops at the next ESC. */
+static struct yetty_ycore_void_result raw_pump(
+    struct yetty_yterm_osc_statemachine *statemachine, size_t want)
 {
-    if (!sm->current_handler || !sm->current_handler->on_envelope) {
-        return YETTY_OK_VOID();
-    }
-    sm->view = VIEW_ENVELOPE;
-    sm->view_code = sm->code;
-    sm->view_args = sm->args_decoded;
-    sm->view_args_len = sm->args_decoded_len;
-    sm->view_payload = sm->payload_buf;
-    sm->view_payload_len = sm->payload_len;
-    struct yetty_ycore_void_result r =
-        sm->current_handler->on_envelope(sm->current_handler->user, sm);
-    sm->view = VIEW_NONE;
-    sm->view_args = NULL;
-    sm->view_args_len = 0;
-    sm->view_payload = NULL;
-    sm->view_payload_len = 0;
-    if (YETTY_IS_ERR(r)) {
-        return YETTY_ERR(yetty_ycore_void, "osc_sm: envelope handler failed", r);
-    }
-    return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result dispatch_raw_range(struct yetty_yterm_osc_sm *sm,
-                                                         size_t start, size_t end)
-{
-    if (!sm->on_raw || end <= start) {
-        return YETTY_OK_VOID();
-    }
-    size_t mask = sm->cap - 1;
-    size_t off = start & mask;
-    size_t n = end - start;
-    size_t first = sm->cap - off;
-
-    sm->view = VIEW_RAW;
-    sm->view_code = 0;
-
-    if (first >= n) {
-        sm->view_raw = (const char *)sm->buf + off;
-        sm->view_raw_len = n;
-        struct yetty_ycore_void_result r = sm->on_raw(sm->raw_user, sm);
-        sm->view = VIEW_NONE;
-        sm->view_raw = NULL;
-        sm->view_raw_len = 0;
-        if (YETTY_IS_ERR(r)) {
-            return YETTY_ERR(yetty_ycore_void, "osc_sm: raw handler failed", r);
+    while (out_carry_avail(statemachine) < want && statemachine->read_pos < statemachine->write_pos) {
+        uint8_t c = ring_at(statemachine, statemachine->read_pos);
+        if (c == '\033') {
+            return YETTY_OK_VOID(); /* leave ESC for the framer */
         }
-        return YETTY_OK_VOID();
-    }
-    /* Wrap — deliver in two halves. */
-    sm->view_raw = (const char *)sm->buf + off;
-    sm->view_raw_len = first;
-    struct yetty_ycore_void_result r1 = sm->on_raw(sm->raw_user, sm);
-    if (YETTY_IS_ERR(r1)) {
-        sm->view = VIEW_NONE;
-        sm->view_raw = NULL;
-        sm->view_raw_len = 0;
-        return YETTY_ERR(yetty_ycore_void, "osc_sm: raw handler failed", r1);
-    }
-    sm->view_raw = (const char *)sm->buf;
-    sm->view_raw_len = n - first;
-    struct yetty_ycore_void_result r2 = sm->on_raw(sm->raw_user, sm);
-    sm->view = VIEW_NONE;
-    sm->view_raw = NULL;
-    sm->view_raw_len = 0;
-    if (YETTY_IS_ERR(r2)) {
-        return YETTY_ERR(yetty_ycore_void, "osc_sm: raw handler failed", r2);
+        struct yetty_ycore_void_result r = out_carry_append(statemachine, &c, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_statemachine: raw out_carry");
+        statemachine->read_pos++;
     }
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result dispatch_raw_stack(struct yetty_yterm_osc_sm *sm,
-                                                         const char *bytes, size_t n)
+/*===========================================================================
+ * Dispatch
+ *=========================================================================*/
+
+static struct yetty_ycore_void_result dispatch(
+    struct yetty_yterm_osc_statemachine *statemachine, struct yetty_yrender_terminal_layer *layer)
 {
-    if (!sm->on_raw || n == 0) {
+    if (!layer || !layer->ops || !layer->ops->process_input) {
         return YETTY_OK_VOID();
     }
-    sm->view = VIEW_RAW;
-    sm->view_code = 0;
-    sm->view_raw = bytes;
-    sm->view_raw_len = n;
-    struct yetty_ycore_void_result r = sm->on_raw(sm->raw_user, sm);
-    sm->view = VIEW_NONE;
-    sm->view_raw = NULL;
-    sm->view_raw_len = 0;
-    if (YETTY_IS_ERR(r)) {
-        return YETTY_ERR(yetty_ycore_void, "osc_sm: raw handler failed", r);
-    }
+    statemachine->dispatching = 1;
+    struct yetty_ycore_void_result r = layer->ops->process_input(layer, statemachine);
+    statemachine->dispatching = 0;
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_statemachine: layer process_input failed");
     return YETTY_OK_VOID();
+}
+
+/* Reset per-envelope state at the start of a new envelope. */
+static void envelope_reset(struct yetty_yterm_osc_statemachine *statemachine)
+{
+    statemachine->args_b64_len = 0;
+    statemachine->args_decoded_len = 0;
+    statemachine->b64_carry_n = 0;
+    statemachine->b64_eos = 0;
+    statemachine->terminator_seen = 0;
+    statemachine->lz4_mode = 0;
+    statemachine->lz4_mode_known = 0;
+    statemachine->lz4_drain_done = 0;
+    out_carry_reset(statemachine);
+    if (statemachine->lz4_ctx) {
+        LZ4F_resetDecompressionContext(statemachine->lz4_ctx);
+    }
 }
 
 /*===========================================================================
  * Public API
  *=========================================================================*/
 
-struct yetty_yterm_osc_sm_ptr_result yetty_yterm_osc_sm_create(void)
+struct yetty_yterm_osc_statemachine_ptr_result yetty_yterm_osc_statemachine_create(
+    struct yetty_platform_pty *pty)
 {
-    struct yetty_yterm_osc_sm *sm = calloc(1, sizeof(struct yetty_yterm_osc_sm));
-    if (!sm) {
-        return YETTY_ERR(yetty_yterm_osc_sm_ptr, "osc_sm: calloc failed");
+    struct yetty_yterm_osc_statemachine *statemachine =
+        calloc(1, sizeof(struct yetty_yterm_osc_statemachine));
+    if (!statemachine) {
+        return YETTY_ERR(yetty_yterm_osc_statemachine_ptr, "osc_statemachine: calloc failed");
     }
-    sm->state = SCAN_RAW;
-    return YETTY_OK(yetty_yterm_osc_sm_ptr, sm);
+    statemachine->pty = pty;
+    statemachine->state = SCAN_RAW;
+    return YETTY_OK(yetty_yterm_osc_statemachine_ptr, statemachine);
 }
 
-struct yetty_ycore_void_result yetty_yterm_osc_sm_destroy(struct yetty_yterm_osc_sm *sm)
+struct yetty_ycore_void_result yetty_yterm_osc_statemachine_destroy(
+    struct yetty_yterm_osc_statemachine *statemachine)
 {
-    if (!sm) {
-        return YETTY_ERR(yetty_ycore_void, "osc_sm: sm is NULL");
+    if (!statemachine) {
+        return YETTY_ERR(yetty_ycore_void, "osc_statemachine: statemachine is NULL");
     }
-    if (sm->lz4_ctx) {
-        LZ4F_freeDecompressionContext(sm->lz4_ctx);
-        sm->lz4_ctx = NULL;
+    if (statemachine->lz4_ctx) {
+        LZ4F_freeDecompressionContext(statemachine->lz4_ctx);
     }
-    free(sm->buf);
-    free(sm->payload_buf);
-    free(sm->handlers);
-    free(sm);
+    free(statemachine->ring);
+    free(statemachine->handlers);
+    free(statemachine);
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yterm_osc_sm_register(
-    struct yetty_yterm_osc_sm *sm, int code, enum yetty_yterm_osc_codec codec,
-    yetty_yterm_osc_on_envelope_cb on_envelope, void *user)
+struct yetty_ycore_void_result yetty_yterm_osc_statemachine_register(
+    struct yetty_yterm_osc_statemachine *statemachine, int code,
+    struct yetty_yrender_terminal_layer *layer)
 {
-    if (!sm) {
-        return YETTY_ERR(yetty_ycore_void, "osc_sm: sm is NULL");
+    if (!statemachine) {
+        return YETTY_ERR(yetty_ycore_void, "osc_statemachine: statemachine is NULL");
     }
-    for (size_t i = 0; i < sm->handler_count; i++) {
-        if (sm->handlers[i].code == code) {
-            sm->handlers[i].codec = codec;
-            sm->handlers[i].on_envelope = on_envelope;
-            sm->handlers[i].user = user;
+    for (size_t i = 0; i < statemachine->handler_count; i++) {
+        if (statemachine->handlers[i].code == code) {
+            statemachine->handlers[i].layer = layer;
             return YETTY_OK_VOID();
         }
     }
-    if (sm->handler_count == sm->handler_cap) {
-        size_t nc = sm->handler_cap ? sm->handler_cap * 2 : OSC_SM_HANDLERS_INITIAL_CAP;
-        struct osc_sm_handler *nh =
-            realloc(sm->handlers, nc * sizeof(struct osc_sm_handler));
+    if (statemachine->handler_count == statemachine->handler_cap) {
+        size_t nc = statemachine->handler_cap ? statemachine->handler_cap * 2 : OSC_HANDLERS_INITIAL_CAP;
+        struct osc_handler *nh = realloc(statemachine->handlers, nc * sizeof(struct osc_handler));
         if (!nh) {
-            return YETTY_ERR(yetty_ycore_void, "osc_sm: handler realloc failed");
+            return YETTY_ERR(yetty_ycore_void, "osc_statemachine: handler realloc failed");
         }
-        sm->handlers = nh;
-        sm->handler_cap = nc;
+        statemachine->handlers = nh;
+        statemachine->handler_cap = nc;
     }
-    sm->handlers[sm->handler_count++] = (struct osc_sm_handler){
-        .code = code,
-        .codec = codec,
-        .on_envelope = on_envelope,
-        .user = user,
-    };
+    statemachine->handlers[statemachine->handler_count++] =
+        (struct osc_handler){.code = code, .layer = layer};
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yterm_osc_sm_set_raw_handler(
-    struct yetty_yterm_osc_sm *sm, yetty_yterm_osc_on_raw_cb on_raw, void *user)
+struct yetty_ycore_void_result yetty_yterm_osc_statemachine_feed(
+    struct yetty_yterm_osc_statemachine *statemachine, const char *bytes, size_t n)
 {
-    if (!sm) {
-        return YETTY_ERR(yetty_ycore_void, "osc_sm: sm is NULL");
-    }
-    sm->on_raw = on_raw;
-    sm->raw_user = user;
-    return YETTY_OK_VOID();
-}
-
-struct yetty_ycore_void_result yetty_yterm_osc_sm_feed(struct yetty_yterm_osc_sm *sm,
-                                                       const char *bytes, size_t n)
-{
-    if (!sm) {
-        return YETTY_ERR(yetty_ycore_void, "osc_sm: sm is NULL");
+    if (!statemachine) {
+        return YETTY_ERR(yetty_ycore_void, "osc_statemachine: statemachine is NULL");
     }
     if (!bytes || n == 0) {
         return YETTY_OK_VOID();
     }
-
-    size_t avail = ring_avail(sm);
-    if (avail + n > sm->cap) {
-        struct yetty_ycore_void_result r = ring_grow_to(sm, avail + n);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_sm: feed grow");
+    size_t avail = ring_avail(statemachine);
+    if (avail + n > statemachine->ring_cap) {
+        struct yetty_ycore_void_result r = ring_grow_to(statemachine, avail + n);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_statemachine: feed grow");
     }
-    size_t mask = sm->cap - 1;
-    size_t off = sm->write_pos & mask;
-    size_t first = sm->cap - off;
+    size_t mask = statemachine->ring_cap - 1;
+    size_t off = statemachine->write_pos & mask;
+    size_t first = statemachine->ring_cap - off;
     if (first >= n) {
-        memcpy(sm->buf + off, bytes, n);
+        memcpy(statemachine->ring + off, bytes, n);
     } else {
-        memcpy(sm->buf + off, bytes, first);
-        memcpy(sm->buf, bytes + first, n - first);
+        memcpy(statemachine->ring + off, bytes, first);
+        memcpy(statemachine->ring, bytes + first, n - first);
     }
-    sm->write_pos += n;
+    statemachine->write_pos += n;
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_size_result yetty_yterm_osc_sm_read_pty(struct yetty_yterm_osc_sm *sm,
-                                                           struct yetty_platform_pty *pty)
+struct yetty_ycore_void_result yetty_yterm_osc_statemachine_set_default(
+    struct yetty_yterm_osc_statemachine *statemachine,
+    struct yetty_yrender_terminal_layer *layer)
 {
-    if (!sm) {
-        return YETTY_ERR(yetty_ycore_size, "osc_sm: sm is NULL");
+    if (!statemachine) {
+        return YETTY_ERR(yetty_ycore_void, "osc_statemachine: statemachine is NULL");
     }
-    if (!pty || !pty->ops || !pty->ops->read) {
-        return YETTY_ERR(yetty_ycore_size, "osc_sm: pty has no read op");
-    }
+    statemachine->default_layer = layer;
+    return YETTY_OK_VOID();
+}
 
-    if (!sm->buf) {
-        struct yetty_ycore_void_result r = ring_grow_to(sm, OSC_SM_RING_INITIAL_CAP);
-        YETTY_RETURN_IF_ERR(yetty_ycore_size, r, "osc_sm: ring init");
+/* Read PTY bytes into the ring's writable region (zero-copy). */
+static struct yetty_ycore_size_result pull_from_pty(
+    struct yetty_yterm_osc_statemachine *statemachine)
+{
+    if (!statemachine->pty || !statemachine->pty->ops || !statemachine->pty->ops->read) {
+        return YETTY_ERR(yetty_ycore_size, "osc_statemachine: pty has no read op");
     }
-    size_t avail = ring_avail(sm);
-    if (avail == sm->cap) {
-        struct yetty_ycore_void_result r = ring_grow_to(sm, sm->cap * 2);
-        YETTY_RETURN_IF_ERR(yetty_ycore_size, r, "osc_sm: ring grow");
+    if (!statemachine->ring) {
+        struct yetty_ycore_void_result r = ring_grow_to(statemachine, OSC_RING_INITIAL_CAP);
+        YETTY_RETURN_IF_ERR(yetty_ycore_size, r, "osc_statemachine: ring init");
     }
-
-    size_t mask = sm->cap - 1;
-    size_t off = sm->write_pos & mask;
-    size_t free_to_end = sm->cap - off;
-    size_t free_total = sm->cap - ring_avail(sm);
+    if (ring_avail(statemachine) == statemachine->ring_cap) {
+        struct yetty_ycore_void_result r = ring_grow_to(statemachine, statemachine->ring_cap * 2);
+        YETTY_RETURN_IF_ERR(yetty_ycore_size, r, "osc_statemachine: ring grow");
+    }
+    size_t mask = statemachine->ring_cap - 1;
+    size_t off = statemachine->write_pos & mask;
+    size_t free_to_end = statemachine->ring_cap - off;
+    size_t free_total = statemachine->ring_cap - ring_avail(statemachine);
     size_t max_n = free_to_end < free_total ? free_to_end : free_total;
     if (max_n == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
     }
-
-    struct yetty_ycore_size_result rr = pty->ops->read(pty, (char *)sm->buf + off, max_n);
+    struct yetty_ycore_size_result rr =
+        statemachine->pty->ops->read(statemachine->pty, (char *)statemachine->ring + off, max_n);
     if (YETTY_IS_ERR(rr)) {
-        return YETTY_ERR(yetty_ycore_size, "osc_sm: pty read", rr);
+        return YETTY_ERR(yetty_ycore_size, "osc_statemachine: pty read", rr);
     }
-    if (rr.value > 0) {
-        sm->write_pos += rr.value;
-    }
+    statemachine->write_pos += rr.value;
     return YETTY_OK(yetty_ycore_size, rr.value);
 }
 
-struct yetty_ycore_void_result yetty_yterm_osc_sm_process(struct yetty_yterm_osc_sm *sm)
+struct yetty_ycore_void_result yetty_yterm_osc_statemachine_process(
+    struct yetty_yterm_osc_statemachine *statemachine)
 {
-    if (!sm) {
-        return YETTY_ERR(yetty_ycore_void, "osc_sm: sm is NULL");
+    if (!statemachine) {
+        return YETTY_ERR(yetty_ycore_void, "osc_statemachine: statemachine is NULL");
     }
 
-    while (sm->read_pos < sm->write_pos) {
-        switch (sm->state) {
-        case SCAN_RAW: {
-            size_t end = ring_find2(sm, sm->read_pos, sm->write_pos, '\033', '\033');
-            if (end > sm->read_pos) {
-                struct yetty_ycore_void_result r = dispatch_raw_range(sm, sm->read_pos, end);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_sm: raw range");
-                sm->read_pos = end;
+    /* Pump fresh PTY bytes into the ring (sync-read backends only).
+     * libuv-backed PTYs return an error from ops->read; bytes arrive
+     * through _feed in that case, so we silently ignore the failure. */
+    if (statemachine->pty) {
+        for (;;) {
+            struct yetty_ycore_size_result rr = pull_from_pty(statemachine);
+            if (YETTY_IS_ERR(rr)) {
+                yetty_ycore_error_destroy(rr.error);
+                break;
             }
-            if (sm->read_pos < sm->write_pos) {
-                sm->read_pos++;
-                sm->state = SCAN_AFTER_ESC;
+            if (rr.value == 0) {
+                break;
+            }
+        }
+    }
+
+    while (statemachine->read_pos < statemachine->write_pos || out_carry_avail(statemachine) > 0) {
+        switch (statemachine->state) {
+        case SCAN_RAW: {
+            if (statemachine->default_layer) {
+                size_t before_rp = statemachine->read_pos;
+                size_t before_oc = out_carry_avail(statemachine);
+                struct yetty_ycore_void_result r = dispatch(statemachine, statemachine->default_layer);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_statemachine: default dispatch");
+                if (statemachine->read_pos == before_rp && out_carry_avail(statemachine) == before_oc) {
+                    /* Layer made no progress — done for this cycle, OR
+                     * we're parked at an ESC and need to advance the
+                     * scanner. */
+                    if (statemachine->read_pos < statemachine->write_pos &&
+                        ring_at(statemachine, statemachine->read_pos) == '\033') {
+                        statemachine->read_pos++;
+                        statemachine->state = SCAN_AFTER_ESC;
+                        break;
+                    }
+                    return YETTY_OK_VOID();
+                }
+            } else {
+                /* No default sink — just skip. */
+                while (statemachine->read_pos < statemachine->write_pos &&
+                       ring_at(statemachine, statemachine->read_pos) != '\033') {
+                    statemachine->read_pos++;
+                }
+                if (statemachine->read_pos < statemachine->write_pos) {
+                    statemachine->read_pos++;
+                    statemachine->state = SCAN_AFTER_ESC;
+                }
             }
             break;
         }
 
         case SCAN_AFTER_ESC: {
-            uint8_t c = ring_at(sm, sm->read_pos++);
+            if (statemachine->read_pos >= statemachine->write_pos) {
+                return YETTY_OK_VOID();
+            }
+            uint8_t c = ring_at(statemachine, statemachine->read_pos);
             if (c == ']') {
-                sm->code = 0;
-                sm->args_b64_len = 0;
-                sm->args_decoded_len = 0;
-                sm->current_handler = NULL;
-                sm->state = SCAN_OSC_CODE;
+                statemachine->read_pos++;
+                statemachine->current_code = 0;
+                envelope_reset(statemachine);
+                statemachine->state = SCAN_OSC_CODE;
             } else {
-                char emit[2] = {'\033', (char)c};
-                struct yetty_ycore_void_result r = dispatch_raw_stack(sm, emit, 2);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_sm: raw esc-pair");
-                sm->state = SCAN_RAW;
+                /* Not OSC opener — emit ESC + this byte to default
+                 * via out_carry so vterm sees the regular escape. */
+                uint8_t emit[2] = {'\033', c};
+                struct yetty_ycore_void_result r = out_carry_append(statemachine, emit, 2);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_statemachine: raw esc-pair");
+                statemachine->read_pos++;
+                statemachine->state = SCAN_RAW;
             }
             break;
         }
 
         case SCAN_OSC_CODE: {
-            uint8_t c = ring_at(sm, sm->read_pos++);
+            if (statemachine->read_pos >= statemachine->write_pos) {
+                return YETTY_OK_VOID();
+            }
+            uint8_t c = ring_at(statemachine, statemachine->read_pos++);
             if (c >= '0' && c <= '9') {
-                sm->code = sm->code * 10 + (int)(c - '0');
+                statemachine->current_code = statemachine->current_code * 10 + (int)(c - '0');
             } else if (c == ';') {
-                sm->state = SCAN_OSC_ARGS;
+                statemachine->state = SCAN_OSC_ARGS;
             } else {
-                ywarn("osc_sm: malformed OSC, code byte=0x%02x", (unsigned)c);
-                sm->state = SCAN_RAW;
+                ywarn("osc_statemachine: malformed OSC code byte=0x%02x", (unsigned)c);
+                statemachine->state = SCAN_RAW;
             }
             break;
         }
 
         case SCAN_OSC_ARGS: {
-            uint8_t c = ring_at(sm, sm->read_pos++);
+            if (statemachine->read_pos >= statemachine->write_pos) {
+                return YETTY_OK_VOID();
+            }
+            uint8_t c = ring_at(statemachine, statemachine->read_pos++);
             if (c == ';') {
-                decode_args(sm);
-                sm->current_handler = find_handler(sm, sm->code);
-                struct yetty_ycore_void_result r = open_codec(sm);
-                if (YETTY_IS_ERR(r)) {
-                    yerror("osc_sm: open_codec failed: %s", r.error.msg);
-                    yetty_ycore_error_destroy(r.error);
-                    sm->current_handler = NULL;
-                    sm->state = SCAN_RAW;
-                    break;
-                }
-                sm->state = SCAN_OSC_BODY;
-            } else if (sm->args_b64_len < sizeof(sm->args_b64)) {
-                sm->args_b64[sm->args_b64_len++] = (char)c;
+                decode_args_slot(statemachine);
+                statemachine->current_layer = find_layer(statemachine, statemachine->current_code);
+                statemachine->state = SCAN_OSC_BODY;
+            } else if (statemachine->args_b64_len < sizeof(statemachine->args_b64)) {
+                statemachine->args_b64[statemachine->args_b64_len++] = (char)c;
             }
             break;
         }
 
-        case SCAN_OSC_BODY: {
-            size_t batch_end = sm->read_pos + OSC_SM_BODY_BATCH;
-            if (batch_end > sm->write_pos) {
-                batch_end = sm->write_pos;
-            }
-            size_t term = ring_find2(sm, sm->read_pos, batch_end, '\033', '\007');
-            size_t batch_n = term - sm->read_pos;
-
-            if (batch_n > 0) {
-                struct yetty_ycore_void_result r =
-                    body_process_batch(sm, sm->read_pos, batch_n);
-                if (YETTY_IS_ERR(r)) {
-                    yerror("osc_sm: body batch failed: %s", r.error.msg);
-                    yetty_ycore_error_destroy(r.error);
-                    sm->current_handler = NULL;
-                    sm->read_pos = term;
-                    sm->state = SCAN_RAW;
-                    break;
-                }
-                sm->read_pos += batch_n;
-            }
-
-            if (term == sm->write_pos) {
-                break; /* out of input within body */
-            }
-            if (term < batch_end) {
-                uint8_t c = ring_at(sm, term);
-                sm->read_pos = term + 1;
-                if (c == '\007') {
-                    struct yetty_ycore_void_result fr = finalize_body(sm);
-                    if (YETTY_IS_ERR(fr)) {
-                        yerror("osc_sm: finalize_body failed: %s", fr.error.msg);
-                        yetty_ycore_error_destroy(fr.error);
-                    } else {
-                        struct yetty_ycore_void_result dr = dispatch_envelope(sm);
-                        YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "osc_sm: dispatch");
-                    }
-                    sm->current_handler = NULL;
-                    sm->state = SCAN_RAW;
-                } else {
-                    sm->state = SCAN_OSC_BODY_ESC;
-                }
-            }
-            break;
-        }
-
+        case SCAN_OSC_BODY:
         case SCAN_OSC_BODY_ESC: {
-            uint8_t c = ring_at(sm, sm->read_pos++);
-            if (c == '\\') {
-                struct yetty_ycore_void_result fr = finalize_body(sm);
-                if (YETTY_IS_ERR(fr)) {
-                    yerror("osc_sm: finalize_body failed: %s", fr.error.msg);
-                    yetty_ycore_error_destroy(fr.error);
-                } else {
-                    struct yetty_ycore_void_result dr = dispatch_envelope(sm);
-                    YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "osc_sm: dispatch");
+            if (!statemachine->current_layer) {
+                /* No registered layer — drain body to terminator. */
+                while (!statemachine->terminator_seen && statemachine->read_pos < statemachine->write_pos) {
+                    uint8_t c = ring_at(statemachine, statemachine->read_pos++);
+                    if (c == '\007') {
+                        statemachine->terminator_seen = 1;
+                        break;
+                    }
+                    if (c == '\033') {
+                        if (statemachine->read_pos >= statemachine->write_pos) {
+                            statemachine->state = SCAN_OSC_BODY_ESC;
+                            statemachine->read_pos--; /* unread */
+                            return YETTY_OK_VOID();
+                        }
+                        if (ring_at(statemachine, statemachine->read_pos) == '\\') {
+                            statemachine->read_pos++;
+                            statemachine->terminator_seen = 1;
+                            break;
+                        }
+                    }
                 }
-                sm->current_handler = NULL;
-                sm->state = SCAN_RAW;
-            } else {
-                ywarn("osc_sm: ESC inside body not followed by '\\\\'; byte=0x%02x", (unsigned)c);
-                sm->state = SCAN_OSC_BODY;
+                if (statemachine->terminator_seen) {
+                    statemachine->state = SCAN_RAW;
+                    statemachine->current_code = 0;
+                    envelope_reset(statemachine);
+                }
+                break;
             }
-            break;
+            size_t before_rp = statemachine->read_pos;
+            size_t before_oc = out_carry_avail(statemachine);
+            struct yetty_ycore_void_result r = dispatch(statemachine, statemachine->current_layer);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_statemachine: body dispatch");
+            if (statemachine->terminator_seen) {
+                statemachine->state = SCAN_RAW;
+                statemachine->current_layer = NULL;
+                statemachine->current_code = 0;
+                envelope_reset(statemachine);
+                break;
+            }
+            if (statemachine->read_pos == before_rp && out_carry_avail(statemachine) == before_oc) {
+                /* No progress — exit, caller drives next cycle. */
+                return YETTY_OK_VOID();
+            }
+            return YETTY_OK_VOID(); /* yield after each body dispatch */
         }
         }
     }
-
     return YETTY_OK_VOID();
 }
 
-struct yetty_yterm_osc_sm_envelope_result yetty_yterm_osc_sm_envelope(
-    const struct yetty_yterm_osc_sm *sm)
+struct yetty_ycore_size_result yetty_yterm_osc_statemachine_read(
+    struct yetty_yterm_osc_statemachine *statemachine, uint8_t *dst, size_t n)
 {
-    if (!sm) {
-        return YETTY_ERR(yetty_yterm_osc_sm_envelope, "osc_sm: sm is NULL");
+    if (!statemachine) {
+        return YETTY_ERR(yetty_ycore_size, "osc_statemachine: statemachine is NULL");
     }
-    if (sm->view != VIEW_ENVELOPE) {
-        return YETTY_ERR(yetty_yterm_osc_sm_envelope,
-                         "osc_sm: no envelope in flight (called outside on_envelope?)");
+    if (!dst || n == 0) {
+        return YETTY_OK(yetty_ycore_size, 0);
     }
-    struct yetty_yterm_osc_sm_envelope env = {
-        .code = sm->view_code,
-        .args = sm->view_args,
-        .args_len = sm->view_args_len,
-        .payload = sm->view_payload,
-        .payload_len = sm->view_payload_len,
-    };
-    return YETTY_OK(yetty_yterm_osc_sm_envelope, env);
+
+    size_t copied = 0;
+
+    /* Drain any decoded carry first. */
+    copied += out_carry_drain(statemachine, dst, n);
+    if (copied == n) {
+        return YETTY_OK(yetty_ycore_size, copied);
+    }
+
+    /* Now pump: in body, run b64+lz4; in raw, passthrough. */
+    if (statemachine->state == SCAN_OSC_BODY || statemachine->state == SCAN_OSC_BODY_ESC) {
+        if (!statemachine->terminator_seen) {
+            struct yetty_ycore_void_result r = body_pump(statemachine, n - copied);
+            YETTY_RETURN_IF_ERR(yetty_ycore_size, r, "osc_statemachine: body_pump");
+            copied += out_carry_drain(statemachine, dst + copied, n - copied);
+        }
+    } else if (statemachine->state == SCAN_RAW) {
+        struct yetty_ycore_void_result r = raw_pump(statemachine, n - copied);
+        YETTY_RETURN_IF_ERR(yetty_ycore_size, r, "osc_statemachine: raw_pump");
+        copied += out_carry_drain(statemachine, dst + copied, n - copied);
+    }
+    return YETTY_OK(yetty_ycore_size, copied);
 }
 
-struct yetty_yterm_osc_sm_raw_result yetty_yterm_osc_sm_raw(const struct yetty_yterm_osc_sm *sm)
+struct yetty_yterm_osc_statemachine_args yetty_yterm_osc_statemachine_args(
+    const struct yetty_yterm_osc_statemachine *statemachine)
 {
-    if (!sm) {
-        return YETTY_ERR(yetty_yterm_osc_sm_raw, "osc_sm: sm is NULL");
+    struct yetty_yterm_osc_statemachine_args view = {NULL, 0};
+    if (!statemachine || !statemachine->dispatching) {
+        return view;
     }
-    if (sm->view != VIEW_RAW) {
-        return YETTY_ERR(yetty_yterm_osc_sm_raw,
-                         "osc_sm: no raw span in flight (called outside on_raw?)");
+    if (statemachine->state != SCAN_OSC_BODY && statemachine->state != SCAN_OSC_BODY_ESC) {
+        return view;
     }
-    struct yetty_yterm_osc_sm_raw raw = {
-        .bytes = sm->view_raw,
-        .len = sm->view_raw_len,
-    };
-    return YETTY_OK(yetty_yterm_osc_sm_raw, raw);
+    view.bytes = statemachine->args_decoded;
+    view.len = statemachine->args_decoded_len;
+    return view;
+}
+
+int yetty_yterm_osc_statemachine_at_end(
+    const struct yetty_yterm_osc_statemachine *statemachine)
+{
+    if (!statemachine || !statemachine->dispatching) {
+        return 0;
+    }
+    return statemachine->terminator_seen;
+}
+
+int yetty_yterm_osc_statemachine_code(
+    const struct yetty_yterm_osc_statemachine *statemachine)
+{
+    return statemachine ? statemachine->current_code : 0;
 }

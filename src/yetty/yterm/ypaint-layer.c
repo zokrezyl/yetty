@@ -130,9 +130,17 @@ struct yetty_yterm_ypaint_layer {
     uint8_t *prim_staging;
     size_t prim_staging_size;
 
-    /* Streaming OSC decoder (b64 → LZ4F → in_buf) — one per layer, lives
-   * for the layer's lifetime. Same pattern as ymgui-layer. */
+    /* yface — kept for OUTGOING emit only (focus events, ymgui responses,
+     * etc). Incoming decode now lives in the OSC SM. */
     struct yetty_yface *yface;
+
+    /* Per-envelope decoded-payload accumulator. The OSC SM hands us
+     * already-decoded bytes via osc_statemachine_read; we buffer them
+     * here and dispatch the existing handlers atomically when the SM
+     * signals at_end. */
+    struct yetty_ycore_buffer accum;
+    int parse_code;
+    int parse_active;
 
     /* Cached at create — needed to lazily build the alt-screen canvas
    * on first ?1049 toggle. */
@@ -148,8 +156,9 @@ struct yetty_yterm_ypaint_layer {
 /* Forward declarations */
 static struct yetty_ycore_void_result ypaint_layer_destroy(
     struct yetty_yrender_terminal_layer *self);
-static struct yetty_ycore_void_result ypaint_layer_process(
-    struct yetty_yrender_terminal_layer *self, struct yetty_yterm_osc_sm *sm);
+static struct yetty_ycore_void_result ypaint_layer_process_input(
+    struct yetty_yrender_terminal_layer *self,
+    struct yetty_yterm_osc_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result ypaint_layer_resize_grid(
     struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size);
 static struct yetty_yrender_gpu_resource_set_result ypaint_layer_get_gpu_resource_set(
@@ -272,7 +281,7 @@ static struct yetty_ycore_void_result ypaint_layer_set_visual_zoom(
 /* Ops */
 static const struct yetty_yterm_terminal_layer_ops ypaint_layer_ops = {
     .destroy = ypaint_layer_destroy,
-    .process = ypaint_layer_process,
+    .process_input = ypaint_layer_process_input,
     .resize_grid = ypaint_layer_resize_grid,
     .set_cell_size = ypaint_layer_set_cell_size,
     .set_visual_zoom = ypaint_layer_set_visual_zoom,
@@ -454,6 +463,7 @@ static struct yetty_ycore_void_result ypaint_layer_destroy(
         }
     }
 
+    free(layer->accum.data);
     free(layer->shader_code.data);
     free(layer->sdf_lib_code.data);
     free(layer->combined_shader);
@@ -524,33 +534,65 @@ static struct yetty_ycore_void_result ypaint_handle_bin(struct yetty_yterm_ypain
     return add_res;
 }
 
-/* Process — pulled from the SM after a complete envelope finishes. The SM
- * has already streamed the body through b64 + LZ4 into `env.payload`, so
- * the layer just consumes the bytes and dispatches by code. */
-static struct yetty_ycore_void_result ypaint_layer_process(
-    struct yetty_yrender_terminal_layer *self, struct yetty_yterm_osc_sm *sm)
+/* Process — pulls already-decoded bytes from the OSC SM into the
+ * per-envelope accumulator. On at_end the layer dispatches the existing
+ * handlers atomically. The SM owns b64 / lz4 decoding; the layer only
+ * sees decoded bytes. */
+static struct yetty_ycore_void_result ypaint_layer_process_input(
+    struct yetty_yrender_terminal_layer *self,
+    struct yetty_yterm_osc_statemachine *osc_statemachine)
 {
     struct yetty_yterm_ypaint_layer *layer = (struct yetty_yterm_ypaint_layer *)self;
 
-    struct yetty_yterm_osc_sm_envelope_result er = yetty_yterm_osc_sm_envelope(sm);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "ypaint: not in envelope");
-    struct yetty_yterm_osc_sm_envelope env = er.value;
+    if (!layer->parse_active) {
+        layer->parse_code = yetty_yterm_osc_statemachine_code(osc_statemachine);
+        yetty_ycore_buffer_clear(&layer->accum);
+        layer->parse_active = 1;
+    }
+
+    uint8_t buf[4096];
+    for (;;) {
+        struct yetty_ycore_size_result rr =
+            yetty_yterm_osc_statemachine_read(osc_statemachine, buf, sizeof(buf));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ypaint: osc read");
+        if (rr.value == 0) {
+            break;
+        }
+        struct yetty_ycore_void_result wr =
+            yetty_ycore_buffer_write(&layer->accum, buf, rr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "ypaint: accum write");
+    }
+
+    if (!yetty_yterm_osc_statemachine_at_end(osc_statemachine)) {
+        return YETTY_OK_VOID();
+    }
+
+    /* End of envelope — dispatch atomically. */
+    struct yetty_yterm_osc_statemachine_args args =
+        yetty_yterm_osc_statemachine_args(osc_statemachine);
+    const uint8_t *payload = layer->accum.data;
+    size_t payload_len = layer->accum.size;
 
     struct yetty_ycore_void_result r;
-    switch (env.code) {
+    switch (layer->parse_code) {
     case YETTY_OSC_YPAINT_CLEAR:
         r = ypaint_handle_clear(layer);
         break;
     case YETTY_OSC_YPAINT_BIN:
     case YETTY_OSC_YPAINT_OVERLAY:
-        r = ypaint_handle_bin(layer, env.args, env.args_len, env.payload, env.payload_len);
+        r = ypaint_handle_bin(layer, args.bytes, args.len, payload, payload_len);
         break;
     case YETTY_OSC_YPAINT_YAML:
-        r = ypaint_handle_yaml(layer, env.payload, env.payload_len);
+        r = ypaint_handle_yaml(layer, payload, payload_len);
         break;
     default:
-        return YETTY_ERR(yetty_ycore_void, "ypaint: unexpected OSC code");
+        r = YETTY_ERR(yetty_ycore_void, "ypaint: unexpected OSC code");
     }
+
+    yetty_ycore_buffer_clear(&layer->accum);
+    layer->parse_active = 0;
+    layer->parse_code = 0;
+
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ypaint: handler failed");
 
     layer->base.dirty = 1;

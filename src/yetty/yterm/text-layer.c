@@ -205,8 +205,9 @@ struct yetty_yterm_terminal_text_layer {
 
 /* Forward declarations */
 static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_terminal_layer *self);
-static struct yetty_ycore_void_result text_layer_process(struct yetty_yrender_terminal_layer *self,
-                                                         struct yetty_yterm_osc_sm *sm);
+static struct yetty_ycore_void_result text_layer_process_input(
+    struct yetty_yrender_terminal_layer *self,
+    struct yetty_yterm_osc_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result text_layer_resize_grid(
     struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size);
 static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_set(
@@ -611,7 +612,7 @@ static struct yetty_ycore_void_result text_layer_set_visual_zoom(
 /* Ops */
 static const struct yetty_yterm_terminal_layer_ops text_layer_ops = {
     .destroy = text_layer_destroy,
-    .process = text_layer_process,
+    .process_input = text_layer_process_input,
     .resize_grid = text_layer_resize_grid,
     .set_cell_size = text_layer_set_cell_size,
     .set_visual_zoom = text_layer_set_visual_zoom,
@@ -898,10 +899,12 @@ static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_te
     return YETTY_OK_VOID();
 }
 
-/* Process — pulled by the SM with a span of out-of-envelope bytes (the
- * SM is registered with text_layer as its raw handler). */
-static struct yetty_ycore_void_result text_layer_process(struct yetty_yrender_terminal_layer *self,
-                                                         struct yetty_yterm_osc_sm *sm)
+/* Process — drains raw bytes from the SM into vterm. The SM is in
+ * SCAN_RAW; osc_statemachine_read returns 0 when an OSC opener is at
+ * the cursor (or input is exhausted). */
+static struct yetty_ycore_void_result text_layer_process_input(
+    struct yetty_yrender_terminal_layer *self,
+    struct yetty_yterm_osc_statemachine *osc_statemachine)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
@@ -910,12 +913,15 @@ static struct yetty_ycore_void_result text_layer_process(struct yetty_yrender_te
         return YETTY_ERR(yetty_ycore_void, "vterm is NULL");
     }
 
-    struct yetty_yterm_osc_sm_raw_result rr = yetty_yterm_osc_sm_raw(sm);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "text_layer: not in raw span");
-    struct yetty_yterm_osc_sm_raw raw = rr.value;
-
-    if (raw.len > 0) {
-        vterm_input_write(text_layer->vterm, raw.bytes, raw.len);
+    uint8_t buf[4096];
+    for (;;) {
+        struct yetty_ycore_size_result rr =
+            yetty_yterm_osc_statemachine_read(osc_statemachine, buf, sizeof(buf));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "text_layer: osc read");
+        if (rr.value == 0) {
+            break;
+        }
+        vterm_input_write(text_layer->vterm, (const char *)buf, rr.value);
     }
     return YETTY_OK_VOID();
 }

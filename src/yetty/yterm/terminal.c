@@ -894,22 +894,18 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
             yetty_yterm_terminal_layer_add(terminal, ypaint_res.value);
             ydebug("terminal_create: ypaint scrolling layer created and added");
 
-            /* Register ypaint layer for the four ypaint OSC codes
-       * (clear/bin/yaml/overlay live in the 600000–600003 block).
-       * CLEAR has no body; BIN/OVERLAY are b64+LZ4; YAML is b64 only. */
+            /* Register ypaint layer for the four ypaint OSC codes. The
+             * SM does b64+lz4 decoding (protocol-fixed), so registration
+             * carries no codec parameter. */
             if (terminal->pty_reader) {
                 yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YETTY_OSC_YPAINT_CLEAR,
-                    YETTY_YTERM_OSC_CODEC_B64, ypaint_res.value);
+                    terminal->pty_reader, YETTY_OSC_YPAINT_CLEAR, ypaint_res.value);
                 yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YETTY_OSC_YPAINT_BIN,
-                    YETTY_YTERM_OSC_CODEC_B64_LZ4, ypaint_res.value);
+                    terminal->pty_reader, YETTY_OSC_YPAINT_BIN, ypaint_res.value);
                 yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YETTY_OSC_YPAINT_YAML,
-                    YETTY_YTERM_OSC_CODEC_B64, ypaint_res.value);
+                    terminal->pty_reader, YETTY_OSC_YPAINT_YAML, ypaint_res.value);
                 yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YETTY_OSC_YPAINT_OVERLAY,
-                    YETTY_YTERM_OSC_CODEC_B64_LZ4, ypaint_res.value);
+                    terminal->pty_reader, YETTY_OSC_YPAINT_OVERLAY, ypaint_res.value);
                 ydebug("terminal_create: ypaint layer registered for OSC 600000-600003");
             }
         } else {
@@ -957,25 +953,19 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
             ymgui_res.value->term_input_sub_fn = terminal_term_input_sub_callback;
             ymgui_res.value->term_input_sub_userdata = terminal;
             if (terminal->pty_reader) {
-                /* FRAME / TEX are b64+LZ4; the rest are b64 only. */
+                /* SM owns b64+lz4; layer registration is just (code, layer). */
                 yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_CLEAR,
-                    YETTY_YTERM_OSC_CODEC_B64, ymgui_res.value);
+                    terminal->pty_reader, YMGUI_OSC_CS_CLEAR, ymgui_res.value);
                 yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_FRAME,
-                    YETTY_YTERM_OSC_CODEC_B64_LZ4, ymgui_res.value);
+                    terminal->pty_reader, YMGUI_OSC_CS_FRAME, ymgui_res.value);
                 yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_TEX,
-                    YETTY_YTERM_OSC_CODEC_B64_LZ4, ymgui_res.value);
+                    terminal->pty_reader, YMGUI_OSC_CS_TEX, ymgui_res.value);
                 yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_CARD_PLACE,
-                    YETTY_YTERM_OSC_CODEC_B64, ymgui_res.value);
+                    terminal->pty_reader, YMGUI_OSC_CS_CARD_PLACE, ymgui_res.value);
                 yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_CARD_REMOVE,
-                    YETTY_YTERM_OSC_CODEC_B64, ymgui_res.value);
+                    terminal->pty_reader, YMGUI_OSC_CS_CARD_REMOVE, ymgui_res.value);
                 yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_TERM_INPUT_SUB,
-                    YETTY_YTERM_OSC_CODEC_B64, ymgui_res.value);
+                    terminal->pty_reader, YMGUI_OSC_CS_TERM_INPUT_SUB, ymgui_res.value);
                 ydebug("terminal_create: ymgui layer registered for OSC 610000-610004 + 610010");
             }
         } else {
