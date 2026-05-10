@@ -41,6 +41,7 @@ add_library(yetty_yfont STATIC
     ms-msdf-font.c
     msdf-font.c
     raster-font.c
+    font-cache.c
 )
 
 target_include_directories(yetty_yfont PUBLIC
