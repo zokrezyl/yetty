@@ -7,10 +7,11 @@ name: Build 3rdparty — netsurf
 # frontends/* excluded so yetty plugs ynetsurf in over it) using
 # NetSurf's own Make-driven build with TARGET=monkey.
 #
-# Linux-x86_64 only. NetSurf's monkey TARGET doesn't cross-compile
-# cleanly so the matrix is intentionally narrow — yetty's build-tools
-# guard skips netsurf on every other platform via the same check in
-# build-tools/3rdparty/netsurf/build.sh and build-tools/cmake/libs/netsurf.cmake.
+# Matrix mirrors lexbor's so the 3rdparty release surface is uniform.
+# NetSurf's monkey TARGET is Unix-Make-only; for windows-MSVC / webasm /
+# iOS / tvOS the per-platform _build.sh emits a placeholder tarball
+# carrying only an UNSUPPORTED marker, which the consumer-side
+# build-tools/cmake/libs/netsurf.cmake detects and silently skips.
 #
 # Version source of truth: build-tools/3rdparty/netsurf/version.
 
@@ -47,7 +48,7 @@ jobs:
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "tag=lib-netsurf-$V" >> "$GITHUB_OUTPUT"
 
-  build-linux-x86_64:
+  build-linux-cross:
     needs: resolve
     runs-on: ubuntu-latest
     strategy:
@@ -55,6 +56,11 @@ jobs:
       matrix:
         target:
           - linux-x86_64
+          - linux-aarch64
+          - linux-riscv64
+          - android-arm64-v8a
+          - android-x86_64
+          - webasm
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
@@ -66,6 +72,92 @@ jobs:
           TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
           ./build-tools/3rdparty/netsurf/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/netsurf-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true
+
+  build-darwin-arm64:
+    needs: resolve
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - macos-arm64
+          - ios-arm64
+          - tvos-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="${{ matrix.target }}" \
+          OUTPUT_DIR="$PWD/out" \
+          ./build-tools/3rdparty/netsurf/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/netsurf-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true
+
+  build-darwin-x86_64:
+    needs: resolve
+    runs-on: macos-15-intel
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - macos-x86_64
+          - ios-x86_64
+          - tvos-x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="${{ matrix.target }}" \
+          OUTPUT_DIR="$PWD/out" \
+          ./build-tools/3rdparty/netsurf/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/netsurf-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true
+
+  # Windows: native MSVC under vcvarsall x64. NetSurf's Makefile is
+  # Unix-only — the matrix entry is here for matrix uniformity with
+  # lexbor; _build.sh's windows-x86_64 branch emits a placeholder
+  # tarball.
+  build-windows:
+    needs: resolve
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - windows-x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build netsurf for ${{ matrix.target }}
+        shell: cmd
+        env:
+          TARGET_PLATFORM: ${{ matrix.target }}
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          if errorlevel 1 exit /b 1
+          mkdir out 2>nul
+
+          bash -c "OUTPUT_DIR=\"$(pwd)/out\" ./build-tools/3rdparty/netsurf/build.sh"
+
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}

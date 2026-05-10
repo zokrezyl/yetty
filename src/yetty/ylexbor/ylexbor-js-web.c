@@ -1560,5 +1560,14 @@ char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status)
     (void)out_status;
     return NULL;
 }
+char *yetty_ylexbor_http_get_referer(const char *url, const char *referer,
+                                     size_t *out_len, long *out_status)
+{
+    (void)url;
+    (void)referer;
+    (void)out_len;
+    (void)out_status;
+    return NULL;
+}
 
 #endif /* YETTY_HAVE_QUICKJS */
