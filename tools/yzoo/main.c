@@ -190,8 +190,28 @@ static float monotonic_now(void)
 struct yzoo_app {
 	struct yetty_yzoo               *zoo;
 	struct yetty_ypaint_core_buffer *buf;
+
+	float pane_w;
+	float pane_h;
+	bool  have_pane_size;
+
 	bool want_quit;
 };
+
+static struct yetty_ycore_void_result
+apply_pane_size(struct yzoo_app *app, float w, float h)
+{
+	if (w < 1.0f || h < 1.0f)
+		return YETTY_OK_VOID();
+	if (app->have_pane_size && w == app->pane_w && h == app->pane_h)
+		return YETTY_OK_VOID();
+	app->pane_w = w;
+	app->pane_h = h;
+	app->have_pane_size = true;
+	struct yetty_ycore_void_result r = yetty_yzoo_set_scene_size(app->zoo, w, h);
+	YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "apply_pane_size: set_scene_size failed");
+	return YETTY_OK_VOID();
+}
 
 static struct yetty_ycore_void_result redraw(struct yzoo_app *app)
 {
@@ -231,6 +251,19 @@ static void on_osc(void *user, int osc_code,
 {
 	(void)args; (void)args_len;
 	struct yzoo_app *app = user;
+
+	if (osc_code == YMGUI_OSC_SC_RESIZE
+	    || osc_code == YMGUI_OSC_SC_TERM_RESIZE) {
+		if (payload_len < sizeof(struct yetty_ymgui_wire_input_resize))
+			return;
+		const struct yetty_ymgui_wire_input_resize *r =
+			(const struct yetty_ymgui_wire_input_resize *)payload;
+		struct yetty_ycore_void_result ar =
+			apply_pane_size(app, r->width, r->height);
+		if (YETTY_IS_ERR(ar))
+			yetty_ycore_error_destroy(ar.error);
+		return;
+	}
 
 	if (osc_code == YMGUI_OSC_SC_KEY || osc_code == YMGUI_OSC_SC_TERM_KEY) {
 		if (payload_len < sizeof(struct yetty_ymgui_wire_input_key))
@@ -394,9 +427,12 @@ int main(int argc, char **argv)
 	}
 
 	struct yzoo_app app = {
-		.zoo       = zr.value,
-		.buf       = br.value,
-		.want_quit = false,
+		.zoo            = zr.value,
+		.buf            = br.value,
+		.pane_w         = cfg.scene_width,
+		.pane_h         = cfg.scene_height,
+		.have_pane_size = false,
+		.want_quit      = false,
 	};
 
 	struct yetty_yface_ptr_result yr = yetty_yface_create();
