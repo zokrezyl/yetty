@@ -269,7 +269,24 @@ apk add --no-cache \
     tree \
     htop \
     runit \
-    busybox-extras
+    busybox-extras \
+    sudo \
+    shadow
+
+# yetty user/group — uid/gid 1000 so host-mounted shares (9p) line up
+# with the typical desktop user. wheel group + NOPASSWD sudoers makes
+# this a friction-free dev VM. Locked password (-D) is fine because
+# the only entry point (telnetd) auto-logins as yetty (see fs/ overlay
+# applied by the host-side _build.sh after this VM exits).
+echo "==> creating yetty user (uid/gid 1000, wheel/sudo)"
+addgroup -g 1000 yetty
+adduser -D -u 1000 -G yetty -s /bin/bash yetty
+addgroup yetty wheel
+mkdir -p /etc/sudoers.d
+cat > /etc/sudoers.d/wheel-nopasswd <<'SUDOERS_EOF'
+%wheel ALL=(ALL:ALL) NOPASSWD: ALL
+SUDOERS_EOF
+chmod 0440 /etc/sudoers.d/wheel-nopasswd
 
 # Belt-and-braces: --no-cache already keeps /var/cache/apk empty, but in
 # case any earlier `apk add` fell back to caching, drop the lot before
@@ -286,8 +303,9 @@ cat > /etc/service/telnetd/run <<'TELNETD_RUN_EOF'
 # telnetd applet lives in busybox-extras (the stock /usr/bin/busybox in
 # Alpine doesn't ship it). The package installs /usr/sbin/telnetd as a
 # symlink to /bin/busybox-extras. -F = foreground (runit needs the
-# daemon to stay attached). -p 23 = port. -l /bin/sh = login shell.
-exec /usr/sbin/telnetd -F -p 23 -l /bin/sh
+# daemon to stay attached). -p 23 = port. -l <wrapper> auto-logins as
+# yetty (see /usr/local/sbin/yetty-telnet-login from the fs/ overlay).
+exec /usr/sbin/telnetd -F -p 23 -l /usr/local/sbin/yetty-telnet-login
 TELNETD_RUN_EOF
 chmod +x /etc/service/telnetd/run
 
@@ -375,6 +393,27 @@ fi
 # Useful one-liner so the build log shows what landed.
 INSTALLED_COUNT="$(sudo find "$MNT" -path "$MNT/proc" -prune -o -path "$MNT/sys" -prune -o -type f -print 2>/dev/null | wc -l)"
 echo "==> install VM completed: ${INSTALLED_COUNT} files in image"
+
+# Apply the host-side fs/ skeleton overlay LAST, so the files committed
+# in this repo win over anything apk laid down inside the VM. This is
+# how we ship things like /etc/profile.d/yetty.sh (TERM defaults) and
+# /usr/local/sbin/yetty-telnet-login (auto-login wrapper) without
+# generating them inline. Anything new dropped in fs/ gets carried in
+# automatically — no _build.sh changes needed.
+FS_OVERLAY="$SCRIPT_DIR/fs"
+if [ -d "$FS_OVERLAY" ]; then
+    echo "==> applying fs overlay from $FS_OVERLAY"
+    # cp -a preserves mode (incl. +x bits), timestamps, and symlinks.
+    # `--no-target-directory` + trailing /. semantics: copy *contents*
+    # of fs/ over MNT, not fs/ itself.
+    sudo cp -a "$FS_OVERLAY/." "$MNT/"
+    # Per-user dirs need correct ownership — adduser created /home/yetty
+    # owned by uid/gid 1000, but our overlay just stomped on it as root.
+    if [ -d "$MNT/home/yetty" ]; then
+        sudo chown -R 1000:1000 "$MNT/home/yetty"
+    fi
+fi
+
 sudo umount "$MNT"
 sudo losetup -d "$LOOP_DEV"
 LOOP_DEV=""
