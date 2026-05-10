@@ -124,7 +124,8 @@ jobs:
           libgl1-mesa-dev \
           libwayland-dev \
           libxkbcommon-dev \
-          libwebp-dev
+          libwebp-dev \
+          clang-18 libclang-18-dev
 
     - name: Build Linux
       run: make build-desktop-ytrace-release
@@ -172,7 +173,8 @@ jobs:
           libgl1-mesa-dev \
           libwayland-dev \
           libxkbcommon-dev \
-          libwebp-dev
+          libwebp-dev \
+          clang-18 libclang-18-dev
 
     - name: Build with ASAN
       run: make build-desktop-ytrace-asan
