@@ -47,14 +47,26 @@ install(TARGETS ygui ARCHIVE DESTINATION lib)
 option(YETTY_BUILD_YGUI_SHARED "Build a libygui.so for FFI consumers" ON)
 
 if(YETTY_BUILD_YGUI_SHARED AND NOT EMSCRIPTEN)
-    # ytrace and yplatform/shared are just single-file pieces compiled into
-    # each parent target, not standalone CMake libraries — pull them in by
-    # path so the .so is fully self-contained for FFI consumers.
+    # term.c / thread.c are platform-specific singletons compiled directly
+    # into each parent target rather than living in a standalone CMake
+    # library. Pick the right pair so the .so/.dll is self-contained for
+    # FFI consumers.
+    if(WIN32)
+        set(_YGUI_PLATFORM_SOURCES
+            ${YETTY_ROOT}/src/yetty/yplatform/term/windows.c
+            ${YETTY_ROOT}/src/yetty/yplatform/thread/windows.c
+        )
+    else()
+        set(_YGUI_PLATFORM_SOURCES
+            ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
+            ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
+        )
+    endif()
+
     add_library(ygui_shared SHARED
         ${YGUI_SOURCES}
         ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-        ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
-        ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
+        ${_YGUI_PLATFORM_SOURCES}
     )
 
     target_include_directories(ygui_shared PUBLIC
@@ -81,6 +93,16 @@ if(YETTY_BUILD_YGUI_SHARED AND NOT EMSCRIPTEN)
         # INDEPENDENT_CODE handling.
         POSITION_INDEPENDENT_CODE ON
     )
+
+    if(WIN32)
+        # MSVC names a SHARED library's import library <OUTPUT_NAME>.lib,
+        # which collides with the static `ygui` target's archive ygui.lib.
+        # Give the DLL's import lib a distinct name; the DLL itself stays
+        # ygui.dll for FFI consumers.
+        set_target_properties(ygui_shared PROPERTIES
+            ARCHIVE_OUTPUT_NAME ygui_import
+        )
+    endif()
 
     install(TARGETS ygui_shared LIBRARY DESTINATION lib)
 endif()

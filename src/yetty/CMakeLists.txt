@@ -205,8 +205,12 @@ if(YETTY_ENABLE_FEATURE_YMSDF_WGSL)
     add_subdirectory(ymsdf-wgsl)
 endif()
 
-# Polymorphic MSDF generator wrapper (cpu | gpu) — depends on both impls.
-if(YETTY_ENABLE_FEATURE_YMSDF_GEN AND YETTY_ENABLE_FEATURE_YMSDF_WGSL)
+# Polymorphic MSDF generator wrapper (cpu | gpu) — built whenever the GPU
+# impl is on, since yetty.c always invokes the factory. The cpu backend is
+# only compiled in when YMSDF_GEN is also on; otherwise factory.c rejects
+# `msdf/generator=cpu` at runtime (Windows path: msdfgen ships /MT, rest of
+# the 3rdparty stack is /MD — see windows.cmake).
+if(YETTY_ENABLE_FEATURE_YMSDF_WGSL)
     add_subdirectory(ymsdf)
 endif()
 

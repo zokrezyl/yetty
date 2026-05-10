@@ -12,7 +12,7 @@ target_link_libraries(yetty_ypaint PUBLIC
     yetty_yimage
     $<$<BOOL:${YETTY_ENABLE_FEATURE_YMESH}>:yetty_ymesh>
     $<$<BOOL:${YETTY_ENABLE_FEATURE_YMSDF_GEN}>:yetty_ymsdf_gen>
-    $<$<AND:$<BOOL:${YETTY_ENABLE_FEATURE_YMSDF_GEN}>,$<BOOL:${YETTY_ENABLE_FEATURE_YMSDF_WGSL}>>:yetty_ymsdf>
+    $<$<BOOL:${YETTY_ENABLE_FEATURE_YMSDF_WGSL}>:yetty_ymsdf>
 )
 
 if(YETTY_ENABLE_FEATURE_YMESH)

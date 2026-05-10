@@ -372,8 +372,8 @@ if(YETTY_ENABLE_FEATURE_SSH)
 endif()
 if(YETTY_ENABLE_FEATURE_YMSDF_WGSL)
     list(APPEND YETTY_LIBS yetty_ymsdf_wgsl)
-endif()
-if(YETTY_ENABLE_FEATURE_YMSDF_GEN AND YETTY_ENABLE_FEATURE_YMSDF_WGSL)
+    # Polymorphic ymsdf wrapper now builds with WGSL alone (cpu backend
+    # gated by YMSDF_GEN inside ymsdf/CMakeLists.txt).
     list(APPEND YETTY_LIBS yetty_ymsdf)
 endif()
 if(YETTY_ENABLE_FEATURE_GPU)

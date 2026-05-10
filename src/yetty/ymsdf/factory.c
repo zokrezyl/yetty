@@ -25,8 +25,15 @@ struct yetty_ymsdf_generator_ptr_result yetty_ymsdf_generator_create_from_config
     }
 
     if (strcmp(kind, "cpu") == 0) {
+#ifdef YETTY_YMSDF_NO_CPU
+        yerror("ymsdf: cpu backend not built in this configuration "
+               "(msdfgen disabled at build time)");
+        return YETTY_ERR(yetty_ymsdf_generator_ptr,
+                         "ymsdf: cpu backend not built");
+#else
         ydebug("ymsdf: selecting CPU generator (msdf/generator=cpu)");
         return yetty_ymsdf_generator_create_cpu();
+#endif
     }
     if (strcmp(kind, "gpu") == 0) {
         char shader_path[1024] = {0};
