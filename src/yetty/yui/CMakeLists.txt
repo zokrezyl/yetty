@@ -1,6 +1,7 @@
 add_library(yetty_yui STATIC
     tile.c
     workspace.c
+    tabbar.c
 )
 
 # stdatomic.h requires C11

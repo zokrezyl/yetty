@@ -365,6 +365,22 @@ static struct yetty_ycore_void_result x11_tile_present(struct yetty_ypaint_core_
                                                        rt);
 }
 
+/* Pass tabbar overlay rects through to the inner texture target. The
+ * x11-tile wrapper's tile-diff readback reads from the same inner texture,
+ * so chrome drawn here flows out to XShmPutImage exactly like the workspace
+ * content does — local and remote (via the same diff path) stay in sync. */
+static struct yetty_ycore_void_result x11_tile_draw_solid_rects(
+    struct yetty_ypaint_core_target *self, const struct yetty_yrender_solid_rect *rects,
+    size_t count)
+{
+    struct yetty_yrender_render_target_x11_tile *rt =
+        (struct yetty_yrender_render_target_x11_tile *)self;
+    if (!rt->inner || !rt->inner->ops || !rt->inner->ops->draw_solid_rects) {
+        return YETTY_OK_VOID();
+    }
+    return rt->inner->ops->draw_solid_rects(rt->inner, rects, count);
+}
+
 static void x11_tile_destroy(struct yetty_ypaint_core_target *self)
 {
     struct yetty_yrender_render_target_x11_tile *rt =
@@ -400,6 +416,7 @@ static const struct yetty_yrender_target_ops x11_tile_ops = {
     .refresh_full = x11_tile_refresh_full,
     .is_busy = x11_tile_is_busy,
     .notify_render_skipped = x11_tile_notify_render_skipped,
+    .draw_solid_rects = x11_tile_draw_solid_rects,
 };
 
 /*=============================================================================

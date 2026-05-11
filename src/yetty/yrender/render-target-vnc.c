@@ -154,6 +154,21 @@ static void render_target_vnc_notify_render_skipped(struct yetty_ypaint_core_tar
     }
 }
 
+/* Pass tabbar / overlay rects straight to the inner texture target. The
+ * inner texture is the SAME pixel buffer present()/send_frame_gpu reads
+ * from, so the chrome shows up identically in the local window and in the
+ * VNC stream — no separate code path. */
+static struct yetty_ycore_void_result render_target_vnc_draw_solid_rects(
+    struct yetty_ypaint_core_target *self, const struct yetty_yrender_solid_rect *rects,
+    size_t count)
+{
+    struct yetty_yrender_render_target_vnc *rt = (struct yetty_yrender_render_target_vnc *)self;
+    if (!rt->inner || !rt->inner->ops || !rt->inner->ops->draw_solid_rects) {
+        return YETTY_OK_VOID();
+    }
+    return rt->inner->ops->draw_solid_rects(rt->inner, rects, count);
+}
+
 static const struct yetty_yrender_target_ops render_target_vnc_ops = {
     .destroy = render_target_vnc_destroy,
     .clear = render_target_vnc_clear,
@@ -166,6 +181,7 @@ static const struct yetty_yrender_target_ops render_target_vnc_ops = {
     .set_visual_zoom = render_target_vnc_set_visual_zoom,
     .is_busy = render_target_vnc_is_busy,
     .notify_render_skipped = render_target_vnc_notify_render_skipped,
+    .draw_solid_rects = render_target_vnc_draw_solid_rects,
 };
 
 struct yetty_yrender_target_ptr_result yetty_yrender_target_vnc_create(

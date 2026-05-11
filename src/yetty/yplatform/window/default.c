@@ -9,6 +9,13 @@ GLFWwindow *yetty_yplatform_create_window(int width, int height, const char *tit
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
+    /* Chrome-like UI: drop the OS title bar and draw our own tab strip on top.
+     * Workspaces ARE the tabs; the strip is owned by the workspace renderer.
+     * GLFW_DECORATED=FALSE removes the OS frame on X11, Wayland, macOS, and
+     * Win32 alike. Window move/resize will be re-implemented inside the tab
+     * strip event handler (drag empty area to move, edges to resize). */
+    glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+
     return glfwCreateWindow(width, height, title, NULL, NULL);
 }
 

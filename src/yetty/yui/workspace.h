@@ -32,6 +32,14 @@ struct yetty_ycore_void_result yetty_yui_workspace_render(
 struct yetty_ycore_void_result yetty_yui_workspace_resize(struct yetty_yui_workspace *ws,
                                                           float width, float height);
 
+/* Place this workspace's top-left at (x, y) inside the render target. The
+ * tabbar sets y = tab strip height so the workspace's tiles render below
+ * the strip instead of starting at y=0 and being overdrawn. Call before
+ * workspace_resize / workspace_set_root so the first set_bounds already
+ * lands at the right origin. */
+struct yetty_ycore_void_result yetty_yui_workspace_set_origin(struct yetty_yui_workspace *ws,
+                                                              float x, float y);
+
 /* Root tile management */
 struct yetty_ycore_void_result yetty_yui_workspace_set_root(struct yetty_yui_workspace *ws,
                                                             struct yetty_yui_tile *tile);

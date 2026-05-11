@@ -17,6 +17,8 @@
 
 struct yetty_yui_workspace {
     struct yetty_yui_tile *root;
+    float origin_x;
+    float origin_y;
     float width;
     float height;
 };
@@ -89,10 +91,29 @@ struct yetty_ycore_void_result yetty_yui_workspace_resize(struct yetty_yui_works
     ws->height = height;
 
     if (ws->root) {
-        bounds = (struct yetty_yui_rect){0, 0, width, height};
+        bounds = (struct yetty_yui_rect){ws->origin_x, ws->origin_y, width, height};
         return yetty_yui_tile_set_bounds(ws->root, bounds);
     }
 
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_yui_workspace_set_origin(struct yetty_yui_workspace *ws,
+                                                              float x, float y)
+{
+    struct yetty_yui_rect bounds;
+
+    if (!ws) {
+        return YETTY_ERR(yetty_ycore_void, "workspace_set_origin: NULL");
+    }
+
+    ws->origin_x = x;
+    ws->origin_y = y;
+
+    if (ws->root && ws->width > 0 && ws->height > 0) {
+        bounds = (struct yetty_yui_rect){x, y, ws->width, ws->height};
+        return yetty_yui_tile_set_bounds(ws->root, bounds);
+    }
     return YETTY_OK_VOID();
 }
 
@@ -112,7 +133,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_set_root(struct yetty_yui_wor
     ws->root = tile;
 
     if (tile && ws->width > 0 && ws->height > 0) {
-        bounds = (struct yetty_yui_rect){0, 0, ws->width, ws->height};
+        bounds = (struct yetty_yui_rect){ws->origin_x, ws->origin_y, ws->width, ws->height};
         return yetty_yui_tile_set_bounds(tile, bounds);
     }
 
@@ -218,7 +239,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_split_pane(
 
     /* Re-layout */
     if (ws->width > 0 && ws->height > 0) {
-        struct yetty_yui_rect bounds = {0, 0, ws->width, ws->height};
+        struct yetty_yui_rect bounds = {ws->origin_x, ws->origin_y, ws->width, ws->height};
         return yetty_yui_tile_set_bounds(ws->root, bounds);
     }
 
@@ -269,7 +290,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_w
 
         ws->root = sibling;
         if (sibling && ws->width > 0 && ws->height > 0) {
-            struct yetty_yui_rect bounds = {0, 0, ws->width, ws->height};
+            struct yetty_yui_rect bounds = {ws->origin_x, ws->origin_y, ws->width, ws->height};
             return yetty_yui_tile_set_bounds(sibling, bounds);
         }
         return YETTY_OK_VOID();
@@ -299,7 +320,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_w
 
     /* Re-layout */
     if (ws->width > 0 && ws->height > 0) {
-        struct yetty_yui_rect bounds = {0, 0, ws->width, ws->height};
+        struct yetty_yui_rect bounds = {ws->origin_x, ws->origin_y, ws->width, ws->height};
         return yetty_yui_tile_set_bounds(ws->root, bounds);
     }
 

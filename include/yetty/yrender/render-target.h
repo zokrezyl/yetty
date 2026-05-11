@@ -24,6 +24,22 @@ struct yetty_yrender_viewport {
     float x, y, w, h;
 };
 
+/* SDF-shaded axis-aligned rectangle for UI chrome (tab strip, focus
+ * outlines, separators, badges). Layout matches the per-instance
+ * attributes in solid-rects.wgsl (48 B = 12 floats), so an array of these
+ * doubles as the GPU instance buffer payload.
+ *
+ * Coordinates are in target pixel space (origin top-left, y grows down);
+ * color is straight RGBA in [0..1]. The four corner radii are in CSS
+ * order — top-left, top-right, bottom-right, bottom-left — and may be
+ * different per corner (Chrome-style tabs round only the top two). Set
+ * all four to 0 for a sharp rect with no antialiasing cost. */
+struct yetty_yrender_solid_rect {
+    float x, y, w, h;
+    float r, g, b, a;
+    float radius_tl, radius_tr, radius_br, radius_bl;
+};
+
 /*=============================================================================
  * Render target - unified abstraction for rendering
  *
@@ -91,6 +107,17 @@ struct yetty_yrender_target_ops {
 	 * becomes idle — without this the skip is silent and the display
 	 * lags behind by one event. NULL iff is_busy is NULL. */
     void (*notify_render_skipped)(struct yetty_ypaint_core_target *self);
+
+    /* Draw a batch of solid-color rectangles directly into this target.
+     * Used by the tabbar overlay to paint the Chrome-style strip on top of
+     * the workspace render — single GPU pass, runs against the same texture
+     * the surface present and the VNC frame export read from, so the same
+     * pixels appear locally and at remote VNC clients. loadOp is Load so
+     * the underlying workspace content stays intact. count==0 is a no-op.
+     * Optional — NULL targets just don't render the overlay. */
+    struct yetty_ycore_void_result (*draw_solid_rects)(
+        struct yetty_ypaint_core_target *self,
+        const struct yetty_yrender_solid_rect *rects, size_t count);
 };
 
 /* Render target base - embed as first member in subclasses */
