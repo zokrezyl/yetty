@@ -1041,15 +1041,180 @@ static void ypaint_layer_set_selection(struct yetty_yrender_terminal_layer *self
     }
 }
 
-/* Stub. The "first thing overlapping each touched row" picker isn't wired
- * up yet — the rule (leftmost vs first-inserted) is a pending design call.
- * Returning OK with no bytes leaves the clipboard payload to the text
- * layer. The selection state is already tracked above so once the picker
- * lands, only this function changes. */
+/*=============================================================================
+ * Selection text extraction — reconstruct UTF-8 from ypaint glyph prims
+ *
+ * The ypaint canvas stores text as flyweight GLYPH primitives — each one
+ * is a single glyph at a pixel position, with the font atlas index (and
+ * canvas font slot) packed in. To produce plain text for the clipboard we:
+ *   1. walk every glyph in the canvas via for_each_glyph
+ *   2. keep the ones whose y lies inside the selected row band
+ *   3. sort by (y, x) — reading order
+ *   4. group consecutive glyphs that share the same canvas row, separated
+ *      by '\n'
+ *   5. reverse each glyph's atlas index through its font's get_codepoint
+ *      and emit UTF-8
+ * The ypaint font's get_codepoint is the inverse of its forward
+ * get_glyph_index map — same trick we use on the text-layer's font.
+ *===========================================================================*/
+
+static void ypaint_layer_collect_visitor(const struct yetty_ypaint_glyph_view *gv, void *user)
+{
+    struct {
+        struct yetty_ypaint_glyph_view *arr;
+        size_t count, cap;
+    } *ctx = user;
+    if (ctx->count >= ctx->cap) {
+        size_t newcap = ctx->cap ? ctx->cap * 2 : 64;
+        struct yetty_ypaint_glyph_view *p = realloc(ctx->arr, newcap * sizeof(*ctx->arr));
+        if (!p) {
+            return;
+        }
+        ctx->arr = p;
+        ctx->cap = newcap;
+    }
+    ctx->arr[ctx->count++] = *gv;
+}
+
+static int ypaint_layer_glyph_view_compare(const void *a, const void *b)
+{
+    const struct yetty_ypaint_glyph_view *x = a;
+    const struct yetty_ypaint_glyph_view *y = b;
+    if (x->y < y->y) {
+        return -1;
+    }
+    if (x->y > y->y) {
+        return 1;
+    }
+    if (x->x < y->x) {
+        return -1;
+    }
+    if (x->x > y->x) {
+        return 1;
+    }
+    return 0;
+}
+
+/* Encode one codepoint as UTF-8 into a 4-byte buffer. Returns byte count.
+ * Same logic as the text-layer copy — small enough that the duplication
+ * is cheaper than a shared helper across module boundaries. */
+static size_t ypaint_layer_cp_to_utf8(uint32_t cp, uint8_t out[4])
+{
+    if (cp < 0x80) {
+        out[0] = (uint8_t)cp;
+        return 1;
+    }
+    if (cp < 0x800) {
+        out[0] = (uint8_t)(0xC0 | (cp >> 6));
+        out[1] = (uint8_t)(0x80 | (cp & 0x3F));
+        return 2;
+    }
+    if (cp < 0x10000) {
+        out[0] = (uint8_t)(0xE0 | (cp >> 12));
+        out[1] = (uint8_t)(0x80 | ((cp >> 6) & 0x3F));
+        out[2] = (uint8_t)(0x80 | (cp & 0x3F));
+        return 3;
+    }
+    if (cp <= 0x10FFFF) {
+        out[0] = (uint8_t)(0xF0 | (cp >> 18));
+        out[1] = (uint8_t)(0x80 | ((cp >> 12) & 0x3F));
+        out[2] = (uint8_t)(0x80 | ((cp >> 6) & 0x3F));
+        out[3] = (uint8_t)(0x80 | (cp & 0x3F));
+        return 4;
+    }
+    out[0] = 0xEF;
+    out[1] = 0xBF;
+    out[2] = 0xBD;
+    return 3;
+}
+
 static struct yetty_ycore_void_result ypaint_layer_get_selection_text(
     const struct yetty_yrender_terminal_layer *self, struct yetty_ycore_buffer *out)
 {
-    (void)self;
-    (void)out;
-    return YETTY_OK_VOID();
+    struct yetty_yterm_ypaint_layer *layer = container_of(
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yterm_ypaint_layer, base);
+
+    if (!layer->sel_active || !layer->canvas || !out) {
+        return YETTY_OK_VOID();
+    }
+    float cell_h = self->cell_size.height;
+    if (cell_h <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+
+    /* Visible rows → absolute pixel y band. The canvas stores glyphs in
+     * absolute canvas-y coords; the visible viewport starts at
+     * rolling_row_0 * cell_h. */
+    uint32_t row0 = yetty_ypaint_canvas_rolling_row_0(layer->canvas);
+    float sel_top = (float)(row0 + layer->sel_min_row) * cell_h;
+    float sel_bot = (float)(row0 + layer->sel_max_row + 1) * cell_h;
+
+    /* Collect every glyph in the canvas, then filter + sort. */
+    struct {
+        struct yetty_ypaint_glyph_view *arr;
+        size_t count, cap;
+    } ctx = {NULL, 0, 0};
+    yetty_ypaint_canvas_for_each_glyph(layer->canvas, ypaint_layer_collect_visitor, &ctx);
+    if (ctx.count == 0) {
+        free(ctx.arr);
+        return YETTY_OK_VOID();
+    }
+
+    /* In-place filter: keep glyphs whose vertical extent intersects the
+     * selection. We approximate a glyph's extent as [y, y + cell_h]; the
+     * cell height is a tight upper bound for ypaint glyphs at the default
+     * font size and is good enough for a row-band test. */
+    size_t kept = 0;
+    for (size_t i = 0; i < ctx.count; i++) {
+        float gy = ctx.arr[i].y;
+        if (gy >= sel_bot || gy + cell_h <= sel_top) {
+            continue;
+        }
+        ctx.arr[kept++] = ctx.arr[i];
+    }
+    ctx.count = kept;
+    if (ctx.count == 0) {
+        free(ctx.arr);
+        return YETTY_OK_VOID();
+    }
+
+    qsort(ctx.arr, ctx.count, sizeof(ctx.arr[0]), ypaint_layer_glyph_view_compare);
+
+    /* Walk in reading order; insert '\n' between glyphs that belong to
+     * different canvas rows. Row is computed from y to be robust against
+     * glyphs with the same y but tiny float jitter. */
+    struct yetty_ycore_void_result rret = YETTY_OK_VOID();
+    int last_row = -1;
+    for (size_t i = 0; i < ctx.count; i++) {
+        int gv_row = (int)(ctx.arr[i].y / cell_h);
+        if (last_row >= 0 && gv_row != last_row) {
+            rret = yetty_ycore_buffer_write(out, "\n", 1);
+            if (!YETTY_IS_OK(rret)) {
+                goto done;
+            }
+        }
+        last_row = gv_row;
+
+        uint32_t slot = ctx.arr[i].font_slot >= 0 ? (uint32_t)ctx.arr[i].font_slot : 0;
+        struct yetty_ypaint_font *font =
+            yetty_ypaint_canvas_get_font_at(layer->canvas, slot);
+        uint32_t cp = 0xFFFD; /* fall back to U+FFFD on any failure */
+        if (font && font->ops && font->ops->get_codepoint) {
+            struct uint32_result cr =
+                font->ops->get_codepoint(font, ctx.arr[i].glyph_idx);
+            if (YETTY_IS_OK(cr)) {
+                cp = cr.value;
+            }
+        }
+        uint8_t utf8[4];
+        size_t n = ypaint_layer_cp_to_utf8(cp, utf8);
+        rret = yetty_ycore_buffer_write(out, utf8, n);
+        if (!YETTY_IS_OK(rret)) {
+            goto done;
+        }
+    }
+
+done:
+    free(ctx.arr);
+    return rret;
 }

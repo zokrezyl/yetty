@@ -2680,3 +2680,60 @@ struct yetty_ypaint_core_complex_prim_factory *yetty_ypaint_canvas_get_complex_p
 {
     return canvas ? canvas->complex_prim_factory : NULL;
 }
+
+/*=============================================================================
+ * Glyph iteration
+ *===========================================================================*/
+
+void yetty_ypaint_canvas_for_each_glyph(struct yetty_ypaint_canvas *canvas,
+                                        yetty_ypaint_canvas_glyph_visitor visitor, void *user)
+{
+    if (!canvas || !visitor) {
+        return;
+    }
+    float cell_h = canvas->cell_size.height;
+    /* Glyph prim layout (see expand_text_span_to_glyphs):
+     *   word[0]: u32 type            (== YETTY_YSDF_GLYPH)
+     *   word[1]: u32 z_order
+     *   word[2]: f32 x               (canvas-pixel)
+     *   word[3]: f32 y               (RELATIVE — see below)
+     *   word[4]: f32 font_size
+     *   word[5]: u32 packed          (low 16 = glyph_idx, high 16 = slot+1)
+     *   word[6]: u32 color
+     *
+     * The stored y is RELATIVE to the cursor-line at insertion time, not
+     * absolute canvas y. The canvas reconstructs the absolute position
+     * via `gy + pd->rolling_row * cell_h` (see the abs_y computation in
+     * expand_text_span_to_glyphs). We do the same here so visitors get
+     * absolute canvas pixel coordinates and can filter by viewport y
+     * directly. Words carry mixed types — memcpy each one out at decode
+     * time to stay endian/alignment-agnostic. */
+    for (uint32_t li = 0; li < canvas->lines.count; li++) {
+        const struct yetty_ypaint_canvas_grid_line *line = &canvas->lines.lines[li];
+        for (uint32_t pi = 0; pi < line->prims.count; pi++) {
+            const struct yetty_ypaint_canvas_prim_data *pd = &line->prims.data[pi];
+            if (pd->word_count < YPAINT_GLYPH_WORDS) {
+                continue;
+            }
+            const uint32_t *words = line->arena + pd->arena_offset;
+            uint32_t type_word;
+            memcpy(&type_word, &words[0], sizeof(type_word));
+            if (type_word != YETTY_YSDF_GLYPH) {
+                continue;
+            }
+            float gx, gy_rel;
+            uint32_t packed;
+            memcpy(&gx, &words[2], sizeof(gx));
+            memcpy(&gy_rel, &words[3], sizeof(gy_rel));
+            memcpy(&packed, &words[5], sizeof(packed));
+
+            struct yetty_ypaint_glyph_view view;
+            view.x = gx;
+            view.y = gy_rel + (float)pd->rolling_row * cell_h;
+            view.glyph_idx = packed & 0xFFFFu;
+            uint32_t slot_plus_one = (packed >> 16) & 0xFFFFu;
+            view.font_slot = slot_plus_one ? (int32_t)(slot_plus_one - 1) : -1;
+            visitor(&view, user);
+        }
+    }
+}

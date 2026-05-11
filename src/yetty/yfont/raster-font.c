@@ -71,6 +71,10 @@ struct yetty_yfont_raster_font {
     uint32_t next_slot;
 
     struct yetty_ycore_map glyph_map;
+    /* Inverse map (slot → cp) — populated alongside glyph_map so
+     * clipboard extraction can recover the codepoint from a glyph
+     * index stored in a ypaint glyph prim. */
+    struct yetty_ycore_map slot_to_cp;
 
     /* GPU — present only in full mode. */
     struct yetty_ycore_buffer shader_code;
@@ -149,6 +153,7 @@ static struct uint32_result load_one(struct yetty_yfont_raster_font *f, uint32_t
         /* Metrics-only: advance only, no rasterization. */
         f->next_slot++;
         yetty_ycore_map_put(&f->glyph_map, cp, slot);
+    yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
         return YETTY_OK(uint32, slot);
     }
 
@@ -156,6 +161,7 @@ static struct uint32_result load_one(struct yetty_yfont_raster_font *f, uint32_t
         FT_Load_Glyph(f->ft_face, gid, FT_LOAD_RENDER) != 0) {
         f->next_slot++;
         yetty_ycore_map_put(&f->glyph_map, cp, slot);
+    yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
         f->dirty = 1;
         return YETTY_OK(uint32, slot);
     }
@@ -171,6 +177,7 @@ static struct uint32_result load_one(struct yetty_yfont_raster_font *f, uint32_t
     if (bmp->width == 0 || bmp->rows == 0) {
         f->next_slot++;
         yetty_ycore_map_put(&f->glyph_map, cp, slot);
+    yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
         f->dirty = 1;
         return YETTY_OK(uint32, slot);
     }
@@ -180,6 +187,7 @@ static struct uint32_result load_one(struct yetty_yfont_raster_font *f, uint32_t
               bmp->rows, f->cell_size);
         f->next_slot++;
         yetty_ycore_map_put(&f->glyph_map, cp, slot);
+    yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
         f->dirty = 1;
         return YETTY_OK(uint32, slot);
     }
@@ -207,6 +215,7 @@ static struct uint32_result load_one(struct yetty_yfont_raster_font *f, uint32_t
     f->next_cell++;
     f->next_slot++;
     yetty_ycore_map_put(&f->glyph_map, cp, slot);
+    yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
     f->dirty = 1;
     return YETTY_OK(uint32, slot);
 }
@@ -233,6 +242,7 @@ static void raster_destroy(struct yetty_ypaint_font *self)
     free(f->meta);
     free(f->shader_code.data);
     yetty_ycore_map_destroy(&f->glyph_map);
+    yetty_ycore_map_destroy(&f->slot_to_cp);
     free(f);
 }
 
@@ -243,6 +253,20 @@ static struct uint32_result raster_get_glyph_index(struct yetty_ypaint_font *sel
         return YETTY_ERR(uint32, "font is NULL");
     }
     return load_one(f, cp);
+}
+
+static struct uint32_result raster_get_codepoint(struct yetty_ypaint_font *self,
+                                                 uint32_t glyph_index)
+{
+    struct yetty_yfont_raster_font *f = (struct yetty_yfont_raster_font *)self;
+    if (!f) {
+        return YETTY_ERR(uint32, "font is NULL");
+    }
+    const uint32_t *cp = yetty_ycore_map_get(&f->slot_to_cp, glyph_index);
+    if (!cp) {
+        return YETTY_ERR(uint32, "unknown glyph_index");
+    }
+    return YETTY_OK(uint32, *cp);
 }
 
 static struct uint32_result raster_get_glyph_index_styled(struct yetty_ypaint_font *self,
@@ -399,6 +423,7 @@ static struct yetty_yrender_gpu_resource_set_result raster_get_gpu_resource_set(
 
 static const struct yetty_yfont_font_ops raster_font_ops = {
     .destroy = raster_destroy,
+    .get_codepoint = raster_get_codepoint,
     .get_glyph_index = raster_get_glyph_index,
     .get_glyph_index_styled = raster_get_glyph_index_styled,
     .load_glyphs = raster_load_glyphs,
@@ -427,6 +452,10 @@ static struct yetty_font_font_result raster_font_finalise(struct yetty_yfont_ras
     if (yetty_ycore_map_init(&f->glyph_map, MAP_CAPACITY) < 0) {
         raster_destroy(&f->base);
         return YETTY_ERR(yetty_font_font, "map init failed");
+    }
+    if (yetty_ycore_map_init(&f->slot_to_cp, MAP_CAPACITY) < 0) {
+        raster_destroy(&f->base);
+        return YETTY_ERR(yetty_font_font, "inverse map init failed");
     }
 
     f->meta_capacity = 256;

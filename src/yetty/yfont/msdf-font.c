@@ -56,7 +56,12 @@ struct yetty_yfont_msdf_font {
     uint32_t meta_capacity;
     uint32_t next_slot;
 
+    /* Forward (cp → slot) and inverse (slot → cp) maps. The inverse map
+     * is populated alongside the forward one so clipboard extraction can
+     * recover the codepoint from a glyph index stored in a ypaint glyph
+     * prim. */
     struct yetty_ycore_map glyph_map;
+    struct yetty_ycore_map slot_to_cp;
 
     float base_size; /* font size CDB was generated at */
     float pixel_range;
@@ -150,6 +155,7 @@ static struct uint32_result load_one(struct yetty_yfont_msdf_font *f, uint32_t c
         m->cell_idx = -1.0f; /* No atlas cell for empty glyphs */
         f->next_slot++;
         yetty_ycore_map_put(&f->glyph_map, cp, slot);
+        yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
         f->dirty = 1;
         free(data);
         return YETTY_OK(uint32, slot);
@@ -194,6 +200,7 @@ static struct uint32_result load_one(struct yetty_yfont_msdf_font *f, uint32_t c
 
     f->next_slot++;
     yetty_ycore_map_put(&f->glyph_map, cp, slot);
+    yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
     f->dirty = 1;
     free(data);
     return YETTY_OK(uint32, slot);
@@ -213,8 +220,22 @@ static void msdf_destroy(struct yetty_ypaint_font *self)
     free(font->meta);
     free(font->shader_code.data);
     yetty_ycore_map_destroy(&font->glyph_map);
+    yetty_ycore_map_destroy(&font->slot_to_cp);
     yetty_ycdb_reader_close(font->cdb);
     free(font);
+}
+
+static struct uint32_result msdf_get_codepoint(struct yetty_ypaint_font *self, uint32_t glyph_index)
+{
+    struct yetty_yfont_msdf_font *f = (struct yetty_yfont_msdf_font *)self;
+    if (!f) {
+        return YETTY_ERR(uint32, "font is NULL");
+    }
+    const uint32_t *cp = yetty_ycore_map_get(&f->slot_to_cp, glyph_index);
+    if (!cp) {
+        return YETTY_ERR(uint32, "unknown glyph_index");
+    }
+    return YETTY_OK(uint32, *cp);
 }
 
 static struct uint32_result msdf_get_glyph_index(struct yetty_ypaint_font *self, uint32_t cp)
@@ -394,6 +415,7 @@ static struct yetty_yrender_gpu_resource_set_result msdf_get_gpu_resource_set(
 
 static const struct yetty_yfont_font_ops msdf_font_ops = {
     .destroy = msdf_destroy,
+    .get_codepoint = msdf_get_codepoint,
     .get_glyph_index = msdf_get_glyph_index,
     .get_glyph_index_styled = msdf_get_glyph_index_styled,
     .load_glyphs = msdf_load_glyphs,
@@ -487,6 +509,15 @@ struct yetty_font_font_result yetty_yfont_msdf_font_create(const char *cdb_path,
         yetty_ycdb_reader_close(font->cdb);
         free(font);
         return YETTY_ERR(yetty_font_font, "map init failed");
+    }
+    if (yetty_ycore_map_init(&font->slot_to_cp, MAP_CAPACITY) < 0) {
+        yetty_ycore_map_destroy(&font->glyph_map);
+        free(font->meta);
+        free(font->atlas_pixels);
+        free(font->shader_code.data);
+        yetty_ycdb_reader_close(font->cdb);
+        free(font);
+        return YETTY_ERR(yetty_font_font, "inverse map init failed");
     }
 
     /* GPU resource set. The namespace must be unique among msdf-font
