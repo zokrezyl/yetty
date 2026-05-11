@@ -4,43 +4,35 @@
 # libparserutils, libnsutils, libnsbmp, libnsgif, libnslog, libnspsl,
 # libsvgtiny, libutf8proc).
 #
-# Built via NetSurf's own Makefile with TARGET=monkey (the smallest
-# viable frontend that produces the full set of helper-lib archives +
-# the core .o tree). yetty links the core .o files into its own
-# libnetsurf_core.a (frontends/* excluded) and plugs its own ynetsurf
-# frontend tables in place of monkey's.
+# Shell mapping (different from lexbor — netsurf needs gperf/bison/flex
+# host tools + expat/libxml2/jpeg/png/webp target headers, which the
+# generic 3rdparty-<platform> shells don't carry):
 #
-# Same matrix as the other 3rdparty libs (lexbor/libcurl/zlib): every
-# platform routes to the matching `3rdparty-${TARGET_PLATFORM}` nix dev
-# shell (which provides cross compiler + target-side deps) and re-execs
-# into _build.sh. NetSurf's Makefile is Unix-centric, so cross-compile
-# to Windows/webasm is best-effort; _build.sh bails per-platform when
-# the toolchain isn't compatible.
+#   linux-x86_64       → 3rdparty-netsurf
+#   linux-aarch64      → 3rdparty-netsurf-linux-aarch64
+#   linux-riscv64      → 3rdparty-netsurf-linux-riscv64
+#   macos-arm64        → 3rdparty-netsurf-macos-arm64
+#   macos-x86_64       → 3rdparty-netsurf-macos-x86_64
+#   android-*, ios-*,  → no nix shell — _build.sh's per-platform branch
+#   tvos-*, webasm,      writes a placeholder UNSUPPORTED tarball and
+#   windows-x86_64       exits 0; the consumer-side netsurf.cmake
+#                        detects the marker and skips silently.
 set -euo pipefail
 : "${TARGET_PLATFORM:?TARGET_PLATFORM is required}"
 
 case "$TARGET_PLATFORM" in
     linux-x86_64)
-        # Native linux build needs gperf/flex/bison/expat/libxml2/jpeg/
-        # png/webp — kept in a dedicated shell so we don't pollute the
-        # generic 3rdparty-linux-x86_64.
         SHELL_NAME="3rdparty-netsurf"
         ;;
+    macos-arm64|macos-x86_64)
+        SHELL_NAME="3rdparty-netsurf-${TARGET_PLATFORM}"
+        ;;
     linux-aarch64|linux-riscv64|\
-    macos-x86_64|macos-arm64|\
     android-arm64-v8a|android-x86_64|\
     ios-arm64|ios-x86_64|tvos-arm64|tvos-x86_64|\
-    webasm)
-        SHELL_NAME="3rdparty-${TARGET_PLATFORM}"
-        ;;
-    windows-x86_64)
-        # Native MSVC: caller must have vcvarsall'd the shell so cl.exe
-        # is on PATH. NetSurf's Makefile + MSVC are mutually allergic
-        # — _build.sh's windows branch bails with a clear message.
-        if ! command -v cl >/dev/null 2>&1 && ! command -v cl.exe >/dev/null 2>&1; then
-            echo "error: windows-x86_64 requires MSVC cl on PATH (vcvarsall x64)" >&2
-            exit 1
-        fi
+    webasm|windows-x86_64)
+        # No nix shell — _build.sh's case block writes a placeholder
+        # tarball directly. Skip the nix-develop wrapping entirely.
         exec bash "$(dirname "$0")/_build.sh" "$@"
         ;;
     *) echo "unknown TARGET_PLATFORM: $TARGET_PLATFORM" >&2; exit 1 ;;

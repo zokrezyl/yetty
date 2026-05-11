@@ -517,10 +517,48 @@
               gcc binutils
               curl gnutar xz gzip
               pkg-config
-              expat libxml2 libjpeg libpng libwebp
-              curl.dev openssl.dev zlib.dev
+              expat libxml2 libwebp
+              curl.dev zlib.dev
+              # openssl headers + libs come from the yetty prebuilt
+              # openssl-new tarball that _build.sh downloads at build
+              # time — same one libcurl is linked against. Pulling nix
+              # openssl in here would conflict at the pkg-config layer.
             ];
-            shellHook = "echo 'Yetty 3rdparty-build (netsurf — Linux x86_64 only)'";
+            shellHook = "echo 'Yetty 3rdparty-build (netsurf — linux-x86_64 native)'";
+          };
+
+          # macOS native — Apple's bundled bison is 2.3 (BSD-licensed
+          # legacy); NetSurf 3.11's libnslog .y file needs bison 3+
+          # for `%type` declarations. Pull a fresh nix bison/flex/gperf
+          # so the macOS system tools don't get picked up first. OpenSSL
+          # comes from the yetty prebuilt openssl-new tarball fetched
+          # inside _build.sh (same one libcurl is linked against) — see
+          # the fetch logic there.
+          "3rdparty-netsurf-macos-arm64" = pkgs.mkShell {
+            buildInputs = with pkgs; [
+              gnumake perl python3 flex bison gperf
+              autoconf automake libtool
+              curl gnutar xz gzip
+              pkg-config
+              expat libxml2 libwebp
+              curl.dev zlib.dev
+              # openssl headers + libs come from the yetty prebuilt
+              # openssl-new tarball that _build.sh downloads at build
+              # time — same one libcurl is linked against.
+            ];
+            shellHook = "echo 'Yetty 3rdparty-build (netsurf — macos-arm64)'";
+          };
+
+          "3rdparty-netsurf-macos-x86_64" = pkgs.mkShell {
+            buildInputs = with pkgs; [
+              gnumake perl python3 flex bison gperf
+              autoconf automake libtool
+              curl gnutar xz gzip
+              pkg-config
+              expat libxml2 libwebp
+              curl.dev zlib.dev
+            ];
+            shellHook = "echo 'Yetty 3rdparty-build (netsurf — macos-x86_64)'";
           };
 
           # Cross to aarch64 Linux: pkgsCross.*.mkShell so nativeBuildInputs
