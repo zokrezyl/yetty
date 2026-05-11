@@ -335,6 +335,24 @@ if [ -f "$_NS_CURL_C" ]; then
 fi
 
 #-----------------------------------------------------------------------------
+# Patch: drop `LDFLAGS += -Wl,--trace` from netsurf/Makefile on macOS.
+# `--trace` is GNU-ld-only; Apple's ld64 fails with `unknown option: --trace`.
+# Upstream's own comment flags it as "may be gcc specific, may need tweaks
+# in future". Idempotent — the next idempotency check uses our sentinel.
+#-----------------------------------------------------------------------------
+case "$TARGET_PLATFORM" in
+macos-*)
+    _NS_MK="$NS_CORE/Makefile"
+    if [ -f "$_NS_MK" ] && ! grep -q "yetty: --trace disabled" "$_NS_MK"; then
+        sed -i \
+            -e "s|^LDFLAGS += -Wl,--trace\$|# yetty: --trace disabled — Apple ld64 rejects it\n#&|" \
+            "$_NS_MK"
+        echo "==> patched $_NS_MK (drop -Wl,--trace for Apple ld64)"
+    fi
+    ;;
+esac
+
+#-----------------------------------------------------------------------------
 # Build
 #-----------------------------------------------------------------------------
 NS_CFLAGS="-Wno-error=redundant-decls -Wno-error=array-bounds \
