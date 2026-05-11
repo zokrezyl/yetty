@@ -154,6 +154,23 @@ struct yetty_yterm_terminal_layer_ops {
    * (text-layer, since libvterm itself owns the swap) may leave NULL. */
     struct yetty_ycore_void_result (*set_alt_screen)(struct yetty_yrender_terminal_layer *self,
                                                      int active);
+    /* Selection — row-based clipboard copy/highlight.
+     *
+     * Layers report whatever text they hold on a given visible row to the
+     * terminal's copy collector. row is a visible-row index in
+     * [0, grid_size.rows). out receives appended UTF-8 bytes (no
+     * trailing newline). A layer with nothing to contribute appends
+     * nothing. Optional — NULL means "this layer has no selectable text".
+     */
+    struct yetty_ycore_void_result (*get_row_text)(
+        const struct yetty_yrender_terminal_layer *self, uint32_t row,
+        struct yetty_ycore_buffer *out);
+    /* Push selection state into the layer so it can render a highlight.
+     * row_min/row_max are visible-row indices in [0, grid_size.rows);
+     * active=0 clears the highlight. Optional — layers that don't
+     * visualise selection leave NULL. */
+    void (*set_selection)(struct yetty_yrender_terminal_layer *self, int active,
+                          uint32_t row_min, uint32_t row_max);
 };
 
 /* Layer base - embed as first member in subclasses */

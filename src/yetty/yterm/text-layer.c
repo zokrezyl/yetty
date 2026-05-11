@@ -36,7 +36,12 @@
  * shader applies it when computing cell_index so the live window appears in
  * the correct place. */
 #define U_ROOT_ROW 11
-#define U_COUNT 12
+/* Selection highlight — row-based. sel_active toggles the tint; sel_rows
+ * carries (row_min, row_max) as visible-row indices. Whole-row tint, no
+ * per-column slicing, since the selection model only knows about lines. */
+#define U_SEL_ACTIVE 12
+#define U_SEL_ROWS 13
+#define U_COUNT 14
 
 /* Setters */
 static inline void set_grid_size(struct yetty_ypaint_core_gpu_resource_set *rs, float cols,
@@ -87,6 +92,13 @@ static inline void set_root_row(struct yetty_ypaint_core_gpu_resource_set *rs, u
 {
     rs->uniforms[U_ROOT_ROW].u32 = r;
 }
+static inline void set_selection_state(struct yetty_ypaint_core_gpu_resource_set *rs, int active,
+                                       uint32_t row_min, uint32_t row_max)
+{
+    rs->uniforms[U_SEL_ACTIVE].u32 = active ? 1u : 0u;
+    rs->uniforms[U_SEL_ROWS].vec2[0] = (float)row_min;
+    rs->uniforms[U_SEL_ROWS].vec2[1] = (float)row_max;
+}
 
 /* Init — names and types use the same constants */
 static void init_uniforms(struct yetty_ypaint_core_gpu_resource_set *rs)
@@ -116,12 +128,17 @@ static void init_uniforms(struct yetty_ypaint_core_gpu_resource_set *rs)
         (struct yetty_yrender_uniform){"visual_zoom_off", YETTY_YRENDER_UNIFORM_VEC2};
     rs->uniforms[U_ROOT_ROW] =
         (struct yetty_yrender_uniform){"root_row", YETTY_YRENDER_UNIFORM_U32};
+    rs->uniforms[U_SEL_ACTIVE] =
+        (struct yetty_yrender_uniform){"sel_active", YETTY_YRENDER_UNIFORM_U32};
+    rs->uniforms[U_SEL_ROWS] =
+        (struct yetty_yrender_uniform){"sel_rows", YETTY_YRENDER_UNIFORM_VEC2};
 
     set_scale(rs, 1.0f);
     set_cursor_shape(rs, 1.0f);
     set_default_fg(rs, 0x00FFFFFFu);
     set_default_bg(rs, 0x00000000u);
     set_visual_zoom(rs, 1.0f, 0.0f, 0.0f);
+    set_selection_state(rs, 0, 0, 0);
 }
 
 /* Per-line descriptor in the scrollback arena: byte offset into the cells
@@ -221,6 +238,11 @@ static uint32_t text_layer_get_live_anchor(const struct yetty_yrender_terminal_l
 static struct yetty_ycore_void_result text_layer_set_view_top(
     struct yetty_yrender_terminal_layer *self, int active, uint32_t view_top_total_idx);
 static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer);
+static struct yetty_ycore_void_result text_layer_get_row_text(
+    const struct yetty_yrender_terminal_layer *self, uint32_t row,
+    struct yetty_ycore_buffer *out);
+static void text_layer_set_selection(struct yetty_yrender_terminal_layer *self, int active,
+                                     uint32_t row_min, uint32_t row_max);
 
 /* VTerm callbacks */
 static int on_damage(VTermRect rect, void *user);
@@ -625,6 +647,8 @@ static const struct yetty_yterm_terminal_layer_ops text_layer_ops = {
     .set_cursor = text_layer_set_cursor,
     .get_live_anchor = text_layer_get_live_anchor,
     .set_view_top = text_layer_set_view_top,
+    .get_row_text = text_layer_get_row_text,
+    .set_selection = text_layer_set_selection,
 };
 
 /* VTerm screen callbacks */
@@ -1343,4 +1367,85 @@ static int on_sb_popline(int cols, VTermScreenCell *cells, void *user)
     ydebug("on_sb_popline: returned %d cols (target=%d) sb_count=%u", copy_cols, cols,
            text_layer->sb.lines_count);
     return 1;
+}
+
+/* Extract UTF-8 text for one visible row, trimming trailing blanks. libvterm
+ * stores the codepoint directly in glyph_index (see resolve_glyph), so its
+ * vterm_screen_get_text walks the cells and emits UTF-8 — including the
+ * GLYPH_WIDE_CONT handling we need for double-width chars. We bound the
+ * eol scan to drop trailing spaces so a "make terminal output" line in a
+ * 200-col grid doesn't produce 180 trailing spaces in the clipboard. */
+static struct yetty_ycore_void_result text_layer_get_row_text(
+    const struct yetty_yrender_terminal_layer *self, uint32_t row,
+    struct yetty_ycore_buffer *out)
+{
+    const struct yetty_yterm_terminal_text_layer *text_layer = container_of(
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yterm_terminal_text_layer, base);
+
+    if (!text_layer->screen || !out) {
+        return YETTY_OK_VOID();
+    }
+
+    int cols = (int)self->grid_size.cols;
+    int rows = (int)self->grid_size.rows;
+    if (cols <= 0 || rows <= 0 || (int)row >= rows) {
+        return YETTY_OK_VOID();
+    }
+
+    /* Find the rightmost non-blank cell so we don't copy trailing spaces. */
+    int last_col = -1;
+    for (int c = cols - 1; c >= 0; c--) {
+        VTermScreenCell cell;
+        VTermPos pos = {.row = (int)row, .col = c};
+        if (!vterm_screen_get_cell(text_layer->screen, pos, &cell)) {
+            continue;
+        }
+        uint32_t g = cell.glyph_index;
+        if (g != 0 && g != 0xFFFEu /* GLYPH_WIDE_CONT */) {
+            last_col = c;
+            break;
+        }
+    }
+    if (last_col < 0) {
+        return YETTY_OK_VOID();
+    }
+
+    /* Two-pass write into out: ask vterm for the byte count first, grow the
+     * buffer, then ask again with the destination pointer. */
+    VTermRect rect = {.start_row = (int)row,
+                      .end_row = (int)row + 1,
+                      .start_col = 0,
+                      .end_col = last_col + 1};
+    size_t need = vterm_screen_get_text(text_layer->screen, NULL, 0, rect);
+    if (need == 0) {
+        return YETTY_OK_VOID();
+    }
+
+    /* Stack scratch for the common short-row case; heap fallback for wide grids. */
+    char stack_buf[1024];
+    char *buf = stack_buf;
+    char *heap_buf = NULL;
+    if (need > sizeof(stack_buf)) {
+        heap_buf = malloc(need);
+        if (!heap_buf) {
+            return YETTY_ERR(yetty_ycore_void, "text_layer_get_row_text: alloc");
+        }
+        buf = heap_buf;
+    }
+    size_t got = vterm_screen_get_text(text_layer->screen, buf, need, rect);
+    struct yetty_ycore_void_result wr = yetty_ycore_buffer_write(out, buf, got);
+    if (heap_buf) {
+        free(heap_buf);
+    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "text_layer_get_row_text: buffer write");
+    return YETTY_OK_VOID();
+}
+
+static void text_layer_set_selection(struct yetty_yrender_terminal_layer *self, int active,
+                                     uint32_t row_min, uint32_t row_max)
+{
+    struct yetty_yterm_terminal_text_layer *text_layer =
+        container_of(self, struct yetty_yterm_terminal_text_layer, base);
+    set_selection_state(&text_layer->rs, active, row_min, row_max);
+    text_layer->base.dirty = 1;
 }

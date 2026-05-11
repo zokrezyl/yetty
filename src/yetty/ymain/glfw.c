@@ -44,6 +44,7 @@ static void platform_get_x11_handles(GLFWwindow *win, void **disp, unsigned long
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/clipboard-manager.h>
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -299,6 +300,23 @@ int main(int argc, char **argv)
     unsigned long x11_window = 0UL;
     platform_get_x11_handles(window, &x11_display, &x11_window);
 
+    /* Platform clipboard manager. Created here (not in yetty_create) so
+     * it sits alongside the other platform-owned objects in app_context.
+     * On GLFW builds glfw must already be initialised — clipboard ops
+     * call glfwGetClipboardString / glfwSetClipboardString. NULL is OK
+     * in headless mode: copy/paste silently no-ops. */
+    struct yetty_platform_clipboard_manager *clipboard_manager = NULL;
+    if (!headless) {
+        struct yetty_yplatform_clipboard_manager_result clip_res =
+            yetty_platform_clipboard_manager_create();
+        if (YETTY_IS_OK(clip_res)) {
+            clipboard_manager = clip_res.value;
+        } else {
+            ywarn("main: clipboard manager create failed: %s", clip_res.error.msg);
+            yetty_ycore_error_destroy(clip_res.error);
+        }
+    }
+
     struct yetty_yetty_app_context app_context = {
         .app_gpu_context = {.instance = instance,
                             .surface = surface,
@@ -308,6 +326,7 @@ int main(int argc, char **argv)
                             .x11_window = x11_window},
         .config = config,
         .platform_input_pipe = platform_input_pipe,
+        .clipboard_manager = clipboard_manager,
         .pty_factory = pty_factory};
 
     /* Yetty */
@@ -370,6 +389,9 @@ int main(int argc, char **argv)
     }
     platform_input_pipe->ops->destroy(platform_input_pipe);
     ydebug("main: platform_input_pipe destroyed");
+    if (clipboard_manager) {
+        clipboard_manager->ops->destroy(clipboard_manager);
+    }
     config->ops->destroy(config);
     ydebug("main: config destroyed");
     if (window) {

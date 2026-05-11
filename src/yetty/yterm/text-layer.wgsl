@@ -128,6 +128,22 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // terminal area, so we draw fully opaque on top.
     var out_color = mix(bg_color, fg_color, glyph_alpha);
 
+    // Selection highlight — row-based, applied as a translucent blue tint
+    // over the composed cell. sel_active==0 disables; otherwise the row
+    // index is checked against [sel_rows.x, sel_rows.y] (inclusive). This
+    // sits BEFORE the cursor invert so the cursor still contrasts against
+    // the tinted background.
+    if (uniforms.text_grid_sel_active != 0u) {
+        let row_u = u32(cell_row);
+        let rmin = u32(uniforms.text_grid_sel_rows.x);
+        let rmax = u32(uniforms.text_grid_sel_rows.y);
+        if (row_u >= rmin && row_u <= rmax) {
+            // Soft blue tint with a hint of inversion for readability.
+            let sel_color = vec3<f32>(0.20, 0.40, 0.80);
+            out_color = mix(out_color, sel_color, 0.45);
+        }
+    }
+
     // Cursor — invert the composed cell pixel (per-fragment), so the cursor
     // contrasts against whatever is actually drawn here.
     let cursor_pos = uniforms.text_grid_cursor_pos;
