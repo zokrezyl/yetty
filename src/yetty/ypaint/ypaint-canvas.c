@@ -12,6 +12,7 @@
 #include <yetty/ypaint-core/buffer.h>
 #include <yetty/ypaint-core/cmds.h>
 #include <yetty/ypaint-core/complex-prim-types.h>
+#include <yetty/ypaint-factory/complex-prim-factory.h>
 #include <yetty/ypaint-core/font-prim.h>
 #include <yetty/ypaint-core/text-span-prim.h>
 #include <yetty/ypaint/flyweight.h>
@@ -737,8 +738,14 @@ struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
 
     ydebug("ypaint_canvas: font render_method='%s'", render_method);
 
-    /* Create the per-canvas font cache. */
-    struct yetty_yfont_cache_ptr_result cache_res = yetty_yfont_cache_create(context);
+    /* Create the per-canvas font cache. yetty_yfont_cache_create takes the
+     * shaders_dir directly (not a yetty_context) so yetty_yfont_core stays
+     * GPU-less — the full yetty_context drags a WGPU app context with it. */
+    struct yetty_yconfig_config *cache_cfg = context->app_context.config;
+    const char *cache_shaders_dir =
+        cache_cfg ? cache_cfg->ops->get_string(cache_cfg, "paths/shaders", "") : "";
+    struct yetty_yfont_cache_ptr_result cache_res =
+        yetty_yfont_cache_create(cache_shaders_dir);
     if (YETTY_IS_ERR(cache_res)) {
         yerror("ypaint_canvas: font cache creation failed: %s", cache_res.error.msg);
         yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);

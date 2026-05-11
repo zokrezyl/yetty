@@ -17,7 +17,7 @@ target_include_directories(yplot PRIVATE
 # android: bionic libc). Same pattern as tools/yecho and tools/ycat.
 find_package(Threads REQUIRED)
 target_link_libraries(yplot PRIVATE
-    yetty_yplot
+    yetty_yplot_core
     Threads::Threads
 )
 

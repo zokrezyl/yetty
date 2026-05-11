@@ -7,8 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <yetty/yconfig/config.h>
-#include <yetty/yetty/yetty.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ytrace/ytrace.h>
@@ -34,16 +32,11 @@ struct yetty_yfont_cache {
     uint32_t free_capacity;
 };
 
-struct yetty_yfont_cache_ptr_result yetty_yfont_cache_create(const struct yetty_context *context)
+struct yetty_yfont_cache_ptr_result yetty_yfont_cache_create(const char *shaders_dir)
 {
-    if (!context) {
-        return YETTY_ERR(yetty_yfont_cache_ptr, "context is NULL");
+    if (!shaders_dir) {
+        return YETTY_ERR(yetty_yfont_cache_ptr, "shaders_dir is NULL");
     }
-    struct yetty_yconfig_config *config = context->app_context.config;
-    if (!config) {
-        return YETTY_ERR(yetty_yfont_cache_ptr, "config is NULL");
-    }
-    const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
 
     struct yetty_yfont_cache *cache = calloc(1, sizeof(struct yetty_yfont_cache));
     if (!cache) {

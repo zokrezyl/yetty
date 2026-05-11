@@ -11,8 +11,8 @@ target_link_libraries(yetty_ypaint_yaml PUBLIC
     yaml
     yetty_ypaint_core
     yetty_ysdf
-    yetty_yplot
-    yetty_yfsvm
+    yetty_yplot_core
+    yetty_yfsvm_core
 )
 
 # Optional: fontconfig for the `font: <name>` lookup in text elements.

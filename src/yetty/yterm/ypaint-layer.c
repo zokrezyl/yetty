@@ -7,6 +7,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/ypaint-core/buffer.h>
 #include <yetty/ypaint-core/complex-prim-types.h>
+#include <yetty/ypaint-factory/complex-prim-factory.h>
 #include <yetty/ypaint/core/ypaint-canvas.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>

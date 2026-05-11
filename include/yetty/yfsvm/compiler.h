@@ -13,7 +13,6 @@
 #include <yetty/ycore/result.h>
 #include <yetty/yfsvm/yfsvm.gen.h>
 #include <yetty/yexpr/yexpr.h>
-#include <yetty/yrender/gpu-resource-set.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -68,8 +67,8 @@ struct yetty_yfsvm_program_result yetty_yfsvm_compile_multi_expr(const char *sou
 uint32_t yetty_yfsvm_program_serialize(const struct yetty_yfsvm_program *prog, uint32_t *buf,
                                        uint32_t buf_capacity);
 
-/* Get static shader-only resource set (for ypaint layer to include yfsvm_execute) */
-const struct yetty_ypaint_core_gpu_resource_set *yetty_yfsvm_get_shader_resource_set(void);
+/* yetty_yfsvm_get_shader_resource_set lives in yetty/yfsvm/shader-rs.h
+ * (yetty_yfsvm). Pulled in only by server-side code. */
 
 #ifdef __cplusplus
 }

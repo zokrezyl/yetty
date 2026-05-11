@@ -15,7 +15,7 @@ target_include_directories(ymesh PRIVATE
 
 find_package(Threads REQUIRED)
 target_link_libraries(ymesh PRIVATE
-    yetty_ymesh
+    yetty_ymesh_core
     Threads::Threads
 )
 

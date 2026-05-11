@@ -81,9 +81,8 @@ target_link_libraries(yetty_ycat PUBLIC
     yetty_ypaint_core
     yetty_ymarkdown
     yetty_ypdf
-    yetty_yfont
-    yetty_yrender
-    yetty_yimage
+    yetty_yfont_core
+    yetty_yimage_core
     pdfio_lib
 )
 

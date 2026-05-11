@@ -12,7 +12,7 @@ target_include_directories(yetty_ypdf PUBLIC
 target_link_libraries(yetty_ypdf PUBLIC
     yetty_ycore
     yetty_ypaint_core
-    yetty_yfont
+    yetty_yfont_core
     yetty_ysdf
     pdfio_lib
 )

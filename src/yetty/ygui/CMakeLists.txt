@@ -24,8 +24,7 @@ target_link_libraries(ygui PUBLIC
     yetty_ysdf
     yetty_ycore
     yetty_yface     # OSC envelope + LZ4F + base64 streamer
-    yetty_yfont     # raster-font-from-file for text measurement
-    yetty_yrender   # transitive: raster-font's shader_code_set
+    yetty_yfont_core  # raster-font-from-file for text measurement
 )
 
 if(NOT EMSCRIPTEN)
@@ -79,8 +78,7 @@ if(YETTY_BUILD_YGUI_SHARED AND NOT EMSCRIPTEN)
         yetty_ysdf
         yetty_ycore
         yetty_yface
-        yetty_yfont
-        yetty_yrender
+        yetty_yfont_core
         uv_a
     )
 

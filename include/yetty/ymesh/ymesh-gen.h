@@ -12,11 +12,15 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ypaint-core/complex-prim-types.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Forward-declared so this header stays GPU-less and can be included by
+ * client-side wire emitters that don't link Dawn. The full type lives in
+ * yetty/ypaint-factory/complex-prim-factory.h (server side). */
+struct yetty_ypaint_core_concrete_factory;
 
 #define YETTY_YMESH_TYPE_ID 0x80000005u
 

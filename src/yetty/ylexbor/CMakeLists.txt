@@ -26,7 +26,7 @@ target_link_libraries(yetty_ylexbor
         yetty_ypaint_core
         yetty_ysdf
         yetty_ycore
-        yetty_yimage
+        yetty_yimage_core
         stb
 )
 

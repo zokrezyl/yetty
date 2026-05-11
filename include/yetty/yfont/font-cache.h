@@ -38,7 +38,6 @@ extern "C" {
 #endif
 
 struct yetty_ypaint_font;
-struct yetty_context;
 struct yetty_yfont_cache;
 
 typedef uint32_t yetty_yfont_cache_handle;
@@ -54,9 +53,12 @@ struct yetty_yfont_cache_ref {
 YETTY_YRESULT_DECLARE(yetty_yfont_cache_ptr, struct yetty_yfont_cache *);
 YETTY_YRESULT_DECLARE(yetty_yfont_cache_ref, struct yetty_yfont_cache_ref);
 
-/* Create a cache. Reads `paths/shaders` from context->app_context.config
- * once and stashes it for the cache's lifetime. */
-struct yetty_yfont_cache_ptr_result yetty_yfont_cache_create(const struct yetty_context *context);
+/* Create a cache. `shaders_dir` is the directory path where per-font WGSL
+ * shaders live (resolved by the caller from `paths/shaders` config). The
+ * cache copies it for its lifetime. Taking the bare string instead of a
+ * yetty_context keeps yfont GPU-less — yetty_context embeds a WGPU app
+ * context and would drag <webgpu/webgpu.h> into every yfont consumer. */
+struct yetty_yfont_cache_ptr_result yetty_yfont_cache_create(const char *shaders_dir);
 
 /* Destroys every entry regardless of refcount. */
 void yetty_yfont_cache_destroy(struct yetty_yfont_cache *cache);
