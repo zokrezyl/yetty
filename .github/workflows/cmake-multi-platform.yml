@@ -185,13 +185,7 @@ jobs:
 
     - name: Run ASAN smoke test
       run: |
-        # Suppress GLFW X11 backend leaks — GLFW does not free its X11
-        # connection on init failure in headless CI (no display). These are
-        # GLFW's own leaks, not yetty bugs.
-        cat > lsan_suppressions.txt <<'EOF'
-leak:_glfwConnectX11
-leak:glfwInit
-EOF
+        printf 'leak:_glfwConnectX11\nleak:glfwInit\n' > lsan_suppressions.txt
         export ASAN_OPTIONS="detect_leaks=1:halt_on_error=0:log_path=asan_log"
         export LSAN_OPTIONS="suppressions=$(pwd)/lsan_suppressions.txt"
         timeout 10 ./${{ env.BUILD_DIR }}/yetty -e 'echo "ASAN smoke test"; exit 0' || true
