@@ -95,6 +95,19 @@ static void glfw_window_manager_drag_by(struct yetty_yplatform_window_manager *s
     post_event(m, &ev);
 }
 
+static void glfw_window_manager_resize_by(struct yetty_yplatform_window_manager *self, int dx,
+                                          int dy)
+{
+    if (dx == 0 && dy == 0) {
+        return;
+    }
+    struct yetty_yplatform_glfw_window_manager *m =
+        container_of(self, struct yetty_yplatform_glfw_window_manager, base);
+    struct yetty_yui_event ev = {.type = YETTY_YCORE_WINDOW_RESIZE_BY,
+                                 .window_resize = {.dx = dx, .dy = dy}};
+    post_event(m, &ev);
+}
+
 /*=============================================================================
  * Main-thread side — apply one event by calling GLFW
  *===========================================================================*/
@@ -137,6 +150,19 @@ static void glfw_window_manager_handle_event(struct yetty_yplatform_window_manag
         glfwSetWindowPos(m->window, x + event->window_drag.dx, y + event->window_drag.dy);
         break;
     }
+    case YETTY_YCORE_WINDOW_RESIZE_BY: {
+        int w, h;
+        glfwGetWindowSize(m->window, &w, &h);
+        int nw = w + event->window_resize.dx;
+        int nh = h + event->window_resize.dy;
+        /* Minimum size — anything smaller than a couple of cells makes
+         * the terminal grid degenerate and risks divide-by-zero or
+         * negative-bound math downstream. */
+        if (nw < 200) nw = 200;
+        if (nh < 100) nh = 100;
+        glfwSetWindowSize(m->window, nw, nh);
+        break;
+    }
     default:
         /* Not ours — silently ignore. The drain dispatches by event
          * type, so this branch only runs if a caller passes a foreign
@@ -151,6 +177,7 @@ static const struct yetty_yplatform_window_manager_ops glfw_window_manager_ops =
     .toggle_maximize = glfw_window_manager_toggle_maximize,
     .request_close = glfw_window_manager_request_close,
     .drag_by = glfw_window_manager_drag_by,
+    .resize_by = glfw_window_manager_resize_by,
     .handle_event = glfw_window_manager_handle_event,
 };
 

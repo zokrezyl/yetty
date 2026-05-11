@@ -87,6 +87,11 @@ enum yetty_yevent_event_type {
     YETTY_YCORE_WINDOW_TOGGLE_MAXIMIZE,
     YETTY_YCORE_WINDOW_CLOSE,
     YETTY_YCORE_WINDOW_DRAG_BY,
+    /* Adjust window outer size by (dx, dy) screen pixels, anchored at the
+     * top-left. Issued by the tabbar/yetty event handler when the user
+     * drags one of the edge/corner resize handles (since GLFW_DECORATED
+     * is off, the OS doesn't provide built-in resize grips). */
+    YETTY_YCORE_WINDOW_RESIZE_BY,
     /* Must be last - used for array sizing */
     YETTY_YCORE_COUNT
 };
@@ -234,6 +239,13 @@ struct yetty_ycore_event_window_drag {
     int dy;
 };
 
+/* Window-resize delta, in screen pixels. dx grows the right edge, dy
+ * grows the bottom edge; negatives shrink. The top-left stays put. */
+struct yetty_ycore_event_window_resize {
+    int dx;
+    int dy;
+};
+
 struct yetty_yui_event {
     enum yetty_yevent_event_type type;
     union {
@@ -262,6 +274,7 @@ struct yetty_yui_event {
         struct yetty_ycore_event_zoom_cell_size zoom_cell_size;
         struct yetty_ycore_event_screenshot screenshot;
         struct yetty_ycore_event_window_drag window_drag;
+        struct yetty_ycore_event_window_resize window_resize;
     };
     void *payload; /* optional heap-allocated data (copy/paste text) */
 };

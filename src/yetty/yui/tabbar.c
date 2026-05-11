@@ -71,6 +71,20 @@ struct yetty_yui_tabbar {
     int dragging;
     float drag_anchor_x;
     float drag_anchor_y;
+
+    /* Edge/corner resize state. GLFW_DECORATED=FALSE removed the OS
+     * resize handles; we re-implement the bottom + right + bottom-right
+     * grips in software here. dir_x and dir_y are each ±1 / 0 telling
+     * the resize_by handler which axes grow. We track resize_last_*
+     * (not an anchor) and emit per-MOUSE_MOVE step deltas — the window
+     * top-left stays fixed during resize, so the cursor's
+     * window-relative position grows in lockstep with the window's
+     * right/bottom edge as we expand. */
+    int resizing;
+    int resize_dir_x;
+    int resize_dir_y;
+    float resize_last_x;
+    float resize_last_y;
 };
 
 /*---------------------------------------------------------------------------
@@ -869,6 +883,66 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
+    /* Edge / corner resize. GLFW_DECORATED=FALSE means the OS no longer
+     * paints (or accepts hit-tests on) resize grips, so we implement
+     * them ourselves. Only bottom + right + bottom-right are wired —
+     * top and left would conflict with the tab strip and with workspace
+     * mouse usage respectively. The hit-test fires only on the WORKSPACE
+     * region (strip already returned above), so the cursor-to-edge
+     * distance matches what the user visually grabs. */
+    {
+        const float EDGE = 6.0f;
+        float mx = 0.0f, my = 0.0f;
+        int have_xy = 0;
+        switch (event->type) {
+        case YETTY_YCORE_MOUSE_DOWN:
+        case YETTY_YCORE_MOUSE_UP:
+        case YETTY_YCORE_MOUSE_MOVE:
+        case YETTY_YCORE_MOUSE_DRAG:
+            mx = event->mouse.x;
+            my = event->mouse.y;
+            have_xy = 1;
+            break;
+        default:
+            break;
+        }
+        struct yetty_yplatform_window_manager *wm =
+            bar->yetty_ctx ? bar->yetty_ctx->app_context.window_manager : NULL;
+
+        if (have_xy && event->type == YETTY_YCORE_MOUSE_DOWN && !bar->resizing && wm) {
+            int right = mx >= bar->width - EDGE && mx <= bar->width;
+            int bottom = my >= bar->height - EDGE && my <= bar->height;
+            if (right || bottom) {
+                bar->resizing = 1;
+                bar->resize_dir_x = right ? 1 : 0;
+                bar->resize_dir_y = bottom ? 1 : 0;
+                bar->resize_last_x = mx;
+                bar->resize_last_y = my;
+                ydebug("tabbar: resize start dirs=(%d,%d) at (%.1f, %.1f)",
+                       bar->resize_dir_x, bar->resize_dir_y, mx, my);
+                return YETTY_OK(yetty_ycore_int, 1);
+            }
+        }
+        if (bar->resizing) {
+            if (have_xy && (event->type == YETTY_YCORE_MOUSE_MOVE ||
+                            event->type == YETTY_YCORE_MOUSE_DRAG)) {
+                int step_dx = (int)(mx - bar->resize_last_x) * bar->resize_dir_x;
+                int step_dy = (int)(my - bar->resize_last_y) * bar->resize_dir_y;
+                if (wm && (step_dx != 0 || step_dy != 0)) {
+                    wm->ops->resize_by(wm, step_dx, step_dy);
+                }
+                bar->resize_last_x = mx;
+                bar->resize_last_y = my;
+                return YETTY_OK(yetty_ycore_int, 1);
+            }
+            if (event->type == YETTY_YCORE_MOUSE_UP) {
+                ydebug("tabbar: resize end");
+                bar->resizing = 0;
+                return YETTY_OK(yetty_ycore_int, 1);
+            }
+        }
+    }
+
     /* Anything else — including keys without a shortcut, resize broadcasts,
      * zoom apply — goes to the active workspace. The workspace's tile tree
      * is anchored at y = strip (workspace_set_origin in resize), so
@@ -878,26 +952,6 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
     if (!ws) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
-
-    /* RESIZE needs height adjusted by strip before forwarding. The
-     * terminal at the leaf re-derives its grid (cols/rows) and resizes
-     * its layer-target textures from the event's width/height. If we
-     * passed the full window height it would size for a region that
-     * extends UNDER the strip — cells past the visible strip height
-     * would be clipped, and the grid math drifts off by one row's
-     * worth at every resize. We do this only on the forward path; the
-     * tabbar's own bar->height stays the full window height because the
-     * strip math depends on it. */
-    if (event->type == YETTY_YCORE_RESIZE) {
-        float strip = YETTY_YUI_TABBAR_HEIGHT;
-        if (strip > event->resize.height) {
-            strip = event->resize.height;
-        }
-        struct yetty_yui_event resize_ev = *event;
-        resize_ev.resize.height -= strip;
-        return yetty_yui_workspace_on_event(ws, &resize_ev);
-    }
-
     return yetty_yui_workspace_on_event(ws, event);
 }
 

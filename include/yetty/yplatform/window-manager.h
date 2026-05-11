@@ -41,6 +41,10 @@ struct yetty_yplatform_window_manager_ops {
     void (*toggle_maximize)(struct yetty_yplatform_window_manager *self);
     void (*request_close)(struct yetty_yplatform_window_manager *self);
     void (*drag_by)(struct yetty_yplatform_window_manager *self, int dx, int dy);
+    /* Grow (or shrink, with negative deltas) the window's outer size by
+     * (dx, dy) screen pixels. Top-left stays fixed — only the right/bottom
+     * edges move. The tabbar's edge/corner resize handles call this. */
+    void (*resize_by)(struct yetty_yplatform_window_manager *self, int dx, int dy);
 
     /* Main-thread side — apply one drained WINDOW_* event by calling
      * GLFW. The clipboard manager's drain dispatches here. */
