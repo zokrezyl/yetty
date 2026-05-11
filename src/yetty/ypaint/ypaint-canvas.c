@@ -17,6 +17,7 @@
 #include <yetty/ypaint-core/text-span-prim.h>
 #include <yetty/ypaint/flyweight.h>
 #include <yetty/ypaint/core/ypaint-canvas.h>
+#include <yetty/ypaint/scrollbuffer.h>
 #include "canvas-internal.h"
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/font-cache.h>
@@ -68,10 +69,13 @@ struct yetty_ypaint_canvas_grid_cell {
     struct yetty_ypaint_canvas_prim_ref_array refs;
 };
 
-// A single primitive's data
+// A single primitive's payload, stored in its owning line's arena. The
+// data lives at `grid_line.arena + arena_offset` for `word_count` u32
+// words. Storing an offset (not a pointer) keeps prim_data stable
+// across arena reallocations.
 struct yetty_ypaint_canvas_prim_data {
     uint32_t rolling_row; // rolling_row at insertion (cursor row or explicit)
-    float *data;
+    uint32_t arena_offset;
     uint32_t word_count;
 };
 
@@ -96,6 +100,16 @@ struct yetty_ypaint_canvas_font_entry {
 struct yetty_ypaint_canvas_grid_line {
     struct yetty_ypaint_canvas_prim_data_array
         prims; // All primitives (SDF + glyph) whose BASE is this line
+
+    // Payload arena: every prim in `prims` stores its words at
+    // `arena + prim.arena_offset` for prim.word_count u32 words. One
+    // allocation per line, doubling growth — replaces the previous
+    // per-prim malloc(word_count * 4) and its attendant ~24 bytes of
+    // glibc bookkeeping per primitive.
+    uint32_t *arena;
+    uint32_t arena_count;
+    uint32_t arena_capacity;
+
     struct yetty_ypaint_canvas_grid_cell *cells;
     uint32_t cell_count;
     uint32_t cell_capacity;
@@ -204,13 +218,32 @@ struct yetty_ypaint_canvas {
     // font (first install). Created in canvas_create, destroyed last in
     // canvas_destroy.
     struct yetty_yfont_cache *font_cache;
+
+    // Scrollbuffer: lines whose absolute canvas-row index has fallen
+    // below the live viewport are serialised to a compact binary form
+    // here, and their expanded grid_line content (prims/arena/cells) is
+    // freed. `sb_offsets[i]` is the byte offset of line `i`'s record
+    // in the scrollbuffer, or SB_OFFSET_UNSET if the line still lives
+    // in canvas->lines.lines[i] in expanded form. Deserialise-on-
+    // scrollback is a later step; today, freed lines are gone for
+    // rendering purposes until reloaded.
+    struct yetty_ypaint_scrollbuffer scrollbuffer;
+    uint32_t *sb_offsets;
+    uint32_t  sb_offsets_count;
+    uint32_t  sb_offsets_capacity;
 };
+
+#define SB_OFFSET_UNSET 0xFFFFFFFFu
 
 #define DEFAULT_MAX_PRIMS_PER_CELL 16
 #define INITIAL_LINE_CAPACITY 64
-#define INITIAL_CELL_CAPACITY 128
+/* Initial cell-array capacity for a *touched* line. Tuned for sparse
+ * lines (e.g. PDF lines that paint only a handful of columns); the
+ * doubling growth in grid_line_ensure_cells keeps wide lines cheap too. */
+#define INITIAL_CELL_CAPACITY 16
 #define INITIAL_PRIM_CAPACITY 16
-#define INITIAL_REF_CAPACITY 8
+/* Each touched cell holds at least one prim_ref; most hold only one. */
+#define INITIAL_REF_CAPACITY 2
 #define INITIAL_STAGING_CAPACITY 4096
 
 //=============================================================================
@@ -252,28 +285,68 @@ static void prim_data_array_init(struct yetty_ypaint_canvas_prim_data_array *arr
 
 static void prim_data_array_free(struct yetty_ypaint_canvas_prim_data_array *arr)
 {
-    for (uint32_t i = 0; i < arr->count; i++) {
-        free(arr->data[i].data);
-    }
+    /* Payloads live in the owning line's arena (freed in grid_line_free);
+     * only the index records need releasing here. */
     free(arr->data);
     arr->data = NULL;
     arr->count = 0;
     arr->capacity = 0;
 }
 
-static uint32_t prim_data_array_push(struct yetty_ypaint_canvas_prim_data_array *arr,
-                                     uint32_t rolling_row, const float *data, uint32_t word_count)
+/* Append `word_count` words of payload to `line->arena`, growing the arena
+ * (doubling) if needed. Returns the offset where the payload was written
+ * — caller stores it in the matching prim_data record. */
+static struct yetty_ycore_void_result grid_line_arena_append(
+    struct yetty_ypaint_canvas_grid_line *line, const float *data, uint32_t word_count,
+    uint32_t *out_offset)
 {
+    if (line->arena_count + word_count > line->arena_capacity) {
+        uint32_t new_cap = line->arena_capacity ? line->arena_capacity : 32;
+        while (new_cap < line->arena_count + word_count) {
+            new_cap *= 2;
+        }
+        uint32_t *new_arena = realloc(line->arena, new_cap * sizeof(uint32_t));
+        if (!new_arena) {
+            return YETTY_ERR(yetty_ycore_void, "realloc failed for prim arena");
+        }
+        line->arena = new_arena;
+        line->arena_capacity = new_cap;
+    }
+    *out_offset = line->arena_count;
+    /* Source is the iter's raw word stream (already in the layout the
+     * GPU expects); copy by bytes to stay endian/alignment-agnostic. */
+    memcpy(line->arena + line->arena_count, data, word_count * sizeof(uint32_t));
+    line->arena_count += word_count;
+    return YETTY_OK_VOID();
+}
+
+/* Append a primitive to `line`. On success returns the prim index within
+ * line->prims. On allocation failure returns UINT32_MAX. */
+static uint32_t grid_line_push_prim(struct yetty_ypaint_canvas_grid_line *line,
+                                    uint32_t rolling_row, const float *data, uint32_t word_count)
+{
+    struct yetty_ypaint_canvas_prim_data_array *arr = &line->prims;
     if (arr->count >= arr->capacity) {
         uint32_t new_cap = arr->capacity == 0 ? INITIAL_PRIM_CAPACITY : arr->capacity * 2;
-        arr->data = realloc(arr->data, new_cap * sizeof(struct yetty_ypaint_canvas_prim_data));
+        struct yetty_ypaint_canvas_prim_data *grown =
+            realloc(arr->data, new_cap * sizeof(struct yetty_ypaint_canvas_prim_data));
+        if (!grown) {
+            return UINT32_MAX;
+        }
+        arr->data = grown;
         arr->capacity = new_cap;
+    }
+    uint32_t offset = 0;
+    struct yetty_ycore_void_result ar =
+        grid_line_arena_append(line, data, word_count, &offset);
+    if (YETTY_IS_ERR(ar)) {
+        yetty_ycore_error_destroy(ar.error);
+        return UINT32_MAX;
     }
     uint32_t idx = arr->count++;
     arr->data[idx].rolling_row = rolling_row;
-    arr->data[idx].data = malloc(word_count * sizeof(float));
+    arr->data[idx].arena_offset = offset;
     arr->data[idx].word_count = word_count;
-    memcpy(arr->data[idx].data, data, word_count * sizeof(float));
     return idx;
 }
 
@@ -284,7 +357,16 @@ static uint32_t prim_data_array_push(struct yetty_ypaint_canvas_prim_data_array 
 static struct yetty_ycore_void_result grid_line_init(struct yetty_ypaint_canvas_grid_line *line,
                                                      uint32_t initial_cells)
 {
+    /* Cells are now allocated lazily by grid_line_ensure_cells on first
+     * touch. Lines with no primitives (common in PDFs — empty space
+     * between paragraphs) stay at zero cell-array bytes. initial_cells
+     * kept in the signature for source compatibility with the line
+     * buffer caller; ignored. */
+    (void)initial_cells;
     prim_data_array_init(&line->prims);
+    line->arena = NULL;
+    line->arena_count = 0;
+    line->arena_capacity = 0;
     line->fonts = NULL;
     line->font_count = 0;
     line->font_capacity = 0;
@@ -294,13 +376,6 @@ static struct yetty_ycore_void_result grid_line_init(struct yetty_ypaint_canvas_
     line->complex_prims = NULL;
     line->complex_prim_count = 0;
     line->complex_prim_capacity = 0;
-    if (initial_cells > 0) {
-        line->cells = calloc(initial_cells, sizeof(struct yetty_ypaint_canvas_grid_cell));
-        if (!line->cells) {
-            return YETTY_ERR(yetty_ycore_void, "calloc failed for grid cells");
-        }
-        line->cell_capacity = initial_cells;
-    }
     return YETTY_OK_VOID();
 }
 
@@ -313,6 +388,11 @@ static struct yetty_ycore_void_result grid_line_free(
     }
 
     prim_data_array_free(&line->prims);
+    /* Payload arena: one allocation for all prims on this line. */
+    free(line->arena);
+    line->arena = NULL;
+    line->arena_count = 0;
+    line->arena_capacity = 0;
     /* Lines hold one cache ref per attached font — release each before
      * dropping the array. Cache may free the slot if this was the last ref. */
     for (uint32_t i = 0; i < line->font_count; i++) {
@@ -515,53 +595,54 @@ static struct yetty_yfont_cache_ref_result ypaint_canvas_get_default_font_ref(
 /* Materialise a buffer-supplied FONT prim through the font cache.
  *
  * Steps:
- *   1. Hash the TTF bytes -> hex (content key).
- *   2. Try cache_get_font with NULL cdb_path — fast cache-hit path.
- *   3. On miss: ensure the on-disk TTF exists, generate the CDB if missing
- *      (via canvas->msdf_generator), then call cache_get_font with the real
- *      cdb_path so the cache can construct the font. */
-static struct yetty_yfont_cache_ref_result ypaint_canvas_materialize_blob_font(
-    struct yetty_ypaint_canvas *canvas, const uint8_t *ttf, uint32_t ttf_len, const char *hint_name)
+ *   1. Hash the TTF bytes -> hex (content key) and write `*out_hex`.
+ *   2. If the .cdb file isn't on disk yet, write the TTF (if missing)
+ *      and run the MSDF generator.
+ *
+ * Crucially this does NOT touch the in-memory font cache. The FONT
+ * primitive only declares "this hash is available on disk"; the cache
+ * is populated lazily by the first TEXT_SPAN that actually references
+ * the font_id (see canvas_resolve_blob_font_handle). PDF over-declares
+ * fonts per page — a font that never produces a glyph never produces
+ * a cache slot. */
+static struct yetty_ycore_void_result ypaint_canvas_ensure_blob_font_cdb(
+    struct yetty_ypaint_canvas *canvas, const uint8_t *ttf, uint32_t ttf_len,
+    const char *hint_name, char out_hex[17])
 {
     if (!ttf || ttf_len == 0) {
-        return YETTY_ERR(yetty_yfont_cache_ref, "blob is empty");
+        return YETTY_ERR(yetty_ycore_void, "blob is empty");
     }
     if (blob_is_raster(hint_name, canvas->font_render_method)) {
-        return YETTY_ERR(yetty_yfont_cache_ref,
+        return YETTY_ERR(yetty_ycore_void,
                          "raster blob fonts are not yet wired through the font cache");
     }
 
     uint64_t h = fnv1a64(ttf, ttf_len);
-    char hex[17];
-    snprintf(hex, sizeof(hex), "%016llx", (unsigned long long)h);
+    snprintf(out_hex, 17, "%016llx", (unsigned long long)h);
 
-    /* Hot path: identical content already in the cache, no disk I/O needed.
-     * Pass NULL cdb_path so a miss surfaces as an error we can swallow. */
-    struct yetty_yfont_cache_ref_result fast =
-        yetty_yfont_cache_get_font(canvas->font_cache, hex, NULL);
-    if (YETTY_IS_OK(fast)) {
-        return fast;
-    }
-    yetty_ycore_error_destroy(fast.error);
-
-    /* Miss path: ensure on-disk artefacts, then ask the cache to build it. */
     const char *cache_dir = yetty_yplatform_get_cache_dir();
     if (!cache_dir || !*cache_dir) {
-        return YETTY_ERR(yetty_yfont_cache_ref, "no cache dir");
+        return YETTY_ERR(yetty_ycore_void, "no cache dir");
     }
 
     char fonts_dir[768];
     snprintf(fonts_dir, sizeof(fonts_dir), "%s/ypaint-fonts", cache_dir);
-    yetty_yplatform_mkdir_p(fonts_dir);
 
     char ttf_path[1024], cdb_path[1024];
-    snprintf(ttf_path, sizeof(ttf_path), "%s/pdf_%s.ttf", fonts_dir, hex);
-    snprintf(cdb_path, sizeof(cdb_path), "%s/pdf_%s.cdb", fonts_dir, hex);
+    snprintf(ttf_path, sizeof(ttf_path), "%s/pdf_%s.ttf", fonts_dir, out_hex);
+    snprintf(cdb_path, sizeof(cdb_path), "%s/pdf_%s.cdb", fonts_dir, out_hex);
 
+    /* Hot path: CDB already on disk from a previous run / earlier
+     * envelope. Nothing else to do — bytes of `ttf` are discarded. */
+    if (yetty_yplatform_file_exists(cdb_path)) {
+        return YETTY_OK_VOID();
+    }
+
+    yetty_yplatform_mkdir_p(fonts_dir);
     if (!yetty_yplatform_file_exists(ttf_path)) {
         FILE *f = fopen(ttf_path, "wb");
         if (!f) {
-            return YETTY_ERR(yetty_yfont_cache_ref, "open ttf cache for write");
+            return YETTY_ERR(yetty_ycore_void, "open ttf cache for write");
         }
         fwrite(ttf, 1, ttf_len, f);
         fclose(f);
@@ -569,29 +650,44 @@ static struct yetty_yfont_cache_ref_result ypaint_canvas_materialize_blob_font(
                hint_name ? hint_name : "");
     }
 
-    if (!yetty_yplatform_file_exists(cdb_path)) {
 #if YETTY_HAS_YMSDF_GEN
-        if (!canvas->msdf_generator) {
-            yerror("ypaint_canvas: CDB '%s' missing and no MSDF generator on "
-                   "the canvas — host must initialise gpu_context.msdf_generator.",
-                   cdb_path);
-            return YETTY_ERR(yetty_yfont_cache_ref, "no MSDF generator available");
-        }
-        struct yetty_ymsdf_generator_config gen = {0};
-        gen.ttf_path = ttf_path;
-        gen.cdb_path = cdb_path;
-        gen.font_size = 32.0f;
-        gen.pixel_range = 4.0f;
-        struct yetty_ycore_void_result gr =
-            canvas->msdf_generator->ops->generate(canvas->msdf_generator, &gen);
-        YETTY_RETURN_IF_ERR(yetty_yfont_cache_ref, gr, "msdf generator failed");
-        ydebug("ypaint_canvas: generated CDB '%s' via %s generator", cdb_path,
-               canvas->msdf_generator->ops->name(canvas->msdf_generator));
-#else
-        return YETTY_ERR(yetty_yfont_cache_ref, "ymsdf-gen disabled in this build");
-#endif
+    if (!canvas->msdf_generator) {
+        yerror("ypaint_canvas: CDB '%s' missing and no MSDF generator on "
+               "the canvas — host must initialise gpu_context.msdf_generator.",
+               cdb_path);
+        return YETTY_ERR(yetty_ycore_void, "no MSDF generator available");
     }
+    struct yetty_ymsdf_generator_config gen = {0};
+    gen.ttf_path = ttf_path;
+    gen.cdb_path = cdb_path;
+    gen.font_size = 32.0f;
+    gen.pixel_range = 4.0f;
+    struct yetty_ycore_void_result gr =
+        canvas->msdf_generator->ops->generate(canvas->msdf_generator, &gen);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "msdf generator failed");
+    ydebug("ypaint_canvas: generated CDB '%s' via %s generator", cdb_path,
+           canvas->msdf_generator->ops->name(canvas->msdf_generator));
+    return YETTY_OK_VOID();
+#else
+    return YETTY_ERR(yetty_ycore_void, "ymsdf-gen disabled in this build");
+#endif
+}
 
+/* Lazy cache lookup keyed by the FONT-primitive's content hash. Builds
+ * the cdb path from the canvas's cache dir + hex; cache.get_font then
+ * hits if any prior envelope (or line still alive in scrollback)
+ * caused a slot to exist, or constructs from the CDB on disk on a
+ * fresh miss. Returns a buffer-scoped ref the caller is responsible
+ * for releasing (via font_map_release_all). */
+static struct yetty_yfont_cache_ref_result canvas_resolve_blob_font_handle(
+    struct yetty_ypaint_canvas *canvas, const char *hex)
+{
+    const char *cache_dir = yetty_yplatform_get_cache_dir();
+    if (!cache_dir || !*cache_dir) {
+        return YETTY_ERR(yetty_yfont_cache_ref, "no cache dir");
+    }
+    char cdb_path[1024];
+    snprintf(cdb_path, sizeof(cdb_path), "%s/ypaint-fonts/pdf_%s.cdb", cache_dir, hex);
     return yetty_yfont_cache_get_font(canvas->font_cache, hex, cdb_path);
 }
 
@@ -618,6 +714,10 @@ struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
     canvas->rolling_row_0 = 0;
 
     line_buffer_init(&canvas->lines);
+    yetty_ypaint_scrollbuffer_init(&canvas->scrollbuffer);
+    canvas->sb_offsets = NULL;
+    canvas->sb_offsets_count = 0;
+    canvas->sb_offsets_capacity = 0;
 
     /* Create flyweight registry with all handlers (for SDF prims) */
     struct yetty_ypaint_core_flyweight_registry_ptr_result fw_res = yetty_ypaint_flyweight_create();
@@ -804,6 +904,8 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_destroy(struct yetty_ypaint_c
     yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);
     free(canvas->grid_staging);
     free(canvas->prim_staging);
+    yetty_ypaint_scrollbuffer_free(&canvas->scrollbuffer);
+    free(canvas->sb_offsets);
     free(canvas);
     return YETTY_OK_VOID();
 }
@@ -1003,8 +1105,11 @@ static struct uint32_result add_primitive_internal(
         return YETTY_ERR(uint32, "line_buffer_get returned NULL");
     }
 
-    uint32_t prim_index = prim_data_array_push(&base_line->prims, primitive_rolling_row,
-                                               (const float *)iter->fw.data, word_count);
+    uint32_t prim_index = grid_line_push_prim(base_line, primitive_rolling_row,
+                                              (const float *)iter->fw.data, word_count);
+    if (prim_index == UINT32_MAX) {
+        return YETTY_ERR(uint32, "grid_line_push_prim failed");
+    }
 
     uint32_t prim_col_min = (uint32_t)(aabb.min.x / canvas->cell_size.width);
     uint32_t prim_col_max = (uint32_t)(aabb.max.x / canvas->cell_size.width);
@@ -1100,10 +1205,28 @@ static struct uint32_result add_primitive_internal(
  *
  * Capacity is grown on demand — text spans typically reference a small
  * set of font_ids but a single PDF can carry dozens. */
+/* Buffer-scoped lookup table mapping producer-assigned font_id values
+ * to the in-memory cache state.
+ *
+ *   declared=true        — a FONT primitive with this font_id was seen
+ *                          in the current buffer; `hex` is its content
+ *                          key and the matching CDB has been ensured
+ *                          on disk. Does NOT imply a cache slot exists.
+ *   resolved=true        — at least one TEXT_SPAN with this font_id was
+ *                          dispatched, which triggered a get_font call.
+ *                          `font`/`handle` are valid and a buffer-scoped
+ *                          ref is owed to the cache (released at end of
+ *                          buffer by font_map_release_all).
+ *
+ * Fonts that are declared but never resolved (PDF over-declares a font
+ * per page) never produce a cache entry — there's no ref to drop and
+ * no MSDF atlas in memory for them. */
 struct font_map_entry {
+    char                      hex[17];    /* "" if not declared */
+    bool                      declared;
+    bool                      resolved;
     struct yetty_ypaint_font *font;
     yetty_yfont_cache_handle  handle;
-    bool                      present;
 };
 
 struct font_map {
@@ -1128,31 +1251,36 @@ static void font_map_grow(struct font_map *m, uint32_t want)
     }
     m->entries = realloc(m->entries, new_cap * sizeof(struct font_map_entry));
     for (uint32_t i = m->capacity; i < new_cap; i++) {
+        m->entries[i].hex[0] = '\0';
+        m->entries[i].declared = false;
+        m->entries[i].resolved = false;
         m->entries[i].font = NULL;
         m->entries[i].handle = YETTY_YFONT_CACHE_HANDLE_INVALID;
-        m->entries[i].present = false;
     }
     m->capacity = new_cap;
 }
 
+/* Resolved-only access: returns NULL if the font has not yet been
+ * looked up in the cache (callers must invoke the lazy resolver first). */
 static const struct font_map_entry *font_map_get(const struct font_map *m, uint32_t id)
 {
-    if (id >= m->capacity || !m->entries[id].present) {
+    if (id >= m->capacity || !m->entries[id].resolved) {
         return NULL;
     }
     return &m->entries[id];
 }
 
-/* Release every buffer-held cache ref this map accumulated. */
+/* Release every buffer-held cache ref this map accumulated. Declared-
+ * but-never-resolved entries hold no ref, so nothing to release. */
 static void font_map_release_all(struct font_map *m, struct yetty_yfont_cache *cache)
 {
     if (!m || !m->entries) {
         return;
     }
     for (uint32_t i = 0; i < m->capacity; i++) {
-        if (m->entries[i].present) {
+        if (m->entries[i].resolved) {
             yetty_yfont_cache_release_font(cache, m->entries[i].handle);
-            m->entries[i].present = false;
+            m->entries[i].resolved = false;
             m->entries[i].handle = YETTY_YFONT_CACHE_HANDLE_INVALID;
             m->entries[i].font = NULL;
         }
@@ -1291,7 +1419,11 @@ static struct uint32_result expand_text_span_to_glyphs(
         }
 
         uint32_t prim_idx =
-            prim_data_array_push(&base_line->prims, rolling_row, glyph_data, YPAINT_GLYPH_WORDS);
+            grid_line_push_prim(base_line, rolling_row, glyph_data, YPAINT_GLYPH_WORDS);
+        if (prim_idx == UINT32_MAX) {
+            cursor_x += advance * scale;
+            continue;
+        }
 
         uint32_t col_min =
             (canvas->cell_size.width > 0) ? (uint32_t)(gx / canvas->cell_size.width) : 0;
@@ -1446,6 +1578,305 @@ static void buffer_attach_note(struct buffer_attach_list *l, yetty_yfont_cache_h
     l->entries[l->count++] = (struct buffer_attach_entry){.handle = handle, .max_row = row};
 }
 
+/* ===========================================================================
+ * Scrollbuffer eviction
+ *
+ * When a line scrolls below `rolling_row_0` it's no longer visible. We
+ * encode it to canvas->scrollbuffer (compact form, no individual
+ * allocations), record the byte offset in sb_offsets[i], then free the
+ * line's expanded prims/arena/cells/fonts so the per-line malloc
+ * footprint goes away. The grid_line struct itself stays in
+ * canvas->lines.lines[i] but ends up empty after grid_line_free; we
+ * preserve the slot so absolute canvas-line indices keep their
+ * meaning. Deserialise-on-scrollback isn't here yet.
+ * ========================================================================= */
+
+static struct yetty_ycore_void_result sb_offsets_ensure(struct yetty_ypaint_canvas *canvas,
+                                                        uint32_t min_count)
+{
+    if (min_count <= canvas->sb_offsets_count) {
+        return YETTY_OK_VOID();
+    }
+    if (min_count > canvas->sb_offsets_capacity) {
+        uint32_t new_cap = canvas->sb_offsets_capacity ? canvas->sb_offsets_capacity : 64u;
+        while (new_cap < min_count) {
+            new_cap *= 2;
+        }
+        uint32_t *grown = realloc(canvas->sb_offsets, new_cap * sizeof(uint32_t));
+        if (!grown) {
+            return YETTY_ERR(yetty_ycore_void, "sb_offsets: realloc failed");
+        }
+        canvas->sb_offsets = grown;
+        canvas->sb_offsets_capacity = new_cap;
+    }
+    for (uint32_t i = canvas->sb_offsets_count; i < min_count; i++) {
+        canvas->sb_offsets[i] = SB_OFFSET_UNSET;
+    }
+    canvas->sb_offsets_count = min_count;
+    return YETTY_OK_VOID();
+}
+
+/* Serialise one line at index `idx` into the scrollbuffer and free its
+ * expanded form. No-op if the line is already serialised or doesn't
+ * exist. Returns OK even if the line was empty; an empty line still
+ * gets a 12-byte header record so sb_offsets[idx] is always meaningful
+ * after this call. */
+static struct yetty_ycore_void_result canvas_evict_line(struct yetty_ypaint_canvas *canvas,
+                                                        uint32_t idx)
+{
+    if (idx >= canvas->lines.count) {
+        return YETTY_OK_VOID();
+    }
+    /* Already evicted? skip. */
+    struct yetty_ycore_void_result er = sb_offsets_ensure(canvas, idx + 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "evict: ensure offsets");
+    if (canvas->sb_offsets[idx] != SB_OFFSET_UNSET) {
+        return YETTY_OK_VOID();
+    }
+
+    struct yetty_ypaint_canvas_grid_line *line = &canvas->lines.lines[idx];
+
+    /* Build the cell view: walk cells in ascending col order, emit
+     * one entry per cell that has at least one ref. The on-stack
+     * buffer is sized by line->cell_count which is bounded by
+     * grid_size.cols + any oversize a wide line grew to. */
+    struct yetty_ypaint_scrollbuffer_cell *cells = NULL;
+    uint32_t n_cells = 0;
+    if (line->cell_count > 0) {
+        cells = malloc(line->cell_count * sizeof(*cells));
+        if (!cells) {
+            return YETTY_ERR(yetty_ycore_void, "evict: cell view alloc failed");
+        }
+        for (uint32_t c = 0; c < line->cell_count; c++) {
+            if (line->cells[c].refs.count == 0) {
+                continue;
+            }
+            cells[n_cells].col = (uint16_t)c;
+            cells[n_cells].ref_count = (uint16_t)line->cells[c].refs.count;
+            /* The codec's ref view shape matches our internal
+             * prim_ref byte-for-byte, so we just hand over the
+             * dynamic array's data pointer. */
+            cells[n_cells].refs =
+                (const struct yetty_ypaint_scrollbuffer_ref *)line->cells[c].refs.data;
+            n_cells++;
+        }
+    }
+
+    /* Build the prim view: per prim, point payload at the arena slice
+     * (arena_offset .. arena_offset + word_count). */
+    struct yetty_ypaint_scrollbuffer_prim *prims = NULL;
+    uint32_t n_prims = line->prims.count;
+    if (n_prims > 0) {
+        prims = malloc(n_prims * sizeof(*prims));
+        if (!prims) {
+            free(cells);
+            return YETTY_ERR(yetty_ycore_void, "evict: prim view alloc failed");
+        }
+        for (uint32_t p = 0; p < n_prims; p++) {
+            struct yetty_ypaint_canvas_prim_data *pd = &line->prims.data[p];
+            prims[p].rolling_row = pd->rolling_row;
+            prims[p].word_count = pd->word_count;
+            prims[p].payload = line->arena + pd->arena_offset;
+        }
+    }
+
+    struct yetty_ypaint_scrollbuffer_offset_result enc =
+        yetty_ypaint_scrollbuffer_encode_line(&canvas->scrollbuffer, idx,
+                                              canvas->grid_size.cols, cells, n_cells, prims,
+                                              n_prims);
+    free(cells);
+    free(prims);
+    if (YETTY_IS_ERR(enc)) {
+        return YETTY_ERR(yetty_ycore_void, "evict: encode failed", enc);
+    }
+    canvas->sb_offsets[idx] = (uint32_t)enc.value;
+
+    /* Free the expanded form. The line struct itself stays in
+     * canvas->lines.lines[idx]; grid_line_free zeroes its internal
+     * pointers/counts so it's effectively a placeholder afterwards.
+     *
+     * Font cache refs the line held are dropped here too — that's
+     * intentional: if the only line referencing a given font is being
+     * evicted, the cache slot would normally die. With the lazy-
+     * resolve commit (69c4dd5), TEXT_SPANs hitting the same font
+     * later re-resolve through the cache; the on-disk CDB still
+     * caches the MSDF generation, so the cost is one cache miss +
+     * atlas load on first reuse. */
+    struct yetty_ycore_void_result fr =
+        grid_line_free(line, canvas->flyweight_registry, canvas->font_cache);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "evict: grid_line_free");
+    /* Re-init so future writes (e.g. an explicit out-of-order place)
+     * don't see dangling pointers. */
+    grid_line_init(line, 0);
+    return YETTY_OK_VOID();
+}
+
+/* Walk every line strictly below rolling_row_0 and evict any that
+ * still hold expanded content. Called at the end of add_buffer once
+ * the new content has been placed and the viewport has scrolled.
+ *
+ * A line that was previously evicted but restored for a scrollback
+ * render (sb_offsets[i] set, but grid_line currently populated) is
+ * NOT re-encoded — its bytes haven't changed — but its expanded
+ * form is freed again. */
+static void canvas_evict_scrollback(struct yetty_ypaint_canvas *canvas)
+{
+    if (canvas->rolling_row_0 == 0) {
+        return;
+    }
+    uint32_t end = canvas->rolling_row_0;
+    if (end > canvas->lines.count) {
+        end = canvas->lines.count;
+    }
+    for (uint32_t i = 0; i < end; i++) {
+        if (i < canvas->sb_offsets_count && canvas->sb_offsets[i] != SB_OFFSET_UNSET) {
+            /* Already serialised. If it was restored, free the
+             * expanded form again. */
+            struct yetty_ypaint_canvas_grid_line *line = &canvas->lines.lines[i];
+            if (line->prims.count > 0 || line->cell_count > 0 || line->font_count > 0) {
+                struct yetty_ycore_void_result fr = grid_line_free(
+                    line, canvas->flyweight_registry, canvas->font_cache);
+                if (YETTY_IS_ERR(fr)) {
+                    yerror("canvas_evict_scrollback: re-free line %u failed: %s",
+                           i, fr.error.msg);
+                    yetty_ycore_error_destroy(fr.error);
+                }
+                grid_line_init(line, 0);
+            }
+            continue;
+        }
+        struct yetty_ycore_void_result r = canvas_evict_line(canvas, i);
+        if (YETTY_IS_ERR(r)) {
+            yerror("canvas_evict_scrollback: evict line %u failed: %s", i, r.error.msg);
+            yetty_ycore_error_destroy(r.error);
+            /* Keep going — best-effort batch eviction; later lines may
+             * still succeed. */
+        }
+    }
+}
+
+/* ===========================================================================
+ * Scrollbuffer restore (decode evicted lines back into canvas->lines)
+ *
+ * Called by rebuild_grid for every visible-window row whose grid_line
+ * is empty but sb_offsets[i] is set. After restore, the grid_line
+ * has its prims/arena/cells populated and rendering proceeds as if
+ * the line had never been evicted. canvas_evict_scrollback frees
+ * these restored lines on the next add_buffer.
+ * ========================================================================= */
+
+/* Hard-coded word_count lookup. Today only YETTY_YSDF_GLYPH (200)
+ * goes through the scrollbuffer's non-default escape — SDF prims
+ * with variable size would need a per-type registry lookup, which
+ * would mean pulling in the ypaint-core flyweight-internal header.
+ * Until SDF/complex content needs scrollback restore, this is
+ * sufficient. */
+static uint32_t canvas_sb_word_count_fn(uint32_t type_word, void *ctx)
+{
+    (void)ctx;
+    if (type_word == YETTY_YSDF_GLYPH) {
+        return YPAINT_GLYPH_WORDS;
+    }
+    return 0;
+}
+
+struct sb_restore_ctx {
+    struct yetty_ypaint_canvas_grid_line *line;
+};
+
+YETTY_EXTERNAL_CALLBACK
+static struct yetty_ycore_void_result sb_restore_on_header(void *ctx,
+                                                           uint32_t line_rolling_row,
+                                                           uint32_t prim_count)
+{
+    /* No-op: the line was freed before this restore was triggered,
+     * so push_prim handles growing the arena/prims as needed. The
+     * header values are only used for sanity checks here. */
+    (void)ctx;
+    (void)line_rolling_row;
+    (void)prim_count;
+    return YETTY_OK_VOID();
+}
+
+YETTY_EXTERNAL_CALLBACK
+static struct yetty_ycore_void_result sb_restore_on_cell(
+    void *ctx, uint32_t col, const struct yetty_ypaint_scrollbuffer_ref *refs, uint32_t ref_count)
+{
+    struct sb_restore_ctx *r = ctx;
+    struct yetty_ycore_void_result er = grid_line_ensure_cells(r->line, col + 1u);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "restore: ensure_cells");
+    for (uint32_t i = 0; i < ref_count; i++) {
+        struct yetty_ypaint_canvas_prim_ref pr = {
+            .lines_ahead = refs[i].lines_ahead,
+            .prim_index  = refs[i].prim_idx,
+        };
+        prim_ref_array_push(&r->line->cells[col].refs, pr);
+    }
+    return YETTY_OK_VOID();
+}
+
+YETTY_EXTERNAL_CALLBACK
+static struct yetty_ycore_void_result sb_restore_on_prim(void *ctx, uint32_t rolling_row,
+                                                         const uint32_t *payload,
+                                                         uint32_t word_count)
+{
+    struct sb_restore_ctx *r = ctx;
+    uint32_t idx = grid_line_push_prim(r->line, rolling_row, (const float *)payload, word_count);
+    if (idx == UINT32_MAX) {
+        return YETTY_ERR(yetty_ycore_void, "restore: grid_line_push_prim failed");
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Decode line `idx` from the scrollbuffer back into
+ * canvas->lines.lines[idx]. Idempotent: if the line is not in
+ * scrollbuffer (sb_offsets[idx] == UNSET) or already has expanded
+ * content, it's a no-op. */
+static struct yetty_ycore_void_result canvas_restore_line(struct yetty_ypaint_canvas *canvas,
+                                                          uint32_t idx)
+{
+    if (idx >= canvas->sb_offsets_count || canvas->sb_offsets[idx] == SB_OFFSET_UNSET) {
+        return YETTY_OK_VOID();
+    }
+    if (idx >= canvas->lines.count) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ypaint_canvas_grid_line *line = &canvas->lines.lines[idx];
+    if (line->prims.count > 0 || line->cell_count > 0) {
+        /* Already expanded — could be a previously-restored line still
+         * holding content from the previous render, or content that
+         * was placed on top of a serialised line (shouldn't happen
+         * for ycat workloads, but harmless to handle). */
+        return YETTY_OK_VOID();
+    }
+
+    struct sb_restore_ctx rctx = {.line = line};
+    struct yetty_ypaint_scrollbuffer_decode_sinks sinks = {
+        .ctx = &rctx,
+        .on_header = sb_restore_on_header,
+        .on_cell   = sb_restore_on_cell,
+        .on_prim   = sb_restore_on_prim,
+    };
+    struct yetty_ypaint_scrollbuffer_offset_result dec = yetty_ypaint_scrollbuffer_decode_line(
+        &canvas->scrollbuffer, canvas->sb_offsets[idx], canvas_sb_word_count_fn, NULL, &sinks);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dec, "canvas_restore_line: decode failed");
+    return YETTY_OK_VOID();
+}
+
+/* Restore every evicted line in [first, last] (inclusive). Used by
+ * rebuild_grid to ensure the visible-window rows are populated. */
+static void canvas_restore_range(struct yetty_ypaint_canvas *canvas, uint32_t first,
+                                 uint32_t last)
+{
+    for (uint32_t i = first; i <= last; i++) {
+        struct yetty_ycore_void_result r = canvas_restore_line(canvas, i);
+        if (YETTY_IS_ERR(r)) {
+            yerror("canvas_restore_range: restore line %u failed: %s", i, r.error.msg);
+            yetty_ycore_error_destroy(r.error);
+        }
+    }
+}
+
 struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
     struct yetty_ypaint_canvas *canvas, struct yetty_ypaint_core_buffer *buffer)
 {
@@ -1510,32 +1941,31 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
             /* Future cmds (cursor-set, …) dispatch here. */
         } else if (prim_type == YETTY_YPAINT_TYPE_FONT) {
             struct yetty_ypaint_core_font_prim_view fv;
-            if (yetty_ypaint_core_font_prim_parse(iter.fw.data, &fv) == 0) {
+            if (yetty_ypaint_core_font_prim_parse(iter.fw.data, &fv) == 0 && fv.font_id >= 0) {
                 char hint[YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH];
                 size_t hl = fv.name_len < sizeof(hint) - 1 ? fv.name_len : sizeof(hint) - 1;
                 memcpy(hint, fv.name, hl);
                 hint[hl] = '\0';
 
-                struct yetty_yfont_cache_ref_result rr =
-                    ypaint_canvas_materialize_blob_font(canvas, fv.ttf, fv.ttf_len, hint);
-                if (YETTY_IS_ERR(rr)) {
-                    /* Non-fatal: PDFs often embed tiny subsetted symbol fonts
-                     * that msdf-gen rejects. Spans referencing this font_id
-                     * fall back to the canvas default in the TEXT_SPAN branch. */
-                    ywarn("add_buffer: font materialize failed (font_id=%d hint='%s'): %s — "
-                          "skipping, spans will use default font",
-                          fv.font_id, hint, rr.error.msg);
-                    yetty_ycore_error_destroy(rr.error);
-                } else if (fv.font_id >= 0) {
-                    /* Buffer-scoped cache ref — released at end-of-buffer. */
-                    font_map_grow(&fonts_map, (uint32_t)fv.font_id + 1);
-                    fonts_map.entries[fv.font_id].font = rr.value.font;
-                    fonts_map.entries[fv.font_id].handle = rr.value.handle;
-                    fonts_map.entries[fv.font_id].present = true;
+                /* FONT primitive only ensures the on-disk CDB exists and
+                 * records the content key against this buffer's font_id.
+                 * NO cache slot is created here — that happens lazily
+                 * the first time a TEXT_SPAN actually references this
+                 * font_id. PDFs over-declare fonts (catalogue all fonts
+                 * per page, use only some); the unused ones never reach
+                 * the cache and never produce an MSDF atlas in memory. */
+                char hex[17];
+                struct yetty_ycore_void_result er =
+                    ypaint_canvas_ensure_blob_font_cdb(canvas, fv.ttf, fv.ttf_len, hint, hex);
+                if (YETTY_IS_ERR(er)) {
+                    ywarn("add_buffer: font CDB ensure failed (font_id=%d hint='%s'): %s — "
+                          "spans will use default font",
+                          fv.font_id, hint, er.error.msg);
+                    yetty_ycore_error_destroy(er.error);
                 } else {
-                    /* fv.font_id < 0: producer didn't tag the font. The cache
-                     * ref we got would otherwise leak — release immediately. */
-                    yetty_yfont_cache_release_font(canvas->font_cache, rr.value.handle);
+                    font_map_grow(&fonts_map, (uint32_t)fv.font_id + 1);
+                    memcpy(fonts_map.entries[fv.font_id].hex, hex, 17);
+                    fonts_map.entries[fv.font_id].declared = true;
                 }
             }
         } else if (prim_type == YETTY_YPAINT_TYPE_TEXT_SPAN) {
@@ -1543,17 +1973,42 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
             if (yetty_ypaint_core_text_span_prim_parse(iter.fw.data, &tv) == 0) {
                 struct yetty_ypaint_font *font = NULL;
                 yetty_yfont_cache_handle handle = YETTY_YFONT_CACHE_HANDLE_INVALID;
-                if (tv.font_id >= 0) {
-                    const struct font_map_entry *e =
-                        font_map_get(&fonts_map, (uint32_t)tv.font_id);
-                    if (e) {
+                if (tv.font_id >= 0 && (uint32_t)tv.font_id < fonts_map.capacity) {
+                    struct font_map_entry *e = &fonts_map.entries[tv.font_id];
+                    if (e->resolved) {
                         font = e->font;
                         handle = e->handle;
+                    } else if (e->declared) {
+                        /* Lazy first-use: now we actually want a cache
+                         * slot. Get one (hit if a prior envelope or a
+                         * scrollback line still alive forced
+                         * construction; miss → construct from CDB).
+                         * The buffer-scoped ref is released by
+                         * font_map_release_all at end of buffer; line
+                         * attaches keep the slot alive afterwards. */
+                        struct yetty_yfont_cache_ref_result rr =
+                            canvas_resolve_blob_font_handle(canvas, e->hex);
+                        if (YETTY_IS_OK(rr)) {
+                            e->font = rr.value.font;
+                            e->handle = rr.value.handle;
+                            e->resolved = true;
+                            font = e->font;
+                            handle = e->handle;
+                        } else {
+                            /* msdf load failed — spans fall back to
+                             * default font for the rest of the buffer. */
+                            ywarn("add_buffer: font resolve failed (font_id=%d): %s — "
+                                  "span falls back to default font",
+                                  tv.font_id, rr.error.msg);
+                            yetty_ycore_error_destroy(rr.error);
+                            e->declared = false;
+                        }
                     }
                 }
                 if (!font) {
                     /* Producer used font_id == -1, or referenced a font_id
-                     * that wasn't materialised in this buffer — fall back. */
+                     * never declared by a FONT primitive in this buffer
+                     * — fall back to the canvas default. */
                     font = canvas->default_font;
                     handle = canvas->default_handle;
                 }
@@ -1683,9 +2138,20 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
         }
     }
 
+    /* Serialise every line that just rolled below the live viewport
+     * (rolling_row_0). Their expanded grid_line content is freed; the
+     * compact form lives in canvas->scrollbuffer keyed by
+     * sb_offsets[i]. This is where the per-instance heap growth comes
+     * back down — without it canvas->lines holds the full
+     * 40+ MB/PDF in expanded form forever. */
+    canvas_evict_scrollback(canvas);
+
     ydebug("add_buffer: END cursor_row=%u rolling_row_0=%u lines.count=%u "
-           "max_row_seen=%u",
-           canvas->cursor_row, canvas->rolling_row_0, canvas->lines.count, max_row_seen);
+           "max_row_seen=%u scrollbuffer=logical %zu B, compressed %zu B (%u chunks)",
+           canvas->cursor_row, canvas->rolling_row_0, canvas->lines.count, max_row_seen,
+           yetty_ypaint_scrollbuffer_logical_size(&canvas->scrollbuffer),
+           yetty_ypaint_scrollbuffer_compressed_size(&canvas->scrollbuffer),
+           canvas->scrollbuffer.chunks_count);
 
     canvas->dirty = true;
     return YETTY_OK_VOID();
@@ -1793,6 +2259,22 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_rebuild_grid(struct yetty_ypa
     }
     if (!canvas->dirty && canvas->grid_staging_count > 0) {
         return YETTY_OK_VOID();
+    }
+
+    /* If the visible window dips into scrollback (set_view_top), the
+     * grid_lines for that range may have been evicted to the
+     * scrollbuffer and emptied. Decode them back into expanded form
+     * before the prefix-sum/cell-walk below runs. Lines that aren't
+     * evicted, or are already restored, are no-ops. */
+    {
+        uint32_t window_top = canvas_effective_view_top(canvas);
+        uint32_t window_last = window_top + canvas->grid_size.rows;
+        if (window_last > canvas->lines.count) {
+            window_last = canvas->lines.count;
+        }
+        if (window_last > window_top) {
+            canvas_restore_range(canvas, window_top, window_last - 1u);
+        }
     }
 
     /* Prefix-sum of prim counts across ALL canvas lines. The GPU prim buffer
@@ -2012,12 +2494,10 @@ struct yetty_ypaint_prim_staging_result yetty_ypaint_canvas_build_prim_staging(
             // Prepend rolling_row at insertion (for shader y_offset calculation)
             canvas->prim_staging[prim_count + data_offset] = prim->rolling_row;
 
-            // Copy primitive data
-            for (uint32_t w = 0; w < prim->word_count; w++) {
-                uint32_t val;
-                memcpy(&val, &prim->data[w], sizeof(uint32_t));
-                canvas->prim_staging[prim_count + data_offset + 1 + w] = val;
-            }
+            // Copy primitive payload from the line's arena.
+            const uint32_t *payload = line->arena + prim->arena_offset;
+            memcpy(&canvas->prim_staging[prim_count + data_offset + 1], payload,
+                   prim->word_count * sizeof(uint32_t));
 
             data_offset += prim->word_count + 1; // +1 for rolling_row
             prim_idx++;
@@ -2061,6 +2541,14 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_clear(struct yetty_ypaint_can
         return res;
     }
     line_buffer_init(&canvas->lines);
+
+    /* Reset scrollbuffer too — clear wipes scrollback. */
+    yetty_ypaint_scrollbuffer_free(&canvas->scrollbuffer);
+    yetty_ypaint_scrollbuffer_init(&canvas->scrollbuffer);
+    free(canvas->sb_offsets);
+    canvas->sb_offsets = NULL;
+    canvas->sb_offsets_count = 0;
+    canvas->sb_offsets_capacity = 0;
 
     canvas->grid_staging_count = 0;
     canvas->prim_staging_count = 0;

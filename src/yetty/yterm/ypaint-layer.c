@@ -5,6 +5,7 @@
 #include <yetty/ycore/util.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yface/yface.h>
+#include <yetty/yterm/osc-statemachine.h>
 #include <yetty/ypaint-core/buffer.h>
 #include <yetty/ypaint-core/complex-prim-types.h>
 #include <yetty/ypaint-factory/complex-prim-factory.h>
@@ -129,9 +130,17 @@ struct yetty_yterm_ypaint_layer {
     uint8_t *prim_staging;
     size_t prim_staging_size;
 
-    /* Streaming OSC decoder (b64 → LZ4F → in_buf) — one per layer, lives
-   * for the layer's lifetime. Same pattern as ymgui-layer. */
+    /* yface — kept for OUTGOING emit only (focus events, ymgui responses,
+     * etc). Incoming decode now lives in the OSC SM. */
     struct yetty_yface *yface;
+
+    /* Per-envelope decoded-payload accumulator. The OSC SM hands us
+     * already-decoded bytes via osc_statemachine_read; we buffer them
+     * here and dispatch the existing handlers atomically when the SM
+     * signals at_end. */
+    struct yetty_ycore_buffer accum;
+    int parse_code;
+    int parse_active;
 
     /* Cached at create — needed to lazily build the alt-screen canvas
    * on first ?1049 toggle. */
@@ -147,9 +156,9 @@ struct yetty_yterm_ypaint_layer {
 /* Forward declarations */
 static struct yetty_ycore_void_result ypaint_layer_destroy(
     struct yetty_yrender_terminal_layer *self);
-static struct yetty_ycore_void_result ypaint_layer_write(struct yetty_yrender_terminal_layer *self,
-                                                         int osc_code, const char *data,
-                                                         size_t len);
+static struct yetty_ycore_void_result ypaint_layer_process_input(
+    struct yetty_yrender_terminal_layer *self,
+    struct yetty_yterm_osc_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result ypaint_layer_resize_grid(
     struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size);
 static struct yetty_yrender_gpu_resource_set_result ypaint_layer_get_gpu_resource_set(
@@ -272,7 +281,7 @@ static struct yetty_ycore_void_result ypaint_layer_set_visual_zoom(
 /* Ops */
 static const struct yetty_yterm_terminal_layer_ops ypaint_layer_ops = {
     .destroy = ypaint_layer_destroy,
-    .write = ypaint_layer_write,
+    .process_input = ypaint_layer_process_input,
     .resize_grid = ypaint_layer_resize_grid,
     .set_cell_size = ypaint_layer_set_cell_size,
     .set_visual_zoom = ypaint_layer_set_visual_zoom,
@@ -454,6 +463,7 @@ static struct yetty_ycore_void_result ypaint_layer_destroy(
         }
     }
 
+    free(layer->accum.data);
     free(layer->shader_code.data);
     free(layer->sdf_lib_code.data);
     free(layer->combined_shader);
@@ -466,30 +476,9 @@ static struct yetty_ycore_void_result ypaint_layer_destroy(
     return YETTY_OK_VOID();
 }
 
-/* Split "<b64-args>;<b64-payload>" into the two slots. Returns 0 on
- * success. Either slot may be empty (zero-length pointer is fine).
- * On failure (no separator), `*payload` and `*payload_len` are zeroed. */
-static int split_args_payload(const char *data, size_t len, const char **args, size_t *args_len,
-                              const char **payload, size_t *payload_len)
-{
-    *args = data;
-    *args_len = 0;
-    *payload = NULL;
-    *payload_len = 0;
-    for (size_t i = 0; i < len; i++) {
-        if (data[i] == ';') {
-            *args_len = i;
-            *payload = data + i + 1;
-            *payload_len = len - i - 1;
-            return 0;
-        }
-    }
-    return -1;
-}
-
 static struct yetty_ycore_void_result ypaint_handle_clear(struct yetty_yterm_ypaint_layer *layer)
 {
-    ydebug("ypaint_layer_write: clearing canvas");
+    ydebug("ypaint: clearing canvas");
     yetty_ypaint_canvas_clear(layer->canvas);
     layer->base.dirty = 1;
     if (layer->base.request_render_fn) {
@@ -498,27 +487,24 @@ static struct yetty_ycore_void_result ypaint_handle_clear(struct yetty_yterm_ypa
     return YETTY_OK_VOID();
 }
 
+/* yaml: payload is plain text (the SM b64-decoded it for us). */
 static struct yetty_ycore_void_result ypaint_handle_yaml(struct yetty_yterm_ypaint_layer *layer,
-                                                         const char *b64, size_t b64_len)
+                                                         const uint8_t *payload, size_t payload_len)
 {
-    if (!b64 || b64_len == 0) {
+    if (!payload || payload_len == 0) {
         return YETTY_ERR(yetty_ycore_void, "ypaint: empty yaml payload");
     }
-
-    /* Plain b64-decode (no LZ4) into a NUL-terminated text buffer. */
-    size_t decoded_cap = b64_len;
-    char *decoded = malloc(decoded_cap + 1);
-    if (!decoded) {
-        return YETTY_ERR(yetty_ycore_void, "malloc failed");
+    /* yaml_parse takes a NUL-terminated string; copy into a small scratch. */
+    char *text = malloc(payload_len + 1);
+    if (!text) {
+        return YETTY_ERR(yetty_ycore_void, "ypaint: yaml malloc failed");
     }
-    size_t decoded_len = yetty_ycore_base64_decode(b64, b64_len, decoded, decoded_cap);
-    decoded[decoded_len] = '\0';
+    memcpy(text, payload, payload_len);
+    text[payload_len] = '\0';
 
-    struct yetty_ypaint_core_buffer_result res = yetty_ypaint_yaml_parse(decoded, decoded_len);
-    free(decoded);
-    if (YETTY_IS_ERR(res)) {
-        return YETTY_ERR(yetty_ycore_void, res.error.msg);
-    }
+    struct yetty_ypaint_core_buffer_result res = yetty_ypaint_yaml_parse(text, payload_len);
+    free(text);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "ypaint: yaml parse failed");
 
     struct yetty_ycore_void_result add_res =
         yetty_ypaint_canvas_add_buffer(layer->canvas, res.value);
@@ -526,49 +512,21 @@ static struct yetty_ycore_void_result ypaint_handle_yaml(struct yetty_yterm_ypai
     return add_res;
 }
 
+/* bin: payload is fully decoded (b64+LZ4) by the SM. Args carry the
+ * yface_bin_meta header — kept here only for diagnostics; the codec
+ * decision is made at SM-register time, not from args. */
 static struct yetty_ycore_void_result ypaint_handle_bin(struct yetty_yterm_ypaint_layer *layer,
-                                                        const char *b64_args, size_t b64_args_len,
-                                                        const char *b64_payload,
-                                                        size_t b64_payload_len)
+                                                        const uint8_t *args, size_t args_len,
+                                                        const uint8_t *payload, size_t payload_len)
 {
-    /* Decode args slot first to discover compressed flag. */
-    int compressed = 0;
-    if (b64_args_len > 0) {
-        /* Args is a b64-encoded yetty_yface_bin_meta (32 bytes raw → ~44 b64
-     * chars). Decode in-place into a stack buffer. */
-        char meta_raw[64];
-        size_t meta_raw_len =
-            yetty_ycore_base64_decode(b64_args, b64_args_len, meta_raw, sizeof(meta_raw));
-        if (meta_raw_len >= sizeof(struct yetty_yface_bin_meta)) {
-            const struct yetty_yface_bin_meta *m = (const struct yetty_yface_bin_meta *)meta_raw;
-            if (m->magic == YETTY_YFACE_BIN_MAGIC) {
-                compressed = (m->compressed != 0);
-            }
-        }
-    }
+    (void)args;
+    (void)args_len;
 
-    ydebug("ypaint_layer_write: bin compressed=%d payload_len=%zu", compressed, b64_payload_len);
+    ydebug("ypaint: bin payload_len=%zu", payload_len);
 
-    struct yetty_ycore_void_result r = yetty_yface_start_read(layer->yface, compressed);
-    if (YETTY_IS_ERR(r)) {
-        return r;
-    }
-    r = yetty_yface_feed(layer->yface, b64_payload, b64_payload_len);
-    if (YETTY_IS_ERR(r)) {
-        yetty_yface_finish_read(layer->yface);
-        return r;
-    }
-    r = yetty_yface_finish_read(layer->yface);
-    if (YETTY_IS_ERR(r)) {
-        return r;
-    }
-
-    struct yetty_ycore_buffer *in = yetty_yface_in_buf(layer->yface);
     struct yetty_ypaint_core_buffer_result res =
-        yetty_ypaint_core_buffer_create_from_bytes(in->data, in->size);
-    if (YETTY_IS_ERR(res)) {
-        return YETTY_ERR(yetty_ycore_void, res.error.msg);
-    }
+        yetty_ypaint_core_buffer_create_from_bytes(payload, payload_len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "ypaint: buffer_create_from_bytes");
 
     struct yetty_ycore_void_result add_res =
         yetty_ypaint_canvas_add_buffer(layer->canvas, res.value);
@@ -576,46 +534,66 @@ static struct yetty_ycore_void_result ypaint_handle_bin(struct yetty_yterm_ypain
     return add_res;
 }
 
-/* Write — receives the OSC body after the leading "<code>;" has been
- * stripped by pty-reader. Body shape (uniform): "<b64-args>;<b64-payload>".
- * Dispatch is by `osc_code` — no verb parsing. */
-static struct yetty_ycore_void_result ypaint_layer_write(struct yetty_yrender_terminal_layer *self,
-                                                         int osc_code, const char *data, size_t len)
+/* Process — pulls already-decoded bytes from the OSC SM into the
+ * per-envelope accumulator. On at_end the layer dispatches the existing
+ * handlers atomically. The SM owns b64 / lz4 decoding; the layer only
+ * sees decoded bytes. */
+static struct yetty_ycore_void_result ypaint_layer_process_input(
+    struct yetty_yrender_terminal_layer *self,
+    struct yetty_yterm_osc_statemachine *osc_statemachine)
 {
     struct yetty_yterm_ypaint_layer *layer = (struct yetty_yterm_ypaint_layer *)self;
 
-    /* clear has an empty body — short-circuit before splitting. */
-    if (osc_code == YETTY_OSC_YPAINT_CLEAR) {
-        return ypaint_handle_clear(layer);
+    if (!layer->parse_active) {
+        layer->parse_code = yetty_yterm_osc_statemachine_code(osc_statemachine);
+        yetty_ycore_buffer_clear(&layer->accum);
+        layer->parse_active = 1;
     }
 
-    const char *args = NULL, *payload = NULL;
-    size_t args_len = 0, payload_len = 0;
-    if (!data || len == 0 ||
-        split_args_payload(data, len, &args, &args_len, &payload, &payload_len) < 0) {
-        return YETTY_ERR(yetty_ycore_void, "ypaint: malformed body (need ;)");
+    uint8_t buf[4096];
+    for (;;) {
+        struct yetty_ycore_size_result rr =
+            yetty_yterm_osc_statemachine_read(osc_statemachine, buf, sizeof(buf));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ypaint: osc read");
+        if (rr.value == 0) {
+            break;
+        }
+        struct yetty_ycore_void_result wr =
+            yetty_ycore_buffer_write(&layer->accum, buf, rr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "ypaint: accum write");
     }
+
+    if (!yetty_yterm_osc_statemachine_at_end(osc_statemachine)) {
+        return YETTY_OK_VOID();
+    }
+
+    /* End of envelope — dispatch atomically. */
+    struct yetty_yterm_osc_statemachine_args args =
+        yetty_yterm_osc_statemachine_args(osc_statemachine);
+    const uint8_t *payload = layer->accum.data;
+    size_t payload_len = layer->accum.size;
 
     struct yetty_ycore_void_result r;
-    switch (osc_code) {
+    switch (layer->parse_code) {
+    case YETTY_OSC_YPAINT_CLEAR:
+        r = ypaint_handle_clear(layer);
+        break;
     case YETTY_OSC_YPAINT_BIN:
-        r = ypaint_handle_bin(layer, args, args_len, payload, payload_len);
+    case YETTY_OSC_YPAINT_OVERLAY:
+        r = ypaint_handle_bin(layer, args.bytes, args.len, payload, payload_len);
         break;
     case YETTY_OSC_YPAINT_YAML:
         r = ypaint_handle_yaml(layer, payload, payload_len);
         break;
-    case YETTY_OSC_YPAINT_OVERLAY:
-        /* Same shape as bin for now — overlay layer registration uses a
-     * different terminal-layer instance, so this branch is reached
-     * only if both register for the same code. */
-        r = ypaint_handle_bin(layer, args, args_len, payload, payload_len);
-        break;
     default:
-        return YETTY_ERR(yetty_ycore_void, "ypaint: unexpected OSC code");
+        r = YETTY_ERR(yetty_ycore_void, "ypaint: unexpected OSC code");
     }
-    if (YETTY_IS_ERR(r)) {
-        return r;
-    }
+
+    yetty_ycore_buffer_clear(&layer->accum);
+    layer->parse_active = 0;
+    layer->parse_code = 0;
+
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ypaint: handler failed");
 
     layer->base.dirty = 1;
     if (layer->base.request_render_fn) {

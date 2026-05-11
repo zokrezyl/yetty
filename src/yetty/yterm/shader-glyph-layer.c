@@ -14,6 +14,7 @@
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yterm/shader-glyph-layer.h>
+#include <yetty/yterm/osc-statemachine.h>
 #include <yetty/yterm/text-layer.h>
 
 /* Uniform slots */
@@ -314,9 +315,9 @@ static char *splice_marker(const char *template, size_t template_size, const cha
 /* Forward declarations */
 static struct yetty_ycore_void_result shader_glyph_destroy(
     struct yetty_yrender_terminal_layer *self);
-static struct yetty_ycore_void_result shader_glyph_write(struct yetty_yrender_terminal_layer *self,
-                                                         int osc_code, const char *data,
-                                                         size_t len);
+static struct yetty_ycore_void_result shader_glyph_process_input(
+    struct yetty_yrender_terminal_layer *self,
+    struct yetty_yterm_osc_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result shader_glyph_resize_grid(
     struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size);
 static struct yetty_ycore_void_result shader_glyph_set_cell_size(
@@ -340,7 +341,7 @@ static struct yetty_ycore_void_result shader_glyph_set_cursor(
 
 static const struct yetty_yterm_terminal_layer_ops shader_glyph_layer_ops = {
     .destroy = shader_glyph_destroy,
-    .write = shader_glyph_write,
+    .process_input = shader_glyph_process_input,
     .resize_grid = shader_glyph_resize_grid,
     .set_cell_size = shader_glyph_set_cell_size,
     .set_visual_zoom = shader_glyph_set_visual_zoom,
@@ -515,14 +516,13 @@ static struct yetty_ycore_void_result shader_glyph_destroy(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result shader_glyph_write(struct yetty_yrender_terminal_layer *self,
-                                                         int osc_code, const char *data, size_t len)
+static struct yetty_ycore_void_result shader_glyph_process_input(
+    struct yetty_yrender_terminal_layer *self,
+    struct yetty_yterm_osc_statemachine *osc_statemachine)
 {
     (void)self;
-    (void)osc_code;
-    (void)data;
-    (void)len;
-    /* This layer is a passive consumer of the text grid; no OSC sink yet. */
+    (void)osc_statemachine;
+    /* Passive consumer of the text grid; not registered with the SM. */
     return YETTY_OK_VOID();
 }
 

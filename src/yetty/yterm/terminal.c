@@ -738,8 +738,13 @@ static void terminal_read_pty(struct yetty_yterm_terminal *terminal)
         return;
     }
 
-    int bytes_read = yetty_yterm_pty_reader_read(terminal->pty_reader);
-    if (bytes_read > 0 && terminal->layer_count > 0) {
+    struct yetty_ycore_size_result r = yetty_yterm_pty_reader_read(terminal->pty_reader);
+    if (YETTY_IS_ERR(r)) {
+        yerror("terminal_read_pty: %s", r.error.msg);
+        yetty_ycore_error_destroy(r.error);
+        return;
+    }
+    if (r.value > 0 && terminal->layer_count > 0) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[0];
         if (layer && layer->dirty) {
             terminal->context.yetty_context.event_loop->ops->request_render(
@@ -851,7 +856,11 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     }
     if (!YETTY_IS_OK(text_layer_res)) {
         yerror("terminal_create: failed to create text layer: %s", text_layer_res.error.msg);
-        yetty_yterm_pty_reader_destroy(terminal->pty_reader);
+        struct yetty_ycore_void_result dr =
+            yetty_yterm_pty_reader_destroy(terminal->pty_reader);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
         if (terminal->context.pty) {
             terminal->context.pty->ops->destroy(terminal->context.pty);
         }
@@ -863,8 +872,14 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
 
     /* Register text layer as default sink for pty_reader */
     if (terminal->pty_reader) {
-        yetty_yterm_pty_reader_register_default_sink(terminal->pty_reader, text_layer_res.value);
-        ydebug("terminal_create: text_layer registered as default sink");
+        struct yetty_ycore_void_result rr = yetty_yterm_pty_reader_register_default_sink(
+            terminal->pty_reader, text_layer_res.value);
+        if (YETTY_IS_ERR(rr)) {
+            yerror("terminal_create: register default sink: %s", rr.error.msg);
+            yetty_ycore_error_destroy(rr.error);
+        } else {
+            ydebug("terminal_create: text_layer registered as default sink");
+        }
     }
 
     /* Create ypaint scrolling layer (overlay on top of text) */
@@ -879,15 +894,16 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
             yetty_yterm_terminal_layer_add(terminal, ypaint_res.value);
             ydebug("terminal_create: ypaint scrolling layer created and added");
 
-            /* Register ypaint layer for the four ypaint OSC codes
-       * (clear/bin/yaml/overlay live in the 600000–600003 block). */
+            /* Register ypaint layer for the four ypaint OSC codes. The
+             * SM does b64+lz4 decoding (protocol-fixed), so registration
+             * carries no codec parameter. */
             if (terminal->pty_reader) {
-                yetty_yterm_pty_reader_register_osc_sink(terminal->pty_reader,
-                                                         YETTY_OSC_YPAINT_CLEAR, ypaint_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(terminal->pty_reader, YETTY_OSC_YPAINT_BIN,
-                                                         ypaint_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(terminal->pty_reader,
-                                                         YETTY_OSC_YPAINT_YAML, ypaint_res.value);
+                yetty_yterm_pty_reader_register_osc_sink(
+                    terminal->pty_reader, YETTY_OSC_YPAINT_CLEAR, ypaint_res.value);
+                yetty_yterm_pty_reader_register_osc_sink(
+                    terminal->pty_reader, YETTY_OSC_YPAINT_BIN, ypaint_res.value);
+                yetty_yterm_pty_reader_register_osc_sink(
+                    terminal->pty_reader, YETTY_OSC_YPAINT_YAML, ypaint_res.value);
                 yetty_yterm_pty_reader_register_osc_sink(
                     terminal->pty_reader, YETTY_OSC_YPAINT_OVERLAY, ypaint_res.value);
                 ydebug("terminal_create: ypaint layer registered for OSC 600000-600003");
@@ -937,16 +953,17 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
             ymgui_res.value->term_input_sub_fn = terminal_term_input_sub_callback;
             ymgui_res.value->term_input_sub_userdata = terminal;
             if (terminal->pty_reader) {
-                yetty_yterm_pty_reader_register_osc_sink(terminal->pty_reader, YMGUI_OSC_CS_CLEAR,
-                                                         ymgui_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(terminal->pty_reader, YMGUI_OSC_CS_FRAME,
-                                                         ymgui_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(terminal->pty_reader, YMGUI_OSC_CS_TEX,
-                                                         ymgui_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(terminal->pty_reader,
-                                                         YMGUI_OSC_CS_CARD_PLACE, ymgui_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(terminal->pty_reader,
-                                                         YMGUI_OSC_CS_CARD_REMOVE, ymgui_res.value);
+                /* SM owns b64+lz4; layer registration is just (code, layer). */
+                yetty_yterm_pty_reader_register_osc_sink(
+                    terminal->pty_reader, YMGUI_OSC_CS_CLEAR, ymgui_res.value);
+                yetty_yterm_pty_reader_register_osc_sink(
+                    terminal->pty_reader, YMGUI_OSC_CS_FRAME, ymgui_res.value);
+                yetty_yterm_pty_reader_register_osc_sink(
+                    terminal->pty_reader, YMGUI_OSC_CS_TEX, ymgui_res.value);
+                yetty_yterm_pty_reader_register_osc_sink(
+                    terminal->pty_reader, YMGUI_OSC_CS_CARD_PLACE, ymgui_res.value);
+                yetty_yterm_pty_reader_register_osc_sink(
+                    terminal->pty_reader, YMGUI_OSC_CS_CARD_REMOVE, ymgui_res.value);
                 yetty_yterm_pty_reader_register_osc_sink(
                     terminal->pty_reader, YMGUI_OSC_CS_TERM_INPUT_SUB, ymgui_res.value);
                 ydebug("terminal_create: ymgui layer registered for OSC 610000-610004 + 610010");
@@ -1034,7 +1051,11 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
     /* Destroy PTY reader */
     if (terminal->pty_reader) {
         ydebug("terminal_destroy: destroying pty_reader");
-        yetty_yterm_pty_reader_destroy(terminal->pty_reader);
+        struct yetty_ycore_void_result dr =
+            yetty_yterm_pty_reader_destroy(terminal->pty_reader);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
     }
 
     if (terminal->emit_yface) {
@@ -1059,17 +1080,15 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
 
 void yetty_yterm_terminal_write(struct yetty_yterm_terminal *terminal, const char *data, size_t len)
 {
-    if (!terminal || !data || len == 0) {
+    if (!terminal || !data || len == 0 || !terminal->pty_reader) {
         return;
     }
-
-    /* Send to first layer (text layer) */
-    if (terminal->layer_count > 0) {
-        struct yetty_yrender_terminal_layer *layer = terminal->layers[0];
-        if (layer && layer->ops && layer->ops->write) {
-            layer->ops->write(layer, 0, data, len);
-            ydebug("terminal_write: sent %zu bytes to text layer", len);
-        }
+    /* Push synthetic input through the SM — out-of-envelope bytes route to
+     * the text layer (the registered raw handler) just like real PTY input. */
+    struct yetty_ycore_void_result r = yetty_yterm_pty_reader_feed(terminal->pty_reader, data, len);
+    if (YETTY_IS_ERR(r)) {
+        yerror("terminal_write: feed failed: %s", r.error.msg);
+        yetty_ycore_error_destroy(r.error);
     }
 }
 
@@ -1208,6 +1227,22 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_v
     switch (event->type) {
     case YETTY_YCORE_KEY_DOWN:
         ydebug("terminal: KEY_DOWN key=%d mods=%d", event->key.key, event->key.mods);
+        /* PageUp / PageDown drive scrollback by one viewport at a
+         * time. Handled BEFORE the "any-key-exits-scrollback" rule
+         * so PageUp/Down keep working while in scrollback view —
+         * otherwise PageDown would exit scrollback instead of
+         * scrolling forward inside it. terminal_scrollback_apply
+         * takes positive lines = older content (up). */
+        if (event->key.key == 266 /* GLFW_KEY_PAGE_UP */ ||
+            event->key.key == 267 /* GLFW_KEY_PAGE_DOWN */) {
+            int page = (int)terminal->rows;
+            if (page < 1) {
+                page = 1;
+            }
+            terminal_scrollback_apply(terminal,
+                                      event->key.key == 266 ? +page : -page);
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
         /* In scrollback view, Enter exits and is consumed (matches tmux copy
      * mode). Other keys also exit scrollback before falling through to
      * normal dispatch — this means typing while in scrollback returns to
