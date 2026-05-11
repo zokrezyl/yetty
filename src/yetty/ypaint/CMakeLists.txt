@@ -3,6 +3,7 @@
 
 add_library(yetty_ypaint STATIC
     flyweight.c
+    scrollbuffer.c
     ypaint-canvas.c
 )
 
