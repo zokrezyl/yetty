@@ -10,7 +10,8 @@ set(YETTY_ENABLE_LIB_GLFW OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_LIB_LIBCO OFF CACHE BOOL "" FORCE)
 # qemu is not built for webasm — the webasm yetty build uses in-process
 # TinyEMU (compiled to wasm) instead of a prebuilt QEMU binary.
-set(YETTY_ENABLE_LIB_QEMU OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_LIB_QEMU        OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_LIB_QEMU_BINARY OFF CACHE BOOL "" FORCE)
 # libjpeg-turbo + YVNC re-enabled now that the webasm-mt 3rdparty variant
 # (built with -pthread → atomics + bulk-memory) is fetched on EMSCRIPTEN,
 # making the prebuilt .a link-compatible with --shared-memory yetty.wasm.
