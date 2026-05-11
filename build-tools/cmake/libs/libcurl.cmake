@@ -104,7 +104,7 @@ if(WIN32)
 elseif(APPLE)
     # Curl on Apple uses CoreFoundation/Security for SecureTransport-adjacent
     # APIs even with OpenSSL backend (timer/cert helpers).
-    list(APPEND _LIBCURL_DEPS "-framework CoreFoundation" "-framework Security")
+    list(APPEND _LIBCURL_DEPS "-framework CoreFoundation" "-framework Security" "-framework SystemConfiguration")
 elseif(ANDROID)
     list(APPEND _LIBCURL_DEPS dl)
 elseif(EMSCRIPTEN)
