@@ -190,9 +190,15 @@ jobs:
         export LSAN_OPTIONS="suppressions=$(pwd)/lsan_suppressions.txt"
         timeout 10 ./${{ env.BUILD_DIR }}/yetty -e 'echo "ASAN smoke test"; exit 0' || true
         if ls asan_log.* 1>/dev/null 2>&1; then
-          echo "=== ASAN ERRORS DETECTED ==="
-          cat asan_log.*
-          exit 1
+          # LSan writes a log file even for fully-suppressed leaks — only fail on real error reports.
+          if grep -Eq '==[0-9]+==ERROR: |SUMMARY: (Address|Leak)Sanitizer:' asan_log.*; then
+            echo "=== ASAN ERRORS DETECTED ==="
+            cat asan_log.*
+            exit 1
+          else
+            echo "No ASAN errors detected (only suppressed leaks):"
+            cat asan_log.*
+          fi
         else
           echo "No ASAN errors detected"
         fi
@@ -224,6 +230,11 @@ jobs:
         sudo dpkg --add-architecture arm64
         sudo sed -i -E 's|^deb (https?://[^ ]+) |deb [arch=amd64] \1 |' \
           /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+        for f in /etc/apt/sources.list.d/*.sources; do
+          [ -f "$f" ] || continue
+          grep -q '^Architectures:' "$f" || \
+            sudo sed -i '/^Types: deb$/a Architectures: amd64' "$f"
+        done
         . /etc/os-release
         echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports ${VERSION_CODENAME} main universe" \
           | sudo tee /etc/apt/sources.list.d/ports.list
@@ -277,6 +288,11 @@ jobs:
         sudo dpkg --add-architecture riscv64
         sudo sed -i -E 's|^deb (https?://[^ ]+) |deb [arch=amd64] \1 |' \
           /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+        for f in /etc/apt/sources.list.d/*.sources; do
+          [ -f "$f" ] || continue
+          grep -q '^Architectures:' "$f" || \
+            sudo sed -i '/^Types: deb$/a Architectures: amd64' "$f"
+        done
         . /etc/os-release
         echo "deb [arch=riscv64] http://ports.ubuntu.com/ubuntu-ports ${VERSION_CODENAME} main universe" \
           | sudo tee /etc/apt/sources.list.d/ports.list
@@ -320,7 +336,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install macOS dependencies
-      run: brew install automake autoconf libtool meson ninja nasm brotli
+      run: brew install automake autoconf libtool meson ninja nasm brotli webp
 
     - name: Configure CMake
       run: >
@@ -360,7 +376,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install macOS dependencies
-      run: brew install automake autoconf libtool meson ninja nasm brotli
+      run: brew install automake autoconf libtool meson ninja nasm brotli webp
 
     - name: Configure CMake
       run: >
