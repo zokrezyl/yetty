@@ -68,10 +68,13 @@ struct yetty_ypaint_canvas_grid_cell {
     struct yetty_ypaint_canvas_prim_ref_array refs;
 };
 
-// A single primitive's data
+// A single primitive's payload, stored in its owning line's arena. The
+// data lives at `grid_line.arena + arena_offset` for `word_count` u32
+// words. Storing an offset (not a pointer) keeps prim_data stable
+// across arena reallocations.
 struct yetty_ypaint_canvas_prim_data {
     uint32_t rolling_row; // rolling_row at insertion (cursor row or explicit)
-    float *data;
+    uint32_t arena_offset;
     uint32_t word_count;
 };
 
@@ -96,6 +99,16 @@ struct yetty_ypaint_canvas_font_entry {
 struct yetty_ypaint_canvas_grid_line {
     struct yetty_ypaint_canvas_prim_data_array
         prims; // All primitives (SDF + glyph) whose BASE is this line
+
+    // Payload arena: every prim in `prims` stores its words at
+    // `arena + prim.arena_offset` for prim.word_count u32 words. One
+    // allocation per line, doubling growth — replaces the previous
+    // per-prim malloc(word_count * 4) and its attendant ~24 bytes of
+    // glibc bookkeeping per primitive.
+    uint32_t *arena;
+    uint32_t arena_count;
+    uint32_t arena_capacity;
+
     struct yetty_ypaint_canvas_grid_cell *cells;
     uint32_t cell_count;
     uint32_t cell_capacity;
@@ -208,9 +221,13 @@ struct yetty_ypaint_canvas {
 
 #define DEFAULT_MAX_PRIMS_PER_CELL 16
 #define INITIAL_LINE_CAPACITY 64
-#define INITIAL_CELL_CAPACITY 128
+/* Initial cell-array capacity for a *touched* line. Tuned for sparse
+ * lines (e.g. PDF lines that paint only a handful of columns); the
+ * doubling growth in grid_line_ensure_cells keeps wide lines cheap too. */
+#define INITIAL_CELL_CAPACITY 16
 #define INITIAL_PRIM_CAPACITY 16
-#define INITIAL_REF_CAPACITY 8
+/* Each touched cell holds at least one prim_ref; most hold only one. */
+#define INITIAL_REF_CAPACITY 2
 #define INITIAL_STAGING_CAPACITY 4096
 
 //=============================================================================
@@ -252,28 +269,68 @@ static void prim_data_array_init(struct yetty_ypaint_canvas_prim_data_array *arr
 
 static void prim_data_array_free(struct yetty_ypaint_canvas_prim_data_array *arr)
 {
-    for (uint32_t i = 0; i < arr->count; i++) {
-        free(arr->data[i].data);
-    }
+    /* Payloads live in the owning line's arena (freed in grid_line_free);
+     * only the index records need releasing here. */
     free(arr->data);
     arr->data = NULL;
     arr->count = 0;
     arr->capacity = 0;
 }
 
-static uint32_t prim_data_array_push(struct yetty_ypaint_canvas_prim_data_array *arr,
-                                     uint32_t rolling_row, const float *data, uint32_t word_count)
+/* Append `word_count` words of payload to `line->arena`, growing the arena
+ * (doubling) if needed. Returns the offset where the payload was written
+ * — caller stores it in the matching prim_data record. */
+static struct yetty_ycore_void_result grid_line_arena_append(
+    struct yetty_ypaint_canvas_grid_line *line, const float *data, uint32_t word_count,
+    uint32_t *out_offset)
 {
+    if (line->arena_count + word_count > line->arena_capacity) {
+        uint32_t new_cap = line->arena_capacity ? line->arena_capacity : 32;
+        while (new_cap < line->arena_count + word_count) {
+            new_cap *= 2;
+        }
+        uint32_t *new_arena = realloc(line->arena, new_cap * sizeof(uint32_t));
+        if (!new_arena) {
+            return YETTY_ERR(yetty_ycore_void, "realloc failed for prim arena");
+        }
+        line->arena = new_arena;
+        line->arena_capacity = new_cap;
+    }
+    *out_offset = line->arena_count;
+    /* Source is the iter's raw word stream (already in the layout the
+     * GPU expects); copy by bytes to stay endian/alignment-agnostic. */
+    memcpy(line->arena + line->arena_count, data, word_count * sizeof(uint32_t));
+    line->arena_count += word_count;
+    return YETTY_OK_VOID();
+}
+
+/* Append a primitive to `line`. On success returns the prim index within
+ * line->prims. On allocation failure returns UINT32_MAX. */
+static uint32_t grid_line_push_prim(struct yetty_ypaint_canvas_grid_line *line,
+                                    uint32_t rolling_row, const float *data, uint32_t word_count)
+{
+    struct yetty_ypaint_canvas_prim_data_array *arr = &line->prims;
     if (arr->count >= arr->capacity) {
         uint32_t new_cap = arr->capacity == 0 ? INITIAL_PRIM_CAPACITY : arr->capacity * 2;
-        arr->data = realloc(arr->data, new_cap * sizeof(struct yetty_ypaint_canvas_prim_data));
+        struct yetty_ypaint_canvas_prim_data *grown =
+            realloc(arr->data, new_cap * sizeof(struct yetty_ypaint_canvas_prim_data));
+        if (!grown) {
+            return UINT32_MAX;
+        }
+        arr->data = grown;
         arr->capacity = new_cap;
+    }
+    uint32_t offset = 0;
+    struct yetty_ycore_void_result ar =
+        grid_line_arena_append(line, data, word_count, &offset);
+    if (YETTY_IS_ERR(ar)) {
+        yetty_ycore_error_destroy(ar.error);
+        return UINT32_MAX;
     }
     uint32_t idx = arr->count++;
     arr->data[idx].rolling_row = rolling_row;
-    arr->data[idx].data = malloc(word_count * sizeof(float));
+    arr->data[idx].arena_offset = offset;
     arr->data[idx].word_count = word_count;
-    memcpy(arr->data[idx].data, data, word_count * sizeof(float));
     return idx;
 }
 
@@ -284,7 +341,16 @@ static uint32_t prim_data_array_push(struct yetty_ypaint_canvas_prim_data_array 
 static struct yetty_ycore_void_result grid_line_init(struct yetty_ypaint_canvas_grid_line *line,
                                                      uint32_t initial_cells)
 {
+    /* Cells are now allocated lazily by grid_line_ensure_cells on first
+     * touch. Lines with no primitives (common in PDFs — empty space
+     * between paragraphs) stay at zero cell-array bytes. initial_cells
+     * kept in the signature for source compatibility with the line
+     * buffer caller; ignored. */
+    (void)initial_cells;
     prim_data_array_init(&line->prims);
+    line->arena = NULL;
+    line->arena_count = 0;
+    line->arena_capacity = 0;
     line->fonts = NULL;
     line->font_count = 0;
     line->font_capacity = 0;
@@ -294,13 +360,6 @@ static struct yetty_ycore_void_result grid_line_init(struct yetty_ypaint_canvas_
     line->complex_prims = NULL;
     line->complex_prim_count = 0;
     line->complex_prim_capacity = 0;
-    if (initial_cells > 0) {
-        line->cells = calloc(initial_cells, sizeof(struct yetty_ypaint_canvas_grid_cell));
-        if (!line->cells) {
-            return YETTY_ERR(yetty_ycore_void, "calloc failed for grid cells");
-        }
-        line->cell_capacity = initial_cells;
-    }
     return YETTY_OK_VOID();
 }
 
@@ -313,6 +372,11 @@ static struct yetty_ycore_void_result grid_line_free(
     }
 
     prim_data_array_free(&line->prims);
+    /* Payload arena: one allocation for all prims on this line. */
+    free(line->arena);
+    line->arena = NULL;
+    line->arena_count = 0;
+    line->arena_capacity = 0;
     /* Lines hold one cache ref per attached font — release each before
      * dropping the array. Cache may free the slot if this was the last ref. */
     for (uint32_t i = 0; i < line->font_count; i++) {
@@ -1003,8 +1067,11 @@ static struct uint32_result add_primitive_internal(
         return YETTY_ERR(uint32, "line_buffer_get returned NULL");
     }
 
-    uint32_t prim_index = prim_data_array_push(&base_line->prims, primitive_rolling_row,
-                                               (const float *)iter->fw.data, word_count);
+    uint32_t prim_index = grid_line_push_prim(base_line, primitive_rolling_row,
+                                              (const float *)iter->fw.data, word_count);
+    if (prim_index == UINT32_MAX) {
+        return YETTY_ERR(uint32, "grid_line_push_prim failed");
+    }
 
     uint32_t prim_col_min = (uint32_t)(aabb.min.x / canvas->cell_size.width);
     uint32_t prim_col_max = (uint32_t)(aabb.max.x / canvas->cell_size.width);
@@ -1291,7 +1358,11 @@ static struct uint32_result expand_text_span_to_glyphs(
         }
 
         uint32_t prim_idx =
-            prim_data_array_push(&base_line->prims, rolling_row, glyph_data, YPAINT_GLYPH_WORDS);
+            grid_line_push_prim(base_line, rolling_row, glyph_data, YPAINT_GLYPH_WORDS);
+        if (prim_idx == UINT32_MAX) {
+            cursor_x += advance * scale;
+            continue;
+        }
 
         uint32_t col_min =
             (canvas->cell_size.width > 0) ? (uint32_t)(gx / canvas->cell_size.width) : 0;
@@ -2012,12 +2083,10 @@ struct yetty_ypaint_prim_staging_result yetty_ypaint_canvas_build_prim_staging(
             // Prepend rolling_row at insertion (for shader y_offset calculation)
             canvas->prim_staging[prim_count + data_offset] = prim->rolling_row;
 
-            // Copy primitive data
-            for (uint32_t w = 0; w < prim->word_count; w++) {
-                uint32_t val;
-                memcpy(&val, &prim->data[w], sizeof(uint32_t));
-                canvas->prim_staging[prim_count + data_offset + 1 + w] = val;
-            }
+            // Copy primitive payload from the line's arena.
+            const uint32_t *payload = line->arena + prim->arena_offset;
+            memcpy(&canvas->prim_staging[prim_count + data_offset + 1], payload,
+                   prim->word_count * sizeof(uint32_t));
 
             data_offset += prim->word_count + 1; // +1 for rolling_row
             prim_idx++;
