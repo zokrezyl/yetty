@@ -5,13 +5,13 @@
 #include <stdint.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/yui-core/view.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 struct yetty_yui_tile;
-struct yetty_yterm_view;
 struct yetty_yconfig_config;
 struct yetty_context;
 struct yetty_yui_event;
@@ -30,11 +30,6 @@ enum yetty_yui_orientation {
 enum yetty_yui_tile_type {
     YETTY_YUI_TILE_SPLIT,
     YETTY_YUI_TILE_PANE,
-};
-
-/* Rectangle */
-struct yetty_yui_rect {
-    float x, y, w, h;
 };
 
 /* Create/destroy */
@@ -81,11 +76,11 @@ enum yetty_yui_orientation yetty_yui_tile_split_orientation(const struct yetty_y
 
 /* Pane-specific */
 struct yetty_ycore_void_result yetty_yui_tile_pane_push_view(struct yetty_yui_tile *pane,
-                                                             struct yetty_yterm_view *view);
+                                                             struct yetty_yui_view *view);
 
 struct yetty_ycore_void_result yetty_yui_tile_pane_pop_view(struct yetty_yui_tile *pane);
 
-struct yetty_yterm_view *yetty_yui_tile_pane_active_view(const struct yetty_yui_tile *pane);
+struct yetty_yui_view *yetty_yui_tile_pane_active_view(const struct yetty_yui_tile *pane);
 
 size_t yetty_yui_tile_pane_view_count(const struct yetty_yui_tile *pane);
 

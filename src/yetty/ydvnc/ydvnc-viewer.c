@@ -19,7 +19,7 @@
 #include <yetty/yetty/yetty.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
-#include <yetty/yui/view.h>
+#include <yetty/yui-core/view.h>
 
 #include "keysyms.h"
 #include "rfb-client.h"
@@ -34,7 +34,7 @@
 #define BTN_BIT_WHEEL_RIGHT 0x40u
 
 struct yetty_ydvnc_viewer {
-    struct yetty_yterm_view view; /* MUST be first — view-cast assumes this. */
+    struct yetty_yui_view view; /* MUST be first — view-cast assumes this. */
     struct yetty_ydvnc_rfb_client *client;
     struct yetty_context context;
     char *host;
@@ -113,7 +113,7 @@ static void on_disconnected(void *userdata, const char *reason)
  * View ops
  *===========================================================================*/
 
-static struct yetty_ycore_void_result viewer_destroy(struct yetty_yterm_view *view)
+static struct yetty_ycore_void_result viewer_destroy(struct yetty_yui_view *view)
 {
     struct yetty_ydvnc_viewer *v = (struct yetty_ydvnc_viewer *)view;
     struct yetty_ycore_void_result inner = YETTY_OK_VOID();
@@ -142,7 +142,7 @@ static struct yetty_ycore_void_result viewer_destroy(struct yetty_yterm_view *vi
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result viewer_render(struct yetty_yterm_view *view,
+static struct yetty_ycore_void_result viewer_render(struct yetty_yui_view *view,
                                                     struct yetty_ypaint_core_target *render_target)
 {
     struct yetty_ydvnc_viewer *v = (struct yetty_ydvnc_viewer *)view;
@@ -200,7 +200,7 @@ static struct yetty_ycore_void_result viewer_render(struct yetty_yterm_view *vie
     return r;
 }
 
-static struct yetty_ycore_void_result viewer_set_bounds(struct yetty_yterm_view *view,
+static struct yetty_ycore_void_result viewer_set_bounds(struct yetty_yui_view *view,
                                                         struct yetty_yui_rect bounds)
 {
     struct yetty_ydvnc_viewer *v = (struct yetty_ydvnc_viewer *)view;
@@ -227,7 +227,7 @@ static int is_printable_glfw_key(int k)
     return k >= 32 && k <= 96;
 }
 
-static struct yetty_ycore_int_result viewer_on_event(struct yetty_yterm_view *view,
+static struct yetty_ycore_int_result viewer_on_event(struct yetty_yui_view *view,
                                                      const struct yetty_yui_event *event)
 {
     struct yetty_ydvnc_viewer *v = (struct yetty_ydvnc_viewer *)view;
@@ -367,7 +367,7 @@ static struct yetty_ycore_int_result viewer_on_event(struct yetty_yterm_view *vi
 
 /* Wrap viewer_on_event in the int_result-returning view-op signature.
  * Some yetty modules use void-result; here we use int (1=handled, 0=not). */
-static struct yetty_ycore_int_result viewer_on_event_op(struct yetty_yterm_view *view,
+static struct yetty_ycore_int_result viewer_on_event_op(struct yetty_yui_view *view,
                                                         const struct yetty_yui_event *event)
 {
     return viewer_on_event(view, event);
@@ -443,7 +443,7 @@ struct yetty_ycore_void_result yetty_ydvnc_viewer_destroy(struct yetty_ydvnc_vie
     return viewer_destroy(&v->view);
 }
 
-struct yetty_yterm_view *yetty_ydvnc_viewer_as_view(struct yetty_ydvnc_viewer *v)
+struct yetty_yui_view *yetty_ydvnc_viewer_as_view(struct yetty_ydvnc_viewer *v)
 {
     return v ? &v->view : NULL;
 }

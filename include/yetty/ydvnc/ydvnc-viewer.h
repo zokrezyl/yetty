@@ -7,7 +7,7 @@
 
 #include <stdint.h>
 #include <yetty/ycore/result.h>
-#include <yetty/yui/view.h>
+#include <yetty/yui-core/view.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,7 +24,7 @@ struct yetty_ydvnc_viewer_ptr_result yetty_ydvnc_viewer_create(
 
 struct yetty_ycore_void_result yetty_ydvnc_viewer_destroy(struct yetty_ydvnc_viewer *viewer);
 
-struct yetty_yterm_view *yetty_ydvnc_viewer_as_view(struct yetty_ydvnc_viewer *viewer);
+struct yetty_yui_view *yetty_ydvnc_viewer_as_view(struct yetty_ydvnc_viewer *viewer);
 
 #ifdef __cplusplus
 }

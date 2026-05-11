@@ -396,8 +396,10 @@ if(YETTY_ENABLE_LIB_ZLIB)
 endif()
 
 # Core libraries (always linked)
-# Note: yetty_yui comes first because it depends on yetty_term
-list(APPEND YETTY_LIBS yetty_yui yetty_yterm yetty_yrender yetty_yrender_utils yetty_ywebgpu yetty_yevent)
+# Order: yui (composes views) → yterm (concrete view) → yui-core (abstract
+# view interface, depends on neither). With the cycle removed there are no
+# duplicate archive entries on the link line.
+list(APPEND YETTY_LIBS yetty_yui yetty_yterm yetty_yui_core yetty_yrender yetty_yrender_utils yetty_ywebgpu yetty_yevent)
 
 # Feature library link platforms
 if(YETTY_ENABLE_FEATURE_BASE)

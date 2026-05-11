@@ -1,5 +1,5 @@
 #include <yetty/yui/tile.h>
-#include <yetty/yui/view.h>
+#include <yetty/yui-core/view.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
 #include <yetty/ycore/util.h>
@@ -56,7 +56,7 @@ struct yetty_yui_split {
 
 struct yetty_yui_pane {
     struct yetty_yui_tile base;
-    struct yetty_yterm_view **views;
+    struct yetty_yui_view **views;
     size_t view_count;
     size_t view_capacity;
     int focused;
@@ -524,7 +524,7 @@ enum yetty_yui_orientation yetty_yui_tile_split_orientation(const struct yetty_y
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_yui_tile_pane_push_view(struct yetty_yui_tile *tile,
-                                                             struct yetty_yterm_view *view)
+                                                             struct yetty_yui_view *view)
 {
     struct yetty_yui_pane *pane;
 
@@ -536,9 +536,9 @@ struct yetty_ycore_void_result yetty_yui_tile_pane_push_view(struct yetty_yui_ti
 
     if (pane->view_count >= pane->view_capacity) {
         size_t new_cap = pane->view_capacity ? pane->view_capacity * 2 : 4;
-        struct yetty_yterm_view **new_views;
+        struct yetty_yui_view **new_views;
 
-        new_views = realloc(pane->views, new_cap * sizeof(struct yetty_yterm_view *));
+        new_views = realloc(pane->views, new_cap * sizeof(struct yetty_yui_view *));
         if (!new_views) {
             return YETTY_ERR(yetty_ycore_void, "allocation failed");
         }
@@ -576,7 +576,7 @@ struct yetty_ycore_void_result yetty_yui_tile_pane_pop_view(struct yetty_yui_til
     return YETTY_OK_VOID();
 }
 
-struct yetty_yterm_view *yetty_yui_tile_pane_active_view(const struct yetty_yui_tile *tile)
+struct yetty_yui_view *yetty_yui_tile_pane_active_view(const struct yetty_yui_tile *tile)
 {
     const struct yetty_yui_pane *pane;
 

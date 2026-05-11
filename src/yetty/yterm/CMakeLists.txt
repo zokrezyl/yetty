@@ -21,7 +21,7 @@ target_link_libraries(yetty_yterm
     yetty_ypaint_factory
     yetty_ypaint_yaml
     yetty_yfont_core
-    yetty_yui
+    yetty_yui_core
     yetty_yface
     lz4_static
 )

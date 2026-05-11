@@ -23,7 +23,7 @@
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui/workspace.h>
 #include <yetty/yui/tile.h>
-#include <yetty/yui/view.h>
+#include <yetty/yui-core/view.h>
 #include <yetty/yrpc/rpc-server.h>
 #include <yetty/ymsdf/generator.h>
 #include <yetty/yvnc/vnc-server.h>

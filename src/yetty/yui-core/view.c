@@ -1,6 +1,4 @@
-#include <yetty/yui/view.h>
-#include <yetty/yrender/render-target.h>
-#include <stdlib.h>
+#include <yetty/yui-core/view.h>
 
 /*=============================================================================
  * Object ID generation
@@ -26,7 +24,7 @@ yetty_ycore_object_id yetty_yui_view_next_id(void)
  * View public API
  *===========================================================================*/
 
-struct yetty_ycore_void_result yetty_yui_view_destroy(struct yetty_yterm_view *view)
+struct yetty_ycore_void_result yetty_yui_view_destroy(struct yetty_yui_view *view)
 {
     if (!view) {
         return YETTY_ERR(yetty_ycore_void, "yetty_yui_view_destroy: NULL view");
@@ -37,7 +35,7 @@ struct yetty_ycore_void_result yetty_yui_view_destroy(struct yetty_yterm_view *v
     return view->ops->destroy(view);
 }
 
-struct yetty_ycore_void_result yetty_yui_view_render(struct yetty_yterm_view *view,
+struct yetty_ycore_void_result yetty_yui_view_render(struct yetty_yui_view *view,
                                                      struct yetty_ypaint_core_target *render_target)
 {
     if (!view) {
@@ -49,7 +47,7 @@ struct yetty_ycore_void_result yetty_yui_view_render(struct yetty_yterm_view *vi
     return view->ops->render(view, render_target);
 }
 
-struct yetty_ycore_void_result yetty_yui_view_set_bounds(struct yetty_yterm_view *view,
+struct yetty_ycore_void_result yetty_yui_view_set_bounds(struct yetty_yui_view *view,
                                                          struct yetty_yui_rect bounds)
 {
     if (!view) {
@@ -62,7 +60,7 @@ struct yetty_ycore_void_result yetty_yui_view_set_bounds(struct yetty_yterm_view
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_int_result yetty_yui_view_on_event(struct yetty_yterm_view *view,
+struct yetty_ycore_int_result yetty_yui_view_on_event(struct yetty_yui_view *view,
                                                       const struct yetty_yui_event *event)
 {
     if (!view) {
@@ -74,12 +72,12 @@ struct yetty_ycore_int_result yetty_yui_view_on_event(struct yetty_yterm_view *v
     return view->ops->on_event(view, event);
 }
 
-yetty_ycore_object_id yetty_yui_view_id(const struct yetty_yterm_view *view)
+yetty_ycore_object_id yetty_yui_view_id(const struct yetty_yui_view *view)
 {
     return view ? view->id : YETTY_YCORE_OBJECT_ID_NONE;
 }
 
-struct yetty_yui_rect yetty_yui_view_bounds(const struct yetty_yterm_view *view)
+struct yetty_yui_rect yetty_yui_view_bounds(const struct yetty_yui_view *view)
 {
     if (!view) {
         return (struct yetty_yui_rect){0, 0, 0, 0};

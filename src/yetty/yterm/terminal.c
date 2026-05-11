@@ -20,17 +20,17 @@
 #include <yetty/yterm/ymgui-layer.h>
 #include <yetty/yterm/shader-glyph-layer.h>
 #include <yetty/ytrace/ytrace.h>
-#include <yetty/yui/view.h>
+#include <yetty/yui-core/view.h>
 
 #define YETTY_YTERM_TERMINAL_MAX_LAYERS 256
 
 /* Forward declarations for view ops */
-static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yterm_view *view);
+static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yui_view *view);
 static struct yetty_ycore_void_result terminal_view_render(
-    struct yetty_yterm_view *view, struct yetty_ypaint_core_target *render_target);
-static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yterm_view *view,
+    struct yetty_yui_view *view, struct yetty_ypaint_core_target *render_target);
+static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_view *view,
                                                                struct yetty_yui_rect bounds);
-static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_view *view,
+static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_view *view,
                                                             const struct yetty_yui_event *event);
 
 static const struct yetty_yui_view_ops terminal_view_ops = {
@@ -41,7 +41,7 @@ static const struct yetty_yui_view_ops terminal_view_ops = {
 };
 
 struct yetty_yterm_terminal {
-    struct yetty_yterm_view view; /* MUST be first - allows cast to view */
+    struct yetty_yui_view view; /* MUST be first - allows cast to view */
     struct yetty_yevent_event_listener listener;
     struct yetty_yterm_terminal_context context;
     uint32_t cols;
@@ -1176,26 +1176,26 @@ struct yetty_yrender_terminal_layer *yetty_yterm_terminal_layer_get(
  * View interface implementation
  *===========================================================================*/
 
-struct yetty_yterm_view *yetty_yterm_terminal_as_view(struct yetty_yterm_terminal *terminal)
+struct yetty_yui_view *yetty_yterm_terminal_as_view(struct yetty_yterm_terminal *terminal)
 {
     return terminal ? &terminal->view : NULL;
 }
 
-static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yterm_view *view)
+static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yui_view *view)
 {
     struct yetty_yterm_terminal *terminal = container_of(view, struct yetty_yterm_terminal, view);
     return yetty_yterm_terminal_destroy(terminal);
 }
 
 static struct yetty_ycore_void_result terminal_view_render(
-    struct yetty_yterm_view *view, struct yetty_ypaint_core_target *render_target)
+    struct yetty_yui_view *view, struct yetty_ypaint_core_target *render_target)
 {
     struct yetty_yterm_terminal *terminal = container_of(view, struct yetty_yterm_terminal, view);
 
     return terminal_render_frame(terminal, render_target);
 }
 
-static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yterm_view *view,
+static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_view *view,
                                                                struct yetty_yui_rect bounds)
 {
     struct yetty_yterm_terminal *terminal = container_of(view, struct yetty_yterm_terminal, view);
@@ -1219,7 +1219,7 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yter
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_view *view,
+static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_view *view,
                                                             const struct yetty_yui_event *event)
 {
     struct yetty_yterm_terminal *terminal = container_of(view, struct yetty_yterm_terminal, view);
