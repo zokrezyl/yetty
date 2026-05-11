@@ -871,13 +871,33 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
 
     /* Anything else — including keys without a shortcut, resize broadcasts,
      * zoom apply — goes to the active workspace. The workspace's tile tree
-     * is now anchored at y = strip (see workspace_set_origin call in resize),
-     * so screen-space mouse coordinates land in the same frame the tile tree
+     * is anchored at y = strip (workspace_set_origin in resize), so
+     * screen-space mouse coordinates land in the same frame the tile tree
      * uses; no y-shift needed. */
     struct yetty_yui_workspace *ws = bar->workspaces[bar->active];
     if (!ws) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
+
+    /* RESIZE needs height adjusted by strip before forwarding. The
+     * terminal at the leaf re-derives its grid (cols/rows) and resizes
+     * its layer-target textures from the event's width/height. If we
+     * passed the full window height it would size for a region that
+     * extends UNDER the strip — cells past the visible strip height
+     * would be clipped, and the grid math drifts off by one row's
+     * worth at every resize. We do this only on the forward path; the
+     * tabbar's own bar->height stays the full window height because the
+     * strip math depends on it. */
+    if (event->type == YETTY_YCORE_RESIZE) {
+        float strip = YETTY_YUI_TABBAR_HEIGHT;
+        if (strip > event->resize.height) {
+            strip = event->resize.height;
+        }
+        struct yetty_yui_event resize_ev = *event;
+        resize_ev.resize.height -= strip;
+        return yetty_yui_workspace_on_event(ws, &resize_ev);
+    }
+
     return yetty_yui_workspace_on_event(ws, event);
 }
 

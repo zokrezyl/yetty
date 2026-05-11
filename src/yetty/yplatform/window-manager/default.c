@@ -26,6 +26,11 @@ struct yetty_yplatform_glfw_window_manager {
     /* Borrowed — owned by the caller. */
     GLFWwindow *window;
     struct yetty_ycore_xthread_event_pipe *output_pipe;
+    /* Used by handle_event(WINDOW_CLOSE) to post SHUTDOWN to the render
+     * thread — same path the OS title-bar window_close_callback takes.
+     * Without it the render thread keeps spinning yetty's event loop
+     * after the main thread exits, and the join() at shutdown hangs. */
+    struct yetty_ycore_xthread_event_pipe *input_pipe;
 };
 
 static void glfw_window_manager_destroy(struct yetty_yplatform_window_manager *self)
@@ -113,12 +118,19 @@ static void glfw_window_manager_handle_event(struct yetty_yplatform_window_manag
             glfwMaximizeWindow(m->window);
         }
         break;
-    case YETTY_YCORE_WINDOW_CLOSE:
-        /* Mirror the OS-bar close button: ask GLFW to wind down. The
-         * main loop's glfwWindowShouldClose check ends the run, after
-         * which the existing shutdown path takes over. */
-        glfwSetWindowShouldClose(m->window, GLFW_TRUE);
+    case YETTY_YCORE_WINDOW_CLOSE: {
+        /* Mirror the OS-bar close callback exactly: post SHUTDOWN to the
+         * render thread's input pipe. The render thread stops its event
+         * loop, sets *running=0, posts an empty event; the main loop
+         * then exits naturally on the running check. Setting
+         * glfwSetWindowShouldClose alone would leave the render thread
+         * spinning and deadlock on join. */
+        if (m->input_pipe) {
+            struct yetty_yui_event ev = {.type = YETTY_YCORE_SHUTDOWN};
+            m->input_pipe->ops->write(m->input_pipe, &ev, sizeof(ev));
+        }
         break;
+    }
     case YETTY_YCORE_WINDOW_DRAG_BY: {
         int x, y;
         glfwGetWindowPos(m->window, &x, &y);
@@ -143,11 +155,12 @@ static const struct yetty_yplatform_window_manager_ops glfw_window_manager_ops =
 };
 
 struct yetty_yplatform_window_manager_ptr_result yetty_yplatform_window_manager_create(
-    void *os_window, struct yetty_ycore_xthread_event_pipe *output_pipe)
+    void *os_window, struct yetty_ycore_xthread_event_pipe *output_pipe,
+    struct yetty_ycore_xthread_event_pipe *input_pipe)
 {
-    if (!os_window || !output_pipe) {
+    if (!os_window || !output_pipe || !input_pipe) {
         return YETTY_ERR(yetty_yplatform_window_manager_ptr,
-                         "window_manager_create: os_window and output_pipe required");
+                         "window_manager_create: os_window, output_pipe, input_pipe required");
     }
     struct yetty_yplatform_glfw_window_manager *m = calloc(1, sizeof(*m));
     if (!m) {
@@ -157,5 +170,6 @@ struct yetty_yplatform_window_manager_ptr_result yetty_yplatform_window_manager_
     m->base.ops = &glfw_window_manager_ops;
     m->window = os_window;
     m->output_pipe = output_pipe;
+    m->input_pipe = input_pipe;
     return YETTY_OK(yetty_yplatform_window_manager_ptr, &m->base);
 }

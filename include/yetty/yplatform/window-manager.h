@@ -52,12 +52,15 @@ struct yetty_yplatform_window_manager {
     const struct yetty_yplatform_window_manager_ops *ops;
 };
 
-/* Construct a window manager bound to (os_window, output_pipe). os_window
- * is the opaque GLFWwindow* the platform layer hands out; output_pipe is
- * the same render→main pipe the clipboard manager uses (both borrowed —
- * the caller owns lifetimes). */
+/* Construct a window manager bound to (os_window, output_pipe, input_pipe).
+ * os_window is the opaque GLFWwindow* the platform layer hands out;
+ * output_pipe is the render→main pipe the clipboard manager already
+ * drains; input_pipe is the main→render pipe — used by the close path
+ * to write a SHUTDOWN event so the render thread winds down (same path
+ * the OS title-bar close callback uses). All three are borrowed. */
 struct yetty_yplatform_window_manager_ptr_result yetty_yplatform_window_manager_create(
-    void *os_window, struct yetty_ycore_xthread_event_pipe *output_pipe);
+    void *os_window, struct yetty_ycore_xthread_event_pipe *output_pipe,
+    struct yetty_ycore_xthread_event_pipe *input_pipe);
 
 #ifdef __cplusplus
 }

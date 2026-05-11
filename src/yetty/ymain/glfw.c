@@ -327,7 +327,7 @@ int main(int argc, char **argv)
              * manager's drain: the drain reads every event off the pipe
              * and dispatches by type, sending WINDOW_* through here. */
             struct yetty_yplatform_window_manager_ptr_result wm_res =
-                yetty_yplatform_window_manager_create(window, output_pipe);
+                yetty_yplatform_window_manager_create(window, output_pipe, platform_input_pipe);
             if (YETTY_IS_OK(wm_res)) {
                 window_manager = wm_res.value;
             } else {
