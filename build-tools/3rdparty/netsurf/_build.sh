@@ -163,64 +163,134 @@ EOF
 esac
 
 #-----------------------------------------------------------------------------
-# Transitive prebuilt dep: openssl-new — same tarball libcurl is built
-# against. NetSurf's content/fetchers/about/certificate.c and
-# content/fetchers/curl.c reference OpenSSL APIs (BIO_*, ASN1_*,
-# EVP_PKEY_*, X509_*) and pkg-config on this build host has to resolve
-# them. Only needed for real-build platforms — placeholder branches
-# exit above. Linux/macOS ship libssl.a + libcrypto.a; we don't fetch
-# openssl-new for the placeholder platforms (Windows uses .lib, but
-# we never reach this for windows-x86_64 anyway).
+# Transitive prebuilt deps fetched from yetty's GitHub releases — same
+# tarballs the rest of yetty (libcurl, freetype, etc.) is built against.
+# Only needed for real-build platforms; placeholder branches exit above.
+#
+# We pull:
+#   openssl-new (4.0.0)  → -lssl -lcrypto for NetSurf's content/fetchers/
+#                          about/certificate.c + content/fetchers/curl.c
+#                          (ASN1_*, BIO_*, EVP_PKEY_*, X509_*)
+#   libpng      (1.6.43) → -lpng for content/handlers/image/png.c
+#                          (png_create_*, png_read_*, png_get_*)
+#   libjpeg-turbo (3.1.3) → -ljpeg for content/handlers/image/jpeg.c
+#                          (jpeg_create_decompress, jpeg_read_*)
+#
+# Why fetch instead of relying on nix shell packages: on macOS, nix's
+# clang wrapper restricts library search to the nix store. Even with
+# `libpng.dev` in buildInputs, the `-L<path>` flag from pkg-config
+# doesn't reach the linker for the .a files. The yetty prebuilts come
+# as static archives we can point to directly via -L/-l.
 #-----------------------------------------------------------------------------
-OPENSSL_VERSION_FILE="$SCRIPT_DIR/../openssl-new/version"
-[ -f "$OPENSSL_VERSION_FILE" ] || { echo "missing $OPENSSL_VERSION_FILE" >&2; exit 1; }
-OPENSSL_NEW_VERSION="$(tr -d '[:space:]' < "$OPENSSL_VERSION_FILE")"
 GH_RELEASE_BASE="${GH_RELEASE_BASE:-https://github.com/zokrezyl/yetty/releases/download}"
-OSSL_FILENAME="openssl-new-${TARGET_PLATFORM}-${OPENSSL_NEW_VERSION}.tar.gz"
-OSSL_TARBALL="$CACHE_DIR/$OSSL_FILENAME"
-OSSL_URL="${GH_RELEASE_BASE}/lib-openssl-new-${OPENSSL_NEW_VERSION}/${OSSL_FILENAME}"
-OSSL_DIR="$WORK_DIR/openssl-new-${OPENSSL_NEW_VERSION}"
 
-if [ ! -f "$OSSL_TARBALL" ]; then
-    _part="$OSSL_TARBALL.part.$$"
-    (
-        if command -v flock >/dev/null 2>&1; then flock -x 9; fi
-        if [ ! -f "$OSSL_TARBALL" ]; then
-            echo "==> downloading openssl-new ${OPENSSL_NEW_VERSION} for ${TARGET_PLATFORM}"
-            echo "    $OSSL_URL"
-            curl -fL --retry 8 --retry-delay 5 --retry-all-errors -o "$_part" "$OSSL_URL"
-            mv "$_part" "$OSSL_TARBALL"
-        fi
-    ) 9>"$CACHE_DIR/.openssl-new-download.lock"
-    rm -f "$_part"
-fi
-if [ ! -d "$OSSL_DIR" ]; then
-    echo "==> extracting openssl-new -> $OSSL_DIR"
-    mkdir -p "$OSSL_DIR"
-    tar -C "$OSSL_DIR" -xzf "$OSSL_TARBALL"
-fi
-[ -f "$OSSL_DIR/lib/libssl.a"           ] || { echo "openssl-new: missing libssl.a"   >&2; exit 1; }
-[ -f "$OSSL_DIR/lib/libcrypto.a"        ] || { echo "openssl-new: missing libcrypto.a">&2; exit 1; }
-[ -f "$OSSL_DIR/include/openssl/ssl.h"  ] || { echo "openssl-new: missing ssl.h"      >&2; exit 1; }
+# fetch_prebuilt <lib_name> <version_file_subdir>
+# Sets <UPPER>_DIR variable, downloads if missing, sed-patches .pc files.
+# Usage: fetch_prebuilt openssl-new openssl-new
+#        → OSSL_NEW_DIR (sans hyphens, uppercased)
+fetch_prebuilt() {
+    local _lib="$1" _verdir="$2"
+    local _verfile="$SCRIPT_DIR/../$_verdir/version"
+    [ -f "$_verfile" ] || { echo "missing $_verfile" >&2; exit 1; }
+    local _ver
+    _ver="$(tr -d '[:space:]' < "$_verfile")"
+    local _file="${_lib}-${TARGET_PLATFORM}-${_ver}.tar.gz"
+    local _tar="$CACHE_DIR/$_file"
+    local _url="${GH_RELEASE_BASE}/lib-${_lib}-${_ver}/${_file}"
+    local _dir="$WORK_DIR/${_lib}-${_ver}"
+    if [ ! -f "$_tar" ]; then
+        local _part="$_tar.part.$$"
+        (
+            if command -v flock >/dev/null 2>&1; then flock -x 9; fi
+            if [ ! -f "$_tar" ]; then
+                echo "==> downloading $_lib $_ver for ${TARGET_PLATFORM}"
+                echo "    $_url"
+                curl -fL --retry 8 --retry-delay 5 --retry-all-errors -o "$_part" "$_url"
+                mv "$_part" "$_tar"
+            fi
+        ) 9>"$CACHE_DIR/.${_lib}-download.lock"
+        rm -f "$_part"
+    fi
+    if [ ! -d "$_dir" ]; then
+        echo "==> extracting $_lib -> $_dir"
+        mkdir -p "$_dir"
+        tar -C "$_dir" -xzf "$_tar"
+    fi
+    # Sed-patch any .pc files so `prefix=...` points at the actual
+    # extraction dir, not the build-time path.
+    for _pc in "$_dir"/lib/pkgconfig/*.pc; do
+        [ -f "$_pc" ] || continue
+        sed -i.bak -E "s|^prefix=.*$|prefix=${_dir}|" "$_pc"
+        rm -f "$_pc.bak"
+    done
+    # Export <UPPER_NAME>_DIR with hyphens turned into underscores.
+    local _var="${_lib^^}_DIR"
+    _var="${_var//-/_}"
+    printf -v "$_var" '%s' "$_dir"
+    export "$_var"
+}
 
-# Rewrite the .pc files in place so `prefix=...` points at the actual
-# extraction dir, not the openssl-new build-time path encoded by the
-# openssl-new release runner.
-for _PC in "$OSSL_DIR"/lib/pkgconfig/*.pc; do
-    [ -f "$_PC" ] || continue
-    sed -i.bak -E "s|^prefix=.*$|prefix=${OSSL_DIR}|" "$_PC"
-    rm -f "$_PC.bak"
-done
+fetch_prebuilt openssl-new   openssl-new
+fetch_prebuilt libpng        libpng
+fetch_prebuilt libjpeg-turbo libjpeg-turbo
 
-# nix's macOS pkg-config wrapper strips `-L<path>` for paths outside
-# the nix store, so `pkg-config openssl --libs` returns only
-# `-lssl -lcrypto` and the linker can't find the .a files in
-# $OSSL_DIR/lib. We can't pass `LDFLAGS=-L$OSSL_DIR/lib` to make —
-# that hard-overrides NetSurf's internal LDFLAGS which carry the
-# in-tree -lwapcaplet -ldom -lnslog etc. Instead use the
-# gcc/clang-native LIBRARY_PATH env var: it's appended to the search
-# path implicitly, without touching make's LDFLAGS calculation.
-NS_LIBRARY_PATH="$OSSL_DIR/lib"
+[ -f "$OPENSSL_NEW_DIR/lib/libssl.a"          ] || { echo "openssl-new: missing libssl.a"   >&2; exit 1; }
+[ -f "$OPENSSL_NEW_DIR/lib/libcrypto.a"       ] || { echo "openssl-new: missing libcrypto.a">&2; exit 1; }
+[ -f "$OPENSSL_NEW_DIR/include/openssl/ssl.h" ] || { echo "openssl-new: missing ssl.h"      >&2; exit 1; }
+[ -f "$LIBPNG_DIR/lib/libpng.a"               ] || { echo "libpng: missing libpng.a"        >&2; exit 1; }
+[ -f "$LIBJPEG_TURBO_DIR/lib/libjpeg.a"       ] || { echo "libjpeg-turbo: missing libjpeg.a">&2; exit 1; }
+
+# The libpng + libjpeg-turbo prebuilts don't ship .pc files (just lib/
+# + include/). NetSurf's openssl-style pkg_config_find_and_add_enabled
+# probes via `pkg-config --exists libpng` / `libjpeg` and skips the
+# feature if missing — that auto-disabled PNG/JPEG in our build until
+# we synthesize minimal .pc files here. Same shape both shipped
+# upstream, just enough fields for the find_and_add_enabled macro
+# to read --cflags / --libs back out.
+mkdir -p "$LIBPNG_DIR/lib/pkgconfig" "$LIBJPEG_TURBO_DIR/lib/pkgconfig"
+cat >"$LIBPNG_DIR/lib/pkgconfig/libpng.pc" <<EOF
+prefix=$LIBPNG_DIR
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+Name: libpng
+Description: Loads and saves PNG files
+Version: 1.6.43
+Libs: -L\${libdir} -lpng
+Cflags: -I\${includedir}
+EOF
+ln -sf libpng.pc "$LIBPNG_DIR/lib/pkgconfig/libpng16.pc"
+
+cat >"$LIBJPEG_TURBO_DIR/lib/pkgconfig/libjpeg.pc" <<EOF
+prefix=$LIBJPEG_TURBO_DIR
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+Name: libjpeg
+Description: A SIMD-accelerated JPEG codec that provides the libjpeg API
+Version: 3.1.3
+Libs: -L\${libdir} -ljpeg
+Cflags: -I\${includedir}
+EOF
+
+# Force-link the yetty prebuilts via env LDFLAGS. macOS's nix clang
+# wrapper strips `-L<path>` from pkg-config output for non-nix-store
+# paths, so we have to seed the search path + lib refs ourselves.
+# Passing LDFLAGS via the environment (not as a `make LDFLAGS=...`
+# arg) preserves NetSurf's internal `LDFLAGS += -lwapcaplet -ldom ...`
+# — make-command-line overrides are sticky and would clobber it.
+# Belt-and-braces on Linux too (gcc tolerates duplicate -L entries).
+NS_LDFLAGS_EXTRA="-L$OPENSSL_NEW_DIR/lib -L$LIBPNG_DIR/lib -L$LIBJPEG_TURBO_DIR/lib -lssl -lcrypto"
+
+# NetSurf's libjpeg handling is via feature_switch (only adds
+# -DWITH_JPEG and -ljpeg, no -I from pkg-config), so the compiler
+# needs $LIBJPEG_TURBO_DIR/include on the include search path
+# explicitly. PNG uses pkg_config_find_and_add_enabled which does
+# pull --cflags from our synthesized .pc, but adding the -I here
+# defensively too is harmless.
+NS_CFLAGS_EXTRA="-I$LIBPNG_DIR/include -I$LIBJPEG_TURBO_DIR/include"
 
 #-----------------------------------------------------------------------------
 # Fetch + extract NetSurf source
@@ -267,7 +337,7 @@ NS_CFLAGS="-Wno-error=redundant-decls -Wno-error=array-bounds \
 -Wno-error=stringop-truncation -Wno-error=use-after-free \
 -Wno-error=dangling-pointer -Wno-error=address \
 -Wno-error=cast-function-type -Wno-error=unused-result -Wno-error \
-${NS_EXTRA_CFLAGS}"
+${NS_EXTRA_CFLAGS} ${NS_CFLAGS_EXTRA}"
 
 # Inside a nix dev shell, pkg-config is a wrapper that hard-codes which
 # env var it consumes at shell-init time, baked through utils.bash's
@@ -298,10 +368,10 @@ _make_args=(-C "$SRC_DIR" "-j${NCPU}" TARGET=monkey \
 echo "==> building netsurf-all ${VERSION} (TARGET=monkey, host=${NS_HOST:-native}, -j${NCPU})"
 env \
     "${_unset_args[@]}" \
-    PKG_CONFIG_PATH="$INST_DIR/lib/pkgconfig:$OSSL_DIR/lib/pkgconfig:${PKG_CONFIG_PATH:-}" \
-    PKG_CONFIG_PATH_FOR_TARGET="$INST_DIR/lib/pkgconfig:$OSSL_DIR/lib/pkgconfig:${PKG_CONFIG_PATH_FOR_TARGET:-}" \
-    LIBRARY_PATH="${NS_LIBRARY_PATH}${LIBRARY_PATH:+:$LIBRARY_PATH}" \
+    PKG_CONFIG_PATH="$INST_DIR/lib/pkgconfig:$OPENSSL_NEW_DIR/lib/pkgconfig:$LIBPNG_DIR/lib/pkgconfig:$LIBJPEG_TURBO_DIR/lib/pkgconfig:${PKG_CONFIG_PATH:-}" \
+    PKG_CONFIG_PATH_FOR_TARGET="$INST_DIR/lib/pkgconfig:$OPENSSL_NEW_DIR/lib/pkgconfig:$LIBPNG_DIR/lib/pkgconfig:$LIBJPEG_TURBO_DIR/lib/pkgconfig:${PKG_CONFIG_PATH_FOR_TARGET:-}" \
     CFLAGS="$NS_CFLAGS" \
+    LDFLAGS="$NS_LDFLAGS_EXTRA" \
     make "${_make_args[@]}"
 
 #-----------------------------------------------------------------------------

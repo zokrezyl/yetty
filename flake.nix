@@ -517,7 +517,7 @@
               gcc binutils
               curl gnutar xz gzip
               pkg-config
-              expat libxml2 libjpeg libpng libwebp
+              expat libxml2 libwebp
               curl.dev zlib.dev
               # openssl headers + libs come from the yetty prebuilt
               # openssl-new tarball that _build.sh downloads at build
@@ -540,7 +540,7 @@
               autoconf automake libtool
               curl gnutar xz gzip
               pkg-config
-              expat libxml2 libjpeg libpng libwebp
+              expat libxml2 libwebp
               curl.dev zlib.dev
               # openssl headers + libs come from the yetty prebuilt
               # openssl-new tarball that _build.sh downloads at build
@@ -555,7 +555,7 @@
               autoconf automake libtool
               curl gnutar xz gzip
               pkg-config
-              expat libxml2 libjpeg libpng libwebp
+              expat libxml2 libwebp
               curl.dev zlib.dev
             ];
             shellHook = "echo 'Yetty 3rdparty-build (netsurf — macos-x86_64)'";
