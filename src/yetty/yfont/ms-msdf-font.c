@@ -62,8 +62,12 @@ struct yetty_yfont_ms_msdf_font {
     uint32_t meta_capacity;
     uint32_t next_slot;
 
-    /* Codepoint -> slot */
+    /* Codepoint -> slot (forward) and slot -> codepoint (inverse).
+     * The inverse map is populated alongside the forward one in load_one
+     * so the font can answer get_codepoint(glyph_index) for clipboard
+     * extraction without scanning the forward map. */
     struct yetty_ycore_map glyph_map;
+    struct yetty_ycore_map slot_to_cp;
 
     /* Font sizing */
     float base_size;      /* CDB generation font size */
@@ -209,6 +213,10 @@ static struct uint32_result load_one(struct yetty_yfont_ms_msdf_font *f, uint32_
             free(data);
             return YETTY_ERR(uint32, "map full");
         }
+        /* Inverse map: slot → cp, for clipboard extraction. Ignore failure;
+         * the forward map already succeeded, and reverse lookup will just
+         * fall back to "unknown glyph". */
+        yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
         f->dirty = 1;
         free(data);
         return YETTY_OK(uint32, slot);
@@ -263,6 +271,7 @@ static struct uint32_result load_one(struct yetty_yfont_ms_msdf_font *f, uint32_
         free(data);
         return YETTY_ERR(uint32, "map full");
     }
+    yetty_ycore_map_put(&f->slot_to_cp, slot, cp);
 
     f->dirty = 1;
     free(data);
@@ -283,8 +292,23 @@ static void ms_msdf_destroy(struct yetty_yfont_ms_font *self)
     free(font->meta);
     free(font->shader_code.data);
     yetty_ycore_map_destroy(&font->glyph_map);
+    yetty_ycore_map_destroy(&font->slot_to_cp);
     yetty_ycdb_reader_close(font->cdb);
     free(font);
+}
+
+static struct uint32_result ms_msdf_get_codepoint(struct yetty_yfont_ms_font *self,
+                                                  uint32_t glyph_index)
+{
+    struct yetty_yfont_ms_msdf_font *f = (struct yetty_yfont_ms_msdf_font *)self;
+    if (!f) {
+        return YETTY_ERR(uint32, "font is NULL");
+    }
+    const uint32_t *cp = yetty_ycore_map_get(&f->slot_to_cp, glyph_index);
+    if (!cp) {
+        return YETTY_ERR(uint32, "unknown glyph_index");
+    }
+    return YETTY_OK(uint32, *cp);
 }
 
 static struct pixel_size_result ms_msdf_get_cell_size(const struct yetty_yfont_ms_font *self)
@@ -452,6 +476,7 @@ static const struct yetty_yfont_ms_font_ops ms_msdf_ops = {
     .set_cell_size = ms_msdf_set_cell_size,
     .get_glyph_index = ms_msdf_get_glyph_index,
     .get_glyph_index_styled = ms_msdf_get_glyph_index_styled,
+    .get_codepoint = ms_msdf_get_codepoint,
     .resize = ms_msdf_resize,
     .load_glyphs = ms_msdf_load_glyphs,
     .load_basic_latin = ms_msdf_load_basic_latin,
@@ -536,7 +561,9 @@ struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
     }
     font->next_slot = 1; /* slot 0 = empty/space */
 
-    /* Init glyph map */
+    /* Init forward and inverse glyph maps. The inverse is sized identically
+     * since every (cp → slot) pair stored in the forward map also gets
+     * a (slot → cp) entry here. */
     if (yetty_ycore_map_init(&font->glyph_map, MAP_CAPACITY) < 0) {
         free(font->meta);
         free(font->atlas_pixels);
@@ -544,6 +571,15 @@ struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
         yetty_ycdb_reader_close(font->cdb);
         free(font);
         return YETTY_ERR(yetty_font_ms_font, "map init failed");
+    }
+    if (yetty_ycore_map_init(&font->slot_to_cp, MAP_CAPACITY) < 0) {
+        yetty_ycore_map_destroy(&font->glyph_map);
+        free(font->meta);
+        free(font->atlas_pixels);
+        free(font->shader_code.data);
+        yetty_ycdb_reader_close(font->cdb);
+        free(font);
+        return YETTY_ERR(yetty_font_ms_font, "inverse map init failed");
     }
 
     /* GPU resource set */
@@ -606,6 +642,7 @@ struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
         free(font->atlas_pixels);
         free(font->shader_code.data);
         yetty_ycore_map_destroy(&font->glyph_map);
+        yetty_ycore_map_destroy(&font->slot_to_cp);
         yetty_ycdb_reader_close(font->cdb);
         free(font);
         return YETTY_ERR(yetty_font_ms_font, "failed to determine font metrics");

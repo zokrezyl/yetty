@@ -87,6 +87,8 @@ static struct uint32_result raster_font_get_glyph_index(struct yetty_yfont_ms_fo
 static struct uint32_result raster_font_get_glyph_index_styled(struct yetty_yfont_ms_font *self,
                                                                uint32_t codepoint,
                                                                enum yetty_yfont_ms_style style);
+static struct uint32_result raster_font_get_codepoint(struct yetty_yfont_ms_font *self,
+                                                      uint32_t glyph_index);
 static struct yetty_ycore_void_result raster_font_resize(struct yetty_yfont_ms_font *self,
                                                          float font_size);
 static struct yetty_ycore_void_result raster_font_load_glyphs(struct yetty_yfont_ms_font *self,
@@ -118,6 +120,7 @@ static const struct yetty_yfont_ms_font_ops raster_font_ops = {
     .set_cell_size = raster_font_set_cell_size,
     .get_glyph_index = raster_font_get_glyph_index,
     .get_glyph_index_styled = raster_font_get_glyph_index_styled,
+    .get_codepoint = raster_font_get_codepoint,
     .resize = raster_font_resize,
     .load_glyphs = raster_font_load_glyphs,
     .load_basic_latin = raster_font_load_basic_latin,
@@ -691,6 +694,28 @@ static struct uint32_result raster_font_get_glyph_index_styled(struct yetty_yfon
     }
 
     return YETTY_ERR(uint32, "glyph not found");
+}
+
+/* Inverse — scan the per-style codepoint_slots arrays for a slot match.
+ * Style isn't preserved through the cell buffer, so we search all four
+ * style arrays. Each glyph_index is unique across styles for a given
+ * codepoint, so the first hit wins. Linear scan is fine here: it only
+ * runs during selection extraction (a few hundred cells, not per-frame). */
+static struct uint32_result raster_font_get_codepoint(struct yetty_yfont_ms_font *self,
+                                                      uint32_t glyph_index)
+{
+    struct yetty_yfont_raster_font *font = container_of(self, struct yetty_yfont_raster_font, base);
+    if (glyph_index == 0) {
+        return YETTY_OK(uint32, 0x20); /* slot 0 is the reserved space cell */
+    }
+    for (int s = 0; s < 4; s++) {
+        for (size_t i = 0; i < font->codepoint_slots_count[s]; i++) {
+            if (font->codepoint_slots[s][i].slot == glyph_index) {
+                return YETTY_OK(uint32, font->codepoint_slots[s][i].codepoint);
+            }
+        }
+    }
+    return YETTY_ERR(uint32, "unknown glyph_index");
 }
 
 static struct yetty_ycore_void_result raster_font_resize(struct yetty_yfont_ms_font *self,

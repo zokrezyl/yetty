@@ -36,7 +36,17 @@
  * shader applies it when computing cell_index so the live window appears in
  * the correct place. */
 #define U_ROOT_ROW 11
-#define U_COUNT 12
+/* Selection highlight — xterm-style stream selection.
+ *   sel_active   — 0 disables; otherwise read the rest
+ *   sel_anchor   — (row, col) cell where the user clicked
+ *   sel_head     — (row, col) cell the cursor sits on now
+ * The shader sorts anchor/head into start/end (reading order) and tints
+ * the cells between them. col runs [0, cols]; col==cols means past the
+ * EOL on that row (drag past the right edge → "to end of line"). */
+#define U_SEL_ACTIVE 12
+#define U_SEL_ANCHOR 13
+#define U_SEL_HEAD 14
+#define U_COUNT 15
 
 /* Setters */
 static inline void set_grid_size(struct yetty_ypaint_core_gpu_resource_set *rs, float cols,
@@ -87,6 +97,16 @@ static inline void set_root_row(struct yetty_ypaint_core_gpu_resource_set *rs, u
 {
     rs->uniforms[U_ROOT_ROW].u32 = r;
 }
+static inline void set_selection_state(struct yetty_ypaint_core_gpu_resource_set *rs, int active,
+                                       uint32_t anchor_row, uint32_t anchor_col,
+                                       uint32_t head_row, uint32_t head_col)
+{
+    rs->uniforms[U_SEL_ACTIVE].u32 = active ? 1u : 0u;
+    rs->uniforms[U_SEL_ANCHOR].vec2[0] = (float)anchor_row;
+    rs->uniforms[U_SEL_ANCHOR].vec2[1] = (float)anchor_col;
+    rs->uniforms[U_SEL_HEAD].vec2[0] = (float)head_row;
+    rs->uniforms[U_SEL_HEAD].vec2[1] = (float)head_col;
+}
 
 /* Init — names and types use the same constants */
 static void init_uniforms(struct yetty_ypaint_core_gpu_resource_set *rs)
@@ -116,12 +136,19 @@ static void init_uniforms(struct yetty_ypaint_core_gpu_resource_set *rs)
         (struct yetty_yrender_uniform){"visual_zoom_off", YETTY_YRENDER_UNIFORM_VEC2};
     rs->uniforms[U_ROOT_ROW] =
         (struct yetty_yrender_uniform){"root_row", YETTY_YRENDER_UNIFORM_U32};
+    rs->uniforms[U_SEL_ACTIVE] =
+        (struct yetty_yrender_uniform){"sel_active", YETTY_YRENDER_UNIFORM_U32};
+    rs->uniforms[U_SEL_ANCHOR] =
+        (struct yetty_yrender_uniform){"sel_anchor", YETTY_YRENDER_UNIFORM_VEC2};
+    rs->uniforms[U_SEL_HEAD] =
+        (struct yetty_yrender_uniform){"sel_head", YETTY_YRENDER_UNIFORM_VEC2};
 
     set_scale(rs, 1.0f);
     set_cursor_shape(rs, 1.0f);
     set_default_fg(rs, 0x00FFFFFFu);
     set_default_bg(rs, 0x00000000u);
     set_visual_zoom(rs, 1.0f, 0.0f, 0.0f);
+    set_selection_state(rs, 0, 0, 0, 0, 0);
 }
 
 /* Per-line descriptor in the scrollback arena: byte offset into the cells
@@ -201,6 +228,14 @@ struct yetty_yterm_terminal_text_layer {
      * we restore from this so the cursor reappears at whatever state vterm
      * settled on while we were in scrollback view. */
     float vterm_cursor_visible;
+
+    /* Selection — xterm-style cell-stream. Both endpoints are stored as
+     * (row, col) and we sort to (start, end) in reading order at extraction
+     * time. col==grid_size.cols means "past EOL" (drag past the right edge,
+     * which selects to end of line). */
+    int sel_active;
+    uint32_t sel_anchor_row, sel_anchor_col;
+    uint32_t sel_head_row, sel_head_col;
 };
 
 /* Forward declarations */
@@ -221,6 +256,11 @@ static uint32_t text_layer_get_live_anchor(const struct yetty_yrender_terminal_l
 static struct yetty_ycore_void_result text_layer_set_view_top(
     struct yetty_yrender_terminal_layer *self, int active, uint32_t view_top_total_idx);
 static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer);
+static struct yetty_ycore_void_result text_layer_get_selection_text(
+    const struct yetty_yrender_terminal_layer *self, struct yetty_ycore_buffer *out);
+static void text_layer_set_selection(struct yetty_yrender_terminal_layer *self, int active,
+                                     uint32_t anchor_row, uint32_t anchor_col, uint32_t head_row,
+                                     uint32_t head_col);
 
 /* VTerm callbacks */
 static int on_damage(VTermRect rect, void *user);
@@ -625,6 +665,8 @@ static const struct yetty_yterm_terminal_layer_ops text_layer_ops = {
     .set_cursor = text_layer_set_cursor,
     .get_live_anchor = text_layer_get_live_anchor,
     .set_view_top = text_layer_set_view_top,
+    .set_selection = text_layer_set_selection,
+    .get_selection_text = text_layer_get_selection_text,
 };
 
 /* VTerm screen callbacks */
@@ -1343,4 +1385,224 @@ static int on_sb_popline(int cols, VTermScreenCell *cells, void *user)
     ydebug("on_sb_popline: returned %d cols (target=%d) sb_count=%u", copy_cols, cols,
            text_layer->sb.lines_count);
     return 1;
+}
+
+/* Sort (anchor_row, anchor_col) and (head_row, head_col) into a reading-order
+ * (start, end) pair. start always precedes end in top-down, left-to-right
+ * stream order. */
+static void text_layer_sel_sorted(const struct yetty_yterm_terminal_text_layer *layer,
+                                  uint32_t *out_sr, uint32_t *out_sc, uint32_t *out_er,
+                                  uint32_t *out_ec)
+{
+    uint32_t sr = layer->sel_anchor_row;
+    uint32_t sc = layer->sel_anchor_col;
+    uint32_t er = layer->sel_head_row;
+    uint32_t ec = layer->sel_head_col;
+    if (sr > er || (sr == er && sc > ec)) {
+        uint32_t tr = sr, tc = sc;
+        sr = er;
+        sc = ec;
+        er = tr;
+        ec = tc;
+    }
+    *out_sr = sr;
+    *out_sc = sc;
+    *out_er = er;
+    *out_ec = ec;
+}
+
+/* Encode a Unicode codepoint as UTF-8 into a 4-byte buffer. Returns the
+ * byte count. Mirrors libvterm's fill_utf8 — we re-implement here because
+ * cells store font glyph indices (not codepoints), so we can't reuse
+ * vterm_screen_get_text and need our own UTF-8 emission path. */
+static size_t text_layer_cp_to_utf8(uint32_t cp, uint8_t out[4])
+{
+    if (cp < 0x80) {
+        out[0] = (uint8_t)cp;
+        return 1;
+    }
+    if (cp < 0x800) {
+        out[0] = (uint8_t)(0xC0 | (cp >> 6));
+        out[1] = (uint8_t)(0x80 | (cp & 0x3F));
+        return 2;
+    }
+    if (cp < 0x10000) {
+        out[0] = (uint8_t)(0xE0 | (cp >> 12));
+        out[1] = (uint8_t)(0x80 | ((cp >> 6) & 0x3F));
+        out[2] = (uint8_t)(0x80 | (cp & 0x3F));
+        return 3;
+    }
+    if (cp <= 0x10FFFF) {
+        out[0] = (uint8_t)(0xF0 | (cp >> 18));
+        out[1] = (uint8_t)(0x80 | ((cp >> 12) & 0x3F));
+        out[2] = (uint8_t)(0x80 | ((cp >> 6) & 0x3F));
+        out[3] = (uint8_t)(0x80 | (cp & 0x3F));
+        return 4;
+    }
+    /* Out of range — fall back to U+FFFD REPLACEMENT CHARACTER. */
+    out[0] = 0xEF;
+    out[1] = 0xBF;
+    out[2] = 0xBD;
+    return 3;
+}
+
+/* Recover the codepoint a cell was drawn from.
+ *
+ * Cells store the font *atlas glyph index*, not the original codepoint —
+ * yetty's libvterm modification calls the resolver and stashes
+ * `resolved.glyph_index` in `cell->glyph_index` (see screen.c::putglyph),
+ * which drops the codepoint on the floor. For clipboard extraction we
+ * walk back through the font's inverse map (or the shader-glyph PUA
+ * inverse for animated cells) to reconstruct it. */
+static uint32_t text_layer_codepoint_from_cell(struct yetty_yterm_terminal_text_layer *layer,
+                                               uint32_t glyph_index)
+{
+    if (glyph_index == 0) {
+        return 0x20; /* empty cell → space */
+    }
+    if (yetty_shader_glyph_is(glyph_index)) {
+        return yetty_shader_glyph_codepoint_from_id(glyph_index);
+    }
+    if (layer->font && layer->font->ops && layer->font->ops->get_codepoint) {
+        struct uint32_result r = layer->font->ops->get_codepoint(layer->font, glyph_index);
+        if (YETTY_IS_OK(r)) {
+            return r.value;
+        }
+    }
+    return 0xFFFD; /* unknown — emit U+FFFD instead of garbage */
+}
+
+/* Append a single row's selected slice [start_col, end_col) to out. The
+ * range is exclusive on the right so end_col==cols means "include the last
+ * cell". We trim trailing blanks within the slice — copying 80 trailing
+ * spaces because the user dragged past EOL is never useful. */
+static struct yetty_ycore_void_result text_layer_append_row_slice(
+    struct yetty_yterm_terminal_text_layer *layer, uint32_t row, uint32_t start_col,
+    uint32_t end_col, struct yetty_ycore_buffer *out)
+{
+    int cols = (int)layer->base.grid_size.cols;
+    if (cols <= 0 || (int)start_col >= cols || end_col == 0 || start_col >= end_col) {
+        return YETTY_OK_VOID();
+    }
+    if ((int)end_col > cols) {
+        end_col = (uint32_t)cols;
+    }
+
+    /* Trim trailing blanks within the slice. Walks cells right-to-left
+     * looking for the rightmost non-empty glyph index; GLYPH_WIDE_CONT
+     * is treated as non-empty since it belongs to a wide char to the left. */
+    int last_col = -1;
+    for (int c = (int)end_col - 1; c >= (int)start_col; c--) {
+        VTermScreenCell cell;
+        VTermPos pos = {.row = (int)row, .col = c};
+        if (!vterm_screen_get_cell(layer->screen, pos, &cell)) {
+            continue;
+        }
+        uint32_t g = cell.glyph_index;
+        if (g != 0 && g != 0xFFFEu /* GLYPH_WIDE_CONT */) {
+            last_col = c;
+            break;
+        }
+    }
+    if (last_col < (int)start_col) {
+        return YETTY_OK_VOID();
+    }
+
+    /* Walk cells left-to-right, mapping each glyph_index back to a
+     * codepoint via the font's inverse op and emitting UTF-8. We skip
+     * GLYPH_WIDE_CONT (the right half of a double-width glyph) since
+     * its codepoint already went out with the left half. */
+    for (int c = (int)start_col; c <= last_col; c++) {
+        VTermScreenCell cell;
+        VTermPos pos = {.row = (int)row, .col = c};
+        if (!vterm_screen_get_cell(layer->screen, pos, &cell)) {
+            continue;
+        }
+        uint32_t g = cell.glyph_index;
+        if (g == 0xFFFEu /* GLYPH_WIDE_CONT */) {
+            continue;
+        }
+        uint32_t cp = text_layer_codepoint_from_cell(layer, g);
+        uint8_t utf8[4];
+        size_t n = text_layer_cp_to_utf8(cp, utf8);
+        struct yetty_ycore_void_result wr = yetty_ycore_buffer_write(out, utf8, n);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "text_layer row slice write");
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Stream-extract the current selection. Empty selection → no-op. */
+static struct yetty_ycore_void_result text_layer_get_selection_text(
+    const struct yetty_yrender_terminal_layer *self, struct yetty_ycore_buffer *out)
+{
+    /* Cast away const — extraction goes through the font, whose
+     * get_codepoint may lazily populate caches (raster font scans). The
+     * cells themselves are read-only here. */
+    struct yetty_yterm_terminal_text_layer *text_layer = container_of(
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yterm_terminal_text_layer, base);
+
+    if (!text_layer->sel_active || !text_layer->screen || !out) {
+        return YETTY_OK_VOID();
+    }
+
+    uint32_t cols = self->grid_size.cols;
+    uint32_t rows = self->grid_size.rows;
+    if (cols == 0 || rows == 0) {
+        return YETTY_OK_VOID();
+    }
+
+    uint32_t sr, sc, er, ec;
+    text_layer_sel_sorted(text_layer, &sr, &sc, &er, &ec);
+    if (sr >= rows) {
+        return YETTY_OK_VOID();
+    }
+    if (er >= rows) {
+        er = rows - 1;
+        ec = cols;
+    }
+
+    if (sr == er) {
+        /* Single-row selection. The exclusive end is sc..ec; clamp to cols. */
+        uint32_t end = ec > cols ? cols : ec;
+        return text_layer_append_row_slice(text_layer, sr, sc, end, out);
+    }
+
+    /* First row: from sc to end of row. */
+    struct yetty_ycore_void_result r =
+        text_layer_append_row_slice(text_layer, sr, sc, cols, out);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "selection first row");
+    {
+        struct yetty_ycore_void_result wr = yetty_ycore_buffer_write(out, "\n", 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "selection LF");
+    }
+
+    /* Middle rows: full rows. */
+    for (uint32_t row = sr + 1; row < er; row++) {
+        r = text_layer_append_row_slice(text_layer, row, 0, cols, out);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "selection middle row");
+        struct yetty_ycore_void_result wr = yetty_ycore_buffer_write(out, "\n", 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "selection middle LF");
+    }
+
+    /* Last row: from 0 to ec. */
+    uint32_t end = ec > cols ? cols : ec;
+    r = text_layer_append_row_slice(text_layer, er, 0, end, out);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "selection last row");
+
+    return YETTY_OK_VOID();
+}
+
+static void text_layer_set_selection(struct yetty_yrender_terminal_layer *self, int active,
+                                     uint32_t anchor_row, uint32_t anchor_col, uint32_t head_row,
+                                     uint32_t head_col)
+{
+    struct yetty_yterm_terminal_text_layer *text_layer =
+        container_of(self, struct yetty_yterm_terminal_text_layer, base);
+    text_layer->sel_active = active;
+    text_layer->sel_anchor_row = anchor_row;
+    text_layer->sel_anchor_col = anchor_col;
+    text_layer->sel_head_row = head_row;
+    text_layer->sel_head_col = head_col;
+    set_selection_state(&text_layer->rs, active, anchor_row, anchor_col, head_row, head_col);
+    text_layer->base.dirty = 1;
 }

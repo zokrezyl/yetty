@@ -128,6 +128,49 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // terminal area, so we draw fully opaque on top.
     var out_color = mix(bg_color, fg_color, glyph_alpha);
 
+    // Selection highlight — xterm-style stream selection.
+    //
+    // anchor = (row, col) where the user clicked; head = the cell the
+    // cursor is currently over. We sort into (start, end) in reading
+    // order and tint:
+    //   row == start.row              → cols >= start.col are selected
+    //   start.row < row < end.row     → every col is selected
+    //   row == end.row                → cols < end.col are selected
+    //   start.row == end.row          → start.col <= col < end.col
+    // The half-open right boundary matches the C extractor and what
+    // every other terminal does.
+    if (uniforms.text_grid_sel_active != 0u) {
+        let anchor = uniforms.text_grid_sel_anchor;
+        let head = uniforms.text_grid_sel_head;
+        var start_row = u32(anchor.x);
+        var start_col = u32(anchor.y);
+        var end_row = u32(head.x);
+        var end_col = u32(head.y);
+        if (start_row > end_row || (start_row == end_row && start_col > end_col)) {
+            let tr = start_row; let tc = start_col;
+            start_row = end_row; start_col = end_col;
+            end_row = tr; end_col = tc;
+        }
+
+        let r = u32(cell_row);
+        let c = u32(cell_col);
+        var in_sel = false;
+        if (start_row == end_row) {
+            in_sel = (r == start_row && c >= start_col && c < end_col);
+        } else if (r == start_row) {
+            in_sel = (c >= start_col);
+        } else if (r == end_row) {
+            in_sel = (c < end_col);
+        } else if (r > start_row && r < end_row) {
+            in_sel = true;
+        }
+
+        if (in_sel) {
+            let sel_color = vec3<f32>(0.20, 0.40, 0.80);
+            out_color = mix(out_color, sel_color, 0.45);
+        }
+    }
+
     // Cursor — invert the composed cell pixel (per-fragment), so the cursor
     // contrasts against whatever is actually drawn here.
     let cursor_pos = uniforms.text_grid_cursor_pos;

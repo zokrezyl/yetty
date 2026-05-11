@@ -1,6 +1,7 @@
 /* glfw-event-loop.c - OS event loop using GLFW */
 
 #include <yetty/yplatform/platform-input-pipe.h>
+#include <yetty/yplatform/clipboard-manager.h>
 #include <yetty/yevent/event.h>
 #include <yetty/ytrace/ytrace.h>
 #include <GLFW/glfw3.h>
@@ -201,9 +202,17 @@ void yetty_yplatform_setup_window_callbacks(GLFWwindow *window)
     glfwSetWindowRefreshCallback(window, window_refresh_callback);
 }
 
-void yetty_yplatform_run_os_event_loop(GLFWwindow *window, int *running)
+void yetty_yplatform_run_os_event_loop(GLFWwindow *window, int *running,
+                                       struct yetty_platform_clipboard_manager *cm)
 {
     while (*running && !glfwWindowShouldClose(window)) {
         glfwWaitEvents();
+        /* After each event burst, drain anything the render thread has
+         * pushed onto the clipboard pipe. GLFW clipboard calls have to
+         * happen on this thread; the render thread parks requests on
+         * the pipe and wakes us via glfwPostEmptyEvent. */
+        if (cm && cm->ops->drain) {
+            cm->ops->drain(cm);
+        }
     }
 }

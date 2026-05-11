@@ -45,6 +45,10 @@ struct yetty_ycore_void_result yetty_yevent_register_default_listeners(
         YETTY_YCORE_ZOOM_CELL_SIZE,
         /* Capture: yetty handles via the screenshot module. */
         YETTY_YCORE_SCREENSHOT,
+        /* Clipboard paste — posted by the clipboard manager (main thread)
+         * onto the input pipe after fetching the system clipboard. The
+         * focused terminal consumes it and writes the bytes to its PTY. */
+        YETTY_YCORE_PASTE,
     };
 
     for (size_t i = 0; i < sizeof(kTypes) / sizeof(kTypes[0]); ++i) {

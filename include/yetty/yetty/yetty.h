@@ -13,7 +13,7 @@ extern "C" {
 struct yetty_yetty_yetty;
 struct yetty_yconfig_config;
 struct yetty_ycore_xthread_event_pipe;
-struct yetty_yetty_clipboard_manager;
+struct yetty_platform_clipboard_manager;
 struct yetty_yplatform_pty_factory;
 struct yetty_yevent_event_loop;
 struct yetty_ypaint_core_gpu_allocator;
@@ -39,7 +39,7 @@ struct yetty_yetty_app_context {
     struct yetty_yetty_app_gpu_context app_gpu_context;
     struct yetty_yconfig_config *config;
     struct yetty_ycore_xthread_event_pipe *platform_input_pipe;
-    struct yetty_yetty_clipboard_manager *clipboard_manager;
+    struct yetty_platform_clipboard_manager *clipboard_manager;
     struct yetty_yplatform_pty_factory *pty_factory;
 };
 

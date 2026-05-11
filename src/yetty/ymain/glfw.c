@@ -44,6 +44,7 @@ static void platform_get_x11_handles(GLFWwindow *win, void **disp, unsigned long
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/clipboard-manager.h>
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -58,7 +59,8 @@ void yetty_yplatform_destroy_window(GLFWwindow *window);
 void yetty_yplatform_get_framebuffer_size(GLFWwindow *window, int *width, int *height);
 WGPUSurface yetty_yplatform_create_surface(WGPUInstance instance, GLFWwindow *window);
 void yetty_yplatform_setup_window_callbacks(GLFWwindow *window);
-void yetty_yplatform_run_os_event_loop(GLFWwindow *window, int *running);
+void yetty_yplatform_run_os_event_loop(GLFWwindow *window, int *running,
+                                       struct yetty_platform_clipboard_manager *cm);
 
 /* Render thread args */
 struct yetty_yplatform_render_thread_args {
@@ -299,6 +301,41 @@ int main(int argc, char **argv)
     unsigned long x11_window = 0UL;
     platform_get_x11_handles(window, &x11_display, &x11_window);
 
+    /* Render→main "output pipe" + clipboard manager that uses it.
+     *
+     * The output pipe is a shared bus for anything the render thread
+     * needs the main thread to do. Today only the clipboard manager
+     * writes here (Set/GetClipboardString must run on the GLFW main
+     * thread); future producers like window minimize/maximize/setTitle
+     * will share the same pipe. The main thread drains it between
+     * glfwWaitEvents and dispatches each event by type.
+     *
+     * Paste responses come back through the existing platform_input_pipe
+     * as YETTY_YCORE_PASTE events with the text in event->payload.
+     *
+     * NULL is OK in headless mode: copy/paste silently no-ops. */
+    struct yetty_ycore_xthread_event_pipe *output_pipe = NULL;
+    struct yetty_platform_clipboard_manager *clipboard_manager = NULL;
+    if (!headless) {
+        struct yetty_yplatform_input_pipe_result op_res = yetty_platform_input_pipe_create();
+        if (YETTY_IS_OK(op_res)) {
+            output_pipe = op_res.value;
+            struct yetty_yplatform_clipboard_manager_result clip_res =
+                yetty_platform_clipboard_manager_create(output_pipe, platform_input_pipe);
+            if (YETTY_IS_OK(clip_res)) {
+                clipboard_manager = clip_res.value;
+            } else {
+                ywarn("main: clipboard manager create failed: %s", clip_res.error.msg);
+                yetty_ycore_error_destroy(clip_res.error);
+                output_pipe->ops->destroy(output_pipe);
+                output_pipe = NULL;
+            }
+        } else {
+            ywarn("main: output pipe create failed: %s", op_res.error.msg);
+            yetty_ycore_error_destroy(op_res.error);
+        }
+    }
+
     struct yetty_yetty_app_context app_context = {
         .app_gpu_context = {.instance = instance,
                             .surface = surface,
@@ -308,6 +345,7 @@ int main(int argc, char **argv)
                             .x11_window = x11_window},
         .config = config,
         .platform_input_pipe = platform_input_pipe,
+        .clipboard_manager = clipboard_manager,
         .pty_factory = pty_factory};
 
     /* Yetty */
@@ -348,7 +386,7 @@ int main(int argc, char **argv)
 
     /* OS event loop (headless uses a simple wait loop) */
     if (window) {
-        yetty_yplatform_run_os_event_loop(window, &running);
+        yetty_yplatform_run_os_event_loop(window, &running, clipboard_manager);
     } else {
         /* Headless mode: just wait for render thread to finish */
         while (running) {
@@ -370,6 +408,12 @@ int main(int argc, char **argv)
     }
     platform_input_pipe->ops->destroy(platform_input_pipe);
     ydebug("main: platform_input_pipe destroyed");
+    if (clipboard_manager) {
+        clipboard_manager->ops->destroy(clipboard_manager);
+    }
+    if (output_pipe) {
+        output_pipe->ops->destroy(output_pipe);
+    }
     config->ops->destroy(config);
     ydebug("main: config destroyed");
     if (window) {

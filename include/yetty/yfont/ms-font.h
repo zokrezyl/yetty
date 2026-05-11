@@ -65,6 +65,12 @@ struct yetty_yfont_ms_font_ops {
     struct uint32_result (*get_glyph_index_styled)(struct yetty_yfont_ms_font *self,
                                                    uint32_t codepoint,
                                                    enum yetty_yfont_ms_style style);
+    /* Inverse of get_glyph_index — given an atlas glyph index that the
+     * font previously handed out, recover the codepoint that produced it.
+     * Used by selection / clipboard so cells (which store glyph_index,
+     * not codepoint) can be turned back into UTF-8 text. Returns an
+     * error result for an unknown glyph_index. */
+    struct uint32_result (*get_codepoint)(struct yetty_yfont_ms_font *self, uint32_t glyph_index);
 
     /* Resize — changes font size, recalculates cell size */
     struct yetty_ycore_void_result (*resize)(struct yetty_yfont_ms_font *self, float font_size);
