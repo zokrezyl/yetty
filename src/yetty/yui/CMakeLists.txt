@@ -1,6 +1,5 @@
 add_library(yetty_yui STATIC
     tile.c
-    view.c
     workspace.c
 )
 
@@ -17,5 +16,6 @@ target_include_directories(yetty_yui
 target_link_libraries(yetty_yui
     PRIVATE
         webgpu
+        yetty_yui_core
         yetty_yterm
 )

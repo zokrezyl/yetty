@@ -4,7 +4,7 @@
 /*
  * Internal RFB client — connection state machine and framebuffer pixel
  * delivery. The viewer (ydvnc-viewer.c) wraps this and surfaces it as a
- * yetty_yterm_view.
+ * yetty_yui_view.
  */
 
 #include <stddef.h>

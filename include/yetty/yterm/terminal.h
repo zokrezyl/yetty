@@ -20,7 +20,7 @@ struct yetty_yterm_terminal_layer_ops;
 struct yetty_yterm_osc_statemachine;
 struct yetty_yevent_event_loop;
 struct yetty_platform_pty;
-struct yetty_yterm_view;
+struct yetty_yui_view;
 struct yetty_yrender_gpu_resource_binder;
 struct yetty_ypaint_core_target;
 
@@ -212,7 +212,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
 struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_terminal *terminal);
 
 /* Get terminal as yui view (for pushing into pane) */
-struct yetty_yterm_view *yetty_yterm_terminal_as_view(struct yetty_yterm_terminal *terminal);
+struct yetty_yui_view *yetty_yterm_terminal_as_view(struct yetty_yterm_terminal *terminal);
 
 /* Terminal input */
 void yetty_yterm_terminal_write(struct yetty_yterm_terminal *terminal, const char *data,

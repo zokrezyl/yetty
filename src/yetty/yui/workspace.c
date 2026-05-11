@@ -1,6 +1,6 @@
 #include <yetty/yui/workspace.h>
 #include <yetty/yui/tile.h>
-#include <yetty/yui/view.h>
+#include <yetty/yui-core/view.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yrender/render-target.h>

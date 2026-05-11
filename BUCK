@@ -129,6 +129,22 @@ cxx_library(
 )
 
 cxx_library(
+    name = "yui_core",
+    srcs = glob(["src/yetty/yui-core/**/*.c"]),
+    headers = glob([
+        "include/yetty/yui-core/**/*.h",
+    ]),
+    header_namespace = "",
+    compiler_flags = YETTY_C_FLAGS,
+    include_directories = YETTY_INCLUDES,
+    preferred_linkage = "static",
+    deps = [
+        ":ycore",
+    ],
+    visibility = ["PUBLIC"],
+)
+
+cxx_library(
     name = "yterm",
     srcs = glob(["src/yetty/yterm/**/*.c"]),
     headers = glob([
@@ -142,6 +158,7 @@ cxx_library(
     deps = [
         ":ycore",
         ":ypaint_yaml",
+        ":yui_core",
         "//buck-build-tools/third_party:vterm",
         "//buck-build-tools/third_party:dawn",
     ],
@@ -439,6 +456,7 @@ cxx_library(
     preferred_linkage = "static",
     deps = [
         ":ycore",
+        ":yui_core",
         ":yterm",
         "//buck-build-tools/third_party:dawn",
     ],

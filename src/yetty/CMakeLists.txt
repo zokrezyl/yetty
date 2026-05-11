@@ -60,6 +60,11 @@ if(NOT EMSCRIPTEN)
     add_subdirectory(yco)
 endif()
 
+# Abstract view interface — shared base for yui and yterm (breaks the
+# yui ↔ yterm cycle by giving both a common dependency that depends on
+# neither).
+add_subdirectory(yui-core)
+
 # UI subsystem (workspace, tile, view)
 add_subdirectory(yui)
 
