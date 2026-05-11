@@ -149,7 +149,6 @@ option(YETTY_ENABLE_TOOL_YFLAME          "yflame tool"                       OFF
 option(YETTY_ENABLE_TOOL_PDF2YDRAW       "pdf2ydraw tool"                    OFF)
 option(YETTY_ENABLE_TOOL_HTML2YDRAW      "html2ydraw tool"                   OFF)
 option(YETTY_ENABLE_TOOL_YHTML_MACHINE   "yhtml-machine tool"                OFF)
-option(YETTY_ENABLE_TOOL_YBROWSER        "ybrowser tool"                     OFF)
 option(YETTY_ENABLE_TOOL_YDOC            "ydoc tool"                         ON)
 option(YETTY_ENABLE_TOOL_YSHEET          "ysheet tool"                       ON)
 option(YETTY_ENABLE_TOOL_YSLIDE          "yslide tool"                       ON)
@@ -160,6 +159,8 @@ option(YETTY_ENABLE_FEATURE_YNETSURF     "ynetsurf — NetSurf frontend lib"   O
 option(YETTY_ENABLE_TOOL_YNETSURF        "ynetsurf browser tool"             ON)
 option(YETTY_ENABLE_FEATURE_YLEXBOR      "ylexbor — lexbor-based HTML lib"   ON)
 option(YETTY_ENABLE_TOOL_YLEXBOR    "ylexbor-demo CLI tool"             ON)
+option(YETTY_ENABLE_FEATURE_YBROWSER     "ybrowser — lexbor HTML + libcss cascade" ON)
+option(YETTY_ENABLE_TOOL_YBROWSER        "ybrowser CLI tool"                 ON)
 
 # Auto-disable ylexbor on webasm, iOS, tvOS: lexbor uses POSIX file I/O and
 # threading APIs not available on these targets.
@@ -167,6 +168,8 @@ if(EMSCRIPTEN OR YETTY_IOS OR YETTY_TVOS)
     foreach(_f
         YETTY_ENABLE_FEATURE_YLEXBOR
         YETTY_ENABLE_TOOL_YLEXBOR
+        YETTY_ENABLE_FEATURE_YBROWSER
+        YETTY_ENABLE_TOOL_YBROWSER
     )
         if(${_f})
             message(STATUS "Disabling ${_f} on webasm/iOS/tvOS (lexbor not supported)")
@@ -204,6 +207,8 @@ if(WIN32)
         YETTY_ENABLE_LIB_LIBCURL       # libcurl Windows port would need OpenSSL+zlib 3rdparty; no Windows consumer right now besides ylexbor.
         YETTY_ENABLE_FEATURE_YLEXBOR   # src/yetty/ylexbor uses GCC `[low...high]` array initializers and POSIX <strings.h>.
         YETTY_ENABLE_TOOL_YLEXBOR      # depends on YLEXBOR; also links CURL::libcurl + POSIX yplatform sources.
+        YETTY_ENABLE_FEATURE_YBROWSER  # same constraints as YLEXBOR (forked module).
+        YETTY_ENABLE_TOOL_YBROWSER     # same constraints as TOOL_YLEXBOR.
         YETTY_ENABLE_FEATURE_YNETSURF  # NetSurf prebuilt is non-Windows; the wrapper has no NetSurf::Windows port today.
         YETTY_ENABLE_TOOL_YNETSURF     # depends on YNETSURF; also hardcodes POSIX yplatform/* sources.
     )
