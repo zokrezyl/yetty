@@ -194,6 +194,35 @@ struct yetty_ypaint_core_complex_prim_factory;
 struct yetty_ypaint_core_complex_prim_factory *yetty_ypaint_canvas_get_complex_prim_factory(
     struct yetty_ypaint_canvas *canvas);
 
+//=============================================================================
+// Glyph primitive iteration (for selection / clipboard text extraction)
+//=============================================================================
+
+// View of a single glyph primitive — what a visitor sees during
+// yetty_ypaint_canvas_for_each_glyph. x/y are absolute canvas pixel
+// coordinates of the glyph's anchor; glyph_idx is the atlas index the
+// font cache handed out; font_slot is the canvas-local font index that
+// produced the glyph (0 = default), or -1 if the prim has no font slot
+// encoded.
+struct yetty_ypaint_glyph_view {
+    float x;
+    float y;
+    uint32_t glyph_idx;
+    int32_t font_slot;
+};
+
+typedef void (*yetty_ypaint_canvas_glyph_visitor)(
+    const struct yetty_ypaint_glyph_view *view, void *user);
+
+// Walk every glyph primitive in the canvas, in storage order. Used by
+// the ypaint layer's selection-extraction path: the caller filters by
+// y range to build the row-by-row text content for the clipboard.
+// Visitor is called synchronously; abort by setting a flag in `user`
+// and checking it inside the visitor (no early-return contract — keep
+// this op simple).
+void yetty_ypaint_canvas_for_each_glyph(struct yetty_ypaint_canvas *canvas,
+                                        yetty_ypaint_canvas_glyph_visitor visitor, void *user);
+
 #ifdef __cplusplus
 }
 #endif

@@ -40,6 +40,12 @@ struct yetty_yfont_font_ops {
     struct uint32_result (*get_glyph_index_styled)(struct yetty_ypaint_font *self,
                                                    uint32_t codepoint,
                                                    enum yetty_yfont_style style);
+    /* Inverse of get_glyph_index — given an atlas glyph index the font
+     * previously handed out, recover the codepoint that produced it.
+     * Used by selection / clipboard so glyph prims (which store
+     * glyph_index, not codepoint) can be reconstructed back into UTF-8.
+     * Returns an error result for an unknown glyph_index. */
+    struct uint32_result (*get_codepoint)(struct yetty_ypaint_font *self, uint32_t glyph_index);
 
     /* Glyph loading */
     struct yetty_ycore_void_result (*load_glyphs)(struct yetty_ypaint_font *self,
