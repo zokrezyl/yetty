@@ -16,6 +16,12 @@ struct yetty_yplatform_unix_pty_factory {
     struct yetty_yplatform_pty_factory base;
     struct yetty_yconfig_config *config;
     struct yetty_yplatform_yprocess *qemu_proc;
+    /* --temu owns the in-process TinyEMU VM lifecycle while the terminal
+     * itself attaches via telnet to the slirp hostfwd (127.0.0.1:2323 →
+     * in-guest telnetd). The pty returned by tinyemu_pty_create is the
+     * hvc0 console; we keep it here only so destroy() can stop the VM
+     * thread. */
+    struct yetty_platform_pty *tinyemu_pty;
 };
 
 /* Forward declarations */
@@ -37,6 +43,15 @@ static void unix_pty_factory_destroy(struct yetty_yplatform_pty_factory *self)
     if (factory->qemu_proc) {
         yetty_yqemu_qemu_stop(factory->qemu_proc);
         factory->qemu_proc = NULL;
+    }
+
+    if (factory->tinyemu_pty) {
+        struct yetty_ycore_void_result dr =
+            factory->tinyemu_pty->ops->destroy(factory->tinyemu_pty);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
+        factory->tinyemu_pty = NULL;
     }
 
     free(factory);
@@ -62,9 +77,36 @@ static struct yetty_yplatform_pty_ptr_result unix_pty_factory_create_pty(
         return yetty_ytelnet_telnet_pty_create_tcp(host, (uint16_t)port, event_loop);
     }
 
-    /* --temu: TinyEMU RISC-V VM */
+    /* --temu: in-process TinyEMU RISC-V VM. The terminal session attaches
+     * to the in-guest telnetd via the slirp hostfwd (127.0.0.1:2323 →
+     * tcp/23 inside the VM), not to the hvc0 console — same shape as the
+     * --qemu branch above. The factory owns the VM lifecycle; the hvc0
+     * console pty stays parked on the factory until destroy(). A separate
+     * console-attached --temu mode can be added later. */
     if (config && config->ops->get_bool(config, YETTY_YCONFIG_KEY_TEMU, 0)) {
-        return yetty_yplatform_tinyemu_pty_create(config);
+        if (!factory->tinyemu_pty) {
+            struct yetty_yplatform_pty_ptr_result tr =
+                yetty_yplatform_tinyemu_pty_create(config);
+            if (!YETTY_IS_OK(tr)) {
+                return tr;
+            }
+            factory->tinyemu_pty = tr.value;
+
+            struct yetty_ycore_void_result wr =
+                yetty_yqemu_qemu_wait_ready(TINYEMU_TELNET_PORT, 30000);
+            if (YETTY_IS_ERR(wr)) {
+                struct yetty_ycore_void_result dr =
+                    factory->tinyemu_pty->ops->destroy(factory->tinyemu_pty);
+                if (YETTY_IS_ERR(dr)) {
+                    yetty_ycore_error_destroy(dr.error);
+                }
+                factory->tinyemu_pty = NULL;
+                return YETTY_ERR(yetty_yplatform_pty_ptr,
+                                 "TinyEMU slirp telnet not ready", wr);
+            }
+        }
+        return yetty_ytelnet_telnet_pty_create_tcp("127.0.0.1", TINYEMU_TELNET_PORT,
+                                                   event_loop);
     }
 
 #if defined(YETTY_HAS_SSH)

@@ -4,9 +4,11 @@
 # any `#if YETTY_IOS` branches in the platform code stay active; YETTY_TVOS=1
 # is added for tvOS-only branches.
 
-# Disable desktop-only / sandbox-incompatible libraries, same as iOS.
+# Disable desktop-only / sandbox-incompatible libraries, same as iOS. The
+# QEMU *launcher* lib stays linked so pty-factory/default.c's --qemu telnet
+# branch resolves; only the qemu-system-riscv64 binary fetch/embed is off.
 set(YETTY_ENABLE_LIB_GLFW OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_LIB_QEMU OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_LIB_QEMU_BINARY OFF CACHE BOOL "" FORCE)
 
 include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
 
@@ -24,7 +26,10 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ymain/ios-tvos.m
     ${YETTY_ROOT}/src/yetty/yplatform/paths/ios-tvos.m
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/ios-tvos.m
-    ${YETTY_ROOT}/src/yetty/ypty/ios-tvos-temu-pty.c
+    ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
+    ${YETTY_ROOT}/src/yetty/ypty/temu-pty.c
+    ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/process/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
@@ -64,9 +69,10 @@ target_compile_definitions(yetty PRIVATE
     YETTY_HAS_VNC=1
     YETTY_HAS_YVIDEO=1
     $<$<BOOL:${YETTY_ENABLE_LIB_TINYEMU}>:YETTY_HAS_TINYEMU=1>
-    # CONFIG_SLIRP must be defined for src/yetty/yplatform/ios/tinyemu-pty.c
-    # so its slirp_open() ifdef block compiles in. Without it, p->tab_eth[i].net
-    # is never set and virtio_net_init derefs NULL → SIGSEGV at vm init.
+    $<$<BOOL:${YETTY_ENABLE_LIB_QEMU}>:YETTY_HAS_QEMU=1>
+    # CONFIG_SLIRP must be defined for temu-pty.c so its slirp_open() ifdef
+    # block compiles in. Without it, p->tab_eth[i].net is never set and
+    # virtio_net_init derefs NULL → SIGSEGV at vm init.
     $<$<BOOL:${YETTY_ENABLE_LIB_TINYEMU}>:CONFIG_SLIRP>
 )
 
@@ -99,6 +105,7 @@ target_link_libraries(yetty PRIVATE
     tinyemu
     yetty_telnet
     yetty_yco
+    $<$<BOOL:${YETTY_ENABLE_LIB_QEMU}>:yetty_qemu>
     ${CORETEXT_LIBRARY}
     ${COREFOUNDATION_LIBRARY}
     ${COREGRAPHICS_LIBRARY}

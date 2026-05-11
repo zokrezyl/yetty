@@ -203,6 +203,15 @@ static struct yetty_platform_pty_pipe_source *fork_pty_pipe_source(struct yetty_
 struct yetty_yplatform_pty_ptr_result yetty_yplatform_fork_pty_create(
     struct yetty_yconfig_config *config)
 {
+#if defined(YETTY_IOS) || defined(YETTY_TVOS)
+    /* iOS/tvOS sandbox forbids fork/exec. The factory still references this
+     * symbol because pty-factory/default.c is shared with desktop, but the
+     * runtime path on these platforms always selects --telnet or --temu so
+     * this function should never be reached. Fail loudly if it is. */
+    (void)config;
+    return YETTY_ERR(yetty_yplatform_pty_ptr,
+                     "forkpty not available in Apple mobile sandbox");
+#else
     struct yetty_yplatform_fork_pty *pty;
     struct yetty_yconfig_shell_argv shellv;
     struct yetty_ycore_void_result argv_res;
@@ -259,4 +268,5 @@ struct yetty_yplatform_pty_ptr_result yetty_yplatform_fork_pty_create(
     pty->running = 1;
 
     return YETTY_OK(yetty_yplatform_pty_ptr, &pty->base);
+#endif /* YETTY_IOS || YETTY_TVOS */
 }
