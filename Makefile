@@ -264,6 +264,7 @@ CMAKE_CROSS_RISCV := \
 	-DCMAKE_C_COMPILER=riscv64-linux-gnu-gcc \
 	-DCMAKE_CXX_COMPILER=riscv64-linux-gnu-g++ \
 	-DCMAKE_LIBRARY_ARCHITECTURE=riscv64-linux-gnu \
+	-DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc -static-libstdc++" \
 	-DYETTY_ENABLE_LIB_WEBGPU=OFF \
 	-DYETTY_ENABLE_LIB_GLFW=OFF \
 	-DYETTY_ENABLE_LIB_QEMU=OFF
