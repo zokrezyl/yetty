@@ -1713,7 +1713,12 @@ static struct yetty_ycore_void_result canvas_evict_line(struct yetty_ypaint_canv
 
 /* Walk every line strictly below rolling_row_0 and evict any that
  * still hold expanded content. Called at the end of add_buffer once
- * the new content has been placed and the viewport has scrolled. */
+ * the new content has been placed and the viewport has scrolled.
+ *
+ * A line that was previously evicted but restored for a scrollback
+ * render (sb_offsets[i] set, but grid_line currently populated) is
+ * NOT re-encoded — its bytes haven't changed — but its expanded
+ * form is freed again. */
 static void canvas_evict_scrollback(struct yetty_ypaint_canvas *canvas)
 {
     if (canvas->rolling_row_0 == 0) {
@@ -1725,6 +1730,19 @@ static void canvas_evict_scrollback(struct yetty_ypaint_canvas *canvas)
     }
     for (uint32_t i = 0; i < end; i++) {
         if (i < canvas->sb_offsets_count && canvas->sb_offsets[i] != SB_OFFSET_UNSET) {
+            /* Already serialised. If it was restored, free the
+             * expanded form again. */
+            struct yetty_ypaint_canvas_grid_line *line = &canvas->lines.lines[i];
+            if (line->prims.count > 0 || line->cell_count > 0 || line->font_count > 0) {
+                struct yetty_ycore_void_result fr = grid_line_free(
+                    line, canvas->flyweight_registry, canvas->font_cache);
+                if (YETTY_IS_ERR(fr)) {
+                    yerror("canvas_evict_scrollback: re-free line %u failed: %s",
+                           i, fr.error.msg);
+                    yetty_ycore_error_destroy(fr.error);
+                }
+                grid_line_init(line, 0);
+            }
             continue;
         }
         struct yetty_ycore_void_result r = canvas_evict_line(canvas, i);
@@ -1733,6 +1751,128 @@ static void canvas_evict_scrollback(struct yetty_ypaint_canvas *canvas)
             yetty_ycore_error_destroy(r.error);
             /* Keep going — best-effort batch eviction; later lines may
              * still succeed. */
+        }
+    }
+}
+
+/* ===========================================================================
+ * Scrollbuffer restore (decode evicted lines back into canvas->lines)
+ *
+ * Called by rebuild_grid for every visible-window row whose grid_line
+ * is empty but sb_offsets[i] is set. After restore, the grid_line
+ * has its prims/arena/cells populated and rendering proceeds as if
+ * the line had never been evicted. canvas_evict_scrollback frees
+ * these restored lines on the next add_buffer.
+ * ========================================================================= */
+
+/* Hard-coded word_count lookup. Today only YETTY_YSDF_GLYPH (200)
+ * goes through the scrollbuffer's non-default escape — SDF prims
+ * with variable size would need a per-type registry lookup, which
+ * would mean pulling in the ypaint-core flyweight-internal header.
+ * Until SDF/complex content needs scrollback restore, this is
+ * sufficient. */
+static uint32_t canvas_sb_word_count_fn(uint32_t type_word, void *ctx)
+{
+    (void)ctx;
+    if (type_word == YETTY_YSDF_GLYPH) {
+        return YPAINT_GLYPH_WORDS;
+    }
+    return 0;
+}
+
+struct sb_restore_ctx {
+    struct yetty_ypaint_canvas_grid_line *line;
+};
+
+YETTY_EXTERNAL_CALLBACK
+static struct yetty_ycore_void_result sb_restore_on_header(void *ctx,
+                                                           uint32_t line_rolling_row,
+                                                           uint32_t prim_count)
+{
+    /* No-op: the line was freed before this restore was triggered,
+     * so push_prim handles growing the arena/prims as needed. The
+     * header values are only used for sanity checks here. */
+    (void)ctx;
+    (void)line_rolling_row;
+    (void)prim_count;
+    return YETTY_OK_VOID();
+}
+
+YETTY_EXTERNAL_CALLBACK
+static struct yetty_ycore_void_result sb_restore_on_cell(
+    void *ctx, uint32_t col, const struct yetty_ypaint_scrollbuffer_ref *refs, uint32_t ref_count)
+{
+    struct sb_restore_ctx *r = ctx;
+    struct yetty_ycore_void_result er = grid_line_ensure_cells(r->line, col + 1u);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "restore: ensure_cells");
+    for (uint32_t i = 0; i < ref_count; i++) {
+        struct yetty_ypaint_canvas_prim_ref pr = {
+            .lines_ahead = refs[i].lines_ahead,
+            .prim_index  = refs[i].prim_idx,
+        };
+        prim_ref_array_push(&r->line->cells[col].refs, pr);
+    }
+    return YETTY_OK_VOID();
+}
+
+YETTY_EXTERNAL_CALLBACK
+static struct yetty_ycore_void_result sb_restore_on_prim(void *ctx, uint32_t rolling_row,
+                                                         const uint32_t *payload,
+                                                         uint32_t word_count)
+{
+    struct sb_restore_ctx *r = ctx;
+    uint32_t idx = grid_line_push_prim(r->line, rolling_row, (const float *)payload, word_count);
+    if (idx == UINT32_MAX) {
+        return YETTY_ERR(yetty_ycore_void, "restore: grid_line_push_prim failed");
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Decode line `idx` from the scrollbuffer back into
+ * canvas->lines.lines[idx]. Idempotent: if the line is not in
+ * scrollbuffer (sb_offsets[idx] == UNSET) or already has expanded
+ * content, it's a no-op. */
+static struct yetty_ycore_void_result canvas_restore_line(struct yetty_ypaint_canvas *canvas,
+                                                          uint32_t idx)
+{
+    if (idx >= canvas->sb_offsets_count || canvas->sb_offsets[idx] == SB_OFFSET_UNSET) {
+        return YETTY_OK_VOID();
+    }
+    if (idx >= canvas->lines.count) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ypaint_canvas_grid_line *line = &canvas->lines.lines[idx];
+    if (line->prims.count > 0 || line->cell_count > 0) {
+        /* Already expanded — could be a previously-restored line still
+         * holding content from the previous render, or content that
+         * was placed on top of a serialised line (shouldn't happen
+         * for ycat workloads, but harmless to handle). */
+        return YETTY_OK_VOID();
+    }
+
+    struct sb_restore_ctx rctx = {.line = line};
+    struct yetty_ypaint_scrollbuffer_decode_sinks sinks = {
+        .ctx = &rctx,
+        .on_header = sb_restore_on_header,
+        .on_cell   = sb_restore_on_cell,
+        .on_prim   = sb_restore_on_prim,
+    };
+    struct yetty_ypaint_scrollbuffer_offset_result dec = yetty_ypaint_scrollbuffer_decode_line(
+        &canvas->scrollbuffer, canvas->sb_offsets[idx], canvas_sb_word_count_fn, NULL, &sinks);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dec, "canvas_restore_line: decode failed");
+    return YETTY_OK_VOID();
+}
+
+/* Restore every evicted line in [first, last] (inclusive). Used by
+ * rebuild_grid to ensure the visible-window rows are populated. */
+static void canvas_restore_range(struct yetty_ypaint_canvas *canvas, uint32_t first,
+                                 uint32_t last)
+{
+    for (uint32_t i = first; i <= last; i++) {
+        struct yetty_ycore_void_result r = canvas_restore_line(canvas, i);
+        if (YETTY_IS_ERR(r)) {
+            yerror("canvas_restore_range: restore line %u failed: %s", i, r.error.msg);
+            yetty_ycore_error_destroy(r.error);
         }
     }
 }
@@ -2119,6 +2259,22 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_rebuild_grid(struct yetty_ypa
     }
     if (!canvas->dirty && canvas->grid_staging_count > 0) {
         return YETTY_OK_VOID();
+    }
+
+    /* If the visible window dips into scrollback (set_view_top), the
+     * grid_lines for that range may have been evicted to the
+     * scrollbuffer and emptied. Decode them back into expanded form
+     * before the prefix-sum/cell-walk below runs. Lines that aren't
+     * evicted, or are already restored, are no-ops. */
+    {
+        uint32_t window_top = canvas_effective_view_top(canvas);
+        uint32_t window_last = window_top + canvas->grid_size.rows;
+        if (window_last > canvas->lines.count) {
+            window_last = canvas->lines.count;
+        }
+        if (window_last > window_top) {
+            canvas_restore_range(canvas, window_top, window_last - 1u);
+        }
     }
 
     /* Prefix-sum of prim counts across ALL canvas lines. The GPU prim buffer
