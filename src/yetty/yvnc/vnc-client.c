@@ -97,6 +97,9 @@ struct yetty_yvnc_client {
     struct yetty_yvnc_vnc_tile_header current_tile;
     struct yetty_yvnc_vnc_rect_header current_rect;
     uint16_t tiles_received;
+    /* Seq of the last frame whose final tile/rect was processed. send_frame_ack
+     * echoes this so the server can release per-client back-pressure. */
+    uint32_t last_completed_seq;
 
     /* GPU resources */
     WGPUTexture texture;
@@ -223,6 +226,7 @@ static struct yetty_ycore_void_result process_tile_data(struct yetty_yvnc_client
             client->stats_frames_window++;
             client->recv_state = YETTY_YVNC_RECV_FRAME_HEADER;
             client->recv_needed = sizeof(struct yetty_yvnc_vnc_frame_header);
+            client->last_completed_seq = client->current_frame.seq;
             struct yetty_ycore_void_result ar = yetty_yvnc_client_send_frame_ack(client);
             if (YETTY_IS_ERR(ar)) {
                 yetty_ycore_error_destroy(ar.error);
@@ -324,6 +328,7 @@ static struct yetty_ycore_void_result process_tile_data(struct yetty_yvnc_client
             client->stats_frames_window++;
             client->recv_state = YETTY_YVNC_RECV_FRAME_HEADER;
             client->recv_needed = sizeof(struct yetty_yvnc_vnc_frame_header);
+            client->last_completed_seq = client->current_frame.seq;
             struct yetty_ycore_void_result ar = yetty_yvnc_client_send_frame_ack(client);
             if (YETTY_IS_ERR(ar)) {
                 yetty_ycore_error_destroy(ar.error);
@@ -375,6 +380,7 @@ static struct yetty_ycore_void_result process_tile_data(struct yetty_yvnc_client
         client->stats_frames_window++;
         client->recv_state = YETTY_YVNC_RECV_FRAME_HEADER;
         client->recv_needed = sizeof(struct yetty_yvnc_vnc_frame_header);
+        client->last_completed_seq = client->current_frame.seq;
         struct yetty_ycore_void_result ar = yetty_yvnc_client_send_frame_ack(client);
         if (YETTY_IS_ERR(ar)) {
             yetty_ycore_error_destroy(ar.error);
@@ -459,6 +465,7 @@ static struct yetty_ycore_void_result process_rect_data(struct yetty_yvnc_client
         client->recv_state = YETTY_YVNC_RECV_FRAME_HEADER;
         client->recv_needed = sizeof(struct yetty_yvnc_vnc_frame_header);
         client->recv_offset = 0;
+        client->last_completed_seq = client->current_frame.seq;
         struct yetty_ycore_void_result ar = yetty_yvnc_client_send_frame_ack(client);
         if (YETTY_IS_ERR(ar)) {
             yetty_ycore_error_destroy(ar.error);
@@ -1310,9 +1317,14 @@ struct yetty_ycore_void_result yetty_yvnc_client_send_frame_ack(struct yetty_yvn
 
     struct yetty_yvnc_vnc_input_header hdr = {0};
     hdr.type = YETTY_YVNC_VNC_INPUT_FRAME_ACK;
-    hdr.data_size = 0;
+    hdr.data_size = sizeof(struct yetty_yvnc_vnc_frame_ack_event);
 
-    send_input(client, &hdr, sizeof(hdr));
+    struct yetty_yvnc_vnc_frame_ack_event msg = {.seq = client->last_completed_seq};
+
+    uint8_t buf[sizeof(hdr) + sizeof(msg)];
+    memcpy(buf, &hdr, sizeof(hdr));
+    memcpy(buf + sizeof(hdr), &msg, sizeof(msg));
+    send_input(client, buf, sizeof(buf));
 
     return YETTY_OK_VOID();
 }
