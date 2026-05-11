@@ -62,17 +62,62 @@ extern "C" {
 #endif
 
 /* ===========================================================================
- * Storage (opaque)
- * ========================================================================= */
+ * Storage
+ * =========================================================================
+ *
+ * Two-tier: a growable "tail" holds the most-recently-encoded bytes
+ * uncompressed; once the tail crosses ~64 KB at a line boundary it
+ * is LZ4-compressed and moved into a `chunks` array. Lines are
+ * addressed by *logical* byte offset — the position they would have
+ * in the conceptual uncompressed concatenation of all encoded
+ * records. That keeps `sb_offsets[i]` stable regardless of which
+ * chunks have been sealed.
+ *
+ * Decode automatically decompresses the chunk containing the
+ * requested offset into a single-entry scratch cache (re-used across
+ * adjacent reads when rendering a viewport that overlaps one
+ * compressed chunk).
+ */
+
+struct yetty_ypaint_scrollbuffer_chunk {
+    uint32_t logical_start;        /* first logical byte in this chunk */
+    uint32_t logical_size;         /* uncompressed size */
+    uint32_t compressed_size;
+    uint8_t *compressed_data;
+};
 
 struct yetty_ypaint_scrollbuffer {
-    uint8_t *data;
-    size_t size;
-    size_t capacity;
+    /* Uncompressed tail — most recently encoded bytes live here. */
+    uint8_t *tail_data;
+    size_t   tail_size;
+    size_t   tail_capacity;
+
+    /* Sealed LZ4 chunks, oldest first. */
+    struct yetty_ypaint_scrollbuffer_chunk *chunks;
+    uint32_t chunks_count;
+    uint32_t chunks_capacity;
+
+    /* Total logical bytes already moved into `chunks`. Bytes still in
+     * `tail_data` occupy logical range [logical_committed,
+     *  logical_committed + tail_size). */
+    size_t logical_committed;
+
+    /* Per-decode scratch — holds the most recently decompressed
+     * chunk. Cached by index (-1 = empty). */
+    uint8_t *decode_scratch;
+    size_t   decode_scratch_capacity;
+    int32_t  decode_scratch_chunk;
 };
 
 void yetty_ypaint_scrollbuffer_init(struct yetty_ypaint_scrollbuffer *sb);
 void yetty_ypaint_scrollbuffer_free(struct yetty_ypaint_scrollbuffer *sb);
+
+/* Total logical bytes (tail + uncompressed sizes of all chunks). For
+ * logging / diagnostics. */
+size_t yetty_ypaint_scrollbuffer_logical_size(const struct yetty_ypaint_scrollbuffer *sb);
+
+/* Sum of compressed bytes in sealed chunks. */
+size_t yetty_ypaint_scrollbuffer_compressed_size(const struct yetty_ypaint_scrollbuffer *sb);
 
 /* ===========================================================================
  * Encoder inputs (view structs — caller assembles from its own state)

@@ -13,6 +13,7 @@ target_link_libraries(yetty_ypaint PUBLIC
     yetty_ysdf
     yetty_yimage
     yetty_yplot
+    lz4_static
     $<$<BOOL:${YETTY_ENABLE_FEATURE_YMESH}>:yetty_ymesh>
     $<$<BOOL:${YETTY_ENABLE_FEATURE_YMSDF_GEN}>:yetty_ymsdf_gen>
     $<$<BOOL:${YETTY_ENABLE_FEATURE_YMSDF_WGSL}>:yetty_ymsdf>

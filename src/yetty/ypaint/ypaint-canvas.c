@@ -2007,9 +2007,11 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
     canvas_evict_scrollback(canvas);
 
     ydebug("add_buffer: END cursor_row=%u rolling_row_0=%u lines.count=%u "
-           "max_row_seen=%u scrollbuffer=%zu B",
+           "max_row_seen=%u scrollbuffer=logical %zu B, compressed %zu B (%u chunks)",
            canvas->cursor_row, canvas->rolling_row_0, canvas->lines.count, max_row_seen,
-           canvas->scrollbuffer.size);
+           yetty_ypaint_scrollbuffer_logical_size(&canvas->scrollbuffer),
+           yetty_ypaint_scrollbuffer_compressed_size(&canvas->scrollbuffer),
+           canvas->scrollbuffer.chunks_count);
 
     canvas->dirty = true;
     return YETTY_OK_VOID();
