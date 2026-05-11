@@ -224,6 +224,10 @@ if(YETTY_ENABLE_LIB_PDFIO)
     include(${YETTY_ROOT}/build-tools/cmake/libs/pdfio.cmake)
 endif()
 
+if(YETTY_ENABLE_LIB_LIBJPEG_TURBO)
+    include(${YETTY_ROOT}/build-tools/cmake/libs/libjpeg-turbo.cmake)
+endif()
+
 if(YETTY_ENABLE_LIB_NETSURF)
     include(${YETTY_ROOT}/build-tools/cmake/libs/netsurf.cmake)
 endif()
@@ -283,10 +287,6 @@ endif()
 
 if(YETTY_ENABLE_LIB_LIBSSH2)
     include(${YETTY_ROOT}/build-tools/cmake/libs/libssh2.cmake)
-endif()
-
-if(YETTY_ENABLE_LIB_LIBJPEG_TURBO)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/libjpeg-turbo.cmake)
 endif()
 
 # Reusable render utilities (GPU tile diff, …). Lives outside src/yetty so it

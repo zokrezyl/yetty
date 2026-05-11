@@ -23,6 +23,7 @@ env:
   BUILD_LINUX_AARCH64: false
   BUILD_LINUX_RISCV: false
   BUILD_MACOS: false
+  BUILD_MACOS_X86_64: false
   BUILD_WINDOWS: false
   BUILD_ANDROID: false
   BUILD_ANDROID_X86_64: false
@@ -47,6 +48,7 @@ jobs:
       linux_aarch64: ${{ steps.set.outputs.linux_aarch64 }}
       linux_riscv: ${{ steps.set.outputs.linux_riscv }}
       macos: ${{ steps.set.outputs.macos }}
+      macos_x86_64: ${{ steps.set.outputs.macos_x86_64 }}
       windows: ${{ steps.set.outputs.windows }}
       android: ${{ steps.set.outputs.android }}
       android_x86_64: ${{ steps.set.outputs.android_x86_64 }}
@@ -65,6 +67,7 @@ jobs:
             echo "linux_aarch64=true" >> $GITHUB_OUTPUT
             echo "linux_riscv=true" >> $GITHUB_OUTPUT
             echo "macos=true" >> $GITHUB_OUTPUT
+            echo "macos_x86_64=true" >> $GITHUB_OUTPUT
             echo "windows=true" >> $GITHUB_OUTPUT
             echo "android=true" >> $GITHUB_OUTPUT
             echo "android_x86_64=true" >> $GITHUB_OUTPUT
@@ -80,6 +83,7 @@ jobs:
             echo "linux_aarch64=${{ env.BUILD_LINUX_AARCH64 }}" >> $GITHUB_OUTPUT
             echo "linux_riscv=${{ env.BUILD_LINUX_RISCV }}" >> $GITHUB_OUTPUT
             echo "macos=${{ env.BUILD_MACOS }}" >> $GITHUB_OUTPUT
+            echo "macos_x86_64=${{ env.BUILD_MACOS_X86_64 }}" >> $GITHUB_OUTPUT
             echo "windows=${{ env.BUILD_WINDOWS }}" >> $GITHUB_OUTPUT
             echo "android=${{ env.BUILD_ANDROID }}" >> $GITHUB_OUTPUT
             echo "android_x86_64=${{ env.BUILD_ANDROID_X86_64 }}" >> $GITHUB_OUTPUT
@@ -123,7 +127,9 @@ jobs:
           libx11-dev \
           libgl1-mesa-dev \
           libwayland-dev \
-          libxkbcommon-dev
+          libxkbcommon-dev \
+          libwebp-dev \
+          clang-18 libclang-18-dev
 
     - name: Build Linux
       run: make build-desktop-ytrace-release
@@ -149,22 +155,39 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      BUILD_DIR: build-desktop-ytrace-asan-nix
+      BUILD_DIR: build-desktop-ytrace-asan
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Nix
-      uses: cachix/install-nix-action@v27
-      with:
-        nix_path: nixpkgs=channel:nixos-unstable
+    - name: Install Linux dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          automake autoconf libtool \
+          meson ninja-build nasm \
+          brotli \
+          libfontconfig1-dev \
+          libxrandr-dev \
+          libxinerama-dev \
+          libxcursor-dev \
+          libxi-dev \
+          libxext-dev \
+          libx11-dev \
+          libgl1-mesa-dev \
+          libwayland-dev \
+          libxkbcommon-dev \
+          libwebp-dev \
+          clang-18 libclang-18-dev
 
     - name: Build with ASAN
-      run: make -f Makefile.2 build PLATFORM=desktop LOGLEVEL=ytrace BUILDTYPE=asan USE_NIX=yes
+      run: make build-desktop-ytrace-asan
 
     - name: Run ASAN smoke test
       run: |
+        printf 'leak:_glfwConnectX11\nleak:glfwInit\n' > lsan_suppressions.txt
         export ASAN_OPTIONS="detect_leaks=1:halt_on_error=0:log_path=asan_log"
+        export LSAN_OPTIONS="suppressions=$(pwd)/lsan_suppressions.txt"
         timeout 10 ./${{ env.BUILD_DIR }}/yetty -e 'echo "ASAN smoke test"; exit 0' || true
         if ls asan_log.* 1>/dev/null 2>&1; then
           echo "=== ASAN ERRORS DETECTED ==="
@@ -192,10 +215,27 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Nix
-      uses: cachix/install-nix-action@v27
-      with:
-        nix_path: nixpkgs=channel:nixos-unstable
+    - name: Install cross-compile toolchain (aarch64)
+      run: |
+        sudo apt-get update -o Acquire::Retries=3
+        sudo apt-get install -y \
+          cmake ninja-build pkg-config nasm brotli \
+          gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+        sudo dpkg --add-architecture arm64
+        sudo sed -i -E 's|^deb (https?://[^ ]+) |deb [arch=amd64] \1 |' \
+          /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+        . /etc/os-release
+        echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports ${VERSION_CODENAME} main universe" \
+          | sudo tee /etc/apt/sources.list.d/ports.list
+        echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports ${VERSION_CODENAME}-updates main universe" \
+          | sudo tee -a /etc/apt/sources.list.d/ports.list
+        sudo apt-get update -o Acquire::Retries=3
+        sudo apt-get install -y \
+          libx11-dev:arm64 libxrandr-dev:arm64 libxinerama-dev:arm64 \
+          libxcursor-dev:arm64 libxi-dev:arm64 libxext-dev:arm64 \
+          libxkbcommon-dev:arm64 libwayland-dev:arm64 wayland-protocols \
+          libgl-dev:arm64 libfontconfig-dev:arm64 \
+          libexpat1-dev:arm64 uuid-dev:arm64
 
     - name: Build Linux aarch64 (cross-compile)
       run: make build-linux-aarch64-ytrace-release
@@ -228,10 +268,27 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Nix
-      uses: cachix/install-nix-action@v27
-      with:
-        nix_path: nixpkgs=channel:nixos-unstable
+    - name: Install cross-compile toolchain (riscv64)
+      run: |
+        sudo apt-get update -o Acquire::Retries=3
+        sudo apt-get install -y \
+          cmake ninja-build pkg-config nasm brotli \
+          gcc-riscv64-linux-gnu g++-riscv64-linux-gnu
+        sudo dpkg --add-architecture riscv64
+        sudo sed -i -E 's|^deb (https?://[^ ]+) |deb [arch=amd64] \1 |' \
+          /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+        . /etc/os-release
+        echo "deb [arch=riscv64] http://ports.ubuntu.com/ubuntu-ports ${VERSION_CODENAME} main universe" \
+          | sudo tee /etc/apt/sources.list.d/ports.list
+        echo "deb [arch=riscv64] http://ports.ubuntu.com/ubuntu-ports ${VERSION_CODENAME}-updates main universe" \
+          | sudo tee -a /etc/apt/sources.list.d/ports.list
+        sudo apt-get update -o Acquire::Retries=3
+        sudo apt-get install -y \
+          libx11-dev:riscv64 libxrandr-dev:riscv64 libxinerama-dev:riscv64 \
+          libxcursor-dev:riscv64 libxi-dev:riscv64 libxext-dev:riscv64 \
+          libxkbcommon-dev:riscv64 libwayland-dev:riscv64 \
+          libgl-dev:riscv64 libfontconfig-dev:riscv64 \
+          libexpat1-dev:riscv64 uuid-dev:riscv64
 
     - name: Build Linux riscv64 (cross-compile)
       run: make build-linux-riscv-ytrace-release
@@ -249,12 +306,12 @@ jobs:
         if-no-files-found: warn
 
   # =============================================================================
-  # Desktop Build (macOS Intel)
+  # Desktop Build (macOS ARM64)
   # =============================================================================
   build-macos-ytrace-release:
     needs: read-flags
     if: needs.read-flags.outputs.macos == 'true'
-    runs-on: macos-15-intel
+    runs-on: macos-latest
 
     env:
       BUILD_DIR: build-macos-ytrace-release
@@ -268,6 +325,7 @@ jobs:
     - name: Configure CMake
       run: >
         cmake -B ${{ env.BUILD_DIR }}
+        -G Ninja
         -DCMAKE_BUILD_TYPE=Release
         -DYETTY_ENABLE_TOOL_QA=OFF
         -S ${{ github.workspace }}
@@ -275,10 +333,50 @@ jobs:
     - name: Build
       run: cmake --build ${{ env.BUILD_DIR }} --config Release --parallel 4
 
-    - name: Upload macOS artifacts
+    - name: Upload macOS ARM64 artifacts
       uses: actions/upload-artifact@v4
       with:
         name: yetty-macos
+        path: |
+          ${{ env.BUILD_DIR }}/yetty
+          ${{ env.BUILD_DIR }}/yettyc
+          ${{ env.BUILD_DIR }}/ycat
+          ${{ env.BUILD_DIR }}/yecho
+          demo/
+        if-no-files-found: warn
+
+  # =============================================================================
+  # Desktop Build (macOS Intel x86_64)
+  # =============================================================================
+  build-macos_x86_64-ytrace-release:
+    needs: read-flags
+    if: needs.read-flags.outputs.macos_x86_64 == 'true'
+    runs-on: macos-15-intel
+
+    env:
+      BUILD_DIR: build-macos_x86_64-ytrace-release
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install macOS dependencies
+      run: brew install automake autoconf libtool meson ninja nasm brotli
+
+    - name: Configure CMake
+      run: >
+        cmake -B ${{ env.BUILD_DIR }}
+        -G Ninja
+        -DCMAKE_BUILD_TYPE=Release
+        -DYETTY_ENABLE_TOOL_QA=OFF
+        -S ${{ github.workspace }}
+
+    - name: Build
+      run: cmake --build ${{ env.BUILD_DIR }} --config Release --parallel 4
+
+    - name: Upload macOS x86_64 artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: yetty-macos-x86_64
         path: |
           ${{ env.BUILD_DIR }}/yetty
           ${{ env.BUILD_DIR }}/yettyc
@@ -308,9 +406,15 @@ jobs:
         choco install make -y
         pip install meson
 
+    - name: Set up MSVC environment
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
     - name: Configure CMake
       run: >
         cmake -B ${{ env.BUILD_DIR }}
+        -G Ninja
         -DCMAKE_BUILD_TYPE=Release
         -DWEBGPU_BACKEND=dawn
         -DYETTY_ENABLE_TOOL_QA=OFF
@@ -362,7 +466,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      BUILD_DIR: build-android-ytrace-release-nix
+      BUILD_DIR: build-android-ytrace-release
 
     steps:
     - uses: actions/checkout@v4
@@ -381,7 +485,7 @@ jobs:
           -dname "CN=Android Debug,O=Android,C=US"
 
     - name: Build Android APK
-      run: make -f Makefile.2 build PLATFORM=android LOGLEVEL=ytrace BUILDTYPE=release USE_NIX=yes
+      run: make build-android-ytrace-release
 
     - name: Upload Android APK
       uses: actions/upload-artifact@v4
@@ -399,7 +503,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      BUILD_DIR: build-android_x86_64-ytrace-release-nix
+      BUILD_DIR: build-android_x86_64-ytrace-release
 
     steps:
     - uses: actions/checkout@v4
@@ -418,7 +522,7 @@ jobs:
           -dname "CN=Android Debug,O=Android,C=US"
 
     - name: Build Android x86_64 APK
-      run: make -f Makefile.2 build PLATFORM=android_x86_64 LOGLEVEL=ytrace BUILDTYPE=release USE_NIX=yes
+      run: make build-android_x86_64-ytrace-release
 
     - name: Upload Android x86_64 APK
       uses: actions/upload-artifact@v4
@@ -571,7 +675,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      BUILD_DIR: build-webasm-ytrace-release-nix
+      BUILD_DIR: build-webasm-ytrace-release
 
     steps:
     - uses: actions/checkout@v4
@@ -582,7 +686,7 @@ jobs:
         nix_path: nixpkgs=channel:nixos-unstable
 
     - name: Build WebAssembly with Nix
-      run: make -f Makefile.2 build PLATFORM=webasm LOGLEVEL=ytrace BUILDTYPE=release USE_NIX=yes
+      run: make build-webasm-ytrace-release
 
     - name: Prepare site directory
       run: |
@@ -593,9 +697,12 @@ jobs:
         cp ${{ env.BUILD_DIR }}/yetty.data site/
         cp ${{ env.BUILD_DIR }}/favicon.ico site/
         cp ${{ env.BUILD_DIR }}/apple-touch-icon.jpg site/
-        cp -r ${{ env.BUILD_DIR }}/vfsync site/
+        cp ${{ env.BUILD_DIR }}/tinyemu-iframe.html site/
+        cp ${{ env.BUILD_DIR }}/tinyemu.js site/
+        cp ${{ env.BUILD_DIR }}/tinyemu.wasm site/
+        cp -r ${{ env.BUILD_DIR }}/tinyemu-assets site/
+        cp -r ${{ env.BUILD_DIR }}/yetty-assets site/
         du -sh site/* | sort -h
-        ls -la site/vfsync/u/os/yetty-alpine/ || echo "vfsync structure check"
 
     - name: Upload WebAssembly artifacts
       uses: actions/upload-artifact@v4
@@ -634,8 +741,7 @@ jobs:
       run: |
         echo "=== Site structure ==="
         ls -la site/
-        echo "=== vfsync directory ==="
-        ls -la site/vfsync/u/os/yetty-alpine/ || echo "vfsync not found"
+        du -sh site/* | sort -h
 
     - name: Setup Pages
       uses: actions/configure-pages@v4
@@ -719,6 +825,23 @@ jobs:
     - uses: softprops/action-gh-release@v2
       with:
         files: yetty-macos.tar.gz
+
+  release-macos-x86_64:
+    runs-on: ubuntu-latest
+    needs: build-macos_x86_64-ytrace-release
+    if: needs.build-macos_x86_64-ytrace-release.result == 'success' && startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: yetty-macos-x86_64
+        path: yetty-macos-x86_64
+    - name: Create archive
+      run: tar -czvf yetty-macos-x86_64.tar.gz -C yetty-macos-x86_64 .
+    - uses: softprops/action-gh-release@v2
+      with:
+        files: yetty-macos-x86_64.tar.gz
 
   release-windows:
     runs-on: ubuntu-latest

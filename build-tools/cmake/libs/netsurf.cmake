@@ -137,28 +137,32 @@ target_link_libraries(netsurf_core INTERFACE
 #-----------------------------------------------------------------------------
 # Run-time link deps. Same set the in-source build pulled in:
 #   - libcurl (yetty's prebuilt, with openssl-new bundled)
-#   - libxml-2.0, libjpeg, libpng, libwebp from the host (pkg-config)
+#   - libjpeg-turbo (yetty's prebuilt, jpeg-static target)
+#   - libxml-2.0, libpng, libwebp from the host (pkg-config)
 #   - z, m
 #-----------------------------------------------------------------------------
 include(${YETTY_ROOT}/build-tools/cmake/libs/libcurl.cmake)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(_NS_LIBXML  REQUIRED libxml-2.0)
-pkg_check_modules(_NS_LIBJPEG REQUIRED libjpeg)
 pkg_check_modules(_NS_LIBPNG  REQUIRED libpng)
 pkg_check_modules(_NS_LIBWEBP REQUIRED libwebp)
+
+if(NOT TARGET jpeg-static)
+    message(FATAL_ERROR "netsurf: jpeg-static target not found — include libjpeg-turbo.cmake before netsurf.cmake")
+endif()
 
 target_link_libraries(netsurf_core INTERFACE
     CURL::libcurl
     ${_NS_LIBXML_LIBRARIES}
-    ${_NS_LIBJPEG_LIBRARIES}
+    jpeg-static
     ${_NS_LIBPNG_LIBRARIES}
     ${_NS_LIBWEBP_LIBRARIES}
     z
-    m)
+    m
+    $<$<BOOL:${APPLE}>:iconv>)
 target_include_directories(netsurf_core INTERFACE
     ${_NS_LIBXML_INCLUDE_DIRS}
-    ${_NS_LIBJPEG_INCLUDE_DIRS}
     ${_NS_LIBPNG_INCLUDE_DIRS}
     ${_NS_LIBWEBP_INCLUDE_DIRS})
 
