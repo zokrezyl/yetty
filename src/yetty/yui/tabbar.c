@@ -12,6 +12,7 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yetty/yetty.h>
+#include <yetty/yplatform/window-manager.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
@@ -58,6 +59,18 @@ struct yetty_yui_tabbar {
      * creation in tabbars that never get rendered (e.g. headless tests).
      * Owned by the tabbar; freed in destroy. */
     struct yetty_yui_tabbar_paint *paint;
+
+    /* Window-drag state. The OS title bar is gone, so the strip's empty
+     * area is the only place the user can grab to move the window. We
+     * record the cursor position (in window-relative coords) at
+     * MOUSE_DOWN; on each MOUSE_MOVE the delta from that anchor goes
+     * to the platform window manager. Because we set the window
+     * position absolutely on the main thread, after each move the
+     * cursor's window-relative pos is back at the anchor, so the
+     * anchor stays valid for the whole drag. */
+    int dragging;
+    float drag_anchor_x;
+    float drag_anchor_y;
 };
 
 /*---------------------------------------------------------------------------
@@ -760,44 +773,99 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
         strip = bar->height;
     }
     float y;
-    if (event_y(event, &y) && y < strip) {
-        if (event->type == YETTY_YCORE_MOUSE_DOWN && bar->count > 0) {
-            /* Hit-test mirrors the render-time layout exactly. Right edge,
-             * from far right going left:
-             *   [window-buttons | new-tab | ...tabs...]
-             *
-             *   - clicks in the window-button area → swallow (visuals only
-             *     today; minimize/maximize/close will be wired through the
-             *     output pipe in a follow-up).
-             *   - clicks in the new-tab area      → add workspace
-             *   - everything left of that         → switch to tab at x */
-            float winbtn_left = bar->width - TABBAR_WINBTN_AREA;
-            float newtab_left = winbtn_left - TABBAR_NEWTAB_AREA;
-            if (event->mouse.x >= winbtn_left) {
-                /* Reserved for min/max/close — no-op until the output
-                 * pipe lands. */
-            } else if (event->mouse.x >= newtab_left && bar->config && bar->yetty_ctx) {
-                struct yetty_ycore_void_result r = yetty_yui_tabbar_add_workspace_from_config(
-                    bar, bar->config, bar->yetty_ctx);
-                if (YETTY_IS_ERR(r)) {
-                    yerror("tabbar: new-tab button: %s", r.error.msg);
-                    yetty_ycore_error_destroy(r.error);
+    int in_strip = event_y(event, &y) && y < strip;
+
+    /* Strip-area MOUSE_DOWN — route by x to a button, a tab, or start a
+     * window drag if it landed in empty space. Right edge from far right
+     * going left:
+     *   [close | max | min | new-tab | ...tabs... | drag space ...] */
+    if (in_strip && event->type == YETTY_YCORE_MOUSE_DOWN && bar->count > 0) {
+        float winbtn_left = bar->width - TABBAR_WINBTN_AREA;
+        float newtab_left = winbtn_left - TABBAR_NEWTAB_AREA;
+        struct yetty_yplatform_window_manager *wm =
+            bar->yetty_ctx ? bar->yetty_ctx->app_context.window_manager : NULL;
+
+        if (event->mouse.x >= winbtn_left) {
+            /* Slot order: minimize, maximize, close (left to right). */
+            float slot = (event->mouse.x - winbtn_left) / TABBAR_WINBTN_WIDTH;
+            if (wm) {
+                if (slot < 1.0f) {
+                    wm->ops->iconify(wm);
+                } else if (slot < 2.0f) {
+                    wm->ops->toggle_maximize(wm);
                 } else {
-                    ydebug("tabbar: new-tab button → workspace %zu", bar->count);
+                    wm->ops->request_close(wm);
                 }
+            }
+        } else if (event->mouse.x >= newtab_left && bar->config && bar->yetty_ctx) {
+            struct yetty_ycore_void_result r = yetty_yui_tabbar_add_workspace_from_config(
+                bar, bar->config, bar->yetty_ctx);
+            if (YETTY_IS_ERR(r)) {
+                yerror("tabbar: new-tab button: %s", r.error.msg);
+                yetty_ycore_error_destroy(r.error);
             } else {
-                float tw = tab_width(bar);
-                float step = tw + TABBAR_TAB_OVERLAP;
-                if (step <= 0) {
-                    step = 1.0f;
-                }
+                ydebug("tabbar: new-tab button → workspace %zu", bar->count);
+            }
+        } else {
+            /* Tabs occupy [0 .. count*step); past that and before
+             * newtab_left is the strip's empty space — grab handle for
+             * window drag. */
+            float tw = tab_width(bar);
+            float step = tw + TABBAR_TAB_OVERLAP;
+            if (step <= 0) {
+                step = 1.0f;
+            }
+            float tabs_end = (float)bar->count * step;
+            if (event->mouse.x < tabs_end) {
                 size_t idx = (size_t)(event->mouse.x / step);
                 if (idx >= bar->count) {
                     idx = bar->count - 1;
                 }
                 tabbar_switch(bar, idx);
+            } else if (wm) {
+                /* Empty strip area — start a window drag. Anchor in
+                 * window-relative coords; subsequent MOUSE_MOVE deltas
+                 * go to the platform via wm->drag_by. */
+                bar->dragging = 1;
+                bar->drag_anchor_x = event->mouse.x;
+                bar->drag_anchor_y = event->mouse.y;
+                ydebug("tabbar: drag start at (%.1f, %.1f)", event->mouse.x, event->mouse.y);
             }
         }
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+
+    /* Continue an in-progress drag. We don't gate on `in_strip` because
+     * once the user has the window grabbed, the cursor will travel
+     * across the whole screen; everything else gets swallowed for the
+     * duration of the drag. */
+    if (bar->dragging) {
+        struct yetty_yplatform_window_manager *wm =
+            bar->yetty_ctx ? bar->yetty_ctx->app_context.window_manager : NULL;
+        if (event->type == YETTY_YCORE_MOUSE_MOVE ||
+            event->type == YETTY_YCORE_MOUSE_DRAG) {
+            int dx = (int)(event->mouse.x - bar->drag_anchor_x);
+            int dy = (int)(event->mouse.y - bar->drag_anchor_y);
+            if (wm && (dx != 0 || dy != 0)) {
+                wm->ops->drag_by(wm, dx, dy);
+                /* Don't update the anchor: glfwSetWindowPos absolutely
+                 * repositions, which leaves the cursor exactly at the
+                 * anchor in the moved window's frame. Resetting would
+                 * accumulate rounding error each frame. */
+            }
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+        if (event->type == YETTY_YCORE_MOUSE_UP) {
+            ydebug("tabbar: drag end");
+            bar->dragging = 0;
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+    }
+
+    /* Any other event in the strip still belongs to the tabbar — swallow
+     * so the workspace below doesn't see e.g. mouse-moves while hovering
+     * over the strip. */
+    if (in_strip) {
         return YETTY_OK(yetty_ycore_int, 1);
     }
 

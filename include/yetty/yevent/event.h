@@ -79,6 +79,14 @@ enum yetty_yevent_event_type {
      * event-loop event (later wired to a keyboard shortcut). The path is
      * inline for simple cases; an empty string means "auto-pick a default". */
     YETTY_YCORE_SCREENSHOT,
+    /* Render→main "output pipe" window-control requests. Produced by the
+     * tabbar's custom title-bar buttons (the OS frame is gone because of
+     * GLFW_DECORATED=FALSE) and drained on the main thread, which is the
+     * only place GLFW window calls are safe. */
+    YETTY_YCORE_WINDOW_ICONIFY,
+    YETTY_YCORE_WINDOW_TOGGLE_MAXIMIZE,
+    YETTY_YCORE_WINDOW_CLOSE,
+    YETTY_YCORE_WINDOW_DRAG_BY,
     /* Must be last - used for array sizing */
     YETTY_YCORE_COUNT
 };
@@ -218,6 +226,14 @@ struct yetty_ycore_event_screenshot {
     char path[256];
 };
 
+/* Window-drag delta, in screen pixels. The tabbar emits one per
+ * MOUSE_MOVE while the user holds a drag on the strip; the main thread
+ * applies it absolutely (current_window_pos += delta). */
+struct yetty_ycore_event_window_drag {
+    int dx;
+    int dy;
+};
+
 struct yetty_yui_event {
     enum yetty_yevent_event_type type;
     union {
@@ -245,6 +261,7 @@ struct yetty_yui_event {
         struct yetty_ycore_event_zoom_visual_pan zoom_visual_pan;
         struct yetty_ycore_event_zoom_cell_size zoom_cell_size;
         struct yetty_ycore_event_screenshot screenshot;
+        struct yetty_ycore_event_window_drag window_drag;
     };
     void *payload; /* optional heap-allocated data (copy/paste text) */
 };

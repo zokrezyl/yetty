@@ -45,6 +45,7 @@ static void platform_get_x11_handles(GLFWwindow *win, void **disp, unsigned long
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/clipboard-manager.h>
+#include <yetty/yplatform/window-manager.h>
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -316,17 +317,36 @@ int main(int argc, char **argv)
      * NULL is OK in headless mode: copy/paste silently no-ops. */
     struct yetty_ycore_xthread_event_pipe *output_pipe = NULL;
     struct yetty_platform_clipboard_manager *clipboard_manager = NULL;
+    struct yetty_yplatform_window_manager *window_manager = NULL;
     if (!headless) {
         struct yetty_yplatform_input_pipe_result op_res = yetty_platform_input_pipe_create();
         if (YETTY_IS_OK(op_res)) {
             output_pipe = op_res.value;
+
+            /* Window manager first so we can hand it to the clipboard
+             * manager's drain: the drain reads every event off the pipe
+             * and dispatches by type, sending WINDOW_* through here. */
+            struct yetty_yplatform_window_manager_ptr_result wm_res =
+                yetty_yplatform_window_manager_create(window, output_pipe);
+            if (YETTY_IS_OK(wm_res)) {
+                window_manager = wm_res.value;
+            } else {
+                ywarn("main: window manager create failed: %s", wm_res.error.msg);
+                yetty_ycore_error_destroy(wm_res.error);
+            }
+
             struct yetty_yplatform_clipboard_manager_result clip_res =
-                yetty_platform_clipboard_manager_create(output_pipe, platform_input_pipe);
+                yetty_platform_clipboard_manager_create(output_pipe, platform_input_pipe,
+                                                        window_manager);
             if (YETTY_IS_OK(clip_res)) {
                 clipboard_manager = clip_res.value;
             } else {
                 ywarn("main: clipboard manager create failed: %s", clip_res.error.msg);
                 yetty_ycore_error_destroy(clip_res.error);
+                if (window_manager) {
+                    window_manager->ops->destroy(window_manager);
+                    window_manager = NULL;
+                }
                 output_pipe->ops->destroy(output_pipe);
                 output_pipe = NULL;
             }
@@ -346,6 +366,7 @@ int main(int argc, char **argv)
         .config = config,
         .platform_input_pipe = platform_input_pipe,
         .clipboard_manager = clipboard_manager,
+        .window_manager = window_manager,
         .pty_factory = pty_factory};
 
     /* Yetty */
@@ -410,6 +431,9 @@ int main(int argc, char **argv)
     ydebug("main: platform_input_pipe destroyed");
     if (clipboard_manager) {
         clipboard_manager->ops->destroy(clipboard_manager);
+    }
+    if (window_manager) {
+        window_manager->ops->destroy(window_manager);
     }
     if (output_pipe) {
         output_pipe->ops->destroy(output_pipe);

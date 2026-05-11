@@ -35,11 +35,18 @@ struct yetty_yetty_app_gpu_context {
 };
 
 /* App context - passed from platform main to yetty_create */
+struct yetty_yplatform_window_manager;
+
 struct yetty_yetty_app_context {
     struct yetty_yetty_app_gpu_context app_gpu_context;
     struct yetty_yconfig_config *config;
     struct yetty_ycore_xthread_event_pipe *platform_input_pipe;
     struct yetty_platform_clipboard_manager *clipboard_manager;
+    /* Owned by glfw.c (main thread). Producer ops are thread-safe; the
+     * tabbar calls them on its render-thread mouse-down/drag handlers
+     * to ask the OS window for iconify / maximize-toggle / close /
+     * drag_by. NULL in headless mode. */
+    struct yetty_yplatform_window_manager *window_manager;
     struct yetty_yplatform_pty_factory *pty_factory;
 };
 
