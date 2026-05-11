@@ -17,6 +17,7 @@
 #include <yetty/ypaint-core/text-span-prim.h>
 #include <yetty/ypaint/flyweight.h>
 #include <yetty/ypaint/core/ypaint-canvas.h>
+#include <yetty/ypaint/scrollbuffer.h>
 #include "canvas-internal.h"
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/font-cache.h>
@@ -217,7 +218,22 @@ struct yetty_ypaint_canvas {
     // font (first install). Created in canvas_create, destroyed last in
     // canvas_destroy.
     struct yetty_yfont_cache *font_cache;
+
+    // Scrollbuffer: lines whose absolute canvas-row index has fallen
+    // below the live viewport are serialised to a compact binary form
+    // here, and their expanded grid_line content (prims/arena/cells) is
+    // freed. `sb_offsets[i]` is the byte offset of line `i`'s record
+    // in the scrollbuffer, or SB_OFFSET_UNSET if the line still lives
+    // in canvas->lines.lines[i] in expanded form. Deserialise-on-
+    // scrollback is a later step; today, freed lines are gone for
+    // rendering purposes until reloaded.
+    struct yetty_ypaint_scrollbuffer scrollbuffer;
+    uint32_t *sb_offsets;
+    uint32_t  sb_offsets_count;
+    uint32_t  sb_offsets_capacity;
 };
+
+#define SB_OFFSET_UNSET 0xFFFFFFFFu
 
 #define DEFAULT_MAX_PRIMS_PER_CELL 16
 #define INITIAL_LINE_CAPACITY 64
@@ -698,6 +714,10 @@ struct yetty_ypaint_canvas_ptr_result yetty_ypaint_canvas_create(
     canvas->rolling_row_0 = 0;
 
     line_buffer_init(&canvas->lines);
+    yetty_ypaint_scrollbuffer_init(&canvas->scrollbuffer);
+    canvas->sb_offsets = NULL;
+    canvas->sb_offsets_count = 0;
+    canvas->sb_offsets_capacity = 0;
 
     /* Create flyweight registry with all handlers (for SDF prims) */
     struct yetty_ypaint_core_flyweight_registry_ptr_result fw_res = yetty_ypaint_flyweight_create();
@@ -884,6 +904,8 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_destroy(struct yetty_ypaint_c
     yetty_ypaint_core_flyweight_registry_destroy(canvas->flyweight_registry);
     free(canvas->grid_staging);
     free(canvas->prim_staging);
+    yetty_ypaint_scrollbuffer_free(&canvas->scrollbuffer);
+    free(canvas->sb_offsets);
     free(canvas);
     return YETTY_OK_VOID();
 }
@@ -1556,6 +1578,165 @@ static void buffer_attach_note(struct buffer_attach_list *l, yetty_yfont_cache_h
     l->entries[l->count++] = (struct buffer_attach_entry){.handle = handle, .max_row = row};
 }
 
+/* ===========================================================================
+ * Scrollbuffer eviction
+ *
+ * When a line scrolls below `rolling_row_0` it's no longer visible. We
+ * encode it to canvas->scrollbuffer (compact form, no individual
+ * allocations), record the byte offset in sb_offsets[i], then free the
+ * line's expanded prims/arena/cells/fonts so the per-line malloc
+ * footprint goes away. The grid_line struct itself stays in
+ * canvas->lines.lines[i] but ends up empty after grid_line_free; we
+ * preserve the slot so absolute canvas-line indices keep their
+ * meaning. Deserialise-on-scrollback isn't here yet.
+ * ========================================================================= */
+
+static struct yetty_ycore_void_result sb_offsets_ensure(struct yetty_ypaint_canvas *canvas,
+                                                        uint32_t min_count)
+{
+    if (min_count <= canvas->sb_offsets_count) {
+        return YETTY_OK_VOID();
+    }
+    if (min_count > canvas->sb_offsets_capacity) {
+        uint32_t new_cap = canvas->sb_offsets_capacity ? canvas->sb_offsets_capacity : 64u;
+        while (new_cap < min_count) {
+            new_cap *= 2;
+        }
+        uint32_t *grown = realloc(canvas->sb_offsets, new_cap * sizeof(uint32_t));
+        if (!grown) {
+            return YETTY_ERR(yetty_ycore_void, "sb_offsets: realloc failed");
+        }
+        canvas->sb_offsets = grown;
+        canvas->sb_offsets_capacity = new_cap;
+    }
+    for (uint32_t i = canvas->sb_offsets_count; i < min_count; i++) {
+        canvas->sb_offsets[i] = SB_OFFSET_UNSET;
+    }
+    canvas->sb_offsets_count = min_count;
+    return YETTY_OK_VOID();
+}
+
+/* Serialise one line at index `idx` into the scrollbuffer and free its
+ * expanded form. No-op if the line is already serialised or doesn't
+ * exist. Returns OK even if the line was empty; an empty line still
+ * gets a 12-byte header record so sb_offsets[idx] is always meaningful
+ * after this call. */
+static struct yetty_ycore_void_result canvas_evict_line(struct yetty_ypaint_canvas *canvas,
+                                                        uint32_t idx)
+{
+    if (idx >= canvas->lines.count) {
+        return YETTY_OK_VOID();
+    }
+    /* Already evicted? skip. */
+    struct yetty_ycore_void_result er = sb_offsets_ensure(canvas, idx + 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "evict: ensure offsets");
+    if (canvas->sb_offsets[idx] != SB_OFFSET_UNSET) {
+        return YETTY_OK_VOID();
+    }
+
+    struct yetty_ypaint_canvas_grid_line *line = &canvas->lines.lines[idx];
+
+    /* Build the cell view: walk cells in ascending col order, emit
+     * one entry per cell that has at least one ref. The on-stack
+     * buffer is sized by line->cell_count which is bounded by
+     * grid_size.cols + any oversize a wide line grew to. */
+    struct yetty_ypaint_scrollbuffer_cell *cells = NULL;
+    uint32_t n_cells = 0;
+    if (line->cell_count > 0) {
+        cells = malloc(line->cell_count * sizeof(*cells));
+        if (!cells) {
+            return YETTY_ERR(yetty_ycore_void, "evict: cell view alloc failed");
+        }
+        for (uint32_t c = 0; c < line->cell_count; c++) {
+            if (line->cells[c].refs.count == 0) {
+                continue;
+            }
+            cells[n_cells].col = (uint16_t)c;
+            cells[n_cells].ref_count = (uint16_t)line->cells[c].refs.count;
+            /* The codec's ref view shape matches our internal
+             * prim_ref byte-for-byte, so we just hand over the
+             * dynamic array's data pointer. */
+            cells[n_cells].refs =
+                (const struct yetty_ypaint_scrollbuffer_ref *)line->cells[c].refs.data;
+            n_cells++;
+        }
+    }
+
+    /* Build the prim view: per prim, point payload at the arena slice
+     * (arena_offset .. arena_offset + word_count). */
+    struct yetty_ypaint_scrollbuffer_prim *prims = NULL;
+    uint32_t n_prims = line->prims.count;
+    if (n_prims > 0) {
+        prims = malloc(n_prims * sizeof(*prims));
+        if (!prims) {
+            free(cells);
+            return YETTY_ERR(yetty_ycore_void, "evict: prim view alloc failed");
+        }
+        for (uint32_t p = 0; p < n_prims; p++) {
+            struct yetty_ypaint_canvas_prim_data *pd = &line->prims.data[p];
+            prims[p].rolling_row = pd->rolling_row;
+            prims[p].word_count = pd->word_count;
+            prims[p].payload = line->arena + pd->arena_offset;
+        }
+    }
+
+    struct yetty_ypaint_scrollbuffer_offset_result enc =
+        yetty_ypaint_scrollbuffer_encode_line(&canvas->scrollbuffer, idx,
+                                              canvas->grid_size.cols, cells, n_cells, prims,
+                                              n_prims);
+    free(cells);
+    free(prims);
+    if (YETTY_IS_ERR(enc)) {
+        return YETTY_ERR(yetty_ycore_void, "evict: encode failed", enc);
+    }
+    canvas->sb_offsets[idx] = (uint32_t)enc.value;
+
+    /* Free the expanded form. The line struct itself stays in
+     * canvas->lines.lines[idx]; grid_line_free zeroes its internal
+     * pointers/counts so it's effectively a placeholder afterwards.
+     *
+     * Font cache refs the line held are dropped here too — that's
+     * intentional: if the only line referencing a given font is being
+     * evicted, the cache slot would normally die. With the lazy-
+     * resolve commit (69c4dd5), TEXT_SPANs hitting the same font
+     * later re-resolve through the cache; the on-disk CDB still
+     * caches the MSDF generation, so the cost is one cache miss +
+     * atlas load on first reuse. */
+    struct yetty_ycore_void_result fr =
+        grid_line_free(line, canvas->flyweight_registry, canvas->font_cache);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "evict: grid_line_free");
+    /* Re-init so future writes (e.g. an explicit out-of-order place)
+     * don't see dangling pointers. */
+    grid_line_init(line, 0);
+    return YETTY_OK_VOID();
+}
+
+/* Walk every line strictly below rolling_row_0 and evict any that
+ * still hold expanded content. Called at the end of add_buffer once
+ * the new content has been placed and the viewport has scrolled. */
+static void canvas_evict_scrollback(struct yetty_ypaint_canvas *canvas)
+{
+    if (canvas->rolling_row_0 == 0) {
+        return;
+    }
+    uint32_t end = canvas->rolling_row_0;
+    if (end > canvas->lines.count) {
+        end = canvas->lines.count;
+    }
+    for (uint32_t i = 0; i < end; i++) {
+        if (i < canvas->sb_offsets_count && canvas->sb_offsets[i] != SB_OFFSET_UNSET) {
+            continue;
+        }
+        struct yetty_ycore_void_result r = canvas_evict_line(canvas, i);
+        if (YETTY_IS_ERR(r)) {
+            yerror("canvas_evict_scrollback: evict line %u failed: %s", i, r.error.msg);
+            yetty_ycore_error_destroy(r.error);
+            /* Keep going — best-effort batch eviction; later lines may
+             * still succeed. */
+        }
+    }
+}
+
 struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
     struct yetty_ypaint_canvas *canvas, struct yetty_ypaint_core_buffer *buffer)
 {
@@ -1817,9 +1998,18 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
         }
     }
 
+    /* Serialise every line that just rolled below the live viewport
+     * (rolling_row_0). Their expanded grid_line content is freed; the
+     * compact form lives in canvas->scrollbuffer keyed by
+     * sb_offsets[i]. This is where the per-instance heap growth comes
+     * back down — without it canvas->lines holds the full
+     * 40+ MB/PDF in expanded form forever. */
+    canvas_evict_scrollback(canvas);
+
     ydebug("add_buffer: END cursor_row=%u rolling_row_0=%u lines.count=%u "
-           "max_row_seen=%u",
-           canvas->cursor_row, canvas->rolling_row_0, canvas->lines.count, max_row_seen);
+           "max_row_seen=%u scrollbuffer=%zu B",
+           canvas->cursor_row, canvas->rolling_row_0, canvas->lines.count, max_row_seen,
+           canvas->scrollbuffer.size);
 
     canvas->dirty = true;
     return YETTY_OK_VOID();
@@ -2193,6 +2383,14 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_clear(struct yetty_ypaint_can
         return res;
     }
     line_buffer_init(&canvas->lines);
+
+    /* Reset scrollbuffer too — clear wipes scrollback. */
+    yetty_ypaint_scrollbuffer_free(&canvas->scrollbuffer);
+    yetty_ypaint_scrollbuffer_init(&canvas->scrollbuffer);
+    free(canvas->sb_offsets);
+    canvas->sb_offsets = NULL;
+    canvas->sb_offsets_count = 0;
+    canvas->sb_offsets_capacity = 0;
 
     canvas->grid_staging_count = 0;
     canvas->prim_staging_count = 0;
