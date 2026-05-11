@@ -28,6 +28,12 @@ BINARIES=(
     "$BUILD_DIR/src/yetty/ymsdf-gen/yetty-ymsdf-gen"
     "$BUILD_DIR/temu"
     "$BUILD_DIR/demo/ymgui/01_demo_window/demo-ymgui-01-demo-window"
+    # Client tools unblocked by issue #132 (yplot/yimage/ymesh/ypaint/yfont
+    # splits) — emit OSC complex-prim envelopes from a riscv64 guest, no GPU.
+    "$BUILD_DIR/tools/yplot/yplot"
+    "$BUILD_DIR/tools/ymesh/ymesh"
+    "$BUILD_DIR/tools/yecho/yecho"
+    "$BUILD_DIR/tools/ycat/ycat"
 )
 
 for b in "${BINARIES[@]}"; do
