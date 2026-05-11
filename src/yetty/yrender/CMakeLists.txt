@@ -74,6 +74,5 @@ if(YETTY_ENABLE_LIB_WEBGPU)
     # Embed shaders via incbin (or stubs on Emscripten)
     incbin_add_resources(yetty_yrender
         blend_shader "${CMAKE_CURRENT_SOURCE_DIR}/blend.wgsl"
-        solid_rects_shader "${CMAKE_CURRENT_SOURCE_DIR}/solid-rects.wgsl"
     )
 endif()
