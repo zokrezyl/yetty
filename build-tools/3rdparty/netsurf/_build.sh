@@ -282,7 +282,12 @@ EOF
 # arg) preserves NetSurf's internal `LDFLAGS += -lwapcaplet -ldom ...`
 # — make-command-line overrides are sticky and would clobber it.
 # Belt-and-braces on Linux too (gcc tolerates duplicate -L entries).
-NS_LDFLAGS_EXTRA="-L$OPENSSL_NEW_DIR/lib -L$LIBPNG_DIR/lib -L$LIBJPEG_TURBO_DIR/lib -lssl -lcrypto"
+#
+# Per-platform extras (e.g. macOS `-arch arm64`) also go through env
+# LDFLAGS for the same reason — passing them as `make LDFLAGS=...`
+# would silently drop NetSurf's `-lparserutils -lutf8proc -lnsbmp ...`
+# chain and leave nsmonkey with hundreds of undefined symbols.
+NS_LDFLAGS_EXTRA="${NS_EXTRA_LDFLAGS} -L$OPENSSL_NEW_DIR/lib -L$LIBPNG_DIR/lib -L$LIBJPEG_TURBO_DIR/lib -lssl -lcrypto"
 
 # NetSurf's libjpeg handling is via feature_switch (only adds
 # -DWITH_JPEG and -ljpeg, no -I from pkg-config), so the compiler
@@ -363,7 +368,6 @@ _make_args=(-C "$SRC_DIR" "-j${NCPU}" TARGET=monkey \
 [ -n "$NS_CXX"    ] && _make_args+=("CXX=$NS_CXX")
 [ -n "$NS_AR"     ] && _make_args+=("AR=$NS_AR")
 [ -n "$NS_RANLIB" ] && _make_args+=("RANLIB=$NS_RANLIB")
-[ -n "$NS_EXTRA_LDFLAGS" ] && _make_args+=("LDFLAGS=$NS_EXTRA_LDFLAGS")
 
 echo "==> building netsurf-all ${VERSION} (TARGET=monkey, host=${NS_HOST:-native}, -j${NCPU})"
 env \
