@@ -1,5 +1,9 @@
 # Linux desktop build target
 
+# All static libs on Linux must be position-independent so they can be linked
+# into ygui_shared and similar SHARED targets without relocation errors.
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # Libraries consumed by feature subdirs must be included BEFORE shared.cmake —
 # shared.cmake's add_subdirectory(src/yetty) processes those subdirs, and
 # their `if(TARGET ...)` guards only see platforms declared before that point.
