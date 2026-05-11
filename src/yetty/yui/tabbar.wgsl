@@ -1,6 +1,6 @@
-/* tabbar-chrome.wgsl — SDF-shaded rounded (optionally rotated) rectangles
- * for the yui tabbar chrome: strip background, tab cells, "+" new-tab
- * button, plus the upcoming minimize / maximize / close glyphs.
+/* tabbar.wgsl — SDF-shaded rounded (optionally rotated) rectangles for
+ * the yui tabbar: strip background, tab cells, "+" new-tab button, plus
+ * the upcoming minimize / maximize / close glyphs.
  *
  * Why SDF: pixel-aligned rounded corners with sub-pixel antialiasing at any
  * size, no separate texture or font atlas needed. Each instance carries
@@ -9,7 +9,7 @@
  * like the X close button share the same pipeline as the axis-aligned
  * tab cells, instead of needing a second shader.
  *
- * Layout (must match struct yetty_yui_tabbar_chrome_rect in C, 52 B):
+ * Layout (must match struct yetty_yui_tabbar_rect in C, 52 B):
  *   pos      : vec2 px  (un-rotated rect's top-left in target pixel space)
  *   size     : vec2 px  (un-rotated dimensions)
  *   color    : vec4 rgba in [0..1]

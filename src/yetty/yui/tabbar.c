@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include "tabbar.h"
+#include "tabbar-paint.h"
 
 /* GLFW modifier bit layout (matches glfw-main.c, ydvnc, yetty.c). Duplicated
  * here so tabbar.c doesn't pull in GLFW headers. */
@@ -51,6 +52,12 @@ struct yetty_yui_tabbar {
      * construction in yetty.c). */
     const struct yetty_yconfig_config *config;
     const struct yetty_context *yetty_ctx;
+
+    /* GPU pipeline that paints the strip + tab cells + buttons. Lazily
+     * built on the first render so we don't pay for shader/pipeline
+     * creation in tabbars that never get rendered (e.g. headless tests).
+     * Owned by the tabbar; freed in destroy. */
+    struct yetty_yui_tabbar_paint *paint;
 };
 
 /*---------------------------------------------------------------------------
@@ -105,6 +112,9 @@ struct yetty_ycore_void_result yetty_yui_tabbar_destroy(struct yetty_yui_tabbar 
         }
     }
     free(bar->workspaces);
+    if (bar->paint) {
+        yetty_yui_tabbar_paint_destroy(bar->paint);
+    }
     free(bar);
 
     if (YETTY_IS_ERR(first_err)) {
@@ -125,22 +135,36 @@ struct yetty_ycore_void_result yetty_yui_tabbar_destroy(struct yetty_yui_tabbar 
  * corners at any zoom level (see solid-rects.wgsl).
  *--------------------------------------------------------------------------*/
 
-/* Tab width envelope: Chrome caps at ~240px when there's room and shrinks
- * to ~60px when many tabs compete; we mirror that range. */
+/* Tab geometry. Caps at ~240 px when there's room and shrinks to a floor
+ * around ~60 px when many tabs compete; matches mainstream browser ranges
+ * so users get familiar behaviour at any window width. */
 #define TABBAR_TAB_MAX_WIDTH    240.0f
 #define TABBAR_TAB_MIN_WIDTH    60.0f
 #define TABBAR_TAB_OVERLAP      0.0f    /* gap between adjacent tab cells */
 #define TABBAR_TAB_RADIUS       12.0f   /* top-corner radius for tab cells */
 #define TABBAR_TOP_INSET        4.0f    /* strip padding above each tab */
-#define TABBAR_NEWTAB_AREA      40.0f   /* right-side new-tab button */
+#define TABBAR_NEWTAB_AREA      40.0f   /* right-edge new-tab "+" button */
 #define TABBAR_PLUS_THICKNESS   2.0f    /* arm thickness of the + glyph */
+
+/* Window-control buttons (minimize, maximize-toggle, close) live at the
+ * far right of the strip. Each button has the same square footprint; the
+ * right-most one is close, leftmost minimize. Geometry is fixed so the
+ * main thread (when wired through the output pipe) can derive identical
+ * hit-rects without consulting the tabbar's internal state. */
+#define TABBAR_WINBTN_WIDTH     46.0f   /* per-button slot width */
+#define TABBAR_WINBTN_COUNT     3
+#define TABBAR_WINBTN_AREA      (TABBAR_WINBTN_WIDTH * TABBAR_WINBTN_COUNT)
+#define TABBAR_WINBTN_GLYPH_PX  10.0f   /* nominal glyph size in pixels */
+#define TABBAR_WINBTN_STROKE    1.5f    /* glyph stroke thickness */
 
 static float tab_width(const struct yetty_yui_tabbar *bar)
 {
     if (bar->count == 0 || bar->width <= 0) {
         return 0;
     }
-    float usable = bar->width - TABBAR_NEWTAB_AREA;
+    /* Tabs share the strip with the new-tab "+" button and the three
+     * window-control buttons; reserve both regions on the right. */
+    float usable = bar->width - TABBAR_NEWTAB_AREA - TABBAR_WINBTN_AREA;
     if (usable <= 0) {
         usable = bar->width;
     }
@@ -152,6 +176,124 @@ static float tab_width(const struct yetty_yui_tabbar *bar)
         ideal = TABBAR_TAB_MIN_WIDTH;
     }
     return ideal;
+}
+
+/* Push (or replace) one rect into the batch. Caller is responsible for
+ * bounds — we trust rect_count up front. */
+static void push_rect(struct yetty_yui_tabbar_rect *rects, size_t *n,
+                      struct yetty_yui_tabbar_rect r)
+{
+    rects[(*n)++] = r;
+}
+
+/* Build the right-side window-control buttons (minimize / maximize-toggle /
+ * close). Footprint mirrors what most desktop window managers paint on the
+ * title bar: 3 equal-width squares, the rightmost being a red-tinted close
+ * with an "X" glyph rotated 45° in the same instanced draw call. The
+ * actual click-to-act wiring (output pipe back to main thread) comes in a
+ * follow-up; today this just paints. */
+static void emit_window_buttons(const struct yetty_yui_tabbar *bar, float strip,
+                                struct yetty_yui_tabbar_rect *rects, size_t *n)
+{
+    float right = bar->width;
+    float btn_w = TABBAR_WINBTN_WIDTH;
+    float btn_h = strip;
+    /* Slot rects, in screen order (left to right): minimize, max, close.
+     * We'll fill each with a glyph after. */
+    float min_x = right - 3.0f * btn_w;
+    float max_x = right - 2.0f * btn_w;
+    float close_x = right - 1.0f * btn_w;
+
+    /* Background fills are flush with the strip so the buttons read as
+     * "part of the bar" rather than floating pills. Close is tinted red
+     * subtly enough that hover/click states can layer brighter red on top
+     * without losing legibility. */
+    push_rect(rects, n,
+              (struct yetty_yui_tabbar_rect){.x = min_x, .y = 0, .w = btn_w, .h = btn_h,
+                                             .r = 0.18f, .g = 0.19f, .b = 0.20f, .a = 1.0f});
+    push_rect(rects, n,
+              (struct yetty_yui_tabbar_rect){.x = max_x, .y = 0, .w = btn_w, .h = btn_h,
+                                             .r = 0.18f, .g = 0.19f, .b = 0.20f, .a = 1.0f});
+    push_rect(rects, n,
+              (struct yetty_yui_tabbar_rect){.x = close_x, .y = 0, .w = btn_w, .h = btn_h,
+                                             .r = 0.35f, .g = 0.10f, .b = 0.11f, .a = 1.0f});
+
+    /* Glyphs. All in a near-white so they pop against the dark/red fill.
+     * Geometry constants are normalized to TABBAR_WINBTN_GLYPH_PX which is
+     * sized to read cleanly at the strip's pixel height. */
+    const float FG_R = 0.92f, FG_G = 0.93f, FG_B = 0.95f;
+    const float gpx = TABBAR_WINBTN_GLYPH_PX;
+    const float stroke = TABBAR_WINBTN_STROKE;
+
+    float cy = btn_h * 0.5f;
+
+    /* Minimize: short horizontal stroke near the vertical center. Sits a
+     * hair below center so it reads as "to the floor" not a divider. */
+    {
+        float cx = min_x + btn_w * 0.5f;
+        push_rect(rects, n,
+                  (struct yetty_yui_tabbar_rect){.x = cx - gpx * 0.5f,
+                                                 .y = cy + gpx * 0.25f - stroke * 0.5f,
+                                                 .w = gpx,
+                                                 .h = stroke,
+                                                 .r = FG_R, .g = FG_G, .b = FG_B, .a = 1.0f});
+    }
+
+    /* Maximize: a square outline made of 4 thin strokes (top, bottom, left,
+     * right). One pipeline pass for all of them, no special glyph atlas.
+     * Could later toggle to a "restore" pair-of-squares once we know the
+     * window state via the output pipe. */
+    {
+        float cx = max_x + btn_w * 0.5f;
+        float side = gpx;
+        float left = cx - side * 0.5f;
+        float top = cy - side * 0.5f;
+        /* Top edge */
+        push_rect(rects, n,
+                  (struct yetty_yui_tabbar_rect){.x = left, .y = top,
+                                                 .w = side, .h = stroke,
+                                                 .r = FG_R, .g = FG_G, .b = FG_B, .a = 1.0f});
+        /* Bottom edge */
+        push_rect(rects, n,
+                  (struct yetty_yui_tabbar_rect){.x = left, .y = top + side - stroke,
+                                                 .w = side, .h = stroke,
+                                                 .r = FG_R, .g = FG_G, .b = FG_B, .a = 1.0f});
+        /* Left edge */
+        push_rect(rects, n,
+                  (struct yetty_yui_tabbar_rect){.x = left, .y = top,
+                                                 .w = stroke, .h = side,
+                                                 .r = FG_R, .g = FG_G, .b = FG_B, .a = 1.0f});
+        /* Right edge */
+        push_rect(rects, n,
+                  (struct yetty_yui_tabbar_rect){.x = left + side - stroke, .y = top,
+                                                 .w = stroke, .h = side,
+                                                 .r = FG_R, .g = FG_G, .b = FG_B, .a = 1.0f});
+    }
+
+    /* Close: two thin strokes rotated ±45° to form an X. Lengths are scaled
+     * by sqrt(2) so the endpoints meet the corners of a gpx-side bounding
+     * square (otherwise the strokes look short compared to min/max glyphs).
+     * The rotation lives in the same instance attribute the shader reads
+     * — no second pipeline. */
+    {
+        float cx = close_x + btn_w * 0.5f;
+        float diag = gpx * 1.41421356f; /* gpx * sqrt(2) */
+        /* Each rect is laid out un-rotated centered at the glyph center;
+         * the shader rotates around the rect's own center, so pos = topleft
+         * of the un-rotated rect. */
+        push_rect(rects, n,
+                  (struct yetty_yui_tabbar_rect){.x = cx - diag * 0.5f,
+                                                 .y = cy - stroke * 0.5f,
+                                                 .w = diag, .h = stroke,
+                                                 .r = FG_R, .g = FG_G, .b = FG_B, .a = 1.0f,
+                                                 .rotation = 0.78539816f /* +45° */});
+        push_rect(rects, n,
+                  (struct yetty_yui_tabbar_rect){.x = cx - diag * 0.5f,
+                                                 .y = cy - stroke * 0.5f,
+                                                 .w = diag, .h = stroke,
+                                                 .r = FG_R, .g = FG_G, .b = FG_B, .a = 1.0f,
+                                                 .rotation = -0.78539816f /* -45° */});
+    }
 }
 
 struct yetty_ycore_void_result yetty_yui_tabbar_render(
@@ -166,15 +308,38 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
 
     /* Workspace pass first — the strip then paints on top. The workspace
      * was set_origin'd to (0, strip) at resize time so its tiles already
-     * render below the strip and the chrome can be a thin overlay. */
+     * render below the strip and the overlay can be a thin band. */
     struct yetty_yui_workspace *ws = bar->workspaces[bar->active];
     if (ws) {
         struct yetty_ycore_void_result r = yetty_yui_workspace_render(ws, render_target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "tabbar_render: workspace render failed");
     }
 
-    if (!render_target || !render_target->ops || !render_target->ops->draw_solid_rects) {
+    /* Need device/queue from the yetty_ctx and the texture view + size
+     * from the render target. Either missing → we silently skip the
+     * overlay (the tabs are still switchable via keyboard). */
+    if (!render_target || !render_target->ops || !render_target->ops->get_view) {
         return YETTY_OK_VOID();
+    }
+    if (!bar->yetty_ctx) {
+        return YETTY_OK_VOID();
+    }
+    WGPUDevice device = bar->yetty_ctx->gpu_context.device;
+    WGPUQueue queue = bar->yetty_ctx->gpu_context.queue;
+    WGPUTextureFormat fmt = bar->yetty_ctx->gpu_context.surface_format;
+    WGPUTextureView view = render_target->ops->get_view(render_target);
+    if (!device || !queue || !view) {
+        return YETTY_OK_VOID();
+    }
+
+    /* Lazy first-frame pipeline creation. */
+    if (!bar->paint) {
+        struct yetty_yui_tabbar_paint_ptr_result pr =
+            yetty_yui_tabbar_paint_create(device, queue, fmt);
+        if (YETTY_IS_ERR(pr)) {
+            return YETTY_ERR(yetty_ycore_void, "tabbar_render: paint_create failed", pr);
+        }
+        bar->paint = pr.value;
     }
 
     float strip = YETTY_YUI_TABBAR_HEIGHT;
@@ -185,12 +350,14 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
         return YETTY_OK_VOID();
     }
 
-    /* Worst-case rect count: strip background + N tab bodies + new-tab
-     * button + 2 plus-glyph arms. Stack-allocate up to 64, heap above. */
-    size_t rect_count = 4 + bar->count;
-    struct yetty_yrender_solid_rect stack_rects[64];
-    struct yetty_yrender_solid_rect *rects = stack_rects;
-    struct yetty_yrender_solid_rect *heap_rects = NULL;
+    /* Worst-case rect count:
+     *   1 strip bg + N tabs + 3 plus-button rects (pill + 2 arms)
+     *   + 3 window-button bgs + 1 (min) + 4 (max outline) + 2 (close X) = 13
+     * Total: 14 + N. Stack-allocate up to 64, heap above. */
+    size_t rect_count = 14 + bar->count;
+    struct yetty_yui_tabbar_rect stack_rects[64];
+    struct yetty_yui_tabbar_rect *rects = stack_rects;
+    struct yetty_yui_tabbar_rect *heap_rects = NULL;
     if (rect_count > sizeof(stack_rects) / sizeof(stack_rects[0])) {
         heap_rects = malloc(rect_count * sizeof(*heap_rects));
         if (!heap_rects) {
@@ -200,114 +367,113 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
     }
     size_t n = 0;
 
-    /* Chrome dark-mode palette:
-     *   strip  — medium dark, sits between the (darker) terminal content
-     *            below and the (slightly lighter) inactive tabs above it
-     *   active — matches the terminal background, so the active tab visually
-     *            "merges" into the content area below (Chrome's hallmark)
-     *   inactive — a step LIGHTER than the strip so unselected tabs read as
-     *              raised pieces against the bar, with clear contrast
-     *
-     * Values are linear-ish RGB in [0..1]; we don't gamma-correct here
-     * because the surface format is sRGB and Dawn handles the conversion. */
+    /* Dark-mode palette tuned to read as a single coherent UI element:
+     *   strip    — medium dark, sits between the (darker) terminal content
+     *              below and the (slightly lighter) inactive tabs above it.
+     *   active   — matches the terminal background, so the active tab
+     *              visually "merges" into the content area below.
+     *   inactive — a step LIGHTER than the strip so unselected tabs read
+     *              as raised pieces against the bar, with clear contrast. */
     const float STRIP_R = 0.18f, STRIP_G = 0.19f, STRIP_B = 0.20f;
-    const float ACTIVE_R = 0.04f, ACTIVE_G = 0.04f, ACTIVE_B = 0.05f; /* ≈ terminal bg */
+    const float ACTIVE_R = 0.04f, ACTIVE_G = 0.04f, ACTIVE_B = 0.05f;
     const float INACTIVE_R = 0.30f, INACTIVE_G = 0.31f, INACTIVE_B = 0.33f;
 
     /* 1. Strip background — sharp rect, no radius (full-width band). */
-    rects[n++] = (struct yetty_yrender_solid_rect){
-        .x = 0, .y = 0, .w = bar->width, .h = strip,
-        .r = STRIP_R, .g = STRIP_G, .b = STRIP_B, .a = 1.0f,
-    };
+    push_rect(rects, &n,
+              (struct yetty_yui_tabbar_rect){.x = 0, .y = 0, .w = bar->width, .h = strip,
+                                             .r = STRIP_R, .g = STRIP_G, .b = STRIP_B, .a = 1.0f});
 
     float tw = tab_width(bar);
-    float x = 0.0f;
     float top_inset = TABBAR_TOP_INSET;
     if (top_inset > strip * 0.30f) {
         top_inset = strip * 0.30f;
     }
     float tab_h = strip - top_inset;
-    /* The radius can't exceed half the smaller side; clamp so degenerate
-     * narrow tabs don't produce visual artifacts. */
+    /* Clamp corner radius to half the smaller side so degenerate narrow
+     * tabs don't produce visual artifacts. */
     float r_corner = TABBAR_TAB_RADIUS;
     if (r_corner > tab_h * 0.5f) r_corner = tab_h * 0.5f;
     if (r_corner > tw * 0.5f)    r_corner = tw * 0.5f;
 
+    float x = 0.0f;
     for (size_t i = 0; i < bar->count; i++) {
         int active = (i == bar->active);
-        /* Active tab matches the terminal background — produces the Chrome
-         * effect where the selected tab visually opens into the page area.
-         * Inactive tab is a clear step lighter than the strip; both bottom
-         * corners stay square so the tab "merges" into the content area
-         * below (CSS order: tl, tr, br, bl). */
-        rects[n++] = (struct yetty_yrender_solid_rect){
-            .x = x,
-            .y = top_inset,
-            .w = tw,
-            .h = tab_h,
-            .r = active ? ACTIVE_R   : INACTIVE_R,
-            .g = active ? ACTIVE_G   : INACTIVE_G,
-            .b = active ? ACTIVE_B   : INACTIVE_B,
-            .a = 1.0f,
-            .radius_tl = r_corner,
-            .radius_tr = r_corner,
-            .radius_br = 0.0f,
-            .radius_bl = 0.0f,
-        };
+        /* Bottom corners stay square so the tab "merges" into the content
+         * area below (CSS order: tl, tr, br, bl). */
+        push_rect(rects, &n,
+                  (struct yetty_yui_tabbar_rect){
+                      .x = x,
+                      .y = top_inset,
+                      .w = tw,
+                      .h = tab_h,
+                      .r = active ? ACTIVE_R   : INACTIVE_R,
+                      .g = active ? ACTIVE_G   : INACTIVE_G,
+                      .b = active ? ACTIVE_B   : INACTIVE_B,
+                      .a = 1.0f,
+                      .radius_tl = r_corner,
+                      .radius_tr = r_corner,
+                      .radius_br = 0.0f,
+                      .radius_bl = 0.0f,
+                  });
         x += tw + TABBAR_TAB_OVERLAP;
     }
 
-    /* 2. New-tab "+" button — fully-rounded background pill followed by
-     * two thin sharp rects forming the plus glyph. The plus is laid in the
-     * same draw call (still one GPU pipeline pass) so there's no per-glyph
-     * shader/atlas cost. Color is light enough to read clearly against
-     * the darker pill background. */
+    /* 2. New-tab "+" button — fully-rounded pill background + 2 thin
+     * sharp rects forming the plus glyph. All in the same draw call so
+     * there's no per-glyph shader/atlas cost. */
     {
         float btn = strip - top_inset - 4.0f;
         if (btn < 16.0f) btn = 16.0f;
         if (btn > 22.0f) btn = 22.0f;
-        float bx = bar->width - TABBAR_NEWTAB_AREA + (TABBAR_NEWTAB_AREA - btn) * 0.5f;
+        float bx = bar->width - TABBAR_WINBTN_AREA - TABBAR_NEWTAB_AREA
+                   + (TABBAR_NEWTAB_AREA - btn) * 0.5f;
         float by = top_inset + (tab_h - btn) * 0.5f;
         float radius = btn * 0.5f; /* perfect circle */
 
-        rects[n++] = (struct yetty_yrender_solid_rect){
-            .x = bx, .y = by, .w = btn, .h = btn,
-            .r = 0.26f, .g = 0.27f, .b = 0.29f, .a = 1.0f,
-            .radius_tl = radius, .radius_tr = radius,
-            .radius_br = radius, .radius_bl = radius,
-        };
+        push_rect(rects, &n,
+                  (struct yetty_yui_tabbar_rect){
+                      .x = bx, .y = by, .w = btn, .h = btn,
+                      .r = 0.26f, .g = 0.27f, .b = 0.29f, .a = 1.0f,
+                      .radius_tl = radius, .radius_tr = radius,
+                      .radius_br = radius, .radius_bl = radius,
+                  });
 
-        /* Plus glyph: horizontal arm + vertical arm. Arm length is 50% of
-         * the button width so the glyph reads as a + with comfortable
-         * padding around it. */
         float arm_len = btn * 0.5f;
         float arm_th = TABBAR_PLUS_THICKNESS;
         float cx = bx + btn * 0.5f;
         float cy = by + btn * 0.5f;
-        /* Horizontal bar */
-        rects[n++] = (struct yetty_yrender_solid_rect){
-            .x = cx - arm_len * 0.5f,
-            .y = cy - arm_th * 0.5f,
-            .w = arm_len,
-            .h = arm_th,
-            .r = 0.85f, .g = 0.86f, .b = 0.88f, .a = 1.0f,
-        };
-        /* Vertical bar */
-        rects[n++] = (struct yetty_yrender_solid_rect){
-            .x = cx - arm_th * 0.5f,
-            .y = cy - arm_len * 0.5f,
-            .w = arm_th,
-            .h = arm_len,
-            .r = 0.85f, .g = 0.86f, .b = 0.88f, .a = 1.0f,
-        };
+        push_rect(rects, &n,
+                  (struct yetty_yui_tabbar_rect){.x = cx - arm_len * 0.5f,
+                                                 .y = cy - arm_th * 0.5f,
+                                                 .w = arm_len, .h = arm_th,
+                                                 .r = 0.85f, .g = 0.86f, .b = 0.88f, .a = 1.0f});
+        push_rect(rects, &n,
+                  (struct yetty_yui_tabbar_rect){.x = cx - arm_th * 0.5f,
+                                                 .y = cy - arm_len * 0.5f,
+                                                 .w = arm_th, .h = arm_len,
+                                                 .r = 0.85f, .g = 0.86f, .b = 0.88f, .a = 1.0f});
     }
 
+    /* 3. Window-control buttons (minimize / maximize / close) on the
+     * far right. Visuals only at this stage — click → output_pipe wiring
+     * comes in a follow-up. */
+    emit_window_buttons(bar, strip, rects, &n);
+
+    /* Texture size for NDC mapping. Asking the inner WebGPU texture is
+     * the only reliable source — render_target->viewport gets clobbered
+     * by per-pane scissor in pane_render(). */
+    WGPUTexture tex = render_target->ops->get_texture
+                          ? render_target->ops->get_texture(render_target)
+                          : NULL;
+    uint32_t tw_px = tex ? wgpuTextureGetWidth(tex) : (uint32_t)bar->width;
+    uint32_t th_px = tex ? wgpuTextureGetHeight(tex) : (uint32_t)bar->height;
+
     struct yetty_ycore_void_result dr =
-        render_target->ops->draw_solid_rects(render_target, rects, n);
+        yetty_yui_tabbar_paint_draw(bar->paint, view, tw_px, th_px, rects, n);
     if (heap_rects) {
         free(heap_rects);
     }
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "tabbar_render: draw_solid_rects failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "tabbar_render: paint_draw failed");
 
     return YETTY_OK_VOID();
 }
@@ -596,14 +762,21 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
     float y;
     if (event_y(event, &y) && y < strip) {
         if (event->type == YETTY_YCORE_MOUSE_DOWN && bar->count > 0) {
-            /* Hit-test mirrors the render-time tab layout exactly:
-             *   - clicks in the new-tab area (right edge) → add workspace
-             *   - clicks left of it → switch to the tab at that x
+            /* Hit-test mirrors the render-time layout exactly. Right edge,
+             * from far right going left:
+             *   [window-buttons | new-tab | ...tabs...]
              *
-             * tab_width() reserves TABBAR_NEWTAB_AREA on the right; matching
-             * that reservation here keeps mouse and pixels in sync. */
-            float newtab_left = bar->width - TABBAR_NEWTAB_AREA;
-            if (event->mouse.x >= newtab_left && bar->config && bar->yetty_ctx) {
+             *   - clicks in the window-button area → swallow (visuals only
+             *     today; minimize/maximize/close will be wired through the
+             *     output pipe in a follow-up).
+             *   - clicks in the new-tab area      → add workspace
+             *   - everything left of that         → switch to tab at x */
+            float winbtn_left = bar->width - TABBAR_WINBTN_AREA;
+            float newtab_left = winbtn_left - TABBAR_NEWTAB_AREA;
+            if (event->mouse.x >= winbtn_left) {
+                /* Reserved for min/max/close — no-op until the output
+                 * pipe lands. */
+            } else if (event->mouse.x >= newtab_left && bar->config && bar->yetty_ctx) {
                 struct yetty_ycore_void_result r = yetty_yui_tabbar_add_workspace_from_config(
                     bar, bar->config, bar->yetty_ctx);
                 if (YETTY_IS_ERR(r)) {
