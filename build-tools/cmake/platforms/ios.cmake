@@ -2,13 +2,13 @@
 
 # Disable desktop-only libraries.
 # - GLFW: desktop window system, not used on iOS (UIKit owns the window).
-# - QEMU: --qemu uses fork+exec to spawn qemu-system-riscv64 — neither
-#   primitive is available in the iOS sandbox, and the qemu-ios-* asset
-#   tarball isn't published. Disable up-front so assets_fetch_qemu() in
-#   shared.cmake doesn't try to download a non-existent file. Use --temu
-#   (in-process TinyEMU) instead.
+# - QEMU binary: no qemu-system-riscv64 tarball published for iOS, and the
+#   sandbox would forbid exec'ing it anyway. The QEMU *launcher lib* stays
+#   linked (LIB_QEMU=ON) so pty-factory/default.c's --qemu telnet branch
+#   resolves — telnet-to-an-already-running-qemu is a planned iOS path
+#   (e.g. a separate YettyQemu.app companion).
 set(YETTY_ENABLE_LIB_GLFW OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_LIB_QEMU OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_LIB_QEMU_BINARY OFF CACHE BOOL "" FORCE)
 
 include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
 
@@ -21,14 +21,18 @@ set(IOS_ASSETS_DIR "${CMAKE_BINARY_DIR}/ios-assets")
 file(MAKE_DIRECTORY ${IOS_ASSETS_DIR})
 
 # Platform sources — iOS-specific (Objective-C) + shared Unix (C). iOS uses
-# TinyEMU for PTY (RISC-V Linux VM) instead of forkpty, so unix-pty-factory.c
-# / fork-pty.c / glfw-* are intentionally excluded. The shared files are the
-# same set linux.cmake uses, minus the desktop-only pieces.
+# the same pty-factory/default.c dispatcher as desktop. --temu (in-process
+# TinyEMU) is the runtime default; --telnet attaches to an external server
+# (e.g. a YettyQemu.app companion). forkpty.c is linked because the factory
+# references its symbol; the forkpty(3) call itself is guarded out on iOS.
 set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ymain/ios-tvos.m
     ${YETTY_ROOT}/src/yetty/yplatform/paths/ios-tvos.m
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/ios-tvos.m
-    ${YETTY_ROOT}/src/yetty/ypty/ios-tvos-temu-pty.c
+    ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
+    ${YETTY_ROOT}/src/yetty/ypty/temu-pty.c
+    ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/process/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
@@ -70,9 +74,10 @@ target_compile_definitions(yetty PRIVATE
     YETTY_HAS_VNC=1
     YETTY_HAS_YVIDEO=1
     $<$<BOOL:${YETTY_ENABLE_LIB_TINYEMU}>:YETTY_HAS_TINYEMU=1>
-    # CONFIG_SLIRP must be defined for src/yetty/yplatform/ios/tinyemu-pty.c
-    # so its slirp_open() ifdef block compiles in. Without it, p->tab_eth[i].net
-    # is never set and virtio_net_init derefs NULL → SIGSEGV at vm init.
+    $<$<BOOL:${YETTY_ENABLE_LIB_QEMU}>:YETTY_HAS_QEMU=1>
+    # CONFIG_SLIRP must be defined for temu-pty.c so its slirp_open() ifdef
+    # block compiles in. Without it, p->tab_eth[i].net is never set and
+    # virtio_net_init derefs NULL → SIGSEGV at vm init.
     $<$<BOOL:${YETTY_ENABLE_LIB_TINYEMU}>:CONFIG_SLIRP>
 )
 
@@ -104,6 +109,7 @@ target_link_libraries(yetty PRIVATE
     tinyemu
     yetty_telnet
     yetty_yco
+    $<$<BOOL:${YETTY_ENABLE_LIB_QEMU}>:yetty_qemu>
     ${CORETEXT_LIBRARY}
     ${COREFOUNDATION_LIBRARY}
     ${COREGRAPHICS_LIBRARY}

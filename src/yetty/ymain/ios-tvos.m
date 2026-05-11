@@ -53,6 +53,7 @@ static void yetty_kb_log(const char *fmt, ...)
 }
 const char *yetty_yplatform_get_data_dir(void);
 const char *yetty_yplatform_get_runtime_dir(void);
+const char *yetty_yplatform_get_config_dir(void);
 WGPUSurface yetty_yplatform_create_surface_from_layer(WGPUInstance instance, CAMetalLayer *layer);
 
 /* YettyMetalView - UIView backed by CAMetalLayer */
@@ -136,8 +137,19 @@ static void *render_thread_func(void *arg)
      * Support/yetty), so point yetty at that — not cache_dir which is never
      * populated. */
     const char *data_dir = yetty_yplatform_get_data_dir();
-    ydebug("cache_dir=%s data_dir=%s runtime_dir=%s",
-           cache_dir, data_dir, runtime_dir);
+    const char *config_dir = yetty_yplatform_get_config_dir();
+    ydebug("cache_dir=%s data_dir=%s runtime_dir=%s config_dir=%s",
+           cache_dir, data_dir, runtime_dir, config_dir);
+
+    /* The shipped tinyemu cfg (assets/yemu/temu/yetty-temu-extended.cfg) uses
+     * $YETTY_DATA_DIR / $YETTY_RUNTIME_DIR / $YETTY_CONFIG_DIR path expansion
+     * (see expand_env_vars in src/tinyemu/machine.c). Desktop and webasm set
+     * these in their main entries (glfw.c, webasm.c); iOS/tvOS must do the
+     * same so the cfg's $YETTY_DATA_DIR/yemu/... paths resolve to the
+     * sandbox's Application Support/yetty (or Caches/yetty on tvOS). */
+    setenv("YETTY_RUNTIME_DIR", runtime_dir, 1);
+    setenv("YETTY_DATA_DIR", data_dir, 1);
+    setenv("YETTY_CONFIG_DIR", config_dir, 1);
 
     static char shaders_dir[512];
     static char fonts_dir[512];

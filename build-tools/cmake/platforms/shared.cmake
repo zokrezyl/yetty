@@ -143,8 +143,11 @@ endif()
 
 # qemu binary — per-host platform (ships per-target tarball).
 # Pull qemu.cmake to make qemu_embed_runtime() available; the from-source
-# qemu_build() in there is dormant unless explicitly invoked.
-if(YETTY_ENABLE_LIB_QEMU)
+# qemu_build() in there is dormant unless explicitly invoked. Gated by
+# the *_BINARY flag, not *_LIB_QEMU: iOS/tvOS link the launcher lib (so
+# pty-factory/default.c's --qemu branch resolves) but don't have a
+# qemu-system-riscv64 tarball to fetch or embed.
+if(YETTY_ENABLE_LIB_QEMU_BINARY)
     yetty_3rdparty_fetch(qemu _QEMU_DIR)
     include(${YETTY_ROOT}/build-tools/cmake/qemu.cmake)
 endif()
@@ -603,7 +606,7 @@ function(yetty_embed_assets TARGET)
     endif()
 
     # Embed QEMU binary if enabled (fetched by yetty_3rdparty_fetch(qemu))
-    if(YETTY_ENABLE_LIB_QEMU)
+    if(YETTY_ENABLE_LIB_QEMU_BINARY)
         qemu_embed_runtime(${TARGET})
     endif()
 

@@ -137,7 +137,7 @@ endif()
 # install time. SELinux denies execute_no_trans on plain app_data files
 # on API 29+, so the binary in <data>/qemu/ can't be exec'd; the .so in
 # /data/app/.../lib/<abi>/ can. Same trick toybox uses (libtoybox.so).
-if(YETTY_ENABLE_LIB_QEMU)
+if(YETTY_ENABLE_LIB_QEMU_BINARY)
     if(NOT DEFINED ANDROID_BUILD_DIR)
         if(DEFINED ENV{ANDROID_BUILD_DIR})
             set(ANDROID_BUILD_DIR $ENV{ANDROID_BUILD_DIR})

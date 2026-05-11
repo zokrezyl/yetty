@@ -61,7 +61,8 @@ option(YETTY_ENABLE_LIB_QUICKJS     "quickjs-ng — MIT JavaScript engine"    ON
 
 # Virtual machine (--virtual flag: run shell in RISC-V Linux VM)
 option(YETTY_ENABLE_LIB_TINYEMU     "tinyemu — RISC-V emulator for --virtual" ON)
-option(YETTY_ENABLE_LIB_QEMU        "qemu — QEMU RISC-V emulator (via telnet)" ON)
+option(YETTY_ENABLE_LIB_QEMU        "qemu — QEMU launcher lib (yetty_qemu)"   ON)
+option(YETTY_ENABLE_LIB_QEMU_BINARY "qemu — fetch + embed qemu-system-riscv64" ON)
 
 #-----------------------------------------------------------------------------
 # Features (internal source directories / modules)

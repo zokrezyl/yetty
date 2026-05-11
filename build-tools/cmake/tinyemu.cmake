@@ -56,11 +56,14 @@ else()
     set(TINYEMU_SLIRP_SOURCES "")
 endif()
 
-# fs_disk: Linux/macOS use fs_disk.c (POSIX); Windows uses fs_disk_win32.c.
-# iOS skips it entirely (no host-FS access).
+# fs_disk: POSIX hosts use fs_disk.c, Windows uses fs_disk_win32.c. iOS/tvOS
+# do have host-FS access inside the app sandbox (Application Support, Caches,
+# tmp), and 9p is required on all platforms so the in-process tinyemu can
+# share a host directory into the guest VM. Include the POSIX impl
+# everywhere except Windows.
 if(WIN32)
     list(APPEND TINYEMU_SOURCES ${TINYEMU_DIR}/fs_disk_win32.c)
-elseif(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+else()
     list(APPEND TINYEMU_SOURCES ${TINYEMU_DIR}/fs_disk.c)
 endif()
 
@@ -232,9 +235,8 @@ endif()
 message(STATUS "TinyEMU: RISC-V emulator v${TINYEMU_VERSION}")
 
 # Standalone temu executable for testing — POSIX-only main loop on Linux/macOS.
-# iOS/tvOS skip it: the iOS tinyemu lib doesn't include fs_disk_init (the
-# disk image bring-up path temu's main exercises), and the standalone
-# binary has no place inside an iOS app bundle anyway.
+# iOS/tvOS skip it: the standalone CLI binary has no place inside an iOS app
+# bundle. (The tinyemu *library* does build on iOS, with fs_disk included.)
 if(NOT WIN32 AND NOT YETTY_IOS AND NOT YETTY_TVOS AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" AND NOT CMAKE_SYSTEM_NAME STREQUAL "tvOS")
     add_executable(temu ${TINYEMU_DIR}/temu.c)
     target_link_libraries(temu PRIVATE tinyemu)
