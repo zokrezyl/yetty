@@ -159,7 +159,8 @@ target_link_libraries(netsurf_core INTERFACE
     ${_NS_LIBPNG_LIBRARIES}
     ${_NS_LIBWEBP_LIBRARIES}
     z
-    m)
+    m
+    $<$<BOOL:${APPLE}>:iconv>)
 target_include_directories(netsurf_core INTERFACE
     ${_NS_LIBXML_INCLUDE_DIRS}
     ${_NS_LIBPNG_INCLUDE_DIRS}
