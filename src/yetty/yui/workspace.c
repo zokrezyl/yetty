@@ -117,6 +117,40 @@ struct yetty_ycore_void_result yetty_yui_workspace_set_origin(struct yetty_yui_w
     return YETTY_OK_VOID();
 }
 
+struct yetty_ycore_void_result yetty_yui_workspace_set_active(struct yetty_yui_workspace *ws,
+                                                              int active)
+{
+    if (!ws) {
+        return YETTY_ERR(yetty_ycore_void, "workspace_set_active: NULL");
+    }
+    if (!ws->root) {
+        return YETTY_OK_VOID();
+    }
+
+    /* Make sure the cascade has a destination. load_layout sets first
+     * pane focused, but a defensive re-assert here means tab switches
+     * stay correct even if something cleared the flag in between. */
+    struct yetty_yui_tile *focused = yetty_yui_tile_find_focused_pane(ws->root);
+    if (!focused && active) {
+        focused = yetty_yui_tile_find_first_pane(ws->root);
+        if (focused) {
+            yetty_yui_tile_pane_set_focused(focused, 1);
+        }
+    }
+    if (!focused) {
+        return YETTY_OK_VOID();
+    }
+
+    /* SET_FOCUS event carries the focused-pane's id when becoming
+     * active, 0 when deactivating. The pane forwards to its active
+     * view; the view (terminal) reads `set_focus.object_id != 0` as
+     * "you are the foreground view now". */
+    struct yetty_yui_event ev = {.type = YETTY_YCORE_SET_FOCUS};
+    ev.set_focus.object_id = active ? yetty_yui_tile_id(focused) : 0;
+    yetty_yui_tile_on_event(focused, &ev);
+    return YETTY_OK_VOID();
+}
+
 /*=============================================================================
  * Root tile management
  *===========================================================================*/

@@ -606,8 +606,19 @@ struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_from_config(
         return YETTY_ERR(yetty_ycore_void, "tabbar_add_ws: load_layout failed", lr);
     }
 
+    /* Deactivate the workspace we're switching away from (if any) so its
+     * leaf view gets a focus-out notification before the new one's
+     * focus-in. */
+    if (bar->count > 0 && bar->workspaces[bar->active]) {
+        yetty_yui_workspace_set_active(bar->workspaces[bar->active], 0);
+    }
+
     bar->workspaces[bar->count++] = ws;
     bar->active = bar->count - 1;
+
+    /* The new workspace becomes active immediately — cascade focus down
+     * to its terminal so it knows it's the foreground view. */
+    yetty_yui_workspace_set_active(ws, 1);
 
     /* Critical: the initial layout sets bounds via set_bounds, which the
      * terminal view only stores. The terminal grid (cols/rows) and the
@@ -664,6 +675,14 @@ static struct yetty_ycore_void_result tabbar_close_active(struct yetty_yui_tabba
     if (bar->active >= bar->count) {
         bar->active = bar->count - 1;
     }
+    /* Whichever workspace is now in the active slot just gained focus
+     * (it might be the one that was already there if we closed a tab to
+     * its right, or the previous neighbour if we closed the rightmost).
+     * Either way, refresh its focus cascade so its terminal knows it's
+     * now the foreground view. */
+    if (bar->count > 0 && bar->workspaces[bar->active]) {
+        yetty_yui_workspace_set_active(bar->workspaces[bar->active], 1);
+    }
     tabbar_request_render(bar);
     return YETTY_OK_VOID();
 }
@@ -691,11 +710,24 @@ static void tabbar_request_render(const struct yetty_yui_tabbar *bar)
 
 static void tabbar_switch(struct yetty_yui_tabbar *bar, size_t idx)
 {
-    if (idx < bar->count && idx != bar->active) {
-        bar->active = idx;
-        ydebug("tabbar: switched to workspace %zu/%zu", idx + 1, bar->count);
-        tabbar_request_render(bar);
+    if (idx >= bar->count || idx == bar->active) {
+        return;
     }
+    /* Deactivate the previously active workspace, then activate the new
+     * one. Both calls cascade SET_FOCUS down through the focused pane to
+     * its active view — without this the leaf view never learns that a
+     * tab switch happened, and per-view focus behaviour (terminal
+     * cursor blink, future focus reporting CSEQ, etc.) lags one step
+     * behind the visible tab. */
+    if (bar->workspaces[bar->active]) {
+        yetty_yui_workspace_set_active(bar->workspaces[bar->active], 0);
+    }
+    bar->active = idx;
+    if (bar->workspaces[bar->active]) {
+        yetty_yui_workspace_set_active(bar->workspaces[bar->active], 1);
+    }
+    ydebug("tabbar: switched to workspace %zu/%zu", idx + 1, bar->count);
+    tabbar_request_render(bar);
 }
 
 /*---------------------------------------------------------------------------
@@ -763,12 +795,11 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
         }
         if (k == KEY_TAB) {
             if (bar->count > 1) {
-                if (shift) {
-                    bar->active = (bar->active + bar->count - 1) % bar->count;
-                } else {
-                    bar->active = (bar->active + 1) % bar->count;
-                }
-                ydebug("tabbar: cycle → %zu/%zu", bar->active + 1, bar->count);
+                size_t next = shift ? (bar->active + bar->count - 1) % bar->count
+                                    : (bar->active + 1) % bar->count;
+                /* Route through tabbar_switch so the SET_FOCUS cascade
+                 * runs — direct bar->active assignment would skip it. */
+                tabbar_switch(bar, next);
             }
             return YETTY_OK(yetty_ycore_int, 1);
         }

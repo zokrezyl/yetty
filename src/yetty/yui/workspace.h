@@ -40,6 +40,24 @@ struct yetty_ycore_void_result yetty_yui_workspace_resize(struct yetty_yui_works
 struct yetty_ycore_void_result yetty_yui_workspace_set_origin(struct yetty_yui_workspace *ws,
                                                               float x, float y);
 
+/* Mark this workspace as the tabbar's active one (active != 0) or as
+ * deactivated (active == 0), and propagate the change DOWN to the
+ * active view. Concretely:
+ *   - if active and no pane in the tree is focused yet, focus the
+ *     first pane (so the cascade has a target);
+ *   - dispatch a SET_FOCUS event to the focused pane, which forwards
+ *     it to its active view. event.set_focus.object_id carries the
+ *     pane's id when active, 0 when deactivated, so leaf views (e.g.
+ *     the terminal) can update their internal focused state.
+ *
+ * The tabbar calls this on every tab switch — without it the per-pane
+ * `focused` flag is set at load_layout time but nothing ever tells the
+ * leaf view (the terminal) that it is the foreground one, and effects
+ * that depend on that knowledge (focus-reporting CSEQ, cursor blink
+ * style, etc.) never fire on tab change. */
+struct yetty_ycore_void_result yetty_yui_workspace_set_active(struct yetty_yui_workspace *ws,
+                                                              int active);
+
 /* Root tile management */
 struct yetty_ycore_void_result yetty_yui_workspace_set_root(struct yetty_yui_workspace *ws,
                                                             struct yetty_yui_tile *tile);
