@@ -217,19 +217,6 @@ struct yetty_ypaint_canvas {
     // font (first install). Created in canvas_create, destroyed last in
     // canvas_destroy.
     struct yetty_yfont_cache *font_cache;
-
-    // Canvas-scoped pin set: every font handle ever materialised via a
-    // blob (PDF embedded font) is retained ONCE here and held for the
-    // canvas's lifetime, regardless of whether any line currently
-    // references it. Without this pin, a PDF font that's declared but
-    // whose glyphs aren't placed (common: PDFs over-declare fonts per
-    // page) gets refcount-dropped at end of add_buffer and rebuilt
-    // (full MSDF atlas reload, ~2 MB) on the next envelope — death by
-    // a thousand re-materialisations when ycat is run in a loop on the
-    // same PDF. Default font has its own pin via default_handle.
-    yetty_yfont_cache_handle *pinned_fonts;
-    uint32_t pinned_fonts_count;
-    uint32_t pinned_fonts_capacity;
 };
 
 #define DEFAULT_MAX_PRIMS_PER_CELL 16
@@ -672,37 +659,6 @@ static struct yetty_yfont_cache_ref_result ypaint_canvas_materialize_blob_font(
     return yetty_yfont_cache_get_font(canvas->font_cache, hex, cdb_path);
 }
 
-/* Once per unique handle, bump the cache refcount one extra time and
- * record the handle so canvas_destroy can release it. Idempotent: a
- * second call with the same handle is a no-op. This is what keeps
- * blob-materialised fonts alive across envelopes that don't actually
- * place any of their glyphs. */
-static void canvas_pin_font_handle(struct yetty_ypaint_canvas *canvas,
-                                   yetty_yfont_cache_handle handle)
-{
-    if (handle == YETTY_YFONT_CACHE_HANDLE_INVALID) {
-        return;
-    }
-    for (uint32_t i = 0; i < canvas->pinned_fonts_count; i++) {
-        if (canvas->pinned_fonts[i] == handle) {
-            return;
-        }
-    }
-    if (canvas->pinned_fonts_count == canvas->pinned_fonts_capacity) {
-        uint32_t nc = canvas->pinned_fonts_capacity ? canvas->pinned_fonts_capacity * 2 : 8;
-        yetty_yfont_cache_handle *grown =
-            realloc(canvas->pinned_fonts, nc * sizeof(yetty_yfont_cache_handle));
-        if (!grown) {
-            ywarn("ypaint_canvas: pinned_fonts realloc failed; font may churn on reuse");
-            return;
-        }
-        canvas->pinned_fonts = grown;
-        canvas->pinned_fonts_capacity = nc;
-    }
-    yetty_yfont_cache_retain(canvas->font_cache, handle);
-    canvas->pinned_fonts[canvas->pinned_fonts_count++] = handle;
-}
-
 //=============================================================================
 // Canvas implementation
 //=============================================================================
@@ -901,17 +857,6 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_destroy(struct yetty_ypaint_c
     if (YETTY_IS_ERR(res)) {
         return res;
     }
-    /* Release every canvas-scoped pin we acquired for blob fonts. Once
-     * these are gone (plus the default-font pin below), the only
-     * remaining refs are from any lines still in canvas->lines — and
-     * line_buffer_free above released those. */
-    for (uint32_t i = 0; i < canvas->pinned_fonts_count; i++) {
-        yetty_yfont_cache_release_font(canvas->font_cache, canvas->pinned_fonts[i]);
-    }
-    free(canvas->pinned_fonts);
-    canvas->pinned_fonts = NULL;
-    canvas->pinned_fonts_count = 0;
-    canvas->pinned_fonts_capacity = 0;
     /* Drop the canvas's default ref, then destroy the cache (which frees
      * any remaining entries — there should be none if every line released
      * its handles correctly). */
@@ -1652,26 +1597,16 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
                           "skipping, spans will use default font",
                           fv.font_id, hint, rr.error.msg);
                     yetty_ycore_error_destroy(rr.error);
+                } else if (fv.font_id >= 0) {
+                    /* Buffer-scoped cache ref — released at end-of-buffer. */
+                    font_map_grow(&fonts_map, (uint32_t)fv.font_id + 1);
+                    fonts_map.entries[fv.font_id].font = rr.value.font;
+                    fonts_map.entries[fv.font_id].handle = rr.value.handle;
+                    fonts_map.entries[fv.font_id].present = true;
                 } else {
-                    /* Pin once for the canvas's lifetime so a future ycat
-                     * call hitting the same blob doesn't pay another MSDF
-                     * atlas reconstruction even if no line ends up
-                     * referencing this font in *this* buffer. Idempotent
-                     * per handle. */
-                    canvas_pin_font_handle(canvas, rr.value.handle);
-
-                    if (fv.font_id >= 0) {
-                        /* Buffer-scoped cache ref — released at end-of-buffer. */
-                        font_map_grow(&fonts_map, (uint32_t)fv.font_id + 1);
-                        fonts_map.entries[fv.font_id].font = rr.value.font;
-                        fonts_map.entries[fv.font_id].handle = rr.value.handle;
-                        fonts_map.entries[fv.font_id].present = true;
-                    } else {
-                        /* fv.font_id < 0: producer didn't tag the font. The cache
-                         * ref we got would otherwise leak — release immediately
-                         * (the canvas-scoped pin we just took keeps the slot). */
-                        yetty_yfont_cache_release_font(canvas->font_cache, rr.value.handle);
-                    }
+                    /* fv.font_id < 0: producer didn't tag the font. The cache
+                     * ref we got would otherwise leak — release immediately. */
+                    yetty_yfont_cache_release_font(canvas->font_cache, rr.value.handle);
                 }
             }
         } else if (prim_type == YETTY_YPAINT_TYPE_TEXT_SPAN) {
