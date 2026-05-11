@@ -97,13 +97,16 @@ macos-x86_64)
     # implicit-function-declaration from error to warning so those
     # generated files compile.
     NS_EXTRA_CFLAGS="-arch x86_64 -D_DARWIN_C_SOURCE -Wno-error=implicit-function-declaration"
-    NS_EXTRA_LDFLAGS="-arch x86_64"
+    # iconv lives in libiconv on macOS (vs glibc on Linux); netsurf
+    # core + libparserutils call iconv_open/iconv/iconv_close without
+    # adding -liconv, so we tack it on here.
+    NS_EXTRA_LDFLAGS="-arch x86_64 -liconv"
     ;;
 
 macos-arm64)
     NS_NATIVE=1
     NS_EXTRA_CFLAGS="-arch arm64 -D_DARWIN_C_SOURCE -Wno-error=implicit-function-declaration"
-    NS_EXTRA_LDFLAGS="-arch arm64"
+    NS_EXTRA_LDFLAGS="-arch arm64 -liconv"
     ;;
 
 linux-aarch64|linux-riscv64|\
