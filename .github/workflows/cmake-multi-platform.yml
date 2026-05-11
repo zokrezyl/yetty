@@ -209,10 +209,27 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Nix
-      uses: cachix/install-nix-action@v27
-      with:
-        nix_path: nixpkgs=channel:nixos-unstable
+    - name: Install cross-compile toolchain (aarch64)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake ninja-build pkg-config nasm brotli \
+          gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+        sudo dpkg --add-architecture arm64
+        sudo sed -i -E 's|^deb (https?://[^ ]+) |deb [arch=amd64] \1 |' \
+          /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+        . /etc/os-release
+        echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports ${VERSION_CODENAME} main universe" \
+          | sudo tee /etc/apt/sources.list.d/ports.list
+        echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports ${VERSION_CODENAME}-updates main universe" \
+          | sudo tee -a /etc/apt/sources.list.d/ports.list
+        sudo apt-get update
+        sudo apt-get install -y \
+          libx11-dev:arm64 libxrandr-dev:arm64 libxinerama-dev:arm64 \
+          libxcursor-dev:arm64 libxi-dev:arm64 libxext-dev:arm64 \
+          libxkbcommon-dev:arm64 libwayland-dev:arm64 wayland-protocols \
+          libgl-dev:arm64 libfontconfig-dev:arm64 \
+          libexpat1-dev:arm64 uuid-dev:arm64
 
     - name: Build Linux aarch64 (cross-compile)
       run: make build-linux-aarch64-ytrace-release
@@ -245,10 +262,27 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Nix
-      uses: cachix/install-nix-action@v27
-      with:
-        nix_path: nixpkgs=channel:nixos-unstable
+    - name: Install cross-compile toolchain (riscv64)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake ninja-build pkg-config nasm brotli \
+          gcc-riscv64-linux-gnu g++-riscv64-linux-gnu
+        sudo dpkg --add-architecture riscv64
+        sudo sed -i -E 's|^deb (https?://[^ ]+) |deb [arch=amd64] \1 |' \
+          /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+        . /etc/os-release
+        echo "deb [arch=riscv64] http://ports.ubuntu.com/ubuntu-ports ${VERSION_CODENAME} main universe" \
+          | sudo tee /etc/apt/sources.list.d/ports.list
+        echo "deb [arch=riscv64] http://ports.ubuntu.com/ubuntu-ports ${VERSION_CODENAME}-updates main universe" \
+          | sudo tee -a /etc/apt/sources.list.d/ports.list
+        sudo apt-get update
+        sudo apt-get install -y \
+          libx11-dev:riscv64 libxrandr-dev:riscv64 libxinerama-dev:riscv64 \
+          libxcursor-dev:riscv64 libxi-dev:riscv64 libxext-dev:riscv64 \
+          libxkbcommon-dev:riscv64 libwayland-dev:riscv64 \
+          libgl-dev:riscv64 libfontconfig-dev:riscv64 \
+          libexpat1-dev:riscv64 uuid-dev:riscv64
 
     - name: Build Linux riscv64 (cross-compile)
       run: make build-linux-riscv-ytrace-release
@@ -325,6 +359,11 @@ jobs:
         choco install nasm -y
         choco install make -y
         pip install meson
+
+    - name: Set up MSVC environment
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
 
     - name: Configure CMake
       run: >
