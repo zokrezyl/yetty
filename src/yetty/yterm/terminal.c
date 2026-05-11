@@ -96,19 +96,22 @@ struct yetty_yterm_terminal {
    * Borrowed pointer — owned by the layers[] array. */
     struct yetty_yrender_terminal_layer *ymgui_layer;
 
-    /* Row-based selection state.
+    /* Cell-precise selection state.
      *
-     * Yetty selection is line-granular by design: the ypaint layer holds
-     * non-text content (plots, images, fonts at arbitrary positions) for
-     * which column-based selection has no meaning, but every layer can
-     * point at a whole row. Selection thus spans visible rows
-     * [sel_row_a, sel_row_b], inclusive, where each endpoint is a
-     * 0..rows-1 index. sel_dragging tracks an in-progress button-1 drag.
-     * Copy walks the layers and lets each one append its row text. */
+     * The terminal tracks one (anchor, head) pair in visible-grid
+     * coordinates and broadcasts it to every layer via set_selection.
+     * Each layer decides what to do with it:
+     *   - text-layer interprets it as an xterm-style cell stream
+     *     (column-granular highlight + extract)
+     *   - ypaint-layer treats the row range as "touched rows" and
+     *     selects the first overlapping primitive per row
+     * sel_dragging tracks an in-progress button-1 drag. */
     int sel_active;
     int sel_dragging;
-    uint32_t sel_row_a; /* anchor (where the drag began) */
-    uint32_t sel_row_b; /* head   (latest drag position) */
+    uint32_t sel_anchor_row;
+    uint32_t sel_anchor_col;
+    uint32_t sel_head_row;
+    uint32_t sel_head_col;
 };
 
 /* How many lines a single mouse-wheel notch moves the scrollback view. */
@@ -685,37 +688,31 @@ static void terminal_cursor_callback(struct yetty_yrender_terminal_layer *source
 }
 
 /*-------------------------------------------------------------------------
- * Row-based selection.
+ * Cell-precise selection.
  *
- * Mouse drag inside the pane records a (row_a, row_b) pair in visible-row
- * coordinates. Both layers receive set_selection() so they can render a
- * highlight band. Copy walks the rows in order and lets each layer append
- * its own row text to a shared buffer; the result lands in the platform
- * clipboard. Paste reads the clipboard and writes raw bytes back through
- * the PTY — bracketed-paste is left to libvterm/the shell to handle.
+ * The terminal owns one (anchor, head) pair in visible-grid coordinates
+ * (row in [0, rows), col in [0, cols]). Each layer interprets it on its
+ * own terms:
+ *
+ *   text-layer  — xterm-style cell stream (column-granular highlight + copy)
+ *   ypaint-layer — row range only; selects whole primitives that overlap
+ *                  the touched rows
+ *
+ * Copy walks every layer's get_selection_text in order and concatenates
+ * their UTF-8 output. Paste pushes clipboard bytes straight to the PTY;
+ * bracketed-paste mode is the shell/libvterm's responsibility.
  *-----------------------------------------------------------------------*/
 
-static inline uint32_t terminal_sel_row_min(const struct yetty_yterm_terminal *terminal)
-{
-    return terminal->sel_row_a < terminal->sel_row_b ? terminal->sel_row_a : terminal->sel_row_b;
-}
-
-static inline uint32_t terminal_sel_row_max(const struct yetty_yterm_terminal *terminal)
-{
-    return terminal->sel_row_a > terminal->sel_row_b ? terminal->sel_row_a : terminal->sel_row_b;
-}
-
-/* Push the current selection state to every layer that opted in via
- * set_selection. Called whenever the band changes (drag, clear) so the
- * highlight follows the mouse without an extra render trigger. */
+/* Push the current (anchor, head) to every layer that opted in. Called
+ * on every drag tick so the highlight tracks the mouse. */
 static void terminal_push_selection(struct yetty_yterm_terminal *terminal)
 {
-    uint32_t rmin = terminal->sel_active ? terminal_sel_row_min(terminal) : 0;
-    uint32_t rmax = terminal->sel_active ? terminal_sel_row_max(terminal) : 0;
     for (size_t i = 0; i < terminal->layer_count; i++) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
         if (layer && layer->ops && layer->ops->set_selection) {
-            layer->ops->set_selection(layer, terminal->sel_active, rmin, rmax);
+            layer->ops->set_selection(layer, terminal->sel_active, terminal->sel_anchor_row,
+                                      terminal->sel_anchor_col, terminal->sel_head_row,
+                                      terminal->sel_head_col);
         }
     }
     if (terminal->context.yetty_context.event_loop &&
@@ -725,56 +722,54 @@ static void terminal_push_selection(struct yetty_yterm_terminal *terminal)
     }
 }
 
-/* Translate a pane-local Y pixel coordinate to a visible-row index, clamped
- * into [0, rows-1]. We use the first layer's cell height (text-layer is
- * always layer 0 in the current tree, and its cell metrics are what every
- * other layer aligns to). */
-static uint32_t terminal_row_from_local_y(const struct yetty_yterm_terminal *terminal, float ly)
+/* Translate a pane-local pixel coordinate to (row, col) in the visible
+ * grid. col is allowed to reach `cols` (one past the last cell) to encode
+ * "past EOL" — needed for "drag past the right edge selects to end of
+ * line". row is clamped to [0, rows-1]; rows below the grid clamp to the
+ * last row, matching how xterm extends selection downward. */
+static void terminal_cell_from_local(const struct yetty_yterm_terminal *terminal, float lx,
+                                     float ly, uint32_t *out_row, uint32_t *out_col)
 {
+    float cell_w = 10.0f;
     float cell_h = 20.0f;
-    if (terminal->layer_count > 0 && terminal->layers[0] &&
-        terminal->layers[0]->cell_size.height > 0.0f) {
-        cell_h = terminal->layers[0]->cell_size.height;
+    if (terminal->layer_count > 0 && terminal->layers[0]) {
+        if (terminal->layers[0]->cell_size.width > 0.0f) {
+            cell_w = terminal->layers[0]->cell_size.width;
+        }
+        if (terminal->layers[0]->cell_size.height > 0.0f) {
+            cell_h = terminal->layers[0]->cell_size.height;
+        }
+    }
+    if (lx < 0.0f) {
+        lx = 0.0f;
     }
     if (ly < 0.0f) {
         ly = 0.0f;
     }
     uint32_t row = (uint32_t)(ly / cell_h);
-    if (row >= terminal->rows && terminal->rows > 0) {
+    uint32_t col = (uint32_t)(lx / cell_w);
+    if (terminal->rows > 0 && row >= terminal->rows) {
         row = terminal->rows - 1;
     }
-    return row;
+    if (col > terminal->cols) {
+        col = terminal->cols;
+    }
+    *out_row = row;
+    *out_col = col;
 }
 
-/* Build the clipboard payload from every row in the selection. Each layer
- * gets a chance to append its row text; an LF separates rows. We strip a
- * trailing LF so single-line copies don't carry one. */
+/* Walk layers and concatenate each layer's selection-text contribution. */
 static struct yetty_ycore_void_result terminal_collect_selection_text(
     struct yetty_yterm_terminal *terminal, struct yetty_ycore_buffer *out)
 {
     if (!terminal->sel_active) {
         return YETTY_OK_VOID();
     }
-    uint32_t rmin = terminal_sel_row_min(terminal);
-    uint32_t rmax = terminal_sel_row_max(terminal);
-    if (rmax >= terminal->rows) {
-        rmax = terminal->rows ? terminal->rows - 1 : 0;
-    }
-
-    for (uint32_t row = rmin; row <= rmax; row++) {
-        for (size_t i = 0; i < terminal->layer_count; i++) {
-            struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
-            if (layer && layer->ops && layer->ops->get_row_text) {
-                struct yetty_ycore_void_result r = layer->ops->get_row_text(layer, row, out);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "collect row text");
-            }
-        }
-        /* Newline between rows so the clipboard reflects the line break the
-         * user saw. Skip after the last row — single-line copies shouldn't
-         * carry a trailing LF. */
-        if (row < rmax) {
-            struct yetty_ycore_void_result wr = yetty_ycore_buffer_write(out, "\n", 1);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "collect row LF");
+    for (size_t i = 0; i < terminal->layer_count; i++) {
+        struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
+        if (layer && layer->ops && layer->ops->get_selection_text) {
+            struct yetty_ycore_void_result r = layer->ops->get_selection_text(layer, out);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "layer selection text");
         }
     }
     return YETTY_OK_VOID();
@@ -818,24 +813,20 @@ static void terminal_copy_selection(struct yetty_yterm_terminal *terminal)
     yetty_ycore_buffer_destroy(&buf);
 }
 
-/* Ctrl+Shift+V — pull text from the system clipboard and write it to the
- * PTY as if the user had typed it. libvterm/the shell handles bracketed-
- * paste mode if it's been enabled; we just push raw bytes. */
+/* Ctrl+Shift+V — kick off an asynchronous clipboard fetch. The result
+ * comes back on the input pipe as a YETTY_YCORE_PASTE event whose
+ * payload holds the text; the event handler below writes it to the
+ * PTY. We don't block the render thread because GLFW clipboard calls
+ * must run on the main thread. */
 static void terminal_paste_clipboard(struct yetty_yterm_terminal *terminal)
 {
     struct yetty_platform_clipboard_manager *cm =
         terminal->context.yetty_context.app_context.clipboard_manager;
-    if (!cm || !cm->ops || !cm->ops->get_text) {
+    if (!cm || !cm->ops || !cm->ops->request_paste) {
         ydebug("terminal_paste_clipboard: no clipboard manager");
         return;
     }
-    const char *text = cm->ops->get_text(cm);
-    if (!text || !*text) {
-        return;
-    }
-    size_t len = strlen(text);
-    terminal_pty_write_raw(terminal, text, len);
-    yinfo("terminal: pasted %zu bytes from clipboard", len);
+    cm->ops->request_paste(cm);
 }
 
 /* Clear any active selection and tell the layers to drop their highlight. */
@@ -846,8 +837,10 @@ static void terminal_clear_selection(struct yetty_yterm_terminal *terminal)
     }
     terminal->sel_active = 0;
     terminal->sel_dragging = 0;
-    terminal->sel_row_a = 0;
-    terminal->sel_row_b = 0;
+    terminal->sel_anchor_row = 0;
+    terminal->sel_anchor_col = 0;
+    terminal->sel_head_row = 0;
+    terminal->sel_head_col = 0;
     terminal_push_selection(terminal);
 }
 
@@ -1653,6 +1646,24 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_v
         terminal->shutting_down = 1;
         return YETTY_OK(yetty_ycore_int, 1);
 
+    case YETTY_YCORE_PASTE: {
+        /* Async paste response — the clipboard manager fetched the text
+         * on the main thread and pushed it back to us through the input
+         * pipe. Payload is a heap-allocated NUL-terminated UTF-8 string
+         * we own; write its bytes to the PTY (libvterm/the shell deals
+         * with bracketed-paste wrapping) and free. */
+        char *text = event->payload;
+        if (text) {
+            size_t len = strlen(text);
+            if (len > 0) {
+                terminal_pty_write_raw(terminal, text, len);
+                yinfo("terminal: pasted %zu bytes from clipboard", len);
+            }
+            free(text);
+        }
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+
     case YETTY_YCORE_POLL_READABLE:
         ydebug("terminal: POLL_READABLE");
         terminal_read_pty(terminal);
@@ -1682,23 +1693,37 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_v
                event->mouse.y, view->bounds.w, view->bounds.h, view->bounds.x, view->bounds.y,
                terminal->mouse_click_subscribed, terminal->term_input_sub_flags);
 
-        /* Row-based selection. Left-button drag starts/extends/finalises
+        /* Cell-precise selection. Left-button drag starts/extends/finalises
          * a selection when nothing else owns the click (no card-aware
          * subscriber, no terminal-wide subscriber, no scrollback view).
-         * Computed inside view bounds; outside is treated as "not for
-         * the terminal" and falls through. */
+         * Anchor is the cell under MOUSE_DOWN; head tracks MOUSE_DRAG. */
         float lx_sel = event->mouse.x - view->bounds.x;
         float ly_sel = event->mouse.y - view->bounds.y;
         int in_bounds = !(lx_sel < 0.0f || ly_sel < 0.0f || lx_sel >= view->bounds.w ||
                           ly_sel >= view->bounds.h);
-        int sel_eligible = in_bounds && event->mouse.button == 0 &&
-                           !terminal->mouse_click_subscribed && !terminal->scrollback_active &&
-                           !(terminal->term_input_sub_flags & YETTY_YMGUI_TERM_SUB_MOUSE_CLICK);
+        int term_owns_click = !terminal->mouse_click_subscribed && !terminal->scrollback_active &&
+                              !(terminal->term_input_sub_flags & YETTY_YMGUI_TERM_SUB_MOUSE_CLICK);
+
+        /* X-Windows-style middle-click paste. Button 2 press inside the
+         * pane, when no subscriber owns the click, pulls the current
+         * clipboard text and pushes it to the PTY — same path as
+         * Ctrl+Shift+V. Release is consumed silently. */
+        if (in_bounds && term_owns_click && event->mouse.button == 2) {
+            if (event->type == YETTY_YCORE_MOUSE_DOWN) {
+                terminal_paste_clipboard(terminal);
+            }
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+
+        int sel_eligible = in_bounds && event->mouse.button == 0 && term_owns_click;
         if (sel_eligible) {
             if (event->type == YETTY_YCORE_MOUSE_DOWN) {
-                uint32_t row = terminal_row_from_local_y(terminal, ly_sel);
-                terminal->sel_row_a = row;
-                terminal->sel_row_b = row;
+                uint32_t r, c;
+                terminal_cell_from_local(terminal, lx_sel, ly_sel, &r, &c);
+                terminal->sel_anchor_row = r;
+                terminal->sel_anchor_col = c;
+                terminal->sel_head_row = r;
+                terminal->sel_head_col = c;
                 terminal->sel_active = 1;
                 terminal->sel_dragging = 1;
                 terminal_push_selection(terminal);
@@ -1706,13 +1731,28 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_v
             }
             /* MOUSE_UP for our drag — finalise. A pure click (no movement)
              * is treated as "clear selection" so users have an obvious way
-             * to dismiss the highlight without dragging into the gutter. */
+             * to dismiss the highlight without dragging into the gutter.
+             *
+             * If the user has X-Windows-style auto-copy enabled (default
+             * true, see terminal/selection/auto-copy), a successful drag
+             * also pushes the new selection to the clipboard right here —
+             * no Ctrl+Shift+C needed. */
             if (terminal->sel_dragging) {
                 terminal->sel_dragging = 0;
-                if (terminal->sel_row_a == terminal->sel_row_b) {
+                if (terminal->sel_anchor_row == terminal->sel_head_row &&
+                    terminal->sel_anchor_col == terminal->sel_head_col) {
                     terminal_clear_selection(terminal);
                 } else {
                     terminal_push_selection(terminal);
+                    struct yetty_yconfig_config *cfg =
+                        terminal->context.yetty_context.app_context.config;
+                    int auto_copy = 1;
+                    if (cfg && cfg->ops && cfg->ops->get_bool) {
+                        auto_copy = cfg->ops->get_bool(cfg, "terminal/selection/auto-copy", 1);
+                    }
+                    if (auto_copy) {
+                        terminal_copy_selection(terminal);
+                    }
                 }
                 return YETTY_OK(yetty_ycore_int, 1);
             }
@@ -1769,13 +1809,19 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_v
         ydebug("terminal: MOUSE_MOVE win=(%.1f,%.1f) move_sub=%d term_sub=0x%x", event->mouse.x,
                event->mouse.y, terminal->mouse_move_subscribed, terminal->term_input_sub_flags);
 
-        /* Extend an in-flight selection drag. Only fires for DRAG (button
-         * held); plain MOVE doesn't alter the band. */
-        if (event->type == YETTY_YCORE_MOUSE_DRAG && terminal->sel_dragging) {
+        /* Extend an in-flight selection. The platform's GLFW dispatcher
+         * never synthesises MOUSE_DRAG — it only emits MOUSE_MOVE — so we
+         * key off our own sel_dragging flag (set on MOUSE_DOWN, cleared on
+         * MOUSE_UP) rather than the event type. Treat any cursor move
+         * while we're dragging as drag extension. */
+        if (terminal->sel_dragging) {
+            float lx_sel = event->mouse.x - view->bounds.x;
             float ly_sel = event->mouse.y - view->bounds.y;
-            uint32_t row = terminal_row_from_local_y(terminal, ly_sel);
-            if (row != terminal->sel_row_b) {
-                terminal->sel_row_b = row;
+            uint32_t r, c;
+            terminal_cell_from_local(terminal, lx_sel, ly_sel, &r, &c);
+            if (r != terminal->sel_head_row || c != terminal->sel_head_col) {
+                terminal->sel_head_row = r;
+                terminal->sel_head_col = c;
                 terminal_push_selection(terminal);
             }
             return YETTY_OK(yetty_ycore_int, 1);

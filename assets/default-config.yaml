@@ -34,6 +34,12 @@ rendering:
 # Terminal Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 terminal:
+  selection:
+    # X-Windows-style auto-copy: when a mouse drag selection finishes,
+    # the highlighted text is automatically pushed to the system
+    # clipboard (no Ctrl+Shift+C needed). Set to false if you prefer
+    # the Windows convention (explicit copy only).
+    auto-copy: true
   text-layer:
     font:
       # Font rendering method: "raster" or "msdf"

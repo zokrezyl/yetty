@@ -154,23 +154,35 @@ struct yetty_yterm_terminal_layer_ops {
    * (text-layer, since libvterm itself owns the swap) may leave NULL. */
     struct yetty_ycore_void_result (*set_alt_screen)(struct yetty_yrender_terminal_layer *self,
                                                      int active);
-    /* Selection — row-based clipboard copy/highlight.
+    /* Selection — clipboard copy + highlight rendering.
      *
-     * Layers report whatever text they hold on a given visible row to the
-     * terminal's copy collector. row is a visible-row index in
-     * [0, grid_size.rows). out receives appended UTF-8 bytes (no
-     * trailing newline). A layer with nothing to contribute appends
-     * nothing. Optional — NULL means "this layer has no selectable text".
+     * The selection has cell precision: an anchor (the cell the user
+     * clicked) and a head (the cell the cursor is now over). Reading
+     * order is anchor→head, top-down. Each endpoint is (row, col) in
+     * visible-grid coordinates. row in [0, grid_size.rows), col in
+     * [0, grid_size.cols].
+     *
+     * How each layer interprets that depends on the layer:
+     *
+     *   text-layer  — xterm-style stream selection. Cells are tinted and
+     *                 extracted from anchor to head (full rows in the
+     *                 middle, partial first/last rows).
+     *   ypaint-layer — the column part is meaningless on rich content,
+     *                 so the layer treats the row span [min_row, max_row]
+     *                 as the "touched rows" and selects the first
+     *                 primitive overlapping each touched row, as a whole.
+     *
+     * Both ops are optional — NULL means "this layer doesn't participate
+     * in selection". active=0 clears any prior selection on the layer.
      */
-    struct yetty_ycore_void_result (*get_row_text)(
-        const struct yetty_yrender_terminal_layer *self, uint32_t row,
-        struct yetty_ycore_buffer *out);
-    /* Push selection state into the layer so it can render a highlight.
-     * row_min/row_max are visible-row indices in [0, grid_size.rows);
-     * active=0 clears the highlight. Optional — layers that don't
-     * visualise selection leave NULL. */
     void (*set_selection)(struct yetty_yrender_terminal_layer *self, int active,
-                          uint32_t row_min, uint32_t row_max);
+                          uint32_t anchor_row, uint32_t anchor_col, uint32_t head_row,
+                          uint32_t head_col);
+    /* Append this layer's contribution to the current selection to out
+     * as UTF-8. Called once per copy; the layer drives both row iteration
+     * and intra-row column handling internally. */
+    struct yetty_ycore_void_result (*get_selection_text)(
+        const struct yetty_yrender_terminal_layer *self, struct yetty_ycore_buffer *out);
 };
 
 /* Layer base - embed as first member in subclasses */

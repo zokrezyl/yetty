@@ -60,6 +60,14 @@ static inline uint32_t yetty_shader_glyph_id_from_codepoint(uint32_t cp)
     return yetty_shader_glyph_id_from_local(cp - YETTY_SHADER_GLYPH_PUA_BASE);
 }
 
+/* Inverse of yetty_shader_glyph_id_from_codepoint — recover the PUA
+ * codepoint that produced this shader-glyph id. Used by selection
+ * extraction so a PUA cell on the clipboard round-trips to itself. */
+static inline uint32_t yetty_shader_glyph_codepoint_from_id(uint32_t glyph_index)
+{
+    return YETTY_SHADER_GLYPH_PUA_BASE + yetty_shader_glyph_local_id(glyph_index);
+}
+
 /*
  * Create the shader-glyph layer.
  *

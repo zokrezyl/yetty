@@ -484,9 +484,12 @@ struct yetty_ycore_int_result yetty_yui_workspace_on_event(struct yetty_yui_work
         return YETTY_OK(yetty_ycore_int, 0);
     }
 
-    /* Keyboard events go only to focused pane */
+    /* Keyboard and clipboard-paste events go only to the focused pane.
+     * Paste arrives asynchronously from the clipboard manager after the
+     * user's Ctrl+Shift+V or middle-click, so we route it like any other
+     * user input — to whoever currently owns the keyboard. */
     if (event->type == YETTY_YCORE_KEY_DOWN || event->type == YETTY_YCORE_KEY_UP ||
-        event->type == YETTY_YCORE_CHAR) {
+        event->type == YETTY_YCORE_CHAR || event->type == YETTY_YCORE_PASTE) {
         focused_pane = yetty_yui_tile_find_focused_pane(ws->root);
         ydebug("workspace: keyboard event type=%d focused_pane=%p", event->type,
                (void *)focused_pane);

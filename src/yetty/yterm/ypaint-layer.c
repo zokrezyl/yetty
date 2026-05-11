@@ -151,6 +151,15 @@ struct yetty_yterm_ypaint_layer {
    * here. Toggle via ypaint_layer_set_alt_screen swaps the two. */
     int alt_active;
     struct yetty_ypaint_canvas *saved_canvas;
+
+    /* Selection — row range only. The column part of (anchor, head) is
+     * meaningless for rich content, so we collapse it to [min_row, max_row].
+     * Today the layer doesn't emit text yet (no row→primitive picker is
+     * wired up); the storage is here so the picker can land without
+     * touching every call site again. */
+    int sel_active;
+    uint32_t sel_min_row;
+    uint32_t sel_max_row;
 };
 
 /* Forward declarations */
@@ -178,6 +187,11 @@ static struct yetty_ycore_void_result ypaint_layer_set_view_top(
     struct yetty_yrender_terminal_layer *self, int active, uint32_t view_top_total_idx);
 static struct yetty_ycore_void_result ypaint_layer_set_alt_screen(
     struct yetty_yrender_terminal_layer *self, int active);
+static void ypaint_layer_set_selection(struct yetty_yrender_terminal_layer *self, int active,
+                                       uint32_t anchor_row, uint32_t anchor_col, uint32_t head_row,
+                                       uint32_t head_col);
+static struct yetty_ycore_void_result ypaint_layer_get_selection_text(
+    const struct yetty_yrender_terminal_layer *self, struct yetty_ycore_buffer *out);
 
 /* Canvas scroll callback - propagate to other layers */
 static struct yetty_ycore_void_result on_canvas_scroll(struct yetty_ycore_void_result *user_data,
@@ -295,6 +309,8 @@ static const struct yetty_yterm_terminal_layer_ops ypaint_layer_ops = {
     .get_live_anchor = ypaint_layer_get_live_anchor,
     .set_view_top = ypaint_layer_set_view_top,
     .set_alt_screen = ypaint_layer_set_alt_screen,
+    .set_selection = ypaint_layer_set_selection,
+    .get_selection_text = ypaint_layer_get_selection_text,
 };
 
 /* Create */
@@ -999,5 +1015,41 @@ static struct yetty_ycore_void_result ypaint_layer_render(struct yetty_yrender_t
         }
     }
 
+    return YETTY_OK_VOID();
+}
+
+/* Selection on the ypaint layer is row-only — the column part of the
+ * terminal-wide (anchor, head) pair has no meaning on rich content. We
+ * collapse to [min_row, max_row] and stash it for the text extractor.
+ * Highlight rendering is intentionally not wired up yet; the text-layer
+ * already shows the user where their selection band is. */
+static void ypaint_layer_set_selection(struct yetty_yrender_terminal_layer *self, int active,
+                                       uint32_t anchor_row, uint32_t anchor_col, uint32_t head_row,
+                                       uint32_t head_col)
+{
+    struct yetty_yterm_ypaint_layer *layer =
+        container_of(self, struct yetty_yterm_ypaint_layer, base);
+    (void)anchor_col;
+    (void)head_col;
+    layer->sel_active = active;
+    if (anchor_row <= head_row) {
+        layer->sel_min_row = anchor_row;
+        layer->sel_max_row = head_row;
+    } else {
+        layer->sel_min_row = head_row;
+        layer->sel_max_row = anchor_row;
+    }
+}
+
+/* Stub. The "first thing overlapping each touched row" picker isn't wired
+ * up yet — the rule (leftmost vs first-inserted) is a pending design call.
+ * Returning OK with no bytes leaves the clipboard payload to the text
+ * layer. The selection state is already tracked above so once the picker
+ * lands, only this function changes. */
+static struct yetty_ycore_void_result ypaint_layer_get_selection_text(
+    const struct yetty_yrender_terminal_layer *self, struct yetty_ycore_buffer *out)
+{
+    (void)self;
+    (void)out;
     return YETTY_OK_VOID();
 }
