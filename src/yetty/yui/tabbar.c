@@ -34,6 +34,9 @@
 
 #define INITIAL_CAPACITY 4
 
+struct yetty_yui_tabbar;
+static void tabbar_request_render(const struct yetty_yui_tabbar *bar);
+
 struct yetty_yui_tabbar {
     struct yetty_yui_workspace **workspaces;
     size_t count;
@@ -197,11 +200,24 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
     }
     size_t n = 0;
 
-    /* 1. Strip background — sharp rect, no radius (it's a full-width band). */
+    /* Chrome dark-mode palette:
+     *   strip  — medium dark, sits between the (darker) terminal content
+     *            below and the (slightly lighter) inactive tabs above it
+     *   active — matches the terminal background, so the active tab visually
+     *            "merges" into the content area below (Chrome's hallmark)
+     *   inactive — a step LIGHTER than the strip so unselected tabs read as
+     *              raised pieces against the bar, with clear contrast
+     *
+     * Values are linear-ish RGB in [0..1]; we don't gamma-correct here
+     * because the surface format is sRGB and Dawn handles the conversion. */
+    const float STRIP_R = 0.18f, STRIP_G = 0.19f, STRIP_B = 0.20f;
+    const float ACTIVE_R = 0.04f, ACTIVE_G = 0.04f, ACTIVE_B = 0.05f; /* ≈ terminal bg */
+    const float INACTIVE_R = 0.30f, INACTIVE_G = 0.31f, INACTIVE_B = 0.33f;
+
+    /* 1. Strip background — sharp rect, no radius (full-width band). */
     rects[n++] = (struct yetty_yrender_solid_rect){
         .x = 0, .y = 0, .w = bar->width, .h = strip,
-        .r = 0.16f, .g = 0.17f, .b = 0.18f, .a = 1.0f,
-        /* corner radii all zero — sharp rect, SDF branch is cheap */
+        .r = STRIP_R, .g = STRIP_G, .b = STRIP_B, .a = 1.0f,
     };
 
     float tw = tab_width(bar);
@@ -219,20 +235,20 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
 
     for (size_t i = 0; i < bar->count; i++) {
         int active = (i == bar->active);
-        /* Active tab is brighter and fully opaque; inactive is slightly
-         * lighter than strip, translucent — matches Chrome's hover-off
-         * resting state. Bottom corners stay square so the tab "merges"
-         * into the content area below; only the top two corners round
-         * (CSS order: tl, tr, br, bl). */
+        /* Active tab matches the terminal background — produces the Chrome
+         * effect where the selected tab visually opens into the page area.
+         * Inactive tab is a clear step lighter than the strip; both bottom
+         * corners stay square so the tab "merges" into the content area
+         * below (CSS order: tl, tr, br, bl). */
         rects[n++] = (struct yetty_yrender_solid_rect){
             .x = x,
             .y = top_inset,
             .w = tw,
             .h = tab_h,
-            .r = active ? 0.20f : 0.13f,
-            .g = active ? 0.21f : 0.14f,
-            .b = active ? 0.23f : 0.15f,
-            .a = active ? 1.0f  : 0.85f,
+            .r = active ? ACTIVE_R   : INACTIVE_R,
+            .g = active ? ACTIVE_G   : INACTIVE_G,
+            .b = active ? ACTIVE_B   : INACTIVE_B,
+            .a = 1.0f,
             .radius_tl = r_corner,
             .radius_tr = r_corner,
             .radius_br = 0.0f,
@@ -455,6 +471,7 @@ static struct yetty_ycore_void_result tabbar_close_active(struct yetty_yui_tabba
     if (bar->active >= bar->count) {
         bar->active = bar->count - 1;
     }
+    tabbar_request_render(bar);
     return YETTY_OK_VOID();
 }
 
@@ -577,12 +594,6 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
         strip = bar->height;
     }
     float y;
-    if (event_y(event, &y)) {
-        if (event->type == YETTY_YCORE_MOUSE_DOWN) {
-            ydebug("tabbar: MOUSE_DOWN at (%.1f, %.1f) strip=%.1f width=%.1f count=%zu",
-                   event->mouse.x, event->mouse.y, strip, bar->width, bar->count);
-        }
-    }
     if (event_y(event, &y) && y < strip) {
         if (event->type == YETTY_YCORE_MOUSE_DOWN && bar->count > 0) {
             /* Hit-test mirrors the render-time tab layout exactly:
