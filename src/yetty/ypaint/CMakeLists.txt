@@ -8,8 +8,10 @@ add_library(yetty_ypaint STATIC
 
 target_link_libraries(yetty_ypaint PUBLIC
     yetty_ypaint_core
+    yetty_ypaint_factory
     yetty_ysdf
     yetty_yimage
+    yetty_yplot
     $<$<BOOL:${YETTY_ENABLE_FEATURE_YMESH}>:yetty_ymesh>
     $<$<BOOL:${YETTY_ENABLE_FEATURE_YMSDF_GEN}>:yetty_ymsdf_gen>
     $<$<BOOL:${YETTY_ENABLE_FEATURE_YMSDF_WGSL}>:yetty_ymsdf>

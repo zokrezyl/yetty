@@ -181,11 +181,15 @@ struct yetty_ycore_void_result yetty_{name}_register_yaml_factory(
 #include <stdint.h>
 #include <stddef.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ypaint-core/complex-prim-types.h>
 
 #ifdef __cplusplus
 extern "C" {{
 #endif
+
+/* Forward-declared so this header stays GPU-less and can be included by
+ * client-side wire emitters that don't link Dawn. The full type lives in
+ * yetty/ypaint-factory/complex-prim-factory.h (server side). */
+struct yetty_ypaint_core_concrete_factory;
 
 #define YETTY_{NAME}_TYPE_ID 0x{type_id:08x}u
 
@@ -222,6 +226,84 @@ void yetty_{name}_factory_destroy(struct yetty_ypaint_core_concrete_factory *fac
 #ifdef __cplusplus
 }}
 #endif
+'''
+
+
+def generate_c_wire_source(schema, uniforms, buffers):
+    """Emit *-gen-wire.c: pure wire-format serialize helpers (no GPU).
+    Lives in yetty_{name}_core so client tools / riscv64 builds can include it
+    without dragging in Dawn / WebGPU.
+    """
+    name = schema['name']
+    NAME = name.upper()
+
+    uniforms_word_count = sum(u['count'] for u in uniforms)
+    buffer_len_fields = len(buffers)
+
+    buf_len_sum_parts = [f'buffers->{b["name"]}_len' for b in buffers]
+    buf_len_sum = ' + '.join(buf_len_sum_parts) if buf_len_sum_parts else '0'
+
+    buf_len_writes = '\n'.join(
+        [f'    *p++ = (uint32_t)buffers->{b["name"]}_len;' for b in buffers])
+
+    buf_copies = '\n'.join([f'''    if (buffers->{b["name"]} && buffers->{b["name"]}_len > 0)
+        memcpy(p, buffers->{b["name"]}, buffers->{b["name"]}_len * sizeof(uint32_t));
+    p += buffers->{b["name"]}_len;''' for b in buffers])
+
+    return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
+//
+// Wire-format helpers for the {name} complex primitive. Pure CPU code: packs
+// caller-supplied uniforms + buffers into the on-the-wire byte layout. Lives
+// in yetty_{name}_core (no Dawn, no WebGPU, safe for riscv64 / wasm / any
+// cross-target without a GPU).
+
+#include <yetty/{name}/{name}-gen.h>
+#include <yetty/ycore/result.h>
+
+#include <stdint.h>
+#include <string.h>
+
+size_t yetty_{name}_uniforms_serialized_size(
+    const struct yetty_{name}_uniforms *uniforms,
+    const struct yetty_{name}_buffers *buffers)
+{{
+    (void)uniforms;
+    // Wire format: [type_id][payload_size][uniforms...][buffer_lens...][buffer_data...]
+    size_t total_buf_words = {buf_len_sum};
+    return (2 + {uniforms_word_count} + {buffer_len_fields} + total_buf_words) * sizeof(uint32_t);
+}}
+
+struct yetty_ycore_size_result yetty_{name}_uniforms_serialize(
+    const struct yetty_{name}_uniforms *uniforms,
+    const struct yetty_{name}_buffers *buffers,
+    uint8_t *out, size_t out_capacity)
+{{
+    if (!uniforms || !buffers)
+        return YETTY_ERR(yetty_ycore_size, "null argument");
+    if (!out)
+        return YETTY_ERR(yetty_ycore_size, "out is NULL");
+
+    size_t total_buf_words = {buf_len_sum};
+    size_t required = (2 + {uniforms_word_count} + {buffer_len_fields} + total_buf_words) * sizeof(uint32_t);
+    if (out_capacity < required)
+        return YETTY_ERR(yetty_ycore_size, "buffer too small");
+
+    uint32_t *p = (uint32_t *)out;
+    *p++ = YETTY_{NAME}_TYPE_ID;
+    *p++ = (uint32_t)(required - 2 * sizeof(uint32_t));
+
+    // Copy uniforms as raw words
+    memcpy(p, uniforms, sizeof(struct yetty_{name}_uniforms));
+    p += {uniforms_word_count};
+
+    // Write buffer lengths
+{buf_len_writes}
+
+    // Copy buffer data
+{buf_copies}
+
+    return YETTY_OK(yetty_ycore_size, required);
+}}
 '''
 
 
@@ -541,8 +623,8 @@ def generate_c_source(schema, uniforms, buffers, textures):
     }}'''
     else:
         instance_resources_wiring = ''
-    # webgpu.h is already pulled in transitively via complex-prim-types.h,
-    # so no extra include is needed for the WGPUTextureFormat_* constants.
+    # webgpu.h is pulled in via the ypaint-factory header (server-only).
+    # Wire format / type-id ranges come from ypaint-core/complex-prim-types.h.
 
     return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
 //
@@ -565,6 +647,7 @@ def generate_c_source(schema, uniforms, buffers, textures):
 #include <yetty/yrender/pipeline.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ypaint-core/complex-prim-types.h>
+#include <yetty/ypaint-factory/complex-prim-factory.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
@@ -618,51 +701,8 @@ static struct yetty_{name}_factory *yetty_{name}_factory_from_base(struct yetty_
     return (struct yetty_{name}_factory *)base;
 }}
 
-//=============================================================================
-// Serialization
-//=============================================================================
-
-size_t yetty_{name}_uniforms_serialized_size(
-    const struct yetty_{name}_uniforms *uniforms,
-    const struct yetty_{name}_buffers *buffers)
-{{
-    (void)uniforms;
-    // Wire format: [type_id][payload_size][uniforms...][buffer_lens...][buffer_data...]
-    size_t total_buf_words = {buf_len_sum};
-    return (2 + {uniforms_word_count} + {buffer_len_fields} + total_buf_words) * sizeof(uint32_t);
-}}
-
-struct yetty_ycore_size_result yetty_{name}_uniforms_serialize(
-    const struct yetty_{name}_uniforms *uniforms,
-    const struct yetty_{name}_buffers *buffers,
-    uint8_t *out, size_t out_capacity)
-{{
-    if (!uniforms || !buffers)
-        return YETTY_ERR(yetty_ycore_size, "null argument");
-    if (!out)
-        return YETTY_ERR(yetty_ycore_size, "out is NULL");
-
-    size_t total_buf_words = {buf_len_sum};
-    size_t required = (2 + {uniforms_word_count} + {buffer_len_fields} + total_buf_words) * sizeof(uint32_t);
-    if (out_capacity < required)
-        return YETTY_ERR(yetty_ycore_size, "buffer too small");
-
-    uint32_t *p = (uint32_t *)out;
-    *p++ = YETTY_{NAME}_TYPE_ID;
-    *p++ = (uint32_t)(required - 2 * sizeof(uint32_t));
-
-    // Copy uniforms as raw words
-    memcpy(p, uniforms, sizeof(struct yetty_{name}_uniforms));
-    p += {uniforms_word_count};
-
-    // Write buffer lengths
-{buf_len_writes}
-
-    // Copy buffer data
-{buf_copies}
-
-    return YETTY_OK(yetty_ycore_size, required);
-}}
+// Wire-format serialize helpers live in {name}-gen-wire.c
+// (yetty_{name}_core, GPU-less, riscv64-safe).
 
 //=============================================================================
 // Resource Set Setup — populates a target RS with this prim's structure
@@ -1296,15 +1336,18 @@ def main():
 
     header = generate_c_header(schema, uniforms, buffers, textures, yaml_mode)
     source = generate_c_source(schema, uniforms, buffers, textures)
+    wire_source = generate_c_wire_source(schema, uniforms, buffers)
     wgsl = generate_wgsl_bindings(schema, uniforms, buffers)
 
     (include_dir / f'{name}-gen.h').write_text(header + '\n')
     (src_dir / f'{name}-gen.c').write_text(source + '\n')
+    (src_dir / f'{name}-gen-wire.c').write_text(wire_source + '\n')
     (src_dir / f'{name}-gen.wgsl').write_text(wgsl + '\n')
 
     print(f'Generated:')
     print(f'  {include_dir / f"{name}-gen.h"}')
     print(f'  {src_dir / f"{name}-gen.c"}')
+    print(f'  {src_dir / f"{name}-gen-wire.c"}')
     print(f'  {src_dir / f"{name}-gen.wgsl"}')
 
     yaml_path = src_dir / f'{name}-gen-yaml.c'

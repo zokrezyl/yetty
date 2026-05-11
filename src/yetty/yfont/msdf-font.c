@@ -15,8 +15,8 @@
 #include <yetty/ycdb/ycdb.h>
 #include <yetty/ycore/map.h>
 #include <yetty/ycore/util.h>
+#include <yetty/yrender/texture-format.h>
 #include <yetty/ytrace/ytrace.h>
-#include <webgpu/webgpu.h>
 
 #include <stdio.h> /* snprintf for namespace */
 #include <stdlib.h>
@@ -504,8 +504,8 @@ struct yetty_font_font_result yetty_yfont_msdf_font_create(const char *cdb_path,
     strncpy(tex->name, "texture", YETTY_YRENDER_NAME_MAX - 1);
     strncpy(tex->wgsl_type, "texture_2d<f32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
     strncpy(tex->sampler_name, "sampler", YETTY_YRENDER_NAME_MAX - 1);
-    tex->format = WGPUTextureFormat_RGBA8Unorm;
-    tex->sampler_filter = WGPUFilterMode_Linear;
+    tex->format = YETTY_YRENDER_TEXTURE_FORMAT_RGBA8_UNORM;
+    tex->sampler_filter = YETTY_YRENDER_FILTER_LINEAR;
 
     font->rs.buffer_count = 1;
     struct yetty_yrender_buffer *buf = &font->rs.buffers[0];

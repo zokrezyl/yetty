@@ -20,8 +20,8 @@
 #include <yetty/ycore/map.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yrender/gpu-resource-set.h>
+#include <yetty/yrender/texture-format.h>
 #include <yetty/ytrace/ytrace.h>
-#include <webgpu/webgpu.h>
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -481,8 +481,8 @@ static struct yetty_font_font_result raster_font_finalise(struct yetty_yfont_ras
     strncpy(tex->name, "texture", YETTY_YRENDER_NAME_MAX - 1);
     strncpy(tex->wgsl_type, "texture_2d<f32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
     strncpy(tex->sampler_name, "sampler", YETTY_YRENDER_NAME_MAX - 1);
-    tex->format = WGPUTextureFormat_R8Unorm;
-    tex->sampler_filter = WGPUFilterMode_Linear;
+    tex->format = YETTY_YRENDER_TEXTURE_FORMAT_R8_UNORM;
+    tex->sampler_filter = YETTY_YRENDER_FILTER_LINEAR;
 
     f->rs.buffer_count = 1;
     struct yetty_yrender_buffer *buf = &f->rs.buffers[0];

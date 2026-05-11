@@ -34,9 +34,15 @@ target_include_directories(yetty_yfont_shader_glyph PRIVATE
 )
 
 #-----------------------------------------------------------------------------
-# Full font subsystem (raster, msdf, ms-msdf) — pulls FreeType + webgpu.
+# yetty_yfont_core — full font subsystem (raster, msdf, ms-msdf) without a
+# WebGPU dep. The .c files describe atlas pixels + texture format metadata
+# (uint32_t mirrors of WGPUTextureFormat / WGPUFilterMode — see
+# yetty/yrender/texture-format.h) so clients (ycat, ypdf, ygui, riscv64
+# cross-builds) get FreeType-driven metrics + glyph rasterization without
+# pulling Dawn. Server-side WGPU uploads happen later in yrender via
+# yetty_ypaint_core_gpu_resource_set, which is itself GPU-less.
 #-----------------------------------------------------------------------------
-add_library(yetty_yfont STATIC
+add_library(yetty_yfont_core STATIC
     ms-raster-font.c
     ms-msdf-font.c
     msdf-font.c
@@ -44,17 +50,22 @@ add_library(yetty_yfont STATIC
     font-cache.c
 )
 
-target_include_directories(yetty_yfont PUBLIC
+target_include_directories(yetty_yfont_core PUBLIC
     ${YETTY_ROOT}/include
     ${YETTY_ROOT}/src
     ${FREETYPE_INCLUDE_DIR}
 )
 
-target_link_libraries(yetty_yfont PUBLIC
-    ${FREETYPE_ALL_LIBS} webgpu yetty_ycdb yetty_yfont_shader_glyph)
+target_link_libraries(yetty_yfont_core PUBLIC
+    ${FREETYPE_ALL_LIBS} yetty_ycdb yetty_yfont_shader_glyph yetty_yrender_core)
 
-# Embed shaders via incbin (or stubs on Emscripten)
-incbin_add_resources(yetty_yfont
+# Embed shaders via incbin (or stubs on Emscripten).
+# These WGSL shaders are part of the gpu_resource_set returned by each font
+# type's get_gpu_resource_set ops. The bytes are inert on client / riscv64
+# builds (the RS is queried only by the server-side renderer), but kept
+# alongside the font code to preserve the existing layout — see comment on
+# yetty_yfont_core above.
+incbin_add_resources(yetty_yfont_core
     ms_raster_font_shader "${CMAKE_CURRENT_SOURCE_DIR}/ms-raster-font.wgsl"
     raster_font_shader "${CMAKE_CURRENT_SOURCE_DIR}/raster-font.wgsl"
     ms_msdf_font_shader "${CMAKE_CURRENT_SOURCE_DIR}/ms-msdf-font.wgsl"

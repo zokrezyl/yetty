@@ -1,6 +1,6 @@
 #include <yetty/yrender/types.h>
+#include <yetty/yrender/texture-format.h>
 #include <yetty/ytrace/ytrace.h>
-#include <webgpu/webgpu.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -72,18 +72,17 @@ size_t yetty_yrender_texture_get_size(const struct yetty_yrender_texture *textur
         return 0;
     }
 
+    /* Bytes-per-pixel for the formats yetty actually uses today. The
+     * numeric values come from yetty/yrender/texture-format.h, which
+     * mirrors the WGPUTextureFormat enum without dragging <webgpu/webgpu.h>
+     * into yetty_yrender_core. Server-side code that talks to the GPU casts
+     * texture->format straight back to WGPUTextureFormat at upload time. */
     size_t bpp;
-    switch ((WGPUTextureFormat)texture->format) {
-    case WGPUTextureFormat_R8Unorm:
+    switch (texture->format) {
+    case YETTY_YRENDER_TEXTURE_FORMAT_R8_UNORM:
         bpp = 1;
         break;
-    case WGPUTextureFormat_RG8Unorm:
-        bpp = 2;
-        break;
-    case WGPUTextureFormat_RGBA8Unorm:
-    case WGPUTextureFormat_RGBA8UnormSrgb:
-    case WGPUTextureFormat_BGRA8Unorm:
-    case WGPUTextureFormat_BGRA8UnormSrgb:
+    case YETTY_YRENDER_TEXTURE_FORMAT_RGBA8_UNORM:
         bpp = 4;
         break;
     default:

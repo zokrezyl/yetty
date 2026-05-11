@@ -26,6 +26,7 @@
 #include <yetty/ymesh/ymesh-math.h>
 
 #include <yetty/ypaint-core/complex-prim-types.h>
+#include <yetty/ypaint-factory/complex-prim-factory.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
 

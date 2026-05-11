@@ -14,7 +14,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/ypaint-core/buffer.h>
 #include <yetty/ycore/types.h>
-#include <yetty/yterm/pty-reader.h> /* YETTY_OSC_YPAINT_BIN */
+#include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YPAINT_BIN */
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -285,7 +285,8 @@ LINUX_RISCV_TARGETS := \
     yetty-ymsdf-gen yetty-msdf-gen \
     cdb-viewer cdb-diff \
     temu \
-    demo-ymgui-01-demo-window
+    demo-ymgui-01-demo-window \
+    yplot ymesh yecho ycat
 
 .PHONY: config-linux-aarch64-ytrace-release
 config-linux-aarch64-ytrace-release: ## Configure Linux aarch64 cross-build (release)

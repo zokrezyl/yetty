@@ -8,8 +8,8 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ycore/util.h>
+#include <yetty/yrender/texture-format.h>
 #include <yetty/ytrace/ytrace.h>
-#include <webgpu/webgpu.h>
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -556,8 +556,8 @@ struct yetty_font_ms_font_result yetty_yfont_ms_raster_font_create(
     /* Start with space for ~16 glyphs (one row) */
     FONT_ATLAS(font).width = GLYPH_SLOT_W(font) * 16;
     FONT_ATLAS(font).height = GLYPH_SLOT_H(font);
-    FONT_ATLAS(font).format = WGPUTextureFormat_R8Unorm;
-    FONT_ATLAS(font).sampler_filter = WGPUFilterMode_Linear;
+    FONT_ATLAS(font).format = YETTY_YRENDER_TEXTURE_FORMAT_R8_UNORM;
+    FONT_ATLAS(font).sampler_filter = YETTY_YRENDER_FILTER_LINEAR;
     strncpy(FONT_ATLAS(font).name, "texture", YETTY_YRENDER_NAME_MAX - 1);
     strncpy(FONT_ATLAS(font).wgsl_type, "texture_2d<f32>", YETTY_YRENDER_WGSL_TYPE_MAX - 1);
     strncpy(FONT_ATLAS(font).sampler_name, "sampler", YETTY_YRENDER_NAME_MAX - 1);

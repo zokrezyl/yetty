@@ -21,17 +21,23 @@ set(_x11_static_search_paths
     /usr/local/lib
 )
 
-find_library(X11_STATIC_LIB     libX11.a     PATHS ${_x11_static_search_paths} REQUIRED)
-find_library(XEXT_STATIC_LIB    libXext.a    PATHS ${_x11_static_search_paths} REQUIRED)
-find_library(XCB_STATIC_LIB     libxcb.a     PATHS ${_x11_static_search_paths} REQUIRED)
-find_library(XAU_STATIC_LIB     libXau.a     PATHS ${_x11_static_search_paths} REQUIRED)
-find_library(XDMCP_STATIC_LIB   libXdmcp.a   PATHS ${_x11_static_search_paths} REQUIRED)
+find_library(X11_STATIC_LIB     libX11.a     PATHS ${_x11_static_search_paths})
+find_library(XEXT_STATIC_LIB    libXext.a    PATHS ${_x11_static_search_paths})
+find_library(XCB_STATIC_LIB     libxcb.a     PATHS ${_x11_static_search_paths})
+find_library(XAU_STATIC_LIB     libXau.a     PATHS ${_x11_static_search_paths})
+find_library(XDMCP_STATIC_LIB   libXdmcp.a   PATHS ${_x11_static_search_paths})
 
 # libX11 also wants the X11 headers — find_package gives us X11_INCLUDE_DIR
 # without forcing us to take its dynamic libs.
 find_package(X11 QUIET COMPONENTS Xext)
-if(NOT X11_INCLUDE_DIR)
-    message(FATAL_ERROR "x11-static: X11 headers not found (install libx11-dev / xorgproto)")
+
+# Graceful skip when X11 isn't installed in the target sysroot (e.g. riscv64
+# cross-build without libx11-dev:riscv64). Consumers gate on YETTY_X11_STATIC_LIBS
+# before adding the X11-tile render target.
+if(NOT X11_STATIC_LIB OR NOT XEXT_STATIC_LIB OR NOT XCB_STATIC_LIB
+        OR NOT XAU_STATIC_LIB OR NOT XDMCP_STATIC_LIB OR NOT X11_INCLUDE_DIR)
+    message(STATUS "x11-static: X11 not available — skipping X11-tile render target")
+    return()
 endif()
 set(YETTY_X11_STATIC_INCLUDE_DIR "${X11_INCLUDE_DIR}" CACHE PATH "X11 headers for static link")
 

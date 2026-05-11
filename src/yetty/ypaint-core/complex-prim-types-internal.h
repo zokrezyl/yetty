@@ -15,10 +15,6 @@ extern "C" {
 /* Get total size (reads FAM header) */
 size_t yetty_ypaint_core_complex_prim_size(const void *data);
 
-/* Get concrete factory by type id */
-struct yetty_ypaint_core_concrete_factory *yetty_ypaint_core_complex_prim_factory_get(
-    struct yetty_ypaint_core_complex_prim_factory *factory, uint32_t type_id);
-
 #ifdef __cplusplus
 }
 #endif
