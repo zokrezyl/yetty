@@ -1227,6 +1227,22 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yterm_v
     switch (event->type) {
     case YETTY_YCORE_KEY_DOWN:
         ydebug("terminal: KEY_DOWN key=%d mods=%d", event->key.key, event->key.mods);
+        /* PageUp / PageDown drive scrollback by one viewport at a
+         * time. Handled BEFORE the "any-key-exits-scrollback" rule
+         * so PageUp/Down keep working while in scrollback view —
+         * otherwise PageDown would exit scrollback instead of
+         * scrolling forward inside it. terminal_scrollback_apply
+         * takes positive lines = older content (up). */
+        if (event->key.key == 266 /* GLFW_KEY_PAGE_UP */ ||
+            event->key.key == 267 /* GLFW_KEY_PAGE_DOWN */) {
+            int page = (int)terminal->rows;
+            if (page < 1) {
+                page = 1;
+            }
+            terminal_scrollback_apply(terminal,
+                                      event->key.key == 266 ? +page : -page);
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
         /* In scrollback view, Enter exits and is consumed (matches tmux copy
      * mode). Other keys also exit scrollback before falling through to
      * normal dispatch — this means typing while in scrollback returns to
