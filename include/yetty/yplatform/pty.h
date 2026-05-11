@@ -38,6 +38,11 @@ struct yetty_yplatform_pty_ptr_result yetty_yplatform_fork_pty_create(
 struct yetty_yplatform_pty_ptr_result yetty_yplatform_tinyemu_pty_create(
     struct yetty_yconfig_config *config);
 
+/* Host-side TCP port that the TinyEMU slirp hostfwd maps to the in-guest
+ * telnetd (tcp/23). Keep in sync with assets/yemu/temu/yetty-temu-extended.cfg's
+ * `hostfwd: ["tcp:2323-:23"]`. Used by --temu in pty-factory/default.c. */
+#define TINYEMU_TELNET_PORT 2323
+
 struct yetty_yplatform_pty_factory;
 struct yetty_yevent_event_loop;
 
