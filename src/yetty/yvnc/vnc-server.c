@@ -1661,6 +1661,15 @@ static struct yetty_ycore_void_result encode_and_send_dirty_tiles(struct yetty_y
 
     check_ack_timeouts(server);
 
+    uint32_t engine_dirty = 0;
+    for (uint32_t i = 0; i < num_tiles; i++) {
+        if (server->dirty_tiles[i]) {
+            engine_dirty++;
+        }
+    }
+    ydebug("VNC encode_and_send: %ux%u num_tiles=%u engine_dirty=%u clients=%zu", width, height,
+           num_tiles, engine_dirty, server->client_count);
+
     /* Phase 1: fold this readback's dirty bitmap into every client's owed
      * tiles. Blocked clients just accumulate more; unblocked clients pick
      * everything up in phase 3. */
@@ -1684,6 +1693,14 @@ static struct yetty_ycore_void_result encode_and_send_dirty_tiles(struct yetty_y
                 c->owed_tiles[t] = 1;
             }
         }
+        uint32_t owed_after = 0;
+        for (uint32_t t = 0; t < num_tiles; t++) {
+            if (c->owed_tiles[t]) {
+                owed_after++;
+            }
+        }
+        ydebug("VNC slot %d: awaiting_ack=%d awaiting_seq=%u next_seq=%u owed=%u", c->slot,
+               c->awaiting_ack, c->awaiting_seq, c->next_seq, owed_after);
     }
 
     /* Phase 2: dirty_tiles has been folded into per-client state — no
@@ -1853,6 +1870,8 @@ static struct yetty_ycore_void_result encode_and_send_dirty_tiles(struct yetty_y
         c->awaiting_ack = 1;
         c->last_send_time = now;
         server->current_stats.frames++;
+        ydebug("VNC slot %d: SENT seq=%u tiles=%u, now awaiting", c->slot, c->awaiting_seq,
+               owed_count);
     }
 
     return YETTY_OK_VOID();
