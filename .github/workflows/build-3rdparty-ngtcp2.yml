@@ -2,7 +2,7 @@ name: Build 3rdparty — ngtcp2
 
 # Triggered on `lib-ngtcp2-<version>` tags. Native build across the
 # 5-target QUIC matrix (linux x86_64/aarch64/riscv64, macos arm64/x86_64).
-# linux-riscv64 runs inside debian:bookworm-slim under QEMU since GitHub
+# linux-riscv64 runs inside riscv64/debian:trixie-slim under QEMU since GitHub
 # has no native riscv64 runner; everything else runs on a native runner.
 # No Nix.
 
@@ -80,13 +80,13 @@ jobs:
         with:
           platforms: riscv64
       - run: mkdir -p out
-      - name: Build ngtcp2 in debian:bookworm-slim (riscv64 via QEMU)
+      - name: Build ngtcp2 in riscv64/debian:trixie-slim (via QEMU)
         run: |
           docker run --rm --platform linux/riscv64 \
             -v "$PWD:/work" -w /work \
             -e TARGET_PLATFORM=linux-riscv64 \
             -e OUTPUT_DIR=/work/out \
-            debian:bookworm-slim \
+            riscv64/debian:trixie-slim \
             bash -c '
               set -e
               export DEBIAN_FRONTEND=noninteractive

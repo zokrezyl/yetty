@@ -76,6 +76,19 @@ fi
 [ -f "$OSSL_DIR/lib/libcrypto.a" ] || { echo "openssl-new: missing libcrypto.a in $OSSL_DIR/lib" >&2; exit 1; }
 [ -f "$OSSL_DIR/include/openssl/ssl.h" ] || { echo "openssl-new: missing ssl.h" >&2; exit 1; }
 
+# Rewrite absolute prefix= in OpenSSL's .pc files. OpenSSL's Configure
+# bakes the build-machine's INSTALL_DIR path into prefix=, which is dead
+# on every other machine. ngtcp2's configure uses PKG_CHECK_MODULES to
+# locate openssl, then AC_LINK_IFELSE compiles a test program against
+# the returned -I/-L paths. With stale paths the includes don't resolve,
+# SSL_set_quic_tls_cbs registers as "no", and the whole configure aborts
+# with "openssl was requested but not found".
+for _pc in "$OSSL_DIR"/lib/pkgconfig/*.pc "$OSSL_DIR"/lib64/pkgconfig/*.pc; do
+    [ -f "$_pc" ] || continue
+    sed -i.bak "s|^prefix=.*|prefix=$OSSL_DIR|" "$_pc"
+    rm -f "$_pc.bak"
+done
+
 # Fetch ngtcp2.
 if [ ! -f "$TARBALL_CACHE" ]; then
     echo "==> downloading ngtcp2 ${VERSION}"
