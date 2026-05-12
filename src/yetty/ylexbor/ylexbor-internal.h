@@ -184,10 +184,15 @@ struct yetty_ylexbor {
     struct yetty_ylexbor_box_vec boxes;
     int content_height;
 
-    /* Arena for text fragments referenced by box.text. Reset between
-	 * documents. */
-    char *text_arena;
-    size_t text_arena_size, text_arena_cap;
+    /* Per-fragment heap allocations for box.text. Each call to
+	 * yetty_ylexbor_arena_dup malloc's a fresh buffer (stable address)
+	 * and pushes it onto this list. Freed in batches by arena_reset
+	 * between documents and on destroy. The old "linear buffer +
+	 * realloc" arena invalidated pointers handed out earlier in the
+	 * walk — visible as garbage characters at paint time, especially
+	 * on large pages like Wikipedia where the arena grew often. */
+    char **text_chunks;
+    size_t text_chunks_count, text_chunks_cap;
 
     /* Decoded image cache. Each entry holds the RGBA8 pixels for a
 	 * resolved <img src=> URL so the paint pass can emit the

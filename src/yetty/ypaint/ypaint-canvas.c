@@ -1701,13 +1701,31 @@ static struct yetty_ycore_void_result canvas_evict_line(struct yetty_ypaint_canv
      * resolve commit (69c4dd5), TEXT_SPANs hitting the same font
      * later re-resolve through the cache; the on-disk CDB still
      * caches the MSDF generation, so the cost is one cache miss +
-     * atlas load on first reuse. */
+     * atlas load on first reuse.
+     *
+     * Complex prims (yimage / yplot / yvideo) are GPU-backed
+     * instances the scrollbuffer codec can't round-trip — we'd lose
+     * them on scroll-back. Detach them before grid_line_free, then
+     * re-attach after grid_line_init so they keep living on the
+     * (otherwise empty) line and re-render the moment the user
+     * scrolls the line back into the visible window. */
+    struct yetty_ypaint_core_complex_prim_instance **saved_cp = line->complex_prims;
+    uint32_t saved_cp_count = line->complex_prim_count;
+    uint32_t saved_cp_cap = line->complex_prim_capacity;
+    line->complex_prims = NULL;
+    line->complex_prim_count = 0;
+    line->complex_prim_capacity = 0;
+
     struct yetty_ycore_void_result fr =
         grid_line_free(line, canvas->flyweight_registry, canvas->font_cache);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "evict: grid_line_free");
     /* Re-init so future writes (e.g. an explicit out-of-order place)
      * don't see dangling pointers. */
     grid_line_init(line, 0);
+
+    line->complex_prims = saved_cp;
+    line->complex_prim_count = saved_cp_count;
+    line->complex_prim_capacity = saved_cp_cap;
     return YETTY_OK_VOID();
 }
 
@@ -1731,9 +1749,19 @@ static void canvas_evict_scrollback(struct yetty_ypaint_canvas *canvas)
     for (uint32_t i = 0; i < end; i++) {
         if (i < canvas->sb_offsets_count && canvas->sb_offsets[i] != SB_OFFSET_UNSET) {
             /* Already serialised. If it was restored, free the
-             * expanded form again. */
+             * expanded form again. Complex prims must survive the
+             * re-free for the same reason as in canvas_evict_line —
+             * detach before grid_line_free, re-attach after
+             * grid_line_init. */
             struct yetty_ypaint_canvas_grid_line *line = &canvas->lines.lines[i];
             if (line->prims.count > 0 || line->cell_count > 0 || line->font_count > 0) {
+                struct yetty_ypaint_core_complex_prim_instance **saved_cp = line->complex_prims;
+                uint32_t saved_cp_count = line->complex_prim_count;
+                uint32_t saved_cp_cap = line->complex_prim_capacity;
+                line->complex_prims = NULL;
+                line->complex_prim_count = 0;
+                line->complex_prim_capacity = 0;
+
                 struct yetty_ycore_void_result fr = grid_line_free(
                     line, canvas->flyweight_registry, canvas->font_cache);
                 if (YETTY_IS_ERR(fr)) {
@@ -1742,6 +1770,10 @@ static void canvas_evict_scrollback(struct yetty_ypaint_canvas *canvas)
                     yetty_ycore_error_destroy(fr.error);
                 }
                 grid_line_init(line, 0);
+
+                line->complex_prims = saved_cp;
+                line->complex_prim_count = saved_cp_count;
+                line->complex_prim_capacity = saved_cp_cap;
             }
             continue;
         }
@@ -2033,11 +2065,17 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
             /* SDF or complex prim — uniform path. */
             struct uint32_result prim_res = add_primitive_internal(canvas, &iter);
             if (YETTY_IS_ERR(prim_res)) {
-                yerror("add_buffer: add_primitive_internal failed: %s", prim_res.error.msg);
-                final_status = YETTY_ERR(yetty_ycore_void, prim_res.error.msg);
-                break;
-            }
-            if (prim_res.value > max_row_seen) {
+                /* One bad prim shouldn't drop the rest of the buffer.
+                 * The original `break` here caused symptoms like "only
+                 * the first image renders on a Wikipedia page" — every
+                 * yimage after a single failed instance-create was
+                 * silently lost, along with all later text/SDF prims.
+                 * Log and keep going; downstream rendering still works
+                 * on the prims that did construct. */
+                yerror("add_buffer: add_primitive_internal failed (continuing): %s",
+                       prim_res.error.msg);
+                yetty_ycore_error_destroy(prim_res.error);
+            } else if (prim_res.value > max_row_seen) {
                 max_row_seen = prim_res.value;
             }
         }

@@ -80,8 +80,18 @@ static char *slurp_url(const char *url, size_t *out_len)
 	curl_easy_setopt(c, CURLOPT_URL, url);
 	curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(c, CURLOPT_MAXREDIRS, 10L);
-	curl_easy_setopt(c, CURLOPT_USERAGENT,
-		"ylexbor-demo/0.1 (yetty)");
+	/* Standard Chrome UA. Bot-looking UAs ("ylexbor-demo/0.1") cause
+	 * sites like Wikipedia and news.google.com to serve a stripped
+	 * legacy/no-JS page that hides images behind sprite tricks or
+	 * replaces <img src> with text labels. YETTY_USER_AGENT env var
+	 * overrides for ops who need a bot-identifying UA (ToS, scraping). */
+	const char *ua = getenv("YETTY_USER_AGENT");
+	if (!ua || !*ua) {
+		ua = "Mozilla/5.0 (X11; Linux x86_64) "
+		     "AppleWebKit/537.36 (KHTML, like Gecko) "
+		     "Chrome/120.0.0.0 Safari/537.36";
+	}
+	curl_easy_setopt(c, CURLOPT_USERAGENT, ua);
 	curl_easy_setopt(c, CURLOPT_TIMEOUT, 30L);
 	curl_easy_setopt(c, CURLOPT_CONNECTTIMEOUT, 10L);
 	/* Empty string = "advertise every encoding curl was built with"

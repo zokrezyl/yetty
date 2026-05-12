@@ -61,27 +61,36 @@ const char *yetty_ylexbor_arena_dup(struct yetty_ylexbor *r, const char *bytes, 
     if (len == 0) {
         return "";
     }
-    if (r->text_arena_size + len > r->text_arena_cap) {
-        size_t new_cap = r->text_arena_cap ? r->text_arena_cap * 2 : 4096;
-        while (new_cap < r->text_arena_size + len) {
-            new_cap *= 2;
-        }
-        char *p = realloc(r->text_arena, new_cap);
+    /* Each fragment gets its own malloc so the returned pointer is
+	 * stable for the document's lifetime. (The old realloc'd arena
+	 * silently invalidated every previously-returned pointer when it
+	 * grew — visible as random garbage characters in painted text on
+	 * pages with many text nodes.) */
+    char *out = malloc(len);
+    if (out == NULL) {
+        return NULL;
+    }
+    memcpy(out, bytes, len);
+    if (r->text_chunks_count == r->text_chunks_cap) {
+        size_t new_cap = r->text_chunks_cap ? r->text_chunks_cap * 2 : 256;
+        char **p = realloc(r->text_chunks, new_cap * sizeof(*p));
         if (p == NULL) {
+            free(out);
             return NULL;
         }
-        r->text_arena = p;
-        r->text_arena_cap = new_cap;
+        r->text_chunks = p;
+        r->text_chunks_cap = new_cap;
     }
-    char *out = r->text_arena + r->text_arena_size;
-    memcpy(out, bytes, len);
-    r->text_arena_size += len;
+    r->text_chunks[r->text_chunks_count++] = out;
     return out;
 }
 
 static void arena_reset(struct yetty_ylexbor *r)
 {
-    r->text_arena_size = 0;
+    for (size_t i = 0; i < r->text_chunks_count; i++) {
+        free(r->text_chunks[i]);
+    }
+    r->text_chunks_count = 0;
 }
 
 /* ===========================================================================
@@ -166,7 +175,8 @@ struct yetty_ycore_void_result yetty_ylexbor_destroy(struct yetty_ylexbor *r)
         lxb_html_document_destroy(r->document);
     }
     box_vec_destroy(&r->boxes);
-    free(r->text_arena);
+    arena_reset(r);
+    free(r->text_chunks);
     free(r->base_url);
     for (int i = 0; i < r->img_cache_count; i++) {
         free(r->img_cache[i].url);

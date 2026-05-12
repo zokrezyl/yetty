@@ -405,6 +405,9 @@ static struct yetty_ypaint_core_complex_prim_instance_ptr_result yimage_create_i
         yetty_yrender_gpu_resource_binder_create_with_pipeline(
             factory->device, factory->queue, factory->allocator, factory->pipeline);
     if (YETTY_IS_ERR(br)) {
+        ydebug("yimage_create_instance: binder_create FAILED for %ux%u: %s",
+               instance->resource_set->textures[0].width,
+               instance->resource_set->textures[0].height, br.error.msg);
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
@@ -416,6 +419,9 @@ static struct yetty_ypaint_core_complex_prim_instance_ptr_result yimage_create_i
     struct yetty_ycore_void_result sr =
         instance->binder->ops->submit(instance->binder, instance->resource_set);
     if (YETTY_IS_ERR(sr)) {
+        ydebug("yimage_create_instance: submit FAILED for %ux%u: %s",
+               instance->resource_set->textures[0].width,
+               instance->resource_set->textures[0].height, sr.error.msg);
         instance->binder->ops->destroy(instance->binder);
         free(instance->resource_set);
         free(instance->buffer_data);
@@ -425,6 +431,9 @@ static struct yetty_ypaint_core_complex_prim_instance_ptr_result yimage_create_i
 
     struct yetty_ycore_void_result fr = instance->binder->ops->finalize(instance->binder);
     if (YETTY_IS_ERR(fr)) {
+        ydebug("yimage_create_instance: finalize FAILED for %ux%u: %s",
+               instance->resource_set->textures[0].width,
+               instance->resource_set->textures[0].height, fr.error.msg);
         instance->binder->ops->destroy(instance->binder);
         free(instance->resource_set);
         free(instance->buffer_data);
@@ -432,6 +441,11 @@ static struct yetty_ypaint_core_complex_prim_instance_ptr_result yimage_create_i
         return YETTY_ERR(yetty_ypaint_core_complex_prim_instance_ptr, "binder finalize failed", fr);
     }
 
+    ydebug("yimage_create_instance: OK %ux%u bounds=(%.0f,%.0f,%.0f,%.0f)",
+           instance->resource_set->textures[0].width,
+           instance->resource_set->textures[0].height,
+           instance->bounds.min.x, instance->bounds.min.y,
+           instance->bounds.max.x, instance->bounds.max.y);
     return YETTY_OK(yetty_ypaint_core_complex_prim_instance_ptr, instance);
 }
 

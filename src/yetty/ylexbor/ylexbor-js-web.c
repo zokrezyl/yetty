@@ -60,35 +60,16 @@
 #define YETTY_HAVE_CURL 0
 #endif
 
-#if YETTY_HAVE_QUICKJS
-
-#include <quickjs.h>
+/* URL resolution and HTTP fetch are independent of QuickJS — image
+ * loading and external-stylesheet fetching need them whether or not a
+ * JS runtime is compiled in. Compile them unconditionally; the
+ * QuickJS-gated section below is just the JS-side bindings. */
 
 #if YETTY_HAVE_CURL
 #include <curl/curl.h>
 #endif
 
 #include <yetty/ytrace/ytrace.h>
-
-/* ===========================================================================
- * Helpers
- * ===========================================================================*/
-
-static struct yetty_ylexbor *runtime_ylex_w(JSContext *ctx)
-{
-    JSRuntime *rt = JS_GetRuntime(ctx);
-    struct {
-        struct yetty_ylexbor *r;
-    } *s = JS_GetRuntimeOpaque(rt);
-    return s ? s->r : NULL;
-}
-
-static int64_t now_ms(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-}
 
 /* ===========================================================================
  * URL resolution + sync HTTP fetch.
@@ -331,6 +312,30 @@ char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status)
 }
 
 #endif /* YETTY_HAVE_CURL */
+
+/* ===========================================================================
+ * Everything below this point is JS-side bindings — gated on QuickJS.
+ * ===========================================================================*/
+
+#if YETTY_HAVE_QUICKJS
+
+#include <quickjs.h>
+
+static struct yetty_ylexbor *runtime_ylex_w(JSContext *ctx)
+{
+    JSRuntime *rt = JS_GetRuntime(ctx);
+    struct {
+        struct yetty_ylexbor *r;
+    } *s = JS_GetRuntimeOpaque(rt);
+    return s ? s->r : NULL;
+}
+
+static int64_t now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
 
 /* ===========================================================================
  * Timers — single linear array sorted by deadline_ms.
@@ -1548,26 +1553,8 @@ int yetty_ylexbor_pump(struct yetty_ylexbor *r)
     (void)r;
     return -1;
 }
-char *yetty_ylexbor_resolve_url(struct yetty_ylexbor *r, const char *href)
-{
-    (void)r;
-    return href ? strdup(href) : NULL;
-}
-char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status)
-{
-    (void)url;
-    (void)out_len;
-    (void)out_status;
-    return NULL;
-}
-char *yetty_ylexbor_http_get_referer(const char *url, const char *referer,
-                                     size_t *out_len, long *out_status)
-{
-    (void)url;
-    (void)referer;
-    (void)out_len;
-    (void)out_status;
-    return NULL;
-}
+/* resolve_url + http_get + http_get_referer are unconditionally
+ * defined above (above the QuickJS gate). They're network helpers
+ * used by image fetch + external-stylesheet loading regardless of JS. */
 
 #endif /* YETTY_HAVE_QUICKJS */
