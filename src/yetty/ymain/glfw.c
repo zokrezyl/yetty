@@ -58,6 +58,7 @@ const char *yetty_yplatform_get_runtime_dir(void);
 GLFWwindow *yetty_yplatform_create_window(int width, int height, const char *title);
 void yetty_yplatform_destroy_window(GLFWwindow *window);
 void yetty_yplatform_get_framebuffer_size(GLFWwindow *window, int *width, int *height);
+void yetty_yplatform_get_window_size(GLFWwindow *window, int *width, int *height);
 WGPUSurface yetty_yplatform_create_surface(WGPUInstance instance, GLFWwindow *window);
 void yetty_yplatform_setup_window_callbacks(GLFWwindow *window);
 void yetty_yplatform_run_os_event_loop(GLFWwindow *window, int *running,
@@ -298,6 +299,20 @@ int main(int argc, char **argv)
         fb_height = height;
     }
 
+    /* HiDPI scale = framebuffer/window. Captured here (after the window
+     * exists, before app_context is built) so anywhere downstream that
+     * needs to scale physical-unit config knobs (font size, padding)
+     * can read app_gpu_context.content_scale instead of re-deriving it
+     * from a pair of GLFW calls. */
+    float content_scale = 1.0f;
+    if (window) {
+        int win_w = 0, win_h = 0;
+        yetty_yplatform_get_window_size(window, &win_w, &win_h);
+        if (win_w > 0 && fb_width > 0) {
+            content_scale = (float)fb_width / (float)win_w;
+        }
+    }
+
     void *x11_display = NULL;
     unsigned long x11_window = 0UL;
     platform_get_x11_handles(window, &x11_display, &x11_window);
@@ -361,6 +376,7 @@ int main(int argc, char **argv)
                             .surface = surface,
                             .surface_width = (uint32_t)fb_width,
                             .surface_height = (uint32_t)fb_height,
+                            .content_scale = content_scale,
                             .x11_display = x11_display,
                             .x11_window = x11_window},
         .config = config,

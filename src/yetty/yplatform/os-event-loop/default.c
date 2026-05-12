@@ -6,6 +6,25 @@
 #include <yetty/ytrace/ytrace.h>
 #include <GLFW/glfw3.h>
 
+/* Scale cursor coords (which GLFW reports in *screen coordinates*, i.e.
+ * logical pixels) into framebuffer-pixel space. The rest of yetty —
+ * tabbar hit-tests, pane bounds, render target dimensions — works in
+ * framebuffer pixels because framebuffer_size_callback drives RESIZE.
+ * On HiDPI displays (notably macOS Retina, where the scale is 2×) the
+ * two coordinate systems differ; without this normalisation tabbar
+ * button rects sit at framebuffer-x but the mouse arrives at
+ * window-x, so clicks land "off" by the scale factor. */
+static void scale_cursor_to_framebuffer(GLFWwindow *window, double *x, double *y)
+{
+    int ww = 0, wh = 0, fw = 0, fh = 0;
+    glfwGetWindowSize(window, &ww, &wh);
+    glfwGetFramebufferSize(window, &fw, &fh);
+    if (ww > 0 && wh > 0 && fw > 0 && fh > 0) {
+        *x *= (double)fw / (double)ww;
+        *y *= (double)fh / (double)wh;
+    }
+}
+
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
     struct yetty_ycore_xthread_event_pipe *pipe = glfwGetWindowUserPointer(window);
@@ -75,6 +94,7 @@ static void mouse_button_callback(GLFWwindow *window, int button, int action, in
     }
 
     glfwGetCursorPos(window, &x, &y);
+    scale_cursor_to_framebuffer(window, &x, &y);
 
     if (action == GLFW_PRESS) {
         event.type = YETTY_YCORE_MOUSE_DOWN;
@@ -98,6 +118,7 @@ static void cursor_pos_callback(GLFWwindow *window, double x, double y)
         return;
     }
 
+    scale_cursor_to_framebuffer(window, &x, &y);
     event.type = YETTY_YCORE_MOUSE_MOVE;
     event.mouse.x = (float)x;
     event.mouse.y = (float)y;
@@ -117,6 +138,7 @@ static void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
     }
 
     glfwGetCursorPos(window, &x, &y);
+    scale_cursor_to_framebuffer(window, &x, &y);
 
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
         glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS) {

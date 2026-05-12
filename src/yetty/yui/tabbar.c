@@ -829,16 +829,23 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
         float newtab_left = winbtn_left - TABBAR_NEWTAB_AREA;
         struct yetty_yplatform_window_manager *wm =
             bar->yetty_ctx ? bar->yetty_ctx->app_context.window_manager : NULL;
+        ydebug("tabbar: strip MOUSE_DOWN at (%.1f, %.1f) bar=(%.0fx%.0f) winbtn_left=%.0f "
+               "newtab_left=%.0f wm=%p", event->mouse.x, event->mouse.y, bar->width, bar->height,
+               winbtn_left, newtab_left, (void *)wm);
 
         if (event->mouse.x >= winbtn_left) {
             /* Slot order: minimize, maximize, close (left to right). */
             float slot = (event->mouse.x - winbtn_left) / TABBAR_WINBTN_WIDTH;
+            ydebug("tabbar: window-button slot=%.2f wm=%p", slot, (void *)wm);
             if (wm) {
                 if (slot < 1.0f) {
+                    ydebug("tabbar: iconify");
                     wm->ops->iconify(wm);
                 } else if (slot < 2.0f) {
+                    ydebug("tabbar: toggle_maximize");
                     wm->ops->toggle_maximize(wm);
                 } else {
+                    ydebug("tabbar: request_close");
                     wm->ops->request_close(wm);
                 }
             }

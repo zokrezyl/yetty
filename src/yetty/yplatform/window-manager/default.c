@@ -118,8 +118,11 @@ static void glfw_window_manager_handle_event(struct yetty_yplatform_window_manag
     struct yetty_yplatform_glfw_window_manager *m =
         container_of(self, struct yetty_yplatform_glfw_window_manager, base);
     if (!m->window || !event) {
+        ydebug("window_manager: handle_event window=%p event=%p — skipping",
+               (void *)(m ? m->window : NULL), (const void *)event);
         return;
     }
+    ydebug("window_manager: handle_event type=%d", (int)event->type);
     switch (event->type) {
     case YETTY_YCORE_WINDOW_ICONIFY:
         glfwIconifyWindow(m->window);
@@ -145,19 +148,36 @@ static void glfw_window_manager_handle_event(struct yetty_yplatform_window_manag
         break;
     }
     case YETTY_YCORE_WINDOW_DRAG_BY: {
+        /* Delta comes in framebuffer pixels (mouse coords are scaled to
+         * framebuffer at the input layer so hit-tests against bar->width
+         * line up). glfwSetWindowPos / glfwSetWindowSize take *screen*
+         * coords. On HiDPI displays (macOS Retina = 2×) framebuffer is
+         * larger than the window in screen coords, so we have to divide
+         * back down here or the window moves/resizes by 2× too much. */
+        int ww = 0, wh = 0, fw = 0, fh = 0;
+        glfwGetWindowSize(m->window, &ww, &wh);
+        glfwGetFramebufferSize(m->window, &fw, &fh);
+        double sx = (fw > 0 && ww > 0) ? (double)ww / (double)fw : 1.0;
+        double sy = (fh > 0 && wh > 0) ? (double)wh / (double)fh : 1.0;
+
         int x, y;
         glfwGetWindowPos(m->window, &x, &y);
-        glfwSetWindowPos(m->window, x + event->window_drag.dx, y + event->window_drag.dy);
+        glfwSetWindowPos(m->window, x + (int)(event->window_drag.dx * sx),
+                         y + (int)(event->window_drag.dy * sy));
         break;
     }
     case YETTY_YCORE_WINDOW_RESIZE_BY: {
-        int w, h;
-        glfwGetWindowSize(m->window, &w, &h);
-        int nw = w + event->window_resize.dx;
-        int nh = h + event->window_resize.dy;
+        int ww = 0, wh = 0, fw = 0, fh = 0;
+        glfwGetWindowSize(m->window, &ww, &wh);
+        glfwGetFramebufferSize(m->window, &fw, &fh);
+        double sx = (fw > 0 && ww > 0) ? (double)ww / (double)fw : 1.0;
+        double sy = (fh > 0 && wh > 0) ? (double)wh / (double)fh : 1.0;
+
+        int nw = ww + (int)(event->window_resize.dx * sx);
+        int nh = wh + (int)(event->window_resize.dy * sy);
         /* Minimum size — anything smaller than a couple of cells makes
          * the terminal grid degenerate and risks divide-by-zero or
-         * negative-bound math downstream. */
+         * negative-bound math downstream. Screen-coord minimums. */
         if (nw < 200) nw = 200;
         if (nh < 100) nh = 100;
         glfwSetWindowSize(m->window, nw, nh);
