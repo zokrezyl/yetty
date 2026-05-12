@@ -5,7 +5,7 @@
 #include "ygui_internal.h"
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/types.h>
-#include <yetty/yterm/pty-reader.h> /* YETTY_OSC_YPAINT_* */
+#include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YPAINT_* */
 #include <yetty/ymgui/wire.h>       /* YMGUI_OSC_CS_CARD_*, wire structs */
 #include <yetty/ytrace/ytrace.h>
 #include <errno.h>
