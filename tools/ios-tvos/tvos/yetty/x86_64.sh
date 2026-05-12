@@ -6,15 +6,16 @@
 # Usage:
 #   First build: make build-tvos_x86_64-ytrace-release (or -debug)
 #   Then run:
-#     ./tools/tvos_x86_64.sh             # Start simulator with yetty
-#     ./tools/tvos_x86_64.sh --kill      # Kill running simulator
-#     ./tools/tvos_x86_64.sh --list      # List available simulators
-#     ./tools/tvos_x86_64.sh --help      # Show full help
+#     ./tools/ios-tvos/tvos/yetty/x86_64.sh             # Start simulator with yetty
+#     ./tools/ios-tvos/tvos/yetty/x86_64.sh --kill      # Kill running simulator
+#     ./tools/ios-tvos/tvos/yetty/x86_64.sh --list      # List available simulators
+#     ./tools/ios-tvos/tvos/yetty/x86_64.sh --help      # Show full help
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+# Script lives at tools/ios-tvos/tvos/yetty/, so the repo root is four dirs up.
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
 # Configuration
 # Apple TV 4K (3rd gen) at 4K is heavy on Intel Macs (SimRenderServer +
@@ -225,7 +226,7 @@ set_keyboard_layout() {
         return 0
     fi
     info "Configuring keyboard layout '$KEYBOARD_LAYOUT' (may restart sim if not yet set)"
-    "$SCRIPT_DIR/sim-keyboard.sh" "$KEYBOARD_LAYOUT" "$SIMULATOR_UDID"
+    "$PROJECT_ROOT/tools/sim-keyboard.sh" "$KEYBOARD_LAYOUT" "$SIMULATOR_UDID"
     success "Keyboard layout ready"
 }
 

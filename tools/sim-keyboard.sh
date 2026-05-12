@@ -97,7 +97,15 @@ echo "writing keyboard prefs via defaults write..."
 spawn_with_timeout defaults write -g AppleKeyboards -array "$LAYOUT_ID" >/dev/null
 spawn_with_timeout defaults write -g KeyboardLastUsedKeyboards -array "$LAYOUT_ID" >/dev/null
 spawn_with_timeout defaults write -g KeyboardLastUsedKeyboard "$LAYOUT_ID" >/dev/null
-spawn_with_timeout defaults write -g AppleKeyboardsExpanded -dict "$LAYOUT_ID" 1 >/dev/null
+# Do NOT write AppleKeyboardsExpanded here. We previously wrote it as
+# `-dict "$LAYOUT_ID" 1`, which iOS's TIPreferencesController later read
+# back and called `boolValue` on, crashing the keyboard subsystem with
+# NSInvalidArgumentException (`-[__NSSingleEntryDictionaryI boolValue]:
+# unrecognized selector`). The three writes above are sufficient to set
+# the active keyboard layout — yetty doesn't open the system picker.
+# Defensively scrub a stale corrupt value if it's still in the sim's
+# global plist from earlier runs.
+spawn_with_timeout defaults delete -g AppleKeyboardsExpanded >/dev/null 2>&1 || true
 
 # Verify
 CURRENT="$(xcrun simctl spawn "$UDID" defaults read -g KeyboardLastUsedKeyboard 2>/dev/null || true)"

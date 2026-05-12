@@ -6,19 +6,16 @@
 # Usage:
 #   First build: make build-ios_x86_64-ytrace-release (or -debug)
 #   Then run:
-#     ./tools/ios_x86_64.sh              # Start simulator with yetty
-#     ./tools/ios_x86_64.sh --kill       # Kill running simulator
-#     ./tools/ios_x86_64.sh --list       # List available simulators
-#     ./tools/ios_x86_64.sh --help       # Show full help
-#
-# NOTE: This script requires an iOS app project that links libyetty.a
-#       The app project should be in build-tools/ios/ (TODO)
-#
+#     ./tools/ios-tvos/ios/yetty/x86_64.sh              # Start simulator with yetty
+#     ./tools/ios-tvos/ios/yetty/x86_64.sh --kill       # Kill running simulator
+#     ./tools/ios-tvos/ios/yetty/x86_64.sh --list       # List available simulators
+#     ./tools/ios-tvos/ios/yetty/x86_64.sh --help       # Show full help
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+# Script lives at tools/ios-tvos/ios/yetty/, so the repo root is four dirs up.
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
 # Configuration
 SIMULATOR_NAME="yetty-simulator"
@@ -173,7 +170,7 @@ set_keyboard_layout() {
         info "Keyboard layout: leaving sim's existing setting (KEYBOARD_LAYOUT=skip)"
         return 0
     fi
-    "$SCRIPT_DIR/sim-keyboard.sh" "$KEYBOARD_LAYOUT" "$SIMULATOR_UDID"
+    "$PROJECT_ROOT/tools/sim-keyboard.sh" "$KEYBOARD_LAYOUT" "$SIMULATOR_UDID"
 }
 
 #-----------------------------------------------------------------------------

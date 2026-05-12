@@ -6,12 +6,13 @@
 # and the codesign step for the real apps (yetty.app, YettyQemu.app) just
 # splices the matching one in as embedded.mobileprovision.
 #
-# Stubs:
-#   yetty-qemu-stub/  →  com.yetty.qemu  (the side-by-side qemu app)
+# Stubs (one per <platform>/<app>/ directory containing a project.yml):
+#   tvos/qemu/  →  com.yetty.qemu  (tvOS)
+#   ios/qemu/   →  com.yetty.qemu  (iOS)
 #
 # yetty.app's own bundle id (com.yetty.terminal) already has a profile
-# from earlier work; if it's missing or stale, drop a yetty-stub/ next
-# to yetty-qemu-stub/ with the same shape and add it to STUBS below.
+# from earlier work; if it's missing or stale, drop a similar stub under
+# tvos/yetty/ or ios/yetty/ and it'll be picked up automatically.
 #
 # Requires:
 #   - Xcode + command-line tools
@@ -29,34 +30,50 @@ TEAM_ID="${TEAM_ID:-R2XJ745TS6}"
 DERIVED="$SCRIPT_DIR/.build"
 mkdir -p "$DERIVED"
 
-STUBS=( yetty-qemu )
+if ! command -v xcodegen >/dev/null 2>&1; then
+    echo "error: xcodegen not on PATH (brew install xcodegen)" >&2
+    exit 1
+fi
 
-for stub in "${STUBS[@]}"; do
-    echo "==> $stub"
-    cd "$SCRIPT_DIR/$stub"
+# Discover stubs by globbing <platform>/<app>/project.yml. Each match's
+# parent directory is one stub; the first path component is the platform,
+# which selects the xcodebuild -destination.
+shopt -s nullglob
+for proj_yml in "$SCRIPT_DIR"/{ios,tvos}/*/project.yml; do
+    stub_dir="$(dirname "$proj_yml")"
+    rel="${stub_dir#$SCRIPT_DIR/}"            # e.g. tvos/qemu
+    platform="${rel%%/*}"                      # ios | tvos
+    stub_name="${rel//\//-}"                   # tvos-qemu  (for DERIVED path)
 
-    if ! command -v xcodegen >/dev/null 2>&1; then
-        echo "error: xcodegen not on PATH (brew install xcodegen)" >&2
-        exit 1
-    fi
-    xcodegen generate --quiet
+    case "$platform" in
+        ios)  destination="generic/platform=iOS"  ;;
+        tvos) destination="generic/platform=tvOS" ;;
+        *)    echo "skip: unknown platform '$platform' for $rel" >&2; continue ;;
+    esac
 
-    PROJ="$(ls -d *.xcodeproj | head -1)"
-    SCHEME="${PROJ%.xcodeproj}"
+    echo "==> $rel ($platform)"
+    (
+        cd "$stub_dir"
+        xcodegen generate --quiet
 
-    # Build for a generic tvOS device. -allowProvisioningUpdates lets Xcode
-    # talk to the developer portal to create / refresh / download the
-    # profile; -allowProvisioningDeviceRegistration covers the first time
-    # the paired Apple TV gets added to the team's device list.
-    xcodebuild \
-        -project "$PROJ" \
-        -scheme "$SCHEME" \
-        -destination "generic/platform=tvOS" \
-        -derivedDataPath "$DERIVED/$stub" \
-        -allowProvisioningUpdates \
-        -allowProvisioningDeviceRegistration \
-        DEVELOPMENT_TEAM="$TEAM_ID" \
-        build 2>&1 | tail -20
+        PROJ="$(ls -d ./*.xcodeproj | head -1)"
+        SCHEME="${PROJ%.xcodeproj}"
+        SCHEME="${SCHEME#./}"
+
+        # -allowProvisioningUpdates lets Xcode talk to the developer portal
+        # to create / refresh / download the profile;
+        # -allowProvisioningDeviceRegistration covers the first time a
+        # paired device gets added to the team's device list.
+        xcodebuild \
+            -project "$PROJ" \
+            -scheme "$SCHEME" \
+            -destination "$destination" \
+            -derivedDataPath "$DERIVED/$stub_name" \
+            -allowProvisioningUpdates \
+            -allowProvisioningDeviceRegistration \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            build 2>&1 | tail -20
+    )
 done
 
 echo ""

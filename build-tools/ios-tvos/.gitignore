@@ -3,3 +3,7 @@
 
 # xcodegen output. Regenerated from each yetty-*/project.yml on demand.
 *.xcodeproj/
+
+# Per-version downloaded tarballs + hand-assembled YettyQemu.app, dropped
+# by tools/ios-tvos/{ios,tvos}/qemu/x86_64.sh.
+.cache/

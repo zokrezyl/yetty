@@ -1,0 +1,58 @@
+# YettyQemu — the qemu-as-iOS-app stub.
+#
+# Companion to ../../tvos/qemu/project.yml; same purpose and same shape,
+# only the platform attributes differ.
+#
+#   ios-main.m   — iOS UIKit harness. Sibling of tvos/qemu/tvos.m;
+#                  the two diverge over time (e.g. AVAudioEngine keep-alive
+#                  on device, tvOS-specific bits, etc.) so they live
+#                  separately rather than as a single shared file.
+#                  build-tools/3rdparty/qemu/_build.sh picks the right
+#                  source per TARGET_PLATFORM and copies it into qemu's
+#                  source tree as system/tvos-main.m (the filename hard-
+#                  coded in patches/0005).
+#   Info.plist                  — bundle metadata (com.yetty.qemu, iPhone+iPad).
+#   project.yml                 — this file; xcodegen turns it into YettyQemu.xcodeproj.
+#
+# `xcodebuild -allowProvisioningUpdates` against this project gets the
+# Apple Development provisioning profile for com.yetty.qemu installed
+# into ~/Library/Developer/Xcode/UserData/Provisioning Profiles/.
+# Driven by build-tools/ios-tvos/refresh-profiles.sh.
+#
+# The actual qemu binary is produced by build-tools/3rdparty/qemu/_build.sh
+# (target ios-arm64 for device, ios-x86_64 for the Intel-Mac iOS Sim) and
+# published as a release asset on zokrezyl/yetty under tag lib-qemu-<version>.
+# The local install script (build-tools/ios-tvos/ios-qemu.sh) downloads
+# that binary, drops it into a hand-assembled YettyQemu.app, splices in
+# the mobileprovision, codesigns, and installs onto the sim / device.
+#
+# xcodebuild's link of this stub may fail on unresolved yetty_qemu_main /
+# qemu_main — provisioning runs during preflight, well before link, so
+# the profile lands either way.
+
+name: YettyQemu
+options:
+  bundleIdPrefix: com.yetty
+  developmentLanguage: en
+  deploymentTarget:
+    iOS: "15.0"
+settings:
+  base:
+    DEVELOPMENT_TEAM: R2XJ745TS6
+    CODE_SIGN_STYLE: Automatic
+    PRODUCT_BUNDLE_IDENTIFIER: com.yetty.qemu
+    TARGETED_DEVICE_FAMILY: "1,2"
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+    SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+    SDKROOT: iphoneos
+    INFOPLIST_FILE: Info.plist
+    INFOPLIST_KEY_CFBundleDisplayName: YettyQemu
+targets:
+  YettyQemu:
+    type: application
+    platform: iOS
+    sources:
+      - ios-main.m
+    settings:
+      base:
+        PRODUCT_NAME: YettyQemu
