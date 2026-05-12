@@ -1430,3 +1430,45 @@ int yetty_ybrowser_libcss_clear(const css_computed_style *style)
     if (!style) return CSS_CLEAR_NONE;
     return css_computed_clear(style);
 }
+
+int yetty_ybrowser_libcss_white_space(const css_computed_style *style)
+{
+    if (!style) return CSS_WHITE_SPACE_NORMAL;
+    return css_computed_white_space(style);
+}
+
+int yetty_ybrowser_libcss_text_decoration(const css_computed_style *style)
+{
+    if (!style) return 0;
+    return css_computed_text_decoration(style);
+}
+
+int yetty_ybrowser_libcss_bg_image_url(const css_computed_style *style, char **out_url)
+{
+    if (!style || !out_url) return 0;
+    *out_url = NULL;
+    lwc_string *url = NULL;
+    uint8_t kind = css_computed_background_image(style, &url);
+    if (kind != CSS_BACKGROUND_IMAGE_IMAGE || url == NULL) {
+        return 0;
+    }
+    size_t len = lwc_string_length(url);
+    const char *data = lwc_string_data(url);
+    if (len == 0 || data == NULL) {
+        return 0;
+    }
+    char *copy = malloc(len + 1);
+    if (!copy) {
+        return 0;
+    }
+    memcpy(copy, data, len);
+    copy[len] = '\0';
+    *out_url = copy;
+    return 1;
+}
+
+int yetty_ybrowser_libcss_list_style_type(const css_computed_style *style)
+{
+    if (!style) return CSS_LIST_STYLE_TYPE_DISC;
+    return css_computed_list_style_type(style);
+}

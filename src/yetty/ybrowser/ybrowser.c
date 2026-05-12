@@ -53,6 +53,8 @@ static void box_vec_clear(struct yetty_ylexbor_box_vec *v)
             v->data[i].segs = NULL;
             v->data[i].segs_count = 0;
         }
+        free(v->data[i].bg_image_url);
+        v->data[i].bg_image_url = NULL;
     }
     v->size = 0;
 }
@@ -61,6 +63,7 @@ static void box_vec_destroy(struct yetty_ylexbor_box_vec *v)
 {
     for (uint32_t i = 0; i < v->size; i++) {
         free(v->data[i].segs);
+        free(v->data[i].bg_image_url);
     }
     free(v->data);
     v->data = NULL;
@@ -501,6 +504,37 @@ int yetty_ylexbor_test_box_at(const struct yetty_ylexbor *r, int index, float *x
                 }
                 tag_out[n] = '\0';
             }
+        }
+    }
+    return 0;
+}
+
+int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int *kind_out,
+                                   int *font_weight_out, int *italic_out, int *underline_out,
+                                   char *text_out, int text_cap)
+{
+    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size) {
+        return -1;
+    }
+    const struct yetty_ylexbor_box *b = &r->boxes.data[index];
+    if (kind_out) *kind_out = (int)b->kind;
+    if (font_weight_out) *font_weight_out = b->font_weight;
+    if (italic_out) *italic_out = b->font_italic ? 1 : 0;
+    if (underline_out) *underline_out = b->underline ? 1 : 0;
+    if (text_out && text_cap > 0) {
+        text_out[0] = '\0';
+        if (b->kind == YL_BOX_INLINE_TEXT && b->text && b->text_len > 0) {
+            int n = b->text_len < (size_t)(text_cap - 1) ? (int)b->text_len : text_cap - 1;
+            memcpy(text_out, b->text, (size_t)n);
+            text_out[n] = '\0';
+        } else if (b->kind == YL_BOX_BLOCK && b->marker_text && b->marker_text_len > 0) {
+            /* Surface list-item markers via the same text channel so
+			 * tests can search for them with the inline-text helpers.
+			 * Block boxes without a marker still come back as empty. */
+            int n = b->marker_text_len < (size_t)(text_cap - 1) ? (int)b->marker_text_len
+                                                                 : text_cap - 1;
+            memcpy(text_out, b->marker_text, (size_t)n);
+            text_out[n] = '\0';
         }
     }
     return 0;

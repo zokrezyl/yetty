@@ -54,13 +54,23 @@ struct yetty_ylexbor_color {
 /* One styled sub-run inside an inline-text box's character stream.
  * Produced by the box pass as it walks <a>/<strong>/<em>/etc. nested
  * inside a block's inline children. wrap_inline_box reads `segs[]`
- * to emit one painted box per visible styled fragment per line. */
+ * to emit one painted box per visible styled fragment per line.
+ *
+ * `element` is the deepest inline ancestor element this run came from
+ * (typically an <a>, sometimes a <button> / <span data-x>). The wrap
+ * pass stamps it onto the resulting INLINE_TEXT box so click hit-test
+ * can walk up to find the click target — without this, links rendered
+ * inside text never fire JS handlers. NULL for runs not nested under
+ * any inline element (i.e. plain text directly inside a block). */
 struct yetty_ylexbor_inline_seg {
     size_t start;  /* byte offset into box->text where this seg begins */
     struct yetty_ylexbor_color fg;
     int font_weight;
     bool font_italic;
     bool underline;
+    bool line_through;
+    bool overline;
+    lxb_dom_element_t *element; /* borrowed, may be NULL */
 };
 
 struct yetty_ylexbor_box {
@@ -144,6 +154,34 @@ struct yetty_ylexbor_box {
 	 * (typically from <a>). The paint pass renders a thin SDF rect
 	 * below the text baseline when true. */
     bool underline;
+    /* `text-decoration: line-through / overline` — paint a thin SDF
+	 * rect at the text mid-line / above the cap-line. Same per-segment
+	 * propagation as underline. */
+    bool line_through;
+    bool overline;
+
+    /* Word-spacing slack added between runs of spaces in painted text.
+	 * Filled by wrap_inline_box when `text-align: justify` is in
+	 * effect: extra pixels per space so the line fills content_w. The
+	 * paint pass routes through yetty_ypaint_core_buffer_add_text_full
+	 * (TEXT_SPAN v2) when this is non-zero. */
+    float word_spacing;
+
+    /* List marker — non-empty when the BLOCK box is an <li>. Painted
+	 * once at the top-left of the block by the paint pass into the
+	 * parent's padding gutter, so wrapping no longer strands "Line 2"
+	 * at the marker column. NUL-terminated, lives in r->text_arena
+	 * (so it's freed with the document). NULL when this isn't a list
+	 * item. */
+    const char *marker_text;
+    size_t marker_text_len;
+
+    /* Background image URL (resolved absolute), if any. Owned, freed
+	 * on document destroy. The paint pass uses
+	 * yetty_ylexbor_img_cache_get_or_load to fetch + decode, then
+	 * emits a yimage prim sized to the box BEFORE the bg_color (so
+	 * authors can layer a tint on top). */
+    char *bg_image_url;
 
     /* Style segments — only populated on the source INLINE_TEXT box
 	 * emitted by flush_inline. wrap_inline_box reads `segs[]` to

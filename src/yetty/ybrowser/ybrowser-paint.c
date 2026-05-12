@@ -689,6 +689,67 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                 };
                 (void)yetty_ysdf_add_box(buf, z++, pack_rgba(b->bg), 0, 0, &box);
             }
+
+            /* Background image — fetch (cached) + decode, emit a
+			 * yimage prim sized to the box. Painted AFTER bg_color so
+			 * the image sits on top of the tint (matches the CSS
+			 * `background: <color> url(...)` compositing order, where
+			 * the image is drawn over the colour). */
+            if (b->bg_image_url && b->w > 0 && b->h > 0) {
+                struct yetty_ylexbor_img_cache_entry *cached =
+                    yetty_ylexbor_img_cache_get_or_load(r, b->bg_image_url);
+                if (cached && !cached->failed && cached->pixels) {
+                    struct yetty_yimage_uniforms u = {
+                        .bounds_x = b->x,
+                        .bounds_y = b->y,
+                        .bounds_w = b->w,
+                        .bounds_h = b->h,
+                        .image_w = (uint32_t)cached->w,
+                        .image_h = (uint32_t)cached->h,
+                    };
+                    struct yetty_yimage_buffers bufs = {
+                        .pixels = cached->pixels,
+                        .pixels_len = (size_t)cached->w * (size_t)cached->h,
+                    };
+                    size_t need =
+                        yetty_yimage_uniforms_serialized_size(&u, &bufs);
+                    uint8_t *prim = malloc(need);
+                    if (prim) {
+                        struct yetty_ycore_size_result ser =
+                            yetty_yimage_uniforms_serialize(&u, &bufs, prim, need);
+                        if (YETTY_IS_OK(ser)) {
+                            (void)yetty_ypaint_core_buffer_add_prim(buf, prim, need);
+                            z++;
+                        }
+                        free(prim);
+                    }
+                }
+            }
+
+            /* List-item marker — painted into the parent's left
+			 * padding gutter so wrapping the LI's text body doesn't
+			 * indent line 2/3/N at the marker column. b->x is the
+			 * LI's content-area origin (parent's padding-left has
+			 * already shifted us in by ~40 px); we draw the marker
+			 * just left of it. font_size and fg are the LI's
+			 * own style snapshot, which inherits from the UL/OL. */
+            if (b->marker_text && b->marker_text_len > 0) {
+                float mw = yetty_ylexbor_naive_text_width(
+                    b->marker_text, b->marker_text_len, b->font_size);
+                float mx = b->x - mw - b->font_size * 0.25f;
+                if (mx < 0) {
+                    mx = 0;
+                }
+                float baseline_y = b->y + b->font_size * 0.8f;
+                struct yetty_ycore_buffer mtxt = {
+                    .data = (uint8_t *)(void *)b->marker_text,
+                    .capacity = b->marker_text_len,
+                    .size = b->marker_text_len,
+                };
+                (void)yetty_ypaint_core_buffer_add_text(
+                    buf, mx, baseline_y, &mtxt, b->font_size, pack_rgba(b->fg), z++,
+                    /*font_id=*/-1, /*rotation=*/0.0f);
+            }
             /* Borders — render each present side as a thin ysdf
 			 * rect of the border color. ysdf can't draw a
 			 * stroked rounded box natively, so for now corner
@@ -818,42 +879,73 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
             /* Baseline approximation: top + 0.8 * line height.
 			 * Real metric needs FreeType ascent. */
             float baseline_y = b->y + b->font_size * 0.8f;
-            (void)yetty_ypaint_core_buffer_add_text(buf, b->x, baseline_y, &txt, b->font_size,
-                                                    pack_rgba(b->fg), z++, /*font_id=*/-1,
-                                                    /*rotation=*/0.0f);
-            /* Synthetic bold — we only have one font, so to make
-			 * <strong>/<b>/font-weight:bold visibly thicker we
-			 * draw the same run again offset by ~1px. Crude but
-			 * it actually reads as bold on the screen. Drop when
-			 * a real bold font is wired through font_id. */
-            if (b->font_weight >= 600) {
-                float ox = b->font_size * 0.05f;
-                if (ox < 1.0f) {
-                    ox = 1.0f;
-                }
-                (void)yetty_ypaint_core_buffer_add_text(buf, b->x + ox, baseline_y, &txt,
-                                                        b->font_size, pack_rgba(b->fg), z++,
-                                                        /*font_id=*/-1, /*rotation=*/0.0f);
+            /* Bold/italic/font-family will eventually map to distinct
+			 * font_ids registered with the canvas. Today only one font
+			 * is wired, so we keep font_id=-1 ("canvas default") and
+			 * accept that <strong>/<em> read at the same weight as
+			 * body text. The previous synthetic-bold double-paint was
+			 * removed because the +1px horizontal ghost it produced
+			 * read as smeared (not bold) at terminal font sizes — and
+			 * inflated the prim count by ~10 % on heading-heavy pages
+			 * like Wikipedia. The font_weight is still stored on the
+			 * box so a real bold font (when added) can map at paint
+			 * time without re-plumbing the cascade. */
+            if (b->word_spacing > 0.0f) {
+                (void)yetty_ypaint_core_buffer_add_text_full(
+                    buf, b->x, baseline_y, &txt, b->font_size, pack_rgba(b->fg), z++,
+                    /*font_id=*/-1, /*rotation=*/0.0f, /*char_spacing=*/0.0f,
+                    b->word_spacing);
+            } else {
+                (void)yetty_ypaint_core_buffer_add_text(buf, b->x, baseline_y, &txt, b->font_size,
+                                                        pack_rgba(b->fg), z++, /*font_id=*/-1,
+                                                        /*rotation=*/0.0f);
             }
-            if (b->underline && b->w > 0) {
-                /* Thin SDF rect ~1px below baseline, in the run's
-				 * foreground color. Matches the visual the user
-				 * expects for an <a>. Thickness scales lightly
-				 * with font size (max(1, font*0.06)) so it remains
-				 * visible at large headings without overpowering
-				 * normal text. */
+            /* text-decoration strips. Thickness scales lightly with
+			 * font_size so they stay visible at large headings without
+			 * overpowering body text. All three use the run's
+			 * foreground color (matches CSS default of `currentColor`).
+			 *
+			 *   underline     — just below the baseline.
+			 *   line-through  — at the x-height midline.
+			 *   overline      — just above the cap-line.
+			 */
+            if (b->w > 0 && (b->underline || b->line_through || b->overline)) {
                 float thickness = b->font_size * 0.06f;
                 if (thickness < 1.0f) {
                     thickness = 1.0f;
                 }
-                float underline_y = baseline_y + b->font_size * 0.12f;
-                struct yetty_ysdf_box ubx = {
-                    .center_x = b->x + b->w * 0.5f,
-                    .center_y = underline_y + thickness * 0.5f,
-                    .half_width = b->w * 0.5f,
-                    .half_height = thickness * 0.5f,
-                };
-                (void)yetty_ysdf_add_box(buf, z++, pack_rgba(b->fg), 0, 0, &ubx);
+                if (b->underline) {
+                    float underline_y = baseline_y + b->font_size * 0.12f;
+                    struct yetty_ysdf_box ubx = {
+                        .center_x = b->x + b->w * 0.5f,
+                        .center_y = underline_y + thickness * 0.5f,
+                        .half_width = b->w * 0.5f,
+                        .half_height = thickness * 0.5f,
+                    };
+                    (void)yetty_ysdf_add_box(buf, z++, pack_rgba(b->fg), 0, 0, &ubx);
+                }
+                if (b->line_through) {
+                    /* x-height midpoint above baseline ≈ font*0.30. */
+                    float strike_y = baseline_y - b->font_size * 0.30f;
+                    struct yetty_ysdf_box sbx = {
+                        .center_x = b->x + b->w * 0.5f,
+                        .center_y = strike_y,
+                        .half_width = b->w * 0.5f,
+                        .half_height = thickness * 0.5f,
+                    };
+                    (void)yetty_ysdf_add_box(buf, z++, pack_rgba(b->fg), 0, 0, &sbx);
+                }
+                if (b->overline) {
+                    /* Cap-line ≈ baseline - font*0.75 (top of glyph). */
+                    float over_y = baseline_y - b->font_size * 0.75f;
+                    struct yetty_ysdf_box obx = {
+                        .center_x = b->x + b->w * 0.5f,
+                        .center_y = over_y - thickness * 0.5f,
+                        .half_width = b->w * 0.5f,
+                        .half_height = thickness * 0.5f,
+                    };
+                    (void)yetty_ysdf_add_box(buf, z++, pack_rgba(b->fg), 0, 0, &obx);
+                }
             }
             break;
         }

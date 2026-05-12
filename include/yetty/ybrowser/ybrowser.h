@@ -115,6 +115,22 @@ int yetty_ylexbor_test_box_count(const struct yetty_ylexbor *r);
 int yetty_ylexbor_test_box_at(const struct yetty_ylexbor *r, int index, float *x, float *y,
                               float *w, float *h, char *tag_out, int tag_cap);
 
+/* Box-kind constants returned in *kind_out by yetty_ylexbor_test_box_info_at.
+ * Map directly to the internal yetty_ylexbor_box_kind enum. */
+#define YETTY_YLEXBOR_BOX_KIND_BLOCK 0
+#define YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT 1
+#define YETTY_YLEXBOR_BOX_KIND_INLINE_IMAGE 2
+
+/* Test-only: introspect inline-text style + text content. Returns 0 +
+ * fills the out args on success, non-zero on out-of-range. text_out is
+ * filled with the box's UTF-8 text bytes (NUL-terminated, truncated to
+ * text_cap-1). For YL_BOX_BLOCK / YL_BOX_INLINE_IMAGE boxes text_out is
+ * empty and font_weight/italic/underline reflect the box's style snapshot.
+ * Any out-pointer may be NULL — those fields are skipped. */
+int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int *kind_out,
+                                   int *font_weight_out, int *italic_out, int *underline_out,
+                                   char *text_out, int text_cap);
+
 #ifdef __cplusplus
 }
 #endif

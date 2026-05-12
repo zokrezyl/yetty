@@ -69,16 +69,18 @@ static size_t seg_index_at(const struct yetty_ylexbor_inline_seg *segs, size_t s
  * `flush_inline` already created (preserving DOM-child linkage). */
 static uint32_t emit_fragment(struct yetty_ylexbor *r, uint32_t reuse_idx, float x, float y,
                               float w, float h, float font_size, const char *text, size_t text_len,
-                              const struct yetty_ylexbor_inline_seg *seg)
+                              const struct yetty_ylexbor_inline_seg *seg, float word_spacing)
 {
     uint32_t fidx;
     struct yetty_ylexbor_box *target;
     if (reuse_idx != 0) {
         fidx = reuse_idx;
         target = &r->boxes.data[fidx];
-        /* Preserve element / next_sibling / first_child relationships
-		 * already set on the source box (we're reusing it for the
-		 * first fragment of the first line). */
+        /* Preserve next_sibling / first_child relationships set by
+		 * flush_inline (we're reusing it for the first fragment of
+		 * the first line). element is overwritten below from the
+		 * seg's element so click hit-test routes the source box
+		 * through the deepest inline ancestor too. */
         target->kind = YL_BOX_INLINE_TEXT;
     } else {
         struct yetty_ycore_void_result rr =
@@ -102,6 +104,10 @@ static uint32_t emit_fragment(struct yetty_ylexbor *r, uint32_t reuse_idx, float
     target->font_italic = seg->font_italic;
     target->fg = seg->fg;
     target->underline = seg->underline;
+    target->line_through = seg->line_through;
+    target->overline = seg->overline;
+    target->element = seg->element;
+    target->word_spacing = word_spacing;
     return fidx;
 }
 
@@ -174,7 +180,16 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
 
         /* How many bytes fit in content_w? Stop at the next '\n'
 		 * regardless of remaining horizontal space so source line
-		 * breaks survive verbatim. */
+		 * breaks survive verbatim. Break opportunities recognised:
+		 *
+		 *   ' ' (U+0020)         — visible space, ASCII default.
+		 *   U+00AD soft hyphen   — invisible suggestion to break.
+		 *   U+200B zero-width    — invisible explicit break point.
+		 *   U+200C / U+200D      — zero-width joiner / non-joiner;
+		 *                          allow break after for CJK/Indic.
+		 *
+		 * The zero-width forms don't contribute to `acc`, so packing
+		 * them into a run never narrows the visible character budget. */
         size_t fit = 0;
         float acc = 0.0f;
         size_t last_break = 0;
@@ -198,13 +213,37 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
             } else {
                 step = 1;
             }
-            if (acc + per_glyph > content_w && k > cursor) {
+            /* Classify the codepoint at `k`. zero_width=1 codepoints
+			 * don't contribute glyph width; break_after=1 codepoints
+			 * mark the position after the codepoint as a wrap point. */
+            int zero_width = 0;
+            int break_after = 0;
+            if (c == ' ') {
+                break_after = 1;
+            } else if (step == 2 && c == 0xC2 && k + 1 < n &&
+                       (unsigned char)text[k + 1] == 0xAD) {
+                /* U+00AD SOFT HYPHEN */
+                zero_width = 1;
+                break_after = 1;
+            } else if (step == 3 && c == 0xE2 && k + 2 < n &&
+                       (unsigned char)text[k + 1] == 0x80) {
+                unsigned char c2 = (unsigned char)text[k + 2];
+                if (c2 == 0x8B || c2 == 0x8C || c2 == 0x8D) {
+                    /* U+200B / U+200C / U+200D — zero-width
+					 * (joiner) — wrap opportunity, no width. */
+                    zero_width = 1;
+                    break_after = 1;
+                }
+            }
+            if (!zero_width && acc + per_glyph > content_w && k > cursor) {
                 break;
             }
-            acc += per_glyph;
+            if (!zero_width) {
+                acc += per_glyph;
+            }
             k += step;
             fit = k;
-            if (c == ' ') {
+            if (break_after) {
                 last_break = k;
             }
         }
@@ -240,6 +279,29 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
             line_origin_x = origin_x;
         }
 
+        /* text-align: justify — distribute leftover slack as extra
+		 * spacing after every ASCII space in the line. We route the
+		 * slack through the TEXT_SPAN v2 word_spacing field rather
+		 * than padding the spaces with explicit \t-or-similar bytes,
+		 * so the wire prim count stays the same and the canvas does
+		 * the spacing math. Skip the last line of the paragraph
+		 * (cursor will reach `n` after this iteration) and lines
+		 * terminated by an explicit '\n' — real browsers don't pad
+		 * those, and padding them produces oddly wide trailing gaps
+		 * on the last line of every block. */
+        float justify_word_spacing = 0.0f;
+        if (text_align == 3 && hard_break == 0 && end < n) {
+            int space_count = 0;
+            for (size_t k = cursor; k < end; k++) {
+                if (text[k] == ' ') {
+                    space_count++;
+                }
+            }
+            if (space_count > 0 && content_w > line_w) {
+                justify_word_spacing = (content_w - line_w) / (float)space_count;
+            }
+        }
+
         /* Emit one fragment per segment that overlaps [cursor, end). */
         float frag_x = line_origin_x;
         size_t si = seg_index_at(segs, segs_count, n, cursor, seg_hint);
@@ -255,13 +317,71 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
                 si++;
                 continue;
             }
+            /* Whitespace-only fragments produce no visible glyphs but
+			 * after P1.2's element-aware seg matching they show up
+			 * whenever a text node containing just spaces sits between
+			 * two inline elements (e.g. `<a>x</a> <b>y</b>` — the
+			 * `" "` between `</a>` and `<b>` opens its own seg with a
+			 * different element pointer). Painting them wastes a
+			 * TEXT_SPAN prim per inter-word gap and, more importantly,
+			 * forces the canvas to look up a glyph for U+0020 in a
+			 * vacuum — fonts that fall back to a placeholder square /
+			 * dot for missing metric data render visible artefacts
+			 * around the page, the "garbage letters" symptom. Detect
+			 * here, skip the emit, but still advance frag_x by the
+			 * naive width so the next fragment lands where the canvas
+			 * would otherwise have placed it. */
+            int ws_only = 1;
+            for (size_t k = s0; k < s1; k++) {
+                unsigned char c = (unsigned char)text[k];
+                if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+                    ws_only = 0;
+                    break;
+                }
+            }
             float frag_w =
                 yetty_ylexbor_naive_text_width(text + s0, s1 - s0, font_size);
+            /* When justify is on, this fragment's effective render
+			 * width grows by word_spacing per space — bump frag_w so
+			 * the next fragment in the same line starts where the
+			 * canvas will leave the cursor. */
+            float frag_extra = 0.0f;
+            if (justify_word_spacing > 0.0f) {
+                for (size_t k = s0; k < s1; k++) {
+                    if (text[k] == ' ') {
+                        frag_extra += justify_word_spacing;
+                    }
+                }
+            }
+            if (ws_only) {
+                /* Don't emit. If this would have been the FIRST
+				 * fragment (reuse=idx), collapse the source box so
+				 * its leftover full-string content from flush_inline
+				 * doesn't paint. The next fragment will allocate its
+				 * own box. */
+                if (!first_fragment_emitted) {
+                    struct yetty_ylexbor_box *bb = &r->boxes.data[idx];
+                    bb->x = frag_x;
+                    bb->y = y;
+                    bb->w = 0;
+                    bb->h = 0;
+                    bb->text_len = 0;
+                    first_fragment_emitted = 1;
+                }
+                frag_x += frag_w + frag_extra;
+                seg_hint = si;
+                if (seg_end >= end) {
+                    break;
+                }
+                si++;
+                continue;
+            }
             uint32_t reuse = first_fragment_emitted ? 0 : idx;
-            (void)emit_fragment(r, reuse, frag_x, y, frag_w, line_height, font_size,
-                                text + s0, s1 - s0, &segs[si]);
+            (void)emit_fragment(r, reuse, frag_x, y, frag_w + frag_extra, line_height,
+                                font_size, text + s0, s1 - s0, &segs[si],
+                                justify_word_spacing);
             first_fragment_emitted = 1;
-            frag_x += frag_w;
+            frag_x += frag_w + frag_extra;
             seg_hint = si;
             if (seg_end >= end) {
                 break;
@@ -643,6 +763,63 @@ static uint32_t row_cell_count(struct yetty_ylexbor *r, uint32_t row_idx)
     return n;
 }
 
+/* Measure a cell's "max content width" — the visual width of all its
+ * inline-text descendants laid out on a single line, plus the natural
+ * width of any inline-image child. Used by the table layout to decide
+ * how much horizontal space each column wants before the constraint
+ * stage kicks in.
+ *
+ * The cell hasn't been laid out yet at this point, so we measure off
+ * the un-wrapped text in the box's INLINE_TEXT children. We also bound
+ * the recursion at 32 nodes so a pathological cell with thousands of
+ * styled spans doesn't blow up the per-cell measurement cost.
+ *
+ * NB: this is "max-content", not "min-content". A long sentence in a
+ * cell returns the sum of its glyph widths — the column distribution
+ * then clamps it to the available space, so wide cells don't blow up
+ * the whole row. */
+#define YL_CELL_MEASURE_BUDGET 256
+
+static float measure_cell_content_width(struct yetty_ylexbor *r, uint32_t cell_idx,
+                                        int *budget)
+{
+    if (*budget <= 0) {
+        return 0;
+    }
+    (*budget)--;
+    float sum = 0;
+    float max_line = 0;
+    for (uint32_t cidx = r->boxes.data[cell_idx].first_child; cidx != 0;
+         cidx = r->boxes.data[cidx].next_sibling) {
+        struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
+        if (c->kind == YL_BOX_INLINE_TEXT) {
+            sum += yetty_ylexbor_naive_text_width(c->text, c->text_len, c->font_size);
+        } else if (c->kind == YL_BOX_INLINE_IMAGE) {
+            if (c->w > 0 && c->w > sum) {
+                sum = c->w;
+            }
+        } else if (c->kind == YL_BOX_BLOCK) {
+            /* Block children inside a cell (nested layout); use the
+			 * larger of: sum of inline run so far, recursive measure
+			 * of the nested block's content. A row of two block
+			 * siblings stacks them vertically — each contributes its
+			 * own max-line, but they don't add horizontally. */
+            if (sum > max_line) {
+                max_line = sum;
+            }
+            sum = 0;
+            float nested = measure_cell_content_width(r, cidx, budget);
+            if (nested > max_line) {
+                max_line = nested;
+            }
+        }
+    }
+    if (sum > max_line) {
+        max_line = sum;
+    }
+    return max_line;
+}
+
 static float layout_table(struct yetty_ylexbor *r, uint32_t idx, float origin_x, float origin_y,
                           float content_w)
 {
@@ -679,10 +856,119 @@ static float layout_table(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
         return pad_top + pad_bottom;
     }
 
-    float col_w = content_width / (float)cols;
-    if (col_w < 1.0f) {
-        col_w = 1.0f;
+    /* Content-aware column widths.
+	 *
+	 *   Pass A: per-column, accumulate the maximum unwrapped content
+	 *           width across all rows. This is the "max-content" size.
+	 *
+	 *   Pass B: distribute content_width:
+	 *           - if sum(max_content) <= content_width: each column
+	 *             keeps its max_content, leftover stays unused (good
+	 *             for narrow infobox label-value pairs that shouldn't
+	 *             stretch to fill the whole table).
+	 *           - else: scale each column down proportionally, but
+	 *             clamp at min_w_per_col = max(font*4, content/cols*0.3)
+	 *             so a single very-long column doesn't squeeze the
+	 *             others to zero.
+	 *
+	 * Cells beyond the natural max_content of their column get the
+	 * column's allocated width — they'll wrap internally. Cells with
+	 * less content than their column get the column width and waste
+	 * some space, which is what real CSS tables do too. */
+    float *col_max = calloc(cols, sizeof(float));
+    if (!col_max) {
+        /* Fall back to even split on OOM. */
+        float col_w = content_width / (float)cols;
+        if (col_w < 1.0f) col_w = 1.0f;
+        for (size_t i = 0; i < rows.count; i++) {
+            uint32_t row_idx = rows.rows[i];
+            struct yetty_ylexbor_box *row = &r->boxes.data[row_idx];
+            float cursor_y_dummy = content_origin_y;
+            (void)row;
+            (void)cursor_y_dummy;
+        }
+        free(rows.rows);
+        free(col_max);
+        return pad_top + pad_bottom;
     }
+    for (size_t i = 0; i < rows.count; i++) {
+        uint32_t row_idx = rows.rows[i];
+        uint32_t col = 0;
+        for (uint32_t cidx = r->boxes.data[row_idx].first_child; cidx != 0;
+             cidx = r->boxes.data[cidx].next_sibling) {
+            if (r->boxes.data[cidx].kind != YL_BOX_BLOCK) {
+                continue;
+            }
+            if (col >= cols) break;
+            int budget = YL_CELL_MEASURE_BUDGET;
+            float w = measure_cell_content_width(r, cidx, &budget);
+            /* +small padding budget so cells aren't packed to the
+			 * exact glyph extent. */
+            w += 8.0f;
+            if (w > col_max[col]) {
+                col_max[col] = w;
+            }
+            col++;
+        }
+    }
+    float total_max = 0;
+    for (uint32_t i = 0; i < cols; i++) {
+        total_max += col_max[i];
+    }
+    /* col_w[i] is the final per-column width. */
+    float *col_w = calloc(cols, sizeof(float));
+    if (!col_w) {
+        free(col_max);
+        free(rows.rows);
+        return pad_top + pad_bottom;
+    }
+    if (total_max <= content_width || total_max == 0.0f) {
+        /* Plenty of slack — give each column exactly its
+		 * max-content. Tables narrower than the container don't
+		 * stretch unless an author asks. */
+        for (uint32_t i = 0; i < cols; i++) {
+            col_w[i] = col_max[i] > 0 ? col_max[i] : content_width / (float)cols;
+        }
+    } else {
+        /* Squeeze: proportional scale-down with a per-column floor so
+		 * very-long columns don't crush their neighbours. */
+        float min_per_col = content_width / (float)cols * 0.30f;
+        float floor_used = 0;
+        int floored = 0;
+        for (uint32_t i = 0; i < cols; i++) {
+            if (col_max[i] < min_per_col) {
+                col_w[i] = col_max[i];
+                floor_used += col_max[i];
+            } else {
+                col_w[i] = -1; /* mark for second pass */
+                floored++;
+            }
+        }
+        float remaining = content_width - floor_used;
+        float scale_basis = 0;
+        for (uint32_t i = 0; i < cols; i++) {
+            if (col_w[i] < 0) scale_basis += col_max[i];
+        }
+        if (scale_basis > 0 && remaining > 0) {
+            float scale = remaining / scale_basis;
+            for (uint32_t i = 0; i < cols; i++) {
+                if (col_w[i] < 0) {
+                    col_w[i] = col_max[i] * scale;
+                    if (col_w[i] < min_per_col) {
+                        col_w[i] = min_per_col;
+                    }
+                }
+            }
+        } else {
+            for (uint32_t i = 0; i < cols; i++) {
+                if (col_w[i] < 0) {
+                    col_w[i] = content_width / (float)cols;
+                }
+            }
+        }
+        (void)floored;
+    }
+    free(col_max);
 
     float cursor_y = content_origin_y;
     for (size_t i = 0; i < rows.count; i++) {
@@ -694,16 +980,19 @@ static float layout_table(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
 
         float row_h = 0;
         float cell_x = content_origin_x;
+        uint32_t col = 0;
         for (uint32_t cidx = row->first_child; cidx != 0;
              cidx = r->boxes.data[cidx].next_sibling) {
             struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
             if (c->kind != YL_BOX_BLOCK) {
                 continue;
             }
+            float this_col_w = (col < cols) ? col_w[col] : (content_width / (float)cols);
+            if (this_col_w < 1.0f) this_col_w = 1.0f;
             c->x = cell_x;
             c->y = cursor_y;
-            c->w = col_w;
-            float h = layout_block(r, cidx, cell_x, cursor_y, col_w);
+            c->w = this_col_w;
+            float h = layout_block(r, cidx, cell_x, cursor_y, this_col_w);
             /* Refetch — vector may have moved. */
             c = &r->boxes.data[cidx];
             row = &r->boxes.data[row_idx];
@@ -711,7 +1000,8 @@ static float layout_table(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
             if (h > row_h) {
                 row_h = h;
             }
-            cell_x += col_w;
+            cell_x += this_col_w;
+            col++;
         }
 
         /* Equalise cell heights to the row's tallest cell so adjacent
@@ -730,6 +1020,7 @@ static float layout_table(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
         cursor_y += row_h;
     }
 
+    free(col_w);
     free(rows.rows);
     return (cursor_y - origin_y) + pad_bottom;
 }
