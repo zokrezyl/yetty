@@ -267,7 +267,8 @@ CMAKE_CROSS_RISCV := \
 	-DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc -static-libstdc++" \
 	-DYETTY_ENABLE_LIB_WEBGPU=OFF \
 	-DYETTY_ENABLE_LIB_GLFW=OFF \
-	-DYETTY_ENABLE_LIB_QEMU=OFF
+	-DYETTY_ENABLE_LIB_QEMU=OFF \
+	-DYETTY_ENABLE_LIB_QEMU_BINARY=OFF
 
 # Scope pkg-config to the multiarch .pc dir so `pkg_check_modules(fontconfig)`
 # doesn't pick up host-x86_64 metadata. PKG_CONFIG_LIBDIR replaces the default
