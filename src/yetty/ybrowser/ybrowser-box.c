@@ -1266,15 +1266,15 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
                     } else {
                         b->flex_basis_px = 0.0f;
                     }
-                    /* Float + clear. The layout pass removes floated
-				 * boxes from normal flow and rewinds the available
-				 * content width for siblings that overlap. */
-                    int fv = yetty_ybrowser_libcss_float(cs);
-                    if (fv == CSS_FLOAT_LEFT) {
-                        b->float_side = 1;
-                    } else if (fv == CSS_FLOAT_RIGHT) {
-                        b->float_side = 2;
-                    }
+                    /* Float disabled — our wrap doesn't narrow lines
+				 * per-y by active floats, so floated content overlaps
+				 * the in-flow body text (visible as scattered letters
+				 * where two lines render in the same x range). ylexbor
+				 * — the reference tool — has no float handling at all
+				 * and stacks figures vertically. Match that for now;
+				 * proper float-aware line wrap is a separate change. */
+                    (void)yetty_ybrowser_libcss_float(cs);
+                    b->float_side = 0;
                     int clr = yetty_ybrowser_libcss_clear(cs);
                     if (clr == CSS_CLEAR_LEFT) {
                         b->clear_side = 1;
