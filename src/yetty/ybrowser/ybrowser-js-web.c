@@ -46,7 +46,7 @@
  * Compile-out: YETTY_HAVE_QUICKJS=0 → all stubs.
  */
 
-#include "ylexbor-internal.h"
+#include "ybrowser-internal.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -314,7 +314,8 @@ char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status)
 #endif /* YETTY_HAVE_CURL */
 
 /* ===========================================================================
- * Everything below this point is JS-side bindings — gated on QuickJS.
+ * Everything below this point is the JS-side bindings (fetch/XHR/
+ * timers/window/etc.). Gated on QuickJS being compiled in.
  * ===========================================================================*/
 
 #if YETTY_HAVE_QUICKJS
@@ -1553,8 +1554,8 @@ int yetty_ylexbor_pump(struct yetty_ylexbor *r)
     (void)r;
     return -1;
 }
-/* resolve_url + http_get + http_get_referer are unconditionally
- * defined above (above the QuickJS gate). They're network helpers
- * used by image fetch + external-stylesheet loading regardless of JS. */
+/* resolve_url + http_get + http_get_referer are defined unconditionally
+ * above (above the QuickJS gate) — they're network helpers used by
+ * image and external-stylesheet loading whether JS is on or off. */
 
 #endif /* YETTY_HAVE_QUICKJS */

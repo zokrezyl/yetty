@@ -149,6 +149,10 @@ if(YETTY_ENABLE_FEATURE_YLEXBOR)
     add_subdirectory(ylexbor)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YBROWSER)
+    add_subdirectory(ybrowser)
+endif()
+
 if(YETTY_ENABLE_FEATURE_DIAGRAM)
     add_subdirectory(diagram)
 endif()

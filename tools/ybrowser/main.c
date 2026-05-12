@@ -30,7 +30,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <yetty/ylexbor/ylexbor.h>
+#include <yetty/ybrowser/ybrowser.h>
 #include <yetty/ypaint-core/buffer.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/types.h>
@@ -80,11 +80,14 @@ static char *slurp_url(const char *url, size_t *out_len)
 	curl_easy_setopt(c, CURLOPT_URL, url);
 	curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(c, CURLOPT_MAXREDIRS, 10L);
-	/* Standard Chrome UA. Bot-looking UAs ("ylexbor-demo/0.1") cause
-	 * sites like Wikipedia and news.google.com to serve a stripped
-	 * legacy/no-JS page that hides images behind sprite tricks or
-	 * replaces <img src> with text labels. YETTY_USER_AGENT env var
-	 * overrides for ops who need a bot-identifying UA (ToS, scraping). */
+	/* Send a standard Chrome UA. Bot-looking UAs ("ylexbor-demo/0.1")
+	 * cause sites like Wikipedia and news.google.com to serve a
+	 * stripped-down legacy/no-JS page that hides images behind sprite
+	 * tricks or replaces <img src> with text labels. The image-fetch
+	 * path in ybrowser-js-web.c already sends Chrome 120; align the
+	 * page-fetch UA so the *whole* document looks like a real browser
+	 * to the origin. YETTY_USER_AGENT env var overrides for ops who
+	 * need bot-identifying UAs (ToS compliance, scraping budgets). */
 	const char *ua = getenv("YETTY_USER_AGENT");
 	if (!ua || !*ua) {
 		ua = "Mozilla/5.0 (X11; Linux x86_64) "
@@ -99,6 +102,16 @@ static char *slurp_url(const char *url, size_t *out_len)
 	curl_easy_setopt(c, CURLOPT_ACCEPT_ENCODING, "");
 	curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, fetch_write_cb);
 	curl_easy_setopt(c, CURLOPT_WRITEDATA, &b);
+	/* Send a browser-shape Accept header. Without an Accept header,
+	 * Wikipedia's caching tier sometimes returns the lightweight bot
+	 * variant of pages. */
+	struct curl_slist *headers = NULL;
+	headers = curl_slist_append(headers,
+		"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+	headers = curl_slist_append(headers, "Accept-Language: en-US,en;q=0.9");
+	if (headers) {
+		curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
+	}
 	/* No-op stderr suppression — curl prints to stderr only on
 	 * CURLOPT_VERBOSE, which we never set. */
 
@@ -110,6 +123,7 @@ static char *slurp_url(const char *url, size_t *out_len)
 		fprintf(stderr, "ylexbor-demo: fetch %s failed: %s\n",
 			url, curl_easy_strerror(rc));
 		curl_easy_cleanup(c);
+		if (headers) curl_slist_free_all(headers);
 		free(b.data);
 		return NULL;
 	}
@@ -119,6 +133,7 @@ static char *slurp_url(const char *url, size_t *out_len)
 		/* Render the body anyway — error pages are HTML too. */
 	}
 	curl_easy_cleanup(c);
+	if (headers) curl_slist_free_all(headers);
 
 	*out_len = b.size;
 	return b.data;

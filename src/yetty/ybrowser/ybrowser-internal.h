@@ -7,7 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <yetty/ylexbor/ylexbor.h>
+#include <yetty/ybrowser/ybrowser.h>
 
 #include <lexbor/dom/interfaces/element.h>
 #include <lexbor/html/html.h>
@@ -148,10 +148,18 @@ struct yetty_ylexbor_customs {
     int size, cap;
 };
 
+/* Forward-declare libcss bridge state — definition in
+ * ybrowser-libcss.h. Kept opaque here so TUs that don't touch libcss
+ * (paint / layout / js) don't need its headers. */
+struct yetty_ybrowser_libcss;
+
 struct yetty_ylexbor {
     /* lexbor objects — owned. */
     lxb_html_document_t *document;
     lxb_css_parser_t *css_parser;
+
+    /* libcss bridge — owned. NULL when libcss isn't compiled in. */
+    struct yetty_ybrowser_libcss *libcss;
 
     /* CSS custom-property table populated by yetty_ylexbor_css_vars_*
 	 * as stylesheets get added. Read by read_inline_color / similar

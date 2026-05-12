@@ -267,7 +267,7 @@ if (YETTY_IS_ERR(r)) {
 ```
 
 Error wrapping must preserve the `cause` chain — pass the whole result
-struct, never `.error.msg` (see `~/.claude/yetty-new/rules/07-error-handling.md`).
+struct, never `.error.msg` 
 
 ## File layout
 

@@ -3,7 +3,8 @@
  * box-build → layout → paint pipeline implemented in the sibling files.
  */
 
-#include "ylexbor-internal.h"
+#include "ybrowser-internal.h"
+#include "ybrowser-libcss.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -159,6 +160,13 @@ struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_
         return YETTY_ERR(yetty_ylexbor_ptr, "css_parser_init");
     }
 
+    /* libcss bridge — fatal init failure leaves r->libcss NULL and
+     * the box pass falls back to lexbor's serialized-cascade path
+     * (same code that ylexbor uses today). */
+    if (yetty_ybrowser_libcss_init(r) != 0) {
+        ydebug("ybrowser: libcss init failed, using lexbor cascade fallback");
+    }
+
     return YETTY_OK(yetty_ylexbor_ptr, r);
 }
 
@@ -168,6 +176,7 @@ struct yetty_ycore_void_result yetty_ylexbor_destroy(struct yetty_ylexbor *r)
         return YETTY_OK_VOID();
     }
     yetty_ylexbor_js_destroy(r);
+    yetty_ybrowser_libcss_destroy(r);
     if (r->css_parser) {
         lxb_css_parser_destroy(r->css_parser, true);
     }
@@ -363,6 +372,9 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css(struct yetty_ylexbor *r, co
     /* Pre-scan for `:root { --x: y; }` etc. before lexbor parses,
 	 * so var() lookups see the latest definitions. */
     yetty_ylexbor_css_vars_scan(r, css, css_len);
+
+    /* Also push the same CSS through libcss so its cascade sees it. */
+    (void)yetty_ybrowser_libcss_add_sheet(r, css, css_len, CSS_ORIGIN_AUTHOR);
 
     lxb_css_stylesheet_t *sheet = lxb_css_stylesheet_create(NULL);
     if (sheet == NULL) {
