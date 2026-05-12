@@ -102,11 +102,20 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_widget *se
         const char *label = self->data.tabbar.labels[i];
         if (label && *label) {
             float fs = theme->font_size > 0 ? theme->font_size : 14.0f;
-            /* Centre the label vertically inside the pill — text origin
-             * is the baseline; ypaint's text path renders downward, so
-             * shift by ~font_size to approximate vertical centring. */
+            /* render_text places the text TOP at (x, y) — see
+             * src/yetty/ygui/ygui_widgets.c label_render comments. The
+             * label descends from y to y+fs, so centring vertically is
+             * just splitting the leftover space. Without the
+             * (now-removed) extra +fs*0.8 baseline shift the descender
+             * cleared the accent bar at the bottom of the pill. */
             float tx = x + TABBAR_PILL_PAD_X;
-            float ty = y + (hh - fs) * 0.5f + fs * 0.8f;
+            float ty = y + (hh - fs) * 0.5f;
+            /* Reserve a few pixels of headroom above the active accent
+             * bar so descenders never paint over it. */
+            float max_top = y + hh - TABBAR_ACCENT_BAR_H - fs - 2.0f;
+            if (ty > max_top) {
+                ty = max_top;
+            }
             yetty_ygui_render_ctx_render_text(ctx, label, tx, ty, text_color, fs);
         }
 
