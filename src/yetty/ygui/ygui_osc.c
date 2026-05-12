@@ -7,6 +7,9 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yterm/pty-reader.h> /* YETTY_OSC_YPAINT_* */
 #include <yetty/ymgui/wire.h>       /* YMGUI_OSC_CS_CARD_*, wire structs */
+#include <yetty/ytrace/ytrace.h>
+#include <errno.h>
+#include <poll.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -48,11 +51,45 @@ static size_t base64_encode(const uint8_t *data, uint32_t size, char *out, size_
     return j;
 }
 
-/* Write OSC sequence to stdout */
+/* Write OSC sequence to stdout, retrying on partial writes / EINTR /
+ * EAGAIN.
+ *
+ * stdout sits on a non-blocking PTY connected to the parent yetty (the
+ * libuv loop sets O_NONBLOCK on the stdio fds). A single write() of a
+ * yimage-bearing frame easily exceeds the PTY's atomic-write capacity
+ * (the kernel buffer is ~64 KB) and returns EAGAIN once filled. A
+ * previous "best effort" implementation silently dropped the
+ * remainder of the OSC envelope, so the receiver saw a truncated
+ * base64 payload that decoded to garbage. Loop, polling on EAGAIN so
+ * we block-with-a-deadline until the PTY drains. */
 static void write_osc(const char *data, size_t len)
 {
-    ssize_t written = write(STDOUT_FILENO, data, len);
-    (void)written; /* Ignore return value - best effort */
+    size_t total = 0;
+    while (total < len) {
+        ssize_t n = write(STDOUT_FILENO, data + total, len - total);
+        if (n < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                struct pollfd pfd = {.fd = STDOUT_FILENO, .events = POLLOUT};
+                int pr = poll(&pfd, 1, 5000);
+                if (pr > 0 && (pfd.revents & POLLOUT)) {
+                    continue;
+                }
+                ydebug("write_osc: poll timeout/error at %zu/%zu (pr=%d revents=0x%x)",
+                       total, len, pr, pfd.revents);
+                return;
+            }
+            ydebug("write_osc: write failed at %zu/%zu (errno=%d)", total, len, errno);
+            return;
+        }
+        if (n == 0) {
+            ydebug("write_osc: write returned 0 (pipe closed) at %zu/%zu", total, len);
+            return;
+        }
+        total += (size_t)n;
+    }
 }
 
 /* Vendor ID = yetty ypaint-layer OSC sink (see terminal.c register_osc_sink).

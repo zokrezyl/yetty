@@ -7,6 +7,7 @@
 #include <yetty/ypaint-core/cmds.h>
 #include <yetty/yfont/raster-font.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/ytrace/ytrace.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -493,6 +494,17 @@ void yetty_ygui_engine_mark_dirty(struct yetty_ygui_engine *engine)
  * Rendering
  *===========================================================================*/
 
+static void reset_was_rendered_recursive(struct yetty_ygui_widget *w)
+{
+    if (!w) {
+        return;
+    }
+    w->was_rendered = 0;
+    for (struct yetty_ygui_widget *c = w->first_child; c; c = c->next_sibling) {
+        reset_was_rendered_recursive(c);
+    }
+}
+
 static struct yetty_ycore_void_result engine_rebuild(struct yetty_ygui_engine *engine)
 {
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
@@ -512,19 +524,39 @@ static struct yetty_ycore_void_result engine_rebuild(struct yetty_ygui_engine *e
         }
     }
 
+    /* Reset was_rendered on EVERY widget (not just top-level) before
+     * the render pass. Earlier this was reset inline only for top-level
+     * widgets in the render loop, leaving nested children's flags
+     * sticky at 1 from previous frames. The result: when a parent's
+     * render_all returned early on a VISIBLE / OPEN check (tabbar
+     * panels going inactive, popup closing, popup_menu collapsing),
+     * its children never got re-evaluated — they kept was_rendered=1
+     * and stayed in the spatial grid forever. Stale buttons under the
+     * now-invisible panel kept absorbing clicks.
+     *
+     * Doing the reset as a separate recursive pass is O(n_widgets) and
+     * makes the contract explicit: every widget enters the frame with
+     * was_rendered=0, and render_all is the only thing that can flip
+     * it to 1. */
+    for (struct yetty_ygui_widget *w = engine->first_widget; w; w = w->next_sibling) {
+        reset_was_rendered_recursive(w);
+    }
+
     /* Create render context */
     struct yetty_ygui_render_ctx ctx;
     yetty_ygui_render_ctx_init(&ctx, engine->buffer, engine->theme);
 
     /* Render all top-level widgets */
     for (struct yetty_ygui_widget *w = engine->first_widget; w; w = w->next_sibling) {
-        w->was_rendered = 0;
+        ydebug("engine_rebuild: render top-level id=%s type=%d visible=%d",
+               w->id ? w->id : "?", (int)w->type, (w->flags & YETTY_YGUI_FLAG_VISIBLE) ? 1 : 0);
         struct yetty_ycore_void_result r;
         if (w->vtable && w->vtable->render_all) {
             r = w->vtable->render_all(w, &ctx);
         } else {
             r = yetty_ygui_widget_render_all_default(w, &ctx);
         }
+        ydebug("engine_rebuild: done top-level id=%s", w->id ? w->id : "?");
         if (YETTY_IS_ERR(r)) {
             if (YETTY_IS_OK(first_err)) {
                 first_err = r;
@@ -533,13 +565,16 @@ static struct yetty_ycore_void_result engine_rebuild(struct yetty_ygui_engine *e
             }
         }
     }
+    ydebug("engine_rebuild: render loop done — entering grid rebuild");
 
     /* Rebuild spatial grid with rendered widgets */
     for (struct yetty_ygui_widget *w = engine->first_widget; w; w = w->next_sibling) {
         if (w->was_rendered) {
+            ydebug("engine_rebuild: grid_insert id=%s", w->id ? w->id : "?");
             yetty_ygui_grid_insert(&engine->grid, w);
         }
     }
+    ydebug("engine_rebuild: grid rebuild done");
 
     engine->dirty = 0;
 
@@ -710,6 +745,7 @@ void yetty_ygui_engine_mouse_move(struct yetty_ygui_engine *engine, float x, flo
 
 void yetty_ygui_engine_mouse_down(struct yetty_ygui_engine *engine, float x, float y, int button)
 {
+    ydebug("mouse_down at (%.1f, %.1f) btn=%d", x, y, button);
     if (!engine) {
         return;
     }
@@ -718,6 +754,9 @@ void yetty_ygui_engine_mouse_down(struct yetty_ygui_engine *engine, float x, flo
     YGUI_LOG("mouse_down at (%.1f, %.1f)", x, y);
     struct yetty_ygui_widget *hit = yetty_ygui_grid_query(&engine->grid, x, y);
     YGUI_LOG("  grid_query returned: %s (ptr=%p)", hit ? hit->id : "NULL", (void *)hit);
+    ydebug("mouse_down: hit=%s ptr=%p has_on_press=%d",
+           hit ? (hit->id ? hit->id : "?") : "NULL", (void *)hit,
+           (hit && hit->vtable && hit->vtable->on_press) ? 1 : 0);
 
     if (hit) {
         hit->flags |= YETTY_YGUI_FLAG_PRESSED;
@@ -737,7 +776,10 @@ void yetty_ygui_engine_mouse_down(struct yetty_ygui_engine *engine, float x, flo
             float lx = x - hit->effective_x;
             float ly = y - hit->effective_y;
             ygui_event_t event = {0};
-            if (hit->vtable->on_press(hit, lx, ly, &event)) {
+            int handled = hit->vtable->on_press(hit, lx, ly, &event);
+            ydebug("mouse_down: on_press(%s, lx=%.1f, ly=%.1f) -> %d",
+                   hit->id ? hit->id : "?", lx, ly, handled);
+            if (handled) {
                 emit_event(engine, &event);
             }
         }

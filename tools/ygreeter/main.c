@@ -648,6 +648,13 @@ struct app {
     struct yetty_ygui_widget *outer;
     struct yetty_ygui_widget *tabbar;
     struct tab_state tabs[4];
+    /* About dialog. Three top-level widgets hidden until the menu's
+     * About entry opens them. They're re-centred on engine resize. The
+     * popup carries the modal overlay + drop shadow; the rich widget
+     * holds the body content; the button closes the dialog. */
+    struct yetty_ygui_widget *about_popup;
+    struct yetty_ygui_widget *about_rich;
+    struct yetty_ygui_widget *about_close;
 };
 
 /* Per-nav-row binding. One of these is allocated for every row at
@@ -773,6 +780,110 @@ static void on_key(struct yetty_ygui_engine *e, uint32_t key, int mods, void *u)
     }
 }
 
+/* About dialog content. Body of the popup; rendered as a rich widget
+ * inside the dialog. Authored in widget-local pixel coordinates so the
+ * rich widget translates everything to the dialog's resolved layout
+ * box automatically. */
+#define ABOUT_BODY_YAML                                                                       \
+    "body:\n"                                                                                  \
+    "  - text:\n"                                                                              \
+    "      position: [0, 20]\n"                                                                \
+    "      content: \"yetty\"\n"                                                               \
+    "      font-size: 28\n"                                                                    \
+    "      color: \"#ffffff\"\n"                                                               \
+    "  - text:\n"                                                                              \
+    "      position: [0, 60]\n"                                                                \
+    "      content: \"A GPU-accelerated terminal.\"\n"                                         \
+    "      font-size: 16\n"                                                                    \
+    "      color: \"#9ad7ff\"\n"                                                               \
+    "  - text:\n"                                                                              \
+    "      position: [0, 96]\n"                                                                \
+    "      content: \"Renders text, plots, images and rich docs\"\n"                           \
+    "      font-size: 14\n"                                                                    \
+    "      color: \"#cccccc\"\n"                                                               \
+    "  - text:\n"                                                                              \
+    "      position: [0, 116]\n"                                                               \
+    "      content: \"side by side with your shell.\"\n"                                       \
+    "      font-size: 14\n"                                                                    \
+    "      color: \"#cccccc\"\n"                                                               \
+    "  - text:\n"                                                                              \
+    "      position: [0, 156]\n"                                                               \
+    "      content: \"ygreeter — first-contact tool\"\n"                                       \
+    "      font-size: 13\n"                                                                    \
+    "      color: \"#888888\"\n"
+
+/* Dialog geometry. Kept here so reposition_about_dialog and the
+ * constructor share constants without spelling them out twice. */
+#define ABOUT_W 460.0f
+#define ABOUT_H 280.0f
+#define ABOUT_BODY_PAD_X 24.0f
+#define ABOUT_BODY_PAD_TOP 52.0f /* leaves room for the popup's header band */
+#define ABOUT_BUTTON_W 90.0f
+#define ABOUT_BUTTON_H 28.0f
+#define ABOUT_BUTTON_PAD 14.0f
+
+/* Re-centre the About dialog and reposition its body / close-button
+ * children to match. Called when the dialog is opened and on every
+ * engine resize so the dialog stays anchored to the middle of the
+ * canvas. Children of a popup are positioned in ABSOLUTE canvas
+ * coordinates (popup_render_all doesn't push ctx->offset for its
+ * children — see demo/ygui/16_new_widgets/main.c for the pattern). */
+static void reposition_about_dialog(struct app *app)
+{
+    if (!app || !app->about_popup) {
+        return;
+    }
+    float ew = 0.0f, eh = 0.0f;
+    yetty_ygui_engine_get_size(app->engine, &ew, &eh);
+    if (ew <= 0.0f || eh <= 0.0f) {
+        return;
+    }
+    float x = (ew - ABOUT_W) * 0.5f;
+    float y = (eh - ABOUT_H) * 0.5f;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+
+    yetty_ygui_widget_set_position(app->about_popup, x, y);
+    yetty_ygui_widget_popup_set_scene_size(app->about_popup, ew, eh);
+
+    if (app->about_rich) {
+        yetty_ygui_widget_set_position(app->about_rich, x + ABOUT_BODY_PAD_X,
+                                       y + ABOUT_BODY_PAD_TOP);
+    }
+    if (app->about_close) {
+        yetty_ygui_widget_set_position(app->about_close,
+                                       x + ABOUT_W - ABOUT_BUTTON_W - ABOUT_BUTTON_PAD,
+                                       y + ABOUT_H - ABOUT_BUTTON_H - ABOUT_BUTTON_PAD);
+    }
+}
+
+static void about_dialog_set_open(struct app *app, int open)
+{
+    if (!app || !app->about_popup) {
+        return;
+    }
+    if (open) {
+        reposition_about_dialog(app);
+    }
+    yetty_ygui_widget_popup_set_open(app->about_popup, open);
+    /* The rich + close button live as top-level siblings (not popup
+     * children of the rendering machinery — see popup_render_all
+     * comment). Toggle their visibility in lockstep with the popup's
+     * OPEN flag. */
+    if (app->about_rich) {
+        yetty_ygui_widget_set_visible(app->about_rich, open);
+    }
+    if (app->about_close) {
+        yetty_ygui_widget_set_visible(app->about_close, open);
+    }
+}
+
+static void on_about_close_click(struct yetty_ygui_widget *button, void *userdata)
+{
+    (void)button;
+    about_dialog_set_open((struct app *)userdata, 0);
+}
+
 /* Menu item handlers. Each takes the standard click signature; the
  * widget arg is the menu itself (the engine fires the callback as if
  * the menu had been clicked). We route via the `app` pointer stashed
@@ -788,11 +899,31 @@ static void on_menu_close(struct yetty_ygui_widget *widget, void *userdata)
 
 static void on_menu_about(struct yetty_ygui_widget *widget, void *userdata)
 {
-    /* For v1 the About entry doesn't open a dialog — clicking it
-     * closes the menu. Hook up a popup-dialog widget here once we
-     * have rich-text content to put in it. */
     (void)widget;
-    (void)userdata;
+    about_dialog_set_open((struct app *)userdata, 1);
+}
+
+static void build_about_dialog(struct app *app)
+{
+    /* Popup carries the header label, modal overlay, drop shadow and
+     * the rounded body. The two extra widgets ride on top as
+     * top-level siblings (a popup's children render at absolute
+     * coordinates anyway — see reposition_about_dialog comment). */
+    app->about_popup =
+        yetty_ygui_engine_popup(app->engine, "about_popup", 0, 0, ABOUT_W, ABOUT_H, "About");
+    yetty_ygui_widget_popup_set_modal(app->about_popup, 1);
+    yetty_ygui_widget_popup_set_open(app->about_popup, 0);
+
+    app->about_rich = yetty_ygui_engine_rich_from_yaml(
+        app->engine, "about_rich", 0, 0, ABOUT_W - 2 * ABOUT_BODY_PAD_X,
+        ABOUT_H - ABOUT_BODY_PAD_TOP - ABOUT_BUTTON_H - 2 * ABOUT_BUTTON_PAD, ABOUT_BODY_YAML,
+        strlen(ABOUT_BODY_YAML));
+    yetty_ygui_widget_set_visible(app->about_rich, 0);
+
+    app->about_close = yetty_ygui_engine_button(app->engine, "about_close", 0, 0,
+                                                ABOUT_BUTTON_W, ABOUT_BUTTON_H, "Close");
+    yetty_ygui_widget_button_on_click(app->about_close, on_about_close_click, app);
+    yetty_ygui_widget_set_visible(app->about_close, 0);
 }
 
 static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, float pw, float ph,
@@ -805,6 +936,9 @@ static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, flo
     if (app->outer) {
         yetty_ygui_widget_set_size(app->outer, new_w, new_h);
     }
+    /* Keep the About dialog centred when the user resizes the
+     * terminal / card. Cheap — only updates positions, not contents. */
+    reposition_about_dialog(app);
 }
 
 static void query_terminal_cells(int *cols, int *rows)
@@ -894,9 +1028,10 @@ int main(int argc, char **argv)
     (void)argc;
     (void)argv;
 
-    /* Drop stderr so libuv / fontconfig diagnostics don't paint the card. */
-    FILE *redir = freopen("/dev/null", "w", stderr);
-    (void)redir;
+    /* Leave stderr untouched. Callers who want to capture diagnostics
+     * redirect it at the shell (e.g. `ygreeter 2>/tmp/ygreeter.log`).
+     * Note: ygreeter's stdout IS the OSC pipe to the parent yetty, so
+     * stderr is the only safe channel for textual diagnostics. */
 
     if (yetty_ygui_init() != 0) {
         fprintf(stdout, "ygreeter: ygui_init failed (run inside a real terminal)\n");
@@ -937,6 +1072,10 @@ int main(int argc, char **argv)
     yetty_ygui_widget_popup_menu_add_separator(app_menu);
     yetty_ygui_widget_popup_menu_add_item(app_menu, "Close", on_menu_close, &app);
     yetty_ygui_widget_window_set_menu(app.outer, app_menu);
+
+    /* About dialog (popup + rich content + close button). Hidden until
+     * the menu's About item opens it. */
+    build_about_dialog(&app);
 
     app.tabbar = yetty_ygui_engine_tabbar(app.engine, "tabs", 0, 0, 0, 0);
     yetty_ygui_widget_apply_css(app.tabbar, "flex: 1 0 0; align-items: stretch;");

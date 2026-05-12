@@ -195,8 +195,27 @@ static void popup_menu_destroy(struct yetty_ygui_widget *self)
     free(self->data.popup_menu.item_userdata);
 }
 
+/* Custom render_all so the menu skips the engine's spatial grid when
+ * it isn't OPEN. The default render_all_default sets was_rendered = 1
+ * for any visible widget; with the menu's default VISIBLE flag the
+ * result was a "ghost" rect parked at the last-open position, eating
+ * every subsequent click on that area (tabbar close-X buttons, mainly)
+ * even though nothing was painted there. Bailing out before
+ * was_rendered keeps the menu out of the grid until it's reopened. */
+static struct yetty_ycore_void_result popup_menu_render_all(struct yetty_ygui_widget *self,
+                                                            struct yetty_ygui_render_ctx *ctx)
+{
+    if (!(self->flags & YETTY_YGUI_FLAG_VISIBLE) ||
+        !(self->flags & YETTY_YGUI_FLAG_OPEN)) {
+        return YETTY_OK_VOID();
+    }
+    self->was_rendered = 1;
+    return popup_menu_render(self, ctx);
+}
+
 static const struct yetty_ygui_widget_vtable popup_menu_vtable = {
     .render = popup_menu_render,
+    .render_all = popup_menu_render_all,
     .on_press = popup_menu_on_press,
     .destroy = popup_menu_destroy,
 };
