@@ -52,6 +52,12 @@ struct yetty_yterm_terminal {
     struct yetty_yterm_terminal_context context;
     uint32_t cols;
     uint32_t rows;
+    /* Set by workspace_set_active via SET_FOCUS — true means this terminal
+     * is the foreground view in its workspace AND the workspace is the
+     * tabbar's active one. Layers can read this to switch cursor style
+     * (block vs hollow), and we'll forward FocusIn/FocusOut CSI to the
+     * PTY once focus reporting (DECSET 1004) is wired through. */
+    int focused;
     struct yetty_yrender_terminal_layer *layers[YETTY_YTERM_TERMINAL_MAX_LAYERS];
     size_t layer_count;
     yetty_yevent_pipe_id pty_pipe_id;
@@ -1644,6 +1650,18 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
     case YETTY_YCORE_SHUTDOWN:
         ydebug("terminal: SHUTDOWN received");
         terminal->shutting_down = 1;
+        return YETTY_OK(yetty_ycore_int, 1);
+
+    case YETTY_YCORE_SET_FOCUS:
+        /* Foreground-view notification from the workspace. object_id != 0
+         * means the tabbar's active workspace is now this terminal's
+         * one and we're its focused pane — i.e. we're the terminal
+         * keys go to. object_id == 0 means we just got backgrounded.
+         * Today we just track the bit (downstream layers + future PTY
+         * focus reporting read it); rendering style updates will land
+         * separately. */
+        terminal->focused = event->set_focus.object_id != 0;
+        ydebug("terminal: SET_FOCUS focused=%d", terminal->focused);
         return YETTY_OK(yetty_ycore_int, 1);
 
     case YETTY_YCORE_PASTE: {

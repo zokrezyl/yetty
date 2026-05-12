@@ -22,6 +22,7 @@
 #include <yetty/yevent/dispatch.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui/workspace.h>
+#include <yetty/yui/tabbar.h>
 #include <yetty/yui/tile.h>
 #include <yetty/yui-core/view.h>
 #include <yetty/yrpc/rpc-server.h>
@@ -44,7 +45,11 @@
 /* Yetty instance */
 struct yetty_yetty_yetty {
     struct yetty_context context;
-    struct yetty_yui_workspace *workspace;
+    /* Chrome-like top-level UI. The tabbar owns N workspaces; only the
+     * active workspace renders. Single-workspace boots create one tab so
+     * the existing render/event paths see exactly the same shape as before
+     * the tabbar was introduced. */
+    struct yetty_yui_tabbar *tabbar;
     struct yetty_yevent_event_loop *event_loop;
     struct yetty_yevent_event_listener listener;
 
@@ -156,13 +161,14 @@ static struct yetty_ycore_int_result yetty_event_handler(
             yerror("yetty: clear failed: %s", clr_res.error.msg);
         }
 
-        /* Render workspace tree - pass render_target down */
+        /* Render the tab strip + active workspace. Inactive workspaces hold
+         * GPU state but don't contribute to the frame. */
         ytime_start(workspace_render);
-        if (yetty->workspace) {
+        if (yetty->tabbar) {
             struct yetty_ycore_void_result res =
-                yetty_yui_workspace_render(yetty->workspace, yetty->render_target);
+                yetty_yui_tabbar_render(yetty->tabbar, yetty->render_target);
             if (!YETTY_IS_OK(res)) {
-                yerror("yetty: workspace render failed: %s", res.error.msg);
+                yerror("yetty: tabbar render failed: %s", res.error.msg);
             }
         }
         ytime_report(workspace_render);
@@ -332,8 +338,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
             apply.zoom_visual_apply.scale = yetty->visual_zoom_scale;
             apply.zoom_visual_apply.offset_x = yetty->visual_zoom_offset_x;
             apply.zoom_visual_apply.offset_y = yetty->visual_zoom_offset_y;
-            if (yetty->workspace) {
-                yetty_yui_workspace_on_event(yetty->workspace, &apply);
+            if (yetty->tabbar) {
+                yetty_yui_tabbar_on_event(yetty->tabbar, &apply);
             }
         }
         if (yetty->event_loop && yetty->event_loop->ops->request_render) {
@@ -374,8 +380,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
                 apply.zoom_visual_apply.scale = yetty->visual_zoom_scale;
                 apply.zoom_visual_apply.offset_x = yetty->visual_zoom_offset_x;
                 apply.zoom_visual_apply.offset_y = yetty->visual_zoom_offset_y;
-                if (yetty->workspace) {
-                    yetty_yui_workspace_on_event(yetty->workspace, &apply);
+                if (yetty->tabbar) {
+                    yetty_yui_tabbar_on_event(yetty->tabbar, &apply);
                 }
             }
             if (yetty->event_loop && yetty->event_loop->ops->request_render) {
@@ -447,8 +453,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
      * active terminal can scale its layers' cell_size and recompute cols/rows.
      * See terminal.c for the actual restructuring. */
     if (event->type == YETTY_YCORE_ZOOM_CELL_SIZE) {
-        if (yetty->workspace) {
-            yetty_yui_workspace_on_event(yetty->workspace, event);
+        if (yetty->tabbar) {
+            yetty_yui_tabbar_on_event(yetty->tabbar, event);
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
@@ -491,14 +497,16 @@ static struct yetty_ycore_int_result yetty_event_handler(
             yetty->render_target->ops->resize(yetty->render_target, vp);
         }
 
-        /* Resize workspace */
-        if (yetty->workspace) {
-            yetty_yui_workspace_resize(yetty->workspace, (float)width, (float)height);
+        /* Resize the tabbar: it slices off the strip height and forwards the
+         * remainder to each workspace. */
+        if (yetty->tabbar) {
+            yetty_yui_tabbar_resize(yetty->tabbar, (float)width, (float)height);
         }
 
-        /* Forward to workspace for tile/view resize handling */
-        if (yetty->workspace) {
-            yetty_yui_workspace_on_event(yetty->workspace, event);
+        /* Forward to tabbar for tile/view resize handling on the active
+         * workspace. */
+        if (yetty->tabbar) {
+            yetty_yui_tabbar_on_event(yetty->tabbar, event);
         }
 
         /* Request re-render after resize */
@@ -523,8 +531,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
      *      fork_pty_stop) reaps the PTY children. */
     if (event->type == YETTY_YCORE_SHUTDOWN) {
         ydebug("yetty: SHUTDOWN — winding down");
-        if (yetty->workspace) {
-            yetty_yui_workspace_on_event(yetty->workspace, event);
+        if (yetty->tabbar) {
+            yetty_yui_tabbar_on_event(yetty->tabbar, event);
         }
         if (yetty->event_loop && yetty->event_loop->ops->stop) {
             yetty->event_loop->ops->stop(yetty->event_loop);
@@ -546,9 +554,9 @@ static struct yetty_ycore_int_result yetty_event_handler(
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
-    /* Forward other events to workspace */
-    if (yetty->workspace) {
-        return yetty_yui_workspace_on_event(yetty->workspace, event);
+    /* Forward other events to the tabbar (which routes to active workspace). */
+    if (yetty->tabbar) {
+        return yetty_yui_tabbar_on_event(yetty->tabbar, event);
     }
 
     return YETTY_OK(yetty_ycore_int, 0);
@@ -899,25 +907,26 @@ struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_contex
         return YETTY_ERR(yetty_yetty_yetty, "failed to register event listeners");
     }
 
-    /* Create workspace */
-    ydebug("yetty_create: Creating workspace...");
-    struct yetty_yui_workspace_ptr_result ws_res = yetty_yui_workspace_create();
-    if (!YETTY_IS_OK(ws_res)) {
+    /* Create tabbar — owns the (initially single) workspace. */
+    ydebug("yetty_create: Creating tabbar...");
+    struct yetty_yui_tabbar_ptr_result tb_res = yetty_yui_tabbar_create();
+    if (!YETTY_IS_OK(tb_res)) {
         yetty_destroy(yetty);
-        return YETTY_ERR(yetty_yetty_yetty, "Failed to create workspace");
+        return YETTY_ERR(yetty_yetty_yetty, "Failed to create tabbar");
     }
-    yetty->workspace = ws_res.value;
-    ydebug("yetty_create: Workspace created");
+    yetty->tabbar = tb_res.value;
+    ydebug("yetty_create: tabbar created");
 
-    /* Load layout from config */
-    ydebug("yetty_create: Loading layout from config...");
-    struct yetty_ycore_void_result layout_res =
-        yetty_yui_workspace_load_layout(yetty->workspace, app_context->config, &yetty->context);
+    /* First workspace = the one defined by config; same payload the
+     * pre-tabbar load_layout consumed. */
+    ydebug("yetty_create: Loading initial workspace from config...");
+    struct yetty_ycore_void_result layout_res = yetty_yui_tabbar_add_workspace_from_config(
+        yetty->tabbar, app_context->config, &yetty->context);
     if (!YETTY_IS_OK(layout_res)) {
         yetty_destroy(yetty);
         return YETTY_ERR(yetty_yetty_yetty, layout_res.error.msg);
     }
-    ydebug("yetty_create: Layout loaded");
+    ydebug("yetty_create: initial workspace loaded");
 
     /* Start RPC server if configured */
     const char *rpc_port_str =
@@ -968,12 +977,12 @@ struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty_yetty *yetty)
         yetty->rpc_server = NULL;
     }
 
-    /* Destroy workspace (also destroys tiles and views including terminals) */
-    if (yetty->workspace) {
-        ydebug("yetty_destroy: destroying workspace");
-        yetty_yui_workspace_destroy(yetty->workspace);
-        yetty->workspace = NULL;
-        ydebug("yetty_destroy: workspace destroyed");
+    /* Destroy tabbar (cascades to each workspace, its tiles, and views). */
+    if (yetty->tabbar) {
+        ydebug("yetty_destroy: destroying tabbar");
+        yetty_yui_tabbar_destroy(yetty->tabbar);
+        yetty->tabbar = NULL;
+        ydebug("yetty_destroy: tabbar destroyed");
     }
 
     /* Destroy render target BEFORE wgpu and the event loop.

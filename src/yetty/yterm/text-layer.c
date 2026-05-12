@@ -821,8 +821,16 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_terminal_text_layer_create(
                  font_family);
         snprintf(shader_path, sizeof(shader_path), "%s/ms-msdf-font.wgsl", shaders_dir);
         ydebug("text_layer: ms-msdf cdb_path='%s' shader='%s'", cdb_path, shader_path);
+        /* Config carries the font size in logical (CSS-style) pixels;
+         * scale once here to framebuffer pixels so the glyphs render at
+         * the right physical size on HiDPI displays without every other
+         * pipeline stage having to know about content_scale. */
+        float content_scale = context->app_context.app_gpu_context.content_scale;
+        if (content_scale <= 0.0f) {
+            content_scale = 1.0f;
+        }
         float msdf_font_size =
-            (float)config->ops->get_int(config, "terminal/text-layer/font/size", 14);
+            (float)config->ops->get_int(config, "terminal/text-layer/font/size", 14) * content_scale;
 
         /* Cell padding around the glyph, fractions of glyph dim. Default 0
          * = cell exactly wraps the glyph extent, which fixes the "glyph too

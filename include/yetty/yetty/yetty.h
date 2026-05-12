@@ -26,6 +26,14 @@ struct yetty_yetty_app_gpu_context {
     uint32_t surface_width;
     uint32_t surface_height;
 
+    /* HiDPI scale = framebuffer_size / window_size, captured at startup
+     * (default 1.0 on non-HiDPI). Pure read-only knob: anything that
+     * loads a size in CSS-pixel-ish units from the user's config (font
+     * size, padding) multiplies by this to render at framebuffer
+     * resolution. Rendering, hit-tests, render-target dimensions etc.
+     * are already in framebuffer pixels and ignore this field. */
+    float content_scale;
+
     /* Optional X11 native handles. Populated by the platform layer on
      * Linux/X11 (opaque here to keep Xlib out of this header); NULL / 0 on
      * every other platform. yetty uses these only when the X11-tile render
@@ -35,11 +43,18 @@ struct yetty_yetty_app_gpu_context {
 };
 
 /* App context - passed from platform main to yetty_create */
+struct yetty_yplatform_window_manager;
+
 struct yetty_yetty_app_context {
     struct yetty_yetty_app_gpu_context app_gpu_context;
     struct yetty_yconfig_config *config;
     struct yetty_ycore_xthread_event_pipe *platform_input_pipe;
     struct yetty_platform_clipboard_manager *clipboard_manager;
+    /* Owned by glfw.c (main thread). Producer ops are thread-safe; the
+     * tabbar calls them on its render-thread mouse-down/drag handlers
+     * to ask the OS window for iconify / maximize-toggle / close /
+     * drag_by. NULL in headless mode. */
+    struct yetty_yplatform_window_manager *window_manager;
     struct yetty_yplatform_pty_factory *pty_factory;
 };
 

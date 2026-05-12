@@ -45,6 +45,7 @@ static void platform_get_x11_handles(GLFWwindow *win, void **disp, unsigned long
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/clipboard-manager.h>
+#include <yetty/yplatform/window-manager.h>
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -57,6 +58,7 @@ const char *yetty_yplatform_get_runtime_dir(void);
 GLFWwindow *yetty_yplatform_create_window(int width, int height, const char *title);
 void yetty_yplatform_destroy_window(GLFWwindow *window);
 void yetty_yplatform_get_framebuffer_size(GLFWwindow *window, int *width, int *height);
+void yetty_yplatform_get_window_size(GLFWwindow *window, int *width, int *height);
 WGPUSurface yetty_yplatform_create_surface(WGPUInstance instance, GLFWwindow *window);
 void yetty_yplatform_setup_window_callbacks(GLFWwindow *window);
 void yetty_yplatform_run_os_event_loop(GLFWwindow *window, int *running,
@@ -297,6 +299,20 @@ int main(int argc, char **argv)
         fb_height = height;
     }
 
+    /* HiDPI scale = framebuffer/window. Captured here (after the window
+     * exists, before app_context is built) so anywhere downstream that
+     * needs to scale physical-unit config knobs (font size, padding)
+     * can read app_gpu_context.content_scale instead of re-deriving it
+     * from a pair of GLFW calls. */
+    float content_scale = 1.0f;
+    if (window) {
+        int win_w = 0, win_h = 0;
+        yetty_yplatform_get_window_size(window, &win_w, &win_h);
+        if (win_w > 0 && fb_width > 0) {
+            content_scale = (float)fb_width / (float)win_w;
+        }
+    }
+
     void *x11_display = NULL;
     unsigned long x11_window = 0UL;
     platform_get_x11_handles(window, &x11_display, &x11_window);
@@ -316,17 +332,36 @@ int main(int argc, char **argv)
      * NULL is OK in headless mode: copy/paste silently no-ops. */
     struct yetty_ycore_xthread_event_pipe *output_pipe = NULL;
     struct yetty_platform_clipboard_manager *clipboard_manager = NULL;
+    struct yetty_yplatform_window_manager *window_manager = NULL;
     if (!headless) {
         struct yetty_yplatform_input_pipe_result op_res = yetty_platform_input_pipe_create();
         if (YETTY_IS_OK(op_res)) {
             output_pipe = op_res.value;
+
+            /* Window manager first so we can hand it to the clipboard
+             * manager's drain: the drain reads every event off the pipe
+             * and dispatches by type, sending WINDOW_* through here. */
+            struct yetty_yplatform_window_manager_ptr_result wm_res =
+                yetty_yplatform_window_manager_create(window, output_pipe, platform_input_pipe);
+            if (YETTY_IS_OK(wm_res)) {
+                window_manager = wm_res.value;
+            } else {
+                ywarn("main: window manager create failed: %s", wm_res.error.msg);
+                yetty_ycore_error_destroy(wm_res.error);
+            }
+
             struct yetty_yplatform_clipboard_manager_result clip_res =
-                yetty_platform_clipboard_manager_create(output_pipe, platform_input_pipe);
+                yetty_platform_clipboard_manager_create(output_pipe, platform_input_pipe,
+                                                        window_manager);
             if (YETTY_IS_OK(clip_res)) {
                 clipboard_manager = clip_res.value;
             } else {
                 ywarn("main: clipboard manager create failed: %s", clip_res.error.msg);
                 yetty_ycore_error_destroy(clip_res.error);
+                if (window_manager) {
+                    window_manager->ops->destroy(window_manager);
+                    window_manager = NULL;
+                }
                 output_pipe->ops->destroy(output_pipe);
                 output_pipe = NULL;
             }
@@ -341,11 +376,13 @@ int main(int argc, char **argv)
                             .surface = surface,
                             .surface_width = (uint32_t)fb_width,
                             .surface_height = (uint32_t)fb_height,
+                            .content_scale = content_scale,
                             .x11_display = x11_display,
                             .x11_window = x11_window},
         .config = config,
         .platform_input_pipe = platform_input_pipe,
         .clipboard_manager = clipboard_manager,
+        .window_manager = window_manager,
         .pty_factory = pty_factory};
 
     /* Yetty */
@@ -410,6 +447,9 @@ int main(int argc, char **argv)
     ydebug("main: platform_input_pipe destroyed");
     if (clipboard_manager) {
         clipboard_manager->ops->destroy(clipboard_manager);
+    }
+    if (window_manager) {
+        window_manager->ops->destroy(window_manager);
     }
     if (output_pipe) {
         output_pipe->ops->destroy(output_pipe);

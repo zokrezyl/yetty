@@ -47,13 +47,22 @@ struct yetty_platform_clipboard_manager {
     const struct yetty_platform_clipboard_manager_ops *ops;
 };
 
+struct yetty_yplatform_window_manager;
+
 /* Construct a clipboard manager that uses output_pipe for render→main
  * requests and writes paste responses back to input_pipe (as
  * YETTY_YCORE_PASTE events with a heap-allocated payload). Both pipes
- * are borrowed — the caller owns them. */
+ * are borrowed — the caller owns them.
+ *
+ * The window_manager is an optional handler the drain hands non-clipboard
+ * events to (window minimize/maximize/close/drag). Pipes are FIFO with
+ * a single reader; this routing is how two managers share one pipe.
+ * Pass NULL to drop unknown events on the floor (the historical
+ * behaviour, kept for builds that don't compile the window manager). */
 struct yetty_yplatform_clipboard_manager_result yetty_platform_clipboard_manager_create(
     struct yetty_ycore_xthread_event_pipe *output_pipe,
-    struct yetty_ycore_xthread_event_pipe *input_pipe);
+    struct yetty_ycore_xthread_event_pipe *input_pipe,
+    struct yetty_yplatform_window_manager *window_manager);
 
 #ifdef __cplusplus
 }
