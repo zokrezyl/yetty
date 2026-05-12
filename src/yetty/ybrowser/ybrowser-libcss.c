@@ -111,10 +111,12 @@ static const char UA_DEFAULT_CSS[] =
     /* Accessibility / chrome — elements explicitly marked off-screen
      * or decorative MUST NOT render. Wikipedia and most large sites
      * leak nav/menu/jump-link junk through these attributes when
-     * their main stylesheet doesn't apply. */
-    "[aria-hidden=\"true\"] { display: none; }\n"
-    "[hidden] { display: none; }\n"
-    "[role=\"presentation\"] { display: none; }\n"
+     * their main stylesheet doesn't apply. `!important` so we beat
+     * the loaded author CSS (which often overrides these for sighted
+     * users via positional tricks we don't implement). */
+    "[aria-hidden=\"true\"] { display: none !important; }\n"
+    "[hidden] { display: none !important; }\n"
+    "[role=\"presentation\"] { display: none !important; }\n"
     /* Wikipedia float helpers. The real Wikipedia stylesheet bundles
      * these in /w/load.php?modules=...; if we couldn't fetch it (no
      * network, file:// rendering) we still want figures and infoboxes
@@ -137,20 +139,31 @@ static const char UA_DEFAULT_CSS[] =
     ".mw-halign-center, figure.mw-halign-center,"
     " figure.mw-default-size.mw-halign-center"
     " { float: none; margin: 0.5em auto; }\n"
-    /* Wikipedia's hidden chrome: namespaces tabs, jump links,
-     * collapsed nav modules, etc. None of these contribute article
-     * content. */
+    /* Wikipedia's hidden chrome: jump links, edit-section markers,
+     * collapsed nav modules, sidebar menus, footer, indicators,
+     * language-switcher etc. None of these contribute article content
+     * to a CSS-less / terminal renderer. `!important` because the
+     * loaded author CSS often overrides display via clip-path /
+     * positional tricks that look hidden in a real browser but render
+     * as visible text for us. The classic symptom without this rule is
+     * "Jump to content" leaking into the upper-left corner of every
+     * Wikipedia page. */
     ".mw-jump-link, .mw-editsection, .navbox, .navbar, .vector-menu,"
     " .vector-header, .mw-portlet, .mw-footer, .mw-indicators,"
     " .mw-cite-backlink, .mw-cite-direction-marker, .mw-hidden,"
     " #vector-toc-pinned-container, .vector-toc, .vector-page-tools,"
-    " .vector-appearance-landmark, .vector-language-button-container"
-    " { display: none; }\n"
+    " .vector-appearance-landmark, .vector-language-button-container,"
+    " .mw-page-container-inner > .vector-column-start,"
+    " .mw-page-container-inner > .vector-column-end,"
+    " .vector-sticky-pinned-container, .vector-sitenotice-container,"
+    " .mw-footer-container, #footer, .vector-pinnable-header,"
+    " .skip-link, .visualClear"
+    " { display: none !important; }\n"
     /* Top-level `<nav>` is almost always chrome (site nav, breadcrumbs,
      * tabs); inline `<nav>` inside an article is rare. The article
      * <header> wrapping the page title is critical content though, so
      * we only hide <nav> by default — NOT <header>. */
-    "nav { display: none; }\n";
+    "nav { display: none !important; }\n";
 
 /* ===========================================================================
  * Select-handler callbacks. `pw` is `struct yetty_ylexbor *r`; `node` is
@@ -834,6 +847,39 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
     if (yetty_ybrowser_libcss_add_sheet(r, UA_DEFAULT_CSS, sizeof(UA_DEFAULT_CSS) - 1,
                                         CSS_ORIGIN_UA) != 0) {
         ydebug("libcss: UA stylesheet append failed");
+    }
+    /* Hostile-author chrome hider, installed as CSS_ORIGIN_USER with
+     * !important. User !important is the highest cascade origin per
+     * CSS spec (beats author !important and UA !important). We need
+     * this because libcss treats UA-origin rules as LOWER priority
+     * than author rules even with !important, so my UA stylesheet's
+     * `.mw-jump-link { display: none !important }` lost to Wikipedia's
+     * `.mw-jump-link { display: block }` and the "Jump to content" /
+     * sidebar / nav-pinning chrome leaked through. CSS_ORIGIN_USER
+     * places these one tier higher in the cascade. */
+    /* NOTE: don't hide .vector-page-titlebar — it wraps the article
+     * <h1>. The header element with that class IS the page title
+     * region we want to render. */
+    static const char CHROME_HIDE_CSS[] =
+        "[aria-hidden=\"true\"], [hidden], [role=\"presentation\"],"
+        " .mw-jump-link, .mw-editsection, .navbox, .navbar, .vector-menu,"
+        " .vector-header, .vector-page-toolbar,"
+        " .vector-sticky-header, .vector-sticky-pinned-container,"
+        " .vector-sitenotice-container, .vector-pinnable-header,"
+        " .mw-portlet, .mw-footer, .mw-footer-container, #footer,"
+        " .mw-indicators, .mw-cite-backlink, .mw-cite-direction-marker,"
+        " .mw-hidden, .mw-page-container-inner > .vector-column-start,"
+        " .mw-page-container-inner > .vector-column-end,"
+        " #vector-toc-pinned-container, .vector-toc, .vector-page-tools,"
+        " .vector-appearance-landmark, .vector-language-button-container,"
+        " .skip-link, .visualClear, nav"
+        " { display: none !important; }\n"
+        /* And re-pin our figure fix at user-origin too in case libcss's
+         * compiled-in defaults for <figure> beat the UA origin. */
+        "figure { display: block !important; }\n";
+    if (yetty_ybrowser_libcss_add_sheet(r, CHROME_HIDE_CSS, sizeof(CHROME_HIDE_CSS) - 1,
+                                        CSS_ORIGIN_USER) != 0) {
+        ydebug("libcss: chrome-hide stylesheet append failed");
     }
     return 0;
 }

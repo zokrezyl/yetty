@@ -379,12 +379,59 @@ static void test_no_images_at_zero_zero(void)
     yetty_ylexbor_destroy(yl);
 }
 
+/* ============================================================================
+ * Test G — no text rendered at (0,0).
+ *
+ * Catches "Jump to content" / similar skip-link chrome that author CSS
+ * leaves visible because they're hidden via offscreen-positioning
+ * tricks (position: absolute; clip: rect(...)) that we don't honour.
+ * Wikipedia's loaded author CSS for `.mw-jump-link` would otherwise
+ * win over our UA `display: none`, so we install the chrome-hide
+ * rules at CSS_ORIGIN_USER with !important — user !important is the
+ * highest tier in the CSS cascade.
+ *
+ * Any text box landing at exactly (0, 0) is essentially never legitimate
+ * — real first-line content respects at least body padding (≥ 8 px).
+ * ============================================================================*/
+static void test_no_text_at_origin(void)
+{
+    fprintf(stderr, "[test_no_text_at_origin]\n");
+    struct yetty_ylexbor *yl = load_wiki(1200, 800);
+
+    int total = yetty_ylexbor_test_box_count(yl);
+    int origin_count = 0;
+    for (int i = 0; i < total; i++) {
+        char tag[16] = {0};
+        float x, y, w, h;
+        if (yetty_ylexbor_test_box_at(yl, i, &x, &y, &w, &h, tag, sizeof(tag)) != 0) {
+            continue;
+        }
+        if (w <= 0.0f || h <= 0.0f) {
+            continue;
+        }
+        /* Skip the root / html / body boxes which legitimately start at
+		 * (0, 0). They have non-zero width/height matching the viewport
+		 * — only truly tiny boxes piled at the origin signal a bug. */
+        if (w > 200.0f) {
+            continue;
+        }
+        if (x == 0.0f && y == 0.0f) {
+            fprintf(stderr, "  unexpected box at (0,0): tag=%s w=%.0f h=%.0f\n", tag, w, h);
+            origin_count++;
+        }
+    }
+    fprintf(stderr, "  small-box-at-origin count=%d (cap=0)\n", origin_count);
+    ASSERT_TRUE("no small boxes at (0,0) — chrome leak", origin_count == 0);
+    yetty_ylexbor_destroy(yl);
+}
+
 int main(void)
 {
     fprintf(stderr, "ybrowser-wikipedia-test on %s\n", YBROWSER_WIKI_PAGE);
 
     test_image_distribution();
     test_no_images_at_zero_zero();
+    test_no_text_at_origin();
     test_no_garbage_at_right_edge();
     test_article_title_near_top();
     test_content_height_sane();
