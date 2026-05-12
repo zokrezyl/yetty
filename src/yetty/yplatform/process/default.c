@@ -22,6 +22,15 @@ struct yetty_yplatform_yprocess *yetty_yplatform_yprocess_spawn(const char *cons
         return YPROCESS_INVALID;
     }
 
+#if defined(YETTY_IOS) || defined(YETTY_TVOS)
+    /* Apple mobile sandbox forbids fork/exec; tvOS SDK headers even mark
+     * them __TVOS_PROHIBITED so the call won't compile. yqemu/qemu.c is
+     * linked here for the --telnet path's symbol resolution only — the
+     * runtime never actually reaches spawn on these platforms. */
+    (void)detached;
+    (void)stdio_to_null;
+    return YPROCESS_INVALID;
+#else
     pid_t pid = fork();
     if (pid < 0) {
         return YPROCESS_INVALID;
@@ -55,6 +64,7 @@ struct yetty_yplatform_yprocess *yetty_yplatform_yprocess_spawn(const char *cons
     }
     p->pid = pid;
     return p;
+#endif /* YETTY_IOS || YETTY_TVOS */
 }
 
 void yetty_yplatform_yprocess_terminate(struct yetty_yplatform_yprocess *proc, unsigned grace_ms)
