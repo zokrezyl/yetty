@@ -24,6 +24,7 @@ required=(
     "$YETTY_RUNTIME_DIR/yemu/opensbi-fw_jump.elf"
     "$YETTY_RUNTIME_DIR/yemu/kernel-riscv64.bin"
     "$YETTY_RUNTIME_DIR/yemu/alpine-extended-rootfs.img"
+    "$YETTY_RUNTIME_DIR/yemu/yetty-riscv-disk.img"
 )
 for f in "${required[@]}"; do
     [[ -e "$f" ]] || { echo "temu-extended.sh: missing $f (run cmake --build build-desktop-ytrace-release)" >&2; exit 1; }

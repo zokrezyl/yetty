@@ -13,6 +13,6 @@ case $- in
     *) return ;;
 esac
 
-if [ -z "${YGREETER_SKIP:-}" ] && [ -x /opt/yetty/bin/ygreeter ]; then
-    /opt/yetty/bin/ygreeter
+if [ -z "${YGREETER_SKIP:-}" ] && [ -x /opt/yetty/yetty/bin/ygreeter ]; then
+    /opt/yetty/yetty/bin/ygreeter
 fi
