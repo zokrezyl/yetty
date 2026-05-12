@@ -16,6 +16,10 @@
 /* Forward declare libuv types */
 typedef struct uv_loop_s uv_loop_t;
 
+/* Forward declare ypaint-core buffer (rich widget hands one of these to ygui;
+ * we don't pull in the full ypaint-core header from this public surface). */
+struct yetty_ypaint_core_buffer;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -82,6 +86,12 @@ typedef enum {
      * widget). Indent is controlled by CSS padding-left on the children
      * list returned by yetty_ygui_widget_tree_node_children(). */
     YETTY_YGUI_WIDGET_TREE_NODE,
+    /* Rich content surface: holds a ypaint-core buffer of pre-built
+     * primitives (TEXT_SPAN, SDF shapes, yplot, yimage, ...). The widget
+     * reserves a flex/layout box and, at render time, translates every
+     * primitive in its buffer by the box's resolved (x, y). Authors
+     * compose content in widget-local coordinates 0..w x 0..h. */
+    YETTY_YGUI_WIDGET_RICH,
     YETTY_YGUI_WIDGET_CUSTOM,
 } ygui_widget_type_t;
 
@@ -429,6 +439,75 @@ struct yetty_ygui_widget *yetty_ygui_engine_list(struct yetty_ygui_engine *engin
  * already participates in flex layout). */
 struct yetty_ygui_widget *yetty_ygui_engine_tree_node(struct yetty_ygui_engine *engine,
                                                       const char *id, const char *label);
+
+/* Rich content surface — holds a ypaint-core buffer of pre-built primitives
+ * (text spans, SDF shapes, yplot, yimage, ...). The widget reserves a flex
+ * layout box; at render time every primitive is translated by the widget's
+ * resolved (layout_x, layout_y), so authors compose content in widget-local
+ * coordinates (0..w, 0..h) and don't have to know where the widget will end
+ * up on the canvas.
+ *
+ * Two constructors:
+ *   - rich(engine, id, x, y, w, h)            — empty surface. Populate it
+ *                                                later with set_buffer or
+ *                                                set_yaml.
+ *   - rich_from_yaml(... , yaml, yaml_len)    — convenience: parses the
+ *                                                YAML via ypaint-yaml and
+ *                                                hands the buffer to the
+ *                                                widget. Equivalent to
+ *                                                rich() + set_yaml(). */
+struct yetty_ygui_widget *yetty_ygui_engine_rich(struct yetty_ygui_engine *engine, const char *id,
+                                                 float x, float y, float w, float h);
+
+struct yetty_ygui_widget *yetty_ygui_engine_rich_from_yaml(struct yetty_ygui_engine *engine,
+                                                           const char *id, float x, float y, float w,
+                                                           float h, const char *yaml,
+                                                           size_t yaml_len);
+
+/* Replace the widget's current content with primitives parsed from a YAML
+ * string. Mirrors yetty_ypaint_yaml_parse internally; ownership of the
+ * resulting buffer stays with the widget. Returns the parser's error result
+ * unchanged (use YETTY_IS_ERR / propagate via YETTY_RETURN_IF_ERR). */
+struct yetty_ycore_void_result yetty_ygui_widget_rich_set_yaml(struct yetty_ygui_widget *widget,
+                                                               const char *yaml, size_t yaml_len);
+
+/* Transfer ownership of an externally-constructed ypaint-core buffer into
+ * the widget. The widget destroys the buffer in its own destroy hook (and
+ * on the next set_yaml / set_buffer / clear call). Passing NULL clears. */
+void yetty_ygui_widget_rich_set_buffer(struct yetty_ygui_widget *widget,
+                                       struct yetty_ypaint_core_buffer *buffer);
+
+/* Drop the current buffer without replacement. Equivalent to
+ * set_buffer(widget, NULL). */
+void yetty_ygui_widget_rich_clear(struct yetty_ygui_widget *widget);
+
+/* Tabbar — Chrome-style tab strip across the top of the widget's box, with
+ * one content panel per tab below. Only the active panel is rendered/laid
+ * out; clicking a header swaps the active tab and (optionally) fires
+ * on_change with the new index in `value`.
+ *
+ * Each call to add_tab creates a new vbox panel sized to fill the area
+ * below the header strip. The returned panel is a normal ygui widget — add
+ * children to it the usual way (yetty_ygui_widget_add_child) or apply CSS.
+ *
+ * The tabbar is itself a flex column container, so it composes inside the
+ * usual hbox / vbox layouts (set_size_percent, flex: 1 0 0, ...).
+ *
+ * Use change_callback on the tabbar (yetty_ygui_widget_tabbar_on_change) to
+ * react to tab switches — the new index is delivered through the standard
+ * `float value` field. */
+struct yetty_ygui_widget *yetty_ygui_engine_tabbar(struct yetty_ygui_engine *engine, const char *id,
+                                                   float x, float y, float w, float h);
+
+struct yetty_ygui_widget *yetty_ygui_widget_tabbar_add_tab(struct yetty_ygui_widget *tabbar,
+                                                           const char *label);
+
+void yetty_ygui_widget_tabbar_set_active(struct yetty_ygui_widget *tabbar, int index);
+int yetty_ygui_widget_tabbar_get_active(const struct yetty_ygui_widget *tabbar);
+int yetty_ygui_widget_tabbar_count(const struct yetty_ygui_widget *tabbar);
+
+void yetty_ygui_widget_tabbar_on_change(struct yetty_ygui_widget *tabbar,
+                                        ygui_change_callback_t callback, void *userdata);
 
 /*=============================================================================
  * Widget Callbacks

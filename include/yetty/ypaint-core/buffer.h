@@ -57,6 +57,13 @@ void yetty_ypaint_core_buffer_clear(struct yetty_ypaint_core_buffer *buf);
 struct yetty_ypaint_core_id_result yetty_ypaint_core_buffer_add_prim(
     struct yetty_ypaint_core_buffer *buf, const void *data YETTY_ANNOT_ARRAY(size), size_t size);
 
+// Read-only view of the raw primitive byte stream (no scene-bounds framing,
+// just the concatenated FAM/SDF prim bytes). Used by producers that need to
+// walk their own buffer (e.g. ygui's RICH widget translating prims into the
+// engine's frame buffer). Lifetime = until the next mutation of buf.
+const void *yetty_ypaint_core_buffer_data(const struct yetty_ypaint_core_buffer *buf);
+size_t yetty_ypaint_core_buffer_size(const struct yetty_ypaint_core_buffer *buf);
+
 /* Serialize the whole buffer (scene_bounds + primitives + text_spans) into
  * a single binary blob, tagged with a magic header. The receiver passes the
  * raw bytes into create_from_bytes() and recognises the magic to restore all
