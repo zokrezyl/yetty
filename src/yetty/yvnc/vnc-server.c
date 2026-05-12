@@ -1170,24 +1170,36 @@ static void dispatch_input(struct yetty_yvnc_server *server,
         if (!client_ctx) {
             break;
         }
-        uint32_t acked_seq = 0;
-        if (hdr->data_size >= sizeof(struct yetty_yvnc_vnc_frame_ack_event)) {
-            const struct yetty_yvnc_vnc_frame_ack_event *msg = (const void *)data;
-            acked_seq = msg->seq;
+        if (hdr->data_size < sizeof(struct yetty_yvnc_vnc_frame_ack_event)) {
+            /* Legacy / malformed ack with no seq. Ignore: the correct frame
+             * is either still inflight (will arrive properly seq'd) or this
+             * is a non-yetty client speaking the wrong protocol — in either
+             * case we don't want a payloadless ack to bypass back-pressure. */
+            ywarn("VNC: ack with no seq payload on slot %d; ignoring", client_ctx->slot);
+            break;
         }
-        /* Mismatch is logged but still clears the flag — TCP guarantees
-         * order, so a mismatch means we have a protocol-version skew or a
-         * dropped/duplicated message. Refusing to clear would deadlock the
-         * client forever; clearing risks a one-frame visual artefact at
-         * worst, which the periodic full-refresh path will repair. */
+        const struct yetty_yvnc_vnc_frame_ack_event *msg = (const void *)data;
+        uint32_t acked_seq = msg->seq;
+        if (!client_ctx->awaiting_ack) {
+            /* Spurious ack — we're not waiting on anything. Most likely a
+             * late duplicate (TCP reorders nothing, but the same frame's
+             * ack can arrive twice if the client sends from two layers). */
+            ydebug("VNC: ack %u on slot %d while not awaiting; ignoring",
+                   acked_seq, client_ctx->slot);
+            break;
+        }
         if (acked_seq != client_ctx->awaiting_seq) {
-            ywarn("VNC: ack seq mismatch (got %u, expected %u) on slot %d",
-                  acked_seq, client_ctx->awaiting_seq, client_ctx->slot);
+            /* Stale ack from before the current in-flight frame. Crucially,
+             * we do NOT clear awaiting_ack — that would defeat the whole
+             * point of stop-and-wait. The real ack will arrive next, or the
+             * ACK_TIMEOUT_SEC path closes the client. */
+            ydebug("VNC: stale ack %u on slot %d (waiting on %u); ignoring",
+                   acked_seq, client_ctx->slot, client_ctx->awaiting_seq);
+            break;
         }
         client_ctx->awaiting_ack = 0;
-        /* The catch-up render path picks up the now-unblocked client on
-         * the next engine readback. Nudge the loop so we don't have to
-         * wait for an unrelated event to drive it. */
+        /* Nudge a render so the catch-up frame ships without waiting for an
+         * unrelated event. */
         if (server->event_loop && server->event_loop->ops->request_render) {
             server->event_loop->ops->request_render(server->event_loop);
         }

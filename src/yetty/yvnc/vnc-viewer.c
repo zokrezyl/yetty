@@ -188,8 +188,12 @@ static struct yetty_ycore_void_result vnc_viewer_view_render(
         return res;
     }
 
-    /* Send frame acknowledgment */
-    yetty_yvnc_client_send_frame_ack(viewer->client);
+    /* No ack here: the protocol layer (process_tile_data/process_rect_data)
+     * already sends one ack per fully-decoded frame, carrying that frame's
+     * seq. Sending another ack from the render path would either be a stale
+     * duplicate (if a frame just landed) or a premature ack(0) (on the very
+     * first render before any frame has been received) — both confuse the
+     * server's per-client back-pressure. */
 
     return YETTY_OK_VOID();
 }
