@@ -19,7 +19,8 @@ QEMU="$YETTY_RUNTIME_DIR/qemu/qemu-system-riscv64"
 required=(
     "$YETTY_RUNTIME_DIR/yemu/opensbi-fw_dynamic.bin"
     "$YETTY_RUNTIME_DIR/yemu/kernel-riscv64.bin"
-    "$YETTY_RUNTIME_DIR/yemu/alpine-rootfs.img"
+    "$YETTY_RUNTIME_DIR/yemu/alpine-extended-rootfs.img"
+    "$YETTY_RUNTIME_DIR/yemu/yetty-riscv-disk.img"
     "$QEMU"
 )
 for f in "${required[@]}"; do
