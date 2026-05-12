@@ -258,43 +258,21 @@ print(ios[-1]['identifier'] if ios else '')
 }
 
 #-----------------------------------------------------------------------------
-# Boot the sim if not already booted. The Simulator.app GUI is optional —
-# YettyQemu's UI is mostly background-audio + log file anyway.
+# Boot the sim and wait until SpringBoard + system services are actually
+# ready to host apps. `simctl list devices` reports state=Booted as soon
+# as the runtime process is up — long before SpringBoard, FrontBoard and
+# friends finish initialising. Installing in that half-state races; a
+# tap-to-launch can be rejected because Springboard hasn't enumerated
+# the new app yet. `simctl bootstatus -b $UDID` boots if needed (no-op
+# if already booted) AND blocks until the device is fully usable.
 #-----------------------------------------------------------------------------
 boot_simulator() {
-    local state
-    state="$(xcrun simctl list devices -j | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-for runtime, devs in d['devices'].items():
-    for dev in devs:
-        if dev.get('udid') == '$SIMULATOR_UDID':
-            print(dev.get('state', 'Unknown')); sys.exit(0)
-" 2>/dev/null)"
-    if [ "$state" = "Booted" ]; then
-        info "Simulator already booted"; return
+    info "Booting simulator (waiting for full boot via simctl bootstatus)..."
+    open -a Simulator --args -CurrentDeviceUDID "$SIMULATOR_UDID" || true
+    if ! xcrun simctl bootstatus "$SIMULATOR_UDID" -b; then
+        error "Simulator boot timeout / failure"; exit 1
     fi
-    info "Booting simulator (headless — Simulator.app GUI not auto-opened)..."
-    xcrun simctl boot "$SIMULATOR_UDID" 2>/dev/null || true
-    # Intentionally NOT calling `open -a Simulator` here: if SpringBoard
-    # later crashes during launch, the visible UI freezes and looks like
-    # the whole sim is dead. Headless boot is enough for simctl install
-    # and for any app whose UI we don't need on screen. Open the GUI
-    # manually when ready:  open -a Simulator --args -CurrentDeviceUDID "$SIMULATOR_UDID"
-    local count=0
-    while [ $count -lt 60 ]; do
-        state="$(xcrun simctl list devices -j | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-for runtime, devs in d['devices'].items():
-    for dev in devs:
-        if dev.get('udid') == '$SIMULATOR_UDID':
-            print(dev.get('state', 'Unknown')); sys.exit(0)
-" 2>/dev/null)"
-        [ "$state" = "Booted" ] && { success "Booted"; return; }
-        sleep 1; count=$((count + 1))
-    done
-    error "Simulator boot timeout"; exit 1
+    success "Booted (system services ready)"
 }
 
 #-----------------------------------------------------------------------------

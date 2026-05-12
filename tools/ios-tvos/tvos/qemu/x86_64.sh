@@ -150,36 +150,17 @@ for d in json.load(sys.stdin)['devicetypes']:
     success "Created simulator: $SIMULATOR_UDID"
 }
 
+# `simctl list devices` reports state=Booted as soon as the runtime
+# process is up, long before SpringBoard + system services are actually
+# ready to host apps. `simctl bootstatus -b $UDID` boots if needed
+# (no-op when already booted) AND blocks until the device is fully usable.
 boot_simulator() {
-    local state
-    state="$(xcrun simctl list devices -j | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-for runtime, devs in d['devices'].items():
-    for dev in devs:
-        if dev.get('udid') == '$SIMULATOR_UDID':
-            print(dev.get('state', 'Unknown')); sys.exit(0)
-" 2>/dev/null)"
-    if [ "$state" = "Booted" ]; then
-        info "Simulator already booted"; return
-    fi
-    info "Booting simulator..."
-    xcrun simctl boot "$SIMULATOR_UDID" 2>/dev/null || true
+    info "Booting simulator (waiting for full boot via simctl bootstatus)..."
     open -a Simulator --args -CurrentDeviceUDID "$SIMULATOR_UDID" || true
-    local count=0
-    while [ $count -lt 60 ]; do
-        state="$(xcrun simctl list devices -j | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-for runtime, devs in d['devices'].items():
-    for dev in devs:
-        if dev.get('udid') == '$SIMULATOR_UDID':
-            print(dev.get('state', 'Unknown')); sys.exit(0)
-" 2>/dev/null)"
-        [ "$state" = "Booted" ] && { success "Booted"; return; }
-        sleep 1; count=$((count + 1))
-    done
-    error "Simulator boot timeout"; exit 1
+    if ! xcrun simctl bootstatus "$SIMULATOR_UDID" -b; then
+        error "Simulator boot timeout / failure"; exit 1
+    fi
+    success "Booted (system services ready)"
 }
 
 install_and_launch() {
