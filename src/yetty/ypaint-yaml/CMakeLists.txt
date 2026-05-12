@@ -48,11 +48,19 @@ if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID AND NOT YETTY_IOS AND NOT YETTY_TVOS AND
                 # symbols (FT_Get_BDF_Property, FT_Get_PS_Font_Info, ...)
                 # that aren't pulled by yfont_core's earlier freetype
                 # link — by the time ld scans fontconfig, libfreetype.a
-                # is already past. Use a LINK_GROUP so ld re-iterates
-                # over the two archives until references are resolved.
-                target_link_libraries(yetty_ypaint_yaml INTERFACE
-                    "$<LINK_GROUP:RESCAN,${_FC_STATIC},freetype>"
-                    ${_EXPAT_STATIC} ${_UUID_STATIC})
+                # is already past. On GNU ld a LINK_GROUP makes the
+                # linker re-iterate until references resolve; Apple ld64
+                # already does multi-pass archive scanning natively and
+                # CMake errors out if LINK_GROUP is used with it, so the
+                # wrap is gated to non-Apple.
+                if(APPLE)
+                    target_link_libraries(yetty_ypaint_yaml INTERFACE
+                        ${_FC_STATIC} freetype ${_EXPAT_STATIC} ${_UUID_STATIC})
+                else()
+                    target_link_libraries(yetty_ypaint_yaml INTERFACE
+                        "$<LINK_GROUP:RESCAN,${_FC_STATIC},freetype>"
+                        ${_EXPAT_STATIC} ${_UUID_STATIC})
+                endif()
                 # Homebrew/MacPorts fontconfig is built with NLS, so the
                 # static archive references libintl_dgettext from GNU gettext.
                 if(APPLE)
