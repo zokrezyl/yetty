@@ -83,3 +83,43 @@ void yetty_yplatform_ymutex_unlock(struct yetty_yplatform_ymutex *m)
 {
     LeaveCriticalSection(&m->cs);
 }
+
+/* Condition variable */
+
+struct yetty_yplatform_ycond {
+    CONDITION_VARIABLE cv;
+};
+
+struct yetty_yplatform_ycond *yetty_yplatform_ycond_create(void)
+{
+    struct yetty_yplatform_ycond *c = calloc(1, sizeof(*c));
+    if (!c) {
+        return NULL;
+    }
+    InitializeConditionVariable(&c->cv);
+    return c;
+}
+
+void yetty_yplatform_ycond_destroy(struct yetty_yplatform_ycond *c)
+{
+    if (!c) {
+        return;
+    }
+    /* No DeleteConditionVariable in WinAPI — just free. */
+    free(c);
+}
+
+void yetty_yplatform_ycond_wait(struct yetty_yplatform_ycond *c, struct yetty_yplatform_ymutex *m)
+{
+    SleepConditionVariableCS(&c->cv, &m->cs, INFINITE);
+}
+
+void yetty_yplatform_ycond_signal(struct yetty_yplatform_ycond *c)
+{
+    WakeConditionVariable(&c->cv);
+}
+
+void yetty_yplatform_ycond_broadcast(struct yetty_yplatform_ycond *c)
+{
+    WakeAllConditionVariable(&c->cv);
+}

@@ -257,8 +257,15 @@ int main(int argc, char **argv)
     }
     struct yetty_yplatform_pty_factory *pty_factory = pty_factory_result.value;
 
-    /* WebGPU instance */
-    WGPUInstance instance = wgpuCreateInstance(NULL);
+    /* WebGPU instance.
+     * TimedWaitAny is required by yplatform/webgpu/default.c: GPU futures
+     * are waited on with non-zero timeoutNS from worker threads, which
+     * Dawn rejects unless this feature is declared up front. */
+    WGPUInstanceFeatureName instance_features[] = {WGPUInstanceFeatureName_TimedWaitAny};
+    WGPUInstanceDescriptor instance_desc = {0};
+    instance_desc.requiredFeatureCount = 1;
+    instance_desc.requiredFeatures = instance_features;
+    WGPUInstance instance = wgpuCreateInstance(&instance_desc);
     if (!instance) {
         fprintf(stderr, "Failed to create WebGPU instance\n");
         pty_factory->ops->destroy(pty_factory);

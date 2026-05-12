@@ -276,8 +276,14 @@ static void init_yetty(struct yetty_yplatform_app_state *state)
     }
     state->pty_factory = pty_result.value;
 
-    /* WebGPU instance */
-    state->instance = wgpuCreateInstance(NULL);
+    /* WebGPU instance.
+     * TimedWaitAny is required by yplatform/webgpu/default.c — GPU futures
+     * are waited on with non-zero timeoutNS from worker threads. */
+    WGPUInstanceFeatureName instance_features[] = {WGPUInstanceFeatureName_TimedWaitAny};
+    WGPUInstanceDescriptor instance_desc = {0};
+    instance_desc.requiredFeatureCount = 1;
+    instance_desc.requiredFeatures = instance_features;
+    state->instance = wgpuCreateInstance(&instance_desc);
     if (!state->instance) {
         LOGE("Failed to create WebGPU instance");
         return;
