@@ -889,6 +889,58 @@ static void test_no_whitespace_only_fragments(void)
     yetty_ylexbor_destroy(yl);
 }
 
+/* ============================================================================
+ * Test 20 — Wikipedia-style nested inlines collapse to ONE fragment.
+ *
+ * `<a><span>[</span>12<span>]</span></a>` is exactly what MediaWiki
+ * emits for every `[N]` citation. The old per-element seg tracking
+ * (P1.2 original) split this into THREE TEXT_SPAN prims at
+ * adjacent x positions computed from our naive `font_size*0.55`
+ * per-glyph estimate. The canvas's real font advances differ — the
+ * cumulative drift across thousands of such fragments produced
+ * visible gaps within bracketed numbers, which from a small distance
+ * read as scattered descender-like glyphs ("the p, g, q garbage" the
+ * user kept reporting).
+ *
+ * Click-target-only tracking (only clickable inlines mark a seg
+ * boundary) collapses `[12]` into ONE fragment. Pin that.
+ * ============================================================================*/
+static void test_nested_inline_collapses_to_one_fragment(void)
+{
+    fprintf(stderr, "[test_nested_inline_collapses_to_one_fragment]\n");
+    /* Mimic exactly MediaWiki's citation markup. */
+    static const char html[] =
+        "<html><body><p>before "
+        "<sup class=\"reference\"><a href=\"#cite_note-1\">"
+        "<span class=\"cite-bracket\">[</span>12<span class=\"cite-bracket\">]</span>"
+        "</a></sup> after</p></body></html>";
+    struct yetty_ylexbor *yl = load(html, 1000);
+
+    int total = yetty_ylexbor_test_box_count(yl);
+    int citation_fragments = 0;
+    for (int i = 0; i < total; i++) {
+        int kind = -1;
+        char text[64];
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text,
+                                           sizeof(text)) != 0) {
+            continue;
+        }
+        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) continue;
+        /* Any inline-text fragment that contains a citation character
+		 * ([, 1, 2, ]) — count fragments that pertain to this citation. */
+        if (strchr(text, '[') || strchr(text, ']') ||
+            (strstr(text, "12") && strlen(text) <= 4)) {
+            citation_fragments++;
+        }
+    }
+    fprintf(stderr, "  fragments for `[12]`: %d (expect 1)\n", citation_fragments);
+    /* The whole `[12]` should be ONE fragment. Pre-fix this was 3. */
+    ASSERT_TRUE("Wikipedia [N] citation renders as a single fragment, not 3",
+                citation_fragments == 1);
+
+    yetty_ylexbor_destroy(yl);
+}
+
 int main(void)
 {
     fprintf(stderr, "ybrowser-inline-test\n");
@@ -912,6 +964,7 @@ int main(void)
     test_marker_separate_from_body();
     test_nbsp_collapsed_to_space();
     test_no_whitespace_only_fragments();
+    test_nested_inline_collapses_to_one_fragment();
 
     fprintf(stderr, "\nresults: %d passed, %d failed\n", g_passed, g_failures);
     return g_failures == 0 ? 0 : 1;

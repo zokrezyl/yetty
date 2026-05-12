@@ -248,14 +248,18 @@ struct yl_inline_buf {
 static bool seg_style_matches(const struct yetty_ylexbor_inline_seg *seg,
                               const struct yl_style_state *style)
 {
-    if (seg->font_weight != style->font_weight) return false;
-    if (seg->font_italic != style->font_italic) return false;
-    if (seg->underline != style->underline) return false;
-    if (seg->line_through != style->line_through) return false;
-    if (seg->overline != style->overline) return false;
-    if (seg->element != style->link_element) return false;
-    if (seg->fg.r != style->fg.r || seg->fg.g != style->fg.g ||
-        seg->fg.b != style->fg.b || seg->fg.a != style->fg.a) return false;
+    (void)seg;
+    (void)style;
+    /* Always merge — match ylexbor's behaviour of emitting ONE
+	 * TEXT_SPAN per wrapped line. Per-segment style tracking
+	 * created visible drift between fragments on the same line
+	 * (each fragment is positioned by our naive `font*0.55` per-glyph
+	 * width estimate, which doesn't match the canvas's actual font
+	 * advances — cumulative drift across many fragments per line
+	 * produced misaligned glyphs, visible as scattered descender
+	 * letters around the page). Losing per-element coloring is the
+	 * trade-off; the original ylexbor tool the user verified as
+	 * working takes the same trade-off. */
     return true;
 }
 
@@ -1550,19 +1554,45 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
                 continue;
             }
             /* Inline element: recurse, accumulating into the
-			 * parent block's inline buffer. Update s.link_element to
-			 * point at this inline element so any text directly
-			 * inside it gets stamped with `el` for click hit-testing.
-			 * If a deeper inline child opens its own seg, it
-			 * overrides; the seg-walker compares element pointers so
-			 * the deepest non-NULL wins.
+			 * parent block's inline buffer. Track the deepest
+			 * CLICKABLE inline ancestor on s.link_element so seg
+			 * boundaries don't fire on every <span>/<bdi>/<cite>
+			 * transition — only on entering / leaving an <a> /
+			 * <button> / <input> / <area> / <label> / <summary>.
 			 *
-			 * For nested inlines like <a><span>foo</span></a>, the
-			 * <span> recursion will set link_element to <span>. That's
-			 * fine — dispatch_click walks UP from `target` and fires
-			 * any listener on the chain, so <span>'s parent <a> still
-			 * receives the click. */
-            s.link_element = el;
+			 * Why this matters: P1.2 originally stamped every
+			 * inline element on the seg. With Wikipedia's ~1000
+			 * spans per article that produces ~1000 extra TEXT_SPAN
+			 * prims, each emitted at a position computed from our
+			 * naive per_glyph estimate. The canvas's real font
+			 * advances differ from that estimate by a few px per
+			 * glyph; multiplied across hundreds of fragments the
+			 * visible cumulative drift LOOKS like scattered letters
+			 * floating around words ("p, g, q garbage" complaint).
+			 *
+			 * Click hit-test still works because dispatch_click
+			 * walks UP from the box's element — and the box's
+			 * element is now the nearest clickable ancestor, which
+			 * is what the user's click would have hit anyway.
+			 * Inline non-clickable spans don't have listeners to
+			 * fire on click; losing per-span granularity costs us
+			 * nothing. */
+            switch (child->local_name) {
+            case LXB_TAG_A:
+            case LXB_TAG_AREA:
+            case LXB_TAG_BUTTON:
+            case LXB_TAG_INPUT:
+            case LXB_TAG_LABEL:
+            case LXB_TAG_SELECT:
+            case LXB_TAG_SUMMARY:
+                s.link_element = el;
+                break;
+            default:
+                /* Inherit whatever the parent's clickable ancestor
+				 * was — don't overwrite with this non-clickable
+				 * inline element. */
+                break;
+            }
             walk(r, child, &s, parent_idx, inline_collect, depth);
         }
     }
