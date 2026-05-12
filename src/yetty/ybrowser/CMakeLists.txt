@@ -68,8 +68,12 @@ else()
     message(STATUS "yetty_ybrowser: QuickJS disabled (qjs target missing)")
 endif()
 
-find_package(CURL QUIET)
-if(CURL_FOUND)
+# libcurl is wired in by the platform cmake (e.g. linux.cmake) via
+# build-tools/cmake/libs/libcurl.cmake — it creates the IMPORTED target
+# CURL::libcurl + sets CURL_FOUND in cache. find_package(CURL) re-runs
+# the system search and ignores the imported target, so use the target
+# check directly (same pattern as src/yetty/ycat/CMakeLists.txt).
+if(YETTY_ENABLE_LIB_LIBCURL AND TARGET CURL::libcurl)
     target_link_libraries(yetty_ybrowser PUBLIC CURL::libcurl)
     target_compile_definitions(yetty_ybrowser PRIVATE YETTY_HAVE_CURL=1)
     message(STATUS "yetty_ybrowser: libcurl enabled")
