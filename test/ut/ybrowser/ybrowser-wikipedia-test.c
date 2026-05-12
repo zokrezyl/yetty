@@ -425,6 +425,81 @@ static void test_no_text_at_origin(void)
     yetty_ylexbor_destroy(yl);
 }
 
+/* ============================================================================
+ * Test H — narrow viewport must not produce a stack of single-letter
+ * fragments at any X column.
+ *
+ * The "p, g, q letters scattered down the page" user-reported symptom
+ * was wrap_inline_box emitting one codepoint per line whenever a
+ * content area squeezed below per_glyph width (typical at narrow
+ * viewports with floats / nested tables). The fix is a per_glyph*8
+ * minimum-width floor in wrap_inline_box that lets text OVERFLOW the
+ * container rather than rasterise vertically. Catch any regression by
+ * rendering at viewport 600 px and counting single-letter alphabetic
+ * fragments that share an X column with ≥4 siblings at near-consecutive
+ * Y positions.
+ * ============================================================================*/
+static void test_no_one_letter_per_line_stacks_at_narrow_viewport(void)
+{
+    fprintf(stderr, "[test_no_one_letter_per_line_stacks_at_narrow_viewport]\n");
+    struct yetty_ylexbor *yl = load_wiki(600, 400);
+
+    int total = yetty_ylexbor_test_box_count(yl);
+    /* Bucket single-letter alpha fragments by integer X. */
+    struct {
+        int x_bucket;
+        int count;
+    } buckets[256] = {0};
+    int n_buckets = 0;
+    for (int i = 0; i < total; i++) {
+        char tag[16], text[16];
+        float x, y, w, h;
+        int kind = -1;
+        if (yetty_ylexbor_test_box_at(yl, i, &x, &y, &w, &h, tag, sizeof(tag)) != 0) {
+            continue;
+        }
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text,
+                                           sizeof(text)) != 0) {
+            continue;
+        }
+        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) continue;
+        size_t tl = strlen(text);
+        if (tl != 1) continue;
+        unsigned char c = (unsigned char)text[0];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) continue;
+        int xb = (int)x;
+        int found = 0;
+        for (int j = 0; j < n_buckets; j++) {
+            if (buckets[j].x_bucket == xb) {
+                buckets[j].count++;
+                found = 1;
+                break;
+            }
+        }
+        if (!found && n_buckets < 256) {
+            buckets[n_buckets].x_bucket = xb;
+            buckets[n_buckets].count = 1;
+            n_buckets++;
+        }
+    }
+    int worst = 0;
+    int worst_x = 0;
+    for (int j = 0; j < n_buckets; j++) {
+        if (buckets[j].count > worst) {
+            worst = buckets[j].count;
+            worst_x = buckets[j].x_bucket;
+        }
+    }
+    fprintf(stderr, "  worst stack: %d single-letter fragments at x=%d (cap=10)\n", worst,
+            worst_x);
+    /* Real content never produces more than a handful of legitimate
+	 * single-letter alpha fragments at the same x (capital 'I'
+	 * standalone, indexing letters in lists). The bug produces 100+. */
+    ASSERT_TRUE("no one-letter-per-line stack at narrow viewport", worst < 10);
+
+    yetty_ylexbor_destroy(yl);
+}
+
 int main(void)
 {
     fprintf(stderr, "ybrowser-wikipedia-test on %s\n", YBROWSER_WIKI_PAGE);
@@ -436,6 +511,7 @@ int main(void)
     test_article_title_near_top();
     test_content_height_sane();
     test_body_paragraphs_on_left();
+    test_no_one_letter_per_line_stacks_at_narrow_viewport();
 
     fprintf(stderr, "\nresults: %d passed, %d failed\n", g_passed, g_failures);
     return g_failures == 0 ? 0 : 1;

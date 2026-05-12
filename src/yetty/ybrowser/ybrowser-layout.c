@@ -147,6 +147,24 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
         per_glyph = 1.0f;
     }
 
+    /* Minimum content-area width for the wrap loop. If the container is
+	 * narrower than ~3 glyphs, we'd produce a stack of one-glyph-per-line
+	 * fragments — the "letters scattered down the page" symptom on
+	 * Wikipedia-rendered pages at small viewports. Real browsers
+	 * OVERFLOW the container in that case (or text becomes unreadable);
+	 * either way it's better than emitting 300 fragments of one letter
+	 * each. We clamp content_w so the wrap loop sees a sensible budget,
+	 * and let the overflowing line render past the container edge. The
+	 * float-narrowed path in layout_block has its own min handling but
+	 * deeply-nested narrow contexts (table cells inside table cells,
+	 * flex items inside flex items at narrow viewports, etc.) can still
+	 * end up here with ridiculous content_w. */
+    float wrap_w = content_w;
+    float min_wrap_w = per_glyph * 8.0f; /* roughly one short word */
+    if (wrap_w < min_wrap_w) {
+        wrap_w = min_wrap_w;
+    }
+
     float y = origin_y;
     int first_fragment_emitted = 0;
     size_t seg_hint = 0;
@@ -235,7 +253,7 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
                     break_after = 1;
                 }
             }
-            if (!zero_width && acc + per_glyph > content_w && k > cursor) {
+            if (!zero_width && acc + per_glyph > wrap_w && k > cursor) {
                 break;
             }
             if (!zero_width) {
@@ -267,13 +285,15 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
             continue;
         }
 
-        /* Total line width — used for text-align translation only. */
+        /* Total line width — used for text-align translation only.
+		 * Use wrap_w (with min-floor applied) so squeezed containers
+		 * don't produce negative offsets. */
         float line_w = yetty_ylexbor_naive_text_width(text + cursor, end - cursor, font_size);
         float line_origin_x = origin_x;
         if (text_align == 1) {
-            line_origin_x = origin_x + (content_w - line_w) * 0.5f;
+            line_origin_x = origin_x + (wrap_w - line_w) * 0.5f;
         } else if (text_align == 2) {
-            line_origin_x = origin_x + (content_w - line_w);
+            line_origin_x = origin_x + (wrap_w - line_w);
         }
         if (line_origin_x < origin_x) {
             line_origin_x = origin_x;
@@ -297,8 +317,12 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
                     space_count++;
                 }
             }
-            if (space_count > 0 && content_w > line_w) {
-                justify_word_spacing = (content_w - line_w) / (float)space_count;
+            /* Use wrap_w (with min-floor applied) for the slack
+			 * calculation — using raw content_w when the container
+			 * is squeezed below the min produces NEGATIVE slack and
+			 * would shrink lines beyond zero. */
+            if (space_count > 0 && wrap_w > line_w) {
+                justify_word_spacing = (wrap_w - line_w) / (float)space_count;
             }
         }
 
