@@ -179,11 +179,34 @@ void yetty_ylexbor_css_vars_scan(struct yetty_ylexbor *r, const char *src, size_
             break;
         }
 
-        /* Skip @-rule blocks (and their nested rules). We don't
-		 * try to evaluate @media; just descend into the body
-		 * recursively so customs in :root inside @media do
-		 * still get picked up — best-effort. */
+        /* Skip @-rule blocks. We used to descend recursively so that
+		 * :root vars inside @media still got captured — but that's
+		 * the wrong call for theme-aware sites like Wikipedia. Their
+		 * stylesheet defines a default light palette in :root then a
+		 * dark palette inside @media (prefers-color-scheme: dark). The
+		 * dark block comes LATER in source order, so last-write-wins
+		 * left us with dark-theme values (--color-base: #eaecf0, near-
+		 * white text). On a default-light terminal that means the
+		 * whole article renders in near-invisible light gray.
+		 *
+		 * We DO descend into @supports / @document / similar conditional
+		 * blocks that aren't user-preference gated. The @media rule is
+		 * the noisy one — explicitly skip it. */
         if (*p == '@') {
+            /* Identify the @-rule keyword to decide whether to
+			 * descend or skip. */
+            const char *kw_start = p + 1;
+            const char *kw_end = kw_start;
+            while (kw_end < end && ((*kw_end >= 'a' && *kw_end <= 'z') ||
+                                    (*kw_end >= 'A' && *kw_end <= 'Z') ||
+                                    *kw_end == '-')) {
+                kw_end++;
+            }
+            size_t kw_len = (size_t)(kw_end - kw_start);
+            int is_media = (kw_len == 5 && strncasecmp(kw_start, "media", 5) == 0);
+            int is_keyframes = (kw_len == 9 && strncasecmp(kw_start, "keyframes", 9) == 0);
+            int is_font_face = (kw_len == 9 && strncasecmp(kw_start, "font-face", 9) == 0);
+
             /* Find { or ; */
             while (p < end && *p != '{' && *p != ';') {
                 p++;
@@ -207,8 +230,12 @@ void yetty_ylexbor_css_vars_scan(struct yetty_ylexbor *r, const char *src, size_
                         p++;
                     }
                 }
-                /* Recurse into the @-rule body. */
-                yetty_ylexbor_css_vars_scan(r, body_start, (size_t)(p - body_start));
+                /* Skip @media / @keyframes / @font-face entirely.
+				 * Recurse into other @-rules (@supports etc.) so
+				 * :root vars defined there still get captured. */
+                if (!is_media && !is_keyframes && !is_font_face) {
+                    yetty_ylexbor_css_vars_scan(r, body_start, (size_t)(p - body_start));
+                }
                 if (p < end) {
                     p++; /* skip closing } */
                 }

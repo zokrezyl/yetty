@@ -62,10 +62,12 @@ else()
 endif()
 
 # libcurl — used by the JS WebAPI layer for fetch() / XHR / external
-# script src=. Only required when QuickJS is enabled; when missing, we
-# fall back to NULL fetches (the stubs still compile).
-find_package(CURL QUIET)
-if(CURL_FOUND)
+# script src=, and by the image cache for <img> loading. The platform
+# cmake (e.g. linux.cmake) includes build-tools/cmake/libs/libcurl.cmake
+# which creates the IMPORTED target CURL::libcurl. find_package(CURL)
+# re-runs the system search and ignores the imported target, so use the
+# target check directly (same pattern as src/yetty/ycat/CMakeLists.txt).
+if(YETTY_ENABLE_LIB_LIBCURL AND TARGET CURL::libcurl)
     target_link_libraries(yetty_ylexbor PUBLIC CURL::libcurl)
     target_compile_definitions(yetty_ylexbor PRIVATE YETTY_HAVE_CURL=1)
     message(STATUS "yetty_ylexbor: libcurl enabled")
