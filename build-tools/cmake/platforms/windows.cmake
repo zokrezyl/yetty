@@ -77,6 +77,7 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
     ${YETTY_ROOT}/src/yetty/ypty/conpty.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/windows.c
     ${YETTY_ROOT}/src/yetty/yplatform/socket/windows.c

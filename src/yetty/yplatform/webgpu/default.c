@@ -1,65 +1,57 @@
 /*
- * yplatform/shared/ywebgpu.c - Desktop wgpu await wrappers.
+ * yplatform/webgpu/default.c - Desktop wgpu await wrappers.
  *
- * ProcessEvents must be driven somewhere or Dawn never delivers buffer-map
- * callbacks. We drive it from a periodic libuv timer that fires on the loop
- * thread — the same thread that issues wgpuQueueSubmit. Same-thread use is
- * safe; an earlier version drove ProcessEvents from a dedicated poll thread
- * and Dawn's Vulkan backend crashed on the first concurrent Submit.
+ * One WGPU async call ↔ one yworkpool job. The worker thread blocks in
+ * wgpuInstanceWaitAny(instance, 1, &fwi, UINT64_MAX) until the future
+ * completes; the pool then posts done() to the loop thread, which resumes
+ * the awaiting coroutine. No ProcessEvents timer, no polling, no CPU
+ * spinning while idle.
  *
- * Callback mode is AllowSpontaneous so Dawn can also deliver callbacks from
- * its own internal threads. Either way the callback ends up calling
- * event_loop->ops->post_to_loop, which is thread-safe and routes the
- * coroutine resume back to the loop thread.
+ * Wait threads are owned by a yworkpool created in yplatform_wgpu_create.
+ * Threads are spawned lazily on first concurrent await and reused for the
+ * lifetime of the instance. Concurrent _await calls grow the pool up to
+ * its max; once at max, additional submits queue FIFO (this matches the
+ * current callers — tile-diff and screenshot serialize their awaits within
+ * one coroutine and run at most one such coroutine at a time).
+ *
+ * Requirements: the WGPU instance must have been created with the
+ * WGPUInstanceFeatureName_TimedWaitAny feature enabled. WaitAny with
+ * timeoutNS > 0 fails without it.
  */
 
 #include <yetty/yplatform/ywebgpu.h>
 #include <yetty/yplatform/ycoroutine.h>
+#include <yetty/yplatform/yworkpool.h>
 #include <yetty/yevent/event-loop.h>
-#include <yetty/yevent/event.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <webgpu/webgpu.h>
 
+#include <stdint.h>
 #include <stdlib.h>
 
-#define YWEBGPU_TICK_MS 1
+/* Pool sized for the worst case any single caller is expected to hit. The
+ * tile-diff coroutine awaits sequentially (one in flight at a time), and
+ * screenshot is also serialized. 4 leaves headroom for future concurrent
+ * use without thread explosion. */
+#define YWEBGPU_WAIT_POOL_MAX 4
 
 struct yetty_yplatform_wgpu {
     WGPUInstance instance;
     struct yetty_yevent_event_loop *loop;
-    yetty_yevent_timer_id tick_timer_id;
-    struct yetty_yevent_event_listener tick_listener;
-    /* Number of in-flight _await calls. The ProcessEvents tick only runs
-     * while this is > 0, so Dawn isn't pumped during regular rendering. */
-    int pending_awaits;
-    int tick_running;
+    struct yetty_yplatform_yworkpool *wait_pool;
 };
 
-/* Per-await context; lives on the awaiting coroutine's stack while it's
- * yielded. Carries the wgpu pointer so the callback can find the loop. */
-struct yetty_yplatform_ywgpu_await_ctx {
-    struct yetty_yplatform_coro *coro;
+/* Per-await context. Allocated by the _await wrapper, freed by done() on
+ * the loop thread after the coroutine has been resumed. */
+struct ywgpu_await_ctx {
     struct yetty_yplatform_wgpu *wgpu;
+    struct yetty_yplatform_coro *coro;
+    WGPUFuture future;
+    /* Status set by the WGPU callback while it fires from inside
+     * WaitAny on the worker thread. The coroutine reads it after resume. */
+    int callback_status;
 };
-
-/* The tick listener struct is embedded in struct yplatform_wgpu. We need to
- * recover the wgpu pointer in the handler — container_of pattern. */
-static inline struct yetty_yplatform_wgpu *wgpu_from_listener(struct yetty_yevent_event_listener *l)
-{
-    return (struct yetty_yplatform_wgpu *)((char *)l -
-                                           offsetof(struct yetty_yplatform_wgpu, tick_listener));
-}
-
-/* Runs on the loop thread every YWEBGPU_TICK_MS milliseconds. */
-static struct yetty_ycore_int_result on_wgpu_tick(struct yetty_yevent_event_listener *listener,
-                                                  const struct yetty_yui_event *event)
-{
-    (void)event;
-    struct yetty_yplatform_wgpu *wgpu = wgpu_from_listener(listener);
-    wgpuInstanceProcessEvents(wgpu->instance);
-    return YETTY_OK(yetty_ycore_int, 1);
-}
 
 struct yplatform_wgpu_ptr_result yetty_yplatform_wgpu_create(WGPUInstance instance,
                                                              struct yetty_yevent_event_loop *loop)
@@ -75,64 +67,19 @@ struct yplatform_wgpu_ptr_result yetty_yplatform_wgpu_create(WGPUInstance instan
     if (!wgpu) {
         return YETTY_ERR(yplatform_wgpu_ptr, "calloc failed");
     }
-
     wgpu->instance = instance;
     wgpu->loop = loop;
-    wgpu->tick_listener.handler = on_wgpu_tick;
 
-    struct yetty_yevent_timer_id_result tres = loop->ops->create_timer(loop);
-    if (!YETTY_IS_OK(tres)) {
+    struct yetty_yplatform_yworkpool_ptr_result pres =
+        yetty_yplatform_yworkpool_create(loop, "wgpu-wait", YWEBGPU_WAIT_POOL_MAX);
+    if (!YETTY_IS_OK(pres)) {
         free(wgpu);
-        return YETTY_ERR(yplatform_wgpu_ptr, "create_timer failed");
+        return YETTY_ERR(yplatform_wgpu_ptr, "yworkpool_create failed", pres);
     }
-    wgpu->tick_timer_id = tres.value;
+    wgpu->wait_pool = pres.value;
 
-    struct yetty_ycore_void_result vres =
-        loop->ops->config_timer(loop, wgpu->tick_timer_id, YWEBGPU_TICK_MS);
-    if (!YETTY_IS_OK(vres)) {
-        loop->ops->destroy_timer(loop, wgpu->tick_timer_id);
-        free(wgpu);
-        return YETTY_ERR(yplatform_wgpu_ptr, "config_timer failed");
-    }
-
-    vres = loop->ops->register_timer_listener(loop, wgpu->tick_timer_id, &wgpu->tick_listener);
-    if (!YETTY_IS_OK(vres)) {
-        loop->ops->destroy_timer(loop, wgpu->tick_timer_id);
-        free(wgpu);
-        return YETTY_ERR(yplatform_wgpu_ptr, "register_timer_listener failed");
-    }
-
-    /* Timer is NOT started here. It runs only while there is at least one
-     * in-flight _await, so Dawn's ProcessEvents isn't pumped during normal
-     * rendering (which broke ypaint). */
-
-    yinfo("ywebgpu: created (%dms tick, on-demand)", YWEBGPU_TICK_MS);
+    yinfo("ywebgpu: created (WaitAny pool, max=%d)", YWEBGPU_WAIT_POOL_MAX);
     return YETTY_OK(yplatform_wgpu_ptr, wgpu);
-}
-
-/* Ref-count the in-flight awaits; start/stop the ProcessEvents tick at the
- * 0→1 and 1→0 transitions. Called from the loop thread only (all awaits
- * originate in coroutines that run on the loop thread). */
-static void await_begin(struct yetty_yplatform_wgpu *wgpu)
-{
-    wgpu->pending_awaits++;
-    if (wgpu->pending_awaits == 1 && !wgpu->tick_running) {
-        wgpu->loop->ops->start_timer(wgpu->loop, wgpu->tick_timer_id);
-        wgpu->tick_running = 1;
-        ydebug("ywebgpu: tick started (pending=1)");
-    }
-}
-
-static void await_end(struct yetty_yplatform_wgpu *wgpu)
-{
-    if (wgpu->pending_awaits > 0) {
-        wgpu->pending_awaits--;
-    }
-    if (wgpu->pending_awaits == 0 && wgpu->tick_running) {
-        wgpu->loop->ops->stop_timer(wgpu->loop, wgpu->tick_timer_id);
-        wgpu->tick_running = 0;
-        ydebug("ywebgpu: tick stopped (pending=0)");
-    }
 }
 
 void yetty_yplatform_wgpu_destroy(struct yetty_yplatform_wgpu *wgpu)
@@ -140,24 +87,43 @@ void yetty_yplatform_wgpu_destroy(struct yetty_yplatform_wgpu *wgpu)
     if (!wgpu) {
         return;
     }
-    yinfo("ywebgpu: destroying (pending_awaits=%d)", wgpu->pending_awaits);
-    if (wgpu->loop && wgpu->loop->ops) {
-        if (wgpu->tick_running && wgpu->loop->ops->stop_timer) {
-            wgpu->loop->ops->stop_timer(wgpu->loop, wgpu->tick_timer_id);
-        }
-        if (wgpu->loop->ops->destroy_timer) {
-            wgpu->loop->ops->destroy_timer(wgpu->loop, wgpu->tick_timer_id);
-        }
+    yinfo("ywebgpu: destroying");
+    if (wgpu->wait_pool) {
+        yetty_yplatform_yworkpool_destroy(wgpu->wait_pool);
     }
     free(wgpu);
 }
 
-/* Runs on the loop thread (posted by the wgpu callback via post_to_loop).
- * If the coroutine ran to completion this round, destroy it — fire-and-forget
- * coroutines own themselves once they yield into the GPU pipeline. */
-static void resume_coro_on_loop(void *arg)
+/* Worker-thread body: block until the future completes. WaitAny invokes
+ * the registered callback (with WGPUCallbackMode_WaitAnyOnly mode) before
+ * returning, so by the time we get here ctx->callback_status is set. */
+static void ywgpu_wait_run(void *arg)
 {
-    struct yetty_yplatform_coro *coro = arg;
+    struct ywgpu_await_ctx *ctx = arg;
+    WGPUFutureWaitInfo fi = {0};
+    fi.future = ctx->future;
+
+    WGPUWaitStatus ws = wgpuInstanceWaitAny(ctx->wgpu->instance, 1, &fi, UINT64_MAX);
+    if (ws != WGPUWaitStatus_Success) {
+        /* Wait itself failed (timeout-with-no-feature, unsupported, etc.).
+         * The callback may not have fired; synthesize an error status so
+         * the awaiter doesn't read an uninitialised value. */
+        ywarn("ywebgpu: wgpuInstanceWaitAny failed ws=%d coro=%u", (int)ws,
+              yetty_yplatform_coro_id(ctx->coro));
+        ctx->callback_status = -1;
+    }
+}
+
+/* Loop-thread body: resume the coroutine. Mirrors the old
+ * resume_coro_on_loop — fire-and-forget coroutines own themselves once
+ * they yield into the GPU pipeline. */
+static void ywgpu_wait_done(void *arg)
+{
+    struct ywgpu_await_ctx *ctx = arg;
+    struct yetty_yplatform_coro *coro = ctx->coro;
+    yetty_yplatform_coro_set_status(coro, ctx->callback_status);
+    free(ctx);
+
     ydebug("ywebgpu: resuming coro %u", yetty_yplatform_coro_id(coro));
     yetty_yplatform_coro_resume(coro);
     if (yetty_yplatform_coro_is_finished(coro)) {
@@ -166,18 +132,14 @@ static void resume_coro_on_loop(void *arg)
     }
 }
 
-/* Fires from inside ProcessEvents on the loop thread, or — depending on
- * Dawn's internal choices — from a Dawn worker thread. Either way we route
- * through post_to_loop so resume always happens on the loop thread. */
 static void map_callback(WGPUMapAsyncStatus status, WGPUStringView msg, void *userdata1,
                          void *userdata2)
 {
     (void)userdata2;
-    struct yetty_yplatform_ywgpu_await_ctx *ctx = userdata1;
+    struct ywgpu_await_ctx *ctx = userdata1;
     ydebug("ywebgpu: map_callback status=%d coro=%u msg=\"%.*s\"", (int)status,
            yetty_yplatform_coro_id(ctx->coro), (int)msg.length, msg.data ? msg.data : "");
-    yetty_yplatform_coro_set_status(ctx->coro, (int)status);
-    ctx->wgpu->loop->ops->post_to_loop(ctx->wgpu->loop, resume_coro_on_loop, ctx->coro);
+    ctx->callback_status = (int)status;
 }
 
 struct yetty_ycore_void_result yetty_yplatform_wgpu_buffer_map_await(
@@ -192,19 +154,34 @@ struct yetty_ycore_void_result yetty_yplatform_wgpu_buffer_map_await(
         return YETTY_ERR(yetty_ycore_void, "buffer_map_await called outside coroutine");
     }
 
-    struct yetty_yplatform_ywgpu_await_ctx ctx = {.coro = self, .wgpu = wgpu};
+    struct ywgpu_await_ctx *ctx = calloc(1, sizeof(*ctx));
+    if (!ctx) {
+        return YETTY_ERR(yetty_ycore_void, "buffer_map_await: ctx alloc failed");
+    }
+    ctx->wgpu = wgpu;
+    ctx->coro = self;
 
     WGPUBufferMapCallbackInfo cb = {0};
-    cb.mode = WGPUCallbackMode_AllowSpontaneous;
+    cb.mode = WGPUCallbackMode_WaitAnyOnly;
     cb.callback = map_callback;
-    cb.userdata1 = &ctx;
+    cb.userdata1 = ctx;
 
     ydebug("ywebgpu: buffer_map_await coro=%u buffer=%p offset=%zu size=%zu",
            yetty_yplatform_coro_id(self), (void *)buffer, offset, size);
-    await_begin(wgpu);
-    wgpuBufferMapAsync(buffer, mode, offset, size, cb);
+    ctx->future = wgpuBufferMapAsync(buffer, mode, offset, size, cb);
+
+    struct yetty_yplatform_yworkpool_job job = {
+        .run = ywgpu_wait_run,
+        .done = ywgpu_wait_done,
+        .ctx = ctx,
+    };
+    struct yetty_ycore_void_result sres = yetty_yplatform_yworkpool_submit(wgpu->wait_pool, job);
+    if (!YETTY_IS_OK(sres)) {
+        free(ctx);
+        return YETTY_ERR(yetty_ycore_void, "buffer_map_await: yworkpool_submit failed", sres);
+    }
+
     yetty_yplatform_coro_yield();
-    await_end(wgpu);
 
     int status = yetty_yplatform_coro_get_status(self);
     if (status != WGPUMapAsyncStatus_Success) {
@@ -218,11 +195,10 @@ static void queue_done_callback(WGPUQueueWorkDoneStatus status, WGPUStringView m
                                 void *userdata2)
 {
     (void)userdata2;
-    struct yetty_yplatform_ywgpu_await_ctx *ctx = userdata1;
+    struct ywgpu_await_ctx *ctx = userdata1;
     ydebug("ywebgpu: queue_done_callback status=%d coro=%u msg=\"%.*s\"", (int)status,
            yetty_yplatform_coro_id(ctx->coro), (int)msg.length, msg.data ? msg.data : "");
-    yetty_yplatform_coro_set_status(ctx->coro, (int)status);
-    ctx->wgpu->loop->ops->post_to_loop(ctx->wgpu->loop, resume_coro_on_loop, ctx->coro);
+    ctx->callback_status = (int)status;
 }
 
 struct yetty_ycore_void_result yetty_yplatform_wgpu_queue_done_await(
@@ -236,19 +212,34 @@ struct yetty_ycore_void_result yetty_yplatform_wgpu_queue_done_await(
         return YETTY_ERR(yetty_ycore_void, "queue_done_await called outside coroutine");
     }
 
-    struct yetty_yplatform_ywgpu_await_ctx ctx = {.coro = self, .wgpu = wgpu};
+    struct ywgpu_await_ctx *ctx = calloc(1, sizeof(*ctx));
+    if (!ctx) {
+        return YETTY_ERR(yetty_ycore_void, "queue_done_await: ctx alloc failed");
+    }
+    ctx->wgpu = wgpu;
+    ctx->coro = self;
 
     WGPUQueueWorkDoneCallbackInfo cb = {0};
-    cb.mode = WGPUCallbackMode_AllowSpontaneous;
+    cb.mode = WGPUCallbackMode_WaitAnyOnly;
     cb.callback = queue_done_callback;
-    cb.userdata1 = &ctx;
+    cb.userdata1 = ctx;
 
     ydebug("ywebgpu: queue_done_await coro=%u queue=%p", yetty_yplatform_coro_id(self),
            (void *)queue);
-    await_begin(wgpu);
-    wgpuQueueOnSubmittedWorkDone(queue, cb);
+    ctx->future = wgpuQueueOnSubmittedWorkDone(queue, cb);
+
+    struct yetty_yplatform_yworkpool_job job = {
+        .run = ywgpu_wait_run,
+        .done = ywgpu_wait_done,
+        .ctx = ctx,
+    };
+    struct yetty_ycore_void_result sres = yetty_yplatform_yworkpool_submit(wgpu->wait_pool, job);
+    if (!YETTY_IS_OK(sres)) {
+        free(ctx);
+        return YETTY_ERR(yetty_ycore_void, "queue_done_await: yworkpool_submit failed", sres);
+    }
+
     yetty_yplatform_coro_yield();
-    await_end(wgpu);
 
     int status = yetty_yplatform_coro_get_status(self);
     if (status != WGPUQueueWorkDoneStatus_Success) {

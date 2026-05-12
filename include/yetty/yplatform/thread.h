@@ -30,6 +30,24 @@ void yetty_yplatform_ymutex_destroy(struct yetty_yplatform_ymutex *m);
 void yetty_yplatform_ymutex_lock(struct yetty_yplatform_ymutex *m);
 void yetty_yplatform_ymutex_unlock(struct yetty_yplatform_ymutex *m);
 
+/* Opaque condition variable handle */
+struct yetty_yplatform_ycond;
+
+/* Condition variable. Always used in the standard pattern:
+ *   ymutex_lock(m);
+ *   while (!predicate) ycond_wait(c, m);
+ *   ...
+ *   ymutex_unlock(m);
+ *
+ * ycond_signal wakes one waiter; ycond_broadcast wakes all. The mutex
+ * passed to ycond_wait must be held by the caller; it is released while
+ * waiting and re-acquired before returning. */
+struct yetty_yplatform_ycond *yetty_yplatform_ycond_create(void);
+void yetty_yplatform_ycond_destroy(struct yetty_yplatform_ycond *c);
+void yetty_yplatform_ycond_wait(struct yetty_yplatform_ycond *c, struct yetty_yplatform_ymutex *m);
+void yetty_yplatform_ycond_signal(struct yetty_yplatform_ycond *c);
+void yetty_yplatform_ycond_broadcast(struct yetty_yplatform_ycond *c);
+
 #ifdef __cplusplus
 }
 #endif

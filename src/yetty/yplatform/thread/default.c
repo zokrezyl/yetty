@@ -80,3 +80,43 @@ void yetty_yplatform_ymutex_unlock(struct yetty_yplatform_ymutex *m)
 {
     pthread_mutex_unlock(&m->handle);
 }
+
+/* Condition variable */
+
+struct yetty_yplatform_ycond {
+    pthread_cond_t handle;
+};
+
+struct yetty_yplatform_ycond *yetty_yplatform_ycond_create(void)
+{
+    struct yetty_yplatform_ycond *c = calloc(1, sizeof(*c));
+    if (!c) {
+        return NULL;
+    }
+    pthread_cond_init(&c->handle, NULL);
+    return c;
+}
+
+void yetty_yplatform_ycond_destroy(struct yetty_yplatform_ycond *c)
+{
+    if (!c) {
+        return;
+    }
+    pthread_cond_destroy(&c->handle);
+    free(c);
+}
+
+void yetty_yplatform_ycond_wait(struct yetty_yplatform_ycond *c, struct yetty_yplatform_ymutex *m)
+{
+    pthread_cond_wait(&c->handle, &m->handle);
+}
+
+void yetty_yplatform_ycond_signal(struct yetty_yplatform_ycond *c)
+{
+    pthread_cond_signal(&c->handle);
+}
+
+void yetty_yplatform_ycond_broadcast(struct yetty_yplatform_ycond *c)
+{
+    pthread_cond_broadcast(&c->handle);
+}

@@ -33,6 +33,7 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/socket/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
