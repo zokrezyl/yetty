@@ -94,7 +94,31 @@ set_target_properties(CURL::libcurl PROPERTIES
 # `ZLIB::ZLIB`, `brotlidec` (transitively `brotlicommon`) come from the
 # include() lines at the top — they satisfy libcurl.a's unresolved
 # zlib + brotli symbols.
-set(_LIBCURL_DEPS
+# HTTP/2 + HTTP/3 sidecars. The libcurl _build.sh stages these next to
+# libcurl.a when the platform supports QUIC (linux + macos at time of
+# writing); when absent the libcurl.a was built with HTTP/1.1 only and
+# has no unresolved nghttp*/ngtcp2 symbols.
+#
+# Order in INTERFACE_LINK_LIBRARIES is the linker scan order after
+# libcurl.a itself. Single-pass ld scans archives once, dropping
+# already-resolved symbols. Required order:
+#   libcurl.a            (forward refs into nghttp*/ngtcp2/openssl)
+#   ngtcp2_crypto_ossl   (refs SSL_set_quic_tls_* in libssl)
+#   ngtcp2 / nghttp3     (no deps on openssl)
+#   nghttp2              (no deps on openssl)
+#   libssl / libcrypto   (provides SSL_set_quic_tls_* — must be AFTER
+#                         ngtcp2_crypto_ossl, else ld drops the
+#                         SSL_set_quic_tls_* symbols before
+#                         ngtcp2_crypto_ossl asks for them)
+#   zlib / brotli
+set(_LIBCURL_DEPS)
+foreach(_QLIB libngtcp2_crypto_ossl libngtcp2 libnghttp3 libnghttp2)
+    set(_QPATH "${_LIBCURL_DIR}/lib/${_QLIB}.a")
+    if(EXISTS "${_QPATH}")
+        list(APPEND _LIBCURL_DEPS "${_QPATH}")
+    endif()
+endforeach()
+list(APPEND _LIBCURL_DEPS
     "${_OSSL_SSL}" "${_OSSL_CRYPTO}"
     ZLIB::ZLIB
     brotlidec

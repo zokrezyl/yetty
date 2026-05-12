@@ -1501,18 +1501,6 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
                 ib->kind = YL_BOX_INLINE_IMAGE;
                 ib->element = el;
 
-                /* Resolve src/srcset/data-* + decode into the
-				 * cache so layout has natural dimensions to
-				 * fall back on. yetty_ylexbor_img_pick_url
-				 * handles lazy-loading patterns where the
-				 * real URL isn't in `src`. */
-                struct yetty_ylexbor_img_cache_entry *cached = NULL;
-                char *abs = yetty_ylexbor_img_pick_url(r, el);
-                if (abs) {
-                    cached = yetty_ylexbor_img_cache_get_or_load(r, abs);
-                    free(abs);
-                }
-
                 /* HTML width/height attrs (in px) take priority
 				 * — the spec calls these the "presentation
 				 * hints"; sites use them to reserve space
@@ -1528,6 +1516,24 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
                     lxb_dom_element_get_attribute(el, (const lxb_char_t *)"height", 6, &alen);
                 if (ah && alen > 0) {
                     attr_h = atoi((const char *)ah);
+                }
+
+                /* Resolve src/srcset/data-* and pre-decode for natural
+				 * dimensions ONLY when at least one of the HTML
+				 * size attrs is missing. With both attrs present
+				 * (the Wikipedia/MediaWiki common case), layout
+				 * already has everything it needs — defer the
+				 * fetch to ybrowser-paint's parallel prefetch
+				 * pass, which fires all images in one curl_multi
+				 * batch instead of 30+ blocking easy-handle
+				 * calls in document order. */
+                struct yetty_ylexbor_img_cache_entry *cached = NULL;
+                if (attr_w <= 0 || attr_h <= 0) {
+                    char *abs = yetty_ylexbor_img_pick_url(r, el);
+                    if (abs) {
+                        cached = yetty_ylexbor_img_cache_get_or_load(r, abs);
+                        free(abs);
+                    }
                 }
 
                 int nat_w = (cached && !cached->failed) ? cached->w : 0;

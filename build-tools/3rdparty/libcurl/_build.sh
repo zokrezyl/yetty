@@ -108,6 +108,125 @@ BROTLI_DIR="$WORK_DIR/brotli-${BROTLI_VERSION}"
 
 mkdir -p "$WORK_DIR" "$OUTPUT_DIR" "$CACHE_DIR"
 
+# HTTP/2 + HTTP/3 backends — built INLINE from upstream sources (no
+# yetty 3rdparty tarballs exist for these yet). Static-linked into the
+# libcurl tarball, just like openssl/zlib/brotli. Gated on platforms
+# where QUIC genuinely works:
+#   - linux-{x86_64,aarch64,riscv64}: native UDP sockets, autotools build
+#   - macos-{x86_64,arm64}            : same
+# Other platforms (android/ios/tvos/webasm/windows) skip QUIC for now —
+# their toolchains/socket layers need per-platform work. libcurl on those
+# stays at HTTP/1.1 + HTTP/2 (the latter when nghttp2 builds there
+# eventually). HTTP/3 needs OpenSSL ≥ 3.5 for its QUIC API — openssl-new
+# 4.0+ has it via the ossl crypto backend in ngtcp2.
+NGHTTP2_VERSION="${NGHTTP2_VERSION:-1.67.1}"
+NGHTTP3_VERSION="${NGHTTP3_VERSION:-1.11.0}"
+NGTCP2_VERSION="${NGTCP2_VERSION:-1.15.0}"
+
+BUILD_QUIC=0
+case "$TARGET_PLATFORM" in
+    linux-x86_64|linux-aarch64|linux-riscv64|macos-x86_64|macos-arm64)
+        BUILD_QUIC=1
+        ;;
+esac
+
+HTTP_PREFIX="$WORK_DIR/http-deps-${TARGET_PLATFORM}"
+
+# Inline-source-fetch helper — github.com/<repo> release tarball into
+# $WORK_DIR. Same retry policy as fetch_3rdparty; keeps the source in
+# $CACHE_DIR for re-runs.
+fetch_inline_src() {
+    local _name="$1" _url="$2" _src_dir="$3"
+    local _cache="$CACHE_DIR/${_name}.tar.gz"
+    if [ ! -f "$_cache" ]; then
+        local _part="$_cache.part.$$"
+        (
+            if command -v flock >/dev/null 2>&1; then flock -x 9; fi
+            if [ ! -f "$_cache" ]; then
+                echo "==> downloading $_name"
+                curl -fL --retry 8 --retry-delay 5 --retry-all-errors \
+                    -o "$_part" "$_url"
+                mv "$_part" "$_cache"
+            fi
+        ) 9>"$CACHE_DIR/.${_name}-download.lock"
+        rm -f "$_part"
+    fi
+    if [ ! -d "$_src_dir" ]; then
+        echo "==> extracting $_name -> $_src_dir"
+        local _tmp="$WORK_DIR/.unpack-$$"
+        mkdir -p "$_tmp"
+        tar -C "$_tmp" -xzf "$_cache"
+        # tarball top-level dir is the only entry — move it to expected name
+        local _top
+        _top="$(ls -1 "$_tmp" | head -n1)"
+        mv "$_tmp/$_top" "$_src_dir"
+        rmdir "$_tmp"
+    fi
+}
+
+if [ "$BUILD_QUIC" = "1" ]; then
+    rm -rf "$HTTP_PREFIX"
+    mkdir -p "$HTTP_PREFIX"
+
+    # nghttp2 — HTTP/2 framing
+    NGHTTP2_SRC="$WORK_DIR/nghttp2-${NGHTTP2_VERSION}"
+    fetch_inline_src "nghttp2-${NGHTTP2_VERSION}" \
+        "https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VERSION}/nghttp2-${NGHTTP2_VERSION}.tar.gz" \
+        "$NGHTTP2_SRC"
+    echo "==> building nghttp2 ${NGHTTP2_VERSION}"
+    (cd "$NGHTTP2_SRC" && \
+        ./configure --prefix="$HTTP_PREFIX" \
+            --enable-static --disable-shared \
+            --enable-lib-only \
+            --without-libxml2 --without-jansson \
+            CFLAGS="-fPIC" CXXFLAGS="-fPIC" >/dev/null && \
+        make -j"$NCPU" >/dev/null && \
+        make install >/dev/null)
+
+    # nghttp3 — HTTP/3 framing over QUIC. Standalone, no openssl dep.
+    NGHTTP3_SRC="$WORK_DIR/nghttp3-${NGHTTP3_VERSION}"
+    fetch_inline_src "nghttp3-${NGHTTP3_VERSION}" \
+        "https://github.com/ngtcp2/nghttp3/releases/download/v${NGHTTP3_VERSION}/nghttp3-${NGHTTP3_VERSION}.tar.gz" \
+        "$NGHTTP3_SRC"
+    echo "==> building nghttp3 ${NGHTTP3_VERSION}"
+    (cd "$NGHTTP3_SRC" && \
+        ./configure --prefix="$HTTP_PREFIX" \
+            --enable-static --disable-shared --enable-lib-only \
+            CFLAGS="-fPIC" CXXFLAGS="-fPIC" >/dev/null && \
+        make -j"$NCPU" >/dev/null && \
+        make install >/dev/null)
+
+    # ngtcp2 — QUIC transport. Uses our openssl-new for the crypto
+    # backend (requires OpenSSL ≥ 3.5 QUIC API; openssl-new is 4.0+).
+    NGTCP2_SRC="$WORK_DIR/ngtcp2-${NGTCP2_VERSION}"
+    fetch_inline_src "ngtcp2-${NGTCP2_VERSION}" \
+        "https://github.com/ngtcp2/ngtcp2/releases/download/v${NGTCP2_VERSION}/ngtcp2-${NGTCP2_VERSION}.tar.gz" \
+        "$NGTCP2_SRC"
+    echo "==> building ngtcp2 ${NGTCP2_VERSION} (openssl QUIC backend)"
+    (cd "$NGTCP2_SRC" && \
+        PKG_CONFIG_PATH="$OSSL_DIR/lib/pkgconfig:$OSSL_DIR/lib64/pkgconfig" \
+        ./configure --prefix="$HTTP_PREFIX" \
+            --enable-static --disable-shared --enable-lib-only \
+            --with-openssl="$OSSL_DIR" \
+            CFLAGS="-fPIC -I$OSSL_DIR/include" \
+            CXXFLAGS="-fPIC -I$OSSL_DIR/include" \
+            LDFLAGS="-L$OSSL_DIR/lib -L$OSSL_DIR/lib64" \
+            OPENSSL_CFLAGS="-I$OSSL_DIR/include" \
+            OPENSSL_LIBS="-L$OSSL_DIR/lib -L$OSSL_DIR/lib64 -lssl -lcrypto" >/dev/null && \
+        make -j"$NCPU" >/dev/null && \
+        make install >/dev/null)
+
+    # Verify the .a archives we'll be feeding to libcurl + the final
+    # yetty link line actually got built.
+    for _F in "$HTTP_PREFIX/lib/libnghttp2.a" \
+              "$HTTP_PREFIX/lib/libnghttp3.a" \
+              "$HTTP_PREFIX/lib/libngtcp2.a" \
+              "$HTTP_PREFIX/lib/libngtcp2_crypto_ossl.a"; do
+        [ -f "$_F" ] || { echo "missing: $_F" >&2; exit 1; }
+    done
+fi
+
+
 # fetch_3rdparty <name> <tarball-cache-path> <url> <extract-dir>
 fetch_3rdparty() {
     local _name="$1" _cache="$2" _url="$3" _dir="$4"
@@ -240,8 +359,6 @@ CMAKE_ARGS=(
     -DCURL_DISABLE_LDAP=ON
     -DCURL_DISABLE_LDAPS=ON
     -DCURL_ZSTD=OFF
-    -DUSE_NGHTTP2=OFF
-    -DUSE_NGTCP2=OFF
     -DUSE_QUICHE=OFF
     -DUSE_LIBRTMP=OFF
     -DENABLE_UNIX_SOCKETS=OFF
@@ -249,11 +366,38 @@ CMAKE_ARGS=(
     # auto-detected nix-store deps even if upstream curl ever flips
     # one of the above to ON by default.
     -DCMAKE_DISABLE_FIND_PACKAGE_Libidn2=ON
-    -DCMAKE_DISABLE_FIND_PACKAGE_NGHTTP2=ON
     -DCMAKE_DISABLE_FIND_PACKAGE_LibPSL=ON
     -DCMAKE_DISABLE_FIND_PACKAGE_LibSSH2=ON
     -DCMAKE_DISABLE_FIND_PACKAGE_ZSTD=ON
 )
+if [ "$BUILD_QUIC" = "1" ]; then
+    # Hand curl our inline-built nghttp2 + nghttp3 + ngtcp2 (+ ossl
+    # crypto backend). Variable names track curl 8.x's
+    # FindNGHTTP2/FindNGHTTP3/FindNGTCP2 conventions.
+    CMAKE_ARGS+=(
+        -DUSE_NGHTTP2=ON
+        -DNGHTTP2_INCLUDE_DIR="$HTTP_PREFIX/include"
+        -DNGHTTP2_LIBRARY="$HTTP_PREFIX/lib/libnghttp2.a"
+
+        -DUSE_NGHTTP3=ON
+        -DNGHTTP3_INCLUDE_DIR="$HTTP_PREFIX/include"
+        -DNGHTTP3_LIBRARY="$HTTP_PREFIX/lib/libnghttp3.a"
+
+        -DUSE_NGTCP2=ON
+        -DNGTCP2_INCLUDE_DIR="$HTTP_PREFIX/include"
+        -DNGTCP2_LIBRARY="$HTTP_PREFIX/lib/libngtcp2.a"
+        -DNGTCP2_CRYPTO_OSSL_LIBRARY="$HTTP_PREFIX/lib/libngtcp2_crypto_ossl.a"
+        # Some curl versions look for the crypto backend lib under a
+        # different cache-var; set both so either matches.
+        -DNGTCP2_CRYPTO_LIBRARY="$HTTP_PREFIX/lib/libngtcp2_crypto_ossl.a"
+    )
+else
+    CMAKE_ARGS+=(
+        -DUSE_NGHTTP2=OFF
+        -DUSE_NGTCP2=OFF
+        -DCMAKE_DISABLE_FIND_PACKAGE_NGHTTP2=ON
+    )
+fi
 EMCMAKE_PREFIX=""
 
 case "$TARGET_PLATFORM" in
@@ -389,6 +533,25 @@ for _D in lib lib64; do
     fi
 done
 cp -a "$INSTALL_DIR/include" "$STAGE/"
+
+# Stage the QUIC sidecar archives next to libcurl.a — libcurl.a has
+# unresolved nghttp2/nghttp3/ngtcp2/ngtcp2_crypto_ossl symbols and the
+# consumer cmake (libs/libcurl.cmake) needs to link these in. Without
+# this the final yetty binary would fail to link with undefined refs
+# to nghttp2_session_*, ngtcp2_conn_*, nghttp3_conn_*.
+if [ "$BUILD_QUIC" = "1" ]; then
+    for _A in libnghttp2.a libnghttp3.a libngtcp2.a libngtcp2_crypto_ossl.a; do
+        cp -a "$HTTP_PREFIX/lib/$_A" "$STAGE/lib/"
+    done
+    # Headers aren't strictly needed by consumers (they don't include
+    # them directly), but shipping the include/ngtcp2 et al. is cheap
+    # and lets debug builds / introspection tools resolve symbols.
+    for _H in nghttp2 nghttp3 ngtcp2; do
+        if [ -d "$HTTP_PREFIX/include/$_H" ]; then
+            cp -a "$HTTP_PREFIX/include/$_H" "$STAGE/include/"
+        fi
+    done
+fi
 
 # Accept libcurl.a (unix/MSYS2 CLANG64) or libcurl.lib (windows native MSVC)
 _LIB_FOUND=""

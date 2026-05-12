@@ -172,6 +172,68 @@ char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status)
     return yetty_ylexbor_http_get_referer(url, NULL, out_len, out_status);
 }
 
+/* Process-wide shared connection / DNS / TLS-session cache. The image
+ * fetch loop in ybrowser-paint.c makes ~30 sequential curl_easy_init()
+ * calls to the same CDN host (upload.wikimedia.org); without a share
+ * handle each call does a fresh TCP+TLS handshake (~100ms × 30 = ~3s
+ * wasted). With the share, the second through Nth easy handle reuse
+ * the live connection from the pool, dropping the per-image cost to
+ * just the transfer time. Equivalent of Chrome's connection pool but
+ * single-threaded sequential — true parallelism would need curl_multi
+ * (deferred). Thread-safe via libcurl's CURL_LOCK_DATA_* — we add the
+ * per-data-type lock callbacks because curl can be called from the
+ * JS-worker thread for fetch()/XHR. */
+static CURLSH *g_curl_share = NULL;
+#include <pthread.h>
+static pthread_once_t g_curl_share_once = PTHREAD_ONCE_INIT;
+static pthread_mutex_t g_curl_share_locks[CURL_LOCK_DATA_LAST];
+
+static void share_lock_cb(CURL *h, curl_lock_data data, curl_lock_access access, void *ud)
+{
+    (void)h;
+    (void)access;
+    (void)ud;
+    if (data < CURL_LOCK_DATA_LAST) {
+        pthread_mutex_lock(&g_curl_share_locks[data]);
+    }
+}
+static void share_unlock_cb(CURL *h, curl_lock_data data, void *ud)
+{
+    (void)h;
+    (void)ud;
+    if (data < CURL_LOCK_DATA_LAST) {
+        pthread_mutex_unlock(&g_curl_share_locks[data]);
+    }
+}
+static void share_init_once(void)
+{
+    for (int i = 0; i < CURL_LOCK_DATA_LAST; i++) {
+        pthread_mutex_init(&g_curl_share_locks[i], NULL);
+    }
+    g_curl_share = curl_share_init();
+    if (!g_curl_share) {
+        return;
+    }
+    curl_share_setopt(g_curl_share, CURLSHOPT_LOCKFUNC, share_lock_cb);
+    curl_share_setopt(g_curl_share, CURLSHOPT_UNLOCKFUNC, share_unlock_cb);
+    /* Share the four caches that matter for sequential same-host
+	 * fetches. CONNECT is the big one — keeps the TCP+TLS connection
+	 * alive across easy handle lifetimes. DNS and SSL_SESSION are
+	 * smaller wins but free. */
+    curl_share_setopt(g_curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+    curl_share_setopt(g_curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
+#ifdef CURL_LOCK_DATA_CONNECT
+    curl_share_setopt(g_curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+#endif
+    curl_share_setopt(g_curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
+}
+
+void *yetty_ylexbor_curl_share(void)
+{
+    pthread_once(&g_curl_share_once, share_init_once);
+    return g_curl_share;
+}
+
 char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_t *out_len,
                                      long *out_status)
 {
@@ -229,10 +291,61 @@ char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_
     if (!c) {
         return NULL;
     }
+    /* Attach the process-wide share handle so this easy handle reuses
+	 * the cached TCP+TLS connection, DNS resolution, and TLS session
+	 * from previous calls. First-touch initialization is one-shot via
+	 * pthread_once. */
+    pthread_once(&g_curl_share_once, share_init_once);
+    if (g_curl_share) {
+        curl_easy_setopt(c, CURLOPT_SHARE, g_curl_share);
+    }
     struct fetch_buf b = {0};
     curl_easy_setopt(c, CURLOPT_URL, url);
     curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(c, CURLOPT_MAXREDIRS, 10L);
+
+    /* HTTP version negotiation. Letting libcurl pick (the default) gives
+	 * HTTP/2 over TLS via ALPN — fast on its own. For HTTP/3 we use the
+	 * Alt-Svc cache: servers advertise H3 via the Alt-Svc response
+	 * header on HTTP/2, libcurl persists the advert, and switches to
+	 * H3 on the NEXT request to that origin. No timeout penalty for
+	 * non-H3 hosts — unlike CURL_HTTP_VERSION_3 which forces H3 and
+	 * cannot downgrade. Alt-Svc cache file lives next to the user's
+	 * runtime dir; persists across runs so warm sessions skip the
+	 * H2-discovery round-trip. */
+#ifdef CURLOPT_ALTSVC
+    {
+        curl_version_info_data *vi = curl_version_info(CURLVERSION_NOW);
+        (void)vi;
+#ifdef CURL_VERSION_HTTP3
+        if (vi && (vi->features & CURL_VERSION_HTTP3)) {
+            /* Cache file: $XDG_CACHE_HOME/yetty/altsvc-cache or
+			 * $HOME/.cache/yetty/altsvc-cache. Created on first
+			 * advert, ignored on read failure. */
+            static char altsvc_path[1024];
+            if (altsvc_path[0] == '\0') {
+                const char *xdg = getenv("XDG_CACHE_HOME");
+                const char *home = getenv("HOME");
+                if (xdg && *xdg) {
+                    snprintf(altsvc_path, sizeof(altsvc_path),
+                             "%s/yetty/altsvc-cache", xdg);
+                } else if (home && *home) {
+                    snprintf(altsvc_path, sizeof(altsvc_path),
+                             "%s/.cache/yetty/altsvc-cache", home);
+                }
+            }
+            if (altsvc_path[0]) {
+                curl_easy_setopt(c, CURLOPT_ALTSVC, altsvc_path);
+                /* Restrict to h2→h3 and h3→h2 upgrades. */
+#ifdef CURLALTSVC_H1
+                curl_easy_setopt(c, CURLOPT_ALTSVC_CTRL,
+                                 (long)(CURLALTSVC_H1 | CURLALTSVC_H2 | CURLALTSVC_H3));
+#endif
+            }
+        }
+#endif
+    }
+#endif
     /* Send a standard Chrome User-Agent so CDNs treat us as a real
 	 * browser. Wikimedia's bot-throttling, news.google.com's image
 	 * gate, and several CloudFlare WAFs all behave very differently
@@ -297,6 +410,172 @@ char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_
     return b.data;
 }
 
+/* Configure one easy handle inside http_get_many with the same options
+ * the sequential path uses. Extracted to avoid copy-paste drift. The
+ * caller adds the curl_slist headers; we set everything else. */
+static void multi_configure_easy(CURL *c, const char *url, const char *referer,
+                                 struct fetch_buf *b, struct curl_slist *headers)
+{
+    pthread_once(&g_curl_share_once, share_init_once);
+    if (g_curl_share) {
+        curl_easy_setopt(c, CURLOPT_SHARE, g_curl_share);
+    }
+    curl_easy_setopt(c, CURLOPT_URL, url);
+    curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(c, CURLOPT_MAXREDIRS, 10L);
+    const char *ua = getenv("YETTY_USER_AGENT");
+    if (!ua || !*ua) {
+        ua = "Mozilla/5.0 (X11; Linux x86_64) "
+             "AppleWebKit/537.36 (KHTML, like Gecko) "
+             "Chrome/120.0.0.0 Safari/537.36";
+    }
+    curl_easy_setopt(c, CURLOPT_USERAGENT, ua);
+    curl_easy_setopt(c, CURLOPT_TIMEOUT, 30L);
+    curl_easy_setopt(c, CURLOPT_CONNECTTIMEOUT, 10L);
+    curl_easy_setopt(c, CURLOPT_ACCEPT_ENCODING, "");
+    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, fetch_write_cb);
+    curl_easy_setopt(c, CURLOPT_WRITEDATA, b);
+    if (referer && *referer) {
+        curl_easy_setopt(c, CURLOPT_REFERER, referer);
+    }
+    if (headers) {
+        curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
+    }
+}
+
+void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *referer,
+                                 int concurrency, char **out_bodies, size_t *out_lens,
+                                 long *out_status)
+{
+    if (n <= 0) {
+        return;
+    }
+    if (concurrency < 1) {
+        concurrency = 1;
+    }
+    if (concurrency > n) {
+        concurrency = n;
+    }
+
+    /* Build the shared header list once — same set used by the
+	 * sequential path. curl_multi shares this slist among handles. */
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(
+        headers, "Accept: image/png,image/jpeg,image/gif,image/svg+xml,image/*;q=0.5,*/*;q=0.1");
+    headers = curl_slist_append(headers, "Accept-Language: en-US,en;q=0.9");
+    headers = curl_slist_append(headers, "Sec-Fetch-Dest: image");
+    headers = curl_slist_append(headers, "Sec-Fetch-Mode: no-cors");
+    headers = curl_slist_append(headers, "Sec-Fetch-Site: cross-site");
+
+    /* Per-request scratch — one CURL*, one fetch_buf, one slot index.
+	 * Use a tag pointer (CURLOPT_PRIVATE) to recover the slot when a
+	 * handle finishes. */
+    struct slot {
+        CURL *c;
+        struct fetch_buf b;
+        int idx;
+        int started;
+        int done;
+    };
+    struct slot *slots = calloc((size_t)n, sizeof(*slots));
+    if (!slots) {
+        curl_slist_free_all(headers);
+        return;
+    }
+    for (int i = 0; i < n; i++) {
+        slots[i].idx = i;
+        out_bodies[i] = NULL;
+        out_lens[i] = 0;
+        out_status[i] = 0;
+    }
+
+    CURLM *mh = curl_multi_init();
+    if (!mh) {
+        curl_slist_free_all(headers);
+        free(slots);
+        return;
+    }
+    /* HTTP/2 multiplexing — when the server speaks H2, all in-flight
+	 * requests to the same origin share ONE TCP+TLS connection. This
+	 * is the big win vs sequential easy-handle calls. */
+    curl_multi_setopt(mh, CURLMOPT_PIPELINING, (long)CURLPIPE_MULTIPLEX);
+    curl_multi_setopt(mh, CURLMOPT_MAX_TOTAL_CONNECTIONS, (long)concurrency);
+    curl_multi_setopt(mh, CURLMOPT_MAX_HOST_CONNECTIONS, (long)concurrency);
+
+    /* Prime the first `concurrency` requests. */
+    int next_to_start = 0;
+    int running_handles = 0;
+    while (next_to_start < n && next_to_start < concurrency) {
+        struct slot *s = &slots[next_to_start];
+        s->c = curl_easy_init();
+        if (!s->c) {
+            next_to_start++;
+            continue;
+        }
+        multi_configure_easy(s->c, urls[next_to_start], referer, &s->b, headers);
+        curl_easy_setopt(s->c, CURLOPT_PRIVATE, s);
+        curl_multi_add_handle(mh, s->c);
+        s->started = 1;
+        next_to_start++;
+    }
+
+    do {
+        int numfds = 0;
+        curl_multi_perform(mh, &running_handles);
+        curl_multi_wait(mh, NULL, 0, 1000, &numfds);
+
+        /* Drain finished messages. */
+        int msgs_left = 0;
+        CURLMsg *m;
+        while ((m = curl_multi_info_read(mh, &msgs_left)) != NULL) {
+            if (m->msg != CURLMSG_DONE) {
+                continue;
+            }
+            struct slot *s = NULL;
+            curl_easy_getinfo(m->easy_handle, CURLINFO_PRIVATE, &s);
+            if (!s) {
+                continue;
+            }
+            long status = 0;
+            curl_easy_getinfo(m->easy_handle, CURLINFO_RESPONSE_CODE, &status);
+            if (m->data.result == CURLE_OK) {
+                if (s->b.data) {
+                    s->b.data[s->b.size] = 0;
+                }
+                out_bodies[s->idx] = s->b.data;
+                out_lens[s->idx] = s->b.size;
+                out_status[s->idx] = status;
+            } else {
+                free(s->b.data);
+                out_bodies[s->idx] = NULL;
+                out_lens[s->idx] = 0;
+                out_status[s->idx] = status;
+            }
+            curl_multi_remove_handle(mh, m->easy_handle);
+            curl_easy_cleanup(m->easy_handle);
+            s->c = NULL;
+            s->done = 1;
+
+            /* Start the next pending request. */
+            if (next_to_start < n) {
+                struct slot *ns = &slots[next_to_start];
+                ns->c = curl_easy_init();
+                if (ns->c) {
+                    multi_configure_easy(ns->c, urls[next_to_start], referer, &ns->b, headers);
+                    curl_easy_setopt(ns->c, CURLOPT_PRIVATE, ns);
+                    curl_multi_add_handle(mh, ns->c);
+                    ns->started = 1;
+                }
+                next_to_start++;
+            }
+        }
+    } while (running_handles > 0 || next_to_start < n);
+
+    curl_multi_cleanup(mh);
+    curl_slist_free_all(headers);
+    free(slots);
+}
+
 #else /* !YETTY_HAVE_CURL */
 
 char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status)
@@ -308,6 +587,23 @@ char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status)
     if (out_status) {
         *out_status = 0;
     }
+    return NULL;
+}
+
+void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *referer,
+                                 int concurrency, char **out_bodies, size_t *out_lens,
+                                 long *out_status)
+{
+    (void)urls; (void)referer; (void)concurrency;
+    for (int i = 0; i < n; i++) {
+        out_bodies[i] = NULL;
+        out_lens[i] = 0;
+        out_status[i] = 0;
+    }
+}
+
+void *yetty_ylexbor_curl_share(void)
+{
     return NULL;
 }
 

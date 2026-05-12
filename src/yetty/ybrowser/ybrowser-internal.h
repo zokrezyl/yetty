@@ -443,6 +443,21 @@ char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status)
 char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_t *out_len,
                                      long *out_status);
 
+/* Parallel HTTP(S) fetch — runs up to `concurrency` requests at once
+ * via curl_multi (HTTP/2 multiplexing reuses one connection per origin,
+ * cutting total wall-time vs N sequential easy-handle calls). All
+ * requests share the global referer (typically the document URL).
+ *
+ * For i in [0,n): on return, out_bodies[i] is malloc'd bytes (caller
+ * frees) or NULL on failure; out_lens[i] is the body length; out_status[i]
+ * is the HTTP status. Pre-allocate the three output arrays to length n.
+ *
+ * Used by ybrowser-paint to fetch every `<img>` URL on a page in one
+ * batch before the synchronous decode/emit loop. */
+void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *referer,
+                                 int concurrency, char **out_bodies, size_t *out_lens,
+                                 long *out_status);
+
 /* Dispatch a click event to the JS handlers attached to the element
  * whose box contains (x,y) in pane-local pixels. Returns 1 if a handler
  * fired, 0 otherwise. The handlers can mutate the DOM; the caller

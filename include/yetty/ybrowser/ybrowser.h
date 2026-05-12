@@ -96,6 +96,18 @@ struct yetty_ycore_void_result yetty_ylexbor_relayout(struct yetty_ylexbor *r);
  * Optional — if not set, only absolute URLs work. */
 struct yetty_ycore_void_result yetty_ylexbor_set_base_url(struct yetty_ylexbor *r, const char *url);
 
+/* Process-wide libcurl share handle (CURLSH*, returned as void* to keep
+ * the public header free of <curl/curl.h>). Use it from external
+ * fetchers that go through their own `curl_easy_init()` so the
+ * connection they open stays warm for subsequent yetty fetches:
+ *     curl_easy_setopt(c, CURLOPT_SHARE, yetty_ylexbor_curl_share());
+ * Without this, the page fetch in tools/ybrowser/main.c opens a TLS
+ * connection to e.g. en.wikipedia.org and immediately discards it —
+ * then load_external_stylesheets has to re-handshake to the same host
+ * for the CSS fetch (~100ms wasted). Returns NULL when libcurl isn't
+ * compiled in. */
+void *yetty_ylexbor_curl_share(void);
+
 /* Run any pending timers whose deadline has elapsed and drain Promise
  * microtasks. Returns milliseconds until the next timer fires (-1 if
  * none). The host calls this from its event loop. */
