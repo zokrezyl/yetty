@@ -130,6 +130,22 @@ case "$TARGET_PLATFORM" in
         ;;
 esac
 
+# Cross-compilation triplet — set early so both the inline autoconf deps
+# (nghttp2/nghttp3/ngtcp2) and the CMake curl build use the same prefix.
+# The :=default guards in the cmake section below are kept as user override
+# points and won't reassign once CROSS_PREFIX is already set here.
+AUTOCONF_HOST=""
+case "$TARGET_PLATFORM" in
+    linux-aarch64)
+        : "${CROSS_PREFIX:=aarch64-unknown-linux-gnu-}"
+        AUTOCONF_HOST="${CROSS_PREFIX%-}"
+        ;;
+    linux-riscv64)
+        : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
+        AUTOCONF_HOST="${CROSS_PREFIX%-}"
+        ;;
+esac
+
 HTTP_PREFIX="$WORK_DIR/http-deps-${TARGET_PLATFORM}"
 
 # Inline-source-fetch helper — github.com/<repo> release tarball into
@@ -176,6 +192,7 @@ if [ "$BUILD_QUIC" = "1" ]; then
     echo "==> building nghttp2 ${NGHTTP2_VERSION}"
     (cd "$NGHTTP2_SRC" && \
         ./configure --prefix="$HTTP_PREFIX" \
+            ${AUTOCONF_HOST:+--host="$AUTOCONF_HOST" CC="${CROSS_PREFIX}gcc" CXX="${CROSS_PREFIX}g++"} \
             --enable-static --disable-shared \
             --enable-lib-only \
             --without-libxml2 --without-jansson \
@@ -191,6 +208,7 @@ if [ "$BUILD_QUIC" = "1" ]; then
     echo "==> building nghttp3 ${NGHTTP3_VERSION}"
     (cd "$NGHTTP3_SRC" && \
         ./configure --prefix="$HTTP_PREFIX" \
+            ${AUTOCONF_HOST:+--host="$AUTOCONF_HOST" CC="${CROSS_PREFIX}gcc" CXX="${CROSS_PREFIX}g++"} \
             --enable-static --disable-shared --enable-lib-only \
             CFLAGS="-fPIC" CXXFLAGS="-fPIC" >/dev/null && \
         make -j"$NCPU" >/dev/null && \
@@ -206,6 +224,7 @@ if [ "$BUILD_QUIC" = "1" ]; then
     (cd "$NGTCP2_SRC" && \
         PKG_CONFIG_PATH="$OSSL_DIR/lib/pkgconfig:$OSSL_DIR/lib64/pkgconfig" \
         ./configure --prefix="$HTTP_PREFIX" \
+            ${AUTOCONF_HOST:+--host="$AUTOCONF_HOST" CC="${CROSS_PREFIX}gcc" CXX="${CROSS_PREFIX}g++"} \
             --enable-static --disable-shared --enable-lib-only \
             --with-openssl="$OSSL_DIR" \
             CFLAGS="-fPIC -I$OSSL_DIR/include" \
