@@ -40,6 +40,36 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
 static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin_x, float origin_y,
                              float content_w, int text_align);
 
+/* Walk the box subtree rooted at `idx` and return the largest known
+ * width of any INLINE_IMAGE descendant. Stops at YL_CELL_MEASURE_BUDGET
+ * boxes so a deep subtree doesn't blow up the cost. Returns 0 when no
+ * descendant image has a known width yet (image still loading, no
+ * width attr). The float branch above uses a one-level scan over
+ * first_child; this recursive variant is needed for `<figure><a><img></a></figure>`,
+ * the Wikipedia pattern where the image is wrapped in a link inside
+ * the figure block. */
+static float find_descendant_img_width(struct yetty_ylexbor *r, uint32_t idx, int *budget)
+{
+    if (*budget <= 0) {
+        return 0;
+    }
+    (*budget)--;
+    float best = 0;
+    for (uint32_t cidx = r->boxes.data[idx].first_child; cidx != 0;
+         cidx = r->boxes.data[cidx].next_sibling) {
+        struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
+        if (c->kind == YL_BOX_INLINE_IMAGE && c->w > 0.0f && c->w > best) {
+            best = c->w;
+        } else if (c->kind == YL_BOX_BLOCK) {
+            float sub = find_descendant_img_width(r, cidx, budget);
+            if (sub > best) {
+                best = sub;
+            }
+        }
+    }
+    return best;
+}
+
 /* ---------------------------------------------------------------------------
  * Wrap one inline-text box into one-or-more lines. Replaces the original
  * box in-place and inserts additional sibling boxes for the extra
@@ -1276,6 +1306,34 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
             } else {
                 child_w = avail;
             }
+
+            /* <figure> shrink-to-fit. Without this, a Wikipedia article
+			 * figure (block with auto width) inherits the full body
+			 * content_w (~1080 px on a desktop viewport), and its
+			 * <figcaption> child — which is also a block with auto
+			 * width — wraps at 1080 px even though the contained <img>
+			 * is only ~280 px wide. The visual result is a tall caption
+			 * line spanning almost the entire viewport, mixing
+			 * visually with adjacent body text — the user perceives
+			 * descender letters (p / q / y / g) from one row "leaking"
+			 * onto the line above. Real browsers honour
+			 * `figure { display: table }` (or the MediaWiki-supplied
+			 * `width: <px>`) to size the figure to its image; we don't
+			 * model either path reliably (libcss reports CSS_DISPLAY_TABLE
+			 * for figure but layout_block bounces it back to BLOCK to
+			 * avoid the table-row scanner), so do the shrink-to-fit
+			 * here at the geometry boundary: if the figure descendant
+			 * has a known-width <img>, clamp the figure width to that
+			 * image's natural width. */
+            if (c->element != NULL && c->element->node.local_name == LXB_TAG_FIGURE &&
+                c->css_width == 0.0f) {
+                int budget = 32;
+                float fig_img_w = find_descendant_img_width(r, cidx, &budget);
+                if (fig_img_w > 0.0f && fig_img_w < child_w) {
+                    child_w = fig_img_w;
+                }
+            }
+
             float resolved_max = c->css_max_width > 0.0f   ? c->css_max_width
                                  : c->css_max_width < 0.0f ? avail_w * (-c->css_max_width)
                                                            : 0.0f;
