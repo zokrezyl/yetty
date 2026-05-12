@@ -122,31 +122,60 @@ for _d in "$OSSL_DIR/lib/pkgconfig" "$OSSL_DIR/lib64/pkgconfig"; do
 done
 [ -n "$PKGCFG_PATH" ] || { echo "openssl-new tarball has no pkgconfig/ dir; cannot locate openssl.pc" >&2; exit 1; }
 
-echo "==> configuring ngtcp2 ${VERSION} for $TARGET_PLATFORM (openssl QUIC backend)"
-echo "    PKG_CONFIG_PATH=$PKGCFG_PATH"
-(cd "$SRC_DIR" && \
-    PKG_CONFIG_PATH="$PKGCFG_PATH" \
-    ./configure --prefix="$INSTALL_DIR" \
-        --enable-static --disable-shared \
-        --with-openssl \
-        CFLAGS="-fPIC" \
-        CXXFLAGS="-fPIC")
+if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+    # Windows MSVC via vcvarsall'd cmd shell. ngtcp2 has a CMakeLists.txt
+    # that picks the OpenSSL crypto backend via -DENABLE_OPENSSL=ON. We
+    # point CMake at the openssl-new prebuilt tarball via OPENSSL_ROOT_DIR.
+    # CMAKE_STATIC_LIBRARY_PREFIX=lib matches openssl-new's lib<name>.lib
+    # convention on Windows.
+    BUILD_DIR="$WORK_DIR/build-${TARGET_PLATFORM}"
+    rm -rf "$BUILD_DIR"
+    echo "==> configuring ngtcp2 ${VERSION} for $TARGET_PLATFORM (cmake + MSVC, openssl QUIC backend)"
+    cmake -S "$SRC_DIR" -B "$BUILD_DIR" -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DENABLE_STATIC_LIB=ON \
+        -DENABLE_SHARED_LIB=OFF \
+        -DENABLE_OPENSSL=ON \
+        -DOPENSSL_ROOT_DIR="$OSSL_DIR" \
+        -DOPENSSL_USE_STATIC_LIBS=ON \
+        -DOPENSSL_SSL_LIBRARY="$OSSL_DIR/lib/libssl.lib" \
+        -DOPENSSL_CRYPTO_LIBRARY="$OSSL_DIR/lib/libcrypto.lib" \
+        -DOPENSSL_INCLUDE_DIR="$OSSL_DIR/include" \
+        -DCMAKE_STATIC_LIBRARY_PREFIX=lib
+    cmake --build "$BUILD_DIR" -j"$NCPU"
+    cmake --install "$BUILD_DIR"
+    _LIBEXT="lib"
+else
+    echo "==> configuring ngtcp2 ${VERSION} for $TARGET_PLATFORM (openssl QUIC backend)"
+    echo "    PKG_CONFIG_PATH=$PKGCFG_PATH"
+    (cd "$SRC_DIR" && \
+        PKG_CONFIG_PATH="$PKGCFG_PATH" \
+        ./configure --prefix="$INSTALL_DIR" \
+            --enable-static --disable-shared \
+            --with-openssl \
+            CFLAGS="-fPIC" \
+            CXXFLAGS="-fPIC")
 
-echo "==> building ngtcp2"
-make -C "$SRC_DIR" -j"$NCPU"
-make -C "$SRC_DIR" install
+    echo "==> building ngtcp2"
+    make -C "$SRC_DIR" -j"$NCPU"
+    make -C "$SRC_DIR" install
+    _LIBEXT="a"
+fi
 
 mkdir -p "$STAGE/lib" "$STAGE/include"
-cp -a "$INSTALL_DIR/lib/libngtcp2.a" "$STAGE/lib/"
-cp -a "$INSTALL_DIR/lib/libngtcp2_crypto_ossl.a" "$STAGE/lib/"
+cp -a "$INSTALL_DIR/lib/libngtcp2.$_LIBEXT" "$STAGE/lib/"
+cp -a "$INSTALL_DIR/lib/libngtcp2_crypto_ossl.$_LIBEXT" "$STAGE/lib/"
 cp -a "$INSTALL_DIR/include/ngtcp2" "$STAGE/include/"
 if [ -d "$INSTALL_DIR/lib/pkgconfig" ]; then
     mkdir -p "$STAGE/lib/pkgconfig"
     cp -a "$INSTALL_DIR/lib/pkgconfig/." "$STAGE/lib/pkgconfig/"
 fi
 
-for _F in "$STAGE/lib/libngtcp2.a" \
-          "$STAGE/lib/libngtcp2_crypto_ossl.a" \
+for _F in "$STAGE/lib/libngtcp2.$_LIBEXT" \
+          "$STAGE/lib/libngtcp2_crypto_ossl.$_LIBEXT" \
           "$STAGE/include/ngtcp2/ngtcp2.h"; do
     [ -f "$_F" ] || { echo "missing: $_F" >&2; exit 1; }
 done

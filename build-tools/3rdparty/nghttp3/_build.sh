@@ -50,26 +50,46 @@ fi
 rm -rf "$INSTALL_DIR" "$STAGE"
 mkdir -p "$INSTALL_DIR" "$STAGE"
 
-echo "==> configuring nghttp3 ${VERSION} for $TARGET_PLATFORM"
-(cd "$SRC_DIR" && \
-    ./configure --prefix="$INSTALL_DIR" \
-        --enable-static --disable-shared \
-        --enable-lib-only \
-        CFLAGS="-fPIC" CXXFLAGS="-fPIC")
+if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+    # See nghttp2/_build.sh for Windows MSVC rationale.
+    BUILD_DIR="$WORK_DIR/build-${TARGET_PLATFORM}"
+    rm -rf "$BUILD_DIR"
+    echo "==> configuring nghttp3 ${VERSION} for $TARGET_PLATFORM (cmake + MSVC)"
+    cmake -S "$SRC_DIR" -B "$BUILD_DIR" -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DENABLE_LIB_ONLY=ON \
+        -DENABLE_STATIC_LIB=ON \
+        -DENABLE_SHARED_LIB=OFF \
+        -DCMAKE_STATIC_LIBRARY_PREFIX=lib
+    cmake --build "$BUILD_DIR" -j"$NCPU"
+    cmake --install "$BUILD_DIR"
+    _LIBEXT="lib"
+else
+    echo "==> configuring nghttp3 ${VERSION} for $TARGET_PLATFORM"
+    (cd "$SRC_DIR" && \
+        ./configure --prefix="$INSTALL_DIR" \
+            --enable-static --disable-shared \
+            --enable-lib-only \
+            CFLAGS="-fPIC" CXXFLAGS="-fPIC")
 
-echo "==> building nghttp3"
-make -C "$SRC_DIR" -j"$NCPU"
-make -C "$SRC_DIR" install
+    echo "==> building nghttp3"
+    make -C "$SRC_DIR" -j"$NCPU"
+    make -C "$SRC_DIR" install
+    _LIBEXT="a"
+fi
 
 mkdir -p "$STAGE/lib" "$STAGE/include"
-cp -a "$INSTALL_DIR/lib/libnghttp3.a" "$STAGE/lib/"
+cp -a "$INSTALL_DIR/lib/libnghttp3.$_LIBEXT" "$STAGE/lib/"
 cp -a "$INSTALL_DIR/include/nghttp3" "$STAGE/include/"
 if [ -d "$INSTALL_DIR/lib/pkgconfig" ]; then
     mkdir -p "$STAGE/lib/pkgconfig"
     cp -a "$INSTALL_DIR/lib/pkgconfig/." "$STAGE/lib/pkgconfig/"
 fi
 
-[ -f "$STAGE/lib/libnghttp3.a" ] || { echo "missing libnghttp3.a" >&2; exit 1; }
+[ -f "$STAGE/lib/libnghttp3.$_LIBEXT" ] || { echo "missing libnghttp3.$_LIBEXT" >&2; exit 1; }
 [ -f "$STAGE/include/nghttp3/nghttp3.h" ] || { echo "missing nghttp3.h" >&2; exit 1; }
 
 tar -C "$STAGE" -czf "$TARBALL" .

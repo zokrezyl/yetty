@@ -54,27 +54,52 @@ fi
 rm -rf "$INSTALL_DIR" "$STAGE"
 mkdir -p "$INSTALL_DIR" "$STAGE"
 
-echo "==> configuring nghttp2 ${VERSION} for $TARGET_PLATFORM"
-(cd "$SRC_DIR" && \
-    ./configure --prefix="$INSTALL_DIR" \
-        --enable-static --disable-shared \
-        --enable-lib-only \
-        --without-libxml2 --without-jansson \
-        CFLAGS="-fPIC" CXXFLAGS="-fPIC")
+if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+    # Windows MSVC via vcvarsall'd cmd shell — same pattern as
+    # libcurl/_build.sh. nghttp2 ships a CMakeLists.txt; using it avoids
+    # the libtool/autoconf-on-MSYS2 mess that doesn't ABI-match yetty's
+    # MSVC link. Output lib gets the `lib` prefix (CMAKE_STATIC_LIBRARY_-
+    # PREFIX=lib) to match the openssl-new / yetty convention of
+    # lib<name>.lib on Windows.
+    BUILD_DIR="$WORK_DIR/build-${TARGET_PLATFORM}"
+    rm -rf "$BUILD_DIR"
+    echo "==> configuring nghttp2 ${VERSION} for $TARGET_PLATFORM (cmake + MSVC)"
+    cmake -S "$SRC_DIR" -B "$BUILD_DIR" -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DENABLE_LIB_ONLY=ON \
+        -DENABLE_STATIC_LIB=ON \
+        -DENABLE_SHARED_LIB=OFF \
+        -DCMAKE_STATIC_LIBRARY_PREFIX=lib
+    cmake --build "$BUILD_DIR" -j"$NCPU"
+    cmake --install "$BUILD_DIR"
+    _LIBEXT="lib"
+else
+    echo "==> configuring nghttp2 ${VERSION} for $TARGET_PLATFORM"
+    (cd "$SRC_DIR" && \
+        ./configure --prefix="$INSTALL_DIR" \
+            --enable-static --disable-shared \
+            --enable-lib-only \
+            --without-libxml2 --without-jansson \
+            CFLAGS="-fPIC" CXXFLAGS="-fPIC")
 
-echo "==> building nghttp2"
-make -C "$SRC_DIR" -j"$NCPU"
-make -C "$SRC_DIR" install
+    echo "==> building nghttp2"
+    make -C "$SRC_DIR" -j"$NCPU"
+    make -C "$SRC_DIR" install
+    _LIBEXT="a"
+fi
 
 mkdir -p "$STAGE/lib" "$STAGE/include"
-cp -a "$INSTALL_DIR/lib/libnghttp2.a" "$STAGE/lib/"
+cp -a "$INSTALL_DIR/lib/libnghttp2.$_LIBEXT" "$STAGE/lib/"
 cp -a "$INSTALL_DIR/include/nghttp2" "$STAGE/include/"
 if [ -d "$INSTALL_DIR/lib/pkgconfig" ]; then
     mkdir -p "$STAGE/lib/pkgconfig"
     cp -a "$INSTALL_DIR/lib/pkgconfig/." "$STAGE/lib/pkgconfig/"
 fi
 
-[ -f "$STAGE/lib/libnghttp2.a" ] || { echo "missing libnghttp2.a" >&2; exit 1; }
+[ -f "$STAGE/lib/libnghttp2.$_LIBEXT" ] || { echo "missing libnghttp2.$_LIBEXT" >&2; exit 1; }
 [ -f "$STAGE/include/nghttp2/nghttp2.h" ] || { echo "missing nghttp2.h" >&2; exit 1; }
 
 tar -C "$STAGE" -czf "$TARBALL" .

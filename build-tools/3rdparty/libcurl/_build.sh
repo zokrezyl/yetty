@@ -137,10 +137,19 @@ NGTCP2_VERSION="$(tr -d '[:space:]' < "$NGTCP2_VERSION_FILE")"
 
 BUILD_QUIC=0
 case "$TARGET_PLATFORM" in
-    linux-x86_64|linux-aarch64|linux-riscv64|macos-x86_64|macos-arm64)
+    linux-x86_64|linux-aarch64|linux-riscv64|macos-x86_64|macos-arm64|windows-x86_64)
         BUILD_QUIC=1
         ;;
 esac
+
+# Static-library file extension for the prebuilt QUIC tarballs. Windows
+# MSVC uses lib<name>.lib (same convention as openssl-new on Windows);
+# unix uses lib<name>.a.
+if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+    _QLIB_EXT="lib"
+else
+    _QLIB_EXT="a"
+fi
 
 HTTP_PREFIX="$WORK_DIR/http-deps-${TARGET_PLATFORM}"
 
@@ -210,10 +219,10 @@ if [ "$BUILD_QUIC" = "1" ]; then
     _fetch_quic nghttp2 "$NGHTTP2_VERSION"
     _fetch_quic nghttp3 "$NGHTTP3_VERSION"
     _fetch_quic ngtcp2  "$NGTCP2_VERSION"
-    for _F in "$HTTP_PREFIX/lib/libnghttp2.a" \
-              "$HTTP_PREFIX/lib/libnghttp3.a" \
-              "$HTTP_PREFIX/lib/libngtcp2.a" \
-              "$HTTP_PREFIX/lib/libngtcp2_crypto_ossl.a"; do
+    for _F in "$HTTP_PREFIX/lib/libnghttp2.$_QLIB_EXT" \
+              "$HTTP_PREFIX/lib/libnghttp3.$_QLIB_EXT" \
+              "$HTTP_PREFIX/lib/libngtcp2.$_QLIB_EXT" \
+              "$HTTP_PREFIX/lib/libngtcp2_crypto_ossl.$_QLIB_EXT"; do
         [ -f "$_F" ] || { echo "missing: $_F" >&2; exit 1; }
     done
 fi
@@ -337,19 +346,19 @@ if [ "$BUILD_QUIC" = "1" ]; then
     CMAKE_ARGS+=(
         -DUSE_NGHTTP2=ON
         -DNGHTTP2_INCLUDE_DIR="$HTTP_PREFIX/include"
-        -DNGHTTP2_LIBRARY="$HTTP_PREFIX/lib/libnghttp2.a"
+        -DNGHTTP2_LIBRARY="$HTTP_PREFIX/lib/libnghttp2.$_QLIB_EXT"
 
         -DUSE_NGHTTP3=ON
         -DNGHTTP3_INCLUDE_DIR="$HTTP_PREFIX/include"
-        -DNGHTTP3_LIBRARY="$HTTP_PREFIX/lib/libnghttp3.a"
+        -DNGHTTP3_LIBRARY="$HTTP_PREFIX/lib/libnghttp3.$_QLIB_EXT"
 
         -DUSE_NGTCP2=ON
         -DNGTCP2_INCLUDE_DIR="$HTTP_PREFIX/include"
-        -DNGTCP2_LIBRARY="$HTTP_PREFIX/lib/libngtcp2.a"
-        -DNGTCP2_CRYPTO_OSSL_LIBRARY="$HTTP_PREFIX/lib/libngtcp2_crypto_ossl.a"
+        -DNGTCP2_LIBRARY="$HTTP_PREFIX/lib/libngtcp2.$_QLIB_EXT"
+        -DNGTCP2_CRYPTO_OSSL_LIBRARY="$HTTP_PREFIX/lib/libngtcp2_crypto_ossl.$_QLIB_EXT"
         # Some curl versions look for the crypto backend lib under a
         # different cache-var; set both so either matches.
-        -DNGTCP2_CRYPTO_LIBRARY="$HTTP_PREFIX/lib/libngtcp2_crypto_ossl.a"
+        -DNGTCP2_CRYPTO_LIBRARY="$HTTP_PREFIX/lib/libngtcp2_crypto_ossl.$_QLIB_EXT"
     )
 else
     CMAKE_ARGS+=(
@@ -504,8 +513,8 @@ cp -a "$INSTALL_DIR/include" "$STAGE/"
 # this the final yetty binary would fail to link with undefined refs
 # to nghttp2_session_*, ngtcp2_conn_*, nghttp3_conn_*.
 if [ "$BUILD_QUIC" = "1" ]; then
-    for _A in libnghttp2.a libnghttp3.a libngtcp2.a libngtcp2_crypto_ossl.a; do
-        cp -a "$HTTP_PREFIX/lib/$_A" "$STAGE/lib/"
+    for _N in libnghttp2 libnghttp3 libngtcp2 libngtcp2_crypto_ossl; do
+        cp -a "$HTTP_PREFIX/lib/${_N}.${_QLIB_EXT}" "$STAGE/lib/"
     done
     # Headers aren't strictly needed by consumers (they don't include
     # them directly), but shipping the include/ngtcp2 et al. is cheap

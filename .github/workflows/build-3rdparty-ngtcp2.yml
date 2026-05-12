@@ -133,3 +133,23 @@ jobs:
           tag_name: ${{ needs.resolve.outputs.tag }}
           files: out/ngtcp2-macos-x86_64-*.tar.gz
           fail_on_unmatched_files: true
+
+  build-windows:
+    needs: resolve
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ngtcp2 for windows-x86_64
+        shell: cmd
+        env:
+          TARGET_PLATFORM: windows-x86_64
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          if errorlevel 1 exit /b 1
+          mkdir out 2>/dev/null
+          bash -c "OUTPUT_DIR=\"$(pwd)/out\" ./build-tools/3rdparty/ngtcp2/build.sh"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/ngtcp2-windows-x86_64-*.tar.gz
+          fail_on_unmatched_files: true
