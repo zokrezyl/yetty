@@ -105,4 +105,18 @@ int yetty_ybrowser_libcss_text_align(const css_computed_style *style);
 /* Flex direction: returns CSS_FLEX_DIRECTION_* (ROW/COLUMN/...). */
 int yetty_ybrowser_libcss_flex_direction(const css_computed_style *style);
 
+/* Flex item / container properties. */
+int yetty_ybrowser_libcss_flex_grow(const css_computed_style *style, float *out);
+/* Returns 1 + writes *out_px if basis is a length; out_auto=true if basis
+ * is `auto` (or `content` — we collapse them). 0 = not set / inherit. */
+int yetty_ybrowser_libcss_flex_basis(struct yetty_ylexbor *r, const css_computed_style *style,
+                                     float font_size, float pct_basis, float *out_px,
+                                     bool *out_auto);
+int yetty_ybrowser_libcss_justify_content(const css_computed_style *style);
+int yetty_ybrowser_libcss_align_items(const css_computed_style *style);
+
+/* Float / clear. Returns the CSS_FLOAT_* / CSS_CLEAR_* enum. */
+int yetty_ybrowser_libcss_float(const css_computed_style *style);
+int yetty_ybrowser_libcss_clear(const css_computed_style *style);
+
 #endif

@@ -974,6 +974,14 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
             if (r->libcss) {
                 css_computed_style *cs = yetty_ybrowser_libcss_select(
                     r, el, (const char *)istyle, istyle ? istylen : 0);
+                /* Re-fetch box pointer — yetty_ybrowser_libcss_select runs
+                 * arbitrary callbacks; even though they don't touch our
+                 * vector today, the compiler can otherwise lift the
+                 * earlier `b = &r->boxes.data[bidx]` past stores done by
+                 * later property writes, producing 0 for css_width et al.
+                 * Refetch defensively so all subsequent reads/writes go
+                 * through the live base pointer. */
+                b = &r->boxes.data[bidx];
                 if (cs) {
                     struct yetty_ylexbor_color cc;
                     int weight;
@@ -1071,12 +1079,47 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
                                           fd == CSS_FLEX_DIRECTION_COLUMN_REVERSE)
                                              ? YL_LAYOUT_FLEX_COLUMN
                                              : YL_LAYOUT_FLEX_ROW;
+                        b->justify_content = yetty_ybrowser_libcss_justify_content(cs);
+                        b->align_items = yetty_ybrowser_libcss_align_items(cs);
                     } else if (disp == CSS_DISPLAY_TABLE ||
                                disp == CSS_DISPLAY_INLINE_TABLE) {
                         b->layout_mode = YL_LAYOUT_TABLE;
                     } else if (disp == CSS_DISPLAY_BLOCK || disp == CSS_DISPLAY_INLINE_BLOCK ||
                                disp == CSS_DISPLAY_LIST_ITEM) {
                         b->layout_mode = YL_LAYOUT_BLOCK;
+                    }
+                    /* Flex-item properties — always read so a block
+				 * inside a flex parent gets sized correctly. The
+				 * parent's layout_mode will gate whether they're
+				 * consumed. */
+                    float fg = 0;
+                    if (yetty_ybrowser_libcss_flex_grow(cs, &fg)) {
+                        b->flex_grow = fg;
+                    }
+                    float fb_px = 0;
+                    bool fb_auto = false;
+                    if (yetty_ybrowser_libcss_flex_basis(r, cs, s.font_size, pct_basis, &fb_px,
+                                                         &fb_auto)) {
+                        b->flex_basis_px = fb_auto ? -1.0f : fb_px;
+                    } else {
+                        b->flex_basis_px = -1.0f;
+                    }
+                    /* Float + clear. The layout pass removes floated
+				 * boxes from normal flow and rewinds the available
+				 * content width for siblings that overlap. */
+                    int fv = yetty_ybrowser_libcss_float(cs);
+                    if (fv == CSS_FLOAT_LEFT) {
+                        b->float_side = 1;
+                    } else if (fv == CSS_FLOAT_RIGHT) {
+                        b->float_side = 2;
+                    }
+                    int clr = yetty_ybrowser_libcss_clear(cs);
+                    if (clr == CSS_CLEAR_LEFT) {
+                        b->clear_side = 1;
+                    } else if (clr == CSS_CLEAR_RIGHT) {
+                        b->clear_side = 2;
+                    } else if (clr == CSS_CLEAR_BOTH) {
+                        b->clear_side = 3;
                     }
                     /* Don't carry currentColor border in further. */
                     yetty_ybrowser_libcss_release(cs);

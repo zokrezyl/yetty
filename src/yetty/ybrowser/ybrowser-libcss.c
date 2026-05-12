@@ -1023,13 +1023,27 @@ static int len_property(uint8_t kind, css_fixed length, css_unit unit, int set_v
     return 1;
 }
 
+/* NB: each of these bridge functions used to be written as
+ *
+ *   return len_property(css_computed_width(style, &l, &u), l, u, ...);
+ *
+ * which is undefined behaviour — C's argument-evaluation order is
+ * unsequenced, so the compiler is free to load `l`/`u` BEFORE
+ * css_computed_width writes them. We hit this in practice (gcc 12
+ * with -O2 inlining the bridge): width values came back as zero for
+ * .float boxes, but materialised correctly the moment any extra
+ * function call sat between the write and the read.
+ *
+ * The fix is a real sequence point: bind the call's return value to
+ * a local before passing l and u as arguments. Do NOT collapse these
+ * back into one expression. */
 int yetty_ybrowser_libcss_width(struct yetty_ylexbor *r, const css_computed_style *style,
                                 float font_size, float pct_basis, float *out_px)
 {
     if (!style) return 0;
     css_fixed l = 0; css_unit u = CSS_UNIT_PX;
-    return len_property(css_computed_width(style, &l, &u), l, u, CSS_WIDTH_SET, r, style,
-                        font_size, pct_basis, out_px);
+    uint8_t k = css_computed_width(style, &l, &u);
+    return len_property(k, l, u, CSS_WIDTH_SET, r, style, font_size, pct_basis, out_px);
 }
 
 int yetty_ybrowser_libcss_height(struct yetty_ylexbor *r, const css_computed_style *style,
@@ -1037,8 +1051,8 @@ int yetty_ybrowser_libcss_height(struct yetty_ylexbor *r, const css_computed_sty
 {
     if (!style) return 0;
     css_fixed l = 0; css_unit u = CSS_UNIT_PX;
-    return len_property(css_computed_height(style, &l, &u), l, u, CSS_HEIGHT_SET, r, style,
-                        font_size, pct_basis, out_px);
+    uint8_t k = css_computed_height(style, &l, &u);
+    return len_property(k, l, u, CSS_HEIGHT_SET, r, style, font_size, pct_basis, out_px);
 }
 
 int yetty_ybrowser_libcss_max_width(struct yetty_ylexbor *r, const css_computed_style *style,
@@ -1046,8 +1060,8 @@ int yetty_ybrowser_libcss_max_width(struct yetty_ylexbor *r, const css_computed_
 {
     if (!style) return 0;
     css_fixed l = 0; css_unit u = CSS_UNIT_PX;
-    return len_property(css_computed_max_width(style, &l, &u), l, u, CSS_MAX_WIDTH_SET, r,
-                        style, font_size, pct_basis, out_px);
+    uint8_t k = css_computed_max_width(style, &l, &u);
+    return len_property(k, l, u, CSS_MAX_WIDTH_SET, r, style, font_size, pct_basis, out_px);
 }
 
 int yetty_ybrowser_libcss_min_width(struct yetty_ylexbor *r, const css_computed_style *style,
@@ -1055,8 +1069,8 @@ int yetty_ybrowser_libcss_min_width(struct yetty_ylexbor *r, const css_computed_
 {
     if (!style) return 0;
     css_fixed l = 0; css_unit u = CSS_UNIT_PX;
-    return len_property(css_computed_min_width(style, &l, &u), l, u, CSS_MIN_WIDTH_SET, r,
-                        style, font_size, pct_basis, out_px);
+    uint8_t k = css_computed_min_width(style, &l, &u);
+    return len_property(k, l, u, CSS_MIN_WIDTH_SET, r, style, font_size, pct_basis, out_px);
 }
 
 int yetty_ybrowser_libcss_margin(struct yetty_ylexbor *r, const css_computed_style *style,
@@ -1246,4 +1260,59 @@ int yetty_ybrowser_libcss_flex_direction(const css_computed_style *style)
 {
     if (!style) return CSS_FLEX_DIRECTION_ROW;
     return css_computed_flex_direction(style);
+}
+
+int yetty_ybrowser_libcss_flex_grow(const css_computed_style *style, float *out)
+{
+    if (!style || !out) return 0;
+    css_fixed n = 0;
+    uint8_t kind = css_computed_flex_grow(style, &n);
+    if (kind == CSS_FLEX_GROW_SET) {
+        *out = fixed_to_float(n);
+        return 1;
+    }
+    return 0;
+}
+
+int yetty_ybrowser_libcss_flex_basis(struct yetty_ylexbor *r, const css_computed_style *style,
+                                     float font_size, float pct_basis, float *out_px,
+                                     bool *out_auto)
+{
+    if (!style) return 0;
+    if (out_auto) *out_auto = false;
+    css_fixed l = 0; css_unit u = CSS_UNIT_PX;
+    uint8_t kind = css_computed_flex_basis(style, &l, &u);
+    if (kind == CSS_FLEX_BASIS_AUTO || kind == CSS_FLEX_BASIS_CONTENT) {
+        if (out_auto) *out_auto = true;
+        return 1;
+    }
+    if (kind == CSS_FLEX_BASIS_SET) {
+        *out_px = resolve_length_to_px(r, style, l, u, font_size, pct_basis);
+        return 1;
+    }
+    return 0;
+}
+
+int yetty_ybrowser_libcss_justify_content(const css_computed_style *style)
+{
+    if (!style) return CSS_JUSTIFY_CONTENT_FLEX_START;
+    return css_computed_justify_content(style);
+}
+
+int yetty_ybrowser_libcss_align_items(const css_computed_style *style)
+{
+    if (!style) return CSS_ALIGN_ITEMS_STRETCH;
+    return css_computed_align_items(style);
+}
+
+int yetty_ybrowser_libcss_float(const css_computed_style *style)
+{
+    if (!style) return CSS_FLOAT_NONE;
+    return css_computed_float(style);
+}
+
+int yetty_ybrowser_libcss_clear(const css_computed_style *style)
+{
+    if (!style) return CSS_CLEAR_NONE;
+    return css_computed_clear(style);
 }
