@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Mirrors build-tools/ios-tvos/ios/yetty/Info.plist (stamped into
+	     yetty.app by CMake) one-for-one — yetty.app launches cleanly on
+	     the iOS Simulator, so we adopt the same minimal key set here.
+	     Extras (UIBackgroundModes=audio, UIDeviceFamily, MinimumOSVersion,
+	     UILaunchScreen) were removed because empirically they make
+	     SpringBoard crash during launch (FBSOpenApplicationServiceErrorDomain
+	     code=5 / XPC error received on message reply handler) when used
+	     with an ad-hoc-signed hand-assembled bundle. -->
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>UIStatusBarHidden</key>
+	<true/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
+	<!-- On a real iOS device, declaring UIBackgroundModes=audio with a
+	     silent-audio AVAudioEngine (tvos-main.m's yq_keep_alive_with_silent_audio())
+	     keeps the process scheduled while yetty.app is foreground. In the
+	     Simulator that path empirically hangs / crashes the app silently
+	     during didFinishLaunching — and the sim doesn't actually suspend
+	     background apps the way a phone does, so the keep-alive isn't
+	     needed here. The audio function inside tvos-main.m fails fast on
+	     setActive: when this key is absent and the code falls through to
+	     the qemu thread spawn. Add this key back for the device build. -->
+</dict>
+</plist>

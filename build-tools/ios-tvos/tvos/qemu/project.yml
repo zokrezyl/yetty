@@ -1,8 +1,11 @@
 # YettyQemu — the qemu-as-tvOS-app build.
 #
-#   tvos-main.m   — UIKit harness (owns main(), wires socketpair → UITextView,
-#                    launches qemu_main on a worker). Same file the qemu
-#                    build script copies into qemu's source tree.
+#   tvos.m        — tvOS UIKit harness (owns main(), wires socketpair → UITextView,
+#                    launches qemu_main on a worker). Sibling of
+#                    ios/qemu/ios-main.m; build-tools/3rdparty/qemu/_build.sh
+#                    picks the right source per TARGET_PLATFORM and copies
+#                    it into qemu's source tree as system/tvos-main.m
+#                    (the filename hard-coded in patches/0005).
 #   Info.plist    — bundle metadata (com.yetty.qemu).
 #   project.yml   — this file; xcodegen turns it into YettyQemu.xcodeproj.
 #
@@ -11,7 +14,7 @@
 # UserData/Provisioning Profiles/. Driven by build-tools/ios-tvos/refresh-profiles.sh.
 #
 # The actual qemu binary is produced by build-tools/3rdparty/qemu/_build.sh
-# (which sources tvos-main.m back from this directory). The codesign step
+# (which sources tvos.m back from this directory). The codesign step
 # splices the downloaded mobileprovision into the real YettyQemu.app and
 # signs it. xcodebuild's link of the stub here may fail on unresolved
 # qemu_main / yetty_qemu_main — provisioning runs during preflight, well
@@ -39,7 +42,7 @@ targets:
     type: application
     platform: tvOS
     sources:
-      - tvos-main.m
+      - tvos.m
     settings:
       base:
         PRODUCT_NAME: YettyQemu

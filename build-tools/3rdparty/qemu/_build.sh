@@ -691,10 +691,15 @@ ZLIB_PC_EOF
     export PKG_CONFIG="$SYSROOT/bin/sysroot-pkg-config"
 
     # ------------------------------------------------------------------
-    # Drop the iOS / tvOS UIKit harness (canonical copy lives at
-    # build-tools/ios-tvos/yetty-qemu/tvos-main.m — same file driven
-    # through xcodegen for provisioning) and apply the qemu source
-    # patches from build-tools/3rdparty/qemu/patches/.
+    # Drop the iOS / tvOS UIKit harness. The two platforms have separate
+    # sources that diverge (audio keep-alive on device, tvOS specifics,
+    # etc.):
+    #   build-tools/ios-tvos/tvos/qemu/tvos.m       — tvOS builds
+    #   build-tools/ios-tvos/ios/qemu/ios-main.m    — iOS builds
+    # Both are dropped into qemu's source tree as system/tvos-main.m so
+    # patches/0005 (which hard-codes that filename) resolves either way.
+    # Then apply the qemu source patches from
+    # build-tools/3rdparty/qemu/patches/.
     # The patches:
     #   0001 — system/main.c: rename main → yetty_qemu_main
     #   0002 — include/qemu/osdep.h: gate pthread_jit_write_protect_np
@@ -704,7 +709,18 @@ ZLIB_PC_EOF
     # `patch -p1 -N --silent` is idempotent (re-applying = no-op exit 1
     # which we ignore via `|| true`).
     # ------------------------------------------------------------------
-    _TVOS_MAIN_SRC="$REPO_ROOT/build-tools/ios-tvos/yetty-qemu/tvos-main.m"
+    case "$TARGET_PLATFORM" in
+        ios-arm64|ios-x86_64)
+            _TVOS_MAIN_SRC="$REPO_ROOT/build-tools/ios-tvos/ios/qemu/ios-main.m"
+            ;;
+        tvos-arm64|tvos-x86_64)
+            _TVOS_MAIN_SRC="$REPO_ROOT/build-tools/ios-tvos/tvos/qemu/tvos.m"
+            ;;
+        *)
+            echo "unexpected TARGET_PLATFORM '$TARGET_PLATFORM' in tvos-main resolver" >&2
+            exit 1
+            ;;
+    esac
     [ -f "$_TVOS_MAIN_SRC" ] || { echo "missing $_TVOS_MAIN_SRC" >&2; exit 1; }
     cp "$_TVOS_MAIN_SRC" "$SRC_DIR/system/tvos-main.m"
     for _patch in "$SCRIPT_DIR"/patches/*.patch; do
