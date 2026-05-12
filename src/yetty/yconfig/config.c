@@ -49,6 +49,7 @@ static struct config_subnode g_subconfigs[MAX_SUBCONFIGS];
 static int g_subconfig_count = 0;
 
 /* Forward declarations */
+static int load_yaml_file_with_dir(struct config_node *root, const char *path, const char *dir);
 static void config_destroy(struct yetty_yconfig_config *self);
 static const char *config_get_string(const struct yetty_yconfig_config *self, const char *path,
                                      const char *default_value);
@@ -261,14 +262,56 @@ static void node_set_value(struct config_node *parent, const char *key, const ch
 
 /* YAML loading */
 
-static void load_yaml_mapping(struct yaml_parser_s *parser, struct config_node *node);
+static void load_yaml_mapping(struct yaml_parser_s *parser, struct config_node *node,
+                              const char *dir);
+
+static void import_config_file(struct config_node *node, const char *filename, const char *dir)
+{
+    char path[1024];
+    if (!filename || !filename[0])
+        return;
+    if (filename[0] == '/') {
+        snprintf(path, sizeof(path), "%s", filename);
+    } else {
+        snprintf(path, sizeof(path), "%s/%s", dir && dir[0] ? dir : ".", filename);
+    }
+    char import_dir[1024];
+    strncpy(import_dir, path, sizeof(import_dir) - 1);
+    import_dir[sizeof(import_dir) - 1] = '\0';
+    char *slash = strrchr(import_dir, '/');
+    if (slash)
+        *slash = '\0';
+    else
+        snprintf(import_dir, sizeof(import_dir), ".");
+    load_yaml_file_with_dir(node, path, import_dir);
+}
 
 static void load_yaml_value(struct yaml_parser_s *parser, struct config_node *parent,
-                            const char *key)
+                            const char *key, const char *dir)
 {
     yaml_event_t event;
 
-    if (!yaml_parser_parse(parser, &event)) {
+    if (!yaml_parser_parse(parser, &event))
+        return;
+
+    if (strcmp(key, "import") == 0) {
+        if (event.type == YAML_SCALAR_EVENT) {
+            import_config_file(parent, (const char *)event.data.scalar.value, dir);
+            yaml_event_delete(&event);
+        } else if (event.type == YAML_SEQUENCE_START_EVENT) {
+            yaml_event_delete(&event);
+            while (yaml_parser_parse(parser, &event)) {
+                if (event.type == YAML_SEQUENCE_END_EVENT) {
+                    yaml_event_delete(&event);
+                    break;
+                }
+                if (event.type == YAML_SCALAR_EVENT)
+                    import_config_file(parent, (const char *)event.data.scalar.value, dir);
+                yaml_event_delete(&event);
+            }
+        } else {
+            yaml_event_delete(&event);
+        }
         return;
     }
 
@@ -278,19 +321,17 @@ static void load_yaml_value(struct yaml_parser_s *parser, struct config_node *pa
     } else if (event.type == YAML_MAPPING_START_EVENT) {
         yaml_event_delete(&event);
         struct config_node *child = node_get_or_create_child(parent, key);
-        if (child) {
-            load_yaml_mapping(parser, child);
-        }
+        if (child)
+            load_yaml_mapping(parser, child, dir);
     } else if (event.type == YAML_SEQUENCE_START_EVENT) {
         /* Skip sequences for now */
         yaml_event_delete(&event);
         int depth = 1;
         while (depth > 0 && yaml_parser_parse(parser, &event)) {
-            if (event.type == YAML_SEQUENCE_START_EVENT) {
+            if (event.type == YAML_SEQUENCE_START_EVENT)
                 depth++;
-            } else if (event.type == YAML_SEQUENCE_END_EVENT) {
+            else if (event.type == YAML_SEQUENCE_END_EVENT)
                 depth--;
-            }
             yaml_event_delete(&event);
         }
     } else {
@@ -298,7 +339,8 @@ static void load_yaml_value(struct yaml_parser_s *parser, struct config_node *pa
     }
 }
 
-static void load_yaml_mapping(struct yaml_parser_s *parser, struct config_node *node)
+static void load_yaml_mapping(struct yaml_parser_s *parser, struct config_node *node,
+                              const char *dir)
 {
     yaml_event_t event;
     char key[MAX_KEY_LEN] = {0};
@@ -312,19 +354,18 @@ static void load_yaml_mapping(struct yaml_parser_s *parser, struct config_node *
         if (event.type == YAML_SCALAR_EVENT) {
             strncpy(key, (const char *)event.data.scalar.value, MAX_KEY_LEN - 1);
             yaml_event_delete(&event);
-            load_yaml_value(parser, node, key);
+            load_yaml_value(parser, node, key, dir);
         } else {
             yaml_event_delete(&event);
         }
     }
 }
 
-static int load_yaml_file(struct config_node *root, const char *path)
+static int load_yaml_file_with_dir(struct config_node *root, const char *path, const char *dir)
 {
     FILE *file = fopen(path, "r");
-    if (!file) {
+    if (!file)
         return 0;
-    }
 
     struct yaml_parser_s parser;
     if (!yaml_parser_initialize(&parser)) {
@@ -338,18 +379,30 @@ static int load_yaml_file(struct config_node *root, const char *path)
     while (yaml_parser_parse(&parser, &event)) {
         if (event.type == YAML_MAPPING_START_EVENT) {
             yaml_event_delete(&event);
-            load_yaml_mapping(&parser, root);
+            load_yaml_mapping(&parser, root, dir);
             break;
         }
         yaml_event_delete(&event);
-        if (event.type == YAML_STREAM_END_EVENT) {
+        if (event.type == YAML_STREAM_END_EVENT)
             break;
-        }
     }
 
     yaml_parser_delete(&parser);
     fclose(file);
     return 1;
+}
+
+static int load_yaml_file(struct config_node *root, const char *path)
+{
+    char dir[1024];
+    strncpy(dir, path, sizeof(dir) - 1);
+    dir[sizeof(dir) - 1] = '\0';
+    char *slash = strrchr(dir, '/');
+    if (slash)
+        *slash = '\0';
+    else
+        snprintf(dir, sizeof(dir), ".");
+    return load_yaml_file_with_dir(root, path, dir);
 }
 
 /* Config ops implementation */

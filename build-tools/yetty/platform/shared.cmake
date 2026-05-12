@@ -563,6 +563,10 @@ function(yetty_embed_assets TARGET)
     get_filename_component(CONFIG_FILENAME "${DEFAULT_CONFIG_FILE}" NAME)
     # Rename to config.yaml when extracted
     file(RENAME "${EMBED_CONFIG_DIR}/${CONFIG_FILENAME}" "${EMBED_CONFIG_DIR}/config.yaml")
+    # Always embed config-defaults.yaml as defaults.yaml so config.yaml can import it
+    file(COPY "${YETTY_ROOT}/build-tools/yetty/platform/config-defaults.yaml"
+         DESTINATION "${EMBED_CONFIG_DIR}")
+    file(RENAME "${EMBED_CONFIG_DIR}/config-defaults.yaml" "${EMBED_CONFIG_DIR}/defaults.yaml")
 
     # Stage tinyemu cfgs under yconfig/temu/ so extract-assets drops them at
     # <config_dir>/temu/. tinyemu-pty.c reads <config_dir>/temu/yetty-temu-extended.cfg

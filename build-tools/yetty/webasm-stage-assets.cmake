@@ -184,6 +184,9 @@ function(yetty_stage_webasm_assets)
         set(_CFG "${YETTY_ROOT}/build-tools/yetty/platform/config-defaults.yaml")
     endif()
     _stage_one("${_CFG}" "config" "config.yaml" FALSE "/config")
+    # Always stage config-defaults.yaml as defaults.yaml so config.yaml can import it
+    _stage_one("${YETTY_ROOT}/build-tools/yetty/platform/config-defaults.yaml"
+               "config" "defaults.yaml" FALSE "/config")
 
     # Tinyemu cfgs — these used to live under <config_dir>/temu/. Keep
     # them around even though webasm no longer runs the in-process VM

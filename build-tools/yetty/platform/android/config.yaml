@@ -1,76 +1,16 @@
-# Yetty Terminal Configuration - Android
-# ========================================
-# Android-specific configuration for yetty.
-# Uses Termux shell when available.
+import: defaults.yaml
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Font Configuration
-# ─────────────────────────────────────────────────────────────────────────────
-font:
-  family: "default"
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Rendering Configuration
-# ─────────────────────────────────────────────────────────────────────────────
 rendering:
-  damage-tracking: true
   show-fps: false
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Terminal Configuration
-# ─────────────────────────────────────────────────────────────────────────────
 scrollback:
   lines: 5000
 
-# ─────────────────────────────────────────────────────────────────────────────
-# MSDF CDB Generation
-# ─────────────────────────────────────────────────────────────────────────────
-# Backend used to build MSDF font atlases on demand.
-#   gpu - WebGPU compute shader. Faster, minor curve artefacts.
-#   cpu - msdfgen library. Slower, artefact-free.
-msdf:
-  generator: "gpu"
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Shell Configuration
-# ─────────────────────────────────────────────────────────────────────────────
 shell:
-  # Default shell binary. Overridden by $SHELL env var at startup if set.
-  # Toybox shell - symlinked from libtoybox.so at runtime
   default: "/data/data/com.yetty.terminal/cache/bin/sh"
-
   env:
     TERM: "xterm-256color"
     COLORTERM: "truecolor"
     HOME: "/data/data/com.yetty.terminal/cache"
     SHELL: "/data/data/com.yetty.terminal/cache/bin/sh"
     PATH: "/data/data/com.yetty.terminal/cache/bin:/system/bin"
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Plugins Configuration
-# ─────────────────────────────────────────────────────────────────────────────
-plugins:
-  path: ""
-
-# ─────────────────────────────────────────────────────────────────────────────
-# RPC Configuration
-# ─────────────────────────────────────────────────────────────────────────────
-rpc:
-  socket-path: ""
-  enabled: false
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Shader Preloading Configuration
-# ─────────────────────────────────────────────────────────────────────────────
-shaders:
-  preload:
-    cards:
-      - "0x0000-texture"
-      - "0x0003-ydraw"
-    glyphs: []
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Debug Configuration
-# ─────────────────────────────────────────────────────────────────────────────
-debug:
-  damage-rects: false
