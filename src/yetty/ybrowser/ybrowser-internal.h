@@ -43,10 +43,24 @@ enum yetty_ylexbor_layout_mode {
     YL_LAYOUT_BLOCK = 0,   /* default: vertical stacking */
     YL_LAYOUT_FLEX_ROW,    /* display:flex; flex-direction:row */
     YL_LAYOUT_FLEX_COLUMN, /* display:flex; flex-direction:column */
+    YL_LAYOUT_TABLE,       /* display:table — rows laid out vertically,
+	                        * cells horizontally with equal column width */
 };
 
 struct yetty_ylexbor_color {
     uint8_t r, g, b, a;
+};
+
+/* One styled sub-run inside an inline-text box's character stream.
+ * Produced by the box pass as it walks <a>/<strong>/<em>/etc. nested
+ * inside a block's inline children. wrap_inline_box reads `segs[]`
+ * to emit one painted box per visible styled fragment per line. */
+struct yetty_ylexbor_inline_seg {
+    size_t start;  /* byte offset into box->text where this seg begins */
+    struct yetty_ylexbor_color fg;
+    int font_weight;
+    bool font_italic;
+    bool underline;
 };
 
 struct yetty_ylexbor_box {
@@ -82,6 +96,28 @@ struct yetty_ylexbor_box {
     float css_width, css_max_width, css_min_width;
     float css_height; /* explicit height — placeholder for tables/img */
 
+    /* Flex item properties (only meaningful when this box is the
+	 * child of a flex container). flex_basis_px < 0 = auto; >= 0 =
+	 * explicit px (resolved from libcss). flex_grow = 0 means the
+	 * item doesn't take leftover space. */
+    float flex_grow;
+    float flex_basis_px;
+
+    /* Flex-container properties (meaningful when this box has
+	 * layout_mode == YL_LAYOUT_FLEX_ROW/COLUMN). Values are the
+	 * libcss CSS_JUSTIFY_CONTENT_* / CSS_ALIGN_ITEMS_* enums (zero =
+	 * inherit / default, treated as flex-start for justify and
+	 * stretch for align). */
+    int justify_content;
+    int align_items;
+
+    /* Float / clear. float_side: 0=none, 1=left, 2=right.
+	 * clear_side: 0=none, 1=left, 2=right, 3=both. Boxes with
+	 * float_side != 0 are removed from the parent's normal flow at
+	 * layout time; subsequent in-flow content flows around them. */
+    uint8_t float_side;
+    uint8_t clear_side;
+
     /* Text alignment for the block's inline children. Values:
 	 *   0 = left (default), 1 = center, 2 = right, 3 = justify. */
     int text_align;
@@ -102,6 +138,21 @@ struct yetty_ylexbor_box {
 	 * Lives in r->text_arena, freed when the document is replaced. */
     const char *text;
     size_t text_len;
+
+    /* Underline flag — set on per-segment line fragments produced by
+	 * wrap_inline_box when the source segment had `underline` set
+	 * (typically from <a>). The paint pass renders a thin SDF rect
+	 * below the text baseline when true. */
+    bool underline;
+
+    /* Style segments — only populated on the source INLINE_TEXT box
+	 * emitted by flush_inline. wrap_inline_box reads `segs[]` to
+	 * split each laid-out line into one painted sub-box per styled
+	 * fragment, then frees the array. Wrap-produced fragments have
+	 * segs=NULL and one style baked into the box's own font_weight
+	 * / font_italic / fg / underline. */
+    struct yetty_ylexbor_inline_seg *segs;
+    size_t segs_count;
 
     /* Children — explicit linked list. `first_child` is the index of
 	 * the first child (0 if none — root is never a child), and each

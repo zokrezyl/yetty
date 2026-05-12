@@ -44,15 +44,19 @@ struct yl_default_style {
     float margin_top_em;
     float margin_bottom_em;
     uint32_t fg_rgb; /* 0xRRGGBB; 0xffffffff = inherit */
+    int underline;   /* 1 = force on, 0 = inherit (no force). Used so
+	                  * <a> propagates text-decoration: underline to
+	                  * its descendants without needing libcss for
+	                  * inline elements. */
 };
 
 #define INHERIT_RGB 0xffffffffu
 
 static const struct yl_default_style YL_DEFAULT_INLINE = {
-    YL_DISP_INLINE, 1.0f, 0, -1, 0.0f, 0.0f, INHERIT_RGB,
+    YL_DISP_INLINE, 1.0f, 0, -1, 0.0f, 0.0f, INHERIT_RGB, 0,
 };
 static const struct yl_default_style YL_DEFAULT_BLOCK = {
-    YL_DISP_BLOCK, 1.0f, 0, -1, 1.0f, 1.0f, INHERIT_RGB,
+    YL_DISP_BLOCK, 1.0f, 0, -1, 1.0f, 1.0f, INHERIT_RGB, 0,
 };
 
 /* Match lexbor tag IDs; values pulled from <lexbor/tag/const.h>. */
@@ -65,10 +69,12 @@ static const struct yl_default_style *default_for(lxb_tag_id_t tag)
     static struct yl_default_style h5 = {YL_DISP_BLOCK, 0.83f, 700, -1, 1.67f, 1.67f, INHERIT_RGB};
     static struct yl_default_style h6 = {YL_DISP_BLOCK, 0.67f, 700, -1, 2.33f, 2.33f, INHERIT_RGB};
 
-    static struct yl_default_style strong = {YL_DISP_INLINE, 1.0f, 700, -1, 0, 0, INHERIT_RGB};
-    static struct yl_default_style em = {YL_DISP_INLINE, 1.0f, 0, 1, 0, 0, INHERIT_RGB};
-    static struct yl_default_style anchor = {YL_DISP_INLINE, 1.0f, 0, -1, 0, 0, 0x0000eeu};
-    static struct yl_default_style none = {YL_DISP_NONE, 1.0f, 0, -1, 0, 0, INHERIT_RGB};
+    static struct yl_default_style strong = {YL_DISP_INLINE, 1.0f, 700, -1, 0, 0, INHERIT_RGB, 0};
+    static struct yl_default_style em = {YL_DISP_INLINE, 1.0f, 0, 1, 0, 0, INHERIT_RGB, 0};
+    static struct yl_default_style anchor = {YL_DISP_INLINE, 1.0f, 0, -1, 0, 0, 0x0000eeu, 1};
+    static struct yl_default_style small_e = {YL_DISP_INLINE, 0.83f, 0, -1, 0, 0, INHERIT_RGB, 0};
+    static struct yl_default_style code_e = {YL_DISP_INLINE, 1.0f, 0, -1, 0, 0, 0x444444u, 0};
+    static struct yl_default_style none = {YL_DISP_NONE, 1.0f, 0, -1, 0, 0, INHERIT_RGB, 0};
 
     switch (tag) {
     case LXB_TAG_H1:
@@ -93,6 +99,15 @@ static const struct yl_default_style *default_for(lxb_tag_id_t tag)
         return &em;
     case LXB_TAG_A:
         return &anchor;
+    case LXB_TAG_SMALL:
+    case LXB_TAG_SUB:
+    case LXB_TAG_SUP:
+        return &small_e;
+    case LXB_TAG_CODE:
+    case LXB_TAG_KBD:
+    case LXB_TAG_SAMP:
+    case LXB_TAG_VAR:
+        return &code_e;
 
     case LXB_TAG_HEAD:
     case LXB_TAG_TITLE:
@@ -160,6 +175,8 @@ struct yl_style_state {
     float font_size;
     int font_weight;
     bool font_italic;
+    bool underline;  /* true inside <a> (and any other inline element
+	                  * whose default_for() flags underline=1) */
     struct yetty_ylexbor_color fg;
     int text_align; /* inherited; 0=left, 1=center, 2=right, 3=justify */
 };
@@ -189,6 +206,9 @@ static struct yl_style_state apply_default(const struct yl_style_state *parent,
     if (d->fg_rgb != INHERIT_RGB) {
         s.fg = rgb_to_color(d->fg_rgb, 0xff);
     }
+    if (d->underline) {
+        s.underline = true;
+    }
     return s;
 }
 
@@ -207,7 +227,55 @@ struct yl_inline_buf {
     char *buf;
     size_t len, cap;
     int last_was_space;
+    /* When set, copy bytes verbatim — used inside <pre> blocks
+	 * (white-space: pre / pre-wrap) so source-line breaks and
+	 * indentation aren't collapsed away. */
+    int preserve_ws;
+    /* Style segments — one entry per contiguous run of text written
+	 * with the same fg/weight/italic/underline. inline_buf_append_styled
+	 * opens a new segment whenever the style changes between calls,
+	 * so adjacent text from the same inline element gets fused. */
+    struct yetty_ylexbor_inline_seg *segs;
+    size_t segs_count, segs_cap;
 };
+
+static bool seg_style_matches(const struct yetty_ylexbor_inline_seg *seg,
+                              const struct yl_style_state *style)
+{
+    if (seg->font_weight != style->font_weight) return false;
+    if (seg->font_italic != style->font_italic) return false;
+    if (seg->underline != style->underline) return false;
+    if (seg->fg.r != style->fg.r || seg->fg.g != style->fg.g ||
+        seg->fg.b != style->fg.b || seg->fg.a != style->fg.a) return false;
+    return true;
+}
+
+/* Open a new style segment in `b` if the current style differs from the
+ * tail segment (or there's no tail yet). Idempotent — callers can blindly
+ * invoke before each `inline_buf_append`. */
+static int inline_buf_open_seg(struct yl_inline_buf *b, const struct yl_style_state *style)
+{
+    if (b->segs_count > 0 && seg_style_matches(&b->segs[b->segs_count - 1], style)) {
+        return 0;
+    }
+    if (b->segs_count == b->segs_cap) {
+        size_t nc = b->segs_cap ? b->segs_cap * 2 : 8;
+        struct yetty_ylexbor_inline_seg *p = realloc(b->segs, nc * sizeof(*p));
+        if (!p) {
+            return -1;
+        }
+        b->segs = p;
+        b->segs_cap = nc;
+    }
+    b->segs[b->segs_count++] = (struct yetty_ylexbor_inline_seg){
+        .start = b->len,
+        .fg = style->fg,
+        .font_weight = style->font_weight,
+        .font_italic = style->font_italic,
+        .underline = style->underline,
+    };
+    return 0;
+}
 
 static int inline_buf_append(struct yl_inline_buf *b, const char *s, size_t n)
 {
@@ -223,11 +291,18 @@ static int inline_buf_append(struct yl_inline_buf *b, const char *s, size_t n)
         b->buf = p;
         b->cap = nc;
     }
-    /* Whitespace collapsing per CSS normal — runs of WS become a single
-	 * space; leading WS is dropped. Same default handful of HTML defaults
-	 * use. Doesn't honor white-space:pre yet. */
+    /* Whitespace handling. Two modes:
+	 *   - preserve_ws=1 (white-space: pre): copy every byte as-is
+	 *     so source newlines and indentation survive into paint.
+	 *   - preserve_ws=0 (default normal): collapse runs to one
+	 *     space and drop leading whitespace, per CSS 2.1 §16.6. */
     for (size_t i = 0; i < n; i++) {
         unsigned char c = (unsigned char)s[i];
+        if (b->preserve_ws) {
+            b->buf[b->len++] = (char)c;
+            b->last_was_space = (c == ' ' || c == '\t' || c == '\n' || c == '\r');
+            continue;
+        }
         int is_ws = (c == ' ' || c == '\t' || c == '\n' || c == '\r');
         if (is_ws) {
             if (b->last_was_space || b->len == 0) {
@@ -771,6 +846,12 @@ static void flush_inline(struct yetty_ylexbor *r, const struct yl_style_state *s
         coll->len--;
     }
     if (coll->len == 0) {
+        /* Whole buffer was whitespace — drop any opened segments too
+		 * so the next inline run starts with a fresh seg list. */
+        free(coll->segs);
+        coll->segs = NULL;
+        coll->segs_count = 0;
+        coll->segs_cap = 0;
         coll->last_was_space = 0;
         return;
     }
@@ -784,6 +865,21 @@ static void flush_inline(struct yetty_ylexbor *r, const struct yl_style_state *s
     style_to_box(b, style);
     b->text = yetty_ylexbor_arena_dup(r, coll->buf, coll->len);
     b->text_len = coll->len;
+    /* Transfer the accumulated style segments to the box. wrap_inline_box
+	 * will read them to split each line into one painted sub-box per
+	 * styled fragment, then free segs. Callers reset coll's segs/len for
+	 * the next inline run within the same block. */
+    if (coll->segs_count > 0) {
+        /* Cap the last segment's effective length at coll->len so the
+		 * trailing-space trim above doesn't leave a dangling segment
+		 * span past the buffer's tail (segments only carry `start`;
+		 * the end is implied by the next seg.start or by box->text_len). */
+        b->segs = coll->segs;
+        b->segs_count = coll->segs_count;
+        coll->segs = NULL;
+        coll->segs_count = 0;
+        coll->segs_cap = 0;
+    }
     link_child(r, parent_idx, cidx);
 
     coll->len = 0;
@@ -800,6 +896,13 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
             size_t len = t->char_data.data.length;
             const char *bytes = (const char *)t->char_data.data.data;
             if (inline_collect != NULL && len > 0) {
+                /* Open / continue a style segment under the *current*
+				 * inline style. parent_style is the style of the
+				 * innermost element on the recursion stack — i.e. the
+				 * one immediately wrapping this text node, exactly
+				 * what we want for per-segment fg/weight/italic/
+				 * underline. */
+                inline_buf_open_seg(inline_collect, parent_style);
                 inline_buf_append(inline_collect, bytes, len);
             }
             continue;
@@ -819,6 +922,24 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
 		 * that would otherwise overlap real content. */
         if (is_display_none(el)) {
             continue;
+        }
+        /* libcss-side display:none — UA CSS rules like
+		 * [aria-hidden="true"] { display: none } only flow through
+		 * the libcss cascade, not lexbor's serialized one. Skip the
+		 * subtree entirely so chrome ARIA/nav junk doesn't leak. */
+        if (r->libcss) {
+            size_t pre_istylen = 0;
+            const lxb_char_t *pre_istyle = lxb_dom_element_get_attribute(
+                el, (const lxb_char_t *)"style", 5, &pre_istylen);
+            css_computed_style *pre_cs = yetty_ybrowser_libcss_select(
+                r, el, (const char *)pre_istyle, pre_istyle ? pre_istylen : 0);
+            if (pre_cs) {
+                int pre_disp = yetty_ybrowser_libcss_display(pre_cs, parent_style == NULL);
+                yetty_ybrowser_libcss_release(pre_cs);
+                if (pre_disp == CSS_DISPLAY_NONE) {
+                    continue;
+                }
+            }
         }
 
         struct yl_style_state s = apply_default(parent_style, d);
@@ -871,6 +992,14 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
             if (r->libcss) {
                 css_computed_style *cs = yetty_ybrowser_libcss_select(
                     r, el, (const char *)istyle, istyle ? istylen : 0);
+                /* Re-fetch box pointer — yetty_ybrowser_libcss_select runs
+                 * arbitrary callbacks; even though they don't touch our
+                 * vector today, the compiler can otherwise lift the
+                 * earlier `b = &r->boxes.data[bidx]` past stores done by
+                 * later property writes, producing 0 for css_width et al.
+                 * Refetch defensively so all subsequent reads/writes go
+                 * through the live base pointer. */
+                b = &r->boxes.data[bidx];
                 if (cs) {
                     struct yetty_ylexbor_color cc;
                     int weight;
@@ -893,9 +1022,11 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
                     }
                     if (yetty_ybrowser_libcss_font_weight(cs, &weight)) {
                         b->font_weight = weight;
+                        s.font_weight = weight;
                     }
                     if (yetty_ybrowser_libcss_font_italic(cs, &italic)) {
                         b->font_italic = italic;
+                        s.font_italic = italic;
                     }
                     if (yetty_ybrowser_libcss_width(r, cs, s.font_size, pct_basis, &px)) {
                         b->css_width = px;
@@ -960,15 +1091,75 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
                     }
 
                     int disp = yetty_ybrowser_libcss_display(cs, parent_style == NULL);
+                    /* libcss's compiled-in UA stylesheet reports computed
+				 * display=CSS_DISPLAY_TABLE (6) for several non-table
+				 * HTML elements (most notably <figure>). Without this
+				 * guard our layout_block would dispatch to layout_table,
+				 * which scans for descendant <tr> elements, finds none,
+				 * and returns zero height — leaving the figure's inner
+				 * <img> at the memset-default (0,0). On Wikipedia that
+				 * collapsed every article figure onto the upper-left
+				 * corner of the page. Test:
+				 * test_figure_img_positioned (ybrowser-layout-test) and
+				 * test_no_images_at_zero_zero (ybrowser-wikipedia-test).
+				 *
+				 * Only honour CSS_DISPLAY_TABLE when the element really
+				 * is a <table>; everything else falls through to BLOCK. */
+                    if ((disp == CSS_DISPLAY_TABLE || disp == CSS_DISPLAY_INLINE_TABLE) &&
+                        child->local_name != LXB_TAG_TABLE) {
+                        disp = CSS_DISPLAY_BLOCK;
+                    }
                     if (disp == CSS_DISPLAY_FLEX || disp == CSS_DISPLAY_INLINE_FLEX) {
                         int fd = yetty_ybrowser_libcss_flex_direction(cs);
                         b->layout_mode = (fd == CSS_FLEX_DIRECTION_COLUMN ||
                                           fd == CSS_FLEX_DIRECTION_COLUMN_REVERSE)
                                              ? YL_LAYOUT_FLEX_COLUMN
                                              : YL_LAYOUT_FLEX_ROW;
+                        b->justify_content = yetty_ybrowser_libcss_justify_content(cs);
+                        b->align_items = yetty_ybrowser_libcss_align_items(cs);
+                    } else if (disp == CSS_DISPLAY_TABLE ||
+                               disp == CSS_DISPLAY_INLINE_TABLE) {
+                        b->layout_mode = YL_LAYOUT_TABLE;
                     } else if (disp == CSS_DISPLAY_BLOCK || disp == CSS_DISPLAY_INLINE_BLOCK ||
                                disp == CSS_DISPLAY_LIST_ITEM) {
                         b->layout_mode = YL_LAYOUT_BLOCK;
+                    }
+                    /* Flex-item properties — always read so a block
+				 * inside a flex parent gets sized correctly. The
+				 * parent's layout_mode will gate whether they're
+				 * consumed. */
+                    float fg = 0;
+                    if (yetty_ybrowser_libcss_flex_grow(cs, &fg)) {
+                        b->flex_grow = fg;
+                    }
+                    float fb_px = 0;
+                    bool fb_auto = false;
+                    if (yetty_ybrowser_libcss_flex_basis(r, cs, s.font_size, pct_basis, &fb_px,
+                                                         &fb_auto)) {
+                        /* Encoding convention shared with css_width:
+						 * 0 = auto / not set, > 0 = absolute px,
+						 * < 0 = percent ratio (-N/100). The flex
+						 * solver dispatches on the sign. */
+                        b->flex_basis_px = fb_auto ? 0.0f : fb_px;
+                    } else {
+                        b->flex_basis_px = 0.0f;
+                    }
+                    /* Float + clear. The layout pass removes floated
+				 * boxes from normal flow and rewinds the available
+				 * content width for siblings that overlap. */
+                    int fv = yetty_ybrowser_libcss_float(cs);
+                    if (fv == CSS_FLOAT_LEFT) {
+                        b->float_side = 1;
+                    } else if (fv == CSS_FLOAT_RIGHT) {
+                        b->float_side = 2;
+                    }
+                    int clr = yetty_ybrowser_libcss_clear(cs);
+                    if (clr == CSS_CLEAR_LEFT) {
+                        b->clear_side = 1;
+                    } else if (clr == CSS_CLEAR_RIGHT) {
+                        b->clear_side = 2;
+                    } else if (clr == CSS_CLEAR_BOTH) {
+                        b->clear_side = 3;
                     }
                     /* Don't carry currentColor border in further. */
                     yetty_ybrowser_libcss_release(cs);
@@ -978,11 +1169,53 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
             link_child(r, parent_idx, bidx);
 
             /* Recurse with a fresh inline accumulator for this
-			 * block's children. */
+			 * block's children. <pre> (and similar verbatim
+			 * blocks) need whitespace preserved so source-line
+			 * breaks and indentation make it into the paint
+			 * stream. */
             struct yl_inline_buf ib = {0};
+            if (child->local_name == LXB_TAG_PRE ||
+                child->local_name == LXB_TAG_TEXTAREA) {
+                ib.preserve_ws = 1;
+            }
+            /* List markers — when the current block is an <li>, seed
+			 * its inline buffer with a bullet (UL ancestor) or a
+			 * decimal counter (OL ancestor) so the user can tell
+			 * list items apart. The UA stylesheet gives <ul>/<ol> a
+			 * padding-left: 40px so the marker visually sits in the
+			 * left gutter even though we render it inline. */
+            if (child->local_name == LXB_TAG_LI && child->parent &&
+                child->parent->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+                lxb_tag_id_t ptag = child->parent->local_name;
+                /* Marker inherits the LI's own style — same fg /
+				 * weight / italic as the LI block we just opened. */
+                inline_buf_open_seg(&ib, &s);
+                if (ptag == LXB_TAG_OL) {
+                    /* Count preceding <li> siblings to derive the
+					 * 1-based item number. Linear per-item but
+					 * the lists we render are small. */
+                    int n = 1;
+                    for (lxb_dom_node_t *p = child->prev; p; p = p->prev) {
+                        if (p->type == LXB_DOM_NODE_TYPE_ELEMENT && p->local_name == LXB_TAG_LI) {
+                            n++;
+                        }
+                    }
+                    char marker[16];
+                    int mlen = snprintf(marker, sizeof(marker), "%d. ", n);
+                    if (mlen > 0) {
+                        inline_buf_append(&ib, marker, (size_t)mlen);
+                    }
+                } else if (ptag == LXB_TAG_UL || ptag == LXB_TAG_MENU ||
+                           ptag == LXB_TAG_DIR) {
+                    /* U+2022 bullet (UTF-8: e2 80 a2) + ASCII space. */
+                    const char *bullet = "\xe2\x80\xa2 ";
+                    inline_buf_append(&ib, bullet, 4);
+                }
+            }
             walk(r, child, &s, bidx, &ib, depth + 1);
             flush_inline(r, &s, bidx, &ib);
             free(ib.buf);
+            free(ib.segs);
         } else {
             /* <img>: pre-decode (or hit the cache) so the box's
 			 * geometry reflects natural pixel dimensions, with
@@ -1098,6 +1331,7 @@ struct yetty_ycore_void_result yetty_ylexbor_box_build(struct yetty_ylexbor *r)
     walk(r, lxb_dom_interface_node(r->document), &initial, root_idx, &ib, 0);
     flush_inline(r, &initial, root_idx, &ib);
     free(ib.buf);
+    free(ib.segs);
 
     return YETTY_OK_VOID();
 }

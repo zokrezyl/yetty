@@ -101,6 +101,20 @@ struct yetty_ycore_void_result yetty_ylexbor_set_base_url(struct yetty_ylexbor *
  * none). The host calls this from its event loop. */
 int yetty_ylexbor_pump_timers(struct yetty_ylexbor *r);
 
+/* ===========================================================================
+ * Test-only inspection.
+ *
+ * Probe the post-layout box vector by index. Returns 0 + fills the
+ * out args on success, non-zero if the index is out of range. Used by
+ * test/ut/ybrowser to pin layout positions for regression coverage —
+ * not intended for production callers (the box vector representation
+ * is internal and may change). `tag_out` is filled with the lowercased
+ * element local name (e.g. "div", "p"); set to "" for anonymous boxes.
+ * ===========================================================================*/
+int yetty_ylexbor_test_box_count(const struct yetty_ylexbor *r);
+int yetty_ylexbor_test_box_at(const struct yetty_ylexbor *r, int index, float *x, float *y,
+                              float *w, float *h, char *tag_out, int tag_cap);
+
 #ifdef __cplusplus
 }
 #endif

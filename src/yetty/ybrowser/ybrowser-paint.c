@@ -632,16 +632,38 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
     ydebug("paint total boxes=%u", r->boxes.size);
     for (uint32_t i = 0; i < r->boxes.size; i++) {
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
-        if (b->w <= 0 || b->h <= 0) {
+        /* A box with h=0 but a visible border is normal — that's
+		 * how `<hr>` renders (border-top: 1px on a content-less
+		 * block). Don't skip it; the border paint below produces
+		 * the visible 1px line. Same logic for w=0 vertical
+		 * separators (rare in HTML but legal CSS). */
+        bool has_visible_border =
+            b->kind == YL_BOX_BLOCK && b->border_color.a != 0 &&
+            (b->border_top > 0 || b->border_right > 0 || b->border_bottom > 0 ||
+             b->border_left > 0);
+        if ((b->w <= 0 && !has_visible_border) || (b->h <= 0 && !has_visible_border)) {
             ydebug("paint skip  i=%u kind=%d xy=%.0f,%.0f wh=%.0fx%.0f", i, b->kind, b->x, b->y,
                    b->w, b->h);
             continue;
         }
         /* Grow scene extents to cover this box. We extend even
 		 * for transparent / text boxes since they contribute glyph
-		 * geometry; the GPU will simply skip empty regions. */
+		 * geometry; the GPU will simply skip empty regions. The
+		 * border-only `<hr>` case adds border-top+border-bottom to
+		 * the vertical extent so the painted 1px line isn't culled
+		 * by the scene-bounds check. */
         float right = b->x + b->w;
         float bottom = b->y + b->h;
+        if (has_visible_border) {
+            float border_h_extent = b->border_top + b->border_bottom;
+            float border_w_extent = b->border_left + b->border_right;
+            if (b->y + border_h_extent > bottom) {
+                bottom = b->y + border_h_extent;
+            }
+            if (b->x + border_w_extent > right) {
+                right = b->x + border_w_extent;
+            }
+        }
         if (right > scene_max_x) {
             scene_max_x = right;
         }
@@ -779,8 +801,11 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
         case YL_BOX_INLINE_TEXT: {
             if (b->text_len) {
                 int n = b->text_len > 40 ? 40 : (int)b->text_len;
-                ydebug("paint text  i=%u xy=%.0f,%.0f wh=%.0fx%.0f fg=%02x%02x%02x%02x \"%.*s\"", i,
-                       b->x, b->y, b->w, b->h, b->fg.r, b->fg.g, b->fg.b, b->fg.a, n, b->text);
+                ydebug("paint text  i=%u xy=%.0f,%.0f wh=%.0fx%.0f fg=%02x%02x%02x%02x w=%d%s%s "
+                       "\"%.*s\"",
+                       i, b->x, b->y, b->w, b->h, b->fg.r, b->fg.g, b->fg.b, b->fg.a,
+                       b->font_weight, b->font_italic ? " i" : "", b->underline ? " u" : "", n,
+                       b->text);
             }
             if (b->text == NULL || b->text_len == 0) {
                 break;
@@ -796,6 +821,40 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
             (void)yetty_ypaint_core_buffer_add_text(buf, b->x, baseline_y, &txt, b->font_size,
                                                     pack_rgba(b->fg), z++, /*font_id=*/-1,
                                                     /*rotation=*/0.0f);
+            /* Synthetic bold — we only have one font, so to make
+			 * <strong>/<b>/font-weight:bold visibly thicker we
+			 * draw the same run again offset by ~1px. Crude but
+			 * it actually reads as bold on the screen. Drop when
+			 * a real bold font is wired through font_id. */
+            if (b->font_weight >= 600) {
+                float ox = b->font_size * 0.05f;
+                if (ox < 1.0f) {
+                    ox = 1.0f;
+                }
+                (void)yetty_ypaint_core_buffer_add_text(buf, b->x + ox, baseline_y, &txt,
+                                                        b->font_size, pack_rgba(b->fg), z++,
+                                                        /*font_id=*/-1, /*rotation=*/0.0f);
+            }
+            if (b->underline && b->w > 0) {
+                /* Thin SDF rect ~1px below baseline, in the run's
+				 * foreground color. Matches the visual the user
+				 * expects for an <a>. Thickness scales lightly
+				 * with font size (max(1, font*0.06)) so it remains
+				 * visible at large headings without overpowering
+				 * normal text. */
+                float thickness = b->font_size * 0.06f;
+                if (thickness < 1.0f) {
+                    thickness = 1.0f;
+                }
+                float underline_y = baseline_y + b->font_size * 0.12f;
+                struct yetty_ysdf_box ubx = {
+                    .center_x = b->x + b->w * 0.5f,
+                    .center_y = underline_y + thickness * 0.5f,
+                    .half_width = b->w * 0.5f,
+                    .half_height = thickness * 0.5f,
+                };
+                (void)yetty_ysdf_add_box(buf, z++, pack_rgba(b->fg), 0, 0, &ubx);
+            }
             break;
         }
         }
