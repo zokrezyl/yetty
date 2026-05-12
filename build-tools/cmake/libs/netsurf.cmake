@@ -118,6 +118,16 @@ foreach(l IN LISTS _NS_LIB_NAMES)
         INTERFACE_INCLUDE_DIRECTORIES "${_NS_INST}/include")
 endforeach()
 
+# libparserutils calls iconv_open/close in src/input/filter.c. On Linux
+# iconv lives in glibc, but macOS ships it as a separate libiconv that
+# must be linked explicitly. Consumers that pull netsurf_core get this
+# transitively below; consumers that link ns_css/ns_parserutils directly
+# (e.g. src/yetty/ybrowser) need it attached to the IMPORTED target.
+if(APPLE)
+    set_target_properties(ns_parserutils PROPERTIES
+        INTERFACE_LINK_LIBRARIES iconv)
+endif()
+
 #-----------------------------------------------------------------------------
 # netsurf_core — the synthesized archive of core .o files (frontends/*
 # excluded). Public include dirs match the original three-root setup so
