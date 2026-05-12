@@ -16,7 +16,7 @@ target_include_directories(yetty_ythorvg PUBLIC
 
 # ThorVG internal headers (RenderMethod, PAINT() macro). The 3rdparty
 # tarball ships them under include-internal/ preserving thorvg's upstream
-# src/<subdir>/ layout — see build-tools/cmake/thorvg.cmake.
+# src/<subdir>/ layout — see build-tools/yetty/thorvg.cmake.
 target_include_directories(yetty_ythorvg PRIVATE
     ${YETTY_3RDPARTY_thorvg_INTERNAL_INCLUDE_DIR}/renderer
     ${YETTY_3RDPARTY_thorvg_INTERNAL_INCLUDE_DIR}/common

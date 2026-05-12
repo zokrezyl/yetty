@@ -23,31 +23,35 @@ option(YETTY_TVOS "Build for tvOS" OFF)
 set(WEBGPU_BACKEND "dawn" CACHE STRING "WebGPU backend (wgpu or dawn)")
 set(TOYBOX_PATH "" CACHE PATH "Path to Toybox binary")
 
-# Central build variables (libraries and features)
-include(${YETTY_ROOT}/build-tools/cmake/variables.cmake)
-
-# Include CPM
-include(${YETTY_ROOT}/build-tools/cmake/CPM.cmake)
+# Include CPM — clear stale CPM_DIRECTORY if CPM.cmake moved to a new path
+# (CPM silently returns early when CPM_DIRECTORY != CMAKE_CURRENT_LIST_DIR)
+get_filename_component(_CPM_EXPECTED_DIR "${YETTY_ROOT}/build-tools/yetty" REALPATH)
+if(DEFINED CPM_DIRECTORY AND NOT CPM_DIRECTORY STREQUAL _CPM_EXPECTED_DIR)
+    unset(CPM_DIRECTORY CACHE)
+endif()
+unset(_CPM_EXPECTED_DIR)
+include(${YETTY_ROOT}/build-tools/yetty/CPM.cmake)
 
 # Detect platform and include appropriate target.
+# Each platform cmake.cmake applies its own variable overrides then builds.
 # tvOS check comes BEFORE iOS — tvOS sets YETTY_IOS=1 internally to share
 # the iOS code paths in src/yetty/yplatform/ios/, but the build target
-# selection itself must pick platforms/tvos.cmake.
+# selection itself must pick platform/tvos/cmake.cmake.
 if(YETTY_ANDROID)
-    include(${YETTY_ROOT}/build-tools/cmake/platforms/android.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/platform/android/cmake.cmake)
 elseif(YETTY_TVOS OR CMAKE_SYSTEM_NAME STREQUAL "tvOS")
-    include(${YETTY_ROOT}/build-tools/cmake/platforms/tvos.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/platform/tvos/cmake.cmake)
 elseif(YETTY_IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
-    include(${YETTY_ROOT}/build-tools/cmake/platforms/ios.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/platform/ios/cmake.cmake)
 elseif(EMSCRIPTEN)
-    include(${YETTY_ROOT}/build-tools/cmake/platforms/webasm.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/platform/webasm/cmake.cmake)
 elseif(WIN32)
-    include(${YETTY_ROOT}/build-tools/cmake/platforms/windows.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/platform/windows/cmake.cmake)
 elseif(APPLE)
-    include(${YETTY_ROOT}/build-tools/cmake/platforms/macos.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/platform/macos/cmake.cmake)
 else()
     # Linux and other Unix
-    include(${YETTY_ROOT}/build-tools/cmake/platforms/linux.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/platform/linux/cmake.cmake)
 endif()
 
 # Tools

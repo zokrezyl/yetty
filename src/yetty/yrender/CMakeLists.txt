@@ -25,7 +25,7 @@ endif()
 # Compiles out on macOS / Windows / Android / iOS / Emscripten.
 set(YETTY_YRENDER_X11_TILE OFF)
 if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN AND NOT YETTY_ANDROID AND NOT YETTY_IOS)
-    include(${YETTY_ROOT}/build-tools/cmake/x11-static.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/x11-static.cmake)
     if(YETTY_X11_STATIC_LIBS)
         list(APPEND YETTY_YRENDER_SOURCES render-target-x11-tile.c)
         set(YETTY_YRENDER_X11_TILE ON)

@@ -6,10 +6,10 @@
 # (no backend/ subdir — the yetty-side receiver is the ymgui-layer
 #  terminal layer in src/yetty/yterm/. A layer, not a side-car lib.)
 #
-# Dear ImGui is fetched via CPM (build-tools/cmake/libs/imgui.cmake),
+# Dear ImGui is fetched via CPM (build-tools/yetty/libs/imgui.cmake),
 # which exposes the lean imgui_core target the frontend links against.
 # No tmp/ vendoring.
-include(${YETTY_ROOT}/build-tools/cmake/libs/imgui.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/libs/imgui.cmake)
 
 if(TARGET imgui_core)
     add_subdirectory(frontend)

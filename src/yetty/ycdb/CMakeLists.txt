@@ -1,4 +1,4 @@
-include(${YETTY_ROOT}/build-tools/cmake/libs/cdb.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/libs/cdb.cmake)
 
 add_library(yetty_ycdb STATIC
     ycdb.c

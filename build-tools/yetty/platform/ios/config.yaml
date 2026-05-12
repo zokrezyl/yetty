@@ -1,0 +1,11 @@
+import: defaults.yaml
+
+terminal:
+  text-layer:
+    font:
+      size: 40
+      padding:
+        left:   0.0
+        right:  0.0
+        top:    0.0
+        bottom: 0.4

@@ -14,7 +14,7 @@ set(YCAT_SOURCES
 
 #=============================================================================
 # Tree-sitter highlight queries are embedded at configure time. Each grammar
-# exports TS_QUERIES_DIR_<name> (see build-tools/cmake/libs/tree-sitter.cmake).
+# exports TS_QUERIES_DIR_<name> (see build-tools/yetty/libs/tree-sitter.cmake).
 # Some child grammars (cpp, typescript) only add rules; inherit from parent.
 #=============================================================================
 
