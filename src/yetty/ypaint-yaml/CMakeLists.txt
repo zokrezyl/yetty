@@ -44,8 +44,15 @@ if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID AND NOT YETTY_IOS AND NOT YETTY_TVOS AND
                       /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu /usr/lib
                       /usr/local/lib /opt/local/lib /opt/homebrew/lib)
             if(_FC_STATIC AND _EXPAT_STATIC AND _UUID_STATIC)
+                # fontconfig's static archive references freetype BDF/PS
+                # symbols (FT_Get_BDF_Property, FT_Get_PS_Font_Info, ...)
+                # that aren't pulled by yfont_core's earlier freetype
+                # link — by the time ld scans fontconfig, libfreetype.a
+                # is already past. Use a LINK_GROUP so ld re-iterates
+                # over the two archives until references are resolved.
                 target_link_libraries(yetty_ypaint_yaml INTERFACE
-                    ${_FC_STATIC} ${_EXPAT_STATIC} ${_UUID_STATIC})
+                    "$<LINK_GROUP:RESCAN,${_FC_STATIC},freetype>"
+                    ${_EXPAT_STATIC} ${_UUID_STATIC})
                 # Homebrew/MacPorts fontconfig is built with NLS, so the
                 # static archive references libintl_dgettext from GNU gettext.
                 if(APPLE)

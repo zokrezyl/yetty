@@ -35,8 +35,9 @@ float yetty_ypaint_core_buffer_scene_min_y(const struct yetty_ypaint_core_buffer
 const struct yetty_ycore_buffer *yetty_ypaint_core_buffer_primitives(
     const struct yetty_ypaint_core_buffer *buf);
 
-const void *yetty_ypaint_core_buffer_data(const struct yetty_ypaint_core_buffer *buf);
-size_t yetty_ypaint_core_buffer_size(const struct yetty_ypaint_core_buffer *buf);
+/* yetty_ypaint_core_buffer_data / _size are now part of the public surface
+ * (see include/yetty/ypaint-core/buffer.h). They are intentionally not
+ * re-declared here. */
 
 #ifdef __cplusplus
 }

@@ -30,6 +30,10 @@ if(YETTY_ENABLE_TOOL_YTOP)
     add_subdirectory(ytop)
 endif()
 
+if(YETTY_ENABLE_TOOL_YGREETER)
+    add_subdirectory(ygreeter)
+endif()
+
 if(YETTY_ENABLE_TOOL_YMESH)
     add_subdirectory(ymesh)
 endif()

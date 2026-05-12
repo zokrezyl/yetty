@@ -139,6 +139,19 @@ static void add_to_engine(struct yetty_ygui_engine *engine, struct yetty_ygui_wi
     engine->dirty = 1;
 }
 
+/* Public-to-other-ygui-TUs wrapper around add_to_engine. The static
+ * add_to_engine remains in use for every constructor in this file; the
+ * new widget files (ygui_rich.c, ygui_tabbar.c) call this so they don't
+ * have to redo the linked-list bookkeeping. */
+void yetty_ygui_engine_attach_widget(struct yetty_ygui_engine *engine,
+                                     struct yetty_ygui_widget *widget)
+{
+    if (!engine || !widget) {
+        return;
+    }
+    add_to_engine(engine, widget);
+}
+
 void yetty_ygui_widget_add_child(struct yetty_ygui_widget *parent, struct yetty_ygui_widget *child)
 {
     if (!parent || !child) {

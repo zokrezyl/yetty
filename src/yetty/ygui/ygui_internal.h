@@ -333,6 +333,27 @@ struct yetty_ygui_widget {
             void (*on_select)(struct yetty_ygui_widget *table, int row, void *userdata);
             void *on_select_userdata;
         } table;
+
+        struct {
+            /* Owned ypaint-core buffer. NULL while empty. Authors fill the
+             * primitives in widget-local coordinates (0..w, 0..h); the
+             * widget's render translates them to absolute canvas coords. */
+            struct yetty_ypaint_core_buffer *buffer;
+        } rich;
+
+        struct {
+            /* Per-tab header label strings (owned, NUL-terminated). */
+            char **labels;
+            /* Per-tab content panel widgets (owned via the normal child
+             * hierarchy — destroy/free propagates). The active panel is
+             * the only one rendered; others are made invisible. */
+            struct yetty_ygui_widget **panels;
+            int n_tabs;
+            int capacity;
+            int active;
+            /* Header strip height in pixels. 0 = derive from theme. */
+            float header_h;
+        } tabbar;
     } data;
 };
 

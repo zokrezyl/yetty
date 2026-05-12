@@ -1,10 +1,14 @@
 # ygui — pure-C widget library with libuv event loop
 # Output: libygui.a
 
+# Core sources — both static and shared variants compile these. No YAML
+# parser dep here: keeps libygui.so light enough for FFI consumers.
 set(YGUI_SOURCES
     ygui_engine.c
     ygui_grid.c
     ygui_widgets.c
+    ygui_rich.c
+    ygui_tabbar.c
     ygui_render.c
     ygui_theme.c
     ygui_osc.c
@@ -12,7 +16,15 @@ set(YGUI_SOURCES
     ygui_css.c
 )
 
-add_library(ygui STATIC ${YGUI_SOURCES})
+# Static-only sources — the YAML convenience layer for the RICH widget.
+# Brought in only by libygui.a so the shared variant can avoid linking
+# yetty_ypaint_yaml (which transitively requires fontconfig + libyaml,
+# and libfontconfig.a on Linux isn't built with -fPIC).
+set(YGUI_STATIC_ONLY_SOURCES
+    ygui_rich_yaml.c
+)
+
+add_library(ygui STATIC ${YGUI_SOURCES} ${YGUI_STATIC_ONLY_SOURCES})
 
 target_include_directories(ygui PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -25,6 +37,7 @@ target_link_libraries(ygui PUBLIC
     yetty_ycore
     yetty_yface     # OSC envelope + LZ4F + base64 streamer
     yetty_yfont_core  # raster-font-from-file for text measurement
+    yetty_ypaint_yaml # rich widget's create_from_yaml -> ypaint_yaml_parse
 )
 
 if(NOT EMSCRIPTEN)
@@ -62,6 +75,10 @@ if(YETTY_BUILD_YGUI_SHARED AND NOT EMSCRIPTEN)
         )
     endif()
 
+    # Shared variant: no YAML-using sources, no yetty_ypaint_yaml dep.
+    # FFI consumers that want YAML can call yetty_ypaint_yaml_parse() in
+    # their own toolchain and hand the resulting buffer to
+    # yetty_ygui_widget_rich_set_buffer().
     add_library(ygui_shared SHARED
         ${YGUI_SOURCES}
         ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
