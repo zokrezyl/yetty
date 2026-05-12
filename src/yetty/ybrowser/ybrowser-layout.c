@@ -287,12 +287,29 @@ static float wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx, float origin
 
         /* Total line width — used for text-align translation only.
 		 * Use wrap_w (with min-floor applied) so squeezed containers
-		 * don't produce negative offsets. */
+		 * don't produce negative offsets.
+		 *
+		 * Centering / right-alignment is suppressed when wrap_w is
+		 * wide (>400px). Wikipedia's <figcaption>s have
+		 * `text-align: center` but their parent figure block is laid
+		 * out at full body width (we don't compute shrink-to-fit
+		 * widths). Centering each wrapped line independently inside
+		 * 1090px produces a stair-step where short trailing lines
+		 * land far right of the long first line — visible as
+		 * "scattered letters". Suppressing centering for wide
+		 * containers gives left-aligned captions that read as one
+		 * block. Narrow centered text (table cells, narrow flex
+		 * items, real captions on sized figures) still centers
+		 * correctly. */
         float line_w = yetty_ylexbor_naive_text_width(text + cursor, end - cursor, font_size);
         float line_origin_x = origin_x;
-        if (text_align == 1) {
+        int effective_align = text_align;
+        if ((effective_align == 1 || effective_align == 2) && wrap_w > 400.0f) {
+            effective_align = 0;
+        }
+        if (effective_align == 1) {
             line_origin_x = origin_x + (wrap_w - line_w) * 0.5f;
-        } else if (text_align == 2) {
+        } else if (effective_align == 2) {
             line_origin_x = origin_x + (wrap_w - line_w);
         }
         if (line_origin_x < origin_x) {
