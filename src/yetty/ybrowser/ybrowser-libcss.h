@@ -128,4 +128,25 @@ int yetty_ybrowser_libcss_align_items(const css_computed_style *style);
 int yetty_ybrowser_libcss_float(const css_computed_style *style);
 int yetty_ybrowser_libcss_clear(const css_computed_style *style);
 
+/* White-space: returns the CSS_WHITE_SPACE_* enum (NORMAL / PRE /
+ * NOWRAP / PRE_WRAP / PRE_LINE). Default is CSS_WHITE_SPACE_NORMAL. */
+int yetty_ybrowser_libcss_white_space(const css_computed_style *style);
+
+/* Text-decoration: returns the CSS_TEXT_DECORATION_* bitmask
+ * (UNDERLINE | OVERLINE | LINE_THROUGH | BLINK), with the NONE bit
+ * (0x10) ORed when the property is explicitly `none`. The caller masks
+ * out the bits it cares about; CSS_TEXT_DECORATION_NONE forces a clear. */
+int yetty_ybrowser_libcss_text_decoration(const css_computed_style *style);
+
+/* Background-image: when the computed value is an absolute URL,
+ * fills *out_url with a freshly malloc'd NUL-terminated copy that the
+ * caller must free(). Returns 1 on success, 0 on `none` / `inherit` /
+ * any non-url() value. */
+int yetty_ybrowser_libcss_bg_image_url(const css_computed_style *style, char **out_url);
+
+/* List-style-type: returns the CSS_LIST_STYLE_TYPE_* enum (DISC /
+ * CIRCLE / SQUARE / DECIMAL / NONE / …). Used by box-build to pick
+ * the marker character (or suppress it) per <li>. */
+int yetty_ybrowser_libcss_list_style_type(const css_computed_style *style);
+
 #endif

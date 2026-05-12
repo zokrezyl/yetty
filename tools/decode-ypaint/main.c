@@ -106,6 +106,118 @@ static int decode_envelope(struct yetty_yface *y,
     for (size_t i = 0; i < in->size && i < 16; i++)
         fprintf(stderr, " %02x", (unsigned char)in->data[i]);
     fprintf(stderr, "\n");
+
+    /* Inspect TEXT_SPAN prims — look for any text content that's ONLY
+	 * descender letters (q, p, y) on its own. Walk the framed payload
+	 * past the 4B magic + 16B scene bounds + 4B byte_count. */
+    if (in->size < 24 || memcmp(in->data, "YPB1", 4) != 0) {
+        return 0;
+    }
+    uint32_t byte_count;
+    memcpy(&byte_count, in->data + 20, 4);
+    if (byte_count + 24 > in->size) {
+        return 0;
+    }
+    const uint8_t *p = in->data + 24;
+    const uint8_t *end = p + byte_count;
+
+    /* SDF prim word counts — from src/yetty/ysdf/funcs.gen.c. Sized to
+	 * cover the prims ybrowser emits (CIRCLE/BOX/SEGMENT, plus extended
+	 * shapes if a future producer adds them). */
+    static const int8_t sdf_words[64] = {
+        /* 0x10000000.. */ 8, 10, 9, 11, -1, -1, 9, 11,
+        /*               */ 13, 9, 8, 8, 10, 10, 11, 8,
+        /*               */ 10, 9, 10, 9, 9, -1, -1, -1,
+        /*               */ -1, -1, -1, -1, 8, 9, 9, -1,
+        /*               */ -1, -1, -1, -1, -1, -1, -1, -1,
+        /*               */ -1, -1, -1, -1, -1, -1, -1, -1,
+        /*               */ -1, -1, -1, -1, -1, -1, -1, -1,
+        /*               */ -1, -1, -1, -1, -1, -1, -1, -1,
+    };
+
+    int text_spans = 0;
+    int qpy_only = 0;
+    int short_qpy = 0;
+
+    while (p + 8 <= end) {
+        uint32_t t;
+        memcpy(&t, p, 4);
+        size_t psize;
+        if ((t & 0xFFFFFF00) == 0x10000000) {
+            uint8_t idx = (uint8_t)(t & 0xFF);
+            if (idx >= 64 || sdf_words[idx] <= 0) {
+                fprintf(stderr, "  unknown SDF prim type 0x%08x at offset %zu\n", t,
+                        (size_t)(p - in->data));
+                break;
+            }
+            psize = (size_t)sdf_words[idx] * 4;
+        } else if (t == 0x40000002 || t == 0x40000001 || t == 0 ||
+                   (t & 0xF0000000) == 0x80000000) {
+            uint32_t payload_size;
+            memcpy(&payload_size, p + 4, 4);
+            psize = 8u + payload_size;
+        } else {
+            fprintf(stderr, "  unknown prim type 0x%08x at offset %zu\n", t,
+                    (size_t)(p - in->data));
+            break;
+        }
+        if (psize == 0 || p + psize > end) {
+            fprintf(stderr, "  truncated prim at offset %zu (size %zu, remaining %zu)\n",
+                    (size_t)(p - in->data), psize, (size_t)(end - p));
+            break;
+        }
+        if (t == 0x40000002 && psize >= 48) {
+            text_spans++;
+            float x, y;
+            uint32_t tl;
+            memcpy(&x, p + 8, 4);
+            memcpy(&y, p + 12, 4);
+            memcpy(&tl, p + 36, 4);
+            if (48u + tl <= psize) {
+                const char *text = (const char *)p + 48;
+                /* Check 1: text is EXCLUSIVELY p/g/q/y letters (any case). */
+                int all_qpy = (tl > 0);
+                for (uint32_t k = 0; k < tl; k++) {
+                    char c = text[k];
+                    if (c != 'p' && c != 'g' && c != 'q' && c != 'y' &&
+                        c != 'P' && c != 'G' && c != 'Q' && c != 'Y') {
+                        all_qpy = 0;
+                        break;
+                    }
+                }
+                if (all_qpy) {
+                    qpy_only++;
+                    if (qpy_only <= 25) {
+                        fprintf(stderr, "  QPY-ONLY span @(%.1f,%.1f) tl=%u text='%.*s'\n",
+                                x, y, tl, (int)tl, text);
+                    }
+                }
+                /* Check 2: short fragment (<=2 chars) containing any p/g/q/y. */
+                if (tl <= 2) {
+                    int has_qpy = 0;
+                    for (uint32_t k = 0; k < tl; k++) {
+                        char c = text[k];
+                        if (c == 'p' || c == 'g' || c == 'q' || c == 'y' ||
+                            c == 'P' || c == 'G' || c == 'Q' || c == 'Y') {
+                            has_qpy = 1;
+                            break;
+                        }
+                    }
+                    if (has_qpy) {
+                        short_qpy++;
+                        if (short_qpy <= 25) {
+                            fprintf(stderr,
+                                    "  SHORT-QPY span @(%.1f,%.1f) tl=%u text='%.*s'\n",
+                                    x, y, tl, (int)tl, text);
+                        }
+                    }
+                }
+            }
+        }
+        p += psize;
+    }
+    fprintf(stderr, "  prim summary: %d TEXT_SPANs; qpy-only=%d; short(<=2)-with-qpy=%d\n",
+            text_spans, qpy_only, short_qpy);
     return 0;
 }
 

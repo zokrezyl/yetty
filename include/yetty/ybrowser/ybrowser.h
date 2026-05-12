@@ -96,6 +96,18 @@ struct yetty_ycore_void_result yetty_ylexbor_relayout(struct yetty_ylexbor *r);
  * Optional — if not set, only absolute URLs work. */
 struct yetty_ycore_void_result yetty_ylexbor_set_base_url(struct yetty_ylexbor *r, const char *url);
 
+/* Process-wide libcurl share handle (CURLSH*, returned as void* to keep
+ * the public header free of <curl/curl.h>). Use it from external
+ * fetchers that go through their own `curl_easy_init()` so the
+ * connection they open stays warm for subsequent yetty fetches:
+ *     curl_easy_setopt(c, CURLOPT_SHARE, yetty_ylexbor_curl_share());
+ * Without this, the page fetch in tools/ybrowser/main.c opens a TLS
+ * connection to e.g. en.wikipedia.org and immediately discards it —
+ * then load_external_stylesheets has to re-handshake to the same host
+ * for the CSS fetch (~100ms wasted). Returns NULL when libcurl isn't
+ * compiled in. */
+void *yetty_ylexbor_curl_share(void);
+
 /* Run any pending timers whose deadline has elapsed and drain Promise
  * microtasks. Returns milliseconds until the next timer fires (-1 if
  * none). The host calls this from its event loop. */
@@ -114,6 +126,22 @@ int yetty_ylexbor_pump_timers(struct yetty_ylexbor *r);
 int yetty_ylexbor_test_box_count(const struct yetty_ylexbor *r);
 int yetty_ylexbor_test_box_at(const struct yetty_ylexbor *r, int index, float *x, float *y,
                               float *w, float *h, char *tag_out, int tag_cap);
+
+/* Box-kind constants returned in *kind_out by yetty_ylexbor_test_box_info_at.
+ * Map directly to the internal yetty_ylexbor_box_kind enum. */
+#define YETTY_YLEXBOR_BOX_KIND_BLOCK 0
+#define YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT 1
+#define YETTY_YLEXBOR_BOX_KIND_INLINE_IMAGE 2
+
+/* Test-only: introspect inline-text style + text content. Returns 0 +
+ * fills the out args on success, non-zero on out-of-range. text_out is
+ * filled with the box's UTF-8 text bytes (NUL-terminated, truncated to
+ * text_cap-1). For YL_BOX_BLOCK / YL_BOX_INLINE_IMAGE boxes text_out is
+ * empty and font_weight/italic/underline reflect the box's style snapshot.
+ * Any out-pointer may be NULL — those fields are skipped. */
+int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int *kind_out,
+                                   int *font_weight_out, int *italic_out, int *underline_out,
+                                   char *text_out, int text_cap);
 
 #ifdef __cplusplus
 }

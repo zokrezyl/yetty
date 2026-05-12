@@ -108,6 +108,52 @@ BROTLI_DIR="$WORK_DIR/brotli-${BROTLI_VERSION}"
 
 mkdir -p "$WORK_DIR" "$OUTPUT_DIR" "$CACHE_DIR"
 
+# HTTP/2 + HTTP/3 backends — fetched as prebuilt tarballs from their own
+# per-lib 3rdparty workflows (build-3rdparty-nghttp2.yml, nghttp3.yml,
+# ngtcp2.yml). Each was built natively on the target arch (linux-riscv64
+# via QEMU+debian container; everything else on a matching native
+# runner). Gated on platforms where QUIC works:
+#   - linux-{x86_64,aarch64,riscv64}, macos-{x86_64,arm64}
+# Other platforms (android/ios/tvos/webasm/windows) skip QUIC; libcurl on
+# those stays at HTTP/1.1. HTTP/3 needs OpenSSL ≥ 3.5 for its QUIC API —
+# openssl-new 4.0+ has it via the ossl crypto backend in ngtcp2.
+#
+# Pin versions are read from the per-lib `version` files (single source
+# of truth — bumping a file is enough to migrate libcurl too).
+NGHTTP2_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/nghttp2/version"
+[ -f "$NGHTTP2_VERSION_FILE" ] || { echo "missing $NGHTTP2_VERSION_FILE" >&2; exit 1; }
+NGHTTP2_VERSION="$(tr -d '[:space:]' < "$NGHTTP2_VERSION_FILE")"
+[ -n "$NGHTTP2_VERSION" ] || { echo "$NGHTTP2_VERSION_FILE is empty" >&2; exit 1; }
+
+NGHTTP3_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/nghttp3/version"
+[ -f "$NGHTTP3_VERSION_FILE" ] || { echo "missing $NGHTTP3_VERSION_FILE" >&2; exit 1; }
+NGHTTP3_VERSION="$(tr -d '[:space:]' < "$NGHTTP3_VERSION_FILE")"
+[ -n "$NGHTTP3_VERSION" ] || { echo "$NGHTTP3_VERSION_FILE is empty" >&2; exit 1; }
+
+NGTCP2_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/ngtcp2/version"
+[ -f "$NGTCP2_VERSION_FILE" ] || { echo "missing $NGTCP2_VERSION_FILE" >&2; exit 1; }
+NGTCP2_VERSION="$(tr -d '[:space:]' < "$NGTCP2_VERSION_FILE")"
+[ -n "$NGTCP2_VERSION" ] || { echo "$NGTCP2_VERSION_FILE is empty" >&2; exit 1; }
+
+BUILD_QUIC=0
+case "$TARGET_PLATFORM" in
+    linux-x86_64|linux-aarch64|linux-riscv64|macos-x86_64|macos-arm64|windows-x86_64)
+        BUILD_QUIC=1
+        ;;
+esac
+
+# Static-library file extension for the prebuilt QUIC tarballs. Windows
+# MSVC uses lib<name>.lib (same convention as openssl-new on Windows);
+# unix uses lib<name>.a.
+if [ "$TARGET_PLATFORM" = "windows-x86_64" ]; then
+    _QLIB_EXT="lib"
+else
+    _QLIB_EXT="a"
+fi
+
+HTTP_PREFIX="$WORK_DIR/http-deps-${TARGET_PLATFORM}"
+
+
 # fetch_3rdparty <name> <tarball-cache-path> <url> <extract-dir>
 fetch_3rdparty() {
     local _name="$1" _cache="$2" _url="$3" _dir="$4"
@@ -138,6 +184,48 @@ fetch_3rdparty() {
 fetch_3rdparty openssl-new "$OSSL_TARBALL"   "$OSSL_URL"   "$OSSL_DIR"
 fetch_3rdparty zlib        "$ZLIB_TARBALL"   "$ZLIB_URL"   "$ZLIB_DIR"
 fetch_3rdparty brotli      "$BROTLI_TARBALL" "$BROTLI_URL" "$BROTLI_DIR"
+
+#-----------------------------------------------------------------------------
+# Fetch QUIC backends — nghttp2 / nghttp3 / ngtcp2 prebuilts. All three
+# tarballs unpack into the same HTTP_PREFIX (their layouts don't collide:
+# each has its own headers under include/<libname>/ and its own .a + .pc
+# under lib/[pkgconfig/]).
+#-----------------------------------------------------------------------------
+if [ "$BUILD_QUIC" = "1" ]; then
+    rm -rf "$HTTP_PREFIX"
+    mkdir -p "$HTTP_PREFIX"
+    _fetch_quic() {
+        local _n="$1" _v="$2"
+        local _fname="${_n}-${TARGET_PLATFORM}-${_v}.tar.gz"
+        local _cache="$CACHE_DIR/$_fname"
+        local _url="${GH_RELEASE_BASE}/lib-${_n}-${_v}/${_fname}"
+        if [ ! -f "$_cache" ]; then
+            local _part="$_cache.part.$$"
+            (
+                if command -v flock >/dev/null 2>&1; then flock -x 9; fi
+                if [ ! -f "$_cache" ]; then
+                    echo "==> downloading $_n $_v for $TARGET_PLATFORM"
+                    echo "    $_url"
+                    curl -fL --retry 8 --retry-delay 5 --retry-all-errors \
+                        -o "$_part" "$_url"
+                    mv "$_part" "$_cache"
+                fi
+            ) 9>"$CACHE_DIR/.${_n}-download.lock"
+            rm -f "$_part"
+        fi
+        echo "==> unpacking $_n $_v into $HTTP_PREFIX"
+        tar -C "$HTTP_PREFIX" -xzf "$_cache"
+    }
+    _fetch_quic nghttp2 "$NGHTTP2_VERSION"
+    _fetch_quic nghttp3 "$NGHTTP3_VERSION"
+    _fetch_quic ngtcp2  "$NGTCP2_VERSION"
+    for _F in "$HTTP_PREFIX/lib/libnghttp2.$_QLIB_EXT" \
+              "$HTTP_PREFIX/lib/libnghttp3.$_QLIB_EXT" \
+              "$HTTP_PREFIX/lib/libngtcp2.$_QLIB_EXT" \
+              "$HTTP_PREFIX/lib/libngtcp2_crypto_ossl.$_QLIB_EXT"; do
+        [ -f "$_F" ] || { echo "missing: $_F" >&2; exit 1; }
+    done
+fi
 
 # Windows MSVC build of openssl-new ships libssl.lib + libcrypto.lib;
 # everywhere else the convention is libssl.a + libcrypto.a.
@@ -240,8 +328,6 @@ CMAKE_ARGS=(
     -DCURL_DISABLE_LDAP=ON
     -DCURL_DISABLE_LDAPS=ON
     -DCURL_ZSTD=OFF
-    -DUSE_NGHTTP2=OFF
-    -DUSE_NGTCP2=OFF
     -DUSE_QUICHE=OFF
     -DUSE_LIBRTMP=OFF
     -DENABLE_UNIX_SOCKETS=OFF
@@ -249,11 +335,38 @@ CMAKE_ARGS=(
     # auto-detected nix-store deps even if upstream curl ever flips
     # one of the above to ON by default.
     -DCMAKE_DISABLE_FIND_PACKAGE_Libidn2=ON
-    -DCMAKE_DISABLE_FIND_PACKAGE_NGHTTP2=ON
     -DCMAKE_DISABLE_FIND_PACKAGE_LibPSL=ON
     -DCMAKE_DISABLE_FIND_PACKAGE_LibSSH2=ON
     -DCMAKE_DISABLE_FIND_PACKAGE_ZSTD=ON
 )
+if [ "$BUILD_QUIC" = "1" ]; then
+    # Hand curl our inline-built nghttp2 + nghttp3 + ngtcp2 (+ ossl
+    # crypto backend). Variable names track curl 8.x's
+    # FindNGHTTP2/FindNGHTTP3/FindNGTCP2 conventions.
+    CMAKE_ARGS+=(
+        -DUSE_NGHTTP2=ON
+        -DNGHTTP2_INCLUDE_DIR="$HTTP_PREFIX/include"
+        -DNGHTTP2_LIBRARY="$HTTP_PREFIX/lib/libnghttp2.$_QLIB_EXT"
+
+        -DUSE_NGHTTP3=ON
+        -DNGHTTP3_INCLUDE_DIR="$HTTP_PREFIX/include"
+        -DNGHTTP3_LIBRARY="$HTTP_PREFIX/lib/libnghttp3.$_QLIB_EXT"
+
+        -DUSE_NGTCP2=ON
+        -DNGTCP2_INCLUDE_DIR="$HTTP_PREFIX/include"
+        -DNGTCP2_LIBRARY="$HTTP_PREFIX/lib/libngtcp2.$_QLIB_EXT"
+        -DNGTCP2_CRYPTO_OSSL_LIBRARY="$HTTP_PREFIX/lib/libngtcp2_crypto_ossl.$_QLIB_EXT"
+        # Some curl versions look for the crypto backend lib under a
+        # different cache-var; set both so either matches.
+        -DNGTCP2_CRYPTO_LIBRARY="$HTTP_PREFIX/lib/libngtcp2_crypto_ossl.$_QLIB_EXT"
+    )
+else
+    CMAKE_ARGS+=(
+        -DUSE_NGHTTP2=OFF
+        -DUSE_NGTCP2=OFF
+        -DCMAKE_DISABLE_FIND_PACKAGE_NGHTTP2=ON
+    )
+fi
 EMCMAKE_PREFIX=""
 
 case "$TARGET_PLATFORM" in
@@ -263,23 +376,27 @@ linux-x86_64)
     ;;
 
 linux-aarch64)
-    : "${CROSS_PREFIX:=aarch64-unknown-linux-gnu-}"
-    CMAKE_ARGS+=(
-        "-DCMAKE_SYSTEM_NAME=Linux"
-        "-DCMAKE_SYSTEM_PROCESSOR=aarch64"
-        "-DCMAKE_C_COMPILER=${CROSS_PREFIX}gcc"
-        "-DCMAKE_CXX_COMPILER=${CROSS_PREFIX}g++"
-    )
+    : "${CROSS_PREFIX=aarch64-unknown-linux-gnu-}"
+    if [ -n "$CROSS_PREFIX" ]; then
+        CMAKE_ARGS+=(
+            "-DCMAKE_SYSTEM_NAME=Linux"
+            "-DCMAKE_SYSTEM_PROCESSOR=aarch64"
+            "-DCMAKE_C_COMPILER=${CROSS_PREFIX}gcc"
+            "-DCMAKE_CXX_COMPILER=${CROSS_PREFIX}g++"
+        )
+    fi
     ;;
 
 linux-riscv64)
-    : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
-    CMAKE_ARGS+=(
-        "-DCMAKE_SYSTEM_NAME=Linux"
-        "-DCMAKE_SYSTEM_PROCESSOR=riscv64"
-        "-DCMAKE_C_COMPILER=${CROSS_PREFIX}gcc"
-        "-DCMAKE_CXX_COMPILER=${CROSS_PREFIX}g++"
-    )
+    : "${CROSS_PREFIX=riscv64-unknown-linux-gnu-}"
+    if [ -n "$CROSS_PREFIX" ]; then
+        CMAKE_ARGS+=(
+            "-DCMAKE_SYSTEM_NAME=Linux"
+            "-DCMAKE_SYSTEM_PROCESSOR=riscv64"
+            "-DCMAKE_C_COMPILER=${CROSS_PREFIX}gcc"
+            "-DCMAKE_CXX_COMPILER=${CROSS_PREFIX}g++"
+        )
+    fi
     ;;
 
 macos-x86_64)
@@ -389,6 +506,25 @@ for _D in lib lib64; do
     fi
 done
 cp -a "$INSTALL_DIR/include" "$STAGE/"
+
+# Stage the QUIC sidecar archives next to libcurl.a — libcurl.a has
+# unresolved nghttp2/nghttp3/ngtcp2/ngtcp2_crypto_ossl symbols and the
+# consumer cmake (libs/libcurl.cmake) needs to link these in. Without
+# this the final yetty binary would fail to link with undefined refs
+# to nghttp2_session_*, ngtcp2_conn_*, nghttp3_conn_*.
+if [ "$BUILD_QUIC" = "1" ]; then
+    for _N in libnghttp2 libnghttp3 libngtcp2 libngtcp2_crypto_ossl; do
+        cp -a "$HTTP_PREFIX/lib/${_N}.${_QLIB_EXT}" "$STAGE/lib/"
+    done
+    # Headers aren't strictly needed by consumers (they don't include
+    # them directly), but shipping the include/ngtcp2 et al. is cheap
+    # and lets debug builds / introspection tools resolve symbols.
+    for _H in nghttp2 nghttp3 ngtcp2; do
+        if [ -d "$HTTP_PREFIX/include/$_H" ]; then
+            cp -a "$HTTP_PREFIX/include/$_H" "$STAGE/include/"
+        fi
+    done
+fi
 
 # Accept libcurl.a (unix/MSYS2 CLANG64) or libcurl.lib (windows native MSVC)
 _LIB_FOUND=""

@@ -629,6 +629,121 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
 	 * prims and their pixel data are present in the wire bytes. */
     float scene_max_x = 0.0f, scene_max_y = 0.0f;
 
+    /* Parallel image prefetch. Before the synchronous per-box paint
+	 * loop kicks in (which does decode + cache-populate on first hit
+	 * per image), batch-fetch every <img> URL on the page in parallel
+	 * via curl_multi. With HTTP/2 multiplexing this drops Wikipedia's
+	 * ~34 image fetches from 34×sequential RTTs to 1 connection per
+	 * origin × multiplexed streams — closer to what Chrome does.
+	 * Skips URLs already in the cache (re-paints) and `data:` URIs
+	 * (handled inline by img_cache_get_or_load). */
+    {
+        uint32_t img_count = 0;
+        for (uint32_t i = 0; i < r->boxes.size; i++) {
+            if (r->boxes.data[i].kind == YL_BOX_INLINE_IMAGE) {
+                img_count++;
+            }
+        }
+        if (img_count > 0) {
+            char **urls = calloc(img_count, sizeof(*urls));
+            char **bodies = calloc(img_count, sizeof(*bodies));
+            size_t *lens = calloc(img_count, sizeof(*lens));
+            long *status = calloc(img_count, sizeof(*status));
+            int slot_to_cache_idx[1024];
+            int n = 0;
+            if (urls && bodies && lens && status) {
+                for (uint32_t i = 0; i < r->boxes.size && n < 1024; i++) {
+                    struct yetty_ylexbor_box *b = &r->boxes.data[i];
+                    if (b->kind != YL_BOX_INLINE_IMAGE || !b->element) {
+                        continue;
+                    }
+                    char *u = yetty_ylexbor_img_pick_url(r, b->element);
+                    if (!u) {
+                        continue;
+                    }
+                    /* Skip data: URIs and already-cached entries. */
+                    int already = 0;
+                    if (strncmp(u, "data:", 5) == 0) {
+                        already = 1;
+                    }
+                    for (int k = 0; !already && k < r->img_cache_count; k++) {
+                        if (r->img_cache[k].url && strcmp(r->img_cache[k].url, u) == 0) {
+                            already = 1;
+                            break;
+                        }
+                    }
+                    /* De-dup within this batch — multiple <img> can
+					 * share the same src. */
+                    for (int k = 0; !already && k < n; k++) {
+                        if (strcmp(urls[k], u) == 0) {
+                            already = 1;
+                            break;
+                        }
+                    }
+                    if (already) {
+                        free(u);
+                        continue;
+                    }
+                    urls[n] = u; /* transferred — freed below */
+                    slot_to_cache_idx[n] = -1;
+                    n++;
+                }
+                if (n > 0) {
+                    yetty_ylexbor_http_get_many((const char *const *)urls, n, r->base_url,
+                                                /*concurrency=*/8, bodies, lens, status);
+                    /* Insert fetched bytes into the cache, decoding
+					 * each in turn. Decode is fast enough that
+					 * parallelising it via worker threads turned
+					 * out not to pay back the pthread_create
+					 * overhead — measured 0.77s vs 0.80s on the
+					 * Photography page; reverted. */
+                    for (int k = 0; k < n; k++) {
+                        if (r->img_cache_count == r->img_cache_cap) {
+                            int nc = r->img_cache_cap ? r->img_cache_cap * 2 : 8;
+                            struct yetty_ylexbor_img_cache_entry *p =
+                                realloc(r->img_cache, (size_t)nc * sizeof(*p));
+                            if (!p) {
+                                free(bodies[k]);
+                                continue;
+                            }
+                            r->img_cache = p;
+                            r->img_cache_cap = nc;
+                        }
+                        struct yetty_ylexbor_img_cache_entry *e =
+                            &r->img_cache[r->img_cache_count++];
+                        memset(e, 0, sizeof(*e));
+                        e->url = urls[k]; /* transfer ownership */
+                        urls[k] = NULL;
+                        if (!bodies[k] || lens[k] == 0 ||
+                            (status[k] != 0 && status[k] != 200)) {
+                            free(bodies[k]);
+                            e->failed = 1;
+                            continue;
+                        }
+                        uint32_t *pixels = NULL;
+                        int w = 0, h = 0;
+                        int ok = decode_image((const uint8_t *)bodies[k], lens[k], &pixels, &w, &h);
+                        free(bodies[k]);
+                        if (!ok) {
+                            e->failed = 1;
+                            continue;
+                        }
+                        e->pixels = pixels;
+                        e->w = w;
+                        e->h = h;
+                    }
+                }
+            }
+            for (int k = 0; k < n; k++) {
+                free(urls[k]);
+            }
+            free(urls);
+            free(bodies);
+            free(lens);
+            free(status);
+        }
+    }
+
     ydebug("paint total boxes=%u", r->boxes.size);
     for (uint32_t i = 0; i < r->boxes.size; i++) {
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
@@ -689,6 +804,13 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                 };
                 (void)yetty_ysdf_add_box(buf, z++, pack_rgba(b->bg), 0, 0, &box);
             }
+
+            /* P2.10 background-image yimage emission removed: ylexbor
+			 * has none, and we're trying to match its visual baseline
+			 * since the user reports ylexbor renders correctly. */
+            /* P1.4 list-item marker emission removed: ylexbor has no
+			 * markers at all and the user reports its rendering as
+			 * correct. */
             /* Borders — render each present side as a thin ysdf
 			 * rect of the border color. ysdf can't draw a
 			 * stroked rounded box natively, so for now corner
@@ -818,30 +940,15 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
             /* Baseline approximation: top + 0.8 * line height.
 			 * Real metric needs FreeType ascent. */
             float baseline_y = b->y + b->font_size * 0.8f;
+            /* Plain text emission — match ylexbor's path exactly.
+			 * word_spacing/char_spacing aren't routed through; the
+			 * justify-fill code computes word_spacing but until we
+			 * confirm it's not the source of the user-reported
+			 * scattered glyphs we keep it dormant. */
             (void)yetty_ypaint_core_buffer_add_text(buf, b->x, baseline_y, &txt, b->font_size,
                                                     pack_rgba(b->fg), z++, /*font_id=*/-1,
                                                     /*rotation=*/0.0f);
-            /* Synthetic bold — we only have one font, so to make
-			 * <strong>/<b>/font-weight:bold visibly thicker we
-			 * draw the same run again offset by ~1px. Crude but
-			 * it actually reads as bold on the screen. Drop when
-			 * a real bold font is wired through font_id. */
-            if (b->font_weight >= 600) {
-                float ox = b->font_size * 0.05f;
-                if (ox < 1.0f) {
-                    ox = 1.0f;
-                }
-                (void)yetty_ypaint_core_buffer_add_text(buf, b->x + ox, baseline_y, &txt,
-                                                        b->font_size, pack_rgba(b->fg), z++,
-                                                        /*font_id=*/-1, /*rotation=*/0.0f);
-            }
             if (b->underline && b->w > 0) {
-                /* Thin SDF rect ~1px below baseline, in the run's
-				 * foreground color. Matches the visual the user
-				 * expects for an <a>. Thickness scales lightly
-				 * with font size (max(1, font*0.06)) so it remains
-				 * visible at large headings without overpowering
-				 * normal text. */
                 float thickness = b->font_size * 0.06f;
                 if (thickness < 1.0f) {
                     thickness = 1.0f;

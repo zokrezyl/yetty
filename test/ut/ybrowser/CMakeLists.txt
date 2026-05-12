@@ -44,3 +44,18 @@ target_compile_definitions(ybrowser-wikipedia-test PRIVATE
 )
 add_test(NAME ybrowser_wikipedia COMMAND ybrowser-wikipedia-test)
 
+# ybrowser-inline-test — pins inline text behaviour (list markers, wrap,
+# UTF-8 safety, weight/italic/underline propagation). Exercises the new
+# yetty_ylexbor_test_box_info_at introspection helper.
+add_executable(ybrowser-inline-test
+    ybrowser-inline-test.c
+    ${YBROWSER_TEST_SHIM_SOURCES}
+)
+target_include_directories(ybrowser-inline-test PRIVATE
+    ${YETTY_ROOT}/include
+    ${YETTY_ROOT}/src
+)
+target_link_libraries(ybrowser-inline-test PRIVATE
+    yetty_ybrowser yetty_ypaint yetty_ypaint_core yetty_ycore m)
+add_test(NAME ybrowser_inline COMMAND ybrowser-inline-test)
+

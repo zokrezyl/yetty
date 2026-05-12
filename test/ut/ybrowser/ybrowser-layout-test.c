@@ -348,7 +348,17 @@ static void test_width_pixels(void)
 }
 
 /* ============================================================================
- * Test 8 — table with 3 columns lays out cells side-by-side, equal width.
+ * Test 8 — table with 3 columns lays out cells side-by-side.
+ *
+ * Updated for content-aware column widths: short cells ("a", "b", "c")
+ * each get only their measured glyph width + small padding, NOT one
+ * third of the container. The total table width therefore stays small
+ * — same behaviour real CSS tables exhibit for narrow infobox-like
+ * label/value tables. The structural facts we still check:
+ *
+ *   - all three cells share a Y coordinate (one row),
+ *   - X is strictly increasing,
+ *   - each cell has a non-trivial width (> font/2 so glyphs fit).
  * ============================================================================*/
 static void test_table_layout(void)
 {
@@ -368,16 +378,54 @@ static void test_table_layout(void)
         return;
     }
 
-    /* Three equal columns within the body's 984 px content area. */
-    float expected = 984.0f / 3.0f;
-    ASSERT_NEAR("td a width", td_a.w, expected);
-    ASSERT_NEAR("td b width", td_b.w, expected);
-    ASSERT_NEAR("td c width", td_c.w, expected);
+    fprintf(stderr, "  td widths a=%.1f b=%.1f c=%.1f\n", td_a.w, td_b.w, td_c.w);
+    /* Each cell wide enough to hold at least one glyph. */
+    ASSERT_TRUE("td a width > 5", td_a.w > 5.0f);
+    ASSERT_TRUE("td b width > 5", td_b.w > 5.0f);
+    ASSERT_TRUE("td c width > 5", td_c.w > 5.0f);
+    /* No cell should consume an unreasonable fraction of the container. */
+    ASSERT_TRUE("td a not full-width", td_a.w < 500.0f);
     /* Same row → same y. */
     ASSERT_NEAR("td a/b same y", td_a.y, td_b.y);
     ASSERT_NEAR("td b/c same y", td_b.y, td_c.y);
     /* Strictly increasing x. */
     ASSERT_TRUE("td x ordering", td_a.x < td_b.x && td_b.x < td_c.x);
+
+    yetty_ylexbor_destroy(yl);
+}
+
+/* ============================================================================
+ * Test 8b — content-aware table column widths: a wide-content cell takes
+ * a larger share than narrow siblings (was equal-split before P1.3).
+ * Pins the new behaviour.
+ * ============================================================================*/
+static void test_table_content_widths(void)
+{
+    fprintf(stderr, "[test_table_content_widths]\n");
+    static const char html[] =
+        "<html><body>"
+        "<table><tr>"
+        "<td>x</td>"
+        "<td>A reasonably long label with several words</td>"
+        "<td>x</td>"
+        "</tr></table>"
+        "</body></html>";
+    struct yetty_ylexbor *yl = load(html, 1000, 600);
+
+    struct box_info a = {0}, b = {0}, c = {0};
+    if (find_box(yl, "td", 0, &a) != 0 || find_box(yl, "td", 1, &b) != 0 ||
+        find_box(yl, "td", 2, &c) != 0) {
+        fprintf(stderr, "  missing td\n");
+        g_failures++;
+        yetty_ylexbor_destroy(yl);
+        return;
+    }
+
+    fprintf(stderr, "  td widths a=%.1f b=%.1f c=%.1f\n", a.w, b.w, c.w);
+    /* The middle cell with much more text must end up wider than the
+     * single-letter cells on either side. */
+    ASSERT_TRUE("wide content cell wider than narrow neighbours",
+                b.w > a.w * 2.0f && b.w > c.w * 2.0f);
 
     yetty_ylexbor_destroy(yl);
 }
@@ -804,6 +852,7 @@ int main(void)
     test_flex_grow_ratios();
     test_flex_space_between_auto_basis();
     test_table_layout();
+    test_table_content_widths();
     test_nav_hidden_header_visible();
     test_aria_hidden_skipped();
     test_wikipedia_float_class();

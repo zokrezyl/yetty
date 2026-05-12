@@ -53,6 +53,8 @@ static void box_vec_clear(struct yetty_ylexbor_box_vec *v)
             v->data[i].segs = NULL;
             v->data[i].segs_count = 0;
         }
+        free(v->data[i].bg_image_url);
+        v->data[i].bg_image_url = NULL;
     }
     v->size = 0;
 }
@@ -61,6 +63,7 @@ static void box_vec_destroy(struct yetty_ylexbor_box_vec *v)
 {
     for (uint32_t i = 0; i < v->size; i++) {
         free(v->data[i].segs);
+        free(v->data[i].bg_image_url);
     }
     free(v->data);
     v->data = NULL;
@@ -239,13 +242,45 @@ void *yetty_ylexbor_internal_get_js_ctx(struct yetty_ylexbor *r)
 
 static int g_css_loaded = 0, g_css_failed = 0, g_css_inline = 0;
 
-/* Walk the DOM, find every <link rel="stylesheet" href="..."> and
- * <style>...</style>, fetch external sheets via http_get, parse, and
- * attach to the document. Internal <style> blocks are normally already
- * processed by lexbor's HTML parser, but we re-attach them defensively
- * so the cascade fires for css class/id selectors used by the boxes
- * we'll later read computed style from. */
-static void load_external_stylesheets(struct yetty_ylexbor *r, lxb_dom_node_t *node)
+/* One CSS source to apply. EITHER `inline_body` is set (an inline
+ * <style> block — body is owned, will be freed after add_css) OR `url`
+ * is set (external <link>; after the parallel-fetch step, body[i] /
+ * len[i] / status[i] in the parent arrays carry the fetched response).
+ * Document order across the two types is preserved by appending to a
+ * single list during the DOM walk — CSS cascade specificity depends
+ * on source order, so we must apply inline + external in the order
+ * they appear. */
+struct css_entry {
+    int is_external;
+    char *url;         /* owned when is_external — freed after fetch */
+    char *inline_body; /* owned when !is_external — freed after add_css */
+    size_t inline_len;
+};
+
+struct css_collect {
+    struct css_entry *items;
+    int count, cap;
+};
+
+static void css_collect_push(struct css_collect *cc, struct css_entry e)
+{
+    if (cc->count == cc->cap) {
+        int nc = cc->cap ? cc->cap * 2 : 8;
+        struct css_entry *p = realloc(cc->items, (size_t)nc * sizeof(*p));
+        if (!p) {
+            free(e.url);
+            free(e.inline_body);
+            return;
+        }
+        cc->items = p;
+        cc->cap = nc;
+    }
+    cc->items[cc->count++] = e;
+}
+
+/* DOM walker — recursively appends <link rel=stylesheet> and <style>
+ * to `cc->items` in document order. */
+static void css_collect_walk(struct yetty_ylexbor *r, lxb_dom_node_t *node, struct css_collect *cc)
 {
     for (lxb_dom_node_t *c = node->first_child; c != NULL; c = c->next) {
         if (c->type == LXB_DOM_NODE_TYPE_ELEMENT) {
@@ -256,8 +291,8 @@ static void load_external_stylesheets(struct yetty_ylexbor *r, lxb_dom_node_t *n
                     lxb_dom_element_get_attribute(el, (const lxb_char_t *)"rel", 3, &rl);
                 if (rel && rl == 10 && strncasecmp((const char *)rel, "stylesheet", 10) == 0) {
                     size_t hl = 0;
-                    const lxb_char_t *href =
-                        lxb_dom_element_get_attribute(el, (const lxb_char_t *)"href", 4, &hl);
+                    const lxb_char_t *href = lxb_dom_element_get_attribute(
+                        el, (const lxb_char_t *)"href", 4, &hl);
                     if (href && hl > 0) {
                         char *h = malloc(hl + 1);
                         if (h) {
@@ -266,32 +301,13 @@ static void load_external_stylesheets(struct yetty_ylexbor *r, lxb_dom_node_t *n
                             char *url = yetty_ylexbor_resolve_url(r, h);
                             free(h);
                             if (url) {
-                                size_t blen = 0;
-                                long status = 0;
-                                char *body = yetty_ylexbor_http_get(url, &blen, &status);
-                                if (body && status >= 200 && status < 300) {
-                                    struct yetty_ycore_void_result ar =
-                                        yetty_ylexbor_add_css(r, body, blen);
-                                    if (YETTY_IS_ERR(ar)) {
-                                        g_css_failed++;
-                                    } else {
-                                        g_css_loaded++;
-                                    }
-                                } else {
-                                    g_css_failed++;
-                                }
-                                free(body);
-                                free(url);
+                                struct css_entry e = {.is_external = 1, .url = url};
+                                css_collect_push(cc, e);
                             }
                         }
                     }
                 }
             } else if (c->local_name == LXB_TAG_STYLE) {
-                /* Concatenate text-node children for the
-				 * <style> block. lexbor normally does this
-				 * automatically; the explicit attach is a
-				 * belt-and-braces measure for cases where
-				 * the parser's auto-attach didn't run. */
                 size_t total = 0;
                 for (lxb_dom_node_t *t = c->first_child; t; t = t->next) {
                     if (t->type == LXB_DOM_NODE_TYPE_TEXT) {
@@ -312,21 +328,119 @@ static void load_external_stylesheets(struct yetty_ylexbor *r, lxb_dom_node_t *n
                             off += n;
                         }
                         css[off] = '\0';
-                        struct yetty_ycore_void_result ar = yetty_ylexbor_add_css(r, css, off);
-                        if (YETTY_IS_ERR(ar)) {
-                            g_css_failed++;
-                        } else {
-                            g_css_inline++;
-                        }
-                        free(css);
+                        struct css_entry e = {
+                            .is_external = 0, .inline_body = css, .inline_len = off};
+                        css_collect_push(cc, e);
                     }
                 }
             }
         }
         if (c->first_child) {
-            load_external_stylesheets(r, c);
+            css_collect_walk(r, c, cc);
         }
     }
+}
+
+/* Two-phase stylesheet load:
+ *   1) DOM walk → collect <style> + <link rel=stylesheet> in order.
+ *   2) Parallel-fetch every external URL via curl_multi.
+ *   3) Apply each entry in collected order so CSS cascade specificity
+ *      sees the same source ordering it would under sequential fetch.
+ *
+ * The big win is phase 2 — Wikipedia's two external sheets used to
+ * fetch one after the other (~100ms RTT each = 200ms). Multiplexed
+ * over a single HTTP/2 connection they finish in one RTT. */
+static void load_external_stylesheets(struct yetty_ylexbor *r, lxb_dom_node_t *node)
+{
+    struct css_collect cc = {0};
+    css_collect_walk(r, node, &cc);
+    if (cc.count == 0) {
+        return;
+    }
+
+    /* Count externals + allocate fetch I/O arrays. */
+    int ext_n = 0;
+    for (int i = 0; i < cc.count; i++) {
+        if (cc.items[i].is_external) {
+            ext_n++;
+        }
+    }
+    char **fetch_urls = NULL;
+    char **bodies = NULL;
+    size_t *lens = NULL;
+    long *status = NULL;
+    int *slot_to_entry = NULL;
+    if (ext_n > 0) {
+        fetch_urls = calloc((size_t)ext_n, sizeof(*fetch_urls));
+        bodies = calloc((size_t)ext_n, sizeof(*bodies));
+        lens = calloc((size_t)ext_n, sizeof(*lens));
+        status = calloc((size_t)ext_n, sizeof(*status));
+        slot_to_entry = calloc((size_t)ext_n, sizeof(*slot_to_entry));
+        if (!fetch_urls || !bodies || !lens || !status || !slot_to_entry) {
+            free(fetch_urls);
+            free(bodies);
+            free(lens);
+            free(status);
+            free(slot_to_entry);
+            ext_n = 0;
+        } else {
+            int j = 0;
+            for (int i = 0; i < cc.count; i++) {
+                if (cc.items[i].is_external) {
+                    fetch_urls[j] = cc.items[i].url;
+                    slot_to_entry[j] = i;
+                    j++;
+                }
+            }
+            yetty_ylexbor_http_get_many((const char *const *)fetch_urls, ext_n, r->base_url,
+                                        /*concurrency=*/8, bodies, lens, status);
+        }
+    }
+
+    /* Apply each entry in document order. */
+    for (int i = 0; i < cc.count; i++) {
+        struct css_entry *e = &cc.items[i];
+        if (e->is_external) {
+            /* Locate the matching slot. */
+            int slot = -1;
+            for (int s = 0; s < ext_n; s++) {
+                if (slot_to_entry[s] == i) {
+                    slot = s;
+                    break;
+                }
+            }
+            if (slot >= 0 && bodies[slot] && status[slot] >= 200 && status[slot] < 300) {
+                struct yetty_ycore_void_result ar =
+                    yetty_ylexbor_add_css(r, bodies[slot], lens[slot]);
+                if (YETTY_IS_ERR(ar)) {
+                    g_css_failed++;
+                } else {
+                    g_css_loaded++;
+                }
+            } else {
+                g_css_failed++;
+            }
+            if (slot >= 0) {
+                free(bodies[slot]);
+            }
+            free(e->url);
+        } else {
+            struct yetty_ycore_void_result ar =
+                yetty_ylexbor_add_css(r, e->inline_body, e->inline_len);
+            if (YETTY_IS_ERR(ar)) {
+                g_css_failed++;
+            } else {
+                g_css_inline++;
+            }
+            free(e->inline_body);
+        }
+    }
+    free(fetch_urls);
+    free(bodies);
+    free(lens);
+    free(status);
+    free(slot_to_entry);
+    free(cc.items);
 }
 
 struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, const char *html,
@@ -501,6 +615,37 @@ int yetty_ylexbor_test_box_at(const struct yetty_ylexbor *r, int index, float *x
                 }
                 tag_out[n] = '\0';
             }
+        }
+    }
+    return 0;
+}
+
+int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int *kind_out,
+                                   int *font_weight_out, int *italic_out, int *underline_out,
+                                   char *text_out, int text_cap)
+{
+    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size) {
+        return -1;
+    }
+    const struct yetty_ylexbor_box *b = &r->boxes.data[index];
+    if (kind_out) *kind_out = (int)b->kind;
+    if (font_weight_out) *font_weight_out = b->font_weight;
+    if (italic_out) *italic_out = b->font_italic ? 1 : 0;
+    if (underline_out) *underline_out = b->underline ? 1 : 0;
+    if (text_out && text_cap > 0) {
+        text_out[0] = '\0';
+        if (b->kind == YL_BOX_INLINE_TEXT && b->text && b->text_len > 0) {
+            int n = b->text_len < (size_t)(text_cap - 1) ? (int)b->text_len : text_cap - 1;
+            memcpy(text_out, b->text, (size_t)n);
+            text_out[n] = '\0';
+        } else if (b->kind == YL_BOX_BLOCK && b->marker_text && b->marker_text_len > 0) {
+            /* Surface list-item markers via the same text channel so
+			 * tests can search for them with the inline-text helpers.
+			 * Block boxes without a marker still come back as empty. */
+            int n = b->marker_text_len < (size_t)(text_cap - 1) ? (int)b->marker_text_len
+                                                                 : text_cap - 1;
+            memcpy(text_out, b->marker_text, (size_t)n);
+            text_out[n] = '\0';
         }
     }
     return 0;

@@ -71,11 +71,28 @@ static size_t fetch_write_cb(char *p, size_t sz, size_t n, void *ud)
 	return add;
 }
 
-static char *slurp_url(const char *url, size_t *out_len)
+/* Out-param: caller-owned char* gets filled with the post-redirect URL
+ * (e.g. http://wikipedia.org/wiki/Photography → https://en.wikipedia.org/
+ * wiki/Photography). NULL passes through. The caller frees with free().
+ * Used by main.c to set base_url to the effective URL so that image
+ * src= references resolve against the HTTPS origin — that pulls them
+ * over HTTP/2 multiplexing instead of HTTP/1.1 with 30+ TCP handshakes. */
+static char *slurp_url(const char *url, size_t *out_len, char **out_effective_url)
 {
 	CURL *c = curl_easy_init();
 	if (c == NULL) return NULL;
 	struct fetch_buf b = {0};
+	if (out_effective_url) *out_effective_url = NULL;
+
+	/* Attach the process-wide CURLSH so the TLS connection we open
+	 * here gets cached and reused by load_external_stylesheets and
+	 * the image-fetch path. Without this the page fetch's
+	 * connection to e.g. en.wikipedia.org is discarded immediately
+	 * after the easy_cleanup below, forcing CSS to re-handshake. */
+	void *share = yetty_ylexbor_curl_share();
+	if (share) {
+		curl_easy_setopt(c, CURLOPT_SHARE, share);
+	}
 
 	curl_easy_setopt(c, CURLOPT_URL, url);
 	curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
@@ -132,6 +149,18 @@ static char *slurp_url(const char *url, size_t *out_len)
 			url, http_status);
 		/* Render the body anyway — error pages are HTML too. */
 	}
+	/* Capture the effective URL after redirect chain so the caller
+	 * can pin base_url to the actual HTTPS origin (not the http://
+	 * the user typed). Without this, protocol-relative image URLs
+	 * like //upload.wikimedia.org/... resolve to http://, which
+	 * forces HTTP/1.1 and 30+ fresh TCP handshakes per page. */
+	if (out_effective_url) {
+		char *eff = NULL;
+		curl_easy_getinfo(c, CURLINFO_EFFECTIVE_URL, &eff);
+		if (eff && *eff) {
+			*out_effective_url = strdup(eff);
+		}
+	}
 	curl_easy_cleanup(c);
 	if (headers) curl_slist_free_all(headers);
 
@@ -139,10 +168,11 @@ static char *slurp_url(const char *url, size_t *out_len)
 	return b.data;
 }
 
-static char *slurp_file(const char *path, size_t *out_len)
+static char *slurp_file(const char *path, size_t *out_len, char **out_effective_url)
 {
 	if (looks_like_url(path))
-		return slurp_url(path, out_len);
+		return slurp_url(path, out_len, out_effective_url);
+	if (out_effective_url) *out_effective_url = NULL;
 
 	FILE *f = strcmp(path, "-") == 0 ? stdin : fopen(path, "rb");
 	if (f == NULL) {
@@ -489,7 +519,8 @@ int main(int argc, char **argv)
 		curl_global_init(CURL_GLOBAL_DEFAULT);
 	}
 	size_t html_len = 0;
-	char *html = slurp_file(src, &html_len);
+	char *effective_url = NULL;
+	char *html = slurp_file(src, &html_len, &effective_url);
 	if (html == NULL) return 1;
 
 	struct yetty_ylexbor_config cfg = {
@@ -500,13 +531,18 @@ int main(int argc, char **argv)
 	struct yetty_ylexbor_ptr_result r = yetty_ylexbor_create(&cfg);
 	if (YETTY_IS_ERR(r)) {
 		fprintf(stderr, "ylexbor_create: %s\n", r.error.msg);
-		free(html); return 1;
+		free(html); free(effective_url); return 1;
 	}
 	struct yetty_ylexbor *yl = r.value;
 
 	/* Tell ylexbor where the document came from so JS fetch() and
-	 * external <script src=...> can resolve relative URLs. */
-	if (looks_like_url(src)) {
+	 * external <script src=...> can resolve relative URLs. Prefer
+	 * the post-redirect effective URL — gets us onto HTTPS (HTTP/2
+	 * multiplexed image fetches) when the user typed an http://. */
+	if (effective_url) {
+		(void)yetty_ylexbor_set_base_url(yl, effective_url);
+		free(effective_url);
+	} else if (looks_like_url(src)) {
 		(void)yetty_ylexbor_set_base_url(yl, src);
 	}
 

@@ -1,17 +1,24 @@
-name: Build 3rdparty — libcurl
+name: Build 3rdparty — libcss
 
-# Triggered on `lib-libcurl-<version>` tags. Builds libcurl statically
-# against OpenSSL 4 (lib-openssl-new-<ver> tarball, fetched at build
-# time by _build.sh). 10-target matrix incl. Windows MSYS2 CLANG64.
+# Triggered on `lib-libcss-<version>` tags. Builds NetSurf's
+# MIT-licensed CSS cascade (libcss + libparserutils + libwapcaplet)
+# standalone — without the GPL'd NetSurf browser core that the
+# netsurf 3rdparty package drags in.
 #
-# Version source of truth: build-tools/3rdparty/libcurl/version.
-# OpenSSL pin source of truth: build-tools/3rdparty/openssl-new/version.
-# Both must agree before pushing this workflow's tag.
+# Matrix mirrors netsurf's. The upstream NetSurf buildsystem is
+# Unix-make-only; for windows-MSVC / webasm / android / iOS / tvOS the
+# per-platform _build.sh writes a placeholder tarball carrying only an
+# UNSUPPORTED marker, which the consumer-side
+# build-tools/cmake/libs/libcss.cmake detects and silently skips.
+#
+# Version source of truth: build-tools/3rdparty/libcss/version (the
+# libcss version itself; libparserutils + libwapcaplet + buildsystem
+# versions are pinned inside _build.sh and bumped alongside).
 
 on:
   push:
     tags:
-      - 'lib-libcurl-*'
+      - 'lib-libcss-*'
   workflow_dispatch: {}
 
 permissions:
@@ -28,18 +35,18 @@ jobs:
       - id: read
         run: |
           set -euo pipefail
-          V="$(tr -d '[:space:]' < build-tools/3rdparty/libcurl/version)"
+          V="$(tr -d '[:space:]' < build-tools/3rdparty/libcss/version)"
           [ -n "$V" ] || { echo "version file is empty" >&2; exit 1; }
           if [[ "${{ github.event_name }}" == "push" ]]; then
             REF="${GITHUB_REF#refs/tags/}"
-            EXPECT="lib-libcurl-$V"
+            EXPECT="lib-libcss-$V"
             if [ "$REF" != "$EXPECT" ]; then
               echo "tag $REF does not match version file ($EXPECT)" >&2
               exit 1
             fi
           fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
-          echo "tag=lib-libcurl-$V" >> "$GITHUB_OUTPUT"
+          echo "tag=lib-libcss-$V" >> "$GITHUB_OUTPUT"
 
   build-linux-cross:
     needs: resolve
@@ -49,6 +56,8 @@ jobs:
       matrix:
         target:
           - linux-x86_64
+          - linux-aarch64
+          - linux-riscv64
           - android-arm64-v8a
           - android-x86_64
           - webasm
@@ -62,51 +71,11 @@ jobs:
       - run: |
           TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
-          ./build-tools/3rdparty/libcurl/build.sh
+          ./build-tools/3rdparty/libcss/build.sh
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/libcurl-${{ matrix.target }}-*.tar.gz
-          fail_on_unmatched_files: true
-
-  build-linux-aarch64:
-    needs: resolve
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install build deps
-        run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends build-essential cmake autoconf automake libtool pkg-config
-      - run: mkdir -p out
-      - run: |
-          TARGET_PLATFORM="linux-aarch64" \
-          OUTPUT_DIR="$PWD/out" \
-          USE_NIX=0 \
-          CROSS_PREFIX="" \
-          ./build-tools/3rdparty/libcurl/build.sh
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/libcurl-linux-aarch64-*.tar.gz
-          fail_on_unmatched_files: true
-
-  build-linux-riscv64:
-    needs: resolve
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install riscv64 cross-compiler
-        run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends gcc-riscv64-linux-gnu g++-riscv64-linux-gnu cmake autoconf automake libtool pkg-config
-      - run: mkdir -p out
-      - run: |
-          TARGET_PLATFORM="linux-riscv64" \
-          OUTPUT_DIR="$PWD/out" \
-          USE_NIX=0 \
-          CROSS_PREFIX="riscv64-linux-gnu-" \
-          ./build-tools/3rdparty/libcurl/build.sh
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/libcurl-linux-riscv64-*.tar.gz
+          files: out/libcss-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
 
   build-darwin-arm64:
@@ -129,11 +98,11 @@ jobs:
       - run: |
           TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
-          ./build-tools/3rdparty/libcurl/build.sh
+          ./build-tools/3rdparty/libcss/build.sh
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/libcurl-${{ matrix.target }}-*.tar.gz
+          files: out/libcss-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
 
   build-darwin-x86_64:
@@ -156,16 +125,17 @@ jobs:
       - run: |
           TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
-          ./build-tools/3rdparty/libcurl/build.sh
+          ./build-tools/3rdparty/libcss/build.sh
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/libcurl-${{ matrix.target }}-*.tar.gz
+          files: out/libcss-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
 
-  # Windows: native MSVC under vcvarsall x64. Every lib that links into
-  # yetty.exe needs MSVC ABI (qemu is the lone mingw exception, since
-  # it ships standalone).
+  # Windows: native MSVC under vcvarsall x64. NetSurf's buildsystem is
+  # Unix-make-only, so windows-x86_64 hits the _build.sh placeholder
+  # branch — the matrix entry exists for shape parity with the other
+  # 3rdparty workflows.
   build-windows:
     needs: resolve
     runs-on: windows-latest
@@ -177,7 +147,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build libcurl for ${{ matrix.target }}
+      - name: Build libcss for ${{ matrix.target }}
         shell: cmd
         env:
           TARGET_PLATFORM: ${{ matrix.target }}
@@ -186,10 +156,10 @@ jobs:
           if errorlevel 1 exit /b 1
           mkdir out 2>nul
 
-          bash -c "OUTPUT_DIR=\"$(pwd)/out\" ./build-tools/3rdparty/libcurl/build.sh"
+          bash -c "OUTPUT_DIR=\"$(pwd)/out\" ./build-tools/3rdparty/libcss/build.sh"
 
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/libcurl-${{ matrix.target }}-*.tar.gz
+          files: out/libcss-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
