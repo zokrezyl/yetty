@@ -3,6 +3,7 @@
  */
 
 #include "ygui_internal.h"
+#include <yetty/ytrace/ytrace.h>
 #include <stdio.h>
 
 /*=============================================================================
@@ -49,6 +50,9 @@ void yetty_ygui_widget_free(struct yetty_ygui_widget *widget)
         return;
     }
 
+    ydebug("widget_free enter id=%s type=%d ptr=%p", widget->id ? widget->id : "?",
+           (int)widget->type, (void *)widget);
+
     /* Free children recursively */
     struct yetty_ygui_widget *child = widget->first_child;
     while (child) {
@@ -59,9 +63,11 @@ void yetty_ygui_widget_free(struct yetty_ygui_widget *widget)
 
     /* Call type-specific destroy via the vtable. */
     if (widget->vtable && widget->vtable->destroy) {
+        ydebug("widget_free destroy id=%s", widget->id ? widget->id : "?");
         widget->vtable->destroy(widget);
     }
 
+    ydebug("widget_free finalize id=%s ptr=%p", widget->id ? widget->id : "?", (void *)widget);
     free(widget->id);
     free(widget);
 }

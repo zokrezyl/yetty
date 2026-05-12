@@ -639,9 +639,11 @@ struct tab_state {
  * caller for the sake of one tab would clutter the signatures. */
 static char *g_image_path = NULL;
 
-/* Index of the Images tab. Held as a global so load_entry can route
- * image-tab loads through the buffer path instead of YAML. */
-#define IMAGES_TAB_INDEX 2
+/* Index of the Images tab. Tracked as a runtime variable so that
+ * closing earlier tabs (which shifts subsequent indices down) keeps
+ * the image-tab dispatch in sync. -1 = the Images tab has been
+ * closed and there is no image-bearing tab to short-circuit for. */
+static int g_images_tab_index = 2;
 
 struct app {
     struct yetty_ygui_engine *engine;
@@ -724,7 +726,7 @@ static void load_entry(struct app *app, int tab_index, int entry_index)
      * buffer with the yimage prim + a title TEXT_SPAN and install it
      * via set_buffer (which takes ownership). Falls through to the
      * static YAML placeholder when no image was found. */
-    if (tab_index == IMAGES_TAB_INDEX && g_image_path) {
+    if (tab_index == g_images_tab_index && g_image_path) {
         struct yetty_ypaint_core_buffer *buf =
             build_image_buffer(t->entries[entry_index].label, g_image_path);
         if (buf) {
@@ -744,7 +746,11 @@ static void load_entry(struct app *app, int tab_index, int entry_index)
 
 /* Click handler bound per-button. Each nav-row button carries its own
  * row_link (allocated in register_row_link) as click_userdata, so we
- * don't have to look up the click target after dispatch. */
+ * don't have to look up the click target after dispatch.
+ *
+ * row_link->app is set to NULL by on_tab_close when the row's tab gets
+ * removed — the button is already freed by then, so the callback
+ * should never fire, but the guard makes the path explicit. */
 static void on_row_clicked(struct yetty_ygui_widget *button, void *userdata)
 {
     (void)button;
@@ -756,6 +762,67 @@ static void on_row_clicked(struct yetty_ygui_widget *button, void *userdata)
         yetty_ygui_widget_tabbar_set_active(rl->app->tabbar, rl->tab_index);
     }
     load_entry(rl->app, rl->tab_index, rl->entry_index);
+}
+
+/* Fired when the user clicks the close 'x' on a tab. We own the
+ * decision here: ygreeter keeps a parallel app.tabs[] array indexed
+ * by the tabbar's tab index, plus a side table of row_links carrying
+ * tab indices. When a tab is closed those indices shift down — fix
+ * the bookkeeping BEFORE handing off to tabbar_remove_tab, otherwise
+ * the change_callback fires for the new active tab while ygreeter is
+ * still pointing at the closed tab's freed widgets (= dangling
+ * pointer -> heap corruption -> "app freezes"). */
+static void on_tab_close(struct yetty_ygui_widget *tabbar, float value, void *userdata)
+{
+    struct app *app = (struct app *)userdata;
+    int idx = (int)value;
+    int n = yetty_ygui_widget_tabbar_count(tabbar);
+    if (!app || idx < 0 || idx >= n) {
+        return;
+    }
+
+    /* Shift app->tabs[] left starting from idx. The trailing slot
+     * is zeroed so any stale access bails on the n_entries==0
+     * check inside load_entry. */
+    int max = (int)(sizeof(app->tabs) / sizeof(app->tabs[0]));
+    for (int i = idx; i < n - 1 && i + 1 < max; i++) {
+        app->tabs[i] = app->tabs[i + 1];
+    }
+    if (n - 1 < max) {
+        memset(&app->tabs[n - 1], 0, sizeof(app->tabs[n - 1]));
+    }
+
+    /* Fix up the per-row userdata: any row_link pointing at the
+     * closed tab gets its app pointer NUL'd so the now-unreachable
+     * row-click handler (its button is freed below) is a no-op even
+     * if the engine somehow still routes a phantom event to it. Row
+     * links for tabs AFTER the closed one shift their tab_index
+     * down by one to stay aligned with the new compact tabs[]. */
+    for (int i = 0; i < g_row_link_count; i++) {
+        struct row_link *rl = g_row_links[i];
+        if (!rl) {
+            continue;
+        }
+        if (rl->tab_index == idx) {
+            rl->app = NULL;
+        } else if (rl->tab_index > idx) {
+            rl->tab_index--;
+        }
+    }
+
+    /* Keep the images-tab dispatch in sync. */
+    if (g_images_tab_index >= 0) {
+        if (idx == g_images_tab_index) {
+            g_images_tab_index = -1;
+        } else if (idx < g_images_tab_index) {
+            g_images_tab_index--;
+        }
+    }
+
+    /* Now safe to actually drop the tab — widgets get freed but
+     * nothing left in app->tabs[] / g_row_links[] still references
+     * them. */
+    yetty_ygui_widget_tabbar_remove_tab(tabbar, idx);
 }
 
 static void on_tab_change(struct yetty_ygui_widget *tabbar, float value, void *userdata)
@@ -1028,10 +1095,14 @@ int main(int argc, char **argv)
     (void)argc;
     (void)argv;
 
-    /* Leave stderr untouched. Callers who want to capture diagnostics
-     * redirect it at the shell (e.g. `ygreeter 2>/tmp/ygreeter.log`).
-     * Note: ygreeter's stdout IS the OSC pipe to the parent yetty, so
-     * stderr is the only safe channel for textual diagnostics. */
+    /* Force stderr to line-buffered. Callers redirect it via the
+     * shell (e.g. `ygreeter 2>/tmp/ygreeter.log`); without this nudge
+     * libc switches to block buffering once the fd points at a file,
+     * and any diagnostic emitted just before a crash / hang sits in
+     * the buffer instead of reaching disk. Note: ygreeter's stdout is
+     * the OSC pipe to the parent yetty, so stderr is the only safe
+     * channel for textual diagnostics. */
+    setvbuf(stderr, NULL, _IOLBF, 0);
 
     if (yetty_ygui_init() != 0) {
         fprintf(stdout, "ygreeter: ygui_init failed (run inside a real terminal)\n");
@@ -1082,6 +1153,7 @@ int main(int argc, char **argv)
     yetty_ygui_widget_add_child(body, app.tabbar);
 
     yetty_ygui_widget_tabbar_on_change(app.tabbar, on_tab_change, &app);
+    yetty_ygui_widget_tabbar_on_tab_close(app.tabbar, on_tab_close, &app);
 
     /* Welcome */
     struct yetty_ygui_widget *welcome = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Welcome");
@@ -1099,7 +1171,7 @@ int main(int argc, char **argv)
      * placeholder. Falls back to placeholder when no image is found. */
     g_image_path = probe_default_image(argv[0]);
     struct yetty_ygui_widget *images = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Images");
-    build_tab_body(&app, IMAGES_TAB_INDEX, images, IMAGE_NAV,
+    build_tab_body(&app, g_images_tab_index, images, IMAGE_NAV,
                    (int)(sizeof(IMAGE_NAV) / sizeof(IMAGE_NAV[0])), "images");
 
     /* Code */

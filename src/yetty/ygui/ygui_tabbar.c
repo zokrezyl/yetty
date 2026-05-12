@@ -30,6 +30,7 @@
 
 #include "ygui_internal.h"
 
+#include <yetty/ytrace/ytrace.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -168,25 +169,26 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_widget *se
             yetty_ygui_render_ctx_render_text(ctx, label, tx, ty, text_color, fs);
         }
 
-        /* Close 'x' button on the right edge of the pill. We only draw
-         * the glyph (no background box) on inactive tabs so the strip
-         * stays calm; the active tab gets a subtle muted-bg square so
-         * users notice the close affordance on the focused pill. */
+        /* Close 'x' button on the right edge of the pill. Always paint
+         * a subtle background square so the click target is visible
+         * even on inactive tabs — previously the inactive close
+         * affordance was just a small glyph floating in space, easy to
+         * miss when aiming. Active tabs get a slightly stronger fill
+         * to keep the visual emphasis on the focused pill. */
         float cx, cy, cw, ch;
         tab_close_rect(pw, hh, &cx, &cy, &cw, &ch);
         float ax = x + cx;
         float ay = y + cy;
-        if (is_active) {
-            yetty_ygui_render_ctx_render_box(ctx, ax, ay, cw, ch, theme->bg_surface,
-                                             TABBAR_PILL_RADIUS * 0.5f);
-        }
+        uint32_t close_bg = is_active ? theme->bg_surface : theme->bg_hover;
+        yetty_ygui_render_ctx_render_box(ctx, ax, ay, cw, ch, close_bg,
+                                         TABBAR_PILL_RADIUS * 0.5f);
         float gfs = ch * 0.85f;
         if (gfs < 10.0f) {
             gfs = 10.0f;
         }
         float gx = ax + (cw - gfs * 0.5f) * 0.5f;
         float gy = ay + (ch - gfs) * 0.5f - 1.0f;
-        yetty_ygui_render_ctx_render_text(ctx, "x", gx, gy, theme->text_muted, gfs);
+        yetty_ygui_render_ctx_render_text(ctx, "x", gx, gy, theme->text_primary, gfs);
 
         x += pw + TABBAR_PILL_GAP;
     }
@@ -202,6 +204,8 @@ static int tabbar_on_press(struct yetty_ygui_widget *self, float lx, float ly, y
 {
     (void)out;
     float hh = tabbar_header_h(self);
+    ydebug("tabbar_on_press lx=%.1f ly=%.1f hh=%.1f n_tabs=%d", lx, ly, hh,
+           self->data.tabbar.n_tabs);
     if (ly < 0 || ly > hh) {
         return 0;
     }
@@ -215,14 +219,26 @@ static int tabbar_on_press(struct yetty_ygui_widget *self, float lx, float ly, y
             float cx, cy, cw, ch;
             tab_close_rect(pw, hh, &cx, &cy, &cw, &ch);
             float gx = x + cx;
+            ydebug("tabbar_on_press pill=%d pill_x=[%.1f..%.1f] close_box=[%.1f..%.1f]x[%.1f..%.1f] hit_close=%d",
+                   i, x, x + pw, gx, gx + cw, cy, cy + ch,
+                   (lx >= gx && lx < gx + cw && ly >= cy && ly < cy + ch) ? 1 : 0);
             if (lx >= gx && lx < gx + cw && ly >= cy && ly < cy + ch) {
-                /* Hit the close button — fire the close callback (if set)
-                 * then remove the tab via the default path. */
+                /* Hit the close button. If the app registered an
+                 * on_tab_close handler, it owns the decision — the
+                 * tabbar fires the callback and stops. The app must
+                 * call yetty_ygui_widget_tabbar_remove_tab() itself
+                 * (typically after updating any external state that
+                 * still references the closed tab's widgets, e.g. a
+                 * parallel array of per-tab pointers — see the
+                 * ygreeter tool for an example). When no handler is
+                 * registered the tabbar applies the auto-remove
+                 * default so simple uses just work. */
                 if (self->data.tabbar.on_tab_close) {
                     self->data.tabbar.on_tab_close(self, (float)i,
                                                     self->data.tabbar.on_tab_close_userdata);
+                } else {
+                    yetty_ygui_widget_tabbar_remove_tab(self, i);
                 }
-                yetty_ygui_widget_tabbar_remove_tab(self, i);
                 return 1;
             }
             if (i != self->data.tabbar.active) {
@@ -373,14 +389,20 @@ void yetty_ygui_widget_tabbar_remove_tab(struct yetty_ygui_widget *tabbar, int i
         return;
     }
 
-    /* Detach + free the panel widget. widget_remove unlinks it from
-     * the tabbar's child list AND the engine's top-level list (the
-     * latter case can't happen here, but the helper handles both).
-     * Then widget_free drops its memory. */
+    ydebug("tabbar_remove_tab enter index=%d n_tabs=%d active=%d", index,
+           tabbar->data.tabbar.n_tabs, tabbar->data.tabbar.active);
+
+    /* yetty_ygui_widget_remove unlinks the panel from its parent (us)
+     * AND frees it. The earlier code in this function ALSO called
+     * widget_free directly after widget_remove, which double-freed
+     * everything below the panel and triggered "free(): double free
+     * detected in tcache 2". widget_remove alone is the correct
+     * complete-removal API. */
     struct yetty_ygui_widget *panel = tabbar->data.tabbar.panels[index];
     if (panel) {
+        ydebug("tabbar_remove_tab: remove+free panel id=%s ptr=%p",
+               panel->id ? panel->id : "?", (void *)panel);
         yetty_ygui_widget_remove(panel);
-        yetty_ygui_widget_free(panel);
     }
     free(tabbar->data.tabbar.labels[index]);
 
