@@ -923,6 +923,24 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
         if (is_display_none(el)) {
             continue;
         }
+        /* libcss-side display:none — UA CSS rules like
+		 * [aria-hidden="true"] { display: none } only flow through
+		 * the libcss cascade, not lexbor's serialized one. Skip the
+		 * subtree entirely so chrome ARIA/nav junk doesn't leak. */
+        if (r->libcss) {
+            size_t pre_istylen = 0;
+            const lxb_char_t *pre_istyle = lxb_dom_element_get_attribute(
+                el, (const lxb_char_t *)"style", 5, &pre_istylen);
+            css_computed_style *pre_cs = yetty_ybrowser_libcss_select(
+                r, el, (const char *)pre_istyle, pre_istyle ? pre_istylen : 0);
+            if (pre_cs) {
+                int pre_disp = yetty_ybrowser_libcss_display(pre_cs, parent_style == NULL);
+                yetty_ybrowser_libcss_release(pre_cs);
+                if (pre_disp == CSS_DISPLAY_NONE) {
+                    continue;
+                }
+            }
+        }
 
         struct yl_style_state s = apply_default(parent_style, d);
 
@@ -1073,6 +1091,24 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
                     }
 
                     int disp = yetty_ybrowser_libcss_display(cs, parent_style == NULL);
+                    /* libcss's compiled-in UA stylesheet reports computed
+				 * display=CSS_DISPLAY_TABLE (6) for several non-table
+				 * HTML elements (most notably <figure>). Without this
+				 * guard our layout_block would dispatch to layout_table,
+				 * which scans for descendant <tr> elements, finds none,
+				 * and returns zero height — leaving the figure's inner
+				 * <img> at the memset-default (0,0). On Wikipedia that
+				 * collapsed every article figure onto the upper-left
+				 * corner of the page. Test:
+				 * test_figure_img_positioned (ybrowser-layout-test) and
+				 * test_no_images_at_zero_zero (ybrowser-wikipedia-test).
+				 *
+				 * Only honour CSS_DISPLAY_TABLE when the element really
+				 * is a <table>; everything else falls through to BLOCK. */
+                    if ((disp == CSS_DISPLAY_TABLE || disp == CSS_DISPLAY_INLINE_TABLE) &&
+                        child->local_name != LXB_TAG_TABLE) {
+                        disp = CSS_DISPLAY_BLOCK;
+                    }
                     if (disp == CSS_DISPLAY_FLEX || disp == CSS_DISPLAY_INLINE_FLEX) {
                         int fd = yetty_ybrowser_libcss_flex_direction(cs);
                         b->layout_mode = (fd == CSS_FLEX_DIRECTION_COLUMN ||
@@ -1100,9 +1136,13 @@ static void walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
                     bool fb_auto = false;
                     if (yetty_ybrowser_libcss_flex_basis(r, cs, s.font_size, pct_basis, &fb_px,
                                                          &fb_auto)) {
-                        b->flex_basis_px = fb_auto ? -1.0f : fb_px;
+                        /* Encoding convention shared with css_width:
+						 * 0 = auto / not set, > 0 = absolute px,
+						 * < 0 = percent ratio (-N/100). The flex
+						 * solver dispatches on the sign. */
+                        b->flex_basis_px = fb_auto ? 0.0f : fb_px;
                     } else {
-                        b->flex_basis_px = -1.0f;
+                        b->flex_basis_px = 0.0f;
                     }
                     /* Float + clear. The layout pass removes floated
 				 * boxes from normal flow and rewinds the available

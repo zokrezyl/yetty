@@ -62,8 +62,17 @@ static inline css_fixed float_to_fixed(float v)
 static const char UA_DEFAULT_CSS[] =
     "html, body { display: block; }\n"
     "body { margin: 8px; line-height: 1.33; }\n"
-    "div, section, article, aside, header, footer, nav, main, figure, figcaption,"
+    "div, section, article, aside, header, footer, nav, main, figcaption,"
     " hgroup, address, blockquote, form, dd, dl, dt, fieldset { display: block; }\n"
+    /* `figure` needs an explicit display:block — libcss's compiled-in
+     * defaults report computed display as CSS_DISPLAY_TABLE (6) for
+     * <figure> without this rule. !important to override whatever the
+     * library's internal UA sheet declared. Without this our layout
+     * dispatches to layout_table on every <figure>, which scans for
+     * <tr> descendants, finds none, and returns h=0 — so the inner
+     * <img> stays at the memset-default (0,0), giving the
+     * "all images stacked at the upper-left" symptom. */
+    "figure { display: block !important; }\n"
     "ul, ol { display: block; margin: 1em 0; padding-left: 40px; }\n"
     "li { display: list-item; margin: 0; }\n"
     "head, title, meta, link, script, style, template { display: none; }\n"
@@ -98,7 +107,50 @@ static const char UA_DEFAULT_CSS[] =
     "strong, b { font-weight: bold; }\n"
     "em, i, cite, dfn { font-style: italic; }\n"
     "a { color: #00e; }\n"
-    "hr { display: block; margin: 0.5em auto; border-top: 1px solid #888; }\n";
+    "hr { display: block; margin: 0.5em auto; border-top: 1px solid #888; }\n"
+    /* Accessibility / chrome — elements explicitly marked off-screen
+     * or decorative MUST NOT render. Wikipedia and most large sites
+     * leak nav/menu/jump-link junk through these attributes when
+     * their main stylesheet doesn't apply. */
+    "[aria-hidden=\"true\"] { display: none; }\n"
+    "[hidden] { display: none; }\n"
+    "[role=\"presentation\"] { display: none; }\n"
+    /* Wikipedia float helpers. The real Wikipedia stylesheet bundles
+     * these in /w/load.php?modules=...; if we couldn't fetch it (no
+     * network, file:// rendering) we still want figures and infoboxes
+     * to land in roughly the right place. Wikipedia's Parsoid emits
+     * <figure typeof="mw:File/Thumb"> for every article image; the
+     * stylesheet floats those right by default and only changes side
+     * when an explicit `.mw-halign-left` is present. We replicate the
+     * default-right behaviour so reading Wikipedia offline still
+     * produces a paragraph-with-sidebar layout instead of a wall of
+     * full-width images. */
+    "figure[typeof~=\"mw:File/Thumb\"], figure[typeof~=\"mw:File/Frame\"],"
+    " .mw-default-size, .thumb"
+    " { float: right; margin: 0 0 0.5em 0.8em; }\n"
+    ".mw-halign-right, .mw-floatright, .floatright, .thumb.tright,"
+    " .infobox, table.infobox"
+    " { float: right; margin: 0 0 0.5em 0.8em; }\n"
+    ".mw-halign-left, .mw-floatleft, .floatleft, figure.mw-halign-left,"
+    " figure.mw-default-size.mw-halign-left, .thumb.tleft"
+    " { float: left; margin: 0 0.8em 0.5em 0; }\n"
+    ".mw-halign-center, figure.mw-halign-center,"
+    " figure.mw-default-size.mw-halign-center"
+    " { float: none; margin: 0.5em auto; }\n"
+    /* Wikipedia's hidden chrome: namespaces tabs, jump links,
+     * collapsed nav modules, etc. None of these contribute article
+     * content. */
+    ".mw-jump-link, .mw-editsection, .navbox, .navbar, .vector-menu,"
+    " .vector-header, .mw-portlet, .mw-footer, .mw-indicators,"
+    " .mw-cite-backlink, .mw-cite-direction-marker, .mw-hidden,"
+    " #vector-toc-pinned-container, .vector-toc, .vector-page-tools,"
+    " .vector-appearance-landmark, .vector-language-button-container"
+    " { display: none; }\n"
+    /* Top-level `<nav>` is almost always chrome (site nav, breadcrumbs,
+     * tabs); inline `<nav>` inside an article is rare. The article
+     * <header> wrapping the page title is critical content though, so
+     * we only hide <nav> by default — NOT <header>. */
+    "nav { display: none; }\n";
 
 /* ===========================================================================
  * Select-handler callbacks. `pw` is `struct yetty_ylexbor *r`; `node` is
@@ -1012,12 +1064,21 @@ int yetty_ybrowser_libcss_bg_color(const css_computed_style *style,
     return out->a != 0;
 }
 
-static int len_property(uint8_t kind, css_fixed length, css_unit unit, int set_value,
-                        struct yetty_ylexbor *r, const css_computed_style *style,
-                        float font_size, float pct_basis, float *out_px)
+/* Variant for width-class properties: when the CSS value is a percent,
+ * encode it as a negative ratio (`-percent/100`) instead of resolving
+ * against pct_basis. Layout resolves the negative case against the
+ * parent's actual content width. Pixel / em / rem / etc. round-trip
+ * as positive pixels. */
+static int len_or_pct_property(uint8_t kind, css_fixed length, css_unit unit, int set_value,
+                               struct yetty_ylexbor *r, const css_computed_style *style,
+                               float font_size, float pct_basis, float *out_px)
 {
     if (kind != set_value) {
         return 0;
+    }
+    if (unit == CSS_UNIT_PCT) {
+        *out_px = -fixed_to_float(length) / 100.0f;
+        return 1;
     }
     *out_px = resolve_length_to_px(r, style, length, unit, font_size, pct_basis);
     return 1;
@@ -1043,7 +1104,7 @@ int yetty_ybrowser_libcss_width(struct yetty_ylexbor *r, const css_computed_styl
     if (!style) return 0;
     css_fixed l = 0; css_unit u = CSS_UNIT_PX;
     uint8_t k = css_computed_width(style, &l, &u);
-    return len_property(k, l, u, CSS_WIDTH_SET, r, style, font_size, pct_basis, out_px);
+    return len_or_pct_property(k, l, u, CSS_WIDTH_SET, r, style, font_size, pct_basis, out_px);
 }
 
 int yetty_ybrowser_libcss_height(struct yetty_ylexbor *r, const css_computed_style *style,
@@ -1052,7 +1113,7 @@ int yetty_ybrowser_libcss_height(struct yetty_ylexbor *r, const css_computed_sty
     if (!style) return 0;
     css_fixed l = 0; css_unit u = CSS_UNIT_PX;
     uint8_t k = css_computed_height(style, &l, &u);
-    return len_property(k, l, u, CSS_HEIGHT_SET, r, style, font_size, pct_basis, out_px);
+    return len_or_pct_property(k, l, u, CSS_HEIGHT_SET, r, style, font_size, pct_basis, out_px);
 }
 
 int yetty_ybrowser_libcss_max_width(struct yetty_ylexbor *r, const css_computed_style *style,
@@ -1061,7 +1122,7 @@ int yetty_ybrowser_libcss_max_width(struct yetty_ylexbor *r, const css_computed_
     if (!style) return 0;
     css_fixed l = 0; css_unit u = CSS_UNIT_PX;
     uint8_t k = css_computed_max_width(style, &l, &u);
-    return len_property(k, l, u, CSS_MAX_WIDTH_SET, r, style, font_size, pct_basis, out_px);
+    return len_or_pct_property(k, l, u, CSS_MAX_WIDTH_SET, r, style, font_size, pct_basis, out_px);
 }
 
 int yetty_ybrowser_libcss_min_width(struct yetty_ylexbor *r, const css_computed_style *style,
@@ -1070,7 +1131,7 @@ int yetty_ybrowser_libcss_min_width(struct yetty_ylexbor *r, const css_computed_
     if (!style) return 0;
     css_fixed l = 0; css_unit u = CSS_UNIT_PX;
     uint8_t k = css_computed_min_width(style, &l, &u);
-    return len_property(k, l, u, CSS_MIN_WIDTH_SET, r, style, font_size, pct_basis, out_px);
+    return len_or_pct_property(k, l, u, CSS_MIN_WIDTH_SET, r, style, font_size, pct_basis, out_px);
 }
 
 int yetty_ybrowser_libcss_margin(struct yetty_ylexbor *r, const css_computed_style *style,
@@ -1287,7 +1348,14 @@ int yetty_ybrowser_libcss_flex_basis(struct yetty_ylexbor *r, const css_computed
         return 1;
     }
     if (kind == CSS_FLEX_BASIS_SET) {
-        *out_px = resolve_length_to_px(r, style, l, u, font_size, pct_basis);
+        if (u == CSS_UNIT_PCT) {
+            /* Encode as negative ratio — flex layout resolves against
+			 * the container's main-axis budget. Same convention as
+			 * width / height. */
+            *out_px = -fixed_to_float(l) / 100.0f;
+        } else {
+            *out_px = resolve_length_to_px(r, style, l, u, font_size, pct_basis);
+        }
         return 1;
     }
     return 0;

@@ -71,7 +71,16 @@ int yetty_ybrowser_libcss_bg_color(const css_computed_style *style,
 /* Each of these returns 1 on a real numeric value (px-resolved), 0 on
  * auto/inherit/none. pct_basis is the parent's content width in CSS px
  * — used to resolve % values. font_size is the element's computed font
- * size in CSS px (used for em). */
+ * size in CSS px (used for em).
+ *
+ * For width / height / max_width / min_width / flex_basis the box pass
+ * doesn't know the parent's content area yet (that's only resolved at
+ * layout time), so it calls these with `pct_basis = 0`. When the CSS
+ * value is a percentage, the function then stores it as a NEGATIVE
+ * ratio (e.g. -1.0 for 100%, -0.5 for 50%) in *out_px; the layout pass
+ * detects negative values and resolves them against the actual parent
+ * content width. Anything else (px / em / rem / ...) round-trips as a
+ * positive pixel value. */
 int yetty_ybrowser_libcss_width(struct yetty_ylexbor *r, const css_computed_style *style,
                                 float font_size, float pct_basis, float *out_px);
 int yetty_ybrowser_libcss_height(struct yetty_ylexbor *r, const css_computed_style *style,

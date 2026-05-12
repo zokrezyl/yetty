@@ -468,3 +468,40 @@ struct yetty_ycore_void_result _yetty_ylexbor_box_vec_reserve(struct yetty_ylexb
 {
     return box_vec_reserve(v, want);
 }
+
+/* Test-only — see header. */
+int yetty_ylexbor_test_box_count(const struct yetty_ylexbor *r)
+{
+    if (r == NULL) {
+        return 0;
+    }
+    return (int)r->boxes.size;
+}
+
+int yetty_ylexbor_test_box_at(const struct yetty_ylexbor *r, int index, float *x, float *y,
+                              float *w, float *h, char *tag_out, int tag_cap)
+{
+    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size) {
+        return -1;
+    }
+    const struct yetty_ylexbor_box *b = &r->boxes.data[index];
+    if (x) *x = b->x;
+    if (y) *y = b->y;
+    if (w) *w = b->w;
+    if (h) *h = b->h;
+    if (tag_out && tag_cap > 0) {
+        tag_out[0] = '\0';
+        if (b->element) {
+            size_t nlen = 0;
+            const unsigned char *nm = lxb_dom_element_local_name(b->element, &nlen);
+            if (nm && nlen > 0) {
+                int n = nlen < (size_t)(tag_cap - 1) ? (int)nlen : tag_cap - 1;
+                for (int i = 0; i < n; i++) {
+                    tag_out[i] = (char)nm[i];
+                }
+                tag_out[n] = '\0';
+            }
+        }
+    }
+    return 0;
+}

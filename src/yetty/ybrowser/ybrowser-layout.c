@@ -368,25 +368,33 @@ static float layout_flex(struct yetty_ylexbor *r, uint32_t idx, float origin_x, 
         main_budget = content_width;
     }
 
-    /* Resolve each child's hypothetical main-axis size. */
+    /* Resolve each child's hypothetical main-axis size. Encoding
+	 * (shared with css_width / css_height):
+	 *   > 0 = absolute px
+	 *   < 0 = percent of main_budget (value is -N/100)
+	 *   == 0 = auto / not set → fall back to css_width or
+	 *          css_height (same encoding), else 0 and let the
+	 *          autobasis branch below distribute space. */
     float main_size[YL_FLEX_MAX_CHILDREN];
     float total_basis = 0.0f;
     float total_grow = 0.0f;
     int autobasis_count = 0;
     for (uint32_t i = 0; i < n_children; i++) {
         struct yetty_ylexbor_box *c = &r->boxes.data[children[i]];
-        float basis = c->flex_basis_px;
-        if (basis < 0.0f) {
-            /* auto — fall back to explicit width/height (the CSS
-			 * "main size" property). When neither is set, we'd
-			 * normally use the item's intrinsic content size; we
-			 * don't compute that today, so leave it as 0 and let
-			 * the auto-basis fallback below distribute space. */
-            basis = column_dir ? c->css_height : c->css_width;
-            if (basis < 0.0f) {
+        float basis;
+        float fbp = c->flex_basis_px;
+        if (fbp > 0.0f) {
+            basis = fbp;
+        } else if (fbp < 0.0f) {
+            basis = main_budget * (-fbp);
+        } else {
+            float css_main = column_dir ? c->css_height : c->css_width;
+            if (css_main > 0.0f) {
+                basis = css_main;
+            } else if (css_main < 0.0f) {
+                basis = main_budget * (-css_main);
+            } else {
                 basis = 0.0f;
-            }
-            if (basis == 0.0f) {
                 autobasis_count++;
             }
         }
@@ -830,9 +838,50 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
 			 * advanced; subsequent in-flow content keeps flowing
 			 * around the float. */
             if (c->float_side != 0) {
-                float fw = c->css_width > 0 ? c->css_width : avail_w;
+                float fw;
+                if (c->css_width > 0.0f) {
+                    fw = c->css_width;
+                } else if (c->css_width < 0.0f) {
+                    fw = content_width * (-c->css_width);
+                } else {
+                    /* Auto-width float — CSS would shrink-to-fit
+					 * from the content's intrinsic size. We don't
+					 * have an intrinsic-size pass, so:
+					 *
+					 *   1. If the float contains an <img> with a
+					 *      known natural width, use that — covers
+					 *      Wikipedia's <figure class="mw-halign-*">
+					 *      pattern (figure wraps an img with
+					 *      explicit width/height attrs).
+					 *   2. Otherwise fall back to min(33% of the
+					 *      content area, 300 px).
+					 *
+					 * NEVER default to avail_w: doing so swallowed
+					 * the full row when no width was set, leaving
+					 * in-flow content with 0 px to wrap into and
+					 * producing one-glyph-per-line garbage at the
+					 * right edge. Test
+					 * `test_float_no_width_doesnt_swallow_row`. */
+                    float img_w = 0.0f;
+                    for (uint32_t scan = c->first_child; scan != 0;
+                         scan = r->boxes.data[scan].next_sibling) {
+                        struct yetty_ylexbor_box *cs = &r->boxes.data[scan];
+                        if (cs->kind == YL_BOX_INLINE_IMAGE && cs->w > 0.0f &&
+                            cs->w > img_w) {
+                            img_w = cs->w;
+                        }
+                    }
+                    if (img_w > 0.0f) {
+                        fw = img_w;
+                    } else {
+                        fw = content_width / 3.0f;
+                        if (fw > 300.0f) {
+                            fw = 300.0f;
+                        }
+                    }
+                }
                 if (fw <= 0) {
-                    fw = content_width > 0 ? content_width : 1;
+                    fw = content_width > 0 ? content_width / 3.0f : 1;
                 }
                 if (fw > content_width) {
                     fw = content_width;
@@ -875,7 +924,10 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
             }
 
             /* Resolve the child's effective width:
-			 *   - explicit `width: <px>` pins it,
+			 *   - explicit `width: <px>` pins it (positive value),
+			 *   - explicit `width: N%` (stored as -N/100 by the
+			 *     libcss bridge) resolves against the parent's
+			 *     content area (avail_w),
 			 *   - `max-width` clamps from above,
 			 *   - `min-width` clamps from below.
 			 * The default is the available rectangle minus the
@@ -884,12 +936,25 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
             if (avail < 0) {
                 avail = 0;
             }
-            float child_w = c->css_width > 0 ? c->css_width : avail;
-            if (c->css_max_width > 0 && child_w > c->css_max_width) {
-                child_w = c->css_max_width;
+            float child_w;
+            if (c->css_width > 0.0f) {
+                child_w = c->css_width;
+            } else if (c->css_width < 0.0f) {
+                child_w = avail_w * (-c->css_width);
+            } else {
+                child_w = avail;
             }
-            if (c->css_min_width > 0 && child_w < c->css_min_width) {
-                child_w = c->css_min_width;
+            float resolved_max = c->css_max_width > 0.0f   ? c->css_max_width
+                                 : c->css_max_width < 0.0f ? avail_w * (-c->css_max_width)
+                                                           : 0.0f;
+            float resolved_min = c->css_min_width > 0.0f   ? c->css_min_width
+                                 : c->css_min_width < 0.0f ? avail_w * (-c->css_min_width)
+                                                           : 0.0f;
+            if (resolved_max > 0.0f && child_w > resolved_max) {
+                child_w = resolved_max;
+            }
+            if (resolved_min > 0.0f && child_w < resolved_min) {
+                child_w = resolved_min;
             }
             if (child_w > avail) {
                 child_w = avail;
@@ -917,9 +982,12 @@ static float layout_block(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
             float child_h = layout_block(r, cidx, child_origin_x, cursor_y, child_w);
             /* Re-fetch — vector may have relocated. */
             c = &r->boxes.data[cidx];
-            /* `height: <px>` from CSS pins; otherwise content
-			 * height wins. */
-            if (c->css_height > 0) {
+            /* `height: <px>` from CSS pins; `height: N%` resolves
+			 * against the parent's content-area height when known
+			 * (we don't have one for a streaming page, so fall
+			 * back to content height — same as auto). Otherwise
+			 * content height wins. */
+            if (c->css_height > 0.0f) {
                 child_h = c->css_height;
             }
             c->h = child_h;
