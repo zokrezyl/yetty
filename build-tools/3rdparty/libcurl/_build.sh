@@ -225,7 +225,7 @@ if [ "$BUILD_QUIC" = "1" ]; then
         PKG_CONFIG_PATH="$OSSL_DIR/lib/pkgconfig:$OSSL_DIR/lib64/pkgconfig" \
         ./configure --prefix="$HTTP_PREFIX" \
             ${AUTOCONF_HOST:+--host="$AUTOCONF_HOST" CC="${CROSS_PREFIX}gcc" CXX="${CROSS_PREFIX}g++"} \
-            --enable-static --disable-shared --enable-lib-only \
+            --enable-static --disable-shared --disable-examples \
             --with-openssl="$OSSL_DIR" \
             CFLAGS="-fPIC -I$OSSL_DIR/include" \
             CXXFLAGS="-fPIC -I$OSSL_DIR/include" \
