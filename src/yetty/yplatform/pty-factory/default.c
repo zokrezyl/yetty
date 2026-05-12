@@ -11,17 +11,32 @@
 
 #include <stdlib.h>
 
+/* Host-side TCP port that QEMU exposes its hvc0/virtio-console chardev on
+ * (see yqemu/qemu.c). yetty.c creates two default tabs in --qemu mode:
+ *   tab 1 → telnet to QEMU_CONSOLE_PORT (the guest console)
+ *   tab 2 → telnet to QEMU_TELNET_PORT  (the slirp hostfwd → in-guest telnetd)
+ */
+#define QEMU_CONSOLE_PORT 2424
+
 /* Unix PTY factory */
 struct yetty_yplatform_unix_pty_factory {
     struct yetty_yplatform_pty_factory base;
     struct yetty_yconfig_config *config;
     struct yetty_yplatform_yprocess *qemu_proc;
-    /* --temu owns the in-process TinyEMU VM lifecycle while the terminal
-     * itself attaches via telnet to the slirp hostfwd (127.0.0.1:2323 →
-     * in-guest telnetd). The pty returned by tinyemu_pty_create is the
-     * hvc0 console; we keep it here only so destroy() can stop the VM
-     * thread. */
+    /* --temu owns the in-process TinyEMU VM lifecycle. yetty creates two
+     * default tabs in --temu mode: the first attaches to the in-VM hvc0
+     * console (this `tinyemu_pty` field is the parked console pty until
+     * tab 1 consumes it via the first create_pty call); the second attaches
+     * via telnet to the slirp hostfwd (127.0.0.1:2323 → in-guest telnetd). */
     struct yetty_platform_pty *tinyemu_pty;
+    /* Set to 1 once tab 1 has consumed the console PTY (tinyemu hvc0 for
+     * --temu, telnet-to-2424 for --qemu). Subsequent create_pty calls
+     * dispense a telnet PTY pointing at the NAT'd guest telnetd port. */
+    int console_dispensed;
+    /* Set to 1 once we've successfully waited for the slirp telnet port
+     * to become reachable. Avoids re-running the few-second poll on every
+     * create_pty invocation past the second. */
+    int nat_telnet_ready;
 };
 
 /* Forward declarations */
@@ -77,33 +92,36 @@ static struct yetty_yplatform_pty_ptr_result unix_pty_factory_create_pty(
         return yetty_ytelnet_telnet_pty_create_tcp(host, (uint16_t)port, event_loop);
     }
 
-    /* --temu: in-process TinyEMU RISC-V VM. The terminal session attaches
-     * to the in-guest telnetd via the slirp hostfwd (127.0.0.1:2323 →
-     * tcp/23 inside the VM), not to the hvc0 console — same shape as the
-     * --qemu branch above. The factory owns the VM lifecycle; the hvc0
-     * console pty stays parked on the factory until destroy(). A separate
-     * console-attached --temu mode can be added later. */
+    /* --temu: in-process TinyEMU RISC-V VM. yetty.c asks for two PTYs
+     * up front (tab 1 + tab 2). The first call hands back the hvc0
+     * console pty (tinyemu_pty_create starts the VM); the second hands
+     * back a telnet client to the slirp hostfwd (127.0.0.1:2323 →
+     * in-guest telnetd). Any further calls (split-pane, Ctrl+T) keep
+     * yielding telnet sessions to the NAT'd telnetd — the hvc0 console
+     * is unique to the VM and can't be multiplexed. */
     if (config && config->ops->get_bool(config, YETTY_YCONFIG_KEY_TEMU, 0)) {
-        if (!factory->tinyemu_pty) {
-            struct yetty_yplatform_pty_ptr_result tr =
-                yetty_yplatform_tinyemu_pty_create(config);
-            if (!YETTY_IS_OK(tr)) {
-                return tr;
+        if (!factory->console_dispensed) {
+            if (!factory->tinyemu_pty) {
+                struct yetty_yplatform_pty_ptr_result tr =
+                    yetty_yplatform_tinyemu_pty_create(config);
+                if (!YETTY_IS_OK(tr)) {
+                    return tr;
+                }
+                factory->tinyemu_pty = tr.value;
             }
-            factory->tinyemu_pty = tr.value;
-
+            struct yetty_platform_pty *console = factory->tinyemu_pty;
+            factory->tinyemu_pty = NULL;
+            factory->console_dispensed = 1;
+            return YETTY_OK(yetty_yplatform_pty_ptr, console);
+        }
+        if (!factory->nat_telnet_ready) {
             struct yetty_ycore_void_result wr =
                 yetty_yqemu_qemu_wait_ready(TINYEMU_TELNET_PORT, 30000);
             if (YETTY_IS_ERR(wr)) {
-                struct yetty_ycore_void_result dr =
-                    factory->tinyemu_pty->ops->destroy(factory->tinyemu_pty);
-                if (YETTY_IS_ERR(dr)) {
-                    yetty_ycore_error_destroy(dr.error);
-                }
-                factory->tinyemu_pty = NULL;
                 return YETTY_ERR(yetty_yplatform_pty_ptr,
                                  "TinyEMU slirp telnet not ready", wr);
             }
+            factory->nat_telnet_ready = 1;
         }
         return yetty_ytelnet_telnet_pty_create_tcp("127.0.0.1", TINYEMU_TELNET_PORT,
                                                    event_loop);
@@ -116,21 +134,39 @@ static struct yetty_yplatform_pty_ptr_result unix_pty_factory_create_pty(
     }
 #endif
 
-    /* --qemu: QEMU via telnet */
+    /* --qemu: QEMU RISC-V VM. yetty.c asks for two PTYs up front.
+     * The first call connects to the qemu virtio-console chardev
+     * exposed on 127.0.0.1:2424 (boot log + hvc0 console); the second
+     * connects via telnet to the slirp hostfwd (127.0.0.1:2423 →
+     * in-guest telnetd). Any further calls keep yielding NAT'd telnet
+     * sessions. */
     if (config && config->ops->get_bool(config, YETTY_YCONFIG_KEY_QEMU, 0)) {
         if (!factory->qemu_proc) {
             factory->qemu_proc = yetty_yqemu_qemu_start(QEMU_TELNET_PORT);
             if (!factory->qemu_proc) {
                 return YETTY_ERR(yetty_yplatform_pty_ptr, "failed to start QEMU");
             }
-
+        }
+        if (!factory->console_dispensed) {
             struct yetty_ycore_void_result wr =
-                yetty_yqemu_qemu_wait_ready(QEMU_TELNET_PORT, 30000);
+                yetty_yqemu_qemu_wait_ready(QEMU_CONSOLE_PORT, 30000);
             if (YETTY_IS_ERR(wr)) {
                 yetty_yqemu_qemu_stop(factory->qemu_proc);
                 factory->qemu_proc = NULL;
+                return YETTY_ERR(yetty_yplatform_pty_ptr,
+                                 "QEMU console chardev not ready", wr);
+            }
+            factory->console_dispensed = 1;
+            return yetty_ytelnet_telnet_pty_create_tcp("127.0.0.1", QEMU_CONSOLE_PORT,
+                                                       event_loop);
+        }
+        if (!factory->nat_telnet_ready) {
+            struct yetty_ycore_void_result wr =
+                yetty_yqemu_qemu_wait_ready(QEMU_TELNET_PORT, 30000);
+            if (YETTY_IS_ERR(wr)) {
                 return YETTY_ERR(yetty_yplatform_pty_ptr, "QEMU telnet not ready", wr);
             }
+            factory->nat_telnet_ready = 1;
         }
         return yetty_ytelnet_telnet_pty_create_tcp("127.0.0.1", QEMU_TELNET_PORT, event_loop);
     }

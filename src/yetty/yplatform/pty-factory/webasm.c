@@ -1,28 +1,25 @@
-/* telnet-iframe-pty-factory.c — webasm pty factory: telnet over iframe.
+/* webasm.c — webasm pty factory: hvc0 console + telnet over iframe.
  *
  * Implements yetty_yplatform_pty_factory_create (the symbol the
- * platform layer looks up to build per-terminal PTYs). Each call to
- * factory->create_pty mints:
+ * platform layer looks up to build per-terminal PTYs). Mirrors the
+ * desktop factory's two-tab shape (default.c) so yetty.c can request
+ * a console + telnet pair regardless of platform:
  *
- *   telnet-pty   ←   yetty_ycore_void_result yetty_ytelnet_telnet_pty_create
- *      └───────  iframe-transport (port=23)   ←
- *                  └─ posts session-open / session-tx / session-close
- *                     to the tinyemu iframe via postMessage; iframe
- *                     uses tinyemu_session_{open,send,close} to
- *                     manufacture a chr-backed slirp connection
- *                     directly into the in-VM telnetd. NAWS / IAC /
- *                     option negotiation is handled by the same
- *                     telnet-pty.c that desktop uses.
+ *   call 1 → iframe-pty (virtio-console hvc0 of the in-iframe TinyEMU
+ *                        VM — singleton, see ypty/iframepty.c).
+ *   call 2+ → telnet-pty over iframe-transport, sessionId-multiplexed
+ *             into the in-VM telnetd via tinyemu_session_{open,send,close}:
  *
- * Multiple terminals = multiple factory calls = multiple sessionIds
- * = multiple in-VM forked shells. No shared state across terminals
- * beyond the single tinyemu iframe + slirp instance.
+ *               telnet-pty   ←   yetty_ytelnet_telnet_pty_create
+ *                  └────  iframe-transport (port=23)   ←
+ *                          └─ posts session-open / session-tx / session-close
+ *                             to the tinyemu iframe via postMessage. NAWS /
+ *                             IAC / option negotiation is handled by the
+ *                             same telnet-pty.c that desktop uses.
  *
- * The legacy iframe-pty.c (virtio-console hvc0) stays compiled and
- * is reachable via yetty_yplatform_iframe_pty_create() if anyone
- * wants to attach yetty to the boot console for debugging — it just
- * isn't the default factory anymore. The boot overlay still mirrors
- * hvc0 from the iframe side via mirrorKernelOutput().
+ *   call 3+ → another telnet sessionId = another forked in-VM shell
+ *             (split-pane / Ctrl+T). No shared state across terminals
+ *             beyond the single tinyemu iframe + slirp instance.
  */
 
 #include <yetty/yplatform/pty.h>
@@ -47,6 +44,10 @@
 struct webasm_telnet_factory {
     struct yetty_yplatform_pty_factory base;
     struct yetty_yconfig_config *config;
+    /* Set to 1 once the iframe-pty (hvc0 console) singleton has been
+     * handed out. Subsequent create_pty calls fall back to
+     * telnet-over-iframe-transport sessions. */
+    int console_dispensed;
 };
 
 static void factory_destroy(struct yetty_yplatform_pty_factory *self)
@@ -59,7 +60,6 @@ static struct yetty_yplatform_pty_ptr_result factory_create_pty(
     struct yetty_yplatform_pty_factory *self, struct yetty_yevent_event_loop *event_loop)
 {
     struct webasm_telnet_factory *f = (struct webasm_telnet_factory *)self;
-    (void)f;
     /* event_loop is the webasm event loop; iframe-transport doesn't
      * need it (it uses postMessage), but telnet-pty does for its
      * register_pty_pipe call — except we don't use it here either,
@@ -69,12 +69,24 @@ static struct yetty_yplatform_pty_ptr_result factory_create_pty(
      * via the postMessage listener, no event loop involvement. */
     (void)event_loop;
 
+    if (!f->console_dispensed) {
+        struct yetty_yplatform_pty_ptr_result cr =
+            yetty_yplatform_iframe_pty_create(f->config);
+        if (!YETTY_IS_OK(cr)) {
+            return cr;
+        }
+        f->console_dispensed = 1;
+        yinfo("webasm: pty[1] = iframe-pty (hvc0 console)");
+        return cr;
+    }
+
     struct yetty_ytransport_conn_transport *transport =
         yetty_ytransport_iframe_transport_create(YETTY_VM_TELNET_PORT);
     if (!transport) {
         return YETTY_ERR(yetty_yplatform_pty_ptr,
                          "telnet-iframe factory: iframe_transport_create failed");
     }
+    yinfo("webasm: pty = telnet-over-iframe-transport (port=%d)", YETTY_VM_TELNET_PORT);
     /* telnet_pty_create takes ownership of the transport — it will
      * destroy on every failure path. */
     return yetty_ytelnet_telnet_pty_create(transport);
@@ -97,6 +109,6 @@ struct yetty_yplatform_pty_factory_ptr_result yetty_yplatform_pty_factory_create
     }
     f->base.ops = &factory_ops;
     f->config = config;
-    yinfo("webasm: pty factory = telnet-over-iframe-transport (port=%d)", YETTY_VM_TELNET_PORT);
+    yinfo("webasm: pty factory = iframe-hvc0 (call 1) + telnet-over-iframe (call 2+)");
     return YETTY_OK(yetty_yplatform_pty_factory_ptr, &f->base);
 }
