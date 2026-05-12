@@ -43,11 +43,25 @@ static struct yetty_ycore_void_result box_vec_reserve(struct yetty_ylexbor_box_v
 
 static void box_vec_clear(struct yetty_ylexbor_box_vec *v)
 {
+    /* Free any per-box heap (segments). wrap_inline_box frees segs as
+	 * it consumes them, but on the re-layout / clear path we may be
+	 * dropping the box vector with unwrapped INLINE_TEXT boxes still
+	 * carrying their original seg arrays. */
+    for (uint32_t i = 0; i < v->size; i++) {
+        if (v->data[i].segs) {
+            free(v->data[i].segs);
+            v->data[i].segs = NULL;
+            v->data[i].segs_count = 0;
+        }
+    }
     v->size = 0;
 }
 
 static void box_vec_destroy(struct yetty_ylexbor_box_vec *v)
 {
+    for (uint32_t i = 0; i < v->size; i++) {
+        free(v->data[i].segs);
+    }
     free(v->data);
     v->data = NULL;
     v->size = v->cap = 0;

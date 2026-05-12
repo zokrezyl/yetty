@@ -63,7 +63,7 @@ static const char UA_DEFAULT_CSS[] =
     "html, body { display: block; }\n"
     "body { margin: 8px; line-height: 1.33; }\n"
     "div, section, article, aside, header, footer, nav, main, figure, figcaption,"
-    " hgroup, address, blockquote, form, table, dd, dl, dt, fieldset { display: block; }\n"
+    " hgroup, address, blockquote, form, dd, dl, dt, fieldset { display: block; }\n"
     "ul, ol { display: block; margin: 1em 0; padding-left: 40px; }\n"
     "li { display: list-item; margin: 0; }\n"
     "head, title, meta, link, script, style, template { display: none; }\n"
@@ -80,6 +80,15 @@ static const char UA_DEFAULT_CSS[] =
     "br { display: inline; }\n"
     "p { display: block; margin: 1em 0; }\n"
     "pre { display: block; margin: 1em 0; white-space: pre; }\n"
+    /* Tables — minimal CSS 2.1 defaults. ybrowser's layout pass
+     * recognises CSS_DISPLAY_TABLE and walks the descendant <tr>
+     * elements to render cells side-by-side. */
+    "table { display: table; border-collapse: separate; border-spacing: 2px; }\n"
+    "thead, tbody, tfoot { display: table-row-group; }\n"
+    "tr { display: table-row; }\n"
+    "td, th { display: table-cell; padding: 2px; vertical-align: top; }\n"
+    "th { font-weight: bold; text-align: center; }\n"
+    "caption { display: table-caption; text-align: center; }\n"
     "h1 { display: block; font-size: 2em;    font-weight: bold; margin: 0.67em 0; }\n"
     "h2 { display: block; font-size: 1.5em;  font-weight: bold; margin: 0.83em 0; }\n"
     "h3 { display: block; font-size: 1.17em; font-weight: bold; margin: 1em 0; }\n"
