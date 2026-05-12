@@ -24,7 +24,7 @@ if(CMAKE_CROSSCOMPILING)
         OUTPUT "${HOST_TOOLS_DIR}/build.ninja"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${HOST_TOOLS_DIR}"
         COMMAND ${CMAKE_COMMAND}
-            -S "${YETTY_ROOT}/build-tools/cmake/host-tools"
+            -S "${YETTY_ROOT}/build-tools/yetty/host-tools"
             -B "${HOST_TOOLS_DIR}"
             -G Ninja
             -DCMAKE_BUILD_TYPE=Release

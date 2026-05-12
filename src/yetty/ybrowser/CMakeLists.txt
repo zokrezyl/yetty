@@ -32,10 +32,10 @@ target_link_libraries(yetty_ybrowser
 )
 
 # libcss (MIT) — NetSurf's CSS cascade. Pulled in via the netsurf prebuilt
-# (build-tools/cmake/libs/netsurf.cmake creates the ns_css IMPORTED
+# (build-tools/yetty/libs/netsurf.cmake creates the ns_css IMPORTED
 # target). If unavailable on this platform, ybrowser falls back to the
 # same string-parsing path ylexbor uses today via YETTY_HAVE_LIBCSS=0.
-include(${YETTY_ROOT}/build-tools/cmake/libs/netsurf.cmake OPTIONAL)
+include(${YETTY_ROOT}/build-tools/yetty/libs/netsurf.cmake OPTIONAL)
 if(TARGET ns_css)
     target_link_libraries(yetty_ybrowser PUBLIC ns_css ns_wapcaplet ns_parserutils)
     target_compile_definitions(yetty_ybrowser PRIVATE YETTY_HAVE_LIBCSS=1)
@@ -46,8 +46,8 @@ else()
 endif()
 
 # libpng + libjpeg-turbo — same as ylexbor.
-include(${YETTY_ROOT}/build-tools/cmake/libs/libpng.cmake OPTIONAL)
-include(${YETTY_ROOT}/build-tools/cmake/libs/libjpeg-turbo.cmake OPTIONAL)
+include(${YETTY_ROOT}/build-tools/yetty/libs/libpng.cmake OPTIONAL)
+include(${YETTY_ROOT}/build-tools/yetty/libs/libjpeg-turbo.cmake OPTIONAL)
 if(TARGET png_static)
     target_link_libraries(yetty_ybrowser PUBLIC png_static)
     target_compile_definitions(yetty_ybrowser PRIVATE YETTY_HAVE_LIBPNG=1)
@@ -69,7 +69,7 @@ else()
 endif()
 
 # libcurl is wired in by the platform cmake (e.g. linux.cmake) via
-# build-tools/cmake/libs/libcurl.cmake — it creates the IMPORTED target
+# build-tools/yetty/libs/libcurl.cmake — it creates the IMPORTED target
 # CURL::libcurl + sets CURL_FOUND in cache. find_package(CURL) re-runs
 # the system search and ignores the imported target, so use the target
 # check directly (same pattern as src/yetty/ycat/CMakeLists.txt).

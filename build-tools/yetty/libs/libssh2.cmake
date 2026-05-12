@@ -17,7 +17,7 @@
 # uses.
 
 include_guard(GLOBAL)
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 if(TARGET libssh2_static)
     return()
@@ -26,7 +26,7 @@ endif()
 # openssl must be resolved before us — the prebuilt libssh2 archive
 # carries unresolved openssl symbols that yetty links via OpenSSL::SSL /
 # OpenSSL::Crypto.
-include(${YETTY_ROOT}/build-tools/cmake/openssl.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/openssl.cmake)
 
 yetty_3rdparty_fetch(libssh2 _LIBSSH2_DIR)
 

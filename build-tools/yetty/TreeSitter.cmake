@@ -3,7 +3,7 @@
 # build (download core + 15 grammar tarballs, compile each per target)
 # now lives in build-tools/3rdparty/tree-sitter/_build.sh.
 #
-# Exposed targets (matched to what build-tools/cmake/TreeSitter.cmake
+# Exposed targets (matched to what build-tools/yetty/TreeSitter.cmake
 # previously created):
 #   tree-sitter-core         imported static (lib/src/lib.c)
 #   ts-grammar-<name>        imported static (parser.c [+scanner.{c,cc}])
@@ -11,7 +11,7 @@
 # packaged queries dir.
 
 include_guard(GLOBAL)
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 if(TARGET tree-sitter-core)
     return()

@@ -172,7 +172,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "aa
         set(_dawn_aarch64_source "prebuilt v${DAWN_VERSION}")
     endif()
 
-    include(${YETTY_ROOT}/build-tools/cmake/x11-static.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/x11-static.cmake)
     add_library(webgpu STATIC IMPORTED GLOBAL)
     set_target_properties(webgpu PROPERTIES
         IMPORTED_LOCATION "${DAWN_LIB_PATH}"
@@ -257,7 +257,7 @@ else()
 
     # Dawn requires additional system libraries - set all properties together
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        include(${YETTY_ROOT}/build-tools/cmake/x11-static.cmake)
+        include(${YETTY_ROOT}/build-tools/yetty/x11-static.cmake)
         set_target_properties(webgpu PROPERTIES
             IMPORTED_LOCATION "${DAWN_LIB_PATH}"
             INTERFACE_INCLUDE_DIRECTORIES "${DAWN_INCLUDE_DIR}"

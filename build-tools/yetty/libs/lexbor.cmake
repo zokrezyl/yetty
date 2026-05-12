@@ -10,7 +10,7 @@
 # unchanged.
 
 include_guard(GLOBAL)
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 if(TARGET lexbor_static)
     return()

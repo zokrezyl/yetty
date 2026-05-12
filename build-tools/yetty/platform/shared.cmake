@@ -57,8 +57,8 @@ endfunction()
 # Determine platform name for config file selection
 # tvOS check before iOS — tvos.cmake doesn't set YETTY_IOS at cmake level,
 # but APPLE is true for tvOS so without an explicit branch it would fall
-# through to "macos" and pick assets/default-config-macos.yaml instead of
-# the new assets/default-config-tvos.yaml.
+# through to "macos" and pick platform/macos/config.yaml instead of
+# platform/tvos/config.yaml.
 if(YETTY_ANDROID)
     set(YETTY_PLATFORM "android")
 elseif(YETTY_TVOS OR CMAKE_SYSTEM_NAME STREQUAL "tvOS")
@@ -96,7 +96,7 @@ endif()
 # Prebuilt 3rdparty assets — each one its own per-lib fetch, version
 # pinned in build-tools/3rdparty/<name>/version. yetty_3rdparty_fetch
 # downloads + extracts + auto-decompresses .br files side-by-side.
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 # msdf-fonts (cdb): pre-brotli'd, embedded directly by incbin.
 if(YETTY_ENABLE_FEATURE_CDB_GEN OR YETTY_ENABLE_FEATURE_MSDF_GEN)
@@ -115,7 +115,7 @@ if(YETTY_ENABLE_LIB_TINYEMU OR YETTY_ENABLE_LIB_QEMU)
     # First-party yetty asset (not lib-) — riscv64 demos+tools + repo
     # checkout packed as a brotli ext4 image. Mounted RO at /opt/yetty
     # inside --temu and --qemu guests via virtio-blk drive1.
-    include(${YETTY_ROOT}/build-tools/cmake/yetty-asset-fetch.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/yetty-asset-fetch.cmake)
     yetty_asset_fetch(yetty-tools-riscv _YETTY_TOOLS_RISCV_DIR)
 
     # Path constants consumed by tinyemu-runtime.cmake (bundle copy at
@@ -149,7 +149,7 @@ endif()
 # qemu-system-riscv64 tarball to fetch or embed.
 if(YETTY_ENABLE_LIB_QEMU_BINARY)
     yetty_3rdparty_fetch(qemu _QEMU_DIR)
-    include(${YETTY_ROOT}/build-tools/cmake/qemu.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/qemu.cmake)
 endif()
 
 #-----------------------------------------------------------------------------
@@ -157,136 +157,136 @@ endif()
 #-----------------------------------------------------------------------------
 
 if(YETTY_ENABLE_LIB_INCBIN)
-    include(${YETTY_ROOT}/build-tools/cmake/incbin.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/incbin.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_ARGS)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/args.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/args.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_LZ4)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/lz4.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/lz4.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_LIBUV)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/libuv.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/libuv.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_LIBCO)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/co.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/co.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_GLM)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/glm.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/glm.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_STB)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/stb.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/stb.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_CGLTF)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/cgltf.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/cgltf.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_YAML_CPP)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/yaml-cpp.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/yaml-cpp.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_LIBYAML)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/libyaml.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/libyaml.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_SPDLOG)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/spdlog.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/spdlog.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_YTRACE)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/ytrace.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/ytrace.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_MSGPACK)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/msgpack.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/msgpack.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_WEBGPU)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/webgpu.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/webgpu.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_VTERM)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/vterm.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/vterm.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_ZLIB)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/zlib.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/zlib.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_PDFIO)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/pdfio.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/pdfio.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_LIBJPEG_TURBO)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/libjpeg-turbo.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/libjpeg-turbo.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_NETSURF)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/netsurf.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/netsurf.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_LEXBOR)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/lexbor.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/lexbor.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_QUICKJS)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/quickjs.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/quickjs.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_LIBPNG)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/libpng.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/libpng.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_FREETYPE)
     # Pull in brotli + bzip2 first — yetty's freetype consumers (e.g.
     # FREETYPE_ALL_LIBS link order) reference brotlidec/bz2_static, and
     # those static archives now come from their own 3rdparty fetch.
-    include(${YETTY_ROOT}/build-tools/cmake/libs/brotli.cmake)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/bzip2.cmake)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/freetype.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/brotli.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/bzip2.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/freetype.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_MSDFGEN)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/msdfgen.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/msdfgen.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_CDB)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/cdb.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/cdb.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_THORVG)
-    include(${YETTY_ROOT}/build-tools/cmake/thorvg.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/thorvg.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_TREESITTER)
-    include(${YETTY_ROOT}/build-tools/cmake/TreeSitter.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/TreeSitter.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_DAV1D)
-    include(${YETTY_ROOT}/build-tools/cmake/Dav1d.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/Dav1d.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_OPENH264)
-    include(${YETTY_ROOT}/build-tools/cmake/openh264.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/openh264.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_MINIMP4)
-    include(${YETTY_ROOT}/build-tools/cmake/minimp4.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/minimp4.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_WASM3)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/wasm3.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/wasm3.cmake)
 endif()
 
 if(YETTY_ENABLE_LIB_LIBSSH2)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/libssh2.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/libssh2.cmake)
 endif()
 
 # Reusable render utilities (GPU tile diff, …). Lives outside src/yetty so it
@@ -555,9 +555,9 @@ function(yetty_embed_assets TARGET)
     # Collect config into separate build directory
     set(EMBED_CONFIG_DIR "${CMAKE_BINARY_DIR}/embed-config")
     file(MAKE_DIRECTORY "${EMBED_CONFIG_DIR}")
-    set(DEFAULT_CONFIG_FILE "${YETTY_ROOT}/assets/default-config-${YETTY_PLATFORM}.yaml")
+    set(DEFAULT_CONFIG_FILE "${YETTY_ROOT}/build-tools/yetty/platform/${YETTY_PLATFORM}/config.yaml")
     if(NOT EXISTS "${DEFAULT_CONFIG_FILE}")
-        set(DEFAULT_CONFIG_FILE "${YETTY_ROOT}/assets/default-config.yaml")
+        set(DEFAULT_CONFIG_FILE "${YETTY_ROOT}/build-tools/yetty/platform/config-defaults.yaml")
     endif()
     file(COPY "${DEFAULT_CONFIG_FILE}" DESTINATION "${EMBED_CONFIG_DIR}")
     get_filename_component(CONFIG_FILENAME "${DEFAULT_CONFIG_FILE}" NAME)

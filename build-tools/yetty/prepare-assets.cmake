@@ -87,7 +87,7 @@ else()
     message(STATUS "  Configuring host tools...")
     execute_process(
         COMMAND ${CMAKE_COMMAND}
-            -S "${YETTY_ROOT}/build-tools/cmake/host-tools"
+            -S "${YETTY_ROOT}/build-tools/yetty/host-tools"
             -B "${HOST_TOOLS_BUILD_DIR}"
             ${HOST_CMAKE_ARGS}
         RESULT_VARIABLE CONFIG_RESULT

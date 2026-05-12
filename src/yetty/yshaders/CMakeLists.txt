@@ -21,7 +21,7 @@ set(MODULE_SHADERS
     # ypaint-layer attaches it as a child resource set at runtime; merging
     # happens in the binder so the WGSL needs to be staged alongside the
     # other module shaders. Keep this in sync with the file(COPY) in
-    # build-tools/cmake/targets/shared.cmake which seeds embed-data.
+    # build-tools/yetty/targets/shared.cmake which seeds embed-data.
     ${YETTY_ROOT}/src/yetty/ysdf/ysdf.gen.wgsl
     # GPU MSDF compute shader — staged so the gpu generator can find it
     # at <shaders_dir>/msdf_gen.wgsl when materialising fonts on the fly.

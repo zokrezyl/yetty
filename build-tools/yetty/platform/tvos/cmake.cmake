@@ -1,19 +1,14 @@
-# tvOS build target — mirrors platforms/ios.cmake. Reuses iOS Objective-C
+# tvOS build target — mirrors ios/cmake.cmake. Reuses iOS Objective-C
 # platform sources (UIKit subset that exists on tvOS); only the bundle
 # metadata + deployment-target attributes differ. YETTY_IOS=1 is set so
 # any `#if YETTY_IOS` branches in the platform code stay active; YETTY_TVOS=1
 # is added for tvOS-only branches.
+include(${CMAKE_CURRENT_LIST_DIR}/variables.cmake)
 
-# Disable desktop-only / sandbox-incompatible libraries, same as iOS. The
-# QEMU *launcher* lib stays linked so pty-factory/default.c's --qemu telnet
-# branch resolves; only the qemu-system-riscv64 binary fetch/embed is off.
-set(YETTY_ENABLE_LIB_GLFW OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_LIB_QEMU_BINARY OFF CACHE BOOL "" FORCE)
+include(${YETTY_ROOT}/build-tools/yetty/platform/shared.cmake)
 
-include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
-
-include(${YETTY_ROOT}/build-tools/cmake/tinyemu.cmake)
-include(${YETTY_ROOT}/build-tools/cmake/tinyemu-runtime.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/tinyemu.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/tinyemu-runtime.cmake)
 
 set(TVOS_ASSETS_DIR "${CMAKE_BINARY_DIR}/tvos-assets")
 file(MAKE_DIRECTORY ${TVOS_ASSETS_DIR})
@@ -122,7 +117,7 @@ if(YETTY_ENABLE_FEATURE_DEMO)
         COMMAND ${CMAKE_COMMAND}
             -DYETTY_ROOT=${YETTY_ROOT}
             -DOUTPUT_DIR=${TVOS_ASSETS_DIR}
-            -P ${YETTY_ROOT}/build-tools/cmake/generate-demo-outputs.cmake
+            -P ${YETTY_ROOT}/build-tools/yetty/generate-demo-outputs.cmake
         WORKING_DIRECTORY ${YETTY_ROOT}
     )
 endif()

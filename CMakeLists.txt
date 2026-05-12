@@ -23,10 +23,13 @@ option(YETTY_TVOS "Build for tvOS" OFF)
 set(WEBGPU_BACKEND "dawn" CACHE STRING "WebGPU backend (wgpu or dawn)")
 set(TOYBOX_PATH "" CACHE PATH "Path to Toybox binary")
 
-# Central build variables (libraries and features — defaults only, no platform logic)
-include(${YETTY_ROOT}/build-tools/yetty/variables.cmake)
-
-# Include CPM
+# Include CPM — clear stale CPM_DIRECTORY if CPM.cmake moved to a new path
+# (CPM silently returns early when CPM_DIRECTORY != CMAKE_CURRENT_LIST_DIR)
+get_filename_component(_CPM_EXPECTED_DIR "${YETTY_ROOT}/build-tools/yetty" REALPATH)
+if(DEFINED CPM_DIRECTORY AND NOT CPM_DIRECTORY STREQUAL _CPM_EXPECTED_DIR)
+    unset(CPM_DIRECTORY CACHE)
+endif()
+unset(_CPM_EXPECTED_DIR)
 include(${YETTY_ROOT}/build-tools/yetty/CPM.cmake)
 
 # Detect platform and include appropriate target.

@@ -1,19 +1,20 @@
 # macOS desktop build target
+include(${CMAKE_CURRENT_LIST_DIR}/variables.cmake)
 
-include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/platform/shared.cmake)
 
 # macOS-specific libraries (guarded by variables.cmake)
 if(YETTY_ENABLE_LIB_GLFW)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/glfw.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/glfw.cmake)
 endif()
 if(YETTY_ENABLE_LIB_LIBMAGIC)
-    include(${YETTY_ROOT}/build-tools/cmake/Libmagic.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/Libmagic.cmake)
 endif()
 
 # TinyEMU - in-process RISC-V emulator for --virtual flag
 if(YETTY_ENABLE_LIB_TINYEMU)
-    include(${YETTY_ROOT}/build-tools/cmake/tinyemu.cmake)
-    include(${YETTY_ROOT}/build-tools/cmake/tinyemu-runtime.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/tinyemu.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/tinyemu-runtime.cmake)
 endif()
 
 # Desktop-specific subdirectories
@@ -120,7 +121,7 @@ endif()
 # Verify all required assets are present
 if(YETTY_ENABLE_FEATURE_ASSETS)
     add_custom_command(TARGET yetty POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -DBUILD_DIR=${CMAKE_BINARY_DIR} -DTARGET_TYPE=desktop -P ${YETTY_ROOT}/build-tools/cmake/verify-assets.cmake
+        COMMAND ${CMAKE_COMMAND} -DBUILD_DIR=${CMAKE_BINARY_DIR} -DTARGET_TYPE=desktop -P ${YETTY_ROOT}/build-tools/yetty/verify-assets.cmake
         COMMENT "Verifying build assets..."
     )
 endif()

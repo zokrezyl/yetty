@@ -23,7 +23,7 @@
 # every cross target on the same OpenSSL version (see version file).
 
 include_guard(GLOBAL)
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 if(TARGET OpenSSL::SSL AND TARGET OpenSSL::Crypto)
     return()

@@ -18,7 +18,7 @@
 # but no getrandom). No extra consumer-side source needed.
 
 include_guard(GLOBAL)
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 if(TARGET pdfio_lib)
     return()
@@ -26,7 +26,7 @@ endif()
 
 # zlib must be resolved before us — pdfio's archive depends on its
 # symbols at link time.
-include(${YETTY_ROOT}/build-tools/cmake/libs/zlib.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/libs/zlib.cmake)
 
 yetty_3rdparty_fetch(pdfio _PDFIO_DIR)
 

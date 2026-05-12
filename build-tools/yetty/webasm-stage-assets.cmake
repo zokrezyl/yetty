@@ -179,9 +179,9 @@ function(yetty_stage_webasm_assets)
     endif()
 
     # Config: pick platform-specific default if it exists, else the generic one.
-    set(_CFG "${YETTY_ROOT}/assets/default-config-${YETTY_PLATFORM}.yaml")
+    set(_CFG "${YETTY_ROOT}/build-tools/yetty/platform/${YETTY_PLATFORM}/config.yaml")
     if(NOT EXISTS "${_CFG}")
-        set(_CFG "${YETTY_ROOT}/assets/default-config.yaml")
+        set(_CFG "${YETTY_ROOT}/build-tools/yetty/platform/config-defaults.yaml")
     endif()
     _stage_one("${_CFG}" "config" "config.yaml" FALSE "/config")
 

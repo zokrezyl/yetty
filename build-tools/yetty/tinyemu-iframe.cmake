@@ -19,14 +19,14 @@ endif()
 # global flags as everything else. On the webasm parent build we DROP
 # -pthread globally, so this static lib is also built without -pthread —
 # perfect for linking into a single-threaded iframe wasm.
-include(${YETTY_ROOT}/build-tools/cmake/tinyemu.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/tinyemu.cmake)
 
 # brotli decoder for the iframe's runtime asset preload — kernel /
 # opensbi / rootfs are shipped brotli-compressed and decoded into MEMFS
 # from the iframe's pre-js. WEBASM-ONLY include — desktop / iOS /
 # Android tinyemu builds are unaffected (they live in their own
 # tinyemu-pty.c paths and don't pull this cmake file at all).
-include(${YETTY_ROOT}/build-tools/cmake/libs/brotli.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/libs/brotli.cmake)
 
 set(TINYEMU_BRIDGE_SOURCE ${YETTY_ROOT}/src/yetty/yplatform/webasm/tinyemu-bridge.c)
 

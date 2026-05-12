@@ -1,10 +1,9 @@
 # Windows desktop build target
+include(${CMAKE_CURRENT_LIST_DIR}/variables.cmake)
 
-# YETTY_ERR(...) in include/yetty/ycore/result.h uses __VA_ARGS__ count-based
-# dispatch, which MSVC's traditional preprocessor mishandles (it treats
-# __VA_ARGS__ as a single token when expanded into another macro call). The
-# conformant preprocessor ships in VS 2019 16.5+ and is a no-op rewrite for
-# code that doesn't rely on the legacy quirks.
+# YETTY_ERR(...) uses __VA_ARGS__ count-based dispatch; MSVC's traditional
+# preprocessor mishandles it. The conformant preprocessor (/Zc:preprocessor)
+# ships in VS 2019 16.5+ and is a no-op rewrite for well-behaved code.
 if(MSVC)
     add_compile_options(/Zc:preprocessor)
 endif()
@@ -14,47 +13,16 @@ endif()
 # pick up the generated .rc file as a regular source and run rc.exe.
 enable_language(RC)
 
-# RISC-V emulator integrations on Windows. Both enabled.
-# - qemu:    uses the locally-built binary from build-windows-minimal/
-#            (see 3rdparty-fetch.cmake / qemu/_build.sh windows path).
-# - tinyemu: ported to Win32. SLIRP user-mode networking is left out for now
-#            (16 files of POSIX socket code) — see tinyemu.cmake's WIN32 branch.
-set(YETTY_ENABLE_LIB_TINYEMU ON CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_LIB_QEMU    ON CACHE BOOL "" FORCE)
-
-# yetty-ymsdf-gen is an offline build-time tool for generating MSDF font
-# atlases. yetty.exe consumes the pre-generated atlas via incbin and does
-# not need msdfgen at runtime. Disable on Windows: the prebuilt msdfgen
-# windows-x86_64 tarball ships /MT static-CRT, while the rest of yetty's
-# 3rdparty Windows libs (freetype, zlib, png, lz4, ...) are /MD. Mixing
-# triggers `LNK2038 mismatch detected for 'RuntimeLibrary'`. Cheapest fix
-# is to skip the only consumer of msdfgen on Windows.
-set(YETTY_ENABLE_FEATURE_YMSDF_GEN OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_LIB_MSDFGEN       OFF CACHE BOOL "" FORCE)
-
-# ymesh tool — uses POSIX termios/select for raw-mode stdin in its
-# interactive watch loop. No Windows port today; disable on Windows.
-set(YETTY_ENABLE_TOOL_YMESH        OFF CACHE BOOL "" FORCE)
-
-# ymaze tool driver — same story (sys/select for raw-mode watch loop).
-# The yetty_ymaze library itself is portable; only the standalone tool
-# main.c isn't.
-set(YETTY_ENABLE_TOOL_YMAZE        OFF CACHE BOOL "" FORCE)
-
-# yzoo tool driver — same story (sys/select + termios). Library is
-# portable; only the tool main.c isn't.
-set(YETTY_ENABLE_TOOL_YZOO         OFF CACHE BOOL "" FORCE)
-
-include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/platform/shared.cmake)
 
 # Windows-specific libraries (guarded by variables.cmake)
 if(YETTY_ENABLE_LIB_GLFW)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/glfw.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/glfw.cmake)
 endif()
 
 # tinyemu static library (RISC-V emulator) for --temu.
 if(YETTY_ENABLE_LIB_TINYEMU)
-    include(${YETTY_ROOT}/build-tools/cmake/tinyemu.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/tinyemu.cmake)
 endif()
 
 # Desktop-specific subdirectories
@@ -272,7 +240,7 @@ endif()
 # Verify all required assets are present
 if(YETTY_ENABLE_FEATURE_ASSETS)
     add_custom_command(TARGET yetty POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -DBUILD_DIR=${CMAKE_BINARY_DIR} -DTARGET_TYPE=desktop -P ${YETTY_ROOT}/build-tools/cmake/verify-assets.cmake
+        COMMAND ${CMAKE_COMMAND} -DBUILD_DIR=${CMAKE_BINARY_DIR} -DTARGET_TYPE=desktop -P ${YETTY_ROOT}/build-tools/yetty/verify-assets.cmake
         COMMENT "Verifying build assets..."
     )
 endif()

@@ -4,7 +4,7 @@
 # release published by build-3rdparty-minimp4.yml.
 
 include_guard(GLOBAL)
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 if(TARGET minimp4)
     return()

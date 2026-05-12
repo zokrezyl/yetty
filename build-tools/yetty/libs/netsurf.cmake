@@ -22,7 +22,7 @@
 # the rest of yetty (including ylexbor) configures unaffected.
 
 include_guard(GLOBAL)
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 if(TARGET netsurf_core)
     return()
@@ -151,7 +151,7 @@ target_link_libraries(netsurf_core INTERFACE
 #   - libxml-2.0, libpng, libwebp from the host (pkg-config)
 #   - z, m
 #-----------------------------------------------------------------------------
-include(${YETTY_ROOT}/build-tools/cmake/libs/libcurl.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/libs/libcurl.cmake)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(_NS_LIBXML  REQUIRED libxml-2.0)

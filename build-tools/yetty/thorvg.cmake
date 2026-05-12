@@ -16,7 +16,7 @@
 # explicitly because they're not part of thorvg's public API.
 
 include_guard(GLOBAL)
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 if(TARGET thorvg_lib)
     return()

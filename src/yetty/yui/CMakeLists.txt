@@ -1,4 +1,4 @@
-include(${YETTY_ROOT}/build-tools/cmake/incbin.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/incbin.cmake)
 
 add_library(yetty_yui STATIC
     tile.c

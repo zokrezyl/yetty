@@ -28,7 +28,7 @@ if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID AND NOT YETTY_IOS AND NOT YETTY_TVOS AND
             target_include_directories(yetty_ypaint_yaml PRIVATE ${FONTCONFIG_INCLUDE_DIRS})
             target_compile_definitions(yetty_ypaint_yaml PRIVATE YETTY_HAS_FONTCONFIG=1)
             # Resolve to the same static archives the executable uses (see
-            # build-tools/cmake/targets/linux.cmake), then attach them as
+            # build-tools/yetty/targets/linux.cmake), then attach them as
             # INTERFACE link deps so anything pulling yetty_ypaint_yaml
             # also pulls fontconfig + expat + uuid in the right order.
             find_library(_FC_STATIC libfontconfig.a

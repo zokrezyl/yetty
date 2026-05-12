@@ -10,7 +10,7 @@
 #   Freetype::Freetype — alias find_package(Freetype) consumers expect
 
 include_guard(GLOBAL)
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 # Idempotency guard keyed on our internal target only. We deliberately do
 # NOT bail out when Freetype::Freetype already exists: FindX11 (pulled in

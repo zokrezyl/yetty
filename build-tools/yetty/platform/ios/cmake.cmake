@@ -1,20 +1,11 @@
 # iOS build target
+include(${CMAKE_CURRENT_LIST_DIR}/variables.cmake)
 
-# Disable desktop-only libraries.
-# - GLFW: desktop window system, not used on iOS (UIKit owns the window).
-# - QEMU binary: no qemu-system-riscv64 tarball published for iOS, and the
-#   sandbox would forbid exec'ing it anyway. The QEMU *launcher lib* stays
-#   linked (LIB_QEMU=ON) so pty-factory/default.c's --qemu telnet branch
-#   resolves — telnet-to-an-already-running-qemu is a planned iOS path
-#   (e.g. a separate YettyQemu.app companion).
-set(YETTY_ENABLE_LIB_GLFW OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_LIB_QEMU_BINARY OFF CACHE BOOL "" FORCE)
-
-include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/platform/shared.cmake)
 
 # TinyEMU - RISC-V emulator for iOS (provides PTY via Linux VM)
-include(${YETTY_ROOT}/build-tools/cmake/tinyemu.cmake)
-include(${YETTY_ROOT}/build-tools/cmake/tinyemu-runtime.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/tinyemu.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/tinyemu-runtime.cmake)
 
 # Set iOS assets directory
 set(IOS_ASSETS_DIR "${CMAKE_BINARY_DIR}/ios-assets")
@@ -133,7 +124,7 @@ if(YETTY_ENABLE_FEATURE_DEMO)
         COMMAND ${CMAKE_COMMAND}
             -DYETTY_ROOT=${YETTY_ROOT}
             -DOUTPUT_DIR=${IOS_ASSETS_DIR}
-            -P ${YETTY_ROOT}/build-tools/cmake/generate-demo-outputs.cmake
+            -P ${YETTY_ROOT}/build-tools/yetty/generate-demo-outputs.cmake
         WORKING_DIRECTORY ${YETTY_ROOT}
     )
 endif()

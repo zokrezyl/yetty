@@ -46,5 +46,5 @@ elseif(EMSCRIPTEN)
 
 else()
     # Desktop: Only Dawn is supported
-    include(${YETTY_ROOT}/build-tools/cmake/Dawn.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/Dawn.cmake)
 endif()

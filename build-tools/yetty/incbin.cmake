@@ -29,7 +29,7 @@ message(STATUS "embed: Brotli quality level: ${BROTLI_QUALITY}")
 # .github/workflows/build-3rdparty-incbin.yml. Tarball layout:
 #   include/incbin.h     — the macro header used via inline assembly
 #   src/incbin.c         — used only by the MSVC code path below
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 yetty_3rdparty_fetch(incbin _INCBIN_DIR)
 
 if(NOT EXISTS "${_INCBIN_DIR}/include/incbin.h")

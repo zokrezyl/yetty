@@ -132,7 +132,7 @@ endfunction()
 function(tinyemu_embed_runtime TARGET)
     # Check if incbin is available
     if(NOT COMMAND incbin_add_resources)
-        include(${YETTY_ROOT}/build-tools/cmake/incbin.cmake)
+        include(${YETTY_ROOT}/build-tools/yetty/incbin.cmake)
     endif()
 
     # Kernel

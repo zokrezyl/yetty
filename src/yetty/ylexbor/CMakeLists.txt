@@ -36,8 +36,8 @@ target_link_libraries(yetty_ylexbor
 # are optional — if either is missing the dispatch in ylexbor-paint.c
 # falls back through `#ifdef`s, but in our standard build both are
 # available via the 3rdparty tarballs.
-include(${YETTY_ROOT}/build-tools/cmake/libs/libpng.cmake OPTIONAL)
-include(${YETTY_ROOT}/build-tools/cmake/libs/libjpeg-turbo.cmake OPTIONAL)
+include(${YETTY_ROOT}/build-tools/yetty/libs/libpng.cmake OPTIONAL)
+include(${YETTY_ROOT}/build-tools/yetty/libs/libjpeg-turbo.cmake OPTIONAL)
 if(TARGET png_static)
     target_link_libraries(yetty_ylexbor PUBLIC png_static)
     target_compile_definitions(yetty_ylexbor PRIVATE YETTY_HAVE_LIBPNG=1)
@@ -63,7 +63,7 @@ endif()
 
 # libcurl — used by the JS WebAPI layer for fetch() / XHR / external
 # script src=, and by the image cache for <img> loading. The platform
-# cmake (e.g. linux.cmake) includes build-tools/cmake/libs/libcurl.cmake
+# cmake (e.g. linux.cmake) includes build-tools/yetty/libs/libcurl.cmake
 # which creates the IMPORTED target CURL::libcurl. find_package(CURL)
 # re-runs the system search and ignores the imported target, so use the
 # target check directly (same pattern as src/yetty/ycat/CMakeLists.txt).

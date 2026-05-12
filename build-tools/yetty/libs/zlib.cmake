@@ -11,7 +11,7 @@
 #   zlib           — alias of zlibstatic, kept for zlib-ng-style consumers
 
 include_guard(GLOBAL)
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 if(TARGET zlib OR TARGET zlibstatic OR TARGET ZLIB::ZLIB)
     return()

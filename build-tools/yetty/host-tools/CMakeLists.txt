@@ -14,10 +14,10 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(BUILD_SHARED_LIBS OFF)
 
-# YETTY_ROOT is three levels up from build-tools/cmake/host-tools/
+# YETTY_ROOT is three levels up from build-tools/yetty/host-tools/
 get_filename_component(YETTY_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
 
-include(${YETTY_ROOT}/build-tools/cmake/CPM.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/CPM.cmake)
 
 # spdlog (needed by ytrace)
 CPMAddPackage(
@@ -52,16 +52,16 @@ CPMAddPackage(
 )
 
 # zlib (required by libpng and FreeType)
-include(${YETTY_ROOT}/build-tools/cmake/libs/zlib.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/libs/zlib.cmake)
 
 # libpng (required by FreeType)
-include(${YETTY_ROOT}/build-tools/cmake/libs/libpng.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/libs/libpng.cmake)
 
 # FreeType + its companions (brotli, bzip2) — each fetched as its own
 # 3rdparty tarball.
-include(${YETTY_ROOT}/build-tools/cmake/libs/brotli.cmake)
-include(${YETTY_ROOT}/build-tools/cmake/libs/bzip2.cmake)
-include(${YETTY_ROOT}/build-tools/cmake/libs/freetype.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/libs/brotli.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/libs/bzip2.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/libs/freetype.cmake)
 
 # msdfgen
 CPMAddPackage(
@@ -210,10 +210,10 @@ if(_SAVE_ZLIB_LIBRARY)
 endif()
 
 # Tree-sitter + grammars
-include(${YETTY_ROOT}/build-tools/cmake/TreeSitter.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/TreeSitter.cmake)
 
 # libmagic (file type detection)
-include(${YETTY_ROOT}/build-tools/cmake/Libmagic.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/Libmagic.cmake)
 
 # Generate tree-sitter query header (same logic as src/yetty/ycat/CMakeLists.txt)
 set(TS_GRAMMAR_NAMES
@@ -301,7 +301,7 @@ CPMAddPackage(
 )
 
 # stb (image loading)
-include(${YETTY_ROOT}/build-tools/cmake/libs/stb.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/libs/stb.cmake)
 
 # fontconfig (system package for font resolution, with static deps)
 find_package(PkgConfig REQUIRED)

@@ -1,8 +1,7 @@
 #=============================================================================
-# Yetty Build Variables
+# Yetty Build Variables — Platform-Neutral Defaults
 #
-# Central place to enable/disable all libraries and features.
-# Include this BEFORE any library or feature includes.
+# Include this from platform/<name>/variables.cmake, then add overrides.
 #
 # YETTY_ENABLE_LIB_*     — third-party library dependencies
 # YETTY_ENABLE_FEATURE_* — internal source directories / modules
@@ -123,12 +122,8 @@ option(YETTY_ENABLE_FEATURE_YMARKDOWN "ymarkdown — Markdown to ypaint buffer" 
 # Build pipeline
 option(YETTY_ENABLE_FEATURE_ASSETS    "assets — runtime asset copying"       ON)
 option(YETTY_ENABLE_FEATURE_CDB_GEN   "cdb-gen — CDB font generation"       ON)
-# Tests on by default for Linux desktop builds.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT EMSCRIPTEN AND NOT YETTY_ANDROID AND NOT YETTY_IOS)
-    option(YETTY_ENABLE_FEATURE_TESTS "tests — unit tests"                   ON)
-else()
-    option(YETTY_ENABLE_FEATURE_TESTS "tests — unit tests"                   OFF)
-endif()
+# Default OFF — platform/linux/variables.cmake enables for Linux desktop builds.
+option(YETTY_ENABLE_FEATURE_TESTS     "tests — unit tests"                   OFF)
 option(YETTY_ENABLE_FEATURE_DEMO      "demo — demo programs"                 ON)
 
 # Tools (each tool has its own option)
@@ -163,138 +158,7 @@ option(YETTY_ENABLE_TOOL_YLEXBOR    "ylexbor-demo CLI tool"             ON)
 option(YETTY_ENABLE_FEATURE_YBROWSER     "ybrowser — lexbor HTML + libcss cascade" ON)
 option(YETTY_ENABLE_TOOL_YBROWSER        "ybrowser CLI tool"                 ON)
 
-# Auto-disable ylexbor on webasm, iOS, tvOS: lexbor uses POSIX file I/O and
-# threading APIs not available on these targets.
-if(EMSCRIPTEN OR YETTY_IOS OR YETTY_TVOS)
-    foreach(_f
-        YETTY_ENABLE_FEATURE_YLEXBOR
-        YETTY_ENABLE_TOOL_YLEXBOR
-        YETTY_ENABLE_FEATURE_YBROWSER
-        YETTY_ENABLE_TOOL_YBROWSER
-    )
-        if(${_f})
-            message(STATUS "Disabling ${_f} on webasm/iOS/tvOS (lexbor not supported)")
-            set(${_f} OFF CACHE BOOL "" FORCE)
-        endif()
-    endforeach()
-endif()
-
-# Auto-disable ybrowser on Android: netsurf (libcss) is unsupported there.
-if(YETTY_ANDROID)
-    foreach(_f
-        YETTY_ENABLE_FEATURE_YBROWSER
-        YETTY_ENABLE_TOOL_YBROWSER
-    )
-        if(${_f})
-            message(STATUS "Disabling ${_f} on Android (netsurf/libcss not supported)")
-            set(${_f} OFF CACHE BOOL "" FORCE)
-        endif()
-    endforeach()
-endif()
-
-# Auto-disable QA tools for cross-compilation (requires host LLVM/Clang libs)
-# Also disabled on macOS and Windows — qa-tools/custom/result-checker/CMakeLists.txt
-# hardcodes Linux LLVM paths.
-if(YETTY_ENABLE_TOOL_QA)
-    if(YETTY_ANDROID OR YETTY_IOS OR EMSCRIPTEN OR CMAKE_CROSSCOMPILING OR APPLE OR WIN32)
-        message(STATUS "Disabling QA tools (cross-compilation, macOS, or Windows)")
-        set(YETTY_ENABLE_TOOL_QA OFF CACHE BOOL "" FORCE)
-    endif()
-endif()
-
-# Auto-disable features whose source still uses POSIX networking / pipe APIs
-# directly and hasn't been ported to the yetty/platform/* abstractions.
-# Remove a feature from this list once its sources are ported.
-if(WIN32)
-    foreach(_f
-        YETTY_ENABLE_FEATURE_SSH    # src/yetty/yssh: <netdb.h>, <pthread.h>, <poll.h>
-        YETTY_ENABLE_LIB_LIBSSH2    # libssh2 itself supports Windows but yssh wrapper doesn't
-        YETTY_ENABLE_FEATURE_YTHORVG # src/yetty/ythorvg/ythorvg.cpp: C99 compound literals (MSVC C++ rejects)
-        YETTY_ENABLE_LIB_THORVG     # only consumer is FEATURE_YTHORVG
-        YETTY_ENABLE_TOOL_YTHORVG   # tool depends on LIB_THORVG / FEATURE_YTHORVG
-        YETTY_ENABLE_TOOL_YPAINT_BENCH # tools/ypaint-bench: passes -Wextra unconditionally (MSVC: D8021)
-        YETTY_ENABLE_FEATURE_DEMO      # demo/ygui/CMakeLists.txt hardcodes shared/{thread,term}.c (POSIX)
-        YETTY_ENABLE_TOOL_YDOC         # tools/ydoc + yrich-runner: poll.h, termios.h, unistd.h (POSIX TTY)
-        YETTY_ENABLE_TOOL_YSHEET       # uses yrich-runner — same POSIX TTY deps
-        YETTY_ENABLE_TOOL_YSLIDE       # uses yrich-runner — same POSIX TTY deps
-        YETTY_ENABLE_LIB_LIBMAGIC      # upstream autotools-only; no MSVC port (libmagic.cmake's ExternalProject runs ./configure + make).
-        YETTY_ENABLE_LIB_LIBCURL       # libcurl Windows port would need OpenSSL+zlib 3rdparty; no Windows consumer right now besides ylexbor.
-        YETTY_ENABLE_FEATURE_YLEXBOR   # src/yetty/ylexbor uses GCC `[low...high]` array initializers and POSIX <strings.h>.
-        YETTY_ENABLE_TOOL_YLEXBOR      # depends on YLEXBOR; also links CURL::libcurl + POSIX yplatform sources.
-        YETTY_ENABLE_FEATURE_YBROWSER  # same constraints as YLEXBOR (forked module).
-        YETTY_ENABLE_TOOL_YBROWSER     # same constraints as TOOL_YLEXBOR.
-        YETTY_ENABLE_FEATURE_YNETSURF  # NetSurf prebuilt is non-Windows; the wrapper has no NetSurf::Windows port today.
-        YETTY_ENABLE_TOOL_YNETSURF     # depends on YNETSURF; also hardcodes POSIX yplatform/* sources.
-    )
-        if(${_f})
-            message(STATUS "Disabling ${_f} on Windows (sources not ported)")
-            set(${_f} OFF CACHE BOOL "" FORCE)
-        endif()
-    endforeach()
-endif()
-
-# Auto-disable on macOS (host build): libssh2 1.11.1's CMakeLists.txt calls
-# find_package(OpenSSL), which on macOS pulls Apple's clang default include
-# search path that has /usr/local/include FIRST (Homebrew prefix) — ahead
-# of our `-isystem .../3rdparty/openssl/include`. With Homebrew openssl@3
-# installed (the common case on Intel macOS), libssh2's openssl.c picks up
-# the 3.x opensslv.h, defines USE_OPENSSL_3, and emits EVP_MAC_*/OSSL_PARAM_*
-# references that the pinned 1.1.1w libcrypto.a (which yetty deliberately
-# uses to stay compatible with cpr / libcurl) does not provide → undefined
-# symbols at link time. Disable the SSH feature + libssh2 lib on APPLE
-# host builds until either (a) yetty migrates to openssl-new (4.x) or
-# (b) libssh2's include order is forced to put 3rdparty/openssl ahead of
-# the system /usr/local/include. iOS / tvOS go through different SDK
-# search paths so this only hits the host-macOS build (APPLE && NOT
-# YETTY_IOS).
-if(APPLE AND NOT YETTY_IOS)
-    foreach(_f
-        YETTY_ENABLE_FEATURE_SSH    # src/yetty/yssh consumer of libssh2
-        YETTY_ENABLE_LIB_LIBSSH2    # see comment above
-    )
-        if(${_f})
-            message(STATUS "Disabling ${_f} on macOS (Homebrew openssl@3 in /usr/local/include shadows pinned 1.1.1w; see variables.cmake)")
-            set(${_f} OFF CACHE BOOL "" FORCE)
-        endif()
-    endforeach()
-endif()
-
-# Auto-disable on macOS (host build): libmagic + ycat. libmagic is built from
-# upstream file(1) sources via cmake/Libmagic.cmake which assumes Linux-style
-# libtool/autotools paths and either picks up Homebrew's libmagic header
-# (incompatible struct layouts vs the bundled magic.mgc) or fails its
-# external-project configure step on macOS. ycat consumes libmagic for
-# MIME-dispatching, so it goes off with it. Both are disabled here until the
-# Libmagic.cmake recipe is reworked for the macOS environment.
-if(APPLE AND NOT YETTY_IOS)
-    foreach(_f
-        YETTY_ENABLE_LIB_LIBMAGIC    # cmake/Libmagic.cmake fails / mis-finds on macOS
-        YETTY_ENABLE_FEATURE_YCAT    # src/yetty/ycat — MIME dispatch needs libmagic
-        YETTY_ENABLE_TOOL_YCAT       # tool links libyetty_ycat (gone with FEATURE_YCAT)
-    )
-        if(${_f})
-            message(STATUS "Disabling ${_f} on macOS (libmagic build/detection unreliable on macOS host; see variables.cmake)")
-            set(${_f} OFF CACHE BOOL "" FORCE)
-        endif()
-    endforeach()
-endif()
-
-# Auto-disable on iOS / tvOS: tools that depend on the YCAT library, which
-# src/yetty/CMakeLists.txt deliberately skips for YETTY_IOS (the lib uses
-# desktop-only POSIX bits — strings.h / unistd.h scattered throughout). The
-# tool unconditionally links libyetty_ycat.a → undefined library at link time.
-if(YETTY_IOS OR YETTY_TVOS)
-    foreach(_f
-        YETTY_ENABLE_TOOL_YCAT       # links yetty_ycat (lib not built on iOS/tvOS)
-    )
-        if(${_f})
-            message(STATUS "Disabling ${_f} on iOS/tvOS (yetty_ycat library not built — see src/yetty/CMakeLists.txt)")
-            set(${_f} OFF CACHE BOOL "" FORCE)
-        endif()
-    endforeach()
-endif()
-
-# Desktop-only features
+# Desktop-only features (default OFF; linux/macos/windows cmake may enable)
 option(YETTY_ENABLE_FEATURE_GPU       "gpu — GPU tools (desktop)"            OFF)
 option(YETTY_ENABLE_FEATURE_CLIENT    "client — client tools (desktop)"      OFF)
 option(YETTY_ENABLE_FEATURE_YTOP      "ytop — system monitor (desktop)"      OFF)

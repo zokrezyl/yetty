@@ -5,7 +5,7 @@
 # build (cmake) lives in build-tools/3rdparty/tinyxml2/_build.sh.
 
 include_guard(GLOBAL)
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 if(TARGET tinyxml2::tinyxml2)
     return()

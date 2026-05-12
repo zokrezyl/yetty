@@ -1,73 +1,9 @@
 # WebAssembly (Emscripten) build target
+include(${CMAKE_CURRENT_LIST_DIR}/variables.cmake)
 
-# Disable desktop-only libraries
-set(YETTY_ENABLE_LIB_GLFW OFF CACHE BOOL "" FORCE)
-# libco is desktop-only. Webasm doesn't need a coroutine library: the
-# wgpu _await wrappers (src/yetty/yplatform/webasm/ywebgpu.c) suspend the
-# C stack via Asyncify (emscripten_sleep) instead of switching stacks,
-# and the coroutine API (src/yetty/yplatform/webasm/ycoroutine.c) is a
-# degenerate stub for source compatibility.
-set(YETTY_ENABLE_LIB_LIBCO OFF CACHE BOOL "" FORCE)
-# qemu is not built for webasm — the webasm yetty build uses in-process
-# TinyEMU (compiled to wasm) instead of a prebuilt QEMU binary.
-set(YETTY_ENABLE_LIB_QEMU        OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_LIB_QEMU_BINARY OFF CACHE BOOL "" FORCE)
-# libjpeg-turbo + YVNC re-enabled now that the webasm-mt 3rdparty variant
-# (built with -pthread → atomics + bulk-memory) is fetched on EMSCRIPTEN,
-# making the prebuilt .a link-compatible with --shared-memory yetty.wasm.
-
-# yetty.wasm is single-threaded. The Linux VM (TinyEMU) runs in a
-# separate iframe wasm (build-tools/cmake/tinyemu-iframe.cmake), wired
-# via postMessage through src/yetty/yplatform/webasm/iframe-pty.c. This
-# eliminates the per-syscall pthread shim cost the in-process pthread
-# variant used to pay on emscripten — see iframe-pty.c for the rationale.
-# No -pthread / --shared-memory anywhere; all 3rdparty libs come from
-# the non-mt webasm prebuilt variant.
-
-# Both `EMSCRIPTEN` and `__EMSCRIPTEN__` are kept defined (emcc default).
-# We previously undefined `EMSCRIPTEN` because upstream tinyemu used it
-# to switch into a stripped-down (single-CPU, no-fopen, fs_wget-only)
-# variant we don't want. Our fork has dropped those legacy paths
-# (machine.c::vm_error / virt_machine_list / load_file, and
-# riscv_cpu.c::riscv_cpu_init's single-class case) — so the macro now
-# means simply "we target wasm via emcc", which is exactly what
-# riscv_machine.c::riscv_machine_get_sleep_duration / _interp need to
-# enable their single-thread CPU drive paths so the kernel actually
-# runs.
-
-# Drop the C++ prebuilt libs on webasm. Each one drags in libc++ (so
-# std::shared_ptr / std::atomic etc.), and the upstream prebuilt tarballs
-# were not produced with the same emscripten/clang version we link with —
-# the resulting wasm has caller/callee type-signature mismatches that
-# wasm-emscripten-finalize rejects with "popping from empty stack".
-# Yetty's webasm config is single-threaded by design, so refcount
-# atomics from these libs are pure cost with no benefit.
-set(YETTY_ENABLE_LIB_THORVG     OFF CACHE BOOL "" FORCE)  # vector graphics renderer (C++)
-set(YETTY_ENABLE_LIB_LIBSSH2    OFF CACHE BOOL "" FORCE)  # transitively pulls openssl libcrypto
-set(YETTY_ENABLE_LIB_OPENH264   OFF CACHE BOOL "" FORCE)  # H.264 decoder (C++)
-# pdfio + tree-sitter + imgui prebuilts for webasm-mt are not published
-# yet (404 on the *-webasm-mt-*.tar.gz release assets). Disable here
-# until the tarballs are built and uploaded; ypdf + ycat consume pdfio
-# (and ycat consumes tree-sitter), and ymgui pulls imgui — so those
-# features go too. ymgui-layer.c in yterm is pure C and doesn't link
-# imgui directly, so yterm builds fine without YMGUI.
-set(YETTY_ENABLE_LIB_PDFIO       OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_LIB_TREESITTER  OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_FEATURE_YPDF    OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_FEATURE_YCAT    OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_FEATURE_YMGUI   OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_TOOL_YCAT       OFF CACHE BOOL "" FORCE)
-# msdfgen + tinyxml2 stay ON: yetty_ypaint hard-depends on
-# yetty_ymsdf_gen, which in turn pulls msdfgen-core/msdfgen-ext +
-# tinyxml2. Unwinding that needs source surgery in ypaint.
-set(YETTY_ENABLE_LIB_MSDFGEN       ON  CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_FEATURE_YMSDF_GEN ON  CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_FEATURE_YTHORVG   OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_FEATURE_SSH       OFF CACHE BOOL "" FORCE)
-
-include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
-include(${YETTY_ROOT}/build-tools/cmake/tinyemu.cmake)
-include(${YETTY_ROOT}/build-tools/cmake/tinyemu-iframe.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/platform/shared.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/tinyemu.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/tinyemu-iframe.cmake)
 
 # Copy runtime assets (fonts, etc.) to build directory
 if(YETTY_ENABLE_FEATURE_ASSETS)
@@ -123,7 +59,7 @@ target_include_directories(yetty PRIVATE ${YETTY_INCLUDES} ${YETTY_RENDERER_INCL
 # Decompression uses the browser's DecompressionStream('br') so no JS
 # brotli library is needed. Kernel/opensbi/rootfs are NOT here — they
 # moved to tinyemu.data, owned by the iframe wasm.
-include(${YETTY_ROOT}/build-tools/cmake/webasm-stage-assets.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/webasm-stage-assets.cmake)
 yetty_stage_webasm_assets()
 
 if(YETTY_ENABLE_FEATURE_ASSETS)
@@ -201,8 +137,8 @@ set_target_properties(yetty PROPERTIES SUFFIX ".js")
 
 # brotli decoder is consumed by webasm/brotli-glue.c, exported as
 # _yetty_brotli_decode for the asset preload shim. Single-threaded
-# webasm prebuilt — see build-tools/cmake/libs/brotli.cmake.
-include(${YETTY_ROOT}/build-tools/cmake/libs/brotli.cmake)
+# webasm prebuilt — see build-tools/yetty/libs/brotli.cmake.
+include(${YETTY_ROOT}/build-tools/yetty/libs/brotli.cmake)
 
 target_link_libraries(yetty PRIVATE
     ${YETTY_LIBS}
@@ -291,7 +227,7 @@ if(YETTY_ENABLE_FEATURE_DEMO)
         COMMAND ${CMAKE_COMMAND}
             -DYETTY_ROOT=${YETTY_ROOT}
             -DOUTPUT_DIR=${CMAKE_BINARY_DIR}
-            -P ${YETTY_ROOT}/build-tools/cmake/generate-demo-outputs.cmake
+            -P ${YETTY_ROOT}/build-tools/yetty/generate-demo-outputs.cmake
         COMMENT "Generating demo script outputs..."
     )
     add_dependencies(yetty generate-demo-outputs)
@@ -300,7 +236,7 @@ endif()
 # Verify all required assets are present
 if(YETTY_ENABLE_FEATURE_ASSETS)
     add_custom_command(TARGET yetty POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -DBUILD_DIR=${CMAKE_BINARY_DIR} -DTARGET_TYPE=webasm -P ${YETTY_ROOT}/build-tools/cmake/verify-assets.cmake
+        COMMAND ${CMAKE_COMMAND} -DBUILD_DIR=${CMAKE_BINARY_DIR} -DTARGET_TYPE=webasm -P ${YETTY_ROOT}/build-tools/yetty/verify-assets.cmake
         COMMENT "Verifying build assets..."
     )
 endif()

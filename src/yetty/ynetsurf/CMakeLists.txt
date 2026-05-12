@@ -1,7 +1,7 @@
 # yetty_ynetsurf — NetSurf 3.11 frontend that emits ypaint primitives.
 #
 # Depends on the `netsurf_core` IMPORTED target produced by
-# build-tools/cmake/libs/netsurf.cmake. Disables itself if NetSurf core
+# build-tools/yetty/libs/netsurf.cmake. Disables itself if NetSurf core
 # is not available so the rest of yetty still configures.
 
 if(NOT TARGET netsurf_core)

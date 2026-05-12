@@ -1,20 +1,18 @@
 # Android build target
-
-# Disable desktop-only libraries
-set(YETTY_ENABLE_LIB_GLFW OFF CACHE BOOL "" FORCE)
+include(${CMAKE_CURRENT_LIST_DIR}/variables.cmake)
 
 if(YETTY_ENABLE_LIB_LIBCURL)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/libcurl.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/libcurl.cmake)
 endif()
 
-include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/platform/shared.cmake)
 
 # TinyEMU - in-process RISC-V emulator for --virtual flag. Not part of
 # src/yetty, so shared.cmake doesn't pull it in; include explicitly like
 # linux.cmake / macos.cmake do.
 if(YETTY_ENABLE_LIB_TINYEMU)
-    include(${YETTY_ROOT}/build-tools/cmake/tinyemu.cmake)
-    include(${YETTY_ROOT}/build-tools/cmake/tinyemu-runtime.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/tinyemu.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/tinyemu-runtime.cmake)
 endif()
 
 # native_app_glue from Android NDK
@@ -112,7 +110,7 @@ if(YETTY_ENABLE_FEATURE_DEMO)
         COMMAND ${CMAKE_COMMAND}
             -DYETTY_ROOT=${YETTY_ROOT}
             -DOUTPUT_DIR=${ANDROID_ASSETS_DIR}
-            -P ${YETTY_ROOT}/build-tools/cmake/generate-demo-outputs.cmake
+            -P ${YETTY_ROOT}/build-tools/yetty/generate-demo-outputs.cmake
         WORKING_DIRECTORY ${YETTY_ROOT}
     )
 endif()
@@ -167,7 +165,7 @@ endif()
 # Verify all required assets are present
 if(YETTY_ENABLE_FEATURE_ASSETS)
     add_custom_command(TARGET yetty POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -DBUILD_DIR=${ANDROID_ASSETS_DIR}/.. -DTARGET_TYPE=android -P ${YETTY_ROOT}/build-tools/cmake/verify-assets.cmake
+        COMMAND ${CMAKE_COMMAND} -DBUILD_DIR=${ANDROID_ASSETS_DIR}/.. -DTARGET_TYPE=android -P ${YETTY_ROOT}/build-tools/yetty/verify-assets.cmake
         COMMENT "Verifying build assets..."
     )
 endif()

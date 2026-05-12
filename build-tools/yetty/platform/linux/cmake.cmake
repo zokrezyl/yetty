@@ -1,4 +1,5 @@
 # Linux desktop build target
+include(${CMAKE_CURRENT_LIST_DIR}/variables.cmake)
 
 # All static libs on Linux must be position-independent so they can be linked
 # into ygui_shared and similar SHARED targets without relocation errors.
@@ -9,23 +10,23 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # their `if(TARGET ...)` guards only see platforms declared before that point.
 # (Tree-sitter is already wired via shared.cmake → TreeSitter.cmake.)
 if(YETTY_ENABLE_LIB_LIBMAGIC)
-    include(${YETTY_ROOT}/build-tools/cmake/Libmagic.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/Libmagic.cmake)
 endif()
 if(YETTY_ENABLE_LIB_LIBCURL)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/libcurl.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/libcurl.cmake)
 endif()
 
-include(${YETTY_ROOT}/build-tools/cmake/platforms/shared.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/platform/shared.cmake)
 
 # Linux-specific libraries needed only by the main yetty executable.
 if(YETTY_ENABLE_LIB_GLFW)
-    include(${YETTY_ROOT}/build-tools/cmake/libs/glfw.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/glfw.cmake)
 endif()
 
 # TinyEMU - in-process RISC-V emulator for --temu flag
 if(YETTY_ENABLE_LIB_TINYEMU)
-    include(${YETTY_ROOT}/build-tools/cmake/tinyemu.cmake)
-    include(${YETTY_ROOT}/build-tools/cmake/tinyemu-runtime.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/tinyemu.cmake)
+    include(${YETTY_ROOT}/build-tools/yetty/tinyemu-runtime.cmake)
 endif()
 
 # The shared RISC-V runtime (OpenSBI firmware, Linux kernel, Alpine rootfs)
@@ -172,7 +173,7 @@ endif()
 # embed pipeline is its own implicit check.
 if(YETTY_ENABLE_FEATURE_ASSETS)
     add_custom_command(TARGET yetty POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -DBUILD_DIR=${CMAKE_BINARY_DIR} -DTARGET_TYPE=desktop -P ${YETTY_ROOT}/build-tools/cmake/verify-assets.cmake
+        COMMAND ${CMAKE_COMMAND} -DBUILD_DIR=${CMAKE_BINARY_DIR} -DTARGET_TYPE=desktop -P ${YETTY_ROOT}/build-tools/yetty/verify-assets.cmake
         COMMENT "Verifying build assets..."
     )
 endif()

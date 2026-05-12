@@ -10,7 +10,7 @@
 #   msdfgen-ext  / msdfgen::msdfgen-ext (links freetype + tinyxml2)
 
 include_guard(GLOBAL)
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 if(TARGET msdfgen::msdfgen-core)
     return()

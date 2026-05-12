@@ -17,7 +17,7 @@ if(EMSCRIPTEN)
     return()
 endif()
 
-include(${YETTY_ROOT}/build-tools/cmake/libs/libuv.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/libs/libuv.cmake)
 
 add_library(yetty_yclient STATIC
     event-loop.c

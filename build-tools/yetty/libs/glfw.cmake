@@ -5,7 +5,7 @@
 # The from-source builds live in build-tools/3rdparty/{glfw,glfw3webgpu}/.
 
 include_guard(GLOBAL)
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 if(TARGET glfw)
     return()

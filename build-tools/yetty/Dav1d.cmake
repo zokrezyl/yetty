@@ -7,7 +7,7 @@
 # build-tools/3rdparty/README.md for how to add platforms or bump versions.
 
 include_guard(GLOBAL)
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 if(TARGET dav1d)
     return()

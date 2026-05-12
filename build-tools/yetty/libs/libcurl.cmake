@@ -26,7 +26,7 @@
 #   - migrate libssh2 to also use openssl-new (not done yet).
 
 include_guard(GLOBAL)
-include(${YETTY_ROOT}/build-tools/cmake/3rdparty-fetch.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 if(TARGET CURL::libcurl)
     return()
@@ -37,8 +37,8 @@ endif()
 # against at 3rdparty-build time. Order matters only for find_package
 # style consumers; the actual link order is chosen by the linker from
 # INTERFACE_LINK_LIBRARIES below.
-include(${YETTY_ROOT}/build-tools/cmake/libs/zlib.cmake)
-include(${YETTY_ROOT}/build-tools/cmake/libs/brotli.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/libs/zlib.cmake)
+include(${YETTY_ROOT}/build-tools/yetty/libs/brotli.cmake)
 
 #-----------------------------------------------------------------------------
 # Fetch libcurl prebuilt + the openssl-new prebuilt it was built against.

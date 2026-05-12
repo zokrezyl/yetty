@@ -194,7 +194,7 @@ endfunction()
 #-----------------------------------------------------------------------------
 function(qemu_embed_runtime TARGET)
     if(NOT COMMAND incbin_add_directory)
-        include(${YETTY_ROOT}/build-tools/cmake/incbin.cmake)
+        include(${YETTY_ROOT}/build-tools/yetty/incbin.cmake)
     endif()
 
     set(_STAGING "${CMAKE_BINARY_DIR}/embed-qemu")
