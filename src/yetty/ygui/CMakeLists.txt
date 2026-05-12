@@ -9,6 +9,8 @@ set(YGUI_SOURCES
     ygui_widgets.c
     ygui_rich.c
     ygui_tabbar.c
+    ygui_window.c
+    ygui_popup_menu.c
     ygui_render.c
     ygui_theme.c
     ygui_osc.c

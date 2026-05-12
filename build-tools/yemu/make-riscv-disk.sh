@@ -34,6 +34,7 @@ BINARIES=(
     "$BUILD_DIR/tools/ymesh/ymesh"
     "$BUILD_DIR/tools/yecho/yecho"
     "$BUILD_DIR/tools/ycat/ycat"
+    "$BUILD_DIR/tools/ygreeter/ygreeter"
 )
 
 for b in "${BINARIES[@]}"; do

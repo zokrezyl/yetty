@@ -31,6 +31,8 @@
 #include <yetty/ypaint-core/text-span-prim.h>
 #include <yetty/ysdf/types.gen.h>
 
+#include <yetty/ytrace/ytrace.h>
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -206,12 +208,19 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
 static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self,
                                                   struct yetty_ygui_render_ctx *ctx)
 {
+    ydebug("rich_render enter id=%s buf=%p ctx=%p ctx_buf=%p",
+           self->id ? self->id : "?", (void *)self->data.rich.buffer, (void *)ctx,
+           ctx ? (void *)ctx->buffer : NULL);
     if (!self->data.rich.buffer || !ctx || !ctx->buffer) {
+        ydebug("rich_render bail (null) id=%s", self->id ? self->id : "?");
         return YETTY_OK_VOID();
     }
     const uint8_t *src_data =
         (const uint8_t *)yetty_ypaint_core_buffer_data(self->data.rich.buffer);
     size_t src_size = yetty_ypaint_core_buffer_size(self->data.rich.buffer);
+    ydebug("rich_render id=%s src=%p size=%zu layout=(%.1f,%.1f)",
+           self->id ? self->id : "?", (const void *)src_data, src_size,
+           self->layout_x, self->layout_y);
     if (!src_data || src_size == 0) {
         return YETTY_OK_VOID();
     }
@@ -227,9 +236,13 @@ static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self
     uint8_t *heap = NULL;
     size_t heap_cap = 0;
 
+    int n_prims = 0;
     while (remaining >= sizeof(uint32_t)) {
         size_t s = rich_prim_size((const uint32_t *)p, remaining);
+        uint32_t t = ((const uint32_t *)p)[0];
+        ydebug("rich_render prim#%d type=0x%x size=%zu rem=%zu", n_prims, t, s, remaining);
         if (s == 0 || s > remaining) {
+            ydebug("rich_render break — malformed/zero size");
             break; /* malformed — bail rather than risk overruns */
         }
         uint8_t *work = stack;
@@ -255,7 +268,10 @@ static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self
         }
         p += s;
         remaining -= s;
+        n_prims++;
     }
+    ydebug("rich_render exit id=%s n_prims=%d remaining=%zu",
+           self->id ? self->id : "?", n_prims, remaining);
     free(heap);
     return YETTY_OK_VOID();
 }

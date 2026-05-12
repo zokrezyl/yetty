@@ -20,8 +20,11 @@ target_include_directories(ygreeter PRIVATE
 )
 
 # ygui carries ypaint-core + ysdf + ycore + yface + yfont_core + the
-# ypaint-yaml dep needed by rich's create_from_yaml. Nothing else here.
-target_link_libraries(ygreeter PRIVATE ygui)
+# ypaint-yaml dep needed by rich's create_from_yaml. yetty_yimage_core
+# is added on top so we can call yetty_yimage_render_path() — the
+# yimage YAML factory isn't wired (yaml_factory: none) so we build the
+# image-bearing buffer programmatically and hand it to rich_set_buffer.
+target_link_libraries(ygreeter PRIVATE ygui yetty_yimage_core)
 
 if(NOT MSVC)
     target_compile_options(ygreeter PRIVATE -Wall -Wextra)

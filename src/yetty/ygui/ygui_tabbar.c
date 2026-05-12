@@ -13,10 +13,24 @@
  * handled by on_press. The header reserves `header_h` pixels at the top
  * via padding-top on the container, so content panels naturally lay out
  * below the strip without manual offset math.
+ *
+ * Visual conventions (mirrored from Chrome to keep the strip readable):
+ *   - The active tab uses the primary background colour and a coloured
+ *     accent bar at the bottom; inactive tabs share the surface
+ *     background.
+ *   - Between two ADJACENT INACTIVE tabs a thin vertical separator is
+ *     drawn so they don't blur into one solid band. The separator is
+ *     deliberately omitted next to the active tab — that's how Chrome
+ *     gives the active tab visual breathing room.
+ *   - Each pill carries a small close 'x' button on its right side
+ *     (yetty_ygui_widget_tabbar_remove_tab on click). The hit-box size
+ *     matches the YETTY_YGUI_TABBAR_BUTTON_SIZE constant so the window
+ *     widget's hamburger button can reuse the same geometry.
  */
 
 #include "ygui_internal.h"
 
+#include <yetty/ytrace/ytrace.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,6 +50,22 @@ void yetty_ygui_engine_attach_widget(struct yetty_ygui_engine *engine,
 #define TABBAR_PILL_RADIUS 6.0f
 #define TABBAR_ACCENT_BAR_H 3.0f
 
+/* Per-tab close-button + window-chrome hamburger button size. Kept as
+ * a public constant via ygui_internal.h's TABBAR_BUTTON_SIZE so the
+ * window widget can match it without copy-pasting magic numbers. */
+#define TABBAR_BUTTON_SIZE 18.0f
+#define TABBAR_BUTTON_PAD 6.0f
+
+/* Width of the separator between two adjacent inactive tabs. Thin
+ * hairline; visible enough to break up the surface but unobtrusive. */
+#define TABBAR_SEPARATOR_W 1.0f
+#define TABBAR_SEPARATOR_INSET_Y 6.0f
+
+float yetty_ygui_tabbar_button_size(void)
+{
+    return TABBAR_BUTTON_SIZE;
+}
+
 static float tabbar_header_h(const struct yetty_ygui_widget *self)
 {
     if (self->data.tabbar.header_h > 0) {
@@ -44,23 +74,36 @@ static float tabbar_header_h(const struct yetty_ygui_widget *self)
     return TABBAR_DEFAULT_HEADER_H;
 }
 
-static float tabbar_pill_width(const struct yetty_ygui_widget *self, int i)
+static float tabbar_pill_width(const struct yetty_ygui_widget *self)
 {
-    /* Equal-width pills: divide header width by tab count, clamp to a
-     * minimum so a single label can always fit. Pill content (label)
-     * truncates on overflow by the underlying text path. */
     int n = self->data.tabbar.n_tabs;
-    (void)i;
     if (n <= 0) {
         return 0.0f;
     }
     float total_gap = (float)(n - 1) * TABBAR_PILL_GAP;
     float each = (self->layout_w - total_gap) / (float)n;
-    float min_w = 60.0f;
+    float min_w = 80.0f;
     if (each < min_w) {
         each = min_w;
     }
     return each;
+}
+
+/* Per-tab close-box rect in window-local coordinates (relative to the
+ * pill's top-left, which is the (x, y) passed in). The close box is
+ * pinned to the right edge of the pill, vertically centred in the
+ * header strip. */
+static void tab_close_rect(float pill_w, float hh, float *out_x, float *out_y, float *out_w,
+                           float *out_h)
+{
+    float sz = TABBAR_BUTTON_SIZE;
+    if (sz > hh - 2 * TABBAR_BUTTON_PAD) {
+        sz = hh - 2 * TABBAR_BUTTON_PAD;
+    }
+    *out_w = sz;
+    *out_h = sz;
+    *out_x = pill_w - sz - TABBAR_BUTTON_PAD;
+    *out_y = (hh - sz) * 0.5f;
 }
 
 /*=============================================================================
@@ -78,37 +121,74 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_widget *se
     const struct yetty_ygui_theme *theme = ctx->theme;
     float hh = tabbar_header_h(self);
 
-    /* Strip background — a flat band the width of the widget. Drawn at
-     * the widget's local origin (render-ctx offset_x/y already includes
-     * the parent's absolute position). */
-    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, hh, theme->bg_surface,
-                                     0.0f);
+    /* Strip background — a flat band the width of the widget. */
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, hh, theme->bg_surface, 0.0f);
 
     float x = self->x;
     float y = self->y;
-    float pw = tabbar_pill_width(self, 0);
+    float pw = tabbar_pill_width(self);
+    int active = self->data.tabbar.active;
+
     for (int i = 0; i < self->data.tabbar.n_tabs; i++) {
-        int active = (i == self->data.tabbar.active);
-        uint32_t fill = active ? theme->bg_primary : theme->bg_surface;
-        uint32_t text_color = active ? theme->text_primary : theme->text_muted;
+        int is_active = (i == active);
+        uint32_t fill = is_active ? theme->bg_primary : theme->bg_surface;
+        uint32_t text_color = is_active ? theme->text_primary : theme->text_muted;
 
         yetty_ygui_render_ctx_render_box(ctx, x, y, pw, hh, fill, TABBAR_PILL_RADIUS);
 
-        if (active) {
+        if (is_active) {
             yetty_ygui_render_ctx_render_box(ctx, x, y + hh - TABBAR_ACCENT_BAR_H, pw,
                                              TABBAR_ACCENT_BAR_H, theme->accent, 0.0f);
         }
 
+        /* Chrome-style separator: draw between this pill and the next
+         * ONLY if both are inactive. The active tab gets visual
+         * breathing room on both sides, which is how Chrome / Firefox
+         * tab strips read. */
+        if (i + 1 < self->data.tabbar.n_tabs && !is_active && (i + 1) != active) {
+            float sep_x = x + pw + (TABBAR_PILL_GAP - TABBAR_SEPARATOR_W) * 0.5f;
+            float sep_y = y + TABBAR_SEPARATOR_INSET_Y;
+            float sep_h = hh - 2 * TABBAR_SEPARATOR_INSET_Y;
+            yetty_ygui_render_ctx_render_box(ctx, sep_x, sep_y, TABBAR_SEPARATOR_W, sep_h,
+                                             theme->border_muted, 0.0f);
+        }
+
+        /* Label. The text path renders top-aligned at (tx, ty); the
+         * label sits to the left of the close 'x' button (we leave a
+         * pad of TABBAR_BUTTON_SIZE + 2*TABBAR_BUTTON_PAD on the right
+         * so the two don't visually collide). */
         const char *label = self->data.tabbar.labels[i];
         if (label && *label) {
             float fs = theme->font_size > 0 ? theme->font_size : 14.0f;
-            /* Centre the label vertically inside the pill — text origin
-             * is the baseline; ypaint's text path renders downward, so
-             * shift by ~font_size to approximate vertical centring. */
             float tx = x + TABBAR_PILL_PAD_X;
-            float ty = y + (hh - fs) * 0.5f + fs * 0.8f;
+            float ty = y + (hh - fs) * 0.5f;
+            float max_top = y + hh - TABBAR_ACCENT_BAR_H - fs - 2.0f;
+            if (ty > max_top) {
+                ty = max_top;
+            }
             yetty_ygui_render_ctx_render_text(ctx, label, tx, ty, text_color, fs);
         }
+
+        /* Close 'x' button on the right edge of the pill. Always paint
+         * a subtle background square so the click target is visible
+         * even on inactive tabs — previously the inactive close
+         * affordance was just a small glyph floating in space, easy to
+         * miss when aiming. Active tabs get a slightly stronger fill
+         * to keep the visual emphasis on the focused pill. */
+        float cx, cy, cw, ch;
+        tab_close_rect(pw, hh, &cx, &cy, &cw, &ch);
+        float ax = x + cx;
+        float ay = y + cy;
+        uint32_t close_bg = is_active ? theme->bg_surface : theme->bg_hover;
+        yetty_ygui_render_ctx_render_box(ctx, ax, ay, cw, ch, close_bg,
+                                         TABBAR_PILL_RADIUS * 0.5f);
+        float gfs = ch * 0.85f;
+        if (gfs < 10.0f) {
+            gfs = 10.0f;
+        }
+        float gx = ax + (cw - gfs * 0.5f) * 0.5f;
+        float gy = ay + (ch - gfs) * 0.5f - 1.0f;
+        yetty_ygui_render_ctx_render_text(ctx, "x", gx, gy, theme->text_primary, gfs);
 
         x += pw + TABBAR_PILL_GAP;
     }
@@ -116,23 +196,51 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_widget *se
 }
 
 /*=============================================================================
- * Hit-test the header strip on press; swap active tab.
+ * Hit-test. Close box wins over the rest of the pill so a user can
+ * close a tab without switching to it first.
  *===========================================================================*/
 
 static int tabbar_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
 {
     (void)out;
     float hh = tabbar_header_h(self);
+    ydebug("tabbar_on_press lx=%.1f ly=%.1f hh=%.1f n_tabs=%d", lx, ly, hh,
+           self->data.tabbar.n_tabs);
     if (ly < 0 || ly > hh) {
-        return 0; /* press below the strip — let it fall through to children */
+        return 0;
     }
     if (self->data.tabbar.n_tabs <= 0) {
         return 0;
     }
-    float pw = tabbar_pill_width(self, 0);
+    float pw = tabbar_pill_width(self);
     float x = 0.0f;
     for (int i = 0; i < self->data.tabbar.n_tabs; i++) {
         if (lx >= x && lx < x + pw) {
+            float cx, cy, cw, ch;
+            tab_close_rect(pw, hh, &cx, &cy, &cw, &ch);
+            float gx = x + cx;
+            ydebug("tabbar_on_press pill=%d pill_x=[%.1f..%.1f] close_box=[%.1f..%.1f]x[%.1f..%.1f] hit_close=%d",
+                   i, x, x + pw, gx, gx + cw, cy, cy + ch,
+                   (lx >= gx && lx < gx + cw && ly >= cy && ly < cy + ch) ? 1 : 0);
+            if (lx >= gx && lx < gx + cw && ly >= cy && ly < cy + ch) {
+                /* Hit the close button. If the app registered an
+                 * on_tab_close handler, it owns the decision — the
+                 * tabbar fires the callback and stops. The app must
+                 * call yetty_ygui_widget_tabbar_remove_tab() itself
+                 * (typically after updating any external state that
+                 * still references the closed tab's widgets, e.g. a
+                 * parallel array of per-tab pointers — see the
+                 * ygreeter tool for an example). When no handler is
+                 * registered the tabbar applies the auto-remove
+                 * default so simple uses just work. */
+                if (self->data.tabbar.on_tab_close) {
+                    self->data.tabbar.on_tab_close(self, (float)i,
+                                                    self->data.tabbar.on_tab_close_userdata);
+                } else {
+                    yetty_ygui_widget_tabbar_remove_tab(self, i);
+                }
+                return 1;
+            }
             if (i != self->data.tabbar.active) {
                 yetty_ygui_widget_tabbar_set_active(self, i);
             }
@@ -156,8 +264,8 @@ static void tabbar_destroy(struct yetty_ygui_widget *self)
         free(self->data.tabbar.labels);
         self->data.tabbar.labels = NULL;
     }
-    /* panels are normal children and are freed via the widget hierarchy
-     * in yetty_ygui_widget_free. We just free our parallel index array. */
+    /* panels are normal children freed via the widget hierarchy in
+     * yetty_ygui_widget_free; only the parallel index array is ours. */
     if (self->data.tabbar.panels) {
         free(self->data.tabbar.panels);
         self->data.tabbar.panels = NULL;
@@ -190,12 +298,11 @@ struct yetty_ygui_widget *yetty_ygui_engine_tabbar(struct yetty_ygui_engine *eng
     t->data.tabbar.n_tabs = 0;
     t->data.tabbar.capacity = 0;
     t->data.tabbar.active = -1;
-    t->data.tabbar.header_h = 0.0f; /* derive from theme/default */
+    t->data.tabbar.header_h = 0.0f;
+    t->data.tabbar.on_tab_close = NULL;
+    t->data.tabbar.on_tab_close_userdata = NULL;
     t->vtable = &tabbar_vtable;
 
-    /* Default layout: flex column with padding-top equal to the header so
-     * content panels lay out cleanly below the strip. CSS callers can
-     * override. */
     t->layout.mode = YETTY_YGUI_LAYOUT_FLEX;
     t->layout.direction = YETTY_YGUI_FLEX_COLUMN;
     t->layout.align_items = YETTY_YGUI_ALIGN_STRETCH;
@@ -221,8 +328,6 @@ static int tabbar_grow_capacity(struct yetty_ygui_widget *self, int need)
     struct yetty_ygui_widget **panels = (struct yetty_ygui_widget **)realloc(
         self->data.tabbar.panels, (size_t)cap * sizeof(struct yetty_ygui_widget *));
     if (!panels) {
-        /* labels still grew but we keep the larger allocation — harmless.
-         * Bail before assigning so we don't half-grow the parallel arrays. */
         self->data.tabbar.labels = labels;
         return 0;
     }
@@ -241,7 +346,6 @@ struct yetty_ygui_widget *yetty_ygui_widget_tabbar_add_tab(struct yetty_ygui_wid
     if (!tabbar_grow_capacity(tabbar, tabbar->data.tabbar.n_tabs + 1)) {
         return NULL;
     }
-    /* Compose a stable per-tab id: <tabbar-id>__tab<index>. */
     char panel_id[256];
     snprintf(panel_id, sizeof(panel_id), "%s__tab%d", tabbar->id ? tabbar->id : "tabbar",
              tabbar->data.tabbar.n_tabs);
@@ -264,7 +368,6 @@ struct yetty_ygui_widget *yetty_ygui_widget_tabbar_add_tab(struct yetty_ygui_wid
 
     yetty_ygui_widget_add_child(tabbar, panel);
 
-    /* First tab becomes active automatically. */
     if (tabbar->data.tabbar.active < 0) {
         tabbar->data.tabbar.active = idx;
     } else if (idx != tabbar->data.tabbar.active) {
@@ -275,6 +378,82 @@ struct yetty_ygui_widget *yetty_ygui_widget_tabbar_add_tab(struct yetty_ygui_wid
         tabbar->engine->dirty = 1;
     }
     return panel;
+}
+
+void yetty_ygui_widget_tabbar_remove_tab(struct yetty_ygui_widget *tabbar, int index)
+{
+    if (!tabbar || tabbar->type != YETTY_YGUI_WIDGET_TABBAR) {
+        return;
+    }
+    if (index < 0 || index >= tabbar->data.tabbar.n_tabs) {
+        return;
+    }
+
+    ydebug("tabbar_remove_tab enter index=%d n_tabs=%d active=%d", index,
+           tabbar->data.tabbar.n_tabs, tabbar->data.tabbar.active);
+
+    /* yetty_ygui_widget_remove unlinks the panel from its parent (us)
+     * AND frees it. The earlier code in this function ALSO called
+     * widget_free directly after widget_remove, which double-freed
+     * everything below the panel and triggered "free(): double free
+     * detected in tcache 2". widget_remove alone is the correct
+     * complete-removal API. */
+    struct yetty_ygui_widget *panel = tabbar->data.tabbar.panels[index];
+    if (panel) {
+        ydebug("tabbar_remove_tab: remove+free panel id=%s ptr=%p",
+               panel->id ? panel->id : "?", (void *)panel);
+        yetty_ygui_widget_remove(panel);
+    }
+    free(tabbar->data.tabbar.labels[index]);
+
+    /* Compact the parallel arrays. */
+    int n = tabbar->data.tabbar.n_tabs;
+    for (int i = index; i < n - 1; i++) {
+        tabbar->data.tabbar.labels[i] = tabbar->data.tabbar.labels[i + 1];
+        tabbar->data.tabbar.panels[i] = tabbar->data.tabbar.panels[i + 1];
+    }
+    tabbar->data.tabbar.labels[n - 1] = NULL;
+    tabbar->data.tabbar.panels[n - 1] = NULL;
+    tabbar->data.tabbar.n_tabs = n - 1;
+
+    /* Re-anchor the active index. If the removed tab WAS active, move
+     * to the next one (or the previous one when removing the last
+     * tab). If it sat after the active tab the index is unchanged but
+     * the array shifted, which is already handled by the active index
+     * being a position rather than a pointer — adjust only when the
+     * removed index <= active. */
+    int new_active = tabbar->data.tabbar.active;
+    if (tabbar->data.tabbar.n_tabs == 0) {
+        new_active = -1;
+    } else if (index == tabbar->data.tabbar.active) {
+        if (new_active >= tabbar->data.tabbar.n_tabs) {
+            new_active = tabbar->data.tabbar.n_tabs - 1;
+        }
+        /* The new "current" panel needs to become visible. */
+        if (new_active >= 0 && tabbar->data.tabbar.panels[new_active]) {
+            yetty_ygui_widget_set_visible(tabbar->data.tabbar.panels[new_active], 1);
+        }
+    } else if (index < tabbar->data.tabbar.active) {
+        new_active--;
+    }
+    tabbar->data.tabbar.active = new_active;
+
+    if (tabbar->change_callback && new_active >= 0) {
+        tabbar->change_callback(tabbar, (float)new_active, tabbar->change_userdata);
+    }
+    if (tabbar->engine) {
+        tabbar->engine->dirty = 1;
+    }
+}
+
+void yetty_ygui_widget_tabbar_on_tab_close(struct yetty_ygui_widget *tabbar,
+                                           ygui_change_callback_t callback, void *userdata)
+{
+    if (!tabbar || tabbar->type != YETTY_YGUI_WIDGET_TABBAR) {
+        return;
+    }
+    tabbar->data.tabbar.on_tab_close = callback;
+    tabbar->data.tabbar.on_tab_close_userdata = userdata;
 }
 
 void yetty_ygui_widget_tabbar_set_active(struct yetty_ygui_widget *tabbar, int index)

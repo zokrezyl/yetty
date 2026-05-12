@@ -3,6 +3,7 @@
  */
 
 #include "ygui_internal.h"
+#include <yetty/ytrace/ytrace.h>
 #include <stdio.h>
 
 /*=============================================================================
@@ -49,6 +50,9 @@ void yetty_ygui_widget_free(struct yetty_ygui_widget *widget)
         return;
     }
 
+    ydebug("widget_free enter id=%s type=%d ptr=%p", widget->id ? widget->id : "?",
+           (int)widget->type, (void *)widget);
+
     /* Free children recursively */
     struct yetty_ygui_widget *child = widget->first_child;
     while (child) {
@@ -59,9 +63,11 @@ void yetty_ygui_widget_free(struct yetty_ygui_widget *widget)
 
     /* Call type-specific destroy via the vtable. */
     if (widget->vtable && widget->vtable->destroy) {
+        ydebug("widget_free destroy id=%s", widget->id ? widget->id : "?");
         widget->vtable->destroy(widget);
     }
 
+    ydebug("widget_free finalize id=%s ptr=%p", widget->id ? widget->id : "?", (void *)widget);
     free(widget->id);
     free(widget);
 }
@@ -2090,20 +2096,29 @@ static struct yetty_ycore_void_result popup_render(struct yetty_ygui_widget *sel
 static struct yetty_ycore_void_result popup_render_all(struct yetty_ygui_widget *self,
                                                        struct yetty_ygui_render_ctx *ctx)
 {
+    /* When closed: bail out completely. Earlier this function still
+     * set was_rendered = 1 even with OPEN=0, which kept the popup
+     * registered in the engine's spatial grid at its rect. The result
+     * was "ghost clicks": after the popup closed, any click in its
+     * former area routed back to popup_on_press, which toggled OPEN
+     * to 1 and made the dialog reappear. Returning early here keeps
+     * the popup out of the grid entirely when it's closed. */
+    if (!(self->flags & YETTY_YGUI_FLAG_OPEN)) {
+        return YETTY_OK_VOID();
+    }
+
     self->effective_x = self->x + ctx->offset_x;
     self->effective_y = self->y + ctx->offset_y;
     self->was_rendered = 1;
 
     popup_render(self, ctx);
 
-    if (self->flags & YETTY_YGUI_FLAG_OPEN) {
-        for (struct yetty_ygui_widget *child = self->first_child; child;
-             child = child->next_sibling) {
-            if (child->vtable && child->vtable->render_all) {
-                child->vtable->render_all(child, ctx);
-            } else {
-                yetty_ygui_widget_render_all_default(child, ctx);
-            }
+    for (struct yetty_ygui_widget *child = self->first_child; child;
+         child = child->next_sibling) {
+        if (child->vtable && child->vtable->render_all) {
+            child->vtable->render_all(child, ctx);
+        } else {
+            yetty_ygui_widget_render_all_default(child, ctx);
         }
     }
     return YETTY_OK_VOID();
@@ -2113,6 +2128,22 @@ static int popup_on_press(struct yetty_ygui_widget *self, float lx, float ly, yg
 {
     (void)lx;
     (void)ly;
+    /* Modal popups stay open until an explicit close button (or
+     * code) clears the OPEN flag. Earlier this toggled OPEN on any
+     * body click, including clicks in the margin around children —
+     * which dismissed the dialog mid-interaction (you click Close,
+     * the click registers on the popup body instead, frame goes
+     * away but child widgets — which are usually top-level siblings
+     * for positioning reasons — stay visible). We still consume the
+     * press so it doesn't leak through to whatever is rendered
+     * behind the popup. */
+    if (self->data.popup.modal) {
+        out->widget_id = self->id;
+        out->type = YETTY_YGUI_EVENT_PRESS;
+        return 1;
+    }
+    /* Non-modal popups keep the legacy click-anywhere-to-close
+     * shorthand — handy for tooltips / dropdown-style transient UI. */
     self->flags ^= YETTY_YGUI_FLAG_OPEN;
     out->widget_id = self->id;
     out->type = YETTY_YGUI_EVENT_CLICK;

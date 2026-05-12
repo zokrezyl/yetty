@@ -306,29 +306,145 @@ static const struct nav_entry IMAGE_NAV[] = {
     {"Diagram", IMAGE_DIAGRAM},
 };
 
-/* If the user sets YGREETER_IMAGE, we substitute the placeholder for a
- * real yimage block on the active image row. */
-static char *build_image_yaml_from_path(const char *title, const char *path)
+/* Build a ypaint buffer holding ONE yimage prim plus a TEXT_SPAN title.
+ * The ypaint-yaml parser doesn't support `yimage:` blocks today
+ * (yaml_factory: none in yimage.yaml), so we go through yimage's C API
+ * directly and append the title via the buffer's add_text helper.
+ *
+ * Caller owns the returned buffer; ownership is transferred to the rich
+ * widget when handed off via set_buffer. */
+#include <yetty/yimage/yimage.h>
+
+static struct yetty_ypaint_core_buffer *build_image_buffer(const char *title, const char *path)
 {
-    /* Pre-size: ~600 bytes of fixed YAML + path length. */
-    size_t n = strlen(path) + strlen(title) + 512;
-    char *buf = (char *)malloc(n);
-    if (!buf) {
+    struct yetty_yimage_render_config cfg = {
+        .bounds_x = 16.0f,
+        .bounds_y = 60.0f,
+        .bounds_w = 460.0f,
+        .bounds_h = 320.0f,
+    };
+    struct yetty_ypaint_core_buffer_result r = yetty_yimage_render_path(path, &cfg);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
         return NULL;
     }
-    snprintf(buf, n,
-             "body:\n"
-             "  - text:\n"
-             "      position: [16, 36]\n"
-             "      content: \"%s\"\n"
-             "      font-size: 22\n"
-             "      color: \"#ffffff\"\n"
-             "  - yimage:\n"
-             "      position: [16, 60]\n"
-             "      size: [460, 320]\n"
-             "      path: \"%s\"\n",
-             title, path);
-    return buf;
+    /* Title TEXT_SPAN drawn above the image. The buffer's add_text takes
+     * a yetty_ycore_buffer view so we wrap the literal in place. */
+    if (title && *title) {
+        struct yetty_ycore_buffer text_view = {
+            .data = (uint8_t *)title,
+            .size = strlen(title),
+            .capacity = strlen(title),
+        };
+        struct yetty_ycore_void_result tr =
+            yetty_ypaint_core_buffer_add_text(r.value, 16.0f, 36.0f, &text_view, 22.0f,
+                                              /*color (ABGR)=*/0xFFFFFFFFu, /*layer=*/0,
+                                              /*font_id=*/-1, /*rotation=*/0.0f);
+        if (YETTY_IS_ERR(tr)) {
+            yetty_ycore_error_destroy(tr.error);
+            /* keep the image even if the title failed */
+        }
+    }
+    return r.value;
+}
+
+#include <libgen.h> /* dirname */
+#include <sys/stat.h>
+
+static int path_exists(const char *path)
+{
+    if (!path || !*path) {
+        return 0;
+    }
+    struct stat st;
+    return stat(path, &st) == 0 && S_ISREG(st.st_mode);
+}
+
+/* Resolve a path relative to argv[0]'s directory walking up `levels`
+ * times. Used to locate bundled assets (assets/logo.jpeg, docs/logo.jpeg)
+ * regardless of where the user invokes the binary from. Returns a
+ * malloc'd path or NULL. */
+static char *resolve_relative_to_exe(const char *argv0, int up_levels, const char *suffix)
+{
+    if (!argv0) {
+        return NULL;
+    }
+    char *real = realpath(argv0, NULL);
+    if (!real) {
+        return NULL;
+    }
+    char *cur = real;
+    for (int i = 0; i < up_levels; i++) {
+        /* dirname() may mutate its input; replace cur in-place. */
+        char *parent = strdup(cur);
+        if (!parent) {
+            free(real);
+            return NULL;
+        }
+        char *d = dirname(parent);
+        char *next = strdup(d);
+        free(parent);
+        free(cur);
+        cur = next;
+        if (!cur) {
+            return NULL;
+        }
+    }
+    size_t need = strlen(cur) + 1 + strlen(suffix) + 1;
+    char *out = (char *)malloc(need);
+    if (!out) {
+        free(cur);
+        return NULL;
+    }
+    snprintf(out, need, "%s/%s", cur, suffix);
+    free(cur);
+    return out;
+}
+
+/* Try to find a bundled image to use for the Images tab. Probe order:
+ *   1. $YGREETER_IMAGE (caller override)
+ *   2. <repo>/assets/logo.jpeg
+ *   3. <repo>/docs/logo-1.jpeg ... logo-4.jpeg
+ *   4. <repo>/assets/apple-touch-icon.jpg
+ *
+ * The "repo root" is derived from argv[0]. With a CMake build the
+ * binary sits at <repo>/build-X/tools/ygreeter/ygreeter — that's 4
+ * dirname() calls away from the assets/. An installed layout may be
+ * shallower; we try a couple of plausible levels until one resolves. */
+static char *find_repo_image(const char *argv0, const char *relative)
+{
+    static const int candidate_levels[] = {4, 3, 2, 1};
+    for (size_t i = 0; i < sizeof(candidate_levels) / sizeof(candidate_levels[0]); i++) {
+        char *p = resolve_relative_to_exe(argv0, candidate_levels[i], relative);
+        if (p && path_exists(p)) {
+            return p;
+        }
+        free(p);
+    }
+    return NULL;
+}
+
+static char *probe_default_image(const char *argv0)
+{
+    const char *env = getenv("YGREETER_IMAGE");
+    if (env && *env && path_exists(env)) {
+        return strdup(env);
+    }
+    static const char *candidates[] = {
+        "assets/logo.jpeg",
+        "docs/logo-1.jpeg",
+        "docs/logo-2.jpeg",
+        "docs/logo-3.jpeg",
+        "docs/logo-4.jpeg",
+        "assets/apple-touch-icon.jpg",
+    };
+    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
+        char *p = find_repo_image(argv0, candidates[i]);
+        if (p) {
+            return p;
+        }
+    }
+    return NULL;
 }
 
 /* =========================================================================
@@ -512,78 +628,88 @@ struct tab_state {
     struct yetty_ygui_widget *rich;
     const struct nav_entry *entries;
     int n_entries;
-    /* Optional: a heap-allocated YAML that overrides one of the entries
-     * (used by the Image tab when YGREETER_IMAGE is set). Owned. */
-    char *overlay_yaml;
-    int overlay_index;
 };
+
+/* Resolved image path for the Images tab. NULL when no usable file was
+ * found (bundled assets missing AND no YGREETER_IMAGE env var) — in that
+ * case the tab falls back to the static IMAGE_NAV YAMLs (placeholder).
+ *
+ * Owned by main; freed before exit. We use a global because load_entry
+ * is called from many spots and threading a path argument through every
+ * caller for the sake of one tab would clutter the signatures. */
+static char *g_image_path = NULL;
+
+/* Index of the Images tab. Tracked as a runtime variable so that
+ * closing earlier tabs (which shifts subsequent indices down) keeps
+ * the image-tab dispatch in sync. -1 = the Images tab has been
+ * closed and there is no image-bearing tab to short-circuit for. */
+static int g_images_tab_index = 2;
 
 struct app {
     struct yetty_ygui_engine *engine;
     struct yetty_ygui_widget *outer;
     struct yetty_ygui_widget *tabbar;
     struct tab_state tabs[4];
+    /* About dialog. Three top-level widgets hidden until the menu's
+     * About entry opens them. They're re-centred on engine resize. The
+     * popup carries the modal overlay + drop shadow; the rich widget
+     * holds the body content; the button closes the dialog. */
+    struct yetty_ygui_widget *about_popup;
+    struct yetty_ygui_widget *about_rich;
+    struct yetty_ygui_widget *about_close;
 };
 
-/* Side table mapping clicked-row widget → (tab_index, entry_index). The
- * list widget's on_select callback is shared across all rows in the
- * list, so we route via the row widget pointer here (same pattern as
- * demo/ygui/21_tree_with_panes). */
+/* Per-nav-row binding. One of these is allocated for every row at
+ * build_tab_body() and handed to the row button as click_userdata. Each
+ * row_link is its own heap allocation so the address is stable even as
+ * the bookkeeping array grows; the array only stores pointers for
+ * shutdown cleanup. */
 struct row_link {
-    struct yetty_ygui_widget *row; /* not owned — refs an engine widget */
+    struct app *app;
     int tab_index;
     int entry_index;
 };
 
-static struct row_link *g_row_links = NULL;
+static struct row_link **g_row_links = NULL;
 static int g_row_link_count = 0;
 static int g_row_link_cap = 0;
 
-static int register_row_link(struct yetty_ygui_widget *row, int tab, int entry)
+static struct row_link *new_row_link(struct app *app, int tab, int entry)
 {
     if (g_row_link_count >= g_row_link_cap) {
         int nc = g_row_link_cap ? g_row_link_cap * 2 : 32;
-        struct row_link *n =
-            (struct row_link *)realloc(g_row_links, (size_t)nc * sizeof(struct row_link));
+        struct row_link **n =
+            (struct row_link **)realloc(g_row_links, (size_t)nc * sizeof(struct row_link *));
         if (!n) {
-            return 0;
+            return NULL;
         }
         g_row_links = n;
         g_row_link_cap = nc;
     }
-    g_row_links[g_row_link_count].row = row;
-    g_row_links[g_row_link_count].tab_index = tab;
-    g_row_links[g_row_link_count].entry_index = entry;
-    g_row_link_count++;
-    return 1;
-}
-
-static const struct row_link *lookup_row_link(const struct yetty_ygui_widget *row)
-{
-    for (int i = 0; i < g_row_link_count; i++) {
-        if (g_row_links[i].row == row) {
-            return &g_row_links[i];
-        }
+    struct row_link *rl = (struct row_link *)calloc(1, sizeof(*rl));
+    if (!rl) {
+        return NULL;
     }
-    return NULL;
+    rl->app = app;
+    rl->tab_index = tab;
+    rl->entry_index = entry;
+    g_row_links[g_row_link_count++] = rl;
+    return rl;
 }
 
 static void free_row_links(void)
 {
+    for (int i = 0; i < g_row_link_count; i++) {
+        free(g_row_links[i]);
+    }
     free(g_row_links);
     g_row_links = NULL;
     g_row_link_count = 0;
     g_row_link_cap = 0;
 }
 
-/* Pick the YAML to load for a given tab+entry. The overlay (if set)
- * trumps the static entry — used so the Image tab can substitute a real
- * yimage block when YGREETER_IMAGE is set. */
 static const char *yaml_for(const struct tab_state *t, int entry_index)
 {
-    if (t->overlay_yaml && entry_index == t->overlay_index) {
-        return t->overlay_yaml;
-    }
     return t->entries[entry_index].yaml;
 }
 
@@ -596,33 +722,107 @@ static void load_entry(struct app *app, int tab_index, int entry_index)
     if (entry_index < 0 || entry_index >= t->n_entries) {
         return;
     }
+    /* Images tab: when we have a resolved file, build a fresh ypaint
+     * buffer with the yimage prim + a title TEXT_SPAN and install it
+     * via set_buffer (which takes ownership). Falls through to the
+     * static YAML placeholder when no image was found. */
+    if (tab_index == g_images_tab_index && g_image_path) {
+        struct yetty_ypaint_core_buffer *buf =
+            build_image_buffer(t->entries[entry_index].label, g_image_path);
+        if (buf) {
+            yetty_ygui_widget_rich_set_buffer(t->rich, buf);
+            return;
+        }
+        /* build_image_buffer failed (file disappeared, decode failed) —
+         * fall through to the placeholder YAML so the tab isn't blank. */
+    }
     const char *yaml = yaml_for(t, entry_index);
     struct yetty_ycore_void_result r =
         yetty_ygui_widget_rich_set_yaml(t->rich, yaml, strlen(yaml));
     if (YETTY_IS_ERR(r)) {
-        /* Stay alive; the rich widget still renders the previous buffer.
-         * Print to stderr for the dev — the user sees nothing. */
         yetty_ycore_error_destroy(r.error);
     }
 }
 
-static void on_row_select(struct yetty_ygui_widget *row, void *userdata)
+/* Click handler bound per-button. Each nav-row button carries its own
+ * row_link (allocated in register_row_link) as click_userdata, so we
+ * don't have to look up the click target after dispatch.
+ *
+ * row_link->app is set to NULL by on_tab_close when the row's tab gets
+ * removed — the button is already freed by then, so the callback
+ * should never fire, but the guard makes the path explicit. */
+static void on_row_clicked(struct yetty_ygui_widget *button, void *userdata)
+{
+    (void)button;
+    const struct row_link *rl = (const struct row_link *)userdata;
+    if (!rl || !rl->app) {
+        return;
+    }
+    if (yetty_ygui_widget_tabbar_get_active(rl->app->tabbar) != rl->tab_index) {
+        yetty_ygui_widget_tabbar_set_active(rl->app->tabbar, rl->tab_index);
+    }
+    load_entry(rl->app, rl->tab_index, rl->entry_index);
+}
+
+/* Fired when the user clicks the close 'x' on a tab. We own the
+ * decision here: ygreeter keeps a parallel app.tabs[] array indexed
+ * by the tabbar's tab index, plus a side table of row_links carrying
+ * tab indices. When a tab is closed those indices shift down — fix
+ * the bookkeeping BEFORE handing off to tabbar_remove_tab, otherwise
+ * the change_callback fires for the new active tab while ygreeter is
+ * still pointing at the closed tab's freed widgets (= dangling
+ * pointer -> heap corruption -> "app freezes"). */
+static void on_tab_close(struct yetty_ygui_widget *tabbar, float value, void *userdata)
 {
     struct app *app = (struct app *)userdata;
-    if (!app || !row) {
+    int idx = (int)value;
+    int n = yetty_ygui_widget_tabbar_count(tabbar);
+    if (!app || idx < 0 || idx >= n) {
         return;
     }
-    const struct row_link *rl = lookup_row_link(row);
-    if (!rl) {
-        return;
+
+    /* Shift app->tabs[] left starting from idx. The trailing slot
+     * is zeroed so any stale access bails on the n_entries==0
+     * check inside load_entry. */
+    int max = (int)(sizeof(app->tabs) / sizeof(app->tabs[0]));
+    for (int i = idx; i < n - 1 && i + 1 < max; i++) {
+        app->tabs[i] = app->tabs[i + 1];
     }
-    /* When the user clicks a tree row, also flip to that row's tab —
-     * the tabbar drives visibility, and this keeps content + chrome in
-     * sync if a tree click happens via keyboard shortcut etc. */
-    if (yetty_ygui_widget_tabbar_get_active(app->tabbar) != rl->tab_index) {
-        yetty_ygui_widget_tabbar_set_active(app->tabbar, rl->tab_index);
+    if (n - 1 < max) {
+        memset(&app->tabs[n - 1], 0, sizeof(app->tabs[n - 1]));
     }
-    load_entry(app, rl->tab_index, rl->entry_index);
+
+    /* Fix up the per-row userdata: any row_link pointing at the
+     * closed tab gets its app pointer NUL'd so the now-unreachable
+     * row-click handler (its button is freed below) is a no-op even
+     * if the engine somehow still routes a phantom event to it. Row
+     * links for tabs AFTER the closed one shift their tab_index
+     * down by one to stay aligned with the new compact tabs[]. */
+    for (int i = 0; i < g_row_link_count; i++) {
+        struct row_link *rl = g_row_links[i];
+        if (!rl) {
+            continue;
+        }
+        if (rl->tab_index == idx) {
+            rl->app = NULL;
+        } else if (rl->tab_index > idx) {
+            rl->tab_index--;
+        }
+    }
+
+    /* Keep the images-tab dispatch in sync. */
+    if (g_images_tab_index >= 0) {
+        if (idx == g_images_tab_index) {
+            g_images_tab_index = -1;
+        } else if (idx < g_images_tab_index) {
+            g_images_tab_index--;
+        }
+    }
+
+    /* Now safe to actually drop the tab — widgets get freed but
+     * nothing left in app->tabs[] / g_row_links[] still references
+     * them. */
+    yetty_ygui_widget_tabbar_remove_tab(tabbar, idx);
 }
 
 static void on_tab_change(struct yetty_ygui_widget *tabbar, float value, void *userdata)
@@ -647,6 +847,152 @@ static void on_key(struct yetty_ygui_engine *e, uint32_t key, int mods, void *u)
     }
 }
 
+/* About dialog content. Body of the popup; rendered as a rich widget
+ * inside the dialog. Authored in widget-local pixel coordinates so the
+ * rich widget translates everything to the dialog's resolved layout
+ * box automatically. */
+#define ABOUT_BODY_YAML                                                                       \
+    "body:\n"                                                                                  \
+    "  - text:\n"                                                                              \
+    "      position: [0, 20]\n"                                                                \
+    "      content: \"yetty\"\n"                                                               \
+    "      font-size: 28\n"                                                                    \
+    "      color: \"#ffffff\"\n"                                                               \
+    "  - text:\n"                                                                              \
+    "      position: [0, 60]\n"                                                                \
+    "      content: \"A GPU-accelerated terminal.\"\n"                                         \
+    "      font-size: 16\n"                                                                    \
+    "      color: \"#9ad7ff\"\n"                                                               \
+    "  - text:\n"                                                                              \
+    "      position: [0, 96]\n"                                                                \
+    "      content: \"Renders text, plots, images and rich docs\"\n"                           \
+    "      font-size: 14\n"                                                                    \
+    "      color: \"#cccccc\"\n"                                                               \
+    "  - text:\n"                                                                              \
+    "      position: [0, 116]\n"                                                               \
+    "      content: \"side by side with your shell.\"\n"                                       \
+    "      font-size: 14\n"                                                                    \
+    "      color: \"#cccccc\"\n"                                                               \
+    "  - text:\n"                                                                              \
+    "      position: [0, 156]\n"                                                               \
+    "      content: \"ygreeter — first-contact tool\"\n"                                       \
+    "      font-size: 13\n"                                                                    \
+    "      color: \"#888888\"\n"
+
+/* Dialog geometry. Kept here so reposition_about_dialog and the
+ * constructor share constants without spelling them out twice. */
+#define ABOUT_W 460.0f
+#define ABOUT_H 280.0f
+#define ABOUT_BODY_PAD_X 24.0f
+#define ABOUT_BODY_PAD_TOP 52.0f /* leaves room for the popup's header band */
+#define ABOUT_BUTTON_W 90.0f
+#define ABOUT_BUTTON_H 28.0f
+#define ABOUT_BUTTON_PAD 14.0f
+
+/* Re-centre the About dialog and reposition its body / close-button
+ * children to match. Called when the dialog is opened and on every
+ * engine resize so the dialog stays anchored to the middle of the
+ * canvas. Children of a popup are positioned in ABSOLUTE canvas
+ * coordinates (popup_render_all doesn't push ctx->offset for its
+ * children — see demo/ygui/16_new_widgets/main.c for the pattern). */
+static void reposition_about_dialog(struct app *app)
+{
+    if (!app || !app->about_popup) {
+        return;
+    }
+    float ew = 0.0f, eh = 0.0f;
+    yetty_ygui_engine_get_size(app->engine, &ew, &eh);
+    if (ew <= 0.0f || eh <= 0.0f) {
+        return;
+    }
+    float x = (ew - ABOUT_W) * 0.5f;
+    float y = (eh - ABOUT_H) * 0.5f;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+
+    yetty_ygui_widget_set_position(app->about_popup, x, y);
+    yetty_ygui_widget_popup_set_scene_size(app->about_popup, ew, eh);
+
+    if (app->about_rich) {
+        yetty_ygui_widget_set_position(app->about_rich, x + ABOUT_BODY_PAD_X,
+                                       y + ABOUT_BODY_PAD_TOP);
+    }
+    if (app->about_close) {
+        yetty_ygui_widget_set_position(app->about_close,
+                                       x + ABOUT_W - ABOUT_BUTTON_W - ABOUT_BUTTON_PAD,
+                                       y + ABOUT_H - ABOUT_BUTTON_H - ABOUT_BUTTON_PAD);
+    }
+}
+
+static void about_dialog_set_open(struct app *app, int open)
+{
+    if (!app || !app->about_popup) {
+        return;
+    }
+    if (open) {
+        reposition_about_dialog(app);
+    }
+    yetty_ygui_widget_popup_set_open(app->about_popup, open);
+    /* The rich + close button live as top-level siblings (not popup
+     * children of the rendering machinery — see popup_render_all
+     * comment). Toggle their visibility in lockstep with the popup's
+     * OPEN flag. */
+    if (app->about_rich) {
+        yetty_ygui_widget_set_visible(app->about_rich, open);
+    }
+    if (app->about_close) {
+        yetty_ygui_widget_set_visible(app->about_close, open);
+    }
+}
+
+static void on_about_close_click(struct yetty_ygui_widget *button, void *userdata)
+{
+    (void)button;
+    about_dialog_set_open((struct app *)userdata, 0);
+}
+
+/* Menu item handlers. Each takes the standard click signature; the
+ * widget arg is the menu itself (the engine fires the callback as if
+ * the menu had been clicked). We route via the `app` pointer stashed
+ * in userdata. */
+static void on_menu_close(struct yetty_ygui_widget *widget, void *userdata)
+{
+    (void)widget;
+    struct app *app = (struct app *)userdata;
+    if (app && app->engine) {
+        yetty_ygui_engine_close_preserve(app->engine);
+    }
+}
+
+static void on_menu_about(struct yetty_ygui_widget *widget, void *userdata)
+{
+    (void)widget;
+    about_dialog_set_open((struct app *)userdata, 1);
+}
+
+static void build_about_dialog(struct app *app)
+{
+    /* Popup carries the header label, modal overlay, drop shadow and
+     * the rounded body. The two extra widgets ride on top as
+     * top-level siblings (a popup's children render at absolute
+     * coordinates anyway — see reposition_about_dialog comment). */
+    app->about_popup =
+        yetty_ygui_engine_popup(app->engine, "about_popup", 0, 0, ABOUT_W, ABOUT_H, "About");
+    yetty_ygui_widget_popup_set_modal(app->about_popup, 1);
+    yetty_ygui_widget_popup_set_open(app->about_popup, 0);
+
+    app->about_rich = yetty_ygui_engine_rich_from_yaml(
+        app->engine, "about_rich", 0, 0, ABOUT_W - 2 * ABOUT_BODY_PAD_X,
+        ABOUT_H - ABOUT_BODY_PAD_TOP - ABOUT_BUTTON_H - 2 * ABOUT_BUTTON_PAD, ABOUT_BODY_YAML,
+        strlen(ABOUT_BODY_YAML));
+    yetty_ygui_widget_set_visible(app->about_rich, 0);
+
+    app->about_close = yetty_ygui_engine_button(app->engine, "about_close", 0, 0,
+                                                ABOUT_BUTTON_W, ABOUT_BUTTON_H, "Close");
+    yetty_ygui_widget_button_on_click(app->about_close, on_about_close_click, app);
+    yetty_ygui_widget_set_visible(app->about_close, 0);
+}
+
 static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, float pw, float ph,
                       void *u)
 {
@@ -657,6 +1003,9 @@ static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, flo
     if (app->outer) {
         yetty_ygui_widget_set_size(app->outer, new_w, new_h);
     }
+    /* Keep the About dialog centred when the user resizes the
+     * terminal / card. Cheap — only updates positions, not contents. */
+    reposition_about_dialog(app);
 }
 
 static void query_terminal_cells(int *cols, int *rows)
@@ -695,22 +1044,28 @@ static struct yetty_ygui_widget *build_tab_body(struct app *app, int tab_index,
                                 "padding: 8px; gap: 12px; flex: 1 0 0; align-items: stretch;");
     yetty_ygui_widget_add_child(tab_panel, body);
 
+    /* Nav: a flex-column vbox of button rows. We tried using a `list`
+     * with label children first — but ygui's grid_query routes clicks
+     * to the deepest hit, and labels have no on_press, so the list's
+     * on_select never fired. Buttons have on_press AND the engine
+     * fires their click_callback on mouse-up out of the box. */
     snprintf(id_buf, sizeof(id_buf), "%s_nav", id_prefix);
     struct yetty_ygui_widget *nav =
-        yetty_ygui_engine_list(app->engine, id_buf, 0, 0, 0, 0);
+        yetty_ygui_engine_vbox(app->engine, id_buf, 0, 0, 0, 0);
     yetty_ygui_widget_apply_css(nav, "padding: 8px; gap: 4px; flex: 0 0 220px;");
     yetty_ygui_widget_add_child(body, nav);
 
     for (int i = 0; i < n_entries; i++) {
         snprintf(id_buf, sizeof(id_buf), "%s_row_%d", id_prefix, i);
         struct yetty_ygui_widget *row =
-            yetty_ygui_engine_label(app->engine, id_buf, 0, 0, entries[i].label);
+            yetty_ygui_engine_button(app->engine, id_buf, 0, 0, 200, 28, entries[i].label);
+        yetty_ygui_widget_apply_css(row, "align-self: stretch;");
         yetty_ygui_widget_add_child(nav, row);
-        register_row_link(row, tab_index, i);
+        struct row_link *rl = new_row_link(app, tab_index, i);
+        if (rl) {
+            yetty_ygui_widget_button_on_click(row, on_row_clicked, rl);
+        }
     }
-    /* The list's on_select callback is shared across rows; we recover
-     * per-row routing via lookup_row_link(clicked_row). */
-    yetty_ygui_widget_list_on_select(nav, on_row_select, app);
 
     /* Build the rich surface. */
     snprintf(id_buf, sizeof(id_buf), "%s_rich", id_prefix);
@@ -740,9 +1095,14 @@ int main(int argc, char **argv)
     (void)argc;
     (void)argv;
 
-    /* Drop stderr so libuv / fontconfig diagnostics don't paint the card. */
-    FILE *redir = freopen("/dev/null", "w", stderr);
-    (void)redir;
+    /* Force stderr to line-buffered. Callers redirect it via the
+     * shell (e.g. `ygreeter 2>/tmp/ygreeter.log`); without this nudge
+     * libc switches to block buffering once the fd points at a file,
+     * and any diagnostic emitted just before a crash / hang sits in
+     * the buffer instead of reaching disk. Note: ygreeter's stdout is
+     * the OSC pipe to the parent yetty, so stderr is the only safe
+     * channel for textual diagnostics. */
+    setvbuf(stderr, NULL, _IOLBF, 0);
 
     if (yetty_ygui_init() != 0) {
         fprintf(stdout, "ygreeter: ygui_init failed (run inside a real terminal)\n");
@@ -769,14 +1129,31 @@ int main(int argc, char **argv)
     yetty_ygui_theme_set_row_height(theme, 28.0f);
     yetty_ygui_engine_set_theme(app.engine, theme);
 
-    app.outer = yetty_ygui_engine_vbox(app.engine, "outer", 0, 0, 100, 100);
-    yetty_ygui_widget_apply_css(app.outer, "padding: 0; gap: 0; align-items: stretch;");
+    /* Outer frame: a window widget supplies the title bar and the
+     * hamburger menu button. The menu we attach below carries the
+     * Close entry — clicking it calls engine_close_preserve() so the
+     * last frame stays painted on the canvas after we exit. */
+    app.outer = yetty_ygui_engine_window(app.engine, "outer", 0, 0, 100, 100, "ygreeter");
+    struct yetty_ygui_widget *body = yetty_ygui_widget_window_body(app.outer);
+
+    /* App menu attached to the hamburger button. */
+    struct yetty_ygui_widget *app_menu =
+        yetty_ygui_engine_popup_menu(app.engine, "app_menu", 0, 0, 200.0f);
+    yetty_ygui_widget_popup_menu_add_item(app_menu, "About", on_menu_about, &app);
+    yetty_ygui_widget_popup_menu_add_separator(app_menu);
+    yetty_ygui_widget_popup_menu_add_item(app_menu, "Close", on_menu_close, &app);
+    yetty_ygui_widget_window_set_menu(app.outer, app_menu);
+
+    /* About dialog (popup + rich content + close button). Hidden until
+     * the menu's About item opens it. */
+    build_about_dialog(&app);
 
     app.tabbar = yetty_ygui_engine_tabbar(app.engine, "tabs", 0, 0, 0, 0);
     yetty_ygui_widget_apply_css(app.tabbar, "flex: 1 0 0; align-items: stretch;");
-    yetty_ygui_widget_add_child(app.outer, app.tabbar);
+    yetty_ygui_widget_add_child(body, app.tabbar);
 
     yetty_ygui_widget_tabbar_on_change(app.tabbar, on_tab_change, &app);
+    yetty_ygui_widget_tabbar_on_tab_close(app.tabbar, on_tab_close, &app);
 
     /* Welcome */
     struct yetty_ygui_widget *welcome = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Welcome");
@@ -788,16 +1165,14 @@ int main(int argc, char **argv)
     build_tab_body(&app, 1, plots, PLOT_NAV,
                    (int)(sizeof(PLOT_NAV) / sizeof(PLOT_NAV[0])), "plots");
 
-    /* Images — with optional env-var overlay for the first row. */
+    /* Resolve the bundled image BEFORE building the Images tab, so
+     * load_entry's first call (during build_tab_body) already sees the
+     * path and goes through the yimage buffer path instead of the YAML
+     * placeholder. Falls back to placeholder when no image is found. */
+    g_image_path = probe_default_image(argv[0]);
     struct yetty_ygui_widget *images = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Images");
-    build_tab_body(&app, 2, images, IMAGE_NAV,
+    build_tab_body(&app, g_images_tab_index, images, IMAGE_NAV,
                    (int)(sizeof(IMAGE_NAV) / sizeof(IMAGE_NAV[0])), "images");
-    const char *img = getenv("YGREETER_IMAGE");
-    if (img && *img) {
-        app.tabs[2].overlay_yaml = build_image_yaml_from_path("Custom image", img);
-        app.tabs[2].overlay_index = 0;
-        load_entry(&app, 2, 0); /* re-render row 0 with the live yimage */
-    }
 
     /* Code */
     struct yetty_ygui_widget *code = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Code");
@@ -817,9 +1192,8 @@ int main(int argc, char **argv)
 
     yetty_ygui_engine_run(app.engine);
 
-    for (int i = 0; i < 4; i++) {
-        free(app.tabs[i].overlay_yaml);
-    }
+    free(g_image_path);
+    g_image_path = NULL;
     free_row_links();
     yetty_ygui_engine_destroy(app.engine);
     yetty_ygui_shutdown();

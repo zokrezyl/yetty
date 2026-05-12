@@ -287,7 +287,8 @@ LINUX_RISCV_TARGETS := \
     cdb-viewer cdb-diff \
     temu \
     demo-ymgui-01-demo-window \
-    yplot ymesh yecho ycat
+    yplot ymesh yecho ycat \
+    ygreeter
 
 .PHONY: config-linux-aarch64-ytrace-release
 config-linux-aarch64-ytrace-release: ## Configure Linux aarch64 cross-build (release)
