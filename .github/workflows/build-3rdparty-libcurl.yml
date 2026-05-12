@@ -49,8 +49,6 @@ jobs:
       matrix:
         target:
           - linux-x86_64
-          - linux-aarch64
-          - linux-riscv64
           - android-arm64-v8a
           - android-x86_64
           - webasm
@@ -69,6 +67,46 @@ jobs:
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
           files: out/libcurl-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true
+
+  build-linux-aarch64:
+    needs: resolve
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends build-essential cmake autoconf automake libtool pkg-config
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="linux-aarch64" \
+          OUTPUT_DIR="$PWD/out" \
+          USE_NIX=0 \
+          CROSS_PREFIX="" \
+          ./build-tools/3rdparty/libcurl/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/libcurl-linux-aarch64-*.tar.gz
+          fail_on_unmatched_files: true
+
+  build-linux-riscv64:
+    needs: resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install riscv64 cross-compiler
+        run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends gcc-riscv64-linux-gnu g++-riscv64-linux-gnu cmake autoconf automake libtool pkg-config
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="linux-riscv64" \
+          OUTPUT_DIR="$PWD/out" \
+          USE_NIX=0 \
+          CROSS_PREFIX="riscv64-linux-gnu-" \
+          ./build-tools/3rdparty/libcurl/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/libcurl-linux-riscv64-*.tar.gz
           fail_on_unmatched_files: true
 
   build-darwin-arm64:

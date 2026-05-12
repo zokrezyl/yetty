@@ -137,11 +137,11 @@ esac
 AUTOCONF_HOST=""
 case "$TARGET_PLATFORM" in
     linux-aarch64)
-        : "${CROSS_PREFIX:=aarch64-unknown-linux-gnu-}"
+        : "${CROSS_PREFIX=aarch64-unknown-linux-gnu-}"
         AUTOCONF_HOST="${CROSS_PREFIX%-}"
         ;;
     linux-riscv64)
-        : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
+        : "${CROSS_PREFIX=riscv64-unknown-linux-gnu-}"
         AUTOCONF_HOST="${CROSS_PREFIX%-}"
         ;;
 esac
@@ -426,23 +426,27 @@ linux-x86_64)
     ;;
 
 linux-aarch64)
-    : "${CROSS_PREFIX:=aarch64-unknown-linux-gnu-}"
-    CMAKE_ARGS+=(
-        "-DCMAKE_SYSTEM_NAME=Linux"
-        "-DCMAKE_SYSTEM_PROCESSOR=aarch64"
-        "-DCMAKE_C_COMPILER=${CROSS_PREFIX}gcc"
-        "-DCMAKE_CXX_COMPILER=${CROSS_PREFIX}g++"
-    )
+    : "${CROSS_PREFIX=aarch64-unknown-linux-gnu-}"
+    if [ -n "$CROSS_PREFIX" ]; then
+        CMAKE_ARGS+=(
+            "-DCMAKE_SYSTEM_NAME=Linux"
+            "-DCMAKE_SYSTEM_PROCESSOR=aarch64"
+            "-DCMAKE_C_COMPILER=${CROSS_PREFIX}gcc"
+            "-DCMAKE_CXX_COMPILER=${CROSS_PREFIX}g++"
+        )
+    fi
     ;;
 
 linux-riscv64)
-    : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
-    CMAKE_ARGS+=(
-        "-DCMAKE_SYSTEM_NAME=Linux"
-        "-DCMAKE_SYSTEM_PROCESSOR=riscv64"
-        "-DCMAKE_C_COMPILER=${CROSS_PREFIX}gcc"
-        "-DCMAKE_CXX_COMPILER=${CROSS_PREFIX}g++"
-    )
+    : "${CROSS_PREFIX=riscv64-unknown-linux-gnu-}"
+    if [ -n "$CROSS_PREFIX" ]; then
+        CMAKE_ARGS+=(
+            "-DCMAKE_SYSTEM_NAME=Linux"
+            "-DCMAKE_SYSTEM_PROCESSOR=riscv64"
+            "-DCMAKE_C_COMPILER=${CROSS_PREFIX}gcc"
+            "-DCMAKE_CXX_COMPILER=${CROSS_PREFIX}g++"
+        )
+    fi
     ;;
 
 macos-x86_64)
