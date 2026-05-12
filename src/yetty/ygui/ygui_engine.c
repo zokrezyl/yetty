@@ -349,8 +349,10 @@ struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engin
         yetty_ygui_osc_subscribe_moves(0);
     }
 
-    /* Kill card if shown */
-    if (engine->card_shown && engine->card_name) {
+    /* Kill card (= clear the ypaint canvas) if shown — UNLESS the
+     * preserve flag is set. The window widget's close button sets it
+     * so the user's final view stays on screen after the app exits. */
+    if (engine->card_shown && engine->card_name && !engine->preserve_canvas_on_destroy) {
         yetty_ygui_osc_kill_card(engine->card_name);
     }
 

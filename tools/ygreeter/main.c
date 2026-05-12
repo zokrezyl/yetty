@@ -773,6 +773,28 @@ static void on_key(struct yetty_ygui_engine *e, uint32_t key, int mods, void *u)
     }
 }
 
+/* Menu item handlers. Each takes the standard click signature; the
+ * widget arg is the menu itself (the engine fires the callback as if
+ * the menu had been clicked). We route via the `app` pointer stashed
+ * in userdata. */
+static void on_menu_close(struct yetty_ygui_widget *widget, void *userdata)
+{
+    (void)widget;
+    struct app *app = (struct app *)userdata;
+    if (app && app->engine) {
+        yetty_ygui_engine_close_preserve(app->engine);
+    }
+}
+
+static void on_menu_about(struct yetty_ygui_widget *widget, void *userdata)
+{
+    /* For v1 the About entry doesn't open a dialog — clicking it
+     * closes the menu. Hook up a popup-dialog widget here once we
+     * have rich-text content to put in it. */
+    (void)widget;
+    (void)userdata;
+}
+
 static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, float pw, float ph,
                       void *u)
 {
@@ -901,12 +923,24 @@ int main(int argc, char **argv)
     yetty_ygui_theme_set_row_height(theme, 28.0f);
     yetty_ygui_engine_set_theme(app.engine, theme);
 
-    app.outer = yetty_ygui_engine_vbox(app.engine, "outer", 0, 0, 100, 100);
-    yetty_ygui_widget_apply_css(app.outer, "padding: 0; gap: 0; align-items: stretch;");
+    /* Outer frame: a window widget supplies the title bar and the
+     * hamburger menu button. The menu we attach below carries the
+     * Close entry — clicking it calls engine_close_preserve() so the
+     * last frame stays painted on the canvas after we exit. */
+    app.outer = yetty_ygui_engine_window(app.engine, "outer", 0, 0, 100, 100, "ygreeter");
+    struct yetty_ygui_widget *body = yetty_ygui_widget_window_body(app.outer);
+
+    /* App menu attached to the hamburger button. */
+    struct yetty_ygui_widget *app_menu =
+        yetty_ygui_engine_popup_menu(app.engine, "app_menu", 0, 0, 200.0f);
+    yetty_ygui_widget_popup_menu_add_item(app_menu, "About", on_menu_about, &app);
+    yetty_ygui_widget_popup_menu_add_separator(app_menu);
+    yetty_ygui_widget_popup_menu_add_item(app_menu, "Close", on_menu_close, &app);
+    yetty_ygui_widget_window_set_menu(app.outer, app_menu);
 
     app.tabbar = yetty_ygui_engine_tabbar(app.engine, "tabs", 0, 0, 0, 0);
     yetty_ygui_widget_apply_css(app.tabbar, "flex: 1 0 0; align-items: stretch;");
-    yetty_ygui_widget_add_child(app.outer, app.tabbar);
+    yetty_ygui_widget_add_child(body, app.tabbar);
 
     yetty_ygui_widget_tabbar_on_change(app.tabbar, on_tab_change, &app);
 

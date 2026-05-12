@@ -342,6 +342,43 @@ struct yetty_ygui_widget {
         } rich;
 
         struct {
+            /* Title text (owned, NUL-terminated, NULL when chromeless). */
+            char *title;
+            /* Title-bar height in pixels. 0 = derive from theme. */
+            float title_h;
+            /* Auto-allocated inner body container (a vbox). Lives in
+             * the regular child hierarchy, so destroy/free propagates. */
+            struct yetty_ygui_widget *body;
+            /* Optional notify-only callback fired on close click. */
+            ygui_widget_click_fn on_close;
+            void *on_close_userdata;
+            /* Optional popup menu opened by the hamburger button. When
+             * NULL the hamburger acts as a direct close button (legacy
+             * behaviour). The menu is OWNED by the engine via the
+             * regular top-level widget list; the window only holds a
+             * reference. */
+            struct yetty_ygui_widget *menu;
+        } window;
+
+        struct {
+            /* Per-row label (owned). NULL slot = separator row (drawn
+             * as a thin divider, not clickable). */
+            char **item_labels;
+            /* Per-row click callback. NULL = item is disabled / a
+             * pure separator. */
+            ygui_widget_click_fn *item_callbacks;
+            void **item_userdata;
+            int n_items;
+            int capacity;
+            /* Row height in pixels. 0 = derive from theme. */
+            float item_h;
+            int modal;
+            /* Index of the currently-hovered row (for highlight). -1
+             * when the cursor isn't over any clickable row. */
+            int hover_index;
+        } popup_menu;
+
+        struct {
             /* Per-tab header label strings (owned, NUL-terminated). */
             char **labels;
             /* Per-tab content panel widgets (owned via the normal child
@@ -353,6 +390,13 @@ struct yetty_ygui_widget {
             int active;
             /* Header strip height in pixels. 0 = derive from theme. */
             float header_h;
+            /* Fired when a tab's close 'x' button is clicked, BEFORE
+             * the default remove_tab path runs. `value` carries the
+             * tab index. Signature reuses change_callback_t for
+             * convenience — close-events deliver an index as a float
+             * the same way tab-switch events do. */
+            ygui_widget_change_fn on_tab_close;
+            void *on_tab_close_userdata;
         } tabbar;
     } data;
 };
@@ -428,6 +472,14 @@ struct yetty_ygui_engine {
     int card_x, card_y, card_w, card_h;
     int card_shown;   /* 0 = not shown yet, 1 = shown (use update) */
     uint32_t card_id; /* ymgui-layer card id (for CARD_PLACE / hit routing) */
+
+    /* When set, engine_destroy skips the YPAINT_CLEAR OSC so the last
+     * rendered frame stays painted on the canvas (the ypaint primitives
+     * remain in the scrolling layer's buffer). The ymgui card-remove
+     * still fires — input routing detaches, but visuals persist. Used
+     * by the WINDOW widget's close button so "X" gives users a graceful
+     * exit that leaves their final view in place. */
+    int preserve_canvas_on_destroy;
 
     /* Long-lived yface for parsing inbound binary OSC envelopes
      * (YMGUI_OSC_SC_MOUSE / RESIZE / FOCUS / KEY). */

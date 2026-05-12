@@ -92,6 +92,18 @@ typedef enum {
      * primitive in its buffer by the box's resolved (x, y). Authors
      * compose content in widget-local coordinates 0..w x 0..h. */
     YETTY_YGUI_WIDGET_RICH,
+    /* Top-level frame: title bar + close 'x' affordance + a body
+     * container all other widgets sit inside. The close button stops
+     * the engine while leaving the last painted frame on the ypaint
+     * canvas, so apps can exit gracefully without wiping the user's
+     * view. See yetty_ygui_engine_window in this file. */
+    YETTY_YGUI_WIDGET_WINDOW,
+    /* Floating menu of clickable items. Inherits the visual chrome of
+     * YETTY_YGUI_WIDGET_POPUP (shadow + rounded body + optional modal
+     * overlay) and specialises it for vertically stacked rows. Items
+     * are stored as label/callback pairs inside the widget — no
+     * sub-widgets needed. See yetty_ygui_engine_popup_menu. */
+    YETTY_YGUI_WIDGET_POPUP_MENU,
     YETTY_YGUI_WIDGET_CUSTOM,
 } ygui_widget_type_t;
 
@@ -481,6 +493,86 @@ void yetty_ygui_widget_rich_set_buffer(struct yetty_ygui_widget *widget,
  * set_buffer(widget, NULL). */
 void yetty_ygui_widget_rich_clear(struct yetty_ygui_widget *widget);
 
+/* Window — top-level frame containing every other widget in an app.
+ * Draws a title bar with a centred title text and a close 'x' button
+ * pinned to the upper-right corner. Clicking the close button stops
+ * the engine event loop AND tells engine_destroy to skip the YPAINT
+ * clear, so the last rendered frame stays on the ypaint canvas after
+ * the app exits.
+ *
+ * The window auto-allocates an inner body widget (a flex-column vbox)
+ * — get a handle to it via yetty_ygui_widget_window_body() and add
+ * children there as usual. The body is laid out below the title bar
+ * via padding-top, so children don't have to know about the title
+ * area. Pass NULL or "" for `title` to render a chromeless title bar
+ * (close button still drawn). */
+struct yetty_ygui_widget *yetty_ygui_engine_window(struct yetty_ygui_engine *engine, const char *id,
+                                                   float x, float y, float w, float h,
+                                                   const char *title);
+
+/* Returns the inner body container (a vbox). Add app widgets here. */
+struct yetty_ygui_widget *yetty_ygui_widget_window_body(struct yetty_ygui_widget *window);
+
+void yetty_ygui_widget_window_set_title(struct yetty_ygui_widget *window, const char *title);
+const char *yetty_ygui_widget_window_get_title(const struct yetty_ygui_widget *window);
+
+/* Optional callback fired when the close button is clicked, BEFORE the
+ * default behaviour runs. Return is ignored — set the callback to
+ * intercept the close (e.g. show a "save changes?" popup, then call
+ * engine_close_preserve yourself when ready). The default close path
+ * still runs after the callback unless you override it via a custom
+ * close_action set on the window (no API today; for v1 the callback is
+ * notify-only). */
+void yetty_ygui_widget_window_on_close(struct yetty_ygui_widget *window,
+                                       ygui_click_callback_t callback, void *userdata);
+
+/* Stop the engine loop and arrange for engine_destroy to leave the
+ * last rendered ypaint frame on the canvas (no YPAINT_CLEAR sent).
+ * This is what the window's close button calls; user code can call it
+ * directly for the same "exit but keep view" semantics. */
+void yetty_ygui_engine_close_preserve(struct yetty_ygui_engine *engine);
+
+/* Hand a popup menu to the window. The window's title-bar hamburger
+ * button toggles its OPEN flag instead of closing the app. Pass NULL to
+ * remove a previously-attached menu (the hamburger reverts to acting
+ * as a direct close button). The window does NOT take ownership — the
+ * menu is a normal engine-managed widget and is freed alongside the
+ * engine. */
+void yetty_ygui_widget_window_set_menu(struct yetty_ygui_widget *window,
+                                       struct yetty_ygui_widget *menu);
+
+/* Popup menu — a floating, vertically-stacked list of clickable items.
+ * Inherits the visual chrome of the popup dialog (rounded body + drop
+ * shadow + optional modal overlay) and specialises it for menus: each
+ * row is just a label + callback (no sub-widgets), the menu auto-grows
+ * in height as items are added, and clicking an item fires its
+ * callback and then closes the menu.
+ *
+ * Typical wiring:
+ *   m = yetty_ygui_engine_popup_menu(engine, "app_menu", 0, 0, 220);
+ *   yetty_ygui_widget_popup_menu_add_item(m, "About",   on_about, app);
+ *   yetty_ygui_widget_popup_menu_add_separator(m);
+ *   yetty_ygui_widget_popup_menu_add_item(m, "Close",   on_close, app);
+ *   yetty_ygui_widget_window_set_menu(window, m);
+ *
+ * The menu starts closed. Open it via yetty_ygui_widget_popup_menu_open_at
+ * (positions then toggles OPEN), or let the window's hamburger toggle it. */
+struct yetty_ygui_widget *yetty_ygui_engine_popup_menu(struct yetty_ygui_engine *engine,
+                                                       const char *id, float x, float y, float w);
+
+/* Append a clickable item. cb fires when clicked; the menu auto-closes
+ * after the callback returns. */
+void yetty_ygui_widget_popup_menu_add_item(struct yetty_ygui_widget *menu, const char *label,
+                                           ygui_click_callback_t cb, void *userdata);
+
+/* Append a non-interactive separator row (a thin divider). */
+void yetty_ygui_widget_popup_menu_add_separator(struct yetty_ygui_widget *menu);
+
+void yetty_ygui_widget_popup_menu_open_at(struct yetty_ygui_widget *menu, float x, float y);
+void yetty_ygui_widget_popup_menu_close(struct yetty_ygui_widget *menu);
+void yetty_ygui_widget_popup_menu_set_modal(struct yetty_ygui_widget *menu, int modal);
+int yetty_ygui_widget_popup_menu_is_open(const struct yetty_ygui_widget *menu);
+
 /* Tabbar — Chrome-style tab strip across the top of the widget's box, with
  * one content panel per tab below. Only the active panel is rendered/laid
  * out; clicking a header swaps the active tab and (optionally) fires
@@ -508,6 +600,23 @@ int yetty_ygui_widget_tabbar_count(const struct yetty_ygui_widget *tabbar);
 
 void yetty_ygui_widget_tabbar_on_change(struct yetty_ygui_widget *tabbar,
                                         ygui_change_callback_t callback, void *userdata);
+
+/* Programmatically remove a tab. Frees its panel and label, compacts the
+ * internal arrays, and re-anchors the active index (advancing to the
+ * next tab when the removed one was active). Also called when the
+ * user clicks the per-tab close 'x' button. */
+void yetty_ygui_widget_tabbar_remove_tab(struct yetty_ygui_widget *tabbar, int index);
+
+/* Optional notify-only callback fired BEFORE the default close path
+ * runs (which removes the tab). The tab index is delivered through
+ * the `value` argument — same shape as the on_change callback. */
+void yetty_ygui_widget_tabbar_on_tab_close(struct yetty_ygui_widget *tabbar,
+                                           ygui_change_callback_t callback, void *userdata);
+
+/* Uniform per-button size used by tab close 'x' and (via the window
+ * widget) the hamburger menu. Useful when an app builds custom chrome
+ * that should visually match the tabbar's close buttons. */
+float yetty_ygui_tabbar_button_size(void);
 
 /*=============================================================================
  * Widget Callbacks
