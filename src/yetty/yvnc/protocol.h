@@ -64,6 +64,11 @@ struct yetty_yvnc_vnc_frame_header {
     uint16_t height;
     uint16_t tile_size;
     uint16_t num_tiles;
+    /* Per-client monotonically increasing sequence number. Client must echo
+     * back via FRAME_ACK after the frame is fully decoded — the server uses
+     * this for stop-and-wait flow control (no new frame to a client until
+     * it acks the previous one). */
+    uint32_t seq;
 };
 
 struct yetty_yvnc_vnc_tile_header {
@@ -142,6 +147,10 @@ struct yetty_yvnc_vnc_compression_config_event {
     uint8_t quality;
     uint8_t always_full;
     uint8_t codec;
+};
+
+struct yetty_yvnc_vnc_frame_ack_event {
+    uint32_t seq;
 };
 
 #pragma pack(pop)

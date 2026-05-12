@@ -6,6 +6,7 @@
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yplatform/platform-input-pipe.h>
+#include <yetty/yplatform/time.h>
 #include <yetty/webgpu/error.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yplatform/ywebgpu.h>
@@ -29,8 +30,16 @@
 #define MAX_CLIENTS 16
 #define FULL_REFRESH_INTERVAL 300
 #define RECV_BUFFER_SIZE 65536
+/* If a client takes longer than this to ack a frame, assume it's dead /
+ * unresponsive and drop the TCP connection. TCP itself can't surface a stuck
+ * receiver any other way (data is buffered all the way up to the kernel send
+ * window). */
+#define ACK_TIMEOUT_SEC 5.0
 
-/* Per-client context */
+/* Per-client context. Holds the wire-protocol state for one TCP peer plus the
+ * per-client back-pressure book-keeping (owed_tiles bitmap, awaiting_ack /
+ * awaiting_seq, next_seq, last_send_time). Each client paces independently —
+ * a slow viewer does not throttle fast ones. */
 struct yetty_yvnc_vnc_client_ctx {
     struct yetty_yvnc_server *server;
     struct yetty_yevent_conn *conn;
@@ -43,6 +52,26 @@ struct yetty_yvnc_vnc_client_ctx {
     size_t recv_needed;
     int reading_header;
     struct yetty_yvnc_vnc_input_header header;
+
+    /* Stop-and-wait flow control. While awaiting_ack is set, no frame_header
+     * is sent to this client; new dirty tiles accumulate into owed_tiles
+     * instead. Cleared when the client's FRAME_ACK arrives with seq matching
+     * awaiting_seq. */
+    int awaiting_ack;
+    uint32_t awaiting_seq;
+    uint32_t next_seq;
+    double last_send_time;
+
+    /* Tiles this client is missing since its last ack. Sized for the current
+     * frame's tiles_x*tiles_y (server-wide). One byte per tile (used as a
+     * bool — keeping it byte-sized lets us memset/cheap-OR with the engine's
+     * dirty bitmap). Lazily (re)allocated by ensure_client_owed. */
+    uint8_t *owed_tiles;
+    uint32_t owed_tiles_count;
+
+    /* Forces the next flush to mark every tile owed regardless of the diff
+     * bitmap. Set on connect and after an ack-timeout reset. */
+    int need_full_frame;
 };
 
 struct yetty_yvnc_server {
@@ -100,7 +129,6 @@ struct yetty_yvnc_server {
     int always_full_frame;
     int use_h264;
     volatile int force_full_frame;
-    volatile int awaiting_ack;
 
     /* JPEG compression */
     tjhandle jpeg_compressor;
@@ -157,6 +185,7 @@ struct yetty_yvnc_server {
 
 /* Forward declarations */
 static void dispatch_input(struct yetty_yvnc_server *server,
+                           struct yetty_yvnc_vnc_client_ctx *client_ctx,
                            const struct yetty_yvnc_vnc_input_header *hdr, const uint8_t *data);
 static struct yetty_ycore_void_result ensure_cpu_state(struct yetty_yvnc_server *server,
                                                        uint32_t width, uint32_t height);
@@ -165,6 +194,9 @@ static struct yetty_ycore_void_result encode_tile(struct yetty_yvnc_server *serv
                                                   uint8_t *out_encoding);
 static struct yetty_ycore_void_result encode_and_send_dirty_tiles(struct yetty_yvnc_server *server,
                                                                   uint32_t width, uint32_t height);
+static struct yetty_ycore_void_result ensure_client_owed(struct yetty_yvnc_vnc_client_ctx *client_ctx,
+                                                         uint32_t num_tiles);
+static void check_ack_timeouts(struct yetty_yvnc_server *server);
 
 /*===========================================================================
  * TCP Server Callbacks
@@ -209,9 +241,18 @@ static void *vnc_server_on_connect(void *ctx, struct yetty_yevent_conn *conn)
     }
     client_ctx->recv_needed = sizeof(struct yetty_yvnc_vnc_input_header);
     client_ctx->reading_header = 1;
+    /* Brand-new client starts unblocked but needs every tile on first flush. */
+    client_ctx->awaiting_ack = 0;
+    client_ctx->awaiting_seq = 0;
+    client_ctx->next_seq = 1;
+    client_ctx->last_send_time = yetty_yplatform_ytime_monotonic_sec();
+    client_ctx->need_full_frame = 1;
 
     server->clients[slot] = client_ctx;
     server->client_count++;
+    /* Also force the engine to mark every tile dirty on its next readback —
+     * otherwise a quiescent screen would produce an empty diff bitmap and the
+     * new client would never receive the initial framebuffer contents. */
     server->force_full_frame = 1;
 
     yinfo("VNC client connected (slot %d, total %zu)", slot, server->client_count);
@@ -286,7 +327,7 @@ static void vnc_server_on_data(void *conn_ctx, struct yetty_yevent_conn *conn, c
         /* Dispatch input */
         const uint8_t *payload =
             client_ctx->recv_buffer + sizeof(struct yetty_yvnc_vnc_input_header);
-        dispatch_input(server, &client_ctx->header, payload);
+        dispatch_input(server, client_ctx, &client_ctx->header, payload);
 
         /* Shift remaining data */
         size_t consumed = sizeof(struct yetty_yvnc_vnc_input_header) + client_ctx->header.data_size;
@@ -316,6 +357,7 @@ static void vnc_server_on_disconnect(void *conn_ctx)
     server->client_count--;
 
     free(client_ctx->recv_buffer);
+    free(client_ctx->owed_tiles);
     free(client_ctx);
 }
 
@@ -678,6 +720,7 @@ struct yetty_ycore_void_result yetty_yvnc_server_stop(struct yetty_yvnc_server *
     for (int i = 0; i < MAX_CLIENTS; i++) {
         if (server->clients[i]) {
             free(server->clients[i]->recv_buffer);
+            free(server->clients[i]->owed_tiles);
             free(server->clients[i]);
             server->clients[i] = NULL;
         }
@@ -699,13 +742,39 @@ int yetty_yvnc_server_has_clients(const struct yetty_yvnc_server *server)
 
 int yetty_yvnc_server_is_awaiting_ack(const struct yetty_yvnc_server *server)
 {
-    return server ? server->awaiting_ack : 0;
+    if (!server) {
+        return 0;
+    }
+    /* Aggregate view across all clients — true iff at least one client is
+     * mid-flight. Callers should not be using this for back-pressure (the
+     * per-client gate inside encode_and_send is authoritative); kept for API
+     * compatibility and observability. */
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        const struct yetty_yvnc_vnc_client_ctx *c = server->clients[i];
+        if (c && c->awaiting_ack) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 int yetty_yvnc_server_is_ready_for_frame(const struct yetty_yvnc_server *server)
 {
-    /* Capture is synchronous now; always ready when ack isn't pending. */
-    return server ? !server->awaiting_ack : 0;
+    if (!server) {
+        return 0;
+    }
+    if (server->client_count == 0) {
+        /* No clients: nothing to gate on (recording, if any, never blocks). */
+        return 1;
+    }
+    /* Ready if at least one client can be served right now. */
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        const struct yetty_yvnc_vnc_client_ctx *c = server->clients[i];
+        if (c && !c->awaiting_ack) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 void yetty_yvnc_server_force_full_frame(struct yetty_yvnc_server *server)
@@ -866,6 +935,63 @@ static struct yetty_ycore_void_result send_to_all_clients(struct yetty_yvnc_serv
     return YETTY_OK_VOID();
 }
 
+static void send_to_client(struct yetty_yvnc_server *server,
+                           struct yetty_yvnc_vnc_client_ctx *client_ctx, const void *data,
+                           size_t size)
+{
+    if (client_ctx && client_ctx->conn) {
+        server->event_loop->ops->tcp_send(client_ctx->conn, data, size);
+    }
+}
+
+/*
+ * Make sure the client's owed_tiles bitmap matches the current tile-grid
+ * size. Grows / shrinks lazily. New cells start zero (no fabricated dirty
+ * bits — need_full_frame handles initial coverage).
+ */
+static struct yetty_ycore_void_result ensure_client_owed(struct yetty_yvnc_vnc_client_ctx *client_ctx,
+                                                         uint32_t num_tiles)
+{
+    if (client_ctx->owed_tiles_count == num_tiles && client_ctx->owed_tiles) {
+        return YETTY_OK_VOID();
+    }
+    uint8_t *resized = realloc(client_ctx->owed_tiles, num_tiles);
+    if (!resized) {
+        return YETTY_ERR(yetty_ycore_void, "owed_tiles alloc failed");
+    }
+    /* If we just grew, zero the new tail. If we shrank, no init needed. */
+    if (num_tiles > client_ctx->owed_tiles_count) {
+        memset(resized + client_ctx->owed_tiles_count, 0,
+               num_tiles - client_ctx->owed_tiles_count);
+    }
+    client_ctx->owed_tiles = resized;
+    client_ctx->owed_tiles_count = num_tiles;
+    return YETTY_OK_VOID();
+}
+
+/*
+ * Close any client that has been waiting on an ack longer than
+ * ACK_TIMEOUT_SEC. TCP itself can't surface a wedged receiver (the kernel
+ * happily buffers up to the send window); this is the only mechanism we have
+ * to evict a dead viewer.
+ */
+static void check_ack_timeouts(struct yetty_yvnc_server *server)
+{
+    double now = yetty_yplatform_ytime_monotonic_sec();
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        struct yetty_yvnc_vnc_client_ctx *c = server->clients[i];
+        if (!c || !c->conn || !c->awaiting_ack) {
+            continue;
+        }
+        if (now - c->last_send_time > ACK_TIMEOUT_SEC) {
+            ywarn("VNC: client slot %d ack timeout (%.1fs); closing", c->slot,
+                  now - c->last_send_time);
+            server->event_loop->ops->tcp_close(c->conn);
+            /* on_disconnect will free the context. */
+        }
+    }
+}
+
 /*===========================================================================
  * CPU-side per-frame state + tile encoding
  *
@@ -901,6 +1027,20 @@ static struct yetty_ycore_void_result ensure_cpu_state(struct yetty_yvnc_server 
     server->dirty_tiles = calloc(num_tiles, sizeof(int));
     if (!server->dirty_tiles) {
         return YETTY_ERR(yetty_ycore_void, "failed to allocate dirty tiles");
+    }
+
+    /* Tile-index space changed — stale bits in each client's owed_tiles now
+     * refer to wrong tiles. Drop them; need_full_frame will repopulate on
+     * the next flush. */
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        struct yetty_yvnc_vnc_client_ctx *c = server->clients[i];
+        if (!c) {
+            continue;
+        }
+        free(c->owed_tiles);
+        c->owed_tiles = NULL;
+        c->owed_tiles_count = 0;
+        c->need_full_frame = 1;
     }
 
     ydebug("VNC CPU state: %ux%u, %u tiles", width, height, num_tiles);
@@ -972,6 +1112,7 @@ static struct yetty_ycore_void_result encode_tile(struct yetty_yvnc_server *serv
  *===========================================================================*/
 
 static void dispatch_input(struct yetty_yvnc_server *server,
+                           struct yetty_yvnc_vnc_client_ctx *client_ctx,
                            const struct yetty_yvnc_vnc_input_header *hdr, const uint8_t *data)
 {
     ydebug("VNC dispatch_input: type=%u size=%u", hdr->type, hdr->data_size);
@@ -1025,9 +1166,45 @@ static void dispatch_input(struct yetty_yvnc_server *server,
         }
         break;
 
-    case YETTY_YVNC_VNC_INPUT_FRAME_ACK:
-        server->awaiting_ack = 0;
+    case YETTY_YVNC_VNC_INPUT_FRAME_ACK: {
+        if (!client_ctx) {
+            break;
+        }
+        if (hdr->data_size < sizeof(struct yetty_yvnc_vnc_frame_ack_event)) {
+            /* Legacy / malformed ack with no seq. Ignore: the correct frame
+             * is either still inflight (will arrive properly seq'd) or this
+             * is a non-yetty client speaking the wrong protocol — in either
+             * case we don't want a payloadless ack to bypass back-pressure. */
+            ywarn("VNC: ack with no seq payload on slot %d; ignoring", client_ctx->slot);
+            break;
+        }
+        const struct yetty_yvnc_vnc_frame_ack_event *msg = (const void *)data;
+        uint32_t acked_seq = msg->seq;
+        if (!client_ctx->awaiting_ack) {
+            /* Spurious ack — we're not waiting on anything. Most likely a
+             * late duplicate (TCP reorders nothing, but the same frame's
+             * ack can arrive twice if the client sends from two layers). */
+            ydebug("VNC: ack %u on slot %d while not awaiting; ignoring",
+                   acked_seq, client_ctx->slot);
+            break;
+        }
+        if (acked_seq != client_ctx->awaiting_seq) {
+            /* Stale ack from before the current in-flight frame. Crucially,
+             * we do NOT clear awaiting_ack — that would defeat the whole
+             * point of stop-and-wait. The real ack will arrive next, or the
+             * ACK_TIMEOUT_SEC path closes the client. */
+            ydebug("VNC: stale ack %u on slot %d (waiting on %u); ignoring",
+                   acked_seq, client_ctx->slot, client_ctx->awaiting_seq);
+            break;
+        }
+        client_ctx->awaiting_ack = 0;
+        /* Nudge a render so the catch-up frame ships without waiting for an
+         * unrelated event. */
+        if (server->event_loop && server->event_loop->ops->request_render) {
+            server->event_loop->ops->request_render(server->event_loop);
+        }
         break;
+    }
 
     default:
         ydebug("VNC unknown input type %u", hdr->type);
@@ -1104,7 +1281,7 @@ struct yetty_yvnc_merged_rect {
  *
  * Ported from yetty-poc/src/yetty/vnc/vnc-server.cpp:mergeRectangles.
  */
-static size_t merge_dirty_rects(struct yetty_yvnc_server *server,
+static size_t merge_dirty_rects(struct yetty_yvnc_server *server, const uint8_t *bitmap,
                                 struct yetty_yvnc_merged_rect *out, size_t out_cap)
 {
     uint16_t tx_count = server->tiles_x;
@@ -1121,7 +1298,7 @@ static size_t merge_dirty_rects(struct yetty_yvnc_server *server,
     for (uint16_t ty = 0; ty < ty_count; ty++) {
         for (uint16_t tx = 0; tx < tx_count; tx++) {
             uint32_t idx = (uint32_t)ty * tx_count + tx;
-            if (!server->dirty_tiles[idx] || used[idx]) {
+            if (!bitmap[idx] || used[idx]) {
                 continue;
             }
 
@@ -1131,7 +1308,7 @@ static size_t merge_dirty_rects(struct yetty_yvnc_server *server,
             /* Extend width. */
             while (tx + max_w < tx_count) {
                 uint32_t next = (uint32_t)ty * tx_count + tx + max_w;
-                if (!server->dirty_tiles[next] || used[next]) {
+                if (!bitmap[next] || used[next]) {
                     break;
                 }
                 max_w++;
@@ -1142,7 +1319,7 @@ static size_t merge_dirty_rects(struct yetty_yvnc_server *server,
                 bool row_ok = true;
                 for (uint16_t x = 0; x < max_w; x++) {
                     uint32_t check = (uint32_t)(ty + max_h) * tx_count + tx + x;
-                    if (!server->dirty_tiles[check] || used[check]) {
+                    if (!bitmap[check] || used[check]) {
                         row_ok = false;
                         break;
                     }
@@ -1391,10 +1568,31 @@ static struct yetty_ycore_void_result h264_send_full_frame(struct yetty_yvnc_ser
         .data_size = (uint32_t)encoded.size,
     };
 
-    send_to_all_clients(server, &fhdr, sizeof(fhdr));
-    send_to_all_clients(server, &thdr, sizeof(thdr));
-    send_to_all_clients(server, &vhdr, sizeof(vhdr));
-    send_to_all_clients(server, encoded.data, encoded.size);
+    /* Per-client frame headers (each carries that client's own seq), then
+     * the shared tile/video headers + NAL bytes. We can broadcast the latter
+     * three because they're identical across clients — only the leading
+     * frame_header differs. */
+    double now = yetty_yplatform_ytime_monotonic_sec();
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        struct yetty_yvnc_vnc_client_ctx *c = server->clients[i];
+        if (!c || !c->conn) {
+            continue;
+        }
+        fhdr.seq = c->next_seq;
+        send_to_client(server, c, &fhdr, sizeof(fhdr));
+        send_to_client(server, c, &thdr, sizeof(thdr));
+        send_to_client(server, c, &vhdr, sizeof(vhdr));
+        send_to_client(server, c, encoded.data, encoded.size);
+        c->awaiting_seq = c->next_seq;
+        c->next_seq++;
+        c->awaiting_ack = 1;
+        c->last_send_time = now;
+        c->need_full_frame = 0;
+        /* H.264 carries the whole framebuffer; nothing is "owed" any more. */
+        if (c->owed_tiles) {
+            memset(c->owed_tiles, 0, c->owed_tiles_count);
+        }
+    }
 
     /* MP4 recording: write the same NAL bytes to the file. The writer is
    * created lazily on the first frame so it knows the encoder's actual
@@ -1434,44 +1632,116 @@ static struct yetty_ycore_void_result h264_send_full_frame(struct yetty_yvnc_ser
     uint32_t num_tiles = server->tiles_x * server->tiles_y;
     memset(server->dirty_tiles, 0, num_tiles * sizeof(int));
 
-    server->awaiting_ack = 1;
     server->current_stats.frames++;
     return YETTY_OK_VOID();
 }
 #endif /* YETTY_HAS_YVIDEO */
 
+/*
+ * Encode the current readback and ship to every client that's not currently
+ * awaiting an ack. Each client's owed_tiles bitmap accumulates dirty tiles
+ * across readbacks, so a slow client doesn't lose updates while it's behind —
+ * it just receives fewer, larger flushes. The diff engine's prev-frame
+ * texture continues to advance on every readback (engine-frame deltas only;
+ * the *client-perceived* delta is whatever bits are still owed at flush time
+ * combined with the freshest readback pixels).
+ *
+ * Flow per call:
+ *   1. Time out any client that's been silent past ACK_TIMEOUT_SEC.
+ *   2. For each client: ensure owed_tiles is the right size; if need_full_frame
+ *      is set, mark every tile owed; OR the new engine bitmap into owed_tiles.
+ *   3. H.264 mode: stateful encoder, single shared bitstream — only emit when
+ *      every client is unblocked.
+ *   4. Otherwise (tile / rect mode): per-client flush of unblocked clients.
+ */
 static struct yetty_ycore_void_result encode_and_send_dirty_tiles(struct yetty_yvnc_server *server,
                                                                   uint32_t width, uint32_t height)
 {
     uint32_t num_tiles = server->tiles_x * server->tiles_y;
 
-    /* Count dirty tiles. */
-    uint16_t dirty_count = 0;
+    check_ack_timeouts(server);
+
+    uint32_t engine_dirty = 0;
     for (uint32_t i = 0; i < num_tiles; i++) {
         if (server->dirty_tiles[i]) {
-            dirty_count++;
+            engine_dirty++;
         }
     }
+    ydebug("VNC encode_and_send: %ux%u num_tiles=%u engine_dirty=%u clients=%zu", width, height,
+           num_tiles, engine_dirty, server->client_count);
 
-    if (dirty_count == 0) {
-        return YETTY_OK_VOID();
+    /* Phase 1: fold this readback's dirty bitmap into every client's owed
+     * tiles. Blocked clients just accumulate more; unblocked clients pick
+     * everything up in phase 3. */
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        struct yetty_yvnc_vnc_client_ctx *c = server->clients[i];
+        if (!c || !c->conn) {
+            continue;
+        }
+        struct yetty_ycore_void_result eres = ensure_client_owed(c, num_tiles);
+        if (YETTY_IS_ERR(eres)) {
+            ywarn("VNC slot %d: %s", c->slot, eres.error.msg);
+            yetty_ycore_error_destroy(eres.error);
+            continue;
+        }
+        if (c->need_full_frame) {
+            memset(c->owed_tiles, 1, num_tiles);
+            c->need_full_frame = 0;
+        }
+        for (uint32_t t = 0; t < num_tiles; t++) {
+            if (server->dirty_tiles[t]) {
+                c->owed_tiles[t] = 1;
+            }
+        }
+        uint32_t owed_after = 0;
+        for (uint32_t t = 0; t < num_tiles; t++) {
+            if (c->owed_tiles[t]) {
+                owed_after++;
+            }
+        }
+        ydebug("VNC slot %d: awaiting_ack=%d awaiting_seq=%u next_seq=%u owed=%u", c->slot,
+               c->awaiting_ack, c->awaiting_seq, c->next_seq, owed_after);
     }
+
+    /* Phase 2: dirty_tiles has been folded into per-client state — no
+     * caller below this point reads it. Clear so the next CPU-path
+     * always_full path starts from a clean slate. */
+    memset(server->dirty_tiles, 0, num_tiles * sizeof(int));
 
 #ifdef YETTY_HAS_YVIDEO
     /*-------------------------------------------------------------------
-   * H.264 streaming mode — once enabled, EVERY frame goes through the
-   * H.264 encoder. Mixing H.264 with JPEG per-tile mid-session would
-   * desynchronise the encoder's reference frames (next P-frame would
-   * reference a picture the decoder never saw) and force the client to
-   * swap between two decode paths per packet. The codec's P-frames
-   * already handle "nothing changed" cheaply — a static screen encodes
-   * to ~100 bytes per frame. force_raw overrides H.264 since the
-   * explicit intent is "no compression of any kind".
-   *
-   * On encoder failure h264_send_full_frame() clears use_h264, so this
-   * falls back to JPEG *for the rest of the session*, not mid-stream.
-   *-------------------------------------------------------------------*/
+     * H.264 streaming mode — one stateful encoder, broadcast to all.
+     * Mixing H.264 with JPEG per-tile mid-session would desynchronise the
+     * encoder's reference frames. force_raw overrides H.264 (explicit
+     * "no compression").
+     *
+     * Per-client back-pressure: H.264 P-frames reference the encoder's
+     * own prior picture, so we can't send a new frame to client A without
+     * also sending it to client B (their decoder states must track in
+     * lockstep). If any client is awaiting_ack we drop this readback's
+     * H.264 frame entirely; the next render will retry when the slowest
+     * client has caught up. On encoder failure h264_send_full_frame()
+     * clears use_h264 for the rest of the session.
+     *-----------------------------------------------------------------*/
     if (server->use_h264 && !server->force_raw) {
+        int any_blocked = 0;
+        int any_active = 0;
+        for (int i = 0; i < MAX_CLIENTS; i++) {
+            struct yetty_yvnc_vnc_client_ctx *c = server->clients[i];
+            if (!c || !c->conn) {
+                continue;
+            }
+            any_active = 1;
+            if (c->awaiting_ack) {
+                any_blocked = 1;
+                break;
+            }
+        }
+        /* If recording but no clients, still encode (record path is its own
+         * consumer and doesn't ack). */
+        if (any_active && any_blocked) {
+            return YETTY_OK_VOID();
+        }
         struct yetty_ycore_void_result res = h264_send_full_frame(server, width, height);
         if (YETTY_IS_OK(res)) {
             return res;
@@ -1480,114 +1750,129 @@ static struct yetty_ycore_void_result encode_and_send_dirty_tiles(struct yetty_y
 #endif
 
     /*-------------------------------------------------------------------
-   * Rectangle mode — merge dirty tiles into solid rectangles, encode
-   * and send one rect per region. Wire header uses tile_size=0 to flag
-   * rect mode (matches yetty-poc convention).
-   *-------------------------------------------------------------------*/
-    if (server->merge_rectangles) {
-        struct yetty_yvnc_merged_rect *rects = malloc(num_tiles * sizeof(*rects));
-        if (!rects) {
-            return YETTY_ERR(yetty_ycore_void, "rects alloc failed");
+     * Per-client flush. Either rect mode (merge owed bits into solid
+     * rectangles, one rect per region) or tile mode (one 64×64 tile per
+     * owed bit). Each unblocked client's frame_header carries its own
+     * seq; the server then waits for an ack matching that seq before
+     * shipping the next frame to that client.
+     *-----------------------------------------------------------------*/
+    double now = yetty_yplatform_ytime_monotonic_sec();
+
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        struct yetty_yvnc_vnc_client_ctx *c = server->clients[i];
+        if (!c || !c->conn) {
+            continue;
+        }
+        if (c->awaiting_ack) {
+            continue;
         }
 
-        size_t rect_n = merge_dirty_rects(server, rects, num_tiles);
+        /* Count owed for this client. */
+        uint32_t owed_count = 0;
+        for (uint32_t t = 0; t < num_tiles; t++) {
+            if (c->owed_tiles[t]) {
+                owed_count++;
+            }
+        }
+        if (owed_count == 0) {
+            continue;
+        }
 
-        struct yetty_yvnc_vnc_frame_header frame_hdr = {
-            .magic = VNC_FRAME_MAGIC,
-            .width = (uint16_t)width,
-            .height = (uint16_t)height,
-            .tile_size = 0,
-            .num_tiles = (uint16_t)rect_n,
-        };
-        send_to_all_clients(server, &frame_hdr, sizeof(frame_hdr));
-
-        for (size_t i = 0; i < rect_n; i++) {
-            struct yetty_yvnc_merged_rect *r = &rects[i];
-
-            uint8_t *data;
-            size_t size;
-            uint8_t encoding;
-            int free_with_tj;
-
-            struct yetty_ycore_void_result res =
-                encode_rect(server, r->x, r->y, r->w, r->h, &data, &size, &encoding, &free_with_tj);
-            if (!YETTY_IS_OK(res)) {
+        if (server->merge_rectangles) {
+            struct yetty_yvnc_merged_rect *rects = malloc(num_tiles * sizeof(*rects));
+            if (!rects) {
+                ywarn("VNC slot %d: rects alloc failed", c->slot);
                 continue;
             }
+            size_t rect_n = merge_dirty_rects(server, c->owed_tiles, rects, num_tiles);
 
-            struct yetty_yvnc_vnc_rect_header rh = {
-                .px_x = r->x,
-                .px_y = r->y,
-                .width = r->w,
-                .height = r->h,
-                .encoding = encoding,
-                .reserved = 0,
-                .data_size = (uint32_t)size,
+            struct yetty_yvnc_vnc_frame_header frame_hdr = {
+                .magic = VNC_FRAME_MAGIC,
+                .width = (uint16_t)width,
+                .height = (uint16_t)height,
+                .tile_size = 0,
+                .num_tiles = (uint16_t)rect_n,
+                .seq = c->next_seq,
             };
+            send_to_client(server, c, &frame_hdr, sizeof(frame_hdr));
 
-            send_to_all_clients(server, &rh, sizeof(rh));
-            send_to_all_clients(server, data, size);
+            for (size_t k = 0; k < rect_n; k++) {
+                struct yetty_yvnc_merged_rect *r = &rects[k];
+                uint8_t *data;
+                size_t size;
+                uint8_t encoding;
+                int free_with_tj;
+                struct yetty_ycore_void_result rer = encode_rect(
+                    server, r->x, r->y, r->w, r->h, &data, &size, &encoding, &free_with_tj);
+                if (!YETTY_IS_OK(rer)) {
+                    continue;
+                }
+                struct yetty_yvnc_vnc_rect_header rh = {
+                    .px_x = r->x,
+                    .px_y = r->y,
+                    .width = r->w,
+                    .height = r->h,
+                    .encoding = encoding,
+                    .reserved = 0,
+                    .data_size = (uint32_t)size,
+                };
+                send_to_client(server, c, &rh, sizeof(rh));
+                send_to_client(server, c, data, size);
+                if (free_with_tj) {
+                    tjFree(data);
+                } else {
+                    free(data);
+                }
+            }
+            free(rects);
+        } else {
+            struct yetty_yvnc_vnc_frame_header frame_hdr = {
+                .magic = VNC_FRAME_MAGIC,
+                .width = (uint16_t)width,
+                .height = (uint16_t)height,
+                .tile_size = VNC_TILE_SIZE,
+                .num_tiles = (uint16_t)owed_count,
+                .seq = c->next_seq,
+            };
+            send_to_client(server, c, &frame_hdr, sizeof(frame_hdr));
 
-            if (free_with_tj) {
-                tjFree(data);
-            } else {
-                free(data);
+            for (uint16_t ty = 0; ty < server->tiles_y; ty++) {
+                for (uint16_t tx = 0; tx < server->tiles_x; tx++) {
+                    uint32_t idx = (uint32_t)ty * server->tiles_x + tx;
+                    if (!c->owed_tiles[idx]) {
+                        continue;
+                    }
+                    uint8_t *tile_data;
+                    size_t tile_size;
+                    uint8_t encoding;
+                    struct yetty_ycore_void_result ter =
+                        encode_tile(server, tx, ty, &tile_data, &tile_size, &encoding);
+                    if (!YETTY_IS_OK(ter)) {
+                        continue;
+                    }
+                    struct yetty_yvnc_vnc_tile_header tile_hdr = {
+                        .tile_x = tx,
+                        .tile_y = ty,
+                        .encoding = encoding,
+                        .data_size = (uint32_t)tile_size,
+                    };
+                    send_to_client(server, c, &tile_hdr, sizeof(tile_hdr));
+                    send_to_client(server, c, tile_data, tile_size);
+                }
             }
         }
 
-        free(rects);
-        memset(server->dirty_tiles, 0, num_tiles * sizeof(int));
-
-        server->awaiting_ack = 1;
+        /* Mark everything sent: client now owns these pixels and won't get
+         * another frame until it acks `awaiting_seq`. */
+        memset(c->owed_tiles, 0, num_tiles);
+        c->awaiting_seq = c->next_seq;
+        c->next_seq++;
+        c->awaiting_ack = 1;
+        c->last_send_time = now;
         server->current_stats.frames++;
-        return YETTY_OK_VOID();
+        ydebug("VNC slot %d: SENT seq=%u tiles=%u, now awaiting", c->slot, c->awaiting_seq,
+               owed_count);
     }
-
-    /*-------------------------------------------------------------------
-   * Tile mode (default) — one header+payload per dirty 64x64 tile.
-   *-------------------------------------------------------------------*/
-    struct yetty_yvnc_vnc_frame_header frame_hdr = {
-        .magic = VNC_FRAME_MAGIC,
-        .width = (uint16_t)width,
-        .height = (uint16_t)height,
-        .tile_size = VNC_TILE_SIZE,
-        .num_tiles = dirty_count,
-    };
-    send_to_all_clients(server, &frame_hdr, sizeof(frame_hdr));
-
-    for (uint16_t ty = 0; ty < server->tiles_y; ty++) {
-        for (uint16_t tx = 0; tx < server->tiles_x; tx++) {
-            uint32_t idx = ty * server->tiles_x + tx;
-            if (!server->dirty_tiles[idx]) {
-                continue;
-            }
-
-            uint8_t *tile_data;
-            size_t tile_size;
-            uint8_t encoding;
-
-            struct yetty_ycore_void_result res =
-                encode_tile(server, tx, ty, &tile_data, &tile_size, &encoding);
-            if (!YETTY_IS_OK(res)) {
-                continue;
-            }
-
-            struct yetty_yvnc_vnc_tile_header tile_hdr = {
-                .tile_x = tx,
-                .tile_y = ty,
-                .encoding = encoding,
-                .data_size = (uint32_t)tile_size,
-            };
-
-            send_to_all_clients(server, &tile_hdr, sizeof(tile_hdr));
-            send_to_all_clients(server, tile_data, tile_size);
-
-            server->dirty_tiles[idx] = 0;
-        }
-    }
-
-    server->awaiting_ack = 1;
-    server->current_stats.frames++;
 
     return YETTY_OK_VOID();
 }

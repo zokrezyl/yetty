@@ -27,6 +27,21 @@
 #define MAX_TCP_CLIENTS 16
 #define TCP_CLIENT_BUFFER_SIZE 65536
 
+/* Per-connection write-request pool. tcp_send must own the bytes until the
+ * write completes (uv_write is async), so we copy the caller's data into a
+ * heap block trailing the uv_write_t. Hot paths (yvnc encode loop) issue
+ * hundreds of small sends per frame, so we keep a freelist of fixed-size
+ * blocks per connection instead of malloc+free per send. Payloads larger
+ * than POOL_BUF_SIZE bypass the pool (one-shot malloc).
+ *
+ * Capacity is tuned for VNC: typical sends are 9..3000 bytes (tile header,
+ * JPEG tile). Pool depth caps idle memory at MAX_POOL * POOL_BUF_SIZE per
+ * connection. */
+#define LIBUV_WRITE_POOL_BUF_SIZE 4096
+#define LIBUV_WRITE_POOL_MAX_DEPTH 128
+
+struct libuv_write_req;
+
 /* TCP connection - used for both server connections and client connections */
 struct yetty_yevent_conn {
     uv_tcp_t tcp;
@@ -35,6 +50,12 @@ struct yetty_yevent_conn {
     struct yetty_yplatform_tcp_server_handle *server; /* NULL for client connections */
     struct yetty_yplatform_tcp_client_handle *client; /* NULL for server connections */
     int active;
+
+    /* Singly-linked freelist of recycled write requests, all sized
+     * POOL_BUF_SIZE. Bounded by LIBUV_WRITE_POOL_MAX_DEPTH; excess
+     * completions free()'d. */
+    struct libuv_write_req *write_pool_head;
+    size_t write_pool_depth;
 };
 
 /* TCP server */
@@ -176,6 +197,7 @@ static struct yetty_ycore_void_result libuv_stop_tcp_client(struct yetty_yevent_
 static struct yetty_ycore_size_result libuv_tcp_send(struct yetty_yevent_conn *conn,
                                                      const void *data, size_t len);
 static struct yetty_ycore_void_result libuv_tcp_close(struct yetty_yevent_conn *conn);
+static void write_pool_drain(struct yetty_yevent_conn *conn);
 static void libuv_request_render(struct yetty_yevent_event_loop *self);
 static void libuv_post_to_loop(struct yetty_yevent_event_loop *self, void (*fn)(void *), void *arg);
 
@@ -738,6 +760,7 @@ static void on_server_conn_read(uv_stream_t *stream, ssize_t nread, const uv_buf
         }
         uv_close((uv_handle_t *)stream, NULL);
         conn->active = 0;
+        write_pool_drain(conn);
         server->conn_count--;
         return;
     }
@@ -928,6 +951,7 @@ static struct yetty_ycore_void_result libuv_stop_tcp_server(struct yetty_yevent_
             }
             uv_close((uv_handle_t *)&server->conns[i]->tcp, NULL);
             server->conns[i]->active = 0;
+            write_pool_drain(server->conns[i]);
         }
     }
     server->conn_count = 0;
@@ -968,6 +992,7 @@ static void on_client_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *b
         }
         uv_close((uv_handle_t *)stream, NULL);
         conn->active = 0;
+        write_pool_drain(conn);
         client->active = 0;
         return;
     }
@@ -1095,6 +1120,7 @@ static struct yetty_ycore_void_result libuv_stop_tcp_client(struct yetty_yevent_
 
     uv_close((uv_handle_t *)&client->conn.tcp, NULL);
     client->conn.active = 0;
+    write_pool_drain(&client->conn);
     client->active = 0;
 
     ytrace("tcp_client: stopped client id=%d", id);
@@ -1103,30 +1129,102 @@ static struct yetty_ycore_void_result libuv_stop_tcp_client(struct yetty_yevent_
 
 /* TCP send/close (works for both server and client connections) */
 
+/* uv_write is asynchronous and holds the data pointer until the write
+ * completes. We own the buffer for that whole window — caller can pass stack
+ * locals, static scratch, or anything else and never has to think about
+ * lifetime. The bug this fixes: callers were passing stack/static buffers
+ * that got reused or went out of scope while writes were still queued; on
+ * loopback writes complete fast enough that nothing notices, but over real
+ * networks the wire gets garbage.
+ *
+ * Pool-backed: pooled blocks carry exactly POOL_BUF_SIZE of trailing data;
+ * one-shot blocks carry exactly the payload size. `conn` is stashed in the
+ * request so the completion callback can push back to the freelist. */
+struct libuv_write_req {
+    uv_write_t req;
+    struct yetty_yevent_conn *conn;
+    struct libuv_write_req *next; /* freelist link, valid only when pooled */
+    int pooled;                   /* 1 = return to pool on completion, 0 = free */
+    char data[];
+};
+
+static struct libuv_write_req *write_req_acquire(struct yetty_yevent_conn *conn, size_t len)
+{
+    if (len <= LIBUV_WRITE_POOL_BUF_SIZE && conn->write_pool_head) {
+        struct libuv_write_req *wreq = conn->write_pool_head;
+        conn->write_pool_head = wreq->next;
+        conn->write_pool_depth--;
+        wreq->next = NULL;
+        wreq->pooled = 1;
+        return wreq;
+    }
+    int pooled = len <= LIBUV_WRITE_POOL_BUF_SIZE;
+    size_t data_size = pooled ? LIBUV_WRITE_POOL_BUF_SIZE : len;
+    struct libuv_write_req *wreq = malloc(sizeof(*wreq) + data_size);
+    if (!wreq) {
+        return NULL;
+    }
+    wreq->conn = conn;
+    wreq->next = NULL;
+    wreq->pooled = pooled;
+    return wreq;
+}
+
+static void write_req_release(struct libuv_write_req *wreq)
+{
+    struct yetty_yevent_conn *conn = wreq->conn;
+    if (conn && conn->active && wreq->pooled &&
+        conn->write_pool_depth < LIBUV_WRITE_POOL_MAX_DEPTH) {
+        wreq->next = conn->write_pool_head;
+        conn->write_pool_head = wreq;
+        conn->write_pool_depth++;
+        return;
+    }
+    free(wreq);
+}
+
+/* Drain the freelist when a connection goes away. Called from tcp_close
+ * paths; safe to call repeatedly. */
+static void write_pool_drain(struct yetty_yevent_conn *conn)
+{
+    if (!conn) {
+        return;
+    }
+    struct libuv_write_req *cur = conn->write_pool_head;
+    while (cur) {
+        struct libuv_write_req *next = cur->next;
+        free(cur);
+        cur = next;
+    }
+    conn->write_pool_head = NULL;
+    conn->write_pool_depth = 0;
+}
+
 static void on_tcp_write_done(uv_write_t *req, int status)
 {
     (void)status;
-    free(req);
+    struct libuv_write_req *wreq = (struct libuv_write_req *)req;
+    write_req_release(wreq);
 }
 
 static struct yetty_ycore_size_result libuv_tcp_send(struct yetty_yevent_conn *conn,
                                                      const void *data, size_t len)
 {
-    uv_write_t *req;
-    uv_buf_t buf;
-
     if (!conn || !conn->active) {
         return YETTY_ERR(yetty_ycore_size, "invalid connection");
     }
 
-    req = malloc(sizeof(uv_write_t));
-    if (!req) {
+    struct libuv_write_req *wreq = write_req_acquire(conn, len);
+    if (!wreq) {
         return YETTY_ERR(yetty_ycore_size, "out of memory");
     }
+    memcpy(wreq->data, data, len);
 
-    buf = uv_buf_init((char *)data, len);
-    if (uv_write(req, (uv_stream_t *)&conn->tcp, &buf, 1, on_tcp_write_done) != 0) {
-        free(req);
+    uv_buf_t buf = uv_buf_init(wreq->data, len);
+    if (uv_write(&wreq->req, (uv_stream_t *)&conn->tcp, &buf, 1, on_tcp_write_done) != 0) {
+        /* Outright failure — don't pool a never-submitted req, it'd skip the
+         * completion path. */
+        free(wreq);
         return YETTY_ERR(yetty_ycore_size, "uv_write failed");
     }
 
@@ -1149,6 +1247,7 @@ static struct yetty_ycore_void_result libuv_tcp_close(struct yetty_yevent_conn *
 
         uv_close((uv_handle_t *)&conn->tcp, NULL);
         conn->active = 0;
+        write_pool_drain(conn);
 
         if (conn->server) {
             conn->server->conn_count--;
