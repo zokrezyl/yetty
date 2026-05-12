@@ -237,15 +237,15 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t host_port)
     snprintf(netdev_arg, sizeof(netdev_arg), "user,id=net0,hostfwd=tcp:127.0.0.1:%u-:23",
              host_port);
 
-    /* Kernel console chardev exposed on 127.0.0.1:2424 for debugging.
-     * yetty does NOT connect here (it talks to the in-guest telnetd via
-     * slirp hostfwd above). This socket is just a side channel: connect
-     * with `telnet 127.0.0.1 2424` (or any TCP client) to see the boot
-     * log and any kernel panic output that the slirp/telnetd path can't
-     * surface. server=on, wait=off so QEMU boots immediately and accepts
-     * a connection any time. */
+    /* Kernel console chardev exposed on 127.0.0.1:2424. yetty's first
+     * default tab in --qemu mode connects here via telnet-pty to see
+     * the boot log + interact with the in-VM hvc0 console (the slirp
+     * telnet path on 2423 is the second tab). server=on, wait=off so
+     * QEMU boots immediately and accepts a connection any time;
+     * telnet=on wraps the socket in the telnet protocol so the
+     * telnet-pty's IAC negotiation matches what the chardev speaks. */
     snprintf(chardev_arg, sizeof(chardev_arg),
-             "socket,id=char0,host=127.0.0.1,port=2424,server=on,wait=off");
+             "socket,id=char0,host=127.0.0.1,port=2424,server=on,wait=off,telnet=on");
 
     if (settings.extra_append[0]) {
         snprintf(append_arg, sizeof(append_arg),

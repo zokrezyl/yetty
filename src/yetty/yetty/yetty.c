@@ -928,6 +928,40 @@ struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_contex
     }
     ydebug("yetty_create: initial workspace loaded");
 
+    /* --temu / --qemu spawn an in-process VM whose only useful interfaces
+     * are (a) the hvc0/virtio console and (b) a slirp-NAT'd telnet client
+     * to the in-guest telnetd. The pty factory dispenses (a) on its first
+     * create_pty call and (b) on its second; opening a second tab here
+     * gives the user both views of the same VM out of the box.
+     *
+     * On webasm there is no flag — the only PTY backend is the in-iframe
+     * TinyEMU VM (its factory is the only one compiled in), so the same
+     * console+telnet pair is the default shape regardless of config. */
+    bool is_temu = app_context->config->ops->get_bool(
+        app_context->config, YETTY_YCONFIG_KEY_TEMU, 0);
+    bool is_qemu = app_context->config->ops->get_bool(
+        app_context->config, YETTY_YCONFIG_KEY_QEMU, 0);
+#ifdef __EMSCRIPTEN__
+    bool needs_console_telnet_pair = true;
+    const char *which = "webasm";
+#else
+    bool needs_console_telnet_pair = is_temu || is_qemu;
+    const char *which = is_temu ? "temu" : "qemu";
+#endif
+    if (needs_console_telnet_pair) {
+        ydebug("yetty_create: %s — adding telnet tab", which);
+        struct yetty_ycore_void_result tab2_res = yetty_yui_tabbar_add_workspace_from_config(
+            yetty->tabbar, app_context->config, &yetty->context);
+        if (!YETTY_IS_OK(tab2_res)) {
+            yerror("yetty_create: failed to add telnet tab: %s", tab2_res.error.msg);
+            yetty_ycore_error_destroy(tab2_res.error);
+        } else {
+            ydebug("yetty_create: telnet tab added");
+        }
+    }
+    (void)is_temu;
+    (void)is_qemu;
+
     /* Start RPC server if configured */
     const char *rpc_port_str =
         app_context->config->ops->get_string(app_context->config, YETTY_YCONFIG_KEY_RPC_PORT, NULL);

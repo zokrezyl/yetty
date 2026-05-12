@@ -38,6 +38,12 @@ struct yetty_yplatform_pty_ptr_result yetty_yplatform_fork_pty_create(
 struct yetty_yplatform_pty_ptr_result yetty_yplatform_tinyemu_pty_create(
     struct yetty_yconfig_config *config);
 
+/* Webasm-only: hvc0 PTY backed by the in-iframe TinyEMU VM (singleton —
+ * exactly one console exists per page). Default factory call 1 returns
+ * this; call 2+ falls back to telnet-over-iframe-transport. */
+struct yetty_yplatform_pty_ptr_result yetty_yplatform_iframe_pty_create(
+    struct yetty_yconfig_config *config);
+
 /* Host-side TCP port that the TinyEMU slirp hostfwd maps to the in-guest
  * telnetd (tcp/23). Keep in sync with assets/yemu/temu/yetty-temu-extended.cfg's
  * `hostfwd: ["tcp:2323-:23"]`. Used by --temu in pty-factory/default.c. */
