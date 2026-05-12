@@ -179,6 +179,19 @@ if(EMSCRIPTEN OR YETTY_IOS OR YETTY_TVOS)
     endforeach()
 endif()
 
+# Auto-disable ybrowser on Android: netsurf (libcss) is unsupported there.
+if(YETTY_ANDROID)
+    foreach(_f
+        YETTY_ENABLE_FEATURE_YBROWSER
+        YETTY_ENABLE_TOOL_YBROWSER
+    )
+        if(${_f})
+            message(STATUS "Disabling ${_f} on Android (netsurf/libcss not supported)")
+            set(${_f} OFF CACHE BOOL "" FORCE)
+        endif()
+    endforeach()
+endif()
+
 # Auto-disable QA tools for cross-compilation (requires host LLVM/Clang libs)
 # Also disabled on macOS and Windows — qa-tools/custom/result-checker/CMakeLists.txt
 # hardcodes Linux LLVM paths.
