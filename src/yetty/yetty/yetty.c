@@ -24,6 +24,7 @@
 #include <yetty/yui/workspace.h>
 #include <yetty/yui/tabbar.h>
 #include <yetty/yui/tile.h>
+#include <yetty/yui/yui.h>
 #include <yetty/yui-core/view.h>
 #include <yetty/yrpc/rpc-server.h>
 #include <yetty/ymsdf/generator.h>
@@ -50,6 +51,11 @@ struct yetty_yetty_yetty {
      * the existing render/event paths see exactly the same shape as before
      * the tabbar was introduced. */
     struct yetty_yui_tabbar *tabbar;
+    /* App-level ygui chrome (popups, dialogs, future statusbar). Sits as
+     * the highest-z layer above every terminal in the active workspace.
+     * The tabbar above stays on its legacy rect path for now — yui is
+     * additive; it does not displace anything. See src/yetty/yui/yui.h. */
+    struct yetty_yui *yui;
     struct yetty_yevent_event_loop *event_loop;
     struct yetty_yevent_event_listener listener;
 
@@ -172,6 +178,17 @@ static struct yetty_ycore_int_result yetty_event_handler(
             }
         }
         ytime_report(workspace_render);
+
+        /* App-level chrome on top of every terminal. ygui-produced
+         * primitives travel via memory-pty → static ypaint-layer here. */
+        if (yetty->yui) {
+            struct yetty_ycore_void_result yr =
+                yetty_yui_render(yetty->yui, yetty->render_target);
+            if (!YETTY_IS_OK(yr)) {
+                yerror("yetty: yui render failed: %s", yr.error.msg);
+                yetty_ycore_error_destroy(yr.error);
+            }
+        }
 
         /* Present the big target to surface */
         ytime_start(present);
@@ -501,6 +518,15 @@ static struct yetty_ycore_int_result yetty_event_handler(
          * remainder to each workspace. */
         if (yetty->tabbar) {
             yetty_yui_tabbar_resize(yetty->tabbar, (float)width, (float)height);
+        }
+
+        /* Resize the app-level chrome's static canvas to match. */
+        if (yetty->yui) {
+            struct yetty_ycore_void_result yr = yetty_yui_resize(yetty->yui, width, height);
+            if (YETTY_IS_ERR(yr)) {
+                ywarn("yetty: yui resize failed: %s", yr.error.msg);
+                yetty_ycore_error_destroy(yr.error);
+            }
         }
 
         /* Forward to tabbar for tile/view resize handling on the active
@@ -852,6 +878,53 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
 }
 
 /*===========================================================================
+ * yui ↔ tabbar bridges
+ *
+ * The v-button on the tabbar fires `yetty_on_v_menu_click` which opens
+ * yui's ygui popup_menu. When the user selects "Connect" in a dialog,
+ * `yetty_on_yui_connect` translates the yui view-kind into the matching
+ * tabbar kind and spawns a new workspace.
+ *===========================================================================*/
+
+static void yetty_on_v_menu_click(void *userdata, float anchor_x, float anchor_y)
+{
+    struct yetty_yetty_yetty *yetty = userdata;
+    if (!yetty || !yetty->yui) {
+        return;
+    }
+    yetty_yui_show_view_menu(yetty->yui, anchor_x, anchor_y);
+    if (yetty->event_loop && yetty->event_loop->ops->request_render) {
+        yetty->event_loop->ops->request_render(yetty->event_loop);
+    }
+}
+
+static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
+{
+    struct yetty_yetty_yetty *yetty = userdata;
+    if (!yetty || !yetty->tabbar) {
+        return;
+    }
+    enum yetty_yui_tabbar_kind tk;
+    switch (kind) {
+    case YETTY_YUI_VIEW_SHELL:  tk = YETTY_YUI_TAB_SHELL;  break;
+    case YETTY_YUI_VIEW_SSH:    tk = YETTY_YUI_TAB_SSH;    break;
+    case YETTY_YUI_VIEW_TELNET: tk = YETTY_YUI_TAB_TELNET; break;
+    case YETTY_YUI_VIEW_YVNC:   tk = YETTY_YUI_TAB_YVNC;   break;
+    default: return;
+    }
+    struct yetty_ycore_void_result r = yetty_yui_tabbar_add_workspace_of_kind(yetty->tabbar, tk);
+    if (YETTY_IS_ERR(r)) {
+        yerror("yetty: connect (kind=%d) failed: %s", (int)kind, r.error.msg);
+        yetty_ycore_error_destroy(r.error);
+    } else {
+        ydebug("yetty: connect (kind=%d) spawned new workspace", (int)kind);
+    }
+    if (yetty->event_loop && yetty->event_loop->ops->request_render) {
+        yetty->event_loop->ops->request_render(yetty->event_loop);
+    }
+}
+
+/*===========================================================================
  * Public API
  *===========================================================================*/
 
@@ -927,6 +1000,36 @@ struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_contex
         return YETTY_ERR(yetty_yetty_yetty, layout_res.error.msg);
     }
     ydebug("yetty_create: initial workspace loaded");
+
+    /* App-level chrome singleton. Sized to the initial framebuffer; cell
+     * stride is a coarse 10x16 default — chrome elements are absolute-pixel
+     * positioned, so the static-canvas grid is only an addressing index.
+     * Non-fatal on failure: the rest of the app keeps working without
+     * top-z chrome. */
+    {
+        uint32_t sw = app_context->app_gpu_context.surface_width;
+        uint32_t sh = app_context->app_gpu_context.surface_height;
+        if (sw == 0) {
+            sw = 1;
+        }
+        if (sh == 0) {
+            sh = 1;
+        }
+        struct yetty_yui_ptr_result yr =
+            yetty_yui_create(&yetty->context, sw, sh, 10.0f, 16.0f);
+        if (YETTY_IS_OK(yr)) {
+            yetty->yui = yr.value;
+            ydebug("yetty_create: yui created");
+
+            /* Bridge tabbar v-button click → yui popup menu, and yui
+             * Connect → tabbar add_workspace_of_kind. */
+            yetty_yui_tabbar_set_v_menu_callback(yetty->tabbar, yetty_on_v_menu_click, yetty);
+            yetty_yui_set_connect_callback(yetty->yui, yetty_on_yui_connect, yetty);
+        } else {
+            ywarn("yetty_create: yui create failed: %s", yr.error.msg);
+            yetty_ycore_error_destroy(yr.error);
+        }
+    }
 
     /* --temu / --qemu spawn an in-process VM whose only useful interfaces
      * are (a) the hvc0/virtio console and (b) a slirp-NAT'd telnet client
@@ -1009,6 +1112,21 @@ struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty_yetty *yetty)
             first_err = rr;
         }
         yetty->rpc_server = NULL;
+    }
+
+    /* Destroy app-level chrome before tabbar/render_target. yui holds GPU
+     * resources owned by the same wgpu/event-loop teardown chain below. */
+    if (yetty->yui) {
+        ydebug("yetty_destroy: destroying yui");
+        struct yetty_ycore_void_result yr = yetty_yui_destroy(yetty->yui);
+        if (YETTY_IS_ERR(yr)) {
+            if (YETTY_IS_OK(first_err)) {
+                first_err = yr;
+            } else {
+                yetty_ycore_error_destroy(yr.error);
+            }
+        }
+        yetty->yui = NULL;
     }
 
     /* Destroy tabbar (cascades to each workspace, its tiles, and views). */

@@ -958,6 +958,15 @@ void yetty_ygui_theme_apply_config(struct yetty_ygui_theme *theme,
 void yetty_ygui_engine_set_input_fd(struct yetty_ygui_engine *engine, int fd);
 void yetty_ygui_engine_set_output_fd(struct yetty_ygui_engine *engine, int fd);
 
+/* Route the engine's ypaint frame OSC envelopes to a yetty_platform_pty
+ * instead of `output_fd`. Used when ygui lives in the same process as the
+ * renderer (yetty's app-level yui chrome) to avoid a stdout round-trip.
+ * `pty` is borrowed — the caller owns its lifetime and must outlive the
+ * engine. Pass NULL to revert to the file-descriptor sink. */
+struct yetty_platform_pty;
+void yetty_ygui_engine_set_output_pty(struct yetty_ygui_engine *engine,
+                                      struct yetty_platform_pty *pty);
+
 /* Set card dimensions for testing coordinate scaling
  * These are normally set by ygui_engine_create() but can be overridden for tests */
 void yetty_ygui_engine_set_card_size(struct yetty_ygui_engine *engine, int card_w, int card_h);

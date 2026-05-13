@@ -44,6 +44,33 @@ struct yetty_yplatform_pty_ptr_result yetty_yplatform_tinyemu_pty_create(
 struct yetty_yplatform_pty_ptr_result yetty_yplatform_iframe_pty_create(
     struct yetty_yconfig_config *config);
 
+/* In-memory PTY pair — two endpoints sharing two fixed-cap ring buffers.
+ * Endpoint a's read drains what endpoint b wrote and vice versa. No fd
+ * (pipe_source returns NULL), no compression. Used for in-process bridges
+ * (yui ↔ render thread today, same thread; eventual thread split later).
+ * `buf_size` is the per-direction byte capacity, rounded up to a power of 2.
+ * Pass 0 to use the default (16 MiB). NOT thread-safe — single-thread use
+ * only until a locking variant lands. */
+struct yetty_yplatform_memory_pty_pair {
+    struct yetty_platform_pty *a;
+    struct yetty_platform_pty *b;
+};
+YETTY_YRESULT_DECLARE(yetty_yplatform_memory_pty_pair,
+                      struct yetty_yplatform_memory_pty_pair);
+struct yetty_yplatform_memory_pty_pair_result yetty_yplatform_memory_pty_pair_create(
+    size_t buf_size);
+
+/* Memory-pty has no fd so libuv has no readiness signal. Caller installs a
+ * wake callback per endpoint; it fires whenever the OTHER endpoint writes
+ * bytes into this endpoint's read ring. Wire it to the event loop's
+ * `request_render` (or `post_to_loop` once threading splits) so the reader
+ * side gets a chance to drain. Pass NULL to disarm. The memory-pty does
+ * not own `userdata`. */
+typedef void (*yetty_yplatform_memory_pty_wake_fn)(void *userdata);
+void yetty_yplatform_memory_pty_set_wake(struct yetty_platform_pty *endpoint,
+                                         yetty_yplatform_memory_pty_wake_fn wake,
+                                         void *userdata);
+
 /* Host-side TCP port that the TinyEMU slirp hostfwd maps to the in-guest
  * telnetd (tcp/23). Keep in sync with assets/yemu/temu/yetty-temu-extended.cfg's
  * `hostfwd: ["tcp:2323-:23"]`. Used by --temu in pty-factory/default.c. */
