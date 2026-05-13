@@ -48,27 +48,52 @@ jobs:
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "tag=lib-libcss-$V" >> "$GITHUB_OUTPUT"
 
-  build-linux-cross:
+  # Linux native + linux-riscv64 cross. Apt installs the NetSurf
+  # buildsystem deps (gcc, make, perl, pkg-config, flex/bison/gperf).
+  # linux-aarch64 runs natively on GitHub's ARM64 runner; linux-riscv64 is
+  # the only linux target that cross-compiles (no native riscv runner).
+  # android-* / webasm hit the _build.sh UNSUPPORTED placeholder (NetSurf's
+  # GNU-make doesn't honour CC/HOST cleanly for those triples); we still
+  # publish a tarball so the consumer-side fetch resolves and falls back
+  # to the lexbor-CSS path.
+  build-linux:
     needs: resolve
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - linux-x86_64
-          - linux-aarch64
-          - linux-riscv64
-          - android-arm64-v8a
-          - android-x86_64
-          - webasm
+        include:
+          - target: linux-x86_64
+            runner: ubuntu-latest
+            cross_pkgs: ""
+          - target: linux-aarch64
+            runner: ubuntu-24.04-arm
+            cross_pkgs: ""
+          - target: linux-riscv64
+            runner: ubuntu-latest
+            cross_pkgs: "gcc-riscv64-linux-gnu g++-riscv64-linux-gnu"
+          - target: android-arm64-v8a
+            runner: ubuntu-latest
+            cross_pkgs: ""
+          - target: android-x86_64
+            runner: ubuntu-latest
+            cross_pkgs: ""
+          - target: webasm
+            runner: ubuntu-latest
+            cross_pkgs: ""
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@main
-        with:
-          extra-conf: |
-            experimental-features = nix-command flakes
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential perl pkg-config \
+            flex bison gperf \
+            curl ca-certificates \
+            ${{ matrix.cross_pkgs }}
       - run: mkdir -p out
-      - run: |
+      - name: Build libcss for ${{ matrix.target }}
+        run: |
           TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
           ./build-tools/3rdparty/libcss/build.sh
@@ -90,12 +115,11 @@ jobs:
           - tvos-arm64
     steps:
       - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@main
-        with:
-          extra-conf: |
-            experimental-features = nix-command flakes
+      - name: Install build dependencies
+        run: brew install autoconf automake libtool pkg-config flex bison gperf
       - run: mkdir -p out
-      - run: |
+      - name: Build libcss for ${{ matrix.target }}
+        run: |
           TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
           ./build-tools/3rdparty/libcss/build.sh
@@ -117,12 +141,11 @@ jobs:
           - tvos-x86_64
     steps:
       - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@main
-        with:
-          extra-conf: |
-            experimental-features = nix-command flakes
+      - name: Install build dependencies
+        run: brew install autoconf automake libtool pkg-config flex bison gperf
       - run: mkdir -p out
-      - run: |
+      - name: Build libcss for ${{ matrix.target }}
+        run: |
           TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
           ./build-tools/3rdparty/libcss/build.sh
