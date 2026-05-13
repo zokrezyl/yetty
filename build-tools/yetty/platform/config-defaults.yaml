@@ -315,6 +315,68 @@ workspace:
             color: "#101820"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Style — shared color palette for yetty's own chrome (yui) and for any
+# client app rendering through ygui. Each value is a hex string accepting
+# #RGB, #RGBA, #RRGGBB or #RRGGBBAA. Alpha defaults to FF when omitted.
+#
+# The defaults below are the yetty brand palette (see logo). Every entry
+# is optional — missing keys fall back to the C-side default. Client ygui
+# apps pick up these values by calling yetty_ygui_theme_apply_config()
+# after creating their engine; yetty's own chrome reads them at startup.
+# ─────────────────────────────────────────────────────────────────────────────
+style:
+  # ygui — widget library used by client apps (dialogs, panels, menus).
+  ygui:
+    # Background ladder, darkest → lightest.
+    bg-primary:    "#0B1014"  # canvas / root surface
+    bg-secondary:  "#141A1F"  # subdued lifted surface
+    bg-surface:    "#1E262C"  # cards, popovers, rows
+    bg-hover:      "#2A3438"  # hover row / list item
+    bg-header:     "#364A47"  # section headers
+    bg-dropdown:   "#141A1F"  # menu / dropdown body
+
+    # Borders & separators.
+    border:        "#364A47"
+    border-light:  "#505545"
+    border-muted:  "#626155"
+
+    # Text.
+    text-primary:  "#E0E5E4"  # off-white, NOT pure FFFFFF
+    text-muted:    "#9FA7A8"
+
+    # Brand accent.
+    accent:        "#6BA892"  # primary mint
+    selection-bg:  "#5A8979"  # deeper mint for selection
+
+    # Scrollbar thumb.
+    thumb-normal:  "#364A47"
+    thumb-hover:   "#626155"
+
+    # Overlays. Hex format here allows explicit alpha.
+    overlay-modal: "#00000080"  # 50 % black behind modal popups
+    shadow:        "#00000040"  # 25 % black drop shadow
+    tooltip-bg:    "#141A1FF0"  # near-opaque BG_LIFTED
+
+  # yui — yetty's own window chrome (tab strip, tabs, window buttons,
+  # left "v" pull-down menu, "+" new-tab pill).
+  yui:
+    strip:         "#141A1F"  # tab strip background
+    tab-active:    "#0B1014"  # selected tab — merges with workspace bg
+    tab-inactive:  "#1E262C"  # unselected tabs sit one step above strip
+
+    pill:          "#364A47"  # background of "v" and "+" pills
+    glyph:         "#E0E5E4"  # off-white glyphs (min/max button strokes)
+    accent:        "#6BA892"  # chevron + plus marks
+
+    # Window control buttons.
+    winbtn-bg:     "#141A1F"  # min/max background (matches strip)
+    close-bg:      "#591A1C"  # close keeps a red tint (destructive action)
+
+    # "v" popup menu.
+    popup-body:    "#141A1F"
+    popup-row:     "#1E262C"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Debug Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 debug:

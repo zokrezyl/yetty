@@ -4,6 +4,9 @@
 
 #include "ygui_internal.h"
 
+#include <yetty/yconfig/config.h>
+#include <yetty/ycore/util.h>
+
 /*=============================================================================
  * Theme Lifecycle
  *===========================================================================*/
@@ -50,25 +53,47 @@ struct yetty_ygui_theme *yetty_ygui_theme_create_default(void)
     theme->elevation_alpha = 0.55f;
     theme->enable_gradient = 1;
 
-    /* Colors (ABGR format) */
-    theme->bg_primary = 0xFF1A1A2E;
-    theme->bg_secondary = 0xFF222233;
-    theme->bg_surface = 0xFF2A2A3E;
-    theme->bg_hover = 0xFF333344;
-    theme->bg_header = 0xFF3A3A4E;
-    theme->bg_dropdown = 0xFF1E1E2E;
-    theme->border = 0xFF444455;
-    theme->border_light = 0xFF555566;
-    theme->border_muted = 0xFF666677;
-    theme->text_primary = 0xFFFFFFFF;
-    theme->text_muted = 0xFFAAAAAA;
-    theme->accent = 0xFF4488FF;
-    theme->thumb_normal = 0xFF444455;
-    theme->thumb_hover = 0xFF555566;
+    /* Colors (ABGR format — byte order R, G, B, A; literals are written
+     * 0xAABBGGRR). Yetty brand palette, see ~/.claude/yetty-new/rules/
+     * 08-branding.md. Each role is the brand equivalent of the previous
+     * brown ladder, preserving the visual ordering (darker bg → lighter
+     * surface, darker border → lighter muted border).
+     *
+     *   bg_primary    BRAND_BG          #0B1014
+     *   bg_secondary  BRAND_BG_LIFTED   #141A1F
+     *   bg_surface    BRAND_BG_ROW     #1E262C
+     *   bg_hover      tween             #2A3438
+     *   bg_header     BRAND_BORDER      #364A47
+     *   bg_dropdown   BRAND_BG_LIFTED   #141A1F
+     *   border        BRAND_BORDER      #364A47
+     *   border_light  tween             #455550
+     *   border_muted  BRAND_TEXT_MUTED  #556162
+     *   text_primary  BRAND_TEXT_PRIMARY #E0E5E4
+     *   text_muted    BRAND_TEXT_SECONDARY #9FA7A8
+     *   accent        BRAND_ACCENT      #6BA892
+     *   thumb_normal  BRAND_BORDER      #364A47
+     *   thumb_hover   BRAND_TEXT_MUTED  #556162
+     *   selection_bg  BRAND_ACCENT_DEEP #5A8979
+     *   tooltip_bg    BRAND_BG_LIFTED @ alpha 0xF0
+     */
+    theme->bg_primary = 0xFF14100B;
+    theme->bg_secondary = 0xFF1F1A14;
+    theme->bg_surface = 0xFF2C261E;
+    theme->bg_hover = 0xFF38342A;
+    theme->bg_header = 0xFF474A36;
+    theme->bg_dropdown = 0xFF1F1A14;
+    theme->border = 0xFF474A36;
+    theme->border_light = 0xFF505545;
+    theme->border_muted = 0xFF626155;
+    theme->text_primary = 0xFFE4E5E0;
+    theme->text_muted = 0xFFA8A79F;
+    theme->accent = 0xFF92A86B;
+    theme->thumb_normal = 0xFF474A36;
+    theme->thumb_hover = 0xFF626155;
     theme->overlay_modal = 0x80000000;
     theme->shadow = 0x40000000;
-    theme->tooltip_bg = 0xF0222233;
-    theme->selection_bg = 0xFF2244AA;
+    theme->tooltip_bg = 0xF01F1A14;
+    theme->selection_bg = 0xFF79895A;
 
     return theme;
 }
@@ -248,4 +273,63 @@ void yetty_ygui_theme_set_gradient(struct yetty_ygui_theme *theme, int enable)
         return;
     }
     theme->enable_gradient = enable ? 1 : 0;
+}
+
+/*=============================================================================
+ * Config-driven overlay
+ *===========================================================================*/
+
+/* Read one hex color string from `config` at `path`. On parse success, write
+ * the decoded ABGR u32 into `*dst`. Missing keys and malformed strings leave
+ * `*dst` untouched so the caller's default survives. */
+static void apply_color(struct yetty_ygui_theme *theme, uint32_t *dst,
+                        const struct yetty_yconfig_config *config, const char *path)
+{
+    (void)theme;
+    const char *s = config->ops->get_string(config, path, NULL);
+    if (!s || !*s) {
+        return;
+    }
+    uint32_t v = 0;
+    if (yetty_ycore_parse_hex_color(s, &v)) {
+        *dst = v;
+    }
+}
+
+void yetty_ygui_theme_apply_config(struct yetty_ygui_theme *theme,
+                                   const struct yetty_yconfig_config *config)
+{
+    if (!theme || !config || !config->ops || !config->ops->get_string) {
+        return;
+    }
+
+    /* Background ladder. */
+    apply_color(theme, &theme->bg_primary,   config, "style/ygui/bg-primary");
+    apply_color(theme, &theme->bg_secondary, config, "style/ygui/bg-secondary");
+    apply_color(theme, &theme->bg_surface,   config, "style/ygui/bg-surface");
+    apply_color(theme, &theme->bg_hover,     config, "style/ygui/bg-hover");
+    apply_color(theme, &theme->bg_header,    config, "style/ygui/bg-header");
+    apply_color(theme, &theme->bg_dropdown,  config, "style/ygui/bg-dropdown");
+
+    /* Borders. */
+    apply_color(theme, &theme->border,       config, "style/ygui/border");
+    apply_color(theme, &theme->border_light, config, "style/ygui/border-light");
+    apply_color(theme, &theme->border_muted, config, "style/ygui/border-muted");
+
+    /* Text. */
+    apply_color(theme, &theme->text_primary, config, "style/ygui/text-primary");
+    apply_color(theme, &theme->text_muted,   config, "style/ygui/text-muted");
+
+    /* Accent + selection. */
+    apply_color(theme, &theme->accent,       config, "style/ygui/accent");
+    apply_color(theme, &theme->selection_bg, config, "style/ygui/selection-bg");
+
+    /* Scrollbar thumb. */
+    apply_color(theme, &theme->thumb_normal, config, "style/ygui/thumb-normal");
+    apply_color(theme, &theme->thumb_hover,  config, "style/ygui/thumb-hover");
+
+    /* Overlays. */
+    apply_color(theme, &theme->overlay_modal, config, "style/ygui/overlay-modal");
+    apply_color(theme, &theme->shadow,        config, "style/ygui/shadow");
+    apply_color(theme, &theme->tooltip_bg,    config, "style/ygui/tooltip-bg");
 }

@@ -55,7 +55,11 @@ YETTY_YRESULT_DECLARE(yetty_yui_tabbar_ptr, struct yetty_yui_tabbar *);
  * scales with framebuffer pixels so it stays visually proportional. */
 #define YETTY_YUI_TABBAR_HEIGHT 36.0f
 
-struct yetty_yui_tabbar_ptr_result yetty_yui_tabbar_create(void);
+/* Create the tabbar. `config` is borrowed and outlives the tabbar; the
+ * tabbar reads style/yui from it during construction to overlay brand
+ * defaults. NULL is allowed (defaults stand). */
+struct yetty_yui_tabbar_ptr_result yetty_yui_tabbar_create(
+    const struct yetty_yconfig_config *config);
 
 struct yetty_ycore_void_result yetty_yui_tabbar_destroy(struct yetty_yui_tabbar *bar);
 
@@ -74,6 +78,23 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
 struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_from_config(
     struct yetty_yui_tabbar *bar, const struct yetty_yconfig_config *config,
     const struct yetty_context *yetty_ctx);
+
+/* Kinds the "v" dropdown menu can spawn. Each kind toggles a small set
+ * of config keys (ssh/enabled, telnet/enabled, vnc/client) so the
+ * existing pty-factory + workspace dispatch paths pick the right
+ * backend. The toggles are sticky — subsequent Ctrl+Shift+T uses the
+ * last selected kind. */
+enum yetty_yui_tabbar_kind {
+    YETTY_YUI_TAB_SHELL = 0, /* native fork-pty */
+    YETTY_YUI_TAB_SSH,       /* libssh2-backed remote shell */
+    YETTY_YUI_TAB_TELNET,    /* telnet TCP client */
+    YETTY_YUI_TAB_YVNC,      /* yvnc terminal-side VNC client */
+};
+
+/* Spawn a new tab of the requested kind. Uses the config and yetty_ctx
+ * cached by the first add_workspace_from_config call. */
+struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_of_kind(
+    struct yetty_yui_tabbar *bar, enum yetty_yui_tabbar_kind kind);
 
 /* Accessors — used by yetty.c for diagnostics and screenshot routing. */
 struct yetty_yui_workspace *yetty_yui_tabbar_active_workspace(const struct yetty_yui_tabbar *bar);

@@ -20,6 +20,10 @@ typedef struct uv_loop_s uv_loop_t;
  * we don't pull in the full ypaint-core header from this public surface). */
 struct yetty_ypaint_core_buffer;
 
+/* Forward declare config — kept opaque so the public ygui surface doesn't
+ * require pulling yconfig headers into every client app. */
+struct yetty_yconfig_config;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -931,6 +935,19 @@ void yetty_ygui_theme_set_selection_bg(struct yetty_ygui_theme *theme, uint32_t 
 void yetty_ygui_theme_set_elevation(struct yetty_ygui_theme *theme, float low, float medium,
                                     float high, float alpha);
 void yetty_ygui_theme_set_gradient(struct yetty_ygui_theme *theme, int enable);
+
+/* Overlay the style/ygui/... block from a loaded yetty config on top of
+ * the theme. Missing keys are skipped (the theme keeps its current value
+ * for those fields). Hex strings are parsed via yetty_ycore_parse_hex_color
+ * — see config.yaml's style section for the canonical key list.
+ *
+ * Client apps that want config-driven theming call this after building
+ * their default theme:
+ *   theme = yetty_ygui_theme_create_default();
+ *   yetty_ygui_theme_apply_config(theme, config);
+ *   yetty_ygui_engine_set_theme(engine, theme); */
+void yetty_ygui_theme_apply_config(struct yetty_ygui_theme *theme,
+                                   const struct yetty_yconfig_config *config);
 
 /*=============================================================================
  * Testing API

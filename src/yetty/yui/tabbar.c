@@ -9,6 +9,8 @@
  */
 
 #include <yetty/yui/workspace.h>
+#include <yetty/yconfig/config.h>
+#include <yetty/ycore/util.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yetty/yetty.h>
@@ -85,6 +87,31 @@ struct yetty_yui_tabbar {
     int resize_dir_y;
     float resize_last_x;
     float resize_last_y;
+
+    /* "v" dropdown menu state. The button itself lives in the strip
+     * left of the first tab; clicking it toggles `menu_open`. While
+     * open, the popup body is drawn below the strip and intercepts
+     * mouse events so the underlying workspace doesn't see them. */
+    int menu_open;
+
+    /* Resolved style colors in straight float RGB. Defaults come from
+     * the yetty brand palette and are overlaid by config's style/yui
+     * block when add_workspace_from_config first runs (or
+     * yetty_yui_tabbar_apply_style is called directly). Keeping the
+     * resolved values on the struct keeps the render hot path free of
+     * config lookups. */
+    struct {
+        float strip_r, strip_g, strip_b;
+        float active_r, active_g, active_b;
+        float inactive_r, inactive_g, inactive_b;
+        float pill_r, pill_g, pill_b;
+        float glyph_r, glyph_g, glyph_b;
+        float accent_r, accent_g, accent_b;
+        float winbtn_r, winbtn_g, winbtn_b;
+        float close_r, close_g, close_b;
+        float popup_body_r, popup_body_g, popup_body_b;
+        float popup_row_r, popup_row_g, popup_row_b;
+    } style;
 };
 
 /*---------------------------------------------------------------------------
@@ -108,12 +135,62 @@ static struct yetty_ycore_void_result tabbar_grow(struct yetty_yui_tabbar *bar)
  * Create / destroy
  *--------------------------------------------------------------------------*/
 
-struct yetty_yui_tabbar_ptr_result yetty_yui_tabbar_create(void)
+/* Resolve one RGB triplet: brand default from the literal arguments,
+ * optionally overridden by a hex-string at `path` in config. Missing
+ * or malformed values keep the default. */
+static void style_resolve(const struct yetty_yconfig_config *config, const char *path,
+                          float def_r, float def_g, float def_b,
+                          float *r, float *g, float *b)
+{
+    *r = def_r; *g = def_g; *b = def_b;
+    if (!config || !config->ops || !config->ops->get_string) {
+        return;
+    }
+    const char *s = config->ops->get_string(config, path, NULL);
+    if (!s || !*s) {
+        return;
+    }
+    uint32_t v = 0;
+    if (!yetty_ycore_parse_hex_color(s, &v)) {
+        return;
+    }
+    *r = (float)(v & 0xFFu) / 255.0f;
+    *g = (float)((v >> 8) & 0xFFu) / 255.0f;
+    *b = (float)((v >> 16) & 0xFFu) / 255.0f;
+}
+
+struct yetty_yui_tabbar_ptr_result yetty_yui_tabbar_create(
+    const struct yetty_yconfig_config *config)
 {
     struct yetty_yui_tabbar *bar = calloc(1, sizeof(struct yetty_yui_tabbar));
     if (!bar) {
         return YETTY_ERR(yetty_yui_tabbar_ptr, "tabbar_create: allocation failed");
     }
+
+    /* Brand-palette defaults — see ~/.claude/yetty-new/rules/08-branding.md
+     * for the role names. config (when non-NULL) overlays these via the
+     * style/yui block; see config-defaults.yaml for the key list. */
+    style_resolve(config, "style/yui/strip",        0.078f, 0.102f, 0.122f,
+                  &bar->style.strip_r,    &bar->style.strip_g,    &bar->style.strip_b);
+    style_resolve(config, "style/yui/tab-active",   0.043f, 0.063f, 0.078f,
+                  &bar->style.active_r,   &bar->style.active_g,   &bar->style.active_b);
+    style_resolve(config, "style/yui/tab-inactive", 0.118f, 0.149f, 0.173f,
+                  &bar->style.inactive_r, &bar->style.inactive_g, &bar->style.inactive_b);
+    style_resolve(config, "style/yui/pill",         0.212f, 0.290f, 0.278f,
+                  &bar->style.pill_r,     &bar->style.pill_g,     &bar->style.pill_b);
+    style_resolve(config, "style/yui/glyph",        0.878f, 0.898f, 0.894f,
+                  &bar->style.glyph_r,    &bar->style.glyph_g,    &bar->style.glyph_b);
+    style_resolve(config, "style/yui/accent",       0.420f, 0.659f, 0.573f,
+                  &bar->style.accent_r,   &bar->style.accent_g,   &bar->style.accent_b);
+    style_resolve(config, "style/yui/winbtn-bg",    0.078f, 0.102f, 0.122f,
+                  &bar->style.winbtn_r,   &bar->style.winbtn_g,   &bar->style.winbtn_b);
+    style_resolve(config, "style/yui/close-bg",     0.35f,  0.10f,  0.11f,
+                  &bar->style.close_r,    &bar->style.close_g,    &bar->style.close_b);
+    style_resolve(config, "style/yui/popup-body",   0.078f, 0.102f, 0.122f,
+                  &bar->style.popup_body_r, &bar->style.popup_body_g, &bar->style.popup_body_b);
+    style_resolve(config, "style/yui/popup-row",    0.118f, 0.149f, 0.173f,
+                  &bar->style.popup_row_r,  &bar->style.popup_row_g,  &bar->style.popup_row_b);
+
     return YETTY_OK(yetty_yui_tabbar_ptr, bar);
 }
 
@@ -170,8 +247,24 @@ struct yetty_ycore_void_result yetty_yui_tabbar_destroy(struct yetty_yui_tabbar 
 #define TABBAR_TAB_OVERLAP      0.0f    /* gap between adjacent tab cells */
 #define TABBAR_TAB_RADIUS       12.0f   /* top-corner radius for tab cells */
 #define TABBAR_TOP_INSET        4.0f    /* strip padding above each tab */
-#define TABBAR_NEWTAB_AREA      40.0f   /* right-edge new-tab "+" button */
+#define TABBAR_NEWTAB_AREA      40.0f   /* footprint reserved for the new-tab "+" pill */
 #define TABBAR_PLUS_THICKNESS   2.0f    /* arm thickness of the + glyph */
+
+/* Left-edge "v" dropdown button — mirrors Chrome's hamburger / customize
+ * menu. Lives between the window's left edge and the first tab. Same
+ * pill footprint as the "+" button so the two read as siblings. */
+#define TABBAR_MENU_AREA        40.0f   /* width reserved for the "v" pill on the left */
+#define TABBAR_CHEVRON_LEN      10.0f   /* total span of the chevron arms */
+#define TABBAR_CHEVRON_STROKE   2.0f    /* arm thickness of the chevron */
+
+/* Popup menu that drops down from the "v" button. Pure rect art — no
+ * text rendering at yui level today, so each entry is a colored bar with
+ * a distinguishing accent stripe. The semantic meaning of each row is
+ * encoded by index → action (see s_menu_actions in render/event code). */
+#define TABBAR_MENU_POPUP_WIDTH 200.0f
+#define TABBAR_MENU_POPUP_ITEM_H 32.0f
+#define TABBAR_MENU_POPUP_PAD    4.0f
+#define TABBAR_MENU_ITEM_COUNT   4 /* shell, telnet-pty, ssh-pty, yvnc */
 
 /* Window-control buttons (minimize, maximize-toggle, close) live at the
  * far right of the strip. Each button has the same square footprint; the
@@ -189,9 +282,12 @@ static float tab_width(const struct yetty_yui_tabbar *bar)
     if (bar->count == 0 || bar->width <= 0) {
         return 0;
     }
-    /* Tabs share the strip with the new-tab "+" button and the three
-     * window-control buttons; reserve both regions on the right. */
-    float usable = bar->width - TABBAR_NEWTAB_AREA - TABBAR_WINBTN_AREA;
+    /* Tabs share the strip with: the left "v" menu pill, the new-tab
+     * "+" pill that sits right after the last tab, and the three
+     * window-control buttons on the far right. Reserve all three so
+     * that even with many tabs the "+" still has room next to the last
+     * one without overlapping the close button. */
+    float usable = bar->width - TABBAR_MENU_AREA - TABBAR_NEWTAB_AREA - TABBAR_WINBTN_AREA;
     if (usable <= 0) {
         usable = bar->width;
     }
@@ -231,24 +327,27 @@ static void emit_window_buttons(const struct yetty_yui_tabbar *bar, float strip,
     float max_x = right - 2.0f * btn_w;
     float close_x = right - 1.0f * btn_w;
 
-    /* Background fills are flush with the strip so the buttons read as
-     * "part of the bar" rather than floating pills. Close is tinted red
-     * subtly enough that hover/click states can layer brighter red on top
-     * without losing legibility. */
+    /* Background fills + close-button tint come from the resolved style
+     * (defaults match BRAND_BG_LIFTED for min/max, dark red for close). */
     push_rect(rects, n,
               (struct yetty_yui_tabbar_rect){.x = min_x, .y = 0, .w = btn_w, .h = btn_h,
-                                             .r = 0.18f, .g = 0.19f, .b = 0.20f, .a = 1.0f});
+                                             .r = bar->style.winbtn_r,
+                                             .g = bar->style.winbtn_g,
+                                             .b = bar->style.winbtn_b, .a = 1.0f});
     push_rect(rects, n,
               (struct yetty_yui_tabbar_rect){.x = max_x, .y = 0, .w = btn_w, .h = btn_h,
-                                             .r = 0.18f, .g = 0.19f, .b = 0.20f, .a = 1.0f});
+                                             .r = bar->style.winbtn_r,
+                                             .g = bar->style.winbtn_g,
+                                             .b = bar->style.winbtn_b, .a = 1.0f});
     push_rect(rects, n,
               (struct yetty_yui_tabbar_rect){.x = close_x, .y = 0, .w = btn_w, .h = btn_h,
-                                             .r = 0.35f, .g = 0.10f, .b = 0.11f, .a = 1.0f});
+                                             .r = bar->style.close_r,
+                                             .g = bar->style.close_g,
+                                             .b = bar->style.close_b, .a = 1.0f});
 
-    /* Glyphs. All in a near-white so they pop against the dark/red fill.
-     * Geometry constants are normalized to TABBAR_WINBTN_GLYPH_PX which is
-     * sized to read cleanly at the strip's pixel height. */
-    const float FG_R = 0.92f, FG_G = 0.93f, FG_B = 0.95f;
+    /* Glyphs use the resolved style glyph color (default BRAND_TEXT_PRIMARY:
+     * off-white with a cool tint, matching the wordmark's "ett" letters). */
+    const float FG_R = bar->style.glyph_r, FG_G = bar->style.glyph_g, FG_B = bar->style.glyph_b;
     const float gpx = TABBAR_WINBTN_GLYPH_PX;
     const float stroke = TABBAR_WINBTN_STROKE;
 
@@ -379,9 +478,12 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
 
     /* Worst-case rect count:
      *   1 strip bg + N tabs + 3 plus-button rects (pill + 2 arms)
-     *   + 3 window-button bgs + 1 (min) + 4 (max outline) + 2 (close X) = 13
-     * Total: 14 + N. Stack-allocate up to 64, heap above. */
-    size_t rect_count = 14 + bar->count;
+     *   + 3 "v" button rects (pill + 2 chevron arms)
+     *   + 3 window-button bgs + 1 (min) + 4 (max outline) + 2 (close X) = 17
+     *   + optional popup body + outline + per-item bg + accent stripe
+     *     (= 2 + 2*ITEM_COUNT) when menu_open.
+     * Total upper bound: 17 + N + 2 + 2*ITEM_COUNT. Stack up to 64. */
+    size_t rect_count = 17 + bar->count + 2 + 2 * TABBAR_MENU_ITEM_COUNT;
     struct yetty_yui_tabbar_rect stack_rects[64];
     struct yetty_yui_tabbar_rect *rects = stack_rects;
     struct yetty_yui_tabbar_rect *heap_rects = NULL;
@@ -394,16 +496,16 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
     }
     size_t n = 0;
 
-    /* Dark-mode palette tuned to read as a single coherent UI element:
-     *   strip    — medium dark, sits between the (darker) terminal content
-     *              below and the (slightly lighter) inactive tabs above it.
-     *   active   — matches the terminal background, so the active tab
-     *              visually "merges" into the content area below.
-     *   inactive — a step LIGHTER than the strip so unselected tabs read
-     *              as raised pieces against the bar, with clear contrast. */
-    const float STRIP_R = 0.18f, STRIP_G = 0.19f, STRIP_B = 0.20f;
-    const float ACTIVE_R = 0.04f, ACTIVE_G = 0.04f, ACTIVE_B = 0.05f;
-    const float INACTIVE_R = 0.30f, INACTIVE_G = 0.31f, INACTIVE_B = 0.33f;
+    /* Resolved palette — defaults set in tabbar_create, optionally
+     * overlaid by the style/yui block from config. See
+     * rules/08-branding.md for role names and ABGR encoding details. */
+    const float STRIP_R = bar->style.strip_r, STRIP_G = bar->style.strip_g, STRIP_B = bar->style.strip_b;
+    const float ACTIVE_R = bar->style.active_r, ACTIVE_G = bar->style.active_g, ACTIVE_B = bar->style.active_b;
+    const float INACTIVE_R = bar->style.inactive_r, INACTIVE_G = bar->style.inactive_g, INACTIVE_B = bar->style.inactive_b;
+    const float ACCENT_R = bar->style.accent_r, ACCENT_G = bar->style.accent_g, ACCENT_B = bar->style.accent_b;
+    const float GLYPH_R = bar->style.glyph_r, GLYPH_G = bar->style.glyph_g, GLYPH_B = bar->style.glyph_b;
+    const float PILL_R = bar->style.pill_r, PILL_G = bar->style.pill_g, PILL_B = bar->style.pill_b;
+    (void)GLYPH_R; (void)GLYPH_G; (void)GLYPH_B; /* used by emit_window_buttons via bar */
 
     /* 1. Strip background — sharp rect, no radius (full-width band). */
     push_rect(rects, &n,
@@ -422,7 +524,55 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
     if (r_corner > tab_h * 0.5f) r_corner = tab_h * 0.5f;
     if (r_corner > tw * 0.5f)    r_corner = tw * 0.5f;
 
-    float x = 0.0f;
+    /* 1b. "v" menu pill on the left — same footprint as the "+" pill so
+     * the two read as siblings. Chevron glyph is two short rotated rects
+     * forming a downward V, drawn in the same instanced pass. */
+    {
+        float btn = strip - top_inset - 4.0f;
+        if (btn < 16.0f) btn = 16.0f;
+        if (btn > 22.0f) btn = 22.0f;
+        float bx = (TABBAR_MENU_AREA - btn) * 0.5f;
+        float by = top_inset + (tab_h - btn) * 0.5f;
+        float radius = btn * 0.5f;
+
+        push_rect(rects, &n,
+                  (struct yetty_yui_tabbar_rect){
+                      .x = bx, .y = by, .w = btn, .h = btn,
+                      .r = PILL_R, .g = PILL_G, .b = PILL_B, .a = 1.0f,
+                      .radius_tl = radius, .radius_tr = radius,
+                      .radius_br = radius, .radius_bl = radius,
+                  });
+
+        /* Chevron: two strokes meeting at the bottom-center of the
+         * glyph box, each rotated 45°/-45° around its own center. The
+         * chevron itself is the brand mint — it's the user-action
+         * surface, so it picks up brand accent rather than off-white. */
+        float arm_len = TABBAR_CHEVRON_LEN;
+        float arm_th = TABBAR_CHEVRON_STROKE;
+        float cx = bx + btn * 0.5f;
+        float cy = by + btn * 0.5f;
+        /* Pre-translate so each rotated arm's bottom-end lands at (cx, cy+offset). */
+        float off_x = arm_len * 0.25f; /* horizontal offset of each arm's center */
+        float off_y = 0.0f;
+        push_rect(rects, &n,
+                  (struct yetty_yui_tabbar_rect){
+                      .x = cx - off_x - arm_len * 0.5f,
+                      .y = cy + off_y - arm_th * 0.5f,
+                      .w = arm_len, .h = arm_th,
+                      .r = ACCENT_R, .g = ACCENT_G, .b = ACCENT_B, .a = 1.0f,
+                      .rotation = 0.78539816f /* +45° */
+                  });
+        push_rect(rects, &n,
+                  (struct yetty_yui_tabbar_rect){
+                      .x = cx + off_x - arm_len * 0.5f,
+                      .y = cy + off_y - arm_th * 0.5f,
+                      .w = arm_len, .h = arm_th,
+                      .r = ACCENT_R, .g = ACCENT_G, .b = ACCENT_B, .a = 1.0f,
+                      .rotation = -0.78539816f /* -45° */
+                  });
+    }
+
+    float x = TABBAR_MENU_AREA;
     for (size_t i = 0; i < bar->count; i++) {
         int active = (i == bar->active);
         /* Bottom corners stay square so the tab "merges" into the content
@@ -446,25 +596,26 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
     }
 
     /* 2. New-tab "+" button — fully-rounded pill background + 2 thin
-     * sharp rects forming the plus glyph. All in the same draw call so
-     * there's no per-glyph shader/atlas cost. */
+     * sharp rects forming the plus glyph. Positioned immediately to the
+     * right of the last tab (Chrome-style), not at the far right edge. */
     {
         float btn = strip - top_inset - 4.0f;
         if (btn < 16.0f) btn = 16.0f;
         if (btn > 22.0f) btn = 22.0f;
-        float bx = bar->width - TABBAR_WINBTN_AREA - TABBAR_NEWTAB_AREA
-                   + (TABBAR_NEWTAB_AREA - btn) * 0.5f;
+        float bx = x + (TABBAR_NEWTAB_AREA - btn) * 0.5f;
         float by = top_inset + (tab_h - btn) * 0.5f;
         float radius = btn * 0.5f; /* perfect circle */
 
         push_rect(rects, &n,
                   (struct yetty_yui_tabbar_rect){
                       .x = bx, .y = by, .w = btn, .h = btn,
-                      .r = 0.26f, .g = 0.27f, .b = 0.29f, .a = 1.0f,
+                      .r = PILL_R, .g = PILL_G, .b = PILL_B, .a = 1.0f,
                       .radius_tl = radius, .radius_tr = radius,
                       .radius_br = radius, .radius_bl = radius,
                   });
 
+        /* Plus glyph in brand mint — paired with the chevron, signals
+         * "action" against the BRAND_BG-family pill. */
         float arm_len = btn * 0.5f;
         float arm_th = TABBAR_PLUS_THICKNESS;
         float cx = bx + btn * 0.5f;
@@ -473,18 +624,79 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
                   (struct yetty_yui_tabbar_rect){.x = cx - arm_len * 0.5f,
                                                  .y = cy - arm_th * 0.5f,
                                                  .w = arm_len, .h = arm_th,
-                                                 .r = 0.85f, .g = 0.86f, .b = 0.88f, .a = 1.0f});
+                                                 .r = ACCENT_R, .g = ACCENT_G, .b = ACCENT_B, .a = 1.0f});
         push_rect(rects, &n,
                   (struct yetty_yui_tabbar_rect){.x = cx - arm_th * 0.5f,
                                                  .y = cy - arm_len * 0.5f,
                                                  .w = arm_th, .h = arm_len,
-                                                 .r = 0.85f, .g = 0.86f, .b = 0.88f, .a = 1.0f});
+                                                 .r = ACCENT_R, .g = ACCENT_G, .b = ACCENT_B, .a = 1.0f});
     }
 
     /* 3. Window-control buttons (minimize / maximize / close) on the
      * far right. Visuals only at this stage — click → output_pipe wiring
      * comes in a follow-up. */
     emit_window_buttons(bar, strip, rects, &n);
+
+    /* 4. "v" dropdown popup. Drawn last so it lays over the strip and
+     * the workspace render below. Each item is a colored bar with a
+     * narrow accent stripe on the left — text rendering isn't available
+     * at yui level yet, so the accent color is the only identifier the
+     * user gets until that lands. Index → action mapping lives in the
+     * event handler. */
+    if (bar->menu_open) {
+        float px = 4.0f;
+        float py = strip + 2.0f;
+        float pw = TABBAR_MENU_POPUP_WIDTH;
+        float ph = TABBAR_MENU_POPUP_PAD * 2.0f
+                   + TABBAR_MENU_ITEM_COUNT * TABBAR_MENU_POPUP_ITEM_H;
+        /* Popup body — resolved style.popup_body (default BRAND_BG_LIFTED),
+         * rounded. Slight translucency (alpha 0.98) lets the strip's edge
+         * tone bleed through so the popup reads as "lifted from" the
+         * canvas rather than pasted on. */
+        push_rect(rects, &n,
+                  (struct yetty_yui_tabbar_rect){
+                      .x = px, .y = py, .w = pw, .h = ph,
+                      .r = bar->style.popup_body_r,
+                      .g = bar->style.popup_body_g,
+                      .b = bar->style.popup_body_b, .a = 0.98f,
+                      .radius_tl = 6.0f, .radius_tr = 6.0f,
+                      .radius_br = 6.0f, .radius_bl = 6.0f,
+                  });
+
+        /* All four rows share the same brand mint accent — they're
+         * peers in an action menu, so a single accent reads as
+         * consistent UI rather than four unrelated actions. Per-row
+         * differentiation will arrive with text labels once yui gets
+         * text rendering. */
+        for (int i = 0; i < TABBAR_MENU_ITEM_COUNT; i++) {
+            float row_y = py + TABBAR_MENU_POPUP_PAD + (float)i * TABBAR_MENU_POPUP_ITEM_H;
+            /* Row background — resolved style.popup_row (default BRAND_BG_ROW,
+             * one shade above the body). */
+            push_rect(rects, &n,
+                      (struct yetty_yui_tabbar_rect){
+                          .x = px + TABBAR_MENU_POPUP_PAD,
+                          .y = row_y,
+                          .w = pw - 2.0f * TABBAR_MENU_POPUP_PAD,
+                          .h = TABBAR_MENU_POPUP_ITEM_H - 2.0f,
+                          .r = bar->style.popup_row_r,
+                          .g = bar->style.popup_row_g,
+                          .b = bar->style.popup_row_b, .a = 1.0f,
+                          .radius_tl = 4.0f, .radius_tr = 4.0f,
+                          .radius_br = 4.0f, .radius_bl = 4.0f,
+                      });
+            /* Accent stripe — brand mint, left edge of row. */
+            push_rect(rects, &n,
+                      (struct yetty_yui_tabbar_rect){
+                          .x = px + TABBAR_MENU_POPUP_PAD + 4.0f,
+                          .y = row_y + 4.0f,
+                          .w = 4.0f,
+                          .h = TABBAR_MENU_POPUP_ITEM_H - 10.0f,
+                          .r = ACCENT_R, .g = ACCENT_G, .b = ACCENT_B, .a = 1.0f,
+                          .radius_tl = 2.0f, .radius_tr = 2.0f,
+                          .radius_br = 2.0f, .radius_bl = 2.0f,
+                      });
+        }
+    }
 
     /* Texture size for NDC mapping. Asking the inner WebGPU texture is
      * the only reliable source — render_target->viewport gets clobbered
@@ -642,6 +854,71 @@ struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_from_config(
      * makes the new tab look "stuck on the old one until I type". */
     tabbar_request_render(bar);
     return YETTY_OK_VOID();
+}
+
+/* Map a tabbar_kind onto the small set of config keys the existing PTY
+ * factory + workspace.c dispatch consult. Each kind sets its own flag
+ * and clears the others so the spawn is unambiguous.
+ *
+ *   SHELL  → clear ssh/telnet flags, clear vnc/client → forkpty default
+ *   SSH    → ssh/enabled=true, clear telnet, clear vnc/client
+ *   TELNET → telnet/enabled=true (+ host/port defaults), clear ssh, clear vnc/client
+ *   YVNC   → set vnc/client to localhost:5900 if currently empty,
+ *            clear ssh/telnet flags
+ *
+ * The config is shared with the rest of yetty by design — set_string is
+ * part of its public API and other subsystems mutate it too (e.g. shell
+ * command from -e flag). The const-cast on bar->config reflects that:
+ * the field is declared const for borrow-discipline, but the underlying
+ * object is mutable. */
+struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_of_kind(
+    struct yetty_yui_tabbar *bar, enum yetty_yui_tabbar_kind kind)
+{
+    if (!bar) {
+        return YETTY_ERR(yetty_ycore_void, "tabbar_add_of_kind: NULL bar");
+    }
+    if (!bar->config || !bar->yetty_ctx) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "tabbar_add_of_kind: config/ctx not cached yet");
+    }
+
+    struct yetty_yconfig_config *cfg = (struct yetty_yconfig_config *)bar->config;
+    const struct yetty_yconfig_config_ops *ops = cfg->ops;
+
+    /* Always clear the three exclusive flags up front. The kind branch
+     * below re-enables exactly one (or none, for SHELL). */
+    ops->set_string(cfg, YETTY_YCONFIG_KEY_SSH, "false");
+    ops->set_string(cfg, YETTY_YCONFIG_KEY_TELNET, "false");
+    ops->set_string(cfg, "vnc/client", "");
+
+    /* TODO: open a ygui dialog to collect host/port/credentials and
+     * apply them to the config before delegating to add_workspace_from_config.
+     * Today we only flip the kind flags; if the relevant config keys
+     * (ssh/host, telnet/host+port, vnc/client) are unset the spawn will
+     * fail loudly at PTY-create time. The dialog work is intentionally
+     * separate — see follow-up task. */
+    switch (kind) {
+    case YETTY_YUI_TAB_SHELL:
+        /* Forkpty default — no extra keys to set. */
+        break;
+    case YETTY_YUI_TAB_SSH:
+        ops->set_string(cfg, YETTY_YCONFIG_KEY_SSH, "true");
+        break;
+    case YETTY_YUI_TAB_TELNET:
+        ops->set_string(cfg, YETTY_YCONFIG_KEY_TELNET, "true");
+        break;
+    case YETTY_YUI_TAB_YVNC:
+        /* vnc/client must be set by the dialog before we get here.
+         * Leaving it empty falls through to a terminal view, which is
+         * confusing — better to surface the missing input. */
+        if (!ops->has(cfg, "vnc/client")) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "yvnc: vnc/client not set (dialog not yet wired)");
+        }
+        break;
+    }
+
+    return yetty_yui_tabbar_add_workspace_from_config(bar, cfg, bar->yetty_ctx);
 }
 
 static struct yetty_ycore_void_result tabbar_close_active(struct yetty_yui_tabbar *bar)
@@ -820,20 +1097,82 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
     float y;
     int in_strip = event_y(event, &y) && y < strip;
 
+    /* "v" popup intercept — once the menu is open it owns mouse input
+     * until clicked away. Click inside a row fires the corresponding
+     * action and closes; click anywhere else just closes. The check
+     * runs BEFORE the strip routing so a click on the "v" button while
+     * the menu is open closes instead of re-opening. */
+    if (bar->menu_open && event->type == YETTY_YCORE_MOUSE_DOWN) {
+        float px = 4.0f;
+        float py = strip + 2.0f;
+        float pw = TABBAR_MENU_POPUP_WIDTH;
+        float ph = TABBAR_MENU_POPUP_PAD * 2.0f
+                   + TABBAR_MENU_ITEM_COUNT * TABBAR_MENU_POPUP_ITEM_H;
+        float mx = event->mouse.x;
+        float my = event->mouse.y;
+        int inside = (mx >= px && mx <= px + pw && my >= py && my <= py + ph);
+        if (inside) {
+            int idx = (int)((my - py - TABBAR_MENU_POPUP_PAD) / TABBAR_MENU_POPUP_ITEM_H);
+            if (idx < 0) idx = 0;
+            if (idx >= TABBAR_MENU_ITEM_COUNT) idx = TABBAR_MENU_ITEM_COUNT - 1;
+            /* Display order matches the user-facing menu: shell first
+             * (most common), remote shells next, GUI VNC last. */
+            static const enum yetty_yui_tabbar_kind KINDS[TABBAR_MENU_ITEM_COUNT] = {
+                YETTY_YUI_TAB_SHELL,
+                YETTY_YUI_TAB_SSH,
+                YETTY_YUI_TAB_TELNET,
+                YETTY_YUI_TAB_YVNC,
+            };
+            static const char *const LABELS[TABBAR_MENU_ITEM_COUNT] = {
+                "shell", "ssh", "telnet", "yvnc"
+            };
+            struct yetty_ycore_void_result r =
+                yetty_yui_tabbar_add_workspace_of_kind(bar, KINDS[idx]);
+            if (YETTY_IS_ERR(r)) {
+                yerror("tabbar: menu '%s': %s", LABELS[idx], r.error.msg);
+                yetty_ycore_error_destroy(r.error);
+            } else {
+                ydebug("tabbar: menu '%s' → workspace %zu",
+                       LABELS[idx], bar->count);
+            }
+        }
+        bar->menu_open = 0;
+        tabbar_request_render(bar);
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+
     /* Strip-area MOUSE_DOWN — route by x to a button, a tab, or start a
-     * window drag if it landed in empty space. Right edge from far right
-     * going left:
-     *   [close | max | min | new-tab | ...tabs... | drag space ...] */
+     * window drag if it landed in empty space. Layout left → right:
+     *   [v-menu | ...tabs... | new-tab | drag space | min | max | close] */
     if (in_strip && event->type == YETTY_YCORE_MOUSE_DOWN && bar->count > 0) {
         float winbtn_left = bar->width - TABBAR_WINBTN_AREA;
-        float newtab_left = winbtn_left - TABBAR_NEWTAB_AREA;
+        /* '+' button hugs the right side of the last tab. */
+        float tw = tab_width(bar);
+        float step = tw + TABBAR_TAB_OVERLAP;
+        if (step <= 0) {
+            step = 1.0f;
+        }
+        float tabs_start = TABBAR_MENU_AREA;
+        float tabs_end = tabs_start + (float)bar->count * step;
+        float newtab_left = tabs_end;
+        float newtab_right = newtab_left + TABBAR_NEWTAB_AREA;
+        if (newtab_right > winbtn_left) {
+            newtab_right = winbtn_left;
+        }
         struct yetty_yplatform_window_manager *wm =
             bar->yetty_ctx ? bar->yetty_ctx->app_context.window_manager : NULL;
         ydebug("tabbar: strip MOUSE_DOWN at (%.1f, %.1f) bar=(%.0fx%.0f) winbtn_left=%.0f "
-               "newtab_left=%.0f wm=%p", event->mouse.x, event->mouse.y, bar->width, bar->height,
-               winbtn_left, newtab_left, (void *)wm);
+               "newtab=[%.0f..%.0f] wm=%p", event->mouse.x, event->mouse.y, bar->width,
+               bar->height, winbtn_left, newtab_left, newtab_right, (void *)wm);
 
-        if (event->mouse.x >= winbtn_left) {
+        if (event->mouse.x < TABBAR_MENU_AREA) {
+            /* "v" button — toggle the popup. Repeat clicks on the button
+             * while the popup is open are handled by the open-state branch
+             * above, which already closed the menu before we got here. */
+            bar->menu_open = !bar->menu_open;
+            ydebug("tabbar: v-menu toggled → %s", bar->menu_open ? "open" : "closed");
+            tabbar_request_render(bar);
+        } else if (event->mouse.x >= winbtn_left) {
             /* Slot order: minimize, maximize, close (left to right). */
             float slot = (event->mouse.x - winbtn_left) / TABBAR_WINBTN_WIDTH;
             ydebug("tabbar: window-button slot=%.2f wm=%p", slot, (void *)wm);
@@ -849,7 +1188,8 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
                     wm->ops->request_close(wm);
                 }
             }
-        } else if (event->mouse.x >= newtab_left && bar->config && bar->yetty_ctx) {
+        } else if (event->mouse.x >= newtab_left && event->mouse.x < newtab_right
+                   && bar->config && bar->yetty_ctx) {
             struct yetty_ycore_void_result r = yetty_yui_tabbar_add_workspace_from_config(
                 bar, bar->config, bar->yetty_ctx);
             if (YETTY_IS_ERR(r)) {
@@ -859,17 +1199,11 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
                 ydebug("tabbar: new-tab button → workspace %zu", bar->count);
             }
         } else {
-            /* Tabs occupy [0 .. count*step); past that and before
-             * newtab_left is the strip's empty space — grab handle for
-             * window drag. */
-            float tw = tab_width(bar);
-            float step = tw + TABBAR_TAB_OVERLAP;
-            if (step <= 0) {
-                step = 1.0f;
-            }
-            float tabs_end = (float)bar->count * step;
-            if (event->mouse.x < tabs_end) {
-                size_t idx = (size_t)(event->mouse.x / step);
+            /* Tabs occupy [TABBAR_MENU_AREA .. tabs_end). Past tabs_end +
+             * newtab footprint and before winbtn_left is empty space —
+             * grab handle for window drag. */
+            if (event->mouse.x >= tabs_start && event->mouse.x < tabs_end) {
+                size_t idx = (size_t)((event->mouse.x - tabs_start) / step);
                 if (idx >= bar->count) {
                     idx = bar->count - 1;
                 }
