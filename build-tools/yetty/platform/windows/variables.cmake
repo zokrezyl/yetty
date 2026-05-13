@@ -24,7 +24,6 @@ set(YETTY_ENABLE_FEATURE_DEMO      OFF CACHE BOOL "" FORCE)  # hardcodes shared/
 set(YETTY_ENABLE_TOOL_YDOC         OFF CACHE BOOL "" FORCE)  # poll.h, termios.h, unistd.h
 set(YETTY_ENABLE_TOOL_YSHEET       OFF CACHE BOOL "" FORCE)  # uses yrich-runner (POSIX TTY)
 set(YETTY_ENABLE_TOOL_YSLIDE       OFF CACHE BOOL "" FORCE)  # uses yrich-runner (POSIX TTY)
-set(YETTY_ENABLE_TOOL_YGREETER     OFF CACHE BOOL "" FORCE)  # sys/ioctl.h + libgen.h + realpath()
 set(YETTY_ENABLE_LIB_LIBMAGIC      OFF CACHE BOOL "" FORCE)  # autotools-only; no MSVC port
 set(YETTY_ENABLE_LIB_LIBCURL       OFF CACHE BOOL "" FORCE)  # no Windows consumer yet
 set(YETTY_ENABLE_FEATURE_YLEXBOR   OFF CACHE BOOL "" FORCE)  # GCC array initializers + POSIX <strings.h>

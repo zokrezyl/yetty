@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
 #include <sys/time.h>
 #include <time.h>
 
@@ -27,4 +28,21 @@ void yetty_yplatform_format_timestamp(char *buf, size_t bufsize)
     struct tm *tm = localtime(&tv.tv_sec);
     snprintf(buf, bufsize, "%02d:%02d:%02d.%03ld", tm->tm_hour, tm->tm_min, tm->tm_sec,
              tv.tv_usec / 1000);
+}
+
+int yetty_yplatform_term_get_size(int *cols, int *rows)
+{
+    /* Probe stdout first, then stdin — interactive shells usually have
+     * both, but a pipe on stdout (e.g. `yetty | tee`) shouldn't make us
+     * report (0, 0). */
+    struct winsize ws = {0};
+    int fds[] = { STDOUT_FILENO, STDIN_FILENO, STDERR_FILENO };
+    for (size_t i = 0; i < sizeof(fds) / sizeof(fds[0]); i++) {
+        if (ioctl(fds[i], TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0) {
+            if (cols) *cols = ws.ws_col;
+            if (rows) *rows = ws.ws_row;
+            return 0;
+        }
+    }
+    return -1;
 }
