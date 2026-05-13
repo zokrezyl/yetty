@@ -223,6 +223,7 @@ static void init_yetty(struct yetty_yplatform_app_state *state)
 
         paths.shaders_dir = shaders_dir;
         paths.fonts_dir = fonts_dir;
+        paths.config_dir = config_dir;
     }
     paths.runtime_dir = runtime_dir;
     paths.bin_dir = NULL;

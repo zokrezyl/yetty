@@ -474,6 +474,7 @@ int main(int argc, char **argv)
     paths.fonts_dir = "/data/fonts";
     paths.runtime_dir = "/tmp";
     paths.bin_dir = NULL;
+    paths.config_dir = "/config";
 
     /* Export platform paths as YETTY_* env vars so config files
      * (e.g. tinyemu .cfg) can reference them via $YETTY_DATA_DIR /
