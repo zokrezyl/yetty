@@ -1,0 +1,156 @@
+name: Build 3rdparty — yxml
+
+# yxml (Yorhel/yxml) — single-TU streaming XML parser, MIT-licensed.
+# Triggered on `lib-yxml-<sha>` tags. Version source of truth:
+# build-tools/3rdparty/yxml/version (a 40-char commit SHA — upstream
+# doesn't tag releases).
+#
+# Same matrix shape as build-3rdparty-tinyxml2.yml: per-target tarball,
+# nix-developed shells for cross-compile on linux, native cmake/clang for
+# darwin/ios/tvos, native MSVC for windows-x86_64.
+
+on:
+  push:
+    tags:
+      - 'lib-yxml-*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag:     ${{ steps.read.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          set -euo pipefail
+          V="$(tr -d '[:space:]' < build-tools/3rdparty/yxml/version)"
+          [ -n "$V" ] || { echo "version file is empty" >&2; exit 1; }
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            REF="${GITHUB_REF#refs/tags/}"
+            EXPECT="lib-yxml-$V"
+            if [ "$REF" != "$EXPECT" ]; then
+              echo "tag $REF does not match version file ($EXPECT)" >&2
+              exit 1
+            fi
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=lib-yxml-$V" >> "$GITHUB_OUTPUT"
+
+  build-linux-cross:
+    needs: resolve
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - linux-x86_64
+          - linux-aarch64
+          - linux-riscv64
+          - android-arm64-v8a
+          - android-x86_64
+          - webasm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="${{ matrix.target }}" \
+          OUTPUT_DIR="$PWD/out" \
+          ./build-tools/3rdparty/yxml/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/yxml-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true
+
+  build-darwin-arm64:
+    needs: resolve
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - macos-arm64
+          - ios-arm64
+          - tvos-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="${{ matrix.target }}" \
+          OUTPUT_DIR="$PWD/out" \
+          ./build-tools/3rdparty/yxml/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/yxml-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true
+
+  build-darwin-x86_64:
+    needs: resolve
+    runs-on: macos-15-intel
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - macos-x86_64
+          - ios-x86_64
+          - tvos-x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="${{ matrix.target }}" \
+          OUTPUT_DIR="$PWD/out" \
+          ./build-tools/3rdparty/yxml/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/yxml-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true
+
+  # Windows: native MSVC under vcvarsall x64.
+  build-windows:
+    needs: resolve
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - windows-x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build yxml for ${{ matrix.target }}
+        shell: cmd
+        env:
+          TARGET_PLATFORM: ${{ matrix.target }}
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          if errorlevel 1 exit /b 1
+          mkdir out 2>nul
+
+          bash -c "OUTPUT_DIR=\"$(pwd)/out\" ./build-tools/3rdparty/yxml/build.sh"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/yxml-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true

@@ -13,7 +13,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ypaint-core/buffer.h>
-#include <yetty/yterm/pty-reader.h>   /* YETTY_OSC_YPAINT_* */
+#include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YPAINT_* */
 #include <yetty/yrich/yrich-document.h>
 #include <yetty/yrich/yrich-element.h>
 #include <yetty/yrich/yrich-types.h>

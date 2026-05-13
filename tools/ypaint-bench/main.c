@@ -8,7 +8,7 @@
 #include <time.h>
 
 #include <yetty/yface/yface.h>
-#include <yetty/yterm/pty-reader.h>   /* YETTY_OSC_YPAINT_BIN */
+#include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YPAINT_BIN */
 
 // Complex primitive type for yplot
 #define YETTY_YPAINT_TYPE_YPLOT 0x80000003u

@@ -13,7 +13,7 @@
 #include <yetty/ycore/util.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ypaint-core/buffer.h>
-#include <yetty/yterm/pty-reader.h>   /* YETTY_OSC_YPAINT_SCROLL */
+#include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YPAINT_* */
 #include <yetty/ythorvg/ythorvg.h>
 
 #include <stdio.h>
