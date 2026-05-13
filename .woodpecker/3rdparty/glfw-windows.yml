@@ -1,0 +1,19 @@
+# glfw 3rdparty — windows-x86_64 (native MSVC on the windows-amd64 agent,
+# e.g. winy). cmake auto-detects cl.exe after vcvarsall. The build script
+# (build.sh) execs _build.sh directly when cl is on PATH, no nix involved.
+
+labels:
+  platform: windows/amd64
+
+when:
+  - event: manual
+  - event: tag
+    ref: refs/tags/lib-glfw-*
+
+steps:
+  build:
+    image: cmd
+    commands:
+      - call "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
+      - bash -c "TARGET_PLATFORM=windows-x86_64 OUTPUT_DIR=out ./build-tools/3rdparty/glfw/build.sh"
+      - dir out

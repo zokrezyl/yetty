@@ -1,0 +1,28 @@
+# libcss 3rdparty — macos-arm64 (native on the macOS agent, e.g. macbook).
+# NetSurf's GNU-make buildsystem; deps via brew.
+
+labels:
+  platform: darwin/arm64
+
+when:
+  - event: manual
+  - event: tag
+    ref: refs/tags/lib-libcss-*
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      lfs: false
+
+steps:
+  build:
+    image: bash
+    environment:
+      TARGET_PLATFORM: macos-arm64
+      OUTPUT_DIR: out
+    commands:
+      - brew install --quiet autoconf automake libtool pkg-config flex bison gperf || true
+      - mkdir -p "$OUTPUT_DIR"
+      - ./build-tools/3rdparty/libcss/build.sh
+      - ls -lh "$OUTPUT_DIR/"
