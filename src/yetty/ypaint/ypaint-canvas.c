@@ -235,6 +235,10 @@ struct yetty_ypaint_canvas {
 
 #define SB_OFFSET_UNSET 0xFFFFFFFFu
 
+/* Forward decl — body lives next to the scrollbuffer machinery; the
+ * mutation paths above call into it. */
+static void canvas_dirty_line(struct yetty_ypaint_canvas *canvas, uint32_t idx);
+
 #define DEFAULT_MAX_PRIMS_PER_CELL 16
 #define INITIAL_LINE_CAPACITY 64
 /* Initial cell-array capacity for a *touched* line. Tuned for sparse
@@ -1104,6 +1108,7 @@ static struct uint32_result add_primitive_internal(
     if (!base_line) {
         return YETTY_ERR(uint32, "line_buffer_get returned NULL");
     }
+    canvas_dirty_line(canvas, primitive_grid_line);
 
     uint32_t prim_index = grid_line_push_prim(base_line, primitive_rolling_row,
                                               (const float *)iter->fw.data, word_count);
@@ -1143,6 +1148,7 @@ static struct uint32_result add_primitive_internal(
     for (uint32_t row = prim_row_min; row <= prim_row_max; row++) {
         struct yetty_ypaint_canvas_grid_line *line = line_buffer_get(&canvas->lines, row);
         grid_line_ensure_cells(line, prim_col_max + 1);
+        canvas_dirty_line(canvas, row);
 
         uint16_t lines_ahead = (uint16_t)(primitive_grid_line - row);
 
@@ -1417,6 +1423,7 @@ static struct uint32_result expand_text_span_to_glyphs(
             cursor_x += advance * scale;
             continue;
         }
+        canvas_dirty_line(canvas, glyph_row_max);
 
         uint32_t prim_idx =
             grid_line_push_prim(base_line, rolling_row, glyph_data, YPAINT_GLYPH_WORDS);
@@ -1438,6 +1445,7 @@ static struct uint32_result expand_text_span_to_glyphs(
         for (uint32_t row = row_min; row <= glyph_row_max; row++) {
             struct yetty_ypaint_canvas_grid_line *line = line_buffer_get(&canvas->lines, row);
             grid_line_ensure_cells(line, col_max + 1);
+            canvas_dirty_line(canvas, row);
             uint16_t lines_ahead = (uint16_t)(glyph_row_max - row);
             for (uint32_t col = col_min; col <= col_max; col++) {
                 struct yetty_ypaint_canvas_prim_ref ref = {lines_ahead, (uint16_t)prim_idx};
@@ -1590,6 +1598,27 @@ static void buffer_attach_note(struct buffer_attach_list *l, yetty_yfont_cache_h
  * preserve the slot so absolute canvas-line indices keep their
  * meaning. Deserialise-on-scrollback isn't here yet.
  * ========================================================================= */
+
+/* If line `idx` was previously evicted to the scrollbuffer, its
+ * sb_offsets[idx] still points at the bytes that were serialised at
+ * eviction time. Any later mutation (fresh prim, cell ref, …) that lands
+ * on this line breaks the invariant "expanded form ⊆ serialised bytes"
+ * canvas_evict_scrollback relies on — that path would otherwise free the
+ * expanded form and lose the new prims, while sb_offsets still served
+ * the old content on scroll-back.
+ *
+ * Mark the line dirty by clearing its sb_offsets entry. The next
+ * eviction will route through canvas_evict_line (the "not serialised
+ * yet" branch) and re-encode the merged content from scratch. The
+ * orphaned old entry inside the scrollbuffer stays live until canvas
+ * destroy; it's small per-line and bounded by the number of times a
+ * scrolled-out line is re-touched. */
+static void canvas_dirty_line(struct yetty_ypaint_canvas *canvas, uint32_t idx)
+{
+    if (idx < canvas->sb_offsets_count && canvas->sb_offsets[idx] != SB_OFFSET_UNSET) {
+        canvas->sb_offsets[idx] = SB_OFFSET_UNSET;
+    }
+}
 
 static struct yetty_ycore_void_result sb_offsets_ensure(struct yetty_ypaint_canvas *canvas,
                                                         uint32_t min_count)
@@ -1797,17 +1826,22 @@ static void canvas_evict_scrollback(struct yetty_ypaint_canvas *canvas)
  * these restored lines on the next add_buffer.
  * ========================================================================= */
 
-/* Hard-coded word_count lookup. Today only YETTY_YSDF_GLYPH (200)
- * goes through the scrollbuffer's non-default escape — SDF prims
- * with variable size would need a per-type registry lookup, which
- * would mean pulling in the ypaint-core flyweight-internal header.
- * Until SDF/complex content needs scrollback restore, this is
- * sufficient. */
+/* Word-count lookup for the scrollbuffer decoder. The codec stores
+ * non-default prims as <type, payload-bytes> with NO explicit length —
+ * the decoder must know how many words each type occupies. For SDF
+ * prims (every type in the 0x10000000..0x1FFFFFFF range) the generated
+ * yetty_ysdf_word_count() answers exactly that, no registry lookup
+ * needed. Returning 0 for an unrecognised type makes the decoder fail
+ * cleanly rather than reading garbage. */
 static uint32_t canvas_sb_word_count_fn(uint32_t type_word, void *ctx)
 {
     (void)ctx;
-    if (type_word == YETTY_YSDF_GLYPH) {
-        return YPAINT_GLYPH_WORDS;
+    /* SDF tier — includes GLYPH (0x10000040) and every other SDF prim
+     * used by SVG / PDF / browser renderers. The generated table covers
+     * everything in sdf-primitives.yaml. */
+    if (type_word >= 0x10000000u && type_word <= 0x1FFFFFFFu) {
+        uint32_t wc = yetty_ysdf_word_count((enum yetty_ysdf_type)type_word);
+        if (wc > 0) return wc;
     }
     return 0;
 }
