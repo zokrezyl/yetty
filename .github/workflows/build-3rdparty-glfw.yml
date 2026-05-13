@@ -34,9 +34,9 @@ jobs:
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "tag=lib-glfw-$V" >> "$GITHUB_OUTPUT"
 
-  # Linux native builds — no nix, no cross-compile. linux-x86_64 runs on a
-  # plain x86_64 ubuntu runner; linux-aarch64 runs on GitHub's native ARM64
-  # runner. Apt installs the GLFW build deps directly. riscv64 glfw is not
+  # Linux native builds. linux-x86_64 runs on a plain x86_64 ubuntu runner;
+  # linux-aarch64 runs on GitHub's native ARM64 runner. Apt installs the
+  # GLFW build deps directly. riscv64 glfw is not
   # needed (the riscv yetty build is GPU-less — built by the separate
   # yetty-tools-riscv pipeline).
   build-linux:
@@ -66,7 +66,6 @@ jobs:
       - run: mkdir -p out
       - name: Build glfw for ${{ matrix.target }}
         run: |
-          USE_NIX=0 \
           TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
           ./build-tools/3rdparty/glfw/build.sh
@@ -78,7 +77,7 @@ jobs:
 
   # macOS native — Cocoa backend, no X11/Wayland needed. Xcode CommandLineTools
   # are pre-installed on macos-latest / macos-15-intel runners (clang + ar);
-  # cmake/ninja/pkg-config come via brew. No nix.
+  # cmake/ninja/pkg-config come via brew.
   build-darwin-arm64:
     needs: resolve
     runs-on: macos-latest
@@ -92,7 +91,6 @@ jobs:
       - run: mkdir -p out
       - name: Build glfw for ${{ matrix.target }}
         run: |
-          USE_NIX=0 \
           TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
           ./build-tools/3rdparty/glfw/build.sh
@@ -115,7 +113,6 @@ jobs:
       - run: mkdir -p out
       - name: Build glfw for ${{ matrix.target }}
         run: |
-          USE_NIX=0 \
           TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
           ./build-tools/3rdparty/glfw/build.sh
