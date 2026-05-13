@@ -1068,12 +1068,15 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
         }
     }
 
-    /* Create ypaint scrolling layer (overlay on top of text) */
+    /* Create ypaint scrolling layer (overlay on top of text) + static
+     * yui-chrome layer above it. Only the scrolling layer is registered
+     * for ypaint OSC codes — static-canvas is a placeholder for yui until
+     * its content path lands. */
     {
         struct yetty_yrender_terminal_layer *text_layer = text_layer_res.value;
         struct yetty_yterm_terminal_layer_result ypaint_res = yetty_yterm_ypaint_layer_create(
-            cols, rows, text_layer->cell_size.width, text_layer->cell_size.height,
-            1, /* scrolling_mode = true */
+            YETTY_YPAINT_LAYER_KIND_SCROLLING, cols, rows,
+            text_layer->cell_size.width, text_layer->cell_size.height,
             yetty_context, terminal_request_render_callback, terminal, terminal_scroll_callback,
             terminal, terminal_cursor_callback, terminal);
         if (YETTY_IS_OK(ypaint_res)) {
@@ -1089,14 +1092,27 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
                 yetty_yterm_pty_reader_register_osc_sink(
                     terminal->pty_reader, YETTY_OSC_YPAINT_BIN, ypaint_res.value);
                 yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YETTY_OSC_YPAINT_YAML, ypaint_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(
                     terminal->pty_reader, YETTY_OSC_YPAINT_OVERLAY, ypaint_res.value);
-                ydebug("terminal_create: ypaint layer registered for OSC 600000-600003");
+                ydebug("terminal_create: ypaint layer registered for OSC CLEAR/BIN/OVERLAY");
             }
         } else {
-            ydebug("terminal_create: failed to create ypaint layer (non-fatal): %s",
+            ydebug("terminal_create: failed to create ypaint scrolling layer (non-fatal): %s",
                    ypaint_res.error.msg);
+        }
+
+        /* yui chrome layer — static canvas, placed above the scrolling one. */
+        struct yetty_yterm_terminal_layer_result ypaint_static_res =
+            yetty_yterm_ypaint_layer_create(
+                YETTY_YPAINT_LAYER_KIND_STATIC, cols, rows,
+                text_layer->cell_size.width, text_layer->cell_size.height,
+                yetty_context, terminal_request_render_callback, terminal,
+                terminal_scroll_callback, terminal, terminal_cursor_callback, terminal);
+        if (YETTY_IS_OK(ypaint_static_res)) {
+            yetty_yterm_terminal_layer_add(terminal, ypaint_static_res.value);
+            ydebug("terminal_create: ypaint static layer created and added");
+        } else {
+            ydebug("terminal_create: failed to create ypaint static layer (non-fatal): %s",
+                   ypaint_static_res.error.msg);
         }
     }
 

@@ -9,30 +9,26 @@ extern "C" {
 #endif
 
 /*
- * YPaint layer - renders SDF primitives as overlay on terminal text.
+ * YPaint layer — renders SDF primitives as overlay on terminal text.
+ * Implements the same terminal_layer_ops interface as text-layer.
  *
- * This layer implements the same terminal_layer_ops interface as text-layer.
- * It receives ypaint data via the write() method (already processed/uncompressed).
- *
- * The write method expects data in the format:
- *   "args;payload" where:
- *   - args: comma-separated options (e.g., "--yaml", "--clear")
- *   - payload: primitive data (YAML or binary format)
- *
- * Scrolling mode: primitives are positioned relative to cursor and scroll
- * with terminal content. The layer syncs scrolling via scroll_lines().
+ * The layer is canvas-agnostic — it holds a `struct yetty_ypaint_canvas *`
+ * and uses only the polymorphic surface. The variant is chosen at create
+ * time via `kind`:
+ *   - SCROLLING — primitives are cursor-relative and scroll with the
+ *     terminal text. This is the "rich content" overlay (PDF, SVG, etc.).
+ *   - STATIC    — primitives at absolute coordinates; no scrolling. Used
+ *     by yui chrome (popups, statusbar). The layer sits in the terminal
+ *     stack as a placeholder until yui content is wired in.
  */
+enum yetty_yterm_ypaint_layer_kind {
+    YETTY_YPAINT_LAYER_KIND_SCROLLING,
+    YETTY_YPAINT_LAYER_KIND_STATIC,
+};
 
-/* Create ypaint layer
- * @param cols, rows: grid dimensions
- * @param cell_width, cell_height: cell size in pixels
- * @param scrolling_mode: true for scrolling layer (syncs with text), false for overlay
- * @param context: yetty context for config access (fonts path, etc.)
- * @param request_render_fn: callback to request re-render
- * @param request_render_userdata: userdata for callback
- */
 struct yetty_yterm_terminal_layer_result yetty_yterm_ypaint_layer_create(
-    uint32_t cols, uint32_t rows, float cell_width, float cell_height, int scrolling_mode,
+    enum yetty_yterm_ypaint_layer_kind kind, uint32_t cols, uint32_t rows,
+    float cell_width, float cell_height,
     const struct yetty_context *context, yetty_yterm_request_render_fn request_render_fn,
     void *request_render_userdata, yetty_yterm_scroll_fn scroll_fn, void *scroll_userdata,
     yetty_yterm_cursor_fn cursor_fn, void *cursor_userdata);

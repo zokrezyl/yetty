@@ -33,6 +33,21 @@ struct yetty_ypaint_core_complex_prim_factory;
 struct yetty_ypaint_core_complex_prim_instance;
 struct yetty_ypaint_core_flyweight_registry;
 struct yetty_ypaint_font;
+struct yetty_yterm_osc_statemachine;
+
+/* Polymorphic canvas pointer result — returned by every variant's
+ * create. The variant struct stays internal; consumers hold the base. */
+YETTY_YRESULT_DECLARE(yetty_ypaint_canvas_ptr, struct yetty_ypaint_canvas *);
+
+/* Public scroll/cursor callback typedefs. The scrolling variant fires the
+ * scroll callback whenever ingestion advances the live viewport past its
+ * current bottom; cursor callback fires when the cursor moves without
+ * scrolling. Static-canvas never invokes either. userdata is opaque to
+ * the canvas. */
+typedef struct yetty_ycore_void_result (*yetty_ypaint_canvas_scroll_callback)(
+    void *userdata, uint16_t num_lines);
+typedef struct yetty_ycore_void_result (*yetty_ypaint_canvas_cursor_callback)(
+    void *userdata, uint16_t new_row);
 
 /* Pointer + size view returned by build_prim_staging.
  * word_count is 0 on an empty canvas. */
@@ -78,12 +93,46 @@ struct yetty_ycore_pixel_size yetty_ypaint_canvas_cell_get_pixel_size(
 struct yetty_ycore_grid_size yetty_ypaint_canvas_get_grid_size(
     const struct yetty_ypaint_canvas *canvas);
 
-/* Buffer ingestion. Each primitive in `buffer` is dispatched per its
- * type; the canvas decides whether to place it (scrolling: cursor-
- * relative, viewport scrolls; static: absolute, out-of-grid primitives
- * are dropped). */
-struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
-    struct yetty_ypaint_canvas *canvas, struct yetty_ypaint_core_buffer *buffer);
+/* Streaming OSC ingestion. Pulls already-decoded primitive bytes from the
+ * OSC state machine via a per-envelope `prim_iter` parked on the variant
+ * struct. Returns mid-envelope (OK_VOID) when the SM signals
+ * `would_block`; the SM re-dispatches the canvas on the next process()
+ * round and the iter resumes where it left off. On DONE (SM at_end with
+ * everything consumed) the variant runs end-of-envelope finalisation:
+ * attach pass, font_map_release_all, viewport scroll (scrolling only),
+ * scrollback evict (scrolling only). */
+struct yetty_ycore_void_result yetty_ypaint_canvas_process_input(
+    struct yetty_ypaint_canvas *canvas, struct yetty_yterm_osc_statemachine *sm);
+
+/* Cursor / scroll API. For static-canvas these are no-ops (cursor pinned
+ * at (0,0), no scrollback). The scrolling variant treats `cursor_pos` as
+ * a screen-row offset from the viewport top. */
+struct yetty_ycore_void_result yetty_ypaint_canvas_set_cursor_pos(
+    struct yetty_ypaint_canvas *canvas, struct yetty_ycore_grid_cursor_pos cursor_pos);
+
+struct yetty_ycore_void_result yetty_ypaint_canvas_scroll_lines(
+    struct yetty_ypaint_canvas *canvas, uint16_t num_lines);
+
+/* Pin / release the visible viewport for scrollback view. While active,
+ * rebuild_grid and the rolling_row_0 accessor return `view_top` instead
+ * of the live anchor. Static-canvas ignores. */
+struct yetty_ycore_void_result yetty_ypaint_canvas_set_view_top(
+    struct yetty_ypaint_canvas *canvas, bool active, uint32_t view_top);
+
+/* Effective viewport top (scrollback override if active, else live anchor).
+ * Static-canvas returns 0. */
+uint32_t yetty_ypaint_canvas_rolling_row_0(struct yetty_ypaint_canvas *canvas);
+
+/* Live anchor — ignores any scrollback override. Static-canvas returns 0. */
+uint32_t yetty_ypaint_canvas_live_rolling_row_0(struct yetty_ypaint_canvas *canvas);
+
+struct yetty_ycore_void_result yetty_ypaint_canvas_set_scroll_callback(
+    struct yetty_ypaint_canvas *canvas,
+    yetty_ypaint_canvas_scroll_callback callback, void *userdata);
+
+struct yetty_ycore_void_result yetty_ypaint_canvas_set_cursor_callback(
+    struct yetty_ypaint_canvas *canvas,
+    yetty_ypaint_canvas_cursor_callback callback, void *userdata);
 
 /* Packed GPU format */
 struct yetty_ycore_void_result yetty_ypaint_canvas_mark_dirty(

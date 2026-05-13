@@ -211,6 +211,22 @@ struct yetty_ypaint_canvas_ops {
     /* Glyph iteration */
     void (*for_each_glyph)(struct yetty_ypaint_canvas *,
                            yetty_ypaint_canvas_glyph_visitor visitor, void *user);
+
+    /* Cursor / scroll. Static-canvas wires these as no-ops. */
+    struct yetty_ycore_void_result (*set_cursor_pos)(
+        struct yetty_ypaint_canvas *, struct yetty_ycore_grid_cursor_pos);
+    struct yetty_ycore_void_result (*scroll_lines)(
+        struct yetty_ypaint_canvas *, uint16_t num_lines);
+    struct yetty_ycore_void_result (*set_view_top)(
+        struct yetty_ypaint_canvas *, bool active, uint32_t view_top);
+    uint32_t (*rolling_row_0)(struct yetty_ypaint_canvas *);
+    uint32_t (*live_rolling_row_0)(struct yetty_ypaint_canvas *);
+    struct yetty_ycore_void_result (*set_scroll_callback)(
+        struct yetty_ypaint_canvas *,
+        yetty_ypaint_canvas_scroll_callback callback, void *userdata);
+    struct yetty_ycore_void_result (*set_cursor_callback)(
+        struct yetty_ypaint_canvas *,
+        yetty_ypaint_canvas_cursor_callback callback, void *userdata);
 };
 
 /*===========================================================================
@@ -227,7 +243,7 @@ struct yetty_ypaint_canvas_ops {
  * Variant `*_create` calls this; variant `_destroy_impl` is in the vtable.
  *===========================================================================*/
 
-YETTY_YRESULT_DECLARE(yetty_ypaint_canvas_ptr, struct yetty_ypaint_canvas *);
+/* yetty_ypaint_canvas_ptr_result is declared in <yetty/ypaint/canvas.h>. */
 
 struct yetty_ypaint_canvas_ptr_result ypaint_canvas_create(
     const struct yetty_context *context,

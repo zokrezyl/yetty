@@ -821,6 +821,84 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_process_input(
     return canvas->ops->process_input(canvas, sm);
 }
 
+struct yetty_ycore_void_result yetty_ypaint_canvas_set_cursor_pos(
+    struct yetty_ypaint_canvas *canvas, struct yetty_ycore_grid_cursor_pos cursor_pos)
+{
+    if (!canvas) {
+        return YETTY_ERR(yetty_ycore_void, "canvas is NULL");
+    }
+    if (!canvas->ops->set_cursor_pos) {
+        return YETTY_OK_VOID();
+    }
+    return canvas->ops->set_cursor_pos(canvas, cursor_pos);
+}
+
+struct yetty_ycore_void_result yetty_ypaint_canvas_scroll_lines(
+    struct yetty_ypaint_canvas *canvas, uint16_t num_lines)
+{
+    if (!canvas) {
+        return YETTY_ERR(yetty_ycore_void, "canvas is NULL");
+    }
+    if (!canvas->ops->scroll_lines) {
+        return YETTY_OK_VOID();
+    }
+    return canvas->ops->scroll_lines(canvas, num_lines);
+}
+
+struct yetty_ycore_void_result yetty_ypaint_canvas_set_view_top(
+    struct yetty_ypaint_canvas *canvas, bool active, uint32_t view_top)
+{
+    if (!canvas) {
+        return YETTY_ERR(yetty_ycore_void, "canvas is NULL");
+    }
+    if (!canvas->ops->set_view_top) {
+        return YETTY_OK_VOID();
+    }
+    return canvas->ops->set_view_top(canvas, active, view_top);
+}
+
+uint32_t yetty_ypaint_canvas_rolling_row_0(struct yetty_ypaint_canvas *canvas)
+{
+    if (!canvas || !canvas->ops->rolling_row_0) {
+        return 0;
+    }
+    return canvas->ops->rolling_row_0(canvas);
+}
+
+uint32_t yetty_ypaint_canvas_live_rolling_row_0(struct yetty_ypaint_canvas *canvas)
+{
+    if (!canvas || !canvas->ops->live_rolling_row_0) {
+        return 0;
+    }
+    return canvas->ops->live_rolling_row_0(canvas);
+}
+
+struct yetty_ycore_void_result yetty_ypaint_canvas_set_scroll_callback(
+    struct yetty_ypaint_canvas *canvas,
+    yetty_ypaint_canvas_scroll_callback callback, void *userdata)
+{
+    if (!canvas) {
+        return YETTY_ERR(yetty_ycore_void, "canvas is NULL");
+    }
+    if (!canvas->ops->set_scroll_callback) {
+        return YETTY_OK_VOID();
+    }
+    return canvas->ops->set_scroll_callback(canvas, callback, userdata);
+}
+
+struct yetty_ycore_void_result yetty_ypaint_canvas_set_cursor_callback(
+    struct yetty_ypaint_canvas *canvas,
+    yetty_ypaint_canvas_cursor_callback callback, void *userdata)
+{
+    if (!canvas) {
+        return YETTY_ERR(yetty_ycore_void, "canvas is NULL");
+    }
+    if (!canvas->ops->set_cursor_callback) {
+        return YETTY_OK_VOID();
+    }
+    return canvas->ops->set_cursor_callback(canvas, callback, userdata);
+}
+
 struct yetty_ycore_void_result yetty_ypaint_canvas_mark_dirty(
     struct yetty_ypaint_canvas *canvas)
 {

@@ -4,7 +4,14 @@ add_library(yetty_ypaint_core STATIC
     complex-prim-types.c
     flyweight.c
     font-prim.c
+    prim-iter.c
     text-span-prim.c
+)
+
+# prim-iter uses yetty_yterm's osc-statemachine header for declarations,
+# but does NOT link against yterm — it only needs the header.
+target_include_directories(yetty_ypaint_core PRIVATE
+    ${YETTY_ROOT}/include
 )
 
 target_include_directories(yetty_ypaint_core PUBLIC
