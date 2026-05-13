@@ -235,6 +235,14 @@ struct yetty_ypaint_canvas {
 
 #define SB_OFFSET_UNSET 0xFFFFFFFFu
 
+/* Forward decls — bodies live next to the scrollbuffer machinery; the
+ * mutation paths above call into them. canvas_dirty_line restores any
+ * previously-evicted content into the expanded form before clearing
+ * sb_offsets so the line's history is preserved across re-mutation. */
+static void canvas_dirty_line(struct yetty_ypaint_canvas *canvas, uint32_t idx);
+static struct yetty_ycore_void_result canvas_restore_line(struct yetty_ypaint_canvas *canvas,
+                                                          uint32_t idx);
+
 #define DEFAULT_MAX_PRIMS_PER_CELL 16
 #define INITIAL_LINE_CAPACITY 64
 /* Initial cell-array capacity for a *touched* line. Tuned for sparse
@@ -1104,6 +1112,7 @@ static struct uint32_result add_primitive_internal(
     if (!base_line) {
         return YETTY_ERR(uint32, "line_buffer_get returned NULL");
     }
+    canvas_dirty_line(canvas, primitive_grid_line);
 
     uint32_t prim_index = grid_line_push_prim(base_line, primitive_rolling_row,
                                               (const float *)iter->fw.data, word_count);
@@ -1143,6 +1152,7 @@ static struct uint32_result add_primitive_internal(
     for (uint32_t row = prim_row_min; row <= prim_row_max; row++) {
         struct yetty_ypaint_canvas_grid_line *line = line_buffer_get(&canvas->lines, row);
         grid_line_ensure_cells(line, prim_col_max + 1);
+        canvas_dirty_line(canvas, row);
 
         uint16_t lines_ahead = (uint16_t)(primitive_grid_line - row);
 
@@ -1417,6 +1427,7 @@ static struct uint32_result expand_text_span_to_glyphs(
             cursor_x += advance * scale;
             continue;
         }
+        canvas_dirty_line(canvas, glyph_row_max);
 
         uint32_t prim_idx =
             grid_line_push_prim(base_line, rolling_row, glyph_data, YPAINT_GLYPH_WORDS);
@@ -1438,6 +1449,7 @@ static struct uint32_result expand_text_span_to_glyphs(
         for (uint32_t row = row_min; row <= glyph_row_max; row++) {
             struct yetty_ypaint_canvas_grid_line *line = line_buffer_get(&canvas->lines, row);
             grid_line_ensure_cells(line, col_max + 1);
+            canvas_dirty_line(canvas, row);
             uint16_t lines_ahead = (uint16_t)(glyph_row_max - row);
             for (uint32_t col = col_min; col <= col_max; col++) {
                 struct yetty_ypaint_canvas_prim_ref ref = {lines_ahead, (uint16_t)prim_idx};
@@ -1591,6 +1603,38 @@ static void buffer_attach_note(struct buffer_attach_list *l, yetty_yfont_cache_h
  * meaning. Deserialise-on-scrollback isn't here yet.
  * ========================================================================= */
 
+/* About to mutate line `idx`. If it was previously evicted to the
+ * scrollbuffer, its expanded form is empty and the only copy of the
+ * content lives at sb_offsets[idx]. We MUST:
+ *   1. restore that content into the line's expanded form first, so
+ *      the new prim can stack on top of it,
+ *   2. clear sb_offsets[idx] so the next eviction re-encodes the merged
+ *      content (the orphaned old record stays in the scrollbuffer but
+ *      no offset points to it — bounded waste).
+ *
+ * Without step 1, clearing sb_offsets[idx] would silently abandon the
+ * old content on the next evict pass (re-encode of merely the new prim,
+ * the old bytes orphaned but unreachable). PDFs, multi-buffer browsers,
+ * and any "ypaint #2 lands on lines previously occupied by ypaint #1"
+ * scenario would lose history.
+ *
+ * Restore failure is logged and we proceed — the new prim still saves,
+ * the old content is gone. Mirror of the best-effort policy used in
+ * canvas_restore_range. */
+static void canvas_dirty_line(struct yetty_ypaint_canvas *canvas, uint32_t idx)
+{
+    if (idx >= canvas->sb_offsets_count || canvas->sb_offsets[idx] == SB_OFFSET_UNSET) {
+        return;
+    }
+    struct yetty_ycore_void_result r = canvas_restore_line(canvas, idx);
+    if (YETTY_IS_ERR(r)) {
+        yerror("canvas_dirty_line: restore line %u failed: %s — old content will be dropped",
+               idx, r.error.msg);
+        yetty_ycore_error_destroy(r.error);
+    }
+    canvas->sb_offsets[idx] = SB_OFFSET_UNSET;
+}
+
 static struct yetty_ycore_void_result sb_offsets_ensure(struct yetty_ypaint_canvas *canvas,
                                                         uint32_t min_count)
 {
@@ -1708,13 +1752,31 @@ static struct yetty_ycore_void_result canvas_evict_line(struct yetty_ypaint_canv
      * them on scroll-back. Detach them before grid_line_free, then
      * re-attach after grid_line_init so they keep living on the
      * (otherwise empty) line and re-render the moment the user
-     * scrolls the line back into the visible window. */
+     * scrolls the line back into the visible window.
+     *
+     * Font attachments get the same treatment for a different reason:
+     * each line holds a cache ref per attached font, and the GLYPH
+     * payloads we just encoded carry the font's slot index. If we let
+     * grid_line_free release these refs, the cache may evict the font
+     * — and the ypaint layer's WGSL dispatcher (sized off
+     * canvas_font_count) keeps referencing that slot's namespace at
+     * render time, causing the shader to fail to compile with
+     * "struct member <ns>_base_size not found". Detach + restore keeps
+     * the cache ref alive across the line's empty-form phase, so the
+     * font slot remains addressable until the line is re-restored. */
     struct yetty_ypaint_core_complex_prim_instance **saved_cp = line->complex_prims;
     uint32_t saved_cp_count = line->complex_prim_count;
     uint32_t saved_cp_cap = line->complex_prim_capacity;
     line->complex_prims = NULL;
     line->complex_prim_count = 0;
     line->complex_prim_capacity = 0;
+
+    struct yetty_ypaint_canvas_font_entry *saved_fonts = line->fonts;
+    uint32_t saved_font_count = line->font_count;
+    uint32_t saved_font_capacity = line->font_capacity;
+    line->fonts = NULL;
+    line->font_count = 0;
+    line->font_capacity = 0;
 
     struct yetty_ycore_void_result fr =
         grid_line_free(line, canvas->flyweight_registry, canvas->font_cache);
@@ -1726,6 +1788,9 @@ static struct yetty_ycore_void_result canvas_evict_line(struct yetty_ypaint_canv
     line->complex_prims = saved_cp;
     line->complex_prim_count = saved_cp_count;
     line->complex_prim_capacity = saved_cp_cap;
+    line->fonts = saved_fonts;
+    line->font_count = saved_font_count;
+    line->font_capacity = saved_font_capacity;
     return YETTY_OK_VOID();
 }
 
@@ -1749,10 +1814,10 @@ static void canvas_evict_scrollback(struct yetty_ypaint_canvas *canvas)
     for (uint32_t i = 0; i < end; i++) {
         if (i < canvas->sb_offsets_count && canvas->sb_offsets[i] != SB_OFFSET_UNSET) {
             /* Already serialised. If it was restored, free the
-             * expanded form again. Complex prims must survive the
-             * re-free for the same reason as in canvas_evict_line —
-             * detach before grid_line_free, re-attach after
-             * grid_line_init. */
+             * expanded form again. Complex prims AND font attachments
+             * must survive the re-free for the same reason as in
+             * canvas_evict_line — detach before grid_line_free,
+             * re-attach after grid_line_init. */
             struct yetty_ypaint_canvas_grid_line *line = &canvas->lines.lines[i];
             if (line->prims.count > 0 || line->cell_count > 0 || line->font_count > 0) {
                 struct yetty_ypaint_core_complex_prim_instance **saved_cp = line->complex_prims;
@@ -1761,6 +1826,13 @@ static void canvas_evict_scrollback(struct yetty_ypaint_canvas *canvas)
                 line->complex_prims = NULL;
                 line->complex_prim_count = 0;
                 line->complex_prim_capacity = 0;
+
+                struct yetty_ypaint_canvas_font_entry *saved_fonts = line->fonts;
+                uint32_t saved_font_count = line->font_count;
+                uint32_t saved_font_capacity = line->font_capacity;
+                line->fonts = NULL;
+                line->font_count = 0;
+                line->font_capacity = 0;
 
                 struct yetty_ycore_void_result fr = grid_line_free(
                     line, canvas->flyweight_registry, canvas->font_cache);
@@ -1774,6 +1846,9 @@ static void canvas_evict_scrollback(struct yetty_ypaint_canvas *canvas)
                 line->complex_prims = saved_cp;
                 line->complex_prim_count = saved_cp_count;
                 line->complex_prim_capacity = saved_cp_cap;
+                line->fonts = saved_fonts;
+                line->font_count = saved_font_count;
+                line->font_capacity = saved_font_capacity;
             }
             continue;
         }
@@ -1797,17 +1872,29 @@ static void canvas_evict_scrollback(struct yetty_ypaint_canvas *canvas)
  * these restored lines on the next add_buffer.
  * ========================================================================= */
 
-/* Hard-coded word_count lookup. Today only YETTY_YSDF_GLYPH (200)
- * goes through the scrollbuffer's non-default escape — SDF prims
- * with variable size would need a per-type registry lookup, which
- * would mean pulling in the ypaint-core flyweight-internal header.
- * Until SDF/complex content needs scrollback restore, this is
- * sufficient. */
+/* Word-count lookup for the scrollbuffer decoder. The codec stores
+ * non-default prims as <type, payload-bytes> with NO explicit length —
+ * the decoder must know how many words each type occupies.
+ *
+ * Two source ranges live in canvas->lines and therefore in the
+ * scrollbuffer:
+ *   - YETTY_YSDF_GLYPH (= 200), the per-character flyweight expanded
+ *     from TEXT_SPAN prims. Standalone constant — not in the SDF
+ *     types.gen enum range.
+ *   - Real SDF prims [0x10000000, 0x1FFFFFFF] from generators that
+ *     emit BOX/CIRCLE/SEGMENT/ELLIPSE/… (SVG, PDF rect/line, browser).
+ *
+ * Returning 0 for an unrecognised type lets the decoder fail cleanly
+ * rather than read garbage. */
 static uint32_t canvas_sb_word_count_fn(uint32_t type_word, void *ctx)
 {
     (void)ctx;
     if (type_word == YETTY_YSDF_GLYPH) {
         return YPAINT_GLYPH_WORDS;
+    }
+    if (type_word >= 0x10000000u && type_word <= 0x1FFFFFFFu) {
+        uint32_t wc = yetty_ysdf_word_count((enum yetty_ysdf_type)type_word);
+        if (wc > 0) return wc;
     }
     return 0;
 }
@@ -2107,49 +2194,27 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
         return final_status;
     }
 
-    /* Scroll the viewport so the cursor lands on the last visible row.
-   * `target_cursor_canvas_line` is one row below the last placed prim,
-   * matching text-mode behavior where the cursor sits below the content
-   * just emitted. Lines stay in canvas->lines (scrollback).
+    /* Scroll the viewport so the cursor lands on the line immediately
+   * below the bottom-most prim — same contract as `cat foo.txt`. The
+   * shell prompt that runs after the OSC envelope finishes will print
+   * at the cursor, so the cursor MUST be at max_row_seen + 1 in canvas
+   * coords, never anywhere above (or it would overlap content) and
+   * never below the viewport (or it would be clipped).
    *
-   * Sparse-tail correction: PDFs often have a "back cover" canvas-line
-   * that contains only a page number / footer-mark — using it as the
-   * scroll anchor parks the viewport on near-empty rows above it (e.g.
-   * optimizing_cpp.pdf: only 8/42 visible rows had any prim). Walk back
-   * from max_row_seen past rows with fewer than MIN_DENSE_PRIMS prims
-   * placed directly on them; use the first row that crosses the
-   * threshold as the effective end-of-content for the scroll calc. The
-   * cursor still tracks max_row_seen+1, which may end up below the
-   * visible viewport — that's fine, it'll get pulled into view by the
-   * next text-mode scroll on the following emit. */
+   * (A previous "sparse-tail correction" tried to park the viewport on
+   * dense rows when the trailing rows held only a footer-mark; in
+   * practice that parked the cursor on top of still-visible content for
+   * SVGs whose density is uniformly low. Removed — predictable
+   * cat-like placement beats the heuristic.) */
     if (canvas->scrolling_mode) {
-        /* Sparse-tail correction: PDF back-covers with a single page-number
-         * footer mark would otherwise pull the viewport too far down. Walk
-         * back past sparse lines, but STOP at any line carrying a complex
-         * primitive (yplot, yimage, yvideo, …) — a single complex prim is
-         * substantial content, not a footer mark. Without this, a yecho
-         * sequence like {plot}/text/{plot} parks the second plot below the
-         * viewport because its anchor line only has prims.count = 1. */
-        const uint32_t MIN_DENSE_PRIMS = 10;
-        uint32_t effective_max_row = max_row_seen;
-        while (effective_max_row > initial_canvas_line) {
-            struct yetty_ypaint_canvas_grid_line *l =
-                line_buffer_get(&canvas->lines, effective_max_row);
-            if (l && (l->prims.count >= MIN_DENSE_PRIMS || l->complex_prim_count > 0)) {
-                break;
-            }
-            effective_max_row--;
-        }
-
         uint32_t target_cursor_canvas_line = max_row_seen + 1;
-        uint32_t scroll_anchor_canvas_line = effective_max_row + 1;
         uint32_t viewport_bottom = canvas->rolling_row_0 + canvas->grid_size.rows - 1;
 
-        ydebug("add_buffer: scroll_anchor=%u (effective_max=%u, max_row_seen=%u)",
-               scroll_anchor_canvas_line, effective_max_row, max_row_seen);
+        ydebug("add_buffer: target_cursor=%u max_row_seen=%u viewport_bottom=%u",
+               target_cursor_canvas_line, max_row_seen, viewport_bottom);
 
-        if (scroll_anchor_canvas_line > viewport_bottom) {
-            uint32_t lines_to_scroll = scroll_anchor_canvas_line - viewport_bottom;
+        if (target_cursor_canvas_line > viewport_bottom) {
+            uint32_t lines_to_scroll = target_cursor_canvas_line - viewport_bottom;
 
             if (!canvas->scroll_callback) {
                 yerror("add_buffer: scroll_callback is NULL");
@@ -2163,12 +2228,12 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
             yetty_ypaint_canvas_scroll_lines(canvas, (uint16_t)lines_to_scroll);
         }
 
+        /* After the scroll above, target_cursor_canvas_line is guaranteed
+         * to be ≤ viewport_bottom, so the subtraction stays in
+         * [0, grid_rows-1] without further clamping. */
         uint32_t cursor_screen_row = (target_cursor_canvas_line >= canvas->rolling_row_0)
                                          ? (target_cursor_canvas_line - canvas->rolling_row_0)
                                          : 0;
-        if (cursor_screen_row >= canvas->grid_size.rows) {
-            cursor_screen_row = canvas->grid_size.rows - 1;
-        }
         canvas->cursor_row = (uint16_t)cursor_screen_row;
 
         if (canvas->cursor_set_callback) {
@@ -2340,7 +2405,10 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_rebuild_grid(struct yetty_ypa
     /* Cells beyond grid_size.cols can exist on lines that grew past the
    * default width; widen grid_w to accommodate the visible window's
    * widest line. Off-screen lines don't influence grid_w because the
-   * shader never indexes those columns. */
+   * shader never indexes those columns. Capped at YPAINT_GRID_COLS_MAX
+   * so a buggy/malicious producer can't blow up grid_staging — anything
+   * beyond is clipped on the right edge, like an unwrapped text line. */
+    const uint32_t YPAINT_GRID_COLS_MAX = 4096u;
     for (uint32_t gpu_y = 0; gpu_y < grid_h; gpu_y++) {
         uint32_t canvas_y = window_top + gpu_y;
         if (canvas_y >= canvas->lines.count) {
@@ -2350,6 +2418,9 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_rebuild_grid(struct yetty_ypa
         if (line->cell_count > grid_w) {
             grid_w = line->cell_count;
         }
+    }
+    if (grid_w > YPAINT_GRID_COLS_MAX) {
+        grid_w = YPAINT_GRID_COLS_MAX;
     }
 
     if (grid_w == 0 || grid_h == 0) {
