@@ -27,6 +27,7 @@
 #include "ysvg-internal.h"
 
 #include <ctype.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -963,7 +964,7 @@ static int complex_matches(const struct yetty_ysvg_css_complex *cx,
     /* Walk leftward through steps. The combinator on steps[i] applies
      * BETWEEN steps[i-1] and steps[i]. */
     const struct yetty_ysvg_node *cursor = n;
-    for (ssize_t i = (ssize_t)cx->step_count - 1; i > 0; i--) {
+    for (ptrdiff_t i = (ptrdiff_t)cx->step_count - 1; i > 0; i--) {
         enum yetty_ysvg_css_combinator comb = cx->steps[i].combinator;
         const struct yetty_ysvg_css_compound *prev = &cx->steps[i - 1].compound;
         switch (comb) {
