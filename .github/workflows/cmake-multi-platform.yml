@@ -22,8 +22,8 @@ env:
   BUILD_LINUX_ASAN: false
   BUILD_MACOS: false
   BUILD_WINDOWS: false
-  BUILD_ANDROID: false
-  BUILD_ANDROID_X86_64: false
+  BUILD_ANDROID: true
+  BUILD_ANDROID_X86_64: true
   BUILD_IOS: false
   BUILD_IOS_X86_64: false
   BUILD_WEB: false
@@ -266,7 +266,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      BUILD_DIR: build-android-ytrace-release-nix
+      BUILD_DIR: build-android-ytrace-release
 
     steps:
     - uses: actions/checkout@v4
@@ -285,7 +285,7 @@ jobs:
           -dname "CN=Android Debug,O=Android,C=US"
 
     - name: Build Android APK
-      run: make -f Makefile.2 build PLATFORM=android LOGLEVEL=ytrace BUILDTYPE=release USE_NIX=yes
+      run: make build-android-ytrace-release
 
     - name: Upload Android APK
       uses: actions/upload-artifact@v4
@@ -303,7 +303,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      BUILD_DIR: build-android_x86_64-ytrace-release-nix
+      BUILD_DIR: build-android_x86_64-ytrace-release
 
     steps:
     - uses: actions/checkout@v4
@@ -322,7 +322,7 @@ jobs:
           -dname "CN=Android Debug,O=Android,C=US"
 
     - name: Build Android x86_64 APK
-      run: make -f Makefile.2 build PLATFORM=android_x86_64 LOGLEVEL=ytrace BUILDTYPE=release USE_NIX=yes
+      run: make build-android_x86_64-ytrace-release
 
     - name: Upload Android x86_64 APK
       uses: actions/upload-artifact@v4
