@@ -52,10 +52,23 @@ struct ysvg_paint_state {
  * packed word ready for ypaint.
  *===========================================================================*/
 
+static int is_near_white(uint32_t rgba)
+{
+    uint32_t r = (rgba >> 24) & 0xFFu;
+    uint32_t g = (rgba >> 16) & 0xFFu;
+    uint32_t b = (rgba >> 8) & 0xFFu;
+    return r >= 245 && g >= 245 && b >= 245;
+}
+
 static uint32_t resolve_color(const struct yetty_ysvg_paint *p, float opacity, float prop_opacity)
 {
     if (p->kind == YETTY_YSVG_PAINT_NONE) return 0;
     uint32_t rgba = p->color;
+    /* Treat near-white fill/stroke as "page background colour" — the SVG
+     * author meant "match the page", not "literally white". On dark BG we
+     * drop these so callers can fall back to the other paint (e.g. a path
+     * with fill=#FFF stroke=#000 emits as the stroke). */
+    if (is_near_white(rgba)) return 0;
     float k = opacity * prop_opacity;
     if (k < 0.0f) k = 0.0f;
     if (k > 1.0f) k = 1.0f;
@@ -64,6 +77,12 @@ static uint32_t resolve_color(const struct yetty_ysvg_paint *p, float opacity, f
         uint32_t na = (uint32_t)((float)a * k + 0.5f);
         if (na > 255) na = 255;
         rgba = (rgba & 0xFFFFFF00u) | na;
+    }
+    /* SVG content is authored for a white page; yetty terminals are dark.
+     * Flip lightness so the document reads correctly on black BG without
+     * hand-editing each colour. */
+    if ((rgba & 0xFFu) != 0) {
+        rgba = yetty_ysvg_rgba_invert_lightness(rgba);
     }
     return yetty_ysvg_rgba_to_abgr(rgba);
 }

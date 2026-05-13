@@ -171,6 +171,11 @@ struct yetty_ysvg_render_result yetty_ysvg_render(const char *content, size_t co
     struct ysvg_params params = {0};
     params.font_size = (config && config->cell_height > 0) ? (float)config->cell_height : 14.0f;
     params.line_spacing = YSVG_DEFAULT_LINE_SPACING;
+    /* SVG content is authored for a white page; yetty terminals are dark.
+     * Instead of forcing a white BG (which fights the terminal palette), the
+     * paint pass lightness-inverts every resolved colour so the document
+     * reads correctly on black. BG stays transparent by default. Override
+     * with `--bg=#RRGGBB`. */
     ysvg_params_parse(args, args_len, &params);
 
     struct yetty_ysvg_doc_ptr_result pr = yetty_ysvg_parse(content, content_len);

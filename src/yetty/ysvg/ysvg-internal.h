@@ -307,6 +307,12 @@ uint32_t yetty_ysvg_rgba_to_abgr(uint32_t rgba);
 /* Multiply only the alpha byte of an RGBA word. */
 uint32_t yetty_ysvg_rgba_mul_alpha(uint32_t rgba, float k);
 
+/* HSL lightness invert: L' = 1 - L, keep hue + saturation, keep alpha.
+ * Maps black ↔ white, light shades to dark shades of the same hue.
+ * Used to remap SVG content (authored assuming a white page background)
+ * to a dark-terminal-friendly palette. */
+uint32_t yetty_ysvg_rgba_invert_lightness(uint32_t rgba);
+
 /*=============================================================================
  * Paint pass
  *===========================================================================*/
