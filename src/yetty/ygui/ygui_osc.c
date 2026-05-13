@@ -9,7 +9,6 @@
 #include <yetty/ymgui/wire.h>       /* YMGUI_OSC_CS_CARD_*, wire structs */
 #include <yetty/ytrace/ytrace.h>
 #include <errno.h>
-#include <poll.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -18,6 +17,7 @@
 #define write _write
 #define STDOUT_FILENO 1
 #else
+#include <poll.h>     /* POSIX poll(), used for EAGAIN backoff below */
 #include <unistd.h>
 #endif
 
@@ -71,6 +71,12 @@ static void write_osc(const char *data, size_t len)
             if (errno == EINTR) {
                 continue;
             }
+#ifndef _WIN32
+            /* The EAGAIN/EWOULDBLOCK + poll() backoff only makes sense on
+             * POSIX. Win32 `_write` on a synchronous file handle blocks
+             * until the buffer drains and never returns EAGAIN; if it
+             * ever does (overlapped I/O case we don't enter), errno is
+             * not even portable. Skip the block on MSVC. */
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 struct pollfd pfd = {.fd = STDOUT_FILENO, .events = POLLOUT};
                 int pr = poll(&pfd, 1, 5000);
@@ -81,6 +87,7 @@ static void write_osc(const char *data, size_t len)
                        total, len, pr, pfd.revents);
                 return;
             }
+#endif
             ydebug("write_osc: write failed at %zu/%zu (errno=%d)", total, len, errno);
             return;
         }
