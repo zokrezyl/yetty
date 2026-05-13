@@ -150,14 +150,21 @@ linux-x86_64|linux-aarch64|linux-riscv64)
             CMAKE_ARGS+=("-DCMAKE_INCLUDE_PATH=$_XORG_INCS")
         fi
     fi
-    if [ "$TARGET_PLATFORM" = "linux-aarch64" ]; then
+    # Cross-compile flags only when host arch != target arch. On a native
+    # GitHub ubuntu-24.04-arm runner targeting linux-aarch64, the host is
+    # already aarch64 and the stock /usr/bin/gcc is the right compiler — no
+    # cross prefix, no CMAKE_SYSTEM_NAME override needed (those would force
+    # CMAKE to flip into cross mode and refuse to use the native pkg-config
+    # results).
+    _HOST_ARCH="$(uname -m)"
+    if [ "$TARGET_PLATFORM" = "linux-aarch64" ] && [ "$_HOST_ARCH" != "aarch64" ]; then
         : "${CROSS_PREFIX:=aarch64-unknown-linux-gnu-}"
         CMAKE_ARGS+=(
             "-DCMAKE_SYSTEM_NAME=Linux"
             "-DCMAKE_SYSTEM_PROCESSOR=aarch64"
             "-DCMAKE_C_COMPILER=${CROSS_PREFIX}gcc"
         )
-    elif [ "$TARGET_PLATFORM" = "linux-riscv64" ]; then
+    elif [ "$TARGET_PLATFORM" = "linux-riscv64" ] && [ "$_HOST_ARCH" != "riscv64" ]; then
         : "${CROSS_PREFIX:=riscv64-unknown-linux-gnu-}"
         CMAKE_ARGS+=(
             "-DCMAKE_SYSTEM_NAME=Linux"
