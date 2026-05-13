@@ -47,6 +47,10 @@ mkdir -p "$INSTALL_DIR" "$STAGE"
 
 CMAKE_ARGS=(
     -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR"
+    # Force `lib` (not `lib64` / `lib/<triple>-linux-gnu`) so the stage
+    # step's hard-coded `$INSTALL_DIR/lib` lookup catches everything,
+    # regardless of distro/cross-toolchain libdir conventions.
+    -DCMAKE_INSTALL_LIBDIR=lib
     -DCMAKE_BUILD_TYPE=Release
     -DGLFW_BUILD_DOCS=OFF
     -DGLFW_BUILD_TESTS=OFF
@@ -208,6 +212,27 @@ for _D in lib lib64; do
         fi
     fi
 done
+
+# Some cmake configurations (notably cross-compile shells) install the
+# package config under share/cmake/glfw3 instead of lib/cmake/glfw3 —
+# pick that up as a fallback so the staged tarball is always usable by
+# find_package(glfw3 CONFIG).
+if [ ! -d "$STAGE/lib/cmake/glfw3" ] && [ -d "$INSTALL_DIR/share/cmake/glfw3" ]; then
+    mkdir -p "$STAGE/lib/cmake/glfw3"
+    cp -a "$INSTALL_DIR/share/cmake/glfw3/." "$STAGE/lib/cmake/glfw3/"
+fi
+
+# Sanity: warn loudly if we still don't have a glfw3Config.cmake. The
+# consumer-side build-tools/yetty/libs/glfw.cmake has a fallback path
+# that hand-builds the IMPORTED target, but the cmake config is the
+# preferred shape and keeps platform deps in lockstep with upstream.
+if [ ! -f "$STAGE/lib/cmake/glfw3/glfw3Config.cmake" ]; then
+    echo "warning: glfw3Config.cmake not staged — consumer will fall back" >&2
+    echo "         to a hand-built IMPORTED target." >&2
+    echo "         INSTALL_DIR layout:" >&2
+    find "$INSTALL_DIR" -type f \( -name '*Config.cmake' -o -name 'glfw3.pc' \) >&2 || true
+fi
+
 cp -a "$INSTALL_DIR/include/GLFW" "$STAGE/include/"
 
 if [ ! -f "$STAGE/lib/libglfw3.a" ] && [ ! -f "$STAGE/lib/glfw3.lib" ]; then
