@@ -262,14 +262,27 @@ jobs:
       run: brew install automake autoconf libtool meson ninja nasm brotli webp fontconfig
 
     - name: Configure CMake
+      env:
+        # brew installs to /opt/homebrew (arm64) or /usr/local (x86_64) —
+        # neither is on Apple clang's default linker search path, so a
+        # bare `-lfontconfig` from pkg-config fails to link. Add the brew
+        # prefix to CMAKE_PREFIX_PATH (so find_package picks it up) and
+        # to PKG_CONFIG_PATH (so pkg_check_modules emits the right
+        # -L<brew>/lib). LIBRARY_PATH is belt-and-braces for tools that
+        # bypass cmake.
+        PKG_CONFIG_PATH: /opt/homebrew/lib/pkgconfig:/opt/homebrew/share/pkgconfig
+        LIBRARY_PATH: /opt/homebrew/lib
       run: >
         cmake -B ${{ env.BUILD_DIR }}
         -G Ninja
         -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_PREFIX_PATH=/opt/homebrew
         -DYETTY_ENABLE_TOOL_QA=OFF
         -S ${{ github.workspace }}
 
     - name: Build
+      env:
+        LIBRARY_PATH: /opt/homebrew/lib
       run: cmake --build ${{ env.BUILD_DIR }} --config Release --parallel 4
 
     - name: Upload macOS ARM64 artifacts
@@ -302,14 +315,24 @@ jobs:
       run: brew install automake autoconf libtool meson ninja nasm brotli webp fontconfig
 
     - name: Configure CMake
+      env:
+        # brew on Intel macOS lives under /usr/local — add it to
+        # CMAKE_PREFIX_PATH / PKG_CONFIG_PATH so cmake's find_package +
+        # pkg-config probes pick up fontconfig etc. and emit
+        # `-L/usr/local/lib` so the linker can find them.
+        PKG_CONFIG_PATH: /usr/local/lib/pkgconfig:/usr/local/share/pkgconfig
+        LIBRARY_PATH: /usr/local/lib
       run: >
         cmake -B ${{ env.BUILD_DIR }}
         -G Ninja
         -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_PREFIX_PATH=/usr/local
         -DYETTY_ENABLE_TOOL_QA=OFF
         -S ${{ github.workspace }}
 
     - name: Build
+      env:
+        LIBRARY_PATH: /usr/local/lib
       run: cmake --build ${{ env.BUILD_DIR }} --config Release --parallel 4
 
     - name: Upload macOS x86_64 artifacts
