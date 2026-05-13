@@ -52,23 +52,10 @@ struct ysvg_paint_state {
  * packed word ready for ypaint.
  *===========================================================================*/
 
-static int is_near_white(uint32_t rgba)
-{
-    uint32_t r = (rgba >> 24) & 0xFFu;
-    uint32_t g = (rgba >> 16) & 0xFFu;
-    uint32_t b = (rgba >> 8) & 0xFFu;
-    return r >= 245 && g >= 245 && b >= 245;
-}
-
 static uint32_t resolve_color(const struct yetty_ysvg_paint *p, float opacity, float prop_opacity)
 {
     if (p->kind == YETTY_YSVG_PAINT_NONE) return 0;
     uint32_t rgba = p->color;
-    /* Treat near-white fill/stroke as "page background colour" — the SVG
-     * author meant "match the page", not "literally white". On dark BG we
-     * drop these so callers can fall back to the other paint (e.g. a path
-     * with fill=#FFF stroke=#000 emits as the stroke). */
-    if (is_near_white(rgba)) return 0;
     float k = opacity * prop_opacity;
     if (k < 0.0f) k = 0.0f;
     if (k > 1.0f) k = 1.0f;
@@ -77,12 +64,6 @@ static uint32_t resolve_color(const struct yetty_ysvg_paint *p, float opacity, f
         uint32_t na = (uint32_t)((float)a * k + 0.5f);
         if (na > 255) na = 255;
         rgba = (rgba & 0xFFFFFF00u) | na;
-    }
-    /* SVG content is authored for a white page; yetty terminals are dark.
-     * Flip lightness so the document reads correctly on black BG without
-     * hand-editing each colour. */
-    if ((rgba & 0xFFu) != 0) {
-        rgba = yetty_ysvg_rgba_invert_lightness(rgba);
     }
     return yetty_ysvg_rgba_to_abgr(rgba);
 }
@@ -291,7 +272,6 @@ static struct yetty_ycore_void_result emit_line(struct ysvg_paint_state *ps,
     uint32_t stroke = resolve_color(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity);
     if (stroke == 0) return YETTY_OK_VOID();
     float sw = ps->style.stroke_width * xform_avg_scale(&ps->ctm);
-    if (sw < 1.0f) sw = 1.0f;
     return emit_segment(ps->ctx, &ps->ctm, x1, y1, x2, y2, stroke, sw);
 }
 
@@ -328,17 +308,22 @@ static struct yetty_ycore_void_result emit_points_shape(struct ysvg_paint_state 
     uint32_t stroke =
         resolve_color(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity);
     uint32_t fill = resolve_color(&ps->style.fill, ps->style.opacity, ps->style.fill_opacity);
-    float scale = xform_avg_scale(&ps->ctm);
-    float sw = ps->style.stroke_width * scale;
-    /* Prefer fill (a filled path's silhouette is the visible mass; we draw it
-     * as an outline since the SDF prim set has no n-gon fill, but the fill
-     * colour is what the SVG author intended to dominate the shape). */
-    uint32_t color = (fill != 0) ? fill : stroke;
+    float sw_scale = xform_avg_scale(&ps->ctm);
+    uint32_t color = 0;
+    float sw = 0.0f;
+    if (stroke != 0) {
+        color = stroke;
+        sw = ps->style.stroke_width * sw_scale;
+    } else if (fill != 0) {
+        /* No real polygon-fill primitive in the SDF set — approximate a
+         * filled polygon by tracing its perimeter in the fill colour. */
+        color = fill;
+        sw = sw_scale; /* one user unit, scaled to pixels */
+    }
     if (color == 0) {
         yetty_ysvg_path_destroy(&path);
         return YETTY_OK_VOID();
     }
-    if (sw < 1.0f) sw = 1.0f; /* sub-pixel strokes render invisibly */
     for (size_t i = 0; i < path.sub_count; i++) {
         struct yetty_ycore_void_result r =
             emit_subpath_segments(ps, &path.subs[i], color, sw);
@@ -365,14 +350,20 @@ static struct yetty_ycore_void_result emit_path(struct ysvg_paint_state *ps,
     uint32_t stroke =
         resolve_color(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity);
     uint32_t fill = resolve_color(&ps->style.fill, ps->style.opacity, ps->style.fill_opacity);
-    float scale = xform_avg_scale(&ps->ctm);
-    float sw = ps->style.stroke_width * scale;
-    uint32_t color = (fill != 0) ? fill : stroke;
+    float sw_scale = xform_avg_scale(&ps->ctm);
+    uint32_t color = 0;
+    float sw = 0.0f;
+    if (stroke != 0) {
+        color = stroke;
+        sw = ps->style.stroke_width * sw_scale;
+    } else if (fill != 0) {
+        color = fill;
+        sw = sw_scale;
+    }
     if (color == 0) {
         yetty_ysvg_path_destroy(&path);
         return YETTY_OK_VOID();
     }
-    if (sw < 1.0f) sw = 1.0f;
     for (size_t i = 0; i < path.sub_count; i++) {
         struct yetty_ycore_void_result r =
             emit_subpath_segments(ps, &path.subs[i], color, sw);
