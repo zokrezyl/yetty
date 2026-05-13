@@ -61,6 +61,7 @@ static const struct ysvg_keyword k_elems[] = {
     {"linearGradient", YETTY_YSVG_ELEM_LINEARGRADIENT},
     {"radialGradient", YETTY_YSVG_ELEM_RADIALGRADIENT},
     {"stop", YETTY_YSVG_ELEM_STOP},
+    {"style", YETTY_YSVG_ELEM_STYLE},
 };
 
 static const struct ysvg_keyword k_attrs[] = {
@@ -282,6 +283,13 @@ static int handle_elemend(struct ysvg_parse_ctx *ctx)
         ctx->text_buf = NULL;
         ctx->text_len = ctx->text_cap = 0;
     }
+    /* <style> bodies feed the author CSS engine. */
+    if (n->elem == YETTY_YSVG_ELEM_STYLE && n->text && n->text_len > 0) {
+        if (yetty_ysvg_css_parse(ctx->doc, n->text, n->text_len) < 0) {
+            ctx->err = "ysvg-parse: out of memory parsing <style> CSS";
+            return -1;
+        }
+    }
     ctx->depth--;
     return 0;
 }
@@ -468,6 +476,7 @@ void yetty_ysvg_doc_destroy(struct yetty_ysvg_doc *doc)
         free(c);
         c = n;
     }
+    yetty_ysvg_css_free_doc_rules(doc);
     free(doc);
 }
 

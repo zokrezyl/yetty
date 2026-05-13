@@ -111,8 +111,8 @@ static void parse_paint(struct yetty_ysvg_paint *out, const char *s, size_t len,
  * are not URL-encoded or quoted; we treat them as plain UTF-8 slices.
  *===========================================================================*/
 
-static void style_apply_property(struct yetty_ysvg_style *out, const char *prop, size_t plen,
-                                 const char *val, size_t vlen)
+void yetty_ysvg_style_apply_property(struct yetty_ysvg_style *out, const char *prop, size_t plen,
+                                     const char *val, size_t vlen)
 {
     /* Trim val whitespace */
     while (vlen > 0 && (val[0] == ' ' || val[0] == '\t' || val[0] == '\n' || val[0] == '\r')) {
@@ -182,7 +182,7 @@ static void apply_style_attr(struct yetty_ysvg_style *out, const char *s, size_t
         size_t vstart = i;
         while (i < len && s[i] != ';') i++;
         size_t vlen = i - vstart;
-        style_apply_property(out, s + pstart, plen, s + vstart, vlen);
+        yetty_ysvg_style_apply_property(out, s + pstart, plen, s + vstart, vlen);
     }
 }
 
@@ -269,6 +269,7 @@ void yetty_ysvg_style_init_root(struct yetty_ysvg_style *s, float default_font_s
 
 void yetty_ysvg_style_resolve(struct yetty_ysvg_style *out,
                               const struct yetty_ysvg_style *parent_style,
+                              const struct yetty_ysvg_doc *doc,
                               const struct yetty_ysvg_node *node)
 {
     /* Start from inherited parent style. */
@@ -278,6 +279,7 @@ void yetty_ysvg_style_resolve(struct yetty_ysvg_style *out,
     out->opacity = 1.0f;
 
     apply_presentation_attrs(out, node, parent_style);
+    yetty_ysvg_css_apply(out, doc, node);
 
     const struct yetty_ysvg_attr *style = yetty_ysvg_attr_find(node, YETTY_YSVG_ATTR_STYLE);
     if (style && style->value) {

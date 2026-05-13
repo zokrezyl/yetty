@@ -150,6 +150,129 @@ struct yetty_ysvg_node {
     struct yetty_ysvg_node *parent;
 };
 
+/* Forward declaration so the CSS function prototypes below don't fall
+ * into C's "function prototype scope" trap (where `struct yetty_ysvg_style *`
+ * inside a prototype would otherwise declare a fresh tag distinct from
+ * the later file-scope definition). */
+struct yetty_ysvg_style;
+
+/*=============================================================================
+ * Author CSS — parsed from every <style> element encountered.
+ *
+ * Why not libcss: NetSurf's libcss does not expose the SVG paint
+ * properties (no CSS_PROP_FILL / CSS_PROP_STROKE accessors) — `fill:`
+ * and `stroke:` declarations are silently dropped at parse time. So we
+ * roll our own parser, sized for the SVG Tiny 1.2 styling chapter:
+ *   - simple selectors:    *, type, .class, #id, [attr], [attr=val],
+ *                          [attr~=val], [attr|=val], :pseudo-class
+ *   - combinators:         descendant, child (>), adjacent (+), general
+ *                          sibling (~)
+ *   - compound + complex selectors with proper specificity (a, b, c)
+ *   - !important
+ *   - all SVG Tiny 1.2 CSS-stylable properties
+ *   - @-rules (@media, @import) tokenised and skipped
+ *
+ * Pseudo-classes recognised but treated as "never match": :hover,
+ * :focus, :active, :link, :visited, :enabled, :disabled, :checked,
+ * :target. Structural pseudo-classes that depend only on the DOM:
+ * :first-child, :last-child, :only-child, :root, :empty — actually
+ * implemented.
+ *===========================================================================*/
+
+enum yetty_ysvg_css_combinator {
+    YETTY_YSVG_CSS_DESCENDANT = 0, /* whitespace */
+    YETTY_YSVG_CSS_CHILD,          /* > */
+    YETTY_YSVG_CSS_ADJACENT,       /* + */
+    YETTY_YSVG_CSS_SIBLING,        /* ~ */
+};
+
+enum yetty_ysvg_css_simple_kind {
+    YETTY_YSVG_CSS_SIMPLE_UNIVERSAL = 0, /* * */
+    YETTY_YSVG_CSS_SIMPLE_TYPE,          /* tag */
+    YETTY_YSVG_CSS_SIMPLE_ID,            /* #id */
+    YETTY_YSVG_CSS_SIMPLE_CLASS,         /* .class */
+    YETTY_YSVG_CSS_SIMPLE_ATTR,          /* [attr], [attr OP value] */
+    YETTY_YSVG_CSS_SIMPLE_PSEUDO,        /* :name */
+};
+
+enum yetty_ysvg_css_attr_op {
+    YETTY_YSVG_CSS_ATTR_EXISTS = 0, /* [name] */
+    YETTY_YSVG_CSS_ATTR_EQUAL,      /* [name="value"] */
+    YETTY_YSVG_CSS_ATTR_INCLUDES,   /* [name~="value"] */
+    YETTY_YSVG_CSS_ATTR_DASHMATCH,  /* [name|="value"] */
+    YETTY_YSVG_CSS_ATTR_PREFIX,     /* [name^="value"] */
+    YETTY_YSVG_CSS_ATTR_SUFFIX,     /* [name$="value"] */
+    YETTY_YSVG_CSS_ATTR_SUBSTR,     /* [name*="value"] */
+};
+
+enum yetty_ysvg_css_pseudo_kind {
+    YETTY_YSVG_CSS_PSEUDO_UNKNOWN = 0,
+    /* structural — actually evaluated from the DOM */
+    YETTY_YSVG_CSS_PSEUDO_FIRST_CHILD,
+    YETTY_YSVG_CSS_PSEUDO_LAST_CHILD,
+    YETTY_YSVG_CSS_PSEUDO_ONLY_CHILD,
+    YETTY_YSVG_CSS_PSEUDO_ROOT,
+    YETTY_YSVG_CSS_PSEUDO_EMPTY,
+    YETTY_YSVG_CSS_PSEUDO_NOT, /* with arg */
+    /* dynamic / link — recognised, always false */
+    YETTY_YSVG_CSS_PSEUDO_HOVER,
+    YETTY_YSVG_CSS_PSEUDO_FOCUS,
+    YETTY_YSVG_CSS_PSEUDO_ACTIVE,
+    YETTY_YSVG_CSS_PSEUDO_LINK,
+    YETTY_YSVG_CSS_PSEUDO_VISITED,
+    YETTY_YSVG_CSS_PSEUDO_ENABLED,
+    YETTY_YSVG_CSS_PSEUDO_DISABLED,
+    YETTY_YSVG_CSS_PSEUDO_CHECKED,
+    YETTY_YSVG_CSS_PSEUDO_TARGET,
+};
+
+struct yetty_ysvg_css_simple {
+    enum yetty_ysvg_css_simple_kind kind;
+    /* Universal: all fields unused. Type: name=tag. Class/Id: name=value.
+     * Attr: name=attr-name, value=attr-value (or NULL for EXISTS), op=...
+     * Pseudo: name="hover", pseudo=PSEUDO_HOVER, value=arg-string for :not(). */
+    char *name;
+    char *value;
+    enum yetty_ysvg_css_attr_op attr_op;
+    enum yetty_ysvg_css_pseudo_kind pseudo;
+    /* For :not(simple) we hold a child simple selector. */
+    struct yetty_ysvg_css_simple *not_child;
+};
+
+struct yetty_ysvg_css_compound {
+    struct yetty_ysvg_css_simple *simples;
+    size_t simple_count;
+};
+
+struct yetty_ysvg_css_complex_step {
+    enum yetty_ysvg_css_combinator combinator; /* combinator to LEFT (between this and previous) */
+    struct yetty_ysvg_css_compound compound;
+};
+
+/* A complex selector is a chain of compounds connected by combinators.
+ * Read left-to-right; the rightmost compound matches the candidate node. */
+struct yetty_ysvg_css_complex {
+    struct yetty_ysvg_css_complex_step *steps; /* >=1 */
+    size_t step_count;
+    /* CSS 2.1 specificity: a(ids) b(classes/attrs/pseudo-classes) c(types). */
+    uint16_t spec_a, spec_b, spec_c;
+};
+
+struct yetty_ysvg_css_decl {
+    char *property; /* lowercased, owned */
+    char *value;    /* trimmed, owned */
+    int important;
+};
+
+struct yetty_ysvg_css_rule {
+    /* Comma-separated selectors → list of complex selectors. */
+    struct yetty_ysvg_css_complex *selectors;
+    size_t selector_count;
+    struct yetty_ysvg_css_decl *decls;
+    size_t decl_count;
+    uint32_t order; /* source order, tiebreaker for equal specificity */
+};
+
 struct yetty_ysvg_doc {
     struct yetty_ysvg_node *root; /* the <svg> node, or NULL if parse failed */
 
@@ -157,7 +280,31 @@ struct yetty_ysvg_doc {
      * realloc them so child pointers stay valid. Per-node owned heap
      * (attrs array, name strings, text) is freed in doc_destroy. */
     struct yetty_ysvg_node_chunk *node_chunks;
+
+    /* Author stylesheet — every <style> element's content, in document
+     * order. Empty when the SVG carries no CSS. */
+    struct yetty_ysvg_css_rule *rules;
+    size_t rule_count;
+    size_t rule_cap;
 };
+
+/* Parse `<style>` text content and append rules to `doc`. Returns 0 on
+ * success, -1 on OOM (partial rules may have landed — destroy frees
+ * them). Tolerant of malformed input: bad rule = skipped at the next
+ * '}'. */
+int yetty_ysvg_css_parse(struct yetty_ysvg_doc *doc, const char *css, size_t len);
+
+/* Apply every CSS rule that matches `node`, in (specificity, source
+ * order) ascending — !important declarations win over non-important. */
+void yetty_ysvg_css_apply(struct yetty_ysvg_style *out, const struct yetty_ysvg_doc *doc,
+                          const struct yetty_ysvg_node *node);
+
+void yetty_ysvg_css_free_doc_rules(struct yetty_ysvg_doc *doc);
+
+/* Shared with ysvg-style.c so CSS declarations and inline `style=`
+ * declarations route through the same property→style applier. */
+void yetty_ysvg_style_apply_property(struct yetty_ysvg_style *out, const char *prop, size_t plen,
+                                     const char *val, size_t vlen);
 
 void yetty_ysvg_doc_destroy(struct yetty_ysvg_doc *doc);
 
@@ -207,10 +354,14 @@ struct yetty_ysvg_style {
 
 void yetty_ysvg_style_init_root(struct yetty_ysvg_style *s, float default_font_size);
 
-/* Resolve `style` for `node` inheriting from `parent_style`. Reads attrs
- * (presentation + inline `style="..."`). */
+/* Resolve `style` for `node` inheriting from `parent_style`. Cascade
+ * order matches SVG Tiny 1.2:
+ *   inherited parent → presentation attrs → CSS rules (doc->rules)
+ *     → inline `style="…"` → !important from CSS / inline.
+ * `doc` is consulted for the author stylesheet; pass NULL to skip CSS. */
 void yetty_ysvg_style_resolve(struct yetty_ysvg_style *out,
                               const struct yetty_ysvg_style *parent_style,
+                              const struct yetty_ysvg_doc *doc,
                               const struct yetty_ysvg_node *node);
 
 /*=============================================================================

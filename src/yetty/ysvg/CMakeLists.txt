@@ -5,6 +5,7 @@ add_library(yetty_ysvg STATIC
     ysvg-parse.c
     ysvg-attrs.c
     ysvg-style.c
+    ysvg-css.c
     ysvg-path.c
     ysvg-paint.c
     ysvg.c

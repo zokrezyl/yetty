@@ -39,6 +39,7 @@
 
 struct ysvg_paint_state {
     struct yetty_ysvg_paint_ctx *ctx;
+    const struct yetty_ysvg_doc *doc; /* needed for CSS rule lookup */
     struct yetty_ysvg_xform ctm;
     struct yetty_ysvg_style style;
     /* y cursor for stacking text lines when no explicit y attribute. */
@@ -450,7 +451,7 @@ static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
     if (!n) return YETTY_OK_VOID();
 
     struct ysvg_paint_state ps = *parent;
-    yetty_ysvg_style_resolve(&ps.style, &parent->style, n);
+    yetty_ysvg_style_resolve(&ps.style, &parent->style, parent->doc, n);
     compose_node_transform(&ps.ctm, &parent->ctm, n);
     ps.text_y = parent->text_y;
 
@@ -526,6 +527,7 @@ struct yetty_ycore_void_result yetty_ysvg_paint(const struct yetty_ysvg_doc *doc
     if (!doc || !doc->root) return YETTY_ERR(yetty_ycore_void, "ysvg-paint: empty doc");
     struct ysvg_paint_state root = {0};
     root.ctx = ctx;
+    root.doc = doc;
     /* Start from the viewBox → pixel transform (a uniform scale +
      * translate set up by ysvg.c). Walk recursion composes element
      * transforms on top of this. */
