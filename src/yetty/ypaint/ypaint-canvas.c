@@ -235,9 +235,13 @@ struct yetty_ypaint_canvas {
 
 #define SB_OFFSET_UNSET 0xFFFFFFFFu
 
-/* Forward decl — body lives next to the scrollbuffer machinery; the
- * mutation paths above call into it. */
+/* Forward decls — bodies live next to the scrollbuffer machinery; the
+ * mutation paths above call into them. canvas_dirty_line restores any
+ * previously-evicted content into the expanded form before clearing
+ * sb_offsets so the line's history is preserved across re-mutation. */
 static void canvas_dirty_line(struct yetty_ypaint_canvas *canvas, uint32_t idx);
+static struct yetty_ycore_void_result canvas_restore_line(struct yetty_ypaint_canvas *canvas,
+                                                          uint32_t idx);
 
 #define DEFAULT_MAX_PRIMS_PER_CELL 16
 #define INITIAL_LINE_CAPACITY 64
@@ -1599,25 +1603,36 @@ static void buffer_attach_note(struct buffer_attach_list *l, yetty_yfont_cache_h
  * meaning. Deserialise-on-scrollback isn't here yet.
  * ========================================================================= */
 
-/* If line `idx` was previously evicted to the scrollbuffer, its
- * sb_offsets[idx] still points at the bytes that were serialised at
- * eviction time. Any later mutation (fresh prim, cell ref, …) that lands
- * on this line breaks the invariant "expanded form ⊆ serialised bytes"
- * canvas_evict_scrollback relies on — that path would otherwise free the
- * expanded form and lose the new prims, while sb_offsets still served
- * the old content on scroll-back.
+/* About to mutate line `idx`. If it was previously evicted to the
+ * scrollbuffer, its expanded form is empty and the only copy of the
+ * content lives at sb_offsets[idx]. We MUST:
+ *   1. restore that content into the line's expanded form first, so
+ *      the new prim can stack on top of it,
+ *   2. clear sb_offsets[idx] so the next eviction re-encodes the merged
+ *      content (the orphaned old record stays in the scrollbuffer but
+ *      no offset points to it — bounded waste).
  *
- * Mark the line dirty by clearing its sb_offsets entry. The next
- * eviction will route through canvas_evict_line (the "not serialised
- * yet" branch) and re-encode the merged content from scratch. The
- * orphaned old entry inside the scrollbuffer stays live until canvas
- * destroy; it's small per-line and bounded by the number of times a
- * scrolled-out line is re-touched. */
+ * Without step 1, clearing sb_offsets[idx] would silently abandon the
+ * old content on the next evict pass (re-encode of merely the new prim,
+ * the old bytes orphaned but unreachable). PDFs, multi-buffer browsers,
+ * and any "ypaint #2 lands on lines previously occupied by ypaint #1"
+ * scenario would lose history.
+ *
+ * Restore failure is logged and we proceed — the new prim still saves,
+ * the old content is gone. Mirror of the best-effort policy used in
+ * canvas_restore_range. */
 static void canvas_dirty_line(struct yetty_ypaint_canvas *canvas, uint32_t idx)
 {
-    if (idx < canvas->sb_offsets_count && canvas->sb_offsets[idx] != SB_OFFSET_UNSET) {
-        canvas->sb_offsets[idx] = SB_OFFSET_UNSET;
+    if (idx >= canvas->sb_offsets_count || canvas->sb_offsets[idx] == SB_OFFSET_UNSET) {
+        return;
     }
+    struct yetty_ycore_void_result r = canvas_restore_line(canvas, idx);
+    if (YETTY_IS_ERR(r)) {
+        yerror("canvas_dirty_line: restore line %u failed: %s — old content will be dropped",
+               idx, r.error.msg);
+        yetty_ycore_error_destroy(r.error);
+    }
+    canvas->sb_offsets[idx] = SB_OFFSET_UNSET;
 }
 
 static struct yetty_ycore_void_result sb_offsets_ensure(struct yetty_ypaint_canvas *canvas,
@@ -2141,49 +2156,27 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
         return final_status;
     }
 
-    /* Scroll the viewport so the cursor lands on the last visible row.
-   * `target_cursor_canvas_line` is one row below the last placed prim,
-   * matching text-mode behavior where the cursor sits below the content
-   * just emitted. Lines stay in canvas->lines (scrollback).
+    /* Scroll the viewport so the cursor lands on the line immediately
+   * below the bottom-most prim — same contract as `cat foo.txt`. The
+   * shell prompt that runs after the OSC envelope finishes will print
+   * at the cursor, so the cursor MUST be at max_row_seen + 1 in canvas
+   * coords, never anywhere above (or it would overlap content) and
+   * never below the viewport (or it would be clipped).
    *
-   * Sparse-tail correction: PDFs often have a "back cover" canvas-line
-   * that contains only a page number / footer-mark — using it as the
-   * scroll anchor parks the viewport on near-empty rows above it (e.g.
-   * optimizing_cpp.pdf: only 8/42 visible rows had any prim). Walk back
-   * from max_row_seen past rows with fewer than MIN_DENSE_PRIMS prims
-   * placed directly on them; use the first row that crosses the
-   * threshold as the effective end-of-content for the scroll calc. The
-   * cursor still tracks max_row_seen+1, which may end up below the
-   * visible viewport — that's fine, it'll get pulled into view by the
-   * next text-mode scroll on the following emit. */
+   * (A previous "sparse-tail correction" tried to park the viewport on
+   * dense rows when the trailing rows held only a footer-mark; in
+   * practice that parked the cursor on top of still-visible content for
+   * SVGs whose density is uniformly low. Removed — predictable
+   * cat-like placement beats the heuristic.) */
     if (canvas->scrolling_mode) {
-        /* Sparse-tail correction: PDF back-covers with a single page-number
-         * footer mark would otherwise pull the viewport too far down. Walk
-         * back past sparse lines, but STOP at any line carrying a complex
-         * primitive (yplot, yimage, yvideo, …) — a single complex prim is
-         * substantial content, not a footer mark. Without this, a yecho
-         * sequence like {plot}/text/{plot} parks the second plot below the
-         * viewport because its anchor line only has prims.count = 1. */
-        const uint32_t MIN_DENSE_PRIMS = 10;
-        uint32_t effective_max_row = max_row_seen;
-        while (effective_max_row > initial_canvas_line) {
-            struct yetty_ypaint_canvas_grid_line *l =
-                line_buffer_get(&canvas->lines, effective_max_row);
-            if (l && (l->prims.count >= MIN_DENSE_PRIMS || l->complex_prim_count > 0)) {
-                break;
-            }
-            effective_max_row--;
-        }
-
         uint32_t target_cursor_canvas_line = max_row_seen + 1;
-        uint32_t scroll_anchor_canvas_line = effective_max_row + 1;
         uint32_t viewport_bottom = canvas->rolling_row_0 + canvas->grid_size.rows - 1;
 
-        ydebug("add_buffer: scroll_anchor=%u (effective_max=%u, max_row_seen=%u)",
-               scroll_anchor_canvas_line, effective_max_row, max_row_seen);
+        ydebug("add_buffer: target_cursor=%u max_row_seen=%u viewport_bottom=%u",
+               target_cursor_canvas_line, max_row_seen, viewport_bottom);
 
-        if (scroll_anchor_canvas_line > viewport_bottom) {
-            uint32_t lines_to_scroll = scroll_anchor_canvas_line - viewport_bottom;
+        if (target_cursor_canvas_line > viewport_bottom) {
+            uint32_t lines_to_scroll = target_cursor_canvas_line - viewport_bottom;
 
             if (!canvas->scroll_callback) {
                 yerror("add_buffer: scroll_callback is NULL");
@@ -2197,12 +2190,12 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_add_buffer(
             yetty_ypaint_canvas_scroll_lines(canvas, (uint16_t)lines_to_scroll);
         }
 
+        /* After the scroll above, target_cursor_canvas_line is guaranteed
+         * to be ≤ viewport_bottom, so the subtraction stays in
+         * [0, grid_rows-1] without further clamping. */
         uint32_t cursor_screen_row = (target_cursor_canvas_line >= canvas->rolling_row_0)
                                          ? (target_cursor_canvas_line - canvas->rolling_row_0)
                                          : 0;
-        if (cursor_screen_row >= canvas->grid_size.rows) {
-            cursor_screen_row = canvas->grid_size.rows - 1;
-        }
         canvas->cursor_row = (uint16_t)cursor_screen_row;
 
         if (canvas->cursor_set_callback) {
@@ -2374,7 +2367,10 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_rebuild_grid(struct yetty_ypa
     /* Cells beyond grid_size.cols can exist on lines that grew past the
    * default width; widen grid_w to accommodate the visible window's
    * widest line. Off-screen lines don't influence grid_w because the
-   * shader never indexes those columns. */
+   * shader never indexes those columns. Capped at YPAINT_GRID_COLS_MAX
+   * so a buggy/malicious producer can't blow up grid_staging — anything
+   * beyond is clipped on the right edge, like an unwrapped text line. */
+    const uint32_t YPAINT_GRID_COLS_MAX = 4096u;
     for (uint32_t gpu_y = 0; gpu_y < grid_h; gpu_y++) {
         uint32_t canvas_y = window_top + gpu_y;
         if (canvas_y >= canvas->lines.count) {
@@ -2384,6 +2380,9 @@ struct yetty_ycore_void_result yetty_ypaint_canvas_rebuild_grid(struct yetty_ypa
         if (line->cell_count > grid_w) {
             grid_w = line->cell_count;
         }
+    }
+    if (grid_w > YPAINT_GRID_COLS_MAX) {
+        grid_w = YPAINT_GRID_COLS_MAX;
     }
 
     if (grid_w == 0 || grid_h == 0) {
