@@ -74,6 +74,24 @@ USE_CCACHE ?= 0
 DISTCC_HOSTS ?= localhost 192.168.1.10
 export DISTCC_HOSTS
 
+# Android builds run on the plain host toolchain — no nix.
+# The nix-based path lives in Makefile.2 (`make -f Makefile.2 ... USE_NIX=yes`).
+# PATH is rebuilt explicitly so a caller's nix-flavoured $PATH doesn't leak
+# in (which would otherwise put nix-store clang/cmake ahead of the NDK ones
+# and silently break the cross-build). JAVA_HOME / ANDROID_HOME /
+# ANDROID_NDK_HOME default to standard system locations above and may be
+# overridden from the environment (e.g. by GitHub-hosted runners).
+ANDROID_PATH := $(JAVA_HOME)/bin:$(ANDROID_HOME)/cmdline-tools/latest/bin:$(ANDROID_HOME)/platform-tools:$(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/linux-x86_64/bin:/usr/local/bin:/usr/bin:/bin
+
+# WebAssembly builds use the upstream emscripten SDK (emsdk), no nix.
+# EMSDK defaults to ~/.local/emsdk (matches build-tools/install-emscripten.sh).
+# Override from the environment if installed elsewhere — emsdk_env.sh already
+# exports EMSDK after `./emsdk activate`. When emsdk isn't installed at all,
+# the apt-shipped /usr/bin/emcc on the system path is still picked up
+# (older but workable).
+EMSDK ?= $(HOME)/.local/emsdk
+WEBASM_PATH := $(EMSDK)/upstream/emscripten:$(EMSDK):/usr/local/bin:/usr/bin:/bin
+
 ifeq ($(USE_DISTCC),1)
 ifneq ($(shell which distcc 2>/dev/null),)
 export CCACHE_PREFIX := distcc
@@ -334,12 +352,12 @@ config-android-ytrace-release: ## Configure Android ytrace release build
 .PHONY: build-android-ytrace-debug
 build-android-ytrace-debug: ## Build Android ytrace debug APK
 	@$(MAKE) _android-ytrace-deps-debug
-	USE_CCACHE=$(USE_CCACHE) ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_YTRACE_DEBUG) nix develop .#android --command bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_YTRACE_DEBUG) assembleDebug"
+	PATH="$(ANDROID_PATH)" USE_CCACHE=$(USE_CCACHE) ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_YTRACE_DEBUG) bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_YTRACE_DEBUG) assembleDebug"
 
 .PHONY: build-android-ytrace-release
 build-android-ytrace-release: ## Build Android ytrace release APK
 	@$(MAKE) _android-ytrace-deps-release
-	USE_CCACHE=$(USE_CCACHE) ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_YTRACE_RELEASE) nix develop .#android --command bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_YTRACE_RELEASE) assembleRelease"
+	PATH="$(ANDROID_PATH)" USE_CCACHE=$(USE_CCACHE) ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_YTRACE_RELEASE) bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_YTRACE_RELEASE) assembleRelease"
 
 .PHONY: test-android-ytrace-debug
 test-android-ytrace-debug: build-android-ytrace-debug ## Install and run Android ytrace debug build
@@ -358,12 +376,12 @@ test-android-ytrace-release: build-android-ytrace-release ## Install and run And
 .PHONY: build-android_x86_64-ytrace-debug
 build-android_x86_64-ytrace-debug: ## Build Android x86_64 ytrace debug APK (emulator)
 	@$(MAKE) _android_x86_64-ytrace-deps-debug
-	USE_CCACHE=$(USE_CCACHE) ANDROID_ABI=x86_64 ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_X86_64_YTRACE_DEBUG) nix develop .#android --command bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_X86_64_YTRACE_DEBUG) assembleDebug"
+	PATH="$(ANDROID_PATH)" USE_CCACHE=$(USE_CCACHE) ANDROID_ABI=x86_64 ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_X86_64_YTRACE_DEBUG) bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_X86_64_YTRACE_DEBUG) assembleDebug"
 
 .PHONY: build-android_x86_64-ytrace-release
 build-android_x86_64-ytrace-release: ## Build Android x86_64 ytrace release APK (emulator)
 	@$(MAKE) _android_x86_64-ytrace-deps-release
-	USE_CCACHE=$(USE_CCACHE) ANDROID_ABI=x86_64 ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_X86_64_YTRACE_RELEASE) nix develop .#android --command bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_X86_64_YTRACE_RELEASE) assembleRelease"
+	PATH="$(ANDROID_PATH)" USE_CCACHE=$(USE_CCACHE) ANDROID_ABI=x86_64 ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_X86_64_YTRACE_RELEASE) bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_X86_64_YTRACE_RELEASE) assembleRelease"
 
 .PHONY: test-android_x86_64-ytrace-debug
 test-android_x86_64-ytrace-debug: build-android_x86_64-ytrace-debug ## Install and run Android x86_64 ytrace debug (emulator)
@@ -381,14 +399,14 @@ test-android_x86_64-ytrace-release: build-android_x86_64-ytrace-release ## Insta
 
 .PHONY: config-webasm-ytrace-debug
 config-webasm-ytrace-debug: ## Configure WebAssembly ytrace debug build
-	nix develop .#web --command bash -c '\
+	PATH="$(WEBASM_PATH)" bash -c '\
 		export EMCC_SKIP_SANITY_CHECK=1 && \
 		emcmake cmake -B $(BUILD_DIR_WEBASM_YTRACE_DEBUG) $(CMAKE_GENERATOR) \
 			-DCMAKE_BUILD_TYPE=Debug $(CMAKE_COMPILER_LAUNCHER)'
 
 .PHONY: config-webasm-ytrace-release
 config-webasm-ytrace-release: ## Configure WebAssembly ytrace release build
-	nix develop .#web --command bash -c '\
+	PATH="$(WEBASM_PATH)" bash -c '\
 		export EMCC_SKIP_SANITY_CHECK=1 && \
 		emcmake cmake -B $(BUILD_DIR_WEBASM_YTRACE_RELEASE) $(CMAKE_GENERATOR) \
 			-DCMAKE_BUILD_TYPE=MinSizeRel $(CMAKE_COMPILER_LAUNCHER)'
@@ -396,20 +414,20 @@ config-webasm-ytrace-release: ## Configure WebAssembly ytrace release build
 .PHONY: build-webasm-ytrace-debug
 build-webasm-ytrace-debug: ## Build WebAssembly ytrace debug
 	@if [ ! -f "$(BUILD_DIR_WEBASM_YTRACE_DEBUG)/build.ninja" ]; then $(MAKE) config-webasm-ytrace-debug; fi
-	nix develop .#web --command bash -c 'cmake --build $(BUILD_DIR_WEBASM_YTRACE_DEBUG) --target yetty $(CMAKE_PARALLEL)'
+	PATH="$(WEBASM_PATH)" bash -c 'cmake --build $(BUILD_DIR_WEBASM_YTRACE_DEBUG) --target yetty $(CMAKE_PARALLEL)'
 	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR_WEBASM_YTRACE_DEBUG)/
 	@$(MAKE) verify-webasm BUILD_DIR=$(BUILD_DIR_WEBASM_YTRACE_DEBUG)
 
 .PHONY: build-webasm-ytrace-release
 build-webasm-ytrace-release: ## Build WebAssembly ytrace release (CDB generation handled by CMake)
 	@if [ ! -f "$(BUILD_DIR_WEBASM_YTRACE_RELEASE)/build.ninja" ]; then $(MAKE) config-webasm-ytrace-release; fi
-	nix develop .#web --command bash -c 'cmake --build $(BUILD_DIR_WEBASM_YTRACE_RELEASE) --target yetty $(CMAKE_PARALLEL)'
+	PATH="$(WEBASM_PATH)" bash -c 'cmake --build $(BUILD_DIR_WEBASM_YTRACE_RELEASE) --target yetty $(CMAKE_PARALLEL)'
 	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR_WEBASM_YTRACE_RELEASE)/
 	@$(MAKE) verify-webasm BUILD_DIR=$(BUILD_DIR_WEBASM_YTRACE_RELEASE)
 
 .PHONY: config-webasm-yinfo-debug
 config-webasm-yinfo-debug: ## Configure WebAssembly yinfo debug build (minimal logging)
-	nix develop .#web --command bash -c '\
+	PATH="$(WEBASM_PATH)" bash -c '\
 		export EMCC_SKIP_SANITY_CHECK=1 && \
 		emcmake cmake -B $(BUILD_DIR_WEBASM_YINFO_DEBUG) $(CMAKE_GENERATOR) \
 			-DCMAKE_BUILD_TYPE=Debug \
@@ -418,13 +436,13 @@ config-webasm-yinfo-debug: ## Configure WebAssembly yinfo debug build (minimal l
 .PHONY: build-webasm-yinfo-debug
 build-webasm-yinfo-debug: ## Build WebAssembly yinfo debug (minimal logging)
 	@if [ ! -f "$(BUILD_DIR_WEBASM_YINFO_DEBUG)/build.ninja" ]; then $(MAKE) config-webasm-yinfo-debug; fi
-	nix develop .#web --command bash -c 'cmake --build $(BUILD_DIR_WEBASM_YINFO_DEBUG) --target yetty $(CMAKE_PARALLEL)'
+	PATH="$(WEBASM_PATH)" bash -c 'cmake --build $(BUILD_DIR_WEBASM_YINFO_DEBUG) --target yetty $(CMAKE_PARALLEL)'
 	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR_WEBASM_YINFO_DEBUG)/
 	@$(MAKE) verify-webasm BUILD_DIR=$(BUILD_DIR_WEBASM_YINFO_DEBUG)
 
 .PHONY: config-webasm-yinfo-release
 config-webasm-yinfo-release: ## Configure WebAssembly yinfo release build (minimal logging)
-	nix develop .#web --command bash -c '\
+	PATH="$(WEBASM_PATH)" bash -c '\
 		export EMCC_SKIP_SANITY_CHECK=1 && \
 		emcmake cmake -B $(BUILD_DIR_WEBASM_YINFO_RELEASE) $(CMAKE_GENERATOR) \
 			-DCMAKE_BUILD_TYPE=MinSizeRel \
@@ -433,7 +451,7 @@ config-webasm-yinfo-release: ## Configure WebAssembly yinfo release build (minim
 .PHONY: build-webasm-yinfo-release
 build-webasm-yinfo-release: ## Build WebAssembly yinfo release (minimal logging)
 	@if [ ! -f "$(BUILD_DIR_WEBASM_YINFO_RELEASE)/build.ninja" ]; then $(MAKE) config-webasm-yinfo-release; fi
-	nix develop .#web --command bash -c 'cmake --build $(BUILD_DIR_WEBASM_YINFO_RELEASE) --target yetty $(CMAKE_PARALLEL)'
+	PATH="$(WEBASM_PATH)" bash -c 'cmake --build $(BUILD_DIR_WEBASM_YINFO_RELEASE) --target yetty $(CMAKE_PARALLEL)'
 	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR_WEBASM_YINFO_RELEASE)/
 	@$(MAKE) verify-webasm BUILD_DIR=$(BUILD_DIR_WEBASM_YINFO_RELEASE)
 

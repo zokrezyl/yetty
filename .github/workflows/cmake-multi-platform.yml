@@ -18,18 +18,17 @@ on:
 # BUILD FLAGS - Set to true to enable specific builds (tags always build all)
 # =============================================================================
 env:
-  BUILD_LINUX: false
-  BUILD_LINUX_ASAN: false
-  BUILD_LINUX_AARCH64: false
-  BUILD_LINUX_RISCV: false
-  BUILD_MACOS: false
-  BUILD_MACOS_X86_64: false
-  BUILD_WINDOWS: false
-  BUILD_ANDROID: false
-  BUILD_ANDROID_X86_64: false
-  BUILD_IOS: false
-  BUILD_IOS_X86_64: false
-  BUILD_WEB: false
+  BUILD_LINUX: true
+  BUILD_LINUX_ASAN: true
+  BUILD_LINUX_AARCH64: true
+  BUILD_MACOS: true
+  BUILD_MACOS_X86_64: true
+  BUILD_WINDOWS: true
+  BUILD_ANDROID: true
+  BUILD_ANDROID_X86_64: true
+  BUILD_IOS: true
+  BUILD_IOS_X86_64: true
+  BUILD_WEB: true
 
   RUN_CODEQL: false
   RUN_CODACY: false
@@ -46,7 +45,6 @@ jobs:
       linux: ${{ steps.set.outputs.linux }}
       linux_asan: ${{ steps.set.outputs.linux_asan }}
       linux_aarch64: ${{ steps.set.outputs.linux_aarch64 }}
-      linux_riscv: ${{ steps.set.outputs.linux_riscv }}
       macos: ${{ steps.set.outputs.macos }}
       macos_x86_64: ${{ steps.set.outputs.macos_x86_64 }}
       windows: ${{ steps.set.outputs.windows }}
@@ -65,7 +63,6 @@ jobs:
             echo "linux=true" >> $GITHUB_OUTPUT
             echo "linux_asan=true" >> $GITHUB_OUTPUT
             echo "linux_aarch64=true" >> $GITHUB_OUTPUT
-            echo "linux_riscv=true" >> $GITHUB_OUTPUT
             echo "macos=true" >> $GITHUB_OUTPUT
             echo "macos_x86_64=true" >> $GITHUB_OUTPUT
             echo "windows=true" >> $GITHUB_OUTPUT
@@ -81,7 +78,6 @@ jobs:
             echo "linux=${{ env.BUILD_LINUX }}" >> $GITHUB_OUTPUT
             echo "linux_asan=${{ env.BUILD_LINUX_ASAN }}" >> $GITHUB_OUTPUT
             echo "linux_aarch64=${{ env.BUILD_LINUX_AARCH64 }}" >> $GITHUB_OUTPUT
-            echo "linux_riscv=${{ env.BUILD_LINUX_RISCV }}" >> $GITHUB_OUTPUT
             echo "macos=${{ env.BUILD_MACOS }}" >> $GITHUB_OUTPUT
             echo "macos_x86_64=${{ env.BUILD_MACOS_X86_64 }}" >> $GITHUB_OUTPUT
             echo "windows=${{ env.BUILD_WINDOWS }}" >> $GITHUB_OUTPUT
@@ -198,105 +194,49 @@ jobs:
         fi
 
   # =============================================================================
-  # Linux aarch64 — cross-compiled from x86_64 ubuntu using the
-  # `3rdparty-linux-aarch64` nix dev shell (cross gcc + cross X11/wayland +
-  # cross fontconfig/expat/libuuid). NOT macOS, NOT QEMU emulation. The
-  # produced binaries are real ARM aarch64 ELFs ready to run on a
-  # Raspberry-Pi-class board or aarch64 Linux server.
+  # Linux aarch64 — built natively on a GitHub-hosted ARM64 runner.
+  # No cross-compile, no nix, no foreign-arch apt. Produces real ARM aarch64
+  # ELFs ready to run on a Raspberry-Pi-class board or aarch64 Linux server.
+  # riscv64 builds live in a separate pipeline.
   # =============================================================================
   build-linux-aarch64-ytrace-release:
     needs: read-flags
     if: needs.read-flags.outputs.linux_aarch64 == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
 
     env:
-      BUILD_DIR: build-linux-aarch64-ytrace-release
+      BUILD_DIR: build-desktop-ytrace-release
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install cross-compile toolchain (aarch64)
+    - name: Install Linux dependencies
       run: |
-        sudo apt-get update -o Acquire::Retries=3
+        sudo apt-get update
         sudo apt-get install -y \
-          cmake ninja-build pkg-config nasm brotli \
-          gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-        sudo dpkg --add-architecture arm64
-        sudo sed -i -E 's|^deb (https?://[^ ]+) |deb [arch=amd64] \1 |' \
-          /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
-        . /etc/os-release
-        echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports ${VERSION_CODENAME} main universe" \
-          | sudo tee /etc/apt/sources.list.d/ports.list
-        echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports ${VERSION_CODENAME}-updates main universe" \
-          | sudo tee -a /etc/apt/sources.list.d/ports.list
-        sudo apt-get update -o Acquire::Retries=3
-        sudo apt-get install -y \
-          libx11-dev:arm64 libxrandr-dev:arm64 libxinerama-dev:arm64 \
-          libxcursor-dev:arm64 libxi-dev:arm64 libxext-dev:arm64 \
-          libxkbcommon-dev:arm64 libwayland-dev:arm64 wayland-protocols \
-          libgl-dev:arm64 libfontconfig-dev:arm64 \
-          libexpat1-dev:arm64 uuid-dev:arm64
+          automake autoconf libtool \
+          meson ninja-build nasm \
+          brotli \
+          libfontconfig1-dev \
+          libxrandr-dev \
+          libxinerama-dev \
+          libxcursor-dev \
+          libxi-dev \
+          libxext-dev \
+          libx11-dev \
+          libgl1-mesa-dev \
+          libwayland-dev \
+          libxkbcommon-dev \
+          libwebp-dev \
+          clang-18 libclang-18-dev
 
-    - name: Build Linux aarch64 (cross-compile)
-      run: make build-linux-aarch64-ytrace-release
+    - name: Build Linux aarch64 (native)
+      run: make build-desktop-ytrace-release
 
     - name: Upload Linux aarch64 artifacts
       uses: actions/upload-artifact@v4
       with:
         name: yetty-linux-aarch64
-        path: |
-          ${{ env.BUILD_DIR }}/yetty
-          ${{ env.BUILD_DIR }}/yettyc
-          ${{ env.BUILD_DIR }}/ycat
-          ${{ env.BUILD_DIR }}/yecho
-          demo/
-        if-no-files-found: warn
-
-  # =============================================================================
-  # Linux riscv64 — cross-compiled from x86_64 ubuntu using the
-  # `3rdparty-linux-riscv64` nix dev shell. Same shape as the aarch64 job.
-  # Real cross-compile, NOT QEMU emulation.
-  # =============================================================================
-  build-linux-riscv-ytrace-release:
-    needs: read-flags
-    if: needs.read-flags.outputs.linux_riscv == 'true'
-    runs-on: ubuntu-latest
-
-    env:
-      BUILD_DIR: build-linux-riscv-ytrace-release
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Install cross-compile toolchain (riscv64)
-      run: |
-        sudo apt-get update -o Acquire::Retries=3
-        sudo apt-get install -y \
-          cmake ninja-build pkg-config nasm brotli \
-          gcc-riscv64-linux-gnu g++-riscv64-linux-gnu
-        sudo dpkg --add-architecture riscv64
-        sudo sed -i -E 's|^deb (https?://[^ ]+) |deb [arch=amd64] \1 |' \
-          /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
-        . /etc/os-release
-        echo "deb [arch=riscv64] http://ports.ubuntu.com/ubuntu-ports ${VERSION_CODENAME} main universe" \
-          | sudo tee /etc/apt/sources.list.d/ports.list
-        echo "deb [arch=riscv64] http://ports.ubuntu.com/ubuntu-ports ${VERSION_CODENAME}-updates main universe" \
-          | sudo tee -a /etc/apt/sources.list.d/ports.list
-        sudo apt-get update -o Acquire::Retries=3
-        sudo apt-get install -y \
-          libx11-dev:riscv64 libxrandr-dev:riscv64 libxinerama-dev:riscv64 \
-          libxcursor-dev:riscv64 libxi-dev:riscv64 libxext-dev:riscv64 \
-          libxkbcommon-dev:riscv64 libwayland-dev:riscv64 \
-          libgl-dev:riscv64 libfontconfig-dev:riscv64 \
-          libexpat1-dev:riscv64 uuid-dev:riscv64
-
-    - name: Build Linux riscv64 (cross-compile)
-      run: make build-linux-riscv-ytrace-release
-
-    - name: Upload Linux riscv64 artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: yetty-linux-riscv
         path: |
           ${{ env.BUILD_DIR }}/yetty
           ${{ env.BUILD_DIR }}/yettyc
@@ -467,14 +407,40 @@ jobs:
 
     env:
       BUILD_DIR: build-android-ytrace-release
+      ANDROID_NDK_VERSION: 26.1.10909125
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Nix
-      uses: cachix/install-nix-action@v27
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          build-essential \
+          ninja-build \
+          cmake \
+          pkg-config \
+          python3 \
+          patch \
+          brotli \
+          curl \
+          unzip \
+          ca-certificates \
+          git
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
       with:
-        nix_path: nixpkgs=channel:nixos-unstable
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Install Android NDK ${{ env.ANDROID_NDK_VERSION }}
+      run: |
+        echo "y" | sdkmanager --install "ndk;${ANDROID_NDK_VERSION}" >/dev/null
+        echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
 
     - name: Create debug keystore
       run: |
@@ -504,14 +470,40 @@ jobs:
 
     env:
       BUILD_DIR: build-android_x86_64-ytrace-release
+      ANDROID_NDK_VERSION: 26.1.10909125
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Nix
-      uses: cachix/install-nix-action@v27
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          build-essential \
+          ninja-build \
+          cmake \
+          pkg-config \
+          python3 \
+          patch \
+          brotli \
+          curl \
+          unzip \
+          ca-certificates \
+          git
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
       with:
-        nix_path: nixpkgs=channel:nixos-unstable
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Install Android NDK ${{ env.ANDROID_NDK_VERSION }}
+      run: |
+        echo "y" | sdkmanager --install "ndk;${ANDROID_NDK_VERSION}" >/dev/null
+        echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
 
     - name: Create debug keystore
       run: |
@@ -667,7 +659,7 @@ jobs:
         if-no-files-found: warn
 
   # =============================================================================
-  # WebAssembly Build (using nix for deterministic builds)
+  # WebAssembly Build
   # =============================================================================
   build-webasm-ytrace-release:
     needs: read-flags
@@ -680,12 +672,46 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Nix
-      uses: cachix/install-nix-action@v27
-      with:
-        nix_path: nixpkgs=channel:nixos-unstable
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          build-essential \
+          ninja-build \
+          cmake \
+          pkg-config \
+          python3 \
+          patch \
+          brotli \
+          curl \
+          unzip \
+          ca-certificates \
+          git \
+          nodejs
 
-    - name: Build WebAssembly with Nix
+    - name: Install Emscripten SDK (latest)
+      run: |
+        ./build-tools/install-emscripten.sh
+        # Export EMSDK + PATH to all subsequent steps. emsdk_env.sh prepends
+        # emsdk/upstream/emscripten and friends to PATH and sets EMSDK*.
+        # Pull them out into GITHUB_ENV / GITHUB_PATH so the make step picks
+        # them up without re-sourcing.
+        set -a
+        . "$HOME/.local/emsdk/emsdk_env.sh"
+        set +a
+        {
+          echo "EMSDK=${EMSDK}"
+          echo "EMSDK_NODE=${EMSDK_NODE}"
+          echo "EMSDK_PYTHON=${EMSDK_PYTHON:-$(command -v python3)}"
+          echo "EM_CONFIG=${EM_CONFIG:-$HOME/.emscripten}"
+        } >> "$GITHUB_ENV"
+        {
+          echo "$HOME/.local/emsdk"
+          echo "$HOME/.local/emsdk/upstream/emscripten"
+        } >> "$GITHUB_PATH"
+        emcc --version | head -1
+
+    - name: Build WebAssembly
       run: make build-webasm-ytrace-release
 
     - name: Prepare site directory
@@ -791,23 +817,6 @@ jobs:
     - uses: softprops/action-gh-release@v2
       with:
         files: yetty-linux-aarch64.tar.gz
-
-  release-linux-riscv:
-    runs-on: ubuntu-latest
-    needs: build-linux-riscv-ytrace-release
-    if: needs.build-linux-riscv-ytrace-release.result == 'success' && startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: write
-    steps:
-    - uses: actions/download-artifact@v4
-      with:
-        name: yetty-linux-riscv
-        path: yetty-linux-riscv
-    - name: Create archive
-      run: tar -czvf yetty-linux-riscv.tar.gz -C yetty-linux-riscv .
-    - uses: softprops/action-gh-release@v2
-      with:
-        files: yetty-linux-riscv.tar.gz
 
   release-macos:
     runs-on: ubuntu-latest
