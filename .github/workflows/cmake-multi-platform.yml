@@ -260,7 +260,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install macOS dependencies
-      run: brew install automake autoconf libtool meson ninja nasm brotli
+      run: brew install automake autoconf libtool meson ninja nasm brotli webp
 
     - name: Configure CMake
       run: >
@@ -300,7 +300,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install macOS dependencies
-      run: brew install automake autoconf libtool meson ninja nasm brotli
+      run: brew install automake autoconf libtool meson ninja nasm brotli webp
 
     - name: Configure CMake
       run: >
@@ -594,7 +594,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install macOS dependencies
-      run: brew install automake autoconf libtool ninja nasm brotli meson
+      run: brew install automake autoconf libtool ninja nasm brotli meson webp
 
     - name: Configure CMake for iOS
       run: >
@@ -633,7 +633,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install macOS dependencies
-      run: brew install automake autoconf libtool ninja nasm brotli meson
+      run: brew install automake autoconf libtool ninja nasm brotli meson webp
 
     - name: Configure CMake for iOS Simulator
       run: >
