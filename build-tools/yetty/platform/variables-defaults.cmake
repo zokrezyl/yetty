@@ -118,6 +118,7 @@ option(YETTY_ENABLE_FEATURE_YMSDF_WGSL "ymsdf-wgsl — GPU MSDF glyph generator"
 option(YETTY_ENABLE_FEATURE_YCAT      "ycat — MIME-dispatched cat for cards"  ON)
 option(YETTY_ENABLE_FEATURE_YPDF      "ypdf — PDF to ypaint buffer"          ON)
 option(YETTY_ENABLE_FEATURE_YMARKDOWN "ymarkdown — Markdown to ypaint buffer" ON)
+option(YETTY_ENABLE_FEATURE_YSVG      "ysvg — SVG (Tiny 1.2) to ypaint buffer" ON)
 
 # Build pipeline
 option(YETTY_ENABLE_FEATURE_ASSETS    "assets — runtime asset copying"       ON)
