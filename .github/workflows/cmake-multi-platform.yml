@@ -184,12 +184,23 @@ jobs:
         export ASAN_OPTIONS="detect_leaks=1:halt_on_error=0:log_path=asan_log"
         export LSAN_OPTIONS="suppressions=$(pwd)/lsan_suppressions.txt"
         timeout 10 ./${{ env.BUILD_DIR }}/yetty -e 'echo "ASAN smoke test"; exit 0' || true
+        # LSAN writes asan_log.* even when every leak is matched by a
+        # suppression (it still prints the "Suppressions used:" summary).
+        # Treat the run as failing only when the log carries a real
+        # diagnostic marker — `ERROR: AddressSanitizer`, `SUMMARY:
+        # AddressSanitizer`, or a "Direct/Indirect leak of N bytes"
+        # header. Pure suppression summaries don't count.
         if ls asan_log.* 1>/dev/null 2>&1; then
-          echo "=== ASAN ERRORS DETECTED ==="
-          cat asan_log.*
-          exit 1
+          if grep -qE '^(==[0-9]+==)?(ERROR|SUMMARY): AddressSanitizer|^(Direct|Indirect) leak of [0-9]+ byte' asan_log.*; then
+            echo "=== ASAN ERRORS DETECTED ==="
+            cat asan_log.*
+            exit 1
+          else
+            echo "ASAN log present but only contains suppressed-leak summary — OK"
+            cat asan_log.*
+          fi
         else
-          echo "No ASAN errors detected"
+          echo "No ASAN log produced"
         fi
 
   # =============================================================================
