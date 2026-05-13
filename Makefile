@@ -70,6 +70,15 @@ USE_CCACHE ?= 0
 DISTCC_HOSTS ?= localhost 192.168.1.10
 export DISTCC_HOSTS
 
+# Android builds run on the plain host toolchain — no nix.
+# The nix-based path lives in Makefile.2 (`make -f Makefile.2 ... USE_NIX=yes`).
+# PATH is rebuilt explicitly so a caller's nix-flavoured $PATH doesn't leak
+# in (which would otherwise put nix-store clang/cmake ahead of the NDK ones
+# and silently break the cross-build). JAVA_HOME / ANDROID_HOME /
+# ANDROID_NDK_HOME default to standard system locations above and may be
+# overridden from the environment (e.g. by GitHub-hosted runners).
+ANDROID_PATH := $(JAVA_HOME)/bin:$(ANDROID_HOME)/cmdline-tools/latest/bin:$(ANDROID_HOME)/platform-tools:$(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/linux-x86_64/bin:/usr/local/bin:/usr/bin:/bin
+
 ifeq ($(USE_DISTCC),1)
 ifneq ($(shell which distcc 2>/dev/null),)
 export CCACHE_PREFIX := distcc
@@ -208,12 +217,12 @@ config-android-ytrace-release: ## Configure Android ytrace release build
 .PHONY: build-android-ytrace-debug
 build-android-ytrace-debug: ## Build Android ytrace debug APK
 	@$(MAKE) _android-ytrace-deps-debug
-	USE_CCACHE=$(USE_CCACHE) ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_YTRACE_DEBUG) nix develop .#android --command bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_YTRACE_DEBUG) assembleDebug"
+	PATH="$(ANDROID_PATH)" USE_CCACHE=$(USE_CCACHE) ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_YTRACE_DEBUG) bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_YTRACE_DEBUG) assembleDebug"
 
 .PHONY: build-android-ytrace-release
 build-android-ytrace-release: ## Build Android ytrace release APK
 	@$(MAKE) _android-ytrace-deps-release
-	USE_CCACHE=$(USE_CCACHE) ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_YTRACE_RELEASE) nix develop .#android --command bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_YTRACE_RELEASE) assembleRelease"
+	PATH="$(ANDROID_PATH)" USE_CCACHE=$(USE_CCACHE) ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_YTRACE_RELEASE) bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_YTRACE_RELEASE) assembleRelease"
 
 .PHONY: test-android-ytrace-debug
 test-android-ytrace-debug: build-android-ytrace-debug ## Install and run Android ytrace debug build
@@ -232,12 +241,12 @@ test-android-ytrace-release: build-android-ytrace-release ## Install and run And
 .PHONY: build-android_x86_64-ytrace-debug
 build-android_x86_64-ytrace-debug: ## Build Android x86_64 ytrace debug APK (emulator)
 	@$(MAKE) _android_x86_64-ytrace-deps-debug
-	USE_CCACHE=$(USE_CCACHE) ANDROID_ABI=x86_64 ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_X86_64_YTRACE_DEBUG) nix develop .#android --command bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_X86_64_YTRACE_DEBUG) assembleDebug"
+	PATH="$(ANDROID_PATH)" USE_CCACHE=$(USE_CCACHE) ANDROID_ABI=x86_64 ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_X86_64_YTRACE_DEBUG) bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_X86_64_YTRACE_DEBUG) assembleDebug"
 
 .PHONY: build-android_x86_64-ytrace-release
 build-android_x86_64-ytrace-release: ## Build Android x86_64 ytrace release APK (emulator)
 	@$(MAKE) _android_x86_64-ytrace-deps-release
-	USE_CCACHE=$(USE_CCACHE) ANDROID_ABI=x86_64 ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_X86_64_YTRACE_RELEASE) nix develop .#android --command bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_X86_64_YTRACE_RELEASE) assembleRelease"
+	PATH="$(ANDROID_PATH)" USE_CCACHE=$(USE_CCACHE) ANDROID_ABI=x86_64 ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_X86_64_YTRACE_RELEASE) bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_X86_64_YTRACE_RELEASE) assembleRelease"
 
 .PHONY: test-android_x86_64-ytrace-debug
 test-android_x86_64-ytrace-debug: build-android_x86_64-ytrace-debug ## Install and run Android x86_64 ytrace debug (emulator)
