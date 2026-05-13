@@ -1843,17 +1843,24 @@ static void canvas_evict_scrollback(struct yetty_ypaint_canvas *canvas)
 
 /* Word-count lookup for the scrollbuffer decoder. The codec stores
  * non-default prims as <type, payload-bytes> with NO explicit length —
- * the decoder must know how many words each type occupies. For SDF
- * prims (every type in the 0x10000000..0x1FFFFFFF range) the generated
- * yetty_ysdf_word_count() answers exactly that, no registry lookup
- * needed. Returning 0 for an unrecognised type makes the decoder fail
- * cleanly rather than reading garbage. */
+ * the decoder must know how many words each type occupies.
+ *
+ * Two source ranges live in canvas->lines and therefore in the
+ * scrollbuffer:
+ *   - YETTY_YSDF_GLYPH (= 200), the per-character flyweight expanded
+ *     from TEXT_SPAN prims. Standalone constant — not in the SDF
+ *     types.gen enum range.
+ *   - Real SDF prims [0x10000000, 0x1FFFFFFF] from generators that
+ *     emit BOX/CIRCLE/SEGMENT/ELLIPSE/… (SVG, PDF rect/line, browser).
+ *
+ * Returning 0 for an unrecognised type lets the decoder fail cleanly
+ * rather than read garbage. */
 static uint32_t canvas_sb_word_count_fn(uint32_t type_word, void *ctx)
 {
     (void)ctx;
-    /* SDF tier — includes GLYPH (0x10000040) and every other SDF prim
-     * used by SVG / PDF / browser renderers. The generated table covers
-     * everything in sdf-primitives.yaml. */
+    if (type_word == YETTY_YSDF_GLYPH) {
+        return YPAINT_GLYPH_WORDS;
+    }
     if (type_word >= 0x10000000u && type_word <= 0x1FFFFFFFu) {
         uint32_t wc = yetty_ysdf_word_count((enum yetty_ysdf_type)type_word);
         if (wc > 0) return wc;
