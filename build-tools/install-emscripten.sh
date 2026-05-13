@@ -78,6 +78,24 @@ install_and_activate() {
 
     info "Activating Emscripten ($EMSDK_VERSION)"
     ( cd "$EMSDK_DIR" && ./emsdk activate "$EMSDK_VERSION" )
+
+    # `emsdk activate` writes the toolchain config to `$EMSDK_DIR/.emscripten`.
+    # emcc looks at $EM_CONFIG first, then falls back to `$HOME/.emscripten`.
+    # `emsdk_env.sh` does NOT export EM_CONFIG, so consumers that source it
+    # still rely on the home-dir fallback — which is missing on clean
+    # runners. Symlink it so the default search path Just Works without
+    # callers having to set EM_CONFIG manually.
+    local _home_cfg="$HOME/.emscripten"
+    local _emsdk_cfg="$EMSDK_DIR/.emscripten"
+    if [ -f "$_emsdk_cfg" ]; then
+        if [ -L "$_home_cfg" ] || [ ! -e "$_home_cfg" ]; then
+            ln -sfn "$_emsdk_cfg" "$_home_cfg"
+            info "Linked $_home_cfg -> $_emsdk_cfg"
+        else
+            warn "$_home_cfg already exists and is not a symlink — leaving it alone"
+            warn "If emcc misbehaves, export EM_CONFIG=$_emsdk_cfg"
+        fi
+    fi
 }
 
 print_next_steps() {

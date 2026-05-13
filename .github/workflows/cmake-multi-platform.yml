@@ -696,6 +696,12 @@ jobs:
         # emsdk/upstream/emscripten and friends to PATH and sets EMSDK*.
         # Pull them out into GITHUB_ENV / GITHUB_PATH so the make step picks
         # them up without re-sourcing.
+        #
+        # NB: `emsdk activate` writes the toolchain config to
+        # `$EMSDK/.emscripten`, NOT `$HOME/.emscripten`. emsdk_env.sh does
+        # *not* export EM_CONFIG. emcc's default fallback is `~/.emscripten`
+        # which doesn't exist on a clean runner — so we point EM_CONFIG at
+        # the activated file explicitly.
         set -a
         . "$HOME/.local/emsdk/emsdk_env.sh"
         set +a
@@ -703,7 +709,7 @@ jobs:
           echo "EMSDK=${EMSDK}"
           echo "EMSDK_NODE=${EMSDK_NODE}"
           echo "EMSDK_PYTHON=${EMSDK_PYTHON:-$(command -v python3)}"
-          echo "EM_CONFIG=${EM_CONFIG:-$HOME/.emscripten}"
+          echo "EM_CONFIG=${EM_CONFIG:-$HOME/.local/emsdk/.emscripten}"
         } >> "$GITHUB_ENV"
         {
           echo "$HOME/.local/emsdk"
