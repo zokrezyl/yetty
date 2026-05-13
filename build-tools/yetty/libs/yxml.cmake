@@ -1,32 +1,48 @@
-# yxml — small streaming XML parser (Yorhel/yxml).
+# yxml — Yorhel/yxml streaming XML parser, MIT-licensed single-TU lib.
+# Consumes a prebuilt static-lib + headers tarball published by
+# .github/workflows/build-3rdparty-yxml.yml.
 #
-# Single .c + .h pair, MIT-licensed, pulled via CPM. yxml.c is pre-
-# generated from yxml-states + yxml-gen.pl and committed upstream, so
-# we just compile the .c as-is — no codegen step needed at build time.
+# Why this is a 3rdparty package instead of a CPM `GIT_REPOSITORY` fetch:
+# upstream lives on https://g.blicky.net/yxml.git which intermittently
+# returns missing-blob errors during git clone + rate-limits with HTTP
+# 429 on retries. There is no upstream tarball or GitHub mirror. Our
+# 3rdparty/_build.sh fetches yxml.c/yxml.h via cgit's `/plain/?id=<sha>`
+# endpoint (much more reliable than the git transport against that host)
+# and compiles per-platform, then publishes per-target tarballs the same
+# way every other 3rdparty lib does.
 #
-# Used by yetty_ysvg to parse SVG documents.
+# Exposed target:
+#   yxml  (STATIC IMPORTED) — INTERFACE_INCLUDE_DIRECTORIES points at the
+#                             extracted include/ dir so consumers can
+#                             `#include "yxml.h"` directly.
+
+include_guard(GLOBAL)
+include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 
 if(TARGET yxml)
     return()
 endif()
 
-CPMAddPackage(
-    NAME yxml
-    GIT_REPOSITORY https://g.blicky.net/yxml.git
-    # Upstream doesn't tag releases — pin to a commit. This SHA is post-
-    # the v1.0 release and includes a handful of post-release fixes.
-    GIT_TAG 66507906673bc6159d5d620414479954c9c21c24
-    DOWNLOAD_ONLY YES
-)
+yetty_3rdparty_fetch(yxml _YXML_DIR)
 
-if(yxml_ADDED)
-    add_library(yxml STATIC ${yxml_SOURCE_DIR}/yxml.c)
-    target_include_directories(yxml SYSTEM PUBLIC ${yxml_SOURCE_DIR})
-    if(MSVC)
-        target_compile_options(yxml PRIVATE /w)
-    else()
-        target_compile_options(yxml PRIVATE -w)
-    endif()
-    set_target_properties(yxml PROPERTIES POSITION_INDEPENDENT_CODE ON)
-    message(STATUS "yxml: using Yorhel/yxml v1.0 via CPM")
+# Tarball layout: lib/libyxml.a (or yxml.lib on windows-MSVC) + include/yxml.h.
+if(MSVC)
+    set(_YXML_LIB "${_YXML_DIR}/lib/yxml.lib")
+else()
+    set(_YXML_LIB "${_YXML_DIR}/lib/libyxml.a")
 endif()
+
+foreach(_F "${_YXML_LIB}" "${_YXML_DIR}/include/yxml.h")
+    if(NOT EXISTS "${_F}")
+        message(FATAL_ERROR
+            "yxml: missing ${_F} — tarball layout changed? \
+(check build-tools/3rdparty/yxml/_build.sh)")
+    endif()
+endforeach()
+
+add_library(yxml STATIC IMPORTED GLOBAL)
+set_target_properties(yxml PROPERTIES
+    IMPORTED_LOCATION "${_YXML_LIB}"
+    INTERFACE_INCLUDE_DIRECTORIES "${_YXML_DIR}/include")
+
+message(STATUS "yxml: prebuilt @${YETTY_3RDPARTY_yxml_VERSION}")

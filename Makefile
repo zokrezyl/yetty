@@ -20,10 +20,6 @@ BUILD_DIR_DESKTOP_YTRACE_RELEASE := build-desktop-ytrace-release
 BUILD_DIR_DESKTOP_YTRACE_ASAN := build-desktop-ytrace-asan
 BUILD_DIR_DESKTOP_YINFO_RELEASE := build-desktop-yinfo-release
 
-# Linux cross-compile (from x86_64 host using nix cross shells)
-BUILD_DIR_LINUX_AARCH64_YTRACE_RELEASE := build-linux-aarch64-ytrace-release
-BUILD_DIR_LINUX_RISCV_YTRACE_RELEASE := build-linux-riscv-ytrace-release
-
 BUILD_DIR_ANDROID_YTRACE_DEBUG := build-android-ytrace-debug
 BUILD_DIR_ANDROID_YTRACE_RELEASE := build-android-ytrace-release
 BUILD_DIR_ANDROID_YINFO_RELEASE := build-android-yinfo-release
@@ -73,6 +69,24 @@ USE_DISTCC ?= 0
 USE_CCACHE ?= 0
 DISTCC_HOSTS ?= localhost 192.168.1.10
 export DISTCC_HOSTS
+
+# Android builds run on the plain host toolchain — no nix.
+# The nix-based path lives in Makefile.2 (`make -f Makefile.2 ... USE_NIX=yes`).
+# PATH is rebuilt explicitly so a caller's nix-flavoured $PATH doesn't leak
+# in (which would otherwise put nix-store clang/cmake ahead of the NDK ones
+# and silently break the cross-build). JAVA_HOME / ANDROID_HOME /
+# ANDROID_NDK_HOME default to standard system locations above and may be
+# overridden from the environment (e.g. by GitHub-hosted runners).
+ANDROID_PATH := $(JAVA_HOME)/bin:$(ANDROID_HOME)/cmdline-tools/latest/bin:$(ANDROID_HOME)/platform-tools:$(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/linux-x86_64/bin:/usr/local/bin:/usr/bin:/bin
+
+# WebAssembly builds use the upstream emscripten SDK (emsdk), no nix.
+# EMSDK defaults to ~/.local/emsdk (matches build-tools/install-emscripten.sh).
+# Override from the environment if installed elsewhere — emsdk_env.sh already
+# exports EMSDK after `./emsdk activate`. When emsdk isn't installed at all,
+# the apt-shipped /usr/bin/emcc on the system path is still picked up
+# (older but workable).
+EMSDK ?= $(HOME)/.local/emsdk
+WEBASM_PATH := $(EMSDK)/upstream/emscripten:$(EMSDK):/usr/local/bin:/usr/bin:/bin
 
 ifeq ($(USE_DISTCC),1)
 ifneq ($(shell which distcc 2>/dev/null),)
@@ -198,128 +212,6 @@ test-desktop-yinfo-release: ## Run desktop yinfo release tests
 	./$(BUILD_DIR_DESKTOP_YINFO_RELEASE)/test/ut/yetty_tests
 
 #=============================================================================
-# Linux cross-compile (aarch64 / riscv64) — host x86_64 → target Linux ARM64/RISC-V
-# NO nix. Uses Ubuntu/Debian's stock cross toolchain + multiarch dev packages.
-#
-# One-time host setup (Ubuntu 24.04 / Debian 12):
-#
-#   sudo apt-get update
-#   sudo apt-get install -y \
-#       cmake ninja-build pkg-config \
-#       gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-#       gcc-riscv64-linux-gnu g++-riscv64-linux-gnu
-#
-#   # Multiarch: pull arm64/riscv64 dev packages from ports.ubuntu.com
-#   sudo dpkg --add-architecture arm64
-#   sudo dpkg --add-architecture riscv64
-#
-#   # Restrict default sources to amd64 (so apt doesn't try to fetch
-#   # arm64/riscv64 from us.archive — which doesn't have them):
-#   sudo sed -i -E 's|^deb |deb [arch=amd64] |' /etc/apt/sources.list \
-#       /etc/apt/sources.list.d/*.list 2>/dev/null || true
-#
-#   # Add ports for arm64/riscv64 (replace `noble` with your codename):
-#   . /etc/os-release
-#   echo "deb [arch=arm64,riscv64] http://ports.ubuntu.com/ubuntu-ports $${VERSION_CODENAME} main universe" \
-#       | sudo tee /etc/apt/sources.list.d/ports.list
-#   echo "deb [arch=arm64,riscv64] http://ports.ubuntu.com/ubuntu-ports $${VERSION_CODENAME}-updates main universe" \
-#       | sudo tee -a /etc/apt/sources.list.d/ports.list
-#
-#   sudo apt-get update
-#
-#   # Cross dev packages (aarch64). Build of the main `yetty` exec needs
-#   # X11/wayland/GL/fontconfig; the riscv64 target builds demos+tools only
-#   # so it's a smaller list — but we install the same set for symmetry.
-#   sudo apt-get install -y \
-#       libx11-dev:arm64 libxrandr-dev:arm64 libxinerama-dev:arm64 \
-#       libxcursor-dev:arm64 libxi-dev:arm64 libxext-dev:arm64 \
-#       libxkbcommon-dev:arm64 libwayland-dev:arm64 wayland-protocols \
-#       libgl-dev:arm64 libfontconfig-dev:arm64 \
-#       libexpat1-dev:arm64 uuid-dev:arm64 \
-#       \
-#       libx11-dev:riscv64 libxrandr-dev:riscv64 libxinerama-dev:riscv64 \
-#       libxcursor-dev:riscv64 libxi-dev:riscv64 libxext-dev:riscv64 \
-#       libxkbcommon-dev:riscv64 libwayland-dev:riscv64 \
-#       libgl-dev:riscv64 libfontconfig-dev:riscv64 \
-#       libexpat1-dev:riscv64 uuid-dev:riscv64
-#
-# riscv64 note: the main `yetty` executable links Dawn/WebGPU which has no
-# riscv64 prebuilt — `build-linux-riscv-ytrace-release` therefore builds
-# only the demos + non-GPU tools (passes -DYETTY_ENABLE_LIB_WEBGPU=OFF and
-# selects specific ninja targets), not `yetty` itself.
-#=============================================================================
-
-# Cross flags. CMAKE_LIBRARY_ARCHITECTURE makes find_library/find_package(X11)
-# pick libs from /usr/lib/<arch>-linux-gnu/ first, ahead of the host /usr/lib.
-CMAKE_CROSS_AARCH64 := \
-	-DCMAKE_SYSTEM_NAME=Linux \
-	-DCMAKE_SYSTEM_PROCESSOR=aarch64 \
-	-DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
-	-DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
-	-DCMAKE_LIBRARY_ARCHITECTURE=aarch64-linux-gnu
-
-CMAKE_CROSS_RISCV := \
-	-DCMAKE_SYSTEM_NAME=Linux \
-	-DCMAKE_SYSTEM_PROCESSOR=riscv64 \
-	-DCMAKE_C_COMPILER=riscv64-linux-gnu-gcc \
-	-DCMAKE_CXX_COMPILER=riscv64-linux-gnu-g++ \
-	-DCMAKE_LIBRARY_ARCHITECTURE=riscv64-linux-gnu \
-	-DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc -static-libstdc++" \
-	-DYETTY_ENABLE_LIB_WEBGPU=OFF \
-	-DYETTY_ENABLE_LIB_GLFW=OFF \
-	-DYETTY_ENABLE_LIB_QEMU=OFF \
-	-DYETTY_ENABLE_LIB_QEMU_BINARY=OFF
-
-# Scope pkg-config to the multiarch .pc dir so `pkg_check_modules(fontconfig)`
-# doesn't pick up host-x86_64 metadata. PKG_CONFIG_LIBDIR replaces the default
-# search path (PKG_CONFIG_PATH only prepends).
-PKG_CFG_AARCH64 := PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig
-PKG_CFG_RISCV := PKG_CONFIG_LIBDIR=/usr/lib/riscv64-linux-gnu/pkgconfig:/usr/share/pkgconfig
-
-# riscv64 target list (no `yetty` — Dawn unavailable for riscv64).
-# Tools/demos that link yrender, ywebgpu, or ypaint-core (which all
-# include <webgpu/webgpu.h> directly) are excluded — that rules out
-# ycat, yecho, yplot, ymesh, ymaze, ydoc, ysheet, yslide, yetty-ythorvg,
-# yetty-ymsdf-gen-gpu, msdf-render-atlas, and every demo-ygui-*. What
-# remains: pure CDB / msdf / ypaint-decode / ymgui-imgui_core / TinyEMU.
-LINUX_RISCV_TARGETS := \
-    decode-ypaint \
-    yetty-ymsdf-gen yetty-msdf-gen \
-    cdb-viewer cdb-diff \
-    temu \
-    demo-ymgui-01-demo-window \
-    yplot ymesh yecho ycat \
-    ygreeter
-
-.PHONY: config-linux-aarch64-ytrace-release
-config-linux-aarch64-ytrace-release: ## Configure Linux aarch64 cross-build (release)
-	$(PKG_CFG_AARCH64) \
-		$(CMAKE) -B $(BUILD_DIR_LINUX_AARCH64_YTRACE_RELEASE) $(CMAKE_GENERATOR) \
-			$(CMAKE_RELEASE) $(CMAKE_LOGLEVEL_YTRACE) $(CMAKE_CROSS_AARCH64) $(CMAKE_COMPILER_LAUNCHER)
-
-.PHONY: build-linux-aarch64-ytrace-release
-build-linux-aarch64-ytrace-release: ## Build Linux aarch64 cross-compiled (release)
-	@if [ ! -f "$(BUILD_DIR_LINUX_AARCH64_YTRACE_RELEASE)/build.ninja" ]; then $(MAKE) config-linux-aarch64-ytrace-release; fi
-	$(CMAKE) --build $(BUILD_DIR_LINUX_AARCH64_YTRACE_RELEASE) $(CMAKE_PARALLEL)
-
-.PHONY: config-linux-riscv-ytrace-release
-config-linux-riscv-ytrace-release: ## Configure Linux riscv64 cross-build (release, no GPU)
-	$(PKG_CFG_RISCV) \
-		$(CMAKE) -B $(BUILD_DIR_LINUX_RISCV_YTRACE_RELEASE) $(CMAKE_GENERATOR) \
-			$(CMAKE_RELEASE) $(CMAKE_LOGLEVEL_YTRACE) $(CMAKE_CROSS_RISCV) $(CMAKE_COMPILER_LAUNCHER)
-
-.PHONY: build-linux-riscv-ytrace-release
-build-linux-riscv-ytrace-release: ## Build Linux riscv64 demos+tools (NOT yetty exec — Dawn missing)
-	@if [ ! -f "$(BUILD_DIR_LINUX_RISCV_YTRACE_RELEASE)/build.ninja" ]; then $(MAKE) config-linux-riscv-ytrace-release; fi
-	$(CMAKE) --build $(BUILD_DIR_LINUX_RISCV_YTRACE_RELEASE) $(CMAKE_PARALLEL) --target $(LINUX_RISCV_TARGETS)
-	$(MAKE) disk-linux-riscv-ytrace-release
-
-.PHONY: disk-linux-riscv-ytrace-release
-disk-linux-riscv-ytrace-release: ## Build minimum-size ext4 disk image with riscv64 binaries + repo HEAD checkout
-	BUILD_DIR=$(CURDIR)/$(BUILD_DIR_LINUX_RISCV_YTRACE_RELEASE) \
-		build-tools/yemu/make-riscv-disk.sh
-
-#=============================================================================
 # Android - ytrace (full logging)
 #=============================================================================
 
@@ -334,12 +226,12 @@ config-android-ytrace-release: ## Configure Android ytrace release build
 .PHONY: build-android-ytrace-debug
 build-android-ytrace-debug: ## Build Android ytrace debug APK
 	@$(MAKE) _android-ytrace-deps-debug
-	USE_CCACHE=$(USE_CCACHE) ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_YTRACE_DEBUG) nix develop .#android --command bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_YTRACE_DEBUG) assembleDebug"
+	PATH="$(ANDROID_PATH)" USE_CCACHE=$(USE_CCACHE) ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_YTRACE_DEBUG) bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_YTRACE_DEBUG) assembleDebug"
 
 .PHONY: build-android-ytrace-release
 build-android-ytrace-release: ## Build Android ytrace release APK
 	@$(MAKE) _android-ytrace-deps-release
-	USE_CCACHE=$(USE_CCACHE) ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_YTRACE_RELEASE) nix develop .#android --command bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_YTRACE_RELEASE) assembleRelease"
+	PATH="$(ANDROID_PATH)" USE_CCACHE=$(USE_CCACHE) ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_YTRACE_RELEASE) bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_YTRACE_RELEASE) assembleRelease"
 
 .PHONY: test-android-ytrace-debug
 test-android-ytrace-debug: build-android-ytrace-debug ## Install and run Android ytrace debug build
@@ -358,12 +250,12 @@ test-android-ytrace-release: build-android-ytrace-release ## Install and run And
 .PHONY: build-android_x86_64-ytrace-debug
 build-android_x86_64-ytrace-debug: ## Build Android x86_64 ytrace debug APK (emulator)
 	@$(MAKE) _android_x86_64-ytrace-deps-debug
-	USE_CCACHE=$(USE_CCACHE) ANDROID_ABI=x86_64 ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_X86_64_YTRACE_DEBUG) nix develop .#android --command bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_X86_64_YTRACE_DEBUG) assembleDebug"
+	PATH="$(ANDROID_PATH)" USE_CCACHE=$(USE_CCACHE) ANDROID_ABI=x86_64 ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_X86_64_YTRACE_DEBUG) bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_X86_64_YTRACE_DEBUG) assembleDebug"
 
 .PHONY: build-android_x86_64-ytrace-release
 build-android_x86_64-ytrace-release: ## Build Android x86_64 ytrace release APK (emulator)
 	@$(MAKE) _android_x86_64-ytrace-deps-release
-	USE_CCACHE=$(USE_CCACHE) ANDROID_ABI=x86_64 ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_X86_64_YTRACE_RELEASE) nix develop .#android --command bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_X86_64_YTRACE_RELEASE) assembleRelease"
+	PATH="$(ANDROID_PATH)" USE_CCACHE=$(USE_CCACHE) ANDROID_ABI=x86_64 ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_X86_64_YTRACE_RELEASE) bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_X86_64_YTRACE_RELEASE) assembleRelease"
 
 .PHONY: test-android_x86_64-ytrace-debug
 test-android_x86_64-ytrace-debug: build-android_x86_64-ytrace-debug ## Install and run Android x86_64 ytrace debug (emulator)
@@ -381,14 +273,14 @@ test-android_x86_64-ytrace-release: build-android_x86_64-ytrace-release ## Insta
 
 .PHONY: config-webasm-ytrace-debug
 config-webasm-ytrace-debug: ## Configure WebAssembly ytrace debug build
-	nix develop .#web --command bash -c '\
+	PATH="$(WEBASM_PATH)" bash -c '\
 		export EMCC_SKIP_SANITY_CHECK=1 && \
 		emcmake cmake -B $(BUILD_DIR_WEBASM_YTRACE_DEBUG) $(CMAKE_GENERATOR) \
 			-DCMAKE_BUILD_TYPE=Debug $(CMAKE_COMPILER_LAUNCHER)'
 
 .PHONY: config-webasm-ytrace-release
 config-webasm-ytrace-release: ## Configure WebAssembly ytrace release build
-	nix develop .#web --command bash -c '\
+	PATH="$(WEBASM_PATH)" bash -c '\
 		export EMCC_SKIP_SANITY_CHECK=1 && \
 		emcmake cmake -B $(BUILD_DIR_WEBASM_YTRACE_RELEASE) $(CMAKE_GENERATOR) \
 			-DCMAKE_BUILD_TYPE=MinSizeRel $(CMAKE_COMPILER_LAUNCHER)'
@@ -396,20 +288,20 @@ config-webasm-ytrace-release: ## Configure WebAssembly ytrace release build
 .PHONY: build-webasm-ytrace-debug
 build-webasm-ytrace-debug: ## Build WebAssembly ytrace debug
 	@if [ ! -f "$(BUILD_DIR_WEBASM_YTRACE_DEBUG)/build.ninja" ]; then $(MAKE) config-webasm-ytrace-debug; fi
-	nix develop .#web --command bash -c 'cmake --build $(BUILD_DIR_WEBASM_YTRACE_DEBUG) --target yetty $(CMAKE_PARALLEL)'
+	PATH="$(WEBASM_PATH)" bash -c 'cmake --build $(BUILD_DIR_WEBASM_YTRACE_DEBUG) --target yetty $(CMAKE_PARALLEL)'
 	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR_WEBASM_YTRACE_DEBUG)/
 	@$(MAKE) verify-webasm BUILD_DIR=$(BUILD_DIR_WEBASM_YTRACE_DEBUG)
 
 .PHONY: build-webasm-ytrace-release
 build-webasm-ytrace-release: ## Build WebAssembly ytrace release (CDB generation handled by CMake)
 	@if [ ! -f "$(BUILD_DIR_WEBASM_YTRACE_RELEASE)/build.ninja" ]; then $(MAKE) config-webasm-ytrace-release; fi
-	nix develop .#web --command bash -c 'cmake --build $(BUILD_DIR_WEBASM_YTRACE_RELEASE) --target yetty $(CMAKE_PARALLEL)'
+	PATH="$(WEBASM_PATH)" bash -c 'cmake --build $(BUILD_DIR_WEBASM_YTRACE_RELEASE) --target yetty $(CMAKE_PARALLEL)'
 	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR_WEBASM_YTRACE_RELEASE)/
 	@$(MAKE) verify-webasm BUILD_DIR=$(BUILD_DIR_WEBASM_YTRACE_RELEASE)
 
 .PHONY: config-webasm-yinfo-debug
 config-webasm-yinfo-debug: ## Configure WebAssembly yinfo debug build (minimal logging)
-	nix develop .#web --command bash -c '\
+	PATH="$(WEBASM_PATH)" bash -c '\
 		export EMCC_SKIP_SANITY_CHECK=1 && \
 		emcmake cmake -B $(BUILD_DIR_WEBASM_YINFO_DEBUG) $(CMAKE_GENERATOR) \
 			-DCMAKE_BUILD_TYPE=Debug \
@@ -418,13 +310,13 @@ config-webasm-yinfo-debug: ## Configure WebAssembly yinfo debug build (minimal l
 .PHONY: build-webasm-yinfo-debug
 build-webasm-yinfo-debug: ## Build WebAssembly yinfo debug (minimal logging)
 	@if [ ! -f "$(BUILD_DIR_WEBASM_YINFO_DEBUG)/build.ninja" ]; then $(MAKE) config-webasm-yinfo-debug; fi
-	nix develop .#web --command bash -c 'cmake --build $(BUILD_DIR_WEBASM_YINFO_DEBUG) --target yetty $(CMAKE_PARALLEL)'
+	PATH="$(WEBASM_PATH)" bash -c 'cmake --build $(BUILD_DIR_WEBASM_YINFO_DEBUG) --target yetty $(CMAKE_PARALLEL)'
 	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR_WEBASM_YINFO_DEBUG)/
 	@$(MAKE) verify-webasm BUILD_DIR=$(BUILD_DIR_WEBASM_YINFO_DEBUG)
 
 .PHONY: config-webasm-yinfo-release
 config-webasm-yinfo-release: ## Configure WebAssembly yinfo release build (minimal logging)
-	nix develop .#web --command bash -c '\
+	PATH="$(WEBASM_PATH)" bash -c '\
 		export EMCC_SKIP_SANITY_CHECK=1 && \
 		emcmake cmake -B $(BUILD_DIR_WEBASM_YINFO_RELEASE) $(CMAKE_GENERATOR) \
 			-DCMAKE_BUILD_TYPE=MinSizeRel \
@@ -433,7 +325,7 @@ config-webasm-yinfo-release: ## Configure WebAssembly yinfo release build (minim
 .PHONY: build-webasm-yinfo-release
 build-webasm-yinfo-release: ## Build WebAssembly yinfo release (minimal logging)
 	@if [ ! -f "$(BUILD_DIR_WEBASM_YINFO_RELEASE)/build.ninja" ]; then $(MAKE) config-webasm-yinfo-release; fi
-	nix develop .#web --command bash -c 'cmake --build $(BUILD_DIR_WEBASM_YINFO_RELEASE) --target yetty $(CMAKE_PARALLEL)'
+	PATH="$(WEBASM_PATH)" bash -c 'cmake --build $(BUILD_DIR_WEBASM_YINFO_RELEASE) --target yetty $(CMAKE_PARALLEL)'
 	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR_WEBASM_YINFO_RELEASE)/
 	@$(MAKE) verify-webasm BUILD_DIR=$(BUILD_DIR_WEBASM_YINFO_RELEASE)
 
