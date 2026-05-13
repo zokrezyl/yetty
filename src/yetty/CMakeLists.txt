@@ -195,6 +195,10 @@ if(YETTY_ENABLE_FEATURE_YMARKDOWN)
     add_subdirectory(ymarkdown)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YSVG)
+    add_subdirectory(ysvg)
+endif()
+
 if(YETTY_ENABLE_FEATURE_YIMAGE)
     add_subdirectory(yimage)
 endif()

@@ -44,6 +44,11 @@ enum yetty_ycat_type yetty_ycat_type_from_mime(const char *mime)
     if (strcmp(mime, "text/markdown") == 0 || strcmp(mime, "text/x-markdown") == 0) {
         return YETTY_YCAT_TYPE_MARKDOWN;
     }
+    /* Check SVG before the generic "image/" prefix so it routes to the
+     * vector handler instead of the raster decoder. */
+    if (strcmp(mime, "image/svg+xml") == 0 || strcmp(mime, "image/svg") == 0) {
+        return YETTY_YCAT_TYPE_SVG;
+    }
     /* libmagic with MAGIC_MIME_TYPE returns "image/png", "image/jpeg", etc.
      * stb_image decodes png/jpg/gif/bmp/tga/psd/hdr/pic/pnm; the handler
      * surfaces stb's own error if the subtype isn't supported. */
@@ -89,6 +94,9 @@ enum yetty_ycat_type yetty_ycat_type_from_extension(const char *ext)
     }
     if (strcasecmp(noleading, "pdf") == 0) {
         return YETTY_YCAT_TYPE_PDF;
+    }
+    if (strcasecmp(noleading, "svg") == 0) {
+        return YETTY_YCAT_TYPE_SVG;
     }
     if (strcasecmp(noleading, "txt") == 0) {
         return YETTY_YCAT_TYPE_TEXT;
@@ -178,7 +186,8 @@ enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const c
     /* Extension first on types libmagic generalises away (markdown and
 	 * most source files → text/plain). */
     enum yetty_ycat_type by_ext = yetty_ycat_type_from_extension(path_extension(path));
-    if (by_ext == YETTY_YCAT_TYPE_MARKDOWN || by_ext == YETTY_YCAT_TYPE_PDF) {
+    if (by_ext == YETTY_YCAT_TYPE_MARKDOWN || by_ext == YETTY_YCAT_TYPE_PDF ||
+        by_ext == YETTY_YCAT_TYPE_SVG) {
         return by_ext;
     }
 

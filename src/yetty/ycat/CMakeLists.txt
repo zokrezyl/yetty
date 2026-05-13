@@ -6,6 +6,7 @@ set(YCAT_SOURCES
     handler-markdown.c
     handler-pdf.c
     handler-image.c
+    handler-svg.c
     osc.c
     fetch.c
     ts-grammars.c
@@ -81,6 +82,7 @@ target_link_libraries(yetty_ycat PUBLIC
     yetty_ypaint_core
     yetty_ymarkdown
     yetty_ypdf
+    yetty_ysvg
     yetty_yfont_core
     yetty_yimage_core
     pdfio_lib
