@@ -909,7 +909,7 @@ struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_contex
 
     /* Create tabbar — owns the (initially single) workspace. */
     ydebug("yetty_create: Creating tabbar...");
-    struct yetty_yui_tabbar_ptr_result tb_res = yetty_yui_tabbar_create();
+    struct yetty_yui_tabbar_ptr_result tb_res = yetty_yui_tabbar_create(app_context->config);
     if (!YETTY_IS_OK(tb_res)) {
         yetty_destroy(yetty);
         return YETTY_ERR(yetty_yetty_yetty, "Failed to create tabbar");
