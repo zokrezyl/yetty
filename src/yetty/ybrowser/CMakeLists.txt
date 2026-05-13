@@ -31,15 +31,22 @@ target_link_libraries(yetty_ybrowser
         stb
 )
 
-# libcss (MIT) — NetSurf's CSS cascade. Pulled in via the netsurf prebuilt
-# (build-tools/yetty/libs/netsurf.cmake creates the ns_css IMPORTED
-# target). If unavailable on this platform, ybrowser falls back to the
-# same string-parsing path ylexbor uses today via YETTY_HAVE_LIBCSS=0.
+# libcss (MIT) — NetSurf's CSS cascade. Prefer the standalone libcss
+# 3rdparty prebuilt (build-tools/yetty/libs/libcss.cmake, target
+# libcss_static). Fall back to the legacy netsurf prebuilt (ns_css) on
+# platforms where libcss isn't yet a standalone prebuilt. If neither is
+# available, ybrowser falls back to the lexbor string-parsing path via
+# YETTY_HAVE_LIBCSS=0.
+include(${YETTY_ROOT}/build-tools/yetty/libs/libcss.cmake OPTIONAL)
 include(${YETTY_ROOT}/build-tools/yetty/libs/netsurf.cmake OPTIONAL)
-if(TARGET ns_css)
+if(TARGET libcss_static)
+    target_link_libraries(yetty_ybrowser PUBLIC libcss_static)
+    target_compile_definitions(yetty_ybrowser PRIVATE YETTY_HAVE_LIBCSS=1)
+    message(STATUS "yetty_ybrowser: libcss enabled (libcss_static)")
+elseif(TARGET ns_css)
     target_link_libraries(yetty_ybrowser PUBLIC ns_css ns_wapcaplet ns_parserutils)
     target_compile_definitions(yetty_ybrowser PRIVATE YETTY_HAVE_LIBCSS=1)
-    message(STATUS "yetty_ybrowser: libcss enabled")
+    message(STATUS "yetty_ybrowser: libcss enabled (ns_css legacy)")
 else()
     target_compile_definitions(yetty_ybrowser PRIVATE YETTY_HAVE_LIBCSS=0)
     message(STATUS "yetty_ybrowser: libcss missing — falling back to lexbor CSS path")
