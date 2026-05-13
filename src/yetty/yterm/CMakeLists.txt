@@ -19,7 +19,6 @@ target_link_libraries(yetty_yterm
     webgpu
     yetty_ypaint_core
     yetty_ypaint_factory
-    yetty_ypaint_yaml
     yetty_yfont_core
     yetty_yui_core
     yetty_yface

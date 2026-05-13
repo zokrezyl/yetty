@@ -195,7 +195,7 @@ The canvas manages a spatial grid for GPU culling:
 Each grid cell stores an array of `prim_ref`:
 
 ```c
-struct yetty_ypaint_canvas_prim_ref {
+struct yetty_ypaint_scrolling_canvas_prim_ref {
     uint16_t lines_ahead;  // relative offset to base line (0 = same line)
     uint16_t prim_index;   // index within base line's prims array
 };

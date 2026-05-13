@@ -30,6 +30,12 @@ struct yetty_yfont_cache {
     yetty_yfont_cache_handle *free_slots;
     uint32_t free_count;
     uint32_t free_capacity;
+
+    /* Bumped on every slot alloc AND every slot release. Lets consumers
+     * (ypaint-layer's dispatcher rebuild) detect any change in the active
+     * slot set — `count` alone is a high watermark and stays unchanged
+     * when a slot drops. */
+    uint32_t generation;
 };
 
 struct yetty_yfont_cache_ptr_result yetty_yfont_cache_create(const char *shaders_dir)
@@ -145,6 +151,7 @@ struct yetty_yfont_cache_ref_result yetty_yfont_cache_get_font(struct yetty_yfon
     e->font = fr.value;
     e->refcount = 1;
     e->in_use = true;
+    cache->generation++;
 
     ydebug("yfont_cache: miss key='%s' -> slot=%u (constructed)", key, slot);
     struct yetty_yfont_cache_ref ref = {.font = fr.value, .handle = slot};
@@ -182,6 +189,7 @@ void yetty_yfont_cache_release_font(struct yetty_yfont_cache *cache, yetty_yfont
     e->font = NULL;
     e->key[0] = '\0';
     e->in_use = false;
+    cache->generation++;
 
     /* Push to free list. On OOM growing the free list, leak the slot — the
      * font is already gone and the caller can keep operating. */
@@ -214,4 +222,9 @@ struct yetty_ypaint_font *yetty_yfont_cache_font_at(const struct yetty_yfont_cac
 uint32_t yetty_yfont_cache_count(const struct yetty_yfont_cache *cache)
 {
     return cache ? cache->count : 0;
+}
+
+uint32_t yetty_yfont_cache_generation(const struct yetty_yfont_cache *cache)
+{
+    return cache ? cache->generation : 0;
 }

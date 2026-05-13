@@ -2,9 +2,11 @@
 # Note: core moved to ypaint-core, SDF/yaml moved to ysdf
 
 add_library(yetty_ypaint STATIC
+    canvas.c
     flyweight.c
     scrollbuffer.c
-    ypaint-canvas.c
+    scrolling-canvas.c
+    static-canvas.c
 )
 
 target_link_libraries(yetty_ypaint PUBLIC
