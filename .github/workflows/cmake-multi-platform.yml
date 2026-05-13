@@ -22,8 +22,8 @@ env:
   BUILD_LINUX_ASAN: false
   BUILD_MACOS: false
   BUILD_WINDOWS: false
-  BUILD_ANDROID: true
-  BUILD_ANDROID_X86_64: true
+  BUILD_ANDROID: false
+  BUILD_ANDROID_X86_64: false
   BUILD_IOS: false
   BUILD_IOS_X86_64: false
   BUILD_WEB: false
@@ -519,7 +519,7 @@ jobs:
         if-no-files-found: warn
 
   # =============================================================================
-  # WebAssembly Build (using nix for deterministic builds)
+  # WebAssembly Build
   # =============================================================================
   build-webasm-ytrace-release:
     needs: read-flags
@@ -527,18 +527,56 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      BUILD_DIR: build-webasm-ytrace-release-nix
+      BUILD_DIR: build-webasm-ytrace-release
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Nix
-      uses: cachix/install-nix-action@v27
-      with:
-        nix_path: nixpkgs=channel:nixos-unstable
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          build-essential \
+          ninja-build \
+          cmake \
+          pkg-config \
+          python3 \
+          patch \
+          brotli \
+          curl \
+          unzip \
+          ca-certificates \
+          git \
+          nodejs
 
-    - name: Build WebAssembly with Nix
-      run: make -f Makefile.2 build PLATFORM=webasm LOGLEVEL=ytrace BUILDTYPE=release USE_NIX=yes
+    - name: Install Emscripten SDK (latest)
+      run: |
+        git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
+        cd "$HOME/emsdk"
+        ./emsdk install latest
+        ./emsdk activate latest
+        # Export EMSDK paths to all subsequent steps. emsdk_env.sh prepends
+        # emsdk/upstream/emscripten and friends to PATH and sets EMSDK*.
+        # We pull them out into GITHUB_ENV / GITHUB_PATH so the make step
+        # picks them up without re-sourcing.
+        set -a
+        . ./emsdk_env.sh
+        set +a
+        {
+          echo "EMSDK=${EMSDK}"
+          echo "EMSDK_NODE=${EMSDK_NODE}"
+          echo "EMSDK_PYTHON=${EMSDK_PYTHON:-$(command -v python3)}"
+          echo "EM_CONFIG=${EM_CONFIG:-$HOME/.emscripten}"
+        } >> "$GITHUB_ENV"
+        # PATH additions: emsdk root + active upstream tools.
+        {
+          echo "$HOME/emsdk"
+          echo "$HOME/emsdk/upstream/emscripten"
+        } >> "$GITHUB_PATH"
+        emcc --version | head -1
+
+    - name: Build WebAssembly
+      run: make build-webasm-ytrace-release
 
     - name: Prepare site directory
       run: |
