@@ -1,0 +1,29 @@
+# glfw 3rdparty — macos-arm64 (native on the macOS agent, e.g. macbook).
+# Cocoa backend, no X11/Wayland. Xcode CommandLineTools must be installed
+# (provides clang/ld/ar); brew provides cmake + ninja.
+
+labels:
+  platform: darwin/arm64
+
+when:
+  - event: manual
+  - event: tag
+    ref: refs/tags/lib-glfw-*
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      lfs: false
+
+steps:
+  build:
+    image: bash
+    environment:
+      TARGET_PLATFORM: macos-arm64
+      OUTPUT_DIR: out
+    commands:
+      - brew install --quiet cmake ninja pkg-config || true
+      - mkdir -p "$OUTPUT_DIR"
+      - ./build-tools/3rdparty/glfw/build.sh
+      - ls -lh "$OUTPUT_DIR/"

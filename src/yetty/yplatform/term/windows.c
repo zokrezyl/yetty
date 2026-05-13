@@ -22,3 +22,28 @@ void yetty_yplatform_format_timestamp(char *buf, size_t bufsize)
     snprintf(buf, bufsize, "%02d:%02d:%02d.%03d", st.wHour, st.wMinute, st.wSecond,
              st.wMilliseconds);
 }
+
+int yetty_yplatform_term_get_size(int *cols, int *rows)
+{
+    /* Try stdout first, then stderr, then stdin. The console-buffer
+     * "window" rectangle (srWindow) is the visible viewport — what users
+     * mean by "terminal size" — not the back-buffer dimensions. */
+    DWORD handles[] = { STD_OUTPUT_HANDLE, STD_ERROR_HANDLE, STD_INPUT_HANDLE };
+    for (size_t i = 0; i < sizeof(handles) / sizeof(handles[0]); i++) {
+        HANDLE h = GetStdHandle(handles[i]);
+        if (h == INVALID_HANDLE_VALUE || h == NULL) {
+            continue;
+        }
+        CONSOLE_SCREEN_BUFFER_INFO csbi;
+        if (GetConsoleScreenBufferInfo(h, &csbi)) {
+            int c = csbi.srWindow.Right  - csbi.srWindow.Left + 1;
+            int r = csbi.srWindow.Bottom - csbi.srWindow.Top  + 1;
+            if (c > 0 && r > 0) {
+                if (cols) *cols = c;
+                if (rows) *rows = r;
+                return 0;
+            }
+        }
+    }
+    return -1;
+}

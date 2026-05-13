@@ -1,0 +1,48 @@
+# glfw 3rdparty — linux-x86_64 (docker on the linux-amd64 agent).
+# Triggered by:
+#   - manual run (test on local network before pushing the lib-glfw-* tag)
+#   - tag push matching lib-glfw-*
+#
+# Output: out/glfw-linux-x86_64-<ver>.tar.gz. The build matches the
+# .github/workflows/build-3rdparty-glfw.yml linux job.
+
+labels:
+  platform: linux/amd64
+  backend: docker
+
+when:
+  - event: manual
+  - event: tag
+    ref: refs/tags/lib-glfw-*
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      lfs: false
+
+steps:
+  fix-workspace-perms:
+    image: alpine
+    commands:
+      - chown -R 1000:1000 .
+
+  build:
+    image: ubuntu:24.04
+    environment:
+      TARGET_PLATFORM: linux-x86_64
+      OUTPUT_DIR: out
+      DEBIAN_FRONTEND: noninteractive
+    commands:
+      - apt-get update
+      - >
+        apt-get install -y --no-install-recommends
+        cmake ninja-build pkg-config build-essential
+        libx11-dev libxrandr-dev libxinerama-dev
+        libxcursor-dev libxi-dev libxext-dev
+        libwayland-dev wayland-protocols libwayland-bin
+        libxkbcommon-dev libgl1-mesa-dev
+        curl ca-certificates tar
+      - mkdir -p "$OUTPUT_DIR"
+      - ./build-tools/3rdparty/glfw/build.sh
+      - ls -lh "$OUTPUT_DIR/"

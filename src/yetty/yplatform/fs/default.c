@@ -1,6 +1,8 @@
 /* fs.c - POSIX filesystem helpers */
 
 #include <yetty/yplatform/fs.h>
+#include <libgen.h>
+#include <stdlib.h>
 #include <sys/stat.h>
 #include <string.h>
 #include <stdio.h>
@@ -44,4 +46,34 @@ int yetty_yplatform_unlink(const char *path)
 int yetty_yplatform_chmod(const char *path, unsigned int mode)
 {
     return chmod(path, (mode_t)mode);
+}
+
+int yetty_yplatform_file_is_regular(const char *path)
+{
+    if (!path) return 0;
+    struct stat st;
+    return stat(path, &st) == 0 && S_ISREG(st.st_mode);
+}
+
+int yetty_yplatform_path_dirname(const char *path, char *out, size_t out_size)
+{
+    if (!path || !out || out_size == 0) return -1;
+    /* POSIX dirname() may mutate its input — work on a private copy. */
+    size_t len = strlen(path);
+    char *copy = (char *)malloc(len + 1);
+    if (!copy) return -1;
+    memcpy(copy, path, len + 1);
+    char *d = dirname(copy);
+    if (!d) { free(copy); return -1; }
+    size_t dlen = strlen(d);
+    if (dlen + 1 > out_size) { free(copy); return -1; }
+    memcpy(out, d, dlen + 1);
+    free(copy);
+    return 0;
+}
+
+char *yetty_yplatform_path_realpath(const char *path)
+{
+    if (!path) return NULL;
+    return realpath(path, NULL);  /* glibc/musl/BSD: NULL second arg → malloc */
 }

@@ -3,15 +3,17 @@
 # four tabs (Welcome / Plots / Images / Code), each with a small tree
 # nav on the left and a rich content surface on the right.
 #
-# ytrace + yplatform/shared/{thread,term} are compiled per-final-target
-# (they're not standalone libraries) — pull them in directly, same shape
-# as tools/ytop.
+# ytrace + the per-platform yplatform impls (thread/term/fs/time) are
+# compiled per-final-target — they're not standalone libraries. Use
+# YETTY_YPLATFORM_THREAD_SOURCES which shared.cmake populates with the
+# correct {default,windows}.c picks so the build stays portable. (The
+# variable name predates fs/ being lumped in; same shape as the main
+# yetty target.)
 
 add_executable(ygreeter
     main.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
+    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
 target_include_directories(ygreeter PRIVATE

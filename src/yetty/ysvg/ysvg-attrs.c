@@ -9,6 +9,13 @@
 
 #include "ysvg-internal.h"
 
+/* MSVC's <math.h> only exposes M_PI when _USE_MATH_DEFINES is set before
+ * the include; glibc/macOS ship it unconditionally. Defining the macro
+ * before <math.h> is the portable way to keep MSVC compiling. */
+#ifndef _USE_MATH_DEFINES
+#define _USE_MATH_DEFINES
+#endif
+
 #include <ctype.h>
 #include <math.h>
 #include <stddef.h>

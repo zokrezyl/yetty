@@ -36,8 +36,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/ioctl.h>
-#include <unistd.h>
+#include <yetty/yplatform/fs.h>     /* path_dirname, path_realpath, file_is_regular */
+#include <yetty/yplatform/term.h>   /* term_get_size */
 #include <yetty/ygui/ygui.h>
 
 /* =========================================================================
@@ -348,16 +348,12 @@ static struct yetty_ypaint_core_buffer *build_image_buffer(const char *title, co
     return r.value;
 }
 
-#include <libgen.h> /* dirname */
-#include <sys/stat.h>
-
 static int path_exists(const char *path)
 {
     if (!path || !*path) {
         return 0;
     }
-    struct stat st;
-    return stat(path, &st) == 0 && S_ISREG(st.st_mode);
+    return yetty_yplatform_file_is_regular(path);
 }
 
 /* Resolve a path relative to argv[0]'s directory walking up `levels`
@@ -369,21 +365,20 @@ static char *resolve_relative_to_exe(const char *argv0, int up_levels, const cha
     if (!argv0) {
         return NULL;
     }
-    char *real = realpath(argv0, NULL);
-    if (!real) {
+    char *cur = yetty_yplatform_path_realpath(argv0);
+    if (!cur) {
         return NULL;
     }
-    char *cur = real;
     for (int i = 0; i < up_levels; i++) {
-        /* dirname() may mutate its input; replace cur in-place. */
-        char *parent = strdup(cur);
-        if (!parent) {
-            free(real);
+        /* PATH_MAX is the conservative upper bound for filesystem paths
+         * on every platform we target; ygreeter walks at most a handful
+         * of dirs up from argv[0], so this stays comfortably below. */
+        char parent[4096];
+        if (yetty_yplatform_path_dirname(cur, parent, sizeof(parent)) != 0) {
+            free(cur);
             return NULL;
         }
-        char *d = dirname(parent);
-        char *next = strdup(d);
-        free(parent);
+        char *next = strdup(parent);
         free(cur);
         cur = next;
         if (!cur) {
@@ -1012,11 +1007,9 @@ static void query_terminal_cells(int *cols, int *rows)
 {
     *cols = 80;
     *rows = 24;
-    struct winsize ws;
-    if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0) {
-        if (ws.ws_col > 0) *cols = ws.ws_col;
-        if (ws.ws_row > 0) *rows = ws.ws_row;
-    }
+    /* yetty_yplatform_term_get_size leaves *cols/*rows untouched on
+     * failure, so the 80x24 defaults above stick when there's no tty. */
+    (void)yetty_yplatform_term_get_size(cols, rows);
 }
 
 /* =========================================================================
