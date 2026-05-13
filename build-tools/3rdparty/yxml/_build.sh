@@ -181,16 +181,22 @@ webasm)
 
 windows-x86_64)
     # Native MSVC — caller must have vcvarsall'd the shell (cl.exe + lib.exe on PATH).
-    # /MD = use the C runtime DLL (matches the rest of the yetty Windows
-    # build); /O2 release-opt; /W0 silence yxml's intentional macro
-    # spew. lib.exe builds a static yxml.lib from yxml.obj.
+    # -MD = use the C runtime DLL (matches the rest of the yetty Windows
+    # build); -O2 release-opt; -W0 silence yxml's intentional macro spew.
+    # lib.exe builds a static yxml.lib from yxml.obj. We use `-flag`
+    # instead of `/flag` because MSYS Git Bash on the GH runner mangles
+    # `//flag` / `/flag` paths (it sees them as POSIX paths and rewrites
+    # them — that's what bit us as `//OUT:/tmp/...` going through
+    # unparsed). cl/lib accept both forms; `-` is the bash-safe one.
     command -v cl   >/dev/null 2>&1 || { echo "cl.exe not on PATH"  >&2; exit 1; }
     command -v lib  >/dev/null 2>&1 || { echo "lib.exe not on PATH" >&2; exit 1; }
     echo "==> compiling yxml @${SHORT} for windows-x86_64 (MSVC)"
+    # Belt-and-braces: also tell MSYS not to convert path-like args.
+    export MSYS2_ARG_CONV_EXCL='*'
     (
         cd "$WORK_DIR"
-        cl //nologo //c //O2 //MD //W0 //I "$SRC_DIR" //Fo:yxml.obj "$SRC_DIR/yxml.c"
-        lib //nologo //OUT:"$STAGE/lib/yxml.lib" yxml.obj
+        cl -nologo -c -O2 -MD -W0 -I "$SRC_DIR" -Fo:yxml.obj "$SRC_DIR/yxml.c"
+        lib -nologo "-OUT:$STAGE/lib/yxml.lib" yxml.obj
     )
     ;;
 
