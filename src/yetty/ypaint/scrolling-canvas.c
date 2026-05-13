@@ -1885,7 +1885,11 @@ static struct yetty_ycore_void_result scrolling_set_grid_size_impl(
 }
 
 /* Reset per-envelope streaming state on the variant. Called on the SM
- * `at_end` finaliser path and on errors. Idempotent. */
+ * `at_end` finaliser path and on errors. Idempotent.
+ *
+ * Font map refs are NOT released here — scrolling_env_finalize releases
+ * them before scroll/evict so the cache refcount has settled by the time
+ * eviction runs. Reset just frees the map storage. */
 static void scrolling_env_reset(struct yetty_ypaint_scrolling_canvas *canvas)
 {
     if (!canvas->env_active) {
@@ -1893,6 +1897,7 @@ static void scrolling_env_reset(struct yetty_ypaint_scrolling_canvas *canvas)
     }
     yetty_ypaint_core_prim_iter_destroy(&canvas->env_iter);
     ypaint_canvas_buffer_attach_free(&canvas->env_attach_list);
+    /* Error path: if finalize never ran, refs are still held — drop them. */
     ypaint_canvas_font_map_release_all(&canvas->env_fonts_map, canvas->base->font_cache);
     free(canvas->env_fonts_map.entries);
     canvas->env_fonts_map.entries = NULL;
@@ -1902,7 +1907,13 @@ static void scrolling_env_reset(struct yetty_ypaint_scrolling_canvas *canvas)
 
 /* End-of-envelope finalisation: attach pass, scroll viewport so the
  * shell prompt that runs after this OSC envelope lands at max_row_seen+1,
- * evict scrollback. Mirrors the tail of add_buffer. */
+ * evict scrollback. Mirrors the tail of add_buffer.
+ *
+ * ORDERING MATTERS: font_map_release_all runs BEFORE scroll/evict.
+ * The dispatcher in ypaint-layer keys its rebuild on font_count alone, so
+ * eviction must observe the final refcount state — otherwise a font
+ * dropped by eviction can leave a stale dispatcher entry referencing
+ * a struct that's no longer in the merged shader. */
 static struct yetty_ycore_void_result scrolling_env_finalize(
     struct yetty_ypaint_scrolling_canvas *canvas)
 {
@@ -1911,6 +1922,14 @@ static struct yetty_ycore_void_result scrolling_env_finalize(
         attach_handle_to_line(canvas, canvas->env_attach_list.entries[i].handle,
                               canvas->env_attach_list.entries[i].max_row);
     }
+
+    /* Release buffer-scoped font refs BEFORE scroll/evict. Lines that took
+     * their own ref via attach_handle_to_line keep the font alive; fonts
+     * only referenced by evicted lines drop together with eviction. */
+    ypaint_canvas_font_map_release_all(&canvas->env_fonts_map, canvas->base->font_cache);
+    free(canvas->env_fonts_map.entries);
+    canvas->env_fonts_map.entries = NULL;
+    canvas->env_fonts_map.capacity = 0;
 
     /* Scroll the viewport so the cursor lands on the line immediately
      * below the bottom-most prim — same contract as `cat foo.txt`. */

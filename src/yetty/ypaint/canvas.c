@@ -971,6 +971,11 @@ uint32_t yetty_ypaint_canvas_font_count(const struct yetty_ypaint_canvas *canvas
     return canvas ? yetty_yfont_cache_count(canvas->font_cache) : 0;
 }
 
+uint32_t yetty_ypaint_canvas_font_generation(const struct yetty_ypaint_canvas *canvas)
+{
+    return canvas ? yetty_yfont_cache_generation(canvas->font_cache) : 0;
+}
+
 struct yetty_ypaint_font *yetty_ypaint_canvas_get_font_at(
     const struct yetty_ypaint_canvas *canvas, uint32_t slot)
 {

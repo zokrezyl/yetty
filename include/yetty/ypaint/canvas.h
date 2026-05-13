@@ -156,6 +156,12 @@ uint32_t yetty_ypaint_canvas_primitive_count(const struct yetty_ypaint_canvas *c
 
 /* Fonts */
 uint32_t yetty_ypaint_canvas_font_count(const struct yetty_ypaint_canvas *canvas);
+
+/* Monotonic counter bumped on every font-cache slot alloc AND release.
+ * Lets layers detect any change in the active slot set — `font_count` is
+ * a high watermark and stays unchanged when a slot drops. */
+uint32_t yetty_ypaint_canvas_font_generation(const struct yetty_ypaint_canvas *canvas);
+
 struct yetty_ypaint_font *yetty_ypaint_canvas_get_font_at(
     const struct yetty_ypaint_canvas *canvas, uint32_t slot);
 struct yetty_ypaint_font *yetty_ypaint_canvas_get_default_font(

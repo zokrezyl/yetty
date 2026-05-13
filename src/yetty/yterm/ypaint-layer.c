@@ -116,12 +116,17 @@ struct yetty_yterm_ypaint_layer {
 
     /* Combined layer shader: generated `font_glyph_*` dispatcher block
      * (one switch case per canvas font) prepended to the static
-     * shader_code above. Regenerated on the fly whenever the canvas's
-     * font count changes. The pipeline keys recompiles on the layer's
-     * shader hash, so changing this triggers a recompile. */
+     * shader_code above. Regenerated whenever the canvas's font-cache
+     * generation changes — i.e. on any slot alloc OR release. Keying
+     * on font_count alone misses drops (count is a high watermark) and
+     * leaves stale `case Nu: msdf_<hex>_*` lines referencing structs the
+     * binder no longer merges into the module. The pipeline keys
+     * recompiles on the layer's shader hash, so changing this triggers
+     * a recompile. */
     char *combined_shader;
     size_t combined_shader_size;
-    uint32_t last_font_count; /* canvas font count baked into combined */
+    uint32_t last_font_count;      /* kept for diagnostics / log lines */
+    uint32_t last_font_generation; /* cache generation baked into combined */
 
     /* Staging buffers - point to canvas data */
     uint8_t *grid_staging;
@@ -615,11 +620,12 @@ static struct yetty_yrender_gpu_resource_set_result ypaint_layer_get_gpu_resourc
         }
     }
 
-    /* (Re)build the per-slot dispatcher block whenever the font set grew.
-     * The dispatcher forwards font_glyph_*(slot, …) to the right
-     * `<ns>_…` helper from the per-instance msdf-font shaders the binder
-     * has merged into the same WGSL module. */
-    if (font_count != layer->last_font_count) {
+    /* (Re)build the per-slot dispatcher block whenever the active font
+     * set changes — both growth (new slot) and shrinkage (slot dropped
+     * by eviction). The cache's generation counter bumps on alloc AND
+     * release, unlike font_count which is a high watermark. */
+    uint32_t font_generation = yetty_ypaint_canvas_font_generation(layer->canvas);
+    if (font_generation != layer->last_font_generation) {
         size_t cap = layer->shader_code.size + 4096 + (size_t)font_count * 512;
         char *buf = malloc(cap);
         if (buf) {
@@ -686,10 +692,11 @@ static struct yetty_yrender_gpu_resource_set_result ypaint_layer_get_gpu_resourc
                 layer->combined_shader = buf;
                 layer->combined_shader_size = off;
                 layer->last_font_count = font_count;
+                layer->last_font_generation = font_generation;
                 yetty_yrender_shader_code_set(&layer->rs.shader, layer->combined_shader,
                                               layer->combined_shader_size);
-                ydebug("ypaint_layer: rebuilt dispatcher for %u fonts (%zu bytes)", font_count,
-                       off);
+                ydebug("ypaint_layer: rebuilt dispatcher for %u fonts gen=%u (%zu bytes)",
+                       font_count, font_generation, off);
             } else {
                 free(buf);
             }

@@ -88,6 +88,13 @@ struct yetty_ypaint_font *yetty_yfont_cache_font_at(const struct yetty_yfont_cac
  * iteration; combine with font_at() which returns NULL on freed slots. */
 uint32_t yetty_yfont_cache_count(const struct yetty_yfont_cache *cache);
 
+/* Monotonic counter that bumps on every slot allocation AND every slot
+ * release. Consumers that key cached state (shader dispatchers, gpu
+ * resource sets) on the cache's slot membership should compare this
+ * against the value seen at last rebuild — `count` alone is a high
+ * watermark and stays unchanged when a slot drops, hiding the change. */
+uint32_t yetty_yfont_cache_generation(const struct yetty_yfont_cache *cache);
+
 #ifdef __cplusplus
 }
 #endif
