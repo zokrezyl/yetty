@@ -183,20 +183,26 @@ windows-x86_64)
     # Native MSVC — caller must have vcvarsall'd the shell (cl.exe + lib.exe on PATH).
     # -MD = use the C runtime DLL (matches the rest of the yetty Windows
     # build); -O2 release-opt; -W0 silence yxml's intentional macro spew.
-    # lib.exe builds a static yxml.lib from yxml.obj. We use `-flag`
-    # instead of `/flag` because MSYS Git Bash on the GH runner mangles
-    # `//flag` / `/flag` paths (it sees them as POSIX paths and rewrites
-    # them — that's what bit us as `//OUT:/tmp/...` going through
-    # unparsed). cl/lib accept both forms; `-` is the bash-safe one.
-    command -v cl   >/dev/null 2>&1 || { echo "cl.exe not on PATH"  >&2; exit 1; }
-    command -v lib  >/dev/null 2>&1 || { echo "lib.exe not on PATH" >&2; exit 1; }
+    # lib.exe builds a static yxml.lib from yxml.obj.
+    #
+    # MSVC + Git-Bash gotchas:
+    #   1. We use `-flag` instead of `/flag` because MSYS Git Bash mangles
+    #      `/flag` (looks like a POSIX path).
+    #   2. Source-file/include-dir arguments must be Windows paths — the
+    #      POSIX `/tmp/...` form gets passed through as-is and cl.exe
+    #      treats the leading `/` as a flag prefix (D9002 / D8003).
+    #      We translate explicitly with `cygpath -m` (mixed-mode Windows
+    #      path with forward slashes, which cl/lib accept happily).
+    command -v cl       >/dev/null 2>&1 || { echo "cl.exe not on PATH"      >&2; exit 1; }
+    command -v lib      >/dev/null 2>&1 || { echo "lib.exe not on PATH"     >&2; exit 1; }
+    command -v cygpath  >/dev/null 2>&1 || { echo "cygpath not on PATH"     >&2; exit 1; }
     echo "==> compiling yxml @${SHORT} for windows-x86_64 (MSVC)"
-    # Belt-and-braces: also tell MSYS not to convert path-like args.
-    export MSYS2_ARG_CONV_EXCL='*'
+    _SRC_W="$(cygpath -m "$SRC_DIR")"
+    _STAGE_W="$(cygpath -m "$STAGE")"
     (
         cd "$WORK_DIR"
-        cl -nologo -c -O2 -MD -W0 -I "$SRC_DIR" -Fo:yxml.obj "$SRC_DIR/yxml.c"
-        lib -nologo "-OUT:$STAGE/lib/yxml.lib" yxml.obj
+        cl -nologo -c -O2 -MD -W0 -I "$_SRC_W" -Fo:yxml.obj "$_SRC_W/yxml.c"
+        lib -nologo "-OUT:$_STAGE_W/lib/yxml.lib" yxml.obj
     )
     ;;
 
