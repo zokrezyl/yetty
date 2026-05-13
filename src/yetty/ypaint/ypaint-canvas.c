@@ -1752,13 +1752,31 @@ static struct yetty_ycore_void_result canvas_evict_line(struct yetty_ypaint_canv
      * them on scroll-back. Detach them before grid_line_free, then
      * re-attach after grid_line_init so they keep living on the
      * (otherwise empty) line and re-render the moment the user
-     * scrolls the line back into the visible window. */
+     * scrolls the line back into the visible window.
+     *
+     * Font attachments get the same treatment for a different reason:
+     * each line holds a cache ref per attached font, and the GLYPH
+     * payloads we just encoded carry the font's slot index. If we let
+     * grid_line_free release these refs, the cache may evict the font
+     * — and the ypaint layer's WGSL dispatcher (sized off
+     * canvas_font_count) keeps referencing that slot's namespace at
+     * render time, causing the shader to fail to compile with
+     * "struct member <ns>_base_size not found". Detach + restore keeps
+     * the cache ref alive across the line's empty-form phase, so the
+     * font slot remains addressable until the line is re-restored. */
     struct yetty_ypaint_core_complex_prim_instance **saved_cp = line->complex_prims;
     uint32_t saved_cp_count = line->complex_prim_count;
     uint32_t saved_cp_cap = line->complex_prim_capacity;
     line->complex_prims = NULL;
     line->complex_prim_count = 0;
     line->complex_prim_capacity = 0;
+
+    struct yetty_ypaint_canvas_font_entry *saved_fonts = line->fonts;
+    uint32_t saved_font_count = line->font_count;
+    uint32_t saved_font_capacity = line->font_capacity;
+    line->fonts = NULL;
+    line->font_count = 0;
+    line->font_capacity = 0;
 
     struct yetty_ycore_void_result fr =
         grid_line_free(line, canvas->flyweight_registry, canvas->font_cache);
@@ -1770,6 +1788,9 @@ static struct yetty_ycore_void_result canvas_evict_line(struct yetty_ypaint_canv
     line->complex_prims = saved_cp;
     line->complex_prim_count = saved_cp_count;
     line->complex_prim_capacity = saved_cp_cap;
+    line->fonts = saved_fonts;
+    line->font_count = saved_font_count;
+    line->font_capacity = saved_font_capacity;
     return YETTY_OK_VOID();
 }
 
@@ -1793,10 +1814,10 @@ static void canvas_evict_scrollback(struct yetty_ypaint_canvas *canvas)
     for (uint32_t i = 0; i < end; i++) {
         if (i < canvas->sb_offsets_count && canvas->sb_offsets[i] != SB_OFFSET_UNSET) {
             /* Already serialised. If it was restored, free the
-             * expanded form again. Complex prims must survive the
-             * re-free for the same reason as in canvas_evict_line —
-             * detach before grid_line_free, re-attach after
-             * grid_line_init. */
+             * expanded form again. Complex prims AND font attachments
+             * must survive the re-free for the same reason as in
+             * canvas_evict_line — detach before grid_line_free,
+             * re-attach after grid_line_init. */
             struct yetty_ypaint_canvas_grid_line *line = &canvas->lines.lines[i];
             if (line->prims.count > 0 || line->cell_count > 0 || line->font_count > 0) {
                 struct yetty_ypaint_core_complex_prim_instance **saved_cp = line->complex_prims;
@@ -1805,6 +1826,13 @@ static void canvas_evict_scrollback(struct yetty_ypaint_canvas *canvas)
                 line->complex_prims = NULL;
                 line->complex_prim_count = 0;
                 line->complex_prim_capacity = 0;
+
+                struct yetty_ypaint_canvas_font_entry *saved_fonts = line->fonts;
+                uint32_t saved_font_count = line->font_count;
+                uint32_t saved_font_capacity = line->font_capacity;
+                line->fonts = NULL;
+                line->font_count = 0;
+                line->font_capacity = 0;
 
                 struct yetty_ycore_void_result fr = grid_line_free(
                     line, canvas->flyweight_registry, canvas->font_cache);
@@ -1818,6 +1846,9 @@ static void canvas_evict_scrollback(struct yetty_ypaint_canvas *canvas)
                 line->complex_prims = saved_cp;
                 line->complex_prim_count = saved_cp_count;
                 line->complex_prim_capacity = saved_cp_cap;
+                line->fonts = saved_fonts;
+                line->font_count = saved_font_count;
+                line->font_capacity = saved_font_capacity;
             }
             continue;
         }
