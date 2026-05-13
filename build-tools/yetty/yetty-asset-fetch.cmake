@@ -2,8 +2,9 @@
 #
 # Sister to 3rdparty-fetch.cmake, but for *first-party* yetty release
 # assets that don't follow the `lib-<name>-<ver>` convention. Used today
-# for `yetty-tools-riscv-<ver>` (cross-built riscv64 binaries + repo
-# checkout, packed as a brotli ext4 disk image).
+# for `yetty-rootfs-riscv-<ver>` (alpine-extended userland + cross-built
+# riscv64 binaries + repo HEAD checkout, packed as a brotli ext4 disk
+# image — the unified VM rootfs).
 #
 # Layout:
 #   version file:  build-tools/yemu/<NAME>/version
@@ -66,14 +67,17 @@ function(yetty_asset_fetch NAME)
             list(GET _DL_STATUS 0 _DL_CODE)
             if(NOT _DL_CODE EQUAL 0)
                 file(REMOVE "${_TARBALL}")
-                # Hard-fail. The old warn-and-continue path produced builds
-                # that linked cleanly but failed at runtime — tinyemu cfg
-                # still references drive1 (yetty-riscv-disk.img), so a
-                # missing release silently broke every webasm VM start.
-                # Fail at configure time instead so the missing release is
-                # obvious. To unblock locally: bump
-                # build-tools/yemu/${NAME}/version back to the last released
-                # tag, or cut the missing release.
+                # Hard-fail at configure time when the pinned release
+                # isn't downloadable. The composite stage-rootfs-riscv
+                # action populates ${YETTY_3RDPARTY_CACHE_DIR} from the
+                # build-rootfs-riscv job's workflow artifact, so this
+                # branch fires only when (a) the pinned version has no
+                # published release and (b) no locally-staged tarball is
+                # in the cache — i.e. someone bumped the version without
+                # cutting the release. To unblock locally: drop the
+                # locally-built tarball into ${YETTY_3RDPARTY_CACHE_DIR},
+                # bump build-tools/yemu/${NAME}/version back to the last
+                # released tag, or cut the missing release.
                 message(FATAL_ERROR
                     "yetty-asset-fetch(${NAME}): download failed for ${_URL} (${_DL_STATUS}).\n"
                     "  Pinned version: ${_VER}\n"

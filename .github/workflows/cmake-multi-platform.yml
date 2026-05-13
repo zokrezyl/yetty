@@ -92,10 +92,23 @@ jobs:
 
 
   # =============================================================================
+  # Merged riscv64 rootfs image — every executable build below gates on
+  # this so we never ship a platform binary against a stale or broken
+  # /yetty/{bin,repo} payload. Reusable-workflow call: build.sh runs in
+  # the called workflow, the tarball is exposed as a workflow artifact
+  # consumers can fetch when consumer-side wiring lands.
+  # =============================================================================
+  build-rootfs-riscv:
+    needs: read-flags
+    uses: ./.github/workflows/build-yetty-rootfs-riscv.yml
+    permissions:
+      contents: write
+
+  # =============================================================================
   # Desktop Build (Linux)
   # =============================================================================
   build-linux-ytrace-release:
-    needs: read-flags
+    needs: [read-flags, build-rootfs-riscv]
     if: needs.read-flags.outputs.linux == 'true'
     runs-on: ubuntu-latest
 
@@ -145,7 +158,7 @@ jobs:
   # Linux ASAN Build (AddressSanitizer)
   # =============================================================================
   build-linux-ytrace-asan:
-    needs: read-flags
+    needs: [read-flags, build-rootfs-riscv]
     if: needs.read-flags.outputs.linux_asan == 'true'
     runs-on: ubuntu-latest
 
@@ -210,7 +223,7 @@ jobs:
   # riscv64 builds live in a separate pipeline.
   # =============================================================================
   build-linux-aarch64-ytrace-release:
-    needs: read-flags
+    needs: [read-flags, build-rootfs-riscv]
     if: needs.read-flags.outputs.linux_aarch64 == 'true'
     runs-on: ubuntu-24.04-arm
 
@@ -259,7 +272,7 @@ jobs:
   # Desktop Build (macOS ARM64)
   # =============================================================================
   build-macos-ytrace-release:
-    needs: read-flags
+    needs: [read-flags, build-rootfs-riscv]
     if: needs.read-flags.outputs.macos == 'true'
     runs-on: macos-latest
 
@@ -312,7 +325,7 @@ jobs:
   # Desktop Build (macOS Intel x86_64)
   # =============================================================================
   build-macos_x86_64-ytrace-release:
-    needs: read-flags
+    needs: [read-flags, build-rootfs-riscv]
     if: needs.read-flags.outputs.macos_x86_64 == 'true'
     runs-on: macos-15-intel
 
@@ -362,7 +375,7 @@ jobs:
   # Desktop Build (Windows)
   # =============================================================================
   build-windows-ytrace-release:
-    needs: read-flags
+    needs: [read-flags, build-rootfs-riscv]
     if: needs.read-flags.outputs.windows == 'true'
     runs-on: windows-latest
 
@@ -434,7 +447,7 @@ jobs:
   # Android Build
   # =============================================================================
   build-android-ytrace-release:
-    needs: read-flags
+    needs: [read-flags, build-rootfs-riscv]
     if: needs.read-flags.outputs.android == 'true'
     runs-on: ubuntu-latest
 
@@ -497,7 +510,7 @@ jobs:
   # Android x86_64 Build (for Emulator Testing)
   # =============================================================================
   build-android_x86_64-ytrace-release:
-    needs: read-flags
+    needs: [read-flags, build-rootfs-riscv]
     if: needs.read-flags.outputs.android_x86_64 == 'true'
     runs-on: ubuntu-latest
 
@@ -616,7 +629,7 @@ jobs:
   # iOS Build (arm64 device)
   # =============================================================================
   build-ios-ytrace-release:
-    needs: read-flags
+    needs: [read-flags, build-rootfs-riscv]
     if: needs.read-flags.outputs.ios == 'true'
     runs-on: macos-latest
 
@@ -655,7 +668,7 @@ jobs:
   # iOS x86_64 Build (for Simulator)
   # =============================================================================
   build-ios_x86_64-ytrace-release:
-    needs: read-flags
+    needs: [read-flags, build-rootfs-riscv]
     if: needs.read-flags.outputs.ios_x86_64 == 'true'
     runs-on: macos-15-intel
 
@@ -695,7 +708,7 @@ jobs:
   # WebAssembly Build
   # =============================================================================
   build-webasm-ytrace-release:
-    needs: read-flags
+    needs: [read-flags, build-rootfs-riscv]
     if: needs.read-flags.outputs.web == 'true'
     runs-on: ubuntu-latest
 

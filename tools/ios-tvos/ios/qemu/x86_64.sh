@@ -314,16 +314,15 @@ seed_assets() {
         return 0
     fi
 
-    # alpine-extended-disk has runit + a telnetd service under
-    # /etc/service/telnetd — required for yetty's --telnet 127.0.0.1:2423
-    # path. The plain alpine-disk image just drops to /bin/sh on
-    # virtio-console and has no listener on guest:23, so slirp's hostfwd
-    # NAT closes the connection immediately. Renamed on copy because
-    # ios-main.m hardcodes the destination filename as alpine-rootfs.img.
+    # The unified yetty-rootfs-riscv image ships alpine-extended userland
+    # (runit + busybox-extras telnetd on tcp/23 — required for yetty's
+    # --telnet 127.0.0.1:2423 path) plus /yetty/{bin,repo}. Renamed on
+    # copy because ios-main.m hardcodes the destination filename as
+    # alpine-rootfs.img.
     local pairs=(
         "3rdparty/opensbi/opensbi-fw_dynamic.bin:opensbi-fw_dynamic.bin"
         "3rdparty/linux/kernel-riscv64.bin:kernel-riscv64.bin"
-        "3rdparty/alpine-extended-disk/alpine-extended-rootfs.img:alpine-rootfs.img"
+        "yetty-assets/yetty-rootfs-riscv/yetty-rootfs-riscv.img:alpine-rootfs.img"
     )
     for pair in "${pairs[@]}"; do
         local rel="${pair%%:*}" name="${pair##*:}"

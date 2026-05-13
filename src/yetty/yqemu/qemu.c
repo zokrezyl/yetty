@@ -136,7 +136,6 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t host_port)
     char bios_path[512];
     char kernel_path[512];
     char blk_path[512];
-    char tools_blk_path[512];
     char share_path[512];
     char qemu_cfg_dir[512];
     char qemu_cfg_path[512];
@@ -144,11 +143,9 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t host_port)
     char chardev_arg[128];
     char append_arg[384];
     char drive_arg[640];
-    char tools_drive_arg[640];
     char fsdev_arg[640];
     char memory_arg[32];
     char smp_arg[16];
-    int has_tools_disk;
     struct yetty_yqemu_qemu_settings settings;
 
     /* qemu binary is program-specific; shared runtime lives under yemu/.
@@ -186,21 +183,13 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t host_port)
 #endif
     snprintf(bios_path, sizeof(bios_path), "%s/yemu/opensbi-fw_dynamic.bin", data_dir);
     snprintf(kernel_path, sizeof(kernel_path), "%s/yemu/kernel-riscv64.bin", data_dir);
-    /* alpine-extended ships busybox telnetd on tcp/23, which is what we
-     * connect to via the slirp hostfwd below. The plain alpine-rootfs.img
-     * has no telnetd, so it would boot but yetty's connect would never
-     * reach a server. */
-    snprintf(blk_path, sizeof(blk_path), "%s/yemu/alpine-extended-rootfs.img", data_dir);
-    /* yetty-tools-riscv: optional second virtio-blk drive carrying the
-     * cross-built riscv64 demos+tools + repo HEAD checkout. The guest's
-     * /init mounts it RO at /opt/yetty when /dev/vdb is present (alpine
-     * init >= 3.23.4-riscv64-2). Image is shipped via incbin under
-     * yemu/yetty-riscv-disk.img.br; runtime extractor decompresses it
-     * into <data_dir>/yemu/yetty-riscv-disk.img. Skip silently if the
-     * file is missing — older yetty installs predate the asset and
-     * should still boot the rootfs without it. */
-    snprintf(tools_blk_path, sizeof(tools_blk_path), "%s/yemu/yetty-riscv-disk.img", data_dir);
-    has_tools_disk = yetty_yplatform_file_exists(tools_blk_path);
+    /* Unified rootfs image: alpine-extended userland + /yetty/{bin,repo}
+     * (cross-compiled riscv64 demos+tools + repo HEAD) in one ext4 image.
+     * Replaces the previous two-drive setup (alpine-extended-rootfs.img +
+     * yetty-riscv-disk.img). Image is shipped via incbin under
+     * yemu/yetty-rootfs-riscv.img.br; runtime extractor decompresses it
+     * into <data_dir>/yemu/yetty-rootfs-riscv.img. */
+    snprintf(blk_path, sizeof(blk_path), "%s/yemu/yetty-rootfs-riscv.img", data_dir);
 
     /* User-tunable qemu settings live under <config_dir>/qemu/.
      * <config_dir>/qemu/share/ is exposed to the guest over 9p as
@@ -256,22 +245,14 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t host_port)
     }
 
     snprintf(drive_arg, sizeof(drive_arg), "file=%s,if=none,format=raw,id=hd0", blk_path);
-    /* readonly=on: the disk carries committed source + cross-built binaries;
-     * the guest must not be able to mutate it. format=raw: ext4 image, no
-     * qcow2 layer. */
-    snprintf(tools_drive_arg, sizeof(tools_drive_arg),
-             "file=%s,if=none,format=raw,id=hd1,readonly=on", tools_blk_path);
     snprintf(fsdev_arg, sizeof(fsdev_arg), "local,id=fsdev0,path=%s,security_model=none",
              share_path);
     snprintf(memory_arg, sizeof(memory_arg), "%u", settings.memory_mb);
     snprintf(smp_arg, sizeof(smp_arg), "%u", settings.smp);
 
-    yinfo("Starting QEMU (telnet hostfwd 127.0.0.1:%u -> guest:23, mem=%uMB smp=%u, tools-disk=%s)",
-          host_port, settings.memory_mb, settings.smp, has_tools_disk ? "yes" : "no");
+    yinfo("Starting QEMU (telnet hostfwd 127.0.0.1:%u -> guest:23, mem=%uMB smp=%u)",
+          host_port, settings.memory_mb, settings.smp);
 
-    /* Build argv as runtime array — the tools-disk pair (`-drive ... -device`
-     * x2) is only added when has_tools_disk, and a static initialiser
-     * doesn't compose conditionally without sentinel tricks. */
     const char *argv[40];
     int argc = 0;
     argv[argc++] = qemu_bin;
@@ -283,10 +264,6 @@ struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t host_port)
     argv[argc++] = "-append";        argv[argc++] = append_arg;
     argv[argc++] = "-drive";         argv[argc++] = drive_arg;
     argv[argc++] = "-device";        argv[argc++] = "virtio-blk-device,drive=hd0";
-    if (has_tools_disk) {
-        argv[argc++] = "-drive";     argv[argc++] = tools_drive_arg;
-        argv[argc++] = "-device";    argv[argc++] = "virtio-blk-device,drive=hd1";
-    }
 #ifndef _WIN32
     /* virtfs/9p is disabled on the Windows minimal qemu build
      * (--without-default-features in build-tools/3rdparty/qemu/_build.sh —
