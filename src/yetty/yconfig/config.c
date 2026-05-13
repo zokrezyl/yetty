@@ -731,7 +731,8 @@ static void store_platform_paths(struct config_impl *impl,
 
 /* Try to find and load config file */
 
-static void try_load_config_file(struct config_impl *impl, int argc, char *argv[])
+static void try_load_config_file(struct config_impl *impl, int argc, char *argv[],
+                                 const struct yetty_yplatform_paths *paths)
 {
     /* Check for -c or --config argument */
     for (int i = 1; i < argc; i++) {
@@ -763,6 +764,16 @@ static void try_load_config_file(struct config_impl *impl, int argc, char *argv[
 
     if (home) {
         snprintf(path, sizeof(path), "%s/.config/yetty/config.yaml", home);
+        if (load_yaml_file(impl->root, path)) {
+            return;
+        }
+    }
+
+    /* Platform-supplied config dir (webasm: /config, android: app files dir,
+     * etc.). Last resort so $XDG_CONFIG_HOME / $HOME can still override on
+     * desktop. */
+    if (paths && paths->config_dir && paths->config_dir[0]) {
+        snprintf(path, sizeof(path), "%s/config.yaml", paths->config_dir);
         load_yaml_file(impl->root, path);
     }
 }
@@ -1270,7 +1281,7 @@ struct yetty_yconfig_result yetty_yconfig_create(int argc, char *argv[],
         return YETTY_ERR(yetty_yconfig, "failed to allocate config root");
     }
 
-    try_load_config_file(impl, argc, argv);
+    try_load_config_file(impl, argc, argv, paths);
     store_platform_paths(impl, paths);
 
     /* $SHELL overrides shell/default from yaml */

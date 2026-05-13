@@ -66,24 +66,18 @@ function(yetty_asset_fetch NAME)
             list(GET _DL_STATUS 0 _DL_CODE)
             if(NOT _DL_CODE EQUAL 0)
                 file(REMOVE "${_TARBALL}")
-                # Warn-and-continue (vs 3rdparty-fetch's FATAL_ERROR): the
-                # asset may not be published yet at the version pinned in
-                # the version file. Downstream embed pipeline guards each
-                # file with `if(EXISTS ...)` and skips missing ones, and
-                # qemu.c / extract-assets.c / tinyemu cfg all silently no-op
-                # when yetty-riscv-disk.img isn't present. So a missing
-                # release degrades cleanly to "no /opt/yetty mount in the
-                # guest", instead of breaking every desktop build until
-                # the tag is cut.
-                message(WARNING
-                    "yetty-asset-fetch(${NAME}): download failed for ${_URL} \
-(${_DL_STATUS}). Continuing without the asset — the guest will not see /opt/yetty.")
-                if(ARGC GREATER 1)
-                    set(${ARGV1} "" PARENT_SCOPE)
-                endif()
-                set(YETTY_ASSET_${NAME}_VERSION "" CACHE INTERNAL "")
-                set(YETTY_ASSET_${NAME}_DIR     "" CACHE INTERNAL "")
-                return()
+                # Hard-fail. The old warn-and-continue path produced builds
+                # that linked cleanly but failed at runtime — tinyemu cfg
+                # still references drive1 (yetty-riscv-disk.img), so a
+                # missing release silently broke every webasm VM start.
+                # Fail at configure time instead so the missing release is
+                # obvious. To unblock locally: bump
+                # build-tools/yemu/${NAME}/version back to the last released
+                # tag, or cut the missing release.
+                message(FATAL_ERROR
+                    "yetty-asset-fetch(${NAME}): download failed for ${_URL} (${_DL_STATUS}).\n"
+                    "  Pinned version: ${_VER}\n"
+                    "  Check that the GitHub release '${_TAG}' exists and the build CI succeeded.")
             endif()
         endif()
 
