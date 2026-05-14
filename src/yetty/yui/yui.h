@@ -128,6 +128,11 @@ void yetty_yui_show_view_menu(struct yetty_yui *yui, float anchor_x, float ancho
 void yetty_yui_set_connect_callback(struct yetty_yui *yui, yetty_yui_connect_cb cb,
                                     void *userdata);
 
+/* For posting a toast notification from anywhere in the codebase use
+ * the standalone `ynotify(...)` primitive in <yetty/ynotify/ynotify.h>.
+ * yui installs itself as the global handler in yetty_yui_create, so
+ * producers don't need to know yui exists. */
+
 #ifdef __cplusplus
 }
 #endif

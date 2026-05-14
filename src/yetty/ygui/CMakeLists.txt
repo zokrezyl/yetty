@@ -30,6 +30,7 @@ set(YGUI_CORE_SOURCES
     ygui_osc.c
     ygui_layout.c
     ygui_css.c
+    ygui_notify.c
 )
 
 # Static-only YAML convenience layer for the RICH widget — same gating
@@ -57,6 +58,7 @@ target_link_libraries(ygui_core PUBLIC
     yetty_yface     # OSC envelope + LZ4F + base64 streamer
     yetty_yfont_core  # raster-font-from-file for text measurement
     yetty_ypaint_yaml # rich widget's create_from_yaml -> ypaint_yaml_parse
+    yetty_yplatform_core # ytime monotonic clock for notification TTL
 )
 
 set_target_properties(ygui_core PROPERTIES
@@ -107,11 +109,13 @@ if(YETTY_BUILD_YGUI_SHARED AND NOT EMSCRIPTEN)
         set(_YGUI_PLATFORM_SOURCES
             ${YETTY_ROOT}/src/yetty/yplatform/term/windows.c
             ${YETTY_ROOT}/src/yetty/yplatform/thread/windows.c
+            ${YETTY_ROOT}/src/yetty/yplatform/time/windows.c
         )
     else()
         set(_YGUI_PLATFORM_SOURCES
             ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
             ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
+            ${YETTY_ROOT}/src/yetty/yplatform/time/default.c
         )
     endif()
 

@@ -366,6 +366,33 @@ void yetty_ygui_engine_key_down(struct yetty_ygui_engine *engine, uint32_t key, 
 void yetty_ygui_engine_key_up(struct yetty_ygui_engine *engine, uint32_t key, int mods);
 void yetty_ygui_engine_text_input(struct yetty_ygui_engine *engine, const char *utf8);
 
+/* =========================================================================
+ * Notifications — toast popups anchored to the top-right of the canvas.
+ *
+ * Available to every ygui app, not just yui. Push from anywhere with
+ * yetty_ygui_engine_notify (printf-style); cards stack top-down with the
+ * newest at the top. Each card auto-dismisses after its TTL, or the user
+ * dismisses it via the "✕" button. Surviving cards slide up to fill the
+ * gap on every dismissal.
+ *
+ * Severity drives the accent stripe colour (INFO mint, WARN amber, ERROR
+ * crimson) — the rest of the card uses the brand surface palette. ERROR
+ * defaults to a longer TTL (10 s) than INFO/WARN (4 s); pass an explicit
+ * TTL via yetty_ygui_engine_notify_ttl if you want a different value, or
+ * 0 to make it sticky (user must click to dismiss).
+ * ========================================================================= */
+enum yetty_ygui_severity {
+    YETTY_YGUI_SEV_INFO = 0,
+    YETTY_YGUI_SEV_WARN,
+    YETTY_YGUI_SEV_ERROR,
+};
+
+void yetty_ygui_engine_notify(struct yetty_ygui_engine *engine,
+                              enum yetty_ygui_severity sev, const char *fmt, ...);
+void yetty_ygui_engine_notify_ttl(struct yetty_ygui_engine *engine,
+                                  enum yetty_ygui_severity sev, uint32_t ttl_ms,
+                                  const char *fmt, ...);
+
 /* Resize handling */
 void yetty_ygui_engine_set_canvas_mode(struct yetty_ygui_engine *engine, ygui_canvas_mode_t mode);
 void yetty_ygui_engine_set_scale_mode(struct yetty_ygui_engine *engine, ygui_scale_mode_t mode);

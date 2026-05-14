@@ -27,6 +27,8 @@ env:
   BUILD_ANDROID_X86_64: false
   BUILD_IOS: false
   BUILD_IOS_X86_64: false
+  BUILD_TVOS: false
+  BUILD_TVOS_X86_64: false
   BUILD_WEB: false
 
   # Merged riscv64 rootfs (alpine-extended + /yetty/{bin,repo}). All
@@ -57,6 +59,8 @@ jobs:
       android_x86_64: ${{ steps.set.outputs.android_x86_64 }}
       ios: ${{ steps.set.outputs.ios }}
       ios_x86_64: ${{ steps.set.outputs.ios_x86_64 }}
+      tvos: ${{ steps.set.outputs.tvos }}
+      tvos_x86_64: ${{ steps.set.outputs.tvos_x86_64 }}
       web: ${{ steps.set.outputs.web }}
       rootfs_riscv: ${{ steps.set.outputs.rootfs_riscv }}
       codeql: ${{ steps.set.outputs.codeql }}
@@ -76,6 +80,8 @@ jobs:
             echo "android_x86_64=true" >> $GITHUB_OUTPUT
             echo "ios=true" >> $GITHUB_OUTPUT
             echo "ios_x86_64=true" >> $GITHUB_OUTPUT
+            echo "tvos=true" >> $GITHUB_OUTPUT
+            echo "tvos_x86_64=true" >> $GITHUB_OUTPUT
             echo "web=true" >> $GITHUB_OUTPUT
             echo "rootfs_riscv=true" >> $GITHUB_OUTPUT
             echo "codeql=false" >> $GITHUB_OUTPUT
@@ -92,6 +98,8 @@ jobs:
             echo "android_x86_64=${{ env.BUILD_ANDROID_X86_64 }}" >> $GITHUB_OUTPUT
             echo "ios=${{ env.BUILD_IOS }}" >> $GITHUB_OUTPUT
             echo "ios_x86_64=${{ env.BUILD_IOS_X86_64 }}" >> $GITHUB_OUTPUT
+            echo "tvos=${{ env.BUILD_TVOS }}" >> $GITHUB_OUTPUT
+            echo "tvos_x86_64=${{ env.BUILD_TVOS_X86_64 }}" >> $GITHUB_OUTPUT
             echo "web=${{ env.BUILD_WEB }}" >> $GITHUB_OUTPUT
             echo "rootfs_riscv=${{ env.BUILD_ROOTFS_RISCV }}" >> $GITHUB_OUTPUT
             echo "codeql=${{ env.RUN_CODEQL }}" >> $GITHUB_OUTPUT
@@ -765,6 +773,95 @@ jobs:
         if-no-files-found: warn
 
   # =============================================================================
+  # tvOS Build (arm64 device)
+  # =============================================================================
+  build-tvos-ytrace-release:
+    needs: [read-flags, build-rootfs-riscv]
+    if: ${{ !cancelled() && needs.read-flags.outputs.tvos == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
+    runs-on: macos-latest
+
+    env:
+      BUILD_DIR: build-tvos-ytrace-release
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
+
+    - name: Install macOS dependencies
+      run: brew install automake autoconf libtool ninja nasm brotli meson webp fontconfig
+
+    - name: Configure CMake for tvOS
+      run: >
+        cmake -B ${{ env.BUILD_DIR }}
+        -G Ninja
+        -DCMAKE_SYSTEM_NAME=tvOS
+        -DCMAKE_OSX_ARCHITECTURES=arm64
+        -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0
+        -DCMAKE_BUILD_TYPE=Release
+        -DYETTY_TVOS=ON
+        -DYETTY_ENABLE_TOOL_QA=OFF
+        -S ${{ github.workspace }}
+
+    - name: Build
+      run: cmake --build ${{ env.BUILD_DIR }} --config Release --parallel 4
+
+    - name: Upload tvOS artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: yetty-tvos
+        path: ${{ env.BUILD_DIR }}/yetty.app
+        if-no-files-found: warn
+
+  # =============================================================================
+  # tvOS x86_64 Build (for Simulator)
+  # =============================================================================
+  build-tvos_x86_64-ytrace-release:
+    needs: [read-flags, build-rootfs-riscv]
+    if: ${{ !cancelled() && needs.read-flags.outputs.tvos_x86_64 == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
+    runs-on: macos-15-intel
+
+    env:
+      BUILD_DIR: build-tvos_x86_64-ytrace-release
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
+
+    - name: Install macOS dependencies
+      run: brew install automake autoconf libtool ninja nasm brotli meson webp fontconfig
+
+    - name: Configure CMake for tvOS Simulator
+      run: >
+        cmake -B ${{ env.BUILD_DIR }}
+        -G Ninja
+        -DCMAKE_SYSTEM_NAME=tvOS
+        -DCMAKE_OSX_ARCHITECTURES=x86_64
+        -DCMAKE_OSX_SYSROOT=appletvsimulator
+        -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0
+        -DCMAKE_BUILD_TYPE=Release
+        -DYETTY_TVOS=ON
+        -DYETTY_ENABLE_TOOL_QA=OFF
+        -S ${{ github.workspace }}
+
+    - name: Build
+      run: cmake --build ${{ env.BUILD_DIR }} --config Release --parallel 4
+
+    - name: Upload tvOS Simulator artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: yetty-tvos-x86_64
+        path: ${{ env.BUILD_DIR }}/yetty.app
+        if-no-files-found: warn
+
+  # =============================================================================
   # WebAssembly Build
   # =============================================================================
   build-webasm-ytrace-release:
@@ -1051,6 +1148,40 @@ jobs:
     - uses: softprops/action-gh-release@v2
       with:
         files: yetty-ios-x86_64.zip
+
+  release-tvos:
+    runs-on: ubuntu-latest
+    needs: build-tvos-ytrace-release
+    if: needs.build-tvos-ytrace-release.result == 'success' && startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: yetty-tvos
+        path: yetty-tvos
+    - name: Create archive
+      run: zip -r yetty-tvos.zip yetty-tvos
+    - uses: softprops/action-gh-release@v2
+      with:
+        files: yetty-tvos.zip
+
+  release-tvos-x86_64:
+    runs-on: ubuntu-latest
+    needs: build-tvos_x86_64-ytrace-release
+    if: needs.build-tvos_x86_64-ytrace-release.result == 'success' && startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: yetty-tvos-x86_64
+        path: yetty-tvos-x86_64
+    - name: Create archive
+      run: zip -r yetty-tvos-x86_64.zip yetty-tvos-x86_64
+    - uses: softprops/action-gh-release@v2
+      with:
+        files: yetty-tvos-x86_64.zip
 
   # =============================================================================
   # CodeQL Security Analysis

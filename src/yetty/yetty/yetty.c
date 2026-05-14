@@ -21,6 +21,7 @@
 #include <yetty/ycore/math.h>
 #include <yetty/yevent/dispatch.h>
 #include <yetty/ytrace/ytrace.h>
+#include <yetty/ynotify/ynotify.h>
 #include <yetty/yui/workspace.h>
 #include <yetty/yui/tabbar.h>
 #include <yetty/yui/tile.h>
@@ -951,13 +952,6 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
         break;
     }
     case YETTY_YUI_VIEW_SSH: {
-        /* Spawn openssh from $PATH rather than driving the in-process
-         * libssh2 backend (which doesn't read ~/.ssh/config and which
-         * the dialog fields don't yet wire into). This route gives
-         * users every openssh feature for free: ProxyJump, IdentityFile,
-         * agent forwarding, ServerAliveInterval, hostname aliases — all
-         * sourced from ~/.ssh/config. The dialog only needs to supply
-         * what the user types; whatever's left is openssh's defaults. */
         const char *host = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 0);
         const char *port = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 1);
         const char *key  = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 2);
@@ -971,21 +965,17 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
         }
         char cmd[1024];
         int n = snprintf(cmd, sizeof(cmd), "ssh");
-        if (port && port[0]) {
+        if (port && port[0])
             n += snprintf(cmd + n, sizeof(cmd) - (size_t)n, " -p %s", port);
-        }
-        if (key && key[0]) {
+        if (key && key[0])
             n += snprintf(cmd + n, sizeof(cmd) - (size_t)n, " -i %s", key);
-        }
         snprintf(cmd + n, sizeof(cmd) - (size_t)n, " %s", host);
         config->ops->set_string(config, "shell/command", cmd);
-        ydebug("yetty: SSH connect via openssh: %s", cmd);
+        ydebug("yetty: SSH connect via ssh(1): %s", cmd);
         tk = YETTY_YUI_TAB_SHELL;
         break;
     }
     case YETTY_YUI_VIEW_TELNET: {
-        /* Same idea — drive the system telnet(1) instead of the
-         * in-process libtelnet wrapper. Plain old TCP, no surprises. */
         const char *host = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_TELNET, 0);
         const char *port = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_TELNET, 1);
         if (!host || !host[0]) {
@@ -996,15 +986,18 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
             yerror("yetty: Telnet connect: no writable config");
             return;
         }
-        char cmd[512];
-        if (port && port[0]) {
-            snprintf(cmd, sizeof(cmd), "telnet %s %s", host, port);
-        } else {
-            snprintf(cmd, sizeof(cmd), "telnet %s", host);
+        int port_i = (port && port[0]) ? atoi(port) : 23;
+        if (port_i <= 0 || port_i > 65535) {
+            ywarn("yetty: Telnet connect: invalid port '%s'", port ? port : "");
+            return;
         }
-        config->ops->set_string(config, "shell/command", cmd);
-        ydebug("yetty: Telnet connect via telnet(1): %s", cmd);
-        tk = YETTY_YUI_TAB_SHELL;
+        char port_str[16];
+        snprintf(port_str, sizeof(port_str), "%d", port_i);
+        config->ops->set_string(config, YETTY_YCONFIG_KEY_TELNET, "true");
+        config->ops->set_string(config, YETTY_YCONFIG_KEY_TELNET_HOST, host);
+        config->ops->set_string(config, YETTY_YCONFIG_KEY_TELNET_PORT, port_str);
+        ydebug("yetty: Telnet connect to '%s:%d' via in-process telnet", host, port_i);
+        tk = YETTY_YUI_TAB_TELNET;
         break;
     }
     case YETTY_YUI_VIEW_YVNC:   tk = YETTY_YUI_TAB_YVNC;   break;
@@ -1012,7 +1005,19 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
     }
     struct yetty_ycore_void_result r = yetty_yui_tabbar_add_workspace_of_kind(yetty->tabbar, tk);
     if (YETTY_IS_ERR(r)) {
-        yerror("yetty: connect (kind=%d) failed: %s", (int)kind, r.error.msg);
+        /* Surface the failure as an in-canvas toast so the user actually
+         * sees it — silent failure was the original Telnet/SSH bug. The
+         * label name is the human-readable view kind. */
+        static const char *kind_label[] = {
+            [YETTY_YUI_VIEW_SHELL]  = "Shell",
+            [YETTY_YUI_VIEW_SSH]    = "SSH",
+            [YETTY_YUI_VIEW_TELNET] = "Telnet",
+            [YETTY_YUI_VIEW_YVNC]   = "yVNC",
+            [YETTY_YUI_VIEW_EXEC]   = "Exec",
+        };
+        const char *label = ((unsigned)kind < (sizeof(kind_label) / sizeof(kind_label[0])))
+                                ? kind_label[kind] : "Connect";
+        ynotify(YETTY_YNOTIFY_ERROR, "%s connect failed: %s", label, r.error.msg);
         yetty_ycore_error_destroy(r.error);
     } else {
         ydebug("yetty: connect (kind=%d) spawned new workspace", (int)kind);

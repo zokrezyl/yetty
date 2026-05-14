@@ -559,6 +559,22 @@ struct yetty_ygui_engine {
     uint8_t *prev_emit_data;
     uint32_t prev_emit_size;
     uint32_t prev_emit_cap;
+
+    /* Toast-style notification stack — top-right of the canvas. See
+     * yetty_ygui_engine_notify in the public header for semantics. The
+     * array is a small fixed cap; pushes past the cap drop the oldest
+     * notification to make room (last-in-wins is the standard pattern
+     * for transient toast stacks). Each entry owns its message string
+     * and a `card` widget tree on the engine; dismiss frees both. */
+    struct ygui_notification {
+        char    *message;            /* owned (strdup) */
+        int      severity;           /* enum yetty_ygui_severity */
+        uint64_t created_ms;         /* clock_gettime(CLOCK_MONOTONIC) */
+        uint32_t ttl_ms;             /* 0 = sticky */
+        struct yetty_ygui_widget *card;
+        struct yetty_ygui_widget *close_btn;
+    } notifications[8];
+    int notification_count;
 };
 
 /*=============================================================================
@@ -691,6 +707,16 @@ void yetty_ygui_internal_yface_on_osc(void *user, int osc_code,
 void yetty_ygui_internal_yface_on_raw(void *user, const char *bytes, size_t n);
 extern volatile int yetty_ygui_internal_resize_pending;
 extern struct yetty_ygui_engine *yetty_ygui_internal_active_engine;
+
+/* Notification lifecycle hooks (ygui_notify.c).
+ *   _tick      — drop expired toasts; called at the top of engine_render
+ *                so the resulting frame already reflects the compacted stack.
+ *   _on_resize — re-anchor the stack to the new right edge.
+ *   _shutdown  — free message strings on engine destroy (card widget
+ *                trees go down with the engine's widget list). */
+void yetty_ygui_engine_notify_tick(struct yetty_ygui_engine *engine);
+void yetty_ygui_engine_notify_on_resize(struct yetty_ygui_engine *engine);
+void yetty_ygui_engine_notify_shutdown(struct yetty_ygui_engine *engine);
 
 /* Math helpers */
 static inline float ygui_clamp(float v, float lo, float hi)
