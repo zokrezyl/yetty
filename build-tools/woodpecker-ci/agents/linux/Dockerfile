@@ -2,10 +2,6 @@ FROM ubuntu:latest
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Chrome .deb fetched at build time so we don't need curl/gnupg pre-install
-# (which is the only reason Chrome would force a second apt-get update cycle).
-ADD https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb /tmp/chrome.deb
-
 # All apt installs in one shot — single update, single install, single cleanup.
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -48,9 +44,6 @@ RUN apt-get update && apt-get install -y \
     libgl-dev \
     libvulkan-dev \
     mesa-utils \
-    # NVIDIA driver userspace
-    nvidia-utils-580 \
-    libnvidia-gl-580 \
     # GLFW dependencies
     libglfw3-dev \
     # FreeType
@@ -81,10 +74,7 @@ RUN apt-get update && apt-get install -y \
     libsm-dev libice-dev \
     # Android build - JDK
     openjdk-17-jdk-headless \
-    # Browser for webasm/web tests (local .deb fetched via ADD above; apt
-    # resolves its dependencies from Ubuntu repos in the same install).
-    /tmp/chrome.deb \
-    && rm /tmp/chrome.deb && rm -rf /var/lib/apt/lists/* && \
+    && rm -rf /var/lib/apt/lists/* && \
     # Provide unversioned /usr/bin/clang etc. pointing at the -18 binaries
     # (3rdparty/_build.sh scripts hardcode `/usr/bin/clang` / `clang++`).
     update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100 \
@@ -109,9 +99,7 @@ RUN mkdir -p $ANDROID_HOME/cmdline-tools && \
         "platform-tools" \
         "platforms;android-34" \
         "build-tools;34.0.0" \
-        "cmake;3.22.1" \
-        "emulator" \
-        "system-images;android-34;google_apis;x86_64" && \
+        "cmake;3.22.1" && \
     chown -R 1000:1000 $ANDROID_HOME
 
 # Emscripten SDK
@@ -138,7 +126,7 @@ RUN userdel -r ubuntu 2>/dev/null; \
 USER misi
 ENV HOME=/home/misi
 ENV USER=misi
-ENV PATH=$EMSDK:$EMSDK/upstream/emscripten:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH
+ENV PATH=$EMSDK:$EMSDK/upstream/emscripten:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
 
 # Android debug keystore for APK signing
 RUN mkdir -p ~/.android && \
