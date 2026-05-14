@@ -24,18 +24,11 @@ steps:
       - chown -R 1000:1000 .
 
   build:
-    image: ubuntu:24.04
+    image: yetty-build:latest
     environment:
       TARGET_PLATFORM: linux-x86_64
       OUTPUT_DIR: out
-      DEBIAN_FRONTEND: noninteractive
     commands:
-      - apt-get update
-      - >
-        apt-get install -y --no-install-recommends
-        build-essential perl pkg-config
-        flex bison gperf
-        curl ca-certificates tar
       - mkdir -p "$OUTPUT_DIR"
       - ./build-tools/3rdparty/libcss/build.sh
       - ls -lh "$OUTPUT_DIR/"

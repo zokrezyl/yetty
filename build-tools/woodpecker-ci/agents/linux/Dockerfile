@@ -1,4 +1,11 @@
-FROM ubuntu:latest
+# Pinned to 24.04 (noble) — the qa-tools cmake hardcodes /usr/lib/cmake/clang-18
+# and friends, so the base image has to be one that still ships llvm-18 in
+# its apt repos. `ubuntu:latest` rolls forward and silently drops llvm-18
+# when the Ubuntu release moves on; rebuilding then leaves find_package(Clang)
+# falling through to whatever partial llvm-21 cmake config the X11/mesa stack
+# transitively pulls, which is missing the static .a archives. Pin and re-pin
+# only when intentionally bumping LLVM in qa-tools.
+FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -64,6 +71,16 @@ RUN apt-get update && apt-get install -y \
     # Build systems
     meson \
     nasm \
+    # NetSurf libcss / libwapcaplet / etc. generate parser tables at build
+    # time — needed by .woodpecker/libcss-linux-*.yml.
+    perl \
+    flex \
+    bison \
+    gperf \
+    # Wayland protocol XMLs + wayland-scanner — needed by glfw's wayland
+    # backend (.woodpecker/glfw-linux-*.yml).
+    wayland-protocols \
+    libwayland-bin \
     # Misc tools
     file \
     tmux \
@@ -82,36 +99,46 @@ RUN apt-get update && apt-get install -y \
         --slave /usr/bin/clang-format clang-format /usr/bin/clang-format-18 \
         --slave /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-18
 
-# Android SDK and NDK
+# Multi-arch build (linux/amd64 + linux/arm64). The android NDK + emsdk
+# ship only x86_64 binaries; skip both on non-amd64 hosts. The android &
+# webasm woodpecker workflows are pinned to platform: linux/amd64 anyway,
+# so a slimmer arm64 image is the correct outcome.
+ARG TARGETARCH
+
+# Android SDK and NDK (amd64 only)
 ENV ANDROID_HOME=/opt/android-sdk
 ENV ANDROID_SDK_ROOT=$ANDROID_HOME
 ENV ANDROID_NDK_VERSION=26.1.10909125
 ENV ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION
 
-RUN mkdir -p $ANDROID_HOME/cmdline-tools && \
-    curl -L -o /tmp/cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip && \
-    unzip -q /tmp/cmdline-tools.zip -d $ANDROID_HOME/cmdline-tools && \
-    mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest && \
-    rm /tmp/cmdline-tools.zip && \
-    yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses && \
-    $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-        "ndk;$ANDROID_NDK_VERSION" \
-        "platform-tools" \
-        "platforms;android-34" \
-        "build-tools;34.0.0" \
-        "cmake;3.22.1" && \
-    chown -R 1000:1000 $ANDROID_HOME
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        mkdir -p $ANDROID_HOME/cmdline-tools && \
+        curl -L -o /tmp/cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip && \
+        unzip -q /tmp/cmdline-tools.zip -d $ANDROID_HOME/cmdline-tools && \
+        mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest && \
+        rm /tmp/cmdline-tools.zip && \
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses && \
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "ndk;$ANDROID_NDK_VERSION" \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0" \
+            "cmake;3.22.1" && \
+        chown -R 1000:1000 $ANDROID_HOME ; \
+    fi
 
-# Emscripten SDK
+# Emscripten SDK (amd64 only)
 ENV EMSDK=/opt/emsdk
 ENV EMSDK_NODE=/opt/emsdk/node/20.18.0_64bit/bin/node
 ENV PATH=$EMSDK:$EMSDK/upstream/emscripten:$PATH
 
-RUN git clone https://github.com/emscripten-core/emsdk.git $EMSDK && \
-    cd $EMSDK && \
-    ./emsdk install latest && \
-    ./emsdk activate latest && \
-    chown -R 1000:1000 $EMSDK
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        git clone https://github.com/emscripten-core/emsdk.git $EMSDK && \
+        cd $EMSDK && \
+        ./emsdk install latest && \
+        ./emsdk activate latest && \
+        chown -R 1000:1000 $EMSDK ; \
+    fi
 
 # Run as host user
 RUN userdel -r ubuntu 2>/dev/null; \

@@ -15,3 +15,6 @@ set(YETTY_ENABLE_TOOL_YCAT     OFF CACHE BOOL "" FORCE)
 
 # QA tools hardcode Linux LLVM paths.
 set(YETTY_ENABLE_TOOL_QA OFF CACHE BOOL "" FORCE)
+
+# Client CLI tools don't ship on macOS (libraries/modules still build).
+set(YETTY_ENABLE_TOOL_YDIAGRAM OFF CACHE BOOL "" FORCE)

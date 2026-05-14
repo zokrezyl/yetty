@@ -24,3 +24,6 @@ set(YETTY_ENABLE_TOOL_YTOP     OFF CACHE BOOL "" FORCE)
 
 # QA tools require host LLVM/Clang libs and hardcode Linux paths.
 set(YETTY_ENABLE_TOOL_QA OFF CACHE BOOL "" FORCE)
+
+# Client CLI tools don't ship on iOS (libraries/modules still build).
+set(YETTY_ENABLE_TOOL_YDIAGRAM OFF CACHE BOOL "" FORCE)

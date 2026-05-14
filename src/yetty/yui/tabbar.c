@@ -686,6 +686,25 @@ struct yetty_ycore_void_result yetty_yui_tabbar_resize(struct yetty_yui_tabbar *
         struct yetty_ycore_void_result r =
             yetty_yui_workspace_resize(bar->workspaces[i], width, ws_h);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "tabbar_resize: workspace resize failed");
+
+        /* set_bounds only STORES the bounds on the terminal view
+         * (terminal.c::terminal_view_set_bounds — comment: "Terminal
+         * handles resize via YETTY_EVENT_RESIZE from event loop"). The
+         * actual layer-target framebuffer resize + cols/rows re-derive
+         * only happens when terminal_view_on_event sees a RESIZE event.
+         *
+         * yetty.c calls tabbar_on_event(RESIZE) after us, but that only
+         * forwards to the ACTIVE workspace — inactive tabs would keep
+         * their initial small layer-target size and, when later
+         * activated, composite that small framebuffer up into the now-
+         * larger workspace, making everything (notably the font) look
+         * ~2× bigger. Fan the synthetic RESIZE here so every tab's
+         * terminal stays in sync. */
+        struct yetty_yui_event resize_ev = {0};
+        resize_ev.type = YETTY_YCORE_RESIZE;
+        resize_ev.resize.width = width;
+        resize_ev.resize.height = ws_h;
+        yetty_yui_workspace_on_event(bar->workspaces[i], &resize_ev);
     }
     return YETTY_OK_VOID();
 }

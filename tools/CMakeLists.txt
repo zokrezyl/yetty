@@ -98,7 +98,11 @@ if(YETTY_ENABLE_TOOL_DECODE_YPAINT)
     add_subdirectory(decode-ypaint)
 endif()
 
-if(YETTY_ENABLE_TOOL_YDIAGRAM)
+# ydiagram CLI links the yetty_ydiagram static lib (built in
+# src/yetty/ydiagram) — that lib only exists when FEATURE_YDIAGRAM is ON.
+# Without this AND clause, default builds (TOOL=ON, FEATURE=OFF) try to
+# link `-lyetty_ydiagram` against a non-existent target → ld error.
+if(YETTY_ENABLE_TOOL_YDIAGRAM AND YETTY_ENABLE_FEATURE_YDIAGRAM)
     add_subdirectory(ydiagram)
 endif()
 

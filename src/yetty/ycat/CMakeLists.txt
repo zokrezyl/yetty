@@ -16,7 +16,7 @@ set(YCAT_SOURCES
 # Mermaid handler is optional — only built when ydiagram is enabled. The
 # detect.c content sniffer also uses the ydiagram parser, so detect.c
 # guards that call on the same compile-time flag.
-if(YETTY_ENABLE_FEATURE_DIAGRAM)
+if(YETTY_ENABLE_FEATURE_YDIAGRAM)
     list(APPEND YCAT_SOURCES handler-mermaid.c)
 endif()
 
@@ -95,7 +95,7 @@ target_link_libraries(yetty_ycat PUBLIC
     pdfio_lib
 )
 
-if(YETTY_ENABLE_FEATURE_DIAGRAM)
+if(YETTY_ENABLE_FEATURE_YDIAGRAM)
     target_link_libraries(yetty_ycat PUBLIC yetty_ydiagram)
     target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_DIAGRAM=1)
 endif()
