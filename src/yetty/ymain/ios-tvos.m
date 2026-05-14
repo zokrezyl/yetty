@@ -156,7 +156,7 @@ static void *render_thread_func(void *arg)
     snprintf(shaders_dir, sizeof(shaders_dir), "%s/shaders", data_dir);
     snprintf(fonts_dir, sizeof(fonts_dir), "%s/fonts", data_dir);
 
-    struct yetty_yplatform_paths paths = {
+    struct yetty_yconfig_paths paths = {
         .shaders_dir = shaders_dir,
         .fonts_dir = fonts_dir,
         .runtime_dir = runtime_dir,

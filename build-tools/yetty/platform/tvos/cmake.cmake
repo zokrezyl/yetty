@@ -19,25 +19,18 @@ file(MAKE_DIRECTORY ${TVOS_ASSETS_DIR})
 # branch here on YETTY_TVOS.
 set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ymain/ios-tvos.m
-    ${YETTY_ROOT}/src/yetty/yplatform/paths/ios-tvos.m
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/ios-tvos.m
     ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
     ${YETTY_ROOT}/src/yetty/ypty/temu-pty.c
     ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
     ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/process/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/socket/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
-    ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/fs/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/time/default.c
 )
 
 add_executable(yetty MACOSX_BUNDLE
@@ -110,6 +103,7 @@ target_link_libraries(yetty PRIVATE
     ${METAL_LIBRARY}
     ${QUARTZCORE_LIBRARY}
     ${GAMECONTROLLER_LIBRARY}
+    yetty_yplatform_core
 )
 
 if(YETTY_ENABLE_FEATURE_DEMO)

@@ -35,7 +35,6 @@ add_executable(ylexbor-wpt-runner
     # path; the regular yetty binary pulls them in transitively, but a
     # standalone ctest binary needs them explicitly.
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
 # QuickJS is needed for the result-readback path; otherwise the runner

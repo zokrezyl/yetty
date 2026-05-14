@@ -45,14 +45,7 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/socket/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/process/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/fs/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
-    ${YETTY_ROOT}/src/yetty/yplatform/paths/macos.c
-    ${YETTY_ROOT}/src/yetty/yplatform/time/default.c
 )
 
 # TinyEMU PTY source (for --virtual flag)
@@ -107,6 +100,7 @@ target_link_libraries(yetty PRIVATE
     $<$<BOOL:${YETTY_ENABLE_LIB_QEMU}>:yetty_qemu>
     yetty_telnet
     yetty_yco
+    yetty_yplatform_core
 )
 
 # Copy runtime assets to build directory

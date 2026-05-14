@@ -103,6 +103,10 @@ if(YETTY_ENABLE_FEATURE_YCORE)
     add_subdirectory(ycore)
 endif()
 
+# yplatform — split into two libs (core + full). Must come after ycore
+# (PUBLIC dep) and before any tool / consumer of its target names.
+add_subdirectory(yplatform)
+
 if(YETTY_ENABLE_FEATURE_YFACE)
     add_subdirectory(yface)
 endif()

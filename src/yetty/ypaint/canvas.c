@@ -30,9 +30,7 @@
 #include <yetty/ymsdf/generator.h>
 #endif
 
-/* Provided per-platform (yplatform/{linux,macos,windows,android,ios,webasm}/
- * platform-paths.{c,m}). Returns a writable directory unique to the user. */
-extern const char *yetty_yplatform_get_cache_dir(void);
+#include <yetty/yplatform/paths.h>
 
 /*===========================================================================
  * prim_ref_array

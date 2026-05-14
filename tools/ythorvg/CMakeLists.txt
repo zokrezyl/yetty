@@ -3,11 +3,9 @@
 
 add_executable(yetty-ythorvg
     main.c
-    ${YETTY_ROOT}/src/yetty/yplatform/getopt.c
     # ytrace stubs used by libraries we pull in (ypaint-core, ythorvg).
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
     # Platform shims (ymutex_*, yplatform_*) needed by ytrace.
-    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
 target_include_directories(yetty-ythorvg PRIVATE
@@ -20,4 +18,5 @@ target_link_libraries(yetty-ythorvg PRIVATE
     yetty_ypaint_core
     yetty_yface
     yetty_ycore
+    yetty_yplatform_core
 )

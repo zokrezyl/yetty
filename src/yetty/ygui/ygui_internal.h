@@ -11,7 +11,14 @@
 #include <yetty/yface/yface.h>
 #include <stdlib.h>
 #include <string.h>
-#include <uv.h>
+
+/* No <uv.h> here — the libuv-driven event-loop integration lives in
+ * ygui_engine_uv.c (the `ygui` static library, layered on top of
+ * `ygui-core`). The engine struct carries an opaque uv_state pointer
+ * + a destroy hook so ygui-core can still build/own/destroy an engine
+ * without pulling libuv into its translation units. Targets that need
+ * the libuv-driven engine_run/attach/poll API link `ygui` (full); the
+ * webasm pipeline only consumes ygui-core. */
 
 /*=============================================================================
  * Forward Declarations
@@ -492,9 +499,16 @@ struct yetty_ygui_engine {
     int dirty;
     int running;
 
-    /* libuv event loop */
-    uv_loop_t *loop;
-    int owns_loop; /* 1 if we created the loop */
+    /* Opaque libuv-side state. NULL on ygui-core-only builds (webasm,
+     * non-interactive embedders). ygui_engine_uv.c — compiled into the
+     * full `ygui` static library — allocates a `struct ygui_uv_state`
+     * (uv_loop_t, owns_loop, uv_poll_t, uv_prepare_t) and stashes the
+     * pointer here in yetty_ygui_engine_attach. uv_state_destroy_cb is
+     * the corresponding teardown hook called from engine_destroy when
+     * non-NULL. */
+    void *uv_state;
+    void (*uv_state_destroy_cb)(struct yetty_ygui_engine *engine);
+
     int input_fd;  /* Input file descriptor (default: STDIN_FILENO) */
     int output_fd; /* Output file descriptor (default: STDOUT_FILENO) */
 
@@ -504,8 +518,6 @@ struct yetty_ygui_engine {
      * lives in the same process as the renderer. NULL = fall back to
      * `output_fd` (default client-mode behaviour). */
     struct yetty_platform_pty *output_pty;
-    uv_poll_t stdin_poll;
-    uv_prepare_t prepare_handle; /* For auto-render before polling */
 
     /* Input buffer for parsing */
     char input_buffer[4096];
@@ -667,6 +679,18 @@ void yetty_ygui_osc_scroll_card_delta(const char *name, float dx, float dy);
 
 /* Error */
 void yetty_ygui_set_error(const char *msg);
+
+/* Internal helpers shared between the ygui-core (libuv-free) and the
+ * libuv-driven runtime in ygui_engine_uv.c. Not part of the public API
+ * — `yetty_ygui_internal_` prefix makes the intent obvious. */
+void yetty_ygui_internal_process_input(struct yetty_ygui_engine *engine,
+                                       const char *data, int len);
+void yetty_ygui_internal_yface_on_osc(void *user, int osc_code,
+                                      const uint8_t *args, size_t args_len,
+                                      const uint8_t *payload, size_t payload_len);
+void yetty_ygui_internal_yface_on_raw(void *user, const char *bytes, size_t n);
+extern volatile int yetty_ygui_internal_resize_pending;
+extern struct yetty_ygui_engine *yetty_ygui_internal_active_engine;
 
 /* Math helpers */
 static inline float ygui_clamp(float v, float lo, float hi)

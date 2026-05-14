@@ -13,7 +13,6 @@
 add_executable(ygreeter
     main.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
 target_include_directories(ygreeter PRIVATE
@@ -26,7 +25,7 @@ target_include_directories(ygreeter PRIVATE
 # is added on top so we can call yetty_yimage_render_path() — the
 # yimage YAML factory isn't wired (yaml_factory: none) so we build the
 # image-bearing buffer programmatically and hand it to rich_set_buffer.
-target_link_libraries(ygreeter PRIVATE ygui yetty_yimage_core)
+target_link_libraries(ygreeter PRIVATE ygui yetty_yimage_core yetty_yplatform_core)
 
 if(NOT MSVC)
     target_compile_options(ygreeter PRIVATE -Wall -Wextra)

@@ -185,7 +185,7 @@ static void init_yetty(struct yetty_yplatform_app_state *state)
 {
     const char *cache_dir;
     const char *runtime_dir;
-    struct yetty_yplatform_paths paths;
+    struct yetty_yconfig_paths paths;
     struct yetty_yconfig_result config_result;
     struct yetty_yplatform_input_pipe_result pipe_result;
     struct yetty_yplatform_pty_factory_ptr_result pty_result;

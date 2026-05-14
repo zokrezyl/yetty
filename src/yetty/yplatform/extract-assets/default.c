@@ -2,13 +2,10 @@
 
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/yplatform/fs.h>
+#include <yetty/yplatform/paths.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* Forward declarations - implemented in platform-paths.c */
-const char *yetty_yplatform_get_data_dir(void);
-const char *yetty_yplatform_get_config_dir(void);
 
 /* Forward declaration - implemented by incbin-assets.c */
 struct yetty_incbin_assets;

@@ -4,8 +4,6 @@
 add_executable(ymesh
     main.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_ROOT}/src/yetty/yplatform/getopt.c
-    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
 target_include_directories(ymesh PRIVATE
@@ -17,6 +15,7 @@ find_package(Threads REQUIRED)
 target_link_libraries(ymesh PRIVATE
     yetty_ymesh_core
     Threads::Threads
+    yetty_yplatform_core
 )
 
 if(NOT MSVC)

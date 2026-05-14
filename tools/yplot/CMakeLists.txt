@@ -4,8 +4,6 @@
 add_executable(yplot
     main.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_ROOT}/src/yetty/yplatform/getopt.c
-    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
 target_include_directories(yplot PRIVATE
@@ -19,6 +17,7 @@ find_package(Threads REQUIRED)
 target_link_libraries(yplot PRIVATE
     yetty_yplot_core
     Threads::Threads
+    yetty_yplatform_core
 )
 
 if(NOT MSVC)

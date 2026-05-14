@@ -69,8 +69,8 @@ static void handle_resize(struct yetty_ygui_engine *engine);
  *===========================================================================*/
 
 static int ygui_initialized = 0;
-static volatile int ygui_resize_pending = 0;
-static struct yetty_ygui_engine *ygui_active_engine = NULL; /* For resize handler */
+volatile int yetty_ygui_internal_resize_pending = 0;
+struct yetty_ygui_engine *yetty_ygui_internal_active_engine = NULL; /* For resize handler */
 
 #ifndef _WIN32
 static struct termios ygui_orig_termios;
@@ -99,7 +99,7 @@ static void ygui_signal_handler(int sig)
 static void ygui_sigwinch_handler(int sig)
 {
     (void)sig;
-    ygui_resize_pending = 1;
+    yetty_ygui_internal_resize_pending = 1;
 }
 #endif /* !_WIN32 */
 
@@ -371,10 +371,11 @@ struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engin
         engine->yface_in = NULL;
     }
 
-    /* Clean up libuv handles if we own the loop */
-    if (engine->owns_loop && engine->loop) {
-        uv_loop_close(engine->loop);
-        free(engine->loop);
+    /* Tear down libuv state if the full `ygui` library populated it
+     * via yetty_ygui_engine_attach. ygui-core-only consumers have NULL
+     * here and the call is skipped — no libuv dependency to satisfy. */
+    if (engine->uv_state_destroy_cb) {
+        engine->uv_state_destroy_cb(engine);
     }
 
     /* Destroy all widgets */
@@ -1509,7 +1510,7 @@ static int parse_view_change_osc(const char *buf, int len, char *card_name, int 
     return 1;
 }
 
-static void process_input(struct yetty_ygui_engine *engine, const char *data, int len)
+void yetty_ygui_internal_process_input(struct yetty_ygui_engine *engine, const char *data, int len)
 {
     /* Append to input buffer */
     if (engine->input_len + len > (int)sizeof(engine->input_buffer) - 1) {
@@ -1646,7 +1647,7 @@ static void process_input(struct yetty_ygui_engine *engine, const char *data, in
  * keystrokes) are forwarded through on_raw to the existing parser.
  *===========================================================================*/
 
-static void yface_on_osc(void *user, int osc_code, const uint8_t *args, size_t args_len,
+void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *args, size_t args_len,
                          const uint8_t *payload, size_t payload_len)
 {
     (void)args;
@@ -1780,7 +1781,7 @@ static void yface_on_osc(void *user, int osc_code, const uint8_t *args, size_t a
     }
 }
 
-static void yface_on_raw(void *user, const char *bytes, size_t n)
+void yetty_ygui_internal_yface_on_raw(void *user, const char *bytes, size_t n)
 {
     struct yetty_ygui_engine *engine = (struct yetty_ygui_engine *)user;
     if (!engine || n == 0) {
@@ -1789,151 +1790,15 @@ static void yface_on_raw(void *user, const char *bytes, size_t n)
     /* Non-OSC bytes (CSI replies, raw keystrokes) — feed the legacy
      * parser, which still handles cell-size CSI / view-change OSC and
      * direct keyboard chars. */
-    process_input(engine, bytes, (int)n);
+    yetty_ygui_internal_process_input(engine, bytes, (int)n);
 }
 
 /*=============================================================================
- * libuv Event Loop
+ * Event-loop integration is implemented in ygui_engine_uv.c (compiled
+ * into the `ygui` static library, layered on top of `ygui-core`).
+ * yetty_ygui_engine_attach / _run / _get_loop / _poll all live there;
+ * engine_stop is libuv-free and stays here.
  *===========================================================================*/
-
-YETTY_EXTERNAL_CALLBACK
-static void stdin_poll_cb(uv_poll_t *handle, int status, int events)
-{
-    struct yetty_ygui_engine *engine = (struct yetty_ygui_engine *)handle->data;
-    if (status < 0) {
-        return;
-    }
-
-    if (events & UV_READABLE) {
-        char buf[1024];
-        ssize_t n = read(engine->input_fd, buf, sizeof(buf));
-        if (n > 0) {
-            if (engine->yface_in) {
-                /* yface scans for \e]…\e\\ envelopes, calls on_osc per
-                 * complete envelope, and on_raw for the bytes in between. */
-                yetty_yface_feed_bytes(engine->yface_in, buf, (size_t)n);
-            } else {
-                /* No yface available — fall back to legacy text parser. */
-                process_input(engine, buf, (int)n);
-            }
-        } else if (n == 0) {
-            /* EOF */
-            engine->running = 0;
-        }
-    }
-}
-
-YETTY_EXTERNAL_CALLBACK
-static void prepare_cb(uv_prepare_t *handle)
-{
-    struct yetty_ygui_engine *engine = (struct yetty_ygui_engine *)handle->data;
-
-    /* Check for terminal resize */
-    if (ygui_resize_pending) {
-        ygui_resize_pending = 0;
-        YGUI_LOG("SIGWINCH received, re-querying terminal size and cell size");
-#ifndef _WIN32
-        /* Pick up the new host-terminal cell count. Without this the card
-         * stays at its original cell dims, the cell pixel size also stays
-         * (no zoom), and handle_resize ends up with no delta — i.e. the
-         * resize event fires but nothing actually changes. */
-        struct winsize ws;
-        if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0) {
-            int new_w = ws.ws_col;
-            int new_h = ws.ws_row;
-            if (new_w != engine->card_w || new_h != engine->card_h) {
-                YGUI_LOG("SIGWINCH: card cells %dx%d -> %dx%d", engine->card_w, engine->card_h,
-                         new_w, new_h);
-                engine->card_w = new_w;
-                engine->card_h = new_h;
-                /* Tell the yetty side to re-place the card at the new cell
-                 * size. Yetty re-creates the card and sends back OSC 777780
-                 * with the new pixel size; that response sets
-                 * needs_resize/dirty and drives handle_resize on the next
-                 * render. We deliberately don't pre-compute pixel dims here
-                 * from cached cell_width — yetty may re-tile cells (which
-                 * changes the cell pixel size), and using a stale cached
-                 * value would cause a render at the wrong size that gets
-                 * corrected a frame later. */
-                struct yetty_ycore_void_result pr =
-                    yetty_ygui_osc_card_place(engine->card_id, engine->card_x, engine->card_y,
-                                              (uint32_t)new_w, (uint32_t)new_h);
-                if (YETTY_IS_ERR(pr)) {
-                    yetty_ycore_error_destroy(pr.error);
-                }
-            }
-        }
-#endif
-        yetty_ygui_osc_query_cell_size();
-        /* The CSI cell-size response and yetty's OSC 777780 reply will
-         * arrive shortly; the OSC 777780 parser sets needs_resize and
-         * dirty, which triggers handle_resize on the next render. */
-    }
-
-    /* Auto-render if dirty */
-    if (engine->dirty) {
-        yetty_ygui_engine_render(engine);
-    }
-
-    /* Check if we should stop */
-    if (!engine->running) {
-        uv_stop(engine->loop);
-    }
-}
-
-void yetty_ygui_engine_attach(struct yetty_ygui_engine *engine, uv_loop_t *loop)
-{
-    if (!engine || !loop) {
-        return;
-    }
-
-    engine->loop = loop;
-    engine->owns_loop = 0;
-
-    /* Wire up the yface handlers so feed_bytes can dispatch into us. */
-    if (engine->yface_in) {
-        yetty_yface_set_handlers(engine->yface_in, yface_on_osc, yface_on_raw, engine);
-    }
-
-    /* Set up stdin poll */
-    uv_poll_init(loop, &engine->stdin_poll, engine->input_fd);
-    engine->stdin_poll.data = engine;
-    uv_poll_start(&engine->stdin_poll, UV_READABLE, stdin_poll_cb);
-
-    /* Set up prepare handle for auto-render */
-    uv_prepare_init(loop, &engine->prepare_handle);
-    engine->prepare_handle.data = engine;
-    uv_prepare_start(&engine->prepare_handle, prepare_cb);
-}
-
-void yetty_ygui_engine_run(struct yetty_ygui_engine *engine)
-{
-    if (!engine) {
-        return;
-    }
-
-    /* Create loop if needed */
-    if (!engine->loop) {
-        engine->loop = (uv_loop_t *)malloc(sizeof(uv_loop_t));
-        if (!engine->loop) {
-            return;
-        }
-        uv_loop_init(engine->loop);
-        engine->owns_loop = 1;
-
-        /* Attach to the loop */
-        yetty_ygui_engine_attach(engine, engine->loop);
-    }
-
-    engine->running = 1;
-
-    /* Run the loop */
-    uv_run(engine->loop, UV_RUN_DEFAULT);
-
-    /* Cleanup handles */
-    uv_poll_stop(&engine->stdin_poll);
-    uv_prepare_stop(&engine->prepare_handle);
-}
 
 void yetty_ygui_engine_stop(struct yetty_ygui_engine *engine)
 {
@@ -1996,18 +1861,8 @@ void yetty_ygui_engine_set_display_pixel_size(struct yetty_ygui_engine *engine, 
     yetty_ygui_grid_init(&engine->grid, width, height, calc_grid_bucket_size(width, height));
 }
 
-uv_loop_t *yetty_ygui_engine_get_loop(struct yetty_ygui_engine *engine)
-{
-    return engine ? engine->loop : NULL;
-}
-
-int yetty_ygui_engine_poll(struct yetty_ygui_engine *engine)
-{
-    if (!engine || !engine->loop) {
-        return 0;
-    }
-    return uv_run(engine->loop, UV_RUN_NOWAIT);
-}
+/* yetty_ygui_engine_get_loop / yetty_ygui_engine_poll are libuv-coupled —
+ * implementations live in ygui_engine_uv.c (the full `ygui` library). */
 
 /*=============================================================================
  * Legacy API compatibility (ygui_engine_create with buffer)

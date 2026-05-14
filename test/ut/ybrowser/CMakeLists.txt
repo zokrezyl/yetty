@@ -10,7 +10,6 @@ enable_testing()
 
 set(YBROWSER_TEST_SHIM_SOURCES
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
 add_executable(ybrowser-layout-test
@@ -22,7 +21,7 @@ target_include_directories(ybrowser-layout-test PRIVATE
     ${YETTY_ROOT}/src
 )
 target_link_libraries(ybrowser-layout-test PRIVATE
-    yetty_ybrowser yetty_ypaint yetty_ypaint_core yetty_ycore m)
+    yetty_ybrowser yetty_ypaint yetty_ypaint_core yetty_ycore yetty_yplatform_core m)
 add_test(NAME ybrowser_layout COMMAND ybrowser-layout-test)
 
 # Wikipedia rendering test — loads the actual Photography page snapshot
@@ -38,7 +37,7 @@ target_include_directories(ybrowser-wikipedia-test PRIVATE
     ${YETTY_ROOT}/src
 )
 target_link_libraries(ybrowser-wikipedia-test PRIVATE
-    yetty_ybrowser yetty_ypaint yetty_ypaint_core yetty_ycore m)
+    yetty_ybrowser yetty_ypaint yetty_ypaint_core yetty_ycore yetty_yplatform_core m)
 target_compile_definitions(ybrowser-wikipedia-test PRIVATE
     YBROWSER_WIKI_PAGE=\"${CMAKE_CURRENT_SOURCE_DIR}/photography.html\"
 )
@@ -56,6 +55,6 @@ target_include_directories(ybrowser-inline-test PRIVATE
     ${YETTY_ROOT}/src
 )
 target_link_libraries(ybrowser-inline-test PRIVATE
-    yetty_ybrowser yetty_ypaint yetty_ypaint_core yetty_ycore m)
+    yetty_ybrowser yetty_ypaint yetty_ypaint_core yetty_ycore yetty_yplatform_core m)
 add_test(NAME ybrowser_inline COMMAND ybrowser-inline-test)
 

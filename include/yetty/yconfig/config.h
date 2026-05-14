@@ -11,8 +11,11 @@ extern "C" {
 
 struct yetty_yconfig_config;
 
-/* Platform-specific paths */
-struct yetty_yplatform_paths {
+/* yconfig-resolved resource paths. Distinct from the canonical
+ * XDG-style locations in <yetty/yplatform/paths.h> (cache/data/config/...);
+ * this struct carries the *config-applied* shader/font/bin overrides
+ * that a yetty exec may receive via yconfig_create_with_paths. */
+struct yetty_yconfig_paths {
     const char *shaders_dir;
     const char *fonts_dir;
     const char *runtime_dir;
@@ -99,7 +102,7 @@ struct yetty_yconfig_config {
 
 /* Create config */
 struct yetty_yconfig_result yetty_yconfig_create(int argc, char *argv[],
-                                                 const struct yetty_yplatform_paths *paths);
+                                                 const struct yetty_yconfig_paths *paths);
 
 #ifdef __cplusplus
 }

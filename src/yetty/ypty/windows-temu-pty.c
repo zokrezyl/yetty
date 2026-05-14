@@ -53,9 +53,7 @@ struct yetty_yplatform_tinyemu_pty {
     char *config_path;
 };
 
-/* External: get data/config directories (platform-specific) */
-extern const char *yetty_yplatform_get_data_dir(void);
-extern const char *yetty_yplatform_get_config_dir(void);
+#include <yetty/yplatform/paths.h>
 
 /* Forward declarations */
 static struct yetty_ycore_void_result tinyemu_pty_destroy(struct yetty_platform_pty *self);

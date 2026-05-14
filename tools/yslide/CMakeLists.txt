@@ -2,7 +2,6 @@
 add_executable(yslide
     main.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_ROOT}/src/yetty/yplatform/getopt.c
     ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
 )
@@ -20,6 +19,7 @@ target_link_libraries(yslide PRIVATE
     yetty_ypaint_core
     yetty_ycore
     Threads::Threads
+    yetty_yplatform_core
 )
 
 target_compile_options(yslide PRIVATE -Wall -Wextra)

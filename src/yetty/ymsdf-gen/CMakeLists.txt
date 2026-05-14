@@ -21,7 +21,6 @@ target_link_libraries(yetty_ymsdf_gen PUBLIC
 add_executable(yetty-ymsdf-gen
     ${YETTY_ROOT}/tools/msdf/gen-msdf/main.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 target_include_directories(yetty-ymsdf-gen PRIVATE ${YETTY_ROOT}/include)
-target_link_libraries(yetty-ymsdf-gen PRIVATE yetty_ymsdf_gen)
+target_link_libraries(yetty-ymsdf-gen PRIVATE yetty_ymsdf_gen yetty_yplatform_core)

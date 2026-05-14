@@ -8,7 +8,6 @@
 add_executable(msdf-render-atlas
     main.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
 target_include_directories(msdf-render-atlas PRIVATE
@@ -21,6 +20,7 @@ target_link_libraries(msdf-render-atlas PRIVATE
     glfw3webgpu
     webgpu
     $<$<NOT:$<C_COMPILER_ID:MSVC>>:m>
+    yetty_yplatform_core
 )
 
 # Dawn (libwebgpu_dawn.a) is C++ — force the C++ stdlib at link time
