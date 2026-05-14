@@ -36,6 +36,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>               /* struct stat, fstat */
+#include <unistd.h>                 /* isatty, dup2, getpid, STD{OUT,ERR}_FILENO */
 #include <yetty/yplatform/fs.h>     /* path_dirname, path_realpath, file_is_regular */
 #include <yetty/yplatform/term.h>   /* term_get_size */
 #include <yetty/ygui/ygui.h>

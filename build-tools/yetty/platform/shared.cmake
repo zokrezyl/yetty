@@ -116,8 +116,19 @@ if(YETTY_ENABLE_LIB_TINYEMU OR YETTY_ENABLE_LIB_QEMU)
     # HEAD` at /yetty/repo, in one bootable ext4 image. Mounted as
     # drive0 in --temu and --qemu guests; replaces the previous two-disk
     # setup (alpine-extended-rootfs.img + yetty-riscv-disk.img).
-    include(${YETTY_ROOT}/build-tools/yetty/yetty-asset-fetch.cmake)
-    yetty_asset_fetch(yetty-rootfs-riscv _YETTY_ROOTFS_RISCV_DIR)
+    #
+    # Skip the fetch when this build *produces* the rootfs (the riscv64
+    # cross-compile feeds /yetty/bin into yetty-rootfs-riscv-<ver>.tar.gz
+    # via build-tools/yemu/yetty-rootfs-riscv/build.sh). Fetching it here
+    # would be circular and would FATAL when the release hasn't been cut
+    # yet for the bumped version.
+    if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL "riscv64")
+        include(${YETTY_ROOT}/build-tools/yetty/yetty-asset-fetch.cmake)
+        yetty_asset_fetch(yetty-rootfs-riscv _YETTY_ROOTFS_RISCV_DIR)
+        set(YETTY_ROOTFS_RISCV_IMG
+            "${_YETTY_ROOTFS_RISCV_DIR}/yetty-rootfs-riscv.img"
+            CACHE FILEPATH "" FORCE)
+    endif()
 
     # Path constants consumed by tinyemu-runtime.cmake (bundle copy at
     # build time) and any future runtime-path consumer. Point at the
@@ -133,9 +144,6 @@ if(YETTY_ENABLE_LIB_TINYEMU OR YETTY_ENABLE_LIB_QEMU)
         CACHE FILEPATH "" FORCE)
     set(TINYEMU_ROOTFS_IMG
         "${_ALPINE_DIR}/alpine-rootfs.img"
-        CACHE FILEPATH "" FORCE)
-    set(YETTY_ROOTFS_RISCV_IMG
-        "${_YETTY_ROOTFS_RISCV_DIR}/yetty-rootfs-riscv.img"
         CACHE FILEPATH "" FORCE)
 endif()
 
