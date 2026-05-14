@@ -21,4 +21,7 @@ steps:
   build:
     image: yetty-build:latest
     commands:
+      # plugin-git does a shallow clone with no tags; the 3rdparty version
+      # resolver in shared.cmake needs a reachable yetty-X.Y.Z tag.
+      - git fetch --tags
       - make build-android_x86_64-ytrace-release

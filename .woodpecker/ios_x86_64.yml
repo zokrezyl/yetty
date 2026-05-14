@@ -8,6 +8,9 @@ steps:
   build:
     image: bash
     commands:
+      # plugin-git does a shallow clone with no tags; the 3rdparty version
+      # resolver in shared.cmake needs a reachable yetty-X.Y.Z tag.
+      - git fetch --tags
       - git lfs install
       - git lfs fetch
       - git lfs checkout
