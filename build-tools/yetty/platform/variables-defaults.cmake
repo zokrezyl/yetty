@@ -87,7 +87,7 @@ option(YETTY_ENABLE_FEATURE_YDRAW_ZOO "ydraw-zoo — ydraw demo shapes"        O
 option(YETTY_ENABLE_FEATURE_YDRAW_MAZE "ydraw-maze — ydraw maze demo"        OFF)
 option(YETTY_ENABLE_FEATURE_YPAINT    "ypaint — painting"                    ON)
 option(YETTY_ENABLE_FEATURE_YRICH     "yrich — rich text"                    ON)
-option(YETTY_ENABLE_FEATURE_DIAGRAM   "diagram — diagram rendering"          OFF)
+option(YETTY_ENABLE_FEATURE_YDIAGRAM  "ydiagram — diagram rendering"         OFF)
 option(YETTY_ENABLE_FEATURE_YPLOT     "yplot — plotting"                     ON)
 
 # Cards
