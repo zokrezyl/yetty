@@ -44,7 +44,10 @@ typedef void (*yetty_ynotify_handler_fn)(int severity, const char *msg, void *us
 
 /* printf-style. Thread-safe. */
 void ynotify(int severity, const char *fmt, ...)
-    __attribute__((format(printf, 2, 3)));
+#ifndef _MSC_VER
+    __attribute__((format(printf, 2, 3)))
+#endif
+    ;
 
 /* va_list variant — for wrappers that pass through their own ... args. */
 void vynotify(int severity, const char *fmt, va_list ap);
