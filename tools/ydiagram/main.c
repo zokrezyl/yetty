@@ -1,17 +1,13 @@
 /*
  * ydiagram — render a diagram file (Mermaid) into a ypaint buffer and emit
- * an OSC envelope on stdout so a running yetty pane redraws it.
+ * an OSC envelope on stdout so a running yetty ypaint pane redraws it.
  *
- * Usage:
- *   ydiagram <file.mmd>             # emit OSC envelope to stdout
- *   ydiagram -o out.bin <file.mmd>  # write serialized ypaint buffer to file
- *                                   # (no OSC framing — useful for tests)
- *   ydiagram -                      # read Mermaid from stdin
+ * Pure one-shot: parse → layout → render → emit → exit. Same wire as
+ * tools/ymaze and tools/yzoo (OSC 600000 clear + OSC 600001 bin).
  *
- * One-shot: parse → layout → render → emit, then exit. No animation, no
- * input subscription, no alt-screen. If you redirect into a pane that
- * runs a ypaint-layer the diagram appears; on a plain terminal you see
- * the OSC bytes (the same as `ymaze`/`yzoo` without their event loop).
+ *   ydiagram <file.mmd>           # OSC envelope to stdout (default)
+ *   ydiagram -o <file>            # raw serialized buffer, no OSC framing
+ *   ydiagram -                    # read Mermaid from stdin
  */
 
 #include <yetty/ydiagram/ydiagram.h>
@@ -29,10 +25,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/*=============================================================================
- * OSC envelope emission — same pattern as tools/ymaze, tools/yzoo.
- *===========================================================================*/
-
 static int emit_envelope(FILE *out, int osc_code, int compressed, const void *args,
                          size_t args_len, const void *body, size_t body_len)
 {
@@ -41,9 +33,7 @@ static int emit_envelope(FILE *out, int osc_code, int compressed, const void *ar
         yetty_yface_emit(osc_code, compressed, args, args_len, body, body_len, &env);
     int rc = 0;
     if (YETTY_IS_OK(r) && env.size > 0) {
-        if (fwrite(env.data, 1, env.size, out) != env.size) {
-            rc = 1;
-        }
+        if (fwrite(env.data, 1, env.size, out) != env.size) rc = 1;
     } else if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "ydiagram: yface_emit failed: %s\n",
                 r.error.msg ? r.error.msg : "?");
@@ -53,8 +43,12 @@ static int emit_envelope(FILE *out, int osc_code, int compressed, const void *ar
     return rc;
 }
 
-static int emit_bin_serialized(FILE *out, struct yetty_ypaint_core_buffer *buf)
+static int emit_osc(FILE *out, struct yetty_ypaint_core_buffer *buf, bool with_clear)
 {
+    if (with_clear) {
+        int rc = emit_envelope(out, YETTY_OSC_YPAINT_CLEAR, 0, NULL, 0, NULL, 0);
+        if (rc) return rc;
+    }
     const uint8_t *raw  = NULL;
     size_t         size = yetty_ypaint_core_buffer_serialize(buf, &raw);
     if (size == 0 || !raw) {
@@ -73,12 +67,7 @@ static int emit_bin_serialized(FILE *out, struct yetty_ypaint_core_buffer *buf)
                          raw, size);
 }
 
-/*=============================================================================
- * Raw serialized output — no OSC framing. Used with -o / --raw for tests
- * and for piping into decode-ypaint-like inspectors.
- *===========================================================================*/
-
-static int write_raw_serialized(FILE *out, struct yetty_ypaint_core_buffer *buf)
+static int write_raw(FILE *out, struct yetty_ypaint_core_buffer *buf)
 {
     const uint8_t *raw  = NULL;
     size_t         size = yetty_ypaint_core_buffer_serialize(buf, &raw);
@@ -93,10 +82,6 @@ static int write_raw_serialized(FILE *out, struct yetty_ypaint_core_buffer *buf)
     return 0;
 }
 
-/*=============================================================================
- * Input — load a whole file (or stdin) into a malloc'd buffer.
- *===========================================================================*/
-
 static char *slurp_file(const char *path, size_t *out_len)
 {
     FILE *f = strcmp(path, "-") == 0 ? stdin : fopen(path, "rb");
@@ -104,7 +89,6 @@ static char *slurp_file(const char *path, size_t *out_len)
         fprintf(stderr, "ydiagram: cannot open '%s': %s\n", path, strerror(errno));
         return NULL;
     }
-
     size_t cap  = 8192;
     size_t size = 0;
     char  *buf  = malloc(cap);
@@ -113,7 +97,7 @@ static char *slurp_file(const char *path, size_t *out_len)
         return NULL;
     }
     for (;;) {
-        if (size + 4096 > cap) {
+        if (size + 4096 + 1 > cap) {
             size_t nc = cap * 2;
             char  *nb = realloc(buf, nc);
             if (!nb) {
@@ -134,24 +118,17 @@ static char *slurp_file(const char *path, size_t *out_len)
     return buf;
 }
 
-/*=============================================================================
- * Usage
- *===========================================================================*/
-
 static void usage(const char *prog)
 {
     fprintf(stderr,
             "Usage: %s [options] <file.mmd | ->\n"
             "\n"
-            "Renders a diagram file (Mermaid) into a ypaint buffer and emits\n"
-            "the result. By default emits an OSC envelope on stdout that a\n"
-            "running yetty pane will redraw.\n"
+            "Emits OSC envelopes on stdout for a running yetty ypaint pane.\n"
             "\n"
             "Options:\n"
-            "  -o <file>   Write the serialized ypaint buffer (no OSC framing)\n"
-            "              to <file>. '-' for stdout.\n"
-            "  -q          Quiet: skip OSC clear envelope before payload.\n"
-            "  -h          Show this help and exit.\n",
+            "  -o <file>     Write raw serialized ypaint buffer (no OSC) to <file>.\n"
+            "  -q            Skip the OSC clear envelope before the bin payload.\n"
+            "  -h            Show this help and exit.\n",
             prog);
 }
 
@@ -163,19 +140,10 @@ int main(int argc, char **argv)
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
-        if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
-            usage(argv[0]);
-            return 0;
-        }
-        if (strcmp(a, "-q") == 0) {
-            quiet = true;
-            continue;
-        }
+        if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) { usage(argv[0]); return 0; }
+        if (strcmp(a, "-q") == 0) { quiet = true; continue; }
         if (strcmp(a, "-o") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "ydiagram: -o requires a path\n");
-                return 2;
-            }
+            if (i + 1 >= argc) { fprintf(stderr, "ydiagram: -o requires a path\n"); return 2; }
             out_path = argv[++i];
             continue;
         }
@@ -184,19 +152,13 @@ int main(int argc, char **argv)
             usage(argv[0]);
             return 2;
         }
-        if (input_path) {
-            fprintf(stderr, "ydiagram: multiple inputs not supported\n");
-            return 2;
-        }
+        if (input_path) { fprintf(stderr, "ydiagram: multiple inputs\n"); return 2; }
         input_path = a;
     }
-    if (!input_path) {
-        usage(argv[0]);
-        return 2;
-    }
+    if (!input_path) { usage(argv[0]); return 2; }
 
-    size_t      in_len = 0;
-    char       *in_buf = slurp_file(input_path, &in_len);
+    size_t in_len = 0;
+    char  *in_buf = slurp_file(input_path, &in_len);
     if (!in_buf) return 1;
 
     struct yetty_ydiagram_buffer_result br = yetty_ydiagram_render_mermaid(in_buf, in_len);
@@ -207,24 +169,18 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    int rc = 0;
+    int rc;
     if (out_path) {
         FILE *out = strcmp(out_path, "-") == 0 ? stdout : fopen(out_path, "wb");
         if (!out) {
-            fprintf(stderr, "ydiagram: cannot open '%s' for writing: %s\n", out_path,
-                    strerror(errno));
+            fprintf(stderr, "ydiagram: cannot open '%s': %s\n", out_path, strerror(errno));
             rc = 1;
         } else {
-            rc = write_raw_serialized(out, br.value);
+            rc = write_raw(out, br.value);
             if (out != stdout) fclose(out);
         }
     } else {
-        if (!quiet) {
-            rc = emit_envelope(stdout, YETTY_OSC_YPAINT_CLEAR, 0, NULL, 0, NULL, 0);
-        }
-        if (rc == 0) {
-            rc = emit_bin_serialized(stdout, br.value);
-        }
+        rc = emit_osc(stdout, br.value, !quiet);
         fflush(stdout);
     }
 

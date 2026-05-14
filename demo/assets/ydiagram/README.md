@@ -33,15 +33,18 @@ isolation:
 
 ## Running
 
-The `ydiagram` CLI (`tools/ydiagram/`) turns any file here into a ypaint
-OSC envelope on stdout, or a raw serialized buffer with `-o`:
+The `ydiagram` CLI (`tools/ydiagram/`) has three output modes:
 
 ```
-# emit OSC envelope into a running yetty pane
+# Default: ASCII rendering on stdout — visible in any terminal.
 ./build-desktop-ytrace-release/tools/ydiagram/ydiagram \
     demo/assets/ydiagram/state-machine.mmd
 
-# dump the raw ypaint buffer for inspection
+# --osc: emit OSC envelope into a running yetty ypaint pane.
+./build-desktop-ytrace-release/tools/ydiagram/ydiagram --osc \
+    demo/assets/ydiagram/state-machine.mmd
+
+# -o: dump the raw ypaint buffer for inspection / piping.
 ./build-desktop-ytrace-release/tools/ydiagram/ydiagram \
     -o tmp/state-machine.ybin \
     demo/assets/ydiagram/state-machine.mmd
