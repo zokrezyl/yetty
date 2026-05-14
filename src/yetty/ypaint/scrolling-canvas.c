@@ -1869,7 +1869,8 @@ static struct yetty_ycore_void_result scrolling_process_input_impl(
         struct yetty_ypaint_core_prim_iter_status_result sr =
             yetty_ypaint_core_prim_iter_next(&canvas->env_iter);
         if (YETTY_IS_ERR(sr)) {
-            yerror("process_input: prim_iter error — resetting envelope state");
+            yerror("process_input: prim_iter error — resetting envelope state: %s",
+                   sr.error.msg ? sr.error.msg : "(no msg)");
             yetty_ycore_error_destroy(sr.error);
             scrolling_env_reset(canvas);
             return YETTY_ERR(yetty_ycore_void, "process_input: prim_iter failed");

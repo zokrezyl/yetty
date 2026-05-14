@@ -150,6 +150,8 @@ static struct yetty_ycore_void_result write_bin(struct yetty_platform_pty *outpu
     struct yetty_ycore_buffer out = {0};
     struct yetty_ycore_void_result r = yetty_yface_emit(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
                                                         &meta, sizeof(meta), data, size, &out);
+    ydebug("write_bin: raw_size=%u envelope_bytes=%zu emit_ok=%d", size, out.size,
+           YETTY_IS_OK(r));
     if (YETTY_IS_OK(r) && out.size > 0) {
         if (output_pty) {
             struct yetty_ycore_void_result wr =

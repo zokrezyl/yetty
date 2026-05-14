@@ -406,6 +406,19 @@ static struct yetty_ycore_void_result push_decoded(
 static struct yetty_ycore_void_result body_pump(
     struct yetty_yterm_osc_statemachine *statemachine, size_t want)
 {
+    /* Cap the in-pass target at half the carry. The carry is bounded
+     * (OSC_OUT_CARRY_CAP), but a single prim can be many MB (e.g. yimage's
+     * 2.5 MB pixel payload). Without this cap, body_pump would loop trying
+     * to satisfy `want = 2.5 MB`, eventually hitting out_carry_append's
+     * overflow guard — surfaced as a stream-level error and a dropped
+     * frame ("prim_iter: body pull" → "envelope truncated"). The iter
+     * already loops calling statemachine_read until its own `filled ==
+     * total_size`, so it's fine for body_pump to deliver progress in
+     * carry-sized chunks; the caller drains and re-asks. */
+    const size_t max_per_pass = sizeof(statemachine->out_carry) / 2;
+    if (want > max_per_pass) {
+        want = max_per_pass;
+    }
     while (out_carry_avail(statemachine) < want) {
         if (statemachine->terminator_seen) {
             /* Bytes after terminator: drain LZ4F incrementally — one
