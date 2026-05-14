@@ -5,10 +5,15 @@
 labels:
   platform: darwin/arm64
 
+# Disabled: no darwin/arm64 agent currently registered. Re-enable once one is
+# attached (see commented-out `when:` block below).
 when:
-  - event: manual
-  - event: tag
-    ref: refs/tags/lib-glfw-*
+  - evaluate: 'false'
+
+#when:
+#  - event: manual
+#  - event: tag
+#    ref: refs/tags/lib-glfw-*
 
 clone:
   git:
