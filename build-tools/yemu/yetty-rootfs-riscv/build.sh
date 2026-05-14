@@ -44,10 +44,21 @@ REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 # Versioning + paths
 #-----------------------------------------------------------------------------
 
-VERSION_FILE="$SCRIPT_DIR/version"
-[ -f "$VERSION_FILE" ] || { echo "missing $VERSION_FILE" >&2; exit 1; }
-VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
-[ -n "$VERSION" ] || { echo "$VERSION_FILE is empty" >&2; exit 1; }
+# Version tracks the yetty release. The parent CI pipeline sets VERSION
+# explicitly when it runs on a yetty-X.Y.Z tag; for branch pushes and
+# local builds we derive it from `git describe`. No separate version
+# file: the yetty tag is the single source of truth.
+if [ -z "${VERSION:-}" ]; then
+    TAG="$(git -C "$REPO_ROOT" describe --tags --abbrev=0 \
+              --match='yetty-[0-9]*.[0-9]*.[0-9]*' HEAD 2>/dev/null || true)"
+    if [ -z "$TAG" ]; then
+        echo "FATAL: cannot derive VERSION — no yetty-X.Y.Z tag reachable from HEAD." >&2
+        echo "Set VERSION=X.Y.Z explicitly, or `git fetch --tags` and rerun." >&2
+        exit 1
+    fi
+    VERSION="${TAG#yetty-}"
+fi
+[ -n "$VERSION" ] || { echo "VERSION resolved to empty" >&2; exit 1; }
 : "${OUTPUT_DIR:?OUTPUT_DIR is required}"
 
 ALPINE_EXT_VER_FILE="$REPO_ROOT/build-tools/3rdparty/alpine-extended-disk/version"

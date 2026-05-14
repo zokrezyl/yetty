@@ -117,16 +117,87 @@ if(YETTY_ENABLE_LIB_TINYEMU OR YETTY_ENABLE_LIB_QEMU)
     # drive0 in --temu and --qemu guests; replaces the previous two-disk
     # setup (alpine-extended-rootfs.img + yetty-riscv-disk.img).
     #
-    # Skip the fetch when this build *produces* the rootfs (the riscv64
+    # Version tracks yetty itself — the rootfs is built by the same CI
+    # pipeline that tags yetty-X.Y.Z (build-yetty-rootfs-riscv.yml runs
+    # first inside cmake-multi-platform.yml). No version file: derive
+    # from the latest yetty-X.Y.Z tag reachable from HEAD.
+    #
+    # Skip entirely when this build *produces* the rootfs (the riscv64
     # cross-compile feeds /yetty/bin into yetty-rootfs-riscv-<ver>.tar.gz
-    # via build-tools/yemu/yetty-rootfs-riscv/build.sh). Fetching it here
-    # would be circular and would FATAL when the release hasn't been cut
-    # yet for the bumped version.
+    # via build-tools/yemu/yetty-rootfs-riscv/build.sh). Fetching here
+    # would be circular and would FATAL on a freshly bumped yetty tag
+    # before that tag's release has been cut.
     if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL "riscv64")
-        include(${YETTY_ROOT}/build-tools/yetty/yetty-asset-fetch.cmake)
-        yetty_asset_fetch(yetty-rootfs-riscv _YETTY_ROOTFS_RISCV_DIR)
+        include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
+
+        execute_process(
+            COMMAND git -C "${YETTY_ROOT}" describe --tags --abbrev=0
+                    --match "yetty-[0-9]*.[0-9]*.[0-9]*" HEAD
+            OUTPUT_VARIABLE _YR_TAG OUTPUT_STRIP_TRAILING_WHITESPACE
+            RESULT_VARIABLE _YR_GIT_RC
+            ERROR_QUIET)
+        if(NOT _YR_GIT_RC EQUAL 0 OR NOT _YR_TAG)
+            message(FATAL_ERROR
+                "yetty-rootfs-riscv: cannot resolve version — no yetty-X.Y.Z "
+                "tag reachable from HEAD. Run `git fetch --tags`, or stage a "
+                "pre-built tarball into ${YETTY_3RDPARTY_CACHE_DIR}.")
+        endif()
+        string(REGEX REPLACE "^yetty-" "" _YR_VER "${_YR_TAG}")
+
+        set(_YR_FILE   "yetty-rootfs-riscv-${_YR_VER}.tar.gz")
+        set(_YR_URL    "${YETTY_3RDPARTY_URL_BASE}/yetty-rootfs-riscv-${_YR_VER}/${_YR_FILE}")
+        set(_YR_CACHED "${YETTY_3RDPARTY_CACHE_DIR}/${_YR_FILE}")
+        set(_YR_DEST   "${CMAKE_BINARY_DIR}/yetty-assets/yetty-rootfs-riscv")
+        set(_YR_STAMP  "${_YR_DEST}/.fetched-${_YR_VER}")
+
+        if(NOT EXISTS "${_YR_STAMP}")
+            if(NOT EXISTS "${_YR_CACHED}")
+                # In CI the stage-rootfs-riscv composite action drops the
+                # workflow-artifact tarball here before configure runs,
+                # so the download branch only fires on local builds /
+                # external consumers.
+                message(STATUS "yetty-rootfs-riscv: downloading ${_YR_FILE}")
+                file(DOWNLOAD "${_YR_URL}" "${_YR_CACHED}"
+                    SHOW_PROGRESS STATUS _YR_DL TLS_VERIFY ON)
+                list(GET _YR_DL 0 _YR_DL_CODE)
+                if(NOT _YR_DL_CODE EQUAL 0)
+                    file(REMOVE "${_YR_CACHED}")
+                    message(FATAL_ERROR
+                        "yetty-rootfs-riscv: download failed for ${_YR_URL} "
+                        "(${_YR_DL}). Resolved version: ${_YR_VER}. Either "
+                        "the release isn't cut yet, or pre-stage the tarball "
+                        "into ${YETTY_3RDPARTY_CACHE_DIR}.")
+                endif()
+            endif()
+            file(REMOVE_RECURSE "${_YR_DEST}")
+            file(MAKE_DIRECTORY "${_YR_DEST}")
+            execute_process(
+                COMMAND ${CMAKE_COMMAND} -E tar xzf "${_YR_CACHED}"
+                WORKING_DIRECTORY "${_YR_DEST}"
+                RESULT_VARIABLE _YR_TAR)
+            if(NOT _YR_TAR EQUAL 0)
+                message(FATAL_ERROR
+                    "yetty-rootfs-riscv: failed to extract ${_YR_CACHED}")
+            endif()
+            # The tarball ships .img.br only; downstream embed pipeline
+            # uses the .br directly, but tinyemu-runtime.cmake's bundle
+            # copy expects the raw .img too. Auto-decompress alongside.
+            file(GLOB_RECURSE _YR_BR_FILES "${_YR_DEST}/*.br")
+            find_program(BROTLI_EXECUTABLE brotli)
+            if(_YR_BR_FILES AND BROTLI_EXECUTABLE)
+                foreach(_BR ${_YR_BR_FILES})
+                    string(REGEX REPLACE "\\.br$" "" _RAW "${_BR}")
+                    if(NOT EXISTS "${_RAW}")
+                        execute_process(
+                            COMMAND "${BROTLI_EXECUTABLE}" -d -k -f
+                                    -o "${_RAW}" "${_BR}")
+                    endif()
+                endforeach()
+            endif()
+            file(WRITE "${_YR_STAMP}" "${_YR_VER}\n")
+        endif()
         set(YETTY_ROOTFS_RISCV_IMG
-            "${_YETTY_ROOTFS_RISCV_DIR}/yetty-rootfs-riscv.img"
+            "${_YR_DEST}/yetty-rootfs-riscv.img"
             CACHE FILEPATH "" FORCE)
     endif()
 
@@ -599,13 +670,17 @@ function(yetty_embed_assets TARGET)
         file(REMOVE_RECURSE "${EMBED_YEMU_DIR}")
         file(MAKE_DIRECTORY "${EMBED_YEMU_DIR}")
 
-        # source-dir → file (per-asset)
+        # source-dir → file (per-asset). yetty-rootfs-riscv lives under
+        # CMAKE_BINARY_DIR/yetty-assets/... — produced by the dedicated
+        # fetch block at the top of this file. Its absence at this point
+        # (e.g. riscv cross-build that skips the fetch) is silently
+        # tolerated by the `if(EXISTS ...)` guard below.
         foreach(_PAIR
                 "${YETTY_3RDPARTY_linux_DIR}|kernel-riscv64.bin.br"
                 "${YETTY_3RDPARTY_opensbi_DIR}|opensbi-fw_jump.elf.br"
                 "${YETTY_3RDPARTY_opensbi_DIR}|opensbi-fw_dynamic.bin.br"
                 "${YETTY_3RDPARTY_alpine-disk_DIR}|alpine-rootfs.img.br"
-                "${YETTY_ASSET_yetty-rootfs-riscv_DIR}|yetty-rootfs-riscv.img.br")
+                "${CMAKE_BINARY_DIR}/yetty-assets/yetty-rootfs-riscv|yetty-rootfs-riscv.img.br")
             string(REPLACE "|" ";" _PARTS "${_PAIR}")
             list(GET _PARTS 0 _SRC_DIR)
             list(GET _PARTS 1 _F)

@@ -19,17 +19,18 @@ name: Build yetty-rootfs-riscv
 #     - manifest.txt
 
 on:
-  push:
-    tags:
-      - 'yetty-rootfs-riscv-*'
+  # Driven exclusively by the parent yetty pipeline (cmake-multi-platform.yml
+  # → workflow_call) or by an explicit manual dispatch. The rootfs version
+  # tracks yetty's X.Y.Z release tag; there is no `yetty-rootfs-riscv-*`
+  # tag namespace to push directly anymore.
   workflow_dispatch: {}
   workflow_call:
     outputs:
       version:
-        description: Version string read from the rootfs version file.
+        description: Resolved yetty version (X.Y.Z) the rootfs tracks.
         value: ${{ jobs.resolve.outputs.version }}
       tag:
-        description: Tag form yetty-rootfs-riscv-<version>.
+        description: Asset tag form yetty-rootfs-riscv-<version>.
         value: ${{ jobs.resolve.outputs.tag }}
       artifact:
         description: Workflow-artifact name carrying the rootfs tarball.
@@ -46,26 +47,33 @@ jobs:
       tag:     ${{ steps.read.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so `git describe` finds the latest yetty-* tag
+          # on branch pushes. Tag pushes carry just the tag commit but
+          # we use $GITHUB_REF directly in that case.
+          fetch-depth: 0
       - id: read
         run: |
           set -euo pipefail
-          V="$(tr -d '[:space:]' < build-tools/yemu/yetty-rootfs-riscv/version)"
-          [ -n "$V" ] || { echo "version file is empty" >&2; exit 1; }
-          # Only enforce tag-vs-version-file match when this workflow is
-          # triggered by a tag in OUR namespace. Other entry points all
-          # arrive as event_name=push too (branch pushes, and main-yetty
-          # `yetty-X.Y.Z` tag pushes that call us via workflow_call), and
-          # for those the version check would compare against the wrong
-          # tag name.
-          if [[ "$GITHUB_REF" == refs/tags/yetty-rootfs-riscv-* ]]; then
-            REF="${GITHUB_REF#refs/tags/}"
-            EXPECT="yetty-rootfs-riscv-$V"
-            if [ "$REF" != "$EXPECT" ]; then
-              echo "tag $REF does not match version file ($EXPECT)" >&2
+          # Version tracks yetty. Resolution order:
+          #   1. refs/tags/yetty-X.Y.Z (tag push, direct or workflow_call):
+          #      strip the prefix.
+          #   2. otherwise (branch push, workflow_dispatch): derive from
+          #      the latest yetty-X.Y.Z tag reachable from HEAD.
+          if [[ "$GITHUB_REF" == refs/tags/yetty-[0-9]*.[0-9]*.[0-9]* ]]; then
+            V="${GITHUB_REF#refs/tags/yetty-}"
+          else
+            TAG="$(git describe --tags --abbrev=0 \
+                       --match='yetty-[0-9]*.[0-9]*.[0-9]*' HEAD 2>/dev/null || true)"
+            if [ -z "$TAG" ]; then
+              echo "FATAL: cannot resolve version — no yetty-X.Y.Z tag reachable from HEAD" >&2
               exit 1
             fi
+            V="${TAG#yetty-}"
           fi
-          echo "version=$V"               >> "$GITHUB_OUTPUT"
+          [ -n "$V" ] || { echo "resolved version is empty" >&2; exit 1; }
+          echo "Resolved yetty-rootfs-riscv version: $V (from $GITHUB_REF)"
+          echo "version=$V"                >> "$GITHUB_OUTPUT"
           echo "tag=yetty-rootfs-riscv-$V" >> "$GITHUB_OUTPUT"
 
   build:
@@ -97,6 +105,8 @@ jobs:
               curl git
 
       - name: Build merged rootfs image
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
         run: |
           set -euo pipefail
           mkdir -p out
@@ -111,10 +121,12 @@ jobs:
           if-no-files-found: error
 
       - name: Publish GitHub release
-        # Only publish to a yetty-rootfs-riscv release when the trigger
-        # ref IS that namespace's tag. Main-yetty `yetty-X.Y.Z` tag pushes
-        # call us via workflow_call but must not produce a release here.
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/yetty-rootfs-riscv-')
+        # Publish a `yetty-rootfs-riscv-X.Y.Z` release whenever the
+        # trigger is a yetty release tag (`yetty-X.Y.Z`, either pushed
+        # directly to this workflow or arriving via workflow_call from
+        # cmake-multi-platform.yml). The rootfs release tracks yetty's
+        # version 1:1 — same SHA, separate tag for the asset namespace.
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/yetty-')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
