@@ -4,6 +4,16 @@
 #include <limits.h>
 #include <yetty/ycore/result.h>
 
+/* MSVC's <limits.h> doesn't define PATH_MAX. Windows has MAX_PATH (260)
+ * in <windows.h> and the older _MAX_PATH alias in <stdlib.h>, but
+ * neither is a drop-in for POSIX PATH_MAX. Modern Windows 10+ with the
+ * long-paths registry flag allows paths well beyond 260. Use the
+ * Linux value here so the struct layout stays uniform across platforms;
+ * it's a process-lifetime singleton, so a few extra KB is irrelevant. */
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
