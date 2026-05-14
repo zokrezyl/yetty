@@ -21,7 +21,9 @@ steps:
   build:
     image: yetty-build:latest
     commands:
-      # plugin-git does a shallow clone with no tags; the 3rdparty version
-      # resolver in shared.cmake needs a reachable yetty-X.Y.Z tag.
-      - git fetch --tags
+      # plugin-git makes a shallow, tagless clone; the 3rdparty version
+      # resolver in shared.cmake runs `git describe --tags HEAD`, which
+      # needs a yetty-X.Y.Z tag *reachable* from HEAD — both the depth
+      # and the missing tag refs must be repaired.
+      - git fetch --unshallow --tags 2>/dev/null || git fetch --tags
       - make build-android_x86_64-ytrace-release

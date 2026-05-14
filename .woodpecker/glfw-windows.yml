@@ -10,6 +10,15 @@ when:
   - event: tag
     ref: refs/tags/lib-glfw-*
 
+# plugin-git writes safe.directory into the user's global gitconfig on every
+# clone. On the local-backend windows agent all jobs share C:\Users\misi, so
+# parallel clones race on .gitconfig.lock. Send that write to NUL.
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    environment:
+      GIT_CONFIG_GLOBAL: NUL
+
 steps:
   build:
     image: cmd

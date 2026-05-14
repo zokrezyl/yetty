@@ -4,10 +4,24 @@ labels:
 when:
   - event: [push, manual, pull_request, tag]
 
+# plugin-git writes safe.directory into the user's global gitconfig on every
+# clone. On the local-backend windows agent all jobs share C:\Users\misi, so
+# parallel clones race on .gitconfig.lock. Send that write to NUL.
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    environment:
+      GIT_CONFIG_GLOBAL: NUL
+
 steps:
   build:
     image: cmd
     commands:
+      # plugin-git makes a shallow, tagless clone; the 3rdparty version
+      # resolver in shared.cmake runs `git describe --tags HEAD`, which
+      # needs a yetty-X.Y.Z tag *reachable* from HEAD — both the depth
+      # and the missing tag refs must be repaired. (cmd.exe shell.)
+      - git fetch --unshallow --tags 2>nul || git fetch --tags
       - git lfs install
       - git lfs fetch
       - git lfs checkout
