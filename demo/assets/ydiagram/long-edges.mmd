@@ -1,0 +1,9 @@
+%% Long edges — exercises phase 3 (dummy node insertion). Edges spanning
+%% more than one layer get an invisible dummy per intermediate layer so the
+%% renderer can route them around interior nodes.
+graph TD
+    A[layer 0] --> B[layer 1]
+    B --> C[layer 2]
+    C --> D[layer 3]
+    A --> D
+    A --> C

@@ -154,7 +154,7 @@ if(YETTY_ENABLE_FEATURE_YBROWSER)
 endif()
 
 if(YETTY_ENABLE_FEATURE_DIAGRAM)
-    add_subdirectory(diagram)
+    add_subdirectory(ydiagram)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YGRID)

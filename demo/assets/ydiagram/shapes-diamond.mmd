@@ -1,0 +1,7 @@
+%% diamond — {text}
+%% SDF rhombus. Diamonds get extra space (×1.4) during layout.
+graph TD
+    A[Input] --> B{Ready?}
+    B -->|yes| C[Proceed]
+    B -->|no|  D[Wait]
+    D --> B

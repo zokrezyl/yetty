@@ -1,0 +1,6 @@
+%% cylinder / database — [(text)]
+%% Composite: body rectangle + top/bottom ellipses + side segments.
+graph LR
+    A[App] --> B[(Cache)]
+    B --> C[(Primary DB)]
+    C --> D[(Replica)]
