@@ -209,6 +209,24 @@
             // restore pill they see complete scroll-back, but the
             // overlay does NOT auto-pop back open on its own.
             let userMinimized = false;
+            // Auto-minimize trigger. The VM iframe announces a real
+            // guest TCP rx with `session N guest TCP established
+            // (first rx)` — that's the moment yetty is actually
+            // talking to the running VM and the boot console can get
+            // out of the way. Fire once; if the user later restores
+            // it manually we respect that.
+            const READY_MARKER = 'guest TCP established (first rx)';
+            let autoMinimizeArmed = true;
+            function maybeAutoMinimize(text) {
+                if (!autoMinimizeArmed) return;
+                if (typeof text !== 'string') return;
+                if (text.indexOf(READY_MARKER) === -1) return;
+                autoMinimizeArmed = false;
+                /* Small delay so the user actually sees the green
+                 * "connected" line land in the log before the
+                 * overlay collapses. */
+                setTimeout(minimize, 600);
+            }
             const restoreBtn = document.getElementById('yetty-status-restore');
             // Tag → DOM line map so callers can update an existing line
             // in place (e.g. download progress %) instead of appending
@@ -241,6 +259,7 @@
                     log.removeChild(log.firstChild);
                 }
                 log.scrollTop = log.scrollHeight;
+                maybeAutoMinimize(text);
             }
             // Append a tagged line on first call; on subsequent calls
             // with the same tag, replace its text in place. Keeps the
@@ -260,6 +279,7 @@
                     if (level) line.className = 'line ' + level;
                 }
                 log.scrollTop = log.scrollHeight;
+                maybeAutoMinimize(text);
             }
             function minimize() {
                 userMinimized = true;
