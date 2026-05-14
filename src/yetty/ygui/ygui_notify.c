@@ -17,12 +17,13 @@
 
 #include "ygui_internal.h"
 
+#include <yetty/yplatform/time.h>
+
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 /* Geometry. The dialog dialog gap was 14; notifications use a slightly
  * larger 8-px inter-card gap (the cards themselves carry their padding)
@@ -37,11 +38,7 @@
 
 static uint64_t now_monotonic_ms(void)
 {
-    struct timespec ts;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
-        return 0;
-    }
-    return (uint64_t)ts.tv_sec * 1000ull + (uint64_t)(ts.tv_nsec / 1000000);
+    return (uint64_t)(yetty_yplatform_ytime_monotonic_sec() * 1000.0);
 }
 
 /* Severity → stripe colour (ARGB). Background of the card is brand
