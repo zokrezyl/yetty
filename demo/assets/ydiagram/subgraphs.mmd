@@ -1,0 +1,19 @@
+%% Subgraphs / clusters. Each `subgraph id [label] ... end` block groups
+%% the contained nodes into a cluster; clusters render as a semi-transparent
+%% rounded background behind their members (when cluster bounds are sized).
+graph TD
+    subgraph frontend [Frontend]
+        UI[UI layer]
+        API[API client]
+        UI --> API
+    end
+
+    subgraph backend [Backend services]
+        Gateway[Gateway]
+        Auth[Auth]
+        Store[(Store)]
+        Gateway --> Auth
+        Auth    --> Store
+    end
+
+    API --> Gateway

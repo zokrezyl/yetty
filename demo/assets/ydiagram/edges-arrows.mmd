@@ -1,0 +1,17 @@
+%% Edge variants — arrow style, line style, labels.
+%%
+%%   -->     solid line + arrowhead
+%%   ---     solid line, no arrowhead
+%%   -.->    dashed line + arrowhead
+%%   -.-     dashed line, no arrowhead
+%%   ==>     thick line + arrowhead
+%%   ===     thick line, no arrowhead
+%%   -->|t|  arrow with edge label "t"
+graph TD
+    A[start] --> B[arrow]
+    A --- C[line]
+    A -.-> D[dashed arrow]
+    A -.- E[dashed line]
+    A ==> F[thick arrow]
+    A === G[thick line]
+    A -->|labelled| H[arrow with label]

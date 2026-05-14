@@ -1,0 +1,7 @@
+%% Cyclic graph — exercises phase 1 (cycle removal) of the Sugiyama layout.
+%% The B → A back-edge is silently reversed before layering so the rest of
+%% the pipeline sees a DAG.
+graph TD
+    A[State A] --> B[State B]
+    B --> C[State C]
+    C --> A

@@ -1,0 +1,29 @@
+%% Every shape ydiagram knows about, in one diagram.
+%%
+%%   rectangle      [text]
+%%   rounded rect   (text)
+%%   circle         ((text))
+%%   diamond        {text}
+%%   hexagon        {{text}}
+%%   cylinder       [(text)]
+%%   stadium        ([text])
+%%   parallelogram  [/text/]  [\text\]
+graph TD
+    R[rectangle]
+    RR(rounded)
+    C((circle))
+    D{diamond}
+    H{{hexagon}}
+    CY[(cylinder)]
+    S([stadium])
+    PR[/parallelogram/]
+    PL[\paralellogram\]
+
+    R  --> RR
+    RR --> C
+    C  --> D
+    D  --> H
+    H  --> CY
+    CY --> S
+    S  --> PR
+    PR --> PL

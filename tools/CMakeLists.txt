@@ -98,6 +98,10 @@ if(YETTY_ENABLE_TOOL_DECODE_YPAINT)
     add_subdirectory(decode-ypaint)
 endif()
 
+if(YETTY_ENABLE_TOOL_YDIAGRAM)
+    add_subdirectory(ydiagram)
+endif()
+
 # MSDF toolbox — CDB viewers/diff/generators/atlas-viewer. Pure C
 # tooling, always built (the bits that need WGPU bring it in themselves).
 add_subdirectory(msdf)

@@ -1,0 +1,11 @@
+%% A realistic small state machine — mixes shapes, edge labels, and a
+%% cycle. Good first thing to try after building the tool.
+flowchart TD
+    Start((start)) --> Idle[Idle]
+    Idle -->|connect|     Connecting{{Connecting}}
+    Connecting -->|ok|    Ready(Ready)
+    Connecting -->|fail|  Failed[/Failed/]
+    Ready  -->|disconnect| Idle
+    Ready  -->|crash|      Failed
+    Failed -->|retry|      Connecting
+    Failed -->|abort|      Done((done))
