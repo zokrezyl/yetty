@@ -51,11 +51,13 @@ jobs:
           set -euo pipefail
           V="$(tr -d '[:space:]' < build-tools/yemu/yetty-rootfs-riscv/version)"
           [ -n "$V" ] || { echo "version file is empty" >&2; exit 1; }
-          # Only enforce tag-vs-version-file match on actual tag pushes.
-          # Branch pushes and reusable-workflow calls (cmake-multi-platform.yml)
-          # arrive here as event_name=push too, but with refs/heads/* — they
-          # build the same image, just don't publish a release at the end.
-          if [[ "${{ github.event_name }}" == "push" && "$GITHUB_REF" == refs/tags/* ]]; then
+          # Only enforce tag-vs-version-file match when this workflow is
+          # triggered by a tag in OUR namespace. Other entry points all
+          # arrive as event_name=push too (branch pushes, and main-yetty
+          # `yetty-X.Y.Z` tag pushes that call us via workflow_call), and
+          # for those the version check would compare against the wrong
+          # tag name.
+          if [[ "$GITHUB_REF" == refs/tags/yetty-rootfs-riscv-* ]]; then
             REF="${GITHUB_REF#refs/tags/}"
             EXPECT="yetty-rootfs-riscv-$V"
             if [ "$REF" != "$EXPECT" ]; then
@@ -109,7 +111,10 @@ jobs:
           if-no-files-found: error
 
       - name: Publish GitHub release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        # Only publish to a yetty-rootfs-riscv release when the trigger
+        # ref IS that namespace's tag. Main-yetty `yetty-X.Y.Z` tag pushes
+        # call us via workflow_call but must not produce a release here.
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/yetty-rootfs-riscv-')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
