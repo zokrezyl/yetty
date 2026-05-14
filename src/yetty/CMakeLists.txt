@@ -157,7 +157,7 @@ if(YETTY_ENABLE_FEATURE_YBROWSER)
     add_subdirectory(ybrowser)
 endif()
 
-if(YETTY_ENABLE_FEATURE_DIAGRAM)
+if(YETTY_ENABLE_FEATURE_YDIAGRAM)
     add_subdirectory(ydiagram)
 endif()
 
