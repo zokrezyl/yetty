@@ -3,16 +3,21 @@
  * an OSC YPAINT_BIN envelope on stdout so a running yetty ypaint pane
  * redraws it. Pure one-shot: parse → layout → render → emit → exit.
  *
+ * Text width comes from a real MSDF font (yetty_yfont_msdf_font) so node
+ * boxes are sized to fit their labels exactly the way the yetty pane will
+ * draw them. Without that, layout falls back to a crude `0.6 * font_size *
+ * char_count` heuristic and boxes are too tight (clipped labels) or too
+ * loose (whitespace).
+ *
  * Wire: a single OSC 600001 envelope. The buffer's first prim is CMD_ZERO
  * (added by the renderer), which clears the canvas + resets the cursor on
- * decode — replacing the separate OSC 600000 CLEAR envelope. Sending a
- * separate CLEAR envelope before BIN currently hangs yetty's OSC SM
- * (canvas_clear doesn't drain the body terminator), so we use the
- * single-envelope form documented in yetty/ypaint-core/cmds.h.
+ * decode — replacing the obsolete separate OSC 600000 CLEAR envelope.
  *
  *   ydiagram <file.mmd>      # OSC envelope to stdout (default)
  *   ydiagram -o <file>       # raw serialized buffer, no OSC framing
  *   ydiagram -               # read Mermaid from stdin
+ *   ydiagram --font-cdb <p>  # override the MSDF CDB used for measurement
+ *   ydiagram --font-shader <p>
  */
 
 #include <yetty/ydiagram/ydiagram.h>
@@ -20,8 +25,11 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yface/yface.h>
+#include <yetty/yfont/font.h>
+#include <yetty/yfont/msdf-font.h>
 #include <yetty/ypaint-core/buffer.h>
 #include <yetty/yterm/osc-codes.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <errno.h>
 #include <stdbool.h>
@@ -29,6 +37,119 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+
+/*=============================================================================
+ * Font measurement
+ *
+ * The msdf-font's measure_text honours real glyph advances so the layout
+ * sizes boxes to actually fit their labels. font_create requires both a
+ * CDB and a shader file even in measure-only use; shader_path content is
+ * never consulted on this path but a readable file must exist.
+ *===========================================================================*/
+
+/* Resolve yetty's data dir without dragging in src/yetty/yplatform/paths/
+ * (which only links into the main yetty binary). We use the same XDG
+ * fallback chain as src/yetty/yplatform/paths/linux.c. */
+static const char *resolve_data_dir(char *buf, size_t buf_size)
+{
+    const char *xdg  = getenv("XDG_DATA_HOME");
+    if (xdg && *xdg) {
+        snprintf(buf, buf_size, "%s/yetty", xdg);
+        return buf;
+    }
+    const char *home = getenv("HOME");
+    if (home && *home) {
+        snprintf(buf, buf_size, "%s/.local/share/yetty", home);
+        return buf;
+    }
+    return NULL;
+}
+
+static float measure_with_font(const char *text, size_t text_len, float font_size, void *userdata)
+{
+    struct yetty_ypaint_font *font = (struct yetty_ypaint_font *)userdata;
+    if (!font || !font->ops || !font->ops->measure_text) {
+        return font_size * 0.6f * (float)text_len;
+    }
+    struct float_result r = font->ops->measure_text(font, text, text_len, font_size);
+    if (YETTY_IS_ERR(r)) {
+        return font_size * 0.6f * (float)text_len;
+    }
+    return r.value;
+}
+
+static bool path_readable(const char *path)
+{
+    if (!path) return false;
+    struct stat st;
+    return stat(path, &st) == 0;
+}
+
+/* Build the standard yetty asset paths from the platform's data_dir. The
+ * canvas does the same construction in src/yetty/ypaint/canvas.c:335. */
+static struct yetty_ypaint_font *open_default_font(const char *cdb_override,
+                                                   const char *shader_override)
+{
+    char cdb_buf[512];
+    char sh_buf[512];
+    const char *cdb_path = cdb_override;
+    const char *sh_path  = shader_override;
+
+    char        data_buf[512];
+    const char *data_dir = NULL;
+    if (!cdb_path || !sh_path) {
+        const char *fonts_env = getenv("YETTY_FONTS_DIR");
+        const char *sh_env    = getenv("YETTY_SHADERS_DIR");
+        if (!fonts_env || !sh_env) {
+            data_dir = resolve_data_dir(data_buf, sizeof(data_buf));
+        }
+        if (!cdb_path) {
+            if (fonts_env) {
+                snprintf(cdb_buf, sizeof(cdb_buf),
+                         "%s/../msdf-fonts/DejaVuSansMNerdFontMono-Regular.cdb", fonts_env);
+            } else if (data_dir) {
+                snprintf(cdb_buf, sizeof(cdb_buf),
+                         "%s/msdf-fonts/DejaVuSansMNerdFontMono-Regular.cdb", data_dir);
+            } else {
+                return NULL;
+            }
+            cdb_path = cdb_buf;
+        }
+        if (!sh_path) {
+            if (sh_env) {
+                snprintf(sh_buf, sizeof(sh_buf), "%s/msdf-font.wgsl", sh_env);
+            } else if (data_dir) {
+                snprintf(sh_buf, sizeof(sh_buf), "%s/shaders/msdf-font.wgsl", data_dir);
+            } else {
+                return NULL;
+            }
+            sh_path = sh_buf;
+        }
+    }
+
+    if (!path_readable(cdb_path)) {
+        fprintf(stderr, "ydiagram: font CDB not found: %s\n", cdb_path);
+        return NULL;
+    }
+    if (!path_readable(sh_path)) {
+        fprintf(stderr, "ydiagram: msdf shader not found: %s\n", sh_path);
+        return NULL;
+    }
+
+    struct yetty_font_font_result fr =
+        yetty_yfont_msdf_font_create(cdb_path, sh_path, "ydiagram_default");
+    if (YETTY_IS_ERR(fr)) {
+        fprintf(stderr, "ydiagram: msdf font create failed: %s\n",
+                fr.error.msg ? fr.error.msg : "?");
+        return NULL;
+    }
+    return fr.value;
+}
+
+/*=============================================================================
+ * OSC / raw emission (unchanged)
+ *===========================================================================*/
 
 static int emit_envelope(FILE *out, int osc_code, int compressed, const void *args,
                          size_t args_len, const void *body, size_t body_len)
@@ -125,26 +246,53 @@ static void usage(const char *prog)
             "Usage: %s [options] <file.mmd | ->\n"
             "\n"
             "Emits an OSC YPAINT_BIN envelope on stdout for a running yetty\n"
-            "ypaint pane (the buffer begins with CMD_ZERO so the canvas is\n"
-            "cleared on decode — no separate OSC CLEAR is sent).\n"
+            "ypaint pane. Box sizing uses real MSDF glyph widths.\n"
             "\n"
             "Options:\n"
-            "  -o <file>     Write raw serialized ypaint buffer (no OSC) to <file>.\n"
-            "  -h            Show this help and exit.\n",
+            "  -o <file>             Write raw serialized ypaint buffer (no OSC).\n"
+            "  --font-cdb <path>     Override the MSDF CDB used for measurement.\n"
+            "  --font-shader <path>  Override the msdf-font.wgsl shader path.\n"
+            "  --no-font             Skip MSDF font; use the heuristic fallback.\n"
+            "  -h                    Show this help and exit.\n",
             prog);
 }
 
 int main(int argc, char **argv)
 {
-    const char *input_path = NULL;
-    const char *out_path   = NULL;
+    /* Silence ytrace unconditionally — the tool is one-shot and runs
+     * inside a yetty pane (its stderr lands on the PTY, so any debug
+     * spam from upstream libraries becomes terminal junk). Trace points
+     * are registered lazily on first call; `ytrace_register` snapshots
+     * `YTRACE_DEFAULT_ON` once during `ytrace_init`. Clearing the env
+     * var BEFORE any trace point fires keeps the default off; the
+     * explicit set_all_enabled covers the (unlikely) case where init
+     * already ran. */
+    unsetenv("YTRACE_DEFAULT_ON");
+    ytrace_set_all_enabled(false);
+
+    const char *input_path    = NULL;
+    const char *out_path      = NULL;
+    const char *cdb_override  = NULL;
+    const char *sh_override   = NULL;
+    bool        no_font       = false;
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) { usage(argv[0]); return 0; }
+        if (strcmp(a, "--no-font") == 0) { no_font = true; continue; }
         if (strcmp(a, "-o") == 0) {
             if (i + 1 >= argc) { fprintf(stderr, "ydiagram: -o requires a path\n"); return 2; }
             out_path = argv[++i];
+            continue;
+        }
+        if (strcmp(a, "--font-cdb") == 0) {
+            if (i + 1 >= argc) { fprintf(stderr, "ydiagram: --font-cdb requires a path\n"); return 2; }
+            cdb_override = argv[++i];
+            continue;
+        }
+        if (strcmp(a, "--font-shader") == 0) {
+            if (i + 1 >= argc) { fprintf(stderr, "ydiagram: --font-shader requires a path\n"); return 2; }
+            sh_override = argv[++i];
             continue;
         }
         if (a[0] == '-' && strcmp(a, "-") != 0) {
@@ -161,11 +309,20 @@ int main(int argc, char **argv)
     char  *in_buf = slurp_file(input_path, &in_len);
     if (!in_buf) return 1;
 
-    struct yetty_ydiagram_buffer_result br = yetty_ydiagram_render_mermaid(in_buf, in_len);
+    /* Open the MSDF font for text measurement. On failure (no asset
+     * install yet, --no-font, etc.) fall back to the heuristic so the
+     * tool still works — boxes will just be a bit off. */
+    struct yetty_ypaint_font *font =
+        no_font ? NULL : open_default_font(cdb_override, sh_override);
+    yetty_ydiagram_measure_text_fn measure_fn = font ? measure_with_font : NULL;
+
+    struct yetty_ydiagram_buffer_result br = yetty_ydiagram_render_mermaid_full(
+        in_buf, in_len, NULL, NULL, measure_fn, font);
     free(in_buf);
     if (YETTY_IS_ERR(br)) {
         fprintf(stderr, "ydiagram: render failed: %s\n",
                 br.error.msg ? br.error.msg : "?");
+        if (font && font->ops && font->ops->destroy) font->ops->destroy(font);
         return 1;
     }
 
@@ -185,5 +342,6 @@ int main(int argc, char **argv)
     }
 
     yetty_ypaint_core_buffer_destroy(br.value);
+    if (font && font->ops && font->ops->destroy) font->ops->destroy(font);
     return rc;
 }

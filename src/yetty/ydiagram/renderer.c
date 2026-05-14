@@ -107,12 +107,71 @@ static void emit_ellipse(struct render_state *s, const struct yetty_ydiagram_nod
                            n->style.stroke_width, &geom);
 }
 
+/* Mermaid-style stretched hexagon — flat-top, slanted left/right sides.
+ *
+ * The ysdf hexagon primitive is regular (radius-only), so a wide label
+ * either gets clipped (with radius = min/2) or wastes huge vertical space
+ * (with radius = max/2). We compose the shape from a centre rectangle +
+ * two side triangles for the fill, and 6 segments for the outline. The
+ * slant is `slant = min(h/2, w/4)`, capping at the height so very wide
+ * boxes still look like hexagons rather than 1px-tipped arrows. */
 static void emit_hexagon(struct render_state *s, const struct yetty_ydiagram_node *n)
 {
-    float                     r    = (n->width < n->height ? n->width : n->height) * 0.5f;
-    struct yetty_ysdf_hexagon geom = {.center_x = n->x, .center_y = n->y, .radius = r};
-    yetty_ysdf_add_hexagon(s->buf, s->z++, n->style.fill_color, n->style.stroke_color,
-                           n->style.stroke_width, &geom);
+    float w  = n->width;
+    float h  = n->height;
+    float hw = w * 0.5f;
+    float hh = h * 0.5f;
+    float slant = hh;
+    if (slant > w * 0.25f) slant = w * 0.25f;
+
+    float cx_l = n->x - hw + slant; /* x where the left slant meets top/bottom edges */
+    float cx_r = n->x + hw - slant;
+    float ty   = n->y - hh;          /* top y of centre rectangle */
+    float by   = n->y + hh;          /* bottom y */
+
+    /* Fill: centre rectangle (no stroke, the segments below stroke the
+     * full outline). */
+    struct yetty_ysdf_box body = {
+        .center_x      = n->x,
+        .center_y      = n->y,
+        .half_width    = (w - 2.0f * slant) * 0.5f,
+        .half_height   = hh,
+        .corner_radius = 0.0f,
+    };
+    yetty_ysdf_add_box(s->buf, s->z++, n->style.fill_color, 0, 0.0f, &body);
+
+    /* Fill: left and right triangles. */
+    struct yetty_ysdf_triangle left = {
+        .vertex_a_x = n->x - hw, .vertex_a_y = n->y,
+        .vertex_b_x = cx_l,      .vertex_b_y = ty,
+        .vertex_c_x = cx_l,      .vertex_c_y = by,
+    };
+    yetty_ysdf_add_triangle(s->buf, s->z++, n->style.fill_color, 0, 0.0f, &left);
+    struct yetty_ysdf_triangle right = {
+        .vertex_a_x = n->x + hw, .vertex_a_y = n->y,
+        .vertex_b_x = cx_r,      .vertex_b_y = ty,
+        .vertex_c_x = cx_r,      .vertex_c_y = by,
+    };
+    yetty_ysdf_add_triangle(s->buf, s->z++, n->style.fill_color, 0, 0.0f, &right);
+
+    /* Stroke: trace the six outline segments. */
+    if (n->style.stroke_width > 0.0f && n->style.stroke_color != 0) {
+        uint32_t sc = n->style.stroke_color;
+        float    sw = n->style.stroke_width;
+        struct yetty_ysdf_segment edges[6] = {
+            {cx_l, ty, cx_r, ty},                /* top */
+            {cx_l, by, cx_r, by},                /* bottom */
+            {n->x - hw, n->y, cx_l, ty},         /* top-left slant */
+            {cx_l, by, n->x - hw, n->y},         /* bottom-left slant */
+            {cx_r, ty, n->x + hw, n->y},         /* top-right slant */
+            {n->x + hw, n->y, cx_r, by},         /* bottom-right slant */
+        };
+        uint32_t z = s->z;
+        for (size_t i = 0; i < 6; i++) {
+            yetty_ysdf_add_segment(s->buf, z, 0, sc, sw, &edges[i]);
+        }
+        s->z = z + 1;
+    }
 }
 
 static void emit_capsule(struct render_state *s, const struct yetty_ydiagram_node *n)

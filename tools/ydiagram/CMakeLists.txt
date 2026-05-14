@@ -20,6 +20,7 @@ target_link_libraries(ydiagram-cli PRIVATE
     yetty_yface
     yetty_ypaint_core
     yetty_ysdf
+    yetty_yfont_core
     yetty_ycore
     Threads::Threads
     m
