@@ -30,6 +30,7 @@ set(YGUI_CORE_SOURCES
     ygui_osc.c
     ygui_layout.c
     ygui_css.c
+    ygui_notify.c
 )
 
 # Static-only YAML convenience layer for the RICH widget — same gating

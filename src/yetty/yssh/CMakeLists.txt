@@ -2,10 +2,11 @@
 
 add_library(yetty_ssh STATIC
     ssh-pty.c
+    openssh-config-parser.c
 )
 
 target_include_directories(yetty_ssh
-    PUBLIC ${YETTY_ROOT}/include
+    PUBLIC  ${YETTY_ROOT}/include
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
             ${LIBSSH2_INCLUDE_DIR}
 )

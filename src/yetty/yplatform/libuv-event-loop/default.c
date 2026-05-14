@@ -75,6 +75,7 @@ struct yetty_yplatform_tcp_server_handle {
 struct yetty_yplatform_tcp_client_handle {
     struct yetty_yevent_conn conn;
     uv_connect_t connect_req;
+    uv_getaddrinfo_t resolve_req;
     struct yetty_yplatform_libuv_event_loop *loop_impl;
     int id;
     char host[256];
@@ -1042,6 +1043,40 @@ static void on_client_connect(uv_connect_t *req, int status)
     }
 }
 
+static void on_client_resolved(uv_getaddrinfo_t *req, int status, struct addrinfo *res)
+{
+    struct yetty_yplatform_tcp_client_handle *client = req->data;
+
+    if (status < 0) {
+        yerror("tcp_client: DNS resolution failed for %s: %s", client->host, uv_strerror(status));
+        if (client->callbacks.on_connect_error) {
+            client->callbacks.on_connect_error(client->callbacks.ctx, uv_strerror(status));
+        }
+        uv_freeaddrinfo(res);
+        return;
+    }
+
+    /* Patch in the port — uv_getaddrinfo returns port 0. */
+    if (res->ai_family == AF_INET) {
+        ((struct sockaddr_in *)res->ai_addr)->sin_port = htons((uint16_t)client->port);
+    } else if (res->ai_family == AF_INET6) {
+        ((struct sockaddr_in6 *)res->ai_addr)->sin6_port = htons((uint16_t)client->port);
+    }
+
+    client->connect_req.data = client;
+    int r = uv_tcp_connect(&client->connect_req, &client->conn.tcp, res->ai_addr,
+                           on_client_connect);
+    uv_freeaddrinfo(res);
+
+    if (r != 0) {
+        yerror("tcp_client: uv_tcp_connect failed: %s", uv_strerror(r));
+        if (client->callbacks.on_connect_error) {
+            client->callbacks.on_connect_error(client->callbacks.ctx, uv_strerror(r));
+        }
+        uv_close((uv_handle_t *)&client->conn.tcp, NULL);
+    }
+}
+
 static struct yetty_yevent_tcp_client_id_result libuv_create_tcp_client(
     struct yetty_yevent_event_loop *self, const char *host, int port,
     const struct yetty_yevent_tcp_client_callbacks *callbacks)
@@ -1050,13 +1085,11 @@ static struct yetty_yevent_tcp_client_id_result libuv_create_tcp_client(
         container_of(self, struct yetty_yplatform_libuv_event_loop, base);
     int id = impl->next_tcp_client_id++;
     struct yetty_yplatform_tcp_client_handle *client;
-    struct sockaddr_in addr;
     int r;
 
     if (id >= MAX_TCP_CLIENTS) {
         return YETTY_ERR(yetty_yevent_tcp_client_id, "too many tcp clients");
     }
-
     if (!callbacks) {
         return YETTY_ERR(yetty_yevent_tcp_client_id, "callbacks required");
     }
@@ -1071,7 +1104,6 @@ static struct yetty_yevent_tcp_client_id_result libuv_create_tcp_client(
     }
     client->port = port;
 
-    /* Setup connection */
     client->conn.loop_impl = impl;
     client->conn.client = client;
     client->conn.tcp.data = &client->conn;
@@ -1081,19 +1113,23 @@ static struct yetty_yevent_tcp_client_id_result libuv_create_tcp_client(
         return YETTY_ERR(yetty_yevent_tcp_client_id, "uv_tcp_init failed");
     }
 
-    r = uv_ip4_addr(host, port, &addr);
+    /* Async DNS resolution — works for hostnames, IPs, and "localhost". */
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family   = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    client->resolve_req.data = client;
+    char port_str[16];
+    snprintf(port_str, sizeof(port_str), "%d", port);
+    r = uv_getaddrinfo(impl->loop, &client->resolve_req, on_client_resolved, host, port_str,
+                       &hints);
     if (r != 0) {
-        return YETTY_ERR(yetty_yevent_tcp_client_id, "uv_ip4_addr failed");
+        uv_close((uv_handle_t *)&client->conn.tcp, NULL);
+        return YETTY_ERR(yetty_yevent_tcp_client_id, "uv_getaddrinfo failed");
     }
 
-    client->connect_req.data = client;
-    r = uv_tcp_connect(&client->connect_req, &client->conn.tcp, (const struct sockaddr *)&addr,
-                       on_client_connect);
-    if (r != 0) {
-        return YETTY_ERR(yetty_yevent_tcp_client_id, "uv_tcp_connect failed");
-    }
-
-    ytrace("tcp_client: connecting to %s:%d", host, port);
+    ytrace("tcp_client: resolving %s:%d", host, port);
     return YETTY_OK(yetty_yevent_tcp_client_id, id);
 }
 
