@@ -346,6 +346,26 @@ void yetty_ygui_engine_set_event_callback(struct yetty_ygui_engine *engine,
 int yetty_ygui_engine_is_dirty(const struct yetty_ygui_engine *engine);
 void yetty_ygui_engine_mark_dirty(struct yetty_ygui_engine *engine);
 
+/* Direct mouse-event injection. Used when the engine isn't being driven
+ * by an OSC mouse stream (e.g. yui's in-process chrome — the host hands
+ * events here so the engine's hit-test + dispatch routes them to the
+ * widget tree). Coords are in widget pixel space, same convention the
+ * OSC SC_MOUSE handler uses. */
+void yetty_ygui_engine_mouse_down(struct yetty_ygui_engine *engine, float x, float y,
+                                  int button);
+void yetty_ygui_engine_mouse_up(struct yetty_ygui_engine *engine, float x, float y,
+                                int button);
+void yetty_ygui_engine_mouse_move(struct yetty_ygui_engine *engine, float x, float y);
+
+/* Direct keyboard-event injection. Same use case as the mouse variants —
+ * the engine's internal dispatch routes the event to engine->focused
+ * (textinput taking text, button taking Enter/Escape, …). `text_input`
+ * takes a NUL-terminated UTF-8 chunk; the engine appends it to the
+ * focused widget if it accepts text. */
+void yetty_ygui_engine_key_down(struct yetty_ygui_engine *engine, uint32_t key, int mods);
+void yetty_ygui_engine_key_up(struct yetty_ygui_engine *engine, uint32_t key, int mods);
+void yetty_ygui_engine_text_input(struct yetty_ygui_engine *engine, const char *utf8);
+
 /* Resize handling */
 void yetty_ygui_engine_set_canvas_mode(struct yetty_ygui_engine *engine, ygui_canvas_mode_t mode);
 void yetty_ygui_engine_set_scale_mode(struct yetty_ygui_engine *engine, ygui_scale_mode_t mode);

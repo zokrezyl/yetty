@@ -535,6 +535,18 @@ struct yetty_ygui_engine {
     /* Resize callback */
     ygui_resize_callback_t resize_callback;
     void *resize_userdata;
+
+    /* Last-emitted OSC frame cache for dedup. The dirty flag fires on
+     * mouse-hover updates, view-changes, focus, etc. — many of those
+     * leave the rendered byte stream unchanged, but we'd still re-emit a
+     * multi-MB envelope (e.g. an Images-tab frame carrying a 2.5 MB
+     * yimage prim) and the receiver would tear down + re-create the
+     * complex-prim instance, causing a visible blink. Cache the bytes
+     * of the most recently sent envelope; if the next render produces
+     * an identical byte stream, skip the OSC write entirely. */
+    uint8_t *prev_emit_data;
+    uint32_t prev_emit_size;
+    uint32_t prev_emit_cap;
 };
 
 /*=============================================================================

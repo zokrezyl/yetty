@@ -404,6 +404,9 @@ struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engin
     /* Free card name */
     free(engine->card_name);
 
+    /* Free dedup cache */
+    free(engine->prev_emit_data);
+
     free(engine);
 
     if (YETTY_IS_ERR(first_err)) {
@@ -636,6 +639,34 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
     uint32_t size = (uint32_t)yetty_ypaint_core_buffer_serialize(engine->buffer, &data);
     if (size == 0 || !data) {
         return YETTY_OK_VOID();
+    }
+
+    /* 4b. Dedup. The dirty flag fires for hover changes, mouse moves
+     * (when subscribed), view-zoom ticks, etc., but many of those leave
+     * the rendered bytes unchanged. Re-emitting the same envelope makes
+     * the receiver tear down and re-create every complex-prim instance
+     * (yimage, yplot) which is what produces the visible blink on the
+     * Images tab. If the just-serialized bytes match the previously
+     * sent ones, skip the OSC write. Card-creation always sends. */
+    if (engine->card_shown && size == engine->prev_emit_size && engine->prev_emit_data &&
+        memcmp(data, engine->prev_emit_data, size) == 0) {
+        ydebug("ygui_engine_render: frame identical to previous (%u B), skipping emit", size);
+        return YETTY_OK_VOID();
+    }
+
+    if (size > engine->prev_emit_cap) {
+        uint8_t *grown = realloc(engine->prev_emit_data, size);
+        if (grown) {
+            engine->prev_emit_data = grown;
+            engine->prev_emit_cap = size;
+        }
+    }
+    if (engine->prev_emit_cap >= size && engine->prev_emit_data) {
+        memcpy(engine->prev_emit_data, data, size);
+        engine->prev_emit_size = size;
+    } else {
+        /* realloc failed — disable dedup for this frame, keep working. */
+        engine->prev_emit_size = 0;
     }
 
     /* 5. Send OSC */
@@ -884,19 +915,31 @@ void yetty_ygui_engine_text_input(struct yetty_ygui_engine *engine, const char *
 
     /* Only textinput handles text input */
     if (engine->focused->type == YETTY_YGUI_WIDGET_TEXTINPUT) {
-        /* Append text to input */
+        /* Insert the new chunk AT the current cursor position rather
+         * than at the end — without this, the emacs-style cursor
+         * moves (Ctrl+A/B/E/F, arrows) only affect deletes; typing
+         * always pushed characters to the right edge of the buffer. */
         char *old_text = engine->focused->data.textinput.text;
         size_t old_len = old_text ? strlen(old_text) : 0;
         size_t add_len = strlen(text);
+        int cursor = engine->focused->data.textinput.cursor_pos;
+        if (cursor < 0) cursor = 0;
+        if ((size_t)cursor > old_len) cursor = (int)old_len;
+
         char *new_text = (char *)malloc(old_len + add_len + 1);
         if (new_text) {
-            if (old_text) {
-                memcpy(new_text, old_text, old_len);
+            if (cursor > 0 && old_text) {
+                memcpy(new_text, old_text, (size_t)cursor);
             }
-            memcpy(new_text + old_len, text, add_len + 1);
+            memcpy(new_text + cursor, text, add_len);
+            if ((size_t)cursor < old_len && old_text) {
+                memcpy(new_text + cursor + add_len, old_text + cursor,
+                       old_len - (size_t)cursor);
+            }
+            new_text[old_len + add_len] = '\0';
             free(old_text);
             engine->focused->data.textinput.text = new_text;
-            engine->focused->data.textinput.cursor_pos = (int)(old_len + add_len);
+            engine->focused->data.textinput.cursor_pos = cursor + (int)add_len;
             engine->dirty = 1;
 
             /* Call widget's text callback */

@@ -1459,50 +1459,163 @@ static struct yetty_ycore_void_result textinput_render(struct yetty_ygui_widget 
     return YETTY_OK_VOID();
 }
 
+/* Modifier bits — match yetty's GLFW-derived layout (see yetty/yetty.c,
+ * tabbar.c). We only key off CTRL for emacs bindings; SHIFT is already
+ * applied at the platform layer when emitting CHAR events. */
+#define YGUI_MOD_CTRL  0x0002
+
+/* GLFW key codes for the special keys the textinput needs to react to.
+ * Inlining the constants avoids pulling GLFW headers into ygui. */
+enum {
+    YGUI_KEY_ESCAPE    = 256,
+    YGUI_KEY_ENTER     = 257,
+    YGUI_KEY_TAB       = 258,
+    YGUI_KEY_BACKSPACE = 259,
+    YGUI_KEY_DELETE    = 261,
+    YGUI_KEY_RIGHT     = 262,
+    YGUI_KEY_LEFT      = 263,
+    YGUI_KEY_HOME      = 268,
+    YGUI_KEY_END       = 269,
+    YGUI_KEY_A         = 65,
+    YGUI_KEY_B         = 66,
+    YGUI_KEY_D         = 68,
+    YGUI_KEY_E         = 69,
+    YGUI_KEY_F         = 70,
+    YGUI_KEY_H         = 72,
+    YGUI_KEY_K         = 75,
+    YGUI_KEY_U         = 85,
+    YGUI_KEY_W         = 87,
+};
+
+/* Find the start of the word boundary to the left of `pos`. Used by
+ * Ctrl+W (kill-previous-word). Skips trailing whitespace, then runs of
+ * non-whitespace — same shape as readline's behaviour. */
+static int textinput_word_start(const char *text, int pos)
+{
+    while (pos > 0 && text[pos - 1] == ' ') {
+        pos--;
+    }
+    while (pos > 0 && text[pos - 1] != ' ') {
+        pos--;
+    }
+    return pos;
+}
+
+/* Delete the half-open range [from, to) from `text`, in place. Returns
+ * the new length; caller must update cursor afterwards. */
+static int textinput_delete_range(char *text, int len, int from, int to)
+{
+    if (from < 0) from = 0;
+    if (to > len) to = len;
+    if (from >= to) return len;
+    memmove(text + from, text + to, len - to + 1 /* NUL */);
+    return len - (to - from);
+}
+
 static int textinput_on_key(struct yetty_ygui_widget *self, uint32_t key, int mods,
                             ygui_event_t *out)
 {
-    (void)mods;
     char *text = self->data.textinput.text;
     int len = text ? (int)strlen(text) : 0;
     int cursor = self->data.textinput.cursor_pos;
+    if (cursor < 0) cursor = 0;
+    if (cursor > len) cursor = len;
+    int handled = 0;
 
-    if (key == 127 || key == 8) { /* Backspace */
-        if (cursor > 0 && len > 0) {
-            memmove(text + cursor - 1, text + cursor, len - cursor + 1);
-            self->data.textinput.cursor_pos--;
-            out->widget_id = self->id;
-            out->type = YETTY_YGUI_EVENT_CHANGE;
-            out->data.string_value = text;
-            return 1;
+    int ctrl = (mods & YGUI_MOD_CTRL) ? 1 : 0;
+
+    /* Printable text DOES NOT come through here — the platform emits a
+     * separate CHAR event (yetty_ygui_engine_text_input). KEY_DOWN is
+     * for navigation / editing commands only. Mixing both was the
+     * "every letter appears twice, once upper, once lower" bug.
+     *
+     * We treat Ctrl+letter as an emacs-style chord. ASCII letter keys
+     * land here as GLFW codes 65..90 (always uppercase) with mods set;
+     * the chord is unambiguous regardless of the shift state. */
+    if (ctrl) {
+        switch (key) {
+        case YGUI_KEY_A:                /* go to start of line */
+            cursor = 0; handled = 1; break;
+        case YGUI_KEY_E:                /* go to end of line */
+            cursor = len; handled = 1; break;
+        case YGUI_KEY_B:                /* back one char */
+            if (cursor > 0) cursor--;
+            handled = 1; break;
+        case YGUI_KEY_F:                /* forward one char */
+            if (cursor < len) cursor++;
+            handled = 1; break;
+        case YGUI_KEY_H:                /* backspace */
+            if (text && cursor > 0) {
+                len = textinput_delete_range(text, len, cursor - 1, cursor);
+                cursor--;
+            }
+            handled = 1; break;
+        case YGUI_KEY_D:                /* delete-char-forward */
+            if (text && cursor < len) {
+                len = textinput_delete_range(text, len, cursor, cursor + 1);
+            }
+            handled = 1; break;
+        case YGUI_KEY_K:                /* kill to end-of-line */
+            if (text && cursor < len) {
+                len = textinput_delete_range(text, len, cursor, len);
+            }
+            handled = 1; break;
+        case YGUI_KEY_U:                /* kill to start-of-line */
+            if (text && cursor > 0) {
+                len = textinput_delete_range(text, len, 0, cursor);
+                cursor = 0;
+            }
+            handled = 1; break;
+        case YGUI_KEY_W: {              /* kill previous word */
+            if (text && cursor > 0) {
+                int ws = textinput_word_start(text, cursor);
+                len = textinput_delete_range(text, len, ws, cursor);
+                cursor = ws;
+            }
+            handled = 1; break;
         }
-    } else if (key >= 32 && key < 127) { /* Printable character */
-        char *new_text = (char *)malloc(len + 2);
-        if (new_text) {
-            if (cursor > 0) {
-                memcpy(new_text, text, cursor);
+        }
+    } else {
+        switch (key) {
+        case YGUI_KEY_BACKSPACE:
+        case 8:                          /* ASCII BS (some platforms) */
+        case 127:                        /* ASCII DEL (some platforms) */
+            if (text && cursor > 0) {
+                len = textinput_delete_range(text, len, cursor - 1, cursor);
+                cursor--;
             }
-            new_text[cursor] = (char)key;
-            if (cursor < len) {
-                memcpy(new_text + cursor + 1, text + cursor, len - cursor);
+            handled = 1; break;
+        case YGUI_KEY_DELETE:
+            if (text && cursor < len) {
+                len = textinput_delete_range(text, len, cursor, cursor + 1);
             }
-            new_text[len + 1] = '\0';
-            free(text);
-            self->data.textinput.text = new_text;
-            self->data.textinput.cursor_pos++;
-
-            /* Call text callback */
-            if (self->text_callback) {
-                self->text_callback(self, new_text, self->text_userdata);
-            }
-
-            out->widget_id = self->id;
-            out->type = YETTY_YGUI_EVENT_CHANGE;
-            out->data.string_value = new_text;
-            return 1;
+            handled = 1; break;
+        case YGUI_KEY_LEFT:
+            if (cursor > 0) cursor--;
+            handled = 1; break;
+        case YGUI_KEY_RIGHT:
+            if (cursor < len) cursor++;
+            handled = 1; break;
+        case YGUI_KEY_HOME:
+            cursor = 0; handled = 1; break;
+        case YGUI_KEY_END:
+            cursor = len; handled = 1; break;
         }
     }
-    return 0;
+
+    if (!handled) {
+        return 0;
+    }
+
+    self->data.textinput.cursor_pos = cursor;
+
+    if (self->text_callback) {
+        self->text_callback(self, text ? text : "", self->text_userdata);
+    }
+    out->widget_id = self->id;
+    out->type = YETTY_YGUI_EVENT_CHANGE;
+    out->data.string_value = text ? text : "";
+    return 1;
 }
 
 static void textinput_destroy(struct yetty_ygui_widget *self)

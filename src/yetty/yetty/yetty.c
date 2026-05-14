@@ -580,6 +580,22 @@ static struct yetty_ycore_int_result yetty_event_handler(
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
+    /* yui chrome priority: when a v-menu / dialog is up, mouse events go
+     * through yui's ygui engine FIRST so the popup is hit-tested before
+     * the workspace below sees them. If yui's not capturing (no active
+     * chrome, or event isn't a mouse type), fall through to the tabbar
+     * which routes strip clicks and forwards the rest to the workspace. */
+    if (yetty->yui) {
+        struct yetty_ycore_int_result yr = yetty_yui_on_event(yetty->yui, event);
+        if (YETTY_IS_OK(yr) && yr.value) {
+            if (yetty->event_loop && yetty->event_loop->ops &&
+                yetty->event_loop->ops->request_render) {
+                yetty->event_loop->ops->request_render(yetty->event_loop);
+            }
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+    }
+
     /* Forward other events to the tabbar (which routes to active workspace). */
     if (yetty->tabbar) {
         return yetty_yui_tabbar_on_event(yetty->tabbar, event);
@@ -905,10 +921,92 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
         return;
     }
     enum yetty_yui_tabbar_kind tk;
+    struct yetty_yconfig_config *config = yetty->context.app_context.config;
     switch (kind) {
-    case YETTY_YUI_VIEW_SHELL:  tk = YETTY_YUI_TAB_SHELL;  break;
-    case YETTY_YUI_VIEW_SSH:    tk = YETTY_YUI_TAB_SSH;    break;
-    case YETTY_YUI_VIEW_TELNET: tk = YETTY_YUI_TAB_TELNET; break;
+    case YETTY_YUI_VIEW_SHELL:
+        /* Default shell — clear shell/command so get_shell_argv falls
+         * through to the resolved $SHELL / shell/default path even if a
+         * prior EXEC tab (or the -e flag) had stashed a command there. */
+        if (config && config->ops && config->ops->set_string) {
+            config->ops->set_string(config, "shell/command", "");
+        }
+        tk = YETTY_YUI_TAB_SHELL;
+        break;
+    case YETTY_YUI_VIEW_EXEC: {
+        /* Take the command from the EXEC dialog's textinput and stash it
+         * in shell/command. The PTY's get_shell_argv tokenizes it instead
+         * of running $SHELL. */
+        const char *cmd = yetty_yui_get_exec_command(yetty->yui);
+        if (!cmd || !cmd[0]) {
+            ywarn("yetty: EXEC connect with empty command — ignoring");
+            return;
+        }
+        if (!config || !config->ops || !config->ops->set_string) {
+            yerror("yetty: EXEC connect: no writable config");
+            return;
+        }
+        config->ops->set_string(config, "shell/command", cmd);
+        ydebug("yetty: EXEC connect with shell/command='%s'", cmd);
+        tk = YETTY_YUI_TAB_SHELL;
+        break;
+    }
+    case YETTY_YUI_VIEW_SSH: {
+        /* Spawn openssh from $PATH rather than driving the in-process
+         * libssh2 backend (which doesn't read ~/.ssh/config and which
+         * the dialog fields don't yet wire into). This route gives
+         * users every openssh feature for free: ProxyJump, IdentityFile,
+         * agent forwarding, ServerAliveInterval, hostname aliases — all
+         * sourced from ~/.ssh/config. The dialog only needs to supply
+         * what the user types; whatever's left is openssh's defaults. */
+        const char *host = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 0);
+        const char *port = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 1);
+        const char *key  = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 2);
+        if (!host || !host[0]) {
+            ywarn("yetty: SSH connect with empty host — ignoring");
+            return;
+        }
+        if (!config || !config->ops || !config->ops->set_string) {
+            yerror("yetty: SSH connect: no writable config");
+            return;
+        }
+        char cmd[1024];
+        int n = snprintf(cmd, sizeof(cmd), "ssh");
+        if (port && port[0]) {
+            n += snprintf(cmd + n, sizeof(cmd) - (size_t)n, " -p %s", port);
+        }
+        if (key && key[0]) {
+            n += snprintf(cmd + n, sizeof(cmd) - (size_t)n, " -i %s", key);
+        }
+        snprintf(cmd + n, sizeof(cmd) - (size_t)n, " %s", host);
+        config->ops->set_string(config, "shell/command", cmd);
+        ydebug("yetty: SSH connect via openssh: %s", cmd);
+        tk = YETTY_YUI_TAB_SHELL;
+        break;
+    }
+    case YETTY_YUI_VIEW_TELNET: {
+        /* Same idea — drive the system telnet(1) instead of the
+         * in-process libtelnet wrapper. Plain old TCP, no surprises. */
+        const char *host = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_TELNET, 0);
+        const char *port = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_TELNET, 1);
+        if (!host || !host[0]) {
+            ywarn("yetty: Telnet connect with empty host — ignoring");
+            return;
+        }
+        if (!config || !config->ops || !config->ops->set_string) {
+            yerror("yetty: Telnet connect: no writable config");
+            return;
+        }
+        char cmd[512];
+        if (port && port[0]) {
+            snprintf(cmd, sizeof(cmd), "telnet %s %s", host, port);
+        } else {
+            snprintf(cmd, sizeof(cmd), "telnet %s", host);
+        }
+        config->ops->set_string(config, "shell/command", cmd);
+        ydebug("yetty: Telnet connect via telnet(1): %s", cmd);
+        tk = YETTY_YUI_TAB_SHELL;
+        break;
+    }
     case YETTY_YUI_VIEW_YVNC:   tk = YETTY_YUI_TAB_YVNC;   break;
     default: return;
     }

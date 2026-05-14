@@ -42,6 +42,10 @@
 #include <yetty/yplatform/term.h>   /* term_get_size */
 #include <yetty/ygui/ygui.h>
 #include <yetty/ytrace/ytrace.h>
+#ifndef _WIN32
+#include <sys/stat.h>               /* fstat (stderr/stdout PTY-sharing check) */
+#include <unistd.h>                 /* isatty, dup2, STDERR_FILENO */
+#endif
 
 /* =========================================================================
  * Tab-local navigation entry. Each entry binds a tree-row label to the

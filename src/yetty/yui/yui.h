@@ -24,6 +24,11 @@
 #include <stdint.h>
 #include <yetty/ycore/result.h>
 
+/* Forward decl — yui_on_event takes the host's event by pointer; the
+ * full union lives in yevent/event.h and we don't want to pull it into
+ * everyone who includes yui.h. */
+struct yetty_yui_event;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -38,17 +43,46 @@ YETTY_YRESULT_DECLARE(yetty_yui_ptr, struct yetty_yui *);
  * kept as a separate type so yui doesn't need to depend on tabbar's
  * header. The yetty.c bridge translates between them. */
 enum yetty_yui_view_kind {
-    YETTY_YUI_VIEW_SHELL = 0,
+    YETTY_YUI_VIEW_SHELL = 0, /* No dialog — spawns the system default shell. */
     YETTY_YUI_VIEW_SSH,
     YETTY_YUI_VIEW_TELNET,
     YETTY_YUI_VIEW_YVNC,
+    YETTY_YUI_VIEW_EXEC,     /* Dialog with one field: path of executable
+                              * to run instead of the default shell. */
 };
+
+#define YETTY_YUI_VIEW_KIND_COUNT 5
 
 /* Connect callback fired when the user clicks "Connect" in a view's
  * config dialog. yetty.c wires this to tabbar->add_workspace_of_kind.
  * Per-kind config fields (host, port, ...) are still TODO — first pass
  * just delivers the kind. */
 typedef void (*yetty_yui_connect_cb)(void *userdata, enum yetty_yui_view_kind kind);
+
+/* Read the current value of a dialog's textinput. `kind` selects the
+ * dialog; `field_idx` indexes into s_views[kind].fields[] (0-based).
+ * Returns NULL when the dialog wasn't built, the slot is empty, or the
+ * indices are out of range. The returned pointer is owned by the
+ * textinput widget — copy if it needs to outlive the next mutation. */
+const char *yetty_yui_get_field_text(const struct yetty_yui *yui,
+                                     enum yetty_yui_view_kind kind, int field_idx);
+
+/* Sugar for the EXEC dialog's one field. Identical to
+ * yetty_yui_get_field_text(yui, YETTY_YUI_VIEW_EXEC, 0). */
+const char *yetty_yui_get_exec_command(const struct yetty_yui *yui);
+
+/* True iff yui currently has any interactive chrome on screen — v-menu
+ * open or any dialog visible. Use this in the host's mouse dispatch to
+ * decide whether to route the event to yui first (yes ⇒ yui owns the
+ * pointer; no ⇒ fall through to the workspace below). */
+int yetty_yui_has_active_chrome(const struct yetty_yui *yui);
+
+/* Route a platform mouse / mouse-scroll event into yui's ygui engine.
+ * Returns 1 if yui consumed it (an open menu / dialog was hit-tested or
+ * the click closed a popup), 0 if it should fall through. Non-mouse
+ * events are passed through unchanged (returns 0). */
+struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
+                                                 const struct yetty_yui_event *event);
 
 /* Construct the app-level chrome singleton.
  *
