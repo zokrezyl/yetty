@@ -21,6 +21,12 @@ REM at asset-extract time (decompress_brotli in incbin-assets.c).
 if exist "C:\Program Files\Git\mingw64\bin\brotli.exe" set PATH=C:\Program Files\Git\mingw64\bin;%PATH%
 if exist "C:\Program Files\Git\usr\bin\brotli.exe" set PATH=C:\Program Files\Git\usr\bin;%PATH%
 
+REM CMake's file(DOWNLOAD ...) uses libcurl, which on Windows ships without a
+REM CA bundle. Without CMAKE_TLS_CAINFO the 3rdparty-fetch HTTPS pulls fail
+REM with "Peer certificate cannot be authenticated". Strawberry Perl includes
+REM Mozilla's bundle; use it if available.
+if not defined CMAKE_TLS_CAINFO if exist "C:\Strawberry\perl\vendor\lib\Mozilla\CA\cacert.pem" set CMAKE_TLS_CAINFO=C:/Strawberry/perl/vendor/lib/Mozilla/CA/cacert.pem
+
 :parse_args
 if "%1"=="" goto :start
 if /i "%1"=="debug" (
@@ -106,12 +112,16 @@ if not exist "%BUILD_DIR%\build.ninja" (
     if not exist "%BUILD_DIR%\*.sln" (
         echo Configuring CMake...
 
+        REM Optional extra cmake args (e.g. -DCMAKE_TLS_CAINFO=...)
+        set CMAKE_EXTRA_ARGS=
+        if defined CMAKE_TLS_CAINFO set CMAKE_EXTRA_ARGS=-DCMAKE_TLS_CAINFO=%CMAKE_TLS_CAINFO%
+
         REM Check for Ninja
         where ninja >nul 2>&1
         if !errorlevel!==0 (
-            cmake -B "%BUILD_DIR%" -G "Ninja" -DCMAKE_BUILD_TYPE=%CONFIG% -DWEBGPU_BACKEND=dawn "%PROJECT_ROOT%"
+            cmake -B "%BUILD_DIR%" -G "Ninja" -DCMAKE_BUILD_TYPE=%CONFIG% -DWEBGPU_BACKEND=dawn !CMAKE_EXTRA_ARGS! "%PROJECT_ROOT%"
         ) else (
-            cmake -B "%BUILD_DIR%" -G "Visual Studio 17 2022" -A x64 -DWEBGPU_BACKEND=dawn "%PROJECT_ROOT%"
+            cmake -B "%BUILD_DIR%" -G "Visual Studio 17 2022" -A x64 -DWEBGPU_BACKEND=dawn !CMAKE_EXTRA_ARGS! "%PROJECT_ROOT%"
         )
 
         if !errorlevel! neq 0 (
