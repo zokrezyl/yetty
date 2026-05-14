@@ -17,7 +17,10 @@ clone:
   git:
     image: woodpeckerci/plugin-git
     environment:
-      GIT_CONFIG_GLOBAL: NUL
+      # NUL doesn't work — git wants to create <path>.lock and NUL.lock
+      # is invalid. A path inside the workspace gives each parallel job
+      # its own lockable file.
+      GIT_CONFIG_GLOBAL: .gitconfig.cisafe
 
 steps:
   build:
