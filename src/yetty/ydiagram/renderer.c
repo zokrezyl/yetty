@@ -420,6 +420,14 @@ struct yetty_ycore_void_result yetty_ydiagram_render(
 
     yetty_ypaint_core_buffer_set_scene_bounds(buffer, g->min_x, g->min_y, g->max_x, g->max_y);
 
+    /* CMD_ZERO at the start of every full-redraw buffer — clears the
+     * receiving canvas + resets cursor as a side effect of decoding.
+     * Replaces the obsolete separate YPAINT_CLEAR OSC envelope (see
+     * yetty/ypaint-core/cmds.h). Sending CLEAR + BIN as two envelopes
+     * currently freezes yetty's OSC SM (CLEAR handler doesn't drain the
+     * body terminator), so we use the single-envelope form. */
+    (void)yetty_ypaint_core_buffer_add_cmd_zero(buffer);
+
     /* Optional fullscreen background. */
     if (opts.background_color) {
         struct yetty_ysdf_box bg = {

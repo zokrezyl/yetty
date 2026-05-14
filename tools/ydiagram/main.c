@@ -1,13 +1,18 @@
 /*
  * ydiagram — render a diagram file (Mermaid) into a ypaint buffer and emit
- * an OSC envelope on stdout so a running yetty ypaint pane redraws it.
+ * an OSC YPAINT_BIN envelope on stdout so a running yetty ypaint pane
+ * redraws it. Pure one-shot: parse → layout → render → emit → exit.
  *
- * Pure one-shot: parse → layout → render → emit → exit. Same wire as
- * tools/ymaze and tools/yzoo (OSC 600000 clear + OSC 600001 bin).
+ * Wire: a single OSC 600001 envelope. The buffer's first prim is CMD_ZERO
+ * (added by the renderer), which clears the canvas + resets the cursor on
+ * decode — replacing the separate OSC 600000 CLEAR envelope. Sending a
+ * separate CLEAR envelope before BIN currently hangs yetty's OSC SM
+ * (canvas_clear doesn't drain the body terminator), so we use the
+ * single-envelope form documented in yetty/ypaint-core/cmds.h.
  *
- *   ydiagram <file.mmd>           # OSC envelope to stdout (default)
- *   ydiagram -o <file>            # raw serialized buffer, no OSC framing
- *   ydiagram -                    # read Mermaid from stdin
+ *   ydiagram <file.mmd>      # OSC envelope to stdout (default)
+ *   ydiagram -o <file>       # raw serialized buffer, no OSC framing
+ *   ydiagram -               # read Mermaid from stdin
  */
 
 #include <yetty/ydiagram/ydiagram.h>
@@ -43,12 +48,8 @@ static int emit_envelope(FILE *out, int osc_code, int compressed, const void *ar
     return rc;
 }
 
-static int emit_osc(FILE *out, struct yetty_ypaint_core_buffer *buf, bool with_clear)
+static int emit_osc_bin(FILE *out, struct yetty_ypaint_core_buffer *buf)
 {
-    if (with_clear) {
-        int rc = emit_envelope(out, YETTY_OSC_YPAINT_CLEAR, 0, NULL, 0, NULL, 0);
-        if (rc) return rc;
-    }
     const uint8_t *raw  = NULL;
     size_t         size = yetty_ypaint_core_buffer_serialize(buf, &raw);
     if (size == 0 || !raw) {
@@ -123,11 +124,12 @@ static void usage(const char *prog)
     fprintf(stderr,
             "Usage: %s [options] <file.mmd | ->\n"
             "\n"
-            "Emits OSC envelopes on stdout for a running yetty ypaint pane.\n"
+            "Emits an OSC YPAINT_BIN envelope on stdout for a running yetty\n"
+            "ypaint pane (the buffer begins with CMD_ZERO so the canvas is\n"
+            "cleared on decode — no separate OSC CLEAR is sent).\n"
             "\n"
             "Options:\n"
             "  -o <file>     Write raw serialized ypaint buffer (no OSC) to <file>.\n"
-            "  -q            Skip the OSC clear envelope before the bin payload.\n"
             "  -h            Show this help and exit.\n",
             prog);
 }
@@ -136,12 +138,10 @@ int main(int argc, char **argv)
 {
     const char *input_path = NULL;
     const char *out_path   = NULL;
-    bool        quiet      = false;
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) { usage(argv[0]); return 0; }
-        if (strcmp(a, "-q") == 0) { quiet = true; continue; }
         if (strcmp(a, "-o") == 0) {
             if (i + 1 >= argc) { fprintf(stderr, "ydiagram: -o requires a path\n"); return 2; }
             out_path = argv[++i];
@@ -180,7 +180,7 @@ int main(int argc, char **argv)
             if (out != stdout) fclose(out);
         }
     } else {
-        rc = emit_osc(stdout, br.value, !quiet);
+        rc = emit_osc_bin(stdout, br.value);
         fflush(stdout);
     }
 
