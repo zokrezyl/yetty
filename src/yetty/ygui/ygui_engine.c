@@ -404,6 +404,9 @@ struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engin
     /* Free card name */
     free(engine->card_name);
 
+    /* Free dedup cache */
+    free(engine->prev_emit_data);
+
     free(engine);
 
     if (YETTY_IS_ERR(first_err)) {
@@ -636,6 +639,34 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
     uint32_t size = (uint32_t)yetty_ypaint_core_buffer_serialize(engine->buffer, &data);
     if (size == 0 || !data) {
         return YETTY_OK_VOID();
+    }
+
+    /* 4b. Dedup. The dirty flag fires for hover changes, mouse moves
+     * (when subscribed), view-zoom ticks, etc., but many of those leave
+     * the rendered bytes unchanged. Re-emitting the same envelope makes
+     * the receiver tear down and re-create every complex-prim instance
+     * (yimage, yplot) which is what produces the visible blink on the
+     * Images tab. If the just-serialized bytes match the previously
+     * sent ones, skip the OSC write. Card-creation always sends. */
+    if (engine->card_shown && size == engine->prev_emit_size && engine->prev_emit_data &&
+        memcmp(data, engine->prev_emit_data, size) == 0) {
+        ydebug("ygui_engine_render: frame identical to previous (%u B), skipping emit", size);
+        return YETTY_OK_VOID();
+    }
+
+    if (size > engine->prev_emit_cap) {
+        uint8_t *grown = realloc(engine->prev_emit_data, size);
+        if (grown) {
+            engine->prev_emit_data = grown;
+            engine->prev_emit_cap = size;
+        }
+    }
+    if (engine->prev_emit_cap >= size && engine->prev_emit_data) {
+        memcpy(engine->prev_emit_data, data, size);
+        engine->prev_emit_size = size;
+    } else {
+        /* realloc failed — disable dedup for this frame, keep working. */
+        engine->prev_emit_size = 0;
     }
 
     /* 5. Send OSC */
