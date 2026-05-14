@@ -259,15 +259,6 @@ static void usage(const char *prog)
 
 int main(int argc, char **argv)
 {
-    /* Silence ytrace unconditionally — the tool is one-shot and runs
-     * inside a yetty pane (its stderr lands on the PTY, so any debug
-     * spam from upstream libraries becomes terminal junk). Trace points
-     * are registered lazily on first call; `ytrace_register` snapshots
-     * `YTRACE_DEFAULT_ON` once during `ytrace_init`. Clearing the env
-     * var BEFORE any trace point fires keeps the default off; the
-     * explicit set_all_enabled covers the (unlikely) case where init
-     * already ran. */
-    unsetenv("YTRACE_DEFAULT_ON");
     ytrace_set_all_enabled(false);
 
     const char *input_path    = NULL;
