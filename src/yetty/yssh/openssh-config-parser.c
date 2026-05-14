@@ -251,7 +251,7 @@ static void handle_include(struct parser_ctx *ctx, const char *pattern)
 
     glob_t gl;
     memset(&gl, 0, sizeof(gl));
-    if (glob(expanded, GLOB_TILDE | GLOB_NOCHECK, NULL, &gl) == 0) {
+    if (glob(expanded, GLOB_NOCHECK, NULL, &gl) == 0) {
         for (size_t i = 0; i < gl.gl_pathc; i++) {
             ctx->depth++;
             parse_file(ctx, gl.gl_pathv[i]);
