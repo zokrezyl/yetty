@@ -83,6 +83,12 @@ if(WIN32)
     target_link_libraries(yetty_yplatform_core PUBLIC ws2_32 advapi32)
 endif()
 
+# Apple Foundation framework for the iOS/tvOS paths impl (NSBundle,
+# NSFileManager, NSSearchPathForDirectoriesInDomains in paths/ios-tvos.m).
+if(YETTY_IOS OR YETTY_TVOS)
+    target_link_libraries(yetty_yplatform_core PUBLIC "-framework Foundation")
+endif()
+
 # NOTE: a `yetty_yplatform` *server-side* library (event loops, GPU
 # surface, clipboard, coroutine, pty-factory, etc.) would be the
 # natural symmetric counterpart, but those sources have heavy

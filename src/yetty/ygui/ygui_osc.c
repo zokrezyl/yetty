@@ -10,6 +10,7 @@
 #include <yetty/ymgui/wire.h>       /* YMGUI_OSC_CS_CARD_*, wire structs */
 #include <yetty/ytrace/ytrace.h>
 #include <errno.h>
+#include <stddef.h>   /* ptrdiff_t — portable signed-size return for write() */
 #include <stdio.h>
 #include <string.h>
 
@@ -70,7 +71,7 @@ static void write_osc(const char *data, size_t len)
 {
     size_t total = 0;
     while (total < len) {
-        ssize_t n = yetty_ygui_raw_write(STDOUT_FILENO, data + total, len - total);
+        ptrdiff_t n = yetty_ygui_raw_write(STDOUT_FILENO, data + total, len - total);
         if (n < 0) {
             if (errno == EINTR) {
                 continue;
