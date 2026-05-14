@@ -13,6 +13,13 @@ set(YCAT_SOURCES
     ts-highlight.c
 )
 
+# Mermaid handler is optional — only built when ydiagram is enabled. The
+# detect.c content sniffer also uses the ydiagram parser, so detect.c
+# guards that call on the same compile-time flag.
+if(YETTY_ENABLE_FEATURE_DIAGRAM)
+    list(APPEND YCAT_SOURCES handler-mermaid.c)
+endif()
+
 #=============================================================================
 # Tree-sitter highlight queries are embedded at configure time. Each grammar
 # exports TS_QUERIES_DIR_<name> (see build-tools/yetty/libs/tree-sitter.cmake).
@@ -87,6 +94,11 @@ target_link_libraries(yetty_ycat PUBLIC
     yetty_yimage_core
     pdfio_lib
 )
+
+if(YETTY_ENABLE_FEATURE_DIAGRAM)
+    target_link_libraries(yetty_ycat PUBLIC yetty_ydiagram)
+    target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_DIAGRAM=1)
+endif()
 
 if(YETTY_ENABLE_LIB_LIBMAGIC AND TARGET magic)
     target_link_libraries(yetty_ycat PUBLIC magic)

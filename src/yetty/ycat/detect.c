@@ -13,6 +13,9 @@
 
 #include <yetty/ycat/ycat.h>
 
+#ifdef YETTY_YCAT_HAS_DIAGRAM
+#include <yetty/ydiagram/mermaid-parser.h>
+#endif
 #include <yetty/ytrace/ytrace.h>
 
 #include <stdlib.h>
@@ -43,6 +46,12 @@ enum yetty_ycat_type yetty_ycat_type_from_mime(const char *mime)
     }
     if (strcmp(mime, "text/markdown") == 0 || strcmp(mime, "text/x-markdown") == 0) {
         return YETTY_YCAT_TYPE_MARKDOWN;
+    }
+    /* Mermaid has no IANA-registered MIME; honour the de-facto strings
+     * used by various editors and the Mermaid CLI. */
+    if (strcmp(mime, "text/vnd.mermaid") == 0 || strcmp(mime, "text/x-mermaid") == 0 ||
+        strcmp(mime, "application/vnd.mermaid") == 0) {
+        return YETTY_YCAT_TYPE_MERMAID;
     }
     /* Check SVG before the generic "image/" prefix so it routes to the
      * vector handler instead of the raster decoder. */
@@ -91,6 +100,9 @@ enum yetty_ycat_type yetty_ycat_type_from_extension(const char *ext)
     if (strcasecmp(noleading, "md") == 0 || strcasecmp(noleading, "markdown") == 0 ||
         strcasecmp(noleading, "mdown") == 0 || strcasecmp(noleading, "mkd") == 0) {
         return YETTY_YCAT_TYPE_MARKDOWN;
+    }
+    if (strcasecmp(noleading, "mmd") == 0 || strcasecmp(noleading, "mermaid") == 0) {
+        return YETTY_YCAT_TYPE_MERMAID;
     }
     if (strcasecmp(noleading, "pdf") == 0) {
         return YETTY_YCAT_TYPE_PDF;
@@ -183,11 +195,11 @@ static enum yetty_ycat_type detect_via_libmagic(const uint8_t *bytes, size_t len
 
 enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const char *path)
 {
-    /* Extension first on types libmagic generalises away (markdown and
-	 * most source files → text/plain). */
+    /* Extension first on types libmagic generalises away (markdown,
+	 * mermaid, and most source files → text/plain). */
     enum yetty_ycat_type by_ext = yetty_ycat_type_from_extension(path_extension(path));
     if (by_ext == YETTY_YCAT_TYPE_MARKDOWN || by_ext == YETTY_YCAT_TYPE_PDF ||
-        by_ext == YETTY_YCAT_TYPE_SVG) {
+        by_ext == YETTY_YCAT_TYPE_SVG || by_ext == YETTY_YCAT_TYPE_MERMAID) {
         return by_ext;
     }
 
@@ -195,6 +207,17 @@ enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const c
     if (by_magic != YETTY_YCAT_TYPE_UNKNOWN && by_magic != YETTY_YCAT_TYPE_TEXT) {
         return by_magic;
     }
+
+#ifdef YETTY_YCAT_HAS_DIAGRAM
+    /* Mermaid has no libmagic signature, but the syntax is distinctive:
+     * the first non-comment, non-blank line starts with `graph ` or
+     * `flowchart `. yetty_ydiagram_mermaid_can_parse implements that
+     * sniff and is cheap enough to run on every text/plain blob. */
+    if (bytes && len > 0 &&
+        yetty_ydiagram_mermaid_can_parse((const char *)bytes, len)) {
+        return YETTY_YCAT_TYPE_MERMAID;
+    }
+#endif
 
     if (by_ext != YETTY_YCAT_TYPE_UNKNOWN) {
         return by_ext;

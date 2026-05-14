@@ -37,6 +37,12 @@ extern struct yetty_ypaint_core_buffer_result yetty_ycat_handler_svg(
     const uint8_t *bytes, size_t len, const char *path_hint,
     const struct yetty_ycat_config *config);
 
+#ifdef YETTY_YCAT_HAS_DIAGRAM
+extern struct yetty_ypaint_core_buffer_result yetty_ycat_handler_mermaid(
+    const uint8_t *bytes, size_t len, const char *path_hint,
+    const struct yetty_ycat_config *config);
+#endif
+
 /*=============================================================================
  * Type name mapping
  *===========================================================================*/
@@ -48,6 +54,7 @@ static const struct {
     {YETTY_YCAT_TYPE_UNKNOWN, "unknown"},   {YETTY_YCAT_TYPE_TEXT, "text"},
     {YETTY_YCAT_TYPE_MARKDOWN, "markdown"}, {YETTY_YCAT_TYPE_PDF, "pdf"},
     {YETTY_YCAT_TYPE_IMAGE, "image"},       {YETTY_YCAT_TYPE_SVG, "svg"},
+    {YETTY_YCAT_TYPE_MERMAID, "mermaid"},
 };
 
 const char *yetty_ycat_type_name(enum yetty_ycat_type type)
@@ -77,7 +84,7 @@ enum yetty_ycat_type yetty_ycat_type_from_name(const char *name)
  * Handler registry
  *===========================================================================*/
 
-#define YCAT_MAX_TYPE 8
+#define YCAT_MAX_TYPE 16
 
 static yetty_ycat_handler_fn handlers[YCAT_MAX_TYPE];
 static int handlers_initialized = 0;
@@ -92,6 +99,9 @@ static void init_handlers(void)
     handlers[YETTY_YCAT_TYPE_PDF] = yetty_ycat_handler_pdf;
     handlers[YETTY_YCAT_TYPE_IMAGE] = yetty_ycat_handler_image;
     handlers[YETTY_YCAT_TYPE_SVG] = yetty_ycat_handler_svg;
+#ifdef YETTY_YCAT_HAS_DIAGRAM
+    handlers[YETTY_YCAT_TYPE_MERMAID] = yetty_ycat_handler_mermaid;
+#endif
 }
 
 yetty_ycat_handler_fn yetty_ycat_get_handler(enum yetty_ycat_type type)

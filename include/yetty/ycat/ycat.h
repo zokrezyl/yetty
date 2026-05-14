@@ -37,6 +37,7 @@ enum yetty_ycat_type {
     YETTY_YCAT_TYPE_PDF,
     YETTY_YCAT_TYPE_IMAGE,
     YETTY_YCAT_TYPE_SVG,
+    YETTY_YCAT_TYPE_MERMAID,
 };
 
 const char *yetty_ycat_type_name(enum yetty_ycat_type type);
