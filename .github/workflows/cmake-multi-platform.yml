@@ -17,23 +17,23 @@ on:
 # BUILD FLAGS - Set to true to enable specific builds (tags always build all)
 # =============================================================================
 env:
-  BUILD_LINUX: true
-  BUILD_LINUX_ASAN: true
-  BUILD_LINUX_AARCH64: true
-  BUILD_MACOS: true
-  BUILD_MACOS_X86_64: true
-  BUILD_WINDOWS: true
-  BUILD_ANDROID: true
-  BUILD_ANDROID_X86_64: true
-  BUILD_IOS: true
-  BUILD_IOS_X86_64: true
-  BUILD_WEB: true
+  BUILD_LINUX: false
+  BUILD_LINUX_ASAN: false
+  BUILD_LINUX_AARCH64: false
+  BUILD_MACOS: false
+  BUILD_MACOS_X86_64: false
+  BUILD_WINDOWS: false
+  BUILD_ANDROID: false
+  BUILD_ANDROID_X86_64: false
+  BUILD_IOS: false
+  BUILD_IOS_X86_64: false
+  BUILD_WEB: false
 
   # Merged riscv64 rootfs (alpine-extended + /yetty/{bin,repo}). All
   # per-platform binaries fetch this as a runtime asset; disable for
   # fast iteration when you only care about a non-VM code path. Always
   # built on release tags regardless of this flag.
-  BUILD_ROOTFS_RISCV: true
+  BUILD_ROOTFS_RISCV: false
 
   RUN_CODEQL: false
   RUN_CODACY: false
