@@ -14,6 +14,15 @@ steps:
   build:
     image: cmd
     commands:
+      # --- DIAGNOSTICS (remove once green) ----------------------------------
+      - echo === host env ===
+      - where bash
+      - where cmake
+      - set MSYS2_PATH_TYPE
+      - set PATH
+      - echo === bash view ===
+      - bash -c "echo BASH=$BASH; echo BASH_VERSION=$BASH_VERSION; echo MSYS2_PATH_TYPE=$MSYS2_PATH_TYPE; echo --PATH--; echo $PATH | tr ':' '\n'; echo --cmake--; which cmake || echo NOT FOUND"
+      # ----------------------------------------------------------------------
       - call "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
       - bash -c "TARGET_PLATFORM=windows-x86_64 OUTPUT_DIR=out ./build-tools/3rdparty/glfw/build.sh"
       - dir out

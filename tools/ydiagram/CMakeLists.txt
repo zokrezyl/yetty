@@ -23,7 +23,7 @@ target_link_libraries(ydiagram-cli PRIVATE
     yetty_yfont_core
     yetty_ycore
     Threads::Threads
-    m
+    $<$<NOT:$<C_COMPILER_ID:MSVC>>:m>
 )
 
 if(NOT MSVC)
