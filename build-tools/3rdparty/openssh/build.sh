@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# openssh 3rdparty wrapper. Builds against the prebuilt openssl-new tarball
-# from build-tools/3rdparty/openssl-new/ — see _build.sh for the cross-fetch
+# openssh 3rdparty wrapper. Builds against the prebuilt openssl tarball
+# from build-tools/3rdparty/openssl/ — see _build.sh for the cross-fetch
 # of that asset at build time.
 #
 # Required env:
-#   TARGET_PLATFORM   linux-x86_64 | linux-aarch64 |
-#                     macos-arm64  | macos-x86_64
+#   TARGET_PLATFORM   linux-x86_64 | linux-aarch64 | linux-riscv64 |
+#                     macos-arm64  | macos-x86_64 |
+#                     android-arm64-v8a | android-x86_64
 #   OUTPUT_DIR        where the tarball is written
 
 set -euo pipefail
@@ -13,8 +14,9 @@ set -euo pipefail
 : "${TARGET_PLATFORM:?TARGET_PLATFORM is required}"
 
 case "$TARGET_PLATFORM" in
-    linux-x86_64|linux-aarch64|\
-    macos-x86_64|macos-arm64)
+    linux-x86_64|linux-aarch64|linux-riscv64|\
+    macos-x86_64|macos-arm64|\
+    android-arm64-v8a|android-x86_64)
         SHELL_NAME="3rdparty-${TARGET_PLATFORM}"
         ;;
     *)

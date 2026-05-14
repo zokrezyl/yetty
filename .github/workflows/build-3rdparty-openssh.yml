@@ -1,18 +1,17 @@
 name: Build 3rdparty — openssh
 
 # Triggered on `lib-openssh-<version>` tags. Builds openssh-portable
-# across the supported desktop platforms (linux-x86_64, linux-aarch64,
-# macos-arm64, macos-x86_64) and attaches the tarballs to a release of
-# the same name.
+# across desktop and mobile platforms and attaches the tarballs to a
+# release of the same name.
 #
-# Version source of truth: build-tools/3rdparty/openssh/version. The tag
-# version must match that file's content; the workflow reads the file at
-# build time so the tarballs are always self-consistent.
+# Version source of truth: build-tools/3rdparty/openssh/version.
+# OpenSSL pin: build-tools/3rdparty/openssl/version (1.1.1w — openssh 9.x
+# rejects OpenSSL 4.x; SSH uses its own crypto, not TLS).
 #
-# openssh is NOT built for webasm, iOS/tvOS, or Windows:
-#   - webasm: no PTY/exec semantics in the browser
-#   - iOS/tvOS: sandbox forbids exec()
-#   - Windows: openssh ships as a system component; vendoring is unnecessary
+# Excluded platforms:
+#   webasm  — no PTY/exec semantics in the browser
+#   iOS/tvOS — sandbox forbids exec()
+#   Windows  — openssh ships as a system component; no vendoring needed
 
 on:
   push:
@@ -21,7 +20,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write  # needed to publish release assets
+  contents: write
 
 jobs:
   resolve:
@@ -48,9 +47,9 @@ jobs:
           echo "tag=lib-openssh-$V" >> "$GITHUB_OUTPUT"
 
   #===========================================================================
-  # Linux — Ubuntu cross (x86_64 native, aarch64 cross-compiled).
+  # Linux x86_64 + Android (ubuntu cross, nix shells provide NDK).
   #===========================================================================
-  build-linux:
+  build-linux-cross:
     needs: resolve
     runs-on: ubuntu-latest
     strategy:
@@ -58,7 +57,8 @@ jobs:
       matrix:
         target:
           - linux-x86_64
-          - linux-aarch64
+          - android-arm64-v8a
+          - android-x86_64
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
@@ -77,11 +77,62 @@ jobs:
           fail_on_unmatched_files: true
 
   #===========================================================================
+  # Linux aarch64 — native ARM runner, no cross-compiler needed.
+  #===========================================================================
+  build-linux-aarch64:
+    needs: resolve
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build deps
+        run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends build-essential autoconf automake
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="linux-aarch64" \
+          OUTPUT_DIR="$PWD/out" \
+          USE_NIX=0 \
+          CROSS_PREFIX="" \
+          ./build-tools/3rdparty/openssh/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/openssh-linux-aarch64-*.tar.gz
+          fail_on_unmatched_files: true
+
+  #===========================================================================
+  # Linux riscv64 — cross-compiled from ubuntu.
+  #===========================================================================
+  build-linux-riscv64:
+    needs: resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install riscv64 cross-compiler
+        run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends gcc-riscv64-linux-gnu autoconf automake
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="linux-riscv64" \
+          OUTPUT_DIR="$PWD/out" \
+          USE_NIX=0 \
+          CROSS_PREFIX="riscv64-linux-gnu-" \
+          ./build-tools/3rdparty/openssh/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/openssh-linux-riscv64-*.tar.gz
+          fail_on_unmatched_files: true
+
+  #===========================================================================
   # macOS arm64 (macos-latest = Apple Silicon).
   #===========================================================================
   build-darwin-arm64:
     needs: resolve
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - macos-arm64
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
@@ -90,13 +141,13 @@ jobs:
             experimental-features = nix-command flakes
       - run: mkdir -p out
       - run: |
-          TARGET_PLATFORM="macos-arm64" \
+          TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
           ./build-tools/3rdparty/openssh/build.sh
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/openssh-macos-arm64-*.tar.gz
+          files: out/openssh-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true
 
   #===========================================================================
@@ -105,6 +156,11 @@ jobs:
   build-darwin-x86_64:
     needs: resolve
     runs-on: macos-15-intel
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - macos-x86_64
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
@@ -113,11 +169,11 @@ jobs:
             experimental-features = nix-command flakes
       - run: mkdir -p out
       - run: |
-          TARGET_PLATFORM="macos-x86_64" \
+          TARGET_PLATFORM="${{ matrix.target }}" \
           OUTPUT_DIR="$PWD/out" \
           ./build-tools/3rdparty/openssh/build.sh
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
-          files: out/openssh-macos-x86_64-*.tar.gz
+          files: out/openssh-${{ matrix.target }}-*.tar.gz
           fail_on_unmatched_files: true

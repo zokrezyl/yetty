@@ -1,19 +1,24 @@
 #!/bin/bash
 # Builds openssh-portable for $TARGET_PLATFORM using upstream ./configure + make.
-# Links against the prebuilt openssl-new (4.x) tarball so the bundled ssh
-# client carries a modern TLS stack.
+# Links against the prebuilt openssl-1.1.1w tarball — openssh 9.8p1 only
+# accepts OpenSSL 1.x/3.x (SSH doesn't use TLS; the OpenSSL link provides
+# crypto primitives, not a TLS layer).
 #
 # Required env:
-#   TARGET_PLATFORM   linux-x86_64 | linux-aarch64 |
-#                     macos-arm64  | macos-x86_64
+#   TARGET_PLATFORM   linux-x86_64 | linux-aarch64 | linux-riscv64 |
+#                     macos-arm64  | macos-x86_64 |
+#                     android-arm64-v8a | android-x86_64
 #   OUTPUT_DIR        where the tarball is written
 #
 # Optional env:
-#   YETTY_3RDPARTY_URL_BASE  default https://github.com/zokrezyl/yetty/releases/download
-#   OPENSSL_VERSION_OVERRIDE  pin a different openssl-new version
-#                              (default: read from build-tools/3rdparty/openssl-new/version)
+#   YETTY_3RDPARTY_URL_BASE    default https://github.com/zokrezyl/yetty/releases/download
+#   OPENSSL_VERSION_OVERRIDE   pin a different openssl version
+#                               (default: read from build-tools/3rdparty/openssl/version)
 #   WORK_DIR          default /tmp/yetty-3rdparty-openssh-$TARGET_PLATFORM
 #   CACHE_DIR         default $HOME/.cache/yetty-3rdparty
+#   CROSS_PREFIX      cross-compiler prefix (linux-aarch64, linux-riscv64)
+#   ANDROID_NDK_HOME  required for android targets
+#   ANDROID_API       default 26
 #
 # Output tarball layout (consumed by build-tools/yetty/openssh.cmake):
 #   bin/ssh
@@ -31,8 +36,8 @@ VERSION_FILE="$SCRIPT_DIR/version"
 VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 [ -n "$VERSION" ] || { echo "$VERSION_FILE is empty" >&2; exit 1; }
 
-# OpenSSL-new version to link against.
-OSSL_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/openssl-new/version"
+# OpenSSL version — reads the 1.1.1w pin; openssh 9.x rejects OpenSSL 4.x.
+OSSL_VERSION_FILE="$REPO_ROOT/build-tools/3rdparty/openssl/version"
 : "${OPENSSL_VERSION_OVERRIDE:=}"
 if [ -n "$OPENSSL_VERSION_OVERRIDE" ]; then
     OSSL_VERSION="$OPENSSL_VERSION_OVERRIDE"
@@ -40,7 +45,7 @@ else
     [ -f "$OSSL_VERSION_FILE" ] || { echo "missing $OSSL_VERSION_FILE" >&2; exit 1; }
     OSSL_VERSION="$(tr -d '[:space:]' < "$OSSL_VERSION_FILE")"
 fi
-[ -n "$OSSL_VERSION" ] || { echo "openssl-new version unresolved" >&2; exit 1; }
+[ -n "$OSSL_VERSION" ] || { echo "openssl version unresolved" >&2; exit 1; }
 
 WORK_DIR="${WORK_DIR:-/tmp/yetty-3rdparty-openssh-$TARGET_PLATFORM}"
 CACHE_DIR="${CACHE_DIR:-$HOME/.cache/yetty-3rdparty}"
@@ -56,10 +61,10 @@ INSTALL_DIR="$WORK_DIR/install-${TARGET_PLATFORM}"
 STAGE="$WORK_DIR/stage-${TARGET_PLATFORM}"
 TARBALL="$OUTPUT_DIR/openssh-${TARGET_PLATFORM}-${VERSION}.tar.gz"
 
-# Prebuilt openssl-new tarball used as TLS backend.
-OSSL_TAR_URL="$URL_BASE/lib-openssl-new-${OSSL_VERSION}/openssl-new-${TARGET_PLATFORM}-${OSSL_VERSION}.tar.gz"
-OSSL_TARBALL="$CACHE_DIR/openssl-new-${TARGET_PLATFORM}-${OSSL_VERSION}.tar.gz"
-OSSL_PREFIX="$WORK_DIR/openssl-new-${TARGET_PLATFORM}-${OSSL_VERSION}"
+# Prebuilt openssl tarball (1.1.1w, the version openssh 9.x supports).
+OSSL_TAR_URL="$URL_BASE/lib-openssl-${OSSL_VERSION}/openssl-${TARGET_PLATFORM}-${OSSL_VERSION}.tar.gz"
+OSSL_TARBALL="$CACHE_DIR/openssl-${TARGET_PLATFORM}-${OSSL_VERSION}.tar.gz"
+OSSL_PREFIX="$WORK_DIR/openssl-${TARGET_PLATFORM}-${OSSL_VERSION}"
 
 mkdir -p "$WORK_DIR" "$OUTPUT_DIR" "$CACHE_DIR"
 
@@ -84,17 +89,17 @@ fetch() {
 }
 
 #-----------------------------------------------------------------------------
-# Fetch openssh source + prebuilt openssl-new tarball.
+# Fetch openssh source + prebuilt openssl tarball.
 #-----------------------------------------------------------------------------
-fetch "$OPENSSH_URL"   "$OPENSSH_TARBALL" "openssh ${VERSION}"                               openssh-source
-fetch "$OSSL_TAR_URL"  "$OSSL_TARBALL"    "openssl-new ${OSSL_VERSION} (${TARGET_PLATFORM})" openssh-openssl
+fetch "$OPENSSH_URL"  "$OPENSSH_TARBALL" "openssh ${VERSION}"                           openssh-source
+fetch "$OSSL_TAR_URL" "$OSSL_TARBALL"    "openssl ${OSSL_VERSION} (${TARGET_PLATFORM})" openssh-openssl
 
 if [ ! -d "$SRC_DIR" ]; then
     echo "==> extracting openssh -> $SRC_DIR"
     tar -C "$WORK_DIR" -xzf "$OPENSSH_TARBALL"
 fi
 
-echo "==> extracting prebuilt openssl-new -> $OSSL_PREFIX"
+echo "==> extracting prebuilt openssl -> $OSSL_PREFIX"
 rm -rf "$OSSL_PREFIX"
 mkdir -p "$OSSL_PREFIX"
 tar -C "$OSSL_PREFIX" -xzf "$OSSL_TARBALL"
@@ -112,7 +117,6 @@ mkdir -p "$BUILD_DIR" "$INSTALL_DIR" "$STAGE/bin"
 CONFIGURE_ARGS=(
     --prefix="$INSTALL_DIR"
     --with-ssl-dir="$OSSL_PREFIX"
-    --without-openssl-header-check
     --without-zlib
     --without-pam
     --without-selinux
@@ -120,7 +124,6 @@ CONFIGURE_ARGS=(
     --without-rpath
 )
 
-# Cross-compile host triplet (unset means native).
 HOST_ARG=()
 
 case "$TARGET_PLATFORM" in
@@ -130,13 +133,30 @@ linux-x86_64)
     ;;
 
 linux-aarch64)
-    : "${CROSS_PREFIX:=aarch64-unknown-linux-gnu-}"
-    HOST_ARG=(--host=aarch64-linux-gnu)
+    # Use = (not :=) so an explicit CROSS_PREFIX="" from the native arm
+    # runner is preserved; := would override empty with the default.
+    : "${CROSS_PREFIX=aarch64-unknown-linux-gnu-}"
+    if [ -n "$CROSS_PREFIX" ]; then
+        HOST_ARG=(--host=aarch64-linux-gnu)
+        export CC="${CROSS_PREFIX}gcc"
+        export AR="${CROSS_PREFIX}ar"
+        export RANLIB="${CROSS_PREFIX}ranlib"
+        export LD="${CROSS_PREFIX}ld"
+        # Pre-answer AC_TRY_RUN checks that can't run on the host.
+        export ac_cv_func_getaddrinfo=yes
+        export ac_cv_have_accrights_in_msghdr=no
+        export ac_cv_have_control_in_msghdr=yes
+        export ac_cv_func_poll=yes
+    fi
+    ;;
+
+linux-riscv64)
+    : "${CROSS_PREFIX=riscv64-unknown-linux-gnu-}"
+    HOST_ARG=(--host=riscv64-linux-gnu)
     export CC="${CROSS_PREFIX}gcc"
     export AR="${CROSS_PREFIX}ar"
     export RANLIB="${CROSS_PREFIX}ranlib"
     export LD="${CROSS_PREFIX}ld"
-    # openssh AC_TRY_RUN tests that must be pre-answered for cross-compile.
     export ac_cv_func_getaddrinfo=yes
     export ac_cv_have_accrights_in_msghdr=no
     export ac_cv_have_control_in_msghdr=yes
@@ -151,6 +171,32 @@ macos-x86_64)
     : # native clang on macos-15-intel
     ;;
 
+android-arm64-v8a|android-x86_64)
+    : "${ANDROID_NDK_HOME:?ANDROID_NDK_HOME not set — source the .#3rdparty-${TARGET_PLATFORM} shell}"
+    : "${ANDROID_API:=26}"
+    case "$TARGET_PLATFORM" in
+        android-arm64-v8a)
+            _ANDROID_TRIPLE="aarch64-linux-android"
+            _HOST_TRIPLE="aarch64-linux-android"
+            ;;
+        android-x86_64)
+            _ANDROID_TRIPLE="x86_64-linux-android"
+            _HOST_TRIPLE="x86_64-linux-android"
+            ;;
+    esac
+    _NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+    export CC="$_NDK_BIN/${_ANDROID_TRIPLE}${ANDROID_API}-clang"
+    export AR="$_NDK_BIN/llvm-ar"
+    export RANLIB="$_NDK_BIN/llvm-ranlib"
+    export LD="$_NDK_BIN/ld"
+    HOST_ARG=(--host="$_HOST_TRIPLE")
+    CONFIGURE_ARGS+=(--without-privsep-user --without-privsep-path)
+    export ac_cv_func_getaddrinfo=yes
+    export ac_cv_have_accrights_in_msghdr=no
+    export ac_cv_have_control_in_msghdr=yes
+    export ac_cv_func_poll=yes
+    ;;
+
 *)
     echo "unsupported TARGET_PLATFORM: $TARGET_PLATFORM" >&2
     exit 1
@@ -158,9 +204,9 @@ macos-x86_64)
 esac
 
 #-----------------------------------------------------------------------------
-# Configure + build ssh client only + install.
+# Configure + build ssh client only.
 #-----------------------------------------------------------------------------
-echo "==> configuring openssh ${VERSION} for ${TARGET_PLATFORM} (openssl-new ${OSSL_VERSION})"
+echo "==> configuring openssh ${VERSION} for ${TARGET_PLATFORM} (openssl ${OSSL_VERSION})"
 (
     cd "$BUILD_DIR"
     "$SRC_DIR/configure" "${HOST_ARG[@]}" "${CONFIGURE_ARGS[@]}"
@@ -173,10 +219,9 @@ echo "==> staging"
 cp "$BUILD_DIR/ssh" "$STAGE/bin/ssh"
 chmod 0755 "$STAGE/bin/ssh"
 
-# Sanity check: the binary should exist and be executable.
 [ -x "$STAGE/bin/ssh" ] || { echo "missing or non-executable $STAGE/bin/ssh" >&2; exit 1; }
 
-# Verify no shared libssl dependency (static link succeeded).
+# Sanity: no shared libssl/libcrypto dependency.
 if command -v ldd >/dev/null 2>&1; then
     if ldd "$STAGE/bin/ssh" 2>/dev/null | grep -q 'libssl\.so\|libcrypto\.so'; then
         echo "warning: ssh binary links against shared libssl/libcrypto" >&2
@@ -191,7 +236,7 @@ echo "==> packaging -> $TARBALL"
 tar -C "$STAGE" -czf "$TARBALL" .
 
 echo ""
-echo "openssh ${VERSION} (${TARGET_PLATFORM}, openssl-new ${OSSL_VERSION}) ready:"
+echo "openssh ${VERSION} (${TARGET_PLATFORM}, openssl ${OSSL_VERSION}) ready:"
 ls -lh "$TARBALL"
 echo "contents:"
 tar -tzf "$TARBALL"
