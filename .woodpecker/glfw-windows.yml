@@ -10,18 +10,6 @@ when:
   - event: tag
     ref: refs/tags/lib-glfw-*
 
-# plugin-git writes safe.directory into the user's global gitconfig on every
-# clone. On the local-backend windows agent all jobs share C:\Users\misi, so
-# parallel clones race on .gitconfig.lock. Send that write to NUL.
-clone:
-  git:
-    image: woodpeckerci/plugin-git
-    environment:
-      # NUL doesn't work — git wants to create <path>.lock and NUL.lock
-      # is invalid. A path inside the workspace gives each parallel job
-      # its own lockable file.
-      GIT_CONFIG_GLOBAL: .gitconfig.cisafe
-
 steps:
   build:
     image: cmd
