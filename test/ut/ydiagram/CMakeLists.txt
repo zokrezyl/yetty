@@ -4,7 +4,8 @@ enable_testing()
 
 set(YDIAGRAM_TEST_SHIM_SOURCES
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_YPLATFORM_THREAD_SOURCES}
+    ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
 )
 
 add_executable(ydiagram-smoke-test

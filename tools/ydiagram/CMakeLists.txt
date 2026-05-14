@@ -4,7 +4,8 @@
 add_executable(ydiagram-cli
     main.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_YPLATFORM_THREAD_SOURCES}
+    ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
+    ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
 )
 
 set_target_properties(ydiagram-cli PROPERTIES OUTPUT_NAME ydiagram)
