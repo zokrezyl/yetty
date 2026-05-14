@@ -53,7 +53,13 @@ struct yetty_yui {
      * an item opens the matching dialog. Dialog widget pointers are
      * needed so item callbacks can address-by-name. */
     struct yetty_ygui_widget *v_menu;
-    struct yetty_ygui_widget *dialogs[4]; /* indexed by yetty_yui_view_kind */
+    struct yetty_ygui_widget *dialogs[YETTY_YUI_VIEW_KIND_COUNT]; /* indexed by view_kind */
+
+    /* Per-dialog textinput handles, indexed by [view_kind][field_idx]
+     * matching s_views[kind].fields[]. yui_dialog_connect / the connect
+     * subscribers read these to recover what the user typed. NULL for
+     * unused slots (kinds with fewer fields, or kinds with no dialog). */
+    struct yetty_ygui_widget *dialog_inputs[YETTY_YUI_VIEW_KIND_COUNT][4];
 
     /* Connect dispatch — invoked from each dialog's "Connect" button. */
     yetty_yui_connect_cb connect_cb;
@@ -84,14 +90,15 @@ struct view_meta {
     } fields[4];
 };
 
-static const struct view_meta s_views[4] = {
+static const struct view_meta s_views[YETTY_YUI_VIEW_KIND_COUNT] = {
     [YETTY_YUI_VIEW_SHELL] = {
+        /* SHELL has no dialog — the v-menu item spawns the default shell
+         * directly. Keep num_fields=0 so the dialog-builder loop skips it
+         * entirely. */
         .title = "Open local shell",
         .id_prefix = "yui_dlg_shell",
-        .num_fields = 1,
-        .fields = {
-            {"Command",  "/cmd",  "/bin/sh", ""},
-        },
+        .num_fields = 0,
+        .fields = {{0}},
     },
     [YETTY_YUI_VIEW_SSH] = {
         .title = "Open SSH",
@@ -121,6 +128,18 @@ static const struct view_meta s_views[4] = {
             {"Port", "/port", "5900", "5900"},
         },
     },
+    [YETTY_YUI_VIEW_EXEC] = {
+        /* Single-field dialog: the user types a command line (executable
+         * path + optional args). yetty.c stuffs that into the
+         * `shell/command` config key before spawning a SHELL tab, so the
+         * PTY's get_shell_argv tokenizes it instead of running $SHELL. */
+        .title = "Run a command",
+        .id_prefix = "yui_dlg_exec",
+        .num_fields = 1,
+        .fields = {
+            {"Command", "/cmd", "/usr/bin/htop", ""},
+        },
+    },
 };
 
 /*===========================================================================
@@ -128,6 +147,7 @@ static const struct view_meta s_views[4] = {
  *===========================================================================*/
 
 static void yui_menu_open_dialog(struct yetty_ygui_widget *item, void *userdata);
+static void yui_menu_spawn_shell(struct yetty_ygui_widget *item, void *userdata);
 static void yui_dialog_connect(struct yetty_ygui_widget *button, void *userdata);
 static void yui_dialog_cancel(struct yetty_ygui_widget *button, void *userdata);
 
@@ -138,7 +158,7 @@ struct yui_cb_ctx {
     enum yetty_yui_view_kind kind;
 };
 
-static struct yui_cb_ctx s_cb_ctx[4];
+static struct yui_cb_ctx s_cb_ctx[YETTY_YUI_VIEW_KIND_COUNT];
 
 /*===========================================================================
  * Memory-pty wake → event loop bridge
@@ -281,9 +301,16 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             yetty_ygui_widget_popup_menu_set_modal(yui->v_menu, 0);
         }
 
-        for (int k = 0; k < 4; k++) {
+        for (int k = 0; k < YETTY_YUI_VIEW_KIND_COUNT; k++) {
             s_cb_ctx[k].yui = yui;
             s_cb_ctx[k].kind = (enum yetty_yui_view_kind)k;
+
+            /* SHELL has no dialog — its menu item spawns the default shell
+             * directly. Skip the widget allocation entirely. */
+            if (s_views[k].num_fields == 0) {
+                yui->dialogs[k] = NULL;
+                continue;
+            }
 
             /* Each dialog is a top-level window — created with placeholder
              * geometry; the body widget below collects the field rows. */
@@ -302,7 +329,12 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             if (!body) {
                 continue;
             }
-            yetty_ygui_widget_apply_css(body, "display:flex;flex-direction:column;gap:6;padding:8 10 10 10;");
+            /* gap:14 between rows gives ~30px line-height with a 16px
+             * default label + a 24px textinput. Earlier gap:6 left labels
+             * visually colliding with the textinput on the row below
+             * (rows have no implicit min-height — they shrink to content,
+             * so we need the gap to carry all the vertical air). */
+            yetty_ygui_widget_apply_css(body, "display:flex;flex-direction:column;gap:14;padding:14 14 14 14;");
 
             /* One labeled textinput per field. Labels use ygui labels; the
              * input itself carries the placeholder + default. */
@@ -315,7 +347,12 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
                 struct yetty_ygui_widget *row = yetty_ygui_engine_hbox(yui->engine, row_id,
                                                                        0, 0, 0, 0);
                 if (!row) continue;
-                yetty_ygui_widget_apply_css(row, "display:flex;flex-direction:row;gap:8;align-items:center;");
+                /* Explicit min-height: the row has no inherent dimension —
+                 * it sizes from its children. Pin it at 28 (the textinput
+                 * row height) so a single-line label can't shrink the row
+                 * below the input's height and bleed into the gap. */
+                yetty_ygui_widget_apply_css(row,
+                    "display:flex;flex-direction:row;gap:10;align-items:center;min-height:28;");
                 yetty_ygui_widget_add_child(body, row);
 
                 struct yetty_ygui_widget *lbl = yetty_ygui_engine_label(yui->engine, lbl_id, 0, 0,
@@ -333,6 +370,13 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
                         yetty_ygui_widget_textinput_set_text(in, s_views[k].fields[f].default_text);
                     }
                     yetty_ygui_widget_add_child(row, in);
+                    /* Stash per-kind textinput so the connect subscriber
+                     * can read what the user typed. dialog_inputs[][] is
+                     * the single source of truth — yetty_yui_get_exec_command
+                     * and the SSH/Telnet field getters all read through it. */
+                    if (f < 4) {
+                        yui->dialog_inputs[k][f] = in;
+                    }
                 }
             }
 
@@ -361,12 +405,35 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             }
         }
 
-        /* Populate the menu rows. Each row opens its kind's dialog. */
+        /* Populate the menu rows. SHELL spawns directly; the rest open
+         * their kind's dialog. Order chosen to match how often each is
+         * used: default shell first, exec right after, then remote
+         * transports grouped at the bottom. */
         if (yui->v_menu) {
-            static const char *const LABELS[4] = {"Shell", "SSH", "Telnet", "yVNC"};
-            for (int k = 0; k < 4; k++) {
-                yetty_ygui_widget_popup_menu_add_item(yui->v_menu, LABELS[k],
-                                                       yui_menu_open_dialog, &s_cb_ctx[k]);
+            static const char *const LABELS[YETTY_YUI_VIEW_KIND_COUNT] = {
+                [YETTY_YUI_VIEW_SHELL]  = "Shell",
+                [YETTY_YUI_VIEW_EXEC]   = "Exec…",
+                [YETTY_YUI_VIEW_SSH]    = "SSH…",
+                [YETTY_YUI_VIEW_TELNET] = "Telnet…",
+                [YETTY_YUI_VIEW_YVNC]   = "yVNC…",
+            };
+            static const int MENU_ORDER[YETTY_YUI_VIEW_KIND_COUNT] = {
+                YETTY_YUI_VIEW_SHELL,
+                YETTY_YUI_VIEW_EXEC,
+                YETTY_YUI_VIEW_SSH,
+                YETTY_YUI_VIEW_TELNET,
+                YETTY_YUI_VIEW_YVNC,
+            };
+            for (int i = 0; i < YETTY_YUI_VIEW_KIND_COUNT; i++) {
+                int k = MENU_ORDER[i];
+                /* SHELL is the only no-dialog item — it dispatches via
+                 * yui_menu_spawn_shell so the connect_cb fires immediately
+                 * with VIEW_SHELL. The rest open their config dialog. */
+                ygui_click_callback_t cb = (k == YETTY_YUI_VIEW_SHELL)
+                                               ? yui_menu_spawn_shell
+                                               : yui_menu_open_dialog;
+                yetty_ygui_widget_popup_menu_add_item(yui->v_menu, LABELS[k], cb,
+                                                       &s_cb_ctx[k]);
             }
         }
     } else {
@@ -468,7 +535,8 @@ static void yui_menu_open_dialog(struct yetty_ygui_widget *item, void *userdata)
 {
     (void)item;
     struct yui_cb_ctx *ctx = userdata;
-    if (!ctx || !ctx->yui || (int)ctx->kind < 0 || (int)ctx->kind >= 4) {
+    if (!ctx || !ctx->yui || (int)ctx->kind < 0 ||
+        (int)ctx->kind >= YETTY_YUI_VIEW_KIND_COUNT) {
         return;
     }
     struct yetty_ygui_widget *dlg = ctx->yui->dialogs[(int)ctx->kind];
@@ -481,11 +549,32 @@ static void yui_menu_open_dialog(struct yetty_ygui_widget *item, void *userdata)
     }
 }
 
+/* Menu handler for SHELL — bypass the dialog entirely. There's nothing
+ * to configure for "spawn the default shell", so the click fires the
+ * connect callback immediately. yetty.c's connect handler is expected
+ * to clear/ignore `shell/command` for the SHELL kind so the spawn runs
+ * the user's $SHELL (or shell/default fallback). */
+static void yui_menu_spawn_shell(struct yetty_ygui_widget *item, void *userdata)
+{
+    (void)item;
+    struct yui_cb_ctx *ctx = userdata;
+    if (!ctx || !ctx->yui) {
+        return;
+    }
+    if (ctx->yui->engine) {
+        yetty_ygui_engine_mark_dirty(ctx->yui->engine);
+    }
+    if (ctx->yui->connect_cb) {
+        ctx->yui->connect_cb(ctx->yui->connect_userdata, YETTY_YUI_VIEW_SHELL);
+    }
+}
+
 static void yui_dialog_cancel(struct yetty_ygui_widget *button, void *userdata)
 {
     (void)button;
     struct yui_cb_ctx *ctx = userdata;
-    if (!ctx || !ctx->yui) {
+    if (!ctx || !ctx->yui || (int)ctx->kind < 0 ||
+        (int)ctx->kind >= YETTY_YUI_VIEW_KIND_COUNT) {
         return;
     }
     struct yetty_ygui_widget *dlg = ctx->yui->dialogs[(int)ctx->kind];
@@ -501,7 +590,8 @@ static void yui_dialog_connect(struct yetty_ygui_widget *button, void *userdata)
 {
     (void)button;
     struct yui_cb_ctx *ctx = userdata;
-    if (!ctx || !ctx->yui) {
+    if (!ctx || !ctx->yui || (int)ctx->kind < 0 ||
+        (int)ctx->kind >= YETTY_YUI_VIEW_KIND_COUNT) {
         return;
     }
     /* Hide the dialog first so the next frame already shows it gone,
@@ -532,6 +622,110 @@ void yetty_yui_show_view_menu(struct yetty_yui *yui, float anchor_x, float ancho
     yetty_ygui_widget_popup_menu_open_at(yui->v_menu, anchor_x, anchor_y);
     if (yui->engine) {
         yetty_ygui_engine_mark_dirty(yui->engine);
+    }
+}
+
+const char *yetty_yui_get_field_text(const struct yetty_yui *yui,
+                                     enum yetty_yui_view_kind kind, int field_idx)
+{
+    if (!yui || (int)kind < 0 || (int)kind >= YETTY_YUI_VIEW_KIND_COUNT) {
+        return NULL;
+    }
+    if (field_idx < 0 || field_idx >= 4) {
+        return NULL;
+    }
+    struct yetty_ygui_widget *in = yui->dialog_inputs[(int)kind][field_idx];
+    if (!in) {
+        return NULL;
+    }
+    return yetty_ygui_widget_textinput_get_text(in);
+}
+
+const char *yetty_yui_get_exec_command(const struct yetty_yui *yui)
+{
+    return yetty_yui_get_field_text(yui, YETTY_YUI_VIEW_EXEC, 0);
+}
+
+int yetty_yui_has_active_chrome(const struct yetty_yui *yui)
+{
+    if (!yui) {
+        return 0;
+    }
+    if (yui->v_menu && yetty_ygui_widget_popup_menu_is_open(yui->v_menu)) {
+        return 1;
+    }
+    for (int k = 0; k < YETTY_YUI_VIEW_KIND_COUNT; k++) {
+        if (yui->dialogs[k] && yetty_ygui_widget_is_visible(yui->dialogs[k])) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
+                                                  const struct yetty_yui_event *event)
+{
+    if (!yui || !event || !yui->engine) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+
+    /* yui only owns the pointer while chrome is up. Without an open menu /
+     * visible dialog there's nothing for the engine to hit-test — fall
+     * through so the workspace below gets the event. */
+    if (!yetty_yui_has_active_chrome(yui)) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+
+    switch (event->type) {
+    case YETTY_YCORE_MOUSE_DOWN:
+        yetty_ygui_engine_mouse_down(yui->engine, event->mouse.x, event->mouse.y,
+                                     event->mouse.button);
+        return YETTY_OK(yetty_ycore_int, 1);
+    case YETTY_YCORE_MOUSE_UP:
+        yetty_ygui_engine_mouse_up(yui->engine, event->mouse.x, event->mouse.y,
+                                   event->mouse.button);
+        return YETTY_OK(yetty_ycore_int, 1);
+    case YETTY_YCORE_MOUSE_MOVE:
+    case YETTY_YCORE_MOUSE_DRAG:
+        yetty_ygui_engine_mouse_move(yui->engine, event->mouse.x, event->mouse.y);
+        return YETTY_OK(yetty_ycore_int, 1);
+    case YETTY_YCORE_KEY_DOWN:
+        yetty_ygui_engine_key_down(yui->engine, event->key.key, event->key.mods);
+        return YETTY_OK(yetty_ycore_int, 1);
+    case YETTY_YCORE_KEY_UP:
+        yetty_ygui_engine_key_up(yui->engine, event->key.key, event->key.mods);
+        return YETTY_OK(yetty_ycore_int, 1);
+    case YETTY_YCORE_CHAR: {
+        /* CHAR carries a unicode codepoint; the engine's text_input wants
+         * a NUL-terminated UTF-8 chunk. Encode in place — codepoints up to
+         * U+10FFFF fit in 4 bytes + NUL. */
+        uint32_t cp = event->chr.codepoint;
+        char utf8[5];
+        size_t n = 0;
+        if (cp < 0x80) {
+            utf8[n++] = (char)cp;
+        } else if (cp < 0x800) {
+            utf8[n++] = (char)(0xC0 | (cp >> 6));
+            utf8[n++] = (char)(0x80 | (cp & 0x3F));
+        } else if (cp < 0x10000) {
+            utf8[n++] = (char)(0xE0 | (cp >> 12));
+            utf8[n++] = (char)(0x80 | ((cp >> 6) & 0x3F));
+            utf8[n++] = (char)(0x80 | (cp & 0x3F));
+        } else if (cp < 0x110000) {
+            utf8[n++] = (char)(0xF0 | (cp >> 18));
+            utf8[n++] = (char)(0x80 | ((cp >> 12) & 0x3F));
+            utf8[n++] = (char)(0x80 | ((cp >> 6) & 0x3F));
+            utf8[n++] = (char)(0x80 | (cp & 0x3F));
+        }
+        utf8[n] = '\0';
+        if (n > 0) {
+            yetty_ygui_engine_text_input(yui->engine, utf8);
+        }
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+    default:
+        /* Other event types (resize, focus, etc.) pass through. */
+        return YETTY_OK(yetty_ycore_int, 0);
     }
 }
 

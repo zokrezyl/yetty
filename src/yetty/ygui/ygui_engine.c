@@ -915,19 +915,31 @@ void yetty_ygui_engine_text_input(struct yetty_ygui_engine *engine, const char *
 
     /* Only textinput handles text input */
     if (engine->focused->type == YETTY_YGUI_WIDGET_TEXTINPUT) {
-        /* Append text to input */
+        /* Insert the new chunk AT the current cursor position rather
+         * than at the end — without this, the emacs-style cursor
+         * moves (Ctrl+A/B/E/F, arrows) only affect deletes; typing
+         * always pushed characters to the right edge of the buffer. */
         char *old_text = engine->focused->data.textinput.text;
         size_t old_len = old_text ? strlen(old_text) : 0;
         size_t add_len = strlen(text);
+        int cursor = engine->focused->data.textinput.cursor_pos;
+        if (cursor < 0) cursor = 0;
+        if ((size_t)cursor > old_len) cursor = (int)old_len;
+
         char *new_text = (char *)malloc(old_len + add_len + 1);
         if (new_text) {
-            if (old_text) {
-                memcpy(new_text, old_text, old_len);
+            if (cursor > 0 && old_text) {
+                memcpy(new_text, old_text, (size_t)cursor);
             }
-            memcpy(new_text + old_len, text, add_len + 1);
+            memcpy(new_text + cursor, text, add_len);
+            if ((size_t)cursor < old_len && old_text) {
+                memcpy(new_text + cursor + add_len, old_text + cursor,
+                       old_len - (size_t)cursor);
+            }
+            new_text[old_len + add_len] = '\0';
             free(old_text);
             engine->focused->data.textinput.text = new_text;
-            engine->focused->data.textinput.cursor_pos = (int)(old_len + add_len);
+            engine->focused->data.textinput.cursor_pos = cursor + (int)add_len;
             engine->dirty = 1;
 
             /* Call widget's text callback */
