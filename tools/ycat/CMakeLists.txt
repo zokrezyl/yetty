@@ -9,8 +9,6 @@
 add_executable(ycat
     main.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_ROOT}/src/yetty/yplatform/getopt.c
-    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
 target_include_directories(ycat PRIVATE
@@ -24,6 +22,7 @@ find_package(Threads REQUIRED)
 target_link_libraries(ycat PRIVATE
     yetty_ycat
     Threads::Threads
+    yetty_yplatform_core
 )
 
 # Re-link brotli at the end of the link line. libcurl.a needs Brotli*

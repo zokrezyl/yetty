@@ -1,117 +1,86 @@
-/* Linux platform paths - XDG directories */
+/*
+ * Linux platform paths — XDG directories.
+ *
+ * Implements the platform-paths contract from
+ * include/yetty/yplatform/paths.h. Resolution order per field is
+ * XDG_*_HOME env var → $HOME/.{cache,config,...}/yetty → /tmp/yetty
+ * fallback (the last branch covers minimal-env service contexts where
+ * neither XDG nor HOME is set).
+ *
+ * assets_dir is the directory holding the running executable, plus
+ * "/assets". $YETTY_ASSETS_DIR overrides for dev-tree builds where
+ * the exec lives in build-*-ytrace-release/ but the assets stay in
+ * the source tree.
+ */
 
+#include <libgen.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <libgen.h>
-#include <limits.h>
 
 #include <yetty/yplatform/paths.h>
 
-static char cache_dir_buf[512];
-static char data_dir_buf[512];
-static char runtime_dir_buf[512];
-static char config_dir_buf[512];
-static char assets_dir_buf[PATH_MAX];
-
-// TODO: unify the platform-paths.c for all platform into one
-const char *yetty_yplatform_get_cache_dir(void)
+static void fill_xdg(char *dst, size_t dst_sz,
+                     const char *xdg_var, const char *home_fallback)
 {
-    const char *xdg = getenv("XDG_CACHE_HOME");
-    if (xdg) {
-        snprintf(cache_dir_buf, sizeof(cache_dir_buf), "%s/yetty", xdg);
-        return cache_dir_buf;
+    const char *xdg = getenv(xdg_var);
+    if (xdg && *xdg) {
+        snprintf(dst, dst_sz, "%s/yetty", xdg);
+        return;
     }
-
     const char *home = getenv("HOME");
-    if (home) {
-        snprintf(cache_dir_buf, sizeof(cache_dir_buf), "%s/.cache/yetty", home);
-        return cache_dir_buf;
+    if (home && *home) {
+        snprintf(dst, dst_sz, "%s/%s/yetty", home, home_fallback);
+        return;
     }
-
-    return "/tmp/yetty";
+    snprintf(dst, dst_sz, "/tmp/yetty");
 }
 
-const char *yetty_yplatform_get_data_dir(void)
+struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths(void)
 {
-    const char *xdg = getenv("XDG_DATA_HOME");
-    if (xdg) {
-        snprintf(data_dir_buf, sizeof(data_dir_buf), "%s/yetty", xdg);
-        return data_dir_buf;
+    struct yetty_yplatform_paths *p = calloc(1, sizeof(*p));
+    if (!p) {
+        return YETTY_ERR(yetty_yplatform_paths_ptr,
+                         "OOM allocating yetty_yplatform_paths");
     }
 
-    const char *home = getenv("HOME");
-    if (home) {
-        snprintf(data_dir_buf, sizeof(data_dir_buf), "%s/.local/share/yetty", home);
-        return data_dir_buf;
+    fill_xdg(p->cache_dir_buf,  sizeof(p->cache_dir_buf),  "XDG_CACHE_HOME",  ".cache");
+    fill_xdg(p->data_dir_buf,   sizeof(p->data_dir_buf),   "XDG_DATA_HOME",   ".local/share");
+    fill_xdg(p->config_dir_buf, sizeof(p->config_dir_buf), "XDG_CONFIG_HOME", ".config");
+
+    /* runtime_dir has a uid-suffixed fallback (per XDG spec). */
+    const char *xdg_runtime = getenv("XDG_RUNTIME_DIR");
+    if (xdg_runtime && *xdg_runtime) {
+        snprintf(p->runtime_dir_buf, sizeof(p->runtime_dir_buf), "%s/yetty", xdg_runtime);
+    } else {
+        snprintf(p->runtime_dir_buf, sizeof(p->runtime_dir_buf),
+                 "/tmp/yetty-%d", (int)getuid());
     }
 
-    return "/tmp/yetty";
-}
-
-const char *yetty_yplatform_get_runtime_dir(void)
-{
-    const char *xdg = getenv("XDG_RUNTIME_DIR");
-    if (xdg) {
-        snprintf(runtime_dir_buf, sizeof(runtime_dir_buf), "%s/yetty", xdg);
-        return runtime_dir_buf;
-    }
-
-    snprintf(runtime_dir_buf, sizeof(runtime_dir_buf), "/tmp/yetty-%d", getuid());
-    return runtime_dir_buf;
-}
-
-const char *yetty_yplatform_get_config_dir(void)
-{
-    const char *xdg = getenv("XDG_CONFIG_HOME");
-    if (xdg) {
-        snprintf(config_dir_buf, sizeof(config_dir_buf), "%s/yetty", xdg);
-        return config_dir_buf;
-    }
-
-    const char *home = getenv("HOME");
-    if (home) {
-        snprintf(config_dir_buf, sizeof(config_dir_buf), "%s/.config/yetty", home);
-        return config_dir_buf;
-    }
-
-    return "/tmp/yetty";
-}
-
-const char *yetty_yplatform_get_assets_dir(void)
-{
-    /* First check YETTY_ASSETS_DIR environment variable */
+    /* assets_dir = $YETTY_ASSETS_DIR || dirname(/proc/self/exe)/assets ||
+     * ./assets. */
     const char *env = getenv("YETTY_ASSETS_DIR");
-    if (env) {
-        snprintf(assets_dir_buf, sizeof(assets_dir_buf), "%s", env);
-        return assets_dir_buf;
+    if (env && *env) {
+        snprintf(p->assets_dir_buf, sizeof(p->assets_dir_buf), "%s", env);
+    } else {
+        char exe_path[PATH_MAX];
+        ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+        if (len > 0) {
+            exe_path[len] = '\0';
+            char *dir = dirname(exe_path);
+            snprintf(p->assets_dir_buf, sizeof(p->assets_dir_buf), "%s/assets", dir);
+        } else {
+            snprintf(p->assets_dir_buf, sizeof(p->assets_dir_buf), "./assets");
+        }
     }
 
-    /* Get directory containing the executable */
-    char exe_path[PATH_MAX];
-    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
-    if (len > 0) {
-        exe_path[len] = '\0';
-        char *dir = dirname(exe_path);
-        snprintf(assets_dir_buf, sizeof(assets_dir_buf), "%s/assets", dir);
-        return assets_dir_buf;
-    }
-
-    /* Fallback to current directory */
-    return "./assets";
-}
-
-struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths()
-{
-
-    struct yetty_yplatform_paths_ptr_result res;
-    return res;
+    return YETTY_OK(yetty_yplatform_paths_ptr, p);
 }
 
 struct yetty_ycore_void_result yetty_yplatform_paths_destroy(struct yetty_yplatform_paths *paths)
 {
-
-    struct yetty_ycore_void_result res;
-    return res;
+    free(paths);
+    return YETTY_OK_VOID();
 }

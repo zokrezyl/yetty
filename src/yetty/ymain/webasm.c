@@ -447,7 +447,7 @@ int main(int argc, char **argv)
      * side. Mirrors `YTRACE_DEFAULT_ON=yes` on desktop. */
     //setenv("YTRACE_DEFAULT_ON", "yes", 1);
 
-    struct yetty_yplatform_paths paths;
+    struct yetty_yconfig_paths paths;
     struct yetty_yconfig_result config_result;
     struct yetty_yconfig_config *config;
     struct yetty_yplatform_input_pipe_result pipe_result;

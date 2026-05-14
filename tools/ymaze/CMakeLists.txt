@@ -4,7 +4,6 @@
 add_executable(ymaze
     main.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
 target_include_directories(ymaze PRIVATE
@@ -17,6 +16,7 @@ target_link_libraries(ymaze PRIVATE
     yetty_ymaze
     yetty_yface
     Threads::Threads
+    yetty_yplatform_core
 )
 
 if(NOT MSVC)

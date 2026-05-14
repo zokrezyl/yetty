@@ -16,5 +16,11 @@ set(YETTY_ENABLE_TOOL_YBROWSER    OFF CACHE BOOL "" FORCE)
 # ycat: yetty_ycat library is skipped on tvOS (desktop-only POSIX bits).
 set(YETTY_ENABLE_TOOL_YCAT OFF CACHE BOOL "" FORCE)
 
+# ygreeter / ytop drive their own libuv event loops via ygui (full). On
+# tvOS the host process is the UIKit-owned yetty app — standalone tools
+# don't make sense here.
+set(YETTY_ENABLE_TOOL_YGREETER OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_TOOL_YTOP     OFF CACHE BOOL "" FORCE)
+
 # QA tools require host LLVM/Clang libs and hardcode Linux paths.
 set(YETTY_ENABLE_TOOL_QA OFF CACHE BOOL "" FORCE)

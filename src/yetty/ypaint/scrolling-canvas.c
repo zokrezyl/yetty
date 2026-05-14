@@ -39,9 +39,7 @@
 #endif
 #include <yetty/ytrace/ytrace.h>
 
-/* Provided per-platform (yplatform/{linux,macos,windows,android,ios,webasm}/
- * platform-paths.{c,m}). Returns a writable directory unique to the user. */
-extern const char *yetty_yplatform_get_cache_dir(void);
+#include <yetty/yplatform/paths.h>
 
 /* Glyph primitive type (not in ysdf types.gen.h since not SDF) */
 #define YETTY_YSDF_GLYPH 200

@@ -1,9 +1,23 @@
-# ygui — pure-C widget library with libuv event loop
-# Output: libygui.a
+# ygui — pure-C widget library.
+#
+# Split into two libraries following the established XXX-core pattern:
+#
+#   ygui_core
+#     Widget tree, layout, rendering, OSC emit, theme — all libuv-free.
+#     Linkable into any target including emscripten / cross-builds where
+#     libuv isn't a fit.
+#
+#   ygui
+#     ygui_core + the libuv-driven event-loop integration
+#     (ygui_engine_uv.c — yetty_ygui_engine_attach / _run / _poll /
+#     _get_loop). Used by standalone interactive tools (ygreeter, ytop).
+#     Builds only when libuv is available (NOT EMSCRIPTEN).
+#
+# Public header (ygui.h) stays unified; the libuv-typed forward decl is
+# guarded so consumers don't need <uv.h>.
 
-# Core sources — both static and shared variants compile these. No YAML
-# parser dep here: keeps libygui.so light enough for FFI consumers.
-set(YGUI_SOURCES
+# ygui_core sources: libuv-free.
+set(YGUI_CORE_SOURCES
     ygui_engine.c
     ygui_grid.c
     ygui_widgets.c
@@ -18,22 +32,25 @@ set(YGUI_SOURCES
     ygui_css.c
 )
 
-# Static-only sources — the YAML convenience layer for the RICH widget.
-# Brought in only by libygui.a so the shared variant can avoid linking
-# yetty_ypaint_yaml (which transitively requires fontconfig + libyaml,
-# and libfontconfig.a on Linux isn't built with -fPIC).
+# Static-only YAML convenience layer for the RICH widget — same gating
+# as before: brings in yetty_ypaint_yaml (fontconfig + libyaml), which
+# the shared FFI variant deliberately omits.
 set(YGUI_STATIC_ONLY_SOURCES
     ygui_rich_yaml.c
 )
 
-add_library(ygui STATIC ${YGUI_SOURCES} ${YGUI_STATIC_ONLY_SOURCES})
+# ---------------------------------------------------------------------
+# ygui_core — libuv-free widget runtime.
+# ---------------------------------------------------------------------
 
-target_include_directories(ygui PUBLIC
+add_library(ygui_core STATIC ${YGUI_CORE_SOURCES} ${YGUI_STATIC_ONLY_SOURCES})
+
+target_include_directories(ygui_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${YETTY_ROOT}/include
 )
 
-target_link_libraries(ygui PUBLIC
+target_link_libraries(ygui_core PUBLIC
     yetty_ypaint_core
     yetty_ysdf
     yetty_ycore
@@ -42,29 +59,50 @@ target_link_libraries(ygui PUBLIC
     yetty_ypaint_yaml # rich widget's create_from_yaml -> ypaint_yaml_parse
 )
 
-if(NOT EMSCRIPTEN)
-    target_link_libraries(ygui PUBLIC uv_a)
-endif()
-
-set_target_properties(ygui PROPERTIES
+set_target_properties(ygui_core PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED ON
 )
 
-install(FILES ygui.h DESTINATION include)
-install(TARGETS ygui ARCHIVE DESTINATION lib)
+# ---------------------------------------------------------------------
+# ygui — libuv-coupled full runtime. Only built when libuv is available
+# (NOT EMSCRIPTEN). Standalone tools that drive their own event loop
+# (ygreeter, ytop) link this; webasm consumers link ygui_core directly.
+# ---------------------------------------------------------------------
 
-# Shared variant for FFI consumers (Python ctypes / cffi, Rust libloading,
-# etc.). Built only when YETTY_BUILD_YGUI_SHARED=ON. The yetty binary itself
-# never links against this — it always uses the static `ygui` target — so
-# turning the option off has zero effect on a normal yetty build.
+if(NOT EMSCRIPTEN)
+    add_library(ygui STATIC ygui_engine_uv.c)
+
+    target_include_directories(ygui PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${YETTY_ROOT}/include
+    )
+
+    target_link_libraries(ygui PUBLIC
+        ygui_core
+        uv_a
+    )
+
+    set_target_properties(ygui PROPERTIES
+        C_STANDARD 11
+        C_STANDARD_REQUIRED ON
+    )
+
+    install(TARGETS ygui ARCHIVE DESTINATION lib)
+endif()
+
+install(FILES ygui.h DESTINATION include)
+install(TARGETS ygui_core ARCHIVE DESTINATION lib)
+
+# ---------------------------------------------------------------------
+# Shared variant for FFI consumers. Standalone .so/.dll built from the
+# same core sources + ygui_engine_uv.c (FFI consumers want the full
+# runtime). Not produced for emscripten.
+# ---------------------------------------------------------------------
+
 option(YETTY_BUILD_YGUI_SHARED "Build a libygui.so for FFI consumers" ON)
 
 if(YETTY_BUILD_YGUI_SHARED AND NOT EMSCRIPTEN)
-    # term.c / thread.c are platform-specific singletons compiled directly
-    # into each parent target rather than living in a standalone CMake
-    # library. Pick the right pair so the .so/.dll is self-contained for
-    # FFI consumers.
     if(WIN32)
         set(_YGUI_PLATFORM_SOURCES
             ${YETTY_ROOT}/src/yetty/yplatform/term/windows.c
@@ -77,12 +115,9 @@ if(YETTY_BUILD_YGUI_SHARED AND NOT EMSCRIPTEN)
         )
     endif()
 
-    # Shared variant: no YAML-using sources, no yetty_ypaint_yaml dep.
-    # FFI consumers that want YAML can call yetty_ypaint_yaml_parse() in
-    # their own toolchain and hand the resulting buffer to
-    # yetty_ygui_widget_rich_set_buffer().
     add_library(ygui_shared SHARED
-        ${YGUI_SOURCES}
+        ${YGUI_CORE_SOURCES}
+        ygui_engine_uv.c
         ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
         ${_YGUI_PLATFORM_SOURCES}
     )
@@ -105,17 +140,10 @@ if(YETTY_BUILD_YGUI_SHARED AND NOT EMSCRIPTEN)
         C_STANDARD 11
         C_STANDARD_REQUIRED ON
         OUTPUT_NAME ygui
-        # Force PIC on the static deps; -fPIC propagates from the SHARED
-        # consumer onto the static archive sources via CMake's POSITION_
-        # INDEPENDENT_CODE handling.
         POSITION_INDEPENDENT_CODE ON
     )
 
     if(WIN32)
-        # MSVC names a SHARED library's import library <OUTPUT_NAME>.lib,
-        # which collides with the static `ygui` target's archive ygui.lib.
-        # Give the DLL's import lib a distinct name; the DLL itself stays
-        # ygui.dll for FFI consumers.
         set_target_properties(ygui_shared PROPERTIES
             ARCHIVE_OUTPUT_NAME ygui_import
         )

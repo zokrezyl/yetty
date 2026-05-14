@@ -115,7 +115,7 @@ int main(int argc, char **argv)
     yetty_yplatform_mkdir_p(config_dir);
 
     //TODO: adapt path reading directly to yetty_yplatform_paths!
-    struct yetty_yplatform_paths paths = {.shaders_dir = shaders_dir,
+    struct yetty_yconfig_paths paths = {.shaders_dir = shaders_dir,
                                           .fonts_dir = fonts_dir,
                                           .runtime_dir = runtime_dir,
                                           .bin_dir = NULL,

@@ -13,7 +13,7 @@ set -e
 
 BUILD_DIR="${1:-build-webasm-ytrace-release}"
 PORT="${2:-8199}"
-TEST_MODE="${3:-full}"  # "full", "telnet"
+TEST_MODE="${3:-full}"  # "full"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 YETTY_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -22,19 +22,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# Special case: "telnet" as first arg means telnet mode (no build dir needed)
-if [ "$BUILD_DIR" = "telnet" ]; then
-    TEST_MODE="telnet"
-    TELNET_WS_URL="${2:-ws://localhost:8765}"
-    REMOTE_MODE=1
-    BASE_URL="http://localhost:8080"
-    echo "=============================================="
-    echo "Headless Chrome Test - TELNET MODE"
-    echo "Server: $BASE_URL"
-    echo "WebSocket: $TELNET_WS_URL"
-    echo "=============================================="
 # Check if BUILD_DIR is a URL (remote mode)
-elif [[ "$BUILD_DIR" == http://* ]] || [[ "$BUILD_DIR" == https://* ]]; then
+if [[ "$BUILD_DIR" == http://* ]] || [[ "$BUILD_DIR" == https://* ]]; then
     REMOTE_MODE=1
     REMOTE_URL="$BUILD_DIR"
     echo "=============================================="
@@ -156,31 +145,12 @@ else
     echo ""
 fi
 
-# Determine test URL
-if [ "$TEST_MODE" = "telnet" ]; then
-    # Test telnet mode via WebSocket proxy
-    # Usage: ./test-chrome-headless.sh telnet [WS_URL]
-    # Requires: telnetd running, websocket proxy running
-    TELNET_WS_URL="${2:-ws://localhost:8765}"
-    # For telnet mode, we use a fixed server at 8080 (user must start it)
-    BASE_URL="http://localhost:8080"
-    TEST_URL="${BASE_URL}/?mode=telnet&wsurl=${TELNET_WS_URL}"
-    echo "Testing telnet mode at: $TEST_URL"
-    echo "WebSocket proxy: $TELNET_WS_URL"
-    echo ""
-    echo "Prerequisites:"
-    echo "  1. Start telnetd: busybox telnetd -F -p 8023 -l /bin/bash"
-    echo "  2. Start proxy:   ./tools/telnet-websocket.sh 127.0.0.1:8023 8765"
-    echo "  3. Start server:  cd build-webasm-dawn-release && python3 serve.py 8080"
-    echo ""
-else
-    # mode=vm pre-selects the embedded VM mode so the headless run skips
-    # index.html's mode-selection dialog (otherwise it sits idle waiting
-    # for a click). trace=1 turns on YTRACE_DEFAULT_ON for the C log
-    # stream. Override via TEST_URL_OVERRIDE env to test other URLs.
-    TEST_URL="${TEST_URL_OVERRIDE:-${BASE_URL}/?mode=vm&trace=1}"
-    echo "Testing full yetty at: $TEST_URL"
-fi
+# Determine test URL. index.html now auto-launches the embedded VM the
+# moment it loads — no picker, no mode= param. ?trace=1 turns on
+# YTRACE_DEFAULT_ON so the C-side checkpoints reach the JS console (the
+# headless verifier asserts those). Override via TEST_URL_OVERRIDE env.
+TEST_URL="${TEST_URL_OVERRIDE:-${BASE_URL}/?trace=1}"
+echo "Testing full yetty at: $TEST_URL"
 
 # Run Chrome with software WebGPU rendering
 echo "Running headless Chrome with software WebGPU..."

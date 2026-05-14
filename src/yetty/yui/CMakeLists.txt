@@ -24,7 +24,7 @@ target_link_libraries(yetty_yui
         webgpu
         yetty_yui_core
         yetty_yterm
-        ygui
+        ygui_core
 )
 
 # Embed the tabbar shader so the GPU pipeline can pick it up at runtime

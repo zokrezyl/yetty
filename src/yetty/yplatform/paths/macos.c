@@ -1,50 +1,84 @@
-/* macOS platform paths - ~/Library directories */
+/*
+ * macOS platform paths — ~/Library directories.
+ *
+ * Implements the platform-paths contract from
+ * include/yetty/yplatform/paths.h. macOS doesn't have XDG, so the
+ * resolution rules are Apple's standard locations:
+ *   cache_dir  → ~/Library/Caches/yetty
+ *   data_dir   → ~/Library/Application Support/yetty
+ *   config_dir → ~/Library/Application Support/yetty (same as data)
+ *   runtime_dir → /tmp/yetty-<uid>
+ *   assets_dir → next to the executable, "../Resources/assets" inside
+ *                a .app bundle, else $YETTY_ASSETS_DIR or ./assets
+ *
+ * Path resolution intentionally mirrors what the previous per-getter
+ * impls returned, modulo $YETTY_ASSETS_DIR honour and assets_dir which
+ * the prior code didn't fill at all.
+ */
 
+#include <limits.h>
+#include <mach-o/dyld.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <unistd.h>
 
-static char cache_dir_buf[512];
-static char data_dir_buf[512];
-static char runtime_dir_buf[512];
-static char config_dir_buf[512];
+#include <yetty/yplatform/paths.h>
 
-// TODO: unify the platform-paths.c for all platform into one
-const char *yetty_yplatform_get_cache_dir(void)
+struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths(void)
 {
-    const char *home = getenv("HOME");
-    if (home) {
-        snprintf(cache_dir_buf, sizeof(cache_dir_buf), "%s/Library/Caches/yetty", home);
-        return cache_dir_buf;
+    struct yetty_yplatform_paths *p = calloc(1, sizeof(*p));
+    if (!p) {
+        return YETTY_ERR(yetty_yplatform_paths_ptr,
+                         "OOM allocating yetty_yplatform_paths");
     }
-    return "/tmp/yetty";
+
+    const char *home = getenv("HOME");
+    if (home && *home) {
+        snprintf(p->cache_dir_buf,  sizeof(p->cache_dir_buf),
+                 "%s/Library/Caches/yetty", home);
+        snprintf(p->data_dir_buf,   sizeof(p->data_dir_buf),
+                 "%s/Library/Application Support/yetty", home);
+        snprintf(p->config_dir_buf, sizeof(p->config_dir_buf),
+                 "%s/Library/Application Support/yetty", home);
+    } else {
+        snprintf(p->cache_dir_buf,  sizeof(p->cache_dir_buf),  "/tmp/yetty");
+        snprintf(p->data_dir_buf,   sizeof(p->data_dir_buf),   "/tmp/yetty");
+        snprintf(p->config_dir_buf, sizeof(p->config_dir_buf), "/tmp/yetty");
+    }
+
+    snprintf(p->runtime_dir_buf, sizeof(p->runtime_dir_buf),
+             "/tmp/yetty-%d", (int)getuid());
+
+    /* assets_dir = $YETTY_ASSETS_DIR || dirname(_NSGetExecutablePath())/assets */
+    const char *env = getenv("YETTY_ASSETS_DIR");
+    if (env && *env) {
+        snprintf(p->assets_dir_buf, sizeof(p->assets_dir_buf), "%s", env);
+    } else {
+        char exe_path[PATH_MAX];
+        uint32_t exe_len = (uint32_t)sizeof(exe_path);
+        if (_NSGetExecutablePath(exe_path, &exe_len) == 0) {
+            char *slash = strrchr(exe_path, '/');
+            if (slash) {
+                *slash = '\0';
+                snprintf(p->assets_dir_buf, sizeof(p->assets_dir_buf),
+                         "%s/assets", exe_path);
+            } else {
+                snprintf(p->assets_dir_buf, sizeof(p->assets_dir_buf),
+                         "./assets");
+            }
+        } else {
+            snprintf(p->assets_dir_buf, sizeof(p->assets_dir_buf), "./assets");
+        }
+    }
+
+    return YETTY_OK(yetty_yplatform_paths_ptr, p);
 }
 
-const char *yetty_yplatform_get_data_dir(void)
+struct yetty_ycore_void_result yetty_yplatform_paths_destroy(struct yetty_yplatform_paths *paths)
 {
-    const char *home = getenv("HOME");
-    if (home) {
-        snprintf(data_dir_buf, sizeof(data_dir_buf), "%s/Library/Application Support/yetty", home);
-        return data_dir_buf;
-    }
-    return "/tmp/yetty";
-}
-
-const char *yetty_yplatform_get_runtime_dir(void)
-{
-    /* macOS doesn't have XDG_RUNTIME_DIR, use tmp with uid */
-    snprintf(runtime_dir_buf, sizeof(runtime_dir_buf), "/tmp/yetty-%d", getuid());
-    return runtime_dir_buf;
-}
-
-const char *yetty_yplatform_get_config_dir(void)
-{
-    const char *home = getenv("HOME");
-    if (home) {
-        snprintf(config_dir_buf, sizeof(config_dir_buf), "%s/Library/Application Support/yetty",
-                 home);
-        return config_dir_buf;
-    }
-    return "/tmp/yetty";
+    free(paths);
+    return YETTY_OK_VOID();
 }

@@ -44,10 +44,15 @@ if(YETTY_ENABLE_FEATURE_YTOP)
     add_subdirectory(${YETTY_ROOT}/src/yetty/ytop ${CMAKE_BINARY_DIR}/src/yetty/ytop)
 endif()
 
-# Platform sources — linux-specific + shared GLFW/Unix (C)
+# Platform sources — the POSIX-flavoured yplatform-core bits (thread,
+# term, fs, time, process, socket, ipc-socket, paths, getopt, tty) are
+# linked from yetty_yplatform_core via target_link_libraries below.
+# The server-side yplatform bits (event loops, GPU surface, clipboard,
+# coroutine, pty-factory, etc.) still compile inline here — they
+# carry transitive deps (libuv, glfw3webgpu, yetty_telnet) that need
+# the main yetty target's include/link set to resolve.
 set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ymain/glfw.c
-    ${YETTY_ROOT}/src/yetty/yplatform/paths/linux.c
     ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
@@ -62,13 +67,7 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/socket/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/process/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
-    ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/fs/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/time/default.c
 )
 
 # TinyEMU PTY source (for --virtual flag)
@@ -154,6 +153,7 @@ target_link_libraries(yetty PRIVATE
     yetty_yco
     rt
     util
+    yetty_yplatform_core
 )
 
 # Copy runtime assets to build directory

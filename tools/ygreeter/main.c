@@ -32,18 +32,14 @@
  * Press 'q' to quit. Tree clicks update the right pane.
  */
 
-#define _DEFAULT_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <yetty/yplatform/fs.h>     /* path_dirname, path_realpath, file_is_regular */
 #include <yetty/yplatform/term.h>   /* term_get_size */
+#include <yetty/yplatform/tty.h>    /* stderr-rerouting probe */
 #include <yetty/ygui/ygui.h>
 #include <yetty/ytrace/ytrace.h>
-#ifndef _WIN32
-#include <sys/stat.h>               /* fstat (stderr/stdout PTY-sharing check) */
-#include <unistd.h>                 /* isatty, dup2, STDERR_FILENO */
-#endif
 
 /* =========================================================================
  * Tab-local navigation entry. Each entry binds a tree-row label to the
@@ -1107,27 +1103,14 @@ int main(int argc, char **argv)
     /* When the caller didn't redirect stderr, it shares the PTY slave
      * with stdout under `yetty -e`. ygreeter's stdout carries the OSC
      * envelopes to the parent yetty; mixing diagnostic text in there
-     * corrupts every OSC frame the parent tries to parse (first 4
-     * bytes of the next debug line look like a bad envelope magic to
-     * prim-iter, the frame is dropped, repeat — manifests as a frozen
-     * UI as soon as something noisy like the Images tab activates the
-     * full render path). Detect that case (stderr is the same tty as
-     * stdout) and reroute trace output to /tmp/ygreeter-<pid>.log so
-     * the OSC stream stays clean and the trace is still recoverable. */
-    if (isatty(STDERR_FILENO) && isatty(STDOUT_FILENO)) {
-        struct stat so, se;
-        if (fstat(STDOUT_FILENO, &so) == 0 && fstat(STDERR_FILENO, &se) == 0 &&
-            so.st_dev == se.st_dev && so.st_ino == se.st_ino) {
-            char log_path[64];
-            snprintf(log_path, sizeof(log_path), "/tmp/ygreeter-%d.log", (int)getpid());
-            FILE *trace_log = fopen(log_path, "w");
-            if (trace_log) {
-                setvbuf(trace_log, NULL, _IOLBF, 0);
-                dup2(fileno(trace_log), STDERR_FILENO);
-                fclose(trace_log);
-            }
-        }
-    }
+     * corrupts every OSC frame the parent tries to parse, manifesting
+     * as a frozen UI as soon as something noisy like the Images tab
+     * activates the full render path. The yplatform tty helper detects
+     * that case and reroutes stderr to <runtime>/ygreeter-<pid>.log
+     * so the OSC stream stays clean and the trace is recoverable.
+     *
+     * Windows impl is a no-op (no PTY-share scenario there). */
+    yetty_yplatform_tty_redirect_stderr_if_shared_with_stdout("ygreeter");
 
     if (yetty_ygui_init() != 0) {
         fprintf(stdout, "ygreeter: ygui_init failed (run inside a real terminal)\n");

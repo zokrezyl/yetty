@@ -23,7 +23,6 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/window/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/webasm.c
-    ${YETTY_ROOT}/src/yetty/yplatform/paths/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/webasm.c
     ${YETTY_ROOT}/src/yetty/ypty/iframepty.c
@@ -32,11 +31,7 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/brotli-glue.c
     ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/fs/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
-    ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/time/default.c
 )
 
 # Create executable with core sources + web platform
@@ -147,6 +142,7 @@ target_link_libraries(yetty PRIVATE
     Freetype::Freetype
     brotlidec
     brotlicommon
+    yetty_yplatform_core
 )
 
 # Force the iframe wasm artifact (tinyemu.{js,wasm,data}) to build whenever

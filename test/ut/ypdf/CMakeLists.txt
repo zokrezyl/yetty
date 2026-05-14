@@ -9,7 +9,6 @@ enable_testing()
 # symbols that yfont/yrender and ypdf reference internally.
 set(YPDF_TEST_SHIM_SOURCES
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
 # Smoke test: render the bundled test-comprehensive.pdf.
@@ -23,7 +22,7 @@ target_include_directories(ypdf-render-test PRIVATE
 )
 target_link_libraries(ypdf-render-test PRIVATE
     yetty_ypdf yetty_ypaint yetty_ypaint_core yetty_yfont_core yetty_ycore
-    yetty_yrender pdfio_lib)
+    yetty_yrender pdfio_lib yetty_yplatform_core)
 target_compile_definitions(ypdf-render-test PRIVATE
     YPDF_TEST_PDF=\"${CMAKE_CURRENT_SOURCE_DIR}/test-comprehensive.pdf\"
 )
@@ -44,7 +43,7 @@ target_include_directories(ypdf-positions-test PRIVATE
 )
 target_link_libraries(ypdf-positions-test PRIVATE
     yetty_ypdf yetty_ypaint yetty_ypaint_core yetty_yfont_core yetty_ycore
-    yetty_yrender pdfio_lib)
+    yetty_yrender pdfio_lib yetty_yplatform_core)
 target_compile_definitions(ypdf-positions-test PRIVATE
     YPDF_TEST_PDF=\"${CMAKE_CURRENT_SOURCE_DIR}/pdf-sample.pdf\"
 )
@@ -60,7 +59,7 @@ target_include_directories(ypdf-font-test PRIVATE
     ${YETTY_ROOT}/src
 )
 target_link_libraries(ypdf-font-test PRIVATE
-    yetty_yfont_core yetty_ycore yetty_yrender)
+    yetty_yfont_core yetty_ycore yetty_yrender yetty_yplatform_core)
 target_compile_definitions(ypdf-font-test PRIVATE
     YPDF_TEST_TTF=\"${YETTY_ROOT}/assets/fonts/DejaVuSansMNerdFontMono-Regular.ttf\"
 )

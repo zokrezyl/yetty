@@ -75,22 +75,10 @@ else()
     set(YETTY_PLATFORM "linux")
 endif()
 
-# Platform abstraction sources (thread, term, fs, time)
-if(WIN32)
-    set(YETTY_YPLATFORM_THREAD_SOURCES
-        ${YETTY_ROOT}/src/yetty/yplatform/thread/windows.c
-        ${YETTY_ROOT}/src/yetty/yplatform/term/windows.c
-        ${YETTY_ROOT}/src/yetty/yplatform/fs/windows.c
-        ${YETTY_ROOT}/src/yetty/yplatform/time/windows.c
-    )
-else()
-    set(YETTY_YPLATFORM_THREAD_SOURCES
-        ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
-        ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
-        ${YETTY_ROOT}/src/yetty/yplatform/fs/default.c
-        ${YETTY_ROOT}/src/yetty/yplatform/time/default.c
-    )
-endif()
+# Platform abstractions are linked from the yetty_yplatform_core and
+# yetty_yplatform libraries (declared in src/yetty/yplatform/CMakeLists.txt).
+# Tools target_link_libraries(... yetty_yplatform_core); the main yetty
+# exec links both via target_link_libraries in each platform's cmake.cmake.
 
 
 # Prebuilt 3rdparty assets — each one its own per-lib fetch, version
@@ -383,8 +371,9 @@ endif()
 # Add src/yetty (populates YETTY_SOURCES, YETTY_CORE_SOURCES, builds feature libraries)
 add_subdirectory(${YETTY_ROOT}/src/yetty ${CMAKE_BINARY_DIR}/src/yetty)
 
-# Vendored portable getopt/getopt_long (shared by all platforms)
-list(APPEND YETTY_SOURCES ${YETTY_ROOT}/src/yetty/yplatform/getopt.c)
+# getopt + the rest of the platform layer live in yetty_yplatform_core
+# (declared in src/yetty/yplatform/CMakeLists.txt). Tools link that lib
+# directly; the main yetty exec links it via platform/<plat>/cmake.cmake.
 
 # Unit tests (opt-in)
 if(YETTY_ENABLE_FEATURE_TESTS)

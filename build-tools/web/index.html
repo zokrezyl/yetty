@@ -48,25 +48,44 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.92);
+            /* Translucent so the user can see the canvas (and yetty
+             * booting up) through the boot log. */
+            background: rgba(0, 0, 0, 0.55);
             color: #ddd;
             font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
             font-size: 12px;
             line-height: 1.45;
-            padding: 28px 16px 16px 16px;   /* top padding leaves room for × */
+            padding: 0;                      /* children own their padding */
             z-index: 200;
             pointer-events: auto;            /* let the user wheel-scroll the log */
-            /* Two-row flex layout: log fills, close button is absolute
-             * (lives outside the scroll container so it never slides
-             * out of view as the log grows). */
+            /* Header (fixed) on top, log (scrollable) below — laid out
+             * as a flex column. The minimize button is absolute-
+             * positioned in the top-right of the whole overlay so the
+             * single click collapses the entire window (header + log). */
             display: flex;
             flex-direction: column;
+        }
+        /* Fixed banner above the log: tells the user what's going on
+         * and which line (in green) means it's safe to minimize. Does
+         * NOT scroll with the log. */
+        #yetty-status-header {
+            flex: 0 0 auto;
+            padding: 12px 48px 10px 16px;    /* right padding clears − btn */
+            background: rgba(20, 24, 31, 0.65);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            color: #cfd4d3;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        #yetty-status-header .hint-key {
+            color: #6c6;
+            font-weight: bold;
         }
         #yetty-status-log {
             overflow-y: auto;
             flex: 1 1 auto;
             min-height: 0;
-            padding-right: 4px;              /* leave room for scrollbar */
+            padding: 12px 16px 16px 16px;
         }
         /* Custom scrollbar so dark-on-dark stays readable. */
         #yetty-status-log::-webkit-scrollbar { width: 10px; }
@@ -146,265 +165,23 @@
             color: #666;
             margin-top: 10px;
         }
-        /* Mode selection dialog */
-        #mode-dialog {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: #1a1a2e;
-            border: 1px solid #333;
-            border-radius: 8px;
-            padding: 24px;
-            color: #eee;
-            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-            z-index: 100;
-            min-width: 380px;
-        }
-        #mode-dialog h2 {
-            margin-bottom: 16px;
-            color: #e94560;
-            font-size: 1.2em;
-        }
-        #mode-dialog .mode-option {
-            display: block;
-            background: #252540;
-            border: 1px solid #444;
-            border-radius: 4px;
-            padding: 12px 16px;
-            margin-bottom: 10px;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-align: left;
-        }
-        #mode-dialog .mode-option:hover {
-            background: #333355;
-            border-color: #e94560;
-        }
-        #mode-dialog .mode-option .mode-title {
-            font-weight: bold;
-            color: #fff;
-            margin-bottom: 4px;
-        }
-        #mode-dialog .mode-option .mode-desc {
-            font-size: 0.85em;
-            color: #888;
-        }
-        #mode-dialog .variant-config {
-            margin-top: 16px;
-            padding-top: 16px;
-            border-top: 1px solid #333;
-            display: none;
-        }
-        #mode-dialog .variant-config.visible {
-            display: block;
-        }
-        #mode-dialog .variant-option {
-            display: block;
-            background: #252540;
-            border: 1px solid #444;
-            border-radius: 4px;
-            padding: 10px 14px;
-            margin-bottom: 8px;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-align: left;
-            color: #eee;
-            font-family: inherit;
-            width: 100%;
-        }
-        #mode-dialog .variant-option:hover {
-            background: #333355;
-            border-color: #e94560;
-        }
-        #mode-dialog .variant-option.selected {
-            border-color: #e94560;
-        }
-        #mode-dialog .variant-option .variant-title {
-            font-weight: bold;
-            margin-bottom: 2px;
-        }
-        #mode-dialog .variant-option .variant-desc {
-            font-size: 0.8em;
-            color: #888;
-        }
-        #mode-dialog .ws-config {
-            margin-top: 16px;
-            padding-top: 16px;
-            border-top: 1px solid #333;
-            display: none;
-        }
-        #mode-dialog .ws-config.visible {
-            display: block;
-        }
-        #mode-dialog label {
-            display: block;
-            margin-bottom: 6px;
-            color: #aaa;
-            font-size: 0.9em;
-        }
-        #mode-dialog input[type="text"] {
-            width: 100%;
-            padding: 8px 12px;
-            background: #0f0f23;
-            border: 1px solid #444;
-            border-radius: 4px;
-            color: #eee;
-            font-family: inherit;
-            font-size: 0.95em;
-            margin-bottom: 12px;
-        }
-        #mode-dialog input[type="text"]:focus {
-            outline: none;
-            border-color: #e94560;
-        }
-        #mode-dialog .connect-btn {
-            background: #e94560;
-            border: none;
-            border-radius: 4px;
-            padding: 10px 20px;
-            color: #fff;
-            font-family: inherit;
-            font-size: 1em;
-            cursor: pointer;
-            width: 100%;
-            transition: background 0.2s;
-        }
-        #mode-dialog .connect-btn:hover {
-            background: #ff5577;
-        }
-        #mode-dialog .connect-btn:disabled {
-            background: #555;
-            cursor: not-allowed;
-        }
-        #mode-dialog .note {
-            font-size: 0.8em;
-            color: #666;
-            margin-top: 8px;
-        }
-        #mode-dialog .options-row {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            margin-top: 12px;
-            padding: 8px 0;
-            border-top: 1px solid #333;
-        }
-        #mode-dialog .options-row label {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 0.85em;
-            color: #888;
-            cursor: pointer;
-        }
-        #mode-dialog .options-row label:hover {
-            color: #aaa;
-        }
-        #mode-dialog .options-row input[type="checkbox"] {
-            width: 16px;
-            height: 16px;
-            cursor: pointer;
-        }
-        #mode-dialog .help-section {
-            margin-top: 16px;
-            padding-top: 12px;
-            border-top: 1px solid #333;
-            font-size: 0.8em;
-            color: #666;
-        }
-        #mode-dialog .help-section summary {
-            cursor: pointer;
-            color: #888;
-            margin-bottom: 8px;
-        }
-        #mode-dialog .help-section summary:hover {
-            color: #aaa;
-        }
-        #mode-dialog .help-section code {
-            background: #0f0f23;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: inherit;
-            color: #e94560;
-        }
-        #mode-dialog .help-section pre {
-            background: #0f0f23;
-            padding: 8px 12px;
-            border-radius: 4px;
-            overflow-x: auto;
-            margin: 6px 0;
-            color: #aaa;
-        }
     </style>
 </head>
 <body>
     <div id="canvas-container">
         <canvas id="canvas" width="1024" height="768" tabindex="0"></canvas>
         <!-- Boot console — populated by yettyStatus.append() from
-             preload, iframe, and the launchYetty flow. The close
-             button is a sibling of the scrollable log so it never
-             slides out of view as the log fills up. -->
-        <div id="yetty-status" style="display: none;"><button id="yetty-status-minimize" type="button" title="Minimize boot console">&minus;</button><div id="yetty-status-log"></div></div>
+             preload, iframe, and the launchYetty flow. Two children:
+             a fixed header (explanatory text) and a scrollable log.
+             Both live inside #yetty-status so the minimize button
+             collapses them together as one window. -->
+        <div id="yetty-status" style="display: none;"><button id="yetty-status-minimize" type="button" title="Minimize boot console">&minus;</button><div id="yetty-status-header">Booting Alpine Linux on RISC-V inside your browser. The log below streams every step — kernel download, decode, boot, telnetd startup. Once you see <span class="hint-key">[vm] session 1 guest TCP established (first rx)</span> the connection is live; click <strong>&minus;</strong> in the top-right corner to minimize this overlay and start using yetty.</div><div id="yetty-status-log"></div></div>
         <button id="yetty-status-restore" type="button"
                 title="Show boot console">&#9707; console</button>
         <div id="loading" style="display: none;">
             <div class="spinner"></div>
             <div>Loading WebGPU...</div>
             <div id="status"></div>
-        </div>
-        <!-- Mode selection dialog -->
-        <div id="mode-dialog">
-            <h2>🖥️ yetty - WebGPU Terminal</h2>
-            <button class="mode-option" data-mode="vm">
-                <div class="mode-title">🐧 Embedded VM</div>
-                <div class="mode-desc">Boot Alpine Linux on RISC-V tinyemu inside yetty.wasm (no iframe, no server)</div>
-            </button>
-            <button class="mode-option" data-mode="vnc">
-                <div class="mode-title">🖼️ VNC Client</div>
-                <div class="mode-desc">Connect to yetty VNC server via WebSocket proxy</div>
-            </button>
-            <button class="mode-option" data-mode="telnet">
-                <div class="mode-title">📡 Telnet</div>
-                <div class="mode-desc">Connect to telnet daemon via WebSocket proxy</div>
-            </button>
-            <div id="ws-config" class="ws-config">
-                <label for="ws-url">WebSocket URL:</label>
-                <input type="text" id="ws-url" placeholder="ws://localhost:5901">
-                <button id="connect-btn" class="connect-btn">Connect</button>
-                <div class="note" id="ws-note"></div>
-            </div>
-            <div class="options-row">
-                <label>
-                    <input type="checkbox" id="trace-logging">
-                    Enable trace logging (slower)
-                </label>
-            </div>
-            <details class="help-section">
-                <summary>ℹ️ Setup Instructions</summary>
-                <div id="help-content">
-                    <p><strong>VNC Mode:</strong></p>
-                    <pre># Start yetty VNC server
-./yetty --vnc-server
-
-# Start WebSocket proxy (in another terminal)
-./tools/vnc-websocket.sh 127.0.0.1:5900 5901
-
-# Connect with: ws://localhost:5901</pre>
-                    <p><strong>Telnet Mode:</strong></p>
-                    <pre># Start telnet daemon
-busybox telnetd -p 8023 -l /bin/bash
-
-# Start WebSocket proxy
-./tools/telnet-websocket.sh 127.0.0.1:8023 8024
-
-# Connect with: ws://localhost:8024</pre>
-                    <p><strong>URL Parameters:</strong></p>
-                    <pre>?mode=vm
-?mode=vnc&wsurl=ws://host:port
-?mode=telnet&wsurl=ws://host:port</pre>
-                </div>
-            </details>
         </div>
     </div>
 
@@ -432,6 +209,24 @@ busybox telnetd -p 8023 -l /bin/bash
             // restore pill they see complete scroll-back, but the
             // overlay does NOT auto-pop back open on its own.
             let userMinimized = false;
+            // Auto-minimize trigger. The VM iframe announces a real
+            // guest TCP rx with `session N guest TCP established
+            // (first rx)` — that's the moment yetty is actually
+            // talking to the running VM and the boot console can get
+            // out of the way. Fire once; if the user later restores
+            // it manually we respect that.
+            const READY_MARKER = 'guest TCP established (first rx)';
+            let autoMinimizeArmed = true;
+            function maybeAutoMinimize(text) {
+                if (!autoMinimizeArmed) return;
+                if (typeof text !== 'string') return;
+                if (text.indexOf(READY_MARKER) === -1) return;
+                autoMinimizeArmed = false;
+                /* Small delay so the user actually sees the green
+                 * "connected" line land in the log before the
+                 * overlay collapses. */
+                setTimeout(minimize, 600);
+            }
             const restoreBtn = document.getElementById('yetty-status-restore');
             // Tag → DOM line map so callers can update an existing line
             // in place (e.g. download progress %) instead of appending
@@ -464,6 +259,7 @@ busybox telnetd -p 8023 -l /bin/bash
                     log.removeChild(log.firstChild);
                 }
                 log.scrollTop = log.scrollHeight;
+                maybeAutoMinimize(text);
             }
             // Append a tagged line on first call; on subsequent calls
             // with the same tag, replace its text in place. Keeps the
@@ -483,6 +279,7 @@ busybox telnetd -p 8023 -l /bin/bash
                     if (level) line.className = 'line ' + level;
                 }
                 log.scrollTop = log.scrollHeight;
+                maybeAutoMinimize(text);
             }
             function minimize() {
                 userMinimized = true;
@@ -539,68 +336,6 @@ busybox telnetd -p 8023 -l /bin/bash
                 }
             });
         })();
-
-        // Selected mode and config
-        let selectedMode = null;
-        let wsUrl = '';
-
-        // Mode selection handling
-        function setupModeSelection() {
-            const modeDialog = document.getElementById('mode-dialog');
-            const wsConfig = document.getElementById('ws-config');
-            const wsUrlInput = document.getElementById('ws-url');
-            const wsNote = document.getElementById('ws-note');
-            const connectBtn = document.getElementById('connect-btn');
-            const modeOptions = document.querySelectorAll('.mode-option');
-
-            modeOptions.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const mode = btn.dataset.mode;
-                    selectedMode = mode;
-
-                    // Highlight selected mode
-                    modeOptions.forEach(b => b.style.borderColor = '#444');
-                    btn.style.borderColor = '#e94560';
-
-                    if (mode === 'vm') {
-                        // Embedded tinyemu — no extra config, launch immediately.
-                        wsConfig.classList.remove('visible');
-                        modeDialog.style.display = 'none';
-                        launchYetty();
-                        return;
-                    }
-
-                    // VNC / telnet need a WebSocket URL.
-                    wsConfig.classList.add('visible');
-                    if (mode === 'vnc') {
-                        wsUrlInput.value = wsUrlInput.value || 'ws://localhost:5901';
-                        wsNote.innerHTML = 'Start VNC server: <code>./yetty --vnc-server</code><br>' +
-                            'Start WebSocket proxy: <code>./tools/vnc-websocket.sh</code>';
-                    } else if (mode === 'telnet') {
-                        wsUrlInput.value = wsUrlInput.value || 'ws://localhost:8024';
-                        wsNote.innerHTML = 'Start telnetd: <code>busybox telnetd -p 8023 -l /bin/bash</code><br>' +
-                            'Start WebSocket proxy: <code>./tools/telnet-websocket.sh</code>';
-                    }
-                });
-            });
-
-            connectBtn.addEventListener('click', () => {
-                wsUrl = wsUrlInput.value.trim();
-                if (!wsUrl) {
-                    wsUrlInput.style.borderColor = '#e94560';
-                    return;
-                }
-                modeDialog.style.display = 'none';
-                launchYetty();
-            });
-
-            // Enter key to connect
-            wsUrlInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    connectBtn.click();
-                }
-            });
-        }
 
         async function checkWebGPU() {
             const status = document.getElementById('status');
@@ -677,47 +412,25 @@ busybox telnetd -p 8023 -l /bin/bash
 
         const urlParams = getUrlParams();
 
-        // Check if URL specifies mode directly (for bookmarking)
-        // Examples:
-        //   ?mode=vm                              (embedded tinyemu VM)
-        //   ?mode=vnc&wsurl=ws://localhost:5901
-        //   ?mode=telnet&wsurl=ws://localhost:8024
-        //   ?trace=1  (enable trace logging)
-        if (urlParams.mode) {
-            selectedMode = urlParams.mode;
-            if (urlParams.wsurl) {
-                wsUrl = urlParams.wsurl;
-            }
-        }
+        // Trace logging — accept several aliases so the URL can use the
+        // same name as the env var the runtime reads.
+        //   ?trace=1 / ?ytrace=on / ?YTRACE_DEFAULT_ON=yes
+        // Accepted values (case-insensitive): 1, on, yes, true.
+        const traceOn = (function () {
+            const v = (urlParams.trace ||
+                       urlParams.ytrace ||
+                       urlParams.YTRACE_DEFAULT_ON || '').toLowerCase();
+            return v === '1' || v === 'on' || v === 'yes' || v === 'true';
+        })();
 
-        // Set trace checkbox from URL param
-        if (urlParams.trace === '1' || urlParams.trace === 'yes') {
-            document.addEventListener('DOMContentLoaded', () => {
-                const cb = document.getElementById('trace-logging');
-                if (cb) cb.checked = true;
-            });
-        }
-
-        // Build environment variables based on selected mode
+        // Build environment variables passed into Emscripten's ENV before
+        // main() runs. The mode/transport picker now lives inside yetty
+        // itself — this page only forwards the optional trace flag.
         function buildEnvVars() {
             const env = {};
-
-            // Check trace logging checkbox
-            const traceCheckbox = document.getElementById('trace-logging');
-            if (traceCheckbox && traceCheckbox.checked) {
+            if (traceOn) {
                 env.YTRACE_DEFAULT_ON = 'yes';
             }
-
-            if (selectedMode === 'vm') {
-                env.YETTY_MODE = 'vm';
-            } else if (selectedMode === 'vnc') {
-                env.YETTY_MODE = 'vnc';
-                env.YETTY_VNC_CLIENT = wsUrl;
-            } else if (selectedMode === 'telnet') {
-                env.YETTY_MODE = 'telnet';
-                env.YETTY_TELNET = wsUrl;
-            }
-
             return env;
         }
 
@@ -857,9 +570,6 @@ busybox telnetd -p 8023 -l /bin/bash
             const loading = document.getElementById('loading');
             loading.style.display = 'block';
 
-            console.log('[yetty] Launching with mode:', selectedMode, 'wsUrl:', wsUrl);
-            window.yettyStatus.append('mode: ' + selectedMode, 'phase');
-
             resizeCanvas();
             window.yettyStatus.append('checking WebGPU…');
             const hasWebGPU = await checkWebGPU();
@@ -869,31 +579,27 @@ busybox telnetd -p 8023 -l /bin/bash
             }
             window.yettyStatus.append('WebGPU ready', 'ok');
 
-            // VM-ONLY mode: bring the iframe up FIRST and only start
-            // yetty once the VM signals ready. This avoids yetty
-            // rendering an empty terminal for 30+ seconds while the
-            // VM rootfs streams down. Other modes (vnc/telnet) skip
-            // straight to yetty.
-            if (selectedMode === 'vm') {
-                const PTY_ID = 1;
+            // Bring the VM iframe up FIRST and only start yetty once the
+            // VM signals ready. Avoids yetty rendering an empty terminal
+            // for 30+ seconds while the rootfs streams down.
+            const PTY_ID = 1;
+            window.yettyStatus.append(
+                'spawning VM iframe (pty ' + PTY_ID + ')…', 'phase');
+            spawnVMIframe(PTY_ID, 80, 24);
+            window.yettyStatus.append(
+                'waiting for VM to be ready (kernel+rootfs download + boot)…');
+            try {
+                // 10 minutes is ridiculous but the rootfs is ~250 MB
+                // brotli'd over potentially-slow links + the brotli
+                // decode itself takes seconds. Better an eventual
+                // success than a spurious timeout.
+                await awaitVmReady(PTY_ID, 10 * 60 * 1000);
+            } catch (e) {
                 window.yettyStatus.append(
-                    'spawning VM iframe (pty ' + PTY_ID + ')…', 'phase');
-                spawnVMIframe(PTY_ID, 80, 24);
-                window.yettyStatus.append(
-                    'waiting for VM to be ready (kernel+rootfs download + boot)…');
-                try {
-                    // 10 minutes is ridiculous but the rootfs is ~250 MB
-                    // brotli'd over potentially-slow links + the brotli
-                    // decode itself takes seconds. Better an eventual
-                    // success than a spurious timeout.
-                    await awaitVmReady(PTY_ID, 10 * 60 * 1000);
-                } catch (e) {
-                    window.yettyStatus.append(
-                        'VM never signaled ready: ' + e.message, 'err');
-                    return;
-                }
-                window.yettyStatus.append('VM is ready', 'ok');
+                    'VM never signaled ready: ' + e.message, 'err');
+                return;
             }
+            window.yettyStatus.append('VM is ready', 'ok');
 
             window.yettyStatus.append('loading yetty.js…');
             await initYetty();
@@ -901,14 +607,7 @@ busybox telnetd -p 8023 -l /bin/bash
 
         async function init() {
             resizeCanvas();
-            setupModeSelection();
-
-            // If mode was specified in URL, launch directly
-            if (selectedMode) {
-                document.getElementById('mode-dialog').style.display = 'none';
-                await launchYetty();
-            }
-            // Otherwise, mode dialog stays visible for user selection
+            await launchYetty();
         }
 
         init();

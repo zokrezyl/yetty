@@ -12,7 +12,6 @@ endif()
 add_executable(yetty-ymsdf-gen-gpu
     main.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
 target_include_directories(yetty-ymsdf-gen-gpu PRIVATE ${YETTY_ROOT}/include)
@@ -21,6 +20,7 @@ target_link_libraries(yetty-ymsdf-gen-gpu PRIVATE
     yetty_ymsdf_wgsl
     yetty_ywebgpu
     webgpu
+    yetty_yplatform_core
 )
 
 # Dawn (libwebgpu_dawn.a) is C++ — force the C++ stdlib at link time even

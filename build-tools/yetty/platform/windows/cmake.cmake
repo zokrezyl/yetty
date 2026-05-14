@@ -49,15 +49,8 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ypty/conpty.c
     ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/windows.c
-    ${YETTY_ROOT}/src/yetty/yplatform/socket/windows.c
-    ${YETTY_ROOT}/src/yetty/yplatform/process/windows.c
     ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
-    ${YETTY_ROOT}/src/yetty/yplatform/paths/windows.c
-    ${YETTY_ROOT}/src/yetty/yplatform/thread/windows.c
-    ${YETTY_ROOT}/src/yetty/yplatform/term/windows.c
-    ${YETTY_ROOT}/src/yetty/yplatform/fs/windows.c
-    ${YETTY_ROOT}/src/yetty/yplatform/time/windows.c
 )
 
 # tinyemu PTY bridge (yetty <-> tinyemu lib) — only when LIB_TINYEMU is on.
@@ -122,6 +115,7 @@ target_link_libraries(yetty PRIVATE
     $<$<BOOL:${YETTY_ENABLE_LIB_TINYEMU}>:tinyemu>
     dwrite
     ws2_32
+    yetty_yplatform_core
 )
 
 # Copy runtime assets to build directory

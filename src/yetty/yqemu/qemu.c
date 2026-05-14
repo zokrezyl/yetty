@@ -16,8 +16,7 @@
 #include <string.h>
 
 /* Platform paths */
-extern const char *yetty_yplatform_get_data_dir(void);
-extern const char *yetty_yplatform_get_config_dir(void);
+#include <yetty/yplatform/paths.h>
 
 /* QEMU tunables, read from <config_dir>/qemu/qemu.cfg if present. */
 struct yetty_yqemu_qemu_settings {

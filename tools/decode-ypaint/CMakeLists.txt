@@ -5,10 +5,8 @@
 
 add_executable(decode-ypaint
     main.c
-    ${YETTY_ROOT}/src/yetty/yplatform/getopt.c
     # ytrace stubs used by libraries we pull in.
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
 target_include_directories(decode-ypaint PRIVATE
@@ -19,6 +17,7 @@ target_include_directories(decode-ypaint PRIVATE
 target_link_libraries(decode-ypaint PRIVATE
     yetty_yface
     yetty_ycore
+    yetty_yplatform_core
 )
 
 if(NOT MSVC)

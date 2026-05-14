@@ -40,7 +40,6 @@ file(MAKE_DIRECTORY ${ANDROID_ASSETS_DIR})
 # Platform sources — Android-specific + shared Unix components (all C)
 set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ymain/android.c
-    ${YETTY_ROOT}/src/yetty/yplatform/paths/android.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/android.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
@@ -50,12 +49,9 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
     ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/process/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/socket/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
     ${YETTY_ROOT}/src/yetty/ypty/temu-pty.c
-    ${YETTY_YPLATFORM_THREAD_SOURCES}
 )
 
 
@@ -102,6 +98,7 @@ target_link_libraries(yetty PRIVATE
     $<$<BOOL:${YETTY_ENABLE_LIB_QEMU}>:yetty_qemu>
     yetty_telnet
     yetty_yco
+    yetty_yplatform_core
 )
 
 # Generate demo outputs (pre-run demo scripts to capture output for Android)

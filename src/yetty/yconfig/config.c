@@ -30,7 +30,7 @@ struct config_node {
 struct config_impl {
     struct yetty_yconfig_config base;
     struct config_node *root;
-    struct yetty_yplatform_paths paths;
+    struct yetty_yconfig_paths paths;
     char shaders_dir[512];
     char fonts_dir[512];
     char runtime_dir[512];
@@ -677,7 +677,7 @@ static struct yetty_yconfig_config *subnode_get_node(const struct yetty_yconfig_
 /* Store platform paths */
 
 static void store_platform_paths(struct config_impl *impl,
-                                 const struct yetty_yplatform_paths *paths)
+                                 const struct yetty_yconfig_paths *paths)
 {
     if (!paths) {
         return;
@@ -732,7 +732,7 @@ static void store_platform_paths(struct config_impl *impl,
 /* Try to find and load config file */
 
 static void try_load_config_file(struct config_impl *impl, int argc, char *argv[],
-                                 const struct yetty_yplatform_paths *paths)
+                                 const struct yetty_yconfig_paths *paths)
 {
     /* Check for -c or --config argument */
     for (int i = 1; i < argc; i++) {
@@ -1267,7 +1267,7 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
 /* Public create function */
 
 struct yetty_yconfig_result yetty_yconfig_create(int argc, char *argv[],
-                                                 const struct yetty_yplatform_paths *paths)
+                                                 const struct yetty_yconfig_paths *paths)
 {
     struct config_impl *impl = calloc(1, sizeof(struct config_impl));
     if (!impl) {
