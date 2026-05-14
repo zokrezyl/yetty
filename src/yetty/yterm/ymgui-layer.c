@@ -1230,7 +1230,8 @@ static int frame_upload(struct yetty_yterm_ymgui_layer *l, struct yetty_yterm_ym
 static struct yetty_ycore_void_result draw_card(struct yetty_yterm_ymgui_layer *l,
                                                 struct yetty_yterm_ymgui_card *c,
                                                 WGPURenderPassEncoder pass, float pane_w,
-                                                float pane_h)
+                                                float pane_h, float scissor_off_x,
+                                                float scissor_off_y)
 {
     if (!c->has_frame || !c->atlas_ready || !c->bind_group) {
         return YETTY_OK_VOID();
@@ -1336,8 +1337,20 @@ static struct yetty_ycore_void_result draw_card(struct yetty_yterm_ymgui_layer *
                 continue;
             }
 
-            wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)sx0, (uint32_t)sy0,
-                                                (uint32_t)(sx1 - sx0), (uint32_t)(sy1 - sy0));
+            /* Per-cmd scissor lives in screen-space (SetScissorRect takes
+             * absolute framebuffer pixels). sx0/sy0 above are pane-local
+             * (card_origin + clip rect). Shift by (scissor_off_x, _off_y)
+             * so the scissor and the GPU viewport agree on what "y=0"
+             * means — without this, after viewport-confine to the pane
+             * rect the scissor stays at framebuffer origin and clips the
+             * bottom of the card by exactly the strip's pixel height. */
+            float ssx0 = sx0 + scissor_off_x;
+            float ssy0 = sy0 + scissor_off_y;
+            float ssx1 = sx1 + scissor_off_x;
+            float ssy1 = sy1 + scissor_off_y;
+            wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)ssx0, (uint32_t)ssy0,
+                                                (uint32_t)(ssx1 - ssx0),
+                                                (uint32_t)(ssy1 - ssy0));
 
             wgpuRenderPassEncoderDrawIndexed(pass, dc->elem_count, 1,
                                              (uint32_t)cl->idx_u32_offset + dc->idx_offset,
@@ -1390,12 +1403,28 @@ static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal
 
     wgpuRenderPassEncoderSetPipeline(pass, l->pipeline);
 
+    /* Confine the layer's draws to its pane's rect — same as text/ypaint
+     * get via render_target_texture_render_layer's SetViewport call.
+     * Without this, the ymgui pipeline draws into the whole framebuffer
+     * (default viewport = full texture), so card vertices at pane-local
+     * (0, 0) render at framebuffer (0, 0) — under the yui tabbar strip,
+     * which overlays them and produces the "top few pixels missing"
+     * symptom. pane_render in yui/tile.c writes the pane bounds into
+     * target->viewport before delegating to us. */
+    struct yetty_yrender_viewport vp = target->viewport;
+    if (vp.w > 0.0f && vp.h > 0.0f) {
+        wgpuRenderPassEncoderSetViewport(pass, vp.x, vp.y, vp.w, vp.h, 0.0f, 1.0f);
+        wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)vp.x, (uint32_t)vp.y,
+                                            (uint32_t)vp.w, (uint32_t)vp.h);
+    }
+
     float pane_w = (float)l->base.grid_size.cols * l->base.cell_size.width;
     float pane_h = (float)l->base.grid_size.rows * l->base.cell_size.height;
 
     /* Older cards first, newer ones on top — matches z-order convention. */
     for (size_t i = 0; i < l->card_count; i++) {
-        struct yetty_ycore_void_result r = draw_card(l, l->cards[i], pass, pane_w, pane_h);
+        struct yetty_ycore_void_result r =
+            draw_card(l, l->cards[i], pass, pane_w, pane_h, vp.x, vp.y);
         if (YETTY_IS_ERR(r)) {
             yerror("ymgui: draw_card: %s", r.error.msg);
         }
