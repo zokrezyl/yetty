@@ -89,6 +89,18 @@ if(YETTY_IOS OR YETTY_TVOS)
     target_link_libraries(yetty_yplatform_core PUBLIC "-framework Foundation")
 endif()
 
+# YETTY_IOS / YETTY_TVOS as preprocessor macros for sources in this lib
+# (process/default.c #if-guards the prohibited fork()/execvp() calls,
+# similarly extract-assets and others may branch on them). The yetty exec
+# target sets these definitions PRIVATEly on itself; without setting them
+# on the static lib too, these sources compile as if they were on Linux.
+if(YETTY_IOS)
+    target_compile_definitions(yetty_yplatform_core PUBLIC YETTY_IOS=1)
+endif()
+if(YETTY_TVOS)
+    target_compile_definitions(yetty_yplatform_core PUBLIC YETTY_TVOS=1)
+endif()
+
 # NOTE: a `yetty_yplatform` *server-side* library (event loops, GPU
 # surface, clipboard, coroutine, pty-factory, etc.) would be the
 # natural symmetric counterpart, but those sources have heavy
