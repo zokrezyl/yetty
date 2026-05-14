@@ -1,0 +1,123 @@
+name: Build 3rdparty — openssh
+
+# Triggered on `lib-openssh-<version>` tags. Builds openssh-portable
+# across the supported desktop platforms (linux-x86_64, linux-aarch64,
+# macos-arm64, macos-x86_64) and attaches the tarballs to a release of
+# the same name.
+#
+# Version source of truth: build-tools/3rdparty/openssh/version. The tag
+# version must match that file's content; the workflow reads the file at
+# build time so the tarballs are always self-consistent.
+#
+# openssh is NOT built for webasm, iOS/tvOS, or Windows:
+#   - webasm: no PTY/exec semantics in the browser
+#   - iOS/tvOS: sandbox forbids exec()
+#   - Windows: openssh ships as a system component; vendoring is unnecessary
+
+on:
+  push:
+    tags:
+      - 'lib-openssh-*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write  # needed to publish release assets
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag:     ${{ steps.read.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          set -euo pipefail
+          V="$(tr -d '[:space:]' < build-tools/3rdparty/openssh/version)"
+          [ -n "$V" ] || { echo "version file is empty" >&2; exit 1; }
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            REF="${GITHUB_REF#refs/tags/}"
+            EXPECT="lib-openssh-$V"
+            if [ "$REF" != "$EXPECT" ]; then
+              echo "tag $REF does not match version file ($EXPECT)" >&2
+              exit 1
+            fi
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=lib-openssh-$V" >> "$GITHUB_OUTPUT"
+
+  #===========================================================================
+  # Linux — Ubuntu cross (x86_64 native, aarch64 cross-compiled).
+  #===========================================================================
+  build-linux:
+    needs: resolve
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - linux-x86_64
+          - linux-aarch64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="${{ matrix.target }}" \
+          OUTPUT_DIR="$PWD/out" \
+          ./build-tools/3rdparty/openssh/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/openssh-${{ matrix.target }}-*.tar.gz
+          fail_on_unmatched_files: true
+
+  #===========================================================================
+  # macOS arm64 (macos-latest = Apple Silicon).
+  #===========================================================================
+  build-darwin-arm64:
+    needs: resolve
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="macos-arm64" \
+          OUTPUT_DIR="$PWD/out" \
+          ./build-tools/3rdparty/openssh/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/openssh-macos-arm64-*.tar.gz
+          fail_on_unmatched_files: true
+
+  #===========================================================================
+  # macOS x86_64 (Intel runner).
+  #===========================================================================
+  build-darwin-x86_64:
+    needs: resolve
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+      - run: mkdir -p out
+      - run: |
+          TARGET_PLATFORM="macos-x86_64" \
+          OUTPUT_DIR="$PWD/out" \
+          ./build-tools/3rdparty/openssh/build.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/openssh-macos-x86_64-*.tar.gz
+          fail_on_unmatched_files: true
