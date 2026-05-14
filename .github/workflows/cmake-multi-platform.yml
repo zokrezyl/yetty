@@ -29,6 +29,12 @@ env:
   BUILD_IOS_X86_64: true
   BUILD_WEB: true
 
+  # Merged riscv64 rootfs (alpine-extended + /yetty/{bin,repo}). All
+  # per-platform binaries fetch this as a runtime asset; disable for
+  # fast iteration when you only care about a non-VM code path. Always
+  # built on release tags regardless of this flag.
+  BUILD_ROOTFS_RISCV: true
+
   RUN_CODEQL: false
   RUN_CODACY: false
 
@@ -52,6 +58,7 @@ jobs:
       ios: ${{ steps.set.outputs.ios }}
       ios_x86_64: ${{ steps.set.outputs.ios_x86_64 }}
       web: ${{ steps.set.outputs.web }}
+      rootfs_riscv: ${{ steps.set.outputs.rootfs_riscv }}
       codeql: ${{ steps.set.outputs.codeql }}
       codacy: ${{ steps.set.outputs.codacy }}
       test_android: ${{ steps.set.outputs.test_android }}
@@ -70,6 +77,7 @@ jobs:
             echo "ios=true" >> $GITHUB_OUTPUT
             echo "ios_x86_64=true" >> $GITHUB_OUTPUT
             echo "web=true" >> $GITHUB_OUTPUT
+            echo "rootfs_riscv=true" >> $GITHUB_OUTPUT
             echo "codeql=false" >> $GITHUB_OUTPUT
             echo "codacy=false" >> $GITHUB_OUTPUT
             echo "test_android=true" >> $GITHUB_OUTPUT
@@ -85,6 +93,7 @@ jobs:
             echo "ios=${{ env.BUILD_IOS }}" >> $GITHUB_OUTPUT
             echo "ios_x86_64=${{ env.BUILD_IOS_X86_64 }}" >> $GITHUB_OUTPUT
             echo "web=${{ env.BUILD_WEB }}" >> $GITHUB_OUTPUT
+            echo "rootfs_riscv=${{ env.BUILD_ROOTFS_RISCV }}" >> $GITHUB_OUTPUT
             echo "codeql=${{ env.RUN_CODEQL }}" >> $GITHUB_OUTPUT
             echo "codacy=${{ env.RUN_CODACY }}" >> $GITHUB_OUTPUT
             echo "test_android=${{ env.TEST_ANDROID }}" >> $GITHUB_OUTPUT
@@ -92,11 +101,25 @@ jobs:
 
 
   # =============================================================================
+  # Merged riscv64 rootfs image — every executable build below gates on
+  # this so we never ship a platform binary against a stale or broken
+  # /yetty/{bin,repo} payload. Reusable-workflow call: build.sh runs in
+  # the called workflow, the tarball is exposed as a workflow artifact
+  # consumers can fetch when consumer-side wiring lands.
+  # =============================================================================
+  build-rootfs-riscv:
+    needs: read-flags
+    if: needs.read-flags.outputs.rootfs_riscv == 'true'
+    uses: ./.github/workflows/build-yetty-rootfs-riscv.yml
+    permissions:
+      contents: write
+
+  # =============================================================================
   # Desktop Build (Linux)
   # =============================================================================
   build-linux-ytrace-release:
-    needs: read-flags
-    if: needs.read-flags.outputs.linux == 'true'
+    needs: [read-flags, build-rootfs-riscv]
+    if: ${{ !cancelled() && needs.read-flags.outputs.linux == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: ubuntu-latest
 
     env:
@@ -104,6 +127,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install Linux dependencies
       if: runner.os == 'Linux'
@@ -145,8 +173,8 @@ jobs:
   # Linux ASAN Build (AddressSanitizer)
   # =============================================================================
   build-linux-ytrace-asan:
-    needs: read-flags
-    if: needs.read-flags.outputs.linux_asan == 'true'
+    needs: [read-flags, build-rootfs-riscv]
+    if: ${{ !cancelled() && needs.read-flags.outputs.linux_asan == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: ubuntu-latest
 
     env:
@@ -154,6 +182,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install Linux dependencies
       run: |
@@ -210,8 +243,8 @@ jobs:
   # riscv64 builds live in a separate pipeline.
   # =============================================================================
   build-linux-aarch64-ytrace-release:
-    needs: read-flags
-    if: needs.read-flags.outputs.linux_aarch64 == 'true'
+    needs: [read-flags, build-rootfs-riscv]
+    if: ${{ !cancelled() && needs.read-flags.outputs.linux_aarch64 == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: ubuntu-24.04-arm
 
     env:
@@ -219,6 +252,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install Linux dependencies
       run: |
@@ -259,8 +297,8 @@ jobs:
   # Desktop Build (macOS ARM64)
   # =============================================================================
   build-macos-ytrace-release:
-    needs: read-flags
-    if: needs.read-flags.outputs.macos == 'true'
+    needs: [read-flags, build-rootfs-riscv]
+    if: ${{ !cancelled() && needs.read-flags.outputs.macos == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: macos-latest
 
     env:
@@ -268,6 +306,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install macOS dependencies
       run: brew install automake autoconf libtool meson ninja nasm brotli webp fontconfig
@@ -312,8 +355,8 @@ jobs:
   # Desktop Build (macOS Intel x86_64)
   # =============================================================================
   build-macos_x86_64-ytrace-release:
-    needs: read-flags
-    if: needs.read-flags.outputs.macos_x86_64 == 'true'
+    needs: [read-flags, build-rootfs-riscv]
+    if: ${{ !cancelled() && needs.read-flags.outputs.macos_x86_64 == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: macos-15-intel
 
     env:
@@ -321,6 +364,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install macOS dependencies
       run: brew install automake autoconf libtool meson ninja nasm brotli webp fontconfig
@@ -362,8 +410,8 @@ jobs:
   # Desktop Build (Windows)
   # =============================================================================
   build-windows-ytrace-release:
-    needs: read-flags
-    if: needs.read-flags.outputs.windows == 'true'
+    needs: [read-flags, build-rootfs-riscv]
+    if: ${{ !cancelled() && needs.read-flags.outputs.windows == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: windows-latest
 
     env:
@@ -371,6 +419,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install Windows build dependencies
       shell: bash
@@ -434,8 +487,8 @@ jobs:
   # Android Build
   # =============================================================================
   build-android-ytrace-release:
-    needs: read-flags
-    if: needs.read-flags.outputs.android == 'true'
+    needs: [read-flags, build-rootfs-riscv]
+    if: ${{ !cancelled() && needs.read-flags.outputs.android == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: ubuntu-latest
 
     env:
@@ -444,6 +497,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install build dependencies
       run: |
@@ -497,8 +555,8 @@ jobs:
   # Android x86_64 Build (for Emulator Testing)
   # =============================================================================
   build-android_x86_64-ytrace-release:
-    needs: read-flags
-    if: needs.read-flags.outputs.android_x86_64 == 'true'
+    needs: [read-flags, build-rootfs-riscv]
+    if: ${{ !cancelled() && needs.read-flags.outputs.android_x86_64 == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: ubuntu-latest
 
     env:
@@ -507,6 +565,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install build dependencies
       run: |
@@ -616,8 +679,8 @@ jobs:
   # iOS Build (arm64 device)
   # =============================================================================
   build-ios-ytrace-release:
-    needs: read-flags
-    if: needs.read-flags.outputs.ios == 'true'
+    needs: [read-flags, build-rootfs-riscv]
+    if: ${{ !cancelled() && needs.read-flags.outputs.ios == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: macos-latest
 
     env:
@@ -625,6 +688,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install macOS dependencies
       run: brew install automake autoconf libtool ninja nasm brotli meson webp fontconfig
@@ -655,8 +723,8 @@ jobs:
   # iOS x86_64 Build (for Simulator)
   # =============================================================================
   build-ios_x86_64-ytrace-release:
-    needs: read-flags
-    if: needs.read-flags.outputs.ios_x86_64 == 'true'
+    needs: [read-flags, build-rootfs-riscv]
+    if: ${{ !cancelled() && needs.read-flags.outputs.ios_x86_64 == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: macos-15-intel
 
     env:
@@ -664,6 +732,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install macOS dependencies
       run: brew install automake autoconf libtool ninja nasm brotli meson webp fontconfig
@@ -695,8 +768,8 @@ jobs:
   # WebAssembly Build
   # =============================================================================
   build-webasm-ytrace-release:
-    needs: read-flags
-    if: needs.read-flags.outputs.web == 'true'
+    needs: [read-flags, build-rootfs-riscv]
+    if: ${{ !cancelled() && needs.read-flags.outputs.web == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: ubuntu-latest
 
     env:
@@ -704,6 +777,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install build dependencies
       run: |

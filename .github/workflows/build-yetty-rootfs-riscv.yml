@@ -1,0 +1,117 @@
+name: Build yetty-rootfs-riscv
+
+# Builds the unified riscv64 rootfs image — alpine-extended-disk pristine
+# rootfs + /yetty/bin (cross-compiled yetty demos+tools) + /yetty/repo
+# (`git archive HEAD`). Replaces the old yetty-tools-riscv pipeline that
+# shipped a separate small disk; now everything lives in one bootable
+# ext4 image.
+#
+# Trigger:
+#   - `yetty-rootfs-riscv-<version>` tags (push)        -> publish release
+#   - workflow_dispatch                                  -> manual run
+#   - workflow_call (from cmake-multi-platform.yml)      -> gate per-
+#                                                          platform builds
+#
+# Version source of truth: build-tools/yemu/yetty-rootfs-riscv/version.
+# Output asset (uploaded to the GitHub release on tagged runs):
+#   yetty-rootfs-riscv-<version>.tar.gz
+#     - yetty-rootfs-riscv.img.br  (brotli q6 of the merged ext4 image)
+#     - manifest.txt
+
+on:
+  push:
+    tags:
+      - 'yetty-rootfs-riscv-*'
+  workflow_dispatch: {}
+  workflow_call:
+    outputs:
+      version:
+        description: Version string read from the rootfs version file.
+        value: ${{ jobs.resolve.outputs.version }}
+      tag:
+        description: Tag form yetty-rootfs-riscv-<version>.
+        value: ${{ jobs.resolve.outputs.tag }}
+      artifact:
+        description: Workflow-artifact name carrying the rootfs tarball.
+        value: ${{ jobs.resolve.outputs.tag }}
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag:     ${{ steps.read.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          set -euo pipefail
+          V="$(tr -d '[:space:]' < build-tools/yemu/yetty-rootfs-riscv/version)"
+          [ -n "$V" ] || { echo "version file is empty" >&2; exit 1; }
+          # Only enforce tag-vs-version-file match on actual tag pushes.
+          # Branch pushes and reusable-workflow calls (cmake-multi-platform.yml)
+          # arrive here as event_name=push too, but with refs/heads/* — they
+          # build the same image, just don't publish a release at the end.
+          if [[ "${{ github.event_name }}" == "push" && "$GITHUB_REF" == refs/tags/* ]]; then
+            REF="${GITHUB_REF#refs/tags/}"
+            EXPECT="yetty-rootfs-riscv-$V"
+            if [ "$REF" != "$EXPECT" ]; then
+              echo "tag $REF does not match version file ($EXPECT)" >&2
+              exit 1
+            fi
+          fi
+          echo "version=$V"               >> "$GITHUB_OUTPUT"
+          echo "tag=yetty-rootfs-riscv-$V" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so `git archive HEAD` inside build.sh produces the
+          # same tree as a developer's local checkout.
+          fetch-depth: 0
+
+      - name: Install host build tooling
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          # gcc-riscv64-linux-gnu / g++-riscv64-linux-gnu  — cross compiler
+          # cmake / ninja-build / pkg-config              — driven by `make`
+          # e2fsprogs                                      — mke2fs, e2fsck,
+          #                                                  resize2fs, dumpe2fs,
+          #                                                  debugfs
+          # brotli                                         — image compression
+          # curl, git                                      — fetch pristine
+          #                                                  rootfs + archive HEAD
+          sudo apt-get install -y \
+              gcc-riscv64-linux-gnu g++-riscv64-linux-gnu \
+              cmake ninja-build pkg-config \
+              e2fsprogs brotli \
+              curl git
+
+      - name: Build merged rootfs image
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          OUTPUT_DIR="$PWD/out" \
+              ./build-tools/yemu/yetty-rootfs-riscv/build.sh
+
+      - name: Upload tarball as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.resolve.outputs.tag }}
+          path: out/yetty-rootfs-riscv-*.tar.gz
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          files: out/yetty-rootfs-riscv-*.tar.gz
+          fail_on_unmatched_files: true

@@ -64,15 +64,14 @@ struct yetty_ycore_void_result yetty_platform_extract_assets(void)
 
     /* Extract shared RISC-V runtime (kernel/opensbi/rootfs) to <data_dir>/yemu.
      * Re-extract whenever any of the expected pieces is missing so an
-     * existing install picks up newly-bundled artifacts (e.g. the extended
-     * rootfs added later) without forcing the user to wipe the dir. */
+     * existing install picks up newly-bundled artifacts (e.g. a bumped
+     * unified rootfs) without forcing the user to wipe the dir. */
     if (yetty_incbin_assets_has_yemu(assets)) {
         const char *expected[] = {
             "yemu/kernel-riscv64.bin",
             "yemu/opensbi-fw_jump.elf",
             "yemu/alpine-rootfs.img",
-            "yemu/alpine-extended-rootfs.img",
-            "yemu/yetty-riscv-disk.img",
+            "yemu/yetty-rootfs-riscv.img",
         };
         int need_extract = 0;
         for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); i++) {

@@ -286,7 +286,8 @@ CMAKE_CROSS_RISCV := \
 	-DYETTY_ENABLE_LIB_WEBGPU=OFF \
 	-DYETTY_ENABLE_LIB_GLFW=OFF \
 	-DYETTY_ENABLE_LIB_QEMU=OFF \
-	-DYETTY_ENABLE_LIB_QEMU_BINARY=OFF
+	-DYETTY_ENABLE_LIB_QEMU_BINARY=OFF \
+	-DYETTY_ENABLE_TOOL_QA=OFF
 
 # Scope pkg-config to the multiarch .pc dir so `pkg_check_modules(fontconfig)`
 # doesn't pick up host-x86_64 metadata. PKG_CONFIG_LIBDIR replaces the default
@@ -330,12 +331,6 @@ config-linux-riscv-ytrace-release: ## Configure Linux riscv64 cross-build (relea
 build-linux-riscv-ytrace-release: ## Build Linux riscv64 demos+tools (NOT yetty exec — Dawn missing)
 	@if [ ! -f "$(BUILD_DIR_LINUX_RISCV_YTRACE_RELEASE)/build.ninja" ]; then $(MAKE) config-linux-riscv-ytrace-release; fi
 	$(CMAKE) --build $(BUILD_DIR_LINUX_RISCV_YTRACE_RELEASE) $(CMAKE_PARALLEL) --target $(LINUX_RISCV_TARGETS)
-	$(MAKE) disk-linux-riscv-ytrace-release
-
-.PHONY: disk-linux-riscv-ytrace-release
-disk-linux-riscv-ytrace-release: ## Build minimum-size ext4 disk image with riscv64 binaries + repo HEAD checkout
-	BUILD_DIR=$(CURDIR)/$(BUILD_DIR_LINUX_RISCV_YTRACE_RELEASE) \
-		build-tools/yemu/make-riscv-disk.sh
 
 #=============================================================================
 # Android - ytrace (full logging)

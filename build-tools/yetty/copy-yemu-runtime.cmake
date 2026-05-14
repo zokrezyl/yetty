@@ -18,7 +18,7 @@ file(MAKE_DIRECTORY "${DST}")
 set(_FILES
     kernel-riscv64.bin
     opensbi-fw_jump.elf
-    alpine-extended-rootfs.img)
+    yetty-rootfs-riscv.img)
 
 foreach(_f ${_FILES})
     if(EXISTS "${SRC}/${_f}")

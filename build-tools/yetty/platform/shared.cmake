@@ -103,20 +103,21 @@ if(YETTY_ENABLE_FEATURE_CDB_GEN OR YETTY_ENABLE_FEATURE_MSDF_GEN)
     yetty_3rdparty_fetch(cdb _CDB_DIR)
 endif()
 
-# yemu runtime (kernel + opensbi + alpine ext4): consumed by both the
-# embed pipeline (via .cdb.br/.bin.br/.elf.br/.img.br) and the runtime
-# path mode (via the auto-decompressed raw files).
+# yemu runtime (kernel + opensbi + alpine + unified yetty rootfs):
+# consumed by both the embed pipeline (via *.br) and the runtime-path
+# mode (via the auto-decompressed raw files).
 if(YETTY_ENABLE_LIB_TINYEMU OR YETTY_ENABLE_LIB_QEMU)
     yetty_3rdparty_fetch(linux       _LINUX_DIR)
     yetty_3rdparty_fetch(opensbi     _OPENSBI_DIR)
     yetty_3rdparty_fetch(alpine-disk _ALPINE_DIR)
-    yetty_3rdparty_fetch(alpine-extended-disk _ALPINE_EXTENDED_DIR)
 
-    # First-party yetty asset (not lib-) — riscv64 demos+tools + repo
-    # checkout packed as a brotli ext4 image. Mounted RO at /opt/yetty
-    # inside --temu and --qemu guests via virtio-blk drive1.
+    # First-party yetty asset (not lib-) — alpine-extended userland with
+    # cross-compiled riscv64 demos+tools at /yetty/bin and `git archive
+    # HEAD` at /yetty/repo, in one bootable ext4 image. Mounted as
+    # drive0 in --temu and --qemu guests; replaces the previous two-disk
+    # setup (alpine-extended-rootfs.img + yetty-riscv-disk.img).
     include(${YETTY_ROOT}/build-tools/yetty/yetty-asset-fetch.cmake)
-    yetty_asset_fetch(yetty-tools-riscv _YETTY_TOOLS_RISCV_DIR)
+    yetty_asset_fetch(yetty-rootfs-riscv _YETTY_ROOTFS_RISCV_DIR)
 
     # Path constants consumed by tinyemu-runtime.cmake (bundle copy at
     # build time) and any future runtime-path consumer. Point at the
@@ -133,11 +134,8 @@ if(YETTY_ENABLE_LIB_TINYEMU OR YETTY_ENABLE_LIB_QEMU)
     set(TINYEMU_ROOTFS_IMG
         "${_ALPINE_DIR}/alpine-rootfs.img"
         CACHE FILEPATH "" FORCE)
-    set(TINYEMU_ALPINE_EXTENDED_IMG
-        "${_ALPINE_EXTENDED_DIR}/alpine-extended-rootfs.img"
-        CACHE FILEPATH "" FORCE)
-    set(YETTY_TOOLS_RISCV_IMG
-        "${_YETTY_TOOLS_RISCV_DIR}/yetty-riscv-disk.img"
+    set(YETTY_ROOTFS_RISCV_IMG
+        "${_YETTY_ROOTFS_RISCV_DIR}/yetty-rootfs-riscv.img"
         CACHE FILEPATH "" FORCE)
 endif()
 
@@ -599,8 +597,7 @@ function(yetty_embed_assets TARGET)
                 "${YETTY_3RDPARTY_opensbi_DIR}|opensbi-fw_jump.elf.br"
                 "${YETTY_3RDPARTY_opensbi_DIR}|opensbi-fw_dynamic.bin.br"
                 "${YETTY_3RDPARTY_alpine-disk_DIR}|alpine-rootfs.img.br"
-                "${YETTY_3RDPARTY_alpine-extended-disk_DIR}|alpine-extended-rootfs.img.br"
-                "${YETTY_ASSET_yetty-tools-riscv_DIR}|yetty-riscv-disk.img.br")
+                "${YETTY_ASSET_yetty-rootfs-riscv_DIR}|yetty-rootfs-riscv.img.br")
             string(REPLACE "|" ";" _PARTS "${_PAIR}")
             list(GET _PARTS 0 _SRC_DIR)
             list(GET _PARTS 1 _F)

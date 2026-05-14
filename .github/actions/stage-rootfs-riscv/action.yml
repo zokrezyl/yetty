@@ -1,0 +1,43 @@
+name: Stage yetty-rootfs-riscv artifact
+description: |
+  Download the merged-rootfs tarball produced by the `build-rootfs-riscv`
+  reusable workflow into the cmake-side 3rdparty cache so per-platform
+  builds find it locally without hitting the GitHub release URL (which
+  may not be tagged yet, especially during branch CI).
+
+  Pass `artifact-name` to the calling workflow's
+  `needs.build-rootfs-riscv.outputs.tag`. Pass empty string to skip
+  (e.g. when build-rootfs-riscv was skipped because BUILD_ROOTFS_RISCV
+  was set to false). When skipped, `tinyemu-iframe.cmake` warns and
+  drops the VM bundle from the produced webasm/iframe — see comment
+  in that file.
+
+inputs:
+  artifact-name:
+    description: Workflow-artifact name (e.g. `yetty-rootfs-riscv-0.0.1`). Empty to skip.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Download merged rootfs artifact
+      if: inputs.artifact-name != ''
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ github.workspace }}/.rootfs-artifact
+
+    - name: Stage into 3rdparty cache
+      if: inputs.artifact-name != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        # yetty-asset-fetch.cmake (build-tools/yetty/) reads ~/.cache/yetty/3rdparty
+        # via $ENV{HOME}/.cache/yetty/3rdparty when no override is set. Copy the
+        # tarball there; the cmake-side stamp guard skips re-extraction
+        # when the version is already extracted (same as a regular
+        # cache hit).
+        mkdir -p "$HOME/.cache/yetty/3rdparty"
+        cp -v "$GITHUB_WORKSPACE/.rootfs-artifact"/yetty-rootfs-riscv-*.tar.gz \
+            "$HOME/.cache/yetty/3rdparty/"
