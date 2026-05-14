@@ -70,9 +70,12 @@ struct rectangle_result yetty_ysdf_compute_aabb(const float *data, uint32_t word
         break;
     }
     case YETTY_YSDF_ROUNDED_BOX: {
-        float max_radius = fmaxf(fmaxf(geom[4], geom[5]), fmaxf(geom[6], geom[7]));
-        float hw = geom[2] + max_radius + expand;
-        float hh = geom[3] + max_radius + expand;
+        /* Corner radii round INWARD into the box (see the SDF in
+         * primitives.yaml: `q = abs(pos) - half_size + corner_radii`
+         * carves the corners from the half-size rectangle). AABB is the
+         * plain (hw, hh) — same as YETTY_YSDF_BOX. */
+        float hw = geom[2] + expand;
+        float hh = geom[3] + expand;
         rect.min.x = geom[0] - hw;
         rect.min.y = geom[1] - hh;
         rect.max.x = geom[0] + hw;

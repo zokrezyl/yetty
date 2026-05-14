@@ -1,0 +1,573 @@
+/* yui.c — app-level chrome singleton.
+ *
+ * See yui.h for the producer → transport → consumer chain. This file owns
+ * the wiring; the ypaint-layer (KIND_STATIC) does the rendering and the
+ * osc_statemachine does the wire decode. Memory-pty bytes flow
+ * producer→consumer via in-process ring buffers and the event loop is
+ * woken via post_to_loop so the wake never re-enters synchronously
+ * (works the same in same-thread mode and once threading splits later).
+ */
+
+#include "yui.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <yetty/ygui/ygui.h>
+#include <yetty/yetty/yetty.h>
+#include <yetty/yevent/event-loop.h>
+#include <yetty/yplatform/pty.h>
+#include <yetty/yrender/render-target.h>
+#include <yetty/yterm/osc-codes.h>
+#include <yetty/yterm/osc-statemachine.h>
+#include <yetty/yterm/terminal.h>
+#include <yetty/yterm/ypaint-layer.h>
+#include <yetty/ytrace/ytrace.h>
+
+struct yetty_yui {
+    /* Producer-side endpoint. ygui's output flows in here via
+     * pty->ops->write. */
+    struct yetty_platform_pty *yui_endpoint;
+
+    /* Consumer-side endpoint. The SM reads from here via pty->ops->read
+     * (zero copy from the memory-pty's ring). */
+    struct yetty_platform_pty *render_endpoint;
+
+    /* Owns the YPAINT decode pipeline (b64 + lz4 today, kept as-is per
+     * the simplified plan — we do NOT change the wire codec yet, only
+     * the transport). Bound to render_endpoint. */
+    struct yetty_yterm_osc_statemachine *sm;
+
+    /* Static-canvas ypaint layer registered against YPAINT_CLEAR/BIN/OVERLAY
+     * on `sm`. Same constructor used by the per-terminal static placeholder. */
+    struct yetty_yrender_terminal_layer *layer;
+
+    /* Producer engine. Its OSC output is routed via output_pty into
+     * `yui_endpoint`; bytes flow through the memory pty → render side
+     * → SM → layer. */
+    struct yetty_ygui_engine *engine;
+
+    /* The v-menu (popup) and per-view config dialogs, parked on `engine`.
+     * Menus start closed; tabbar's v-click opens v_menu, and selecting
+     * an item opens the matching dialog. Dialog widget pointers are
+     * needed so item callbacks can address-by-name. */
+    struct yetty_ygui_widget *v_menu;
+    struct yetty_ygui_widget *dialogs[4]; /* indexed by yetty_yui_view_kind */
+
+    /* Connect dispatch — invoked from each dialog's "Connect" button. */
+    yetty_yui_connect_cb connect_cb;
+    void               *connect_userdata;
+
+    /* Cached for the memory-pty wake bridge. */
+    struct yetty_yevent_event_loop *loop;
+
+    /* Cell stride captured at create — `resize` recomputes grid cols/rows
+     * from new surface dims but leaves cell size alone. */
+    float cell_w;
+    float cell_h;
+};
+
+/*===========================================================================
+ * View kind metadata
+ *===========================================================================*/
+
+struct view_meta {
+    const char *title;
+    const char *id_prefix;
+    int         num_fields; /* number of textinput rows; Shell has 0. */
+    struct {
+        const char *label;
+        const char *id_suffix;
+        const char *placeholder;
+        const char *default_text;
+    } fields[4];
+};
+
+static const struct view_meta s_views[4] = {
+    [YETTY_YUI_VIEW_SHELL] = {
+        .title = "Open local shell",
+        .id_prefix = "yui_dlg_shell",
+        .num_fields = 1,
+        .fields = {
+            {"Command",  "/cmd",  "/bin/sh", ""},
+        },
+    },
+    [YETTY_YUI_VIEW_SSH] = {
+        .title = "Open SSH",
+        .id_prefix = "yui_dlg_ssh",
+        .num_fields = 3,
+        .fields = {
+            {"Host",     "/host", "user@host", ""},
+            {"Port",     "/port", "22",        "22"},
+            {"Key path", "/key",  "~/.ssh/id_rsa", ""},
+        },
+    },
+    [YETTY_YUI_VIEW_TELNET] = {
+        .title = "Open Telnet",
+        .id_prefix = "yui_dlg_telnet",
+        .num_fields = 2,
+        .fields = {
+            {"Host", "/host", "host", ""},
+            {"Port", "/port", "23",   "23"},
+        },
+    },
+    [YETTY_YUI_VIEW_YVNC] = {
+        .title = "Open yVNC",
+        .id_prefix = "yui_dlg_yvnc",
+        .num_fields = 2,
+        .fields = {
+            {"Host", "/host", "host", ""},
+            {"Port", "/port", "5900", "5900"},
+        },
+    },
+};
+
+/*===========================================================================
+ * Menu / dialog callbacks
+ *===========================================================================*/
+
+static void yui_menu_open_dialog(struct yetty_ygui_widget *item, void *userdata);
+static void yui_dialog_connect(struct yetty_ygui_widget *button, void *userdata);
+static void yui_dialog_cancel(struct yetty_ygui_widget *button, void *userdata);
+
+/* Per-callback bundle: which yui, which kind. Lives for the engine's
+ * lifetime — freed in destroy. */
+struct yui_cb_ctx {
+    struct yetty_yui     *yui;
+    enum yetty_yui_view_kind kind;
+};
+
+static struct yui_cb_ctx s_cb_ctx[4];
+
+/*===========================================================================
+ * Memory-pty wake → event loop bridge
+ *
+ * post_to_loop is thread-safe in both directions (caller thread + loop
+ * thread) and always defers — it is the right primitive even in
+ * same-thread mode, because waking synchronously inside pty->ops->write
+ * would re-enter dispatch in the middle of a write. Stays identical
+ * once yui moves to its own thread.
+ *===========================================================================*/
+
+static void yui_drain_cb(void *arg)
+{
+    struct yetty_yui *yui = arg;
+    if (!yui || !yui->sm) {
+        return;
+    }
+    struct yetty_ycore_void_result r = yetty_yterm_osc_statemachine_process(yui->sm);
+    if (!YETTY_IS_OK(r)) {
+        ywarn("yui: SM process failed: %s", r.error.msg);
+        yetty_ycore_error_destroy(r.error);
+    }
+}
+
+static void yui_wake(void *userdata)
+{
+    struct yetty_yui *yui = userdata;
+    if (!yui || !yui->loop || !yui->loop->ops || !yui->loop->ops->post_to_loop) {
+        return;
+    }
+    yui->loop->ops->post_to_loop(yui->loop, yui_drain_cb, yui);
+}
+
+/*===========================================================================
+ * Lifecycle
+ *===========================================================================*/
+
+struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context,
+                                             uint32_t surface_w, uint32_t surface_h, float cell_w,
+                                             float cell_h)
+{
+    if (!context) {
+        return YETTY_ERR(yetty_yui_ptr, "yui_create: NULL context");
+    }
+    if (cell_w <= 0.0f || cell_h <= 0.0f) {
+        return YETTY_ERR(yetty_yui_ptr, "yui_create: bad cell size");
+    }
+    if (surface_w == 0 || surface_h == 0) {
+        return YETTY_ERR(yetty_yui_ptr, "yui_create: zero surface");
+    }
+
+    struct yetty_yui *yui = calloc(1, sizeof(*yui));
+    if (!yui) {
+        return YETTY_ERR(yetty_yui_ptr, "yui_create: alloc failed");
+    }
+    yui->loop = context->event_loop;
+    yui->cell_w = cell_w;
+    yui->cell_h = cell_h;
+
+    /* Memory-pty pair — default 16 MiB per direction. */
+    struct yetty_yplatform_memory_pty_pair_result pp =
+        yetty_yplatform_memory_pty_pair_create(0);
+    if (!YETTY_IS_OK(pp)) {
+        free(yui);
+        return YETTY_ERR(yetty_yui_ptr, "yui_create: memory pty pair", pp);
+    }
+    yui->yui_endpoint = pp.value.a;
+    yui->render_endpoint = pp.value.b;
+
+    /* Static-canvas ypaint layer. Computes a coarse cols/rows from the
+     * window dims; chrome primitives are absolute-pixel so the grid is
+     * just an addressing index for the static-canvas's primitive lookup. */
+    uint32_t cols = (uint32_t)((float)surface_w / cell_w);
+    uint32_t rows = (uint32_t)((float)surface_h / cell_h);
+    if (cols == 0) {
+        cols = 1;
+    }
+    if (rows == 0) {
+        rows = 1;
+    }
+
+    struct yetty_yterm_terminal_layer_result lr = yetty_yterm_ypaint_layer_create(
+        YETTY_YPAINT_LAYER_KIND_STATIC, cols, rows, cell_w, cell_h, context,
+        /*request_render_fn=*/NULL, /*request_render_userdata=*/NULL,
+        /*scroll_fn=*/NULL, /*scroll_userdata=*/NULL,
+        /*cursor_fn=*/NULL, /*cursor_userdata=*/NULL);
+    if (!YETTY_IS_OK(lr)) {
+        yui->yui_endpoint->ops->destroy(yui->yui_endpoint);
+        yui->render_endpoint->ops->destroy(yui->render_endpoint);
+        free(yui);
+        return YETTY_ERR(yetty_yui_ptr, "yui_create: layer create", lr);
+    }
+    yui->layer = lr.value;
+
+    /* SM bound to the consumer-side endpoint. */
+    struct yetty_yterm_osc_statemachine_ptr_result sr =
+        yetty_yterm_osc_statemachine_create(yui->render_endpoint);
+    if (!YETTY_IS_OK(sr)) {
+        if (yui->layer && yui->layer->ops && yui->layer->ops->destroy) {
+            yui->layer->ops->destroy(yui->layer);
+        }
+        yui->yui_endpoint->ops->destroy(yui->yui_endpoint);
+        yui->render_endpoint->ops->destroy(yui->render_endpoint);
+        free(yui);
+        return YETTY_ERR(yetty_yui_ptr, "yui_create: SM create", sr);
+    }
+    yui->sm = sr.value;
+
+    /* Register YPAINT codes against the SM. */
+    struct yetty_ycore_void_result rr;
+    rr = yetty_yterm_osc_statemachine_register(yui->sm, YETTY_OSC_YPAINT_CLEAR, yui->layer);
+    YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register CLEAR");
+    rr = yetty_yterm_osc_statemachine_register(yui->sm, YETTY_OSC_YPAINT_BIN, yui->layer);
+    YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register BIN");
+    rr = yetty_yterm_osc_statemachine_register(yui->sm, YETTY_OSC_YPAINT_OVERLAY, yui->layer);
+    YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register OVERLAY");
+
+    /* Wake the consumer side via post_to_loop whenever the producer
+     * writes — defers even in same-thread mode, so the wake never
+     * re-enters dispatch mid-write. */
+    yetty_yplatform_memory_pty_set_wake(yui->render_endpoint, yui_wake, yui);
+
+    /* Producer engine. Local-only — no init/show/subscribe, no parent
+     * yetty to talk to via stdout. `output_pty` redirects OSC frame
+     * envelopes through the memory pty instead. */
+    struct ygui_engine_ptr_result er = yetty_ygui_engine_create("yui", 0, 0, (int)cols, (int)rows);
+    if (YETTY_IS_OK(er)) {
+        yui->engine = er.value;
+        yetty_ygui_engine_set_output_pty(yui->engine, yui->yui_endpoint);
+        yetty_ygui_engine_set_display_pixel_size(yui->engine, (float)surface_w, (float)surface_h);
+
+        /* Build the v-menu (closed at start) and one config dialog per
+         * view kind. Each dialog is positioned roughly under the v-button
+         * with a small offset so successive dialogs don't stack on top
+         * of one another. */
+        yui->v_menu = yetty_ygui_engine_popup_menu(yui->engine, "yui_v_menu",
+                                                   /*x=*/0, /*y=*/0,
+                                                   /*w=*/220);
+        if (yui->v_menu) {
+            yetty_ygui_widget_popup_menu_set_modal(yui->v_menu, 0);
+        }
+
+        for (int k = 0; k < 4; k++) {
+            s_cb_ctx[k].yui = yui;
+            s_cb_ctx[k].kind = (enum yetty_yui_view_kind)k;
+
+            /* Each dialog is a top-level window — created with placeholder
+             * geometry; the body widget below collects the field rows. */
+            char dlg_id[64];
+            snprintf(dlg_id, sizeof(dlg_id), "%s", s_views[k].id_prefix);
+            struct yetty_ygui_widget *dlg = yetty_ygui_engine_window(
+                yui->engine, dlg_id, 80.0f + (float)k * 12.0f, 60.0f, 360.0f, 220.0f,
+                s_views[k].title);
+            yui->dialogs[k] = dlg;
+            if (!dlg) {
+                continue;
+            }
+            yetty_ygui_widget_set_visible(dlg, 0);
+
+            struct yetty_ygui_widget *body = yetty_ygui_widget_window_body(dlg);
+            if (!body) {
+                continue;
+            }
+            yetty_ygui_widget_apply_css(body, "display:flex;flex-direction:column;gap:6;padding:8 10 10 10;");
+
+            /* One labeled textinput per field. Labels use ygui labels; the
+             * input itself carries the placeholder + default. */
+            for (int f = 0; f < s_views[k].num_fields; f++) {
+                char row_id[80], lbl_id[80], in_id[80];
+                snprintf(row_id, sizeof(row_id), "%s/row%d", s_views[k].id_prefix, f);
+                snprintf(lbl_id, sizeof(lbl_id), "%s/lbl%d", s_views[k].id_prefix, f);
+                snprintf(in_id,  sizeof(in_id),  "%s%s",   s_views[k].id_prefix,
+                         s_views[k].fields[f].id_suffix);
+                struct yetty_ygui_widget *row = yetty_ygui_engine_hbox(yui->engine, row_id,
+                                                                       0, 0, 0, 0);
+                if (!row) continue;
+                yetty_ygui_widget_apply_css(row, "display:flex;flex-direction:row;gap:8;align-items:center;");
+                yetty_ygui_widget_add_child(body, row);
+
+                struct yetty_ygui_widget *lbl = yetty_ygui_engine_label(yui->engine, lbl_id, 0, 0,
+                                                                        s_views[k].fields[f].label);
+                if (lbl) {
+                    yetty_ygui_widget_apply_css(lbl, "width:30%;");
+                    yetty_ygui_widget_add_child(row, lbl);
+                }
+                struct yetty_ygui_widget *in = yetty_ygui_engine_textinput(yui->engine, in_id, 0, 0, 0,
+                                                                            24,
+                                                                            s_views[k].fields[f].placeholder);
+                if (in) {
+                    yetty_ygui_widget_apply_css(in, "flex:1 0 0;");
+                    if (s_views[k].fields[f].default_text && s_views[k].fields[f].default_text[0]) {
+                        yetty_ygui_widget_textinput_set_text(in, s_views[k].fields[f].default_text);
+                    }
+                    yetty_ygui_widget_add_child(row, in);
+                }
+            }
+
+            /* Action row — Cancel + Connect at the bottom. */
+            char actions_id[80], cancel_id[80], connect_id[80];
+            snprintf(actions_id, sizeof(actions_id), "%s/actions", s_views[k].id_prefix);
+            snprintf(cancel_id,  sizeof(cancel_id),  "%s/cancel",  s_views[k].id_prefix);
+            snprintf(connect_id, sizeof(connect_id), "%s/connect", s_views[k].id_prefix);
+            struct yetty_ygui_widget *actions = yetty_ygui_engine_hbox(yui->engine, actions_id,
+                                                                        0, 0, 0, 0);
+            if (actions) {
+                yetty_ygui_widget_apply_css(actions, "display:flex;flex-direction:row;justify-content:end;gap:8;");
+                yetty_ygui_widget_add_child(body, actions);
+                struct yetty_ygui_widget *cancel = yetty_ygui_engine_button(yui->engine, cancel_id,
+                                                                              0, 0, 80, 28, "Cancel");
+                if (cancel) {
+                    yetty_ygui_widget_button_on_click(cancel, yui_dialog_cancel, &s_cb_ctx[k]);
+                    yetty_ygui_widget_add_child(actions, cancel);
+                }
+                struct yetty_ygui_widget *connect = yetty_ygui_engine_button(yui->engine, connect_id,
+                                                                               0, 0, 96, 28, "Connect");
+                if (connect) {
+                    yetty_ygui_widget_button_on_click(connect, yui_dialog_connect, &s_cb_ctx[k]);
+                    yetty_ygui_widget_add_child(actions, connect);
+                }
+            }
+        }
+
+        /* Populate the menu rows. Each row opens its kind's dialog. */
+        if (yui->v_menu) {
+            static const char *const LABELS[4] = {"Shell", "SSH", "Telnet", "yVNC"};
+            for (int k = 0; k < 4; k++) {
+                yetty_ygui_widget_popup_menu_add_item(yui->v_menu, LABELS[k],
+                                                       yui_menu_open_dialog, &s_cb_ctx[k]);
+            }
+        }
+    } else {
+        ywarn("yui_create: ygui engine create failed: %s", er.error.msg);
+        yetty_ycore_error_destroy(er.error);
+        /* Non-fatal — yui still owns the SM + layer; just no producer yet. */
+    }
+
+    ydebug("yui_create: grid=%ux%u cell=%.1fx%.1f", cols, rows, cell_w, cell_h);
+    return YETTY_OK(yetty_yui_ptr, yui);
+}
+
+struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
+{
+    if (!yui) {
+        return YETTY_OK_VOID();
+    }
+    if (yui->engine) {
+        struct yetty_ycore_void_result r = yetty_ygui_engine_destroy(yui->engine);
+        if (!YETTY_IS_OK(r)) {
+            ywarn("yui_destroy: engine destroy: %s", r.error.msg);
+            yetty_ycore_error_destroy(r.error);
+        }
+        yui->engine = NULL;
+    }
+    if (yui->sm) {
+        struct yetty_ycore_void_result r = yetty_yterm_osc_statemachine_destroy(yui->sm);
+        if (!YETTY_IS_OK(r)) {
+            ywarn("yui_destroy: sm destroy: %s", r.error.msg);
+            yetty_ycore_error_destroy(r.error);
+        }
+    }
+    if (yui->layer && yui->layer->ops && yui->layer->ops->destroy) {
+        struct yetty_ycore_void_result r = yui->layer->ops->destroy(yui->layer);
+        if (!YETTY_IS_OK(r)) {
+            ywarn("yui_destroy: layer destroy: %s", r.error.msg);
+            yetty_ycore_error_destroy(r.error);
+        }
+    }
+    if (yui->yui_endpoint) {
+        yui->yui_endpoint->ops->destroy(yui->yui_endpoint);
+    }
+    if (yui->render_endpoint) {
+        yui->render_endpoint->ops->destroy(yui->render_endpoint);
+    }
+    free(yui);
+    return YETTY_OK_VOID();
+}
+
+/*===========================================================================
+ * Render
+ *===========================================================================*/
+
+struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
+                                                struct yetty_ypaint_core_target *target)
+{
+    if (!yui || !yui->layer || !target) {
+        return YETTY_OK_VOID();
+    }
+
+    /* Drive the producer engine when dirty. Writes the OSC frame envelope
+     * into the yui_endpoint memory pty (no stdout, no b64-round-trip). */
+    if (yui->engine && yetty_ygui_engine_is_dirty(yui->engine)) {
+        struct yetty_ycore_void_result er = yetty_ygui_engine_render(yui->engine);
+        if (YETTY_IS_ERR(er)) {
+            ywarn("yui_render: engine render: %s", er.error.msg);
+            yetty_ycore_error_destroy(er.error);
+        }
+    }
+
+    /* Drain the SM synchronously — bytes the engine just wrote are sitting
+     * in the memory pty waiting to be parsed. Doing this in the same frame
+     * avoids a one-frame lag (the post_to_loop wake would otherwise defer
+     * this to next iteration). */
+    if (yui->sm) {
+        struct yetty_ycore_void_result pr = yetty_yterm_osc_statemachine_process(yui->sm);
+        if (YETTY_IS_ERR(pr)) {
+            ywarn("yui_render: SM process: %s", pr.error.msg);
+            yetty_ycore_error_destroy(pr.error);
+        }
+    }
+
+    if (yui->layer->ops->is_empty && yui->layer->ops->is_empty(yui->layer)) {
+        return YETTY_OK_VOID();
+    }
+    return yui->layer->ops->render(yui->layer, target);
+}
+
+struct yetty_platform_pty *yetty_yui_producer_pty(struct yetty_yui *yui)
+{
+    return yui ? yui->yui_endpoint : NULL;
+}
+
+/*===========================================================================
+ * Menu / dialog callback implementations
+ *===========================================================================*/
+
+static void yui_menu_open_dialog(struct yetty_ygui_widget *item, void *userdata)
+{
+    (void)item;
+    struct yui_cb_ctx *ctx = userdata;
+    if (!ctx || !ctx->yui || (int)ctx->kind < 0 || (int)ctx->kind >= 4) {
+        return;
+    }
+    struct yetty_ygui_widget *dlg = ctx->yui->dialogs[(int)ctx->kind];
+    if (!dlg) {
+        return;
+    }
+    yetty_ygui_widget_set_visible(dlg, 1);
+    if (ctx->yui->engine) {
+        yetty_ygui_engine_mark_dirty(ctx->yui->engine);
+    }
+}
+
+static void yui_dialog_cancel(struct yetty_ygui_widget *button, void *userdata)
+{
+    (void)button;
+    struct yui_cb_ctx *ctx = userdata;
+    if (!ctx || !ctx->yui) {
+        return;
+    }
+    struct yetty_ygui_widget *dlg = ctx->yui->dialogs[(int)ctx->kind];
+    if (dlg) {
+        yetty_ygui_widget_set_visible(dlg, 0);
+    }
+    if (ctx->yui->engine) {
+        yetty_ygui_engine_mark_dirty(ctx->yui->engine);
+    }
+}
+
+static void yui_dialog_connect(struct yetty_ygui_widget *button, void *userdata)
+{
+    (void)button;
+    struct yui_cb_ctx *ctx = userdata;
+    if (!ctx || !ctx->yui) {
+        return;
+    }
+    /* Hide the dialog first so the next frame already shows it gone,
+     * then fire the connect callback. The callback (yetty.c) will spawn
+     * the workspace on the same thread, but the dialog is no longer in
+     * the way visually. */
+    struct yetty_ygui_widget *dlg = ctx->yui->dialogs[(int)ctx->kind];
+    if (dlg) {
+        yetty_ygui_widget_set_visible(dlg, 0);
+    }
+    if (ctx->yui->engine) {
+        yetty_ygui_engine_mark_dirty(ctx->yui->engine);
+    }
+    if (ctx->yui->connect_cb) {
+        ctx->yui->connect_cb(ctx->yui->connect_userdata, ctx->kind);
+    }
+}
+
+/*===========================================================================
+ * Public menu / connect API
+ *===========================================================================*/
+
+void yetty_yui_show_view_menu(struct yetty_yui *yui, float anchor_x, float anchor_y)
+{
+    if (!yui || !yui->v_menu) {
+        return;
+    }
+    yetty_ygui_widget_popup_menu_open_at(yui->v_menu, anchor_x, anchor_y);
+    if (yui->engine) {
+        yetty_ygui_engine_mark_dirty(yui->engine);
+    }
+}
+
+void yetty_yui_set_connect_callback(struct yetty_yui *yui, yetty_yui_connect_cb cb,
+                                    void *userdata)
+{
+    if (!yui) {
+        return;
+    }
+    yui->connect_cb = cb;
+    yui->connect_userdata = userdata;
+}
+
+struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t surface_w,
+                                                uint32_t surface_h)
+{
+    if (!yui || !yui->layer) {
+        return YETTY_OK_VOID();
+    }
+    if (surface_w == 0 || surface_h == 0 || yui->cell_w <= 0.0f || yui->cell_h <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+    uint32_t cols = (uint32_t)((float)surface_w / yui->cell_w);
+    uint32_t rows = (uint32_t)((float)surface_h / yui->cell_h);
+    if (cols == 0) {
+        cols = 1;
+    }
+    if (rows == 0) {
+        rows = 1;
+    }
+    if (yui->engine) {
+        yetty_ygui_engine_set_display_pixel_size(yui->engine, (float)surface_w, (float)surface_h);
+    }
+    if (yui->layer->ops->resize_grid) {
+        struct yetty_ycore_grid_size gs = {.cols = cols, .rows = rows};
+        return yui->layer->ops->resize_grid(yui->layer, gs);
+    }
+    return YETTY_OK_VOID();
+}

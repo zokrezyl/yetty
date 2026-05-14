@@ -8,6 +8,7 @@
  */
 
 #include "ygui_internal.h"
+#include <yetty/ytrace/ytrace.h>
 
 #include <yetty/ypaint-core/buffer.h>
 #include <yetty/ysdf/funcs.gen.h>
@@ -50,6 +51,8 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box(struct yetty_ygu
     float cy = ay + h * 0.5f;
     float hw = w * 0.5f;
     float hh = h * 0.5f;
+    ydebug("render_box: in=(%.1f,%.1f,%.1f,%.1f) off=(%.1f,%.1f) abs=(%.1f,%.1f)..(%.1f,%.1f) color=0x%08x r=%.1f",
+           x, y, w, h, ctx->offset_x, ctx->offset_y, ax, ay, ax + w, ay + h, color, radius);
 
     struct yetty_ypaint_core_id_result r;
     if (radius > 0) {

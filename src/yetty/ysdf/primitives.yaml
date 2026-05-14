@@ -212,9 +212,17 @@
       return min(max(q.x, q.y), 0.0) + length(max(q, vec2<f32>(0.0))) - corner_radii.x;
   aabb:
     code: |
-      float max_radius = fmaxf(fmaxf(geom[4], geom[5]), fmaxf(geom[6], geom[7]));
-      float hw = geom[2] + max_radius + expand;
-      float hh = geom[3] + max_radius + expand;
+      /* Corner radii in this primitive round INWARD into the box (see the
+       * SDF above: `q = abs(pos) - half_size + corner_radii` carves the
+       * corners from the half-size rectangle), so the bounding box is the
+       * plain (hw, hh) — same as YETTY_YSDF_BOX. Adding max_radius here
+       * over-inflates the AABB and made fully-pane-sized rounded frames
+       * spill past the ypaint viewport's bottom row by one cell, which
+       * tripped scrolling-canvas's scroll-when-overflow path and shifted
+       * the canvas by one row — manifesting as the window titlebar
+       * showing only its lower half on the first frame after a resize. */
+      float hw = geom[2] + expand;
+      float hh = geom[3] + expand;
       *min_x = geom[0] - hw;
       *min_y = geom[1] - hh;
       *max_x = geom[0] + hw;

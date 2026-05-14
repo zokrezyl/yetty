@@ -28,6 +28,7 @@
 #include <yetty/ycore/util.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yface/yface.h>
+#include <yetty/ysdf/types.gen.h>
 
 static int decode_envelope(struct yetty_yface *y,
                            const char *body, size_t body_len)
@@ -121,50 +122,90 @@ static int decode_envelope(struct yetty_yface *y,
     const uint8_t *p = in->data + 24;
     const uint8_t *end = p + byte_count;
 
-    /* SDF prim word counts — from src/yetty/ysdf/funcs.gen.c. Sized to
-	 * cover the prims ybrowser emits (CIRCLE/BOX/SEGMENT, plus extended
-	 * shapes if a future producer adds them). */
-    static const int8_t sdf_words[64] = {
-        /* 0x10000000.. */ 8, 10, 9, 11, -1, -1, 9, 11,
-        /*               */ 13, 9, 8, 8, 10, 10, 11, 8,
-        /*               */ 10, 9, 10, 9, 9, -1, -1, -1,
-        /*               */ -1, -1, -1, -1, 8, 9, 9, -1,
-        /*               */ -1, -1, -1, -1, -1, -1, -1, -1,
-        /*               */ -1, -1, -1, -1, -1, -1, -1, -1,
-        /*               */ -1, -1, -1, -1, -1, -1, -1, -1,
-        /*               */ -1, -1, -1, -1, -1, -1, -1, -1,
-    };
-
     int text_spans = 0;
     int qpy_only = 0;
     int short_qpy = 0;
+    int prim_index = 0;
 
     while (p + 8 <= end) {
         uint32_t t;
         memcpy(&t, p, 4);
         size_t psize;
-        if ((t & 0xFFFFFF00) == 0x10000000) {
-            uint8_t idx = (uint8_t)(t & 0xFF);
-            if (idx >= 64 || sdf_words[idx] <= 0) {
-                fprintf(stderr, "  unknown SDF prim type 0x%08x at offset %zu\n", t,
-                        (size_t)(p - in->data));
+        int is_sdf = ((t & 0xF0000000u) == 0x10000000u);
+        if (is_sdf) {
+            uint32_t wc = yetty_ysdf_word_count((enum yetty_ysdf_type)t);
+            if (wc == 0) {
+                fprintf(stderr,
+                        "  prim #%d @off=%zu: unknown SDF type 0x%08x — skipping rest\n",
+                        prim_index, (size_t)(p - in->data), t);
                 break;
             }
-            psize = (size_t)sdf_words[idx] * 4;
+            psize = (size_t)wc * 4u;
         } else if (t == 0x40000002 || t == 0x40000001 || t == 0 ||
                    (t & 0xF0000000) == 0x80000000) {
             uint32_t payload_size;
             memcpy(&payload_size, p + 4, 4);
             psize = 8u + payload_size;
         } else {
-            fprintf(stderr, "  unknown prim type 0x%08x at offset %zu\n", t,
-                    (size_t)(p - in->data));
+            fprintf(stderr,
+                    "  prim #%d @off=%zu: unknown prim type 0x%08x — skipping rest\n",
+                    prim_index, (size_t)(p - in->data), t);
             break;
         }
         if (psize == 0 || p + psize > end) {
-            fprintf(stderr, "  truncated prim at offset %zu (size %zu, remaining %zu)\n",
-                    (size_t)(p - in->data), psize, (size_t)(end - p));
+            fprintf(stderr,
+                    "  prim #%d @off=%zu: truncated (size %zu, remaining %zu)\n",
+                    prim_index, (size_t)(p - in->data), psize, (size_t)(end - p));
             break;
+        }
+
+        /* One-line dump per SDF prim. Geometry layout (after type/z_order/
+         * fill/stroke/stroke_width) starts at word[5]. For the 2D box-ish
+         * primitives (BOX, ROUNDED_BOX, LINEAR/RADIAL_GRADIENT_BOX, CIRCLE,
+         * ELLIPSE, CAPSULE, …) word[5..6] are (cx, cy). For BOX/ROUNDED_BOX
+         * specifically word[7..8] are (hw, hh) — so we can recover the
+         * (x, y, w, h) the producer asked for. CIRCLE has radius at [7].
+         * Anything else prints just (cx, cy). */
+        if (is_sdf) {
+            const uint32_t *w = (const uint32_t *)p;
+            float cx, cy;
+            memcpy(&cx, &w[5], 4);
+            memcpy(&cy, &w[6], 4);
+            if (t == YETTY_YSDF_BOX || t == YETTY_YSDF_ROUNDED_BOX ||
+                t == YETTY_YSDF_LINEAR_GRADIENT_BOX ||
+                t == YETTY_YSDF_RADIAL_GRADIENT_BOX) {
+                float hw, hh;
+                memcpy(&hw, &w[7], 4);
+                memcpy(&hh, &w[8], 4);
+                const char *name =
+                    (t == YETTY_YSDF_BOX) ? "BOX" :
+                    (t == YETTY_YSDF_ROUNDED_BOX) ? "ROUNDED_BOX" :
+                    (t == YETTY_YSDF_LINEAR_GRADIENT_BOX) ? "LINEAR_GRADIENT_BOX" :
+                                                            "RADIAL_GRADIENT_BOX";
+                uint32_t fill, stroke;
+                memcpy(&fill, &w[2], 4);
+                memcpy(&stroke, &w[3], 4);
+                fprintf(stderr,
+                        "  prim #%d %s rect=(%.1f,%.1f)..(%.1f,%.1f) "
+                        "hw=%.1f hh=%.1f fill=0x%08x stroke=0x%08x\n",
+                        prim_index, name, cx - hw, cy - hh, cx + hw, cy + hh, hw, hh,
+                        fill, stroke);
+            } else if (t == YETTY_YSDF_CIRCLE) {
+                float r;
+                memcpy(&r, &w[7], 4);
+                fprintf(stderr, "  prim #%d CIRCLE c=(%.1f,%.1f) r=%.1f\n",
+                        prim_index, cx, cy, r);
+            } else {
+                fprintf(stderr,
+                        "  prim #%d SDF type=0x%08x c=(%.1f,%.1f) words=%zu\n",
+                        prim_index, t, cx, cy, psize / 4);
+            }
+        } else if ((t & 0xF0000000u) == 0x80000000u) {
+            fprintf(stderr,
+                    "  prim #%d COMPLEX type=0x%08x payload=%zu B\n",
+                    prim_index, t, psize - 8);
+        } else if (t == 0) {
+            fprintf(stderr, "  prim #%d CMD_ZERO (clear+home)\n", prim_index);
         }
         if (t == 0x40000002 && psize >= 48) {
             text_spans++;
@@ -215,27 +256,43 @@ static int decode_envelope(struct yetty_yface *y,
             }
         }
         p += psize;
+        prim_index++;
     }
-    fprintf(stderr, "  prim summary: %d TEXT_SPANs; qpy-only=%d; short(<=2)-with-qpy=%d\n",
-            text_spans, qpy_only, short_qpy);
+    fprintf(stderr,
+            "  prim summary: %d prims total; %d TEXT_SPANs; "
+            "qpy-only=%d; short(<=2)-with-qpy=%d\n",
+            prim_index, text_spans, qpy_only, short_qpy);
     return 0;
 }
 
-static int run(const char *path)
+static int run(FILE *f, const char *label)
 {
-    FILE *f = fopen(path, "rb");
-    if (!f) { perror(path); return 1; }
-    fseek(f, 0, SEEK_END);
-    size_t n = (size_t)ftell(f);
-    fseek(f, 0, SEEK_SET);
-    char *buf = malloc(n + 1);
-    if (!buf) { fclose(f); return 1; }
-    if (fread(buf, 1, n, f) != n) {
-        fprintf(stderr, "short read\n");
-        free(buf); fclose(f); return 1;
+    /* Read everything until EOF. Stdin can't seek, so use a growable
+     * buffer for both stdin and regular files (one path, no fseek). */
+    size_t cap = 1u << 14;
+    size_t n = 0;
+    char *buf = malloc(cap + 1);
+    if (!buf) { fprintf(stderr, "alloc failed\n"); return 1; }
+    for (;;) {
+        if (n == cap) {
+            cap *= 2;
+            char *grown = realloc(buf, cap + 1);
+            if (!grown) { free(buf); fprintf(stderr, "realloc failed\n"); return 1; }
+            buf = grown;
+        }
+        size_t r = fread(buf + n, 1, cap - n, f);
+        n += r;
+        if (r == 0) {
+            if (ferror(f)) {
+                fprintf(stderr, "read error on %s\n", label);
+                free(buf);
+                return 1;
+            }
+            break;
+        }
     }
     buf[n] = 0;
-    fclose(f);
+    fprintf(stderr, "read %zu B from %s\n", n, label);
 
     /* One yface for all envelopes — same pattern as the receiver. */
     struct yetty_yface_ptr_result yr = yetty_yface_create();
@@ -273,11 +330,68 @@ static int run(const char *path)
     return errors ? 1 : 0;
 }
 
+static void print_help(const char *prog)
+{
+    fprintf(stderr,
+            "usage: %s [FILE | -]\n"
+            "       %s -h | --help\n"
+            "\n"
+            "Decode the OSC envelopes emitted by a ypaint producer\n"
+            "(ycat, ygreeter, ygui apps, ...).\n"
+            "\n"
+            "With no argument or with `-`, reads from standard input — useful\n"
+            "for piping a live producer straight into the decoder:\n"
+            "\n"
+            "    ./ygreeter | %s\n"
+            "    cat capture.bin | %s -\n"
+            "    %s capture.bin\n"
+            "\n"
+            "All diagnostic output goes to stderr, so this tool can be chained\n"
+            "with others (e.g. `grep`, `tee`) on stdout without interference.\n"
+            "\n"
+            "For each OSC envelope decode-ypaint prints:\n"
+            "  - the OSC code\n"
+            "  - the args meta (magic, version, compression flag, raw size)\n"
+            "  - the decoded payload size + first 16 bytes (so the ypaint\n"
+            "    magic `YPB1` is directly visible)\n"
+            "  - a summary of TEXT_SPAN primitives carried in the payload\n",
+            prog, prog, prog, prog, prog);
+}
+
 int main(int argc, char **argv)
 {
-    if (argc != 2) {
-        fprintf(stderr, "usage: %s <ycat-output-file>\n", argv[0]);
-        return 1;
+    const char *path = NULL;
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
+            print_help(argv[0]);
+            return 0;
+        }
+        if (argv[i][0] == '-' && argv[i][1] != '\0') {
+            fprintf(stderr, "unknown flag: %s\n", argv[i]);
+            print_help(argv[0]);
+            return 1;
+        }
+        if (path) {
+            fprintf(stderr, "too many positional arguments\n");
+            print_help(argv[0]);
+            return 1;
+        }
+        path = argv[i];
     }
-    return run(argv[1]);
+
+    FILE *f;
+    const char *label;
+    if (!path || !strcmp(path, "-")) {
+        f = stdin;
+        label = "<stdin>";
+    } else {
+        f = fopen(path, "rb");
+        if (!f) { perror(path); return 1; }
+        label = path;
+    }
+    int rc = run(f, label);
+    if (f != stdin) {
+        fclose(f);
+    }
+    return rc;
 }

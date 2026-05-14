@@ -1183,9 +1183,15 @@ int main(int argc, char **argv)
     yetty_ygui_engine_on_key(app.engine, on_key, NULL);
     yetty_ygui_engine_show(app.engine);
     {
+        /* In CANVAS_FIT mode the engine reports 1x1 until OSC 777780 returns
+         * the real pixel size. set_size(outer, 1, 1) would stomp the authored
+         * 100x100 and trip window_render's "skip first frame" early-return
+         * (self->w < 78), so the frame + titlebar would never paint. Skip the
+         * stomp here — on_resize installs the real size as soon as the host
+         * replies. */
         float cw = 0, ch = 0;
         yetty_ygui_engine_get_size(app.engine, &cw, &ch);
-        if (cw > 0 && ch > 0) {
+        if (cw > 1.0f && ch > 1.0f) {
             yetty_ygui_widget_set_size(app.outer, cw, ch);
         }
     }
