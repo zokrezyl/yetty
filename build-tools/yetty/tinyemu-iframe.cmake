@@ -92,25 +92,41 @@ target_link_options(tinyemu_vm PRIVATE
 # manifest.json schema mirrors yetty-assets:
 #   { "version": "<stamp>",
 #     "entries": [ { "url": "X.br", "dest": "/yetty-vm/yemu/X", "brotli": true }, ... ] }
-if(NOT TINYEMU_KERNEL_PATH OR NOT TINYEMU_OPENSBI_PATH OR NOT YETTY_ROOTFS_RISCV_IMG)
+if(NOT TINYEMU_KERNEL_PATH OR NOT TINYEMU_OPENSBI_PATH)
     message(FATAL_ERROR
-        "tinyemu-iframe: missing kernel/opensbi/rootfs paths — shared.cmake "
+        "tinyemu-iframe: missing kernel/opensbi paths — shared.cmake "
         "must be included before tinyemu-iframe.cmake")
 endif()
 
 # The .br files live next to the decompressed ones in 3rdparty-fetch's
 # output (the linux / opensbi tarballs ship both flavours; the unified
 # yetty-rootfs-riscv tarball ships only .br + manifest).
+#
+# Kernel + opensbi are stable 3rdparty pins — required. The unified rootfs
+# (yetty-rootfs-riscv) follows the same warn-and-skip pattern the old
+# yetty-tools-riscv asset did: a fresh checkout (no release tagged yet) or
+# an explicit BUILD_ROOTFS_RISCV=false in CI can omit it, in which case
+# the iframe ships without the riscv VM bundle.
 set(_KERNEL_BR  "${TINYEMU_KERNEL_PATH}.br")
 set(_OPENSBI_BR "${TINYEMU_OPENSBI_PATH}.br")
-set(_ROOTFS_BR  "${YETTY_ROOTFS_RISCV_IMG}.br")
-foreach(_F "${_KERNEL_BR}" "${_OPENSBI_BR}" "${_ROOTFS_BR}")
+foreach(_F "${_KERNEL_BR}" "${_OPENSBI_BR}")
     if(NOT EXISTS "${_F}")
         message(FATAL_ERROR
             "tinyemu-iframe: expected pre-brotli'd VM asset not found: ${_F}\n"
-            "  the 3rdparty-fetch / yetty-asset-fetch tarballs should ship both raw + .br files.")
+            "  the 3rdparty-fetch tarballs should ship both raw + .br files.")
     endif()
 endforeach()
+
+set(_ROOTFS_BR "")
+if(YETTY_ROOTFS_RISCV_IMG AND EXISTS "${YETTY_ROOTFS_RISCV_IMG}.br")
+    set(_ROOTFS_BR "${YETTY_ROOTFS_RISCV_IMG}.br")
+else()
+    message(WARNING
+        "tinyemu-iframe: yetty-rootfs-riscv.img.br not found — VM bundle "
+        "will be absent from the webasm iframe. Build with the "
+        "yetty-rootfs-riscv asset present (release the tag or stage the "
+        "tarball into the 3rdparty cache) to include it.")
+endif()
 
 set(YETTY_TINYEMU_ASSETS_DIR "${CMAKE_BINARY_DIR}/tinyemu-assets" CACHE INTERNAL "")
 file(REMOVE_RECURSE "${YETTY_TINYEMU_ASSETS_DIR}")
@@ -123,10 +139,16 @@ configure_file("${_KERNEL_BR}"
     "${YETTY_TINYEMU_ASSETS_DIR}/kernel-riscv64.bin.br" COPYONLY)
 configure_file("${_OPENSBI_BR}"
     "${YETTY_TINYEMU_ASSETS_DIR}/opensbi-fw_jump.elf.br" COPYONLY)
-configure_file("${_ROOTFS_BR}"
-    "${YETTY_TINYEMU_ASSETS_DIR}/yetty-rootfs-riscv.img.br" COPYONLY)
 configure_file("${YETTY_ROOT}/assets/yemu/temu/yetty-temu-extended.cfg"
     "${YETTY_TINYEMU_ASSETS_DIR}/yetty-temu-extended.cfg" COPYONLY)
+if(_ROOTFS_BR)
+    configure_file("${_ROOTFS_BR}"
+        "${YETTY_TINYEMU_ASSETS_DIR}/yetty-rootfs-riscv.img.br" COPYONLY)
+    set(_ROOTFS_MANIFEST_ENTRY
+        "    { \"url\": \"yetty-rootfs-riscv.img.br\",   \"dest\": \"/yetty-vm/yemu/yetty-rootfs-riscv.img\",   \"brotli\": true  },\n")
+else()
+    set(_ROOTFS_MANIFEST_ENTRY "")
+endif()
 
 # Manifest. dest paths match BRIDGE_CFG_PATH ("/yetty-vm/...") in
 # tinyemu-bridge.c and the cfg's $YETTY_DATA_DIR expansion.
@@ -137,13 +159,16 @@ file(WRITE "${YETTY_TINYEMU_ASSETS_DIR}/manifest.json"
   \"entries\": [
     { \"url\": \"kernel-riscv64.bin.br\",       \"dest\": \"/yetty-vm/yemu/kernel-riscv64.bin\",       \"brotli\": true  },
     { \"url\": \"opensbi-fw_jump.elf.br\",      \"dest\": \"/yetty-vm/yemu/opensbi-fw_jump.elf\",      \"brotli\": true  },
-    { \"url\": \"yetty-rootfs-riscv.img.br\",   \"dest\": \"/yetty-vm/yemu/yetty-rootfs-riscv.img\",   \"brotli\": true  },
-    { \"url\": \"yetty-temu-extended.cfg\",     \"dest\": \"/yetty-vm/yetty-temu-extended.cfg\",       \"brotli\": false }
+${_ROOTFS_MANIFEST_ENTRY}    { \"url\": \"yetty-temu-extended.cfg\",     \"dest\": \"/yetty-vm/yetty-temu-extended.cfg\",       \"brotli\": false }
   ]
 }
 ")
 
-message(STATUS "tinyemu-iframe: staged 4 VM assets in ${YETTY_TINYEMU_ASSETS_DIR}")
+if(_ROOTFS_BR)
+    message(STATUS "tinyemu-iframe: staged 4 VM assets in ${YETTY_TINYEMU_ASSETS_DIR}")
+else()
+    message(STATUS "tinyemu-iframe: staged 3 VM assets in ${YETTY_TINYEMU_ASSETS_DIR} (no rootfs — VM bundle absent)")
+endif()
 
 # Place tinyemu.{js,wasm,data} next to yetty.{js,wasm} so tinyemu-iframe.html
 # can load them with relative URLs.

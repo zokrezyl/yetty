@@ -128,6 +128,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
+
     - name: Install Linux dependencies
       if: runner.os == 'Linux'
       run: |
@@ -177,6 +182,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install Linux dependencies
       run: |
@@ -243,6 +253,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
+
     - name: Install Linux dependencies
       run: |
         sudo apt-get update
@@ -291,6 +306,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install macOS dependencies
       run: brew install automake autoconf libtool meson ninja nasm brotli webp fontconfig
@@ -345,6 +365,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
+
     - name: Install macOS dependencies
       run: brew install automake autoconf libtool meson ninja nasm brotli webp fontconfig
 
@@ -394,6 +419,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install Windows build dependencies
       shell: bash
@@ -468,6 +498,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
+
     - name: Install build dependencies
       run: |
         sudo apt-get update
@@ -530,6 +565,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install build dependencies
       run: |
@@ -649,6 +689,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
+
     - name: Install macOS dependencies
       run: brew install automake autoconf libtool ninja nasm brotli meson webp fontconfig
 
@@ -687,6 +732,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install macOS dependencies
       run: brew install automake autoconf libtool ninja nasm brotli meson webp fontconfig
@@ -727,6 +777,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Stage merged rootfs
+      uses: ./.github/actions/stage-rootfs-riscv
+      with:
+        artifact-name: ${{ needs.build-rootfs-riscv.result == 'success' && needs.build-rootfs-riscv.outputs.tag || '' }}
 
     - name: Install build dependencies
       run: |
