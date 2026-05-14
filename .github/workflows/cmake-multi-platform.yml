@@ -29,6 +29,12 @@ env:
   BUILD_IOS_X86_64: true
   BUILD_WEB: true
 
+  # Merged riscv64 rootfs (alpine-extended + /yetty/{bin,repo}). All
+  # per-platform binaries fetch this as a runtime asset; disable for
+  # fast iteration when you only care about a non-VM code path. Always
+  # built on release tags regardless of this flag.
+  BUILD_ROOTFS_RISCV: true
+
   RUN_CODEQL: false
   RUN_CODACY: false
 
@@ -52,6 +58,7 @@ jobs:
       ios: ${{ steps.set.outputs.ios }}
       ios_x86_64: ${{ steps.set.outputs.ios_x86_64 }}
       web: ${{ steps.set.outputs.web }}
+      rootfs_riscv: ${{ steps.set.outputs.rootfs_riscv }}
       codeql: ${{ steps.set.outputs.codeql }}
       codacy: ${{ steps.set.outputs.codacy }}
       test_android: ${{ steps.set.outputs.test_android }}
@@ -70,6 +77,7 @@ jobs:
             echo "ios=true" >> $GITHUB_OUTPUT
             echo "ios_x86_64=true" >> $GITHUB_OUTPUT
             echo "web=true" >> $GITHUB_OUTPUT
+            echo "rootfs_riscv=true" >> $GITHUB_OUTPUT
             echo "codeql=false" >> $GITHUB_OUTPUT
             echo "codacy=false" >> $GITHUB_OUTPUT
             echo "test_android=true" >> $GITHUB_OUTPUT
@@ -85,6 +93,7 @@ jobs:
             echo "ios=${{ env.BUILD_IOS }}" >> $GITHUB_OUTPUT
             echo "ios_x86_64=${{ env.BUILD_IOS_X86_64 }}" >> $GITHUB_OUTPUT
             echo "web=${{ env.BUILD_WEB }}" >> $GITHUB_OUTPUT
+            echo "rootfs_riscv=${{ env.BUILD_ROOTFS_RISCV }}" >> $GITHUB_OUTPUT
             echo "codeql=${{ env.RUN_CODEQL }}" >> $GITHUB_OUTPUT
             echo "codacy=${{ env.RUN_CODACY }}" >> $GITHUB_OUTPUT
             echo "test_android=${{ env.TEST_ANDROID }}" >> $GITHUB_OUTPUT
@@ -100,6 +109,7 @@ jobs:
   # =============================================================================
   build-rootfs-riscv:
     needs: read-flags
+    if: needs.read-flags.outputs.rootfs_riscv == 'true'
     uses: ./.github/workflows/build-yetty-rootfs-riscv.yml
     permissions:
       contents: write
@@ -109,7 +119,7 @@ jobs:
   # =============================================================================
   build-linux-ytrace-release:
     needs: [read-flags, build-rootfs-riscv]
-    if: needs.read-flags.outputs.linux == 'true'
+    if: ${{ !cancelled() && needs.read-flags.outputs.linux == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: ubuntu-latest
 
     env:
@@ -159,7 +169,7 @@ jobs:
   # =============================================================================
   build-linux-ytrace-asan:
     needs: [read-flags, build-rootfs-riscv]
-    if: needs.read-flags.outputs.linux_asan == 'true'
+    if: ${{ !cancelled() && needs.read-flags.outputs.linux_asan == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: ubuntu-latest
 
     env:
@@ -224,7 +234,7 @@ jobs:
   # =============================================================================
   build-linux-aarch64-ytrace-release:
     needs: [read-flags, build-rootfs-riscv]
-    if: needs.read-flags.outputs.linux_aarch64 == 'true'
+    if: ${{ !cancelled() && needs.read-flags.outputs.linux_aarch64 == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: ubuntu-24.04-arm
 
     env:
@@ -273,7 +283,7 @@ jobs:
   # =============================================================================
   build-macos-ytrace-release:
     needs: [read-flags, build-rootfs-riscv]
-    if: needs.read-flags.outputs.macos == 'true'
+    if: ${{ !cancelled() && needs.read-flags.outputs.macos == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: macos-latest
 
     env:
@@ -326,7 +336,7 @@ jobs:
   # =============================================================================
   build-macos_x86_64-ytrace-release:
     needs: [read-flags, build-rootfs-riscv]
-    if: needs.read-flags.outputs.macos_x86_64 == 'true'
+    if: ${{ !cancelled() && needs.read-flags.outputs.macos_x86_64 == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: macos-15-intel
 
     env:
@@ -376,7 +386,7 @@ jobs:
   # =============================================================================
   build-windows-ytrace-release:
     needs: [read-flags, build-rootfs-riscv]
-    if: needs.read-flags.outputs.windows == 'true'
+    if: ${{ !cancelled() && needs.read-flags.outputs.windows == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: windows-latest
 
     env:
@@ -448,7 +458,7 @@ jobs:
   # =============================================================================
   build-android-ytrace-release:
     needs: [read-flags, build-rootfs-riscv]
-    if: needs.read-flags.outputs.android == 'true'
+    if: ${{ !cancelled() && needs.read-flags.outputs.android == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: ubuntu-latest
 
     env:
@@ -511,7 +521,7 @@ jobs:
   # =============================================================================
   build-android_x86_64-ytrace-release:
     needs: [read-flags, build-rootfs-riscv]
-    if: needs.read-flags.outputs.android_x86_64 == 'true'
+    if: ${{ !cancelled() && needs.read-flags.outputs.android_x86_64 == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: ubuntu-latest
 
     env:
@@ -630,7 +640,7 @@ jobs:
   # =============================================================================
   build-ios-ytrace-release:
     needs: [read-flags, build-rootfs-riscv]
-    if: needs.read-flags.outputs.ios == 'true'
+    if: ${{ !cancelled() && needs.read-flags.outputs.ios == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: macos-latest
 
     env:
@@ -669,7 +679,7 @@ jobs:
   # =============================================================================
   build-ios_x86_64-ytrace-release:
     needs: [read-flags, build-rootfs-riscv]
-    if: needs.read-flags.outputs.ios_x86_64 == 'true'
+    if: ${{ !cancelled() && needs.read-flags.outputs.ios_x86_64 == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: macos-15-intel
 
     env:
@@ -709,7 +719,7 @@ jobs:
   # =============================================================================
   build-webasm-ytrace-release:
     needs: [read-flags, build-rootfs-riscv]
-    if: needs.read-flags.outputs.web == 'true'
+    if: ${{ !cancelled() && needs.read-flags.outputs.web == 'true' && (needs.build-rootfs-riscv.result == 'success' || needs.build-rootfs-riscv.result == 'skipped') }}
     runs-on: ubuntu-latest
 
     env:

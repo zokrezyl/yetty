@@ -51,7 +51,11 @@ jobs:
           set -euo pipefail
           V="$(tr -d '[:space:]' < build-tools/yemu/yetty-rootfs-riscv/version)"
           [ -n "$V" ] || { echo "version file is empty" >&2; exit 1; }
-          if [[ "${{ github.event_name }}" == "push" ]]; then
+          # Only enforce tag-vs-version-file match on actual tag pushes.
+          # Branch pushes and reusable-workflow calls (cmake-multi-platform.yml)
+          # arrive here as event_name=push too, but with refs/heads/* — they
+          # build the same image, just don't publish a release at the end.
+          if [[ "${{ github.event_name }}" == "push" && "$GITHUB_REF" == refs/tags/* ]]; then
             REF="${GITHUB_REF#refs/tags/}"
             EXPECT="yetty-rootfs-riscv-$V"
             if [ "$REF" != "$EXPECT" ]; then
