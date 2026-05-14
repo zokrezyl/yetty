@@ -31,6 +31,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <yetty/ytrace/ytrace.h>
 
 void yetty_ygui_engine_attach_widget(struct yetty_ygui_engine *engine,
                                      struct yetty_ygui_widget *widget);
@@ -87,14 +88,23 @@ static struct yetty_ycore_void_result window_render(struct yetty_ygui_widget *se
      * ypaint canvas rejects the AABB and logs an error. By the time
      * resize fires the geometry is sane. */
     float bsz = window_button_size();
+    ydebug("window_render id=%s self=(%.1f,%.1f) size=%.1fx%.1f th=%.1f bsz=%.1f thr=%.1f",
+           self->id ? self->id : "?", self->x, self->y, self->w, self->h, th, bsz,
+           th + 2 * (bsz + WINDOW_BUTTON_PAD));
     if (self->w < (th + 2 * (bsz + WINDOW_BUTTON_PAD))) {
+        ydebug("window_render EARLY-RETURN (self->w=%.1f < threshold=%.1f)",
+               self->w, th + 2 * (bsz + WINDOW_BUTTON_PAD));
         return YETTY_OK_VOID();
     }
 
     /* Frame: a single rounded box behind everything; the title bar
      * sits as a solid band on top. */
+    ydebug("window_render: frame box=(%.1f,%.1f,%.1f,%.1f)",
+           self->x, self->y, self->w, self->h);
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, theme->bg_primary,
                                      WINDOW_CORNER_RADIUS);
+    ydebug("window_render: titlebar box=(%.1f,%.1f,%.1f,%.1f)",
+           self->x, self->y, self->w, th);
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, th, theme->bg_header,
                                      WINDOW_CORNER_RADIUS);
     /* Hairline at the bottom of the title bar separates chrome from body. */

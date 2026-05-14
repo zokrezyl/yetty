@@ -20,6 +20,9 @@
 struct yetty_ygui_render_ctx;
 typedef struct ygui_input_event ygui_input_event_t;
 
+/* Forward-declare to avoid pulling yplatform/pty.h into widget-heavy includes. */
+struct yetty_platform_pty;
+
 /*=============================================================================
  * Render Context (drawing target = a ypaint-core buffer). The shim that used
  * to sit here (ydraw-capi.gen.*) is gone; widgets call yetty_ysdf_add_* and
@@ -494,6 +497,13 @@ struct yetty_ygui_engine {
     int owns_loop; /* 1 if we created the loop */
     int input_fd;  /* Input file descriptor (default: STDIN_FILENO) */
     int output_fd; /* Output file descriptor (default: STDOUT_FILENO) */
+
+    /* In-process sink override. When non-NULL, ypaint frame envelopes
+     * go through pty->ops->write instead of write(output_fd). Used by
+     * yetty's own yui chrome to avoid a stdout round-trip when ygui
+     * lives in the same process as the renderer. NULL = fall back to
+     * `output_fd` (default client-mode behaviour). */
+    struct yetty_platform_pty *output_pty;
     uv_poll_t stdin_poll;
     uv_prepare_t prepare_handle; /* For auto-render before polling */
 
@@ -618,11 +628,18 @@ struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(
  * boxes that the spatial grid uses for hit testing. See ygui_layout.c. */
 struct yetty_ycore_void_result yetty_ygui_layout_compute_engine(struct yetty_ygui_engine *engine);
 
-/* OSC output (ygui_osc.c) */
-struct yetty_ycore_void_result yetty_ygui_osc_create_card(const char *name, int x, int y, int w,
+/* OSC output (ygui_osc.c).
+ *
+ * `output_pty` is optional — when non-NULL, the binary OSC envelope is
+ * written through pty->ops->write (zero-copy, no fd, used by yetty's
+ * own in-process yui chrome). When NULL, falls back to writing the
+ * full envelope to STDOUT_FILENO (default client-mode path). */
+struct yetty_ycore_void_result yetty_ygui_osc_create_card(struct yetty_platform_pty *output_pty,
+                                                          const char *name, int x, int y, int w,
                                                           int h, const uint8_t *data,
                                                           uint32_t size);
-struct yetty_ycore_void_result yetty_ygui_osc_update_card(const char *name, const uint8_t *data,
+struct yetty_ycore_void_result yetty_ygui_osc_update_card(struct yetty_platform_pty *output_pty,
+                                                          const char *name, const uint8_t *data,
                                                           uint32_t size);
 void yetty_ygui_osc_kill_card(const char *name);
 void yetty_ygui_osc_subscribe_clicks(int enable);

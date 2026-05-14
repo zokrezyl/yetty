@@ -27,6 +27,7 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/webasm.c
     ${YETTY_ROOT}/src/yetty/ypty/iframepty.c
+    ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
     ${YETTY_ROOT}/src/yetty/ytransport/iframe-transport.c
     ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/brotli-glue.c

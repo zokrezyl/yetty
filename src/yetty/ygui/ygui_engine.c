@@ -640,13 +640,13 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
 
     /* 5. Send OSC */
     if (!engine->card_shown) {
-        struct yetty_ycore_void_result r =
-            yetty_ygui_osc_create_card(engine->card_name, engine->card_x, engine->card_y,
-                                       engine->card_w, engine->card_h, data, size);
+        struct yetty_ycore_void_result r = yetty_ygui_osc_create_card(
+            engine->output_pty, engine->card_name, engine->card_x, engine->card_y, engine->card_w,
+            engine->card_h, data, size);
         engine->card_shown = 1;
         return r;
     }
-    return yetty_ygui_osc_update_card(engine->card_name, data, size);
+    return yetty_ygui_osc_update_card(engine->output_pty, engine->card_name, data, size);
 }
 
 struct yetty_ycore_void_result yetty_ygui_engine_show(struct yetty_ygui_engine *engine)
@@ -685,9 +685,9 @@ struct yetty_ycore_void_result yetty_ygui_engine_show(struct yetty_ygui_engine *
         const uint8_t *data = NULL;
         uint32_t size = (uint32_t)yetty_ypaint_core_buffer_serialize(engine->buffer, &data);
         if (size > 0 && data) {
-            struct yetty_ycore_void_result cr =
-                yetty_ygui_osc_create_card(engine->card_name, engine->card_x, engine->card_y,
-                                           engine->card_w, engine->card_h, data, size);
+            struct yetty_ycore_void_result cr = yetty_ygui_osc_create_card(
+                engine->output_pty, engine->card_name, engine->card_x, engine->card_y,
+                engine->card_w, engine->card_h, data, size);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "ygui_engine_show: create_card failed");
             engine->card_shown = 1;
         }
@@ -1914,6 +1914,14 @@ void yetty_ygui_engine_set_output_fd(struct yetty_ygui_engine *engine, int fd)
 {
     if (engine) {
         engine->output_fd = fd;
+    }
+}
+
+void yetty_ygui_engine_set_output_pty(struct yetty_ygui_engine *engine,
+                                      struct yetty_platform_pty *pty)
+{
+    if (engine) {
+        engine->output_pty = pty;
     }
 }
 

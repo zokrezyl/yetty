@@ -39,6 +39,7 @@
 #include <yetty/yplatform/fs.h>     /* path_dirname, path_realpath, file_is_regular */
 #include <yetty/yplatform/term.h>   /* term_get_size */
 #include <yetty/ygui/ygui.h>
+#include <yetty/ytrace/ytrace.h>
 
 /* =========================================================================
  * Tab-local navigation entry. Each entry binds a tree-row label to the
@@ -317,6 +318,8 @@ static const struct nav_entry IMAGE_NAV[] = {
 
 static struct yetty_ypaint_core_buffer *build_image_buffer(const char *title, const char *path)
 {
+    ydebug("build_image_buffer: ENTER title='%s' path='%s'", title ? title : "(null)",
+           path ? path : "(null)");
     struct yetty_yimage_render_config cfg = {
         .bounds_x = 16.0f,
         .bounds_y = 60.0f,
@@ -325,9 +328,11 @@ static struct yetty_ypaint_core_buffer *build_image_buffer(const char *title, co
     };
     struct yetty_ypaint_core_buffer_result r = yetty_yimage_render_path(path, &cfg);
     if (YETTY_IS_ERR(r)) {
+        ydebug("build_image_buffer: yimage_render_path FAILED: %s", r.error.msg);
         yetty_ycore_error_destroy(r.error);
         return NULL;
     }
+    ydebug("build_image_buffer: yimage_render_path OK, buf=%p", (void *)r.value);
     /* Title TEXT_SPAN drawn above the image. The buffer's add_text takes
      * a yetty_ycore_buffer view so we wrap the literal in place. */
     if (title && *title) {
@@ -1092,10 +1097,33 @@ int main(int argc, char **argv)
      * shell (e.g. `ygreeter 2>/tmp/ygreeter.log`); without this nudge
      * libc switches to block buffering once the fd points at a file,
      * and any diagnostic emitted just before a crash / hang sits in
-     * the buffer instead of reaching disk. Note: ygreeter's stdout is
-     * the OSC pipe to the parent yetty, so stderr is the only safe
-     * channel for textual diagnostics. */
+     * the buffer instead of reaching disk. */
     setvbuf(stderr, NULL, _IOLBF, 0);
+
+    /* When the caller didn't redirect stderr, it shares the PTY slave
+     * with stdout under `yetty -e`. ygreeter's stdout carries the OSC
+     * envelopes to the parent yetty; mixing diagnostic text in there
+     * corrupts every OSC frame the parent tries to parse (first 4
+     * bytes of the next debug line look like a bad envelope magic to
+     * prim-iter, the frame is dropped, repeat — manifests as a frozen
+     * UI as soon as something noisy like the Images tab activates the
+     * full render path). Detect that case (stderr is the same tty as
+     * stdout) and reroute trace output to /tmp/ygreeter-<pid>.log so
+     * the OSC stream stays clean and the trace is still recoverable. */
+    if (isatty(STDERR_FILENO) && isatty(STDOUT_FILENO)) {
+        struct stat so, se;
+        if (fstat(STDOUT_FILENO, &so) == 0 && fstat(STDERR_FILENO, &se) == 0 &&
+            so.st_dev == se.st_dev && so.st_ino == se.st_ino) {
+            char log_path[64];
+            snprintf(log_path, sizeof(log_path), "/tmp/ygreeter-%d.log", (int)getpid());
+            FILE *trace_log = fopen(log_path, "w");
+            if (trace_log) {
+                setvbuf(trace_log, NULL, _IOLBF, 0);
+                dup2(fileno(trace_log), STDERR_FILENO);
+                fclose(trace_log);
+            }
+        }
+    }
 
     if (yetty_ygui_init() != 0) {
         fprintf(stdout, "ygreeter: ygui_init failed (run inside a real terminal)\n");
@@ -1174,11 +1202,22 @@ int main(int argc, char **argv)
 
     yetty_ygui_engine_on_resize(app.engine, on_resize, &app);
     yetty_ygui_engine_on_key(app.engine, on_key, NULL);
+    /* DEBUG: start with Images tab active so we can repro the freeze
+     * without external mouse input. Revert before commit. */
+    if (getenv("YGREETER_START_IMAGES")) {
+        yetty_ygui_widget_tabbar_set_active(app.tabbar, g_images_tab_index);
+    }
     yetty_ygui_engine_show(app.engine);
     {
+        /* In CANVAS_FIT mode the engine reports 1x1 until OSC 777780 returns
+         * the real pixel size. set_size(outer, 1, 1) would stomp the authored
+         * 100x100 and trip window_render's "skip first frame" early-return
+         * (self->w < 78), so the frame + titlebar would never paint. Skip the
+         * stomp here — on_resize installs the real size as soon as the host
+         * replies. */
         float cw = 0, ch = 0;
         yetty_ygui_engine_get_size(app.engine, &cw, &ch);
-        if (cw > 0 && ch > 0) {
+        if (cw > 1.0f && ch > 1.0f) {
             yetty_ygui_widget_set_size(app.outer, cw, ch);
         }
     }

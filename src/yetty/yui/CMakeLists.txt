@@ -5,6 +5,7 @@ add_library(yetty_yui STATIC
     workspace.c
     tabbar.c
     tabbar-paint.c
+    yui.c
 )
 
 # stdatomic.h requires C11
@@ -23,6 +24,7 @@ target_link_libraries(yetty_yui
         webgpu
         yetty_yui_core
         yetty_yterm
+        ygui
 )
 
 # Embed the tabbar shader so the GPU pipeline can pick it up at runtime

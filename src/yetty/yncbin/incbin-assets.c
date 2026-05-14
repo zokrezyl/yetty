@@ -322,6 +322,28 @@ static int extract_with_prefix(struct yetty_incbin_assets *assets, const char *p
         snprintf(path, sizeof(path), "%s/%s", dest_dir, rel_name);
         ydebug("extractTo: extracting '%s' -> '%s'", entry->name, path);
 
+        /* Skip if the destination already exists. The assets are baked
+         * into the binary at build time, so once a file is on disk it
+         * has the right content for that build. Without this check every
+         * startup re-decompresses huge artefacts (e.g. the 300 MB Alpine
+         * rootfs image expands from a 49 MB brotli blob — adds ~1 s of
+         * pure wasted CPU + IO on every launch). For uncompressed
+         * entries we additionally cross-check the size since we have it
+         * cheaply; for compressed ones the decompressed size isn't known
+         * without decompressing, so existence is the strongest no-op
+         * predicate available. If the user wants a forced re-extract
+         * they can delete the cache dir. */
+        {
+            struct stat st;
+            if (stat(path, &st) == 0 && S_ISREG(st.st_mode)) {
+                if (entry->compressed || (size_t)st.st_size == entry->size) {
+                    ydebug("Skipped (already present): %s (%lld bytes on disk)",
+                           entry->name, (long long)st.st_size);
+                    continue;
+                }
+            }
+        }
+
         /* Create parent directories */
         last_slash = strrchr(path, '/');
         if (last_slash) {

@@ -412,6 +412,8 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
          * neighboring panes. pane_render() in yui/tile.c writes the pane
          * bounds into self->viewport before calling our render_layer. */
         struct yetty_yrender_viewport vp = self->viewport;
+        ydebug("render_layer: GPU SetViewport=(%.1f,%.1f,%.1f,%.1f) layer=%p",
+               vp.x, vp.y, vp.w, vp.h, (void *)layer);
         wgpuRenderPassEncoderSetViewport(pass, vp.x, vp.y, vp.w, vp.h, 0.0f, 1.0f);
         wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)vp.x, (uint32_t)vp.y, (uint32_t)vp.w,
                                             (uint32_t)vp.h);

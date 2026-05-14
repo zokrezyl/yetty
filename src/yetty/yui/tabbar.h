@@ -100,6 +100,15 @@ struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_of_kind(
 struct yetty_yui_workspace *yetty_yui_tabbar_active_workspace(const struct yetty_yui_tabbar *bar);
 size_t yetty_yui_tabbar_count(const struct yetty_yui_tabbar *bar);
 
+/* Callback invoked when the v-button on the tabbar is clicked. The
+ * tabbar reports the on-screen anchor (the lower-left corner of the
+ * v-button, in window coordinates) so the listener can position a
+ * popup. Used by yetty.c to bridge the click to yui's ygui popup_menu.
+ * Pass NULL to disarm. The tabbar does not own `userdata`. */
+typedef void (*yetty_yui_tabbar_v_menu_cb)(void *userdata, float anchor_x, float anchor_y);
+void yetty_yui_tabbar_set_v_menu_callback(struct yetty_yui_tabbar *bar,
+                                          yetty_yui_tabbar_v_menu_cb cb, void *userdata);
+
 #ifdef __cplusplus
 }
 #endif

@@ -405,7 +405,15 @@ static struct uint32_result add_primitive_internal(
     if (aabb.min.y < min_valid_y)
         aabb.min.y = min_valid_y;
 
-    uint32_t primitive_max_in_rows = (uint32_t)floorf(aabb.max.y / canvas->base->cell_size.height);
+    /* Half-open: row R covers y in [R*cell_h, (R+1)*cell_h). A primitive
+     * whose max_y sits exactly on a row boundary K*cell_h ends at the top
+     * edge of row K and paints zero pixels of it — last touched row is
+     * K-1. ceil-minus-one gives the correct count for both boundary and
+     * mid-row cases. */
+    float max_rows = aabb.max.y / canvas->base->cell_size.height;
+    uint32_t primitive_max_in_rows = (max_rows > 0.0f)
+                                         ? ((uint32_t)ceilf(max_rows) - 1u)
+                                         : 0u;
 
     uint32_t primitive_grid_line = cursor_canvas_line + primitive_max_in_rows;
     uint32_t primitive_rolling_row = cursor_canvas_line;
@@ -429,12 +437,17 @@ static struct uint32_result add_primitive_internal(
     uint32_t prim_col_max = (uint32_t)(aabb.max.x / canvas->base->cell_size.width);
 
     int32_t row_min_rel = (int32_t)floorf(aabb.min.y / canvas->base->cell_size.height);
-    int32_t row_max_rel = (int32_t)floorf(aabb.max.y / canvas->base->cell_size.height);
+    /* Same half-open convention as primitive_max_in_rows above: an AABB
+     * ending exactly on row K's top edge does not touch row K. */
+    int32_t row_max_rel = (int32_t)ceilf(aabb.max.y / canvas->base->cell_size.height) - 1;
     if (row_min_rel < 0) {
         row_min_rel = 0;
     }
     if (row_max_rel < 0) {
         row_max_rel = 0;
+    }
+    if (row_max_rel < row_min_rel) {
+        row_max_rel = row_min_rel;
     }
 
     uint32_t prim_row_min = cursor_canvas_line + (uint32_t)row_min_rel;
@@ -630,7 +643,13 @@ static struct uint32_result expand_text_span_to_glyphs(
         uint32_t cursor_canvas_line = canvas->rolling_row_0 + canvas->cursor_row;
         float abs_y = gy + (float)cursor_canvas_line * canvas->base->cell_size.height;
         float abs_y_max = abs_y + gh;
-        uint32_t glyph_row_max = (uint32_t)(abs_y_max / canvas->base->cell_size.height);
+        /* Half-open: a glyph whose bottom edge sits exactly on row K's top
+         * paints zero pixels of row K. ceil-minus-one matches the same
+         * convention used in add_primitive_internal. */
+        float gymax_rows = abs_y_max / canvas->base->cell_size.height;
+        uint32_t glyph_row_max = (gymax_rows > 0.0f)
+                                     ? ((uint32_t)ceilf(gymax_rows) - 1u)
+                                     : 0u;
 
         canvas_ensure_lines(canvas, glyph_row_max + 1);
 
@@ -1155,249 +1174,6 @@ static void canvas_restore_range(struct yetty_ypaint_scrolling_canvas *canvas, u
     }
 }
 
-#if 0  /* DEAD: legacy buffer-based add_buffer — replaced by streaming
-        * scrolling_process_input_impl in Phase 3. Kept in #if 0 for one
-        * release as a reference; delete after the streaming path proves
-        * itself on PDF/SVG workloads. */
-static struct yetty_ycore_void_result yetty_ypaint_scrolling_canvas_add_buffer_legacy(
-    struct yetty_ypaint_scrolling_canvas *canvas, struct yetty_ypaint_core_buffer *buffer)
-{
-    struct yetty_ypaint_core_primitive_iter_result iter_res =
-        yetty_ypaint_core_buffer_prim_first(buffer, canvas->base->flyweight_registry);
-    bool has_primitives = YETTY_IS_OK(iter_res);
-
-    if (!has_primitives) {
-        canvas->base->dirty = true;
-        return YETTY_OK_VOID();
-    }
-
-    uint32_t initial_canvas_line = canvas->rolling_row_0 + canvas->cursor_row;
-    uint32_t max_row_seen = initial_canvas_line;
-
-    struct ypaint_canvas_font_map fonts_map;
-    ypaint_canvas_font_map_init(&fonts_map);
-
-    struct ypaint_canvas_buffer_attach_list attach_list;
-    ypaint_canvas_buffer_attach_init(&attach_list);
-
-    struct yetty_ypaint_core_primitive_iter iter = iter_res.value;
-    struct yetty_ycore_void_result final_status = YETTY_OK_VOID();
-
-    while (1) {
-        uint32_t prim_type = iter.fw.data[0];
-
-        /* Cmd tier (control, no rendering). Apply side effects on the
-         * canvas, fall through the per-type handlers without storing
-         * anything. */
-        if (prim_type <= YETTY_YPAINT_CMD_END) {
-            if (prim_type == YETTY_YPAINT_CMD_ZERO) {
-                ydebug("add_buffer: CMD_ZERO — clearing canvas + cursor (0,0)");
-                yetty_ypaint_scrolling_canvas_clear(canvas);
-                struct yetty_ycore_grid_cursor_pos pos = {.cols = 0, .rows = 0};
-                struct yetty_ycore_void_result cr = yetty_ypaint_scrolling_canvas_set_cursor_pos(canvas, pos);
-                if (YETTY_IS_ERR(cr)) {
-                    yetty_ycore_error_destroy(cr.error);
-                }
-                /* Re-read cursor anchor since clear+reset moved us. */
-                initial_canvas_line = canvas->rolling_row_0 + canvas->cursor_row;
-                max_row_seen = initial_canvas_line;
-            }
-            /* Future cmds (cursor-set, …) dispatch here. */
-        } else if (prim_type == YETTY_YPAINT_TYPE_FONT) {
-            struct yetty_ypaint_core_font_prim_view fv;
-            if (yetty_ypaint_core_font_prim_parse(iter.fw.data, &fv) == 0 && fv.font_id >= 0) {
-                char hint[YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH];
-                size_t hl = fv.name_len < sizeof(hint) - 1 ? fv.name_len : sizeof(hint) - 1;
-                memcpy(hint, fv.name, hl);
-                hint[hl] = '\0';
-
-                /* FONT primitive only ensures the on-disk CDB exists and
-                 * records the content key against this buffer's font_id.
-                 * NO cache slot is created here — that happens lazily
-                 * the first time a TEXT_SPAN actually references this
-                 * font_id. PDFs over-declare fonts (catalogue all fonts
-                 * per page, use only some); the unused ones never reach
-                 * the cache and never produce an MSDF atlas in memory. */
-                char hex[17];
-                struct yetty_ycore_void_result er =
-                    ypaint_canvas_ensure_blob_font_cdb(canvas->base, fv.ttf, fv.ttf_len, hint, hex);
-                if (YETTY_IS_ERR(er)) {
-                    ywarn("add_buffer: font CDB ensure failed (font_id=%d hint='%s'): %s — "
-                          "spans will use default font",
-                          fv.font_id, hint, er.error.msg);
-                    yetty_ycore_error_destroy(er.error);
-                } else {
-                    ypaint_canvas_font_map_grow(&fonts_map, (uint32_t)fv.font_id + 1);
-                    memcpy(fonts_map.entries[fv.font_id].hex, hex, 17);
-                    fonts_map.entries[fv.font_id].declared = true;
-                }
-            }
-        } else if (prim_type == YETTY_YPAINT_TYPE_TEXT_SPAN) {
-            struct yetty_ypaint_core_text_span_prim_view tv;
-            if (yetty_ypaint_core_text_span_prim_parse(iter.fw.data, &tv) == 0) {
-                struct yetty_ypaint_font *font = NULL;
-                yetty_yfont_cache_handle handle = YETTY_YFONT_CACHE_HANDLE_INVALID;
-                if (tv.font_id >= 0 && (uint32_t)tv.font_id < fonts_map.capacity) {
-                    struct ypaint_canvas_font_map_entry *e = &fonts_map.entries[tv.font_id];
-                    if (e->resolved) {
-                        font = e->font;
-                        handle = e->handle;
-                    } else if (e->declared) {
-                        /* Lazy first-use: now we actually want a cache
-                         * slot. Get one (hit if a prior envelope or a
-                         * scrollback line still alive forced
-                         * construction; miss → construct from CDB).
-                         * The buffer-scoped ref is released by
-                         * font_map_release_all at end of buffer; line
-                         * attaches keep the slot alive afterwards. */
-                        struct yetty_yfont_cache_ref_result rr =
-                            ypaint_canvas_resolve_blob_font_handle(canvas->base, e->hex);
-                        if (YETTY_IS_OK(rr)) {
-                            e->font = rr.value.font;
-                            e->handle = rr.value.handle;
-                            e->resolved = true;
-                            font = e->font;
-                            handle = e->handle;
-                        } else {
-                            /* msdf load failed — spans fall back to
-                             * default font for the rest of the buffer. */
-                            ywarn("add_buffer: font resolve failed (font_id=%d): %s — "
-                                  "span falls back to default font",
-                                  tv.font_id, rr.error.msg);
-                            yetty_ycore_error_destroy(rr.error);
-                            e->declared = false;
-                        }
-                    }
-                }
-                if (!font) {
-                    /* Producer used font_id == -1, or referenced a font_id
-                     * never declared by a FONT primitive in this buffer
-                     * — fall back to the canvas default. */
-                    font = canvas->base->default_font;
-                    handle = canvas->base->default_handle;
-                }
-                if (font) {
-                    struct uint32_result gmr_res =
-                        expand_text_span_to_glyphs(canvas, &tv, font, handle);
-                    if (YETTY_IS_OK(gmr_res)) {
-                        uint32_t glyph_max_row = gmr_res.value;
-                        if (glyph_max_row > max_row_seen) {
-                            max_row_seen = glyph_max_row;
-                        }
-                        /* Defer attach: just record the highest row this
-                         * handle reached during the buffer; a single pass
-                         * after the loop attaches each unique handle once. */
-                        ypaint_canvas_buffer_attach_note(&attach_list, handle, glyph_max_row);
-                    } else {
-                        yetty_ycore_error_destroy(gmr_res.error);
-                    }
-                }
-            }
-        } else {
-            /* SDF or complex prim — uniform path. */
-            struct uint32_result prim_res = add_primitive_internal(canvas, &iter.fw);
-            if (YETTY_IS_ERR(prim_res)) {
-                /* One bad prim shouldn't drop the rest of the buffer.
-                 * The original `break` here caused symptoms like "only
-                 * the first image renders on a Wikipedia page" — every
-                 * yimage after a single failed instance-create was
-                 * silently lost, along with all later text/SDF prims.
-                 * Log and keep going; downstream rendering still works
-                 * on the prims that did construct. */
-                yerror("add_buffer: add_primitive_internal failed (continuing): %s",
-                       prim_res.error.msg);
-                yetty_ycore_error_destroy(prim_res.error);
-            } else if (prim_res.value > max_row_seen) {
-                max_row_seen = prim_res.value;
-            }
-        }
-
-        struct yetty_ypaint_core_primitive_iter_result nx =
-            yetty_ypaint_core_buffer_prim_next(buffer, canvas->base->flyweight_registry, &iter);
-        if (YETTY_IS_ERR(nx)) {
-            break;
-        }
-        iter = nx.value;
-    }
-
-    /* End-of-buffer pass: attach each unique font once to its destination
-     * line. This replaces the per-text-span attach call that dominated
-     * profiling at 33% of CPU on PDF rendering. */
-    for (uint32_t i = 0; i < attach_list.count; i++) {
-        attach_handle_to_line(canvas, attach_list.entries[i].handle,
-                              attach_list.entries[i].max_row);
-    }
-    ypaint_canvas_buffer_attach_free(&attach_list);
-
-    /* Release every buffer-scoped cache ref (one per FONT prim materialised
-     * in this buffer). Lines that took their own ref via attach_handle_to_line
-     * keep the font alive. */
-    ypaint_canvas_font_map_release_all(&fonts_map, canvas->base->font_cache);
-    free(fonts_map.entries);
-
-    if (YETTY_IS_ERR(final_status)) {
-        return final_status;
-    }
-
-    /* Scroll the viewport so the cursor lands on the line immediately
-   * below the bottom-most prim — same contract as `cat foo.txt`. The
-   * shell prompt that runs after the OSC envelope finishes will print
-   * at the cursor, so the cursor MUST be at max_row_seen + 1 in canvas
-   * coords, never anywhere above (or it would overlap content) and
-   * never below the viewport (or it would be clipped).
-   *
-   * (A previous "sparse-tail correction" tried to park the viewport on
-   * dense rows when the trailing rows held only a footer-mark; in
-   * practice that parked the cursor on top of still-visible content for
-   * SVGs whose density is uniformly low. Removed — predictable
-   * cat-like placement beats the heuristic.) */
-    {
-        uint32_t target_cursor_canvas_line = max_row_seen + 1;
-        uint32_t viewport_bottom = canvas->rolling_row_0 + canvas->base->grid_size.rows - 1;
-
-        ydebug("add_buffer: target_cursor=%u max_row_seen=%u viewport_bottom=%u",
-               target_cursor_canvas_line, max_row_seen, viewport_bottom);
-
-        if (target_cursor_canvas_line > viewport_bottom) {
-            uint32_t lines_to_scroll = target_cursor_canvas_line - viewport_bottom;
-
-            if (!canvas->scroll_callback) {
-                yerror("add_buffer: scroll_callback is NULL");
-                return YETTY_ERR(yetty_ycore_void, "scroll_callback is NULL");
-            }
-            struct yetty_ycore_void_result scroll_res = canvas->scroll_callback(
-                canvas->scroll_callback_user_data, (uint16_t)lines_to_scroll);
-            if (YETTY_IS_ERR(scroll_res)) {
-                return scroll_res;
-            }
-            yetty_ypaint_scrolling_canvas_scroll_lines(canvas, (uint16_t)lines_to_scroll);
-        }
-
-        /* After the scroll above, target_cursor_canvas_line is guaranteed
-         * to be ≤ viewport_bottom, so the subtraction stays in
-         * [0, grid_rows-1] without further clamping. */
-        uint32_t cursor_screen_row = (target_cursor_canvas_line >= canvas->rolling_row_0)
-                                         ? (target_cursor_canvas_line - canvas->rolling_row_0)
-                                         : 0;
-        canvas->cursor_row = (uint16_t)cursor_screen_row;
-
-        if (canvas->cursor_set_callback) {
-            canvas->cursor_set_callback(canvas->cursor_set_callback_user_data, canvas->cursor_row);
-        }
-    }
-
-    /* Serialise every line that just rolled below the live viewport
-     * (rolling_row_0). Their expanded grid_line content is freed; the
-     * compact form lives in canvas->scrollbuffer keyed by
-     * sb_offsets[i]. This is where the per-instance heap growth comes
-     * back down — without it canvas->lines holds the full
-     * 40+ MB/PDF in expanded form forever. */
-    canvas_evict_scrollback(canvas);
-    canvas->base->dirty = true;
-    return YETTY_OK_VOID();
-}
-#endif /* legacy add_buffer */
-
 //=============================================================================
 // Scrolling
 //=============================================================================
@@ -1905,9 +1681,15 @@ static void scrolling_env_reset(struct yetty_ypaint_scrolling_canvas *canvas)
     canvas->env_active = false;
 }
 
-/* End-of-envelope finalisation: attach pass, scroll viewport so the
- * shell prompt that runs after this OSC envelope lands at max_row_seen+1,
- * evict scrollback. Mirrors the tail of add_buffer.
+/* End-of-envelope finalisation: attach fonts, advance the cursor to the
+ * deepest row the queue painted on, scroll the viewport only as much as
+ * needed to keep that row visible, then evict scrollback.
+ *
+ * Contract — same as a plain text write that does NOT end with `\n`:
+ * cursor lands on the last touched row, no phantom row reserved for a
+ * follow-on prompt. Producers that want a fresh row below their painting
+ * (ycat, ypdf, ...) emit `\n` via the PTY text path themselves, exactly
+ * like `cat foo.txt` does.
  *
  * ORDERING MATTERS: font_map_release_all runs BEFORE scroll/evict.
  * The dispatcher in ypaint-layer keys its rebuild on font_count alone, so
@@ -1931,9 +1713,11 @@ static struct yetty_ycore_void_result scrolling_env_finalize(
     canvas->env_fonts_map.entries = NULL;
     canvas->env_fonts_map.capacity = 0;
 
-    /* Scroll the viewport so the cursor lands on the line immediately
-     * below the bottom-most prim — same contract as `cat foo.txt`. */
-    uint32_t target_cursor_canvas_line = canvas->env_max_row_seen + 1;
+    /* Target: the deepest row the queue actually painted on. Equivalent
+     * to writing N rows of text without a trailing newline — cursor sits
+     * on the last touched row, viewport scrolls just enough to bring it
+     * into view. The producer is responsible for any follow-on `\n`. */
+    uint32_t target_cursor_canvas_line = canvas->env_max_row_seen;
     uint32_t viewport_bottom = canvas->rolling_row_0 + canvas->base->grid_size.rows - 1;
 
     if (target_cursor_canvas_line > viewport_bottom) {
@@ -2085,7 +1869,8 @@ static struct yetty_ycore_void_result scrolling_process_input_impl(
         struct yetty_ypaint_core_prim_iter_status_result sr =
             yetty_ypaint_core_prim_iter_next(&canvas->env_iter);
         if (YETTY_IS_ERR(sr)) {
-            yerror("process_input: prim_iter error — resetting envelope state");
+            yerror("process_input: prim_iter error — resetting envelope state: %s",
+                   sr.error.msg ? sr.error.msg : "(no msg)");
             yetty_ycore_error_destroy(sr.error);
             scrolling_env_reset(canvas);
             return YETTY_ERR(yetty_ycore_void, "process_input: prim_iter failed");

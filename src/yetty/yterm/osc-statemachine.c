@@ -406,6 +406,19 @@ static struct yetty_ycore_void_result push_decoded(
 static struct yetty_ycore_void_result body_pump(
     struct yetty_yterm_osc_statemachine *statemachine, size_t want)
 {
+    /* Cap the in-pass target at half the carry. The carry is bounded
+     * (OSC_OUT_CARRY_CAP), but a single prim can be many MB (e.g. yimage's
+     * 2.5 MB pixel payload). Without this cap, body_pump would loop trying
+     * to satisfy `want = 2.5 MB`, eventually hitting out_carry_append's
+     * overflow guard — surfaced as a stream-level error and a dropped
+     * frame ("prim_iter: body pull" → "envelope truncated"). The iter
+     * already loops calling statemachine_read until its own `filled ==
+     * total_size`, so it's fine for body_pump to deliver progress in
+     * carry-sized chunks; the caller drains and re-asks. */
+    const size_t max_per_pass = sizeof(statemachine->out_carry) / 2;
+    if (want > max_per_pass) {
+        want = max_per_pass;
+    }
     while (out_carry_avail(statemachine) < want) {
         if (statemachine->terminator_seen) {
             /* Bytes after terminator: drain LZ4F incrementally — one
@@ -853,7 +866,41 @@ struct yetty_ycore_void_result yetty_yterm_osc_statemachine_process(
             size_t before_rp = statemachine->read_pos;
             size_t before_oc = out_carry_avail(statemachine);
             struct yetty_ycore_void_result r = dispatch(statemachine, statemachine->current_layer);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_statemachine: body dispatch");
+            if (YETTY_IS_ERR(r)) {
+                /* Layer failed mid-envelope (e.g. prim_iter saw a bad
+                 * envelope magic). Without draining, the next dispatch on
+                 * the next ring chunk hands the new (fresh) iter the
+                 * MIDDLE of the failed envelope as if it were a new
+                 * envelope header — its first 4 bytes look like garbage
+                 * to the magic check, the iter errors again, repeat. The
+                 * symptom is a stuck UI: ygreeter keeps emitting frames
+                 * but none of them ever parse. Drain to the envelope
+                 * terminator and reset state so the NEXT envelope on the
+                 * wire gets a clean shot. */
+                ywarn("osc_statemachine: body dispatch failed (%s) — draining envelope",
+                      r.error.msg);
+                yetty_ycore_error_destroy(r.error);
+                while (!statemachine->terminator_seen &&
+                       statemachine->read_pos < statemachine->write_pos) {
+                    uint8_t c = ring_at(statemachine, statemachine->read_pos++);
+                    if (c == '\007') {
+                        statemachine->terminator_seen = 1;
+                        break;
+                    }
+                    if (c == '\033' &&
+                        statemachine->read_pos < statemachine->write_pos &&
+                        ring_at(statemachine, statemachine->read_pos) == '\\') {
+                        statemachine->read_pos++;
+                        statemachine->terminator_seen = 1;
+                        break;
+                    }
+                }
+                statemachine->state = SCAN_RAW;
+                statemachine->current_layer = NULL;
+                statemachine->current_code = 0;
+                envelope_reset(statemachine);
+                break;
+            }
             if (statemachine->terminator_seen) {
                 statemachine->state = SCAN_RAW;
                 statemachine->current_layer = NULL;

@@ -4,6 +4,7 @@
 
 #include "ygui_internal.h"
 #include <yetty/yface/yface.h>
+#include <yetty/yplatform/pty.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YPAINT_* */
 #include <yetty/ymgui/wire.h>       /* YMGUI_OSC_CS_CARD_*, wire structs */
@@ -14,11 +15,14 @@
 
 #ifdef _WIN32
 #include <io.h>
-#define write _write
 #define STDOUT_FILENO 1
+/* Used explicitly inside write_osc; no global `#define write _write` so the
+ * pty ops vtable's `->write` member access in write_pty_all isn't macroed. */
+#define yetty_ygui_raw_write _write
 #else
 #include <poll.h>     /* POSIX poll(), used for EAGAIN backoff below */
 #include <unistd.h>
+#define yetty_ygui_raw_write write
 #endif
 
 /* Base64 encoding table */
@@ -66,7 +70,7 @@ static void write_osc(const char *data, size_t len)
 {
     size_t total = 0;
     while (total < len) {
-        ssize_t n = write(STDOUT_FILENO, data + total, len - total);
+        ssize_t n = yetty_ygui_raw_write(STDOUT_FILENO, data + total, len - total);
         if (n < 0) {
             if (errno == EINTR) {
                 continue;
@@ -110,7 +114,27 @@ static void write_osc(const char *data, size_t len)
  * flicker that a separate YPAINT_CLEAR envelope used to cause. */
 #define VENDOR_ID "666674"
 
-static struct yetty_ycore_void_result write_bin(const uint8_t *data, uint32_t size)
+/* Write a full envelope to a yetty_platform_pty using ops->write. The pty
+ * is responsible for whatever transport (memory ring, fd, etc.). Surfaces
+ * a short / failed write as an error so the caller can react. */
+static struct yetty_ycore_void_result write_pty_all(struct yetty_platform_pty *pty,
+                                                    const char *data, size_t len)
+{
+    if (!pty || !pty->ops || !pty->ops->write) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_osc: output_pty has no write op");
+    }
+    struct yetty_ycore_size_result r = pty->ops->write(pty, data, len);
+    if (YETTY_IS_ERR(r)) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_osc: pty write failed", r);
+    }
+    if (r.value != len) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_osc: pty short write");
+    }
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result write_bin(struct yetty_platform_pty *output_pty,
+                                                const uint8_t *data, uint32_t size)
 {
     if (size == 0 || !data) {
         /* Nothing to send. The receiver keeps last frame; intentional
@@ -133,14 +157,26 @@ static struct yetty_ycore_void_result write_bin(const uint8_t *data, uint32_t si
     struct yetty_ycore_buffer out = {0};
     struct yetty_ycore_void_result r = yetty_yface_emit(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
                                                         &meta, sizeof(meta), data, size, &out);
+    ydebug("write_bin: raw_size=%u envelope_bytes=%zu emit_ok=%d", size, out.size,
+           YETTY_IS_OK(r));
     if (YETTY_IS_OK(r) && out.size > 0) {
-        write_osc((const char *)out.data, out.size);
+        if (output_pty) {
+            struct yetty_ycore_void_result wr =
+                write_pty_all(output_pty, (const char *)out.data, out.size);
+            if (YETTY_IS_ERR(wr)) {
+                yetty_ycore_buffer_destroy(&out);
+                return wr;
+            }
+        } else {
+            write_osc((const char *)out.data, out.size);
+        }
     }
     yetty_ycore_buffer_destroy(&out);
     return r;
 }
 
-struct yetty_ycore_void_result yetty_ygui_osc_create_card(const char *name, int x, int y, int w,
+struct yetty_ycore_void_result yetty_ygui_osc_create_card(struct yetty_platform_pty *output_pty,
+                                                          const char *name, int x, int y, int w,
                                                           int h, const uint8_t *data, uint32_t size)
 {
     (void)name;
@@ -148,14 +184,15 @@ struct yetty_ycore_void_result yetty_ygui_osc_create_card(const char *name, int 
     (void)y;
     (void)w;
     (void)h;
-    return write_bin(data, size);
+    return write_bin(output_pty, data, size);
 }
 
-struct yetty_ycore_void_result yetty_ygui_osc_update_card(const char *name, const uint8_t *data,
+struct yetty_ycore_void_result yetty_ygui_osc_update_card(struct yetty_platform_pty *output_pty,
+                                                          const char *name, const uint8_t *data,
                                                           uint32_t size)
 {
     (void)name;
-    return write_bin(data, size);
+    return write_bin(output_pty, data, size);
 }
 
 void yetty_ygui_osc_kill_card(const char *name)

@@ -187,8 +187,17 @@ struct yetty_ypaint_core_prim_iter_status_result yetty_ypaint_core_prim_iter_nex
         uint32_t magic;
         memcpy(&magic, iter->scratch + 0, 4);
         if (magic != PRIM_ITER_ENVELOPE_MAGIC) {
-            yerror("prim_iter: bad envelope magic 0x%08x (expected 0x%08x)",
-                   magic, PRIM_ITER_ENVELOPE_MAGIC);
+            yerror("prim_iter: bad envelope magic 0x%08x (expected 0x%08x); "
+                   "header_filled=%u scratch[0..24]=%02x %02x %02x %02x  %02x %02x %02x %02x  "
+                   "%02x %02x %02x %02x  %02x %02x %02x %02x  %02x %02x %02x %02x  "
+                   "%02x %02x %02x %02x",
+                   magic, PRIM_ITER_ENVELOPE_MAGIC, iter->header_filled,
+                   iter->scratch[0], iter->scratch[1], iter->scratch[2], iter->scratch[3],
+                   iter->scratch[4], iter->scratch[5], iter->scratch[6], iter->scratch[7],
+                   iter->scratch[8], iter->scratch[9], iter->scratch[10], iter->scratch[11],
+                   iter->scratch[12], iter->scratch[13], iter->scratch[14], iter->scratch[15],
+                   iter->scratch[16], iter->scratch[17], iter->scratch[18], iter->scratch[19],
+                   iter->scratch[20], iter->scratch[21], iter->scratch[22], iter->scratch[23]);
             return YETTY_ERR(yetty_ypaint_core_prim_iter_status,
                              "prim_iter: envelope magic mismatch");
         }
