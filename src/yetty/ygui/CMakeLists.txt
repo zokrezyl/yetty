@@ -16,6 +16,7 @@ set(YGUI_SOURCES
     ygui_osc.c
     ygui_layout.c
     ygui_css.c
+    ygui_notify.c
 )
 
 # Static-only sources — the YAML convenience layer for the RICH widget.

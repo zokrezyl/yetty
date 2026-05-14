@@ -17,7 +17,9 @@
 #include <yetty/ygui/ygui.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yevent/event-loop.h>
+#include <yetty/ynotify/ynotify.h>
 #include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/thread.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterm/osc-codes.h>
 #include <yetty/yterm/osc-statemachine.h>
@@ -73,6 +75,87 @@ struct yetty_yui {
     float cell_w;
     float cell_h;
 };
+
+/*===========================================================================
+ * ynotify bridge — yui registers itself as the global notification handler
+ * so any subsystem can call ynotify() and have the toast surface here.
+ *
+ * The handler can be invoked from any thread, so we trampoline through
+ * post_to_loop into the event-loop thread before touching ygui state.
+ * yui is a process-wide singleton in practice; we store the active one
+ * in `s_active_yui` so a thunk that lands after yui_destroy can just
+ * drop the message instead of dereferencing a freed pointer.
+ *===========================================================================*/
+
+static struct yetty_yui *s_active_yui = NULL;
+static struct yetty_yplatform_ymutex *s_active_yui_mutex = NULL;
+
+struct yui_ynotify_thunk {
+    int      severity;
+    uint32_t ttl_ms;     /* 0 = use severity default */
+    char     msg[];      /* NUL-terminated */
+};
+
+static void yui_active_lock(void)
+{
+    if (!s_active_yui_mutex) {
+        s_active_yui_mutex = yetty_yplatform_ymutex_create();
+    }
+    yetty_yplatform_ymutex_lock(s_active_yui_mutex);
+}
+
+static void yui_active_unlock(void)
+{
+    yetty_yplatform_ymutex_unlock(s_active_yui_mutex);
+}
+
+/* Runs on the event-loop thread. Reads the current yui under the lock
+ * to defeat the obvious destroy/dispatch race. */
+static void yui_ynotify_dispatch(void *arg)
+{
+    struct yui_ynotify_thunk *t = arg;
+    if (!t) {
+        return;
+    }
+    yui_active_lock();
+    struct yetty_yui *yui = s_active_yui;
+    yui_active_unlock();
+
+    if (yui && yui->engine) {
+        if (t->ttl_ms > 0) {
+            yetty_ygui_engine_notify_ttl(yui->engine,
+                                         (enum yetty_ygui_severity)t->severity,
+                                         t->ttl_ms, "%s", t->msg);
+        } else {
+            yetty_ygui_engine_notify(yui->engine,
+                                     (enum yetty_ygui_severity)t->severity,
+                                     "%s", t->msg);
+        }
+    }
+    free(t);
+}
+
+/* Installed via ynotify_set_handler. userdata is the event loop pointer
+ * (which outlives yui — yetty owns the loop, yui is a child of yetty).
+ * Producers may call ynotify from any thread, so we never touch yui
+ * directly here; we just post to the loop and let dispatch find the
+ * active yui (or skip if none). */
+static void yui_ynotify_handler(int severity, const char *msg, void *userdata)
+{
+    struct yetty_yevent_event_loop *loop = userdata;
+    if (!loop || !loop->ops || !loop->ops->post_to_loop || !msg) {
+        return;
+    }
+    size_t mlen = strlen(msg) + 1;
+    struct yui_ynotify_thunk *t = malloc(sizeof(*t) + mlen);
+    if (!t) {
+        return;
+    }
+    t->severity = severity;
+    t->ttl_ms   = 0;
+    memcpy(t->msg, msg, mlen);
+    loop->ops->post_to_loop(loop, yui_ynotify_dispatch, t);
+}
 
 /*===========================================================================
  * View kind metadata
@@ -442,6 +525,15 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         /* Non-fatal — yui still owns the SM + layer; just no producer yet. */
     }
 
+    /* Register as the global ynotify sink. Producers that call ynotify
+     * from any thread will land here via post_to_loop. We pass the loop
+     * (not yui) as userdata since the loop outlives this yui instance.
+     * The dispatch trampoline looks up the active yui under a lock. */
+    yui_active_lock();
+    s_active_yui = yui;
+    yui_active_unlock();
+    ynotify_set_handler(yui_ynotify_handler, context->event_loop);
+
     ydebug("yui_create: grid=%ux%u cell=%.1fx%.1f", cols, rows, cell_w, cell_h);
     return YETTY_OK(yetty_yui_ptr, yui);
 }
@@ -451,6 +543,16 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
     if (!yui) {
         return YETTY_OK_VOID();
     }
+    /* Detach the ynotify sink before tearing anything down. New ynotify
+     * calls will be a no-op; in-flight post_to_loop thunks see
+     * s_active_yui == NULL and drop the message. */
+    ynotify_set_handler(NULL, NULL);
+    yui_active_lock();
+    if (s_active_yui == yui) {
+        s_active_yui = NULL;
+    }
+    yui_active_unlock();
+
     if (yui->engine) {
         struct yetty_ycore_void_result r = yetty_ygui_engine_destroy(yui->engine);
         if (!YETTY_IS_OK(r)) {
@@ -765,3 +867,4 @@ struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t 
     }
     return YETTY_OK_VOID();
 }
+

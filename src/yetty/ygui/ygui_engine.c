@@ -377,6 +377,10 @@ struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engin
         free(engine->loop);
     }
 
+    /* Free notification message strings. The card widgets themselves are
+     * top-level engine widgets and go down with the loop below. */
+    yetty_ygui_engine_notify_shutdown(engine);
+
     /* Destroy all widgets */
     struct yetty_ygui_widget *w = engine->first_widget;
     while (w) {
@@ -610,6 +614,10 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
         handle_resize(engine);
         engine->needs_resize = 0;
     }
+
+    /* 0a. Drop expired toast notifications so the about-to-be-built
+     * frame already reflects the compacted stack. */
+    yetty_ygui_engine_notify_tick(engine);
 
     /* 1. Clear buffer */
     yetty_ypaint_core_buffer_clear(engine->buffer);
@@ -1374,6 +1382,11 @@ static void handle_resize(struct yetty_ygui_engine *engine)
 
     engine->prev_width = prev_w;
     engine->prev_height = prev_h;
+
+    /* Re-anchor any live toast notifications to the new right edge before
+     * the user callback sees the new size — the callback might trigger
+     * additional layout work and we want the stack already in place. */
+    yetty_ygui_engine_notify_on_resize(engine);
 
     /* Call user's resize callback */
     if (engine->resize_callback) {

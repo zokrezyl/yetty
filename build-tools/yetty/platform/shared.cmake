@@ -295,6 +295,11 @@ if(YETTY_ENABLE_LIB_LIBSSH2)
     include(${YETTY_ROOT}/build-tools/yetty/libs/libssh2.cmake)
 endif()
 
+if(YETTY_ENABLE_FEATURE_SSH AND NOT EMSCRIPTEN AND NOT ANDROID
+        AND NOT WIN32 AND NOT YETTY_IOS AND NOT YETTY_TVOS)
+    include(${YETTY_ROOT}/build-tools/yetty/openssh.cmake)
+endif()
+
 # Reusable render utilities (GPU tile diff, …). Lives outside src/yetty so it
 # can be consumed by both the main yetty modules and standalone tools. Must
 # be declared before src/yetty so yetty_vnc (et al.) can link against it.

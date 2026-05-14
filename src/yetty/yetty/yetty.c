@@ -21,6 +21,7 @@
 #include <yetty/ycore/math.h>
 #include <yetty/yevent/dispatch.h>
 #include <yetty/ytrace/ytrace.h>
+#include <yetty/ynotify/ynotify.h>
 #include <yetty/yui/workspace.h>
 #include <yetty/yui/tabbar.h>
 #include <yetty/yui/tile.h>
@@ -1012,7 +1013,19 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
     }
     struct yetty_ycore_void_result r = yetty_yui_tabbar_add_workspace_of_kind(yetty->tabbar, tk);
     if (YETTY_IS_ERR(r)) {
-        yerror("yetty: connect (kind=%d) failed: %s", (int)kind, r.error.msg);
+        /* Surface the failure as an in-canvas toast so the user actually
+         * sees it — silent failure was the original Telnet/SSH bug. The
+         * label name is the human-readable view kind. */
+        static const char *kind_label[] = {
+            [YETTY_YUI_VIEW_SHELL]  = "Shell",
+            [YETTY_YUI_VIEW_SSH]    = "SSH",
+            [YETTY_YUI_VIEW_TELNET] = "Telnet",
+            [YETTY_YUI_VIEW_YVNC]   = "yVNC",
+            [YETTY_YUI_VIEW_EXEC]   = "Exec",
+        };
+        const char *label = ((unsigned)kind < (sizeof(kind_label) / sizeof(kind_label[0])))
+                                ? kind_label[kind] : "Connect";
+        ynotify(YETTY_YNOTIFY_ERROR, "%s connect failed: %s", label, r.error.msg);
         yetty_ycore_error_destroy(r.error);
     } else {
         ydebug("yetty: connect (kind=%d) spawned new workspace", (int)kind);

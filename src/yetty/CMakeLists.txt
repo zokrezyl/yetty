@@ -37,6 +37,7 @@ set(YETTY_SOURCES
     ${YETTY_ROOT}/src/yetty/yetty/yetty.c
     ${YETTY_ROOT}/src/yetty/yconfig/config.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
+    ${YETTY_ROOT}/src/yetty/ynotify/ynotify.c
 )
 
 
