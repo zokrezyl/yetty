@@ -31,13 +31,13 @@
 #define PRIM_ITER_HEADER_BYTES       8u
 
 /* Framed-envelope header — every BIN/OVERLAY payload starts with:
- *   u32 magic = YPAINT_SERIAL_MAGIC ('YPB1')
+ *   u32 magic = YDRAW_SERIAL_MAGIC ('YPB1')
  *   f32 scene_min_x, scene_min_y, scene_max_x, scene_max_y
  *   u32 byte_count
  * = 24 bytes. The prim stream follows. The iter consumes these once at
  * envelope start, validates the magic, stashes scene_bounds, then drops
  * into per-prim mode. Producers always emit framed output (see
- * ypaint_core_buffer_serialize / _to_base64). */
+ * ydraw_core_buffer_serialize / _to_base64). */
 #define PRIM_ITER_ENVELOPE_HEADER_BYTES 24u
 #define PRIM_ITER_ENVELOPE_MAGIC        0x31425059u  /* 'YPB1' little-endian */
 

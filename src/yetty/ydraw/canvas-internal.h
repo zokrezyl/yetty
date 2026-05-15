@@ -1,16 +1,16 @@
 /* canvas-internal.h — module-internal shared canvas types and helpers.
  *
- * The ypaint canvas comes in two flavours:
+ * The ydraw canvas comes in two flavours:
  *
  *   scrolling-canvas — viewport scrolls, scrollbuffer evicts old rows, used
- *                      by the terminal text and ypaint layers.
+ *                      by the terminal text and ydraw layers.
  *   static-canvas    — viewport fixed, prims that don't fit are discarded,
  *                      used by yui chrome (popups, dialogs, statusbar).
  *
  * They share the grid model, font cache, flyweight registry, complex-prim
  * factory, and GPU staging buffers via `struct yetty_ydraw_canvas` —
  * the polymorphic base. Each variant owns a `struct yetty_ydraw_canvas *`
- * created via `ypaint_canvas_create(context, ops, impl=variant)` and freed
+ * created via `ydraw_canvas_create(context, ops, impl=variant)` and freed
  * via `yetty_ydraw_canvas_destroy(base)` (the polymorphic destroy dispatches
  * the variant's `destroy` op which frees variant-specific state before the
  * base teardown runs).
@@ -46,45 +46,45 @@ struct yetty_yterm_osc_statemachine;
  *===========================================================================*/
 
 /* Reference to a primitive on a (possibly different) line. */
-struct ypaint_canvas_prim_ref {
+struct ydraw_canvas_prim_ref {
     uint16_t lines_ahead; /* relative offset to base line (0 = same line) */
     uint16_t prim_index;  /* index within base line's prims array */
 };
 
-struct ypaint_canvas_prim_ref_array {
-    struct ypaint_canvas_prim_ref *data;
+struct ydraw_canvas_prim_ref_array {
+    struct ydraw_canvas_prim_ref *data;
     uint32_t count;
     uint32_t capacity;
 };
 
-struct ypaint_canvas_grid_cell {
-    struct ypaint_canvas_prim_ref_array refs;
+struct ydraw_canvas_grid_cell {
+    struct ydraw_canvas_prim_ref_array refs;
 };
 
 /* A single primitive's payload, stored in its owning line's arena.
  * Storing an offset (not a pointer) keeps prim_data stable across arena
  * reallocations. */
-struct ypaint_canvas_prim_data {
+struct ydraw_canvas_prim_data {
     uint32_t rolling_row;  /* cursor-line at insertion (0 for static-canvas) */
     uint32_t arena_offset;
     uint32_t word_count;
 };
 
-struct ypaint_canvas_prim_data_array {
-    struct ypaint_canvas_prim_data *data;
+struct ydraw_canvas_prim_data_array {
+    struct ydraw_canvas_prim_data *data;
     uint32_t count;
     uint32_t capacity;
 };
 
 /* Refcounted font-cache handle attached to a grid line. The grid_line owns
  * one cache ref per entry, released at grid_line_free. */
-struct ypaint_canvas_font_entry {
+struct ydraw_canvas_font_entry {
     yetty_yfont_cache_handle handle;
 };
 
 /* A single row/line in the grid. */
-struct ypaint_canvas_grid_line {
-    struct ypaint_canvas_prim_data_array prims;
+struct ydraw_canvas_grid_line {
+    struct ydraw_canvas_prim_data_array prims;
 
     /* Payload arena: every prim stores its words at
      * arena[prim.arena_offset .. prim.arena_offset + prim.word_count).
@@ -93,12 +93,12 @@ struct ypaint_canvas_grid_line {
     uint32_t  arena_count;
     uint32_t  arena_capacity;
 
-    struct ypaint_canvas_grid_cell *cells;
+    struct ydraw_canvas_grid_cell *cells;
     uint32_t cell_count;
     uint32_t cell_capacity;
 
     /* Font cache refs this line owns (one per attached font). */
-    struct ypaint_canvas_font_entry *fonts;
+    struct ydraw_canvas_font_entry *fonts;
     uint32_t font_count;
     uint32_t font_capacity;
 
@@ -110,8 +110,8 @@ struct ypaint_canvas_grid_line {
 
 /* Simple line array. Both canvases use this. Scrolling-canvas grows it on
  * demand as content arrives; static-canvas sizes it once to grid_size.rows. */
-struct ypaint_canvas_line_buffer {
-    struct ypaint_canvas_grid_line *lines;
+struct ydraw_canvas_line_buffer {
+    struct ydraw_canvas_grid_line *lines;
     uint32_t capacity;
     uint32_t count;
 };
@@ -232,7 +232,7 @@ struct yetty_ydraw_canvas_ops {
 /*===========================================================================
  * Polymorphic base lifecycle
  *
- * `ypaint_canvas_create` allocates the base and sets up the shared state:
+ * `ydraw_canvas_create` allocates the base and sets up the shared state:
  * flyweight registry, complex-prim factory + yplot/yimage/ymesh
  * registrations, font cache, default font, dirs/family/render-method.
  *
@@ -245,7 +245,7 @@ struct yetty_ydraw_canvas_ops {
 
 /* yetty_ydraw_canvas_ptr_result is declared in <yetty/ydraw/canvas.h>. */
 
-struct yetty_ydraw_canvas_ptr_result ypaint_canvas_create(
+struct yetty_ydraw_canvas_ptr_result ydraw_canvas_create(
     const struct yetty_context *context,
     const struct yetty_ydraw_canvas_ops *ops,
     void *impl);
@@ -258,68 +258,68 @@ struct yetty_ydraw_canvas_ptr_result ypaint_canvas_create(
 #define YETTY_YSDF_GLYPH 200
 /* Glyph prim layout: type, z_order, x, y, font_size,
  * packed(glyph_idx | font_id), color */
-#define YPAINT_GLYPH_WORDS 7
+#define YDRAW_GLYPH_WORDS 7
 
-#define YPAINT_CANVAS_INITIAL_LINE_CAPACITY     64
-#define YPAINT_CANVAS_INITIAL_CELL_CAPACITY     16
-#define YPAINT_CANVAS_INITIAL_PRIM_CAPACITY     16
-#define YPAINT_CANVAS_INITIAL_REF_CAPACITY      2
-#define YPAINT_CANVAS_INITIAL_STAGING_CAPACITY  4096
+#define YDRAW_CANVAS_INITIAL_LINE_CAPACITY     64
+#define YDRAW_CANVAS_INITIAL_CELL_CAPACITY     16
+#define YDRAW_CANVAS_INITIAL_PRIM_CAPACITY     16
+#define YDRAW_CANVAS_INITIAL_REF_CAPACITY      2
+#define YDRAW_CANVAS_INITIAL_STAGING_CAPACITY  4096
 
 /*===========================================================================
  * Helpers — implemented in canvas.c
  *===========================================================================*/
 
 /* prim_ref_array */
-void ypaint_canvas_prim_ref_array_init(struct ypaint_canvas_prim_ref_array *arr);
-void ypaint_canvas_prim_ref_array_free(struct ypaint_canvas_prim_ref_array *arr);
-void ypaint_canvas_prim_ref_array_push(struct ypaint_canvas_prim_ref_array *arr,
-                                       struct ypaint_canvas_prim_ref ref);
+void ydraw_canvas_prim_ref_array_init(struct ydraw_canvas_prim_ref_array *arr);
+void ydraw_canvas_prim_ref_array_free(struct ydraw_canvas_prim_ref_array *arr);
+void ydraw_canvas_prim_ref_array_push(struct ydraw_canvas_prim_ref_array *arr,
+                                       struct ydraw_canvas_prim_ref ref);
 
 /* prim_data_array */
-void ypaint_canvas_prim_data_array_init(struct ypaint_canvas_prim_data_array *arr);
-void ypaint_canvas_prim_data_array_free(struct ypaint_canvas_prim_data_array *arr);
+void ydraw_canvas_prim_data_array_init(struct ydraw_canvas_prim_data_array *arr);
+void ydraw_canvas_prim_data_array_free(struct ydraw_canvas_prim_data_array *arr);
 
 /* grid_line */
-struct yetty_ycore_void_result ypaint_canvas_grid_line_init(
-    struct ypaint_canvas_grid_line *line);
-struct yetty_ycore_void_result ypaint_canvas_grid_line_free(
-    struct ypaint_canvas_grid_line *line, struct yetty_yfont_cache *cache);
-struct yetty_ycore_void_result ypaint_canvas_grid_line_ensure_cells(
-    struct ypaint_canvas_grid_line *line, uint32_t min_cells);
-struct yetty_ycore_void_result ypaint_canvas_grid_line_arena_append(
-    struct ypaint_canvas_grid_line *line, const float *data, uint32_t word_count,
+struct yetty_ycore_void_result ydraw_canvas_grid_line_init(
+    struct ydraw_canvas_grid_line *line);
+struct yetty_ycore_void_result ydraw_canvas_grid_line_free(
+    struct ydraw_canvas_grid_line *line, struct yetty_yfont_cache *cache);
+struct yetty_ycore_void_result ydraw_canvas_grid_line_ensure_cells(
+    struct ydraw_canvas_grid_line *line, uint32_t min_cells);
+struct yetty_ycore_void_result ydraw_canvas_grid_line_arena_append(
+    struct ydraw_canvas_grid_line *line, const float *data, uint32_t word_count,
     uint32_t *out_offset);
 /* Returns prim index in line->prims, or UINT32_MAX on allocation failure. */
-uint32_t ypaint_canvas_grid_line_push_prim(struct ypaint_canvas_grid_line *line,
+uint32_t ydraw_canvas_grid_line_push_prim(struct ydraw_canvas_grid_line *line,
                                            uint32_t rolling_row,
                                            const float *data, uint32_t word_count);
 
 /* line_buffer */
-void ypaint_canvas_line_buffer_init(struct ypaint_canvas_line_buffer *buf);
-struct yetty_ycore_void_result ypaint_canvas_line_buffer_free(
-    struct ypaint_canvas_line_buffer *buf, struct yetty_yfont_cache *cache);
-struct ypaint_canvas_grid_line *ypaint_canvas_line_buffer_get(
-    struct ypaint_canvas_line_buffer *buf, uint32_t index);
+void ydraw_canvas_line_buffer_init(struct ydraw_canvas_line_buffer *buf);
+struct yetty_ycore_void_result ydraw_canvas_line_buffer_free(
+    struct ydraw_canvas_line_buffer *buf, struct yetty_yfont_cache *cache);
+struct ydraw_canvas_grid_line *ydraw_canvas_line_buffer_get(
+    struct ydraw_canvas_line_buffer *buf, uint32_t index);
 
 /* Font-blob utilities */
-int      ypaint_canvas_blob_is_raster(const char *name, int canvas_method);
-uint64_t ypaint_canvas_fnv1a64(const uint8_t *data, size_t len);
-void     ypaint_canvas_sanitize_identifier(char *dst, size_t dst_cap, const char *src);
+int      ydraw_canvas_blob_is_raster(const char *name, int canvas_method);
+uint64_t ydraw_canvas_fnv1a64(const uint8_t *data, size_t len);
+void     ydraw_canvas_sanitize_identifier(char *dst, size_t dst_cap, const char *src);
 
 /* Font resolution against the canvas's font_cache */
-struct yetty_yfont_cache_ref_result ypaint_canvas_get_default_font_ref(
+struct yetty_yfont_cache_ref_result ydraw_canvas_get_default_font_ref(
     struct yetty_ydraw_canvas *canvas);
-struct yetty_ycore_void_result ypaint_canvas_ensure_blob_font_cdb(
+struct yetty_ycore_void_result ydraw_canvas_ensure_blob_font_cdb(
     struct yetty_ydraw_canvas *canvas, const uint8_t *ttf, uint32_t ttf_len,
     const char *hint_name, char out_hex[17]);
-struct yetty_yfont_cache_ref_result ypaint_canvas_resolve_blob_font_handle(
+struct yetty_yfont_cache_ref_result ydraw_canvas_resolve_blob_font_handle(
     struct yetty_ydraw_canvas *canvas, const char *hex);
 
 /* Staging growth */
-struct yetty_ycore_void_result ypaint_canvas_ensure_grid_staging(
+struct yetty_ycore_void_result ydraw_canvas_ensure_grid_staging(
     struct yetty_ydraw_canvas *canvas, uint32_t min_size);
-struct yetty_ycore_void_result ypaint_canvas_ensure_prim_staging(
+struct yetty_ycore_void_result ydraw_canvas_ensure_prim_staging(
     struct yetty_ydraw_canvas *canvas, uint32_t min_size);
 
 /*===========================================================================
@@ -327,7 +327,7 @@ struct yetty_ycore_void_result ypaint_canvas_ensure_prim_staging(
  * one process_input pass over an OSC envelope.
  *===========================================================================*/
 
-struct ypaint_canvas_font_map_entry {
+struct ydraw_canvas_font_map_entry {
     char                      hex[17];   /* "" if not declared */
     bool                      declared;
     bool                      resolved;
@@ -335,17 +335,17 @@ struct ypaint_canvas_font_map_entry {
     yetty_yfont_cache_handle  handle;
 };
 
-struct ypaint_canvas_font_map {
-    struct ypaint_canvas_font_map_entry *entries;
+struct ydraw_canvas_font_map {
+    struct ydraw_canvas_font_map_entry *entries;
     uint32_t                             capacity;
 };
 
-void ypaint_canvas_font_map_init(struct ypaint_canvas_font_map *m);
-void ypaint_canvas_font_map_grow(struct ypaint_canvas_font_map *m, uint32_t want);
-const struct ypaint_canvas_font_map_entry *ypaint_canvas_font_map_get(
-    const struct ypaint_canvas_font_map *m, uint32_t id);
-void ypaint_canvas_font_map_release_all(
-    struct ypaint_canvas_font_map *m, struct yetty_yfont_cache *cache);
+void ydraw_canvas_font_map_init(struct ydraw_canvas_font_map *m);
+void ydraw_canvas_font_map_grow(struct ydraw_canvas_font_map *m, uint32_t want);
+const struct ydraw_canvas_font_map_entry *ydraw_canvas_font_map_get(
+    const struct ydraw_canvas_font_map *m, uint32_t id);
+void ydraw_canvas_font_map_release_all(
+    struct ydraw_canvas_font_map *m, struct yetty_yfont_cache *cache);
 
 /*===========================================================================
  * Per-envelope attach list — highest row each unique font handle was seen
@@ -353,20 +353,20 @@ void ypaint_canvas_font_map_release_all(
  * ends, instead of per text-span.
  *===========================================================================*/
 
-struct ypaint_canvas_buffer_attach_entry {
+struct ydraw_canvas_buffer_attach_entry {
     yetty_yfont_cache_handle handle;
     uint32_t                 max_row;
 };
 
-struct ypaint_canvas_buffer_attach_list {
-    struct ypaint_canvas_buffer_attach_entry *entries;
+struct ydraw_canvas_buffer_attach_list {
+    struct ydraw_canvas_buffer_attach_entry *entries;
     uint32_t                                  count;
     uint32_t                                  capacity;
 };
 
-void ypaint_canvas_buffer_attach_init(struct ypaint_canvas_buffer_attach_list *l);
-void ypaint_canvas_buffer_attach_free(struct ypaint_canvas_buffer_attach_list *l);
-void ypaint_canvas_buffer_attach_note(struct ypaint_canvas_buffer_attach_list *l,
+void ydraw_canvas_buffer_attach_init(struct ydraw_canvas_buffer_attach_list *l);
+void ydraw_canvas_buffer_attach_free(struct ydraw_canvas_buffer_attach_list *l);
+void ydraw_canvas_buffer_attach_note(struct ydraw_canvas_buffer_attach_list *l,
                                       yetty_yfont_cache_handle handle, uint32_t row);
 
 #ifdef __cplusplus

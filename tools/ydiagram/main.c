@@ -1,6 +1,6 @@
 /*
- * ydiagram — render a diagram file (Mermaid) into a ypaint buffer and emit
- * an OSC YPAINT_BIN envelope on stdout so a running yetty ypaint pane
+ * ydiagram — render a diagram file (Mermaid) into a ydraw buffer and emit
+ * an OSC YDRAW_BIN envelope on stdout so a running yetty ydraw pane
  * redraws it. Pure one-shot: parse → layout → render → emit → exit.
  *
  * Text width comes from a real MSDF font (yetty_yfont_msdf_font) so node
@@ -185,7 +185,7 @@ static int emit_osc_bin(FILE *out, struct yetty_ydraw_core_buffer *buf)
         .raw_size         = size,
         .reserved         = {0, 0},
     };
-    return emit_envelope(out, YETTY_OSC_YPAINT_BIN, /*compressed=*/1, &meta, sizeof(meta),
+    return emit_envelope(out, YETTY_OSC_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta),
                          raw, size);
 }
 
@@ -245,11 +245,11 @@ static void usage(const char *prog)
     fprintf(stderr,
             "Usage: %s [options] <file.mmd | ->\n"
             "\n"
-            "Emits an OSC YPAINT_BIN envelope on stdout for a running yetty\n"
-            "ypaint pane. Box sizing uses real MSDF glyph widths.\n"
+            "Emits an OSC YDRAW_BIN envelope on stdout for a running yetty\n"
+            "ydraw pane. Box sizing uses real MSDF glyph widths.\n"
             "\n"
             "Options:\n"
-            "  -o <file>             Write raw serialized ypaint buffer (no OSC).\n"
+            "  -o <file>             Write raw serialized ydraw buffer (no OSC).\n"
             "  --font-cdb <path>     Override the MSDF CDB used for measurement.\n"
             "  --font-shader <path>  Override the msdf-font.wgsl shader path.\n"
             "  --no-font             Skip MSDF font; use the heuristic fallback.\n"

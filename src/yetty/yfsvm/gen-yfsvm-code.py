@@ -20,7 +20,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent.parent.parent
 
 YAML_PATH = SCRIPT_DIR / "yfsvm-opcodes.yaml"
-HEADER_OUT = PROJECT_ROOT / "include" / "yetty" / "ypaint" / "yfsvm" / "yfsvm.gen.h"
+HEADER_OUT = PROJECT_ROOT / "include" / "yetty" / "ydraw" / "yfsvm" / "yfsvm.gen.h"
 WGSL_OUT = SCRIPT_DIR / "yfsvm.gen.wgsl"
 
 HEADER = """// Auto-generated from yfsvm-opcodes.yaml - DO NOT EDIT

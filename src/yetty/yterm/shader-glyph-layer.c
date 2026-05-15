@@ -368,7 +368,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
         return YETTY_ERR(yetty_yterm_terminal_layer, "shader-glyph-layer: context is NULL");
     }
 
-    /* Load shader template from disk (matches text-layer / ypaint-layer pattern). */
+    /* Load shader template from disk (matches text-layer / ydraw-layer pattern). */
     struct yetty_yconfig_config *config = context->app_context.config;
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
     char shader_path[512];
@@ -661,7 +661,7 @@ static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yrender_t
     if (shader_glyph_is_empty(self)) {
         anim_timer_stop(layer);
         /* Direct-render-into-big_target path: big_target is fully redrawn
-         * every frame (text Clear + ypaint/shader-glyph Load), so there's
+         * every frame (text Clear + ydraw/shader-glyph Load), so there's
          * no stale shader-glyph image to evict — just skip. The old
          * "always render" workaround was for the per-layer-RT path, which
          * needed an explicit clear on its dedicated RT; that path is no

@@ -1,5 +1,5 @@
 /*
- * ts-highlight.c - tree-sitter → colored ypaint buffer.
+ * ts-highlight.c - tree-sitter → colored ydraw buffer.
  *
  * Parses source with the matched grammar, runs the embedded highlights.scm
  * query, paints a per-byte color map (width-sorted so that narrower / more
@@ -27,10 +27,10 @@
 #endif
 
 /*=============================================================================
- * Theme — capture name → color (0xAABBGGRR, matches ypaint text span)
+ * Theme — capture name → color (0xAABBGGRR, matches ydraw text span)
  *===========================================================================*/
 
-/* Theme colours, packed as ypaint text-span format 0xAABBGGRR.
+/* Theme colours, packed as ydraw text-span format 0xAABBGGRR.
  * R/G/B are unpacked on the fly for 24-bit true-colour SGR
  * (ESC[38;2;R;G;Bm) when emitting for a non-yetty terminal. */
 
@@ -364,7 +364,7 @@ static void ts_parse_done(TSParser *parser, TSTree *tree, uint32_t *color_map)
 }
 
 /*=============================================================================
- * Emitter #1 — ypaint buffer (for in-yetty consumers)
+ * Emitter #1 — ydraw buffer (for in-yetty consumers)
  *===========================================================================*/
 
 struct yetty_ydraw_core_buffer_result yetty_ycat_ts_render(const uint8_t *bytes, size_t len,

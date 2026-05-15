@@ -1,11 +1,11 @@
 /*
- * pdf-renderer.c - PDF → ypaint buffer.
+ * pdf-renderer.c - PDF → ydraw buffer.
  *
  * Pass 1 (scene bounds):
  *   Walk pages, read each MediaBox, compute max page width and accumulated
  *   height (with per-page margin). No content streams are touched.
  *
- * Create the ypaint buffer with those bounds.
+ * Create the ydraw buffer with those bounds.
  *
  * Pass 2 (emission):
  *   Per page, extract embedded TTF fonts, parse the ToUnicode CMap, then

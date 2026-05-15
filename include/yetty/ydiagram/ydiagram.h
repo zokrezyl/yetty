@@ -2,9 +2,9 @@
 #define YETTY_YDIAGRAM_YDIAGRAM_H
 
 /*
- * ydiagram — text → ypaint buffer for Mermaid (and later Graphviz) diagrams.
+ * ydiagram — text → ydraw buffer for Mermaid (and later Graphviz) diagrams.
  *
- * One-shot API: hand over a UTF-8 input string, get back a fresh ypaint
+ * One-shot API: hand over a UTF-8 input string, get back a fresh ydraw
  * buffer populated with MSD shape primitives and MSDF text spans. The
  * caller owns the buffer and frees it via yetty_ydraw_core_buffer_destroy.
  *
@@ -13,7 +13,7 @@
  *   - graph-ir.h     : build / inspect the IR
  *   - mermaid-parser.h : Mermaid → IR
  *   - layout.h       : Sugiyama layered layout
- *   - renderer.h     : IR → ypaint buffer
+ *   - renderer.h     : IR → ydraw buffer
  */
 
 #include <stddef.h>
@@ -27,7 +27,7 @@ extern "C" {
 #endif
 
 /* Result type for the high-level entry. On success, .value is a freshly
- * allocated ypaint buffer the caller owns. */
+ * allocated ydraw buffer the caller owns. */
 YETTY_YRESULT_DECLARE(yetty_ydiagram_buffer, struct yetty_ydraw_core_buffer *);
 
 /* High-level: parse Mermaid text, lay it out, emit MSD/MSDF primitives.

@@ -2,11 +2,11 @@
 #define YETTY_YPDF_YPDF_H
 
 /*
- * ypdf - render a PDF document into a ypaint buffer.
+ * ypdf - render a PDF document into a ydraw buffer.
  *
  * The renderer:
  *   - walks pages once up-front to compute scene bounds from MediaBoxes
- *   - creates the ypaint buffer pre-configured with those bounds
+ *   - creates the ydraw buffer pre-configured with those bounds
  *   - extracts embedded TTF fonts (FontFile2 / FontFile3) and registers them
  *   - parses each content stream through the ypdf content parser, emitting
  *     text spans, axis-aligned box primitives (SDF type Box) and line segments
@@ -38,7 +38,7 @@ struct yetty_ypdf_render_output {
 
 YETTY_YRESULT_DECLARE(yetty_ypdf_render, struct yetty_ypdf_render_output);
 
-/* Render pdf into a fresh ypaint buffer. On success the caller owns
+/* Render pdf into a fresh ydraw buffer. On success the caller owns
  * result.value.buffer. */
 struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf);
 

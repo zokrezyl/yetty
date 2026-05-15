@@ -21,7 +21,7 @@ extern const unsigned int gblend_shaderSize;
 #define MAX_BLEND_SOURCES 4
 
 /* Per-layer binder cache entry. Each layer's resource_set tree concatenates
- * its own shader (e.g. text-grid + msdf-font, ypaint-grid + ypaint-prims),
+ * its own shader (e.g. text-grid + msdf-font, ydraw-grid + ydraw-prims),
  * and merging trees from different layers redeclares functions like
  * median3. So when the same target serves multiple layers (direct
  * multi-layer render, no per-layer RTs), each layer needs its own binder.
@@ -293,7 +293,7 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
      * The texture state at the start of this layer's pass depends on what
      * earlier layers in the same frame did:
      *   - layer 0 renders with LoadOp_Clear → wipes the entire attachment,
-     *     so any non-dirty upper layer (ypaint, ymgui, …) skipping its draw
+     *     so any non-dirty upper layer (ydraw, ymgui, …) skipping its draw
      *     would lose its previous-frame pixels — its content disappears.
      *   - layers above 0 with non-opaque pixels (alpha<1) would also leave
      *     ghosts of upper layers that didn't redraw, since LoadOp_Load

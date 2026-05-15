@@ -1,4 +1,4 @@
-# yzoo tool — animated control-point zoo, emits ypaint OSC envelopes.
+# yzoo tool — animated control-point zoo, emits ydraw OSC envelopes.
 # Pure C frontend over the yetty_yzoo library.
 
 add_executable(yzoo

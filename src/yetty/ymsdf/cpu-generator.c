@@ -4,7 +4,7 @@
  * The underlying CPU API takes (ttf_path, output_dir) and produces
  * <dir>/<ttf_basename>.cdb. The polymorphic API takes a full cdb_path,
  * so we split it, invoke the CPU gen, and rename the output if the
- * derived basename doesn't match. In practice ypaint-canvas already
+ * derived basename doesn't match. In practice ydraw-canvas already
  * names them consistently (pdf_<hash>.ttf → pdf_<hash>.cdb) so the
  * rename is a no-op there.
  */

@@ -1,5 +1,5 @@
 /*
- * ynetsurf — NetSurf 3.11 frontend → ypaint primitives.
+ * ynetsurf — NetSurf 3.11 frontend → ydraw primitives.
  *
  * Implements the five mandatory NetSurf gui tables (misc, window,
  * fetch, bitmap, layout) plus a plotter_table that drains drawing

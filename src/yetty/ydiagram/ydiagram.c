@@ -1,8 +1,8 @@
 /*
- * ydiagram.c — high-level glue: text → graph IR → layout → ypaint buffer.
+ * ydiagram.c — high-level glue: text → graph IR → layout → ydraw buffer.
  *
  * Owns nothing across calls — every entry creates a fresh graph and a
- * fresh ypaint buffer. The buffer is the only thing handed back to the
+ * fresh ydraw buffer. The buffer is the only thing handed back to the
  * caller; the graph is destroyed before return.
  */
 

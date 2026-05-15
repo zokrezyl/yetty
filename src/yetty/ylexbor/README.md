@@ -1,7 +1,7 @@
 # ylexbor — HTML/CSS/JS rendering on top of lexbor
 
 `ylexbor` is yetty's permissively-licensed Web rendering layer. It takes HTML
-(plus optional CSS and JavaScript) and produces a [ypaint] primitive stream
+(plus optional CSS and JavaScript) and produces a [ydraw] primitive stream
 that yetty's GPU-side painter consumes. Unlike `ynetsurf` (which links the
 GPL'd NetSurf), `ylexbor` uses only Apache-2.0 [lexbor] for parsing/cascade
 and MIT [QuickJS-NG] for scripting, so it can be linked directly into the
@@ -21,7 +21,7 @@ runtime that boots single-page-app shells.
 | `ylexbor.c`            | Document lifecycle: create/destroy, load HTML, drive CSS load, kick off box-build/layout/paint, set base URL |
 | `ylexbor-box.c`        | DOM walk → flat box vector. Reads computed style, resolves CSS lengths/colors/keywords, decides display/flex/none |
 | `ylexbor-layout.c`     | Box vector → laid-out coordinates. Block-flow vertical stacking, inline text wrapping, flex-row even split |
-| `ylexbor-paint.c`      | Box vector → ypaint primitives. ysdf rects for backgrounds + borders, text spans for inline runs, yimage prims for `<img>` |
+| `ylexbor-paint.c`      | Box vector → ydraw primitives. ysdf rects for backgrounds + borders, text spans for inline runs, yimage prims for `<img>` |
 | `ylexbor-css-vars.c`   | CSS custom-property scanner + `var(--foo[, fallback])` resolver — see [CSS extras](#css-extras-vs-lexbor) below |
 | `ylexbor-js.c`         | QuickJS lifecycle, `<script>` walker, exception reporting, drain microtasks |
 | `ylexbor-js-dom.c`     | DOM API for the JS runtime: Element/Document/CharacterData wrappers, querySelector, addEventListener, classList, attributes, innerHTML, etc. |
@@ -68,7 +68,7 @@ runtime that boots single-page-app shells.
                        │
                        ▼
    ┌──────────────────────────────────────────┐
-   │  ylexbor-paint.c: emit ypaint primitives │
+   │  ylexbor-paint.c: emit ydraw primitives │
    │       ysdf box  ← bg, borders            │
    │       text span ← inline text            │
    │       yimage    ← <img>                  │
@@ -214,12 +214,12 @@ WebGL/WebGPU, no Worker/SharedWorker, no IndexedDB, no Service Worker,
 no full prototype chain (`obj instanceof HTMLDivElement` returns false
 even for divs — every Element shares one JS class).
 
-## Integration with yetty ypaint
+## Integration with yetty ydraw
 
 The output of the pipeline is a `yetty_ydraw_core_buffer*` populated by
 `yetty_ylexbor_paint`. Per-box mapping:
 
-| Box kind | ypaint emission |
+| Box kind | ydraw emission |
 |---|---|
 | `YL_BOX_BLOCK` with `bg.a > 0`     | `yetty_ysdf_add_box(buf, z, bg, 0, 0, &box)` with `corner_radius = border_radius` |
 | `YL_BOX_BLOCK` with any border > 0 | up to 4 thin `ysdf_box` rects (top / right / bottom / left) of `border_color` |
@@ -248,7 +248,7 @@ Decoded image pixels live in a per-document hash (open-addressed,
 5. Cache RGBA8 pixels + dimensions
 
 The same decoded buffer is re-serialized into a fresh yimage prim on every
-paint call (ypaint takes ownership of the prim bytes via `add_prim`).
+paint call (ydraw takes ownership of the prim bytes via `add_prim`).
 
 ### URL picking
 
@@ -348,7 +348,7 @@ charter:
 - The flat box vector (`yetty_ylexbor_box_vec`), block-flow layout,
   inline text wrapping, flex-row split — that's a layout engine, and
   lexbor explicitly stops at the cascade
-- ypaint emission — lexbor has no notion of GPU buffers
+- ydraw emission — lexbor has no notion of GPU buffers
 - The QuickJS DOM bindings — lexbor doesn't take a position on JS
   engines, and tying it to QuickJS would split the user base
 - The image cache, lazy-load attribute picker, browser-shaped fetch —
@@ -381,4 +381,4 @@ starting point.
 
 [lexbor]: https://github.com/lexbor/lexbor
 [QuickJS-NG]: https://github.com/quickjs-ng/quickjs
-[ypaint]: ../ypaint-core/
+[ydraw]: ../ydraw-core/

@@ -12,7 +12,7 @@
 // the abstract-factory registry) lives in
 // include/yetty/ydraw-factory/complex-prim-factory.h.
 //
-// See docs/ypaint.md for full documentation.
+// See docs/ydraw.md for full documentation.
 
 #pragma once
 
@@ -30,7 +30,7 @@ extern "C" {
 // Complex primitive type IDs (0x80000000+ to avoid collision with SDF 0-255)
 //=============================================================================
 
-/* Tier ranges for ypaint primitive types:
+/* Tier ranges for ydraw primitive types:
  *   [0x00000000, 0x000000FF]   Simple SDF (fixed-size, generated)
  *   [0x40000000, 0x7FFFFFFF]   Flyweight (variable-size, no GPU pipeline)
  *                                FONT       — yetty/ydraw-core/font-prim.h

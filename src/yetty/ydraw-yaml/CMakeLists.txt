@@ -1,5 +1,5 @@
 add_library(yetty_ydraw_yaml STATIC
-    ypaint-yaml.c
+    ydraw-yaml.c
 )
 
 target_include_directories(yetty_ydraw_yaml PUBLIC

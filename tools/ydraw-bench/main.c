@@ -1,4 +1,4 @@
-// ypaint-bench: Generate random SDF primitives as binary OSC sequence
+// ydraw-bench: Generate random SDF primitives as binary OSC sequence
 // Outputs raw binary format (not YAML) for performance benchmarking
 
 #include <stdint.h>
@@ -8,7 +8,7 @@
 #include <time.h>
 
 #include <yetty/yface/yface.h>
-#include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YPAINT_BIN */
+#include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YDRAW_BIN */
 
 // Complex primitive type for yplot
 #define YETTY_YDRAW_TYPE_YPLOT 0x80000003u
@@ -30,44 +30,44 @@ static inline uint32_t yfsvm_encode(uint8_t op, uint8_t dst, uint8_t src1, uint8
     return ((uint32_t)op << 24) | ((dst & 0xF) << 20) | ((src1 & 0xF) << 16) | ((src2 & 0xF) << 12) | (imm12 & 0xFFF);
 }
 
-// SDF primitive types (from ypaint-sdf-types.gen.h)
-enum ypaint_sdf_type {
-    YPAINT_SDF_CIRCLE = 0,
-    YPAINT_SDF_BOX = 1,
-    YPAINT_SDF_SEGMENT = 2,
-    YPAINT_SDF_TRIANGLE = 3,
-    YPAINT_SDF_ELLIPSE = 6,
-    YPAINT_SDF_RHOMBUS = 9,
-    YPAINT_SDF_PENTAGON = 10,
-    YPAINT_SDF_HEXAGON = 11,
-    YPAINT_SDF_STAR = 12,
-    YPAINT_SDF_HEART = 15,
-    YPAINT_SDF_HEXAGRAM = 29,
+// SDF primitive types (from ydraw-sdf-types.gen.h)
+enum ydraw_sdf_type {
+    YDRAW_SDF_CIRCLE = 0,
+    YDRAW_SDF_BOX = 1,
+    YDRAW_SDF_SEGMENT = 2,
+    YDRAW_SDF_TRIANGLE = 3,
+    YDRAW_SDF_ELLIPSE = 6,
+    YDRAW_SDF_RHOMBUS = 9,
+    YDRAW_SDF_PENTAGON = 10,
+    YDRAW_SDF_HEXAGON = 11,
+    YDRAW_SDF_STAR = 12,
+    YDRAW_SDF_HEART = 15,
+    YDRAW_SDF_HEXAGRAM = 29,
 };
 
 // Word counts per primitive type
-static uint32_t prim_word_count(enum ypaint_sdf_type type) {
+static uint32_t prim_word_count(enum ydraw_sdf_type type) {
     switch (type) {
-        case YPAINT_SDF_CIRCLE: return 8;
-        case YPAINT_SDF_BOX: return 10;
-        case YPAINT_SDF_SEGMENT: return 9;
-        case YPAINT_SDF_TRIANGLE: return 11;
-        case YPAINT_SDF_ELLIPSE: return 9;
-        case YPAINT_SDF_RHOMBUS: return 9;
-        case YPAINT_SDF_PENTAGON: return 8;
-        case YPAINT_SDF_HEXAGON: return 8;
-        case YPAINT_SDF_STAR: return 10;
-        case YPAINT_SDF_HEART: return 8;
-        case YPAINT_SDF_HEXAGRAM: return 8;
+        case YDRAW_SDF_CIRCLE: return 8;
+        case YDRAW_SDF_BOX: return 10;
+        case YDRAW_SDF_SEGMENT: return 9;
+        case YDRAW_SDF_TRIANGLE: return 11;
+        case YDRAW_SDF_ELLIPSE: return 9;
+        case YDRAW_SDF_RHOMBUS: return 9;
+        case YDRAW_SDF_PENTAGON: return 8;
+        case YDRAW_SDF_HEXAGON: return 8;
+        case YDRAW_SDF_STAR: return 10;
+        case YDRAW_SDF_HEART: return 8;
+        case YDRAW_SDF_HEXAGRAM: return 8;
         default: return 0;
     }
 }
 
 // Available primitive types for random selection
-static const enum ypaint_sdf_type PRIM_TYPES[] = {
-    YPAINT_SDF_CIRCLE, YPAINT_SDF_BOX, YPAINT_SDF_SEGMENT, YPAINT_SDF_TRIANGLE,
-    YPAINT_SDF_ELLIPSE, YPAINT_SDF_RHOMBUS, YPAINT_SDF_PENTAGON,
-    YPAINT_SDF_HEXAGON, YPAINT_SDF_STAR, YPAINT_SDF_HEART, YPAINT_SDF_HEXAGRAM,
+static const enum ydraw_sdf_type PRIM_TYPES[] = {
+    YDRAW_SDF_CIRCLE, YDRAW_SDF_BOX, YDRAW_SDF_SEGMENT, YDRAW_SDF_TRIANGLE,
+    YDRAW_SDF_ELLIPSE, YDRAW_SDF_RHOMBUS, YDRAW_SDF_PENTAGON,
+    YDRAW_SDF_HEXAGON, YDRAW_SDF_STAR, YDRAW_SDF_HEART, YDRAW_SDF_HEXAGRAM,
 };
 #define NUM_PRIM_TYPES (sizeof(PRIM_TYPES) / sizeof(PRIM_TYPES[0]))
 
@@ -131,7 +131,7 @@ static void write_u32(float *buf, uint32_t val) {
 // Generate single random primitive into buffer, returns words written
 static uint32_t gen_primitive(float *buf, float scene_w, float scene_h) {
     (void)scene_h; // unused - we use cursor-relative coords
-    enum ypaint_sdf_type type = PRIM_TYPES[randu32() % NUM_PRIM_TYPES];
+    enum ydraw_sdf_type type = PRIM_TYPES[randu32() % NUM_PRIM_TYPES];
     uint32_t word_count = prim_word_count(type);
 
     // Common header: type, z_order, fill, stroke, stroke_width
@@ -147,25 +147,25 @@ static uint32_t gen_primitive(float *buf, float scene_w, float scene_h) {
     float size = randf(10.0f, 50.0f);
 
     switch (type) {
-    case YPAINT_SDF_CIRCLE:
+    case YDRAW_SDF_CIRCLE:
         buf[5] = cx;
         buf[6] = cy;
         buf[7] = size;
         break;
-    case YPAINT_SDF_BOX:
+    case YDRAW_SDF_BOX:
         buf[5] = cx;
         buf[6] = cy;
         buf[7] = size;           // half_width
         buf[8] = size * 0.7f;    // half_height
         buf[9] = randf(0, 10.0f); // corner_radius
         break;
-    case YPAINT_SDF_SEGMENT:
+    case YDRAW_SDF_SEGMENT:
         buf[5] = cx;
         buf[6] = cy;
         buf[7] = cx + randf(-100, 100);
         buf[8] = cy + randf(-100, 100);
         break;
-    case YPAINT_SDF_TRIANGLE:
+    case YDRAW_SDF_TRIANGLE:
         buf[5] = cx;
         buf[6] = cy - size;
         buf[7] = cx - size;
@@ -173,33 +173,33 @@ static uint32_t gen_primitive(float *buf, float scene_w, float scene_h) {
         buf[9] = cx + size;
         buf[10] = cy + size;
         break;
-    case YPAINT_SDF_ELLIPSE:
+    case YDRAW_SDF_ELLIPSE:
         buf[5] = cx;
         buf[6] = cy;
         buf[7] = size;
         buf[8] = size * 0.6f;
         break;
-    case YPAINT_SDF_RHOMBUS:
+    case YDRAW_SDF_RHOMBUS:
         buf[5] = cx;
         buf[6] = cy;
         buf[7] = size;
         buf[8] = size * 0.8f;
         break;
-    case YPAINT_SDF_PENTAGON:
-    case YPAINT_SDF_HEXAGON:
-    case YPAINT_SDF_HEXAGRAM:
+    case YDRAW_SDF_PENTAGON:
+    case YDRAW_SDF_HEXAGON:
+    case YDRAW_SDF_HEXAGRAM:
         buf[5] = cx;
         buf[6] = cy;
         buf[7] = size;
         break;
-    case YPAINT_SDF_STAR:
+    case YDRAW_SDF_STAR:
         buf[5] = cx;
         buf[6] = cy;
         buf[7] = size;
         buf[8] = 5.0f + (float)(randu32() % 4); // num_points: 5-8
         buf[9] = randf(0.3f, 0.6f);          // inner_ratio
         break;
-    case YPAINT_SDF_HEART:
+    case YDRAW_SDF_HEART:
         buf[5] = cx;
         buf[6] = cy;
         buf[7] = size * 0.5f;
@@ -402,7 +402,7 @@ int main(int argc, char **argv) {
             .reserved         = {0, 0},
         };
         struct yetty_ycore_void_result rr = yetty_yface_emit_to_fd(
-            fileno(stdout), YETTY_OSC_YPAINT_BIN,
+            fileno(stdout), YETTY_OSC_YDRAW_BIN,
             /*compressed=*/1, &meta, sizeof(meta), g_buffer, raw_bytes);
         if (YETTY_IS_ERR(rr)) {
             fprintf(stderr, "yface_emit: %s\n", rr.error.msg);

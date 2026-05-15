@@ -2,7 +2,7 @@
 //
 // Generates random 2D SDF primitives (circles, boxes, ellipses, triangles,
 // segments) within specified boundaries and outputs an OSC sequence for
-// ydraw or ypaint cards.
+// ydraw or ydraw cards.
 
 #include "../../src/yetty/ycat/osc.h"
 #include "../../src/yetty/ydraw/ydraw-buffer.h"
@@ -24,7 +24,7 @@ using namespace yetty;
 
 struct GeneratorConfig {
   uint32_t count = 10;
-  std::string mode = "ypaint";
+  std::string mode = "ydraw";
   float minX = 0.0f;
   float minY = 0.0f;
   float maxX = 800.0f;
@@ -512,13 +512,13 @@ bool parseBounds(const std::string &s, float &minX, float &minY, float &maxX,
 int main(int argc, char **argv) {
   args::ArgumentParser parser(
       "ydraw-generator - Generate random shapes as OSC sequence",
-      "Outputs an OSC sequence for ydraw/ypaint cards.");
+      "Outputs an OSC sequence for ydraw/ydraw cards.");
   args::HelpFlag help(parser, "help", "Show help", {"help"});
 
   args::ValueFlag<uint32_t> countFlag(
       parser, "N", "Number of shapes to generate", {'n', "count"}, 10);
   args::ValueFlag<std::string> modeFlag(
-      parser, "MODE", "Output mode: ydraw or ypaint", {'m', "mode"}, "ypaint");
+      parser, "MODE", "Output mode: ydraw or ydraw", {'m', "mode"}, "ydraw");
   args::ValueFlag<std::string> boundsFlag(parser, "BOUNDS",
                                           "Bounds as minX,minY,maxX,maxY",
                                           {'b', "bounds"}, "0,0,800,600");
@@ -577,8 +577,8 @@ int main(int argc, char **argv) {
   if (paddingYFlag) config.paddingY = args::get(paddingYFlag);
 
   // Validate mode
-  if (config.mode != "ydraw" && config.mode != "ypaint") {
-    std::cerr << "Error: mode must be 'ydraw' or 'ypaint'\n";
+  if (config.mode != "ydraw" && config.mode != "ydraw") {
+    std::cerr << "Error: mode must be 'ydraw' or 'ydraw'\n";
     return 1;
   }
 

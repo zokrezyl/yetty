@@ -1,8 +1,8 @@
 /*
- * ymarkdown.c - Markdown → ypaint buffer.
+ * ymarkdown.c - Markdown → ydraw buffer.
  *
  * Port of yetty-poc/src/yetty/cards/markdown/markdown.cpp stripped of the
- * Card/GPU lifecycle; the output is just a ypaint buffer with text spans and
+ * Card/GPU lifecycle; the output is just a ydraw buffer with text spans and
  * SDF boxes for code-run backgrounds. The renderer uses the same geometric
  * conventions as the C++ version: layout starts at (2, 2), text advances by
  * 0.6 * font_size per character (proportional approximation), lines advance

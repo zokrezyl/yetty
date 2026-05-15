@@ -1,6 +1,6 @@
 /*
  * ymesh.c — public API: load a .glb, parse via cgltf, serialize to the
- * ymesh wire format, attach to a fresh ypaint buffer, emit via OSC.
+ * ymesh wire format, attach to a fresh ydraw buffer, emit via OSC.
  *
  * See include/yetty/ymesh/ymesh.h for the wire format. Hand-written (not
  * schema-generated) because ymesh's GPU pipeline uses a real vertex layout
@@ -151,7 +151,7 @@ struct yetty_ydraw_core_buffer_result yetty_ymesh_render(
         yetty_ydraw_core_buffer_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         free(prim_buf);
-        return YETTY_ERR(yetty_ydraw_core_buffer, "ymesh: ypaint buffer create failed", br);
+        return YETTY_ERR(yetty_ydraw_core_buffer, "ymesh: ydraw buffer create failed", br);
     }
 
     struct yetty_ydraw_core_id_result idr =
@@ -159,7 +159,7 @@ struct yetty_ydraw_core_buffer_result yetty_ymesh_render(
     free(prim_buf);
     if (YETTY_IS_ERR(idr)) {
         yetty_ydraw_core_buffer_destroy(br.value);
-        return YETTY_ERR(yetty_ydraw_core_buffer, "ymesh: ypaint add_prim failed", idr);
+        return YETTY_ERR(yetty_ydraw_core_buffer, "ymesh: ydraw add_prim failed", idr);
     }
 
     return YETTY_OK(yetty_ydraw_core_buffer, br.value);
@@ -227,7 +227,7 @@ struct yetty_ycore_size_result yetty_ymesh_osc_bin_emit(
     };
     struct yetty_ycore_buffer envelope = {0};
     struct yetty_ycore_void_result r = yetty_yface_emit(
-        YETTY_OSC_YPAINT_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
+        YETTY_OSC_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
         return YETTY_ERR(yetty_ycore_size, "ymesh_osc_bin_emit: yface_emit failed", r);

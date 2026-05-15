@@ -224,7 +224,7 @@ int yetty_ycore_parse_hex_color(const char *s, uint32_t *out)
     /* Pack as the canonical yetty layout: byte 0 = R, byte 1 = G,
      * byte 2 = B, byte 3 = A. As a u32 on little-endian:
      *   (A << 24) | (B << 16) | (G << 8) | R
-     * Matches WGSL `ypaint_unpack_color` and the existing yplot/yecho
+     * Matches WGSL `ydraw_unpack_color` and the existing yplot/yecho
      * conventions. */
     *out = ((uint32_t)byte[3] << 24) | ((uint32_t)byte[2] << 16) | ((uint32_t)byte[1] << 8) |
            (uint32_t)byte[0];

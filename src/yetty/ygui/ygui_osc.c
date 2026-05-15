@@ -6,7 +6,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/ycore/types.h>
-#include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YPAINT_* */
+#include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YDRAW_* */
 #include <yetty/ymgui/wire.h>       /* YMGUI_OSC_CS_CARD_*, wire structs */
 #include <yetty/ytrace/ytrace.h>
 #include <errno.h>
@@ -104,15 +104,15 @@ static void write_osc(const char *data, size_t len)
     }
 }
 
-/* Vendor ID = yetty ypaint-layer OSC sink (see terminal.c register_osc_sink).
+/* Vendor ID = yetty ydraw-layer OSC sink (see terminal.c register_osc_sink).
  * The layer's write() handler accepts:
- *   \033]666674;--bin;<base64>\033\ — append a base64 ypaint buffer
+ *   \033]666674;--bin;<base64>\033\ — append a base64 ydraw buffer
  *
  * ygui's semantics are "the whole UI is re-rendered every tick". The
  * buffer's first prim is CMD_ZERO (set by ygui_engine_render), which the
  * receiver applies inline — clearing the canvas + cursor reset in the
  * same envelope as the rest of the frame. This eliminates the inter-write
- * flicker that a separate YPAINT_CLEAR envelope used to cause. */
+ * flicker that a separate YDRAW_CLEAR envelope used to cause. */
 #define VENDOR_ID "666674"
 
 /* Write a full envelope to a yetty_platform_pty using ops->write. The pty
@@ -144,7 +144,7 @@ static struct yetty_ycore_void_result write_bin(struct yetty_platform_pty *outpu
     }
 
     /* Bin envelope: args = bin meta (compressed=1), payload = LZ4F'd
-     * + b64'd ypaint serialized buffer. yetty_yface_emit builds the
+     * + b64'd ydraw serialized buffer. yetty_yface_emit builds the
      * whole envelope into out_buf and we push it via the blocking
      * write helper. */
     struct yetty_yface_bin_meta meta = {
@@ -156,7 +156,7 @@ static struct yetty_ycore_void_result write_bin(struct yetty_platform_pty *outpu
         .reserved = {0, 0},
     };
     struct yetty_ycore_buffer out = {0};
-    struct yetty_ycore_void_result r = yetty_yface_emit(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
+    struct yetty_ycore_void_result r = yetty_yface_emit(YETTY_OSC_YDRAW_BIN, /*compressed=*/1,
                                                         &meta, sizeof(meta), data, size, &out);
     ydebug("write_bin: raw_size=%u envelope_bytes=%zu emit_ok=%d", size, out.size,
            YETTY_IS_OK(r));

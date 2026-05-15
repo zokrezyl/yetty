@@ -1,11 +1,11 @@
-add_library(ypaint_core STATIC
-    ypaint-buffer.c
-    ypaint-canvas.c
+add_library(ydraw_core STATIC
+    ydraw-buffer.c
+    ydraw-canvas.c
 )
 
-target_include_directories(ypaint_core PUBLIC
+target_include_directories(ydraw_core PUBLIC
     ${YETTY_ROOT}/include
     ${YETTY_ROOT}/src
 )
 
-target_link_libraries(ypaint_core PUBLIC ypaint_sdf)
+target_link_libraries(ydraw_core PUBLIC ydraw_sdf)

@@ -73,7 +73,7 @@ struct yetty_yfont_raster_font {
     struct yetty_ycore_map glyph_map;
     /* Inverse map (slot → cp) — populated alongside glyph_map so
      * clipboard extraction can recover the codepoint from a glyph
-     * index stored in a ypaint glyph prim. */
+     * index stored in a ydraw glyph prim. */
     struct yetty_ycore_map slot_to_cp;
 
     /* GPU — present only in full mode. */

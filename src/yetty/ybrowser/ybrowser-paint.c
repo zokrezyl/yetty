@@ -1,5 +1,5 @@
 /*
- * ylexbor-paint — emit ypaint primitives from a laid-out box vector.
+ * ylexbor-paint — emit ydraw primitives from a laid-out box vector.
  *
  * Every YL_BOX_BLOCK with non-zero alpha background → ysdf box.
  * Every YL_BOX_INLINE_TEXT → TEXT_SPAN flyweight prim.
@@ -9,10 +9,10 @@
  * Image decoding: per-document cache keyed by the resolved absolute
  * URL of `<img src>`. Cache hits skip the fetch + decode. The same
  * decoded pixel buffer is re-serialized into a fresh yimage prim each
- * paint call, since ypaint takes ownership of the prim bytes via
+ * paint call, since ydraw takes ownership of the prim bytes via
  * add_prim — we keep the cache copy alive for repaints.
  *
- * Color packing matches what ypaint's shader expects: low byte = R,
+ * Color packing matches what ydraw's shader expects: low byte = R,
  * high byte = A. Same convention ynetsurf-plotters.c uses.
  */
 

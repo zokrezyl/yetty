@@ -11,9 +11,9 @@
 //
 // Anything in this header pulls in <webgpu/webgpu.h> and the GPU resource
 // types — keep client-only code (OSC emit, YAML, wire serialize) on the
-// ypaint-core side.
+// ydraw-core side.
 //
-// See docs/ypaint.md for full documentation.
+// See docs/ydraw.md for full documentation.
 
 #pragma once
 

@@ -1,7 +1,7 @@
-/* scrolling-canvas.h — public API for the scrolling (terminal) ypaint canvas.
+/* scrolling-canvas.h — public API for the scrolling (terminal) ydraw canvas.
  *
  * Viewport scrolls, scrollbuffer evicts old rows. Used by the terminal's
- * text + ypaint layers. The variant exposes ONLY a create — every other
+ * text + ydraw layers. The variant exposes ONLY a create — every other
  * operation goes through the polymorphic surface defined in
  * <yetty/ydraw/canvas.h>.
  */

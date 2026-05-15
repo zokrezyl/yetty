@@ -1,19 +1,19 @@
 /*
- * decode-ypaint — diagnostic tool that takes the OSC stream emitted by ycat
- * (or any other ypaint-bin emitter) and decodes it via yface, printing what's
+ * decode-ydraw — diagnostic tool that takes the OSC stream emitted by ycat
+ * (or any other ydraw-bin emitter) and decodes it via yface, printing what's
  * inside.
  *
  * Usage:
- *   decode-ypaint <file>     # parse and decode every \e]…\e\\ envelope in file
+ *   decode-ydraw <file>     # parse and decode every \e]…\e\\ envelope in file
  *
  * Goal: when ycat output looks broken (server side does nothing), run
- * decode-ypaint on the captured bytes to confirm the wire format is valid
- * end-to-end (envelope, args meta, b64+LZ4F payload, ypaint magic).
+ * decode-ydraw on the captured bytes to confirm the wire format is valid
+ * end-to-end (envelope, args meta, b64+LZ4F payload, ydraw magic).
  *
  * For each envelope it prints:
  *   - osc code
  *   - decoded args meta (magic / version / compressed / raw_size)
- *   - decoded payload size + first bytes (so the ypaint magic is visible)
+ *   - decoded payload size + first bytes (so the ydraw magic is visible)
  *
  * The tool uses yface for the decode side — same code path the receiver
  * uses, so a clean run here means the wire is fine and bugs (if any) live
@@ -336,7 +336,7 @@ static void print_help(const char *prog)
             "usage: %s [FILE | -]\n"
             "       %s -h | --help\n"
             "\n"
-            "Decode the OSC envelopes emitted by a ypaint producer\n"
+            "Decode the OSC envelopes emitted by a ydraw producer\n"
             "(ycat, ygreeter, ygui apps, ...).\n"
             "\n"
             "With no argument or with `-`, reads from standard input — useful\n"
@@ -349,10 +349,10 @@ static void print_help(const char *prog)
             "All diagnostic output goes to stderr, so this tool can be chained\n"
             "with others (e.g. `grep`, `tee`) on stdout without interference.\n"
             "\n"
-            "For each OSC envelope decode-ypaint prints:\n"
+            "For each OSC envelope decode-ydraw prints:\n"
             "  - the OSC code\n"
             "  - the args meta (magic, version, compression flag, raw size)\n"
-            "  - the decoded payload size + first 16 bytes (so the ypaint\n"
+            "  - the decoded payload size + first 16 bytes (so the ydraw\n"
             "    magic `YPB1` is directly visible)\n"
             "  - a summary of TEXT_SPAN primitives carried in the payload\n",
             prog, prog, prog, prog, prog);

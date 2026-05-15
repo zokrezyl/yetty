@@ -1,4 +1,4 @@
-/* complex-prim-types — module-internal declarations (ypaint-core only).
+/* complex-prim-types — module-internal declarations (ydraw-core only).
  *
  * The public surface lives in include/yetty/ydraw-core/complex-prim-types.h.
  */

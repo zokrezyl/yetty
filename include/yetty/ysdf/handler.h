@@ -44,7 +44,7 @@ static const struct yetty_ydraw_core_prim_ops yetty_ysdf_prim_ops = {
 };
 
 // Handler returns base ops (for flyweight registry).
-// SDF tier is [0x10000000, 0x1FFFFFFF] in the ypaint type-id space.
+// SDF tier is [0x10000000, 0x1FFFFFFF] in the ydraw type-id space.
 static inline struct yetty_ydraw_core_prim_base_ops_ptr_result yetty_ysdf_handler(
     uint32_t prim_type)
 {

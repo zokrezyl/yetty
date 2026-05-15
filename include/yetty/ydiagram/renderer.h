@@ -2,10 +2,10 @@
 #define YETTY_YDIAGRAM_RENDERER_H
 
 /*
- * renderer — emit a laid-out diagram graph into a ypaint buffer using
+ * renderer — emit a laid-out diagram graph into a ydraw buffer using
  * MSD (SDF shape) and MSDF (text) primitives.
  *
- * Caller owns the ypaint buffer; we only append primitives. Scene bounds
+ * Caller owns the ydraw buffer; we only append primitives. Scene bounds
  * on the buffer are set from the graph's computed bounds.
  *
  * For text measurement (used to centre labels), the renderer accepts the

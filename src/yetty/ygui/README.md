@@ -1,14 +1,14 @@
 # ygui — Retained-Mode GUI for yetty
 
 A pure-C widget library that builds a tree of widgets, lays it out, draws
-into a `ypaint-core` buffer, and ships the result to a running yetty
+into a `ydraw-core` buffer, and ships the result to a running yetty
 instance over OSC. The library is self-contained: no Qt, no GTK, no
 ImGui-style immediate mode. Apps drive it via FFI from any language that
 can call C.
 
 ## Concepts
 
-- **Engine** — owns the widget tree, the ypaint-core buffer, the spatial
+- **Engine** — owns the widget tree, the ydraw-core buffer, the spatial
   hit-test grid, and the libuv loop that processes input and renders.
 - **Widget** — a node in the tree (`button`, `label`, `panel`, `hbox`,
   `vbox`, …). Carries identity, geometry, styling, callbacks, and child
@@ -22,7 +22,7 @@ can call C.
   pixels) and live `x/y/w/h` (relative-to-parent). Render functions and
   the spatial grid both consume the resolved values.
 - **Render pass** — walks the tree depth-first and emits SDF primitives
-  and text spans into the ypaint-core buffer.
+  and text spans into the ydraw-core buffer.
 - **OSC sink** — every render serializes the buffer (LZ4 + base64) and
   ships it to yetty as a single OSC envelope. Yetty decodes and draws.
 
@@ -204,7 +204,7 @@ absolute-positioned widgets (the default).
 
 1. `handle_resize` if `needs_resize` is set (snapshots prev size, updates
    `engine->width/height`, fires `resize_callback`).
-2. Clear the ypaint-core buffer.
+2. Clear the ydraw-core buffer.
 3. **Layout pass** — `yetty_ygui_layout_compute_engine` walks the tree,
    resolving authored geometry into `layout_*` and `x/y/w/h`.
 4. **Render pass** — each widget's `render` is called via `render_all`

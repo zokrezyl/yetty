@@ -93,7 +93,7 @@ struct yetty_yterm_terminal_layer_ops {
    *         read() returns 0 forever in this dispatch.
    *   - yetty_yterm_osc_statemachine_code(osc_statemachine)
    *       — 0 for the default sink, the OSC code for an envelope
-   *         dispatch (e.g. 600001 = ypaint BIN).
+   *         dispatch (e.g. 600001 = ydraw BIN).
    *   - yetty_yterm_osc_statemachine_args(osc_statemachine)
    *       — decoded args view (envelope dispatch only).
    *
@@ -135,7 +135,7 @@ struct yetty_yterm_terminal_layer_ops {
                                                  int row);
     /* Live anchor — absolute line index that represents "top of live viewport"
    * right now. Text-layer returns its scrollback row count (lines pushed off
-   * the top of the screen); ypaint-layer returns its canvas rolling_row_0.
+   * the top of the screen); ydraw-layer returns its canvas rolling_row_0.
    * The terminal uses this value to convert mouse-wheel deltas into a stable
    * absolute view_top_total_idx that doesn't drift when new content arrives
    * during scrollback view. Optional — NULL means the layer can't anchor a
@@ -167,7 +167,7 @@ struct yetty_yterm_terminal_layer_ops {
      *   text-layer  — xterm-style stream selection. Cells are tinted and
      *                 extracted from anchor to head (full rows in the
      *                 middle, partial first/last rows).
-     *   ypaint-layer — the column part is meaningless on rich content,
+     *   ydraw-layer — the column part is meaningless on rich content,
      *                 so the layer treats the row span [min_row, max_row]
      *                 as the "touched rows" and selects the first
      *                 primitive overlapping each touched row, as a whole.

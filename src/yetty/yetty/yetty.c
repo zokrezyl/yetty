@@ -181,7 +181,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
         ytime_report(workspace_render);
 
         /* App-level chrome on top of every terminal. ygui-produced
-         * primitives travel via memory-pty → static ypaint-layer here. */
+         * primitives travel via memory-pty → static ydraw-layer here. */
         if (yetty->yui) {
             struct yetty_ycore_void_result yr =
                 yetty_yui_render(yetty->yui, yetty->render_target);
@@ -767,7 +767,7 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
     yetty->context.gpu_context.allocator = alloc_res.value;
 
     /* MSDF CDB generator (cpu | gpu). Selected by `msdf/generator` config
-     * key. Created here so every consumer (currently ypaint-canvas font
+     * key. Created here so every consumer (currently ydraw-canvas font
      * materialisation) can grab it off gpu_context. */
     {
         const char *shaders_dir = yetty->context.app_context.config->ops->get_string(

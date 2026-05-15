@@ -54,7 +54,7 @@
 
 /* Glyph type word emitted by expand_text_span_to_glyphs(). Kept as a
  * private constant here so this TU doesn't drag in the SDF type
- * generator. Must match `YETTY_YSDF_GLYPH` in ypaint-canvas.c. */
+ * generator. Must match `YETTY_YSDF_GLYPH` in ydraw-canvas.c. */
 #define SB_GLYPH_TYPE_WORD 200u
 #define SB_GLYPH_WORD_COUNT 7u
 

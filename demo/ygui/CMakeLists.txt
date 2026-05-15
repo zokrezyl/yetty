@@ -1,12 +1,12 @@
 # ygui C demos — each builds a tiny program that uses the ygui widget API.
-# ygui accumulates primitives into a ypaint-core buffer and ships them as
+# ygui accumulates primitives into a ydraw-core buffer and ships them as
 # base64-encoded OSC sequences to a running yetty instance, which decodes
 # them via yetty_ydraw_core_buffer_create_from_base64 and renders.
-# See src/yetty/ygui/ydraw-capi.gen.{h,c} for the ypaint buffer shim.
+# See src/yetty/ygui/ydraw-capi.gen.{h,c} for the ydraw buffer shim.
 
 # Shared support object: ytrace + ymutex/term platform glue. Compiled once
 # and linked into each demo exec so we avoid static-archive ordering issues
-# (ygui/ypaint-core reference these symbols; they need to be in the final
+# (ygui/ydraw-core reference these symbols; they need to be in the final
 # exec object list, not hidden deeper in the archive chain).
 add_library(demo_ygui_support OBJECT
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c

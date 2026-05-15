@@ -84,7 +84,7 @@ visible lines for GPU upload.
 ## YPaint Spatial Structure
 
 Separate from the text grid but sharing the same row/col coordinate system
-and scroll counter. The ypaint spatial data is a `deque<PrimLine>` where each
+and scroll counter. The ydraw spatial data is a `deque<PrimLine>` where each
 line holds primitives and per-cell references.
 
 ### Primitive Storage
@@ -121,9 +121,9 @@ YPaint data structures are independent of rendering mode. The same structures se
 
 | Usage             | Grid size      | Scrolls? | Lifecycle              |
 |-------------------|---------------|----------|------------------------|
-| Scrolling ypaint  | terminal grid | yes      | rows scroll off        |
+| Scrolling ydraw  | terminal grid | yes      | rows scroll off        |
 | Cards             | sub-grid NxM  | yes      | anchored to last row   |
-| Static ypaint     | terminal grid | no       | explicit clear/replace |
+| Static ydraw     | terminal grid | no       | explicit clear/replace |
 | YPaint card       | sub-grid NxM  | yes      | anchored to last row   |
 
 ### YPaintBuffer (input)
@@ -135,7 +135,7 @@ No rendering logic, no GPU awareness.
 ### SpatialGrid (storage + spatial indexing)
 
 Manages the deque of rows, primitive storage, grid cell references, scroll counter.
-Shared between text and ypaint — single scroll mechanism.
+Shared between text and ydraw — single scroll mechanism.
 
 Reusable for any grid size (full terminal or card sub-grid).
 
@@ -179,7 +179,7 @@ src/yetty/term/
   terminal-screen.cpp        — TerminalScreenImpl (orchestrates layers, compositing)
 
 src/yetty/ydraw/
-  ypaint-buffer.h            — YPaintBuffer (pure data input, unchanged)
+  ydraw-buffer.h            — YPaintBuffer (pure data input, unchanged)
   canvas.cpp                 — replaced by SpatialGrid
   painter.cpp                — rendering logic, uses SpatialGrid
 ```
@@ -189,11 +189,11 @@ src/yetty/ydraw/
 ```
 TextCell buffer ──────────────────────────> Layer 0 texture
                                                 │
-SpatialGrid (scrolling ypaint) ──> Renderer ──> Layer 1 on cached Layer 0
+SpatialGrid (scrolling ydraw) ──> Renderer ──> Layer 1 on cached Layer 0
                                                 │
 Cards (sub-grid SpatialGrids) ──> Renderer ──> Layer 2 on cached Layer 1
                                                 │
-SpatialGrid (static ypaint) ──> Renderer ──> Layer 3 on cached Layer 2
+SpatialGrid (static ydraw) ──> Renderer ──> Layer 3 on cached Layer 2
                                                 │
                                            Final frame
 ```
@@ -281,7 +281,7 @@ The `loadOp` determines compositing behavior:
 
 Each layer maintains a dirty flag:
 - Layer 0 dirty: terminal content changed (scroll, new text)
-- Layer 1 dirty: ypaint primitives changed
+- Layer 1 dirty: ydraw primitives changed
 - Layer 2 dirty: card content changed
 - Layer 3 dirty: static overlay changed
 
@@ -394,7 +394,7 @@ uint32_t getCols() const;
 uint32_t getRows() const;
 int getCursorRow() const;
 int getCursorCol() const;
-// ... etc for ypaint, cards
+// ... etc for ydraw, cards
 ```
 
 Does NOT render. Assembles layer chain and triggers render.
@@ -452,7 +452,7 @@ class ScrollingYPaintLayer : public RenderableLayer {
         if (_previousLayer) {
             _previousLayer->render(terminalScreenRenderContext);
         }
-        // ... render ypaint primitives on top
+        // ... render ydraw primitives on top
     }
 };
 

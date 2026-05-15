@@ -1,5 +1,5 @@
 /*
- * renderer.c — graph IR → ypaint buffer.
+ * renderer.c — graph IR → ydraw buffer.
  *
  * Emission is single-pass and z-order ascends as we go:
  *   clusters → edges → nodes → labels
@@ -481,7 +481,7 @@ struct yetty_ycore_void_result yetty_ydiagram_render(
 
     /* CMD_ZERO at the start of every full-redraw buffer — clears the
      * receiving canvas + resets cursor as a side effect of decoding.
-     * Replaces the obsolete separate YPAINT_CLEAR OSC envelope (see
+     * Replaces the obsolete separate YDRAW_CLEAR OSC envelope (see
      * yetty/ydraw-core/cmds.h). Sending CLEAR + BIN as two envelopes
      * currently freezes yetty's OSC SM (CLEAR handler doesn't drain the
      * body terminator), so we use the single-envelope form. */

@@ -1,11 +1,11 @@
-// ypaint-core YAML factory callback type
+// ydraw-core YAML factory callback type
 
 #pragma once
 
 #include <yetty/ycore/result.h>
 #include <yetty/ydraw-core/buffer.h>
 
-// Forward declare libyaml parser (avoids yaml.h dependency in ypaint-core)
+// Forward declare libyaml parser (avoids yaml.h dependency in ydraw-core)
 struct yaml_parser_s;
 
 #ifdef __cplusplus

@@ -16,8 +16,8 @@
 /* Forward declare libuv types */
 typedef struct uv_loop_s uv_loop_t;
 
-/* Forward declare ypaint-core buffer (rich widget hands one of these to ygui;
- * we don't pull in the full ypaint-core header from this public surface). */
+/* Forward declare ydraw-core buffer (rich widget hands one of these to ygui;
+ * we don't pull in the full ydraw-core header from this public surface). */
 struct yetty_ydraw_core_buffer;
 
 /* Forward declare config — kept opaque so the public ygui surface doesn't
@@ -90,7 +90,7 @@ typedef enum {
      * widget). Indent is controlled by CSS padding-left on the children
      * list returned by yetty_ygui_widget_tree_node_children(). */
     YETTY_YGUI_WIDGET_TREE_NODE,
-    /* Rich content surface: holds a ypaint-core buffer of pre-built
+    /* Rich content surface: holds a ydraw-core buffer of pre-built
      * primitives (TEXT_SPAN, SDF shapes, yplot, yimage, ...). The widget
      * reserves a flex/layout box and, at render time, translates every
      * primitive in its buffer by the box's resolved (x, y). Authors
@@ -98,7 +98,7 @@ typedef enum {
     YETTY_YGUI_WIDGET_RICH,
     /* Top-level frame: title bar + close 'x' affordance + a body
      * container all other widgets sit inside. The close button stops
-     * the engine while leaving the last painted frame on the ypaint
+     * the engine while leaving the last painted frame on the ydraw
      * canvas, so apps can exit gracefully without wiping the user's
      * view. See yetty_ygui_engine_window in this file. */
     YETTY_YGUI_WIDGET_WINDOW,
@@ -503,7 +503,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_list(struct yetty_ygui_engine *engin
 struct yetty_ygui_widget *yetty_ygui_engine_tree_node(struct yetty_ygui_engine *engine,
                                                       const char *id, const char *label);
 
-/* Rich content surface — holds a ypaint-core buffer of pre-built primitives
+/* Rich content surface — holds a ydraw-core buffer of pre-built primitives
  * (text spans, SDF shapes, yplot, yimage, ...). The widget reserves a flex
  * layout box; at render time every primitive is translated by the widget's
  * resolved (layout_x, layout_y), so authors compose content in widget-local
@@ -515,7 +515,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_tree_node(struct yetty_ygui_engine *
  *                                                later with set_buffer or
  *                                                set_yaml.
  *   - rich_from_yaml(... , yaml, yaml_len)    — convenience: parses the
- *                                                YAML via ypaint-yaml and
+ *                                                YAML via ydraw-yaml and
  *                                                hands the buffer to the
  *                                                widget. Equivalent to
  *                                                rich() + set_yaml(). */
@@ -534,7 +534,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_rich_from_yaml(struct yetty_ygui_eng
 struct yetty_ycore_void_result yetty_ygui_widget_rich_set_yaml(struct yetty_ygui_widget *widget,
                                                                const char *yaml, size_t yaml_len);
 
-/* Transfer ownership of an externally-constructed ypaint-core buffer into
+/* Transfer ownership of an externally-constructed ydraw-core buffer into
  * the widget. The widget destroys the buffer in its own destroy hook (and
  * on the next set_yaml / set_buffer / clear call). Passing NULL clears. */
 void yetty_ygui_widget_rich_set_buffer(struct yetty_ygui_widget *widget,
@@ -547,8 +547,8 @@ void yetty_ygui_widget_rich_clear(struct yetty_ygui_widget *widget);
 /* Window — top-level frame containing every other widget in an app.
  * Draws a title bar with a centred title text and a close 'x' button
  * pinned to the upper-right corner. Clicking the close button stops
- * the engine event loop AND tells engine_destroy to skip the YPAINT
- * clear, so the last rendered frame stays on the ypaint canvas after
+ * the engine event loop AND tells engine_destroy to skip the YDRAW
+ * clear, so the last rendered frame stays on the ydraw canvas after
  * the app exits.
  *
  * The window auto-allocates an inner body widget (a flex-column vbox)
@@ -578,7 +578,7 @@ void yetty_ygui_widget_window_on_close(struct yetty_ygui_widget *window,
                                        ygui_click_callback_t callback, void *userdata);
 
 /* Stop the engine loop and arrange for engine_destroy to leave the
- * last rendered ypaint frame on the canvas (no YPAINT_CLEAR sent).
+ * last rendered ydraw frame on the canvas (no YDRAW_CLEAR sent).
  * This is what the window's close button calls; user code can call it
  * directly for the same "exit but keep view" semantics. */
 void yetty_ygui_engine_close_preserve(struct yetty_ygui_engine *engine);
@@ -1005,7 +1005,7 @@ void yetty_ygui_theme_apply_config(struct yetty_ygui_theme *theme,
 void yetty_ygui_engine_set_input_fd(struct yetty_ygui_engine *engine, int fd);
 void yetty_ygui_engine_set_output_fd(struct yetty_ygui_engine *engine, int fd);
 
-/* Route the engine's ypaint frame OSC envelopes to a yetty_platform_pty
+/* Route the engine's ydraw frame OSC envelopes to a yetty_platform_pty
  * instead of `output_fd`. Used when ygui lives in the same process as the
  * renderer (yetty's app-level yui chrome) to avoid a stdout round-trip.
  * `pty` is borrowed — the caller owns its lifetime and must outlive the

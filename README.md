@@ -32,13 +32,13 @@ Terminals are stuck in the 1970s — text, maybe colors, that's it. Meanwhile, t
 ```
 Terminal
   └── text-layer (libvterm)
-  └── ypaint-layer
+  └── ydraw-layer
         ├── simple primitives (circles, boxes, lines, glyphs)
         └── complex primitives / cards
               └── yplot, yimage, yvideo, ydoc, ysheet...
 ```
 
-Cards are nested ypaint canvases — same rendering model all the way down. A card can contain other cards, enabling recursive composition.
+Cards are nested ydraw canvases — same rendering model all the way down. A card can contain other cards, enabling recursive composition.
 
 ## Rich Content Cards
 
@@ -120,7 +120,7 @@ make build-android_x86_64-ytrace-release
 | [Design Overview](docs/design.md) | Architecture and design decisions |
 | [Layered Rendering](docs/layered-rendering.md) | Layer stack and compositor |
 | [GPU Resource Binding](docs/gpu-resource-binding.md) | Buffer packing and atlas textures |
-| [ypaint](docs/ypaint.md) | Primitives and scrolling model |
+| [ydraw](docs/ydraw.md) | Primitives and scrolling model |
 | [Platform Abstraction](docs/platform.md) | PTY, event loop, input pipe |
 | [Font System](docs/font.md) | Glyph rendering and atlas |
 | [ytrace](docs/ytrace.md) | Logging and tracing |

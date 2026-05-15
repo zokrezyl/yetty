@@ -11,7 +11,7 @@
  *   - CSS parsing + selector matching + computed style (via lexbor)
  *   - Naive block-flow layout: vertical stacking of block-level elements,
  *     line-by-line text wrapping inside inline content
- *   - Painting: emit ypaint primitives (boxes + TEXT_SPAN) into a buffer
+ *   - Painting: emit ydraw primitives (boxes + TEXT_SPAN) into a buffer
  *
  * Explicitly NOT implemented (TODO, separate work):
  *   - Float layout
@@ -69,7 +69,7 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css(struct yetty_ylexbor *r, co
 struct yetty_ycore_void_result yetty_ylexbor_set_viewport(struct yetty_ylexbor *r, int width,
                                                           int height);
 
-/* Drain the laid-out document into a ypaint buffer. Caller owns buf;
+/* Drain the laid-out document into a ydraw buffer. Caller owns buf;
  * this function appends primitives. */
 struct yetty_ycore_void_result yetty_ylexbor_render(struct yetty_ylexbor *r,
                                                     struct yetty_ydraw_core_buffer *buf);

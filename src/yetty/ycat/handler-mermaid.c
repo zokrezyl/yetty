@@ -1,5 +1,5 @@
 /*
- * handler-mermaid.c — Mermaid diagram → ypaint buffer.
+ * handler-mermaid.c — Mermaid diagram → ydraw buffer.
  *
  * Thin wrapper around yetty_ydiagram_render_mermaid. ycat doesn't carry
  * a font_id-aware measure callback (the canvas's default font measures

@@ -1,4 +1,4 @@
-/* flyweight — module-internal declarations (ypaint-core only).
+/* flyweight — module-internal declarations (ydraw-core only).
  *
  * The public surface lives in include/yetty/ydraw-core/flyweight.h.
  */

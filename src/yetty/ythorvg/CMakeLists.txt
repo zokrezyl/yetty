@@ -1,4 +1,4 @@
-# yetty_ythorvg — ThorVG SVG/Lottie -> ypaint SDF bridge.
+# yetty_ythorvg — ThorVG SVG/Lottie -> ydraw SDF bridge.
 #
 # C++ internally (uses ThorVG's C++ RenderMethod interface) but exposes a
 # C API via include/yetty/ythorvg/ythorvg.h so the rest of the C codebase
@@ -34,7 +34,7 @@ set_target_properties(yetty_ythorvg PROPERTIES
 )
 
 target_link_libraries(yetty_ythorvg PUBLIC
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_ysdf
     thorvg_lib
 )

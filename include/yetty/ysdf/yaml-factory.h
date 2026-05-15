@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <yetty/ydraw-yaml/ypaint-yaml.h>
+#include <yetty/ydraw-yaml/ydraw-yaml.h>
 
 #ifdef __cplusplus
 extern "C" {

@@ -31,7 +31,7 @@ typedef struct ygui_input_event ygui_input_event_t;
 struct yetty_platform_pty;
 
 /*=============================================================================
- * Render Context (drawing target = a ypaint-core buffer). The shim that used
+ * Render Context (drawing target = a ydraw-core buffer). The shim that used
  * to sit here (ydraw-capi.gen.*) is gone; widgets call yetty_ysdf_add_* and
  * yetty_ydraw_core_buffer_add_text directly.
  *===========================================================================*/
@@ -345,7 +345,7 @@ struct yetty_ygui_widget {
         } table;
 
         struct {
-            /* Owned ypaint-core buffer. NULL while empty. Authors fill the
+            /* Owned ydraw-core buffer. NULL while empty. Authors fill the
              * primitives in widget-local coordinates (0..w, 0..h); the
              * widget's render translates them to absolute canvas coords. */
             struct yetty_ydraw_core_buffer *buffer;
@@ -433,7 +433,7 @@ typedef struct {
  *===========================================================================*/
 
 struct yetty_ygui_engine {
-    /* ypaint-core buffer (created and owned by engine). Widgets add primitives
+    /* ydraw-core buffer (created and owned by engine). Widgets add primitives
      * via yetty_ysdf_* and text via yetty_ydraw_core_buffer_add_text. */
     struct yetty_ydraw_core_buffer *buffer;
 
@@ -483,8 +483,8 @@ struct yetty_ygui_engine {
     int card_shown;   /* 0 = not shown yet, 1 = shown (use update) */
     uint32_t card_id; /* ymgui-layer card id (for CARD_PLACE / hit routing) */
 
-    /* When set, engine_destroy skips the YPAINT_CLEAR OSC so the last
-     * rendered frame stays painted on the canvas (the ypaint primitives
+    /* When set, engine_destroy skips the YDRAW_CLEAR OSC so the last
+     * rendered frame stays painted on the canvas (the ydraw primitives
      * remain in the scrolling layer's buffer). The ymgui card-remove
      * still fires — input routing detaches, but visuals persist. Used
      * by the WINDOW widget's close button so "X" gives users a graceful
@@ -512,7 +512,7 @@ struct yetty_ygui_engine {
     int input_fd;  /* Input file descriptor (default: STDIN_FILENO) */
     int output_fd; /* Output file descriptor (default: STDOUT_FILENO) */
 
-    /* In-process sink override. When non-NULL, ypaint frame envelopes
+    /* In-process sink override. When non-NULL, ydraw frame envelopes
      * go through pty->ops->write instead of write(output_fd). Used by
      * yetty's own yui chrome to avoid a stdout round-trip when ygui
      * lives in the same process as the renderer. NULL = fall back to

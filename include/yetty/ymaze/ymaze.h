@@ -2,7 +2,7 @@
 #define YETTY_YMAZE_YMAZE_H
 
 /*
- * ymaze — animated maze generator + solver, drawn as ypaint SDF prims.
+ * ymaze — animated maze generator + solver, drawn as ydraw SDF prims.
  *
  * Port of yetty-poc/src/yetty/ydraw-maze (C++ → C). The renderer:
  *   1. Generates a maze with a recursive-backtracker DFS.
@@ -11,7 +11,7 @@
  *      and an actor circle interpolated along the path.
  *   4. When auto_regen is on, finishing the path triggers a fresh maze.
  *
- * The renderer is a pure producer of ypaint primitives — no IO, no GPU,
+ * The renderer is a pure producer of ydraw primitives — no IO, no GPU,
  * no terminal interaction. The frontend tool drives time, owns the buffer,
  * and ships it out via OSC.
  */

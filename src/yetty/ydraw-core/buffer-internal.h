@@ -1,11 +1,11 @@
-/* buffer — module-internal declarations (ypaint-core only).
+/* buffer — module-internal declarations (ydraw-core only).
  *
  * These functions are not part of the inter-module public API. The public
  * surface lives in include/yetty/ydraw-core/buffer.h.
  *
  * Most of these are the base64 round-trip pair (used internally to fuse
  * compression+encoding without double-buffering) and the matched min-side
- * scene-bounds accessors that nothing outside ypaint-core currently needs.
+ * scene-bounds accessors that nothing outside ydraw-core currently needs.
  */
 #ifndef YETTY_YDRAW_CORE_BUFFER_INTERNAL_H
 #define YETTY_YDRAW_CORE_BUFFER_INTERNAL_H

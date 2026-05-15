@@ -1,7 +1,7 @@
 /*
  * yplot — emit a yplot complex-prim OSC envelope for a function expression.
  *
- * Inside a yetty terminal the OSC is routed to the ypaint scrolling layer,
+ * Inside a yetty terminal the OSC is routed to the ydraw scrolling layer,
  * which renders the plot via the yplot pipeline. Outside a yetty terminal
  * the bytes are still printed (mostly garbage on a vt100), so the typical
  * usage is `yetty -e 'yplot ...'` or invocation from a script running in
@@ -54,8 +54,8 @@ static void usage(FILE *out, const char *prog)
     fprintf(out,
         "Usage: %s [options] <expression> [<expression> ...]\n"
         "\n"
-        "Emit a YPlot OSC envelope (YETTY_OSC_YPAINT_BIN, 600001) consumed\n"
-        "by the yetty ypaint scrolling layer.\n"
+        "Emit a YPlot OSC envelope (YETTY_OSC_YDRAW_BIN, 600001) consumed\n"
+        "by the yetty ydraw scrolling layer.\n"
         "\n"
         "Multi-function syntax (yexpr-plot):\n"
         "  '<expr>'                     single function (auto-named plot1)\n"

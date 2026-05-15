@@ -144,7 +144,7 @@ struct yetty_ydraw_core_buffer_result yetty_yplot_render(
         return YETTY_ERR(yetty_ydraw_core_buffer, "yplot: serialize failed", ser);
     }
 
-    /* Build a fresh ypaint buffer + attach the prim. Scene bounds = the
+    /* Build a fresh ydraw buffer + attach the prim. Scene bounds = the
      * yplot's own w x h (so the receiving canvas knows how much vertical
      * space to reserve). */
     struct yetty_ydraw_core_buffer_config bcfg = {
@@ -157,7 +157,7 @@ struct yetty_ydraw_core_buffer_result yetty_yplot_render(
         yetty_ydraw_core_buffer_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         free(prim_buf);
-        return YETTY_ERR(yetty_ydraw_core_buffer, "yplot: ypaint buffer create failed", br);
+        return YETTY_ERR(yetty_ydraw_core_buffer, "yplot: ydraw buffer create failed", br);
     }
 
     struct yetty_ydraw_core_id_result idr =
@@ -165,7 +165,7 @@ struct yetty_ydraw_core_buffer_result yetty_yplot_render(
     free(prim_buf);
     if (YETTY_IS_ERR(idr)) {
         yetty_ydraw_core_buffer_destroy(br.value);
-        return YETTY_ERR(yetty_ydraw_core_buffer, "yplot: ypaint add_prim failed", idr);
+        return YETTY_ERR(yetty_ydraw_core_buffer, "yplot: ydraw add_prim failed", idr);
     }
 
     return YETTY_OK(yetty_ydraw_core_buffer, br.value);
@@ -194,7 +194,7 @@ struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(
     };
     struct yetty_ycore_buffer envelope = {0};
     struct yetty_ycore_void_result r = yetty_yface_emit(
-        YETTY_OSC_YPAINT_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
+        YETTY_OSC_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
         return YETTY_ERR(yetty_ycore_size, "yplot_osc_bin_emit: yface_emit failed", r);

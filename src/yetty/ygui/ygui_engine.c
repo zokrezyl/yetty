@@ -212,14 +212,14 @@ static struct ygui_engine_ptr_result engine_alloc_init(const char *card_name, in
         return YETTY_ERR(ygui_engine_ptr, "engine_alloc_init: alloc failed");
     }
 
-    /* Create ypaint-core buffer — widgets accumulate SDF primitives + text
+    /* Create ydraw-core buffer — widgets accumulate SDF primitives + text
      * spans into it; the engine base64-encodes the serialization and ships
      * it via OSC 666674 every render. */
     struct yetty_ydraw_core_buffer_result br = yetty_ydraw_core_buffer_config_buffer_create(NULL);
     if (!YETTY_IS_OK(br)) {
-        yetty_ygui_set_error("Failed to create ypaint buffer");
+        yetty_ygui_set_error("Failed to create ydraw buffer");
         free(engine);
-        return YETTY_ERR(ygui_engine_ptr, "engine_alloc_init: ypaint buffer create failed", br);
+        return YETTY_ERR(ygui_engine_ptr, "engine_alloc_init: ydraw buffer create failed", br);
     }
     engine->buffer = br.value;
 
@@ -350,7 +350,7 @@ struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engin
         yetty_ygui_osc_subscribe_moves(0);
     }
 
-    /* Kill card (= clear the ypaint canvas) if shown — UNLESS the
+    /* Kill card (= clear the ydraw canvas) if shown — UNLESS the
      * preserve flag is set. The window widget's close button sets it
      * so the user's final view stays on screen after the app exits. */
     if (engine->card_shown && engine->card_name && !engine->preserve_canvas_on_destroy) {
@@ -625,7 +625,7 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
 
     /* 1a. Prepend a CMD_ZERO so the receiver clears its canvas + resets
      * cursor in the SAME OSC envelope that carries this frame's prims —
-     * eliminates the inter-write flash that the separate YPAINT_CLEAR
+     * eliminates the inter-write flash that the separate YDRAW_CLEAR
      * envelope used to cause. */
     {
         struct yetty_ycore_void_result zr = yetty_ydraw_core_buffer_add_cmd_zero(engine->buffer);

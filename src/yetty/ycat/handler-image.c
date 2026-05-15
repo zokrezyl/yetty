@@ -1,5 +1,5 @@
 /*
- * handler-image.c - image bytes (PNG/JPG/...) → ypaint buffer.
+ * handler-image.c - image bytes (PNG/JPG/...) → ydraw buffer.
  *
  * Thin glue: forwards the raw encoded bytes to yetty_yimage_render, which
  * handles the stb_image decode and the wire-format serialization for the

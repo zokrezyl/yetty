@@ -1,4 +1,4 @@
-# ydiagram CLI — Mermaid file → ypaint OSC envelope (or raw serialized
+# ydiagram CLI — Mermaid file → ydraw OSC envelope (or raw serialized
 # buffer). Mirrors the wiring of tools/ymaze and tools/yzoo.
 
 add_executable(ydiagram-cli

@@ -17,7 +17,7 @@
  *
  * Scrolling
  *   Each card is anchored at a rolling_row at placement time (same
- *   model the ypaint canvas uses). card_origin_y on render is computed
+ *   model the ydraw canvas uses). card_origin_y on render is computed
  *   as (rolling_row - row0_absolute) * cell_height. Scroll is O(1):
  *   geometry never re-uploads, the per-card uniform is rewritten.
  *
@@ -118,7 +118,7 @@ struct yetty_yterm_ymgui_layer {
      * the OSC SM. */
     struct yetty_yface *yface;
 
-    /* Per-envelope decoded-payload accumulator (see ypaint-layer for
+    /* Per-envelope decoded-payload accumulator (see ydraw-layer for
      * the same pattern). */
     struct yetty_ycore_buffer accum;
     int parse_code;
@@ -1386,7 +1386,7 @@ static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal
     /* LoadOp_Load: every pass into the shared big target preserves prior
      * pixels. The single per-frame wipe is the global clear() in
      * yetty_event_handler. ymgui draws on top of whatever earlier layers
-     * (text, ypaint, shader-glyph) put down. */
+     * (text, ydraw, shader-glyph) put down. */
     WGPUCommandEncoderDescriptor ed = {0};
     WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(l->device, &ed);
 
@@ -1403,7 +1403,7 @@ static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal
 
     wgpuRenderPassEncoderSetPipeline(pass, l->pipeline);
 
-    /* Confine the layer's draws to its pane's rect — same as text/ypaint
+    /* Confine the layer's draws to its pane's rect — same as text/ydraw
      * get via render_target_texture_render_layer's SetViewport call.
      * Without this, the ymgui pipeline draws into the whole framebuffer
      * (default viewport = full texture), so card vertices at pane-local

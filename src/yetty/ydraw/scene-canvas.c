@@ -418,7 +418,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create(
     sc->entities[SCENE_ROOT_SLOT].parent_slot = SCENE_INVALID_SLOT;
 
     struct yetty_ydraw_canvas_ptr_result base_res =
-        ypaint_canvas_create(context, &scene_canvas_ops, sc);
+        ydraw_canvas_create(context, &scene_canvas_ops, sc);
     if (YETTY_IS_ERR(base_res)) {
         free(sc->entities);
         free(sc);

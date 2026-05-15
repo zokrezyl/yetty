@@ -16,7 +16,7 @@
 #include <yetty/ydraw-core/font-prim.h>
 #include <yetty/ydraw-core/text-span-prim.h>
 #include <yetty/ydraw/flyweight.h>
-#include <yetty/ydraw/core/ypaint-canvas.h>
+#include <yetty/ydraw/core/ydraw-canvas.h>
 #include <yetty/ydraw/scrollbuffer.h>
 #include "canvas-internal.h"
 #include <yetty/yfont/font.h>
@@ -43,7 +43,7 @@
 #define YETTY_YSDF_GLYPH 200
 
 /* Glyph primitive: type, z_order, x, y, font_size, packed(glyph_idx|font_id), color */
-#define YPAINT_GLYPH_WORDS 7
+#define YDRAW_GLYPH_WORDS 7
 
 //=============================================================================
 // Internal data structures
@@ -582,7 +582,7 @@ static void sanitize_identifier(char *dst, size_t dst_cap, const char *src)
  * an error otherwise. The first cache miss installs at slot 0 (this is the
  * very first get_font call on a fresh cache), which is what the binder /
  * shader dispatcher expect. */
-static struct yetty_yfont_cache_ref_result ypaint_canvas_get_default_font_ref(
+static struct yetty_yfont_cache_ref_result ydraw_canvas_get_default_font_ref(
     struct yetty_ydraw_canvas *canvas)
 {
     if (canvas->font_render_method == 1) {
@@ -594,7 +594,7 @@ static struct yetty_yfont_cache_ref_result ypaint_canvas_get_default_font_ref(
              canvas->font_family);
     char ns[128];
     sanitize_identifier(ns, sizeof(ns), canvas->font_family);
-    ydebug("ypaint_canvas: default msdf font cdb='%s' key='%s'", cdb_path, ns);
+    ydebug("ydraw_canvas: default msdf font cdb='%s' key='%s'", cdb_path, ns);
     return yetty_yfont_cache_get_font(canvas->font_cache, ns, cdb_path);
 }
 
@@ -611,7 +611,7 @@ static struct yetty_yfont_cache_ref_result ypaint_canvas_get_default_font_ref(
  * the font_id (see canvas_resolve_blob_font_handle). PDF over-declares
  * fonts per page — a font that never produces a glyph never produces
  * a cache slot. */
-static struct yetty_ycore_void_result ypaint_canvas_ensure_blob_font_cdb(
+static struct yetty_ycore_void_result ydraw_canvas_ensure_blob_font_cdb(
     struct yetty_ydraw_canvas *canvas, const uint8_t *ttf, uint32_t ttf_len,
     const char *hint_name, char out_hex[17])
 {
@@ -632,7 +632,7 @@ static struct yetty_ycore_void_result ypaint_canvas_ensure_blob_font_cdb(
     }
 
     char fonts_dir[768];
-    snprintf(fonts_dir, sizeof(fonts_dir), "%s/ypaint-fonts", cache_dir);
+    snprintf(fonts_dir, sizeof(fonts_dir), "%s/ydraw-fonts", cache_dir);
 
     char ttf_path[1024], cdb_path[1024];
     snprintf(ttf_path, sizeof(ttf_path), "%s/pdf_%s.ttf", fonts_dir, out_hex);
@@ -652,13 +652,13 @@ static struct yetty_ycore_void_result ypaint_canvas_ensure_blob_font_cdb(
         }
         fwrite(ttf, 1, ttf_len, f);
         fclose(f);
-        ydebug("ypaint_canvas: cached TTF '%s' (%u bytes) hint='%s'", ttf_path, ttf_len,
+        ydebug("ydraw_canvas: cached TTF '%s' (%u bytes) hint='%s'", ttf_path, ttf_len,
                hint_name ? hint_name : "");
     }
 
 #if YETTY_HAS_YMSDF_GEN
     if (!canvas->msdf_generator) {
-        yerror("ypaint_canvas: CDB '%s' missing and no MSDF generator on "
+        yerror("ydraw_canvas: CDB '%s' missing and no MSDF generator on "
                "the canvas — host must initialise gpu_context.msdf_generator.",
                cdb_path);
         return YETTY_ERR(yetty_ycore_void, "no MSDF generator available");
@@ -671,7 +671,7 @@ static struct yetty_ycore_void_result ypaint_canvas_ensure_blob_font_cdb(
     struct yetty_ycore_void_result gr =
         canvas->msdf_generator->ops->generate(canvas->msdf_generator, &gen);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "msdf generator failed");
-    ydebug("ypaint_canvas: generated CDB '%s' via %s generator", cdb_path,
+    ydebug("ydraw_canvas: generated CDB '%s' via %s generator", cdb_path,
            canvas->msdf_generator->ops->name(canvas->msdf_generator));
     return YETTY_OK_VOID();
 #else
@@ -693,7 +693,7 @@ static struct yetty_yfont_cache_ref_result canvas_resolve_blob_font_handle(
         return YETTY_ERR(yetty_yfont_cache_ref, "no cache dir");
     }
     char cdb_path[1024];
-    snprintf(cdb_path, sizeof(cdb_path), "%s/ypaint-fonts/pdf_%s.cdb", cache_dir, hex);
+    snprintf(cdb_path, sizeof(cdb_path), "%s/ydraw-fonts/pdf_%s.cdb", cache_dir, hex);
     return yetty_yfont_cache_get_font(canvas->font_cache, hex, cdb_path);
 }
 
@@ -728,10 +728,10 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
     /* Create flyweight registry with all handlers (for SDF prims) */
     struct yetty_ydraw_core_flyweight_registry_ptr_result fw_res = yetty_ydraw_flyweight_create();
     if (YETTY_IS_ERR(fw_res)) {
-        yerror("ypaint_canvas: flyweight creation failed: %s", fw_res.error.msg);
+        yerror("ydraw_canvas: flyweight creation failed: %s", fw_res.error.msg);
         free(canvas->lines.lines);
         free(canvas);
-        return YETTY_ERR(yetty_ydraw_canvas_ptr, "ypaint_canvas: flyweight creation failed",
+        return YETTY_ERR(yetty_ydraw_canvas_ptr, "ydraw_canvas: flyweight creation failed",
                          fw_res);
     }
     canvas->flyweight_registry = fw_res.value;
@@ -742,11 +742,11 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
             context->gpu_context.device, context->gpu_context.queue,
             context->gpu_context.surface_format, context->gpu_context.allocator);
     if (YETTY_IS_ERR(factory_res)) {
-        yerror("ypaint_canvas: factory creation failed: %s", factory_res.error.msg);
+        yerror("ydraw_canvas: factory creation failed: %s", factory_res.error.msg);
         yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
-        return YETTY_ERR(yetty_ydraw_canvas_ptr, "ypaint_canvas: factory creation failed",
+        return YETTY_ERR(yetty_ydraw_canvas_ptr, "ydraw_canvas: factory creation failed",
                          factory_res);
     }
     canvas->complex_prim_factory = factory_res.value;
@@ -754,7 +754,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
     /* Create and register yplot factory */
     struct yetty_ydraw_core_concrete_factory *yetty_yplot_factory = yetty_yplot_factory_create();
     if (!yetty_yplot_factory) {
-        yerror("ypaint_canvas: yplot factory creation failed");
+        yerror("ydraw_canvas: yplot factory creation failed");
         yetty_ydraw_core_complex_prim_factory_destroy(canvas->complex_prim_factory);
         yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
@@ -764,20 +764,20 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
     struct yetty_ycore_void_result yplot_reg_res = yetty_ydraw_core_complex_prim_factory_register(
         canvas->complex_prim_factory, yetty_yplot_factory);
     if (YETTY_IS_ERR(yplot_reg_res)) {
-        yerror("ypaint_canvas: yplot registration failed: %s", yplot_reg_res.error.msg);
+        yerror("ydraw_canvas: yplot registration failed: %s", yplot_reg_res.error.msg);
         yetty_yplot_factory_destroy(yetty_yplot_factory);
         yetty_ydraw_core_complex_prim_factory_destroy(canvas->complex_prim_factory);
         yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
-        return YETTY_ERR(yetty_ydraw_canvas_ptr, "ypaint_canvas: yplot registration failed",
+        return YETTY_ERR(yetty_ydraw_canvas_ptr, "ydraw_canvas: yplot registration failed",
                          yplot_reg_res);
     }
 
     /* Create and register yimage factory */
     struct yetty_ydraw_core_concrete_factory *yetty_yimage_factory = yetty_yimage_factory_create();
     if (!yetty_yimage_factory) {
-        yerror("ypaint_canvas: yimage factory creation failed");
+        yerror("ydraw_canvas: yimage factory creation failed");
         yetty_ydraw_core_complex_prim_factory_destroy(canvas->complex_prim_factory);
         yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
@@ -787,13 +787,13 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
     struct yetty_ycore_void_result yimage_reg_res = yetty_ydraw_core_complex_prim_factory_register(
         canvas->complex_prim_factory, yetty_yimage_factory);
     if (YETTY_IS_ERR(yimage_reg_res)) {
-        yerror("ypaint_canvas: yimage registration failed: %s", yimage_reg_res.error.msg);
+        yerror("ydraw_canvas: yimage registration failed: %s", yimage_reg_res.error.msg);
         yetty_yimage_factory_destroy(yetty_yimage_factory);
         yetty_ydraw_core_complex_prim_factory_destroy(canvas->complex_prim_factory);
         yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
-        return YETTY_ERR(yetty_ydraw_canvas_ptr, "ypaint_canvas: yimage registration failed",
+        return YETTY_ERR(yetty_ydraw_canvas_ptr, "ydraw_canvas: yimage registration failed",
                          yimage_reg_res);
     }
 
@@ -801,7 +801,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
     /* Create and register ymesh factory (3D glTF mesh primitive). */
     struct yetty_ydraw_core_concrete_factory *yetty_ymesh_factory = yetty_ymesh_factory_create();
     if (!yetty_ymesh_factory) {
-        yerror("ypaint_canvas: ymesh factory creation failed");
+        yerror("ydraw_canvas: ymesh factory creation failed");
         yetty_ydraw_core_complex_prim_factory_destroy(canvas->complex_prim_factory);
         yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
@@ -811,19 +811,19 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
     struct yetty_ycore_void_result ymesh_reg_res = yetty_ydraw_core_complex_prim_factory_register(
         canvas->complex_prim_factory, yetty_ymesh_factory);
     if (YETTY_IS_ERR(ymesh_reg_res)) {
-        yerror("ypaint_canvas: ymesh registration failed: %s", ymesh_reg_res.error.msg);
+        yerror("ydraw_canvas: ymesh registration failed: %s", ymesh_reg_res.error.msg);
         yetty_ymesh_factory_destroy(yetty_ymesh_factory);
         yetty_ydraw_core_complex_prim_factory_destroy(canvas->complex_prim_factory);
         yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
-        return YETTY_ERR(yetty_ydraw_canvas_ptr, "ypaint_canvas: ymesh registration failed",
+        return YETTY_ERR(yetty_ydraw_canvas_ptr, "ydraw_canvas: ymesh registration failed",
                          ymesh_reg_res);
     }
 #endif
 
     /* Create default font for text spans (font_id = -1).
-   * Backend (MSDF vs raster) is selected via ypaint/font/render-method.
+   * Backend (MSDF vs raster) is selected via ydraw/font/render-method.
    * Default is "msdf" to preserve existing rendering. */
     struct yetty_yconfig_config *config = context->app_context.config;
     const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
@@ -833,7 +833,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
         font_family = "DejaVuSansMNerdFontMono";
     }
     const char *render_method =
-        config->ops->get_string(config, "ypaint/font/render-method", "msdf");
+        config->ops->get_string(config, "ydraw/font/render-method", "msdf");
 
     strncpy(canvas->shaders_dir, shaders_dir, sizeof(canvas->shaders_dir) - 1);
     strncpy(canvas->fonts_dir, fonts_dir, sizeof(canvas->fonts_dir) - 1);
@@ -842,7 +842,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
     canvas->raster_base_size = 32.0f;
     canvas->msdf_generator = context->gpu_context.msdf_generator;
 
-    ydebug("ypaint_canvas: font render_method='%s'", render_method);
+    ydebug("ydraw_canvas: font render_method='%s'", render_method);
 
     /* Create the per-canvas font cache. yetty_yfont_cache_create takes the
      * shaders_dir directly (not a yetty_context) so yetty_yfont_core stays
@@ -853,11 +853,11 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
     struct yetty_yfont_cache_ptr_result cache_res =
         yetty_yfont_cache_create(cache_shaders_dir);
     if (YETTY_IS_ERR(cache_res)) {
-        yerror("ypaint_canvas: font cache creation failed: %s", cache_res.error.msg);
+        yerror("ydraw_canvas: font cache creation failed: %s", cache_res.error.msg);
         yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
-        return YETTY_ERR(yetty_ydraw_canvas_ptr, "ypaint_canvas: font cache creation failed",
+        return YETTY_ERR(yetty_ydraw_canvas_ptr, "ydraw_canvas: font cache creation failed",
                          cache_res);
     }
     canvas->font_cache = cache_res.value;
@@ -867,18 +867,18 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
      * Producer font_id == -1 routes through default_font/default_handle; the
      * binder attaches cache slots in handle order so slot 0 lines up with the
      * shader dispatcher's "default" branch. */
-    struct yetty_yfont_cache_ref_result def_res = ypaint_canvas_get_default_font_ref(canvas);
+    struct yetty_yfont_cache_ref_result def_res = ydraw_canvas_get_default_font_ref(canvas);
     if (YETTY_IS_OK(def_res)) {
         canvas->default_font = def_res.value.font;
         canvas->default_handle = def_res.value.handle;
-        ydebug("ypaint_canvas: default font installed at handle=%u", canvas->default_handle);
+        ydebug("ydraw_canvas: default font installed at handle=%u", canvas->default_handle);
     } else {
-        yerror("ypaint_canvas: default font creation failed: %s", def_res.error.msg);
+        yerror("ydraw_canvas: default font creation failed: %s", def_res.error.msg);
         yetty_yfont_cache_destroy(canvas->font_cache);
         yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
-        return YETTY_ERR(yetty_ydraw_canvas_ptr, "ypaint_canvas: default font creation failed",
+        return YETTY_ERR(yetty_ydraw_canvas_ptr, "ydraw_canvas: default font creation failed",
                          def_res);
     }
 
@@ -1395,7 +1395,7 @@ static struct uint32_result expand_text_span_to_glyphs(
          * means "use slot 0" (default font); +1 lets producers encode
          * "no font" as 0 in pre-existing prims. */
         uint32_t slot = (font_handle != YETTY_YFONT_CACHE_HANDLE_INVALID) ? font_handle : 0u;
-        float glyph_data[YPAINT_GLYPH_WORDS];
+        float glyph_data[YDRAW_GLYPH_WORDS];
         uint32_t tmp;
         tmp = YETTY_YSDF_GLYPH;
         memcpy(&glyph_data[0], &tmp, sizeof(float));
@@ -1428,7 +1428,7 @@ static struct uint32_result expand_text_span_to_glyphs(
         canvas_dirty_line(canvas, glyph_row_max);
 
         uint32_t prim_idx =
-            grid_line_push_prim(base_line, rolling_row, glyph_data, YPAINT_GLYPH_WORDS);
+            grid_line_push_prim(base_line, rolling_row, glyph_data, YDRAW_GLYPH_WORDS);
         if (prim_idx == UINT32_MAX) {
             cursor_x += advance * scale;
             continue;
@@ -1613,7 +1613,7 @@ static void buffer_attach_note(struct buffer_attach_list *l, yetty_yfont_cache_h
  * Without step 1, clearing sb_offsets[idx] would silently abandon the
  * old content on the next evict pass (re-encode of merely the new prim,
  * the old bytes orphaned but unreachable). PDFs, multi-buffer browsers,
- * and any "ypaint #2 lands on lines previously occupied by ypaint #1"
+ * and any "ydraw #2 lands on lines previously occupied by ydraw #1"
  * scenario would lose history.
  *
  * Restore failure is logged and we proceed — the new prim still saves,
@@ -1756,7 +1756,7 @@ static struct yetty_ycore_void_result canvas_evict_line(struct yetty_ydraw_canva
      * each line holds a cache ref per attached font, and the GLYPH
      * payloads we just encoded carry the font's slot index. If we let
      * grid_line_free release these refs, the cache may evict the font
-     * — and the ypaint layer's WGSL dispatcher (sized off
+     * — and the ydraw layer's WGSL dispatcher (sized off
      * canvas_font_count) keeps referencing that slot's namespace at
      * render time, causing the shader to fail to compile with
      * "struct member <ns>_base_size not found". Detach + restore keeps
@@ -1888,7 +1888,7 @@ static uint32_t canvas_sb_word_count_fn(uint32_t type_word, void *ctx)
 {
     (void)ctx;
     if (type_word == YETTY_YSDF_GLYPH) {
-        return YPAINT_GLYPH_WORDS;
+        return YDRAW_GLYPH_WORDS;
     }
     if (type_word >= 0x10000000u && type_word <= 0x1FFFFFFFu) {
         uint32_t wc = yetty_ysdf_word_count((enum yetty_ysdf_type)type_word);
@@ -2073,7 +2073,7 @@ struct yetty_ycore_void_result yetty_ydraw_canvas_add_buffer(
                  * the cache and never produce an MSDF atlas in memory. */
                 char hex[17];
                 struct yetty_ycore_void_result er =
-                    ypaint_canvas_ensure_blob_font_cdb(canvas, fv.ttf, fv.ttf_len, hint, hex);
+                    ydraw_canvas_ensure_blob_font_cdb(canvas, fv.ttf, fv.ttf_len, hint, hex);
                 if (YETTY_IS_ERR(er)) {
                     ywarn("add_buffer: font CDB ensure failed (font_id=%d hint='%s'): %s — "
                           "spans will use default font",
@@ -2403,10 +2403,10 @@ struct yetty_ycore_void_result yetty_ydraw_canvas_rebuild_grid(struct yetty_ydra
     /* Cells beyond grid_size.cols can exist on lines that grew past the
    * default width; widen grid_w to accommodate the visible window's
    * widest line. Off-screen lines don't influence grid_w because the
-   * shader never indexes those columns. Capped at YPAINT_GRID_COLS_MAX
+   * shader never indexes those columns. Capped at YDRAW_GRID_COLS_MAX
    * so a buggy/malicious producer can't blow up grid_staging — anything
    * beyond is clipped on the right edge, like an unwrapped text line. */
-    const uint32_t YPAINT_GRID_COLS_MAX = 4096u;
+    const uint32_t YDRAW_GRID_COLS_MAX = 4096u;
     for (uint32_t gpu_y = 0; gpu_y < grid_h; gpu_y++) {
         uint32_t canvas_y = window_top + gpu_y;
         if (canvas_y >= canvas->lines.count) {
@@ -2417,8 +2417,8 @@ struct yetty_ycore_void_result yetty_ydraw_canvas_rebuild_grid(struct yetty_ydra
             grid_w = line->cell_count;
         }
     }
-    if (grid_w > YPAINT_GRID_COLS_MAX) {
-        grid_w = YPAINT_GRID_COLS_MAX;
+    if (grid_w > YDRAW_GRID_COLS_MAX) {
+        grid_w = YDRAW_GRID_COLS_MAX;
     }
 
     if (grid_w == 0 || grid_h == 0) {
@@ -2819,7 +2819,7 @@ void yetty_ydraw_canvas_for_each_glyph(struct yetty_ydraw_canvas *canvas,
         const struct yetty_ydraw_canvas_grid_line *line = &canvas->lines.lines[li];
         for (uint32_t pi = 0; pi < line->prims.count; pi++) {
             const struct yetty_ydraw_canvas_prim_data *pd = &line->prims.data[pi];
-            if (pd->word_count < YPAINT_GLYPH_WORDS) {
+            if (pd->word_count < YDRAW_GLYPH_WORDS) {
                 continue;
             }
             const uint32_t *words = line->arena + pd->arena_offset;

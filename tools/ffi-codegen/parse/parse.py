@@ -7,7 +7,7 @@ later stage. Just the bare AST translated into a portable representation.
 
 Run:
     tools/ffi-codegen/.venv/bin/python tools/ffi-codegen/parse/parse.py <module>
-    # e.g. ygui, yface, ypaint-core
+    # e.g. ygui, yface, ydraw-core
 
 The module name selects:
   - header   include/yetty/<module>/<module>.h  (override with --header)
@@ -114,7 +114,7 @@ def render_type(t: cindex.Type) -> dict:
     # Record (struct or union). Include size/align so the emitter can
     # synthesise opaque-with-known-size for types declared outside the
     # module's scope (e.g. struct yetty_ycore_error referenced from a
-    # ypaint-core result type but defined in ycore).
+    # ydraw-core result type but defined in ycore).
     if t.kind == cindex.TypeKind.RECORD:
         decl = t.get_declaration()
         kind = "union" if decl.kind == cindex.CursorKind.UNION_DECL else "struct"

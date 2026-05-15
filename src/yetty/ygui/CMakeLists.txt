@@ -57,7 +57,7 @@ target_link_libraries(ygui_core PUBLIC
     yetty_ycore
     yetty_yface     # OSC envelope + LZ4F + base64 streamer
     yetty_yfont_core  # raster-font-from-file for text measurement
-    yetty_ydraw_yaml # rich widget's create_from_yaml -> ypaint_yaml_parse
+    yetty_ydraw_yaml # rich widget's create_from_yaml -> ydraw_yaml_parse
     yetty_yplatform_core # ytime monotonic clock for notification TTL
 )
 

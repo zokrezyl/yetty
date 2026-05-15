@@ -1,5 +1,5 @@
 /*
- * Plotter callbacks — translate NetSurf plot ops into ypaint primitives.
+ * Plotter callbacks — translate NetSurf plot ops into ydraw primitives.
  *
  * Strategy:
  *   - clip()   : track CPU rect; AABB-cull every later prim against it.
@@ -34,7 +34,7 @@
 #include <yetty/ysdf/funcs.gen.h>
 
 /* ----- color ------------------------------------------------------------
- * NetSurf colour is 0x00BBGGRR (R in low byte, no alpha). ypaint shader
+ * NetSurf colour is 0x00BBGGRR (R in low byte, no alpha). ydraw shader
  * unpacks as { R = packed & 0xff, G = (packed>>8)&0xff, B = (packed>>16)&0xff,
  * A = (packed>>24)&0xff } — same byte order — so we just keep the 24-bit
  * RGB layout and slot 0xFF into the alpha byte. */

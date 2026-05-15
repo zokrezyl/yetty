@@ -5,9 +5,9 @@
  *   1. Parse args ("--font-size", "--line-spacing", "--bg").
  *   2. Parse SVG XML → struct yetty_ysvg_doc tree (ysvg-parse.c).
  *   3. Resolve scene bounds from <svg> width/height/viewBox or config.
- *   4. Create the ypaint buffer pre-configured with those bounds.
+ *   4. Create the ydraw buffer pre-configured with those bounds.
  *   5. Optional background fill.
- *   6. Walk the tree emitting ypaint primitives (ysvg-paint.c).
+ *   6. Walk the tree emitting ydraw primitives (ysvg-paint.c).
  *
  * Mirrors ymarkdown/ypdf shape — caller owns the returned buffer.
  */

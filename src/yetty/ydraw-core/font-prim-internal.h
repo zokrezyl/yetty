@@ -1,4 +1,4 @@
-/* font-prim — module-internal declarations (ypaint-core only).
+/* font-prim — module-internal declarations (ydraw-core only).
  *
  * The packers are called from buffer.c when wrapping FONT primitive
  * insertions; they are not part of the inter-module public API. The public

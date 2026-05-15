@@ -1,5 +1,5 @@
 /*
- * yzoo.c — animated control-point zoo, drawn as ypaint SDF prims.
+ * yzoo.c — animated control-point zoo, drawn as ydraw SDF prims.
  *
  * Port of yetty-poc/src/yetty/ydraw-zoo/zoo-renderer.cpp.
  *

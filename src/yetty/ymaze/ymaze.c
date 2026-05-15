@@ -1,5 +1,5 @@
 /*
- * ymaze.c — animated maze generator + solver, drawn as ypaint SDF prims.
+ * ymaze.c — animated maze generator + solver, drawn as ydraw SDF prims.
  *
  * Port of yetty-poc/src/yetty/ydraw-maze/maze-renderer.cpp.
  */

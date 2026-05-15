@@ -4,7 +4,7 @@
 /*
  * yetty_font_font - Non-monospace font interface
  *
- * Used by ypaint text spans. No fixed cell size.
+ * Used by ydraw text spans. No fixed cell size.
  * Each text span specifies its own font size — shader scales.
  * Font provides gpu_resource_set (atlas + glyph metadata).
  */

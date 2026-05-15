@@ -1,9 +1,9 @@
 /*
  * ymaze — animated maze frontend.
  *
- * The yetty_ymaze library produces ypaint primitives; this tool drives time,
+ * The yetty_ymaze library produces ydraw primitives; this tool drives time,
  * owns a yetty_ydraw_core_buffer, and emits OSC 600000 (clear) + OSC 600001
- * (bin) per frame so the host pane's ypaint-layer redraws.
+ * (bin) per frame so the host pane's ydraw-layer redraws.
  *
  * Modeled on tools/ymesh/main.c. There is no card abstraction in new yetty
  * — the maze fills the whole pane.
@@ -58,7 +58,7 @@ static int emit_envelope(int osc_code, int compressed,
 
 static int emit_clear(void)
 {
-	return emit_envelope(YETTY_OSC_YPAINT_CLEAR, 0, NULL, 0, NULL, 0);
+	return emit_envelope(YETTY_OSC_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
 }
 
 static int emit_bin_serialized(struct yetty_ydraw_core_buffer *buf)
@@ -76,7 +76,7 @@ static int emit_bin_serialized(struct yetty_ydraw_core_buffer *buf)
 		.raw_size = raw_size,
 		.reserved = {0, 0},
 	};
-	return emit_envelope(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
+	return emit_envelope(YETTY_OSC_YDRAW_BIN, /*compressed=*/1,
 			     &meta, sizeof(meta), raw, raw_size);
 }
 
@@ -334,7 +334,7 @@ static void usage(FILE *out, const char *prog)
 	fprintf(out,
 		"Usage: %s [options]\n"
 		"\n"
-		"Animated maze demo — emits ypaint OSC envelopes to stdout.\n"
+		"Animated maze demo — emits ydraw OSC envelopes to stdout.\n"
 		"\n"
 		"Maze options:\n"
 		"  --cols N              maze columns (3..80, default 15)\n"

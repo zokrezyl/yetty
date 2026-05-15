@@ -76,7 +76,7 @@ extern "C" {
  *===========================================================================*/
 
 /* client → server (frontend → ymgui-layer). 600000–600003 belong to
- * ypaint (see <yetty/yterm/pty-reader.h>); ymgui starts at 610000. */
+ * ydraw (see <yetty/yterm/pty-reader.h>); ymgui starts at 610000. */
 #define YMGUI_OSC_CS_CLEAR 610000       /* ymgui_wire_clear,        comp=0 */
 #define YMGUI_OSC_CS_FRAME 610001       /* ymgui_wire_frame,        comp=1 */
 #define YMGUI_OSC_CS_TEX 610002         /* ymgui_wire_tex,          comp=1 */
@@ -266,7 +266,7 @@ struct yetty_ymgui_wire_clear {
  *   col, row are in grid cells, relative to the visible top-left at
  *   message arrival. The server resolves row to a rolling_row anchor
  *   (= row0_absolute + row), so the card scrolls with terminal content
- *   exactly like ypaint primitives or the previous single-frame ymgui
+ *   exactly like ydraw primitives or the previous single-frame ymgui
  *   layer. If row + h_cells doesn't fit below the cursor, the server
  *   scrolls the terminal up before placement.
  *

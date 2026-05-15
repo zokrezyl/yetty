@@ -32,7 +32,7 @@ struct yetty_yfont_cache {
     uint32_t free_capacity;
 
     /* Bumped on every slot alloc AND every slot release. Lets consumers
-     * (ypaint-layer's dispatcher rebuild) detect any change in the active
+     * (ydraw-layer's dispatcher rebuild) detect any change in the active
      * slot set — `count` alone is a high watermark and stays unchanged
      * when a slot drops. */
     uint32_t generation;

@@ -455,7 +455,7 @@ int yetty_ysvg_parse_transform(const char *s, size_t len, struct yetty_ysvg_xfor
 
 uint32_t yetty_ysvg_rgba_to_abgr(uint32_t rgba)
 {
-    /* SVG packs as 0xRRGGBBAA; ypaint expects 0xAABBGGRR. */
+    /* SVG packs as 0xRRGGBBAA; ydraw expects 0xAABBGGRR. */
     uint32_t r = (rgba >> 24) & 0xFFu;
     uint32_t g = (rgba >> 16) & 0xFFu;
     uint32_t b = (rgba >> 8) & 0xFFu;

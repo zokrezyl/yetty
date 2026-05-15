@@ -1,5 +1,5 @@
 /*
- * yecho.c - text/glyph/block parser + ypaint-buffer renderer.
+ * yecho.c - text/glyph/block parser + ydraw-buffer renderer.
  *
  * Parser: walks input char-by-char. `@name` becomes a glyph span,
  * `{attrs: content}` a block span, everything else a text span. Escapes
@@ -631,7 +631,7 @@ struct yetty_yecho_doc_ptr_result yetty_yecho_parse(const char *input, size_t le
 }
 
 /*=============================================================================
- * Renderer — ypaint-core buffer.
+ * Renderer — ydraw-core buffer.
  *
  * Layout: cursor walks left-to-right, x advances by approx width per
  * codepoint. '\n' inside a span resets x and bumps y. Glyphs occupy
@@ -773,7 +773,7 @@ static int append_utf8(struct strbuf *sb, uint32_t cp)
 }
 
 /* Parse #RRGGBB or #RGB into 0xFFRRGGBB (alpha = 0xFF, R in low byte of the
- * RGB nibble — but ypaint text wants R in low byte of the WHOLE u32).
+ * RGB nibble — but ydraw text wants R in low byte of the WHOLE u32).
  *
  * The wire convention (text-span-prim.h): "color: u32 (RGBA, R in low byte)".
  * Returns 1 on success and writes *out; 0 on parse failure. */
@@ -853,7 +853,7 @@ static int span_has_attr(const struct yetty_yecho_span *span, const char *key)
     return 0;
 }
 
-/* yplot block: emit a yplot complex primitive into the ypaint buffer.
+/* yplot block: emit a yplot complex primitive into the ydraw buffer.
  *
  * Block syntax (left side = attrs, right side = function definitions):
  *   {plot; w=400; h=200; xrange=-3.14..3.14; yrange=-1.5..1.5:
@@ -1106,7 +1106,7 @@ struct yetty_ydraw_core_buffer_result yetty_yecho_render(
     struct yetty_ydraw_core_buffer_result br =
         yetty_ydraw_core_buffer_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
-        return YETTY_ERR(yetty_ydraw_core_buffer, "ypaint buffer create failed", br);
+        return YETTY_ERR(yetty_ydraw_core_buffer, "ydraw buffer create failed", br);
     }
 
     struct render_state rs = {
@@ -1217,13 +1217,13 @@ struct yetty_ydraw_core_buffer_result yetty_yecho_render_string(
 }
 
 /*=============================================================================
- * OSC emission — wraps the buffer in a YPAINT_BIN envelope (mirror of
+ * OSC emission — wraps the buffer in a YDRAW_BIN envelope (mirror of
  * yetty_ycat_osc_bin_emit; we replicate it here so the yecho lib doesn't
  * pull the whole ycat target into thin clients).
  *===========================================================================*/
 
 #include <yetty/yface/yface.h>
-#include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YPAINT_BIN */
+#include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YDRAW_BIN */
 
 struct yetty_ycore_size_result yetty_yecho_osc_bin_emit(
     const struct yetty_ydraw_core_buffer *buffer, FILE *out)
@@ -1248,7 +1248,7 @@ struct yetty_ycore_size_result yetty_yecho_osc_bin_emit(
     };
     struct yetty_ycore_buffer envelope = {0};
     struct yetty_ycore_void_result r = yetty_yface_emit(
-        YETTY_OSC_YPAINT_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
+        YETTY_OSC_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
         return YETTY_ERR(yetty_ycore_size, "yetty_yecho_osc_bin_emit: yface_emit failed", r);

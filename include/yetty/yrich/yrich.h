@@ -6,7 +6,7 @@
  *
  * Umbrella header. Pulls in the building blocks plus the three concrete
  * document kinds (spreadsheet, slides, ydoc). Mirrors yetty-poc's yrich.h
- * but wired against the C ypaint buffer instead of YDrawBuffer.
+ * but wired against the C ydraw buffer instead of YDrawBuffer.
  */
 
 #include <yetty/yrich/yrich-types.h>

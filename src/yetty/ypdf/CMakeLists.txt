@@ -1,4 +1,4 @@
-# ypdf - PDF → ypaint buffer rendering
+# ypdf - PDF → ydraw buffer rendering
 add_library(yetty_ypdf STATIC
     pdf-content-parser.c
     pdf-renderer.c

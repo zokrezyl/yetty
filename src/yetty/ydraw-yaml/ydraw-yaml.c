@@ -1,6 +1,6 @@
-// ypaint-yaml - YAML parser for ypaint primitives
+// ydraw-yaml - YAML parser for ydraw primitives
 
-#include <yetty/ydraw-yaml/ypaint-yaml.h>
+#include <yetty/ydraw-yaml/ydraw-yaml.h>
 #include <yetty/ysdf/handler.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yfsvm/compiler.h>
@@ -29,7 +29,7 @@ static char *resolve_font_to_path(const char *name)
     static int s_fc_inited = 0;
     if (!s_fc_inited) {
         if (!FcInit()) {
-            ywarn("ypaint_yaml: FcInit failed");
+            ywarn("ydraw_yaml: FcInit failed");
             return NULL;
         }
         s_fc_inited = 1;
@@ -193,37 +193,37 @@ struct yetty_ycore_void_result yetty_ydraw_yaml_parser_parse(
 
         case YAML_MAPPING_START_EVENT:
             depth++;
-            ydebug("ypaint_yaml: MAPPING_START depth=%d in_body=%d in_prim=%d", depth, in_body,
+            ydebug("ydraw_yaml: MAPPING_START depth=%d in_body=%d in_prim=%d", depth, in_body,
                    in_prim);
             if (in_body && !in_prim) {
                 in_prim = 1;
                 primitive_type_name[0] = 0;
-                ydebug("ypaint_yaml: entering primitive");
+                ydebug("ydraw_yaml: entering primitive");
             }
             break;
 
         case YAML_MAPPING_END_EVENT:
-            ydebug("ypaint_yaml: MAPPING_END depth=%d->%d in_prim=%d", depth, depth - 1, in_prim);
+            ydebug("ydraw_yaml: MAPPING_END depth=%d->%d in_prim=%d", depth, depth - 1, in_prim);
             depth--;
             if (in_prim && depth == 1) {
                 in_prim = 0;
-                ydebug("ypaint_yaml: exiting primitive");
+                ydebug("ydraw_yaml: exiting primitive");
             }
             break;
 
         case YAML_SEQUENCE_START_EVENT:
-            ydebug("ypaint_yaml: SEQUENCE_START depth=%d prop_key='%s'", depth, prop_key);
+            ydebug("ydraw_yaml: SEQUENCE_START depth=%d prop_key='%s'", depth, prop_key);
             if (depth == 1 && strcmp(prop_key, "body") == 0) {
                 in_body = 1;
-                ydebug("ypaint_yaml: entering body");
+                ydebug("ydraw_yaml: entering body");
             }
             break;
 
         case YAML_SEQUENCE_END_EVENT:
-            ydebug("ypaint_yaml: SEQUENCE_END depth=%d in_body=%d", depth, in_body);
+            ydebug("ydraw_yaml: SEQUENCE_END depth=%d in_body=%d", depth, in_body);
             if (in_body && depth == 1) {
                 in_body = 0;
-                ydebug("ypaint_yaml: exiting body");
+                ydebug("ydraw_yaml: exiting body");
             }
             break;
 
@@ -232,24 +232,24 @@ struct yetty_ycore_void_result yetty_ydraw_yaml_parser_parse(
 
             if (in_prim && primitive_type_name[0] == 0) {
                 strncpy(primitive_type_name, val, PRIMITIVE_TYPE_NAME_LEN - 1);
-                ydebug("ypaint_yaml: got primitive type '%s' at depth=%d", primitive_type_name,
+                ydebug("ydraw_yaml: got primitive type '%s' at depth=%d", primitive_type_name,
                        depth);
 
                 yetty_ydraw_yaml_factory_fn factory = find_factory(parser, primitive_type_name);
                 if (factory) {
-                    ydebug("ypaint_yaml: calling factory for '%s'", primitive_type_name);
+                    ydebug("ydraw_yaml: calling factory for '%s'", primitive_type_name);
                     struct yetty_ycore_void_result res =
                         factory(buffer, &yaml_parser, primitive_type_name);
                     if (YETTY_IS_ERR(res)) {
-                        ydebug("ypaint_yaml: factory for '%s' failed: %s", primitive_type_name,
+                        ydebug("ydraw_yaml: factory for '%s' failed: %s", primitive_type_name,
                                res.error.msg);
                         yaml_event_delete(&event);
                         yaml_parser_delete(&yaml_parser);
                         return res;
                     }
-                    ydebug("ypaint_yaml: factory for '%s' succeeded", primitive_type_name);
+                    ydebug("ydraw_yaml: factory for '%s' succeeded", primitive_type_name);
                 } else {
-                    ydebug("ypaint_yaml: unknown type '%s' (registered=%zu)", primitive_type_name,
+                    ydebug("ydraw_yaml: unknown type '%s' (registered=%zu)", primitive_type_name,
                            parser->count);
                     yaml_event_delete(&event);
                     yaml_parser_delete(&yaml_parser);
@@ -420,18 +420,18 @@ static struct yetty_ycore_void_result text_factory(struct yetty_ydraw_core_buffe
                         yetty_ydraw_core_buffer_add_font(buffer, &ttf_buf, font_name);
                     if (YETTY_IS_OK(fr)) {
                         font_id = fr.value;
-                        ydebug("ypaint_yaml: font '%s' -> %s (font_id=%d)", font_name, path,
+                        ydebug("ydraw_yaml: font '%s' -> %s (font_id=%d)", font_name, path,
                                font_id);
                     } else {
-                        ywarn("ypaint_yaml: add_font failed for '%s': %s", font_name, fr.error.msg);
+                        ywarn("ydraw_yaml: add_font failed for '%s': %s", font_name, fr.error.msg);
                     }
                     free(ttf);
                 } else {
-                    ywarn("ypaint_yaml: cannot read font file '%s' for name '%s'", path, font_name);
+                    ywarn("ydraw_yaml: cannot read font file '%s' for name '%s'", path, font_name);
                 }
                 free(path);
             } else {
-                ywarn("ypaint_yaml: font '%s' not found via fontconfig", font_name);
+                ywarn("ydraw_yaml: font '%s' not found via fontconfig", font_name);
             }
         }
 
@@ -440,7 +440,7 @@ static struct yetty_ycore_void_result text_factory(struct yetty_ydraw_core_buffe
         struct yetty_ycore_void_result res = yetty_ydraw_core_buffer_add_text(
             buffer, x, y, &text_buf, font_size, color, 0, font_id, 0.0f);
         if (YETTY_IS_ERR(res)) {
-            ydebug("ypaint_yaml: failed to add text: %s", res.error.msg);
+            ydebug("ydraw_yaml: failed to add text: %s", res.error.msg);
             return res;
         }
     }
@@ -481,19 +481,19 @@ struct yetty_ydraw_core_buffer_result yetty_ydraw_yaml_parse(const char *yaml, s
 
     struct yetty_ycore_void_result reg_res = yetty_ysdf_register_yaml_factories(parser);
     if (YETTY_IS_ERR(reg_res)) {
-        ydebug("ypaint_yaml: ysdf registration failed: %s", reg_res.error.msg);
+        ydebug("ydraw_yaml: ysdf registration failed: %s", reg_res.error.msg);
     } else {
-        ydebug("ypaint_yaml: ysdf factories registered, count=%zu", parser->count);
+        ydebug("ydraw_yaml: ysdf factories registered, count=%zu", parser->count);
     }
     struct yetty_ycore_void_result text_reg_res = register_text_factory(parser);
     if (YETTY_IS_ERR(text_reg_res)) {
-        ydebug("ypaint_yaml: text factory registration failed: %s", text_reg_res.error.msg);
+        ydebug("ydraw_yaml: text factory registration failed: %s", text_reg_res.error.msg);
     }
     struct yetty_ycore_void_result yplot_reg_res = yetty_yplot_register_yaml_factory(parser);
     if (YETTY_IS_ERR(yplot_reg_res)) {
-        ydebug("ypaint_yaml: yplot factory registration failed: %s", yplot_reg_res.error.msg);
+        ydebug("ydraw_yaml: yplot factory registration failed: %s", yplot_reg_res.error.msg);
     }
-    ydebug("ypaint_yaml: text+yplot factories registered, total count=%zu", parser->count);
+    ydebug("ydraw_yaml: text+yplot factories registered, total count=%zu", parser->count);
 
     struct yetty_ycore_void_result parse_res =
         yetty_ydraw_yaml_parser_parse(parser, buffer, yaml, len);

@@ -2,7 +2,7 @@
  * ynetsurf — NetSurf 3.11 browser tool, two operating modes:
  *
  *   ONE-SHOT (--once, or non-TTY stdout/stdin):
- *     navigate URL, wait, redraw, emit one OSC envelope (or raw ypaint
+ *     navigate URL, wait, redraw, emit one OSC envelope (or raw ydraw
  *     bytes with --raw), exit. Same shape as the rest of yetty's emitter
  *     tools (ycat, yecho, yplot, ymarkdown).
  *
@@ -13,8 +13,8 @@
  *       - stdin (keyboard + any inbound OSC envelopes from yterm)
  *     yface owns stdin parsing: it splits OSC envelopes from raw bytes,
  *     calls on_osc(...) for each envelope and on_raw(...) for the bytes
- *     between. After any input, re-render: emit OSC 600000 (ypaint clear)
- *     followed by OSC 600001 (bin) so the receiving ypaint-layer replaces
+ *     between. After any input, re-render: emit OSC 600000 (ydraw clear)
+ *     followed by OSC 600001 (bin) so the receiving ydraw-layer replaces
  *     instead of accumulates primitives. Quit on Ctrl-C, EOF, or SIGTERM.
  *
  *   Notes on input plumbing:
@@ -79,12 +79,12 @@ static int emit_bin_osc(const uint8_t *bytes, size_t blen)
 		.raw_size = blen,
 		.reserved = {0, 0},
 	};
-	return emit_envelope(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
+	return emit_envelope(YETTY_OSC_YDRAW_BIN, /*compressed=*/1,
 			     &meta, sizeof(meta), bytes, blen);
 }
 
-/* Drain the page into a fresh ypaint buffer, then emit clear+bin so the
- * receiving ypaint-layer replaces (not accumulates) the previous frame's
+/* Drain the page into a fresh ydraw buffer, then emit clear+bin so the
+ * receiving ydraw-layer replaces (not accumulates) the previous frame's
  * primitives. */
 static int redraw_and_push(struct yetty_ynetsurf *ns)
 {
@@ -100,7 +100,7 @@ static int redraw_and_push(struct yetty_ynetsurf *ns)
 	if (YETTY_IS_OK(rd)) {
 		const uint8_t *bytes = NULL;
 		size_t blen = yetty_ydraw_core_buffer_serialize(buf, &bytes);
-		(void)emit_envelope(YETTY_OSC_YPAINT_CLEAR, 0, NULL, 0, NULL, 0);
+		(void)emit_envelope(YETTY_OSC_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
 		(void)emit_bin_osc(bytes, blen);
 		fflush(stdout);
 		rc = 0;

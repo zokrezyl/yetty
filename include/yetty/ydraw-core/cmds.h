@@ -1,7 +1,7 @@
-/* ypaint control cmds — non-drawing primitives that have side effects on
+/* ydraw control cmds — non-drawing primitives that have side effects on
  * the receiving canvas at decode time.
  *
- * Type-id space for the ypaint wire format:
+ * Type-id space for the ydraw wire format:
  *   [0x00000000, 0x0000FFFF]  cmds (this header)
  *   [0x10000000, 0x1FFFFFFF]  SDF (paint primitives, generated)
  *   [0x40000000, 0x7FFFFFFF]  flyweight (FONT, TEXT_SPAN)
@@ -26,15 +26,15 @@ extern "C" {
 #define YETTY_YDRAW_CMD_BASE 0x00000000u
 #define YETTY_YDRAW_CMD_END 0x0000FFFFu
 
-/* CMD_ZERO: clear the receiving ypaint canvas AND reset the cursor to
+/* CMD_ZERO: clear the receiving ydraw canvas AND reset the cursor to
  * (col=0, row=0). The canvas's cursor-set callback fires on the reset, so
  * sibling layers (text/vterm) see the cursor move too — that's how the
  * "all layers cursor" semantic propagates without this header reaching
- * outside the ypaint module.
+ * outside the ydraw module.
  *
  * Empty payload. Use at the start of every full-redraw frame buffer in
  * GUI / fullscreen producers (ygui sends one CMD_ZERO + the new prims per
- * frame, eliminating the separate YPAINT_CLEAR OSC envelope). */
+ * frame, eliminating the separate YDRAW_CLEAR OSC envelope). */
 #define YETTY_YDRAW_CMD_ZERO 0x00000000u
 
 struct yetty_ydraw_core_buffer;

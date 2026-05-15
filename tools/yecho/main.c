@@ -1,8 +1,8 @@
 /*
  * yecho - echo text with embedded glyphs and styled blocks.
  *
- * Inside a yetty terminal, the parsed input is rendered into a ypaint-core
- * buffer and emitted as a YETTY_OSC_YPAINT_BIN sequence (same wire format
+ * Inside a yetty terminal, the parsed input is rendered into a ydraw-core
+ * buffer and emitted as a YETTY_OSC_YDRAW_BIN sequence (same wire format
  * ycat uses). Outside a yetty terminal there's nothing meaningful to do
  * with rich content; we fall back to writing the raw input through —
  * unless --osc is forced.
@@ -76,8 +76,8 @@ static void usage(FILE *out, const char *prog)
         "  bg=#RRGGBB      background color\n"
         "  style=bold      bold | italic | underline (combinable with '|')\n"
         "\n"
-        "Inside a yetty terminal, the input is rendered to a ypaint buffer\n"
-        "and emitted via OSC 600001 (YPAINT_BIN). Otherwise the raw input\n"
+        "Inside a yetty terminal, the input is rendered to a ydraw buffer\n"
+        "and emitted via OSC 600001 (YDRAW_BIN). Otherwise the raw input\n"
         "is written through.\n"
         "\n"
         "Options:\n"

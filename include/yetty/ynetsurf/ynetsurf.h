@@ -2,7 +2,7 @@
 #define YETTY_YNETSURF_H
 
 /*
- * ynetsurf — NetSurf 3.11 frontend that emits ypaint primitives.
+ * ynetsurf — NetSurf 3.11 frontend that emits ydraw primitives.
  *
  * Plug a NetSurf core build (libnetsurf + libcss + libdom + libhubbub +
  * libnsutils + libwapcaplet + libnsbmp + libnsgif + libnslog +

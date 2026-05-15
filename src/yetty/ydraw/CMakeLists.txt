@@ -1,5 +1,5 @@
-# ypaint layer - rich content rendering
-# Note: core moved to ypaint-core, SDF/yaml moved to ysdf
+# ydraw layer - rich content rendering
+# Note: core moved to ydraw-core, SDF/yaml moved to ysdf
 
 add_library(yetty_ydraw STATIC
     canvas.c
@@ -28,7 +28,7 @@ else()
     target_compile_definitions(yetty_ydraw PUBLIC YETTY_HAS_YMESH=0)
 endif()
 
-# YETTY_HAS_YMSDF_GEN gates ypaint-canvas.c's on-demand MSDF CDB generation
+# YETTY_HAS_YMSDF_GEN gates ydraw-canvas.c's on-demand MSDF CDB generation
 # (uses yetty_ymsdf_gen_cpu_generate from yetty_ymsdf_gen). When the feature
 # is off (e.g. Windows where the upstream msdfgen tarball ships /MT static-CRT
 # and would clash with yetty's /MD), the CDB must be pre-built and present.

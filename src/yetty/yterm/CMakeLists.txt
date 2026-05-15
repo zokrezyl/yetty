@@ -1,7 +1,7 @@
 add_library(yetty_yterm
     terminal.c
     text-layer.c
-    ypaint-layer.c
+    ydraw-layer.c
     ymgui-layer.c
     shader-glyph-layer.c
     background-layer.c
@@ -28,7 +28,7 @@ target_link_libraries(yetty_yterm
 # Embed shaders via incbin (or stubs on Emscripten)
 incbin_add_resources(yetty_yterm
     text_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/text-layer.wgsl"
-    ypaint_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/ypaint-layer.wgsl"
+    ydraw_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/ydraw-layer.wgsl"
     ymgui_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/ymgui-layer.wgsl"
     shader_glyph_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/shader-glyph-layer.wgsl"
     background_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/background-layer.wgsl"

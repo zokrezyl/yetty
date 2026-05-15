@@ -11,7 +11,7 @@
  * Selected at yetty startup from the config key `msdf/generator`
  * (values: "cpu" or "gpu", default "gpu"). The chosen instance lives on
  * the gpu_context and is shared by every consumer (currently
- * ypaint-canvas font materialisation) so we can A/B the two backends by
+ * ydraw-canvas font materialisation) so we can A/B the two backends by
  * flipping a single config knob.
  *
  * The generator is created in yetty_create after the WebGPU device is

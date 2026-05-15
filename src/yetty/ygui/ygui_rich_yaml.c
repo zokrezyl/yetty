@@ -7,7 +7,7 @@
  * this TU; the shared variant excludes it via CMakeLists.txt.
  *
  * Implements:
- *   yetty_ygui_widget_rich_set_yaml — parse YAML via ypaint-yaml and hand
+ *   yetty_ygui_widget_rich_set_yaml — parse YAML via ydraw-yaml and hand
  *                                      the resulting buffer to the
  *                                      widget (drops any previous buffer)
  *   yetty_ygui_engine_rich_from_yaml — sugar: rich() + set_yaml()
@@ -16,7 +16,7 @@
 #include "ygui_internal.h"
 
 #include <yetty/ydraw-core/buffer.h>
-#include <yetty/ydraw-yaml/ypaint-yaml.h>
+#include <yetty/ydraw-yaml/ydraw-yaml.h>
 
 struct yetty_ycore_void_result yetty_ygui_widget_rich_set_yaml(struct yetty_ygui_widget *widget,
                                                                const char *yaml, size_t yaml_len)

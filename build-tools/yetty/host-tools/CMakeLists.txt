@@ -162,7 +162,7 @@ target_link_libraries(yetty-ymsdf-gen PRIVATE yetty_ymsdf_gen)
 # C port. The previous C++ implementation lived in src/yetty/yecho/*.cpp;
 # the C version moved to src/yetty/yecho/yecho.c and is built by the main
 # CMake tree as the `yecho` tool target. Re-wire it here when the VM image
-# starts shipping yecho again — needs ycore + ypaint-core + ysdf + yface +
+# starts shipping yecho again — needs ycore + ydraw-core + ysdf + yface +
 # yfont_shader_glyph sources compiled standalone.
 
 # =============================================================================

@@ -1,4 +1,4 @@
-// ypaint-yaml - YAML parser for ypaint primitives
+// ydraw-yaml - YAML parser for ydraw primitives
 //
 // Two layers:
 // - High level: yetty_ydraw_yaml_parse() - just call with YAML, get buffer
@@ -16,7 +16,7 @@ extern "C" {
 #endif
 
 //=============================================================================
-// High level API - ypaint-layer uses this
+// High level API - ydraw-layer uses this
 //=============================================================================
 
 struct yetty_ydraw_core_buffer_result yetty_ydraw_yaml_parse(const char *yaml, size_t len);

@@ -1,9 +1,9 @@
 /*
  * yzoo — animated control-point zoo frontend.
  *
- * The yetty_yzoo library produces ypaint primitives; this tool drives time,
+ * The yetty_yzoo library produces ydraw primitives; this tool drives time,
  * owns a yetty_ydraw_core_buffer, and emits OSC 600001 (bin) per frame so
- * the host pane's ypaint-layer redraws. The bin payload's first prim is
+ * the host pane's ydraw-layer redraws. The bin payload's first prim is
  * CMD_ZERO (added by the renderer), which clears the canvas + resets the
  * cursor in the same envelope as the new prims — same flicker-free pattern
  * as ygui.
@@ -62,7 +62,7 @@ emit_envelope(int osc_code, int compressed,
 static struct yetty_ycore_void_result emit_clear(void)
 {
 	struct yetty_ycore_void_result r =
-		emit_envelope(YETTY_OSC_YPAINT_CLEAR, 0, NULL, 0, NULL, 0);
+		emit_envelope(YETTY_OSC_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
 	YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "emit_clear");
 	return YETTY_OK_VOID();
 }
@@ -84,7 +84,7 @@ emit_bin_serialized(struct yetty_ydraw_core_buffer *buf)
 		.reserved = {0, 0},
 	};
 	struct yetty_ycore_void_result r =
-		emit_envelope(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
+		emit_envelope(YETTY_OSC_YDRAW_BIN, /*compressed=*/1,
 			      &meta, sizeof(meta), raw, raw_size);
 	YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "emit_bin_serialized");
 	return YETTY_OK_VOID();
@@ -324,7 +324,7 @@ static void usage(FILE *out, const char *prog)
 	fprintf(out,
 		"Usage: %s [options]\n"
 		"\n"
-		"Animated control-point zoo — emits ypaint OSC envelopes to stdout.\n"
+		"Animated control-point zoo — emits ydraw OSC envelopes to stdout.\n"
 		"\n"
 		"Zoo options:\n"
 		"  -n, --points N         target control points (2..100, default 20)\n"

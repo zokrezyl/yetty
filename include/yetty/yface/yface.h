@@ -82,7 +82,7 @@ YETTY_YRESULT_DECLARE(yetty_yface_ptr, struct yetty_yface *);
  * Wire structs that travel in the args slot
  *
  * Each OSC code defines what (if anything) lives in `<args>`. For "bin"
- * codes that ship a compressed binary payload (ypaint serialized buffer,
+ * codes that ship a compressed binary payload (ydraw serialized buffer,
  * ymgui frame, …) the args slot carries this meta header so the receiver
  * knows how to decode the payload before touching it.
  *

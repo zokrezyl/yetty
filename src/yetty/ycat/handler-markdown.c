@@ -1,5 +1,5 @@
 /*
- * handler-markdown.c - markdown → ypaint buffer.
+ * handler-markdown.c - markdown → ydraw buffer.
  *
  * Thin wrapper around yetty_ymarkdown_render: re-packs the ycat config into
  * a ymarkdown config and lifts the result into the ycat handler return type.

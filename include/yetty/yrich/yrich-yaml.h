@@ -10,7 +10,7 @@
  *   - yslides:      presentation.{slideWidth, slideHeight, slides[]}
  *
  * Hex colours are accepted as "#AARRGGBB" and re-packed to the ABGR layout
- * used by ypaint.
+ * used by ydraw.
  */
 
 #include <stddef.h>

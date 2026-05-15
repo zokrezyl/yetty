@@ -10,7 +10,7 @@
  *      ▼
  *   osc_statemachine  (on render-side endpoint)
  *      ▼
- *   ypaint-layer KIND_STATIC  (consumer, owns a static-canvas)
+ *   ydraw-layer KIND_STATIC  (consumer, owns a static-canvas)
  *      ▼
  *   render target  (composited above all terminals in the frame loop)
  *
@@ -87,7 +87,7 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
 /* Construct the app-level chrome singleton.
  *
  * Sets up: memory-pty pair, osc_statemachine on the render endpoint,
- * ypaint-layer KIND_STATIC registered for YPAINT_CLEAR/BIN/OVERLAY on
+ * ydraw-layer KIND_STATIC registered for YDRAW_CLEAR/BIN/OVERLAY on
  * that SM, and the memory-pty wake bridged to the event loop. The
  * ygui_engine producer is wired later (separate task).
  *

@@ -50,7 +50,7 @@ static uint32_t parse_color(const char *str)
  * Parser context
  *===========================================================================*/
 
-struct yetty_ysdf_ypaint_yaml_parse_ctx {
+struct yetty_ysdf_ydraw_yaml_parse_ctx {
     struct yetty_ydraw_core_buffer *buffer;
     uint32_t z_order;
     /* Current primitive state */
@@ -99,7 +99,7 @@ struct yetty_ysdf_ypaint_yaml_parse_ctx {
     float array_vals[8];
 };
 
-static void reset_prim(struct yetty_ysdf_ypaint_yaml_parse_ctx *yaml_parse_ctx)
+static void reset_prim(struct yetty_ysdf_ydraw_yaml_parse_ctx *yaml_parse_ctx)
 {
     yaml_parse_ctx->prim_type[0] = 0;
     yaml_parse_ctx->prop_key[0] = 0;
@@ -144,7 +144,7 @@ static void reset_prim(struct yetty_ysdf_ypaint_yaml_parse_ctx *yaml_parse_ctx)
     yaml_parse_ctx->array_idx = 0;
 }
 
-static void store_array(struct yetty_ysdf_ypaint_yaml_parse_ctx *yaml_parse_ctx)
+static void store_array(struct yetty_ysdf_ydraw_yaml_parse_ctx *yaml_parse_ctx)
 {
     const char *key = yaml_parse_ctx->prop_key;
     ydebug("store_array: key='%s' idx=%d vals=[%f,%f]", key, yaml_parse_ctx->array_idx,
@@ -185,7 +185,7 @@ static void store_array(struct yetty_ysdf_ypaint_yaml_parse_ctx *yaml_parse_ctx)
 }
 
 static struct yetty_ycore_void_result add_prim(
-    struct yetty_ysdf_ypaint_yaml_parse_ctx *yaml_parse_ctx)
+    struct yetty_ysdf_ydraw_yaml_parse_ctx *yaml_parse_ctx)
 {
     float data[16];
     uint32_t word_count = 0, tmp;
@@ -534,7 +534,7 @@ static struct yetty_ycore_void_result add_prim(
         data[7] = yaml_parse_ctx->radius;
         word_count = 8;
     } else {
-        ydebug("ypaint_yaml: unknown type '%s'", yaml_parse_ctx->prim_type);
+        ydebug("ydraw_yaml: unknown type '%s'", yaml_parse_ctx->prim_type);
         yaml_parse_ctx->z_order++;
         return YETTY_ERR(yetty_ycore_void, "ysdf yaml: unknown primitive type");
     }
@@ -556,7 +556,7 @@ struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ydraw_core_buf
 {
     struct yaml_parser_s parser;
     yaml_event_t event;
-    struct yetty_ysdf_ypaint_yaml_parse_ctx yaml_parse_ctx = {0};
+    struct yetty_ysdf_ydraw_yaml_parse_ctx yaml_parse_ctx = {0};
     int done = 0;
     int depth = 0;        /* mapping depth */
     int in_body = 0;      /* inside body sequence */
@@ -679,6 +679,6 @@ struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ydraw_core_buf
     }
     yaml_parser_delete(&parser);
 
-    ydebug("ypaint_yaml: parsed %u primitives", yaml_parse_ctx.z_order);
+    ydebug("ydraw_yaml: parsed %u primitives", yaml_parse_ctx.z_order);
     return YETTY_OK_VOID();
 }

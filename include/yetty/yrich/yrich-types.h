@@ -6,7 +6,7 @@
  *
  * Ported from yetty-poc/src/yetty/yrich/yrich-types.h. C-side rules:
  *   - structs are POD, copied by value
- *   - colours stored as packed ABGR uint32_t (matches ypaint convention)
+ *   - colours stored as packed ABGR uint32_t (matches ydraw convention)
  *   - all helpers are static inline; no library code needed
  */
 
@@ -46,7 +46,7 @@ static inline bool yetty_yrich_rect_intersects(const struct yetty_yrich_rect *a,
 }
 
 /*=============================================================================
- * Color — packed RGBA stored as ABGR (ypaint convention)
+ * Color — packed RGBA stored as ABGR (ydraw convention)
  *===========================================================================*/
 
 #define YETTY_YRICH_RGBA(r, g, b, a)                                                               \

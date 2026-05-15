@@ -2,7 +2,7 @@
  * ydoc — interactive rich-text document editor.
  *
  * Builds a yetty_yrich_ydoc, hands it to the shared yrich-runner which
- * pumps stdin events into the document and emits ypaint frames to the
+ * pumps stdin events into the document and emits ydraw frames to the
  * canvas via OSC 666674.
  *
  * Usage:

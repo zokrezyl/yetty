@@ -1,10 +1,10 @@
 /*
- * ygui_render.c — render helpers that drop ypaint-core primitives directly.
+ * ygui_render.c — render helpers that drop ydraw-core primitives directly.
  *
  * Bridges YGui widgets to a yetty_ydraw_core_buffer. Shapes go through
  * yetty_ysdf_add_* (generated from ysdf/primitives.yaml); text goes through
  * yetty_ydraw_core_buffer_add_text (canvas decomposes text_spans into
- * YPAINT_SDF_GLYPH primitives in PASS4). No shim layer in between.
+ * YDRAW_SDF_GLYPH primitives in PASS4). No shim layer in between.
  */
 
 #include "ygui_internal.h"
@@ -134,8 +134,8 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_text(struct yetty_yg
     float ax = x + ctx->offset_x;
     float ay = y + ctx->offset_y;
 
-    /* Text spans live on the ypaint-core buffer and get decomposed into
-     * YPAINT_SDF_GLYPH primitives by the canvas's add_buffer (PASS4). */
+    /* Text spans live on the ydraw-core buffer and get decomposed into
+     * YDRAW_SDF_GLYPH primitives by the canvas's add_buffer (PASS4). */
     size_t tlen = 0;
     while (text[tlen] != '\0') {
         tlen++;

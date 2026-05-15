@@ -13,7 +13,7 @@
  *   button on first open). The menu then handles its own item
  *   dispatch. With no menu attached, the hamburger acts as a direct
  *   close button that calls engine_close_preserve() — keeping the
- *   last rendered frame on the ypaint canvas after the app exits.
+ *   last rendered frame on the ydraw canvas after the app exits.
  *
  *   The button uses the same square footprint as the tabbar's per-tab
  *   close 'x' (yetty_ygui_tabbar_button_size) so the two visually
@@ -85,7 +85,7 @@ static struct yetty_ycore_void_result window_render(struct yetty_ygui_widget *se
     /* Skip the first frame in CANVAS_FIT mode: the engine defaults the
      * canvas to 1x1 until OSC 777780 returns the real pixel size, and
      * placing a button at (self->w - sz) lands at negative x — the
-     * ypaint canvas rejects the AABB and logs an error. By the time
+     * ydraw canvas rejects the AABB and logs an error. By the time
      * resize fires the geometry is sane. */
     float bsz = window_button_size();
     ydebug("window_render id=%s self=(%.1f,%.1f) size=%.1fx%.1f th=%.1f bsz=%.1f thr=%.1f",

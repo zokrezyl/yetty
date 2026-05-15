@@ -51,7 +51,7 @@ GEOMETRY_OFFSET = 5
 
 # Tier base for SDF wire IDs. The YAML's `type:` field is the per-tier slot
 # (0..N); the actual wire / dispatch id is SDF_TIER_BASE | slot. The space
-# layout for ypaint primitive types is:
+# layout for ydraw primitive types is:
 #     [0x00000000, 0x0000FFFF]  cmds
 #     [0x10000000, 0x1FFFFFFF]  SDF                    ← this generator
 #     [0x40000000, 0x7FFFFFFF]  flyweight (FONT, TEXT_SPAN)
@@ -85,7 +85,7 @@ def load_primitives(path: Path) -> list[dict]:
 
 
 def generate_sdf_types(prims: list[dict], out: Path) -> None:
-    """Generate ypaint-sdf-types.gen.h - enums and geometry structs for SDF primitives"""
+    """Generate ydraw-sdf-types.gen.h - enums and geometry structs for SDF primitives"""
     lines = [HEADER_C, "#pragma once", "", "#include <stddef.h>", "#include <stdint.h>", "", "#ifdef __cplusplus", 'extern "C" {', "#endif", ""]
 
     # Enum for SDF primitive types. Values are the WIRE ids (tier-base | slot).
@@ -146,7 +146,7 @@ def generate_sdf_types(prims: list[dict], out: Path) -> None:
 
 
 def generate_sdf_prim_header(prims: list[dict], out: Path) -> None:
-    """Generate ypaint-sdf-prim.gen.h - add function declarations for SDF primitives"""
+    """Generate ydraw-sdf-prim.gen.h - add function declarations for SDF primitives"""
     lines = [HEADER_C, "#pragma once", ""]
     lines.append('#include "types.gen.h"')
     lines.append('#include <yetty/ydraw-core/buffer.h>')
@@ -171,7 +171,7 @@ def generate_sdf_prim_header(prims: list[dict], out: Path) -> None:
 
 
 def generate_sdf_prim_impl(prims: list[dict], out: Path) -> None:
-    """Generate ypaint-sdf-prim.gen.c - add function implementations for SDF primitives"""
+    """Generate ydraw-sdf-prim.gen.c - add function implementations for SDF primitives"""
     lines = [HEADER_C, ""]
     lines.append('#include <yetty/ysdf/funcs.gen.h>')
     lines.append('#include <string.h>')
@@ -219,7 +219,7 @@ def generate_sdf_prim_impl(prims: list[dict], out: Path) -> None:
 
 
 def generate_sdf_aabb(prims: list[dict], out: Path) -> None:
-    """Generate ypaint-sdf-aabb.gen.c - AABB computation for SDF primitives"""
+    """Generate ydraw-sdf-aabb.gen.c - AABB computation for SDF primitives"""
     lines = [HEADER_C, ""]
     lines.append('#include <yetty/ysdf/types.gen.h>')
     lines.append('#include <math.h>')
@@ -268,7 +268,7 @@ def generate_sdf_aabb(prims: list[dict], out: Path) -> None:
 
 
 def generate_sdf_wgsl(prims: list[dict], out: Path) -> None:
-    """Generate ypaint-sdf.gen.wgsl - WGSL SDF functions and dispatcher"""
+    """Generate ydraw-sdf.gen.wgsl - WGSL SDF functions and dispatcher"""
     lines = [HEADER_WGSL, ""]
 
     # Generate individual SDF functions
@@ -377,7 +377,7 @@ def generate_sdf_wgsl(prims: list[dict], out: Path) -> None:
     lines.append("")
 
     # Fallback unpack if the consumer hasn't defined one. Matches
-    # ypaint-layer.wgsl's ypaint_unpack_color (RGBA in low->high bytes).
+    # ydraw-layer.wgsl's ydraw_unpack_color (RGBA in low->high bytes).
     lines.append("fn yetty_ysdf_unpack_color(packed: u32) -> vec4<f32> {")
     lines.append("    return vec4<f32>(")
     lines.append("        f32(packed & 0xFFu) / 255.0,")
@@ -518,7 +518,7 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
     lines.append('#include <yetty/ysdf/yaml-factory.gen.h>')
     lines.append('#include <yetty/ysdf/types.gen.h>')
     lines.append('#include <yetty/ydraw-core/buffer.h>')
-    lines.append('#include <yetty/ydraw-yaml/ypaint-yaml.h>')
+    lines.append('#include <yetty/ydraw-yaml/ydraw-yaml.h>')
     lines.append('#include <yetty/ytrace/ytrace.h>')
     lines.append('#include <yaml.h>')
     lines.append('#include <stdlib.h>')

@@ -1,5 +1,5 @@
 /*
- * ylexbor-demo — render HTML via the ylexbor lib, emit ypaint OSC.
+ * ylexbor-demo — render HTML via the ylexbor lib, emit ydraw OSC.
  *
  * Two operating modes (same shape ynetsurf uses):
  *
@@ -184,7 +184,7 @@ static int emit_bin_osc(const uint8_t *bytes, size_t blen)
 		.raw_size = blen,
 		.reserved = {0, 0},
 	};
-	return emit_envelope(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
+	return emit_envelope(YETTY_OSC_YDRAW_BIN, /*compressed=*/1,
 			     &meta, sizeof(meta), bytes, blen);
 }
 
@@ -199,7 +199,7 @@ static int redraw_and_push(struct yetty_ylexbor *yl)
 	if (YETTY_IS_OK(rd)) {
 		const uint8_t *bytes = NULL;
 		size_t blen = yetty_ydraw_core_buffer_serialize(buf, &bytes);
-		(void)emit_envelope(YETTY_OSC_YPAINT_CLEAR, 0, NULL, 0, NULL, 0);
+		(void)emit_envelope(YETTY_OSC_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
 		(void)emit_bin_osc(bytes, blen);
 		fflush(stdout);
 		rc = 0;
@@ -387,7 +387,7 @@ static void usage(const char *argv0)
 		"            [-w W] [-H H] [--font-size PX] [<file>|-]\n"
 		"\n"
 		"  Reads HTML from <file> (or '-' / no arg = stdin), renders\n"
-		"  via lexbor + ylexbor's block-flow layout, emits a ypaint\n"
+		"  via lexbor + ylexbor's block-flow layout, emits a ydraw\n"
 		"  OSC envelope on stdout (or raw YPB1 bytes with --raw).\n"
 		"\n"
 		"  default mode: interactive when stdin+stdout are TTYs,\n"

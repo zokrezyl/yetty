@@ -623,8 +623,8 @@ def generate_c_source(schema, uniforms, buffers, textures):
     }}'''
     else:
         instance_resources_wiring = ''
-    # webgpu.h is pulled in via the ypaint-factory header (server-only).
-    # Wire format / type-id ranges come from ypaint-core/complex-prim-types.h.
+    # webgpu.h is pulled in via the ydraw-factory header (server-only).
+    # Wire format / type-id ranges come from ydraw-core/complex-prim-types.h.
 
     return f'''// Auto-generated from {name}.yaml - DO NOT EDIT
 //
@@ -1128,7 +1128,7 @@ def generate_yaml_parser(schema, uniforms, buffers):
 // YAML parser factory for {name} complex primitive
 
 #include <yetty/{name}/{name}-gen.h>
-#include <yetty/ydraw-yaml/ypaint-yaml.h>
+#include <yetty/ydraw-yaml/ydraw-yaml.h>
 #include <yetty/ydraw-core/buffer.h>
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/ytrace/ytrace.h>

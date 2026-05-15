@@ -1,4 +1,4 @@
-# yecho - text/glyph/styled-block parser, renders to a ypaint-core buffer.
+# yecho - text/glyph/styled-block parser, renders to a ydraw-core buffer.
 # Strictly client-side; never linked into the yetty process.
 
 add_library(yetty_yecho STATIC

@@ -8,7 +8,7 @@
  *   - element list (insertion-ordered)
  *   - local selection
  *   - operation log + undo/redo history
- *   - render target (ypaint buffer)
+ *   - render target (ydraw buffer)
  *
  * Subclasses (yspreadsheet, yslides, ydoc) embed this struct and install a
  * vtable that overrides render(), input handlers, and operation application.
@@ -159,7 +159,7 @@ void yetty_yrich_document_clear_selection(struct yetty_yrich_document *doc);
  * Render
  *===========================================================================*/
 
-/* Set/get the ypaint buffer used as render target. Document does not own it. */
+/* Set/get the ydraw buffer used as render target. Document does not own it. */
 void yetty_yrich_document_set_buffer(struct yetty_yrich_document *doc,
                                      struct yetty_ydraw_core_buffer *buf);
 

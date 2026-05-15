@@ -2,7 +2,7 @@
 // YAML parser factory for yplot complex primitive
 
 #include <yetty/yplot/yplot-gen.h>
-#include <yetty/ydraw-yaml/ypaint-yaml.h>
+#include <yetty/ydraw-yaml/ydraw-yaml.h>
 #include <yetty/ydraw-core/buffer.h>
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/ytrace/ytrace.h>

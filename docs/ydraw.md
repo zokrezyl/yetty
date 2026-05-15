@@ -1,6 +1,6 @@
-# ypaint
+# ydraw
 
-Pure C implementation of ypaint for FFI support with other programming languages.
+Pure C implementation of ydraw for FFI support with other programming languages.
 
 ## Example: Circle Rendering with Scrolling
 
@@ -283,7 +283,7 @@ struct yetty_ydraw_box {
 
 ## Complex Primitives
 
-Complex primitives (yplot, nested ypaint, images, video) require more than simple SDF evaluation. They have their own rendering logic and may contain nested content.
+Complex primitives (yplot, nested ydraw, images, video) require more than simple SDF evaluation. They have their own rendering logic and may contain nested content.
 
 ### Types
 
@@ -292,7 +292,7 @@ Complex primitives (yplot, nested ypaint, images, video) require more than simpl
 | 0x80000001 | FONT | Font definition (atlas + metrics) |
 | 0x80000002 | TEXT_SPAN | Text with font reference |
 | 0x80000003 | YPLOT | Function plot with yfsvm bytecode |
-| 0x80000004+ | Reserved | Future: images, video, nested ypaint |
+| 0x80000004+ | Reserved | Future: images, video, nested ydraw |
 
 ### Storage (Simplified vs Simple Primitives)
 
@@ -317,10 +317,10 @@ Why simplified:
 
 ### Direct Layer Rendering
 
-Complex primitives render directly to the ypaint layer texture at their viewport positions:
+Complex primitives render directly to the ydraw layer texture at their viewport positions:
 
 ```
-ypaint_layer_texture (render target)
+ydraw_layer_texture (render target)
 ┌─────────────────────────────────────────────────────┐
 │                                                     │
 │    ┌──────────┐                                     │
@@ -370,7 +370,7 @@ ypaint_layer_texture (render target)
 
 ### Recursive Composition (Future)
 
-Complex primitives may contain nested ypaint (recursive). Each nesting level would render to its parent's render target at its viewport bounds.
+Complex primitives may contain nested ydraw (recursive). Each nesting level would render to its parent's render target at its viewport bounds.
 
 ### Render Target Integration
 

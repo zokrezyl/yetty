@@ -11,34 +11,34 @@ extern "C" {
 #endif
 
 enum yetty_ysdf_type {
-    YETTY_YSDF_CIRCLE = 0x10000000u,
-    YETTY_YSDF_BOX = 0x10000001u,
-    YETTY_YSDF_SEGMENT = 0x10000002u,
-    YETTY_YSDF_TRIANGLE = 0x10000003u,
-    YETTY_YSDF_ELLIPSE = 0x10000006u,
-    YETTY_YSDF_ARC = 0x10000007u,
-    YETTY_YSDF_ROUNDED_BOX = 0x10000008u,
-    YETTY_YSDF_RHOMBUS = 0x10000009u,
-    YETTY_YSDF_PENTAGON = 0x1000000Au,
-    YETTY_YSDF_HEXAGON = 0x1000000Bu,
-    YETTY_YSDF_STAR = 0x1000000Cu,
-    YETTY_YSDF_PIE = 0x1000000Du,
-    YETTY_YSDF_RING = 0x1000000Eu,
-    YETTY_YSDF_HEART = 0x1000000Fu,
-    YETTY_YSDF_CROSS = 0x10000010u,
-    YETTY_YSDF_ROUNDED_X = 0x10000011u,
-    YETTY_YSDF_CAPSULE = 0x10000012u,
-    YETTY_YSDF_MOON = 0x10000013u,
-    YETTY_YSDF_EGG = 0x10000014u,
-    YETTY_YSDF_OCTOGON = 0x1000001Cu,
-    YETTY_YSDF_HEXAGRAM = 0x1000001Du,
-    YETTY_YSDF_PENTAGRAM = 0x1000001Eu,
-    YETTY_YSDF_LINEAR_GRADIENT_BOX = 0x10000082u,
-    YETTY_YSDF_RADIAL_GRADIENT_BOX = 0x10000083u,
-    YETTY_YSDF_SPHERE_3D = 0x10000064u,
-    YETTY_YSDF_BOX_3D = 0x10000065u,
-    YETTY_YSDF_TORUS_3D = 0x10000067u,
-    YETTY_YSDF_CYLINDER_3D = 0x10000069u,
+    YETTY_YSDF_CIRCLE = 0x7FFFFFFFu,
+    YETTY_YSDF_BOX = 0x7FFFFFFEu,
+    YETTY_YSDF_SEGMENT = 0x7FFFFFFDu,
+    YETTY_YSDF_TRIANGLE = 0x7FFFFFFCu,
+    YETTY_YSDF_ELLIPSE = 0x7FFFFFF9u,
+    YETTY_YSDF_ARC = 0x7FFFFFF8u,
+    YETTY_YSDF_ROUNDED_BOX = 0x7FFFFFF7u,
+    YETTY_YSDF_RHOMBUS = 0x7FFFFFF6u,
+    YETTY_YSDF_PENTAGON = 0x7FFFFFF5u,
+    YETTY_YSDF_HEXAGON = 0x7FFFFFF4u,
+    YETTY_YSDF_STAR = 0x7FFFFFF3u,
+    YETTY_YSDF_PIE = 0x7FFFFFF2u,
+    YETTY_YSDF_RING = 0x7FFFFFF1u,
+    YETTY_YSDF_HEART = 0x7FFFFFF0u,
+    YETTY_YSDF_CROSS = 0x7FFFFFEFu,
+    YETTY_YSDF_ROUNDED_X = 0x7FFFFFEEu,
+    YETTY_YSDF_CAPSULE = 0x7FFFFFEDu,
+    YETTY_YSDF_MOON = 0x7FFFFFECu,
+    YETTY_YSDF_EGG = 0x7FFFFFEBu,
+    YETTY_YSDF_OCTOGON = 0x7FFFFFE3u,
+    YETTY_YSDF_HEXAGRAM = 0x7FFFFFE2u,
+    YETTY_YSDF_PENTAGRAM = 0x7FFFFFE1u,
+    YETTY_YSDF_LINEAR_GRADIENT_BOX = 0x7FFFFF7Du,
+    YETTY_YSDF_RADIAL_GRADIENT_BOX = 0x7FFFFF7Cu,
+    YETTY_YSDF_SPHERE_3D = 0x7FFFFF9Bu,
+    YETTY_YSDF_BOX_3D = 0x7FFFFF9Au,
+    YETTY_YSDF_TORUS_3D = 0x7FFFFF98u,
+    YETTY_YSDF_CYLINDER_3D = 0x7FFFFF96u,
 };
 
 struct yetty_ysdf_circle {
@@ -264,73 +264,42 @@ struct yetty_ysdf_cylinder_3d {
 };
 
 // Word count per SDF primitive type
-static inline uint32_t yetty_ysdf_word_count(enum yetty_ysdf_type type)
-{
+static inline uint32_t yetty_ysdf_word_count(enum yetty_ysdf_type type) {
     switch (type) {
-    case YETTY_YSDF_CIRCLE:
-        return 8u;
-    case YETTY_YSDF_BOX:
-        return 10u;
-    case YETTY_YSDF_SEGMENT:
-        return 9u;
-    case YETTY_YSDF_TRIANGLE:
-        return 11u;
-    case YETTY_YSDF_ELLIPSE:
-        return 9u;
-    case YETTY_YSDF_ARC:
-        return 11u;
-    case YETTY_YSDF_ROUNDED_BOX:
-        return 13u;
-    case YETTY_YSDF_RHOMBUS:
-        return 9u;
-    case YETTY_YSDF_PENTAGON:
-        return 8u;
-    case YETTY_YSDF_HEXAGON:
-        return 8u;
-    case YETTY_YSDF_STAR:
-        return 10u;
-    case YETTY_YSDF_PIE:
-        return 10u;
-    case YETTY_YSDF_RING:
-        return 11u;
-    case YETTY_YSDF_HEART:
-        return 8u;
-    case YETTY_YSDF_CROSS:
-        return 10u;
-    case YETTY_YSDF_ROUNDED_X:
-        return 9u;
-    case YETTY_YSDF_CAPSULE:
-        return 10u;
-    case YETTY_YSDF_MOON:
-        return 10u;
-    case YETTY_YSDF_EGG:
-        return 9u;
-    case YETTY_YSDF_OCTOGON:
-        return 8u;
-    case YETTY_YSDF_HEXAGRAM:
-        return 8u;
-    case YETTY_YSDF_PENTAGRAM:
-        return 8u;
-    case YETTY_YSDF_LINEAR_GRADIENT_BOX:
-        return 16u;
-    case YETTY_YSDF_RADIAL_GRADIENT_BOX:
-        return 15u;
-    case YETTY_YSDF_SPHERE_3D:
-        return 9u;
-    case YETTY_YSDF_BOX_3D:
-        return 11u;
-    case YETTY_YSDF_TORUS_3D:
-        return 10u;
-    case YETTY_YSDF_CYLINDER_3D:
-        return 10u;
-    default:
-        return 0u;
+        case YETTY_YSDF_CIRCLE: return 8u;
+        case YETTY_YSDF_BOX: return 10u;
+        case YETTY_YSDF_SEGMENT: return 9u;
+        case YETTY_YSDF_TRIANGLE: return 11u;
+        case YETTY_YSDF_ELLIPSE: return 9u;
+        case YETTY_YSDF_ARC: return 11u;
+        case YETTY_YSDF_ROUNDED_BOX: return 13u;
+        case YETTY_YSDF_RHOMBUS: return 9u;
+        case YETTY_YSDF_PENTAGON: return 8u;
+        case YETTY_YSDF_HEXAGON: return 8u;
+        case YETTY_YSDF_STAR: return 10u;
+        case YETTY_YSDF_PIE: return 10u;
+        case YETTY_YSDF_RING: return 11u;
+        case YETTY_YSDF_HEART: return 8u;
+        case YETTY_YSDF_CROSS: return 10u;
+        case YETTY_YSDF_ROUNDED_X: return 9u;
+        case YETTY_YSDF_CAPSULE: return 10u;
+        case YETTY_YSDF_MOON: return 10u;
+        case YETTY_YSDF_EGG: return 9u;
+        case YETTY_YSDF_OCTOGON: return 8u;
+        case YETTY_YSDF_HEXAGRAM: return 8u;
+        case YETTY_YSDF_PENTAGRAM: return 8u;
+        case YETTY_YSDF_LINEAR_GRADIENT_BOX: return 16u;
+        case YETTY_YSDF_RADIAL_GRADIENT_BOX: return 15u;
+        case YETTY_YSDF_SPHERE_3D: return 9u;
+        case YETTY_YSDF_BOX_3D: return 11u;
+        case YETTY_YSDF_TORUS_3D: return 10u;
+        case YETTY_YSDF_CYLINDER_3D: return 10u;
+        default: return 0u;
     }
 }
 
 // Primitive size in bytes - use as yetty_ydraw_core_primitive_size_fn callback
-static inline size_t yetty_ysdf_primitive_size(uint32_t type)
-{
+static inline size_t yetty_ysdf_primitive_size(uint32_t type) {
     return yetty_ysdf_word_count((enum yetty_ysdf_type)type) * sizeof(float);
 }
 

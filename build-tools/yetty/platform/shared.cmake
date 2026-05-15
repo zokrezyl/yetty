@@ -484,7 +484,7 @@ endif()
 if(YETTY_ENABLE_FEATURE_YDRAW)
     list(APPEND YETTY_LIBS yetty_ydraw)
 endif()
-if(YETTY_ENABLE_FEATURE_YPAINT)
+if(YETTY_ENABLE_FEATURE_YDRAW)
     list(APPEND YETTY_LIBS yetty_ydraw)
 endif()
 if(YETTY_ENABLE_FEATURE_YDIAGRAM)
@@ -570,11 +570,11 @@ function(yetty_embed_assets TARGET)
 
     # Collect shaders from module locations
     file(COPY "${YETTY_ROOT}/src/yetty/yterm/text-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
-    file(COPY "${YETTY_ROOT}/src/yetty/yterm/ypaint-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
+    file(COPY "${YETTY_ROOT}/src/yetty/yterm/ydraw-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yterm/ymgui-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yterm/background-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     # Generated SDF dispatcher + sdf_* functions — attached at runtime as a
-    # child resource set of ypaint-layer; see src/yetty/ysdf/gen-sdf-code.py.
+    # child resource set of ydraw-layer; see src/yetty/ysdf/gen-sdf-code.py.
     file(COPY "${YETTY_ROOT}/src/yetty/ysdf/ysdf.gen.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yrender/blend.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(RENAME "${EMBED_DATA_DIR}/shaders/blend.wgsl" "${EMBED_DATA_DIR}/shaders/blender.wgsl")

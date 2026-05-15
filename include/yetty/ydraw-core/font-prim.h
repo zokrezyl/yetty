@@ -2,7 +2,7 @@
 #define YETTY_YDRAW_CORE_FONT_PRIM_H
 
 /*
- * font-prim - flyweight primitive carrying TTF bytes through a ypaint buffer.
+ * font-prim - flyweight primitive carrying TTF bytes through a ydraw buffer.
  *
  * Tier:
  *   Simple (SDF, fixed-size):    [0x00, 0xFF]

@@ -70,7 +70,7 @@ struct yetty_yetty_gpu_context {
     /* Polymorphic MSDF CDB generator (cpu | gpu). Selected from the
      * `msdf/generator` config key in yetty_create after the WGPU device
      * is up. Shared by every consumer that materialises a font on the
-     * fly (today: ypaint-canvas blob-font materialisation). */
+     * fly (today: ydraw-canvas blob-font materialisation). */
     struct yetty_ymsdf_generator *msdf_generator;
 };
 

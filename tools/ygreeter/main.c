@@ -6,8 +6,8 @@
  * Layout: a single full-canvas ygui app driving a tabbar at the top with
  * a per-tab body underneath. Every body is an hbox: a small navigation
  * tree on the left, a `rich` content surface on the right. The rich
- * widget holds a ypaint-core buffer built from an inline YAML — same
- * vocabulary as demo/scripts/ypaint/scrolling/.
+ * widget holds a ydraw-core buffer built from an inline YAML — same
+ * vocabulary as demo/scripts/ydraw/scrolling/.
  *
  *   ┌─────────────────────────────────────────────────────────────┐
  *   │ [Welcome] [Plots] [Images] [Code]                            │
@@ -19,7 +19,7 @@
  *   └──────────────────┴───────────────────────────────────────────┘
  *
  * Tabs:
- *   Welcome — rich-text intro authored as ypaint TEXT spans with mixed
+ *   Welcome — rich-text intro authored as ydraw TEXT spans with mixed
  *             font sizes / colors. Short on purpose so it stays
  *             readable on phone-sized cards.
  *   Plots   — yplot demos (sin/cos, parabola, decay, ...).
@@ -57,7 +57,7 @@ struct nav_entry {
  * Welcome tab content.
  *
  * Short blocks: a heading, a tagline, a two-line "what's special" pitch,
- * and a hint to use the other tabs. Authored as ypaint TEXT spans so the
+ * and a hint to use the other tabs. Authored as ydraw TEXT spans so the
  * various sizes / colors actually render on the GPU canvas (the regular
  * ygui label widget doesn't carry inline colour runs).
  * ========================================================================= */
@@ -295,7 +295,7 @@ static const struct nav_entry PLOT_NAV[] = {
 
 #define IMAGE_PHOTO                                                                         \
     IMAGE_PLACEHOLDER_FOR("Photograph",                                                     \
-                          "ypaint texture atlas; the GPU samples it at the displayed size.")
+                          "ydraw texture atlas; the GPU samples it at the displayed size.")
 
 #define IMAGE_DIAGRAM                                                                       \
     IMAGE_PLACEHOLDER_FOR("Diagram",                                                        \
@@ -307,8 +307,8 @@ static const struct nav_entry IMAGE_NAV[] = {
     {"Diagram", IMAGE_DIAGRAM},
 };
 
-/* Build a ypaint buffer holding ONE yimage prim plus a TEXT_SPAN title.
- * The ypaint-yaml parser doesn't support `yimage:` blocks today
+/* Build a ydraw buffer holding ONE yimage prim plus a TEXT_SPAN title.
+ * The ydraw-yaml parser doesn't support `yimage:` blocks today
  * (yaml_factory: none in yimage.yaml), so we go through yimage's C API
  * directly and append the title via the buffer's add_text helper.
  *
@@ -451,7 +451,7 @@ static char *probe_default_image(const char *argv0)
  * Code tab content.
  *
  * The user asked for "code viewing using the ycat feature". ycat builds a
- * ypaint buffer of coloured TEXT_SPAN prims via its tree-sitter backend;
+ * ydraw buffer of coloured TEXT_SPAN prims via its tree-sitter backend;
  * linking yetty_ycat pulls in libmagic + tree-sitter grammars (~few MB).
  * For the v1 tool we author the same shape inline — TEXT spans with
  * token-class colors — so the demo runs anywhere ygui runs (including
@@ -722,7 +722,7 @@ static void load_entry(struct app *app, int tab_index, int entry_index)
     if (entry_index < 0 || entry_index >= t->n_entries) {
         return;
     }
-    /* Images tab: when we have a resolved file, build a fresh ypaint
+    /* Images tab: when we have a resolved file, build a fresh ydraw
      * buffer with the yimage prim + a title TEXT_SPAN and install it
      * via set_buffer (which takes ownership). Falls through to the
      * static YAML placeholder when no image was found. */

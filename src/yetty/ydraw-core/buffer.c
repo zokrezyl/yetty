@@ -22,7 +22,7 @@
 #include "font-prim-internal.h"
 #include "text-span-prim-internal.h"
 
-#define YPAINT_BUFFER_INITIAL_CAPACITY 1024
+#define YDRAW_BUFFER_INITIAL_CAPACITY 1024
 
 struct yetty_ydraw_core_buffer {
     struct yetty_ycore_named_buffer primitives;
@@ -42,13 +42,13 @@ struct yetty_ydraw_core_buffer {
  *   u32 byte_count
  *   u8  prim_bytes[byte_count]
  */
-#define YPAINT_SERIAL_MAGIC 0x31425059u /* 'YPB1' little-endian */
-#define YPAINT_SERIAL_HEADER_BYTES (4 + 16 + 4)
+#define YDRAW_SERIAL_MAGIC 0x31425059u /* 'YPB1' little-endian */
+#define YDRAW_SERIAL_HEADER_BYTES (4 + 16 + 4)
 
 static int parse_framed_payload(struct yetty_ydraw_core_buffer *buf, const uint8_t *data,
                                 size_t size)
 {
-    if (size < YPAINT_SERIAL_HEADER_BYTES) {
+    if (size < YDRAW_SERIAL_HEADER_BYTES) {
         return 0;
     }
 
@@ -63,7 +63,7 @@ static int parse_framed_payload(struct yetty_ydraw_core_buffer *buf, const uint8
     memcpy(&byte_count, p, 4);
     p += 4;
 
-    if (byte_count > size - YPAINT_SERIAL_HEADER_BYTES) {
+    if (byte_count > size - YDRAW_SERIAL_HEADER_BYTES) {
         return 0;
     }
 
@@ -98,7 +98,7 @@ struct yetty_ydraw_core_buffer_result yetty_ydraw_core_buffer_create_from_bytes(
    * Otherwise the bytes are a bare primitive stream (legacy path). */
     uint32_t magic;
     memcpy(&magic, data, len >= 4 ? 4 : 0);
-    if (len >= 4 && magic == YPAINT_SERIAL_MAGIC) {
+    if (len >= 4 && magic == YDRAW_SERIAL_MAGIC) {
         if (!parse_framed_payload(buf, data, len)) {
             yetty_ydraw_core_buffer_destroy(buf);
             return YETTY_ERR(yetty_ydraw_core_buffer, "framed payload parse failed");
@@ -147,13 +147,13 @@ struct yetty_ydraw_core_buffer_result yetty_ydraw_core_buffer_config_buffer_crea
         return YETTY_ERR(yetty_ydraw_core_buffer, "calloc failed");
     }
 
-    buf->primitives.buf.data = calloc(1, YPAINT_BUFFER_INITIAL_CAPACITY);
+    buf->primitives.buf.data = calloc(1, YDRAW_BUFFER_INITIAL_CAPACITY);
     if (!buf->primitives.buf.data) {
         free(buf);
         return YETTY_ERR(yetty_ydraw_core_buffer, "calloc for prims failed");
     }
 
-    buf->primitives.buf.capacity = YPAINT_BUFFER_INITIAL_CAPACITY;
+    buf->primitives.buf.capacity = YDRAW_BUFFER_INITIAL_CAPACITY;
     buf->primitives.buf.size = 0;
     strncpy(buf->primitives.name, "prims", YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH - 1);
 
@@ -236,7 +236,7 @@ size_t yetty_ydraw_core_buffer_serialize(struct yetty_ydraw_core_buffer *buf,
         return 0;
     }
 
-    size_t need = YPAINT_SERIAL_HEADER_BYTES + buf->primitives.buf.size;
+    size_t need = YDRAW_SERIAL_HEADER_BYTES + buf->primitives.buf.size;
 
     if (buf->serial_cap < need) {
         uint8_t *np = realloc(buf->serial_data, need);
@@ -249,7 +249,7 @@ size_t yetty_ydraw_core_buffer_serialize(struct yetty_ydraw_core_buffer *buf,
     }
 
     uint8_t *p = buf->serial_data;
-    uint32_t magic = YPAINT_SERIAL_MAGIC;
+    uint32_t magic = YDRAW_SERIAL_MAGIC;
     memcpy(p, &magic, 4);
     p += 4;
     memcpy(p, &buf->scene_min_x, 4);
@@ -272,7 +272,7 @@ size_t yetty_ydraw_core_buffer_serialize(struct yetty_ydraw_core_buffer *buf,
 }
 
 /* Single-pass base64 encode of the framed wire format. */
-static const char YPAINT_B64_ALPHABET[] =
+static const char YDRAW_B64_ALPHABET[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 struct yetty_ycore_buffer_result yetty_ydraw_core_buffer_to_base64(
@@ -282,7 +282,7 @@ struct yetty_ycore_buffer_result yetty_ydraw_core_buffer_to_base64(
         return YETTY_ERR(yetty_ycore_buffer, "buf is NULL");
     }
 
-    size_t need = YPAINT_SERIAL_HEADER_BYTES + buf->primitives.buf.size;
+    size_t need = YDRAW_SERIAL_HEADER_BYTES + buf->primitives.buf.size;
     size_t cap = ((need + 2) / 3) * 4 + 1;
     char *out = malloc(cap);
     if (!out) {
@@ -300,7 +300,7 @@ struct yetty_ycore_buffer_result yetty_ydraw_core_buffer_to_base64(
     }
 
     uint8_t *p = raw;
-    uint32_t magic = YPAINT_SERIAL_MAGIC;
+    uint32_t magic = YDRAW_SERIAL_MAGIC;
     memcpy(p, &magic, 4);
     p += 4;
     memcpy(p, &buf->scene_min_x, 4);
@@ -321,23 +321,23 @@ struct yetty_ycore_buffer_result yetty_ydraw_core_buffer_to_base64(
     size_t olen = 0;
     for (size_t i = 0; i + 3 <= need; i += 3) {
         uint32_t t = ((uint32_t)raw[i] << 16) | ((uint32_t)raw[i + 1] << 8) | (uint32_t)raw[i + 2];
-        out[olen++] = YPAINT_B64_ALPHABET[(t >> 18) & 0x3F];
-        out[olen++] = YPAINT_B64_ALPHABET[(t >> 12) & 0x3F];
-        out[olen++] = YPAINT_B64_ALPHABET[(t >> 6) & 0x3F];
-        out[olen++] = YPAINT_B64_ALPHABET[t & 0x3F];
+        out[olen++] = YDRAW_B64_ALPHABET[(t >> 18) & 0x3F];
+        out[olen++] = YDRAW_B64_ALPHABET[(t >> 12) & 0x3F];
+        out[olen++] = YDRAW_B64_ALPHABET[(t >> 6) & 0x3F];
+        out[olen++] = YDRAW_B64_ALPHABET[t & 0x3F];
     }
     size_t rem = need % 3;
     if (rem == 1) {
         uint32_t t = (uint32_t)raw[need - 1] << 16;
-        out[olen++] = YPAINT_B64_ALPHABET[(t >> 18) & 0x3F];
-        out[olen++] = YPAINT_B64_ALPHABET[(t >> 12) & 0x3F];
+        out[olen++] = YDRAW_B64_ALPHABET[(t >> 18) & 0x3F];
+        out[olen++] = YDRAW_B64_ALPHABET[(t >> 12) & 0x3F];
         out[olen++] = '=';
         out[olen++] = '=';
     } else if (rem == 2) {
         uint32_t t = ((uint32_t)raw[need - 2] << 16) | ((uint32_t)raw[need - 1] << 8);
-        out[olen++] = YPAINT_B64_ALPHABET[(t >> 18) & 0x3F];
-        out[olen++] = YPAINT_B64_ALPHABET[(t >> 12) & 0x3F];
-        out[olen++] = YPAINT_B64_ALPHABET[(t >> 6) & 0x3F];
+        out[olen++] = YDRAW_B64_ALPHABET[(t >> 18) & 0x3F];
+        out[olen++] = YDRAW_B64_ALPHABET[(t >> 12) & 0x3F];
+        out[olen++] = YDRAW_B64_ALPHABET[(t >> 6) & 0x3F];
         out[olen++] = '=';
     }
     out[olen] = '\0';

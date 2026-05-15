@@ -1,5 +1,5 @@
 /*
- * handler-svg.c - SVG → ypaint buffer.
+ * handler-svg.c - SVG → ydraw buffer.
  *
  * Thin wrapper around yetty_ysvg_render: re-packs the ycat config into
  * an ysvg config and lifts the result into the ycat handler return type.

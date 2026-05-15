@@ -5,11 +5,11 @@
  * ycat - MIME-dispatched cat.
  *
  * Detects the type of a byte buffer (libmagic + extension fallback) and
- * dispatches to a handler that turns the bytes into a ypaint-core buffer.
+ * dispatches to a handler that turns the bytes into a ydraw-core buffer.
  * The caller then either:
- *   - base64-encodes the ypaint primitives and emits an OSC 666674 sequence
+ *   - base64-encodes the ydraw primitives and emits an OSC 666674 sequence
  *     (yetty_ycat_osc_bin_emit), so a running yetty terminal picks it up
- *     and routes to its ypaint scrolling layer, or
+ *     and routes to its ydraw scrolling layer, or
  *   - for plain-text / unknown input, passes the bytes through unchanged.
  *
  * The library is pure C. The tool in tools/ycat drives it.
@@ -70,7 +70,7 @@ struct yetty_ycat_config {
 };
 
 /* Handler signature: bytes+len (and optionally a path for formats that need
- * one, e.g. PDF via pdfio) → fresh ypaint-core buffer. Returned buffer
+ * one, e.g. PDF via pdfio) → fresh ydraw-core buffer. Returned buffer
  * ownership is transferred to the caller.
  *
  * path_hint may be NULL (for stdin / URL). If the handler needs a real file
@@ -100,7 +100,7 @@ struct yetty_ydraw_core_buffer_result yetty_ycat_render(const uint8_t *bytes, si
  * neither yields a supported grammar. */
 const char *yetty_ycat_grammar_lookup(const char *mime, const char *path);
 
-/* Parse bytes with `grammar_name`, emit coloured spans into a fresh ypaint
+/* Parse bytes with `grammar_name`, emit coloured spans into a fresh ydraw
  * buffer. Useful when targeting a yetty terminal (via the OSC envelope). */
 struct yetty_ydraw_core_buffer_result yetty_ycat_ts_render(const uint8_t *bytes, size_t len,
                                                             const char *grammar_name,
@@ -126,7 +126,7 @@ int yetty_ycat_fetch_url(const char *url, uint8_t **out, size_t *out_len, char *
  * OSC emission
  *===========================================================================*/
 
-/* Emit an OSC 666674 (YPAINT_SCROLL) sequence wrapping the buffer's primitive
+/* Emit an OSC 666674 (YDRAW_SCROLL) sequence wrapping the buffer's primitive
  * bytes (base64-encoded, `--bin` format) to `out`. Returns number of bytes
  * written, 0 on failure. */
 struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(

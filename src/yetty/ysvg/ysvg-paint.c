@@ -1,11 +1,11 @@
 /*
- * ysvg-paint.c — walk the SVG DOM and emit ypaint primitives.
+ * ysvg-paint.c — walk the SVG DOM and emit ydraw primitives.
  *
  * For each element we:
  *   1. Resolve the cascaded style (parent ⊕ presentation attrs ⊕ inline).
  *   2. Compose the current-transform-matrix with this element's
  *      `transform="..."`.
- *   3. Emit ypaint primitives. Geometry is transformed at emit time
+ *   3. Emit ydraw primitives. Geometry is transformed at emit time
  *      since SDF primitives carry shape parameters, not a transform.
  *
  * Mapping summary:
@@ -50,7 +50,7 @@ struct ysvg_paint_state {
  * Color resolution
  *
  * Compose fill_opacity * opacity into the alpha byte and produce an ABGR
- * packed word ready for ypaint.
+ * packed word ready for ydraw.
  *===========================================================================*/
 
 static uint32_t resolve_color(const struct yetty_ysvg_paint *p, float opacity, float prop_opacity)

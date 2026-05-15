@@ -9,7 +9,7 @@
  * connection midpoint.
  *
  * Port of yetty-poc/src/yetty/ydraw-zoo/zoo-renderer.cpp (C++ → C). The
- * renderer is a pure producer of ypaint primitives — no IO, no GPU, no
+ * renderer is a pure producer of ydraw primitives — no IO, no GPU, no
  * terminal interaction. The frontend tool drives time, owns the buffer, and
  * ships it out via OSC.
  */

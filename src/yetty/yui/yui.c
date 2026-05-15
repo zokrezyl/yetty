@@ -1,7 +1,7 @@
 /* yui.c — app-level chrome singleton.
  *
  * See yui.h for the producer → transport → consumer chain. This file owns
- * the wiring; the ypaint-layer (KIND_STATIC) does the rendering and the
+ * the wiring; the ydraw-layer (KIND_STATIC) does the rendering and the
  * osc_statemachine does the wire decode. Memory-pty bytes flow
  * producer→consumer via in-process ring buffers and the event loop is
  * woken via post_to_loop so the wake never re-enters synchronously
@@ -24,7 +24,7 @@
 #include <yetty/yterm/osc-codes.h>
 #include <yetty/yterm/osc-statemachine.h>
 #include <yetty/yterm/terminal.h>
-#include <yetty/yterm/ypaint-layer.h>
+#include <yetty/yterm/ydraw-layer.h>
 #include <yetty/ytrace/ytrace.h>
 
 struct yetty_yui {
@@ -36,12 +36,12 @@ struct yetty_yui {
      * (zero copy from the memory-pty's ring). */
     struct yetty_platform_pty *render_endpoint;
 
-    /* Owns the YPAINT decode pipeline (b64 + lz4 today, kept as-is per
+    /* Owns the YDRAW decode pipeline (b64 + lz4 today, kept as-is per
      * the simplified plan — we do NOT change the wire codec yet, only
      * the transport). Bound to render_endpoint. */
     struct yetty_yterm_osc_statemachine *sm;
 
-    /* Static-canvas ypaint layer registered against YPAINT_CLEAR/BIN/OVERLAY
+    /* Static-canvas ydraw layer registered against YDRAW_CLEAR/BIN/OVERLAY
      * on `sm`. Same constructor used by the per-terminal static placeholder. */
     struct yetty_yrender_terminal_layer *layer;
 
@@ -311,7 +311,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     yui->yui_endpoint = pp.value.a;
     yui->render_endpoint = pp.value.b;
 
-    /* Static-canvas ypaint layer. Computes a coarse cols/rows from the
+    /* Static-canvas ydraw layer. Computes a coarse cols/rows from the
      * window dims; chrome primitives are absolute-pixel so the grid is
      * just an addressing index for the static-canvas's primitive lookup. */
     uint32_t cols = (uint32_t)((float)surface_w / cell_w);
@@ -323,7 +323,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         rows = 1;
     }
 
-    struct yetty_yterm_terminal_layer_result lr = yetty_yterm_ypaint_layer_create(
+    struct yetty_yterm_terminal_layer_result lr = yetty_yterm_ydraw_layer_create(
         YETTY_YDRAW_LAYER_KIND_STATIC, cols, rows, cell_w, cell_h, context,
         /*request_render_fn=*/NULL, /*request_render_userdata=*/NULL,
         /*scroll_fn=*/NULL, /*scroll_userdata=*/NULL,
@@ -350,13 +350,13 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     }
     yui->sm = sr.value;
 
-    /* Register YPAINT codes against the SM. */
+    /* Register YDRAW codes against the SM. */
     struct yetty_ycore_void_result rr;
-    rr = yetty_yterm_osc_statemachine_register(yui->sm, YETTY_OSC_YPAINT_CLEAR, yui->layer);
+    rr = yetty_yterm_osc_statemachine_register(yui->sm, YETTY_OSC_YDRAW_CLEAR, yui->layer);
     YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register CLEAR");
-    rr = yetty_yterm_osc_statemachine_register(yui->sm, YETTY_OSC_YPAINT_BIN, yui->layer);
+    rr = yetty_yterm_osc_statemachine_register(yui->sm, YETTY_OSC_YDRAW_BIN, yui->layer);
     YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register BIN");
-    rr = yetty_yterm_osc_statemachine_register(yui->sm, YETTY_OSC_YPAINT_OVERLAY, yui->layer);
+    rr = yetty_yterm_osc_statemachine_register(yui->sm, YETTY_OSC_YDRAW_OVERLAY, yui->layer);
     YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register OVERLAY");
 
     /* Wake the consumer side via post_to_loop whenever the producer

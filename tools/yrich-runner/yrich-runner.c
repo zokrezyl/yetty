@@ -2,7 +2,7 @@
  * yrich-runner — interactive loop for yrich documents → OSC 666674 canvas.
  *
  * Mirrors the protocol used by ygui_osc.c: emit --clear and --bin in a
- * single tick to replace the canvas contents with a fresh ypaint buffer.
+ * single tick to replace the canvas contents with a fresh ydraw buffer.
  * Input events come back via OSC 777777/777778/777779/777780 plus regular
  * key bytes; the runner translates them into yrich document calls.
  */
@@ -13,7 +13,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ydraw-core/buffer.h>
-#include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YPAINT_* */
+#include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YDRAW_* */
 #include <yetty/yrich/yrich-document.h>
 #include <yetty/yrich/yrich-element.h>
 #include <yetty/yrich/yrich-types.h>
@@ -108,7 +108,7 @@ static void emit_bin(const struct yetty_ydraw_core_buffer *buf)
 	};
 	struct yetty_ycore_buffer envelope = {0};
 	struct yetty_ycore_void_result r = yetty_yface_emit(
-		YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
+		YETTY_OSC_YDRAW_BIN, /*compressed=*/1,
 		&meta, sizeof(meta),
 		raw, raw_size, &envelope);
 	if (YETTY_IS_OK(r) && envelope.size > 0)

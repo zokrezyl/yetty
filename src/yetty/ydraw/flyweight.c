@@ -1,6 +1,6 @@
 // YPaint Flyweight - creates configured flyweight registry for ALL primitives.
 //
-// Type-id space (see ypaint-core/cmds.h for the canonical layout):
+// Type-id space (see ydraw-core/cmds.h for the canonical layout):
 //   1. CMD tier handler                      types [0x00000000, 0x0000FFFF]
 //   2. SDF default handler                   types [0x10000000, 0x1FFFFFFF]
 //   3. FONT      flyweight handler           type   0x40000001

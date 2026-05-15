@@ -17,7 +17,7 @@
 #include <yetty/yterm/pty-reader.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/yterm/text-layer.h>
-#include <yetty/yterm/ypaint-layer.h>
+#include <yetty/yterm/ydraw-layer.h>
 #include <yetty/yterm/ymgui-layer.h>
 #include <yetty/yterm/shader-glyph-layer.h>
 #include <yetty/ytrace/ytrace.h>
@@ -109,7 +109,7 @@ struct yetty_yterm_terminal {
      * Each layer decides what to do with it:
      *   - text-layer interprets it as an xterm-style cell stream
      *     (column-granular highlight + extract)
-     *   - ypaint-layer treats the row range as "touched rows" and
+     *   - ydraw-layer treats the row range as "touched rows" and
      *     selects the first overlapping primitive per row
      * sel_dragging tracks an in-progress button-1 drag. */
     int sel_active;
@@ -466,8 +466,8 @@ static int terminal_emit_card_key(struct yetty_yterm_terminal *terminal, uint32_
  *
  * Mouse-wheel events drive both layers into scrollback mode together.
  * view_top_total_idx is an absolute line index — text-layer's sb_count
- * and ypaint canvas's rolling_row_0 stay in lockstep (every text scroll
- * triggers a ypaint scroll and vice versa), so the same index identifies
+ * and ydraw canvas's rolling_row_0 stay in lockstep (every text scroll
+ * triggers a ydraw scroll and vice versa), so the same index identifies
  * the same line in both.
  *
  * PR #89 ("Ymgui 5") rewrote the OSC mouse path to forward wheel events
@@ -481,7 +481,7 @@ static int terminal_emit_card_key(struct yetty_yterm_terminal *terminal, uint32_
  *---------------------------------------------------------------------*/
 
 /* Find the live anchor across layers. We use the maximum so a layer that
- * has scrolled further (e.g. ypaint just absorbed a multi-page PDF) doesn't
+ * has scrolled further (e.g. ydraw just absorbed a multi-page PDF) doesn't
  * leave the others behind — both layers have the same anchor by design,
  * but max() is a safe fallback in case they ever drift. */
 static uint32_t terminal_live_anchor(struct yetty_yterm_terminal *terminal)
@@ -701,7 +701,7 @@ static void terminal_cursor_callback(struct yetty_yrender_terminal_layer *source
  * own terms:
  *
  *   text-layer  — xterm-style cell stream (column-granular highlight + copy)
- *   ypaint-layer — row range only; selects whole primitives that overlap
+ *   ydraw-layer — row range only; selects whole primitives that overlap
  *                  the touched rows
  *
  * Copy walks every layer's get_selection_text in order and concatenates
@@ -898,7 +898,7 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
         if (!layer) {
             continue;
         }
-        /* Skip layers with nothing to draw. ypaint/ymgui report empty
+        /* Skip layers with nothing to draw. ydraw/ymgui report empty
          * when their canvas has no primitives — paying the binder/draw
          * cost for them on every text-layer redraw is pure overhead. */
         if (layer->ops->is_empty && layer->ops->is_empty(layer)) {
@@ -1068,51 +1068,51 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
         }
     }
 
-    /* Create ypaint scrolling layer (overlay on top of text) + static
+    /* Create ydraw scrolling layer (overlay on top of text) + static
      * yui-chrome layer above it. Only the scrolling layer is registered
-     * for ypaint OSC codes — static-canvas is a placeholder for yui until
+     * for ydraw OSC codes — static-canvas is a placeholder for yui until
      * its content path lands. */
     {
         struct yetty_yrender_terminal_layer *text_layer = text_layer_res.value;
-        struct yetty_yterm_terminal_layer_result ypaint_res = yetty_yterm_ypaint_layer_create(
+        struct yetty_yterm_terminal_layer_result ydraw_res = yetty_yterm_ydraw_layer_create(
             YETTY_YDRAW_LAYER_KIND_SCROLLING, cols, rows,
             text_layer->cell_size.width, text_layer->cell_size.height,
             yetty_context, terminal_request_render_callback, terminal, terminal_scroll_callback,
             terminal, terminal_cursor_callback, terminal);
-        if (YETTY_IS_OK(ypaint_res)) {
-            yetty_yterm_terminal_layer_add(terminal, ypaint_res.value);
-            ydebug("terminal_create: ypaint scrolling layer created and added");
+        if (YETTY_IS_OK(ydraw_res)) {
+            yetty_yterm_terminal_layer_add(terminal, ydraw_res.value);
+            ydebug("terminal_create: ydraw scrolling layer created and added");
 
-            /* Register ypaint layer for the four ypaint OSC codes. The
+            /* Register ydraw layer for the four ydraw OSC codes. The
              * SM does b64+lz4 decoding (protocol-fixed), so registration
              * carries no codec parameter. */
             if (terminal->pty_reader) {
                 yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YETTY_OSC_YPAINT_CLEAR, ypaint_res.value);
+                    terminal->pty_reader, YETTY_OSC_YDRAW_CLEAR, ydraw_res.value);
                 yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YETTY_OSC_YPAINT_BIN, ypaint_res.value);
+                    terminal->pty_reader, YETTY_OSC_YDRAW_BIN, ydraw_res.value);
                 yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YETTY_OSC_YPAINT_OVERLAY, ypaint_res.value);
-                ydebug("terminal_create: ypaint layer registered for OSC CLEAR/BIN/OVERLAY");
+                    terminal->pty_reader, YETTY_OSC_YDRAW_OVERLAY, ydraw_res.value);
+                ydebug("terminal_create: ydraw layer registered for OSC CLEAR/BIN/OVERLAY");
             }
         } else {
-            ydebug("terminal_create: failed to create ypaint scrolling layer (non-fatal): %s",
-                   ypaint_res.error.msg);
+            ydebug("terminal_create: failed to create ydraw scrolling layer (non-fatal): %s",
+                   ydraw_res.error.msg);
         }
 
         /* yui chrome layer — static canvas, placed above the scrolling one. */
-        struct yetty_yterm_terminal_layer_result ypaint_static_res =
-            yetty_yterm_ypaint_layer_create(
+        struct yetty_yterm_terminal_layer_result ydraw_static_res =
+            yetty_yterm_ydraw_layer_create(
                 YETTY_YDRAW_LAYER_KIND_STATIC, cols, rows,
                 text_layer->cell_size.width, text_layer->cell_size.height,
                 yetty_context, terminal_request_render_callback, terminal,
                 terminal_scroll_callback, terminal, terminal_cursor_callback, terminal);
-        if (YETTY_IS_OK(ypaint_static_res)) {
-            yetty_yterm_terminal_layer_add(terminal, ypaint_static_res.value);
-            ydebug("terminal_create: ypaint static layer created and added");
+        if (YETTY_IS_OK(ydraw_static_res)) {
+            yetty_yterm_terminal_layer_add(terminal, ydraw_static_res.value);
+            ydebug("terminal_create: ydraw static layer created and added");
         } else {
-            ydebug("terminal_create: failed to create ypaint static layer (non-fatal): %s",
-                   ypaint_static_res.error.msg);
+            ydebug("terminal_create: failed to create ydraw static layer (non-fatal): %s",
+                   ydraw_static_res.error.msg);
         }
     }
 

@@ -58,7 +58,7 @@ struct yetty_yfont_msdf_font {
 
     /* Forward (cp → slot) and inverse (slot → cp) maps. The inverse map
      * is populated alongside the forward one so clipboard extraction can
-     * recover the codepoint from a glyph index stored in a ypaint glyph
+     * recover the codepoint from a glyph index stored in a ydraw glyph
      * prim. */
     struct yetty_ycore_map glyph_map;
     struct yetty_ycore_map slot_to_cp;

@@ -2,7 +2,7 @@
  * ydiagram smoke test.
  *
  * Verifies the end-to-end pipeline: Mermaid input → graph IR → layout →
- * ypaint buffer with MSD/MSDF primitives. Asserts the expected counts of
+ * ydraw buffer with MSD/MSDF primitives. Asserts the expected counts of
  * nodes/edges in the IR plus a non-empty primitive byte stream in the
  * resulting buffer.
  */

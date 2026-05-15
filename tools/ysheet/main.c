@@ -1,7 +1,7 @@
 /*
  * ysheet — interactive spreadsheet editor.
  *
- * Renders a yetty_yrich_spreadsheet to a ypaint buffer and emits frames as
+ * Renders a yetty_yrich_spreadsheet to a ydraw buffer and emits frames as
  * OSC 666674. Mouse / key events come back over stdin and drive the
  * document via the shared runner.
  *

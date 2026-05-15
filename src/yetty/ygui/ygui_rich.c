@@ -1,7 +1,7 @@
 /*
  * ygui_rich.c — RICH widget.
  *
- * Holds a ypaint-core buffer of pre-built primitives (TEXT_SPAN, SDF
+ * Holds a ydraw-core buffer of pre-built primitives (TEXT_SPAN, SDF
  * shapes, yplot, yimage, ...). At render time every primitive in that
  * buffer is translated by the widget's resolved absolute position and
  * appended to the engine's frame buffer.
@@ -14,7 +14,7 @@
  * Two constructors:
  *   - rich(engine, id, x, y, w, h)            empty surface, fill later
  *   - rich_from_yaml(... yaml, yaml_len)      convenience: parses YAML via
- *                                              ypaint-yaml and hands the
+ *                                              ydraw-yaml and hands the
  *                                              resulting buffer to the
  *                                              widget (equivalent to
  *                                              rich() + set_yaml())
@@ -43,7 +43,7 @@
 /*=============================================================================
  * Buffer walker — sized strides without depending on a flyweight registry.
  *
- * The ypaint wire format reserves type-id ranges per category:
+ * The ydraw wire format reserves type-id ranges per category:
  *   [0x00000000, 0x0000FFFF]  cmd   FAM:  type, payload_size, payload[]
  *   [0x10000000, 0x1FFFFFFF]  SDF   plain: type, z_order, fill, stroke,
  *                                          stroke_width, args[]    (sized

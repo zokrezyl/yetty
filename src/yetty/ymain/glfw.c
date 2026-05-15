@@ -92,7 +92,7 @@ int main(int argc, char **argv)
 {
     /* Advertise ourselves via the de-facto TERM_PROGRAM convention so child
      * processes (PTY shells, tools like ycat) can detect a yetty terminal
-     * and adapt their output (e.g. emit ypaint OSC sequences instead of
+     * and adapt their output (e.g. emit ydraw OSC sequences instead of
      * plain ANSI). Done here at the top of main so every fork inherits it. */
     setenv("TERM_PROGRAM", "yetty", 1);
 

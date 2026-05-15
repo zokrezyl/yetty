@@ -1,5 +1,5 @@
-#ifndef YETTY_YTERM_YPAINT_LAYER_H
-#define YETTY_YTERM_YPAINT_LAYER_H
+#ifndef YETTY_YTERM_YDRAW_LAYER_H
+#define YETTY_YTERM_YDRAW_LAYER_H
 
 #include <stdint.h>
 #include <yetty/yterm/terminal.h>
@@ -21,13 +21,13 @@ extern "C" {
  *     by yui chrome (popups, statusbar). The layer sits in the terminal
  *     stack as a placeholder until yui content is wired in.
  */
-enum yetty_yterm_ypaint_layer_kind {
+enum yetty_yterm_ydraw_layer_kind {
     YETTY_YDRAW_LAYER_KIND_SCROLLING,
     YETTY_YDRAW_LAYER_KIND_STATIC,
 };
 
-struct yetty_yterm_terminal_layer_result yetty_yterm_ypaint_layer_create(
-    enum yetty_yterm_ypaint_layer_kind kind, uint32_t cols, uint32_t rows,
+struct yetty_yterm_terminal_layer_result yetty_yterm_ydraw_layer_create(
+    enum yetty_yterm_ydraw_layer_kind kind, uint32_t cols, uint32_t rows,
     float cell_width, float cell_height,
     const struct yetty_context *context, yetty_yterm_request_render_fn request_render_fn,
     void *request_render_userdata, yetty_yterm_scroll_fn scroll_fn, void *scroll_userdata,
@@ -37,4 +37,4 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ypaint_layer_create(
 }
 #endif
 
-#endif /* YETTY_YTERM_YPAINT_LAYER_H */
+#endif /* YETTY_YTERM_YDRAW_LAYER_H */

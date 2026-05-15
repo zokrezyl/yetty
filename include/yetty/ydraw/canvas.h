@@ -1,7 +1,7 @@
-/* canvas.h — polymorphic ypaint canvas interface.
+/* canvas.h — polymorphic ydraw canvas interface.
  *
  * `struct yetty_ydraw_canvas` is the polymorphic base for both
- * scrolling-canvas (terminal text/ypaint layer) and static-canvas (yui
+ * scrolling-canvas (terminal text/ydraw layer) and static-canvas (yui
  * chrome). It carries a vtable and the state shared between both
  * variants (grid + cell size, font cache, flyweight registry,
  * complex-prim factory, GPU staging buffers, dirty flag).

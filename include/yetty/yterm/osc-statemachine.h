@@ -24,7 +24,7 @@
  * boundary. The SM keeps current_layer + scan position + decode state
  * across calls; the next process() cycle re-dispatches the same layer
  * and the layer resumes pulling bytes seamlessly. This is what enables
- * scroll-yielding in ypaint-layer.
+ * scroll-yielding in ydraw-layer.
  */
 #ifndef YETTY_YTERM_OSC_STATEMACHINE_H
 #define YETTY_YTERM_OSC_STATEMACHINE_H
@@ -132,7 +132,7 @@ struct yetty_ycore_size_result yetty_yterm_osc_statemachine_read(
  *
  * Args are tiny by protocol (e.g. yetty_yface_bin_meta is 32 B), so
  * the SM holds them in a small fixed buffer and exposes a pointer
- * view. Used by ypaint-layer / ymgui-layer to read meta headers.
+ * view. Used by ydraw-layer / ymgui-layer to read meta headers.
  */
 struct yetty_yterm_osc_statemachine_args {
     const uint8_t *bytes;
@@ -153,10 +153,10 @@ int yetty_yterm_osc_statemachine_at_end(
     const struct yetty_yterm_osc_statemachine *osc_statemachine);
 
 /*
- * Return the OSC code (e.g. 600001 for ypaint BIN) of the envelope
+ * Return the OSC code (e.g. 600001 for ydraw BIN) of the envelope
  * currently being dispatched. 0 outside any OSC dispatch.
  *
- * Used by layers that own multiple codes — ypaint-layer is registered
+ * Used by layers that own multiple codes — ydraw-layer is registered
  * for CLEAR/BIN/YAML/OVERLAY and dispatches by this value.
  */
 int yetty_yterm_osc_statemachine_code(

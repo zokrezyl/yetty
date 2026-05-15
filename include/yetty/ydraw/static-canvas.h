@@ -1,4 +1,4 @@
-/* static-canvas.h — public API for the static (non-scrolling) ypaint canvas.
+/* static-canvas.h — public API for the static (non-scrolling) ydraw canvas.
  *
  * Viewport fixed, prims that don't fit are discarded. Used by yui chrome
  * (popups, dialogs, statusbar). Cursor pinned at (0,0); rolling_row_0

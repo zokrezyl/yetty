@@ -14,11 +14,11 @@ set(MODULE_SHADERS
     ${YETTY_ROOT}/src/yetty/yfont/ms-msdf-font.wgsl
     ${YETTY_ROOT}/src/yetty/yfont/msdf-font.wgsl
     ${YETTY_ROOT}/src/yetty/yterm/text-layer.wgsl
-    ${YETTY_ROOT}/src/yetty/yterm/ypaint-layer.wgsl
+    ${YETTY_ROOT}/src/yetty/yterm/ydraw-layer.wgsl
     ${YETTY_ROOT}/src/yetty/yterm/shader-glyph-layer.wgsl
     ${YETTY_ROOT}/src/yetty/yrender/blend.wgsl
     # Generated SDF dispatcher + sdf_* functions (gen-sdf-code.py output).
-    # ypaint-layer attaches it as a child resource set at runtime; merging
+    # ydraw-layer attaches it as a child resource set at runtime; merging
     # happens in the binder so the WGSL needs to be staged alongside the
     # other module shaders. Keep this in sync with the file(COPY) in
     # build-tools/yetty/targets/shared.cmake which seeds embed-data.

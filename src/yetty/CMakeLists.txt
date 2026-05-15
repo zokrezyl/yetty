@@ -130,10 +130,6 @@ if(YETTY_ENABLE_FEATURE_YCAT)
     endif()
 endif()
 
-if(YETTY_ENABLE_FEATURE_YDRAW)
-    add_subdirectory(ydraw)
-endif()
-
 if(YETTY_ENABLE_FEATURE_YRICH)
     add_subdirectory(yrich)
 endif()

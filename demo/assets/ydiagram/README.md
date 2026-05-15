@@ -40,11 +40,11 @@ The `ydiagram` CLI (`tools/ydiagram/`) has three output modes:
 ./build-desktop-ytrace-release/tools/ydiagram/ydiagram \
     demo/assets/ydiagram/state-machine.mmd
 
-# --osc: emit OSC envelope into a running yetty ypaint pane.
+# --osc: emit OSC envelope into a running yetty ydraw pane.
 ./build-desktop-ytrace-release/tools/ydiagram/ydiagram --osc \
     demo/assets/ydiagram/state-machine.mmd
 
-# -o: dump the raw ypaint buffer for inspection / piping.
+# -o: dump the raw ydraw buffer for inspection / piping.
 ./build-desktop-ytrace-release/tools/ydiagram/ydiagram \
     -o tmp/state-machine.ybin \
     demo/assets/ydiagram/state-machine.mmd

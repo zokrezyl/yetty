@@ -232,7 +232,7 @@ struct yetty_ycore_void_result yetty_ylexbor_box_build(struct yetty_ylexbor *r);
 struct yetty_ycore_void_result yetty_ylexbor_layout(struct yetty_ylexbor *r);
 
 /* ===========================================================================
- * paint (ylexbor-paint.c) — emit ypaint prims into the caller's buffer.
+ * paint (ylexbor-paint.c) — emit ydraw prims into the caller's buffer.
  * ===========================================================================*/
 struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                                                    struct yetty_ydraw_core_buffer *buf);

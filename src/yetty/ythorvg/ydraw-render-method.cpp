@@ -4,7 +4,7 @@
 
 #include "ydraw-render-method.hpp"
 
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/buffer.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -87,7 +87,7 @@ namespace yetty::ythorvg {
 // Constructor/Destructor
 //=============================================================================
 
-YDrawRenderMethod::YDrawRenderMethod(yetty_ypaint_core_buffer* buffer)
+YDrawRenderMethod::YDrawRenderMethod(yetty_ydraw_core_buffer* buffer)
     : _buffer(buffer) {}
 
 YDrawRenderMethod::~YDrawRenderMethod() {
@@ -115,7 +115,7 @@ bool YDrawRenderMethod::postUpdate() {
 }
 
 bool YDrawRenderMethod::preRender() {
-    if (_buffer) { yetty_ypaint_core_buffer_clear(_buffer);
+    if (_buffer) { yetty_ydraw_core_buffer_clear(_buffer);
 }
     _nextPrimId = 0;
     return true;
@@ -126,7 +126,7 @@ bool YDrawRenderMethod::postRender() {
 }
 
 bool YDrawRenderMethod::clear() {
-    if (_buffer) { yetty_ypaint_core_buffer_clear(_buffer);
+    if (_buffer) { yetty_ydraw_core_buffer_clear(_buffer);
 }
     _nextPrimId = 0;
     return true;
@@ -290,7 +290,7 @@ bool YDrawRenderMethod::renderImage(tvg::RenderData data) {
     }
 
     // Image rendering not yet implemented — new yetty image pipeline lives
-    // in ypaint complex primitives; wiring is a separate task.
+    // in ydraw complex primitives; wiring is a separate task.
     ywarn("YDrawRenderMethod::renderImage: not yet implemented");
     return true;
 }
@@ -448,7 +448,7 @@ uint32_t YDrawRenderMethod::rgbaToPackedABGR(uint8_t r, uint8_t g, uint8_t b, ui
 //=============================================================================
 // Mesh polygon emission
 //
-// The new ypaint core has no mesh_polygon primitive, so we approximate:
+// The new ydraw core has no mesh_polygon primitive, so we approximate:
 //   - fill: fan-triangulation from vertex[0] (exact for convex, approximate
 //     for concave — acceptable for SVG shape-detection fallbacks)
 //   - stroke: one SDF segment per edge
@@ -904,7 +904,7 @@ void YDrawRenderMethod::renderPath(YDrawRenderData* rd) {
                 auto cp2 = transformPoint(pts[ptIdx++], m);
                 auto end = transformPoint(pts[ptIdx++], m);
 
-                // No bezier SDF primitive in ypaint core — flatten to segments.
+                // No bezier SDF primitive in ydraw core — flatten to segments.
                 // TODO: dashed beziers would need per-segment dash state; for
                 // now the flattened segments are emitted solid.
                 std::vector<float> flat;
@@ -1052,7 +1052,7 @@ bool YDrawRenderMethod::tryRenderAsGradientBox(YDrawRenderData* rd) {
     if (!extractGradientInfo(rd, isLinear, gx1, gy1, gx2, gy2, gcx, gcy, gr, gradColor1, gradColor2)) {
         return false;
     }
-    (void)gradColor2;  // ypaint core has no gradient SDF yet — only first stop used.
+    (void)gradColor2;  // ydraw core has no gradient SDF yet — only first stop used.
 
     float minX = 1e10f, minY = 1e10f, maxX = -1e10f, maxY = -1e10f;
     for (size_t i = 0; i < std::min(pts.size(), size_t(4)); ++i) {
@@ -1071,7 +1071,7 @@ bool YDrawRenderMethod::tryRenderAsGradientBox(YDrawRenderData* rd) {
     uint8_t strokeA = static_cast<uint8_t>((rd->strokeA * rd->opacity) / 255);
     uint32_t strokeColor = (strokeA > 0) ? rgbaToPackedABGR(rd->strokeR, rd->strokeG, rd->strokeB, strokeA) : 0;
 
-    // Fallback: ypaint core currently has no gradient primitives. Emit a solid
+    // Fallback: ydraw core currently has no gradient primitives. Emit a solid
     // shape using the first color stop — geometry is preserved, gradient is
     // flattened. Replace with a proper gradient SDF when available.
     if (isLinear) {

@@ -1,4 +1,4 @@
-// YPaint Buffer - primitive buffer for ypaint
+// YPaint Buffer - primitive buffer for ydraw
 // Pure data container, struct is public for direct field access
 
 #pragma once
@@ -34,9 +34,9 @@ YETTY_ANNOT_CALLER_OWNED
 struct yetty_ydraw_core_buffer_result yetty_ydraw_core_buffer_config_buffer_create(
     const struct yetty_ydraw_core_buffer_config *config YETTY_ANNOT_NULLABLE);
 
-/* Build a ypaint buffer directly from already-decoded raw bytes (bare
+/* Build a ydraw buffer directly from already-decoded raw bytes (bare
  * primitive stream OR magic-tagged framed payload). Used by callers that
- * have done their own decompression / decoding (e.g. the ypaint-layer's
+ * have done their own decompression / decoding (e.g. the ydraw-layer's
  * yface-driven path: base64 + LZ4F decompression happens upstream, the
  * decompressed bytes land here). */
 YETTY_ANNOT_CALLER_OWNED

@@ -2,7 +2,7 @@
  * Demo 23: tabbar + rich (YAML).
  *
  * Three tabs, each populated with a rich widget whose content is parsed
- * from an inline ypaint YAML string:
+ * from an inline ydraw YAML string:
  *   - "Text"  — heading + body span (mixed font sizes / colors)
  *   - "Plot"  — sin(x) / cos(x) over [-pi, pi]
  *   - "Shapes" — a couple of SDF primitives, exercises the translator
@@ -66,7 +66,7 @@ static const char *YAML_TEXT =
     "      color: \"#cccccc\"\n"
     "  - text:\n"
     "      position: [16, 115]\n"
-    "      content: \"holds a ypaint-core buffer; the engine translates its\"\n"
+    "      content: \"holds a ydraw-core buffer; the engine translates its\"\n"
     "      font-size: 16\n"
     "      color: \"#cccccc\"\n"
     "  - text:\n"

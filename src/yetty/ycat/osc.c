@@ -1,7 +1,7 @@
 /*
- * osc.c - OSC envelope writer for ypaint binary buffers.
+ * osc.c - OSC envelope writer for ydraw binary buffers.
  *
- * Wire format (consumed by yterm/ypaint-layer.c):
+ * Wire format (consumed by yterm/ydraw-layer.c):
  *   ESC ] 600001 ; <b64(yetty_yface_bin_meta)> ; <base64(LZ4F(payload))> ESC \
  *
  * The payload is the magic-tagged blob produced by
@@ -14,7 +14,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/ydraw-core/buffer.h>
 #include <yetty/ycore/types.h>
-#include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YPAINT_BIN */
+#include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YDRAW_BIN */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,7 +43,7 @@ struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(
     };
     struct yetty_ycore_buffer envelope = {0};
     struct yetty_ycore_void_result r =
-        yetty_yface_emit(YETTY_OSC_YPAINT_BIN, /*compressed=*/1, &meta, sizeof(meta), raw_bytes,
+        yetty_yface_emit(YETTY_OSC_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw_bytes,
                          raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);

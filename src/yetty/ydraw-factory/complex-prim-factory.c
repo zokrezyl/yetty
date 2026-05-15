@@ -146,7 +146,7 @@ yetty_ydraw_core_complex_prim_factory_create_instance(
 }
 
 //=============================================================================
-// Visual zoom fan-out — called by ypaint-layer when the visual zoom changes.
+// Visual zoom fan-out — called by ydraw-layer when the visual zoom changes.
 // Each concrete factory writes the scale/offsets into its own shared uniforms
 // so its fragment shader can transform the incoming pixel at fs_main entry.
 //=============================================================================

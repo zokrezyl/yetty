@@ -77,7 +77,7 @@ struct yetty_ydraw_core_buffer_result yetty_yimage_render(
         yetty_ydraw_core_buffer_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         free(prim_buf);
-        return YETTY_ERR(yetty_ydraw_core_buffer, "yimage: ypaint buffer create failed", br);
+        return YETTY_ERR(yetty_ydraw_core_buffer, "yimage: ydraw buffer create failed", br);
     }
 
     struct yetty_ydraw_core_id_result idr =
@@ -85,7 +85,7 @@ struct yetty_ydraw_core_buffer_result yetty_yimage_render(
     free(prim_buf);
     if (YETTY_IS_ERR(idr)) {
         yetty_ydraw_core_buffer_destroy(br.value);
-        return YETTY_ERR(yetty_ydraw_core_buffer, "yimage: ypaint add_prim failed", idr);
+        return YETTY_ERR(yetty_ydraw_core_buffer, "yimage: ydraw add_prim failed", idr);
     }
 
     return YETTY_OK(yetty_ydraw_core_buffer, br.value);
@@ -152,7 +152,7 @@ struct yetty_ycore_size_result yetty_yimage_osc_bin_emit(
     };
     struct yetty_ycore_buffer envelope = {0};
     struct yetty_ycore_void_result r = yetty_yface_emit(
-        YETTY_OSC_YPAINT_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
+        YETTY_OSC_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
         return YETTY_ERR(yetty_ycore_size, "yimage_osc_bin_emit: yface_emit failed", r);

@@ -1,13 +1,13 @@
 /*
- * ycat - cat with MIME-dispatched ypaint rendering.
+ * ycat - cat with MIME-dispatched ydraw rendering.
  *
  * For each positional input (file path, or "-" for stdin):
  *   1. read the bytes
  *   2. detect the type via libmagic + extension
- *   3. dispatch to a handler that returns a ypaint-core buffer (markdown,
+ *   3. dispatch to a handler that returns a ydraw-core buffer (markdown,
  *      PDF for now — registry is open for more)
  *   4. emit an OSC 666674 sequence to stdout carrying the base64-encoded
- *      ypaint primitive bytes (consumed by the ypaint scrolling layer)
+ *      ydraw primitive bytes (consumed by the ydraw scrolling layer)
  *
  * If the handler dispatch yields no buffer (TEXT / UNKNOWN) the bytes are
  * streamed through unchanged. --raw forces pass-through regardless.
@@ -87,7 +87,7 @@ static void usage(FILE *out, const char *prog)
 		"\n"
 		"    flags       │ in yetty                    │ non-yetty\n"
 		"    ────────────┼─────────────────────────────┼─────────────\n"
-		"    (none)      │ ypaint handler → OSC,       │ tree-sitter\n"
+		"    (none)      │ ydraw handler → OSC,       │ tree-sitter\n"
 		"                │  else ts → OSC, else raw    │  → SGR, else raw\n"
 		"    --raw       │ raw bytes                   │ raw bytes\n"
 		"    --ts        │ ts → OSC                    │ ts → SGR\n"
@@ -227,7 +227,7 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
 	 *
 	 *   flags          │ in yetty                     │ non-yetty
 	 *   ───────────────┼──────────────────────────────┼──────────────
-	 *   (none)         │ ypaint handler → OSC;         │ ts → SGR;
+	 *   (none)         │ ydraw handler → OSC;         │ ts → SGR;
 	 *                  │  else ts → OSC;               │  else raw.
 	 *                  │  else raw.                    │
 	 *   --raw          │ raw bytes                    │ raw bytes
@@ -311,7 +311,7 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
 		type = yetty_ycat_detect(buf.data, buf.len, path_hint);
 	}
 
-	/* Inside a yetty terminal: try the dedicated ypaint handler first,
+	/* Inside a yetty terminal: try the dedicated ydraw handler first,
 	 * then ts → OSC, then raw. */
 	if (in_yetty) {
 		yetty_ycat_handler_fn fn = yetty_ycat_get_handler(type);
@@ -331,7 +331,7 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
 				return em_r.value > 0 ? 0 : -1;
 			}
 			fprintf(stderr,
-				"ycat: %s: ypaint handler failed (%s), trying tree-sitter\n",
+				"ycat: %s: ydraw handler failed (%s), trying tree-sitter\n",
 				arg, r.error.msg);
 		}
 		if (grammar) {

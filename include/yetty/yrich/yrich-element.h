@@ -35,7 +35,7 @@ YETTY_YRESULT_DECLARE(yetty_yrich_element_ptr, struct yetty_yrich_element *);
  * destroy:       free the element (handles NULL, cascades to children)
  * bounds:        axis-aligned bounding box
  * hit_test:      point-in-element test (default uses bounds)
- * render:        emit ypaint primitives at the given base layer
+ * render:        emit ydraw primitives at the given base layer
  * is_editable:   element supports text/edit operations
  * begin_edit:    enter edit mode
  * end_edit:      leave edit mode

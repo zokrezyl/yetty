@@ -2,13 +2,13 @@
 #define YETTY_YTHORVG_H
 
 /*
- * ythorvg - ThorVG SVG/Lottie renderer emitting into a ypaint core buffer.
+ * ythorvg - ThorVG SVG/Lottie renderer emitting into a ydraw core buffer.
  *
  * Wraps a C++ tvg::RenderMethod whose shape/image prepare+render paths are
  * mapped to yetty_ysdf_add_* primitives written into a
- * yetty_ypaint_core_buffer. The C++ implementation is ported from
+ * yetty_ydraw_core_buffer. The C++ implementation is ported from
  * yetty-poc's src/yetty/ythorvg with YDrawBuffer calls replaced by
- * ypaint/ysdf buffer calls.
+ * ydraw/ysdf buffer calls.
  *
  * Engine init/term is reference-counted; create/destroy pairs handle it.
  */
@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-struct yetty_ypaint_core_buffer;
+struct yetty_ydraw_core_buffer;
 struct yetty_ythorvg_renderer;
 
 YETTY_YRESULT_DECLARE(yetty_ythorvg_renderer_ptr, struct yetty_ythorvg_renderer *);
@@ -30,7 +30,7 @@ YETTY_YRESULT_DECLARE(yetty_ythorvg_renderer_ptr, struct yetty_ythorvg_renderer 
  * the renderer; the renderer does NOT take ownership. Initializes the ThorVG
  * engine on first call (ref-counted). */
 struct yetty_ythorvg_renderer_ptr_result yetty_ythorvg_renderer_create(
-    struct yetty_ypaint_core_buffer *buf);
+    struct yetty_ydraw_core_buffer *buf);
 
 /* Destroy renderer. NULL-safe. Decrements engine ref count; calls
  * tvg::Initializer::term() when the last renderer is destroyed. */

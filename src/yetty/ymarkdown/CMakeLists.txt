@@ -1,4 +1,4 @@
-# ymarkdown - Markdown → ypaint buffer rendering
+# ymarkdown - Markdown → ydraw buffer rendering
 add_library(yetty_ymarkdown STATIC
     ymarkdown.c
 )

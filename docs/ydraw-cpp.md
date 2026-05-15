@@ -112,7 +112,7 @@ circles.sh
            └── Glyph data at painter->gpuGlyphOffset()
            │
            ▼
-    Shader: 0x0004-ypaint.wgsl
+    Shader: 0x0004-ydraw.wgsl
            │
            ├── Read from cardStorage using painter offsets
            ├── Lookup cell from pixel position
@@ -697,20 +697,20 @@ struct YPaintMetadata {
 
 ### TODO
 
-- [ ] Fix gen-ypaint-types.py to read ypaint-primitives.yaml
+- [ ] Fix gen-ydraw-types.py to read ydraw-primitives.yaml
 - [ ] Generate evaluateSDF from YAML
 - [ ] Generate primitive size lookup map
 - [ ] Delete hand-written evaluateSDF from distfunctions.wgsl
 - [ ] Debug why demos don't work (trace OSC path)
-- [ ] Unify or clearly separate ydraw/ypaint primitive IDs
+- [ ] Unify or clearly separate ydraw/ydraw primitive IDs
 
 ## Known Issues
 
 ### 1. Broken Code Generator
 
-`gen-ypaint-types.py` is a non-functional copy of `gen-ydraw-types.py`:
-- Line 26 reads `ydraw-primitives.yaml` which doesn't exist in ypaint directory
-- No generated files for ypaint primitives
+`gen-ydraw-types.py` is a non-functional copy of `gen-ydraw-types.py`:
+- Line 26 reads `ydraw-primitives.yaml` which doesn't exist in ydraw directory
+- No generated files for ydraw primitives
 
 ### 2. Hand-Written evaluateSDF Misalignment
 
@@ -735,7 +735,7 @@ Meanwhile, `gen-ydraw-types.py` generates `evalSDF()` (different function!) with
 
 ### 3. Primitive ID Conflicts
 
-| Primitive | ydraw ID | ypaint ID |
+| Primitive | ydraw ID | ydraw ID |
 |-----------|----------|-----------|
 | Circle    | 0        | 1         |
 | Box       | 1        | 2         |
@@ -776,7 +776,7 @@ uint16_t primMaxRow = _scrollingMode ? (_cursorRow + localMaxRow) : localMaxRow;
 ```
 
 **Problem:** `_cursorRow` is in **terminal cell units** (e.g., row 3 = terminal line 3), while
-`localMinRow/MaxRow` are computed using **ypaint cell size** (e.g., sceneHeight/10). These are
+`localMinRow/MaxRow` are computed using **ydraw cell size** (e.g., sceneHeight/10). These are
 completely different coordinate systems being added together.
 
 **Example with shapes.sh:**
@@ -799,8 +799,8 @@ The shader looks up grid cell at row **1**, but the primitive is stored at rows 
 
 #### 3. Required Fix
 
-In scrolling mode, the ypaint cell size MUST equal the terminal cell size so that:
-- `_cursorRow` (terminal rows) and `localMinRow` (ypaint grid rows) are in the same units
+In scrolling mode, the ydraw cell size MUST equal the terminal cell size so that:
+- `_cursorRow` (terminal rows) and `localMinRow` (ydraw grid rows) are in the same units
 - Grid lookup in shader matches where primitives are stored in canvas
 
 Alternatively, don't add `_cursorRow` to grid indices at all - let the gridOffset in the

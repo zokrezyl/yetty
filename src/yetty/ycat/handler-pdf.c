@@ -1,5 +1,5 @@
 /*
- * handler-pdf.c - PDF → ypaint buffer.
+ * handler-pdf.c - PDF → ydraw buffer.
  *
  * pdfio only opens PDFs from a filename. When we already have a path_hint
  * we pass it straight through. When bytes come from stdin / URL we spill

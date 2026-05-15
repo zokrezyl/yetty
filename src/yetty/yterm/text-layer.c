@@ -378,7 +378,7 @@ static void sb_arena_drop_newest(struct yetty_yterm_text_sb_arena *a)
 
 /* Read cols cells from the ring at byte offset into dst, handling wrap.
  * Defensive: garbage line records (uninit/stale) have shown up under heavy
- * ypaint scrollback. Bail with a loud yerror rather than memcpy from a
+ * ydraw scrollback. Bail with a loud yerror rather than memcpy from a
  * bogus pointer — the caller has already filled dst with blank if needed. */
 static void sb_arena_read(const struct yetty_yterm_text_sb_arena *a, size_t offset, int cols,
                           VTermScreenCell *dst)
@@ -506,9 +506,9 @@ static int sb_arena_pop(struct yetty_yterm_text_sb_arena *a, VTermScreenCell *ds
     return n;
 }
 
-/* Append a synthetic blank scrollback line — used when ypaint asks to
+/* Append a synthetic blank scrollback line — used when ydraw asks to
  * scroll more lines than the live screen contains. Without this we'd
- * desync from ypaint's rolling_row_0 (which counts every row of unified
+ * desync from ydraw's rolling_row_0 (which counts every row of unified
  * scroll history, including space the text screen never had content in). */
 static void push_blank_sb_line(struct yetty_yterm_terminal_text_layer *layer, int cols)
 {
@@ -530,11 +530,11 @@ static void push_blank_sb_line(struct yetty_yterm_terminal_text_layer *layer, in
     }
 }
 
-/* Receive scroll from other layers (e.g., ypaint).
+/* Receive scroll from other layers (e.g., ydraw).
  *
  * libvterm's vterm_scroll_rect() takes a fast path when |downward| >= rows:
  * it just erases the screen and skips the per-row moverect machinery, so
- * sb_pushline never fires. That fast path desyncs us from ypaint's
+ * sb_pushline never fires. That fast path desyncs us from ydraw's
  * rolling_row_0 — every row of unified scroll history must add exactly one
  * entry to sb_lines, even when the text screen had no content for it.
  *
@@ -586,7 +586,7 @@ static struct yetty_ycore_void_result text_layer_scroll(struct yetty_yrender_ter
     return YETTY_OK_VOID();
 }
 
-/* Receive cursor position from other layers (e.g., ypaint) */
+/* Receive cursor position from other layers (e.g., ydraw) */
 static struct yetty_ycore_void_result text_layer_set_cursor(
     struct yetty_yrender_terminal_layer *self, int col, int row)
 {

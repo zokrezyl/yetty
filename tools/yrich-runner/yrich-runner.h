@@ -4,13 +4,13 @@
 /*
  * yrich-runner — interactive driver for yrich documents.
  *
- * Renders a yetty_yrich_document to a ypaint buffer and emits it on stdout
- * as OSC 666674 (the canvas sink consumed by yetty's ypaint-layer). There is
+ * Renders a yetty_yrich_document to a ydraw buffer and emits it on stdout
+ * as OSC 666674 (the canvas sink consumed by yetty's ydraw-layer). There is
  * no card abstraction — the document IS the canvas.
  *
  * Output protocol (matches src/yetty/ygui/ygui_osc.c):
  *   \033]666674;--clear\033\\          — empty the canvas
- *   \033]666674;--bin;<base64>\033\\   — push a fresh ypaint buffer
+ *   \033]666674;--bin;<base64>\033\\   — push a fresh ydraw buffer
  *
  * Input protocol:
  *   OSC 777777 — mouse click       (buttons;press;x;y)

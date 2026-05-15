@@ -2,7 +2,7 @@
 #define YETTY_YMARKDOWN_YMARKDOWN_H
 
 /*
- * ymarkdown - render markdown text into a ypaint buffer.
+ * ymarkdown - render markdown text into a ydraw buffer.
  *
  * The renderer:
  *   - parses headers (#..######), inline bold (**..**), italic (*..*),

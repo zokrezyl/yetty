@@ -2,7 +2,7 @@
  * ypdf render smoke test.
  *
  * Loads test-comprehensive.pdf (3 pages) through yetty_ypdf_render_pdf and
- * validates the resulting ypaint buffer:
+ * validates the resulting ydraw buffer:
  *   - pages are counted correctly
  *   - scene bounds reflect the accumulated page heights
  *   - at least one FONT prim was emitted (test PDF embeds fonts)

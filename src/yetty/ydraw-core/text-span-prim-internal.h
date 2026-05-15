@@ -1,6 +1,6 @@
-/* text-span-prim — module-internal declarations (ypaint-core only).
+/* text-span-prim — module-internal declarations (ydraw-core only).
  *
- * These functions are called only from within the ypaint-core module
+ * These functions are called only from within the ydraw-core module
  * (text-span-prim.c implementation, buffer.c packing wrappers). The public
  * surface (parse, view struct, type id, handler) lives in
  * include/yetty/ydraw-core/text-span-prim.h.

@@ -3,7 +3,7 @@
 
 /*
  * yecho - text with embedded glyphs and styled blocks, rendered to a
- * ypaint-core buffer (client-side only — yecho never runs in yetty's
+ * ydraw-core buffer (client-side only — yecho never runs in yetty's
  * process).
  *
  * Grammar:
@@ -38,7 +38,7 @@
  * The library emits a yetty_ydraw_core_buffer (text spans for runs of
  * UTF-8 text, SDF box primitives for backgrounds). The frontend tool
  * wraps that buffer in the same OSC envelope ycat uses
- * (YETTY_OSC_YPAINT_BIN — see yetty_yecho_osc_bin_emit).
+ * (YETTY_OSC_YDRAW_BIN — see yetty_yecho_osc_bin_emit).
  */
 
 #include <stddef.h>
@@ -112,7 +112,7 @@ size_t yetty_yecho_doc_error_count(const struct yetty_yecho_doc *doc);
 const char *yetty_yecho_doc_error(const struct yetty_yecho_doc *doc, size_t idx);
 
 /*=============================================================================
- * Rendering — produce a ypaint-core buffer
+ * Rendering — produce a ydraw-core buffer
  *===========================================================================*/
 
 struct yetty_yecho_render_config {
@@ -129,7 +129,7 @@ struct yetty_yecho_render_config {
     float line_spacing;
 };
 
-/* Render `doc` into a fresh ypaint-core buffer. Caller frees with
+/* Render `doc` into a fresh ydraw-core buffer. Caller frees with
  * yetty_ydraw_core_buffer_destroy. */
 struct yetty_ydraw_core_buffer_result yetty_yecho_render(
     const struct yetty_yecho_doc *doc, const struct yetty_yecho_render_config *config);
@@ -139,7 +139,7 @@ struct yetty_ydraw_core_buffer_result yetty_yecho_render_string(
     const char *input, size_t len, const struct yetty_yecho_render_config *config);
 
 /*=============================================================================
- * OSC emission — wraps a ypaint buffer in a YETTY_OSC_YPAINT_BIN envelope
+ * OSC emission — wraps a ydraw buffer in a YETTY_OSC_YDRAW_BIN envelope
  * (same wire format as yetty_ycat_osc_bin_emit). Returns bytes written on
  * success.
  *===========================================================================*/
