@@ -17,7 +17,7 @@ extern "C" {
 struct yetty_yterm_terminal;
 struct yetty_yrender_terminal_layer;
 struct yetty_yterm_terminal_layer_ops;
-struct yetty_yterm_osc_statemachine;
+struct yetty_ywire_wire_statemachine;
 struct yetty_yevent_event_loop;
 struct yetty_platform_pty;
 struct yetty_yui_view;
@@ -85,16 +85,16 @@ struct yetty_yterm_terminal_layer_ops {
    * bytes via osc_statemachine_read and runs its own framing on top.
    * Accessors usable inside this call:
    *
-   *   - yetty_yterm_osc_statemachine_read(osc_statemachine, dst, n)
+   *   - yetty_ywire_wire_statemachine_read(osc_statemachine, dst, n)
    *       — copy up to n DECODED bytes (b64+lz4 already applied for
    *         payloads; passthrough for raw); returns count copied.
-   *   - yetty_yterm_osc_statemachine_at_end(osc_statemachine)
+   *   - yetty_ywire_wire_statemachine_at_end(osc_statemachine)
    *       — true once the framer reached the envelope terminator;
    *         read() returns 0 forever in this dispatch.
-   *   - yetty_yterm_osc_statemachine_code(osc_statemachine)
+   *   - yetty_ywire_wire_statemachine_code(osc_statemachine)
    *       — 0 for the default sink, the OSC code for an envelope
    *         dispatch (e.g. 600001 = ydraw BIN).
-   *   - yetty_yterm_osc_statemachine_args(osc_statemachine)
+   *   - yetty_ywire_wire_statemachine_args(osc_statemachine)
    *       — decoded args view (envelope dispatch only).
    *
    * The layer may return early at any byte boundary; the SM keeps
@@ -103,7 +103,7 @@ struct yetty_yterm_terminal_layer_ops {
    */
     struct yetty_ycore_void_result (*process_input)(
         struct yetty_yrender_terminal_layer *self,
-        struct yetty_yterm_osc_statemachine *osc_statemachine);
+        struct yetty_ywire_wire_statemachine *osc_statemachine);
     struct yetty_ycore_void_result (*resize_grid)(struct yetty_yrender_terminal_layer *self,
                                                   struct yetty_ycore_grid_size grid_size);
     /* Change the layer's cell pixel size. Implementations must also push the

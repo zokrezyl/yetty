@@ -47,7 +47,7 @@ struct memory_pty_endpoint {
 };
 
 /*===========================================================================
- * Ring helpers (same shape as osc-statemachine's ring: monotonic positions,
+ * Ring helpers (same shape as wire-statemachine's ring: monotonic positions,
  * mask on access, power-of-2 cap).
  *===========================================================================*/
 

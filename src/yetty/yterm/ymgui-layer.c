@@ -36,7 +36,7 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yface/yface.h>
-#include <yetty/yterm/osc-statemachine.h>
+#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterm/osc-args.h>
@@ -151,7 +151,7 @@ struct yetty_yterm_ymgui_layer {
 static struct yetty_ycore_void_result ymgui_destroy(struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result ymgui_process_input(
     struct yetty_yrender_terminal_layer *self,
-    struct yetty_yterm_osc_statemachine *osc_statemachine);
+    struct yetty_ywire_wire_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result ymgui_resize_grid(struct yetty_yrender_terminal_layer *self,
                                                         struct yetty_ycore_grid_size gs);
 static struct yetty_ycore_void_result ymgui_set_cell_size(struct yetty_yrender_terminal_layer *self,
@@ -971,12 +971,12 @@ static struct yetty_ycore_void_result ymgui_dispatch_atomic(
 
 static struct yetty_ycore_void_result ymgui_process_input(
     struct yetty_yrender_terminal_layer *self,
-    struct yetty_yterm_osc_statemachine *osc_statemachine)
+    struct yetty_ywire_wire_statemachine *osc_statemachine)
 {
     struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)self;
 
     if (!l->parse_active) {
-        l->parse_code = yetty_yterm_osc_statemachine_code(osc_statemachine);
+        l->parse_code = yetty_ywire_wire_statemachine_code(osc_statemachine);
         yetty_ycore_buffer_clear(&l->accum);
         l->parse_active = 1;
     }
@@ -984,7 +984,7 @@ static struct yetty_ycore_void_result ymgui_process_input(
     uint8_t buf[4096];
     for (;;) {
         struct yetty_ycore_size_result rr =
-            yetty_yterm_osc_statemachine_read(osc_statemachine, buf, sizeof(buf));
+            yetty_ywire_wire_statemachine_read(osc_statemachine, buf, sizeof(buf));
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ymgui: osc read");
         if (rr.value == 0) {
             break;
@@ -994,7 +994,7 @@ static struct yetty_ycore_void_result ymgui_process_input(
         YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "ymgui: accum write");
     }
 
-    if (!yetty_yterm_osc_statemachine_at_end(osc_statemachine)) {
+    if (!yetty_ywire_wire_statemachine_at_end(osc_statemachine)) {
         return YETTY_OK_VOID();
     }
 

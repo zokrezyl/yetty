@@ -5,7 +5,7 @@
 #include <yetty/ycore/util.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yface/yface.h>
-#include <yetty/yterm/osc-statemachine.h>
+#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/ydraw-core/complex-prim-types.h>
 #include <yetty/ydraw-factory/complex-prim-factory.h>
 #include <yetty/ydraw/canvas.h>
@@ -168,7 +168,7 @@ static struct yetty_ycore_void_result ydraw_layer_destroy(
     struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result ydraw_layer_process_input(
     struct yetty_yrender_terminal_layer *self,
-    struct yetty_yterm_osc_statemachine *osc_statemachine);
+    struct yetty_ywire_wire_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result ydraw_layer_resize_grid(
     struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size);
 static struct yetty_yrender_gpu_resource_set_result ydraw_layer_get_gpu_resource_set(
@@ -263,9 +263,9 @@ static struct yetty_ycore_void_result ydraw_layer_set_cell_size(
 
     /* Fan out to complex-prim factories so yplot and friends apply the
      * same transform in their own shaders. */
-    struct yetty_ydraw_core_complex_prim_factory *f =
-        yetty_ydraw_canvas_get_complex_prim_factory(layer->canvas);
-    yetty_ydraw_core_complex_prim_factory_set_cell_zoom(f, cz, 0.0f, 0.0f);
+    struct yetty_ydraw_core_figure_factory *f =
+        yetty_ydraw_canvas_get_figure_factory(layer->canvas);
+    yetty_ydraw_core_figure_factory_set_cell_zoom(f, cz, 0.0f, 0.0f);
 
     ydebug("ydraw_layer_set_cell_size: %.1fx%.1f cell_zoom=%.3f", cell_size.width,
            cell_size.height, cz);
@@ -284,9 +284,9 @@ static struct yetty_ycore_void_result ydraw_layer_set_visual_zoom(
      * ydraw-layer shader. Push the zoom into every concrete factory's shared
      * uniforms so each type's shader can apply the same transform. */
     if (layer->canvas) {
-        struct yetty_ydraw_core_complex_prim_factory *f =
-            yetty_ydraw_canvas_get_complex_prim_factory(layer->canvas);
-        yetty_ydraw_core_complex_prim_factory_set_visual_zoom(f, scale, off_x, off_y);
+        struct yetty_ydraw_core_figure_factory *f =
+            yetty_ydraw_canvas_get_figure_factory(layer->canvas);
+        yetty_ydraw_core_figure_factory_set_visual_zoom(f, scale, off_x, off_y);
     }
     return YETTY_OK_VOID();
 }
@@ -498,11 +498,11 @@ static struct yetty_ycore_void_result ydraw_layer_destroy(
  * YAML is no longer accepted on the wire — yaml is producer-side only. */
 static struct yetty_ycore_void_result ydraw_layer_process_input(
     struct yetty_yrender_terminal_layer *self,
-    struct yetty_yterm_osc_statemachine *osc_statemachine)
+    struct yetty_ywire_wire_statemachine *osc_statemachine)
 {
     struct yetty_yterm_ydraw_layer *layer = (struct yetty_yterm_ydraw_layer *)self;
 
-    int code = yetty_yterm_osc_statemachine_code(osc_statemachine);
+    int code = yetty_ywire_wire_statemachine_code(osc_statemachine);
     struct yetty_ycore_void_result r;
     switch (code) {
     case YETTY_OSC_YDRAW_CLEAR:
@@ -894,7 +894,7 @@ static struct yetty_ycore_void_result ydraw_layer_render(struct yetty_yrender_te
         return YETTY_OK_VOID();
     }
 
-    uint32_t count = yetty_ydraw_canvas_complex_prim_count(layer->canvas);
+    uint32_t count = yetty_ydraw_canvas_figure_count(layer->canvas);
     if (count == 0) {
         return YETTY_OK_VOID();
     }
@@ -904,8 +904,8 @@ static struct yetty_ycore_void_result ydraw_layer_render(struct yetty_yrender_te
         yetty_ydraw_canvas_cell_get_pixel_size(layer->canvas);
 
     for (uint32_t i = 0; i < count; i++) {
-        struct yetty_ydraw_core_complex_prim_instance *inst =
-            yetty_ydraw_canvas_get_complex_prim(layer->canvas, i);
+        struct yetty_ydraw_core_figure_instance *inst =
+            yetty_ydraw_canvas_get_figure(layer->canvas, i);
         if (!inst || !inst->render) {
             continue;
         }

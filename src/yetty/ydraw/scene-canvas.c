@@ -753,7 +753,7 @@ struct yetty_ycore_void_result yetty_ydraw_scene_entity_delete(
  *===========================================================================*/
 
 static struct yetty_ycore_void_result scene_process_input_impl(
-    struct yetty_ydraw_canvas *base, struct yetty_yterm_osc_statemachine *sm)
+    struct yetty_ydraw_canvas *base, struct yetty_ywire_wire_statemachine *sm)
 {
     (void)base;
     (void)sm;
@@ -817,13 +817,13 @@ static uint32_t scene_prim_gpu_size_impl(const struct yetty_ydraw_canvas *base)
     return base ? base->prim_staging_count * (uint32_t)sizeof(uint32_t) : 0;
 }
 
-static uint32_t scene_complex_prim_count_impl(const struct yetty_ydraw_canvas *base)
+static uint32_t scene_figure_count_impl(const struct yetty_ydraw_canvas *base)
 {
     (void)base;
     return 0;
 }
 
-static struct yetty_ydraw_core_complex_prim_instance *scene_get_complex_prim_impl(
+static struct yetty_ydraw_core_figure_instance *scene_get_figure_impl(
     const struct yetty_ydraw_canvas *base, uint32_t index)
 {
     (void)base;
@@ -899,8 +899,8 @@ static const struct yetty_ydraw_canvas_ops scene_canvas_ops = {
     .rebuild_grid        = scene_rebuild_grid_impl,
     .build_prim_staging  = scene_build_prim_staging_impl,
     .prim_gpu_size       = scene_prim_gpu_size_impl,
-    .complex_prim_count  = scene_complex_prim_count_impl,
-    .get_complex_prim    = scene_get_complex_prim_impl,
+    .figure_count  = scene_figure_count_impl,
+    .get_figure    = scene_get_figure_impl,
     .for_each_glyph      = scene_for_each_glyph_impl,
     .set_cursor_pos      = scene_set_cursor_pos_impl,
     .scroll_lines        = scene_scroll_lines_impl,

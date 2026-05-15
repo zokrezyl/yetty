@@ -14,7 +14,7 @@
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yterm/shader-glyph-layer.h>
-#include <yetty/yterm/osc-statemachine.h>
+#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yterm/text-layer.h>
 
 /* Uniform slots */
@@ -317,7 +317,7 @@ static struct yetty_ycore_void_result shader_glyph_destroy(
     struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result shader_glyph_process_input(
     struct yetty_yrender_terminal_layer *self,
-    struct yetty_yterm_osc_statemachine *osc_statemachine);
+    struct yetty_ywire_wire_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result shader_glyph_resize_grid(
     struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size);
 static struct yetty_ycore_void_result shader_glyph_set_cell_size(
@@ -518,7 +518,7 @@ static struct yetty_ycore_void_result shader_glyph_destroy(
 
 static struct yetty_ycore_void_result shader_glyph_process_input(
     struct yetty_yrender_terminal_layer *self,
-    struct yetty_yterm_osc_statemachine *osc_statemachine)
+    struct yetty_ywire_wire_statemachine *osc_statemachine)
 {
     (void)self;
     (void)osc_statemachine;

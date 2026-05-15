@@ -307,7 +307,7 @@ grid[row=7].add(prim_ref{lines_ahead=0, prim_index=0})
 
 **Complex primitives:**
 ```
-line[7].complex_prims.add(ptr)  // Only last overlapping line
+line[7].figures.add(ptr)  // Only last overlapping line
 ```
 
 Why simplified:

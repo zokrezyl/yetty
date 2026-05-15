@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 /* Get total size (reads FAM header) */
-size_t yetty_ydraw_core_complex_prim_size(const void *data);
+size_t yetty_ydraw_core_figure_size(const void *data);
 
 #ifdef __cplusplus
 }

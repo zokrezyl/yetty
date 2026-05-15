@@ -26,7 +26,7 @@
 #include <yetty/ydraw-core/prim-iter.h>
 #include <yetty/ydraw-core/text-span-prim.h>
 #include <yetty/ydraw/static-canvas.h>
-#include <yetty/yterm/osc-statemachine.h>
+#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/font-cache.h>
 #include <yetty/ysdf/types.gen.h>
@@ -271,28 +271,28 @@ static struct uint32_result static_canvas_add_primitive(
     }
 
     if (yetty_ydraw_core_is_complex_type(prim_type)) {
-        struct yetty_ydraw_core_complex_prim_instance_ptr_result inst_res =
-            yetty_ydraw_core_complex_prim_factory_create_instance(
-                canvas->base->complex_prim_factory, fw->data,
+        struct yetty_ydraw_core_figure_instance_ptr_result inst_res =
+            yetty_ydraw_core_figure_factory_create_instance(
+                canvas->base->figure_factory, fw->data,
                 word_count * sizeof(uint32_t), 0);
         if (YETTY_IS_ERR(inst_res)) {
             return YETTY_ERR(uint32, inst_res.error.msg);
         }
-        if (base_line->complex_prim_count >= base_line->complex_prim_capacity) {
-            uint32_t new_cap = base_line->complex_prim_capacity == 0
+        if (base_line->figure_count >= base_line->figure_capacity) {
+            uint32_t new_cap = base_line->figure_capacity == 0
                                    ? 4
-                                   : base_line->complex_prim_capacity * 2;
-            struct yetty_ydraw_core_complex_prim_instance **grown = realloc(
-                base_line->complex_prims,
-                new_cap * sizeof(struct yetty_ydraw_core_complex_prim_instance *));
+                                   : base_line->figure_capacity * 2;
+            struct yetty_ydraw_core_figure_instance **grown = realloc(
+                base_line->figures,
+                new_cap * sizeof(struct yetty_ydraw_core_figure_instance *));
             if (!grown) {
-                yetty_ydraw_core_complex_prim_instance_destroy(inst_res.value);
-                return YETTY_ERR(uint32, "realloc complex_prims failed");
+                yetty_ydraw_core_figure_instance_destroy(inst_res.value);
+                return YETTY_ERR(uint32, "realloc figures failed");
             }
-            base_line->complex_prims = grown;
-            base_line->complex_prim_capacity = new_cap;
+            base_line->figures = grown;
+            base_line->figure_capacity = new_cap;
         }
-        base_line->complex_prims[base_line->complex_prim_count++] = inst_res.value;
+        base_line->figures[base_line->figure_count++] = inst_res.value;
     }
 
     canvas->base->dirty = true;
@@ -819,29 +819,29 @@ static uint32_t yetty_ydraw_static_canvas_primitive_count(
     return count;
 }
 
-static uint32_t yetty_ydraw_static_canvas_complex_prim_count(
+static uint32_t yetty_ydraw_static_canvas_figure_count(
     struct yetty_ydraw_static_canvas *canvas)
 {
     if (!canvas) return 0;
     uint32_t count = 0;
     for (uint32_t i = 0; i < canvas->lines_count; i++) {
-        count += canvas->lines[i].complex_prim_count;
+        count += canvas->lines[i].figure_count;
     }
     return count;
 }
 
-static struct yetty_ydraw_core_complex_prim_instance *
-yetty_ydraw_static_canvas_get_complex_prim(struct yetty_ydraw_static_canvas *canvas,
+static struct yetty_ydraw_core_figure_instance *
+yetty_ydraw_static_canvas_get_figure(struct yetty_ydraw_static_canvas *canvas,
                                             uint32_t index)
 {
     if (!canvas) return NULL;
     uint32_t current = 0;
     for (uint32_t i = 0; i < canvas->lines_count; i++) {
         struct ydraw_canvas_grid_line *line = &canvas->lines[i];
-        if (index < current + line->complex_prim_count) {
-            return line->complex_prims[index - current];
+        if (index < current + line->figure_count) {
+            return line->figures[index - current];
         }
-        current += line->complex_prim_count;
+        current += line->figure_count;
     }
     return NULL;
 }
@@ -992,7 +992,7 @@ static void static_env_reset(struct yetty_ydraw_static_canvas *canvas)
 }
 
 static struct yetty_ycore_void_result static_process_input_impl(
-    struct yetty_ydraw_canvas *base, struct yetty_yterm_osc_statemachine *sm)
+    struct yetty_ydraw_canvas *base, struct yetty_ywire_wire_statemachine *sm)
 {
     struct yetty_ydraw_static_canvas *canvas = base->impl;
 
@@ -1069,16 +1069,16 @@ static uint32_t static_prim_gpu_size_impl(const struct yetty_ydraw_canvas *base)
     return base->prim_staging_count * (uint32_t)sizeof(uint32_t);
 }
 
-static uint32_t static_complex_prim_count_impl(const struct yetty_ydraw_canvas *base)
+static uint32_t static_figure_count_impl(const struct yetty_ydraw_canvas *base)
 {
-    return yetty_ydraw_static_canvas_complex_prim_count(
+    return yetty_ydraw_static_canvas_figure_count(
         (struct yetty_ydraw_static_canvas *)base->impl);
 }
 
-static struct yetty_ydraw_core_complex_prim_instance *static_get_complex_prim_impl(
+static struct yetty_ydraw_core_figure_instance *static_get_figure_impl(
     const struct yetty_ydraw_canvas *base, uint32_t index)
 {
-    return yetty_ydraw_static_canvas_get_complex_prim(
+    return yetty_ydraw_static_canvas_get_figure(
         (struct yetty_ydraw_static_canvas *)base->impl, index);
 }
 
@@ -1162,8 +1162,8 @@ static const struct yetty_ydraw_canvas_ops static_canvas_ops = {
     .rebuild_grid       = static_rebuild_grid_impl,
     .build_prim_staging = static_build_prim_staging_impl,
     .prim_gpu_size      = static_prim_gpu_size_impl,
-    .complex_prim_count = static_complex_prim_count_impl,
-    .get_complex_prim   = static_get_complex_prim_impl,
+    .figure_count = static_figure_count_impl,
+    .get_figure   = static_get_figure_impl,
     .for_each_glyph     = static_for_each_glyph_impl,
     .set_cursor_pos     = static_set_cursor_pos_impl,
     .scroll_lines       = static_scroll_lines_impl,

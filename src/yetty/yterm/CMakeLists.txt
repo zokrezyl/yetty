@@ -7,7 +7,6 @@ add_library(yetty_yterm
     background-layer.c
     pty-reader.c
     osc-args.c
-    osc-statemachine.c
 )
 
 target_include_directories(yetty_yterm PUBLIC
@@ -22,6 +21,7 @@ target_link_libraries(yetty_yterm
     yetty_yfont_core
     yetty_yui_core
     yetty_yface
+    yetty_ywire
     lz4_static
 )
 

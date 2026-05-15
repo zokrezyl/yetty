@@ -16,7 +16,7 @@
 #include <yetty/ydraw-core/font-prim.h>
 #include <yetty/ydraw-core/prim-iter.h>
 #include <yetty/ydraw-core/text-span-prim.h>
-#include <yetty/yterm/osc-statemachine.h>
+#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/ydraw/flyweight.h>
 #include <yetty/ydraw/scrolling-canvas.h>
 #include <yetty/ydraw/scrollbuffer.h>
@@ -487,29 +487,29 @@ static struct uint32_result add_primitive_internal(
     // Track complex prims for resource set collection
     if (yetty_ydraw_core_is_complex_type(prim_type)) {
         /* Create factory instance for complex prim */
-        struct yetty_ydraw_core_complex_prim_instance_ptr_result inst_res =
-            yetty_ydraw_core_complex_prim_factory_create_instance(
-                canvas->base->complex_prim_factory, fw->data, word_count * sizeof(uint32_t),
+        struct yetty_ydraw_core_figure_instance_ptr_result inst_res =
+            yetty_ydraw_core_figure_factory_create_instance(
+                canvas->base->figure_factory, fw->data, word_count * sizeof(uint32_t),
                 primitive_rolling_row);
         if (YETTY_IS_ERR(inst_res)) {
             return YETTY_ERR(uint32, inst_res.error.msg);
         }
 
         /* Ensure capacity for instance pointer array */
-        if (base_line->complex_prim_count >= base_line->complex_prim_capacity) {
+        if (base_line->figure_count >= base_line->figure_capacity) {
             uint32_t new_cap =
-                base_line->complex_prim_capacity == 0 ? 4 : base_line->complex_prim_capacity * 2;
-            base_line->complex_prims =
-                realloc(base_line->complex_prims,
-                        new_cap * sizeof(struct yetty_ydraw_core_complex_prim_instance *));
-            if (!base_line->complex_prims) {
-                yetty_ydraw_core_complex_prim_instance_destroy(inst_res.value);
-                return YETTY_ERR(uint32, "realloc complex_prims failed");
+                base_line->figure_capacity == 0 ? 4 : base_line->figure_capacity * 2;
+            base_line->figures =
+                realloc(base_line->figures,
+                        new_cap * sizeof(struct yetty_ydraw_core_figure_instance *));
+            if (!base_line->figures) {
+                yetty_ydraw_core_figure_instance_destroy(inst_res.value);
+                return YETTY_ERR(uint32, "realloc figures failed");
             }
-            base_line->complex_prim_capacity = new_cap;
+            base_line->figure_capacity = new_cap;
         }
 
-        base_line->complex_prims[base_line->complex_prim_count++] = inst_res.value;
+        base_line->figures[base_line->figure_count++] = inst_res.value;
 
         ydebug("add_primitive_internal: added complex prim type=0x%08x to line %u", prim_type,
                primitive_grid_line);
@@ -940,12 +940,12 @@ static struct yetty_ycore_void_result canvas_evict_line(struct yetty_ydraw_scrol
      * "struct member <ns>_base_size not found". Detach + restore keeps
      * the cache ref alive across the line's empty-form phase, so the
      * font slot remains addressable until the line is re-restored. */
-    struct yetty_ydraw_core_complex_prim_instance **saved_cp = line->complex_prims;
-    uint32_t saved_cp_count = line->complex_prim_count;
-    uint32_t saved_cp_cap = line->complex_prim_capacity;
-    line->complex_prims = NULL;
-    line->complex_prim_count = 0;
-    line->complex_prim_capacity = 0;
+    struct yetty_ydraw_core_figure_instance **saved_cp = line->figures;
+    uint32_t saved_cp_count = line->figure_count;
+    uint32_t saved_cp_cap = line->figure_capacity;
+    line->figures = NULL;
+    line->figure_count = 0;
+    line->figure_capacity = 0;
 
     struct ydraw_canvas_font_entry *saved_fonts = line->fonts;
     uint32_t saved_font_count = line->font_count;
@@ -961,9 +961,9 @@ static struct yetty_ycore_void_result canvas_evict_line(struct yetty_ydraw_scrol
      * don't see dangling pointers. */
     ydraw_canvas_grid_line_init(line);
 
-    line->complex_prims = saved_cp;
-    line->complex_prim_count = saved_cp_count;
-    line->complex_prim_capacity = saved_cp_cap;
+    line->figures = saved_cp;
+    line->figure_count = saved_cp_count;
+    line->figure_capacity = saved_cp_cap;
     line->fonts = saved_fonts;
     line->font_count = saved_font_count;
     line->font_capacity = saved_font_capacity;
@@ -996,12 +996,12 @@ static void canvas_evict_scrollback(struct yetty_ydraw_scrolling_canvas *canvas)
              * re-attach after grid_line_init. */
             struct ydraw_canvas_grid_line *line = &canvas->lines.lines[i];
             if (line->prims.count > 0 || line->cell_count > 0 || line->font_count > 0) {
-                struct yetty_ydraw_core_complex_prim_instance **saved_cp = line->complex_prims;
-                uint32_t saved_cp_count = line->complex_prim_count;
-                uint32_t saved_cp_cap = line->complex_prim_capacity;
-                line->complex_prims = NULL;
-                line->complex_prim_count = 0;
-                line->complex_prim_capacity = 0;
+                struct yetty_ydraw_core_figure_instance **saved_cp = line->figures;
+                uint32_t saved_cp_count = line->figure_count;
+                uint32_t saved_cp_cap = line->figure_capacity;
+                line->figures = NULL;
+                line->figure_count = 0;
+                line->figure_capacity = 0;
 
                 struct ydraw_canvas_font_entry *saved_fonts = line->fonts;
                 uint32_t saved_font_count = line->font_count;
@@ -1019,9 +1019,9 @@ static void canvas_evict_scrollback(struct yetty_ydraw_scrolling_canvas *canvas)
                 }
                 ydraw_canvas_grid_line_init(line);
 
-                line->complex_prims = saved_cp;
-                line->complex_prim_count = saved_cp_count;
-                line->complex_prim_capacity = saved_cp_cap;
+                line->figures = saved_cp;
+                line->figure_count = saved_cp_count;
+                line->figure_capacity = saved_cp_cap;
                 line->fonts = saved_fonts;
                 line->font_count = saved_font_count;
                 line->font_capacity = saved_font_capacity;
@@ -1545,7 +1545,7 @@ static void canvas_visible_window(const struct yetty_ydraw_scrolling_canvas *can
     *out_end = end;
 }
 
-static uint32_t yetty_ydraw_scrolling_canvas_complex_prim_count(struct yetty_ydraw_scrolling_canvas *canvas)
+static uint32_t yetty_ydraw_scrolling_canvas_figure_count(struct yetty_ydraw_scrolling_canvas *canvas)
 {
     if (!canvas) {
         return 0;
@@ -1557,12 +1557,12 @@ static uint32_t yetty_ydraw_scrolling_canvas_complex_prim_count(struct yetty_ydr
     uint32_t count = 0;
     for (uint32_t i = top; i < end; i++) {
         struct ydraw_canvas_grid_line *line = ydraw_canvas_line_buffer_get(&canvas->lines, i);
-        count += line->complex_prim_count;
+        count += line->figure_count;
     }
     return count;
 }
 
-static struct yetty_ydraw_core_complex_prim_instance *yetty_ydraw_scrolling_canvas_get_complex_prim(
+static struct yetty_ydraw_core_figure_instance *yetty_ydraw_scrolling_canvas_get_figure(
     struct yetty_ydraw_scrolling_canvas *canvas, uint32_t index)
 {
     if (!canvas) {
@@ -1575,11 +1575,11 @@ static struct yetty_ydraw_core_complex_prim_instance *yetty_ydraw_scrolling_canv
     uint32_t current = 0;
     for (uint32_t i = top; i < end; i++) {
         struct ydraw_canvas_grid_line *line = ydraw_canvas_line_buffer_get(&canvas->lines, i);
-        if (index < current + line->complex_prim_count) {
+        if (index < current + line->figure_count) {
             uint32_t local_idx = index - current;
-            return line->complex_prims[local_idx];
+            return line->figures[local_idx];
         }
-        current += line->complex_prim_count;
+        current += line->figure_count;
     }
     return NULL;
 }
@@ -1845,7 +1845,7 @@ static void scrolling_dispatch_one(
 }
 
 static struct yetty_ycore_void_result scrolling_process_input_impl(
-    struct yetty_ydraw_canvas *base, struct yetty_yterm_osc_statemachine *sm)
+    struct yetty_ydraw_canvas *base, struct yetty_ywire_wire_statemachine *sm)
 {
     struct yetty_ydraw_scrolling_canvas *canvas = base->impl;
 
@@ -1925,16 +1925,16 @@ static uint32_t scrolling_prim_gpu_size_impl(const struct yetty_ydraw_canvas *ba
         (struct yetty_ydraw_scrolling_canvas *)base->impl);
 }
 
-static uint32_t scrolling_complex_prim_count_impl(const struct yetty_ydraw_canvas *base)
+static uint32_t scrolling_figure_count_impl(const struct yetty_ydraw_canvas *base)
 {
-    return yetty_ydraw_scrolling_canvas_complex_prim_count(
+    return yetty_ydraw_scrolling_canvas_figure_count(
         (struct yetty_ydraw_scrolling_canvas *)base->impl);
 }
 
-static struct yetty_ydraw_core_complex_prim_instance *scrolling_get_complex_prim_impl(
+static struct yetty_ydraw_core_figure_instance *scrolling_get_figure_impl(
     const struct yetty_ydraw_canvas *base, uint32_t index)
 {
-    return yetty_ydraw_scrolling_canvas_get_complex_prim(
+    return yetty_ydraw_scrolling_canvas_get_figure(
         (struct yetty_ydraw_scrolling_canvas *)base->impl, index);
 }
 
@@ -2006,8 +2006,8 @@ static const struct yetty_ydraw_canvas_ops scrolling_canvas_ops = {
     .rebuild_grid       = scrolling_rebuild_grid_impl,
     .build_prim_staging = scrolling_build_prim_staging_impl,
     .prim_gpu_size      = scrolling_prim_gpu_size_impl,
-    .complex_prim_count = scrolling_complex_prim_count_impl,
-    .get_complex_prim   = scrolling_get_complex_prim_impl,
+    .figure_count = scrolling_figure_count_impl,
+    .get_figure   = scrolling_get_figure_impl,
     .for_each_glyph     = scrolling_for_each_glyph_impl,
     .set_cursor_pos     = scrolling_set_cursor_pos_impl,
     .scroll_lines       = scrolling_scroll_lines_impl,

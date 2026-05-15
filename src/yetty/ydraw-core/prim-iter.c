@@ -22,7 +22,7 @@
 #include <string.h>
 
 #include <yetty/ydraw-core/prim-iter.h>
-#include <yetty/yterm/osc-statemachine.h>
+#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include "flyweight-internal.h"
@@ -43,7 +43,7 @@
 
 struct yetty_ycore_void_result yetty_ydraw_core_prim_iter_init(
     struct yetty_ydraw_core_prim_iter *iter,
-    struct yetty_yterm_osc_statemachine *sm,
+    struct yetty_ywire_wire_statemachine *sm,
     const struct yetty_ydraw_core_flyweight_registry *reg)
 {
     if (!iter) {
@@ -116,7 +116,7 @@ static struct yetty_ycore_void_result iter_pull(
     while (iter->filled < want) {
         uint32_t need = want - iter->filled;
         struct yetty_ycore_size_result rr =
-            yetty_yterm_osc_statemachine_read(iter->sm, iter->scratch + iter->filled, need);
+            yetty_ywire_wire_statemachine_read(iter->sm, iter->scratch + iter->filled, need);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "prim_iter: sm read failed");
         if (rr.value == 0) {
             /* SM has nothing right now — caller decides based on at_end. */
@@ -136,7 +136,7 @@ static struct yetty_ycore_void_result iter_pull_header(
 {
     while (iter->header_filled < PRIM_ITER_ENVELOPE_HEADER_BYTES) {
         uint32_t need = PRIM_ITER_ENVELOPE_HEADER_BYTES - iter->header_filled;
-        struct yetty_ycore_size_result rr = yetty_yterm_osc_statemachine_read(
+        struct yetty_ycore_size_result rr = yetty_ywire_wire_statemachine_read(
             iter->sm, iter->scratch + iter->header_filled, need);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "prim_iter: sm read (header) failed");
         if (rr.value == 0) {
@@ -170,7 +170,7 @@ struct yetty_ydraw_core_prim_iter_status_result yetty_ydraw_core_prim_iter_next(
                              "prim_iter: envelope header pull", pr);
         }
         if (iter->header_filled < PRIM_ITER_ENVELOPE_HEADER_BYTES) {
-            int at_end = yetty_yterm_osc_statemachine_at_end(iter->sm);
+            int at_end = yetty_ywire_wire_statemachine_at_end(iter->sm);
             if (at_end) {
                 if (iter->header_filled == 0) {
                     /* Empty envelope — caller treats this as clean DONE. */
@@ -228,7 +228,7 @@ struct yetty_ydraw_core_prim_iter_status_result yetty_ydraw_core_prim_iter_next(
         }
 
         if (iter->filled < PRIM_ITER_HEADER_BYTES) {
-            int at_end = yetty_yterm_osc_statemachine_at_end(iter->sm);
+            int at_end = yetty_ywire_wire_statemachine_at_end(iter->sm);
             if (at_end) {
                 if (iter->filled == 0) {
                     /* Clean tail. */
@@ -281,7 +281,7 @@ struct yetty_ydraw_core_prim_iter_status_result yetty_ydraw_core_prim_iter_next(
                              "prim_iter: body pull", pr);
         }
         if (iter->filled < iter->total_size) {
-            int at_end = yetty_yterm_osc_statemachine_at_end(iter->sm);
+            int at_end = yetty_ywire_wire_statemachine_at_end(iter->sm);
             if (at_end) {
                 return YETTY_ERR(yetty_ydraw_core_prim_iter_status,
                                  "prim_iter: truncated body at envelope end");

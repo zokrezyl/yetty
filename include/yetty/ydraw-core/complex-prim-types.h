@@ -1,14 +1,14 @@
 // YDraw Complex Primitive Types - Wire Format
 //
 // Pure data layout for complex primitives traveling over the OSC wire:
-//   - struct complex_prim (type + payload_size + FAM data)
+//   - struct figure (type + payload_size + FAM data)
 //   - type-id ranges (simple SDF / flyweight / complex)
 //   - helpers that operate on raw bytes (is_complex_type, size, aabb, handler)
 //
 // This header is intentionally GPU-less so client tools (ycat, yecho, yplot
 // CLI, demos, riscv64 builds) can include it without dragging in WebGPU.
 //
-// The server-side runtime (struct concrete_factory, struct complex_prim_instance,
+// The server-side runtime (struct concrete_factory, struct figure_instance,
 // the abstract-factory registry) lives in
 // include/yetty/ydraw-factory/complex-prim-factory.h.
 //
@@ -45,7 +45,7 @@ extern "C" {
 // Complex primitive header (FAM wire format)
 //=============================================================================
 
-struct yetty_ydraw_core_complex_prim {
+struct yetty_ydraw_core_figure {
     uint32_t type;
     uint32_t payload_size;
     uint8_t data[];
@@ -55,7 +55,7 @@ struct yetty_ydraw_core_complex_prim {
 bool yetty_ydraw_core_is_complex_type(uint32_t type);
 
 // Get AABB (reads bounds from standard offset 0-15 in payload)
-struct rectangle_result yetty_ydraw_core_complex_prim_aabb(const void *data);
+struct rectangle_result yetty_ydraw_core_figure_aabb(const void *data);
 
 //=============================================================================
 // Base ops for complex primitives (for flyweight registry)
@@ -65,7 +65,7 @@ struct rectangle_result yetty_ydraw_core_complex_prim_aabb(const void *data);
 #include <yetty/ydraw-core/flyweight.h>
 
 // Handler for complex prim types (>= 0x80000000)
-struct yetty_ydraw_core_prim_base_ops_ptr_result yetty_ydraw_core_complex_prim_handler(
+struct yetty_ydraw_core_prim_base_ops_ptr_result yetty_ydraw_core_figure_handler(
     uint32_t prim_type);
 
 #ifdef __cplusplus

@@ -4,7 +4,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yterm/osc-codes.h>
-#include <yetty/yterm/osc-statemachine.h>
+#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yterm/terminal.h>
 
 #ifdef __cplusplus

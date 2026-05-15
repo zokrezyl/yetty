@@ -36,10 +36,10 @@ extern "C" {
 struct yetty_context;
 struct yetty_ydraw_font;
 struct yetty_ymsdf_generator;
-struct yetty_ydraw_core_complex_prim_factory;
-struct yetty_ydraw_core_complex_prim_instance;
+struct yetty_ydraw_core_figure_factory;
+struct yetty_ydraw_core_figure_instance;
 struct yetty_ydraw_core_flyweight_registry;
-struct yetty_yterm_osc_statemachine;
+struct yetty_ywire_wire_statemachine;
 
 /*===========================================================================
  * Shared grid types
@@ -103,9 +103,9 @@ struct ydraw_canvas_grid_line {
     uint32_t font_capacity;
 
     /* Complex prim instances whose base (last overlapping line) is this. */
-    struct yetty_ydraw_core_complex_prim_instance **complex_prims;
-    uint32_t complex_prim_count;
-    uint32_t complex_prim_capacity;
+    struct yetty_ydraw_core_figure_instance **figures;
+    uint32_t figure_count;
+    uint32_t figure_capacity;
 };
 
 /* Simple line array. Both canvases use this. Scrolling-canvas grows it on
@@ -155,7 +155,7 @@ struct yetty_ydraw_canvas {
     /* Flyweight registry (SDF prim handlers) + complex-prim factory
      * (yplot / yimage / ymesh instance ops). */
     struct yetty_ydraw_core_flyweight_registry   *flyweight_registry;
-    struct yetty_ydraw_core_complex_prim_factory *complex_prim_factory;
+    struct yetty_ydraw_core_figure_factory *figure_factory;
 
     /* Polymorphic MSDF generator (borrowed from context->gpu_context).
      * NULL in tests/hosts that don't initialise it. */
@@ -191,7 +191,7 @@ struct yetty_ydraw_canvas_ops {
      * finalisation runs (attach pass, scroll viewport for scrolling, ...).
      */
     struct yetty_ycore_void_result (*process_input)(
-        struct yetty_ydraw_canvas *, struct yetty_yterm_osc_statemachine *);
+        struct yetty_ydraw_canvas *, struct yetty_ywire_wire_statemachine *);
 
     /* State */
     struct yetty_ycore_void_result (*clear)(struct yetty_ydraw_canvas *);
@@ -204,8 +204,8 @@ struct yetty_ydraw_canvas_ops {
     uint32_t (*prim_gpu_size)(const struct yetty_ydraw_canvas *);
 
     /* Complex prims */
-    uint32_t (*complex_prim_count)(const struct yetty_ydraw_canvas *);
-    struct yetty_ydraw_core_complex_prim_instance *(*get_complex_prim)(
+    uint32_t (*figure_count)(const struct yetty_ydraw_canvas *);
+    struct yetty_ydraw_core_figure_instance *(*get_figure)(
         const struct yetty_ydraw_canvas *, uint32_t index);
 
     /* Glyph iteration */

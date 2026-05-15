@@ -43,7 +43,7 @@ struct yetty_ydraw_core_flyweight_registry_ptr_result yetty_ydraw_flyweight_crea
 
     // Complex prim handler (types >= 0x80000000)
     yetty_ydraw_core_flyweight_registry_add(reg, YETTY_YDRAW_COMPLEX_TYPE_BASE, 0xFFFFFFFF,
-                                             yetty_ydraw_core_complex_prim_handler);
+                                             yetty_ydraw_core_figure_handler);
 
     ydebug("flyweight_create: cmd + SDF default + FONT + TEXT_SPAN + complex");
     return res;

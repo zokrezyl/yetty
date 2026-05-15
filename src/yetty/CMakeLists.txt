@@ -72,6 +72,9 @@ add_subdirectory(yui)
 # Core sources (src/yetty/core/*.cpp)
 set(YETTY_YCORE_SOURCES "")
 
+# Wire-format state machine (OSC framer + decode stack)
+add_subdirectory(ywire)
+
 # Term subsystem
 add_subdirectory(yterm)
 

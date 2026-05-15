@@ -1,6 +1,6 @@
 #include <yetty/yterm/text-layer.h>
 #include <yetty/yterm/shader-glyph-layer.h>
-#include <yetty/yterm/osc-statemachine.h>
+#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yfont/ms-font.h>
 #include <yetty/yfont/ms-raster-font.h>
 #include <yetty/yfont/ms-msdf-font.h>
@@ -242,7 +242,7 @@ struct yetty_yterm_terminal_text_layer {
 static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result text_layer_process_input(
     struct yetty_yrender_terminal_layer *self,
-    struct yetty_yterm_osc_statemachine *osc_statemachine);
+    struct yetty_ywire_wire_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result text_layer_resize_grid(
     struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size);
 static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_set(
@@ -954,7 +954,7 @@ static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_te
  * the cursor (or input is exhausted). */
 static struct yetty_ycore_void_result text_layer_process_input(
     struct yetty_yrender_terminal_layer *self,
-    struct yetty_yterm_osc_statemachine *osc_statemachine)
+    struct yetty_ywire_wire_statemachine *osc_statemachine)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
@@ -966,7 +966,7 @@ static struct yetty_ycore_void_result text_layer_process_input(
     uint8_t buf[4096];
     for (;;) {
         struct yetty_ycore_size_result rr =
-            yetty_yterm_osc_statemachine_read(osc_statemachine, buf, sizeof(buf));
+            yetty_ywire_wire_statemachine_read(osc_statemachine, buf, sizeof(buf));
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "text_layer: osc read");
         if (rr.value == 0) {
             break;

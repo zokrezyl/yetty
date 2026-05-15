@@ -12,7 +12,7 @@
 // Abstract factory internal structure
 //=============================================================================
 
-struct yetty_ydraw_core_complex_prim_factory {
+struct yetty_ydraw_core_figure_factory {
     WGPUDevice device;
     WGPUQueue queue;
     WGPUTextureFormat target_format;
@@ -25,15 +25,15 @@ struct yetty_ydraw_core_complex_prim_factory {
 // Abstract factory lifecycle
 //=============================================================================
 
-struct yetty_ydraw_core_complex_prim_factory_ptr_result
-yetty_ydraw_core_complex_prim_factory_create(WGPUDevice device, WGPUQueue queue,
+struct yetty_ydraw_core_figure_factory_ptr_result
+yetty_ydraw_core_figure_factory_create(WGPUDevice device, WGPUQueue queue,
                                               WGPUTextureFormat target_format,
                                               struct yetty_ydraw_core_gpu_allocator *allocator)
 {
-    struct yetty_ydraw_core_complex_prim_factory *factory =
-        calloc(1, sizeof(struct yetty_ydraw_core_complex_prim_factory));
+    struct yetty_ydraw_core_figure_factory *factory =
+        calloc(1, sizeof(struct yetty_ydraw_core_figure_factory));
     if (!factory) {
-        return YETTY_ERR(yetty_ydraw_core_complex_prim_factory_ptr, "allocation failed");
+        return YETTY_ERR(yetty_ydraw_core_figure_factory_ptr, "allocation failed");
     }
 
     factory->device = device;
@@ -41,11 +41,11 @@ yetty_ydraw_core_complex_prim_factory_create(WGPUDevice device, WGPUQueue queue,
     factory->target_format = target_format;
     factory->allocator = allocator;
 
-    return YETTY_OK(yetty_ydraw_core_complex_prim_factory_ptr, factory);
+    return YETTY_OK(yetty_ydraw_core_figure_factory_ptr, factory);
 }
 
-void yetty_ydraw_core_complex_prim_factory_destroy(
-    struct yetty_ydraw_core_complex_prim_factory *factory)
+void yetty_ydraw_core_figure_factory_destroy(
+    struct yetty_ydraw_core_figure_factory *factory)
 {
     if (!factory) {
         return;
@@ -58,8 +58,8 @@ void yetty_ydraw_core_complex_prim_factory_destroy(
 // Abstract factory registration
 //=============================================================================
 
-struct yetty_ycore_void_result yetty_ydraw_core_complex_prim_factory_register(
-    struct yetty_ydraw_core_complex_prim_factory *factory,
+struct yetty_ycore_void_result yetty_ydraw_core_figure_factory_register(
+    struct yetty_ydraw_core_figure_factory *factory,
     struct yetty_ydraw_core_concrete_factory *concrete)
 {
     if (!factory) {
@@ -84,14 +84,14 @@ struct yetty_ycore_void_result yetty_ydraw_core_complex_prim_factory_register(
         struct yetty_ycore_void_result res = concrete->compile_pipeline(
             concrete, factory->device, factory->queue, factory->target_format, factory->allocator);
         if (YETTY_IS_ERR(res)) {
-            yerror("complex_prim_factory: failed to compile pipeline for type 0x%08x: %s",
+            yerror("figure_factory: failed to compile pipeline for type 0x%08x: %s",
                    concrete->type_id, res.error.msg);
             return res;
         }
     }
 
     factory->factories[factory->count++] = concrete;
-    ydebug("complex_prim_factory: registered type 0x%08x", concrete->type_id);
+    ydebug("figure_factory: registered type 0x%08x", concrete->type_id);
     return YETTY_OK_VOID();
 }
 
@@ -99,8 +99,8 @@ struct yetty_ycore_void_result yetty_ydraw_core_complex_prim_factory_register(
 // Abstract factory lookup
 //=============================================================================
 
-static struct yetty_ydraw_core_concrete_factory *complex_prim_factory_get(
-    struct yetty_ydraw_core_complex_prim_factory *factory, uint32_t type_id)
+static struct yetty_ydraw_core_concrete_factory *figure_factory_get(
+    struct yetty_ydraw_core_figure_factory *factory, uint32_t type_id)
 {
     if (!factory) {
         return NULL;
@@ -118,27 +118,27 @@ static struct yetty_ydraw_core_concrete_factory *complex_prim_factory_get(
 // Abstract factory instance creation
 //=============================================================================
 
-struct yetty_ydraw_core_complex_prim_instance_ptr_result
-yetty_ydraw_core_complex_prim_factory_create_instance(
-    struct yetty_ydraw_core_complex_prim_factory *factory, const void *buffer_data, size_t size,
+struct yetty_ydraw_core_figure_instance_ptr_result
+yetty_ydraw_core_figure_factory_create_instance(
+    struct yetty_ydraw_core_figure_factory *factory, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
     if (!factory) {
-        return YETTY_ERR(yetty_ydraw_core_complex_prim_instance_ptr, "factory is NULL");
+        return YETTY_ERR(yetty_ydraw_core_figure_instance_ptr, "factory is NULL");
     }
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_core_complex_prim)) {
-        return YETTY_ERR(yetty_ydraw_core_complex_prim_instance_ptr, "invalid buffer data");
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_core_figure)) {
+        return YETTY_ERR(yetty_ydraw_core_figure_instance_ptr, "invalid buffer data");
     }
 
     // Read type from buffer
-    const struct yetty_ydraw_core_complex_prim *prim = buffer_data;
+    const struct yetty_ydraw_core_figure *prim = buffer_data;
     uint32_t type_id = prim->type;
 
     // Get concrete factory
     struct yetty_ydraw_core_concrete_factory *concrete =
-        complex_prim_factory_get(factory, type_id);
+        figure_factory_get(factory, type_id);
     if (!concrete) {
-        return YETTY_ERR(yetty_ydraw_core_complex_prim_instance_ptr, "type not registered");
+        return YETTY_ERR(yetty_ydraw_core_figure_instance_ptr, "type not registered");
     }
 
     // Delegate to concrete factory
@@ -151,8 +151,8 @@ yetty_ydraw_core_complex_prim_factory_create_instance(
 // so its fragment shader can transform the incoming pixel at fs_main entry.
 //=============================================================================
 
-void yetty_ydraw_core_complex_prim_factory_set_visual_zoom(
-    struct yetty_ydraw_core_complex_prim_factory *factory, float scale, float offset_x,
+void yetty_ydraw_core_figure_factory_set_visual_zoom(
+    struct yetty_ydraw_core_figure_factory *factory, float scale, float offset_x,
     float offset_y)
 {
     if (!factory) {
@@ -166,15 +166,15 @@ void yetty_ydraw_core_complex_prim_factory_set_visual_zoom(
     }
 }
 
-void yetty_ydraw_core_complex_prim_factory_set_cell_zoom(
-    struct yetty_ydraw_core_complex_prim_factory *factory, float scale, float offset_x,
+void yetty_ydraw_core_figure_factory_set_cell_zoom(
+    struct yetty_ydraw_core_figure_factory *factory, float scale, float offset_x,
     float offset_y)
 {
     if (!factory) {
-        ydebug("complex_prim_factory_set_cell_zoom: factory is NULL");
+        ydebug("figure_factory_set_cell_zoom: factory is NULL");
         return;
     }
-    ydebug("complex_prim_factory_set_cell_zoom: scale=%.3f off=(%.1f,%.1f) factories=%u", scale,
+    ydebug("figure_factory_set_cell_zoom: scale=%.3f off=(%.1f,%.1f) factories=%u", scale,
            offset_x, offset_y, factory->count);
     for (uint32_t i = 0; i < factory->count; i++) {
         struct yetty_ydraw_core_concrete_factory *cf = factory->factories[i];
@@ -193,8 +193,8 @@ void yetty_ydraw_core_complex_prim_factory_set_cell_zoom(
 // Instance destruction (uses back-pointer)
 //=============================================================================
 
-void yetty_ydraw_core_complex_prim_instance_destroy(
-    struct yetty_ydraw_core_complex_prim_instance *instance)
+void yetty_ydraw_core_figure_instance_destroy(
+    struct yetty_ydraw_core_figure_instance *instance)
 {
     if (!instance) {
         return;

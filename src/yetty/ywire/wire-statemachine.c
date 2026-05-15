@@ -1,5 +1,5 @@
 /*
- * osc-statemachine.c — OSC framer + decode stack + dispatcher.
+ * wire-statemachine.c — OSC framer + decode stack + dispatcher.
  *
  * Pipeline:
  *
@@ -8,7 +8,7 @@
  * SM owns the full decode stack. Layers register against codes and pull
  * decoded bytes via osc_statemachine_read. See header for the contract.
  */
-#include <yetty/yterm/osc-statemachine.h>
+#include <yetty/ywire/wire-statemachine.h>
 
 #include <lz4frame.h>
 #include <stdint.h>
@@ -39,7 +39,7 @@ struct osc_handler {
     struct yetty_yrender_terminal_layer *layer;
 };
 
-struct yetty_yterm_osc_statemachine {
+struct yetty_ywire_wire_statemachine {
     /* Non-owning. */
     struct yetty_platform_pty *pty;
 
@@ -99,7 +99,7 @@ struct yetty_yterm_osc_statemachine {
  * Ring helpers
  *=========================================================================*/
 
-static size_t ring_avail(const struct yetty_yterm_osc_statemachine *statemachine)
+static size_t ring_avail(const struct yetty_ywire_wire_statemachine *statemachine)
 {
     return statemachine->write_pos - statemachine->read_pos;
 }
@@ -114,7 +114,7 @@ static size_t round_pow2(size_t n)
 }
 
 static struct yetty_ycore_void_result ring_grow_to(
-    struct yetty_yterm_osc_statemachine *statemachine, size_t new_min)
+    struct yetty_ywire_wire_statemachine *statemachine, size_t new_min)
 {
     size_t avail = ring_avail(statemachine);
     size_t new_cap = statemachine->ring_cap ? statemachine->ring_cap : OSC_RING_INITIAL_CAP;
@@ -147,7 +147,7 @@ static struct yetty_ycore_void_result ring_grow_to(
     return YETTY_OK_VOID();
 }
 
-static uint8_t ring_at(const struct yetty_yterm_osc_statemachine *statemachine, size_t pos)
+static uint8_t ring_at(const struct yetty_ywire_wire_statemachine *statemachine, size_t pos)
 {
     return statemachine->ring[pos & (statemachine->ring_cap - 1)];
 }
@@ -156,18 +156,18 @@ static uint8_t ring_at(const struct yetty_yterm_osc_statemachine *statemachine, 
  * Out-carry (decoded bytes produced but not yet pulled)
  *=========================================================================*/
 
-static size_t out_carry_avail(const struct yetty_yterm_osc_statemachine *statemachine)
+static size_t out_carry_avail(const struct yetty_ywire_wire_statemachine *statemachine)
 {
     return statemachine->out_carry_tail - statemachine->out_carry_head;
 }
 
-static void out_carry_reset(struct yetty_yterm_osc_statemachine *statemachine)
+static void out_carry_reset(struct yetty_ywire_wire_statemachine *statemachine)
 {
     statemachine->out_carry_head = 0;
     statemachine->out_carry_tail = 0;
 }
 
-static size_t out_carry_drain(struct yetty_yterm_osc_statemachine *statemachine,
+static size_t out_carry_drain(struct yetty_ywire_wire_statemachine *statemachine,
                               uint8_t *dst, size_t n)
 {
     size_t have = out_carry_avail(statemachine);
@@ -186,7 +186,7 @@ static size_t out_carry_drain(struct yetty_yterm_osc_statemachine *statemachine,
 /* Append `n` decoded bytes to the carry. Caller must have called
  * out_carry_avail and ensured space (carry is sized for one LZ4F block). */
 static struct yetty_ycore_void_result out_carry_append(
-    struct yetty_yterm_osc_statemachine *statemachine, const uint8_t *src, size_t n)
+    struct yetty_ywire_wire_statemachine *statemachine, const uint8_t *src, size_t n)
 {
     if (statemachine->out_carry_tail + n > sizeof(statemachine->out_carry)) {
         /* Compact: shift live bytes to start. */
@@ -242,7 +242,7 @@ static int b64_decode_quartet(const char chars[4], uint8_t triple[3])
 }
 
 /* Decode the accumulated args_b64 into args_decoded (one shot). */
-static void decode_args_slot(struct yetty_yterm_osc_statemachine *statemachine)
+static void decode_args_slot(struct yetty_ywire_wire_statemachine *statemachine)
 {
     statemachine->args_decoded_len = 0;
     size_t b64n = statemachine->args_b64_len;
@@ -282,7 +282,7 @@ static void decode_args_slot(struct yetty_yterm_osc_statemachine *statemachine)
  *=========================================================================*/
 
 static struct yetty_yrender_terminal_layer *find_layer(
-    const struct yetty_yterm_osc_statemachine *statemachine, int code)
+    const struct yetty_ywire_wire_statemachine *statemachine, int code)
 {
     for (size_t i = 0; i < statemachine->handler_count; i++) {
         if (statemachine->handlers[i].code == code) {
@@ -306,7 +306,7 @@ static struct yetty_yrender_terminal_layer *find_layer(
  * — large frames decompress to many MB and would overflow the carry
  * if drained in one shot. */
 static struct yetty_ycore_void_result lz4_drain_one(
-    struct yetty_yterm_osc_statemachine *statemachine)
+    struct yetty_ywire_wire_statemachine *statemachine)
 {
     if (!statemachine->lz4_ctx) {
         statemachine->lz4_drain_done = 1;
@@ -340,7 +340,7 @@ static struct yetty_ycore_void_result lz4_drain_one(
 /* Push `n` bytes of b64-decoded payload through the per-envelope
  * pipeline (lz4 or passthrough) into out_carry. */
 static struct yetty_ycore_void_result push_decoded(
-    struct yetty_yterm_osc_statemachine *statemachine, const uint8_t *decoded, size_t n)
+    struct yetty_ywire_wire_statemachine *statemachine, const uint8_t *decoded, size_t n)
 {
     if (n == 0) {
         return YETTY_OK_VOID();
@@ -404,7 +404,7 @@ static struct yetty_ycore_void_result push_decoded(
  * at the envelope terminator (BEL or ESC \\). Advances read_pos past
  * consumed wire bytes. */
 static struct yetty_ycore_void_result body_pump(
-    struct yetty_yterm_osc_statemachine *statemachine, size_t want)
+    struct yetty_ywire_wire_statemachine *statemachine, size_t want)
 {
     /* Cap the in-pass target at half the carry. The carry is bounded
      * (OSC_OUT_CARRY_CAP), but a single prim can be many MB (e.g. yimage's
@@ -546,7 +546,7 @@ out:
 /* Pump raw (non-decoded) bytes from the ring into out_carry up to `want`
  * decoded bytes available — for SCAN_RAW. Stops at the next ESC. */
 static struct yetty_ycore_void_result raw_pump(
-    struct yetty_yterm_osc_statemachine *statemachine, size_t want)
+    struct yetty_ywire_wire_statemachine *statemachine, size_t want)
 {
     while (out_carry_avail(statemachine) < want && statemachine->read_pos < statemachine->write_pos) {
         uint8_t c = ring_at(statemachine, statemachine->read_pos);
@@ -565,7 +565,7 @@ static struct yetty_ycore_void_result raw_pump(
  *=========================================================================*/
 
 static struct yetty_ycore_void_result dispatch(
-    struct yetty_yterm_osc_statemachine *statemachine, struct yetty_yrender_terminal_layer *layer)
+    struct yetty_ywire_wire_statemachine *statemachine, struct yetty_yrender_terminal_layer *layer)
 {
     if (!layer || !layer->ops || !layer->ops->process_input) {
         return YETTY_OK_VOID();
@@ -578,7 +578,7 @@ static struct yetty_ycore_void_result dispatch(
 }
 
 /* Reset per-envelope state at the start of a new envelope. */
-static void envelope_reset(struct yetty_yterm_osc_statemachine *statemachine)
+static void envelope_reset(struct yetty_ywire_wire_statemachine *statemachine)
 {
     statemachine->args_b64_len = 0;
     statemachine->args_decoded_len = 0;
@@ -598,21 +598,21 @@ static void envelope_reset(struct yetty_yterm_osc_statemachine *statemachine)
  * Public API
  *=========================================================================*/
 
-struct yetty_yterm_osc_statemachine_ptr_result yetty_yterm_osc_statemachine_create(
+struct yetty_ywire_wire_statemachine_ptr_result yetty_ywire_wire_statemachine_create(
     struct yetty_platform_pty *pty)
 {
-    struct yetty_yterm_osc_statemachine *statemachine =
-        calloc(1, sizeof(struct yetty_yterm_osc_statemachine));
+    struct yetty_ywire_wire_statemachine *statemachine =
+        calloc(1, sizeof(struct yetty_ywire_wire_statemachine));
     if (!statemachine) {
-        return YETTY_ERR(yetty_yterm_osc_statemachine_ptr, "osc_statemachine: calloc failed");
+        return YETTY_ERR(yetty_ywire_wire_statemachine_ptr, "osc_statemachine: calloc failed");
     }
     statemachine->pty = pty;
     statemachine->state = SCAN_RAW;
-    return YETTY_OK(yetty_yterm_osc_statemachine_ptr, statemachine);
+    return YETTY_OK(yetty_ywire_wire_statemachine_ptr, statemachine);
 }
 
-struct yetty_ycore_void_result yetty_yterm_osc_statemachine_destroy(
-    struct yetty_yterm_osc_statemachine *statemachine)
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_destroy(
+    struct yetty_ywire_wire_statemachine *statemachine)
 {
     if (!statemachine) {
         return YETTY_ERR(yetty_ycore_void, "osc_statemachine: statemachine is NULL");
@@ -626,8 +626,8 @@ struct yetty_ycore_void_result yetty_yterm_osc_statemachine_destroy(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yterm_osc_statemachine_register(
-    struct yetty_yterm_osc_statemachine *statemachine, int code,
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register(
+    struct yetty_ywire_wire_statemachine *statemachine, int code,
     struct yetty_yrender_terminal_layer *layer)
 {
     if (!statemachine) {
@@ -653,8 +653,8 @@ struct yetty_ycore_void_result yetty_yterm_osc_statemachine_register(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yterm_osc_statemachine_feed(
-    struct yetty_yterm_osc_statemachine *statemachine, const char *bytes, size_t n)
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_feed(
+    struct yetty_ywire_wire_statemachine *statemachine, const char *bytes, size_t n)
 {
     if (!statemachine) {
         return YETTY_ERR(yetty_ycore_void, "osc_statemachine: statemachine is NULL");
@@ -680,8 +680,8 @@ struct yetty_ycore_void_result yetty_yterm_osc_statemachine_feed(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yterm_osc_statemachine_set_default(
-    struct yetty_yterm_osc_statemachine *statemachine,
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_default(
+    struct yetty_ywire_wire_statemachine *statemachine,
     struct yetty_yrender_terminal_layer *layer)
 {
     if (!statemachine) {
@@ -693,7 +693,7 @@ struct yetty_ycore_void_result yetty_yterm_osc_statemachine_set_default(
 
 /* Read PTY bytes into the ring's writable region (zero-copy). */
 static struct yetty_ycore_size_result pull_from_pty(
-    struct yetty_yterm_osc_statemachine *statemachine)
+    struct yetty_ywire_wire_statemachine *statemachine)
 {
     if (!statemachine->pty || !statemachine->pty->ops || !statemachine->pty->ops->read) {
         return YETTY_ERR(yetty_ycore_size, "osc_statemachine: pty has no read op");
@@ -723,8 +723,8 @@ static struct yetty_ycore_size_result pull_from_pty(
     return YETTY_OK(yetty_ycore_size, rr.value);
 }
 
-struct yetty_ycore_void_result yetty_yterm_osc_statemachine_process(
-    struct yetty_yterm_osc_statemachine *statemachine)
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_process(
+    struct yetty_ywire_wire_statemachine *statemachine)
 {
     if (!statemachine) {
         return YETTY_ERR(yetty_ycore_void, "osc_statemachine: statemachine is NULL");
@@ -919,8 +919,8 @@ struct yetty_ycore_void_result yetty_yterm_osc_statemachine_process(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_size_result yetty_yterm_osc_statemachine_read(
-    struct yetty_yterm_osc_statemachine *statemachine, uint8_t *dst, size_t n)
+struct yetty_ycore_size_result yetty_ywire_wire_statemachine_read(
+    struct yetty_ywire_wire_statemachine *statemachine, uint8_t *dst, size_t n)
 {
     if (!statemachine) {
         return YETTY_ERR(yetty_ycore_size, "osc_statemachine: statemachine is NULL");
@@ -952,10 +952,10 @@ struct yetty_ycore_size_result yetty_yterm_osc_statemachine_read(
     return YETTY_OK(yetty_ycore_size, copied);
 }
 
-struct yetty_yterm_osc_statemachine_args yetty_yterm_osc_statemachine_args(
-    const struct yetty_yterm_osc_statemachine *statemachine)
+struct yetty_ywire_wire_statemachine_args yetty_ywire_wire_statemachine_args(
+    const struct yetty_ywire_wire_statemachine *statemachine)
 {
-    struct yetty_yterm_osc_statemachine_args view = {NULL, 0};
+    struct yetty_ywire_wire_statemachine_args view = {NULL, 0};
     if (!statemachine || !statemachine->dispatching) {
         return view;
     }
@@ -967,8 +967,8 @@ struct yetty_yterm_osc_statemachine_args yetty_yterm_osc_statemachine_args(
     return view;
 }
 
-int yetty_yterm_osc_statemachine_at_end(
-    const struct yetty_yterm_osc_statemachine *statemachine)
+int yetty_ywire_wire_statemachine_at_end(
+    const struct yetty_ywire_wire_statemachine *statemachine)
 {
     if (!statemachine || !statemachine->dispatching) {
         return 0;
@@ -976,8 +976,8 @@ int yetty_yterm_osc_statemachine_at_end(
     return statemachine->terminator_seen;
 }
 
-int yetty_yterm_osc_statemachine_code(
-    const struct yetty_yterm_osc_statemachine *statemachine)
+int yetty_ywire_wire_statemachine_code(
+    const struct yetty_ywire_wire_statemachine *statemachine)
 {
     return statemachine ? statemachine->current_code : 0;
 }

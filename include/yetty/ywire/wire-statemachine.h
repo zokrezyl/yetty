@@ -1,5 +1,5 @@
 /*
- * yetty_yterm_osc_statemachine — OSC framer + decode stack + dispatcher.
+ * yetty_ywire_wire_statemachine — OSC framer + decode stack + dispatcher.
  *
  * Wire shape:
  *
@@ -37,28 +37,28 @@
 extern "C" {
 #endif
 
-struct yetty_yterm_osc_statemachine;
+struct yetty_ywire_wire_statemachine;
 struct yetty_platform_pty;
 struct yetty_yrender_terminal_layer;
 
-YETTY_YRESULT_DECLARE(yetty_yterm_osc_statemachine_ptr,
-                     struct yetty_yterm_osc_statemachine *);
+YETTY_YRESULT_DECLARE(yetty_ywire_wire_statemachine_ptr,
+                     struct yetty_ywire_wire_statemachine *);
 
 /*
  * Construct the SM. Stores `pty` as a non-owning pointer; the SM uses
  * it as its only byte source via pty->ops->read. Lazy init for the ring
  * and decode stack. Called once at terminal startup, by pty-reader.
  */
-struct yetty_yterm_osc_statemachine_ptr_result
-yetty_yterm_osc_statemachine_create(struct yetty_platform_pty *pty);
+struct yetty_ywire_wire_statemachine_ptr_result
+yetty_ywire_wire_statemachine_create(struct yetty_platform_pty *pty);
 
 /*
  * Destroy. Frees the ring, decode-stack state (b64 carry, LZ4F context,
  * args + output carry), and the per-code registry. Does NOT touch the
  * PTY (non-owning) or any registered layers (also non-owning).
  */
-struct yetty_ycore_void_result yetty_yterm_osc_statemachine_destroy(
-    struct yetty_yterm_osc_statemachine *osc_statemachine);
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_destroy(
+    struct yetty_ywire_wire_statemachine *osc_statemachine);
 
 /*
  * Bind `layer` to OSC `code`. When the framer recognises ESC ] code ;
@@ -67,8 +67,8 @@ struct yetty_ycore_void_result yetty_yterm_osc_statemachine_destroy(
  * the same code overwrites. No codec parameter — the decode pipeline
  * is fixed by protocol (args = b64, payload = b64 + lz4).
  */
-struct yetty_ycore_void_result yetty_yterm_osc_statemachine_register(
-    struct yetty_yterm_osc_statemachine *osc_statemachine, int code,
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register(
+    struct yetty_ywire_wire_statemachine *osc_statemachine, int code,
     struct yetty_yrender_terminal_layer *layer);
 
 /*
@@ -78,8 +78,8 @@ struct yetty_ycore_void_result yetty_yterm_osc_statemachine_register(
  * SCAN_RAW. There is no decode stack on this path; bytes the layer
  * reads via osc_statemachine_read are wire bytes verbatim.
  */
-struct yetty_ycore_void_result yetty_yterm_osc_statemachine_set_default(
-    struct yetty_yterm_osc_statemachine *osc_statemachine,
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_default(
+    struct yetty_ywire_wire_statemachine *osc_statemachine,
     struct yetty_yrender_terminal_layer *layer);
 
 /*
@@ -91,8 +91,8 @@ struct yetty_ycore_void_result yetty_yterm_osc_statemachine_set_default(
  *
  * NOT a layer-facing API.
  */
-struct yetty_ycore_void_result yetty_yterm_osc_statemachine_feed(
-    struct yetty_yterm_osc_statemachine *osc_statemachine,
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_feed(
+    struct yetty_ywire_wire_statemachine *osc_statemachine,
     const char *bytes, size_t n);
 
 /*
@@ -106,8 +106,8 @@ struct yetty_ycore_void_result yetty_yterm_osc_statemachine_feed(
  * readability, and again after every render frame to drain residual
  * bytes that arrived while we were rendering.
  */
-struct yetty_ycore_void_result yetty_yterm_osc_statemachine_process(
-    struct yetty_yterm_osc_statemachine *osc_statemachine);
+struct yetty_ycore_void_result yetty_ywire_wire_statemachine_process(
+    struct yetty_ywire_wire_statemachine *osc_statemachine);
 
 /*
  * Pull up to `n` DECODED bytes from the SM into `dst`. Returns the
@@ -122,8 +122,8 @@ struct yetty_ycore_void_result yetty_yterm_osc_statemachine_process(
  *
  * Called from inside layer->ops->process_input (and only there).
  */
-struct yetty_ycore_size_result yetty_yterm_osc_statemachine_read(
-    struct yetty_yterm_osc_statemachine *osc_statemachine, uint8_t *dst, size_t n);
+struct yetty_ycore_size_result yetty_ywire_wire_statemachine_read(
+    struct yetty_ywire_wire_statemachine *osc_statemachine, uint8_t *dst, size_t n);
 
 /*
  * View into the decoded args slot for the envelope currently being
@@ -134,12 +134,12 @@ struct yetty_ycore_size_result yetty_yterm_osc_statemachine_read(
  * the SM holds them in a small fixed buffer and exposes a pointer
  * view. Used by ydraw-layer / ymgui-layer to read meta headers.
  */
-struct yetty_yterm_osc_statemachine_args {
+struct yetty_ywire_wire_statemachine_args {
     const uint8_t *bytes;
     size_t len;
 };
-struct yetty_yterm_osc_statemachine_args yetty_yterm_osc_statemachine_args(
-    const struct yetty_yterm_osc_statemachine *osc_statemachine);
+struct yetty_ywire_wire_statemachine_args yetty_ywire_wire_statemachine_args(
+    const struct yetty_ywire_wire_statemachine *osc_statemachine);
 
 /*
  * True iff the framer has reached the envelope terminator (BEL or
@@ -149,8 +149,8 @@ struct yetty_yterm_osc_statemachine_args yetty_yterm_osc_statemachine_args(
  *
  * Always 0 outside an OSC dispatch.
  */
-int yetty_yterm_osc_statemachine_at_end(
-    const struct yetty_yterm_osc_statemachine *osc_statemachine);
+int yetty_ywire_wire_statemachine_at_end(
+    const struct yetty_ywire_wire_statemachine *osc_statemachine);
 
 /*
  * Return the OSC code (e.g. 600001 for ydraw BIN) of the envelope
@@ -159,8 +159,8 @@ int yetty_yterm_osc_statemachine_at_end(
  * Used by layers that own multiple codes — ydraw-layer is registered
  * for CLEAR/BIN/YAML/OVERLAY and dispatches by this value.
  */
-int yetty_yterm_osc_statemachine_code(
-    const struct yetty_yterm_osc_statemachine *osc_statemachine);
+int yetty_ywire_wire_statemachine_code(
+    const struct yetty_ywire_wire_statemachine *osc_statemachine);
 
 #ifdef __cplusplus
 }

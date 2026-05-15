@@ -22,7 +22,7 @@
 #include <yetty/yplatform/thread.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterm/osc-codes.h>
-#include <yetty/yterm/osc-statemachine.h>
+#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/yterm/ydraw-layer.h>
 #include <yetty/ytrace/ytrace.h>
@@ -39,7 +39,7 @@ struct yetty_yui {
     /* Owns the YDRAW decode pipeline (b64 + lz4 today, kept as-is per
      * the simplified plan — we do NOT change the wire codec yet, only
      * the transport). Bound to render_endpoint. */
-    struct yetty_yterm_osc_statemachine *sm;
+    struct yetty_ywire_wire_statemachine *sm;
 
     /* Static-canvas ydraw layer registered against YDRAW_CLEAR/BIN/OVERLAY
      * on `sm`. Same constructor used by the per-terminal static placeholder. */
@@ -259,7 +259,7 @@ static void yui_drain_cb(void *arg)
     if (!yui || !yui->sm) {
         return;
     }
-    struct yetty_ycore_void_result r = yetty_yterm_osc_statemachine_process(yui->sm);
+    struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_process(yui->sm);
     if (!YETTY_IS_OK(r)) {
         ywarn("yui: SM process failed: %s", r.error.msg);
         yetty_ycore_error_destroy(r.error);
@@ -337,8 +337,8 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     yui->layer = lr.value;
 
     /* SM bound to the consumer-side endpoint. */
-    struct yetty_yterm_osc_statemachine_ptr_result sr =
-        yetty_yterm_osc_statemachine_create(yui->render_endpoint);
+    struct yetty_ywire_wire_statemachine_ptr_result sr =
+        yetty_ywire_wire_statemachine_create(yui->render_endpoint);
     if (!YETTY_IS_OK(sr)) {
         if (yui->layer && yui->layer->ops && yui->layer->ops->destroy) {
             yui->layer->ops->destroy(yui->layer);
@@ -352,11 +352,11 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
 
     /* Register YDRAW codes against the SM. */
     struct yetty_ycore_void_result rr;
-    rr = yetty_yterm_osc_statemachine_register(yui->sm, YETTY_OSC_YDRAW_CLEAR, yui->layer);
+    rr = yetty_ywire_wire_statemachine_register(yui->sm, YETTY_OSC_YDRAW_CLEAR, yui->layer);
     YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register CLEAR");
-    rr = yetty_yterm_osc_statemachine_register(yui->sm, YETTY_OSC_YDRAW_BIN, yui->layer);
+    rr = yetty_ywire_wire_statemachine_register(yui->sm, YETTY_OSC_YDRAW_BIN, yui->layer);
     YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register BIN");
-    rr = yetty_yterm_osc_statemachine_register(yui->sm, YETTY_OSC_YDRAW_OVERLAY, yui->layer);
+    rr = yetty_ywire_wire_statemachine_register(yui->sm, YETTY_OSC_YDRAW_OVERLAY, yui->layer);
     YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register OVERLAY");
 
     /* Wake the consumer side via post_to_loop whenever the producer
@@ -562,7 +562,7 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
         yui->engine = NULL;
     }
     if (yui->sm) {
-        struct yetty_ycore_void_result r = yetty_yterm_osc_statemachine_destroy(yui->sm);
+        struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_destroy(yui->sm);
         if (!YETTY_IS_OK(r)) {
             ywarn("yui_destroy: sm destroy: %s", r.error.msg);
             yetty_ycore_error_destroy(r.error);
@@ -611,7 +611,7 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
      * avoids a one-frame lag (the post_to_loop wake would otherwise defer
      * this to next iteration). */
     if (yui->sm) {
-        struct yetty_ycore_void_result pr = yetty_yterm_osc_statemachine_process(yui->sm);
+        struct yetty_ycore_void_result pr = yetty_ywire_wire_statemachine_process(yui->sm);
         if (YETTY_IS_ERR(pr)) {
             ywarn("yui_render: SM process: %s", pr.error.msg);
             yetty_ycore_error_destroy(pr.error);

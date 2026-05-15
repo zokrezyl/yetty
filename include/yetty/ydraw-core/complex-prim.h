@@ -14,17 +14,17 @@
 extern "C" {
 #endif
 
-struct yetty_ydraw_core_complex_prim;
+struct yetty_ydraw_core_figure;
 
-struct yetty_ydraw_core_complex_prim_ops {
-    void (*destroy)(struct yetty_ydraw_core_complex_prim *self);
+struct yetty_ydraw_core_figure_ops {
+    void (*destroy)(struct yetty_ydraw_core_figure *self);
 
     struct yetty_yrender_gpu_resource_set_result (*get_gpu_resource_set)(
-        struct yetty_ydraw_core_complex_prim *self);
+        struct yetty_ydraw_core_figure *self);
 };
 
-struct yetty_ydraw_core_complex_prim {
-    const struct yetty_ydraw_core_complex_prim_ops *ops;
+struct yetty_ydraw_core_figure {
+    const struct yetty_ydraw_core_figure_ops *ops;
     uint32_t type;
     uint32_t size;
 };

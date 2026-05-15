@@ -29,11 +29,11 @@ extern "C" {
 
 struct yetty_ydraw_canvas;
 struct yetty_ydraw_core_buffer;
-struct yetty_ydraw_core_complex_prim_factory;
-struct yetty_ydraw_core_complex_prim_instance;
+struct yetty_ydraw_core_figure_factory;
+struct yetty_ydraw_core_figure_instance;
 struct yetty_ydraw_core_flyweight_registry;
 struct yetty_ydraw_font;
-struct yetty_yterm_osc_statemachine;
+struct yetty_ywire_wire_statemachine;
 
 /* Polymorphic canvas pointer result — returned by every variant's
  * create. The variant struct stays internal; consumers hold the base. */
@@ -102,7 +102,7 @@ struct yetty_ycore_grid_size yetty_ydraw_canvas_get_grid_size(
  * attach pass, font_map_release_all, viewport scroll (scrolling only),
  * scrollback evict (scrolling only). */
 struct yetty_ycore_void_result yetty_ydraw_canvas_process_input(
-    struct yetty_ydraw_canvas *canvas, struct yetty_yterm_osc_statemachine *sm);
+    struct yetty_ydraw_canvas *canvas, struct yetty_ywire_wire_statemachine *sm);
 
 /* Cursor / scroll API. For static-canvas these are no-ops (cursor pinned
  * at (0,0), no scrollback). The scrolling variant treats `cursor_pos` as
@@ -170,12 +170,12 @@ struct yetty_ydraw_font *yetty_ydraw_canvas_get_default_font(
 /* Flyweight registry / complex-prim factory accessors */
 const struct yetty_ydraw_core_flyweight_registry *
 yetty_ydraw_canvas_get_flyweight_registry(const struct yetty_ydraw_canvas *canvas);
-struct yetty_ydraw_core_complex_prim_factory *
-yetty_ydraw_canvas_get_complex_prim_factory(const struct yetty_ydraw_canvas *canvas);
+struct yetty_ydraw_core_figure_factory *
+yetty_ydraw_canvas_get_figure_factory(const struct yetty_ydraw_canvas *canvas);
 
 /* Complex primitive access (for atlas rendering) */
-uint32_t yetty_ydraw_canvas_complex_prim_count(const struct yetty_ydraw_canvas *canvas);
-struct yetty_ydraw_core_complex_prim_instance *yetty_ydraw_canvas_get_complex_prim(
+uint32_t yetty_ydraw_canvas_figure_count(const struct yetty_ydraw_canvas *canvas);
+struct yetty_ydraw_core_figure_instance *yetty_ydraw_canvas_get_figure(
     const struct yetty_ydraw_canvas *canvas, uint32_t index);
 
 /* Glyph iteration (for selection / clipboard text extraction) */

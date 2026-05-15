@@ -43,7 +43,7 @@
 extern "C" {
 #endif
 
-struct yetty_yterm_osc_statemachine;
+struct yetty_ywire_wire_statemachine;
 
 enum yetty_ydraw_core_prim_iter_status {
     YETTY_PRIM_ITER_OK = 0,        /* fw populated; caller consumes then re-calls */
@@ -73,14 +73,14 @@ struct yetty_ydraw_core_prim_iter {
     uint32_t header_filled;   /* bytes of the 24-byte envelope header already pulled */
     bool     header_done;     /* true once envelope header is parsed and validated */
 
-    struct yetty_yterm_osc_statemachine             *sm;
+    struct yetty_ywire_wire_statemachine             *sm;
     const struct yetty_ydraw_core_flyweight_registry *reg;
 };
 
 /* Initialise. No allocation; scratch grows on demand. */
 struct yetty_ycore_void_result yetty_ydraw_core_prim_iter_init(
     struct yetty_ydraw_core_prim_iter *iter,
-    struct yetty_yterm_osc_statemachine *sm,
+    struct yetty_ywire_wire_statemachine *sm,
     const struct yetty_ydraw_core_flyweight_registry *reg);
 
 /* Free the scratch. Safe on a zero-inited iter (no-op). */
