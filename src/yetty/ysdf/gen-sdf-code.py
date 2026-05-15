@@ -49,19 +49,12 @@ HEADER_WGSL = """// Auto-generated from sdf-primitives.yaml - DO NOT EDIT
 
 GEOMETRY_OFFSET = 5
 
-# Tier base for SDF wire IDs. The YAML's `type:` field is the per-tier slot
-# (0..N); the actual wire / dispatch id is SDF_TIER_BASE | slot. The space
-# layout for ydraw primitive types is:
-#     [0x00000000, 0x0000FFFF]  cmds
-#     [0x10000000, 0x1FFFFFFF]  SDF                    ← this generator
-#     [0x40000000, 0x7FFFFFFF]  flyweight (FONT, TEXT_SPAN)
-#     [0x80000000, 0xFFFFFFFF]  complex
-SDF_TIER_BASE = 0x10000000
-
-
+# The YAML is the single source of truth for primitive type ids. Each
+# entry's `type:` field is the actual on-wire / dispatch id — this
+# generator does NOT transform it.
 def wire_id(p):
-    """Wire/dispatch id for a primitive: SDF tier base OR'd with the YAML slot."""
-    return SDF_TIER_BASE | p["type"]
+    """Wire/dispatch id for a primitive — read straight from the YAML."""
+    return p["type"]
 
 
 def wire_lit(p):
