@@ -17,6 +17,6 @@ target_include_directories(ydiagram-smoke-test PRIVATE
     ${YETTY_ROOT}/src
 )
 target_link_libraries(ydiagram-smoke-test PRIVATE
-    yetty_ydiagram yetty_ypaint_core yetty_ysdf yetty_ycore m)
+    yetty_ydiagram yetty_ydraw_core yetty_ysdf yetty_ycore m)
 
 add_test(NAME ydiagram_smoke COMMAND ydiagram-smoke-test)

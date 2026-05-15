@@ -1,6 +1,6 @@
 # yetty_yrender_core — CPU-only helpers (struct layout, hash, shader-code
 # setter, uniform/texture-format metadata). No <webgpu/webgpu.h>, no Dawn
-# link. Used by yetty_yfont_core / yetty_ypaint_factory / generated paint
+# link. Used by yetty_yfont_core / yetty_ydraw_factory / generated paint
 # code and by riscv64 cross-builds that can't link Dawn.
 add_library(yetty_yrender_core STATIC
     types.c

@@ -36,7 +36,7 @@ struct yetty_ycore_void_result yetty_yui_view_destroy(struct yetty_yui_view *vie
 }
 
 struct yetty_ycore_void_result yetty_yui_view_render(struct yetty_yui_view *view,
-                                                     struct yetty_ypaint_core_target *render_target)
+                                                     struct yetty_ydraw_core_target *render_target)
 {
     if (!view) {
         return YETTY_ERR(yetty_ycore_void, "view is NULL");

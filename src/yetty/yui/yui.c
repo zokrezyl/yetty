@@ -324,7 +324,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     }
 
     struct yetty_yterm_terminal_layer_result lr = yetty_yterm_ypaint_layer_create(
-        YETTY_YPAINT_LAYER_KIND_STATIC, cols, rows, cell_w, cell_h, context,
+        YETTY_YDRAW_LAYER_KIND_STATIC, cols, rows, cell_w, cell_h, context,
         /*request_render_fn=*/NULL, /*request_render_userdata=*/NULL,
         /*scroll_fn=*/NULL, /*scroll_userdata=*/NULL,
         /*cursor_fn=*/NULL, /*cursor_userdata=*/NULL);
@@ -590,7 +590,7 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
-                                                struct yetty_ypaint_core_target *target)
+                                                struct yetty_ydraw_core_target *target)
 {
     if (!yui || !yui->layer || !target) {
         return YETTY_OK_VOID();

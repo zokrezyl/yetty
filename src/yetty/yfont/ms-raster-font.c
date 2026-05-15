@@ -63,7 +63,7 @@ struct yetty_yfont_raster_font {
 
     /* GPU resource set — returned directly.
      * rs.textures[0] = atlas, rs.buffers[0] = glyph UVs */
-    struct yetty_ypaint_core_gpu_resource_set rs;
+    struct yetty_ydraw_core_gpu_resource_set rs;
     int next_slot_idx;
 
     /* Shelf packer state */

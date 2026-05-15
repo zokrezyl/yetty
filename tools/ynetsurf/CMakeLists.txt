@@ -22,7 +22,7 @@ target_include_directories(ynetsurf PRIVATE
 
 target_link_libraries(ynetsurf PRIVATE
     yetty_ynetsurf
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_ysdf
     yetty_yface
     yetty_ycore

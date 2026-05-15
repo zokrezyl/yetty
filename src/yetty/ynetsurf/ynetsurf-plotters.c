@@ -29,7 +29,7 @@
 #include "netsurf/bitmap.h"
 
 #include <yetty/ycore/types.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/buffer.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ysdf/funcs.gen.h>
 
@@ -413,7 +413,7 @@ static nserror p_text(const struct redraw_context *ctx, const plot_font_style_t 
         .capacity = length,
         .size = length,
     };
-    (void)yetty_ypaint_core_buffer_add_text(ns->cur_buf, (float)x, (float)y, &txt, pt,
+    (void)yetty_ydraw_core_buffer_add_text(ns->cur_buf, (float)x, (float)y, &txt, pt,
                                             to_rgba(fstyle->foreground), ns->z_counter++,
                                             ns->default_font_id, 0.0f);
     return NSERROR_OK;

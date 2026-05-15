@@ -18,6 +18,6 @@ target_include_directories(yetty_ydiagram PUBLIC
 
 target_link_libraries(yetty_ydiagram PUBLIC
     yetty_ycore
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_ysdf
 )

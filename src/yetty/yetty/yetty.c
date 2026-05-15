@@ -71,7 +71,7 @@ struct yetty_yetty_yetty {
     struct yetty_yplatform_wgpu *wgpu;
 
     /* Big render target - window-sized texture with surface for presentation */
-    struct yetty_ypaint_core_target *render_target;
+    struct yetty_ydraw_core_target *render_target;
 
     /* RPC server (optional, enabled via -r/--rpc-socket) */
     struct yetty_yrpc_server *rpc_server;

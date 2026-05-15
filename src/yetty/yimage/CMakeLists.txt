@@ -12,7 +12,7 @@ target_include_directories(yetty_yimage_core PUBLIC
 
 target_link_libraries(yetty_yimage_core PUBLIC
     stb
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_yface
 )
 
@@ -29,7 +29,7 @@ if(YETTY_ENABLE_LIB_WEBGPU)
 
     target_link_libraries(yetty_yimage PUBLIC
         yetty_yimage_core
-        yetty_ypaint_factory
+        yetty_ydraw_factory
         yetty_yrender
     )
 

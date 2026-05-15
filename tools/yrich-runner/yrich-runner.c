@@ -12,7 +12,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yface/yface.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/buffer.h>
 #include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YPAINT_* */
 #include <yetty/yrich/yrich-document.h>
 #include <yetty/yrich/yrich-element.h>
@@ -91,11 +91,11 @@ static void emit_clear(void)
 	write_all(clear, sizeof(clear) - 1);
 }
 
-static void emit_bin(const struct yetty_ypaint_core_buffer *buf)
+static void emit_bin(const struct yetty_ydraw_core_buffer *buf)
 {
 	const uint8_t *raw = NULL;
-	size_t raw_size = yetty_ypaint_core_buffer_serialize(
-		(struct yetty_ypaint_core_buffer *)buf, &raw);
+	size_t raw_size = yetty_ydraw_core_buffer_serialize(
+		(struct yetty_ydraw_core_buffer *)buf, &raw);
 	if (raw_size == 0 || !raw) return;
 
 	struct yetty_yface_bin_meta meta = {
@@ -131,7 +131,7 @@ void yrich_runner_emit(struct yrich_runner *r)
 
 void yrich_runner_init(struct yrich_runner *r,
 		       struct yetty_yrich_document *doc,
-		       struct yetty_ypaint_core_buffer *buf)
+		       struct yetty_ydraw_core_buffer *buf)
 {
 	if (!r)
 		return;

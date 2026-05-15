@@ -2,7 +2,7 @@
  * ygui_rich_yaml.c — YAML convenience layer for the RICH widget.
  *
  * Split out of ygui_rich.c so the libygui.so variant (FFI-friendly,
- * minimal deps) can skip linking yetty_ypaint_yaml (which transitively
+ * minimal deps) can skip linking yetty_ydraw_yaml (which transitively
  * pulls libyaml and fontconfig). The static libygui.a always includes
  * this TU; the shared variant excludes it via CMakeLists.txt.
  *
@@ -15,8 +15,8 @@
 
 #include "ygui_internal.h"
 
-#include <yetty/ypaint-core/buffer.h>
-#include <yetty/ypaint-yaml/ypaint-yaml.h>
+#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-yaml/ypaint-yaml.h>
 
 struct yetty_ycore_void_result yetty_ygui_widget_rich_set_yaml(struct yetty_ygui_widget *widget,
                                                                const char *yaml, size_t yaml_len)
@@ -28,7 +28,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_rich_set_yaml(struct yetty_ygui
         yetty_ygui_widget_rich_clear(widget);
         return YETTY_OK_VOID();
     }
-    struct yetty_ypaint_core_buffer_result pr = yetty_ypaint_yaml_parse(yaml, yaml_len);
+    struct yetty_ydraw_core_buffer_result pr = yetty_ydraw_yaml_parse(yaml, yaml_len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "rich_set_yaml: yaml parse failed");
     yetty_ygui_widget_rich_set_buffer(widget, pr.value);
     return YETTY_OK_VOID();

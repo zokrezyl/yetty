@@ -14,7 +14,7 @@ target_include_directories(ybrowser PRIVATE
 
 target_link_libraries(ybrowser PRIVATE
     yetty_ybrowser
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_ysdf
     yetty_yface
     yetty_ycore

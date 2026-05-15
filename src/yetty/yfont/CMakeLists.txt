@@ -40,7 +40,7 @@ target_include_directories(yetty_yfont_shader_glyph PRIVATE
 # yetty/yrender/texture-format.h) so clients (ycat, ypdf, ygui, riscv64
 # cross-builds) get FreeType-driven metrics + glyph rasterization without
 # pulling Dawn. Server-side WGPU uploads happen later in yrender via
-# yetty_ypaint_core_gpu_resource_set, which is itself GPU-less.
+# yetty_ydraw_core_gpu_resource_set, which is itself GPU-less.
 #-----------------------------------------------------------------------------
 add_library(yetty_yfont_core STATIC
     ms-raster-font.c

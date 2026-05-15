@@ -11,7 +11,7 @@
 #include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YPAINT_BIN */
 
 // Complex primitive type for yplot
-#define YETTY_YPAINT_TYPE_YPLOT 0x80000003u
+#define YETTY_YDRAW_TYPE_YPLOT 0x80000003u
 
 // yfsvm constants
 #define YFSVM_MAGIC       0x5946534Du
@@ -232,7 +232,7 @@ static uint32_t gen_yplot(uint8_t *buf, float scene_w, float scene_h, int func_c
     uint32_t pos = 0;
 
     // FAM header: type, payload_size (filled in later)
-    u32buf[pos++] = YETTY_YPAINT_TYPE_YPLOT;
+    u32buf[pos++] = YETTY_YDRAW_TYPE_YPLOT;
     uint32_t payload_size_pos = pos++;
 
     // Wire format starts here

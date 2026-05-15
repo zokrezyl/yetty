@@ -36,7 +36,7 @@
 
 #include <yetty/ycore/result.h>
 
-struct yetty_ypaint_core_buffer;
+struct yetty_ydraw_core_buffer;
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,7 +72,7 @@ struct yetty_ycore_void_result yetty_ylexbor_set_viewport(struct yetty_ylexbor *
 /* Drain the laid-out document into a ypaint buffer. Caller owns buf;
  * this function appends primitives. */
 struct yetty_ycore_void_result yetty_ylexbor_render(struct yetty_ylexbor *r,
-                                                    struct yetty_ypaint_core_buffer *buf);
+                                                    struct yetty_ydraw_core_buffer *buf);
 
 /* Total content height after layout, in px. Useful for scrollbars. */
 int yetty_ylexbor_content_height(const struct yetty_ylexbor *r);

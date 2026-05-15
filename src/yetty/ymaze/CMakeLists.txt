@@ -8,6 +8,6 @@ target_include_directories(yetty_ymaze PUBLIC
 )
 
 target_link_libraries(yetty_ymaze PUBLIC
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_ysdf
 )

@@ -11,7 +11,7 @@ target_include_directories(yetty_ymesh_core PUBLIC
 
 target_link_libraries(yetty_ymesh_core PUBLIC
     cgltf
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_yface
 )
 
@@ -28,7 +28,7 @@ if(YETTY_ENABLE_LIB_WEBGPU)
 
     target_link_libraries(yetty_ymesh PUBLIC
         yetty_ymesh_core
-        yetty_ypaint_factory
+        yetty_ydraw_factory
         yetty_yrender
     )
 

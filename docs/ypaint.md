@@ -195,7 +195,7 @@ The canvas manages a spatial grid for GPU culling:
 Each grid cell stores an array of `prim_ref`:
 
 ```c
-struct yetty_ypaint_scrolling_canvas_prim_ref {
+struct yetty_ydraw_scrolling_canvas_prim_ref {
     uint16_t lines_ahead;  // relative offset to base line (0 = same line)
     uint16_t prim_index;   // index within base line's prims array
 };
@@ -223,32 +223,32 @@ On scroll:
 
 ## Common Structs
 
-### struct yetty_ypaint_type
+### struct yetty_ydraw_type
 
 Primitive type identifier for shader dispatch:
 
 ```c
-struct yetty_ypaint_type {
+struct yetty_ydraw_type {
     uint32_t type;
 };
 ```
 
-### struct yetty_ypaint_attrs
+### struct yetty_ydraw_attrs
 
 Rendering attributes (not used by SDF functions):
 
 ```c
-struct yetty_ypaint_attrs {
+struct yetty_ydraw_attrs {
     uint32_t z_order;
 };
 ```
 
-### struct yetty_ypaint_style
+### struct yetty_ydraw_style
 
 Common rendering parameters for all primitives (used after SDF evaluation):
 
 ```c
-struct yetty_ypaint_style {
+struct yetty_ydraw_style {
     uint32_t fill_color;
     uint32_t stroke_color;
     float stroke_width;
@@ -264,13 +264,13 @@ Only contain SDF-specific parameters. **Coordinates are stored exactly as user s
 Examples:
 
 ```c
-struct yetty_ypaint_circle {
+struct yetty_ydraw_circle {
     float cx;
     float cy;
     float r;
 };
 
-struct yetty_ypaint_box {
+struct yetty_ydraw_box {
     float cx;
     float cy;
     float hw;

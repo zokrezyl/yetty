@@ -25,25 +25,25 @@
 #define U_VZ_OFF 4
 #define U_COUNT 5
 
-static inline void set_grid_size(struct yetty_ypaint_core_gpu_resource_set *rs, float cols,
+static inline void set_grid_size(struct yetty_ydraw_core_gpu_resource_set *rs, float cols,
                                  float rows)
 {
     rs->uniforms[U_GRID_SIZE].vec2[0] = cols;
     rs->uniforms[U_GRID_SIZE].vec2[1] = rows;
 }
 
-static inline void set_cell_size(struct yetty_ypaint_core_gpu_resource_set *rs, float w, float h)
+static inline void set_cell_size(struct yetty_ydraw_core_gpu_resource_set *rs, float w, float h)
 {
     rs->uniforms[U_CELL_SIZE].vec2[0] = w;
     rs->uniforms[U_CELL_SIZE].vec2[1] = h;
 }
 
-static inline void set_time(struct yetty_ypaint_core_gpu_resource_set *rs, float t)
+static inline void set_time(struct yetty_ydraw_core_gpu_resource_set *rs, float t)
 {
     rs->uniforms[U_TIME].f32 = t;
 }
 
-static inline void set_visual_zoom(struct yetty_ypaint_core_gpu_resource_set *rs, float scale,
+static inline void set_visual_zoom(struct yetty_ydraw_core_gpu_resource_set *rs, float scale,
                                    float off_x, float off_y)
 {
     rs->uniforms[U_VZ_SCALE].f32 = scale;
@@ -51,7 +51,7 @@ static inline void set_visual_zoom(struct yetty_ypaint_core_gpu_resource_set *rs
     rs->uniforms[U_VZ_OFF].vec2[1] = off_y;
 }
 
-static void init_uniforms(struct yetty_ypaint_core_gpu_resource_set *rs)
+static void init_uniforms(struct yetty_ydraw_core_gpu_resource_set *rs)
 {
     rs->uniform_count = U_COUNT;
 
@@ -77,7 +77,7 @@ struct yetty_yterm_shader_glyph_layer {
     /* Final assembled shader source (template with glyph code spliced in). */
     char *shader_source;
     size_t shader_source_size;
-    struct yetty_ypaint_core_gpu_resource_set rs;
+    struct yetty_ydraw_core_gpu_resource_set rs;
     /* CPU-side animation clock origin. Time uniform is (now - t0). */
     struct timespec t0;
 
@@ -327,7 +327,7 @@ static struct yetty_ycore_void_result shader_glyph_set_visual_zoom(
 static struct yetty_yrender_gpu_resource_set_result shader_glyph_get_gpu_resource_set(
     const struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yrender_terminal_layer *self,
-                                                          struct yetty_ypaint_core_target *target);
+                                                          struct yetty_ydraw_core_target *target);
 static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_listener *listener,
                                                   const struct yetty_yui_event *event);
 static int shader_glyph_is_empty(const struct yetty_yrender_terminal_layer *self);
@@ -650,7 +650,7 @@ static void anim_timer_stop(struct yetty_yterm_shader_glyph_layer *layer)
 }
 
 static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yrender_terminal_layer *self,
-                                                          struct yetty_ypaint_core_target *target)
+                                                          struct yetty_ydraw_core_target *target)
 {
     struct yetty_yterm_shader_glyph_layer *layer =
         container_of(self, struct yetty_yterm_shader_glyph_layer, base);

@@ -33,7 +33,7 @@
 /* Forward declarations for view ops */
 static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yui_view *view);
 static struct yetty_ycore_void_result terminal_view_render(
-    struct yetty_yui_view *view, struct yetty_ypaint_core_target *render_target);
+    struct yetty_yui_view *view, struct yetty_ydraw_core_target *render_target);
 static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_view *view,
                                                                struct yetty_yui_rect bounds);
 static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_view *view,
@@ -62,7 +62,7 @@ struct yetty_yterm_terminal {
     size_t layer_count;
     yetty_yevent_pipe_id pty_pipe_id;
     /* Render targets - one per layer for render_layer */
-    struct yetty_ypaint_core_target *layer_targets[YETTY_YTERM_TERMINAL_MAX_LAYERS];
+    struct yetty_ydraw_core_target *layer_targets[YETTY_YTERM_TERMINAL_MAX_LAYERS];
     int shutting_down;
     struct yetty_yterm_pty_reader *pty_reader;
 
@@ -126,7 +126,7 @@ struct yetty_yterm_terminal {
 /* Forward declarations */
 static void terminal_read_pty(struct yetty_yterm_terminal *terminal);
 static struct yetty_ycore_void_result terminal_render_frame(
-    struct yetty_yterm_terminal *terminal, struct yetty_ypaint_core_target *target);
+    struct yetty_yterm_terminal *terminal, struct yetty_ydraw_core_target *target);
 
 /* PTY pipe alloc callback — provides buffer for uv_pipe_t reads.
  * One reusable per-terminal buffer, lazily allocated. 64KB matches
@@ -867,7 +867,7 @@ static struct yetty_ycore_int_result terminal_event_handler(
 
 /* Render a frame using layered rendering */
 static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_terminal *terminal,
-                                                            struct yetty_ypaint_core_target *target)
+                                                            struct yetty_ydraw_core_target *target)
 {
     if (terminal->shutting_down) {
         ydebug("terminal_render_frame: shutting down, skipping render");
@@ -1075,7 +1075,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     {
         struct yetty_yrender_terminal_layer *text_layer = text_layer_res.value;
         struct yetty_yterm_terminal_layer_result ypaint_res = yetty_yterm_ypaint_layer_create(
-            YETTY_YPAINT_LAYER_KIND_SCROLLING, cols, rows,
+            YETTY_YDRAW_LAYER_KIND_SCROLLING, cols, rows,
             text_layer->cell_size.width, text_layer->cell_size.height,
             yetty_context, terminal_request_render_callback, terminal, terminal_scroll_callback,
             terminal, terminal_cursor_callback, terminal);
@@ -1103,7 +1103,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
         /* yui chrome layer — static canvas, placed above the scrolling one. */
         struct yetty_yterm_terminal_layer_result ypaint_static_res =
             yetty_yterm_ypaint_layer_create(
-                YETTY_YPAINT_LAYER_KIND_STATIC, cols, rows,
+                YETTY_YDRAW_LAYER_KIND_STATIC, cols, rows,
                 text_layer->cell_size.width, text_layer->cell_size.height,
                 yetty_context, terminal_request_render_callback, terminal,
                 terminal_scroll_callback, terminal, terminal_cursor_callback, terminal);
@@ -1390,7 +1390,7 @@ static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yui_vie
 }
 
 static struct yetty_ycore_void_result terminal_view_render(
-    struct yetty_yui_view *view, struct yetty_ypaint_core_target *render_target)
+    struct yetty_yui_view *view, struct yetty_ydraw_core_target *render_target)
 {
     struct yetty_yterm_terminal *terminal = container_of(view, struct yetty_yterm_terminal, view);
 

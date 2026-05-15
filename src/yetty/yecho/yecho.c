@@ -19,7 +19,7 @@
 
 #include <yetty/yfont/shader-glyph.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/buffer.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/yexpr/yexpr.h>
@@ -646,7 +646,7 @@ struct yetty_yecho_doc_ptr_result yetty_yecho_parse(const char *input, size_t le
 #define YECHO_GLYPH_ADVANCE 0.6f /* cell advance per char (proportional approx) */
 
 struct render_state {
-    struct yetty_ypaint_core_buffer *buf;
+    struct yetty_ydraw_core_buffer *buf;
     float cursor_x;
     float cursor_y;
     float font_size;
@@ -718,7 +718,7 @@ static struct yetty_ycore_void_result render_text_run(struct render_state *rs, c
                     .size = llen,
                     .capacity = llen,
                 };
-                struct yetty_ycore_void_result tr = yetty_ypaint_core_buffer_add_text(
+                struct yetty_ycore_void_result tr = yetty_ydraw_core_buffer_add_text(
                     rs->buf, rs->cursor_x, rs->cursor_y, &text, rs->font_size, color, 0, -1, 0.0f);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "buffer_add_text failed");
                 size_t cp_count = utf8_codepoint_count(s + line_start, llen);
@@ -976,8 +976,8 @@ static struct yetty_ycore_void_result render_yplot_block(struct render_state *rs
         return YETTY_ERR(yetty_ycore_void, "yplot_serialize failed", ser);
     }
 
-    struct yetty_ypaint_core_id_result idr =
-        yetty_ypaint_core_buffer_add_prim(rs->buf, prim_buf, required);
+    struct yetty_ydraw_core_id_result idr =
+        yetty_ydraw_core_buffer_add_prim(rs->buf, prim_buf, required);
     free(prim_buf);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, idr, "yplot add_prim failed");
 
@@ -1058,7 +1058,7 @@ static struct yetty_ycore_void_result render_block(struct render_state *rs,
                         .half_height = rs->font_size * 0.5f + 0.5f,
                         .corner_radius = 0.0f,
                     };
-                    struct yetty_ypaint_core_id_result br =
+                    struct yetty_ydraw_core_id_result br =
                         yetty_ysdf_add_box(rs->buf, 0, bg, 0, 0.0f, &geom);
                     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "ysdf_add_box failed");
                 }
@@ -1080,11 +1080,11 @@ static struct yetty_ycore_void_result render_block(struct render_state *rs,
     return tr;
 }
 
-struct yetty_ypaint_core_buffer_result yetty_yecho_render(
+struct yetty_ydraw_core_buffer_result yetty_yecho_render(
     const struct yetty_yecho_doc *doc, const struct yetty_yecho_render_config *config)
 {
     if (!doc) {
-        return YETTY_ERR(yetty_ypaint_core_buffer, "doc is NULL");
+        return YETTY_ERR(yetty_ydraw_core_buffer, "doc is NULL");
     }
 
     /* Resolve config defaults. */
@@ -1097,16 +1097,16 @@ struct yetty_ypaint_core_buffer_result yetty_yecho_render(
     uint32_t default_fg =
         (config && config->default_fg) ? config->default_fg : (uint32_t)YECHO_DEFAULT_FG;
 
-    struct yetty_ypaint_core_buffer_config bcfg = {
+    struct yetty_ydraw_core_buffer_config bcfg = {
         .scene_min_x = 0.0f,
         .scene_min_y = 0.0f,
         .scene_max_x = (float)(width_cells * cell_w),
         .scene_max_y = (float)cell_h * 2.0f, /* updated as content grows */
     };
-    struct yetty_ypaint_core_buffer_result br =
-        yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
+    struct yetty_ydraw_core_buffer_result br =
+        yetty_ydraw_core_buffer_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
-        return YETTY_ERR(yetty_ypaint_core_buffer, "ypaint buffer create failed", br);
+        return YETTY_ERR(yetty_ydraw_core_buffer, "ypaint buffer create failed", br);
     }
 
     struct render_state rs = {
@@ -1127,8 +1127,8 @@ struct yetty_ypaint_core_buffer_result yetty_yecho_render(
             struct yetty_ycore_void_result tr = render_text_run(
                 &rs, s->text ? s->text : "", s->text ? strlen(s->text) : 0, rs.default_fg);
             if (YETTY_IS_ERR(tr)) {
-                yetty_ypaint_core_buffer_destroy(rs.buf);
-                return YETTY_ERR(yetty_ypaint_core_buffer, "text span emission failed", tr);
+                yetty_ydraw_core_buffer_destroy(rs.buf);
+                return YETTY_ERR(yetty_ydraw_core_buffer, "text span emission failed", tr);
             }
             break;
         }
@@ -1146,42 +1146,42 @@ struct yetty_ypaint_core_buffer_result yetty_yecho_render(
                 struct strbuf fb = {0};
                 if (sb_push(&fb, '[') < 0 || sb_push(&fb, '?') < 0) {
                     sb_free(&fb);
-                    yetty_ypaint_core_buffer_destroy(rs.buf);
-                    return YETTY_ERR(yetty_ypaint_core_buffer, "glyph fallback alloc failed");
+                    yetty_ydraw_core_buffer_destroy(rs.buf);
+                    return YETTY_ERR(yetty_ydraw_core_buffer, "glyph fallback alloc failed");
                 }
                 for (const char *p = s->text; p && *p; p++) {
                     if (sb_push(&fb, *p) < 0) {
                         sb_free(&fb);
-                        yetty_ypaint_core_buffer_destroy(rs.buf);
-                        return YETTY_ERR(yetty_ypaint_core_buffer, "glyph fallback alloc failed");
+                        yetty_ydraw_core_buffer_destroy(rs.buf);
+                        return YETTY_ERR(yetty_ydraw_core_buffer, "glyph fallback alloc failed");
                     }
                 }
                 if (sb_push(&fb, ']') < 0) {
                     sb_free(&fb);
-                    yetty_ypaint_core_buffer_destroy(rs.buf);
-                    return YETTY_ERR(yetty_ypaint_core_buffer, "glyph fallback alloc failed");
+                    yetty_ydraw_core_buffer_destroy(rs.buf);
+                    return YETTY_ERR(yetty_ydraw_core_buffer, "glyph fallback alloc failed");
                 }
                 struct yetty_ycore_void_result tr =
                     render_text_run(&rs, fb.data, fb.len, rs.default_fg);
                 sb_free(&fb);
                 if (YETTY_IS_ERR(tr)) {
-                    yetty_ypaint_core_buffer_destroy(rs.buf);
-                    return YETTY_ERR(yetty_ypaint_core_buffer, "glyph fallback emission failed",
+                    yetty_ydraw_core_buffer_destroy(rs.buf);
+                    return YETTY_ERR(yetty_ydraw_core_buffer, "glyph fallback emission failed",
                                      tr);
                 }
             } else {
                 struct strbuf u = {0};
                 if (append_utf8(&u, cp) < 0) {
                     sb_free(&u);
-                    yetty_ypaint_core_buffer_destroy(rs.buf);
-                    return YETTY_ERR(yetty_ypaint_core_buffer, "glyph encode alloc failed");
+                    yetty_ydraw_core_buffer_destroy(rs.buf);
+                    return YETTY_ERR(yetty_ydraw_core_buffer, "glyph encode alloc failed");
                 }
                 struct yetty_ycore_void_result tr =
                     render_text_run(&rs, u.data, u.len, rs.default_fg);
                 sb_free(&u);
                 if (YETTY_IS_ERR(tr)) {
-                    yetty_ypaint_core_buffer_destroy(rs.buf);
-                    return YETTY_ERR(yetty_ypaint_core_buffer, "glyph emission failed", tr);
+                    yetty_ydraw_core_buffer_destroy(rs.buf);
+                    return YETTY_ERR(yetty_ydraw_core_buffer, "glyph emission failed", tr);
                 }
             }
             break;
@@ -1189,8 +1189,8 @@ struct yetty_ypaint_core_buffer_result yetty_yecho_render(
         case YETTY_YECHO_SPAN_BLOCK: {
             struct yetty_ycore_void_result tr = render_block(&rs, s);
             if (YETTY_IS_ERR(tr)) {
-                yetty_ypaint_core_buffer_destroy(rs.buf);
-                return YETTY_ERR(yetty_ypaint_core_buffer, "block emission failed", tr);
+                yetty_ydraw_core_buffer_destroy(rs.buf);
+                return YETTY_ERR(yetty_ydraw_core_buffer, "block emission failed", tr);
             }
             break;
         }
@@ -1198,20 +1198,20 @@ struct yetty_ypaint_core_buffer_result yetty_yecho_render(
     }
 
     /* Update the scene bounds to what we actually painted. */
-    yetty_ypaint_core_buffer_set_scene_bounds(rs.buf, 0.0f, 0.0f, rs.scene_max_x,
+    yetty_ydraw_core_buffer_set_scene_bounds(rs.buf, 0.0f, 0.0f, rs.scene_max_x,
                                               rs.cursor_y + rs.font_size);
 
-    return YETTY_OK(yetty_ypaint_core_buffer, rs.buf);
+    return YETTY_OK(yetty_ydraw_core_buffer, rs.buf);
 }
 
-struct yetty_ypaint_core_buffer_result yetty_yecho_render_string(
+struct yetty_ydraw_core_buffer_result yetty_yecho_render_string(
     const char *input, size_t len, const struct yetty_yecho_render_config *config)
 {
     struct yetty_yecho_doc_ptr_result pr = yetty_yecho_parse(input, len);
     if (YETTY_IS_ERR(pr)) {
-        return YETTY_ERR(yetty_ypaint_core_buffer, "parse failed", pr);
+        return YETTY_ERR(yetty_ydraw_core_buffer, "parse failed", pr);
     }
-    struct yetty_ypaint_core_buffer_result rr = yetty_yecho_render(pr.value, config);
+    struct yetty_ydraw_core_buffer_result rr = yetty_yecho_render(pr.value, config);
     yetty_yecho_doc_destroy(pr.value);
     return rr;
 }
@@ -1226,14 +1226,14 @@ struct yetty_ypaint_core_buffer_result yetty_yecho_render_string(
 #include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YPAINT_BIN */
 
 struct yetty_ycore_size_result yetty_yecho_osc_bin_emit(
-    const struct yetty_ypaint_core_buffer *buffer, FILE *out)
+    const struct yetty_ydraw_core_buffer *buffer, FILE *out)
 {
     if (!buffer || !out) {
         return YETTY_ERR(yetty_ycore_size, "yetty_yecho_osc_bin_emit: NULL buffer or out");
     }
     const uint8_t *raw = NULL;
     size_t raw_size =
-        yetty_ypaint_core_buffer_serialize((struct yetty_ypaint_core_buffer *)buffer, &raw);
+        yetty_ydraw_core_buffer_serialize((struct yetty_ydraw_core_buffer *)buffer, &raw);
     if (raw_size == 0 || !raw) {
         return YETTY_ERR(yetty_ycore_size, "yetty_yecho_osc_bin_emit: empty serialize");
     }

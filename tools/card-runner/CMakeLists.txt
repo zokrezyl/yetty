@@ -54,7 +54,7 @@ target_link_libraries(card-runner PRIVATE
     yetty_base
     yetty_font
     yetty_ydraw
-    yetty_ypaint
+    yetty_ydraw
     yetty_diagram
     ygrid
     cdb-wrapper

@@ -416,7 +416,7 @@ static void emit_window_buttons(const struct yetty_yui_tabbar *bar, float strip,
 }
 
 struct yetty_ycore_void_result yetty_yui_tabbar_render(
-    struct yetty_yui_tabbar *bar, struct yetty_ypaint_core_target *render_target)
+    struct yetty_yui_tabbar *bar, struct yetty_ydraw_core_target *render_target)
 {
     if (!bar) {
         return YETTY_ERR(yetty_ycore_void, "tabbar_render: NULL");

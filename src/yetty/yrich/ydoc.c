@@ -11,7 +11,7 @@
 #include <yetty/yrich/yrich-element.h>
 
 #include <yetty/ycore/types.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/buffer.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
@@ -69,7 +69,7 @@ static bool paragraph_is_editing(const struct yetty_yrich_element *e)
 }
 
 static struct yetty_ycore_void_result paragraph_render(struct yetty_yrich_element *e,
-                                                       struct yetty_ypaint_core_buffer *buf,
+                                                       struct yetty_ydraw_core_buffer *buf,
                                                        uint32_t layer, bool selected)
 {
     struct yetty_yrich_paragraph *p = (struct yetty_yrich_paragraph *)e;
@@ -83,7 +83,7 @@ static struct yetty_ycore_void_result paragraph_render(struct yetty_yrich_elemen
             .size = p->text_len,
             .capacity = p->text_len,
         };
-        struct yetty_ycore_void_result tr = yetty_ypaint_core_buffer_add_text(
+        struct yetty_ycore_void_result tr = yetty_ydraw_core_buffer_add_text(
             buf, p->bounds.x, p->bounds.y + p->style.font_size, &text, p->style.font_size,
             p->style.color, layer, p->style.font_id, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "paragraph_render: add_text failed");
@@ -97,7 +97,7 @@ static struct yetty_ycore_void_result paragraph_render(struct yetty_yrich_elemen
             .half_height = p->bounds.h * 0.5f,
             .corner_radius = 0.0f,
         };
-        struct yetty_ypaint_core_id_result br =
+        struct yetty_ydraw_core_id_result br =
             yetty_ysdf_add_box(buf, layer + 1, 0, YETTY_YRICH_RGBA(0, 100, 200, 96), 1.0f, &border);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "paragraph_render: selection box add failed");
     }
@@ -234,7 +234,7 @@ static void image_destroy(struct yetty_yrich_element *e)
 }
 
 static struct yetty_ycore_void_result image_render(struct yetty_yrich_element *e,
-                                                   struct yetty_ypaint_core_buffer *buf,
+                                                   struct yetty_ydraw_core_buffer *buf,
                                                    uint32_t layer, bool selected)
 {
     struct yetty_yrich_inline_image *im = (struct yetty_yrich_inline_image *)e;
@@ -253,7 +253,7 @@ static struct yetty_ycore_void_result image_render(struct yetty_yrich_element *e
     };
     uint32_t border =
         selected ? YETTY_YRICH_RGBA(0, 100, 200, 255) : YETTY_YRICH_RGBA(150, 150, 150, 255);
-    struct yetty_ypaint_core_id_result br =
+    struct yetty_ydraw_core_id_result br =
         yetty_ysdf_add_box(buf, layer, YETTY_YRICH_RGBA(245, 245, 245, 255), border, 1.0f, &body);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "image_render: body box add failed");
 
@@ -264,7 +264,7 @@ static struct yetty_ycore_void_result image_render(struct yetty_yrich_element *e
             .size = cap_len,
             .capacity = cap_len,
         };
-        struct yetty_ycore_void_result tr = yetty_ypaint_core_buffer_add_text(
+        struct yetty_ycore_void_result tr = yetty_ydraw_core_buffer_add_text(
             buf, im->bounds.x, im->bounds.y + im->bounds.h + 14.0f, &text, 12.0f,
             YETTY_YRICH_COLOR_BLACK, layer + 1, 0, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "image_render: caption add_text failed");

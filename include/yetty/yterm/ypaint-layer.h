@@ -12,7 +12,7 @@ extern "C" {
  * YPaint layer — renders SDF primitives as overlay on terminal text.
  * Implements the same terminal_layer_ops interface as text-layer.
  *
- * The layer is canvas-agnostic — it holds a `struct yetty_ypaint_canvas *`
+ * The layer is canvas-agnostic — it holds a `struct yetty_ydraw_canvas *`
  * and uses only the polymorphic surface. The variant is chosen at create
  * time via `kind`:
  *   - SCROLLING — primitives are cursor-relative and scroll with the
@@ -22,8 +22,8 @@ extern "C" {
  *     stack as a placeholder until yui content is wired in.
  */
 enum yetty_yterm_ypaint_layer_kind {
-    YETTY_YPAINT_LAYER_KIND_SCROLLING,
-    YETTY_YPAINT_LAYER_KIND_STATIC,
+    YETTY_YDRAW_LAYER_KIND_SCROLLING,
+    YETTY_YDRAW_LAYER_KIND_STATIC,
 };
 
 struct yetty_yterm_terminal_layer_result yetty_yterm_ypaint_layer_create(

@@ -14,7 +14,7 @@ target_include_directories(yetty_yplot_core PUBLIC
 
 target_link_libraries(yetty_yplot_core PUBLIC
     yaml
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_yfsvm_core
     yetty_yface
 )
@@ -34,7 +34,7 @@ if(YETTY_ENABLE_LIB_WEBGPU)
     target_link_libraries(yetty_yplot PUBLIC
         yetty_yplot_core
         yetty_yfsvm
-        yetty_ypaint_factory
+        yetty_ydraw_factory
         yetty_yrender
     )
 

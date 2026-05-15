@@ -9,7 +9,7 @@
  *   cgltf_parse + cgltf_load_buffers (path or in-memory .glb)
  *       → host-side mesh (positions, normals, indices, bbox)
  *   yetty_ymesh_serialize_prim(uniforms, mesh) → wire bytes
- *   yetty_ypaint_core_buffer_add_prim(buffer)  → attach to ypaint
+ *   yetty_ydraw_core_buffer_add_prim(buffer)  → attach to ypaint
  *
  * Wire format (all words u32 unless marked):
  *   [type_id u32][payload_size u32]
@@ -37,7 +37,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/buffer.h>
 #include <yetty/ymesh/ymesh-gen.h>
 
 #ifdef __cplusplus
@@ -62,17 +62,17 @@ struct yetty_ymesh_render_config {
 };
 
 /* Decode `glb_bytes` and produce a fresh ypaint-core buffer holding ONE
- * ymesh complex prim. Caller frees with yetty_ypaint_core_buffer_destroy. */
-struct yetty_ypaint_core_buffer_result yetty_ymesh_render(
+ * ymesh complex prim. Caller frees with yetty_ydraw_core_buffer_destroy. */
+struct yetty_ydraw_core_buffer_result yetty_ymesh_render(
     const uint8_t *glb_bytes, size_t len, const struct yetty_ymesh_render_config *config);
 
 /* Convenience: read the file at `path` and call yetty_ymesh_render. */
-struct yetty_ypaint_core_buffer_result yetty_ymesh_render_path(
+struct yetty_ydraw_core_buffer_result yetty_ymesh_render_path(
     const char *path, const struct yetty_ymesh_render_config *config);
 
 /* OSC envelope (YETTY_OSC_YPAINT_BIN, same wire format as yimage). */
 struct yetty_ycore_size_result yetty_ymesh_osc_bin_emit(
-    const struct yetty_ypaint_core_buffer *buffer, FILE *out);
+    const struct yetty_ydraw_core_buffer *buffer, FILE *out);
 
 #ifdef __cplusplus
 }

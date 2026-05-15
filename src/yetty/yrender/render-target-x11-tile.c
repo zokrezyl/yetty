@@ -26,10 +26,10 @@
 #define X11_TILE_SIZE 64
 
 struct yetty_yrender_render_target_x11_tile {
-    struct yetty_ypaint_core_target base;
+    struct yetty_ydraw_core_target base;
 
     /* Inner texture target — renders offscreen, no WGPU surface. */
-    struct yetty_ypaint_core_target *inner;
+    struct yetty_ydraw_core_target *inner;
 
     /* Tile-diff engine (shared with other potential sinks). */
     struct yetty_yrender_utils_tile_diff_engine *diff_engine;
@@ -231,7 +231,7 @@ static void x11_tile_sink(void *ctx, const struct yetty_yrender_utils_tile_diff_
  * Target ops — most delegate to the inner texture target
  *===========================================================================*/
 
-static struct yetty_ycore_void_result x11_tile_clear(struct yetty_ypaint_core_target *self)
+static struct yetty_ycore_void_result x11_tile_clear(struct yetty_ydraw_core_target *self)
 {
     struct yetty_yrender_render_target_x11_tile *rt =
         (struct yetty_yrender_render_target_x11_tile *)self;
@@ -239,7 +239,7 @@ static struct yetty_ycore_void_result x11_tile_clear(struct yetty_ypaint_core_ta
 }
 
 static struct yetty_ycore_void_result x11_tile_render_layer(
-    struct yetty_ypaint_core_target *self, struct yetty_yrender_terminal_layer *layer)
+    struct yetty_ydraw_core_target *self, struct yetty_yrender_terminal_layer *layer)
 {
     struct yetty_yrender_render_target_x11_tile *rt =
         (struct yetty_yrender_render_target_x11_tile *)self;
@@ -251,8 +251,8 @@ static struct yetty_ycore_void_result x11_tile_render_layer(
     return rt->inner->ops->render_layer(rt->inner, layer);
 }
 
-static struct yetty_ycore_void_result x11_tile_blend(struct yetty_ypaint_core_target *self,
-                                                     struct yetty_ypaint_core_target **sources,
+static struct yetty_ycore_void_result x11_tile_blend(struct yetty_ydraw_core_target *self,
+                                                     struct yetty_ydraw_core_target **sources,
                                                      size_t count)
 {
     struct yetty_yrender_render_target_x11_tile *rt =
@@ -260,21 +260,21 @@ static struct yetty_ycore_void_result x11_tile_blend(struct yetty_ypaint_core_ta
     return rt->inner->ops->blend(rt->inner, sources, count);
 }
 
-static WGPUTextureView x11_tile_get_view(const struct yetty_ypaint_core_target *self)
+static WGPUTextureView x11_tile_get_view(const struct yetty_ydraw_core_target *self)
 {
     const struct yetty_yrender_render_target_x11_tile *rt =
         (const struct yetty_yrender_render_target_x11_tile *)self;
     return rt->inner->ops->get_view(rt->inner);
 }
 
-static WGPUTexture x11_tile_get_texture(const struct yetty_ypaint_core_target *self)
+static WGPUTexture x11_tile_get_texture(const struct yetty_ydraw_core_target *self)
 {
     const struct yetty_yrender_render_target_x11_tile *rt =
         (const struct yetty_yrender_render_target_x11_tile *)self;
     return rt->inner->ops->get_texture(rt->inner);
 }
 
-static struct yetty_ycore_void_result x11_tile_resize(struct yetty_ypaint_core_target *self,
+static struct yetty_ycore_void_result x11_tile_resize(struct yetty_ydraw_core_target *self,
                                                       struct yetty_yrender_viewport viewport)
 {
     struct yetty_yrender_render_target_x11_tile *rt =
@@ -295,7 +295,7 @@ static struct yetty_ycore_void_result x11_tile_resize(struct yetty_ypaint_core_t
 }
 
 static struct yetty_ycore_void_result x11_tile_set_visual_zoom(
-    struct yetty_ypaint_core_target *self, float scale, float off_x, float off_y)
+    struct yetty_ydraw_core_target *self, float scale, float off_x, float off_y)
 {
     struct yetty_yrender_render_target_x11_tile *rt =
         (struct yetty_yrender_render_target_x11_tile *)self;
@@ -309,7 +309,7 @@ static struct yetty_ycore_void_result x11_tile_set_visual_zoom(
  * X window contents have been clobbered (by an overlapping window, unmap/
  * map, etc.), so we have to blit every tile even if the diff would say
  * nothing changed. */
-static void x11_tile_refresh_full(struct yetty_ypaint_core_target *self)
+static void x11_tile_refresh_full(struct yetty_ydraw_core_target *self)
 {
     struct yetty_yrender_render_target_x11_tile *rt =
         (struct yetty_yrender_render_target_x11_tile *)self;
@@ -330,21 +330,21 @@ static void on_engine_idle(void *ctx)
     }
 }
 
-static bool x11_tile_is_busy(const struct yetty_ypaint_core_target *self)
+static bool x11_tile_is_busy(const struct yetty_ydraw_core_target *self)
 {
     const struct yetty_yrender_render_target_x11_tile *rt =
         (const struct yetty_yrender_render_target_x11_tile *)self;
     return yetty_yrender_utils_tile_diff_engine_is_busy(rt->diff_engine);
 }
 
-static void x11_tile_notify_render_skipped(struct yetty_ypaint_core_target *self)
+static void x11_tile_notify_render_skipped(struct yetty_ydraw_core_target *self)
 {
     struct yetty_yrender_render_target_x11_tile *rt =
         (struct yetty_yrender_render_target_x11_tile *)self;
     yetty_yrender_utils_tile_diff_engine_mark_redraw_pending(rt->diff_engine);
 }
 
-static struct yetty_ycore_void_result x11_tile_present(struct yetty_ypaint_core_target *self)
+static struct yetty_ycore_void_result x11_tile_present(struct yetty_ydraw_core_target *self)
 {
     struct yetty_yrender_render_target_x11_tile *rt =
         (struct yetty_yrender_render_target_x11_tile *)self;
@@ -365,7 +365,7 @@ static struct yetty_ycore_void_result x11_tile_present(struct yetty_ypaint_core_
                                                        rt);
 }
 
-static void x11_tile_destroy(struct yetty_ypaint_core_target *self)
+static void x11_tile_destroy(struct yetty_ydraw_core_target *self)
 {
     struct yetty_yrender_render_target_x11_tile *rt =
         (struct yetty_yrender_render_target_x11_tile *)self;
@@ -409,12 +409,12 @@ static const struct yetty_yrender_target_ops x11_tile_ops = {
 /* Forward-declared from render-target-texture.c to avoid a circular header. */
 struct yetty_yrender_target_ptr_result yetty_yrender_target_texture_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat format,
-    struct yetty_ypaint_core_gpu_allocator *allocator, WGPUSurface surface,
+    struct yetty_ydraw_core_gpu_allocator *allocator, WGPUSurface surface,
     struct yetty_yrender_viewport viewport);
 
 struct yetty_yrender_target_ptr_result yetty_yrender_target_x11_tile_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat format,
-    struct yetty_ypaint_core_gpu_allocator *allocator, struct yetty_yplatform_wgpu *wgpu,
+    struct yetty_ydraw_core_gpu_allocator *allocator, struct yetty_yplatform_wgpu *wgpu,
     struct yetty_yevent_event_loop *event_loop, void *x11_display, unsigned long x11_window,
     struct yetty_yrender_viewport viewport)
 {

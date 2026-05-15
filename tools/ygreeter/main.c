@@ -316,7 +316,7 @@ static const struct nav_entry IMAGE_NAV[] = {
  * widget when handed off via set_buffer. */
 #include <yetty/yimage/yimage.h>
 
-static struct yetty_ypaint_core_buffer *build_image_buffer(const char *title, const char *path)
+static struct yetty_ydraw_core_buffer *build_image_buffer(const char *title, const char *path)
 {
     ydebug("build_image_buffer: ENTER title='%s' path='%s'", title ? title : "(null)",
            path ? path : "(null)");
@@ -326,7 +326,7 @@ static struct yetty_ypaint_core_buffer *build_image_buffer(const char *title, co
         .bounds_w = 460.0f,
         .bounds_h = 320.0f,
     };
-    struct yetty_ypaint_core_buffer_result r = yetty_yimage_render_path(path, &cfg);
+    struct yetty_ydraw_core_buffer_result r = yetty_yimage_render_path(path, &cfg);
     if (YETTY_IS_ERR(r)) {
         ydebug("build_image_buffer: yimage_render_path FAILED: %s", r.error.msg);
         yetty_ycore_error_destroy(r.error);
@@ -342,7 +342,7 @@ static struct yetty_ypaint_core_buffer *build_image_buffer(const char *title, co
             .capacity = strlen(title),
         };
         struct yetty_ycore_void_result tr =
-            yetty_ypaint_core_buffer_add_text(r.value, 16.0f, 36.0f, &text_view, 22.0f,
+            yetty_ydraw_core_buffer_add_text(r.value, 16.0f, 36.0f, &text_view, 22.0f,
                                               /*color (ABGR)=*/0xFFFFFFFFu, /*layer=*/0,
                                               /*font_id=*/-1, /*rotation=*/0.0f);
         if (YETTY_IS_ERR(tr)) {
@@ -727,7 +727,7 @@ static void load_entry(struct app *app, int tab_index, int entry_index)
      * via set_buffer (which takes ownership). Falls through to the
      * static YAML placeholder when no image was found. */
     if (tab_index == g_images_tab_index && g_image_path) {
-        struct yetty_ypaint_core_buffer *buf =
+        struct yetty_ydraw_core_buffer *buf =
             build_image_buffer(t->entries[entry_index].label, g_image_path);
         if (buf) {
             yetty_ygui_widget_rich_set_buffer(t->rich, buf);

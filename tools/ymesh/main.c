@@ -36,7 +36,7 @@
 
 #include <yetty/ymesh/ymesh.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/buffer.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yterm/osc-codes.h>
@@ -164,7 +164,7 @@ static int redraw_and_push(struct ev_state *st)
         .pan_y      = st->pan_y,
         .mode       = st->mode,
     };
-    struct yetty_ypaint_core_buffer_result br =
+    struct yetty_ydraw_core_buffer_result br =
         yetty_ymesh_render(st->glb_bytes, st->glb_len, &cfg);
     if (YETTY_IS_ERR(br)) {
         fprintf(stderr, "ymesh: render failed: %s\n", br.error.msg);
@@ -172,12 +172,12 @@ static int redraw_and_push(struct ev_state *st)
     }
 
     const uint8_t *bytes = NULL;
-    size_t blen = yetty_ypaint_core_buffer_serialize(br.value, &bytes);
+    size_t blen = yetty_ydraw_core_buffer_serialize(br.value, &bytes);
     (void)emit_envelope(YETTY_OSC_YPAINT_CLEAR, 0, NULL, 0, NULL, 0);
     (void)emit_bin_osc(bytes, blen);
     fflush(stdout);
 
-    yetty_ypaint_core_buffer_destroy(br.value);
+    yetty_ydraw_core_buffer_destroy(br.value);
     return 0;
 }
 
@@ -434,14 +434,14 @@ static int oneshot(const char *path, float bounds_w, float bounds_h)
     struct yetty_ymesh_render_config cfg = {
         .bounds_w = bounds_w, .bounds_h = bounds_h,
     };
-    struct yetty_ypaint_core_buffer_result br =
+    struct yetty_ydraw_core_buffer_result br =
         yetty_ymesh_render_path(path, &cfg);
     if (YETTY_IS_ERR(br)) {
         fprintf(stderr, "ymesh: %s\n", br.error.msg);
         return 1;
     }
     struct yetty_ycore_size_result sr = yetty_ymesh_osc_bin_emit(br.value, stdout);
-    yetty_ypaint_core_buffer_destroy(br.value);
+    yetty_ydraw_core_buffer_destroy(br.value);
     if (YETTY_IS_ERR(sr)) {
         fprintf(stderr, "ymesh: emit failed: %s\n", sr.error.msg);
         return 1;

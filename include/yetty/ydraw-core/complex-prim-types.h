@@ -1,0 +1,73 @@
+// YPaint Complex Primitive Types - Wire Format
+//
+// Pure data layout for complex primitives traveling over the OSC wire:
+//   - struct complex_prim (type + payload_size + FAM data)
+//   - type-id ranges (simple SDF / flyweight / complex)
+//   - helpers that operate on raw bytes (is_complex_type, size, aabb, handler)
+//
+// This header is intentionally GPU-less so client tools (ycat, yecho, yplot
+// CLI, demos, riscv64 builds) can include it without dragging in WebGPU.
+//
+// The server-side runtime (struct concrete_factory, struct complex_prim_instance,
+// the abstract-factory registry) lives in
+// include/yetty/ydraw-factory/complex-prim-factory.h.
+//
+// See docs/ypaint.md for full documentation.
+
+#pragma once
+
+#include <stdbool.h>
+#include <stdint.h>
+#include <yetty/ycore/ffi-annotations.h>
+#include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+//=============================================================================
+// Complex primitive type IDs (0x80000000+ to avoid collision with SDF 0-255)
+//=============================================================================
+
+/* Tier ranges for ypaint primitive types:
+ *   [0x00000000, 0x000000FF]   Simple SDF (fixed-size, generated)
+ *   [0x40000000, 0x7FFFFFFF]   Flyweight (variable-size, no GPU pipeline)
+ *                                FONT       — yetty/ydraw-core/font-prim.h
+ *                                TEXT_SPAN  — yetty/ydraw-core/text-span-prim.h
+ *   [0x80000000, 0xFFFFFFFF]   Complex (factory + per-instance GPU resources)
+ *                                each concrete factory owns its own type id
+ *                                (e.g. YETTY_YPLOT_TYPE_ID in yplot-gen.h).
+ */
+#define YETTY_YDRAW_COMPLEX_TYPE_BASE 0x80000000u
+
+//=============================================================================
+// Complex primitive header (FAM wire format)
+//=============================================================================
+
+struct yetty_ydraw_core_complex_prim {
+    uint32_t type;
+    uint32_t payload_size;
+    uint8_t data[];
+};
+
+// Check if type uses FAM format
+bool yetty_ydraw_core_is_complex_type(uint32_t type);
+
+// Get AABB (reads bounds from standard offset 0-15 in payload)
+struct rectangle_result yetty_ydraw_core_complex_prim_aabb(const void *data);
+
+//=============================================================================
+// Base ops for complex primitives (for flyweight registry)
+// Returns base ops pointer for buffer iteration
+//=============================================================================
+
+#include <yetty/ydraw-core/flyweight.h>
+
+// Handler for complex prim types (>= 0x80000000)
+struct yetty_ydraw_core_prim_base_ops_ptr_result yetty_ydraw_core_complex_prim_handler(
+    uint32_t prim_type);
+
+#ifdef __cplusplus
+}
+#endif

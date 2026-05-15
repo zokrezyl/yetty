@@ -122,13 +122,13 @@ Programs are serialized as 32-bit words:
 
 ## Code Generation
 
-Source of truth: `src/yetty/ypaint/yfsvm/yfsvm-opcodes.yaml`
+Source of truth: `src/yetty/ydraw/yfsvm/yfsvm-opcodes.yaml`
 
-Generator: `src/yetty/ypaint/yfsvm/gen-yfsvm-code.py`
+Generator: `src/yetty/ydraw/yfsvm/gen-yfsvm-code.py`
 
 Outputs:
-- `include/yetty/ypaint/yfsvm/yfsvm.gen.h` - C enum, encode/decode functions
-- `src/yetty/ypaint/yfsvm/yfsvm.gen.wgsl` - WGSL VM execution
+- `include/yetty/ydraw/yfsvm/yfsvm.gen.h` - C enum, encode/decode functions
+- `src/yetty/ydraw/yfsvm/yfsvm.gen.wgsl` - WGSL VM execution
 
 ## Example
 

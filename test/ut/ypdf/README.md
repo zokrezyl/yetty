@@ -87,7 +87,7 @@ the per-char cursor for any span containing `"sma"` (the canonical
 test, then inspect:
 
 - The diagnostic dump (test stderr) — what the sim *expects*.
-- `tools/cdb-viewer ~/.cache/yetty/ypaint-fonts/pdf_<hash>.cdb` — what
+- `tools/cdb-viewer ~/.cache/yetty/ydraw-fonts/pdf_<hash>.cdb` — what
   the canvas *actually* uses for advances/bearings.
 - A side-by-side `mutool draw -F png` of the PDF — what it should
   *look* like.

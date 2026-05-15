@@ -178,7 +178,7 @@ src/yetty/term/
   spatial-grid.cpp           — SpatialGrid implementation
   terminal-screen.cpp        — TerminalScreenImpl (orchestrates layers, compositing)
 
-src/yetty/ypaint/
+src/yetty/ydraw/
   ypaint-buffer.h            — YPaintBuffer (pure data input, unchanged)
   canvas.cpp                 — replaced by SpatialGrid
   painter.cpp                — rendering logic, uses SpatialGrid

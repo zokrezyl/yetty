@@ -13,10 +13,10 @@
 extern const unsigned char gyfsvm_shaderData[];
 extern const unsigned int gyfsvm_shaderSize;
 
-static struct yetty_ypaint_core_gpu_resource_set yfsvm_static_shader_rs;
+static struct yetty_ydraw_core_gpu_resource_set yfsvm_static_shader_rs;
 static bool yfsvm_static_shader_rs_initialized = false;
 
-const struct yetty_ypaint_core_gpu_resource_set *yetty_yfsvm_get_shader_resource_set(void)
+const struct yetty_ydraw_core_gpu_resource_set *yetty_yfsvm_get_shader_resource_set(void)
 {
     if (!yfsvm_static_shader_rs_initialized) {
         memset(&yfsvm_static_shader_rs, 0, sizeof(yfsvm_static_shader_rs));

@@ -8,7 +8,7 @@
 #include <yetty/yexpr/yexpr.h>
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/yface/yface.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/buffer.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yterm/osc-codes.h>
 
@@ -56,11 +56,11 @@ static int parse_hex_color(const char *s, uint32_t *out)
     return 1;
 }
 
-struct yetty_ypaint_core_buffer_result yetty_yplot_render(
+struct yetty_ydraw_core_buffer_result yetty_yplot_render(
     const char *source, size_t len, const struct yetty_yplot_render_config *config)
 {
     if (!source && len > 0) {
-        return YETTY_ERR(yetty_ypaint_core_buffer, "source is NULL");
+        return YETTY_ERR(yetty_ydraw_core_buffer, "source is NULL");
     }
 
     /* Resolve config defaults. */
@@ -95,7 +95,7 @@ struct yetty_ypaint_core_buffer_result yetty_yplot_render(
      * @<name>.color attrs). */
     struct yetty_yexpr_plot_parse_result pr = yetty_yexpr_parse_plot(source, len);
     if (YETTY_IS_ERR(pr)) {
-        return YETTY_ERR(yetty_ypaint_core_buffer, "yplot: expression parse failed", pr);
+        return YETTY_ERR(yetty_ydraw_core_buffer, "yplot: expression parse failed", pr);
     }
     u.function_count = pr.value.plot.def_count;
     if (u.function_count > 8) {
@@ -122,12 +122,12 @@ struct yetty_ypaint_core_buffer_result yetty_yplot_render(
     /* Compile to bytecode. */
     struct yetty_yfsvm_program_result prog = yetty_yfsvm_compile_multi(&pr.value.plot);
     if (YETTY_IS_ERR(prog)) {
-        return YETTY_ERR(yetty_ypaint_core_buffer, "yplot: yfsvm compile failed", prog);
+        return YETTY_ERR(yetty_ydraw_core_buffer, "yplot: yfsvm compile failed", prog);
     }
     uint32_t bc_buf[1024];
     uint32_t bc_len = yetty_yfsvm_program_serialize(&prog.value, bc_buf, 1024);
     if (bc_len == 0) {
-        return YETTY_ERR(yetty_ypaint_core_buffer, "yplot: bytecode serialize failed");
+        return YETTY_ERR(yetty_ydraw_core_buffer, "yplot: bytecode serialize failed");
     }
     struct yetty_yplot_buffers bufs = {.bytecode = bc_buf, .bytecode_len = bc_len};
 
@@ -135,51 +135,51 @@ struct yetty_ypaint_core_buffer_result yetty_yplot_render(
     size_t required = yetty_yplot_uniforms_serialized_size(&u, &bufs);
     uint8_t *prim_buf = malloc(required);
     if (!prim_buf) {
-        return YETTY_ERR(yetty_ypaint_core_buffer, "yplot: prim alloc failed");
+        return YETTY_ERR(yetty_ydraw_core_buffer, "yplot: prim alloc failed");
     }
     struct yetty_ycore_size_result ser =
         yetty_yplot_uniforms_serialize(&u, &bufs, prim_buf, required);
     if (YETTY_IS_ERR(ser)) {
         free(prim_buf);
-        return YETTY_ERR(yetty_ypaint_core_buffer, "yplot: serialize failed", ser);
+        return YETTY_ERR(yetty_ydraw_core_buffer, "yplot: serialize failed", ser);
     }
 
     /* Build a fresh ypaint buffer + attach the prim. Scene bounds = the
      * yplot's own w x h (so the receiving canvas knows how much vertical
      * space to reserve). */
-    struct yetty_ypaint_core_buffer_config bcfg = {
+    struct yetty_ydraw_core_buffer_config bcfg = {
         .scene_min_x = 0.0f,
         .scene_min_y = 0.0f,
         .scene_max_x = u.bounds_x + u.bounds_w,
         .scene_max_y = u.bounds_y + u.bounds_h,
     };
-    struct yetty_ypaint_core_buffer_result br =
-        yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
+    struct yetty_ydraw_core_buffer_result br =
+        yetty_ydraw_core_buffer_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         free(prim_buf);
-        return YETTY_ERR(yetty_ypaint_core_buffer, "yplot: ypaint buffer create failed", br);
+        return YETTY_ERR(yetty_ydraw_core_buffer, "yplot: ypaint buffer create failed", br);
     }
 
-    struct yetty_ypaint_core_id_result idr =
-        yetty_ypaint_core_buffer_add_prim(br.value, prim_buf, required);
+    struct yetty_ydraw_core_id_result idr =
+        yetty_ydraw_core_buffer_add_prim(br.value, prim_buf, required);
     free(prim_buf);
     if (YETTY_IS_ERR(idr)) {
-        yetty_ypaint_core_buffer_destroy(br.value);
-        return YETTY_ERR(yetty_ypaint_core_buffer, "yplot: ypaint add_prim failed", idr);
+        yetty_ydraw_core_buffer_destroy(br.value);
+        return YETTY_ERR(yetty_ydraw_core_buffer, "yplot: ypaint add_prim failed", idr);
     }
 
-    return YETTY_OK(yetty_ypaint_core_buffer, br.value);
+    return YETTY_OK(yetty_ydraw_core_buffer, br.value);
 }
 
 struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(
-    const struct yetty_ypaint_core_buffer *buffer, FILE *out)
+    const struct yetty_ydraw_core_buffer *buffer, FILE *out)
 {
     if (!buffer || !out) {
         return YETTY_ERR(yetty_ycore_size, "yplot_osc_bin_emit: NULL buffer or out");
     }
     const uint8_t *raw = NULL;
     size_t raw_size =
-        yetty_ypaint_core_buffer_serialize((struct yetty_ypaint_core_buffer *)buffer, &raw);
+        yetty_ydraw_core_buffer_serialize((struct yetty_ydraw_core_buffer *)buffer, &raw);
     if (raw_size == 0 || !raw) {
         return YETTY_ERR(yetty_ycore_size, "yplot_osc_bin_emit: empty serialize");
     }

@@ -161,7 +161,7 @@ static struct yetty_ycore_void_result ymgui_set_visual_zoom(
 static struct yetty_yrender_gpu_resource_set_result ymgui_get_gpu_resource_set(
     const struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal_layer *self,
-                                                   struct yetty_ypaint_core_target *target);
+                                                   struct yetty_ydraw_core_target *target);
 static int ymgui_is_empty(const struct yetty_yrender_terminal_layer *self);
 static int ymgui_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods);
 static int ymgui_on_char(struct yetty_yrender_terminal_layer *self, uint32_t cp, int mods);
@@ -1085,7 +1085,7 @@ static struct yetty_yrender_gpu_resource_set_result ymgui_get_gpu_resource_set(
     const struct yetty_yrender_terminal_layer *self)
 {
     (void)self;
-    static const struct yetty_ypaint_core_gpu_resource_set empty = {0};
+    static const struct yetty_ydraw_core_gpu_resource_set empty = {0};
     return YETTY_OK(yetty_yrender_gpu_resource_set, &empty);
 }
 
@@ -1362,7 +1362,7 @@ static struct yetty_ycore_void_result draw_card(struct yetty_yterm_ymgui_layer *
 }
 
 static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal_layer *self,
-                                                   struct yetty_ypaint_core_target *target)
+                                                   struct yetty_ydraw_core_target *target)
 {
     struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)self;
     if (!target || !target->ops || !target->ops->get_view) {

@@ -86,7 +86,7 @@ target_include_directories(yetty_ycat PRIVATE
 target_link_libraries(yetty_ycat PUBLIC
     yetty_ycore
     yetty_yface
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_ymarkdown
     yetty_ypdf
     yetty_ysvg

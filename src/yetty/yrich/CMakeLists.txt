@@ -18,7 +18,7 @@ target_include_directories(yetty_yrich PUBLIC
 
 target_link_libraries(yetty_yrich PUBLIC
     yetty_ycore
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_ysdf
     yaml
 )

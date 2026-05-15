@@ -26,9 +26,9 @@
 
 #include "ygui_internal.h"
 
-#include <yetty/ypaint-core/buffer.h>
-#include <yetty/ypaint-core/cmds.h>
-#include <yetty/ypaint-core/text-span-prim.h>
+#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/cmds.h>
+#include <yetty/ydraw-core/text-span-prim.h>
 #include <yetty/ysdf/types.gen.h>
 
 #include <yetty/ytrace/ytrace.h>
@@ -183,7 +183,7 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
         translate_sdf(prim, words, dx, dy);
         return;
     }
-    if (type == YETTY_YPAINT_TYPE_TEXT_SPAN) {
+    if (type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
         translate_text_span(prim, words, dx, dy);
         return;
     }
@@ -200,7 +200,7 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
  * absolute layout box and append it to the engine's frame buffer.
  *
  * The source buffer's raw primitive byte stream is exposed by
- * yetty_ypaint_core_buffer_data() / _size() — these used to be
+ * yetty_ydraw_core_buffer_data() / _size() — these used to be
  * module-private; promoted to the public surface for producers that
  * need to walk their own buffers (this widget is the motivating case).
  *===========================================================================*/
@@ -216,8 +216,8 @@ static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self
         return YETTY_OK_VOID();
     }
     const uint8_t *src_data =
-        (const uint8_t *)yetty_ypaint_core_buffer_data(self->data.rich.buffer);
-    size_t src_size = yetty_ypaint_core_buffer_size(self->data.rich.buffer);
+        (const uint8_t *)yetty_ydraw_core_buffer_data(self->data.rich.buffer);
+    size_t src_size = yetty_ydraw_core_buffer_size(self->data.rich.buffer);
     ydebug("rich_render id=%s src=%p size=%zu layout=(%.1f,%.1f)",
            self->id ? self->id : "?", (const void *)src_data, src_size,
            self->layout_x, self->layout_y);
@@ -260,8 +260,8 @@ static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self
         }
         memcpy(work, p, s);
         translate_prim((uint32_t *)work, s, dx, dy);
-        struct yetty_ypaint_core_id_result r =
-            yetty_ypaint_core_buffer_add_prim(ctx->buffer, work, s);
+        struct yetty_ydraw_core_id_result r =
+            yetty_ydraw_core_buffer_add_prim(ctx->buffer, work, s);
         if (YETTY_IS_ERR(r)) {
             free(heap);
             return YETTY_ERR(yetty_ycore_void, "rich_render: add_prim failed", r);
@@ -279,7 +279,7 @@ static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self
 static void rich_destroy(struct yetty_ygui_widget *self)
 {
     if (self->data.rich.buffer) {
-        yetty_ypaint_core_buffer_destroy(self->data.rich.buffer);
+        yetty_ydraw_core_buffer_destroy(self->data.rich.buffer);
         self->data.rich.buffer = NULL;
     }
 }
@@ -320,13 +320,13 @@ struct yetty_ygui_widget *yetty_ygui_engine_rich(struct yetty_ygui_engine *engin
  * of this file for the rationale. */
 
 void yetty_ygui_widget_rich_set_buffer(struct yetty_ygui_widget *widget,
-                                       struct yetty_ypaint_core_buffer *buffer)
+                                       struct yetty_ydraw_core_buffer *buffer)
 {
     if (!widget || widget->type != YETTY_YGUI_WIDGET_RICH) {
         return;
     }
     if (widget->data.rich.buffer && widget->data.rich.buffer != buffer) {
-        yetty_ypaint_core_buffer_destroy(widget->data.rich.buffer);
+        yetty_ydraw_core_buffer_destroy(widget->data.rich.buffer);
     }
     widget->data.rich.buffer = buffer;
     if (widget->engine) {

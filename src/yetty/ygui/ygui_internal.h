@@ -6,7 +6,7 @@
 #define YGUI_INTERNAL_H
 
 #include <yetty/ygui/ygui.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/buffer.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yface/yface.h>
 #include <stdlib.h>
@@ -33,11 +33,11 @@ struct yetty_platform_pty;
 /*=============================================================================
  * Render Context (drawing target = a ypaint-core buffer). The shim that used
  * to sit here (ydraw-capi.gen.*) is gone; widgets call yetty_ysdf_add_* and
- * yetty_ypaint_core_buffer_add_text directly.
+ * yetty_ydraw_core_buffer_add_text directly.
  *===========================================================================*/
 
 struct yetty_ygui_render_ctx {
-    struct yetty_ypaint_core_buffer *buffer;
+    struct yetty_ydraw_core_buffer *buffer;
     const struct yetty_ygui_theme *theme;
     float offset_x, offset_y;
     float clip_x, clip_y, clip_w, clip_h;
@@ -348,7 +348,7 @@ struct yetty_ygui_widget {
             /* Owned ypaint-core buffer. NULL while empty. Authors fill the
              * primitives in widget-local coordinates (0..w, 0..h); the
              * widget's render translates them to absolute canvas coords. */
-            struct yetty_ypaint_core_buffer *buffer;
+            struct yetty_ydraw_core_buffer *buffer;
         } rich;
 
         struct {
@@ -434,14 +434,14 @@ typedef struct {
 
 struct yetty_ygui_engine {
     /* ypaint-core buffer (created and owned by engine). Widgets add primitives
-     * via yetty_ysdf_* and text via yetty_ypaint_core_buffer_add_text. */
-    struct yetty_ypaint_core_buffer *buffer;
+     * via yetty_ysdf_* and text via yetty_ydraw_core_buffer_add_text. */
+    struct yetty_ydraw_core_buffer *buffer;
 
     /* Raster font in metrics-only mode — used for ygui_text_width() and widget
      * layout. Opened in engine_alloc_init and reused for every render. See
      * ypdf's pdf-renderer.c for the pattern (raster_font_create_from_file with
      * shader_path=NULL). Lazily reopened if the path changes. */
-    struct yetty_ypaint_font *measure_font;
+    struct yetty_ydraw_font *measure_font;
     float measure_base_size; /* The font's base_size; measurement scales from here. */
 
     /* Spatial grid for hit testing */
@@ -612,7 +612,7 @@ void yetty_ygui_widget_init_base(struct yetty_ygui_widget *widget, float x, floa
 
 /* Render context */
 void yetty_ygui_render_ctx_init(struct yetty_ygui_render_ctx *ctx,
-                                struct yetty_ypaint_core_buffer *buffer,
+                                struct yetty_ydraw_core_buffer *buffer,
                                 const struct yetty_ygui_theme *theme);
 struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box(struct yetty_ygui_render_ctx *ctx,
                                                                 float x, float y, float w, float h,

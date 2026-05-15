@@ -38,13 +38,13 @@ struct yetty_yrender_flat_uniform {
 struct yetty_yrender_gpu_binder {
     WGPUDevice device;
     WGPUQueue queue;
-    struct yetty_ypaint_core_gpu_allocator *allocator;
+    struct yetty_ydraw_core_gpu_allocator *allocator;
 
     // Pre-compiled pipeline (from factory)
     WGPURenderPipeline pipeline;
 
     // Collected resource sets
-    const struct yetty_ypaint_core_gpu_resource_set *resource_sets[MAX_RESOURCE_SETS];
+    const struct yetty_ydraw_core_gpu_resource_set *resource_sets[MAX_RESOURCE_SETS];
     size_t resource_set_count;
 
     // Flattened resources
@@ -85,7 +85,7 @@ struct yetty_yrender_gpu_binder {
 //=============================================================================
 
 struct yetty_primitive_gpu_binder_ptr_result yetty_yrender_gpu_binder_create(
-    WGPUDevice device, WGPUQueue queue, struct yetty_ypaint_core_gpu_allocator *allocator)
+    WGPUDevice device, WGPUQueue queue, struct yetty_ydraw_core_gpu_allocator *allocator)
 {
     if (!device || !queue) {
         return YETTY_ERR(yetty_primitive_gpu_binder_ptr, "device or queue is NULL");
@@ -182,7 +182,7 @@ struct yetty_ycore_void_result yetty_yrender_gpu_binder_set_pipeline(
 //=============================================================================
 
 static void collect_resources_recursive(struct yetty_yrender_gpu_binder *binder,
-                                        const struct yetty_ypaint_core_gpu_resource_set *rs)
+                                        const struct yetty_ydraw_core_gpu_resource_set *rs)
 {
     if (!rs) {
         return;
@@ -223,7 +223,7 @@ static void collect_resources_recursive(struct yetty_yrender_gpu_binder *binder,
 }
 
 struct yetty_ycore_void_result yetty_yrender_gpu_binder_add_resource_set(
-    struct yetty_yrender_gpu_binder *binder, const struct yetty_ypaint_core_gpu_resource_set *rs)
+    struct yetty_yrender_gpu_binder *binder, const struct yetty_ydraw_core_gpu_resource_set *rs)
 {
     if (!binder) {
         return YETTY_ERR(yetty_ycore_void, "binder is NULL");

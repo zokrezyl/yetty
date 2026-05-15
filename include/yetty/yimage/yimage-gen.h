@@ -11,8 +11,8 @@ extern "C" {
 
 /* Forward-declared so this header stays GPU-less and can be included by
  * client-side wire emitters that don't link Dawn. The full type lives in
- * yetty/ypaint-factory/complex-prim-factory.h (server side). */
-struct yetty_ypaint_core_concrete_factory;
+ * yetty/ydraw-factory/complex-prim-factory.h (server side). */
+struct yetty_ydraw_core_concrete_factory;
 
 #define YETTY_YIMAGE_TYPE_ID 0x80000004u
 
@@ -47,8 +47,8 @@ struct yetty_ycore_size_result yetty_yimage_uniforms_serialize(
 // Factory API (creates binder with pre-compiled pipeline)
 //=============================================================================
 
-struct yetty_ypaint_core_concrete_factory *yetty_yimage_factory_create(void);
-void yetty_yimage_factory_destroy(struct yetty_ypaint_core_concrete_factory *factory);
+struct yetty_ydraw_core_concrete_factory *yetty_yimage_factory_create(void);
+void yetty_yimage_factory_destroy(struct yetty_ydraw_core_concrete_factory *factory);
 
 #ifdef __cplusplus
 }

@@ -1,0 +1,22 @@
+/* complex-prim-types — module-internal declarations (ypaint-core only).
+ *
+ * The public surface lives in include/yetty/ydraw-core/complex-prim-types.h.
+ */
+#ifndef YETTY_YDRAW_CORE_COMPLEX_PRIM_TYPES_INTERNAL_H
+#define YETTY_YDRAW_CORE_COMPLEX_PRIM_TYPES_INTERNAL_H
+
+#include <stddef.h>
+#include <yetty/ydraw-core/complex-prim-types.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Get total size (reads FAM header) */
+size_t yetty_ydraw_core_complex_prim_size(const void *data);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* YETTY_YDRAW_CORE_COMPLEX_PRIM_TYPES_INTERNAL_H */

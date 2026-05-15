@@ -9,7 +9,7 @@
 
 #include <yetty/ysvg/ysvg.h>
 
-struct yetty_ypaint_core_buffer_result yetty_ycat_handler_svg(
+struct yetty_ydraw_core_buffer_result yetty_ycat_handler_svg(
     const uint8_t *bytes, size_t len, const char *path_hint, const struct yetty_ycat_config *config)
 {
     (void)path_hint;
@@ -25,7 +25,7 @@ struct yetty_ypaint_core_buffer_result yetty_ycat_handler_svg(
     struct yetty_ysvg_render_result r =
         yetty_ysvg_render((const char *)bytes, len, NULL, 0, &svgcfg);
     if (YETTY_IS_ERR(r)) {
-        return YETTY_ERR(yetty_ypaint_core_buffer, r.error.msg);
+        return YETTY_ERR(yetty_ydraw_core_buffer, r.error.msg);
     }
-    return YETTY_OK(yetty_ypaint_core_buffer, r.value.buffer);
+    return YETTY_OK(yetty_ydraw_core_buffer, r.value.buffer);
 }

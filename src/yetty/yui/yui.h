@@ -35,7 +35,7 @@ extern "C" {
 
 struct yetty_yui;
 struct yetty_context;
-struct yetty_ypaint_core_target;
+struct yetty_ydraw_core_target;
 
 YETTY_YRESULT_DECLARE(yetty_yui_ptr, struct yetty_yui *);
 
@@ -105,7 +105,7 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui);
 /* Composite the yui chrome into the render target. Called from yetty's
  * RENDER handler after every terminal layer has rendered. */
 struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
-                                                struct yetty_ypaint_core_target *target);
+                                                struct yetty_ydraw_core_target *target);
 
 /* Update the static-canvas grid to match a new framebuffer size. Called
  * from the RESIZE handler. Cell stride stays as set at create time. */

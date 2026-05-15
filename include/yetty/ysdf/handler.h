@@ -1,7 +1,7 @@
 // YSDF primitive handler for buffer iteration
 #pragma once
 
-#include <yetty/ypaint-core/flyweight.h>
+#include <yetty/ydraw-core/flyweight.h>
 #include <yetty/ysdf/types.gen.h>
 
 #ifdef __cplusplus
@@ -27,13 +27,13 @@ static inline struct rectangle_result yetty_ysdf_prim_aabb(const uint32_t *prim)
 }
 
 // Base ops for SDF primitives (size, aabb only)
-static const struct yetty_ypaint_core_prim_base_ops yetty_ysdf_prim_base_ops = {
+static const struct yetty_ydraw_core_prim_base_ops yetty_ysdf_prim_base_ops = {
     .size = yetty_ysdf_prim_size,
     .aabb = yetty_ysdf_prim_aabb,
 };
 
 // Extended ops for SDF primitives (includes base + destroy + get_gpu_resource_set)
-static const struct yetty_ypaint_core_prim_ops yetty_ysdf_prim_ops = {
+static const struct yetty_ydraw_core_prim_ops yetty_ysdf_prim_ops = {
     .base =
         {
             .size = yetty_ysdf_prim_size,
@@ -45,14 +45,14 @@ static const struct yetty_ypaint_core_prim_ops yetty_ysdf_prim_ops = {
 
 // Handler returns base ops (for flyweight registry).
 // SDF tier is [0x10000000, 0x1FFFFFFF] in the ypaint type-id space.
-static inline struct yetty_ypaint_core_prim_base_ops_ptr_result yetty_ysdf_handler(
+static inline struct yetty_ydraw_core_prim_base_ops_ptr_result yetty_ysdf_handler(
     uint32_t prim_type)
 {
     if (prim_type >= 0x10000000u && prim_type <= 0x1FFFFFFFu &&
         yetty_ysdf_primitive_size(prim_type) > 0) {
-        return YETTY_OK(yetty_ypaint_core_prim_base_ops_ptr, &yetty_ysdf_prim_base_ops);
+        return YETTY_OK(yetty_ydraw_core_prim_base_ops_ptr, &yetty_ysdf_prim_base_ops);
     }
-    return YETTY_ERR(yetty_ypaint_core_prim_base_ops_ptr, "not an SDF type");
+    return YETTY_ERR(yetty_ydraw_core_prim_base_ops_ptr, "not an SDF type");
 }
 
 #ifdef __cplusplus

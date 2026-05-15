@@ -24,7 +24,7 @@
 extern "C" {
 #endif
 
-struct yetty_ypaint_core_buffer;
+struct yetty_ydraw_core_buffer;
 struct yetty_yrich_element;
 
 YETTY_YRESULT_DECLARE(yetty_yrich_element_ptr, struct yetty_yrich_element *);
@@ -51,7 +51,7 @@ struct yetty_yrich_element_ops {
     bool (*hit_test)(const struct yetty_yrich_element *self, float x, float y);
 
     struct yetty_ycore_void_result (*render)(struct yetty_yrich_element *self,
-                                             struct yetty_ypaint_core_buffer *buf, uint32_t layer,
+                                             struct yetty_ydraw_core_buffer *buf, uint32_t layer,
                                              bool selected);
 
     bool (*is_editable)(const struct yetty_yrich_element *self);
@@ -84,7 +84,7 @@ struct yetty_yrich_rect yetty_yrich_element_bounds(const struct yetty_yrich_elem
 bool yetty_yrich_element_hit_test(const struct yetty_yrich_element *e, float x, float y);
 
 struct yetty_ycore_void_result yetty_yrich_element_render(struct yetty_yrich_element *e,
-                                                          struct yetty_ypaint_core_buffer *buf,
+                                                          struct yetty_ydraw_core_buffer *buf,
                                                           uint32_t layer, bool selected);
 
 bool yetty_yrich_element_is_editable(const struct yetty_yrich_element *e);

@@ -11,7 +11,7 @@ target_include_directories(yetty_yecho PUBLIC
 
 target_link_libraries(yetty_yecho PUBLIC
     yetty_ycore
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_ysdf
     yetty_yfont_shader_glyph
     yetty_yface

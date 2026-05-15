@@ -24,7 +24,7 @@ target_include_directories(yetty_ybrowser PUBLIC
 target_link_libraries(yetty_ybrowser
     PUBLIC
         lexbor_static
-        yetty_ypaint_core
+        yetty_ydraw_core
         yetty_ysdf
         yetty_ycore
         yetty_yimage_core

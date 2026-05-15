@@ -18,7 +18,7 @@ typedef struct uv_loop_s uv_loop_t;
 
 /* Forward declare ypaint-core buffer (rich widget hands one of these to ygui;
  * we don't pull in the full ypaint-core header from this public surface). */
-struct yetty_ypaint_core_buffer;
+struct yetty_ydraw_core_buffer;
 
 /* Forward declare config — kept opaque so the public ygui surface doesn't
  * require pulling yconfig headers into every client app. */
@@ -528,7 +528,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_rich_from_yaml(struct yetty_ygui_eng
                                                            size_t yaml_len);
 
 /* Replace the widget's current content with primitives parsed from a YAML
- * string. Mirrors yetty_ypaint_yaml_parse internally; ownership of the
+ * string. Mirrors yetty_ydraw_yaml_parse internally; ownership of the
  * resulting buffer stays with the widget. Returns the parser's error result
  * unchanged (use YETTY_IS_ERR / propagate via YETTY_RETURN_IF_ERR). */
 struct yetty_ycore_void_result yetty_ygui_widget_rich_set_yaml(struct yetty_ygui_widget *widget,
@@ -538,7 +538,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_rich_set_yaml(struct yetty_ygui
  * the widget. The widget destroys the buffer in its own destroy hook (and
  * on the next set_yaml / set_buffer / clear call). Passing NULL clears. */
 void yetty_ygui_widget_rich_set_buffer(struct yetty_ygui_widget *widget,
-                                       struct yetty_ypaint_core_buffer *buffer);
+                                       struct yetty_ydraw_core_buffer *buffer);
 
 /* Drop the current buffer without replacement. Equivalent to
  * set_buffer(widget, NULL). */

@@ -34,7 +34,7 @@ set(YGUI_CORE_SOURCES
 )
 
 # Static-only YAML convenience layer for the RICH widget — same gating
-# as before: brings in yetty_ypaint_yaml (fontconfig + libyaml), which
+# as before: brings in yetty_ydraw_yaml (fontconfig + libyaml), which
 # the shared FFI variant deliberately omits.
 set(YGUI_STATIC_ONLY_SOURCES
     ygui_rich_yaml.c
@@ -52,12 +52,12 @@ target_include_directories(ygui_core PUBLIC
 )
 
 target_link_libraries(ygui_core PUBLIC
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_ysdf
     yetty_ycore
     yetty_yface     # OSC envelope + LZ4F + base64 streamer
     yetty_yfont_core  # raster-font-from-file for text measurement
-    yetty_ypaint_yaml # rich widget's create_from_yaml -> ypaint_yaml_parse
+    yetty_ydraw_yaml # rich widget's create_from_yaml -> ypaint_yaml_parse
     yetty_yplatform_core # ytime monotonic clock for notification TTL
 )
 
@@ -132,7 +132,7 @@ if(YETTY_BUILD_YGUI_SHARED AND NOT EMSCRIPTEN)
     )
 
     target_link_libraries(ygui_shared PRIVATE
-        yetty_ypaint_core
+        yetty_ydraw_core
         yetty_ysdf
         yetty_ycore
         yetty_yface

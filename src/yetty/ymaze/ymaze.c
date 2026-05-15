@@ -6,7 +6,7 @@
 
 #include <yetty/ymaze/ymaze.h>
 
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/buffer.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
@@ -373,7 +373,7 @@ static struct yetty_ycore_void_result ymaze_generate(struct yetty_ymaze *m)
  *===========================================================================*/
 
 static struct yetty_ycore_void_result ymaze_build_prims(struct yetty_ymaze *m,
-                                                        struct yetty_ypaint_core_buffer *buf,
+                                                        struct yetty_ydraw_core_buffer *buf,
                                                         float time)
 {
     uint32_t z = 0;
@@ -626,7 +626,7 @@ const struct yetty_ymaze_config *yetty_ymaze_config_get(const struct yetty_ymaze
 }
 
 struct yetty_ycore_void_result yetty_ymaze_render(struct yetty_ymaze *maze,
-                                                  struct yetty_ypaint_core_buffer *buf, float time,
+                                                  struct yetty_ydraw_core_buffer *buf, float time,
                                                   bool *out_regenerated)
 {
     if (!maze) {
@@ -653,8 +653,8 @@ struct yetty_ycore_void_result yetty_ymaze_render(struct yetty_ymaze *maze,
         regenerated = true;
     }
 
-    yetty_ypaint_core_buffer_clear(buf);
-    yetty_ypaint_core_buffer_set_scene_bounds(buf, 0.0f, 0.0f, maze->config.scene_width,
+    yetty_ydraw_core_buffer_clear(buf);
+    yetty_ydraw_core_buffer_set_scene_bounds(buf, 0.0f, 0.0f, maze->config.scene_width,
                                               maze->config.scene_height);
 
     struct yetty_ycore_void_result br = ymaze_build_prims(maze, buf, time);

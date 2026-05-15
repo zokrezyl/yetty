@@ -15,8 +15,8 @@
 
 #include <yetty/yzoo/yzoo.h>
 
-#include <yetty/ypaint-core/buffer.h>
-#include <yetty/ypaint-core/cmds.h>
+#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/cmds.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
@@ -440,7 +440,7 @@ static struct yetty_ycore_void_result yzoo_update_connections(struct yetty_yzoo 
  * stroke_color/stroke_width slots stay zero; we paint via fill.
  *===========================================================================*/
 
-static void yzoo_emit_shape(struct yetty_ypaint_core_buffer *buf, uint32_t z_order, int choice,
+static void yzoo_emit_shape(struct yetty_ydraw_core_buffer *buf, uint32_t z_order, int choice,
                             float cx, float cy, float size, uint32_t color)
 {
     switch (choice) {
@@ -568,7 +568,7 @@ static void yzoo_emit_shape(struct yetty_ypaint_core_buffer *buf, uint32_t z_ord
     }
 }
 
-static uint32_t yzoo_emit_curve(struct yetty_ypaint_core_buffer *buf, uint32_t z_order, float p0x,
+static uint32_t yzoo_emit_curve(struct yetty_ydraw_core_buffer *buf, uint32_t z_order, float p0x,
                                 float p0y, float cx, float cy, float p1x, float p1y, float width,
                                 uint32_t color, uint32_t n_segs)
 {
@@ -592,7 +592,7 @@ static uint32_t yzoo_emit_curve(struct yetty_ypaint_core_buffer *buf, uint32_t z
  *===========================================================================*/
 
 static struct yetty_ycore_void_result yzoo_build_prims(struct yetty_yzoo *z,
-                                                       struct yetty_ypaint_core_buffer *buf,
+                                                       struct yetty_ydraw_core_buffer *buf,
                                                        float time)
 {
     uint32_t zo = 0;
@@ -803,7 +803,7 @@ const struct yetty_yzoo_config *yetty_yzoo_config_get(const struct yetty_yzoo *z
 }
 
 struct yetty_ycore_void_result yetty_yzoo_render(struct yetty_yzoo *zoo,
-                                                 struct yetty_ypaint_core_buffer *buf, float time)
+                                                 struct yetty_ydraw_core_buffer *buf, float time)
 {
     if (!zoo) {
         return YETTY_ERR(yetty_ycore_void, "yzoo_render: zoo is NULL");
@@ -850,16 +850,16 @@ struct yetty_ycore_void_result yetty_yzoo_render(struct yetty_yzoo *zoo,
     struct yetty_ycore_void_result ur = yzoo_update_connections(zoo, time);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, ur, "yzoo_render: update_connections");
 
-    yetty_ypaint_core_buffer_clear(buf);
+    yetty_ydraw_core_buffer_clear(buf);
 
     /* Prepend CMD_ZERO so the receiver clears its canvas + resets the cursor
      * in the SAME envelope that carries this frame's prims — without it,
      * older frames' primitives accumulate on screen between our send and
      * any separate clear envelope's arrival. Same pattern as ygui. */
-    struct yetty_ycore_void_result zr = yetty_ypaint_core_buffer_add_cmd_zero(buf);
+    struct yetty_ycore_void_result zr = yetty_ydraw_core_buffer_add_cmd_zero(buf);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "yzoo_render: add_cmd_zero");
 
-    yetty_ypaint_core_buffer_set_scene_bounds(buf, 0.0f, 0.0f, zoo->config.scene_width,
+    yetty_ydraw_core_buffer_set_scene_bounds(buf, 0.0f, 0.0f, zoo->config.scene_width,
                                               zoo->config.scene_height);
 
     struct yetty_ycore_void_result br = yzoo_build_prims(zoo, buf, time);

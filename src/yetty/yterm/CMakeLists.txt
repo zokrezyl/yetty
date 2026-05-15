@@ -17,8 +17,8 @@ target_include_directories(yetty_yterm PUBLIC
 target_link_libraries(yetty_yterm
     vterm
     webgpu
-    yetty_ypaint_core
-    yetty_ypaint_factory
+    yetty_ydraw_core
+    yetty_ydraw_factory
     yetty_yfont_core
     yetty_yui_core
     yetty_yface

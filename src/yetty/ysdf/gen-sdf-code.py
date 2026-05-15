@@ -121,7 +121,7 @@ def generate_sdf_types(prims: list[dict], out: Path) -> None:
     lines.append("")
 
     # Primitive size in bytes (callback compatible)
-    lines.append("// Primitive size in bytes - use as yetty_ypaint_core_primitive_size_fn callback")
+    lines.append("// Primitive size in bytes - use as yetty_ydraw_core_primitive_size_fn callback")
     lines.append("static inline size_t yetty_ysdf_primitive_size(uint32_t type) {")
     lines.append("    return yetty_ysdf_word_count((enum yetty_ysdf_type)type) * sizeof(float);")
     lines.append("}")
@@ -149,7 +149,7 @@ def generate_sdf_prim_header(prims: list[dict], out: Path) -> None:
     """Generate ypaint-sdf-prim.gen.h - add function declarations for SDF primitives"""
     lines = [HEADER_C, "#pragma once", ""]
     lines.append('#include "types.gen.h"')
-    lines.append('#include <yetty/ypaint-core/buffer.h>')
+    lines.append('#include <yetty/ydraw-core/buffer.h>')
     lines.append("")
     lines.append("#ifdef __cplusplus")
     lines.append('extern "C" {')
@@ -158,7 +158,7 @@ def generate_sdf_prim_header(prims: list[dict], out: Path) -> None:
 
     for p in prims:
         name = p["name"]
-        lines.append(f"struct yetty_ypaint_core_id_result yetty_ysdf_add_{name}(struct yetty_ypaint_core_buffer *buf, uint32_t z_order, uint32_t fill_color, uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_{name} *geom);")
+        lines.append(f"struct yetty_ydraw_core_id_result yetty_ysdf_add_{name}(struct yetty_ydraw_core_buffer *buf, uint32_t z_order, uint32_t fill_color, uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_{name} *geom);")
         lines.append("")
 
     lines.append("#ifdef __cplusplus")
@@ -182,7 +182,7 @@ def generate_sdf_prim_impl(prims: list[dict], out: Path) -> None:
         args = p.get("args", [])
         word_count = GEOMETRY_OFFSET + len(args)
 
-        lines.append(f"struct yetty_ypaint_core_id_result yetty_ysdf_add_{name}(struct yetty_ypaint_core_buffer *buf, uint32_t z_order, uint32_t fill_color, uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_{name} *geom) {{")
+        lines.append(f"struct yetty_ydraw_core_id_result yetty_ysdf_add_{name}(struct yetty_ydraw_core_buffer *buf, uint32_t z_order, uint32_t fill_color, uint32_t stroke_color, float stroke_width, const struct yetty_ysdf_{name} *geom) {{")
         lines.append(f"    float data[{word_count}];")
         lines.append("    uint32_t tmp;")
         lines.append("")
@@ -209,7 +209,7 @@ def generate_sdf_prim_impl(prims: list[dict], out: Path) -> None:
                 lines.append(f"    tmp = geom->{arg['name']};")
                 lines.append(f"    memcpy(&data[{offset}], &tmp, sizeof(tmp));")
         lines.append("")
-        lines.append(f"    return yetty_ypaint_core_buffer_add_prim(buf, data, {word_count} * sizeof(float));")
+        lines.append(f"    return yetty_ydraw_core_buffer_add_prim(buf, data, {word_count} * sizeof(float));")
         lines.append("}")
         lines.append("")
 
@@ -483,7 +483,7 @@ def generate_sdf_yaml_factory_header(prims: list[dict], out: Path) -> None:
     prims_2d = [p for p in prims if p["category"] == "sdf2d"]
 
     lines = [HEADER_C, "#pragma once", ""]
-    lines.append('#include <yetty/ypaint-core/yaml-factory.h>')
+    lines.append('#include <yetty/ydraw-core/yaml-factory.h>')
     lines.append("")
     lines.append("#ifdef __cplusplus")
     lines.append('extern "C" {')
@@ -491,15 +491,15 @@ def generate_sdf_yaml_factory_header(prims: list[dict], out: Path) -> None:
     lines.append("")
     lines.append("// SDF factory - handles all SDF primitive types")
     lines.append("struct yetty_ycore_void_result")
-    lines.append("yetty_ysdf_yaml_factory(struct yetty_ypaint_core_buffer *buffer,")
+    lines.append("yetty_ysdf_yaml_factory(struct yetty_ydraw_core_buffer *buffer,")
     lines.append("                        struct yaml_parser_s *yaml_parser,")
     lines.append("                        const char *primitive_type_name);")
     lines.append("")
     lines.append("// Register all SDF primitive types with the parser")
     lines.append("// Supported types: " + ", ".join(p["name"] for p in prims_2d))
-    lines.append("struct yetty_ypaint_yaml_parser;")
+    lines.append("struct yetty_ydraw_yaml_parser;")
     lines.append("struct yetty_ycore_void_result")
-    lines.append("yetty_ysdf_register_yaml_factories(struct yetty_ypaint_yaml_parser *parser);")
+    lines.append("yetty_ysdf_register_yaml_factories(struct yetty_ydraw_yaml_parser *parser);")
     lines.append("")
     lines.append("#ifdef __cplusplus")
     lines.append("}")
@@ -517,8 +517,8 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
     lines = [HEADER_C, ""]
     lines.append('#include <yetty/ysdf/yaml-factory.gen.h>')
     lines.append('#include <yetty/ysdf/types.gen.h>')
-    lines.append('#include <yetty/ypaint-core/buffer.h>')
-    lines.append('#include <yetty/ypaint-yaml/ypaint-yaml.h>')
+    lines.append('#include <yetty/ydraw-core/buffer.h>')
+    lines.append('#include <yetty/ydraw-yaml/ypaint-yaml.h>')
     lines.append('#include <yetty/ytrace/ytrace.h>')
     lines.append('#include <yaml.h>')
     lines.append('#include <stdlib.h>')
@@ -612,7 +612,7 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
     lines.append("")
 
     # Build primitive data
-    lines.append("static void build_prim(struct yetty_ypaint_core_buffer *buffer,")
+    lines.append("static void build_prim(struct yetty_ydraw_core_buffer *buffer,")
     lines.append("                       const char *primitive_type_name,")
     lines.append("                       struct ysdf_parse_ctx *ctx) {")
     lines.append("    float data[16];")
@@ -642,7 +642,7 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
     lines.append("    }")
     lines.append("")
     lines.append("    if (word_count > 0)")
-    lines.append("        yetty_ypaint_core_buffer_add_prim(buffer, data, word_count * sizeof(float));")
+    lines.append("        yetty_ydraw_core_buffer_add_prim(buffer, data, word_count * sizeof(float));")
     lines.append("}")
     lines.append("")
 
@@ -652,7 +652,7 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
     lines.append(" *===========================================================================*/")
     lines.append("")
     lines.append("struct yetty_ycore_void_result")
-    lines.append("yetty_ysdf_yaml_factory(struct yetty_ypaint_core_buffer *buffer,")
+    lines.append("yetty_ysdf_yaml_factory(struct yetty_ydraw_core_buffer *buffer,")
     lines.append("                        struct yaml_parser_s *yaml_parser,")
     lines.append("                        const char *primitive_type_name) {")
     lines.append("    struct ysdf_parse_ctx ctx = {0};")
@@ -738,12 +738,12 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
     lines.append(" *===========================================================================*/")
     lines.append("")
     lines.append("struct yetty_ycore_void_result")
-    lines.append("yetty_ysdf_register_yaml_factories(struct yetty_ypaint_yaml_parser *parser) {")
+    lines.append("yetty_ysdf_register_yaml_factories(struct yetty_ydraw_yaml_parser *parser) {")
     lines.append("    struct yetty_ycore_void_result res;")
     lines.append("")
     for p in prims_2d:
         name = p["name"]
-        lines.append(f'    res = yetty_ypaint_yaml_parser_register(parser, "{name}", yetty_ysdf_yaml_factory);')
+        lines.append(f'    res = yetty_ydraw_yaml_parser_register(parser, "{name}", yetty_ysdf_yaml_factory);')
         lines.append("    if (!res.ok) return res;")
         lines.append("")
     lines.append("    return YETTY_OK_VOID();")

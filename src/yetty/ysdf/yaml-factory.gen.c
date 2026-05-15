@@ -3,8 +3,8 @@
 
 #include <yetty/ysdf/yaml-factory.gen.h>
 #include <yetty/ysdf/types.gen.h>
-#include <yetty/ypaint-core/buffer.h>
-#include <yetty/ypaint-yaml/ypaint-yaml.h>
+#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-yaml/ypaint-yaml.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yaml.h>
 #include <stdlib.h>
@@ -142,7 +142,7 @@ static void store_array(struct ysdf_parse_ctx *ctx)
     }
 }
 
-static void build_prim(struct yetty_ypaint_core_buffer *buffer, const char *primitive_type_name,
+static void build_prim(struct yetty_ydraw_core_buffer *buffer, const char *primitive_type_name,
                        struct ysdf_parse_ctx *ctx)
 {
     float data[16];
@@ -536,7 +536,7 @@ static void build_prim(struct yetty_ypaint_core_buffer *buffer, const char *prim
     }
 
     if (word_count > 0) {
-        yetty_ypaint_core_buffer_add_prim(buffer, data, word_count * sizeof(float));
+        yetty_ydraw_core_buffer_add_prim(buffer, data, word_count * sizeof(float));
     }
 }
 
@@ -544,7 +544,7 @@ static void build_prim(struct yetty_ypaint_core_buffer *buffer, const char *prim
  * Factory
  *===========================================================================*/
 
-struct yetty_ycore_void_result yetty_ysdf_yaml_factory(struct yetty_ypaint_core_buffer *buffer,
+struct yetty_ycore_void_result yetty_ysdf_yaml_factory(struct yetty_ydraw_core_buffer *buffer,
                                                        struct yaml_parser_s *yaml_parser,
                                                        const char *primitive_type_name)
 {
@@ -634,126 +634,126 @@ struct yetty_ycore_void_result yetty_ysdf_yaml_factory(struct yetty_ypaint_core_
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_ysdf_register_yaml_factories(
-    struct yetty_ypaint_yaml_parser *parser)
+    struct yetty_ydraw_yaml_parser *parser)
 {
     struct yetty_ycore_void_result res;
 
-    res = yetty_ypaint_yaml_parser_register(parser, "circle", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "circle", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "box", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "box", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "segment", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "segment", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "triangle", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "triangle", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "ellipse", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "ellipse", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "arc", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "arc", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "rounded_box", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "rounded_box", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "rhombus", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "rhombus", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "pentagon", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "pentagon", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "hexagon", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "hexagon", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "star", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "star", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "pie", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "pie", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "ring", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "ring", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "heart", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "heart", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "cross", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "cross", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "rounded_x", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "rounded_x", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "capsule", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "capsule", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "moon", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "moon", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "egg", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "egg", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "octogon", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "octogon", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "hexagram", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "hexagram", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "pentagram", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "pentagram", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "linear_gradient_box", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "linear_gradient_box", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
 
-    res = yetty_ypaint_yaml_parser_register(parser, "radial_gradient_box", yetty_ysdf_yaml_factory);
+    res = yetty_ydraw_yaml_parser_register(parser, "radial_gradient_box", yetty_ysdf_yaml_factory);
     if (!res.ok) {
         return res;
     }
