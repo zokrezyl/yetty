@@ -16,7 +16,7 @@
 # =============================================================================
 
 - name: circle
-  type: 0
+  type: 0x7FFFFFFF
   category: sdf2d
   args:
     - { name: center_x, type: f32 }
@@ -34,7 +34,7 @@
       *max_y = geom[1] + total_radius;
 
 - name: box
-  type: 1
+  type: 0x7FFFFFFE
   category: sdf2d
   args:
     - { name: center_x,    type: f32 }
@@ -56,7 +56,7 @@
       *max_y = geom[1] + hh;
 
 - name: segment
-  type: 2
+  type: 0x7FFFFFFD
   category: sdf2d
   args:
     - { name: start_x, type: f32 }
@@ -79,7 +79,7 @@
       *max_y = fmaxf(geom[1], geom[3]) + expand;
 
 - name: triangle
-  type: 3
+  type: 0x7FFFFFFC
   category: sdf2d
   args:
     - { name: vertex_a_x, type: f32 }
@@ -116,7 +116,7 @@
       *max_y = maxy + expand;
 
 - name: ellipse
-  type: 6
+  type: 0x7FFFFFF9
   category: sdf2d
   args:
     - { name: center_x, type: f32 }
@@ -164,7 +164,7 @@
       *max_y = geom[1] + geom[3] + expand;
 
 - name: arc
-  type: 7
+  type: 0x7FFFFFF8
   category: sdf2d
   args:
     - { name: center_x,    type: f32 }
@@ -189,7 +189,7 @@
       *max_y = geom[1] + total_radius;
 
 - name: rounded_box
-  type: 8
+  type: 0x7FFFFFF7
   category: sdf2d
   args:
     - { name: center_x,          type: f32 }
@@ -229,7 +229,7 @@
       *max_y = geom[1] + hh;
 
 - name: rhombus
-  type: 9
+  type: 0x7FFFFFF6
   category: sdf2d
   args:
     - { name: center_x,    type: f32 }
@@ -253,7 +253,7 @@
       *max_y = geom[1] + hh;
 
 - name: pentagon
-  type: 10
+  type: 0x7FFFFFF5
   category: sdf2d
   args:
     - { name: center_x, type: f32 }
@@ -277,7 +277,7 @@
       *max_y = geom[1] + total_radius;
 
 - name: hexagon
-  type: 11
+  type: 0x7FFFFFF4
   category: sdf2d
   args:
     - { name: center_x, type: f32 }
@@ -299,7 +299,7 @@
       *max_y = geom[1] + total_radius;
 
 - name: star
-  type: 12
+  type: 0x7FFFFFF3
   category: sdf2d
   args:
     - { name: center_x,    type: f32 }
@@ -329,7 +329,7 @@
       *max_y = geom[1] + total_radius;
 
 - name: pie
-  type: 13
+  type: 0x7FFFFFF2
   category: sdf2d
   args:
     - { name: center_x,   type: f32 }
@@ -354,7 +354,7 @@
       *max_y = geom[1] + total_radius;
 
 - name: ring
-  type: 14
+  type: 0x7FFFFFF1
   category: sdf2d
   args:
     - { name: center_x,  type: f32 }
@@ -380,7 +380,7 @@
       *max_y = geom[1] + total_radius;
 
 - name: heart
-  type: 15
+  type: 0x7FFFFFF0
   category: sdf2d
   args:
     - { name: center_x, type: f32 }
@@ -405,7 +405,7 @@
       *max_y = geom[1] + extent;
 
 - name: cross
-  type: 16
+  type: 0x7FFFFFEF
   category: sdf2d
   args:
     - { name: center_x,    type: f32 }
@@ -431,7 +431,7 @@
       *max_y = geom[1] + extent;
 
 - name: rounded_x
-  type: 17
+  type: 0x7FFFFFEE
   category: sdf2d
   args:
     - { name: center_x, type: f32 }
@@ -451,7 +451,7 @@
       *max_y = geom[1] + extent;
 
 - name: capsule
-  type: 18
+  type: 0x7FFFFFED
   category: sdf2d
   args:
     - { name: start_x, type: f32 }
@@ -476,7 +476,7 @@
       *max_y = fmaxf(geom[1], geom[3]) + total_radius;
 
 - name: moon
-  type: 19
+  type: 0x7FFFFFEC
   category: sdf2d
   args:
     - { name: center_x,     type: f32 }
@@ -503,7 +503,7 @@
       *max_y = geom[1] + total_radius;
 
 - name: egg
-  type: 20
+  type: 0x7FFFFFEB
   category: sdf2d
   args:
     - { name: center_x,     type: f32 }
@@ -528,7 +528,7 @@
       *max_y = geom[1] + total_radius + geom[2];
 
 - name: octogon
-  type: 28
+  type: 0x7FFFFFE3
   category: sdf2d
   args:
     - { name: center_x, type: f32 }
@@ -551,7 +551,7 @@
       *max_y = geom[1] + total_radius;
 
 - name: hexagram
-  type: 29
+  type: 0x7FFFFFE2
   category: sdf2d
   args:
     - { name: center_x, type: f32 }
@@ -574,7 +574,7 @@
       *max_y = geom[1] + total_radius;
 
 - name: pentagram
-  type: 30
+  type: 0x7FFFFFE1
   category: sdf2d
   args:
     - { name: center_x, type: f32 }
@@ -610,7 +610,7 @@
 # =============================================================================
 
 - name: linear_gradient_box
-  type: 130
+  type: 0x7FFFFF7D
   category: sdf2d
   args:
     - { name: center_x,      type: f32 }
@@ -642,7 +642,7 @@
       *max_y = geom[1] + hh;
 
 - name: radial_gradient_box
-  type: 131
+  type: 0x7FFFFF7C
   category: sdf2d
   args:
     - { name: center_x,      type: f32 }
@@ -675,7 +675,7 @@
 # =============================================================================
 
 - name: sphere_3d
-  type: 100
+  type: 0x7FFFFF9B
   category: sdf3d
   args:
     - { name: position_x, type: f32 }
@@ -690,7 +690,7 @@
       *min_x = 0; *min_y = 0; *max_x = 0; *max_y = 0;
 
 - name: box_3d
-  type: 101
+  type: 0x7FFFFF9A
   category: sdf3d
   args:
     - { name: position_x,  type: f32 }
@@ -708,7 +708,7 @@
       *min_x = 0; *min_y = 0; *max_x = 0; *max_y = 0;
 
 - name: torus_3d
-  type: 103
+  type: 0x7FFFFF98
   category: sdf3d
   args:
     - { name: position_x,   type: f32 }
@@ -726,7 +726,7 @@
       *min_x = 0; *min_y = 0; *max_x = 0; *max_y = 0;
 
 - name: cylinder_3d
-  type: 105
+  type: 0x7FFFFF96
   category: sdf3d
   args:
     - { name: position_x,  type: f32 }
