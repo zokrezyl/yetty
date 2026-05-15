@@ -83,11 +83,8 @@ struct yetty_ycore_void_result yetty_ydraw_core_figure_factory_register(
     if (concrete->compile_pipeline) {
         struct yetty_ycore_void_result res = concrete->compile_pipeline(
             concrete, factory->device, factory->queue, factory->target_format, factory->allocator);
-        if (YETTY_IS_ERR(res)) {
-            yerror("figure_factory: failed to compile pipeline for type 0x%08x: %s",
-                   concrete->type_id, res.error.msg);
-            return res;
-        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, res,
+                            "figure_factory: compile_pipeline failed");
     }
 
     factory->factories[factory->count++] = concrete;

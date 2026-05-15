@@ -54,8 +54,8 @@ uint32_t yetty_yterm_terminal_layer_ymgui_layer_focused_card(
  * current focus, the layer fires FOCUS-lost on the old card and
  * FOCUS-gained on the new card via the layer's emit_osc_fn. No-op
  * when the new id matches the current focus. */
-void yetty_yterm_terminal_layer_ymgui_layer_set_focus(struct yetty_yrender_terminal_layer *layer,
-                                                      uint32_t card_id);
+struct yetty_ycore_void_result yetty_yterm_terminal_layer_ymgui_layer_set_focus(
+    struct yetty_yrender_terminal_layer *layer, uint32_t card_id);
 
 #ifdef __cplusplus
 }

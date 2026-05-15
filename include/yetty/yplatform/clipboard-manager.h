@@ -30,16 +30,19 @@ YETTY_YRESULT_DECLARE(yetty_yplatform_clipboard_manager, struct yetty_platform_c
  * output_pipe + a glfwPostEmptyEvent wakeup. The main thread drains
  * output_pipe between glfwWaitEvents calls. */
 struct yetty_platform_clipboard_manager_ops {
-    void (*destroy)(struct yetty_platform_clipboard_manager *self);
-    /* Push text to the system clipboard. Fire-and-forget. */
-    void (*set_text)(struct yetty_platform_clipboard_manager *self, const char *text, size_t len);
+    struct yetty_ycore_void_result (*destroy)(struct yetty_platform_clipboard_manager *self);
+    /* Push text to the system clipboard. Fire-and-forget on the wire,
+     * but the cross-thread enqueue can fail (pipe full, allocation) —
+     * the caller must learn about that. */
+    struct yetty_ycore_void_result (*set_text)(struct yetty_platform_clipboard_manager *self,
+                                                const char *text, size_t len);
     /* Ask the main thread to fetch the clipboard. The result arrives later
      * as a YETTY_YCORE_PASTE event on the input pipe with event->payload
      * set to a malloc'd UTF-8 C string the receiver must free. */
-    void (*request_paste)(struct yetty_platform_clipboard_manager *self);
+    struct yetty_ycore_void_result (*request_paste)(struct yetty_platform_clipboard_manager *self);
     /* Main-thread only: read pending requests from output_pipe and run the
      * actual GLFW calls. Safe to call when nothing is pending. */
-    void (*drain)(struct yetty_platform_clipboard_manager *self);
+    struct yetty_ycore_void_result (*drain)(struct yetty_platform_clipboard_manager *self);
 };
 
 /* Clipboard manager base */

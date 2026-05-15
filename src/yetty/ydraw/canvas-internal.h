@@ -273,8 +273,8 @@ struct yetty_ydraw_canvas_ptr_result ydraw_canvas_create(
 /* prim_ref_array */
 void ydraw_canvas_prim_ref_array_init(struct ydraw_canvas_prim_ref_array *arr);
 void ydraw_canvas_prim_ref_array_free(struct ydraw_canvas_prim_ref_array *arr);
-void ydraw_canvas_prim_ref_array_push(struct ydraw_canvas_prim_ref_array *arr,
-                                       struct ydraw_canvas_prim_ref ref);
+struct yetty_ycore_void_result ydraw_canvas_prim_ref_array_push(
+    struct ydraw_canvas_prim_ref_array *arr, struct ydraw_canvas_prim_ref ref);
 
 /* prim_data_array */
 void ydraw_canvas_prim_data_array_init(struct ydraw_canvas_prim_data_array *arr);
@@ -290,10 +290,10 @@ struct yetty_ycore_void_result ydraw_canvas_grid_line_ensure_cells(
 struct yetty_ycore_void_result ydraw_canvas_grid_line_arena_append(
     struct ydraw_canvas_grid_line *line, const float *data, uint32_t word_count,
     uint32_t *out_offset);
-/* Returns prim index in line->prims, or UINT32_MAX on allocation failure. */
-uint32_t ydraw_canvas_grid_line_push_prim(struct ydraw_canvas_grid_line *line,
-                                           uint32_t rolling_row,
-                                           const float *data, uint32_t word_count);
+/* Returns the prim index in line->prims as the success value. */
+struct uint32_result ydraw_canvas_grid_line_push_prim(
+    struct ydraw_canvas_grid_line *line, uint32_t rolling_row,
+    const float *data, uint32_t word_count);
 
 /* line_buffer */
 void ydraw_canvas_line_buffer_init(struct ydraw_canvas_line_buffer *buf);
@@ -341,7 +341,8 @@ struct ydraw_canvas_font_map {
 };
 
 void ydraw_canvas_font_map_init(struct ydraw_canvas_font_map *m);
-void ydraw_canvas_font_map_grow(struct ydraw_canvas_font_map *m, uint32_t want);
+struct yetty_ycore_void_result ydraw_canvas_font_map_grow(
+    struct ydraw_canvas_font_map *m, uint32_t want);
 const struct ydraw_canvas_font_map_entry *ydraw_canvas_font_map_get(
     const struct ydraw_canvas_font_map *m, uint32_t id);
 void ydraw_canvas_font_map_release_all(
@@ -366,8 +367,9 @@ struct ydraw_canvas_buffer_attach_list {
 
 void ydraw_canvas_buffer_attach_init(struct ydraw_canvas_buffer_attach_list *l);
 void ydraw_canvas_buffer_attach_free(struct ydraw_canvas_buffer_attach_list *l);
-void ydraw_canvas_buffer_attach_note(struct ydraw_canvas_buffer_attach_list *l,
-                                      yetty_yfont_cache_handle handle, uint32_t row);
+struct yetty_ycore_void_result ydraw_canvas_buffer_attach_note(
+    struct ydraw_canvas_buffer_attach_list *l,
+    yetty_yfont_cache_handle handle, uint32_t row);
 
 #ifdef __cplusplus
 }

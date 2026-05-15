@@ -26,8 +26,9 @@ struct yetty_ydraw_core_buffer_result yetty_ydraw_yaml_parse(const char *yaml, s
 //=============================================================================
 
 struct yetty_ydraw_yaml_parser;
+YETTY_YRESULT_DECLARE(yetty_ydraw_yaml_parser_ptr, struct yetty_ydraw_yaml_parser *);
 
-struct yetty_ydraw_yaml_parser *yetty_ydraw_yaml_parser_create(void);
+struct yetty_ydraw_yaml_parser_ptr_result yetty_ydraw_yaml_parser_create(void);
 void yetty_ydraw_yaml_parser_destroy(struct yetty_ydraw_yaml_parser *parser);
 
 struct yetty_ycore_void_result yetty_ydraw_yaml_parser_register(

@@ -158,8 +158,9 @@ static struct yetty_ycore_buffer_result assemble_glyph_shaders(const char *glyph
                 continue;
             }
             struct yetty_ycore_buffer_result br = yetty_ycore_read_file(path);
-            if (!YETTY_IS_OK(br)) {
+            if (YETTY_IS_ERR(br)) {
                 ywarn("glyph-shaders: prelude %s: %s", path, br.error.msg);
+                yetty_ycore_error_destroy(br.error);
                 continue;
             }
             prelude_bufs[prelude_count] = br.value;
@@ -176,8 +177,9 @@ static struct yetty_ycore_buffer_result assemble_glyph_shaders(const char *glyph
         uint32_t local_id = (uint32_t)strtoul(name + 2, NULL, 16);
 
         struct yetty_ycore_buffer_result br = yetty_ycore_read_file(path);
-        if (!YETTY_IS_OK(br)) {
+        if (YETTY_IS_ERR(br)) {
             ywarn("glyph-shaders: read %s: %s", path, br.error.msg);
+            yetty_ycore_error_destroy(br.error);
             continue;
         }
 
@@ -378,7 +380,9 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
 
     struct yetty_ycore_buffer_result template_res = yetty_ycore_read_file(shader_path);
     if (YETTY_IS_ERR(template_res)) {
-        return YETTY_ERR(yetty_yterm_terminal_layer, template_res.error.msg);
+        return YETTY_ERR(yetty_yterm_terminal_layer,
+                         "shader_glyph_layer_create: read_file(shader-glyph-layer.wgsl) failed",
+                         template_res);
     }
 
     /* Assemble per-glyph .wgsl files + generated dispatcher. */
@@ -626,7 +630,10 @@ static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_list
     (void)event;
     struct yetty_yterm_shader_glyph_layer *layer = layer_from_listener(listener);
     if (layer->base.request_render_fn) {
-        layer->base.request_render_fn(layer->base.request_render_userdata);
+        struct yetty_ycore_void_result r =
+            layer->base.request_render_fn(layer->base.request_render_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, r,
+                            "on_anim_tick: request_render_fn failed");
     }
     return YETTY_OK(yetty_ycore_int, 0);
 }

@@ -188,9 +188,9 @@ static struct yetty_ycore_void_result ydraw_layer_set_view_top(
     struct yetty_yrender_terminal_layer *self, int active, uint32_t view_top_total_idx);
 static struct yetty_ycore_void_result ydraw_layer_set_alt_screen(
     struct yetty_yrender_terminal_layer *self, int active);
-static void ydraw_layer_set_selection(struct yetty_yrender_terminal_layer *self, int active,
-                                       uint32_t anchor_row, uint32_t anchor_col, uint32_t head_row,
-                                       uint32_t head_col);
+static struct yetty_ycore_void_result ydraw_layer_set_selection(
+    struct yetty_yrender_terminal_layer *self, int active,
+    uint32_t anchor_row, uint32_t anchor_col, uint32_t head_row, uint32_t head_col);
 static struct yetty_ycore_void_result ydraw_layer_get_selection_text(
     const struct yetty_yrender_terminal_layer *self, struct yetty_ycore_buffer *out);
 
@@ -214,10 +214,7 @@ static struct yetty_ycore_void_result on_canvas_scroll(void *user_data, uint16_t
     }
     struct yetty_ycore_void_result res =
         layer->base.scroll_fn(&layer->base, (int)num_lines, layer->base.scroll_userdata);
-    if (YETTY_IS_ERR(res)) {
-        yerror("on_canvas_scroll: scroll_fn failed: %s", res.error.msg);
-        return res;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "on_canvas_scroll: scroll_fn failed");
     ydebug("on_canvas_scroll EXIT: num_lines=%u", num_lines);
     return YETTY_OK_VOID();
 }
@@ -228,12 +225,12 @@ static struct yetty_ycore_void_result on_canvas_cursor_set(void *user_data, uint
     struct yetty_yterm_ydraw_layer *layer = user_data;
     ydebug("on_canvas_cursor_set ENTER: new_row=%u", new_row);
     if (!layer->base.cursor_fn) {
-        yerror("on_canvas_cursor_set: cursor_fn is NULL");
-        return YETTY_ERR(yetty_ycore_void, "cursor_fn is NULL");
+        return YETTY_ERR(yetty_ycore_void, "on_canvas_cursor_set: cursor_fn is NULL");
     }
-    layer->base.cursor_fn(&layer->base,
-                          (struct yetty_ycore_grid_cursor_pos){.cols = 0, .rows = new_row},
-                          layer->base.cursor_userdata);
+    struct yetty_ycore_void_result r = layer->base.cursor_fn(
+        &layer->base, (struct yetty_ycore_grid_cursor_pos){.cols = 0, .rows = new_row},
+        layer->base.cursor_userdata);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "on_canvas_cursor_set: cursor_fn failed");
     ydebug("on_canvas_cursor_set EXIT: new_row=%u", new_row);
     return YETTY_OK_VOID();
 }
@@ -335,12 +332,14 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ydraw_layer_create(
 
     struct yetty_ycore_buffer_result shader_res = yetty_ycore_read_file(shader_path);
     if (YETTY_IS_ERR(shader_res)) {
-        return YETTY_ERR(yetty_yterm_terminal_layer, shader_res.error.msg);
+        return YETTY_ERR(yetty_yterm_terminal_layer,
+                         "ydraw_layer_create: read_file(ydraw-layer.wgsl) failed", shader_res);
     }
     struct yetty_ycore_buffer_result sdf_lib_res = yetty_ycore_read_file(sdf_lib_path);
     if (YETTY_IS_ERR(sdf_lib_res)) {
         free(shader_res.value.data);
-        return YETTY_ERR(yetty_yterm_terminal_layer, sdf_lib_res.error.msg);
+        return YETTY_ERR(yetty_yterm_terminal_layer,
+                         "ydraw_layer_create: read_file(sdf_lib) failed", sdf_lib_res);
     }
 
     layer = calloc(1, sizeof(struct yetty_yterm_ydraw_layer));
@@ -441,7 +440,8 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ydraw_layer_create(
             free(layer->shader_code.data);
             free(layer->sdf_lib_code.data);
             free(layer);
-            return YETTY_ERR(yetty_yterm_terminal_layer, yr.error.msg);
+            return YETTY_ERR(yetty_yterm_terminal_layer,
+                             "ydraw_layer_create: yetty_yface_create failed", yr);
         }
         layer->yface = yr.value;
     }
@@ -562,14 +562,12 @@ static struct yetty_yrender_gpu_resource_set_result ydraw_layer_get_gpu_resource
         /* Build primitive staging */
         struct yetty_ydraw_prim_staging_result ps_r =
             yetty_ydraw_canvas_build_prim_staging(layer->canvas);
-        const uint32_t *prim_data = NULL;
-        uint32_t prim_word_count = 0;
-        if (YETTY_IS_OK(ps_r)) {
-            prim_data = ps_r.value.data;
-            prim_word_count = ps_r.value.word_count;
-        } else {
-            yetty_ycore_error_destroy(ps_r.error);
+        if (YETTY_IS_ERR(ps_r)) {
+            return YETTY_ERR(yetty_yrender_gpu_resource_set,
+                             "ydraw_layer_get_gpu_resource_set: build_prim_staging failed", ps_r);
         }
+        const uint32_t *prim_data = ps_r.value.data;
+        uint32_t prim_word_count = ps_r.value.word_count;
 
         layer->rs.buffers[1].data = (uint8_t *)prim_data;
         layer->rs.buffers[1].size = prim_word_count * sizeof(uint32_t);
@@ -916,10 +914,8 @@ static struct yetty_ycore_void_result ydraw_layer_render(struct yetty_yrender_te
         float screen_y = inst->bounds.min.y + y_offset;
 
         res = inst->render(inst, target, screen_x, screen_y);
-        if (!YETTY_IS_OK(res)) {
-            yerror("ydraw_layer_render: complex prim %u render failed: %s", i, res.error.msg);
-            /* Continue with other prims */
-        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, res,
+                            "ydraw_layer_render: complex prim render failed");
     }
 
     return YETTY_OK_VOID();
@@ -930,9 +926,9 @@ static struct yetty_ycore_void_result ydraw_layer_render(struct yetty_yrender_te
  * collapse to [min_row, max_row] and stash it for the text extractor.
  * Highlight rendering is intentionally not wired up yet; the text-layer
  * already shows the user where their selection band is. */
-static void ydraw_layer_set_selection(struct yetty_yrender_terminal_layer *self, int active,
-                                       uint32_t anchor_row, uint32_t anchor_col, uint32_t head_row,
-                                       uint32_t head_col)
+static struct yetty_ycore_void_result ydraw_layer_set_selection(
+    struct yetty_yrender_terminal_layer *self, int active,
+    uint32_t anchor_row, uint32_t anchor_col, uint32_t head_row, uint32_t head_col)
 {
     struct yetty_yterm_ydraw_layer *layer =
         container_of(self, struct yetty_yterm_ydraw_layer, base);
@@ -946,6 +942,7 @@ static void ydraw_layer_set_selection(struct yetty_yrender_terminal_layer *self,
         layer->sel_min_row = head_row;
         layer->sel_max_row = anchor_row;
     }
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================

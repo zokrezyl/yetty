@@ -153,9 +153,8 @@ static struct yetty_ycore_void_result yetty_ydraw_static_canvas_set_grid_size(
         for (uint32_t i = 0; i < size.rows; i++) {
             struct yetty_ycore_void_result r =
                 ydraw_canvas_grid_line_init(&canvas->lines[i]);
-            if (YETTY_IS_ERR(r)) {
-                return r;
-            }
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                                "static-canvas: grid_line_init");
         }
     }
 
@@ -192,15 +191,11 @@ static struct uint32_result static_canvas_add_primitive(
     uint32_t prim_type = fw->data[0];
 
     struct rectangle_result aabb_res = fw->ops->aabb(fw->data);
-    if (YETTY_IS_ERR(aabb_res)) {
-        return YETTY_ERR(uint32, aabb_res.error.msg);
-    }
+    YETTY_RETURN_IF_ERR(uint32, aabb_res, "static-canvas: aabb");
     struct yetty_ycore_rectangle aabb = aabb_res.value;
 
     struct yetty_ycore_size_result size_res = fw->ops->size(fw->data);
-    if (YETTY_IS_ERR(size_res)) {
-        return YETTY_ERR(uint32, size_res.error.msg);
-    }
+    YETTY_RETURN_IF_ERR(uint32, size_res, "static-canvas: size");
     uint32_t word_count = size_res.value / sizeof(uint32_t);
 
     if (aabb.min.y > aabb.max.y) {
@@ -249,24 +244,22 @@ static struct uint32_result static_canvas_add_primitive(
      * for static-canvas — the shader uses (prim.rolling_row - row_origin)
      * and row_origin == 0, so the absolute canvas y stays as encoded. */
     struct ydraw_canvas_grid_line *base_line = &canvas->lines[row_max];
-    uint32_t prim_index = ydraw_canvas_grid_line_push_prim(
+    struct uint32_result push_res = ydraw_canvas_grid_line_push_prim(
         base_line, 0, (const float *)fw->data, word_count);
-    if (prim_index == UINT32_MAX) {
-        return YETTY_ERR(uint32, "grid_line_push_prim failed");
-    }
+    YETTY_RETURN_IF_ERR(uint32, push_res, "static-canvas: push_prim");
+    uint32_t prim_index = push_res.value;
 
     for (uint32_t row = row_min; row <= row_max; row++) {
         struct ydraw_canvas_grid_line *line = &canvas->lines[row];
         struct yetty_ycore_void_result ec =
             ydraw_canvas_grid_line_ensure_cells(line, col_max + 1);
-        if (YETTY_IS_ERR(ec)) {
-            yetty_ycore_error_destroy(ec.error);
-            continue;
-        }
+        YETTY_RETURN_IF_ERR(uint32, ec, "static-canvas: ensure_cells");
         uint16_t lines_ahead = (uint16_t)(row_max - row);
         for (uint32_t col = col_min; col <= col_max; col++) {
             struct ydraw_canvas_prim_ref ref = {lines_ahead, (uint16_t)prim_index};
-            ydraw_canvas_prim_ref_array_push(&line->cells[col].refs, ref);
+            struct yetty_ycore_void_result rp =
+                ydraw_canvas_prim_ref_array_push(&line->cells[col].refs, ref);
+            YETTY_RETURN_IF_ERR(uint32, rp, "static-canvas: ref_array_push");
         }
     }
 
@@ -276,7 +269,8 @@ static struct uint32_result static_canvas_add_primitive(
                 canvas->base->figure_factory, fw->data,
                 word_count * sizeof(uint32_t), 0);
         if (YETTY_IS_ERR(inst_res)) {
-            return YETTY_ERR(uint32, inst_res.error.msg);
+            return YETTY_ERR(uint32, "static-canvas: create_instance failed",
+                             inst_res);
         }
         if (base_line->figure_count >= base_line->figure_capacity) {
             uint32_t new_cap = base_line->figure_capacity == 0
@@ -346,27 +340,25 @@ static struct uint32_result static_canvas_expand_text_span(
         }
 
         struct uint32_result gi_res = font->ops->get_glyph_index(font, cp);
-        if (YETTY_IS_ERR(gi_res)) {
-            cursor_x += ts->font_size * 0.5f;
-            continue;
-        }
+        YETTY_RETURN_IF_ERR(uint32, gi_res,
+                            "expand_text_span: get_glyph_index");
         uint32_t glyph_index = gi_res.value;
 
         struct yetty_yrender_gpu_resource_set_result rs_res =
             font->ops->get_gpu_resource_set(font);
-        if (YETTY_IS_ERR(rs_res)) {
-            continue;
-        }
+        YETTY_RETURN_IF_ERR(uint32, rs_res,
+                            "expand_text_span: get_gpu_resource_set");
         const struct yetty_ydraw_core_gpu_resource_set *rs = rs_res.value;
         if (rs->buffer_count == 0 || !rs->buffers[0].data) {
-            continue;
+            return YETTY_ERR(uint32,
+                             "expand_text_span: font resource set has no glyph metadata buffer");
         }
 
         const float *meta = (const float *)rs->buffers[0].data;
         uint32_t meta_count = (uint32_t)(rs->buffers[0].size / (6 * sizeof(float)));
         if (glyph_index >= meta_count) {
-            cursor_x += ts->font_size * 0.5f;
-            continue;
+            return YETTY_ERR(uint32,
+                             "expand_text_span: glyph_index out of metadata range");
         }
         const float *gm = meta + glyph_index * 6;
         float size_x = gm[0], size_y = gm[1];
@@ -430,25 +422,24 @@ static struct uint32_result static_canvas_expand_text_span(
         }
 
         struct ydraw_canvas_grid_line *base_line = &canvas->lines[row_max];
-        uint32_t prim_idx = ydraw_canvas_grid_line_push_prim(
+        struct uint32_result push_res = ydraw_canvas_grid_line_push_prim(
             base_line, 0, glyph_data, YDRAW_GLYPH_WORDS);
-        if (prim_idx == UINT32_MAX) {
-            cursor_x += advance * scale;
-            continue;
-        }
+        YETTY_RETURN_IF_ERR(uint32, push_res,
+                            "expand_text_span: push_prim");
+        uint32_t prim_idx = push_res.value;
 
         for (uint32_t row = row_min; row <= row_max; row++) {
             struct ydraw_canvas_grid_line *line = &canvas->lines[row];
             struct yetty_ycore_void_result ec =
                 ydraw_canvas_grid_line_ensure_cells(line, col_max + 1);
-            if (YETTY_IS_ERR(ec)) {
-                yetty_ycore_error_destroy(ec.error);
-                continue;
-            }
+            YETTY_RETURN_IF_ERR(uint32, ec, "expand_text_span: ensure_cells");
             uint16_t lines_ahead = (uint16_t)(row_max - row);
             for (uint32_t col = col_min; col <= col_max; col++) {
                 struct ydraw_canvas_prim_ref ref = {lines_ahead, (uint16_t)prim_idx};
-                ydraw_canvas_prim_ref_array_push(&line->cells[col].refs, ref);
+                struct yetty_ycore_void_result rp =
+                    ydraw_canvas_prim_ref_array_push(&line->cells[col].refs, ref);
+                YETTY_RETURN_IF_ERR(uint32, rp,
+                                    "expand_text_span: ref_array_push");
             }
         }
 
@@ -465,12 +456,13 @@ static struct uint32_result static_canvas_expand_text_span(
 /* Attach a cache handle to lines[row]. If the handle is already attached
  * to some other line, migrate (no refcount change); else add a fresh
  * entry and bump the cache refcount. */
-static void static_canvas_attach_handle(struct yetty_ydraw_static_canvas *canvas,
-                                        yetty_yfont_cache_handle handle, uint32_t row)
+static struct yetty_ycore_void_result static_canvas_attach_handle(
+    struct yetty_ydraw_static_canvas *canvas,
+    yetty_yfont_cache_handle handle, uint32_t row)
 {
     if (handle == YETTY_YFONT_CACHE_HANDLE_INVALID ||
         handle == canvas->base->default_handle || row >= canvas->lines_count) {
-        return;
+        return YETTY_OK_VOID();
     }
     struct ydraw_canvas_grid_line *target = &canvas->lines[row];
 
@@ -478,18 +470,23 @@ static void static_canvas_attach_handle(struct yetty_ydraw_static_canvas *canvas
         struct ydraw_canvas_grid_line *l = &canvas->lines[li];
         for (uint32_t fi = 0; fi < l->font_count; fi++) {
             if (l->fonts[fi].handle == handle) {
-                if (li == row) return;
+                if (li == row) return YETTY_OK_VOID();
                 if (target->font_count >= target->font_capacity) {
                     uint32_t new_cap =
                         target->font_capacity == 0 ? 4 : target->font_capacity * 2;
-                    target->fonts = realloc(
+                    struct ydraw_canvas_font_entry *grown = realloc(
                         target->fonts,
                         new_cap * sizeof(struct ydraw_canvas_font_entry));
+                    if (!grown) {
+                        return YETTY_ERR(yetty_ycore_void,
+                                         "static_canvas_attach_handle: fonts realloc failed (migrate)");
+                    }
+                    target->fonts = grown;
                     target->font_capacity = new_cap;
                 }
                 target->fonts[target->font_count++] = l->fonts[fi];
                 l->fonts[fi] = l->fonts[--l->font_count];
-                return;
+                return YETTY_OK_VOID();
             }
         }
     }
@@ -497,13 +494,18 @@ static void static_canvas_attach_handle(struct yetty_ydraw_static_canvas *canvas
     if (target->font_count >= target->font_capacity) {
         uint32_t new_cap =
             target->font_capacity == 0 ? 4 : target->font_capacity * 2;
-        target->fonts =
-            realloc(target->fonts,
-                    new_cap * sizeof(struct ydraw_canvas_font_entry));
+        struct ydraw_canvas_font_entry *grown = realloc(
+            target->fonts, new_cap * sizeof(struct ydraw_canvas_font_entry));
+        if (!grown) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "static_canvas_attach_handle: fonts realloc failed (new)");
+        }
+        target->fonts = grown;
         target->font_capacity = new_cap;
     }
     yetty_yfont_cache_retain(canvas->base->font_cache, handle);
     target->fonts[target->font_count++].handle = handle;
+    return YETTY_OK_VOID();
 }
 
 #if 0  /* DEAD: legacy buffer-based add_buffer for static-canvas.
@@ -675,7 +677,8 @@ static struct yetty_ycore_void_result yetty_ydraw_static_canvas_rebuild_grid(
         ydraw_canvas_ensure_grid_staging(canvas->base, num_cells * 4);
     if (YETTY_IS_ERR(es)) {
         free(line_base_prim_idx);
-        return es;
+        return YETTY_ERR(yetty_ycore_void,
+                         "static rebuild_grid: ensure_grid_staging", es);
     }
     canvas->base->grid_staging_count = num_cells;
 
@@ -691,7 +694,9 @@ static struct yetty_ycore_void_result yetty_ydraw_static_canvas_rebuild_grid(
                 canvas->base, canvas->base->grid_staging_count + 2);
             if (YETTY_IS_ERR(es2)) {
                 free(line_base_prim_idx);
-                return es2;
+                return YETTY_ERR(yetty_ycore_void,
+                                 "static rebuild_grid: ensure_grid_staging (header)",
+                                 es2);
             }
 
             canvas->base->grid_staging[cell_idx] = canvas->base->grid_staging_count;
@@ -710,7 +715,9 @@ static struct yetty_ycore_void_result yetty_ydraw_static_canvas_rebuild_grid(
                                 canvas->base, canvas->base->grid_staging_count + 1);
                         if (YETTY_IS_ERR(es3)) {
                             free(line_base_prim_idx);
-                            return es3;
+                            return YETTY_ERR(yetty_ycore_void,
+                                             "static rebuild_grid: ensure_grid_staging (ref)",
+                                             es3);
                         }
                         canvas->base->grid_staging[canvas->base->grid_staging_count++] =
                             line_base_prim_idx[bl] + ref->prim_index;
@@ -793,14 +800,12 @@ static struct yetty_ycore_void_result yetty_ydraw_static_canvas_clear(
     for (uint32_t i = 0; i < canvas->lines_count; i++) {
         struct yetty_ycore_void_result r =
             ydraw_canvas_grid_line_free(&canvas->lines[i], canvas->base->font_cache);
-        if (YETTY_IS_ERR(r)) {
-            return r;
-        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                            "static-canvas clear: grid_line_free");
         struct yetty_ycore_void_result ir =
             ydraw_canvas_grid_line_init(&canvas->lines[i]);
-        if (YETTY_IS_ERR(ir)) {
-            return ir;
-        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ir,
+                            "static-canvas clear: grid_line_init");
     }
     canvas->base->grid_staging_count = 0;
     canvas->base->prim_staging_count = 0;
@@ -895,9 +900,10 @@ static struct yetty_ycore_void_result static_set_grid_size_impl(
         (struct yetty_ydraw_static_canvas *)base->impl, size);
 }
 
-/* Dispatch one prim into the static canvas. Mirrors the per-prim block
- * of the legacy add_buffer; per-prim errors are logged, not propagated. */
-static void static_dispatch_one(
+/* Dispatch one prim into the static canvas. Any per-prim failure aborts
+ * the envelope — the wire is corrupt or we're out of resources, and
+ * continuing would mask the cause. */
+static struct yetty_ycore_void_result static_dispatch_one(
     struct yetty_ydraw_static_canvas *canvas,
     const struct yetty_ydraw_core_prim_flyweight *fw)
 {
@@ -905,76 +911,82 @@ static void static_dispatch_one(
 
     if (prim_type <= YETTY_YDRAW_CMD_END) {
         if (prim_type == YETTY_YDRAW_CMD_ZERO) {
-            yetty_ydraw_static_canvas_clear(canvas);
+            struct yetty_ycore_void_result cr =
+                yetty_ydraw_static_canvas_clear(canvas);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, cr,
+                                "static dispatch: clear");
         }
-    } else if (prim_type == YETTY_YDRAW_TYPE_FONT) {
-        struct yetty_ydraw_core_font_prim_view fv;
-        if (yetty_ydraw_core_font_prim_parse(fw->data, &fv) == 0 && fv.font_id >= 0) {
-            char hint[YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH];
-            size_t hl = fv.name_len < sizeof(hint) - 1 ? fv.name_len : sizeof(hint) - 1;
-            memcpy(hint, fv.name, hl);
-            hint[hl] = '\0';
-            char hex[17];
-            struct yetty_ycore_void_result er = ydraw_canvas_ensure_blob_font_cdb(
-                canvas->base, fv.ttf, fv.ttf_len, hint, hex);
-            if (YETTY_IS_ERR(er)) {
-                yetty_ycore_error_destroy(er.error);
-            } else {
-                ydraw_canvas_font_map_grow(&canvas->env_fonts_map,
-                                            (uint32_t)fv.font_id + 1);
-                memcpy(canvas->env_fonts_map.entries[fv.font_id].hex, hex, 17);
-                canvas->env_fonts_map.entries[fv.font_id].declared = true;
-            }
-        }
-    } else if (prim_type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
-        struct yetty_ydraw_core_text_span_prim_view tv;
-        if (yetty_ydraw_core_text_span_prim_parse(fw->data, &tv) == 0) {
-            struct yetty_ydraw_font *font = NULL;
-            yetty_yfont_cache_handle handle = YETTY_YFONT_CACHE_HANDLE_INVALID;
-            if (tv.font_id >= 0 && (uint32_t)tv.font_id < canvas->env_fonts_map.capacity) {
-                struct ydraw_canvas_font_map_entry *e =
-                    &canvas->env_fonts_map.entries[tv.font_id];
-                if (e->resolved) {
-                    font = e->font;
-                    handle = e->handle;
-                } else if (e->declared) {
-                    struct yetty_yfont_cache_ref_result rr =
-                        ydraw_canvas_resolve_blob_font_handle(canvas->base, e->hex);
-                    if (YETTY_IS_OK(rr)) {
-                        e->font = rr.value.font;
-                        e->handle = rr.value.handle;
-                        e->resolved = true;
-                        font = e->font;
-                        handle = e->handle;
-                    } else {
-                        yetty_ycore_error_destroy(rr.error);
-                        e->declared = false;
-                    }
-                }
-            }
-            if (!font) {
-                font = canvas->base->default_font;
-                handle = canvas->base->default_handle;
-            }
-            if (font) {
-                struct uint32_result gmr =
-                    static_canvas_expand_text_span(canvas, &tv, font, handle);
-                if (YETTY_IS_OK(gmr)) {
-                    ydraw_canvas_buffer_attach_note(&canvas->env_attach_list,
-                                                     handle, gmr.value);
-                } else {
-                    yetty_ycore_error_destroy(gmr.error);
-                }
-            }
-        }
-    } else {
-        struct uint32_result prim_res = static_canvas_add_primitive(canvas, fw);
-        if (YETTY_IS_ERR(prim_res)) {
-            yerror("static process_input: add_primitive failed: %s",
-                   prim_res.error.msg);
-            yetty_ycore_error_destroy(prim_res.error);
-        }
+        return YETTY_OK_VOID();
     }
+    if (prim_type == YETTY_YDRAW_TYPE_FONT) {
+        struct yetty_ydraw_core_font_prim_view fv;
+        if (yetty_ydraw_core_font_prim_parse(fw->data, &fv) != 0 ||
+            fv.font_id < 0) {
+            return YETTY_OK_VOID();
+        }
+        char hint[YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH];
+        size_t hl = fv.name_len < sizeof(hint) - 1 ? fv.name_len : sizeof(hint) - 1;
+        memcpy(hint, fv.name, hl);
+        hint[hl] = '\0';
+        char hex[17];
+        struct yetty_ycore_void_result er = ydraw_canvas_ensure_blob_font_cdb(
+            canvas->base, fv.ttf, fv.ttf_len, hint, hex);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, er,
+                            "static dispatch: ensure_blob_font_cdb");
+        struct yetty_ycore_void_result gr = ydraw_canvas_font_map_grow(
+            &canvas->env_fonts_map, (uint32_t)fv.font_id + 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, gr,
+                            "static dispatch: font_map_grow");
+        memcpy(canvas->env_fonts_map.entries[fv.font_id].hex, hex, 17);
+        canvas->env_fonts_map.entries[fv.font_id].declared = true;
+        return YETTY_OK_VOID();
+    }
+    if (prim_type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
+        struct yetty_ydraw_core_text_span_prim_view tv;
+        if (yetty_ydraw_core_text_span_prim_parse(fw->data, &tv) != 0) {
+            return YETTY_OK_VOID();
+        }
+        struct yetty_ydraw_font *font = NULL;
+        yetty_yfont_cache_handle handle = YETTY_YFONT_CACHE_HANDLE_INVALID;
+        if (tv.font_id >= 0 && (uint32_t)tv.font_id < canvas->env_fonts_map.capacity) {
+            struct ydraw_canvas_font_map_entry *e =
+                &canvas->env_fonts_map.entries[tv.font_id];
+            if (e->resolved) {
+                font = e->font;
+                handle = e->handle;
+            } else if (e->declared) {
+                struct yetty_yfont_cache_ref_result rr =
+                    ydraw_canvas_resolve_blob_font_handle(canvas->base, e->hex);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, rr,
+                                    "static dispatch: resolve_blob_font_handle");
+                e->font = rr.value.font;
+                e->handle = rr.value.handle;
+                e->resolved = true;
+                font = e->font;
+                handle = e->handle;
+            }
+        }
+        if (!font) {
+            font = canvas->base->default_font;
+            handle = canvas->base->default_handle;
+        }
+        if (!font) {
+            return YETTY_OK_VOID();
+        }
+        struct uint32_result gmr =
+            static_canvas_expand_text_span(canvas, &tv, font, handle);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, gmr,
+                            "static dispatch: expand_text_span");
+        struct yetty_ycore_void_result an = ydraw_canvas_buffer_attach_note(
+            &canvas->env_attach_list, handle, gmr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, an,
+                            "static dispatch: buffer_attach_note");
+        return YETTY_OK_VOID();
+    }
+    struct uint32_result prim_res = static_canvas_add_primitive(canvas, fw);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, prim_res,
+                        "static dispatch: add_primitive");
+    return YETTY_OK_VOID();
 }
 
 static void static_env_reset(struct yetty_ydraw_static_canvas *canvas)
@@ -1009,10 +1021,9 @@ static struct yetty_ycore_void_result static_process_input_impl(
         struct yetty_ydraw_core_prim_iter_status_result sr =
             yetty_ydraw_core_prim_iter_next(&canvas->env_iter);
         if (YETTY_IS_ERR(sr)) {
-            yerror("static process_input: prim_iter error — resetting envelope state");
-            yetty_ycore_error_destroy(sr.error);
             static_env_reset(canvas);
-            return YETTY_ERR(yetty_ycore_void, "static process_input: prim_iter failed");
+            return YETTY_ERR(yetty_ycore_void,
+                             "static process_input: prim_iter_next failed", sr);
         }
         if (sr.value == YETTY_PRIM_ITER_WOULD_BLOCK) {
             return YETTY_OK_VOID();
@@ -1020,13 +1031,25 @@ static struct yetty_ycore_void_result static_process_input_impl(
         if (sr.value == YETTY_PRIM_ITER_DONE) {
             break;
         }
-        static_dispatch_one(canvas, &canvas->env_iter.fw);
+        struct yetty_ycore_void_result dr =
+            static_dispatch_one(canvas, &canvas->env_iter.fw);
+        if (YETTY_IS_ERR(dr)) {
+            static_env_reset(canvas);
+            return YETTY_ERR(yetty_ycore_void,
+                             "static process_input: dispatch_one failed", dr);
+        }
     }
 
     /* End of envelope — run attach pass; no viewport scroll, no eviction. */
     for (uint32_t i = 0; i < canvas->env_attach_list.count; i++) {
-        static_canvas_attach_handle(canvas, canvas->env_attach_list.entries[i].handle,
-                                    canvas->env_attach_list.entries[i].max_row);
+        struct yetty_ycore_void_result ar = static_canvas_attach_handle(
+            canvas, canvas->env_attach_list.entries[i].handle,
+            canvas->env_attach_list.entries[i].max_row);
+        if (YETTY_IS_ERR(ar)) {
+            static_env_reset(canvas);
+            return YETTY_ERR(yetty_ycore_void,
+                             "static process_input: attach_handle failed", ar);
+        }
     }
     canvas->base->dirty = true;
     static_env_reset(canvas);

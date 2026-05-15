@@ -506,9 +506,8 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_encode_li
     if (sb->tail_size >= SB_SEAL_THRESHOLD) {
         struct yetty_ycore_void_result sr = sb_seal_tail(sb);
         if (YETTY_IS_ERR(sr)) {
-            /* Seal failed — keep the tail uncompressed; offsets stay
-             * valid. Log via warn so we notice but don't break. */
-            yetty_ycore_error_destroy(sr.error);
+            return YETTY_ERR(yetty_ydraw_scrollbuffer_offset,
+                             "scrollbuffer: seal_tail failed", sr);
         }
     }
 

@@ -232,9 +232,17 @@ void yetty_yplatform_run_os_event_loop(GLFWwindow *window, int *running,
         /* After each event burst, drain anything the render thread has
          * pushed onto the clipboard pipe. GLFW clipboard calls have to
          * happen on this thread; the render thread parks requests on
-         * the pipe and wakes us via glfwPostEmptyEvent. */
+         * the pipe and wakes us via glfwPostEmptyEvent.
+         *
+         * This function's signature is fixed by GLFW's main-thread driver
+         * idiom (void return, no out-params). Errors from drain are logged
+         * and absorbed at this boundary. */
         if (cm && cm->ops->drain) {
-            cm->ops->drain(cm);
+            struct yetty_ycore_void_result r = cm->ops->drain(cm);
+            if (YETTY_IS_ERR(r)) {
+                yerror("os_event_loop: clipboard drain failed: %s", r.error.msg);
+                yetty_ycore_error_destroy(r.error);
+            }
         }
     }
 }

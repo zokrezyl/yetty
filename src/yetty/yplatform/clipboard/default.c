@@ -41,22 +41,25 @@ struct yetty_yplatform_glfw_clipboard_manager {
     struct yetty_yplatform_window_manager *window_manager;
 };
 
-static void glfw_clipboard_destroy(struct yetty_platform_clipboard_manager *self)
+static struct yetty_ycore_void_result glfw_clipboard_destroy(
+    struct yetty_platform_clipboard_manager *self)
 {
     struct yetty_yplatform_glfw_clipboard_manager *m =
         container_of(self, struct yetty_yplatform_glfw_clipboard_manager, base);
     free(m);
+    return YETTY_OK_VOID();
 }
 
-static void glfw_clipboard_set_text(struct yetty_platform_clipboard_manager *self, const char *text,
-                                    size_t len)
+static struct yetty_ycore_void_result glfw_clipboard_set_text(
+    struct yetty_platform_clipboard_manager *self, const char *text, size_t len)
 {
     struct yetty_yplatform_glfw_clipboard_manager *m =
         container_of(self, struct yetty_yplatform_glfw_clipboard_manager, base);
 
     char *copy = malloc(len + 1);
     if (!copy) {
-        return;
+        return YETTY_ERR(yetty_ycore_void,
+                         "glfw_clipboard_set_text: malloc for clipboard text copy failed");
     }
     memcpy(copy, text, len);
     copy[len] = '\0';
@@ -66,14 +69,22 @@ static void glfw_clipboard_set_text(struct yetty_platform_clipboard_manager *sel
      * write. On a write error the bytes never leave; free locally. */
     struct yetty_ycore_size_result wr =
         m->output_pipe->ops->write(m->output_pipe, &ev, sizeof(ev));
-    if (!YETTY_IS_OK(wr) || wr.value != sizeof(ev)) {
+    if (YETTY_IS_ERR(wr)) {
         free(copy);
-        return;
+        return YETTY_ERR(yetty_ycore_void,
+                         "glfw_clipboard_set_text: output_pipe write failed", wr);
+    }
+    if (wr.value != sizeof(ev)) {
+        free(copy);
+        return YETTY_ERR(yetty_ycore_void,
+                         "glfw_clipboard_set_text: short write on output_pipe");
     }
     glfwPostEmptyEvent();
+    return YETTY_OK_VOID();
 }
 
-static void glfw_clipboard_request_paste(struct yetty_platform_clipboard_manager *self)
+static struct yetty_ycore_void_result glfw_clipboard_request_paste(
+    struct yetty_platform_clipboard_manager *self)
 {
     struct yetty_yplatform_glfw_clipboard_manager *m =
         container_of(self, struct yetty_yplatform_glfw_clipboard_manager, base);
@@ -81,13 +92,20 @@ static void glfw_clipboard_request_paste(struct yetty_platform_clipboard_manager
     struct yetty_yui_event ev = {.type = YETTY_YCORE_PASTE, .payload = NULL};
     struct yetty_ycore_size_result wr =
         m->output_pipe->ops->write(m->output_pipe, &ev, sizeof(ev));
-    if (!YETTY_IS_OK(wr) || wr.value != sizeof(ev)) {
-        return;
+    if (YETTY_IS_ERR(wr)) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "glfw_clipboard_request_paste: output_pipe write failed", wr);
+    }
+    if (wr.value != sizeof(ev)) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "glfw_clipboard_request_paste: short write on output_pipe");
     }
     glfwPostEmptyEvent();
+    return YETTY_OK_VOID();
 }
 
-static void glfw_clipboard_drain(struct yetty_platform_clipboard_manager *self)
+static struct yetty_ycore_void_result glfw_clipboard_drain(
+    struct yetty_platform_clipboard_manager *self)
 {
     struct yetty_yplatform_glfw_clipboard_manager *m =
         container_of(self, struct yetty_yplatform_glfw_clipboard_manager, base);
@@ -101,13 +119,17 @@ static void glfw_clipboard_drain(struct yetty_platform_clipboard_manager *self)
         struct yetty_yui_event ev;
         struct yetty_ycore_size_result rr =
             m->output_pipe->ops->read(m->output_pipe, &ev, sizeof(ev));
-        if (!YETTY_IS_OK(rr) || rr.value == 0) {
+        if (YETTY_IS_ERR(rr)) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "glfw_clipboard_drain: output_pipe read failed", rr);
+        }
+        if (rr.value == 0) {
             break;
         }
         if (rr.value != sizeof(ev)) {
-            /* Partial event — pipe framing is broken. Don't try to
-             * interpret it. */
-            break;
+            /* Partial event — pipe framing is broken. */
+            return YETTY_ERR(yetty_ycore_void,
+                             "glfw_clipboard_drain: partial event on output_pipe (framing broken)");
         }
 
         switch (ev.type) {
@@ -128,15 +150,24 @@ static void glfw_clipboard_drain(struct yetty_platform_clipboard_manager *self)
             if (got) {
                 size_t glen = strlen(got);
                 copy = malloc(glen + 1);
-                if (copy) {
-                    memcpy(copy, got, glen + 1);
+                if (!copy) {
+                    return YETTY_ERR(yetty_ycore_void,
+                                     "glfw_clipboard_drain: malloc for paste text copy failed");
                 }
+                memcpy(copy, got, glen + 1);
             }
             struct yetty_yui_event out = {.type = YETTY_YCORE_PASTE, .payload = copy};
             struct yetty_ycore_size_result wr =
                 m->input_pipe->ops->write(m->input_pipe, &out, sizeof(out));
-            if (!YETTY_IS_OK(wr) || wr.value != sizeof(out)) {
+            if (YETTY_IS_ERR(wr)) {
                 free(copy);
+                return YETTY_ERR(yetty_ycore_void,
+                                 "glfw_clipboard_drain: input_pipe write of paste result failed", wr);
+            }
+            if (wr.value != sizeof(out)) {
+                free(copy);
+                return YETTY_ERR(yetty_ycore_void,
+                                 "glfw_clipboard_drain: short write of paste result on input_pipe");
             }
             break;
         }
@@ -152,6 +183,7 @@ static void glfw_clipboard_drain(struct yetty_platform_clipboard_manager *self)
             break;
         }
     }
+    return YETTY_OK_VOID();
 }
 
 static const struct yetty_platform_clipboard_manager_ops glfw_clipboard_ops = {

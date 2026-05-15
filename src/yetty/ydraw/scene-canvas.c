@@ -209,24 +209,27 @@ static struct scene_cell_bucket *cell_find_bucket(struct scene_cell *cell,
     return NULL;
 }
 
-/* Get-or-create the bucket for `slot` in this cell. */
-static struct scene_cell_bucket *cell_ensure_bucket(struct scene_cell *cell,
-                                                    uint32_t slot)
+/* Get-or-create the bucket for `slot` in this cell. Writes the bucket
+ * pointer into `*out` on success. */
+static struct yetty_ycore_void_result cell_ensure_bucket(
+    struct scene_cell *cell, uint32_t slot, struct scene_cell_bucket **out)
 {
     struct scene_cell_bucket *b = cell_find_bucket(cell, slot);
-    if (b) return b;
+    if (b) {
+        *out = b;
+        return YETTY_OK_VOID();
+    }
     struct yetty_ycore_void_result gr =
         grow_buckets(&cell->buckets, &cell->bucket_capacity, cell->bucket_count + 1);
-    if (YETTY_IS_ERR(gr)) {
-        yetty_ycore_error_destroy(gr.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr,
+                        "cell_ensure_bucket: grow_buckets");
     b = &cell->buckets[cell->bucket_count++];
     b->entity_slot   = slot;
     b->local_indices = NULL;
     b->count         = 0;
     b->capacity      = 0;
-    return b;
+    *out = b;
+    return YETTY_OK_VOID();
 }
 
 /* Append `local_idx` to the bucket. */
@@ -296,24 +299,25 @@ static struct yetty_ycore_void_result scene_grow_entities(
     return YETTY_OK_VOID();
 }
 
-/* Allocate a fresh slot. Returns SCENE_INVALID_SLOT on alloc failure. */
-static uint32_t scene_alloc_slot(struct yetty_ydraw_scene_canvas *sc)
+/* Allocate a fresh slot. The new slot id is written to `*out` on success. */
+static struct yetty_ycore_void_result scene_alloc_slot(
+    struct yetty_ydraw_scene_canvas *sc, uint32_t *out)
 {
     if (sc->free_slot_head != SCENE_INVALID_SLOT) {
         uint32_t slot = sc->free_slot_head;
         sc->free_slot_head = sc->entities[slot].next_free;
         sc->entities[slot].next_free = SCENE_INVALID_SLOT;
         sc->entities[slot].in_use    = true;
-        return slot;
+        *out = slot;
+        return YETTY_OK_VOID();
     }
     uint32_t slot = sc->entity_capacity;
     struct yetty_ycore_void_result gr = scene_grow_entities(sc, slot + 1);
-    if (YETTY_IS_ERR(gr)) {
-        yetty_ycore_error_destroy(gr.error);
-        return SCENE_INVALID_SLOT;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr,
+                        "scene_alloc_slot: scene_grow_entities");
     sc->entities[slot].in_use = true;
-    return slot;
+    *out = slot;
+    return YETTY_OK_VOID();
 }
 
 /* Free entity storage in place (does not return slot to free-list). */
@@ -551,10 +555,11 @@ struct yetty_ydraw_scene_entity_ptr_result yetty_ydraw_scene_entity_create(
     }
 
     uint32_t parent_slot = parent->slot;
-    uint32_t slot = scene_alloc_slot(sc);
-    if (slot == SCENE_INVALID_SLOT) {
+    uint32_t slot = SCENE_INVALID_SLOT;
+    struct yetty_ycore_void_result ar = scene_alloc_slot(sc, &slot);
+    if (YETTY_IS_ERR(ar)) {
         return YETTY_ERR(yetty_ydraw_scene_entity_ptr,
-                         "scene-canvas: out of entity slots");
+                         "scene-canvas: alloc slot failed", ar);
     }
     /* Re-fetch parent — scene_alloc_slot may have reallocated entities[]. */
     parent = &sc->entities[parent_slot];
@@ -663,11 +668,11 @@ struct yetty_ycore_void_result yetty_ydraw_scene_entity_add_prim(
         for (uint32_t c = col_min; c <= col_max; c++) {
             struct scene_cell *cell = &sc->cells[r * cols + c];
             bool fresh = (cell_find_bucket(cell, entity->slot) == NULL);
-            struct scene_cell_bucket *b = cell_ensure_bucket(cell, entity->slot);
-            if (!b) {
-                return YETTY_ERR(yetty_ycore_void,
-                                 "scene-canvas: cell bucket alloc failed");
-            }
+            struct scene_cell_bucket *b = NULL;
+            struct yetty_ycore_void_result br =
+                cell_ensure_bucket(cell, entity->slot, &b);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, br,
+                                "scene-canvas: cell_ensure_bucket");
             struct yetty_ycore_void_result pr = bucket_push_index(b, local_idx);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "scene-canvas: bucket push");
 

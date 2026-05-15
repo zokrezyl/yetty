@@ -453,7 +453,11 @@ int main(int argc, char **argv)
     platform_input_pipe->ops->destroy(platform_input_pipe);
     ydebug("main: platform_input_pipe destroyed");
     if (clipboard_manager) {
-        clipboard_manager->ops->destroy(clipboard_manager);
+        struct yetty_ycore_void_result cd = clipboard_manager->ops->destroy(clipboard_manager);
+        if (YETTY_IS_ERR(cd)) {
+            yerror("main: clipboard_manager destroy failed: %s", cd.error.msg);
+            yetty_ycore_error_destroy(cd.error);
+        }
     }
     if (window_manager) {
         window_manager->ops->destroy(window_manager);

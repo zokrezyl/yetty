@@ -113,10 +113,14 @@ struct yetty_ydraw_yaml_parser {
 // Low level API
 //=============================================================================
 
-struct yetty_ydraw_yaml_parser *yetty_ydraw_yaml_parser_create(void)
+struct yetty_ydraw_yaml_parser_ptr_result yetty_ydraw_yaml_parser_create(void)
 {
     struct yetty_ydraw_yaml_parser *parser = calloc(1, sizeof(*parser));
-    return parser;
+    if (!parser) {
+        return YETTY_ERR(yetty_ydraw_yaml_parser_ptr,
+                         "ydraw_yaml: parser calloc failed");
+    }
+    return YETTY_OK(yetty_ydraw_yaml_parser_ptr, parser);
 }
 
 void yetty_ydraw_yaml_parser_destroy(struct yetty_ydraw_yaml_parser *parser)
@@ -241,11 +245,11 @@ struct yetty_ycore_void_result yetty_ydraw_yaml_parser_parse(
                     struct yetty_ycore_void_result res =
                         factory(buffer, &yaml_parser, primitive_type_name);
                     if (YETTY_IS_ERR(res)) {
-                        ydebug("ydraw_yaml: factory for '%s' failed: %s", primitive_type_name,
-                               res.error.msg);
                         yaml_event_delete(&event);
                         yaml_parser_delete(&yaml_parser);
-                        return res;
+                        return YETTY_ERR(yetty_ycore_void,
+                                         "ydraw_yaml: primitive factory failed",
+                                         res);
                     }
                     ydebug("ydraw_yaml: factory for '%s' succeeded", primitive_type_name);
                 } else {
@@ -403,46 +407,43 @@ static struct yetty_ycore_void_result text_factory(struct yetty_ydraw_core_buffe
 
     if (content[0] != 0) {
         /* If a font name was given, resolve it via fontconfig, read the
-         * file, and emit a FONT prim. Failures (no fontconfig, name
-         * doesn't match any installed font, file read error) fall back
-         * silently to the canvas default font — same behaviour as
-         * leaving `font:` unset. */
+         * file, and emit a FONT prim. Any step that fails surfaces as an
+         * error — silent fallback to the canvas default would mask
+         * configuration problems we want to see. */
         int32_t font_id = -1;
         if (font_name[0] != 0) {
             char *path = resolve_font_to_path(font_name);
-            if (path) {
-                size_t ttf_len = 0;
-                uint8_t *ttf = read_file_bytes(path, &ttf_len);
-                if (ttf) {
-                    struct yetty_ycore_buffer ttf_buf = {
-                        .data = ttf, .size = ttf_len, .capacity = ttf_len};
-                    struct yetty_ycore_int_result fr =
-                        yetty_ydraw_core_buffer_add_font(buffer, &ttf_buf, font_name);
-                    if (YETTY_IS_OK(fr)) {
-                        font_id = fr.value;
-                        ydebug("ydraw_yaml: font '%s' -> %s (font_id=%d)", font_name, path,
-                               font_id);
-                    } else {
-                        ywarn("ydraw_yaml: add_font failed for '%s': %s", font_name, fr.error.msg);
-                    }
-                    free(ttf);
-                } else {
-                    ywarn("ydraw_yaml: cannot read font file '%s' for name '%s'", path, font_name);
-                }
-                free(path);
-            } else {
-                ywarn("ydraw_yaml: font '%s' not found via fontconfig", font_name);
+            if (!path) {
+                return YETTY_ERR(yetty_ycore_void,
+                                 "ydraw_yaml: font name not resolved via fontconfig");
             }
+            size_t ttf_len = 0;
+            uint8_t *ttf = read_file_bytes(path, &ttf_len);
+            if (!ttf) {
+                free(path);
+                return YETTY_ERR(yetty_ycore_void,
+                                 "ydraw_yaml: failed to read font file");
+            }
+            struct yetty_ycore_buffer ttf_buf = {
+                .data = ttf, .size = ttf_len, .capacity = ttf_len};
+            struct yetty_ycore_int_result fr =
+                yetty_ydraw_core_buffer_add_font(buffer, &ttf_buf, font_name);
+            free(ttf);
+            if (YETTY_IS_ERR(fr)) {
+                free(path);
+                return YETTY_ERR(yetty_ycore_void,
+                                 "ydraw_yaml: add_font failed", fr);
+            }
+            font_id = fr.value;
+            ydebug("ydraw_yaml: font '%s' -> %s (font_id=%d)", font_name, path, font_id);
+            free(path);
         }
 
         struct yetty_ycore_buffer text_buf = {
             .data = (uint8_t *)content, .size = strlen(content), .capacity = strlen(content)};
         struct yetty_ycore_void_result res = yetty_ydraw_core_buffer_add_text(
             buffer, x, y, &text_buf, font_size, color, 0, font_id, 0.0f);
-        if (YETTY_IS_ERR(res)) {
-            ydebug("ydraw_yaml: failed to add text: %s", res.error.msg);
-            return res;
-        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "ydraw_yaml: add_text");
     }
 
     return YETTY_OK_VOID();
@@ -473,25 +474,37 @@ struct yetty_ydraw_core_buffer_result yetty_ydraw_yaml_parse(const char *yaml, s
 
     struct yetty_ydraw_core_buffer *buffer = buf_res.value;
 
-    struct yetty_ydraw_yaml_parser *parser = yetty_ydraw_yaml_parser_create();
-    if (!parser) {
+    struct yetty_ydraw_yaml_parser_ptr_result parser_res = yetty_ydraw_yaml_parser_create();
+    if (YETTY_IS_ERR(parser_res)) {
         yetty_ydraw_core_buffer_destroy(buffer);
-        return YETTY_ERR(yetty_ydraw_core_buffer, "failed to create parser");
+        return YETTY_ERR(yetty_ydraw_core_buffer,
+                         "ydraw_yaml: parser create failed", parser_res);
     }
+    struct yetty_ydraw_yaml_parser *parser = parser_res.value;
 
     struct yetty_ycore_void_result reg_res = yetty_ysdf_register_yaml_factories(parser);
     if (YETTY_IS_ERR(reg_res)) {
-        ydebug("ydraw_yaml: ysdf registration failed: %s", reg_res.error.msg);
-    } else {
-        ydebug("ydraw_yaml: ysdf factories registered, count=%zu", parser->count);
+        yetty_ydraw_yaml_parser_destroy(parser);
+        yetty_ydraw_core_buffer_destroy(buffer);
+        return YETTY_ERR(yetty_ydraw_core_buffer,
+                         "ydraw_yaml: ysdf factories registration", reg_res);
     }
+    ydebug("ydraw_yaml: ysdf factories registered, count=%zu", parser->count);
+
     struct yetty_ycore_void_result text_reg_res = register_text_factory(parser);
     if (YETTY_IS_ERR(text_reg_res)) {
-        ydebug("ydraw_yaml: text factory registration failed: %s", text_reg_res.error.msg);
+        yetty_ydraw_yaml_parser_destroy(parser);
+        yetty_ydraw_core_buffer_destroy(buffer);
+        return YETTY_ERR(yetty_ydraw_core_buffer,
+                         "ydraw_yaml: text factory registration", text_reg_res);
     }
+
     struct yetty_ycore_void_result yplot_reg_res = yetty_yplot_register_yaml_factory(parser);
     if (YETTY_IS_ERR(yplot_reg_res)) {
-        ydebug("ydraw_yaml: yplot factory registration failed: %s", yplot_reg_res.error.msg);
+        yetty_ydraw_yaml_parser_destroy(parser);
+        yetty_ydraw_core_buffer_destroy(buffer);
+        return YETTY_ERR(yetty_ydraw_core_buffer,
+                         "ydraw_yaml: yplot factory registration", yplot_reg_res);
     }
     ydebug("ydraw_yaml: text+yplot factories registered, total count=%zu", parser->count);
 
@@ -502,7 +515,8 @@ struct yetty_ydraw_core_buffer_result yetty_ydraw_yaml_parse(const char *yaml, s
 
     if (YETTY_IS_ERR(parse_res)) {
         yetty_ydraw_core_buffer_destroy(buffer);
-        return YETTY_ERR(yetty_ydraw_core_buffer, parse_res.error.msg);
+        return YETTY_ERR(yetty_ydraw_core_buffer,
+                         "ydraw_yaml: parse failed", parse_res);
     }
 
     return YETTY_OK(yetty_ydraw_core_buffer, buffer);

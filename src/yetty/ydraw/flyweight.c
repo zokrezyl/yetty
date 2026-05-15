@@ -31,19 +31,40 @@ struct yetty_ydraw_core_flyweight_registry_ptr_result yetty_ydraw_flyweight_crea
     yetty_ydraw_core_flyweight_registry_set_default(reg, yetty_ysdf_handler);
 
     // Cmd tier — control commands at the bottom of the id space.
-    yetty_ydraw_core_flyweight_registry_add(reg, YETTY_YDRAW_CMD_BASE, YETTY_YDRAW_CMD_END,
-                                             yetty_ydraw_core_cmd_handler);
+    struct yetty_ycore_void_result r_cmd = yetty_ydraw_core_flyweight_registry_add(
+        reg, YETTY_YDRAW_CMD_BASE, YETTY_YDRAW_CMD_END, yetty_ydraw_core_cmd_handler);
+    if (YETTY_IS_ERR(r_cmd)) {
+        yetty_ydraw_core_flyweight_registry_destroy(reg);
+        return YETTY_ERR(yetty_ydraw_core_flyweight_registry_ptr,
+                         "flyweight_create: register CMD handler", r_cmd);
+    }
 
     // Flyweight prims — one handler per type id, registered like SDF/complex
-    yetty_ydraw_core_flyweight_registry_add(reg, YETTY_YDRAW_TYPE_FONT, YETTY_YDRAW_TYPE_FONT,
-                                             yetty_ydraw_core_font_prim_handler);
-    yetty_ydraw_core_flyweight_registry_add(reg, YETTY_YDRAW_TYPE_TEXT_SPAN,
-                                             YETTY_YDRAW_TYPE_TEXT_SPAN,
-                                             yetty_ydraw_core_text_span_prim_handler);
+    struct yetty_ycore_void_result r_font = yetty_ydraw_core_flyweight_registry_add(
+        reg, YETTY_YDRAW_TYPE_FONT, YETTY_YDRAW_TYPE_FONT,
+        yetty_ydraw_core_font_prim_handler);
+    if (YETTY_IS_ERR(r_font)) {
+        yetty_ydraw_core_flyweight_registry_destroy(reg);
+        return YETTY_ERR(yetty_ydraw_core_flyweight_registry_ptr,
+                         "flyweight_create: register FONT handler", r_font);
+    }
+    struct yetty_ycore_void_result r_ts = yetty_ydraw_core_flyweight_registry_add(
+        reg, YETTY_YDRAW_TYPE_TEXT_SPAN, YETTY_YDRAW_TYPE_TEXT_SPAN,
+        yetty_ydraw_core_text_span_prim_handler);
+    if (YETTY_IS_ERR(r_ts)) {
+        yetty_ydraw_core_flyweight_registry_destroy(reg);
+        return YETTY_ERR(yetty_ydraw_core_flyweight_registry_ptr,
+                         "flyweight_create: register TEXT_SPAN handler", r_ts);
+    }
 
     // Complex prim handler (types >= 0x80000000)
-    yetty_ydraw_core_flyweight_registry_add(reg, YETTY_YDRAW_COMPLEX_TYPE_BASE, 0xFFFFFFFF,
-                                             yetty_ydraw_core_figure_handler);
+    struct yetty_ycore_void_result r_complex = yetty_ydraw_core_flyweight_registry_add(
+        reg, YETTY_YDRAW_COMPLEX_TYPE_BASE, 0xFFFFFFFF, yetty_ydraw_core_figure_handler);
+    if (YETTY_IS_ERR(r_complex)) {
+        yetty_ydraw_core_flyweight_registry_destroy(reg);
+        return YETTY_ERR(yetty_ydraw_core_flyweight_registry_ptr,
+                         "flyweight_create: register complex handler", r_complex);
+    }
 
     ydebug("flyweight_create: cmd + SDF default + FONT + TEXT_SPAN + complex");
     return res;

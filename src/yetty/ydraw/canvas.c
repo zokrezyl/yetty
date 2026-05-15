@@ -51,16 +51,22 @@ void ydraw_canvas_prim_ref_array_free(struct ydraw_canvas_prim_ref_array *arr)
     arr->capacity = 0;
 }
 
-void ydraw_canvas_prim_ref_array_push(struct ydraw_canvas_prim_ref_array *arr,
-                                       struct ydraw_canvas_prim_ref ref)
+struct yetty_ycore_void_result ydraw_canvas_prim_ref_array_push(
+    struct ydraw_canvas_prim_ref_array *arr, struct ydraw_canvas_prim_ref ref)
 {
     if (arr->count >= arr->capacity) {
         uint32_t new_cap =
             arr->capacity == 0 ? YDRAW_CANVAS_INITIAL_REF_CAPACITY : arr->capacity * 2;
-        arr->data = realloc(arr->data, new_cap * sizeof(struct ydraw_canvas_prim_ref));
+        struct ydraw_canvas_prim_ref *grown =
+            realloc(arr->data, new_cap * sizeof(struct ydraw_canvas_prim_ref));
+        if (!grown) {
+            return YETTY_ERR(yetty_ycore_void, "prim_ref_array_push: realloc failed");
+        }
+        arr->data = grown;
         arr->capacity = new_cap;
     }
     arr->data[arr->count++] = ref;
+    return YETTY_OK_VOID();
 }
 
 /*===========================================================================
@@ -202,9 +208,9 @@ struct yetty_ycore_void_result ydraw_canvas_grid_line_arena_append(
     return YETTY_OK_VOID();
 }
 
-uint32_t ydraw_canvas_grid_line_push_prim(struct ydraw_canvas_grid_line *line,
-                                           uint32_t rolling_row,
-                                           const float *data, uint32_t word_count)
+struct uint32_result ydraw_canvas_grid_line_push_prim(
+    struct ydraw_canvas_grid_line *line, uint32_t rolling_row,
+    const float *data, uint32_t word_count)
 {
     struct ydraw_canvas_prim_data_array *arr = &line->prims;
     if (arr->count >= arr->capacity) {
@@ -213,7 +219,7 @@ uint32_t ydraw_canvas_grid_line_push_prim(struct ydraw_canvas_grid_line *line,
         struct ydraw_canvas_prim_data *grown =
             realloc(arr->data, new_cap * sizeof(struct ydraw_canvas_prim_data));
         if (!grown) {
-            return UINT32_MAX;
+            return YETTY_ERR(uint32, "grid_line_push_prim: prims realloc failed");
         }
         arr->data = grown;
         arr->capacity = new_cap;
@@ -221,15 +227,12 @@ uint32_t ydraw_canvas_grid_line_push_prim(struct ydraw_canvas_grid_line *line,
     uint32_t offset = 0;
     struct yetty_ycore_void_result ar =
         ydraw_canvas_grid_line_arena_append(line, data, word_count, &offset);
-    if (YETTY_IS_ERR(ar)) {
-        yetty_ycore_error_destroy(ar.error);
-        return UINT32_MAX;
-    }
+    YETTY_RETURN_IF_ERR(uint32, ar, "grid_line_push_prim: arena append");
     uint32_t idx = arr->count++;
     arr->data[idx].rolling_row = rolling_row;
     arr->data[idx].arena_offset = offset;
     arr->data[idx].word_count = word_count;
-    return idx;
+    return YETTY_OK(uint32, idx);
 }
 
 /*===========================================================================
@@ -377,8 +380,15 @@ struct yetty_ycore_void_result ydraw_canvas_ensure_blob_font_cdb(
         if (!f) {
             return YETTY_ERR(yetty_ycore_void, "open ttf cache for write");
         }
-        fwrite(ttf, 1, ttf_len, f);
-        fclose(f);
+        size_t written = fwrite(ttf, 1, ttf_len, f);
+        if (fclose(f) != 0) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "ydraw_canvas: fclose on ttf cache failed");
+        }
+        if (written != ttf_len) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "ydraw_canvas: short write to ttf cache");
+        }
         ydebug("ydraw_canvas: cached TTF '%s' (%u bytes) hint='%s'", ttf_path, ttf_len,
                hint_name ? hint_name : "");
     }
@@ -654,16 +664,22 @@ void ydraw_canvas_font_map_init(struct ydraw_canvas_font_map *m)
     m->capacity = 0;
 }
 
-void ydraw_canvas_font_map_grow(struct ydraw_canvas_font_map *m, uint32_t want)
+struct yetty_ycore_void_result ydraw_canvas_font_map_grow(
+    struct ydraw_canvas_font_map *m, uint32_t want)
 {
     if (want <= m->capacity) {
-        return;
+        return YETTY_OK_VOID();
     }
     uint32_t new_cap = m->capacity ? m->capacity * 2 : 8;
     while (new_cap < want) {
         new_cap *= 2;
     }
-    m->entries = realloc(m->entries, new_cap * sizeof(struct ydraw_canvas_font_map_entry));
+    struct ydraw_canvas_font_map_entry *grown =
+        realloc(m->entries, new_cap * sizeof(struct ydraw_canvas_font_map_entry));
+    if (!grown) {
+        return YETTY_ERR(yetty_ycore_void, "font_map_grow: realloc failed");
+    }
+    m->entries = grown;
     for (uint32_t i = m->capacity; i < new_cap; i++) {
         m->entries[i].hex[0] = '\0';
         m->entries[i].declared = false;
@@ -672,6 +688,7 @@ void ydraw_canvas_font_map_grow(struct ydraw_canvas_font_map *m, uint32_t want)
         m->entries[i].handle = YETTY_YFONT_CACHE_HANDLE_INVALID;
     }
     m->capacity = new_cap;
+    return YETTY_OK_VOID();
 }
 
 const struct ydraw_canvas_font_map_entry *ydraw_canvas_font_map_get(
@@ -718,18 +735,19 @@ void ydraw_canvas_buffer_attach_free(struct ydraw_canvas_buffer_attach_list *l)
     l->capacity = 0;
 }
 
-void ydraw_canvas_buffer_attach_note(struct ydraw_canvas_buffer_attach_list *l,
-                                      yetty_yfont_cache_handle handle, uint32_t row)
+struct yetty_ycore_void_result ydraw_canvas_buffer_attach_note(
+    struct ydraw_canvas_buffer_attach_list *l,
+    yetty_yfont_cache_handle handle, uint32_t row)
 {
     if (handle == YETTY_YFONT_CACHE_HANDLE_INVALID) {
-        return;
+        return YETTY_OK_VOID();
     }
     for (uint32_t i = 0; i < l->count; i++) {
         if (l->entries[i].handle == handle) {
             if (row > l->entries[i].max_row) {
                 l->entries[i].max_row = row;
             }
-            return;
+            return YETTY_OK_VOID();
         }
     }
     if (l->count >= l->capacity) {
@@ -737,13 +755,15 @@ void ydraw_canvas_buffer_attach_note(struct ydraw_canvas_buffer_attach_list *l,
         struct ydraw_canvas_buffer_attach_entry *ne =
             realloc(l->entries, nc * sizeof(struct ydraw_canvas_buffer_attach_entry));
         if (!ne) {
-            return; /* Best-effort; lose attachment for this font. */
+            return YETTY_ERR(yetty_ycore_void,
+                             "buffer_attach_note: realloc failed");
         }
         l->entries = ne;
         l->capacity = nc;
     }
     l->entries[l->count++] = (struct ydraw_canvas_buffer_attach_entry){
         .handle = handle, .max_row = row};
+    return YETTY_OK_VOID();
 }
 
 /*===========================================================================

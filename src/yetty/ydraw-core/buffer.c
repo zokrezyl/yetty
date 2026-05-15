@@ -45,11 +45,12 @@ struct yetty_ydraw_core_buffer {
 #define YDRAW_SERIAL_MAGIC 0x31425059u /* 'YPB1' little-endian */
 #define YDRAW_SERIAL_HEADER_BYTES (4 + 16 + 4)
 
-static int parse_framed_payload(struct yetty_ydraw_core_buffer *buf, const uint8_t *data,
-                                size_t size)
+static struct yetty_ycore_void_result parse_framed_payload(
+    struct yetty_ydraw_core_buffer *buf, const uint8_t *data, size_t size)
 {
     if (size < YDRAW_SERIAL_HEADER_BYTES) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_void,
+                         "framed payload: shorter than header bytes");
     }
 
     const uint8_t *p = data + 4; /* skip magic, validated by caller */
@@ -64,13 +65,15 @@ static int parse_framed_payload(struct yetty_ydraw_core_buffer *buf, const uint8
     p += 4;
 
     if (byte_count > size - YDRAW_SERIAL_HEADER_BYTES) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_void,
+                         "framed payload: byte_count exceeds remaining bytes");
     }
 
     if (byte_count > 0) {
         uint8_t *pd = malloc(byte_count);
         if (!pd) {
-            return 0;
+            return YETTY_ERR(yetty_ycore_void,
+                             "framed payload: malloc failed");
         }
         memcpy(pd, p, byte_count);
         free(buf->primitives.buf.data);
@@ -78,7 +81,7 @@ static int parse_framed_payload(struct yetty_ydraw_core_buffer *buf, const uint8
         buf->primitives.buf.size = byte_count;
         buf->primitives.buf.capacity = byte_count;
     }
-    return 1;
+    return YETTY_OK_VOID();
 }
 
 /* Construct from already-decoded bytes. Owns a private copy. */
@@ -96,12 +99,16 @@ struct yetty_ydraw_core_buffer_result yetty_ydraw_core_buffer_create_from_bytes(
 
     /* Framed (magic-tagged) payload = scene_bounds + raw prim stream.
    * Otherwise the bytes are a bare primitive stream (legacy path). */
-    uint32_t magic;
-    memcpy(&magic, data, len >= 4 ? 4 : 0);
+    uint32_t magic = 0;
+    if (len >= 4) {
+        memcpy(&magic, data, 4);
+    }
     if (len >= 4 && magic == YDRAW_SERIAL_MAGIC) {
-        if (!parse_framed_payload(buf, data, len)) {
+        struct yetty_ycore_void_result pr = parse_framed_payload(buf, data, len);
+        if (YETTY_IS_ERR(pr)) {
             yetty_ydraw_core_buffer_destroy(buf);
-            return YETTY_ERR(yetty_ydraw_core_buffer, "framed payload parse failed");
+            return YETTY_ERR(yetty_ydraw_core_buffer,
+                             "create_from_bytes: framed payload parse failed", pr);
         }
     } else {
         uint8_t *copy = malloc(len);

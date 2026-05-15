@@ -672,8 +672,8 @@ static int validate_tex(const uint8_t *data, size_t size,
  * Card placement / removal
  *=========================================================================*/
 
-static void anchor_card_and_fit(struct yetty_yterm_ymgui_layer *l, struct yetty_yterm_ymgui_card *c,
-                                int row_visible_top)
+static struct yetty_ycore_void_result anchor_card_and_fit(
+    struct yetty_yterm_ymgui_layer *l, struct yetty_yterm_ymgui_card *c, int row_visible_top)
 {
     /* Resolve visible-relative `row` to a rolling_row anchor. */
     if (row_visible_top < 0) {
@@ -690,10 +690,9 @@ static void anchor_card_and_fit(struct yetty_yterm_ymgui_layer *l, struct yetty_
         int need = (int)(bottom_excl - rows);
         struct yetty_ycore_void_result r =
             l->base.scroll_fn(&l->base, need, l->base.scroll_userdata);
-        if (YETTY_IS_ERR(r)) {
-            yerror("ymgui: scroll_fn failed: %s", r.error.msg);
-        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "anchor_card_and_fit: scroll_fn failed");
     }
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result handle_card_place(struct yetty_yterm_ymgui_layer *l,
@@ -737,7 +736,11 @@ static struct yetty_ycore_void_result handle_card_place(struct yetty_yterm_ymgui
     }
 
     /* Map visible-row to rolling_row anchor; scroll up if not enough room. */
-    anchor_card_and_fit(l, c, cp->row);
+    {
+        struct yetty_ycore_void_result ar = anchor_card_and_fit(l, c, cp->row);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ar,
+                            "handle_card_place: anchor_card_and_fit failed");
+    }
 
     /* On first placement, advance the cursor under the card so subsequent
      * stdout flows beneath. Move/resize emits do NOT touch the cursor. */
@@ -754,7 +757,9 @@ static struct yetty_ycore_void_result handle_card_place(struct yetty_yterm_ymgui
             .cols = 0,
             .rows = (uint16_t)new_row,
         };
-        l->base.cursor_fn(&l->base, pos, l->base.cursor_userdata);
+        struct yetty_ycore_void_result cr =
+            l->base.cursor_fn(&l->base, pos, l->base.cursor_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "handle_card_place: cursor_fn failed");
     }
 
     /* Confirm pixel size to the client (DisplaySize). */
@@ -766,12 +771,18 @@ static struct yetty_ycore_void_result handle_card_place(struct yetty_yterm_ymgui
             .width = card_pixel_w(l, c),
             .height = card_pixel_h(l, c),
         };
-        l->base.emit_osc_fn(YMGUI_OSC_SC_RESIZE, &msg, sizeof(msg), l->base.emit_osc_userdata);
+        struct yetty_ycore_void_result er = l->base.emit_osc_fn(
+            YMGUI_OSC_SC_RESIZE, &msg, sizeof(msg), l->base.emit_osc_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, er,
+                            "handle_card_place: emit_osc_fn(YMGUI_OSC_SC_RESIZE) failed");
     }
 
     l->base.dirty = 1;
     if (l->base.request_render_fn) {
-        l->base.request_render_fn(l->base.request_render_userdata);
+        struct yetty_ycore_void_result rr =
+            l->base.request_render_fn(l->base.request_render_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr,
+                            "handle_card_place: request_render_fn failed");
     }
 
     ydebug("ymgui: card %u %s at (col=%d row=%d, w=%u h=%u, rolling=%u)", c->id,
@@ -779,10 +790,11 @@ static struct yetty_ycore_void_result handle_card_place(struct yetty_yterm_ymgui
     return YETTY_OK_VOID();
 }
 
-static void emit_focus(struct yetty_yterm_ymgui_layer *l, uint32_t card_id, int gained)
+static struct yetty_ycore_void_result emit_focus(struct yetty_yterm_ymgui_layer *l,
+                                                  uint32_t card_id, int gained)
 {
     if (!l->base.emit_osc_fn) {
-        return;
+        return YETTY_OK_VOID();
     }
     struct yetty_ymgui_wire_input_focus msg = {
         .magic = YMGUI_WIRE_MAGIC_INPUT_FOCUS,
@@ -790,7 +802,10 @@ static void emit_focus(struct yetty_yterm_ymgui_layer *l, uint32_t card_id, int 
         .card_id = card_id,
         .gained = gained,
     };
-    l->base.emit_osc_fn(YMGUI_OSC_SC_FOCUS, &msg, sizeof(msg), l->base.emit_osc_userdata);
+    struct yetty_ycore_void_result r = l->base.emit_osc_fn(
+        YMGUI_OSC_SC_FOCUS, &msg, sizeof(msg), l->base.emit_osc_userdata);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "emit_focus: emit_osc_fn(YMGUI_OSC_SC_FOCUS) failed");
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result handle_card_remove(struct yetty_yterm_ymgui_layer *l,
@@ -813,13 +828,17 @@ static struct yetty_ycore_void_result handle_card_remove(struct yetty_yterm_ymgu
 
     /* TODO: archive to ymgui-static-layer when KEEP_VISIBLE flag set. */
     if (l->focused_card_id == cr->card_id) {
-        emit_focus(l, cr->card_id, 0);
+        struct yetty_ycore_void_result ef = emit_focus(l, cr->card_id, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ef,
+                            "handle_card_remove: emit_focus(lost) failed");
         l->focused_card_id = 0;
     }
     card_remove(l, cr->card_id);
     l->base.dirty = 1;
     if (l->base.request_render_fn) {
-        l->base.request_render_fn(l->base.request_render_userdata);
+        struct yetty_ycore_void_result rr =
+            l->base.request_render_fn(l->base.request_render_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "request_render_fn failed");
     }
     return YETTY_OK_VOID();
 }
@@ -841,7 +860,9 @@ static struct yetty_ycore_void_result handle_clear(struct yetty_yterm_ymgui_laye
     /* TODO: archive to ymgui-static-layer when KEEP_VISIBLE flag set. */
     if (cl->card_id == YMGUI_CARD_ID_NONE) {
         if (l->focused_card_id) {
-            emit_focus(l, l->focused_card_id, 0);
+            struct yetty_ycore_void_result ef = emit_focus(l, l->focused_card_id, 0);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, ef,
+                                "handle_clear: emit_focus(all) failed");
             l->focused_card_id = 0;
         }
         for (size_t i = 0; i < l->card_count; i++) {
@@ -850,14 +871,18 @@ static struct yetty_ycore_void_result handle_clear(struct yetty_yterm_ymgui_laye
         l->card_count = 0;
     } else {
         if (l->focused_card_id == cl->card_id) {
-            emit_focus(l, cl->card_id, 0);
+            struct yetty_ycore_void_result ef = emit_focus(l, cl->card_id, 0);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, ef,
+                                "handle_clear: emit_focus(one) failed");
             l->focused_card_id = 0;
         }
         card_remove(l, cl->card_id);
     }
     l->base.dirty = 1;
     if (l->base.request_render_fn) {
-        l->base.request_render_fn(l->base.request_render_userdata);
+        struct yetty_ycore_void_result rr =
+            l->base.request_render_fn(l->base.request_render_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "request_render_fn failed");
     }
     return YETTY_OK_VOID();
 }
@@ -897,7 +922,9 @@ static struct yetty_ycore_void_result handle_frame(struct yetty_yterm_ymgui_laye
 
     l->base.dirty = 1;
     if (l->base.request_render_fn) {
-        l->base.request_render_fn(l->base.request_render_userdata);
+        struct yetty_ycore_void_result rr =
+            l->base.request_render_fn(l->base.request_render_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "request_render_fn failed");
     }
     return YETTY_OK_VOID();
 }
@@ -1425,7 +1452,9 @@ static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal
         struct yetty_ycore_void_result r =
             draw_card(l, l->cards[i], pass, pane_w, pane_h, vp.x, vp.y);
         if (YETTY_IS_ERR(r)) {
-            yerror("ymgui: draw_card: %s", r.error.msg);
+            wgpuRenderPassEncoderEnd(pass);
+            wgpuRenderPassEncoderRelease(pass);
+            return YETTY_ERR(yetty_ycore_void, "ymgui_render: draw_card failed", r);
         }
     }
 
@@ -1525,7 +1554,9 @@ static struct yetty_ycore_void_result ymgui_set_alt_screen(
      * gets a clean focus-lost. We don't restore focus on the way back —
      * focus is a transient runtime fact, not a state to preserve. */
     if (l->focused_card_id) {
-        emit_focus(l, l->focused_card_id, 0);
+        struct yetty_ycore_void_result ef = emit_focus(l, l->focused_card_id, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ef,
+                            "ymgui_set_alt_screen: emit_focus(saved) failed");
         l->focused_card_id = 0;
     }
 
@@ -1547,7 +1578,10 @@ static struct yetty_ycore_void_result ymgui_set_alt_screen(
     l->alt_active = wanted;
     self->dirty = 1;
     if (self->request_render_fn) {
-        self->request_render_fn(self->request_render_userdata);
+        struct yetty_ycore_void_result rr =
+            self->request_render_fn(self->request_render_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr,
+                            "ymgui_set_alt_screen: request_render_fn failed");
     }
 
     ydebug("ymgui: alt_screen=%d (live=%zu cards, saved=%zu cards)", wanted, l->card_count,
@@ -1578,7 +1612,8 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ymgui_layer_create(
     snprintf(shader_path, sizeof(shader_path), "%s/ymgui-layer.wgsl", shaders_dir);
     struct yetty_ycore_buffer_result shader_res = yetty_ycore_read_file(shader_path);
     if (YETTY_IS_ERR(shader_res)) {
-        return YETTY_ERR(yetty_yterm_terminal_layer, shader_res.error.msg);
+        return YETTY_ERR(yetty_yterm_terminal_layer,
+                         "ymgui_layer_create: read_file(ymgui-layer.wgsl) failed", shader_res);
     }
 
     struct yetty_yterm_ymgui_layer *l = calloc(1, sizeof(*l));
@@ -1610,7 +1645,8 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ymgui_layer_create(
         if (YETTY_IS_ERR(yr)) {
             free(l->shader_code.data);
             free(l);
-            return YETTY_ERR(yetty_yterm_terminal_layer, yr.error.msg);
+            return YETTY_ERR(yetty_yterm_terminal_layer,
+                             "ymgui_layer_create: yetty_yface_create failed", yr);
         }
         l->yface = yr.value;
     }
@@ -1688,27 +1724,38 @@ uint32_t yetty_yterm_terminal_layer_ymgui_layer_focused_card(
     return l->focused_card_id;
 }
 
-void yetty_yterm_terminal_layer_ymgui_layer_set_focus(struct yetty_yrender_terminal_layer *layer,
-                                                      uint32_t card_id)
+struct yetty_ycore_void_result yetty_yterm_terminal_layer_ymgui_layer_set_focus(
+    struct yetty_yrender_terminal_layer *layer, uint32_t card_id)
 {
-    if (!layer || layer->ops != &ymgui_ops) {
-        return;
+    if (!layer) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_yterm_terminal_layer_ymgui_layer_set_focus: layer is NULL");
+    }
+    if (layer->ops != &ymgui_ops) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_yterm_terminal_layer_ymgui_layer_set_focus: layer is not a ymgui layer");
     }
     struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)layer;
     if (l->focused_card_id == card_id) {
-        return;
+        return YETTY_OK_VOID();
     }
 
-    /* Validate that card_id refers to a live card (or 0). */
+    /* Validate that card_id refers to a live card (or 0). Unknown id is
+     * silently ignored — the focus model is purely advisory. */
     if (card_id != 0 && !card_find(l, card_id)) {
-        return;
+        return YETTY_OK_VOID();
     }
 
     if (l->focused_card_id != 0) {
-        emit_focus(l, l->focused_card_id, 0);
+        struct yetty_ycore_void_result lost = emit_focus(l, l->focused_card_id, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, lost,
+                            "ymgui_layer_set_focus: emit_focus(lost) failed");
     }
     l->focused_card_id = card_id;
     if (card_id != 0) {
-        emit_focus(l, card_id, 1);
+        struct yetty_ycore_void_result gained = emit_focus(l, card_id, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, gained,
+                            "ymgui_layer_set_focus: emit_focus(gained) failed");
     }
+    return YETTY_OK_VOID();
 }
