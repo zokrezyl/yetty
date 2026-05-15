@@ -1,26 +1,26 @@
 // =============================================================================
-// YPaint Layer Shader - SDF Primitive Rendering
+// YDraw Layer Shader - SDF Primitive Rendering
 // =============================================================================
-// Complete standalone shader that renders ypaint primitives to a texture.
+// Complete standalone shader that renders ydraw primitives to a texture.
 // This layer is rendered separately, then composited with text-layer.
 //
 // Generated constants (prepended by binder):
-//   uniforms.ypaint_ypaint_grid_size
-//   uniforms.ypaint_ypaint_cell_size
-//   uniforms.ypaint_ypaint_rolling_row_0
-//   uniforms.ypaint_ypaint_prim_count
-//   ypaint_grid_offset
-//   ypaint_prims_offset
+//   uniforms.ydraw_ydraw_grid_size
+//   uniforms.ydraw_ydraw_cell_size
+//   uniforms.ydraw_ydraw_rolling_row_0
+//   uniforms.ydraw_ydraw_prim_count
+//   ydraw_grid_offset
+//   ydraw_prims_offset
 
 // RENDER_LAYER_BINDINGS_PLACEHOLDER
 
 // SDF functions + evaluate_sdf_2d() dispatcher come from the GENERATED
-// src/yetty/ysdf/ysdf.gen.wgsl — prepended to this file by ypaint-layer.c
+// src/yetty/ysdf/ysdf.gen.wgsl — prepended to this file by ydraw-layer.c
 // at shader-load time. Don't hand-add SDF cases here; update the .yaml and
 // regenerate.
 
-// GLYPH is ypaint's own primitive (not SDF), kept here next to its reader fns.
-const YPAINT_SDF_GLYPH: u32 = 200u;
+// GLYPH is ydraw's own primitive (not SDF), kept here next to its reader fns.
+const YDRAW_SDF_GLYPH: u32 = 200u;
 
 // =============================================================================
 // Vertex Shader
@@ -44,8 +44,8 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = vec4<f32>(input.position, 0.0, 1.0);
 
-    let grid_size = uniforms.ypaint_ypaint_grid_size;
-    let cell_size = uniforms.ypaint_ypaint_cell_size;
+    let grid_size = uniforms.ydraw_ydraw_grid_size;
+    let cell_size = uniforms.ydraw_ydraw_cell_size;
     let grid_pixel_w = grid_size.x * cell_size.x;
     let grid_pixel_h = grid_size.y * cell_size.y;
     output.grid_pixel = vec2<f32>(
@@ -66,27 +66,27 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 //   [6+] geometry     - primitive-specific args (Y coords relative to line)
 // =============================================================================
 
-fn ypaint_read_rolling_row(prim_offset: u32) -> u32 {
+fn ydraw_read_rolling_row(prim_offset: u32) -> u32 {
     return storage_buffer[prim_offset + 0u];
 }
 
-fn ypaint_read_prim_type(prim_offset: u32) -> u32 {
+fn ydraw_read_prim_type(prim_offset: u32) -> u32 {
     return storage_buffer[prim_offset + 1u];
 }
 
-fn ypaint_read_fill_color(prim_offset: u32) -> u32 {
+fn ydraw_read_fill_color(prim_offset: u32) -> u32 {
     return storage_buffer[prim_offset + 3u];
 }
 
-fn ypaint_read_stroke_color(prim_offset: u32) -> u32 {
+fn ydraw_read_stroke_color(prim_offset: u32) -> u32 {
     return storage_buffer[prim_offset + 4u];
 }
 
-fn ypaint_read_stroke_width(prim_offset: u32) -> f32 {
+fn ydraw_read_stroke_width(prim_offset: u32) -> f32 {
     return bitcast<f32>(storage_buffer[prim_offset + 5u]);
 }
 
-fn ypaint_read_geom_f32(prim_offset: u32, idx: u32) -> f32 {
+fn ydraw_read_geom_f32(prim_offset: u32, idx: u32) -> f32 {
     return bitcast<f32>(storage_buffer[prim_offset + 6u + idx]);
 }
 
@@ -126,7 +126,7 @@ fn glyph_read_color(prim_offset: u32) -> u32 {
 // Each instance contributes its own helpers — `<ns>_base_size`, `<ns>_glyph_size`,
 // `<ns>_glyph_sample` — namespaced by the binder's __NS__ substitution.
 //
-// ypaint-layer.c emits a per-canvas dispatcher block ABOVE this static
+// ydraw-layer.c emits a per-canvas dispatcher block ABOVE this static
 // source that exposes:
 //   font_base_size(slot)            -> f32
 //   font_glyph_size(slot, i)        -> vec2<f32>
@@ -136,11 +136,11 @@ fn glyph_read_color(prim_offset: u32) -> u32 {
 // fonts in canvas->all_fonts order.
 
 // SDF evaluation: call the generated evaluate_sdf_2d() (from ysdf.gen.wgsl).
-// The ypaint prim stores rolling_row at word +0 and the raw ysdf record
+// The ydraw prim stores rolling_row at word +0 and the raw ysdf record
 // from +1 onward, so pass prim_offset + 1u.
 
 // Unpack RGBA color from u32
-fn ypaint_unpack_color(packed: u32) -> vec4<f32> {
+fn ydraw_unpack_color(packed: u32) -> vec4<f32> {
     return vec4<f32>(
         f32(packed & 0xFFu) / 255.0,
         f32((packed >> 8u) & 0xFFu) / 255.0,
@@ -154,9 +154,9 @@ fn ypaint_unpack_color(packed: u32) -> vec4<f32> {
 // =============================================================================
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    let prim_count = uniforms.ypaint_ypaint_prim_count;
-    let grid_size = uniforms.ypaint_ypaint_grid_size;
-    let cell_size = uniforms.ypaint_ypaint_cell_size;
+    let prim_count = uniforms.ydraw_ydraw_prim_count;
+    let grid_size = uniforms.ydraw_ydraw_grid_size;
+    let cell_size = uniforms.ydraw_ydraw_cell_size;
 
     let grid_width = u32(grid_size.x);
     let grid_height = u32(grid_size.y);
@@ -166,8 +166,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         return vec4<f32>(0.0, 0.0, 0.0, 0.0);  // Fully transparent
     }
 
-    let grid_offset = ypaint_grid_offset;
-    let prims_offset = ypaint_prims_offset;
+    let grid_offset = ydraw_grid_offset;
+    let prims_offset = ydraw_prims_offset;
 
     // Grid pixel bounds
     let grid_pixel_w = grid_size.x * cell_size.x;
@@ -180,10 +180,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     //                 cells growing in the text layer (they multiply from 0).
     // Both run BEFORE cell lookup / SDF eval, so edges stay crisp at any
     // zoom level — the shader re-samples SDF math per fragment.
-    let vz_scale = uniforms.ypaint_ypaint_visual_zoom_scale;
-    let vz_off   = uniforms.ypaint_ypaint_visual_zoom_off;
-    let cz_scale = uniforms.ypaint_ypaint_cell_zoom_scale;
-    let cz_off   = uniforms.ypaint_ypaint_cell_zoom_off;
+    let vz_scale = uniforms.ydraw_ydraw_visual_zoom_scale;
+    let vz_off   = uniforms.ydraw_ydraw_visual_zoom_off;
+    let cz_scale = uniforms.ydraw_ydraw_cell_zoom_scale;
+    let cz_off   = uniforms.ydraw_ydraw_cell_zoom_off;
     let vz_center = vec2<f32>(grid_pixel_w * 0.5, grid_pixel_h * 0.5);
     let after_visual = (input.grid_pixel - vz_center) / max(vz_scale, 0.0001)
                      + vz_center + vz_off;
@@ -222,11 +222,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
         // Compute primitive's screen Y offset from its rolling_row
         // Use signed arithmetic to handle scrolling past the primitive
-        let rolling_row = ypaint_read_rolling_row(prim_offset);
-        let rolling_row_0 = uniforms.ypaint_ypaint_rolling_row_0;
+        let rolling_row = ydraw_read_rolling_row(prim_offset);
+        let rolling_row_0 = uniforms.ydraw_ydraw_rolling_row_0;
         let y_offset = f32(i32(rolling_row) - i32(rolling_row_0)) * cell_size.y;
 
-        let prim_type = ypaint_read_prim_type(prim_offset);
+        let prim_type = ydraw_read_prim_type(prim_offset);
 
         // Transform pixel position to primitive-local coords
         let local_pos = vec2<f32>(pixel_pos.x, pixel_pos.y - y_offset);
@@ -236,7 +236,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         // backend via font_glyph_sample() / font_glyph_size(). Bearing has
         // already been applied on the CPU, so (glyph_x, glyph_y) is the
         // top-left corner of the rendered glyph rectangle.
-        if (prim_type == YPAINT_SDF_GLYPH) {
+        if (prim_type == YDRAW_SDF_GLYPH) {
             let glyph_x = glyph_read_x(prim_offset);
             let glyph_y = glyph_read_y(prim_offset);
             let font_size = glyph_read_font_size(prim_offset);
@@ -266,7 +266,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             let glyph_alpha = font_glyph_sample(font_slot, glyph_index, glyph_uv, pixel_scale);
 
             if (glyph_alpha > 0.0) {
-                let glyph_rgba = ypaint_unpack_color(color_packed);
+                let glyph_rgba = ydraw_unpack_color(color_packed);
                 let alpha = glyph_alpha * glyph_rgba.a;
                 result_color = mix(result_color, glyph_rgba.rgb, alpha);
                 result_alpha = max(result_alpha, alpha);
@@ -280,15 +280,15 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         // Resolve the fill color. Gradient primitives compute their color
         // from per-pixel position; everything else reads the single
         // packed fill_color word.
-        let prim_type_for_color = ypaint_read_prim_type(prim_offset);
+        let prim_type_for_color = ydraw_read_prim_type(prim_offset);
         var fill_rgba: vec4<f32>;
         var has_fill: bool;
         if (yetty_ysdf_is_gradient_2d(prim_type_for_color)) {
             fill_rgba = yetty_ysdf_eval_gradient_color_2d(prim_offset + 1u, local_pos);
             has_fill = fill_rgba.a > 0.0;
         } else {
-            let fill_color = ypaint_read_fill_color(prim_offset);
-            fill_rgba = ypaint_unpack_color(fill_color);
+            let fill_color = ydraw_read_fill_color(prim_offset);
+            fill_rgba = ydraw_unpack_color(fill_color);
             has_fill = fill_color != 0u;
         }
 
@@ -300,12 +300,12 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         }
 
         // Render stroke
-        let stroke_color = ypaint_read_stroke_color(prim_offset);
-        let stroke_width = ypaint_read_stroke_width(prim_offset);
+        let stroke_color = ydraw_read_stroke_color(prim_offset);
+        let stroke_width = ydraw_read_stroke_width(prim_offset);
         if (stroke_width > 0.0 && stroke_color != 0u) {
             let stroke_dist = abs(d) - stroke_width * 0.5;
             if (stroke_dist < 0.0) {
-                let stroke_rgba = ypaint_unpack_color(stroke_color);
+                let stroke_rgba = ydraw_unpack_color(stroke_color);
                 let edge_alpha = clamp(-stroke_dist * 2.0, 0.0, 1.0);
                 let alpha = edge_alpha * stroke_rgba.a;
                 result_color = mix(result_color, stroke_rgba.rgb, alpha);

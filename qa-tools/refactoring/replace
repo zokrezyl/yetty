@@ -15,7 +15,7 @@ WITH="$2"
 
 # Find and replace in source files, excluding build dirs and .git
 find . \
-    -type f \( -name '*.cpp' -o -name '*.c' -o -nam '*.cpp' -o -name '*.h' -o -name '*.md' -o -name '*.txt' -o -name 'CMakeLists.txt' -o -name '*.cmake' -o -name 'Makefile' -o -name '*.py' -o -name '*.mm' -o -name '*.m' \) \
+    -type f \( -name '*.yaml' -o -name '*.yml' -o -name '*.cpp' -o -name '*.c' -o -name '*.sh' -o -name '*.wgsl' -o -name '*.h' -o -name '*.md' -o -name '*.txt' -o -name 'CMakeLists.txt' -o -name '*.cmake' -o -name 'Makefile' -o -name '*.py' -o -name '*.mm' -o -name '*.m' \) \
     ! -path './build-desktop*' \
     ! -path './build-android*' \
     ! -path './build-webasm*' \

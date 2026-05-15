@@ -1,7 +1,7 @@
 #!/bin/bash
 # ymesh tool — basic showcase. Runs the standalone ymesh binary on a few
 # .glb files from demo/assets/ymesh/ and lets the OSC envelopes scroll into
-# the ypaint layer of the host yetty terminal.
+# the ydraw layer of the host yetty terminal.
 #
 # Usage (from inside yetty):
 #   ./build-desktop-ytrace-release/yetty -e demo/scripts/ymesh/basic.sh

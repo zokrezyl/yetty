@@ -1,6 +1,6 @@
 #!/bin/bash
-# Test scroll sync between text-layer and ypaint-layer
-# Alternates between text output and ypaint content
+# Test scroll sync between text-layer and ydraw-layer
+# Alternates between text output and ydraw content
 
 SCRIPT_DIR="$(dirname "$0")"
 

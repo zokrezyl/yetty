@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 /*
- * YPaint layer — renders SDF primitives as overlay on terminal text.
+ * YDraw layer — renders SDF primitives as overlay on terminal text.
  * Implements the same terminal_layer_ops interface as text-layer.
  *
  * The layer is canvas-agnostic — it holds a `struct yetty_ydraw_canvas *`

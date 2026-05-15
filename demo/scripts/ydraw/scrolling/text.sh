@@ -1,5 +1,5 @@
 #!/bin/bash
-# Demo: ypaint text rendering via YAML
+# Demo: ydraw text rendering via YAML
 
 # YAML document with text primitive
 YAML='body:
@@ -28,6 +28,6 @@ YAML='body:
 # Base64 encode the YAML
 PAYLOAD=$(echo -n "$YAML" | base64 -w0)
 
-# Send via OSC 666674 (ypaint scroll mode)
+# Send via OSC 666674 (ydraw scroll mode)
 # Format: ESC ] 666674 ; --yaml ; <base64_payload> BEL
 printf '\033]600002;;%s\007' "$PAYLOAD"

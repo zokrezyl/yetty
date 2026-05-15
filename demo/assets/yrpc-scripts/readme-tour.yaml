@@ -6,16 +6,16 @@
 # the demo runs.
 #
 # Scenes:
-#   1. MSDF text — runs the existing ypaint/scrolling/text.sh, then
+#   1. MSDF text — runs the existing ydraw/scrolling/text.sh, then
 #      Ctrl+scroll-zooms in (soft visual zoom) so the viewer sees the
 #      MSDF-rendered glyphs stay sharp at any scale.
 #   2. Plot demo — ycat the plot.sh source (rendered with tree-sitter
 #      highlighting), zoom; then actually run plot.sh and zoom on the
 #      rendered curves. Ctrl+C bails the trailing `sleep 600`.
-#   3. ycat README.md — markdown rendered inline as ypaint primitives
+#   3. ycat README.md — markdown rendered inline as ydraw primitives
 #      (headings, lists, code blocks) instead of plain text.
 #   3b. ycat <pdf> — same tool, different MIME: a real PDF (pdfio →
-#      ypaint primitives) lives in the scrolling layer. Zoom dance.
+#      ydraw primitives) lives in the scrolling layer. Zoom dance.
 #   4. ygui flex dashboard — fullscreen flexbox layout demo with native
 #      widgets. Press `q` to quit between scenes.
 #   5. ygui tree view — interactive tree widget.
@@ -61,7 +61,7 @@ script:
   - special-char: ENTER
   - sleep: 0.4
 
-  - type: "./demo/scripts/ypaint/scrolling/text.sh"
+  - type: "./demo/scripts/ydraw/scrolling/text.sh"
   - special-char: ENTER
   - sleep: 1.4
 
@@ -201,7 +201,7 @@ script:
   - sleep: 0.4
 
   # --- scene 3: ycat README.md -------------------------------------------
-  - type: "# ycat — render markdown inline as ypaint primitives"
+  - type: "# ycat — render markdown inline as ydraw primitives"
   - special-char: ENTER
   - sleep: 0.4
 
@@ -241,7 +241,7 @@ script:
   - sleep: 1.0
 
   # --- scene 3b: ycat a real PDF -----------------------------------------
-  # Same ycat, different MIME — pdfio decodes pages into ypaint primitives
+  # Same ycat, different MIME — pdfio decodes pages into ydraw primitives
   # so the PDF renders inline alongside text. The killer demo: a real
   # technical PDF lives in the scrolling layer like any other content.
   - type: "# ycat — and the SAME tool renders a real PDF inline"

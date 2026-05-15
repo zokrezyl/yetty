@@ -1,4 +1,4 @@
-// YPaint Flyweight - creates configured flyweight registry with all handlers
+// YDraw Flyweight - creates configured flyweight registry with all handlers
 #pragma once
 
 #include <yetty/ydraw-core/flyweight.h>

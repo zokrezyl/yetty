@@ -9,9 +9,9 @@ enabling fast scrolling by only re-rendering layers that changed.
 ## Layer Architecture
 
 ```
-Layer 3: Static YPaint     — screen-fixed SDF/MSDF overlay (dialogs, HUD)
+Layer 3: Static YDraw     — screen-fixed SDF/MSDF overlay (dialogs, HUD)
 Layer 2: Cards              — independent SDF/MSDF sub-grids, scroll with terminal
-Layer 1: Scrolling YPaint   — SDF/MSDF primitives, 1-to-1 with text grid, scroll together
+Layer 1: Scrolling YDraw   — SDF/MSDF primitives, 1-to-1 with text grid, scroll together
 Layer 0: Text Grid          — standard terminal text (TextCell buffer)
 ```
 
@@ -81,7 +81,7 @@ scroll-back viewing. Scrollback lines are compressed/trimmed (trailing spaces
 removed). When scrolled back, a `viewBuffer` is composed from scrollback +
 visible lines for GPU upload.
 
-## YPaint Spatial Structure
+## YDraw Spatial Structure
 
 Separate from the text grid but sharing the same row/col coordinate system
 and scroll counter. The ydraw spatial data is a `deque<PrimLine>` where each
@@ -117,19 +117,19 @@ uses `pop_front`. Both are O(1) per scroll event (no primitive iteration).
 
 ## Data Structure Separation
 
-YPaint data structures are independent of rendering mode. The same structures serve:
+YDraw data structures are independent of rendering mode. The same structures serve:
 
 | Usage             | Grid size      | Scrolls? | Lifecycle              |
 |-------------------|---------------|----------|------------------------|
 | Scrolling ydraw  | terminal grid | yes      | rows scroll off        |
 | Cards             | sub-grid NxM  | yes      | anchored to last row   |
 | Static ydraw     | terminal grid | no       | explicit clear/replace |
-| YPaint card       | sub-grid NxM  | yes      | anchored to last row   |
+| YDraw card       | sub-grid NxM  | yes      | anchored to last row   |
 
-### YPaintBuffer (input)
+### YDrawBuffer (input)
 
 Pure data container for SDF primitives, text spans, images, font blobs.
-This is the input format — users build a YPaintBuffer and submit it.
+This is the input format — users build a YDrawBuffer and submit it.
 No rendering logic, no GPU awareness.
 
 ### SpatialGrid (storage + spatial indexing)
@@ -179,7 +179,7 @@ src/yetty/term/
   terminal-screen.cpp        — TerminalScreenImpl (orchestrates layers, compositing)
 
 src/yetty/ydraw/
-  ydraw-buffer.h            — YPaintBuffer (pure data input, unchanged)
+  ydraw-buffer.h            — YDrawBuffer (pure data input, unchanged)
   canvas.cpp                 — replaced by SpatialGrid
   painter.cpp                — rendering logic, uses SpatialGrid
 ```
@@ -385,7 +385,7 @@ TerminalScreen manages terminal state only. Rendering is delegated to Renderable
 
 Manages:
 - vterm state, cells, scrollback, cursor
-- YPaint primitives, cards, static overlays
+- YDraw primitives, cards, static overlays
 
 Exposes state via methods:
 ```cpp
@@ -447,7 +447,7 @@ class TextGridLayer : public RenderableLayer {
     }
 };
 
-class ScrollingYPaintLayer : public RenderableLayer {
+class ScrollingYDrawLayer : public RenderableLayer {
     void render(const TerminalScreenRenderContext& terminalScreenRenderContext) override {
         if (_previousLayer) {
             _previousLayer->render(terminalScreenRenderContext);
@@ -461,7 +461,7 @@ class CardsLayer : public RenderableLayer {
     // Cards are cached individually, re-rendered only when dirty
 };
 
-class StaticYPaintLayer : public RenderableLayer {
+class StaticYDrawLayer : public RenderableLayer {
     // Static overlay, screen-fixed position
 };
 ```
@@ -473,11 +473,11 @@ TerminalScreen assembles the layer chain at init:
 ```cpp
 // In TerminalScreen::init()
 _textGridLayer = new TextGridLayer(nullptr, this);
-_scrollingYPaintLayer = new ScrollingYPaintLayer(_textGridLayer, this);
-_cardsLayer = new CardsLayer(_scrollingYPaintLayer, this);
-_staticYPaintLayer = new StaticYPaintLayer(_cardsLayer, this);
+_scrollingYDrawLayer = new ScrollingYDrawLayer(_textGridLayer, this);
+_cardsLayer = new CardsLayer(_scrollingYDrawLayer, this);
+_staticYDrawLayer = new StaticYDrawLayer(_cardsLayer, this);
 
-_topLayer = _staticYPaintLayer;
+_topLayer = _staticYDrawLayer;
 ```
 
 ### Render Trigger

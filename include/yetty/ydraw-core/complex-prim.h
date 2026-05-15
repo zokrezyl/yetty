@@ -1,4 +1,4 @@
-// YPaint Complex Primitive - base interface for yplot, yimage, etc.
+// YDraw Complex Primitive - base interface for yplot, yimage, etc.
 //
 // Complex primitives:
 // - Embed this base struct as FIRST member

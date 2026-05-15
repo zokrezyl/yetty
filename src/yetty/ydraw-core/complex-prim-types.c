@@ -1,4 +1,4 @@
-// YPaint Complex Primitive Types - Wire-format helpers (GPU-less)
+// YDraw Complex Primitive Types - Wire-format helpers (GPU-less)
 //
 // The GPU-side runtime (factory registry, instance lifecycle, zoom fan-out)
 // lives in src/yetty/ydraw-factory/complex-prim-factory.c.

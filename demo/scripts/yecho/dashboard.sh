@@ -1,6 +1,6 @@
 #!/bin/bash
 # yecho dashboard demo — text + glyphs + yplot all driven through the same
-# tool, all flowing through OSC 600001 (ypaint scrolling layer).
+# tool, all flowing through OSC 600001 (ydraw scrolling layer).
 #
 # Run inside yetty:  ./build-desktop-ytrace-release/yetty -e demo/scripts/yecho/dashboard.sh
 

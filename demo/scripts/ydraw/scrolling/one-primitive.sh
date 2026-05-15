@@ -1,5 +1,5 @@
 #!/bin/bash
-# YPaint Scrolling Layer: Single primitive for scroll testing
+# YDraw Scrolling Layer: Single primitive for scroll testing
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR/../../../.."

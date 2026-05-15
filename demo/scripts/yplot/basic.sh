@@ -1,6 +1,6 @@
 #!/bin/bash
 # yplot tool — basic showcase. Runs the standalone yplot binary on a few
-# function expressions and lets the OSC envelopes scroll into the ypaint
+# function expressions and lets the OSC envelopes scroll into the ydraw
 # layer of the host yetty terminal.
 #
 #   ./build-desktop-ytrace-release/yetty -e demo/scripts/yplot/basic.sh

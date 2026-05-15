@@ -1,4 +1,4 @@
-// YPaint Flyweight - primitive handler registry implementation (instance-based)
+// YDraw Flyweight - primitive handler registry implementation (instance-based)
 
 #include <stdlib.h>
 #include <yetty/ydraw-core/flyweight.h>

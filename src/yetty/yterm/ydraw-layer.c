@@ -95,7 +95,7 @@ static void init_uniforms(struct yetty_ydraw_core_gpu_resource_set *rs)
     set_cell_zoom(rs, 1.0f, 0.0f, 0.0f);
 }
 
-/* YPaint layer - embeds base as first member */
+/* YDraw layer - embeds base as first member */
 struct yetty_yterm_ydraw_layer {
     struct yetty_yrender_terminal_layer base;
     /* Initial cell size captured at creation — used to derive the cumulative
@@ -729,7 +729,7 @@ static int ydraw_layer_on_char(struct yetty_yrender_terminal_layer *self, uint32
     return 0; /* Not handled */
 }
 
-/* YPaint layer is empty if there are no primitives */
+/* YDraw layer is empty if there are no primitives */
 static int ydraw_layer_is_empty(const struct yetty_yrender_terminal_layer *self)
 {
     const struct yetty_yterm_ydraw_layer *layer = (const struct yetty_yterm_ydraw_layer *)self;

@@ -1,4 +1,4 @@
-// YPaint Canvas - Implementation
+// YDraw Canvas - Implementation
 // Rolling offset approach for O(1) scrolling
 
 #include <math.h>

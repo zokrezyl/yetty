@@ -44,12 +44,13 @@ static const struct yetty_ydraw_core_prim_ops yetty_ysdf_prim_ops = {
 };
 
 // Handler returns base ops (for flyweight registry).
-// SDF tier is [0x10000000, 0x1FFFFFFF] in the ydraw type-id space.
+// yetty_ysdf_primitive_size returns 0 for any type id not registered in
+// the SDF YAML, so the size lookup is itself the SDF discriminator —
+// no hardcoded range gate.
 static inline struct yetty_ydraw_core_prim_base_ops_ptr_result yetty_ysdf_handler(
     uint32_t prim_type)
 {
-    if (prim_type >= 0x10000000u && prim_type <= 0x1FFFFFFFu &&
-        yetty_ysdf_primitive_size(prim_type) > 0) {
+    if (yetty_ysdf_primitive_size(prim_type) > 0) {
         return YETTY_OK(yetty_ydraw_core_prim_base_ops_ptr, &yetty_ysdf_prim_base_ops);
     }
     return YETTY_ERR(yetty_ydraw_core_prim_base_ops_ptr, "not an SDF type");

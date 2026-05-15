@@ -1,5 +1,5 @@
 #!/bin/bash
-# YPaint Scrolling Layer Demo: Two plots
+# YDraw Scrolling Layer Demo: Two plots
 # Mathematical function plots that scroll with terminal output (OSC 666674)
 
 YAML_PAYLOAD=$(cat <<'EOF'

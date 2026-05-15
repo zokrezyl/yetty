@@ -89,7 +89,7 @@ BUILD_DIR="$REPO_ROOT/build-linux-riscv-ytrace-release"
 # Binaries to ship — same set the old make-riscv-disk.sh produced. Keep
 # in sync with LINUX_RISCV_TARGETS in the top-level Makefile.
 BINARIES=(
-    "$BUILD_DIR/tools/decode-ypaint/decode-ypaint"
+    "$BUILD_DIR/tools/decode-ydraw/decode-ydraw"
     "$BUILD_DIR/tools/msdf/cdb-viewer/cdb-viewer"
     "$BUILD_DIR/tools/msdf/cdb-diff/cdb-diff"
     "$BUILD_DIR/tools/msdf/gen-msdf/yetty-msdf-gen"

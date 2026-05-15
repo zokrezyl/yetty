@@ -1,6 +1,6 @@
-// Raster (FreeType R8 atlas) font shader — ypaint-layer glue.
+// Raster (FreeType R8 atlas) font shader — ydraw-layer glue.
 //
-// Mirrors msdf-font.wgsl's interface so ypaint-layer can call the same three
+// Mirrors msdf-font.wgsl's interface so ydraw-layer can call the same three
 // helper names regardless of which backend is active. Glyph metadata layout
 // matches struct glyph_meta_gpu in raster-font.c:
 //   [0] size_x       bitmap width  in pixels at base_size

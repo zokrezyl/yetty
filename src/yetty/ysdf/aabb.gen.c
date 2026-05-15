@@ -74,7 +74,7 @@ struct rectangle_result yetty_ysdf_compute_aabb(const float *data, uint32_t word
          * corners from the half-size rectangle), so the bounding box is the
          * plain (hw, hh) — same as YETTY_YSDF_BOX. Adding max_radius here
          * over-inflates the AABB and made fully-pane-sized rounded frames
-         * spill past the ypaint viewport's bottom row by one cell, which
+         * spill past the ydraw viewport's bottom row by one cell, which
          * tripped scrolling-canvas's scroll-when-overflow path and shifted
          * the canvas by one row — manifesting as the window titlebar
          * showing only its lower half on the first frame after a resize. */

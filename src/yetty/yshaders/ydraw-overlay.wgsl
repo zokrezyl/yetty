@@ -1,12 +1,12 @@
 // =============================================================================
-// YPaint Overlay Rendering
+// YDraw Overlay Rendering
 //
-// Full-screen painter layers for YPaint content.
-// Renders ypaint content from a metadata slot as a full-screen overlay.
+// Full-screen painter layers for YDraw content.
+// Renders ydraw content from a metadata slot as a full-screen overlay.
 // Returns vec4: rgb = color, a = coverage (0 = transparent, 1 = opaque)
 // =============================================================================
 
-fn renderYpaintOverlay(slotIndex: u32, pixelPos: vec2<f32>) -> vec4<f32> {
+fn renderYdrawOverlay(slotIndex: u32, pixelPos: vec2<f32>) -> vec4<f32> {
     if (slotIndex == 0u) {
         return vec4<f32>(0.0);  // Disabled
     }
@@ -78,9 +78,9 @@ fn renderYpaintOverlay(slotIndex: u32, pixelPos: vec2<f32>) -> vec4<f32> {
 
         // SDF primitive
         let primOff = primDataBase + rawIdx;
-        let d = evaluateYpaintSDF(primOff, scenePos);
+        let d = evaluateYdrawSDF(primOff, scenePos);
 
-        let colors = ypaintPrimColors(primOff);
+        let colors = ydrawPrimColors(primOff);
         let fillColorPacked = colors.x;
         if (d < 0.0 && fillColorPacked != 0u) {
             let fillColorAlpha = unpackColorAlpha(fillColorPacked);
@@ -91,7 +91,7 @@ fn renderYpaintOverlay(slotIndex: u32, pixelPos: vec2<f32>) -> vec4<f32> {
         }
 
         let strokeColorPacked = colors.y;
-        let strokeWidth = ypaintPrimStrokeWidth(primOff);
+        let strokeWidth = ydrawPrimStrokeWidth(primOff);
         if (strokeWidth > 0.0 && strokeColorPacked != 0u) {
             let strokeDist = abs(d) - strokeWidth * 0.5;
             if (strokeDist < 0.0) {

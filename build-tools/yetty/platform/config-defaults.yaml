@@ -64,11 +64,11 @@ terminal:
         bottom: 0.0
 
 # ─────────────────────────────────────────────────────────────────────────────
-# YPaint (non-monospace font used for ypaint text spans)
+# YPaint (non-monospace font used for ydraw text spans)
 # ─────────────────────────────────────────────────────────────────────────────
-ypaint:
+ydraw:
   font:
-    # Backend for text spans rendered via the ypaint layer.
+    # Backend for text spans rendered via the ydraw layer.
     #   msdf   - MSDF atlas (CDB-based, scales smoothly)
     #   raster - FreeType-rasterized R8 atlas (baseline for comparison)
     render-method: "msdf"
@@ -77,7 +77,7 @@ ypaint:
 # MSDF CDB Generation
 # ─────────────────────────────────────────────────────────────────────────────
 # Selects the backend used to build MSDF font atlases on demand (e.g. when
-# ypaint receives an embedded PDF font that hasn't been cached yet).
+# ydraw receives an embedded PDF font that hasn't been cached yet).
 #   gpu - WebGPU compute shader. Faster, but the shader still has minor
 #         artefacts on glyphs with curves.
 #   cpu - msdfgen library, multi-threaded. Slower but artefact-free.
@@ -136,7 +136,7 @@ shaders:
       - "0x0000-texture"       # Image cards - commonly used
       - "0x0003-ydraw"         # Vector graphics - commonly used
       # - "0x0001-plot"        # Legacy plot cards
-      # - "0x0004-ypaint"      # Paint primitives
+      # - "0x0004-ydraw"      # Paint primitives
       # - "0x0005-jdraw-compute"  # Compute-based drawing
       # - "0x0006-ytext"       # Rich text rendering
       # - "0x0007-qrcode"      # QR code generation

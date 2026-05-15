@@ -1,4 +1,4 @@
-// YPaint Complex Primitive Types - Wire Format
+// YDraw Complex Primitive Types - Wire Format
 //
 // Pure data layout for complex primitives traveling over the OSC wire:
 //   - struct complex_prim (type + payload_size + FAM data)

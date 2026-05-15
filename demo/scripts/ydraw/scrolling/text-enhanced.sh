@@ -1,5 +1,5 @@
 #!/bin/bash
-# Demo: ypaint text rendering with NON-DEFAULT system fonts.
+# Demo: ydraw text rendering with NON-DEFAULT system fonts.
 #
 # The default canvas font is DejaVu Sans Mono (monospace). This demo emits
 # text spans using a different font name (resolved via fontconfig at the
@@ -13,7 +13,7 @@
 #     FONT="Liberation Serif" ./text-enhanced.sh
 #
 # Run:
-#     ./yetty -e ./demo/scripts/ypaint/scrolling/text-enhanced.sh
+#     ./yetty -e ./demo/scripts/ydraw/scrolling/text-enhanced.sh
 
 FONT="${FONT:-DejaVu Serif}"
 
@@ -44,6 +44,6 @@ YAML="body:
 
 PAYLOAD=$(printf '%s' "$YAML" | base64 -w0)
 
-# OSC 600002 = ypaint canvas (YAML payload).
+# OSC 600002 = ydraw canvas (YAML payload).
 printf '\033]600002;;%s\007' "$PAYLOAD"
 

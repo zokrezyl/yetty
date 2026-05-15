@@ -1,4 +1,4 @@
-// YPaint Flyweight - creates configured flyweight registry for ALL primitives.
+// YDraw Flyweight - creates configured flyweight registry for ALL primitives.
 //
 // Type-id space (see ydraw-core/cmds.h for the canonical layout):
 //   1. CMD tier handler                      types [0x00000000, 0x0000FFFF]

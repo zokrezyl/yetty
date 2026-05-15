@@ -1,4 +1,4 @@
-// YPaint Buffer - primitive buffer for ydraw
+// YDraw Buffer - primitive buffer for ydraw
 // Pure data container, struct is public for direct field access
 
 #pragma once

@@ -1,5 +1,5 @@
 #!/bin/bash
-# YPaint Scrolling Layer Demo: Simple inline graphic
+# YDraw Scrolling Layer Demo: Simple inline graphic
 # A small graphic that scrolls with terminal output (OSC 666675)
 
 DIR="$(cd "$(dirname "$0")" && pwd)"

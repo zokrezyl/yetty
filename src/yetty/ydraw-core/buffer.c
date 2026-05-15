@@ -1,4 +1,4 @@
-// YPaint Buffer - Implementation
+// YDraw Buffer - Implementation
 //
 // The buffer is a single byte stream of primitives. Everything — SDF shapes,
 // fonts, text spans, complex prims — is a primitive identified by the type

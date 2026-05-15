@@ -1,5 +1,5 @@
 #!/bin/bash
-# YPaint Scrolling Layer Demo: Basic shapes
+# YDraw Scrolling Layer Demo: Basic shapes
 # Draws SDF shapes that scroll with terminal content (OSC 666674)
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -86,4 +86,4 @@ EOF
 
 PAYLOAD=$(echo "$YAML_PAYLOAD" | base64 -w0)
 printf '\033]600002;;%s\033\\' "$PAYLOAD"
-echo "YPaint scrolling layer: shapes demo"
+echo "YDraw scrolling layer: shapes demo"

@@ -1,4 +1,4 @@
-// YPaint Complex Primitive Factory - Abstract Factory Implementation
+// YDraw Complex Primitive Factory - Abstract Factory Implementation
 
 #include <yetty/ydraw-factory/complex-prim-factory.h>
 #include <yetty/yrender/gpu-allocator.h>

@@ -1,4 +1,4 @@
-// YPaint Flyweight - primitive handler registry (instance-based)
+// YDraw Flyweight - primitive handler registry (instance-based)
 // Decoupled from buffer, usable by buffer and canvas
 //
 // Two-level ops structure:

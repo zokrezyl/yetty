@@ -1,5 +1,5 @@
 #!/bin/bash
-# YPaint Static Layer Demo: Geometric shapes (polygons and stars)
+# YDraw Static Layer Demo: Geometric shapes (polygons and stars)
 # Fixed overlay (OSC 666675)
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -136,4 +136,4 @@ EOF
 
 PAYLOAD=$(echo "$YAML_PAYLOAD" | base64 -w0)
 printf '\033]600002;;%s\033\\' "$PAYLOAD"
-echo "YPaint static layer: geometric shapes demo"
+echo "YDraw static layer: geometric shapes demo"
