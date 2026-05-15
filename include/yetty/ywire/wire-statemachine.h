@@ -47,7 +47,7 @@ YETTY_YRESULT_DECLARE(yetty_ywire_wire_statemachine_ptr,
 /*
  * Construct the SM. Stores `pty` as a non-owning pointer; the SM uses
  * it as its only byte source via pty->ops->read. Lazy init for the ring
- * and decode stack. Called once at terminal startup, by pty-reader.
+ * and decode stack. Called once at terminal startup.
  */
 struct yetty_ywire_wire_statemachine_ptr_result
 yetty_ywire_wire_statemachine_create(struct yetty_platform_pty *pty);

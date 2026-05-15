@@ -2,7 +2,7 @@
  *
  * Works on both Unix and Windows:
  * - Input pipe (bridge): uv_pipe_t reads structured events from main thread
- * - PTY pipe: uv_pipe_t reads raw PTY output, feeds to pty_reader
+ * - PTY pipe: uv_pipe_t reads raw PTY output, feeds to the wire state machine
  * - Both use IOCP on Windows, epoll/kqueue on Unix — zero CPU when idle
  */
 
@@ -512,7 +512,7 @@ static struct yetty_ycore_void_result libuv_broadcast(struct yetty_yevent_event_
     return YETTY_OK_VOID();
 }
 
-/* PTY pipe — uv_pipe_t with uv_read_start, data feeds to pty_reader */
+/* PTY pipe — uv_pipe_t with uv_read_start, data feeds to the wire state machine */
 
 static struct yetty_yevent_pipe_id_result libuv_register_pty_pipe(
     struct yetty_yevent_event_loop *self, struct yetty_platform_pty_pipe_source *source,

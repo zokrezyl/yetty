@@ -14,7 +14,7 @@
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterm/osc-args.h>
-#include <yetty/yterm/pty-reader.h> /* YETTY_OSC_YDRAW_* */
+#include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YDRAW_* */
 #include <yetty/yterm/ydraw-layer.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yetty/yetty.h>

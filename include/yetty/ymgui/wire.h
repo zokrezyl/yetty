@@ -76,7 +76,7 @@ extern "C" {
  *===========================================================================*/
 
 /* client → server (frontend → ymgui-layer). 600000–600003 belong to
- * ydraw (see <yetty/yterm/pty-reader.h>); ymgui starts at 610000. */
+ * ydraw (see <yetty/yterm/osc-codes.h>); ymgui starts at 610000. */
 #define YMGUI_OSC_CS_CLEAR 610000       /* ymgui_wire_clear,        comp=0 */
 #define YMGUI_OSC_CS_FRAME 610001       /* ymgui_wire_frame,        comp=1 */
 #define YMGUI_OSC_CS_TEX 610002         /* ymgui_wire_tex,          comp=1 */

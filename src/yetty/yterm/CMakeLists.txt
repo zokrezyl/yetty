@@ -5,7 +5,6 @@ add_library(yetty_yterm
     ymgui-layer.c
     shader-glyph-layer.c
     background-layer.c
-    pty-reader.c
     osc-args.c
 )
 

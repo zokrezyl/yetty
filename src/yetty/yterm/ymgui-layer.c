@@ -40,7 +40,6 @@
 #include <yetty/ymgui/wire.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterm/osc-args.h>
-#include <yetty/yterm/pty-reader.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/yterm/ymgui-layer.h>
 #include <yetty/ytrace/ytrace.h>

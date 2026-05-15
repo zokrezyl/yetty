@@ -14,7 +14,8 @@
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yterm/pty-reader.h>
+#include <yetty/yterm/osc-codes.h>
+#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/yterm/text-layer.h>
 #include <yetty/yterm/ydraw-layer.h>
@@ -64,7 +65,7 @@ struct yetty_yterm_terminal {
     /* Render targets - one per layer for render_layer */
     struct yetty_ydraw_core_target *layer_targets[YETTY_YTERM_TERMINAL_MAX_LAYERS];
     int shutting_down;
-    struct yetty_yterm_pty_reader *pty_reader;
+    struct yetty_ywire_wire_statemachine *sm;
 
     /* Reusable read buffer handed back from terminal_pty_pipe_alloc.
      * Lazily allocated on the first read; freed in destroy. */
@@ -149,12 +150,12 @@ static void terminal_pty_pipe_alloc(void *ctx, size_t suggested_size, char **buf
     *buflen = YETTY_YTERM_PTY_READ_BUF_SIZE;
 }
 
-/* PTY pipe read callback — feeds data to pty_reader, triggers render */
+/* PTY pipe read callback — feeds data to the wire state machine, triggers render */
 static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
 {
     struct yetty_yterm_terminal *terminal = ctx;
 
-    if (nread > 0 && terminal->pty_reader) {
+    if (nread > 0 && terminal->sm) {
         /* Dump first/last bytes as hex+ascii to see what ConPTY sent */
         char hex[512] = {0};
         char asc[256] = {0};
@@ -170,7 +171,19 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
             }
         }
         ydebug("terminal_pty_pipe_read: nread=%ld dump=[%s] ascii=[%s]", nread, hex, asc);
-        yetty_yterm_pty_reader_feed(terminal->pty_reader, buf, (size_t)nread);
+        struct yetty_ycore_void_result fr =
+            yetty_ywire_wire_statemachine_feed(terminal->sm, buf, (size_t)nread);
+        if (YETTY_IS_ERR(fr)) {
+            yerror("terminal_pty_pipe_read: feed failed: %s", fr.error.msg);
+            yetty_ycore_error_destroy(fr.error);
+        } else {
+            struct yetty_ycore_void_result pr =
+                yetty_ywire_wire_statemachine_process(terminal->sm);
+            if (YETTY_IS_ERR(pr)) {
+                yerror("terminal_pty_pipe_read: process failed: %s", pr.error.msg);
+                yetty_ycore_error_destroy(pr.error);
+            }
+        }
         if (terminal->layer_count > 0) {
             struct yetty_yrender_terminal_layer *layer = terminal->layers[0];
             ydebug("terminal_pty_pipe_read: after feed layer=%p dirty=%d", (void *)layer,
@@ -202,8 +215,8 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
             pipe->ops->write(pipe, &ev, sizeof(ev));
         }
     } else {
-        ydebug("terminal_pty_pipe_read: skipped (nread=%ld pty_reader=%p)", nread,
-               (void *)(terminal ? terminal->pty_reader : NULL));
+        ydebug("terminal_pty_pipe_read: skipped (nread=%ld sm=%p)", nread,
+               (void *)(terminal ? terminal->sm : NULL));
     }
 }
 
@@ -917,20 +930,21 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
     return YETTY_OK_VOID();
 }
 
-/* Read from PTY via pty_reader */
+/* Drive the wire state machine — pulls PTY bytes (sync-read backends) and
+ * dispatches to registered layers. */
 static void terminal_read_pty(struct yetty_yterm_terminal *terminal)
 {
-    if (!terminal->pty_reader) {
+    if (!terminal->sm) {
         return;
     }
 
-    struct yetty_ycore_size_result r = yetty_yterm_pty_reader_read(terminal->pty_reader);
+    struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_process(terminal->sm);
     if (YETTY_IS_ERR(r)) {
         yerror("terminal_read_pty: %s", r.error.msg);
         yetty_ycore_error_destroy(r.error);
         return;
     }
-    if (r.value > 0 && terminal->layer_count > 0) {
+    if (terminal->layer_count > 0) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[0];
         if (layer && layer->dirty) {
             terminal->context.yetty_context.event_loop->ops->request_render(
@@ -985,12 +999,16 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
             terminal->context.pty = pty_res.value;
             ydebug("terminal_create: PTY created at %p", (void *)terminal->context.pty);
 
-            /* Create PTY reader */
-            struct yetty_yterm_pty_reader_result reader_res =
-                yetty_yterm_pty_reader_create(terminal->context.pty);
-            if (YETTY_IS_OK(reader_res)) {
-                terminal->pty_reader = reader_res.value;
-                ydebug("terminal_create: pty_reader created");
+            /* Create wire state machine — owns the PTY pointer, the decode
+             * stack, and the per-OSC-code layer registry. */
+            struct yetty_ywire_wire_statemachine_ptr_result sm_res =
+                yetty_ywire_wire_statemachine_create(terminal->context.pty);
+            if (YETTY_IS_OK(sm_res)) {
+                terminal->sm = sm_res.value;
+                ydebug("terminal_create: wire state machine created");
+            } else {
+                ydebug("terminal_create: SM create failed: %s", sm_res.error.msg);
+                yetty_ycore_error_destroy(sm_res.error);
             }
 
             /* Long-lived yface for emit_*. One per terminal — out_buf is
@@ -1008,7 +1026,7 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
             /* Register PTY pipe — uv_pipe_t reads data, callbacks handle it */
             struct yetty_platform_pty_pipe_source *pipe_source =
                 terminal->context.pty->ops->pipe_source(terminal->context.pty);
-            if (pipe_source && terminal->pty_reader) {
+            if (pipe_source && terminal->sm) {
                 struct yetty_yevent_pipe_id_result pipe_res =
                     terminal->context.yetty_context.event_loop->ops->register_pty_pipe(
                         terminal->context.yetty_context.event_loop, pipe_source,
@@ -1042,10 +1060,12 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     }
     if (!YETTY_IS_OK(text_layer_res)) {
         yerror("terminal_create: failed to create text layer: %s", text_layer_res.error.msg);
-        struct yetty_ycore_void_result dr =
-            yetty_yterm_pty_reader_destroy(terminal->pty_reader);
-        if (YETTY_IS_ERR(dr)) {
-            yetty_ycore_error_destroy(dr.error);
+        if (terminal->sm) {
+            struct yetty_ycore_void_result dr =
+                yetty_ywire_wire_statemachine_destroy(terminal->sm);
+            if (YETTY_IS_ERR(dr)) {
+                yetty_ycore_error_destroy(dr.error);
+            }
         }
         if (terminal->context.pty) {
             terminal->context.pty->ops->destroy(terminal->context.pty);
@@ -1056,10 +1076,10 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     yetty_yterm_terminal_layer_add(terminal, text_layer_res.value);
     ydebug("terminal_create: text_layer created and added");
 
-    /* Register text layer as default sink for pty_reader */
-    if (terminal->pty_reader) {
-        struct yetty_ycore_void_result rr = yetty_yterm_pty_reader_register_default_sink(
-            terminal->pty_reader, text_layer_res.value);
+    /* Register text layer as default (raw-passthrough) sink */
+    if (terminal->sm) {
+        struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_set_default(
+            terminal->sm, text_layer_res.value);
         if (YETTY_IS_ERR(rr)) {
             yerror("terminal_create: register default sink: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
@@ -1086,13 +1106,13 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
             /* Register ydraw layer for the four ydraw OSC codes. The
              * SM does b64+lz4 decoding (protocol-fixed), so registration
              * carries no codec parameter. */
-            if (terminal->pty_reader) {
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YETTY_OSC_YDRAW_CLEAR, ydraw_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YETTY_OSC_YDRAW_BIN, ydraw_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YETTY_OSC_YDRAW_OVERLAY, ydraw_res.value);
+            if (terminal->sm) {
+                yetty_ywire_wire_statemachine_register(
+                    terminal->sm, YETTY_OSC_YDRAW_CLEAR, ydraw_res.value);
+                yetty_ywire_wire_statemachine_register(
+                    terminal->sm, YETTY_OSC_YDRAW_BIN, ydraw_res.value);
+                yetty_ywire_wire_statemachine_register(
+                    terminal->sm, YETTY_OSC_YDRAW_OVERLAY, ydraw_res.value);
                 ydebug("terminal_create: ydraw layer registered for OSC CLEAR/BIN/OVERLAY");
             }
         } else {
@@ -1154,20 +1174,20 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
              * the new bitmask to us. */
             ymgui_res.value->term_input_sub_fn = terminal_term_input_sub_callback;
             ymgui_res.value->term_input_sub_userdata = terminal;
-            if (terminal->pty_reader) {
+            if (terminal->sm) {
                 /* SM owns b64+lz4; layer registration is just (code, layer). */
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_CLEAR, ymgui_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_FRAME, ymgui_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_TEX, ymgui_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_CARD_PLACE, ymgui_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_CARD_REMOVE, ymgui_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_TERM_INPUT_SUB, ymgui_res.value);
+                yetty_ywire_wire_statemachine_register(
+                    terminal->sm, YMGUI_OSC_CS_CLEAR, ymgui_res.value);
+                yetty_ywire_wire_statemachine_register(
+                    terminal->sm, YMGUI_OSC_CS_FRAME, ymgui_res.value);
+                yetty_ywire_wire_statemachine_register(
+                    terminal->sm, YMGUI_OSC_CS_TEX, ymgui_res.value);
+                yetty_ywire_wire_statemachine_register(
+                    terminal->sm, YMGUI_OSC_CS_CARD_PLACE, ymgui_res.value);
+                yetty_ywire_wire_statemachine_register(
+                    terminal->sm, YMGUI_OSC_CS_CARD_REMOVE, ymgui_res.value);
+                yetty_ywire_wire_statemachine_register(
+                    terminal->sm, YMGUI_OSC_CS_TERM_INPUT_SUB, ymgui_res.value);
                 ydebug("terminal_create: ymgui layer registered for OSC 610000-610004 + 610010");
             }
         } else {
@@ -1250,11 +1270,11 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
 
     /* event_loop is owned by yetty, not terminal - do not destroy */
 
-    /* Destroy PTY reader */
-    if (terminal->pty_reader) {
-        ydebug("terminal_destroy: destroying pty_reader");
+    /* Destroy wire state machine */
+    if (terminal->sm) {
+        ydebug("terminal_destroy: destroying wire state machine");
         struct yetty_ycore_void_result dr =
-            yetty_yterm_pty_reader_destroy(terminal->pty_reader);
+            yetty_ywire_wire_statemachine_destroy(terminal->sm);
         if (YETTY_IS_ERR(dr)) {
             yetty_ycore_error_destroy(dr.error);
         }
@@ -1282,15 +1302,23 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
 
 void yetty_yterm_terminal_write(struct yetty_yterm_terminal *terminal, const char *data, size_t len)
 {
-    if (!terminal || !data || len == 0 || !terminal->pty_reader) {
+    if (!terminal || !data || len == 0 || !terminal->sm) {
         return;
     }
     /* Push synthetic input through the SM — out-of-envelope bytes route to
      * the text layer (the registered raw handler) just like real PTY input. */
-    struct yetty_ycore_void_result r = yetty_yterm_pty_reader_feed(terminal->pty_reader, data, len);
-    if (YETTY_IS_ERR(r)) {
-        yerror("terminal_write: feed failed: %s", r.error.msg);
-        yetty_ycore_error_destroy(r.error);
+    struct yetty_ycore_void_result fr =
+        yetty_ywire_wire_statemachine_feed(terminal->sm, data, len);
+    if (YETTY_IS_ERR(fr)) {
+        yerror("terminal_write: feed failed: %s", fr.error.msg);
+        yetty_ycore_error_destroy(fr.error);
+        return;
+    }
+    struct yetty_ycore_void_result pr =
+        yetty_ywire_wire_statemachine_process(terminal->sm);
+    if (YETTY_IS_ERR(pr)) {
+        yerror("terminal_write: process failed: %s", pr.error.msg);
+        yetty_ycore_error_destroy(pr.error);
     }
 }
 
