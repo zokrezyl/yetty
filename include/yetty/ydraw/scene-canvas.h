@@ -85,6 +85,13 @@ struct yetty_ycore_void_result yetty_ydraw_scene_entity_delete(
     struct yetty_ydraw_canvas *canvas,
     struct yetty_ydraw_scene_entity *entity);
 
+/* Recursively delete every child subtree of this entity. The entity
+ * itself remains, with its own direct drawables and touched cells
+ * untouched. */
+struct yetty_ycore_void_result yetty_ydraw_scene_entity_delete_children(
+    struct yetty_ydraw_canvas *canvas,
+    struct yetty_ydraw_scene_entity *entity);
+
 #ifdef __cplusplus
 }
 #endif

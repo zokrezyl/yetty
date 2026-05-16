@@ -225,3 +225,73 @@ void yetty_ydraw_scene_grid_drop_at(
         }
     }
 }
+
+/*===========================================================================
+ * Staging build — emit the per-cell drawable-index table.
+ *
+ * Format matches scrolling-grid's grid_staging exactly so the shader is
+ * shared. See scene-grid.h for the layout.
+ *===========================================================================*/
+
+static struct yetty_ycore_void_result staging_ensure_cap(uint32_t **buf, uint32_t *cap,
+                                                         uint32_t need)
+{
+    if (need <= *cap) return YETTY_OK_VOID();
+    uint32_t new_cap = *cap ? *cap * 2 : 256;
+    while (new_cap < need) new_cap *= 2;
+    uint32_t *grown = realloc(*buf, new_cap * sizeof(uint32_t));
+    if (!grown) return YETTY_ERR(yetty_ycore_void, "scene-grid: staging realloc");
+    *buf = grown;
+    *cap = new_cap;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ydraw_scene_grid_rebuild_staging(
+    const struct yetty_ydraw_scene_grid *grid, const uint32_t *entity_base,
+    uint32_t entity_base_count, uint32_t **inout_buf, uint32_t *inout_capacity,
+    uint32_t *out_count)
+{
+    if (!grid || !inout_buf || !inout_capacity || !out_count) {
+        return YETTY_ERR(yetty_ycore_void, "scene-grid: rebuild_staging null arg");
+    }
+    if (grid->cell_count == 0) {
+        *out_count = 0;
+        return YETTY_OK_VOID();
+    }
+    if (entity_base_count > 0 && !entity_base) {
+        return YETTY_ERR(yetty_ycore_void, "scene-grid: rebuild_staging null entity_base");
+    }
+
+    /* The first num_cells words are the per-cell header offsets; the
+     * per-cell (cell_count, indices…) tuples land after, growing on
+     * demand. */
+    uint32_t num_cells = grid->cell_count;
+    struct yetty_ycore_void_result e1 = staging_ensure_cap(inout_buf, inout_capacity, num_cells);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, e1, "scene-grid: ensure header table");
+
+    uint32_t count = num_cells;
+    for (uint32_t cell_idx = 0; cell_idx < num_cells; cell_idx++) {
+        const struct scene_cell *cell = &grid->cells[cell_idx];
+        struct yetty_ycore_void_result e2 = staging_ensure_cap(inout_buf, inout_capacity, count + 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, e2, "scene-grid: ensure count slot");
+        (*inout_buf)[cell_idx] = count;
+        uint32_t count_pos = count++;
+        uint32_t emitted = 0;
+
+        for (uint32_t b = 0; b < cell->bucket_count; b++) {
+            const struct cell_bucket *bk = &cell->buckets[b];
+            if (bk->entity_slot >= entity_base_count) continue; /* defensive */
+            uint32_t base = entity_base[bk->entity_slot];
+            for (uint32_t i = 0; i < bk->count; i++) {
+                struct yetty_ycore_void_result e3 =
+                    staging_ensure_cap(inout_buf, inout_capacity, count + 1);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, e3, "scene-grid: ensure index slot");
+                (*inout_buf)[count++] = base + bk->local_indices[i];
+                emitted++;
+            }
+        }
+        (*inout_buf)[count_pos] = emitted;
+    }
+    *out_count = count;
+    return YETTY_OK_VOID();
+}

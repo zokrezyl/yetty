@@ -26,6 +26,11 @@ extern "C" {
 #define YETTY_YDRAW_CMD_BASE 0x00000000u
 #define YETTY_YDRAW_CMD_END 0x0000FFFFu
 
+/* Top bit of the type word. When set on the wire, a u32 id follows the
+ * type word — for ADD this names the drawable so it can be DELETEd later;
+ * for DELETE the id field carries the target. */
+#define YETTY_YDRAW_HAS_ID_FLAG 0x80000000u
+
 /* CMD_ZERO: clear the receiving ydraw canvas AND reset the cursor to
  * (col=0, row=0). The canvas's cursor-set callback fires on the reset, so
  * sibling layers (text/vterm) see the cursor move too — that's how the
@@ -36,6 +41,26 @@ extern "C" {
  * GUI / fullscreen producers (ygui sends one CMD_ZERO + the new prims per
  * frame, eliminating the separate YDRAW_CLEAR OSC envelope). */
 #define YETTY_YDRAW_CMD_ZERO 0x00000000u
+
+/* CMD_DELETE: remove the entity / addressable drawable named by `id`.
+ * Wire layout: (type|HAS_ID_FLAG) | id | payload_size=0.
+ *
+ * The drawable-iterator surfaces this with command.kind=DELETE,
+ * command.id=<target>. Canvas variants without an addressable-entity
+ * model (e.g. scrolling-canvas today) treat it as a no-op. */
+#define YETTY_YDRAW_CMD_DELETE (YETTY_YDRAW_HAS_ID_FLAG | 0x00000001u)
+
+/* CMD_GROUP: open or re-open a named entity scope. The payload is a
+ * stream of nested commands belonging to this entity.
+ *
+ * Wire layout: (type|HAS_ID_FLAG) | id | payload_size | payload[payload_size]
+ *
+ * The drawable-iterator surfaces this as an ADD with flyweight.data
+ * pointing at the full record; canvases with an entity model (e.g.
+ * scene-canvas) recognise the type, look up / create the entity by id,
+ * and walk the payload bytes as nested commands attached to that
+ * entity. Canvas variants without entities (scrolling-canvas) drop it. */
+#define YETTY_YDRAW_CMD_GROUP (YETTY_YDRAW_HAS_ID_FLAG | 0x00000002u)
 
 struct yetty_ydraw_draw_list;
 

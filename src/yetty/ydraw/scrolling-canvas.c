@@ -1110,6 +1110,15 @@ static struct yetty_ycore_void_result dispatch_one(
         }
         return YETTY_OK_VOID();
     }
+    if (drawable_type == YETTY_YDRAW_CMD_GROUP) {
+        /* Scrolling-canvas has no entity model — GROUP is a debug-log
+         * no-op. The iter has already consumed the full record (header
+         * + payload bytes); the payload's nested commands are simply
+         * not processed. */
+        uint32_t group_id = flyweight->data[1];
+        ydebug("scrolling-canvas: CMD_GROUP id=%u — no-op (entities not supported)", group_id);
+        return YETTY_OK_VOID();
+    }
     if (drawable_type == YETTY_YDRAW_TYPE_FONT) {
         struct yetty_ydraw_font_drawable_view fv;
         if (yetty_ydraw_font_drawable_parse(flyweight->data, &fv) != 0 || fv.font_id < 0) {
@@ -1293,10 +1302,18 @@ static struct yetty_ycore_void_result scrolling_process_input(
                 ret = YETTY_ERR(yetty_ycore_void, "process_input: iter_next", sr);
                 goto cleanup;
             }
-            if (sr.value == YETTY_PRIM_ITER_EOE) {
+            if (sr.value == YETTY_YDRAW_ITERATOR_EOE) {
                 break;
             }
-            struct yetty_ycore_void_result dr = dispatch_one(c, &iter.flyweight, &env);
+            /* Scrolling-canvas has no addressable-entity model yet, so
+             * DELETE is a debug-log no-op. ADD goes through the existing
+             * dispatch path unchanged. */
+            if (iter.command.kind == YETTY_YDRAW_COMMAND_DELETE) {
+                ydebug("scrolling-canvas: DELETE id=%u — no-op (entities not supported)",
+                       iter.command.id);
+                continue;
+            }
+            struct yetty_ycore_void_result dr = dispatch_one(c, &iter.command.flyweight, &env);
             if (YETTY_IS_ERR(dr)) {
                 ret = YETTY_ERR(yetty_ycore_void, "process_input: dispatch_one", dr);
                 goto cleanup;

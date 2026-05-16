@@ -62,6 +62,30 @@ void yetty_ydraw_scene_grid_drop_at(
     struct yetty_ydraw_scene_grid *grid, uint32_t row, uint32_t col,
     uint32_t entity_slot);
 
+/* Build the per-cell drawable-index lookup table the renderer reads.
+ *
+ * Format matches scrolling-grid's grid_staging exactly so the shader
+ * can be shared:
+ *
+ *   words[0..num_cells)               — per-cell start offset into the
+ *                                       same buffer (cell N's data
+ *                                       lives at words[words[N]] on).
+ *   at each cell's offset:
+ *     words[off]                      — cell_count (drawable refs in cell)
+ *     words[off+1..off+1+cell_count)  — global drawable indices
+ *
+ * Global drawable index = `entity_base[entity_slot] + local_idx`. The
+ * caller computes entity_base[] from a walk over its entity arena and
+ * passes it in; the grid never sees entity payloads.
+ *
+ * `inout_buf` / `inout_capacity` is grown as needed (realloc) and
+ * returned to the caller — caller continues to own the buffer.
+ * `out_count` receives the number of words used. */
+struct yetty_ycore_void_result yetty_ydraw_scene_grid_rebuild_staging(
+    const struct yetty_ydraw_scene_grid *grid,
+    const uint32_t *entity_base, uint32_t entity_base_count,
+    uint32_t **inout_buf, uint32_t *inout_capacity, uint32_t *out_count);
+
 #ifdef __cplusplus
 }
 #endif
