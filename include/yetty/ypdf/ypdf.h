@@ -42,6 +42,40 @@ YETTY_YRESULT_DECLARE(yetty_ypdf_render, struct yetty_ypdf_render_output);
  * result.value.buffer. */
 struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf);
 
+/*=============================================================================
+ * Streaming render — one envelope per page.
+ *
+ * Per-page coordinates are envelope-relative (page origin at y=0); the
+ * receiver scrolls by each envelope's scene_max_y, so stacking pages just
+ * works without the producer maintaining absolute Y.
+ *
+ * Fonts are content-addressed by FNV1a64(TTF bytes). On the first envelope
+ * that references a given font the full FONT prim (with TTF bytes) is
+ * emitted; subsequent envelopes referencing the same font emit a hash-only
+ * FONT prim (ttf_len = 0, name = 16-char hex). The receiver's on-disk MSDF
+ * cache is keyed by the same hash, so byte payload is only ever sent once
+ * per document.
+ *
+ * The callback is invoked synchronously per page. `envelope` is borrowed
+ * for the duration of the call; the renderer destroys it right after.
+ * Return an error result to abort the render.
+ *===========================================================================*/
+
+typedef struct yetty_ycore_void_result (*yetty_ypdf_page_emit_fn)(
+    void *user_data, int page_index, int page_count,
+    const struct yetty_ydraw_draw_list *envelope);
+
+struct yetty_ypdf_stream_render_output {
+    int page_count;
+    float first_page_height;
+    float max_width;
+};
+
+YETTY_YRESULT_DECLARE(yetty_ypdf_stream_render, struct yetty_ypdf_stream_render_output);
+
+struct yetty_ypdf_stream_render_result yetty_ypdf_render_pdf_streaming(
+    struct _pdfio_file_s *pdf, yetty_ypdf_page_emit_fn on_page, void *user_data);
+
 #ifdef __cplusplus
 }
 #endif

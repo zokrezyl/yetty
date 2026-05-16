@@ -195,6 +195,29 @@ static int write_all_stdout(const uint8_t *data, size_t len)
 }
 
 /*=============================================================================
+ * Streaming-handler bridge: wraps yetty_ycat_osc_bin_emit so multi-
+ * envelope handlers (pdf, markdown) can ship one OSC per envelope to
+ * stdout without each handler depending on ycat tool internals.
+ *===========================================================================*/
+
+struct emit_to_stdout_ctx {
+	FILE *out;
+	size_t total;
+};
+
+static struct yetty_ycore_void_result emit_to_stdout(
+	void *ud, const struct yetty_ydraw_draw_list *envelope)
+{
+	struct emit_to_stdout_ctx *ec = ud;
+	struct yetty_ycore_size_result r = yetty_ycat_osc_bin_emit(envelope, ec->out);
+	if (YETTY_IS_ERR(r)) {
+		return YETTY_ERR(yetty_ycore_void, "osc_bin_emit failed", r);
+	}
+	ec->total += r.value;
+	return YETTY_OK_VOID();
+}
+
+/*=============================================================================
  * Per-file processing
  *===========================================================================*/
 
@@ -312,8 +335,28 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
 	}
 
 	/* Inside a yetty terminal: try the dedicated ydraw handler first,
-	 * then ts → OSC, then raw. */
+	 * then ts → OSC, then raw. Multi-envelope formats (pdf, markdown)
+	 * register a streaming handler; single-shot formats (image, svg,
+	 * mermaid) register a legacy one. We try streaming first. */
 	if (in_yetty) {
+		yetty_ycat_handler_streaming_fn sfn = yetty_ycat_get_handler_streaming(type);
+		if (sfn) {
+			struct emit_to_stdout_ctx ec = { .out = stdout, .total = 0 };
+			struct yetty_ycore_void_result sr =
+				sfn(buf.data, buf.len, path_hint, &cfg,
+				    emit_to_stdout, &ec);
+			if (YETTY_IS_OK(sr)) {
+				byte_buf_free(&buf);
+				free(url_mime);
+				return ec.total > 0 ? 0 : -1;
+			}
+			fprintf(stderr,
+				"ycat: %s: streaming handler failed (%s), trying tree-sitter\n",
+				arg, sr.error.msg);
+			yetty_ycore_error_destroy(sr.error);
+			/* fall through to ts → OSC */
+		}
+
 		yetty_ycat_handler_fn fn = yetty_ycat_get_handler(type);
 		if (fn) {
 			struct yetty_ydraw_draw_list_result r =

@@ -179,6 +179,9 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
             }
         }
         ydebug("terminal_pty_pipe_read: nread=%ld dump=[%s] ascii=[%s]", nread, hex, asc);
+        /* feed() now resumes the SM coro itself — no separate process()
+         * call needed. The SM scanner runs as far as it can, then yields
+         * back when it needs more bytes (or surfaces a fatal error). */
         struct yetty_ycore_void_result fr =
             yetty_ywire_wire_statemachine_feed(terminal->sm, buf, (size_t)nread);
         if (YETTY_IS_ERR(fr)) {
@@ -189,17 +192,6 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
             struct yetty_ycore_void_result wrap = YETTY_ERR(
                 yetty_ycore_void,
                 "terminal_pty_pipe_read: wire_statemachine_feed failed", fr);
-            struct yetty_yevent_event_loop *loop =
-                terminal->context.yetty_context.event_loop;
-            loop->ops->post_fatal_error(loop, wrap.error);
-            return;
-        }
-        struct yetty_ycore_void_result pr =
-            yetty_ywire_wire_statemachine_process(terminal->sm);
-        if (YETTY_IS_ERR(pr)) {
-            struct yetty_ycore_void_result wrap = YETTY_ERR(
-                yetty_ycore_void,
-                "terminal_pty_pipe_read: wire_statemachine_process failed", pr);
             struct yetty_yevent_event_loop *loop =
                 terminal->context.yetty_context.event_loop;
             loop->ops->post_fatal_error(loop, wrap.error);

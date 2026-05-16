@@ -93,6 +93,36 @@ struct yetty_ydraw_draw_list_result yetty_ycat_render(const uint8_t *bytes, size
                                                          const struct yetty_ycat_config *config);
 
 /*=============================================================================
+ * Streaming handlers — for types whose natural unit is smaller than the
+ * whole document (PDF: per page, markdown: per screen-height tile, …).
+ *
+ * The handler emits one or more ydraw envelopes by invoking the supplied
+ * emit callback. Each envelope is independent; coordinates inside it are
+ * envelope-local (origin at y=0), and the receiver scrolls by the
+ * envelope's scene height between calls.
+ *
+ * Single-shot handlers (image, svg, mermaid) keep using
+ * yetty_ycat_handler_fn — the dispatch path picks streaming first and
+ * falls back to single-shot if no streaming handler is registered.
+ *===========================================================================*/
+
+/* emit one envelope. The envelope is borrowed for the call's duration; the
+ * handler must not retain the pointer. Return an error to abort the
+ * streaming render. */
+typedef struct yetty_ycore_void_result (*yetty_ycat_emit_fn)(
+    void *user_data, const struct yetty_ydraw_draw_list *envelope);
+
+typedef struct yetty_ycore_void_result (*yetty_ycat_handler_streaming_fn)(
+    const uint8_t *bytes, size_t len, const char *path_hint,
+    const struct yetty_ycat_config *config,
+    yetty_ycat_emit_fn emit, void *emit_user_data);
+
+yetty_ycat_handler_streaming_fn yetty_ycat_get_handler_streaming(enum yetty_ycat_type type);
+
+int yetty_ycat_register_handler_streaming(enum yetty_ycat_type type,
+                                          yetty_ycat_handler_streaming_fn fn);
+
+/*=============================================================================
  * Tree-sitter direct access — two emitters, shared parser+color-map.
  *===========================================================================*/
 

@@ -656,22 +656,28 @@ static struct yetty_ycore_void_result scene_process_input(
     struct yetty_ydraw_canvas *base, struct yetty_ywire_wire_statemachine *sm)
 {
     (void)base;
-    /* Scene-canvas's real wire-decode (entities + GROUP/DELETE/...) is not
-     * yet implemented. Until it lands, drain the envelope so the SM
-     * doesn't spin: pull bytes from the SM until it reports end-of-
-     * envelope. This runs on the coro spawned by the SM; the read yields
-     * back to the SM when no more body bytes are ready right now. */
+    /* Scene-canvas's real wire-decode (entities + GROUP/DELETE/...) is
+     * not yet implemented. Until it lands, drain envelopes so the SM
+     * doesn't spin: read bytes until sm_read returns 0 (EOE for OSC),
+     * then loop to the next envelope. Runs as a persistent coro for the
+     * SM's lifetime — never returns OK; only errors out. */
     uint8_t scratch[4096];
     for (;;) {
-        struct yetty_ycore_size_result rr =
-            yetty_ywire_wire_statemachine_read(sm, scratch, sizeof(scratch));
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "scene_process_input: read");
-        if (rr.value > 0) {
-            continue;
+        /* Inner loop: drain one envelope. */
+        for (;;) {
+            struct yetty_ycore_size_result rr =
+                yetty_ywire_wire_statemachine_read(sm, scratch, sizeof(scratch));
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "scene_process_input: read");
+            if (rr.value == 0) {
+                /* EOE: envelope terminator hit, carry drained. */
+                break;
+            }
+            /* Bytes consumed silently; real decode goes here later. */
         }
-        if (yetty_ywire_wire_statemachine_at_end(sm)) {
-            return YETTY_OK_VOID();
-        }
+        /* Envelope done. Yield so sm_coro can observe terminator_seen
+         * and transition state to SCAN_RAW (or another envelope). If
+         * we don't yield, sm_read on the next call would return 0
+         * again immediately (terminator still set), spinning. */
         yetty_yplatform_coro_yield();
     }
 }

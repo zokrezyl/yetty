@@ -52,12 +52,60 @@
 
 struct yetty_ypdf_font_info {
     char tag[64];                       /* e.g. "/F1" or "F1" */
-    int buffer_font_id;                 /* yetty_ydraw_draw_list font index */
+    int buffer_font_id;                 /* yetty_ydraw_draw_list font index.
+                                         * Legacy single-buffer mode: assigned
+                                         * once at first add, stable across
+                                         * pages. Streaming mode: envelope-
+                                         * local, rewritten per page. */
     struct yetty_ydraw_font *raw_font; /* non-atlas metrics source */
     bool is_identity_h;
     struct yetty_ycore_map to_unicode; /* CID → Unicode */
     bool to_unicode_init;
+    /* Streaming mode only: FNV1a64 of the TTF bytes (and its 16-hex form),
+     * plus a flag tracking whether the TTF bytes have already been put on
+     * the wire in any prior envelope. Unused in legacy mode. */
+    uint64_t hash;
+    char hex[17];
+    bool globally_emitted;
 };
+
+/* FNV1a64 of a byte buffer. Sender-side mirror of the receiver's hash
+ * (scrolling-canvas.c) — must stay bit-identical so the receiver's
+ * disk-cached CDB lookup hits on subsequent envelopes. */
+static uint64_t fnv1a64(const uint8_t *data, size_t len)
+{
+    uint64_t h = 14695981039346656037ULL;
+    for (size_t i = 0; i < len; i++) {
+        h ^= data[i];
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+/* MediaBox is an inheritable attribute (PDF spec 14.2): pages without an
+ * explicit MediaBox pick one up via their /Parent chain on the Pages
+ * tree. pdfioDictGetRect doesn't walk parents — we do it here. Returns
+ * true on success; *out filled with the resolved box. */
+static bool resolve_media_box(pdfio_obj_t *page_obj, pdfio_rect_t *out)
+{
+    if (!page_obj) {
+        return false;
+    }
+    pdfio_obj_t *cur = page_obj;
+    /* Cap the walk so a cyclic /Parent (malformed PDF) can't spin
+     * forever. PDF page trees are typically shallow; 64 is generous. */
+    for (int depth = 0; depth < 64 && cur; depth++) {
+        pdfio_dict_t *d = pdfioObjGetDict(cur);
+        if (d && pdfioDictGetRect(d, "MediaBox", out)) {
+            return true;
+        }
+        if (!d) {
+            return false;
+        }
+        cur = pdfioDictGetObj(d, "Parent");
+    }
+    return false;
+}
 
 /*=============================================================================
  * Colour helpers
@@ -1043,6 +1091,254 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
     return YETTY_OK_VOID();
 }
 
+/* Streaming variant: per page, populate the per-document fonts[] on first
+ * encounter (load TTF, hash, build raster_font, parse ToUnicode), then
+ * emit a FONT prim into THIS page's envelope buffer for every font this
+ * page references. The prim is full-bytes on the first envelope that ships
+ * a given font (hash recorded in fi->globally_emitted), and hash-ref on
+ * all later envelopes referencing the same font.
+ *
+ * fi->buffer_font_id is rewritten per envelope to the envelope-local id
+ * (TEXT_SPAN refs read this through find_font_idx in the callbacks).
+ *
+ * Per-font failures are absorbed (logged + continue), matching the legacy
+ * extract_page_fonts. */
+static struct yetty_ycore_void_result extract_and_emit_page_fonts_streaming(
+    pdfio_obj_t *page_obj, struct yetty_ydraw_draw_list *buffer,
+    struct yetty_ypdf_font_info *fonts, size_t *font_count)
+{
+    pdfio_dict_t *page_dict = pdfioObjGetDict(page_obj);
+    if (!page_dict) {
+        return YETTY_OK_VOID();
+    }
+
+    pdfio_dict_t *resources = pdfioDictGetDict(page_dict, "Resources");
+    if (!resources) {
+        pdfio_obj_t *ro = pdfioDictGetObj(page_dict, "Resources");
+        if (ro) {
+            resources = pdfioObjGetDict(ro);
+        }
+    }
+    if (!resources) {
+        return YETTY_OK_VOID();
+    }
+
+    pdfio_dict_t *font_dict = pdfioDictGetDict(resources, "Font");
+    if (!font_dict) {
+        pdfio_obj_t *fo = pdfioDictGetObj(resources, "Font");
+        if (fo) {
+            font_dict = pdfioObjGetDict(fo);
+        }
+    }
+    if (!font_dict) {
+        return YETTY_OK_VOID();
+    }
+
+    size_t n = pdfioDictGetNumPairs(font_dict);
+    for (size_t fi_idx = 0; fi_idx < n; fi_idx++) {
+        const char *tag = pdfioDictGetKey(font_dict, fi_idx);
+        if (!tag) {
+            continue;
+        }
+
+        int existing = find_font_idx(fonts, *font_count, tag);
+        if (existing >= 0) {
+            /* Already loaded on a prior page. Just emit a FONT prim
+             * into THIS envelope so the receiver can rebuild its
+             * envelope-local font_map. */
+            struct yetty_ypdf_font_info *fi = &fonts[existing];
+            if (fi->globally_emitted) {
+                struct yetty_ycore_int_result id_res =
+                    yetty_ydraw_draw_list_add_font_ref(buffer, fi->hex);
+                if (YETTY_IS_OK(id_res)) {
+                    fi->buffer_font_id = id_res.value;
+                } else {
+                    ywarn("ypdf: streaming hash-ref emit failed for '%s'", tag);
+                    fi->buffer_font_id = -1;
+                }
+            } else {
+                /* Edge case: previously seen tag but not yet emitted
+                 * (load_font_file or raster_font failed last time). Re-attempt
+                 * — but we don't have bytes any more. Best effort: skip. */
+                fi->buffer_font_id = -1;
+            }
+            continue;
+        }
+
+        if (*font_count >= MAX_FONTS) {
+            ywarn("ypdf: MAX_FONTS reached, skipping %s", tag);
+            continue;
+        }
+
+        /* New font for the document: load bytes, hmtx-patch, hash, build
+         * raster_font, parse ToUnicode. Then emit full FONT prim. */
+        pdfio_obj_t *font_obj = pdfioDictGetObj(font_dict, tag);
+        if (!font_obj) {
+            continue;
+        }
+        pdfio_dict_t *font_obj_dict = pdfioObjGetDict(font_obj);
+        if (!font_obj_dict) {
+            continue;
+        }
+
+        pdfio_obj_t *font_desc_obj = pdfioDictGetObj(font_obj_dict, "FontDescriptor");
+        bool is_identity_h = false;
+        pdfio_obj_t *to_unicode_obj = pdfioDictGetObj(font_obj_dict, "ToUnicode");
+        const char *encoding = pdfioDictGetName(font_obj_dict, "Encoding");
+        if (encoding &&
+            (strcmp(encoding, "Identity-H") == 0 || strcmp(encoding, "/Identity-H") == 0)) {
+            is_identity_h = true;
+        }
+
+        pdfio_dict_t *cid_font_dict = NULL;
+        if (!font_desc_obj) {
+            pdfio_array_t *desc = pdfioDictGetArray(font_obj_dict, "DescendantFonts");
+            if (!desc) {
+                pdfio_obj_t *dfo = pdfioDictGetObj(font_obj_dict, "DescendantFonts");
+                if (dfo) {
+                    desc = pdfioObjGetArray(dfo);
+                }
+            }
+            if (desc && pdfioArrayGetSize(desc) > 0) {
+                pdfio_obj_t *cid_font_obj = pdfioArrayGetObj(desc, 0);
+                if (cid_font_obj) {
+                    cid_font_dict = pdfioObjGetDict(cid_font_obj);
+                    if (cid_font_dict) {
+                        font_desc_obj = pdfioDictGetObj(cid_font_dict, "FontDescriptor");
+                    }
+                }
+            }
+        }
+        if (!font_desc_obj) {
+            continue;
+        }
+
+        pdfio_dict_t *font_desc_dict = pdfioObjGetDict(font_desc_obj);
+        if (!font_desc_dict) {
+            continue;
+        }
+
+        bool is_truetype = true;
+        pdfio_obj_t *font_file_obj = pdfioDictGetObj(font_desc_dict, "FontFile2");
+        if (!font_file_obj) {
+            font_file_obj = pdfioDictGetObj(font_desc_dict, "FontFile3");
+            is_truetype = false;
+        }
+
+        uint8_t *substituted_bytes = NULL;
+        size_t substituted_sz = 0;
+        if (!font_file_obj) {
+            const char *base_font = pdfioDictGetName(font_obj_dict, "BaseFont");
+            if (!base_font) {
+                base_font = pdfioDictGetName(font_desc_dict, "FontName");
+            }
+            if (base_font) {
+                char *path = resolve_pdf_font_via_fontconfig(base_font);
+                if (path) {
+                    substituted_bytes = load_font_file(path, &substituted_sz);
+                    if (substituted_bytes) {
+                        is_truetype = true;
+                    }
+                    free(path);
+                }
+            }
+        }
+        if (!font_file_obj && !substituted_bytes) {
+            continue;
+        }
+
+        struct _pdfio_stream_s *ff_stream = NULL;
+        if (font_file_obj) {
+            ff_stream = pdfioObjOpenStream(font_file_obj, true);
+            if (!ff_stream) {
+                free(substituted_bytes);
+                continue;
+            }
+        }
+
+        uint8_t *bytes = substituted_bytes;
+        size_t sz = substituted_sz, cap = substituted_sz;
+        uint8_t chunk[8192];
+        ssize_t rd;
+        while (ff_stream && (rd = pdfioStreamRead(ff_stream, chunk, sizeof(chunk))) > 0) {
+            if (sz + (size_t)rd > cap) {
+                size_t nc = cap ? cap * 2 : 16384;
+                while (nc < sz + (size_t)rd) {
+                    nc *= 2;
+                }
+                uint8_t *nb = realloc(bytes, nc);
+                if (!nb) {
+                    free(bytes);
+                    bytes = NULL;
+                    break;
+                }
+                bytes = nb;
+                cap = nc;
+            }
+            memcpy(bytes + sz, chunk, (size_t)rd);
+            sz += (size_t)rd;
+        }
+        if (ff_stream) {
+            pdfioStreamClose(ff_stream);
+        }
+        if (!bytes || sz == 0) {
+            free(bytes);
+            continue;
+        }
+
+        if (is_truetype) {
+            patch_ttf_with_pdf_widths(bytes, sz, font_obj_dict, cid_font_dict);
+        }
+
+        /* Hash the (possibly patched) bytes — same encoding the receiver
+         * uses to key its on-disk CDB cache. */
+        uint64_t h = fnv1a64(bytes, sz);
+        char hex[17];
+        snprintf(hex, sizeof(hex), "%016llx", (unsigned long long)h);
+
+        /* Full FONT prim with TTF bytes — this is the first time the
+         * document ships this font. */
+        struct yetty_ycore_buffer ttf_buf = {bytes, sz, sz};
+        struct yetty_ycore_int_result id_res =
+            yetty_ydraw_draw_list_add_font(buffer, &ttf_buf, tag);
+        int buf_font_id = -1;
+        if (YETTY_IS_OK(id_res)) {
+            buf_font_id = id_res.value;
+        }
+
+        struct yetty_font_font_result ff_res =
+            yetty_yfont_raster_font_create_from_data(bytes, sz, tag, NULL, 32.0f);
+
+        free(bytes);
+
+        if (YETTY_IS_ERR(ff_res)) {
+            ywarn("ypdf: raster_font from TTF '%s' failed: %s", tag, ff_res.error.msg);
+            continue;
+        }
+
+        struct yetty_ypdf_font_info *fi_out = &fonts[*font_count];
+        memset(fi_out, 0, sizeof(*fi_out));
+        strncpy(fi_out->tag, tag, sizeof(fi_out->tag) - 1);
+        fi_out->buffer_font_id = buf_font_id;
+        fi_out->raw_font = ff_res.value;
+        fi_out->is_identity_h = is_identity_h;
+        fi_out->hash = h;
+        memcpy(fi_out->hex, hex, sizeof(fi_out->hex));
+        fi_out->globally_emitted = (buf_font_id >= 0);
+
+        if (to_unicode_obj) {
+            if (yetty_ycore_map_init(&fi_out->to_unicode, 1024) == 0) {
+                fi_out->to_unicode_init = true;
+                parse_to_unicode_cmap(to_unicode_obj, &fi_out->to_unicode);
+            }
+        }
+
+        (*font_count)++;
+        ydebug("ypdf: streaming first-emit '%s' (%zu bytes) hash=%s", tag, sz, hex);
+    }
+    return YETTY_OK_VOID();
+}
+
 /*=============================================================================
  * Render context (shared by the three callbacks via user_data)
  *===========================================================================*/
@@ -1245,13 +1541,9 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf)
         if (!page_obj) {
             continue;
         }
-        pdfio_dict_t *pd = pdfioObjGetDict(page_obj);
         pdfio_rect_t mb = {0};
-        if (!pdfioDictGetRect(pd, "MediaBox", &mb)) {
-            mb.x1 = 0.0;
-            mb.y1 = 0.0;
-            mb.x2 = 612.0;
-            mb.y2 = 792.0;
+        if (!resolve_media_box(page_obj, &mb)) {
+            return YETTY_ERR(yetty_ypdf_render, "page is missing MediaBox");
         }
         float pw = (float)(mb.x2 - mb.x1);
         float ph = (float)(mb.y2 - mb.y1);
@@ -1305,13 +1597,10 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf)
         if (!page_obj) {
             continue;
         }
-        pdfio_dict_t *pd = pdfioObjGetDict(page_obj);
         pdfio_rect_t mb = {0};
-        if (!pdfioDictGetRect(pd, "MediaBox", &mb)) {
-            mb.x1 = 0.0;
-            mb.y1 = 0.0;
-            mb.x2 = 612.0;
-            mb.y2 = 792.0;
+        if (!resolve_media_box(page_obj, &mb)) {
+            yetty_ydraw_draw_list_destroy(buffer);
+            return YETTY_ERR(yetty_ypdf_render, "page is missing MediaBox");
         }
         float ph = (float)(mb.y2 - mb.y1);
 
@@ -1366,4 +1655,141 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf)
 
     ydebug("ypdf: %d pages, %zu fonts, total_h=%.1f", page_count, font_count, y_offset);
     return YETTY_OK(yetty_ypdf_render, out);
+}
+
+/*=============================================================================
+ * Streaming entry point — one envelope per page.
+ *===========================================================================*/
+
+struct yetty_ypdf_stream_render_result yetty_ypdf_render_pdf_streaming(
+    struct _pdfio_file_s *pdf, yetty_ypdf_page_emit_fn on_page, void *user_data)
+{
+    if (!pdf) {
+        return YETTY_ERR(yetty_ypdf_stream_render, "pdf is NULL");
+    }
+    if (!on_page) {
+        return YETTY_ERR(yetty_ypdf_stream_render, "on_page is NULL");
+    }
+
+    int page_count = (int)pdfioFileGetNumPages(pdf);
+    struct yetty_ypdf_stream_render_output out = {0};
+    out.page_count = page_count;
+    if (page_count == 0) {
+        return YETTY_ERR(yetty_ypdf_stream_render, "pdf has no pages");
+    }
+
+    /* Per-document font state survives across envelopes. raw_font (metrics)
+     * and ToUnicode maps are used by text_emit_cb on every page the font
+     * is referenced; the globally_emitted flag suppresses re-shipping the
+     * TTF bytes after the first envelope. */
+    struct yetty_ypdf_font_info fonts[MAX_FONTS];
+    memset(fonts, 0, sizeof(fonts));
+    size_t font_count = 0;
+
+    struct yetty_ypdf_render_ctx ctx = {0};
+    struct yetty_ypdf_content_parser_callbacks cb = {
+        .text_emit = text_emit_cb,
+        .rect_paint = rect_paint_cb,
+        .line_paint = line_paint_cb,
+        .user_data = &ctx,
+    };
+
+    float first_page_height = 0.0f;
+    float max_width = 0.0f;
+    struct yetty_ycore_void_result emit_err = YETTY_OK_VOID();
+
+    for (int page = 0; page < page_count; page++) {
+        pdfio_obj_t *page_obj = pdfioFileGetPage(pdf, (size_t)page);
+        if (!page_obj) {
+            continue;
+        }
+        pdfio_rect_t mb = {0};
+        if (!resolve_media_box(page_obj, &mb)) {
+            emit_err = YETTY_ERR(yetty_ycore_void, "page is missing MediaBox");
+            break;
+        }
+        float pw = (float)(mb.x2 - mb.x1);
+        float ph = (float)(mb.y2 - mb.y1);
+        if (page == 0) {
+            first_page_height = ph;
+        }
+        if (pw > max_width) {
+            max_width = pw;
+        }
+
+        /* Page envelope: scene spans the page plus a bottom margin so the
+         * receiver scrolls a uniform gap between pages. Coordinates inside
+         * are page-relative (origin top-left, y=0..ph). */
+        struct yetty_ydraw_draw_list_config bcfg = {
+            .scene_min_x = 0.0f,
+            .scene_min_y = 0.0f,
+            .scene_max_x = pw,
+            .scene_max_y = ph + PAGE_MARGIN,
+        };
+        struct yetty_ydraw_draw_list_result br =
+            yetty_ydraw_draw_list_config_buffer_create(&bcfg);
+        if (YETTY_IS_ERR(br)) {
+            emit_err = YETTY_ERR(yetty_ycore_void, "draw_list create failed", br);
+            break;
+        }
+        struct yetty_ydraw_draw_list *page_buffer = br.value;
+
+        /* Per-page font handling: load on first encounter, emit full TTF
+         * on first envelope using the font, hash-ref on subsequent ones. */
+        (void)extract_and_emit_page_fonts_streaming(page_obj, page_buffer, fonts, &font_count);
+
+        struct yetty_ypdf_content_parser_ptr_result pr =
+            yetty_ypdf_content_parser_callbacks_content_parser_create(&cb);
+        if (YETTY_IS_ERR(pr)) {
+            yetty_ydraw_draw_list_destroy(page_buffer);
+            emit_err = YETTY_ERR(yetty_ycore_void, "content parser create", pr);
+            break;
+        }
+        yetty_ypdf_content_parser_set_page_height(pr.value, ph);
+
+        ctx.buffer = page_buffer;
+        ctx.fonts = fonts;
+        ctx.font_count = font_count;
+        ctx.y_offset = 0.0f;
+        ctx.page_height = ph;
+
+        size_t num_streams = pdfioPageGetNumStreams(page_obj);
+        for (size_t s = 0; s < num_streams; s++) {
+            struct _pdfio_stream_s *stream = pdfioPageOpenStream(page_obj, s, true);
+            if (!stream) {
+                continue;
+            }
+            (void)yetty_ypdf_content_parser_parse_stream(pr.value, stream);
+            pdfioStreamClose(stream);
+        }
+
+        yetty_ypdf_content_parser_destroy(pr.value);
+
+        struct yetty_ycore_void_result er = on_page(user_data, page, page_count, page_buffer);
+        yetty_ydraw_draw_list_destroy(page_buffer);
+        if (YETTY_IS_ERR(er)) {
+            emit_err = YETTY_ERR(yetty_ycore_void, "on_page callback failed", er);
+            break;
+        }
+    }
+
+    /* Cleanup per-font state. raw_font and ToUnicode survive for the whole
+     * document; release them now that no more envelopes will be emitted. */
+    for (size_t i = 0; i < font_count; i++) {
+        if (fonts[i].raw_font && fonts[i].raw_font->ops && fonts[i].raw_font->ops->destroy) {
+            fonts[i].raw_font->ops->destroy(fonts[i].raw_font);
+        }
+        if (fonts[i].to_unicode_init) {
+            yetty_ycore_map_destroy(&fonts[i].to_unicode);
+        }
+    }
+
+    if (YETTY_IS_ERR(emit_err)) {
+        return YETTY_ERR(yetty_ypdf_stream_render, "streaming render aborted", emit_err);
+    }
+
+    out.first_page_height = first_page_height;
+    out.max_width = max_width;
+    ydebug("ypdf: streaming %d pages, %zu fonts", page_count, font_count);
+    return YETTY_OK(yetty_ypdf_stream_render, out);
 }

@@ -20,7 +20,29 @@ struct flat_buffer {
     struct yetty_yrender_buffer *src; /* mutable to clear dirty */
     const char *ns;                   /* namespace for WGSL name */
     size_t mega_offset;               /* byte offset in mega buffer */
+    size_t cap;                       /* GPU-allocated capacity for this slot.
+                                       * Always >= src->size, rounded up to a
+                                       * power of 2 so small growth doesn't
+                                       * shift subsequent buffers' mega_offsets
+                                       * — that bake into the shader as `const
+                                       * X_offset: u32 = …` and a moved offset
+                                       * means a fresh shader compile. */
 };
+
+/* Round buffer size up to a power-of-2 capacity. Worst-case 2× memory overhead
+ * in exchange for stable mega_offsets across small growth — once a buffer
+ * slot's GPU capacity is allocated, subsequent envelopes can add a few KB
+ * without forcing every later buffer's offset to shift (and every shader to
+ * recompile via libnvidia-gpucomp). 256 B floor keeps the math simple for
+ * the tiny font-metadata buffers. */
+static size_t round_buffer_capacity(size_t s)
+{
+    size_t c = 256;
+    while (c < s) {
+        c *= 2;
+    }
+    return c;
+}
 
 /* Flat texture entry — one per texture across all resource sets */
 struct flat_texture {
@@ -97,8 +119,10 @@ struct yetty_yrender_gpu_resource_binder_impl {
     int finalized;
     uint64_t last_shader_hash;
 
-    /* Cached sizes for detecting layout-breaking changes */
-    size_t last_buffer_sizes[MAX_FLAT_BUFFERS];
+    /* Cached capacities for detecting layout-breaking changes. The buffer
+     * cap is the GPU-allocated slot size (rounded up); a logical size that
+     * still fits inside its cap is NOT a layout change. */
+    size_t last_buffer_caps[MAX_FLAT_BUFFERS];
     uint32_t last_tex_width[MAX_FLAT_TEXTURES];
     uint32_t last_tex_height[MAX_FLAT_TEXTURES];
 
@@ -208,14 +232,17 @@ static void collect_resources(struct yetty_yrender_gpu_resource_binder_impl *imp
         }
     }
 
-    /* Buffers - always collect even if empty (shader needs offset constants) */
+    /* Buffers - always collect even if empty (shader needs offset constants).
+     * mega_offset is stable across re-finalizes as long as the cap fits — the
+     * shader hard-codes `const X_offset: u32 = …` for every buffer, so an
+     * offset shift means a full WGSL → SPIR-V → NVIDIA-IR recompile chain. */
     for (size_t i = 0; i < rs->buffer_count && impl->flat_buffer_count < MAX_FLAT_BUFFERS; i++) {
         struct flat_buffer *fb = &impl->flat_buffers[impl->flat_buffer_count++];
         fb->src = &rs->buffers[i];
         fb->ns = rs->namespace;
         fb->mega_offset = impl->storage_buffer_size;
-        size_t aligned = (rs->buffers[i].size + 3) & ~(size_t)3;
-        impl->storage_buffer_size += aligned;
+        fb->cap = round_buffer_capacity(rs->buffers[i].size);
+        impl->storage_buffer_size += fb->cap;
     }
 
     /* Textures */
@@ -1116,7 +1143,7 @@ static struct yetty_ycore_void_result binder_finalize(
         impl->last_shader_hash ^= compute_tree_shader_hash(impl->resource_sets[i]);
     }
     for (size_t i = 0; i < impl->flat_buffer_count; i++) {
-        impl->last_buffer_sizes[i] = impl->flat_buffers[i].src->size;
+        impl->last_buffer_caps[i] = impl->flat_buffers[i].cap;
     }
     for (size_t i = 0; i < impl->flat_texture_count; i++) {
         impl->last_tex_width[i] = impl->flat_textures[i].src->width;
@@ -1153,13 +1180,17 @@ static struct yetty_ycore_void_result binder_update(struct yetty_yrender_gpu_res
         need_refinalize = 1;
     }
 
-    /* Buffer sizes — if ANY changed, mega buffer offsets are all wrong */
+    /* Buffer capacities — only force a layout rebuild if a logical buffer
+     * has outgrown its rounded slot. A buffer that's still inside its cap
+     * keeps the same mega_offset, the shader's baked-in `*_offset` consts
+     * stay valid, and we can just re-upload the dirty bytes into the
+     * existing GPU buffer at the existing offset. */
     if (!need_refinalize) {
         for (size_t i = 0; i < impl->flat_buffer_count; i++) {
-            if (impl->flat_buffers[i].src->size != impl->last_buffer_sizes[i]) {
-                ydebug("GpuResourceBinder: buffer '%s_%s' size changed %zu -> %zu",
+            if (impl->flat_buffers[i].src->size > impl->last_buffer_caps[i]) {
+                ydebug("GpuResourceBinder: buffer '%s_%s' size %zu exceeds cap %zu",
                        impl->flat_buffers[i].ns, impl->flat_buffers[i].src->name,
-                       impl->last_buffer_sizes[i], impl->flat_buffers[i].src->size);
+                       impl->flat_buffers[i].src->size, impl->last_buffer_caps[i]);
                 need_refinalize = 1;
                 break;
             }

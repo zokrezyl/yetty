@@ -996,6 +996,10 @@ static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_te
 /* Process — drains raw bytes from the SM into vterm. The SM is in
  * SCAN_RAW; osc_statemachine_read returns 0 when an OSC opener is at
  * the cursor (or input is exhausted). */
+/* Runs on the persistent default-layer coro spawned by the wire SM at
+ * set_default. Never returns under normal operation — `sm_read` yields
+ * when no raw bytes are deliverable, the SM scanner resumes us when
+ * more arrive. A returned ERR would surface to the SM at the next tick. */
 static struct yetty_ycore_void_result text_layer_process_input(
     struct yetty_yrender_terminal_layer *self,
     struct yetty_ywire_wire_statemachine *osc_statemachine)
@@ -1012,12 +1016,15 @@ static struct yetty_ycore_void_result text_layer_process_input(
         struct yetty_ycore_size_result rr =
             yetty_ywire_wire_statemachine_read(osc_statemachine, buf, sizeof(buf));
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "text_layer: osc read");
+        /* sm_read in RAW mode never returns 0 unless something is
+         * fundamentally wrong — it yields when no raw bytes are ready.
+         * If we ever DO see 0, just yield again (defensive: avoid a
+         * tight loop in the unlikely event the contract changes). */
         if (rr.value == 0) {
-            break;
+            continue;
         }
         vterm_input_write(text_layer->vterm, (const char *)buf, rr.value);
     }
-    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result text_layer_resize_grid(

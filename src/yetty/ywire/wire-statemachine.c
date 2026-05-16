@@ -40,6 +40,23 @@ struct osc_handler {
     struct yetty_yrender_terminal_layer *layer;
 };
 
+/* One coroutine per registered layer. The SM scanner resumes the coro
+ * whose layer matches the current scan state's consumer (default_layer
+ * in SCAN_RAW, current_layer in SCAN_OSC_BODY). The layer's
+ * process_input runs in a `for(;;)` loop, reading envelope after
+ * envelope via the iter; the iter's sm_read yields the coro back to
+ * sm_coro when no bytes are deliverable for the layer right now.
+ *
+ * Spawned the first time a layer is bound (set_default or register;
+ * one coro per unique layer pointer, deduped). Destroyed at SM destroy
+ * by dropping the stack (process exit reclaims). */
+struct layer_coro {
+    struct yetty_yrender_terminal_layer *layer;
+    struct yetty_ywire_wire_statemachine *sm;
+    struct yetty_yplatform_coro *coro;
+    struct yetty_ycore_void_result result;
+};
+
 struct yetty_ywire_wire_statemachine {
     /* Non-owning. */
     struct yetty_platform_pty *pty;
@@ -95,22 +112,25 @@ struct yetty_ywire_wire_statemachine {
      * read(). Set inside read(), checked by process() after dispatch. */
     int terminator_seen;
 
-    /* Per-envelope coroutine running the registered layer's
-     * process_input. Spawned the first time we enter SCAN_OSC_BODY for a
-     * layer, resumed each subsequent process() until the coro returns
-     * (envelope done or layer error). NULL outside any dispatch.
-     *
-     * The coro yields from inside the layer's iter when the SM has no
-     * more body bytes right now AND the envelope terminator has not yet
-     * been seen. Whoever resumed (process()) returns control to the
-     * event loop; the next PTY-byte arrival drives the next process()
-     * which resumes the coro. */
-    struct yetty_yplatform_coro *active_coro;
-    struct {
-        struct yetty_yrender_terminal_layer *layer;
-        struct yetty_ywire_wire_statemachine *sm;
-        struct yetty_ycore_void_result result;
-    } coro_ctx;
+    /* Persistent SM coroutine — the scanner runs here. Spawned at SM
+     * create, destroyed at SM destroy. The PTY-byte-arrival path
+     * (`wire_statemachine_feed`) resumes this coro after appending to
+     * the ring. When the scanner runs out of work it yields back to
+     * the event-loop caller of feed(). */
+    struct yetty_yplatform_coro *sm_coro;
+
+    /* Fatal result stash. The sm_coro entry function returns its
+     * Result here on a fatal exit (envelope-body coro signalled
+     * "finished without terminator", lz4 decode failure, etc.). The
+     * next wake_sm_coro caller surfaces it. */
+    struct yetty_ycore_void_result sm_result;
+
+    /* Per-layer coroutine table. One entry per unique registered
+     * layer (default or OSC). Lookup is linear in the layer pointer;
+     * N is small (a handful at most). */
+    struct layer_coro *layer_coros;
+    size_t layer_coro_count;
+    size_t layer_coro_cap;
 };
 
 /*===========================================================================
@@ -579,47 +599,94 @@ static struct yetty_ycore_void_result raw_pump(
 }
 
 /*===========================================================================
- * Dispatch
+ * Coroutines
  *
- * Two paths:
+ * The SM runs as one persistent coroutine (`sm_coro`) that scans the
+ * ring and decides which consumer gets each byte stream. Each unique
+ * registered layer (default and/or OSC) runs as its own persistent
+ * coroutine and consumes bytes via `wire_statemachine_read`, which
+ * yields when no bytes are deliverable to it right now.
  *
- *   - default-layer dispatch (SCAN_RAW, text path) — synchronous, inline.
- *     The text layer doesn't park state across the call; a direct
- *     process_input call is fine.
+ * One coro per *unique* layer pointer — dedup is done on bind:
+ *   - set_default(layer) → get_or_spawn_layer_coro(layer)
+ *   - register(code, layer) → get_or_spawn_layer_coro(layer)
+ * If a single layer is registered as both default AND for an OSC code,
+ * it gets ONE coro (text-layer is the canonical example: bound as
+ * default for RAW vterm bytes; on real builds it does not also handle
+ * an OSC code, but the dedup keeps that future safe).
  *
- *   - OSC-body dispatch — runs on a coroutine. The first time we enter
- *     SCAN_OSC_BODY for a registered layer, we spawn a coro whose entry
- *     is `body_coro_entry` and call resume. Inside process_input the
- *     iter yields whenever the SM has no more body bytes right now;
- *     control returns to whoever resumed, which is this function. We
- *     return to process()'s outer loop, which returns to the event
- *     loop. The next process() resumes the same coro. When process_input
- *     finally returns (envelope terminator or layer error), the coro
- *     finishes; we collect its result, destroy the coro, transition out
- *     of SCAN_OSC_BODY.
+ * The layer's process_input runs in a `for(;;)` loop reading envelope
+ * after envelope (or raw bytes forever); a return from it means fatal
+ * error or unexpected exit, both of which the SM surfaces.
+ *
+ * Forward declarations resolve the mutual dependency between sm_coro
+ * (which resumes layer coros) and sm_read (called from layer coros,
+ * yields back to sm_coro when nothing to deliver).
  *=========================================================================*/
 
+/* Forward decl — defined after pull_from_pty (sm_coro_entry calls it). */
+static void sm_coro_entry(void *arg);
+
+/* Layer coro entry — runs `layer->ops->process_input(layer, sm)` to
+ * completion. process_input is expected to loop forever (envelope after
+ * envelope, or raw bytes forever for default layers); a return here
+ * means either error or voluntary shutdown, and the result lands in
+ * `lc->result` for the SM to surface. */
 YETTY_EXTERNAL_CALLBACK
-static void body_coro_entry(void *arg)
+static void layer_coro_entry(void *arg)
 {
-    struct yetty_ywire_wire_statemachine *sm = arg;
-    struct yetty_yrender_terminal_layer *layer = sm->coro_ctx.layer;
-    sm->dispatching = 1;
-    sm->coro_ctx.result = layer->ops->process_input(layer, sm);
-    sm->dispatching = 0;
+    struct layer_coro *lc = arg;
+    lc->sm->dispatching = 1;
+    lc->result = lc->layer->ops->process_input(lc->layer, lc->sm);
+    lc->sm->dispatching = 0;
 }
 
-static struct yetty_ycore_void_result dispatch_default(
-    struct yetty_ywire_wire_statemachine *statemachine, struct yetty_yrender_terminal_layer *layer)
+/* Find the layer_coro entry for `layer`, or NULL. */
+static struct layer_coro *find_layer_coro(
+    struct yetty_ywire_wire_statemachine *sm,
+    struct yetty_yrender_terminal_layer *layer)
 {
-    if (!layer || !layer->ops || !layer->ops->process_input) {
-        return YETTY_OK_VOID();
+    if (!layer) return NULL;
+    for (size_t i = 0; i < sm->layer_coro_count; i++) {
+        if (sm->layer_coros[i].layer == layer) {
+            return &sm->layer_coros[i];
+        }
     }
-    statemachine->dispatching = 1;
-    struct yetty_ycore_void_result r = layer->ops->process_input(layer, statemachine);
-    statemachine->dispatching = 0;
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_statemachine: default dispatch");
-    return YETTY_OK_VOID();
+    return NULL;
+}
+
+/* Get-or-create the layer_coro for `layer`. Spawns the coro on first
+ * call; subsequent calls return the existing entry. Returns NULL on
+ * alloc / spawn failure (caller must surface the error). */
+static struct layer_coro *get_or_spawn_layer_coro(
+    struct yetty_ywire_wire_statemachine *sm,
+    struct yetty_yrender_terminal_layer *layer)
+{
+    struct layer_coro *existing = find_layer_coro(sm, layer);
+    if (existing) return existing;
+    if (!layer || !layer->ops || !layer->ops->process_input) return NULL;
+
+    if (sm->layer_coro_count == sm->layer_coro_cap) {
+        size_t nc = sm->layer_coro_cap ? sm->layer_coro_cap * 2 : 4;
+        struct layer_coro *grown =
+            realloc(sm->layer_coros, nc * sizeof(struct layer_coro));
+        if (!grown) return NULL;
+        sm->layer_coros = grown;
+        sm->layer_coro_cap = nc;
+    }
+    struct layer_coro *lc = &sm->layer_coros[sm->layer_coro_count];
+    lc->layer  = layer;
+    lc->sm     = sm;
+    lc->result = YETTY_OK_VOID();
+    struct yplatform_coro_ptr_result spawn_res = yetty_yplatform_coro_spawn(
+        layer_coro_entry, lc, 1024 * 1024, "wire-layer");
+    if (YETTY_IS_ERR(spawn_res)) {
+        yetty_ycore_error_destroy(spawn_res.error);
+        return NULL;
+    }
+    lc->coro = spawn_res.value;
+    sm->layer_coro_count++;
+    return lc;
 }
 
 /* Reset per-envelope state at the start of a new envelope. */
@@ -653,6 +720,18 @@ struct yetty_ywire_wire_statemachine_ptr_result yetty_ywire_wire_statemachine_cr
     }
     statemachine->pty = pty;
     statemachine->state = SCAN_RAW;
+
+    /* Spawn the persistent scanner coro. It immediately yields on first
+     * resume because the ring is empty. */
+    struct yplatform_coro_ptr_result spawn_res =
+        yetty_yplatform_coro_spawn(sm_coro_entry, statemachine, 1024 * 1024, "wire-sm");
+    if (YETTY_IS_ERR(spawn_res)) {
+        free(statemachine);
+        return YETTY_ERR(yetty_ywire_wire_statemachine_ptr,
+                         "osc_statemachine: sm_coro spawn", spawn_res);
+    }
+    statemachine->sm_coro = spawn_res.value;
+
     return YETTY_OK(yetty_ywire_wire_statemachine_ptr, statemachine);
 }
 
@@ -662,14 +741,25 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_destroy(
     if (!statemachine) {
         return YETTY_ERR(yetty_ycore_void, "osc_statemachine: statemachine is NULL");
     }
-    /* In-flight layer coro at process teardown: the coro is parked
-     * inside the layer's iter waiting for bytes that will never come.
-     * Process is exiting; OS reclaims the stack. We just drop the
-     * handle. (Cleaner than driving the coro to a forced exit, which
-     * would require unwind hooks we don't have in C.) */
-    if (statemachine->active_coro) {
-        yetty_yplatform_coro_destroy(statemachine->active_coro);
-        statemachine->active_coro = NULL;
+    /* In-flight coros at teardown: parked in their respective layer
+     * coros waiting for bytes that will never come. Process is exiting;
+     * OS reclaims the stacks. We just drop the handles. (Cleaner than
+     * driving each coro to a forced exit, which would require unwind
+     * hooks we don't have in C.) */
+    for (size_t i = 0; i < statemachine->layer_coro_count; i++) {
+        if (statemachine->layer_coros[i].coro) {
+            yetty_yplatform_coro_destroy(statemachine->layer_coros[i].coro);
+            statemachine->layer_coros[i].coro = NULL;
+        }
+    }
+    free(statemachine->layer_coros);
+    statemachine->layer_coros = NULL;
+    statemachine->layer_coro_count = 0;
+    statemachine->layer_coro_cap = 0;
+
+    if (statemachine->sm_coro) {
+        yetty_yplatform_coro_destroy(statemachine->sm_coro);
+        statemachine->sm_coro = NULL;
     }
     if (statemachine->lz4_ctx) {
         LZ4F_freeDecompressionContext(statemachine->lz4_ctx);
@@ -704,6 +794,15 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_register(
     }
     statemachine->handlers[statemachine->handler_count++] =
         (struct osc_handler){.code = code, .layer = layer};
+    /* Ensure the layer's persistent coro is spawned. Dedup is handled
+     * inside get_or_spawn_layer_coro — same layer registered for multiple
+     * codes only spawns one coro. */
+    if (layer && layer->ops && layer->ops->process_input) {
+        if (!get_or_spawn_layer_coro(statemachine, layer)) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "wire: layer coro spawn failed in register");
+        }
+    }
     return YETTY_OK_VOID();
 }
 
@@ -731,6 +830,22 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_feed(
         memcpy(statemachine->ring, bytes + first, n - first);
     }
     statemachine->write_pos += n;
+
+    /* Wake the scanner. The PTY-byte-arrival path is the SOLE source of
+     * new work for the SM; feed() bundles "got bytes" + "process them"
+     * so callers don't need a separate process() call. The sm_coro runs
+     * as far as it can, then yields back here when it needs more PTY
+     * bytes or the layer coros are all parked. */
+    if (statemachine->sm_coro &&
+        !yetty_yplatform_coro_is_finished(statemachine->sm_coro)) {
+        yetty_yplatform_coro_resume(statemachine->sm_coro);
+        if (yetty_yplatform_coro_is_finished(statemachine->sm_coro)) {
+            struct yetty_ycore_void_result r = statemachine->sm_result;
+            yetty_yplatform_coro_destroy(statemachine->sm_coro);
+            statemachine->sm_coro = NULL;
+            return r;
+        }
+    }
     return YETTY_OK_VOID();
 }
 
@@ -742,6 +857,15 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_set_default(
         return YETTY_ERR(yetty_ycore_void, "osc_statemachine: statemachine is NULL");
     }
     statemachine->default_layer = layer;
+    /* Ensure the default layer's persistent coro is spawned. Dedup
+     * handled inside get_or_spawn_layer_coro — registering the same
+     * layer as default AND for an OSC code only spawns one coro. */
+    if (layer && layer->ops && layer->ops->process_input) {
+        if (!get_or_spawn_layer_coro(statemachine, layer)) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "wire: default coro spawn failed");
+        }
+    }
     return YETTY_OK_VOID();
 }
 
@@ -777,214 +901,244 @@ static struct yetty_ycore_size_result pull_from_pty(
     return YETTY_OK(yetty_ycore_size, rr.value);
 }
 
+/*===========================================================================
+ * sm_coro: the scanner loop
+ *
+ * Runs forever. Pulls PTY bytes (sync backends), then walks the state
+ * machine. Layer bytes go to the layer's coro via coro_resume; layer
+ * coros call wire_statemachine_read which yields back here when they
+ * need more bytes than the ring has. When the ring is drained and no
+ * layer has progress to make, sm_coro yields itself — the event loop
+ * runs other work; the next PTY callback feeds + resumes us.
+ *=========================================================================*/
+
+YETTY_EXTERNAL_CALLBACK
+static void sm_coro_entry(void *arg)
+{
+    struct yetty_ywire_wire_statemachine *sm = arg;
+
+    for (;;) {
+        /* Pump fresh PTY bytes into the ring (sync-read backends only).
+         * libuv-backed PTYs return an error from ops->read; bytes arrive
+         * through _feed in that case, so we silently ignore the failure. */
+        if (sm->pty) {
+            for (;;) {
+                struct yetty_ycore_size_result rr = pull_from_pty(sm);
+                if (YETTY_IS_ERR(rr)) {
+                    yetty_ycore_error_destroy(rr.error);
+                    break;
+                }
+                if (rr.value == 0) {
+                    break;
+                }
+            }
+        }
+
+        while (sm->read_pos < sm->write_pos || out_carry_avail(sm) > 0) {
+            switch (sm->state) {
+            case SCAN_RAW: {
+                /* If an ESC sits at the head of the ring, advance the
+                 * scanner ourselves — the default layer must not see
+                 * ESC (it's the OSC opener candidate). */
+                if (sm->read_pos < sm->write_pos &&
+                    ring_at(sm, sm->read_pos) == '\033') {
+                    sm->read_pos++;
+                    sm->state = SCAN_AFTER_ESC;
+                    break;
+                }
+                struct layer_coro *lc = find_layer_coro(sm, sm->default_layer);
+                if (lc && lc->coro &&
+                    !yetty_yplatform_coro_is_finished(lc->coro)) {
+                    /* Resume the persistent default-layer coro. It will
+                     * consume raw bytes via sm_read until the ring
+                     * is empty for raw mode or sees ESC at head, then
+                     * yield back to us. */
+                    yetty_yplatform_coro_resume(lc->coro);
+                    if (yetty_yplatform_coro_is_finished(lc->coro)) {
+                        /* Layer's process_input returned — fatal: it
+                         * is supposed to loop forever. Surface the
+                         * stashed result. */
+                        sm->sm_result = YETTY_IS_ERR(lc->result)
+                            ? YETTY_ERR(yetty_ycore_void,
+                                        "wire: default layer coro exited",
+                                        lc->result)
+                            : YETTY_ERR(yetty_ycore_void,
+                                        "wire: default layer coro exited unexpectedly");
+                        return;
+                    }
+                    /* After resume: re-evaluate state in the outer loop. */
+                    break;
+                }
+                /* No default sink — just skip raw bytes until ESC. */
+                while (sm->read_pos < sm->write_pos &&
+                       ring_at(sm, sm->read_pos) != '\033') {
+                    sm->read_pos++;
+                }
+                break;
+            }
+
+            case SCAN_AFTER_ESC: {
+                if (sm->read_pos >= sm->write_pos) goto wait_more;
+                uint8_t c = ring_at(sm, sm->read_pos);
+                if (c == ']') {
+                    sm->read_pos++;
+                    sm->current_code = 0;
+                    envelope_reset(sm);
+                    sm->state = SCAN_OSC_CODE;
+                } else {
+                    /* Not OSC opener — emit ESC + this byte to default
+                     * via out_carry so vterm sees the regular escape. */
+                    uint8_t emit[2] = {'\033', c};
+                    struct yetty_ycore_void_result r = out_carry_append(sm, emit, 2);
+                    if (YETTY_IS_ERR(r)) {
+                        sm->sm_result =
+                            YETTY_ERR(yetty_ycore_void, "wire: raw esc-pair", r);
+                        return;
+                    }
+                    sm->read_pos++;
+                    sm->state = SCAN_RAW;
+                }
+                break;
+            }
+
+            case SCAN_OSC_CODE: {
+                if (sm->read_pos >= sm->write_pos) goto wait_more;
+                uint8_t c = ring_at(sm, sm->read_pos++);
+                if (c >= '0' && c <= '9') {
+                    sm->current_code = sm->current_code * 10 + (int)(c - '0');
+                } else if (c == ';') {
+                    sm->state = SCAN_OSC_ARGS;
+                } else {
+                    ywarn("wire: malformed OSC code byte=0x%02x", (unsigned)c);
+                    sm->state = SCAN_RAW;
+                }
+                break;
+            }
+
+            case SCAN_OSC_ARGS: {
+                if (sm->read_pos >= sm->write_pos) goto wait_more;
+                uint8_t c = ring_at(sm, sm->read_pos++);
+                if (c == ';') {
+                    decode_args_slot(sm);
+                    sm->current_layer = find_layer(sm, sm->current_code);
+                    sm->state = SCAN_OSC_BODY;
+                } else if (sm->args_b64_len < sizeof(sm->args_b64)) {
+                    sm->args_b64[sm->args_b64_len++] = (char)c;
+                }
+                break;
+            }
+
+            case SCAN_OSC_BODY:
+            case SCAN_OSC_BODY_ESC: {
+                if (!sm->current_layer) {
+                    /* No registered layer — drain body to terminator. */
+                    while (!sm->terminator_seen && sm->read_pos < sm->write_pos) {
+                        uint8_t c = ring_at(sm, sm->read_pos++);
+                        if (c == '\007') {
+                            sm->terminator_seen = 1;
+                            break;
+                        }
+                        if (c == '\033') {
+                            if (sm->read_pos >= sm->write_pos) {
+                                sm->state = SCAN_OSC_BODY_ESC;
+                                sm->read_pos--;
+                                goto wait_more;
+                            }
+                            if (ring_at(sm, sm->read_pos) == '\\') {
+                                sm->read_pos++;
+                                sm->terminator_seen = 1;
+                                break;
+                            }
+                        }
+                    }
+                    if (sm->terminator_seen) {
+                        sm->state = SCAN_RAW;
+                        sm->current_code = 0;
+                        envelope_reset(sm);
+                    }
+                    break;
+                }
+
+                /* Look up the persistent coro for the OSC body's target
+                 * layer. The layer was registered before the first byte
+                 * arrived, so its coro must already exist. */
+                struct layer_coro *lc = find_layer_coro(sm, sm->current_layer);
+                if (!lc || !lc->coro) {
+                    sm->sm_result = YETTY_ERR(
+                        yetty_ycore_void,
+                        "wire: no persistent coro for OSC layer");
+                    return;
+                }
+                if (yetty_yplatform_coro_is_finished(lc->coro)) {
+                    sm->sm_result = YETTY_IS_ERR(lc->result)
+                        ? YETTY_ERR(yetty_ycore_void,
+                                    "wire: OSC layer coro exited",
+                                    lc->result)
+                        : YETTY_ERR(yetty_ycore_void,
+                                    "wire: OSC layer coro exited unexpectedly");
+                    return;
+                }
+
+                /* Resume the layer. It will pull body bytes via sm_read
+                 * until the iter signals EOE, then loop to its next
+                 * envelope (yielding back here when the carry is empty). */
+                yetty_yplatform_coro_resume(lc->coro);
+
+                if (sm->terminator_seen) {
+                    sm->state = SCAN_RAW;
+                    sm->current_layer = NULL;
+                    sm->current_code = 0;
+                    envelope_reset(sm);
+                    break;
+                }
+                /* Coro yielded — needs more body bytes. Fall through to
+                 * the outer wait_more so we yield ourselves. */
+                goto wait_more;
+            }
+            }
+        }
+
+    wait_more:
+        yetty_yplatform_coro_yield();
+    }
+}
+
 struct yetty_ycore_void_result yetty_ywire_wire_statemachine_process(
     struct yetty_ywire_wire_statemachine *statemachine)
 {
     if (!statemachine) {
         return YETTY_ERR(yetty_ycore_void, "osc_statemachine: statemachine is NULL");
     }
-
-    /* Pump fresh PTY bytes into the ring (sync-read backends only).
-     * libuv-backed PTYs return an error from ops->read; bytes arrive
-     * through _feed in that case, so we silently ignore the failure. */
-    if (statemachine->pty) {
-        for (;;) {
-            struct yetty_ycore_size_result rr = pull_from_pty(statemachine);
-            if (YETTY_IS_ERR(rr)) {
-                yetty_ycore_error_destroy(rr.error);
-                break;
-            }
-            if (rr.value == 0) {
-                break;
-            }
-        }
+    if (!statemachine->sm_coro) {
+        return YETTY_ERR(yetty_ycore_void, "osc_statemachine: sm_coro not spawned");
     }
-
-    while (statemachine->read_pos < statemachine->write_pos || out_carry_avail(statemachine) > 0) {
-        switch (statemachine->state) {
-        case SCAN_RAW: {
-            if (statemachine->default_layer) {
-                size_t before_rp = statemachine->read_pos;
-                size_t before_oc = out_carry_avail(statemachine);
-                struct yetty_ycore_void_result r =
-                    dispatch_default(statemachine, statemachine->default_layer);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_statemachine: default dispatch");
-                if (statemachine->read_pos == before_rp && out_carry_avail(statemachine) == before_oc) {
-                    /* Layer made no progress — done for this cycle, OR
-                     * we're parked at an ESC and need to advance the
-                     * scanner. */
-                    if (statemachine->read_pos < statemachine->write_pos &&
-                        ring_at(statemachine, statemachine->read_pos) == '\033') {
-                        statemachine->read_pos++;
-                        statemachine->state = SCAN_AFTER_ESC;
-                        break;
-                    }
-                    return YETTY_OK_VOID();
-                }
-            } else {
-                /* No default sink — just skip. */
-                while (statemachine->read_pos < statemachine->write_pos &&
-                       ring_at(statemachine, statemachine->read_pos) != '\033') {
-                    statemachine->read_pos++;
-                }
-                if (statemachine->read_pos < statemachine->write_pos) {
-                    statemachine->read_pos++;
-                    statemachine->state = SCAN_AFTER_ESC;
-                }
-            }
-            break;
-        }
-
-        case SCAN_AFTER_ESC: {
-            if (statemachine->read_pos >= statemachine->write_pos) {
-                return YETTY_OK_VOID();
-            }
-            uint8_t c = ring_at(statemachine, statemachine->read_pos);
-            if (c == ']') {
-                statemachine->read_pos++;
-                statemachine->current_code = 0;
-                envelope_reset(statemachine);
-                statemachine->state = SCAN_OSC_CODE;
-            } else {
-                /* Not OSC opener — emit ESC + this byte to default
-                 * via out_carry so vterm sees the regular escape. */
-                uint8_t emit[2] = {'\033', c};
-                struct yetty_ycore_void_result r = out_carry_append(statemachine, emit, 2);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_statemachine: raw esc-pair");
-                statemachine->read_pos++;
-                statemachine->state = SCAN_RAW;
-            }
-            break;
-        }
-
-        case SCAN_OSC_CODE: {
-            if (statemachine->read_pos >= statemachine->write_pos) {
-                return YETTY_OK_VOID();
-            }
-            uint8_t c = ring_at(statemachine, statemachine->read_pos++);
-            if (c >= '0' && c <= '9') {
-                statemachine->current_code = statemachine->current_code * 10 + (int)(c - '0');
-            } else if (c == ';') {
-                statemachine->state = SCAN_OSC_ARGS;
-            } else {
-                ywarn("osc_statemachine: malformed OSC code byte=0x%02x", (unsigned)c);
-                statemachine->state = SCAN_RAW;
-            }
-            break;
-        }
-
-        case SCAN_OSC_ARGS: {
-            if (statemachine->read_pos >= statemachine->write_pos) {
-                return YETTY_OK_VOID();
-            }
-            uint8_t c = ring_at(statemachine, statemachine->read_pos++);
-            if (c == ';') {
-                decode_args_slot(statemachine);
-                statemachine->current_layer = find_layer(statemachine, statemachine->current_code);
-                statemachine->state = SCAN_OSC_BODY;
-            } else if (statemachine->args_b64_len < sizeof(statemachine->args_b64)) {
-                statemachine->args_b64[statemachine->args_b64_len++] = (char)c;
-            }
-            break;
-        }
-
-        case SCAN_OSC_BODY:
-        case SCAN_OSC_BODY_ESC: {
-            if (!statemachine->current_layer) {
-                /* No registered layer — drain body to terminator. */
-                while (!statemachine->terminator_seen && statemachine->read_pos < statemachine->write_pos) {
-                    uint8_t c = ring_at(statemachine, statemachine->read_pos++);
-                    if (c == '\007') {
-                        statemachine->terminator_seen = 1;
-                        break;
-                    }
-                    if (c == '\033') {
-                        if (statemachine->read_pos >= statemachine->write_pos) {
-                            statemachine->state = SCAN_OSC_BODY_ESC;
-                            statemachine->read_pos--; /* unread */
-                            return YETTY_OK_VOID();
-                        }
-                        if (ring_at(statemachine, statemachine->read_pos) == '\\') {
-                            statemachine->read_pos++;
-                            statemachine->terminator_seen = 1;
-                            break;
-                        }
-                    }
-                }
-                if (statemachine->terminator_seen) {
-                    statemachine->state = SCAN_RAW;
-                    statemachine->current_code = 0;
-                    envelope_reset(statemachine);
-                }
-                break;
-            }
-
-            /* Spawn the layer coro lazily — first entry into this body. */
-            if (!statemachine->active_coro) {
-                ydebug("wire: spawn body coro code=%d term=%d rp=%zu wp=%zu",
-                       statemachine->current_code, statemachine->terminator_seen,
-                       statemachine->read_pos, statemachine->write_pos);
-                statemachine->coro_ctx.layer  = statemachine->current_layer;
-                statemachine->coro_ctx.sm     = statemachine;
-                statemachine->coro_ctx.result = YETTY_OK_VOID();
-                struct yplatform_coro_ptr_result spawn_res =
-                    yetty_yplatform_coro_spawn(body_coro_entry, statemachine,
-                                               1024 * 1024, "wire-body");
-                if (YETTY_IS_ERR(spawn_res)) {
-                    return YETTY_ERR(yetty_ycore_void,
-                                     "osc_statemachine: body coro spawn", spawn_res);
-                }
-                statemachine->active_coro = spawn_res.value;
-            }
-
-            /* Drive the coro. yield from inside the layer's iter returns
-             * here; finish means process_input returned. */
-            yetty_yplatform_coro_resume(statemachine->active_coro);
-
-            if (yetty_yplatform_coro_is_finished(statemachine->active_coro)) {
-                struct yetty_ycore_void_result r = statemachine->coro_ctx.result;
-                yetty_yplatform_coro_destroy(statemachine->active_coro);
-                statemachine->active_coro = NULL;
-                ydebug("wire: body coro finished term=%d rp=%zu wp=%zu err=%d",
-                       statemachine->terminator_seen, statemachine->read_pos,
-                       statemachine->write_pos, YETTY_IS_ERR(r));
-                if (YETTY_IS_ERR(r)) {
-                    if (statemachine->terminator_seen) {
-                        statemachine->state = SCAN_RAW;
-                        statemachine->current_layer = NULL;
-                        statemachine->current_code = 0;
-                        envelope_reset(statemachine);
-                    }
-                    return YETTY_ERR(yetty_ycore_void,
-                                     "osc_statemachine: body dispatch failed", r);
-                }
-                if (statemachine->terminator_seen) {
-                    statemachine->state = SCAN_RAW;
-                    statemachine->current_layer = NULL;
-                    statemachine->current_code = 0;
-                    envelope_reset(statemachine);
-                } else {
-                    /* Coro finished without seeing terminator: process_input
-                     * exited cleanly but the envelope isn't done. This
-                     * shouldn't happen with the new contract — process_input
-                     * runs until EOE. If it does, treat it as a fatal
-                     * design bug, not a silent spin. */
-                    return YETTY_ERR(yetty_ycore_void,
-                                     "osc_statemachine: body coro finished without terminator");
-                }
-                break;
-            }
-
-            /* Coro yielded — needs more body bytes. Return to the event
-             * loop; the next PTY arrival drives a new process() that
-             * resumes the coro. */
-            return YETTY_OK_VOID();
-        }
-        }
+    /* Wake the scanner. The coro runs as far as it can, then yields back
+     * here when it needs more PTY bytes. If the scanner returned (entry
+     * function exited — fatal), surface the stashed result. */
+    yetty_yplatform_coro_resume(statemachine->sm_coro);
+    if (yetty_yplatform_coro_is_finished(statemachine->sm_coro)) {
+        struct yetty_ycore_void_result r = statemachine->sm_result;
+        yetty_yplatform_coro_destroy(statemachine->sm_coro);
+        statemachine->sm_coro = NULL;
+        return r;
     }
     return YETTY_OK_VOID();
 }
 
+/* Layer-side read. Called from inside a layer coro (default text layer
+ * or OSC body layer). Returns whatever bytes are deliverable for the
+ * current SM state, decoding (body) or copying (raw) as needed.
+ *
+ * Coroutine semantics:
+ *   - returns >0 immediately when bytes are available;
+ *   - returns 0 when we're at end-of-envelope and the carry is drained
+ *     (OSC layer's EOE signal);
+ *   - yields the current coro otherwise, then loops — control flows
+ *     back to sm_coro, which advances the scanner / pulls more PTY
+ *     bytes; when the read can finally satisfy something, sm_coro
+ *     resumes this coro and the loop emits the bytes.
+ *
+ * The yield is the SOLE blocking point a layer ever sees. */
 struct yetty_ycore_size_result yetty_ywire_wire_statemachine_read(
     struct yetty_ywire_wire_statemachine *statemachine, uint8_t *dst, size_t n)
 {
@@ -995,27 +1149,42 @@ struct yetty_ycore_size_result yetty_ywire_wire_statemachine_read(
         return YETTY_OK(yetty_ycore_size, 0);
     }
 
-    size_t copied = 0;
+    for (;;) {
+        size_t copied = 0;
 
-    /* Drain any decoded carry first. */
-    copied += out_carry_drain(statemachine, dst, n);
-    if (copied == n) {
-        return YETTY_OK(yetty_ycore_size, copied);
-    }
-
-    /* Now pump: in body, run b64+lz4; in raw, passthrough. */
-    if (statemachine->state == SCAN_OSC_BODY || statemachine->state == SCAN_OSC_BODY_ESC) {
-        if (!statemachine->terminator_seen) {
-            struct yetty_ycore_void_result r = body_pump(statemachine, n - copied);
-            YETTY_RETURN_IF_ERR(yetty_ycore_size, r, "osc_statemachine: body_pump");
-            copied += out_carry_drain(statemachine, dst + copied, n - copied);
+        /* Drain any decoded carry first. */
+        copied += out_carry_drain(statemachine, dst, n);
+        if (copied > 0) {
+            return YETTY_OK(yetty_ycore_size, copied);
         }
-    } else if (statemachine->state == SCAN_RAW) {
-        struct yetty_ycore_void_result r = raw_pump(statemachine, n - copied);
-        YETTY_RETURN_IF_ERR(yetty_ycore_size, r, "osc_statemachine: raw_pump");
-        copied += out_carry_drain(statemachine, dst + copied, n - copied);
+
+        /* Try to produce bytes for whichever mode we're in. */
+        if (statemachine->state == SCAN_OSC_BODY ||
+            statemachine->state == SCAN_OSC_BODY_ESC) {
+            if (!statemachine->terminator_seen) {
+                struct yetty_ycore_void_result r = body_pump(statemachine, n);
+                YETTY_RETURN_IF_ERR(yetty_ycore_size, r, "osc_statemachine: body_pump");
+                copied = out_carry_drain(statemachine, dst, n);
+                if (copied > 0) {
+                    return YETTY_OK(yetty_ycore_size, copied);
+                }
+            }
+            /* terminator_seen + carry empty = EOE for the OSC layer. */
+            if (statemachine->terminator_seen && out_carry_avail(statemachine) == 0) {
+                return YETTY_OK(yetty_ycore_size, 0);
+            }
+        } else if (statemachine->state == SCAN_RAW) {
+            struct yetty_ycore_void_result r = raw_pump(statemachine, n);
+            YETTY_RETURN_IF_ERR(yetty_ycore_size, r, "osc_statemachine: raw_pump");
+            copied = out_carry_drain(statemachine, dst, n);
+            if (copied > 0) {
+                return YETTY_OK(yetty_ycore_size, copied);
+            }
+        }
+        /* Nothing for us right now — and we're not at EOE. Yield back
+         * to sm_coro so it can advance the scanner / wait for PTY. */
+        yetty_yplatform_coro_yield();
     }
-    return YETTY_OK(yetty_ycore_size, copied);
 }
 
 struct yetty_ywire_wire_statemachine_args yetty_ywire_wire_statemachine_args(

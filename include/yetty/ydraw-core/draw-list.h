@@ -105,6 +105,21 @@ struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font(
     struct yetty_ydraw_draw_list *buf, const struct yetty_ycore_buffer *ttf_data,
     const char *name YETTY_ANNOT_CSTRING);
 
+/* Pack a FONT primitive that references a font by content hash instead of
+ * shipping its TTF bytes. Used in multi-envelope producers (ypdf
+ * page-per-envelope) where the receiver's on-disk MSDF cache is keyed by
+ * FNV1a64(TTF) — once the bytes have been sent in a prior envelope, later
+ * envelopes only carry the 16-char hex hash.
+ *
+ * Wire shape: FONT prim with ttf_len = 0 and name = 16-char hex hash. The
+ * receiver recognises ttf_len == 0 as "this name *is* the hex hash; look
+ * up cache by hash without re-hashing bytes".
+ *
+ * Returns the producer-assigned envelope-local font_id, same numbering
+ * convention as yetty_ydraw_draw_list_add_font. */
+struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font_ref(
+    struct yetty_ydraw_draw_list *buf, const char *hex16 YETTY_ANNOT_CSTRING);
+
 /* Pack a TEXT_SPAN primitive (text-span-prim.h). font_id must match a
  * previously-added FONT prim's id, or be -1 to use the canvas default. */
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_text(

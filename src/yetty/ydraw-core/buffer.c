@@ -524,6 +524,58 @@ struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font(
     return YETTY_OK(yetty_ycore_int, next_id);
 }
 
+struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font_ref(
+    struct yetty_ydraw_draw_list *buf, const char *hex16)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_int, "buf is NULL");
+    }
+    if (!hex16) {
+        return YETTY_ERR(yetty_ycore_int, "hex16 is NULL");
+    }
+
+    /* The receiver distinguishes "ref-by-hash" from "real declaration"
+   * purely by ttf_len == 0, and reads the 16-hex-char hash out of the
+   * name field. Anything other than exactly 16 chars would be ambiguous
+   * with prior PDF tag conventions ("/F1" etc.), so reject early. */
+    uint32_t name_len = (uint32_t)strlen(hex16);
+    if (name_len != 16) {
+        return YETTY_ERR(yetty_ycore_int, "hex16 must be exactly 16 hex chars");
+    }
+
+    size_t prim_size = yetty_ydraw_font_prim_size_for(name_len, 0);
+    uint8_t *staging = malloc(prim_size);
+    if (!staging) {
+        return YETTY_ERR(yetty_ycore_int, "alloc failed");
+    }
+
+    /* Same envelope-local id discovery as add_font: count existing FONTs. */
+    int next_id = 0;
+    const uint8_t *p = buf->primitives.buf.data;
+    const uint8_t *end = p + buf->primitives.buf.size;
+    while (p + 8 <= end) {
+        uint32_t t, ps;
+        memcpy(&t, p, 4);
+        memcpy(&ps, p + 4, 4);
+        if (t == YETTY_YDRAW_TYPE_FONT) {
+            next_id++;
+        }
+        if (t >= 0x40000000u) {
+            p += 8 + ps;
+        } else {
+            break;
+        }
+    }
+
+    yetty_ydraw_font_prim_write(staging, (int32_t)next_id, hex16, name_len, NULL, 0);
+
+    struct yetty_ydraw_id_result r =
+        yetty_ydraw_draw_list_add_prim(buf, staging, prim_size);
+    free(staging);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "add_font_ref: add_prim failed");
+    return YETTY_OK(yetty_ycore_int, next_id);
+}
+
 struct yetty_ycore_void_result yetty_ydraw_draw_list_add_text_full(
     struct yetty_ydraw_draw_list *buf, float x, float y, const struct yetty_ycore_buffer *text,
     float font_size, uint32_t color, uint32_t layer, int32_t font_id, float rotation,

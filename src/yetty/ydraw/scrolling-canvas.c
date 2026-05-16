@@ -26,6 +26,7 @@
 #include <yetty/ydraw/canvas.h>
 #include <yetty/ydraw/flyweight.h>
 #include <yetty/ydraw/scrolling-canvas.h>
+#include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/complex-prim-types.h>
 #include <yetty/ydraw-core/draw-list.h>
@@ -1112,13 +1113,38 @@ static struct yetty_ycore_void_result dispatch_one(struct scrolling_canvas *c,
         if (yetty_ydraw_font_prim_parse(fw->data, &fv) != 0 || fv.font_id < 0) {
             return YETTY_OK_VOID();
         }
-        char hint[YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH];
-        size_t hl = fv.name_len < sizeof(hint) - 1 ? fv.name_len : sizeof(hint) - 1;
-        memcpy(hint, fv.name, hl);
-        hint[hl] = '\0';
         char hex[17];
-        struct yetty_ycore_void_result er = ensure_blob_font_cdb(c, fv.ttf, fv.ttf_len, hint, hex);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "dispatch: ensure_blob_font_cdb");
+        /* Hash-ref form: producers (ypdf streaming, future ymarkdown
+         * streaming) ship a FONT prim with no TTF bytes when the same
+         * font was already sent in a prior envelope. The on-disk MSDF
+         * cache is content-addressed by FNV1a64(TTF), and that hash
+         * lives in `name` as 16 hex chars. Resolve directly from the
+         * name without re-running the bytes path. */
+        if (fv.ttf_len == 0) {
+            if (fv.name_len != 16) {
+                return YETTY_ERR(yetty_ycore_void,
+                                 "FONT prim: ttf_len=0 but name is not a 16-char hex hash");
+            }
+            for (uint32_t i = 0; i < 16; i++) {
+                char ch = fv.name[i];
+                bool ok = (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') ||
+                          (ch >= 'A' && ch <= 'F');
+                if (!ok) {
+                    return YETTY_ERR(yetty_ycore_void,
+                                     "FONT prim: ttf_len=0 name has non-hex char");
+                }
+            }
+            memcpy(hex, fv.name, 16);
+            hex[16] = '\0';
+        } else {
+            char hint[YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH];
+            size_t hl = fv.name_len < sizeof(hint) - 1 ? fv.name_len : sizeof(hint) - 1;
+            memcpy(hint, fv.name, hl);
+            hint[hl] = '\0';
+            struct yetty_ycore_void_result er =
+                ensure_blob_font_cdb(c, fv.ttf, fv.ttf_len, hint, hex);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "dispatch: ensure_blob_font_cdb");
+        }
         struct yetty_ycore_void_result gr =
             font_map_grow(&env->fonts_map, (uint32_t)fv.font_id + 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "dispatch: font_map_grow");
@@ -1223,10 +1249,12 @@ static struct yetty_ycore_void_result env_finalize(struct scrolling_canvas *c,
     return YETTY_OK_VOID();
 }
 
-/* Runs on a coroutine spawned by the wire Wire Statemachine on entry into OSC body.
- * Yields from inside the iter when the Wire Statemachine has no more body bytes; the
- * Wire Statemachine resumes us from process() when fresh PTY bytes arrive. Returns
- * when the iter reports EOE (envelope terminator hit) or ERR. */
+/* Runs on a persistent coroutine spawned by the wire Wire Statemachine
+ * at register time. Loops forever: each iteration handles one envelope
+ * (iter_init → drain prims → iter_destroy → env_finalize). Yields from
+ * inside the iter when the Wire Statemachine has no more body bytes;
+ * the Wire Statemachine resumes us when fresh PTY bytes arrive. Returns
+ * only on fatal error — the SM treats a return as a fatal exit. */
 static struct yetty_ycore_void_result scrolling_process_input(
     struct yetty_ydraw_canvas *base, struct yetty_ywire_wire_statemachine *wire_statemachine)
 {
@@ -1238,55 +1266,70 @@ static struct yetty_ycore_void_result scrolling_process_input(
     }
     struct scrolling_canvas *c = as_scrolling(base);
 
-    struct yetty_ydraw_drawable_iter iter = {0};
-    struct env_state env = {
-        .initial_canvas_line = c->rolling_row_0 + c->cursor_row,
-        .max_row_seen = c->rolling_row_0 + c->cursor_row,
-    };
-    font_map_init(&env.fonts_map);
-    attach_list_init(&env.attach_list);
-
-    struct yetty_ycore_void_result ret = YETTY_OK_VOID();
-
-    struct yetty_ycore_void_result ir =
-        yetty_ydraw_drawable_iter_init(&iter, wire_statemachine, c->flyweight_registry);
-    if (YETTY_IS_ERR(ir)) {
-        ret = YETTY_ERR(yetty_ycore_void, "process_input: iter init", ir);
-        goto cleanup;
-    }
-
     for (;;) {
-        struct yetty_ydraw_drawable_iter_status_result sr = yetty_ydraw_drawable_iter_next(&iter);
-        if (YETTY_IS_ERR(sr)) {
-            ret = YETTY_ERR(yetty_ycore_void, "process_input: iter_next", sr);
-            goto cleanup;
-        }
-        if (sr.value == YETTY_PRIM_ITER_EOE) {
-            break;
-        }
-        struct yetty_ycore_void_result dr = dispatch_one(c, &iter.fw, &env);
-        if (YETTY_IS_ERR(dr)) {
-            ret = YETTY_ERR(yetty_ycore_void, "process_input: dispatch_one", dr);
-            goto cleanup;
-        }
-    }
+        struct yetty_ydraw_drawable_iter iter = {0};
+        struct env_state env = {
+            .initial_canvas_line = c->rolling_row_0 + c->cursor_row,
+            .max_row_seen = c->rolling_row_0 + c->cursor_row,
+        };
+        font_map_init(&env.fonts_map);
+        attach_list_init(&env.attach_list);
 
-    ret = env_finalize(c, &env);
-    if (YETTY_IS_ERR(ret)) {
-        struct yetty_ycore_void_result wrap =
-            YETTY_ERR(yetty_ycore_void, "process_input: finalize", ret);
-        ret = wrap;
-    }
+        struct yetty_ycore_void_result ret = YETTY_OK_VOID();
+
+        struct yetty_ycore_void_result ir =
+            yetty_ydraw_drawable_iter_init(&iter, wire_statemachine, c->flyweight_registry);
+        if (YETTY_IS_ERR(ir)) {
+            ret = YETTY_ERR(yetty_ycore_void, "process_input: iter init", ir);
+            goto cleanup;
+        }
+
+        for (;;) {
+            struct yetty_ydraw_drawable_iter_status_result sr =
+                yetty_ydraw_drawable_iter_next(&iter);
+            if (YETTY_IS_ERR(sr)) {
+                ret = YETTY_ERR(yetty_ycore_void, "process_input: iter_next", sr);
+                goto cleanup;
+            }
+            if (sr.value == YETTY_PRIM_ITER_EOE) {
+                break;
+            }
+            struct yetty_ycore_void_result dr = dispatch_one(c, &iter.fw, &env);
+            if (YETTY_IS_ERR(dr)) {
+                ret = YETTY_ERR(yetty_ycore_void, "process_input: dispatch_one", dr);
+                goto cleanup;
+            }
+        }
+
+        ret = env_finalize(c, &env);
+        if (YETTY_IS_ERR(ret)) {
+            struct yetty_ycore_void_result wrap =
+                YETTY_ERR(yetty_ycore_void, "process_input: finalize", ret);
+            ret = wrap;
+        }
 
 cleanup:
-    yetty_ydraw_drawable_iter_destroy(&iter);
-    attach_list_free(&env.attach_list);
-    /* If we never reached env_finalize (or it failed before the
-     * font_map release), drop any held cache refs now. Idempotent —
-     * release_all skips already-released entries. */
-    font_map_release_all(&env.fonts_map, c->font_cache);
-    free(env.fonts_map.entries);
-    return ret;
+        yetty_ydraw_drawable_iter_destroy(&iter);
+        attach_list_free(&env.attach_list);
+        /* If we never reached env_finalize (or it failed before the
+         * font_map release), drop any held cache refs now. Idempotent —
+         * release_all skips already-released entries. */
+        font_map_release_all(&env.fonts_map, c->font_cache);
+        free(env.fonts_map.entries);
+
+        if (YETTY_IS_ERR(ret)) {
+            return ret;
+        }
+        /* Envelope handled cleanly. Yield so sm_coro can observe
+         * terminator_seen and transition state to SCAN_RAW (or set up
+         * the next envelope). Without this yield, the very next
+         * iter_next would call sm_read which would return 0 (EOE) again
+         * — terminator still set — and we'd spin returning EOE. The
+         * yield gives sm_coro the chance to run, drop terminator_seen,
+         * and only resume us when a fresh envelope body is queued for
+         * this layer. */
+        yetty_yplatform_coro_yield();
+    }
 }
 
 /*===========================================================================
