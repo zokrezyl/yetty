@@ -162,7 +162,7 @@ def _geom_writes(args: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def generate_sdf_prim_header(prims: list[dict], out: Path) -> None:
+def generate_sdf_drawable_header(prims: list[dict], out: Path) -> None:
     """Generate funcs.gen.h — add-cmd declarations for SDF drawables.
 
     Per drawable, one function:
@@ -198,7 +198,7 @@ extern "C" {{
     print(f"Generated: {out}")
 
 
-def generate_sdf_prim_impl(prims: list[dict], out: Path) -> None:
+def generate_sdf_drawable_impl(prims: list[dict], out: Path) -> None:
     """Generate funcs.gen.c — add-cmd implementations for SDF drawables."""
     bodies = []
     for p in prims:
@@ -313,7 +313,7 @@ def generate_sdf_wgsl(prims: list[dict], out: Path) -> None:
         lines.append("")
 
     # Dispatcher bufferaccess — consumers bind an array<u32> called
-    # `storage_buffer`. The SDF args are f32, the prim_type is u32, so we emit
+    # `storage_buffer`. The SDF args are f32, the drawable_type is u32, so we emit
     # bitcasts at access time. Keeps the generator coupled to one convention
     # (storage_buffer) instead of inventing per-consumer shims.
     def _u32(expr):
@@ -322,15 +322,15 @@ def generate_sdf_wgsl(prims: list[dict], out: Path) -> None:
         return f"bitcast<f32>(storage_buffer[{expr}])"
 
     def _arg_access(arg: dict, idx: int) -> str:
-        offset = f"prim_offset + {GEOMETRY_OFFSET + idx}u"
+        offset = f"drawable_offset + {GEOMETRY_OFFSET + idx}u"
         return _u32(offset) if arg["type"] != "f32" else _f32(offset)
 
     # Generate dispatcher for 2D
     sdf2d = [p for p in prims if p["category"] == "sdf2d"]
     if sdf2d:
-        lines.append("fn evaluate_sdf_2d(prim_offset: u32, sample_pos: vec2<f32>) -> f32 {")
-        lines.append(f"    let prim_type = {_u32('prim_offset')};")
-        lines.append("    switch (prim_type) {")
+        lines.append("fn evaluate_sdf_2d(drawable_offset: u32, sample_pos: vec2<f32>) -> f32 {")
+        lines.append(f"    let drawable_type = {_u32('drawable_offset')};")
+        lines.append("    switch (drawable_type) {")
         for p in sdf2d:
             name = p["name"]
             args = p.get("args", [])
@@ -344,9 +344,9 @@ def generate_sdf_wgsl(prims: list[dict], out: Path) -> None:
     # Generate dispatcher for 3D
     sdf3d = [p for p in prims if p["category"] == "sdf3d"]
     if sdf3d:
-        lines.append("fn evaluate_sdf_3d(prim_offset: u32, sample_pos: vec3<f32>) -> f32 {")
-        lines.append(f"    let prim_type = {_u32('prim_offset')};")
-        lines.append("    switch (prim_type) {")
+        lines.append("fn evaluate_sdf_3d(drawable_offset: u32, sample_pos: vec3<f32>) -> f32 {")
+        lines.append(f"    let drawable_type = {_u32('drawable_offset')};")
+        lines.append("    switch (drawable_type) {")
         for p in sdf3d:
             name = p["name"]
             args = p.get("args", [])
@@ -358,11 +358,11 @@ def generate_sdf_wgsl(prims: list[dict], out: Path) -> None:
         lines.append("")
 
     # Style extraction
-    lines.append("fn get_sdf_prim_style(prim_offset: u32) -> vec3<u32> {")
+    lines.append("fn get_sdf_drawable_style(drawable_offset: u32) -> vec3<u32> {")
     lines.append("    return vec3<u32>(")
-    lines.append(f"        {_u32('prim_offset + 2u')},  // fill_color")
-    lines.append(f"        {_u32('prim_offset + 3u')},  // stroke_color")
-    lines.append(f"        {_u32('prim_offset + 4u')}   // stroke_width as bits")
+    lines.append(f"        {_u32('drawable_offset + 2u')},  // fill_color")
+    lines.append(f"        {_u32('drawable_offset + 3u')},  // stroke_color")
+    lines.append(f"        {_u32('drawable_offset + 4u')}   // stroke_width as bits")
     lines.append("    );")
     lines.append("}")
     lines.append("")
@@ -385,9 +385,9 @@ def generate_sdf_wgsl(prims: list[dict], out: Path) -> None:
 
     grads_2d = [p for p in sdf2d if is_any_gradient(p)]
 
-    lines.append("fn yetty_ysdf_is_gradient_2d(prim_type: u32) -> bool {")
+    lines.append("fn yetty_ysdf_is_gradient_2d(drawable_type: u32) -> bool {")
     if grads_2d:
-        lines.append("    switch (prim_type) {")
+        lines.append("    switch (drawable_type) {")
         for p in grads_2d:
             lines.append(f"        case {wire_lit(p)}: {{ return true; }}")
         lines.append("        default: { return false; }")
@@ -409,17 +409,17 @@ def generate_sdf_wgsl(prims: list[dict], out: Path) -> None:
     lines.append("}")
     lines.append("")
 
-    lines.append("fn yetty_ysdf_eval_gradient_color_2d(prim_offset: u32, sample_pos: vec2<f32>) -> vec4<f32> {")
-    lines.append(f"    let prim_type = {_u32('prim_offset')};")
-    lines.append("    switch (prim_type) {")
+    lines.append("fn yetty_ysdf_eval_gradient_color_2d(drawable_offset: u32, sample_pos: vec2<f32>) -> vec4<f32> {")
+    lines.append(f"    let drawable_type = {_u32('drawable_offset')};")
+    lines.append("    switch (drawable_type) {")
     for p in grads_2d:
         args = p.get("args", [])
         # Find argument indices by name so the layout stays in lockstep with YAML.
         idx = {arg["name"]: GEOMETRY_OFFSET + i for i, arg in enumerate(args)}
         def f32_at(name):
-            return _f32(f"prim_offset + {idx[name]}u")
+            return _f32(f"drawable_offset + {idx[name]}u")
         def u32_at(name):
-            return _u32(f"prim_offset + {idx[name]}u")
+            return _u32(f"drawable_offset + {idx[name]}u")
         lines.append(f"        case {wire_lit(p)}: {{")
         if is_linear_gradient(p):
             lines.append(f"            let g0 = vec2<f32>({f32_at('grad_x0')}, {f32_at('grad_y0')});")
@@ -644,7 +644,7 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
     for i, p in enumerate(prims_2d):
         name = p["name"]
         args = p.get("args", [])
-        prim_word_count = GEOMETRY_OFFSET + len(args)
+        drawable_word_count = GEOMETRY_OFFSET + len(args)
         cond = "if" if i == 0 else "else if"
 
         lines.append(f'    {cond} (strcmp(primitive_type_name, "{name}") == 0) {{')
@@ -655,7 +655,7 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
         lines.append(f"        data[4] = ctx->stroke_width;")
         for j, arg in enumerate(args):
             lines.append(f"        data[{GEOMETRY_OFFSET + j}] = ctx->{arg['name']};")
-        lines.append(f"        word_count = {prim_word_count};")
+        lines.append(f"        word_count = {drawable_word_count};")
         lines.append("    }")
 
     lines.append("    else {")
@@ -778,8 +778,8 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
 def main():
     prims = load_primitives(YAML_PATH)
     generate_sdf_types(prims, SDF_TYPES_OUT)
-    generate_sdf_prim_header(prims, SDF_PRIM_H_OUT)
-    generate_sdf_prim_impl(prims, SDF_PRIM_C_OUT)
+    generate_sdf_drawable_header(prims, SDF_PRIM_H_OUT)
+    generate_sdf_drawable_impl(prims, SDF_PRIM_C_OUT)
     generate_sdf_aabb(prims, SDF_AABB_OUT)
     generate_sdf_wgsl(prims, SDF_WGSL_OUT)
     generate_sdf_yaml_factory_header(prims, SDF_YAML_FACTORY_H_OUT)

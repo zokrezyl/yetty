@@ -10,7 +10,7 @@
 #include <yetty/ycore/types.h>
 
 /* size op — read payload_size from prim[1], add the 8-byte header. */
-static struct yetty_ycore_size_result cmd_prim_size(const uint32_t *prim)
+static struct yetty_ycore_size_result cmd_drawable_size(const uint32_t *prim)
 {
     if (!prim) {
         return YETTY_ERR(yetty_ycore_size, "prim is NULL");
@@ -21,7 +21,7 @@ static struct yetty_ycore_size_result cmd_prim_size(const uint32_t *prim)
 
 /* aabb op — cmds don't render so they have an empty bounding box. The
  * canvas's grid placement skips zero-area prims. */
-static struct rectangle_result cmd_prim_aabb(const uint32_t *prim)
+static struct rectangle_result cmd_drawable_aabb(const uint32_t *prim)
 {
     (void)prim;
     struct yetty_ycore_rectangle r = {0};
@@ -29,13 +29,13 @@ static struct rectangle_result cmd_prim_aabb(const uint32_t *prim)
 }
 
 static const struct yetty_ydraw_drawable_base_ops cmd_base_ops = {
-    .size = cmd_prim_size,
-    .aabb = cmd_prim_aabb,
+    .size = cmd_drawable_size,
+    .aabb = cmd_drawable_aabb,
 };
 
-struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_cmd_handler(uint32_t prim_type)
+struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_cmd_handler(uint32_t drawable_type)
 {
-    if (prim_type <= YETTY_YDRAW_CMD_END) {
+    if (drawable_type <= YETTY_YDRAW_CMD_END) {
         return YETTY_OK(yetty_ydraw_drawable_base_ops_ptr, &cmd_base_ops);
     }
     return YETTY_ERR(yetty_ydraw_drawable_base_ops_ptr, "not a cmd type");

@@ -40,10 +40,10 @@ rolling_row = row0_absolute + cursor_row = 0 + 5 = 5
 **STEP 4: Register primitive in spatial grid**
 ```
 // Primitive DATA stored in storage_row=7's line (for deletion tracking)
-// Grid cells in rows 5, 6, 7 get prim_ref pointing to storage_row=7
-grid[row=5].add(prim_ref{lines_ahead=2, prim_index=0})
-grid[row=6].add(prim_ref{lines_ahead=1, prim_index=0})
-grid[row=7].add(prim_ref{lines_ahead=0, prim_index=0})
+// Grid cells in rows 5, 6, 7 get drawable_ref pointing to storage_row=7
+grid[row=5].add(drawable_ref{lines_ahead=2, drawable_index=0})
+grid[row=6].add(drawable_ref{lines_ahead=1, drawable_index=0})
+grid[row=7].add(drawable_ref{lines_ahead=0, drawable_index=0})
 ```
 
 **STEP 5: Serialize to GPU buffer**
@@ -60,21 +60,21 @@ grid[row=7].add(prim_ref{lines_ahead=0, prim_index=0})
 **STEP 6: Render pixel at screen Y=130 (circle center)**
 ```wgsl
 pixel_pos_y = 130              // screen pixel Y coordinate
-rolling_row = 5                // from buffer[prim_offset + 0]
+rolling_row = 5                // from buffer[drawable_offset + 0]
 row_origin = 0                 // uniform (rolling_row_0)
 
 y_offset = (rolling_row - row_origin) * cell_height = (5 - 0) * 20 = 100
-prim_scene_pos_y = pixel_pos_y - y_offset = 130 - 100 = 30
+drawable_scene_pos_y = pixel_pos_y - y_offset = 130 - 100 = 30
 
 cy = 30                        // from primitive buffer (stored as-is)
-distance = |prim_scene_pos_y - cy| - radius = |30 - 30| - 25 = -25 < 0 → INSIDE
+distance = |drawable_scene_pos_y - cy| - radius = |30 - 30| - 25 = -25 < 0 → INSIDE
 ```
 
 **STEP 7: Render pixel at screen Y=110 (inside AABB, row 5 area)**
 ```wgsl
 pixel_pos_y = 110
 y_offset = 100                 // same primitive, same y_offset
-prim_scene_pos_y = 110 - 100 = 10
+drawable_scene_pos_y = 110 - 100 = 10
 
 distance = |10 - 30| - 25 = 20 - 25 = -5 < 0 → INSIDE
 ```
@@ -87,8 +87,8 @@ Geometry coordinates are stored **exactly as user specified**. The shader handle
 
 ```wgsl
 y_offset = (rolling_row - row_origin) * cell_height
-prim_scene_pos_y = pixel_pos_y - y_offset
-sd_circle(prim_scene_pos, vec2(cx, cy), radius)  // cy used as-is
+drawable_scene_pos_y = pixel_pos_y - y_offset
+sd_circle(drawable_scene_pos, vec2(cx, cy), radius)  // cy used as-is
 ```
 
 This means:
@@ -119,10 +119,10 @@ In scrolling mode (terminal), lines scroll off the top. Naive approach updates e
 
 5. **GPU adjusts test position:**
    ```wgsl
-   let rolling_row = storage_buffer[prim_offset + 0u];
+   let rolling_row = storage_buffer[drawable_offset + 0u];
    let y_offset = f32(i32(rolling_row) - i32(row_origin)) * cell_height;
-   let prim_scene_pos_y = pixel_pos_y - y_offset;
-   // SDF evaluates: sd_xxx(prim_scene_pos, stored_coords)
+   let drawable_scene_pos_y = pixel_pos_y - y_offset;
+   // SDF evaluates: sd_xxx(drawable_scene_pos, stored_coords)
    ```
 
 ### Scroll Complexity
@@ -175,10 +175,10 @@ Buffer is `array<u32>` in WGSL. Shader reads at fixed offsets:
 Shader:
 1. Reads `rolling_row` from offset 0
 2. Computes `y_offset = (rolling_row - row_origin) * cell_height` (signed arithmetic)
-3. Adjusts **test position**: `prim_scene_pos_y = pixel_pos_y - y_offset`
+3. Adjusts **test position**: `drawable_scene_pos_y = pixel_pos_y - y_offset`
 4. Dispatches based on type
 5. Extracts geometry at known offsets (used as-is, no transformation)
-6. Calls `sd_xxx(prim_scene_pos, ...)` - SDF evaluates adjusted test position against stored coords
+6. Calls `sd_xxx(drawable_scene_pos, ...)` - SDF evaluates adjusted test position against stored coords
 
 ---
 
@@ -192,17 +192,17 @@ The canvas manages a spatial grid for GPU culling:
 
 ### Spatial Grid
 
-Each grid cell stores an array of `prim_ref`:
+Each grid cell stores an array of `drawable_ref`:
 
 ```c
-struct yetty_ydraw_scrolling_canvas_prim_ref {
+struct yetty_ydraw_scrolling_canvas_drawable_ref {
     uint16_t lines_ahead;  // relative offset to base line (0 = same line)
-    uint16_t prim_index;   // index within base line's prims array
+    uint16_t drawable_index;   // index within base line's prims array
 };
 ```
 
 - `lines_ahead`: how many lines below to find the base line (where primitive data lives)
-- `prim_index`: index into that base line's `prims` array
+- `drawable_index`: index into that base line's `prims` array
 
 Primitives are stored in their **base line** (storage_row = lowest row of AABB). Grid cells in rows above reference down to the base line.
 
@@ -300,9 +300,9 @@ Unlike simple primitives which register in ALL overlapping grid cells, complex p
 
 **Simple primitives:**
 ```
-grid[row=5].add(prim_ref{lines_ahead=2, prim_index=0})
-grid[row=6].add(prim_ref{lines_ahead=1, prim_index=0})
-grid[row=7].add(prim_ref{lines_ahead=0, prim_index=0})
+grid[row=5].add(drawable_ref{lines_ahead=2, drawable_index=0})
+grid[row=6].add(drawable_ref{lines_ahead=1, drawable_index=0})
+grid[row=7].add(drawable_ref{lines_ahead=0, drawable_index=0})
 ```
 
 **Complex primitives:**

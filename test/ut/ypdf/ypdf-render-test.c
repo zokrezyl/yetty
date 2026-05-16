@@ -43,18 +43,18 @@ static bool error_cb(struct _pdfio_file_s *f, const char *s, void *d) {
     return true;
 }
 
-struct prim_counts {
+struct drawable_counts {
     uint32_t fonts;
     uint32_t text_spans;
     uint32_t other;
 };
 
-static struct prim_counts count_prims(struct yetty_ydraw_draw_list *buf,
+static struct drawable_counts count_prims(struct yetty_ydraw_draw_list *buf,
                                       struct yetty_ydraw_flyweight_registry *reg)
 {
-    struct prim_counts c = {0};
+    struct drawable_counts c = {0};
     struct yetty_ydraw_primitive_iter_result ir =
-        yetty_ydraw_draw_list_prim_first(buf, reg);
+        yetty_ydraw_draw_list_drawable_first(buf, reg);
     if (YETTY_IS_ERR(ir))
         return c;
     struct yetty_ydraw_primitive_iter it = ir.value;
@@ -65,7 +65,7 @@ static struct prim_counts count_prims(struct yetty_ydraw_draw_list *buf,
         else                                        c.other++;
 
         struct yetty_ydraw_primitive_iter_result nx =
-            yetty_ydraw_draw_list_prim_next(buf, reg, &it);
+            yetty_ydraw_draw_list_drawable_next(buf, reg, &it);
         if (YETTY_IS_ERR(nx)) break;
         it = nx.value;
     }
@@ -96,7 +96,7 @@ int main(void) {
     REQUIRE(YETTY_IS_OK(rr), "flyweight_create failed");
     struct yetty_ydraw_flyweight_registry *reg = rr.value;
 
-    struct prim_counts c = count_prims(out->buffer, reg);
+    struct drawable_counts c = count_prims(out->buffer, reg);
     REQUIRE(c.fonts >= 1, "no FONT prims in buffer");
     REQUIRE(c.text_spans >= 1, "no TEXT_SPAN prims in buffer");
 

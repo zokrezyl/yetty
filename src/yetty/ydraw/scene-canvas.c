@@ -70,8 +70,8 @@ struct yetty_ydraw_scene_entity {
     uint32_t arena_capacity;
 
     struct scene_prim *prims;
-    uint32_t prim_count;
-    uint32_t prim_capacity;
+    uint32_t drawable_count;
+    uint32_t drawable_capacity;
 
     struct scene_touched_cell *touched_cells;
     uint32_t touched_cell_count;
@@ -91,9 +91,9 @@ struct scene_canvas {
     uint32_t *grid_staging;
     uint32_t grid_staging_count;
     uint32_t grid_staging_capacity;
-    uint32_t *prim_staging;
-    uint32_t prim_staging_count;
-    uint32_t prim_staging_capacity;
+    uint32_t *drawable_staging;
+    uint32_t drawable_staging_count;
+    uint32_t drawable_staging_capacity;
 
     /* Opaque spatial index. */
     struct yetty_ydraw_scene_grid *grid;
@@ -241,7 +241,7 @@ static void entity_free_storage(struct yetty_ydraw_scene_entity *e)
     e->arena = NULL;
     e->arena_count = e->arena_capacity = 0;
     e->prims = NULL;
-    e->prim_count = e->prim_capacity = 0;
+    e->drawable_count = e->drawable_capacity = 0;
     e->touched_cells = NULL;
     e->touched_cell_count = e->touched_cell_capacity = 0;
     e->children = NULL;
@@ -271,7 +271,7 @@ static void entity_clear_in_place(struct scene_canvas *sc, struct yetty_ydraw_sc
     }
     e->touched_cell_count = 0;
     e->arena_count = 0;
-    e->prim_count = 0;
+    e->drawable_count = 0;
     sc->dirty = true;
 }
 
@@ -333,7 +333,7 @@ static struct yetty_ycore_void_result scene_destroy(struct yetty_ydraw_canvas *b
     }
     free(sc->entities);
     free(sc->grid_staging);
-    free(sc->prim_staging);
+    free(sc->drawable_staging);
     free(sc);
     return YETTY_OK_VOID();
 }
@@ -370,7 +370,7 @@ static struct yetty_ycore_void_result scene_set_grid_size(struct yetty_ydraw_can
     for (uint32_t i = 0; i < sc->entity_capacity; i++) {
         if (sc->entities[i].in_use) {
             sc->entities[i].arena_count = 0;
-            sc->entities[i].prim_count = 0;
+            sc->entities[i].drawable_count = 0;
             sc->entities[i].touched_cell_count = 0;
         }
     }
@@ -588,15 +588,15 @@ struct yetty_ycore_void_result yetty_ydraw_scene_entity_add_prim(
 
     /* Append placement record. */
     struct yetty_ycore_void_result gpr =
-        grow_prims(&entity->prims, &entity->prim_capacity, entity->prim_count + 1);
+        grow_prims(&entity->prims, &entity->drawable_capacity, entity->drawable_count + 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, gpr, "scene-canvas: prims grow");
-    uint32_t local_idx = entity->prim_count;
+    uint32_t local_idx = entity->drawable_count;
     entity->prims[local_idx] = (struct scene_prim){
         .arena_offset = arena_offset,
         .word_count = word_count,
         .type = fw->data[0],
     };
-    entity->prim_count++;
+    entity->drawable_count++;
 
     /* Insert into the grid via opaque API. */
     struct fresh_ctx ctx = {.entity = entity};
@@ -659,7 +659,7 @@ struct yetty_ycore_void_result yetty_ydraw_scene_entity_delete(
  * Vtable stubs — staging / OSC / scroll / fonts
  *
  * GPU staging output is not yet wired; rebuild_grid and
- * build_prim_staging produce empty buffers so the polymorphic surface
+ * build_drawable_staging produce empty buffers so the polymorphic surface
  * remains callable. Cursor/scroll are no-ops. Font ops return empty
  * since scene-canvas does not yet render glyphs.
  *===========================================================================*/
@@ -721,7 +721,7 @@ static uint32_t scene_drawable_count(const struct yetty_ydraw_canvas *base)
     uint32_t total = 0;
     for (uint32_t i = 0; i < sc->entity_capacity; i++) {
         if (sc->entities[i].in_use) {
-            total += sc->entities[i].prim_count;
+            total += sc->entities[i].drawable_count;
         }
     }
     return total;
@@ -748,24 +748,24 @@ static uint32_t scene_grid_word_count(const struct yetty_ydraw_canvas *base)
     return base ? as_scene_const(base)->grid_staging_count : 0;
 }
 
-static struct yetty_ydraw_drawable_staging_result scene_build_prim_staging(
+static struct yetty_ydraw_drawable_staging_result scene_build_drawable_staging(
     struct yetty_ydraw_canvas *base)
 {
     if (!base) {
         return YETTY_ERR(yetty_ydraw_drawable_staging, "scene-canvas: NULL");
     }
     struct scene_canvas *sc = as_scene(base);
-    sc->prim_staging_count = 0;
+    sc->drawable_staging_count = 0;
     struct yetty_ydraw_drawable_staging view = {
-        .data = sc->prim_staging,
+        .data = sc->drawable_staging,
         .word_count = 0,
     };
     return YETTY_OK(yetty_ydraw_drawable_staging, view);
 }
 
-static uint32_t scene_prim_gpu_size(const struct yetty_ydraw_canvas *base)
+static uint32_t scene_drawable_gpu_size(const struct yetty_ydraw_canvas *base)
 {
-    return base ? as_scene_const(base)->prim_staging_count * (uint32_t)sizeof(uint32_t) : 0;
+    return base ? as_scene_const(base)->drawable_staging_count * (uint32_t)sizeof(uint32_t) : 0;
 }
 
 static struct yetty_ycore_void_result scene_mark_dirty(struct yetty_ydraw_canvas *base)
@@ -925,8 +925,8 @@ static const struct yetty_ydraw_canvas_ops scene_canvas_ops = {
     .rebuild_grid = scene_rebuild_grid,
     .grid_data = scene_grid_data,
     .grid_word_count = scene_grid_word_count,
-    .build_prim_staging = scene_build_prim_staging,
-    .prim_gpu_size = scene_prim_gpu_size,
+    .build_drawable_staging = scene_build_drawable_staging,
+    .drawable_gpu_size = scene_drawable_gpu_size,
     .clear = scene_clear,
     .drawable_count = scene_drawable_count,
     .font_count = scene_font_count,

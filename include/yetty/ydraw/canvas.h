@@ -47,7 +47,7 @@ typedef struct yetty_ycore_void_result (*yetty_ydraw_canvas_scroll_callback)(voi
 typedef struct yetty_ycore_void_result (*yetty_ydraw_canvas_cursor_callback)(void *userdata,
                                                                              uint16_t new_row);
 
-/* Pointer + size view returned by build_prim_staging.
+/* Pointer + size view returned by build_drawable_staging.
  * word_count is 0 on an empty canvas. */
 struct yetty_ydraw_drawable_staging {
     const uint32_t *data;
@@ -121,9 +121,9 @@ struct yetty_ydraw_canvas_ops {
     const uint32_t *(*grid_data)(const struct yetty_ydraw_canvas *canvas);
     uint32_t (*grid_word_count)(const struct yetty_ydraw_canvas *canvas);
 
-    struct yetty_ydraw_drawable_staging_result (*build_prim_staging)(
+    struct yetty_ydraw_drawable_staging_result (*build_drawable_staging)(
         struct yetty_ydraw_canvas *canvas);
-    uint32_t (*prim_gpu_size)(const struct yetty_ydraw_canvas *canvas);
+    uint32_t (*drawable_gpu_size)(const struct yetty_ydraw_canvas *canvas);
 
     /* State */
     struct yetty_ycore_void_result (*clear)(struct yetty_ydraw_canvas *canvas);

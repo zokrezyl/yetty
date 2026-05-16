@@ -46,7 +46,7 @@ static inline void set_rolling_row_0(struct yetty_ydraw_gpu_resource_set *rs, ui
 {
     rs->uniforms[U_ROLLING_ROW_0].u32 = row_origin;
 }
-static inline void set_prim_count(struct yetty_ydraw_gpu_resource_set *rs, uint32_t count)
+static inline void set_drawable_count(struct yetty_ydraw_gpu_resource_set *rs, uint32_t count)
 {
     rs->uniforms[U_PRIM_COUNT].u32 = count;
 }
@@ -77,7 +77,7 @@ static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
     rs->uniforms[U_ROLLING_ROW_0] =
         (struct yetty_yrender_uniform){"ydraw_rolling_row_0", YETTY_YRENDER_UNIFORM_U32};
     rs->uniforms[U_PRIM_COUNT] =
-        (struct yetty_yrender_uniform){"ydraw_prim_count", YETTY_YRENDER_UNIFORM_U32};
+        (struct yetty_yrender_uniform){"ydraw_drawable_count", YETTY_YRENDER_UNIFORM_U32};
     rs->uniforms[U_VZ_SCALE] =
         (struct yetty_yrender_uniform){"ydraw_visual_zoom_scale", YETTY_YRENDER_UNIFORM_F32};
     rs->uniforms[U_VZ_OFF] =
@@ -88,7 +88,7 @@ static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
         (struct yetty_yrender_uniform){"ydraw_cell_zoom_off", YETTY_YRENDER_UNIFORM_VEC2};
 
     set_rolling_row_0(rs, 0);
-    set_prim_count(rs, 0);
+    set_drawable_count(rs, 0);
     set_visual_zoom(rs, 1.0f, 0.0f, 0.0f);
     set_cell_zoom(rs, 1.0f, 0.0f, 0.0f);
 }
@@ -129,8 +129,8 @@ struct yetty_yterm_ydraw_layer {
     /* Staging buffers - point to canvas data */
     uint8_t *grid_staging;
     size_t grid_staging_size;
-    uint8_t *prim_staging;
-    size_t prim_staging_size;
+    uint8_t *drawable_staging;
+    size_t drawable_staging_size;
 
     /* yface — kept for OUTGOING emit only (focus events, ymgui responses,
      * etc). Incoming decode now lives in the OSC SM. */
@@ -555,16 +555,16 @@ static struct yetty_yrender_gpu_resource_set_result ydraw_layer_get_gpu_resource
 
         /* Build drawable staging */
         struct yetty_ydraw_drawable_staging_result ps_r =
-            layer->canvas->ops->build_prim_staging(layer->canvas);
+            layer->canvas->ops->build_drawable_staging(layer->canvas);
         if (YETTY_IS_ERR(ps_r)) {
             return YETTY_ERR(yetty_yrender_gpu_resource_set,
-                             "ydraw_layer_get_gpu_resource_set: build_prim_staging failed", ps_r);
+                             "ydraw_layer_get_gpu_resource_set: build_drawable_staging failed", ps_r);
         }
-        const uint32_t *prim_data = ps_r.value.data;
-        uint32_t prim_word_count = ps_r.value.word_count;
+        const uint32_t *drawable_data = ps_r.value.data;
+        uint32_t drawable_word_count = ps_r.value.word_count;
 
-        layer->rs.buffers[1].data = (uint8_t *)prim_data;
-        layer->rs.buffers[1].size = prim_word_count * sizeof(uint32_t);
+        layer->rs.buffers[1].data = (uint8_t *)drawable_data;
+        layer->rs.buffers[1].size = drawable_word_count * sizeof(uint32_t);
         layer->rs.buffers[1].dirty = 1;
 
         /* Update ALL uniforms from canvas - single source of truth */
@@ -573,15 +573,15 @@ static struct yetty_yrender_gpu_resource_set_result ydraw_layer_get_gpu_resource
         set_grid_size(&layer->rs, (float)gs.cols, (float)gs.rows);
         set_cell_size(&layer->rs, cs.width, cs.height);
         set_rolling_row_0(&layer->rs, layer->canvas->ops->rolling_row_0(layer->canvas));
-        uint32_t prim_count = layer->canvas->ops->drawable_count(layer->canvas);
-        set_prim_count(&layer->rs, prim_count);
+        uint32_t drawable_count = layer->canvas->ops->drawable_count(layer->canvas);
+        set_drawable_count(&layer->rs, drawable_count);
 
         /* Set pixel size for render target */
         layer->rs.pixel_size.width = (float)gs.cols * cs.width;
         layer->rs.pixel_size.height = (float)gs.rows * cs.height;
 
         ydebug("ydraw_layer: grid=%ux%u, cell=%.1fx%.1f, prims=%u", gs.cols, gs.rows, cs.width,
-               cs.height, prim_count);
+               cs.height, drawable_count);
 
         layer->base.dirty = 0;
     }

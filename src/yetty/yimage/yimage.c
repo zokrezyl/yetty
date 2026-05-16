@@ -52,18 +52,18 @@ struct yetty_ydraw_draw_list_result yetty_yimage_render(
     };
 
     size_t required = yetty_yimage_uniforms_serialized_size(&u, &bufs);
-    uint8_t *prim_buf = malloc(required);
-    if (!prim_buf) {
+    uint8_t *drawable_buf = malloc(required);
+    if (!drawable_buf) {
         stbi_image_free(pixels);
         return YETTY_ERR(yetty_ydraw_draw_list, "yimage: prim alloc failed");
     }
     struct yetty_ycore_size_result ser =
-        yetty_yimage_uniforms_serialize(&u, &bufs, prim_buf, required);
-    /* The serialize call has copied pixels into prim_buf; stbi data is no
+        yetty_yimage_uniforms_serialize(&u, &bufs, drawable_buf, required);
+    /* The serialize call has copied pixels into drawable_buf; stbi data is no
      * longer referenced. */
     stbi_image_free(pixels);
     if (YETTY_IS_ERR(ser)) {
-        free(prim_buf);
+        free(drawable_buf);
         return YETTY_ERR(yetty_ydraw_draw_list, "yimage: serialize failed", ser);
     }
 
@@ -76,13 +76,13 @@ struct yetty_ydraw_draw_list_result yetty_yimage_render(
     struct yetty_ydraw_draw_list_result br =
         yetty_ydraw_draw_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
-        free(prim_buf);
+        free(drawable_buf);
         return YETTY_ERR(yetty_ydraw_draw_list, "yimage: ydraw buffer create failed", br);
     }
 
     struct yetty_ydraw_id_result idr =
-        yetty_ydraw_draw_list_add_prim(br.value, prim_buf, required);
-    free(prim_buf);
+        yetty_ydraw_draw_list_add_prim(br.value, drawable_buf, required);
+    free(drawable_buf);
     if (YETTY_IS_ERR(idr)) {
         yetty_ydraw_draw_list_destroy(br.value);
         return YETTY_ERR(yetty_ydraw_draw_list, "yimage: ydraw add_prim failed", idr);

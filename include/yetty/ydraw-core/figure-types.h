@@ -66,7 +66,7 @@ struct rectangle_result yetty_ydraw_figure_aabb(const void *data);
 
 // Handler for complex prim types (>= 0x80000000)
 struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_figure_handler(
-    uint32_t prim_type);
+    uint32_t drawable_type);
 
 #ifdef __cplusplus
 }

@@ -7,7 +7,7 @@
  *   - per-line prim/cell/ref/figure/font-attachment storage.
  *
  * scrolling-canvas calls into this module via the narrow API below; the
- * grid_line / line_buffer / prim_ref / prim_data types stay private to
+ * grid_line / line_buffer / drawable_ref / drawable_data types stay private to
  * scrolling-grid.c.
  */
 #ifndef YETTY_YDRAW_SCROLLING_GRID_H
@@ -52,7 +52,7 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_clear(
 
 uint32_t yetty_ydraw_scrolling_grid_line_count(const struct yetty_ydraw_scrolling_grid *grid);
 
-uint32_t yetty_ydraw_scrolling_grid_total_prim_count(
+uint32_t yetty_ydraw_scrolling_grid_total_drawable_count(
     const struct yetty_ydraw_scrolling_grid *grid);
 
 uint32_t yetty_ydraw_scrolling_grid_figure_count_in_window(
@@ -91,10 +91,10 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_ensure_cells(
     struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx, uint32_t min_cells);
 
 /* Append a cell ref to (line_idx, col). The ref points back at the prim
- * placed at `lines_ahead` rows down at local index `prim_idx`. */
+ * placed at `lines_ahead` rows down at local index `drawable_idx`. */
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_ref(
     struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx, uint32_t col,
-    uint16_t lines_ahead, uint16_t prim_idx);
+    uint16_t lines_ahead, uint16_t drawable_idx);
 
 /* Attach a complex-prim instance to line `line_idx`. The grid takes
  * ownership (destroys on grid_line_free / grid_clear). */
@@ -135,8 +135,8 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_restore_range(
  * is the column count to bake in (the canvas widens it for over-wide
  * lines via grid_max_cell_count_in_window).
  *
- * `build_prim_staging` writes the per-prim payload table the same way.
- * Returns the total prim count (offset-table entries) via `*out_prim_count`.
+ * `build_drawable_staging` writes the per-prim payload table the same way.
+ * Returns the total prim count (offset-table entries) via `*out_drawable_count`.
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_rebuild_staging(
@@ -144,10 +144,10 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_rebuild_staging(
     uint32_t window_top, uint32_t grid_rows, uint32_t effective_grid_cols,
     uint32_t **out_buf, uint32_t *out_capacity, uint32_t *out_count);
 
-struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_build_prim_staging(
+struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_build_drawable_staging(
     struct yetty_ydraw_scrolling_grid *grid,
     uint32_t **out_buf, uint32_t *out_capacity, uint32_t *out_count,
-    uint32_t *out_prim_count);
+    uint32_t *out_drawable_count);
 
 /*===========================================================================
  * Glyph iteration

@@ -47,29 +47,29 @@
  * Private types
  *===========================================================================*/
 
-struct prim_ref {
+struct drawable_ref {
     uint16_t lines_ahead;
-    uint16_t prim_index;
+    uint16_t drawable_index;
 };
 
-struct prim_ref_array {
-    struct prim_ref *data;
+struct drawable_ref_array {
+    struct drawable_ref *data;
     uint32_t count;
     uint32_t capacity;
 };
 
 struct grid_cell {
-    struct prim_ref_array refs;
+    struct drawable_ref_array refs;
 };
 
-struct prim_data {
+struct drawable_data {
     uint32_t rolling_row;
     uint32_t arena_offset;
     uint32_t word_count;
 };
 
-struct prim_data_array {
-    struct prim_data *data;
+struct drawable_data_array {
+    struct drawable_data *data;
     uint32_t count;
     uint32_t capacity;
 };
@@ -79,7 +79,7 @@ struct font_entry {
 };
 
 struct grid_line {
-    struct prim_data_array prims;
+    struct drawable_data_array prims;
 
     uint32_t *arena;
     uint32_t  arena_count;
@@ -110,17 +110,17 @@ struct yetty_ydraw_scrolling_grid {
 };
 
 /*===========================================================================
- * Small helpers — prim_ref_array, prim_data_array, grid_line
+ * Small helpers — drawable_ref_array, drawable_data_array, grid_line
  *===========================================================================*/
 
-static void prim_ref_array_init(struct prim_ref_array *arr)
+static void drawable_ref_array_init(struct drawable_ref_array *arr)
 {
     arr->data = NULL;
     arr->count = 0;
     arr->capacity = 0;
 }
 
-static void prim_ref_array_free(struct prim_ref_array *arr)
+static void drawable_ref_array_free(struct drawable_ref_array *arr)
 {
     free(arr->data);
     arr->data = NULL;
@@ -128,16 +128,16 @@ static void prim_ref_array_free(struct prim_ref_array *arr)
     arr->capacity = 0;
 }
 
-static struct yetty_ycore_void_result prim_ref_array_push(
-    struct prim_ref_array *arr, struct prim_ref ref)
+static struct yetty_ycore_void_result drawable_ref_array_push(
+    struct drawable_ref_array *arr, struct drawable_ref ref)
 {
     if (arr->count >= arr->capacity) {
         uint32_t new_cap =
             arr->capacity == 0 ? YDRAW_CANVAS_INITIAL_REF_CAPACITY : arr->capacity * 2;
-        struct prim_ref *grown =
-            realloc(arr->data, new_cap * sizeof(struct prim_ref));
+        struct drawable_ref *grown =
+            realloc(arr->data, new_cap * sizeof(struct drawable_ref));
         if (!grown) {
-            return YETTY_ERR(yetty_ycore_void, "prim_ref_array_push: realloc failed");
+            return YETTY_ERR(yetty_ycore_void, "drawable_ref_array_push: realloc failed");
         }
         arr->data = grown;
         arr->capacity = new_cap;
@@ -146,14 +146,14 @@ static struct yetty_ycore_void_result prim_ref_array_push(
     return YETTY_OK_VOID();
 }
 
-static void prim_data_array_init(struct prim_data_array *arr)
+static void drawable_data_array_init(struct drawable_data_array *arr)
 {
     arr->data = NULL;
     arr->count = 0;
     arr->capacity = 0;
 }
 
-static void prim_data_array_free(struct prim_data_array *arr)
+static void drawable_data_array_free(struct drawable_data_array *arr)
 {
     free(arr->data);
     arr->data = NULL;
@@ -163,7 +163,7 @@ static void prim_data_array_free(struct prim_data_array *arr)
 
 static struct yetty_ycore_void_result grid_line_init(struct grid_line *line)
 {
-    prim_data_array_init(&line->prims);
+    drawable_data_array_init(&line->prims);
     line->arena = NULL;
     line->arena_count = 0;
     line->arena_capacity = 0;
@@ -182,7 +182,7 @@ static struct yetty_ycore_void_result grid_line_init(struct grid_line *line)
 static struct yetty_ycore_void_result grid_line_free(
     struct grid_line *line, struct yetty_yfont_cache *cache)
 {
-    prim_data_array_free(&line->prims);
+    drawable_data_array_free(&line->prims);
     free(line->arena);
     line->arena = NULL;
     line->arena_count = 0;
@@ -204,7 +204,7 @@ static struct yetty_ycore_void_result grid_line_free(
     line->figure_count = 0;
     line->figure_capacity = 0;
     for (uint32_t i = 0; i < line->cell_count; i++) {
-        prim_ref_array_free(&line->cells[i].refs);
+        drawable_ref_array_free(&line->cells[i].refs);
     }
     free(line->cells);
     line->cells = NULL;
@@ -219,7 +219,7 @@ static struct yetty_ycore_void_result grid_line_ensure_cells(
     if (min_cells <= line->cell_capacity) {
         if (min_cells > line->cell_count) {
             for (uint32_t i = line->cell_count; i < min_cells; i++) {
-                prim_ref_array_init(&line->cells[i].refs);
+                drawable_ref_array_init(&line->cells[i].refs);
             }
             line->cell_count = min_cells;
         }
@@ -239,7 +239,7 @@ static struct yetty_ycore_void_result grid_line_ensure_cells(
     }
     line->cells = new_cells;
     for (uint32_t i = line->cell_capacity; i < new_cap; i++) {
-        prim_ref_array_init(&line->cells[i].refs);
+        drawable_ref_array_init(&line->cells[i].refs);
     }
     line->cell_capacity = new_cap;
     line->cell_count = min_cells;
@@ -267,16 +267,16 @@ static struct yetty_ycore_void_result grid_line_arena_append(
     return YETTY_OK_VOID();
 }
 
-static struct uint32_result grid_line_push_prim_internal(
+static struct uint32_result grid_line_push_drawable_internal(
     struct grid_line *line, uint32_t rolling_row,
     const float *data, uint32_t word_count)
 {
-    struct prim_data_array *arr = &line->prims;
+    struct drawable_data_array *arr = &line->prims;
     if (arr->count >= arr->capacity) {
         uint32_t new_cap =
             arr->capacity == 0 ? YDRAW_CANVAS_INITIAL_PRIM_CAPACITY : arr->capacity * 2;
-        struct prim_data *grown =
-            realloc(arr->data, new_cap * sizeof(struct prim_data));
+        struct drawable_data *grown =
+            realloc(arr->data, new_cap * sizeof(struct drawable_data));
         if (!grown) {
             return YETTY_ERR(uint32, "grid_line_push_prim: prims realloc failed");
         }
@@ -364,7 +364,7 @@ uint32_t yetty_ydraw_scrolling_grid_line_count(const struct yetty_ydraw_scrollin
     return grid ? grid->lines_count : 0;
 }
 
-uint32_t yetty_ydraw_scrolling_grid_total_prim_count(
+uint32_t yetty_ydraw_scrolling_grid_total_drawable_count(
     const struct yetty_ydraw_scrolling_grid *grid)
 {
     if (!grid) return 0;
@@ -495,9 +495,9 @@ struct sb_restore_ctx {
 YETTY_EXTERNAL_CALLBACK
 static struct yetty_ycore_void_result sb_restore_on_header(void *ctx,
                                                            uint32_t line_rolling_row,
-                                                           uint32_t prim_count)
+                                                           uint32_t drawable_count)
 {
-    (void)ctx; (void)line_rolling_row; (void)prim_count;
+    (void)ctx; (void)line_rolling_row; (void)drawable_count;
     return YETTY_OK_VOID();
 }
 
@@ -509,12 +509,12 @@ static struct yetty_ycore_void_result sb_restore_on_cell(
     struct yetty_ycore_void_result er = grid_line_ensure_cells(r->line, col + 1u);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "restore: ensure_cells");
     for (uint32_t i = 0; i < ref_count; i++) {
-        struct prim_ref pr = {
+        struct drawable_ref pr = {
             .lines_ahead = refs[i].lines_ahead,
-            .prim_index  = refs[i].prim_idx,
+            .drawable_index  = refs[i].drawable_idx,
         };
         struct yetty_ycore_void_result rp =
-            prim_ref_array_push(&r->line->cells[col].refs, pr);
+            drawable_ref_array_push(&r->line->cells[col].refs, pr);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rp, "restore: ref_array_push");
     }
     return YETTY_OK_VOID();
@@ -526,7 +526,7 @@ static struct yetty_ycore_void_result sb_restore_on_prim(void *ctx, uint32_t rol
                                                          uint32_t word_count)
 {
     struct sb_restore_ctx *r = ctx;
-    struct uint32_result push_res = grid_line_push_prim_internal(
+    struct uint32_result push_res = grid_line_push_drawable_internal(
         r->line, rolling_row, (const float *)payload, word_count);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, push_res, "restore: push_prim");
     return YETTY_OK_VOID();
@@ -626,7 +626,7 @@ static struct yetty_ycore_void_result grid_evict_line(
             return YETTY_ERR(yetty_ycore_void, "evict: prim view alloc failed");
         }
         for (uint32_t p = 0; p < n_prims; p++) {
-            struct prim_data *pd = &line->prims.data[p];
+            struct drawable_data *pd = &line->prims.data[p];
             prims[p].rolling_row = pd->rolling_row;
             prims[p].word_count = pd->word_count;
             prims[p].payload = line->arena + pd->arena_offset;
@@ -739,7 +739,7 @@ struct uint32_result yetty_ydraw_scrolling_grid_push_prim(
     if (!grid || line_idx >= grid->lines_count) {
         return YETTY_ERR(uint32, "push_prim: line_idx out of range");
     }
-    return grid_line_push_prim_internal(&grid->lines[line_idx], rolling_row, data, word_count);
+    return grid_line_push_drawable_internal(&grid->lines[line_idx], rolling_row, data, word_count);
 }
 
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_ensure_cells(
@@ -753,7 +753,7 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_ensure_cells(
 
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_ref(
     struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx, uint32_t col,
-    uint16_t lines_ahead, uint16_t prim_idx)
+    uint16_t lines_ahead, uint16_t drawable_idx)
 {
     if (!grid || line_idx >= grid->lines_count) {
         return YETTY_ERR(yetty_ycore_void, "push_ref: line_idx out of range");
@@ -762,8 +762,8 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_ref(
     if (col >= line->cell_count) {
         return YETTY_ERR(yetty_ycore_void, "push_ref: col out of range");
     }
-    struct prim_ref ref = {lines_ahead, prim_idx};
-    return prim_ref_array_push(&line->cells[col].refs, ref);
+    struct drawable_ref ref = {lines_ahead, drawable_idx};
+    return drawable_ref_array_push(&line->cells[col].refs, ref);
 }
 
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_figure(
@@ -889,14 +889,14 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_rebuild_staging(
 
     /* Prefix-sum of prim counts across ALL lines. */
     uint32_t total_prims = 0;
-    uint32_t *line_base_prim_idx = NULL;
+    uint32_t *line_base_drawable_idx = NULL;
     if (grid->lines_count > 0) {
-        line_base_prim_idx = malloc(grid->lines_count * sizeof(uint32_t));
-        if (!line_base_prim_idx) {
+        line_base_drawable_idx = malloc(grid->lines_count * sizeof(uint32_t));
+        if (!line_base_drawable_idx) {
             return YETTY_ERR(yetty_ycore_void, "rebuild_staging: line_base alloc");
         }
         for (uint32_t i = 0; i < grid->lines_count; i++) {
-            line_base_prim_idx[i] = total_prims;
+            line_base_drawable_idx[i] = total_prims;
             total_prims += grid->lines[i].prims.count;
         }
     }
@@ -906,14 +906,14 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_rebuild_staging(
 
     if (grid_w == 0 || grid_rows == 0) {
         *out_count = 0;
-        free(line_base_prim_idx);
+        free(line_base_drawable_idx);
         return YETTY_OK_VOID();
     }
 
     uint32_t num_cells = grid_w * grid_rows;
     struct yetty_ycore_void_result es = ensure_staging_cap(out_buf, out_capacity, num_cells * 4);
     if (YETTY_IS_ERR(es)) {
-        free(line_base_prim_idx);
+        free(line_base_drawable_idx);
         return YETTY_ERR(yetty_ycore_void, "rebuild_staging: ensure_cap", es);
     }
     uint32_t count = num_cells;
@@ -930,7 +930,7 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_rebuild_staging(
             struct yetty_ycore_void_result e1 =
                 ensure_staging_cap(out_buf, out_capacity, count + 2);
             if (YETTY_IS_ERR(e1)) {
-                free(line_base_prim_idx);
+                free(line_base_drawable_idx);
                 return YETTY_ERR(yetty_ycore_void, "rebuild_staging: ensure_cap (h)", e1);
             }
 
@@ -942,18 +942,18 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_rebuild_staging(
             if (has_line && x < line_cell_count) {
                 struct grid_cell *cell = &line->cells[x];
                 for (uint32_t ri = 0; ri < cell->refs.count; ri++) {
-                    struct prim_ref *ref = &cell->refs.data[ri];
+                    struct drawable_ref *ref = &cell->refs.data[ri];
                     uint32_t bl = canvas_y + ref->lines_ahead;
-                    if (bl < grid->lines_count && line_base_prim_idx) {
+                    if (bl < grid->lines_count && line_base_drawable_idx) {
                         struct yetty_ycore_void_result e2 =
                             ensure_staging_cap(out_buf, out_capacity, count + 1);
                         if (YETTY_IS_ERR(e2)) {
-                            free(line_base_prim_idx);
+                            free(line_base_drawable_idx);
                             return YETTY_ERR(yetty_ycore_void,
                                              "rebuild_staging: ensure_cap (r)", e2);
                         }
                         (*out_buf)[count++] =
-                            line_base_prim_idx[bl] + ref->prim_index;
+                            line_base_drawable_idx[bl] + ref->drawable_index;
                         cell_count++;
                     }
                 }
@@ -962,54 +962,54 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_rebuild_staging(
         }
     }
 
-    free(line_base_prim_idx);
+    free(line_base_drawable_idx);
     *out_count = count;
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_build_prim_staging(
+struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_build_drawable_staging(
     struct yetty_ydraw_scrolling_grid *grid,
     uint32_t **out_buf, uint32_t *out_capacity, uint32_t *out_count,
-    uint32_t *out_prim_count)
+    uint32_t *out_drawable_count)
 {
     if (!grid) return YETTY_ERR(yetty_ycore_void, "scrolling-grid: NULL");
 
-    uint32_t prim_count = 0;
+    uint32_t drawable_count = 0;
     uint32_t total_words = 0;
     for (uint32_t i = 0; i < grid->lines_count; i++) {
         const struct grid_line *line = &grid->lines[i];
         for (uint32_t p = 0; p < line->prims.count; p++) {
-            prim_count++;
+            drawable_count++;
             total_words += line->prims.data[p].word_count + 1;
         }
     }
-    if (prim_count == 0) {
+    if (drawable_count == 0) {
         *out_count = 0;
-        *out_prim_count = 0;
+        *out_drawable_count = 0;
         return YETTY_OK_VOID();
     }
-    uint32_t total_size = prim_count + total_words;
+    uint32_t total_size = drawable_count + total_words;
     struct yetty_ycore_void_result e =
         ensure_staging_cap(out_buf, out_capacity, total_size);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, e, "build_prim_staging: ensure_cap");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, e, "build_drawable_staging: ensure_cap");
 
     uint32_t data_offset = 0;
-    uint32_t prim_idx = 0;
+    uint32_t drawable_idx = 0;
     for (uint32_t i = 0; i < grid->lines_count; i++) {
         struct grid_line *line = &grid->lines[i];
         for (uint32_t p = 0; p < line->prims.count; p++) {
-            struct prim_data *prim = &line->prims.data[p];
-            (*out_buf)[prim_idx] = data_offset;
-            (*out_buf)[prim_count + data_offset] = prim->rolling_row;
+            struct drawable_data *prim = &line->prims.data[p];
+            (*out_buf)[drawable_idx] = data_offset;
+            (*out_buf)[drawable_count + data_offset] = prim->rolling_row;
             const uint32_t *payload = line->arena + prim->arena_offset;
-            memcpy(&(*out_buf)[prim_count + data_offset + 1], payload,
+            memcpy(&(*out_buf)[drawable_count + data_offset + 1], payload,
                    prim->word_count * sizeof(uint32_t));
             data_offset += prim->word_count + 1;
-            prim_idx++;
+            drawable_idx++;
         }
     }
     *out_count = total_size;
-    *out_prim_count = prim_count;
+    *out_drawable_count = drawable_count;
     return YETTY_OK_VOID();
 }
 
@@ -1025,7 +1025,7 @@ void yetty_ydraw_scrolling_grid_for_each_glyph(
     for (uint32_t li = 0; li < grid->lines_count; li++) {
         const struct grid_line *line = &grid->lines[li];
         for (uint32_t pi = 0; pi < line->prims.count; pi++) {
-            const struct prim_data *pd = &line->prims.data[pi];
+            const struct drawable_data *pd = &line->prims.data[pi];
             if (pd->word_count < YDRAW_GLYPH_WORDS) continue;
             const uint32_t *words = line->arena + pd->arena_offset;
             uint32_t type_word;

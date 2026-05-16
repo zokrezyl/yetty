@@ -16,7 +16,7 @@
  *   HEADER (12 B):
  *     u32 line_rolling_row     ; line's storage row, sanity check
  *     u32 byte_count           ; bytes after this header; 0 = empty
- *     u32 prim_count           ; total prims (default + non-default)
+ *     u32 drawable_count           ; total prims (default + non-default)
  *
  *   if byte_count > 0:
  *
@@ -24,7 +24,7 @@
  *     repeated:
  *       u32 col_plus_one       ; 0-based col + 1; sentinel 0
  *       u32 ref_count
- *       (u16 lines_ahead, u16 prim_idx) × ref_count
+ *       (u16 lines_ahead, u16 drawable_idx) × ref_count
  *
  *   PRIM STYLE PREAMBLE (20 B):
  *     u32 z_base               ; z_order of the first default-style glyph
@@ -33,7 +33,7 @@
  *     u32 y_f32                ; bit-cast of f32 baseline y
  *     u32 color                ; packed rgba8
  *
- *   PRIM STREAM (variable, one entry per prim_count):
+ *   PRIM STREAM (variable, one entry per drawable_count):
  *     Default-style glyph (8 B; bit 31 clear):
  *       u32 word0 = glyph_idx          ; bit 31 = 0; low 16 = glyph_idx
  *       u32 word1 = bitcast<u32>(x)    ; f32 x
@@ -43,7 +43,7 @@
  *
  *     Non-default record (8 + 4*N B; bit 31 set):
  *       u32 word0 = 0x80000000
- *       u32 word1 = prim_rolling_row
+ *       u32 word1 = drawable_rolling_row
  *       u32 payload[N]                 ; N = type_words(payload[0])
  *
  * Endianness: all u32 / u16 fields are host-native. Scrollbuffer state
@@ -126,7 +126,7 @@ size_t yetty_ydraw_scrollbuffer_compressed_size(const struct yetty_ydraw_scrollb
 /* Reference from one grid cell to a prim, as stored on the canvas today. */
 struct yetty_ydraw_scrollbuffer_ref {
     uint16_t lines_ahead;
-    uint16_t prim_idx;
+    uint16_t drawable_idx;
 };
 
 /* One cell that has at least one ref. `col` is 0-based grid column. */
@@ -181,11 +181,11 @@ struct yetty_ydraw_scrollbuffer_decode_sinks {
     void *ctx;
 
     /* Optional: called once per record after the header is read, with
-     * the line's own rolling_row and the prim_count from the header.
+     * the line's own rolling_row and the drawable_count from the header.
      * Useful for the caller to pre-size its output arrays. */
     struct yetty_ycore_void_result (*on_header)(void *ctx,
                                                 uint32_t line_rolling_row,
-                                                uint32_t prim_count);
+                                                uint32_t drawable_count);
 
     /* Called for each non-empty cell, in ascending col order.
      * `refs` and `ref_count` describe that cell's refs. */

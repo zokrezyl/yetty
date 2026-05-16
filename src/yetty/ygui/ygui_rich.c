@@ -55,7 +55,7 @@
  * For SDF prims size comes from the auto-generated word-count table.
  *===========================================================================*/
 
-static size_t rich_prim_size(const uint32_t *prim, size_t remaining)
+static size_t rich_drawable_size(const uint32_t *prim, size_t remaining)
 {
     if (remaining < sizeof(uint32_t)) {
         return 0;
@@ -238,7 +238,7 @@ static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self
 
     int n_prims = 0;
     while (remaining >= sizeof(uint32_t)) {
-        size_t s = rich_prim_size((const uint32_t *)p, remaining);
+        size_t s = rich_drawable_size((const uint32_t *)p, remaining);
         uint32_t t = ((const uint32_t *)p)[0];
         ydebug("rich_render prim#%d type=0x%x size=%zu rem=%zu", n_prims, t, s, remaining);
         if (s == 0 || s > remaining) {

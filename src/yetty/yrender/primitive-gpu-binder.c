@@ -287,7 +287,7 @@ struct yetty_ycore_void_result yetty_yrender_gpu_binder_finalize(
                                                                       : MEGA_BUFFER_INITIAL_SIZE;
 
         WGPUBufferDescriptor desc = {
-            .label = {.data = "prim_mega_buffer", .length = 16},
+            .label = {.data = "drawable_mega_buffer", .length = 16},
             .size = new_cap,
             .usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
         };
@@ -306,7 +306,7 @@ struct yetty_ycore_void_result yetty_yrender_gpu_binder_finalize(
     // Create/resize uniform buffer if needed
     if (uniform_size > 0 && !binder->uniform_buffer) {
         WGPUBufferDescriptor desc = {
-            .label = {.data = "prim_uniforms", .length = 13},
+            .label = {.data = "drawable_uniforms", .length = 13},
             .size = uniform_size > 256 ? uniform_size : 256,
             .usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
         };
@@ -347,7 +347,7 @@ struct yetty_ycore_void_result yetty_yrender_gpu_binder_finalize(
     }
 
     WGPUBindGroupDescriptor bg_desc = {
-        .label = {.data = "prim_bind_group", .length = 15},
+        .label = {.data = "drawable_bind_group", .length = 15},
         .layout = binder->bind_group_layout,
         .entryCount = entry_count,
         .entries = entries,

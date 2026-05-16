@@ -12,14 +12,14 @@
 extern "C" {
 #endif
 
-/* Handler function — takes prim_type, returns base ops pointer or error. */
+/* Handler function — takes drawable_type, returns base ops pointer or error. */
 typedef struct yetty_ydraw_drawable_base_ops_ptr_result (*yetty_ydraw_drawable_handler_fn)(
-    uint32_t prim_type);
+    uint32_t drawable_type);
 
 /* Get flyweight for primitive (tries default first, then by type range). */
 struct yetty_ydraw_drawable_flyweight_ptr_result yetty_ydraw_flyweight_registry_get(
-    const struct yetty_ydraw_flyweight_registry *reg, uint32_t prim_type,
-    const uint32_t *prim_data);
+    const struct yetty_ydraw_flyweight_registry *reg, uint32_t drawable_type,
+    const uint32_t *drawable_data);
 
 #ifdef __cplusplus
 }

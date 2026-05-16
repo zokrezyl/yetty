@@ -449,7 +449,7 @@ static struct yetty_ycore_void_result body_pump(
      * 2.5 MB pixel payload). Without this cap, body_pump would loop trying
      * to satisfy `want = 2.5 MB`, eventually hitting out_carry_append's
      * overflow guard — surfaced as a stream-level error and a dropped
-     * frame ("prim_iter: body pull" → "envelope truncated"). The iter
+     * frame ("drawable_iter: body pull" → "envelope truncated"). The iter
      * already loops calling statemachine_read until its own `filled ==
      * total_size`, so it's fine for body_pump to deliver progress in
      * carry-sized chunks; the caller drains and re-asks. */

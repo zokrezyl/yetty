@@ -50,7 +50,7 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_zero(
  *       YETTY_YDRAW_CMD_BASE, YETTY_YDRAW_CMD_END,
  *       yetty_ydraw_cmd_handler);
  */
-struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_cmd_handler(uint32_t prim_type);
+struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_cmd_handler(uint32_t drawable_type);
 
 #ifdef __cplusplus
 }

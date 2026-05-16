@@ -1290,20 +1290,20 @@ static struct yetty_ycore_void_result
     }};
 
     size_t required = yetty_{name}_uniforms_serialized_size(&uniforms, &bufs);
-    uint8_t *prim_buf = malloc(required);
-    if (!prim_buf)
+    uint8_t *drawable_buf = malloc(required);
+    if (!drawable_buf)
         return YETTY_ERR(yetty_ycore_void, "malloc failed");
 
     struct yetty_ycore_size_result ser_res =
-        yetty_{name}_uniforms_serialize(&uniforms, &bufs, prim_buf, required);
+        yetty_{name}_uniforms_serialize(&uniforms, &bufs, drawable_buf, required);
     if (YETTY_IS_ERR(ser_res)) {{
-        free(prim_buf);
+        free(drawable_buf);
         return YETTY_ERR(yetty_ycore_void, "{name} uniforms serialize failed", ser_res);
     }}
 
     struct yetty_ydraw_id_result id_res =
-        yetty_ydraw_draw_list_add_prim(buffer, prim_buf, required);
-    free(prim_buf);
+        yetty_ydraw_draw_list_add_prim(buffer, drawable_buf, required);
+    free(drawable_buf);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "{name} yaml: add_prim failed");
     return YETTY_OK_VOID();
 }}

@@ -83,11 +83,11 @@ struct yetty_ydraw_primitive_iter {
 
 YETTY_YRESULT_DECLARE(yetty_ydraw_primitive_iter, struct yetty_ydraw_primitive_iter);
 
-struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_prim_first(
+struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_drawable_first(
     const struct yetty_ydraw_draw_list *buf,
     const struct yetty_ydraw_flyweight_registry *reg);
 
-struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_prim_next(
+struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_drawable_next(
     const struct yetty_ydraw_draw_list *buf,
     const struct yetty_ydraw_flyweight_registry *reg,
     const struct yetty_ydraw_primitive_iter *iter);

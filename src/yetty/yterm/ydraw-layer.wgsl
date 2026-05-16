@@ -8,7 +8,7 @@
 //   uniforms.ydraw_ydraw_grid_size
 //   uniforms.ydraw_ydraw_cell_size
 //   uniforms.ydraw_ydraw_rolling_row_0
-//   uniforms.ydraw_ydraw_prim_count
+//   uniforms.ydraw_ydraw_drawable_count
 //   ydraw_grid_offset
 //   ydraw_prims_offset
 
@@ -66,28 +66,28 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 //   [6+] geometry     - primitive-specific args (Y coords relative to line)
 // =============================================================================
 
-fn ydraw_read_rolling_row(prim_offset: u32) -> u32 {
-    return storage_buffer[prim_offset + 0u];
+fn ydraw_read_rolling_row(drawable_offset: u32) -> u32 {
+    return storage_buffer[drawable_offset + 0u];
 }
 
-fn ydraw_read_prim_type(prim_offset: u32) -> u32 {
-    return storage_buffer[prim_offset + 1u];
+fn ydraw_read_drawable_type(drawable_offset: u32) -> u32 {
+    return storage_buffer[drawable_offset + 1u];
 }
 
-fn ydraw_read_fill_color(prim_offset: u32) -> u32 {
-    return storage_buffer[prim_offset + 3u];
+fn ydraw_read_fill_color(drawable_offset: u32) -> u32 {
+    return storage_buffer[drawable_offset + 3u];
 }
 
-fn ydraw_read_stroke_color(prim_offset: u32) -> u32 {
-    return storage_buffer[prim_offset + 4u];
+fn ydraw_read_stroke_color(drawable_offset: u32) -> u32 {
+    return storage_buffer[drawable_offset + 4u];
 }
 
-fn ydraw_read_stroke_width(prim_offset: u32) -> f32 {
-    return bitcast<f32>(storage_buffer[prim_offset + 5u]);
+fn ydraw_read_stroke_width(drawable_offset: u32) -> f32 {
+    return bitcast<f32>(storage_buffer[drawable_offset + 5u]);
 }
 
-fn ydraw_read_geom_f32(prim_offset: u32, idx: u32) -> f32 {
-    return bitcast<f32>(storage_buffer[prim_offset + 6u + idx]);
+fn ydraw_read_geom_f32(drawable_offset: u32, idx: u32) -> f32 {
+    return bitcast<f32>(storage_buffer[drawable_offset + 6u + idx]);
 }
 
 // =============================================================================
@@ -102,24 +102,24 @@ fn ydraw_read_geom_f32(prim_offset: u32, idx: u32) -> f32 {
 //   [7] color       - packed RGBA
 // =============================================================================
 
-fn glyph_read_x(prim_offset: u32) -> f32 {
-    return bitcast<f32>(storage_buffer[prim_offset + 3u]);
+fn glyph_read_x(drawable_offset: u32) -> f32 {
+    return bitcast<f32>(storage_buffer[drawable_offset + 3u]);
 }
 
-fn glyph_read_y(prim_offset: u32) -> f32 {
-    return bitcast<f32>(storage_buffer[prim_offset + 4u]);
+fn glyph_read_y(drawable_offset: u32) -> f32 {
+    return bitcast<f32>(storage_buffer[drawable_offset + 4u]);
 }
 
-fn glyph_read_font_size(prim_offset: u32) -> f32 {
-    return bitcast<f32>(storage_buffer[prim_offset + 5u]);
+fn glyph_read_font_size(drawable_offset: u32) -> f32 {
+    return bitcast<f32>(storage_buffer[drawable_offset + 5u]);
 }
 
-fn glyph_read_packed(prim_offset: u32) -> u32 {
-    return storage_buffer[prim_offset + 6u];
+fn glyph_read_packed(drawable_offset: u32) -> u32 {
+    return storage_buffer[drawable_offset + 6u];
 }
 
-fn glyph_read_color(prim_offset: u32) -> u32 {
-    return storage_buffer[prim_offset + 7u];
+fn glyph_read_color(drawable_offset: u32) -> u32 {
+    return storage_buffer[drawable_offset + 7u];
 }
 
 // The active fonts' shaders (msdf-font.wgsl × N) are merged by the binder.
@@ -137,7 +137,7 @@ fn glyph_read_color(prim_offset: u32) -> u32 {
 
 // SDF evaluation: call the generated evaluate_sdf_2d() (from ysdf.gen.wgsl).
 // The ydraw prim stores rolling_row at word +0 and the raw ysdf record
-// from +1 onward, so pass prim_offset + 1u.
+// from +1 onward, so pass drawable_offset + 1u.
 
 // Unpack RGBA color from u32
 fn ydraw_unpack_color(packed: u32) -> vec4<f32> {
@@ -154,7 +154,7 @@ fn ydraw_unpack_color(packed: u32) -> vec4<f32> {
 // =============================================================================
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    let prim_count = uniforms.ydraw_ydraw_prim_count;
+    let drawable_count = uniforms.ydraw_ydraw_drawable_count;
     let grid_size = uniforms.ydraw_ydraw_grid_size;
     let cell_size = uniforms.ydraw_ydraw_cell_size;
 
@@ -162,7 +162,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let grid_height = u32(grid_size.y);
 
     // Early exit if no primitives
-    if (prim_count == 0u || grid_width == 0u || grid_height == 0u) {
+    if (drawable_count == 0u || grid_width == 0u || grid_height == 0u) {
         return vec4<f32>(0.0, 0.0, 0.0, 0.0);  // Fully transparent
     }
 
@@ -215,18 +215,18 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let raw_idx = storage_buffer[grid_offset + cell_start + 1u + i];
 
         // raw_idx is a primitive index (0, 1, 2...), not a data offset
-        // Prim staging layout: [offset_table...][prim_data...]
+        // Prim staging layout: [offset_table...][drawable_data...]
         // Read data offset from offset table, then compute actual position
         let data_offset = storage_buffer[prims_offset + raw_idx];
-        let prim_offset = prims_offset + prim_count + data_offset;
+        let drawable_offset = prims_offset + drawable_count + data_offset;
 
         // Compute primitive's screen Y offset from its rolling_row
         // Use signed arithmetic to handle scrolling past the primitive
-        let rolling_row = ydraw_read_rolling_row(prim_offset);
+        let rolling_row = ydraw_read_rolling_row(drawable_offset);
         let rolling_row_0 = uniforms.ydraw_ydraw_rolling_row_0;
         let y_offset = f32(i32(rolling_row) - i32(rolling_row_0)) * cell_size.y;
 
-        let prim_type = ydraw_read_prim_type(prim_offset);
+        let drawable_type = ydraw_read_drawable_type(drawable_offset);
 
         // Transform pixel position to primitive-local coords
         let local_pos = vec2<f32>(pixel_pos.x, pixel_pos.y - y_offset);
@@ -236,16 +236,16 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         // backend via font_glyph_sample() / font_glyph_size(). Bearing has
         // already been applied on the CPU, so (glyph_x, glyph_y) is the
         // top-left corner of the rendered glyph rectangle.
-        if (prim_type == YDRAW_SDF_GLYPH) {
-            let glyph_x = glyph_read_x(prim_offset);
-            let glyph_y = glyph_read_y(prim_offset);
-            let font_size = glyph_read_font_size(prim_offset);
-            let packed = glyph_read_packed(prim_offset);
+        if (drawable_type == YDRAW_SDF_GLYPH) {
+            let glyph_x = glyph_read_x(drawable_offset);
+            let glyph_y = glyph_read_y(drawable_offset);
+            let font_size = glyph_read_font_size(drawable_offset);
+            let packed = glyph_read_packed(drawable_offset);
             let glyph_index = packed & 0xFFFFu;
             // High 16 bits hold (canvas_slot + 1). 0 means "default font".
             let slot_plus_one = (packed >> 16u) & 0xFFFFu;
             let font_slot = select(0u, slot_plus_one - 1u, slot_plus_one > 0u);
-            let color_packed = glyph_read_color(prim_offset);
+            let color_packed = glyph_read_color(drawable_offset);
 
             let base_size = font_base_size(font_slot);
             let pixel_scale = select(1.0, font_size / base_size, base_size > 0.0);
@@ -275,19 +275,19 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         }
 
         // Evaluate SDF for non-glyph primitives
-        let d = evaluate_sdf_2d(prim_offset + 1u, local_pos);
+        let d = evaluate_sdf_2d(drawable_offset + 1u, local_pos);
 
         // Resolve the fill color. Gradient primitives compute their color
         // from per-pixel position; everything else reads the single
         // packed fill_color word.
-        let prim_type_for_color = ydraw_read_prim_type(prim_offset);
+        let drawable_type_for_color = ydraw_read_drawable_type(drawable_offset);
         var fill_rgba: vec4<f32>;
         var has_fill: bool;
-        if (yetty_ysdf_is_gradient_2d(prim_type_for_color)) {
-            fill_rgba = yetty_ysdf_eval_gradient_color_2d(prim_offset + 1u, local_pos);
+        if (yetty_ysdf_is_gradient_2d(drawable_type_for_color)) {
+            fill_rgba = yetty_ysdf_eval_gradient_color_2d(drawable_offset + 1u, local_pos);
             has_fill = fill_rgba.a > 0.0;
         } else {
-            let fill_color = ydraw_read_fill_color(prim_offset);
+            let fill_color = ydraw_read_fill_color(drawable_offset);
             fill_rgba = ydraw_unpack_color(fill_color);
             has_fill = fill_color != 0u;
         }
@@ -300,8 +300,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         }
 
         // Render stroke
-        let stroke_color = ydraw_read_stroke_color(prim_offset);
-        let stroke_width = ydraw_read_stroke_width(prim_offset);
+        let stroke_color = ydraw_read_stroke_color(drawable_offset);
+        let stroke_width = ydraw_read_stroke_width(drawable_offset);
         if (stroke_width > 0.0 && stroke_color != 0u) {
             let stroke_dist = abs(d) - stroke_width * 0.5;
             if (stroke_dist < 0.0) {

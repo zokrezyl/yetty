@@ -46,7 +46,7 @@ enum ydraw_sdf_type {
 };
 
 // Word counts per primitive type
-static uint32_t prim_word_count(enum ydraw_sdf_type type) {
+static uint32_t drawable_word_count(enum ydraw_sdf_type type) {
     switch (type) {
         case YDRAW_SDF_CIRCLE: return 8;
         case YDRAW_SDF_BOX: return 10;
@@ -105,7 +105,7 @@ static void write_u32(float *buf, uint32_t val) {
 static uint32_t gen_primitive(float *buf, float scene_w, float scene_h) {
     (void)scene_h; // unused - we use cursor-relative coords
     enum ydraw_sdf_type type = PRIM_TYPES[randu32() % NUM_PRIM_TYPES];
-    uint32_t word_count = prim_word_count(type);
+    uint32_t word_count = drawable_word_count(type);
 
     // Common header: type, z_order, fill, stroke, stroke_width
     write_u32(&buf[0], type);

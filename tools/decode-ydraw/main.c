@@ -125,7 +125,7 @@ static int decode_envelope(struct yetty_yface *y,
     int text_spans = 0;
     int qpy_only = 0;
     int short_qpy = 0;
-    int prim_index = 0;
+    int drawable_index = 0;
 
     while (p + 8 <= end) {
         uint32_t t;
@@ -137,7 +137,7 @@ static int decode_envelope(struct yetty_yface *y,
             if (wc == 0) {
                 fprintf(stderr,
                         "  prim #%d @off=%zu: unknown SDF type 0x%08x — skipping rest\n",
-                        prim_index, (size_t)(p - in->data), t);
+                        drawable_index, (size_t)(p - in->data), t);
                 break;
             }
             psize = (size_t)wc * 4u;
@@ -149,13 +149,13 @@ static int decode_envelope(struct yetty_yface *y,
         } else {
             fprintf(stderr,
                     "  prim #%d @off=%zu: unknown prim type 0x%08x — skipping rest\n",
-                    prim_index, (size_t)(p - in->data), t);
+                    drawable_index, (size_t)(p - in->data), t);
             break;
         }
         if (psize == 0 || p + psize > end) {
             fprintf(stderr,
                     "  prim #%d @off=%zu: truncated (size %zu, remaining %zu)\n",
-                    prim_index, (size_t)(p - in->data), psize, (size_t)(end - p));
+                    drawable_index, (size_t)(p - in->data), psize, (size_t)(end - p));
             break;
         }
 
@@ -188,24 +188,24 @@ static int decode_envelope(struct yetty_yface *y,
                 fprintf(stderr,
                         "  prim #%d %s rect=(%.1f,%.1f)..(%.1f,%.1f) "
                         "hw=%.1f hh=%.1f fill=0x%08x stroke=0x%08x\n",
-                        prim_index, name, cx - hw, cy - hh, cx + hw, cy + hh, hw, hh,
+                        drawable_index, name, cx - hw, cy - hh, cx + hw, cy + hh, hw, hh,
                         fill, stroke);
             } else if (t == YETTY_YSDF_CIRCLE) {
                 float r;
                 memcpy(&r, &w[7], 4);
                 fprintf(stderr, "  prim #%d CIRCLE c=(%.1f,%.1f) r=%.1f\n",
-                        prim_index, cx, cy, r);
+                        drawable_index, cx, cy, r);
             } else {
                 fprintf(stderr,
                         "  prim #%d SDF type=0x%08x c=(%.1f,%.1f) words=%zu\n",
-                        prim_index, t, cx, cy, psize / 4);
+                        drawable_index, t, cx, cy, psize / 4);
             }
         } else if ((t & 0xF0000000u) == 0x80000000u) {
             fprintf(stderr,
                     "  prim #%d COMPLEX type=0x%08x payload=%zu B\n",
-                    prim_index, t, psize - 8);
+                    drawable_index, t, psize - 8);
         } else if (t == 0) {
-            fprintf(stderr, "  prim #%d CMD_ZERO (clear+home)\n", prim_index);
+            fprintf(stderr, "  prim #%d CMD_ZERO (clear+home)\n", drawable_index);
         }
         if (t == 0x40000002 && psize >= 48) {
             text_spans++;
@@ -256,12 +256,12 @@ static int decode_envelope(struct yetty_yface *y,
             }
         }
         p += psize;
-        prim_index++;
+        drawable_index++;
     }
     fprintf(stderr,
             "  prim summary: %d prims total; %d TEXT_SPANs; "
             "qpy-only=%d; short(<=2)-with-qpy=%d\n",
-            prim_index, text_spans, qpy_only, short_qpy);
+            drawable_index, text_spans, qpy_only, short_qpy);
     return 0;
 }
 

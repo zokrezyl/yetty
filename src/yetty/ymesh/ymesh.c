@@ -128,16 +128,16 @@ struct yetty_ydraw_draw_list_result yetty_ymesh_render(
     }
 
     size_t required = ymesh_serialized_size(&mesh);
-    uint8_t *prim_buf = malloc(required);
-    if (!prim_buf) {
+    uint8_t *drawable_buf = malloc(required);
+    if (!drawable_buf) {
         yetty_ymesh_glb_destroy(&mesh);
         return YETTY_ERR(yetty_ydraw_draw_list, "ymesh: prim alloc failed");
     }
 
-    struct yetty_ycore_size_result ser = ymesh_serialize_prim(&u, &mesh, prim_buf, required);
+    struct yetty_ycore_size_result ser = ymesh_serialize_prim(&u, &mesh, drawable_buf, required);
     yetty_ymesh_glb_destroy(&mesh);
     if (YETTY_IS_ERR(ser)) {
-        free(prim_buf);
+        free(drawable_buf);
         return YETTY_ERR(yetty_ydraw_draw_list, "ymesh: serialize failed", ser);
     }
 
@@ -150,13 +150,13 @@ struct yetty_ydraw_draw_list_result yetty_ymesh_render(
     struct yetty_ydraw_draw_list_result br =
         yetty_ydraw_draw_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
-        free(prim_buf);
+        free(drawable_buf);
         return YETTY_ERR(yetty_ydraw_draw_list, "ymesh: ydraw buffer create failed", br);
     }
 
     struct yetty_ydraw_id_result idr =
-        yetty_ydraw_draw_list_add_prim(br.value, prim_buf, required);
-    free(prim_buf);
+        yetty_ydraw_draw_list_add_prim(br.value, drawable_buf, required);
+    free(drawable_buf);
     if (YETTY_IS_ERR(idr)) {
         yetty_ydraw_draw_list_destroy(br.value);
         return YETTY_ERR(yetty_ydraw_draw_list, "ymesh: ydraw add_prim failed", idr);

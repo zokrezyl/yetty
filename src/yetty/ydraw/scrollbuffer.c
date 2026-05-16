@@ -384,7 +384,7 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_encode_li
     size_t record_logical_start = sb->logical_committed + sb->tail_size;
     size_t tail_record_start = sb->tail_size;
 
-    /* Header: rolling_row + byte_count placeholder + prim_count. */
+    /* Header: rolling_row + byte_count placeholder + drawable_count. */
     struct yetty_ycore_void_result r = sb_tail_reserve(sb, 12);
     if (YETTY_IS_ERR(r)) {
         return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "encode: header reserve", r);
@@ -431,7 +431,7 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_encode_li
         sb_tail_write_u32(sb, (uint32_t)c->col + 1u);
         sb_tail_write_u32(sb, c->ref_count);
         for (uint32_t k = 0; k < c->ref_count; k++) {
-            sb_tail_write_u16_pair(sb, c->refs[k].lines_ahead, c->refs[k].prim_idx);
+            sb_tail_write_u16_pair(sb, c->refs[k].lines_ahead, c->refs[k].drawable_idx);
         }
     }
     {
@@ -576,11 +576,11 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_decode_li
     const uint8_t *p = base + offset_in_base;
     uint32_t line_rolling_row = sb_read_u32(p + 0);
     uint32_t byte_count       = sb_read_u32(p + 4);
-    uint32_t prim_count       = sb_read_u32(p + 8);
+    uint32_t drawable_count       = sb_read_u32(p + 8);
 
     if (sinks && sinks->on_header) {
         struct yetty_ycore_void_result r =
-            sinks->on_header(sinks->ctx, line_rolling_row, prim_count);
+            sinks->on_header(sinks->ctx, line_rolling_row, drawable_count);
         if (YETTY_IS_ERR(r)) {
             return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "decode: on_header", r);
         }
@@ -641,7 +641,7 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_decode_li
 
     /* PRIM STREAM. */
     uint32_t payload_buf[64];
-    for (uint32_t i = 0; i < prim_count; i++) {
+    for (uint32_t i = 0; i < drawable_count; i++) {
         if (pos + 4 > body_end) {
             return YETTY_ERR(yetty_ydraw_scrollbuffer_offset,
                              "decode: prim word0 truncated");
@@ -681,7 +681,7 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_decode_li
             return YETTY_ERR(yetty_ydraw_scrollbuffer_offset,
                              "decode: non-default rolling_row truncated");
         }
-        uint32_t prim_rolling_row = sb_read_u32(base + pos);
+        uint32_t drawable_rolling_row = sb_read_u32(base + pos);
         pos += 4;
         if (pos + 4 > body_end) {
             return YETTY_ERR(yetty_ydraw_scrollbuffer_offset,
@@ -705,7 +705,7 @@ struct yetty_ydraw_scrollbuffer_offset_result yetty_ydraw_scrollbuffer_decode_li
 
         if (sinks && sinks->on_prim) {
             struct yetty_ycore_void_result r =
-                sinks->on_prim(sinks->ctx, prim_rolling_row, payload_buf, word_count);
+                sinks->on_prim(sinks->ctx, drawable_rolling_row, payload_buf, word_count);
             if (YETTY_IS_ERR(r)) {
                 return YETTY_ERR(yetty_ydraw_scrollbuffer_offset, "decode: on_prim non-default",
                                  r);

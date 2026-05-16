@@ -40,7 +40,7 @@ struct yetty_ydraw_draw_list {
  *   u32 magic
  *   f32 scene_min_x, scene_min_y, scene_max_x, scene_max_y
  *   u32 byte_count
- *   u8  prim_bytes[byte_count]
+ *   u8  drawable_bytes[byte_count]
  */
 #define YDRAW_SERIAL_MAGIC 0x31425059u /* 'YPB1' little-endian */
 #define YDRAW_SERIAL_HEADER_BYTES (4 + 16 + 4)
@@ -401,7 +401,7 @@ struct yetty_ydraw_id_result yetty_ydraw_draw_list_add_prim(
     return YETTY_OK(yetty_ydraw_id, id);
 }
 
-struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_prim_first(
+struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_drawable_first(
     const struct yetty_ydraw_draw_list *buf,
     const struct yetty_ydraw_flyweight_registry *reg)
 {
@@ -416,17 +416,17 @@ struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_prim_first(
     }
 
     const uint32_t *prim = (const uint32_t *)buf->primitives.buf.data;
-    uint32_t prim_type = prim[0];
+    uint32_t drawable_type = prim[0];
     struct yetty_ydraw_drawable_flyweight_ptr_result fw_res =
-        yetty_ydraw_flyweight_registry_get(reg, prim_type, prim);
+        yetty_ydraw_flyweight_registry_get(reg, drawable_type, prim);
     YETTY_RETURN_IF_ERR(yetty_ydraw_primitive_iter, fw_res,
-                        "prim_first: registry lookup failed");
+                        "drawable_first: registry lookup failed");
 
     struct yetty_ydraw_primitive_iter iter = {.fw = *fw_res.value};
     return YETTY_OK(yetty_ydraw_primitive_iter, iter);
 }
 
-struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_prim_next(
+struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_drawable_next(
     const struct yetty_ydraw_draw_list *buf,
     const struct yetty_ydraw_flyweight_registry *reg,
     const struct yetty_ydraw_primitive_iter *iter)
@@ -444,7 +444,7 @@ struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_prim_next(
     const uint8_t *base = buf->primitives.buf.data;
     size_t buf_size = buf->primitives.buf.size;
     struct yetty_ycore_size_result size_res = iter->fw.ops->size(iter->fw.data);
-    YETTY_RETURN_IF_ERR(yetty_ydraw_primitive_iter, size_res, "prim_next: size op failed");
+    YETTY_RETURN_IF_ERR(yetty_ydraw_primitive_iter, size_res, "drawable_next: size op failed");
     const uint32_t *next = (const uint32_t *)((const uint8_t *)iter->fw.data + size_res.value);
     size_t offset = (const uint8_t *)next - base;
 
@@ -452,11 +452,11 @@ struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_prim_next(
         return YETTY_ERR(yetty_ydraw_primitive_iter, "end of buffer");
     }
 
-    uint32_t prim_type = next[0];
+    uint32_t drawable_type = next[0];
     struct yetty_ydraw_drawable_flyweight_ptr_result fw_res =
-        yetty_ydraw_flyweight_registry_get(reg, prim_type, next);
+        yetty_ydraw_flyweight_registry_get(reg, drawable_type, next);
     YETTY_RETURN_IF_ERR(yetty_ydraw_primitive_iter, fw_res,
-                        "prim_next: registry lookup failed");
+                        "drawable_next: registry lookup failed");
 
     struct yetty_ydraw_primitive_iter new_iter = {.fw = *fw_res.value};
     return YETTY_OK(yetty_ydraw_primitive_iter, new_iter);
@@ -480,9 +480,9 @@ struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font(
 
     uint32_t name_len = name ? (uint32_t)strlen(name) : 0;
     uint32_t ttf_len = (uint32_t)ttf_data->size;
-    size_t prim_size = yetty_ydraw_font_prim_size_for(name_len, ttf_len);
+    size_t drawable_size = yetty_ydraw_font_drawable_size_for(name_len, ttf_len);
 
-    uint8_t *staging = malloc(prim_size);
+    uint8_t *staging = malloc(drawable_size);
     if (!staging) {
         return YETTY_ERR(yetty_ycore_int, "alloc failed");
     }
@@ -514,11 +514,11 @@ struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font(
         }
     }
 
-    yetty_ydraw_font_prim_write(staging, (int32_t)next_id, name, name_len, ttf_data->data,
+    yetty_ydraw_font_drawable_write(staging, (int32_t)next_id, name, name_len, ttf_data->data,
                                       ttf_len);
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(buf, staging, prim_size);
+        yetty_ydraw_draw_list_add_prim(buf, staging, drawable_size);
     free(staging);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "add_font: add_prim failed");
     return YETTY_OK(yetty_ycore_int, next_id);
@@ -543,8 +543,8 @@ struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font_ref(
         return YETTY_ERR(yetty_ycore_int, "hex16 must be exactly 16 hex chars");
     }
 
-    size_t prim_size = yetty_ydraw_font_prim_size_for(name_len, 0);
-    uint8_t *staging = malloc(prim_size);
+    size_t drawable_size = yetty_ydraw_font_drawable_size_for(name_len, 0);
+    uint8_t *staging = malloc(drawable_size);
     if (!staging) {
         return YETTY_ERR(yetty_ycore_int, "alloc failed");
     }
@@ -567,10 +567,10 @@ struct yetty_ycore_int_result yetty_ydraw_draw_list_add_font_ref(
         }
     }
 
-    yetty_ydraw_font_prim_write(staging, (int32_t)next_id, hex16, name_len, NULL, 0);
+    yetty_ydraw_font_drawable_write(staging, (int32_t)next_id, hex16, name_len, NULL, 0);
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(buf, staging, prim_size);
+        yetty_ydraw_draw_list_add_prim(buf, staging, drawable_size);
     free(staging);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "add_font_ref: add_prim failed");
     return YETTY_OK(yetty_ycore_int, next_id);
@@ -589,19 +589,19 @@ struct yetty_ycore_void_result yetty_ydraw_draw_list_add_text_full(
     }
 
     uint32_t text_len = (uint32_t)text->size;
-    size_t prim_size = yetty_ydraw_text_span_prim_size_for(text_len);
+    size_t drawable_size = yetty_ydraw_text_span_drawable_size_for(text_len);
 
-    uint8_t *staging = malloc(prim_size);
+    uint8_t *staging = malloc(drawable_size);
     if (!staging) {
         return YETTY_ERR(yetty_ycore_void, "alloc failed");
     }
 
-    yetty_ydraw_text_span_prim_write_full(staging, x, y, font_size, rotation, color, layer,
+    yetty_ydraw_text_span_drawable_write_full(staging, x, y, font_size, rotation, color, layer,
                                                 font_id, (const char *)text->data, text_len,
                                                 char_spacing, word_spacing);
 
     struct yetty_ydraw_id_result r =
-        yetty_ydraw_draw_list_add_prim(buf, staging, prim_size);
+        yetty_ydraw_draw_list_add_prim(buf, staging, drawable_size);
     free(staging);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "add_text: add_prim failed");
     return YETTY_OK_VOID();

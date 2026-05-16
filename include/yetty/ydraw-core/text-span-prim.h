@@ -31,7 +31,7 @@ extern "C" {
 
 #define YETTY_YDRAW_TYPE_TEXT_SPAN 0x40000002u
 
-struct yetty_ydraw_text_span_prim_view {
+struct yetty_ydraw_text_span_drawable_view {
     float x, y;
     float font_size;
     float rotation;
@@ -58,11 +58,11 @@ struct yetty_ydraw_text_span_prim_view {
     float word_spacing;
 };
 
-int yetty_ydraw_text_span_prim_parse(
-    const uint32_t *prim, struct yetty_ydraw_text_span_prim_view *out YETTY_ANNOT_OUT);
+int yetty_ydraw_text_span_drawable_parse(
+    const uint32_t *prim, struct yetty_ydraw_text_span_drawable_view *out YETTY_ANNOT_OUT);
 
-struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_text_span_prim_handler(
-    uint32_t prim_type);
+struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_text_span_drawable_handler(
+    uint32_t drawable_type);
 
 #ifdef __cplusplus
 }

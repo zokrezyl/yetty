@@ -39,9 +39,9 @@ static const struct yetty_ydraw_drawable_base_ops g_figure_base_ops = {
 };
 
 struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_figure_handler(
-    uint32_t prim_type)
+    uint32_t drawable_type)
 {
-    if (yetty_ydraw_is_figure(prim_type)) {
+    if (yetty_ydraw_is_figure(drawable_type)) {
         return YETTY_OK(yetty_ydraw_drawable_base_ops_ptr, &g_figure_base_ops);
     }
     return YETTY_ERR(yetty_ydraw_drawable_base_ops_ptr, "not a complex type");
