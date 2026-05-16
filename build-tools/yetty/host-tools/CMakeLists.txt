@@ -240,6 +240,10 @@ foreach(NAME ${TS_GRAMMAR_NAMES})
         file(READ "${_QUERY_FILE}" _CHILD_CONTENT)
         string(APPEND _QUERY_CONTENT "${_CHILD_CONTENT}")
         string(REPLACE "\\" "\\\\" _QUERY_CONTENT "${_QUERY_CONTENT}")
+        # Escape '?' so adjacent '??' sequences in .scm files aren't
+        # interpreted as C trigraphs (compilers warn even when trigraphs
+        # are disabled, as in C17+).
+        string(REPLACE "?" "\\?" _QUERY_CONTENT "${_QUERY_CONTENT}")
         string(REPLACE "\"" "\\\"" _QUERY_CONTENT "${_QUERY_CONTENT}")
         string(REPLACE "\n" "\\n\"\n\"" _QUERY_CONTENT "${_QUERY_CONTENT}")
         string(APPEND _TS_HEADER "static const char TS_QUERY_${NAME}[] =\n\"${_QUERY_CONTENT}\";\n\n")

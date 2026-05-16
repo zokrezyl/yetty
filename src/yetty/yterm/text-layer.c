@@ -428,7 +428,10 @@ static int sb_arena_push(struct yetty_yterm_text_sb_arena *a, const VTermScreenC
     size_t bytes = (size_t)cols * sizeof(VTermScreenCell);
 
     /* Growth phase: extend lines[] up to max_lines. The live range is
-     * always linear in this phase (lines_tail = 0), so realloc preserves it. */
+     * always linear in this phase (lines_tail = 0), so realloc preserves it.
+     * After grow, force lines_head = lines_count: the prior push's modulus
+     * may have wrapped lines_head to 0 at the old cap boundary, which would
+     * cause this push to overwrite slot 0 instead of appending. */
     if (a->lines_count >= a->lines_cap && a->lines_cap < a->max_lines) {
         uint32_t new_cap = a->lines_cap == 0 ? 256 : a->lines_cap * 2;
         if (new_cap > a->max_lines) {
@@ -442,10 +445,12 @@ static int sb_arena_push(struct yetty_yterm_text_sb_arena *a, const VTermScreenC
         }
         a->lines = grown;
         a->lines_cap = new_cap;
+        a->lines_head = a->lines_count;
     }
 
     /* Growth phase: extend cells[] until the new line fits. Same linearity
-     * argument — cells_tail = 0 so realloc keeps the range valid. */
+     * argument — cells_tail = 0 so realloc keeps the range valid. Force
+     * cells_head = cells_used for the same reason as lines_head above. */
     while (a->cells_used + bytes > a->cells_cap && a->lines_cap < a->max_lines) {
         size_t new_cap = a->cells_cap == 0 ? 64 * 1024 : a->cells_cap * 2;
         while (new_cap < a->cells_used + bytes) {
@@ -458,6 +463,7 @@ static int sb_arena_push(struct yetty_yterm_text_sb_arena *a, const VTermScreenC
         }
         a->cells = grown;
         a->cells_cap = new_cap;
+        a->cells_head = a->cells_used;
     }
 
     /* Steady phase: evict oldest until lines[] has a free slot and cells[]
@@ -1359,6 +1365,7 @@ static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer)
     }
 
     const VTermScreenCell *live = vterm_screen_get_buffer(layer->screen);
+    uint32_t live_root_row = (uint32_t)vterm_screen_get_buffer_root_row(layer->screen);
     VTermScreenCell blank;
     memset(&blank, 0, sizeof(blank));
 
@@ -1392,7 +1399,8 @@ static void text_layer_build_view(struct yetty_yterm_terminal_text_layer *layer)
         } else if (live) {
             uint32_t live_row = total_idx - layer->sb.lines_count;
             if (live_row < rows) {
-                memcpy(dst, live + (size_t)live_row * cols, (size_t)cols * sizeof(VTermScreenCell));
+                memcpy(dst, live + (size_t)(live_root_row + live_row) * cols,
+                       (size_t)cols * sizeof(VTermScreenCell));
             } else {
                 for (uint32_t c = 0; c < cols; c++) {
                     dst[c] = blank;
