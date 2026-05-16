@@ -1085,6 +1085,18 @@ struct emit_glyph {
     struct bounds b; /* glyph bounds in font units (for the shader uniform) */
 };
 
+/* Push a codepoint if not already present (linear dedupe over `out`).
+ * Returns -1 on alloc failure, 0 otherwise. */
+static int push_unique(struct u32_vec *out, uint32_t cp)
+{
+    for (uint32_t j = 0; j < out->size; j++) {
+        if (out->data[j] == cp) {
+            return 0;
+        }
+    }
+    return u32_vec_push(out, cp);
+}
+
 /* Walk every cmap available on the face and collect the codepoints it
  * maps. FreeType picks ONE charmap as `face->charmap` at FT_New_Face
  * time (Unicode preferred). For PDF symbol fonts that only carry a
@@ -1093,38 +1105,45 @@ struct emit_glyph {
  * immediately and the charset comes back empty.
  *
  * Iterate over `face->charmaps[]` instead: select each cmap, walk it,
- * dedupe via a simple "highest cp seen" check (cmaps return entries in
- * ascending order). Restore the original selection on exit. */
+ * dedupe via push_unique. Restore the original selection on exit.
+ *
+ * Microsoft Symbol (platform=3, encoding=0) cmaps encode glyphs in the
+ * PUA range 0xF020-0xF0FF — the high byte 0xF0 is a fixed prefix and the
+ * low byte is the real character. PDF /ToUnicode maps these glyphs back
+ * to plain Latin codepoints (e.g. GID for "-" lives at U+F02D in the
+ * cmap but the producer emits U+002D in text). For each MS-Symbol entry
+ * also register the stripped codepoint so the CDB has both keys
+ * pointing at the same MSDF render. FreeType's MS-Symbol cmap honours
+ * the stripped codepoint too: FT_Get_Char_Index(face, 0x002D) returns
+ * the same GID as 0xF02D when the symbol cmap is active. */
 static int collect_codepoints(FT_Face face, struct u32_vec *out)
 {
     FT_CharMap saved = face->charmap;
-    int        any   = 0;
 
     for (FT_Int i = 0; i < face->num_charmaps; i++) {
-        if (FT_Set_Charmap(face, face->charmaps[i]) != 0) {
+        FT_CharMap cm = face->charmaps[i];
+        if (FT_Set_Charmap(face, cm) != 0) {
             continue;
         }
+        int is_ms_symbol = (cm->platform_id == 3 && cm->encoding_id == 0);
+        ydebug("ymsdf-wgsl: cmap[%d] plat=%u enc=%u symbol=%d",
+               (int)i, (unsigned)cm->platform_id, (unsigned)cm->encoding_id,
+               is_ms_symbol);
+
         FT_UInt  gid;
         FT_ULong cp = FT_Get_First_Char(face, &gid);
         while (gid != 0) {
-            /* Dedupe against the previous entry of THIS cmap (the iter
-             * yields ascending cp), and against the global set with a
-             * cheap linear scan over the last N pushes — codepoint
-             * ranges across cmaps overlap rarely enough that a linear
-             * tail scan stays cheap in practice. */
-            int dup = 0;
-            for (uint32_t j = 0; j < out->size; j++) {
-                if (out->data[j] == (uint32_t)cp) {
-                    dup = 1;
-                    break;
-                }
+            if (push_unique(out, (uint32_t)cp) < 0) {
+                if (saved) FT_Set_Charmap(face, saved);
+                return -1;
             }
-            if (!dup) {
-                if (u32_vec_push(out, (uint32_t)cp) < 0) {
+            if (is_ms_symbol && cp >= 0xF000 && cp <= 0xF0FF) {
+                ydebug("ymsdf-wgsl:   ms-symbol cp=0x%lX -> stripped 0x%02lX",
+                       (unsigned long)cp, (unsigned long)(cp & 0xFFu));
+                if (push_unique(out, (uint32_t)(cp & 0xFFu)) < 0) {
                     if (saved) FT_Set_Charmap(face, saved);
                     return -1;
                 }
-                any = 1;
             }
             cp = FT_Get_Next_Char(face, cp, &gid);
         }
@@ -1133,7 +1152,6 @@ static int collect_codepoints(FT_Face face, struct u32_vec *out)
     if (saved) {
         FT_Set_Charmap(face, saved);
     }
-    (void)any;
     return 0;
 }
 

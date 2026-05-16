@@ -912,7 +912,19 @@ static struct uint32_result expand_text_span_to_glyphs(
         }
 
         struct uint32_result gi_res = font->ops->get_glyph_index(font, cp);
-        YETTY_RETURN_IF_ERR(uint32, gi_res, "expand_text_span: get_glyph_index");
+        if (YETTY_IS_ERR(gi_res)) {
+            /* Missing glyph — PDF subset fonts routinely omit codepoints
+             * the producer's ToUnicode CMap nonetheless decodes to (e.g.
+             * a hyphen byte routed through a symbol font's Differences
+             * array). Standard PDF behavior is to advance by a default
+             * em-fraction and render nothing (.notdef equivalent), not
+             * abort the document. */
+            ydebug("expand_text_span: skip missing glyph cp=U+%04X", cp);
+            yetty_ycore_error_destroy(gi_res.error);
+            cursor_x += (ts->font_size * 0.25f) + ts->char_spacing;
+            if (cp == 0x20) cursor_x += ts->word_spacing;
+            continue;
+        }
         uint32_t glyph_index = gi_res.value;
 
         struct yetty_yrender_gpu_resource_set_result rs_res =

@@ -115,6 +115,7 @@ static struct uint32_result load_one(struct yetty_yfont_msdf_font *f, uint32_t c
         return YETTY_ERR(uint32, res.error.msg);
     }
     if (!data) {
+        ydebug("msdf_font: glyph cp=U+%04X not in CDB", cp);
         return YETTY_ERR(uint32, "glyph not found");
     }
 
