@@ -1,4 +1,4 @@
-/* prim-iter.h — streaming primitive iterator.
+/* drawable-iterator.h — streaming primitive iterator.
  *
  * Pulls already-decoded primitive bytes from an OSC state machine and
  * reassembles them into typed flyweight views. Hands the canvas one
@@ -23,15 +23,15 @@
  *
  * Lifecycle:
  *   - init: zero-out, no allocation yet.
- *   - next: returns OK / EOE / ERR. On OK, iter->fw is valid until the
+ *   - next: returns OK / EOE / ERR. On OK, iter->flyweight is valid until the
  *     next _next call. EOE means the envelope terminator was reached
  *     (clean end). ERR is a parse or stream failure; the layer should
  *     surface it as fatal.
  *   - destroy: frees scratch.
  *
  * Single-use scratch: after _next returns OK and the caller has consumed
- * iter->fw, the next _next call may overwrite the scratch. Do NOT cache
- * fw.data beyond the next iter step.
+ * iter->flyweight, the next _next call may overwrite the scratch. Do NOT cache
+ * flyweight.data beyond the next iter step.
  */
 #ifndef YETTY_YDRAW_CORE_PRIM_ITER_H
 #define YETTY_YDRAW_CORE_PRIM_ITER_H
@@ -48,7 +48,7 @@ extern "C" {
 struct yetty_ywire_wire_statemachine;
 
 enum yetty_ydraw_drawable_iter_status {
-    YETTY_PRIM_ITER_OK = 0, /* fw populated; caller consumes then re-calls */
+    YETTY_PRIM_ITER_OK = 0, /* flyweight populated; caller consumes then re-calls */
     YETTY_PRIM_ITER_EOE,    /* end-of-envelope: Wire Statemachine at_end + scratch empty */
     YETTY_PRIM_ITER_ERR,    /* internal error (truncated, alloc, …) */
 };
@@ -56,9 +56,9 @@ enum yetty_ydraw_drawable_iter_status {
 YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_iter_status, enum yetty_ydraw_drawable_iter_status);
 
 struct yetty_ydraw_drawable_iter {
-    /* Public: valid after _next returns OK. fw.data points into the
+    /* Public: valid after _next returns OK. flyweight.data points into the
      * iter's scratch — stable until the next _next call. */
-    struct yetty_ydraw_drawable_flyweight fw;
+    struct yetty_ydraw_drawable_flyweight flyweight;
 
     /* Scene bounds parsed from the 24-byte framed envelope header. Valid
      * once header_done flips to true (after the header bytes have been

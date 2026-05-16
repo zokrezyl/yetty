@@ -1,6 +1,6 @@
-/* prim-iter.c — streaming primitive iterator implementation.
+/* drawable-iterator.c — streaming primitive iterator implementation.
  *
- * See prim-iter.h for design overview. The iter runs on the layer's
+ * See drawable-iterator.h for design overview. The iter runs on the layer's
  * process_input coroutine; it pulls bytes from the Wire Statemachine and yields the
  * coro when the Wire Statemachine has no more body bytes right now AND the envelope
  * terminator has not been seen. From the caller's view `iter_next` is
@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <yetty/ydraw-core/prim-iter.h>
+#include <yetty/ydraw-core/drawable-iterator.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/ytrace/ytrace.h>
@@ -44,8 +44,8 @@ struct yetty_ycore_void_result yetty_ydraw_drawable_iter_init(
     if (!reg) {
         return YETTY_ERR(yetty_ycore_void, "reg is NULL");
     }
-    iter->fw.data = NULL;
-    iter->fw.ops = NULL;
+    iter->flyweight.data = NULL;
+    iter->flyweight.ops = NULL;
     iter->scene_min_x = 0.0f;
     iter->scene_min_y = 0.0f;
     iter->scene_max_x = 0.0f;
@@ -232,16 +232,16 @@ struct yetty_ydraw_drawable_iter_status_result yetty_ydraw_drawable_iter_next(
         /* Resolve flyweight + stride. */
         uint32_t prim_type;
         memcpy(&prim_type, iter->scratch, sizeof(prim_type));
-        struct yetty_ydraw_drawable_flyweight_ptr_result fw_res =
+        struct yetty_ydraw_drawable_flyweight_ptr_result flyweight_res =
             yetty_ydraw_flyweight_registry_get(iter->reg, prim_type,
                                                (const uint32_t *)iter->scratch);
-        if (YETTY_IS_ERR(fw_res)) {
+        if (YETTY_IS_ERR(flyweight_res)) {
             yerror("prim_iter: registry lookup failed for type 0x%08x", prim_type);
             return YETTY_ERR(yetty_ydraw_drawable_iter_status, "prim_iter: flyweight lookup failed",
-                             fw_res);
+                             flyweight_res);
         }
         struct yetty_ycore_size_result size_res =
-            fw_res.value->ops->size((const uint32_t *)iter->scratch);
+            flyweight_res.value->ops->size((const uint32_t *)iter->scratch);
         if (YETTY_IS_ERR(size_res)) {
             return YETTY_ERR(yetty_ydraw_drawable_iter_status, "prim_iter: ops->size failed",
                              size_res);
@@ -271,17 +271,17 @@ struct yetty_ydraw_drawable_iter_status_result yetty_ydraw_drawable_iter_next(
         }
     }
 
-    /* Prim complete — populate fw, reset counters so the next call starts
-     * a fresh prim. Caller must consume fw before re-calling. */
+    /* Prim complete — populate flyweight, reset counters so the next call starts
+     * a fresh prim. Caller must consume flyweight before re-calling. */
     uint32_t prim_type;
     memcpy(&prim_type, iter->scratch, sizeof(prim_type));
-    struct yetty_ydraw_drawable_flyweight_ptr_result fw_res =
+    struct yetty_ydraw_drawable_flyweight_ptr_result flyweight_res =
         yetty_ydraw_flyweight_registry_get(iter->reg, prim_type, (const uint32_t *)iter->scratch);
-    if (YETTY_IS_ERR(fw_res)) {
+    if (YETTY_IS_ERR(flyweight_res)) {
         return YETTY_ERR(yetty_ydraw_drawable_iter_status, "prim_iter: re-resolve flyweight failed",
-                         fw_res);
+                         flyweight_res);
     }
-    iter->fw = *fw_res.value;
+    iter->flyweight = *flyweight_res.value;
     iter->filled = 0;
     iter->total_size = 0;
     return YETTY_OK(yetty_ydraw_drawable_iter_status, YETTY_PRIM_ITER_OK);

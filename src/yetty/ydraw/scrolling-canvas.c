@@ -31,7 +31,7 @@
 #include <yetty/ydraw-core/complex-prim-types.h>
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ydraw-core/font-prim.h>
-#include <yetty/ydraw-core/prim-iter.h>
+#include <yetty/ydraw-core/drawable-iterator.h>
 #include <yetty/ydraw-core/text-span-prim.h>
 #include <yetty/ydraw-factory/complex-prim-factory.h>
 #include <yetty/yetty/yetty.h>
@@ -496,12 +496,12 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
     c->raster_base_size = 32.0f;
 
     /* Flyweight registry. */
-    struct yetty_ydraw_flyweight_registry_ptr_result fw_res = yetty_ydraw_flyweight_create();
-    if (YETTY_IS_ERR(fw_res)) {
+    struct yetty_ydraw_flyweight_registry_ptr_result flyweight_res = yetty_ydraw_flyweight_create();
+    if (YETTY_IS_ERR(flyweight_res)) {
         free(c);
-        return YETTY_ERR(yetty_ydraw_canvas_ptr, "flyweight create", fw_res);
+        return YETTY_ERR(yetty_ydraw_canvas_ptr, "flyweight create", flyweight_res);
     }
-    c->flyweight_registry = fw_res.value;
+    c->flyweight_registry = flyweight_res.value;
 
     /* Complex-prim factory + built-in registrations. */
     struct yetty_ydraw_figure_factory_ptr_result factory_res = yetty_ydraw_figure_factory_create(
@@ -771,10 +771,10 @@ static struct yetty_ycore_void_result scrolling_set_cursor_callback(
  * Add a single SDF / complex primitive
  *===========================================================================*/
 
-static struct uint32_result add_primitive_internal(struct scrolling_canvas *c,
-                                                   const struct yetty_ydraw_drawable_flyweight *fw)
+static struct uint32_result add_primitive_internal(
+    struct scrolling_canvas *c, const struct yetty_ydraw_drawable_flyweight *flyweight)
 {
-    if (!fw || !fw->data || !fw->ops) {
+    if (!flyweight || !flyweight->data || !flyweight->ops) {
         return YETTY_ERR(uint32, "invalid flyweight");
     }
     if (c->cell_size.height <= 0.0f) {
@@ -783,17 +783,17 @@ static struct uint32_result add_primitive_internal(struct scrolling_canvas *c,
     if (c->cell_size.width <= 0.0f) {
         return YETTY_ERR(uint32, "cell_width <= 0");
     }
-    if (!fw->ops->aabb || !fw->ops->size) {
+    if (!flyweight->ops->aabb || !flyweight->ops->size) {
         return YETTY_ERR(uint32, "handler missing ops");
     }
 
-    uint32_t prim_type = fw->data[0];
+    uint32_t prim_type = flyweight->data[0];
 
-    struct rectangle_result aabb_res = fw->ops->aabb(fw->data);
+    struct rectangle_result aabb_res = flyweight->ops->aabb(flyweight->data);
     YETTY_RETURN_IF_ERR(uint32, aabb_res, "add_primitive: aabb");
     struct yetty_ycore_rectangle aabb = aabb_res.value;
 
-    struct yetty_ycore_size_result size_res = fw->ops->size(fw->data);
+    struct yetty_ycore_size_result size_res = flyweight->ops->size(flyweight->data);
     YETTY_RETURN_IF_ERR(uint32, size_res, "add_primitive: size");
     uint32_t word_count = size_res.value / sizeof(uint32_t);
 
@@ -825,8 +825,9 @@ static struct uint32_result add_primitive_internal(struct scrolling_canvas *c,
         yetty_ydraw_scrolling_grid_dirty_line(c->grid, primitive_grid_line);
     YETTY_RETURN_IF_ERR(uint32, dl, "add_primitive: dirty_line");
 
-    struct uint32_result push_res = yetty_ydraw_scrolling_grid_push_prim(
-        c->grid, primitive_grid_line, primitive_rolling_row, (const float *)fw->data, word_count);
+    struct uint32_result push_res =
+        yetty_ydraw_scrolling_grid_push_prim(c->grid, primitive_grid_line, primitive_rolling_row,
+                                             (const float *)flyweight->data, word_count);
     YETTY_RETURN_IF_ERR(uint32, push_res, "add_primitive: push_prim");
     uint32_t prim_index = push_res.value;
 
@@ -876,8 +877,9 @@ static struct uint32_result add_primitive_internal(struct scrolling_canvas *c,
 
     if (yetty_ydraw_is_complex_type(prim_type)) {
         struct yetty_ydraw_figure_instance_ptr_result inst_res =
-            yetty_ydraw_figure_factory_create_instance(
-                c->figure_factory, fw->data, word_count * sizeof(uint32_t), primitive_rolling_row);
+            yetty_ydraw_figure_factory_create_instance(c->figure_factory, flyweight->data,
+                                                       word_count * sizeof(uint32_t),
+                                                       primitive_rolling_row);
         YETTY_RETURN_IF_ERR(uint32, inst_res, "add_primitive: create_instance");
         struct yetty_ycore_void_result fr =
             yetty_ydraw_scrolling_grid_push_figure(c->grid, primitive_grid_line, inst_res.value);
@@ -1090,11 +1092,11 @@ struct env_state {
     uint32_t max_row_seen;
 };
 
-static struct yetty_ycore_void_result dispatch_one(struct scrolling_canvas *c,
-                                                   const struct yetty_ydraw_drawable_flyweight *fw,
-                                                   struct env_state *env)
+static struct yetty_ycore_void_result dispatch_one(
+    struct scrolling_canvas *c, const struct yetty_ydraw_drawable_flyweight *flyweight,
+    struct env_state *env)
 {
-    uint32_t prim_type = fw->data[0];
+    uint32_t prim_type = flyweight->data[0];
     if (prim_type <= YETTY_YDRAW_CMD_END) {
         if (prim_type == YETTY_YDRAW_CMD_ZERO) {
             ydebug("process_input: CMD_ZERO — clearing canvas + cursor (0,0)");
@@ -1110,7 +1112,7 @@ static struct yetty_ycore_void_result dispatch_one(struct scrolling_canvas *c,
     }
     if (prim_type == YETTY_YDRAW_TYPE_FONT) {
         struct yetty_ydraw_font_prim_view fv;
-        if (yetty_ydraw_font_prim_parse(fw->data, &fv) != 0 || fv.font_id < 0) {
+        if (yetty_ydraw_font_prim_parse(flyweight->data, &fv) != 0 || fv.font_id < 0) {
             return YETTY_OK_VOID();
         }
         char hex[17];
@@ -1154,7 +1156,7 @@ static struct yetty_ycore_void_result dispatch_one(struct scrolling_canvas *c,
     }
     if (prim_type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
         struct yetty_ydraw_text_span_prim_view tv;
-        if (yetty_ydraw_text_span_prim_parse(fw->data, &tv) != 0) {
+        if (yetty_ydraw_text_span_prim_parse(flyweight->data, &tv) != 0) {
             return YETTY_OK_VOID();
         }
         struct yetty_ydraw_font *font = NULL;
@@ -1191,7 +1193,7 @@ static struct yetty_ycore_void_result dispatch_one(struct scrolling_canvas *c,
         YETTY_RETURN_IF_ERR(yetty_ycore_void, an, "dispatch: attach_list_note");
         return YETTY_OK_VOID();
     }
-    struct uint32_result prim_res = add_primitive_internal(c, fw);
+    struct uint32_result prim_res = add_primitive_internal(c, flyweight);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, prim_res, "dispatch: add_primitive");
     if (prim_res.value > env->max_row_seen) {
         env->max_row_seen = prim_res.value;
@@ -1294,7 +1296,7 @@ static struct yetty_ycore_void_result scrolling_process_input(
             if (sr.value == YETTY_PRIM_ITER_EOE) {
                 break;
             }
-            struct yetty_ycore_void_result dr = dispatch_one(c, &iter.fw, &env);
+            struct yetty_ycore_void_result dr = dispatch_one(c, &iter.flyweight, &env);
             if (YETTY_IS_ERR(dr)) {
                 ret = YETTY_ERR(yetty_ycore_void, "process_input: dispatch_one", dr);
                 goto cleanup;
@@ -1308,7 +1310,7 @@ static struct yetty_ycore_void_result scrolling_process_input(
             ret = wrap;
         }
 
-cleanup:
+    cleanup:
         yetty_ydraw_drawable_iter_destroy(&iter);
         attach_list_free(&env.attach_list);
         /* If we never reached env_finalize (or it failed before the

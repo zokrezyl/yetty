@@ -4,11 +4,11 @@ add_library(yetty_ydraw_core STATIC
     complex-prim-types.c
     flyweight.c
     font-prim.c
-    prim-iter.c
+    drawable-iterator.c
     text-span-prim.c
 )
 
-# prim-iter uses yetty_yterm's wire-statemachine header for declarations,
+# drawable-iterator uses yetty_yterm's wire-statemachine header for declarations,
 # but does NOT link against yterm — it only needs the header.
 target_include_directories(yetty_ydraw_core PRIVATE
     ${YETTY_ROOT}/include
