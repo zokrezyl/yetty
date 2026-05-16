@@ -183,7 +183,7 @@ static void raster_font_update_font_size(struct yetty_yfont_raster_font *font)
     /* Get font metrics in pixels (at current size) */
     /* FreeType metrics are in 26.6 fixed point (divide by 64) */
     int ascender = regular_face->size->metrics.ascender >> 6;
-    int descender = abs(regular_face->size->metrics.descender >> 6);
+    int descender = (int)labs(regular_face->size->metrics.descender >> 6);
     int line_height = ascender + descender;
 
     /* Scale font size so line height fits in cell height (with small margin) */
@@ -203,7 +203,7 @@ static void raster_font_update_font_size(struct yetty_yfont_raster_font *font)
 
     /* Recalculate metrics at new size */
     ascender = regular_face->size->metrics.ascender >> 6;
-    descender = abs(regular_face->size->metrics.descender >> 6);
+    descender = (int)labs(regular_face->size->metrics.descender >> 6);
 
     /* Baseline position from top of cell (center the text vertically) */
     int actual_line_height = ascender + descender;

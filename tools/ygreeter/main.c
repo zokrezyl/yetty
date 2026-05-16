@@ -1012,7 +1012,7 @@ static void query_terminal_cells(int *cols, int *rows)
 {
     *cols = 80;
     *rows = 24;
-    /* yetty_yplatform_term_get_size leaves *cols/*rows untouched on
+    /* yetty_yplatform_term_get_size leaves *cols / *rows untouched on
      * failure, so the 80x24 defaults above stick when there's no tty. */
     (void)yetty_yplatform_term_get_size(cols, rows);
 }

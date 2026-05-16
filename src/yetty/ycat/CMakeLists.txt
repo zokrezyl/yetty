@@ -49,6 +49,10 @@ if(YETTY_ENABLE_LIB_TREESITTER)
             file(READ "${_QUERY_FILE}" _CHILD_CONTENT)
             string(APPEND _QUERY_CONTENT "${_CHILD_CONTENT}")
             string(REPLACE "\\" "\\\\" _QUERY_CONTENT "${_QUERY_CONTENT}")
+            # Escape '?' so adjacent '??' sequences in .scm files aren't
+            # interpreted as C trigraphs (compilers warn even when trigraphs
+            # are disabled, as in C17+).
+            string(REPLACE "?" "\\?" _QUERY_CONTENT "${_QUERY_CONTENT}")
             string(REPLACE "\"" "\\\"" _QUERY_CONTENT "${_QUERY_CONTENT}")
             string(REPLACE "\n" "\\n\"\n\"" _QUERY_CONTENT "${_QUERY_CONTENT}")
             string(APPEND _TS_HEADER
@@ -103,7 +107,12 @@ endif()
 if(YETTY_ENABLE_LIB_LIBMAGIC AND TARGET magic)
     target_link_libraries(yetty_ycat PUBLIC magic)
     target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_LIBMAGIC=1)
-    if(DEFINED LIBMAGIC_MGC_PATH)
+    # Only define if non-empty — empty paths would force a runtime guard in
+    # detect.c (`MACRO[0] != '\0'`), which clang flags as a constant logical
+    # operand. CMake's `if(LIBMAGIC_MGC_PATH)` is truthy only when set AND
+    # non-empty, so an empty path leaves the macro undefined and the
+    # `#ifdef` block in detect.c is skipped.
+    if(LIBMAGIC_MGC_PATH)
         target_compile_definitions(yetty_ycat PRIVATE
             YETTY_YCAT_MAGIC_MGC_PATH="${LIBMAGIC_MGC_PATH}")
     endif()

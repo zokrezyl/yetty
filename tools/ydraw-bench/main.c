@@ -71,33 +71,6 @@ static const enum ydraw_sdf_type PRIM_TYPES[] = {
 };
 #define NUM_PRIM_TYPES (sizeof(PRIM_TYPES) / sizeof(PRIM_TYPES[0]))
 
-// Base64 encoding
-static const char B64_TABLE[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-static size_t base64_encode(const uint8_t *in, size_t in_len, char *out,
-                            size_t out_cap) {
-    size_t out_len = 0;
-    for (size_t i = 0; i < in_len && out_len + 4 <= out_cap;) {
-        uint32_t octet_a = i < in_len ? in[i++] : 0;
-        uint32_t octet_b = i < in_len ? in[i++] : 0;
-        uint32_t octet_c = i < in_len ? in[i++] : 0;
-        uint32_t triple = (octet_a << 16) | (octet_b << 8) | octet_c;
-
-        out[out_len++] = B64_TABLE[(triple >> 18) & 0x3F];
-        out[out_len++] = B64_TABLE[(triple >> 12) & 0x3F];
-        out[out_len++] = B64_TABLE[(triple >> 6) & 0x3F];
-        out[out_len++] = B64_TABLE[triple & 0x3F];
-    }
-    // Padding
-    size_t mod = in_len % 3;
-    if (mod > 0 && out_len >= 1)
-        out[out_len - 1] = '=';
-    if (mod == 1 && out_len >= 2)
-        out[out_len - 2] = '=';
-    return out_len;
-}
-
 // Fast xorshift64 PRNG
 static uint64_t g_rng_state = 1;
 

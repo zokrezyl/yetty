@@ -36,6 +36,15 @@ struct flat_uniform {
     const char *ns;
 };
 
+/* Fixed atlas slots — one per format, always bound */
+struct texture_atlas {
+    uint32_t width;
+    uint32_t height;
+    WGPUTexture texture;
+    WGPUTextureView view;
+    WGPUSampler sampler;
+};
+
 struct yetty_yrender_gpu_resource_binder_impl {
     struct yetty_yrender_gpu_resource_binder base;
     WGPUDevice device;
@@ -69,13 +78,6 @@ struct yetty_yrender_gpu_resource_binder_impl {
     struct yetty_yrender_buffer shader_code;
 
     /* Fixed atlas slots — one per format, always bound */
-    struct texture_atlas {
-        uint32_t width;
-        uint32_t height;
-        WGPUTexture texture;
-        WGPUTextureView view;
-        WGPUSampler sampler;
-    };
 #define ATLAS_R8 0
 #define ATLAS_RGBA8 1
 #define ATLAS_COUNT 2

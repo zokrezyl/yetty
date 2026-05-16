@@ -21,6 +21,12 @@ add_executable(naming-convention-fix
     naming-convention-fix.cpp
 )
 
+# See qa-tools/lib/naming-convention/CMakeLists.txt for why C++20.
+set_target_properties(naming-convention-fix PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+)
+
 target_include_directories(naming-convention-fix PRIVATE
     ${LLVM_INCLUDE_DIRS}
     ${CLANG_INCLUDE_DIRS}
