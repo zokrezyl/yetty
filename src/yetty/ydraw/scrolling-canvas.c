@@ -59,7 +59,7 @@
  * Constants
  *===========================================================================*/
 
-/* Glyph primitive type — not in ysdf types.gen.h since it's not SDF. */
+/* Glyph drawable type — not in ysdf types.gen.h since it's not SDF. */
 #define YETTY_YSDF_GLYPH 200
 /* Glyph prim layout: type, z_order, x, y, font_size,
  * packed(glyph_idx | font_id), color */
@@ -768,10 +768,10 @@ static struct yetty_ycore_void_result scrolling_set_cursor_callback(
 }
 
 /*===========================================================================
- * Add a single SDF / complex primitive
+ * Add a single SDF / complex drawable
  *===========================================================================*/
 
-static struct uint32_result add_primitive_internal(
+static struct uint32_result add_drawable_internal(
     struct scrolling_canvas *c, const struct yetty_ydraw_drawable_flyweight *flyweight)
 {
     if (!flyweight || !flyweight->data || !flyweight->ops) {
@@ -790,11 +790,11 @@ static struct uint32_result add_primitive_internal(
     uint32_t prim_type = flyweight->data[0];
 
     struct rectangle_result aabb_res = flyweight->ops->aabb(flyweight->data);
-    YETTY_RETURN_IF_ERR(uint32, aabb_res, "add_primitive: aabb");
+    YETTY_RETURN_IF_ERR(uint32, aabb_res, "add_drawable: aabb");
     struct yetty_ycore_rectangle aabb = aabb_res.value;
 
     struct yetty_ycore_size_result size_res = flyweight->ops->size(flyweight->data);
-    YETTY_RETURN_IF_ERR(uint32, size_res, "add_primitive: size");
+    YETTY_RETURN_IF_ERR(uint32, size_res, "add_drawable: size");
     uint32_t word_count = size_res.value / sizeof(uint32_t);
 
     if (aabb.min.y > aabb.max.y) {
@@ -813,22 +813,22 @@ static struct uint32_result add_primitive_internal(
     }
 
     float max_rows = aabb.max.y / c->cell_size.height;
-    uint32_t primitive_max_in_rows = (max_rows > 0.0f) ? ((uint32_t)ceilf(max_rows) - 1u) : 0u;
-    uint32_t primitive_grid_line = cursor_canvas_line + primitive_max_in_rows;
-    uint32_t primitive_rolling_row = cursor_canvas_line;
+    uint32_t drawable_max_in_rows = (max_rows > 0.0f) ? ((uint32_t)ceilf(max_rows) - 1u) : 0u;
+    uint32_t drawable_grid_line = cursor_canvas_line + drawable_max_in_rows;
+    uint32_t drawable_rolling_row = cursor_canvas_line;
 
     struct yetty_ycore_void_result el =
-        yetty_ydraw_scrolling_grid_ensure_lines(c->grid, primitive_grid_line + 1);
-    YETTY_RETURN_IF_ERR(uint32, el, "add_primitive: ensure_lines");
+        yetty_ydraw_scrolling_grid_ensure_lines(c->grid, drawable_grid_line + 1);
+    YETTY_RETURN_IF_ERR(uint32, el, "add_drawable: ensure_lines");
 
     struct yetty_ycore_void_result dl =
-        yetty_ydraw_scrolling_grid_dirty_line(c->grid, primitive_grid_line);
-    YETTY_RETURN_IF_ERR(uint32, dl, "add_primitive: dirty_line");
+        yetty_ydraw_scrolling_grid_dirty_line(c->grid, drawable_grid_line);
+    YETTY_RETURN_IF_ERR(uint32, dl, "add_drawable: dirty_line");
 
     struct uint32_result push_res =
-        yetty_ydraw_scrolling_grid_push_prim(c->grid, primitive_grid_line, primitive_rolling_row,
+        yetty_ydraw_scrolling_grid_push_prim(c->grid, drawable_grid_line, drawable_rolling_row,
                                              (const float *)flyweight->data, word_count);
-    YETTY_RETURN_IF_ERR(uint32, push_res, "add_primitive: push_prim");
+    YETTY_RETURN_IF_ERR(uint32, push_res, "add_drawable: push_prim");
     uint32_t prim_index = push_res.value;
 
     uint32_t prim_col_min = (uint32_t)(aabb.min.x / c->cell_size.width);
@@ -864,14 +864,14 @@ static struct uint32_result add_primitive_internal(
     for (uint32_t row = prim_row_min; row <= prim_row_max; row++) {
         struct yetty_ycore_void_result ec =
             yetty_ydraw_scrolling_grid_ensure_cells(c->grid, row, prim_col_max + 1);
-        YETTY_RETURN_IF_ERR(uint32, ec, "add_primitive: ensure_cells");
+        YETTY_RETURN_IF_ERR(uint32, ec, "add_drawable: ensure_cells");
         struct yetty_ycore_void_result dr = yetty_ydraw_scrolling_grid_dirty_line(c->grid, row);
-        YETTY_RETURN_IF_ERR(uint32, dr, "add_primitive: dirty_line (cell row)");
-        uint16_t lines_ahead = (uint16_t)(primitive_grid_line - row);
+        YETTY_RETURN_IF_ERR(uint32, dr, "add_drawable: dirty_line (cell row)");
+        uint16_t lines_ahead = (uint16_t)(drawable_grid_line - row);
         for (uint32_t col = prim_col_min; col <= prim_col_max; col++) {
             struct yetty_ycore_void_result rp = yetty_ydraw_scrolling_grid_push_ref(
                 c->grid, row, col, lines_ahead, (uint16_t)prim_index);
-            YETTY_RETURN_IF_ERR(uint32, rp, "add_primitive: push_ref");
+            YETTY_RETURN_IF_ERR(uint32, rp, "add_drawable: push_ref");
         }
     }
 
@@ -879,22 +879,22 @@ static struct uint32_result add_primitive_internal(
         struct yetty_ydraw_figure_instance_ptr_result inst_res =
             yetty_ydraw_figure_factory_create_instance(c->figure_factory, flyweight->data,
                                                        word_count * sizeof(uint32_t),
-                                                       primitive_rolling_row);
-        YETTY_RETURN_IF_ERR(uint32, inst_res, "add_primitive: create_instance");
+                                                       drawable_rolling_row);
+        YETTY_RETURN_IF_ERR(uint32, inst_res, "add_drawable: create_instance");
         struct yetty_ycore_void_result fr =
-            yetty_ydraw_scrolling_grid_push_figure(c->grid, primitive_grid_line, inst_res.value);
+            yetty_ydraw_scrolling_grid_push_figure(c->grid, drawable_grid_line, inst_res.value);
         if (YETTY_IS_ERR(fr)) {
             yetty_ydraw_figure_instance_destroy(inst_res.value);
-            return YETTY_ERR(uint32, "add_primitive: push_figure", fr);
+            return YETTY_ERR(uint32, "add_drawable: push_figure", fr);
         }
     }
 
     c->dirty = true;
-    return YETTY_OK(uint32, primitive_grid_line);
+    return YETTY_OK(uint32, drawable_grid_line);
 }
 
 /*===========================================================================
- * Expand a TEXT_SPAN view into per-glyph SDF primitives
+ * Expand a TEXT_SPAN view into per-glyph SDF drawables
  *===========================================================================*/
 
 static struct uint32_result expand_text_span_to_glyphs(
@@ -1193,8 +1193,8 @@ static struct yetty_ycore_void_result dispatch_one(
         YETTY_RETURN_IF_ERR(yetty_ycore_void, an, "dispatch: attach_list_note");
         return YETTY_OK_VOID();
     }
-    struct uint32_result prim_res = add_primitive_internal(c, flyweight);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, prim_res, "dispatch: add_primitive");
+    struct uint32_result prim_res = add_drawable_internal(c, flyweight);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, prim_res, "dispatch: add_drawable");
     if (prim_res.value > env->max_row_seen) {
         env->max_row_seen = prim_res.value;
     }
@@ -1433,7 +1433,7 @@ static uint32_t scrolling_prim_gpu_size(const struct yetty_ydraw_canvas *base)
  * State / inspection
  *===========================================================================*/
 
-static uint32_t scrolling_primitive_count(const struct yetty_ydraw_canvas *base)
+static uint32_t scrolling_drawable_count(const struct yetty_ydraw_canvas *base)
 {
     return base ? yetty_ydraw_scrolling_grid_total_prim_count(as_scrolling_const(base)->grid) : 0;
 }
@@ -1578,7 +1578,7 @@ static const struct yetty_ydraw_canvas_ops scrolling_canvas_ops = {
     .build_prim_staging = scrolling_build_prim_staging,
     .prim_gpu_size = scrolling_prim_gpu_size,
     .clear = scrolling_clear,
-    .primitive_count = scrolling_primitive_count,
+    .drawable_count = scrolling_drawable_count,
     .font_count = scrolling_font_count,
     .font_generation = scrolling_font_generation,
     .get_font_at = scrolling_get_font_at,
