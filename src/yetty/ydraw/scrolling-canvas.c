@@ -237,15 +237,6 @@ struct scrolling_canvas {
     void                              *scroll_callback_user_data;
     yetty_ydraw_canvas_cursor_callback cursor_set_callback;
     void                              *cursor_set_callback_user_data;
-
-    /* Per-envelope streaming state. Survives mid-envelope WOULD_BLOCK
-     * returns. `env_active` is true between iter init and finalisation. */
-    bool                              env_active;
-    struct yetty_ydraw_drawable_iter  env_iter;
-    struct font_map                   env_fonts_map;
-    struct attach_list                env_attach_list;
-    uint32_t                          env_initial_canvas_line;
-    uint32_t                          env_max_row_seen;
 };
 
 static const struct yetty_ydraw_canvas_ops scrolling_canvas_ops;
@@ -438,13 +429,10 @@ static struct yetty_yfont_cache_ref_result resolve_blob_font_handle(
 
 static void scrolling_canvas_destroy_internals(struct scrolling_canvas *c)
 {
-    if (c->env_active) {
-        yetty_ydraw_drawable_iter_destroy(&c->env_iter);
-        attach_list_free(&c->env_attach_list);
-        font_map_release_all(&c->env_fonts_map, c->font_cache);
-        free(c->env_fonts_map.entries);
-        c->env_active = false;
-    }
+    /* No per-envelope state to tear down — process_input runs on a coro
+     * stack, all per-envelope state is local. If a coro is in-flight at
+     * SM destroy time, the SM drops the coro handle (process is exiting,
+     * OS reclaims the stack). */
     if (c->grid) {
         struct yetty_ycore_void_result gr =
             yetty_ydraw_scrolling_grid_destroy(c->grid, c->font_cache);
@@ -1050,8 +1038,20 @@ static struct yetty_ycore_void_result scrolling_clear(struct yetty_ydraw_canvas 
     return YETTY_OK_VOID();
 }
 
+/* Per-envelope streaming state — lives on the process_input coro
+ * stack. The iter parses on the same coro and yields via the SM when
+ * more body bytes are needed; everything in this struct survives the
+ * yield because it sits on the same stack. */
+struct env_state {
+    struct font_map    fonts_map;
+    struct attach_list attach_list;
+    uint32_t           initial_canvas_line;
+    uint32_t           max_row_seen;
+};
+
 static struct yetty_ycore_void_result dispatch_one(
-    struct scrolling_canvas *c, const struct yetty_ydraw_drawable_flyweight *fw)
+    struct scrolling_canvas *c, const struct yetty_ydraw_drawable_flyweight *fw,
+    struct env_state *env)
 {
     uint32_t prim_type = fw->data[0];
     if (prim_type <= YETTY_YDRAW_CMD_END) {
@@ -1062,8 +1062,8 @@ static struct yetty_ycore_void_result dispatch_one(
             struct yetty_ycore_grid_cursor_pos pos = {.cols = 0, .rows = 0};
             struct yetty_ycore_void_result cr = scrolling_set_cursor_pos(&c->base, pos);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "dispatch: set_cursor_pos");
-            c->env_initial_canvas_line = c->rolling_row_0 + c->cursor_row;
-            c->env_max_row_seen        = c->env_initial_canvas_line;
+            env->initial_canvas_line = c->rolling_row_0 + c->cursor_row;
+            env->max_row_seen        = env->initial_canvas_line;
         }
         return YETTY_OK_VOID();
     }
@@ -1081,10 +1081,10 @@ static struct yetty_ycore_void_result dispatch_one(
             ensure_blob_font_cdb(c, fv.ttf, fv.ttf_len, hint, hex);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "dispatch: ensure_blob_font_cdb");
         struct yetty_ycore_void_result gr =
-            font_map_grow(&c->env_fonts_map, (uint32_t)fv.font_id + 1);
+            font_map_grow(&env->fonts_map, (uint32_t)fv.font_id + 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "dispatch: font_map_grow");
-        memcpy(c->env_fonts_map.entries[fv.font_id].hex, hex, 17);
-        c->env_fonts_map.entries[fv.font_id].declared = true;
+        memcpy(env->fonts_map.entries[fv.font_id].hex, hex, 17);
+        env->fonts_map.entries[fv.font_id].declared = true;
         return YETTY_OK_VOID();
     }
     if (prim_type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
@@ -1094,8 +1094,8 @@ static struct yetty_ycore_void_result dispatch_one(
         }
         struct yetty_ydraw_font *font = NULL;
         yetty_yfont_cache_handle handle = YETTY_YFONT_CACHE_HANDLE_INVALID;
-        if (tv.font_id >= 0 && (uint32_t)tv.font_id < c->env_fonts_map.capacity) {
-            struct font_map_entry *e = &c->env_fonts_map.entries[tv.font_id];
+        if (tv.font_id >= 0 && (uint32_t)tv.font_id < env->fonts_map.capacity) {
+            struct font_map_entry *e = &env->fonts_map.entries[tv.font_id];
             if (e->resolved) {
                 font = e->font;
                 handle = e->handle;
@@ -1119,48 +1119,38 @@ static struct yetty_ycore_void_result dispatch_one(
 
         struct uint32_result gmr = expand_text_span_to_glyphs(c, &tv, font, handle);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, gmr, "dispatch: expand_text_span");
-        if (gmr.value > c->env_max_row_seen) c->env_max_row_seen = gmr.value;
+        if (gmr.value > env->max_row_seen) env->max_row_seen = gmr.value;
         struct yetty_ycore_void_result an =
-            attach_list_note(&c->env_attach_list, handle, gmr.value);
+            attach_list_note(&env->attach_list, handle, gmr.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, an, "dispatch: attach_list_note");
         return YETTY_OK_VOID();
     }
     struct uint32_result prim_res = add_primitive_internal(c, fw);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, prim_res, "dispatch: add_primitive");
-    if (prim_res.value > c->env_max_row_seen) c->env_max_row_seen = prim_res.value;
+    if (prim_res.value > env->max_row_seen) env->max_row_seen = prim_res.value;
     return YETTY_OK_VOID();
 }
 
-static void env_reset(struct scrolling_canvas *c)
-{
-    if (!c->env_active) return;
-    yetty_ydraw_drawable_iter_destroy(&c->env_iter);
-    attach_list_free(&c->env_attach_list);
-    font_map_release_all(&c->env_fonts_map, c->font_cache);
-    free(c->env_fonts_map.entries);
-    c->env_fonts_map.entries = NULL;
-    c->env_fonts_map.capacity = 0;
-    c->env_active = false;
-}
-
-static struct yetty_ycore_void_result env_finalize(struct scrolling_canvas *c)
+/* End-of-envelope: attach pass, drop buffer-scoped font refs, advance
+ * cursor, scroll, evict scrollback. All per-envelope state arrives by
+ * value via `env` (local on the coro stack); only `c` carries
+ * canvas-persistent state. */
+static struct yetty_ycore_void_result env_finalize(
+    struct scrolling_canvas *c, struct env_state *env)
 {
     /* Attach pass — one cache ref per unique font, parked on its highest row. */
-    for (uint32_t i = 0; i < c->env_attach_list.count; i++) {
+    for (uint32_t i = 0; i < env->attach_list.count; i++) {
         struct yetty_ycore_void_result ar = yetty_ydraw_scrolling_grid_attach_font(
             c->grid, c->font_cache, c->default_handle,
-            c->env_attach_list.entries[i].handle,
-            c->env_attach_list.entries[i].max_row);
+            env->attach_list.entries[i].handle,
+            env->attach_list.entries[i].max_row);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "env_finalize: attach_font");
     }
 
     /* Release buffer-scoped font refs BEFORE scroll/evict. */
-    font_map_release_all(&c->env_fonts_map, c->font_cache);
-    free(c->env_fonts_map.entries);
-    c->env_fonts_map.entries = NULL;
-    c->env_fonts_map.capacity = 0;
+    font_map_release_all(&env->fonts_map, c->font_cache);
 
-    uint32_t target_cursor_canvas_line = c->env_max_row_seen;
+    uint32_t target_cursor_canvas_line = env->max_row_seen;
     uint32_t viewport_bottom = c->rolling_row_0 + c->grid_size.rows - 1;
 
     if (target_cursor_canvas_line > viewport_bottom) {
@@ -1194,6 +1184,10 @@ static struct yetty_ycore_void_result env_finalize(struct scrolling_canvas *c)
     return YETTY_OK_VOID();
 }
 
+/* Runs on a coroutine spawned by the wire SM on entry into OSC body.
+ * Yields from inside the iter when the SM has no more body bytes; the
+ * SM resumes us from process() when fresh PTY bytes arrive. Returns
+ * when the iter reports EOE (envelope terminator hit) or ERR. */
 static struct yetty_ycore_void_result scrolling_process_input(
     struct yetty_ydraw_canvas *base, struct yetty_ywire_wire_statemachine *sm)
 {
@@ -1201,41 +1195,56 @@ static struct yetty_ycore_void_result scrolling_process_input(
     if (!sm)   return YETTY_ERR(yetty_ycore_void, "sm: NULL");
     struct scrolling_canvas *c = as_scrolling(base);
 
-    if (!c->env_active) {
-        struct yetty_ycore_void_result ir = yetty_ydraw_drawable_iter_init(
-            &c->env_iter, sm, c->flyweight_registry);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, ir, "process_input: iter init");
-        font_map_init(&c->env_fonts_map);
-        attach_list_init(&c->env_attach_list);
-        c->env_initial_canvas_line = c->rolling_row_0 + c->cursor_row;
-        c->env_max_row_seen        = c->env_initial_canvas_line;
-        c->env_active              = true;
+    struct yetty_ydraw_drawable_iter iter = {0};
+    struct env_state env = {
+        .initial_canvas_line = c->rolling_row_0 + c->cursor_row,
+        .max_row_seen        = c->rolling_row_0 + c->cursor_row,
+    };
+    font_map_init(&env.fonts_map);
+    attach_list_init(&env.attach_list);
+
+    struct yetty_ycore_void_result ret = YETTY_OK_VOID();
+
+    struct yetty_ycore_void_result ir =
+        yetty_ydraw_drawable_iter_init(&iter, sm, c->flyweight_registry);
+    if (YETTY_IS_ERR(ir)) {
+        ret = YETTY_ERR(yetty_ycore_void, "process_input: iter init", ir);
+        goto cleanup;
     }
 
     for (;;) {
         struct yetty_ydraw_drawable_iter_status_result sr =
-            yetty_ydraw_drawable_iter_next(&c->env_iter);
+            yetty_ydraw_drawable_iter_next(&iter);
         if (YETTY_IS_ERR(sr)) {
-            env_reset(c);
-            return YETTY_ERR(yetty_ycore_void, "process_input: iter_next", sr);
+            ret = YETTY_ERR(yetty_ycore_void, "process_input: iter_next", sr);
+            goto cleanup;
         }
-        if (sr.value == YETTY_PRIM_ITER_WOULD_BLOCK) {
-            return YETTY_OK_VOID();
-        }
-        if (sr.value == YETTY_PRIM_ITER_DONE) {
+        if (sr.value == YETTY_PRIM_ITER_EOE) {
             break;
         }
-        struct yetty_ycore_void_result dr = dispatch_one(c, &c->env_iter.fw);
+        struct yetty_ycore_void_result dr = dispatch_one(c, &iter.fw, &env);
         if (YETTY_IS_ERR(dr)) {
-            env_reset(c);
-            return YETTY_ERR(yetty_ycore_void, "process_input: dispatch_one", dr);
+            ret = YETTY_ERR(yetty_ycore_void, "process_input: dispatch_one", dr);
+            goto cleanup;
         }
     }
 
-    struct yetty_ycore_void_result fr = env_finalize(c);
-    env_reset(c);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "process_input: finalize");
-    return YETTY_OK_VOID();
+    ret = env_finalize(c, &env);
+    if (YETTY_IS_ERR(ret)) {
+        struct yetty_ycore_void_result wrap =
+            YETTY_ERR(yetty_ycore_void, "process_input: finalize", ret);
+        ret = wrap;
+    }
+
+cleanup:
+    yetty_ydraw_drawable_iter_destroy(&iter);
+    attach_list_free(&env.attach_list);
+    /* If we never reached env_finalize (or it failed before the
+     * font_map release), drop any held cache refs now. Idempotent —
+     * release_all skips already-released entries. */
+    font_map_release_all(&env.fonts_map, c->font_cache);
+    free(env.fonts_map.entries);
+    return ret;
 }
 
 /*===========================================================================

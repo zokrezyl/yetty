@@ -1,27 +1,17 @@
 /* prim-iter.c — streaming primitive iterator implementation.
  *
- * See prim-iter.h for design overview. The iter is a small state machine:
- *
- *   STATE A — "no header yet" (total_size == 0):
- *     Read up to 8 bytes from the SM. With <8 buffered we don't know the
- *     stride yet. At end-of-envelope mid-header → ERR (truncated).
- *
- *   STATE B — "header in, body in flight" (total_size > 0):
- *     Read up to (total_size - filled) more bytes. End-of-envelope
- *     mid-body → ERR. WOULD_BLOCK when SM returns 0 and at_end is false.
- *
- *   Transition A → B happens once filled >= 8: call registry_get to
- *   resolve the flyweight ops, then ops->size to get the stride. Grow
- *   scratch if needed.
- *
- *   On completion (filled == total_size), populate iter->fw, reset
- *   filled / total_size to 0, return OK. Caller consumes fw before
- *   re-calling.
+ * See prim-iter.h for design overview. The iter runs on the layer's
+ * process_input coroutine; it pulls bytes from the SM and yields the
+ * coro when the SM has no more body bytes right now AND the envelope
+ * terminator has not been seen. From the caller's view `iter_next` is
+ * synchronous: it returns OK with a complete prim, EOE at envelope
+ * terminator, or ERR.
  */
 #include <stdlib.h>
 #include <string.h>
 
 #include <yetty/ydraw-core/prim-iter.h>
+#include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -107,9 +97,11 @@ static struct yetty_ycore_void_result iter_ensure_scratch(
     return YETTY_OK_VOID();
 }
 
-/* Pull bytes from the SM until either `want` is reached or the SM yields.
- * Returns YETTY_OK_VOID() normally; on read error returns the SM error.
- * Updates iter->filled on the way. */
+/* Pull bytes from the SM until `want` is reached OR the SM signals
+ * end-of-envelope. Yields the current coro when the SM has nothing
+ * right now but the terminator has not been seen yet. Returns
+ * YETTY_OK_VOID(); the caller checks `iter->filled` against `want` to
+ * distinguish complete vs. EOE-mid-prim. */
 static struct yetty_ycore_void_result iter_pull(
     struct yetty_ydraw_drawable_iter *iter, uint32_t want)
 {
@@ -118,19 +110,22 @@ static struct yetty_ycore_void_result iter_pull(
         struct yetty_ycore_size_result rr =
             yetty_ywire_wire_statemachine_read(iter->sm, iter->scratch + iter->filled, need);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "prim_iter: sm read failed");
-        if (rr.value == 0) {
-            /* SM has nothing right now — caller decides based on at_end. */
+        if (rr.value > 0) {
+            iter->filled += (uint32_t)rr.value;
+            continue;
+        }
+        if (yetty_ywire_wire_statemachine_at_end(iter->sm)) {
             return YETTY_OK_VOID();
         }
-        iter->filled += (uint32_t)rr.value;
+        /* SM has nothing AND envelope still open — yield. The SM
+         * resumes us from process() when more PTY bytes arrive. */
+        yetty_yplatform_coro_yield();
     }
     return YETTY_OK_VOID();
 }
 
-/* Pull bytes specifically into the envelope header slot. Header lives in
- * iter->scratch[0..24); we keep iter->header_filled separate from
- * iter->filled because the latter is reused as the per-prim fill cursor
- * once header parsing is done. */
+/* Pull bytes specifically into the envelope header slot. Same yield
+ * semantics as iter_pull. */
 static struct yetty_ycore_void_result iter_pull_header(
     struct yetty_ydraw_drawable_iter *iter)
 {
@@ -139,10 +134,14 @@ static struct yetty_ycore_void_result iter_pull_header(
         struct yetty_ycore_size_result rr = yetty_ywire_wire_statemachine_read(
             iter->sm, iter->scratch + iter->header_filled, need);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "prim_iter: sm read (header) failed");
-        if (rr.value == 0) {
+        if (rr.value > 0) {
+            iter->header_filled += (uint32_t)rr.value;
+            continue;
+        }
+        if (yetty_ywire_wire_statemachine_at_end(iter->sm)) {
             return YETTY_OK_VOID();
         }
-        iter->header_filled += (uint32_t)rr.value;
+        yetty_yplatform_coro_yield();
     }
     return YETTY_OK_VOID();
 }
@@ -170,18 +169,15 @@ struct yetty_ydraw_drawable_iter_status_result yetty_ydraw_drawable_iter_next(
                              "prim_iter: envelope header pull", pr);
         }
         if (iter->header_filled < PRIM_ITER_ENVELOPE_HEADER_BYTES) {
-            int at_end = yetty_ywire_wire_statemachine_at_end(iter->sm);
-            if (at_end) {
-                if (iter->header_filled == 0) {
-                    /* Empty envelope — caller treats this as clean DONE. */
-                    return YETTY_OK(yetty_ydraw_drawable_iter_status,
-                                    YETTY_PRIM_ITER_DONE);
-                }
-                return YETTY_ERR(yetty_ydraw_drawable_iter_status,
-                                 "prim_iter: truncated envelope header");
+            /* iter_pull_header already loops on yield; reaching here
+             * with header_filled short means at_end is set. */
+            if (iter->header_filled == 0) {
+                /* Empty envelope — clean EOE. */
+                return YETTY_OK(yetty_ydraw_drawable_iter_status,
+                                YETTY_PRIM_ITER_EOE);
             }
-            return YETTY_OK(yetty_ydraw_drawable_iter_status,
-                            YETTY_PRIM_ITER_WOULD_BLOCK);
+            return YETTY_ERR(yetty_ydraw_drawable_iter_status,
+                             "prim_iter: truncated envelope header");
         }
 
         uint32_t magic;
@@ -228,20 +224,14 @@ struct yetty_ydraw_drawable_iter_status_result yetty_ydraw_drawable_iter_next(
         }
 
         if (iter->filled < PRIM_ITER_HEADER_BYTES) {
-            int at_end = yetty_ywire_wire_statemachine_at_end(iter->sm);
-            if (at_end) {
-                if (iter->filled == 0) {
-                    /* Clean tail. */
-                    return YETTY_OK(yetty_ydraw_drawable_iter_status,
-                                    YETTY_PRIM_ITER_DONE);
-                }
-                /* Some bytes but no full header — truncated stream. */
-                return YETTY_ERR(yetty_ydraw_drawable_iter_status,
-                                 "prim_iter: truncated header at envelope end");
+            /* iter_pull yielded until at_end; partial header at EOE. */
+            if (iter->filled == 0) {
+                /* Clean tail — envelope ended exactly between prims. */
+                return YETTY_OK(yetty_ydraw_drawable_iter_status,
+                                YETTY_PRIM_ITER_EOE);
             }
-            /* Wait for more bytes. */
-            return YETTY_OK(yetty_ydraw_drawable_iter_status,
-                            YETTY_PRIM_ITER_WOULD_BLOCK);
+            return YETTY_ERR(yetty_ydraw_drawable_iter_status,
+                             "prim_iter: truncated header at envelope end");
         }
 
         /* Resolve flyweight + stride. */
@@ -281,13 +271,9 @@ struct yetty_ydraw_drawable_iter_status_result yetty_ydraw_drawable_iter_next(
                              "prim_iter: body pull", pr);
         }
         if (iter->filled < iter->total_size) {
-            int at_end = yetty_ywire_wire_statemachine_at_end(iter->sm);
-            if (at_end) {
-                return YETTY_ERR(yetty_ydraw_drawable_iter_status,
-                                 "prim_iter: truncated body at envelope end");
-            }
-            return YETTY_OK(yetty_ydraw_drawable_iter_status,
-                            YETTY_PRIM_ITER_WOULD_BLOCK);
+            /* iter_pull yielded until at_end; partial prim body. */
+            return YETTY_ERR(yetty_ydraw_drawable_iter_status,
+                             "prim_iter: truncated body at envelope end");
         }
     }
 

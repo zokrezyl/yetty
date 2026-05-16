@@ -1,10 +1,13 @@
 /* prim-iter.h — streaming primitive iterator.
  *
- * Pulls already-decoded primitive bytes from an OSC state machine (the
- * source is the SM, not a buffer) and reassembles them into typed
- * flyweight views. Hands the canvas one prim at a time; survives
- * mid-envelope yields (would-block) — the iter owns a scratch buffer
- * that carries partial-prim bytes across re-entries.
+ * Pulls already-decoded primitive bytes from an OSC state machine and
+ * reassembles them into typed flyweight views. Hands the canvas one
+ * prim at a time. The iter runs inside the layer's process_input coro
+ * (spawned by the SM on entry to OSC body) — when the SM has no more
+ * body bytes right now and the envelope terminator has not yet been
+ * seen, the iter yields the coro internally. From the canvas's point
+ * of view `iter_next` is a synchronous call that always returns with a
+ * complete prim, EOE, or ERR.
  *
  * Wire format:
  *   - First 4 bytes of every prim: u32 type.
@@ -20,11 +23,10 @@
  *
  * Lifecycle:
  *   - init: zero-out, no allocation yet.
- *   - next: returns OK/WOULD_BLOCK/DONE/ERR. On OK, iter->fw is valid
- *     until the next _next call. On WOULD_BLOCK, the iter has parked
- *     partial state and the canvas should park its other per-envelope
- *     state (font_map, attach_list) too — the SM will re-dispatch
- *     process_input later.
+ *   - next: returns OK / EOE / ERR. On OK, iter->fw is valid until the
+ *     next _next call. EOE means the envelope terminator was reached
+ *     (clean end). ERR is a parse or stream failure; the layer should
+ *     surface it as fatal.
  *   - destroy: frees scratch.
  *
  * Single-use scratch: after _next returns OK and the caller has consumed
@@ -47,8 +49,7 @@ struct yetty_ywire_wire_statemachine;
 
 enum yetty_ydraw_drawable_iter_status {
     YETTY_PRIM_ITER_OK = 0,        /* fw populated; caller consumes then re-calls */
-    YETTY_PRIM_ITER_WOULD_BLOCK,   /* SM has no more bytes; envelope not at_end yet */
-    YETTY_PRIM_ITER_DONE,          /* SM at_end and scratch empty — clean tail */
+    YETTY_PRIM_ITER_EOE,           /* end-of-envelope: SM at_end + scratch empty */
     YETTY_PRIM_ITER_ERR,           /* internal error (truncated, alloc, …) */
 };
 

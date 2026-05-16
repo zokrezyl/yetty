@@ -16,6 +16,7 @@
 #include <string.h>
 
 #include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -93,6 +94,23 @@ struct yetty_ywire_wire_statemachine {
     /* Scratch flag: scanner consumed the terminator while inside a
      * read(). Set inside read(), checked by process() after dispatch. */
     int terminator_seen;
+
+    /* Per-envelope coroutine running the registered layer's
+     * process_input. Spawned the first time we enter SCAN_OSC_BODY for a
+     * layer, resumed each subsequent process() until the coro returns
+     * (envelope done or layer error). NULL outside any dispatch.
+     *
+     * The coro yields from inside the layer's iter when the SM has no
+     * more body bytes right now AND the envelope terminator has not yet
+     * been seen. Whoever resumed (process()) returns control to the
+     * event loop; the next PTY-byte arrival drives the next process()
+     * which resumes the coro. */
+    struct yetty_yplatform_coro *active_coro;
+    struct {
+        struct yetty_yrender_terminal_layer *layer;
+        struct yetty_ywire_wire_statemachine *sm;
+        struct yetty_ycore_void_result result;
+    } coro_ctx;
 };
 
 /*===========================================================================
@@ -562,9 +580,36 @@ static struct yetty_ycore_void_result raw_pump(
 
 /*===========================================================================
  * Dispatch
+ *
+ * Two paths:
+ *
+ *   - default-layer dispatch (SCAN_RAW, text path) — synchronous, inline.
+ *     The text layer doesn't park state across the call; a direct
+ *     process_input call is fine.
+ *
+ *   - OSC-body dispatch — runs on a coroutine. The first time we enter
+ *     SCAN_OSC_BODY for a registered layer, we spawn a coro whose entry
+ *     is `body_coro_entry` and call resume. Inside process_input the
+ *     iter yields whenever the SM has no more body bytes right now;
+ *     control returns to whoever resumed, which is this function. We
+ *     return to process()'s outer loop, which returns to the event
+ *     loop. The next process() resumes the same coro. When process_input
+ *     finally returns (envelope terminator or layer error), the coro
+ *     finishes; we collect its result, destroy the coro, transition out
+ *     of SCAN_OSC_BODY.
  *=========================================================================*/
 
-static struct yetty_ycore_void_result dispatch(
+YETTY_EXTERNAL_CALLBACK
+static void body_coro_entry(void *arg)
+{
+    struct yetty_ywire_wire_statemachine *sm = arg;
+    struct yetty_yrender_terminal_layer *layer = sm->coro_ctx.layer;
+    sm->dispatching = 1;
+    sm->coro_ctx.result = layer->ops->process_input(layer, sm);
+    sm->dispatching = 0;
+}
+
+static struct yetty_ycore_void_result dispatch_default(
     struct yetty_ywire_wire_statemachine *statemachine, struct yetty_yrender_terminal_layer *layer)
 {
     if (!layer || !layer->ops || !layer->ops->process_input) {
@@ -573,7 +618,7 @@ static struct yetty_ycore_void_result dispatch(
     statemachine->dispatching = 1;
     struct yetty_ycore_void_result r = layer->ops->process_input(layer, statemachine);
     statemachine->dispatching = 0;
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_statemachine: layer process_input failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_statemachine: default dispatch");
     return YETTY_OK_VOID();
 }
 
@@ -616,6 +661,15 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_destroy(
 {
     if (!statemachine) {
         return YETTY_ERR(yetty_ycore_void, "osc_statemachine: statemachine is NULL");
+    }
+    /* In-flight layer coro at process teardown: the coro is parked
+     * inside the layer's iter waiting for bytes that will never come.
+     * Process is exiting; OS reclaims the stack. We just drop the
+     * handle. (Cleaner than driving the coro to a forced exit, which
+     * would require unwind hooks we don't have in C.) */
+    if (statemachine->active_coro) {
+        yetty_yplatform_coro_destroy(statemachine->active_coro);
+        statemachine->active_coro = NULL;
     }
     if (statemachine->lz4_ctx) {
         LZ4F_freeDecompressionContext(statemachine->lz4_ctx);
@@ -752,7 +806,8 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_process(
             if (statemachine->default_layer) {
                 size_t before_rp = statemachine->read_pos;
                 size_t before_oc = out_carry_avail(statemachine);
-                struct yetty_ycore_void_result r = dispatch(statemachine, statemachine->default_layer);
+                struct yetty_ycore_void_result r =
+                    dispatch_default(statemachine, statemachine->default_layer);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "osc_statemachine: default dispatch");
                 if (statemachine->read_pos == before_rp && out_carry_avail(statemachine) == before_oc) {
                     /* Layer made no progress — done for this cycle, OR
@@ -863,27 +918,67 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_process(
                 }
                 break;
             }
-            size_t before_rp = statemachine->read_pos;
-            size_t before_oc = out_carry_avail(statemachine);
-            struct yetty_ycore_void_result r = dispatch(statemachine, statemachine->current_layer);
-            if (YETTY_IS_ERR(r)) {
-                /* Layer failed mid-envelope. Propagate up — fix the root
-                 * cause; do not retrofit tolerance here. */
-                return YETTY_ERR(yetty_ycore_void,
-                                 "osc_statemachine: body dispatch failed", r);
+
+            /* Spawn the layer coro lazily — first entry into this body. */
+            if (!statemachine->active_coro) {
+                ydebug("wire: spawn body coro code=%d term=%d rp=%zu wp=%zu",
+                       statemachine->current_code, statemachine->terminator_seen,
+                       statemachine->read_pos, statemachine->write_pos);
+                statemachine->coro_ctx.layer  = statemachine->current_layer;
+                statemachine->coro_ctx.sm     = statemachine;
+                statemachine->coro_ctx.result = YETTY_OK_VOID();
+                struct yplatform_coro_ptr_result spawn_res =
+                    yetty_yplatform_coro_spawn(body_coro_entry, statemachine,
+                                               1024 * 1024, "wire-body");
+                if (YETTY_IS_ERR(spawn_res)) {
+                    return YETTY_ERR(yetty_ycore_void,
+                                     "osc_statemachine: body coro spawn", spawn_res);
+                }
+                statemachine->active_coro = spawn_res.value;
             }
-            if (statemachine->terminator_seen) {
-                statemachine->state = SCAN_RAW;
-                statemachine->current_layer = NULL;
-                statemachine->current_code = 0;
-                envelope_reset(statemachine);
+
+            /* Drive the coro. yield from inside the layer's iter returns
+             * here; finish means process_input returned. */
+            yetty_yplatform_coro_resume(statemachine->active_coro);
+
+            if (yetty_yplatform_coro_is_finished(statemachine->active_coro)) {
+                struct yetty_ycore_void_result r = statemachine->coro_ctx.result;
+                yetty_yplatform_coro_destroy(statemachine->active_coro);
+                statemachine->active_coro = NULL;
+                ydebug("wire: body coro finished term=%d rp=%zu wp=%zu err=%d",
+                       statemachine->terminator_seen, statemachine->read_pos,
+                       statemachine->write_pos, YETTY_IS_ERR(r));
+                if (YETTY_IS_ERR(r)) {
+                    if (statemachine->terminator_seen) {
+                        statemachine->state = SCAN_RAW;
+                        statemachine->current_layer = NULL;
+                        statemachine->current_code = 0;
+                        envelope_reset(statemachine);
+                    }
+                    return YETTY_ERR(yetty_ycore_void,
+                                     "osc_statemachine: body dispatch failed", r);
+                }
+                if (statemachine->terminator_seen) {
+                    statemachine->state = SCAN_RAW;
+                    statemachine->current_layer = NULL;
+                    statemachine->current_code = 0;
+                    envelope_reset(statemachine);
+                } else {
+                    /* Coro finished without seeing terminator: process_input
+                     * exited cleanly but the envelope isn't done. This
+                     * shouldn't happen with the new contract — process_input
+                     * runs until EOE. If it does, treat it as a fatal
+                     * design bug, not a silent spin. */
+                    return YETTY_ERR(yetty_ycore_void,
+                                     "osc_statemachine: body coro finished without terminator");
+                }
                 break;
             }
-            if (statemachine->read_pos == before_rp && out_carry_avail(statemachine) == before_oc) {
-                /* No progress — exit, caller drives next cycle. */
-                return YETTY_OK_VOID();
-            }
-            return YETTY_OK_VOID(); /* yield after each body dispatch */
+
+            /* Coro yielded — needs more body bytes. Return to the event
+             * loop; the next PTY arrival drives a new process() that
+             * resumes the coro. */
+            return YETTY_OK_VOID();
         }
         }
     }

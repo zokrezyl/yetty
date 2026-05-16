@@ -32,6 +32,8 @@
 #include <yetty/ydraw/canvas.h>
 #include <yetty/ydraw-core/flyweight.h>
 #include <yetty/ydraw/scene-canvas.h>
+#include <yetty/yplatform/ycoroutine.h>
+#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/ytrace/ytrace.h>
 
 #define SCENE_ROOT_SLOT       0u
@@ -653,8 +655,25 @@ struct yetty_ycore_void_result yetty_ydraw_scene_entity_delete(
 static struct yetty_ycore_void_result scene_process_input(
     struct yetty_ydraw_canvas *base, struct yetty_ywire_wire_statemachine *sm)
 {
-    (void)base; (void)sm;
-    return YETTY_OK_VOID();
+    (void)base;
+    /* Scene-canvas's real wire-decode (entities + GROUP/DELETE/...) is not
+     * yet implemented. Until it lands, drain the envelope so the SM
+     * doesn't spin: pull bytes from the SM until it reports end-of-
+     * envelope. This runs on the coro spawned by the SM; the read yields
+     * back to the SM when no more body bytes are ready right now. */
+    uint8_t scratch[4096];
+    for (;;) {
+        struct yetty_ycore_size_result rr =
+            yetty_ywire_wire_statemachine_read(sm, scratch, sizeof(scratch));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "scene_process_input: read");
+        if (rr.value > 0) {
+            continue;
+        }
+        if (yetty_ywire_wire_statemachine_at_end(sm)) {
+            return YETTY_OK_VOID();
+        }
+        yetty_yplatform_coro_yield();
+    }
 }
 
 static struct yetty_ycore_void_result scene_clear(struct yetty_ydraw_canvas *base)
