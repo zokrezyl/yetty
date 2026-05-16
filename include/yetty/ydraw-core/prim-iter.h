@@ -3,7 +3,7 @@
  * Pulls already-decoded primitive bytes from an OSC state machine and
  * reassembles them into typed flyweight views. Hands the canvas one
  * prim at a time. The iter runs inside the layer's process_input coro
- * (spawned by the SM on entry to OSC body) — when the SM has no more
+ * (spawned by the Wire Statemachine on entry to OSC body) — when the Wire Statemachine has no more
  * body bytes right now and the envelope terminator has not yet been
  * seen, the iter yields the coro internally. From the canvas's point
  * of view `iter_next` is a synchronous call that always returns with a
@@ -48,13 +48,12 @@ extern "C" {
 struct yetty_ywire_wire_statemachine;
 
 enum yetty_ydraw_drawable_iter_status {
-    YETTY_PRIM_ITER_OK = 0,        /* fw populated; caller consumes then re-calls */
-    YETTY_PRIM_ITER_EOE,           /* end-of-envelope: SM at_end + scratch empty */
-    YETTY_PRIM_ITER_ERR,           /* internal error (truncated, alloc, …) */
+    YETTY_PRIM_ITER_OK = 0, /* fw populated; caller consumes then re-calls */
+    YETTY_PRIM_ITER_EOE,    /* end-of-envelope: Wire Statemachine at_end + scratch empty */
+    YETTY_PRIM_ITER_ERR,    /* internal error (truncated, alloc, …) */
 };
 
-YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_iter_status,
-                      enum yetty_ydraw_drawable_iter_status);
+YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_iter_status, enum yetty_ydraw_drawable_iter_status);
 
 struct yetty_ydraw_drawable_iter {
     /* Public: valid after _next returns OK. fw.data points into the
@@ -63,25 +62,24 @@ struct yetty_ydraw_drawable_iter {
 
     /* Scene bounds parsed from the 24-byte framed envelope header. Valid
      * once header_done flips to true (after the header bytes have been
-     * pulled from the SM). */
-    float    scene_min_x, scene_min_y, scene_max_x, scene_max_y;
+     * pulled from the Wire Statemachine). */
+    float scene_min_x, scene_min_y, scene_max_x, scene_max_y;
 
     /* Private: caller should not touch. */
     uint8_t *scratch;
     uint32_t scratch_cap;
-    uint32_t filled;          /* bytes currently buffered for the in-flight prim / header */
-    uint32_t total_size;      /* full prim stride, once known from the 8-byte header (0 = unknown) */
-    uint32_t header_filled;   /* bytes of the 24-byte envelope header already pulled */
-    bool     header_done;     /* true once envelope header is parsed and validated */
+    uint32_t filled;        /* bytes currently buffered for the in-flight prim / header */
+    uint32_t total_size;    /* full prim stride, once known from the 8-byte header (0 = unknown) */
+    uint32_t header_filled; /* bytes of the 24-byte envelope header already pulled */
+    bool header_done;       /* true once envelope header is parsed and validated */
 
-    struct yetty_ywire_wire_statemachine             *sm;
+    struct yetty_ywire_wire_statemachine *wire_statemachine;
     const struct yetty_ydraw_flyweight_registry *reg;
 };
 
 /* Initialise. No allocation; scratch grows on demand. */
 struct yetty_ycore_void_result yetty_ydraw_drawable_iter_init(
-    struct yetty_ydraw_drawable_iter *iter,
-    struct yetty_ywire_wire_statemachine *sm,
+    struct yetty_ydraw_drawable_iter *iter, struct yetty_ywire_wire_statemachine *wire_statemachine,
     const struct yetty_ydraw_flyweight_registry *reg);
 
 /* Free the scratch. Safe on a zero-inited iter (no-op). */
