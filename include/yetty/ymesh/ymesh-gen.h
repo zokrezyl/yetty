@@ -19,7 +19,7 @@ extern "C" {
 
 /* Forward-declared so this header stays GPU-less and can be included by
  * client-side wire emitters that don't link Dawn. The full type lives in
- * yetty/ydraw-factory/complex-prim-factory.h (server side). */
+ * yetty/ydraw-factory/figure-factory.h (server side). */
 struct yetty_ydraw_concrete_factory;
 
 #define YETTY_YMESH_TYPE_ID 0x80000005u

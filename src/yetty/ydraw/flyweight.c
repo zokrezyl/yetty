@@ -12,7 +12,7 @@
 #include <yetty/ydraw/flyweight.h>
 #include <yetty/ysdf/handler.h>
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/complex-prim-types.h>
+#include <yetty/ydraw-core/figure-types.h>
 #include <yetty/ydraw-core/font-prim.h>
 #include <yetty/ydraw-core/text-span-prim.h>
 #include <yetty/ytrace/ytrace.h>

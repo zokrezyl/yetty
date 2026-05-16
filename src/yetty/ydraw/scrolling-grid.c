@@ -15,8 +15,8 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ydraw/scrollbuffer.h>
-#include <yetty/ydraw-core/complex-prim-types.h>
-#include <yetty/ydraw-factory/complex-prim-factory.h>
+#include <yetty/ydraw-core/figure-types.h>
+#include <yetty/ydraw-factory/figure-factory.h>
 #include <yetty/yfont/font-cache.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ytrace/ytrace.h>

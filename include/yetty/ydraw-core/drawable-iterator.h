@@ -47,15 +47,15 @@ extern "C" {
 
 struct yetty_ywire_wire_statemachine;
 
-enum yetty_ydraw_drawable_iter_status {
+enum yetty_ydraw_drawable_iterator_status {
     YETTY_PRIM_ITER_OK = 0, /* flyweight populated; caller consumes then re-calls */
     YETTY_PRIM_ITER_EOE,    /* end-of-envelope: Wire Statemachine at_end + scratch empty */
     YETTY_PRIM_ITER_ERR,    /* internal error (truncated, alloc, …) */
 };
 
-YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_iter_status, enum yetty_ydraw_drawable_iter_status);
+YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_iterator_status, enum yetty_ydraw_drawable_iterator_status);
 
-struct yetty_ydraw_drawable_iter {
+struct yetty_ydraw_drawable_iterator {
     /* Public: valid after _next returns OK. flyweight.data points into the
      * iter's scratch — stable until the next _next call. */
     struct yetty_ydraw_drawable_flyweight flyweight;
@@ -78,18 +78,19 @@ struct yetty_ydraw_drawable_iter {
 };
 
 /* Initialise. No allocation; scratch grows on demand. */
-struct yetty_ycore_void_result yetty_ydraw_drawable_iter_init(
-    struct yetty_ydraw_drawable_iter *iter, struct yetty_ywire_wire_statemachine *wire_statemachine,
+struct yetty_ycore_void_result yetty_ydraw_drawable_iterator_init(
+    struct yetty_ydraw_drawable_iterator *iter,
+    struct yetty_ywire_wire_statemachine *wire_statemachine,
     const struct yetty_ydraw_flyweight_registry *reg);
 
 /* Free the scratch. Safe on a zero-inited iter (no-op). */
-void yetty_ydraw_drawable_iter_destroy(struct yetty_ydraw_drawable_iter *iter);
+void yetty_ydraw_drawable_iterator_destroy(struct yetty_ydraw_drawable_iterator *iter);
 
 /* Advance one prim. See enum docs above for status semantics. The
  * result struct's `value` is the status; on ERR, .ok=0 and .error.msg
  * describes the failure. */
-struct yetty_ydraw_drawable_iter_status_result yetty_ydraw_drawable_iter_next(
-    struct yetty_ydraw_drawable_iter *iter);
+struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator_next(
+    struct yetty_ydraw_drawable_iterator *iter);
 
 #ifdef __cplusplus
 }

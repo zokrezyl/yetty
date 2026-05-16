@@ -188,7 +188,7 @@ extern "C" {{
 
 /* Forward-declared so this header stays GPU-less and can be included by
  * client-side wire emitters that don't link Dawn. The full type lives in
- * yetty/ydraw-factory/complex-prim-factory.h (server side). */
+ * yetty/ydraw-factory/figure-factory.h (server side). */
 struct yetty_ydraw_concrete_factory;
 
 #define YETTY_{NAME}_TYPE_ID 0x{type_id:08x}u
@@ -646,8 +646,8 @@ def generate_c_source(schema, uniforms, buffers, textures):
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/pipeline.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/ydraw-core/complex-prim-types.h>
-#include <yetty/ydraw-factory/complex-prim-factory.h>
+#include <yetty/ydraw-core/figure-types.h>
+#include <yetty/ydraw-factory/figure-factory.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>

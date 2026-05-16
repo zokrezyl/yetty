@@ -25,8 +25,8 @@
 #include <yetty/ymesh/ymesh-gen.h>
 #include <yetty/ymesh/ymesh-math.h>
 
-#include <yetty/ydraw-core/complex-prim-types.h>
-#include <yetty/ydraw-factory/complex-prim-factory.h>
+#include <yetty/ydraw-core/figure-types.h>
+#include <yetty/ydraw-factory/figure-factory.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
 

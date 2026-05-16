@@ -10,7 +10,7 @@
 //
 // The server-side runtime (struct concrete_factory, struct figure_instance,
 // the abstract-factory registry) lives in
-// include/yetty/ydraw-factory/complex-prim-factory.h.
+// include/yetty/ydraw-factory/figure-factory.h.
 //
 // See docs/ydraw.md for full documentation.
 
@@ -52,7 +52,7 @@ struct yetty_ydraw_figure {
 };
 
 // Check if type uses FAM format
-bool yetty_ydraw_is_complex_type(uint32_t type);
+bool yetty_ydraw_is_figure(uint32_t type);
 
 // Get AABB (reads bounds from standard offset 0-15 in payload)
 struct rectangle_result yetty_ydraw_figure_aabb(const void *data);

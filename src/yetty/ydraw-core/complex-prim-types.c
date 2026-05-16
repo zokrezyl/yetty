@@ -3,7 +3,7 @@
 // The GPU-side runtime (factory registry, instance lifecycle, zoom fan-out)
 // lives in src/yetty/ydraw-factory/complex-prim-factory.c.
 
-#include <yetty/ydraw-core/complex-prim-types.h>
+#include <yetty/ydraw-core/figure-types.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -13,7 +13,7 @@
 // Helper functions
 //=============================================================================
 
-bool yetty_ydraw_is_complex_type(uint32_t type)
+bool yetty_ydraw_is_figure(uint32_t type)
 {
     return (type >= YETTY_YDRAW_COMPLEX_TYPE_BASE);
 }
@@ -41,7 +41,7 @@ static const struct yetty_ydraw_drawable_base_ops g_figure_base_ops = {
 struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_figure_handler(
     uint32_t prim_type)
 {
-    if (yetty_ydraw_is_complex_type(prim_type)) {
+    if (yetty_ydraw_is_figure(prim_type)) {
         return YETTY_OK(yetty_ydraw_drawable_base_ops_ptr, &g_figure_base_ops);
     }
     return YETTY_ERR(yetty_ydraw_drawable_base_ops_ptr, "not a complex type");

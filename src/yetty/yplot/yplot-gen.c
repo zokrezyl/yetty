@@ -18,8 +18,8 @@
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/pipeline.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/ydraw-core/complex-prim-types.h>
-#include <yetty/ydraw-factory/complex-prim-factory.h>
+#include <yetty/ydraw-core/figure-types.h>
+#include <yetty/ydraw-factory/figure-factory.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>

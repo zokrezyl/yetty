@@ -4,7 +4,7 @@
 #include <yetty/ysdf/handler.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yfsvm/compiler.h>
-#include <yetty/ydraw-core/complex-prim-types.h>
+#include <yetty/ydraw-core/figure-types.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yaml.h>
 #include <stdio.h>

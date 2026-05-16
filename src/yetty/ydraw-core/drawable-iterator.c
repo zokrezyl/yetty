@@ -31,8 +31,8 @@
 #define PRIM_ITER_ENVELOPE_HEADER_BYTES 24u
 #define PRIM_ITER_ENVELOPE_MAGIC 0x31425059u /* 'YPB1' little-endian */
 
-struct yetty_ycore_void_result yetty_ydraw_drawable_iter_init(
-    struct yetty_ydraw_drawable_iter *iter, struct yetty_ywire_wire_statemachine *wire_statemachine,
+struct yetty_ycore_void_result yetty_ydraw_drawable_iterator_init(
+    struct yetty_ydraw_drawable_iterator *iter, struct yetty_ywire_wire_statemachine *wire_statemachine,
     const struct yetty_ydraw_flyweight_registry *reg)
 {
     if (!iter) {
@@ -61,7 +61,7 @@ struct yetty_ycore_void_result yetty_ydraw_drawable_iter_init(
     return YETTY_OK_VOID();
 }
 
-void yetty_ydraw_drawable_iter_destroy(struct yetty_ydraw_drawable_iter *iter)
+void yetty_ydraw_drawable_iterator_destroy(struct yetty_ydraw_drawable_iterator *iter)
 {
     if (!iter) {
         return;
@@ -77,7 +77,7 @@ void yetty_ydraw_drawable_iter_destroy(struct yetty_ydraw_drawable_iter *iter)
 
 /* Grow scratch to hold at least `want` bytes. Doubling, with a floor of
  * PRIM_ITER_INIT_SCRATCH_CAP. */
-static struct yetty_ycore_void_result iter_ensure_scratch(struct yetty_ydraw_drawable_iter *iter,
+static struct yetty_ycore_void_result iter_ensure_scratch(struct yetty_ydraw_drawable_iterator *iter,
                                                           uint32_t want)
 {
     if (want <= iter->scratch_cap) {
@@ -101,7 +101,7 @@ static struct yetty_ycore_void_result iter_ensure_scratch(struct yetty_ydraw_dra
  * right now but the terminator has not been seen yet. Returns
  * YETTY_OK_VOID(); the caller checks `iter->filled` against `want` to
  * distinguish complete vs. EOE-mid-prim. */
-static struct yetty_ycore_void_result iter_pull(struct yetty_ydraw_drawable_iter *iter,
+static struct yetty_ycore_void_result iter_pull(struct yetty_ydraw_drawable_iterator *iter,
                                                 uint32_t want)
 {
     while (iter->filled < want) {
@@ -125,7 +125,7 @@ static struct yetty_ycore_void_result iter_pull(struct yetty_ydraw_drawable_iter
 
 /* Pull bytes specifically into the envelope header slot. Same yield
  * semantics as iter_pull. */
-static struct yetty_ycore_void_result iter_pull_header(struct yetty_ydraw_drawable_iter *iter)
+static struct yetty_ycore_void_result iter_pull_header(struct yetty_ydraw_drawable_iterator *iter)
 {
     while (iter->header_filled < PRIM_ITER_ENVELOPE_HEADER_BYTES) {
         uint32_t need = PRIM_ITER_ENVELOPE_HEADER_BYTES - iter->header_filled;
@@ -145,11 +145,11 @@ static struct yetty_ycore_void_result iter_pull_header(struct yetty_ydraw_drawab
     return YETTY_OK_VOID();
 }
 
-struct yetty_ydraw_drawable_iter_status_result yetty_ydraw_drawable_iter_next(
-    struct yetty_ydraw_drawable_iter *iter)
+struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator_next(
+    struct yetty_ydraw_drawable_iterator *iter)
 {
     if (!iter) {
-        return YETTY_ERR(yetty_ydraw_drawable_iter_status, "iter is NULL");
+        return YETTY_ERR(yetty_ydraw_drawable_iterator_status, "iter is NULL");
     }
 
     /* Envelope header: 24 bytes of (magic + scene_bounds + byte_count) at
@@ -159,12 +159,12 @@ struct yetty_ydraw_drawable_iter_status_result yetty_ydraw_drawable_iter_next(
         struct yetty_ycore_void_result es =
             iter_ensure_scratch(iter, PRIM_ITER_ENVELOPE_HEADER_BYTES);
         if (YETTY_IS_ERR(es)) {
-            return YETTY_ERR(yetty_ydraw_drawable_iter_status,
+            return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
                              "prim_iter: ensure_scratch envelope header", es);
         }
         struct yetty_ycore_void_result pr = iter_pull_header(iter);
         if (YETTY_IS_ERR(pr)) {
-            return YETTY_ERR(yetty_ydraw_drawable_iter_status, "prim_iter: envelope header pull",
+            return YETTY_ERR(yetty_ydraw_drawable_iterator_status, "prim_iter: envelope header pull",
                              pr);
         }
         if (iter->header_filled < PRIM_ITER_ENVELOPE_HEADER_BYTES) {
@@ -172,9 +172,9 @@ struct yetty_ydraw_drawable_iter_status_result yetty_ydraw_drawable_iter_next(
              * with header_filled short means at_end is set. */
             if (iter->header_filled == 0) {
                 /* Empty envelope — clean EOE. */
-                return YETTY_OK(yetty_ydraw_drawable_iter_status, YETTY_PRIM_ITER_EOE);
+                return YETTY_OK(yetty_ydraw_drawable_iterator_status, YETTY_PRIM_ITER_EOE);
             }
-            return YETTY_ERR(yetty_ydraw_drawable_iter_status,
+            return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
                              "prim_iter: truncated envelope header");
         }
 
@@ -192,7 +192,7 @@ struct yetty_ydraw_drawable_iter_status_result yetty_ydraw_drawable_iter_next(
                    iter->scratch[13], iter->scratch[14], iter->scratch[15], iter->scratch[16],
                    iter->scratch[17], iter->scratch[18], iter->scratch[19], iter->scratch[20],
                    iter->scratch[21], iter->scratch[22], iter->scratch[23]);
-            return YETTY_ERR(yetty_ydraw_drawable_iter_status,
+            return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
                              "prim_iter: envelope magic mismatch");
         }
         memcpy(&iter->scene_min_x, iter->scratch + 4, 4);
@@ -211,21 +211,21 @@ struct yetty_ydraw_drawable_iter_status_result yetty_ydraw_drawable_iter_next(
         /* Need at least one byte; pull as many as the Wire Statemachine gives, up to 8. */
         struct yetty_ycore_void_result es = iter_ensure_scratch(iter, PRIM_ITER_HEADER_BYTES);
         if (YETTY_IS_ERR(es)) {
-            return YETTY_ERR(yetty_ydraw_drawable_iter_status, "prim_iter: ensure_scratch header",
+            return YETTY_ERR(yetty_ydraw_drawable_iterator_status, "prim_iter: ensure_scratch header",
                              es);
         }
         struct yetty_ycore_void_result pr = iter_pull(iter, PRIM_ITER_HEADER_BYTES);
         if (YETTY_IS_ERR(pr)) {
-            return YETTY_ERR(yetty_ydraw_drawable_iter_status, "prim_iter: header pull", pr);
+            return YETTY_ERR(yetty_ydraw_drawable_iterator_status, "prim_iter: header pull", pr);
         }
 
         if (iter->filled < PRIM_ITER_HEADER_BYTES) {
             /* iter_pull yielded until at_end; partial header at EOE. */
             if (iter->filled == 0) {
                 /* Clean tail — envelope ended exactly between prims. */
-                return YETTY_OK(yetty_ydraw_drawable_iter_status, YETTY_PRIM_ITER_EOE);
+                return YETTY_OK(yetty_ydraw_drawable_iterator_status, YETTY_PRIM_ITER_EOE);
             }
-            return YETTY_ERR(yetty_ydraw_drawable_iter_status,
+            return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
                              "prim_iter: truncated header at envelope end");
         }
 
@@ -237,23 +237,23 @@ struct yetty_ydraw_drawable_iter_status_result yetty_ydraw_drawable_iter_next(
                                                (const uint32_t *)iter->scratch);
         if (YETTY_IS_ERR(flyweight_res)) {
             yerror("prim_iter: registry lookup failed for type 0x%08x", prim_type);
-            return YETTY_ERR(yetty_ydraw_drawable_iter_status, "prim_iter: flyweight lookup failed",
+            return YETTY_ERR(yetty_ydraw_drawable_iterator_status, "prim_iter: flyweight lookup failed",
                              flyweight_res);
         }
         struct yetty_ycore_size_result size_res =
             flyweight_res.value->ops->size((const uint32_t *)iter->scratch);
         if (YETTY_IS_ERR(size_res)) {
-            return YETTY_ERR(yetty_ydraw_drawable_iter_status, "prim_iter: ops->size failed",
+            return YETTY_ERR(yetty_ydraw_drawable_iterator_status, "prim_iter: ops->size failed",
                              size_res);
         }
         if (size_res.value == 0) {
-            return YETTY_ERR(yetty_ydraw_drawable_iter_status,
+            return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
                              "prim_iter: prim ops returned size 0");
         }
         iter->total_size = (uint32_t)size_res.value;
         struct yetty_ycore_void_result es2 = iter_ensure_scratch(iter, iter->total_size);
         if (YETTY_IS_ERR(es2)) {
-            return YETTY_ERR(yetty_ydraw_drawable_iter_status, "prim_iter: ensure_scratch body",
+            return YETTY_ERR(yetty_ydraw_drawable_iterator_status, "prim_iter: ensure_scratch body",
                              es2);
         }
     }
@@ -262,11 +262,11 @@ struct yetty_ydraw_drawable_iter_status_result yetty_ydraw_drawable_iter_next(
     if (iter->filled < iter->total_size) {
         struct yetty_ycore_void_result pr = iter_pull(iter, iter->total_size);
         if (YETTY_IS_ERR(pr)) {
-            return YETTY_ERR(yetty_ydraw_drawable_iter_status, "prim_iter: body pull", pr);
+            return YETTY_ERR(yetty_ydraw_drawable_iterator_status, "prim_iter: body pull", pr);
         }
         if (iter->filled < iter->total_size) {
             /* iter_pull yielded until at_end; partial prim body. */
-            return YETTY_ERR(yetty_ydraw_drawable_iter_status,
+            return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
                              "prim_iter: truncated body at envelope end");
         }
     }
@@ -278,11 +278,11 @@ struct yetty_ydraw_drawable_iter_status_result yetty_ydraw_drawable_iter_next(
     struct yetty_ydraw_drawable_flyweight_ptr_result flyweight_res =
         yetty_ydraw_flyweight_registry_get(iter->reg, prim_type, (const uint32_t *)iter->scratch);
     if (YETTY_IS_ERR(flyweight_res)) {
-        return YETTY_ERR(yetty_ydraw_drawable_iter_status, "prim_iter: re-resolve flyweight failed",
+        return YETTY_ERR(yetty_ydraw_drawable_iterator_status, "prim_iter: re-resolve flyweight failed",
                          flyweight_res);
     }
     iter->flyweight = *flyweight_res.value;
     iter->filled = 0;
     iter->total_size = 0;
-    return YETTY_OK(yetty_ydraw_drawable_iter_status, YETTY_PRIM_ITER_OK);
+    return YETTY_OK(yetty_ydraw_drawable_iterator_status, YETTY_PRIM_ITER_OK);
 }

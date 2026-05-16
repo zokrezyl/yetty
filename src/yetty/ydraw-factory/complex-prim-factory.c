@@ -1,6 +1,6 @@
 // YDraw Complex Primitive Factory - Abstract Factory Implementation
 
-#include <yetty/ydraw-factory/complex-prim-factory.h>
+#include <yetty/ydraw-factory/figure-factory.h>
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>

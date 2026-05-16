@@ -6,8 +6,8 @@
 #include <yetty/yfont/font.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ywire/wire-statemachine.h>
-#include <yetty/ydraw-core/complex-prim-types.h>
-#include <yetty/ydraw-factory/complex-prim-factory.h>
+#include <yetty/ydraw-core/figure-types.h>
+#include <yetty/ydraw-factory/figure-factory.h>
 #include <yetty/ydraw/canvas.h>
 #include <yetty/ydraw/scene-canvas.h>
 #include <yetty/ydraw/scrolling-canvas.h>
