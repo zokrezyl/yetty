@@ -29,7 +29,7 @@
  */
 
 #include <pdfio.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ydraw-core/font-prim.h>
 #include <yetty/ydraw-core/text-span-prim.h>
 #include <yetty/ydraw/flyweight.h>
@@ -152,7 +152,7 @@ int main(void)
     float print_y = 0;
 
     struct yetty_ydraw_core_primitive_iter_result ir =
-        yetty_ydraw_core_buffer_prim_first(out->buffer, reg);
+        yetty_ydraw_core_draw_list_prim_first(out->buffer, reg);
     REQUIRE(ir.ok, "iterator first failed");
     struct yetty_ydraw_core_primitive_iter it = ir.value;
 
@@ -211,7 +211,7 @@ int main(void)
             }
         }
         struct yetty_ydraw_core_primitive_iter_result nx =
-            yetty_ydraw_core_buffer_prim_next(out->buffer, reg, &it);
+            yetty_ydraw_core_draw_list_prim_next(out->buffer, reg, &it);
         if (!nx.ok) break;
         it = nx.value;
     }
@@ -292,7 +292,7 @@ int main(void)
 
     /* Re-scan: the first iter consumed everything; iterate again. */
     struct yetty_ydraw_core_primitive_iter_result ir2 =
-        yetty_ydraw_core_buffer_prim_first(out->buffer, reg);
+        yetty_ydraw_core_draw_list_prim_first(out->buffer, reg);
     REQUIRE(ir2.ok, "iterator first (rescan) failed");
 
     const float Y_TOL = 2.0f;
@@ -330,7 +330,7 @@ int main(void)
                 }
             }
             struct yetty_ydraw_core_primitive_iter_result nx3 =
-                yetty_ydraw_core_buffer_prim_next(out->buffer, reg, &it3);
+                yetty_ydraw_core_draw_list_prim_next(out->buffer, reg, &it3);
             if (!nx3.ok) break;
             it3 = nx3.value;
         }
@@ -401,7 +401,7 @@ int main(void)
     enum { MAX_FONTS_LOCAL = 32 };
     struct yetty_ydraw_font *fonts[MAX_FONTS_LOCAL] = {0};
     struct yetty_ydraw_core_primitive_iter_result ir3 =
-        yetty_ydraw_core_buffer_prim_first(out->buffer, reg);
+        yetty_ydraw_core_draw_list_prim_first(out->buffer, reg);
     REQUIRE(ir3.ok, "iterator first (font scan) failed");
     struct yetty_ydraw_core_primitive_iter it4 = ir3.value;
     int loaded_fonts = 0;
@@ -420,7 +420,7 @@ int main(void)
             }
         }
         struct yetty_ydraw_core_primitive_iter_result nx4 =
-            yetty_ydraw_core_buffer_prim_next(out->buffer, reg, &it4);
+            yetty_ydraw_core_draw_list_prim_next(out->buffer, reg, &it4);
         if (!nx4.ok) break;
         it4 = nx4.value;
     }
@@ -434,7 +434,7 @@ int main(void)
     int char_misses_dumped = 0;
 
     struct yetty_ydraw_core_primitive_iter_result ir4 =
-        yetty_ydraw_core_buffer_prim_first(out->buffer, reg);
+        yetty_ydraw_core_draw_list_prim_first(out->buffer, reg);
     REQUIRE(ir4.ok, "iterator first (char layout sim) failed");
     struct yetty_ydraw_core_primitive_iter it5 = ir4.value;
     for (;;) {
@@ -497,7 +497,7 @@ int main(void)
             }
         }
         struct yetty_ydraw_core_primitive_iter_result nx5 =
-            yetty_ydraw_core_buffer_prim_next(out->buffer, reg, &it5);
+            yetty_ydraw_core_draw_list_prim_next(out->buffer, reg, &it5);
         if (!nx5.ok) break;
         it5 = nx5.value;
     }
@@ -512,7 +512,7 @@ int main(void)
      * advances). */
     fprintf(stderr, "\n=== smaller-line diagnostic (per-char canvas-side cursor) ===\n");
     struct yetty_ydraw_core_primitive_iter_result ir5 =
-        yetty_ydraw_core_buffer_prim_first(out->buffer, reg);
+        yetty_ydraw_core_draw_list_prim_first(out->buffer, reg);
     if (ir5.ok) {
         struct yetty_ydraw_core_primitive_iter dit = ir5.value;
         for (;;) {
@@ -550,7 +550,7 @@ int main(void)
                 }
             }
             struct yetty_ydraw_core_primitive_iter_result nxd =
-                yetty_ydraw_core_buffer_prim_next(out->buffer, reg, &dit);
+                yetty_ydraw_core_draw_list_prim_next(out->buffer, reg, &dit);
             if (!nxd.ok) break;
             dit = nxd.value;
         }
@@ -583,7 +583,7 @@ int main(void)
            body_min_x, body_size);
 
     yetty_ydraw_core_flyweight_registry_destroy(reg);
-    yetty_ydraw_core_buffer_destroy(out->buffer);
+    yetty_ydraw_core_draw_list_destroy(out->buffer);
     pdfioFileClose(pdf);
     return 0;
 }

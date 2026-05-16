@@ -9,7 +9,7 @@
 #include <yetty/yplatform/fs.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/complex-prim-types.h>
 #include <yetty/ydraw-factory/complex-prim-factory.h>
@@ -1995,7 +1995,7 @@ static void canvas_restore_range(struct yetty_ydraw_canvas *canvas, uint32_t fir
 }
 
 struct yetty_ycore_void_result yetty_ydraw_canvas_add_buffer(
-    struct yetty_ydraw_canvas *canvas, struct yetty_ydraw_core_buffer *buffer)
+    struct yetty_ydraw_canvas *canvas, struct yetty_ydraw_core_draw_list *buffer)
 {
     if (!canvas) {
         yerror("yetty_ydraw_canvas_add_buffer: canvas is NULL");
@@ -2007,7 +2007,7 @@ struct yetty_ycore_void_result yetty_ydraw_canvas_add_buffer(
     }
 
     struct yetty_ydraw_core_primitive_iter_result iter_res =
-        yetty_ydraw_core_buffer_prim_first(buffer, canvas->flyweight_registry);
+        yetty_ydraw_core_draw_list_prim_first(buffer, canvas->flyweight_registry);
     bool has_primitives = YETTY_IS_OK(iter_res);
 
     ydebug("add_buffer: START cursor_row=%u grid_rows=%u rolling_row_0=%u "
@@ -2166,7 +2166,7 @@ struct yetty_ycore_void_result yetty_ydraw_canvas_add_buffer(
         }
 
         struct yetty_ydraw_core_primitive_iter_result nx =
-            yetty_ydraw_core_buffer_prim_next(buffer, canvas->flyweight_registry, &iter);
+            yetty_ydraw_core_draw_list_prim_next(buffer, canvas->flyweight_registry, &iter);
         if (YETTY_IS_ERR(nx)) {
             break;
         }

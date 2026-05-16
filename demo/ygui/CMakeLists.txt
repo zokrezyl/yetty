@@ -1,7 +1,7 @@
 # ygui C demos — each builds a tiny program that uses the ygui widget API.
 # ygui accumulates primitives into a ydraw-core buffer and ships them as
 # base64-encoded OSC sequences to a running yetty instance, which decodes
-# them via yetty_ydraw_core_buffer_create_from_base64 and renders.
+# them via yetty_ydraw_core_draw_list_create_from_base64 and renders.
 # See src/yetty/ygui/ydraw-capi.gen.{h,c} for the ydraw buffer shim.
 
 # Shared support object: ytrace + ymutex/term platform glue. Compiled once

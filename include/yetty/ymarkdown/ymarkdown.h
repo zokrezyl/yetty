@@ -8,18 +8,18 @@
  *   - parses headers (#..######), inline bold (**..**), italic (*..*),
  *     bold+italic (***..***), inline code (`..`) and bullet lists
  *     ('-' or '*' at start of line)
- *   - emits text spans via yetty_ydraw_core_buffer_add_text
+ *   - emits text spans via yetty_ydraw_core_draw_list_add_text
  *   - emits code-run background rectangles as SDF Box primitives
  *   - populates the scene bounds on the buffer from the config
  *
  * The result carries the buffer ownership; caller frees it via
- * yetty_ydraw_core_buffer_destroy.
+ * yetty_ydraw_core_draw_list_destroy.
  */
 
 #include <stddef.h>
 #include <stdint.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,7 +33,7 @@ struct yetty_ymarkdown_render_config {
 };
 
 struct yetty_ymarkdown_render_output {
-    struct yetty_ydraw_core_buffer *buffer;
+    struct yetty_ydraw_core_draw_list *buffer;
     float scene_width;
     float scene_height;
 };

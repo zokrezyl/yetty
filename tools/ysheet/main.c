@@ -13,7 +13,7 @@
 
 #include <yrich-runner.h>
 
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yplatform/getopt.h>
 #include <yetty/yrich/yrich-document.h>
 #include <yetty/yrich/yrich-yaml.h>
@@ -102,17 +102,17 @@ int main(int argc, char **argv)
 		seed_demo(sheet);
 	}
 
-	struct yetty_ydraw_core_buffer_config bcfg = {0};
+	struct yetty_ydraw_core_draw_list_config bcfg = {0};
 	bcfg.scene_max_x = yetty_yrich_document_content_width(&sheet->base);
 	bcfg.scene_max_y = yetty_yrich_document_content_height(&sheet->base);
-	struct yetty_ydraw_core_buffer_result br =
-		yetty_ydraw_core_buffer_config_buffer_create(&bcfg);
+	struct yetty_ydraw_core_draw_list_result br =
+		yetty_ydraw_core_draw_list_config_buffer_create(&bcfg);
 	if (YETTY_IS_ERR(br)) {
 		fprintf(stderr, "ysheet: %s\n", br.error.msg);
 		yetty_yrich_document_destroy(&sheet->base);
 		return 1;
 	}
-	struct yetty_ydraw_core_buffer *buf = br.value;
+	struct yetty_ydraw_core_draw_list *buf = br.value;
 	yetty_yrich_document_set_buffer(&sheet->base, buf);
 
 	struct yrich_runner runner;
@@ -133,7 +133,7 @@ int main(int argc, char **argv)
 		yrich_runner_subscribe(false);
 
 	yrich_runner_fini(&runner);
-	yetty_ydraw_core_buffer_destroy(buf);
+	yetty_ydraw_core_draw_list_destroy(buf);
 	yetty_yrich_document_destroy(&sheet->base);
 	return rc;
 }

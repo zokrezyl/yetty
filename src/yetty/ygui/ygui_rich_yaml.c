@@ -15,7 +15,7 @@
 
 #include "ygui_internal.h"
 
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ydraw-yaml/ydraw-yaml.h>
 
 struct yetty_ycore_void_result yetty_ygui_widget_rich_set_yaml(struct yetty_ygui_widget *widget,
@@ -28,7 +28,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_rich_set_yaml(struct yetty_ygui
         yetty_ygui_widget_rich_clear(widget);
         return YETTY_OK_VOID();
     }
-    struct yetty_ydraw_core_buffer_result pr = yetty_ydraw_yaml_parse(yaml, yaml_len);
+    struct yetty_ydraw_core_draw_list_result pr = yetty_ydraw_yaml_parse(yaml, yaml_len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "rich_set_yaml: yaml parse failed");
     yetty_ygui_widget_rich_set_buffer(widget, pr.value);
     return YETTY_OK_VOID();

@@ -11,7 +11,7 @@
 #include <yetty/yrich/yrich-element.h>
 
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
@@ -64,7 +64,7 @@ static bool shape_is_editing(const struct yetty_yrich_element *e)
     return s->editing;
 }
 
-static struct yetty_ycore_void_result emit_text(struct yetty_ydraw_core_buffer *buf,
+static struct yetty_ycore_void_result emit_text(struct yetty_ydraw_core_draw_list *buf,
                                                 const struct yetty_yrich_shape *s, uint32_t layer)
 {
     if (s->text_len == 0 || !s->text) {
@@ -102,13 +102,13 @@ static struct yetty_ycore_void_result emit_text(struct yetty_ydraw_core_buffer *
         .size = s->text_len,
         .capacity = s->text_len,
     };
-    return yetty_ydraw_core_buffer_add_text(buf, text_x, text_y, &text, s->text_style.font_size,
+    return yetty_ydraw_core_draw_list_add_text(buf, text_x, text_y, &text, s->text_style.font_size,
                                              s->text_style.color, layer + 1, s->text_style.font_id,
                                              0.0f);
 }
 
 static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e,
-                                                   struct yetty_ydraw_core_buffer *buf,
+                                                   struct yetty_ydraw_core_draw_list *buf,
                                                    uint32_t layer, bool selected)
 {
     struct yetty_yrich_shape *s = (struct yetty_yrich_shape *)e;
@@ -130,8 +130,8 @@ static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e
             .half_height = s->bounds.h * 0.5f,
             .corner_radius = s->corner_radius,
         };
-        struct yetty_ydraw_core_id_result idr =
-            yetty_ysdf_add_box(buf, layer, s->fill_color, s->stroke_color, s->stroke_width, &body);
+        struct yetty_ycore_void_result idr =
+            yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, layer, s->fill_color, s->stroke_color, s->stroke_width, &body);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, idr, "shape_render: rect add failed");
         if (s->kind == YETTY_YRICH_SHAPE_TEXTBOX) {
             struct yetty_ycore_void_result tr = emit_text(buf, s, layer);
@@ -146,8 +146,8 @@ static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e
             .radius_x = s->bounds.w * 0.5f,
             .radius_y = s->bounds.h * 0.5f,
         };
-        struct yetty_ydraw_core_id_result idr = yetty_ysdf_add_ellipse(
-            buf, layer, s->fill_color, s->stroke_color, s->stroke_width, &body);
+        struct yetty_ycore_void_result idr = yetty_ydraw_draw_list_add_cmd_add_ellipse(
+            buf, 0, layer, s->fill_color, s->stroke_color, s->stroke_width, &body);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, idr, "shape_render: ellipse add failed");
         break;
     }
@@ -159,8 +159,8 @@ static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e
             .end_x = s->bounds.x + s->bounds.w,
             .end_y = s->bounds.y + s->bounds.h,
         };
-        struct yetty_ydraw_core_id_result idr =
-            yetty_ysdf_add_segment(buf, layer, 0, s->stroke_color, s->stroke_width, &seg);
+        struct yetty_ycore_void_result idr =
+            yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, layer, 0, s->stroke_color, s->stroke_width, &seg);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, idr, "shape_render: segment add failed");
         break;
     }
@@ -176,8 +176,8 @@ static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e
             .half_height = s->bounds.h * 0.5f + 2.0f,
             .corner_radius = 0.0f,
         };
-        struct yetty_ydraw_core_id_result idr = yetty_ysdf_add_box(
-            buf, layer + 4, 0, YETTY_YRICH_RGBA(0, 100, 200, 255), 1.5f, &border);
+        struct yetty_ycore_void_result idr = yetty_ydraw_draw_list_add_cmd_add_box(
+            buf, 0, layer + 4, 0, YETTY_YRICH_RGBA(0, 100, 200, 255), 1.5f, &border);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, idr, "shape_render: selection box add failed");
     }
     return YETTY_OK_VOID();
@@ -350,8 +350,8 @@ static struct yetty_ycore_void_result slides_render(struct yetty_yrich_document 
         return YETTY_ERR(yetty_ycore_void, "slides_render: NULL buffer");
     }
 
-    yetty_ydraw_core_buffer_clear(doc->buffer);
-    yetty_ydraw_core_buffer_set_scene_bounds(doc->buffer, 0.0f, 0.0f, s->slide_width,
+    yetty_ydraw_core_draw_list_clear(doc->buffer);
+    yetty_ydraw_core_draw_list_set_scene_bounds(doc->buffer, 0.0f, 0.0f, s->slide_width,
                                               s->slide_height);
 
     struct yetty_yrich_slide *slide = yetty_yrich_slides_slide_at(s, s->current_slide);
@@ -368,8 +368,8 @@ static struct yetty_ycore_void_result slides_render(struct yetty_yrich_document 
         .half_height = s->slide_height * 0.5f,
         .corner_radius = 0.0f,
     };
-    struct yetty_ydraw_core_id_result br =
-        yetty_ysdf_add_box(doc->buffer, 0, slide->bg_color, 0, 0.0f, &bg);
+    struct yetty_ycore_void_result br =
+        yetty_ydraw_draw_list_add_cmd_add_box(doc->buffer, 0, 0, slide->bg_color, 0, 0.0f, &bg);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "slides_render: bg add failed");
 
     uint32_t layer = 1;

@@ -3,7 +3,7 @@
 #pragma once
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 
 // Forward declare libyaml parser (avoids yaml.h dependency in ydraw-core)
 struct yaml_parser_s;
@@ -16,7 +16,7 @@ extern "C" {
 // primitive_type_name: e.g., "circle", "box", "text"
 // yaml_parser: positioned to read the value (mapping content)
 typedef struct yetty_ycore_void_result (*yetty_ydraw_yaml_factory_fn)(
-    struct yetty_ydraw_core_buffer *buffer, struct yaml_parser_s *yaml_parser,
+    struct yetty_ydraw_core_draw_list *buffer, struct yaml_parser_s *yaml_parser,
     const char *primitive_type_name);
 
 #ifdef __cplusplus

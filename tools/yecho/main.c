@@ -11,7 +11,7 @@
 #include <yetty/yecho/yecho.h>
 #include <yetty/yfont/shader-glyph.h>
 #include <yetty/yplatform/getopt.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ycore/result.h>
 
 #include <stdbool.h>
@@ -228,7 +228,7 @@ int main(int argc, char **argv)
             .default_fg = 0,
             .line_spacing = 0,
         };
-        struct yetty_ydraw_core_buffer_result r =
+        struct yetty_ydraw_core_draw_list_result r =
             yetty_yecho_render_string(input, input_len, &cfg);
         if (YETTY_IS_ERR(r)) {
             fprintf(stderr, "yecho: render failed: %s\n", r.error.msg);
@@ -239,7 +239,7 @@ int main(int argc, char **argv)
             rc = 1;
         } else {
             struct yetty_ycore_size_result wr = yetty_yecho_osc_bin_emit(r.value, stdout);
-            yetty_ydraw_core_buffer_destroy(r.value);
+            yetty_ydraw_core_draw_list_destroy(r.value);
             if (YETTY_IS_ERR(wr)) {
                 fprintf(stderr, "yecho: OSC emit failed: %s\n", wr.error.msg);
                 for (const struct yetty_ycore_error *e = wr.error.cause; e; e = e->cause) {

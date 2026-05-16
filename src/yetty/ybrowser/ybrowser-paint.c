@@ -31,7 +31,7 @@
 #include <turbojpeg.h>
 #endif
 
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/yimage/yimage-gen.h>
@@ -614,7 +614,7 @@ char *yetty_ylexbor_img_pick_url(struct yetty_ylexbor *r, lxb_dom_element_t *el)
 }
 
 struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
-                                                   struct yetty_ydraw_core_buffer *buf)
+                                                   struct yetty_ydraw_core_draw_list *buf)
 {
     if (r == NULL || buf == NULL) {
         return YETTY_ERR(yetty_ycore_void, "ylexbor_paint: null");
@@ -714,8 +714,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                         memset(e, 0, sizeof(*e));
                         e->url = urls[k]; /* transfer ownership */
                         urls[k] = NULL;
-                        if (!bodies[k] || lens[k] == 0 ||
-                            (status[k] != 0 && status[k] != 200)) {
+                        if (!bodies[k] || lens[k] == 0 || (status[k] != 0 && status[k] != 200)) {
                             free(bodies[k]);
                             e->failed = 1;
                             continue;
@@ -752,10 +751,9 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
 		 * block). Don't skip it; the border paint below produces
 		 * the visible 1px line. Same logic for w=0 vertical
 		 * separators (rare in HTML but legal CSS). */
-        bool has_visible_border =
-            b->kind == YL_BOX_BLOCK && b->border_color.a != 0 &&
-            (b->border_top > 0 || b->border_right > 0 || b->border_bottom > 0 ||
-             b->border_left > 0);
+        bool has_visible_border = b->kind == YL_BOX_BLOCK && b->border_color.a != 0 &&
+                                  (b->border_top > 0 || b->border_right > 0 ||
+                                   b->border_bottom > 0 || b->border_left > 0);
         if ((b->w <= 0 && !has_visible_border) || (b->h <= 0 && !has_visible_border)) {
             ydebug("paint skip  i=%u kind=%d xy=%.0f,%.0f wh=%.0fx%.0f", i, b->kind, b->x, b->y,
                    b->w, b->h);
@@ -802,7 +800,8 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                     .half_height = b->h * 0.5f,
                     .corner_radius = b->border_radius,
                 };
-                (void)yetty_ysdf_add_box(buf, z++, pack_rgba(b->bg), 0, 0, &box);
+                (void)yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->bg), 0, 0,
+                                                            &box);
             }
 
             /* P2.10 background-image yimage emission removed: ylexbor
@@ -827,7 +826,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                         .half_width = b->w * 0.5f,
                         .half_height = b->border_top * 0.5f,
                     };
-                    (void)yetty_ysdf_add_box(buf, z++, bc, 0, 0, &bx);
+                    (void)yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, z++, bc, 0, 0, &bx);
                 }
                 if (b->border_bottom > 0) {
                     struct yetty_ysdf_box bx = {
@@ -836,7 +835,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                         .half_width = b->w * 0.5f,
                         .half_height = b->border_bottom * 0.5f,
                     };
-                    (void)yetty_ysdf_add_box(buf, z++, bc, 0, 0, &bx);
+                    (void)yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, z++, bc, 0, 0, &bx);
                 }
                 if (b->border_left > 0) {
                     struct yetty_ysdf_box bx = {
@@ -845,7 +844,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                         .half_width = b->border_left * 0.5f,
                         .half_height = b->h * 0.5f,
                     };
-                    (void)yetty_ysdf_add_box(buf, z++, bc, 0, 0, &bx);
+                    (void)yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, z++, bc, 0, 0, &bx);
                 }
                 if (b->border_right > 0) {
                     struct yetty_ysdf_box bx = {
@@ -854,7 +853,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                         .half_width = b->border_right * 0.5f,
                         .half_height = b->h * 0.5f,
                     };
-                    (void)yetty_ysdf_add_box(buf, z++, bc, 0, 0, &bx);
+                    (void)yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, z++, bc, 0, 0, &bx);
                 }
             }
             break;
@@ -879,7 +878,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                     .half_height = b->h * 0.5f,
                     .corner_radius = 0,
                 };
-                (void)yetty_ysdf_add_box(buf, z++, 0xc0c0c0ffu, 0, 0, &box);
+                (void)yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, z++, 0xc0c0c0ffu, 0, 0, &box);
                 ydebug("paint image (placeholder) i=%u xy=%.0f,%.0f wh=%.0fx%.0f", i, b->x, b->y,
                        b->w, b->h);
                 break;
@@ -912,7 +911,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                 free(prim);
                 break;
             }
-            (void)yetty_ydraw_core_buffer_add_prim(buf, prim, need);
+            (void)yetty_ydraw_core_draw_list_add_prim(buf, prim, need);
             free(prim);
             z++;
             ydebug("paint image i=%u xy=%.0f,%.0f wh=%.0fx%.0f src=%dx%d", i, b->x, b->y, b->w,
@@ -945,9 +944,9 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
 			 * justify-fill code computes word_spacing but until we
 			 * confirm it's not the source of the user-reported
 			 * scattered glyphs we keep it dormant. */
-            (void)yetty_ydraw_core_buffer_add_text(buf, b->x, baseline_y, &txt, b->font_size,
-                                                    pack_rgba(b->fg), z++, /*font_id=*/-1,
-                                                    /*rotation=*/0.0f);
+            (void)yetty_ydraw_core_draw_list_add_text(buf, b->x, baseline_y, &txt, b->font_size,
+                                                      pack_rgba(b->fg), z++, /*font_id=*/-1,
+                                                      /*rotation=*/0.0f);
             if (b->underline && b->w > 0) {
                 float thickness = b->font_size * 0.06f;
                 if (thickness < 1.0f) {
@@ -960,7 +959,8 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                     .half_width = b->w * 0.5f,
                     .half_height = thickness * 0.5f,
                 };
-                (void)yetty_ysdf_add_box(buf, z++, pack_rgba(b->fg), 0, 0, &ubx);
+                (void)yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->fg), 0, 0,
+                                                            &ubx);
             }
             break;
         }
@@ -974,7 +974,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
     if (scene_max_x < min_w) {
         scene_max_x = min_w;
     }
-    yetty_ydraw_core_buffer_set_scene_bounds(buf, 0.0f, 0.0f, scene_max_x, scene_max_y);
+    yetty_ydraw_core_draw_list_set_scene_bounds(buf, 0.0f, 0.0f, scene_max_x, scene_max_y);
     ydebug("paint scene bounds = (0,0)-(%.0f,%.0f)", scene_max_x, scene_max_y);
 
     return YETTY_OK_VOID();

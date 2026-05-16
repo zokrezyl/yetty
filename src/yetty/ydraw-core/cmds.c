@@ -5,7 +5,7 @@
  * payload (CMD_ZERO) are an 8-byte record. */
 
 #include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ydraw-core/flyweight.h>
 #include <yetty/ycore/types.h>
 
@@ -41,13 +41,13 @@ struct yetty_ydraw_core_prim_base_ops_ptr_result yetty_ydraw_core_cmd_handler(ui
     return YETTY_ERR(yetty_ydraw_core_prim_base_ops_ptr, "not a cmd type");
 }
 
-struct yetty_ycore_void_result yetty_ydraw_core_buffer_add_cmd_zero(
-    struct yetty_ydraw_core_buffer *buf)
+struct yetty_ycore_void_result yetty_ydraw_core_draw_list_add_cmd_zero(
+    struct yetty_ydraw_core_draw_list *buf)
 {
     /* FAM header only: type=ZERO, payload_size=0. */
     uint32_t header[2] = {YETTY_YDRAW_CMD_ZERO, 0u};
     struct yetty_ydraw_core_id_result r =
-        yetty_ydraw_core_buffer_add_prim(buf, header, sizeof(header));
+        yetty_ydraw_core_draw_list_add_prim(buf, header, sizeof(header));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "add_cmd_zero: add_prim failed");
     return YETTY_OK_VOID();
 }

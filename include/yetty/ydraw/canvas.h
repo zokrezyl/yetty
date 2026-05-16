@@ -28,7 +28,7 @@ extern "C" {
 #endif
 
 struct yetty_ydraw_canvas;
-struct yetty_ydraw_core_buffer;
+struct yetty_ydraw_core_draw_list;
 struct yetty_ydraw_core_figure_factory;
 struct yetty_ydraw_core_figure_instance;
 struct yetty_ydraw_core_flyweight_registry;

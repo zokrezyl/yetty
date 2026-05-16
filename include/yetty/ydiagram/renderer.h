@@ -19,7 +19,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ydiagram/graph-ir.h>
 #include <yetty/ydiagram/layout.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,7 +35,7 @@ struct yetty_ydiagram_render_options {
 struct yetty_ydiagram_render_options yetty_ydiagram_default_render_options(void);
 
 struct yetty_ycore_void_result yetty_ydiagram_render(
-    const struct yetty_ydiagram_graph *g, struct yetty_ydraw_core_buffer *buffer,
+    const struct yetty_ydiagram_graph *g, struct yetty_ydraw_core_draw_list *buffer,
     const struct yetty_ydiagram_render_options *options,
     yetty_ydiagram_measure_text_fn measure, void *measure_userdata);
 

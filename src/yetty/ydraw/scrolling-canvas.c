@@ -9,7 +9,7 @@
 #include <yetty/yplatform/fs.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/complex-prim-types.h>
 #include <yetty/ydraw-factory/complex-prim-factory.h>

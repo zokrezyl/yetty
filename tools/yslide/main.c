@@ -12,7 +12,7 @@
 
 #include <yrich-runner.h>
 
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yplatform/getopt.h>
 #include <yetty/yrich/yrich-document.h>
 #include <yetty/yrich/yrich-yaml.h>
@@ -119,18 +119,18 @@ int main(int argc, char **argv)
 		seed_demo(deck);
 	}
 
-	struct yetty_ydraw_core_buffer_config bcfg = {
+	struct yetty_ydraw_core_draw_list_config bcfg = {
 		.scene_max_x = deck->slide_width,
 		.scene_max_y = deck->slide_height,
 	};
-	struct yetty_ydraw_core_buffer_result br =
-		yetty_ydraw_core_buffer_config_buffer_create(&bcfg);
+	struct yetty_ydraw_core_draw_list_result br =
+		yetty_ydraw_core_draw_list_config_buffer_create(&bcfg);
 	if (YETTY_IS_ERR(br)) {
 		fprintf(stderr, "yslide: %s\n", br.error.msg);
 		yetty_yrich_document_destroy(&deck->base);
 		return 1;
 	}
-	struct yetty_ydraw_core_buffer *buf = br.value;
+	struct yetty_ydraw_core_draw_list *buf = br.value;
 	yetty_yrich_document_set_buffer(&deck->base, buf);
 
 	struct yrich_runner runner;
@@ -151,7 +151,7 @@ int main(int argc, char **argv)
 		yrich_runner_subscribe(false);
 
 	yrich_runner_fini(&runner);
-	yetty_ydraw_core_buffer_destroy(buf);
+	yetty_ydraw_core_draw_list_destroy(buf);
 	yetty_yrich_document_destroy(&deck->base);
 	return rc;
 }

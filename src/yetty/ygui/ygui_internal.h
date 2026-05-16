@@ -6,7 +6,7 @@
 #define YGUI_INTERNAL_H
 
 #include <yetty/ygui/ygui.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yface/yface.h>
 #include <stdlib.h>
@@ -32,12 +32,12 @@ struct yetty_platform_pty;
 
 /*=============================================================================
  * Render Context (drawing target = a ydraw-core buffer). The shim that used
- * to sit here (ydraw-capi.gen.*) is gone; widgets call yetty_ysdf_add_* and
- * yetty_ydraw_core_buffer_add_text directly.
+ * to sit here (ydraw-capi.gen.*) is gone; widgets call yetty_ydraw_draw_list_add_cmd_add_* and
+ * yetty_ydraw_core_draw_list_add_text directly.
  *===========================================================================*/
 
 struct yetty_ygui_render_ctx {
-    struct yetty_ydraw_core_buffer *buffer;
+    struct yetty_ydraw_core_draw_list *buffer;
     const struct yetty_ygui_theme *theme;
     float offset_x, offset_y;
     float clip_x, clip_y, clip_w, clip_h;
@@ -348,7 +348,7 @@ struct yetty_ygui_widget {
             /* Owned ydraw-core buffer. NULL while empty. Authors fill the
              * primitives in widget-local coordinates (0..w, 0..h); the
              * widget's render translates them to absolute canvas coords. */
-            struct yetty_ydraw_core_buffer *buffer;
+            struct yetty_ydraw_core_draw_list *buffer;
         } rich;
 
         struct {
@@ -434,8 +434,8 @@ typedef struct {
 
 struct yetty_ygui_engine {
     /* ydraw-core buffer (created and owned by engine). Widgets add primitives
-     * via yetty_ysdf_* and text via yetty_ydraw_core_buffer_add_text. */
-    struct yetty_ydraw_core_buffer *buffer;
+     * via yetty_ysdf_* and text via yetty_ydraw_core_draw_list_add_text. */
+    struct yetty_ydraw_core_draw_list *buffer;
 
     /* Raster font in metrics-only mode — used for ygui_text_width() and widget
      * layout. Opened in engine_alloc_init and reused for every render. See
@@ -612,7 +612,7 @@ void yetty_ygui_widget_init_base(struct yetty_ygui_widget *widget, float x, floa
 
 /* Render context */
 void yetty_ygui_render_ctx_init(struct yetty_ygui_render_ctx *ctx,
-                                struct yetty_ydraw_core_buffer *buffer,
+                                struct yetty_ydraw_core_draw_list *buffer,
                                 const struct yetty_ygui_theme *theme);
 struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box(struct yetty_ygui_render_ctx *ctx,
                                                                 float x, float y, float w, float h,

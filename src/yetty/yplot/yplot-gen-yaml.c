@@ -3,7 +3,7 @@
 
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/ydraw-yaml/ydraw-yaml.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yaml.h>
@@ -54,7 +54,7 @@ static const uint32_t YPLOT_COLOR_PALETTE[8] = {
     0xFFFF6B6B, 0xFF4ECDC4, 0xFFFFE66D, 0xFF95E1D3, 0xFFF38181, 0xFFAA96DA, 0xFF72D6C9, 0xFFFCBF49,
 };
 
-static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ydraw_core_buffer *buffer,
+static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ydraw_core_draw_list *buffer,
                                                          yaml_parser_t *yaml_parser,
                                                          const char *primitive_type_name)
 {
@@ -225,7 +225,7 @@ static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ydraw_core
     }
 
     struct yetty_ydraw_core_id_result id_res =
-        yetty_ydraw_core_buffer_add_prim(buffer, prim_buf, required);
+        yetty_ydraw_core_draw_list_add_prim(buffer, prim_buf, required);
     free(prim_buf);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yplot yaml: add_prim failed");
     return YETTY_OK_VOID();

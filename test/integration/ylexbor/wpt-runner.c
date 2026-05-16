@@ -35,7 +35,7 @@
  */
 
 #include <yetty/ylexbor/ylexbor.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ycore/types.h>
 
 #include <dirent.h>

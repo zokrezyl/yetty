@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ydraw-core/yaml-factory.h>
 
 #ifdef __cplusplus
@@ -19,7 +19,7 @@ extern "C" {
 // High level API - ydraw-layer uses this
 //=============================================================================
 
-struct yetty_ydraw_core_buffer_result yetty_ydraw_yaml_parse(const char *yaml, size_t len);
+struct yetty_ydraw_core_draw_list_result yetty_ydraw_yaml_parse(const char *yaml, size_t len);
 
 //=============================================================================
 // Low level API - for factory registration
@@ -36,7 +36,7 @@ struct yetty_ycore_void_result yetty_ydraw_yaml_parser_register(
     yetty_ydraw_yaml_factory_fn factory);
 
 struct yetty_ycore_void_result yetty_ydraw_yaml_parser_parse(
-    struct yetty_ydraw_yaml_parser *parser, struct yetty_ydraw_core_buffer *buffer,
+    struct yetty_ydraw_yaml_parser *parser, struct yetty_ydraw_core_draw_list *buffer,
     const char *yaml, size_t len);
 
 #ifdef __cplusplus

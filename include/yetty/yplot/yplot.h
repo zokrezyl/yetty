@@ -21,7 +21,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yplot/yplot-gen.h>
 
 #ifdef __cplusplus
@@ -52,14 +52,14 @@ struct yetty_yplot_render_config {
  * the source; plots without explicit colors fall back to a built-in
  * 8-slot palette (matches the yaml factory).
  *
- * Caller frees the returned buffer with yetty_ydraw_core_buffer_destroy. */
-struct yetty_ydraw_core_buffer_result yetty_yplot_render(
+ * Caller frees the returned buffer with yetty_ydraw_core_draw_list_destroy. */
+struct yetty_ydraw_core_draw_list_result yetty_yplot_render(
     const char *source, size_t len, const struct yetty_yplot_render_config *config);
 
 /* OSC envelope (YETTY_OSC_YDRAW_BIN, same wire format as ycat / yecho).
  * Returns bytes written; ERR on failure. */
 struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(
-    const struct yetty_ydraw_core_buffer *buffer, FILE *out);
+    const struct yetty_ydraw_core_draw_list *buffer, FILE *out);
 
 #ifdef __cplusplus
 }

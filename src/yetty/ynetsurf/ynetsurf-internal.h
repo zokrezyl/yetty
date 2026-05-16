@@ -16,7 +16,7 @@
 #include "netsurf/plot_style.h"
 
 struct browser_window;
-struct yetty_ydraw_core_buffer;
+struct yetty_ydraw_core_draw_list;
 
 struct yetty_ynetsurf_schedule_entry {
     int64_t deadline_ms;
@@ -46,7 +46,7 @@ struct yetty_ynetsurf {
 
     /* Current redraw target (set by yetty_ynetsurf_redraw, read by plotter
 	 * callbacks via redraw_context.priv). */
-    struct yetty_ydraw_core_buffer *cur_buf;
+    struct yetty_ydraw_core_draw_list *cur_buf;
 
     /* Current clip rect (CPU-tracked, used to AABB-cull primitives). */
     struct rect cur_clip;

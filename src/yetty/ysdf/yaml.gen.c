@@ -3,7 +3,7 @@
 
 #include <yetty/ysdf/yaml.gen.h>
 #include <yetty/ysdf/types.gen.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yaml.h>
 #include <stdlib.h>
@@ -51,7 +51,7 @@ static uint32_t parse_color(const char *str)
  *===========================================================================*/
 
 struct yetty_ysdf_ydraw_yaml_parse_ctx {
-    struct yetty_ydraw_core_buffer *buffer;
+    struct yetty_ydraw_core_draw_list *buffer;
     uint32_t z_order;
     /* Current primitive state */
     char prim_type[32];
@@ -541,7 +541,7 @@ static struct yetty_ycore_void_result add_prim(
 
     /* Add primitive to buffer */
     struct yetty_ydraw_core_id_result r =
-        yetty_ydraw_core_buffer_add_prim(yaml_parse_ctx->buffer, data, word_count * sizeof(float));
+        yetty_ydraw_core_draw_list_add_prim(yaml_parse_ctx->buffer, data, word_count * sizeof(float));
     yaml_parse_ctx->z_order++;
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ysdf yaml: add_prim failed");
     return YETTY_OK_VOID();
@@ -551,7 +551,7 @@ static struct yetty_ycore_void_result add_prim(
  * YAML event parser
  *===========================================================================*/
 
-struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ydraw_core_buffer *buffer,
+struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ydraw_core_draw_list *buffer,
                                                      const char *yaml_str, size_t yaml_len)
 {
     struct yaml_parser_s parser;

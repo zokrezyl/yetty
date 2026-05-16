@@ -13,13 +13,13 @@
  *     (SDF type Segment) into the buffer
  *
  * The result carries the buffer ownership; caller frees it via
- * yetty_ydraw_core_buffer_destroy.
+ * yetty_ydraw_core_draw_list_destroy.
  */
 
 #include <stddef.h>
 #include <stdint.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 
 /* Forward declare pdfio file (C API). */
 struct _pdfio_file_s;
@@ -29,7 +29,7 @@ extern "C" {
 #endif
 
 struct yetty_ypdf_render_output {
-    struct yetty_ydraw_core_buffer *buffer;
+    struct yetty_ydraw_core_draw_list *buffer;
     int page_count;
     float total_height;
     float first_page_height;

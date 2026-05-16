@@ -33,11 +33,11 @@ extern "C" {
 #endif
 
 struct yetty_yrich_document;
-struct yetty_ydraw_core_buffer;
+struct yetty_ydraw_core_draw_list;
 
 struct yrich_runner {
 	struct yetty_yrich_document *doc;       /* not owned */
-	struct yetty_ydraw_core_buffer *buf;   /* not owned */
+	struct yetty_ydraw_core_draw_list *buf;   /* not owned */
 
 	/* View state, populated from OSC 777779 / 777780. */
 	float display_w;
@@ -67,7 +67,7 @@ struct yrich_runner {
 /* Initialise an existing struct (zero-fills, attaches refs). NULL-safe. */
 void yrich_runner_init(struct yrich_runner *r,
 		       struct yetty_yrich_document *doc,
-		       struct yetty_ydraw_core_buffer *buf);
+		       struct yetty_ydraw_core_draw_list *buf);
 
 /* Free transient state owned by the runner (escape buffer). */
 void yrich_runner_fini(struct yrich_runner *r);

@@ -37,11 +37,11 @@ extern "C" {
  * frame, eliminating the separate YDRAW_CLEAR OSC envelope). */
 #define YETTY_YDRAW_CMD_ZERO 0x00000000u
 
-struct yetty_ydraw_core_buffer;
+struct yetty_ydraw_core_draw_list;
 
 /* Append a CMD_ZERO at the current write head of the buffer. */
-struct yetty_ycore_void_result yetty_ydraw_core_buffer_add_cmd_zero(
-    struct yetty_ydraw_core_buffer *buf);
+struct yetty_ycore_void_result yetty_ydraw_core_draw_list_add_cmd_zero(
+    struct yetty_ydraw_core_draw_list *buf);
 
 /* Flyweight handler for the cmd tier — returns the cmd base_ops which
  * stride by the FAM `8 + payload_size` bytes (same as flyweight prims).

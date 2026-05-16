@@ -88,23 +88,23 @@ static int spill_to_tempfile(const uint8_t *bytes, size_t len, char *path_out, s
  * Handler
  *===========================================================================*/
 
-static struct yetty_ydraw_core_buffer_result render_from_path(const char *path)
+static struct yetty_ydraw_core_draw_list_result render_from_path(const char *path)
 {
     struct _pdfio_file_s *pdf = pdfioFileOpen(path, NULL, NULL, NULL, NULL);
     if (!pdf) {
-        return YETTY_ERR(yetty_ydraw_core_buffer, "pdfioFileOpen failed");
+        return YETTY_ERR(yetty_ydraw_core_draw_list, "pdfioFileOpen failed");
     }
 
     struct yetty_ypdf_render_result r = yetty_ypdf_render_pdf(pdf);
     pdfioFileClose(pdf);
 
     if (YETTY_IS_ERR(r)) {
-        return YETTY_ERR(yetty_ydraw_core_buffer, r.error.msg);
+        return YETTY_ERR(yetty_ydraw_core_draw_list, r.error.msg);
     }
-    return YETTY_OK(yetty_ydraw_core_buffer, r.value.buffer);
+    return YETTY_OK(yetty_ydraw_core_draw_list, r.value.buffer);
 }
 
-struct yetty_ydraw_core_buffer_result yetty_ycat_handler_pdf(
+struct yetty_ydraw_core_draw_list_result yetty_ycat_handler_pdf(
     const uint8_t *bytes, size_t len, const char *path_hint, const struct yetty_ycat_config *config)
 {
     (void)config;
@@ -114,15 +114,15 @@ struct yetty_ydraw_core_buffer_result yetty_ycat_handler_pdf(
     }
 
     if (!bytes || len == 0) {
-        return YETTY_ERR(yetty_ydraw_core_buffer, "no bytes and no path");
+        return YETTY_ERR(yetty_ydraw_core_draw_list, "no bytes and no path");
     }
 
     char tmp_path[256];
     if (spill_to_tempfile(bytes, len, tmp_path, sizeof(tmp_path)) < 0) {
-        return YETTY_ERR(yetty_ydraw_core_buffer, "failed to spill PDF to temp file");
+        return YETTY_ERR(yetty_ydraw_core_draw_list, "failed to spill PDF to temp file");
     }
 
-    struct yetty_ydraw_core_buffer_result r = render_from_path(tmp_path);
+    struct yetty_ydraw_core_draw_list_result r = render_from_path(tmp_path);
     unlink(tmp_path);
     return r;
 }

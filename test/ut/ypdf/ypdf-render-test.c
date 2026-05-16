@@ -15,7 +15,7 @@
  */
 
 #include <pdfio.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ydraw-core/font-prim.h>
 #include <yetty/ydraw-core/text-span-prim.h>
 #include <yetty/ydraw/flyweight.h>
@@ -49,12 +49,12 @@ struct prim_counts {
     uint32_t other;
 };
 
-static struct prim_counts count_prims(struct yetty_ydraw_core_buffer *buf,
+static struct prim_counts count_prims(struct yetty_ydraw_core_draw_list *buf,
                                       struct yetty_ydraw_core_flyweight_registry *reg)
 {
     struct prim_counts c = {0};
     struct yetty_ydraw_core_primitive_iter_result ir =
-        yetty_ydraw_core_buffer_prim_first(buf, reg);
+        yetty_ydraw_core_draw_list_prim_first(buf, reg);
     if (YETTY_IS_ERR(ir))
         return c;
     struct yetty_ydraw_core_primitive_iter it = ir.value;
@@ -65,7 +65,7 @@ static struct prim_counts count_prims(struct yetty_ydraw_core_buffer *buf,
         else                                        c.other++;
 
         struct yetty_ydraw_core_primitive_iter_result nx =
-            yetty_ydraw_core_buffer_prim_next(buf, reg, &it);
+            yetty_ydraw_core_draw_list_prim_next(buf, reg, &it);
         if (YETTY_IS_ERR(nx)) break;
         it = nx.value;
     }
@@ -86,8 +86,8 @@ int main(void) {
     REQUIRE(out->total_height > 0.0f, "total_height not set");
     REQUIRE(out->max_width > 0.0f, "max_width not set");
 
-    float sx = yetty_ydraw_core_buffer_scene_max_x(out->buffer);
-    float sy = yetty_ydraw_core_buffer_scene_max_y(out->buffer);
+    float sx = yetty_ydraw_core_draw_list_scene_max_x(out->buffer);
+    float sy = yetty_ydraw_core_draw_list_scene_max_y(out->buffer);
     REQUIRE(sx == out->max_width, "scene max_x mismatch");
     REQUIRE(sy == out->total_height, "scene max_y mismatch");
 
@@ -106,7 +106,7 @@ int main(void) {
            out->total_height);
 
     yetty_ydraw_core_flyweight_registry_destroy(reg);
-    yetty_ydraw_core_buffer_destroy(out->buffer);
+    yetty_ydraw_core_draw_list_destroy(out->buffer);
     pdfioFileClose(pdf);
     return 0;
 }

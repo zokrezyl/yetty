@@ -18,20 +18,20 @@
  *      Path data is flattened to segments after applying the inherited
  *      transform stack.
  *   4. Text: <text>/<tspan> emits MSDF TEXT_SPAN flyweights via
- *      yetty_ydraw_core_buffer_add_text.
+ *      yetty_ydraw_core_draw_list_add_text.
  *
  * The viewBox attribute on <svg> determines the scene bounds passed to the
  * ydraw buffer at creation time; absent a viewBox, the width/height
  * attributes are used; absent those, the config's pixel dimensions.
  *
  * The output buffer is owned by the caller (free with
- * yetty_ydraw_core_buffer_destroy).
+ * yetty_ydraw_core_draw_list_destroy).
  */
 
 #include <stddef.h>
 #include <stdint.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,7 +49,7 @@ struct yetty_ysvg_render_config {
 };
 
 struct yetty_ysvg_render_output {
-    struct yetty_ydraw_core_buffer *buffer;
+    struct yetty_ydraw_core_draw_list *buffer;
     float scene_width;
     float scene_height;
 };
