@@ -278,7 +278,7 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
 			return er;
 		}
 
-		struct yetty_ydraw_core_draw_list_result r =
+		struct yetty_ydraw_draw_list_result r =
 			yetty_ycat_ts_render(buf.data, buf.len, grammar, &cfg);
 		if (YETTY_IS_ERR(r)) {
 			fprintf(stderr, "ycat: %s: ts render failed: %s\n",
@@ -288,7 +288,7 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
 			return -1;
 		}
 		struct yetty_ycore_size_result em_r = yetty_ycat_osc_bin_emit(r.value, stdout);
-		yetty_ydraw_core_draw_list_destroy(r.value);
+		yetty_ydraw_draw_list_destroy(r.value);
 		byte_buf_free(&buf);
 		free(url_mime);
 		if (YETTY_IS_ERR(em_r)) {
@@ -316,12 +316,12 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
 	if (in_yetty) {
 		yetty_ycat_handler_fn fn = yetty_ycat_get_handler(type);
 		if (fn) {
-			struct yetty_ydraw_core_draw_list_result r =
+			struct yetty_ydraw_draw_list_result r =
 				fn(buf.data, buf.len, path_hint, &cfg);
 			if (YETTY_IS_OK(r)) {
 				struct yetty_ycore_size_result em_r =
 					yetty_ycat_osc_bin_emit(r.value, stdout);
-				yetty_ydraw_core_draw_list_destroy(r.value);
+				yetty_ydraw_draw_list_destroy(r.value);
 				byte_buf_free(&buf);
 				free(url_mime);
 				if (YETTY_IS_ERR(em_r)) {
@@ -335,13 +335,13 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
 				arg, r.error.msg);
 		}
 		if (grammar) {
-			struct yetty_ydraw_core_draw_list_result r =
+			struct yetty_ydraw_draw_list_result r =
 				yetty_ycat_ts_render(buf.data, buf.len,
 						     grammar, &cfg);
 			if (YETTY_IS_OK(r)) {
 				struct yetty_ycore_size_result em_r =
 					yetty_ycat_osc_bin_emit(r.value, stdout);
-				yetty_ydraw_core_draw_list_destroy(r.value);
+				yetty_ydraw_draw_list_destroy(r.value);
 				byte_buf_free(&buf);
 				free(url_mime);
 				if (YETTY_IS_ERR(em_r)) {

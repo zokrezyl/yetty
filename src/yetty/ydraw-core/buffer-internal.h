@@ -19,23 +19,23 @@
 extern "C" {
 #endif
 
-struct yetty_ydraw_core_draw_list_result yetty_ydraw_core_draw_list_create_from_base64(
+struct yetty_ydraw_draw_list_result yetty_ydraw_draw_list_create_from_base64(
     const struct yetty_ycore_buffer *base64_buf);
 
 /* Base64-encode the buffer's raw primitive bytes. Allocates the output —
  * caller owns result.value.data and must free() it. Symmetric inverse of
- * yetty_ydraw_core_draw_list_create_from_base64. */
-struct yetty_ycore_buffer_result yetty_ydraw_core_draw_list_to_base64(
-    const struct yetty_ydraw_core_draw_list *buf);
+ * yetty_ydraw_draw_list_create_from_base64. */
+struct yetty_ycore_buffer_result yetty_ydraw_draw_list_to_base64(
+    const struct yetty_ydraw_draw_list *buf);
 
-float yetty_ydraw_core_draw_list_scene_min_x(const struct yetty_ydraw_core_draw_list *buf);
-float yetty_ydraw_core_draw_list_scene_min_y(const struct yetty_ydraw_core_draw_list *buf);
+float yetty_ydraw_draw_list_scene_min_x(const struct yetty_ydraw_draw_list *buf);
+float yetty_ydraw_draw_list_scene_min_y(const struct yetty_ydraw_draw_list *buf);
 
 /* Read-only view into the primitives payload. NULL on invalid buf. */
-const struct yetty_ycore_buffer *yetty_ydraw_core_draw_list_primitives(
-    const struct yetty_ydraw_core_draw_list *buf);
+const struct yetty_ycore_buffer *yetty_ydraw_draw_list_primitives(
+    const struct yetty_ydraw_draw_list *buf);
 
-/* yetty_ydraw_core_draw_list_data / _size are now part of the public surface
+/* yetty_ydraw_draw_list_data / _size are now part of the public surface
  * (see include/yetty/ydraw-core/draw-list.h). They are intentionally not
  * re-declared here. */
 

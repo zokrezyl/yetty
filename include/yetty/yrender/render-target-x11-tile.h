@@ -30,7 +30,7 @@ extern "C" {
 #endif
 
 struct yetty_yplatform_wgpu;
-struct yetty_ydraw_core_gpu_allocator;
+struct yetty_ydraw_gpu_allocator;
 struct yetty_yevent_event_loop;
 
 /*
@@ -49,7 +49,7 @@ struct yetty_yevent_event_loop;
  */
 struct yetty_yrender_target_ptr_result yetty_yrender_target_x11_tile_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat format,
-    struct yetty_ydraw_core_gpu_allocator *allocator, struct yetty_yplatform_wgpu *wgpu,
+    struct yetty_ydraw_gpu_allocator *allocator, struct yetty_yplatform_wgpu *wgpu,
     struct yetty_yevent_event_loop *event_loop, void *x11_display, unsigned long x11_window,
     struct yetty_yrender_viewport viewport);
 

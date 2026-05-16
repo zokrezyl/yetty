@@ -413,7 +413,7 @@ static nserror p_text(const struct redraw_context *ctx, const plot_font_style_t 
         .capacity = length,
         .size = length,
     };
-    (void)yetty_ydraw_core_draw_list_add_text(ns->cur_buf, (float)x, (float)y, &txt, pt,
+    (void)yetty_ydraw_draw_list_add_text(ns->cur_buf, (float)x, (float)y, &txt, pt,
                                             to_rgba(fstyle->foreground), ns->z_counter++,
                                             ns->default_font_id, 0.0f);
     return NSERROR_OK;

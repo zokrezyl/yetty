@@ -49,55 +49,55 @@
 #define U_COUNT 15
 
 /* Setters */
-static inline void set_grid_size(struct yetty_ydraw_core_gpu_resource_set *rs, float cols,
+static inline void set_grid_size(struct yetty_ydraw_gpu_resource_set *rs, float cols,
                                  float rows)
 {
     rs->uniforms[U_GRID_SIZE].vec2[0] = cols;
     rs->uniforms[U_GRID_SIZE].vec2[1] = rows;
 }
-static inline void set_cell_size(struct yetty_ydraw_core_gpu_resource_set *rs, float w, float h)
+static inline void set_cell_size(struct yetty_ydraw_gpu_resource_set *rs, float w, float h)
 {
     rs->uniforms[U_CELL_SIZE].vec2[0] = w;
     rs->uniforms[U_CELL_SIZE].vec2[1] = h;
 }
-static inline void set_cursor_pos(struct yetty_ydraw_core_gpu_resource_set *rs, float col,
+static inline void set_cursor_pos(struct yetty_ydraw_gpu_resource_set *rs, float col,
                                   float row)
 {
     rs->uniforms[U_CURSOR_POS].vec2[0] = col;
     rs->uniforms[U_CURSOR_POS].vec2[1] = row;
 }
-static inline void set_cursor_visible(struct yetty_ydraw_core_gpu_resource_set *rs, float v)
+static inline void set_cursor_visible(struct yetty_ydraw_gpu_resource_set *rs, float v)
 {
     rs->uniforms[U_CURSOR_VISIBLE].f32 = v;
 }
-static inline void set_cursor_shape(struct yetty_ydraw_core_gpu_resource_set *rs, float s)
+static inline void set_cursor_shape(struct yetty_ydraw_gpu_resource_set *rs, float s)
 {
     rs->uniforms[U_CURSOR_SHAPE].f32 = s;
 }
-static inline void set_scale(struct yetty_ydraw_core_gpu_resource_set *rs, float s)
+static inline void set_scale(struct yetty_ydraw_gpu_resource_set *rs, float s)
 {
     rs->uniforms[U_SCALE].f32 = s;
 }
-static inline void set_default_fg(struct yetty_ydraw_core_gpu_resource_set *rs, uint32_t c)
+static inline void set_default_fg(struct yetty_ydraw_gpu_resource_set *rs, uint32_t c)
 {
     rs->uniforms[U_DEFAULT_FG].u32 = c;
 }
-static inline void set_default_bg(struct yetty_ydraw_core_gpu_resource_set *rs, uint32_t c)
+static inline void set_default_bg(struct yetty_ydraw_gpu_resource_set *rs, uint32_t c)
 {
     rs->uniforms[U_DEFAULT_BG].u32 = c;
 }
-static inline void set_visual_zoom(struct yetty_ydraw_core_gpu_resource_set *rs, float scale,
+static inline void set_visual_zoom(struct yetty_ydraw_gpu_resource_set *rs, float scale,
                                    float off_x, float off_y)
 {
     rs->uniforms[U_VZ_SCALE].f32 = scale;
     rs->uniforms[U_VZ_OFF].vec2[0] = off_x;
     rs->uniforms[U_VZ_OFF].vec2[1] = off_y;
 }
-static inline void set_root_row(struct yetty_ydraw_core_gpu_resource_set *rs, uint32_t r)
+static inline void set_root_row(struct yetty_ydraw_gpu_resource_set *rs, uint32_t r)
 {
     rs->uniforms[U_ROOT_ROW].u32 = r;
 }
-static inline void set_selection_state(struct yetty_ydraw_core_gpu_resource_set *rs, int active,
+static inline void set_selection_state(struct yetty_ydraw_gpu_resource_set *rs, int active,
                                        uint32_t anchor_row, uint32_t anchor_col,
                                        uint32_t head_row, uint32_t head_col)
 {
@@ -109,7 +109,7 @@ static inline void set_selection_state(struct yetty_ydraw_core_gpu_resource_set 
 }
 
 /* Init — names and types use the same constants */
-static void init_uniforms(struct yetty_ydraw_core_gpu_resource_set *rs)
+static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
 {
     rs->uniform_count = U_COUNT;
 
@@ -198,7 +198,7 @@ struct yetty_yterm_terminal_text_layer {
     struct yetty_yfont_ms_font *font;
     uint32_t font_type; /* 0=msdf, 6=raster */
     struct yetty_ycore_buffer shader_code;
-    struct yetty_ydraw_core_gpu_resource_set rs;
+    struct yetty_ydraw_gpu_resource_set rs;
     struct yetty_ycore_void_result pending_error; /* Error from vterm callbacks */
     /* DEC mode 1500/1501 — mirrored from libvterm via settermprop. The
      * terminal reads these (via base.mouse_sub_fn) to decide whether to
@@ -251,7 +251,7 @@ static int text_layer_on_key(struct yetty_yrender_terminal_layer *self, int key,
 static int text_layer_on_char(struct yetty_yrender_terminal_layer *self, uint32_t codepoint,
                               int mods);
 static struct yetty_ycore_void_result text_layer_render(struct yetty_yrender_terminal_layer *self,
-                                                        struct yetty_ydraw_core_target *target);
+                                                        struct yetty_ydraw_target *target);
 static uint32_t text_layer_get_live_anchor(const struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result text_layer_set_view_top(
     struct yetty_yrender_terminal_layer *self, int active, uint32_t view_top_total_idx);
@@ -1190,7 +1190,7 @@ static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_
         struct yetty_yrender_gpu_resource_set_result font_rs =
             text_layer->font->ops->get_gpu_resource_set(text_layer->font);
         if (YETTY_IS_OK(font_rs)) {
-            text_layer->rs.children[0] = (struct yetty_ydraw_core_gpu_resource_set *)font_rs.value;
+            text_layer->rs.children[0] = (struct yetty_ydraw_gpu_resource_set *)font_rs.value;
         }
     }
 
@@ -1199,7 +1199,7 @@ static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_
 
 /* Render layer to target - delegate to render_target */
 static struct yetty_ycore_void_result text_layer_render(struct yetty_yrender_terminal_layer *self,
-                                                        struct yetty_ydraw_core_target *target)
+                                                        struct yetty_ydraw_target *target)
 {
     return target->ops->render_layer(target, self);
 }

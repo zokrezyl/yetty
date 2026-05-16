@@ -41,7 +41,6 @@ static void on_key(struct yetty_ygui_engine* engine, uint32_t key, int mods, voi
 }
 
 int main(void) {
-    (void)freopen("/dev/null", "w", stderr);
     fprintf(stderr, "=== COORDINATE DEBUG DEMO ===\n");
     fprintf(stderr, "This demo helps debug the click boundary bug.\n");
     fprintf(stderr, "Expected button area: x=[%d,%d), y=[%d,%d)\n",

@@ -2,10 +2,10 @@
 
 /*
  * YDrawRenderMethod — ThorVG RenderMethod that emits ydraw SDF primitives
- * into a yetty_ydraw_core_draw_list.
+ * into a yetty_ydraw_draw_list.
  *
  * Ported from yetty-poc/src/yetty/ythorvg/ydraw-render-method.h with the
- * YDrawBuffer dependency replaced by yetty_ydraw_core_draw_list + ysdf
+ * YDrawBuffer dependency replaced by yetty_ydraw_draw_list + ysdf
  * add helpers. The detection/flattening/gradient logic is preserved.
  */
 
@@ -19,7 +19,7 @@
 #include <memory>
 #include <vector>
 
-struct yetty_ydraw_core_draw_list;
+struct yetty_ydraw_draw_list;
 
 namespace yetty::ythorvg
 {
@@ -72,7 +72,7 @@ class YDrawRenderMethod : public tvg::RenderMethod
     using Ptr = std::unique_ptr<YDrawRenderMethod>;
 
     // buffer is borrowed — caller retains ownership and must outlive this.
-    explicit YDrawRenderMethod(yetty_ydraw_core_draw_list *buffer);
+    explicit YDrawRenderMethod(yetty_ydraw_draw_list *buffer);
     ~YDrawRenderMethod() override;
 
     // Set target viewport size
@@ -163,7 +163,7 @@ class YDrawRenderMethod : public tvg::RenderMethod
     // Color conversion
     uint32_t rgbaToPackedABGR(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 
-    yetty_ydraw_core_draw_list *_buffer = nullptr; // borrowed
+    yetty_ydraw_draw_list *_buffer = nullptr; // borrowed
     uint32_t _width = 0;
     uint32_t _height = 0;
     uint32_t _nextPrimId = 0;

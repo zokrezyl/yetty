@@ -29,7 +29,7 @@
 extern "C" {
 #endif
 
-struct yetty_ydraw_core_draw_list;
+struct yetty_ydraw_draw_list;
 struct yetty_yrich_document;
 
 /* Outgoing-operations callback — used by future sync layer. */
@@ -96,7 +96,7 @@ struct yetty_yrich_document {
     struct yetty_yrich_history history;
 
     /* Render target — caller-owned. */
-    struct yetty_ydraw_core_draw_list *buffer;
+    struct yetty_ydraw_draw_list *buffer;
     uint32_t bg_color; /* packed ABGR */
 
     bool dirty;
@@ -161,7 +161,7 @@ void yetty_yrich_document_clear_selection(struct yetty_yrich_document *doc);
 
 /* Set/get the ydraw buffer used as render target. Document does not own it. */
 void yetty_yrich_document_set_buffer(struct yetty_yrich_document *doc,
-                                     struct yetty_ydraw_core_draw_list *buf);
+                                     struct yetty_ydraw_draw_list *buf);
 
 void yetty_yrich_document_set_bg_color(struct yetty_yrich_document *doc, uint32_t color);
 

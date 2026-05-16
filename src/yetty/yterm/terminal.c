@@ -35,7 +35,7 @@
 /* Forward declarations for view ops */
 static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yui_view *view);
 static struct yetty_ycore_void_result terminal_view_render(
-    struct yetty_yui_view *view, struct yetty_ydraw_core_target *render_target);
+    struct yetty_yui_view *view, struct yetty_ydraw_target *render_target);
 static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_view *view,
                                                                struct yetty_yui_rect bounds);
 static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_view *view,
@@ -64,7 +64,7 @@ struct yetty_yterm_terminal {
     size_t layer_count;
     yetty_yevent_pipe_id pty_pipe_id;
     /* Render targets - one per layer for render_layer */
-    struct yetty_ydraw_core_target *layer_targets[YETTY_YTERM_TERMINAL_MAX_LAYERS];
+    struct yetty_ydraw_target *layer_targets[YETTY_YTERM_TERMINAL_MAX_LAYERS];
     int shutting_down;
     struct yetty_ywire_wire_statemachine *sm;
 
@@ -128,7 +128,7 @@ struct yetty_yterm_terminal {
 /* Forward declarations */
 static struct yetty_ycore_void_result terminal_read_pty(struct yetty_yterm_terminal *terminal);
 static struct yetty_ycore_void_result terminal_render_frame(
-    struct yetty_yterm_terminal *terminal, struct yetty_ydraw_core_target *target);
+    struct yetty_yterm_terminal *terminal, struct yetty_ydraw_target *target);
 
 /* PTY pipe alloc callback — provides buffer for uv_pipe_t reads.
  * One reusable per-terminal buffer, lazily allocated. 64KB matches
@@ -962,7 +962,7 @@ static struct yetty_ycore_int_result terminal_event_handler(
 
 /* Render a frame using layered rendering */
 static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_terminal *terminal,
-                                                            struct yetty_ydraw_core_target *target)
+                                                            struct yetty_ydraw_target *target)
 {
     if (terminal->shutting_down) {
         ydebug("terminal_render_frame: shutting down, skipping render");
@@ -1455,7 +1455,7 @@ static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yui_vie
 }
 
 static struct yetty_ycore_void_result terminal_view_render(
-    struct yetty_yui_view *view, struct yetty_ydraw_core_target *render_target)
+    struct yetty_yui_view *view, struct yetty_ydraw_target *render_target)
 {
     struct yetty_yterm_terminal *terminal = container_of(view, struct yetty_yterm_terminal, view);
 

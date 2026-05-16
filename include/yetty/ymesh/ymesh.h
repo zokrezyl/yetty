@@ -9,7 +9,7 @@
  *   cgltf_parse + cgltf_load_buffers (path or in-memory .glb)
  *       → host-side mesh (positions, normals, indices, bbox)
  *   yetty_ymesh_serialize_prim(uniforms, mesh) → wire bytes
- *   yetty_ydraw_core_draw_list_add_prim(buffer)  → attach to ydraw
+ *   yetty_ydraw_draw_list_add_prim(buffer)  → attach to ydraw
  *
  * Wire format (all words u32 unless marked):
  *   [type_id u32][payload_size u32]
@@ -62,17 +62,17 @@ struct yetty_ymesh_render_config {
 };
 
 /* Decode `glb_bytes` and produce a fresh ydraw-core buffer holding ONE
- * ymesh complex prim. Caller frees with yetty_ydraw_core_draw_list_destroy. */
-struct yetty_ydraw_core_draw_list_result yetty_ymesh_render(
+ * ymesh complex prim. Caller frees with yetty_ydraw_draw_list_destroy. */
+struct yetty_ydraw_draw_list_result yetty_ymesh_render(
     const uint8_t *glb_bytes, size_t len, const struct yetty_ymesh_render_config *config);
 
 /* Convenience: read the file at `path` and call yetty_ymesh_render. */
-struct yetty_ydraw_core_draw_list_result yetty_ymesh_render_path(
+struct yetty_ydraw_draw_list_result yetty_ymesh_render_path(
     const char *path, const struct yetty_ymesh_render_config *config);
 
 /* OSC envelope (YETTY_OSC_YDRAW_BIN, same wire format as yimage). */
 struct yetty_ycore_size_result yetty_ymesh_osc_bin_emit(
-    const struct yetty_ydraw_core_draw_list *buffer, FILE *out);
+    const struct yetty_ydraw_draw_list *buffer, FILE *out);
 
 #ifdef __cplusplus
 }

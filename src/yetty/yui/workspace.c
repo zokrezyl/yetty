@@ -65,7 +65,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_destroy(struct yetty_yui_work
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_yui_workspace_render(
-    struct yetty_yui_workspace *ws, struct yetty_ydraw_core_target *render_target)
+    struct yetty_yui_workspace *ws, struct yetty_ydraw_target *render_target)
 {
     if (!ws) {
         return YETTY_ERR(yetty_ycore_void, "workspace is NULL");

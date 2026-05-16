@@ -28,10 +28,10 @@ extern "C" {
 #endif
 
 struct yetty_ydraw_canvas;
-struct yetty_ydraw_core_draw_list;
-struct yetty_ydraw_core_figure_factory;
-struct yetty_ydraw_core_figure_instance;
-struct yetty_ydraw_core_flyweight_registry;
+struct yetty_ydraw_draw_list;
+struct yetty_ydraw_figure_factory;
+struct yetty_ydraw_figure_instance;
+struct yetty_ydraw_flyweight_registry;
 struct yetty_ydraw_font;
 struct yetty_ywire_wire_statemachine;
 
@@ -51,11 +51,11 @@ typedef struct yetty_ycore_void_result (*yetty_ydraw_canvas_cursor_callback)(
 
 /* Pointer + size view returned by build_prim_staging.
  * word_count is 0 on an empty canvas. */
-struct yetty_ydraw_prim_staging {
+struct yetty_ydraw_drawable_staging {
     const uint32_t *data;
     uint32_t word_count;
 };
-YETTY_YRESULT_DECLARE(yetty_ydraw_prim_staging, struct yetty_ydraw_prim_staging);
+YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_staging, struct yetty_ydraw_drawable_staging);
 
 /* View of a single glyph primitive — what a visitor sees during
  * `for_each_glyph`. x/y are absolute canvas pixel coordinates of the
@@ -145,7 +145,7 @@ struct yetty_ycore_void_result yetty_ydraw_canvas_rebuild_grid(
 const uint32_t *yetty_ydraw_canvas_grid_data(const struct yetty_ydraw_canvas *canvas);
 uint32_t yetty_ydraw_canvas_grid_word_count(const struct yetty_ydraw_canvas *canvas);
 
-struct yetty_ydraw_prim_staging_result yetty_ydraw_canvas_build_prim_staging(
+struct yetty_ydraw_drawable_staging_result yetty_ydraw_canvas_build_prim_staging(
     struct yetty_ydraw_canvas *canvas);
 
 uint32_t yetty_ydraw_canvas_prim_gpu_size(const struct yetty_ydraw_canvas *canvas);
@@ -168,14 +168,14 @@ struct yetty_ydraw_font *yetty_ydraw_canvas_get_default_font(
     const struct yetty_ydraw_canvas *canvas);
 
 /* Flyweight registry / complex-prim factory accessors */
-const struct yetty_ydraw_core_flyweight_registry *
+const struct yetty_ydraw_flyweight_registry *
 yetty_ydraw_canvas_get_flyweight_registry(const struct yetty_ydraw_canvas *canvas);
-struct yetty_ydraw_core_figure_factory *
+struct yetty_ydraw_figure_factory *
 yetty_ydraw_canvas_get_figure_factory(const struct yetty_ydraw_canvas *canvas);
 
 /* Complex primitive access (for atlas rendering) */
 uint32_t yetty_ydraw_canvas_figure_count(const struct yetty_ydraw_canvas *canvas);
-struct yetty_ydraw_core_figure_instance *yetty_ydraw_canvas_get_figure(
+struct yetty_ydraw_figure_instance *yetty_ydraw_canvas_get_figure(
     const struct yetty_ydraw_canvas *canvas, uint32_t index);
 
 /* Glyph iteration (for selection / clipboard text extraction) */

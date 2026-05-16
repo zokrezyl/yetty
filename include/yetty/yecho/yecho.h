@@ -35,7 +35,7 @@
  * range, U+E000 + local_id). Unknown names land in the doc's error list
  * and render as a literal "[?name]" placeholder.
  *
- * The library emits a yetty_ydraw_core_draw_list (text spans for runs of
+ * The library emits a yetty_ydraw_draw_list (text spans for runs of
  * UTF-8 text, SDF box primitives for backgrounds). The frontend tool
  * wraps that buffer in the same OSC envelope ycat uses
  * (YETTY_OSC_YDRAW_BIN — see yetty_yecho_osc_bin_emit).
@@ -130,12 +130,12 @@ struct yetty_yecho_render_config {
 };
 
 /* Render `doc` into a fresh ydraw-core buffer. Caller frees with
- * yetty_ydraw_core_draw_list_destroy. */
-struct yetty_ydraw_core_draw_list_result yetty_yecho_render(
+ * yetty_ydraw_draw_list_destroy. */
+struct yetty_ydraw_draw_list_result yetty_yecho_render(
     const struct yetty_yecho_doc *doc, const struct yetty_yecho_render_config *config);
 
 /* Convenience: parse + render in one call. */
-struct yetty_ydraw_core_draw_list_result yetty_yecho_render_string(
+struct yetty_ydraw_draw_list_result yetty_yecho_render_string(
     const char *input, size_t len, const struct yetty_yecho_render_config *config);
 
 /*=============================================================================
@@ -145,7 +145,7 @@ struct yetty_ydraw_core_draw_list_result yetty_yecho_render_string(
  *===========================================================================*/
 
 struct yetty_ycore_size_result yetty_yecho_osc_bin_emit(
-    const struct yetty_ydraw_core_draw_list *buffer, FILE *out);
+    const struct yetty_ydraw_draw_list *buffer, FILE *out);
 
 #ifdef __cplusplus
 }

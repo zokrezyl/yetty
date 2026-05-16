@@ -13,7 +13,7 @@
 // Helper functions
 //=============================================================================
 
-bool yetty_ydraw_core_is_complex_type(uint32_t type)
+bool yetty_ydraw_is_complex_type(uint32_t type)
 {
     return (type >= YETTY_YDRAW_COMPLEX_TYPE_BASE);
 }
@@ -24,33 +24,33 @@ bool yetty_ydraw_core_is_complex_type(uint32_t type)
 
 static struct yetty_ycore_size_result figure_size_wrapper(const uint32_t *prim)
 {
-    size_t size = yetty_ydraw_core_figure_size(prim);
+    size_t size = yetty_ydraw_figure_size(prim);
     return YETTY_OK(yetty_ycore_size, size);
 }
 
 static struct rectangle_result figure_aabb_wrapper(const uint32_t *prim)
 {
-    return yetty_ydraw_core_figure_aabb(prim);
+    return yetty_ydraw_figure_aabb(prim);
 }
 
-static const struct yetty_ydraw_core_prim_base_ops g_figure_base_ops = {
+static const struct yetty_ydraw_drawable_base_ops g_figure_base_ops = {
     .size = figure_size_wrapper,
     .aabb = figure_aabb_wrapper,
 };
 
-struct yetty_ydraw_core_prim_base_ops_ptr_result yetty_ydraw_core_figure_handler(
+struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_figure_handler(
     uint32_t prim_type)
 {
-    if (yetty_ydraw_core_is_complex_type(prim_type)) {
-        return YETTY_OK(yetty_ydraw_core_prim_base_ops_ptr, &g_figure_base_ops);
+    if (yetty_ydraw_is_complex_type(prim_type)) {
+        return YETTY_OK(yetty_ydraw_drawable_base_ops_ptr, &g_figure_base_ops);
     }
-    return YETTY_ERR(yetty_ydraw_core_prim_base_ops_ptr, "not a complex type");
+    return YETTY_ERR(yetty_ydraw_drawable_base_ops_ptr, "not a complex type");
 }
 
-size_t yetty_ydraw_core_figure_size(const void *data)
+size_t yetty_ydraw_figure_size(const void *data)
 {
-    const struct yetty_ydraw_core_figure *prim = data;
-    return sizeof(struct yetty_ydraw_core_figure) + prim->payload_size;
+    const struct yetty_ydraw_figure *prim = data;
+    return sizeof(struct yetty_ydraw_figure) + prim->payload_size;
 }
 
 //=============================================================================
@@ -60,13 +60,13 @@ size_t yetty_ydraw_core_figure_size(const void *data)
 
 #define COMPLEX_PRIM_BOUNDS_SIZE 16 /* 4 floats */
 
-struct rectangle_result yetty_ydraw_core_figure_aabb(const void *data)
+struct rectangle_result yetty_ydraw_figure_aabb(const void *data)
 {
     if (!data) {
         return YETTY_ERR(rectangle, "NULL data");
     }
 
-    const struct yetty_ydraw_core_figure *prim = data;
+    const struct yetty_ydraw_figure *prim = data;
     if (prim->payload_size < COMPLEX_PRIM_BOUNDS_SIZE) {
         return YETTY_ERR(rectangle, "payload too small for bounds");
     }

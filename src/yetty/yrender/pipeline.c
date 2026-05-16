@@ -79,7 +79,7 @@ struct flatten_state {
     size_t shader_size;
     size_t shader_capacity;
 
-    const struct yetty_ydraw_core_gpu_resource_set *visited[MAX_VISITED_RS];
+    const struct yetty_ydraw_gpu_resource_set *visited[MAX_VISITED_RS];
     size_t visited_count;
 };
 
@@ -123,7 +123,7 @@ static void shader_append(struct flatten_state *st, const struct yetty_yrender_s
            st->shader_size);
 }
 
-static void collect(struct flatten_state *st, const struct yetty_ydraw_core_gpu_resource_set *rs)
+static void collect(struct flatten_state *st, const struct yetty_ydraw_gpu_resource_set *rs)
 {
     for (size_t i = 0; i < st->visited_count; i++) {
         if (st->visited[i] == rs) {
@@ -171,7 +171,7 @@ static void collect(struct flatten_state *st, const struct yetty_ydraw_core_gpu_
     shader_append(st, &rs->shader, rs->namespace);
 }
 
-static uint64_t compute_tree_shader_hash(const struct yetty_ydraw_core_gpu_resource_set *rs)
+static uint64_t compute_tree_shader_hash(const struct yetty_ydraw_gpu_resource_set *rs)
 {
     uint64_t h = rs->shader.hash;
     for (size_t i = 0; i < rs->children_count; i++) {
@@ -264,7 +264,7 @@ static void generate_wgsl_bindings(const struct flatten_state *st, char *out, si
 struct yetty_yrender_pipeline {
     WGPUDevice device;
     WGPUTextureFormat target_format;
-    struct yetty_ydraw_core_gpu_allocator *allocator;
+    struct yetty_ydraw_gpu_allocator *allocator;
 
     WGPUShaderModule shader_module;
     WGPUBindGroupLayout bind_group_layout;
@@ -466,8 +466,8 @@ static struct yetty_ycore_void_result create_pipeline(struct yetty_yrender_pipel
 
 struct yetty_yrender_pipeline_ptr_result yetty_yrender_pipeline_create(
     WGPUDevice device, WGPUTextureFormat target_format,
-    struct yetty_ydraw_core_gpu_allocator *allocator,
-    const struct yetty_ydraw_core_gpu_resource_set *template_rs)
+    struct yetty_ydraw_gpu_allocator *allocator,
+    const struct yetty_ydraw_gpu_resource_set *template_rs)
 {
     if (!device || !allocator || !template_rs) {
         return YETTY_ERR(yetty_yrender_pipeline_ptr, "NULL arg to pipeline_create");

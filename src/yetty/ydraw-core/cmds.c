@@ -28,26 +28,26 @@ static struct rectangle_result cmd_prim_aabb(const uint32_t *prim)
     return YETTY_OK(rectangle, r);
 }
 
-static const struct yetty_ydraw_core_prim_base_ops cmd_base_ops = {
+static const struct yetty_ydraw_drawable_base_ops cmd_base_ops = {
     .size = cmd_prim_size,
     .aabb = cmd_prim_aabb,
 };
 
-struct yetty_ydraw_core_prim_base_ops_ptr_result yetty_ydraw_core_cmd_handler(uint32_t prim_type)
+struct yetty_ydraw_drawable_base_ops_ptr_result yetty_ydraw_cmd_handler(uint32_t prim_type)
 {
     if (prim_type <= YETTY_YDRAW_CMD_END) {
-        return YETTY_OK(yetty_ydraw_core_prim_base_ops_ptr, &cmd_base_ops);
+        return YETTY_OK(yetty_ydraw_drawable_base_ops_ptr, &cmd_base_ops);
     }
-    return YETTY_ERR(yetty_ydraw_core_prim_base_ops_ptr, "not a cmd type");
+    return YETTY_ERR(yetty_ydraw_drawable_base_ops_ptr, "not a cmd type");
 }
 
-struct yetty_ycore_void_result yetty_ydraw_core_draw_list_add_cmd_zero(
-    struct yetty_ydraw_core_draw_list *buf)
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_zero(
+    struct yetty_ydraw_draw_list *buf)
 {
     /* FAM header only: type=ZERO, payload_size=0. */
     uint32_t header[2] = {YETTY_YDRAW_CMD_ZERO, 0u};
-    struct yetty_ydraw_core_id_result r =
-        yetty_ydraw_core_draw_list_add_prim(buf, header, sizeof(header));
+    struct yetty_ydraw_id_result r =
+        yetty_ydraw_draw_list_add_prim(buf, header, sizeof(header));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "add_cmd_zero: add_prim failed");
     return YETTY_OK_VOID();
 }

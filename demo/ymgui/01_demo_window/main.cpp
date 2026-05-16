@@ -87,10 +87,6 @@ int main(int argc, char **argv)
         }
     }
 
-    /* Keep stderr off the PTY. */
-    (void)freopen("/tmp/ymgui-demo.log", "w", stderr);
-    setvbuf(stderr, NULL, _IOLBF, 0);
-
     IMGUI_CHECKVERSION();
 
     if (!yetty_ymgui_ImGui_ImplYetty_Init()) {

@@ -135,7 +135,7 @@ struct yetty_ycore_void_result ydraw_canvas_grid_line_free(
     line->font_capacity = 0;
     /* Destroy complex prim instances owned by this line. */
     for (uint32_t i = 0; i < line->figure_count; i++) {
-        yetty_ydraw_core_figure_instance_destroy(line->figures[i]);
+        yetty_ydraw_figure_instance_destroy(line->figures[i]);
     }
     free(line->figures);
     line->figures = NULL;
@@ -507,11 +507,11 @@ static struct yetty_ycore_void_result ydraw_canvas_free_base(
         canvas->font_cache = NULL;
     }
     if (canvas->figure_factory) {
-        yetty_ydraw_core_figure_factory_destroy(canvas->figure_factory);
+        yetty_ydraw_figure_factory_destroy(canvas->figure_factory);
         canvas->figure_factory = NULL;
     }
     if (canvas->flyweight_registry) {
-        yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        yetty_ydraw_flyweight_registry_destroy(canvas->flyweight_registry);
         canvas->flyweight_registry = NULL;
     }
     free(canvas->grid_staging);
@@ -542,7 +542,7 @@ struct yetty_ydraw_canvas_ptr_result ydraw_canvas_create(
     canvas->default_handle = YETTY_YFONT_CACHE_HANDLE_INVALID;
 
     /* Flyweight registry (SDF prim handlers). */
-    struct yetty_ydraw_core_flyweight_registry_ptr_result fw_res =
+    struct yetty_ydraw_flyweight_registry_ptr_result fw_res =
         yetty_ydraw_flyweight_create();
     if (YETTY_IS_ERR(fw_res)) {
         free(canvas);
@@ -551,8 +551,8 @@ struct yetty_ydraw_canvas_ptr_result ydraw_canvas_create(
     canvas->flyweight_registry = fw_res.value;
 
     /* Complex prim factory. */
-    struct yetty_ydraw_core_figure_factory_ptr_result factory_res =
-        yetty_ydraw_core_figure_factory_create(
+    struct yetty_ydraw_figure_factory_ptr_result factory_res =
+        yetty_ydraw_figure_factory_create(
             context->gpu_context.device, context->gpu_context.queue,
             context->gpu_context.surface_format, context->gpu_context.allocator);
     if (YETTY_IS_ERR(factory_res)) {
@@ -563,13 +563,13 @@ struct yetty_ydraw_canvas_ptr_result ydraw_canvas_create(
     canvas->figure_factory = factory_res.value;
 
     /* Built-in factory registrations: yplot, yimage, ymesh. */
-    struct yetty_ydraw_core_concrete_factory *yplot_factory = yetty_yplot_factory_create();
+    struct yetty_ydraw_concrete_factory *yplot_factory = yetty_yplot_factory_create();
     if (!yplot_factory) {
         ydraw_canvas_free_base(canvas);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "yplot factory creation failed");
     }
     struct yetty_ycore_void_result yplot_reg_res =
-        yetty_ydraw_core_figure_factory_register(canvas->figure_factory,
+        yetty_ydraw_figure_factory_register(canvas->figure_factory,
                                                         yplot_factory);
     if (YETTY_IS_ERR(yplot_reg_res)) {
         yetty_yplot_factory_destroy(yplot_factory);
@@ -578,13 +578,13 @@ struct yetty_ydraw_canvas_ptr_result ydraw_canvas_create(
                          yplot_reg_res);
     }
 
-    struct yetty_ydraw_core_concrete_factory *yimage_factory = yetty_yimage_factory_create();
+    struct yetty_ydraw_concrete_factory *yimage_factory = yetty_yimage_factory_create();
     if (!yimage_factory) {
         ydraw_canvas_free_base(canvas);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "yimage factory creation failed");
     }
     struct yetty_ycore_void_result yimage_reg_res =
-        yetty_ydraw_core_figure_factory_register(canvas->figure_factory,
+        yetty_ydraw_figure_factory_register(canvas->figure_factory,
                                                         yimage_factory);
     if (YETTY_IS_ERR(yimage_reg_res)) {
         yetty_yimage_factory_destroy(yimage_factory);
@@ -594,13 +594,13 @@ struct yetty_ydraw_canvas_ptr_result ydraw_canvas_create(
     }
 
 #if YETTY_HAS_YMESH
-    struct yetty_ydraw_core_concrete_factory *ymesh_factory = yetty_ymesh_factory_create();
+    struct yetty_ydraw_concrete_factory *ymesh_factory = yetty_ymesh_factory_create();
     if (!ymesh_factory) {
         ydraw_canvas_free_base(canvas);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "ymesh factory creation failed");
     }
     struct yetty_ycore_void_result ymesh_reg_res =
-        yetty_ydraw_core_figure_factory_register(canvas->figure_factory,
+        yetty_ydraw_figure_factory_register(canvas->figure_factory,
                                                         ymesh_factory);
     if (YETTY_IS_ERR(ymesh_reg_res)) {
         yetty_ymesh_factory_destroy(ymesh_factory);
@@ -951,11 +951,11 @@ uint32_t yetty_ydraw_canvas_grid_word_count(const struct yetty_ydraw_canvas *can
     return canvas ? canvas->grid_staging_count : 0;
 }
 
-struct yetty_ydraw_prim_staging_result yetty_ydraw_canvas_build_prim_staging(
+struct yetty_ydraw_drawable_staging_result yetty_ydraw_canvas_build_prim_staging(
     struct yetty_ydraw_canvas *canvas)
 {
     if (!canvas) {
-        return YETTY_ERR(yetty_ydraw_prim_staging, "canvas is NULL");
+        return YETTY_ERR(yetty_ydraw_drawable_staging, "canvas is NULL");
     }
     return canvas->ops->build_prim_staging(canvas);
 }
@@ -1010,13 +1010,13 @@ struct yetty_ydraw_font *yetty_ydraw_canvas_get_default_font(
     return canvas ? canvas->default_font : NULL;
 }
 
-const struct yetty_ydraw_core_flyweight_registry *yetty_ydraw_canvas_get_flyweight_registry(
+const struct yetty_ydraw_flyweight_registry *yetty_ydraw_canvas_get_flyweight_registry(
     const struct yetty_ydraw_canvas *canvas)
 {
     return canvas ? canvas->flyweight_registry : NULL;
 }
 
-struct yetty_ydraw_core_figure_factory *yetty_ydraw_canvas_get_figure_factory(
+struct yetty_ydraw_figure_factory *yetty_ydraw_canvas_get_figure_factory(
     const struct yetty_ydraw_canvas *canvas)
 {
     return canvas ? canvas->figure_factory : NULL;
@@ -1030,7 +1030,7 @@ uint32_t yetty_ydraw_canvas_figure_count(const struct yetty_ydraw_canvas *canvas
     return canvas->ops->figure_count(canvas);
 }
 
-struct yetty_ydraw_core_figure_instance *yetty_ydraw_canvas_get_figure(
+struct yetty_ydraw_figure_instance *yetty_ydraw_canvas_get_figure(
     const struct yetty_ydraw_canvas *canvas, uint32_t index)
 {
     if (!canvas) {

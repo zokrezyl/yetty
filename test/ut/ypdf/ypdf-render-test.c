@@ -49,23 +49,23 @@ struct prim_counts {
     uint32_t other;
 };
 
-static struct prim_counts count_prims(struct yetty_ydraw_core_draw_list *buf,
-                                      struct yetty_ydraw_core_flyweight_registry *reg)
+static struct prim_counts count_prims(struct yetty_ydraw_draw_list *buf,
+                                      struct yetty_ydraw_flyweight_registry *reg)
 {
     struct prim_counts c = {0};
-    struct yetty_ydraw_core_primitive_iter_result ir =
-        yetty_ydraw_core_draw_list_prim_first(buf, reg);
+    struct yetty_ydraw_primitive_iter_result ir =
+        yetty_ydraw_draw_list_prim_first(buf, reg);
     if (YETTY_IS_ERR(ir))
         return c;
-    struct yetty_ydraw_core_primitive_iter it = ir.value;
+    struct yetty_ydraw_primitive_iter it = ir.value;
     for (;;) {
         uint32_t t = it.fw.data[0];
         if (t == YETTY_YDRAW_TYPE_FONT)            c.fonts++;
         else if (t == YETTY_YDRAW_TYPE_TEXT_SPAN)  c.text_spans++;
         else                                        c.other++;
 
-        struct yetty_ydraw_core_primitive_iter_result nx =
-            yetty_ydraw_core_draw_list_prim_next(buf, reg, &it);
+        struct yetty_ydraw_primitive_iter_result nx =
+            yetty_ydraw_draw_list_prim_next(buf, reg, &it);
         if (YETTY_IS_ERR(nx)) break;
         it = nx.value;
     }
@@ -86,15 +86,15 @@ int main(void) {
     REQUIRE(out->total_height > 0.0f, "total_height not set");
     REQUIRE(out->max_width > 0.0f, "max_width not set");
 
-    float sx = yetty_ydraw_core_draw_list_scene_max_x(out->buffer);
-    float sy = yetty_ydraw_core_draw_list_scene_max_y(out->buffer);
+    float sx = yetty_ydraw_draw_list_scene_max_x(out->buffer);
+    float sy = yetty_ydraw_draw_list_scene_max_y(out->buffer);
     REQUIRE(sx == out->max_width, "scene max_x mismatch");
     REQUIRE(sy == out->total_height, "scene max_y mismatch");
 
-    struct yetty_ydraw_core_flyweight_registry_ptr_result rr =
+    struct yetty_ydraw_flyweight_registry_ptr_result rr =
         yetty_ydraw_flyweight_create();
     REQUIRE(YETTY_IS_OK(rr), "flyweight_create failed");
-    struct yetty_ydraw_core_flyweight_registry *reg = rr.value;
+    struct yetty_ydraw_flyweight_registry *reg = rr.value;
 
     struct prim_counts c = count_prims(out->buffer, reg);
     REQUIRE(c.fonts >= 1, "no FONT prims in buffer");
@@ -105,8 +105,8 @@ int main(void) {
            out->page_count, c.fonts, c.text_spans, c.other,
            out->total_height);
 
-    yetty_ydraw_core_flyweight_registry_destroy(reg);
-    yetty_ydraw_core_draw_list_destroy(out->buffer);
+    yetty_ydraw_flyweight_registry_destroy(reg);
+    yetty_ydraw_draw_list_destroy(out->buffer);
     pdfioFileClose(pdf);
     return 0;
 }

@@ -41,7 +41,7 @@ struct yetty_yrender_gpu_resource_binder_impl {
     WGPUDevice device;
     WGPUQueue queue;
     WGPUTextureFormat surface_format;
-    struct yetty_ydraw_core_gpu_allocator *allocator;
+    struct yetty_ydraw_gpu_allocator *allocator;
 
     /* If non-NULL, binder runs in two-tier mode: skips shader compile +
      * pipeline create; uses pipeline's bind_group_layout to create its own
@@ -50,7 +50,7 @@ struct yetty_yrender_gpu_resource_binder_impl {
     const struct yetty_yrender_pipeline *external_pipeline;
 
     /* Submitted resource sets (persistent pointers, submitted once) */
-    struct yetty_ydraw_core_gpu_resource_set *resource_sets[MAX_RESOURCE_SETS];
+    struct yetty_ydraw_gpu_resource_set *resource_sets[MAX_RESOURCE_SETS];
     size_t resource_set_count;
     int submitted; /* resource sets already submitted */
 
@@ -101,7 +101,7 @@ struct yetty_yrender_gpu_resource_binder_impl {
     uint32_t last_tex_height[MAX_FLAT_TEXTURES];
 
     /* Visited resource sets during collection (to avoid duplicates) */
-    const struct yetty_ydraw_core_gpu_resource_set *visited_rs[MAX_RESOURCE_SETS * 4];
+    const struct yetty_ydraw_gpu_resource_set *visited_rs[MAX_RESOURCE_SETS * 4];
     size_t visited_rs_count;
 };
 
@@ -109,7 +109,7 @@ struct yetty_yrender_gpu_resource_binder_impl {
 static void binder_destroy(struct yetty_yrender_gpu_resource_binder *self);
 static struct yetty_ycore_void_result binder_submit(
     struct yetty_yrender_gpu_resource_binder *self,
-    const struct yetty_ydraw_core_gpu_resource_set *rs);
+    const struct yetty_ydraw_gpu_resource_set *rs);
 static struct yetty_ycore_void_result binder_finalize(
     struct yetty_yrender_gpu_resource_binder *self);
 static struct yetty_ycore_void_result binder_update(struct yetty_yrender_gpu_resource_binder *self);
@@ -173,7 +173,7 @@ static void append_shader(struct yetty_yrender_gpu_resource_binder_impl *impl,
 }
 
 /* Compute combined hash of entire resource set tree */
-static uint64_t compute_tree_shader_hash(const struct yetty_ydraw_core_gpu_resource_set *rs)
+static uint64_t compute_tree_shader_hash(const struct yetty_ydraw_gpu_resource_set *rs)
 {
     uint64_t h = rs->shader.hash;
     for (size_t i = 0; i < rs->children_count; i++) {
@@ -187,7 +187,7 @@ static uint64_t compute_tree_shader_hash(const struct yetty_ydraw_core_gpu_resou
 /* Collect all resources from a resource set and its children recursively.
  * Children first (they define functions), parent last (calls them). */
 static void collect_resources(struct yetty_yrender_gpu_resource_binder_impl *impl,
-                              struct yetty_ydraw_core_gpu_resource_set *rs)
+                              struct yetty_ydraw_gpu_resource_set *rs)
 {
     /* Check if already visited (avoid duplicating shared children) */
     for (size_t i = 0; i < impl->visited_rs_count; i++) {
@@ -982,7 +982,7 @@ static void binder_destroy(struct yetty_yrender_gpu_resource_binder *self)
 
 static struct yetty_ycore_void_result binder_submit(
     struct yetty_yrender_gpu_resource_binder *self,
-    const struct yetty_ydraw_core_gpu_resource_set *rs)
+    const struct yetty_ydraw_gpu_resource_set *rs)
 {
     struct yetty_yrender_gpu_resource_binder_impl *impl =
         (struct yetty_yrender_gpu_resource_binder_impl *)self;
@@ -1001,7 +1001,7 @@ static struct yetty_ycore_void_result binder_submit(
     }
 
     impl->resource_sets[impl->resource_set_count++] =
-        (struct yetty_ydraw_core_gpu_resource_set *)rs;
+        (struct yetty_ydraw_gpu_resource_set *)rs;
     return YETTY_OK_VOID();
 }
 
@@ -1308,7 +1308,7 @@ static WGPUBuffer binder_get_quad_vertex_buffer(
 
 struct yetty_yrender_gpu_resource_binder_result yetty_yrender_gpu_resource_binder_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat surface_format,
-    struct yetty_ydraw_core_gpu_allocator *allocator)
+    struct yetty_ydraw_gpu_allocator *allocator)
 {
     if (!device) {
         return YETTY_ERR(yetty_yrender_gpu_resource_binder, "device is null");
@@ -1337,7 +1337,7 @@ struct yetty_yrender_gpu_resource_binder_result yetty_yrender_gpu_resource_binde
 
 struct yetty_yrender_gpu_resource_binder_result
 yetty_yrender_gpu_resource_binder_create_with_pipeline(
-    WGPUDevice device, WGPUQueue queue, struct yetty_ydraw_core_gpu_allocator *allocator,
+    WGPUDevice device, WGPUQueue queue, struct yetty_ydraw_gpu_allocator *allocator,
     const struct yetty_yrender_pipeline *pipeline)
 {
     if (!device) {

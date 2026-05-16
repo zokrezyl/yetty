@@ -61,7 +61,6 @@ static void on_key(struct yetty_ygui_engine* e, uint32_t key, int mods, void* u)
 }
 
 int main(void) {
-    (void)freopen("/dev/null", "w", stderr);
     fprintf(stderr, "╔══════════════════════════════════════════════════════════════╗\n");
     fprintf(stderr, "║                    EDGE TEST DEMO                            ║\n");
     fprintf(stderr, "╠══════════════════════════════════════════════════════════════╣\n");

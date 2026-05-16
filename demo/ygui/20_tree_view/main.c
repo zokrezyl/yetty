@@ -215,7 +215,6 @@ static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, flo
 
 int main(void)
 {
-    (void)freopen("/dev/null", "w", stderr);
     if (yetty_ygui_init() != 0) {
         return 1;
     }

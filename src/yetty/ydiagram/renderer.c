@@ -5,7 +5,7 @@
  *   clusters → edges → nodes → labels
  *
  * Every primitive is an MSD shape (yetty_ydraw_draw_list_add_cmd_add_*) or an MSDF text run
- * (yetty_ydraw_core_draw_list_add_text). The buffer's font_id = -1 means
+ * (yetty_ydraw_draw_list_add_text). The buffer's font_id = -1 means
  * "canvas default" — producers don't need to embed fonts themselves.
  */
 
@@ -40,7 +40,7 @@ struct yetty_ydiagram_render_options yetty_ydiagram_default_render_options(void)
  *===========================================================================*/
 
 struct render_state {
-    struct yetty_ydraw_core_draw_list *buf;
+    struct yetty_ydraw_draw_list *buf;
     const struct yetty_ydiagram_render_options *opt;
     yetty_ydiagram_measure_text_fn measure;
     void *userdata;
@@ -403,7 +403,7 @@ static void emit_text(struct render_state *s, float x, float y, const char *text
         .capacity = n,
         .size = n,
     };
-    (void)yetty_ydraw_core_draw_list_add_text(s->buf, x, y, &view, font_size, color, s->z++, -1,
+    (void)yetty_ydraw_draw_list_add_text(s->buf, x, y, &view, font_size, color, s->z++, -1,
                                               0.0f);
 }
 
@@ -488,7 +488,7 @@ static void emit_edge(struct render_state *s, const struct yetty_ydiagram_graph 
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_ydiagram_render(
-    const struct yetty_ydiagram_graph *g, struct yetty_ydraw_core_draw_list *buffer,
+    const struct yetty_ydiagram_graph *g, struct yetty_ydraw_draw_list *buffer,
     const struct yetty_ydiagram_render_options *options, yetty_ydiagram_measure_text_fn measure,
     void *userdata)
 {
@@ -506,7 +506,7 @@ struct yetty_ycore_void_result yetty_ydiagram_render(
         .z = 0,
     };
 
-    yetty_ydraw_core_draw_list_set_scene_bounds(buffer, g->min_x, g->min_y, g->max_x, g->max_y);
+    yetty_ydraw_draw_list_set_scene_bounds(buffer, g->min_x, g->min_y, g->max_x, g->max_y);
 
     /* CMD_ZERO at the start of every full-redraw buffer — clears the
      * receiving canvas + resets cursor as a side effect of decoding.
@@ -514,7 +514,7 @@ struct yetty_ycore_void_result yetty_ydiagram_render(
      * yetty/ydraw-core/cmds.h). Sending CLEAR + BIN as two envelopes
      * currently freezes yetty's OSC SM (CLEAR handler doesn't drain the
      * body terminator), so we use the single-envelope form. */
-    (void)yetty_ydraw_core_draw_list_add_cmd_zero(buffer);
+    (void)yetty_ydraw_draw_list_add_cmd_zero(buffer);
 
     /* Optional fullscreen background. */
     if (opts.background_color) {

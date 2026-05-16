@@ -119,7 +119,7 @@ struct yetty_ydraw_canvas_grid_line {
 
     // Complex primitives whose BASE (last overlapping line) is this line
     // Uses factory instances instead of canvas-specific struct
-    struct yetty_ydraw_core_figure_instance **figures;
+    struct yetty_ydraw_figure_instance **figures;
     uint32_t figure_count;
     uint32_t figure_capacity;
 };
@@ -199,10 +199,10 @@ struct yetty_ydraw_canvas {
     char font_family[128];
 
     // Flyweight registry for primitive handlers (SDF prims)
-    struct yetty_ydraw_core_flyweight_registry *flyweight_registry;
+    struct yetty_ydraw_flyweight_registry *flyweight_registry;
 
     // Factory for complex primitive ops (yplot, yimage, etc.)
-    struct yetty_ydraw_core_figure_factory *figure_factory;
+    struct yetty_ydraw_figure_factory *figure_factory;
 
     // Polymorphic MSDF CDB generator (cpu | gpu) — borrowed from
     // context->gpu_context. Used for on-demand CDB generation when a PDF
@@ -387,7 +387,7 @@ static struct yetty_ycore_void_result grid_line_init(struct yetty_ydraw_canvas_g
 
 static struct yetty_ycore_void_result grid_line_free(
     struct yetty_ydraw_canvas_grid_line *line,
-    const struct yetty_ydraw_core_flyweight_registry *reg, struct yetty_yfont_cache *cache)
+    const struct yetty_ydraw_flyweight_registry *reg, struct yetty_yfont_cache *cache)
 {
     if (!reg) {
         return YETTY_ERR(yetty_ycore_void, "reg is NULL");
@@ -410,7 +410,7 @@ static struct yetty_ycore_void_result grid_line_free(
     line->font_capacity = 0;
     /* Destroy complex prim instances owned by this line */
     for (uint32_t i = 0; i < line->figure_count; i++) {
-        yetty_ydraw_core_figure_instance_destroy(line->figures[i]);
+        yetty_ydraw_figure_instance_destroy(line->figures[i]);
     }
     free(line->figures);
     line->figures = NULL;
@@ -471,7 +471,7 @@ static void line_buffer_init(struct yetty_ydraw_canvas_line_buffer *buf)
 
 static struct yetty_ycore_void_result line_buffer_free(
     struct yetty_ydraw_canvas_line_buffer *buf,
-    const struct yetty_ydraw_core_flyweight_registry *reg, struct yetty_yfont_cache *cache)
+    const struct yetty_ydraw_flyweight_registry *reg, struct yetty_yfont_cache *cache)
 {
     for (uint32_t i = 0; i < buf->count; i++) {
         struct yetty_ycore_void_result res = grid_line_free(&buf->lines[i], reg, cache);
@@ -726,7 +726,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
     canvas->sb_offsets_capacity = 0;
 
     /* Create flyweight registry with all handlers (for SDF prims) */
-    struct yetty_ydraw_core_flyweight_registry_ptr_result fw_res = yetty_ydraw_flyweight_create();
+    struct yetty_ydraw_flyweight_registry_ptr_result fw_res = yetty_ydraw_flyweight_create();
     if (YETTY_IS_ERR(fw_res)) {
         yerror("ydraw_canvas: flyweight creation failed: %s", fw_res.error.msg);
         free(canvas->lines.lines);
@@ -737,13 +737,13 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
     canvas->flyweight_registry = fw_res.value;
 
     /* Create complex prim factory and register types */
-    struct yetty_ydraw_core_figure_factory_ptr_result factory_res =
-        yetty_ydraw_core_figure_factory_create(
+    struct yetty_ydraw_figure_factory_ptr_result factory_res =
+        yetty_ydraw_figure_factory_create(
             context->gpu_context.device, context->gpu_context.queue,
             context->gpu_context.surface_format, context->gpu_context.allocator);
     if (YETTY_IS_ERR(factory_res)) {
         yerror("ydraw_canvas: factory creation failed: %s", factory_res.error.msg);
-        yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        yetty_ydraw_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "ydraw_canvas: factory creation failed",
@@ -752,22 +752,22 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
     canvas->figure_factory = factory_res.value;
 
     /* Create and register yplot factory */
-    struct yetty_ydraw_core_concrete_factory *yetty_yplot_factory = yetty_yplot_factory_create();
+    struct yetty_ydraw_concrete_factory *yetty_yplot_factory = yetty_yplot_factory_create();
     if (!yetty_yplot_factory) {
         yerror("ydraw_canvas: yplot factory creation failed");
-        yetty_ydraw_core_figure_factory_destroy(canvas->figure_factory);
-        yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        yetty_ydraw_figure_factory_destroy(canvas->figure_factory);
+        yetty_ydraw_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "yplot factory creation failed");
     }
-    struct yetty_ycore_void_result yplot_reg_res = yetty_ydraw_core_figure_factory_register(
+    struct yetty_ycore_void_result yplot_reg_res = yetty_ydraw_figure_factory_register(
         canvas->figure_factory, yetty_yplot_factory);
     if (YETTY_IS_ERR(yplot_reg_res)) {
         yerror("ydraw_canvas: yplot registration failed: %s", yplot_reg_res.error.msg);
         yetty_yplot_factory_destroy(yetty_yplot_factory);
-        yetty_ydraw_core_figure_factory_destroy(canvas->figure_factory);
-        yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        yetty_ydraw_figure_factory_destroy(canvas->figure_factory);
+        yetty_ydraw_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "ydraw_canvas: yplot registration failed",
@@ -775,22 +775,22 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
     }
 
     /* Create and register yimage factory */
-    struct yetty_ydraw_core_concrete_factory *yetty_yimage_factory = yetty_yimage_factory_create();
+    struct yetty_ydraw_concrete_factory *yetty_yimage_factory = yetty_yimage_factory_create();
     if (!yetty_yimage_factory) {
         yerror("ydraw_canvas: yimage factory creation failed");
-        yetty_ydraw_core_figure_factory_destroy(canvas->figure_factory);
-        yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        yetty_ydraw_figure_factory_destroy(canvas->figure_factory);
+        yetty_ydraw_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "yimage factory creation failed");
     }
-    struct yetty_ycore_void_result yimage_reg_res = yetty_ydraw_core_figure_factory_register(
+    struct yetty_ycore_void_result yimage_reg_res = yetty_ydraw_figure_factory_register(
         canvas->figure_factory, yetty_yimage_factory);
     if (YETTY_IS_ERR(yimage_reg_res)) {
         yerror("ydraw_canvas: yimage registration failed: %s", yimage_reg_res.error.msg);
         yetty_yimage_factory_destroy(yetty_yimage_factory);
-        yetty_ydraw_core_figure_factory_destroy(canvas->figure_factory);
-        yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        yetty_ydraw_figure_factory_destroy(canvas->figure_factory);
+        yetty_ydraw_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "ydraw_canvas: yimage registration failed",
@@ -799,22 +799,22 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
 
 #if YETTY_HAS_YMESH
     /* Create and register ymesh factory (3D glTF mesh primitive). */
-    struct yetty_ydraw_core_concrete_factory *yetty_ymesh_factory = yetty_ymesh_factory_create();
+    struct yetty_ydraw_concrete_factory *yetty_ymesh_factory = yetty_ymesh_factory_create();
     if (!yetty_ymesh_factory) {
         yerror("ydraw_canvas: ymesh factory creation failed");
-        yetty_ydraw_core_figure_factory_destroy(canvas->figure_factory);
-        yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        yetty_ydraw_figure_factory_destroy(canvas->figure_factory);
+        yetty_ydraw_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "ymesh factory creation failed");
     }
-    struct yetty_ycore_void_result ymesh_reg_res = yetty_ydraw_core_figure_factory_register(
+    struct yetty_ycore_void_result ymesh_reg_res = yetty_ydraw_figure_factory_register(
         canvas->figure_factory, yetty_ymesh_factory);
     if (YETTY_IS_ERR(ymesh_reg_res)) {
         yerror("ydraw_canvas: ymesh registration failed: %s", ymesh_reg_res.error.msg);
         yetty_ymesh_factory_destroy(yetty_ymesh_factory);
-        yetty_ydraw_core_figure_factory_destroy(canvas->figure_factory);
-        yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        yetty_ydraw_figure_factory_destroy(canvas->figure_factory);
+        yetty_ydraw_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "ydraw_canvas: ymesh registration failed",
@@ -854,7 +854,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
         yetty_yfont_cache_create(cache_shaders_dir);
     if (YETTY_IS_ERR(cache_res)) {
         yerror("ydraw_canvas: font cache creation failed: %s", cache_res.error.msg);
-        yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        yetty_ydraw_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "ydraw_canvas: font cache creation failed",
@@ -875,7 +875,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_canvas_create(
     } else {
         yerror("ydraw_canvas: default font creation failed: %s", def_res.error.msg);
         yetty_yfont_cache_destroy(canvas->font_cache);
-        yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
+        yetty_ydraw_flyweight_registry_destroy(canvas->flyweight_registry);
         free(canvas->lines.lines);
         free(canvas);
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "ydraw_canvas: default font creation failed",
@@ -906,8 +906,8 @@ struct yetty_ycore_void_result yetty_ydraw_canvas_destroy(struct yetty_ydraw_can
         yetty_yfont_cache_release_font(canvas->font_cache, canvas->default_handle);
     }
     yetty_yfont_cache_destroy(canvas->font_cache);
-    yetty_ydraw_core_figure_factory_destroy(canvas->figure_factory);
-    yetty_ydraw_core_flyweight_registry_destroy(canvas->flyweight_registry);
+    yetty_ydraw_figure_factory_destroy(canvas->figure_factory);
+    yetty_ydraw_flyweight_registry_destroy(canvas->flyweight_registry);
     free(canvas->grid_staging);
     free(canvas->prim_staging);
     yetty_ydraw_scrollbuffer_free(&canvas->scrollbuffer);
@@ -1037,7 +1037,7 @@ struct yetty_ycore_void_result yetty_ydraw_canvas_set_view_top(struct yetty_ydra
 // Add a single primitive (internal)
 // Returns the grid_line (bottom row of AABB) for this primitive
 static struct uint32_result add_primitive_internal(
-    struct yetty_ydraw_canvas *canvas, const struct yetty_ydraw_core_primitive_iter *iter)
+    struct yetty_ydraw_canvas *canvas, const struct yetty_ydraw_primitive_iter *iter)
 {
     if (!canvas) {
         return YETTY_ERR(uint32, "canvas is NULL");
@@ -1167,10 +1167,10 @@ static struct uint32_result add_primitive_internal(
            prim_row_max, canvas->lines.count);
 
     // Track complex prims for resource set collection
-    if (yetty_ydraw_core_is_complex_type(prim_type)) {
+    if (yetty_ydraw_is_complex_type(prim_type)) {
         /* Create factory instance for complex prim */
-        struct yetty_ydraw_core_figure_instance_ptr_result inst_res =
-            yetty_ydraw_core_figure_factory_create_instance(
+        struct yetty_ydraw_figure_instance_ptr_result inst_res =
+            yetty_ydraw_figure_factory_create_instance(
                 canvas->figure_factory, iter->fw.data, word_count * sizeof(uint32_t),
                 primitive_rolling_row);
         if (YETTY_IS_ERR(inst_res)) {
@@ -1183,9 +1183,9 @@ static struct uint32_result add_primitive_internal(
                 base_line->figure_capacity == 0 ? 4 : base_line->figure_capacity * 2;
             base_line->figures =
                 realloc(base_line->figures,
-                        new_cap * sizeof(struct yetty_ydraw_core_figure_instance *));
+                        new_cap * sizeof(struct yetty_ydraw_figure_instance *));
             if (!base_line->figures) {
-                yetty_ydraw_core_figure_instance_destroy(inst_res.value);
+                yetty_ydraw_figure_instance_destroy(inst_res.value);
                 return YETTY_ERR(uint32, "realloc figures failed");
             }
             base_line->figure_capacity = new_cap;
@@ -1300,7 +1300,7 @@ static void font_map_release_all(struct font_map *m, struct yetty_yfont_cache *c
  * placed). `font_handle` is the cache handle the resulting glyphs encode
  * into the shader's per-glyph slot dispatcher. */
 static struct uint32_result expand_text_span_to_glyphs(
-    struct yetty_ydraw_canvas *canvas, const struct yetty_ydraw_core_text_span_prim_view *ts,
+    struct yetty_ydraw_canvas *canvas, const struct yetty_ydraw_text_span_prim_view *ts,
     struct yetty_ydraw_font *font, yetty_yfont_cache_handle font_handle)
 {
     static uint32_t glyph_z_order = 0;
@@ -1357,7 +1357,7 @@ static struct uint32_result expand_text_span_to_glyphs(
         if (YETTY_IS_ERR(rs_res)) {
             continue;
         }
-        const struct yetty_ydraw_core_gpu_resource_set *rs = rs_res.value;
+        const struct yetty_ydraw_gpu_resource_set *rs = rs_res.value;
         if (rs->buffer_count == 0 || !rs->buffers[0].data) {
             continue;
         }
@@ -1762,7 +1762,7 @@ static struct yetty_ycore_void_result canvas_evict_line(struct yetty_ydraw_canva
      * "struct member <ns>_base_size not found". Detach + restore keeps
      * the cache ref alive across the line's empty-form phase, so the
      * font slot remains addressable until the line is re-restored. */
-    struct yetty_ydraw_core_figure_instance **saved_cp = line->figures;
+    struct yetty_ydraw_figure_instance **saved_cp = line->figures;
     uint32_t saved_cp_count = line->figure_count;
     uint32_t saved_cp_cap = line->figure_capacity;
     line->figures = NULL;
@@ -1818,7 +1818,7 @@ static void canvas_evict_scrollback(struct yetty_ydraw_canvas *canvas)
              * re-attach after grid_line_init. */
             struct yetty_ydraw_canvas_grid_line *line = &canvas->lines.lines[i];
             if (line->prims.count > 0 || line->cell_count > 0 || line->font_count > 0) {
-                struct yetty_ydraw_core_figure_instance **saved_cp = line->figures;
+                struct yetty_ydraw_figure_instance **saved_cp = line->figures;
                 uint32_t saved_cp_count = line->figure_count;
                 uint32_t saved_cp_cap = line->figure_capacity;
                 line->figures = NULL;
@@ -1995,7 +1995,7 @@ static void canvas_restore_range(struct yetty_ydraw_canvas *canvas, uint32_t fir
 }
 
 struct yetty_ycore_void_result yetty_ydraw_canvas_add_buffer(
-    struct yetty_ydraw_canvas *canvas, struct yetty_ydraw_core_draw_list *buffer)
+    struct yetty_ydraw_canvas *canvas, struct yetty_ydraw_draw_list *buffer)
 {
     if (!canvas) {
         yerror("yetty_ydraw_canvas_add_buffer: canvas is NULL");
@@ -2006,8 +2006,8 @@ struct yetty_ycore_void_result yetty_ydraw_canvas_add_buffer(
         return YETTY_ERR(yetty_ycore_void, "buffer is NULL");
     }
 
-    struct yetty_ydraw_core_primitive_iter_result iter_res =
-        yetty_ydraw_core_draw_list_prim_first(buffer, canvas->flyweight_registry);
+    struct yetty_ydraw_primitive_iter_result iter_res =
+        yetty_ydraw_draw_list_prim_first(buffer, canvas->flyweight_registry);
     bool has_primitives = YETTY_IS_OK(iter_res);
 
     ydebug("add_buffer: START cursor_row=%u grid_rows=%u rolling_row_0=%u "
@@ -2033,7 +2033,7 @@ struct yetty_ycore_void_result yetty_ydraw_canvas_add_buffer(
     struct buffer_attach_list attach_list;
     buffer_attach_init(&attach_list);
 
-    struct yetty_ydraw_core_primitive_iter iter = iter_res.value;
+    struct yetty_ydraw_primitive_iter iter = iter_res.value;
     struct yetty_ycore_void_result final_status = YETTY_OK_VOID();
 
     while (1) {
@@ -2057,8 +2057,8 @@ struct yetty_ycore_void_result yetty_ydraw_canvas_add_buffer(
             }
             /* Future cmds (cursor-set, …) dispatch here. */
         } else if (prim_type == YETTY_YDRAW_TYPE_FONT) {
-            struct yetty_ydraw_core_font_prim_view fv;
-            if (yetty_ydraw_core_font_prim_parse(iter.fw.data, &fv) == 0 && fv.font_id >= 0) {
+            struct yetty_ydraw_font_prim_view fv;
+            if (yetty_ydraw_font_prim_parse(iter.fw.data, &fv) == 0 && fv.font_id >= 0) {
                 char hint[YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH];
                 size_t hl = fv.name_len < sizeof(hint) - 1 ? fv.name_len : sizeof(hint) - 1;
                 memcpy(hint, fv.name, hl);
@@ -2086,8 +2086,8 @@ struct yetty_ycore_void_result yetty_ydraw_canvas_add_buffer(
                 }
             }
         } else if (prim_type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
-            struct yetty_ydraw_core_text_span_prim_view tv;
-            if (yetty_ydraw_core_text_span_prim_parse(iter.fw.data, &tv) == 0) {
+            struct yetty_ydraw_text_span_prim_view tv;
+            if (yetty_ydraw_text_span_prim_parse(iter.fw.data, &tv) == 0) {
                 struct yetty_ydraw_font *font = NULL;
                 yetty_yfont_cache_handle handle = YETTY_YFONT_CACHE_HANDLE_INVALID;
                 if (tv.font_id >= 0 && (uint32_t)tv.font_id < fonts_map.capacity) {
@@ -2165,8 +2165,8 @@ struct yetty_ycore_void_result yetty_ydraw_canvas_add_buffer(
             }
         }
 
-        struct yetty_ydraw_core_primitive_iter_result nx =
-            yetty_ydraw_core_draw_list_prim_next(buffer, canvas->flyweight_registry, &iter);
+        struct yetty_ydraw_primitive_iter_result nx =
+            yetty_ydraw_draw_list_prim_next(buffer, canvas->flyweight_registry, &iter);
         if (YETTY_IS_ERR(nx)) {
             break;
         }
@@ -2557,11 +2557,11 @@ static struct yetty_ycore_void_result ensure_prim_staging(struct yetty_ydraw_can
     return YETTY_OK_VOID();
 }
 
-struct yetty_ydraw_prim_staging_result yetty_ydraw_canvas_build_prim_staging(
+struct yetty_ydraw_drawable_staging_result yetty_ydraw_canvas_build_prim_staging(
     struct yetty_ydraw_canvas *canvas)
 {
     if (!canvas) {
-        return YETTY_ERR(yetty_ydraw_prim_staging,
+        return YETTY_ERR(yetty_ydraw_drawable_staging,
                          "yetty_ydraw_canvas_build_prim_staging: NULL canvas");
     }
 
@@ -2578,15 +2578,15 @@ struct yetty_ydraw_prim_staging_result yetty_ydraw_canvas_build_prim_staging(
 
     if (prim_count == 0) {
         canvas->prim_staging_count = 0;
-        struct yetty_ydraw_prim_staging empty = {.data = NULL, .word_count = 0};
-        return YETTY_OK(yetty_ydraw_prim_staging, empty);
+        struct yetty_ydraw_drawable_staging empty = {.data = NULL, .word_count = 0};
+        return YETTY_OK(yetty_ydraw_drawable_staging, empty);
     }
 
     // Layout: [prim0_offset, prim1_offset, ...][rolling_row0,
     // prim0_data...][rolling_row1, prim1_data...]
     uint32_t total_size = prim_count + total_words;
     struct yetty_ycore_void_result eps = ensure_prim_staging(canvas, total_size);
-    YETTY_RETURN_IF_ERR(yetty_ydraw_prim_staging, eps,
+    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_staging, eps,
                         "yetty_ydraw_canvas_build_prim_staging: ensure_prim_staging failed");
 
     uint32_t data_offset = 0;
@@ -2612,8 +2612,8 @@ struct yetty_ydraw_prim_staging_result yetty_ydraw_canvas_build_prim_staging(
     }
 
     canvas->prim_staging_count = total_size;
-    struct yetty_ydraw_prim_staging out = {.data = canvas->prim_staging, .word_count = total_size};
-    return YETTY_OK(yetty_ydraw_prim_staging, out);
+    struct yetty_ydraw_drawable_staging out = {.data = canvas->prim_staging, .word_count = total_size};
+    return YETTY_OK(yetty_ydraw_drawable_staging, out);
 }
 
 uint32_t yetty_ydraw_canvas_prim_gpu_size(struct yetty_ydraw_canvas *canvas)
@@ -2754,7 +2754,7 @@ uint32_t yetty_ydraw_canvas_figure_count(struct yetty_ydraw_canvas *canvas)
     return count;
 }
 
-struct yetty_ydraw_core_figure_instance *yetty_ydraw_canvas_get_figure(
+struct yetty_ydraw_figure_instance *yetty_ydraw_canvas_get_figure(
     struct yetty_ydraw_canvas *canvas, uint32_t index)
 {
     if (!canvas) {
@@ -2776,13 +2776,13 @@ struct yetty_ydraw_core_figure_instance *yetty_ydraw_canvas_get_figure(
     return NULL;
 }
 
-const struct yetty_ydraw_core_flyweight_registry *yetty_ydraw_canvas_get_flyweight_registry(
+const struct yetty_ydraw_flyweight_registry *yetty_ydraw_canvas_get_flyweight_registry(
     struct yetty_ydraw_canvas *canvas)
 {
     return canvas ? canvas->flyweight_registry : NULL;
 }
 
-struct yetty_ydraw_core_figure_factory *yetty_ydraw_canvas_get_figure_factory(
+struct yetty_ydraw_figure_factory *yetty_ydraw_canvas_get_figure_factory(
     struct yetty_ydraw_canvas *canvas)
 {
     return canvas ? canvas->figure_factory : NULL;

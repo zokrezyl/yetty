@@ -18,7 +18,7 @@ extern "C" {
  * @param yaml YAML string (null-terminated)
  * @param len Length of YAML string
  */
-struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ydraw_core_draw_list *canvas,
+struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ydraw_draw_list *canvas,
                                                      const char *yaml, size_t len);
 
 #ifdef __cplusplus

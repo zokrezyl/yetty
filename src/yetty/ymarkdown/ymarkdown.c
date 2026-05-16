@@ -494,7 +494,7 @@ static uint32_t ymd_span_color(const struct yetty_ymarkdown_ymd_span *s)
     return YMD_COLOR_TEXT;
 }
 
-static struct yetty_ycore_void_result ymd_emit(struct yetty_ydraw_core_draw_list *buf,
+static struct yetty_ycore_void_result ymd_emit(struct yetty_ydraw_draw_list *buf,
                                                const struct yetty_ymarkdown_ymd_doc *doc,
                                                const struct yetty_ymarkdown_ymd_params *p)
 {
@@ -535,7 +535,7 @@ static struct yetty_ycore_void_result ymd_emit(struct yetty_ydraw_core_draw_list
                 .size = span->text_len,
                 .capacity = span->text_len,
             };
-            struct yetty_ycore_void_result tr = yetty_ydraw_core_draw_list_add_text(
+            struct yetty_ycore_void_result tr = yetty_ydraw_draw_list_add_text(
                 buf, cursor_x, cursor_y, &text, scaled_size, color, 0, -1, 0.0f);
             if (YETTY_IS_ERR(tr)) {
                 return tr;
@@ -576,30 +576,30 @@ struct yetty_ymarkdown_render_result yetty_ymarkdown_render(
         scene_h = (float)(config->height_cells * config->cell_height);
     }
 
-    struct yetty_ydraw_core_draw_list_config bcfg = {
+    struct yetty_ydraw_draw_list_config bcfg = {
         .scene_min_x = 0.0f,
         .scene_min_y = 0.0f,
         .scene_max_x = scene_w,
         .scene_max_y = scene_h,
     };
-    struct yetty_ydraw_core_draw_list_result br =
-        yetty_ydraw_core_draw_list_config_buffer_create(&bcfg);
+    struct yetty_ydraw_draw_list_result br =
+        yetty_ydraw_draw_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         return YETTY_ERR(yetty_ymarkdown_render, br.error.msg);
     }
-    struct yetty_ydraw_core_draw_list *buf = br.value;
+    struct yetty_ydraw_draw_list *buf = br.value;
 
     struct yetty_ymarkdown_ymd_doc doc = {0};
     if (ymd_parse(&doc, content, content_len) < 0) {
         ymd_doc_destroy(&doc);
-        yetty_ydraw_core_draw_list_destroy(buf);
+        yetty_ydraw_draw_list_destroy(buf);
         return YETTY_ERR(yetty_ymarkdown_render, "parse failed");
     }
 
     struct yetty_ycore_void_result er = ymd_emit(buf, &doc, &params);
     if (YETTY_IS_ERR(er)) {
         ymd_doc_destroy(&doc);
-        yetty_ydraw_core_draw_list_destroy(buf);
+        yetty_ydraw_draw_list_destroy(buf);
         return YETTY_ERR(yetty_ymarkdown_render, "ymarkdown: primitive emission failed", er);
     }
 

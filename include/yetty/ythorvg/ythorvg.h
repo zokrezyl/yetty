@@ -6,7 +6,7 @@
  *
  * Wraps a C++ tvg::RenderMethod whose shape/image prepare+render paths are
  * mapped to yetty_ydraw_draw_list_add_cmd_add_* primitives written into a
- * yetty_ydraw_core_draw_list. The C++ implementation is ported from
+ * yetty_ydraw_draw_list. The C++ implementation is ported from
  * yetty-poc's src/yetty/ythorvg with YDrawBuffer calls replaced by
  * ydraw/ysdf buffer calls.
  *
@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-struct yetty_ydraw_core_draw_list;
+struct yetty_ydraw_draw_list;
 struct yetty_ythorvg_renderer;
 
 YETTY_YRESULT_DECLARE(yetty_ythorvg_renderer_ptr, struct yetty_ythorvg_renderer *);
@@ -30,7 +30,7 @@ YETTY_YRESULT_DECLARE(yetty_ythorvg_renderer_ptr, struct yetty_ythorvg_renderer 
  * the renderer; the renderer does NOT take ownership. Initializes the ThorVG
  * engine on first call (ref-counted). */
 struct yetty_ythorvg_renderer_ptr_result yetty_ythorvg_renderer_create(
-    struct yetty_ydraw_core_draw_list *buf);
+    struct yetty_ydraw_draw_list *buf);
 
 /* Destroy renderer. NULL-safe. Decrements engine ref count; calls
  * tvg::Initializer::term() when the last renderer is destroyed. */

@@ -60,7 +60,7 @@ struct yetty_ycore_void_result yetty_yzoo_set_scene_size(struct yetty_yzoo *zoo,
  * `buf`. The buffer is cleared and its scene bounds are set to
  * (0, 0, scene_width, scene_height). */
 struct yetty_ycore_void_result yetty_yzoo_render(struct yetty_yzoo *zoo,
-                                                 struct yetty_ydraw_core_draw_list *buf, float time);
+                                                 struct yetty_ydraw_draw_list *buf, float time);
 
 const struct yetty_yzoo_config *yetty_yzoo_config_get(const struct yetty_yzoo *zoo);
 

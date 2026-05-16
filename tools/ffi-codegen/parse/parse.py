@@ -39,7 +39,9 @@ def _resource_dir() -> str:
     missing-stddef.h.
     """
     import shutil, subprocess
-    clang = shutil.which("clang") or shutil.which("clang-18") or shutil.which("clang-19")
+    clang = (shutil.which("clang-20")
+             or shutil.which("clang-19")
+             or shutil.which("clang-18"))
     if not clang:
         return ""
     try:

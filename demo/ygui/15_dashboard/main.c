@@ -91,7 +91,6 @@ static void on_key(struct yetty_ygui_engine* e, uint32_t key, int mods, void* u)
 }
 
 int main(void) {
-    (void)freopen("/dev/null", "w", stderr);
     srand((unsigned)time(NULL));
 
     if (yetty_ygui_init() != 0) return 1;

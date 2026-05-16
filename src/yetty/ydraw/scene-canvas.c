@@ -584,7 +584,7 @@ struct yetty_ydraw_scene_entity_ptr_result yetty_ydraw_scene_entity_create(
 struct yetty_ycore_void_result yetty_ydraw_scene_entity_add_prim(
     struct yetty_ydraw_canvas *canvas,
     struct yetty_ydraw_scene_entity *entity,
-    const struct yetty_ydraw_core_prim_flyweight *fw)
+    const struct yetty_ydraw_drawable_flyweight *fw)
 {
     if (!canvas || !canvas->impl || !entity) {
         return YETTY_ERR(yetty_ycore_void, "scene-canvas: null arg to add_prim");
@@ -806,15 +806,15 @@ static struct yetty_ycore_void_result scene_rebuild_grid_impl(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ydraw_prim_staging_result scene_build_prim_staging_impl(
+static struct yetty_ydraw_drawable_staging_result scene_build_prim_staging_impl(
     struct yetty_ydraw_canvas *base)
 {
     base->prim_staging_count = 0;
-    struct yetty_ydraw_prim_staging view = {
+    struct yetty_ydraw_drawable_staging view = {
         .data = base->prim_staging,
         .word_count = 0,
     };
-    return YETTY_OK(yetty_ydraw_prim_staging, view);
+    return YETTY_OK(yetty_ydraw_drawable_staging, view);
 }
 
 static uint32_t scene_prim_gpu_size_impl(const struct yetty_ydraw_canvas *base)
@@ -828,7 +828,7 @@ static uint32_t scene_figure_count_impl(const struct yetty_ydraw_canvas *base)
     return 0;
 }
 
-static struct yetty_ydraw_core_figure_instance *scene_get_figure_impl(
+static struct yetty_ydraw_figure_instance *scene_get_figure_impl(
     const struct yetty_ydraw_canvas *base, uint32_t index)
 {
     (void)base;

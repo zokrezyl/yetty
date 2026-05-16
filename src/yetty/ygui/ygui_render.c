@@ -1,9 +1,9 @@
 /*
  * ygui_render.c — render helpers that drop ydraw-core primitives directly.
  *
- * Bridges YGui widgets to a yetty_ydraw_core_draw_list. Shapes go through
+ * Bridges YGui widgets to a yetty_ydraw_draw_list. Shapes go through
  * yetty_ydraw_draw_list_add_cmd_add_* (generated from ysdf/primitives.yaml); text goes through
- * yetty_ydraw_core_draw_list_add_text (canvas decomposes text_spans into
+ * yetty_ydraw_draw_list_add_text (canvas decomposes text_spans into
  * YDRAW_SDF_GLYPH primitives in PASS4). No shim layer in between.
  */
 
@@ -19,7 +19,7 @@
  *===========================================================================*/
 
 void yetty_ygui_render_ctx_init(struct yetty_ygui_render_ctx *ctx,
-                                struct yetty_ydraw_core_draw_list *buffer,
+                                struct yetty_ydraw_draw_list *buffer,
                                 const struct yetty_ygui_theme *theme)
 {
     ctx->buffer = buffer;
@@ -145,7 +145,7 @@ struct yetty_ycore_void_result yetty_ygui_render_ctx_render_text(struct yetty_yg
         .size = tlen,
         .capacity = tlen,
     };
-    return yetty_ydraw_core_draw_list_add_text(ctx->buffer, ax, ay + font_size * 0.8f, &tbuf,
+    return yetty_ydraw_draw_list_add_text(ctx->buffer, ax, ay + font_size * 0.8f, &tbuf,
                                              font_size, color,
                                              /*layer*/ 0, /*font_id*/ -1,
                                              /*rotation*/ 0.0f);

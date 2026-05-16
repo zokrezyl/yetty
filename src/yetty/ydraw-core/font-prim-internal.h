@@ -17,11 +17,11 @@ extern "C" {
 
 /* Size in bytes of a packed FONT prim including the 8-byte FAM header
  * and trailing alignment padding. */
-size_t yetty_ydraw_core_font_prim_size_for(uint32_t name_len, uint32_t ttf_len);
+size_t yetty_ydraw_font_prim_size_for(uint32_t name_len, uint32_t ttf_len);
 
 /* Pack a FONT prim into out. out must have at least
- * yetty_ydraw_core_font_prim_size_for(name_len, ttf_len) bytes. */
-void yetty_ydraw_core_font_prim_write(uint8_t *out, int32_t font_id, const char *name,
+ * yetty_ydraw_font_prim_size_for(name_len, ttf_len) bytes. */
+void yetty_ydraw_font_prim_write(uint8_t *out, int32_t font_id, const char *name,
                                        uint32_t name_len, const uint8_t *ttf, uint32_t ttf_len);
 
 #ifdef __cplusplus

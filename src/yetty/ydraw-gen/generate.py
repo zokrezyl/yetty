@@ -189,7 +189,7 @@ extern "C" {{
 /* Forward-declared so this header stays GPU-less and can be included by
  * client-side wire emitters that don't link Dawn. The full type lives in
  * yetty/ydraw-factory/complex-prim-factory.h (server side). */
-struct yetty_ydraw_core_concrete_factory;
+struct yetty_ydraw_concrete_factory;
 
 #define YETTY_{NAME}_TYPE_ID 0x{type_id:08x}u
 
@@ -220,8 +220,8 @@ struct yetty_ycore_size_result yetty_{name}_uniforms_serialize(
 // Factory API (creates binder with pre-compiled pipeline)
 //=============================================================================
 
-struct yetty_ydraw_core_concrete_factory *yetty_{name}_factory_create(void);
-void yetty_{name}_factory_destroy(struct yetty_ydraw_core_concrete_factory *factory);
+struct yetty_ydraw_concrete_factory *yetty_{name}_factory_create(void);
+void yetty_{name}_factory_destroy(struct yetty_ydraw_concrete_factory *factory);
 {yaml_section}
 #ifdef __cplusplus
 }}
@@ -439,14 +439,14 @@ def generate_c_source(schema, uniforms, buffers, textures):
 
     # Library children setup - accessor lib is children[0], external libs start at [1]
     lib_children_parts = [f'''    // Accessor library (generated uniforms accessors)
-    rs->children[0] = (struct yetty_ydraw_core_gpu_resource_set *)&{name}_lib_rs;
+    rs->children[0] = (struct yetty_ydraw_gpu_resource_set *)&{name}_lib_rs;
     rs->children_count = 1;''']
     for i, lib in enumerate(libraries):
         lib_children_parts.append(f'''    // Library: {lib}
-    const struct yetty_ydraw_core_gpu_resource_set *{lib}_rs =
+    const struct yetty_ydraw_gpu_resource_set *{lib}_rs =
         yetty_{lib}_get_shader_resource_set();
     if ({lib}_rs) {{
-        rs->children[{i + 1}] = (struct yetty_ydraw_core_gpu_resource_set *){lib}_rs;
+        rs->children[{i + 1}] = (struct yetty_ydraw_gpu_resource_set *){lib}_rs;
         rs->children_count = {i + 2};
     }}''')
     lib_children = '\n'.join(lib_children_parts)
@@ -660,7 +660,7 @@ extern const unsigned int g{name}_lib_shaderSize;
 
 /* Static resource set for accessor library ({name}-gen.wgsl).
  * Read-only after init; safely shared across all instances as a child. */
-static struct yetty_ydraw_core_gpu_resource_set {name}_lib_rs;
+static struct yetty_ydraw_gpu_resource_set {name}_lib_rs;
 static bool {name}_lib_rs_initialized = false;
 
 static void {name}_init_lib_rs(void)
@@ -674,17 +674,17 @@ static void {name}_init_lib_rs(void)
 }}
 
 struct yetty_{name}_factory {{
-    struct yetty_ydraw_core_concrete_factory base;
+    struct yetty_ydraw_concrete_factory base;
     /* Shared, compiled once. NULL until compile_pipeline. */
     struct yetty_yrender_pipeline *pipeline;
     /* Template RS: shape definition for both the pipeline and per-instance
      * RSes. Children point to the shared static library RSes. */
-    struct yetty_ydraw_core_gpu_resource_set template_rs;
+    struct yetty_ydraw_gpu_resource_set template_rs;
     int template_initialized;
 
     WGPUDevice device;
     WGPUQueue queue;
-    struct yetty_ydraw_core_gpu_allocator *allocator;
+    struct yetty_ydraw_gpu_allocator *allocator;
 
     /* Zoom state — written by the canvas into the factory, read by each
      * instance render() and pushed into the instance's own RS uniforms. */
@@ -696,7 +696,7 @@ struct yetty_{name}_factory {{
     float cell_zoom_off_y;
 }};
 
-static struct yetty_{name}_factory *yetty_{name}_factory_from_base(struct yetty_ydraw_core_concrete_factory *base)
+static struct yetty_{name}_factory *yetty_{name}_factory_from_base(struct yetty_ydraw_concrete_factory *base)
 {{
     return (struct yetty_{name}_factory *)base;
 }}
@@ -711,7 +711,7 @@ static struct yetty_{name}_factory *yetty_{name}_factory_from_base(struct yetty_
 // for each per-instance RS (binder-build) — they're memcpy clones.
 //=============================================================================
 
-static void {name}_populate_rs(struct yetty_ydraw_core_gpu_resource_set *rs)
+static void {name}_populate_rs(struct yetty_ydraw_gpu_resource_set *rs)
 {{
     {name}_init_lib_rs();
 
@@ -735,8 +735,8 @@ static void {name}_populate_rs(struct yetty_ydraw_core_gpu_resource_set *rs)
 //=============================================================================
 
 static struct yetty_ycore_void_result
-{name}_instance_render(struct yetty_ydraw_core_figure_instance *self,
-                       struct yetty_ydraw_core_target *target, float x, float y)
+{name}_instance_render(struct yetty_ydraw_figure_instance *self,
+                       struct yetty_ydraw_target *target, float x, float y)
 {{
     if (!self || !self->buffer_data || !self->factory)
         return YETTY_ERR(yetty_ycore_void, "invalid instance");
@@ -747,7 +747,7 @@ static struct yetty_ycore_void_result
     if (!factory->pipeline)
         return YETTY_ERR(yetty_ycore_void, "factory pipeline not initialized");
 
-    struct yetty_ydraw_core_gpu_resource_set *rs = self->resource_set;
+    struct yetty_ydraw_gpu_resource_set *rs = self->resource_set;
 
     // Parse wire format: [type_id][payload_size][uniforms...][buffer_lens...][buffer_data...]
     const uint32_t *data = (const uint32_t *)self->buffer_data;
@@ -844,10 +844,10 @@ static struct yetty_ycore_void_result
 //=============================================================================
 
 static struct yetty_ycore_void_result
-{name}_compile_pipeline(struct yetty_ydraw_core_concrete_factory *self,
+{name}_compile_pipeline(struct yetty_ydraw_concrete_factory *self,
                         WGPUDevice device, WGPUQueue queue,
                         WGPUTextureFormat target_format,
-                        struct yetty_ydraw_core_gpu_allocator *allocator)
+                        struct yetty_ydraw_gpu_allocator *allocator)
 {{
     struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
 
@@ -875,33 +875,33 @@ static struct yetty_ycore_void_result
     return YETTY_OK_VOID();
 }}
 
-static WGPURenderPipeline {name}_get_pipeline(struct yetty_ydraw_core_concrete_factory *self)
+static WGPURenderPipeline {name}_get_pipeline(struct yetty_ydraw_concrete_factory *self)
 {{
     struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
     return factory->pipeline ? yetty_yrender_pipeline_get_pipeline(factory->pipeline) : NULL;
 }}
 
-static struct yetty_ydraw_core_figure_instance_ptr_result
-{name}_create_instance(struct yetty_ydraw_core_concrete_factory *self,
+static struct yetty_ydraw_figure_instance_ptr_result
+{name}_create_instance(struct yetty_ydraw_concrete_factory *self,
                        const void *buffer_data, size_t size, uint32_t rolling_row)
 {{
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_core_figure))
-        return YETTY_ERR(yetty_ydraw_core_figure_instance_ptr, "invalid buffer data");
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_figure))
+        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "invalid buffer data");
 
     struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
     if (!factory->pipeline)
-        return YETTY_ERR(yetty_ydraw_core_figure_instance_ptr,
+        return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
                          "{name} factory pipeline not compiled");
 
-    struct yetty_ydraw_core_figure_instance *instance =
-        calloc(1, sizeof(struct yetty_ydraw_core_figure_instance));
+    struct yetty_ydraw_figure_instance *instance =
+        calloc(1, sizeof(struct yetty_ydraw_figure_instance));
     if (!instance)
-        return YETTY_ERR(yetty_ydraw_core_figure_instance_ptr, "allocation failed");
+        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "allocation failed");
 
     instance->buffer_data = malloc(size);
     if (!instance->buffer_data) {{
         free(instance);
-        return YETTY_ERR(yetty_ydraw_core_figure_instance_ptr, "buffer alloc failed");
+        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "buffer alloc failed");
     }}
     memcpy(instance->buffer_data, buffer_data, size);
     instance->buffer_size = size;
@@ -910,21 +910,21 @@ static struct yetty_ydraw_core_figure_instance_ptr_result
     instance->rolling_row = rolling_row;
     instance->render = {name}_instance_render;
 
-    struct rectangle_result aabb_res = yetty_ydraw_core_figure_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_figure_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res))
         instance->bounds = aabb_res.value;
 
     /* Per-instance RS. Same shape as the factory template (so the binder
      * flattens to the same layout the pipeline was compiled against), but
      * with per-instance buffer/uniform values (set in render). */
-    instance->resource_set = malloc(sizeof(struct yetty_ydraw_core_gpu_resource_set));
+    instance->resource_set = malloc(sizeof(struct yetty_ydraw_gpu_resource_set));
     if (!instance->resource_set) {{
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_core_figure_instance_ptr, "rs alloc failed");
+        return YETTY_ERR(yetty_ydraw_figure_instance_ptr, "rs alloc failed");
     }}
     memcpy(instance->resource_set, &factory->template_rs,
-           sizeof(struct yetty_ydraw_core_gpu_resource_set));
+           sizeof(struct yetty_ydraw_gpu_resource_set));
 
 {instance_resources_wiring}
 
@@ -937,7 +937,7 @@ static struct yetty_ydraw_core_figure_instance_ptr_result
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_core_figure_instance_ptr,
+        return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
                          "instance binder create failed", br);
     }}
     instance->binder = br.value;
@@ -949,7 +949,7 @@ static struct yetty_ydraw_core_figure_instance_ptr_result
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_core_figure_instance_ptr,
+        return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
                          "binder submit failed", sr);
     }}
 
@@ -959,15 +959,15 @@ static struct yetty_ydraw_core_figure_instance_ptr_result
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_core_figure_instance_ptr,
+        return YETTY_ERR(yetty_ydraw_figure_instance_ptr,
                          "binder finalize failed", fr);
     }}
 
-    return YETTY_OK(yetty_ydraw_core_figure_instance_ptr, instance);
+    return YETTY_OK(yetty_ydraw_figure_instance_ptr, instance);
 }}
 
-static void {name}_destroy_instance(struct yetty_ydraw_core_concrete_factory *self,
-                                    struct yetty_ydraw_core_figure_instance *instance)
+static void {name}_destroy_instance(struct yetty_ydraw_concrete_factory *self,
+                                    struct yetty_ydraw_figure_instance *instance)
 {{
     (void)self;
     if (!instance)
@@ -979,8 +979,8 @@ static void {name}_destroy_instance(struct yetty_ydraw_core_concrete_factory *se
     free(instance);
 }}
 
-static struct yetty_ydraw_core_gpu_resource_set *{name}_get_shared_rs(
-    struct yetty_ydraw_core_concrete_factory *self)
+static struct yetty_ydraw_gpu_resource_set *{name}_get_shared_rs(
+    struct yetty_ydraw_concrete_factory *self)
 {{
     /* Returns the structural template, NOT a mutable per-instance RS. */
     struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
@@ -988,7 +988,7 @@ static struct yetty_ydraw_core_gpu_resource_set *{name}_get_shared_rs(
 }}
 
 static struct yetty_ycore_void_result
-{name}_set_visual_zoom(struct yetty_ydraw_core_concrete_factory *self,
+{name}_set_visual_zoom(struct yetty_ydraw_concrete_factory *self,
                        float scale, float off_x, float off_y)
 {{
     struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
@@ -999,7 +999,7 @@ static struct yetty_ycore_void_result
 }}
 
 static struct yetty_ycore_void_result
-{name}_set_cell_zoom(struct yetty_ydraw_core_concrete_factory *self,
+{name}_set_cell_zoom(struct yetty_ydraw_concrete_factory *self,
                      float scale, float off_x, float off_y)
 {{
     struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
@@ -1010,7 +1010,7 @@ static struct yetty_ycore_void_result
     return YETTY_OK_VOID();
 }}
 
-struct yetty_ydraw_core_concrete_factory *yetty_{name}_factory_create(void)
+struct yetty_ydraw_concrete_factory *yetty_{name}_factory_create(void)
 {{
     struct yetty_{name}_factory *factory = calloc(1, sizeof(struct yetty_{name}_factory));
     if (!factory)
@@ -1031,7 +1031,7 @@ struct yetty_ydraw_core_concrete_factory *yetty_{name}_factory_create(void)
     return &factory->base;
 }}
 
-void yetty_{name}_factory_destroy(struct yetty_ydraw_core_concrete_factory *self)
+void yetty_{name}_factory_destroy(struct yetty_ydraw_concrete_factory *self)
 {{
     if (!self)
         return;
@@ -1166,7 +1166,7 @@ static const uint32_t {NAME}_COLOR_PALETTE[8] = {{
 }};
 
 static struct yetty_ycore_void_result
-{name}_yaml_factory(struct yetty_ydraw_core_draw_list *buffer,
+{name}_yaml_factory(struct yetty_ydraw_draw_list *buffer,
                     yaml_parser_t *yaml_parser,
                     const char *primitive_type_name)
 {{
@@ -1301,8 +1301,8 @@ static struct yetty_ycore_void_result
         return YETTY_ERR(yetty_ycore_void, "{name} uniforms serialize failed", ser_res);
     }}
 
-    struct yetty_ydraw_core_id_result id_res =
-        yetty_ydraw_core_draw_list_add_prim(buffer, prim_buf, required);
+    struct yetty_ydraw_id_result id_res =
+        yetty_ydraw_draw_list_add_prim(buffer, prim_buf, required);
     free(prim_buf);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "{name} yaml: add_prim failed");
     return YETTY_OK_VOID();

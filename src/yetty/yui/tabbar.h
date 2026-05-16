@@ -45,7 +45,7 @@ struct yetty_yui_workspace;
 struct yetty_yconfig_config;
 struct yetty_context;
 struct yetty_yui_event;
-struct yetty_ydraw_core_target;
+struct yetty_ydraw_target;
 
 YETTY_YRESULT_DECLARE(yetty_yui_tabbar_ptr, struct yetty_yui_tabbar *);
 
@@ -64,7 +64,7 @@ struct yetty_yui_tabbar_ptr_result yetty_yui_tabbar_create(
 struct yetty_ycore_void_result yetty_yui_tabbar_destroy(struct yetty_yui_tabbar *bar);
 
 struct yetty_ycore_void_result yetty_yui_tabbar_render(
-    struct yetty_yui_tabbar *bar, struct yetty_ydraw_core_target *render_target);
+    struct yetty_yui_tabbar *bar, struct yetty_ydraw_target *render_target);
 
 struct yetty_ycore_void_result yetty_yui_tabbar_resize(struct yetty_yui_tabbar *bar, float width,
                                                        float height);

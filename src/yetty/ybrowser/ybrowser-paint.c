@@ -614,7 +614,7 @@ char *yetty_ylexbor_img_pick_url(struct yetty_ylexbor *r, lxb_dom_element_t *el)
 }
 
 struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
-                                                   struct yetty_ydraw_core_draw_list *buf)
+                                                   struct yetty_ydraw_draw_list *buf)
 {
     if (r == NULL || buf == NULL) {
         return YETTY_ERR(yetty_ycore_void, "ylexbor_paint: null");
@@ -911,7 +911,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                 free(prim);
                 break;
             }
-            (void)yetty_ydraw_core_draw_list_add_prim(buf, prim, need);
+            (void)yetty_ydraw_draw_list_add_prim(buf, prim, need);
             free(prim);
             z++;
             ydebug("paint image i=%u xy=%.0f,%.0f wh=%.0fx%.0f src=%dx%d", i, b->x, b->y, b->w,
@@ -944,7 +944,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
 			 * justify-fill code computes word_spacing but until we
 			 * confirm it's not the source of the user-reported
 			 * scattered glyphs we keep it dormant. */
-            (void)yetty_ydraw_core_draw_list_add_text(buf, b->x, baseline_y, &txt, b->font_size,
+            (void)yetty_ydraw_draw_list_add_text(buf, b->x, baseline_y, &txt, b->font_size,
                                                       pack_rgba(b->fg), z++, /*font_id=*/-1,
                                                       /*rotation=*/0.0f);
             if (b->underline && b->w > 0) {
@@ -974,7 +974,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
     if (scene_max_x < min_w) {
         scene_max_x = min_w;
     }
-    yetty_ydraw_core_draw_list_set_scene_bounds(buf, 0.0f, 0.0f, scene_max_x, scene_max_y);
+    yetty_ydraw_draw_list_set_scene_bounds(buf, 0.0f, 0.0f, scene_max_x, scene_max_y);
     ydebug("paint scene bounds = (0,0)-(%.0f,%.0f)", scene_max_x, scene_max_y);
 
     return YETTY_OK_VOID();

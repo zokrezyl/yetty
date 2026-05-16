@@ -14,7 +14,7 @@ extern "C" {
 #endif
 
 /* Static shader-only resource set used by ydraw layer to include yfsvm_execute. */
-const struct yetty_ydraw_core_gpu_resource_set *yetty_yfsvm_get_shader_resource_set(void);
+const struct yetty_ydraw_gpu_resource_set *yetty_yfsvm_get_shader_resource_set(void);
 
 #ifdef __cplusplus
 }

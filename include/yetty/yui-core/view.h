@@ -20,7 +20,7 @@ extern "C" {
 
 struct yetty_yui_view;
 struct yetty_yui_event;
-struct yetty_ydraw_core_target;
+struct yetty_ydraw_target;
 
 /* Rectangle — used for view/tile bounds. Lives here so the view set_bounds
  * op can reference it without pulling in any yui-side headers. */
@@ -35,7 +35,7 @@ YETTY_YRESULT_DECLARE(yetty_yui_view_ptr, struct yetty_yui_view *);
 struct yetty_yui_view_ops {
     struct yetty_ycore_void_result (*destroy)(struct yetty_yui_view *self);
     struct yetty_ycore_void_result (*render)(struct yetty_yui_view *self,
-                                             struct yetty_ydraw_core_target *render_target);
+                                             struct yetty_ydraw_target *render_target);
     struct yetty_ycore_void_result (*set_bounds)(struct yetty_yui_view *self,
                                                  struct yetty_yui_rect bounds);
     struct yetty_ycore_int_result (*on_event)(struct yetty_yui_view *self,
@@ -53,7 +53,7 @@ struct yetty_yui_view {
 struct yetty_ycore_void_result yetty_yui_view_destroy(struct yetty_yui_view *view);
 
 struct yetty_ycore_void_result yetty_yui_view_render(
-    struct yetty_yui_view *view, struct yetty_ydraw_core_target *render_target);
+    struct yetty_yui_view *view, struct yetty_ydraw_target *render_target);
 
 struct yetty_ycore_void_result yetty_yui_view_set_bounds(struct yetty_yui_view *view,
                                                          struct yetty_yui_rect bounds);

@@ -15,7 +15,7 @@ struct yetty_yui_tile;
 struct yetty_yconfig_config;
 struct yetty_context;
 struct yetty_yui_event;
-struct yetty_ydraw_core_target;
+struct yetty_ydraw_target;
 
 /* Result types */
 YETTY_YRESULT_DECLARE(yetty_yui_tile_ptr, struct yetty_yui_tile *);
@@ -45,7 +45,7 @@ struct yetty_ycore_void_result yetty_yui_tile_destroy(struct yetty_yui_tile *til
 
 /* Tile operations */
 struct yetty_ycore_void_result yetty_yui_tile_render(
-    struct yetty_yui_tile *tile, struct yetty_ydraw_core_target *render_target);
+    struct yetty_yui_tile *tile, struct yetty_ydraw_target *render_target);
 
 struct yetty_ycore_void_result yetty_yui_tile_set_bounds(struct yetty_yui_tile *tile,
                                                          struct yetty_yui_rect bounds);

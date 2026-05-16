@@ -36,9 +36,9 @@ extern "C" {
 struct yetty_context;
 struct yetty_ydraw_font;
 struct yetty_ymsdf_generator;
-struct yetty_ydraw_core_figure_factory;
-struct yetty_ydraw_core_figure_instance;
-struct yetty_ydraw_core_flyweight_registry;
+struct yetty_ydraw_figure_factory;
+struct yetty_ydraw_figure_instance;
+struct yetty_ydraw_flyweight_registry;
 struct yetty_ywire_wire_statemachine;
 
 /*===========================================================================
@@ -103,7 +103,7 @@ struct ydraw_canvas_grid_line {
     uint32_t font_capacity;
 
     /* Complex prim instances whose base (last overlapping line) is this. */
-    struct yetty_ydraw_core_figure_instance **figures;
+    struct yetty_ydraw_figure_instance **figures;
     uint32_t figure_count;
     uint32_t figure_capacity;
 };
@@ -154,8 +154,8 @@ struct yetty_ydraw_canvas {
 
     /* Flyweight registry (SDF prim handlers) + complex-prim factory
      * (yplot / yimage / ymesh instance ops). */
-    struct yetty_ydraw_core_flyweight_registry   *flyweight_registry;
-    struct yetty_ydraw_core_figure_factory *figure_factory;
+    struct yetty_ydraw_flyweight_registry   *flyweight_registry;
+    struct yetty_ydraw_figure_factory *figure_factory;
 
     /* Polymorphic MSDF generator (borrowed from context->gpu_context).
      * NULL in tests/hosts that don't initialise it. */
@@ -199,13 +199,13 @@ struct yetty_ydraw_canvas_ops {
 
     /* GPU staging */
     struct yetty_ycore_void_result (*rebuild_grid)(struct yetty_ydraw_canvas *);
-    struct yetty_ydraw_prim_staging_result (*build_prim_staging)(
+    struct yetty_ydraw_drawable_staging_result (*build_prim_staging)(
         struct yetty_ydraw_canvas *);
     uint32_t (*prim_gpu_size)(const struct yetty_ydraw_canvas *);
 
     /* Complex prims */
     uint32_t (*figure_count)(const struct yetty_ydraw_canvas *);
-    struct yetty_ydraw_core_figure_instance *(*get_figure)(
+    struct yetty_ydraw_figure_instance *(*get_figure)(
         const struct yetty_ydraw_canvas *, uint32_t index);
 
     /* Glyph iteration */

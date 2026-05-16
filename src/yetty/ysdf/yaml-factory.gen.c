@@ -128,7 +128,7 @@ static void store_array(struct ysdf_parse_ctx *ctx) {
     }
 }
 
-static void build_prim(struct yetty_ydraw_core_draw_list *buffer,
+static void build_prim(struct yetty_ydraw_draw_list *buffer,
                        const char *primitive_type_name,
                        struct ysdf_parse_ctx *ctx) {
     float data[16];
@@ -450,7 +450,7 @@ static void build_prim(struct yetty_ydraw_core_draw_list *buffer,
     }
 
     if (word_count > 0)
-        yetty_ydraw_core_draw_list_add_prim(buffer, data, word_count * sizeof(float));
+        yetty_ydraw_draw_list_add_prim(buffer, data, word_count * sizeof(float));
 }
 
 /*=============================================================================
@@ -458,7 +458,7 @@ static void build_prim(struct yetty_ydraw_core_draw_list *buffer,
  *===========================================================================*/
 
 struct yetty_ycore_void_result
-yetty_ysdf_yaml_factory(struct yetty_ydraw_core_draw_list *buffer,
+yetty_ysdf_yaml_factory(struct yetty_ydraw_draw_list *buffer,
                         struct yaml_parser_s *yaml_parser,
                         const char *primitive_type_name) {
     struct ysdf_parse_ctx ctx = {0};

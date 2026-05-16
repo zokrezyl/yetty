@@ -69,7 +69,7 @@ struct yetty_ydraw_scene_entity *yetty_ydraw_scene_entity_lookup(
 struct yetty_ycore_void_result yetty_ydraw_scene_entity_add_prim(
     struct yetty_ydraw_canvas *canvas,
     struct yetty_ydraw_scene_entity *entity,
-    const struct yetty_ydraw_core_prim_flyweight *fw);
+    const struct yetty_ydraw_drawable_flyweight *fw);
 
 /* Remove this entity's own primitives and detach them from every cell
  * it has touched. Children are untouched. The entity remains usable

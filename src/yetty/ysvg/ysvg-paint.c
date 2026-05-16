@@ -434,7 +434,7 @@ static struct yetty_ycore_void_result emit_text(struct ysvg_paint_state *ps,
         .capacity = blen,
     };
     struct yetty_ycore_void_result tr =
-        yetty_ydraw_core_draw_list_add_text(ps->ctx->buf, tx, ty, &text, font_size, color, 0, -1,
+        yetty_ydraw_draw_list_add_text(ps->ctx->buf, tx, ty, &text, font_size, color, 0, -1,
                                           0.0f);
     if (YETTY_IS_ERR(tr)) return tr;
     ps->text_y = y + ps->style.font_size * ps->ctx->line_spacing;

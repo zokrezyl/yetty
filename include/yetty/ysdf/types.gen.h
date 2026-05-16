@@ -298,7 +298,7 @@ static inline uint32_t yetty_ysdf_word_count(enum yetty_ysdf_type type) {
     }
 }
 
-// Primitive size in bytes - use as yetty_ydraw_core_primitive_size_fn callback
+// Primitive size in bytes - use as yetty_ydraw_primitive_size_fn callback
 static inline size_t yetty_ysdf_primitive_size(uint32_t type) {
     return yetty_ysdf_word_count((enum yetty_ysdf_type)type) * sizeof(float);
 }

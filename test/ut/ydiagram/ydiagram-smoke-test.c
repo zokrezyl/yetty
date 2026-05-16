@@ -76,10 +76,10 @@ int main(void)
     REQUIRE(YETTY_IS_OK(br), "render_mermaid");
     REQUIRE(br.value != NULL, "buffer is non-null");
 
-    size_t buf_size = yetty_ydraw_core_draw_list_size(br.value);
+    size_t buf_size = yetty_ydraw_draw_list_size(br.value);
     REQUIRE(buf_size > 0, "buffer has primitives");
 
-    yetty_ydraw_core_draw_list_destroy(br.value);
+    yetty_ydraw_draw_list_destroy(br.value);
     yetty_ydiagram_graph_destroy(&g);
 
     printf("OK: ydiagram smoke test (%zu primitive bytes)\n", buf_size);

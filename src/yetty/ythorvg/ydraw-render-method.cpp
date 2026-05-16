@@ -83,7 +83,7 @@ namespace yetty::ythorvg
 // Constructor/Destructor
 //=============================================================================
 
-YDrawRenderMethod::YDrawRenderMethod(yetty_ydraw_core_draw_list *buffer) : _buffer(buffer)
+YDrawRenderMethod::YDrawRenderMethod(yetty_ydraw_draw_list *buffer) : _buffer(buffer)
 {
 }
 
@@ -118,7 +118,7 @@ bool YDrawRenderMethod::postUpdate()
 bool YDrawRenderMethod::preRender()
 {
     if (_buffer) {
-        yetty_ydraw_core_draw_list_clear(_buffer);
+        yetty_ydraw_draw_list_clear(_buffer);
     }
     _nextPrimId = 0;
     return true;
@@ -132,7 +132,7 @@ bool YDrawRenderMethod::postRender()
 bool YDrawRenderMethod::clear()
 {
     if (_buffer) {
-        yetty_ydraw_core_draw_list_clear(_buffer);
+        yetty_ydraw_draw_list_clear(_buffer);
     }
     _nextPrimId = 0;
     return true;

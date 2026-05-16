@@ -227,7 +227,7 @@ void yetty_yrich_document_clear_selection(struct yetty_yrich_document *doc)
  *===========================================================================*/
 
 void yetty_yrich_document_set_buffer(struct yetty_yrich_document *doc,
-                                     struct yetty_ydraw_core_draw_list *buf)
+                                     struct yetty_ydraw_draw_list *buf)
 {
     if (!doc) {
         return;
@@ -254,11 +254,11 @@ static void clear_target(struct yetty_yrich_document *doc)
         return;
     }
 
-    yetty_ydraw_core_draw_list_clear(doc->buffer);
+    yetty_ydraw_draw_list_clear(doc->buffer);
 
     float w = yetty_yrich_document_content_width(doc);
     float h = yetty_yrich_document_content_height(doc);
-    yetty_ydraw_core_draw_list_set_scene_bounds(doc->buffer, 0.0f, 0.0f, w, h);
+    yetty_ydraw_draw_list_set_scene_bounds(doc->buffer, 0.0f, 0.0f, w, h);
 }
 
 struct yetty_ycore_void_result yetty_yrich_document_default_render(struct yetty_yrich_document *doc)

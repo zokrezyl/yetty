@@ -13,7 +13,7 @@
  *     (SDF type Segment) into the buffer
  *
  * The result carries the buffer ownership; caller frees it via
- * yetty_ydraw_core_draw_list_destroy.
+ * yetty_ydraw_draw_list_destroy.
  */
 
 #include <stddef.h>
@@ -29,7 +29,7 @@ extern "C" {
 #endif
 
 struct yetty_ypdf_render_output {
-    struct yetty_ydraw_core_draw_list *buffer;
+    struct yetty_ydraw_draw_list *buffer;
     int page_count;
     float total_height;
     float first_page_height;

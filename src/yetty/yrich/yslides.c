@@ -64,7 +64,7 @@ static bool shape_is_editing(const struct yetty_yrich_element *e)
     return s->editing;
 }
 
-static struct yetty_ycore_void_result emit_text(struct yetty_ydraw_core_draw_list *buf,
+static struct yetty_ycore_void_result emit_text(struct yetty_ydraw_draw_list *buf,
                                                 const struct yetty_yrich_shape *s, uint32_t layer)
 {
     if (s->text_len == 0 || !s->text) {
@@ -102,13 +102,13 @@ static struct yetty_ycore_void_result emit_text(struct yetty_ydraw_core_draw_lis
         .size = s->text_len,
         .capacity = s->text_len,
     };
-    return yetty_ydraw_core_draw_list_add_text(buf, text_x, text_y, &text, s->text_style.font_size,
+    return yetty_ydraw_draw_list_add_text(buf, text_x, text_y, &text, s->text_style.font_size,
                                              s->text_style.color, layer + 1, s->text_style.font_id,
                                              0.0f);
 }
 
 static struct yetty_ycore_void_result shape_render(struct yetty_yrich_element *e,
-                                                   struct yetty_ydraw_core_draw_list *buf,
+                                                   struct yetty_ydraw_draw_list *buf,
                                                    uint32_t layer, bool selected)
 {
     struct yetty_yrich_shape *s = (struct yetty_yrich_shape *)e;
@@ -350,8 +350,8 @@ static struct yetty_ycore_void_result slides_render(struct yetty_yrich_document 
         return YETTY_ERR(yetty_ycore_void, "slides_render: NULL buffer");
     }
 
-    yetty_ydraw_core_draw_list_clear(doc->buffer);
-    yetty_ydraw_core_draw_list_set_scene_bounds(doc->buffer, 0.0f, 0.0f, s->slide_width,
+    yetty_ydraw_draw_list_clear(doc->buffer);
+    yetty_ydraw_draw_list_set_scene_bounds(doc->buffer, 0.0f, 0.0f, s->slide_width,
                                               s->slide_height);
 
     struct yetty_yrich_slide *slide = yetty_yrich_slides_slide_at(s, s->current_slide);

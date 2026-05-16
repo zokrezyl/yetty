@@ -45,20 +45,20 @@ extern "C" {
 
 struct yetty_ywire_wire_statemachine;
 
-enum yetty_ydraw_core_prim_iter_status {
+enum yetty_ydraw_drawable_iter_status {
     YETTY_PRIM_ITER_OK = 0,        /* fw populated; caller consumes then re-calls */
     YETTY_PRIM_ITER_WOULD_BLOCK,   /* SM has no more bytes; envelope not at_end yet */
     YETTY_PRIM_ITER_DONE,          /* SM at_end and scratch empty — clean tail */
     YETTY_PRIM_ITER_ERR,           /* internal error (truncated, alloc, …) */
 };
 
-YETTY_YRESULT_DECLARE(yetty_ydraw_core_prim_iter_status,
-                      enum yetty_ydraw_core_prim_iter_status);
+YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_iter_status,
+                      enum yetty_ydraw_drawable_iter_status);
 
-struct yetty_ydraw_core_prim_iter {
+struct yetty_ydraw_drawable_iter {
     /* Public: valid after _next returns OK. fw.data points into the
      * iter's scratch — stable until the next _next call. */
-    struct yetty_ydraw_core_prim_flyweight fw;
+    struct yetty_ydraw_drawable_flyweight fw;
 
     /* Scene bounds parsed from the 24-byte framed envelope header. Valid
      * once header_done flips to true (after the header bytes have been
@@ -74,23 +74,23 @@ struct yetty_ydraw_core_prim_iter {
     bool     header_done;     /* true once envelope header is parsed and validated */
 
     struct yetty_ywire_wire_statemachine             *sm;
-    const struct yetty_ydraw_core_flyweight_registry *reg;
+    const struct yetty_ydraw_flyweight_registry *reg;
 };
 
 /* Initialise. No allocation; scratch grows on demand. */
-struct yetty_ycore_void_result yetty_ydraw_core_prim_iter_init(
-    struct yetty_ydraw_core_prim_iter *iter,
+struct yetty_ycore_void_result yetty_ydraw_drawable_iter_init(
+    struct yetty_ydraw_drawable_iter *iter,
     struct yetty_ywire_wire_statemachine *sm,
-    const struct yetty_ydraw_core_flyweight_registry *reg);
+    const struct yetty_ydraw_flyweight_registry *reg);
 
 /* Free the scratch. Safe on a zero-inited iter (no-op). */
-void yetty_ydraw_core_prim_iter_destroy(struct yetty_ydraw_core_prim_iter *iter);
+void yetty_ydraw_drawable_iter_destroy(struct yetty_ydraw_drawable_iter *iter);
 
 /* Advance one prim. See enum docs above for status semantics. The
  * result struct's `value` is the status; on ERR, .ok=0 and .error.msg
  * describes the failure. */
-struct yetty_ydraw_core_prim_iter_status_result yetty_ydraw_core_prim_iter_next(
-    struct yetty_ydraw_core_prim_iter *iter);
+struct yetty_ydraw_drawable_iter_status_result yetty_ydraw_drawable_iter_next(
+    struct yetty_ydraw_drawable_iter *iter);
 
 #ifdef __cplusplus
 }

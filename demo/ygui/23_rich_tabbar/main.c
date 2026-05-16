@@ -124,7 +124,6 @@ static const char *YAML_SHAPES =
 
 int main(void)
 {
-    (void)freopen("/dev/null", "w", stderr);
     if (yetty_ygui_init() != 0) {
         return 1;
     }

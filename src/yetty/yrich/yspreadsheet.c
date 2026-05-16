@@ -71,7 +71,7 @@ static bool cell_is_editing(const struct yetty_yrich_element *e)
 }
 
 static struct yetty_ycore_void_result cell_render(struct yetty_yrich_element *e,
-                                                  struct yetty_ydraw_core_draw_list *buf,
+                                                  struct yetty_ydraw_draw_list *buf,
                                                   uint32_t layer, bool selected)
 {
     struct yetty_yrich_cell *c = (struct yetty_yrich_cell *)e;
@@ -111,7 +111,7 @@ static struct yetty_ycore_void_result cell_render(struct yetty_yrich_element *e,
             .capacity = c->text_len,
         };
         struct yetty_ycore_void_result tr =
-            yetty_ydraw_core_draw_list_add_text(buf, text_x, text_y, &text, c->style.font_size,
+            yetty_ydraw_draw_list_add_text(buf, text_x, text_y, &text, c->style.font_size,
                                               c->style.color, layer + 1, c->style.font_id, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "cell_render: add_text failed");
     }

@@ -464,7 +464,7 @@ uint32_t yetty_ysvg_rgba_mul_alpha(uint32_t rgba, float k);
  *===========================================================================*/
 
 struct yetty_ysvg_paint_ctx {
-    struct yetty_ydraw_core_draw_list *buf;
+    struct yetty_ydraw_draw_list *buf;
     float default_font_size;
     float line_spacing;
     /* Scene bounds — points outside are still emitted but the buffer

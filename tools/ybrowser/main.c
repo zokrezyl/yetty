@@ -235,21 +235,21 @@ static int emit_bin_osc(const uint8_t *bytes, size_t blen)
 
 static int redraw_and_push(struct yetty_ylexbor *yl)
 {
-	struct yetty_ydraw_core_draw_list_result br =
-		yetty_ydraw_core_draw_list_config_buffer_create(NULL);
+	struct yetty_ydraw_draw_list_result br =
+		yetty_ydraw_draw_list_config_buffer_create(NULL);
 	if (YETTY_IS_ERR(br)) return 1;
-	struct yetty_ydraw_core_draw_list *buf = br.value;
+	struct yetty_ydraw_draw_list *buf = br.value;
 	struct yetty_ycore_void_result rd = yetty_ylexbor_render(yl, buf);
 	int rc = 1;
 	if (YETTY_IS_OK(rd)) {
 		const uint8_t *bytes = NULL;
-		size_t blen = yetty_ydraw_core_draw_list_serialize(buf, &bytes);
+		size_t blen = yetty_ydraw_draw_list_serialize(buf, &bytes);
 		(void)emit_envelope(YETTY_OSC_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
 		(void)emit_bin_osc(bytes, blen);
 		fflush(stdout);
 		rc = 0;
 	}
-	yetty_ydraw_core_draw_list_destroy(buf);
+	yetty_ydraw_draw_list_destroy(buf);
 	return rc;
 }
 
@@ -589,24 +589,24 @@ int main(int argc, char **argv)
 	if (interactive) {
 		rc = interactive_loop(yl);
 	} else {
-		struct yetty_ydraw_core_draw_list_result br =
-			yetty_ydraw_core_draw_list_config_buffer_create(NULL);
+		struct yetty_ydraw_draw_list_result br =
+			yetty_ydraw_draw_list_config_buffer_create(NULL);
 		if (YETTY_IS_ERR(br)) {
 			yetty_ylexbor_destroy(yl); free(html); return 1;
 		}
-		struct yetty_ydraw_core_draw_list *buf = br.value;
+		struct yetty_ydraw_draw_list *buf = br.value;
 		struct yetty_ycore_void_result rr = yetty_ylexbor_render(yl, buf);
 		if (YETTY_IS_ERR(rr)) {
 			fprintf(stderr, "render: %s\n", rr.error.msg);
-			yetty_ydraw_core_draw_list_destroy(buf);
+			yetty_ydraw_draw_list_destroy(buf);
 			yetty_ylexbor_destroy(yl); free(html); return 1;
 		}
 		const uint8_t *bytes = NULL;
-		size_t blen = yetty_ydraw_core_draw_list_serialize(buf, &bytes);
+		size_t blen = yetty_ydraw_draw_list_serialize(buf, &bytes);
 		if (osc) (void)emit_bin_osc(bytes, blen);
 		else     fwrite(bytes, 1, blen, stdout);
 		fflush(stdout);
-		yetty_ydraw_core_draw_list_destroy(buf);
+		yetty_ydraw_draw_list_destroy(buf);
 		rc = 0;
 	}
 

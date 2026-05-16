@@ -590,7 +590,7 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
-                                                struct yetty_ydraw_core_target *target)
+                                                struct yetty_ydraw_target *target)
 {
     if (!yui || !yui->layer || !target) {
         return YETTY_OK_VOID();

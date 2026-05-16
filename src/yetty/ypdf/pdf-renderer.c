@@ -52,7 +52,7 @@
 
 struct yetty_ypdf_font_info {
     char tag[64];                       /* e.g. "/F1" or "F1" */
-    int buffer_font_id;                 /* yetty_ydraw_core_draw_list font index */
+    int buffer_font_id;                 /* yetty_ydraw_draw_list font index */
     struct yetty_ydraw_font *raw_font; /* non-atlas metrics source */
     bool is_identity_h;
     struct yetty_ycore_map to_unicode; /* CID → Unicode */
@@ -811,7 +811,7 @@ static int find_font_idx(const struct yetty_ypdf_font_info *fonts, size_t count,
  * Result return is structural (this function calls Result-returning
  * APIs); it always reports OK. */
 static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
-                                                         struct yetty_ydraw_core_draw_list *buffer,
+                                                         struct yetty_ydraw_draw_list *buffer,
                                                          struct yetty_ypdf_font_info *fonts,
                                                          size_t *font_count)
 {
@@ -1004,7 +1004,7 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
         /* Store TTF in buffer. */
         struct yetty_ycore_buffer ttf_buf = {bytes, sz, sz};
         struct yetty_ycore_int_result id_res =
-            yetty_ydraw_core_draw_list_add_font(buffer, &ttf_buf, tag);
+            yetty_ydraw_draw_list_add_font(buffer, &ttf_buf, tag);
 
         int buf_font_id = -1;
         if (YETTY_IS_OK(id_res)) {
@@ -1048,7 +1048,7 @@ static struct yetty_ycore_void_result extract_page_fonts(pdfio_obj_t *page_obj,
  *===========================================================================*/
 
 struct yetty_ypdf_render_ctx {
-    struct yetty_ydraw_core_draw_list *buffer;
+    struct yetty_ydraw_draw_list *buffer;
     struct yetty_ypdf_font_info *fonts;
     size_t font_count;
     float y_offset;
@@ -1110,7 +1110,7 @@ static struct float_result text_emit_cb(void *ud, const char *text, size_t text_
     float h_scale_for_emit = state->horizontal_scaling / 100.0f;
     float emit_char_spacing = state->char_spacing * effective_size * h_scale_for_emit;
     float emit_word_spacing = state->word_spacing * effective_size * h_scale_for_emit;
-    (void)yetty_ydraw_core_draw_list_add_text_full(
+    (void)yetty_ydraw_draw_list_add_text_full(
         c->buffer, sx, sy, &tb, effective_size, color, 0, font_id,
         (fabsf(rotation_radians) > 0.001f) ? -rotation_radians : 0.0f, emit_char_spacing,
         emit_word_spacing);
@@ -1267,17 +1267,17 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf)
         }
     }
 
-    struct yetty_ydraw_core_draw_list_config cfg = {
+    struct yetty_ydraw_draw_list_config cfg = {
         .scene_min_x = 0.0f,
         .scene_min_y = 0.0f,
         .scene_max_x = max_width,
         .scene_max_y = total_height,
     };
-    struct yetty_ydraw_core_draw_list_result br = yetty_ydraw_core_draw_list_config_buffer_create(&cfg);
+    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(&cfg);
     if (YETTY_IS_ERR(br)) {
         return YETTY_ERR(yetty_ypdf_render, br.error.msg);
     }
-    struct yetty_ydraw_core_draw_list *buffer = br.value;
+    struct yetty_ydraw_draw_list *buffer = br.value;
 
     /* ---------- Pass 2: emission ---------- */
     struct yetty_ypdf_font_info fonts[MAX_FONTS];
@@ -1322,7 +1322,7 @@ struct yetty_ypdf_render_result yetty_ypdf_render_pdf(struct _pdfio_file_s *pdf)
         struct yetty_ypdf_content_parser_ptr_result pr =
             yetty_ypdf_content_parser_callbacks_content_parser_create(&cb);
         if (YETTY_IS_ERR(pr)) {
-            yetty_ydraw_core_draw_list_destroy(buffer);
+            yetty_ydraw_draw_list_destroy(buffer);
             return YETTY_ERR(yetty_ypdf_render, pr.error.msg);
         }
         yetty_ypdf_content_parser_set_page_height(pr.value, ph);

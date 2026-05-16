@@ -109,7 +109,6 @@ make_field_row(const char *id, const char *label_text, struct yetty_ygui_widget 
 
 int main(void)
 {
-    (void)freopen("/dev/null", "w", stderr);
     if (yetty_ygui_init() != 0) {
         return 1;
     }

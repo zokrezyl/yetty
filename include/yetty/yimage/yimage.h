@@ -42,18 +42,18 @@ struct yetty_yimage_render_config {
 
 /* Decode `image_bytes` (PNG/JPG/...) and produce a fresh ydraw-core
  * buffer holding ONE yimage complex prim. Caller frees the buffer with
- * yetty_ydraw_core_draw_list_destroy. */
-struct yetty_ydraw_core_draw_list_result yetty_yimage_render(
+ * yetty_ydraw_draw_list_destroy. */
+struct yetty_ydraw_draw_list_result yetty_yimage_render(
     const uint8_t *image_bytes, size_t len, const struct yetty_yimage_render_config *config);
 
 /* Convenience: read the file at `path` and call yetty_yimage_render. */
-struct yetty_ydraw_core_draw_list_result yetty_yimage_render_path(
+struct yetty_ydraw_draw_list_result yetty_yimage_render_path(
     const char *path, const struct yetty_yimage_render_config *config);
 
 /* OSC envelope (YETTY_OSC_YDRAW_BIN, same wire format as ycat / yecho).
  * Returns bytes written; ERR on failure. */
 struct yetty_ycore_size_result yetty_yimage_osc_bin_emit(
-    const struct yetty_ydraw_core_draw_list *buffer, FILE *out);
+    const struct yetty_ydraw_draw_list *buffer, FILE *out);
 
 #ifdef __cplusplus
 }

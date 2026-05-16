@@ -215,7 +215,7 @@ static struct ygui_engine_ptr_result engine_alloc_init(const char *card_name, in
     /* Create ydraw-core buffer — widgets accumulate SDF primitives + text
      * spans into it; the engine base64-encodes the serialization and ships
      * it via OSC 666674 every render. */
-    struct yetty_ydraw_core_draw_list_result br = yetty_ydraw_core_draw_list_config_buffer_create(NULL);
+    struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(NULL);
     if (!YETTY_IS_OK(br)) {
         yetty_ygui_set_error("Failed to create ydraw buffer");
         free(engine);
@@ -400,7 +400,7 @@ struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engin
 
     /* Destroy buffer + measurement font */
     if (engine->buffer) {
-        yetty_ydraw_core_draw_list_destroy(engine->buffer);
+        yetty_ydraw_draw_list_destroy(engine->buffer);
     }
     if (engine->measure_font && engine->measure_font->ops && engine->measure_font->ops->destroy) {
         engine->measure_font->ops->destroy(engine->measure_font);
@@ -621,21 +621,21 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
     yetty_ygui_engine_notify_tick(engine);
 
     /* 1. Clear buffer */
-    yetty_ydraw_core_draw_list_clear(engine->buffer);
+    yetty_ydraw_draw_list_clear(engine->buffer);
 
     /* 1a. Prepend a CMD_ZERO so the receiver clears its canvas + resets
      * cursor in the SAME OSC envelope that carries this frame's prims —
      * eliminates the inter-write flash that the separate YDRAW_CLEAR
      * envelope used to cause. */
     {
-        struct yetty_ycore_void_result zr = yetty_ydraw_core_draw_list_add_cmd_zero(engine->buffer);
+        struct yetty_ycore_void_result zr = yetty_ydraw_draw_list_add_cmd_zero(engine->buffer);
         if (YETTY_IS_ERR(zr)) {
             yetty_ycore_error_destroy(zr.error);
         }
     }
 
     /* 2. Set explicit scene bounds to match full canvas */
-    yetty_ydraw_core_draw_list_set_scene_bounds(engine->buffer, 0, 0, engine->width, engine->height);
+    yetty_ydraw_draw_list_set_scene_bounds(engine->buffer, 0, 0, engine->width, engine->height);
 
     /* 3. Rebuild UI */
     struct yetty_ycore_void_result rb = engine_rebuild(engine);
@@ -645,7 +645,7 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
 
     /* 4. Serialize (framed: prims + text_spans + scene_bounds) */
     const uint8_t *data = NULL;
-    uint32_t size = (uint32_t)yetty_ydraw_core_draw_list_serialize(engine->buffer, &data);
+    uint32_t size = (uint32_t)yetty_ydraw_draw_list_serialize(engine->buffer, &data);
     if (size == 0 || !data) {
         return YETTY_OK_VOID();
     }
@@ -720,10 +720,10 @@ struct yetty_ycore_void_result yetty_ygui_engine_show(struct yetty_ygui_engine *
     if (engine->canvas_mode == YETTY_YGUI_CANVAS_FIT && !engine->have_pixel_size) {
         /* Establish the card with an empty buffer so the receiver responds
          * with the pixel size we need to drive the first real render. */
-        yetty_ydraw_core_draw_list_clear(engine->buffer);
-        yetty_ydraw_core_draw_list_set_scene_bounds(engine->buffer, 0, 0, 1, 1);
+        yetty_ydraw_draw_list_clear(engine->buffer);
+        yetty_ydraw_draw_list_set_scene_bounds(engine->buffer, 0, 0, 1, 1);
         const uint8_t *data = NULL;
-        uint32_t size = (uint32_t)yetty_ydraw_core_draw_list_serialize(engine->buffer, &data);
+        uint32_t size = (uint32_t)yetty_ydraw_draw_list_serialize(engine->buffer, &data);
         if (size > 0 && data) {
             struct yetty_ycore_void_result cr = yetty_ygui_osc_create_card(
                 engine->output_pty, engine->card_name, engine->card_x, engine->card_y,

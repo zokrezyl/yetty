@@ -91,11 +91,11 @@ static void emit_clear(void)
 	write_all(clear, sizeof(clear) - 1);
 }
 
-static void emit_bin(const struct yetty_ydraw_core_draw_list *buf)
+static void emit_bin(const struct yetty_ydraw_draw_list *buf)
 {
 	const uint8_t *raw = NULL;
-	size_t raw_size = yetty_ydraw_core_draw_list_serialize(
-		(struct yetty_ydraw_core_draw_list *)buf, &raw);
+	size_t raw_size = yetty_ydraw_draw_list_serialize(
+		(struct yetty_ydraw_draw_list *)buf, &raw);
 	if (raw_size == 0 || !raw) return;
 
 	struct yetty_yface_bin_meta meta = {
@@ -131,7 +131,7 @@ void yrich_runner_emit(struct yrich_runner *r)
 
 void yrich_runner_init(struct yrich_runner *r,
 		       struct yetty_yrich_document *doc,
-		       struct yetty_ydraw_core_draw_list *buf)
+		       struct yetty_ydraw_draw_list *buf)
 {
 	if (!r)
 		return;

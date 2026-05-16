@@ -87,21 +87,21 @@ int main(int argc, char **argv) {
 	}
 
 	/* Create the ydraw buffer + thorvg renderer. */
-	struct yetty_ydraw_core_draw_list_result buf_res =
-	    yetty_ydraw_core_draw_list_config_buffer_create(NULL);
+	struct yetty_ydraw_draw_list_result buf_res =
+	    yetty_ydraw_draw_list_config_buffer_create(NULL);
 	if (YETTY_IS_ERR(buf_res)) {
 		fprintf(stderr, "%s: buffer_create: %s\n", argv[0], buf_res.error.msg);
 		free(file_res.value.data);
 		return 1;
 	}
-	struct yetty_ydraw_core_draw_list *buf = buf_res.value;
+	struct yetty_ydraw_draw_list *buf = buf_res.value;
 
 	struct yetty_ythorvg_renderer_ptr_result r_res =
 	    yetty_ythorvg_renderer_create(buf);
 	if (YETTY_IS_ERR(r_res)) {
 		fprintf(stderr, "%s: renderer_create: %s\n",
 		        argv[0], r_res.error.msg);
-		yetty_ydraw_core_draw_list_destroy(buf);
+		yetty_ydraw_draw_list_destroy(buf);
 		free(file_res.value.data);
 		return 1;
 	}
@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
 	if (YETTY_IS_ERR(rr)) {
 		fprintf(stderr, "%s: render: %s\n", argv[0], rr.error.msg);
 		yetty_ythorvg_renderer_destroy(renderer);
-		yetty_ydraw_core_draw_list_destroy(buf);
+		yetty_ydraw_draw_list_destroy(buf);
 		return 1;
 	}
 
@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
 		if (YETTY_IS_ERR(fr)) {
 			fprintf(stderr, "%s: render_frame: %s\n", argv[0], fr.error.msg);
 			yetty_ythorvg_renderer_destroy(renderer);
-			yetty_ydraw_core_draw_list_destroy(buf);
+			yetty_ydraw_draw_list_destroy(buf);
 			return 1;
 		}
 	}
@@ -149,11 +149,11 @@ int main(int argc, char **argv) {
 	}
 
 	const uint8_t *raw = NULL;
-	size_t raw_size = yetty_ydraw_core_draw_list_serialize(buf, &raw);
+	size_t raw_size = yetty_ydraw_draw_list_serialize(buf, &raw);
 	if (raw_size == 0 || !raw) {
 		fprintf(stderr, "%s: serialize failed\n", argv[0]);
 		yetty_ythorvg_renderer_destroy(renderer);
-		yetty_ydraw_core_draw_list_destroy(buf);
+		yetty_ydraw_draw_list_destroy(buf);
 		return 1;
 	}
 
@@ -174,6 +174,6 @@ int main(int argc, char **argv) {
 	fflush(stdout);
 
 	yetty_ythorvg_renderer_destroy(renderer);
-	yetty_ydraw_core_draw_list_destroy(buf);
+	yetty_ydraw_draw_list_destroy(buf);
 	return 0;
 }

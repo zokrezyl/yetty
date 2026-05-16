@@ -95,7 +95,7 @@ struct yetty_ydraw_scrolling_canvas {
      * `env_active` is true between the first prim_iter init and the
      * end-of-envelope finalisation. */
     bool                                     env_active;
-    struct yetty_ydraw_core_prim_iter       env_iter;
+    struct yetty_ydraw_drawable_iter       env_iter;
     struct ydraw_canvas_font_map            env_fonts_map;
     struct ydraw_canvas_buffer_attach_list  env_attach_list;
     uint32_t                                 env_initial_canvas_line;
@@ -215,7 +215,7 @@ static struct yetty_ycore_void_result scrolling_destroy_impl(
      * tears down the iter's scratch and the per-envelope font / attach
      * tracking too. */
     if (canvas->env_active) {
-        yetty_ydraw_core_prim_iter_destroy(&canvas->env_iter);
+        yetty_ydraw_drawable_iter_destroy(&canvas->env_iter);
         ydraw_canvas_buffer_attach_free(&canvas->env_attach_list);
         ydraw_canvas_font_map_release_all(&canvas->env_fonts_map, base->font_cache);
         free(canvas->env_fonts_map.entries);
@@ -342,7 +342,7 @@ static struct yetty_ycore_void_result yetty_ydraw_scrolling_canvas_set_view_top(
 // Returns the grid_line (bottom row of AABB) for this primitive
 static struct uint32_result add_primitive_internal(
     struct yetty_ydraw_scrolling_canvas *canvas,
-    const struct yetty_ydraw_core_prim_flyweight *fw)
+    const struct yetty_ydraw_drawable_flyweight *fw)
 {
     if (!canvas) {
         return YETTY_ERR(uint32, "canvas is NULL");
@@ -492,10 +492,10 @@ static struct uint32_result add_primitive_internal(
            prim_row_max, canvas->lines.count);
 
     // Track complex prims for resource set collection
-    if (yetty_ydraw_core_is_complex_type(prim_type)) {
+    if (yetty_ydraw_is_complex_type(prim_type)) {
         /* Create factory instance for complex prim */
-        struct yetty_ydraw_core_figure_instance_ptr_result inst_res =
-            yetty_ydraw_core_figure_factory_create_instance(
+        struct yetty_ydraw_figure_instance_ptr_result inst_res =
+            yetty_ydraw_figure_factory_create_instance(
                 canvas->base->figure_factory, fw->data, word_count * sizeof(uint32_t),
                 primitive_rolling_row);
         YETTY_RETURN_IF_ERR(uint32, inst_res,
@@ -505,11 +505,11 @@ static struct uint32_result add_primitive_internal(
         if (base_line->figure_count >= base_line->figure_capacity) {
             uint32_t new_cap =
                 base_line->figure_capacity == 0 ? 4 : base_line->figure_capacity * 2;
-            struct yetty_ydraw_core_figure_instance **grown = realloc(
+            struct yetty_ydraw_figure_instance **grown = realloc(
                 base_line->figures,
-                new_cap * sizeof(struct yetty_ydraw_core_figure_instance *));
+                new_cap * sizeof(struct yetty_ydraw_figure_instance *));
             if (!grown) {
-                yetty_ydraw_core_figure_instance_destroy(inst_res.value);
+                yetty_ydraw_figure_instance_destroy(inst_res.value);
                 return YETTY_ERR(uint32,
                                  "add_primitive_internal: realloc figures failed");
             }
@@ -536,7 +536,7 @@ static struct uint32_result add_primitive_internal(
  * placed). `font_handle` is the cache handle the resulting glyphs encode
  * into the shader's per-glyph slot dispatcher. */
 static struct uint32_result expand_text_span_to_glyphs(
-    struct yetty_ydraw_scrolling_canvas *canvas, const struct yetty_ydraw_core_text_span_prim_view *ts,
+    struct yetty_ydraw_scrolling_canvas *canvas, const struct yetty_ydraw_text_span_prim_view *ts,
     struct yetty_ydraw_font *font, yetty_yfont_cache_handle font_handle)
 {
     static uint32_t glyph_z_order = 0;
@@ -590,7 +590,7 @@ static struct uint32_result expand_text_span_to_glyphs(
         struct yetty_yrender_gpu_resource_set_result rs_res = font->ops->get_gpu_resource_set(font);
         YETTY_RETURN_IF_ERR(uint32, rs_res,
                             "expand_text_span: get_gpu_resource_set");
-        const struct yetty_ydraw_core_gpu_resource_set *rs = rs_res.value;
+        const struct yetty_ydraw_gpu_resource_set *rs = rs_res.value;
         if (rs->buffer_count == 0 || !rs->buffers[0].data) {
             return YETTY_ERR(uint32,
                              "expand_text_span: font resource set has no glyph metadata buffer");
@@ -978,7 +978,7 @@ static struct yetty_ycore_void_result canvas_evict_line(struct yetty_ydraw_scrol
      * "struct member <ns>_base_size not found". Detach + restore keeps
      * the cache ref alive across the line's empty-form phase, so the
      * font slot remains addressable until the line is re-restored. */
-    struct yetty_ydraw_core_figure_instance **saved_cp = line->figures;
+    struct yetty_ydraw_figure_instance **saved_cp = line->figures;
     uint32_t saved_cp_count = line->figure_count;
     uint32_t saved_cp_cap = line->figure_capacity;
     line->figures = NULL;
@@ -1036,7 +1036,7 @@ static struct yetty_ycore_void_result canvas_evict_scrollback(
              * re-attach after grid_line_init. */
             struct ydraw_canvas_grid_line *line = &canvas->lines.lines[i];
             if (line->prims.count > 0 || line->cell_count > 0 || line->font_count > 0) {
-                struct yetty_ydraw_core_figure_instance **saved_cp = line->figures;
+                struct yetty_ydraw_figure_instance **saved_cp = line->figures;
                 uint32_t saved_cp_count = line->figure_count;
                 uint32_t saved_cp_cap = line->figure_capacity;
                 line->figures = NULL;
@@ -1470,11 +1470,11 @@ static struct yetty_ycore_void_result yetty_ydraw_scrolling_canvas_rebuild_grid(
 // Primitive staging
 //=============================================================================
 
-static struct yetty_ydraw_prim_staging_result yetty_ydraw_scrolling_canvas_build_prim_staging(
+static struct yetty_ydraw_drawable_staging_result yetty_ydraw_scrolling_canvas_build_prim_staging(
     struct yetty_ydraw_scrolling_canvas *canvas)
 {
     if (!canvas) {
-        return YETTY_ERR(yetty_ydraw_prim_staging,
+        return YETTY_ERR(yetty_ydraw_drawable_staging,
                          "yetty_ydraw_scrolling_canvas_build_prim_staging: NULL canvas");
     }
 
@@ -1491,15 +1491,15 @@ static struct yetty_ydraw_prim_staging_result yetty_ydraw_scrolling_canvas_build
 
     if (prim_count == 0) {
         canvas->base->prim_staging_count = 0;
-        struct yetty_ydraw_prim_staging empty = {.data = NULL, .word_count = 0};
-        return YETTY_OK(yetty_ydraw_prim_staging, empty);
+        struct yetty_ydraw_drawable_staging empty = {.data = NULL, .word_count = 0};
+        return YETTY_OK(yetty_ydraw_drawable_staging, empty);
     }
 
     // Layout: [prim0_offset, prim1_offset, ...][rolling_row0,
     // prim0_data...][rolling_row1, prim1_data...]
     uint32_t total_size = prim_count + total_words;
     struct yetty_ycore_void_result eps = ydraw_canvas_ensure_prim_staging(canvas->base, total_size);
-    YETTY_RETURN_IF_ERR(yetty_ydraw_prim_staging, eps,
+    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_staging, eps,
                         "yetty_ydraw_scrolling_canvas_build_prim_staging: ensure_prim_staging failed");
 
     uint32_t data_offset = 0;
@@ -1525,8 +1525,8 @@ static struct yetty_ydraw_prim_staging_result yetty_ydraw_scrolling_canvas_build
     }
 
     canvas->base->prim_staging_count = total_size;
-    struct yetty_ydraw_prim_staging out = {.data = canvas->base->prim_staging, .word_count = total_size};
-    return YETTY_OK(yetty_ydraw_prim_staging, out);
+    struct yetty_ydraw_drawable_staging out = {.data = canvas->base->prim_staging, .word_count = total_size};
+    return YETTY_OK(yetty_ydraw_drawable_staging, out);
 }
 
 static uint32_t yetty_ydraw_scrolling_canvas_prim_gpu_size(struct yetty_ydraw_scrolling_canvas *canvas)
@@ -1632,7 +1632,7 @@ static uint32_t yetty_ydraw_scrolling_canvas_figure_count(struct yetty_ydraw_scr
     return count;
 }
 
-static struct yetty_ydraw_core_figure_instance *yetty_ydraw_scrolling_canvas_get_figure(
+static struct yetty_ydraw_figure_instance *yetty_ydraw_scrolling_canvas_get_figure(
     struct yetty_ydraw_scrolling_canvas *canvas, uint32_t index)
 {
     if (!canvas) {
@@ -1739,7 +1739,7 @@ static void scrolling_env_reset(struct yetty_ydraw_scrolling_canvas *canvas)
     if (!canvas->env_active) {
         return;
     }
-    yetty_ydraw_core_prim_iter_destroy(&canvas->env_iter);
+    yetty_ydraw_drawable_iter_destroy(&canvas->env_iter);
     ydraw_canvas_buffer_attach_free(&canvas->env_attach_list);
     /* Error path: if finalize never ran, refs are still held — drop them. */
     ydraw_canvas_font_map_release_all(&canvas->env_fonts_map, canvas->base->font_cache);
@@ -1828,7 +1828,7 @@ static struct yetty_ycore_void_result scrolling_env_finalize(
  * the envelope so the underlying cause surfaces to the caller. */
 static struct yetty_ycore_void_result scrolling_dispatch_one(
     struct yetty_ydraw_scrolling_canvas *canvas,
-    const struct yetty_ydraw_core_prim_flyweight *fw)
+    const struct yetty_ydraw_drawable_flyweight *fw)
 {
     uint32_t prim_type = fw->data[0];
 
@@ -1851,8 +1851,8 @@ static struct yetty_ycore_void_result scrolling_dispatch_one(
         return YETTY_OK_VOID();
     }
     if (prim_type == YETTY_YDRAW_TYPE_FONT) {
-        struct yetty_ydraw_core_font_prim_view fv;
-        if (yetty_ydraw_core_font_prim_parse(fw->data, &fv) != 0 ||
+        struct yetty_ydraw_font_prim_view fv;
+        if (yetty_ydraw_font_prim_parse(fw->data, &fv) != 0 ||
             fv.font_id < 0) {
             return YETTY_OK_VOID();
         }
@@ -1874,8 +1874,8 @@ static struct yetty_ycore_void_result scrolling_dispatch_one(
         return YETTY_OK_VOID();
     }
     if (prim_type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
-        struct yetty_ydraw_core_text_span_prim_view tv;
-        if (yetty_ydraw_core_text_span_prim_parse(fw->data, &tv) != 0) {
+        struct yetty_ydraw_text_span_prim_view tv;
+        if (yetty_ydraw_text_span_prim_parse(fw->data, &tv) != 0) {
             return YETTY_OK_VOID();
         }
         struct yetty_ydraw_font *font = NULL;
@@ -1935,7 +1935,7 @@ static struct yetty_ycore_void_result scrolling_process_input_impl(
     /* First entry into this envelope — set up per-envelope state on the
      * variant struct (survives mid-envelope WOULD_BLOCK returns). */
     if (!canvas->env_active) {
-        struct yetty_ycore_void_result ir = yetty_ydraw_core_prim_iter_init(
+        struct yetty_ycore_void_result ir = yetty_ydraw_drawable_iter_init(
             &canvas->env_iter, sm, canvas->base->flyweight_registry);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ir, "process_input: prim_iter init");
         ydraw_canvas_font_map_init(&canvas->env_fonts_map);
@@ -1947,8 +1947,8 @@ static struct yetty_ycore_void_result scrolling_process_input_impl(
 
     /* Pull-and-dispatch loop. */
     for (;;) {
-        struct yetty_ydraw_core_prim_iter_status_result sr =
-            yetty_ydraw_core_prim_iter_next(&canvas->env_iter);
+        struct yetty_ydraw_drawable_iter_status_result sr =
+            yetty_ydraw_drawable_iter_next(&canvas->env_iter);
         if (YETTY_IS_ERR(sr)) {
             scrolling_env_reset(canvas);
             return YETTY_ERR(yetty_ycore_void,
@@ -1999,7 +1999,7 @@ static struct yetty_ycore_void_result scrolling_rebuild_grid_impl(
         (struct yetty_ydraw_scrolling_canvas *)base->impl);
 }
 
-static struct yetty_ydraw_prim_staging_result scrolling_build_prim_staging_impl(
+static struct yetty_ydraw_drawable_staging_result scrolling_build_prim_staging_impl(
     struct yetty_ydraw_canvas *base)
 {
     return yetty_ydraw_scrolling_canvas_build_prim_staging(
@@ -2018,7 +2018,7 @@ static uint32_t scrolling_figure_count_impl(const struct yetty_ydraw_canvas *bas
         (struct yetty_ydraw_scrolling_canvas *)base->impl);
 }
 
-static struct yetty_ydraw_core_figure_instance *scrolling_get_figure_impl(
+static struct yetty_ydraw_figure_instance *scrolling_get_figure_impl(
     const struct yetty_ydraw_canvas *base, uint32_t index)
 {
     return yetty_ydraw_scrolling_canvas_get_figure(

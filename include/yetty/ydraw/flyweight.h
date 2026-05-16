@@ -8,7 +8,7 @@ extern "C" {
 #endif
 
 // Create flyweight registry with all handlers registered (SDF, yplot, etc.)
-struct yetty_ydraw_core_flyweight_registry_ptr_result yetty_ydraw_flyweight_create(void);
+struct yetty_ydraw_flyweight_registry_ptr_result yetty_ydraw_flyweight_create(void);
 
 #ifdef __cplusplus
 }

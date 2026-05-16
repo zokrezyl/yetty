@@ -1,10 +1,8 @@
-# Pinned to 24.04 (noble) — the qa-tools cmake hardcodes /usr/lib/cmake/clang-18
-# and friends, so the base image has to be one that still ships llvm-18 in
-# its apt repos. `ubuntu:latest` rolls forward and silently drops llvm-18
-# when the Ubuntu release moves on; rebuilding then leaves find_package(Clang)
-# falling through to whatever partial llvm-21 cmake config the X11/mesa stack
-# transitively pulls, which is missing the static .a archives. Pin and re-pin
-# only when intentionally bumping LLVM in qa-tools.
+# Pinned to 24.04 (noble) — qa-tools' cmake hardcodes /usr/lib/cmake/clang-20
+# and /usr/lib/llvm-20/lib/cmake/llvm, both supplied by noble-updates/universe
+# (clang-20 / llvm-20-dev / libclang-20-dev). `ubuntu:latest` rolls forward
+# across releases and would silently shift available clang versions; re-pin
+# this FROM only when intentionally bumping LLVM in qa-tools.
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -14,19 +12,19 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     ninja-build \
-    # LLVM/Clang 18 explicitly. The unversioned `clang` meta-package on
-    # current Ubuntu noble pulls clang-21, which collides with the
-    # qa-tools' hardcoded LLVM 18 paths and leaves an incomplete clang-21
-    # cmake config that find_package(Clang) latches onto first.
+    # LLVM/Clang 20 explicitly. Versioned packages only — never the
+    # unversioned `clang` meta-package, which can pull a different llvm
+    # version and collide with the qa-tools' hardcoded /usr/lib/llvm-20
+    # cmake paths (find_package(Clang) latches onto the first match).
     # Hardcoded paths in qa-tools/.../CMakeLists.txt:
-    #   /usr/lib/llvm-18/lib/cmake/llvm  (llvm-18-dev)
-    #   /usr/lib/cmake/clang-18          (libclang-18-dev)
+    #   /usr/lib/llvm-20/lib/cmake/llvm  (llvm-20-dev)
+    #   /usr/lib/cmake/clang-20          (libclang-20-dev)
     # update-alternatives below provides /usr/bin/clang for 3rdparty scripts.
-    clang-18 \
-    clang-format-18 \
-    clang-tidy-18 \
-    llvm-18-dev \
-    libclang-18-dev \
+    clang-20 \
+    clang-format-20 \
+    clang-tidy-20 \
+    llvm-20-dev \
+    libclang-20-dev \
     git \
     git-lfs \
     pkg-config \
@@ -92,12 +90,12 @@ RUN apt-get update && apt-get install -y \
     # Android build - JDK
     openjdk-17-jdk-headless \
     && rm -rf /var/lib/apt/lists/* && \
-    # Provide unversioned /usr/bin/clang etc. pointing at the -18 binaries
+    # Provide unversioned /usr/bin/clang etc. pointing at the -20 binaries
     # (3rdparty/_build.sh scripts hardcode `/usr/bin/clang` / `clang++`).
-    update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100 \
-        --slave /usr/bin/clang++ clang++ /usr/bin/clang++-18 \
-        --slave /usr/bin/clang-format clang-format /usr/bin/clang-format-18 \
-        --slave /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-18
+    update-alternatives --install /usr/bin/clang clang /usr/bin/clang-20 200 \
+        --slave /usr/bin/clang++ clang++ /usr/bin/clang++-20 \
+        --slave /usr/bin/clang-format clang-format /usr/bin/clang-format-20 \
+        --slave /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-20
 
 # Multi-arch build (linux/amd64 + linux/arm64). The android NDK + emsdk
 # ship only x86_64 binaries; skip both on non-amd64 hosts. The android &

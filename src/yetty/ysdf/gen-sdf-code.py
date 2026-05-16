@@ -114,7 +114,7 @@ def generate_sdf_types(prims: list[dict], out: Path) -> None:
     lines.append("")
 
     # Primitive size in bytes (callback compatible)
-    lines.append("// Primitive size in bytes - use as yetty_ydraw_core_primitive_size_fn callback")
+    lines.append("// Primitive size in bytes - use as yetty_ydraw_primitive_size_fn callback")
     lines.append("static inline size_t yetty_ysdf_primitive_size(uint32_t type) {")
     lines.append("    return yetty_ysdf_word_count((enum yetty_ysdf_type)type) * sizeof(float);")
     lines.append("}")
@@ -142,7 +142,7 @@ def _decl(name: str) -> str:
     """One add-cmd declaration, used by both the .h and the .c."""
     return (
         f"struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_add_{name}(\n"
-        f"    struct yetty_ydraw_core_draw_list *list, uint32_t id,\n"
+        f"    struct yetty_ydraw_draw_list *list, uint32_t id,\n"
         f"    uint32_t z_order, uint32_t fill_color, uint32_t stroke_color,\n"
         f"    float stroke_width, const struct yetty_ysdf_{name} *geom)"
     )
@@ -223,8 +223,8 @@ def generate_sdf_prim_impl(prims: list[dict], out: Path) -> None:
     memcpy(&data[off++], &stroke_width, sizeof(float));
 {_geom_writes(args)}
 
-    struct yetty_ydraw_core_id_result r =
-        yetty_ydraw_core_draw_list_add_prim(list, data, off * sizeof(uint32_t));
+    struct yetty_ydraw_id_result r =
+        yetty_ydraw_draw_list_add_prim(list, data, off * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw list: add SDF prim failed");
     return YETTY_OK_VOID();
 }}
@@ -512,7 +512,7 @@ def generate_sdf_yaml_factory_header(prims: list[dict], out: Path) -> None:
     lines.append("")
     lines.append("// SDF factory - handles all SDF primitive types")
     lines.append("struct yetty_ycore_void_result")
-    lines.append("yetty_ysdf_yaml_factory(struct yetty_ydraw_core_draw_list *buffer,")
+    lines.append("yetty_ysdf_yaml_factory(struct yetty_ydraw_draw_list *buffer,")
     lines.append("                        struct yaml_parser_s *yaml_parser,")
     lines.append("                        const char *primitive_type_name);")
     lines.append("")
@@ -633,7 +633,7 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
     lines.append("")
 
     # Build primitive data
-    lines.append("static void build_prim(struct yetty_ydraw_core_draw_list *buffer,")
+    lines.append("static void build_prim(struct yetty_ydraw_draw_list *buffer,")
     lines.append("                       const char *primitive_type_name,")
     lines.append("                       struct ysdf_parse_ctx *ctx) {")
     lines.append("    float data[16];")
@@ -663,7 +663,7 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
     lines.append("    }")
     lines.append("")
     lines.append("    if (word_count > 0)")
-    lines.append("        yetty_ydraw_core_draw_list_add_prim(buffer, data, word_count * sizeof(float));")
+    lines.append("        yetty_ydraw_draw_list_add_prim(buffer, data, word_count * sizeof(float));")
     lines.append("}")
     lines.append("")
 
@@ -673,7 +673,7 @@ def generate_sdf_yaml_factory_impl(prims: list[dict], out: Path) -> None:
     lines.append(" *===========================================================================*/")
     lines.append("")
     lines.append("struct yetty_ycore_void_result")
-    lines.append("yetty_ysdf_yaml_factory(struct yetty_ydraw_core_draw_list *buffer,")
+    lines.append("yetty_ysdf_yaml_factory(struct yetty_ydraw_draw_list *buffer,")
     lines.append("                        struct yaml_parser_s *yaml_parser,")
     lines.append("                        const char *primitive_type_name) {")
     lines.append("    struct ysdf_parse_ctx ctx = {0};")

@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-struct yetty_ydraw_core_gpu_allocator;
+struct yetty_ydraw_gpu_allocator;
 
 //=============================================================================
 // Primitive GPU Binder
@@ -32,7 +32,7 @@ YETTY_YRESULT_DECLARE(yetty_primitive_gpu_binder_ptr, struct yetty_yrender_gpu_b
 
 // Create binder
 struct yetty_primitive_gpu_binder_ptr_result yetty_yrender_gpu_binder_create(
-    WGPUDevice device, WGPUQueue queue, struct yetty_ydraw_core_gpu_allocator *allocator);
+    WGPUDevice device, WGPUQueue queue, struct yetty_ydraw_gpu_allocator *allocator);
 
 // Destroy binder
 void yetty_yrender_gpu_binder_destroy(struct yetty_yrender_gpu_binder *binder);
@@ -45,7 +45,7 @@ struct yetty_ycore_void_result yetty_yrender_gpu_binder_set_pipeline(
 // Add resource set (buffers, textures, uniforms)
 // Does NOT compile anything - just collects resources for bind group
 struct yetty_ycore_void_result yetty_yrender_gpu_binder_add_resource_set(
-    struct yetty_yrender_gpu_binder *binder, const struct yetty_ydraw_core_gpu_resource_set *rs);
+    struct yetty_yrender_gpu_binder *binder, const struct yetty_ydraw_gpu_resource_set *rs);
 
 // Finalize - create bind group from collected resources
 // Uses pre-set pipeline's bind group layout

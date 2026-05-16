@@ -11,12 +11,12 @@ extern "C" {
 #endif
 
 struct yetty_yrender_gpu_resource_binder;
-struct yetty_ydraw_core_gpu_allocator;
+struct yetty_ydraw_gpu_allocator;
 
 struct yetty_yrender_gpu_resource_binder_ops {
     void (*destroy)(struct yetty_yrender_gpu_resource_binder *self);
     struct yetty_ycore_void_result (*submit)(struct yetty_yrender_gpu_resource_binder *self,
-                                             const struct yetty_ydraw_core_gpu_resource_set *rs);
+                                             const struct yetty_ydraw_gpu_resource_set *rs);
     struct yetty_ycore_void_result (*finalize)(struct yetty_yrender_gpu_resource_binder *self);
     struct yetty_ycore_void_result (*update)(struct yetty_yrender_gpu_resource_binder *self);
     struct yetty_ycore_void_result (*bind)(struct yetty_yrender_gpu_resource_binder *self,
@@ -37,7 +37,7 @@ YETTY_YRESULT_DECLARE(yetty_yrender_gpu_resource_binder,
  * fine (no instance-sharing). */
 struct yetty_yrender_gpu_resource_binder_result yetty_yrender_gpu_resource_binder_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat surface_format,
-    struct yetty_ydraw_core_gpu_allocator *allocator);
+    struct yetty_ydraw_gpu_allocator *allocator);
 
 /* Two-tier: binder uses an externally-owned pipeline. The binder owns only
  * the per-instance side (uniform_buffer, storage_buffer, bind_group). The
@@ -48,7 +48,7 @@ struct yetty_yrender_gpu_resource_binder_result yetty_yrender_gpu_resource_binde
  * The supplied pipeline must outlive the binder. */
 struct yetty_yrender_gpu_resource_binder_result
 yetty_yrender_gpu_resource_binder_create_with_pipeline(
-    WGPUDevice device, WGPUQueue queue, struct yetty_ydraw_core_gpu_allocator *allocator,
+    WGPUDevice device, WGPUQueue queue, struct yetty_ydraw_gpu_allocator *allocator,
     const struct yetty_yrender_pipeline *pipeline);
 
 #ifdef __cplusplus

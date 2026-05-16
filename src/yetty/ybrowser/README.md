@@ -75,7 +75,7 @@ runtime that boots single-page-app shells.
    └──────────────────────────────────────────┘
                        │
                        ▼
-              yetty_ydraw_core_draw_list
+              yetty_ydraw_draw_list
                   (ready for GPU)
 ```
 
@@ -216,18 +216,18 @@ even for divs — every Element shares one JS class).
 
 ## Integration with yetty ydraw
 
-The output of the pipeline is a `yetty_ydraw_core_draw_list*` populated by
+The output of the pipeline is a `yetty_ydraw_draw_list*` populated by
 `yetty_ylexbor_paint`. Per-box mapping:
 
 | Box kind | ydraw emission |
 |---|---|
 | `YL_BOX_BLOCK` with `bg.a > 0`     | `yetty_ydraw_draw_list_add_cmd_add_box(buf, z, bg, 0, 0, &box)` with `corner_radius = border_radius` |
 | `YL_BOX_BLOCK` with any border > 0 | up to 4 thin `ysdf_box` rects (top / right / bottom / left) of `border_color` |
-| `YL_BOX_INLINE_TEXT`               | `yetty_ydraw_core_draw_list_add_text(buf, x, baseline_y, &txt, font_size, fg, z, font_id, rotation)` |
-| `YL_BOX_INLINE_IMAGE`              | `yetty_yimage_uniforms_serialize` + `yetty_ydraw_core_draw_list_add_prim(buf, prim_buf, len)` (or grey ysdf placeholder if decode failed) |
+| `YL_BOX_INLINE_TEXT`               | `yetty_ydraw_draw_list_add_text(buf, x, baseline_y, &txt, font_size, fg, z, font_id, rotation)` |
+| `YL_BOX_INLINE_IMAGE`              | `yetty_yimage_uniforms_serialize` + `yetty_ydraw_draw_list_add_prim(buf, prim_buf, len)` (or grey ysdf placeholder if decode failed) |
 
 The paint pass tracks the maximum `(x+w, y+h)` of every emitted prim and
-calls `yetty_ydraw_core_draw_list_set_scene_bounds` before returning.
+calls `yetty_ydraw_draw_list_set_scene_bounds` before returning.
 Without this, the GPU rasterizer culls every prim that falls outside the
 default `(0,0)–(0,0)` scene rectangle — a "no image displayed" symptom we
 hit on every page until it was fixed.

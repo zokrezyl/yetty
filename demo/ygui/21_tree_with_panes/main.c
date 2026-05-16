@@ -296,7 +296,6 @@ static struct yetty_ygui_widget *make_field(const char *id, const char *label_te
 
 int main(void)
 {
-    (void)freopen("/dev/null", "w", stderr);
     if (yetty_ygui_init() != 0) {
         return 1;
     }

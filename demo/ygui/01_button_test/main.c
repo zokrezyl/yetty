@@ -56,9 +56,6 @@ static void on_key(struct yetty_ygui_engine* engine, uint32_t key, int mods, voi
 }
 
 int main(void) {
-    /* yetty's -e binds the child's stderr to the PTY. Redirect it to /dev/null
-     * so [DEMO] lines don't land as terminal text on top of the widgets. */
-    (void)freopen("/dev/null", "w", stderr);
     fprintf(stderr, "[DEMO] Starting button test demo\n");
 
     if (yetty_ygui_init() != 0) {
