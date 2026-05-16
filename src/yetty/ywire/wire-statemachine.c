@@ -879,6 +879,9 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_process(
                  * wire gets a clean shot. */
                 ywarn("osc_statemachine: body dispatch failed (%s) — draining envelope",
                       r.error.msg);
+                for (struct yetty_ycore_error *c = r.error.cause; c; c = c->cause) {
+                    ywarn("  caused by: %s", c->msg);
+                }
                 yetty_ycore_error_destroy(r.error);
                 while (!statemachine->terminator_seen &&
                        statemachine->read_pos < statemachine->write_pos) {
