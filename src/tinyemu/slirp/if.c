@@ -186,8 +186,11 @@ if_start(Slirp *slirp)
 	remque(ifm);
 	slirp->if_queued--;
 
-	/* If there are more packets for this session, re-queue them */
-	if (ifm->ifs_next != /* ifm->ifs_prev != */ ifm) {
+	/* If there are more packets for this session, re-queue them.
+	 * A self-loop (ifs_next == ifm) means "alone in session chain"
+	 * (set by ifs_init). NULL means the chain was never set up — treat
+	 * it the same way to avoid a NULL deref in insque. */
+	if (ifm->ifs_next && ifm->ifs_next != ifm) {
 		insque(ifm->ifs_next, ifqt);
 		ifs_remque(ifm);
 	}
