@@ -9,8 +9,8 @@
 #include <yetty/ydraw-core/complex-prim-types.h>
 #include <yetty/ydraw-factory/complex-prim-factory.h>
 #include <yetty/ydraw/canvas.h>
+#include <yetty/ydraw/scene-canvas.h>
 #include <yetty/ydraw/scrolling-canvas.h>
-#include <yetty/ydraw/static-canvas.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterm/osc-args.h>
@@ -261,7 +261,7 @@ static struct yetty_ycore_void_result ydraw_layer_set_cell_size(
     /* Fan out to complex-prim factories so yplot and friends apply the
      * same transform in their own shaders. */
     struct yetty_ydraw_figure_factory *f =
-        yetty_ydraw_canvas_get_figure_factory(layer->canvas);
+        layer->canvas->ops->get_figure_factory(layer->canvas);
     yetty_ydraw_figure_factory_set_cell_zoom(f, cz, 0.0f, 0.0f);
 
     ydebug("ydraw_layer_set_cell_size: %.1fx%.1f cell_zoom=%.3f", cell_size.width,
@@ -282,7 +282,7 @@ static struct yetty_ycore_void_result ydraw_layer_set_visual_zoom(
      * uniforms so each type's shader can apply the same transform. */
     if (layer->canvas) {
         struct yetty_ydraw_figure_factory *f =
-            yetty_ydraw_canvas_get_figure_factory(layer->canvas);
+            layer->canvas->ops->get_figure_factory(layer->canvas);
         yetty_ydraw_figure_factory_set_visual_zoom(f, scale, off_x, off_y);
     }
     return YETTY_OK_VOID();
@@ -382,7 +382,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ydraw_layer_create(
     struct yetty_ydraw_canvas_ptr_result canvas_res =
         (kind == YETTY_YDRAW_LAYER_KIND_SCROLLING)
             ? yetty_ydraw_scrolling_canvas_create(context)
-            : yetty_ydraw_static_canvas_create(context);
+            : yetty_ydraw_scene_canvas_create(context);
     if (YETTY_IS_ERR(canvas_res)) {
         free(layer);
         return YETTY_ERR(yetty_yterm_terminal_layer, "ydraw-layer: canvas create failed",
@@ -391,14 +391,14 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ydraw_layer_create(
     layer->canvas = canvas_res.value;
 
     /* Configure canvas grid/cell dimensions */
-    yetty_ydraw_canvas_set_cell_size(
+    layer->canvas->ops->set_cell_size(
         layer->canvas, (struct yetty_ycore_pixel_size){.width = cell_width, .height = cell_height});
-    yetty_ydraw_canvas_set_grid_size(layer->canvas,
+    layer->canvas->ops->set_grid_size(layer->canvas,
                                       (struct yetty_ycore_grid_size){.cols = cols, .rows = rows});
 
     /* Register scroll/cursor callbacks for propagation to other layers */
-    yetty_ydraw_canvas_set_scroll_callback(layer->canvas, on_canvas_scroll, layer);
-    yetty_ydraw_canvas_set_cursor_callback(layer->canvas, on_canvas_cursor_set, layer);
+    layer->canvas->ops->set_scroll_callback(layer->canvas, on_canvas_scroll, layer);
+    layer->canvas->ops->set_cursor_callback(layer->canvas, on_canvas_cursor_set, layer);
 
     /* Resource set. Both scrolling and overlay layers share one namespace —
    * each layer has its own binder/render-target, so the names cannot collide
@@ -447,7 +447,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ydraw_layer_create(
     }
 
     ydebug("ydraw_layer_create: kind=%s, %ux%u grid, %.1fx%.1f cells",
-           kind == YETTY_YDRAW_LAYER_KIND_SCROLLING ? "scrolling" : "static",
+           kind == YETTY_YDRAW_LAYER_KIND_SCROLLING ? "scrolling" : "scene",
            cols, rows, cell_width, cell_height);
 
     return YETTY_OK(yetty_yterm_terminal_layer, &layer->base);
@@ -464,13 +464,13 @@ static struct yetty_ycore_void_result ydraw_layer_destroy(
         yetty_yface_destroy(layer->yface);
     }
     if (layer->canvas) {
-        struct yetty_ycore_void_result cr = yetty_ydraw_canvas_destroy(layer->canvas);
+        struct yetty_ycore_void_result cr = layer->canvas->ops->destroy(layer->canvas);
         if (YETTY_IS_ERR(cr)) {
             first_err = cr;
         }
     }
     if (layer->saved_canvas) {
-        struct yetty_ycore_void_result cr = yetty_ydraw_canvas_destroy(layer->saved_canvas);
+        struct yetty_ycore_void_result cr = layer->saved_canvas->ops->destroy(layer->saved_canvas);
         if (YETTY_IS_ERR(cr)) {
             if (YETTY_IS_OK(first_err)) {
                 first_err = cr;
@@ -506,11 +506,11 @@ static struct yetty_ycore_void_result ydraw_layer_process_input(
     struct yetty_ycore_void_result r;
     switch (code) {
     case YETTY_OSC_YDRAW_CLEAR:
-        r = yetty_ydraw_canvas_clear(layer->canvas);
+        r = layer->canvas->ops->clear(layer->canvas);
         break;
     case YETTY_OSC_YDRAW_BIN:
     case YETTY_OSC_YDRAW_OVERLAY:
-        r = yetty_ydraw_canvas_process_input(layer->canvas, osc_statemachine);
+        r = layer->canvas->ops->process_input(layer->canvas, osc_statemachine);
         break;
     default:
         return YETTY_ERR(yetty_ycore_void, "ydraw: unexpected OSC code");
@@ -535,7 +535,7 @@ static struct yetty_ycore_void_result ydraw_layer_resize_grid(
     }
 
     self->grid_size = grid_size;
-    yetty_ydraw_canvas_set_grid_size(layer->canvas, grid_size);
+    layer->canvas->ops->set_grid_size(layer->canvas, grid_size);
     self->dirty = 1;
 
     ydebug("ydraw_layer_resize_grid: %ux%u", grid_size.cols, grid_size.rows);
@@ -548,12 +548,12 @@ static struct yetty_yrender_gpu_resource_set_result ydraw_layer_get_gpu_resource
 {
     struct yetty_yterm_ydraw_layer *layer = (struct yetty_yterm_ydraw_layer *)self;
 
-    if (layer->base.dirty || yetty_ydraw_canvas_is_dirty(layer->canvas)) {
+    if (layer->base.dirty || layer->canvas->ops->is_dirty(layer->canvas)) {
         /* Rebuild grid staging */
-        yetty_ydraw_canvas_rebuild_grid(layer->canvas);
+        layer->canvas->ops->rebuild_grid(layer->canvas);
 
-        const uint32_t *grid_data = yetty_ydraw_canvas_grid_data(layer->canvas);
-        uint32_t grid_word_count = yetty_ydraw_canvas_grid_word_count(layer->canvas);
+        const uint32_t *grid_data = layer->canvas->ops->grid_data(layer->canvas);
+        uint32_t grid_word_count = layer->canvas->ops->grid_word_count(layer->canvas);
 
         layer->rs.buffers[0].data = (uint8_t *)grid_data;
         layer->rs.buffers[0].size = grid_word_count * sizeof(uint32_t);
@@ -561,7 +561,7 @@ static struct yetty_yrender_gpu_resource_set_result ydraw_layer_get_gpu_resource
 
         /* Build primitive staging */
         struct yetty_ydraw_drawable_staging_result ps_r =
-            yetty_ydraw_canvas_build_prim_staging(layer->canvas);
+            layer->canvas->ops->build_prim_staging(layer->canvas);
         if (YETTY_IS_ERR(ps_r)) {
             return YETTY_ERR(yetty_yrender_gpu_resource_set,
                              "ydraw_layer_get_gpu_resource_set: build_prim_staging failed", ps_r);
@@ -574,12 +574,12 @@ static struct yetty_yrender_gpu_resource_set_result ydraw_layer_get_gpu_resource
         layer->rs.buffers[1].dirty = 1;
 
         /* Update ALL uniforms from canvas - single source of truth */
-        struct yetty_ycore_grid_size gs = yetty_ydraw_canvas_get_grid_size(layer->canvas);
-        struct yetty_ycore_pixel_size cs = yetty_ydraw_canvas_cell_get_pixel_size(layer->canvas);
+        struct yetty_ycore_grid_size gs = layer->canvas->ops->get_grid_size(layer->canvas);
+        struct yetty_ycore_pixel_size cs = layer->canvas->ops->get_cell_size(layer->canvas);
         set_grid_size(&layer->rs, (float)gs.cols, (float)gs.rows);
         set_cell_size(&layer->rs, cs.width, cs.height);
-        set_rolling_row_0(&layer->rs, yetty_ydraw_canvas_rolling_row_0(layer->canvas));
-        uint32_t prim_count = yetty_ydraw_canvas_primitive_count(layer->canvas);
+        set_rolling_row_0(&layer->rs, layer->canvas->ops->rolling_row_0(layer->canvas));
+        uint32_t prim_count = layer->canvas->ops->primitive_count(layer->canvas);
         set_prim_count(&layer->rs, prim_count);
 
         /* Set pixel size for render target */
@@ -599,7 +599,7 @@ static struct yetty_yrender_gpu_resource_set_result ydraw_layer_get_gpu_resource
     size_t child_idx = 0;
     layer->rs.children[child_idx++] = &layer->sdf_lib_rs;
 
-    uint32_t font_count = yetty_ydraw_canvas_font_count(layer->canvas);
+    uint32_t font_count = layer->canvas->ops->font_count(layer->canvas);
     /* Cap at the rs.children[] capacity minus the SDF child. */
     if (font_count > YETTY_YRENDER_RS_MAX_CHILDREN - 1) {
         font_count = YETTY_YRENDER_RS_MAX_CHILDREN - 1;
@@ -607,7 +607,7 @@ static struct yetty_yrender_gpu_resource_set_result ydraw_layer_get_gpu_resource
     /* Collect each font's resource set in slot order (slot 0 = default). */
     const struct yetty_ydraw_gpu_resource_set *font_rss[YETTY_YRENDER_RS_MAX_CHILDREN] = {0};
     for (uint32_t s = 0; s < font_count; s++) {
-        struct yetty_ydraw_font *f = yetty_ydraw_canvas_get_font_at(layer->canvas, s);
+        struct yetty_ydraw_font *f = layer->canvas->ops->get_font_at(layer->canvas, s);
         if (!f || !f->ops || !f->ops->get_gpu_resource_set) {
             continue;
         }
@@ -622,7 +622,7 @@ static struct yetty_yrender_gpu_resource_set_result ydraw_layer_get_gpu_resource
      * set changes — both growth (new slot) and shrinkage (slot dropped
      * by eviction). The cache's generation counter bumps on alloc AND
      * release, unlike font_count which is a high watermark. */
-    uint32_t font_generation = yetty_ydraw_canvas_font_generation(layer->canvas);
+    uint32_t font_generation = layer->canvas->ops->font_generation(layer->canvas);
     if (font_generation != layer->last_font_generation) {
         size_t cap = layer->shader_code.size + 4096 + (size_t)font_count * 512;
         char *buf = malloc(cap);
@@ -736,7 +736,7 @@ static int ydraw_layer_is_empty(const struct yetty_yrender_terminal_layer *self)
         return 1;
     }
 
-    return yetty_ydraw_canvas_primitive_count(layer->canvas) == 0;
+    return layer->canvas->ops->primitive_count(layer->canvas) == 0;
 }
 
 /* Scroll - called when another layer scrolls */
@@ -755,7 +755,7 @@ static struct yetty_ycore_void_result ydraw_layer_scroll(struct yetty_yrender_te
     }
 
     struct yetty_ycore_void_result res =
-        yetty_ydraw_canvas_scroll_lines(layer->canvas, (uint16_t)lines);
+        layer->canvas->ops->scroll_lines(layer->canvas, (uint16_t)lines);
     if (YETTY_IS_ERR(res)) {
         return res;
     }
@@ -780,7 +780,7 @@ static uint32_t ydraw_layer_get_live_anchor(const struct yetty_yrender_terminal_
     if (!layer->canvas) {
         return 0;
     }
-    return yetty_ydraw_canvas_live_rolling_row_0(layer->canvas);
+    return layer->canvas->ops->live_rolling_row_0(layer->canvas);
 }
 
 /* Pin / release the canvas's viewport for tmux-style scrollback view. */
@@ -792,7 +792,7 @@ static struct yetty_ycore_void_result ydraw_layer_set_view_top(
         return YETTY_ERR(yetty_ycore_void, "ydraw_layer_set_view_top: NULL canvas");
     }
     struct yetty_ycore_void_result vt =
-        yetty_ydraw_canvas_set_view_top(layer->canvas, active ? true : false, view_top_total_idx);
+        layer->canvas->ops->set_view_top(layer->canvas, active ? true : false, view_top_total_idx);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, vt, "ydraw_layer_set_view_top failed");
     layer->base.dirty = 1;
     if (layer->base.request_render_fn) {
@@ -823,20 +823,20 @@ static struct yetty_ycore_void_result ydraw_layer_set_alt_screen(
         struct yetty_ydraw_canvas_ptr_result saved_res =
             (layer->kind == YETTY_YDRAW_LAYER_KIND_SCROLLING)
                 ? yetty_ydraw_scrolling_canvas_create(layer->create_context)
-                : yetty_ydraw_static_canvas_create(layer->create_context);
+                : yetty_ydraw_scene_canvas_create(layer->create_context);
         if (YETTY_IS_ERR(saved_res)) {
             return YETTY_ERR(yetty_ycore_void, "ydraw_layer_set_alt_screen: canvas create failed",
                              saved_res);
         }
         layer->saved_canvas = saved_res.value;
         struct yetty_ycore_void_result r;
-        r = yetty_ydraw_canvas_set_cell_size(layer->saved_canvas, layer->base.cell_size);
+        r = layer->saved_canvas->ops->set_cell_size(layer->saved_canvas, layer->base.cell_size);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "set_alt_screen: set_cell_size failed");
-        r = yetty_ydraw_canvas_set_grid_size(layer->saved_canvas, layer->base.grid_size);
+        r = layer->saved_canvas->ops->set_grid_size(layer->saved_canvas, layer->base.grid_size);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "set_alt_screen: set_grid_size failed");
-        r = yetty_ydraw_canvas_set_scroll_callback(layer->saved_canvas, on_canvas_scroll, layer);
+        r = layer->saved_canvas->ops->set_scroll_callback(layer->saved_canvas, on_canvas_scroll, layer);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "set_alt_screen: set_scroll_callback failed");
-        r = yetty_ydraw_canvas_set_cursor_callback(layer->saved_canvas, on_canvas_cursor_set, layer);
+        r = layer->saved_canvas->ops->set_cursor_callback(layer->saved_canvas, on_canvas_cursor_set, layer);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "set_alt_screen: set_cursor_callback failed");
     }
     if (!layer->saved_canvas) {
@@ -867,7 +867,7 @@ static struct yetty_ycore_void_result ydraw_layer_set_cursor(
         return YETTY_ERR(yetty_ycore_void, "ydraw_layer_set_cursor: NULL canvas");
     }
 
-    struct yetty_ycore_void_result r = yetty_ydraw_canvas_set_cursor_pos(
+    struct yetty_ycore_void_result r = layer->canvas->ops->set_cursor_pos(
         layer->canvas,
         (struct yetty_ycore_grid_cursor_pos){.cols = (uint32_t)col, .rows = (uint32_t)row});
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ydraw_layer_set_cursor failed");
@@ -892,18 +892,18 @@ static struct yetty_ycore_void_result ydraw_layer_render(struct yetty_yrender_te
         return YETTY_OK_VOID();
     }
 
-    uint32_t count = yetty_ydraw_canvas_figure_count(layer->canvas);
+    uint32_t count = layer->canvas->ops->figure_count(layer->canvas);
     if (count == 0) {
         return YETTY_OK_VOID();
     }
 
-    uint32_t row0 = yetty_ydraw_canvas_rolling_row_0(layer->canvas);
+    uint32_t row0 = layer->canvas->ops->rolling_row_0(layer->canvas);
     struct yetty_ycore_pixel_size cell_size =
-        yetty_ydraw_canvas_cell_get_pixel_size(layer->canvas);
+        layer->canvas->ops->get_cell_size(layer->canvas);
 
     for (uint32_t i = 0; i < count; i++) {
         struct yetty_ydraw_figure_instance *inst =
-            yetty_ydraw_canvas_get_figure(layer->canvas, i);
+            layer->canvas->ops->get_figure(layer->canvas, i);
         if (!inst || !inst->render) {
             continue;
         }
@@ -1049,7 +1049,7 @@ static struct yetty_ycore_void_result ydraw_layer_get_selection_text(
     /* Visible rows → absolute pixel y band. The canvas stores glyphs in
      * absolute canvas-y coords; the visible viewport starts at
      * rolling_row_0 * cell_h. */
-    uint32_t row0 = yetty_ydraw_canvas_rolling_row_0(layer->canvas);
+    uint32_t row0 = layer->canvas->ops->rolling_row_0(layer->canvas);
     float sel_top = (float)(row0 + layer->sel_min_row) * cell_h;
     float sel_bot = (float)(row0 + layer->sel_max_row + 1) * cell_h;
 
@@ -1058,7 +1058,14 @@ static struct yetty_ycore_void_result ydraw_layer_get_selection_text(
         struct yetty_ydraw_glyph_view *arr;
         size_t count, cap;
     } ctx = {NULL, 0, 0};
-    yetty_ydraw_canvas_for_each_glyph(layer->canvas, ydraw_layer_collect_visitor, &ctx);
+    {
+        struct yetty_ycore_void_result gr =
+            layer->canvas->ops->for_each_glyph(layer->canvas, ydraw_layer_collect_visitor, &ctx);
+        if (YETTY_IS_ERR(gr)) {
+            free(ctx.arr);
+            return YETTY_ERR(yetty_ycore_void, "ydraw_layer: for_each_glyph failed", gr);
+        }
+    }
     if (ctx.count == 0) {
         free(ctx.arr);
         return YETTY_OK_VOID();
@@ -1101,7 +1108,7 @@ static struct yetty_ycore_void_result ydraw_layer_get_selection_text(
 
         uint32_t slot = ctx.arr[i].font_slot >= 0 ? (uint32_t)ctx.arr[i].font_slot : 0;
         struct yetty_ydraw_font *font =
-            yetty_ydraw_canvas_get_font_at(layer->canvas, slot);
+            layer->canvas->ops->get_font_at(layer->canvas, slot);
         uint32_t cp = 0xFFFD; /* fall back to U+FFFD on any failure */
         if (font && font->ops && font->ops->get_codepoint) {
             struct uint32_result cr =

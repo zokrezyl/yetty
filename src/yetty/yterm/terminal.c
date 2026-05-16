@@ -182,15 +182,27 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
         struct yetty_ycore_void_result fr =
             yetty_ywire_wire_statemachine_feed(terminal->sm, buf, (size_t)nread);
         if (YETTY_IS_ERR(fr)) {
-            yerror("terminal_pty_pipe_read: wire_statemachine_feed failed: %s", fr.error.msg);
-            yetty_ycore_error_destroy(fr.error);
+            /* libuv-callback boundary: no Result to propagate. Park the
+             * error on the event loop; libuv_start will surface it from
+             * its own return, which yetty_run propagates to main.
+             * Build via YETTY_ERR so the loop frame gets file/line/func. */
+            struct yetty_ycore_void_result wrap = YETTY_ERR(
+                yetty_ycore_void,
+                "terminal_pty_pipe_read: wire_statemachine_feed failed", fr);
+            struct yetty_yevent_event_loop *loop =
+                terminal->context.yetty_context.event_loop;
+            loop->ops->post_fatal_error(loop, wrap.error);
             return;
         }
         struct yetty_ycore_void_result pr =
             yetty_ywire_wire_statemachine_process(terminal->sm);
         if (YETTY_IS_ERR(pr)) {
-            yerror("terminal_pty_pipe_read: wire_statemachine_process failed: %s", pr.error.msg);
-            yetty_ycore_error_destroy(pr.error);
+            struct yetty_ycore_void_result wrap = YETTY_ERR(
+                yetty_ycore_void,
+                "terminal_pty_pipe_read: wire_statemachine_process failed", pr);
+            struct yetty_yevent_event_loop *loop =
+                terminal->context.yetty_context.event_loop;
+            loop->ops->post_fatal_error(loop, wrap.error);
             return;
         }
         if (terminal->layer_count > 0) {
@@ -1166,10 +1178,10 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
                         "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_OVERLAY failed");
     ydebug("terminal_create: ydraw layer registered for OSC CLEAR/BIN/OVERLAY");
 
-    /* yui chrome layer — static canvas, placed above the scrolling one.
+    /* yui layer — scene canvas, placed above the scrolling one.
      * Placeholder for yui until its content path lands; no OSC codes. */
     struct yetty_yterm_terminal_layer_result ydraw_static_res = yetty_yterm_ydraw_layer_create(
-        YETTY_YDRAW_LAYER_KIND_STATIC, cols, rows,
+        YETTY_YDRAW_LAYER_KIND_SCENE, cols, rows,
         text_layer->cell_size.width, text_layer->cell_size.height,
         yetty_context, terminal_request_render_callback, terminal,
         terminal_scroll_callback, terminal, terminal_cursor_callback, terminal);

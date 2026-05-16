@@ -1,7 +1,7 @@
-/* yui.c — app-level chrome singleton.
+/* yui.c — app-level yui singleton.
  *
  * See yui.h for the producer → transport → consumer chain. This file owns
- * the wiring; the ydraw-layer (KIND_STATIC) does the rendering and the
+ * the wiring; the ydraw-layer (KIND_SCENE) does the rendering and the
  * osc_statemachine does the wire decode. Memory-pty bytes flow
  * producer→consumer via in-process ring buffers and the event loop is
  * woken via post_to_loop so the wake never re-enters synchronously
@@ -311,9 +311,9 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     yui->yui_endpoint = pp.value.a;
     yui->render_endpoint = pp.value.b;
 
-    /* Static-canvas ydraw layer. Computes a coarse cols/rows from the
-     * window dims; chrome primitives are absolute-pixel so the grid is
-     * just an addressing index for the static-canvas's primitive lookup. */
+    /* Scene-canvas ydraw layer. Computes a coarse cols/rows from the
+     * window dims; primitives are absolute-pixel so the grid is just an
+     * addressing index for the scene-canvas's primitive lookup. */
     uint32_t cols = (uint32_t)((float)surface_w / cell_w);
     uint32_t rows = (uint32_t)((float)surface_h / cell_h);
     if (cols == 0) {
@@ -324,7 +324,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     }
 
     struct yetty_yterm_terminal_layer_result lr = yetty_yterm_ydraw_layer_create(
-        YETTY_YDRAW_LAYER_KIND_STATIC, cols, rows, cell_w, cell_h, context,
+        YETTY_YDRAW_LAYER_KIND_SCENE, cols, rows, cell_w, cell_h, context,
         /*request_render_fn=*/NULL, /*request_render_userdata=*/NULL,
         /*scroll_fn=*/NULL, /*scroll_userdata=*/NULL,
         /*cursor_fn=*/NULL, /*cursor_userdata=*/NULL);
@@ -748,7 +748,7 @@ const char *yetty_yui_get_exec_command(const struct yetty_yui *yui)
     return yetty_yui_get_field_text(yui, YETTY_YUI_VIEW_EXEC, 0);
 }
 
-int yetty_yui_has_active_chrome(const struct yetty_yui *yui)
+int yetty_yui_is_active(const struct yetty_yui *yui)
 {
     if (!yui) {
         return 0;
@@ -771,10 +771,10 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
         return YETTY_OK(yetty_ycore_int, 0);
     }
 
-    /* yui only owns the pointer while chrome is up. Without an open menu /
+    /* yui only owns the pointer while a widget is up. Without an open menu /
      * visible dialog there's nothing for the engine to hit-test — fall
      * through so the workspace below gets the event. */
-    if (!yetty_yui_has_active_chrome(yui)) {
+    if (!yetty_yui_is_active(yui)) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
 

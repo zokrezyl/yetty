@@ -102,7 +102,7 @@ typedef enum {
      * canvas, so apps can exit gracefully without wiping the user's
      * view. See yetty_ygui_engine_window in this file. */
     YETTY_YGUI_WIDGET_WINDOW,
-    /* Floating menu of clickable items. Inherits the visual chrome of
+    /* Floating menu of clickable items. Inherits the visuals of
      * YETTY_YGUI_WIDGET_POPUP (shadow + rounded body + optional modal
      * overlay) and specialises it for vertically stacked rows. Items
      * are stored as label/callback pairs inside the widget — no
@@ -347,7 +347,7 @@ int yetty_ygui_engine_is_dirty(const struct yetty_ygui_engine *engine);
 void yetty_ygui_engine_mark_dirty(struct yetty_ygui_engine *engine);
 
 /* Direct mouse-event injection. Used when the engine isn't being driven
- * by an OSC mouse stream (e.g. yui's in-process chrome — the host hands
+ * by an OSC mouse stream (e.g. yui in-process — the host hands
  * events here so the engine's hit-test + dispatch routes them to the
  * widget tree). Coords are in widget pixel space, same convention the
  * OSC SC_MOUSE handler uses. */
@@ -555,7 +555,7 @@ void yetty_ygui_widget_rich_clear(struct yetty_ygui_widget *widget);
  * — get a handle to it via yetty_ygui_widget_window_body() and add
  * children there as usual. The body is laid out below the title bar
  * via padding-top, so children don't have to know about the title
- * area. Pass NULL or "" for `title` to render a chromeless title bar
+ * area. Pass NULL or "" for `title` to render a bare title bar
  * (close button still drawn). */
 struct yetty_ygui_widget *yetty_ygui_engine_window(struct yetty_ygui_engine *engine, const char *id,
                                                    float x, float y, float w, float h,
@@ -593,7 +593,7 @@ void yetty_ygui_widget_window_set_menu(struct yetty_ygui_widget *window,
                                        struct yetty_ygui_widget *menu);
 
 /* Popup menu — a floating, vertically-stacked list of clickable items.
- * Inherits the visual chrome of the popup dialog (rounded body + drop
+ * Inherits the visuals of the popup dialog (rounded body + drop
  * shadow + optional modal overlay) and specialises it for menus: each
  * row is just a label + callback (no sub-widgets), the menu auto-grows
  * in height as items are added, and clicking an item fires its
@@ -624,7 +624,7 @@ void yetty_ygui_widget_popup_menu_close(struct yetty_ygui_widget *menu);
 void yetty_ygui_widget_popup_menu_set_modal(struct yetty_ygui_widget *menu, int modal);
 int yetty_ygui_widget_popup_menu_is_open(const struct yetty_ygui_widget *menu);
 
-/* Tabbar — Chrome-style tab strip across the top of the widget's box, with
+/* Tabbar — browser-style tab strip across the top of the widget's box, with
  * one content panel per tab below. Only the active panel is rendered/laid
  * out; clicking a header swaps the active tab and (optionally) fires
  * on_change with the new index in `value`.
@@ -665,8 +665,8 @@ void yetty_ygui_widget_tabbar_on_tab_close(struct yetty_ygui_widget *tabbar,
                                            ygui_change_callback_t callback, void *userdata);
 
 /* Uniform per-button size used by tab close 'x' and (via the window
- * widget) the hamburger menu. Useful when an app builds custom chrome
- * that should visually match the tabbar's close buttons. */
+ * widget) the hamburger menu. Useful when an app builds custom UI
+ * elements that should visually match the tabbar's close buttons. */
 float yetty_ygui_tabbar_button_size(void);
 
 /*=============================================================================
@@ -1007,7 +1007,7 @@ void yetty_ygui_engine_set_output_fd(struct yetty_ygui_engine *engine, int fd);
 
 /* Route the engine's ydraw frame OSC envelopes to a yetty_platform_pty
  * instead of `output_fd`. Used when ygui lives in the same process as the
- * renderer (yetty's app-level yui chrome) to avoid a stdout round-trip.
+ * renderer (yetty's app-level yui) to avoid a stdout round-trip.
  * `pty` is borrowed — the caller owns its lifetime and must outlive the
  * engine. Pass NULL to revert to the file-descriptor sink. */
 struct yetty_platform_pty;

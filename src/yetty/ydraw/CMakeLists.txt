@@ -2,12 +2,12 @@
 # Note: core moved to ydraw-core, SDF/yaml moved to ysdf
 
 add_library(yetty_ydraw STATIC
-    canvas.c
     flyweight.c
     scene-canvas.c
+    scene-grid.c
     scrollbuffer.c
     scrolling-canvas.c
-    static-canvas.c
+    scrolling-grid.c
 )
 
 target_link_libraries(yetty_ydraw PUBLIC

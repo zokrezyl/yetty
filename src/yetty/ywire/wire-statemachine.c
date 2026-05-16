@@ -867,42 +867,10 @@ struct yetty_ycore_void_result yetty_ywire_wire_statemachine_process(
             size_t before_oc = out_carry_avail(statemachine);
             struct yetty_ycore_void_result r = dispatch(statemachine, statemachine->current_layer);
             if (YETTY_IS_ERR(r)) {
-                /* Layer failed mid-envelope (e.g. prim_iter saw a bad
-                 * envelope magic). Without draining, the next dispatch on
-                 * the next ring chunk hands the new (fresh) iter the
-                 * MIDDLE of the failed envelope as if it were a new
-                 * envelope header — its first 4 bytes look like garbage
-                 * to the magic check, the iter errors again, repeat. The
-                 * symptom is a stuck UI: ygreeter keeps emitting frames
-                 * but none of them ever parse. Drain to the envelope
-                 * terminator and reset state so the NEXT envelope on the
-                 * wire gets a clean shot. */
-                ywarn("osc_statemachine: body dispatch failed (%s) — draining envelope",
-                      r.error.msg);
-                for (struct yetty_ycore_error *c = r.error.cause; c; c = c->cause) {
-                    ywarn("  caused by: %s", c->msg);
-                }
-                yetty_ycore_error_destroy(r.error);
-                while (!statemachine->terminator_seen &&
-                       statemachine->read_pos < statemachine->write_pos) {
-                    uint8_t c = ring_at(statemachine, statemachine->read_pos++);
-                    if (c == '\007') {
-                        statemachine->terminator_seen = 1;
-                        break;
-                    }
-                    if (c == '\033' &&
-                        statemachine->read_pos < statemachine->write_pos &&
-                        ring_at(statemachine, statemachine->read_pos) == '\\') {
-                        statemachine->read_pos++;
-                        statemachine->terminator_seen = 1;
-                        break;
-                    }
-                }
-                statemachine->state = SCAN_RAW;
-                statemachine->current_layer = NULL;
-                statemachine->current_code = 0;
-                envelope_reset(statemachine);
-                break;
+                /* Layer failed mid-envelope. Propagate up — fix the root
+                 * cause; do not retrofit tolerance here. */
+                return YETTY_ERR(yetty_ycore_void,
+                                 "osc_statemachine: body dispatch failed", r);
             }
             if (statemachine->terminator_seen) {
                 statemachine->state = SCAN_RAW;

@@ -2,7 +2,7 @@
  * ygui_popup_menu.c — POPUP_MENU widget.
  *
  * Floating, vertically-stacked list of clickable items. Inherits the
- * visual chrome of yetty_ygui_engine_popup (rounded body + drop shadow
+ * visuals of yetty_ygui_engine_popup (rounded body + drop shadow
  * + optional modal overlay) and specialises the body for menu rows: a
  * single TEXT_SPAN per row, with the hovered row highlighted using
  * theme->bg_hover. Inheritance in C is structural — we reuse the same

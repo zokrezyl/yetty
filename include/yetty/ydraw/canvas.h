@@ -1,19 +1,18 @@
-/* canvas.h — polymorphic ydraw canvas interface.
+/* canvas.h — polymorphic ydraw canvas vtable.
  *
- * `struct yetty_ydraw_canvas` is the polymorphic base for both
- * scrolling-canvas (terminal text/ydraw layer) and static-canvas (yui
- * chrome). It carries a vtable and the state shared between both
- * variants (grid + cell size, font cache, flyweight registry,
- * complex-prim factory, GPU staging buffers, dirty flag).
+ * Two independent implementations fill in this vtable:
+ *   - scrolling-canvas (src/yetty/ydraw/scrolling-canvas.c)
+ *   - scene-canvas    (src/yetty/ydraw/scene-canvas.c)
  *
- * Consumers that want to be canvas-agnostic hold a
- * `struct yetty_ydraw_canvas *` and call the `yetty_ydraw_canvas_*`
- * functions below. Each variant's `_create` returns the concrete type
- * (e.g. `struct yetty_ydraw_scrolling_canvas *`); pass
- * `&that->base` when you want to invoke the polymorphic surface.
+ * They share NOTHING but this header. No dispatcher functions, no shared
+ * "base" struct, no shared init helpers. Consumers hold a
+ * `struct yetty_ydraw_canvas *` and invoke methods directly through the
+ * vtable: `canvas->ops->set_cell_size(canvas, sz)`.
  *
- * Mode-specific operations (cursor / scroll / view_top for scrolling)
- * live on the variant's own header and take the concrete pointer.
+ * The variant struct is private to each variant's .c file; the public
+ * `struct yetty_ydraw_canvas` carries only the vtable pointer, embedded
+ * as the FIRST member of each variant struct, so the variant recovers
+ * itself with a plain downcast (offset 0).
  */
 #pragma once
 
@@ -28,22 +27,21 @@ extern "C" {
 #endif
 
 struct yetty_ydraw_canvas;
-struct yetty_ydraw_draw_list;
+struct yetty_ydraw_canvas_ops;
 struct yetty_ydraw_figure_factory;
 struct yetty_ydraw_figure_instance;
 struct yetty_ydraw_flyweight_registry;
 struct yetty_ydraw_font;
 struct yetty_ywire_wire_statemachine;
 
-/* Polymorphic canvas pointer result — returned by every variant's
- * create. The variant struct stays internal; consumers hold the base. */
+/* Result type for the polymorphic pointer — every variant's create
+ * returns this. */
 YETTY_YRESULT_DECLARE(yetty_ydraw_canvas_ptr, struct yetty_ydraw_canvas *);
 
-/* Public scroll/cursor callback typedefs. The scrolling variant fires the
- * scroll callback whenever ingestion advances the live viewport past its
- * current bottom; cursor callback fires when the cursor moves without
- * scrolling. Static-canvas never invokes either. userdata is opaque to
- * the canvas. */
+/* Scroll / cursor callback typedefs. The scrolling variant fires the
+ * scroll callback whenever ingestion advances the live viewport past
+ * its current bottom; cursor callback fires when the cursor moves
+ * without scrolling. scene-canvas never invokes either. */
 typedef struct yetty_ycore_void_result (*yetty_ydraw_canvas_scroll_callback)(
     void *userdata, uint16_t num_lines);
 typedef struct yetty_ycore_void_result (*yetty_ydraw_canvas_cursor_callback)(
@@ -57,11 +55,7 @@ struct yetty_ydraw_drawable_staging {
 };
 YETTY_YRESULT_DECLARE(yetty_ydraw_drawable_staging, struct yetty_ydraw_drawable_staging);
 
-/* View of a single glyph primitive — what a visitor sees during
- * `for_each_glyph`. x/y are absolute canvas pixel coordinates of the
- * glyph's anchor; glyph_idx is the atlas index the font cache handed
- * out; font_slot is the canvas-local font index that produced the
- * glyph (0 = default), or -1 if the prim has no font slot encoded. */
+/* View of a single glyph primitive. */
 struct yetty_ydraw_glyph_view {
     float    x;
     float    y;
@@ -73,115 +67,105 @@ typedef void (*yetty_ydraw_canvas_glyph_visitor)(
     const struct yetty_ydraw_glyph_view *view, void *user);
 
 /*===========================================================================
- * Polymorphic API
+ * Vtable
+ *
+ * Every public operation IS the vtable. Callers invoke
+ * `canvas->ops->foo(canvas, ...)` directly — there is no wrapper.
+ * Both variants supply a complete vtable; ops are never NULL. (Variant-
+ * specific ops with no semantic action — e.g. cursor on scene-canvas —
+ * are implemented as success-returning stubs.)
+ *
+ * Convention: functions that DO work and can fail return a Result type;
+ * plain getters that read state return the value directly.
  *===========================================================================*/
 
-/* Destroy. Frees variant-specific state (lines, scrollbuffer, ...) and
- * the common state (font cache, registries, staging buffers), then
- * frees the outer canvas struct. */
-struct yetty_ycore_void_result yetty_ydraw_canvas_destroy(
-    struct yetty_ydraw_canvas *canvas YETTY_ANNOT_CALLEE_OWNED);
+struct yetty_ydraw_canvas_ops {
+    const char *name;  /* "scrolling" | "scene" — diagnostics */
 
-/* Config */
-struct yetty_ycore_void_result yetty_ydraw_canvas_set_cell_size(
-    struct yetty_ydraw_canvas *canvas, struct yetty_ycore_pixel_size pixel_size);
-struct yetty_ycore_void_result yetty_ydraw_canvas_set_grid_size(
-    struct yetty_ydraw_canvas *canvas, struct yetty_ycore_grid_size grid_size);
+    struct yetty_ycore_void_result (*destroy)(
+        struct yetty_ydraw_canvas *canvas YETTY_ANNOT_CALLEE_OWNED);
 
-struct yetty_ycore_pixel_size yetty_ydraw_canvas_cell_get_pixel_size(
-    const struct yetty_ydraw_canvas *canvas);
-struct yetty_ycore_grid_size yetty_ydraw_canvas_get_grid_size(
-    const struct yetty_ydraw_canvas *canvas);
+    /* Config */
+    struct yetty_ycore_void_result (*set_cell_size)(
+        struct yetty_ydraw_canvas *canvas, struct yetty_ycore_pixel_size pixel_size);
+    struct yetty_ycore_void_result (*set_grid_size)(
+        struct yetty_ydraw_canvas *canvas, struct yetty_ycore_grid_size grid_size);
+    struct yetty_ycore_pixel_size (*get_cell_size)(const struct yetty_ydraw_canvas *canvas);
+    struct yetty_ycore_grid_size  (*get_grid_size)(const struct yetty_ydraw_canvas *canvas);
 
-/* Streaming OSC ingestion. Pulls already-decoded primitive bytes from the
- * OSC state machine via a per-envelope `prim_iter` parked on the variant
- * struct. Returns mid-envelope (OK_VOID) when the SM signals
- * `would_block`; the SM re-dispatches the canvas on the next process()
- * round and the iter resumes where it left off. On DONE (SM at_end with
- * everything consumed) the variant runs end-of-envelope finalisation:
- * attach pass, font_map_release_all, viewport scroll (scrolling only),
- * scrollback evict (scrolling only). */
-struct yetty_ycore_void_result yetty_ydraw_canvas_process_input(
-    struct yetty_ydraw_canvas *canvas, struct yetty_ywire_wire_statemachine *sm);
+    /* OSC ingestion. */
+    struct yetty_ycore_void_result (*process_input)(
+        struct yetty_ydraw_canvas *canvas, struct yetty_ywire_wire_statemachine *sm);
 
-/* Cursor / scroll API. For static-canvas these are no-ops (cursor pinned
- * at (0,0), no scrollback). The scrolling variant treats `cursor_pos` as
- * a screen-row offset from the viewport top. */
-struct yetty_ycore_void_result yetty_ydraw_canvas_set_cursor_pos(
-    struct yetty_ydraw_canvas *canvas, struct yetty_ycore_grid_cursor_pos cursor_pos);
+    /* Cursor / scroll. scene-canvas implements these as success-stubs. */
+    struct yetty_ycore_void_result (*set_cursor_pos)(
+        struct yetty_ydraw_canvas *canvas, struct yetty_ycore_grid_cursor_pos pos);
+    struct yetty_ycore_void_result (*scroll_lines)(
+        struct yetty_ydraw_canvas *canvas, uint16_t num_lines);
+    struct yetty_ycore_void_result (*set_view_top)(
+        struct yetty_ydraw_canvas *canvas, bool active, uint32_t view_top);
+    uint32_t (*rolling_row_0)(struct yetty_ydraw_canvas *canvas);
+    uint32_t (*live_rolling_row_0)(struct yetty_ydraw_canvas *canvas);
+    struct yetty_ycore_void_result (*set_scroll_callback)(
+        struct yetty_ydraw_canvas *canvas,
+        yetty_ydraw_canvas_scroll_callback callback, void *userdata);
+    struct yetty_ycore_void_result (*set_cursor_callback)(
+        struct yetty_ydraw_canvas *canvas,
+        yetty_ydraw_canvas_cursor_callback callback, void *userdata);
 
-struct yetty_ycore_void_result yetty_ydraw_canvas_scroll_lines(
-    struct yetty_ydraw_canvas *canvas, uint16_t num_lines);
+    /* Packed GPU format */
+    struct yetty_ycore_void_result (*mark_dirty)(struct yetty_ydraw_canvas *canvas);
+    bool (*is_dirty)(const struct yetty_ydraw_canvas *canvas);
 
-/* Pin / release the visible viewport for scrollback view. While active,
- * rebuild_grid and the rolling_row_0 accessor return `view_top` instead
- * of the live anchor. Static-canvas ignores. */
-struct yetty_ycore_void_result yetty_ydraw_canvas_set_view_top(
-    struct yetty_ydraw_canvas *canvas, bool active, uint32_t view_top);
+    struct yetty_ycore_void_result (*rebuild_grid)(struct yetty_ydraw_canvas *canvas);
+    const uint32_t *(*grid_data)(const struct yetty_ydraw_canvas *canvas);
+    uint32_t (*grid_word_count)(const struct yetty_ydraw_canvas *canvas);
 
-/* Effective viewport top (scrollback override if active, else live anchor).
- * Static-canvas returns 0. */
-uint32_t yetty_ydraw_canvas_rolling_row_0(struct yetty_ydraw_canvas *canvas);
+    struct yetty_ydraw_drawable_staging_result (*build_prim_staging)(
+        struct yetty_ydraw_canvas *canvas);
+    uint32_t (*prim_gpu_size)(const struct yetty_ydraw_canvas *canvas);
 
-/* Live anchor — ignores any scrollback override. Static-canvas returns 0. */
-uint32_t yetty_ydraw_canvas_live_rolling_row_0(struct yetty_ydraw_canvas *canvas);
+    /* State */
+    struct yetty_ycore_void_result (*clear)(struct yetty_ydraw_canvas *canvas);
+    uint32_t (*primitive_count)(const struct yetty_ydraw_canvas *canvas);
 
-struct yetty_ycore_void_result yetty_ydraw_canvas_set_scroll_callback(
-    struct yetty_ydraw_canvas *canvas,
-    yetty_ydraw_canvas_scroll_callback callback, void *userdata);
+    /* Fonts */
+    uint32_t (*font_count)(const struct yetty_ydraw_canvas *canvas);
+    uint32_t (*font_generation)(const struct yetty_ydraw_canvas *canvas);
+    struct yetty_ydraw_font *(*get_font_at)(
+        const struct yetty_ydraw_canvas *canvas, uint32_t slot);
+    struct yetty_ydraw_font *(*get_default_font)(const struct yetty_ydraw_canvas *canvas);
 
-struct yetty_ycore_void_result yetty_ydraw_canvas_set_cursor_callback(
-    struct yetty_ydraw_canvas *canvas,
-    yetty_ydraw_canvas_cursor_callback callback, void *userdata);
+    /* Flyweight registry / complex-prim factory accessors. */
+    const struct yetty_ydraw_flyweight_registry *(*get_flyweight_registry)(
+        const struct yetty_ydraw_canvas *canvas);
+    struct yetty_ydraw_figure_factory *(*get_figure_factory)(
+        const struct yetty_ydraw_canvas *canvas);
 
-/* Packed GPU format */
-struct yetty_ycore_void_result yetty_ydraw_canvas_mark_dirty(
-    struct yetty_ydraw_canvas *canvas);
-bool yetty_ydraw_canvas_is_dirty(const struct yetty_ydraw_canvas *canvas);
+    /* Complex primitive access (for atlas rendering). */
+    uint32_t (*figure_count)(const struct yetty_ydraw_canvas *canvas);
+    struct yetty_ydraw_figure_instance *(*get_figure)(
+        const struct yetty_ydraw_canvas *canvas, uint32_t index);
 
-struct yetty_ycore_void_result yetty_ydraw_canvas_rebuild_grid(
-    struct yetty_ydraw_canvas *canvas);
+    /* Glyph iteration. Does work + invokes the visitor — must surface
+     * any internal failure (alloc, decode of evicted lines, ...) via
+     * the Result. */
+    struct yetty_ycore_void_result (*for_each_glyph)(
+        struct yetty_ydraw_canvas *canvas,
+        yetty_ydraw_canvas_glyph_visitor visitor, void *user);
+};
 
-const uint32_t *yetty_ydraw_canvas_grid_data(const struct yetty_ydraw_canvas *canvas);
-uint32_t yetty_ydraw_canvas_grid_word_count(const struct yetty_ydraw_canvas *canvas);
+/*===========================================================================
+ * Polymorphic handle — JUST a vtable pointer.
+ *
+ * Every variant struct embeds `struct yetty_ydraw_canvas base` as its
+ * first member. The variant fills `base.ops` at create time; recovery
+ * inside vtable methods is a plain downcast since `base` is at offset 0.
+ *===========================================================================*/
 
-struct yetty_ydraw_drawable_staging_result yetty_ydraw_canvas_build_prim_staging(
-    struct yetty_ydraw_canvas *canvas);
-
-uint32_t yetty_ydraw_canvas_prim_gpu_size(const struct yetty_ydraw_canvas *canvas);
-
-/* State management */
-struct yetty_ycore_void_result yetty_ydraw_canvas_clear(struct yetty_ydraw_canvas *canvas);
-uint32_t yetty_ydraw_canvas_primitive_count(const struct yetty_ydraw_canvas *canvas);
-
-/* Fonts */
-uint32_t yetty_ydraw_canvas_font_count(const struct yetty_ydraw_canvas *canvas);
-
-/* Monotonic counter bumped on every font-cache slot alloc AND release.
- * Lets layers detect any change in the active slot set — `font_count` is
- * a high watermark and stays unchanged when a slot drops. */
-uint32_t yetty_ydraw_canvas_font_generation(const struct yetty_ydraw_canvas *canvas);
-
-struct yetty_ydraw_font *yetty_ydraw_canvas_get_font_at(
-    const struct yetty_ydraw_canvas *canvas, uint32_t slot);
-struct yetty_ydraw_font *yetty_ydraw_canvas_get_default_font(
-    const struct yetty_ydraw_canvas *canvas);
-
-/* Flyweight registry / complex-prim factory accessors */
-const struct yetty_ydraw_flyweight_registry *
-yetty_ydraw_canvas_get_flyweight_registry(const struct yetty_ydraw_canvas *canvas);
-struct yetty_ydraw_figure_factory *
-yetty_ydraw_canvas_get_figure_factory(const struct yetty_ydraw_canvas *canvas);
-
-/* Complex primitive access (for atlas rendering) */
-uint32_t yetty_ydraw_canvas_figure_count(const struct yetty_ydraw_canvas *canvas);
-struct yetty_ydraw_figure_instance *yetty_ydraw_canvas_get_figure(
-    const struct yetty_ydraw_canvas *canvas, uint32_t index);
-
-/* Glyph iteration (for selection / clipboard text extraction) */
-void yetty_ydraw_canvas_for_each_glyph(
-    struct yetty_ydraw_canvas *canvas,
-    yetty_ydraw_canvas_glyph_visitor visitor, void *user);
+struct yetty_ydraw_canvas {
+    const struct yetty_ydraw_canvas_ops *ops;
+};
 
 #ifdef __cplusplus
 }

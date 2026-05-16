@@ -2,10 +2,11 @@
  * yetty_yui_tabbar — see tabbar.h for the design.
  *
  * Today this file only implements the architecture: data, sizing, event
- * routing, keyboard/mouse shortcuts. The visual tab cells (Chrome-style
- * rounded rectangles + labels + close button) need a dedicated WebGPU
- * pipeline that draws into the strip region after workspace render — see
- * the render() entry point for the integration seam.
+ * routing, keyboard/mouse shortcuts. The visual tab cells (rounded
+ * rectangles + labels + close button, browser-tab style) need a
+ * dedicated WebGPU pipeline that draws into the strip region after
+ * workspace render — see the render() entry point for the integration
+ * seam.
  */
 
 #include <yetty/yui/workspace.h>
@@ -234,11 +235,11 @@ struct yetty_ycore_void_result yetty_yui_tabbar_destroy(struct yetty_yui_tabbar 
  *--------------------------------------------------------------------------*/
 
 /*---------------------------------------------------------------------------
- * Chrome-style colors + geometry. Picked to read as the same UI element a
- * user sees in Google Chrome dark mode: dark gray strip, the active tab
- * "rises out" of the strip as a lighter rounded shape, inactive tabs sit
- * flush and slightly translucent. SDF rounding gives us crisp antialiased
- * corners at any zoom level (see solid-rects.wgsl).
+ * Browser-tab colors + geometry. Picked to read as a familiar dark-mode
+ * tab strip: dark gray strip, the active tab "rises out" of the strip as
+ * a lighter rounded shape, inactive tabs sit flush and slightly
+ * translucent. SDF rounding gives us crisp antialiased corners at any
+ * zoom level (see solid-rects.wgsl).
  *--------------------------------------------------------------------------*/
 
 /* Tab geometry. Caps at ~240 px when there's room and shrinks to a floor
@@ -252,8 +253,9 @@ struct yetty_ycore_void_result yetty_yui_tabbar_destroy(struct yetty_yui_tabbar 
 #define TABBAR_NEWTAB_AREA      40.0f   /* footprint reserved for the new-tab "+" pill */
 #define TABBAR_PLUS_THICKNESS   2.0f    /* arm thickness of the + glyph */
 
-/* Left-edge "v" dropdown button — mirrors Chrome's hamburger / customize
- * menu. Lives between the window's left edge and the first tab. Same
+/* Left-edge "v" dropdown button — mirrors a typical browser's
+ * hamburger / customize menu. Lives between the window's left edge and
+ * the first tab. Same
  * pill footprint as the "+" button so the two read as siblings. */
 #define TABBAR_MENU_AREA        40.0f   /* width reserved for the "v" pill on the left */
 #define TABBAR_CHEVRON_LEN      10.0f   /* total span of the chevron arms */
@@ -588,7 +590,8 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
 
     /* 2. New-tab "+" button — fully-rounded pill background + 2 thin
      * sharp rects forming the plus glyph. Positioned immediately to the
-     * right of the last tab (Chrome-style), not at the far right edge. */
+     * right of the last tab (typical browser-tab convention), not at the
+     * far right edge. */
     {
         float btn = strip - top_inset - 4.0f;
         if (btn < 16.0f) btn = 16.0f;
@@ -875,9 +878,9 @@ static struct yetty_ycore_void_result tabbar_close_active(struct yetty_yui_tabba
     if (bar->count == 0) {
         return YETTY_OK_VOID();
     }
-    /* Refuse to close the last workspace — Chrome closes the window in that
-     * case, but yetty's lifecycle is owned by yetty.c (which posts SHUTDOWN
-     * on window-close). Leaving the last workspace open keeps the UI in a
+    /* Refuse to close the last workspace — most browsers close the window
+     * in that case, but yetty's lifecycle is owned by yetty.c (which posts
+     * SHUTDOWN on window-close). Leaving the last workspace open keeps the UI in a
      * defined state until the user explicitly asks to quit. */
     if (bar->count == 1) {
         ydebug("tabbar: refusing to close last workspace");
@@ -990,7 +993,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
     /* Keyboard shortcuts — only on KEY_DOWN. Char events with Ctrl held may
      * still produce control codes (Ctrl+T → 0x14) which we want the terminal
      * to see, so we deliberately don't filter on YCORE_CHAR. The shortcut
-     * matches Chrome's defaults. */
+     * set matches the common browser defaults. */
     if (event->type == YETTY_YCORE_KEY_DOWN && (event->key.mods & YETTY_MOD_CONTROL)) {
         int k = event->key.key;
         int shift = (event->key.mods & YETTY_MOD_SHIFT) != 0;

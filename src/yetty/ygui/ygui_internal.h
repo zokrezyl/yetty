@@ -352,7 +352,7 @@ struct yetty_ygui_widget {
         } rich;
 
         struct {
-            /* Title text (owned, NUL-terminated, NULL when chromeless). */
+            /* Title text (owned, NUL-terminated, NULL when title is empty). */
             char *title;
             /* Title-bar height in pixels. 0 = derive from theme. */
             float title_h;
@@ -514,9 +514,9 @@ struct yetty_ygui_engine {
 
     /* In-process sink override. When non-NULL, ydraw frame envelopes
      * go through pty->ops->write instead of write(output_fd). Used by
-     * yetty's own yui chrome to avoid a stdout round-trip when ygui
-     * lives in the same process as the renderer. NULL = fall back to
-     * `output_fd` (default client-mode behaviour). */
+     * yetty's own yui to avoid a stdout round-trip when ygui lives in
+     * the same process as the renderer. NULL = fall back to `output_fd`
+     * (default client-mode behaviour). */
     struct yetty_platform_pty *output_pty;
 
     /* Input buffer for parsing */
@@ -672,8 +672,8 @@ struct yetty_ycore_void_result yetty_ygui_layout_compute_engine(struct yetty_ygu
  *
  * `output_pty` is optional — when non-NULL, the binary OSC envelope is
  * written through pty->ops->write (zero-copy, no fd, used by yetty's
- * own in-process yui chrome). When NULL, falls back to writing the
- * full envelope to STDOUT_FILENO (default client-mode path). */
+ * own in-process yui). When NULL, falls back to writing the full
+ * envelope to STDOUT_FILENO (default client-mode path). */
 struct yetty_ycore_void_result yetty_ygui_osc_create_card(struct yetty_platform_pty *output_pty,
                                                           const char *name, int x, int y, int w,
                                                           int h, const uint8_t *data,

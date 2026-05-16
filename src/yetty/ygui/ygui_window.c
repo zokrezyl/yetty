@@ -54,8 +54,8 @@ static float window_title_h(const struct yetty_ygui_widget *self)
 
 static float window_button_size(void)
 {
-    /* Match the tabbar's per-tab close X so window chrome and tab
-     * chrome line up visually. */
+    /* Match the tabbar's per-tab close X so the window close button
+     * and tab close button line up visually. */
     return yetty_ygui_tabbar_button_size();
 }
 
@@ -107,7 +107,7 @@ static struct yetty_ycore_void_result window_render(struct yetty_ygui_widget *se
            self->x, self->y, self->w, th);
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, th, theme->bg_header,
                                      WINDOW_CORNER_RADIUS);
-    /* Hairline at the bottom of the title bar separates chrome from body. */
+    /* Hairline at the bottom of the title bar separates header from body. */
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y + th - 1.0f, self->w, 1.0f,
                                      theme->border_muted, 0.0f);
 
@@ -219,7 +219,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_window(struct yetty_ygui_engine *eng
     win->vtable = &window_vtable;
 
     /* Default layout: flex column with padding-top equal to the title
-     * bar so children land below the chrome. align-items: stretch so
+     * bar so children land below the header. align-items: stretch so
      * the body fills the width. */
     win->layout.mode = YETTY_YGUI_LAYOUT_FLEX;
     win->layout.direction = YETTY_YGUI_FLEX_COLUMN;

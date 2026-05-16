@@ -78,7 +78,15 @@ static int render_thread_func(void *arg)
     struct yetty_yplatform_render_thread_args *args = arg;
     struct yetty_ycore_void_result res = yetty_run(args->yetty);
 
-    args->result = YETTY_IS_OK(res) ? 0 : 1;
+    if (YETTY_IS_ERR(res)) {
+        /* End-of-chain — main is the consumer; print the whole chain to
+         * stderr (visible regardless of ytrace config) and free it. */
+        yetty_ycore_error_print(stderr, "yetty: fatal error", res.error);
+        yetty_ycore_error_destroy(res.error);
+        args->result = 1;
+    } else {
+        args->result = 0;
+    }
     *(args->running) = 0;
 
     if (args->window) {

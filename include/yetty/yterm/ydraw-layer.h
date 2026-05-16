@@ -17,13 +17,13 @@ extern "C" {
  * time via `kind`:
  *   - SCROLLING — primitives are cursor-relative and scroll with the
  *     terminal text. This is the "rich content" overlay (PDF, SVG, etc.).
- *   - STATIC    — primitives at absolute coordinates; no scrolling. Used
- *     by yui chrome (popups, statusbar). The layer sits in the terminal
- *     stack as a placeholder until yui content is wired in.
+ *   - SCENE     — entity-based, no scrolling. Used by yui (popups,
+ *     statusbar) and any other place that wants persistent named
+ *     primitives at absolute coordinates.
  */
 enum yetty_yterm_ydraw_layer_kind {
     YETTY_YDRAW_LAYER_KIND_SCROLLING,
-    YETTY_YDRAW_LAYER_KIND_STATIC,
+    YETTY_YDRAW_LAYER_KIND_SCENE,
 };
 
 struct yetty_yterm_terminal_layer_result yetty_yterm_ydraw_layer_create(

@@ -311,7 +311,7 @@ static const char *ns_fetch_filetype(const char *unix_path)
     return "text/html";
 }
 
-/* NetSurf core fetches its built-in stylesheets and chrome content via
+/* NetSurf core fetches its built-in stylesheets and about-page content via
  * URLs of the form `resource:default.css`. Translate those to a file://
  * URL pointing into the unpacked netsurf-all source tree, which is
  * always available at YETTY_NETSURF_RESOURCES_DIR (CMake-supplied) — or,
@@ -621,7 +621,7 @@ struct yetty_ynetsurf_ptr_result yetty_ynetsurf_create(const struct yetty_ynetsu
     nslog_set_filter(log_filter != NULL ? log_filter : "level:WARNING");
 
     /* Load per-language Messages so error titles, dialog text and the
-	 * built-in chrome (about:query/fetcherror, …) come out as real
+	 * built-in about-pages (about:query/fetcherror, …) come out as real
 	 * strings instead of raw message keys like "FetchErrorTitle". The
 	 * file is generated at build time by libs/netsurf-messages.cmake
 	 * from NetSurf's resources/FatMessages. */
