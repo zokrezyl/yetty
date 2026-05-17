@@ -130,17 +130,10 @@ struct yetty_ydraw_scene_entity {
     uint32_t touched_cell_count;
     uint32_t touched_cell_capacity;
 
-    /* Complex-prim instances. yplot / yimage / ymesh prims arriving on
-     * the wire are turned into GPU-resident instances via the canvas's
-     * figure_factory; the rendering layer enumerates them through
-     * scene_figure_count / scene_get_figure. One pointer per figure
-     * prim in arena order — index N corresponds to the N-th figure prim
-     * appended to the entity. NULL entries are gaps (a figure prim
-     * arrived but instance creation failed — kept positional for the
-     * rare case so the index doesn't shift on later inserts).
-     *
-     * Owned: yetty_ydraw_figure_instance_destroy is called on every
-     * non-NULL entry in entity_clear_in_place and entity_free_storage. */
+    /* Per-entity live figure instances. Parallel to (but not 1:1 with)
+     * prims[] — only figure-typed drawables produce instances. Each entry
+     * owns its GPU resource set and is destroyed in entity_clear_in_place
+     * and entity_free_storage. */
     struct yetty_ydraw_figure_instance **figures;
     uint32_t figure_count;
     uint32_t figure_capacity;
@@ -201,12 +194,6 @@ struct scene_canvas {
     uint32_t *entity_base;
     uint32_t  entity_base_capacity;
 
-    /* Monotonic counter assigned to each glyph drawable produced by
-     * TEXT_SPAN expansion. Used as the z_order field so glyphs added
-     * later draw on top of earlier ones. Reset on CMD_ZERO via
-     * scene_clear so it stays bounded over the canvas's lifetime. */
-    uint32_t glyph_z_order;
-
     /* Wire dispatch resources. The registry is shared by the
      * drawable-iterator (handler lookup) and by the GROUP-body inner-loop
      * parser. The factory builds figure instances (yplot/yimage/ymesh)
@@ -247,6 +234,13 @@ struct scene_canvas {
         yetty_yfont_cache_handle handle;
     } *font_map;
     uint32_t font_map_capacity;
+
+    /* Monotonic counter for glyph z-order inside TEXT_SPAN expansion.
+     * Reset on scene_clear so a wiped scene starts fresh; otherwise we
+     * just keep counting up across envelopes. Lives here (not as a
+     * function-local static) so it stays per-canvas and is not file-scope
+     * mutable state. */
+    uint32_t glyph_z_order;
 };
 
 /* Forward decl — vtable is filled in at the bottom of the file. */
@@ -324,6 +318,29 @@ static struct yetty_ycore_void_result grow_touched(struct scene_touched_cell **a
     return YETTY_OK_VOID();
 }
 
+static struct yetty_ycore_void_result grow_figures(struct yetty_ydraw_figure_instance ***arr,
+                                                   uint32_t *cap, uint32_t need)
+{
+    if (need <= *cap) {
+        return YETTY_OK_VOID();
+    }
+    uint32_t new_cap = *cap ? *cap * 2 : 4;
+    while (new_cap < need) {
+        new_cap *= 2;
+    }
+    struct yetty_ydraw_figure_instance **grown =
+        realloc(*arr, new_cap * sizeof(struct yetty_ydraw_figure_instance *));
+    if (!grown) {
+        return YETTY_ERR(yetty_ycore_void, "scene-canvas: figures grow failed");
+    }
+    for (uint32_t i = *cap; i < new_cap; i++) {
+        grown[i] = NULL;
+    }
+    *arr = grown;
+    *cap = new_cap;
+    return YETTY_OK_VOID();
+}
+
 /*===========================================================================
  * Entity slot allocator
  *===========================================================================*/
@@ -385,27 +402,18 @@ static struct yetty_ycore_void_result scene_alloc_slot(struct scene_canvas *sc, 
     return YETTY_OK_VOID();
 }
 
-static void entity_destroy_all_figures(struct yetty_ydraw_scene_entity *e)
+static void entity_free_storage(struct yetty_ydraw_scene_entity *e)
 {
     for (uint32_t i = 0; i < e->figure_count; i++) {
         if (e->figures[i]) {
             yetty_ydraw_figure_instance_destroy(e->figures[i]);
-            e->figures[i] = NULL;
         }
     }
-    e->figure_count = 0;
-}
-
-static void entity_free_storage(struct yetty_ydraw_scene_entity *e)
-{
-    entity_destroy_all_figures(e);
     free(e->figures);
     free(e->arena);
     free(e->prims);
     free(e->touched_cells);
     free(e->children);
-    e->figures = NULL;
-    e->figure_capacity = 0;
     e->arena = NULL;
     e->arena_count = e->arena_capacity = 0;
     e->prims = NULL;
@@ -414,6 +422,8 @@ static void entity_free_storage(struct yetty_ydraw_scene_entity *e)
     e->touched_cell_count = e->touched_cell_capacity = 0;
     e->children = NULL;
     e->children_count = e->children_capacity = 0;
+    e->figures = NULL;
+    e->figure_count = e->figure_capacity = 0;
 }
 
 /*===========================================================================
@@ -543,10 +553,19 @@ static void entity_clear_in_place(struct scene_canvas *sc, struct yetty_ydraw_sc
         yetty_ydraw_scene_grid_drop_at(sc->grid, e->touched_cells[i].row, e->touched_cells[i].col,
                                        e->slot);
     }
+    /* Figures own GPU resources — must be destroyed on clear, not just
+     * reset like the byte-arena. The figures[] buffer itself is kept for
+     * reuse on the next re-emit of this entity. */
+    for (uint32_t i = 0; i < e->figure_count; i++) {
+        if (e->figures[i]) {
+            yetty_ydraw_figure_instance_destroy(e->figures[i]);
+            e->figures[i] = NULL;
+        }
+    }
+    e->figure_count = 0;
     e->touched_cell_count = 0;
     e->arena_count = 0;
     e->drawable_count = 0;
-    entity_destroy_all_figures(e);
     sc->dirty = true;
 }
 
@@ -1238,24 +1257,49 @@ static struct yetty_ycore_void_result scene_entity_add_bytes(
         return YETTY_ERR(yetty_ycore_void, "scene-canvas: grid_insert", ir);
     }
 
-    sc->dirty = true;
-    return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result entity_push_figure(
-    struct yetty_ydraw_scene_entity *e, struct yetty_ydraw_figure_instance *inst)
-{
-    if (e->figure_count >= e->figure_capacity) {
-        uint32_t new_cap = e->figure_capacity ? e->figure_capacity * 2u : 4u;
-        struct yetty_ydraw_figure_instance **grown =
-            realloc(e->figures, new_cap * sizeof(struct yetty_ydraw_figure_instance *));
-        if (!grown) {
-            return YETTY_ERR(yetty_ycore_void, "scene-canvas: figures grow failed");
+    /* Figure-typed drawables (yplot, yimage, ymesh, …) need a GPU-side
+     * instance in addition to the wire bytes — otherwise ydraw-layer's
+     * figure iterator hands the renderer nothing and nothing reaches the
+     * screen. Bytes-only is the right behavior for SDF / glyph / text
+     * spans, where the shader reads the staging buffer directly.
+     *
+     * If the canvas was created without a factory (test mode), skip:
+     * the bytes are still committed, but no GPU resources exist to bind. */
+    if (sc->figure_factory && yetty_ydraw_is_figure(data[0])) {
+        struct yetty_ydraw_figure_instance_ptr_result inst_res =
+            yetty_ydraw_figure_factory_create_instance(sc->figure_factory, data,
+                                                       word_count * sizeof(uint32_t),
+                                                       /*rolling_row=*/0u);
+        if (YETTY_IS_ERR(inst_res)) {
+            /* Roll back all prior commits + drop the grid bucket we just
+             * inserted, so the entity stays consistent. */
+            for (uint32_t i = saved_touched_count; i < entity->touched_cell_count; i++) {
+                yetty_ydraw_scene_grid_drop_at(sc->grid, entity->touched_cells[i].row,
+                                               entity->touched_cells[i].col, entity->slot);
+            }
+            entity->arena_count = saved_arena_count;
+            entity->drawable_count = saved_drawable_count;
+            entity->touched_cell_count = saved_touched_count;
+            return YETTY_ERR(yetty_ycore_void, "scene-canvas: figure create_instance", inst_res);
         }
-        e->figures = grown;
-        e->figure_capacity = new_cap;
+        struct yetty_ycore_void_result gf = grow_figures(&entity->figures,
+                                                         &entity->figure_capacity,
+                                                         entity->figure_count + 1u);
+        if (YETTY_IS_ERR(gf)) {
+            yetty_ydraw_figure_instance_destroy(inst_res.value);
+            for (uint32_t i = saved_touched_count; i < entity->touched_cell_count; i++) {
+                yetty_ydraw_scene_grid_drop_at(sc->grid, entity->touched_cells[i].row,
+                                               entity->touched_cells[i].col, entity->slot);
+            }
+            entity->arena_count = saved_arena_count;
+            entity->drawable_count = saved_drawable_count;
+            entity->touched_cell_count = saved_touched_count;
+            return YETTY_ERR(yetty_ycore_void, "scene-canvas: figures grow", gf);
+        }
+        entity->figures[entity->figure_count++] = inst_res.value;
     }
-    e->figures[e->figure_count++] = inst;
+
+    sc->dirty = true;
     return YETTY_OK_VOID();
 }
 
@@ -1277,30 +1321,7 @@ struct yetty_ycore_void_result yetty_ydraw_scene_entity_add_prim(
 
     struct rectangle_result aabb_res = fw->ops->aabb(fw->data);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, aabb_res, "scene-canvas: prim aabb");
-    struct yetty_ycore_void_result br =
-        scene_entity_add_bytes(sc, entity, fw->data, word_count, aabb_res.value);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "scene-canvas: add_prim");
-
-    /* Complex (figure) prims also need a GPU-resident instance — the
-     * scrolling layer renders these via canvas->ops->figure_count /
-     * get_figure, not through the SDF grid path. Without this every
-     * yplot / yimage / ymesh prim would be in the entity arena but
-     * invisible on screen. */
-    uint32_t drawable_type = fw->data[0];
-    if (yetty_ydraw_is_figure(drawable_type) && sc->figure_factory) {
-        struct yetty_ydraw_figure_instance_ptr_result inst_res =
-            yetty_ydraw_figure_factory_create_instance(
-                sc->figure_factory, fw->data, (size_t)word_count * sizeof(uint32_t),
-                /*rolling_row=*/0u);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, inst_res,
-                            "scene-canvas: figure_factory_create_instance");
-        struct yetty_ycore_void_result pr = entity_push_figure(entity, inst_res.value);
-        if (YETTY_IS_ERR(pr)) {
-            yetty_ydraw_figure_instance_destroy(inst_res.value);
-            return YETTY_ERR(yetty_ycore_void, "scene-canvas: push figure", pr);
-        }
-    }
-    return YETTY_OK_VOID();
+    return scene_entity_add_bytes(sc, entity, fw->data, word_count, aabb_res.value);
 }
 
 /*===========================================================================
@@ -2023,13 +2044,14 @@ static struct yetty_ydraw_figure_instance *scene_get_figure(const struct yetty_y
         return NULL;
     }
     const struct scene_canvas *sc = as_scene_const(base);
-    /* Walk entities in slot order (matches the scene_build_staging_pass
-     * traversal so the rendering pass sees figures in a stable,
-     * predictable order). */
+    /* Walk entities in slot order; the global figure index is the
+     * concatenation of each entity's figures[] in that order. Matches
+     * the entity walk used by scene_build_staging_pass, so rendering
+     * order between SDF prims and figures stays consistent. */
     uint32_t cursor = 0;
     for (uint32_t s = 0; s < sc->entity_high_water; s++) {
-        if (!sc->entities[s].in_use) continue;
         const struct yetty_ydraw_scene_entity *e = &sc->entities[s];
+        if (!e->in_use) continue;
         if (index < cursor + e->figure_count) {
             return e->figures[index - cursor];
         }

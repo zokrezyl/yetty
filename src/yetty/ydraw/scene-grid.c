@@ -75,18 +75,17 @@ static struct yetty_ycore_void_result grow_buckets(struct cell_bucket **arr,
  * resulting drawable list in that order, so cell-bucket order is the
  * inter-entity painter's-algorithm order.
  *
- * Insertion order is unstable across DELETE+GROUP (a re-emitted entity
- * would otherwise have its bucket appended to the end of every cell
+ * Insertion order would otherwise be unstable across DELETE+GROUP: a
+ * re-emitted entity's bucket would be appended to the end of each cell
  * it touches, so its drawables would paint on top of every sibling
- * entity). Sorting by entity_slot reuses the natural slot ordering
- * (slot 0 = ROOT, slots 1+ = creation order, freelist preserves slot
- * identity on DELETE+GROUP of the same external_id), which matches
- * the producer's tree-walk emit order for the common case. */
-
+ * entity that wasn't re-emitted this frame. Sorting by entity_slot
+ * reuses the natural slot ordering — slot 0 = ROOT, slots 1+ are
+ * creation order, and the freelist returns the same slot to a
+ * DELETE+GROUP of the same external_id — which matches the producer's
+ * tree-walk emit order for the common case. */
 static struct cell_bucket *cell_find_bucket(struct scene_cell *cell,
                                             uint32_t entity_slot)
 {
-    /* Binary search — buckets are kept sorted by entity_slot. */
     uint32_t lo = 0, hi = cell->bucket_count;
     while (lo < hi) {
         uint32_t mid = lo + (hi - lo) / 2u;
@@ -106,8 +105,9 @@ static struct cell_bucket *cell_find_bucket(struct scene_cell *cell,
 static struct yetty_ycore_void_result cell_ensure_bucket(
     struct scene_cell *cell, uint32_t entity_slot, struct cell_bucket **out, bool *out_fresh)
 {
-    /* Sorted-position search: locate either the existing bucket or the
-     * insertion index for a fresh one. */
+    /* Locate either the existing bucket or the insertion index for a
+     * fresh one, keeping the sorted invariant. Linear scan is fine
+     * here — cells with many buckets are rare in practice. */
     uint32_t pos = 0;
     while (pos < cell->bucket_count && cell->buckets[pos].entity_slot < entity_slot) {
         pos++;
@@ -120,8 +120,6 @@ static struct yetty_ycore_void_result cell_ensure_bucket(
     struct yetty_ycore_void_result gr =
         grow_buckets(&cell->buckets, &cell->bucket_capacity, cell->bucket_count + 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "cell_ensure_bucket: grow");
-    /* Shift buckets at [pos, bucket_count) right by one to make room
-     * for the new bucket. Preserves the ascending-slot invariant. */
     if (pos < cell->bucket_count) {
         memmove(&cell->buckets[pos + 1], &cell->buckets[pos],
                 (cell->bucket_count - pos) * sizeof(struct cell_bucket));
@@ -151,9 +149,9 @@ static void cell_drop_bucket_at(struct scene_cell *cell, uint32_t idx)
 {
     struct cell_bucket *b = &cell->buckets[idx];
     free(b->local_indices);
-    /* Shift remaining buckets left to preserve the ascending-slot
-     * invariant. Swap-with-last would corrupt the order, which the
-     * staging build relies on for inter-entity paint ordering. */
+    /* Shift tail left to preserve the ascending-slot invariant —
+     * swap-with-last would corrupt cell-bucket order, which the staging
+     * build relies on for inter-entity paint ordering. */
     if (idx + 1u < cell->bucket_count) {
         memmove(&cell->buckets[idx], &cell->buckets[idx + 1u],
                 (cell->bucket_count - idx - 1u) * sizeof(struct cell_bucket));
@@ -276,9 +274,17 @@ struct yetty_ycore_void_result yetty_ydraw_scene_grid_insert(
             if (YETTY_IS_ERR(pr)) {
                 /* If the bucket was created in this iteration it's now
                  * empty and ours alone — drop before falling into the
-                 * shared rollback path. */
+                 * shared rollback path. With sorted insertion the fresh
+                 * bucket is at a position determined by entity_slot,
+                 * not necessarily the end of the array, so locate it
+                 * by slot rather than indexing the last slot. */
                 if (fresh) {
-                    cell_drop_bucket_at(cell, cell->bucket_count - 1);
+                    for (uint32_t bi = 0; bi < cell->bucket_count; bi++) {
+                        if (cell->buckets[bi].entity_slot == entity_slot) {
+                            cell_drop_bucket_at(cell, bi);
+                            break;
+                        }
+                    }
                 }
                 final_err = YETTY_ERR(yetty_ycore_void, "scene-grid: push_index", pr);
                 aborted = true;

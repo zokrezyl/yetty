@@ -97,6 +97,85 @@ install(FILES ygui.h DESTINATION include)
 install(TARGETS ygui_core ARCHIVE DESTINATION lib)
 
 # ---------------------------------------------------------------------
+# Per-producer widget libs.
+#
+# Each widget below wraps one producer module (ypdf, ymarkdown via
+# yreadme, ybrowser, yjungle, yzoo) and exposes it as a ygui widget by
+# building a draw_list at construction time and handing it to the
+# generic RICH widget. Each lives in its own static library so callers
+# only link the producer dependencies they actually use; ygui_core stays
+# free of pdfio / lexbor / libcurl / etc.
+#
+# Two of the wrappers (yjungle, yzoo) share a small flatten helper that
+# turns the producer's command stream (CMD_ZERO + CMD_GROUPs) into a
+# flat paint list compatible with the RICH widget's render path.
+# ---------------------------------------------------------------------
+
+if(YETTY_ENABLE_FEATURE_YMARKDOWN)
+    add_library(ygui_yreadme STATIC ygui_yreadme.c)
+    target_include_directories(ygui_yreadme PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${YETTY_ROOT}/include
+    )
+    target_link_libraries(ygui_yreadme PUBLIC ygui_core yetty_yreadme)
+    set_target_properties(ygui_yreadme PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    install(TARGETS ygui_yreadme ARCHIVE DESTINATION lib)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YPDF)
+    add_library(ygui_ypdf STATIC ygui_ypdf.c)
+    target_include_directories(ygui_ypdf PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${YETTY_ROOT}/include
+    )
+    target_link_libraries(ygui_ypdf PUBLIC ygui_core yetty_ypdf)
+    set_target_properties(ygui_ypdf PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    install(TARGETS ygui_ypdf ARCHIVE DESTINATION lib)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YBROWSER)
+    add_library(ygui_ybrowser STATIC ygui_ybrowser.c)
+    target_include_directories(ygui_ybrowser PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${YETTY_ROOT}/include
+    )
+    target_link_libraries(ygui_ybrowser PUBLIC ygui_core yetty_ybrowser)
+    set_target_properties(ygui_ybrowser PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    install(TARGETS ygui_ybrowser ARCHIVE DESTINATION lib)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YJUNGLE)
+    add_library(ygui_yjungle STATIC ygui_yjungle.c ygui_flatten.c)
+    target_include_directories(ygui_yjungle PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${YETTY_ROOT}/include
+    )
+    target_link_libraries(ygui_yjungle PUBLIC ygui_core yetty_yjungle)
+    set_target_properties(ygui_yjungle PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    install(TARGETS ygui_yjungle ARCHIVE DESTINATION lib)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YZOO)
+    add_library(ygui_yzoo STATIC ygui_yzoo.c ygui_flatten.c)
+    target_include_directories(ygui_yzoo PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${YETTY_ROOT}/include
+    )
+    target_link_libraries(ygui_yzoo PUBLIC ygui_core yetty_yzoo)
+    set_target_properties(ygui_yzoo PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    install(TARGETS ygui_yzoo ARCHIVE DESTINATION lib)
+endif()
+
+install(FILES
+    ${YETTY_ROOT}/include/yetty/ygui/ygui_ypdf.h
+    ${YETTY_ROOT}/include/yetty/ygui/ygui_ybrowser.h
+    ${YETTY_ROOT}/include/yetty/ygui/ygui_yreadme.h
+    ${YETTY_ROOT}/include/yetty/ygui/ygui_yjungle.h
+    ${YETTY_ROOT}/include/yetty/ygui/ygui_yzoo.h
+    DESTINATION include/yetty/ygui
+)
+
+# ---------------------------------------------------------------------
 # Shared variant for FFI consumers. Standalone .so/.dll built from the
 # same core sources + ygui_engine_uv.c (FFI consumers want the full
 # runtime). Not produced for emscripten.
