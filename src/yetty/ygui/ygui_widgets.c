@@ -2584,6 +2584,18 @@ static struct yetty_ycore_void_result collapsing_header_render(struct yetty_ygui
         header_h = self->h;
     }
 
+    /* When OPEN, draw a rounded body frame behind the children so the
+     * section is visually grouped (otherwise children just flow below
+     * the header and it's unclear what belongs to which section). */
+    if ((self->flags & YETTY_YGUI_FLAG_OPEN) && self->h > header_h + 0.5f) {
+        float body_y = self->y + header_h;
+        float body_h = self->h - header_h;
+        yetty_ygui_render_ctx_render_box(ctx, self->x, body_y, self->w, body_h, t->bg_secondary,
+                                         t->radius_medium);
+        yetty_ygui_render_ctx_render_box_outline(ctx, self->x, body_y, self->w, body_h,
+                                                 t->border_muted, t->radius_medium, 1.0f);
+    }
+
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, header_h, self->bg_color,
                                      t->radius_medium);
 
@@ -2726,11 +2738,11 @@ struct yetty_ygui_widget *yetty_ygui_engine_collapsing_header(struct yetty_ygui_
     c->layout.mode = YETTY_YGUI_LAYOUT_FLEX;
     c->layout.direction = YETTY_YGUI_FLEX_COLUMN;
     c->layout.align_items = YETTY_YGUI_ALIGN_STRETCH;
-    c->layout.padding_top = h;
-    c->layout.padding_bottom = 0;
-    c->layout.padding_left = 0;
-    c->layout.padding_right = 0;
-    c->layout.gap = 4.0f;
+    c->layout.padding_top = h + 8.0f;   /* header strip + inset above first child */
+    c->layout.padding_bottom = 8.0f;
+    c->layout.padding_left = 12.0f;
+    c->layout.padding_right = 12.0f;
+    c->layout.gap = 6.0f;
     static const struct yetty_ygui_widget_vtable collapsing_header_vtable = {
         .render = collapsing_header_render,
         .render_all = collapsing_header_render_all,

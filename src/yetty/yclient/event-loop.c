@@ -27,6 +27,7 @@
 
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -140,9 +141,7 @@ static void on_yface_osc(void *user, int osc_code, const uint8_t *args, size_t a
     struct yetty_yclient_event_loop *L = user;
     (void)args;
     (void)args_len; /* mouse/resize codes carry no args */
-    fprintf(stderr, "[yclient] on_yface_osc: code=%d args_len=%zu payload_len=%zu\n", osc_code,
-            args_len, len);
-    fflush(stderr);
+    ydebug("on_yface_osc: code=%d args_len=%zu payload_len=%zu", osc_code, args_len, len);
 
     switch (osc_code) {
     case YMGUI_OSC_SC_MOUSE: {
@@ -244,8 +243,7 @@ static void on_yface_raw(void *user, const char *bytes, size_t n)
 static void on_in_readable(uv_poll_t *handle, int status, int events)
 {
     struct yetty_yclient_event_loop *L = handle->data;
-    fprintf(stderr, "[yclient] on_in_readable: status=%d events=%d\n", status, events);
-    fflush(stderr);
+    ydebug("on_in_readable: status=%d events=%d", status, events);
     if (status < 0 || !(events & UV_READABLE)) {
         return;
     }
@@ -254,29 +252,25 @@ static void on_in_readable(uv_poll_t *handle, int status, int events)
     for (;;) {
         ssize_t n = read(L->in_fd, buf, sizeof(buf));
         if (n > 0) {
-            fprintf(stderr, "[yclient] read n=%zd first=[%c%c%c%c%c%c%c%c]\n", n,
-                    n > 0 ? buf[0] : '?', n > 1 ? buf[1] : '?', n > 2 ? buf[2] : '?',
-                    n > 3 ? buf[3] : '?', n > 4 ? buf[4] : '?', n > 5 ? buf[5] : '?',
-                    n > 6 ? buf[6] : '?', n > 7 ? buf[7] : '?');
-            fflush(stderr);
+            ydebug("read n=%zd first=[%c%c%c%c%c%c%c%c]", n, n > 0 ? buf[0] : '?',
+                   n > 1 ? buf[1] : '?', n > 2 ? buf[2] : '?', n > 3 ? buf[3] : '?',
+                   n > 4 ? buf[4] : '?', n > 5 ? buf[5] : '?', n > 6 ? buf[6] : '?',
+                   n > 7 ? buf[7] : '?');
             yetty_yface_feed_bytes(L->yface, buf, (size_t)n);
             continue;
         }
         if (n == 0) {
-            fprintf(stderr, "[yclient] read=0 EOF\n");
-            fflush(stderr);
+            ydebug("read=0 EOF");
             break;
         }
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            fprintf(stderr, "[yclient] read EAGAIN\n");
-            fflush(stderr);
+            ydebug("read EAGAIN");
             break;
         }
         if (errno == EINTR) {
             continue;
         }
-        fprintf(stderr, "[yclient] read errno=%d\n", errno);
-        fflush(stderr);
+        ydebug("read errno=%d", errno);
         break;
     }
 }
@@ -291,9 +285,7 @@ static void on_frame_check(uv_check_t *handle)
     if (!L->frame_pending) {
         return;
     }
-    fprintf(stderr, "[yclient] on_frame_check: firing on_frame (cb=%p user=%p)\n",
-            (void *)L->on_frame, L->user);
-    fflush(stderr);
+    ydebug("on_frame_check: firing on_frame (cb=%p user=%p)", (void *)L->on_frame, L->user);
     L->frame_pending = 0;
     if (L->on_frame) {
         L->on_frame(L->user);

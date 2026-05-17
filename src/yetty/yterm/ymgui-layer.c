@@ -61,12 +61,23 @@ struct yetty_yterm_ymgui_card {
     /* Anchor: absolute rolling row of the card's top edge. */
     uint32_t rolling_row;
 
-    /* Latest decoded frame (owning copy of the OSC payload, post-LZ4F). */
+    /* Latest decoded frame, fully denormalized (every cmd_list slot is
+     * inlined here, even ones the wire delivered as REPEAT — those got
+     * filled in from the previous frame at handle_frame time). The
+     * render path treats this as the canonical, contiguous frame. */
     uint8_t *frame_bytes;
     size_t frame_size;
     int has_frame;
     float frame_display_w; /* ImGui DisplaySize from the last frame */
     float frame_display_h;
+
+    /* Per-slot byte offsets / sizes within frame_bytes. Lets the next
+     * frame fill in REPEAT slots from this frame without re-walking.
+     * slot_offsets[i] points at the slot's cmd_list_hdr; slot_sizes[i]
+     * covers cmd_list_hdr + vtx + idx (padded) + cmds. */
+    size_t *slot_offsets;
+    size_t *slot_sizes;
+    size_t slot_count;
 
     /* Atlas. */
     int atlas_ready;
@@ -263,6 +274,8 @@ static void card_destroy(struct yetty_yterm_ymgui_card *c)
     }
     card_release_gpu(c);
     free(c->frame_bytes);
+    free(c->slot_offsets);
+    free(c->slot_sizes);
     free(c);
 }
 
@@ -892,6 +905,11 @@ static struct yetty_ycore_void_result handle_clear(struct yetty_yterm_ymgui_laye
  * Frame / atlas handlers
  *=========================================================================*/
 
+/* Walk the wire frame to produce a denormalized frame_bytes — REPEAT
+ * slots get filled in from the card's previous frame_bytes, full slots
+ * are copied straight from the wire. The result is laid out exactly
+ * like a v2 frame (no REPEAT flags), so frame_measure / frame_upload /
+ * draw_card don't need to know REPEAT exists. */
 static struct yetty_ycore_void_result handle_frame(struct yetty_yterm_ymgui_layer *l,
                                                    const uint8_t *raw, size_t size)
 {
@@ -908,15 +926,115 @@ static struct yetty_ycore_void_result handle_frame(struct yetty_yterm_ymgui_laye
         return YETTY_ERR(yetty_ycore_void, "ymgui: --frame for unknown card");
     }
 
-    uint8_t *copy = (uint8_t *)malloc(size);
-    if (!copy) {
-        return YETTY_ERR(yetty_ycore_void, "ymgui: oom");
+    int idx32 = (fh->flags & YMGUI_FRAME_FLAG_IDX32) ? 1 : 0;
+    size_t idx_bpe = idx32 ? 4u : 2u;
+    size_t cl_count = fh->cmd_list_count;
+
+    /* Pass 1: walk the wire, classify each slot (REPEAT vs full),
+     * compute the denormalized size. */
+    struct slot_info {
+        int from_cache;   /* 1 = source = previous frame_bytes */
+        size_t src_off;   /* offset in source buffer (wire or prev frame) */
+        size_t size;      /* full slot size: hdr + vtx + idx_padded + cmds */
+    };
+    struct slot_info *infos = NULL;
+    if (cl_count) {
+        infos = (struct slot_info *)calloc(cl_count, sizeof(*infos));
+        if (!infos) {
+            return YETTY_ERR(yetty_ycore_void, "ymgui: oom (slot infos)");
+        }
     }
-    memcpy(copy, raw, size);
+
+    const uint8_t *wire_end = raw + size;
+    size_t wire_off = sizeof(*fh);
+    size_t denorm_size = sizeof(*fh);
+
+    for (size_t i = 0; i < cl_count; i++) {
+        if (raw + wire_off + sizeof(struct yetty_ymgui_wire_cmd_list) > wire_end) {
+            free(infos);
+            return YETTY_ERR(yetty_ycore_void, "ymgui: --frame truncated cmd_list_hdr");
+        }
+        const struct yetty_ymgui_wire_cmd_list *clh =
+            (const struct yetty_ymgui_wire_cmd_list *)(raw + wire_off);
+
+        if (clh->flags & YMGUI_CMDLIST_FLAG_REPEAT) {
+            if (i >= c->slot_count || !c->frame_bytes) {
+                free(infos);
+                return YETTY_ERR(yetty_ycore_void,
+                                 "ymgui: REPEAT slot has no cached predecessor");
+            }
+            infos[i].from_cache = 1;
+            infos[i].src_off = c->slot_offsets[i];
+            infos[i].size = c->slot_sizes[i];
+            wire_off += sizeof(*clh);
+        } else {
+            size_t vbytes = (size_t)clh->vtx_count * 20u;
+            size_t ibytes_padded = (size_t)clh->idx_count * idx_bpe;
+            if (ibytes_padded & 3u) {
+                ibytes_padded += 4u - (ibytes_padded & 3u);
+            }
+            size_t cmd_bytes = (size_t)clh->cmd_count * sizeof(struct yetty_ymgui_wire_cmd);
+            size_t slot_size = sizeof(*clh) + vbytes + ibytes_padded + cmd_bytes;
+            if (raw + wire_off + slot_size > wire_end) {
+                free(infos);
+                return YETTY_ERR(yetty_ycore_void, "ymgui: --frame truncated slot body");
+            }
+            infos[i].from_cache = 0;
+            infos[i].src_off = wire_off;
+            infos[i].size = slot_size;
+            wire_off += slot_size;
+        }
+        denorm_size += infos[i].size;
+    }
+
+    /* Pass 2: allocate the denormalized buffer and copy slots. We need
+     * to source REPEAT slots from c->frame_bytes BEFORE we free it. */
+    uint8_t *new_frame = (uint8_t *)malloc(denorm_size ? denorm_size : 1);
+    size_t *new_offsets = NULL;
+    size_t *new_sizes = NULL;
+    if (cl_count) {
+        new_offsets = (size_t *)malloc(cl_count * sizeof(*new_offsets));
+        new_sizes = (size_t *)malloc(cl_count * sizeof(*new_sizes));
+    }
+    if (!new_frame || (cl_count && (!new_offsets || !new_sizes))) {
+        free(new_frame);
+        free(new_offsets);
+        free(new_sizes);
+        free(infos);
+        return YETTY_ERR(yetty_ycore_void, "ymgui: oom (denormalized frame)");
+    }
+
+    memcpy(new_frame, fh, sizeof(*fh));
+    /* The denormalized buffer's total_size reflects post-expansion size,
+     * not the wire's REPEAT-compressed size. Kept self-consistent so any
+     * future revalidation sees a well-formed v2-style frame. */
+    ((struct yetty_ymgui_wire_frame *)new_frame)->total_size = (uint32_t)denorm_size;
+
+    size_t out_off = sizeof(*fh);
+    for (size_t i = 0; i < cl_count; i++) {
+        new_offsets[i] = out_off;
+        new_sizes[i] = infos[i].size;
+        const uint8_t *src = infos[i].from_cache ? (c->frame_bytes + infos[i].src_off)
+                                                 : (raw + infos[i].src_off);
+        memcpy(new_frame + out_off, src, infos[i].size);
+        /* Clear the REPEAT flag in the denormalized copy of the cl_hdr
+         * so frame_measure can't misread it (cl_hdr.flags is reserved
+         * for wire-side signalling). */
+        struct yetty_ymgui_wire_cmd_list *out_clh =
+            (struct yetty_ymgui_wire_cmd_list *)(new_frame + out_off);
+        out_clh->flags = 0;
+        out_off += infos[i].size;
+    }
+    free(infos);
 
     free(c->frame_bytes);
-    c->frame_bytes = copy;
-    c->frame_size = size;
+    free(c->slot_offsets);
+    free(c->slot_sizes);
+    c->frame_bytes = new_frame;
+    c->frame_size = denorm_size;
+    c->slot_offsets = new_offsets;
+    c->slot_sizes = new_sizes;
+    c->slot_count = cl_count;
     c->has_frame = 1;
     c->frame_display_w = fh->display_size_x;
     c->frame_display_h = fh->display_size_y;

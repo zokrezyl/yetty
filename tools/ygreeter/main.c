@@ -1203,15 +1203,31 @@ static struct yetty_ygui_widget *make_section(struct app *app,
 
 static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_panel)
 {
-    /* Outer column. flex:1 fills the tab body; the children are the
-     * collapsing-header sections themselves stretched to the full
-     * width. */
+    /* Outer scrollable container — panel.scroll_y advances on wheel
+     * (panel's built-in on_scroll handler) so the user can reach
+     * sections below the visible viewport when many are expanded.
+     * Children are positioned at authored y > header_h so panel's
+     * render_all routes them through the scrolled-children path. */
+    struct yetty_ygui_widget *scroll =
+        yetty_ygui_engine_panel(app->engine, "el_scroll", 0, 0, 0, 0);
+    yetty_ygui_widget_apply_css(scroll, "flex: 1 0 0; align-self: stretch;");
+    /* Tall enough to cover every section fully expanded — overshooting
+     * is fine; panel clamps scroll to max(0, content_h - viewport). */
+    yetty_ygui_widget_panel_set_content_size(scroll, 1, 2000);
+    /* No header strip — every child lives in the scrolling area. The
+     * "header_h" gating in panel_render_all uses authored y >= header_h,
+     * so we need header_h == 0 and child y > 0. */
+    yetty_ygui_widget_panel_set_header_height(scroll, 0);
+    yetty_ygui_widget_add_child(tab_panel, scroll);
+
+    /* Inner column hosting all sections. Authored y = 1 (any value >0)
+     * so panel treats it as scrollable content. */
     struct yetty_ygui_widget *root =
-        yetty_ygui_engine_vbox(app->engine, "el_root", 0, 0, 0, 0);
+        yetty_ygui_engine_vbox(app->engine, "el_root", 0, 1, 0, 0);
     yetty_ygui_widget_apply_css(root,
                                 "padding: 12px; gap: 4px; flex: 1 0 0; "
                                 "align-items: stretch;");
-    yetty_ygui_widget_add_child(tab_panel, root);
+    yetty_ygui_widget_add_child(scroll, root);
 
     /* ---- Inputs ---- */
     {
@@ -1261,8 +1277,11 @@ static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_pa
             yetty_ygui_engine_dropdown(app->engine, "el_dd", 24, 0, 220, 28,
                                        dd_items, 3));
         static const char *ch_items[] = {"Small", "Medium", "Large", "Huge"};
+        /* Choicebox row count × theme row_height (28) — must match the
+         * actual rendered height, otherwise the widget paints below its
+         * authored box and overlaps siblings inside the section. */
         struct yetty_ygui_widget *ch =
-            yetty_ygui_engine_choicebox(app->engine, "el_choice", 24, 0, 220, 24 * 4,
+            yetty_ygui_engine_choicebox(app->engine, "el_choice", 24, 0, 220, 28 * 4,
                                         ch_items, 4);
         yetty_ygui_widget_choicebox_set_selected(ch, 1);
         yetty_ygui_widget_add_child(sec, ch);
@@ -1357,15 +1376,10 @@ static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_pa
         yetty_ygui_widget_apply_css(r, "align-self: stretch;");
         yetty_ygui_widget_add_child(split_row, r);
         yetty_ygui_widget_add_child(sec, split_row);
-
-        /* Standalone v/h scrollbars (free-running 0..1 values; not bound
-         * to any target — just to show the visuals). */
-        struct yetty_ygui_widget *vbar =
-            yetty_ygui_engine_vscrollbar(app->engine, "el_vbar", 24, 0, 12, 80);
-        yetty_ygui_widget_add_child(sec, vbar);
-        struct yetty_ygui_widget *hbar =
-            yetty_ygui_engine_hscrollbar(app->engine, "el_hbar", 24, 0, 320, 12);
-        yetty_ygui_widget_add_child(sec, hbar);
+        /* Standalone scrollbars deliberately omitted — out of context
+         * they look like an unattached pill. The scrollbar widget is
+         * exercised in the PDF tab where it's bound to the ypdf
+         * widget via yetty_ygui_widget_scrollbar_bind. */
     }
 
     /* ---- Overlays ---- */

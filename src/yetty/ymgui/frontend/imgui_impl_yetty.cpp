@@ -70,6 +70,12 @@ struct ymgui_card_state {
     int row;
     uint32_t w_cells;
     uint32_t h_cells;
+    /* Per-slot content hashes from the last successfully emitted frame.
+     * Slot index = position in draw_data->CmdLists. On the next frame we
+     * compare each cmd_list's hash against the cached value at the same
+     * slot and emit a REPEAT marker on match (server reuses its cache),
+     * full bytes on miss (server stores them in the slot). */
+    std::vector<uint64_t> prev_cl_hashes;
 };
 
 struct ymgui_impl_state {
@@ -411,6 +417,62 @@ void yetty_ymgui_ImGui_ImplYetty_BeginCardFrame(uint32_t card_id)
     }
 }
 
+/* FNV-1a 64-bit. Stream-friendly, fast enough at our scale (~30-80 KB
+ * per cmd_list) that the hash cost is well under the bandwidth saved
+ * when a cmd_list is unchanged. */
+static inline uint64_t fnv64_update(uint64_t h, const void *data, size_t n)
+{
+    const uint8_t *p = (const uint8_t *)data;
+    for (size_t i = 0; i < n; i++) {
+        h ^= p[i];
+        h *= 0x100000001b3ULL;
+    }
+    return h;
+}
+
+/* Hash the byte sequence we'd put on the wire for one cmd_list (vtx +
+ * idx + non-callback cmds), salted with the counts so different shapes
+ * can't collide. Matches the write loop below — if the hash equals last
+ * frame's hash at the same slot, the wire bytes would be byte-identical
+ * and the server can reuse its cached slot. */
+static uint64_t hash_cmd_list(const ImDrawList *cl)
+{
+    uint64_t h = 0xcbf29ce484222325ULL;
+    uint32_t v = (uint32_t)cl->VtxBuffer.Size;
+    uint32_t i = (uint32_t)cl->IdxBuffer.Size;
+    uint32_t c = (uint32_t)cl->CmdBuffer.Size;
+    uint32_t isize = (uint32_t)sizeof(ImDrawIdx);
+    h = fnv64_update(h, &v, sizeof(v));
+    h = fnv64_update(h, &i, sizeof(i));
+    h = fnv64_update(h, &c, sizeof(c));
+    h = fnv64_update(h, &isize, sizeof(isize));
+    if (cl->VtxBuffer.Size) {
+        h = fnv64_update(h, cl->VtxBuffer.Data,
+                         (size_t)cl->VtxBuffer.Size * sizeof(ImDrawVert));
+    }
+    if (cl->IdxBuffer.Size) {
+        h = fnv64_update(h, cl->IdxBuffer.Data,
+                         (size_t)cl->IdxBuffer.Size * sizeof(ImDrawIdx));
+    }
+    for (int k = 0; k < cl->CmdBuffer.Size; k++) {
+        const ImDrawCmd *dc = &cl->CmdBuffer[k];
+        if (dc->UserCallback) {
+            continue;
+        }
+        struct yetty_ymgui_wire_cmd wc = {};
+        wc.clip_min_x = dc->ClipRect.x;
+        wc.clip_min_y = dc->ClipRect.y;
+        wc.clip_max_x = dc->ClipRect.z;
+        wc.clip_max_y = dc->ClipRect.w;
+        wc.tex_id = (uint32_t)(intptr_t)dc->GetTexID();
+        wc.vtx_offset = dc->VtxOffset;
+        wc.idx_offset = dc->IdxOffset;
+        wc.elem_count = dc->ElemCount;
+        h = fnv64_update(h, &wc, sizeof(wc));
+    }
+    return h;
+}
+
 void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData *draw_data)
 {
     auto *c = find_card(card_id);
@@ -428,15 +490,30 @@ void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData
         return;
     }
 
+    int cl_count = draw_data->CmdListsCount;
+    std::vector<uint64_t> new_hashes((size_t)cl_count);
+    std::vector<uint8_t> repeat((size_t)cl_count, 0);
+    for (int n = 0; n < cl_count; n++) {
+        const ImDrawList *cl = draw_data->CmdLists[n];
+        uint64_t h = hash_cmd_list(cl);
+        new_hashes[(size_t)n] = h;
+        if ((size_t)n < c->prev_cl_hashes.size() && c->prev_cl_hashes[(size_t)n] == h) {
+            repeat[(size_t)n] = 1;
+        }
+    }
+
     size_t total_size = sizeof(struct yetty_ymgui_wire_frame);
-    for (int n = 0; n < draw_data->CmdListsCount; ++n) {
+    for (int n = 0; n < cl_count; ++n) {
+        total_size += sizeof(struct yetty_ymgui_wire_cmd_list);
+        if (repeat[(size_t)n]) {
+            continue;
+        }
         const ImDrawList *cl = draw_data->CmdLists[n];
         size_t idx_bytes = (size_t)cl->IdxBuffer.Size * sizeof(ImDrawIdx);
         if (idx_bytes & 3u) {
             idx_bytes += 4u - (idx_bytes & 3u);
         }
-        total_size += sizeof(struct yetty_ymgui_wire_cmd_list) +
-                      (size_t)cl->VtxBuffer.Size * sizeof(ImDrawVert) + idx_bytes +
+        total_size += (size_t)cl->VtxBuffer.Size * sizeof(ImDrawVert) + idx_bytes +
                       (size_t)cl->CmdBuffer.Size * sizeof(struct yetty_ymgui_wire_cmd);
     }
 
@@ -446,7 +523,7 @@ void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData
     fh.flags = (sizeof(ImDrawIdx) == 4) ? YMGUI_FRAME_FLAG_IDX32 : 0;
     fh.total_size = (uint32_t)total_size;
     fh.card_id = card_id;
-    fh.cmd_list_count = (uint32_t)draw_data->CmdListsCount;
+    fh.cmd_list_count = (uint32_t)cl_count;
     fh.display_pos_x = draw_data->DisplayPos.x;
     fh.display_pos_y = draw_data->DisplayPos.y;
     fh.display_size_x = draw_data->DisplaySize.x;
@@ -465,13 +542,24 @@ void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData
 
     static const uint8_t pad[4] = {0, 0, 0, 0};
 
-    for (int n = 0; n < draw_data->CmdListsCount; ++n) {
+    for (int n = 0; n < cl_count; ++n) {
         const ImDrawList *cl = draw_data->CmdLists[n];
 
         struct yetty_ymgui_wire_cmd_list cl_hdr = {};
+        if (repeat[(size_t)n]) {
+            /* REPEAT marker — server reuses cached slot. Counts must be
+             * zero so a v3 server can't mistake stale data for fresh. */
+            cl_hdr.flags = YMGUI_CMDLIST_FLAG_REPEAT;
+            if (!yetty_yface_write(g_state.yface_out, &cl_hdr, sizeof(cl_hdr)).ok) {
+                return;
+            }
+            continue;
+        }
+
         cl_hdr.vtx_count = (uint32_t)cl->VtxBuffer.Size;
         cl_hdr.idx_count = (uint32_t)cl->IdxBuffer.Size;
         cl_hdr.cmd_count = (uint32_t)cl->CmdBuffer.Size;
+        cl_hdr.flags = 0;
         if (!yetty_yface_write(g_state.yface_out, &cl_hdr, sizeof(cl_hdr)).ok) {
             return;
         }
@@ -518,7 +606,13 @@ void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData
     if (!yetty_yface_finish_write(g_state.yface_out).ok) {
         return;
     }
-    flush_yface_to_fd();
+    if (flush_yface_to_fd() < 0) {
+        return;
+    }
+
+    /* Frame fully shipped — cache hashes for next frame's REPEAT
+     * comparison. Server's per-slot cache now matches this state. */
+    c->prev_cl_hashes = std::move(new_hashes);
 }
 
 /*===========================================================================
