@@ -82,11 +82,12 @@ static struct cell_bucket *cell_find_bucket(struct scene_cell *cell,
 }
 
 static struct yetty_ycore_void_result cell_ensure_bucket(
-    struct scene_cell *cell, uint32_t entity_slot, struct cell_bucket **out)
+    struct scene_cell *cell, uint32_t entity_slot, struct cell_bucket **out, bool *out_fresh)
 {
     struct cell_bucket *b = cell_find_bucket(cell, entity_slot);
     if (b) {
         *out = b;
+        *out_fresh = false;
         return YETTY_OK_VOID();
     }
     struct yetty_ycore_void_result gr =
@@ -98,6 +99,7 @@ static struct yetty_ycore_void_result cell_ensure_bucket(
     b->count         = 0;
     b->capacity      = 0;
     *out = b;
+    *out_fresh = true;
     return YETTY_OK_VOID();
 }
 
@@ -180,6 +182,14 @@ struct yetty_ycore_void_result yetty_ydraw_scene_grid_set_size(
  * Cell mutation
  *===========================================================================*/
 
+struct insert_undo {
+    uint32_t row;
+    uint32_t col;
+    bool was_fresh;
+};
+
+enum { INSERT_UNDO_STACK = 64 };
+
 struct yetty_ycore_void_result yetty_ydraw_scene_grid_insert(
     struct yetty_ydraw_scene_grid *grid,
     uint32_t entity_slot, uint32_t local_idx,
@@ -192,21 +202,89 @@ struct yetty_ycore_void_result yetty_ydraw_scene_grid_insert(
     if (col_max >= grid->cols) col_max = grid->cols - 1;
     if (row_min > row_max || col_min > col_max) return YETTY_OK_VOID();
 
-    for (uint32_t r = row_min; r <= row_max; r++) {
-        for (uint32_t c = col_min; c <= col_max; c++) {
+    /* Atomic: either every cell in the rectangle gets local_idx (and
+     * on_fresh fires for each newly-bucketed cell), or none do. The
+     * undo log tracks committed iterations so we can roll back on any
+     * allocation failure. on_fresh is contractually infallible — the
+     * caller pre-grows whatever buffer it appends to. */
+    uint64_t rect = (uint64_t)(row_max - row_min + 1) * (col_max - col_min + 1);
+    struct insert_undo stack_undo[INSERT_UNDO_STACK];
+    struct insert_undo *undo = stack_undo;
+    bool heap_undo = false;
+    if (rect > INSERT_UNDO_STACK) {
+        undo = calloc((size_t)rect, sizeof(struct insert_undo));
+        if (!undo) {
+            return YETTY_ERR(yetty_ycore_void, "scene-grid: insert undo alloc");
+        }
+        heap_undo = true;
+    }
+    uint32_t undo_count = 0;
+    struct yetty_ycore_void_result final_err = YETTY_OK_VOID();
+    bool aborted = false;
+
+    for (uint32_t r = row_min; r <= row_max && !aborted; r++) {
+        for (uint32_t c = col_min; c <= col_max && !aborted; c++) {
             struct scene_cell *cell = &grid->cells[r * grid->cols + c];
-            bool fresh = (cell_find_bucket(cell, entity_slot) == NULL);
             struct cell_bucket *b = NULL;
-            struct yetty_ycore_void_result br = cell_ensure_bucket(cell, entity_slot, &b);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "scene-grid: ensure_bucket");
+            bool fresh = false;
+            struct yetty_ycore_void_result br =
+                cell_ensure_bucket(cell, entity_slot, &b, &fresh);
+            if (YETTY_IS_ERR(br)) {
+                final_err = YETTY_ERR(yetty_ycore_void, "scene-grid: ensure_bucket", br);
+                aborted = true;
+                break;
+            }
             struct yetty_ycore_void_result pr = bucket_push_index(b, local_idx);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "scene-grid: push_index");
+            if (YETTY_IS_ERR(pr)) {
+                /* If the bucket was created in this iteration it's now
+                 * empty and ours alone — drop before falling into the
+                 * shared rollback path. */
+                if (fresh) {
+                    cell_drop_bucket_at(cell, cell->bucket_count - 1);
+                }
+                final_err = YETTY_ERR(yetty_ycore_void, "scene-grid: push_index", pr);
+                aborted = true;
+                break;
+            }
             if (fresh && on_fresh) {
                 struct yetty_ycore_void_result fr = on_fresh(user, r, c);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "scene-grid: on_fresh");
+                if (YETTY_IS_ERR(fr)) {
+                    /* Caller violated the pre-grow contract. Roll back
+                     * this iteration's commit so the shared rollback
+                     * loop only sees prior committed cells. */
+                    for (uint32_t bi = 0; bi < cell->bucket_count; bi++) {
+                        if (cell->buckets[bi].entity_slot == entity_slot) {
+                            cell_drop_bucket_at(cell, bi);
+                            break;
+                        }
+                    }
+                    final_err = YETTY_ERR(yetty_ycore_void, "scene-grid: on_fresh", fr);
+                    aborted = true;
+                    break;
+                }
             }
+            undo[undo_count++] = (struct insert_undo){.row = r, .col = c, .was_fresh = fresh};
         }
     }
+
+    if (aborted) {
+        for (uint32_t i = undo_count; i-- > 0; ) {
+            struct scene_cell *cell = &grid->cells[undo[i].row * grid->cols + undo[i].col];
+            for (uint32_t bi = 0; bi < cell->bucket_count; bi++) {
+                if (cell->buckets[bi].entity_slot != entity_slot) continue;
+                if (undo[i].was_fresh) {
+                    cell_drop_bucket_at(cell, bi);
+                } else if (cell->buckets[bi].count > 0) {
+                    cell->buckets[bi].count--;
+                }
+                break;
+            }
+        }
+        if (heap_undo) free(undo);
+        return final_err;
+    }
+
+    if (heap_undo) free(undo);
     return YETTY_OK_VOID();
 }
 
@@ -262,18 +340,34 @@ struct yetty_ycore_void_result yetty_ydraw_scene_grid_rebuild_staging(
         return YETTY_ERR(yetty_ycore_void, "scene-grid: rebuild_staging null entity_base");
     }
 
-    /* The first num_cells words are the per-cell header offsets; the
-     * per-cell (cell_count, indices…) tuples land after, growing on
-     * demand. */
+    /* Pre-pass: compute the exact total word count we'll emit
+     * (num_cells header offsets + one count-slot per cell + every
+     * global drawable index). One staging_ensure_cap upfront then the
+     * emit loop runs allocation-free, avoiding the realloc + copy
+     * chain the doubling-grow version would do on the first dense
+     * frame. */
     uint32_t num_cells = grid->cell_count;
-    struct yetty_ycore_void_result e1 = staging_ensure_cap(inout_buf, inout_capacity, num_cells);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, e1, "scene-grid: ensure header table");
+    uint64_t total = (uint64_t)num_cells;
+    for (uint32_t cell_idx = 0; cell_idx < num_cells; cell_idx++) {
+        const struct scene_cell *cell = &grid->cells[cell_idx];
+        total += 1; /* cell_count slot */
+        for (uint32_t b = 0; b < cell->bucket_count; b++) {
+            const struct cell_bucket *bk = &cell->buckets[b];
+            if (bk->entity_slot >= entity_base_count) continue; /* defensive */
+            total += bk->count;
+        }
+    }
+    if (total > UINT32_MAX) {
+        return YETTY_ERR(yetty_ycore_void, "scene-grid: staging size overflow");
+    }
+    struct yetty_ycore_void_result e1 =
+        staging_ensure_cap(inout_buf, inout_capacity, (uint32_t)total);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, e1, "scene-grid: ensure staging size");
 
+    /* Emit pass — staging is pre-sized so no further reallocs. */
     uint32_t count = num_cells;
     for (uint32_t cell_idx = 0; cell_idx < num_cells; cell_idx++) {
         const struct scene_cell *cell = &grid->cells[cell_idx];
-        struct yetty_ycore_void_result e2 = staging_ensure_cap(inout_buf, inout_capacity, count + 1);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, e2, "scene-grid: ensure count slot");
         (*inout_buf)[cell_idx] = count;
         uint32_t count_pos = count++;
         uint32_t emitted = 0;
@@ -283,9 +377,6 @@ struct yetty_ycore_void_result yetty_ydraw_scene_grid_rebuild_staging(
             if (bk->entity_slot >= entity_base_count) continue; /* defensive */
             uint32_t base = entity_base[bk->entity_slot];
             for (uint32_t i = 0; i < bk->count; i++) {
-                struct yetty_ycore_void_result e3 =
-                    staging_ensure_cap(inout_buf, inout_capacity, count + 1);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, e3, "scene-grid: ensure index slot");
                 (*inout_buf)[count++] = base + bk->local_indices[i];
                 emitted++;
             }
