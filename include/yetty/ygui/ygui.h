@@ -108,6 +108,10 @@ typedef enum {
      * are stored as label/callback pairs inside the widget — no
      * sub-widgets needed. See yetty_ygui_engine_popup_menu. */
     YETTY_YGUI_WIDGET_POPUP_MENU,
+    /* PDF viewer: owns N per-page draw_lists; emits font header + only
+     * visible pages translated by (widget_origin + page_y - scroll_y).
+     * See yetty/ygui/ygui_ypdf.h for construction + scroll API. */
+    YETTY_YGUI_WIDGET_YPDF,
     YETTY_YGUI_WIDGET_CUSTOM,
 } ygui_widget_type_t;
 
@@ -887,6 +891,25 @@ int yetty_ygui_widget_choicebox_get_selected(const struct yetty_ygui_widget *wid
 /* Scrollbars (V/H share the same value 0..1) */
 void yetty_ygui_widget_scrollbar_set_value(struct yetty_ygui_widget *widget, float value);
 float yetty_ygui_widget_scrollbar_get_value(const struct yetty_ygui_widget *widget);
+
+/* Bind a scrollbar to a scrollable widget (today: ypdf — anything that
+ * exposes the internal scrollable interface). The scrollbar becomes a
+ * pure view of the target's scroll state:
+ *
+ *   - render: thumb position from target.scroll / target.max_scroll;
+ *             thumb size proportional to target.viewport / target.content
+ *             (the bigger the document, the smaller the thumb).
+ *   - input:  click / drag / wheel on the scrollbar all call
+ *             target.scroll_to(...) — one canonical path.
+ *   - sync:   target.scroll_to marks the scrollbar dirty so the thumb
+ *             repaints in the same frame, including when the change
+ *             originated elsewhere (wheel on the target, keyboard, ...).
+ *
+ * No callbacks to wire, no reentrancy guards. Pass `target = NULL` to
+ * unbind and revert to free-running mode (the scrollbar value is what
+ * yetty_ygui_widget_scrollbar_set_value puts there). */
+void yetty_ygui_widget_scrollbar_bind(struct yetty_ygui_widget *scrollbar,
+                                      struct yetty_ygui_widget *target);
 
 /* List */
 void yetty_ygui_widget_list_set_selected(struct yetty_ygui_widget *list,

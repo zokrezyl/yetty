@@ -15,8 +15,21 @@
  * Private types
  *===========================================================================*/
 
+/* Each cell holds one bucket per entity that has placed a primitive
+ * here. Buckets are kept SORTED BY external_id ASCENDING so the
+ * staging build (which walks buckets in array order) feeds the shader
+ * a painter's-algorithm order that matches the producer's creation
+ * order (parent created before children → lower id → paints first =
+ * background → children paint on top).
+ *
+ * external_id is the sort key (not entity_slot) because the canvas's
+ * LIFO free list reassigns slots arbitrarily across CMD_ZERO and
+ * DELETE+GROUP cycles, while external_id is stable per widget for the
+ * widget's lifetime. entity_slot is still stored because the staging
+ * build needs it to look up entity_base[slot]. */
 struct cell_bucket {
     uint32_t  entity_slot;
+    uint64_t  external_id;
     uint32_t *local_indices;
     uint32_t  count;
     uint32_t  capacity;
@@ -70,6 +83,10 @@ static struct yetty_ycore_void_result grow_buckets(struct cell_bucket **arr,
     return YETTY_OK_VOID();
 }
 
+/* Locate the bucket for `entity_slot` in `cell`, or NULL if absent.
+ * Linear scan — cells hold few buckets in practice (one per widget
+ * that touches that cell). Used by `drop_at` which addresses buckets
+ * by their entity_slot rather than by external_id. */
 static struct cell_bucket *cell_find_bucket(struct scene_cell *cell,
                                             uint32_t entity_slot)
 {
@@ -81,25 +98,46 @@ static struct cell_bucket *cell_find_bucket(struct scene_cell *cell,
     return NULL;
 }
 
+/* Find or create a bucket for (entity_slot, external_id). Inserts at
+ * the sorted position by external_id so the bucket-order invariant
+ * holds after the call. `*out_pos` receives the array index of the
+ * returned bucket — needed by the caller to clean up after a failure
+ * mid-insertion (the position depends on sort, not append). */
 static struct yetty_ycore_void_result cell_ensure_bucket(
-    struct scene_cell *cell, uint32_t entity_slot, struct cell_bucket **out, bool *out_fresh)
+    struct scene_cell *cell, uint32_t entity_slot, uint64_t external_id,
+    struct cell_bucket **out, bool *out_fresh, uint32_t *out_pos)
 {
-    struct cell_bucket *b = cell_find_bucket(cell, entity_slot);
-    if (b) {
-        *out = b;
+    /* Find the sorted insertion point. If an entry with this
+     * external_id already exists at `pos` it's our entity from an
+     * earlier drawable in the same add_bytes batch — return it. */
+    uint32_t pos = 0;
+    while (pos < cell->bucket_count && cell->buckets[pos].external_id < external_id) {
+        pos++;
+    }
+    if (pos < cell->bucket_count && cell->buckets[pos].external_id == external_id) {
+        *out = &cell->buckets[pos];
         *out_fresh = false;
+        *out_pos = pos;
         return YETTY_OK_VOID();
     }
     struct yetty_ycore_void_result gr =
         grow_buckets(&cell->buckets, &cell->bucket_capacity, cell->bucket_count + 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "cell_ensure_bucket: grow");
-    b = &cell->buckets[cell->bucket_count++];
+    /* Shift tail right to open the slot at `pos`. */
+    if (pos < cell->bucket_count) {
+        memmove(&cell->buckets[pos + 1], &cell->buckets[pos],
+                (cell->bucket_count - pos) * sizeof(struct cell_bucket));
+    }
+    cell->bucket_count++;
+    struct cell_bucket *b = &cell->buckets[pos];
     b->entity_slot   = entity_slot;
+    b->external_id   = external_id;
     b->local_indices = NULL;
     b->count         = 0;
     b->capacity      = 0;
     *out = b;
     *out_fresh = true;
+    *out_pos = pos;
     return YETTY_OK_VOID();
 }
 
@@ -117,8 +155,12 @@ static void cell_drop_bucket_at(struct scene_cell *cell, uint32_t idx)
 {
     struct cell_bucket *b = &cell->buckets[idx];
     free(b->local_indices);
-    if (idx + 1 != cell->bucket_count) {
-        cell->buckets[idx] = cell->buckets[cell->bucket_count - 1];
+    /* Shift tail left to preserve the sorted-by-external_id invariant.
+     * Swap-with-last would corrupt the order and break the painter's-
+     * algorithm guarantee the staging build relies on. */
+    if (idx + 1u < cell->bucket_count) {
+        memmove(&cell->buckets[idx], &cell->buckets[idx + 1u],
+                (cell->bucket_count - idx - 1u) * sizeof(struct cell_bucket));
     }
     cell->bucket_count--;
 }
@@ -192,7 +234,7 @@ enum { INSERT_UNDO_STACK = 64 };
 
 struct yetty_ycore_void_result yetty_ydraw_scene_grid_insert(
     struct yetty_ydraw_scene_grid *grid,
-    uint32_t entity_slot, uint32_t local_idx,
+    uint32_t entity_slot, uint64_t external_id, uint32_t local_idx,
     uint32_t row_min, uint32_t row_max, uint32_t col_min, uint32_t col_max,
     yetty_ydraw_scene_grid_fresh_cb on_fresh, void *user)
 {
@@ -227,8 +269,9 @@ struct yetty_ycore_void_result yetty_ydraw_scene_grid_insert(
             struct scene_cell *cell = &grid->cells[r * grid->cols + c];
             struct cell_bucket *b = NULL;
             bool fresh = false;
+            uint32_t bpos = 0;
             struct yetty_ycore_void_result br =
-                cell_ensure_bucket(cell, entity_slot, &b, &fresh);
+                cell_ensure_bucket(cell, entity_slot, external_id, &b, &fresh, &bpos);
             if (YETTY_IS_ERR(br)) {
                 final_err = YETTY_ERR(yetty_ycore_void, "scene-grid: ensure_bucket", br);
                 aborted = true;
@@ -238,9 +281,11 @@ struct yetty_ycore_void_result yetty_ydraw_scene_grid_insert(
             if (YETTY_IS_ERR(pr)) {
                 /* If the bucket was created in this iteration it's now
                  * empty and ours alone — drop before falling into the
-                 * shared rollback path. */
+                 * shared rollback path. The fresh bucket lives at
+                 * `bpos` from the sorted insertion, not at
+                 * `bucket_count - 1` — sorted insert can land anywhere. */
                 if (fresh) {
-                    cell_drop_bucket_at(cell, cell->bucket_count - 1);
+                    cell_drop_bucket_at(cell, bpos);
                 }
                 final_err = YETTY_ERR(yetty_ycore_void, "scene-grid: push_index", pr);
                 aborted = true;

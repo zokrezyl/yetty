@@ -49,10 +49,17 @@ struct yetty_ycore_void_result yetty_ydraw_scene_grid_set_size(
 
 /* Insert `local_idx` into every cell overlapping
  * [row_min..row_max] × [col_min..col_max]. `on_fresh` fires for each
- * cell that didn't already have a bucket for this entity_slot. */
+ * cell that didn't already have a bucket for this entity_slot.
+ *
+ * `external_id` is the entity's wire id (from the producer's GROUP
+ * record). The grid sorts each cell's buckets by ascending external_id
+ * so the painter's-algorithm order in any cell is the producer's
+ * creation order. This ordering is stable across DELETE+GROUP cycles
+ * because external_id is stable per widget while entity_slot can be
+ * reassigned by the canvas's LIFO free list. */
 struct yetty_ycore_void_result yetty_ydraw_scene_grid_insert(
     struct yetty_ydraw_scene_grid *grid,
-    uint32_t entity_slot, uint32_t local_idx,
+    uint32_t entity_slot, uint64_t external_id, uint32_t local_idx,
     uint32_t row_min, uint32_t row_max, uint32_t col_min, uint32_t col_max,
     yetty_ydraw_scene_grid_fresh_cb on_fresh, void *user);
 

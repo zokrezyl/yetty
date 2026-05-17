@@ -3077,6 +3077,39 @@ int yetty_ygui_widget_choicebox_get_selected(const struct yetty_ygui_widget *wid
  * Standalone scrollbar; drag thumb to set value in [0..1].
  *===========================================================================*/
 
+/* Scrollbar geometry helpers — read from the bound target when one is
+ * attached, fall back to the free-running 0..1 value otherwise. */
+
+static float vscrollbar_value(const struct yetty_ygui_widget *self)
+{
+    struct yetty_ygui_widget *tgt = self->data.scrollbar.target;
+    if (tgt && tgt->scrollable) {
+        float max_s = tgt->scrollable->get_max_scroll(tgt);
+        if (max_s <= 0.0f) {
+            return 0.0f;
+        }
+        return tgt->scrollable->get_scroll(tgt) / max_s;
+    }
+    return self->data.scrollbar.value;
+}
+
+static float vscrollbar_thumb_h(const struct yetty_ygui_widget *self)
+{
+    /* When bound: thumb size is proportional to viewport / content —
+     * the bigger the document the smaller the thumb. Floor at 20 px
+     * so it stays grabbable. Free-running mode keeps the legacy 20%
+     * appearance. */
+    struct yetty_ygui_widget *tgt = self->data.scrollbar.target;
+    if (tgt && tgt->scrollable) {
+        float content = tgt->scrollable->get_content_h(tgt);
+        if (content > 0) {
+            float ratio = tgt->scrollable->get_viewport_h(tgt) / content;
+            return ygui_max(20.0f, self->h * ygui_clamp(ratio, 0.05f, 1.0f));
+        }
+    }
+    return ygui_max(20.0f, self->h * 0.2f);
+}
+
 static struct yetty_ycore_void_result vscrollbar_render(struct yetty_ygui_widget *self,
                                                         struct yetty_ygui_render_ctx *ctx)
 {
@@ -3085,9 +3118,9 @@ static struct yetty_ycore_void_result vscrollbar_render(struct yetty_ygui_widget
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, track_w, self->h, t->bg_secondary,
                                      track_w * 0.5f);
 
-    float thumb_h = ygui_max(20.0f, self->h * 0.2f);
+    float thumb_h = vscrollbar_thumb_h(self);
     float track_range = self->h - thumb_h;
-    float thumb_y = self->y + self->data.scrollbar.value * track_range;
+    float thumb_y = self->y + vscrollbar_value(self) * track_range;
     uint32_t thumb_color =
         (self->flags & YETTY_YGUI_FLAG_PRESSED)
             ? self->accent_color
@@ -3099,16 +3132,33 @@ static struct yetty_ycore_void_result vscrollbar_render(struct yetty_ygui_widget
 
 static int vscrollbar_update(struct yetty_ygui_widget *self, float ly, ygui_event_t *out)
 {
-    float thumb_h = ygui_max(20.0f, self->h * 0.2f);
+    float thumb_h = vscrollbar_thumb_h(self);
     float track_range = self->h - thumb_h;
     if (track_range <= 0) {
         return 0;
     }
     float pct = (ly - thumb_h * 0.5f) / track_range;
-    self->data.scrollbar.value = ygui_clamp(pct, 0.0f, 1.0f);
+    pct = ygui_clamp(pct, 0.0f, 1.0f);
+
+    struct yetty_ygui_widget *tgt = self->data.scrollbar.target;
+    if (tgt && tgt->scrollable) {
+        float max_s = tgt->scrollable->get_max_scroll(tgt);
+        tgt->scrollable->scroll_to(tgt, pct * max_s);
+        out->widget_id = self->id;
+        out->type = YETTY_YGUI_EVENT_SCROLL;
+        out->data.scroll.x = 0;
+        out->data.scroll.y = tgt->scrollable->get_scroll(tgt);
+        return 1;
+    }
+
+    /* Free-running fallback: own the 0..1 value, fire change_callback. */
+    self->data.scrollbar.value = pct;
+    if (self->change_callback) {
+        self->change_callback(self, pct, self->change_userdata);
+    }
     out->widget_id = self->id;
     out->type = YETTY_YGUI_EVENT_CHANGE;
-    out->data.float_value = self->data.scrollbar.value;
+    out->data.float_value = pct;
     return 1;
 }
 
@@ -3125,6 +3175,30 @@ static int vscrollbar_on_drag(struct yetty_ygui_widget *self, float lx, float ly
     return vscrollbar_update(self, ly, out);
 }
 
+/* Wheel on the scrollbar — forward to the bound target so the user
+ * gets the same scroll-on-wheel UX everywhere along the strip. */
+static int vscrollbar_on_scroll(struct yetty_ygui_widget *self, float dx, float dy,
+                                ygui_event_t *out)
+{
+    (void)dx;
+    struct yetty_ygui_widget *tgt = self->data.scrollbar.target;
+    if (!tgt || !tgt->scrollable) {
+        return 0;
+    }
+    const float speed = 60.0f;
+    float prev = tgt->scrollable->get_scroll(tgt);
+    tgt->scrollable->scroll_to(tgt, prev - dy * speed);
+    float now = tgt->scrollable->get_scroll(tgt);
+    if (now == prev) {
+        return 0;
+    }
+    out->widget_id = self->id;
+    out->type = YETTY_YGUI_EVENT_SCROLL;
+    out->data.scroll.x = 0;
+    out->data.scroll.y = now;
+    return 1;
+}
+
 struct yetty_ygui_widget *yetty_ygui_engine_vscrollbar(struct yetty_ygui_engine *engine,
                                                        const char *id, float x, float y, float w,
                                                        float h)
@@ -3136,10 +3210,12 @@ struct yetty_ygui_widget *yetty_ygui_engine_vscrollbar(struct yetty_ygui_engine 
     }
     yetty_ygui_widget_init_base(sb, x, y, w, h);
     sb->data.scrollbar.value = 0;
+    sb->data.scrollbar.target = NULL;
     static const struct yetty_ygui_widget_vtable vscrollbar_vtable = {
         .render = vscrollbar_render,
         .on_press = vscrollbar_on_press,
         .on_drag = vscrollbar_on_drag,
+        .on_scroll = vscrollbar_on_scroll,
     };
     sb->vtable = &vscrollbar_vtable;
     add_to_engine(engine, sb);
@@ -3176,6 +3252,9 @@ static int hscrollbar_update(struct yetty_ygui_widget *self, float lx, ygui_even
     }
     float pct = (lx - thumb_w * 0.5f) / track_range;
     self->data.scrollbar.value = ygui_clamp(pct, 0.0f, 1.0f);
+    if (self->change_callback) {
+        self->change_callback(self, self->data.scrollbar.value, self->change_userdata);
+    }
     out->widget_id = self->id;
     out->type = YETTY_YGUI_EVENT_CHANGE;
     out->data.float_value = self->data.scrollbar.value;
@@ -3228,6 +3307,33 @@ void yetty_ygui_widget_scrollbar_set_value(struct yetty_ygui_widget *widget, flo
     widget->data.scrollbar.value = ygui_clamp(value, 0.0f, 1.0f);
     if (widget->engine) {
         widget->engine->dirty = 1; widget->dirty = 1;
+    }
+}
+
+void yetty_ygui_widget_scrollbar_bind(struct yetty_ygui_widget *scrollbar,
+                                      struct yetty_ygui_widget *target)
+{
+    if (!scrollbar) {
+        return;
+    }
+    if (scrollbar->type != YETTY_YGUI_WIDGET_VSCROLLBAR &&
+        scrollbar->type != YETTY_YGUI_WIDGET_HSCROLLBAR) {
+        return;
+    }
+    /* Detach any previously-bound target from this scrollbar's observer
+     * slot — keeps target->scroll_observer pointing only at the latest
+     * bound bar (and only if no other view has claimed the slot since). */
+    struct yetty_ygui_widget *prev = scrollbar->data.scrollbar.target;
+    if (prev && prev->scroll_observer == scrollbar) {
+        prev->scroll_observer = NULL;
+    }
+    scrollbar->data.scrollbar.target = target;
+    if (target) {
+        target->scroll_observer = scrollbar;
+    }
+    if (scrollbar->engine) {
+        scrollbar->engine->dirty = 1;
+        scrollbar->dirty = 1;
     }
 }
 

@@ -185,6 +185,24 @@ struct yetty_ygui_widget_vtable {
 };
 
 /*=============================================================================
+ * Scrollable interface — a thin vtable any widget can expose so a
+ * scrollbar (or any other view) can drive it without knowing its
+ * concrete type. ypdf wires it in its constructor.
+ *
+ * Conventions: all four sizes are in DOCUMENT pixels. `max_scroll` is
+ * `max(0, content - viewport)`. `scroll_to` clamps and fires the
+ * widget's own observers (e.g. marks `scroll_observer` dirty).
+ *===========================================================================*/
+
+struct yetty_ygui_scrollable {
+    float (*get_content_h)(const struct yetty_ygui_widget *self);
+    float (*get_viewport_h)(const struct yetty_ygui_widget *self);
+    float (*get_scroll)(const struct yetty_ygui_widget *self);
+    float (*get_max_scroll)(const struct yetty_ygui_widget *self);
+    void  (*scroll_to)(struct yetty_ygui_widget *self, float y);
+};
+
+/*=============================================================================
  * Widget Structure
  *===========================================================================*/
 
@@ -247,6 +265,17 @@ struct yetty_ygui_widget {
      * saved 56 bytes per instance and matches the project design rule of
      * "vtable pattern with structural embedding". */
     const struct yetty_ygui_widget_vtable *vtable;
+
+    /* Optional: widget implements the scrollable interface. NULL = not
+     * scrollable. Set in the constructor by widgets that own scrollable
+     * content (ypdf today; panel and future yreadme/ybrowser later). */
+    const struct yetty_ygui_scrollable *scrollable;
+
+    /* Optional: a sibling widget (typically a vscrollbar) that observes
+     * this widget's scroll position. Set by yetty_ygui_widget_scrollbar_bind.
+     * On every scroll mutation the widget marks `scroll_observer->dirty`
+     * so the bound scrollbar's thumb repaints in the same frame. */
+    struct yetty_ygui_widget *scroll_observer;
 
     /* User callbacks */
     ygui_widget_click_fn click_callback;
@@ -341,7 +370,12 @@ struct yetty_ygui_widget {
         } choicebox;
 
         struct {
-            float value; /* 0..1 */
+            float value; /* 0..1 — used when no target is bound */
+            /* When bound, the scrollbar acts as a pure view of the
+             * target's scroll state: it reads target.scroll on render,
+             * forwards click/drag/wheel to target.scroll_to / scroll_by.
+             * NULL = legacy free-running mode (value drives nothing). */
+            struct yetty_ygui_widget *target;
         } scrollbar;
 
         struct {
@@ -384,6 +418,36 @@ struct yetty_ygui_widget {
              * widget's render translates them to absolute canvas coords. */
             struct yetty_ydraw_draw_list *buffer;
         } rich;
+
+        struct {
+            /* Per-page sub-buffers; each is in page-local coordinates
+             * (page origin at 0, 0). Allocated by the ypdf widget
+             * constructor and freed by its destroy hook. */
+            struct ypdf_page_entry {
+                struct yetty_ydraw_draw_list *buf;
+                float abs_y; /* document-absolute Y of the page top */
+                float h;     /* page height */
+            } *pages;
+            int n_pages;
+            float total_h;  /* sum of page heights + N*page_gap */
+            float page_gap; /* spacer between consecutive pages */
+            float scroll_y; /* current scroll position [0, max_scroll] */
+
+            /* Concatenated full FONT prims (ttf bytes inline) for every
+             * font referenced anywhere in the document. Emitted at the
+             * head of every render envelope so any visible-page TEXT_SPAN
+             * can resolve its font_id even when the page that originally
+             * carried the full FONT prim is currently scrolled off. */
+            struct yetty_ydraw_draw_list *font_header;
+
+            /* Fired AFTER the widget mutates scroll_y so a bound
+             * scrollbar (or any other observer) can sync. NULL = no
+             * observer; the widget still updates internally. */
+            void (*on_scroll_change)(struct yetty_ygui_widget *self,
+                                     float scroll_y, float max_scroll,
+                                     void *userdata);
+            void *on_scroll_change_userdata;
+        } ypdf;
 
         struct {
             /* Title text (owned, NUL-terminated, NULL when title is empty). */

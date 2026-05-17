@@ -1244,10 +1244,13 @@ static struct yetty_ycore_void_result scene_entity_add_bytes(
     };
     entity->drawable_count++;
 
-    /* Insert into the grid via opaque API. */
+    /* Insert into the grid via opaque API. The grid sorts each cell's
+     * buckets by external_id so paint order in any cell matches the
+     * producer's creation order (background widgets painted first). */
     struct fresh_ctx ctx = {.entity = entity};
     struct yetty_ycore_void_result ir = yetty_ydraw_scene_grid_insert(
-        sc->grid, entity->slot, local_idx, row_min, row_max, col_min, col_max, on_fresh_cell, &ctx);
+        sc->grid, entity->slot, entity->external_id, local_idx,
+        row_min, row_max, col_min, col_max, on_fresh_cell, &ctx);
     if (YETTY_IS_ERR(ir)) {
         /* grid_insert rolled back its own state — restore the entity's
          * append-points so they stay consistent. */
@@ -1647,8 +1650,6 @@ static struct yetty_ycore_void_result dispatch_command(struct scene_canvas *sc,
     uint32_t drawable_type = cmd->flyweight.data[0];
 
     if (drawable_type == YETTY_YDRAW_CMD_ZERO) {
-        ydebug("scene-canvas: CMD_ZERO high_water=%u (clearing scene)",
-               sc->entity_high_water);
         return scene_clear(&sc->base);
     }
     if (drawable_type == YETTY_YDRAW_CMD_GROUP) {
@@ -1662,14 +1663,8 @@ static struct yetty_ycore_void_result dispatch_command(struct scene_canvas *sc,
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ent_res, "scene-canvas: GROUP lookup/create");
         /* Capture the new entity's slot BEFORE any further table grow. */
         uint32_t child_slot = ent_res.value->slot;
-        ydebug("scene-canvas: GROUP id=%u → slot=%u parent_slot=%u payload=%u B",
-               id, child_slot, parent_slot, payload_size);
         const uint8_t *body = (const uint8_t *)cmd->flyweight.data + 12u;
-        struct yetty_ycore_void_result br = process_group_body(sc, child_slot, body, payload_size);
-        ydebug("scene-canvas: GROUP id=%u DONE slot=%u drawable_count=%u touched_cells=%u",
-               id, child_slot, sc->entities[child_slot].drawable_count,
-               sc->entities[child_slot].touched_cell_count);
-        return br;
+        return process_group_body(sc, child_slot, body, payload_size);
     }
     if (drawable_type == YETTY_YDRAW_TYPE_FONT) {
         return scene_handle_font(sc, &cmd->flyweight);
