@@ -39,7 +39,21 @@
 #include <yetty/yplatform/term.h>   /* term_get_size */
 #include <yetty/yplatform/tty.h>    /* stderr-rerouting probe */
 #include <yetty/ygui/ygui.h>
+#ifdef YGREETER_HAS_YBROWSER
+#include <yetty/ygui/ygui_ybrowser.h>
+#endif
+#ifdef YGREETER_HAS_YMARKDOWN
+#include <yetty/ygui/ygui_ymarkdown.h>
+#endif
+#ifdef YGREETER_HAS_YPDF
+#include <yetty/ygui/ygui_ypdf.h>
+#endif
 #include <yetty/ytrace/ytrace.h>
+
+/* Upper bound on the tab count. Built-ins (Welcome, Plots, Images,
+ * Code) plus the widget-showcase tabs (Markdown, Browser, PDF) plus
+ * a few free slots for runtime experimentation. */
+#define YGREETER_TAB_MAX 12
 
 /* =========================================================================
  * Tab-local navigation entry. Each entry binds a tree-row label to the
@@ -189,7 +203,7 @@ static const struct nav_entry WELCOME_NAV[] = {
     "      font-size: 22\n"                                                                  \
     "      color: \"#ffffff\"\n"                                                             \
     "  - yplot:\n"                                                                           \
-    "      position: [16, 60]\n"                                                             \
+    "      position: [16, 80]\n"                                                             \
     "      size: [460, 280]\n"                                                               \
     "      x_range: [-6.2832, 6.2832]\n"                                                     \
     "      y_range: [-1.5, 1.5]\n"                                                           \
@@ -210,7 +224,7 @@ static const struct nav_entry WELCOME_NAV[] = {
     "      font-size: 22\n"                                                                  \
     "      color: \"#ffffff\"\n"                                                             \
     "  - yplot:\n"                                                                           \
-    "      position: [16, 60]\n"                                                             \
+    "      position: [16, 80]\n"                                                             \
     "      size: [460, 280]\n"                                                               \
     "      x_range: [-5, 5]\n"                                                               \
     "      y_range: [-2, 12]\n"                                                              \
@@ -231,7 +245,7 @@ static const struct nav_entry WELCOME_NAV[] = {
     "      font-size: 22\n"                                                                  \
     "      color: \"#ffffff\"\n"                                                             \
     "  - yplot:\n"                                                                           \
-    "      position: [16, 60]\n"                                                             \
+    "      position: [16, 80]\n"                                                             \
     "      size: [460, 280]\n"                                                               \
     "      x_range: [-6, 6]\n"                                                               \
     "      y_range: [-1.2, 1.2]\n"                                                           \
@@ -289,23 +303,20 @@ static const struct nav_entry PLOT_NAV[] = {
     "      font-size: 16\n"                                                                  \
     "      color: \"#666e85\"\n"
 
-#define IMAGE_LOGO                                                                          \
-    IMAGE_PLACEHOLDER_FOR("Logo preview",                                                   \
-                          "yimage decodes PNG / JPEG via stb_image and uploads it as a")
+/* Placeholder YAML for an image row when its file isn't on disk. The
+ * Images tab's nav entries are built at startup from whatever
+ * docs/logo-*.jpeg files exist, so the placeholder is only seen when
+ * a probe failed mid-way through. */
+#define IMAGE_FALLBACK_YAML                                                                 \
+    IMAGE_PLACEHOLDER_FOR("Image not found",                                                \
+                          "ygreeter probes docs/logo-*.jpeg relative to the executable.")
 
-#define IMAGE_PHOTO                                                                         \
-    IMAGE_PLACEHOLDER_FOR("Photograph",                                                     \
-                          "ydraw texture atlas; the GPU samples it at the displayed size.")
-
-#define IMAGE_DIAGRAM                                                                       \
-    IMAGE_PLACEHOLDER_FOR("Diagram",                                                        \
-                          "Works inline with other primitives — see the Plots tab.")
-
-static const struct nav_entry IMAGE_NAV[] = {
-    {"Logo", IMAGE_LOGO},
-    {"Photograph", IMAGE_PHOTO},
-    {"Diagram", IMAGE_DIAGRAM},
-};
+/* Heap-owned: built at startup from discover_logo_images(), freed
+ * before exit. Parallel arrays — entry N's label is g_image_nav[N],
+ * the file it loads is g_image_paths[N]. */
+static struct nav_entry *g_image_nav = NULL;
+static char           **g_image_paths = NULL;
+static int              g_image_path_count = 0;
 
 /* Build a ydraw buffer holding ONE yimage prim plus a TEXT_SPAN title.
  * The ydraw-yaml parser doesn't support `yimage:` blocks today
@@ -320,11 +331,15 @@ static struct yetty_ydraw_draw_list *build_image_buffer(const char *title, const
 {
     ydebug("build_image_buffer: ENTER title='%s' path='%s'", title ? title : "(null)",
            path ? path : "(null)");
+    /* Image bounds: position 80 (same y-clearance the plot tab uses
+     * over its 22pt title so the heading isn't covered) and 2× the
+     * previous draw area so the bundled logos render at a respectable
+     * size on a typical card. */
     struct yetty_yimage_render_config cfg = {
         .bounds_x = 16.0f,
-        .bounds_y = 60.0f,
-        .bounds_w = 460.0f,
-        .bounds_h = 320.0f,
+        .bounds_y = 80.0f,
+        .bounds_w = 920.0f,
+        .bounds_h = 640.0f,
     };
     struct yetty_ydraw_draw_list_result r = yetty_yimage_render_path(path, &cfg);
     if (YETTY_IS_ERR(r)) {
@@ -424,27 +439,77 @@ static char *find_repo_image(const char *argv0, const char *relative)
     return NULL;
 }
 
-static char *probe_default_image(const char *argv0)
+/* Discover every docs/logo-N.jpeg that exists relative to the binary
+ * and populate g_image_paths / g_image_nav. One nav entry per file so
+ * the Images tab's left rail flexes from 1 to N rows depending on how
+ * many bundled logos are shipped. The yaml field is the fallback
+ * placeholder — load_entry routes through build_image_buffer when the
+ * file path resolves, so the YAML is only seen on decode failure. */
+static void discover_logo_images(const char *argv0)
 {
+    /* Probe a generous upper bound on logo numbers. The repo currently
+     * ships logo-1..logo-4 in docs/, but a future build might add
+     * more — we stop at the first miss after at least one hit, with
+     * a hard ceiling so a broken numbering scheme can't loop. */
+    enum { MAX_LOGOS = 32 };
+    char  *paths_tmp[MAX_LOGOS];
+    int    count = 0;
+    /* Optional user override comes first so YGREETER_IMAGE still shows
+     * up as the leading entry. */
     const char *env = getenv("YGREETER_IMAGE");
     if (env && *env && path_exists(env)) {
-        return strdup(env);
+        paths_tmp[count++] = strdup(env);
     }
-    static const char *candidates[] = {
-        "assets/logo.jpeg",
-        "docs/logo-1.jpeg",
-        "docs/logo-2.jpeg",
-        "docs/logo-3.jpeg",
-        "docs/logo-4.jpeg",
-        "assets/apple-touch-icon.jpg",
-    };
-    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
-        char *p = find_repo_image(argv0, candidates[i]);
-        if (p) {
-            return p;
+    for (int i = 1; i <= MAX_LOGOS && count < MAX_LOGOS; i++) {
+        char rel[64];
+        snprintf(rel, sizeof(rel), "docs/logo-%d.jpeg", i);
+        char *p = find_repo_image(argv0, rel);
+        if (!p) {
+            /* allow gaps in numbering up to logo-8 before giving up */
+            if (i > 8) break;
+            continue;
         }
+        paths_tmp[count++] = p;
     }
-    return NULL;
+    /* assets/logo.jpeg as a final fallback when nothing else resolved */
+    if (count == 0) {
+        char *p = find_repo_image(argv0, "assets/logo.jpeg");
+        if (p) paths_tmp[count++] = p;
+    }
+    if (count == 0) {
+        return;
+    }
+    g_image_paths = (char **)calloc((size_t)count, sizeof(char *));
+    g_image_nav   = (struct nav_entry *)calloc((size_t)count, sizeof(struct nav_entry));
+    if (!g_image_paths || !g_image_nav) {
+        for (int i = 0; i < count; i++) free(paths_tmp[i]);
+        free(g_image_paths); g_image_paths = NULL;
+        free(g_image_nav);   g_image_nav = NULL;
+        return;
+    }
+    /* The label memory has to outlive build_tab_body — heap-allocated
+     * strings owned by ygreeter; freed in free_image_nav() at exit. */
+    for (int i = 0; i < count; i++) {
+        g_image_paths[i] = paths_tmp[i];
+        char label[64];
+        const char *base = strrchr(paths_tmp[i], '/');
+        base = base ? base + 1 : paths_tmp[i];
+        snprintf(label, sizeof(label), "%.60s", base);
+        g_image_nav[i].label = strdup(label);
+        g_image_nav[i].yaml  = IMAGE_FALLBACK_YAML;
+    }
+    g_image_path_count = count;
+}
+
+static void free_image_nav(void)
+{
+    for (int i = 0; i < g_image_path_count; i++) {
+        free(g_image_paths[i]);
+        free((char *)g_image_nav[i].label);
+    }
+    free(g_image_paths); g_image_paths = NULL;
+    free(g_image_nav);   g_image_nav = NULL;
+    g_image_path_count = 0;
 }
 
 /* =========================================================================
@@ -630,14 +695,11 @@ struct tab_state {
     int n_entries;
 };
 
-/* Resolved image path for the Images tab. NULL when no usable file was
- * found (bundled assets missing AND no YGREETER_IMAGE env var) — in that
- * case the tab falls back to the static IMAGE_NAV YAMLs (placeholder).
- *
- * Owned by main; freed before exit. We use a global because load_entry
- * is called from many spots and threading a path argument through every
- * caller for the sake of one tab would clutter the signatures. */
-static char *g_image_path = NULL;
+/* The Images tab uses g_image_paths[entry_index] (built at startup
+ * by discover_logo_images) instead of a single resolved image. Kept
+ * as a local in main() rather than a separate global, so the
+ * pre-discovery placeholder behaviour for $YGREETER_IMAGE still
+ * works as a fallback when no logo-* files were located. */
 
 /* Index of the Images tab. Tracked as a runtime variable so that
  * closing earlier tabs (which shifts subsequent indices down) keeps
@@ -649,7 +711,7 @@ struct app {
     struct yetty_ygui_engine *engine;
     struct yetty_ygui_widget *outer;
     struct yetty_ygui_widget *tabbar;
-    struct tab_state tabs[4];
+    struct tab_state tabs[YGREETER_TAB_MAX];
     /* About dialog. Three top-level widgets hidden until the menu's
      * About entry opens them. They're re-centred on engine resize. The
      * popup carries the modal overlay + drop shadow; the rich widget
@@ -715,26 +777,26 @@ static const char *yaml_for(const struct tab_state *t, int entry_index)
 
 static void load_entry(struct app *app, int tab_index, int entry_index)
 {
-    if (tab_index < 0 || tab_index >= 4) {
+    if (tab_index < 0 || tab_index >= YGREETER_TAB_MAX) {
         return;
     }
     struct tab_state *t = &app->tabs[tab_index];
     if (entry_index < 0 || entry_index >= t->n_entries) {
         return;
     }
-    /* Images tab: when we have a resolved file, build a fresh ydraw
-     * buffer with the yimage prim + a title TEXT_SPAN and install it
-     * via set_buffer (which takes ownership). Falls through to the
-     * static YAML placeholder when no image was found. */
-    if (tab_index == g_images_tab_index && g_image_path) {
+    /* Images tab: pick the per-entry file from g_image_paths and build
+     * a fresh ydraw buffer (yimage prim + title TEXT_SPAN). Falls
+     * through to the placeholder YAML when nothing was discovered or
+     * the file decode failed. */
+    if (tab_index == g_images_tab_index && entry_index < g_image_path_count &&
+        g_image_paths && g_image_paths[entry_index]) {
         struct yetty_ydraw_draw_list *buf =
-            build_image_buffer(t->entries[entry_index].label, g_image_path);
+            build_image_buffer(t->entries[entry_index].label,
+                               g_image_paths[entry_index]);
         if (buf) {
             yetty_ygui_widget_rich_set_buffer(t->rich, buf);
             return;
         }
-        /* build_image_buffer failed (file disappeared, decode failed) —
-         * fall through to the placeholder YAML so the tab isn't blank. */
     }
     const char *yaml = yaml_for(t, entry_index);
     struct yetty_ycore_void_result r =
@@ -1164,19 +1226,90 @@ int main(int argc, char **argv)
     build_tab_body(&app, 1, plots, PLOT_NAV,
                    (int)(sizeof(PLOT_NAV) / sizeof(PLOT_NAV[0])), "plots");
 
-    /* Resolve the bundled image BEFORE building the Images tab, so
-     * load_entry's first call (during build_tab_body) already sees the
-     * path and goes through the yimage buffer path instead of the YAML
-     * placeholder. Falls back to placeholder when no image is found. */
-    g_image_path = probe_default_image(argv[0]);
+    /* Images tab — nav rows built dynamically from docs/logo-*.jpeg
+     * so the rail grows with the bundled asset count. Falls back to
+     * the placeholder YAML row when no logo files are found. */
+    discover_logo_images(argv[0]);
     struct yetty_ygui_widget *images = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Images");
-    build_tab_body(&app, g_images_tab_index, images, IMAGE_NAV,
-                   (int)(sizeof(IMAGE_NAV) / sizeof(IMAGE_NAV[0])), "images");
+    if (g_image_path_count > 0) {
+        build_tab_body(&app, g_images_tab_index, images, g_image_nav,
+                       g_image_path_count, "images");
+    } else {
+        /* No bundled images located — single placeholder row so the
+         * tab isn't empty and the hint text is visible. */
+        static const struct nav_entry fallback[] = {
+            {"Logo", IMAGE_FALLBACK_YAML},
+        };
+        build_tab_body(&app, g_images_tab_index, images, fallback, 1, "images");
+    }
 
     /* Code */
     struct yetty_ygui_widget *code = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Code");
     build_tab_body(&app, 3, code, CODE_NAV,
                    (int)(sizeof(CODE_NAV) / sizeof(CODE_NAV[0])), "code");
+
+    /* Markdown / HTML / PDF widget showcase tabs — each shows one
+     * sample document via the corresponding ygui widget. The widget
+     * fills its tab via flex: 1; if the bundled sample isn't found
+     * the tab is silently skipped (the feature was probably built
+     * without the dependency). */
+#ifdef YGREETER_HAS_YMARKDOWN
+    {
+        char *md_path = find_repo_image(argv[0], "README.md");
+        if (md_path) {
+            struct yetty_ygui_widget *tab =
+                yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Markdown");
+            struct yetty_ygui_widget *w =
+                yetty_ygui_engine_ymarkdown_from_file(app.engine, "md_view",
+                                                      0, 0, 100, 100, md_path);
+            if (w) {
+                yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
+                yetty_ygui_widget_add_child(tab, w);
+            }
+            free(md_path);
+        }
+    }
+#endif
+#ifdef YGREETER_HAS_YBROWSER
+    {
+        char *html_path =
+            find_repo_image(argv[0], "demo/ygui/26_ybrowser/sample.html");
+        if (html_path) {
+            struct yetty_ygui_widget *tab =
+                yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Browser");
+            struct yetty_ygui_widget *w =
+                yetty_ygui_engine_ybrowser_from_file(app.engine, "html_view",
+                                                     0, 0, 100, 100, html_path);
+            if (w) {
+                yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
+                yetty_ygui_widget_add_child(tab, w);
+            }
+            free(html_path);
+        }
+    }
+#endif
+#ifdef YGREETER_HAS_YPDF
+    {
+        /* Prefer the comprehensive PDF — falls back to pdf-sample if the
+         * larger one isn't shipped. */
+        char *pdf_path = find_repo_image(argv[0], "test/ut/ypdf/test-comprehensive.pdf");
+        if (!pdf_path) {
+            pdf_path = find_repo_image(argv[0], "test/ut/ypdf/pdf-sample.pdf");
+        }
+        if (pdf_path) {
+            struct yetty_ygui_widget *tab =
+                yetty_ygui_widget_tabbar_add_tab(app.tabbar, "PDF");
+            struct yetty_ygui_widget *w =
+                yetty_ygui_engine_ypdf_from_file(app.engine, "pdf_view",
+                                                 0, 0, 100, 100, pdf_path);
+            if (w) {
+                yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
+                yetty_ygui_widget_add_child(tab, w);
+            }
+            free(pdf_path);
+        }
+    }
+#endif
 
     yetty_ygui_engine_on_resize(app.engine, on_resize, &app);
     yetty_ygui_engine_on_key(app.engine, on_key, NULL);
@@ -1192,8 +1325,7 @@ int main(int argc, char **argv)
 
     yetty_ygui_engine_run(app.engine);
 
-    free(g_image_path);
-    g_image_path = NULL;
+    free_image_nav();
     free_row_links();
     yetty_ygui_engine_destroy(app.engine);
     yetty_ygui_shutdown();

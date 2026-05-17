@@ -43,7 +43,7 @@ add_subdirectory(23_rich_tabbar)
 # producer's enable flag so a build that drops e.g. YPDF doesn't fail
 # trying to link demo-ygui-25-ypdf against a missing ygui_ypdf target.
 if(YETTY_ENABLE_FEATURE_YMARKDOWN)
-    add_subdirectory(24_yreadme)
+    add_subdirectory(24_ymarkdown)
 endif()
 if(YETTY_ENABLE_FEATURE_YPDF)
     add_subdirectory(25_ypdf)

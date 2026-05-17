@@ -99,8 +99,8 @@ install(TARGETS ygui_core ARCHIVE DESTINATION lib)
 # ---------------------------------------------------------------------
 # Per-producer widget libs.
 #
-# Each widget below wraps one producer module (ypdf, ymarkdown via
-# yreadme, ybrowser, yjungle, yzoo) and exposes it as a ygui widget by
+# Each widget below wraps one producer module (ypdf, ymarkdown,
+# ybrowser, yjungle, yzoo) and exposes it as a ygui widget by
 # building a draw_list at construction time and handing it to the
 # generic RICH widget. Each lives in its own static library so callers
 # only link the producer dependencies they actually use; ygui_core stays
@@ -112,14 +112,14 @@ install(TARGETS ygui_core ARCHIVE DESTINATION lib)
 # ---------------------------------------------------------------------
 
 if(YETTY_ENABLE_FEATURE_YMARKDOWN)
-    add_library(ygui_yreadme STATIC ygui_yreadme.c)
-    target_include_directories(ygui_yreadme PUBLIC
+    add_library(ygui_ymarkdown STATIC ygui_ymarkdown.c)
+    target_include_directories(ygui_ymarkdown PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${YETTY_ROOT}/include
     )
-    target_link_libraries(ygui_yreadme PUBLIC ygui_core yetty_yreadme)
-    set_target_properties(ygui_yreadme PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
-    install(TARGETS ygui_yreadme ARCHIVE DESTINATION lib)
+    target_link_libraries(ygui_ymarkdown PUBLIC ygui_core yetty_ymarkdown)
+    set_target_properties(ygui_ymarkdown PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    install(TARGETS ygui_ymarkdown ARCHIVE DESTINATION lib)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YPDF)
@@ -169,7 +169,7 @@ endif()
 install(FILES
     ${YETTY_ROOT}/include/yetty/ygui/ygui_ypdf.h
     ${YETTY_ROOT}/include/yetty/ygui/ygui_ybrowser.h
-    ${YETTY_ROOT}/include/yetty/ygui/ygui_yreadme.h
+    ${YETTY_ROOT}/include/yetty/ygui/ygui_ymarkdown.h
     ${YETTY_ROOT}/include/yetty/ygui/ygui_yjungle.h
     ${YETTY_ROOT}/include/yetty/ygui/ygui_yzoo.h
     DESTINATION include/yetty/ygui

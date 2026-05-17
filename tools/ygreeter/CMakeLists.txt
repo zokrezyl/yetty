@@ -27,6 +27,21 @@ target_include_directories(ygreeter PRIVATE
 # image-bearing buffer programmatically and hand it to rich_set_buffer.
 target_link_libraries(ygreeter PRIVATE ygui yetty_yimage_core yetty_yplatform_core)
 
+# Optional showcase widgets — each gated on the feature flag that turns
+# the underlying backend on. Missing flag → tab silently absent.
+if(YETTY_ENABLE_FEATURE_YMARKDOWN)
+    target_link_libraries(ygreeter PRIVATE ygui_ymarkdown)
+    target_compile_definitions(ygreeter PRIVATE YGREETER_HAS_YMARKDOWN)
+endif()
+if(YETTY_ENABLE_FEATURE_YBROWSER)
+    target_link_libraries(ygreeter PRIVATE ygui_ybrowser)
+    target_compile_definitions(ygreeter PRIVATE YGREETER_HAS_YBROWSER)
+endif()
+if(YETTY_ENABLE_FEATURE_YPDF)
+    target_link_libraries(ygreeter PRIVATE ygui_ypdf)
+    target_compile_definitions(ygreeter PRIVATE YGREETER_HAS_YPDF)
+endif()
+
 if(NOT MSVC)
     target_compile_options(ygreeter PRIVATE -Wall -Wextra)
 endif()

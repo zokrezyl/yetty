@@ -197,10 +197,6 @@ endif()
 
 if(YETTY_ENABLE_FEATURE_YMARKDOWN)
     add_subdirectory(ymarkdown)
-    # yreadme is a thin convenience wrapper over ymarkdown — gate it on
-    # the same flag rather than introducing a parallel YETTY_ENABLE_*
-    # toggle that would always shadow ymarkdown's.
-    add_subdirectory(yreadme)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YSVG)

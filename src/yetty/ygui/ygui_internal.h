@@ -268,7 +268,7 @@ struct yetty_ygui_widget {
 
     /* Optional: widget implements the scrollable interface. NULL = not
      * scrollable. Set in the constructor by widgets that own scrollable
-     * content (ypdf today; panel and future yreadme/ybrowser later). */
+     * content (ypdf today; panel and future ymarkdown/ybrowser later). */
     const struct yetty_ygui_scrollable *scrollable;
 
     /* Optional: a sibling widget (typically a vscrollbar) that observes
