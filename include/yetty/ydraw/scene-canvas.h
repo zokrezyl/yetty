@@ -43,6 +43,17 @@ YETTY_ANNOT_CALLER_OWNED
 struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create(
     const struct yetty_context *context);
 
+/* Minimal-init constructor for unit tests — no GPU device, no figure
+ * factory, no font cache. The resulting canvas supports the entity
+ * tree, grid/staging rebuild, and dispatch of CMD_ZERO / CMD_GROUP /
+ * CMD_DELETE / plain SDF flyweights. TEXT_SPAN, FONT, and complex
+ * (figure) drawables are NOT supported here — they need the GPU stack.
+ *
+ * Free with the same yetty_ydraw_canvas_destroy path as the full
+ * constructor. */
+YETTY_ANNOT_CALLER_OWNED
+struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create_for_test(void);
+
 /* The implicit root entity. Receives any primitive added without a
  * specific entity (e.g. free prims arriving on the wire). Lives for
  * the canvas's lifetime. */

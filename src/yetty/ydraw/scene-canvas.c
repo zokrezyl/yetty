@@ -136,9 +136,24 @@ struct scene_canvas {
     /* Opaque spatial index. */
     struct yetty_ydraw_scene_grid *grid;
 
-    /* Entity table + free-list. Slot 0 = implicit root. */
+    /* Entity table + free-list. Slot 0 = implicit root.
+     *
+     *   entity_capacity — physical size of the entities[] array.
+     *   entity_high_water — index one past the highest slot ever issued
+     *                       (including freed ones still on the free list).
+     *                       When the free list is empty, the next fresh
+     *                       slot to issue is entity_high_water, and the
+     *                       array is grown if necessary first.
+     *   free_slot_head  — head of the singly-linked free list (slots that
+     *                     were issued, then released).
+     *
+     * Mixing capacity with high-water-mark used to be the same field,
+     * which made every alloc consume an entire doubling step (1 → 2 →
+     * 4 → 8 …) even when the caller only wanted one slot — so creating N
+     * entities took O(2^N) work. The split keeps growth amortized O(N). */
     struct yetty_ydraw_scene_entity *entities;
     uint32_t entity_capacity;
+    uint32_t entity_high_water;
     uint32_t free_slot_head;
 
     /* Wire dispatch resources. The registry is shared by the
@@ -303,10 +318,18 @@ static struct yetty_ycore_void_result scene_alloc_slot(struct scene_canvas *sc, 
         *out = slot;
         return YETTY_OK_VOID();
     }
-    uint32_t slot = sc->entity_capacity;
-    struct yetty_ycore_void_result gr = scene_grow_entities(sc, slot + 1);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "scene_alloc_slot: scene_grow_entities");
+    /* Fresh slot at the high-water mark. Grow the array only if the
+     * mark has caught up with capacity — doubling spreads the realloc
+     * cost amortized O(1) per alloc. The old version used
+     * entity_capacity here, which made each alloc consume an entire
+     * doubling step. */
+    uint32_t slot = sc->entity_high_water;
+    if (slot >= sc->entity_capacity) {
+        struct yetty_ycore_void_result gr = scene_grow_entities(sc, slot + 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "scene_alloc_slot: scene_grow_entities");
+    }
     sc->entities[slot].in_use = true;
+    sc->entity_high_water = slot + 1u;
     *out = slot;
     return YETTY_OK_VOID();
 }
@@ -514,7 +537,7 @@ static void scene_canvas_destroy_internals(struct scene_canvas *sc)
         yetty_ydraw_scene_grid_destroy(sc->grid);
         sc->grid = NULL;
     }
-    for (uint32_t i = 0; i < sc->entity_capacity; i++) {
+    for (uint32_t i = 0; i < sc->entity_high_water; i++) {
         if (sc->entities[i].in_use) {
             entity_free_storage(&sc->entities[i]);
         }
@@ -522,6 +545,7 @@ static void scene_canvas_destroy_internals(struct scene_canvas *sc)
     free(sc->entities);
     sc->entities = NULL;
     sc->entity_capacity = 0;
+    sc->entity_high_water = 0;
     free(sc->grid_staging);
     sc->grid_staging = NULL;
     free(sc->drawable_staging);
@@ -552,13 +576,13 @@ static void scene_canvas_destroy_internals(struct scene_canvas *sc)
     }
 }
 
-struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create(
-    const struct yetty_context *context)
+/* Allocate the canvas struct and initialise the parts that don't need a
+ * GPU context: entity table (with root reserved), spatial grid, flyweight
+ * registry. Both the full constructor and the test-mode constructor share
+ * this. On failure the caller is responsible for freeing nothing — this
+ * helper unwinds on its own. */
+static struct yetty_ydraw_canvas_ptr_result scene_canvas_alloc_core(void)
 {
-    if (!context) {
-        return YETTY_ERR(yetty_ydraw_canvas_ptr, "scene-canvas: context is NULL");
-    }
-
     struct scene_canvas *sc = calloc(1, sizeof(struct scene_canvas));
     if (!sc) {
         return YETTY_ERR(yetty_ydraw_canvas_ptr, "scene-canvas: alloc failed");
@@ -569,7 +593,9 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create(
     sc->default_handle = YETTY_YFONT_CACHE_HANDLE_INVALID;
     sc->raster_base_size = 32.0f;
 
-    /* Reserve slot 0 for the root. */
+    /* Reserve slot 0 for the root. Bump the high-water mark past it so
+     * the next scene_alloc_slot issues slot 1 (not 0, which would
+     * collide with root). */
     struct yetty_ycore_void_result gr = scene_grow_entities(sc, 1);
     if (YETTY_IS_ERR(gr)) {
         free(sc);
@@ -578,6 +604,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create(
     sc->entities[SCENE_ROOT_SLOT].in_use = true;
     sc->entities[SCENE_ROOT_SLOT].external_id = 0;
     sc->entities[SCENE_ROOT_SLOT].parent_slot = SCENE_INVALID_SLOT;
+    sc->entity_high_water = SCENE_ROOT_SLOT + 1u;
 
     /* Opaque grid (zero-size until set_grid_size). */
     struct yetty_ydraw_scene_grid_ptr_result grid_res = yetty_ydraw_scene_grid_create();
@@ -598,6 +625,28 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create(
                          "scene-canvas: flyweight create failed", fw_res);
     }
     sc->flyweight_registry = fw_res.value;
+
+    return YETTY_OK(yetty_ydraw_canvas_ptr, &sc->base);
+}
+
+struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create_for_test(void)
+{
+    /* Test-only constructor: skip GPU/figure-factory/font-cache setup. */
+    return scene_canvas_alloc_core();
+}
+
+struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scene_canvas_create(
+    const struct yetty_context *context)
+{
+    if (!context) {
+        return YETTY_ERR(yetty_ydraw_canvas_ptr, "scene-canvas: context is NULL");
+    }
+
+    struct yetty_ydraw_canvas_ptr_result core_res = scene_canvas_alloc_core();
+    if (YETTY_IS_ERR(core_res)) {
+        return core_res;
+    }
+    struct scene_canvas *sc = as_scene(core_res.value);
 
     /* Figure factory + built-in concrete factories (yplot, yimage, ymesh).
      * Figures arriving on the wire route through this factory at
@@ -741,7 +790,7 @@ static struct yetty_ycore_void_result scene_set_grid_size(struct yetty_ydraw_can
 
     /* Resizing wipes content: every cell's bucket layout depends on grid
      * dims. Easier than migrating. */
-    for (uint32_t i = 0; i < sc->entity_capacity; i++) {
+    for (uint32_t i = 0; i < sc->entity_high_water; i++) {
         if (sc->entities[i].in_use) {
             sc->entities[i].arena_count = 0;
             sc->entities[i].drawable_count = 0;
@@ -786,7 +835,7 @@ struct yetty_ydraw_scene_entity *yetty_ydraw_scene_entity_lookup(struct yetty_yd
         return NULL;
     }
     struct scene_canvas *sc = as_scene(canvas);
-    for (uint32_t i = 0; i < sc->entity_capacity; i++) {
+    for (uint32_t i = 0; i < sc->entity_high_water; i++) {
         if (sc->entities[i].in_use && sc->entities[i].external_id == external_id) {
             return &sc->entities[i];
         }
@@ -1081,7 +1130,7 @@ static struct yetty_ydraw_scene_entity *scene_lookup_entity(struct scene_canvas 
     if (external_id == 0) {
         return &sc->entities[SCENE_ROOT_SLOT];
     }
-    for (uint32_t i = 0; i < sc->entity_capacity; i++) {
+    for (uint32_t i = 0; i < sc->entity_high_water; i++) {
         if (sc->entities[i].in_use && sc->entities[i].external_id == external_id) {
             return &sc->entities[i];
         }
@@ -1456,7 +1505,7 @@ static struct yetty_ycore_void_result scene_clear(struct yetty_ydraw_canvas *bas
         return YETTY_OK_VOID();
     }
     struct scene_canvas *sc = as_scene(base);
-    for (uint32_t slot = 1; slot < sc->entity_capacity; slot++) {
+    for (uint32_t slot = 1; slot < sc->entity_high_water; slot++) {
         if (sc->entities[slot].in_use) {
             entity_clear_in_place(sc, &sc->entities[slot]);
             scene_release_slot(sc, slot);
@@ -1475,7 +1524,7 @@ static uint32_t scene_drawable_count(const struct yetty_ydraw_canvas *base)
         return 0;
     }
     uint32_t total = 0;
-    for (uint32_t i = 0; i < sc->entity_capacity; i++) {
+    for (uint32_t i = 0; i < sc->entity_high_water; i++) {
         if (sc->entities[i].in_use) {
             total += sc->entities[i].drawable_count;
         }
@@ -1501,8 +1550,12 @@ static uint32_t scene_drawable_count(const struct yetty_ydraw_canvas *base)
 static struct yetty_ycore_void_result scene_build_staging_pass(struct scene_canvas *sc)
 {
     /* Pass 1: count drawables and accumulate total payload words per
-     * entity, while filling in entity_base[]. */
-    uint32_t entity_cap = sc->entity_capacity;
+     * entity, while filling in entity_base[]. Only walk up to the
+     * high-water mark — slots beyond that have never been issued, and
+     * scene-grid never references them. The grid_rebuild_staging API
+     * still wants `entity_base_count` to cover every referenced slot,
+     * so we hand it `entity_high_water`. */
+    uint32_t entity_cap = sc->entity_high_water;
     uint32_t *entity_base = NULL;
     if (entity_cap > 0) {
         entity_base = calloc(entity_cap, sizeof(uint32_t));
@@ -1702,7 +1755,7 @@ static struct yetty_ycore_void_result scene_for_each_glyph(struct yetty_ydraw_ca
         return YETTY_ERR(yetty_ycore_void, "scene-canvas: NULL visitor");
     }
     struct scene_canvas *sc = as_scene(base);
-    for (uint32_t s = 0; s < sc->entity_capacity; s++) {
+    for (uint32_t s = 0; s < sc->entity_high_water; s++) {
         if (!sc->entities[s].in_use) continue;
         const struct yetty_ydraw_scene_entity *e = &sc->entities[s];
         for (uint32_t p = 0; p < e->drawable_count; p++) {
