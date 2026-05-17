@@ -169,42 +169,24 @@ static uint32_t random_color(struct yetty_yjungle *j)
 }
 
 /*=============================================================================
- * Random-walk endpoint.
- *
- * Pick a unit direction uniformly on the circle, scale by a random
- * length in [step_min, step_max], and add to `start`. If the result
- * lands more than `off_canvas_margin` outside the scene rect, reflect
- * the direction (negate it). Single reflection is enough since the step
- * length is small relative to the margin in practice.
+ * Pick the next chain endpoint — uniformly random over the whole canvas
+ * (with a small off-canvas margin so the receiver occasionally sees
+ * partially-off-screen segments). The previous step-based random walk
+ * made segments tiny; the user wants the chain to span the full area.
  *===========================================================================*/
 
 static void random_next_point(struct yetty_yjungle *j, float sx, float sy,
                               float *ex, float *ey)
 {
+    (void)sx;
+    (void)sy;
     const struct yetty_yjungle_config *cfg = &j->config;
-    float angle = rng_range(j, 0.0f, YJUNGLE_TWO_PI);
-    float len   = rng_range(j, cfg->step_min, cfg->step_max);
-    float dx    = cosf(angle) * len;
-    float dy    = sinf(angle) * len;
-
-    float candidate_x = sx + dx;
-    float candidate_y = sy + dy;
-
     float xmin = -cfg->off_canvas_margin;
     float ymin = -cfg->off_canvas_margin;
     float xmax = cfg->scene_width  + cfg->off_canvas_margin;
     float ymax = cfg->scene_height + cfg->off_canvas_margin;
-
-    if (candidate_x < xmin || candidate_x > xmax) {
-        dx = -dx;
-        candidate_x = sx + dx;
-    }
-    if (candidate_y < ymin || candidate_y > ymax) {
-        dy = -dy;
-        candidate_y = sy + dy;
-    }
-    *ex = candidate_x;
-    *ey = candidate_y;
+    *ex = rng_range(j, xmin, xmax);
+    *ey = rng_range(j, ymin, ymax);
 }
 
 /*=============================================================================
@@ -362,12 +344,30 @@ static void generate_subtree_into(struct yetty_yjungle *j, struct yjungle_segmen
 }
 
 /*=============================================================================
- * Primitive emission — pick the SDF flavour by shape_choice (modulo 22).
+ * Primitive emission. Every leaf segment carries an SDF shape whose two
+ * anchor points are exactly the segment's (sx, sy) start and (ex, ey)
+ * end — that way consecutive chain segments visibly meet at shared
+ * endpoints regardless of which shape was rolled.
  *
- * The drawable is sized from the segment's start→end length so the chain
- * is visually obvious without forcing every primitive to be a line. The
- * 22-way table mirrors yzoo's emit_shape for visual consistency.
+ * Most SDF shapes (circle, pentagon, …) are radially defined and don't
+ * naturally have two anchor points. For those we emit a "bead" at the
+ * start anchor PLUS a stroked segment along the spine; the bead radius
+ * is small so adjacent chain neighbours' beads at the shared endpoint
+ * overlap and the chain looks continuous. The segment+stroke spine
+ * carries the connection itself.
+ *
+ * Variant assignment (modulo YJUNGLE_SHAPE_COUNT):
+ *   0   segment (just a line)
+ *   1   capsule (rounded thick line)
+ *   2   thin rotated box aligned to spine
+ *   3   triangle with 2 verts at endpoints + perpendicular peak
+ *   4-N spine line + bead-of-shape-X at start
  *===========================================================================*/
+
+static struct yetty_ycore_void_result emit_bead_at(struct yetty_ydraw_draw_list *buf,
+                                                    uint32_t z_order, int variant,
+                                                    float ax, float ay, float r,
+                                                    uint32_t color);
 
 static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_list *buf,
                                                       uint32_t z_order,
@@ -375,117 +375,162 @@ static struct yetty_ycore_void_result emit_primitive(struct yetty_ydraw_draw_lis
 {
     float sx = seg->start_x, sy = seg->start_y;
     float ex = seg->end_x,   ey = seg->end_y;
-    float cx = (sx + ex) * 0.5f;
-    float cy = (sy + ey) * 0.5f;
     float dx = ex - sx;
     float dy = ey - sy;
     float length = sqrtf(dx * dx + dy * dy);
-    float size = length * 0.5f;
-    if (size < 4.0f) {
-        size = 4.0f;
+    if (length < 1e-3f) {
+        /* Degenerate — still emit a tiny circle at the endpoint so the
+         * canvas isn't unaccounted-for. */
+        struct yetty_ysdf_circle g = {sx, sy, 2.0f};
+        return yetty_ydraw_draw_list_add_cmd_add_circle(buf, 0, z_order, seg->color,
+                                                        0u, 0.0f, &g);
     }
+    float nx = dx / length;            /* unit along spine */
+    float ny = dy / length;
+    float px = -ny;                    /* unit perpendicular */
+    float py =  nx;
     uint32_t color = seg->color;
-    float    stroke = seg->stroke_width;
-    int      choice = seg->shape_choice;
+    float stroke = seg->stroke_width;
+    int choice = seg->shape_choice;
     if (choice < 0) choice = 0;
     choice %= YJUNGLE_SHAPE_COUNT;
 
     switch (choice) {
     case 0: {
-        struct yetty_ysdf_circle g = {cx, cy, size};
-        return yetty_ydraw_draw_list_add_cmd_add_circle(buf, 0, z_order, color, 0u, 0.0f, &g);
-    }
-    case 1: {
-        struct yetty_ysdf_box g = {cx, cy, size, size * 0.6f, size * 0.15f};
-        return yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, z_order, color, 0u, 0.0f, &g);
-    }
-    case 2: {
-        /* Real chain line: from start to end, stroked. */
+        /* Plain stroked line, start→end. */
         struct yetty_ysdf_segment g = {sx, sy, ex, ey};
         return yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, z_order, 0u, color, stroke, &g);
     }
-    case 3: {
-        struct yetty_ysdf_triangle g = {
-            cx, cy - size, cx - size, cy + size * 0.7f, cx + size, cy + size * 0.7f,
-        };
-        return yetty_ydraw_draw_list_add_cmd_add_triangle(buf, 0, z_order, color, 0u, 0.0f, &g);
-    }
-    case 4: {
-        struct yetty_ysdf_ellipse g = {cx, cy, size, size * 0.6f};
-        return yetty_ydraw_draw_list_add_cmd_add_ellipse(buf, 0, z_order, color, 0u, 0.0f, &g);
-    }
-    case 5: {
-        struct yetty_ysdf_arc g = {cx, cy, 0.866f, 0.5f, size, size * 0.2f};
-        return yetty_ydraw_draw_list_add_cmd_add_arc(buf, 0, z_order, color, 0u, 0.0f, &g);
-    }
-    case 6: {
-        struct yetty_ysdf_rounded_box g = {
-            cx, cy, size, size * 0.6f, size * 0.2f, size * 0.2f, size * 0.2f, size * 0.2f,
-        };
-        return yetty_ydraw_draw_list_add_cmd_add_rounded_box(buf, 0, z_order, color, 0u, 0.0f, &g);
-    }
-    case 7: {
-        struct yetty_ysdf_rhombus g = {cx, cy, size, size * 1.2f};
-        return yetty_ydraw_draw_list_add_cmd_add_rhombus(buf, 0, z_order, color, 0u, 0.0f, &g);
-    }
-    case 8: {
-        struct yetty_ysdf_pentagon g = {cx, cy, size};
-        return yetty_ydraw_draw_list_add_cmd_add_pentagon(buf, 0, z_order, color, 0u, 0.0f, &g);
-    }
-    case 9: {
-        struct yetty_ysdf_hexagon g = {cx, cy, size};
-        return yetty_ydraw_draw_list_add_cmd_add_hexagon(buf, 0, z_order, color, 0u, 0.0f, &g);
-    }
-    case 10: {
-        struct yetty_ysdf_star g = {cx, cy, size, 5.0f, 2.5f};
-        return yetty_ydraw_draw_list_add_cmd_add_star(buf, 0, z_order, color, 0u, 0.0f, &g);
-    }
-    case 11: {
-        struct yetty_ysdf_pie g = {cx, cy, 0.866f, 0.5f, size};
-        return yetty_ydraw_draw_list_add_cmd_add_pie(buf, 0, z_order, color, 0u, 0.0f, &g);
-    }
-    case 12: {
-        struct yetty_ysdf_ring g = {cx, cy, 0.866f, 0.5f, size, size * 0.25f};
-        return yetty_ydraw_draw_list_add_cmd_add_ring(buf, 0, z_order, color, 0u, 0.0f, &g);
-    }
-    case 13: {
-        struct yetty_ysdf_heart g = {cx, cy, size};
-        return yetty_ydraw_draw_list_add_cmd_add_heart(buf, 0, z_order, color, 0u, 0.0f, &g);
-    }
-    case 14: {
-        struct yetty_ysdf_cross g = {cx, cy, size, size * 0.3f, size * 0.1f};
-        return yetty_ydraw_draw_list_add_cmd_add_cross(buf, 0, z_order, color, 0u, 0.0f, &g);
-    }
-    case 15: {
-        struct yetty_ysdf_rounded_x g = {cx, cy, size, size * 0.2f};
-        return yetty_ydraw_draw_list_add_cmd_add_rounded_x(buf, 0, z_order, color, 0u, 0.0f, &g);
-    }
-    case 16: {
-        struct yetty_ysdf_capsule g = {sx, sy, ex, ey, length * 0.12f};
+    case 1: {
+        /* Capsule = thick rounded line from start to end. */
+        float radius = stroke * 1.5f;
+        if (radius < 2.0f) radius = 2.0f;
+        struct yetty_ysdf_capsule g = {sx, sy, ex, ey, radius};
         return yetty_ydraw_draw_list_add_cmd_add_capsule(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
-    case 17: {
-        struct yetty_ysdf_moon g = {cx, cy, size * 0.5f, size, size * 0.8f};
+    case 2: {
+        /* Rotated thin box aligned along the spine. SDF box is
+         * axis-aligned and has no rotation parameter, so we approximate
+         * with a stroked segment of larger thickness — same chain
+         * semantics but visually distinct from case 0. */
+        struct yetty_ysdf_segment g = {sx, sy, ex, ey};
+        return yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, z_order, 0u, color,
+                                                          stroke * 3.0f, &g);
+    }
+    case 3: {
+        /* Triangle: two verts at the chain endpoints, third vertex
+         * offset perpendicular by ~25% of the spine length. */
+        float off = length * 0.25f;
+        float tx = (sx + ex) * 0.5f + px * off;
+        float ty = (sy + ey) * 0.5f + py * off;
+        struct yetty_ysdf_triangle g = {sx, sy, ex, ey, tx, ty};
+        return yetty_ydraw_draw_list_add_cmd_add_triangle(buf, 0, z_order, color, 0u, 0.0f, &g);
+    }
+    default: {
+        /* Spine + bead. Emit the spine first (lower z_order? no — the
+         * receiver paints in submission order for ties, so the bead
+         * landing AFTER the spine sits on top, which is what we want). */
+        struct yetty_ysdf_segment g = {sx, sy, ex, ey};
+        struct yetty_ycore_void_result sr =
+            yetty_ydraw_draw_list_add_cmd_add_segment(buf, 0, z_order, 0u, color, stroke, &g);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yjungle: spine emit");
+        /* Bead radius scales with stroke but stays small enough that
+         * the next segment's bead at the shared endpoint visibly
+         * overlaps — keeps the chain crisp. */
+        float bead = stroke * 3.0f;
+        if (bead < 5.0f) bead = 5.0f;
+        if (bead > length * 0.4f) bead = length * 0.4f;
+        return emit_bead_at(buf, z_order + 1u, choice, sx, sy, bead, color);
+    }
+    }
+}
+
+/* Bead = small shape placed at (ax, ay) with characteristic size r.
+ * `variant` selects which SDF flavour. Variants are taken from the
+ * choice value the segment was generated with, so each segment's bead
+ * is stable across re-renders. */
+static struct yetty_ycore_void_result emit_bead_at(struct yetty_ydraw_draw_list *buf,
+                                                    uint32_t z_order, int variant,
+                                                    float ax, float ay, float r,
+                                                    uint32_t color)
+{
+    switch (variant % 18) {
+    case 0: {
+        struct yetty_ysdf_circle g = {ax, ay, r};
+        return yetty_ydraw_draw_list_add_cmd_add_circle(buf, 0, z_order, color, 0u, 0.0f, &g);
+    }
+    case 1: {
+        struct yetty_ysdf_box g = {ax, ay, r, r, r * 0.2f};
+        return yetty_ydraw_draw_list_add_cmd_add_box(buf, 0, z_order, color, 0u, 0.0f, &g);
+    }
+    case 2: {
+        struct yetty_ysdf_ellipse g = {ax, ay, r * 1.2f, r * 0.8f};
+        return yetty_ydraw_draw_list_add_cmd_add_ellipse(buf, 0, z_order, color, 0u, 0.0f, &g);
+    }
+    case 3: {
+        struct yetty_ysdf_rounded_box g = {ax, ay, r, r, r * 0.3f, r * 0.3f, r * 0.3f, r * 0.3f};
+        return yetty_ydraw_draw_list_add_cmd_add_rounded_box(buf, 0, z_order, color, 0u, 0.0f, &g);
+    }
+    case 4: {
+        struct yetty_ysdf_rhombus g = {ax, ay, r, r * 1.2f};
+        return yetty_ydraw_draw_list_add_cmd_add_rhombus(buf, 0, z_order, color, 0u, 0.0f, &g);
+    }
+    case 5: {
+        struct yetty_ysdf_pentagon g = {ax, ay, r};
+        return yetty_ydraw_draw_list_add_cmd_add_pentagon(buf, 0, z_order, color, 0u, 0.0f, &g);
+    }
+    case 6: {
+        struct yetty_ysdf_hexagon g = {ax, ay, r};
+        return yetty_ydraw_draw_list_add_cmd_add_hexagon(buf, 0, z_order, color, 0u, 0.0f, &g);
+    }
+    case 7: {
+        struct yetty_ysdf_star g = {ax, ay, r, 5.0f, 2.5f};
+        return yetty_ydraw_draw_list_add_cmd_add_star(buf, 0, z_order, color, 0u, 0.0f, &g);
+    }
+    case 8: {
+        struct yetty_ysdf_pie g = {ax, ay, 0.866f, 0.5f, r};
+        return yetty_ydraw_draw_list_add_cmd_add_pie(buf, 0, z_order, color, 0u, 0.0f, &g);
+    }
+    case 9: {
+        struct yetty_ysdf_ring g = {ax, ay, 0.866f, 0.5f, r, r * 0.25f};
+        return yetty_ydraw_draw_list_add_cmd_add_ring(buf, 0, z_order, color, 0u, 0.0f, &g);
+    }
+    case 10: {
+        struct yetty_ysdf_heart g = {ax, ay, r};
+        return yetty_ydraw_draw_list_add_cmd_add_heart(buf, 0, z_order, color, 0u, 0.0f, &g);
+    }
+    case 11: {
+        struct yetty_ysdf_cross g = {ax, ay, r, r * 0.3f, r * 0.1f};
+        return yetty_ydraw_draw_list_add_cmd_add_cross(buf, 0, z_order, color, 0u, 0.0f, &g);
+    }
+    case 12: {
+        struct yetty_ysdf_rounded_x g = {ax, ay, r, r * 0.2f};
+        return yetty_ydraw_draw_list_add_cmd_add_rounded_x(buf, 0, z_order, color, 0u, 0.0f, &g);
+    }
+    case 13: {
+        struct yetty_ysdf_moon g = {ax, ay, r * 0.5f, r, r * 0.8f};
         return yetty_ydraw_draw_list_add_cmd_add_moon(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
-    case 18: {
-        struct yetty_ysdf_egg g = {cx, cy, size, size * 0.6f};
+    case 14: {
+        struct yetty_ysdf_egg g = {ax, ay, r, r * 0.6f};
         return yetty_ydraw_draw_list_add_cmd_add_egg(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
-    case 19: {
-        struct yetty_ysdf_octogon g = {cx, cy, size};
+    case 15: {
+        struct yetty_ysdf_octogon g = {ax, ay, r};
         return yetty_ydraw_draw_list_add_cmd_add_octogon(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
-    case 20: {
-        struct yetty_ysdf_hexagram g = {cx, cy, size};
+    case 16: {
+        struct yetty_ysdf_hexagram g = {ax, ay, r};
         return yetty_ydraw_draw_list_add_cmd_add_hexagram(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
-    case 21: {
-        struct yetty_ysdf_pentagram g = {cx, cy, size};
+    case 17: {
+        struct yetty_ysdf_pentagram g = {ax, ay, r};
         return yetty_ydraw_draw_list_add_cmd_add_pentagram(buf, 0, z_order, color, 0u, 0.0f, &g);
     }
-    default:
-        return YETTY_OK_VOID();
+    default: {
+        struct yetty_ysdf_circle g = {ax, ay, r};
+        return yetty_ydraw_draw_list_add_cmd_add_circle(buf, 0, z_order, color, 0u, 0.0f, &g);
+    }
     }
 }
 
