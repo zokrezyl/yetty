@@ -255,6 +255,15 @@ static struct ygui_engine_ptr_result engine_alloc_init(const char *card_name, in
     engine->cell_width = 0.0f;
     engine->cell_height = 0.0f;
 
+    /* Wire state — sequential u32 ids start at 1 (0 = receiver root).
+     * First render is a full redraw (CMD_ZERO + entire tree); after that
+     * the producer only ships DELETE+GROUP for dirty subtrees. */
+    engine->next_group_id = 1;
+    engine->needs_full_redraw = 1;
+    engine->pending_deletes = NULL;
+    engine->pending_delete_count = 0;
+    engine->pending_delete_cap = 0;
+
     /* View state defaults */
     engine->view_zoom = 1.0f;
     engine->view_scroll_x = 0.0f;
@@ -342,24 +351,39 @@ struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engin
     /* Stop running if needed */
     engine->running = 0;
 
-    /* Unsubscribe from events */
+    /* Unsubscribe from events. Errors here are best-effort during
+     * teardown — log and continue so the rest of cleanup still runs. */
     if (engine->clicks_subscribed) {
-        yetty_ygui_osc_subscribe_clicks(0);
+        struct yetty_ycore_void_result r = yetty_ygui_osc_subscribe_clicks(engine->output_pty, 0);
+        if (YETTY_IS_ERR(r)) {
+            yerror("ygui_engine_destroy: unsubscribe_clicks: %s", r.error.msg);
+            yetty_ycore_error_destroy(r.error);
+        }
     }
     if (engine->moves_subscribed) {
-        yetty_ygui_osc_subscribe_moves(0);
+        struct yetty_ycore_void_result r = yetty_ygui_osc_subscribe_moves(engine->output_pty, 0);
+        if (YETTY_IS_ERR(r)) {
+            yerror("ygui_engine_destroy: unsubscribe_moves: %s", r.error.msg);
+            yetty_ycore_error_destroy(r.error);
+        }
     }
 
     /* Kill card (= clear the ydraw canvas) if shown — UNLESS the
      * preserve flag is set. The window widget's close button sets it
      * so the user's final view stays on screen after the app exits. */
     if (engine->card_shown && engine->card_name && !engine->preserve_canvas_on_destroy) {
-        yetty_ygui_osc_kill_card(engine->card_name);
+        struct yetty_ycore_void_result r =
+            yetty_ygui_osc_kill_card(engine->output_pty, engine->card_name);
+        if (YETTY_IS_ERR(r)) {
+            yerror("ygui_engine_destroy: kill_card: %s", r.error.msg);
+            yetty_ycore_error_destroy(r.error);
+        }
     }
 
     /* Drop the ymgui-layer card so the server stops routing mouse to us. */
     if (engine->card_id != 0) {
-        struct yetty_ycore_void_result r = yetty_ygui_osc_card_remove(engine->card_id);
+        struct yetty_ycore_void_result r =
+            yetty_ygui_osc_card_remove(engine->output_pty, engine->card_id);
         if (YETTY_IS_ERR(r)) {
             first_err = r;
         }
@@ -407,6 +431,7 @@ struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engin
     }
 
     /* Free card name */
+    free(engine->pending_deletes);
     free(engine->card_name);
 
     /* Free dedup cache */
@@ -434,6 +459,10 @@ void yetty_ygui_engine_set_size(struct yetty_ygui_engine *engine, float width, f
     yetty_ygui_grid_destroy(&engine->grid);
     yetty_ygui_grid_init(&engine->grid, width, height, calc_grid_bucket_size(width, height));
     engine->dirty = 1;
+    /* Resize: every widget's absolute coords may shift after the next
+     * layout pass — force a full redraw rather than guessing which
+     * widgets moved. CMD_ZERO + full re-emit. */
+    engine->needs_full_redraw = 1;
 }
 
 void yetty_ygui_engine_get_size(const struct yetty_ygui_engine *engine, float *width, float *height)
@@ -460,6 +489,8 @@ void yetty_ygui_engine_set_theme(struct yetty_ygui_engine *engine, struct yetty_
     engine->theme = theme;
     engine->owns_theme = 0;
     engine->dirty = 1;
+    /* Theme swap touches colors / radii of every widget — full redraw. */
+    engine->needs_full_redraw = 1;
 }
 
 void yetty_ygui_engine_set_event_callback(struct yetty_ygui_engine *engine,
@@ -495,6 +526,11 @@ void yetty_ygui_engine_mark_dirty(struct yetty_ygui_engine *engine)
 {
     if (engine) {
         engine->dirty = 1;
+        /* External callers using this entry point don't know which
+         * widget changed — be safe and force a full redraw. Code that
+         * does know which widget changed should call the widget's
+         * setter (which dirties just that widget) instead. */
+        engine->needs_full_redraw = 1;
     }
 }
 
@@ -513,7 +549,8 @@ static void reset_was_rendered_recursive(struct yetty_ygui_widget *w)
     }
 }
 
-static struct yetty_ycore_void_result engine_rebuild(struct yetty_ygui_engine *engine)
+static struct yetty_ycore_void_result engine_rebuild_with_mode(struct yetty_ygui_engine *engine,
+                                                                int full_redraw)
 {
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
     if (!engine || !engine->buffer) {
@@ -533,38 +570,29 @@ static struct yetty_ycore_void_result engine_rebuild(struct yetty_ygui_engine *e
     }
 
     /* Reset was_rendered on EVERY widget (not just top-level) before
-     * the render pass. Earlier this was reset inline only for top-level
-     * widgets in the render loop, leaving nested children's flags
-     * sticky at 1 from previous frames. The result: when a parent's
-     * render_all returned early on a VISIBLE / OPEN check (tabbar
-     * panels going inactive, popup closing, popup_menu collapsing),
-     * its children never got re-evaluated — they kept was_rendered=1
-     * and stayed in the spatial grid forever. Stale buttons under the
-     * now-invisible panel kept absorbing clicks.
-     *
-     * Doing the reset as a separate recursive pass is O(n_widgets) and
-     * makes the contract explicit: every widget enters the frame with
-     * was_rendered=0, and render_all is the only thing that can flip
-     * it to 1. */
+     * the render pass. */
     for (struct yetty_ygui_widget *w = engine->first_widget; w; w = w->next_sibling) {
         reset_was_rendered_recursive(w);
     }
 
-    /* Create render context */
+    /* Create render context. force_full_redraw=1 makes every visible
+     * widget emit its GROUP regardless of its `dirty` bit; the CMD_ZERO
+     * at the envelope head means we don't need to prefix each emit with
+     * a DELETE. Incremental mode (full_redraw=0) emits only widgets
+     * whose `dirty` is set, each prefixed with DELETE(group_id) so the
+     * receiver's existing entity is wiped before the new one lands. */
     struct yetty_ygui_render_ctx ctx;
     yetty_ygui_render_ctx_init(&ctx, engine->buffer, engine->theme);
+    ctx.force_full_redraw = full_redraw;
 
     /* Render all top-level widgets */
     for (struct yetty_ygui_widget *w = engine->first_widget; w; w = w->next_sibling) {
-        ydebug("engine_rebuild: render top-level id=%s type=%d visible=%d",
-               w->id ? w->id : "?", (int)w->type, (w->flags & YETTY_YGUI_FLAG_VISIBLE) ? 1 : 0);
         struct yetty_ycore_void_result r;
         if (w->vtable && w->vtable->render_all) {
             r = w->vtable->render_all(w, &ctx);
         } else {
             r = yetty_ygui_widget_render_all_default(w, &ctx);
         }
-        ydebug("engine_rebuild: done top-level id=%s", w->id ? w->id : "?");
         if (YETTY_IS_ERR(r)) {
             if (YETTY_IS_OK(first_err)) {
                 first_err = r;
@@ -573,16 +601,13 @@ static struct yetty_ycore_void_result engine_rebuild(struct yetty_ygui_engine *e
             }
         }
     }
-    ydebug("engine_rebuild: render loop done — entering grid rebuild");
 
     /* Rebuild spatial grid with rendered widgets */
     for (struct yetty_ygui_widget *w = engine->first_widget; w; w = w->next_sibling) {
         if (w->was_rendered) {
-            ydebug("engine_rebuild: grid_insert id=%s", w->id ? w->id : "?");
             yetty_ygui_grid_insert(&engine->grid, w);
         }
     }
-    ydebug("engine_rebuild: grid rebuild done");
 
     engine->dirty = 0;
 
@@ -620,28 +645,46 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
      * frame already reflects the compacted stack. */
     yetty_ygui_engine_notify_tick(engine);
 
-    /* 1. Clear buffer */
+    /* 1. Clear buffer (the producer-side staging only — has no
+     * effect on the receiver until we ship the envelope). */
     yetty_ydraw_draw_list_clear(engine->buffer);
 
-    /* 1a. Prepend a CMD_ZERO so the receiver clears its canvas + resets
-     * cursor in the SAME OSC envelope that carries this frame's prims —
-     * eliminates the inter-write flash that the separate YDRAW_CLEAR
-     * envelope used to cause. */
-    {
+    /* 1a. Full-redraw frames open with CMD_ZERO so the receiver wipes
+     * any prior entity state before we re-emit the whole tree. After
+     * the first frame we run in incremental mode: no CMD_ZERO, just a
+     * batch of `DELETE(group_id)` records for widgets that died since
+     * last render, followed by `DELETE+GROUP` pairs for every dirty
+     * widget (emitted inside the tree walk below). */
+    int full_redraw = engine->needs_full_redraw || !engine->card_shown;
+    if (full_redraw) {
         struct yetty_ycore_void_result zr = yetty_ydraw_draw_list_add_cmd_zero(engine->buffer);
         if (YETTY_IS_ERR(zr)) {
             yetty_ycore_error_destroy(zr.error);
         }
+        /* CMD_ZERO supersedes any queued deletes from the prior frame. */
+        engine->pending_delete_count = 0;
+    } else {
+        /* Flush all queued DELETEs for destroyed / unparented widgets. */
+        for (uint32_t i = 0; i < engine->pending_delete_count; i++) {
+            struct yetty_ycore_void_result dr =
+                yetty_ydraw_draw_list_add_cmd_delete(engine->buffer, engine->pending_deletes[i]);
+            if (YETTY_IS_ERR(dr)) {
+                yetty_ycore_error_destroy(dr.error);
+            }
+        }
+        engine->pending_delete_count = 0;
     }
 
     /* 2. Set explicit scene bounds to match full canvas */
     yetty_ydraw_draw_list_set_scene_bounds(engine->buffer, 0, 0, engine->width, engine->height);
 
-    /* 3. Rebuild UI */
-    struct yetty_ycore_void_result rb = engine_rebuild(engine);
+    /* 3. Rebuild UI — walks the tree; emits GROUP for dirty widgets
+     * (or for every visible widget when `full_redraw` is set). */
+    struct yetty_ycore_void_result rb = engine_rebuild_with_mode(engine, full_redraw);
     if (YETTY_IS_ERR(rb)) {
         yetty_ycore_error_destroy(rb.error);
     }
+    engine->needs_full_redraw = 0;
 
     /* 4. Serialize (framed: prims + text_spans + scene_bounds) */
     const uint8_t *data = NULL;
@@ -698,20 +741,24 @@ struct yetty_ycore_void_result yetty_ygui_engine_show(struct yetty_ygui_engine *
     /* card_x, card_y, card_w, card_h already set in ygui_engine_create */
 
     /* Query cell size (kept for future use) */
-    yetty_ygui_osc_query_cell_size();
+    struct yetty_ycore_void_result qr = yetty_ygui_osc_query_cell_size(engine->output_pty);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, qr, "ygui_engine_show: query_cell_size failed");
 
     /* Subscribe to click AND move events (move needed for slider drag) */
-    yetty_ygui_osc_subscribe_clicks(1);
+    struct yetty_ycore_void_result sc_r = yetty_ygui_osc_subscribe_clicks(engine->output_pty, 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sc_r, "ygui_engine_show: subscribe_clicks failed");
     engine->clicks_subscribed = 1;
-    yetty_ygui_osc_subscribe_moves(1);
+    struct yetty_ycore_void_result sm_r = yetty_ygui_osc_subscribe_moves(engine->output_pty, 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sm_r, "ygui_engine_show: subscribe_moves failed");
     engine->moves_subscribed = 1;
 
     /* Register our card with the ymgui-layer so the server hit-tests the
      * cursor against our rect and emits YMGUI_OSC_SC_MOUSE with card-local
      * coordinates. Without this, mouse events have nowhere to go. */
     struct yetty_ycore_void_result place_r =
-        yetty_ygui_osc_card_place(engine->card_id, engine->card_x, engine->card_y,
-                                  (uint32_t)engine->card_w, (uint32_t)engine->card_h);
+        yetty_ygui_osc_card_place(engine->output_pty, engine->card_id, engine->card_x,
+                                  engine->card_y, (uint32_t)engine->card_w,
+                                  (uint32_t)engine->card_h);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, place_r, "ygui_engine_show: card_place failed");
 
     /* In CANVAS_FIT mode, create card with minimal data first to trigger OSC 777780.
@@ -758,26 +805,29 @@ void yetty_ygui_engine_mouse_move(struct yetty_ygui_engine *engine, float x, flo
 
     struct yetty_ygui_widget *hit = yetty_ygui_grid_query(&engine->grid, x, y);
 
-    /* Handle hover changes */
+    /* Handle hover changes — only the two affected widgets need re-emitting. */
     if (hit != engine->hovered) {
         if (engine->hovered) {
             engine->hovered->flags &= ~YETTY_YGUI_FLAG_HOVER;
+            engine->hovered->dirty = 1;
             engine->dirty = 1;
         }
         if (hit) {
             hit->flags |= YETTY_YGUI_FLAG_HOVER;
+            hit->dirty = 1;
             engine->dirty = 1;
         }
         engine->hovered = hit;
     }
 
-    /* Handle drag */
+    /* Handle drag — the pressed widget may visibly change. */
     if (engine->pressed && engine->pressed->vtable && engine->pressed->vtable->on_drag) {
         float lx = x - engine->pressed->effective_x;
         float ly = y - engine->pressed->effective_y;
         ygui_event_t event = {0};
         if (engine->pressed->vtable->on_drag(engine->pressed, lx, ly, &event)) {
             emit_event(engine, &event);
+            engine->pressed->dirty = 1;
             engine->dirty = 1;
         }
     }
@@ -801,6 +851,7 @@ void yetty_ygui_engine_mouse_down(struct yetty_ygui_engine *engine, float x, flo
     if (hit) {
         hit->flags |= YETTY_YGUI_FLAG_PRESSED;
         engine->pressed = hit;
+        hit->dirty = 1;
         engine->dirty = 1;
 
         /* Focus change */
@@ -839,6 +890,7 @@ void yetty_ygui_engine_mouse_up(struct yetty_ygui_engine *engine, float x, float
     if (engine->pressed) {
         struct yetty_ygui_widget *widget = engine->pressed;
         widget->flags &= ~YETTY_YGUI_FLAG_PRESSED;
+        widget->dirty = 1;
         engine->dirty = 1;
 
         /* Check if release is on same widget (click) */
@@ -882,6 +934,7 @@ void yetty_ygui_engine_mouse_scroll(struct yetty_ygui_engine *engine, float x, f
         ygui_event_t event = {0};
         if (hit->vtable->on_scroll(hit, dx, dy, &event)) {
             emit_event(engine, &event);
+            hit->dirty = 1;
             engine->dirty = 1;
         }
     }
@@ -903,6 +956,7 @@ void yetty_ygui_engine_key_down(struct yetty_ygui_engine *engine, uint32_t key, 
         ygui_event_t event = {0};
         if (engine->focused->vtable->on_key(engine->focused, key, mods, &event)) {
             emit_event(engine, &event);
+            engine->focused->dirty = 1;
             engine->dirty = 1;
         }
     }
@@ -949,6 +1003,7 @@ void yetty_ygui_engine_text_input(struct yetty_ygui_engine *engine, const char *
             free(old_text);
             engine->focused->data.textinput.text = new_text;
             engine->focused->data.textinput.cursor_pos = cursor + (int)add_len;
+            engine->focused->dirty = 1;
             engine->dirty = 1;
 
             /* Call widget's text callback */
@@ -1378,6 +1433,7 @@ static void handle_resize(struct yetty_ygui_engine *engine)
                              calc_grid_bucket_size(engine->width, engine->height));
 
         engine->dirty = 1;
+        engine->needs_full_redraw = 1;
     }
     /* YGUI_CANVAS_FIXED: canvas size unchanged, ydraw card handles zoom/scroll */
 
@@ -1564,6 +1620,7 @@ void yetty_ygui_internal_process_input(struct yetty_ygui_engine *engine, const c
                 /* Defer resize to render time - keeps visual and hit-test in sync */
                 engine->needs_resize = 1;
                 engine->dirty = 1;
+                engine->needs_full_redraw = 1;
             }
             i += consumed;
         }
@@ -1723,6 +1780,7 @@ void yetty_ygui_internal_yface_on_osc(void *user, int osc_code, const uint8_t *a
         }
         engine->needs_resize = 1;
         engine->dirty = 1;
+        engine->needs_full_redraw = 1;
         /* Don't fire resize_callback here — engine->width/height haven't
          * been updated yet. handle_resize() runs on the next render (driven
          * by needs_resize) and emits the callback once the canvas dims
@@ -1954,6 +2012,9 @@ void yetty_ygui_engine_clear(struct yetty_ygui_engine *engine)
 
     yetty_ygui_grid_clear(&engine->grid);
     engine->dirty = 1;
+    /* All widgets gone — next render is a full redraw with CMD_ZERO. */
+    engine->needs_full_redraw = 1;
+    engine->pending_delete_count = 0;
 }
 
 /*=============================================================================
@@ -1965,13 +2026,17 @@ void yetty_ygui_engine_subscribe_clicks(struct yetty_ygui_engine *engine, int en
     if (!engine) {
         return;
     }
-    if (enable && !engine->clicks_subscribed) {
-        yetty_ygui_osc_subscribe_clicks(1);
-        engine->clicks_subscribed = 1;
-    } else if (!enable && engine->clicks_subscribed) {
-        yetty_ygui_osc_subscribe_clicks(0);
-        engine->clicks_subscribed = 0;
+    int want = enable ? 1 : 0;
+    if (want == engine->clicks_subscribed) {
+        return;
     }
+    struct yetty_ycore_void_result r = yetty_ygui_osc_subscribe_clicks(engine->output_pty, want);
+    if (YETTY_IS_ERR(r)) {
+        yerror("ygui_engine_subscribe_clicks(%d): %s", want, r.error.msg);
+        yetty_ycore_error_destroy(r.error);
+        return;
+    }
+    engine->clicks_subscribed = want;
 }
 
 void yetty_ygui_engine_subscribe_moves(struct yetty_ygui_engine *engine, int enable)
@@ -1979,19 +2044,25 @@ void yetty_ygui_engine_subscribe_moves(struct yetty_ygui_engine *engine, int ena
     if (!engine) {
         return;
     }
-    if (enable && !engine->moves_subscribed) {
-        yetty_ygui_osc_subscribe_moves(1);
-        engine->moves_subscribed = 1;
-    } else if (!enable && engine->moves_subscribed) {
-        yetty_ygui_osc_subscribe_moves(0);
-        engine->moves_subscribed = 0;
+    int want = enable ? 1 : 0;
+    if (want == engine->moves_subscribed) {
+        return;
     }
+    struct yetty_ycore_void_result r = yetty_ygui_osc_subscribe_moves(engine->output_pty, want);
+    if (YETTY_IS_ERR(r)) {
+        yerror("ygui_engine_subscribe_moves(%d): %s", want, r.error.msg);
+        yetty_ycore_error_destroy(r.error);
+        return;
+    }
+    engine->moves_subscribed = want;
 }
 
-/* Rebuild without render (for internal use) */
+/* Rebuild without render (for internal use). Forces a full redraw
+ * mode — this entry point is used by tests / off-screen consumers
+ * that want to populate the buffer from scratch. */
 struct yetty_ycore_void_result yetty_ygui_engine_rebuild(struct yetty_ygui_engine *engine)
 {
-    return engine_rebuild(engine);
+    return engine_rebuild_with_mode(engine, /*full_redraw=*/1);
 }
 
 /*=============================================================================
@@ -2050,13 +2121,18 @@ void yetty_ygui_engine_subscribe_view_changes(struct yetty_ygui_engine *engine, 
     if (!engine) {
         return;
     }
-    if (enable && !engine->view_subscribed) {
-        yetty_ygui_osc_subscribe_view_changes(1);
-        engine->view_subscribed = 1;
-    } else if (!enable && engine->view_subscribed) {
-        yetty_ygui_osc_subscribe_view_changes(0);
-        engine->view_subscribed = 0;
+    int want = enable ? 1 : 0;
+    if (want == engine->view_subscribed) {
+        return;
     }
+    struct yetty_ycore_void_result r =
+        yetty_ygui_osc_subscribe_view_changes(engine->output_pty, want);
+    if (YETTY_IS_ERR(r)) {
+        yerror("ygui_engine_subscribe_view_changes(%d): %s", want, r.error.msg);
+        yetty_ycore_error_destroy(r.error);
+        return;
+    }
+    engine->view_subscribed = want;
 }
 
 /*=============================================================================
@@ -2068,7 +2144,12 @@ void yetty_ygui_engine_set_zoom(struct yetty_ygui_engine *engine, float level)
     if (!engine || !engine->card_name) {
         return;
     }
-    yetty_ygui_osc_zoom_card(engine->card_name, level);
+    struct yetty_ycore_void_result r =
+        yetty_ygui_osc_zoom_card(engine->output_pty, engine->card_name, level);
+    if (YETTY_IS_ERR(r)) {
+        yerror("ygui_engine_set_zoom: %s", r.error.msg);
+        yetty_ycore_error_destroy(r.error);
+    }
 }
 
 void yetty_ygui_engine_scroll_to(struct yetty_ygui_engine *engine, float x, float y)
@@ -2076,7 +2157,12 @@ void yetty_ygui_engine_scroll_to(struct yetty_ygui_engine *engine, float x, floa
     if (!engine || !engine->card_name) {
         return;
     }
-    yetty_ygui_osc_scroll_card(engine->card_name, x, y, 1);
+    struct yetty_ycore_void_result r =
+        yetty_ygui_osc_scroll_card(engine->output_pty, engine->card_name, x, y, 1);
+    if (YETTY_IS_ERR(r)) {
+        yerror("ygui_engine_scroll_to: %s", r.error.msg);
+        yetty_ycore_error_destroy(r.error);
+    }
 }
 
 void yetty_ygui_engine_scroll_by(struct yetty_ygui_engine *engine, float dx, float dy)
@@ -2084,5 +2170,10 @@ void yetty_ygui_engine_scroll_by(struct yetty_ygui_engine *engine, float dx, flo
     if (!engine || !engine->card_name) {
         return;
     }
-    yetty_ygui_osc_scroll_card(engine->card_name, dx, dy, 0);
+    struct yetty_ycore_void_result r =
+        yetty_ygui_osc_scroll_card(engine->output_pty, engine->card_name, dx, dy, 0);
+    if (YETTY_IS_ERR(r)) {
+        yerror("ygui_engine_scroll_by: %s", r.error.msg);
+        yetty_ycore_error_destroy(r.error);
+    }
 }

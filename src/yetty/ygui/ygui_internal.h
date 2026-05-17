@@ -42,7 +42,29 @@ struct yetty_ygui_render_ctx {
     float offset_x, offset_y;
     float clip_x, clip_y, clip_w, clip_h;
     int has_clip;
+    /* When 1: emit GROUP for every visible widget regardless of its
+     * `dirty` bit, and skip the DELETE prefix (CMD_ZERO at the envelope
+     * head supersedes everything). Set by the engine on the first frame
+     * after create / CMD_ZERO. When 0: emit only widgets whose dirty
+     * bit is set, prefixing each with a DELETE record. */
+    int force_full_redraw;
 };
+
+/* Wrap one widget's own drawables in a scene-canvas GROUP keyed by
+ * self->group_id. Called from render_all_default and from every custom
+ * render_all that needs to emit its widget's drawables. Caller passes
+ * the widget's `render` function pointer (NULL is allowed — emits an
+ * empty group for layout-only containers).
+ *
+ * Behaviour:
+ *   - if widget is not dirty AND ctx->force_full_redraw == 0: no-op.
+ *   - else: optionally emit DELETE(group_id), then begin_group + render
+ *     + end_group, then clear widget->dirty.
+ */
+struct yetty_ycore_void_result yetty_ygui_widget_emit_self_in_group(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx,
+    struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
+                                                struct yetty_ygui_render_ctx *));
 
 /*=============================================================================
  * Theme Structure
@@ -170,6 +192,18 @@ struct yetty_ygui_widget {
     /* Identity */
     char *id;
     ygui_widget_type_t type;
+
+    /* Sequential u32 assigned at widget alloc, stable for the widget's
+     * lifetime. Sent on the wire as the GROUP id so the receiver
+     * (scene-canvas) can route incremental DELETE/GROUP updates back to
+     * the same entity. 0 is reserved for the scene-canvas root, so the
+     * sequence starts at 1. */
+    uint32_t group_id;
+
+    /* Set by any setter that changes geometry / styling / text. Cleared
+     * after the widget's GROUP is re-emitted. The first frame after
+     * widget alloc starts dirty. */
+    uint8_t dirty;
 
     /* Authored geometry — input to the layout pass; set by constructors and
      * by yetty_ygui_widget_set_position/set_size. Never mutated by the engine. */
@@ -512,12 +546,22 @@ struct yetty_ygui_engine {
     int input_fd;  /* Input file descriptor (default: STDIN_FILENO) */
     int output_fd; /* Output file descriptor (default: STDOUT_FILENO) */
 
-    /* In-process sink override. When non-NULL, ydraw frame envelopes
-     * go through pty->ops->write instead of write(output_fd). Used by
-     * yetty's own yui to avoid a stdout round-trip when ygui lives in
-     * the same process as the renderer. NULL = fall back to `output_fd`
-     * (default client-mode behaviour). */
+    /* OSC sink. Every OSC byte ygui emits goes through
+     * output_pty->ops->write — the pty abstraction owns the actual
+     * delivery mechanism. Two implementations:
+     *   - yui (in-process): memory-ring pty pair, write is a memcpy.
+     *   - standalone (ygreeter, ytop, …): a libuv-backed pty that
+     *     queues bytes via uv_write on a uv_pipe_t wrapping output_fd.
+     *     Created and installed by ygui_engine_uv when the engine is
+     *     attached to a loop.
+     *
+     * Either way ygui_osc.c just calls ops->write and gets a non-
+     * blocking, complete-or-fail result back. The output_pty MUST be
+     * set before any OSC traffic is emitted; OSC functions return an
+     * error if it isn't. */
     struct yetty_platform_pty *output_pty;
+    int output_pty_owned; /* 1 if engine_destroy should destroy output_pty
+                           * (set when ygui_engine_uv created it). */
 
     /* Input buffer for parsing */
     char input_buffer[4096];
@@ -575,6 +619,27 @@ struct yetty_ygui_engine {
         struct yetty_ygui_widget *close_btn;
     } notifications[8];
     int notification_count;
+
+    /* Producer-side scene-canvas wire state.
+     *
+     * `next_group_id` — sequential u32 assigned to each widget. 0 is
+     * reserved for the receiver's implicit root entity, so the counter
+     * starts at 1.
+     *
+     * `pending_deletes` — group_ids of widgets that were destroyed or
+     * unparented since the last render. The next render flushes these
+     * as DELETE records at the envelope root before re-emitting any
+     * dirty groups. */
+    uint32_t next_group_id;
+    uint32_t *pending_deletes;
+    uint32_t pending_delete_count;
+    uint32_t pending_delete_cap;
+
+    /* Set to 1 by engine_create / scene_clear / CMD_ZERO emission;
+     * forces the next render to be a full-tree redraw (every widget is
+     * treated as dirty, no DELETE flush before — CMD_ZERO supersedes
+     * everything on the receiver). Cleared after that render. */
+    uint8_t needs_full_redraw;
 };
 
 /*=============================================================================
@@ -670,10 +735,14 @@ struct yetty_ycore_void_result yetty_ygui_layout_compute_engine(struct yetty_ygu
 
 /* OSC output (ygui_osc.c).
  *
- * `output_pty` is optional — when non-NULL, the binary OSC envelope is
- * written through pty->ops->write (zero-copy, no fd, used by yetty's
- * own in-process yui). When NULL, falls back to writing the full
- * envelope to STDOUT_FILENO (default client-mode path). */
+ * Every OSC function takes `output_pty` as its first parameter and
+ * returns _result. Writes go through output_pty->ops->write — either
+ * a libuv-backed uv_pipe_t (ygui_engine_uv installs it) or yui's
+ * in-process memory-pty. Passing NULL is an error.
+ *
+ * No silent stdout fallback exists any more; failing to install an
+ * output_pty surfaces as an error rather than blocking on a sync
+ * write() that could truncate large envelopes. */
 struct yetty_ycore_void_result yetty_ygui_osc_create_card(struct yetty_platform_pty *output_pty,
                                                           const char *name, int x, int y, int w,
                                                           int h, const uint8_t *data,
@@ -681,17 +750,29 @@ struct yetty_ycore_void_result yetty_ygui_osc_create_card(struct yetty_platform_
 struct yetty_ycore_void_result yetty_ygui_osc_update_card(struct yetty_platform_pty *output_pty,
                                                           const char *name, const uint8_t *data,
                                                           uint32_t size);
-void yetty_ygui_osc_kill_card(const char *name);
-void yetty_ygui_osc_subscribe_clicks(int enable);
-void yetty_ygui_osc_subscribe_moves(int enable);
-void yetty_ygui_osc_subscribe_view_changes(int enable);
-void yetty_ygui_osc_query_cell_size(void);
-struct yetty_ycore_void_result yetty_ygui_osc_card_place(uint32_t card_id, int col, int row,
+struct yetty_ycore_void_result yetty_ygui_osc_kill_card(struct yetty_platform_pty *output_pty,
+                                                        const char *name);
+struct yetty_ycore_void_result yetty_ygui_osc_subscribe_clicks(struct yetty_platform_pty *output_pty,
+                                                               int enable);
+struct yetty_ycore_void_result yetty_ygui_osc_subscribe_moves(struct yetty_platform_pty *output_pty,
+                                                              int enable);
+struct yetty_ycore_void_result yetty_ygui_osc_subscribe_view_changes(
+    struct yetty_platform_pty *output_pty, int enable);
+struct yetty_ycore_void_result yetty_ygui_osc_query_cell_size(
+    struct yetty_platform_pty *output_pty);
+struct yetty_ycore_void_result yetty_ygui_osc_card_place(struct yetty_platform_pty *output_pty,
+                                                         uint32_t card_id, int col, int row,
                                                          uint32_t w_cells, uint32_t h_cells);
-struct yetty_ycore_void_result yetty_ygui_osc_card_remove(uint32_t card_id);
-void yetty_ygui_osc_zoom_card(const char *name, float level);
-void yetty_ygui_osc_scroll_card(const char *name, float x, float y, int absolute);
-void yetty_ygui_osc_scroll_card_delta(const char *name, float dx, float dy);
+struct yetty_ycore_void_result yetty_ygui_osc_card_remove(struct yetty_platform_pty *output_pty,
+                                                          uint32_t card_id);
+struct yetty_ycore_void_result yetty_ygui_osc_zoom_card(struct yetty_platform_pty *output_pty,
+                                                        const char *name, float level);
+struct yetty_ycore_void_result yetty_ygui_osc_scroll_card(struct yetty_platform_pty *output_pty,
+                                                          const char *name, float x, float y,
+                                                          int absolute);
+struct yetty_ycore_void_result yetty_ygui_osc_scroll_card_delta(struct yetty_platform_pty *output_pty,
+                                                                const char *name, float dx,
+                                                                float dy);
 
 /* Error */
 void yetty_ygui_set_error(const char *msg);

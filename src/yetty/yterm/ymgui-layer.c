@@ -36,6 +36,7 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yface/yface.h>
+#include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yrender/render-target.h>
@@ -995,46 +996,67 @@ static struct yetty_ycore_void_result ymgui_dispatch_atomic(
     }
 }
 
+/* Persistent layer coro — the wire-statemachine spawns this once and
+ * expects it to loop forever, yielding back when there are no more
+ * body bytes for the current envelope. A return here is treated as a
+ * fatal layer exit. Each iteration:
+ *
+ *   1. Reset accum and capture the OSC code on entry to a fresh envelope.
+ *   2. Drain body bytes via sm_read until the read returns 0.
+ *   3. If sm hasn't seen the envelope terminator yet, yield — the SM
+ *      will resume us when fresh body bytes arrive.
+ *   4. Once at_end, dispatch the assembled atomic envelope to ymgui's
+ *      handler, reset the per-envelope state, then yield so the SM can
+ *      observe terminator clearance before the next envelope.
+ */
 static struct yetty_ycore_void_result ymgui_process_input(
     struct yetty_yrender_terminal_layer *self,
     struct yetty_ywire_wire_statemachine *osc_statemachine)
 {
     struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)self;
 
-    if (!l->parse_active) {
-        l->parse_code = yetty_ywire_wire_statemachine_code(osc_statemachine);
-        yetty_ycore_buffer_clear(&l->accum);
-        l->parse_active = 1;
-    }
-
-    uint8_t buf[4096];
     for (;;) {
-        struct yetty_ycore_size_result rr =
-            yetty_ywire_wire_statemachine_read(osc_statemachine, buf, sizeof(buf));
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ymgui: osc read");
-        if (rr.value == 0) {
-            break;
+        if (!l->parse_active) {
+            l->parse_code = yetty_ywire_wire_statemachine_code(osc_statemachine);
+            yetty_ycore_buffer_clear(&l->accum);
+            l->parse_active = 1;
         }
-        struct yetty_ycore_void_result wr =
-            yetty_ycore_buffer_write(&l->accum, buf, rr.value);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "ymgui: accum write");
+
+        uint8_t buf[4096];
+        for (;;) {
+            struct yetty_ycore_size_result rr =
+                yetty_ywire_wire_statemachine_read(osc_statemachine, buf, sizeof(buf));
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ymgui: osc read");
+            if (rr.value == 0) {
+                break;
+            }
+            struct yetty_ycore_void_result wr =
+                yetty_ycore_buffer_write(&l->accum, buf, rr.value);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "ymgui: accum write");
+        }
+
+        if (!yetty_ywire_wire_statemachine_at_end(osc_statemachine)) {
+            /* More body bytes pending — yield until SM has them. */
+            yetty_yplatform_coro_yield();
+            continue;
+        }
+
+        int code = l->parse_code;
+        const uint8_t *payload = l->accum.data;
+        size_t payload_len = l->accum.size;
+
+        struct yetty_ycore_void_result r = ymgui_dispatch_atomic(l, code, payload, payload_len);
+
+        yetty_ycore_buffer_clear(&l->accum);
+        l->parse_active = 0;
+        l->parse_code = 0;
+
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ymgui: dispatch_atomic");
+
+        /* Envelope handled — yield so the SM can clear terminator_seen
+         * and route us the next envelope (or another layer's bytes). */
+        yetty_yplatform_coro_yield();
     }
-
-    if (!yetty_ywire_wire_statemachine_at_end(osc_statemachine)) {
-        return YETTY_OK_VOID();
-    }
-
-    int code = l->parse_code;
-    const uint8_t *payload = l->accum.data;
-    size_t payload_len = l->accum.size;
-
-    struct yetty_ycore_void_result r = ymgui_dispatch_atomic(l, code, payload, payload_len);
-
-    yetty_ycore_buffer_clear(&l->accum);
-    l->parse_active = 0;
-    l->parse_code = 0;
-
-    return r;
 }
 
 /*===========================================================================

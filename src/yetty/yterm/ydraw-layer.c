@@ -504,6 +504,12 @@ static struct yetty_ycore_void_result ydraw_layer_process_input(
         break;
     case YETTY_OSC_YDRAW_BIN:
     case YETTY_OSC_YDRAW_OVERLAY:
+    case YETTY_OSC_YDRAW_SCENE_BIN:
+        /* All three carry a framed YDrawList envelope; the canvas's
+         * process_input pulls bytes off the wire-statemachine. The
+         * code distinction matters only to yterm's routing (which
+         * decides which layer/canvas variant receives the bytes) — by
+         * the time we're here the canvas already is the right kind. */
         r = layer->canvas->ops->process_input(layer->canvas, osc_statemachine);
         break;
     default:

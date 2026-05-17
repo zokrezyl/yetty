@@ -28,6 +28,16 @@ struct yetty_ygui_widget *yetty_ygui_engine_widget_alloc(struct yetty_ygui_engin
     w->fg_color = engine->theme->text_primary;
     w->accent_color = engine->theme->accent;
 
+    /* Assign a stable wire-side group id. 0 is reserved for the
+     * scene-canvas root, so start at 1. Each widget keeps the same
+     * group_id for its lifetime — the receiver routes incremental
+     * DELETE/GROUP updates back to the same entity. */
+    if (engine->next_group_id == 0) {
+        engine->next_group_id = 1;
+    }
+    w->group_id = engine->next_group_id++;
+    w->dirty = 1;
+
     return w;
 }
 
@@ -44,6 +54,27 @@ void yetty_ygui_widget_init_base(struct yetty_ygui_widget *widget, float x, floa
     widget->h = h;
 }
 
+/* Queue this widget's group_id for emission as a DELETE record on the
+ * next render. Skips if the engine hasn't yet sent a first frame (the
+ * receiver doesn't know about the widget yet) or if a full redraw is
+ * already pending (CMD_ZERO supersedes deletes). */
+static void engine_queue_pending_delete(struct yetty_ygui_engine *engine, uint32_t group_id)
+{
+    if (!engine || engine->needs_full_redraw) {
+        return;
+    }
+    if (engine->pending_delete_count >= engine->pending_delete_cap) {
+        uint32_t new_cap = engine->pending_delete_cap ? engine->pending_delete_cap * 2 : 16;
+        uint32_t *grown = realloc(engine->pending_deletes, new_cap * sizeof(uint32_t));
+        if (!grown) {
+            return; /* drop — DELETE will be missing but receiver tolerates */
+        }
+        engine->pending_deletes = grown;
+        engine->pending_delete_cap = new_cap;
+    }
+    engine->pending_deletes[engine->pending_delete_count++] = group_id;
+}
+
 void yetty_ygui_widget_free(struct yetty_ygui_widget *widget)
 {
     if (!widget) {
@@ -52,6 +83,17 @@ void yetty_ygui_widget_free(struct yetty_ygui_widget *widget)
 
     ydebug("widget_free enter id=%s type=%d ptr=%p", widget->id ? widget->id : "?",
            (int)widget->type, (void *)widget);
+
+    /* Queue a DELETE for this widget's group on the receiver. Children
+     * are deleted recursively below; the receiver's DELETE(parent_id)
+     * already wipes the whole subtree, so we only queue the top widget
+     * being freed. Subtree-internal frees during recursion still call
+     * widget_free for each child, but only the topmost freed widget is
+     * normally the "user-initiated" delete; we queue all to be safe
+     * (DELETE on unknown id is a warn+continue). */
+    if (widget->engine && widget->was_rendered) {
+        engine_queue_pending_delete(widget->engine, widget->group_id);
+    }
 
     /* Free children recursively */
     struct yetty_ygui_widget *child = widget->first_child;
@@ -72,6 +114,58 @@ void yetty_ygui_widget_free(struct yetty_ygui_widget *widget)
     free(widget);
 }
 
+struct yetty_ycore_void_result yetty_ygui_widget_emit_self_in_group(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx,
+    struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
+                                                struct yetty_ygui_render_ctx *))
+{
+    if (!self || !ctx || !ctx->buffer) {
+        return YETTY_OK_VOID();
+    }
+    /* Skip emission for clean widgets in incremental mode — the receiver
+     * already has the entity from a prior frame. */
+    if (!self->dirty && !ctx->force_full_redraw) {
+        return YETTY_OK_VOID();
+    }
+    /* In incremental mode, the receiver's existing entity for this
+     * group_id must be wiped before we re-emit a fresh GROUP. CMD_ZERO
+     * at the envelope head (force_full_redraw=1) handles this for the
+     * whole canvas at once, so no per-widget DELETE is needed there. */
+    if (!ctx->force_full_redraw) {
+        struct yetty_ycore_void_result dr =
+            yetty_ydraw_draw_list_add_cmd_delete(ctx->buffer, self->group_id);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
+    }
+    struct yetty_ydraw_id_result mark_res =
+        yetty_ydraw_draw_list_begin_group(ctx->buffer, self->group_id);
+    if (YETTY_IS_ERR(mark_res)) {
+        yetty_ycore_error_destroy(mark_res.error);
+        return YETTY_OK_VOID();
+    }
+    uint32_t group_marker = mark_res.value;
+
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
+    if (render_fn) {
+        struct yetty_ycore_void_result r = render_fn(self, ctx);
+        if (YETTY_IS_ERR(r)) {
+            first_err = r;
+        }
+    }
+
+    struct yetty_ycore_void_result er = yetty_ydraw_draw_list_end_group(ctx->buffer, group_marker);
+    if (YETTY_IS_ERR(er)) {
+        if (YETTY_IS_OK(first_err)) {
+            first_err = er;
+        } else {
+            yetty_ycore_error_destroy(er.error);
+        }
+    }
+    self->dirty = 0;
+    return first_err;
+}
+
 struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(
     struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx)
 {
@@ -85,15 +179,27 @@ struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(
     self->was_rendered = 1;
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
 
-    if (self->vtable && self->vtable->render) {
-        struct yetty_ycore_void_result r = self->vtable->render(self, ctx);
-        if (YETTY_IS_ERR(r)) {
-            first_err = r;
+    /* Emit this widget's own drawables as a flat GROUP at the current
+     * scope (envelope root for engine-driven walks). Children are
+     * emitted as siblings in their own GROUPs by the recursion below,
+     * each addressable by its own group_id — no nested GROUPs. This
+     * matters because the producer drives lifecycle by widget id, and
+     * the receiver's recursive DELETE only follows wire-time nesting;
+     * keeping all widgets flat under root makes DELETE(id) target just
+     * that widget. */
+    {
+        struct yetty_ycore_void_result e = yetty_ygui_widget_emit_self_in_group(
+            self, ctx,
+            self->vtable && self->vtable->render ? self->vtable->render : NULL);
+        if (YETTY_IS_ERR(e)) {
+            first_err = e;
         }
     }
 
     /* Recurse into children with offset = self's absolute origin so each
-     * child can keep drawing at its own (relative) self->x / self->y. */
+     * child can keep drawing at its own (relative) self->x / self->y.
+     * Children are siblings of `self` on the wire — each child's own
+     * render_all emits another flat GROUP. */
     if (self->first_child) {
         float old_offset_x = ctx->offset_x;
         float old_offset_y = ctx->offset_y;
@@ -123,6 +229,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_render_all_default(
         ctx->offset_x = old_offset_x;
         ctx->offset_y = old_offset_y;
     }
+
     return first_err;
 }
 
@@ -222,7 +329,18 @@ void yetty_ygui_widget_remove_child(struct yetty_ygui_widget *parent,
     child->next_sibling = NULL;
 
     if (parent->engine) {
-        parent->engine->dirty = 1;
+        parent->engine->dirty = 1; parent->dirty = 1;
+        /* Queue a DELETE for the unparented child's entity on the
+         * receiver. If the caller re-adds the widget later, the next
+         * render emits a fresh GROUP at envelope root (the widget's
+         * dirty bit is still set from creation / mutation) — the
+         * DELETE-then-GROUP pair lands in order on the wire and the
+         * receiver's scene-canvas applies them sequentially. */
+        if (child->was_rendered) {
+            engine_queue_pending_delete(parent->engine, child->group_id);
+        }
+        /* Mark child dirty so it re-emits if re-parented. */
+        child->dirty = 1;
     }
 }
 
@@ -292,7 +410,7 @@ void yetty_ygui_widget_set_position(struct yetty_ygui_widget *widget, float x, f
     widget->x = x;
     widget->y = y;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -319,7 +437,7 @@ void yetty_ygui_widget_set_size(struct yetty_ygui_widget *widget, float w, float
     widget->w = w;
     widget->h = h;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -368,7 +486,7 @@ void yetty_ygui_widget_set_visible(struct yetty_ygui_widget *widget, int visible
         widget->flags &= ~YETTY_YGUI_FLAG_VISIBLE;
     }
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -388,7 +506,7 @@ void yetty_ygui_widget_set_enabled(struct yetty_ygui_widget *widget, int enabled
         widget->flags |= YETTY_YGUI_FLAG_DISABLED;
     }
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -409,7 +527,7 @@ void yetty_ygui_widget_set_bg_color(struct yetty_ygui_widget *widget, uint32_t c
     }
     widget->bg_color = color;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -420,7 +538,7 @@ void yetty_ygui_widget_set_fg_color(struct yetty_ygui_widget *widget, uint32_t c
     }
     widget->fg_color = color;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -431,7 +549,7 @@ void yetty_ygui_widget_set_accent_color(struct yetty_ygui_widget *widget, uint32
     }
     widget->accent_color = color;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -442,7 +560,7 @@ void yetty_ygui_widget_set_accent_color(struct yetty_ygui_widget *widget, uint32
 static void layout_widget_dirty(struct yetty_ygui_widget *widget)
 {
     if (widget && widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -769,7 +887,7 @@ void yetty_ygui_widget_button_set_label(struct yetty_ygui_widget *widget, const 
     free(widget->data.button.label);
     widget->data.button.label = ygui_strdup(label);
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -843,7 +961,7 @@ void yetty_ygui_widget_label_set_text(struct yetty_ygui_widget *widget, const ch
     free(widget->data.label.text);
     widget->data.label.text = ygui_strdup(text);
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -862,7 +980,7 @@ void yetty_ygui_widget_label_set_font_size(struct yetty_ygui_widget *widget, flo
     }
     widget->data.label.font_size = size;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -982,7 +1100,7 @@ void yetty_ygui_widget_slider_set_value(struct yetty_ygui_widget *widget, float 
     widget->data.slider.value =
         ygui_clamp(value, widget->data.slider.min_val, widget->data.slider.max_val);
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -1004,7 +1122,7 @@ void yetty_ygui_widget_slider_set_range(struct yetty_ygui_widget *widget, float 
     widget->data.slider.max_val = max_val;
     widget->data.slider.value = ygui_clamp(widget->data.slider.value, min_val, max_val);
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -1099,7 +1217,7 @@ void yetty_ygui_widget_checkbox_set_checked(struct yetty_ygui_widget *widget, in
     }
     widget->data.checkbox.checked = checked;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -1119,7 +1237,7 @@ void yetty_ygui_widget_checkbox_set_label(struct yetty_ygui_widget *widget, cons
     free(widget->data.checkbox.label);
     widget->data.checkbox.label = ygui_strdup(label);
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -1174,8 +1292,14 @@ static struct yetty_ycore_void_result panel_render_all(struct yetty_ygui_widget 
     self->effective_y = self->y + ctx->offset_y;
     self->was_rendered = 1;
 
-    /* Render panel background and scrollbar */
-    panel_render(self, ctx);
+    /* Render panel background and scrollbar — wrapped in its own GROUP. */
+    {
+        struct yetty_ycore_void_result e =
+            yetty_ygui_widget_emit_self_in_group(self, ctx, panel_render);
+        if (YETTY_IS_ERR(e)) {
+            yetty_ycore_error_destroy(e.error);
+        }
+    }
 
     const struct yetty_ygui_theme *t = ctx->theme;
     float header_h = self->data.panel.header_h;
@@ -1271,7 +1395,7 @@ void yetty_ygui_widget_panel_set_scroll(struct yetty_ygui_widget *widget, float 
     widget->data.panel.scroll_x = x;
     widget->data.panel.scroll_y = y;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -1296,7 +1420,7 @@ void yetty_ygui_widget_panel_set_content_size(struct yetty_ygui_widget *widget, 
     widget->data.panel.content_w = w;
     widget->data.panel.content_h = h;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -1307,7 +1431,7 @@ void yetty_ygui_widget_panel_set_header_height(struct yetty_ygui_widget *widget,
     }
     widget->data.panel.header_h = h;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -1362,7 +1486,7 @@ void yetty_ygui_widget_progress_set_value(struct yetty_ygui_widget *widget, floa
     }
     widget->data.progress.value = ygui_clamp(value, 0, 1);
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -1657,7 +1781,7 @@ void yetty_ygui_widget_textinput_set_text(struct yetty_ygui_widget *widget, cons
     free(widget->data.textinput.text);
     widget->data.textinput.text = ygui_strdup(text);
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -1677,7 +1801,7 @@ void yetty_ygui_widget_textinput_set_placeholder(struct yetty_ygui_widget *widge
     free(widget->data.textinput.placeholder);
     widget->data.textinput.placeholder = ygui_strdup(text);
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -1902,7 +2026,7 @@ void yetty_ygui_widget_dropdown_set_options(struct yetty_ygui_widget *widget, co
         widget->data.dropdown.selected = count > 0 ? 0 : -1;
     }
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -1913,7 +2037,7 @@ void yetty_ygui_widget_dropdown_set_selected(struct yetty_ygui_widget *widget, i
     }
     widget->data.dropdown.selected = index;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -2123,7 +2247,7 @@ void yetty_ygui_widget_colorpicker_set_color(struct yetty_ygui_widget *widget, f
                &widget->data.colorpicker.val);
     widget->data.colorpicker.alpha = a;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -2224,7 +2348,13 @@ static struct yetty_ycore_void_result popup_render_all(struct yetty_ygui_widget 
     self->effective_y = self->y + ctx->offset_y;
     self->was_rendered = 1;
 
-    popup_render(self, ctx);
+    {
+        struct yetty_ycore_void_result e =
+            yetty_ygui_widget_emit_self_in_group(self, ctx, popup_render);
+        if (YETTY_IS_ERR(e)) {
+            yetty_ycore_error_destroy(e.error);
+        }
+    }
 
     for (struct yetty_ygui_widget *child = self->first_child; child;
          child = child->next_sibling) {
@@ -2303,7 +2433,7 @@ void yetty_ygui_widget_popup_set_label(struct yetty_ygui_widget *widget, const c
     free(widget->data.popup.label);
     widget->data.popup.label = ygui_strdup(label);
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -2322,7 +2452,7 @@ void yetty_ygui_widget_popup_set_modal(struct yetty_ygui_widget *widget, int mod
     }
     widget->data.popup.modal = modal ? 1 : 0;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -2345,7 +2475,7 @@ void yetty_ygui_widget_popup_set_open(struct yetty_ygui_widget *widget, int open
         widget->flags &= ~YETTY_YGUI_FLAG_OPEN;
     }
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -2365,7 +2495,7 @@ void yetty_ygui_widget_popup_set_scene_size(struct yetty_ygui_widget *widget, fl
     widget->data.popup.scene_w = w;
     widget->data.popup.scene_h = h;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -2376,7 +2506,7 @@ void yetty_ygui_widget_popup_set_header_color(struct yetty_ygui_widget *widget, 
     }
     widget->data.popup.header_color = color;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -2429,7 +2559,13 @@ static struct yetty_ycore_void_result collapsing_header_render_all(
     self->effective_y = self->y + ctx->offset_y;
     self->was_rendered = 1;
 
-    collapsing_header_render(self, ctx);
+    {
+        struct yetty_ycore_void_result e =
+            yetty_ygui_widget_emit_self_in_group(self, ctx, collapsing_header_render);
+        if (YETTY_IS_ERR(e)) {
+            yetty_ycore_error_destroy(e.error);
+        }
+    }
 
     if (!(self->flags & YETTY_YGUI_FLAG_OPEN)) {
         return YETTY_OK_VOID();
@@ -2505,7 +2641,7 @@ void yetty_ygui_widget_collapsing_header_set_label(struct yetty_ygui_widget *wid
     free(widget->data.collapsing_header.label);
     widget->data.collapsing_header.label = ygui_strdup(label);
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -2528,7 +2664,7 @@ void yetty_ygui_widget_collapsing_header_set_open(struct yetty_ygui_widget *widg
         widget->flags &= ~YETTY_YGUI_FLAG_OPEN;
     }
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -2596,7 +2732,7 @@ void yetty_ygui_widget_tooltip_set_label(struct yetty_ygui_widget *widget, const
     free(widget->data.tooltip.label);
     widget->data.tooltip.label = ygui_strdup(label);
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -2678,7 +2814,7 @@ void yetty_ygui_widget_selectable_set_label(struct yetty_ygui_widget *widget, co
     free(widget->data.selectable.label);
     widget->data.selectable.label = ygui_strdup(label);
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -2701,7 +2837,7 @@ void yetty_ygui_widget_selectable_set_checked(struct yetty_ygui_widget *widget, 
         widget->flags &= ~YETTY_YGUI_FLAG_CHECKED;
     }
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -2839,7 +2975,7 @@ void yetty_ygui_widget_choicebox_set_options(struct yetty_ygui_widget *widget, c
         widget->data.choicebox.selected = count > 0 ? 0 : -1;
     }
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -2850,7 +2986,7 @@ void yetty_ygui_widget_choicebox_set_selected(struct yetty_ygui_widget *widget, 
     }
     widget->data.choicebox.selected = index;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -3018,7 +3154,7 @@ void yetty_ygui_widget_scrollbar_set_value(struct yetty_ygui_widget *widget, flo
     }
     widget->data.scrollbar.value = ygui_clamp(value, 0.0f, 1.0f);
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 
@@ -3038,6 +3174,20 @@ float yetty_ygui_widget_scrollbar_get_value(const struct yetty_ygui_widget *widg
  * List Widget — generic row-aware vertical container with selection.
  *===========================================================================*/
 
+/* Inner: emit only the list's selection-background drawable. Called via
+ * widget_emit_self_in_group, so it lands inside the list's GROUP. */
+static struct yetty_ycore_void_result list_render(struct yetty_ygui_widget *self,
+                                                  struct yetty_ygui_render_ctx *ctx)
+{
+    const struct yetty_ygui_theme *t = ctx->theme;
+    struct yetty_ygui_widget *sel = self->data.list.selected;
+    if (sel && (sel->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+        return yetty_ygui_render_ctx_render_box(ctx, sel->x, sel->y, sel->w, sel->h,
+                                                t->selection_bg, t->radius_small);
+    }
+    return YETTY_OK_VOID();
+}
+
 /* Custom render_all so the selection background lands at the correct
  * absolute position. The default render_all_default calls render() while
  * ctx->offset still points at the *parent's* origin — wrong frame for
@@ -3052,18 +3202,20 @@ static struct yetty_ycore_void_result list_render_all(struct yetty_ygui_widget *
         return YETTY_OK_VOID();
     }
     self->was_rendered = 1;
-    const struct yetty_ygui_theme *t = ctx->theme;
 
     float old_offset_x = ctx->offset_x;
     float old_offset_y = ctx->offset_y;
     ctx->offset_x = self->layout_x;
     ctx->offset_y = self->layout_y;
 
-    /* Selection background — drawn before children so they sit on top. */
-    struct yetty_ygui_widget *sel = self->data.list.selected;
-    if (sel && (sel->flags & YETTY_YGUI_FLAG_VISIBLE)) {
-        yetty_ygui_render_ctx_render_box(ctx, sel->x, sel->y, sel->w, sel->h, t->selection_bg,
-                                         t->radius_small);
+    /* Selection background — drawn before children so they sit on top.
+     * Wrapped in this widget's GROUP. */
+    {
+        struct yetty_ycore_void_result e =
+            yetty_ygui_widget_emit_self_in_group(self, ctx, list_render);
+        if (YETTY_IS_ERR(e)) {
+            yetty_ycore_error_destroy(e.error);
+        }
     }
 
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
@@ -3114,7 +3266,7 @@ static int list_on_press(struct yetty_ygui_widget *self, float lx, float ly, ygu
     if (self->data.list.selected != child) {
         self->data.list.selected = child;
         if (self->engine) {
-            self->engine->dirty = 1;
+            self->engine->dirty = 1; self->dirty = 1;
         }
     }
     if (self->data.list.on_select) {
@@ -3157,7 +3309,7 @@ void yetty_ygui_widget_list_set_selected(struct yetty_ygui_widget *list,
     }
     list->data.list.selected = child;
     if (list->engine) {
-        list->engine->dirty = 1;
+        list->engine->dirty = 1; list->dirty = 1;
     }
 }
 
@@ -3363,7 +3515,7 @@ static int table_on_press(struct yetty_ygui_widget *self, float lx, float ly, yg
     if (self->data.table.selected_row != row) {
         self->data.table.selected_row = row;
         if (self->engine) {
-            self->engine->dirty = 1;
+            self->engine->dirty = 1; self->dirty = 1;
         }
     }
     if (self->data.table.on_select) {
@@ -3453,7 +3605,7 @@ void yetty_ygui_widget_table_set_columns(struct yetty_ygui_widget *table, const 
     }
     table->data.table.n_columns = n_columns;
     if (table->engine) {
-        table->engine->dirty = 1;
+        table->engine->dirty = 1; table->dirty = 1;
     }
 }
 
@@ -3469,7 +3621,7 @@ void yetty_ygui_widget_table_clear_rows(struct yetty_ygui_widget *table)
     table->data.table.n_rows = 0;
     table->data.table.selected_row = -1;
     if (table->engine) {
-        table->engine->dirty = 1;
+        table->engine->dirty = 1; table->dirty = 1;
     }
 }
 
@@ -3501,7 +3653,7 @@ void yetty_ygui_widget_table_add_row(struct yetty_ygui_widget *table, const char
     }
     table->data.table.rows[table->data.table.n_rows++] = row;
     if (table->engine) {
-        table->engine->dirty = 1;
+        table->engine->dirty = 1; table->dirty = 1;
     }
 }
 
@@ -3524,7 +3676,7 @@ void yetty_ygui_widget_table_set_row(struct yetty_ygui_widget *table, int row,
     table_free_row(table->data.table.rows[row], n_cells);
     table->data.table.rows[row] = new_row;
     if (table->engine) {
-        table->engine->dirty = 1;
+        table->engine->dirty = 1; table->dirty = 1;
     }
 }
 
@@ -3546,7 +3698,7 @@ void yetty_ygui_widget_table_set_selected(struct yetty_ygui_widget *table, int r
     }
     table->data.table.selected_row = row;
     if (table->engine) {
-        table->engine->dirty = 1;
+        table->engine->dirty = 1; table->dirty = 1;
     }
 }
 
@@ -3575,7 +3727,7 @@ void yetty_ygui_widget_table_set_row_height(struct yetty_ygui_widget *table, flo
     }
     table->data.table.row_height = h;
     if (table->engine) {
-        table->engine->dirty = 1;
+        table->engine->dirty = 1; table->dirty = 1;
     }
 }
 
@@ -3660,8 +3812,9 @@ static struct yetty_ycore_void_result tree_node_render_all(struct yetty_ygui_wid
     }
     self->was_rendered = 1;
 
-    /* Always render the header. */
-    struct yetty_ycore_void_result first_err = tree_node_render(self, ctx);
+    /* Always render the header. Wrapped in this widget's GROUP. */
+    struct yetty_ycore_void_result first_err =
+        yetty_ygui_widget_emit_self_in_group(self, ctx, tree_node_render);
     if (YETTY_IS_ERR(first_err)) {
         return first_err;
     }
@@ -3714,7 +3867,7 @@ static int tree_node_on_press(struct yetty_ygui_widget *self, float lx, float ly
                                            self->data.tree_node.on_toggle_userdata);
         }
         if (self->engine) {
-            self->engine->dirty = 1;
+            self->engine->dirty = 1; self->dirty = 1;
         }
         out->widget_id = self->id;
         out->type = YETTY_YGUI_EVENT_CHANGE;
@@ -3802,7 +3955,7 @@ void yetty_ygui_widget_tree_node_set_label(struct yetty_ygui_widget *node, const
     free(node->data.tree_node.label);
     node->data.tree_node.label = ygui_strdup(label);
     if (node->engine) {
-        node->engine->dirty = 1;
+        node->engine->dirty = 1; node->dirty = 1;
     }
 }
 
@@ -3824,7 +3977,7 @@ void yetty_ygui_widget_tree_node_set_expanded(struct yetty_ygui_widget *node, in
         yetty_ygui_widget_set_visible(node->data.tree_node.children_list, expanded);
     }
     if (node->engine) {
-        node->engine->dirty = 1;
+        node->engine->dirty = 1; node->dirty = 1;
     }
 }
 

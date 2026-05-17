@@ -326,6 +326,11 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
                              "drawable_iter: body pull", pr);
         }
         if (iter->filled < iter->total_size) {
+            uint32_t type_seen = 0;
+            memcpy(&type_seen, iter->scratch, sizeof(type_seen));
+            yerror("drawable_iter: truncated body at envelope end — "
+                   "type=0x%08x filled=%u expected=%u",
+                   type_seen, iter->filled, iter->total_size);
             return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
                              "drawable_iter: truncated body at envelope end");
         }

@@ -57,6 +57,30 @@ void yetty_ydraw_draw_list_clear(struct yetty_ydraw_draw_list *buf);
 struct yetty_ydraw_id_result yetty_ydraw_draw_list_add_prim(
     struct yetty_ydraw_draw_list *buf, const void *data YETTY_ANNOT_ARRAY(size), size_t size);
 
+/* GROUP / DELETE — entity-scoped wire commands for incremental updates.
+ *
+ * `begin_group` writes a 12-byte GROUP header (type | id | payload_size=0)
+ * at the current write head and returns the byte offset of that header.
+ * Drawables added between begin and end land inside the group's payload.
+ * `end_group` back-patches the GROUP's payload_size by computing
+ * `current_write_head - marker - 12`. Nested groups work because each
+ * marker addresses its own size slot.
+ *
+ * `add_cmd_delete` writes a fully-formed DELETE record (12 bytes:
+ * type | id | payload_size=0) at the current write head. Used by
+ * producers shipping incremental updates to scene-canvas: emit
+ * DELETE(id) before a fresh GROUP(id, …) when a widget's drawables
+ * have changed since the last frame.
+ */
+struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_group(
+    struct yetty_ydraw_draw_list *buf, uint32_t group_id);
+
+struct yetty_ycore_void_result yetty_ydraw_draw_list_end_group(
+    struct yetty_ydraw_draw_list *buf, uint32_t group_marker_offset);
+
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_delete(
+    struct yetty_ydraw_draw_list *buf, uint32_t group_id);
+
 // Read-only view of the raw primitive byte stream (no scene-bounds framing,
 // just the concatenated FAM/SDF prim bytes). Used by producers that need to
 // walk their own buffer (e.g. ygui's RICH widget translating prims into the

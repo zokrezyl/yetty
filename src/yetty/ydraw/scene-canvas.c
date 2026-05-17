@@ -148,6 +148,17 @@ struct scene_canvas {
     struct yetty_ydraw_flyweight_registry *flyweight_registry;
     struct yetty_ydraw_figure_factory *figure_factory;
 
+    /* Per-envelope render-request hook. scene_process_input runs as a
+     * long-lived layer coro; it never returns to ydraw_layer_process_input
+     * so the layer's `request_render_fn` is never re-invoked there. To
+     * still kick the main event loop after each envelope we piggy-back
+     * on the canvas's cursor-set callback (same trick scrolling-canvas
+     * uses via its env_finalize). The callback chain is:
+     *   scene_process_input → cursor_set_callback → terminal_cursor_callback
+     *   → terminal_request_render_callback → libuv_request_render. */
+    yetty_ydraw_canvas_cursor_callback cursor_set_callback;
+    void *cursor_set_callback_userdata;
+
     /* Font cache + default font (slot 0). Scene-canvas does not evict —
      * fonts loaded here live for the canvas's lifetime. */
     struct yetty_yfont_cache *font_cache;
@@ -1053,10 +1064,14 @@ struct yetty_ycore_void_result yetty_ydraw_scene_entity_delete_children(
  *===========================================================================*/
 
 /* Forward declare — dispatch_command and process_group_body call each
- * other (recursion through GROUP). */
+ * other (recursion through GROUP).
+ *
+ * Both pass the parent entity by SLOT, not pointer. The scene entity
+ * table grows by realloc during scene_entity_create; a pointer captured
+ * before a recursive create-then-realloc call would dangle. Slots are
+ * stable for the entity's lifetime, so re-deref at each use is safe. */
 static struct yetty_ycore_void_result process_group_body(
-    struct scene_canvas *sc, struct yetty_ydraw_scene_entity *parent, const uint8_t *body_bytes,
-    uint32_t body_len);
+    struct scene_canvas *sc, uint32_t parent_slot, const uint8_t *body_bytes, uint32_t body_len);
 
 /* Lookup an in-use entity by external_id; returns root for id==0;
  * NULL if not found. */
@@ -1260,16 +1275,17 @@ static struct yetty_ycore_void_result scene_resolve_text_span_font(
     return YETTY_OK_VOID();
 }
 
-/* Apply one parsed command. `current_entity` is the top of the parser
- * stack (root for the outer loop, the GROUP's entity inside a body). */
-static struct yetty_ycore_void_result dispatch_command(
-    struct scene_canvas *sc, struct yetty_ydraw_scene_entity *current_entity,
-    const struct yetty_ydraw_command *cmd)
+/* Apply one parsed command. `parent_slot` identifies the current parser
+ * scope (root for the outer loop, the GROUP's entity inside a body).
+ * The slot is stable across entity-table reallocs that may happen
+ * during nested entity creation; an entity pointer would not be. */
+static struct yetty_ycore_void_result dispatch_command(struct scene_canvas *sc,
+                                                       uint32_t parent_slot,
+                                                       const struct yetty_ydraw_command *cmd)
 {
     if (cmd->kind == YETTY_YDRAW_COMMAND_DELETE) {
         struct yetty_ydraw_scene_entity *target = scene_lookup_entity(sc, cmd->id);
         if (!target) {
-            /* §7: unknown id is a warn-and-continue, not fatal. */
             ydebug("scene-canvas: DELETE id=%u: not found, ignoring", cmd->id);
             return YETTY_OK_VOID();
         }
@@ -1280,7 +1296,6 @@ static struct yetty_ycore_void_result dispatch_command(
         return yetty_ydraw_scene_entity_delete(&sc->base, target);
     }
 
-    /* ADD — switch on the flyweight type to find any special verbs. */
     if (!cmd->flyweight.data) {
         return YETTY_ERR(yetty_ycore_void, "scene-canvas: ADD with NULL flyweight data");
     }
@@ -1294,11 +1309,14 @@ static struct yetty_ycore_void_result dispatch_command(
         uint32_t payload_size;
         memcpy(&id, &cmd->flyweight.data[1], sizeof(id));
         memcpy(&payload_size, &cmd->flyweight.data[2], sizeof(payload_size));
+        struct yetty_ydraw_scene_entity *parent = &sc->entities[parent_slot];
         struct yetty_ydraw_scene_entity_ptr_result ent_res =
-            scene_lookup_or_create_entity(sc, current_entity, (uint64_t)id);
+            scene_lookup_or_create_entity(sc, parent, (uint64_t)id);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ent_res, "scene-canvas: GROUP lookup/create");
+        /* Capture the new entity's slot BEFORE any further table grow. */
+        uint32_t child_slot = ent_res.value->slot;
         const uint8_t *body = (const uint8_t *)cmd->flyweight.data + 12u;
-        return process_group_body(sc, ent_res.value, body, payload_size);
+        return process_group_body(sc, child_slot, body, payload_size);
     }
     if (drawable_type == YETTY_YDRAW_TYPE_FONT) {
         return scene_handle_font(sc, &cmd->flyweight);
@@ -1314,20 +1332,25 @@ static struct yetty_ycore_void_result dispatch_command(
             scene_resolve_text_span_font(sc, tv.font_id, &font, &handle);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "scene-canvas: resolve text-span font");
         if (!font) {
-            /* No font available — silently drop the span. */
             return YETTY_OK_VOID();
         }
-        return scene_expand_text_span_to_glyphs(sc, current_entity, &tv, font, handle);
+        return scene_expand_text_span_to_glyphs(sc, &sc->entities[parent_slot], &tv, font, handle);
     }
-    /* Implicit Add — append drawable to the current parent. */
-    return yetty_ydraw_scene_entity_add_prim(&sc->base, current_entity, &cmd->flyweight);
+    /* Implicit Add — re-deref parent each call; entity_add_prim can
+     * itself grow the entity's arena via realloc but never touches the
+     * entity table, so the local pointer here stays valid for the
+     * duration of this call. */
+    return yetty_ydraw_scene_entity_add_prim(&sc->base, &sc->entities[parent_slot],
+                                             &cmd->flyweight);
 }
 
 /* Walk a GROUP's payload as a stream of nested commands. Recurses on
- * sub-GROUPs via dispatch_command. */
-static struct yetty_ycore_void_result process_group_body(
-    struct scene_canvas *sc, struct yetty_ydraw_scene_entity *parent, const uint8_t *body_bytes,
-    uint32_t body_len)
+ * sub-GROUPs via dispatch_command. parent_slot is stable across
+ * entities[] reallocs that nested creates can trigger. */
+static struct yetty_ycore_void_result process_group_body(struct scene_canvas *sc,
+                                                         uint32_t parent_slot,
+                                                         const uint8_t *body_bytes,
+                                                         uint32_t body_len)
 {
     uint32_t offset = 0;
     while (offset < body_len) {
@@ -1338,7 +1361,7 @@ static struct yetty_ycore_void_result process_group_body(
         if (pr.value == 0) {
             return YETTY_ERR(yetty_ycore_void, "scene-canvas: group body parser returned 0");
         }
-        struct yetty_ycore_void_result dr = dispatch_command(sc, parent, &cmd);
+        struct yetty_ycore_void_result dr = dispatch_command(sc, parent_slot, &cmd);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "scene-canvas: group body dispatch");
         offset += (uint32_t)pr.value;
     }
@@ -1371,8 +1394,6 @@ static struct yetty_ycore_void_result scene_process_input(
             goto cleanup;
         }
 
-        struct yetty_ydraw_scene_entity *root = &sc->entities[SCENE_ROOT_SLOT];
-
         for (;;) {
             struct yetty_ydraw_drawable_iterator_status_result sr =
                 yetty_ydraw_drawable_iterator_next(&iter);
@@ -1383,7 +1404,10 @@ static struct yetty_ycore_void_result scene_process_input(
             if (sr.value == YETTY_YDRAW_ITERATOR_EOE) {
                 break;
             }
-            struct yetty_ycore_void_result dr = dispatch_command(sc, root, &iter.command);
+            /* Pass parent by slot — `sc->entities[]` may grow under our
+             * feet when nested GROUPs trigger entity allocation. */
+            struct yetty_ycore_void_result dr =
+                dispatch_command(sc, SCENE_ROOT_SLOT, &iter.command);
             if (YETTY_IS_ERR(dr)) {
                 ret = YETTY_ERR(yetty_ycore_void, "scene_process_input: dispatch", dr);
                 goto cleanup;
@@ -1396,6 +1420,20 @@ cleanup:
         yetty_ydraw_drawable_iterator_destroy(&iter);
         if (YETTY_IS_ERR(ret)) {
             return ret;
+        }
+        /* Kick the host event loop. scene_process_input never returns
+         * to ydraw_layer_process_input (this is a long-lived coro), so
+         * the layer's request_render_fn is never re-invoked there. The
+         * cursor-set callback is wired in terminal.c to call
+         * terminal_request_render_callback → libuv_request_render, which
+         * is exactly what we need to trigger a render of the freshly
+         * processed envelope. Pass row=0 (no real cursor on scene). */
+        if (sc->cursor_set_callback) {
+            struct yetty_ycore_void_result cb =
+                sc->cursor_set_callback(sc->cursor_set_callback_userdata, 0);
+            if (YETTY_IS_ERR(cb)) {
+                yetty_ycore_error_destroy(cb.error);
+            }
         }
         /* Envelope handled cleanly — yield so sm_coro can clear its
          * terminator-seen state before resuming us on the next body. */
@@ -1737,9 +1775,10 @@ static struct yetty_ycore_void_result scene_set_scroll_callback(
 static struct yetty_ycore_void_result scene_set_cursor_callback(
     struct yetty_ydraw_canvas *base, yetty_ydraw_canvas_cursor_callback callback, void *userdata)
 {
-    (void)base;
-    (void)callback;
-    (void)userdata;
+    if (!base) return YETTY_ERR(yetty_ycore_void, "scene-canvas: NULL");
+    struct scene_canvas *sc = as_scene(base);
+    sc->cursor_set_callback = callback;
+    sc->cursor_set_callback_userdata = userdata;
     return YETTY_OK_VOID();
 }
 

@@ -19,4 +19,12 @@
 #define YETTY_OSC_YDRAW_YAML 600002    /* yaml text payload */
 #define YETTY_OSC_YDRAW_OVERLAY 600003 /* overlay variant */
 
+/* Scene-canvas variant for entity-scoped producers (ygui). Same on-wire
+ * envelope shape as YDRAW_BIN, but lands on a separate yterm layer
+ * whose canvas is a scene-canvas (entity tree + GROUP/DELETE incremental
+ * updates) rather than a scrolling-canvas. Producers that need the
+ * incremental shipping (only re-emit dirty widgets) target this code;
+ * legacy flat-list producers (ypdf, ycat svg) keep using YDRAW_BIN. */
+#define YETTY_OSC_YDRAW_SCENE_BIN 600004
+
 #endif /* YETTY_YTERM_OSC_CODES_H */

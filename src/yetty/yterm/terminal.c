@@ -1184,6 +1184,15 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
                         "terminal_create: terminal_layer_add(ydraw static) failed");
     ydebug("terminal_create: ydraw static layer created and added");
 
+    /* Register the scene layer for YDRAW_SCENE_BIN — ygui's incremental
+     * GROUP/DELETE shipments land here so they don't compete with the
+     * scrolling layer for flat YDRAW_BIN envelopes. */
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_OSC_YDRAW_SCENE_BIN,
+                                                ydraw_static_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register scene layer for YDRAW_SCENE_BIN failed");
+    ydebug("terminal_create: ydraw scene layer registered for OSC SCENE_BIN");
+
     /* Shader-glyph layer — animated procedurals at cells whose glyph_index
      * is in the shader-glyph range (top half of u32). Sits above text-layer
      * in compose order so animations overlay text. Reads text-layer's cell

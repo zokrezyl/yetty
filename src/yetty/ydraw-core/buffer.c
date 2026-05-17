@@ -11,6 +11,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ydraw-core/font-prim.h>
 #include <yetty/ydraw-core/text-span-prim.h>
@@ -399,6 +400,55 @@ struct yetty_ydraw_id_result yetty_ydraw_draw_list_add_prim(
     buf->primitives.buf.size = new_size;
 
     return YETTY_OK(yetty_ydraw_id, id);
+}
+
+/* GROUP / DELETE producer helpers — see the comment in draw-list.h.
+ *
+ * Wire layout for both records:
+ *   GROUP(id)   : u32 type=CMD_GROUP | u32 id | u32 payload_size | …payload…
+ *   DELETE(id)  : u32 type=CMD_DELETE | u32 id | u32 payload_size=0
+ *
+ * For GROUP, the payload (nested commands / drawables) is appended to
+ * the buffer after begin_group returns; end_group then back-patches the
+ * 4-byte payload_size slot at marker+8. The 12-byte header itself
+ * already counts against the buffer; end_group only patches, it doesn't
+ * append.
+ */
+struct yetty_ydraw_id_result yetty_ydraw_draw_list_begin_group(
+    struct yetty_ydraw_draw_list *buf, uint32_t group_id)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ydraw_id, "begin_group: buf is NULL");
+    }
+    uint32_t header[3] = {YETTY_YDRAW_CMD_GROUP, group_id, 0u};
+    return yetty_ydraw_draw_list_add_prim(buf, header, sizeof(header));
+}
+
+struct yetty_ycore_void_result yetty_ydraw_draw_list_end_group(
+    struct yetty_ydraw_draw_list *buf, uint32_t group_marker_offset)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_void, "end_group: buf is NULL");
+    }
+    if (group_marker_offset + 12u > buf->primitives.buf.size) {
+        return YETTY_ERR(yetty_ycore_void, "end_group: marker out of range");
+    }
+    uint32_t payload_size = (uint32_t)(buf->primitives.buf.size - group_marker_offset - 12u);
+    memcpy(buf->primitives.buf.data + group_marker_offset + 8u, &payload_size,
+           sizeof(payload_size));
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ydraw_draw_list_add_cmd_delete(
+    struct yetty_ydraw_draw_list *buf, uint32_t group_id)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_void, "add_cmd_delete: buf is NULL");
+    }
+    uint32_t record[3] = {YETTY_YDRAW_CMD_DELETE, group_id, 0u};
+    struct yetty_ydraw_id_result r = yetty_ydraw_draw_list_add_prim(buf, record, sizeof(record));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "add_cmd_delete: add_prim failed");
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ydraw_primitive_iter_result yetty_ydraw_draw_list_drawable_first(
