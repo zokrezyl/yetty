@@ -17,6 +17,7 @@ target_include_directories(decode-ydraw PRIVATE
 target_link_libraries(decode-ydraw PRIVATE
     yetty_yface
     yetty_ycore
+    yetty_ydraw_core
     yetty_yplatform_core
 )
 

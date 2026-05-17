@@ -1647,6 +1647,8 @@ static struct yetty_ycore_void_result dispatch_command(struct scene_canvas *sc,
     uint32_t drawable_type = cmd->flyweight.data[0];
 
     if (drawable_type == YETTY_YDRAW_CMD_ZERO) {
+        ydebug("scene-canvas: CMD_ZERO high_water=%u (clearing scene)",
+               sc->entity_high_water);
         return scene_clear(&sc->base);
     }
     if (drawable_type == YETTY_YDRAW_CMD_GROUP) {
@@ -1660,8 +1662,14 @@ static struct yetty_ycore_void_result dispatch_command(struct scene_canvas *sc,
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ent_res, "scene-canvas: GROUP lookup/create");
         /* Capture the new entity's slot BEFORE any further table grow. */
         uint32_t child_slot = ent_res.value->slot;
+        ydebug("scene-canvas: GROUP id=%u → slot=%u parent_slot=%u payload=%u B",
+               id, child_slot, parent_slot, payload_size);
         const uint8_t *body = (const uint8_t *)cmd->flyweight.data + 12u;
-        return process_group_body(sc, child_slot, body, payload_size);
+        struct yetty_ycore_void_result br = process_group_body(sc, child_slot, body, payload_size);
+        ydebug("scene-canvas: GROUP id=%u DONE slot=%u drawable_count=%u touched_cells=%u",
+               id, child_slot, sc->entities[child_slot].drawable_count,
+               sc->entities[child_slot].touched_cell_count);
+        return br;
     }
     if (drawable_type == YETTY_YDRAW_TYPE_FONT) {
         return scene_handle_font(sc, &cmd->flyweight);

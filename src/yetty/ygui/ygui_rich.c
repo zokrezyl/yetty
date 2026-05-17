@@ -112,46 +112,52 @@ static size_t rich_drawable_size(const uint32_t *prim, size_t remaining)
 
 static void translate_sdf(uint32_t *prim, size_t words, float dx, float dy)
 {
-    if (words < 7) {
-        return; /* type+z+fill+stroke+sw+x+y minimum */
-    }
+    /* Layout (non-addressable):
+     *   [type, z, fill, stroke, sw, x, y, ...] — geometry starts at float 5.
+     * Addressable variant shifts every field by one slot to make room for
+     * the trailing id word inserted right after type. Handle both. */
     uint32_t type = prim[0];
+    uint32_t base = RICH_TYPE_BASE(type);
+    size_t shift = (type & YETTY_YDRAW_HAS_ID_FLAG) ? 1u : 0u;
+    size_t geom = 5u + shift; /* index of center_x / start_x */
 
-    /* Every SDF prim carries center/start at float indices 5, 6. */
+    if (words < geom + 2u) {
+        return;
+    }
     float *fprim = (float *)prim;
-    fprim[5] += dx;
-    fprim[6] += dy;
+    fprim[geom + 0] += dx;
+    fprim[geom + 1] += dy;
 
-    switch (type) {
+    switch (base) {
     case YETTY_YSDF_SEGMENT:
-        if (words >= 9) {
-            fprim[7] += dx;
-            fprim[8] += dy;
+        if (words >= geom + 4u) {
+            fprim[geom + 2] += dx;
+            fprim[geom + 3] += dy;
         }
         break;
     case YETTY_YSDF_TRIANGLE:
-        if (words >= 11) {
-            fprim[7] += dx;
-            fprim[8] += dy;
-            fprim[9] += dx;
-            fprim[10] += dy;
+        if (words >= geom + 6u) {
+            fprim[geom + 2] += dx;
+            fprim[geom + 3] += dy;
+            fprim[geom + 4] += dx;
+            fprim[geom + 5] += dy;
         }
         break;
     case YETTY_YSDF_LINEAR_GRADIENT_BOX:
-        /* args: center_x, center_y, half_w, half_h, corner, gx0, gy0,
-         * gx1, gy1, color0, color1 → gradient endpoints at floats 10..13. */
-        if (words >= 14) {
-            fprim[10] += dx;
-            fprim[11] += dy;
-            fprim[12] += dx;
-            fprim[13] += dy;
+        /* args: cx, cy, hw, hh, corner, gx0, gy0, gx1, gy1, color0, color1.
+         * Gradient endpoints are at geom+5 .. geom+8. */
+        if (words >= geom + 9u) {
+            fprim[geom + 5] += dx;
+            fprim[geom + 6] += dy;
+            fprim[geom + 7] += dx;
+            fprim[geom + 8] += dy;
         }
         break;
     case YETTY_YSDF_RADIAL_GRADIENT_BOX:
-        /* gradient center at floats 10..11. */
-        if (words >= 12) {
-            fprim[10] += dx;
-            fprim[11] += dy;
+        /* args end with gradient center → geom+5 .. geom+6. */
+        if (words >= geom + 7u) {
+            fprim[geom + 5] += dx;
+            fprim[geom + 6] += dy;
         }
         break;
     default:
@@ -193,7 +199,10 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
         /* CMD — payload-less in practice (CMD_ZERO); nothing to translate. */
         return;
     }
-    if (type >= 0x10000000u && type < 0x20000000u) {
+    /* SDF — primitive_size doubles as the type-class probe (returns 0
+     * for non-SDF). Check before the FAM/complex branches because SDF
+     * types overlap the [0x40000000, 0x7FFFFFFF] flyweight range. */
+    if (yetty_ysdf_primitive_size(RICH_TYPE_BASE(type)) > 0u) {
         translate_sdf(prim, words, dx, dy);
         return;
     }

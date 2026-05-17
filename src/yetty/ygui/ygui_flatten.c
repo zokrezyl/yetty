@@ -34,10 +34,17 @@ static size_t paint_prim_size(const uint8_t *p, size_t remaining)
         return 0;
     }
     uint32_t type = *(const uint32_t *)p;
-    if (type >= 0x10000000u && type < 0x20000000u) {
-        size_t s = yetty_ysdf_primitive_size(type);
-        return (s > 0 && s <= remaining) ? s : 0;
+
+    /* SDF tier — primitive_size returns 0 for any non-SDF type, so it
+     * also serves as the type-class probe. Strip the HAS_ID flag before
+     * the lookup, and add 4 bytes for the trailing id slot when set. */
+    uint32_t base = type & ~YETTY_YDRAW_HAS_ID_FLAG;
+    size_t sdf_bytes = yetty_ysdf_primitive_size(base);
+    if (sdf_bytes > 0) {
+        size_t s = sdf_bytes + ((type & YETTY_YDRAW_HAS_ID_FLAG) ? sizeof(uint32_t) : 0);
+        return (s <= remaining) ? s : 0;
     }
+
     if (remaining < 2 * sizeof(uint32_t)) {
         return 0;
     }
