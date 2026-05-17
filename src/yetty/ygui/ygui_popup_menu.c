@@ -337,6 +337,8 @@ void yetty_ygui_widget_popup_menu_open_at(struct yetty_ygui_widget *menu, float 
     menu->layout_x = x;
     menu->layout_y = y;
     menu->flags |= YETTY_YGUI_FLAG_OPEN;
+    /* Float above everything painted earlier in the frame. */
+    yetty_ygui_internal_bring_to_front(menu);
     if (menu->engine) {
         menu->engine->dirty = 1; menu->dirty = 1;
     }

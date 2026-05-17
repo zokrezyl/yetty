@@ -143,6 +143,20 @@ typedef enum {
     /* Horizontal sequence of clickable segments separated by ' › '.
      * on_change fires with the clicked segment index. */
     YETTY_YGUI_WIDGET_BREADCRUMBS,
+    /* Editable text input with a dropdown of suggested values reached
+     * via a small arrow button on the right side. */
+    YETTY_YGUI_WIDGET_COMBO,
+    /* Horizontal strip of menu buttons; each opens an attached
+     * popup_menu anchored beneath the click. */
+    YETTY_YGUI_WIDGET_MENUBAR,
+    /* Numbered-step indicator: circles + connecting lines + per-step
+     * state (complete / current / upcoming). */
+    YETTY_YGUI_WIDGET_STEPPER,
+    /* Compact month calendar with prev/next month navigation. */
+    YETTY_YGUI_WIDGET_DATEPICKER,
+    /* File / folder picker — list of directory entries with
+     * navigation. Often used inside a modal popup. */
+    YETTY_YGUI_WIDGET_FILEPICKER,
     YETTY_YGUI_WIDGET_CUSTOM,
 } ygui_widget_type_t;
 
@@ -1068,6 +1082,215 @@ void yetty_ygui_widget_textarea_set_text(struct yetty_ygui_widget *widget, const
 const char *yetty_ygui_widget_textarea_get_text(const struct yetty_ygui_widget *widget);
 void yetty_ygui_widget_textarea_on_change(struct yetty_ygui_widget *widget,
                                           ygui_text_callback_t cb, void *userdata);
+
+/*=============================================================================
+ * Scrollarea — generic vertical scrolling container.
+ *
+ * Behaves as a flex-column container that renders its children with a
+ * vertical scroll offset. Wheel events scroll. Exposes the scrollable
+ * interface so a vscrollbar can be bound to it via scrollbar_bind.
+ *
+ *   sa = yetty_ygui_engine_scrollarea(eng, "sa", 0, 0, 0, 0);
+ *   yetty_ygui_widget_apply_css(sa, "flex: 1 0 0; align-self: stretch;");
+ *   yetty_ygui_widget_add_child(sa, my_long_vbox);
+ *
+ * The scrollarea computes its own content height from the layout
+ * (preflight intrinsic-sizing pass). scroll_y clamps to
+ * max(0, content_h - viewport_h).
+ *
+ * Hit testing: render_all adjusts every visible descendant's
+ * layout_y by -scroll_y so the spatial grid sees on-screen positions
+ * (clicks work correctly even when scrolled).
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_scrollarea(
+    struct yetty_ygui_engine *engine, const char *id,
+    float x, float y, float w, float h);
+
+void  yetty_ygui_widget_scrollarea_scroll_to(struct yetty_ygui_widget *widget, float y);
+void  yetty_ygui_widget_scrollarea_scroll_by(struct yetty_ygui_widget *widget, float dy);
+float yetty_ygui_widget_scrollarea_get_scroll(const struct yetty_ygui_widget *widget);
+
+/*=============================================================================
+ * Toggle switch — boolean on/off with sliding thumb.
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_toggle(struct yetty_ygui_engine *engine,
+                                                   const char *id, float x, float y,
+                                                   float w, float h, const char *label,
+                                                   int on);
+
+void yetty_ygui_widget_toggle_set_on(struct yetty_ygui_widget *widget, int on);
+int  yetty_ygui_widget_toggle_get_on(const struct yetty_ygui_widget *widget);
+void yetty_ygui_widget_toggle_on_change(struct yetty_ygui_widget *widget,
+                                        ygui_check_callback_t cb, void *userdata);
+
+/*=============================================================================
+ * Chip / tag — small pill label with optional close button.
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_chip(struct yetty_ygui_engine *engine,
+                                                 const char *id, float x, float y,
+                                                 float w, float h, const char *label,
+                                                 int closable);
+
+void yetty_ygui_widget_chip_on_remove(struct yetty_ygui_widget *widget,
+                                      ygui_click_callback_t cb, void *userdata);
+
+/*=============================================================================
+ * Breadcrumbs — horizontal segments separated by ' › '.
+ *
+ * on_change fires with the clicked segment index as the float value.
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_breadcrumbs(struct yetty_ygui_engine *engine,
+                                                        const char *id,
+                                                        float x, float y, float w, float h,
+                                                        const char *const *labels, int n);
+
+void yetty_ygui_widget_breadcrumbs_on_change(struct yetty_ygui_widget *widget,
+                                             ygui_change_callback_t cb, void *userdata);
+
+/*=============================================================================
+ * Indeterminate progress
+ *
+ * When set, the progress widget renders a sliding bar (no value).
+ * Useful for "working…" indicators where no percentage is known.
+ *===========================================================================*/
+
+void yetty_ygui_widget_progress_set_indeterminate(struct yetty_ygui_widget *widget,
+                                                  int indeterminate);
+
+/*=============================================================================
+ * Right-click context menu
+ *
+ * Attach any popup_menu widget to any other widget. Right-clicking
+ * inside the target's bounding box opens the menu at the cursor
+ * position. Pass NULL to clear.
+ *
+ * The menu widget is borrowed — caller must keep it alive (regular
+ * engine widget lifetime is fine).
+ *===========================================================================*/
+
+void yetty_ygui_widget_set_context_menu(struct yetty_ygui_widget *widget,
+                                        struct yetty_ygui_widget *menu);
+
+/*=============================================================================
+ * Combo box — editable textinput with a dropdown of suggestions.
+ *
+ * Click the right-edge ▼ arrow to open the suggestions list. Type
+ * directly into the field to enter any value (free-form). Clicking
+ * a suggestion replaces the field's text.
+ *
+ * on_change fires whenever the text changes (typing OR picking a
+ * suggestion), with the new text in `data.string_value`.
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_combo(struct yetty_ygui_engine *engine,
+                                                  const char *id, float x, float y,
+                                                  float w, float h, const char *initial_text,
+                                                  const char *const *options, int option_count);
+
+void yetty_ygui_widget_combo_set_text(struct yetty_ygui_widget *widget, const char *text);
+const char *yetty_ygui_widget_combo_get_text(const struct yetty_ygui_widget *widget);
+void yetty_ygui_widget_combo_on_change(struct yetty_ygui_widget *widget,
+                                       ygui_text_callback_t cb, void *userdata);
+
+/*=============================================================================
+ * Menubar — top-of-window strip of menu buttons.
+ *
+ * Each button label opens its attached popup_menu when clicked. The
+ * menus are borrowed pointers (regular engine-managed popup_menu
+ * widgets); the menubar does not own them.
+ *
+ *   bar = yetty_ygui_engine_menubar(eng, "mb", 0, 0, 800, 28);
+ *   file_m = yetty_ygui_engine_popup_menu(eng, "fm", 0, 0, 180);
+ *   yetty_ygui_widget_popup_menu_add_item(file_m, "New",  ...);
+ *   yetty_ygui_widget_menubar_add(bar, "File", file_m);
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_menubar(struct yetty_ygui_engine *engine,
+                                                    const char *id,
+                                                    float x, float y, float w, float h);
+
+void yetty_ygui_widget_menubar_add(struct yetty_ygui_widget *menubar, const char *label,
+                                   struct yetty_ygui_widget *menu);
+
+/*=============================================================================
+ * Stepper — numbered-step progress indicator.
+ *
+ * Renders horizontal circles numbered 1..N with a label below each.
+ * `current` selects the active step: steps < current paint as
+ * completed (filled accent), step == current paints active (filled +
+ * outlined), steps > current paint as upcoming (outlined only).
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_stepper(struct yetty_ygui_engine *engine,
+                                                    const char *id,
+                                                    float x, float y, float w, float h,
+                                                    const char *const *labels, int n_steps);
+
+void yetty_ygui_widget_stepper_set_current(struct yetty_ygui_widget *widget, int step);
+int  yetty_ygui_widget_stepper_get_current(const struct yetty_ygui_widget *widget);
+
+/*=============================================================================
+ * Sortable / resizable table columns.
+ *
+ * - Click a column header to sort by it (cycle none → asc → desc → none).
+ *   The table sorts its rows in place by the column's string value.
+ *   on_select index is preserved by re-locating the previously-selected
+ *   row's pointer after sort.
+ * - Drag the right edge of a header cell (~6 px wide grip) to resize the
+ *   column. The new width is stored in column_widths[i].
+ *===========================================================================*/
+
+void yetty_ygui_widget_table_set_sortable(struct yetty_ygui_widget *table, int enabled);
+int  yetty_ygui_widget_table_get_sort_column(const struct yetty_ygui_widget *table);
+int  yetty_ygui_widget_table_get_sort_order(const struct yetty_ygui_widget *table);
+void yetty_ygui_widget_table_sort_by(struct yetty_ygui_widget *table, int column, int descending);
+
+/*=============================================================================
+ * Date picker — compact month calendar.
+ *
+ * Click a day to select; click ← / → in the header to step months.
+ * on_change fires with a packed integer `yyyymmdd` (year*10000 +
+ * month*100 + day) so apps can decode without a multi-value callback.
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_datepicker(struct yetty_ygui_engine *engine,
+                                                       const char *id,
+                                                       float x, float y, float w, float h);
+
+void yetty_ygui_widget_datepicker_set_date(struct yetty_ygui_widget *widget, int year,
+                                           int month_0_based, int day);
+void yetty_ygui_widget_datepicker_get_date(const struct yetty_ygui_widget *widget, int *year,
+                                           int *month_0_based, int *day);
+void yetty_ygui_widget_datepicker_on_change(struct yetty_ygui_widget *widget,
+                                            ygui_change_callback_t cb, void *userdata);
+
+/*=============================================================================
+ * File picker — directory listing widget.
+ *
+ * Lists the entries of a directory. Click ".." to go up. Click a
+ * directory to navigate into it. Click a file to select it. The
+ * selected path is the absolute path of the currently-selected entry
+ * inside the current working directory.
+ *
+ * The widget owns its current path; navigation updates it and re-reads
+ * the directory.
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_filepicker(struct yetty_ygui_engine *engine,
+                                                       const char *id,
+                                                       float x, float y, float w, float h,
+                                                       const char *initial_dir);
+
+const char *yetty_ygui_widget_filepicker_get_cwd(const struct yetty_ygui_widget *widget);
+/* Returns the currently-selected entry name (e.g. "main.c"); NULL if
+ * nothing is selected. Combine with get_cwd to form a full path. */
+const char *yetty_ygui_widget_filepicker_get_selected(const struct yetty_ygui_widget *widget);
+void yetty_ygui_widget_filepicker_on_change(struct yetty_ygui_widget *widget,
+                                            ygui_text_callback_t cb, void *userdata);
 
 /* Bind a scrollbar to a scrollable widget (today: ypdf — anything that
  * exposes the internal scrollable interface). The scrollbar becomes a
