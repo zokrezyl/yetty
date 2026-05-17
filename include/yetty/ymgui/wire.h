@@ -120,7 +120,7 @@ extern "C" {
 #define YMGUI_WIRE_MAGIC_INPUT_KEY 0x4D59454Bu      /* "KEYM" */
 #define YMGUI_WIRE_MAGIC_TERM_INPUT_SUB 0x53504954u /* "TIPS" */
 
-#define YMGUI_WIRE_VERSION 2u
+#define YMGUI_WIRE_VERSION 3u
 
 /*=============================================================================
  * Terminal-wide input subscription flags (YMGUI_OSC_CS_TERM_INPUT_SUB).
@@ -152,6 +152,20 @@ struct yetty_ymgui_wire_term_input_sub {
 /* Frame flags. */
 #define YMGUI_FRAME_FLAG_IDX32 (1u << 0)
 
+/* Per-cmd_list flags (yetty_ymgui_wire_cmd_list.flags).
+ *
+ * REPEAT: this slot's content is byte-identical to the previous frame's
+ *   cmd_list at the same slot index. The wire carries ONLY the cmd_list
+ *   header (16 B) — no vertex / index / cmd bytes follow. The server
+ *   reuses the cached slot from the previous frame. vtx_count, idx_count,
+ *   cmd_count are sent as 0 and must be ignored by the receiver.
+ *
+ * The frontend computes a content hash (fnv64 over vtx + idx + cmds) per
+ * cmd_list, compares against last frame's hash at the same slot, and
+ * emits REPEAT on match. First frame, or any frame where a slot's hash
+ * differs, sends the full cmd_list. */
+#define YMGUI_CMDLIST_FLAG_REPEAT (1u << 0)
+
 /*---------------------------------------------------------------------------
  * Vertex — identical to ImDrawVert (pos:vec2, uv:vec2, col:u32 RGBA).
  *-------------------------------------------------------------------------*/
@@ -178,16 +192,20 @@ struct yetty_ymgui_wire_cmd {
 };
 
 /*---------------------------------------------------------------------------
- * Per-cmd-list header. Followed immediately by:
+ * Per-cmd-list header. When flags & YMGUI_CMDLIST_FLAG_REPEAT == 0,
+ * followed immediately by:
  *     struct ymgui_wire_vertex vtx[vtx_count];
  *     uint16_t (or uint32_t) idx[idx_count];       // padded to 4 bytes
  *     struct ymgui_wire_cmd    cmds[cmd_count];
+ *
+ * When the REPEAT flag is set, NOTHING follows the header — the server
+ * reuses the slot's content from the previous frame at the same index.
  *-------------------------------------------------------------------------*/
 struct yetty_ymgui_wire_cmd_list {
     uint32_t vtx_count;
     uint32_t idx_count;
     uint32_t cmd_count;
-    uint32_t _pad0;
+    uint32_t flags; /* YMGUI_CMDLIST_FLAG_* */
 };
 
 /*---------------------------------------------------------------------------

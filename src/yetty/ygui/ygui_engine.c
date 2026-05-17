@@ -986,6 +986,16 @@ void yetty_ygui_engine_text_input(struct yetty_ygui_engine *engine, const char *
         return;
     }
 
+    /* Textarea — multi-line. The textarea owns its insertion logic in
+     * ygui_widgets.c so we don't re-implement byte/cursor splicing
+     * here too. */
+    if (engine->focused->type == YETTY_YGUI_WIDGET_TEXTAREA) {
+        extern void yetty_ygui_internal_textarea_insert(struct yetty_ygui_widget *w,
+                                                        const char *text);
+        yetty_ygui_internal_textarea_insert(engine->focused, text);
+        return;
+    }
+
     /* Only textinput handles text input */
     if (engine->focused->type == YETTY_YGUI_WIDGET_TEXTINPUT) {
         /* Insert the new chunk AT the current cursor position rather

@@ -709,39 +709,78 @@ static void preflight_intrinsic_size(struct yetty_ygui_widget *w)
         preflight_intrinsic_size(c);
     }
 
-    if (w->type != YETTY_YGUI_WIDGET_TREE_NODE) {
+    if (w->type == YETTY_YGUI_WIDGET_TREE_NODE) {
+        /* Header height = theme->row_height (set by the constructor as
+         * padding_top). The constructor seeds padding_top = row_height;
+         * the engine pre-flight just trusts that value. */
+        float h = w->layout.padding_top;
+        if (h <= 0.0f) {
+            const struct yetty_ygui_theme *theme = layout_theme(w);
+            h = theme ? theme->row_height : 24.0f;
+            w->layout.padding_top = h;
+        }
+
+        if (w->data.tree_node.expanded && w->data.tree_node.children_list) {
+            struct yetty_ygui_widget *kids = w->data.tree_node.children_list;
+            float sum = 0.0f;
+            int count = 0;
+            for (struct yetty_ygui_widget *c = kids->first_child; c; c = c->next_sibling) {
+                if (!layout_is_visible(c)) {
+                    continue;
+                }
+                sum += c->authored_h;
+                count++;
+            }
+            if (count > 1) {
+                sum += (float)(count - 1) * kids->layout.gap;
+            }
+            sum += kids->layout.padding_top + kids->layout.padding_bottom;
+            h += sum;
+        }
+
+        w->authored_h = h;
         return;
     }
 
-    /* Header height = theme->row_height (set by the constructor as
-     * padding_top). The constructor seeds padding_top = row_height; the
-     * engine pre-flight just trusts that value. */
-    float h = w->layout.padding_top;
-    if (h <= 0.0f) {
-        const struct yetty_ygui_theme *theme = layout_theme(w);
-        h = theme ? theme->row_height : 24.0f;
-        w->layout.padding_top = h;
-    }
+    if (w->type == YETTY_YGUI_WIDGET_COLLAPSING_HEADER) {
+        /* The constructor stored the header strip height in
+         * data.collapsing_header.header_h. Always reset padding_top to
+         * that — the flex children sit in the box below the strip. */
+        float header_h = w->data.collapsing_header.header_h;
+        if (header_h <= 0.0f) {
+            header_h = w->authored_h > 0.0f ? w->authored_h : 28.0f;
+            w->data.collapsing_header.header_h = header_h;
+        }
+        w->layout.padding_top = header_h;
 
-    if (w->data.tree_node.expanded && w->data.tree_node.children_list) {
-        struct yetty_ygui_widget *kids = w->data.tree_node.children_list;
+        if (!(w->flags & YETTY_YGUI_FLAG_OPEN)) {
+            /* Closed: occupy only the header strip so siblings stack
+             * directly below it. Children's was_rendered stays 0 (the
+             * render walks skip them), so they don't appear in the
+             * spatial grid and can't catch stray clicks. */
+            w->authored_h = header_h;
+            return;
+        }
+
+        /* Open: tally children intrinsic heights + gaps so the parent
+         * flex sees the real expanded box. Sum mirrors layout_flex's
+         * main-axis computation (visible flex-flow children only). */
         float sum = 0.0f;
         int count = 0;
-        for (struct yetty_ygui_widget *c = kids->first_child; c; c = c->next_sibling) {
-            if (!layout_is_visible(c)) {
+        for (struct yetty_ygui_widget *c = w->first_child; c; c = c->next_sibling) {
+            if (!layout_is_visible(c) ||
+                c->layout.position == YETTY_YGUI_POSITION_ABSOLUTE) {
                 continue;
             }
             sum += c->authored_h;
             count++;
         }
         if (count > 1) {
-            sum += (float)(count - 1) * kids->layout.gap;
+            sum += (float)(count - 1) * w->layout.gap;
         }
-        sum += kids->layout.padding_top + kids->layout.padding_bottom;
-        h += sum;
+        w->authored_h = header_h + sum;
+        return;
     }
-
-    w->authored_h = h;
 }
 
 struct yetty_ycore_void_result yetty_ygui_layout_compute_engine(struct yetty_ygui_engine *engine)

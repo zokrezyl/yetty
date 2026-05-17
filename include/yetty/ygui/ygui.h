@@ -112,6 +112,28 @@ typedef enum {
      * visible pages translated by (widget_origin + page_y - scroll_y).
      * See yetty/ygui/ygui_ypdf.h for construction + scroll API. */
     YETTY_YGUI_WIDGET_YPDF,
+    /* Single-select group of radio buttons. Tracks which child radio
+     * is currently selected; clicking another radio in the group
+     * deselects the prior one. Fires on_change(group, index) when
+     * selection moves. */
+    YETTY_YGUI_WIDGET_RADIO_GROUP,
+    /* One radio inside a RADIO_GROUP. Renders an outlined circle with
+     * a filled inner dot when selected, plus a label to the right. */
+    YETTY_YGUI_WIDGET_RADIO,
+    /* Numeric input with ± buttons. Click +/- (or wheel / arrow keys)
+     * to step; range/step/precision configurable. on_change fires with
+     * the new value. */
+    YETTY_YGUI_WIDGET_SPINNER,
+    /* Drag-to-resize divider sitting between two siblings inside a
+     * flex container. Detects orientation from the parent's flex
+     * direction; resizes by mutating the two siblings' authored sizes
+     * (so the children must NOT use flex-basis:0 / flex-grow:1 — see
+     * yetty_ygui_engine_splitter docs). */
+    YETTY_YGUI_WIDGET_SPLITTER,
+    /* Multi-line editable text. Cursor + typing + Backspace + Enter +
+     * Home/End + arrow keys, viewport scrolling. Selection / clipboard
+     * not yet implemented. */
+    YETTY_YGUI_WIDGET_TEXTAREA,
     YETTY_YGUI_WIDGET_CUSTOM,
 } ygui_widget_type_t;
 
@@ -891,6 +913,152 @@ int yetty_ygui_widget_choicebox_get_selected(const struct yetty_ygui_widget *wid
 /* Scrollbars (V/H share the same value 0..1) */
 void yetty_ygui_widget_scrollbar_set_value(struct yetty_ygui_widget *widget, float value);
 float yetty_ygui_widget_scrollbar_get_value(const struct yetty_ygui_widget *widget);
+
+/*=============================================================================
+ * Radio group / Radio button
+ *
+ * A RADIO_GROUP is a single-select container. RADIOs are its children;
+ * clicking one selects it and deselects its siblings inside the same
+ * group. The group is also a flex column by default — apply CSS to
+ * customise (e.g. `flex-direction: row;` for horizontal radio bars).
+ *
+ *   group = yetty_ygui_engine_radio_group(eng, "fruit", 0, 0, 200, 100);
+ *   yetty_ygui_widget_radio_group_add(group, "r_apple",  "Apple");
+ *   yetty_ygui_widget_radio_group_add(group, "r_banana", "Banana");
+ *   yetty_ygui_widget_radio_group_set_selected_index(group, 0);
+ *   yetty_ygui_widget_radio_group_on_change(group, my_cb, NULL);
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_radio_group(
+    struct yetty_ygui_engine *engine, const char *id,
+    float x, float y, float w, float h);
+
+/* Append a radio. Returns the newly-created radio widget so the caller
+ * can apply CSS / hook a per-radio callback if needed. */
+struct yetty_ygui_widget *yetty_ygui_widget_radio_group_add(
+    struct yetty_ygui_widget *group, const char *id, const char *label);
+
+void yetty_ygui_widget_radio_group_set_selected_index(struct yetty_ygui_widget *group, int index);
+int yetty_ygui_widget_radio_group_get_selected_index(const struct yetty_ygui_widget *group);
+
+/* Cb gets the new index in `value` (cast from float). -1 means none. */
+void yetty_ygui_widget_radio_group_on_change(struct yetty_ygui_widget *group,
+                                             ygui_change_callback_t cb, void *userdata);
+
+/*=============================================================================
+ * Spinner — numeric input with ± buttons.
+ *
+ * Wheel and Up/Down keys also step. The widget paints its value with
+ * `precision` decimal places (set 0 for integer-style); editing the
+ * displayed string by click is not supported yet — for arbitrary entry
+ * use a textinput.
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_spinner(
+    struct yetty_ygui_engine *engine, const char *id,
+    float x, float y, float w, float h,
+    float min_val, float max_val, float step, float value);
+
+void yetty_ygui_widget_spinner_set_value(struct yetty_ygui_widget *widget, float value);
+float yetty_ygui_widget_spinner_get_value(const struct yetty_ygui_widget *widget);
+void yetty_ygui_widget_spinner_set_range(struct yetty_ygui_widget *widget, float min_val, float max_val);
+void yetty_ygui_widget_spinner_set_step(struct yetty_ygui_widget *widget, float step);
+void yetty_ygui_widget_spinner_set_precision(struct yetty_ygui_widget *widget, int decimals);
+void yetty_ygui_widget_spinner_on_change(struct yetty_ygui_widget *widget,
+                                         ygui_change_callback_t cb, void *userdata);
+
+/*=============================================================================
+ * Splitter — drag-to-resize divider.
+ *
+ * Place between two siblings inside a flex hbox or vbox. Detects the
+ * parent's flex direction automatically (row → resizes widths,
+ * column → resizes heights). On drag, mutates `authored_w` / `authored_h`
+ * of the adjacent siblings so the layout pass re-flows.
+ *
+ * IMPORTANT: the siblings being resized must use authored sizes for
+ * their main-axis dimension. Do NOT apply `flex: 1 0 0` (which sets
+ * flex-basis to 0 and ignores authored size). Use `flex-grow: 0` and
+ * an explicit width/height, or let the flex pass infer from the
+ * authored size.
+ *
+ *   left  = panel(...,  300, 0);
+ *   split = yetty_ygui_engine_splitter(eng, "sp", 0, 0, 6, 0);
+ *   right = panel(...,  500, 0);
+ *   add_child(hbox, left); add_child(hbox, split); add_child(hbox, right);
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_splitter(
+    struct yetty_ygui_engine *engine, const char *id,
+    float x, float y, float w, float h);
+
+/* Minimum size enforced on each side during drag. Default 30 px. */
+void yetty_ygui_widget_splitter_set_min(struct yetty_ygui_widget *widget, float min_size);
+
+/*=============================================================================
+ * Modal dialog — popup with a title, message, and bottom button row.
+ *
+ * Convenience helper that builds a regular POPUP with the standard
+ * layout (title bar, body label, button row) so an app doesn't have
+ * to hand-wire the same pattern every time.
+ *
+ *   const char *btns[] = {"Cancel", "OK"};
+ *   yetty_ygui_widget_dialog_args args = {
+ *       .id = "save_q", .title = "Save changes?",
+ *       .message = "Unsaved edits will be lost.",
+ *       .buttons = btns, .button_count = 2,
+ *       .on_button = my_cb, .userdata = self,
+ *   };
+ *   dlg = yetty_ygui_engine_dialog(engine, &args);
+ *   yetty_ygui_widget_popup_set_open(dlg, 1);
+ *
+ * Button click fires on_button(dlg, index, userdata) and closes the
+ * dialog. The dialog widget is owned by the engine (regular popup
+ * lifetime); the helper does not destroy it. */
+
+typedef void (*yetty_ygui_dialog_button_fn)(struct yetty_ygui_widget *dialog, int button_index,
+                                            void *userdata);
+
+struct yetty_ygui_dialog_args {
+    const char *id;
+    const char *title;
+    const char *message;
+    const char *const *buttons; /* button_count labels */
+    int button_count;
+    yetty_ygui_dialog_button_fn on_button;
+    void *userdata;
+    int modal; /* non-zero → dim the rest of the canvas while open */
+};
+
+struct yetty_ygui_widget *yetty_ygui_engine_dialog(struct yetty_ygui_engine *engine,
+                                                   const struct yetty_ygui_dialog_args *args);
+
+/*=============================================================================
+ * Multi-line text area — editable text with cursor + keyboard nav.
+ *
+ * Backing store: a single owned `char *` with embedded '\n' line
+ * breaks. Cursor is a byte offset. Viewport scrolls by line when the
+ * cursor moves off-screen.
+ *
+ * Supported input (v1):
+ *   - text input (via the engine's text_input path)
+ *   - Backspace (delete char left of cursor)
+ *   - Enter   (insert newline)
+ *   - Left/Right (move cursor by char)
+ *   - Up/Down    (move cursor by line)
+ *   - Home/End   (start / end of current line)
+ *
+ * Not yet implemented: selection, clipboard, undo, word wrap,
+ * line numbers, find/replace.
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_textarea(
+    struct yetty_ygui_engine *engine, const char *id,
+    float x, float y, float w, float h, const char *initial_text);
+
+void yetty_ygui_widget_textarea_set_text(struct yetty_ygui_widget *widget, const char *text);
+const char *yetty_ygui_widget_textarea_get_text(const struct yetty_ygui_widget *widget);
+void yetty_ygui_widget_textarea_on_change(struct yetty_ygui_widget *widget,
+                                          ygui_text_callback_t cb, void *userdata);
 
 /* Bind a scrollbar to a scrollable widget (today: ypdf — anything that
  * exposes the internal scrollable interface). The scrollbar becomes a

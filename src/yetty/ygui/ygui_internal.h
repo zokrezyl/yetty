@@ -318,6 +318,37 @@ struct yetty_ygui_widget {
         } textinput;
 
         struct {
+            /* Selected child radio (pointer for stability across
+             * insertion/removal). NULL = no selection (index -1). */
+            struct yetty_ygui_widget *selected;
+        } radio_group;
+
+        struct {
+            char *label;
+            /* Back-pointer to the owning RADIO_GROUP. Set by
+             * yetty_ygui_widget_radio_group_add at construction time. */
+            struct yetty_ygui_widget *group;
+        } radio;
+
+        struct {
+            float value, min_val, max_val, step;
+            int precision; /* decimal places when rendering */
+        } spinner;
+
+        struct {
+            /* Smallest size enforced on each adjacent sibling during
+             * drag (main-axis dimension). */
+            float min_size;
+        } splitter;
+
+        struct {
+            char *text;     /* owned, NUL-terminated; may be NULL=="" */
+            int   length;   /* bytes (excluding NUL) */
+            int   cursor;   /* byte offset, 0..length */
+            int   scroll_line; /* first visible line index */
+        } textarea;
+
+        struct {
             float scroll_x, scroll_y;
             float content_w, content_h;
             float header_h;
@@ -352,6 +383,13 @@ struct yetty_ygui_widget {
 
         struct {
             char *label;
+            /* Height of the header strip (NOT the full expanded box).
+             * Preserved across frames because `authored_h` is rewritten
+             * each preflight to `header_h` (closed) or
+             * `header_h + Σ children` (open) so the flex layout above
+             * stacks siblings correctly. Seeded from the constructor's
+             * `h` arg. */
+            float header_h;
         } collapsing_header;
 
         struct {

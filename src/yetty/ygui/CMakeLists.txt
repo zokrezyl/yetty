@@ -122,6 +122,17 @@ if(YETTY_ENABLE_FEATURE_YMARKDOWN)
     install(TARGETS ygui_ymarkdown ARCHIVE DESTINATION lib)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YIMAGE)
+    add_library(ygui_yimage STATIC ygui_yimage.c)
+    target_include_directories(ygui_yimage PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${YETTY_ROOT}/include
+    )
+    target_link_libraries(ygui_yimage PUBLIC ygui_core yetty_yimage_core)
+    set_target_properties(ygui_yimage PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    install(TARGETS ygui_yimage ARCHIVE DESTINATION lib)
+endif()
+
 if(YETTY_ENABLE_FEATURE_YPDF)
     add_library(ygui_ypdf STATIC ygui_ypdf.c)
     target_include_directories(ygui_ypdf PUBLIC
@@ -170,6 +181,7 @@ install(FILES
     ${YETTY_ROOT}/include/yetty/ygui/ygui_ypdf.h
     ${YETTY_ROOT}/include/yetty/ygui/ygui_ybrowser.h
     ${YETTY_ROOT}/include/yetty/ygui/ygui_ymarkdown.h
+    ${YETTY_ROOT}/include/yetty/ygui/ygui_yimage.h
     ${YETTY_ROOT}/include/yetty/ygui/ygui_yjungle.h
     ${YETTY_ROOT}/include/yetty/ygui/ygui_yzoo.h
     DESTINATION include/yetty/ygui
