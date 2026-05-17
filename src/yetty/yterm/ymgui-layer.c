@@ -1397,7 +1397,8 @@ static struct yetty_ycore_void_result draw_card(struct yetty_yterm_ymgui_layer *
                                                 struct yetty_yterm_ymgui_card *c,
                                                 WGPURenderPassEncoder pass, float pane_w,
                                                 float pane_h, float scissor_off_x,
-                                                float scissor_off_y)
+                                                float scissor_off_y, float scissor_w,
+                                                float scissor_h)
 {
     if (!c->has_frame || !c->atlas_ready || !c->bind_group) {
         return YETTY_OK_VOID();
@@ -1449,9 +1450,15 @@ static struct yetty_ycore_void_result draw_card(struct yetty_yterm_ymgui_layer *
     wgpuRenderPassEncoderSetIndexBuffer(pass, c->idx_buf, WGPUIndexFormat_Uint32, 0,
                                         total_idx_bytes);
 
-    /* Card pixel rect in pane space (for scissor clamping). */
+    /* Card pixel rect in pane space (for scissor clamping). Clamp against
+     * BOTH the grid-derived pane size AND the actual viewport size — the
+     * two can disagree by one row/column when grid_size doesn't divide
+     * the framebuffer evenly, and the scissor must lie inside the
+     * viewport's rendering area or WebGPU rejects the whole pass. */
     float cw = card_pixel_w(l, c);
     float ch = card_pixel_h(l, c);
+    float max_x = pane_w < scissor_w ? pane_w : scissor_w;
+    float max_y = pane_h < scissor_h ? pane_h : scissor_h;
     float card_x0 = ox;
     float card_y0 = oy;
     float card_x1 = ox + cw;
@@ -1462,11 +1469,11 @@ static struct yetty_ycore_void_result draw_card(struct yetty_yterm_ymgui_layer *
     if (card_y0 < 0) {
         card_y0 = 0;
     }
-    if (card_x1 > pane_w) {
-        card_x1 = pane_w;
+    if (card_x1 > max_x) {
+        card_x1 = max_x;
     }
-    if (card_y1 > pane_h) {
-        card_y1 = pane_h;
+    if (card_y1 > max_y) {
+        card_y1 = max_y;
     }
 
     /* Iterate cmd-lists × cmds. ImGui cmd's clip rect is in card-local
@@ -1590,7 +1597,7 @@ static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal
     /* Older cards first, newer ones on top — matches z-order convention. */
     for (size_t i = 0; i < l->card_count; i++) {
         struct yetty_ycore_void_result r =
-            draw_card(l, l->cards[i], pass, pane_w, pane_h, vp.x, vp.y);
+            draw_card(l, l->cards[i], pass, pane_w, pane_h, vp.x, vp.y, vp.w, vp.h);
         if (YETTY_IS_ERR(r)) {
             wgpuRenderPassEncoderEnd(pass);
             wgpuRenderPassEncoderRelease(pass);

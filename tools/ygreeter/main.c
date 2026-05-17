@@ -1203,31 +1203,23 @@ static struct yetty_ygui_widget *make_section(struct app *app,
 
 static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_panel)
 {
-    /* Outer scrollable container — panel.scroll_y advances on wheel
-     * (panel's built-in on_scroll handler) so the user can reach
-     * sections below the visible viewport when many are expanded.
-     * Children are positioned at authored y > header_h so panel's
-     * render_all routes them through the scrolled-children path. */
-    struct yetty_ygui_widget *scroll =
-        yetty_ygui_engine_panel(app->engine, "el_scroll", 0, 0, 0, 0);
-    yetty_ygui_widget_apply_css(scroll, "flex: 1 0 0; align-self: stretch;");
-    /* Tall enough to cover every section fully expanded — overshooting
-     * is fine; panel clamps scroll to max(0, content_h - viewport). */
-    yetty_ygui_widget_panel_set_content_size(scroll, 1, 2000);
-    /* No header strip — every child lives in the scrolling area. The
-     * "header_h" gating in panel_render_all uses authored y >= header_h,
-     * so we need header_h == 0 and child y > 0. */
-    yetty_ygui_widget_panel_set_header_height(scroll, 0);
-    yetty_ygui_widget_add_child(tab_panel, scroll);
-
-    /* Inner column hosting all sections. Authored y = 1 (any value >0)
-     * so panel treats it as scrollable content. */
+    /* Outer column. flex:1 fills the tab body; the children are the
+     * collapsing-header sections themselves stretched to the full
+     * width.
+     *
+     * NOTE: no scrollable wrapper around this yet. The panel widget
+     * was tried but its render path doesn't propagate flex layout to
+     * its children (panel is manual-mode); the result was a frozen
+     * tab with everything sized 0x0. Will revisit once a real
+     * scrollarea widget exists. Until then, if you open every
+     * section at once the bottom ones may clip off-screen — close a
+     * section higher up to access lower ones. */
     struct yetty_ygui_widget *root =
-        yetty_ygui_engine_vbox(app->engine, "el_root", 0, 1, 0, 0);
+        yetty_ygui_engine_vbox(app->engine, "el_root", 0, 0, 0, 0);
     yetty_ygui_widget_apply_css(root,
                                 "padding: 12px; gap: 4px; flex: 1 0 0; "
                                 "align-items: stretch;");
-    yetty_ygui_widget_add_child(scroll, root);
+    yetty_ygui_widget_add_child(tab_panel, root);
 
     /* ---- Inputs ---- */
     {

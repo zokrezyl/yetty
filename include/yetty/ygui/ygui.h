@@ -134,6 +134,15 @@ typedef enum {
      * Home/End + arrow keys, viewport scrolling. Selection / clipboard
      * not yet implemented. */
     YETTY_YGUI_WIDGET_TEXTAREA,
+    /* Pill-shaped on/off control with sliding thumb. Same callback
+     * shape as checkbox. */
+    YETTY_YGUI_WIDGET_TOGGLE,
+    /* Small pill label with optional ✕ close button. on_remove fires
+     * when the user clicks ✕. */
+    YETTY_YGUI_WIDGET_CHIP,
+    /* Horizontal sequence of clickable segments separated by ' › '.
+     * on_change fires with the clicked segment index. */
+    YETTY_YGUI_WIDGET_BREADCRUMBS,
     YETTY_YGUI_WIDGET_CUSTOM,
 } ygui_widget_type_t;
 
