@@ -6,8 +6,8 @@
  * Layout: a single full-canvas ygui app driving a tabbar at the top with
  * a per-tab body underneath. Every body is an hbox: a small navigation
  * tree on the left, a `rich` content surface on the right. The rich
- * widget holds a ypaint-core buffer built from an inline YAML — same
- * vocabulary as demo/scripts/ypaint/scrolling/.
+ * widget holds a ydraw-core buffer built from an inline YAML — same
+ * vocabulary as demo/scripts/ydraw/scrolling/.
  *
  *   ┌─────────────────────────────────────────────────────────────┐
  *   │ [Welcome] [Plots] [Images] [Code]                            │
@@ -19,7 +19,7 @@
  *   └──────────────────┴───────────────────────────────────────────┘
  *
  * Tabs:
- *   Welcome — rich-text intro authored as ypaint TEXT spans with mixed
+ *   Welcome — rich-text intro authored as ydraw TEXT spans with mixed
  *             font sizes / colors. Short on purpose so it stays
  *             readable on phone-sized cards.
  *   Plots   — yplot demos (sin/cos, parabola, decay, ...).
@@ -39,7 +39,21 @@
 #include <yetty/yplatform/term.h>   /* term_get_size */
 #include <yetty/yplatform/tty.h>    /* stderr-rerouting probe */
 #include <yetty/ygui/ygui.h>
+#ifdef YGREETER_HAS_YBROWSER
+#include <yetty/ygui/ygui_ybrowser.h>
+#endif
+#ifdef YGREETER_HAS_YMARKDOWN
+#include <yetty/ygui/ygui_ymarkdown.h>
+#endif
+#ifdef YGREETER_HAS_YPDF
+#include <yetty/ygui/ygui_ypdf.h>
+#endif
 #include <yetty/ytrace/ytrace.h>
+
+/* Upper bound on the tab count. Built-ins (Welcome, Plots, Images,
+ * Code) plus the widget-showcase tabs (Markdown, Browser, PDF) plus
+ * a few free slots for runtime experimentation. */
+#define YGREETER_TAB_MAX 12
 
 /* =========================================================================
  * Tab-local navigation entry. Each entry binds a tree-row label to the
@@ -57,7 +71,7 @@ struct nav_entry {
  * Welcome tab content.
  *
  * Short blocks: a heading, a tagline, a two-line "what's special" pitch,
- * and a hint to use the other tabs. Authored as ypaint TEXT spans so the
+ * and a hint to use the other tabs. Authored as ydraw TEXT spans so the
  * various sizes / colors actually render on the GPU canvas (the regular
  * ygui label widget doesn't carry inline colour runs).
  * ========================================================================= */
@@ -189,7 +203,7 @@ static const struct nav_entry WELCOME_NAV[] = {
     "      font-size: 22\n"                                                                  \
     "      color: \"#ffffff\"\n"                                                             \
     "  - yplot:\n"                                                                           \
-    "      position: [16, 60]\n"                                                             \
+    "      position: [16, 80]\n"                                                             \
     "      size: [460, 280]\n"                                                               \
     "      x_range: [-6.2832, 6.2832]\n"                                                     \
     "      y_range: [-1.5, 1.5]\n"                                                           \
@@ -210,7 +224,7 @@ static const struct nav_entry WELCOME_NAV[] = {
     "      font-size: 22\n"                                                                  \
     "      color: \"#ffffff\"\n"                                                             \
     "  - yplot:\n"                                                                           \
-    "      position: [16, 60]\n"                                                             \
+    "      position: [16, 80]\n"                                                             \
     "      size: [460, 280]\n"                                                               \
     "      x_range: [-5, 5]\n"                                                               \
     "      y_range: [-2, 12]\n"                                                              \
@@ -231,7 +245,7 @@ static const struct nav_entry WELCOME_NAV[] = {
     "      font-size: 22\n"                                                                  \
     "      color: \"#ffffff\"\n"                                                             \
     "  - yplot:\n"                                                                           \
-    "      position: [16, 60]\n"                                                             \
+    "      position: [16, 80]\n"                                                             \
     "      size: [460, 280]\n"                                                               \
     "      x_range: [-6, 6]\n"                                                               \
     "      y_range: [-1.2, 1.2]\n"                                                           \
@@ -289,26 +303,23 @@ static const struct nav_entry PLOT_NAV[] = {
     "      font-size: 16\n"                                                                  \
     "      color: \"#666e85\"\n"
 
-#define IMAGE_LOGO                                                                          \
-    IMAGE_PLACEHOLDER_FOR("Logo preview",                                                   \
-                          "yimage decodes PNG / JPEG via stb_image and uploads it as a")
+/* Placeholder YAML for an image row when its file isn't on disk. The
+ * Images tab's nav entries are built at startup from whatever
+ * docs/logo-*.jpeg files exist, so the placeholder is only seen when
+ * a probe failed mid-way through. */
+#define IMAGE_FALLBACK_YAML                                                                 \
+    IMAGE_PLACEHOLDER_FOR("Image not found",                                                \
+                          "ygreeter probes docs/logo-*.jpeg relative to the executable.")
 
-#define IMAGE_PHOTO                                                                         \
-    IMAGE_PLACEHOLDER_FOR("Photograph",                                                     \
-                          "ypaint texture atlas; the GPU samples it at the displayed size.")
+/* Heap-owned: built at startup from discover_logo_images(), freed
+ * before exit. Parallel arrays — entry N's label is g_image_nav[N],
+ * the file it loads is g_image_paths[N]. */
+static struct nav_entry *g_image_nav = NULL;
+static char           **g_image_paths = NULL;
+static int              g_image_path_count = 0;
 
-#define IMAGE_DIAGRAM                                                                       \
-    IMAGE_PLACEHOLDER_FOR("Diagram",                                                        \
-                          "Works inline with other primitives — see the Plots tab.")
-
-static const struct nav_entry IMAGE_NAV[] = {
-    {"Logo", IMAGE_LOGO},
-    {"Photograph", IMAGE_PHOTO},
-    {"Diagram", IMAGE_DIAGRAM},
-};
-
-/* Build a ypaint buffer holding ONE yimage prim plus a TEXT_SPAN title.
- * The ypaint-yaml parser doesn't support `yimage:` blocks today
+/* Build a ydraw buffer holding ONE yimage prim plus a TEXT_SPAN title.
+ * The ydraw-yaml parser doesn't support `yimage:` blocks today
  * (yaml_factory: none in yimage.yaml), so we go through yimage's C API
  * directly and append the title via the buffer's add_text helper.
  *
@@ -316,17 +327,21 @@ static const struct nav_entry IMAGE_NAV[] = {
  * widget when handed off via set_buffer. */
 #include <yetty/yimage/yimage.h>
 
-static struct yetty_ypaint_core_buffer *build_image_buffer(const char *title, const char *path)
+static struct yetty_ydraw_draw_list *build_image_buffer(const char *title, const char *path)
 {
     ydebug("build_image_buffer: ENTER title='%s' path='%s'", title ? title : "(null)",
            path ? path : "(null)");
+    /* Image bounds: position 80 (same y-clearance the plot tab uses
+     * over its 22pt title so the heading isn't covered) and 2× the
+     * previous draw area so the bundled logos render at a respectable
+     * size on a typical card. */
     struct yetty_yimage_render_config cfg = {
         .bounds_x = 16.0f,
-        .bounds_y = 60.0f,
-        .bounds_w = 460.0f,
-        .bounds_h = 320.0f,
+        .bounds_y = 80.0f,
+        .bounds_w = 920.0f,
+        .bounds_h = 640.0f,
     };
-    struct yetty_ypaint_core_buffer_result r = yetty_yimage_render_path(path, &cfg);
+    struct yetty_ydraw_draw_list_result r = yetty_yimage_render_path(path, &cfg);
     if (YETTY_IS_ERR(r)) {
         ydebug("build_image_buffer: yimage_render_path FAILED: %s", r.error.msg);
         yetty_ycore_error_destroy(r.error);
@@ -342,7 +357,7 @@ static struct yetty_ypaint_core_buffer *build_image_buffer(const char *title, co
             .capacity = strlen(title),
         };
         struct yetty_ycore_void_result tr =
-            yetty_ypaint_core_buffer_add_text(r.value, 16.0f, 36.0f, &text_view, 22.0f,
+            yetty_ydraw_draw_list_add_text(r.value, 16.0f, 36.0f, &text_view, 22.0f,
                                               /*color (ABGR)=*/0xFFFFFFFFu, /*layer=*/0,
                                               /*font_id=*/-1, /*rotation=*/0.0f);
         if (YETTY_IS_ERR(tr)) {
@@ -424,34 +439,84 @@ static char *find_repo_image(const char *argv0, const char *relative)
     return NULL;
 }
 
-static char *probe_default_image(const char *argv0)
+/* Discover every docs/logo-N.jpeg that exists relative to the binary
+ * and populate g_image_paths / g_image_nav. One nav entry per file so
+ * the Images tab's left rail flexes from 1 to N rows depending on how
+ * many bundled logos are shipped. The yaml field is the fallback
+ * placeholder — load_entry routes through build_image_buffer when the
+ * file path resolves, so the YAML is only seen on decode failure. */
+static void discover_logo_images(const char *argv0)
 {
+    /* Probe a generous upper bound on logo numbers. The repo currently
+     * ships logo-1..logo-4 in docs/, but a future build might add
+     * more — we stop at the first miss after at least one hit, with
+     * a hard ceiling so a broken numbering scheme can't loop. */
+    enum { MAX_LOGOS = 32 };
+    char  *paths_tmp[MAX_LOGOS];
+    int    count = 0;
+    /* Optional user override comes first so YGREETER_IMAGE still shows
+     * up as the leading entry. */
     const char *env = getenv("YGREETER_IMAGE");
     if (env && *env && path_exists(env)) {
-        return strdup(env);
+        paths_tmp[count++] = strdup(env);
     }
-    static const char *candidates[] = {
-        "assets/logo.jpeg",
-        "docs/logo-1.jpeg",
-        "docs/logo-2.jpeg",
-        "docs/logo-3.jpeg",
-        "docs/logo-4.jpeg",
-        "assets/apple-touch-icon.jpg",
-    };
-    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
-        char *p = find_repo_image(argv0, candidates[i]);
-        if (p) {
-            return p;
+    for (int i = 1; i <= MAX_LOGOS && count < MAX_LOGOS; i++) {
+        char rel[64];
+        snprintf(rel, sizeof(rel), "docs/logo-%d.jpeg", i);
+        char *p = find_repo_image(argv0, rel);
+        if (!p) {
+            /* allow gaps in numbering up to logo-8 before giving up */
+            if (i > 8) break;
+            continue;
         }
+        paths_tmp[count++] = p;
     }
-    return NULL;
+    /* assets/logo.jpeg as a final fallback when nothing else resolved */
+    if (count == 0) {
+        char *p = find_repo_image(argv0, "assets/logo.jpeg");
+        if (p) paths_tmp[count++] = p;
+    }
+    if (count == 0) {
+        return;
+    }
+    g_image_paths = (char **)calloc((size_t)count, sizeof(char *));
+    g_image_nav   = (struct nav_entry *)calloc((size_t)count, sizeof(struct nav_entry));
+    if (!g_image_paths || !g_image_nav) {
+        for (int i = 0; i < count; i++) free(paths_tmp[i]);
+        free(g_image_paths); g_image_paths = NULL;
+        free(g_image_nav);   g_image_nav = NULL;
+        return;
+    }
+    /* The label memory has to outlive build_tab_body — heap-allocated
+     * strings owned by ygreeter; freed in free_image_nav() at exit. */
+    for (int i = 0; i < count; i++) {
+        g_image_paths[i] = paths_tmp[i];
+        char label[64];
+        const char *base = strrchr(paths_tmp[i], '/');
+        base = base ? base + 1 : paths_tmp[i];
+        snprintf(label, sizeof(label), "%.60s", base);
+        g_image_nav[i].label = strdup(label);
+        g_image_nav[i].yaml  = IMAGE_FALLBACK_YAML;
+    }
+    g_image_path_count = count;
+}
+
+static void free_image_nav(void)
+{
+    for (int i = 0; i < g_image_path_count; i++) {
+        free(g_image_paths[i]);
+        free((char *)g_image_nav[i].label);
+    }
+    free(g_image_paths); g_image_paths = NULL;
+    free(g_image_nav);   g_image_nav = NULL;
+    g_image_path_count = 0;
 }
 
 /* =========================================================================
  * Code tab content.
  *
  * The user asked for "code viewing using the ycat feature". ycat builds a
- * ypaint buffer of coloured TEXT_SPAN prims via its tree-sitter backend;
+ * ydraw buffer of coloured TEXT_SPAN prims via its tree-sitter backend;
  * linking yetty_ycat pulls in libmagic + tree-sitter grammars (~few MB).
  * For the v1 tool we author the same shape inline — TEXT spans with
  * token-class colors — so the demo runs anywhere ygui runs (including
@@ -630,14 +695,11 @@ struct tab_state {
     int n_entries;
 };
 
-/* Resolved image path for the Images tab. NULL when no usable file was
- * found (bundled assets missing AND no YGREETER_IMAGE env var) — in that
- * case the tab falls back to the static IMAGE_NAV YAMLs (placeholder).
- *
- * Owned by main; freed before exit. We use a global because load_entry
- * is called from many spots and threading a path argument through every
- * caller for the sake of one tab would clutter the signatures. */
-static char *g_image_path = NULL;
+/* The Images tab uses g_image_paths[entry_index] (built at startup
+ * by discover_logo_images) instead of a single resolved image. Kept
+ * as a local in main() rather than a separate global, so the
+ * pre-discovery placeholder behaviour for $YGREETER_IMAGE still
+ * works as a fallback when no logo-* files were located. */
 
 /* Index of the Images tab. Tracked as a runtime variable so that
  * closing earlier tabs (which shifts subsequent indices down) keeps
@@ -649,7 +711,7 @@ struct app {
     struct yetty_ygui_engine *engine;
     struct yetty_ygui_widget *outer;
     struct yetty_ygui_widget *tabbar;
-    struct tab_state tabs[4];
+    struct tab_state tabs[YGREETER_TAB_MAX];
     /* About dialog. Three top-level widgets hidden until the menu's
      * About entry opens them. They're re-centred on engine resize. The
      * popup carries the modal overlay + drop shadow; the rich widget
@@ -715,26 +777,26 @@ static const char *yaml_for(const struct tab_state *t, int entry_index)
 
 static void load_entry(struct app *app, int tab_index, int entry_index)
 {
-    if (tab_index < 0 || tab_index >= 4) {
+    if (tab_index < 0 || tab_index >= YGREETER_TAB_MAX) {
         return;
     }
     struct tab_state *t = &app->tabs[tab_index];
     if (entry_index < 0 || entry_index >= t->n_entries) {
         return;
     }
-    /* Images tab: when we have a resolved file, build a fresh ypaint
-     * buffer with the yimage prim + a title TEXT_SPAN and install it
-     * via set_buffer (which takes ownership). Falls through to the
-     * static YAML placeholder when no image was found. */
-    if (tab_index == g_images_tab_index && g_image_path) {
-        struct yetty_ypaint_core_buffer *buf =
-            build_image_buffer(t->entries[entry_index].label, g_image_path);
+    /* Images tab: pick the per-entry file from g_image_paths and build
+     * a fresh ydraw buffer (yimage prim + title TEXT_SPAN). Falls
+     * through to the placeholder YAML when nothing was discovered or
+     * the file decode failed. */
+    if (tab_index == g_images_tab_index && entry_index < g_image_path_count &&
+        g_image_paths && g_image_paths[entry_index]) {
+        struct yetty_ydraw_draw_list *buf =
+            build_image_buffer(t->entries[entry_index].label,
+                               g_image_paths[entry_index]);
         if (buf) {
             yetty_ygui_widget_rich_set_buffer(t->rich, buf);
             return;
         }
-        /* build_image_buffer failed (file disappeared, decode failed) —
-         * fall through to the placeholder YAML so the tab isn't blank. */
     }
     const char *yaml = yaml_for(t, entry_index);
     struct yetty_ycore_void_result r =
@@ -1008,15 +1070,6 @@ static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, flo
     reposition_about_dialog(app);
 }
 
-static void query_terminal_cells(int *cols, int *rows)
-{
-    *cols = 80;
-    *rows = 24;
-    /* yetty_yplatform_term_get_size leaves *cols/*rows untouched on
-     * failure, so the 80x24 defaults above stick when there's no tty. */
-    (void)yetty_yplatform_term_get_size(cols, rows);
-}
-
 /* =========================================================================
  * UI construction.
  *
@@ -1086,6 +1139,309 @@ static struct yetty_ygui_widget *build_tab_body(struct app *app, int tab_index,
 }
 
 /* =========================================================================
+ * Elements tab — a single tab gathering one sample of every ygui widget,
+ * grouped under vertical organizers (collapsing_header) so the tabbar
+ * isn't drowned by one tab per widget. Each section toggles open / closed
+ * with a click on its header strip.
+ * ========================================================================= */
+
+/* No-op click handler — the showcase widgets exist for visual demo, not
+ * to drive app state. The presence of the callback keeps the cursor in
+ * "interactive" mode so hover / press states still render. */
+static void on_demo_click(struct yetty_ygui_widget *w, void *u)
+{
+    (void)w;
+    (void)u;
+}
+
+/* Trigger handlers for the Overlays section — open a popup-like widget
+ * (dialog / popup / popup_menu) whose pointer is passed in userdata. */
+static void on_demo_open_popup_like(struct yetty_ygui_widget *btn, void *u)
+{
+    (void)btn;
+    struct yetty_ygui_widget *target = (struct yetty_ygui_widget *)u;
+    if (target) {
+        yetty_ygui_widget_popup_set_open(target, 1);
+    }
+}
+
+static void on_demo_open_menu(struct yetty_ygui_widget *btn, void *u)
+{
+    struct yetty_ygui_widget *menu = (struct yetty_ygui_widget *)u;
+    if (!btn || !menu) {
+        return;
+    }
+    /* Anchor under the trigger button so the menu is visible next to
+     * the click point. */
+    float x = 0, y = 0, w = 0, h = 0;
+    yetty_ygui_widget_get_layout_box(btn, &x, &y, &w, &h);
+    yetty_ygui_widget_popup_menu_open_at(menu, x, y + h + 4);
+}
+
+/* Build one collapsing_header section + add it as a child of `parent`.
+ * Returns the header widget so the caller can keep adding children
+ * (each child becomes one row inside the section, stacked vertically
+ * by collapsing_header_render_all). */
+static struct yetty_ygui_widget *make_section(struct app *app,
+                                              struct yetty_ygui_widget *parent,
+                                              const char *id, const char *label,
+                                              int initially_open)
+{
+    /* Width 0 here is a placeholder — the parent vbox's flex stretch
+     * resolves the real width at layout time. Height 28 is what 16_new
+     * uses for the header bar. */
+    struct yetty_ygui_widget *sec =
+        yetty_ygui_engine_collapsing_header(app->engine, id, 0, 0, 600, 28, label);
+    if (!sec) {
+        return NULL;
+    }
+    yetty_ygui_widget_collapsing_header_set_open(sec, initially_open);
+    yetty_ygui_widget_apply_css(sec, "align-self: stretch;");
+    yetty_ygui_widget_add_child(parent, sec);
+    return sec;
+}
+
+static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_panel)
+{
+    /* Outer scrollable container — panel.scroll_y advances on wheel
+     * (panel's built-in on_scroll handler) so the user can reach
+     * sections below the visible viewport when many are expanded.
+     * Children are positioned at authored y > header_h so panel's
+     * render_all routes them through the scrolled-children path. */
+    struct yetty_ygui_widget *scroll =
+        yetty_ygui_engine_panel(app->engine, "el_scroll", 0, 0, 0, 0);
+    yetty_ygui_widget_apply_css(scroll, "flex: 1 0 0; align-self: stretch;");
+    /* Tall enough to cover every section fully expanded — overshooting
+     * is fine; panel clamps scroll to max(0, content_h - viewport). */
+    yetty_ygui_widget_panel_set_content_size(scroll, 1, 2000);
+    /* No header strip — every child lives in the scrolling area. The
+     * "header_h" gating in panel_render_all uses authored y >= header_h,
+     * so we need header_h == 0 and child y > 0. */
+    yetty_ygui_widget_panel_set_header_height(scroll, 0);
+    yetty_ygui_widget_add_child(tab_panel, scroll);
+
+    /* Inner column hosting all sections. Authored y = 1 (any value >0)
+     * so panel treats it as scrollable content. */
+    struct yetty_ygui_widget *root =
+        yetty_ygui_engine_vbox(app->engine, "el_root", 0, 1, 0, 0);
+    yetty_ygui_widget_apply_css(root,
+                                "padding: 12px; gap: 4px; flex: 1 0 0; "
+                                "align-items: stretch;");
+    yetty_ygui_widget_add_child(scroll, root);
+
+    /* ---- Inputs ---- */
+    {
+        struct yetty_ygui_widget *sec = make_section(app, root, "el_inputs", "Inputs", 0);
+        if (!sec) return;
+        struct yetty_ygui_widget *btn =
+            yetty_ygui_engine_button(app->engine, "el_btn", 24, 0, 160, 32, "Button");
+        yetty_ygui_widget_button_on_click(btn, on_demo_click, NULL);
+        yetty_ygui_widget_add_child(sec, btn);
+        yetty_ygui_widget_add_child(sec,
+            yetty_ygui_engine_textinput(app->engine, "el_input", 24, 0, 320, 28, "type here…"));
+        yetty_ygui_widget_add_child(sec,
+            yetty_ygui_engine_slider(app->engine, "el_slider", 24, 0, 320, 28, 0.0f, 1.0f, 0.4f));
+        /* Integer + float spinner side-by-side. */
+        yetty_ygui_widget_add_child(sec,
+            yetty_ygui_engine_spinner(app->engine, "el_spin_i", 24, 0, 160, 30,
+                                       1.0f, 100.0f, 1.0f, 42.0f));
+        struct yetty_ygui_widget *spin_f =
+            yetty_ygui_engine_spinner(app->engine, "el_spin_f", 24, 0, 160, 30,
+                                       0.0f, 10.0f, 0.25f, 2.5f);
+        yetty_ygui_widget_spinner_set_precision(spin_f, 2);
+        yetty_ygui_widget_add_child(sec, spin_f);
+        yetty_ygui_widget_add_child(sec,
+            yetty_ygui_engine_checkbox(app->engine, "el_check", 24, 0, 220, 24, "Enabled", 1));
+        yetty_ygui_widget_add_child(sec,
+            yetty_ygui_engine_progress(app->engine, "el_prog", 24, 0, 320, 16, 0.65f));
+        /* Multi-line text area — initial text + line-aware nav. */
+        yetty_ygui_widget_add_child(sec,
+            yetty_ygui_engine_textarea(app->engine, "el_ta", 24, 0, 420, 120,
+                                        "Multi-line text area.\nClick to focus, then type.\n"));
+    }
+
+    /* ---- Selectors ---- */
+    {
+        struct yetty_ygui_widget *sec = make_section(app, root, "el_select", "Selectors", 0);
+        if (!sec) return;
+        /* Radio group — single-select, vertical by default. */
+        struct yetty_ygui_widget *rg =
+            yetty_ygui_engine_radio_group(app->engine, "el_radio", 24, 0, 220, 0);
+        yetty_ygui_widget_radio_group_add(rg, "el_r_apple",  "Apple");
+        yetty_ygui_widget_radio_group_add(rg, "el_r_banana", "Banana");
+        yetty_ygui_widget_radio_group_add(rg, "el_r_cherry", "Cherry");
+        yetty_ygui_widget_radio_group_set_selected_index(rg, 0);
+        yetty_ygui_widget_add_child(sec, rg);
+        static const char *dd_items[] = {"Option A", "Option B", "Option C"};
+        yetty_ygui_widget_add_child(sec,
+            yetty_ygui_engine_dropdown(app->engine, "el_dd", 24, 0, 220, 28,
+                                       dd_items, 3));
+        static const char *ch_items[] = {"Small", "Medium", "Large", "Huge"};
+        /* Choicebox row count × theme row_height (28) — must match the
+         * actual rendered height, otherwise the widget paints below its
+         * authored box and overlaps siblings inside the section. */
+        struct yetty_ygui_widget *ch =
+            yetty_ygui_engine_choicebox(app->engine, "el_choice", 24, 0, 220, 28 * 4,
+                                        ch_items, 4);
+        yetty_ygui_widget_choicebox_set_selected(ch, 1);
+        yetty_ygui_widget_add_child(sec, ch);
+        /* colorpicker takes only geometry — no initial-color arg. */
+        yetty_ygui_widget_add_child(sec,
+            yetty_ygui_engine_colorpicker(app->engine, "el_color", 24, 0, 240, 160));
+    }
+
+    /* ---- Display / static ---- */
+    {
+        struct yetty_ygui_widget *sec = make_section(app, root, "el_display", "Display", 0);
+        if (!sec) return;
+        yetty_ygui_widget_add_child(sec,
+            yetty_ygui_engine_label(app->engine, "el_lbl", 24, 0, "Plain label"));
+        yetty_ygui_widget_add_child(sec,
+            yetty_ygui_engine_separator(app->engine, "el_sep", 24, 0, 400, 8));
+        yetty_ygui_widget_add_child(sec,
+            yetty_ygui_engine_progress(app->engine, "el_prog2", 24, 0, 400, 14, 0.25f));
+        /* Table — 4 columns × 3 rows. Last column stretches. */
+        struct yetty_ygui_widget *tbl =
+            yetty_ygui_engine_table(app->engine, "el_table", 24, 0, 600, 120);
+        static const char *col_names[]   = {"PID", "USER",  "%CPU", "COMMAND"};
+        static const float col_widths[]  = { 60.0f, 100.0f,  60.0f,  0.0f /* stretch */ };
+        yetty_ygui_widget_table_set_columns(tbl, col_names, col_widths, 4);
+        static const char *row1[] = {"1",    "root",  "0.0", "/sbin/init"};
+        static const char *row2[] = {"42",   "misi",  "1.3", "/usr/bin/yetty"};
+        static const char *row3[] = {"1337", "misi",  "0.2", "/usr/bin/ygreeter"};
+        yetty_ygui_widget_table_add_row(tbl, row1, 4);
+        yetty_ygui_widget_table_add_row(tbl, row2, 4);
+        yetty_ygui_widget_table_add_row(tbl, row3, 4);
+        yetty_ygui_widget_add_child(sec, tbl);
+    }
+
+    /* ---- Lists & trees ---- */
+    {
+        struct yetty_ygui_widget *sec = make_section(app, root, "el_lists", "Lists & Trees", 0);
+        if (!sec) return;
+        /* list is a generic row container — items are arbitrary widgets
+         * added with widget_add_child. */
+        struct yetty_ygui_widget *lst =
+            yetty_ygui_engine_list(app->engine, "el_list", 24, 0, 220, 24 * 4);
+        static const char *fruits[] = {"Apple", "Banana", "Cherry", "Date"};
+        for (int i = 0; i < 4; i++) {
+            char id[32];
+            snprintf(id, sizeof(id), "el_list_row_%d", i);
+            yetty_ygui_widget_add_child(lst,
+                yetty_ygui_engine_selectable(app->engine, id, 0, 0, 200, 24, fruits[i]));
+        }
+        yetty_ygui_widget_add_child(sec, lst);
+        /* tree_node has the (engine, id, label) ctor; geometry comes
+         * from layout. Children go into the auto-allocated children
+         * container accessed via tree_node_children(). */
+        struct yetty_ygui_widget *tn =
+            yetty_ygui_engine_tree_node(app->engine, "el_tree", "Tree root");
+        yetty_ygui_widget_tree_node_set_expanded(tn, 1);
+        struct yetty_ygui_widget *tn_kids = yetty_ygui_widget_tree_node_children(tn);
+        if (tn_kids) {
+            yetty_ygui_widget_add_child(tn_kids,
+                yetty_ygui_engine_label(app->engine, "el_tn1", 0, 0, "  child 1"));
+            yetty_ygui_widget_add_child(tn_kids,
+                yetty_ygui_engine_label(app->engine, "el_tn2", 0, 0, "  child 2"));
+        }
+        yetty_ygui_widget_add_child(sec, tn);
+    }
+
+    /* ---- Layout & Containers ---- */
+    {
+        struct yetty_ygui_widget *sec =
+            make_section(app, root, "el_layout", "Layout & Containers", 0);
+        if (!sec) return;
+
+        /* Splitter sample — mini hbox with [left | splitter | right]
+         * panels. Drag the splitter to resize. The siblings carry
+         * authored widths (no flex:1 0 0) so the splitter can move
+         * them. */
+        struct yetty_ygui_widget *split_row =
+            yetty_ygui_engine_hbox(app->engine, "el_split_row", 24, 0, 600, 80);
+        yetty_ygui_widget_apply_css(split_row,
+                                    "padding: 0; gap: 0; align-items: stretch;");
+        struct yetty_ygui_widget *l =
+            yetty_ygui_engine_panel(app->engine, "el_split_left", 0, 0, 220, 80);
+        yetty_ygui_widget_set_bg_color(l, 0xFF1E262C);
+        yetty_ygui_widget_apply_css(l, "align-self: stretch;");
+        yetty_ygui_widget_add_child(split_row, l);
+        struct yetty_ygui_widget *div =
+            yetty_ygui_engine_splitter(app->engine, "el_split", 0, 0, 6, 80);
+        yetty_ygui_widget_apply_css(div, "align-self: stretch;");
+        yetty_ygui_widget_add_child(split_row, div);
+        struct yetty_ygui_widget *r =
+            yetty_ygui_engine_panel(app->engine, "el_split_right", 0, 0, 374, 80);
+        yetty_ygui_widget_set_bg_color(r, 0xFF141A1F);
+        yetty_ygui_widget_apply_css(r, "align-self: stretch;");
+        yetty_ygui_widget_add_child(split_row, r);
+        yetty_ygui_widget_add_child(sec, split_row);
+        /* Standalone scrollbars deliberately omitted — out of context
+         * they look like an unattached pill. The scrollbar widget is
+         * exercised in the PDF tab where it's bound to the ypdf
+         * widget via yetty_ygui_widget_scrollbar_bind. */
+    }
+
+    /* ---- Overlays ---- */
+    {
+        struct yetty_ygui_widget *sec = make_section(app, root, "el_over", "Overlays", 0);
+        if (!sec) return;
+        yetty_ygui_widget_add_child(sec,
+            yetty_ygui_engine_tooltip(app->engine, "el_tip", 24, 0, 240, 28,
+                                      "Tooltip example"));
+        struct yetty_ygui_widget *sel =
+            yetty_ygui_engine_selectable(app->engine, "el_selable", 24, 0, 240, 26,
+                                         "Selectable row");
+        yetty_ygui_widget_add_child(sec, sel);
+
+        /* Modal dialog — assembled once; the button toggles its OPEN
+         * flag. The dialog widget lives at the top of the engine's
+         * widget list so the popup overlay renders above sections. */
+        const char *btns[] = {"Cancel", "OK"};
+        struct yetty_ygui_dialog_args dargs = {
+            .id = "el_dlg",
+            .title = "Dialog",
+            .message = "This is a modal dialog. Pick a button.",
+            .buttons = btns,
+            .button_count = 2,
+            .on_button = NULL,
+            .userdata = NULL,
+            .modal = 1,
+        };
+        struct yetty_ygui_widget *dlg = yetty_ygui_engine_dialog(app->engine, &dargs);
+        struct yetty_ygui_widget *open_dlg =
+            yetty_ygui_engine_button(app->engine, "el_open_dlg", 24, 0, 220, 30,
+                                      "Open dialog…");
+        yetty_ygui_widget_button_on_click(open_dlg, on_demo_open_popup_like, dlg);
+        yetty_ygui_widget_add_child(sec, open_dlg);
+
+        /* Popup — a labelled overlay you toggle. Identical activation
+         * pattern as the dialog. */
+        struct yetty_ygui_widget *pop = yetty_ygui_engine_popup(app->engine, "el_popup",
+                                                                 200, 200, 280, 120,
+                                                                 "Popup title");
+        struct yetty_ygui_widget *open_pop =
+            yetty_ygui_engine_button(app->engine, "el_open_pop", 24, 0, 220, 30,
+                                      "Open popup…");
+        yetty_ygui_widget_button_on_click(open_pop, on_demo_open_popup_like, pop);
+        yetty_ygui_widget_add_child(sec, open_pop);
+
+        /* Popup menu — anchored to the trigger button's position. */
+        struct yetty_ygui_widget *pmenu = yetty_ygui_engine_popup_menu(app->engine,
+                                                                        "el_pmenu", 0, 0, 220);
+        yetty_ygui_widget_popup_menu_add_item(pmenu, "First action",  on_demo_click, NULL);
+        yetty_ygui_widget_popup_menu_add_item(pmenu, "Second action", on_demo_click, NULL);
+        yetty_ygui_widget_popup_menu_add_separator(pmenu);
+        yetty_ygui_widget_popup_menu_add_item(pmenu, "Third action",  on_demo_click, NULL);
+        struct yetty_ygui_widget *open_menu =
+            yetty_ygui_engine_button(app->engine, "el_open_menu", 24, 0, 220, 30,
+                                      "Open menu…");
+        yetty_ygui_widget_button_on_click(open_menu, on_demo_open_menu, pmenu);
+        yetty_ygui_widget_add_child(sec, open_menu);
+    }
+}
+
+/* =========================================================================
  * Entry point.
  * ========================================================================= */
 int main(int argc, char **argv)
@@ -1117,11 +1473,17 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    int cols, rows;
-    query_terminal_cells(&cols, &rows);
+    /* Theme up front so engine_create can install it during construction;
+     * the engine takes ownership when passed in `args.theme`. */
+    struct yetty_ygui_theme *theme = yetty_ygui_theme_create_default();
+    yetty_ygui_theme_set_font_size(theme, 16.0f);
+    yetty_ygui_theme_set_row_height(theme, 28.0f);
 
-    struct ygui_engine_ptr_result eng_r =
-        yetty_ygui_engine_create("ygreeter", 0, 0, cols, rows);
+    struct yetty_ygui_engine_args args = {
+        .name = "ygreeter",
+        .theme = theme,
+    };
+    struct ygui_engine_ptr_result eng_r = yetty_ygui_engine_create(args);
     if (YETTY_IS_ERR(eng_r)) {
         yetty_ycore_error_destroy(eng_r.error);
         yetty_ygui_shutdown();
@@ -1130,12 +1492,6 @@ int main(int argc, char **argv)
 
     struct app app = {0};
     app.engine = eng_r.value;
-    yetty_ygui_engine_set_canvas_mode(app.engine, YETTY_YGUI_CANVAS_FIT);
-
-    struct yetty_ygui_theme *theme = yetty_ygui_theme_create_default();
-    yetty_ygui_theme_set_font_size(theme, 16.0f);
-    yetty_ygui_theme_set_row_height(theme, 28.0f);
-    yetty_ygui_engine_set_theme(app.engine, theme);
 
     /* Outer frame: a window widget supplies the title bar and the
      * hamburger menu button. The menu we attach below carries the
@@ -1173,19 +1529,101 @@ int main(int argc, char **argv)
     build_tab_body(&app, 1, plots, PLOT_NAV,
                    (int)(sizeof(PLOT_NAV) / sizeof(PLOT_NAV[0])), "plots");
 
-    /* Resolve the bundled image BEFORE building the Images tab, so
-     * load_entry's first call (during build_tab_body) already sees the
-     * path and goes through the yimage buffer path instead of the YAML
-     * placeholder. Falls back to placeholder when no image is found. */
-    g_image_path = probe_default_image(argv[0]);
+    /* Images tab — nav rows built dynamically from docs/logo-*.jpeg
+     * so the rail grows with the bundled asset count. Falls back to
+     * the placeholder YAML row when no logo files are found. */
+    discover_logo_images(argv[0]);
     struct yetty_ygui_widget *images = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Images");
-    build_tab_body(&app, g_images_tab_index, images, IMAGE_NAV,
-                   (int)(sizeof(IMAGE_NAV) / sizeof(IMAGE_NAV[0])), "images");
+    if (g_image_path_count > 0) {
+        build_tab_body(&app, g_images_tab_index, images, g_image_nav,
+                       g_image_path_count, "images");
+    } else {
+        /* No bundled images located — single placeholder row so the
+         * tab isn't empty and the hint text is visible. */
+        static const struct nav_entry fallback[] = {
+            {"Logo", IMAGE_FALLBACK_YAML},
+        };
+        build_tab_body(&app, g_images_tab_index, images, fallback, 1, "images");
+    }
 
     /* Code */
     struct yetty_ygui_widget *code = yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Code");
     build_tab_body(&app, 3, code, CODE_NAV,
                    (int)(sizeof(CODE_NAV) / sizeof(CODE_NAV[0])), "code");
+
+    /* Elements — single tab gathering every ygui widget under
+     * collapsing-header sections, so the tabbar doesn't grow one tab
+     * per widget. Tab index 4 (after Welcome/Plots/Images/Code) — no
+     * tab_state entry registered because Elements doesn't use the
+     * nav+rich pattern. */
+    {
+        struct yetty_ygui_widget *el_tab =
+            yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Elements");
+        build_elements_tab(&app, el_tab);
+    }
+
+    /* Markdown / HTML / PDF widget showcase tabs — each shows one
+     * sample document via the corresponding ygui widget. The widget
+     * fills its tab via flex: 1; if the bundled sample isn't found
+     * the tab is silently skipped (the feature was probably built
+     * without the dependency). */
+#ifdef YGREETER_HAS_YMARKDOWN
+    {
+        char *md_path = find_repo_image(argv[0], "README.md");
+        if (md_path) {
+            struct yetty_ygui_widget *tab =
+                yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Markdown");
+            struct yetty_ygui_widget *w =
+                yetty_ygui_engine_ymarkdown_from_file(app.engine, "md_view",
+                                                      0, 0, 100, 100, md_path);
+            if (w) {
+                yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
+                yetty_ygui_widget_add_child(tab, w);
+            }
+            free(md_path);
+        }
+    }
+#endif
+#ifdef YGREETER_HAS_YBROWSER
+    {
+        char *html_path =
+            find_repo_image(argv[0], "demo/ygui/26_ybrowser/sample.html");
+        if (html_path) {
+            struct yetty_ygui_widget *tab =
+                yetty_ygui_widget_tabbar_add_tab(app.tabbar, "Browser");
+            struct yetty_ygui_widget *w =
+                yetty_ygui_engine_ybrowser_from_file(app.engine, "html_view",
+                                                     0, 0, 100, 100, html_path);
+            if (w) {
+                yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
+                yetty_ygui_widget_add_child(tab, w);
+            }
+            free(html_path);
+        }
+    }
+#endif
+#ifdef YGREETER_HAS_YPDF
+    {
+        /* Prefer the comprehensive PDF — falls back to pdf-sample if the
+         * larger one isn't shipped. */
+        char *pdf_path = find_repo_image(argv[0], "test/ut/ypdf/test-comprehensive.pdf");
+        if (!pdf_path) {
+            pdf_path = find_repo_image(argv[0], "test/ut/ypdf/pdf-sample.pdf");
+        }
+        if (pdf_path) {
+            struct yetty_ygui_widget *tab =
+                yetty_ygui_widget_tabbar_add_tab(app.tabbar, "PDF");
+            struct yetty_ygui_widget *w =
+                yetty_ygui_engine_ypdf_from_file(app.engine, "pdf_view",
+                                                 0, 0, 100, 100, pdf_path);
+            if (w) {
+                yetty_ygui_widget_apply_css(w, "flex: 1 0 0; align-self: stretch;");
+                yetty_ygui_widget_add_child(tab, w);
+            }
+            free(pdf_path);
+        }
+    }
+#endif
 
     yetty_ygui_engine_on_resize(app.engine, on_resize, &app);
     yetty_ygui_engine_on_key(app.engine, on_key, NULL);
@@ -1194,25 +1632,14 @@ int main(int argc, char **argv)
     if (getenv("YGREETER_START_IMAGES")) {
         yetty_ygui_widget_tabbar_set_active(app.tabbar, g_images_tab_index);
     }
-    yetty_ygui_engine_show(app.engine);
-    {
-        /* In CANVAS_FIT mode the engine reports 1x1 until OSC 777780 returns
-         * the real pixel size. set_size(outer, 1, 1) would stomp the authored
-         * 100x100 and trip window_render's "skip first frame" early-return
-         * (self->w < 78), so the frame + titlebar would never paint. Skip the
-         * stomp here — on_resize installs the real size as soon as the host
-         * replies. */
-        float cw = 0, ch = 0;
-        yetty_ygui_engine_get_size(app.engine, &cw, &ch);
-        if (cw > 1.0f && ch > 1.0f) {
-            yetty_ygui_widget_set_size(app.outer, cw, ch);
-        }
-    }
+    /* engine_create already sent the init handshake; the real pixel size
+     * arrives via SC_RESIZE on the loop. The window stays at its authored
+     * 100x100 until then — on_resize installs the real size as soon as
+     * the host replies. */
 
     yetty_ygui_engine_run(app.engine);
 
-    free(g_image_path);
-    g_image_path = NULL;
+    free_image_nav();
     free_row_links();
     yetty_ygui_engine_destroy(app.engine);
     yetty_ygui_shutdown();

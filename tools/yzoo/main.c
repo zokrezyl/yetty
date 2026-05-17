@@ -1,9 +1,9 @@
 /*
  * yzoo — animated control-point zoo frontend.
  *
- * The yetty_yzoo library produces ypaint primitives; this tool drives time,
- * owns a yetty_ypaint_core_buffer, and emits OSC 600001 (bin) per frame so
- * the host pane's ypaint-layer redraws. The bin payload's first prim is
+ * The yetty_yzoo library produces ydraw primitives; this tool drives time,
+ * owns a yetty_ydraw_draw_list, and emits OSC 600001 (bin) per frame so
+ * the host pane's ydraw-layer redraws. The bin payload's first prim is
  * CMD_ZERO (added by the renderer), which clears the canvas + resets the
  * cursor in the same envelope as the new prims — same flicker-free pattern
  * as ygui.
@@ -24,8 +24,8 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
-#include <yetty/ypaint-core/buffer.h>
-#include <yetty/ypaint-core/cmds.h>
+#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/cmds.h>
 #include <yetty/yterm/osc-codes.h>
 
 #include <errno.h>
@@ -62,16 +62,16 @@ emit_envelope(int osc_code, int compressed,
 static struct yetty_ycore_void_result emit_clear(void)
 {
 	struct yetty_ycore_void_result r =
-		emit_envelope(YETTY_OSC_YPAINT_CLEAR, 0, NULL, 0, NULL, 0);
+		emit_envelope(YETTY_OSC_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
 	YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "emit_clear");
 	return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result
-emit_bin_serialized(struct yetty_ypaint_core_buffer *buf)
+emit_bin_serialized(struct yetty_ydraw_draw_list *buf)
 {
 	const uint8_t *raw = NULL;
-	size_t raw_size = yetty_ypaint_core_buffer_serialize(buf, &raw);
+	size_t raw_size = yetty_ydraw_draw_list_serialize(buf, &raw);
 	if (raw_size == 0 || !raw)
 		return YETTY_ERR(yetty_ycore_void, "emit_bin_serialized: empty buffer");
 
@@ -84,7 +84,7 @@ emit_bin_serialized(struct yetty_ypaint_core_buffer *buf)
 		.reserved = {0, 0},
 	};
 	struct yetty_ycore_void_result r =
-		emit_envelope(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
+		emit_envelope(YETTY_OSC_YDRAW_BIN, /*compressed=*/1,
 			      &meta, sizeof(meta), raw, raw_size);
 	YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "emit_bin_serialized");
 	return YETTY_OK_VOID();
@@ -189,7 +189,7 @@ static float monotonic_now(void)
 
 struct yzoo_app {
 	struct yetty_yzoo               *zoo;
-	struct yetty_ypaint_core_buffer *buf;
+	struct yetty_ydraw_draw_list *buf;
 
 	float pane_w;
 	float pane_h;
@@ -324,7 +324,7 @@ static void usage(FILE *out, const char *prog)
 	fprintf(out,
 		"Usage: %s [options]\n"
 		"\n"
-		"Animated control-point zoo — emits ypaint OSC envelopes to stdout.\n"
+		"Animated control-point zoo — emits ydraw OSC envelopes to stdout.\n"
 		"\n"
 		"Zoo options:\n"
 		"  -n, --points N         target control points (2..100, default 20)\n"
@@ -411,14 +411,14 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	struct yetty_ypaint_core_buffer_config bcfg = {
+	struct yetty_ydraw_draw_list_config bcfg = {
 		.scene_min_x = 0.0f,
 		.scene_min_y = 0.0f,
 		.scene_max_x = cfg.scene_width,
 		.scene_max_y = cfg.scene_height,
 	};
-	struct yetty_ypaint_core_buffer_result br =
-		yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
+	struct yetty_ydraw_draw_list_result br =
+		yetty_ydraw_draw_list_config_buffer_create(&bcfg);
 	if (YETTY_IS_ERR(br)) {
 		fprintf(stderr, "yzoo: %s\n", br.error.msg);
 		yetty_ycore_error_destroy(br.error);
@@ -439,7 +439,7 @@ int main(int argc, char **argv)
 	if (YETTY_IS_ERR(yr)) {
 		fprintf(stderr, "yzoo: yface_create: %s\n", yr.error.msg);
 		yetty_ycore_error_destroy(yr.error);
-		yetty_ypaint_core_buffer_destroy(app.buf);
+		yetty_ydraw_draw_list_destroy(app.buf);
 		yetty_yzoo_destroy(app.zoo);
 		return 1;
 	}
@@ -453,7 +453,7 @@ int main(int argc, char **argv)
 	if (tty_raw() < 0) {
 		fprintf(stderr, "yzoo: cannot put stdin into raw mode\n");
 		yetty_yface_destroy(yface);
-		yetty_ypaint_core_buffer_destroy(app.buf);
+		yetty_ydraw_draw_list_destroy(app.buf);
 		yetty_yzoo_destroy(app.zoo);
 		return 1;
 	}
@@ -521,7 +521,7 @@ int main(int argc, char **argv)
 	alt_screen_leave();
 
 	yetty_yface_destroy(yface);
-	yetty_ypaint_core_buffer_destroy(app.buf);
+	yetty_ydraw_draw_list_destroy(app.buf);
 	yetty_yzoo_destroy(app.zoo);
 	return 0;
 }

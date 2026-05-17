@@ -11,7 +11,7 @@ The layers are:
 | Layer | Owns | Driven by |
 |---|---|---|
 | **text-layer**   | one `VTerm` (libvterm) — primary + alt buffers, scrollback, cursor | PTY bytes (text + CSI/OSC) |
-| **ypaint-layer** | a `ypaint_canvas` (rolling-row primitive grid) | OSC `600000-600003` |
+| **ydraw-layer** | a `ydraw_canvas` (rolling-row primitive grid) | OSC `600000-600003` |
 | **ymgui-layer**  | a registry of *cards* (placed ImGui sub-regions) | OSC `610000-610004` |
 
 All three are siblings, instantiated once per terminal in `terminal.c`. They
@@ -29,7 +29,7 @@ thousands of cells filling and the user holding `j` in vim, that's not viable.
 
 ### The trick
 
-Every layer that holds anchored content (ypaint, ymgui) addresses lines by an
+Every layer that holds anchored content (ydraw, ymgui) addresses lines by an
 **absolute monotonic counter** — the *rolling row*. Lines never move; the
 viewport's idea of "row 0 on screen" advances.
 
@@ -82,7 +82,7 @@ Scrollback is held in RAM:
 | Layer | Storage |
 |---|---|
 | text-layer  | libvterm `sb_pushline` callback feeds a per-terminal ring of `VTermScreenCell` rows |
-| ypaint-layer | `canvas->lines` deque keyed by rolling row; primitives stay alive until the line drops off the front |
+| ydraw-layer | `canvas->lines` deque keyed by rolling row; primitives stay alive until the line drops off the front |
 | ymgui-layer | each card holds its last frame mesh + atlas; cards drop only on `CARD_REMOVE`/`CLEAR` |
 
 Memory grows monotonically until the ring caps. Nothing is persisted. A
@@ -95,7 +95,7 @@ yetty crash or restart loses the entire history.
 DEC modes `?1049` / `?1047` / `?47` ask the terminal to swap to a separate
 screen buffer (vim, less, mc, top, htop). On exit the original screen
 returns intact. Every layer must follow — otherwise the user's vim session
-sees stray ypaint plots from the prior shell, or sees empty ymgui where it
+sees stray ydraw plots from the prior shell, or sees empty ymgui where it
 just left a Dear ImGui app.
 
 ### Hook chain
@@ -120,7 +120,7 @@ terminal_alt_screen_callback:
 | Layer | Implementation |
 |---|---|
 | text-layer  | libvterm owns the swap (primary + alt VTermScreenBuffer); we just refresh the GPU buffer pointer |
-| ypaint-layer | lazy-build a sibling `ypaint_canvas`; toggle = swap `canvas` ↔ `saved_canvas` |
+| ydraw-layer | lazy-build a sibling `ydraw_canvas`; toggle = swap `canvas` ↔ `saved_canvas` |
 | ymgui-layer | swap `cards` array ↔ `saved_cards` (atlases, buffers, bind groups travel with the pointers, no GPU work at toggle time) |
 
 ymgui drops focus across the boundary (a `FOCUS-lost` is emitted to the
@@ -161,7 +161,7 @@ adversaries, no proof-of-work. What we *do* want from that family:
 ```
 struct entry {
     uint64_t  rolling_row;      // monotonic per session
-    uint8_t   layer_id;         // 0=text, 1=ypaint, 2=ymgui
+    uint8_t   layer_id;         // 0=text, 1=ydraw, 2=ymgui
     uint8_t   kind;             // text-line / prim-add / frame / clear / ...
     uint16_t  flags;
     uint32_t  body_len;
@@ -176,7 +176,7 @@ Each layer becomes a writer:
 | Layer | What it writes |
 |---|---|
 | text-layer  | each line popped from libvterm's scrollback (already has a clean event in `sb_pushline`) |
-| ypaint-layer | each primitive add / line drop |
+| ydraw-layer | each primitive add / line drop |
 | ymgui-layer | card lifecycle + each frame's mesh+atlas (or just the *card_id, hash-of-frame* for dedup) |
 
 ### File format
@@ -256,7 +256,7 @@ persistence.
 - Scroll plumbing: `terminal.c::terminal_scroll_callback`, `*_layer_scroll`
 - Alt-screen wiring: `terminal.c::terminal_alt_screen_callback`,
   `text-layer.c::on_settermprop` (`VTERM_PROP_ALTSCREEN`),
-  `ypaint-layer.c::ypaint_layer_set_alt_screen`,
+  `ydraw-layer.c::ydraw_layer_set_alt_screen`,
   `ymgui-layer.c::ymgui_set_alt_screen`
 - Wire format for ymgui cards (the model the persisted-history idea would
   reuse): `include/yetty/ymgui/wire.h`

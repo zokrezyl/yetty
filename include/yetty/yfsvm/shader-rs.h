@@ -2,7 +2,7 @@
 #define YETTY_YFSVM_SHADER_RS_H
 
 /* yfsvm shader resource set — server-side bridge between the yfsvm compiler
- * and the ypaint GPU pipeline. Lives in yetty_yfsvm (not yetty_yfsvm_core)
+ * and the ydraw GPU pipeline. Lives in yetty_yfsvm (not yetty_yfsvm_core)
  * because the embedded yfsvm.gen.wgsl shader is only meaningful when the
  * full GPU stack is available.
  */
@@ -13,8 +13,8 @@
 extern "C" {
 #endif
 
-/* Static shader-only resource set used by ypaint layer to include yfsvm_execute. */
-const struct yetty_ypaint_core_gpu_resource_set *yetty_yfsvm_get_shader_resource_set(void);
+/* Static shader-only resource set used by ydraw layer to include yfsvm_execute. */
+const struct yetty_ydraw_gpu_resource_set *yetty_yfsvm_get_shader_resource_set(void);
 
 #ifdef __cplusplus
 }

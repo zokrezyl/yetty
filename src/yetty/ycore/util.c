@@ -5,12 +5,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Base64 decode table */
+/* Base64 decode table. Accepts both standard ('+'=62, '/'=63) and URL-safe
+ * ('-'=62, '_'=63) alphabets — they don't collide so handling both costs
+ * nothing. Whitespace (' ', '\t', '\n', '\r') and '=' padding are skipped
+ * in the loop, not in the table. */
 static const signed char b64_table[256] = {
     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 62, -1, -1, -1, 63,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 62, -1, 62, -1, 63,
     52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1, -1, -1, -1, -1, -1, 0,  1,  2,  3,  4,  5,  6,
-    7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1, -1, -1,
+    7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1, -1, 63,
     -1, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
     49, 50, 51, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -25,7 +28,11 @@ size_t yetty_ycore_base64_decode(const char *in, size_t in_len, char *out, size_
     int val = 0, valb = -8;
 
     for (size_t i = 0; i < in_len && out_len < out_cap; i++) {
-        int c = b64_table[(unsigned char)in[i]];
+        unsigned char ch = (unsigned char)in[i];
+        if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '=') {
+            continue;
+        }
+        int c = b64_table[ch];
         if (c == -1) {
             break;
         }
@@ -224,7 +231,7 @@ int yetty_ycore_parse_hex_color(const char *s, uint32_t *out)
     /* Pack as the canonical yetty layout: byte 0 = R, byte 1 = G,
      * byte 2 = B, byte 3 = A. As a u32 on little-endian:
      *   (A << 24) | (B << 16) | (G << 8) | R
-     * Matches WGSL `ypaint_unpack_color` and the existing yplot/yecho
+     * Matches WGSL `ydraw_unpack_color` and the existing yplot/yecho
      * conventions. */
     *out = ((uint32_t)byte[3] << 24) | ((uint32_t)byte[2] << 16) | ((uint32_t)byte[1] << 8) |
            (uint32_t)byte[0];

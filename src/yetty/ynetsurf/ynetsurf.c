@@ -1,9 +1,9 @@
 /*
- * ynetsurf — NetSurf 3.11 frontend → ypaint primitives.
+ * ynetsurf — NetSurf 3.11 frontend → ydraw primitives.
  *
  * Implements the five mandatory NetSurf gui tables (misc, window,
  * fetch, bitmap, layout) plus a plotter_table that drains drawing
- * commands into a yetty_ypaint_core_buffer.
+ * commands into a yetty_ydraw_draw_list.
  */
 
 #include "ynetsurf-internal.h"
@@ -38,7 +38,7 @@
 #include "content/fetch.h"
 
 /* yetty */
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 
 /* Singleton — NetSurf's table registration is process-wide and the
  * plotter callbacks reach this via redraw_context.priv. We keep one
@@ -311,7 +311,7 @@ static const char *ns_fetch_filetype(const char *unix_path)
     return "text/html";
 }
 
-/* NetSurf core fetches its built-in stylesheets and chrome content via
+/* NetSurf core fetches its built-in stylesheets and about-page content via
  * URLs of the form `resource:default.css`. Translate those to a file://
  * URL pointing into the unpacked netsurf-all source tree, which is
  * always available at YETTY_NETSURF_RESOURCES_DIR (CMake-supplied) — or,
@@ -621,7 +621,7 @@ struct yetty_ynetsurf_ptr_result yetty_ynetsurf_create(const struct yetty_ynetsu
     nslog_set_filter(log_filter != NULL ? log_filter : "level:WARNING");
 
     /* Load per-language Messages so error titles, dialog text and the
-	 * built-in chrome (about:query/fetcherror, …) come out as real
+	 * built-in about-pages (about:query/fetcherror, …) come out as real
 	 * strings instead of raw message keys like "FetchErrorTitle". The
 	 * file is generated at build time by libs/netsurf-messages.cmake
 	 * from NetSurf's resources/FatMessages. */
@@ -721,7 +721,7 @@ struct yetty_ycore_void_result yetty_ynetsurf_set_scroll(struct yetty_ynetsurf *
 }
 
 struct yetty_ycore_void_result yetty_ynetsurf_redraw(struct yetty_ynetsurf *ns,
-                                                     struct yetty_ypaint_core_buffer *buf)
+                                                     struct yetty_ydraw_draw_list *buf)
 {
     if (ns == NULL || buf == NULL) {
         return YETTY_ERR(yetty_ycore_void, "null");

@@ -1,7 +1,7 @@
 /*
  * yplot — emit a yplot complex-prim OSC envelope for a function expression.
  *
- * Inside a yetty terminal the OSC is routed to the ypaint scrolling layer,
+ * Inside a yetty terminal the OSC is routed to the ydraw scrolling layer,
  * which renders the plot via the yplot pipeline. Outside a yetty terminal
  * the bytes are still printed (mostly garbage on a vt100), so the typical
  * usage is `yetty -e 'yplot ...'` or invocation from a script running in
@@ -17,7 +17,7 @@
 #include <yetty/yplot/yplot.h>
 #include <yetty/yplatform/getopt.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -54,8 +54,8 @@ static void usage(FILE *out, const char *prog)
     fprintf(out,
         "Usage: %s [options] <expression> [<expression> ...]\n"
         "\n"
-        "Emit a YPlot OSC envelope (YETTY_OSC_YPAINT_BIN, 600001) consumed\n"
-        "by the yetty ypaint scrolling layer.\n"
+        "Emit a YPlot OSC envelope (YETTY_OSC_YDRAW_BIN, 600001) consumed\n"
+        "by the yetty ydraw scrolling layer.\n"
         "\n"
         "Multi-function syntax (yexpr-plot):\n"
         "  '<expr>'                     single function (auto-named plot1)\n"
@@ -227,7 +227,7 @@ int main(int argc, char **argv)
         cfg.y_max =  1.5f;
     }
 
-    struct yetty_ypaint_core_buffer_result rr =
+    struct yetty_ydraw_draw_list_result rr =
         yetty_yplot_render(source, source_len, &cfg);
     free(source);
     if (YETTY_IS_ERR(rr)) {
@@ -241,7 +241,7 @@ int main(int argc, char **argv)
 
     int rc = 0;
     struct yetty_ycore_size_result wr = yetty_yplot_osc_bin_emit(rr.value, stdout);
-    yetty_ypaint_core_buffer_destroy(rr.value);
+    yetty_ydraw_draw_list_destroy(rr.value);
     if (YETTY_IS_ERR(wr)) {
         fprintf(stderr, "yplot: OSC emit failed: %s\n", wr.error.msg);
         for (const struct yetty_ycore_error *e = wr.error.cause; e; e = e->cause) {

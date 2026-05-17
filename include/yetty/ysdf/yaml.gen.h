@@ -5,7 +5,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/ysdf/types.gen.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <stddef.h>
 
 #ifdef __cplusplus
@@ -18,7 +18,7 @@ extern "C" {
  * @param yaml YAML string (null-terminated)
  * @param len Length of YAML string
  */
-struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ypaint_core_buffer *canvas,
+struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ydraw_draw_list *canvas,
                                                      const char *yaml, size_t len);
 
 #ifdef __cplusplus

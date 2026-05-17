@@ -2,8 +2,8 @@
 // YAML parser factory for yplot complex primitive
 
 #include <yetty/yplot/yplot-gen.h>
-#include <yetty/ypaint-yaml/ypaint-yaml.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-yaml/ydraw-yaml.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yfsvm/compiler.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yaml.h>
@@ -54,7 +54,7 @@ static const uint32_t YPLOT_COLOR_PALETTE[8] = {
     0xFFFF6B6B, 0xFF4ECDC4, 0xFFFFE66D, 0xFF95E1D3, 0xFFF38181, 0xFFAA96DA, 0xFF72D6C9, 0xFFFCBF49,
 };
 
-static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ypaint_core_buffer *buffer,
+static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ydraw_draw_list *buffer,
                                                          yaml_parser_t *yaml_parser,
                                                          const char *primitive_type_name)
 {
@@ -212,27 +212,27 @@ static struct yetty_ycore_void_result yplot_yaml_factory(struct yetty_ypaint_cor
     };
 
     size_t required = yetty_yplot_uniforms_serialized_size(&uniforms, &bufs);
-    uint8_t *prim_buf = malloc(required);
-    if (!prim_buf) {
+    uint8_t *drawable_buf = malloc(required);
+    if (!drawable_buf) {
         return YETTY_ERR(yetty_ycore_void, "malloc failed");
     }
 
     struct yetty_ycore_size_result ser_res =
-        yetty_yplot_uniforms_serialize(&uniforms, &bufs, prim_buf, required);
+        yetty_yplot_uniforms_serialize(&uniforms, &bufs, drawable_buf, required);
     if (YETTY_IS_ERR(ser_res)) {
-        free(prim_buf);
+        free(drawable_buf);
         return YETTY_ERR(yetty_ycore_void, "yplot uniforms serialize failed", ser_res);
     }
 
-    struct yetty_ypaint_core_id_result id_res =
-        yetty_ypaint_core_buffer_add_prim(buffer, prim_buf, required);
-    free(prim_buf);
+    struct yetty_ydraw_id_result id_res =
+        yetty_ydraw_draw_list_add_prim(buffer, drawable_buf, required);
+    free(drawable_buf);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yplot yaml: add_prim failed");
     return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_yplot_register_yaml_factory(
-    struct yetty_ypaint_yaml_parser *parser)
+    struct yetty_ydraw_yaml_parser *parser)
 {
-    return yetty_ypaint_yaml_parser_register(parser, "yplot", yplot_yaml_factory);
+    return yetty_ydraw_yaml_parser_register(parser, "yplot", yplot_yaml_factory);
 }

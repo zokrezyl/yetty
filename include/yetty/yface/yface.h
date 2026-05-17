@@ -82,7 +82,7 @@ YETTY_YRESULT_DECLARE(yetty_yface_ptr, struct yetty_yface *);
  * Wire structs that travel in the args slot
  *
  * Each OSC code defines what (if anything) lives in `<args>`. For "bin"
- * codes that ship a compressed binary payload (ypaint serialized buffer,
+ * codes that ship a compressed binary payload (ydraw serialized buffer,
  * ymgui frame, …) the args slot carries this meta header so the receiver
  * knows how to decode the payload before touching it.
  *
@@ -172,7 +172,7 @@ struct yetty_ycore_void_result yetty_yface_feed_bytes(struct yetty_yface *yface,
  *
  * The stream API above is the primary read path; this remains for
  * call sites that have the b64 body extracted by some other parser
- * (e.g. yterm/pty-reader-driven layer dispatch). `compressed` must
+ * (e.g. ywire wire-statemachine-driven layer dispatch). `compressed` must
  * match what the writer used.
  *---------------------------------------------------------------------------*/
 struct yetty_ycore_void_result yetty_yface_start_read(struct yetty_yface *yface, int compressed);

@@ -7,10 +7,10 @@ if(DEFINED ENV{NIX_CC})
     set(Clang_DIR "$ENV{Clang_DIR}")
 else()
     if(NOT DEFINED LLVM_DIR)
-        set(LLVM_DIR "/usr/lib/llvm-18/lib/cmake/llvm")
+        set(LLVM_DIR "/usr/lib/llvm-20/lib/cmake/llvm")
     endif()
     if(NOT DEFINED Clang_DIR)
-        set(Clang_DIR "/usr/lib/cmake/clang-18")
+        set(Clang_DIR "/usr/lib/cmake/clang-20")
     endif()
 endif()
 
@@ -19,6 +19,12 @@ find_package(Clang REQUIRED CONFIG)
 
 add_executable(naming-convention-fix
     naming-convention-fix.cpp
+)
+
+# See qa-tools/lib/naming-convention/CMakeLists.txt for why C++20.
+set_target_properties(naming-convention-fix PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
 )
 
 target_include_directories(naming-convention-fix PRIVATE

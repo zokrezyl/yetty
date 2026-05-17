@@ -1,9 +1,9 @@
 /*
  * ymaze — animated maze frontend.
  *
- * The yetty_ymaze library produces ypaint primitives; this tool drives time,
- * owns a yetty_ypaint_core_buffer, and emits OSC 600000 (clear) + OSC 600001
- * (bin) per frame so the host pane's ypaint-layer redraws.
+ * The yetty_ymaze library produces ydraw primitives; this tool drives time,
+ * owns a yetty_ydraw_draw_list, and emits OSC 600000 (clear) + OSC 600001
+ * (bin) per frame so the host pane's ydraw-layer redraws.
  *
  * Modeled on tools/ymesh/main.c. There is no card abstraction in new yetty
  * — the maze fills the whole pane.
@@ -21,7 +21,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yterm/osc-codes.h>
 
 #include <errno.h>
@@ -58,13 +58,13 @@ static int emit_envelope(int osc_code, int compressed,
 
 static int emit_clear(void)
 {
-	return emit_envelope(YETTY_OSC_YPAINT_CLEAR, 0, NULL, 0, NULL, 0);
+	return emit_envelope(YETTY_OSC_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
 }
 
-static int emit_bin_serialized(struct yetty_ypaint_core_buffer *buf)
+static int emit_bin_serialized(struct yetty_ydraw_draw_list *buf)
 {
 	const uint8_t *raw = NULL;
-	size_t raw_size = yetty_ypaint_core_buffer_serialize(buf, &raw);
+	size_t raw_size = yetty_ydraw_draw_list_serialize(buf, &raw);
 	if (raw_size == 0 || !raw)
 		return 1;
 
@@ -76,7 +76,7 @@ static int emit_bin_serialized(struct yetty_ypaint_core_buffer *buf)
 		.raw_size = raw_size,
 		.reserved = {0, 0},
 	};
-	return emit_envelope(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
+	return emit_envelope(YETTY_OSC_YDRAW_BIN, /*compressed=*/1,
 			     &meta, sizeof(meta), raw, raw_size);
 }
 
@@ -180,7 +180,7 @@ static float monotonic_now(void)
 
 struct ymaze_app {
 	struct yetty_ymaze              *maze;
-	struct yetty_ypaint_core_buffer *buf;
+	struct yetty_ydraw_draw_list *buf;
 
 	float pane_w;
 	float pane_h;
@@ -334,7 +334,7 @@ static void usage(FILE *out, const char *prog)
 	fprintf(out,
 		"Usage: %s [options]\n"
 		"\n"
-		"Animated maze demo — emits ypaint OSC envelopes to stdout.\n"
+		"Animated maze demo — emits ydraw OSC envelopes to stdout.\n"
 		"\n"
 		"Maze options:\n"
 		"  --cols N              maze columns (3..80, default 15)\n"
@@ -415,14 +415,14 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	struct yetty_ypaint_core_buffer_config bcfg = {
+	struct yetty_ydraw_draw_list_config bcfg = {
 		.scene_min_x = 0.0f,
 		.scene_min_y = 0.0f,
 		.scene_max_x = cfg.scene_width,
 		.scene_max_y = cfg.scene_height,
 	};
-	struct yetty_ypaint_core_buffer_result br =
-		yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
+	struct yetty_ydraw_draw_list_result br =
+		yetty_ydraw_draw_list_config_buffer_create(&bcfg);
 	if (YETTY_IS_ERR(br)) {
 		fprintf(stderr, "ymaze: %s\n", br.error.msg);
 		yetty_ycore_error_destroy(br.error);
@@ -444,7 +444,7 @@ int main(int argc, char **argv)
 	if (YETTY_IS_ERR(yr)) {
 		fprintf(stderr, "ymaze: yface_create: %s\n", yr.error.msg);
 		yetty_ycore_error_destroy(yr.error);
-		yetty_ypaint_core_buffer_destroy(app.buf);
+		yetty_ydraw_draw_list_destroy(app.buf);
 		yetty_ymaze_destroy(app.maze);
 		return 1;
 	}
@@ -458,7 +458,7 @@ int main(int argc, char **argv)
 	if (tty_raw() < 0) {
 		fprintf(stderr, "ymaze: cannot put stdin into raw mode\n");
 		yetty_yface_destroy(yface);
-		yetty_ypaint_core_buffer_destroy(app.buf);
+		yetty_ydraw_draw_list_destroy(app.buf);
 		yetty_ymaze_destroy(app.maze);
 		return 1;
 	}
@@ -512,7 +512,7 @@ int main(int argc, char **argv)
 	alt_screen_leave();
 
 	yetty_yface_destroy(yface);
-	yetty_ypaint_core_buffer_destroy(app.buf);
+	yetty_ydraw_draw_list_destroy(app.buf);
 	yetty_ymaze_destroy(app.maze);
 	return 0;
 }

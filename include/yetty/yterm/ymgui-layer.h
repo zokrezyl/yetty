@@ -17,7 +17,7 @@ extern "C" {
  * in include/yetty/ymgui/wire.h.
  *
  * Each card is anchored at a rolling_row at placement time and scrolls
- * with terminal content (same anchoring model the ypaint canvas uses).
+ * with terminal content (same anchoring model the ydraw canvas uses).
  * Width/height are in grid cells; the layer derives pixel size from
  * cell_size. CARD_PLACE on an unknown id creates the card; on a known
  * id moves/resizes it.
@@ -54,8 +54,8 @@ uint32_t yetty_yterm_terminal_layer_ymgui_layer_focused_card(
  * current focus, the layer fires FOCUS-lost on the old card and
  * FOCUS-gained on the new card via the layer's emit_osc_fn. No-op
  * when the new id matches the current focus. */
-void yetty_yterm_terminal_layer_ymgui_layer_set_focus(struct yetty_yrender_terminal_layer *layer,
-                                                      uint32_t card_id);
+struct yetty_ycore_void_result yetty_yterm_terminal_layer_ymgui_layer_set_focus(
+    struct yetty_yrender_terminal_layer *layer, uint32_t card_id);
 
 #ifdef __cplusplus
 }

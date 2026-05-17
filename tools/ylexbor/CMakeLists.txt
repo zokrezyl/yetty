@@ -17,7 +17,7 @@ target_include_directories(ylexbor PRIVATE
 
 target_link_libraries(ylexbor PRIVATE
     yetty_ylexbor
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_ysdf
     yetty_yface
     yetty_ycore

@@ -1,4 +1,4 @@
-# ypdf - PDF → ypaint buffer rendering
+# ypdf - PDF → ydraw buffer rendering
 add_library(yetty_ypdf STATIC
     pdf-content-parser.c
     pdf-renderer.c
@@ -11,7 +11,7 @@ target_include_directories(yetty_ypdf PUBLIC
 
 target_link_libraries(yetty_ypdf PUBLIC
     yetty_ycore
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_yfont_core
     yetty_ysdf
     pdfio_lib
@@ -19,7 +19,7 @@ target_link_libraries(yetty_ypdf PUBLIC
 
 # Optional: fontconfig for system-font substitution when a referenced PDF
 # font isn't embedded (very common for "standard" fonts like Arial / Times
-# / Helvetica). Mirrors the wiring in src/yetty/ypaint-yaml/CMakeLists.txt.
+# / Helvetica). Mirrors the wiring in src/yetty/ydraw-yaml/CMakeLists.txt.
 if(NOT EMSCRIPTEN AND NOT YETTY_ANDROID AND NOT YETTY_IOS AND NOT YETTY_TVOS AND NOT WIN32)
     find_package(PkgConfig QUIET)
     if(PkgConfig_FOUND)

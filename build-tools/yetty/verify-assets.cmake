@@ -92,7 +92,7 @@ check_file("${ASSETS_PREFIX}/shaders/msdf_gen.wgsl" "MSDF generation shader")
 check_file("${ASSETS_PREFIX}/shaders/cards/0x0000-texture.wgsl" "Texture card shader")
 check_file("${ASSETS_PREFIX}/shaders/cards/0x0001-plot.wgsl" "Plot card shader")
 check_file("${ASSETS_PREFIX}/shaders/cards/0x0003-ydraw.wgsl" "Ydraw card shader")
-check_file("${ASSETS_PREFIX}/shaders/cards/0x0004-ypaint.wgsl" "Kdraw card shader")
+check_file("${ASSETS_PREFIX}/shaders/cards/0x0004-ydraw.wgsl" "Kdraw card shader")
 check_file("${ASSETS_PREFIX}/shaders/cards/0x0006-ytext.wgsl" "Ytext card shader")
 
 #-----------------------------------------------------------------------------

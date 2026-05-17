@@ -2,7 +2,7 @@
  * ygui_popup_menu.c — POPUP_MENU widget.
  *
  * Floating, vertically-stacked list of clickable items. Inherits the
- * visual chrome of yetty_ygui_engine_popup (rounded body + drop shadow
+ * visuals of yetty_ygui_engine_popup (rounded body + drop shadow
  * + optional modal overlay) and specialises the body for menu rows: a
  * single TEXT_SPAN per row, with the hovered row highlighted using
  * theme->bg_hover. Inheritance in C is structural — we reuse the same
@@ -168,7 +168,8 @@ static int popup_menu_on_press(struct yetty_ygui_widget *self, float lx, float l
     if (lx < 0 || lx > self->w || ly < 0 || ly > self->h) {
         self->flags &= ~YETTY_YGUI_FLAG_OPEN;
         if (self->engine) {
-            self->engine->dirty = 1;
+            self->engine->dirty = 1; self->dirty = 1;
+            yetty_ygui_internal_queue_delete_subtree_rendered(self);
         }
         return 1;
     }
@@ -178,7 +179,8 @@ static int popup_menu_on_press(struct yetty_ygui_widget *self, float lx, float l
     }
     self->flags &= ~YETTY_YGUI_FLAG_OPEN;
     if (self->engine) {
-        self->engine->dirty = 1;
+        self->engine->dirty = 1; self->dirty = 1;
+        yetty_ygui_internal_queue_delete_subtree_rendered(self);
     }
     return 1;
 }
@@ -201,7 +203,13 @@ static void popup_menu_destroy(struct yetty_ygui_widget *self)
  * result was a "ghost" rect parked at the last-open position, eating
  * every subsequent click on that area (tabbar close-X buttons, mainly)
  * even though nothing was painted there. Bailing out before
- * was_rendered keeps the menu out of the grid until it's reopened. */
+ * was_rendered keeps the menu out of the grid until it's reopened.
+ *
+ * The drawables MUST be wrapped in emit_self_in_group so the receiver
+ * routes them to the menu's own scene-canvas entity (keyed by
+ * group_id). Without the wrapper the prims attach to whatever entity
+ * is the current parser scope (ROOT) and a later DELETE(menu_id)
+ * targets nothing — the menu's body would accumulate on ROOT forever. */
 static struct yetty_ycore_void_result popup_menu_render_all(struct yetty_ygui_widget *self,
                                                             struct yetty_ygui_render_ctx *ctx)
 {
@@ -210,7 +218,7 @@ static struct yetty_ycore_void_result popup_menu_render_all(struct yetty_ygui_wi
         return YETTY_OK_VOID();
     }
     self->was_rendered = 1;
-    return popup_menu_render(self, ctx);
+    return yetty_ygui_widget_emit_self_in_group(self, ctx, popup_menu_render);
 }
 
 static const struct yetty_ygui_widget_vtable popup_menu_vtable = {
@@ -294,7 +302,7 @@ void yetty_ygui_widget_popup_menu_add_item(struct yetty_ygui_widget *menu, const
     menu->data.popup_menu.n_items = i + 1;
     menu_resize(menu);
     if (menu->engine) {
-        menu->engine->dirty = 1;
+        menu->engine->dirty = 1; menu->dirty = 1;
     }
 }
 
@@ -313,7 +321,7 @@ void yetty_ygui_widget_popup_menu_add_separator(struct yetty_ygui_widget *menu)
     menu->data.popup_menu.n_items = i + 1;
     menu_resize(menu);
     if (menu->engine) {
-        menu->engine->dirty = 1;
+        menu->engine->dirty = 1; menu->dirty = 1;
     }
 }
 
@@ -330,7 +338,7 @@ void yetty_ygui_widget_popup_menu_open_at(struct yetty_ygui_widget *menu, float 
     menu->layout_y = y;
     menu->flags |= YETTY_YGUI_FLAG_OPEN;
     if (menu->engine) {
-        menu->engine->dirty = 1;
+        menu->engine->dirty = 1; menu->dirty = 1;
     }
 }
 
@@ -341,7 +349,8 @@ void yetty_ygui_widget_popup_menu_close(struct yetty_ygui_widget *menu)
     }
     menu->flags &= ~YETTY_YGUI_FLAG_OPEN;
     if (menu->engine) {
-        menu->engine->dirty = 1;
+        menu->engine->dirty = 1; menu->dirty = 1;
+        yetty_ygui_internal_queue_delete_subtree_rendered(menu);
     }
 }
 

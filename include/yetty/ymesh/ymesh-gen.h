@@ -19,8 +19,8 @@ extern "C" {
 
 /* Forward-declared so this header stays GPU-less and can be included by
  * client-side wire emitters that don't link Dawn. The full type lives in
- * yetty/ypaint-factory/complex-prim-factory.h (server side). */
-struct yetty_ypaint_core_concrete_factory;
+ * yetty/ydraw-factory/figure-factory.h (server side). */
+struct yetty_ydraw_concrete_factory;
 
 #define YETTY_YMESH_TYPE_ID 0x80000005u
 
@@ -49,9 +49,9 @@ struct yetty_ymesh_uniforms {
 #define YETTY_YMESH_MODE_WIREFRAME 1u
 
 /* Factory create / destroy — registered with the abstract complex-prim
- * factory in ypaint-canvas.c. */
-struct yetty_ypaint_core_concrete_factory *yetty_ymesh_factory_create(void);
-void yetty_ymesh_factory_destroy(struct yetty_ypaint_core_concrete_factory *factory);
+ * factory in ydraw-canvas.c. */
+struct yetty_ydraw_concrete_factory *yetty_ymesh_factory_create(void);
+void yetty_ymesh_factory_destroy(struct yetty_ydraw_concrete_factory *factory);
 
 #ifdef __cplusplus
 }

@@ -13,7 +13,7 @@
  *   button on first open). The menu then handles its own item
  *   dispatch. With no menu attached, the hamburger acts as a direct
  *   close button that calls engine_close_preserve() — keeping the
- *   last rendered frame on the ypaint canvas after the app exits.
+ *   last rendered frame on the ydraw canvas after the app exits.
  *
  *   The button uses the same square footprint as the tabbar's per-tab
  *   close 'x' (yetty_ygui_tabbar_button_size) so the two visually
@@ -54,8 +54,8 @@ static float window_title_h(const struct yetty_ygui_widget *self)
 
 static float window_button_size(void)
 {
-    /* Match the tabbar's per-tab close X so window chrome and tab
-     * chrome line up visually. */
+    /* Match the tabbar's per-tab close X so the window close button
+     * and tab close button line up visually. */
     return yetty_ygui_tabbar_button_size();
 }
 
@@ -85,7 +85,7 @@ static struct yetty_ycore_void_result window_render(struct yetty_ygui_widget *se
     /* Skip the first frame in CANVAS_FIT mode: the engine defaults the
      * canvas to 1x1 until OSC 777780 returns the real pixel size, and
      * placing a button at (self->w - sz) lands at negative x — the
-     * ypaint canvas rejects the AABB and logs an error. By the time
+     * ydraw canvas rejects the AABB and logs an error. By the time
      * resize fires the geometry is sane. */
     float bsz = window_button_size();
     ydebug("window_render id=%s self=(%.1f,%.1f) size=%.1fx%.1f th=%.1f bsz=%.1f thr=%.1f",
@@ -107,7 +107,7 @@ static struct yetty_ycore_void_result window_render(struct yetty_ygui_widget *se
            self->x, self->y, self->w, th);
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, th, theme->bg_header,
                                      WINDOW_CORNER_RADIUS);
-    /* Hairline at the bottom of the title bar separates chrome from body. */
+    /* Hairline at the bottom of the title bar separates header from body. */
     yetty_ygui_render_ctx_render_box(ctx, self->x, self->y + th - 1.0f, self->w, 1.0f,
                                      theme->border_muted, 0.0f);
 
@@ -219,7 +219,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_window(struct yetty_ygui_engine *eng
     win->vtable = &window_vtable;
 
     /* Default layout: flex column with padding-top equal to the title
-     * bar so children land below the chrome. align-items: stretch so
+     * bar so children land below the header. align-items: stretch so
      * the body fills the width. */
     win->layout.mode = YETTY_YGUI_LAYOUT_FLEX;
     win->layout.direction = YETTY_YGUI_FLEX_COLUMN;
@@ -262,7 +262,7 @@ void yetty_ygui_widget_window_set_title(struct yetty_ygui_widget *window, const 
     free(window->data.window.title);
     window->data.window.title = title ? ygui_strdup(title) : NULL;
     if (window->engine) {
-        window->engine->dirty = 1;
+        window->engine->dirty = 1; window->dirty = 1;
     }
 }
 
@@ -301,6 +301,6 @@ void yetty_ygui_widget_window_set_menu(struct yetty_ygui_widget *window,
     }
     window->data.window.menu = menu;
     if (window->engine) {
-        window->engine->dirty = 1;
+        window->engine->dirty = 1; window->dirty = 1;
     }
 }

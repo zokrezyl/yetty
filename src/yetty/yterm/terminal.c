@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,10 +15,11 @@
 #include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yterm/pty-reader.h>
+#include <yetty/yterm/osc-codes.h>
+#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/yterm/text-layer.h>
-#include <yetty/yterm/ypaint-layer.h>
+#include <yetty/yterm/ydraw-layer.h>
 #include <yetty/yterm/ymgui-layer.h>
 #include <yetty/yterm/shader-glyph-layer.h>
 #include <yetty/ytrace/ytrace.h>
@@ -33,7 +35,7 @@
 /* Forward declarations for view ops */
 static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yui_view *view);
 static struct yetty_ycore_void_result terminal_view_render(
-    struct yetty_yui_view *view, struct yetty_ypaint_core_target *render_target);
+    struct yetty_yui_view *view, struct yetty_ydraw_target *render_target);
 static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_view *view,
                                                                struct yetty_yui_rect bounds);
 static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_view *view,
@@ -62,9 +64,9 @@ struct yetty_yterm_terminal {
     size_t layer_count;
     yetty_yevent_pipe_id pty_pipe_id;
     /* Render targets - one per layer for render_layer */
-    struct yetty_ypaint_core_target *layer_targets[YETTY_YTERM_TERMINAL_MAX_LAYERS];
+    struct yetty_ydraw_target *layer_targets[YETTY_YTERM_TERMINAL_MAX_LAYERS];
     int shutting_down;
-    struct yetty_yterm_pty_reader *pty_reader;
+    struct yetty_ywire_wire_statemachine *sm;
 
     /* Reusable read buffer handed back from terminal_pty_pipe_alloc.
      * Lazily allocated on the first read; freed in destroy. */
@@ -109,7 +111,7 @@ struct yetty_yterm_terminal {
      * Each layer decides what to do with it:
      *   - text-layer interprets it as an xterm-style cell stream
      *     (column-granular highlight + extract)
-     *   - ypaint-layer treats the row range as "touched rows" and
+     *   - ydraw-layer treats the row range as "touched rows" and
      *     selects the first overlapping primitive per row
      * sel_dragging tracks an in-progress button-1 drag. */
     int sel_active;
@@ -124,15 +126,19 @@ struct yetty_yterm_terminal {
 #define YETTY_YTERM_WHEEL_LINES_PER_TICK 3
 
 /* Forward declarations */
-static void terminal_read_pty(struct yetty_yterm_terminal *terminal);
+static struct yetty_ycore_void_result terminal_read_pty(struct yetty_yterm_terminal *terminal);
 static struct yetty_ycore_void_result terminal_render_frame(
-    struct yetty_yterm_terminal *terminal, struct yetty_ypaint_core_target *target);
+    struct yetty_yterm_terminal *terminal, struct yetty_ydraw_target *target);
 
 /* PTY pipe alloc callback — provides buffer for uv_pipe_t reads.
  * One reusable per-terminal buffer, lazily allocated. 64KB matches
  * libuv's default suggested_size on Linux/macOS and is plenty for one
  * PTY chunk; the read callback drains it before the next call. */
 #define YETTY_YTERM_PTY_READ_BUF_SIZE (64 * 1024)
+
+/* libuv-shaped buffer-alloc callback: signature dictated by yetty_pipe_alloc_cb
+ * which is dispatched from the libuv read path. Cannot return a Result. */
+YETTY_EXTERNAL_CALLBACK
 static void terminal_pty_pipe_alloc(void *ctx, size_t suggested_size, char **buf, size_t *buflen)
 {
     (void)suggested_size;
@@ -149,12 +155,15 @@ static void terminal_pty_pipe_alloc(void *ctx, size_t suggested_size, char **buf
     *buflen = YETTY_YTERM_PTY_READ_BUF_SIZE;
 }
 
-/* PTY pipe read callback — feeds data to pty_reader, triggers render */
+/* libuv-shaped pipe-read callback. Errors from feed/process have no
+ * Result to propagate to — absorb them at this boundary by logging the
+ * full chain and destroying it. */
+YETTY_EXTERNAL_CALLBACK
 static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
 {
     struct yetty_yterm_terminal *terminal = ctx;
 
-    if (nread > 0 && terminal->pty_reader) {
+    if (nread > 0) {
         /* Dump first/last bytes as hex+ascii to see what ConPTY sent */
         char hex[512] = {0};
         char asc[256] = {0};
@@ -170,7 +179,24 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
             }
         }
         ydebug("terminal_pty_pipe_read: nread=%ld dump=[%s] ascii=[%s]", nread, hex, asc);
-        yetty_yterm_pty_reader_feed(terminal->pty_reader, buf, (size_t)nread);
+        /* feed() now resumes the SM coro itself — no separate process()
+         * call needed. The SM scanner runs as far as it can, then yields
+         * back when it needs more bytes (or surfaces a fatal error). */
+        struct yetty_ycore_void_result fr =
+            yetty_ywire_wire_statemachine_feed(terminal->sm, buf, (size_t)nread);
+        if (YETTY_IS_ERR(fr)) {
+            /* libuv-callback boundary: no Result to propagate. Park the
+             * error on the event loop; libuv_start will surface it from
+             * its own return, which yetty_run propagates to main.
+             * Build via YETTY_ERR so the loop frame gets file/line/func. */
+            struct yetty_ycore_void_result wrap = YETTY_ERR(
+                yetty_ycore_void,
+                "terminal_pty_pipe_read: wire_statemachine_feed failed", fr);
+            struct yetty_yevent_event_loop *loop =
+                terminal->context.yetty_context.event_loop;
+            loop->ops->post_fatal_error(loop, wrap.error);
+            return;
+        }
         if (terminal->layer_count > 0) {
             struct yetty_yrender_terminal_layer *layer = terminal->layers[0];
             ydebug("terminal_pty_pipe_read: after feed layer=%p dirty=%d", (void *)layer,
@@ -202,85 +228,109 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
             pipe->ops->write(pipe, &ev, sizeof(ev));
         }
     } else {
-        ydebug("terminal_pty_pipe_read: skipped (nread=%ld pty_reader=%p)", nread,
-               (void *)(terminal ? terminal->pty_reader : NULL));
+        ydebug("terminal_pty_pipe_read: skipped (nread=%ld)", nread);
     }
 }
 
-/* PTY write callback for layers */
-static void terminal_pty_write_callback(const char *data, size_t len, void *userdata)
+/* Direct PTY write — shared by the layer callback (text-layer keypress
+ * forwarding) and the direct emitter path (mouse-OSC, paste). The PTY ops
+ * table is populated by the backend at creation time; absence of `write`
+ * is a build/configuration bug, not a runtime condition to silence. */
+static struct yetty_ycore_size_result terminal_pty_write_raw(
+    struct yetty_yterm_terminal *terminal, const char *data, size_t len)
+{
+    if (!terminal->context.pty->ops->write) {
+        return YETTY_ERR(yetty_ycore_size,
+                         "terminal_pty_write_raw: PTY backend has no `write` op");
+    }
+    return terminal->context.pty->ops->write(terminal->context.pty, data, len);
+}
+
+/* yetty_yterm_pty_write_fn impl — adapts the Result-returning PTY op
+ * (size_result) to the typedef (void_result). */
+static struct yetty_ycore_void_result terminal_pty_write_callback(
+    const char *data, size_t len, void *userdata)
 {
     struct yetty_yterm_terminal *terminal = userdata;
-    if (terminal->context.pty && terminal->context.pty->ops && terminal->context.pty->ops->write) {
-        terminal->context.pty->ops->write(terminal->context.pty, data, len);
-        ydebug("terminal_pty_write: wrote %zu bytes to PTY", len);
-    }
-}
-
-/* Direct PTY write — used by the mouse-OSC emitter. Bypasses the layer
- * callback path because mouse events come from the GLFW input pipe, not
- * from a layer. */
-static void terminal_pty_write_raw(struct yetty_yterm_terminal *terminal, const char *data,
-                                   size_t len)
-{
-    if (terminal->context.pty && terminal->context.pty->ops && terminal->context.pty->ops->write) {
-        terminal->context.pty->ops->write(terminal->context.pty, data, len);
-    }
+    struct yetty_ycore_size_result r = terminal_pty_write_raw(terminal, data, len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                        "terminal_pty_write_callback: pty_write_raw failed");
+    ydebug("terminal_pty_write_callback: wrote %zu bytes to PTY", len);
+    return YETTY_OK_VOID();
 }
 
 /* Build one yface envelope around `payload` and ship it to the inferior.
- * compressed=0 because input events are short — LZ4 framing would dominate. */
-YETTY_EXTERNAL_CALLBACK
-static void terminal_yface_emit(struct yetty_yterm_terminal *terminal, int osc_code,
-                                const void *payload, size_t len)
+ * compressed=0 because input events are short — LZ4 framing would dominate.
+ *
+ * The yface out buffer is reused across calls; success path drains it via
+ * pty_write_raw, error paths clear it explicitly so the next call starts
+ * from a known state. */
+static struct yetty_ycore_void_result terminal_yface_emit(
+    struct yetty_yterm_terminal *terminal, int osc_code,
+    const void *payload, size_t len)
 {
-    if (!terminal->emit_yface) {
-        return;
+    struct yetty_ycore_void_result sr = yetty_yface_start_write(
+        terminal->emit_yface, osc_code, /*compressed=*/0, /*args=*/NULL, /*args_len=*/0);
+    if (YETTY_IS_ERR(sr)) {
+        struct yetty_ycore_buffer *out_buf = yetty_yface_out_buf(terminal->emit_yface);
+        if (out_buf) {
+            yetty_ycore_buffer_clear(out_buf);
+        }
+        return YETTY_ERR(yetty_ycore_void,
+                         "terminal_yface_emit: yface_start_write failed", sr);
     }
-    struct yetty_ycore_void_result r = yetty_yface_start_write(terminal->emit_yface, osc_code,
-                                                               /*compressed=*/0,
-                                                               /*args=*/NULL, /*args_len=*/0);
-    if (!r.ok) {
-        goto reset;
+    struct yetty_ycore_void_result wr = yetty_yface_write(terminal->emit_yface, payload, len);
+    if (YETTY_IS_ERR(wr)) {
+        struct yetty_ycore_buffer *out_buf = yetty_yface_out_buf(terminal->emit_yface);
+        if (out_buf) {
+            yetty_ycore_buffer_clear(out_buf);
+        }
+        return YETTY_ERR(yetty_ycore_void,
+                         "terminal_yface_emit: yface_write failed", wr);
     }
-    r = yetty_yface_write(terminal->emit_yface, payload, len);
-    if (!r.ok) {
-        goto reset;
-    }
-    r = yetty_yface_finish_write(terminal->emit_yface);
-    if (!r.ok) {
-        goto reset;
+    struct yetty_ycore_void_result fr = yetty_yface_finish_write(terminal->emit_yface);
+    if (YETTY_IS_ERR(fr)) {
+        struct yetty_ycore_buffer *out_buf = yetty_yface_out_buf(terminal->emit_yface);
+        if (out_buf) {
+            yetty_ycore_buffer_clear(out_buf);
+        }
+        return YETTY_ERR(yetty_ycore_void,
+                         "terminal_yface_emit: yface_finish_write failed", fr);
     }
 
     struct yetty_ycore_buffer *out = yetty_yface_out_buf(terminal->emit_yface);
     if (out && out->size) {
-        terminal_pty_write_raw(terminal, (const char *)out->data, out->size);
-    }
-
-reset:
-    if (terminal->emit_yface) {
-        struct yetty_ycore_buffer *out = yetty_yface_out_buf(terminal->emit_yface);
-        if (out) {
+        struct yetty_ycore_size_result pwr =
+            terminal_pty_write_raw(terminal, (const char *)out->data, out->size);
+        if (YETTY_IS_ERR(pwr)) {
             yetty_ycore_buffer_clear(out);
+            return YETTY_ERR(yetty_ycore_void,
+                             "terminal_yface_emit: pty_write_raw failed", pwr);
         }
+        yetty_ycore_buffer_clear(out);
     }
+    return YETTY_OK_VOID();
 }
 
-/* Layer → terminal OSC emit. Wired into ymgui-layer at create time so
+/* yetty_yterm_emit_osc_fn impl — wired into ymgui-layer at create time so
  * the layer can ship FOCUS / RESIZE events back to the focused client
  * without owning its own emit_yface. */
-static void terminal_layer_emit_osc(int osc_code, const void *payload, size_t len, void *userdata)
+static struct yetty_ycore_void_result terminal_layer_emit_osc(
+    int osc_code, const void *payload, size_t len, void *userdata)
 {
     struct yetty_yterm_terminal *terminal = userdata;
-    terminal_yface_emit(terminal, osc_code, payload, len);
+    struct yetty_ycore_void_result r =
+        terminal_yface_emit(terminal, osc_code, payload, len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_layer_emit_osc: yface_emit failed");
+    return YETTY_OK_VOID();
 }
 
 /* Card-aware mouse forwarding. Each emit carries a card_id and
  * card-local pixel coords. card_id=0 means "no card here" — clients
  * use that to clear their hover state. */
-static void terminal_emit_card_mouse_button(struct yetty_yterm_terminal *terminal, uint32_t card_id,
-                                            float lx, float ly, int button, int press,
-                                            float wheel_dy)
+static struct yetty_ycore_void_result terminal_emit_card_mouse_button(
+    struct yetty_yterm_terminal *terminal, uint32_t card_id,
+    float lx, float ly, int button, int press, float wheel_dy)
 {
     struct yetty_ymgui_wire_input_mouse msg = {
         .magic = YMGUI_WIRE_MAGIC_INPUT_MOUSE,
@@ -298,11 +348,15 @@ static void terminal_emit_card_mouse_button(struct yetty_yterm_terminal *termina
         msg.button = button;
         msg.pressed = press;
     }
-    terminal_yface_emit(terminal, YMGUI_OSC_SC_MOUSE, &msg, sizeof(msg));
+    struct yetty_ycore_void_result r =
+        terminal_yface_emit(terminal, YMGUI_OSC_SC_MOUSE, &msg, sizeof(msg));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_card_mouse_button: yface_emit failed");
+    return YETTY_OK_VOID();
 }
 
-static void terminal_emit_card_mouse_move(struct yetty_yterm_terminal *terminal, uint32_t card_id,
-                                          float lx, float ly, int buttons_held)
+static struct yetty_ycore_void_result terminal_emit_card_mouse_move(
+    struct yetty_yterm_terminal *terminal, uint32_t card_id,
+    float lx, float ly, int buttons_held)
 {
     struct yetty_ymgui_wire_input_mouse msg = {
         .magic = YMGUI_WIRE_MAGIC_INPUT_MOUSE,
@@ -314,20 +368,24 @@ static void terminal_emit_card_mouse_move(struct yetty_yterm_terminal *terminal,
         .x = lx,
         .y = ly,
     };
-    terminal_yface_emit(terminal, YMGUI_OSC_SC_MOUSE, &msg, sizeof(msg));
+    struct yetty_ycore_void_result r =
+        terminal_yface_emit(terminal, YMGUI_OSC_SC_MOUSE, &msg, sizeof(msg));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_card_mouse_move: yface_emit failed");
+    return YETTY_OK_VOID();
 }
 
 /* Terminal-wide variants — same wire structs, card_id=0, pane-local px.
  * Each is gated on a bit of terminal->term_input_sub_flags so an
  * uninterested subscriber doesn't receive (e.g.) wheel events when it
  * only asked for clicks + moves. */
-static void terminal_emit_term_mouse_button(struct yetty_yterm_terminal *terminal, float lx,
-                                            float ly, int button, int press, float wheel_dy)
+static struct yetty_ycore_void_result terminal_emit_term_mouse_button(
+    struct yetty_yterm_terminal *terminal, float lx, float ly,
+    int button, int press, float wheel_dy)
 {
     int is_wheel = (wheel_dy != 0.0f);
     uint32_t need = is_wheel ? YETTY_YMGUI_TERM_SUB_MOUSE_WHEEL : YETTY_YMGUI_TERM_SUB_MOUSE_CLICK;
     if (!(terminal->term_input_sub_flags & need)) {
-        return;
+        return YETTY_OK_VOID();
     }
     struct yetty_ymgui_wire_input_mouse msg = {
         .magic = YMGUI_WIRE_MAGIC_INPUT_MOUSE,
@@ -345,14 +403,17 @@ static void terminal_emit_term_mouse_button(struct yetty_yterm_terminal *termina
         msg.button = button;
         msg.pressed = press;
     }
-    terminal_yface_emit(terminal, YMGUI_OSC_SC_TERM_MOUSE, &msg, sizeof(msg));
+    struct yetty_ycore_void_result r =
+        terminal_yface_emit(terminal, YMGUI_OSC_SC_TERM_MOUSE, &msg, sizeof(msg));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_term_mouse_button: yface_emit failed");
+    return YETTY_OK_VOID();
 }
 
-static void terminal_emit_term_mouse_move(struct yetty_yterm_terminal *terminal, float lx, float ly,
-                                          int buttons_held)
+static struct yetty_ycore_void_result terminal_emit_term_mouse_move(
+    struct yetty_yterm_terminal *terminal, float lx, float ly, int buttons_held)
 {
     if (!(terminal->term_input_sub_flags & YETTY_YMGUI_TERM_SUB_MOUSE_MOVE)) {
-        return;
+        return YETTY_OK_VOID();
     }
     struct yetty_ymgui_wire_input_mouse msg = {
         .magic = YMGUI_WIRE_MAGIC_INPUT_MOUSE,
@@ -364,15 +425,19 @@ static void terminal_emit_term_mouse_move(struct yetty_yterm_terminal *terminal,
         .x = lx,
         .y = ly,
     };
-    terminal_yface_emit(terminal, YMGUI_OSC_SC_TERM_MOUSE, &msg, sizeof(msg));
+    struct yetty_ycore_void_result r =
+        terminal_yface_emit(terminal, YMGUI_OSC_SC_TERM_MOUSE, &msg, sizeof(msg));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_term_mouse_move: yface_emit failed");
+    return YETTY_OK_VOID();
 }
 
 /* Pane pixel size — emitted on subscribe (rising edge) and on resize so
  * subscribers can size their canvases. card_id=0 = pane-wide. */
-static void terminal_emit_term_resize(struct yetty_yterm_terminal *terminal, float w_px, float h_px)
+static struct yetty_ycore_void_result terminal_emit_term_resize(
+    struct yetty_yterm_terminal *terminal, float w_px, float h_px)
 {
     if (!terminal->term_input_sub_flags) {
-        return;
+        return YETTY_OK_VOID();
     }
     struct yetty_ymgui_wire_input_resize msg = {
         .magic = YMGUI_WIRE_MAGIC_INPUT_RESIZE,
@@ -381,16 +446,20 @@ static void terminal_emit_term_resize(struct yetty_yterm_terminal *terminal, flo
         .width = w_px,
         .height = h_px,
     };
-    terminal_yface_emit(terminal, YMGUI_OSC_SC_TERM_RESIZE, &msg, sizeof(msg));
+    struct yetty_ycore_void_result r =
+        terminal_yface_emit(terminal, YMGUI_OSC_SC_TERM_RESIZE, &msg, sizeof(msg));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_term_resize: yface_emit failed");
+    return YETTY_OK_VOID();
 }
 
 /* Term-wide keyboard. Sent for any key (including with no card focused),
  * so console programs can do their own focus tracking. card_id=0. */
-static void terminal_emit_term_key(struct yetty_yterm_terminal *terminal, uint32_t kind, int key,
-                                   int mods, uint32_t codepoint)
+static struct yetty_ycore_void_result terminal_emit_term_key(
+    struct yetty_yterm_terminal *terminal, uint32_t kind, int key,
+    int mods, uint32_t codepoint)
 {
     if (!(terminal->term_input_sub_flags & YETTY_YMGUI_TERM_SUB_KEY)) {
-        return;
+        return YETTY_OK_VOID();
     }
     struct yetty_ymgui_wire_input_key msg = {
         .magic = YMGUI_WIRE_MAGIC_INPUT_KEY,
@@ -401,7 +470,10 @@ static void terminal_emit_term_key(struct yetty_yterm_terminal *terminal, uint32
         .mods = mods,
         .codepoint = codepoint,
     };
-    terminal_yface_emit(terminal, YMGUI_OSC_SC_TERM_KEY, &msg, sizeof(msg));
+    struct yetty_ycore_void_result r =
+        terminal_yface_emit(terminal, YMGUI_OSC_SC_TERM_KEY, &msg, sizeof(msg));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_term_key: yface_emit failed");
+    return YETTY_OK_VOID();
 }
 
 /* Resolve the pane-pixel point (lx, ly) to a card-local hit. If a card
@@ -436,16 +508,18 @@ static struct yetty_yterm_ymgui_hit terminal_resolve_card_hit(struct yetty_yterm
 }
 
 /* Emit a keyboard event for the focused card. Returns 1 if delivered
- * (caller should treat the keystroke as consumed), 0 otherwise. */
-static int terminal_emit_card_key(struct yetty_yterm_terminal *terminal, uint32_t kind, int key,
-                                  int mods, uint32_t codepoint)
+ * (caller treats the keystroke as consumed), 0 otherwise. Emit failures
+ * propagate via the Result. */
+static struct yetty_ycore_int_result terminal_emit_card_key(
+    struct yetty_yterm_terminal *terminal, uint32_t kind, int key,
+    int mods, uint32_t codepoint)
 {
     uint32_t focused =
         terminal->ymgui_layer
             ? yetty_yterm_terminal_layer_ymgui_layer_focused_card(terminal->ymgui_layer)
             : 0;
     if (focused == 0) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
 
     struct yetty_ymgui_wire_input_key msg = {
@@ -457,8 +531,10 @@ static int terminal_emit_card_key(struct yetty_yterm_terminal *terminal, uint32_
         .mods = mods,
         .codepoint = codepoint,
     };
-    terminal_yface_emit(terminal, YMGUI_OSC_SC_KEY, &msg, sizeof(msg));
-    return 1;
+    struct yetty_ycore_void_result r =
+        terminal_yface_emit(terminal, YMGUI_OSC_SC_KEY, &msg, sizeof(msg));
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "terminal_emit_card_key: yface_emit failed");
+    return YETTY_OK(yetty_ycore_int, 1);
 }
 
 /*-----------------------------------------------------------------------
@@ -466,8 +542,8 @@ static int terminal_emit_card_key(struct yetty_yterm_terminal *terminal, uint32_
  *
  * Mouse-wheel events drive both layers into scrollback mode together.
  * view_top_total_idx is an absolute line index — text-layer's sb_count
- * and ypaint canvas's rolling_row_0 stay in lockstep (every text scroll
- * triggers a ypaint scroll and vice versa), so the same index identifies
+ * and ydraw canvas's rolling_row_0 stay in lockstep (every text scroll
+ * triggers a ydraw scroll and vice versa), so the same index identifies
  * the same line in both.
  *
  * PR #89 ("Ymgui 5") rewrote the OSC mouse path to forward wheel events
@@ -481,7 +557,7 @@ static int terminal_emit_card_key(struct yetty_yterm_terminal *terminal, uint32_
  *---------------------------------------------------------------------*/
 
 /* Find the live anchor across layers. We use the maximum so a layer that
- * has scrolled further (e.g. ypaint just absorbed a multi-page PDF) doesn't
+ * has scrolled further (e.g. ydraw just absorbed a multi-page PDF) doesn't
  * leave the others behind — both layers have the same anchor by design,
  * but max() is a safe fallback in case they ever drift. */
 static uint32_t terminal_live_anchor(struct yetty_yterm_terminal *terminal)
@@ -500,35 +576,37 @@ static uint32_t terminal_live_anchor(struct yetty_yterm_terminal *terminal)
 }
 
 /* Push the current scrollback view state to every layer that supports it. */
-static void terminal_push_view_top(struct yetty_yterm_terminal *terminal)
+static struct yetty_ycore_void_result terminal_push_view_top(struct yetty_yterm_terminal *terminal)
 {
     for (size_t i = 0; i < terminal->layer_count; i++) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
         if (layer && layer->ops && layer->ops->set_view_top) {
-            layer->ops->set_view_top(layer, terminal->scrollback_active,
-                                     terminal->view_top_total_idx);
+            struct yetty_ycore_void_result r = layer->ops->set_view_top(
+                layer, terminal->scrollback_active, terminal->view_top_total_idx);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                                "terminal_push_view_top: layer set_view_top failed");
         }
     }
-    if (terminal->context.yetty_context.event_loop) {
-        terminal->context.yetty_context.event_loop->ops->request_render(
-            terminal->context.yetty_context.event_loop);
-    }
+    terminal->context.yetty_context.event_loop->ops->request_render(
+        terminal->context.yetty_context.event_loop);
+    return YETTY_OK_VOID();
 }
 
 /* Apply a relative wheel delta. Positive lines = scroll up (older). On the
  * first wheel-up out of live mode we anchor view_top one line back from
  * the current live position and enter scrollback. Scrolling past the live
  * anchor exits back to live. */
-static void terminal_scrollback_apply(struct yetty_yterm_terminal *terminal, int lines)
+static struct yetty_ycore_void_result terminal_scrollback_apply(
+    struct yetty_yterm_terminal *terminal, int lines)
 {
     uint32_t live = terminal_live_anchor(terminal);
 
     if (!terminal->scrollback_active) {
         if (lines <= 0) {
-            return; /* downward wheel in live mode: nothing to do */
+            return YETTY_OK_VOID(); /* downward wheel in live mode: nothing to do */
         }
         if (live == 0) {
-            return; /* nothing in scrollback yet */
+            return YETTY_OK_VOID(); /* nothing in scrollback yet */
         }
         terminal->scrollback_active = 1;
         terminal->view_top_total_idx = live - 1;
@@ -559,38 +637,45 @@ static void terminal_scrollback_apply(struct yetty_yterm_terminal *terminal, int
 
     ydebug("scrollback: active=%d view_top=%u live=%u", terminal->scrollback_active,
            terminal->view_top_total_idx, live);
-    terminal_push_view_top(terminal);
+    struct yetty_ycore_void_result r = terminal_push_view_top(terminal);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_scrollback_apply: push_view_top failed");
+    return YETTY_OK_VOID();
 }
 
 /* Force a return to live, regardless of current view position. */
-static void terminal_scrollback_exit(struct yetty_yterm_terminal *terminal)
+static struct yetty_ycore_void_result terminal_scrollback_exit(struct yetty_yterm_terminal *terminal)
 {
     if (!terminal->scrollback_active) {
-        return;
+        return YETTY_OK_VOID();
     }
     terminal->scrollback_active = 0;
     terminal->view_top_total_idx = terminal_live_anchor(terminal);
     ydebug("scrollback: EXIT");
-    terminal_push_view_top(terminal);
+    struct yetty_ycore_void_result r = terminal_push_view_top(terminal);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_scrollback_exit: push_view_top failed");
+    return YETTY_OK_VOID();
 }
 
-/* Mouse-subscription callback fired by the text-layer when libvterm flips
- * DEC mode 1500/1501. Latch state on the terminal. (No pane-size emission
- * on the rising edge — under the card model, each CARD_PLACE confirms
- * the card's pixel size via YMGUI_OSC_SC_RESIZE individually.) */
-static void terminal_mouse_sub_callback(int click_enabled, int move_enabled, void *userdata)
+/* yetty_yterm_mouse_sub_fn impl — fired by the text-layer when libvterm
+ * flips DEC mode 1500/1501. Latch state on the terminal. (No pane-size
+ * emission on the rising edge — under the card model, each CARD_PLACE
+ * confirms the card's pixel size via YMGUI_OSC_SC_RESIZE individually.) */
+static struct yetty_ycore_void_result terminal_mouse_sub_callback(
+    int click_enabled, int move_enabled, void *userdata)
 {
     struct yetty_yterm_terminal *terminal = userdata;
     terminal->mouse_click_subscribed = click_enabled;
     terminal->mouse_move_subscribed = move_enabled;
     ydebug("terminal: mouse_sub click=%d move=%d", click_enabled, move_enabled);
+    return YETTY_OK_VOID();
 }
 
-/* YMGUI_OSC_CS_TERM_INPUT_SUB arrived (forwarded by ymgui-layer). Latch
- * the new flag bitmask, and on the rising edge of any subscription emit
- * a YMGUI_OSC_SC_TERM_RESIZE so the subscriber knows the pane pixel
- * size before the first event arrives. */
-static void terminal_term_input_sub_callback(uint32_t flags, void *userdata)
+/* yetty_yterm_term_input_sub_fn impl — YMGUI_OSC_CS_TERM_INPUT_SUB arrived
+ * (forwarded by ymgui-layer). Latch the new flag bitmask, and on the rising
+ * edge of any subscription emit a YMGUI_OSC_SC_TERM_RESIZE so the
+ * subscriber knows the pane pixel size before the first event arrives. */
+static struct yetty_ycore_void_result terminal_term_input_sub_callback(
+    uint32_t flags, void *userdata)
 {
     struct yetty_yterm_terminal *terminal = userdata;
     uint32_t prev = terminal->term_input_sub_flags;
@@ -601,43 +686,43 @@ static void terminal_term_input_sub_callback(uint32_t flags, void *userdata)
      * its canvas before the first event arrives. Bounds come from the
      * view already used by the mouse handlers above (terminal->view). */
     if (flags && !prev) {
-        terminal_emit_term_resize(terminal, terminal->view.bounds.w, terminal->view.bounds.h);
+        struct yetty_ycore_void_result r =
+            terminal_emit_term_resize(terminal, terminal->view.bounds.w, terminal->view.bounds.h);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                            "terminal_term_input_sub_callback: emit_term_resize failed");
     }
+    return YETTY_OK_VOID();
 }
 
-/* Alt-screen toggle from text-layer (libvterm). Broadcast to every
- * layer that implements set_alt_screen so each can save/restore. */
-static void terminal_alt_screen_callback(int active, void *userdata)
+/* yetty_yterm_alt_screen_fn impl — alt-screen toggle from text-layer
+ * (libvterm). Broadcast to every layer that implements set_alt_screen so
+ * each can save/restore. */
+static struct yetty_ycore_void_result terminal_alt_screen_callback(int active, void *userdata)
 {
     struct yetty_yterm_terminal *terminal = userdata;
     ydebug("terminal: alt_screen=%d (broadcasting to %zu layers)", active, terminal->layer_count);
     for (size_t i = 0; i < terminal->layer_count; i++) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
         if (layer && layer->ops && layer->ops->set_alt_screen) {
-            layer->ops->set_alt_screen(layer, active);
+            struct yetty_ycore_void_result r = layer->ops->set_alt_screen(layer, active);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                                "terminal_alt_screen_callback: layer set_alt_screen failed");
         }
     }
-    if (terminal->context.yetty_context.event_loop &&
-        terminal->context.yetty_context.event_loop->ops &&
-        terminal->context.yetty_context.event_loop->ops->request_render) {
-        terminal->context.yetty_context.event_loop->ops->request_render(
-            terminal->context.yetty_context.event_loop);
-    }
+    terminal->context.yetty_context.event_loop->ops->request_render(
+        terminal->context.yetty_context.event_loop);
+    return YETTY_OK_VOID();
 }
 
-/* Request render callback for layers */
-static void terminal_request_render_callback(void *userdata)
+/* yetty_yterm_request_render_fn impl — called when a layer needs a
+ * render frame. */
+static struct yetty_ycore_void_result terminal_request_render_callback(void *userdata)
 {
     struct yetty_yterm_terminal *terminal = userdata;
-    ydebug("terminal_request_render_callback: event_loop=%p",
-           (void *)terminal->context.yetty_context.event_loop);
-    if (terminal->context.yetty_context.event_loop &&
-        terminal->context.yetty_context.event_loop->ops &&
-        terminal->context.yetty_context.event_loop->ops->request_render) {
-        ydebug("terminal_request_render_callback: calling request_render");
-        terminal->context.yetty_context.event_loop->ops->request_render(
-            terminal->context.yetty_context.event_loop);
-    }
+    ydebug("terminal_request_render_callback: calling request_render");
+    terminal->context.yetty_context.event_loop->ops->request_render(
+        terminal->context.yetty_context.event_loop);
+    return YETTY_OK_VOID();
 }
 
 /* Scroll callback - propagate scroll from source layer to all other layers */
@@ -659,20 +744,19 @@ static struct yetty_ycore_void_result terminal_scroll_callback(
             layer->in_external_scroll = 1;
             struct yetty_ycore_void_result res = layer->ops->scroll(layer, lines);
             layer->in_external_scroll = 0;
-            if (YETTY_IS_ERR(res)) {
-                yerror("terminal_scroll_callback: layer[%zu] scroll failed: %s", i, res.error.msg);
-                return res;
-            }
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, res,
+                                "terminal_scroll_callback: layer scroll failed");
         }
     }
     ydebug("terminal_scroll_callback EXIT: lines=%d", lines);
     return YETTY_OK_VOID();
 }
 
-/* Cursor callback - propagate cursor position from source layer to all other
- * layers */
-static void terminal_cursor_callback(struct yetty_yrender_terminal_layer *source,
-                                     struct yetty_ycore_grid_cursor_pos cursor_pos, void *userdata)
+/* yetty_yterm_cursor_fn impl — propagate cursor position from source
+ * layer to all other layers. */
+static struct yetty_ycore_void_result terminal_cursor_callback(
+    struct yetty_yrender_terminal_layer *source,
+    struct yetty_ycore_grid_cursor_pos cursor_pos, void *userdata)
 {
     struct yetty_yterm_terminal *terminal = userdata;
     ydebug("terminal_cursor_callback ENTER: source=%p col=%u row=%u layer_count=%zu",
@@ -683,7 +767,10 @@ static void terminal_cursor_callback(struct yetty_yrender_terminal_layer *source
         if (layer != source && layer->ops && layer->ops->set_cursor) {
             ydebug("terminal_cursor_callback: calling layer[%zu]=%p set_cursor(%u,%u)", i,
                    (void *)layer, cursor_pos.cols, cursor_pos.rows);
-            layer->ops->set_cursor(layer, cursor_pos.cols, cursor_pos.rows);
+            struct yetty_ycore_void_result r =
+                layer->ops->set_cursor(layer, cursor_pos.cols, cursor_pos.rows);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                                "terminal_cursor_callback: layer set_cursor failed");
         } else {
             ydebug("terminal_cursor_callback: skipping layer[%zu]=%p (source=%d "
                    "has_set_cursor=%d)",
@@ -691,6 +778,7 @@ static void terminal_cursor_callback(struct yetty_yrender_terminal_layer *source
         }
     }
     ydebug("terminal_cursor_callback EXIT: col=%u row=%u", cursor_pos.cols, cursor_pos.rows);
+    return YETTY_OK_VOID();
 }
 
 /*-------------------------------------------------------------------------
@@ -701,7 +789,7 @@ static void terminal_cursor_callback(struct yetty_yrender_terminal_layer *source
  * own terms:
  *
  *   text-layer  — xterm-style cell stream (column-granular highlight + copy)
- *   ypaint-layer — row range only; selects whole primitives that overlap
+ *   ydraw-layer — row range only; selects whole primitives that overlap
  *                  the touched rows
  *
  * Copy walks every layer's get_selection_text in order and concatenates
@@ -711,21 +799,21 @@ static void terminal_cursor_callback(struct yetty_yrender_terminal_layer *source
 
 /* Push the current (anchor, head) to every layer that opted in. Called
  * on every drag tick so the highlight tracks the mouse. */
-static void terminal_push_selection(struct yetty_yterm_terminal *terminal)
+static struct yetty_ycore_void_result terminal_push_selection(struct yetty_yterm_terminal *terminal)
 {
     for (size_t i = 0; i < terminal->layer_count; i++) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
         if (layer && layer->ops && layer->ops->set_selection) {
-            layer->ops->set_selection(layer, terminal->sel_active, terminal->sel_anchor_row,
-                                      terminal->sel_anchor_col, terminal->sel_head_row,
-                                      terminal->sel_head_col);
+            struct yetty_ycore_void_result r = layer->ops->set_selection(
+                layer, terminal->sel_active, terminal->sel_anchor_row,
+                terminal->sel_anchor_col, terminal->sel_head_row, terminal->sel_head_col);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                                "terminal_push_selection: layer set_selection failed");
         }
     }
-    if (terminal->context.yetty_context.event_loop &&
-        terminal->context.yetty_context.event_loop->ops->request_render) {
-        terminal->context.yetty_context.event_loop->ops->request_render(
-            terminal->context.yetty_context.event_loop);
-    }
+    terminal->context.yetty_context.event_loop->ops->request_render(
+        terminal->context.yetty_context.event_loop);
+    return YETTY_OK_VOID();
 }
 
 /* Translate a pane-local pixel coordinate to (row, col) in the visible
@@ -784,39 +872,42 @@ static struct yetty_ycore_void_result terminal_collect_selection_text(
 /* Ctrl+Shift+C — extract the selection, set it on the system clipboard,
  * leave the highlight in place so the user can verify. No-op when nothing
  * is selected or no clipboard manager exists (headless). */
-static void terminal_copy_selection(struct yetty_yterm_terminal *terminal)
+static struct yetty_ycore_void_result terminal_copy_selection(
+    struct yetty_yterm_terminal *terminal)
 {
     if (!terminal->sel_active) {
-        return;
+        return YETTY_OK_VOID();
     }
     struct yetty_platform_clipboard_manager *cm =
         terminal->context.yetty_context.app_context.clipboard_manager;
     if (!cm || !cm->ops || !cm->ops->set_text) {
         ydebug("terminal_copy_selection: no clipboard manager");
-        return;
+        return YETTY_OK_VOID();
     }
 
     struct yetty_ycore_buffer_result br = yetty_ycore_buffer_create(256);
-    if (!YETTY_IS_OK(br)) {
-        yerror("terminal_copy_selection: buffer create: %s", br.error.msg);
-        yetty_ycore_error_destroy(br.error);
-        return;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "terminal_copy_selection: buffer_create failed");
     struct yetty_ycore_buffer buf = br.value;
 
     struct yetty_ycore_void_result cr = terminal_collect_selection_text(terminal, &buf);
-    if (!YETTY_IS_OK(cr)) {
-        yerror("terminal_copy_selection: collect: %s", cr.error.msg);
-        yetty_ycore_error_destroy(cr.error);
+    if (YETTY_IS_ERR(cr)) {
         yetty_ycore_buffer_destroy(&buf);
-        return;
+        return YETTY_ERR(yetty_ycore_void,
+                         "terminal_copy_selection: collect_selection_text failed", cr);
     }
 
     if (buf.size > 0) {
-        cm->ops->set_text(cm, (const char *)buf.data, buf.size);
+        struct yetty_ycore_void_result sr =
+            cm->ops->set_text(cm, (const char *)buf.data, buf.size);
+        if (YETTY_IS_ERR(sr)) {
+            yetty_ycore_buffer_destroy(&buf);
+            return YETTY_ERR(yetty_ycore_void,
+                             "terminal_copy_selection: clipboard set_text failed", sr);
+        }
         yinfo("terminal: copied %zu bytes to clipboard", buf.size);
     }
     yetty_ycore_buffer_destroy(&buf);
+    return YETTY_OK_VOID();
 }
 
 /* Ctrl+Shift+V — kick off an asynchronous clipboard fetch. The result
@@ -824,22 +915,27 @@ static void terminal_copy_selection(struct yetty_yterm_terminal *terminal)
  * payload holds the text; the event handler below writes it to the
  * PTY. We don't block the render thread because GLFW clipboard calls
  * must run on the main thread. */
-static void terminal_paste_clipboard(struct yetty_yterm_terminal *terminal)
+static struct yetty_ycore_void_result terminal_paste_clipboard(
+    struct yetty_yterm_terminal *terminal)
 {
     struct yetty_platform_clipboard_manager *cm =
         terminal->context.yetty_context.app_context.clipboard_manager;
     if (!cm || !cm->ops || !cm->ops->request_paste) {
         ydebug("terminal_paste_clipboard: no clipboard manager");
-        return;
+        return YETTY_OK_VOID();
     }
-    cm->ops->request_paste(cm);
+    struct yetty_ycore_void_result r = cm->ops->request_paste(cm);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                        "terminal_paste_clipboard: clipboard request_paste failed");
+    return YETTY_OK_VOID();
 }
 
 /* Clear any active selection and tell the layers to drop their highlight. */
-static void terminal_clear_selection(struct yetty_yterm_terminal *terminal)
+static struct yetty_ycore_void_result terminal_clear_selection(
+    struct yetty_yterm_terminal *terminal)
 {
     if (!terminal->sel_active && !terminal->sel_dragging) {
-        return;
+        return YETTY_OK_VOID();
     }
     terminal->sel_active = 0;
     terminal->sel_dragging = 0;
@@ -847,7 +943,10 @@ static void terminal_clear_selection(struct yetty_yterm_terminal *terminal)
     terminal->sel_anchor_col = 0;
     terminal->sel_head_row = 0;
     terminal->sel_head_col = 0;
-    terminal_push_selection(terminal);
+    struct yetty_ycore_void_result r = terminal_push_selection(terminal);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                        "terminal_clear_selection: push_selection failed");
+    return YETTY_OK_VOID();
 }
 
 /* Event handler - only for PTY poll events registered directly with event loop
@@ -867,7 +966,7 @@ static struct yetty_ycore_int_result terminal_event_handler(
 
 /* Render a frame using layered rendering */
 static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_terminal *terminal,
-                                                            struct yetty_ypaint_core_target *target)
+                                                            struct yetty_ydraw_target *target)
 {
     if (terminal->shutting_down) {
         ydebug("terminal_render_frame: shutting down, skipping render");
@@ -898,17 +997,14 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
         if (!layer) {
             continue;
         }
-        /* Skip layers with nothing to draw. ypaint/ymgui report empty
+        /* Skip layers with nothing to draw. ydraw/ymgui report empty
          * when their canvas has no primitives — paying the binder/draw
          * cost for them on every text-layer redraw is pure overhead. */
         if (layer->ops->is_empty && layer->ops->is_empty(layer)) {
             continue;
         }
         struct yetty_ycore_void_result res = layer->ops->render(layer, target);
-        if (!YETTY_IS_OK(res)) {
-            yerror("terminal_render_frame: layer %zu render failed: %s", i, res.error.msg);
-            return res;
-        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "terminal_render_frame: layer render failed");
     }
     ytime_report(layers);
 
@@ -917,26 +1013,21 @@ static struct yetty_ycore_void_result terminal_render_frame(struct yetty_yterm_t
     return YETTY_OK_VOID();
 }
 
-/* Read from PTY via pty_reader */
-static void terminal_read_pty(struct yetty_yterm_terminal *terminal)
+/* Drive the wire state machine — pulls PTY bytes (sync-read backends) and
+ * dispatches to registered layers. */
+static struct yetty_ycore_void_result terminal_read_pty(struct yetty_yterm_terminal *terminal)
 {
-    if (!terminal->pty_reader) {
-        return;
-    }
-
-    struct yetty_ycore_size_result r = yetty_yterm_pty_reader_read(terminal->pty_reader);
-    if (YETTY_IS_ERR(r)) {
-        yerror("terminal_read_pty: %s", r.error.msg);
-        yetty_ycore_error_destroy(r.error);
-        return;
-    }
-    if (r.value > 0 && terminal->layer_count > 0) {
+    struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_process(terminal->sm);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                        "terminal_read_pty: wire_statemachine_process failed");
+    if (terminal->layer_count > 0) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[0];
         if (layer && layer->dirty) {
             terminal->context.yetty_context.event_loop->ops->request_render(
                 terminal->context.yetty_context.event_loop);
         }
     }
+    return YETTY_OK_VOID();
 }
 
 /* Terminal creation/destruction */
@@ -976,52 +1067,51 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
     /* Set up listener for PTY poll events */
     terminal->listener.handler = terminal_event_handler;
 
-    /* Create PTY */
+    /* PTY factory is required — every supported platform installs one at
+     * startup. A missing factory means yetty_context was constructed wrong. */
     struct yetty_yplatform_pty_factory *pty_factory = yetty_context->app_context.pty_factory;
-    if (pty_factory && pty_factory->ops && pty_factory->ops->create_pty) {
-        struct yetty_yplatform_pty_ptr_result pty_res =
-            pty_factory->ops->create_pty(pty_factory, terminal->context.yetty_context.event_loop);
-        if (YETTY_IS_OK(pty_res)) {
-            terminal->context.pty = pty_res.value;
-            ydebug("terminal_create: PTY created at %p", (void *)terminal->context.pty);
+    if (!pty_factory || !pty_factory->ops || !pty_factory->ops->create_pty) {
+        free(terminal);
+        return YETTY_ERR(yetty_yterm_terminal,
+                         "terminal_create: yetty_context.app_context.pty_factory is NULL or has no create_pty op");
+    }
 
-            /* Create PTY reader */
-            struct yetty_yterm_pty_reader_result reader_res =
-                yetty_yterm_pty_reader_create(terminal->context.pty);
-            if (YETTY_IS_OK(reader_res)) {
-                terminal->pty_reader = reader_res.value;
-                ydebug("terminal_create: pty_reader created");
-            }
+    /* Create PTY */
+    struct yetty_yplatform_pty_ptr_result pty_res =
+        pty_factory->ops->create_pty(pty_factory, terminal->context.yetty_context.event_loop);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, pty_res, "terminal_create: pty_factory create_pty failed");
+    terminal->context.pty = pty_res.value;
+    ydebug("terminal_create: PTY created at %p", (void *)terminal->context.pty);
 
-            /* Long-lived yface for emit_*. One per terminal — out_buf is
-       * cleared after every send so it stays at the steady-state
-       * high-water mark rather than growing per-event. */
-            {
-                struct yetty_yface_ptr_result yr = yetty_yface_create();
-                if (YETTY_IS_OK(yr)) {
-                    terminal->emit_yface = yr.value;
-                } else {
-                    ydebug("terminal_create: emit_yface alloc failed: %s", yr.error.msg);
-                }
-            }
+    /* Create wire state machine — owns the PTY pointer, the decode stack,
+     * and the per-OSC-code layer registry. */
+    struct yetty_ywire_wire_statemachine_ptr_result sm_res =
+        yetty_ywire_wire_statemachine_create(terminal->context.pty);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, sm_res, "terminal_create: wire_statemachine_create failed");
+    terminal->sm = sm_res.value;
+    ydebug("terminal_create: wire state machine created");
 
-            /* Register PTY pipe — uv_pipe_t reads data, callbacks handle it */
-            struct yetty_platform_pty_pipe_source *pipe_source =
-                terminal->context.pty->ops->pipe_source(terminal->context.pty);
-            if (pipe_source && terminal->pty_reader) {
-                struct yetty_yevent_pipe_id_result pipe_res =
-                    terminal->context.yetty_context.event_loop->ops->register_pty_pipe(
-                        terminal->context.yetty_context.event_loop, pipe_source,
-                        terminal_pty_pipe_alloc, terminal_pty_pipe_read, terminal);
-                if (YETTY_IS_OK(pipe_res)) {
-                    terminal->pty_pipe_id = pipe_res.value;
-                    ydebug("terminal_create: PTY pipe registered");
-                }
-            }
-        } else {
-            ydebug("terminal_create: failed to create PTY (non-fatal): %s",
-                   pty_res.error.msg ? pty_res.error.msg : "(no msg)");
-        }
+    /* Long-lived yface for emit_*. One per terminal — out_buf is cleared
+     * after every send so it stays at the steady-state high-water mark
+     * rather than growing per-event. */
+    struct yetty_yface_ptr_result yr = yetty_yface_create();
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, yr, "terminal_create: emit_yface yetty_yface_create failed");
+    terminal->emit_yface = yr.value;
+
+    /* Register PTY pipe with the event loop for async-delivery backends.
+     * Sync-read backends (e.g. memory-pty) legitimately return NULL here;
+     * the SM pulls bytes itself via pty->ops->read on each process(). */
+    struct yetty_platform_pty_pipe_source *pipe_source =
+        terminal->context.pty->ops->pipe_source(terminal->context.pty);
+    if (pipe_source) {
+        struct yetty_yevent_pipe_id_result pipe_res =
+            terminal->context.yetty_context.event_loop->ops->register_pty_pipe(
+                terminal->context.yetty_context.event_loop, pipe_source,
+                terminal_pty_pipe_alloc, terminal_pty_pipe_read, terminal);
+        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, pipe_res,
+                            "terminal_create: event_loop register_pty_pipe failed");
+        terminal->pty_pipe_id = pipe_res.value;
+        ydebug("terminal_create: PTY pipe registered");
     }
 
     /* Create text layer */
@@ -1030,151 +1120,133 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
             cols, rows, yetty_context, terminal_pty_write_callback, terminal,
             terminal_request_render_callback, terminal, terminal_scroll_callback, terminal,
             terminal_cursor_callback, terminal);
-    if (YETTY_IS_OK(text_layer_res)) {
-        /* Mouse-subscription callback — text-layer's libvterm settermprop hook
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, text_layer_res,
+                        "terminal_create: text_layer_create failed");
+    /* Mouse-subscription callback — text-layer's libvterm settermprop hook
      * forwards DEC ?1500 / ?1501 changes here. */
-        text_layer_res.value->mouse_sub_fn = terminal_mouse_sub_callback;
-        text_layer_res.value->mouse_sub_userdata = terminal;
-        /* Alt-screen toggle callback — text-layer's settermprop hook fires
+    text_layer_res.value->mouse_sub_fn = terminal_mouse_sub_callback;
+    text_layer_res.value->mouse_sub_userdata = terminal;
+    /* Alt-screen toggle callback — text-layer's settermprop hook fires
      * this when libvterm processes DEC ?1047/?1049/?47. */
-        text_layer_res.value->alt_screen_fn = terminal_alt_screen_callback;
-        text_layer_res.value->alt_screen_userdata = terminal;
-    }
-    if (!YETTY_IS_OK(text_layer_res)) {
-        yerror("terminal_create: failed to create text layer: %s", text_layer_res.error.msg);
-        struct yetty_ycore_void_result dr =
-            yetty_yterm_pty_reader_destroy(terminal->pty_reader);
-        if (YETTY_IS_ERR(dr)) {
-            yetty_ycore_error_destroy(dr.error);
-        }
-        if (terminal->context.pty) {
-            terminal->context.pty->ops->destroy(terminal->context.pty);
-        }
-        free(terminal);
-        return YETTY_ERR(yetty_yterm_terminal, text_layer_res.error.msg);
-    }
-    yetty_yterm_terminal_layer_add(terminal, text_layer_res.value);
+    text_layer_res.value->alt_screen_fn = terminal_alt_screen_callback;
+    text_layer_res.value->alt_screen_userdata = terminal;
+    struct yetty_ycore_void_result add_r =
+        yetty_yterm_terminal_layer_add(terminal, text_layer_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, add_r,
+                        "terminal_create: terminal_layer_add(text_layer) failed");
     ydebug("terminal_create: text_layer created and added");
 
-    /* Register text layer as default sink for pty_reader */
-    if (terminal->pty_reader) {
-        struct yetty_ycore_void_result rr = yetty_yterm_pty_reader_register_default_sink(
-            terminal->pty_reader, text_layer_res.value);
-        if (YETTY_IS_ERR(rr)) {
-            yerror("terminal_create: register default sink: %s", rr.error.msg);
-            yetty_ycore_error_destroy(rr.error);
-        } else {
-            ydebug("terminal_create: text_layer registered as default sink");
-        }
-    }
+    /* Register text layer as default (raw-passthrough) sink */
+    struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_set_default(
+        terminal->sm, text_layer_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: wire_statemachine_set_default(text_layer) failed");
+    ydebug("terminal_create: text_layer registered as default sink");
 
-    /* Create ypaint scrolling layer (overlay on top of text) + static
-     * yui-chrome layer above it. Only the scrolling layer is registered
-     * for ypaint OSC codes — static-canvas is a placeholder for yui until
-     * its content path lands. */
-    {
-        struct yetty_yrender_terminal_layer *text_layer = text_layer_res.value;
-        struct yetty_yterm_terminal_layer_result ypaint_res = yetty_yterm_ypaint_layer_create(
-            YETTY_YPAINT_LAYER_KIND_SCROLLING, cols, rows,
-            text_layer->cell_size.width, text_layer->cell_size.height,
-            yetty_context, terminal_request_render_callback, terminal, terminal_scroll_callback,
-            terminal, terminal_cursor_callback, terminal);
-        if (YETTY_IS_OK(ypaint_res)) {
-            yetty_yterm_terminal_layer_add(terminal, ypaint_res.value);
-            ydebug("terminal_create: ypaint scrolling layer created and added");
+    /* Create ydraw scrolling layer (overlay on top of text). Registered
+     * for the ydraw OSC codes — the SM does b64+lz4 decoding
+     * (protocol-fixed), so registration carries no codec parameter. */
+    struct yetty_yrender_terminal_layer *text_layer = text_layer_res.value;
+    struct yetty_yterm_terminal_layer_result ydraw_res = yetty_yterm_ydraw_layer_create(
+        YETTY_YDRAW_LAYER_KIND_SCROLLING, cols, rows,
+        text_layer->cell_size.width, text_layer->cell_size.height,
+        yetty_context, terminal_request_render_callback, terminal, terminal_scroll_callback,
+        terminal, terminal_cursor_callback, terminal);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, ydraw_res,
+                        "terminal_create: ydraw scrolling layer create failed");
+    add_r = yetty_yterm_terminal_layer_add(terminal, ydraw_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, add_r,
+                        "terminal_create: terminal_layer_add(ydraw scrolling) failed");
+    ydebug("terminal_create: ydraw scrolling layer created and added");
 
-            /* Register ypaint layer for the four ypaint OSC codes. The
-             * SM does b64+lz4 decoding (protocol-fixed), so registration
-             * carries no codec parameter. */
-            if (terminal->pty_reader) {
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YETTY_OSC_YPAINT_CLEAR, ypaint_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YETTY_OSC_YPAINT_BIN, ypaint_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YETTY_OSC_YPAINT_OVERLAY, ypaint_res.value);
-                ydebug("terminal_create: ypaint layer registered for OSC CLEAR/BIN/OVERLAY");
-            }
-        } else {
-            ydebug("terminal_create: failed to create ypaint scrolling layer (non-fatal): %s",
-                   ypaint_res.error.msg);
-        }
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_OSC_YDRAW_CLEAR, ydraw_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_CLEAR failed");
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_OSC_YDRAW_BIN, ydraw_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_BIN failed");
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_OSC_YDRAW_OVERLAY, ydraw_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ydraw layer for YETTY_OSC_YDRAW_OVERLAY failed");
+    ydebug("terminal_create: ydraw layer registered for OSC CLEAR/BIN/OVERLAY");
 
-        /* yui chrome layer — static canvas, placed above the scrolling one. */
-        struct yetty_yterm_terminal_layer_result ypaint_static_res =
-            yetty_yterm_ypaint_layer_create(
-                YETTY_YPAINT_LAYER_KIND_STATIC, cols, rows,
-                text_layer->cell_size.width, text_layer->cell_size.height,
-                yetty_context, terminal_request_render_callback, terminal,
-                terminal_scroll_callback, terminal, terminal_cursor_callback, terminal);
-        if (YETTY_IS_OK(ypaint_static_res)) {
-            yetty_yterm_terminal_layer_add(terminal, ypaint_static_res.value);
-            ydebug("terminal_create: ypaint static layer created and added");
-        } else {
-            ydebug("terminal_create: failed to create ypaint static layer (non-fatal): %s",
-                   ypaint_static_res.error.msg);
-        }
-    }
+    /* yui layer — scene canvas, placed above the scrolling one.
+     * Placeholder for yui until its content path lands; no OSC codes. */
+    struct yetty_yterm_terminal_layer_result ydraw_static_res = yetty_yterm_ydraw_layer_create(
+        YETTY_YDRAW_LAYER_KIND_SCENE, cols, rows,
+        text_layer->cell_size.width, text_layer->cell_size.height,
+        yetty_context, terminal_request_render_callback, terminal,
+        terminal_scroll_callback, terminal, terminal_cursor_callback, terminal);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, ydraw_static_res,
+                        "terminal_create: ydraw static layer create failed");
+    add_r = yetty_yterm_terminal_layer_add(terminal, ydraw_static_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, add_r,
+                        "terminal_create: terminal_layer_add(ydraw static) failed");
+    ydebug("terminal_create: ydraw static layer created and added");
 
-    /* Create shader-glyph layer — animated procedurals at cells whose
-   * glyph_index is in the shader-glyph range (top half of u32). Sits
-   * above text-layer in compose order so the animations overlay text.
-   * Reads text-layer's cell buffer directly (text_layer must outlive). */
-    {
-        struct yetty_yrender_terminal_layer *text_layer = text_layer_res.value;
-        struct yetty_yterm_terminal_layer_result sg_res = yetty_yterm_shader_glyph_layer_create(
-            cols, rows, text_layer->cell_size.width, text_layer->cell_size.height, text_layer,
-            yetty_context, terminal_request_render_callback, terminal, terminal_scroll_callback,
-            terminal, terminal_cursor_callback, terminal);
-        if (YETTY_IS_OK(sg_res)) {
-            yetty_yterm_terminal_layer_add(terminal, sg_res.value);
-            ydebug("terminal_create: shader_glyph layer created and added");
-        } else {
-            ydebug("terminal_create: failed to create shader_glyph layer (non-fatal): %s",
-                   sg_res.error.msg);
-        }
-    }
+    /* Register the scene layer for YDRAW_SCENE_BIN — ygui's incremental
+     * GROUP/DELETE shipments land here so they don't compete with the
+     * scrolling layer for flat YDRAW_BIN envelopes. */
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_OSC_YDRAW_SCENE_BIN,
+                                                ydraw_static_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register scene layer for YDRAW_SCENE_BIN failed");
+    ydebug("terminal_create: ydraw scene layer registered for OSC SCENE_BIN");
 
-    /* Create ymgui layer (Dear ImGui frame, cursor-anchored, terminal-scrolling) */
-    {
-        struct yetty_yrender_terminal_layer *text_layer = text_layer_res.value;
-        struct yetty_yterm_terminal_layer_result ymgui_res = yetty_yterm_ymgui_layer_create(
-            cols, rows, text_layer->cell_size.width, text_layer->cell_size.height, yetty_context,
-            terminal_request_render_callback, terminal, terminal_scroll_callback, terminal,
-            terminal_cursor_callback, terminal);
-        if (YETTY_IS_OK(ymgui_res)) {
-            yetty_yterm_terminal_layer_add(terminal, ymgui_res.value);
-            terminal->ymgui_layer = ymgui_res.value;
-            /* Wire the layer's emit-back path so it can ship FOCUS / RESIZE
-       * events through this terminal's emit_yface. */
-            ymgui_res.value->emit_osc_fn = terminal_layer_emit_osc;
-            ymgui_res.value->emit_osc_userdata = terminal;
-            /* Terminal-wide input subscription updates flow through the
-             * same layer (it owns the OSC parser); the layer just forwards
-             * the new bitmask to us. */
-            ymgui_res.value->term_input_sub_fn = terminal_term_input_sub_callback;
-            ymgui_res.value->term_input_sub_userdata = terminal;
-            if (terminal->pty_reader) {
-                /* SM owns b64+lz4; layer registration is just (code, layer). */
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_CLEAR, ymgui_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_FRAME, ymgui_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_TEX, ymgui_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_CARD_PLACE, ymgui_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_CARD_REMOVE, ymgui_res.value);
-                yetty_yterm_pty_reader_register_osc_sink(
-                    terminal->pty_reader, YMGUI_OSC_CS_TERM_INPUT_SUB, ymgui_res.value);
-                ydebug("terminal_create: ymgui layer registered for OSC 610000-610004 + 610010");
-            }
-        } else {
-            ydebug("terminal_create: failed to create ymgui layer (non-fatal): %s",
-                   ymgui_res.error.msg);
-        }
-    }
+    /* Shader-glyph layer — animated procedurals at cells whose glyph_index
+     * is in the shader-glyph range (top half of u32). Sits above text-layer
+     * in compose order so animations overlay text. Reads text-layer's cell
+     * buffer directly (text_layer must outlive). */
+    struct yetty_yterm_terminal_layer_result sg_res = yetty_yterm_shader_glyph_layer_create(
+        cols, rows, text_layer->cell_size.width, text_layer->cell_size.height, text_layer,
+        yetty_context, terminal_request_render_callback, terminal, terminal_scroll_callback,
+        terminal, terminal_cursor_callback, terminal);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, sg_res,
+                        "terminal_create: shader_glyph layer create failed");
+    add_r = yetty_yterm_terminal_layer_add(terminal, sg_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, add_r,
+                        "terminal_create: terminal_layer_add(shader_glyph) failed");
+    ydebug("terminal_create: shader_glyph layer created and added");
+
+    /* ymgui layer (Dear ImGui frame, cursor-anchored, terminal-scrolling) */
+    struct yetty_yterm_terminal_layer_result ymgui_res = yetty_yterm_ymgui_layer_create(
+        cols, rows, text_layer->cell_size.width, text_layer->cell_size.height, yetty_context,
+        terminal_request_render_callback, terminal, terminal_scroll_callback, terminal,
+        terminal_cursor_callback, terminal);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, ymgui_res,
+                        "terminal_create: ymgui layer create failed");
+    add_r = yetty_yterm_terminal_layer_add(terminal, ymgui_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, add_r,
+                        "terminal_create: terminal_layer_add(ymgui) failed");
+    terminal->ymgui_layer = ymgui_res.value;
+    /* Layer's emit-back path so it can ship FOCUS / RESIZE events through
+     * this terminal's emit_yface. */
+    ymgui_res.value->emit_osc_fn = terminal_layer_emit_osc;
+    ymgui_res.value->emit_osc_userdata = terminal;
+    /* Terminal-wide input subscription updates flow through the same layer
+     * (it owns the OSC parser); the layer just forwards the new bitmask. */
+    ymgui_res.value->term_input_sub_fn = terminal_term_input_sub_callback;
+    ymgui_res.value->term_input_sub_userdata = terminal;
+
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YMGUI_OSC_CS_CLEAR, ymgui_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ymgui layer for YMGUI_OSC_CS_CLEAR failed");
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YMGUI_OSC_CS_FRAME, ymgui_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ymgui layer for YMGUI_OSC_CS_FRAME failed");
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YMGUI_OSC_CS_TEX, ymgui_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ymgui layer for YMGUI_OSC_CS_TEX failed");
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YMGUI_OSC_CS_CARD_PLACE, ymgui_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ymgui layer for YMGUI_OSC_CS_CARD_PLACE failed");
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YMGUI_OSC_CS_CARD_REMOVE, ymgui_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ymgui layer for YMGUI_OSC_CS_CARD_REMOVE failed");
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YMGUI_OSC_CS_TERM_INPUT_SUB, ymgui_res.value);
+    YETTY_RETURN_IF_ERR(yetty_yterm_terminal, rr,
+                        "terminal_create: register ymgui layer for YMGUI_OSC_CS_TERM_INPUT_SUB failed");
+    ydebug("terminal_create: ymgui layer registered for OSC 610000-610004 + 610010");
 
     /* Create render targets for each layer */
     const struct yetty_yetty_app_gpu_context *app_gpu = &yetty_context->gpu_context.app_gpu_context;
@@ -1186,20 +1258,8 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
             yetty_context->gpu_context.surface_format, yetty_context->gpu_context.allocator,
             NULL, /* no surface for layer targets */
             layer_vp);
-        if (!YETTY_IS_OK(target_res)) {
-            ydebug("terminal_create: failed to create layer target %zu", i);
-            /* Clean up already created targets */
-            for (size_t j = 0; j < i; j++) {
-                if (terminal->layer_targets[j]) {
-                    terminal->layer_targets[j]->ops->destroy(terminal->layer_targets[j]);
-                }
-            }
-            if (terminal->context.pty) {
-                terminal->context.pty->ops->destroy(terminal->context.pty);
-            }
-            free(terminal);
-            return YETTY_ERR(yetty_yterm_terminal, "failed to create layer target");
-        }
+        YETTY_RETURN_IF_ERR(yetty_yterm_terminal, target_res,
+                            "terminal_create: yrender_target_texture_create failed for a layer");
         terminal->layer_targets[i] = target_res.value;
     }
     ydebug("terminal_create: layer targets created");
@@ -1209,17 +1269,18 @@ struct yetty_yterm_terminal_result yetty_yterm_terminal_create(
 
 struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_terminal *terminal)
 {
-    size_t i;
-    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
-
     if (!terminal) {
         return YETTY_ERR(yetty_ycore_void, "yetty_yterm_terminal_destroy: NULL terminal");
     }
 
+    /* Best-effort cleanup: every step must run so resources are released.
+     * Stash the first error and keep going; surface it at the end. */
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
+    bool have_err = false;
     ydebug("terminal_destroy: starting");
 
-    /* Destroy layer targets */
-    for (i = 0; i < terminal->layer_count; i++) {
+    /* Destroy layer targets (render_target ops->destroy is void by signature). */
+    for (size_t i = 0; i < terminal->layer_count; i++) {
         if (terminal->layer_targets[i] && terminal->layer_targets[i]->ops &&
             terminal->layer_targets[i]->ops->destroy) {
             ydebug("terminal_destroy: destroying layer_target %zu", i);
@@ -1228,77 +1289,81 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
     }
     ydebug("terminal_destroy: layer_targets destroyed");
 
-    /* Destroy layers */
-    for (i = 0; i < terminal->layer_count; i++) {
+    /* Destroy layers. */
+    for (size_t i = 0; i < terminal->layer_count; i++) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
         if (layer && layer->ops && layer->ops->destroy) {
             ydebug("terminal_destroy: destroying layer %zu", i);
-            layer->ops->destroy(layer);
+            struct yetty_ycore_void_result r = layer->ops->destroy(layer);
+            if (YETTY_IS_ERR(r)) {
+                yerror("terminal_destroy: layer[%zu] destroy failed: %s", i, r.error.msg);
+                if (!have_err) {
+                    first_err = r;
+                    have_err = true;
+                } else {
+                    yetty_ycore_error_destroy(r.error);
+                }
+            }
         }
     }
     ydebug("terminal_destroy: layers destroyed");
 
+    /* Destroy wire state machine BEFORE the PTY — the SM holds a
+     * non-owning pointer to the PTY and must not outlive it. */
+    ydebug("terminal_destroy: destroying wire state machine");
+    {
+        struct yetty_ycore_void_result r =
+            yetty_ywire_wire_statemachine_destroy(terminal->sm);
+        if (YETTY_IS_ERR(r)) {
+            yerror("terminal_destroy: wire_statemachine_destroy failed: %s", r.error.msg);
+            if (!have_err) {
+                first_err = r;
+                have_err = true;
+            } else {
+                yetty_ycore_error_destroy(r.error);
+            }
+        }
+    }
+
     if (terminal->context.pty && terminal->context.pty->ops &&
         terminal->context.pty->ops->destroy) {
         ydebug("terminal_destroy: destroying pty");
-        struct yetty_ycore_void_result pr =
+        struct yetty_ycore_void_result r =
             terminal->context.pty->ops->destroy(terminal->context.pty);
-        if (YETTY_IS_ERR(pr)) {
-            first_err = pr;
+        if (YETTY_IS_ERR(r)) {
+            yerror("terminal_destroy: pty destroy failed: %s", r.error.msg);
+            if (!have_err) {
+                first_err = r;
+                have_err = true;
+            } else {
+                yetty_ycore_error_destroy(r.error);
+            }
         }
     }
 
-    /* event_loop is owned by yetty, not terminal - do not destroy */
+    /* event_loop is owned by yetty, not terminal — do not destroy. */
 
-    /* Destroy PTY reader */
-    if (terminal->pty_reader) {
-        ydebug("terminal_destroy: destroying pty_reader");
-        struct yetty_ycore_void_result dr =
-            yetty_yterm_pty_reader_destroy(terminal->pty_reader);
-        if (YETTY_IS_ERR(dr)) {
-            yetty_ycore_error_destroy(dr.error);
-        }
-    }
-
-    if (terminal->emit_yface) {
-        yetty_yface_destroy(terminal->emit_yface);
-        terminal->emit_yface = NULL;
-    }
-
+    yetty_yface_destroy(terminal->emit_yface);
     free(terminal->pty_read_buf);
 
     ydebug("terminal_destroy: freeing terminal struct");
     free(terminal);
     ydebug("terminal_destroy: done");
 
-    if (YETTY_IS_ERR(first_err)) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_yterm_terminal_destroy: pty destroy failed",
+    if (have_err) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_yterm_terminal_destroy: one or more cleanup steps failed",
                          first_err);
     }
     return YETTY_OK_VOID();
 }
 
-/* Terminal input */
-
-void yetty_yterm_terminal_write(struct yetty_yterm_terminal *terminal, const char *data, size_t len)
-{
-    if (!terminal || !data || len == 0 || !terminal->pty_reader) {
-        return;
-    }
-    /* Push synthetic input through the SM — out-of-envelope bytes route to
-     * the text layer (the registered raw handler) just like real PTY input. */
-    struct yetty_ycore_void_result r = yetty_yterm_pty_reader_feed(terminal->pty_reader, data, len);
-    if (YETTY_IS_ERR(r)) {
-        yerror("terminal_write: feed failed: %s", r.error.msg);
-        yetty_ycore_error_destroy(r.error);
-    }
-}
-
-void yetty_yterm_terminal_resize_grid(struct yetty_yterm_terminal *terminal,
-                                      struct yetty_ycore_grid_size grid_size)
+struct yetty_ycore_void_result yetty_yterm_terminal_resize_grid(
+    struct yetty_yterm_terminal *terminal, struct yetty_ycore_grid_size grid_size)
 {
     if (!terminal) {
-        return;
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_yterm_terminal_resize_grid: terminal is NULL");
     }
 
     terminal->cols = grid_size.cols;
@@ -1307,9 +1372,12 @@ void yetty_yterm_terminal_resize_grid(struct yetty_yterm_terminal *terminal,
     for (size_t i = 0; i < terminal->layer_count; i++) {
         struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
         if (layer && layer->ops && layer->ops->resize_grid) {
-            layer->ops->resize_grid(layer, grid_size);
+            struct yetty_ycore_void_result r = layer->ops->resize_grid(layer, grid_size);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                                "yetty_yterm_terminal_resize_grid: layer resize_grid failed");
         }
     }
+    return YETTY_OK_VOID();
 }
 
 /* Terminal state */
@@ -1326,37 +1394,47 @@ uint32_t yetty_yterm_terminal_get_rows(const struct yetty_yterm_terminal *termin
 
 /* Layer management */
 
-void yetty_yterm_terminal_layer_add(struct yetty_yterm_terminal *terminal,
-                                    struct yetty_yrender_terminal_layer *layer)
+struct yetty_ycore_void_result yetty_yterm_terminal_layer_add(
+    struct yetty_yterm_terminal *terminal, struct yetty_yrender_terminal_layer *layer)
 {
-    if (!terminal || !layer) {
-        return;
+    if (!terminal) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_yterm_terminal_layer_add: terminal is NULL");
     }
-
+    if (!layer) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_yterm_terminal_layer_add: layer is NULL");
+    }
     if (terminal->layer_count >= YETTY_YTERM_TERMINAL_MAX_LAYERS) {
-        return;
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_yterm_terminal_layer_add: terminal->layers is full (YETTY_YTERM_TERMINAL_MAX_LAYERS reached)");
     }
-
     terminal->layers[terminal->layer_count++] = layer;
+    return YETTY_OK_VOID();
 }
 
-void yetty_yterm_terminal_layer_remove(struct yetty_yterm_terminal *terminal,
-                                       struct yetty_yrender_terminal_layer *layer)
+struct yetty_ycore_void_result yetty_yterm_terminal_layer_remove(
+    struct yetty_yterm_terminal *terminal, struct yetty_yrender_terminal_layer *layer)
 {
-    size_t i;
-
-    if (!terminal || !layer) {
-        return;
+    if (!terminal) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_yterm_terminal_layer_remove: terminal is NULL");
+    }
+    if (!layer) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_yterm_terminal_layer_remove: layer is NULL");
     }
 
-    for (i = 0; i < terminal->layer_count; i++) {
+    for (size_t i = 0; i < terminal->layer_count; i++) {
         if (terminal->layers[i] == layer) {
             memmove(&terminal->layers[i], &terminal->layers[i + 1],
                     (terminal->layer_count - i - 1) * sizeof(terminal->layers[0]));
             terminal->layer_count--;
-            return;
+            return YETTY_OK_VOID();
         }
     }
+    return YETTY_ERR(yetty_ycore_void,
+                     "yetty_yterm_terminal_layer_remove: layer not found in terminal->layers");
 }
 
 size_t yetty_yterm_terminal_layer_count(const struct yetty_yterm_terminal *terminal)
@@ -1390,7 +1468,7 @@ static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yui_vie
 }
 
 static struct yetty_ycore_void_result terminal_view_render(
-    struct yetty_yui_view *view, struct yetty_ypaint_core_target *render_target)
+    struct yetty_yui_view *view, struct yetty_ydraw_target *render_target)
 {
     struct yetty_yterm_terminal *terminal = container_of(view, struct yetty_yterm_terminal, view);
 
@@ -1415,7 +1493,10 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_
      * Card-aware subscribers get their per-card resize through a separate
      * path (ymgui-layer's CARD_PLACE → SC_RESIZE). */
     if (changed && terminal->term_input_sub_flags) {
-        terminal_emit_term_resize(terminal, bounds.w, bounds.h);
+        struct yetty_ycore_void_result r =
+            terminal_emit_term_resize(terminal, bounds.w, bounds.h);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                            "terminal_view_set_bounds: emit_term_resize failed");
     }
 
     return YETTY_OK_VOID();
@@ -1435,11 +1516,15 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
          * through to libvterm — these keystrokes are ours. */
         if ((event->key.mods & YETTY_MOD_CONTROL) && (event->key.mods & YETTY_MOD_SHIFT)) {
             if (event->key.key == 67 /* GLFW_KEY_C */) {
-                terminal_copy_selection(terminal);
+                struct yetty_ycore_void_result cr = terminal_copy_selection(terminal);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, cr,
+                                    "terminal_view_on_event: copy_selection failed");
                 return YETTY_OK(yetty_ycore_int, 1);
             }
             if (event->key.key == 86 /* GLFW_KEY_V */) {
-                terminal_paste_clipboard(terminal);
+                struct yetty_ycore_void_result pr = terminal_paste_clipboard(terminal);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, pr,
+                                    "terminal_view_on_event: paste_clipboard failed");
                 return YETTY_OK(yetty_ycore_int, 1);
             }
         }
@@ -1455,8 +1540,10 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             if (page < 1) {
                 page = 1;
             }
-            terminal_scrollback_apply(terminal,
-                                      event->key.key == 266 ? +page : -page);
+            struct yetty_ycore_void_result sr = terminal_scrollback_apply(
+                terminal, event->key.key == 266 ? +page : -page);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, sr,
+                                "terminal_view_on_event: scrollback_apply failed");
             return YETTY_OK(yetty_ycore_int, 1);
         }
         /* In scrollback view, Enter exits and is consumed (matches tmux copy
@@ -1466,7 +1553,9 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
      * expect when they meant to interact with the prompt. */
         if (terminal->scrollback_active) {
             int is_enter = (event->key.key == 257); /* GLFW_KEY_ENTER */
-            terminal_scrollback_exit(terminal);
+            struct yetty_ycore_void_result xr = terminal_scrollback_exit(terminal);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, xr,
+                                "terminal_view_on_event: scrollback_exit failed");
             if (is_enter) {
                 return YETTY_OK(yetty_ycore_int, 1);
             }
@@ -1476,14 +1565,25 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
          * pane received, regardless of card focus. Subscribers that also
          * want libvterm-formatted bytes get those via stdin as usual; this
          * channel just adds structured (key+mods+codepoint) info on top. */
-        terminal_emit_term_key(terminal, YETTY_YMGUI_INPUT_KEY_DOWN, event->key.key,
-                               event->key.mods, 0);
+        {
+            struct yetty_ycore_void_result tkr = terminal_emit_term_key(
+                terminal, YETTY_YMGUI_INPUT_KEY_DOWN, event->key.key, event->key.mods, 0);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, tkr,
+                                "terminal_view_on_event: emit_term_key(KEY_DOWN) failed");
+        }
         /* If a ymgui card has focus, route the keystroke to it as an OSC
      * envelope and DO NOT also feed libvterm — otherwise the shell
      * would see the keystroke alongside the card. */
-        if (terminal_emit_card_key(terminal, YETTY_YMGUI_INPUT_KEY_DOWN, event->key.key,
-                                   event->key.mods, 0)) {
-            return YETTY_OK(yetty_ycore_int, 1);
+        {
+            struct yetty_ycore_int_result ckr = terminal_emit_card_key(
+                terminal, YETTY_YMGUI_INPUT_KEY_DOWN, event->key.key, event->key.mods, 0);
+            if (YETTY_IS_ERR(ckr)) {
+                return YETTY_ERR(yetty_ycore_int,
+                                 "terminal_view_on_event: emit_card_key(KEY_DOWN) failed", ckr);
+            }
+            if (ckr.value) {
+                return YETTY_OK(yetty_ycore_int, 1);
+            }
         }
         for (size_t i = 0; i < terminal->layer_count; i++) {
             struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
@@ -1495,27 +1595,48 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         }
         return YETTY_OK(yetty_ycore_int, 1);
 
-    case YETTY_YCORE_KEY_UP:
+    case YETTY_YCORE_KEY_UP: {
         ydebug("terminal: KEY_UP key=%d mods=%d", event->key.key, event->key.mods);
-        terminal_emit_term_key(terminal, YETTY_YMGUI_INPUT_KEY_UP, event->key.key, event->key.mods,
-                               0);
-        if (terminal_emit_card_key(terminal, YETTY_YMGUI_INPUT_KEY_UP, event->key.key,
-                                   event->key.mods, 0)) {
+        struct yetty_ycore_void_result tkr = terminal_emit_term_key(
+            terminal, YETTY_YMGUI_INPUT_KEY_UP, event->key.key, event->key.mods, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, tkr,
+                            "terminal_view_on_event: emit_term_key(KEY_UP) failed");
+        struct yetty_ycore_int_result ckr = terminal_emit_card_key(
+            terminal, YETTY_YMGUI_INPUT_KEY_UP, event->key.key, event->key.mods, 0);
+        if (YETTY_IS_ERR(ckr)) {
+            return YETTY_ERR(yetty_ycore_int,
+                             "terminal_view_on_event: emit_card_key(KEY_UP) failed", ckr);
+        }
+        if (ckr.value) {
             return YETTY_OK(yetty_ycore_int, 1);
         }
         return YETTY_OK(yetty_ycore_int, 0);
+    }
 
     case YETTY_YCORE_CHAR:
         ydebug("terminal: CHAR codepoint=U+%04X mods=%d", event->chr.codepoint, event->chr.mods);
         if (terminal->scrollback_active) {
-            terminal_scrollback_exit(terminal);
+            struct yetty_ycore_void_result xr = terminal_scrollback_exit(terminal);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, xr,
+                                "terminal_view_on_event: scrollback_exit failed");
         }
-        terminal_emit_term_key(terminal, YETTY_YMGUI_INPUT_KEY_CHAR, -1, event->chr.mods,
-                               event->chr.codepoint);
+        {
+            struct yetty_ycore_void_result tkr = terminal_emit_term_key(
+                terminal, YETTY_YMGUI_INPUT_KEY_CHAR, -1, event->chr.mods, event->chr.codepoint);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, tkr,
+                                "terminal_view_on_event: emit_term_key(CHAR) failed");
+        }
         /* See KEY_DOWN: focused card consumes the codepoint. */
-        if (terminal_emit_card_key(terminal, YETTY_YMGUI_INPUT_KEY_CHAR, -1, event->chr.mods,
-                                   event->chr.codepoint)) {
-            return YETTY_OK(yetty_ycore_int, 1);
+        {
+            struct yetty_ycore_int_result ckr = terminal_emit_card_key(
+                terminal, YETTY_YMGUI_INPUT_KEY_CHAR, -1, event->chr.mods, event->chr.codepoint);
+            if (YETTY_IS_ERR(ckr)) {
+                return YETTY_ERR(yetty_ycore_int,
+                                 "terminal_view_on_event: emit_card_key(CHAR) failed", ckr);
+            }
+            if (ckr.value) {
+                return YETTY_OK(yetty_ycore_int, 1);
+            }
         }
         for (size_t i = 0; i < terminal->layer_count; i++) {
             struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
@@ -1540,7 +1661,10 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         struct yetty_yrender_viewport vp = {.x = 0, .y = 0, .w = width, .h = height};
         for (size_t i = 0; i < terminal->layer_count; i++) {
             if (terminal->layer_targets[i] && terminal->layer_targets[i]->ops->resize) {
-                terminal->layer_targets[i]->ops->resize(terminal->layer_targets[i], vp);
+                struct yetty_ycore_void_result tr =
+                    terminal->layer_targets[i]->ops->resize(terminal->layer_targets[i], vp);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, tr,
+                                    "terminal_view_on_event: layer_target resize failed");
             }
         }
 
@@ -1554,11 +1678,15 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
 
             if (new_cols > 0 && new_rows > 0 &&
                 (new_cols != terminal->cols || new_rows != terminal->rows)) {
-                yetty_yterm_terminal_resize_grid(
+                struct yetty_ycore_void_result rgr = yetty_yterm_terminal_resize_grid(
                     terminal, (struct yetty_ycore_grid_size){.cols = new_cols, .rows = new_rows});
-                if (terminal->context.pty && terminal->context.pty->ops &&
-                    terminal->context.pty->ops->resize) {
-                    terminal->context.pty->ops->resize(terminal->context.pty, new_cols, new_rows);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, rgr,
+                                    "terminal_view_on_event: terminal_resize_grid failed");
+                if (terminal->context.pty->ops->resize) {
+                    struct yetty_ycore_void_result pr = terminal->context.pty->ops->resize(
+                        terminal->context.pty, new_cols, new_rows);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_int, pr,
+                                        "terminal_view_on_event: pty resize failed");
                 }
             }
         }
@@ -1612,7 +1740,9 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 new_cs.height *= factor;
             }
             if (layer->ops && layer->ops->set_cell_size) {
-                layer->ops->set_cell_size(layer, new_cs);
+                struct yetty_ycore_void_result cs_r = layer->ops->set_cell_size(layer, new_cs);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, cs_r,
+                                    "terminal_view_on_event: layer set_cell_size failed");
             } else {
                 layer->cell_size = new_cs;
                 layer->dirty = 1;
@@ -1632,20 +1762,21 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 new_rows = 1;
             }
             if (new_cols != terminal->cols || new_rows != terminal->rows) {
-                yetty_yterm_terminal_resize_grid(
+                struct yetty_ycore_void_result rgr = yetty_yterm_terminal_resize_grid(
                     terminal, (struct yetty_ycore_grid_size){.cols = new_cols, .rows = new_rows});
-                if (terminal->context.pty && terminal->context.pty->ops &&
-                    terminal->context.pty->ops->resize) {
-                    terminal->context.pty->ops->resize(terminal->context.pty, new_cols, new_rows);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, rgr,
+                                    "terminal_view_on_event: terminal_resize_grid (zoom) failed");
+                if (terminal->context.pty->ops->resize) {
+                    struct yetty_ycore_void_result pr = terminal->context.pty->ops->resize(
+                        terminal->context.pty, new_cols, new_rows);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_int, pr,
+                                        "terminal_view_on_event: pty resize (zoom) failed");
                 }
             }
         }
 
-        if (terminal->context.yetty_context.event_loop &&
-            terminal->context.yetty_context.event_loop->ops->request_render) {
-            terminal->context.yetty_context.event_loop->ops->request_render(
-                terminal->context.yetty_context.event_loop);
-        }
+        terminal->context.yetty_context.event_loop->ops->request_render(
+            terminal->context.yetty_context.event_loop);
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
@@ -1656,7 +1787,10 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         for (size_t i = 0; i < terminal->layer_count; i++) {
             struct yetty_yrender_terminal_layer *layer = terminal->layers[i];
             if (layer && layer->ops && layer->ops->set_visual_zoom) {
-                layer->ops->set_visual_zoom(layer, scale, ox, oy);
+                struct yetty_ycore_void_result vr =
+                    layer->ops->set_visual_zoom(layer, scale, ox, oy);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, vr,
+                                    "terminal_view_on_event: layer set_visual_zoom failed");
             }
         }
         ydebug("terminal: ZOOM_VISUAL_APPLY scale=%.2f off=(%.1f,%.1f)", scale, ox, oy);
@@ -1690,7 +1824,13 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         if (text) {
             size_t len = strlen(text);
             if (len > 0) {
-                terminal_pty_write_raw(terminal, text, len);
+                struct yetty_ycore_size_result wr =
+                    terminal_pty_write_raw(terminal, text, len);
+                if (YETTY_IS_ERR(wr)) {
+                    free(text);
+                    return YETTY_ERR(yetty_ycore_int,
+                                     "terminal_view_on_event: pty_write_raw(paste) failed", wr);
+                }
                 yinfo("terminal: pasted %zu bytes from clipboard", len);
             }
             free(text);
@@ -1698,10 +1838,13 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
-    case YETTY_YCORE_POLL_READABLE:
+    case YETTY_YCORE_POLL_READABLE: {
         ydebug("terminal: POLL_READABLE");
-        terminal_read_pty(terminal);
+        struct yetty_ycore_void_result rr = terminal_read_pty(terminal);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, rr,
+                            "terminal_view_on_event: terminal_read_pty failed");
         return YETTY_OK(yetty_ycore_int, 1);
+    }
 
     /*-------------------------------------------------------------------------
    * Card-aware mouse forwarding.
@@ -1744,7 +1887,9 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
          * Ctrl+Shift+V. Release is consumed silently. */
         if (in_bounds && term_owns_click && event->mouse.button == 2) {
             if (event->type == YETTY_YCORE_MOUSE_DOWN) {
-                terminal_paste_clipboard(terminal);
+                struct yetty_ycore_void_result pr = terminal_paste_clipboard(terminal);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, pr,
+                                    "terminal_view_on_event: middle-click paste_clipboard failed");
             }
             return YETTY_OK(yetty_ycore_int, 1);
         }
@@ -1760,7 +1905,9 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 terminal->sel_head_col = c;
                 terminal->sel_active = 1;
                 terminal->sel_dragging = 1;
-                terminal_push_selection(terminal);
+                struct yetty_ycore_void_result psr = terminal_push_selection(terminal);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, psr,
+                                    "terminal_view_on_event: push_selection (anchor) failed");
                 return YETTY_OK(yetty_ycore_int, 1);
             }
             /* MOUSE_UP for our drag — finalise. A pure click (no movement)
@@ -1775,9 +1922,13 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 terminal->sel_dragging = 0;
                 if (terminal->sel_anchor_row == terminal->sel_head_row &&
                     terminal->sel_anchor_col == terminal->sel_head_col) {
-                    terminal_clear_selection(terminal);
+                    struct yetty_ycore_void_result cr = terminal_clear_selection(terminal);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_int, cr,
+                                        "terminal_view_on_event: clear_selection failed");
                 } else {
-                    terminal_push_selection(terminal);
+                    struct yetty_ycore_void_result psr = terminal_push_selection(terminal);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_int, psr,
+                                        "terminal_view_on_event: push_selection (final) failed");
                     struct yetty_yconfig_config *cfg =
                         terminal->context.yetty_context.app_context.config;
                     int auto_copy = 1;
@@ -1785,7 +1936,9 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                         auto_copy = cfg->ops->get_bool(cfg, "terminal/selection/auto-copy", 1);
                     }
                     if (auto_copy) {
-                        terminal_copy_selection(terminal);
+                        struct yetty_ycore_void_result cs = terminal_copy_selection(terminal);
+                        YETTY_RETURN_IF_ERR(yetty_ycore_int, cs,
+                                            "terminal_view_on_event: auto-copy_selection failed");
                     }
                 }
                 return YETTY_OK(yetty_ycore_int, 1);
@@ -1819,21 +1972,31 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             if (press) {
                 hit = terminal_resolve_card_hit(terminal, lx, ly, 0);
                 if (terminal->ymgui_layer) {
-                    yetty_yterm_terminal_layer_ymgui_layer_set_focus(terminal->ymgui_layer,
-                                                                     hit.card_id);
+                    struct yetty_ycore_void_result fr =
+                        yetty_yterm_terminal_layer_ymgui_layer_set_focus(terminal->ymgui_layer,
+                                                                         hit.card_id);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_int, fr,
+                                        "terminal_view_on_event: ymgui_layer_set_focus failed");
                 }
             } else {
                 hit = terminal_resolve_card_hit(terminal, lx, ly, focused);
             }
             if (hit.card_id != 0) {
-                terminal_emit_card_mouse_button(terminal, hit.card_id, hit.local_x, hit.local_y,
-                                                btn, press, 0.0f);
+                struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
+                    terminal, hit.card_id, hit.local_x, hit.local_y, btn, press, 0.0f);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
+                                    "terminal_view_on_event: emit_card_mouse_button failed");
             }
         }
 
         /* Terminal-wide fan-out — fires regardless of card hit, with
          * pane-local pixel coords. */
-        terminal_emit_term_mouse_button(terminal, lx, ly, btn, press, 0.0f);
+        {
+            struct yetty_ycore_void_result tmr =
+                terminal_emit_term_mouse_button(terminal, lx, ly, btn, press, 0.0f);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, tmr,
+                                "terminal_view_on_event: emit_term_mouse_button failed");
+        }
 
         return YETTY_OK(yetty_ycore_int, 1);
     }
@@ -1856,7 +2019,9 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             if (r != terminal->sel_head_row || c != terminal->sel_head_col) {
                 terminal->sel_head_row = r;
                 terminal->sel_head_col = c;
-                terminal_push_selection(terminal);
+                struct yetty_ycore_void_result psr = terminal_push_selection(terminal);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, psr,
+                                    "terminal_view_on_event: push_selection (drag) failed");
             }
             return YETTY_OK(yetty_ycore_int, 1);
         }
@@ -1881,13 +2046,20 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             struct yetty_yterm_ymgui_hit hit =
                 terminal_resolve_card_hit(terminal, lx, ly, captured);
             if (hit.card_id != 0) {
-                terminal_emit_card_mouse_move(terminal, hit.card_id, hit.local_x, hit.local_y,
-                                              terminal->mouse_buttons_held);
+                struct yetty_ycore_void_result mr = terminal_emit_card_mouse_move(
+                    terminal, hit.card_id, hit.local_x, hit.local_y, terminal->mouse_buttons_held);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
+                                    "terminal_view_on_event: emit_card_mouse_move failed");
             }
         }
 
         /* Terminal-wide fan-out. */
-        terminal_emit_term_mouse_move(terminal, lx, ly, terminal->mouse_buttons_held);
+        {
+            struct yetty_ycore_void_result tmr = terminal_emit_term_mouse_move(
+                terminal, lx, ly, terminal->mouse_buttons_held);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, tmr,
+                                "terminal_view_on_event: emit_term_mouse_move failed");
+        }
 
         return YETTY_OK(yetty_ycore_int, 1);
     }
@@ -1915,13 +2087,19 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             if (terminal->mouse_click_subscribed) {
                 struct yetty_yterm_ymgui_hit hit = terminal_resolve_card_hit(terminal, lx, ly, 0);
                 if (hit.card_id != 0) {
-                    terminal_emit_card_mouse_button(terminal, hit.card_id, hit.local_x, hit.local_y,
-                                                    0, 0, event->mouse_scroll.dy);
+                    struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
+                        terminal, hit.card_id, hit.local_x, hit.local_y,
+                        0, 0, event->mouse_scroll.dy);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
+                                        "terminal_view_on_event: emit_card_mouse_button (wheel) failed");
                     delivered = 1;
                 }
             }
             if (term_wheel_wants) {
-                terminal_emit_term_mouse_button(terminal, lx, ly, 0, 0, event->mouse_scroll.dy);
+                struct yetty_ycore_void_result tmr = terminal_emit_term_mouse_button(
+                    terminal, lx, ly, 0, 0, event->mouse_scroll.dy);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, tmr,
+                                    "terminal_view_on_event: emit_term_mouse_button (wheel) failed");
                 delivered = 1;
             }
             if (delivered) {
@@ -1934,7 +2112,9 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             lines = (event->mouse_scroll.dy > 0) ? 1 : -1;
         }
         if (lines != 0) {
-            terminal_scrollback_apply(terminal, lines);
+            struct yetty_ycore_void_result sr = terminal_scrollback_apply(terminal, lines);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, sr,
+                                "terminal_view_on_event: scrollback_apply (wheel) failed");
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }

@@ -1,0 +1,37 @@
+body {
+  font-family: sans-serif;
+  background: #0b1014;
+  color: #e0e5e4;
+  padding: 24px;
+  margin: 0;
+}
+
+h1 {
+  color: #6ba892;
+  margin: 0 0 12px 0;
+}
+
+p {
+  line-height: 1.5;
+}
+
+ul {
+  line-height: 1.6;
+}
+
+code {
+  background: #1e262c;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #74c5a5;
+}
+
+em {
+  color: #74c5a5;
+  font-style: normal;
+}
+
+.footnote {
+  color: #9fa7a8;
+  margin-top: 24px;
+}

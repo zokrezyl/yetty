@@ -13,7 +13,7 @@
 //
 // Vertex shader:
 //   1. shifts pos by frame_top so the frame can scroll with the terminal
-//      without the layer re-uploading geometry — same model as ypaint's
+//      without the layer re-uploading geometry — same model as ydraw's
 //      rolling-row trick, just applied as a single uniform translation
 //   2. converts to NDC: WebGPU clip space is Y-up, ImGui Y-down → flip Y
 //

@@ -143,7 +143,7 @@ static struct yetty_ycore_void_result viewer_destroy(struct yetty_yui_view *view
 }
 
 static struct yetty_ycore_void_result viewer_render(struct yetty_yui_view *view,
-                                                    struct yetty_ypaint_core_target *render_target)
+                                                    struct yetty_ydraw_target *render_target)
 {
     struct yetty_ydvnc_viewer *v = (struct yetty_ydvnc_viewer *)view;
 

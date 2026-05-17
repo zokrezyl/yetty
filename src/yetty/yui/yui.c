@@ -1,7 +1,7 @@
-/* yui.c — app-level chrome singleton.
+/* yui.c — app-level yui singleton.
  *
  * See yui.h for the producer → transport → consumer chain. This file owns
- * the wiring; the ypaint-layer (KIND_STATIC) does the rendering and the
+ * the wiring; the ydraw-layer (KIND_SCENE) does the rendering and the
  * osc_statemachine does the wire decode. Memory-pty bytes flow
  * producer→consumer via in-process ring buffers and the event loop is
  * woken via post_to_loop so the wake never re-enters synchronously
@@ -16,15 +16,21 @@
 
 #include <yetty/ygui/ygui.h>
 #include <yetty/yetty/yetty.h>
+
+/* yui-only entry into ygui — declared in src/yetty/ygui/ygui_internal.h.
+ * The public ygui.h is the only header outside-of-ygui code includes,
+ * so forward-declare here instead of widening the public API. */
+struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
+    const char *name, struct yetty_ygui_theme *theme);
 #include <yetty/yevent/event-loop.h>
 #include <yetty/ynotify/ynotify.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/thread.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterm/osc-codes.h>
-#include <yetty/yterm/osc-statemachine.h>
+#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yterm/terminal.h>
-#include <yetty/yterm/ypaint-layer.h>
+#include <yetty/yterm/ydraw-layer.h>
 #include <yetty/ytrace/ytrace.h>
 
 struct yetty_yui {
@@ -36,12 +42,12 @@ struct yetty_yui {
      * (zero copy from the memory-pty's ring). */
     struct yetty_platform_pty *render_endpoint;
 
-    /* Owns the YPAINT decode pipeline (b64 + lz4 today, kept as-is per
+    /* Owns the YDRAW decode pipeline (b64 + lz4 today, kept as-is per
      * the simplified plan — we do NOT change the wire codec yet, only
      * the transport). Bound to render_endpoint. */
-    struct yetty_yterm_osc_statemachine *sm;
+    struct yetty_ywire_wire_statemachine *sm;
 
-    /* Static-canvas ypaint layer registered against YPAINT_CLEAR/BIN/OVERLAY
+    /* Static-canvas ydraw layer registered against YDRAW_CLEAR/BIN/OVERLAY
      * on `sm`. Same constructor used by the per-terminal static placeholder. */
     struct yetty_yrender_terminal_layer *layer;
 
@@ -259,7 +265,7 @@ static void yui_drain_cb(void *arg)
     if (!yui || !yui->sm) {
         return;
     }
-    struct yetty_ycore_void_result r = yetty_yterm_osc_statemachine_process(yui->sm);
+    struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_process(yui->sm);
     if (!YETTY_IS_OK(r)) {
         ywarn("yui: SM process failed: %s", r.error.msg);
         yetty_ycore_error_destroy(r.error);
@@ -311,9 +317,9 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     yui->yui_endpoint = pp.value.a;
     yui->render_endpoint = pp.value.b;
 
-    /* Static-canvas ypaint layer. Computes a coarse cols/rows from the
-     * window dims; chrome primitives are absolute-pixel so the grid is
-     * just an addressing index for the static-canvas's primitive lookup. */
+    /* Scene-canvas ydraw layer. Computes a coarse cols/rows from the
+     * window dims; primitives are absolute-pixel so the grid is just an
+     * addressing index for the scene-canvas's primitive lookup. */
     uint32_t cols = (uint32_t)((float)surface_w / cell_w);
     uint32_t rows = (uint32_t)((float)surface_h / cell_h);
     if (cols == 0) {
@@ -323,8 +329,8 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         rows = 1;
     }
 
-    struct yetty_yterm_terminal_layer_result lr = yetty_yterm_ypaint_layer_create(
-        YETTY_YPAINT_LAYER_KIND_STATIC, cols, rows, cell_w, cell_h, context,
+    struct yetty_yterm_terminal_layer_result lr = yetty_yterm_ydraw_layer_create(
+        YETTY_YDRAW_LAYER_KIND_SCENE, cols, rows, cell_w, cell_h, context,
         /*request_render_fn=*/NULL, /*request_render_userdata=*/NULL,
         /*scroll_fn=*/NULL, /*scroll_userdata=*/NULL,
         /*cursor_fn=*/NULL, /*cursor_userdata=*/NULL);
@@ -337,8 +343,8 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     yui->layer = lr.value;
 
     /* SM bound to the consumer-side endpoint. */
-    struct yetty_yterm_osc_statemachine_ptr_result sr =
-        yetty_yterm_osc_statemachine_create(yui->render_endpoint);
+    struct yetty_ywire_wire_statemachine_ptr_result sr =
+        yetty_ywire_wire_statemachine_create(yui->render_endpoint);
     if (!YETTY_IS_OK(sr)) {
         if (yui->layer && yui->layer->ops && yui->layer->ops->destroy) {
             yui->layer->ops->destroy(yui->layer);
@@ -350,13 +356,13 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     }
     yui->sm = sr.value;
 
-    /* Register YPAINT codes against the SM. */
+    /* Register YDRAW codes against the SM. */
     struct yetty_ycore_void_result rr;
-    rr = yetty_yterm_osc_statemachine_register(yui->sm, YETTY_OSC_YPAINT_CLEAR, yui->layer);
+    rr = yetty_ywire_wire_statemachine_register(yui->sm, YETTY_OSC_YDRAW_CLEAR, yui->layer);
     YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register CLEAR");
-    rr = yetty_yterm_osc_statemachine_register(yui->sm, YETTY_OSC_YPAINT_BIN, yui->layer);
+    rr = yetty_ywire_wire_statemachine_register(yui->sm, YETTY_OSC_YDRAW_BIN, yui->layer);
     YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register BIN");
-    rr = yetty_yterm_osc_statemachine_register(yui->sm, YETTY_OSC_YPAINT_OVERLAY, yui->layer);
+    rr = yetty_ywire_wire_statemachine_register(yui->sm, YETTY_OSC_YDRAW_OVERLAY, yui->layer);
     YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register OVERLAY");
 
     /* Wake the consumer side via post_to_loop whenever the producer
@@ -364,10 +370,13 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
      * re-enters dispatch mid-write. */
     yetty_yplatform_memory_pty_set_wake(yui->render_endpoint, yui_wake, yui);
 
-    /* Producer engine. Local-only — no init/show/subscribe, no parent
-     * yetty to talk to via stdout. `output_pty` redirects OSC frame
-     * envelopes through the memory pty instead. */
-    struct ygui_engine_ptr_result er = yetty_ygui_engine_create("yui", 0, 0, (int)cols, (int)rows);
+    /* Producer engine. yui is in-process — no parent yetty over a pty,
+     * no stdin polling, no handshake. Allocation-only constructor, then
+     * we plug in the memory pty and the display size directly. */
+    (void)cols;
+    (void)rows;
+    struct ygui_engine_ptr_result er =
+        yetty_ygui_engine_internal_alloc_for_yui("yui", /*theme=*/NULL);
     if (YETTY_IS_OK(er)) {
         yui->engine = er.value;
         yetty_ygui_engine_set_output_pty(yui->engine, yui->yui_endpoint);
@@ -562,7 +571,7 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
         yui->engine = NULL;
     }
     if (yui->sm) {
-        struct yetty_ycore_void_result r = yetty_yterm_osc_statemachine_destroy(yui->sm);
+        struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_destroy(yui->sm);
         if (!YETTY_IS_OK(r)) {
             ywarn("yui_destroy: sm destroy: %s", r.error.msg);
             yetty_ycore_error_destroy(r.error);
@@ -590,7 +599,7 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
-                                                struct yetty_ypaint_core_target *target)
+                                                struct yetty_ydraw_target *target)
 {
     if (!yui || !yui->layer || !target) {
         return YETTY_OK_VOID();
@@ -611,7 +620,7 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
      * avoids a one-frame lag (the post_to_loop wake would otherwise defer
      * this to next iteration). */
     if (yui->sm) {
-        struct yetty_ycore_void_result pr = yetty_yterm_osc_statemachine_process(yui->sm);
+        struct yetty_ycore_void_result pr = yetty_ywire_wire_statemachine_process(yui->sm);
         if (YETTY_IS_ERR(pr)) {
             ywarn("yui_render: SM process: %s", pr.error.msg);
             yetty_ycore_error_destroy(pr.error);
@@ -748,7 +757,7 @@ const char *yetty_yui_get_exec_command(const struct yetty_yui *yui)
     return yetty_yui_get_field_text(yui, YETTY_YUI_VIEW_EXEC, 0);
 }
 
-int yetty_yui_has_active_chrome(const struct yetty_yui *yui)
+int yetty_yui_is_active(const struct yetty_yui *yui)
 {
     if (!yui) {
         return 0;
@@ -771,10 +780,10 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
         return YETTY_OK(yetty_ycore_int, 0);
     }
 
-    /* yui only owns the pointer while chrome is up. Without an open menu /
+    /* yui only owns the pointer while a widget is up. Without an open menu /
      * visible dialog there's nothing for the engine to hit-test — fall
      * through so the workspace below gets the event. */
-    if (!yetty_yui_has_active_chrome(yui)) {
+    if (!yetty_yui_is_active(yui)) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
 

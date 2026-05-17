@@ -2,7 +2,7 @@
 #define YETTY_YUI_TABBAR_H
 
 /*
- * yetty_yui_tabbar — Chrome-like tab strip that owns N workspaces.
+ * yetty_yui_tabbar — browser-style tab strip that owns N workspaces.
  *
  * Replaces the single-workspace ownership in yetty.c. The strip sits at the
  * top of the window (height = YETTY_YUI_TABBAR_HEIGHT) and lets the user
@@ -45,12 +45,13 @@ struct yetty_yui_workspace;
 struct yetty_yconfig_config;
 struct yetty_context;
 struct yetty_yui_event;
-struct yetty_ypaint_core_target;
+struct yetty_ydraw_target;
 
 YETTY_YRESULT_DECLARE(yetty_yui_tabbar_ptr, struct yetty_yui_tabbar *);
 
-/* Reserved top-strip pixel height. Matches Chrome's ~36-logical-px tab
- * strip, leaving room for unmistakably rounded top corners on the tab
+/* Reserved top-strip pixel height. ~36 logical px matches typical
+ * browser tab strips, leaving room for unmistakably rounded top corners
+ * on the tab
  * cells (TABBAR_TAB_RADIUS lives in tabbar.c). On HiDPI displays this
  * scales with framebuffer pixels so it stays visually proportional. */
 #define YETTY_YUI_TABBAR_HEIGHT 36.0f
@@ -64,7 +65,7 @@ struct yetty_yui_tabbar_ptr_result yetty_yui_tabbar_create(
 struct yetty_ycore_void_result yetty_yui_tabbar_destroy(struct yetty_yui_tabbar *bar);
 
 struct yetty_ycore_void_result yetty_yui_tabbar_render(
-    struct yetty_yui_tabbar *bar, struct yetty_ypaint_core_target *render_target);
+    struct yetty_yui_tabbar *bar, struct yetty_ydraw_target *render_target);
 
 struct yetty_ycore_void_result yetty_yui_tabbar_resize(struct yetty_yui_tabbar *bar, float width,
                                                        float height);

@@ -302,7 +302,7 @@ Layer 4). The inference is logged with its provenance:
 yterm/terminal.h:42  yetty_term_terminal_write
     param `data`:  array(len)   [Layer 3: ptr+size_t pair]
     param `len`:   array_length [Layer 3: follows ptr]
-ypaint/layer.h:17  yetty_ypaint_get_bounds
+ydraw/layer.h:17  yetty_ydraw_get_bounds
     param `bounds`: out         [Layer 2: `get_*` + last param]
 ```
 

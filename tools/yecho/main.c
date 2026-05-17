@@ -1,8 +1,8 @@
 /*
  * yecho - echo text with embedded glyphs and styled blocks.
  *
- * Inside a yetty terminal, the parsed input is rendered into a ypaint-core
- * buffer and emitted as a YETTY_OSC_YPAINT_BIN sequence (same wire format
+ * Inside a yetty terminal, the parsed input is rendered into a ydraw-core
+ * buffer and emitted as a YETTY_OSC_YDRAW_BIN sequence (same wire format
  * ycat uses). Outside a yetty terminal there's nothing meaningful to do
  * with rich content; we fall back to writing the raw input through —
  * unless --osc is forced.
@@ -11,7 +11,7 @@
 #include <yetty/yecho/yecho.h>
 #include <yetty/yfont/shader-glyph.h>
 #include <yetty/yplatform/getopt.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ycore/result.h>
 
 #include <stdbool.h>
@@ -76,8 +76,8 @@ static void usage(FILE *out, const char *prog)
         "  bg=#RRGGBB      background color\n"
         "  style=bold      bold | italic | underline (combinable with '|')\n"
         "\n"
-        "Inside a yetty terminal, the input is rendered to a ypaint buffer\n"
-        "and emitted via OSC 600001 (YPAINT_BIN). Otherwise the raw input\n"
+        "Inside a yetty terminal, the input is rendered to a ydraw buffer\n"
+        "and emitted via OSC 600001 (YDRAW_BIN). Otherwise the raw input\n"
         "is written through.\n"
         "\n"
         "Options:\n"
@@ -228,7 +228,7 @@ int main(int argc, char **argv)
             .default_fg = 0,
             .line_spacing = 0,
         };
-        struct yetty_ypaint_core_buffer_result r =
+        struct yetty_ydraw_draw_list_result r =
             yetty_yecho_render_string(input, input_len, &cfg);
         if (YETTY_IS_ERR(r)) {
             fprintf(stderr, "yecho: render failed: %s\n", r.error.msg);
@@ -239,7 +239,7 @@ int main(int argc, char **argv)
             rc = 1;
         } else {
             struct yetty_ycore_size_result wr = yetty_yecho_osc_bin_emit(r.value, stdout);
-            yetty_ypaint_core_buffer_destroy(r.value);
+            yetty_ydraw_draw_list_destroy(r.value);
             if (YETTY_IS_ERR(wr)) {
                 fprintf(stderr, "yecho: OSC emit failed: %s\n", wr.error.msg);
                 for (const struct yetty_ycore_error *e = wr.error.cause; e; e = e->cause) {

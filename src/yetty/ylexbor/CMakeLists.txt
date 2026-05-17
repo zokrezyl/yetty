@@ -23,7 +23,7 @@ target_include_directories(yetty_ylexbor PUBLIC
 target_link_libraries(yetty_ylexbor
     PUBLIC
         lexbor_static
-        yetty_ypaint_core
+        yetty_ydraw_core
         yetty_ysdf
         yetty_ycore
         yetty_yimage_core

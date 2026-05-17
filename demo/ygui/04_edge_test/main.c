@@ -61,7 +61,6 @@ static void on_key(struct yetty_ygui_engine* e, uint32_t key, int mods, void* u)
 }
 
 int main(void) {
-    (void)freopen("/dev/null", "w", stderr);
     fprintf(stderr, "╔══════════════════════════════════════════════════════════════╗\n");
     fprintf(stderr, "║                    EDGE TEST DEMO                            ║\n");
     fprintf(stderr, "╠══════════════════════════════════════════════════════════════╣\n");
@@ -84,7 +83,7 @@ int main(void) {
     }
 
     /* Use specific size for predictable scaling */
-    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_engine_create_with_pixel_hint("edge-test", 1, 1, 500.0f, 250.0f);
+    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_engine_create((struct yetty_ygui_engine_args){.name = "edge-test"});
         if (YETTY_IS_ERR(_eng_r)) { yetty_ycore_error_destroy(_eng_r.error); return 1; }
         g_engine = _eng_r.value; }
     if (!g_engine) {
@@ -130,7 +129,6 @@ int main(void) {
 
     fprintf(stderr, "Press 'q' to quit\n\n");
 
-    yetty_ygui_engine_show(g_engine);
     yetty_ygui_engine_run(g_engine);
 
     yetty_ygui_engine_destroy(g_engine);

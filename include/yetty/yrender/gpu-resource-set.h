@@ -12,14 +12,14 @@ extern "C" {
 #define YETTY_YRENDER_RS_MAX_TEXTURES 4
 #define YETTY_YRENDER_RS_MAX_BUFFERS 4
 #define YETTY_YRENDER_RS_MAX_UNIFORMS 32
-/* Bumped from 4 to 64: ypaint-layer attaches one child per canvas-owned
+/* Bumped from 4 to 64: ydraw-layer attaches one child per canvas-owned
  * font (default + every PDF-embedded font), and a single PDF can carry
  * a couple dozen subset fonts. 64 is also well within MAX_FLAT_TEXTURES
  * (64) in the binder/pipeline. */
 #define YETTY_YRENDER_RS_MAX_CHILDREN 64
 
 /* GPU resource set - collection of resources a provider needs */
-struct yetty_ypaint_core_gpu_resource_set {
+struct yetty_ydraw_gpu_resource_set {
     char namespace[YETTY_YRENDER_NAME_MAX];
     struct yetty_ycore_pixel_size pixel_size;
 
@@ -34,12 +34,12 @@ struct yetty_ypaint_core_gpu_resource_set {
 
     struct yetty_yrender_shader_code shader;
 
-    struct yetty_ypaint_core_gpu_resource_set *children[YETTY_YRENDER_RS_MAX_CHILDREN];
+    struct yetty_ydraw_gpu_resource_set *children[YETTY_YRENDER_RS_MAX_CHILDREN];
     size_t children_count;
 };
 
 YETTY_YRESULT_DECLARE(yetty_yrender_gpu_resource_set,
-                      const struct yetty_ypaint_core_gpu_resource_set *);
+                      const struct yetty_ydraw_gpu_resource_set *);
 
 #ifdef __cplusplus
 }

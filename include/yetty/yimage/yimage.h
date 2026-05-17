@@ -8,7 +8,7 @@
  * Pipeline:
  *   stb_image decode (path or in-memory PNG/JPG/...)  → RGBA8 pixels
  *   yetty_yimage_uniforms_serialize(uniforms, pixels) → wire bytes
- *   ypaint_core_buffer_add_prim(buffer)               → attach to ypaint
+ *   ydraw_core_buffer_add_prim(buffer)               → attach to ydraw
  *
  * The frontend tool (tools/yimage) wraps the path-based variant with a
  * CLI; yecho's `{image: ...}` block (planned) will use the bytes variant
@@ -25,7 +25,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yimage/yimage-gen.h>
 
 #ifdef __cplusplus
@@ -40,20 +40,20 @@ struct yetty_yimage_render_config {
     float bounds_h; /* 0   — when 0, defaults to source height */
 };
 
-/* Decode `image_bytes` (PNG/JPG/...) and produce a fresh ypaint-core
+/* Decode `image_bytes` (PNG/JPG/...) and produce a fresh ydraw-core
  * buffer holding ONE yimage complex prim. Caller frees the buffer with
- * yetty_ypaint_core_buffer_destroy. */
-struct yetty_ypaint_core_buffer_result yetty_yimage_render(
+ * yetty_ydraw_draw_list_destroy. */
+struct yetty_ydraw_draw_list_result yetty_yimage_render(
     const uint8_t *image_bytes, size_t len, const struct yetty_yimage_render_config *config);
 
 /* Convenience: read the file at `path` and call yetty_yimage_render. */
-struct yetty_ypaint_core_buffer_result yetty_yimage_render_path(
+struct yetty_ydraw_draw_list_result yetty_yimage_render_path(
     const char *path, const struct yetty_yimage_render_config *config);
 
-/* OSC envelope (YETTY_OSC_YPAINT_BIN, same wire format as ycat / yecho).
+/* OSC envelope (YETTY_OSC_YDRAW_BIN, same wire format as ycat / yecho).
  * Returns bytes written; ERR on failure. */
 struct yetty_ycore_size_result yetty_yimage_osc_bin_emit(
-    const struct yetty_ypaint_core_buffer *buffer, FILE *out);
+    const struct yetty_ydraw_draw_list *buffer, FILE *out);
 
 #ifdef __cplusplus
 }

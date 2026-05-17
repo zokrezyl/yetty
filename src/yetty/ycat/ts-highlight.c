@@ -1,5 +1,5 @@
 /*
- * ts-highlight.c - tree-sitter → colored ypaint buffer.
+ * ts-highlight.c - tree-sitter → colored ydraw buffer.
  *
  * Parses source with the matched grammar, runs the embedded highlights.scm
  * query, paints a per-byte color map (width-sorted so that narrower / more
@@ -14,7 +14,7 @@
 #include <yetty/ycat/ycat.h>
 #include "ts-grammars.h"
 
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -27,10 +27,10 @@
 #endif
 
 /*=============================================================================
- * Theme — capture name → color (0xAABBGGRR, matches ypaint text span)
+ * Theme — capture name → color (0xAABBGGRR, matches ydraw text span)
  *===========================================================================*/
 
-/* Theme colours, packed as ypaint text-span format 0xAABBGGRR.
+/* Theme colours, packed as ydraw text-span format 0xAABBGGRR.
  * R/G/B are unpacked on the fly for 24-bit true-colour SGR
  * (ESC[38;2;R;G;Bm) when emitting for a non-yetty terminal. */
 
@@ -252,7 +252,7 @@ static uint32_t *compute_color_map(const TSLanguage *lang, const char *query_str
  * Emit per-line, per-color runs as text spans
  *===========================================================================*/
 
-static struct yetty_ycore_void_result emit_runs(struct yetty_ypaint_core_buffer *buf,
+static struct yetty_ycore_void_result emit_runs(struct yetty_ydraw_draw_list *buf,
                                                 const char *source, uint32_t source_len,
                                                 const uint32_t *color_map, float font_size,
                                                 float line_spacing)
@@ -288,7 +288,7 @@ static struct yetty_ycore_void_result emit_runs(struct yetty_ypaint_core_buffer 
                     .capacity = run_len,
                 };
                 uint32_t col = c ? c : TS_COLOR_DEFAULT;
-                struct yetty_ycore_void_result r = yetty_ypaint_core_buffer_add_text(
+                struct yetty_ycore_void_result r = yetty_ydraw_draw_list_add_text(
                     buf, x, cursor_y, &text, font_size, col, 0, -1, 0.0f);
                 if (YETTY_IS_ERR(r)) {
                     return r;
@@ -364,10 +364,10 @@ static void ts_parse_done(TSParser *parser, TSTree *tree, uint32_t *color_map)
 }
 
 /*=============================================================================
- * Emitter #1 — ypaint buffer (for in-yetty consumers)
+ * Emitter #1 — ydraw buffer (for in-yetty consumers)
  *===========================================================================*/
 
-struct yetty_ypaint_core_buffer_result yetty_ycat_ts_render(const uint8_t *bytes, size_t len,
+struct yetty_ydraw_draw_list_result yetty_ycat_ts_render(const uint8_t *bytes, size_t len,
                                                             const char *grammar_name,
                                                             const struct yetty_ycat_config *config)
 {
@@ -376,7 +376,7 @@ struct yetty_ypaint_core_buffer_result yetty_ycat_ts_render(const uint8_t *bytes
     const char *err = NULL;
     uint32_t *color_map = ts_parse_and_map(bytes, len, grammar_name, &parser, &tree, &err);
     if (!color_map && err) {
-        return YETTY_ERR(yetty_ypaint_core_buffer, err);
+        return YETTY_ERR(yetty_ydraw_draw_list, err);
     }
 
     float font_size = config && config->cell_height > 0 ? (float)config->cell_height : 14.0f;
@@ -386,14 +386,14 @@ struct yetty_ypaint_core_buffer_result yetty_ycat_ts_render(const uint8_t *bytes
         scene_w = (float)(config->width_cells * config->cell_width);
         scene_h = (float)(config->height_cells * config->cell_height);
     }
-    struct yetty_ypaint_core_buffer_config bcfg = {
+    struct yetty_ydraw_draw_list_config bcfg = {
         .scene_min_x = 0.0f,
         .scene_min_y = 0.0f,
         .scene_max_x = scene_w,
         .scene_max_y = scene_h,
     };
-    struct yetty_ypaint_core_buffer_result br =
-        yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
+    struct yetty_ydraw_draw_list_result br =
+        yetty_ydraw_draw_list_config_buffer_create(&bcfg);
     if (YETTY_IS_ERR(br)) {
         ts_parse_done(parser, tree, color_map);
         return br;
@@ -404,8 +404,8 @@ struct yetty_ypaint_core_buffer_result yetty_ycat_ts_render(const uint8_t *bytes
     ts_parse_done(parser, tree, color_map);
 
     if (YETTY_IS_ERR(er)) {
-        yetty_ypaint_core_buffer_destroy(br.value);
-        return YETTY_ERR(yetty_ypaint_core_buffer, "ts-highlight: emit_runs failed", er);
+        yetty_ydraw_draw_list_destroy(br.value);
+        return YETTY_ERR(yetty_ydraw_draw_list, "ts-highlight: emit_runs failed", er);
     }
     return br;
 }
@@ -479,7 +479,7 @@ int yetty_ycat_ts_emit_sgr(const uint8_t *bytes, size_t len, const char *grammar
 
 #else /* !YETTY_YCAT_HAS_TREESITTER */
 
-struct yetty_ypaint_core_buffer_result yetty_ycat_ts_render(const uint8_t *bytes, size_t len,
+struct yetty_ydraw_draw_list_result yetty_ycat_ts_render(const uint8_t *bytes, size_t len,
                                                             const char *grammar_name,
                                                             const struct yetty_ycat_config *config)
 {
@@ -487,7 +487,7 @@ struct yetty_ypaint_core_buffer_result yetty_ycat_ts_render(const uint8_t *bytes
     (void)len;
     (void)grammar_name;
     (void)config;
-    return YETTY_ERR(yetty_ypaint_core_buffer, "tree-sitter not compiled in");
+    return YETTY_ERR(yetty_ydraw_draw_list, "tree-sitter not compiled in");
 }
 
 int yetty_ycat_ts_emit_sgr(const uint8_t *bytes, size_t len, const char *grammar_name, FILE *out)

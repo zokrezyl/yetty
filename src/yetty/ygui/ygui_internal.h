@@ -6,7 +6,7 @@
 #define YGUI_INTERNAL_H
 
 #include <yetty/ygui/ygui.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yface/yface.h>
 #include <stdlib.h>
@@ -31,18 +31,40 @@ typedef struct ygui_input_event ygui_input_event_t;
 struct yetty_platform_pty;
 
 /*=============================================================================
- * Render Context (drawing target = a ypaint-core buffer). The shim that used
- * to sit here (ydraw-capi.gen.*) is gone; widgets call yetty_ysdf_add_* and
- * yetty_ypaint_core_buffer_add_text directly.
+ * Render Context (drawing target = a ydraw-core buffer). The shim that used
+ * to sit here (ydraw-capi.gen.*) is gone; widgets call yetty_ydraw_draw_list_add_cmd_add_* and
+ * yetty_ydraw_draw_list_add_text directly.
  *===========================================================================*/
 
 struct yetty_ygui_render_ctx {
-    struct yetty_ypaint_core_buffer *buffer;
+    struct yetty_ydraw_draw_list *buffer;
     const struct yetty_ygui_theme *theme;
     float offset_x, offset_y;
     float clip_x, clip_y, clip_w, clip_h;
     int has_clip;
+    /* When 1: emit GROUP for every visible widget regardless of its
+     * `dirty` bit, and skip the DELETE prefix (CMD_ZERO at the envelope
+     * head supersedes everything). Set by the engine on the first frame
+     * after create / CMD_ZERO. When 0: emit only widgets whose dirty
+     * bit is set, prefixing each with a DELETE record. */
+    int force_full_redraw;
 };
+
+/* Wrap one widget's own drawables in a scene-canvas GROUP keyed by
+ * self->group_id. Called from render_all_default and from every custom
+ * render_all that needs to emit its widget's drawables. Caller passes
+ * the widget's `render` function pointer (NULL is allowed — emits an
+ * empty group for layout-only containers).
+ *
+ * Behaviour:
+ *   - if widget is not dirty AND ctx->force_full_redraw == 0: no-op.
+ *   - else: optionally emit DELETE(group_id), then begin_group + render
+ *     + end_group, then clear widget->dirty.
+ */
+struct yetty_ycore_void_result yetty_ygui_widget_emit_self_in_group(
+    struct yetty_ygui_widget *self, struct yetty_ygui_render_ctx *ctx,
+    struct yetty_ycore_void_result (*render_fn)(struct yetty_ygui_widget *,
+                                                struct yetty_ygui_render_ctx *));
 
 /*=============================================================================
  * Theme Structure
@@ -163,6 +185,24 @@ struct yetty_ygui_widget_vtable {
 };
 
 /*=============================================================================
+ * Scrollable interface — a thin vtable any widget can expose so a
+ * scrollbar (or any other view) can drive it without knowing its
+ * concrete type. ypdf wires it in its constructor.
+ *
+ * Conventions: all four sizes are in DOCUMENT pixels. `max_scroll` is
+ * `max(0, content - viewport)`. `scroll_to` clamps and fires the
+ * widget's own observers (e.g. marks `scroll_observer` dirty).
+ *===========================================================================*/
+
+struct yetty_ygui_scrollable {
+    float (*get_content_h)(const struct yetty_ygui_widget *self);
+    float (*get_viewport_h)(const struct yetty_ygui_widget *self);
+    float (*get_scroll)(const struct yetty_ygui_widget *self);
+    float (*get_max_scroll)(const struct yetty_ygui_widget *self);
+    void  (*scroll_to)(struct yetty_ygui_widget *self, float y);
+};
+
+/*=============================================================================
  * Widget Structure
  *===========================================================================*/
 
@@ -170,6 +210,18 @@ struct yetty_ygui_widget {
     /* Identity */
     char *id;
     ygui_widget_type_t type;
+
+    /* Sequential u32 assigned at widget alloc, stable for the widget's
+     * lifetime. Sent on the wire as the GROUP id so the receiver
+     * (scene-canvas) can route incremental DELETE/GROUP updates back to
+     * the same entity. 0 is reserved for the scene-canvas root, so the
+     * sequence starts at 1. */
+    uint32_t group_id;
+
+    /* Set by any setter that changes geometry / styling / text. Cleared
+     * after the widget's GROUP is re-emitted. The first frame after
+     * widget alloc starts dirty. */
+    uint8_t dirty;
 
     /* Authored geometry — input to the layout pass; set by constructors and
      * by yetty_ygui_widget_set_position/set_size. Never mutated by the engine. */
@@ -214,6 +266,17 @@ struct yetty_ygui_widget {
      * "vtable pattern with structural embedding". */
     const struct yetty_ygui_widget_vtable *vtable;
 
+    /* Optional: widget implements the scrollable interface. NULL = not
+     * scrollable. Set in the constructor by widgets that own scrollable
+     * content (ypdf today; panel and future ymarkdown/ybrowser later). */
+    const struct yetty_ygui_scrollable *scrollable;
+
+    /* Optional: a sibling widget (typically a vscrollbar) that observes
+     * this widget's scroll position. Set by yetty_ygui_widget_scrollbar_bind.
+     * On every scroll mutation the widget marks `scroll_observer->dirty`
+     * so the bound scrollbar's thumb repaints in the same frame. */
+    struct yetty_ygui_widget *scroll_observer;
+
     /* User callbacks */
     ygui_widget_click_fn click_callback;
     void *click_userdata;
@@ -255,6 +318,37 @@ struct yetty_ygui_widget {
         } textinput;
 
         struct {
+            /* Selected child radio (pointer for stability across
+             * insertion/removal). NULL = no selection (index -1). */
+            struct yetty_ygui_widget *selected;
+        } radio_group;
+
+        struct {
+            char *label;
+            /* Back-pointer to the owning RADIO_GROUP. Set by
+             * yetty_ygui_widget_radio_group_add at construction time. */
+            struct yetty_ygui_widget *group;
+        } radio;
+
+        struct {
+            float value, min_val, max_val, step;
+            int precision; /* decimal places when rendering */
+        } spinner;
+
+        struct {
+            /* Smallest size enforced on each adjacent sibling during
+             * drag (main-axis dimension). */
+            float min_size;
+        } splitter;
+
+        struct {
+            char *text;     /* owned, NUL-terminated; may be NULL=="" */
+            int   length;   /* bytes (excluding NUL) */
+            int   cursor;   /* byte offset, 0..length */
+            int   scroll_line; /* first visible line index */
+        } textarea;
+
+        struct {
             float scroll_x, scroll_y;
             float content_w, content_h;
             float header_h;
@@ -289,6 +383,13 @@ struct yetty_ygui_widget {
 
         struct {
             char *label;
+            /* Height of the header strip (NOT the full expanded box).
+             * Preserved across frames because `authored_h` is rewritten
+             * each preflight to `header_h` (closed) or
+             * `header_h + Σ children` (open) so the flex layout above
+             * stacks siblings correctly. Seeded from the constructor's
+             * `h` arg. */
+            float header_h;
         } collapsing_header;
 
         struct {
@@ -307,7 +408,12 @@ struct yetty_ygui_widget {
         } choicebox;
 
         struct {
-            float value; /* 0..1 */
+            float value; /* 0..1 — used when no target is bound */
+            /* When bound, the scrollbar acts as a pure view of the
+             * target's scroll state: it reads target.scroll on render,
+             * forwards click/drag/wheel to target.scroll_to / scroll_by.
+             * NULL = legacy free-running mode (value drives nothing). */
+            struct yetty_ygui_widget *target;
         } scrollbar;
 
         struct {
@@ -345,14 +451,44 @@ struct yetty_ygui_widget {
         } table;
 
         struct {
-            /* Owned ypaint-core buffer. NULL while empty. Authors fill the
+            /* Owned ydraw-core buffer. NULL while empty. Authors fill the
              * primitives in widget-local coordinates (0..w, 0..h); the
              * widget's render translates them to absolute canvas coords. */
-            struct yetty_ypaint_core_buffer *buffer;
+            struct yetty_ydraw_draw_list *buffer;
         } rich;
 
         struct {
-            /* Title text (owned, NUL-terminated, NULL when chromeless). */
+            /* Per-page sub-buffers; each is in page-local coordinates
+             * (page origin at 0, 0). Allocated by the ypdf widget
+             * constructor and freed by its destroy hook. */
+            struct ypdf_page_entry {
+                struct yetty_ydraw_draw_list *buf;
+                float abs_y; /* document-absolute Y of the page top */
+                float h;     /* page height */
+            } *pages;
+            int n_pages;
+            float total_h;  /* sum of page heights + N*page_gap */
+            float page_gap; /* spacer between consecutive pages */
+            float scroll_y; /* current scroll position [0, max_scroll] */
+
+            /* Concatenated full FONT prims (ttf bytes inline) for every
+             * font referenced anywhere in the document. Emitted at the
+             * head of every render envelope so any visible-page TEXT_SPAN
+             * can resolve its font_id even when the page that originally
+             * carried the full FONT prim is currently scrolled off. */
+            struct yetty_ydraw_draw_list *font_header;
+
+            /* Fired AFTER the widget mutates scroll_y so a bound
+             * scrollbar (or any other observer) can sync. NULL = no
+             * observer; the widget still updates internally. */
+            void (*on_scroll_change)(struct yetty_ygui_widget *self,
+                                     float scroll_y, float max_scroll,
+                                     void *userdata);
+            void *on_scroll_change_userdata;
+        } ypdf;
+
+        struct {
+            /* Title text (owned, NUL-terminated, NULL when title is empty). */
             char *title;
             /* Title-bar height in pixels. 0 = derive from theme. */
             float title_h;
@@ -433,15 +569,15 @@ typedef struct {
  *===========================================================================*/
 
 struct yetty_ygui_engine {
-    /* ypaint-core buffer (created and owned by engine). Widgets add primitives
-     * via yetty_ysdf_* and text via yetty_ypaint_core_buffer_add_text. */
-    struct yetty_ypaint_core_buffer *buffer;
+    /* ydraw-core buffer (created and owned by engine). Widgets add primitives
+     * via yetty_ysdf_* and text via yetty_ydraw_draw_list_add_text. */
+    struct yetty_ydraw_draw_list *buffer;
 
     /* Raster font in metrics-only mode — used for ygui_text_width() and widget
      * layout. Opened in engine_alloc_init and reused for every render. See
      * ypdf's pdf-renderer.c for the pattern (raster_font_create_from_file with
      * shader_path=NULL). Lazily reopened if the path changes. */
-    struct yetty_ypaint_font *measure_font;
+    struct yetty_ydraw_font *measure_font;
     float measure_base_size; /* The font's base_size; measurement scales from here. */
 
     /* Spatial grid for hit testing */
@@ -483,8 +619,8 @@ struct yetty_ygui_engine {
     int card_shown;   /* 0 = not shown yet, 1 = shown (use update) */
     uint32_t card_id; /* ymgui-layer card id (for CARD_PLACE / hit routing) */
 
-    /* When set, engine_destroy skips the YPAINT_CLEAR OSC so the last
-     * rendered frame stays painted on the canvas (the ypaint primitives
+    /* When set, engine_destroy skips the YDRAW_CLEAR OSC so the last
+     * rendered frame stays painted on the canvas (the ydraw primitives
      * remain in the scrolling layer's buffer). The ymgui card-remove
      * still fires — input routing detaches, but visuals persist. Used
      * by the WINDOW widget's close button so "X" gives users a graceful
@@ -512,12 +648,22 @@ struct yetty_ygui_engine {
     int input_fd;  /* Input file descriptor (default: STDIN_FILENO) */
     int output_fd; /* Output file descriptor (default: STDOUT_FILENO) */
 
-    /* In-process sink override. When non-NULL, ypaint frame envelopes
-     * go through pty->ops->write instead of write(output_fd). Used by
-     * yetty's own yui chrome to avoid a stdout round-trip when ygui
-     * lives in the same process as the renderer. NULL = fall back to
-     * `output_fd` (default client-mode behaviour). */
+    /* OSC sink. Every OSC byte ygui emits goes through
+     * output_pty->ops->write — the pty abstraction owns the actual
+     * delivery mechanism. Two implementations:
+     *   - yui (in-process): memory-ring pty pair, write is a memcpy.
+     *   - standalone (ygreeter, ytop, …): a libuv-backed pty that
+     *     queues bytes via uv_write on a uv_pipe_t wrapping output_fd.
+     *     Created and installed by ygui_engine_uv when the engine is
+     *     attached to a loop.
+     *
+     * Either way ygui_osc.c just calls ops->write and gets a non-
+     * blocking, complete-or-fail result back. The output_pty MUST be
+     * set before any OSC traffic is emitted; OSC functions return an
+     * error if it isn't. */
     struct yetty_platform_pty *output_pty;
+    int output_pty_owned; /* 1 if engine_destroy should destroy output_pty
+                           * (set when ygui_engine_uv created it). */
 
     /* Input buffer for parsing */
     char input_buffer[4096];
@@ -575,6 +721,27 @@ struct yetty_ygui_engine {
         struct yetty_ygui_widget *close_btn;
     } notifications[8];
     int notification_count;
+
+    /* Producer-side scene-canvas wire state.
+     *
+     * `next_group_id` — sequential u32 assigned to each widget. 0 is
+     * reserved for the receiver's implicit root entity, so the counter
+     * starts at 1.
+     *
+     * `pending_deletes` — group_ids of widgets that were destroyed or
+     * unparented since the last render. The next render flushes these
+     * as DELETE records at the envelope root before re-emitting any
+     * dirty groups. */
+    uint32_t next_group_id;
+    uint32_t *pending_deletes;
+    uint32_t pending_delete_count;
+    uint32_t pending_delete_cap;
+
+    /* Set to 1 by engine_create / scene_clear / CMD_ZERO emission;
+     * forces the next render to be a full-tree redraw (every widget is
+     * treated as dirty, no DELETE flush before — CMD_ZERO supersedes
+     * everything on the receiver). Cleared after that render. */
+    uint8_t needs_full_redraw;
 };
 
 /*=============================================================================
@@ -612,7 +779,7 @@ void yetty_ygui_widget_init_base(struct yetty_ygui_widget *widget, float x, floa
 
 /* Render context */
 void yetty_ygui_render_ctx_init(struct yetty_ygui_render_ctx *ctx,
-                                struct yetty_ypaint_core_buffer *buffer,
+                                struct yetty_ydraw_draw_list *buffer,
                                 const struct yetty_ygui_theme *theme);
 struct yetty_ycore_void_result yetty_ygui_render_ctx_render_box(struct yetty_ygui_render_ctx *ctx,
                                                                 float x, float y, float w, float h,
@@ -670,10 +837,14 @@ struct yetty_ycore_void_result yetty_ygui_layout_compute_engine(struct yetty_ygu
 
 /* OSC output (ygui_osc.c).
  *
- * `output_pty` is optional — when non-NULL, the binary OSC envelope is
- * written through pty->ops->write (zero-copy, no fd, used by yetty's
- * own in-process yui chrome). When NULL, falls back to writing the
- * full envelope to STDOUT_FILENO (default client-mode path). */
+ * Every OSC function takes `output_pty` as its first parameter and
+ * returns _result. Writes go through output_pty->ops->write — either
+ * a libuv-backed uv_pipe_t (ygui_engine_uv installs it) or yui's
+ * in-process memory-pty. Passing NULL is an error.
+ *
+ * No silent stdout fallback exists any more; failing to install an
+ * output_pty surfaces as an error rather than blocking on a sync
+ * write() that could truncate large envelopes. */
 struct yetty_ycore_void_result yetty_ygui_osc_create_card(struct yetty_platform_pty *output_pty,
                                                           const char *name, int x, int y, int w,
                                                           int h, const uint8_t *data,
@@ -681,20 +852,41 @@ struct yetty_ycore_void_result yetty_ygui_osc_create_card(struct yetty_platform_
 struct yetty_ycore_void_result yetty_ygui_osc_update_card(struct yetty_platform_pty *output_pty,
                                                           const char *name, const uint8_t *data,
                                                           uint32_t size);
-void yetty_ygui_osc_kill_card(const char *name);
-void yetty_ygui_osc_subscribe_clicks(int enable);
-void yetty_ygui_osc_subscribe_moves(int enable);
-void yetty_ygui_osc_subscribe_view_changes(int enable);
-void yetty_ygui_osc_query_cell_size(void);
-struct yetty_ycore_void_result yetty_ygui_osc_card_place(uint32_t card_id, int col, int row,
+struct yetty_ycore_void_result yetty_ygui_osc_kill_card(struct yetty_platform_pty *output_pty,
+                                                        const char *name);
+struct yetty_ycore_void_result yetty_ygui_osc_subscribe_clicks(struct yetty_platform_pty *output_pty,
+                                                               int enable);
+struct yetty_ycore_void_result yetty_ygui_osc_subscribe_moves(struct yetty_platform_pty *output_pty,
+                                                              int enable);
+struct yetty_ycore_void_result yetty_ygui_osc_subscribe_view_changes(
+    struct yetty_platform_pty *output_pty, int enable);
+struct yetty_ycore_void_result yetty_ygui_osc_query_cell_size(
+    struct yetty_platform_pty *output_pty);
+struct yetty_ycore_void_result yetty_ygui_osc_card_place(struct yetty_platform_pty *output_pty,
+                                                         uint32_t card_id, int col, int row,
                                                          uint32_t w_cells, uint32_t h_cells);
-struct yetty_ycore_void_result yetty_ygui_osc_card_remove(uint32_t card_id);
-void yetty_ygui_osc_zoom_card(const char *name, float level);
-void yetty_ygui_osc_scroll_card(const char *name, float x, float y, int absolute);
-void yetty_ygui_osc_scroll_card_delta(const char *name, float dx, float dy);
+struct yetty_ycore_void_result yetty_ygui_osc_card_remove(struct yetty_platform_pty *output_pty,
+                                                          uint32_t card_id);
+struct yetty_ycore_void_result yetty_ygui_osc_zoom_card(struct yetty_platform_pty *output_pty,
+                                                        const char *name, float level);
+struct yetty_ycore_void_result yetty_ygui_osc_scroll_card(struct yetty_platform_pty *output_pty,
+                                                          const char *name, float x, float y,
+                                                          int absolute);
+struct yetty_ycore_void_result yetty_ygui_osc_scroll_card_delta(struct yetty_platform_pty *output_pty,
+                                                                const char *name, float dx,
+                                                                float dy);
 
 /* Error */
 void yetty_ygui_set_error(const char *msg);
+
+/* Recursively queue scene-canvas DELETE records for every widget in
+ * the given subtree that owns a live entity on the receiver
+ * (was_rendered = 1 from the previous frame). Used by set_visible(0)
+ * and by widgets that gate their own emission outside of the standard
+ * VISIBLE flag (e.g. popup_menu's OPEN check). After this call every
+ * touched widget has was_rendered = 0 and dirty = 1, so it re-emits a
+ * fresh GROUP the next time it lands in the render walk. */
+void yetty_ygui_internal_queue_delete_subtree_rendered(struct yetty_ygui_widget *w);
 
 /* Internal helpers shared between the ygui-core (libuv-free) and the
  * libuv-driven runtime in ygui_engine_uv.c. Not part of the public API
@@ -717,6 +909,46 @@ extern struct yetty_ygui_engine *yetty_ygui_internal_active_engine;
 void yetty_ygui_engine_notify_tick(struct yetty_ygui_engine *engine);
 void yetty_ygui_engine_notify_on_resize(struct yetty_ygui_engine *engine);
 void yetty_ygui_engine_notify_shutdown(struct yetty_ygui_engine *engine);
+
+/* Construct the libuv runtime and the output pty inside an
+ * already-allocated engine, then fire the init OSC handshake
+ * (query_cell_size, subscribe_clicks/moves, CARD_PLACE, CANVAS_FIT
+ * placeholder). Lives in ygui_engine_uv.c because it owns the libuv
+ * dependency; called from yetty_ygui_engine_create after the engine
+ * struct has been allocated and its non-libuv state set up.
+ *
+ * If `borrowed_pty` is non-NULL the engine uses it as output_pty
+ * (yui-style in-process memory pty); otherwise the engine wraps its
+ * own STDOUT_FILENO via a libuv pipe. If `borrowed_loop` is non-NULL
+ * the engine attaches to it; otherwise the engine allocates a loop and
+ * owns it.
+ *
+ * On error, the engine is left consistent (no half-wired handles) and
+ * the caller can call yetty_ygui_engine_destroy normally. */
+struct yetty_ycore_void_result yetty_ygui_engine_internal_bootstrap_runtime(
+    struct yetty_ygui_engine *engine, struct yetty_platform_pty *borrowed_pty,
+    uv_loop_t *borrowed_loop);
+
+/* Allocate-only — used by both the libuv-coupled public entry
+ * (yetty_ygui_engine_create, in ygui_engine_uv.c, which follows up
+ * with bootstrap_runtime) and the yui in-process path. Lives in
+ * ygui_engine.c so ygui_core stays libuv-free. */
+struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc(
+    const char *name, struct yetty_ygui_theme *theme);
+
+/* yui-specific allocator. Behaviour is currently identical to
+ * internal_alloc; kept as a named alias so the yui call-site is
+ * self-documenting and so we can diverge later without touching yui. */
+struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
+    const char *name, struct yetty_ygui_theme *theme);
+
+/* Emit the init OSC handshake (cell size query, subscribe_clicks/moves,
+ * CARD_PLACE, CANVAS_FIT placeholder). Called from
+ * engine_internal_bootstrap_runtime after output_pty is wired up.
+ * Errors are chained — handshake failure should abort engine
+ * construction. */
+struct yetty_ycore_void_result yetty_ygui_engine_internal_emit_handshake(
+    struct yetty_ygui_engine *engine);
 
 /* Math helpers */
 static inline float ygui_clamp(float v, float lo, float hi)

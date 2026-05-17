@@ -97,7 +97,6 @@ static void on_key(struct yetty_ygui_engine* e, uint32_t key, int mods, void* u)
 }
 
 int main(void) {
-    (void)freopen("/dev/null", "w", stderr);
     fprintf(stderr, "=== ALL WIDGETS DEMO ===\n");
     fprintf(stderr, "Tests: buttons, sliders, checkboxes, progress, dropdown\n\n");
 
@@ -106,7 +105,7 @@ int main(void) {
         return 1;
     }
 
-    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_engine_create_with_pixel_hint("all-widgets", 1, 1, 550.0f, 400.0f);
+    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_engine_create((struct yetty_ygui_engine_args){.name = "all-widgets"});
         if (YETTY_IS_ERR(_eng_r)) { yetty_ycore_error_destroy(_eng_r.error); return 1; }
         g_engine = _eng_r.value; }
     if (!g_engine) {
@@ -208,7 +207,6 @@ int main(void) {
 
     fprintf(stderr, "Press 'q' to quit\n");
 
-    yetty_ygui_engine_show(g_engine);
     yetty_ygui_engine_run(g_engine);
 
     yetty_ygui_engine_destroy(g_engine);

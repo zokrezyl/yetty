@@ -110,6 +110,13 @@ CMAKE_RELEASE := -DCMAKE_BUILD_TYPE=Release
 CMAKE_DEBUG := -DCMAKE_BUILD_TYPE=Debug
 CMAKE_ASAN := -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
 
+# Desktop compiler — clang/clang++ by default (the FFI annotate attribute
+# is Clang-only; using gcc here produces ~1000 -Wattributes warnings).
+# Override on the command line with: DESKTOP_CC=gcc DESKTOP_CXX=g++
+DESKTOP_CC ?= clang
+DESKTOP_CXX ?= clang++
+CMAKE_DESKTOP_COMPILER := -DCMAKE_C_COMPILER=$(DESKTOP_CC) -DCMAKE_CXX_COMPILER=$(DESKTOP_CXX)
+
 # Logging level options (ytrace = all, yinfo = info and above)
 CMAKE_LOGLEVEL_YTRACE :=
 CMAKE_LOGLEVEL_YINFO := -DYTRACE_ENABLE_YTRACE=0 -DYTRACE_ENABLE_YDEBUG=0
@@ -133,12 +140,12 @@ all: help
 
 .PHONY: config-desktop-ytrace-debug
 config-desktop-ytrace-debug: ## Configure desktop ytrace debug build
-	PATH="$(SYSTEM_PATH)" $(CMAKE) -B $(BUILD_DIR_DESKTOP_YTRACE_DEBUG) $(CMAKE_GENERATOR) $(CMAKE_DEBUG) $(CMAKE_LOGLEVEL_YTRACE) $(CMAKE_COMPILER_LAUNCHER)
+	PATH="$(SYSTEM_PATH)" $(CMAKE) -B $(BUILD_DIR_DESKTOP_YTRACE_DEBUG) $(CMAKE_GENERATOR) $(CMAKE_DEBUG) $(CMAKE_LOGLEVEL_YTRACE) $(CMAKE_DESKTOP_COMPILER) $(CMAKE_COMPILER_LAUNCHER)
 	@ln -sfn $(BUILD_DIR_DESKTOP_YTRACE_DEBUG)/compile_commands.json compile_commands.json
 
 .PHONY: config-desktop-ytrace-release
 config-desktop-ytrace-release: ## Configure desktop ytrace release build
-	PATH="$(SYSTEM_PATH)" $(CMAKE) -B $(BUILD_DIR_DESKTOP_YTRACE_RELEASE) $(CMAKE_GENERATOR) $(CMAKE_RELEASE) $(CMAKE_LOGLEVEL_YTRACE) $(CMAKE_COMPILER_LAUNCHER)
+	PATH="$(SYSTEM_PATH)" $(CMAKE) -B $(BUILD_DIR_DESKTOP_YTRACE_RELEASE) $(CMAKE_GENERATOR) $(CMAKE_RELEASE) $(CMAKE_LOGLEVEL_YTRACE) $(CMAKE_DESKTOP_COMPILER) $(CMAKE_COMPILER_LAUNCHER)
 	@ln -sfn $(BUILD_DIR_DESKTOP_YTRACE_RELEASE)/compile_commands.json compile_commands.json
 
 .PHONY: build-desktop-ytrace-debug
@@ -177,7 +184,7 @@ test-desktop-ytrace-debug: ## Run desktop ytrace debug tests
 
 .PHONY: config-desktop-ytrace-asan
 config-desktop-ytrace-asan: ## Configure desktop ytrace ASAN build
-	PATH="$(SYSTEM_PATH)" $(CMAKE) -B $(BUILD_DIR_DESKTOP_YTRACE_ASAN) $(CMAKE_GENERATOR) $(CMAKE_DEBUG) $(CMAKE_LOGLEVEL_YTRACE) $(CMAKE_ASAN) $(CMAKE_COMPILER_LAUNCHER)
+	PATH="$(SYSTEM_PATH)" $(CMAKE) -B $(BUILD_DIR_DESKTOP_YTRACE_ASAN) $(CMAKE_GENERATOR) $(CMAKE_DEBUG) $(CMAKE_LOGLEVEL_YTRACE) $(CMAKE_ASAN) $(CMAKE_DESKTOP_COMPILER) $(CMAKE_COMPILER_LAUNCHER)
 	@ln -sfn $(BUILD_DIR_DESKTOP_YTRACE_ASAN)/compile_commands.json compile_commands.json
 
 .PHONY: build-desktop-ytrace-asan
@@ -198,7 +205,7 @@ run-desktop-ytrace-asan: build-desktop-ytrace-asan ## Run desktop ytrace ASAN bu
 
 .PHONY: config-desktop-yinfo-release
 config-desktop-yinfo-release: ## Configure desktop yinfo release build (minimal logging)
-	PATH="$(SYSTEM_PATH)" $(CMAKE) -B $(BUILD_DIR_DESKTOP_YINFO_RELEASE) $(CMAKE_GENERATOR) $(CMAKE_RELEASE) $(CMAKE_LOGLEVEL_YINFO) $(CMAKE_COMPILER_LAUNCHER)
+	PATH="$(SYSTEM_PATH)" $(CMAKE) -B $(BUILD_DIR_DESKTOP_YINFO_RELEASE) $(CMAKE_GENERATOR) $(CMAKE_RELEASE) $(CMAKE_LOGLEVEL_YINFO) $(CMAKE_DESKTOP_COMPILER) $(CMAKE_COMPILER_LAUNCHER)
 
 .PHONY: build-desktop-yinfo-release
 build-desktop-yinfo-release: ## Build desktop yinfo release (for perf testing)
@@ -296,13 +303,13 @@ PKG_CFG_AARCH64 := PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/s
 PKG_CFG_RISCV := PKG_CONFIG_LIBDIR=/usr/lib/riscv64-linux-gnu/pkgconfig:/usr/share/pkgconfig
 
 # riscv64 target list (no `yetty` — Dawn unavailable for riscv64).
-# Tools/demos that link yrender, ywebgpu, or ypaint-core (which all
+# Tools/demos that link yrender, ywebgpu, or ydraw-core (which all
 # include <webgpu/webgpu.h> directly) are excluded — that rules out
 # ycat, yecho, yplot, ymesh, ymaze, ydoc, ysheet, yslide, yetty-ythorvg,
 # yetty-ymsdf-gen-gpu, msdf-render-atlas, and every demo-ygui-*. What
-# remains: pure CDB / msdf / ypaint-decode / ymgui-imgui_core / TinyEMU.
+# remains: pure CDB / msdf / ydraw-decode / ymgui-imgui_core / TinyEMU.
 LINUX_RISCV_TARGETS := \
-    decode-ypaint \
+    decode-ydraw \
     yetty-ymsdf-gen yetty-msdf-gen \
     cdb-viewer cdb-diff \
     temu \

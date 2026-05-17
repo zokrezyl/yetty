@@ -48,7 +48,7 @@ struct yetty_ycore_buffer_result yetty_ycore_base64_encode(const void *in, size_
  *   "#RRGGBB"    (6 hex digits, alpha defaults to 0xFF)
  *   "#RRGGBBAA"  (8 hex digits)
  * The leading '#' is optional. Output layout is the canonical yetty packed
- * RGBA (matches the WGSL `ypaint_unpack_color` and existing yplot/yecho
+ * RGBA (matches the WGSL `ydraw_unpack_color` and existing yplot/yecho
  * conventions): byte 0 = R, byte 1 = G, byte 2 = B, byte 3 = A. As a u32
  * that's `(A << 24) | (B << 16) | (G << 8) | R`.
  *

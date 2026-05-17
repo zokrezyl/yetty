@@ -1,7 +1,7 @@
 /*
  * ygui_tabbar.c — TABBAR widget.
  *
- * Chrome-style tab strip across the top of the widget's box. One content
+ * Browser-style tab strip across the top of the widget's box. One content
  * panel per tab below; only the active panel is rendered and laid out.
  * Clicking a header pill switches the active tab and fires on_change with
  * the new index in `value` via the standard change-callback machinery
@@ -14,14 +14,14 @@
  * via padding-top on the container, so content panels naturally lay out
  * below the strip without manual offset math.
  *
- * Visual conventions (mirrored from Chrome to keep the strip readable):
+ * Visual conventions (typical browser-tab style to keep the strip readable):
  *   - The active tab uses the primary background colour and a coloured
  *     accent bar at the bottom; inactive tabs share the surface
  *     background.
  *   - Between two ADJACENT INACTIVE tabs a thin vertical separator is
  *     drawn so they don't blur into one solid band. The separator is
- *     deliberately omitted next to the active tab — that's how Chrome
- *     gives the active tab visual breathing room.
+ *     deliberately omitted next to the active tab — that's how most
+ *     browser tab strips give the active tab visual breathing room.
  *   - Each pill carries a small close 'x' button on its right side
  *     (yetty_ygui_widget_tabbar_remove_tab on click). The hit-box size
  *     matches the YETTY_YGUI_TABBAR_BUTTON_SIZE constant so the window
@@ -50,7 +50,7 @@ void yetty_ygui_engine_attach_widget(struct yetty_ygui_engine *engine,
 #define TABBAR_PILL_RADIUS 6.0f
 #define TABBAR_ACCENT_BAR_H 3.0f
 
-/* Per-tab close-button + window-chrome hamburger button size. Kept as
+/* Per-tab close-button + window hamburger button size. Kept as
  * a public constant via ygui_internal.h's TABBAR_BUTTON_SIZE so the
  * window widget can match it without copy-pasting magic numbers. */
 #define TABBAR_BUTTON_SIZE 18.0f
@@ -141,9 +141,9 @@ static struct yetty_ycore_void_result tabbar_render(struct yetty_ygui_widget *se
                                              TABBAR_ACCENT_BAR_H, theme->accent, 0.0f);
         }
 
-        /* Chrome-style separator: draw between this pill and the next
+        /* Browser-style separator: draw between this pill and the next
          * ONLY if both are inactive. The active tab gets visual
-         * breathing room on both sides, which is how Chrome / Firefox
+         * breathing room on both sides, which is how typical browser
          * tab strips read. */
         if (i + 1 < self->data.tabbar.n_tabs && !is_active && (i + 1) != active) {
             float sep_x = x + pw + (TABBAR_PILL_GAP - TABBAR_SEPARATOR_W) * 0.5f;
@@ -375,7 +375,7 @@ struct yetty_ygui_widget *yetty_ygui_widget_tabbar_add_tab(struct yetty_ygui_wid
     }
 
     if (tabbar->engine) {
-        tabbar->engine->dirty = 1;
+        tabbar->engine->dirty = 1; tabbar->dirty = 1;
     }
     return panel;
 }
@@ -442,7 +442,7 @@ void yetty_ygui_widget_tabbar_remove_tab(struct yetty_ygui_widget *tabbar, int i
         tabbar->change_callback(tabbar, (float)new_active, tabbar->change_userdata);
     }
     if (tabbar->engine) {
-        tabbar->engine->dirty = 1;
+        tabbar->engine->dirty = 1; tabbar->dirty = 1;
     }
 }
 
@@ -479,7 +479,7 @@ void yetty_ygui_widget_tabbar_set_active(struct yetty_ygui_widget *tabbar, int i
         tabbar->change_callback(tabbar, (float)index, tabbar->change_userdata);
     }
     if (tabbar->engine) {
-        tabbar->engine->dirty = 1;
+        tabbar->engine->dirty = 1; tabbar->dirty = 1;
     }
 }
 

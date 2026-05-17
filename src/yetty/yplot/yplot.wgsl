@@ -60,7 +60,7 @@ fn yplot_draw_axes(bg: vec3<f32>, plotUV: vec2<f32>, xMin: f32, xMax: f32, yMin:
     return color;
 }
 
-// Main yplot render function - called by ypaint dispatcher
+// Main yplot render function - called by ydraw dispatcher
 // Uses generated uniform accessors: yplot_get_*()
 fn yplot_render(local_pos: vec2<f32>) -> vec4<f32> {
     // `local_pos` is ALREADY relative to the plot's top-left — fs_main has

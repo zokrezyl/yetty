@@ -12,8 +12,8 @@
 #include <stdlib.h>
 
 struct yetty_yrender_render_target_vnc {
-    struct yetty_ypaint_core_target base;
-    struct yetty_ypaint_core_target *inner; /* Texture target for actual rendering */
+    struct yetty_ydraw_target base;
+    struct yetty_ydraw_target *inner; /* Texture target for actual rendering */
     struct yetty_yvnc_server *vnc_server;
     WGPUSurface surface; /* NULL for headless, non-NULL for mirror */
 };
@@ -22,7 +22,7 @@ struct yetty_yrender_render_target_vnc {
  * Destroy
  *===========================================================================*/
 
-static void render_target_vnc_destroy(struct yetty_ypaint_core_target *self)
+static void render_target_vnc_destroy(struct yetty_ydraw_target *self)
 {
     struct yetty_yrender_render_target_vnc *rt = (struct yetty_yrender_render_target_vnc *)self;
 
@@ -37,14 +37,14 @@ static void render_target_vnc_destroy(struct yetty_ypaint_core_target *self)
  * Delegated operations
  *===========================================================================*/
 
-static struct yetty_ycore_void_result render_target_vnc_clear(struct yetty_ypaint_core_target *self)
+static struct yetty_ycore_void_result render_target_vnc_clear(struct yetty_ydraw_target *self)
 {
     struct yetty_yrender_render_target_vnc *rt = (struct yetty_yrender_render_target_vnc *)self;
     return rt->inner->ops->clear(rt->inner);
 }
 
 static struct yetty_ycore_void_result render_target_vnc_render_layer(
-    struct yetty_ypaint_core_target *self, struct yetty_yrender_terminal_layer *layer)
+    struct yetty_ydraw_target *self, struct yetty_yrender_terminal_layer *layer)
 {
     struct yetty_yrender_render_target_vnc *rt = (struct yetty_yrender_render_target_vnc *)self;
     /* Propagate the outer viewport (set per-pane by pane_render) into the
@@ -55,20 +55,20 @@ static struct yetty_ycore_void_result render_target_vnc_render_layer(
 }
 
 static struct yetty_ycore_void_result render_target_vnc_blend(
-    struct yetty_ypaint_core_target *self, struct yetty_ypaint_core_target **sources, size_t count)
+    struct yetty_ydraw_target *self, struct yetty_ydraw_target **sources, size_t count)
 {
     struct yetty_yrender_render_target_vnc *rt = (struct yetty_yrender_render_target_vnc *)self;
     return rt->inner->ops->blend(rt->inner, sources, count);
 }
 
-static WGPUTextureView render_target_vnc_get_view(const struct yetty_ypaint_core_target *self)
+static WGPUTextureView render_target_vnc_get_view(const struct yetty_ydraw_target *self)
 {
     const struct yetty_yrender_render_target_vnc *rt =
         (const struct yetty_yrender_render_target_vnc *)self;
     return rt->inner->ops->get_view(rt->inner);
 }
 
-static WGPUTexture render_target_vnc_get_texture(const struct yetty_ypaint_core_target *self)
+static WGPUTexture render_target_vnc_get_texture(const struct yetty_ydraw_target *self)
 {
     const struct yetty_yrender_render_target_vnc *rt =
         (const struct yetty_yrender_render_target_vnc *)self;
@@ -76,7 +76,7 @@ static WGPUTexture render_target_vnc_get_texture(const struct yetty_ypaint_core_
 }
 
 static struct yetty_ycore_void_result render_target_vnc_resize(
-    struct yetty_ypaint_core_target *self, struct yetty_yrender_viewport viewport)
+    struct yetty_ydraw_target *self, struct yetty_yrender_viewport viewport)
 {
     struct yetty_yrender_render_target_vnc *rt = (struct yetty_yrender_render_target_vnc *)self;
     rt->base.viewport = viewport;
@@ -88,7 +88,7 @@ static struct yetty_ycore_void_result render_target_vnc_resize(
  *===========================================================================*/
 
 static struct yetty_ycore_void_result render_target_vnc_present(
-    struct yetty_ypaint_core_target *self)
+    struct yetty_ydraw_target *self)
 {
     struct yetty_yrender_render_target_vnc *rt = (struct yetty_yrender_render_target_vnc *)self;
     struct yetty_ycore_void_result res;
@@ -125,7 +125,7 @@ static struct yetty_ycore_void_result render_target_vnc_present(
  *===========================================================================*/
 
 static struct yetty_ycore_void_result render_target_vnc_set_visual_zoom(
-    struct yetty_ypaint_core_target *self, float scale, float off_x, float off_y)
+    struct yetty_ydraw_target *self, float scale, float off_x, float off_y)
 {
     struct yetty_yrender_render_target_vnc *rt = (struct yetty_yrender_render_target_vnc *)self;
     if (rt->inner && rt->inner->ops && rt->inner->ops->set_visual_zoom) {
@@ -139,14 +139,14 @@ static struct yetty_ycore_void_result render_target_vnc_set_visual_zoom(
  * renders + blend) to avoid piling up GPU handles — same fd exhaustion we
  * fixed on x11-tile. The server's on_idle hook (set in
  * yetty_vnc_server_send_frame_gpu) fires a catch-up render when it drains. */
-static bool render_target_vnc_is_busy(const struct yetty_ypaint_core_target *self)
+static bool render_target_vnc_is_busy(const struct yetty_ydraw_target *self)
 {
     const struct yetty_yrender_render_target_vnc *rt =
         (const struct yetty_yrender_render_target_vnc *)self;
     return rt->vnc_server && yetty_yvnc_server_is_busy(rt->vnc_server);
 }
 
-static void render_target_vnc_notify_render_skipped(struct yetty_ypaint_core_target *self)
+static void render_target_vnc_notify_render_skipped(struct yetty_ydraw_target *self)
 {
     struct yetty_yrender_render_target_vnc *rt = (struct yetty_yrender_render_target_vnc *)self;
     if (rt->vnc_server) {
@@ -170,7 +170,7 @@ static const struct yetty_yrender_target_ops render_target_vnc_ops = {
 
 struct yetty_yrender_target_ptr_result yetty_yrender_target_vnc_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat format,
-    struct yetty_ypaint_core_gpu_allocator *allocator, WGPUSurface surface,
+    struct yetty_ydraw_gpu_allocator *allocator, WGPUSurface surface,
     struct yetty_yvnc_server *vnc_server, struct yetty_yrender_viewport viewport)
 {
     struct yetty_yrender_render_target_vnc *rt = calloc(1, sizeof(*rt));

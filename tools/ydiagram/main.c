@@ -1,6 +1,6 @@
 /*
- * ydiagram — render a diagram file (Mermaid) into a ypaint buffer and emit
- * an OSC YPAINT_BIN envelope on stdout so a running yetty ypaint pane
+ * ydiagram — render a diagram file (Mermaid) into a ydraw buffer and emit
+ * an OSC YDRAW_BIN envelope on stdout so a running yetty ydraw pane
  * redraws it. Pure one-shot: parse → layout → render → emit → exit.
  *
  * Text width comes from a real MSDF font (yetty_yfont_msdf_font) so node
@@ -27,7 +27,7 @@
 #include <yetty/yface/yface.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yterm/osc-codes.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -68,7 +68,7 @@ static const char *resolve_data_dir(char *buf, size_t buf_size)
 
 static float measure_with_font(const char *text, size_t text_len, float font_size, void *userdata)
 {
-    struct yetty_ypaint_font *font = (struct yetty_ypaint_font *)userdata;
+    struct yetty_ydraw_font *font = (struct yetty_ydraw_font *)userdata;
     if (!font || !font->ops || !font->ops->measure_text) {
         return font_size * 0.6f * (float)text_len;
     }
@@ -87,8 +87,8 @@ static bool path_readable(const char *path)
 }
 
 /* Build the standard yetty asset paths from the platform's data_dir. The
- * canvas does the same construction in src/yetty/ypaint/canvas.c:335. */
-static struct yetty_ypaint_font *open_default_font(const char *cdb_override,
+ * canvas does the same construction in src/yetty/ydraw/canvas.c:335. */
+static struct yetty_ydraw_font *open_default_font(const char *cdb_override,
                                                    const char *shader_override)
 {
     char cdb_buf[512];
@@ -169,10 +169,10 @@ static int emit_envelope(FILE *out, int osc_code, int compressed, const void *ar
     return rc;
 }
 
-static int emit_osc_bin(FILE *out, struct yetty_ypaint_core_buffer *buf)
+static int emit_osc_bin(FILE *out, struct yetty_ydraw_draw_list *buf)
 {
     const uint8_t *raw  = NULL;
-    size_t         size = yetty_ypaint_core_buffer_serialize(buf, &raw);
+    size_t         size = yetty_ydraw_draw_list_serialize(buf, &raw);
     if (size == 0 || !raw) {
         fprintf(stderr, "ydiagram: serialize produced empty buffer\n");
         return 1;
@@ -185,14 +185,14 @@ static int emit_osc_bin(FILE *out, struct yetty_ypaint_core_buffer *buf)
         .raw_size         = size,
         .reserved         = {0, 0},
     };
-    return emit_envelope(out, YETTY_OSC_YPAINT_BIN, /*compressed=*/1, &meta, sizeof(meta),
+    return emit_envelope(out, YETTY_OSC_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta),
                          raw, size);
 }
 
-static int write_raw(FILE *out, struct yetty_ypaint_core_buffer *buf)
+static int write_raw(FILE *out, struct yetty_ydraw_draw_list *buf)
 {
     const uint8_t *raw  = NULL;
-    size_t         size = yetty_ypaint_core_buffer_serialize(buf, &raw);
+    size_t         size = yetty_ydraw_draw_list_serialize(buf, &raw);
     if (size == 0 || !raw) {
         fprintf(stderr, "ydiagram: serialize produced empty buffer\n");
         return 1;
@@ -245,11 +245,11 @@ static void usage(const char *prog)
     fprintf(stderr,
             "Usage: %s [options] <file.mmd | ->\n"
             "\n"
-            "Emits an OSC YPAINT_BIN envelope on stdout for a running yetty\n"
-            "ypaint pane. Box sizing uses real MSDF glyph widths.\n"
+            "Emits an OSC YDRAW_BIN envelope on stdout for a running yetty\n"
+            "ydraw pane. Box sizing uses real MSDF glyph widths.\n"
             "\n"
             "Options:\n"
-            "  -o <file>             Write raw serialized ypaint buffer (no OSC).\n"
+            "  -o <file>             Write raw serialized ydraw buffer (no OSC).\n"
             "  --font-cdb <path>     Override the MSDF CDB used for measurement.\n"
             "  --font-shader <path>  Override the msdf-font.wgsl shader path.\n"
             "  --no-font             Skip MSDF font; use the heuristic fallback.\n"
@@ -303,7 +303,7 @@ int main(int argc, char **argv)
     /* Open the MSDF font for text measurement. On failure (no asset
      * install yet, --no-font, etc.) fall back to the heuristic so the
      * tool still works — boxes will just be a bit off. */
-    struct yetty_ypaint_font *font =
+    struct yetty_ydraw_font *font =
         no_font ? NULL : open_default_font(cdb_override, sh_override);
     yetty_ydiagram_measure_text_fn measure_fn = font ? measure_with_font : NULL;
 
@@ -332,7 +332,7 @@ int main(int argc, char **argv)
         fflush(stdout);
     }
 
-    yetty_ypaint_core_buffer_destroy(br.value);
+    yetty_ydraw_draw_list_destroy(br.value);
     if (font && font->ops && font->ops->destroy) font->ops->destroy(font);
     return rc;
 }

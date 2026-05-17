@@ -1,4 +1,4 @@
-# ymaze tool — animated maze frontend, emits ypaint OSC envelopes.
+# ymaze tool — animated maze frontend, emits ydraw OSC envelopes.
 # Pure C frontend over the yetty_ymaze library.
 
 add_executable(ymaze

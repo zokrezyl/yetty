@@ -10,7 +10,7 @@
  *                               attrs (`f = sin(x); g = cos(x); @f.color=...`)
  *   yfsvm_compile_multi(ast)  — bytecode for the GPU interpreter
  *   yplot_serialize(uniforms, bytecode) — wire bytes
- *   ypaint_core_buffer_add_prim(buffer)  — attach to a ypaint buffer
+ *   ydraw_core_buffer_add_prim(buffer)  — attach to a ydraw buffer
  *
  * The frontend tool (tools/yplot) wraps this with a CLI; yecho's
  * `{plot: ...}` block uses the same path internally.
@@ -21,7 +21,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yplot/yplot-gen.h>
 
 #ifdef __cplusplus
@@ -46,20 +46,20 @@ struct yetty_yplot_render_config {
 };
 
 /* Render `source` (multi-plot-expression syntax — see yexpr_parse_plot)
- * into a fresh ypaint-core buffer holding ONE yplot complex prim.
+ * into a fresh ydraw-core buffer holding ONE yplot complex prim.
  *
  * Per-plot color overrides come from `@<name>.color = #RRGGBB` attrs in
  * the source; plots without explicit colors fall back to a built-in
  * 8-slot palette (matches the yaml factory).
  *
- * Caller frees the returned buffer with yetty_ypaint_core_buffer_destroy. */
-struct yetty_ypaint_core_buffer_result yetty_yplot_render(
+ * Caller frees the returned buffer with yetty_ydraw_draw_list_destroy. */
+struct yetty_ydraw_draw_list_result yetty_yplot_render(
     const char *source, size_t len, const struct yetty_yplot_render_config *config);
 
-/* OSC envelope (YETTY_OSC_YPAINT_BIN, same wire format as ycat / yecho).
+/* OSC envelope (YETTY_OSC_YDRAW_BIN, same wire format as ycat / yecho).
  * Returns bytes written; ERR on failure. */
 struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(
-    const struct yetty_ypaint_core_buffer *buffer, FILE *out);
+    const struct yetty_ydraw_draw_list *buffer, FILE *out);
 
 #ifdef __cplusplus
 }

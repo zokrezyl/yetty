@@ -1,10 +1,10 @@
 /*
- * yetty-ythorvg - Render SVG/Lottie via ThorVG into a ypaint buffer,
- * emit the result as a ypaint OSC sequence on stdout.
+ * yetty-ythorvg - Render SVG/Lottie via ThorVG into a ydraw buffer,
+ * emit the result as a ydraw OSC sequence on stdout.
  *
  * Usage: yetty-ythorvg [options] <input-file>
  *
- * Consumers embed the output in a terminal that speaks ypaint OSC, e.g.:
+ * Consumers embed the output in a terminal that speaks ydraw OSC, e.g.:
  *   yetty-ythorvg logo.svg
  *   yetty-ythorvg --lottie anim.json --frame 12
  */
@@ -12,8 +12,8 @@
 #include <yetty/yplatform/getopt.h>
 #include <yetty/ycore/util.h>
 #include <yetty/yface/yface.h>
-#include <yetty/ypaint-core/buffer.h>
-#include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YPAINT_* */
+#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YDRAW_* */
 #include <yetty/ythorvg/ythorvg.h>
 
 #include <stdio.h>
@@ -86,22 +86,22 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	/* Create the ypaint buffer + thorvg renderer. */
-	struct yetty_ypaint_core_buffer_result buf_res =
-	    yetty_ypaint_core_buffer_config_buffer_create(NULL);
+	/* Create the ydraw buffer + thorvg renderer. */
+	struct yetty_ydraw_draw_list_result buf_res =
+	    yetty_ydraw_draw_list_config_buffer_create(NULL);
 	if (YETTY_IS_ERR(buf_res)) {
 		fprintf(stderr, "%s: buffer_create: %s\n", argv[0], buf_res.error.msg);
 		free(file_res.value.data);
 		return 1;
 	}
-	struct yetty_ypaint_core_buffer *buf = buf_res.value;
+	struct yetty_ydraw_draw_list *buf = buf_res.value;
 
 	struct yetty_ythorvg_renderer_ptr_result r_res =
 	    yetty_ythorvg_renderer_create(buf);
 	if (YETTY_IS_ERR(r_res)) {
 		fprintf(stderr, "%s: renderer_create: %s\n",
 		        argv[0], r_res.error.msg);
-		yetty_ypaint_core_buffer_destroy(buf);
+		yetty_ydraw_draw_list_destroy(buf);
 		free(file_res.value.data);
 		return 1;
 	}
@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
 	if (YETTY_IS_ERR(rr)) {
 		fprintf(stderr, "%s: render: %s\n", argv[0], rr.error.msg);
 		yetty_ythorvg_renderer_destroy(renderer);
-		yetty_ypaint_core_buffer_destroy(buf);
+		yetty_ydraw_draw_list_destroy(buf);
 		return 1;
 	}
 
@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
 		if (YETTY_IS_ERR(fr)) {
 			fprintf(stderr, "%s: render_frame: %s\n", argv[0], fr.error.msg);
 			yetty_ythorvg_renderer_destroy(renderer);
-			yetty_ypaint_core_buffer_destroy(buf);
+			yetty_ydraw_draw_list_destroy(buf);
 			return 1;
 		}
 	}
@@ -145,15 +145,15 @@ int main(int argc, char **argv) {
 
 	/* Emit OSC. */
 	if (do_clear) {
-		printf("\033]%u;;\033\\", YETTY_OSC_YPAINT_CLEAR);
+		printf("\033]%u;;\033\\", YETTY_OSC_YDRAW_CLEAR);
 	}
 
 	const uint8_t *raw = NULL;
-	size_t raw_size = yetty_ypaint_core_buffer_serialize(buf, &raw);
+	size_t raw_size = yetty_ydraw_draw_list_serialize(buf, &raw);
 	if (raw_size == 0 || !raw) {
 		fprintf(stderr, "%s: serialize failed\n", argv[0]);
 		yetty_ythorvg_renderer_destroy(renderer);
-		yetty_ypaint_core_buffer_destroy(buf);
+		yetty_ydraw_draw_list_destroy(buf);
 		return 1;
 	}
 
@@ -167,13 +167,13 @@ int main(int argc, char **argv) {
 		.reserved         = {0, 0},
 	};
 	struct yetty_ycore_void_result emit_r = yetty_yface_emit_to_fd(
-	    fileno(stdout), YETTY_OSC_YPAINT_BIN,
+	    fileno(stdout), YETTY_OSC_YDRAW_BIN,
 	    /*compressed=*/1, &meta, sizeof(meta), raw, raw_size);
 	if (YETTY_IS_ERR(emit_r))
 		fprintf(stderr, "%s: yface_emit: %s\n", argv[0], emit_r.error.msg);
 	fflush(stdout);
 
 	yetty_ythorvg_renderer_destroy(renderer);
-	yetty_ypaint_core_buffer_destroy(buf);
+	yetty_ydraw_draw_list_destroy(buf);
 	return 0;
 }

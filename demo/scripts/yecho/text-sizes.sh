@@ -1,6 +1,6 @@
 #!/bin/bash
 # yecho — text rendered at varying font sizes via the `font-size=N` block
-# attribute. Demonstrates that the ypaint scrolling layer accepts arbitrary
+# attribute. Demonstrates that the ydraw scrolling layer accepts arbitrary
 # pixel-sized text spans (not just terminal-cell sized).
 #
 #   ./build-desktop-ytrace-release/yetty -e demo/scripts/yecho/text-sizes.sh

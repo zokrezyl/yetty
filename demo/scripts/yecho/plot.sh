@@ -1,10 +1,10 @@
 #!/bin/bash
-# yecho yplot demo — function plots emitted directly into the ypaint buffer.
+# yecho yplot demo — function plots emitted directly into the ydraw buffer.
 #
 # yecho parses {plot; w=...; h=...; xrange=lo..hi; yrange=lo..hi:
 #                f=expr; g=expr; @f.color=#hex}
 # and emits a yplot complex primitive (yfsvm-compiled bytecode + uniforms)
-# in the same OSC 600001 ypaint envelope used by ycat / ymarkdown / ypdf.
+# in the same OSC 600001 ydraw envelope used by ycat / ymarkdown / ypdf.
 #
 # Run inside yetty:  ./build-desktop-ytrace-release/yetty -e demo/scripts/yecho/plot.sh
 

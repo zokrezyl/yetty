@@ -1,12 +1,12 @@
 # ygui C demos — each builds a tiny program that uses the ygui widget API.
-# ygui accumulates primitives into a ypaint-core buffer and ships them as
+# ygui accumulates primitives into a ydraw-core buffer and ships them as
 # base64-encoded OSC sequences to a running yetty instance, which decodes
-# them via yetty_ypaint_core_buffer_create_from_base64 and renders.
-# See src/yetty/ygui/ydraw-capi.gen.{h,c} for the ypaint buffer shim.
+# them via yetty_ydraw_draw_list_create_from_base64 and renders.
+# See src/yetty/ygui/ydraw-capi.gen.{h,c} for the ydraw buffer shim.
 
 # Shared support object: ytrace + ymutex/term platform glue. Compiled once
 # and linked into each demo exec so we avoid static-archive ordering issues
-# (ygui/ypaint-core reference these symbols; they need to be in the final
+# (ygui/ydraw-core reference these symbols; they need to be in the final
 # exec object list, not hidden deeper in the archive chain).
 add_library(demo_ygui_support OBJECT
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
@@ -38,3 +38,30 @@ add_subdirectory(20_tree_view)
 add_subdirectory(21_tree_with_panes)
 add_subdirectory(22_tree_complex)
 add_subdirectory(23_rich_tabbar)
+
+# New-widget demos — one per ygui_<producer> widget. Each guarded by the
+# producer's enable flag so a build that drops e.g. YPDF doesn't fail
+# trying to link demo-ygui-25-ypdf against a missing ygui_ypdf target.
+if(YETTY_ENABLE_FEATURE_YMARKDOWN)
+    add_subdirectory(24_ymarkdown)
+endif()
+if(YETTY_ENABLE_FEATURE_YPDF)
+    add_subdirectory(25_ypdf)
+endif()
+if(YETTY_ENABLE_FEATURE_YBROWSER)
+    add_subdirectory(26_ybrowser)
+endif()
+if(YETTY_ENABLE_FEATURE_YJUNGLE)
+    add_subdirectory(27_yjungle)
+endif()
+if(YETTY_ENABLE_FEATURE_YZOO)
+    add_subdirectory(28_yzoo)
+endif()
+if(YETTY_ENABLE_FEATURE_YIMAGE)
+    add_subdirectory(29_yimage)
+endif()
+add_subdirectory(30_radio)
+add_subdirectory(31_spinner)
+add_subdirectory(32_splitter)
+add_subdirectory(33_dialog)
+add_subdirectory(34_textarea)

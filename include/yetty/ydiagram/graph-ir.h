@@ -6,7 +6,7 @@
  *
  * Mermaid (and later DOT) parsers fill this; the layout engine annotates
  * nodes/edges with positions; the renderer walks it once and emits MSD/MSDF
- * primitives into a ypaint buffer.
+ * primitives into a ydraw buffer.
  *
  * Storage is simple dynamic arrays — diagrams are small (tens to hundreds
  * of nodes), so an open-addressing string map would be overkill. Lookup

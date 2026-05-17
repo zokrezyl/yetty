@@ -78,7 +78,15 @@ static int render_thread_func(void *arg)
     struct yetty_yplatform_render_thread_args *args = arg;
     struct yetty_ycore_void_result res = yetty_run(args->yetty);
 
-    args->result = YETTY_IS_OK(res) ? 0 : 1;
+    if (YETTY_IS_ERR(res)) {
+        /* End-of-chain — main is the consumer; print the whole chain to
+         * stderr (visible regardless of ytrace config) and free it. */
+        yetty_ycore_error_print(stderr, "yetty: fatal error", res.error);
+        yetty_ycore_error_destroy(res.error);
+        args->result = 1;
+    } else {
+        args->result = 0;
+    }
     *(args->running) = 0;
 
     if (args->window) {
@@ -92,7 +100,7 @@ int main(int argc, char **argv)
 {
     /* Advertise ourselves via the de-facto TERM_PROGRAM convention so child
      * processes (PTY shells, tools like ycat) can detect a yetty terminal
-     * and adapt their output (e.g. emit ypaint OSC sequences instead of
+     * and adapt their output (e.g. emit ydraw OSC sequences instead of
      * plain ANSI). Done here at the top of main so every fork inherits it. */
     setenv("TERM_PROGRAM", "yetty", 1);
 
@@ -453,7 +461,11 @@ int main(int argc, char **argv)
     platform_input_pipe->ops->destroy(platform_input_pipe);
     ydebug("main: platform_input_pipe destroyed");
     if (clipboard_manager) {
-        clipboard_manager->ops->destroy(clipboard_manager);
+        struct yetty_ycore_void_result cd = clipboard_manager->ops->destroy(clipboard_manager);
+        if (YETTY_IS_ERR(cd)) {
+            yerror("main: clipboard_manager destroy failed: %s", cd.error.msg);
+            yetty_ycore_error_destroy(cd.error);
+        }
     }
     if (window_manager) {
         window_manager->ops->destroy(window_manager);

@@ -17,7 +17,7 @@
  *
  * Scrolling
  *   Each card is anchored at a rolling_row at placement time (same
- *   model the ypaint canvas uses). card_origin_y on render is computed
+ *   model the ydraw canvas uses). card_origin_y on render is computed
  *   as (rolling_row - row0_absolute) * cell_height. Scroll is O(1):
  *   geometry never re-uploads, the per-card uniform is rewritten.
  *
@@ -36,11 +36,11 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yface/yface.h>
-#include <yetty/yterm/osc-statemachine.h>
+#include <yetty/yplatform/ycoroutine.h>
+#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterm/osc-args.h>
-#include <yetty/yterm/pty-reader.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/yterm/ymgui-layer.h>
 #include <yetty/ytrace/ytrace.h>
@@ -61,12 +61,23 @@ struct yetty_yterm_ymgui_card {
     /* Anchor: absolute rolling row of the card's top edge. */
     uint32_t rolling_row;
 
-    /* Latest decoded frame (owning copy of the OSC payload, post-LZ4F). */
+    /* Latest decoded frame, fully denormalized (every cmd_list slot is
+     * inlined here, even ones the wire delivered as REPEAT — those got
+     * filled in from the previous frame at handle_frame time). The
+     * render path treats this as the canonical, contiguous frame. */
     uint8_t *frame_bytes;
     size_t frame_size;
     int has_frame;
     float frame_display_w; /* ImGui DisplaySize from the last frame */
     float frame_display_h;
+
+    /* Per-slot byte offsets / sizes within frame_bytes. Lets the next
+     * frame fill in REPEAT slots from this frame without re-walking.
+     * slot_offsets[i] points at the slot's cmd_list_hdr; slot_sizes[i]
+     * covers cmd_list_hdr + vtx + idx (padded) + cmds. */
+    size_t *slot_offsets;
+    size_t *slot_sizes;
+    size_t slot_count;
 
     /* Atlas. */
     int atlas_ready;
@@ -118,7 +129,7 @@ struct yetty_yterm_ymgui_layer {
      * the OSC SM. */
     struct yetty_yface *yface;
 
-    /* Per-envelope decoded-payload accumulator (see ypaint-layer for
+    /* Per-envelope decoded-payload accumulator (see ydraw-layer for
      * the same pattern). */
     struct yetty_ycore_buffer accum;
     int parse_code;
@@ -151,7 +162,7 @@ struct yetty_yterm_ymgui_layer {
 static struct yetty_ycore_void_result ymgui_destroy(struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result ymgui_process_input(
     struct yetty_yrender_terminal_layer *self,
-    struct yetty_yterm_osc_statemachine *osc_statemachine);
+    struct yetty_ywire_wire_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result ymgui_resize_grid(struct yetty_yrender_terminal_layer *self,
                                                         struct yetty_ycore_grid_size gs);
 static struct yetty_ycore_void_result ymgui_set_cell_size(struct yetty_yrender_terminal_layer *self,
@@ -161,7 +172,7 @@ static struct yetty_ycore_void_result ymgui_set_visual_zoom(
 static struct yetty_yrender_gpu_resource_set_result ymgui_get_gpu_resource_set(
     const struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal_layer *self,
-                                                   struct yetty_ypaint_core_target *target);
+                                                   struct yetty_ydraw_target *target);
 static int ymgui_is_empty(const struct yetty_yrender_terminal_layer *self);
 static int ymgui_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods);
 static int ymgui_on_char(struct yetty_yrender_terminal_layer *self, uint32_t cp, int mods);
@@ -263,6 +274,8 @@ static void card_destroy(struct yetty_yterm_ymgui_card *c)
     }
     card_release_gpu(c);
     free(c->frame_bytes);
+    free(c->slot_offsets);
+    free(c->slot_sizes);
     free(c);
 }
 
@@ -673,8 +686,8 @@ static int validate_tex(const uint8_t *data, size_t size,
  * Card placement / removal
  *=========================================================================*/
 
-static void anchor_card_and_fit(struct yetty_yterm_ymgui_layer *l, struct yetty_yterm_ymgui_card *c,
-                                int row_visible_top)
+static struct yetty_ycore_void_result anchor_card_and_fit(
+    struct yetty_yterm_ymgui_layer *l, struct yetty_yterm_ymgui_card *c, int row_visible_top)
 {
     /* Resolve visible-relative `row` to a rolling_row anchor. */
     if (row_visible_top < 0) {
@@ -691,10 +704,9 @@ static void anchor_card_and_fit(struct yetty_yterm_ymgui_layer *l, struct yetty_
         int need = (int)(bottom_excl - rows);
         struct yetty_ycore_void_result r =
             l->base.scroll_fn(&l->base, need, l->base.scroll_userdata);
-        if (YETTY_IS_ERR(r)) {
-            yerror("ymgui: scroll_fn failed: %s", r.error.msg);
-        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "anchor_card_and_fit: scroll_fn failed");
     }
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result handle_card_place(struct yetty_yterm_ymgui_layer *l,
@@ -738,7 +750,11 @@ static struct yetty_ycore_void_result handle_card_place(struct yetty_yterm_ymgui
     }
 
     /* Map visible-row to rolling_row anchor; scroll up if not enough room. */
-    anchor_card_and_fit(l, c, cp->row);
+    {
+        struct yetty_ycore_void_result ar = anchor_card_and_fit(l, c, cp->row);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ar,
+                            "handle_card_place: anchor_card_and_fit failed");
+    }
 
     /* On first placement, advance the cursor under the card so subsequent
      * stdout flows beneath. Move/resize emits do NOT touch the cursor. */
@@ -755,7 +771,9 @@ static struct yetty_ycore_void_result handle_card_place(struct yetty_yterm_ymgui
             .cols = 0,
             .rows = (uint16_t)new_row,
         };
-        l->base.cursor_fn(&l->base, pos, l->base.cursor_userdata);
+        struct yetty_ycore_void_result cr =
+            l->base.cursor_fn(&l->base, pos, l->base.cursor_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "handle_card_place: cursor_fn failed");
     }
 
     /* Confirm pixel size to the client (DisplaySize). */
@@ -767,12 +785,18 @@ static struct yetty_ycore_void_result handle_card_place(struct yetty_yterm_ymgui
             .width = card_pixel_w(l, c),
             .height = card_pixel_h(l, c),
         };
-        l->base.emit_osc_fn(YMGUI_OSC_SC_RESIZE, &msg, sizeof(msg), l->base.emit_osc_userdata);
+        struct yetty_ycore_void_result er = l->base.emit_osc_fn(
+            YMGUI_OSC_SC_RESIZE, &msg, sizeof(msg), l->base.emit_osc_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, er,
+                            "handle_card_place: emit_osc_fn(YMGUI_OSC_SC_RESIZE) failed");
     }
 
     l->base.dirty = 1;
     if (l->base.request_render_fn) {
-        l->base.request_render_fn(l->base.request_render_userdata);
+        struct yetty_ycore_void_result rr =
+            l->base.request_render_fn(l->base.request_render_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr,
+                            "handle_card_place: request_render_fn failed");
     }
 
     ydebug("ymgui: card %u %s at (col=%d row=%d, w=%u h=%u, rolling=%u)", c->id,
@@ -780,10 +804,11 @@ static struct yetty_ycore_void_result handle_card_place(struct yetty_yterm_ymgui
     return YETTY_OK_VOID();
 }
 
-static void emit_focus(struct yetty_yterm_ymgui_layer *l, uint32_t card_id, int gained)
+static struct yetty_ycore_void_result emit_focus(struct yetty_yterm_ymgui_layer *l,
+                                                  uint32_t card_id, int gained)
 {
     if (!l->base.emit_osc_fn) {
-        return;
+        return YETTY_OK_VOID();
     }
     struct yetty_ymgui_wire_input_focus msg = {
         .magic = YMGUI_WIRE_MAGIC_INPUT_FOCUS,
@@ -791,7 +816,10 @@ static void emit_focus(struct yetty_yterm_ymgui_layer *l, uint32_t card_id, int 
         .card_id = card_id,
         .gained = gained,
     };
-    l->base.emit_osc_fn(YMGUI_OSC_SC_FOCUS, &msg, sizeof(msg), l->base.emit_osc_userdata);
+    struct yetty_ycore_void_result r = l->base.emit_osc_fn(
+        YMGUI_OSC_SC_FOCUS, &msg, sizeof(msg), l->base.emit_osc_userdata);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "emit_focus: emit_osc_fn(YMGUI_OSC_SC_FOCUS) failed");
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result handle_card_remove(struct yetty_yterm_ymgui_layer *l,
@@ -814,13 +842,17 @@ static struct yetty_ycore_void_result handle_card_remove(struct yetty_yterm_ymgu
 
     /* TODO: archive to ymgui-static-layer when KEEP_VISIBLE flag set. */
     if (l->focused_card_id == cr->card_id) {
-        emit_focus(l, cr->card_id, 0);
+        struct yetty_ycore_void_result ef = emit_focus(l, cr->card_id, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ef,
+                            "handle_card_remove: emit_focus(lost) failed");
         l->focused_card_id = 0;
     }
     card_remove(l, cr->card_id);
     l->base.dirty = 1;
     if (l->base.request_render_fn) {
-        l->base.request_render_fn(l->base.request_render_userdata);
+        struct yetty_ycore_void_result rr =
+            l->base.request_render_fn(l->base.request_render_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "request_render_fn failed");
     }
     return YETTY_OK_VOID();
 }
@@ -842,7 +874,9 @@ static struct yetty_ycore_void_result handle_clear(struct yetty_yterm_ymgui_laye
     /* TODO: archive to ymgui-static-layer when KEEP_VISIBLE flag set. */
     if (cl->card_id == YMGUI_CARD_ID_NONE) {
         if (l->focused_card_id) {
-            emit_focus(l, l->focused_card_id, 0);
+            struct yetty_ycore_void_result ef = emit_focus(l, l->focused_card_id, 0);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, ef,
+                                "handle_clear: emit_focus(all) failed");
             l->focused_card_id = 0;
         }
         for (size_t i = 0; i < l->card_count; i++) {
@@ -851,14 +885,18 @@ static struct yetty_ycore_void_result handle_clear(struct yetty_yterm_ymgui_laye
         l->card_count = 0;
     } else {
         if (l->focused_card_id == cl->card_id) {
-            emit_focus(l, cl->card_id, 0);
+            struct yetty_ycore_void_result ef = emit_focus(l, cl->card_id, 0);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, ef,
+                                "handle_clear: emit_focus(one) failed");
             l->focused_card_id = 0;
         }
         card_remove(l, cl->card_id);
     }
     l->base.dirty = 1;
     if (l->base.request_render_fn) {
-        l->base.request_render_fn(l->base.request_render_userdata);
+        struct yetty_ycore_void_result rr =
+            l->base.request_render_fn(l->base.request_render_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "request_render_fn failed");
     }
     return YETTY_OK_VOID();
 }
@@ -867,6 +905,11 @@ static struct yetty_ycore_void_result handle_clear(struct yetty_yterm_ymgui_laye
  * Frame / atlas handlers
  *=========================================================================*/
 
+/* Walk the wire frame to produce a denormalized frame_bytes — REPEAT
+ * slots get filled in from the card's previous frame_bytes, full slots
+ * are copied straight from the wire. The result is laid out exactly
+ * like a v2 frame (no REPEAT flags), so frame_measure / frame_upload /
+ * draw_card don't need to know REPEAT exists. */
 static struct yetty_ycore_void_result handle_frame(struct yetty_yterm_ymgui_layer *l,
                                                    const uint8_t *raw, size_t size)
 {
@@ -883,22 +926,124 @@ static struct yetty_ycore_void_result handle_frame(struct yetty_yterm_ymgui_laye
         return YETTY_ERR(yetty_ycore_void, "ymgui: --frame for unknown card");
     }
 
-    uint8_t *copy = (uint8_t *)malloc(size);
-    if (!copy) {
-        return YETTY_ERR(yetty_ycore_void, "ymgui: oom");
+    int idx32 = (fh->flags & YMGUI_FRAME_FLAG_IDX32) ? 1 : 0;
+    size_t idx_bpe = idx32 ? 4u : 2u;
+    size_t cl_count = fh->cmd_list_count;
+
+    /* Pass 1: walk the wire, classify each slot (REPEAT vs full),
+     * compute the denormalized size. */
+    struct slot_info {
+        int from_cache;   /* 1 = source = previous frame_bytes */
+        size_t src_off;   /* offset in source buffer (wire or prev frame) */
+        size_t size;      /* full slot size: hdr + vtx + idx_padded + cmds */
+    };
+    struct slot_info *infos = NULL;
+    if (cl_count) {
+        infos = (struct slot_info *)calloc(cl_count, sizeof(*infos));
+        if (!infos) {
+            return YETTY_ERR(yetty_ycore_void, "ymgui: oom (slot infos)");
+        }
     }
-    memcpy(copy, raw, size);
+
+    const uint8_t *wire_end = raw + size;
+    size_t wire_off = sizeof(*fh);
+    size_t denorm_size = sizeof(*fh);
+
+    for (size_t i = 0; i < cl_count; i++) {
+        if (raw + wire_off + sizeof(struct yetty_ymgui_wire_cmd_list) > wire_end) {
+            free(infos);
+            return YETTY_ERR(yetty_ycore_void, "ymgui: --frame truncated cmd_list_hdr");
+        }
+        const struct yetty_ymgui_wire_cmd_list *clh =
+            (const struct yetty_ymgui_wire_cmd_list *)(raw + wire_off);
+
+        if (clh->flags & YMGUI_CMDLIST_FLAG_REPEAT) {
+            if (i >= c->slot_count || !c->frame_bytes) {
+                free(infos);
+                return YETTY_ERR(yetty_ycore_void,
+                                 "ymgui: REPEAT slot has no cached predecessor");
+            }
+            infos[i].from_cache = 1;
+            infos[i].src_off = c->slot_offsets[i];
+            infos[i].size = c->slot_sizes[i];
+            wire_off += sizeof(*clh);
+        } else {
+            size_t vbytes = (size_t)clh->vtx_count * 20u;
+            size_t ibytes_padded = (size_t)clh->idx_count * idx_bpe;
+            if (ibytes_padded & 3u) {
+                ibytes_padded += 4u - (ibytes_padded & 3u);
+            }
+            size_t cmd_bytes = (size_t)clh->cmd_count * sizeof(struct yetty_ymgui_wire_cmd);
+            size_t slot_size = sizeof(*clh) + vbytes + ibytes_padded + cmd_bytes;
+            if (raw + wire_off + slot_size > wire_end) {
+                free(infos);
+                return YETTY_ERR(yetty_ycore_void, "ymgui: --frame truncated slot body");
+            }
+            infos[i].from_cache = 0;
+            infos[i].src_off = wire_off;
+            infos[i].size = slot_size;
+            wire_off += slot_size;
+        }
+        denorm_size += infos[i].size;
+    }
+
+    /* Pass 2: allocate the denormalized buffer and copy slots. We need
+     * to source REPEAT slots from c->frame_bytes BEFORE we free it. */
+    uint8_t *new_frame = (uint8_t *)malloc(denorm_size ? denorm_size : 1);
+    size_t *new_offsets = NULL;
+    size_t *new_sizes = NULL;
+    if (cl_count) {
+        new_offsets = (size_t *)malloc(cl_count * sizeof(*new_offsets));
+        new_sizes = (size_t *)malloc(cl_count * sizeof(*new_sizes));
+    }
+    if (!new_frame || (cl_count && (!new_offsets || !new_sizes))) {
+        free(new_frame);
+        free(new_offsets);
+        free(new_sizes);
+        free(infos);
+        return YETTY_ERR(yetty_ycore_void, "ymgui: oom (denormalized frame)");
+    }
+
+    memcpy(new_frame, fh, sizeof(*fh));
+    /* The denormalized buffer's total_size reflects post-expansion size,
+     * not the wire's REPEAT-compressed size. Kept self-consistent so any
+     * future revalidation sees a well-formed v2-style frame. */
+    ((struct yetty_ymgui_wire_frame *)new_frame)->total_size = (uint32_t)denorm_size;
+
+    size_t out_off = sizeof(*fh);
+    for (size_t i = 0; i < cl_count; i++) {
+        new_offsets[i] = out_off;
+        new_sizes[i] = infos[i].size;
+        const uint8_t *src = infos[i].from_cache ? (c->frame_bytes + infos[i].src_off)
+                                                 : (raw + infos[i].src_off);
+        memcpy(new_frame + out_off, src, infos[i].size);
+        /* Clear the REPEAT flag in the denormalized copy of the cl_hdr
+         * so frame_measure can't misread it (cl_hdr.flags is reserved
+         * for wire-side signalling). */
+        struct yetty_ymgui_wire_cmd_list *out_clh =
+            (struct yetty_ymgui_wire_cmd_list *)(new_frame + out_off);
+        out_clh->flags = 0;
+        out_off += infos[i].size;
+    }
+    free(infos);
 
     free(c->frame_bytes);
-    c->frame_bytes = copy;
-    c->frame_size = size;
+    free(c->slot_offsets);
+    free(c->slot_sizes);
+    c->frame_bytes = new_frame;
+    c->frame_size = denorm_size;
+    c->slot_offsets = new_offsets;
+    c->slot_sizes = new_sizes;
+    c->slot_count = cl_count;
     c->has_frame = 1;
     c->frame_display_w = fh->display_size_x;
     c->frame_display_h = fh->display_size_y;
 
     l->base.dirty = 1;
     if (l->base.request_render_fn) {
-        l->base.request_render_fn(l->base.request_render_userdata);
+        struct yetty_ycore_void_result rr =
+            l->base.request_render_fn(l->base.request_render_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "request_render_fn failed");
     }
     return YETTY_OK_VOID();
 }
@@ -969,46 +1114,67 @@ static struct yetty_ycore_void_result ymgui_dispatch_atomic(
     }
 }
 
+/* Persistent layer coro — the wire-statemachine spawns this once and
+ * expects it to loop forever, yielding back when there are no more
+ * body bytes for the current envelope. A return here is treated as a
+ * fatal layer exit. Each iteration:
+ *
+ *   1. Reset accum and capture the OSC code on entry to a fresh envelope.
+ *   2. Drain body bytes via sm_read until the read returns 0.
+ *   3. If sm hasn't seen the envelope terminator yet, yield — the SM
+ *      will resume us when fresh body bytes arrive.
+ *   4. Once at_end, dispatch the assembled atomic envelope to ymgui's
+ *      handler, reset the per-envelope state, then yield so the SM can
+ *      observe terminator clearance before the next envelope.
+ */
 static struct yetty_ycore_void_result ymgui_process_input(
     struct yetty_yrender_terminal_layer *self,
-    struct yetty_yterm_osc_statemachine *osc_statemachine)
+    struct yetty_ywire_wire_statemachine *osc_statemachine)
 {
     struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)self;
 
-    if (!l->parse_active) {
-        l->parse_code = yetty_yterm_osc_statemachine_code(osc_statemachine);
-        yetty_ycore_buffer_clear(&l->accum);
-        l->parse_active = 1;
-    }
-
-    uint8_t buf[4096];
     for (;;) {
-        struct yetty_ycore_size_result rr =
-            yetty_yterm_osc_statemachine_read(osc_statemachine, buf, sizeof(buf));
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ymgui: osc read");
-        if (rr.value == 0) {
-            break;
+        if (!l->parse_active) {
+            l->parse_code = yetty_ywire_wire_statemachine_code(osc_statemachine);
+            yetty_ycore_buffer_clear(&l->accum);
+            l->parse_active = 1;
         }
-        struct yetty_ycore_void_result wr =
-            yetty_ycore_buffer_write(&l->accum, buf, rr.value);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "ymgui: accum write");
+
+        uint8_t buf[4096];
+        for (;;) {
+            struct yetty_ycore_size_result rr =
+                yetty_ywire_wire_statemachine_read(osc_statemachine, buf, sizeof(buf));
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ymgui: osc read");
+            if (rr.value == 0) {
+                break;
+            }
+            struct yetty_ycore_void_result wr =
+                yetty_ycore_buffer_write(&l->accum, buf, rr.value);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "ymgui: accum write");
+        }
+
+        if (!yetty_ywire_wire_statemachine_at_end(osc_statemachine)) {
+            /* More body bytes pending — yield until SM has them. */
+            yetty_yplatform_coro_yield();
+            continue;
+        }
+
+        int code = l->parse_code;
+        const uint8_t *payload = l->accum.data;
+        size_t payload_len = l->accum.size;
+
+        struct yetty_ycore_void_result r = ymgui_dispatch_atomic(l, code, payload, payload_len);
+
+        yetty_ycore_buffer_clear(&l->accum);
+        l->parse_active = 0;
+        l->parse_code = 0;
+
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ymgui: dispatch_atomic");
+
+        /* Envelope handled — yield so the SM can clear terminator_seen
+         * and route us the next envelope (or another layer's bytes). */
+        yetty_yplatform_coro_yield();
     }
-
-    if (!yetty_yterm_osc_statemachine_at_end(osc_statemachine)) {
-        return YETTY_OK_VOID();
-    }
-
-    int code = l->parse_code;
-    const uint8_t *payload = l->accum.data;
-    size_t payload_len = l->accum.size;
-
-    struct yetty_ycore_void_result r = ymgui_dispatch_atomic(l, code, payload, payload_len);
-
-    yetty_ycore_buffer_clear(&l->accum);
-    l->parse_active = 0;
-    l->parse_code = 0;
-
-    return r;
 }
 
 /*===========================================================================
@@ -1085,7 +1251,7 @@ static struct yetty_yrender_gpu_resource_set_result ymgui_get_gpu_resource_set(
     const struct yetty_yrender_terminal_layer *self)
 {
     (void)self;
-    static const struct yetty_ypaint_core_gpu_resource_set empty = {0};
+    static const struct yetty_ydraw_gpu_resource_set empty = {0};
     return YETTY_OK(yetty_yrender_gpu_resource_set, &empty);
 }
 
@@ -1362,7 +1528,7 @@ static struct yetty_ycore_void_result draw_card(struct yetty_yterm_ymgui_layer *
 }
 
 static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal_layer *self,
-                                                   struct yetty_ypaint_core_target *target)
+                                                   struct yetty_ydraw_target *target)
 {
     struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)self;
     if (!target || !target->ops || !target->ops->get_view) {
@@ -1386,7 +1552,7 @@ static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal
     /* LoadOp_Load: every pass into the shared big target preserves prior
      * pixels. The single per-frame wipe is the global clear() in
      * yetty_event_handler. ymgui draws on top of whatever earlier layers
-     * (text, ypaint, shader-glyph) put down. */
+     * (text, ydraw, shader-glyph) put down. */
     WGPUCommandEncoderDescriptor ed = {0};
     WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(l->device, &ed);
 
@@ -1403,7 +1569,7 @@ static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal
 
     wgpuRenderPassEncoderSetPipeline(pass, l->pipeline);
 
-    /* Confine the layer's draws to its pane's rect — same as text/ypaint
+    /* Confine the layer's draws to its pane's rect — same as text/ydraw
      * get via render_target_texture_render_layer's SetViewport call.
      * Without this, the ymgui pipeline draws into the whole framebuffer
      * (default viewport = full texture), so card vertices at pane-local
@@ -1426,7 +1592,9 @@ static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal
         struct yetty_ycore_void_result r =
             draw_card(l, l->cards[i], pass, pane_w, pane_h, vp.x, vp.y);
         if (YETTY_IS_ERR(r)) {
-            yerror("ymgui: draw_card: %s", r.error.msg);
+            wgpuRenderPassEncoderEnd(pass);
+            wgpuRenderPassEncoderRelease(pass);
+            return YETTY_ERR(yetty_ycore_void, "ymgui_render: draw_card failed", r);
         }
     }
 
@@ -1526,7 +1694,9 @@ static struct yetty_ycore_void_result ymgui_set_alt_screen(
      * gets a clean focus-lost. We don't restore focus on the way back —
      * focus is a transient runtime fact, not a state to preserve. */
     if (l->focused_card_id) {
-        emit_focus(l, l->focused_card_id, 0);
+        struct yetty_ycore_void_result ef = emit_focus(l, l->focused_card_id, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ef,
+                            "ymgui_set_alt_screen: emit_focus(saved) failed");
         l->focused_card_id = 0;
     }
 
@@ -1548,7 +1718,10 @@ static struct yetty_ycore_void_result ymgui_set_alt_screen(
     l->alt_active = wanted;
     self->dirty = 1;
     if (self->request_render_fn) {
-        self->request_render_fn(self->request_render_userdata);
+        struct yetty_ycore_void_result rr =
+            self->request_render_fn(self->request_render_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr,
+                            "ymgui_set_alt_screen: request_render_fn failed");
     }
 
     ydebug("ymgui: alt_screen=%d (live=%zu cards, saved=%zu cards)", wanted, l->card_count,
@@ -1579,7 +1752,8 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ymgui_layer_create(
     snprintf(shader_path, sizeof(shader_path), "%s/ymgui-layer.wgsl", shaders_dir);
     struct yetty_ycore_buffer_result shader_res = yetty_ycore_read_file(shader_path);
     if (YETTY_IS_ERR(shader_res)) {
-        return YETTY_ERR(yetty_yterm_terminal_layer, shader_res.error.msg);
+        return YETTY_ERR(yetty_yterm_terminal_layer,
+                         "ymgui_layer_create: read_file(ymgui-layer.wgsl) failed", shader_res);
     }
 
     struct yetty_yterm_ymgui_layer *l = calloc(1, sizeof(*l));
@@ -1611,7 +1785,8 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_ymgui_layer_create(
         if (YETTY_IS_ERR(yr)) {
             free(l->shader_code.data);
             free(l);
-            return YETTY_ERR(yetty_yterm_terminal_layer, yr.error.msg);
+            return YETTY_ERR(yetty_yterm_terminal_layer,
+                             "ymgui_layer_create: yetty_yface_create failed", yr);
         }
         l->yface = yr.value;
     }
@@ -1689,27 +1864,38 @@ uint32_t yetty_yterm_terminal_layer_ymgui_layer_focused_card(
     return l->focused_card_id;
 }
 
-void yetty_yterm_terminal_layer_ymgui_layer_set_focus(struct yetty_yrender_terminal_layer *layer,
-                                                      uint32_t card_id)
+struct yetty_ycore_void_result yetty_yterm_terminal_layer_ymgui_layer_set_focus(
+    struct yetty_yrender_terminal_layer *layer, uint32_t card_id)
 {
-    if (!layer || layer->ops != &ymgui_ops) {
-        return;
+    if (!layer) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_yterm_terminal_layer_ymgui_layer_set_focus: layer is NULL");
+    }
+    if (layer->ops != &ymgui_ops) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_yterm_terminal_layer_ymgui_layer_set_focus: layer is not a ymgui layer");
     }
     struct yetty_yterm_ymgui_layer *l = (struct yetty_yterm_ymgui_layer *)layer;
     if (l->focused_card_id == card_id) {
-        return;
+        return YETTY_OK_VOID();
     }
 
-    /* Validate that card_id refers to a live card (or 0). */
+    /* Validate that card_id refers to a live card (or 0). Unknown id is
+     * silently ignored — the focus model is purely advisory. */
     if (card_id != 0 && !card_find(l, card_id)) {
-        return;
+        return YETTY_OK_VOID();
     }
 
     if (l->focused_card_id != 0) {
-        emit_focus(l, l->focused_card_id, 0);
+        struct yetty_ycore_void_result lost = emit_focus(l, l->focused_card_id, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, lost,
+                            "ymgui_layer_set_focus: emit_focus(lost) failed");
     }
     l->focused_card_id = card_id;
     if (card_id != 0) {
-        emit_focus(l, card_id, 1);
+        struct yetty_ycore_void_result gained = emit_focus(l, card_id, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, gained,
+                            "ymgui_layer_set_focus: emit_focus(gained) failed");
     }
+    return YETTY_OK_VOID();
 }

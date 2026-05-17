@@ -497,7 +497,7 @@ const VTermScreenCell *vterm_screen_get_buffer(const VTermScreen *screen);
 size_t vterm_screen_get_buffer_size(const VTermScreen *screen);
 int vterm_screen_get_buffer_root_row(const VTermScreen *screen);
 
-/* yetty: direct cursor/scroll control for ypaint integration */
+/* yetty: direct cursor/scroll control for ydraw integration */
 void vterm_screen_set_cursorpos(VTermScreen *screen, VTermPos pos);
 void vterm_screen_scroll_lines(VTermScreen *screen, int lines);
 

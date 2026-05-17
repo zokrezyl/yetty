@@ -1,128 +1,55 @@
 /*
- * ygui_osc.c - OSC output to yetty terminal
+ * ygui_osc.c — OSC envelope emission.
+ *
+ * Every OSC byte that ygui writes goes through
+ * output_pty->ops->write — the pty abstraction owns the actual delivery
+ * mechanism. Two backends are in use:
+ *
+ *   - yui (in-process): memory-ring pty pair, write is a memcpy.
+ *   - standalone (ygreeter, ytop, …): libuv-backed uv_pipe_t wrapping
+ *     output_fd; write queues via uv_write and the kernel buffer
+ *     drains in the background.
+ *
+ * In both cases, ops->write is non-blocking from the producer's
+ * perspective — accepting all bytes, returning OK immediately. This
+ * file does no I/O of its own beyond yface_emit (envelope encoding).
+ *
+ * `output_pty` is required for every OSC function — passing NULL is an
+ * error. The libuv layer (ygui_engine_uv.c) installs a default one
+ * wrapping output_fd; consumers that bypass that layer (yui) must
+ * install their own before any ygui_osc_* call.
  */
 
 #include "ygui_internal.h"
-#include <yetty/yface/yface.h>
-#include <yetty/yplatform/pty.h>
 #include <yetty/ycore/types.h>
-#include <yetty/yterm/osc-codes.h> /* YETTY_OSC_YPAINT_* */
-#include <yetty/ymgui/wire.h>       /* YMGUI_OSC_CS_CARD_*, wire structs */
+#include <yetty/yface/yface.h>
+#include <yetty/ymgui/wire.h>
+#include <yetty/yplatform/pty.h>
+#include <yetty/yterm/osc-codes.h>
 #include <yetty/ytrace/ytrace.h>
-#include <errno.h>
-#include <stddef.h>   /* ptrdiff_t — portable signed-size return for write() */
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
-#ifdef _WIN32
-#include <io.h>
-#define STDOUT_FILENO 1
-/* Used explicitly inside write_osc; no global `#define write _write` so the
- * pty ops vtable's `->write` member access in write_pty_all isn't macroed. */
-#define yetty_ygui_raw_write _write
-#else
-#include <poll.h>     /* POSIX poll(), used for EAGAIN backoff below */
-#include <unistd.h>
-#define yetty_ygui_raw_write write
-#endif
-
-/* Base64 encoding table */
-static const char b64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-/* Encode data to base64 into output buffer. Returns bytes written. */
-static size_t base64_encode(const uint8_t *data, uint32_t size, char *out, size_t out_size)
-{
-    size_t out_len = ((size + 2) / 3) * 4;
-    if (out_len + 1 > out_size) {
-        return 0;
-    }
-
-    size_t j = 0;
-    for (uint32_t i = 0; i < size; i += 3) {
-        uint32_t n = ((uint32_t)data[i]) << 16;
-        if (i + 1 < size) {
-            n |= ((uint32_t)data[i + 1]) << 8;
-        }
-        if (i + 2 < size) {
-            n |= (uint32_t)data[i + 2];
-        }
-
-        out[j++] = b64_table[(n >> 18) & 0x3F];
-        out[j++] = b64_table[(n >> 12) & 0x3F];
-        out[j++] = (i + 1 < size) ? b64_table[(n >> 6) & 0x3F] : '=';
-        out[j++] = (i + 2 < size) ? b64_table[n & 0x3F] : '=';
-    }
-    out[j] = '\0';
-    return j;
-}
-
-/* Write OSC sequence to stdout, retrying on partial writes / EINTR /
- * EAGAIN.
- *
- * stdout sits on a non-blocking PTY connected to the parent yetty (the
- * libuv loop sets O_NONBLOCK on the stdio fds). A single write() of a
- * yimage-bearing frame easily exceeds the PTY's atomic-write capacity
- * (the kernel buffer is ~64 KB) and returns EAGAIN once filled. A
- * previous "best effort" implementation silently dropped the
- * remainder of the OSC envelope, so the receiver saw a truncated
- * base64 payload that decoded to garbage. Loop, polling on EAGAIN so
- * we block-with-a-deadline until the PTY drains. */
-static void write_osc(const char *data, size_t len)
-{
-    size_t total = 0;
-    while (total < len) {
-        ptrdiff_t n = yetty_ygui_raw_write(STDOUT_FILENO, data + total, len - total);
-        if (n < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-#ifndef _WIN32
-            /* The EAGAIN/EWOULDBLOCK + poll() backoff only makes sense on
-             * POSIX. Win32 `_write` on a synchronous file handle blocks
-             * until the buffer drains and never returns EAGAIN; if it
-             * ever does (overlapped I/O case we don't enter), errno is
-             * not even portable. Skip the block on MSVC. */
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                struct pollfd pfd = {.fd = STDOUT_FILENO, .events = POLLOUT};
-                int pr = poll(&pfd, 1, 5000);
-                if (pr > 0 && (pfd.revents & POLLOUT)) {
-                    continue;
-                }
-                ydebug("write_osc: poll timeout/error at %zu/%zu (pr=%d revents=0x%x)",
-                       total, len, pr, pfd.revents);
-                return;
-            }
-#endif
-            ydebug("write_osc: write failed at %zu/%zu (errno=%d)", total, len, errno);
-            return;
-        }
-        if (n == 0) {
-            ydebug("write_osc: write returned 0 (pipe closed) at %zu/%zu", total, len);
-            return;
-        }
-        total += (size_t)n;
-    }
-}
-
-/* Vendor ID = yetty ypaint-layer OSC sink (see terminal.c register_osc_sink).
- * The layer's write() handler accepts:
- *   \033]666674;--bin;<base64>\033\ — append a base64 ypaint buffer
- *
- * ygui's semantics are "the whole UI is re-rendered every tick". The
- * buffer's first prim is CMD_ZERO (set by ygui_engine_render), which the
- * receiver applies inline — clearing the canvas + cursor reset in the
- * same envelope as the rest of the frame. This eliminates the inter-write
- * flicker that a separate YPAINT_CLEAR envelope used to cause. */
+/* Vendor ID for the legacy ydraw-layer OSC sink (zoom / scroll
+ * commands still ride this tag for now). */
 #define VENDOR_ID "666674"
 
-/* Write a full envelope to a yetty_platform_pty using ops->write. The pty
- * is responsible for whatever transport (memory ring, fd, etc.). Surfaces
- * a short / failed write as an error so the caller can react. */
+/* Push `len` bytes to the engine's output pty. The pty's ops->write is
+ * defined to accept the full payload (it queues internally for async
+ * delivery in the libuv backend, or memcpy's into the ring for the
+ * memory-pty backend), so a short return is always treated as failure. */
 static struct yetty_ycore_void_result write_pty_all(struct yetty_platform_pty *pty,
                                                     const char *data, size_t len)
 {
-    if (!pty || !pty->ops || !pty->ops->write) {
+    if (!pty) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_osc: output_pty is NULL");
+    }
+    if (!pty->ops || !pty->ops->write) {
         return YETTY_ERR(yetty_ycore_void, "ygui_osc: output_pty has no write op");
+    }
+    if (len == 0) {
+        return YETTY_OK_VOID();
     }
     struct yetty_ycore_size_result r = pty->ops->write(pty, data, len);
     if (YETTY_IS_ERR(r)) {
@@ -134,6 +61,8 @@ static struct yetty_ycore_void_result write_pty_all(struct yetty_platform_pty *p
     return YETTY_OK_VOID();
 }
 
+/* Build the OSC envelope for a binary ydraw payload (compressed) and
+ * push it through output_pty. */
 static struct yetty_ycore_void_result write_bin(struct yetty_platform_pty *output_pty,
                                                 const uint8_t *data, uint32_t size)
 {
@@ -143,10 +72,6 @@ static struct yetty_ycore_void_result write_bin(struct yetty_platform_pty *outpu
         return YETTY_OK_VOID();
     }
 
-    /* Bin envelope: args = bin meta (compressed=1), payload = LZ4F'd
-     * + b64'd ypaint serialized buffer. yetty_yface_emit builds the
-     * whole envelope into out_buf and we push it via the blocking
-     * write helper. */
     struct yetty_yface_bin_meta meta = {
         .magic = YETTY_YFACE_BIN_MAGIC,
         .version = YETTY_YFACE_BIN_VERSION,
@@ -156,29 +81,34 @@ static struct yetty_ycore_void_result write_bin(struct yetty_platform_pty *outpu
         .reserved = {0, 0},
     };
     struct yetty_ycore_buffer out = {0};
-    struct yetty_ycore_void_result r = yetty_yface_emit(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
-                                                        &meta, sizeof(meta), data, size, &out);
+    /* Target the scene-canvas layer — the envelope shape is identical
+     * to YDRAW_BIN (yface binary, framed YDrawList); only the OSC code
+     * differs so the receiver routes incremental GROUP/DELETE updates
+     * to the entity-aware canvas. */
+    struct yetty_ycore_void_result r =
+        yetty_yface_emit(YETTY_OSC_YDRAW_SCENE_BIN, /*compressed=*/1, &meta, sizeof(meta), data,
+                         size, &out);
     ydebug("write_bin: raw_size=%u envelope_bytes=%zu emit_ok=%d", size, out.size,
            YETTY_IS_OK(r));
-    if (YETTY_IS_OK(r) && out.size > 0) {
-        if (output_pty) {
-            struct yetty_ycore_void_result wr =
-                write_pty_all(output_pty, (const char *)out.data, out.size);
-            if (YETTY_IS_ERR(wr)) {
-                yetty_ycore_buffer_destroy(&out);
-                return wr;
-            }
-        } else {
-            write_osc((const char *)out.data, out.size);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_buffer_destroy(&out);
+        return YETTY_ERR(yetty_ycore_void, "ygui_osc: yface_emit (bin) failed", r);
+    }
+    if (out.size > 0) {
+        struct yetty_ycore_void_result wr = write_pty_all(output_pty, (const char *)out.data, out.size);
+        if (YETTY_IS_ERR(wr)) {
+            yetty_ycore_buffer_destroy(&out);
+            return YETTY_ERR(yetty_ycore_void, "ygui_osc: write_bin write failed", wr);
         }
     }
     yetty_ycore_buffer_destroy(&out);
-    return r;
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_ygui_osc_create_card(struct yetty_platform_pty *output_pty,
                                                           const char *name, int x, int y, int w,
-                                                          int h, const uint8_t *data, uint32_t size)
+                                                          int h, const uint8_t *data,
+                                                          uint32_t size)
 {
     (void)name;
     (void)x;
@@ -196,54 +126,54 @@ struct yetty_ycore_void_result yetty_ygui_osc_update_card(struct yetty_platform_
     return write_bin(output_pty, data, size);
 }
 
-void yetty_ygui_osc_kill_card(const char *name)
+struct yetty_ycore_void_result yetty_ygui_osc_kill_card(struct yetty_platform_pty *output_pty,
+                                                        const char *name)
 {
     /* No named-card concept on this sink — kill = clear the canvas. */
     (void)name;
     static const char clear_seq[] = "\033]600000;;\033\\";
-    write_osc(clear_seq, sizeof(clear_seq) - 1);
+    return write_pty_all(output_pty, clear_seq, sizeof(clear_seq) - 1);
 }
 
-void yetty_ygui_osc_subscribe_clicks(int enable)
+struct yetty_ycore_void_result yetty_ygui_osc_subscribe_clicks(struct yetty_platform_pty *output_pty,
+                                                               int enable)
 {
     if (enable) {
-        write_osc("\033[?1500h", 8);
-    } else {
-        write_osc("\033[?1500l", 8);
+        return write_pty_all(output_pty, "\033[?1500h", 8);
     }
+    return write_pty_all(output_pty, "\033[?1500l", 8);
 }
 
-void yetty_ygui_osc_subscribe_moves(int enable)
+struct yetty_ycore_void_result yetty_ygui_osc_subscribe_moves(struct yetty_platform_pty *output_pty,
+                                                              int enable)
 {
     if (enable) {
-        write_osc("\033[?1501h", 8);
-    } else {
-        write_osc("\033[?1501l", 8);
+        return write_pty_all(output_pty, "\033[?1501h", 8);
     }
+    return write_pty_all(output_pty, "\033[?1501l", 8);
 }
 
-void yetty_ygui_osc_query_cell_size(void)
+struct yetty_ycore_void_result yetty_ygui_osc_query_cell_size(struct yetty_platform_pty *output_pty)
 {
     /* CSI 16 t - request cell size in pixels */
-    write_osc("\033[16t", 5);
+    return write_pty_all(output_pty, "\033[16t", 5);
 }
 
-void yetty_ygui_osc_subscribe_view_changes(int enable)
+struct yetty_ycore_void_result yetty_ygui_osc_subscribe_view_changes(
+    struct yetty_platform_pty *output_pty, int enable)
 {
     /* DEC mode 1502 - subscribe to card view change events */
     if (enable) {
-        write_osc("\033[?1502h", 8);
-    } else {
-        write_osc("\033[?1502l", 8);
+        return write_pty_all(output_pty, "\033[?1502h", 8);
     }
+    return write_pty_all(output_pty, "\033[?1502l", 8);
 }
 
-/* Register a card with the ymgui layer. The server then hit-tests this card
- * and routes mouse events to it as YMGUI_OSC_SC_MOUSE with card-local
- * coords. Without this, the server's hit table has no entry for our UI and
- * no mouse traffic ever flows back. col/row/w_cells/h_cells are in grid
- * cells (matching ygui_engine_create's x,y,cols,rows). */
-struct yetty_ycore_void_result yetty_ygui_osc_card_place(uint32_t card_id, int col, int row,
+/* Register a card with the ymgui layer. The server then hit-tests this
+ * card and routes mouse events to it as YMGUI_OSC_SC_MOUSE with
+ * card-local coords. */
+struct yetty_ycore_void_result yetty_ygui_osc_card_place(struct yetty_platform_pty *output_pty,
+                                                         uint32_t card_id, int col, int row,
                                                          uint32_t w_cells, uint32_t h_cells)
 {
     struct yetty_ymgui_wire_card_place msg = {
@@ -260,14 +190,24 @@ struct yetty_ycore_void_result yetty_ygui_osc_card_place(uint32_t card_id, int c
     struct yetty_ycore_void_result r =
         yetty_yface_emit(YMGUI_OSC_CS_CARD_PLACE, /*compressed=*/0,
                          /*args=*/NULL, /*args_len=*/0, &msg, sizeof(msg), &out);
-    if (YETTY_IS_OK(r) && out.size > 0) {
-        write_osc((const char *)out.data, out.size);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_buffer_destroy(&out);
+        return YETTY_ERR(yetty_ycore_void, "ygui_osc: card_place emit failed", r);
+    }
+    if (out.size > 0) {
+        struct yetty_ycore_void_result wr =
+            write_pty_all(output_pty, (const char *)out.data, out.size);
+        if (YETTY_IS_ERR(wr)) {
+            yetty_ycore_buffer_destroy(&out);
+            return YETTY_ERR(yetty_ycore_void, "ygui_osc: card_place write failed", wr);
+        }
     }
     yetty_ycore_buffer_destroy(&out);
-    return r;
+    return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ygui_osc_card_remove(uint32_t card_id)
+struct yetty_ycore_void_result yetty_ygui_osc_card_remove(struct yetty_platform_pty *output_pty,
+                                                          uint32_t card_id)
 {
     struct yetty_ymgui_wire_card_remove msg = {
         .magic = YMGUI_WIRE_MAGIC_CARD_REMOVE,
@@ -279,38 +219,57 @@ struct yetty_ycore_void_result yetty_ygui_osc_card_remove(uint32_t card_id)
     struct yetty_ycore_void_result r =
         yetty_yface_emit(YMGUI_OSC_CS_CARD_REMOVE, /*compressed=*/0,
                          /*args=*/NULL, /*args_len=*/0, &msg, sizeof(msg), &out);
-    if (YETTY_IS_OK(r) && out.size > 0) {
-        write_osc((const char *)out.data, out.size);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_buffer_destroy(&out);
+        return YETTY_ERR(yetty_ycore_void, "ygui_osc: card_remove emit failed", r);
+    }
+    if (out.size > 0) {
+        struct yetty_ycore_void_result wr =
+            write_pty_all(output_pty, (const char *)out.data, out.size);
+        if (YETTY_IS_ERR(wr)) {
+            yetty_ycore_buffer_destroy(&out);
+            return YETTY_ERR(yetty_ycore_void, "ygui_osc: card_remove write failed", wr);
+        }
     }
     yetty_ycore_buffer_destroy(&out);
-    return r;
+    return YETTY_OK_VOID();
 }
 
-void yetty_ygui_osc_zoom_card(const char *name, float level)
+struct yetty_ycore_void_result yetty_ygui_osc_zoom_card(struct yetty_platform_pty *output_pty,
+                                                        const char *name, float level)
 {
     char buf[256];
     int len = snprintf(buf, sizeof(buf), "\033]" VENDOR_ID ";zoom --name %s --level %.2f\033\\",
                        name, level);
-    write_osc(buf, len);
+    if (len < 0 || (size_t)len >= sizeof(buf)) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_osc: zoom_card snprintf overflow");
+    }
+    return write_pty_all(output_pty, buf, (size_t)len);
 }
 
-void yetty_ygui_osc_scroll_card(const char *name, float x, float y, int absolute)
+struct yetty_ycore_void_result yetty_ygui_osc_scroll_card(struct yetty_platform_pty *output_pty,
+                                                          const char *name, float x, float y,
+                                                          int absolute)
 {
     char buf[256];
     int len;
     if (absolute) {
-        /* Absolute scroll position: -x/-y */
         len = snprintf(buf, sizeof(buf),
                        "\033]" VENDOR_ID ";scroll --name %s -x %.0f -y %.0f\033\\", name, x, y);
     } else {
-        /* Relative scroll delta: --dx/--dy */
         len = snprintf(buf, sizeof(buf),
-                       "\033]" VENDOR_ID ";scroll --name %s --dx %.0f --dy %.0f\033\\", name, x, y);
+                       "\033]" VENDOR_ID ";scroll --name %s --dx %.0f --dy %.0f\033\\", name, x,
+                       y);
     }
-    write_osc(buf, len);
+    if (len < 0 || (size_t)len >= sizeof(buf)) {
+        return YETTY_ERR(yetty_ycore_void, "ygui_osc: scroll_card snprintf overflow");
+    }
+    return write_pty_all(output_pty, buf, (size_t)len);
 }
 
-void yetty_ygui_osc_scroll_card_delta(const char *name, float dx, float dy)
+struct yetty_ycore_void_result yetty_ygui_osc_scroll_card_delta(struct yetty_platform_pty *output_pty,
+                                                                const char *name, float dx,
+                                                                float dy)
 {
-    yetty_ygui_osc_scroll_card(name, dx, dy, 0);
+    return yetty_ygui_osc_scroll_card(output_pty, name, dx, dy, /*absolute=*/0);
 }

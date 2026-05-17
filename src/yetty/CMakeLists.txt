@@ -72,6 +72,9 @@ add_subdirectory(yui)
 # Core sources (src/yetty/core/*.cpp)
 set(YETTY_YCORE_SOURCES "")
 
+# Wire-format state machine (OSC framer + decode stack)
+add_subdirectory(ywire)
+
 # Term subsystem
 add_subdirectory(yterm)
 
@@ -130,20 +133,16 @@ if(YETTY_ENABLE_FEATURE_YCAT)
     endif()
 endif()
 
-if(YETTY_ENABLE_FEATURE_YDRAW)
-    add_subdirectory(ydraw)
-endif()
-
 if(YETTY_ENABLE_FEATURE_YRICH)
     add_subdirectory(yrich)
 endif()
 
-if(YETTY_ENABLE_FEATURE_YPAINT)
-    add_subdirectory(ypaint-core)
-    add_subdirectory(ypaint-factory)
-    add_subdirectory(ypaint-yaml)
+if(YETTY_ENABLE_FEATURE_YDRAW)
+    add_subdirectory(ydraw-core)
+    add_subdirectory(ydraw-factory)
+    add_subdirectory(ydraw-yaml)
     add_subdirectory(ysdf)
-    add_subdirectory(ypaint)
+    add_subdirectory(ydraw)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YNETSURF)
@@ -218,6 +217,10 @@ endif()
 
 if(YETTY_ENABLE_FEATURE_YZOO)
     add_subdirectory(yzoo)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YJUNGLE)
+    add_subdirectory(yjungle)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YMSDF_GEN)

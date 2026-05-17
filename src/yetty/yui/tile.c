@@ -39,7 +39,7 @@ struct yetty_yui_tile {
 struct yetty_yui_tile_ops {
     struct yetty_ycore_void_result (*destroy)(struct yetty_yui_tile *self);
     struct yetty_ycore_void_result (*render)(struct yetty_yui_tile *self,
-                                             struct yetty_ypaint_core_target *render_target);
+                                             struct yetty_ydraw_target *render_target);
     struct yetty_ycore_void_result (*set_bounds)(struct yetty_yui_tile *self,
                                                  struct yetty_yui_rect bounds);
     struct yetty_ycore_int_result (*on_event)(struct yetty_yui_tile *self,
@@ -104,7 +104,7 @@ static struct yetty_ycore_void_result split_destroy(struct yetty_yui_tile *self)
 }
 
 static struct yetty_ycore_void_result split_render(struct yetty_yui_tile *self,
-                                                   struct yetty_ypaint_core_target *render_target)
+                                                   struct yetty_ydraw_target *render_target)
 {
     struct yetty_yui_split *split = (struct yetty_yui_split *)self;
     struct yetty_ycore_void_result res;
@@ -274,7 +274,7 @@ static struct yetty_ycore_void_result pane_destroy(struct yetty_yui_tile *self)
 }
 
 static struct yetty_ycore_void_result pane_render(struct yetty_yui_tile *self,
-                                                  struct yetty_ypaint_core_target *render_target)
+                                                  struct yetty_ydraw_target *render_target)
 {
     struct yetty_yui_pane *pane = (struct yetty_yui_pane *)self;
 
@@ -378,7 +378,7 @@ struct yetty_ycore_void_result yetty_yui_tile_destroy(struct yetty_yui_tile *til
 }
 
 struct yetty_ycore_void_result yetty_yui_tile_render(struct yetty_yui_tile *tile,
-                                                     struct yetty_ypaint_core_target *render_target)
+                                                     struct yetty_ydraw_target *render_target)
 {
     if (!tile) {
         return YETTY_ERR(yetty_ycore_void, "tile is NULL");

@@ -31,7 +31,7 @@ enable_testing()
 
 add_executable(ylexbor-wpt-runner
     wpt-runner.c
-    # ytrace symbols are referenced by yetty_ypaint_core's flyweight
+    # ytrace symbols are referenced by yetty_ydraw_core's flyweight
     # path; the regular yetty binary pulls them in transitively, but a
     # standalone ctest binary needs them explicitly.
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
@@ -41,7 +41,7 @@ add_executable(ylexbor-wpt-runner
 # couldn't pull globalThis.__ylexbor_test_results__ back out.
 target_link_libraries(ylexbor-wpt-runner PRIVATE
     yetty_ylexbor
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_ycore
     qjs
 )

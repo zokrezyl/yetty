@@ -2,7 +2,7 @@
 #define YETTY_YMAZE_YMAZE_H
 
 /*
- * ymaze — animated maze generator + solver, drawn as ypaint SDF prims.
+ * ymaze — animated maze generator + solver, drawn as ydraw SDF prims.
  *
  * Port of yetty-poc/src/yetty/ydraw-maze (C++ → C). The renderer:
  *   1. Generates a maze with a recursive-backtracker DFS.
@@ -11,7 +11,7 @@
  *      and an actor circle interpolated along the path.
  *   4. When auto_regen is on, finishing the path triggers a fresh maze.
  *
- * The renderer is a pure producer of ypaint primitives — no IO, no GPU,
+ * The renderer is a pure producer of ydraw primitives — no IO, no GPU,
  * no terminal interaction. The frontend tool drives time, owns the buffer,
  * and ships it out via OSC.
  */
@@ -20,7 +20,7 @@
 #include <stdint.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -68,7 +68,7 @@ struct yetty_ycore_void_result yetty_ymaze_regenerate(struct yetty_ymaze *maze);
  * `*out_regenerated` (may be NULL) is set to true iff a new maze was generated
  * during this call. */
 struct yetty_ycore_void_result yetty_ymaze_render(struct yetty_ymaze *maze,
-                                                  struct yetty_ypaint_core_buffer *buf, float time,
+                                                  struct yetty_ydraw_draw_list *buf, float time,
                                                   bool *out_regenerated);
 
 bool yetty_ymaze_is_finished(const struct yetty_ymaze *maze, float time);

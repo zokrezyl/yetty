@@ -1,6 +1,6 @@
-# ydiagram — Mermaid (and later DOT) → ypaint buffer of MSD/MSDF primitives.
+# ydiagram — Mermaid (and later DOT) → ydraw buffer of MSD/MSDF primitives.
 #
-# Pure C; depends on ycore (result/types), ypaint-core (buffer + text/font
+# Pure C; depends on ycore (result/types), ydraw-core (buffer + text/font
 # flyweights), and ysdf (SDF shape emitters). No platform-specific deps.
 
 add_library(yetty_ydiagram STATIC
@@ -18,6 +18,6 @@ target_include_directories(yetty_ydiagram PUBLIC
 
 target_link_libraries(yetty_ydiagram PUBLIC
     yetty_ycore
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_ysdf
 )

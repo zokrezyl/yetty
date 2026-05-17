@@ -45,7 +45,7 @@ struct yetty_yfont_glyph_meta_gpu {
 };
 
 struct yetty_yfont_raster_font {
-    struct yetty_ypaint_font base;
+    struct yetty_ydraw_font base;
 
     /* TTF bytes owned when loaded from memory; NULL when loaded from file. */
     uint8_t *ttf_owned;
@@ -73,12 +73,12 @@ struct yetty_yfont_raster_font {
     struct yetty_ycore_map glyph_map;
     /* Inverse map (slot → cp) — populated alongside glyph_map so
      * clipboard extraction can recover the codepoint from a glyph
-     * index stored in a ypaint glyph prim. */
+     * index stored in a ydraw glyph prim. */
     struct yetty_ycore_map slot_to_cp;
 
     /* GPU — present only in full mode. */
     struct yetty_ycore_buffer shader_code;
-    struct yetty_ypaint_core_gpu_resource_set rs;
+    struct yetty_ydraw_gpu_resource_set rs;
     int dirty;
 };
 
@@ -224,7 +224,7 @@ static struct uint32_result load_one(struct yetty_yfont_raster_font *f, uint32_t
  * Vtable
  *===========================================================================*/
 
-static void raster_destroy(struct yetty_ypaint_font *self)
+static void raster_destroy(struct yetty_ydraw_font *self)
 {
     struct yetty_yfont_raster_font *f = (struct yetty_yfont_raster_font *)self;
     if (!f) {
@@ -246,7 +246,7 @@ static void raster_destroy(struct yetty_ypaint_font *self)
     free(f);
 }
 
-static struct uint32_result raster_get_glyph_index(struct yetty_ypaint_font *self, uint32_t cp)
+static struct uint32_result raster_get_glyph_index(struct yetty_ydraw_font *self, uint32_t cp)
 {
     struct yetty_yfont_raster_font *f = (struct yetty_yfont_raster_font *)self;
     if (!f) {
@@ -255,7 +255,7 @@ static struct uint32_result raster_get_glyph_index(struct yetty_ypaint_font *sel
     return load_one(f, cp);
 }
 
-static struct uint32_result raster_get_codepoint(struct yetty_ypaint_font *self,
+static struct uint32_result raster_get_codepoint(struct yetty_ydraw_font *self,
                                                  uint32_t glyph_index)
 {
     struct yetty_yfont_raster_font *f = (struct yetty_yfont_raster_font *)self;
@@ -269,14 +269,14 @@ static struct uint32_result raster_get_codepoint(struct yetty_ypaint_font *self,
     return YETTY_OK(uint32, *cp);
 }
 
-static struct uint32_result raster_get_glyph_index_styled(struct yetty_ypaint_font *self,
+static struct uint32_result raster_get_glyph_index_styled(struct yetty_ydraw_font *self,
                                                           uint32_t cp, enum yetty_yfont_style style)
 {
     (void)style;
     return raster_get_glyph_index(self, cp);
 }
 
-static struct yetty_ycore_void_result raster_load_glyphs(struct yetty_ypaint_font *self,
+static struct yetty_ycore_void_result raster_load_glyphs(struct yetty_ydraw_font *self,
                                                          const uint32_t *cps, size_t count)
 {
     struct yetty_yfont_raster_font *f = (struct yetty_yfont_raster_font *)self;
@@ -289,7 +289,7 @@ static struct yetty_ycore_void_result raster_load_glyphs(struct yetty_ypaint_fon
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result raster_load_basic_latin(struct yetty_ypaint_font *self)
+static struct yetty_ycore_void_result raster_load_basic_latin(struct yetty_ydraw_font *self)
 {
     struct yetty_yfont_raster_font *f = (struct yetty_yfont_raster_font *)self;
     if (!f) {
@@ -301,7 +301,7 @@ static struct yetty_ycore_void_result raster_load_basic_latin(struct yetty_ypain
     return YETTY_OK_VOID();
 }
 
-static struct float_result raster_get_advance(struct yetty_ypaint_font *self, uint32_t cp,
+static struct float_result raster_get_advance(struct yetty_ydraw_font *self, uint32_t cp,
                                               float font_size)
 {
     struct yetty_yfont_raster_font *f = (struct yetty_yfont_raster_font *)self;
@@ -325,7 +325,7 @@ static struct float_result raster_get_advance(struct yetty_ypaint_font *self, ui
     return YETTY_OK(float, (float)adv_fu *font_size / f->units_per_em);
 }
 
-static struct float_result raster_measure_text(struct yetty_ypaint_font *self, const char *utf8,
+static struct float_result raster_measure_text(struct yetty_ydraw_font *self, const char *utf8,
                                                size_t len, float font_size)
 {
     struct yetty_yfont_raster_font *f = (struct yetty_yfont_raster_font *)self;
@@ -377,20 +377,20 @@ static struct float_result raster_measure_text(struct yetty_ypaint_font *self, c
     return YETTY_OK(float, (float)total_fu *font_size / f->units_per_em);
 }
 
-static float raster_get_base_size(const struct yetty_ypaint_font *self)
+static float raster_get_base_size(const struct yetty_ydraw_font *self)
 {
     const struct yetty_yfont_raster_font *f = (const struct yetty_yfont_raster_font *)self;
     return f ? f->base_size : 32.0f;
 }
 
-static int raster_is_dirty(const struct yetty_ypaint_font *self)
+static int raster_is_dirty(const struct yetty_ydraw_font *self)
 {
     const struct yetty_yfont_raster_font *f = (const struct yetty_yfont_raster_font *)self;
     return f ? f->dirty : 0;
 }
 
 static struct yetty_yrender_gpu_resource_set_result raster_get_gpu_resource_set(
-    struct yetty_ypaint_font *self)
+    struct yetty_ydraw_font *self)
 {
     struct yetty_yfont_raster_font *f = (struct yetty_yfont_raster_font *)self;
     if (!f) {

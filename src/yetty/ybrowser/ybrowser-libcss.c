@@ -108,10 +108,10 @@ static const char UA_DEFAULT_CSS[] =
     "em, i, cite, dfn { font-style: italic; }\n"
     "a { color: #00e; }\n"
     "hr { display: block; margin: 0.5em auto; border-top: 1px solid #888; }\n"
-    /* Accessibility / chrome — elements explicitly marked off-screen
-     * or decorative MUST NOT render. Wikipedia and most large sites
-     * leak nav/menu/jump-link junk through these attributes when
-     * their main stylesheet doesn't apply. `!important` so we beat
+    /* Accessibility / boilerplate — elements explicitly marked
+     * off-screen or decorative MUST NOT render. Wikipedia and most
+     * large sites leak nav/menu/jump-link junk through these attributes
+     * when their main stylesheet doesn't apply. `!important` so we beat
      * the loaded author CSS (which often overrides these for sighted
      * users via positional tricks we don't implement). */
     "[aria-hidden=\"true\"] { display: none !important; }\n"
@@ -139,7 +139,7 @@ static const char UA_DEFAULT_CSS[] =
     ".mw-halign-center, figure.mw-halign-center,"
     " figure.mw-default-size.mw-halign-center"
     " { float: none; margin: 0.5em auto; }\n"
-    /* Wikipedia's hidden chrome: jump links, edit-section markers,
+    /* Wikipedia's hidden navigation: jump links, edit-section markers,
      * collapsed nav modules, sidebar menus, footer, indicators,
      * language-switcher etc. None of these contribute article content
      * to a CSS-less / terminal renderer. `!important` because the
@@ -159,8 +159,9 @@ static const char UA_DEFAULT_CSS[] =
     " .mw-footer-container, #footer, .vector-pinnable-header,"
     " .skip-link, .visualClear"
     " { display: none !important; }\n"
-    /* Top-level `<nav>` is almost always chrome (site nav, breadcrumbs,
-     * tabs); inline `<nav>` inside an article is rare. The article
+    /* Top-level `<nav>` is almost always boilerplate (site nav,
+     * breadcrumbs, tabs); inline `<nav>` inside an article is rare.
+     * The article
      * <header> wrapping the page title is critical content though, so
      * we only hide <nav> by default — NOT <header>. */
     "nav { display: none !important; }\n";
@@ -848,19 +849,19 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
                                         CSS_ORIGIN_UA) != 0) {
         ydebug("libcss: UA stylesheet append failed");
     }
-    /* Hostile-author chrome hider, installed as CSS_ORIGIN_USER with
+    /* Hostile-author nav hider, installed as CSS_ORIGIN_USER with
      * !important. User !important is the highest cascade origin per
      * CSS spec (beats author !important and UA !important). We need
      * this because libcss treats UA-origin rules as LOWER priority
      * than author rules even with !important, so my UA stylesheet's
      * `.mw-jump-link { display: none !important }` lost to Wikipedia's
      * `.mw-jump-link { display: block }` and the "Jump to content" /
-     * sidebar / nav-pinning chrome leaked through. CSS_ORIGIN_USER
-     * places these one tier higher in the cascade. */
+     * sidebar / nav-pinning leaked through. CSS_ORIGIN_USER places
+     * these one tier higher in the cascade. */
     /* NOTE: don't hide .vector-page-titlebar — it wraps the article
      * <h1>. The header element with that class IS the page title
      * region we want to render. */
-    static const char CHROME_HIDE_CSS[] =
+    static const char NAV_HIDE_CSS[] =
         "[aria-hidden=\"true\"], [hidden], [role=\"presentation\"],"
         " .mw-jump-link, .mw-editsection, .navbox, .navbar, .vector-menu,"
         " .vector-header, .vector-page-toolbar,"
@@ -877,9 +878,9 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
         /* And re-pin our figure fix at user-origin too in case libcss's
          * compiled-in defaults for <figure> beat the UA origin. */
         "figure { display: block !important; }\n";
-    if (yetty_ybrowser_libcss_add_sheet(r, CHROME_HIDE_CSS, sizeof(CHROME_HIDE_CSS) - 1,
+    if (yetty_ybrowser_libcss_add_sheet(r, NAV_HIDE_CSS, sizeof(NAV_HIDE_CSS) - 1,
                                         CSS_ORIGIN_USER) != 0) {
-        ydebug("libcss: chrome-hide stylesheet append failed");
+        ydebug("libcss: nav-hide stylesheet append failed");
     }
     return 0;
 }

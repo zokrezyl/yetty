@@ -1,7 +1,7 @@
-/* yui.h — app-level chrome singleton.
+/* yui.h — app-level yui singleton.
  *
  * Internal header (only yetty.c includes it). Owns the producer + transport +
- * consumer chain for the app's top-z chrome layer:
+ * consumer chain for the app's top-z yui layer:
  *
  *   ygui_engine  (producer, future)
  *      │  yface-encoded OSC envelope
@@ -10,7 +10,7 @@
  *      ▼
  *   osc_statemachine  (on render-side endpoint)
  *      ▼
- *   ypaint-layer KIND_STATIC  (consumer, owns a static-canvas)
+ *   ydraw-layer KIND_SCENE  (consumer, owns a scene-canvas)
  *      ▼
  *   render target  (composited above all terminals in the frame loop)
  *
@@ -35,7 +35,7 @@ extern "C" {
 
 struct yetty_yui;
 struct yetty_context;
-struct yetty_ypaint_core_target;
+struct yetty_ydraw_target;
 
 YETTY_YRESULT_DECLARE(yetty_yui_ptr, struct yetty_yui *);
 
@@ -71,11 +71,11 @@ const char *yetty_yui_get_field_text(const struct yetty_yui *yui,
  * yetty_yui_get_field_text(yui, YETTY_YUI_VIEW_EXEC, 0). */
 const char *yetty_yui_get_exec_command(const struct yetty_yui *yui);
 
-/* True iff yui currently has any interactive chrome on screen — v-menu
+/* True iff yui currently has any interactive widget on screen — v-menu
  * open or any dialog visible. Use this in the host's mouse dispatch to
  * decide whether to route the event to yui first (yes ⇒ yui owns the
  * pointer; no ⇒ fall through to the workspace below). */
-int yetty_yui_has_active_chrome(const struct yetty_yui *yui);
+int yetty_yui_is_active(const struct yetty_yui *yui);
 
 /* Route a platform mouse / mouse-scroll event into yui's ygui engine.
  * Returns 1 if yui consumed it (an open menu / dialog was hit-tested or
@@ -84,16 +84,16 @@ int yetty_yui_has_active_chrome(const struct yetty_yui *yui);
 struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
                                                  const struct yetty_yui_event *event);
 
-/* Construct the app-level chrome singleton.
+/* Construct the app-level yui singleton.
  *
  * Sets up: memory-pty pair, osc_statemachine on the render endpoint,
- * ypaint-layer KIND_STATIC registered for YPAINT_CLEAR/BIN/OVERLAY on
+ * ydraw-layer KIND_SCENE registered for YDRAW_CLEAR/BIN/OVERLAY on
  * that SM, and the memory-pty wake bridged to the event loop. The
  * ygui_engine producer is wired later (separate task).
  *
  * `surface_w`/`surface_h` are the initial window framebuffer dims; the
- * layer is sized to fit. `cell_w`/`cell_h` set the static-canvas grid
- * stride — for app-level chrome these are mostly arbitrary; the
+ * layer is sized to fit. `cell_w`/`cell_h` set the scene-canvas grid
+ * stride — for app-level yui these are mostly arbitrary; the
  * defaults follow the terminal text-layer's font metrics.
  */
 struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context,
@@ -102,12 +102,12 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
 
 struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui);
 
-/* Composite the yui chrome into the render target. Called from yetty's
+/* Composite the yui into the render target. Called from yetty's
  * RENDER handler after every terminal layer has rendered. */
 struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
-                                                struct yetty_ypaint_core_target *target);
+                                                struct yetty_ydraw_target *target);
 
-/* Update the static-canvas grid to match a new framebuffer size. Called
+/* Update the scene-canvas grid to match a new framebuffer size. Called
  * from the RESIZE handler. Cell stride stays as set at create time. */
 struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t surface_w,
                                                 uint32_t surface_h);

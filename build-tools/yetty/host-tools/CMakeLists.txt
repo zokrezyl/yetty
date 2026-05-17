@@ -162,7 +162,7 @@ target_link_libraries(yetty-ymsdf-gen PRIVATE yetty_ymsdf_gen)
 # C port. The previous C++ implementation lived in src/yetty/yecho/*.cpp;
 # the C version moved to src/yetty/yecho/yecho.c and is built by the main
 # CMake tree as the `yecho` tool target. Re-wire it here when the VM image
-# starts shipping yecho again — needs ycore + ypaint-core + ysdf + yface +
+# starts shipping yecho again — needs ycore + ydraw-core + ysdf + yface +
 # yfont_shader_glyph sources compiled standalone.
 
 # =============================================================================
@@ -240,6 +240,10 @@ foreach(NAME ${TS_GRAMMAR_NAMES})
         file(READ "${_QUERY_FILE}" _CHILD_CONTENT)
         string(APPEND _QUERY_CONTENT "${_CHILD_CONTENT}")
         string(REPLACE "\\" "\\\\" _QUERY_CONTENT "${_QUERY_CONTENT}")
+        # Escape '?' so adjacent '??' sequences in .scm files aren't
+        # interpreted as C trigraphs (compilers warn even when trigraphs
+        # are disabled, as in C17+).
+        string(REPLACE "?" "\\?" _QUERY_CONTENT "${_QUERY_CONTENT}")
         string(REPLACE "\"" "\\\"" _QUERY_CONTENT "${_QUERY_CONTENT}")
         string(REPLACE "\n" "\\n\"\n\"" _QUERY_CONTENT "${_QUERY_CONTENT}")
         string(APPEND _TS_HEADER "static const char TS_QUERY_${NAME}[] =\n\"${_QUERY_CONTENT}\";\n\n")

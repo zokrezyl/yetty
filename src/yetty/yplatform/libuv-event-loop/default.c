@@ -2,7 +2,7 @@
  *
  * Works on both Unix and Windows:
  * - Input pipe (bridge): uv_pipe_t reads structured events from main thread
- * - PTY pipe: uv_pipe_t reads raw PTY output, feeds to pty_reader
+ * - PTY pipe: uv_pipe_t reads raw PTY output, feeds to the wire state machine
  * - Both use IOCP on Windows, epoll/kqueue on Unix — zero CPU when idle
  */
 
@@ -150,6 +150,13 @@ struct yetty_yplatform_libuv_event_loop {
     uv_signal_t sigint_handle;
     uv_signal_t sigterm_handle;
 #endif
+
+    /* Set by post_fatal_error from any thread / callback. The loop tears
+     * itself down (uv_stop); libuv_start checks this on exit and returns
+     * an error wrapping the stashed chain. msg is a string literal; cause
+     * is the heap chain transferred from the caller. */
+    int                       fatal_set;       /* 0/1, set under post_mutex */
+    struct yetty_ycore_error  fatal_error;
 };
 
 /* Forward declarations */
@@ -201,6 +208,8 @@ static struct yetty_ycore_void_result libuv_tcp_close(struct yetty_yevent_conn *
 static void write_pool_drain(struct yetty_yevent_conn *conn);
 static void libuv_request_render(struct yetty_yevent_event_loop *self);
 static void libuv_post_to_loop(struct yetty_yevent_event_loop *self, void (*fn)(void *), void *arg);
+static void libuv_post_fatal_error(struct yetty_yevent_event_loop *self,
+                                   struct yetty_ycore_error error);
 
 static const struct yetty_yevent_event_loop_ops libuv_ops = {
     .destroy = libuv_destroy,
@@ -227,6 +236,7 @@ static const struct yetty_yevent_event_loop_ops libuv_ops = {
     .tcp_close = libuv_tcp_close,
     .request_render = libuv_request_render,
     .post_to_loop = libuv_post_to_loop,
+    .post_fatal_error = libuv_post_fatal_error,
 };
 
 /* Callbacks */
@@ -391,6 +401,23 @@ static struct yetty_ycore_void_result libuv_start(struct yetty_yevent_event_loop
         container_of(self, struct yetty_yplatform_libuv_event_loop, base);
     int r = uv_run(impl->loop, UV_RUN_DEFAULT);
 
+    /* Fatal error stashed during the run takes precedence over uv_run's
+     * own return: external callbacks (libuv read/write, signal handlers)
+     * have no Result to propagate, so they call post_fatal_error which
+     * stops the loop and parks the error chain here for surfacing. */
+    if (impl->fatal_set) {
+        impl->fatal_set = 0;
+        /* Synthesise a Result that carries the stashed chain. Build it
+         * as if YETTY_ERR_3 were composing it: msg = the stashed top,
+         * cause = the stashed chain head. */
+        struct yetty_ycore_void_result out = {
+            .ok = 0,
+            .error = impl->fatal_error,
+        };
+        impl->fatal_error = (struct yetty_ycore_error){0};
+        return out;
+    }
+
     if (r < 0) {
         return YETTY_ERR(yetty_ycore_void, "uv_run failed");
     }
@@ -512,7 +539,7 @@ static struct yetty_ycore_void_result libuv_broadcast(struct yetty_yevent_event_
     return YETTY_OK_VOID();
 }
 
-/* PTY pipe — uv_pipe_t with uv_read_start, data feeds to pty_reader */
+/* PTY pipe — uv_pipe_t with uv_read_start, data feeds to the wire state machine */
 
 static struct yetty_yevent_pipe_id_result libuv_register_pty_pipe(
     struct yetty_yevent_event_loop *self, struct yetty_platform_pty_pipe_source *source,
@@ -728,6 +755,40 @@ static void libuv_post_to_loop(struct yetty_yevent_event_loop *self, void (*fn)(
     uv_mutex_unlock(&impl->post_mutex);
 
     uv_async_send(&impl->post_async);
+}
+
+/* Trampoline for post_to_loop: call uv_stop on the loop thread. */
+static void uv_stop_trampoline(void *arg)
+{
+    uv_stop((uv_loop_t *)arg);
+}
+
+/* post_fatal_error — stash, mark, stop the loop. Thread-safe (uses
+ * post_mutex). MOVES the error chain into the loop; caller must not
+ * destroy. Second and subsequent calls free their own chain. */
+static void libuv_post_fatal_error(struct yetty_yevent_event_loop *self,
+                                   struct yetty_ycore_error error)
+{
+    struct yetty_yplatform_libuv_event_loop *impl =
+        container_of(self, struct yetty_yplatform_libuv_event_loop, base);
+
+    uv_mutex_lock(&impl->post_mutex);
+    int already_set = impl->fatal_set;
+    if (!already_set) {
+        impl->fatal_error = error;
+        impl->fatal_set = 1;
+    }
+    uv_mutex_unlock(&impl->post_mutex);
+
+    if (already_set) {
+        /* Lost the race — drop the duplicate. */
+        yetty_ycore_error_destroy(error);
+        return;
+    }
+
+    /* uv_stop is documented thread-unsafe; route through post_to_loop so
+     * the actual uv_stop call lands on the loop thread. */
+    libuv_post_to_loop(self, uv_stop_trampoline, impl->loop);
 }
 
 /* TCP Server & Client */

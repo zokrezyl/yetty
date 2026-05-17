@@ -2,7 +2,7 @@
  * Demo 23: tabbar + rich (YAML).
  *
  * Three tabs, each populated with a rich widget whose content is parsed
- * from an inline ypaint YAML string:
+ * from an inline ydraw YAML string:
  *   - "Text"  — heading + body span (mixed font sizes / colors)
  *   - "Plot"  — sin(x) / cos(x) over [-pi, pi]
  *   - "Shapes" — a couple of SDF primitives, exercises the translator
@@ -66,7 +66,7 @@ static const char *YAML_TEXT =
     "      color: \"#cccccc\"\n"
     "  - text:\n"
     "      position: [16, 115]\n"
-    "      content: \"holds a ypaint-core buffer; the engine translates its\"\n"
+    "      content: \"holds a ydraw-core buffer; the engine translates its\"\n"
     "      font-size: 16\n"
     "      color: \"#cccccc\"\n"
     "  - text:\n"
@@ -124,7 +124,6 @@ static const char *YAML_SHAPES =
 
 int main(void)
 {
-    (void)freopen("/dev/null", "w", stderr);
     if (yetty_ygui_init() != 0) {
         return 1;
     }
@@ -133,15 +132,13 @@ int main(void)
     query_terminal_cells(&cols, &rows);
 
     struct ygui_engine_ptr_result eng_r =
-        yetty_ygui_engine_create("rich-tabbar", 0, 0, cols, rows);
+        yetty_ygui_engine_create((struct yetty_ygui_engine_args){.name = "rich-tabbar"});
     if (YETTY_IS_ERR(eng_r)) {
         yetty_ycore_error_destroy(eng_r.error);
         yetty_ygui_shutdown();
         return 1;
     }
     struct yetty_ygui_engine *engine = eng_r.value;
-    yetty_ygui_engine_set_canvas_mode(engine, YETTY_YGUI_CANVAS_FIT);
-
     struct yetty_ygui_theme *theme = yetty_ygui_theme_create_default();
     yetty_ygui_theme_set_font_size(theme, 16.0f);
     yetty_ygui_engine_set_theme(engine, theme);
@@ -176,7 +173,6 @@ int main(void)
 
     yetty_ygui_engine_on_resize(engine, on_resize, NULL);
     yetty_ygui_engine_on_key(engine, on_key, NULL);
-    yetty_ygui_engine_show(engine);
     {
         float cw = 0, ch = 0;
         yetty_ygui_engine_get_size(engine, &cw, &ch);

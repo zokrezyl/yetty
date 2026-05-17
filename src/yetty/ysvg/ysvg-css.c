@@ -51,7 +51,7 @@ static int css_is_name_char(int c)
     return css_is_name_start(c) || (c >= '0' && c <= '9');
 }
 
-/* Skip whitespace + /* … *⁠/ comments. */
+/* Skip whitespace and CSS block comments. */
 static size_t css_skip_ws(const char *s, size_t len, size_t pos)
 {
     for (;;) {

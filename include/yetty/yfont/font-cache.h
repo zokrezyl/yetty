@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-struct yetty_ypaint_font;
+struct yetty_ydraw_font;
 struct yetty_yfont_cache;
 
 typedef uint32_t yetty_yfont_cache_handle;
@@ -46,7 +46,7 @@ typedef uint32_t yetty_yfont_cache_handle;
 /* Pair returned by get_font. `font` is borrowed — valid only while the
  * caller still holds at least one ref to `handle`. */
 struct yetty_yfont_cache_ref {
-    struct yetty_ypaint_font *font;
+    struct yetty_ydraw_font *font;
     yetty_yfont_cache_handle  handle;
 };
 
@@ -81,7 +81,7 @@ void yetty_yfont_cache_release_font(struct yetty_yfont_cache *cache,
                                     yetty_yfont_cache_handle handle);
 
 /* Read access. Returns NULL if handle is INVALID, out of range, or freed. */
-struct yetty_ypaint_font *yetty_yfont_cache_font_at(const struct yetty_yfont_cache *cache,
+struct yetty_ydraw_font *yetty_yfont_cache_font_at(const struct yetty_yfont_cache *cache,
                                                     yetty_yfont_cache_handle handle);
 
 /* Total slots ever allocated (including freed ones). For binder / debug

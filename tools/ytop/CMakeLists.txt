@@ -21,7 +21,7 @@ target_include_directories(ytop PRIVATE
     ${YETTY_ROOT}/src
 )
 
-# ygui pulls in ypaint-core, ysdf, ycore, yface, yfont, yrender, libuv as
+# ygui pulls in ydraw-core, ysdf, ycore, yface, yfont, yrender, libuv as
 # transitive PUBLIC deps — no need to list them again here.
 target_link_libraries(ytop PRIVATE ygui)
 

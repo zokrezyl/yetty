@@ -56,9 +56,9 @@ struct GridUniforms {
     visualZoomScale: f32,      // 4 bytes: 1.0 = off, >1.0 = zoomed
     visualZoomOffsetX: f32,    // 4 bytes: pan X in pixels
     visualZoomOffsetY: f32,    // 4 bytes: pan Y in pixels
-    // YPaint overlay painters (full-screen layers)
-    ypaintScrollingSlot: u32,  // 4 bytes: slot index (0 = disabled)
-    ypaintOverlaySlot: u32,    // 4 bytes: slot index (0 = disabled)
+    // YDraw overlay painters (full-screen layers)
+    ydrawScrollingSlot: u32,  // 4 bytes: slot index (0 = disabled)
+    ydrawOverlaySlot: u32,    // 4 bytes: slot index (0 = disabled)
     _pad0: f32,                // 4 bytes: alignment padding
     _pad1: f32,                // 4 bytes: alignment padding
     _pad2: f32,                // 4 bytes: alignment padding for 16-byte
@@ -609,11 +609,11 @@ fn renderShaderGlyph(glyphIndex: u32, localUV: vec2<f32>, time: f32, fg: u32, bg
 }
 
 // =============================================================================
-// YPaint Overlay Rendering (full-screen painters)
-// Renders ypaint content from a metadata slot as a full-screen overlay.
+// YDraw Overlay Rendering (full-screen painters)
+// Renders ydraw content from a metadata slot as a full-screen overlay.
 // Returns vec4: rgb = color, a = coverage (0 = transparent, 1 = opaque)
 // =============================================================================
-fn renderYpaintOverlay(slotIndex: u32, pixelPos: vec2<f32>) -> vec4<f32> {
+fn renderYdrawOverlay(slotIndex: u32, pixelPos: vec2<f32>) -> vec4<f32> {
     if (slotIndex == 0u) {
         return vec4<f32>(0.0);  // Disabled
     }
@@ -685,9 +685,9 @@ fn renderYpaintOverlay(slotIndex: u32, pixelPos: vec2<f32>) -> vec4<f32> {
 
         // SDF primitive
         let primOff = primDataBase + rawIdx;
-        let d = evaluateYpaintSDF(primOff, scenePos);
+        let d = evaluateYdrawSDF(primOff, scenePos);
 
-        let colors = ypaintPrimColors(primOff);
+        let colors = ydrawPrimColors(primOff);
         let fillColorPacked = colors.x;
         if (d < 0.0 && fillColorPacked != 0u) {
             let fillColorAlpha = unpackColorAlpha(fillColorPacked);
@@ -698,7 +698,7 @@ fn renderYpaintOverlay(slotIndex: u32, pixelPos: vec2<f32>) -> vec4<f32> {
         }
 
         let strokeColorPacked = colors.y;
-        let strokeWidth = ypaintPrimStrokeWidth(primOff);
+        let strokeWidth = ydrawPrimStrokeWidth(primOff);
         if (strokeWidth > 0.0 && strokeColorPacked != 0u) {
             let strokeDist = abs(d) - strokeWidth * 0.5;
             if (strokeDist < 0.0) {
@@ -1051,17 +1051,17 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // ==== POST-EFFECT: modify final pixel color ====
     // POST_EFFECT_APPLY_PLACEHOLDER
 
-    // ==== YPAINT OVERLAYS: render full-screen painter layers ====
+    // ==== YDRAW OVERLAYS: render full-screen painter layers ====
     // Layer 1: Scrolling painter (scrolls with terminal content)
-    if (grid.ypaintScrollingSlot > 0u) {
-        let scrollingColor = renderYpaintOverlay(grid.ypaintScrollingSlot, pixelPos);
+    if (grid.ydrawScrollingSlot > 0u) {
+        let scrollingColor = renderYdrawOverlay(grid.ydrawScrollingSlot, pixelPos);
         if (scrollingColor.a > 0.01) {
             finalColor = mix(finalColor, scrollingColor.rgb, scrollingColor.a);
         }
     }
     // Layer 2: Overlay painter (fixed position, on top)
-    if (grid.ypaintOverlaySlot > 0u) {
-        let overlayColor = renderYpaintOverlay(grid.ypaintOverlaySlot, pixelPos);
+    if (grid.ydrawOverlaySlot > 0u) {
+        let overlayColor = renderYdrawOverlay(grid.ydrawOverlaySlot, pixelPos);
         if (overlayColor.a > 0.01) {
             finalColor = mix(finalColor, overlayColor.rgb, overlayColor.a);
         }

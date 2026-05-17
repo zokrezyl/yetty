@@ -1,7 +1,7 @@
 /*
  * ygui_rich.c — RICH widget.
  *
- * Holds a ypaint-core buffer of pre-built primitives (TEXT_SPAN, SDF
+ * Holds a ydraw-core buffer of pre-built primitives (TEXT_SPAN, SDF
  * shapes, yplot, yimage, ...). At render time every primitive in that
  * buffer is translated by the widget's resolved absolute position and
  * appended to the engine's frame buffer.
@@ -14,7 +14,7 @@
  * Two constructors:
  *   - rich(engine, id, x, y, w, h)            empty surface, fill later
  *   - rich_from_yaml(... yaml, yaml_len)      convenience: parses YAML via
- *                                              ypaint-yaml and hands the
+ *                                              ydraw-yaml and hands the
  *                                              resulting buffer to the
  *                                              widget (equivalent to
  *                                              rich() + set_yaml())
@@ -26,10 +26,14 @@
 
 #include "ygui_internal.h"
 
-#include <yetty/ypaint-core/buffer.h>
-#include <yetty/ypaint-core/cmds.h>
-#include <yetty/ypaint-core/text-span-prim.h>
+#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/ydraw-core/cmds.h>
+#include <yetty/ydraw-core/text-span-prim.h>
 #include <yetty/ysdf/types.gen.h>
+
+/* Strip CMD_GROUP / CMD_DELETE / addressable-record HAS_ID bit so the
+ * raw type word can be matched against the SDF type table. */
+#define RICH_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
 
 #include <yetty/ytrace/ytrace.h>
 
@@ -43,29 +47,39 @@
 /*=============================================================================
  * Buffer walker — sized strides without depending on a flyweight registry.
  *
- * The ypaint wire format reserves type-id ranges per category:
- *   [0x00000000, 0x0000FFFF]  cmd   FAM:  type, payload_size, payload[]
- *   [0x10000000, 0x1FFFFFFF]  SDF   plain: type, z_order, fill, stroke,
- *                                          stroke_width, args[]    (sized
- *                                          via yetty_ysdf_primitive_size)
- *   [0x40000000, 0x7FFFFFFF]  flyweight (FONT, TEXT_SPAN)  FAM
- *   [0x80000000, 0xFFFFFFFF]  complex (yplot, yimage, ...) FAM
+ * The ydraw wire format actually reserves these type-id ranges (see
+ * include/yetty/ydraw-core/cmds.h, include/yetty/ydraw-core/font-prim.h,
+ * include/yetty/ydraw-core/text-span-prim.h, include/yetty/ysdf/types.gen.h):
+ *   [0x00000000, 0x0000FFFF]  cmd       FAM:  type, payload_size, payload[]
+ *   0x40000001                FONT      FAM
+ *   0x40000002                TEXT_SPAN FAM
+ *   [0x7FFFFF7C, 0x7FFFFFFF]  SDF       fixed word count per type
+ *                                       (yetty_ysdf_primitive_size)
+ *   [0x80000000, 0xFFFFFFFF]  complex   FAM (yplot, yimage, ...)
+ *
+ * SDFs may also carry the HAS_ID flag (0x80000000 OR'd onto the type
+ * word) — addressable variant inserts a 4-byte id right after the type
+ * word, adding 4 bytes to the prim's overall size.
  *
  * For FAM prims size = 8 + payload_size (payload_size already 4-aligned).
  * For SDF prims size comes from the auto-generated word-count table.
  *===========================================================================*/
 
-static size_t rich_prim_size(const uint32_t *prim, size_t remaining)
+static size_t rich_drawable_size(const uint32_t *prim, size_t remaining)
 {
     if (remaining < sizeof(uint32_t)) {
         return 0;
     }
     uint32_t type = prim[0];
 
-    /* SDF tier */
-    if (type >= 0x10000000u && type < 0x20000000u) {
-        size_t s = yetty_ysdf_primitive_size(type);
-        return (s > 0 && s <= remaining) ? s : 0;
+    /* SDF tier — primitive_size returns 0 for any non-SDF type word, so
+     * it doubles as the type-class probe. Mask off the optional HAS_ID
+     * bit before the lookup; if addressable, add the trailing id slot. */
+    uint32_t base = RICH_TYPE_BASE(type);
+    size_t sdf_bytes = yetty_ysdf_primitive_size(base);
+    if (sdf_bytes > 0) {
+        size_t s = sdf_bytes + ((type & YETTY_YDRAW_HAS_ID_FLAG) ? sizeof(uint32_t) : 0);
+        return (s <= remaining) ? s : 0;
     }
 
     /* CMD / flyweight / complex — all FAM. */
@@ -98,46 +112,52 @@ static size_t rich_prim_size(const uint32_t *prim, size_t remaining)
 
 static void translate_sdf(uint32_t *prim, size_t words, float dx, float dy)
 {
-    if (words < 7) {
-        return; /* type+z+fill+stroke+sw+x+y minimum */
-    }
+    /* Layout (non-addressable):
+     *   [type, z, fill, stroke, sw, x, y, ...] — geometry starts at float 5.
+     * Addressable variant shifts every field by one slot to make room for
+     * the trailing id word inserted right after type. Handle both. */
     uint32_t type = prim[0];
+    uint32_t base = RICH_TYPE_BASE(type);
+    size_t shift = (type & YETTY_YDRAW_HAS_ID_FLAG) ? 1u : 0u;
+    size_t geom = 5u + shift; /* index of center_x / start_x */
 
-    /* Every SDF prim carries center/start at float indices 5, 6. */
+    if (words < geom + 2u) {
+        return;
+    }
     float *fprim = (float *)prim;
-    fprim[5] += dx;
-    fprim[6] += dy;
+    fprim[geom + 0] += dx;
+    fprim[geom + 1] += dy;
 
-    switch (type) {
+    switch (base) {
     case YETTY_YSDF_SEGMENT:
-        if (words >= 9) {
-            fprim[7] += dx;
-            fprim[8] += dy;
+        if (words >= geom + 4u) {
+            fprim[geom + 2] += dx;
+            fprim[geom + 3] += dy;
         }
         break;
     case YETTY_YSDF_TRIANGLE:
-        if (words >= 11) {
-            fprim[7] += dx;
-            fprim[8] += dy;
-            fprim[9] += dx;
-            fprim[10] += dy;
+        if (words >= geom + 6u) {
+            fprim[geom + 2] += dx;
+            fprim[geom + 3] += dy;
+            fprim[geom + 4] += dx;
+            fprim[geom + 5] += dy;
         }
         break;
     case YETTY_YSDF_LINEAR_GRADIENT_BOX:
-        /* args: center_x, center_y, half_w, half_h, corner, gx0, gy0,
-         * gx1, gy1, color0, color1 → gradient endpoints at floats 10..13. */
-        if (words >= 14) {
-            fprim[10] += dx;
-            fprim[11] += dy;
-            fprim[12] += dx;
-            fprim[13] += dy;
+        /* args: cx, cy, hw, hh, corner, gx0, gy0, gx1, gy1, color0, color1.
+         * Gradient endpoints are at geom+5 .. geom+8. */
+        if (words >= geom + 9u) {
+            fprim[geom + 5] += dx;
+            fprim[geom + 6] += dy;
+            fprim[geom + 7] += dx;
+            fprim[geom + 8] += dy;
         }
         break;
     case YETTY_YSDF_RADIAL_GRADIENT_BOX:
-        /* gradient center at floats 10..11. */
-        if (words >= 12) {
-            fprim[10] += dx;
-            fprim[11] += dy;
+        /* args end with gradient center → geom+5 .. geom+6. */
+        if (words >= geom + 7u) {
+            fprim[geom + 5] += dx;
+            fprim[geom + 6] += dy;
         }
         break;
     default:
@@ -179,11 +199,14 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
         /* CMD — payload-less in practice (CMD_ZERO); nothing to translate. */
         return;
     }
-    if (type >= 0x10000000u && type < 0x20000000u) {
+    /* SDF — primitive_size doubles as the type-class probe (returns 0
+     * for non-SDF). Check before the FAM/complex branches because SDF
+     * types overlap the [0x40000000, 0x7FFFFFFF] flyweight range. */
+    if (yetty_ysdf_primitive_size(RICH_TYPE_BASE(type)) > 0u) {
         translate_sdf(prim, words, dx, dy);
         return;
     }
-    if (type == YETTY_YPAINT_TYPE_TEXT_SPAN) {
+    if (type == YETTY_YDRAW_TYPE_TEXT_SPAN) {
         translate_text_span(prim, words, dx, dy);
         return;
     }
@@ -200,7 +223,7 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
  * absolute layout box and append it to the engine's frame buffer.
  *
  * The source buffer's raw primitive byte stream is exposed by
- * yetty_ypaint_core_buffer_data() / _size() — these used to be
+ * yetty_ydraw_draw_list_data() / _size() — these used to be
  * module-private; promoted to the public surface for producers that
  * need to walk their own buffers (this widget is the motivating case).
  *===========================================================================*/
@@ -216,8 +239,8 @@ static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self
         return YETTY_OK_VOID();
     }
     const uint8_t *src_data =
-        (const uint8_t *)yetty_ypaint_core_buffer_data(self->data.rich.buffer);
-    size_t src_size = yetty_ypaint_core_buffer_size(self->data.rich.buffer);
+        (const uint8_t *)yetty_ydraw_draw_list_data(self->data.rich.buffer);
+    size_t src_size = yetty_ydraw_draw_list_size(self->data.rich.buffer);
     ydebug("rich_render id=%s src=%p size=%zu layout=(%.1f,%.1f)",
            self->id ? self->id : "?", (const void *)src_data, src_size,
            self->layout_x, self->layout_y);
@@ -238,7 +261,7 @@ static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self
 
     int n_prims = 0;
     while (remaining >= sizeof(uint32_t)) {
-        size_t s = rich_prim_size((const uint32_t *)p, remaining);
+        size_t s = rich_drawable_size((const uint32_t *)p, remaining);
         uint32_t t = ((const uint32_t *)p)[0];
         ydebug("rich_render prim#%d type=0x%x size=%zu rem=%zu", n_prims, t, s, remaining);
         if (s == 0 || s > remaining) {
@@ -260,8 +283,8 @@ static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self
         }
         memcpy(work, p, s);
         translate_prim((uint32_t *)work, s, dx, dy);
-        struct yetty_ypaint_core_id_result r =
-            yetty_ypaint_core_buffer_add_prim(ctx->buffer, work, s);
+        struct yetty_ydraw_id_result r =
+            yetty_ydraw_draw_list_add_prim(ctx->buffer, work, s);
         if (YETTY_IS_ERR(r)) {
             free(heap);
             return YETTY_ERR(yetty_ycore_void, "rich_render: add_prim failed", r);
@@ -279,7 +302,7 @@ static struct yetty_ycore_void_result rich_render(struct yetty_ygui_widget *self
 static void rich_destroy(struct yetty_ygui_widget *self)
 {
     if (self->data.rich.buffer) {
-        yetty_ypaint_core_buffer_destroy(self->data.rich.buffer);
+        yetty_ydraw_draw_list_destroy(self->data.rich.buffer);
         self->data.rich.buffer = NULL;
     }
 }
@@ -320,17 +343,17 @@ struct yetty_ygui_widget *yetty_ygui_engine_rich(struct yetty_ygui_engine *engin
  * of this file for the rationale. */
 
 void yetty_ygui_widget_rich_set_buffer(struct yetty_ygui_widget *widget,
-                                       struct yetty_ypaint_core_buffer *buffer)
+                                       struct yetty_ydraw_draw_list *buffer)
 {
     if (!widget || widget->type != YETTY_YGUI_WIDGET_RICH) {
         return;
     }
     if (widget->data.rich.buffer && widget->data.rich.buffer != buffer) {
-        yetty_ypaint_core_buffer_destroy(widget->data.rich.buffer);
+        yetty_ydraw_draw_list_destroy(widget->data.rich.buffer);
     }
     widget->data.rich.buffer = buffer;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 

@@ -19,7 +19,7 @@ set(YETTY_ENABLE_LIB_LIBSSH2       OFF CACHE BOOL "" FORCE)  # yssh wrapper not 
 set(YETTY_ENABLE_FEATURE_YTHORVG   OFF CACHE BOOL "" FORCE)  # C99 compound literals (MSVC C++ rejects)
 set(YETTY_ENABLE_LIB_THORVG        OFF CACHE BOOL "" FORCE)  # only consumer is FEATURE_YTHORVG
 set(YETTY_ENABLE_TOOL_YTHORVG      OFF CACHE BOOL "" FORCE)
-set(YETTY_ENABLE_TOOL_YPAINT_BENCH OFF CACHE BOOL "" FORCE)  # passes -Wextra unconditionally (MSVC: D8021)
+set(YETTY_ENABLE_TOOL_YDRAW_BENCH OFF CACHE BOOL "" FORCE)  # passes -Wextra unconditionally (MSVC: D8021)
 set(YETTY_ENABLE_FEATURE_DEMO      OFF CACHE BOOL "" FORCE)  # hardcodes shared/{thread,term}.c (POSIX)
 set(YETTY_ENABLE_TOOL_YDOC         OFF CACHE BOOL "" FORCE)  # poll.h, termios.h, unistd.h
 set(YETTY_ENABLE_TOOL_YSHEET       OFF CACHE BOOL "" FORCE)  # uses yrich-runner (POSIX TTY)

@@ -4,13 +4,13 @@
 /*
  * yrich-runner — interactive driver for yrich documents.
  *
- * Renders a yetty_yrich_document to a ypaint buffer and emits it on stdout
- * as OSC 666674 (the canvas sink consumed by yetty's ypaint-layer). There is
+ * Renders a yetty_yrich_document to a ydraw buffer and emits it on stdout
+ * as OSC 666674 (the canvas sink consumed by yetty's ydraw-layer). There is
  * no card abstraction — the document IS the canvas.
  *
  * Output protocol (matches src/yetty/ygui/ygui_osc.c):
  *   \033]666674;--clear\033\\          — empty the canvas
- *   \033]666674;--bin;<base64>\033\\   — push a fresh ypaint buffer
+ *   \033]666674;--bin;<base64>\033\\   — push a fresh ydraw buffer
  *
  * Input protocol:
  *   OSC 777777 — mouse click       (buttons;press;x;y)
@@ -33,11 +33,11 @@ extern "C" {
 #endif
 
 struct yetty_yrich_document;
-struct yetty_ypaint_core_buffer;
+struct yetty_ydraw_draw_list;
 
 struct yrich_runner {
 	struct yetty_yrich_document *doc;       /* not owned */
-	struct yetty_ypaint_core_buffer *buf;   /* not owned */
+	struct yetty_ydraw_draw_list *buf;   /* not owned */
 
 	/* View state, populated from OSC 777779 / 777780. */
 	float display_w;
@@ -67,7 +67,7 @@ struct yrich_runner {
 /* Initialise an existing struct (zero-fills, attaches refs). NULL-safe. */
 void yrich_runner_init(struct yrich_runner *r,
 		       struct yetty_yrich_document *doc,
-		       struct yetty_ypaint_core_buffer *buf);
+		       struct yetty_ydraw_draw_list *buf);
 
 /* Free transient state owned by the runner (escape buffer). */
 void yrich_runner_fini(struct yrich_runner *r);

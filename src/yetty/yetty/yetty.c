@@ -47,13 +47,13 @@
 /* Yetty instance */
 struct yetty_yetty_yetty {
     struct yetty_context context;
-    /* Chrome-like top-level UI. The tabbar owns N workspaces; only the
-     * active workspace renders. Single-workspace boots create one tab so
-     * the existing render/event paths see exactly the same shape as before
+    /* Top-level UI. The tabbar owns N workspaces; only the active
+     * workspace renders. Single-workspace boots create one tab so the
+     * existing render/event paths see exactly the same shape as before
      * the tabbar was introduced. */
     struct yetty_yui_tabbar *tabbar;
-    /* App-level ygui chrome (popups, dialogs, future statusbar). Sits as
-     * the highest-z layer above every terminal in the active workspace.
+    /* App-level ygui (popups, dialogs, future statusbar). Sits as the
+     * highest-z layer above every terminal in the active workspace.
      * The tabbar above stays on its legacy rect path for now — yui is
      * additive; it does not displace anything. See src/yetty/yui/yui.h. */
     struct yetty_yui *yui;
@@ -71,7 +71,7 @@ struct yetty_yetty_yetty {
     struct yetty_yplatform_wgpu *wgpu;
 
     /* Big render target - window-sized texture with surface for presentation */
-    struct yetty_ypaint_core_target *render_target;
+    struct yetty_ydraw_target *render_target;
 
     /* RPC server (optional, enabled via -r/--rpc-socket) */
     struct yetty_yrpc_server *rpc_server;
@@ -180,8 +180,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
         }
         ytime_report(workspace_render);
 
-        /* App-level chrome on top of every terminal. ygui-produced
-         * primitives travel via memory-pty → static ypaint-layer here. */
+        /* App-level yui on top of every terminal. ygui-produced
+         * primitives travel via memory-pty → scene ydraw-layer here. */
         if (yetty->yui) {
             struct yetty_ycore_void_result yr =
                 yetty_yui_render(yetty->yui, yetty->render_target);
@@ -521,7 +521,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             yetty_yui_tabbar_resize(yetty->tabbar, (float)width, (float)height);
         }
 
-        /* Resize the app-level chrome's static canvas to match. */
+        /* Resize the app-level yui's scene canvas to match. */
         if (yetty->yui) {
             struct yetty_ycore_void_result yr = yetty_yui_resize(yetty->yui, width, height);
             if (YETTY_IS_ERR(yr)) {
@@ -581,11 +581,11 @@ static struct yetty_ycore_int_result yetty_event_handler(
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
-    /* yui chrome priority: when a v-menu / dialog is up, mouse events go
+    /* yui priority: when a v-menu / dialog is up, mouse events go
      * through yui's ygui engine FIRST so the popup is hit-tested before
-     * the workspace below sees them. If yui's not capturing (no active
-     * chrome, or event isn't a mouse type), fall through to the tabbar
-     * which routes strip clicks and forwards the rest to the workspace. */
+     * the workspace below sees them. If yui's not capturing (not active,
+     * or event isn't a mouse type), fall through to the tabbar which
+     * routes strip clicks and forwards the rest to the workspace. */
     if (yetty->yui) {
         struct yetty_ycore_int_result yr = yetty_yui_on_event(yetty->yui, event);
         if (YETTY_IS_OK(yr) && yr.value) {
@@ -767,7 +767,7 @@ static struct yetty_ycore_void_result init_webgpu(struct yetty_yetty_yetty *yett
     yetty->context.gpu_context.allocator = alloc_res.value;
 
     /* MSDF CDB generator (cpu | gpu). Selected by `msdf/generator` config
-     * key. Created here so every consumer (currently ypaint-canvas font
+     * key. Created here so every consumer (currently ydraw-canvas font
      * materialisation) can grab it off gpu_context. */
     {
         const char *shaders_dir = yetty->context.app_context.config->ops->get_string(
@@ -1104,11 +1104,11 @@ struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_contex
     }
     ydebug("yetty_create: initial workspace loaded");
 
-    /* App-level chrome singleton. Sized to the initial framebuffer; cell
-     * stride is a coarse 10x16 default — chrome elements are absolute-pixel
-     * positioned, so the static-canvas grid is only an addressing index.
+    /* App-level yui singleton. Sized to the initial framebuffer; cell
+     * stride is a coarse 10x16 default — yui elements are absolute-pixel
+     * positioned, so the scene-canvas grid is only an addressing index.
      * Non-fatal on failure: the rest of the app keeps working without
-     * top-z chrome. */
+     * the top-z yui layer. */
     {
         uint32_t sw = app_context->app_gpu_context.surface_width;
         uint32_t sh = app_context->app_gpu_context.surface_height;
@@ -1217,7 +1217,7 @@ struct yetty_ycore_void_result yetty_destroy(struct yetty_yetty_yetty *yetty)
         yetty->rpc_server = NULL;
     }
 
-    /* Destroy app-level chrome before tabbar/render_target. yui holds GPU
+    /* Destroy app-level yui before tabbar/render_target. yui holds GPU
      * resources owned by the same wgpu/event-loop teardown chain below. */
     if (yetty->yui) {
         ydebug("yetty_destroy: destroying yui");

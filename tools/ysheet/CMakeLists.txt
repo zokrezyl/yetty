@@ -16,7 +16,7 @@ target_include_directories(ysheet PRIVATE
 target_link_libraries(ysheet PRIVATE
     yrich_runner
     yetty_yrich
-    yetty_ypaint_core
+    yetty_ydraw_core
     yetty_ycore
     Threads::Threads
     yetty_yplatform_core

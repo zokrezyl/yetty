@@ -11,8 +11,8 @@ extern "C" {
 
 /* Forward-declared so this header stays GPU-less and can be included by
  * client-side wire emitters that don't link Dawn. The full type lives in
- * yetty/ypaint-factory/complex-prim-factory.h (server side). */
-struct yetty_ypaint_core_concrete_factory;
+ * yetty/ydraw-factory/figure-factory.h (server side). */
+struct yetty_ydraw_concrete_factory;
 
 #define YETTY_YPLOT_TYPE_ID 0x80000003u
 
@@ -52,16 +52,16 @@ struct yetty_ycore_size_result yetty_yplot_uniforms_serialize(
 // Factory API (creates binder with pre-compiled pipeline)
 //=============================================================================
 
-struct yetty_ypaint_core_concrete_factory *yetty_yplot_factory_create(void);
-void yetty_yplot_factory_destroy(struct yetty_ypaint_core_concrete_factory *factory);
+struct yetty_ydraw_concrete_factory *yetty_yplot_factory_create(void);
+void yetty_yplot_factory_destroy(struct yetty_ydraw_concrete_factory *factory);
 
 //=============================================================================
 // YAML parser registration
 //=============================================================================
 
-struct yetty_ypaint_yaml_parser;
+struct yetty_ydraw_yaml_parser;
 struct yetty_ycore_void_result yetty_yplot_register_yaml_factory(
-    struct yetty_ypaint_yaml_parser *parser);
+    struct yetty_ydraw_yaml_parser *parser);
 
 #ifdef __cplusplus
 }

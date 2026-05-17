@@ -2,10 +2,10 @@
 #define YETTY_YSVG_YSVG_H
 
 /*
- * ysvg - render an SVG document into a ypaint buffer.
+ * ysvg - render an SVG document into a ydraw buffer.
  *
  * Scope: SVG Tiny 1.2 (https://www.w3.org/TR/SVGMobile12/), focused on the
- * static-graphics subset that maps cleanly onto ypaint MSDF primitives and
+ * static-graphics subset that maps cleanly onto ydraw MSDF primitives and
  * MSDF text spans. We do NOT cover scripting, SMIL animation, the SVG DOM
  * timing model, or audio/video elements.
  *
@@ -13,25 +13,25 @@
  *   1. XML parse: source string → ysvg_node tree (elements + attributes).
  *   2. Style cascade: presentation attributes + inline `style` →
  *      resolved struct ysvg_style per element, with inheritance.
- *   3. Geometry flatten: shape elements + <path d="..."> → ypaint SDF
+ *   3. Geometry flatten: shape elements + <path d="..."> → ydraw SDF
  *      primitives (circle, ellipse, box, rounded_box, segment, capsule).
  *      Path data is flattened to segments after applying the inherited
  *      transform stack.
  *   4. Text: <text>/<tspan> emits MSDF TEXT_SPAN flyweights via
- *      yetty_ypaint_core_buffer_add_text.
+ *      yetty_ydraw_draw_list_add_text.
  *
  * The viewBox attribute on <svg> determines the scene bounds passed to the
- * ypaint buffer at creation time; absent a viewBox, the width/height
+ * ydraw buffer at creation time; absent a viewBox, the width/height
  * attributes are used; absent those, the config's pixel dimensions.
  *
  * The output buffer is owned by the caller (free with
- * yetty_ypaint_core_buffer_destroy).
+ * yetty_ydraw_draw_list_destroy).
  */
 
 #include <stddef.h>
 #include <stdint.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,14 +49,14 @@ struct yetty_ysvg_render_config {
 };
 
 struct yetty_ysvg_render_output {
-    struct yetty_ypaint_core_buffer *buffer;
+    struct yetty_ydraw_draw_list *buffer;
     float scene_width;
     float scene_height;
 };
 
 YETTY_YRESULT_DECLARE(yetty_ysvg_render, struct yetty_ysvg_render_output);
 
-/* Render SVG source into a fresh ypaint buffer. `content` need not be NUL
+/* Render SVG source into a fresh ydraw buffer. `content` need not be NUL
  * terminated; `content_len` is authoritative. `args` is a flag string of
  * the same shape ymarkdown uses, currently:
  *   --font-size=<float>      override default font size (default cell_height)

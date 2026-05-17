@@ -8,7 +8,7 @@
  *   ysvg-attrs.c   parses SVG attribute mini-languages (numbers, lengths,
  *                  colors, transforms, path 'd', points list, viewBox)
  *   ysvg-style.c   resolves the cascaded style for an element
- *   ysvg-paint.c   walks the tree and emits ypaint primitives + text spans
+ *   ysvg-paint.c   walks the tree and emits ydraw primitives + text spans
  *   ysvg.c         glues the pipeline together; owns the public entry point
  *
  * Memory model: one root yetty_ysvg_doc owns every node, attribute string,
@@ -20,7 +20,7 @@
 #include <stdint.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ysvg/ysvg.h>
 
 #ifdef __cplusplus
@@ -453,7 +453,7 @@ int yetty_ysvg_path_from_points(struct yetty_ysvg_path *out, const char *pts, si
  * Color helpers
  *===========================================================================*/
 
-/* Pack RGBA8888 (R in low byte) into the ABGR layout ypaint expects. */
+/* Pack RGBA8888 (R in low byte) into the ABGR layout ydraw expects. */
 uint32_t yetty_ysvg_rgba_to_abgr(uint32_t rgba);
 
 /* Multiply only the alpha byte of an RGBA word. */
@@ -464,14 +464,14 @@ uint32_t yetty_ysvg_rgba_mul_alpha(uint32_t rgba, float k);
  *===========================================================================*/
 
 struct yetty_ysvg_paint_ctx {
-    struct yetty_ypaint_core_buffer *buf;
+    struct yetty_ydraw_draw_list *buf;
     float default_font_size;
     float line_spacing;
     /* Scene bounds — points outside are still emitted but the buffer
      * carries these for the layer's scroll region. */
     float scene_min_x, scene_min_y, scene_max_x, scene_max_y;
     /* Root transform: maps SVG user units (viewBox space) to display
-     * pixels. The yetty ypaint canvas treats primitive coords as
+     * pixels. The yetty ydraw canvas treats primitive coords as
      * pixels, so we bake the viewBox→pixel scale here rather than
      * leaving it to the receiver. */
     struct yetty_ysvg_xform root_ctm;

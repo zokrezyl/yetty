@@ -1,4 +1,4 @@
-# ysvg — SVG (Tiny 1.2 subset) → ypaint buffer rendering
+# ysvg — SVG (Tiny 1.2 subset) → ydraw buffer rendering
 include(${YETTY_ROOT}/build-tools/yetty/libs/yxml.cmake)
 
 add_library(yetty_ysvg STATIC
@@ -19,7 +19,7 @@ target_include_directories(yetty_ysvg PUBLIC
 target_link_libraries(yetty_ysvg
     PUBLIC
         yetty_ycore
-        yetty_ypaint_core
+        yetty_ydraw_core
         yetty_ysdf
     PRIVATE
         yxml

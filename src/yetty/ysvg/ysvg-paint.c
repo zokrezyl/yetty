@@ -1,11 +1,11 @@
 /*
- * ysvg-paint.c — walk the SVG DOM and emit ypaint primitives.
+ * ysvg-paint.c — walk the SVG DOM and emit ydraw primitives.
  *
  * For each element we:
  *   1. Resolve the cascaded style (parent ⊕ presentation attrs ⊕ inline).
  *   2. Compose the current-transform-matrix with this element's
  *      `transform="..."`.
- *   3. Emit ypaint primitives. Geometry is transformed at emit time
+ *   3. Emit ydraw primitives. Geometry is transformed at emit time
  *      since SDF primitives carry shape parameters, not a transform.
  *
  * Mapping summary:
@@ -25,7 +25,7 @@
 #include "ysvg-internal.h"
 
 #include <yetty/ycore/result.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ycore/types.h>
@@ -50,7 +50,7 @@ struct ysvg_paint_state {
  * Color resolution
  *
  * Compose fill_opacity * opacity into the alpha byte and produce an ABGR
- * packed word ready for ypaint.
+ * packed word ready for ydraw.
  *===========================================================================*/
 
 static uint32_t resolve_color(const struct yetty_ysvg_paint *p, float opacity, float prop_opacity)
@@ -125,8 +125,8 @@ static struct yetty_ycore_void_result emit_segment(struct yetty_ysvg_paint_ctx *
     /* SDF segment is a stroked line — the shader reads stroke_color, not
      * fill. Pass `color` as the stroke argument (fill=0). Mirrors how
      * pdf-renderer.c / yzoo.c invoke add_segment. */
-    struct yetty_ypaint_core_id_result r =
-        yetty_ysdf_add_segment(ctx->buf, 0, 0, color, width, &seg);
+    struct yetty_ycore_void_result r =
+        yetty_ydraw_draw_list_add_cmd_add_segment(ctx->buf, 0, 0, 0, color, width, &seg);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ysvg: segment emit failed");
     return YETTY_OK_VOID();
 }
@@ -173,8 +173,8 @@ static struct yetty_ycore_void_result emit_rect(struct ysvg_paint_state *ps,
                 .radius_top_left = rx * rs,
                 .radius_bottom_left = rx * rs,
             };
-            struct yetty_ypaint_core_id_result r =
-                yetty_ysdf_add_rounded_box(ps->ctx->buf, 0, fill, stroke, sw, &geom);
+            struct yetty_ycore_void_result r =
+                yetty_ydraw_draw_list_add_cmd_add_rounded_box(ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ysvg: rect emit failed");
             return YETTY_OK_VOID();
         }
@@ -183,8 +183,8 @@ static struct yetty_ycore_void_result emit_rect(struct ysvg_paint_state *ps,
                                       .half_width = hw,
                                       .half_height = hh,
                                       .corner_radius = 0.0f};
-        struct yetty_ypaint_core_id_result r =
-            yetty_ysdf_add_box(ps->ctx->buf, 0, fill, stroke, sw, &geom);
+        struct yetty_ycore_void_result r =
+            yetty_ydraw_draw_list_add_cmd_add_box(ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ysvg: rect emit failed");
         return YETTY_OK_VOID();
     }
@@ -224,14 +224,14 @@ static struct yetty_ycore_void_result emit_circle(struct ysvg_paint_state *ps,
 
     if (fabsf(sx - sy) < 1e-4f) {
         struct yetty_ysdf_circle geom = {.center_x = cx, .center_y = cy, .radius = r * sx};
-        struct yetty_ypaint_core_id_result q =
-            yetty_ysdf_add_circle(ps->ctx->buf, 0, fill, stroke, sw, &geom);
+        struct yetty_ycore_void_result q =
+            yetty_ydraw_draw_list_add_cmd_add_circle(ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, q, "ysvg: circle emit failed");
     } else {
         struct yetty_ysdf_ellipse geom = {
             .center_x = cx, .center_y = cy, .radius_x = r * sx, .radius_y = r * sy};
-        struct yetty_ypaint_core_id_result q =
-            yetty_ysdf_add_ellipse(ps->ctx->buf, 0, fill, stroke, sw, &geom);
+        struct yetty_ycore_void_result q =
+            yetty_ydraw_draw_list_add_cmd_add_ellipse(ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, q, "ysvg: circle-as-ellipse emit failed");
     }
     return YETTY_OK_VOID();
@@ -257,8 +257,8 @@ static struct yetty_ycore_void_result emit_ellipse(struct ysvg_paint_state *ps,
                                                                 : ps->style.stroke_width * scale_avg;
     struct yetty_ysdf_ellipse geom = {
         .center_x = cx, .center_y = cy, .radius_x = rx * sx, .radius_y = ry * sy};
-    struct yetty_ypaint_core_id_result q =
-        yetty_ysdf_add_ellipse(ps->ctx->buf, 0, fill, stroke, sw, &geom);
+    struct yetty_ycore_void_result q =
+        yetty_ydraw_draw_list_add_cmd_add_ellipse(ps->ctx->buf, 0, 0, fill, stroke, sw, &geom);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, q, "ysvg: ellipse emit failed");
     return YETTY_OK_VOID();
 }
@@ -434,7 +434,7 @@ static struct yetty_ycore_void_result emit_text(struct ysvg_paint_state *ps,
         .capacity = blen,
     };
     struct yetty_ycore_void_result tr =
-        yetty_ypaint_core_buffer_add_text(ps->ctx->buf, tx, ty, &text, font_size, color, 0, -1,
+        yetty_ydraw_draw_list_add_text(ps->ctx->buf, tx, ty, &text, font_size, color, 0, -1,
                                           0.0f);
     if (YETTY_IS_ERR(tr)) return tr;
     ps->text_y = y + ps->style.font_size * ps->ctx->line_spacing;

@@ -2,7 +2,7 @@
  * ydiagram smoke test.
  *
  * Verifies the end-to-end pipeline: Mermaid input → graph IR → layout →
- * ypaint buffer with MSD/MSDF primitives. Asserts the expected counts of
+ * ydraw buffer with MSD/MSDF primitives. Asserts the expected counts of
  * nodes/edges in the IR plus a non-empty primitive byte stream in the
  * resulting buffer.
  */
@@ -16,7 +16,7 @@
 #include <yetty/ydiagram/mermaid-parser.h>
 #include <yetty/ydiagram/renderer.h>
 #include <yetty/ydiagram/ydiagram.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 
 #define REQUIRE(cond, msg)                                                       \
     do {                                                                         \
@@ -76,10 +76,10 @@ int main(void)
     REQUIRE(YETTY_IS_OK(br), "render_mermaid");
     REQUIRE(br.value != NULL, "buffer is non-null");
 
-    size_t buf_size = yetty_ypaint_core_buffer_size(br.value);
+    size_t buf_size = yetty_ydraw_draw_list_size(br.value);
     REQUIRE(buf_size > 0, "buffer has primitives");
 
-    yetty_ypaint_core_buffer_destroy(br.value);
+    yetty_ydraw_draw_list_destroy(br.value);
     yetty_ydiagram_graph_destroy(&g);
 
     printf("OK: ydiagram smoke test (%zu primitive bytes)\n", buf_size);

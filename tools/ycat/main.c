@@ -1,13 +1,13 @@
 /*
- * ycat - cat with MIME-dispatched ypaint rendering.
+ * ycat - cat with MIME-dispatched ydraw rendering.
  *
  * For each positional input (file path, or "-" for stdin):
  *   1. read the bytes
  *   2. detect the type via libmagic + extension
- *   3. dispatch to a handler that returns a ypaint-core buffer (markdown,
+ *   3. dispatch to a handler that returns a ydraw-core buffer (markdown,
  *      PDF for now — registry is open for more)
  *   4. emit an OSC 666674 sequence to stdout carrying the base64-encoded
- *      ypaint primitive bytes (consumed by the ypaint scrolling layer)
+ *      ydraw primitive bytes (consumed by the ydraw scrolling layer)
  *
  * If the handler dispatch yields no buffer (TEXT / UNKNOWN) the bytes are
  * streamed through unchanged. --raw forces pass-through regardless.
@@ -20,7 +20,7 @@
 
 #include <yetty/yplatform/getopt.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -87,7 +87,7 @@ static void usage(FILE *out, const char *prog)
 		"\n"
 		"    flags       │ in yetty                    │ non-yetty\n"
 		"    ────────────┼─────────────────────────────┼─────────────\n"
-		"    (none)      │ ypaint handler → OSC,       │ tree-sitter\n"
+		"    (none)      │ ydraw handler → OSC,       │ tree-sitter\n"
 		"                │  else ts → OSC, else raw    │  → SGR, else raw\n"
 		"    --raw       │ raw bytes                   │ raw bytes\n"
 		"    --ts        │ ts → OSC                    │ ts → SGR\n"
@@ -195,6 +195,29 @@ static int write_all_stdout(const uint8_t *data, size_t len)
 }
 
 /*=============================================================================
+ * Streaming-handler bridge: wraps yetty_ycat_osc_bin_emit so multi-
+ * envelope handlers (pdf, markdown) can ship one OSC per envelope to
+ * stdout without each handler depending on ycat tool internals.
+ *===========================================================================*/
+
+struct emit_to_stdout_ctx {
+	FILE *out;
+	size_t total;
+};
+
+static struct yetty_ycore_void_result emit_to_stdout(
+	void *ud, const struct yetty_ydraw_draw_list *envelope)
+{
+	struct emit_to_stdout_ctx *ec = ud;
+	struct yetty_ycore_size_result r = yetty_ycat_osc_bin_emit(envelope, ec->out);
+	if (YETTY_IS_ERR(r)) {
+		return YETTY_ERR(yetty_ycore_void, "osc_bin_emit failed", r);
+	}
+	ec->total += r.value;
+	return YETTY_OK_VOID();
+}
+
+/*=============================================================================
  * Per-file processing
  *===========================================================================*/
 
@@ -227,7 +250,7 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
 	 *
 	 *   flags          │ in yetty                     │ non-yetty
 	 *   ───────────────┼──────────────────────────────┼──────────────
-	 *   (none)         │ ypaint handler → OSC;         │ ts → SGR;
+	 *   (none)         │ ydraw handler → OSC;         │ ts → SGR;
 	 *                  │  else ts → OSC;               │  else raw.
 	 *                  │  else raw.                    │
 	 *   --raw          │ raw bytes                    │ raw bytes
@@ -278,7 +301,7 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
 			return er;
 		}
 
-		struct yetty_ypaint_core_buffer_result r =
+		struct yetty_ydraw_draw_list_result r =
 			yetty_ycat_ts_render(buf.data, buf.len, grammar, &cfg);
 		if (YETTY_IS_ERR(r)) {
 			fprintf(stderr, "ycat: %s: ts render failed: %s\n",
@@ -288,7 +311,7 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
 			return -1;
 		}
 		struct yetty_ycore_size_result em_r = yetty_ycat_osc_bin_emit(r.value, stdout);
-		yetty_ypaint_core_buffer_destroy(r.value);
+		yetty_ydraw_draw_list_destroy(r.value);
 		byte_buf_free(&buf);
 		free(url_mime);
 		if (YETTY_IS_ERR(em_r)) {
@@ -311,17 +334,37 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
 		type = yetty_ycat_detect(buf.data, buf.len, path_hint);
 	}
 
-	/* Inside a yetty terminal: try the dedicated ypaint handler first,
-	 * then ts → OSC, then raw. */
+	/* Inside a yetty terminal: try the dedicated ydraw handler first,
+	 * then ts → OSC, then raw. Multi-envelope formats (pdf, markdown)
+	 * register a streaming handler; single-shot formats (image, svg,
+	 * mermaid) register a legacy one. We try streaming first. */
 	if (in_yetty) {
+		yetty_ycat_handler_streaming_fn sfn = yetty_ycat_get_handler_streaming(type);
+		if (sfn) {
+			struct emit_to_stdout_ctx ec = { .out = stdout, .total = 0 };
+			struct yetty_ycore_void_result sr =
+				sfn(buf.data, buf.len, path_hint, &cfg,
+				    emit_to_stdout, &ec);
+			if (YETTY_IS_OK(sr)) {
+				byte_buf_free(&buf);
+				free(url_mime);
+				return ec.total > 0 ? 0 : -1;
+			}
+			fprintf(stderr,
+				"ycat: %s: streaming handler failed (%s), trying tree-sitter\n",
+				arg, sr.error.msg);
+			yetty_ycore_error_destroy(sr.error);
+			/* fall through to ts → OSC */
+		}
+
 		yetty_ycat_handler_fn fn = yetty_ycat_get_handler(type);
 		if (fn) {
-			struct yetty_ypaint_core_buffer_result r =
+			struct yetty_ydraw_draw_list_result r =
 				fn(buf.data, buf.len, path_hint, &cfg);
 			if (YETTY_IS_OK(r)) {
 				struct yetty_ycore_size_result em_r =
 					yetty_ycat_osc_bin_emit(r.value, stdout);
-				yetty_ypaint_core_buffer_destroy(r.value);
+				yetty_ydraw_draw_list_destroy(r.value);
 				byte_buf_free(&buf);
 				free(url_mime);
 				if (YETTY_IS_ERR(em_r)) {
@@ -331,17 +374,17 @@ static int process_one(const char *arg, const struct ycat_opts *opts)
 				return em_r.value > 0 ? 0 : -1;
 			}
 			fprintf(stderr,
-				"ycat: %s: ypaint handler failed (%s), trying tree-sitter\n",
+				"ycat: %s: ydraw handler failed (%s), trying tree-sitter\n",
 				arg, r.error.msg);
 		}
 		if (grammar) {
-			struct yetty_ypaint_core_buffer_result r =
+			struct yetty_ydraw_draw_list_result r =
 				yetty_ycat_ts_render(buf.data, buf.len,
 						     grammar, &cfg);
 			if (YETTY_IS_OK(r)) {
 				struct yetty_ycore_size_result em_r =
 					yetty_ycat_osc_bin_emit(r.value, stdout);
-				yetty_ypaint_core_buffer_destroy(r.value);
+				yetty_ydraw_draw_list_destroy(r.value);
 				byte_buf_free(&buf);
 				free(url_mime);
 				if (YETTY_IS_ERR(em_r)) {

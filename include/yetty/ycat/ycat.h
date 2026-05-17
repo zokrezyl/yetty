@@ -5,11 +5,11 @@
  * ycat - MIME-dispatched cat.
  *
  * Detects the type of a byte buffer (libmagic + extension fallback) and
- * dispatches to a handler that turns the bytes into a ypaint-core buffer.
+ * dispatches to a handler that turns the bytes into a ydraw-core buffer.
  * The caller then either:
- *   - base64-encodes the ypaint primitives and emits an OSC 666674 sequence
+ *   - base64-encodes the ydraw primitives and emits an OSC 666674 sequence
  *     (yetty_ycat_osc_bin_emit), so a running yetty terminal picks it up
- *     and routes to its ypaint scrolling layer, or
+ *     and routes to its ydraw scrolling layer, or
  *   - for plain-text / unknown input, passes the bytes through unchanged.
  *
  * The library is pure C. The tool in tools/ycat drives it.
@@ -20,7 +20,7 @@
 #include <stdio.h>
 
 #include <yetty/ycore/result.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -70,12 +70,12 @@ struct yetty_ycat_config {
 };
 
 /* Handler signature: bytes+len (and optionally a path for formats that need
- * one, e.g. PDF via pdfio) → fresh ypaint-core buffer. Returned buffer
+ * one, e.g. PDF via pdfio) → fresh ydraw-core buffer. Returned buffer
  * ownership is transferred to the caller.
  *
  * path_hint may be NULL (for stdin / URL). If the handler needs a real file
  * and path_hint is NULL, it is expected to spill to a temp file. */
-typedef struct yetty_ypaint_core_buffer_result (*yetty_ycat_handler_fn)(
+typedef struct yetty_ydraw_draw_list_result (*yetty_ycat_handler_fn)(
     const uint8_t *bytes, size_t len, const char *path_hint,
     const struct yetty_ycat_config *config);
 
@@ -88,9 +88,39 @@ yetty_ycat_handler_fn yetty_ycat_get_handler(enum yetty_ycat_type type);
 int yetty_ycat_register_handler(enum yetty_ycat_type type, yetty_ycat_handler_fn fn);
 
 /* One-shot: detect → render. */
-struct yetty_ypaint_core_buffer_result yetty_ycat_render(const uint8_t *bytes, size_t len,
+struct yetty_ydraw_draw_list_result yetty_ycat_render(const uint8_t *bytes, size_t len,
                                                          const char *path_hint,
                                                          const struct yetty_ycat_config *config);
+
+/*=============================================================================
+ * Streaming handlers — for types whose natural unit is smaller than the
+ * whole document (PDF: per page, markdown: per screen-height tile, …).
+ *
+ * The handler emits one or more ydraw envelopes by invoking the supplied
+ * emit callback. Each envelope is independent; coordinates inside it are
+ * envelope-local (origin at y=0), and the receiver scrolls by the
+ * envelope's scene height between calls.
+ *
+ * Single-shot handlers (image, svg, mermaid) keep using
+ * yetty_ycat_handler_fn — the dispatch path picks streaming first and
+ * falls back to single-shot if no streaming handler is registered.
+ *===========================================================================*/
+
+/* emit one envelope. The envelope is borrowed for the call's duration; the
+ * handler must not retain the pointer. Return an error to abort the
+ * streaming render. */
+typedef struct yetty_ycore_void_result (*yetty_ycat_emit_fn)(
+    void *user_data, const struct yetty_ydraw_draw_list *envelope);
+
+typedef struct yetty_ycore_void_result (*yetty_ycat_handler_streaming_fn)(
+    const uint8_t *bytes, size_t len, const char *path_hint,
+    const struct yetty_ycat_config *config,
+    yetty_ycat_emit_fn emit, void *emit_user_data);
+
+yetty_ycat_handler_streaming_fn yetty_ycat_get_handler_streaming(enum yetty_ycat_type type);
+
+int yetty_ycat_register_handler_streaming(enum yetty_ycat_type type,
+                                          yetty_ycat_handler_streaming_fn fn);
 
 /*=============================================================================
  * Tree-sitter direct access — two emitters, shared parser+color-map.
@@ -100,9 +130,9 @@ struct yetty_ypaint_core_buffer_result yetty_ycat_render(const uint8_t *bytes, s
  * neither yields a supported grammar. */
 const char *yetty_ycat_grammar_lookup(const char *mime, const char *path);
 
-/* Parse bytes with `grammar_name`, emit coloured spans into a fresh ypaint
+/* Parse bytes with `grammar_name`, emit coloured spans into a fresh ydraw
  * buffer. Useful when targeting a yetty terminal (via the OSC envelope). */
-struct yetty_ypaint_core_buffer_result yetty_ycat_ts_render(const uint8_t *bytes, size_t len,
+struct yetty_ydraw_draw_list_result yetty_ycat_ts_render(const uint8_t *bytes, size_t len,
                                                             const char *grammar_name,
                                                             const struct yetty_ycat_config *config);
 
@@ -126,11 +156,11 @@ int yetty_ycat_fetch_url(const char *url, uint8_t **out, size_t *out_len, char *
  * OSC emission
  *===========================================================================*/
 
-/* Emit an OSC 666674 (YPAINT_SCROLL) sequence wrapping the buffer's primitive
+/* Emit an OSC 666674 (YDRAW_SCROLL) sequence wrapping the buffer's primitive
  * bytes (base64-encoded, `--bin` format) to `out`. Returns number of bytes
  * written, 0 on failure. */
 struct yetty_ycore_size_result yetty_ycat_osc_bin_emit(
-    const struct yetty_ypaint_core_buffer *buffer, FILE *out);
+    const struct yetty_ydraw_draw_list *buffer, FILE *out);
 
 #ifdef __cplusplus
 }

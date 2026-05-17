@@ -87,7 +87,7 @@ Key invariants:
 - The GPU "tick" (a 1ms libuv timer that calls `wgpuInstanceProcessEvents`)
   runs **only when at least one `_await` is in flight**. Outside the bounded
   await window there is no `ProcessEvents` activity at all, so non-coro code
-  paths (ypaint, normal rendering) see Dawn behaving exactly as before.
+  paths (ydraw, normal rendering) see Dawn behaving exactly as before.
 - Callback mode is `WGPUCallbackMode_AllowSpontaneous`: Dawn may also
   deliver callbacks from its own worker threads, in which case `post_to_loop`
   routes them back to the loop. The application never sees the difference.

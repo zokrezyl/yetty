@@ -296,7 +296,6 @@ static struct yetty_ygui_widget *make_field(const char *id, const char *label_te
 
 int main(void)
 {
-    (void)freopen("/dev/null", "w", stderr);
     if (yetty_ygui_init() != 0) {
         return 1;
     }
@@ -309,15 +308,13 @@ int main(void)
     query_terminal_cells(&cols, &rows);
 
     struct ygui_engine_ptr_result eng_r =
-        yetty_ygui_engine_create("file-panes", 0, 0, cols, rows);
+        yetty_ygui_engine_create((struct yetty_ygui_engine_args){.name = "file-panes"});
     if (YETTY_IS_ERR(eng_r)) {
         yetty_ycore_error_destroy(eng_r.error);
         yetty_ygui_shutdown();
         return 1;
     }
     g_engine = eng_r.value;
-    yetty_ygui_engine_set_canvas_mode(g_engine, YETTY_YGUI_CANVAS_FIT);
-
     /* Larger theme so rows / chevrons are readable. */
     struct yetty_ygui_theme *theme = yetty_ygui_theme_create_default();
     yetty_ygui_theme_set_font_size(theme, 28.0f);
@@ -384,7 +381,6 @@ int main(void)
 
     yetty_ygui_engine_on_resize(g_engine, on_resize, NULL);
     yetty_ygui_engine_on_key(g_engine, on_key, NULL);
-    yetty_ygui_engine_show(g_engine);
     {
         float cw = 0, ch = 0;
         yetty_ygui_engine_get_size(g_engine, &cw, &ch);

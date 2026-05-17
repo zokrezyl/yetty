@@ -2,7 +2,7 @@
 
 ## Overview
 
-Terminal rendering is split into multiple layers (text, ypaint, etc.), each rendering to its own texture. A blender composites all layer textures to a render target.
+Terminal rendering is split into multiple layers (text, ydraw, etc.), each rendering to its own texture. A blender composites all layer textures to a render target.
 
 **Key principles:**
 - **Simple orchestration** - terminal.c iterates layers and calls blender
@@ -20,11 +20,11 @@ terminal.c (simple orchestrator)
     │
     ├── layers[]      ─────────────────────────────────────┐
     │   ├── text_layer                                     │
-    │   └── ypaint_layer                                   │
+    │   └── ydraw_layer                                   │
     │                                                      │ 1:1
     ├── renderers[]   ←────────────────────────────────────┘
     │   ├── text_renderer (owns: binder, texture, layer ref)
-    │   └── ypaint_renderer (owns: binder, texture, layer ref)
+    │   └── ydraw_renderer (owns: binder, texture, layer ref)
     │
     └── blender->ops->blend(rendered_layers[], count)
                 │
@@ -175,7 +175,7 @@ static struct yetty_ycore_void_result terminal_render_frame(
 ## Data Flow
 
 ```
-terminal_layer (text, ypaint, etc.)
+terminal_layer (text, ydraw, etc.)
        │
        │ renderer checks: layer->ops->is_dirty()
        │

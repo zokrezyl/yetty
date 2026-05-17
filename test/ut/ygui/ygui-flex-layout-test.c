@@ -39,7 +39,8 @@ static int g_devnull_fd = -1;
 
 static struct yetty_ygui_engine *make_engine(float canvas_w, float canvas_h)
 {
-    struct ygui_engine_ptr_result r = yetty_ygui_engine_create("flex-test", 0, 0, 80, 24);
+    struct yetty_ygui_engine_args args = { .name = "flex-test" };
+    struct ygui_engine_ptr_result r = yetty_ygui_engine_create(args);
     if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "engine_create failed\n");
         exit(2);

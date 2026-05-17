@@ -3,7 +3,7 @@
 
 #include <yetty/ysdf/yaml.gen.h>
 #include <yetty/ysdf/types.gen.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yaml.h>
 #include <stdlib.h>
@@ -50,11 +50,11 @@ static uint32_t parse_color(const char *str)
  * Parser context
  *===========================================================================*/
 
-struct yetty_ysdf_ypaint_yaml_parse_ctx {
-    struct yetty_ypaint_core_buffer *buffer;
+struct yetty_ysdf_ydraw_yaml_parse_ctx {
+    struct yetty_ydraw_draw_list *buffer;
     uint32_t z_order;
     /* Current primitive state */
-    char prim_type[32];
+    char drawable_type[32];
     char prop_key[32];
     uint32_t fill_color;
     uint32_t stroke_color;
@@ -99,9 +99,9 @@ struct yetty_ysdf_ypaint_yaml_parse_ctx {
     float array_vals[8];
 };
 
-static void reset_prim(struct yetty_ysdf_ypaint_yaml_parse_ctx *yaml_parse_ctx)
+static void reset_prim(struct yetty_ysdf_ydraw_yaml_parse_ctx *yaml_parse_ctx)
 {
-    yaml_parse_ctx->prim_type[0] = 0;
+    yaml_parse_ctx->drawable_type[0] = 0;
     yaml_parse_ctx->prop_key[0] = 0;
     yaml_parse_ctx->fill_color = 0;
     yaml_parse_ctx->stroke_color = 0;
@@ -144,7 +144,7 @@ static void reset_prim(struct yetty_ysdf_ypaint_yaml_parse_ctx *yaml_parse_ctx)
     yaml_parse_ctx->array_idx = 0;
 }
 
-static void store_array(struct yetty_ysdf_ypaint_yaml_parse_ctx *yaml_parse_ctx)
+static void store_array(struct yetty_ysdf_ydraw_yaml_parse_ctx *yaml_parse_ctx)
 {
     const char *key = yaml_parse_ctx->prop_key;
     ydebug("store_array: key='%s' idx=%d vals=[%f,%f]", key, yaml_parse_ctx->array_idx,
@@ -185,16 +185,16 @@ static void store_array(struct yetty_ysdf_ypaint_yaml_parse_ctx *yaml_parse_ctx)
 }
 
 static struct yetty_ycore_void_result add_prim(
-    struct yetty_ysdf_ypaint_yaml_parse_ctx *yaml_parse_ctx)
+    struct yetty_ysdf_ydraw_yaml_parse_ctx *yaml_parse_ctx)
 {
     float data[16];
     uint32_t word_count = 0, tmp;
 
     ydebug("add_prim: type='%s' center_x=%f center_y=%f radius=%f fill=0x%08x",
-           yaml_parse_ctx->prim_type, yaml_parse_ctx->center_x, yaml_parse_ctx->center_y,
+           yaml_parse_ctx->drawable_type, yaml_parse_ctx->center_x, yaml_parse_ctx->center_y,
            yaml_parse_ctx->radius, yaml_parse_ctx->fill_color);
 
-    if (strcmp(yaml_parse_ctx->prim_type, "circle") == 0) {
+    if (strcmp(yaml_parse_ctx->drawable_type, "circle") == 0) {
         tmp = YETTY_YSDF_CIRCLE;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -208,7 +208,7 @@ static struct yetty_ycore_void_result add_prim(
         data[6] = yaml_parse_ctx->center_y;
         data[7] = yaml_parse_ctx->radius;
         word_count = 8;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "box") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "box") == 0) {
         tmp = YETTY_YSDF_BOX;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -224,7 +224,7 @@ static struct yetty_ycore_void_result add_prim(
         data[8] = yaml_parse_ctx->half_height;
         data[9] = yaml_parse_ctx->corner_radius;
         word_count = 10;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "segment") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "segment") == 0) {
         tmp = YETTY_YSDF_SEGMENT;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -239,7 +239,7 @@ static struct yetty_ycore_void_result add_prim(
         data[7] = yaml_parse_ctx->end_x;
         data[8] = yaml_parse_ctx->end_y;
         word_count = 9;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "triangle") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "triangle") == 0) {
         tmp = YETTY_YSDF_TRIANGLE;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -256,7 +256,7 @@ static struct yetty_ycore_void_result add_prim(
         data[9] = yaml_parse_ctx->vertex_c_x;
         data[10] = yaml_parse_ctx->vertex_c_y;
         word_count = 11;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "ellipse") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "ellipse") == 0) {
         tmp = YETTY_YSDF_ELLIPSE;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -271,7 +271,7 @@ static struct yetty_ycore_void_result add_prim(
         data[7] = yaml_parse_ctx->radius_x;
         data[8] = yaml_parse_ctx->radius_y;
         word_count = 9;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "arc") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "arc") == 0) {
         tmp = YETTY_YSDF_ARC;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -288,7 +288,7 @@ static struct yetty_ycore_void_result add_prim(
         data[9] = yaml_parse_ctx->radius;
         data[10] = yaml_parse_ctx->thickness;
         word_count = 11;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "rounded_box") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "rounded_box") == 0) {
         tmp = YETTY_YSDF_ROUNDED_BOX;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -307,7 +307,7 @@ static struct yetty_ycore_void_result add_prim(
         data[11] = yaml_parse_ctx->radius_top_left;
         data[12] = yaml_parse_ctx->radius_bottom_left;
         word_count = 13;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "rhombus") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "rhombus") == 0) {
         tmp = YETTY_YSDF_RHOMBUS;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -322,7 +322,7 @@ static struct yetty_ycore_void_result add_prim(
         data[7] = yaml_parse_ctx->half_width;
         data[8] = yaml_parse_ctx->half_height;
         word_count = 9;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "pentagon") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "pentagon") == 0) {
         tmp = YETTY_YSDF_PENTAGON;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -336,7 +336,7 @@ static struct yetty_ycore_void_result add_prim(
         data[6] = yaml_parse_ctx->center_y;
         data[7] = yaml_parse_ctx->radius;
         word_count = 8;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "hexagon") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "hexagon") == 0) {
         tmp = YETTY_YSDF_HEXAGON;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -350,7 +350,7 @@ static struct yetty_ycore_void_result add_prim(
         data[6] = yaml_parse_ctx->center_y;
         data[7] = yaml_parse_ctx->radius;
         word_count = 8;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "star") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "star") == 0) {
         tmp = YETTY_YSDF_STAR;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -366,7 +366,7 @@ static struct yetty_ycore_void_result add_prim(
         data[8] = yaml_parse_ctx->num_points;
         data[9] = yaml_parse_ctx->inner_ratio;
         word_count = 10;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "pie") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "pie") == 0) {
         tmp = YETTY_YSDF_PIE;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -382,7 +382,7 @@ static struct yetty_ycore_void_result add_prim(
         data[8] = yaml_parse_ctx->aperture_y;
         data[9] = yaml_parse_ctx->radius;
         word_count = 10;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "ring") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "ring") == 0) {
         tmp = YETTY_YSDF_RING;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -399,7 +399,7 @@ static struct yetty_ycore_void_result add_prim(
         data[9] = yaml_parse_ctx->radius;
         data[10] = yaml_parse_ctx->thickness;
         word_count = 11;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "heart") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "heart") == 0) {
         tmp = YETTY_YSDF_HEART;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -413,7 +413,7 @@ static struct yetty_ycore_void_result add_prim(
         data[6] = yaml_parse_ctx->center_y;
         data[7] = yaml_parse_ctx->scale;
         word_count = 8;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "cross") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "cross") == 0) {
         tmp = YETTY_YSDF_CROSS;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -429,7 +429,7 @@ static struct yetty_ycore_void_result add_prim(
         data[8] = yaml_parse_ctx->half_height;
         data[9] = yaml_parse_ctx->corner_radius;
         word_count = 10;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "rounded_x") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "rounded_x") == 0) {
         tmp = YETTY_YSDF_ROUNDED_X;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -444,7 +444,7 @@ static struct yetty_ycore_void_result add_prim(
         data[7] = yaml_parse_ctx->width;
         data[8] = yaml_parse_ctx->radius;
         word_count = 9;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "capsule") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "capsule") == 0) {
         tmp = YETTY_YSDF_CAPSULE;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -460,7 +460,7 @@ static struct yetty_ycore_void_result add_prim(
         data[8] = yaml_parse_ctx->end_y;
         data[9] = yaml_parse_ctx->radius;
         word_count = 10;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "moon") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "moon") == 0) {
         tmp = YETTY_YSDF_MOON;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -476,7 +476,7 @@ static struct yetty_ycore_void_result add_prim(
         data[8] = yaml_parse_ctx->radius_outer;
         data[9] = yaml_parse_ctx->radius_inner;
         word_count = 10;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "egg") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "egg") == 0) {
         tmp = YETTY_YSDF_EGG;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -491,7 +491,7 @@ static struct yetty_ycore_void_result add_prim(
         data[7] = yaml_parse_ctx->radius_outer;
         data[8] = yaml_parse_ctx->radius_inner;
         word_count = 9;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "octogon") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "octogon") == 0) {
         tmp = YETTY_YSDF_OCTOGON;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -505,7 +505,7 @@ static struct yetty_ycore_void_result add_prim(
         data[6] = yaml_parse_ctx->center_y;
         data[7] = yaml_parse_ctx->radius;
         word_count = 8;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "hexagram") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "hexagram") == 0) {
         tmp = YETTY_YSDF_HEXAGRAM;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -519,7 +519,7 @@ static struct yetty_ycore_void_result add_prim(
         data[6] = yaml_parse_ctx->center_y;
         data[7] = yaml_parse_ctx->radius;
         word_count = 8;
-    } else if (strcmp(yaml_parse_ctx->prim_type, "pentagram") == 0) {
+    } else if (strcmp(yaml_parse_ctx->drawable_type, "pentagram") == 0) {
         tmp = YETTY_YSDF_PENTAGRAM;
         memcpy(&data[0], &tmp, sizeof(tmp));
         tmp = yaml_parse_ctx->z_order;
@@ -534,14 +534,14 @@ static struct yetty_ycore_void_result add_prim(
         data[7] = yaml_parse_ctx->radius;
         word_count = 8;
     } else {
-        ydebug("ypaint_yaml: unknown type '%s'", yaml_parse_ctx->prim_type);
+        ydebug("ydraw_yaml: unknown type '%s'", yaml_parse_ctx->drawable_type);
         yaml_parse_ctx->z_order++;
         return YETTY_ERR(yetty_ycore_void, "ysdf yaml: unknown primitive type");
     }
 
     /* Add primitive to buffer */
-    struct yetty_ypaint_core_id_result r =
-        yetty_ypaint_core_buffer_add_prim(yaml_parse_ctx->buffer, data, word_count * sizeof(float));
+    struct yetty_ydraw_id_result r =
+        yetty_ydraw_draw_list_add_prim(yaml_parse_ctx->buffer, data, word_count * sizeof(float));
     yaml_parse_ctx->z_order++;
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ysdf yaml: add_prim failed");
     return YETTY_OK_VOID();
@@ -551,17 +551,17 @@ static struct yetty_ycore_void_result add_prim(
  * YAML event parser
  *===========================================================================*/
 
-struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ypaint_core_buffer *buffer,
+struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ydraw_draw_list *buffer,
                                                      const char *yaml_str, size_t yaml_len)
 {
     struct yaml_parser_s parser;
     yaml_event_t event;
-    struct yetty_ysdf_ypaint_yaml_parse_ctx yaml_parse_ctx = {0};
+    struct yetty_ysdf_ydraw_yaml_parse_ctx yaml_parse_ctx = {0};
     int done = 0;
     int depth = 0;        /* mapping depth */
     int in_body = 0;      /* inside body sequence */
     int in_prim = 0;      /* inside primitive map */
-    int in_prim_type = 0; /* inside primitive type map */
+    int in_drawable_type = 0; /* inside primitive type map */
     int expect_value = 0;
 
     if (!buffer || !yaml_str) {
@@ -588,19 +588,19 @@ struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ypaint_core_bu
             if (in_body && !in_prim) {
                 in_prim = 1;
                 reset_prim(&yaml_parse_ctx);
-            } else if (in_prim && !in_prim_type) {
-                in_prim_type = 1;
+            } else if (in_prim && !in_drawable_type) {
+                in_drawable_type = 1;
             }
             break;
         case YAML_MAPPING_END_EVENT:
-            if (in_prim_type) {
+            if (in_drawable_type) {
                 struct yetty_ycore_void_result ar = add_prim(&yaml_parse_ctx);
                 if (YETTY_IS_ERR(ar)) {
                     yaml_event_delete(&event);
                     yaml_parser_delete(&parser);
                     return YETTY_ERR(yetty_ycore_void, "ysdf yaml_parse: prim build failed", ar);
                 }
-                in_prim_type = 0;
+                in_drawable_type = 0;
                 in_prim = 0;
             }
             depth--;
@@ -608,7 +608,7 @@ struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ypaint_core_bu
         case YAML_SEQUENCE_START_EVENT:
             if (depth == 1 && strcmp(yaml_parse_ctx.prop_key, "body") == 0) {
                 in_body = 1;
-            } else if (in_prim_type) {
+            } else if (in_drawable_type) {
                 yaml_parse_ctx.in_array = 1;
                 yaml_parse_ctx.array_idx = 0;
                 expect_value = 0;
@@ -629,10 +629,10 @@ struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ypaint_core_bu
                     yaml_parse_ctx.array_vals[yaml_parse_ctx.array_idx++] =
                         strtof(scalar_value, NULL);
                 }
-            } else if (in_prim && !in_prim_type) {
-                strncpy(yaml_parse_ctx.prim_type, scalar_value,
-                        sizeof(yaml_parse_ctx.prim_type) - 1);
-            } else if (in_prim_type) {
+            } else if (in_prim && !in_drawable_type) {
+                strncpy(yaml_parse_ctx.drawable_type, scalar_value,
+                        sizeof(yaml_parse_ctx.drawable_type) - 1);
+            } else if (in_drawable_type) {
                 if (!expect_value) {
                     strncpy(yaml_parse_ctx.prop_key, scalar_value,
                             sizeof(yaml_parse_ctx.prop_key) - 1);
@@ -679,6 +679,6 @@ struct yetty_ycore_void_result yetty_ysdf_yaml_parse(struct yetty_ypaint_core_bu
     }
     yaml_parser_delete(&parser);
 
-    ydebug("ypaint_yaml: parsed %u primitives", yaml_parse_ctx.z_order);
+    ydebug("ydraw_yaml: parsed %u primitives", yaml_parse_ctx.z_order);
     return YETTY_OK_VOID();
 }

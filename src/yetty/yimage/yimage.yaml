@@ -21,7 +21,7 @@ description: Image primitive — atlas-sampled RGBA8 texture inside an AABB
 yaml_factory: none
 
 uniforms:
-  # AABB in ypaint coordinates (pixels relative to cursor). bounds_x/y
+  # AABB in ydraw coordinates (pixels relative to cursor). bounds_x/y
   # at offset 0/1 — _instance_render overrides these with the post-
   # scroll screen position passed to render(x, y).
   - name: bounds_x

@@ -10,8 +10,8 @@ if(YETTY_ENABLE_TOOL_YDRAW_GENERATOR)
     add_subdirectory(ydraw-generator)
 endif()
 
-if(YETTY_ENABLE_TOOL_YPAINT_BENCH)
-    add_subdirectory(ypaint-bench)
+if(YETTY_ENABLE_TOOL_YDRAW_BENCH)
+    add_subdirectory(ydraw-bench)
 endif()
 
 if(YETTY_ENABLE_TOOL_YCAT)
@@ -44,6 +44,10 @@ endif()
 
 if(YETTY_ENABLE_TOOL_YZOO)
     add_subdirectory(yzoo)
+endif()
+
+if(YETTY_ENABLE_TOOL_YJUNGLE)
+    add_subdirectory(yjungle)
 endif()
 
 if(YETTY_ENABLE_TOOL_YDRAW_MAZE)
@@ -94,8 +98,8 @@ if(YETTY_ENABLE_TOOL_YTHORVG AND YETTY_ENABLE_FEATURE_YTHORVG AND YETTY_ENABLE_L
     add_subdirectory(ythorvg)
 endif()
 
-if(YETTY_ENABLE_TOOL_DECODE_YPAINT)
-    add_subdirectory(decode-ypaint)
+if(YETTY_ENABLE_TOOL_DECODE_YDRAW)
+    add_subdirectory(decode-ydraw)
 endif()
 
 # ydiagram CLI links the yetty_ydiagram static lib (built in

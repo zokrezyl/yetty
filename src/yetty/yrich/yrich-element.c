@@ -47,7 +47,7 @@ bool yetty_yrich_element_hit_test(const struct yetty_yrich_element *e, float x, 
 }
 
 struct yetty_ycore_void_result yetty_yrich_element_render(struct yetty_yrich_element *e,
-                                                          struct yetty_ypaint_core_buffer *buf,
+                                                          struct yetty_ydraw_draw_list *buf,
                                                           uint32_t layer, bool selected)
 {
     if (!e || !e->ops || !e->ops->render) {

@@ -134,7 +134,6 @@ static void query_terminal_cells(int *cols, int *rows)
 
 int main(void)
 {
-    (void)freopen("/dev/null", "w", stderr);
     if (yetty_ygui_init() != 0) {
         return 1;
     }
@@ -143,15 +142,13 @@ int main(void)
     query_terminal_cells(&cols, &rows);
 
     struct ygui_engine_ptr_result eng_r =
-        yetty_ygui_engine_create("flex-dashboard", 0, 0, cols, rows);
+        yetty_ygui_engine_create((struct yetty_ygui_engine_args){.name = "flex-dashboard"});
     if (YETTY_IS_ERR(eng_r)) {
         yetty_ycore_error_destroy(eng_r.error);
         yetty_ygui_shutdown();
         return 1;
     }
     g_engine = eng_r.value;
-    yetty_ygui_engine_set_canvas_mode(g_engine, YETTY_YGUI_CANVAS_FIT);
-
     /* Outer column fills the canvas (resize callback re-applies). */
     g_outer = yetty_ygui_engine_vbox(g_engine, "outer", 0, 0, 100, 100);
     yetty_ygui_widget_set_padding(g_outer, 12, 12, 12, 12);
@@ -227,7 +224,6 @@ int main(void)
 
     yetty_ygui_engine_on_resize(g_engine, on_resize, NULL);
     yetty_ygui_engine_on_key(g_engine, on_key, NULL);
-    yetty_ygui_engine_show(g_engine);
     {
         float cw = 0, ch = 0;
         yetty_ygui_engine_get_size(g_engine, &cw, &ch);

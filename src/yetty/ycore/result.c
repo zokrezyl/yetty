@@ -9,6 +9,7 @@
 
 #include <yetty/ycore/result.h>
 
+#include <stdio.h>
 #include <stdlib.h>
 
 struct yetty_ycore_error *yetty_ycore_error_chain(struct yetty_ycore_error prev)
@@ -31,5 +32,29 @@ void yetty_ycore_error_destroy(struct yetty_ycore_error err)
         struct yetty_ycore_error *next = p->cause;
         free(p);
         p = next;
+    }
+}
+
+void yetty_ycore_error_print(FILE *out, const char *headline,
+                             struct yetty_ycore_error err)
+{
+    if (!out) {
+        return;
+    }
+    if (headline) {
+        fprintf(out, "%s: %s\n", headline, err.msg ? err.msg : "<no message>");
+    } else {
+        fprintf(out, "%s\n", err.msg ? err.msg : "<no message>");
+    }
+    fprintf(out, "    at %s:%d (%s)\n",
+            err.file ? err.file : "<unknown>",
+            err.line,
+            err.func ? err.func : "<unknown>");
+    for (const struct yetty_ycore_error *c = err.cause; c; c = c->cause) {
+        fprintf(out, "  caused by: %s\n", c->msg ? c->msg : "<no message>");
+        fprintf(out, "    at %s:%d (%s)\n",
+                c->file ? c->file : "<unknown>",
+                c->line,
+                c->func ? c->func : "<unknown>");
     }
 }

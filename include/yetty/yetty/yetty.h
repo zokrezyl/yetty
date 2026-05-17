@@ -16,7 +16,7 @@ struct yetty_ycore_xthread_event_pipe;
 struct yetty_platform_clipboard_manager;
 struct yetty_yplatform_pty_factory;
 struct yetty_yevent_event_loop;
-struct yetty_ypaint_core_gpu_allocator;
+struct yetty_ydraw_gpu_allocator;
 struct yetty_ymsdf_generator;
 
 /* App GPU context - platform-owned GPU objects */
@@ -65,12 +65,12 @@ struct yetty_yetty_gpu_context {
     WGPUDevice device;
     WGPUQueue queue;
     WGPUTextureFormat surface_format;
-    struct yetty_ypaint_core_gpu_allocator *allocator;
+    struct yetty_ydraw_gpu_allocator *allocator;
 
     /* Polymorphic MSDF CDB generator (cpu | gpu). Selected from the
      * `msdf/generator` config key in yetty_create after the WGPU device
      * is up. Shared by every consumer that materialises a font on the
-     * fly (today: ypaint-canvas blob-font materialisation). */
+     * fly (today: ydraw-canvas blob-font materialisation). */
     struct yetty_ymsdf_generator *msdf_generator;
 };
 

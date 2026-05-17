@@ -140,6 +140,17 @@ struct yetty_yevent_event_loop_ops {
      * of dispatch matches submission order. Used by the GPU poll thread to
      * resume coroutines on the loop after wgpu callbacks fire. */
     void (*post_to_loop)(struct yetty_yevent_event_loop *self, void (*fn)(void *), void *arg);
+
+    /* Stash a fatal error and tear the loop down. Used by external-callback
+     * boundaries (libuv read/write completions, signal handlers, …) that
+     * have no Result to propagate — the loop stops, `start()` returns the
+     * stashed error wrapped, and the chain reaches main.
+     *
+     * MOVES ownership of the error: caller must NOT destroy it. Only the
+     * FIRST call sticks; subsequent ones free their own chain. No-op if
+     * the loop isn't running. */
+    void (*post_fatal_error)(struct yetty_yevent_event_loop *self,
+                             struct yetty_ycore_error error);
 };
 
 /* Event loop base */

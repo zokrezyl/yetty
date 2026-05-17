@@ -16,9 +16,9 @@
 /* Forward declare libuv types */
 typedef struct uv_loop_s uv_loop_t;
 
-/* Forward declare ypaint-core buffer (rich widget hands one of these to ygui;
- * we don't pull in the full ypaint-core header from this public surface). */
-struct yetty_ypaint_core_buffer;
+/* Forward declare ydraw-core buffer (rich widget hands one of these to ygui;
+ * we don't pull in the full ydraw-core header from this public surface). */
+struct yetty_ydraw_draw_list;
 
 /* Forward declare config — kept opaque so the public ygui surface doesn't
  * require pulling yconfig headers into every client app. */
@@ -90,7 +90,7 @@ typedef enum {
      * widget). Indent is controlled by CSS padding-left on the children
      * list returned by yetty_ygui_widget_tree_node_children(). */
     YETTY_YGUI_WIDGET_TREE_NODE,
-    /* Rich content surface: holds a ypaint-core buffer of pre-built
+    /* Rich content surface: holds a ydraw-core buffer of pre-built
      * primitives (TEXT_SPAN, SDF shapes, yplot, yimage, ...). The widget
      * reserves a flex/layout box and, at render time, translates every
      * primitive in its buffer by the box's resolved (x, y). Authors
@@ -98,16 +98,42 @@ typedef enum {
     YETTY_YGUI_WIDGET_RICH,
     /* Top-level frame: title bar + close 'x' affordance + a body
      * container all other widgets sit inside. The close button stops
-     * the engine while leaving the last painted frame on the ypaint
+     * the engine while leaving the last painted frame on the ydraw
      * canvas, so apps can exit gracefully without wiping the user's
      * view. See yetty_ygui_engine_window in this file. */
     YETTY_YGUI_WIDGET_WINDOW,
-    /* Floating menu of clickable items. Inherits the visual chrome of
+    /* Floating menu of clickable items. Inherits the visuals of
      * YETTY_YGUI_WIDGET_POPUP (shadow + rounded body + optional modal
      * overlay) and specialises it for vertically stacked rows. Items
      * are stored as label/callback pairs inside the widget — no
      * sub-widgets needed. See yetty_ygui_engine_popup_menu. */
     YETTY_YGUI_WIDGET_POPUP_MENU,
+    /* PDF viewer: owns N per-page draw_lists; emits font header + only
+     * visible pages translated by (widget_origin + page_y - scroll_y).
+     * See yetty/ygui/ygui_ypdf.h for construction + scroll API. */
+    YETTY_YGUI_WIDGET_YPDF,
+    /* Single-select group of radio buttons. Tracks which child radio
+     * is currently selected; clicking another radio in the group
+     * deselects the prior one. Fires on_change(group, index) when
+     * selection moves. */
+    YETTY_YGUI_WIDGET_RADIO_GROUP,
+    /* One radio inside a RADIO_GROUP. Renders an outlined circle with
+     * a filled inner dot when selected, plus a label to the right. */
+    YETTY_YGUI_WIDGET_RADIO,
+    /* Numeric input with ± buttons. Click +/- (or wheel / arrow keys)
+     * to step; range/step/precision configurable. on_change fires with
+     * the new value. */
+    YETTY_YGUI_WIDGET_SPINNER,
+    /* Drag-to-resize divider sitting between two siblings inside a
+     * flex container. Detects orientation from the parent's flex
+     * direction; resizes by mutating the two siblings' authored sizes
+     * (so the children must NOT use flex-basis:0 / flex-grow:1 — see
+     * yetty_ygui_engine_splitter docs). */
+    YETTY_YGUI_WIDGET_SPLITTER,
+    /* Multi-line editable text. Cursor + typing + Backspace + Enter +
+     * Home/End + arrow keys, viewport scrolling. Selection / clipboard
+     * not yet implemented. */
+    YETTY_YGUI_WIDGET_TEXTAREA,
     YETTY_YGUI_WIDGET_CUSTOM,
 } ygui_widget_type_t;
 
@@ -281,31 +307,47 @@ typedef void (*ygui_resize_callback_t)(struct yetty_ygui_engine *engine, float n
 
 /*=============================================================================
  * Engine API
+ *
+ * Framework, not just a library: the engine owns the libuv loop, the pty
+ * wrapping the process's stdin/stdout, the wire-side OSC handshake, and
+ * the render scheduling. Apps only see widgets, callbacks, and the
+ * engine handle.
+ *
+ * Lifecycle:
+ *   1. eng = yetty_ygui_engine_create({.name = "myapp"}).value
+ *      Allocates the loop, wires the pty, installs handles, emits the
+ *      init OSCs (CSI 16t, subscribe_clicks/moves, CARD_PLACE, CANVAS_FIT
+ *      placeholder). The pty is live before this returns.
+ *   2. Build widget tree against `eng`; register callbacks.
+ *   3. yetty_ygui_engine_run(eng) — blocks on the engine's own loop until
+ *      shutdown.
+ *   4. yetty_ygui_engine_destroy(eng) — unsubscribes, drops the card,
+ *      tears down handles, closes the loop.
+ *
+ * Apps never pass file descriptors, pty pointers, loop pointers, cell
+ * sizes, canvas modes, or any pixel geometry — every one of those is
+ * either framework-internal or discovered at runtime from the host's
+ * OSC reply.
  *===========================================================================*/
 
-/* Create engine with card name, position, and size in terminal cells.
- * x, y: card position in terminal cells
- * cols, rows: card size in terminal cells
- * After show(), queries card pixel size (OSC 777780).
- * Canvas = actual card pixels (cols * cell_width, rows * cell_height).
- * Widgets are positioned in actual pixel coordinates. */
-struct ygui_engine_ptr_result yetty_ygui_engine_create(const char *card_name, int x, int y,
-                                                       int cols, int rows);
+/* Construction parameters. Pass by value; the engine copies what it
+ * needs. Both fields are optional; sensible defaults are supplied. */
+struct yetty_ygui_engine_args {
+    /* Human-readable identifier ("ygreeter", "ytop", …). Used for logs
+     * and for matching legacy name-keyed OSC events. NULL → "ygui". */
+    const char *name;
+    /* Theme handle. NULL → built-in brand-palette default. The engine
+     * takes ownership of NULL-input themes; caller-supplied themes
+     * remain caller-owned and must outlive the engine. */
+    struct yetty_ygui_theme *theme;
+};
 
-/* Create engine with pixel size hints.
- * x, y: card position in terminal cells
- * width_hint, height_hint: desired pixel size (calculates closest cols/rows)
- * Then same as ygui_engine_create: canvas = actual card pixels. */
-struct ygui_engine_ptr_result yetty_ygui_engine_create_with_pixel_hint(const char *card_name, int x,
-                                                                       int y, float width_hint,
-                                                                       float height_hint);
+/* Construct the engine. Returns a ready-to-use handle with the loop +
+ * pty + handshake already in place. */
+struct ygui_engine_ptr_result yetty_ygui_engine_create(struct yetty_ygui_engine_args args);
 
-/* Destroy engine (kills card, frees all resources) */
+/* Destroy engine (kills card, frees all resources, closes the loop). */
 struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engine *engine);
-
-/* Show card (creates it via OSC, queries pixel size).
- * Position and size were set in ygui_engine_create. */
-struct yetty_ycore_void_result yetty_ygui_engine_show(struct yetty_ygui_engine *engine);
 
 /* Render a frame (clear buffer → rebuild → serialize → send OSC)
  * Usually not needed - engine auto-renders when dirty. */
@@ -318,14 +360,11 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
  * triggering a render. */
 struct yetty_ycore_void_result yetty_ygui_engine_layout(struct yetty_ygui_engine *engine);
 
-/* Attach engine to user's libuv loop (for advanced usage) */
-void yetty_ygui_engine_attach(struct yetty_ygui_engine *engine, uv_loop_t *loop);
-
-/* Run event loop (creates libuv loop internally for simple usage)
- * Blocks until ygui_engine_stop() called or 'q' pressed. */
+/* Run the engine's event loop. Blocks until yetty_ygui_engine_stop() is
+ * called, the user closes the card, or the host shuts the pty. */
 void yetty_ygui_engine_run(struct yetty_ygui_engine *engine);
 
-/* Stop the event loop */
+/* Stop the event loop. Safe to call from any uv-loop callback. */
 void yetty_ygui_engine_stop(struct yetty_ygui_engine *engine);
 
 /* Configuration */
@@ -347,7 +386,7 @@ int yetty_ygui_engine_is_dirty(const struct yetty_ygui_engine *engine);
 void yetty_ygui_engine_mark_dirty(struct yetty_ygui_engine *engine);
 
 /* Direct mouse-event injection. Used when the engine isn't being driven
- * by an OSC mouse stream (e.g. yui's in-process chrome — the host hands
+ * by an OSC mouse stream (e.g. yui in-process — the host hands
  * events here so the engine's hit-test + dispatch routes them to the
  * widget tree). Coords are in widget pixel space, same convention the
  * OSC SC_MOUSE handler uses. */
@@ -393,9 +432,8 @@ void yetty_ygui_engine_notify_ttl(struct yetty_ygui_engine *engine,
                                   enum yetty_ygui_severity sev, uint32_t ttl_ms,
                                   const char *fmt, ...);
 
-/* Resize handling */
-void yetty_ygui_engine_set_canvas_mode(struct yetty_ygui_engine *engine, ygui_canvas_mode_t mode);
-void yetty_ygui_engine_set_scale_mode(struct yetty_ygui_engine *engine, ygui_scale_mode_t mode);
+/* Resize handling. Canvas always tracks the host's reported pixel size
+ * (CANVAS_FIT semantics); there is no other mode. */
 void yetty_ygui_engine_on_resize(struct yetty_ygui_engine *engine, ygui_resize_callback_t callback,
                                  void *userdata);
 
@@ -503,7 +541,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_list(struct yetty_ygui_engine *engin
 struct yetty_ygui_widget *yetty_ygui_engine_tree_node(struct yetty_ygui_engine *engine,
                                                       const char *id, const char *label);
 
-/* Rich content surface — holds a ypaint-core buffer of pre-built primitives
+/* Rich content surface — holds a ydraw-core buffer of pre-built primitives
  * (text spans, SDF shapes, yplot, yimage, ...). The widget reserves a flex
  * layout box; at render time every primitive is translated by the widget's
  * resolved (layout_x, layout_y), so authors compose content in widget-local
@@ -515,7 +553,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_tree_node(struct yetty_ygui_engine *
  *                                                later with set_buffer or
  *                                                set_yaml.
  *   - rich_from_yaml(... , yaml, yaml_len)    — convenience: parses the
- *                                                YAML via ypaint-yaml and
+ *                                                YAML via ydraw-yaml and
  *                                                hands the buffer to the
  *                                                widget. Equivalent to
  *                                                rich() + set_yaml(). */
@@ -528,17 +566,17 @@ struct yetty_ygui_widget *yetty_ygui_engine_rich_from_yaml(struct yetty_ygui_eng
                                                            size_t yaml_len);
 
 /* Replace the widget's current content with primitives parsed from a YAML
- * string. Mirrors yetty_ypaint_yaml_parse internally; ownership of the
+ * string. Mirrors yetty_ydraw_yaml_parse internally; ownership of the
  * resulting buffer stays with the widget. Returns the parser's error result
  * unchanged (use YETTY_IS_ERR / propagate via YETTY_RETURN_IF_ERR). */
 struct yetty_ycore_void_result yetty_ygui_widget_rich_set_yaml(struct yetty_ygui_widget *widget,
                                                                const char *yaml, size_t yaml_len);
 
-/* Transfer ownership of an externally-constructed ypaint-core buffer into
+/* Transfer ownership of an externally-constructed ydraw-core buffer into
  * the widget. The widget destroys the buffer in its own destroy hook (and
  * on the next set_yaml / set_buffer / clear call). Passing NULL clears. */
 void yetty_ygui_widget_rich_set_buffer(struct yetty_ygui_widget *widget,
-                                       struct yetty_ypaint_core_buffer *buffer);
+                                       struct yetty_ydraw_draw_list *buffer);
 
 /* Drop the current buffer without replacement. Equivalent to
  * set_buffer(widget, NULL). */
@@ -547,15 +585,15 @@ void yetty_ygui_widget_rich_clear(struct yetty_ygui_widget *widget);
 /* Window — top-level frame containing every other widget in an app.
  * Draws a title bar with a centred title text and a close 'x' button
  * pinned to the upper-right corner. Clicking the close button stops
- * the engine event loop AND tells engine_destroy to skip the YPAINT
- * clear, so the last rendered frame stays on the ypaint canvas after
+ * the engine event loop AND tells engine_destroy to skip the YDRAW
+ * clear, so the last rendered frame stays on the ydraw canvas after
  * the app exits.
  *
  * The window auto-allocates an inner body widget (a flex-column vbox)
  * — get a handle to it via yetty_ygui_widget_window_body() and add
  * children there as usual. The body is laid out below the title bar
  * via padding-top, so children don't have to know about the title
- * area. Pass NULL or "" for `title` to render a chromeless title bar
+ * area. Pass NULL or "" for `title` to render a bare title bar
  * (close button still drawn). */
 struct yetty_ygui_widget *yetty_ygui_engine_window(struct yetty_ygui_engine *engine, const char *id,
                                                    float x, float y, float w, float h,
@@ -578,7 +616,7 @@ void yetty_ygui_widget_window_on_close(struct yetty_ygui_widget *window,
                                        ygui_click_callback_t callback, void *userdata);
 
 /* Stop the engine loop and arrange for engine_destroy to leave the
- * last rendered ypaint frame on the canvas (no YPAINT_CLEAR sent).
+ * last rendered ydraw frame on the canvas (no YDRAW_CLEAR sent).
  * This is what the window's close button calls; user code can call it
  * directly for the same "exit but keep view" semantics. */
 void yetty_ygui_engine_close_preserve(struct yetty_ygui_engine *engine);
@@ -593,7 +631,7 @@ void yetty_ygui_widget_window_set_menu(struct yetty_ygui_widget *window,
                                        struct yetty_ygui_widget *menu);
 
 /* Popup menu — a floating, vertically-stacked list of clickable items.
- * Inherits the visual chrome of the popup dialog (rounded body + drop
+ * Inherits the visuals of the popup dialog (rounded body + drop
  * shadow + optional modal overlay) and specialises it for menus: each
  * row is just a label + callback (no sub-widgets), the menu auto-grows
  * in height as items are added, and clicking an item fires its
@@ -624,7 +662,7 @@ void yetty_ygui_widget_popup_menu_close(struct yetty_ygui_widget *menu);
 void yetty_ygui_widget_popup_menu_set_modal(struct yetty_ygui_widget *menu, int modal);
 int yetty_ygui_widget_popup_menu_is_open(const struct yetty_ygui_widget *menu);
 
-/* Tabbar — Chrome-style tab strip across the top of the widget's box, with
+/* Tabbar — browser-style tab strip across the top of the widget's box, with
  * one content panel per tab below. Only the active panel is rendered/laid
  * out; clicking a header swaps the active tab and (optionally) fires
  * on_change with the new index in `value`.
@@ -665,8 +703,8 @@ void yetty_ygui_widget_tabbar_on_tab_close(struct yetty_ygui_widget *tabbar,
                                            ygui_change_callback_t callback, void *userdata);
 
 /* Uniform per-button size used by tab close 'x' and (via the window
- * widget) the hamburger menu. Useful when an app builds custom chrome
- * that should visually match the tabbar's close buttons. */
+ * widget) the hamburger menu. Useful when an app builds custom UI
+ * elements that should visually match the tabbar's close buttons. */
 float yetty_ygui_tabbar_button_size(void);
 
 /*=============================================================================
@@ -876,6 +914,171 @@ int yetty_ygui_widget_choicebox_get_selected(const struct yetty_ygui_widget *wid
 void yetty_ygui_widget_scrollbar_set_value(struct yetty_ygui_widget *widget, float value);
 float yetty_ygui_widget_scrollbar_get_value(const struct yetty_ygui_widget *widget);
 
+/*=============================================================================
+ * Radio group / Radio button
+ *
+ * A RADIO_GROUP is a single-select container. RADIOs are its children;
+ * clicking one selects it and deselects its siblings inside the same
+ * group. The group is also a flex column by default — apply CSS to
+ * customise (e.g. `flex-direction: row;` for horizontal radio bars).
+ *
+ *   group = yetty_ygui_engine_radio_group(eng, "fruit", 0, 0, 200, 100);
+ *   yetty_ygui_widget_radio_group_add(group, "r_apple",  "Apple");
+ *   yetty_ygui_widget_radio_group_add(group, "r_banana", "Banana");
+ *   yetty_ygui_widget_radio_group_set_selected_index(group, 0);
+ *   yetty_ygui_widget_radio_group_on_change(group, my_cb, NULL);
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_radio_group(
+    struct yetty_ygui_engine *engine, const char *id,
+    float x, float y, float w, float h);
+
+/* Append a radio. Returns the newly-created radio widget so the caller
+ * can apply CSS / hook a per-radio callback if needed. */
+struct yetty_ygui_widget *yetty_ygui_widget_radio_group_add(
+    struct yetty_ygui_widget *group, const char *id, const char *label);
+
+void yetty_ygui_widget_radio_group_set_selected_index(struct yetty_ygui_widget *group, int index);
+int yetty_ygui_widget_radio_group_get_selected_index(const struct yetty_ygui_widget *group);
+
+/* Cb gets the new index in `value` (cast from float). -1 means none. */
+void yetty_ygui_widget_radio_group_on_change(struct yetty_ygui_widget *group,
+                                             ygui_change_callback_t cb, void *userdata);
+
+/*=============================================================================
+ * Spinner — numeric input with ± buttons.
+ *
+ * Wheel and Up/Down keys also step. The widget paints its value with
+ * `precision` decimal places (set 0 for integer-style); editing the
+ * displayed string by click is not supported yet — for arbitrary entry
+ * use a textinput.
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_spinner(
+    struct yetty_ygui_engine *engine, const char *id,
+    float x, float y, float w, float h,
+    float min_val, float max_val, float step, float value);
+
+void yetty_ygui_widget_spinner_set_value(struct yetty_ygui_widget *widget, float value);
+float yetty_ygui_widget_spinner_get_value(const struct yetty_ygui_widget *widget);
+void yetty_ygui_widget_spinner_set_range(struct yetty_ygui_widget *widget, float min_val, float max_val);
+void yetty_ygui_widget_spinner_set_step(struct yetty_ygui_widget *widget, float step);
+void yetty_ygui_widget_spinner_set_precision(struct yetty_ygui_widget *widget, int decimals);
+void yetty_ygui_widget_spinner_on_change(struct yetty_ygui_widget *widget,
+                                         ygui_change_callback_t cb, void *userdata);
+
+/*=============================================================================
+ * Splitter — drag-to-resize divider.
+ *
+ * Place between two siblings inside a flex hbox or vbox. Detects the
+ * parent's flex direction automatically (row → resizes widths,
+ * column → resizes heights). On drag, mutates `authored_w` / `authored_h`
+ * of the adjacent siblings so the layout pass re-flows.
+ *
+ * IMPORTANT: the siblings being resized must use authored sizes for
+ * their main-axis dimension. Do NOT apply `flex: 1 0 0` (which sets
+ * flex-basis to 0 and ignores authored size). Use `flex-grow: 0` and
+ * an explicit width/height, or let the flex pass infer from the
+ * authored size.
+ *
+ *   left  = panel(...,  300, 0);
+ *   split = yetty_ygui_engine_splitter(eng, "sp", 0, 0, 6, 0);
+ *   right = panel(...,  500, 0);
+ *   add_child(hbox, left); add_child(hbox, split); add_child(hbox, right);
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_splitter(
+    struct yetty_ygui_engine *engine, const char *id,
+    float x, float y, float w, float h);
+
+/* Minimum size enforced on each side during drag. Default 30 px. */
+void yetty_ygui_widget_splitter_set_min(struct yetty_ygui_widget *widget, float min_size);
+
+/*=============================================================================
+ * Modal dialog — popup with a title, message, and bottom button row.
+ *
+ * Convenience helper that builds a regular POPUP with the standard
+ * layout (title bar, body label, button row) so an app doesn't have
+ * to hand-wire the same pattern every time.
+ *
+ *   const char *btns[] = {"Cancel", "OK"};
+ *   yetty_ygui_widget_dialog_args args = {
+ *       .id = "save_q", .title = "Save changes?",
+ *       .message = "Unsaved edits will be lost.",
+ *       .buttons = btns, .button_count = 2,
+ *       .on_button = my_cb, .userdata = self,
+ *   };
+ *   dlg = yetty_ygui_engine_dialog(engine, &args);
+ *   yetty_ygui_widget_popup_set_open(dlg, 1);
+ *
+ * Button click fires on_button(dlg, index, userdata) and closes the
+ * dialog. The dialog widget is owned by the engine (regular popup
+ * lifetime); the helper does not destroy it. */
+
+typedef void (*yetty_ygui_dialog_button_fn)(struct yetty_ygui_widget *dialog, int button_index,
+                                            void *userdata);
+
+struct yetty_ygui_dialog_args {
+    const char *id;
+    const char *title;
+    const char *message;
+    const char *const *buttons; /* button_count labels */
+    int button_count;
+    yetty_ygui_dialog_button_fn on_button;
+    void *userdata;
+    int modal; /* non-zero → dim the rest of the canvas while open */
+};
+
+struct yetty_ygui_widget *yetty_ygui_engine_dialog(struct yetty_ygui_engine *engine,
+                                                   const struct yetty_ygui_dialog_args *args);
+
+/*=============================================================================
+ * Multi-line text area — editable text with cursor + keyboard nav.
+ *
+ * Backing store: a single owned `char *` with embedded '\n' line
+ * breaks. Cursor is a byte offset. Viewport scrolls by line when the
+ * cursor moves off-screen.
+ *
+ * Supported input (v1):
+ *   - text input (via the engine's text_input path)
+ *   - Backspace (delete char left of cursor)
+ *   - Enter   (insert newline)
+ *   - Left/Right (move cursor by char)
+ *   - Up/Down    (move cursor by line)
+ *   - Home/End   (start / end of current line)
+ *
+ * Not yet implemented: selection, clipboard, undo, word wrap,
+ * line numbers, find/replace.
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_textarea(
+    struct yetty_ygui_engine *engine, const char *id,
+    float x, float y, float w, float h, const char *initial_text);
+
+void yetty_ygui_widget_textarea_set_text(struct yetty_ygui_widget *widget, const char *text);
+const char *yetty_ygui_widget_textarea_get_text(const struct yetty_ygui_widget *widget);
+void yetty_ygui_widget_textarea_on_change(struct yetty_ygui_widget *widget,
+                                          ygui_text_callback_t cb, void *userdata);
+
+/* Bind a scrollbar to a scrollable widget (today: ypdf — anything that
+ * exposes the internal scrollable interface). The scrollbar becomes a
+ * pure view of the target's scroll state:
+ *
+ *   - render: thumb position from target.scroll / target.max_scroll;
+ *             thumb size proportional to target.viewport / target.content
+ *             (the bigger the document, the smaller the thumb).
+ *   - input:  click / drag / wheel on the scrollbar all call
+ *             target.scroll_to(...) — one canonical path.
+ *   - sync:   target.scroll_to marks the scrollbar dirty so the thumb
+ *             repaints in the same frame, including when the change
+ *             originated elsewhere (wheel on the target, keyboard, ...).
+ *
+ * No callbacks to wire, no reentrancy guards. Pass `target = NULL` to
+ * unbind and revert to free-running mode (the scrollbar value is what
+ * yetty_ygui_widget_scrollbar_set_value puts there). */
+void yetty_ygui_widget_scrollbar_bind(struct yetty_ygui_widget *scrollbar,
+                                      struct yetty_ygui_widget *target);
+
 /* List */
 void yetty_ygui_widget_list_set_selected(struct yetty_ygui_widget *list,
                                          struct yetty_ygui_widget *child);
@@ -1005,9 +1208,9 @@ void yetty_ygui_theme_apply_config(struct yetty_ygui_theme *theme,
 void yetty_ygui_engine_set_input_fd(struct yetty_ygui_engine *engine, int fd);
 void yetty_ygui_engine_set_output_fd(struct yetty_ygui_engine *engine, int fd);
 
-/* Route the engine's ypaint frame OSC envelopes to a yetty_platform_pty
+/* Route the engine's ydraw frame OSC envelopes to a yetty_platform_pty
  * instead of `output_fd`. Used when ygui lives in the same process as the
- * renderer (yetty's app-level yui chrome) to avoid a stdout round-trip.
+ * renderer (yetty's app-level yui) to avoid a stdout round-trip.
  * `pty` is borrowed — the caller owns its lifetime and must outlive the
  * engine. Pass NULL to revert to the file-descriptor sink. */
 struct yetty_platform_pty;

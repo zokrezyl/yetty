@@ -2,7 +2,7 @@
  * ydoc — interactive rich-text document editor.
  *
  * Builds a yetty_yrich_ydoc, hands it to the shared yrich-runner which
- * pumps stdin events into the document and emits ypaint frames to the
+ * pumps stdin events into the document and emits ydraw frames to the
  * canvas via OSC 666674.
  *
  * Usage:
@@ -13,7 +13,7 @@
 
 #include <yrich-runner.h>
 
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yplatform/getopt.h>
 #include <yetty/yrich/ydoc.h>
 #include <yetty/yrich/yrich-document.h>
@@ -97,17 +97,17 @@ int main(int argc, char **argv)
 		seed_demo(doc);
 	}
 
-	struct yetty_ypaint_core_buffer_config bcfg = {0};
+	struct yetty_ydraw_draw_list_config bcfg = {0};
 	bcfg.scene_max_x = yetty_yrich_document_content_width(&doc->base);
 	bcfg.scene_max_y = yetty_yrich_document_content_height(&doc->base);
-	struct yetty_ypaint_core_buffer_result br =
-		yetty_ypaint_core_buffer_config_buffer_create(&bcfg);
+	struct yetty_ydraw_draw_list_result br =
+		yetty_ydraw_draw_list_config_buffer_create(&bcfg);
 	if (YETTY_IS_ERR(br)) {
 		fprintf(stderr, "ydoc: %s\n", br.error.msg);
 		yetty_yrich_document_destroy(&doc->base);
 		return 1;
 	}
-	struct yetty_ypaint_core_buffer *buf = br.value;
+	struct yetty_ydraw_draw_list *buf = br.value;
 	yetty_yrich_document_set_buffer(&doc->base, buf);
 
 	struct yrich_runner runner;
@@ -128,7 +128,7 @@ int main(int argc, char **argv)
 		yrich_runner_subscribe(false);
 
 	yrich_runner_fini(&runner);
-	yetty_ypaint_core_buffer_destroy(buf);
+	yetty_ydraw_draw_list_destroy(buf);
 	yetty_yrich_document_destroy(&doc->base);
 	return rc;
 }

@@ -1,5 +1,5 @@
 /*
- * ylexbor-demo — render HTML via the ylexbor lib, emit ypaint OSC.
+ * ylexbor-demo — render HTML via the ylexbor lib, emit ydraw OSC.
  *
  * Two operating modes (same shape ynetsurf uses):
  *
@@ -31,7 +31,7 @@
 #include <unistd.h>
 
 #include <yetty/ylexbor/ylexbor.h>
-#include <yetty/ypaint-core/buffer.h>
+#include <yetty/ydraw-core/draw-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ymgui/wire.h>
@@ -184,27 +184,27 @@ static int emit_bin_osc(const uint8_t *bytes, size_t blen)
 		.raw_size = blen,
 		.reserved = {0, 0},
 	};
-	return emit_envelope(YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
+	return emit_envelope(YETTY_OSC_YDRAW_BIN, /*compressed=*/1,
 			     &meta, sizeof(meta), bytes, blen);
 }
 
 static int redraw_and_push(struct yetty_ylexbor *yl)
 {
-	struct yetty_ypaint_core_buffer_result br =
-		yetty_ypaint_core_buffer_config_buffer_create(NULL);
+	struct yetty_ydraw_draw_list_result br =
+		yetty_ydraw_draw_list_config_buffer_create(NULL);
 	if (YETTY_IS_ERR(br)) return 1;
-	struct yetty_ypaint_core_buffer *buf = br.value;
+	struct yetty_ydraw_draw_list *buf = br.value;
 	struct yetty_ycore_void_result rd = yetty_ylexbor_render(yl, buf);
 	int rc = 1;
 	if (YETTY_IS_OK(rd)) {
 		const uint8_t *bytes = NULL;
-		size_t blen = yetty_ypaint_core_buffer_serialize(buf, &bytes);
-		(void)emit_envelope(YETTY_OSC_YPAINT_CLEAR, 0, NULL, 0, NULL, 0);
+		size_t blen = yetty_ydraw_draw_list_serialize(buf, &bytes);
+		(void)emit_envelope(YETTY_OSC_YDRAW_CLEAR, 0, NULL, 0, NULL, 0);
 		(void)emit_bin_osc(bytes, blen);
 		fflush(stdout);
 		rc = 0;
 	}
-	yetty_ypaint_core_buffer_destroy(buf);
+	yetty_ydraw_draw_list_destroy(buf);
 	return rc;
 }
 
@@ -387,7 +387,7 @@ static void usage(const char *argv0)
 		"            [-w W] [-H H] [--font-size PX] [<file>|-]\n"
 		"\n"
 		"  Reads HTML from <file> (or '-' / no arg = stdin), renders\n"
-		"  via lexbor + ylexbor's block-flow layout, emits a ypaint\n"
+		"  via lexbor + ylexbor's block-flow layout, emits a ydraw\n"
 		"  OSC envelope on stdout (or raw YPB1 bytes with --raw).\n"
 		"\n"
 		"  default mode: interactive when stdin+stdout are TTYs,\n"
@@ -538,24 +538,24 @@ int main(int argc, char **argv)
 	if (interactive) {
 		rc = interactive_loop(yl);
 	} else {
-		struct yetty_ypaint_core_buffer_result br =
-			yetty_ypaint_core_buffer_config_buffer_create(NULL);
+		struct yetty_ydraw_draw_list_result br =
+			yetty_ydraw_draw_list_config_buffer_create(NULL);
 		if (YETTY_IS_ERR(br)) {
 			yetty_ylexbor_destroy(yl); free(html); return 1;
 		}
-		struct yetty_ypaint_core_buffer *buf = br.value;
+		struct yetty_ydraw_draw_list *buf = br.value;
 		struct yetty_ycore_void_result rr = yetty_ylexbor_render(yl, buf);
 		if (YETTY_IS_ERR(rr)) {
 			fprintf(stderr, "render: %s\n", rr.error.msg);
-			yetty_ypaint_core_buffer_destroy(buf);
+			yetty_ydraw_draw_list_destroy(buf);
 			yetty_ylexbor_destroy(yl); free(html); return 1;
 		}
 		const uint8_t *bytes = NULL;
-		size_t blen = yetty_ypaint_core_buffer_serialize(buf, &bytes);
+		size_t blen = yetty_ydraw_draw_list_serialize(buf, &bytes);
 		if (osc) (void)emit_bin_osc(bytes, blen);
 		else     fwrite(bytes, 1, blen, stdout);
 		fflush(stdout);
-		yetty_ypaint_core_buffer_destroy(buf);
+		yetty_ydraw_draw_list_destroy(buf);
 		rc = 0;
 	}
 

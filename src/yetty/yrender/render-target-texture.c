@@ -21,7 +21,7 @@ extern const unsigned int gblend_shaderSize;
 #define MAX_BLEND_SOURCES 4
 
 /* Per-layer binder cache entry. Each layer's resource_set tree concatenates
- * its own shader (e.g. text-grid + msdf-font, ypaint-grid + ypaint-prims),
+ * its own shader (e.g. text-grid + msdf-font, ydraw-grid + ydraw-prims),
  * and merging trees from different layers redeclares functions like
  * median3. So when the same target serves multiple layers (direct
  * multi-layer render, no per-layer RTs), each layer needs its own binder.
@@ -34,11 +34,11 @@ struct layer_binder_entry {
 };
 
 struct yetty_yrender_render_target_texture {
-    struct yetty_ypaint_core_target base; /* viewport stored here */
+    struct yetty_ydraw_target base; /* viewport stored here */
     WGPUDevice device;
     WGPUQueue queue;
     WGPUTextureFormat format;
-    struct yetty_ypaint_core_gpu_allocator *allocator;
+    struct yetty_ydraw_gpu_allocator *allocator;
 
     /* Owned texture (size from base.viewport.w/h) */
     WGPUTexture texture;
@@ -74,7 +74,7 @@ struct yetty_yrender_render_target_texture {
  * Destroy
  *===========================================================================*/
 
-static void render_target_texture_destroy(struct yetty_ypaint_core_target *self)
+static void render_target_texture_destroy(struct yetty_ydraw_target *self)
 {
     struct yetty_yrender_render_target_texture *rt =
         (struct yetty_yrender_render_target_texture *)self;
@@ -142,7 +142,7 @@ static void render_target_texture_destroy(struct yetty_ypaint_core_target *self)
  *===========================================================================*/
 
 static struct yetty_ycore_void_result render_target_texture_clear(
-    struct yetty_ypaint_core_target *self)
+    struct yetty_ydraw_target *self)
 {
     struct yetty_yrender_render_target_texture *rt =
         (struct yetty_yrender_render_target_texture *)self;
@@ -187,7 +187,7 @@ static struct yetty_ycore_void_result render_target_texture_clear(
  *===========================================================================*/
 
 static struct yetty_ycore_void_result render_target_texture_resize(
-    struct yetty_ypaint_core_target *self, struct yetty_yrender_viewport viewport)
+    struct yetty_ydraw_target *self, struct yetty_yrender_viewport viewport)
 {
     struct yetty_yrender_render_target_texture *rt =
         (struct yetty_yrender_render_target_texture *)self;
@@ -264,14 +264,14 @@ static struct yetty_ycore_void_result render_target_texture_resize(
  * Accessors
  *===========================================================================*/
 
-static WGPUTextureView render_target_texture_get_view(const struct yetty_ypaint_core_target *self)
+static WGPUTextureView render_target_texture_get_view(const struct yetty_ydraw_target *self)
 {
     const struct yetty_yrender_render_target_texture *rt =
         (const struct yetty_yrender_render_target_texture *)self;
     return rt->view;
 }
 
-static WGPUTexture render_target_texture_get_texture(const struct yetty_ypaint_core_target *self)
+static WGPUTexture render_target_texture_get_texture(const struct yetty_ydraw_target *self)
 {
     const struct yetty_yrender_render_target_texture *rt =
         (const struct yetty_yrender_render_target_texture *)self;
@@ -283,7 +283,7 @@ static WGPUTexture render_target_texture_get_texture(const struct yetty_ypaint_c
  *===========================================================================*/
 
 static struct yetty_ycore_void_result render_target_texture_render_layer(
-    struct yetty_ypaint_core_target *self, struct yetty_yrender_terminal_layer *layer)
+    struct yetty_ydraw_target *self, struct yetty_yrender_terminal_layer *layer)
 {
     struct yetty_yrender_render_target_texture *rt =
         (struct yetty_yrender_render_target_texture *)self;
@@ -293,7 +293,7 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
      * The texture state at the start of this layer's pass depends on what
      * earlier layers in the same frame did:
      *   - layer 0 renders with LoadOp_Clear → wipes the entire attachment,
-     *     so any non-dirty upper layer (ypaint, ymgui, …) skipping its draw
+     *     so any non-dirty upper layer (ydraw, ymgui, …) skipping its draw
      *     would lose its previous-frame pixels — its content disappears.
      *   - layers above 0 with non-opaque pixels (alpha<1) would also leave
      *     ghosts of upper layers that didn't redraw, since LoadOp_Load
@@ -313,7 +313,7 @@ static struct yetty_ycore_void_result render_target_texture_render_layer(
         return YETTY_ERR(yetty_ycore_void, rs_res.error.msg);
     }
 
-    const struct yetty_ypaint_core_gpu_resource_set *rs = rs_res.value;
+    const struct yetty_ydraw_gpu_resource_set *rs = rs_res.value;
 
     /* Look up or create the per-layer binder. Multiple layers rendering
      * into the same target each have their own resource-tree shader, and
@@ -592,7 +592,7 @@ static struct yetty_ycore_void_result create_blend_pipeline(
 }
 
 static struct yetty_ycore_void_result render_target_texture_blend(
-    struct yetty_ypaint_core_target *self, struct yetty_ypaint_core_target **sources, size_t count)
+    struct yetty_ydraw_target *self, struct yetty_ydraw_target **sources, size_t count)
 {
     struct yetty_yrender_render_target_texture *rt =
         (struct yetty_yrender_render_target_texture *)self;
@@ -726,7 +726,7 @@ static struct yetty_ycore_void_result render_target_texture_blend(
  *===========================================================================*/
 
 static struct yetty_ycore_void_result render_target_texture_present(
-    struct yetty_ypaint_core_target *self)
+    struct yetty_ydraw_target *self)
 {
     struct yetty_yrender_render_target_texture *rt =
         (struct yetty_yrender_render_target_texture *)self;
@@ -876,7 +876,7 @@ static struct yetty_ycore_void_result render_target_texture_present(
  *===========================================================================*/
 
 static struct yetty_ycore_void_result render_target_texture_set_visual_zoom(
-    struct yetty_ypaint_core_target *self, float scale, float offset_x, float offset_y)
+    struct yetty_ydraw_target *self, float scale, float offset_x, float offset_y)
 {
     struct yetty_yrender_render_target_texture *rt =
         (struct yetty_yrender_render_target_texture *)self;
@@ -905,7 +905,7 @@ static const struct yetty_yrender_target_ops render_target_texture_ops = {
 
 struct yetty_yrender_target_ptr_result yetty_yrender_target_texture_create(
     WGPUDevice device, WGPUQueue queue, WGPUTextureFormat format,
-    struct yetty_ypaint_core_gpu_allocator *allocator, WGPUSurface surface,
+    struct yetty_ydraw_gpu_allocator *allocator, WGPUSurface surface,
     struct yetty_yrender_viewport viewport)
 {
     struct yetty_yrender_render_target_texture *rt = calloc(1, sizeof(*rt));

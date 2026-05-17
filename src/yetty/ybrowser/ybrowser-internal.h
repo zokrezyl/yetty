@@ -163,7 +163,7 @@ struct yetty_ylexbor_box {
     /* Word-spacing slack added between runs of spaces in painted text.
 	 * Filled by wrap_inline_box when `text-align: justify` is in
 	 * effect: extra pixels per space so the line fills content_w. The
-	 * paint pass routes through yetty_ypaint_core_buffer_add_text_full
+	 * paint pass routes through yetty_ydraw_draw_list_add_text_full
 	 * (TEXT_SPAN v2) when this is non-zero. */
     float word_spacing;
 
@@ -329,10 +329,10 @@ struct yetty_ycore_void_result yetty_ylexbor_box_build(struct yetty_ylexbor *r);
 struct yetty_ycore_void_result yetty_ylexbor_layout(struct yetty_ylexbor *r);
 
 /* ===========================================================================
- * paint (ylexbor-paint.c) — emit ypaint prims into the caller's buffer.
+ * paint (ylexbor-paint.c) — emit ydraw prims into the caller's buffer.
  * ===========================================================================*/
 struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
-                                                   struct yetty_ypaint_core_buffer *buf);
+                                                   struct yetty_ydraw_draw_list *buf);
 
 /* ===========================================================================
  * helpers

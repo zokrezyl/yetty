@@ -160,7 +160,7 @@ jobs:
           libwayland-dev \
           libxkbcommon-dev \
           libwebp-dev \
-          clang-18 libclang-18-dev
+          clang-20 llvm-20-dev libclang-20-dev
 
     - name: Build Linux
       run: make build-desktop-ytrace-release
@@ -214,7 +214,7 @@ jobs:
           libwayland-dev \
           libxkbcommon-dev \
           libwebp-dev \
-          clang-18 libclang-18-dev
+          clang-20 llvm-20-dev libclang-20-dev
 
     - name: Build with ASAN
       run: make build-desktop-ytrace-asan
@@ -284,7 +284,7 @@ jobs:
           libwayland-dev \
           libxkbcommon-dev \
           libwebp-dev \
-          clang-18 libclang-18-dev
+          clang-20 llvm-20-dev libclang-20-dev
 
     - name: Build Linux aarch64 (native)
       run: make build-desktop-ytrace-release

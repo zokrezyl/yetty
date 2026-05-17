@@ -3,7 +3,7 @@
  *
  * Used by:
  *   - VNC client — decode incoming H.264 frames from yetty-as-VNC-server
- *   - Terminal video playback — decode MP4/H.264 streams inside a ypaint card
+ *   - Terminal video playback — decode MP4/H.264 streams inside a ydraw card
  */
 
 #ifndef YETTY_YVIDEO_DECODER_H

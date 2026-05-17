@@ -1,7 +1,7 @@
 // MSDF font shader — instance-namespaced.
 //
 // Multiple msdf-font instances coexist as separate children of one layer
-// (e.g. ypaint mixing 13 PDF-embedded fonts). The pipeline binder gives
+// (e.g. ydraw mixing 13 PDF-embedded fonts). The pipeline binder gives
 // each instance a unique namespace and substitutes __NS__ here with that
 // namespace at shader-merge time. After substitution each instance
 // contributes its own helpers (e.g. `msdf_<hash>_glyph_sample`) and
@@ -22,8 +22,8 @@
 // Glyph metadata layout (6 u32 / glyph):
 //   [0] size_x    bitmap width  in px at base_size
 //   [1] size_y    bitmap height in px at base_size
-//   [2] bearing_x   horizontal bearing (pre-applied by ypaint on the CPU)
-//   [3] bearing_y   vertical   bearing (pre-applied by ypaint on the CPU)
+//   [2] bearing_x   horizontal bearing (pre-applied by ydraw on the CPU)
+//   [3] bearing_y   vertical   bearing (pre-applied by ydraw on the CPU)
 //   [4] advance     horizontal advance in px at base_size
 //   [5] cell_idx    atlas-cell index (-1 for empty glyphs like space)
 

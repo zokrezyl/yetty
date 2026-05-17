@@ -6,12 +6,12 @@ if(DEFINED ENV{NIX_CC})
     set(LLVM_DIR "$ENV{LLVM_DIR}")
     set(Clang_DIR "$ENV{Clang_DIR}")
 else()
-    # System: use LLVM 18
+    # System: use LLVM 20
     if(NOT DEFINED LLVM_DIR)
-        set(LLVM_DIR "/usr/lib/llvm-18/lib/cmake/llvm")
+        set(LLVM_DIR "/usr/lib/llvm-20/lib/cmake/llvm")
     endif()
     if(NOT DEFINED Clang_DIR)
-        set(Clang_DIR "/usr/lib/cmake/clang-18")
+        set(Clang_DIR "/usr/lib/cmake/clang-20")
     endif()
 endif()
 
@@ -26,6 +26,12 @@ message(STATUS "QA tools: Using ClangConfig.cmake in: ${Clang_DIR}")
 # result-checker: ensures functions calling result-returning functions also return results
 add_executable(result-checker
     result-checker.cpp
+)
+
+# See qa-tools/lib/naming-convention/CMakeLists.txt for why C++20.
+set_target_properties(result-checker PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
 )
 
 target_include_directories(result-checker PRIVATE

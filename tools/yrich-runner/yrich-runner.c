@@ -2,7 +2,7 @@
  * yrich-runner — interactive loop for yrich documents → OSC 666674 canvas.
  *
  * Mirrors the protocol used by ygui_osc.c: emit --clear and --bin in a
- * single tick to replace the canvas contents with a fresh ypaint buffer.
+ * single tick to replace the canvas contents with a fresh ydraw buffer.
  * Input events come back via OSC 777777/777778/777779/777780 plus regular
  * key bytes; the runner translates them into yrich document calls.
  */
@@ -12,8 +12,8 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yface/yface.h>
-#include <yetty/ypaint-core/buffer.h>
-#include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YPAINT_* */
+#include <yetty/ydraw-core/draw-list.h>
+#include <yetty/yterm/osc-codes.h>    /* YETTY_OSC_YDRAW_* */
 #include <yetty/yrich/yrich-document.h>
 #include <yetty/yrich/yrich-element.h>
 #include <yetty/yrich/yrich-types.h>
@@ -91,11 +91,11 @@ static void emit_clear(void)
 	write_all(clear, sizeof(clear) - 1);
 }
 
-static void emit_bin(const struct yetty_ypaint_core_buffer *buf)
+static void emit_bin(const struct yetty_ydraw_draw_list *buf)
 {
 	const uint8_t *raw = NULL;
-	size_t raw_size = yetty_ypaint_core_buffer_serialize(
-		(struct yetty_ypaint_core_buffer *)buf, &raw);
+	size_t raw_size = yetty_ydraw_draw_list_serialize(
+		(struct yetty_ydraw_draw_list *)buf, &raw);
 	if (raw_size == 0 || !raw) return;
 
 	struct yetty_yface_bin_meta meta = {
@@ -108,7 +108,7 @@ static void emit_bin(const struct yetty_ypaint_core_buffer *buf)
 	};
 	struct yetty_ycore_buffer envelope = {0};
 	struct yetty_ycore_void_result r = yetty_yface_emit(
-		YETTY_OSC_YPAINT_BIN, /*compressed=*/1,
+		YETTY_OSC_YDRAW_BIN, /*compressed=*/1,
 		&meta, sizeof(meta),
 		raw, raw_size, &envelope);
 	if (YETTY_IS_OK(r) && envelope.size > 0)
@@ -131,7 +131,7 @@ void yrich_runner_emit(struct yrich_runner *r)
 
 void yrich_runner_init(struct yrich_runner *r,
 		       struct yetty_yrich_document *doc,
-		       struct yetty_ypaint_core_buffer *buf)
+		       struct yetty_ydraw_draw_list *buf)
 {
 	if (!r)
 		return;

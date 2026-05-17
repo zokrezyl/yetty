@@ -2,10 +2,11 @@
  * yetty_yui_tabbar — see tabbar.h for the design.
  *
  * Today this file only implements the architecture: data, sizing, event
- * routing, keyboard/mouse shortcuts. The visual tab cells (Chrome-style
- * rounded rectangles + labels + close button) need a dedicated WebGPU
- * pipeline that draws into the strip region after workspace render — see
- * the render() entry point for the integration seam.
+ * routing, keyboard/mouse shortcuts. The visual tab cells (rounded
+ * rectangles + labels + close button, browser-tab style) need a
+ * dedicated WebGPU pipeline that draws into the strip region after
+ * workspace render — see the render() entry point for the integration
+ * seam.
  */
 
 #include <yetty/yui/workspace.h>
@@ -94,7 +95,7 @@ struct yetty_yui_tabbar {
      * widget-based menu on top. NULL means "no menu attached", in which
      * case the v-button click is a no-op. */
     yetty_yui_tabbar_v_menu_cb v_menu_cb;
-    void                     *v_menu_userdata;
+    void *v_menu_userdata;
 
     /* Resolved style colors in straight float RGB. Defaults come from
      * the yetty brand palette and are overlaid by config's style/yui
@@ -123,8 +124,7 @@ struct yetty_yui_tabbar {
 static struct yetty_ycore_void_result tabbar_grow(struct yetty_yui_tabbar *bar)
 {
     size_t new_cap = bar->capacity ? bar->capacity * 2 : INITIAL_CAPACITY;
-    struct yetty_yui_workspace **arr =
-        realloc(bar->workspaces, new_cap * sizeof(*bar->workspaces));
+    struct yetty_yui_workspace **arr = realloc(bar->workspaces, new_cap * sizeof(*bar->workspaces));
     if (!arr) {
         return YETTY_ERR(yetty_ycore_void, "tabbar grow: realloc failed");
     }
@@ -140,11 +140,12 @@ static struct yetty_ycore_void_result tabbar_grow(struct yetty_yui_tabbar *bar)
 /* Resolve one RGB triplet: brand default from the literal arguments,
  * optionally overridden by a hex-string at `path` in config. Missing
  * or malformed values keep the default. */
-static void style_resolve(const struct yetty_yconfig_config *config, const char *path,
-                          float def_r, float def_g, float def_b,
-                          float *r, float *g, float *b)
+static void style_resolve(const struct yetty_yconfig_config *config, const char *path, float def_r,
+                          float def_g, float def_b, float *r, float *g, float *b)
 {
-    *r = def_r; *g = def_g; *b = def_b;
+    *r = def_r;
+    *g = def_g;
+    *b = def_b;
     if (!config || !config->ops || !config->ops->get_string) {
         return;
     }
@@ -169,29 +170,26 @@ struct yetty_yui_tabbar_ptr_result yetty_yui_tabbar_create(
         return YETTY_ERR(yetty_yui_tabbar_ptr, "tabbar_create: allocation failed");
     }
 
-    /* Brand-palette defaults — see ~/.claude/yetty-new/rules/08-branding.md
-     * for the role names. config (when non-NULL) overlays these via the
-     * style/yui block; see config-defaults.yaml for the key list. */
-    style_resolve(config, "style/yui/strip",        0.078f, 0.102f, 0.122f,
-                  &bar->style.strip_r,    &bar->style.strip_g,    &bar->style.strip_b);
-    style_resolve(config, "style/yui/tab-active",   0.043f, 0.063f, 0.078f,
-                  &bar->style.active_r,   &bar->style.active_g,   &bar->style.active_b);
-    style_resolve(config, "style/yui/tab-inactive", 0.118f, 0.149f, 0.173f,
-                  &bar->style.inactive_r, &bar->style.inactive_g, &bar->style.inactive_b);
-    style_resolve(config, "style/yui/pill",         0.212f, 0.290f, 0.278f,
-                  &bar->style.pill_r,     &bar->style.pill_g,     &bar->style.pill_b);
-    style_resolve(config, "style/yui/glyph",        0.878f, 0.898f, 0.894f,
-                  &bar->style.glyph_r,    &bar->style.glyph_g,    &bar->style.glyph_b);
-    style_resolve(config, "style/yui/accent",       0.420f, 0.659f, 0.573f,
-                  &bar->style.accent_r,   &bar->style.accent_g,   &bar->style.accent_b);
-    style_resolve(config, "style/yui/winbtn-bg",    0.078f, 0.102f, 0.122f,
-                  &bar->style.winbtn_r,   &bar->style.winbtn_g,   &bar->style.winbtn_b);
-    style_resolve(config, "style/yui/close-bg",     0.35f,  0.10f,  0.11f,
-                  &bar->style.close_r,    &bar->style.close_g,    &bar->style.close_b);
-    style_resolve(config, "style/yui/popup-body",   0.078f, 0.102f, 0.122f,
-                  &bar->style.popup_body_r, &bar->style.popup_body_g, &bar->style.popup_body_b);
-    style_resolve(config, "style/yui/popup-row",    0.118f, 0.149f, 0.173f,
-                  &bar->style.popup_row_r,  &bar->style.popup_row_g,  &bar->style.popup_row_b);
+    style_resolve(config, "style/yui/strip", 0.078f, 0.102f, 0.122f, &bar->style.strip_r,
+                  &bar->style.strip_g, &bar->style.strip_b);
+    style_resolve(config, "style/yui/tab-active", 0.043f, 0.063f, 0.078f, &bar->style.active_r,
+                  &bar->style.active_g, &bar->style.active_b);
+    style_resolve(config, "style/yui/tab-inactive", 0.118f, 0.149f, 0.173f, &bar->style.inactive_r,
+                  &bar->style.inactive_g, &bar->style.inactive_b);
+    style_resolve(config, "style/yui/pill", 0.212f, 0.290f, 0.278f, &bar->style.pill_r,
+                  &bar->style.pill_g, &bar->style.pill_b);
+    style_resolve(config, "style/yui/glyph", 0.878f, 0.898f, 0.894f, &bar->style.glyph_r,
+                  &bar->style.glyph_g, &bar->style.glyph_b);
+    style_resolve(config, "style/yui/accent", 0.420f, 0.659f, 0.573f, &bar->style.accent_r,
+                  &bar->style.accent_g, &bar->style.accent_b);
+    style_resolve(config, "style/yui/winbtn-bg", 0.078f, 0.102f, 0.122f, &bar->style.winbtn_r,
+                  &bar->style.winbtn_g, &bar->style.winbtn_b);
+    style_resolve(config, "style/yui/close-bg", 0.35f, 0.10f, 0.11f, &bar->style.close_r,
+                  &bar->style.close_g, &bar->style.close_b);
+    style_resolve(config, "style/yui/popup-body", 0.078f, 0.102f, 0.122f, &bar->style.popup_body_r,
+                  &bar->style.popup_body_g, &bar->style.popup_body_b);
+    style_resolve(config, "style/yui/popup-row", 0.118f, 0.149f, 0.173f, &bar->style.popup_row_r,
+                  &bar->style.popup_row_g, &bar->style.popup_row_b);
 
     return YETTY_OK(yetty_yui_tabbar_ptr, bar);
 }
@@ -234,41 +232,42 @@ struct yetty_ycore_void_result yetty_yui_tabbar_destroy(struct yetty_yui_tabbar 
  *--------------------------------------------------------------------------*/
 
 /*---------------------------------------------------------------------------
- * Chrome-style colors + geometry. Picked to read as the same UI element a
- * user sees in Google Chrome dark mode: dark gray strip, the active tab
- * "rises out" of the strip as a lighter rounded shape, inactive tabs sit
- * flush and slightly translucent. SDF rounding gives us crisp antialiased
- * corners at any zoom level (see solid-rects.wgsl).
+ * Browser-tab colors + geometry. Picked to read as a familiar dark-mode
+ * tab strip: dark gray strip, the active tab "rises out" of the strip as
+ * a lighter rounded shape, inactive tabs sit flush and slightly
+ * translucent. SDF rounding gives us crisp antialiased corners at any
+ * zoom level (see solid-rects.wgsl).
  *--------------------------------------------------------------------------*/
 
 /* Tab geometry. Caps at ~240 px when there's room and shrinks to a floor
  * around ~60 px when many tabs compete; matches mainstream browser ranges
  * so users get familiar behaviour at any window width. */
-#define TABBAR_TAB_MAX_WIDTH    240.0f
-#define TABBAR_TAB_MIN_WIDTH    60.0f
-#define TABBAR_TAB_OVERLAP      0.0f    /* gap between adjacent tab cells */
-#define TABBAR_TAB_RADIUS       12.0f   /* top-corner radius for tab cells */
-#define TABBAR_TOP_INSET        4.0f    /* strip padding above each tab */
-#define TABBAR_NEWTAB_AREA      40.0f   /* footprint reserved for the new-tab "+" pill */
-#define TABBAR_PLUS_THICKNESS   2.0f    /* arm thickness of the + glyph */
+#define TABBAR_TAB_MAX_WIDTH 240.0f
+#define TABBAR_TAB_MIN_WIDTH 60.0f
+#define TABBAR_TAB_OVERLAP 0.0f    /* gap between adjacent tab cells */
+#define TABBAR_TAB_RADIUS 12.0f    /* top-corner radius for tab cells */
+#define TABBAR_TOP_INSET 4.0f      /* strip padding above each tab */
+#define TABBAR_NEWTAB_AREA 40.0f   /* footprint reserved for the new-tab "+" pill */
+#define TABBAR_PLUS_THICKNESS 2.0f /* arm thickness of the + glyph */
 
-/* Left-edge "v" dropdown button — mirrors Chrome's hamburger / customize
- * menu. Lives between the window's left edge and the first tab. Same
+/* Left-edge "v" dropdown button — mirrors a typical browser's
+ * hamburger / customize menu. Lives between the window's left edge and
+ * the first tab. Same
  * pill footprint as the "+" button so the two read as siblings. */
-#define TABBAR_MENU_AREA        40.0f   /* width reserved for the "v" pill on the left */
-#define TABBAR_CHEVRON_LEN      10.0f   /* total span of the chevron arms */
-#define TABBAR_CHEVRON_STROKE   2.0f    /* arm thickness of the chevron */
+#define TABBAR_MENU_AREA 40.0f     /* width reserved for the "v" pill on the left */
+#define TABBAR_CHEVRON_LEN 10.0f   /* total span of the chevron arms */
+#define TABBAR_CHEVRON_STROKE 2.0f /* arm thickness of the chevron */
 
 /* Window-control buttons (minimize, maximize-toggle, close) live at the
  * far right of the strip. Each button has the same square footprint; the
  * right-most one is close, leftmost minimize. Geometry is fixed so the
  * main thread (when wired through the output pipe) can derive identical
  * hit-rects without consulting the tabbar's internal state. */
-#define TABBAR_WINBTN_WIDTH     46.0f   /* per-button slot width */
-#define TABBAR_WINBTN_COUNT     3
-#define TABBAR_WINBTN_AREA      (TABBAR_WINBTN_WIDTH * TABBAR_WINBTN_COUNT)
-#define TABBAR_WINBTN_GLYPH_PX  10.0f   /* nominal glyph size in pixels */
-#define TABBAR_WINBTN_STROKE    1.5f    /* glyph stroke thickness */
+#define TABBAR_WINBTN_WIDTH 46.0f /* per-button slot width */
+#define TABBAR_WINBTN_COUNT 3
+#define TABBAR_WINBTN_AREA (TABBAR_WINBTN_WIDTH * TABBAR_WINBTN_COUNT)
+#define TABBAR_WINBTN_GLYPH_PX 10.0f /* nominal glyph size in pixels */
+#define TABBAR_WINBTN_STROKE 1.5f    /* glyph stroke thickness */
 
 static float tab_width(const struct yetty_yui_tabbar *bar)
 {
@@ -323,20 +322,32 @@ static void emit_window_buttons(const struct yetty_yui_tabbar *bar, float strip,
     /* Background fills + close-button tint come from the resolved style
      * (defaults match BRAND_BG_LIFTED for min/max, dark red for close). */
     push_rect(rects, n,
-              (struct yetty_yui_tabbar_rect){.x = min_x, .y = 0, .w = btn_w, .h = btn_h,
+              (struct yetty_yui_tabbar_rect){.x = min_x,
+                                             .y = 0,
+                                             .w = btn_w,
+                                             .h = btn_h,
                                              .r = bar->style.winbtn_r,
                                              .g = bar->style.winbtn_g,
-                                             .b = bar->style.winbtn_b, .a = 1.0f});
+                                             .b = bar->style.winbtn_b,
+                                             .a = 1.0f});
     push_rect(rects, n,
-              (struct yetty_yui_tabbar_rect){.x = max_x, .y = 0, .w = btn_w, .h = btn_h,
+              (struct yetty_yui_tabbar_rect){.x = max_x,
+                                             .y = 0,
+                                             .w = btn_w,
+                                             .h = btn_h,
                                              .r = bar->style.winbtn_r,
                                              .g = bar->style.winbtn_g,
-                                             .b = bar->style.winbtn_b, .a = 1.0f});
+                                             .b = bar->style.winbtn_b,
+                                             .a = 1.0f});
     push_rect(rects, n,
-              (struct yetty_yui_tabbar_rect){.x = close_x, .y = 0, .w = btn_w, .h = btn_h,
+              (struct yetty_yui_tabbar_rect){.x = close_x,
+                                             .y = 0,
+                                             .w = btn_w,
+                                             .h = btn_h,
                                              .r = bar->style.close_r,
                                              .g = bar->style.close_g,
-                                             .b = bar->style.close_b, .a = 1.0f});
+                                             .b = bar->style.close_b,
+                                             .a = 1.0f});
 
     /* Glyphs use the resolved style glyph color (default BRAND_TEXT_PRIMARY:
      * off-white with a cool tint, matching the wordmark's "ett" letters). */
@@ -355,7 +366,10 @@ static void emit_window_buttons(const struct yetty_yui_tabbar *bar, float strip,
                                                  .y = cy + gpx * 0.25f - stroke * 0.5f,
                                                  .w = gpx,
                                                  .h = stroke,
-                                                 .r = FG_R, .g = FG_G, .b = FG_B, .a = 1.0f});
+                                                 .r = FG_R,
+                                                 .g = FG_G,
+                                                 .b = FG_B,
+                                                 .a = 1.0f});
     }
 
     /* Maximize: a square outline made of 4 thin strokes (top, bottom, left,
@@ -369,24 +383,44 @@ static void emit_window_buttons(const struct yetty_yui_tabbar *bar, float strip,
         float top = cy - side * 0.5f;
         /* Top edge */
         push_rect(rects, n,
-                  (struct yetty_yui_tabbar_rect){.x = left, .y = top,
-                                                 .w = side, .h = stroke,
-                                                 .r = FG_R, .g = FG_G, .b = FG_B, .a = 1.0f});
+                  (struct yetty_yui_tabbar_rect){.x = left,
+                                                 .y = top,
+                                                 .w = side,
+                                                 .h = stroke,
+                                                 .r = FG_R,
+                                                 .g = FG_G,
+                                                 .b = FG_B,
+                                                 .a = 1.0f});
         /* Bottom edge */
         push_rect(rects, n,
-                  (struct yetty_yui_tabbar_rect){.x = left, .y = top + side - stroke,
-                                                 .w = side, .h = stroke,
-                                                 .r = FG_R, .g = FG_G, .b = FG_B, .a = 1.0f});
+                  (struct yetty_yui_tabbar_rect){.x = left,
+                                                 .y = top + side - stroke,
+                                                 .w = side,
+                                                 .h = stroke,
+                                                 .r = FG_R,
+                                                 .g = FG_G,
+                                                 .b = FG_B,
+                                                 .a = 1.0f});
         /* Left edge */
         push_rect(rects, n,
-                  (struct yetty_yui_tabbar_rect){.x = left, .y = top,
-                                                 .w = stroke, .h = side,
-                                                 .r = FG_R, .g = FG_G, .b = FG_B, .a = 1.0f});
+                  (struct yetty_yui_tabbar_rect){.x = left,
+                                                 .y = top,
+                                                 .w = stroke,
+                                                 .h = side,
+                                                 .r = FG_R,
+                                                 .g = FG_G,
+                                                 .b = FG_B,
+                                                 .a = 1.0f});
         /* Right edge */
         push_rect(rects, n,
-                  (struct yetty_yui_tabbar_rect){.x = left + side - stroke, .y = top,
-                                                 .w = stroke, .h = side,
-                                                 .r = FG_R, .g = FG_G, .b = FG_B, .a = 1.0f});
+                  (struct yetty_yui_tabbar_rect){.x = left + side - stroke,
+                                                 .y = top,
+                                                 .w = stroke,
+                                                 .h = side,
+                                                 .r = FG_R,
+                                                 .g = FG_G,
+                                                 .b = FG_B,
+                                                 .a = 1.0f});
     }
 
     /* Close: two thin strokes rotated ±45° to form an X. Lengths are scaled
@@ -403,20 +437,28 @@ static void emit_window_buttons(const struct yetty_yui_tabbar *bar, float strip,
         push_rect(rects, n,
                   (struct yetty_yui_tabbar_rect){.x = cx - diag * 0.5f,
                                                  .y = cy - stroke * 0.5f,
-                                                 .w = diag, .h = stroke,
-                                                 .r = FG_R, .g = FG_G, .b = FG_B, .a = 1.0f,
+                                                 .w = diag,
+                                                 .h = stroke,
+                                                 .r = FG_R,
+                                                 .g = FG_G,
+                                                 .b = FG_B,
+                                                 .a = 1.0f,
                                                  .rotation = 0.78539816f /* +45° */});
         push_rect(rects, n,
                   (struct yetty_yui_tabbar_rect){.x = cx - diag * 0.5f,
                                                  .y = cy - stroke * 0.5f,
-                                                 .w = diag, .h = stroke,
-                                                 .r = FG_R, .g = FG_G, .b = FG_B, .a = 1.0f,
+                                                 .w = diag,
+                                                 .h = stroke,
+                                                 .r = FG_R,
+                                                 .g = FG_G,
+                                                 .b = FG_B,
+                                                 .a = 1.0f,
                                                  .rotation = -0.78539816f /* -45° */});
     }
 }
 
-struct yetty_ycore_void_result yetty_yui_tabbar_render(
-    struct yetty_yui_tabbar *bar, struct yetty_ypaint_core_target *render_target)
+struct yetty_ycore_void_result yetty_yui_tabbar_render(struct yetty_yui_tabbar *bar,
+                                                       struct yetty_ydraw_target *render_target)
 {
     if (!bar) {
         return YETTY_ERR(yetty_ycore_void, "tabbar_render: NULL");
@@ -490,18 +532,31 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
     /* Resolved palette — defaults set in tabbar_create, optionally
      * overlaid by the style/yui block from config. See
      * rules/08-branding.md for role names and ABGR encoding details. */
-    const float STRIP_R = bar->style.strip_r, STRIP_G = bar->style.strip_g, STRIP_B = bar->style.strip_b;
-    const float ACTIVE_R = bar->style.active_r, ACTIVE_G = bar->style.active_g, ACTIVE_B = bar->style.active_b;
-    const float INACTIVE_R = bar->style.inactive_r, INACTIVE_G = bar->style.inactive_g, INACTIVE_B = bar->style.inactive_b;
-    const float ACCENT_R = bar->style.accent_r, ACCENT_G = bar->style.accent_g, ACCENT_B = bar->style.accent_b;
-    const float GLYPH_R = bar->style.glyph_r, GLYPH_G = bar->style.glyph_g, GLYPH_B = bar->style.glyph_b;
+    const float STRIP_R = bar->style.strip_r, STRIP_G = bar->style.strip_g,
+                STRIP_B = bar->style.strip_b;
+    const float ACTIVE_R = bar->style.active_r, ACTIVE_G = bar->style.active_g,
+                ACTIVE_B = bar->style.active_b;
+    const float INACTIVE_R = bar->style.inactive_r, INACTIVE_G = bar->style.inactive_g,
+                INACTIVE_B = bar->style.inactive_b;
+    const float ACCENT_R = bar->style.accent_r, ACCENT_G = bar->style.accent_g,
+                ACCENT_B = bar->style.accent_b;
+    const float GLYPH_R = bar->style.glyph_r, GLYPH_G = bar->style.glyph_g,
+                GLYPH_B = bar->style.glyph_b;
     const float PILL_R = bar->style.pill_r, PILL_G = bar->style.pill_g, PILL_B = bar->style.pill_b;
-    (void)GLYPH_R; (void)GLYPH_G; (void)GLYPH_B; /* used by emit_window_buttons via bar */
+    (void)GLYPH_R;
+    (void)GLYPH_G;
+    (void)GLYPH_B; /* used by emit_window_buttons via bar */
 
     /* 1. Strip background — sharp rect, no radius (full-width band). */
     push_rect(rects, &n,
-              (struct yetty_yui_tabbar_rect){.x = 0, .y = 0, .w = bar->width, .h = strip,
-                                             .r = STRIP_R, .g = STRIP_G, .b = STRIP_B, .a = 1.0f});
+              (struct yetty_yui_tabbar_rect){.x = 0,
+                                             .y = 0,
+                                             .w = bar->width,
+                                             .h = strip,
+                                             .r = STRIP_R,
+                                             .g = STRIP_G,
+                                             .b = STRIP_B,
+                                             .a = 1.0f});
 
     float tw = tab_width(bar);
     float top_inset = TABBAR_TOP_INSET;
@@ -512,26 +567,42 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
     /* Clamp corner radius to half the smaller side so degenerate narrow
      * tabs don't produce visual artifacts. */
     float r_corner = TABBAR_TAB_RADIUS;
-    if (r_corner > tab_h * 0.5f) r_corner = tab_h * 0.5f;
-    if (r_corner > tw * 0.5f)    r_corner = tw * 0.5f;
+    if (r_corner > tab_h * 0.5f) {
+        r_corner = tab_h * 0.5f;
+    }
+    if (r_corner > tw * 0.5f) {
+        r_corner = tw * 0.5f;
+    }
 
     /* 1b. "v" menu pill on the left — same footprint as the "+" pill so
      * the two read as siblings. Chevron glyph is two short rotated rects
      * forming a downward V, drawn in the same instanced pass. */
     {
         float btn = strip - top_inset - 4.0f;
-        if (btn < 16.0f) btn = 16.0f;
-        if (btn > 22.0f) btn = 22.0f;
+        if (btn < 16.0f) {
+            btn = 16.0f;
+        }
+        if (btn > 22.0f) {
+            btn = 22.0f;
+        }
         float bx = (TABBAR_MENU_AREA - btn) * 0.5f;
         float by = top_inset + (tab_h - btn) * 0.5f;
         float radius = btn * 0.5f;
 
         push_rect(rects, &n,
                   (struct yetty_yui_tabbar_rect){
-                      .x = bx, .y = by, .w = btn, .h = btn,
-                      .r = PILL_R, .g = PILL_G, .b = PILL_B, .a = 1.0f,
-                      .radius_tl = radius, .radius_tr = radius,
-                      .radius_br = radius, .radius_bl = radius,
+                      .x = bx,
+                      .y = by,
+                      .w = btn,
+                      .h = btn,
+                      .r = PILL_R,
+                      .g = PILL_G,
+                      .b = PILL_B,
+                      .a = 1.0f,
+                      .radius_tl = radius,
+                      .radius_tr = radius,
+                      .radius_br = radius,
+                      .radius_bl = radius,
                   });
 
         /* Chevron: two strokes meeting at the bottom-center of the
@@ -549,16 +620,24 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
                   (struct yetty_yui_tabbar_rect){
                       .x = cx - off_x - arm_len * 0.5f,
                       .y = cy + off_y - arm_th * 0.5f,
-                      .w = arm_len, .h = arm_th,
-                      .r = ACCENT_R, .g = ACCENT_G, .b = ACCENT_B, .a = 1.0f,
+                      .w = arm_len,
+                      .h = arm_th,
+                      .r = ACCENT_R,
+                      .g = ACCENT_G,
+                      .b = ACCENT_B,
+                      .a = 1.0f,
                       .rotation = 0.78539816f /* +45° */
                   });
         push_rect(rects, &n,
                   (struct yetty_yui_tabbar_rect){
                       .x = cx + off_x - arm_len * 0.5f,
                       .y = cy + off_y - arm_th * 0.5f,
-                      .w = arm_len, .h = arm_th,
-                      .r = ACCENT_R, .g = ACCENT_G, .b = ACCENT_B, .a = 1.0f,
+                      .w = arm_len,
+                      .h = arm_th,
+                      .r = ACCENT_R,
+                      .g = ACCENT_G,
+                      .b = ACCENT_B,
+                      .a = 1.0f,
                       .rotation = -0.78539816f /* -45° */
                   });
     }
@@ -574,9 +653,9 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
                       .y = top_inset,
                       .w = tw,
                       .h = tab_h,
-                      .r = active ? ACTIVE_R   : INACTIVE_R,
-                      .g = active ? ACTIVE_G   : INACTIVE_G,
-                      .b = active ? ACTIVE_B   : INACTIVE_B,
+                      .r = active ? ACTIVE_R : INACTIVE_R,
+                      .g = active ? ACTIVE_G : INACTIVE_G,
+                      .b = active ? ACTIVE_B : INACTIVE_B,
                       .a = 1.0f,
                       .radius_tl = r_corner,
                       .radius_tr = r_corner,
@@ -588,21 +667,34 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
 
     /* 2. New-tab "+" button — fully-rounded pill background + 2 thin
      * sharp rects forming the plus glyph. Positioned immediately to the
-     * right of the last tab (Chrome-style), not at the far right edge. */
+     * right of the last tab (typical browser-tab convention), not at the
+     * far right edge. */
     {
         float btn = strip - top_inset - 4.0f;
-        if (btn < 16.0f) btn = 16.0f;
-        if (btn > 22.0f) btn = 22.0f;
+        if (btn < 16.0f) {
+            btn = 16.0f;
+        }
+        if (btn > 22.0f) {
+            btn = 22.0f;
+        }
         float bx = x + (TABBAR_NEWTAB_AREA - btn) * 0.5f;
         float by = top_inset + (tab_h - btn) * 0.5f;
         float radius = btn * 0.5f; /* perfect circle */
 
         push_rect(rects, &n,
                   (struct yetty_yui_tabbar_rect){
-                      .x = bx, .y = by, .w = btn, .h = btn,
-                      .r = PILL_R, .g = PILL_G, .b = PILL_B, .a = 1.0f,
-                      .radius_tl = radius, .radius_tr = radius,
-                      .radius_br = radius, .radius_bl = radius,
+                      .x = bx,
+                      .y = by,
+                      .w = btn,
+                      .h = btn,
+                      .r = PILL_R,
+                      .g = PILL_G,
+                      .b = PILL_B,
+                      .a = 1.0f,
+                      .radius_tl = radius,
+                      .radius_tr = radius,
+                      .radius_br = radius,
+                      .radius_bl = radius,
                   });
 
         /* Plus glyph in brand mint — paired with the chevron, signals
@@ -614,13 +706,21 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
         push_rect(rects, &n,
                   (struct yetty_yui_tabbar_rect){.x = cx - arm_len * 0.5f,
                                                  .y = cy - arm_th * 0.5f,
-                                                 .w = arm_len, .h = arm_th,
-                                                 .r = ACCENT_R, .g = ACCENT_G, .b = ACCENT_B, .a = 1.0f});
+                                                 .w = arm_len,
+                                                 .h = arm_th,
+                                                 .r = ACCENT_R,
+                                                 .g = ACCENT_G,
+                                                 .b = ACCENT_B,
+                                                 .a = 1.0f});
         push_rect(rects, &n,
                   (struct yetty_yui_tabbar_rect){.x = cx - arm_th * 0.5f,
                                                  .y = cy - arm_len * 0.5f,
-                                                 .w = arm_th, .h = arm_len,
-                                                 .r = ACCENT_R, .g = ACCENT_G, .b = ACCENT_B, .a = 1.0f});
+                                                 .w = arm_th,
+                                                 .h = arm_len,
+                                                 .r = ACCENT_R,
+                                                 .g = ACCENT_G,
+                                                 .b = ACCENT_B,
+                                                 .a = 1.0f});
     }
 
     /* 3. Window-control buttons (minimize / maximize / close) on the
@@ -631,9 +731,8 @@ struct yetty_ycore_void_result yetty_yui_tabbar_render(
     /* Texture size for NDC mapping. Asking the inner WebGPU texture is
      * the only reliable source — render_target->viewport gets clobbered
      * by per-pane scissor in pane_render(). */
-    WGPUTexture tex = render_target->ops->get_texture
-                          ? render_target->ops->get_texture(render_target)
-                          : NULL;
+    WGPUTexture tex =
+        render_target->ops->get_texture ? render_target->ops->get_texture(render_target) : NULL;
     uint32_t tw_px = tex ? wgpuTextureGetWidth(tex) : (uint32_t)bar->width;
     uint32_t th_px = tex ? wgpuTextureGetHeight(tex) : (uint32_t)bar->height;
 
@@ -827,8 +926,7 @@ struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_of_kind(
         return YETTY_ERR(yetty_ycore_void, "tabbar_add_of_kind: NULL bar");
     }
     if (!bar->config || !bar->yetty_ctx) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "tabbar_add_of_kind: config/ctx not cached yet");
+        return YETTY_ERR(yetty_ycore_void, "tabbar_add_of_kind: config/ctx not cached yet");
     }
 
     struct yetty_yconfig_config *cfg = (struct yetty_yconfig_config *)bar->config;
@@ -861,8 +959,7 @@ struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_of_kind(
          * Leaving it empty falls through to a terminal view, which is
          * confusing — better to surface the missing input. */
         if (!ops->has(cfg, "vnc/client")) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yvnc: vnc/client not set (dialog not yet wired)");
+            return YETTY_ERR(yetty_ycore_void, "yvnc: vnc/client not set (dialog not yet wired)");
         }
         break;
     }
@@ -875,9 +972,9 @@ static struct yetty_ycore_void_result tabbar_close_active(struct yetty_yui_tabba
     if (bar->count == 0) {
         return YETTY_OK_VOID();
     }
-    /* Refuse to close the last workspace — Chrome closes the window in that
-     * case, but yetty's lifecycle is owned by yetty.c (which posts SHUTDOWN
-     * on window-close). Leaving the last workspace open keeps the UI in a
+    /* Refuse to close the last workspace — most browsers close the window
+     * in that case, but yetty's lifecycle is owned by yetty.c (which posts
+     * SHUTDOWN on window-close). Leaving the last workspace open keeps the UI in a
      * defined state until the user explicitly asks to quit. */
     if (bar->count == 1) {
         ydebug("tabbar: refusing to close last workspace");
@@ -990,7 +1087,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
     /* Keyboard shortcuts — only on KEY_DOWN. Char events with Ctrl held may
      * still produce control codes (Ctrl+T → 0x14) which we want the terminal
      * to see, so we deliberately don't filter on YCORE_CHAR. The shortcut
-     * matches Chrome's defaults. */
+     * set matches the common browser defaults. */
     if (event->type == YETTY_YCORE_KEY_DOWN && (event->key.mods & YETTY_MOD_CONTROL)) {
         int k = event->key.key;
         int shift = (event->key.mods & YETTY_MOD_SHIFT) != 0;
@@ -1000,8 +1097,8 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
          * for the inner program. */
         if (shift && k == KEY_T) {
             if (bar->config && bar->yetty_ctx) {
-                struct yetty_ycore_void_result r = yetty_yui_tabbar_add_workspace_from_config(
-                    bar, bar->config, bar->yetty_ctx);
+                struct yetty_ycore_void_result r =
+                    yetty_yui_tabbar_add_workspace_from_config(bar, bar->config, bar->yetty_ctx);
                 if (YETTY_IS_ERR(r)) {
                     yerror("tabbar: new tab failed: %s", r.error.msg);
                     yetty_ycore_error_destroy(r.error);
@@ -1067,8 +1164,9 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
         struct yetty_yplatform_window_manager *wm =
             bar->yetty_ctx ? bar->yetty_ctx->app_context.window_manager : NULL;
         ydebug("tabbar: strip MOUSE_DOWN at (%.1f, %.1f) bar=(%.0fx%.0f) winbtn_left=%.0f "
-               "newtab=[%.0f..%.0f] wm=%p", event->mouse.x, event->mouse.y, bar->width,
-               bar->height, winbtn_left, newtab_left, newtab_right, (void *)wm);
+               "newtab=[%.0f..%.0f] wm=%p",
+               event->mouse.x, event->mouse.y, bar->width, bar->height, winbtn_left, newtab_left,
+               newtab_right, (void *)wm);
 
         if (event->mouse.x < TABBAR_MENU_AREA) {
             /* "v" button — fire the v-menu callback. The actual popup
@@ -1099,10 +1197,10 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
                     wm->ops->request_close(wm);
                 }
             }
-        } else if (event->mouse.x >= newtab_left && event->mouse.x < newtab_right
-                   && bar->config && bar->yetty_ctx) {
-            struct yetty_ycore_void_result r = yetty_yui_tabbar_add_workspace_from_config(
-                bar, bar->config, bar->yetty_ctx);
+        } else if (event->mouse.x >= newtab_left && event->mouse.x < newtab_right && bar->config &&
+                   bar->yetty_ctx) {
+            struct yetty_ycore_void_result r =
+                yetty_yui_tabbar_add_workspace_from_config(bar, bar->config, bar->yetty_ctx);
             if (YETTY_IS_ERR(r)) {
                 yerror("tabbar: new-tab button: %s", r.error.msg);
                 yetty_ycore_error_destroy(r.error);
@@ -1139,8 +1237,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
     if (bar->dragging) {
         struct yetty_yplatform_window_manager *wm =
             bar->yetty_ctx ? bar->yetty_ctx->app_context.window_manager : NULL;
-        if (event->type == YETTY_YCORE_MOUSE_MOVE ||
-            event->type == YETTY_YCORE_MOUSE_DRAG) {
+        if (event->type == YETTY_YCORE_MOUSE_MOVE || event->type == YETTY_YCORE_MOUSE_DRAG) {
             int dx = (int)(event->mouse.x - bar->drag_anchor_x);
             int dy = (int)(event->mouse.y - bar->drag_anchor_y);
             if (wm && (dx != 0 || dy != 0)) {
@@ -1201,14 +1298,14 @@ struct yetty_ycore_int_result yetty_yui_tabbar_on_event(struct yetty_yui_tabbar 
                 bar->resize_dir_y = bottom ? 1 : 0;
                 bar->resize_last_x = mx;
                 bar->resize_last_y = my;
-                ydebug("tabbar: resize start dirs=(%d,%d) at (%.1f, %.1f)",
-                       bar->resize_dir_x, bar->resize_dir_y, mx, my);
+                ydebug("tabbar: resize start dirs=(%d,%d) at (%.1f, %.1f)", bar->resize_dir_x,
+                       bar->resize_dir_y, mx, my);
                 return YETTY_OK(yetty_ycore_int, 1);
             }
         }
         if (bar->resizing) {
-            if (have_xy && (event->type == YETTY_YCORE_MOUSE_MOVE ||
-                            event->type == YETTY_YCORE_MOUSE_DRAG)) {
+            if (have_xy &&
+                (event->type == YETTY_YCORE_MOUSE_MOVE || event->type == YETTY_YCORE_MOUSE_DRAG)) {
                 int step_dx = (int)(mx - bar->resize_last_x) * bar->resize_dir_x;
                 int step_dy = (int)(my - bar->resize_last_y) * bar->resize_dir_y;
                 if (wm && (step_dx != 0 || step_dy != 0)) {

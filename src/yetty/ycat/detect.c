@@ -150,7 +150,7 @@ static magic_t get_magic_cookie(void)
 	 * default. */
     const char *mgc_path = getenv("YCAT_MAGIC_MGC");
 #ifdef YETTY_YCAT_MAGIC_MGC_PATH
-    if (!mgc_path && YETTY_YCAT_MAGIC_MGC_PATH[0]) {
+    if (!mgc_path) {
         mgc_path = YETTY_YCAT_MAGIC_MGC_PATH;
     }
 #endif

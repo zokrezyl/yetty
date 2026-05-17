@@ -17,12 +17,12 @@ extern "C" {
 struct yetty_yterm_terminal;
 struct yetty_yrender_terminal_layer;
 struct yetty_yterm_terminal_layer_ops;
-struct yetty_yterm_osc_statemachine;
+struct yetty_ywire_wire_statemachine;
 struct yetty_yevent_event_loop;
 struct yetty_platform_pty;
 struct yetty_yui_view;
 struct yetty_yrender_gpu_resource_binder;
-struct yetty_ypaint_core_target;
+struct yetty_ydraw_target;
 
 /* Render layer function - stateless, renders layer to target texture.
  * Returns early with OK if layer is not dirty. */
@@ -35,10 +35,11 @@ YETTY_YRESULT_DECLARE(yetty_yterm_terminal, struct yetty_yterm_terminal *);
 YETTY_YRESULT_DECLARE(yetty_yterm_terminal_layer, struct yetty_yrender_terminal_layer *);
 
 /* PTY write callback - called when layer needs to send data to PTY */
-typedef void (*yetty_yterm_pty_write_fn)(const char *data, size_t len, void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterm_pty_write_fn)(
+    const char *data, size_t len, void *userdata);
 
 /* Request render callback - called when layer needs a render frame */
-typedef void (*yetty_yterm_request_render_fn)(void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterm_request_render_fn)(void *userdata);
 
 /* Scroll callback - called when layer scrolls, passes source layer and line
  * count */
@@ -47,34 +48,37 @@ typedef struct yetty_ycore_void_result (*yetty_yterm_scroll_fn)(
 
 /* Cursor callback - called when layer moves cursor, passes source layer and
  * position */
-typedef void (*yetty_yterm_cursor_fn)(struct yetty_yrender_terminal_layer *source,
-                                      struct yetty_ycore_grid_cursor_pos cursor_pos,
-                                      void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterm_cursor_fn)(
+    struct yetty_yrender_terminal_layer *source,
+    struct yetty_ycore_grid_cursor_pos cursor_pos, void *userdata);
 
 /* Mouse-subscription callback - fired when libvterm flips DEC mode 1500
  * (card click, click_enabled) or 1501 (card move, move_enabled). The two
  * args carry the *current* subscription state for both modes; the layer
  * fires this whenever either changes. */
-typedef void (*yetty_yterm_mouse_sub_fn)(int click_enabled, int move_enabled, void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterm_mouse_sub_fn)(
+    int click_enabled, int move_enabled, void *userdata);
 
 /* Terminal-wide input subscription callback — fired when a layer
  * receives YMGUI_OSC_CS_TERM_INPUT_SUB from the inferior. `flags` is the
  * new (post-update) bitmask of YETTY_YMGUI_TERM_SUB_* bits. flags == 0
  * means full unsubscribe. */
-typedef void (*yetty_yterm_term_input_sub_fn)(uint32_t flags, void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterm_term_input_sub_fn)(
+    uint32_t flags, void *userdata);
 
 /* OSC emit callback - fires when a layer needs to send an OSC envelope
  * back to the client app (PTY child). Used by ymgui-layer to deliver
  * focus events, by future bidirectional layers, etc. The terminal
  * implements this via terminal_yface_emit. */
-typedef void (*yetty_yterm_emit_osc_fn)(int osc_code, const void *payload, size_t len,
-                                        void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterm_emit_osc_fn)(
+    int osc_code, const void *payload, size_t len, void *userdata);
 
 /* Alt-screen-toggle callback - fired by the text-layer when libvterm
  * switches in/out of alternate-screen mode (DEC ?1047/?1049/?47). The
  * terminal forwards the new state to every layer via its set_alt_screen
  * op so each layer can save/restore its content. */
-typedef void (*yetty_yterm_alt_screen_fn)(int active, void *userdata);
+typedef struct yetty_ycore_void_result (*yetty_yterm_alt_screen_fn)(
+    int active, void *userdata);
 
 /* Layer ops */
 struct yetty_yterm_terminal_layer_ops {
@@ -85,16 +89,16 @@ struct yetty_yterm_terminal_layer_ops {
    * bytes via osc_statemachine_read and runs its own framing on top.
    * Accessors usable inside this call:
    *
-   *   - yetty_yterm_osc_statemachine_read(osc_statemachine, dst, n)
+   *   - yetty_ywire_wire_statemachine_read(osc_statemachine, dst, n)
    *       — copy up to n DECODED bytes (b64+lz4 already applied for
    *         payloads; passthrough for raw); returns count copied.
-   *   - yetty_yterm_osc_statemachine_at_end(osc_statemachine)
+   *   - yetty_ywire_wire_statemachine_at_end(osc_statemachine)
    *       — true once the framer reached the envelope terminator;
    *         read() returns 0 forever in this dispatch.
-   *   - yetty_yterm_osc_statemachine_code(osc_statemachine)
+   *   - yetty_ywire_wire_statemachine_code(osc_statemachine)
    *       — 0 for the default sink, the OSC code for an envelope
-   *         dispatch (e.g. 600001 = ypaint BIN).
-   *   - yetty_yterm_osc_statemachine_args(osc_statemachine)
+   *         dispatch (e.g. 600001 = ydraw BIN).
+   *   - yetty_ywire_wire_statemachine_args(osc_statemachine)
    *       — decoded args view (envelope dispatch only).
    *
    * The layer may return early at any byte boundary; the SM keeps
@@ -103,7 +107,7 @@ struct yetty_yterm_terminal_layer_ops {
    */
     struct yetty_ycore_void_result (*process_input)(
         struct yetty_yrender_terminal_layer *self,
-        struct yetty_yterm_osc_statemachine *osc_statemachine);
+        struct yetty_ywire_wire_statemachine *osc_statemachine);
     struct yetty_ycore_void_result (*resize_grid)(struct yetty_yrender_terminal_layer *self,
                                                   struct yetty_ycore_grid_size grid_size);
     /* Change the layer's cell pixel size. Implementations must also push the
@@ -121,7 +125,7 @@ struct yetty_yterm_terminal_layer_ops {
         const struct yetty_yrender_terminal_layer *self);
     /* Render layer to target */
     struct yetty_ycore_void_result (*render)(struct yetty_yrender_terminal_layer *self,
-                                             struct yetty_ypaint_core_target *target);
+                                             struct yetty_ydraw_target *target);
     /* Returns 1 if layer has no content to render (skip rendering, use
    * transparent texture) */
     int (*is_empty)(const struct yetty_yrender_terminal_layer *self);
@@ -135,7 +139,7 @@ struct yetty_yterm_terminal_layer_ops {
                                                  int row);
     /* Live anchor — absolute line index that represents "top of live viewport"
    * right now. Text-layer returns its scrollback row count (lines pushed off
-   * the top of the screen); ypaint-layer returns its canvas rolling_row_0.
+   * the top of the screen); ydraw-layer returns its canvas rolling_row_0.
    * The terminal uses this value to convert mouse-wheel deltas into a stable
    * absolute view_top_total_idx that doesn't drift when new content arrives
    * during scrollback view. Optional — NULL means the layer can't anchor a
@@ -167,7 +171,7 @@ struct yetty_yterm_terminal_layer_ops {
      *   text-layer  — xterm-style stream selection. Cells are tinted and
      *                 extracted from anchor to head (full rows in the
      *                 middle, partial first/last rows).
-     *   ypaint-layer — the column part is meaningless on rich content,
+     *   ydraw-layer — the column part is meaningless on rich content,
      *                 so the layer treats the row span [min_row, max_row]
      *                 as the "touched rows" and selects the first
      *                 primitive overlapping each touched row, as a whole.
@@ -175,9 +179,9 @@ struct yetty_yterm_terminal_layer_ops {
      * Both ops are optional — NULL means "this layer doesn't participate
      * in selection". active=0 clears any prior selection on the layer.
      */
-    void (*set_selection)(struct yetty_yrender_terminal_layer *self, int active,
-                          uint32_t anchor_row, uint32_t anchor_col, uint32_t head_row,
-                          uint32_t head_col);
+    struct yetty_ycore_void_result (*set_selection)(
+        struct yetty_yrender_terminal_layer *self, int active,
+        uint32_t anchor_row, uint32_t anchor_col, uint32_t head_row, uint32_t head_col);
     /* Append this layer's contribution to the current selection to out
      * as UTF-8. Called once per copy; the layer drives both row iteration
      * and intra-row column handling internally. */
@@ -243,22 +247,18 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
 /* Get terminal as yui view (for pushing into pane) */
 struct yetty_yui_view *yetty_yterm_terminal_as_view(struct yetty_yterm_terminal *terminal);
 
-/* Terminal input */
-void yetty_yterm_terminal_write(struct yetty_yterm_terminal *terminal, const char *data,
-                                size_t len);
-
-void yetty_yterm_terminal_resize_grid(struct yetty_yterm_terminal *terminal,
-                                      struct yetty_ycore_grid_size grid_size);
+struct yetty_ycore_void_result yetty_yterm_terminal_resize_grid(
+    struct yetty_yterm_terminal *terminal, struct yetty_ycore_grid_size grid_size);
 
 /* Terminal state */
 uint32_t yetty_yterm_terminal_get_cols(const struct yetty_yterm_terminal *terminal);
 uint32_t yetty_yterm_terminal_get_rows(const struct yetty_yterm_terminal *terminal);
 
 /* Layer management */
-void yetty_yterm_terminal_layer_add(struct yetty_yterm_terminal *terminal,
-                                    struct yetty_yrender_terminal_layer *layer);
-void yetty_yterm_terminal_layer_remove(struct yetty_yterm_terminal *terminal,
-                                       struct yetty_yrender_terminal_layer *layer);
+struct yetty_ycore_void_result yetty_yterm_terminal_layer_add(
+    struct yetty_yterm_terminal *terminal, struct yetty_yrender_terminal_layer *layer);
+struct yetty_ycore_void_result yetty_yterm_terminal_layer_remove(
+    struct yetty_yterm_terminal *terminal, struct yetty_yrender_terminal_layer *layer);
 size_t yetty_yterm_terminal_layer_count(const struct yetty_yterm_terminal *terminal);
 struct yetty_yrender_terminal_layer *yetty_yterm_terminal_layer_get(
     const struct yetty_yterm_terminal *terminal, size_t index);

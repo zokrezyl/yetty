@@ -145,7 +145,7 @@ function(yetty_stage_webasm_assets)
     # Shaders — same set as yetty_embed_assets (shared.cmake lines 413-446).
     foreach(_SHADER
             "${YETTY_ROOT}/src/yetty/yterm/text-layer.wgsl"
-            "${YETTY_ROOT}/src/yetty/yterm/ypaint-layer.wgsl"
+            "${YETTY_ROOT}/src/yetty/yterm/ydraw-layer.wgsl"
             "${YETTY_ROOT}/src/yetty/yterm/ymgui-layer.wgsl"
             "${YETTY_ROOT}/src/yetty/yterm/background-layer.wgsl"
             "${YETTY_ROOT}/src/yetty/yterm/shader-glyph-layer.wgsl"

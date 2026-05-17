@@ -14,7 +14,7 @@
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yterm/shader-glyph-layer.h>
-#include <yetty/yterm/osc-statemachine.h>
+#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yterm/text-layer.h>
 
 /* Uniform slots */
@@ -25,25 +25,25 @@
 #define U_VZ_OFF 4
 #define U_COUNT 5
 
-static inline void set_grid_size(struct yetty_ypaint_core_gpu_resource_set *rs, float cols,
+static inline void set_grid_size(struct yetty_ydraw_gpu_resource_set *rs, float cols,
                                  float rows)
 {
     rs->uniforms[U_GRID_SIZE].vec2[0] = cols;
     rs->uniforms[U_GRID_SIZE].vec2[1] = rows;
 }
 
-static inline void set_cell_size(struct yetty_ypaint_core_gpu_resource_set *rs, float w, float h)
+static inline void set_cell_size(struct yetty_ydraw_gpu_resource_set *rs, float w, float h)
 {
     rs->uniforms[U_CELL_SIZE].vec2[0] = w;
     rs->uniforms[U_CELL_SIZE].vec2[1] = h;
 }
 
-static inline void set_time(struct yetty_ypaint_core_gpu_resource_set *rs, float t)
+static inline void set_time(struct yetty_ydraw_gpu_resource_set *rs, float t)
 {
     rs->uniforms[U_TIME].f32 = t;
 }
 
-static inline void set_visual_zoom(struct yetty_ypaint_core_gpu_resource_set *rs, float scale,
+static inline void set_visual_zoom(struct yetty_ydraw_gpu_resource_set *rs, float scale,
                                    float off_x, float off_y)
 {
     rs->uniforms[U_VZ_SCALE].f32 = scale;
@@ -51,7 +51,7 @@ static inline void set_visual_zoom(struct yetty_ypaint_core_gpu_resource_set *rs
     rs->uniforms[U_VZ_OFF].vec2[1] = off_y;
 }
 
-static void init_uniforms(struct yetty_ypaint_core_gpu_resource_set *rs)
+static void init_uniforms(struct yetty_ydraw_gpu_resource_set *rs)
 {
     rs->uniform_count = U_COUNT;
 
@@ -77,7 +77,7 @@ struct yetty_yterm_shader_glyph_layer {
     /* Final assembled shader source (template with glyph code spliced in). */
     char *shader_source;
     size_t shader_source_size;
-    struct yetty_ypaint_core_gpu_resource_set rs;
+    struct yetty_ydraw_gpu_resource_set rs;
     /* CPU-side animation clock origin. Time uniform is (now - t0). */
     struct timespec t0;
 
@@ -158,8 +158,9 @@ static struct yetty_ycore_buffer_result assemble_glyph_shaders(const char *glyph
                 continue;
             }
             struct yetty_ycore_buffer_result br = yetty_ycore_read_file(path);
-            if (!YETTY_IS_OK(br)) {
+            if (YETTY_IS_ERR(br)) {
                 ywarn("glyph-shaders: prelude %s: %s", path, br.error.msg);
+                yetty_ycore_error_destroy(br.error);
                 continue;
             }
             prelude_bufs[prelude_count] = br.value;
@@ -176,8 +177,9 @@ static struct yetty_ycore_buffer_result assemble_glyph_shaders(const char *glyph
         uint32_t local_id = (uint32_t)strtoul(name + 2, NULL, 16);
 
         struct yetty_ycore_buffer_result br = yetty_ycore_read_file(path);
-        if (!YETTY_IS_OK(br)) {
+        if (YETTY_IS_ERR(br)) {
             ywarn("glyph-shaders: read %s: %s", path, br.error.msg);
+            yetty_ycore_error_destroy(br.error);
             continue;
         }
 
@@ -317,7 +319,7 @@ static struct yetty_ycore_void_result shader_glyph_destroy(
     struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result shader_glyph_process_input(
     struct yetty_yrender_terminal_layer *self,
-    struct yetty_yterm_osc_statemachine *osc_statemachine);
+    struct yetty_ywire_wire_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result shader_glyph_resize_grid(
     struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size);
 static struct yetty_ycore_void_result shader_glyph_set_cell_size(
@@ -327,7 +329,7 @@ static struct yetty_ycore_void_result shader_glyph_set_visual_zoom(
 static struct yetty_yrender_gpu_resource_set_result shader_glyph_get_gpu_resource_set(
     const struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yrender_terminal_layer *self,
-                                                          struct yetty_ypaint_core_target *target);
+                                                          struct yetty_ydraw_target *target);
 static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_listener *listener,
                                                   const struct yetty_yui_event *event);
 static int shader_glyph_is_empty(const struct yetty_yrender_terminal_layer *self);
@@ -368,7 +370,7 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
         return YETTY_ERR(yetty_yterm_terminal_layer, "shader-glyph-layer: context is NULL");
     }
 
-    /* Load shader template from disk (matches text-layer / ypaint-layer pattern). */
+    /* Load shader template from disk (matches text-layer / ydraw-layer pattern). */
     struct yetty_yconfig_config *config = context->app_context.config;
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
     char shader_path[512];
@@ -378,7 +380,9 @@ struct yetty_yterm_terminal_layer_result yetty_yterm_shader_glyph_layer_create(
 
     struct yetty_ycore_buffer_result template_res = yetty_ycore_read_file(shader_path);
     if (YETTY_IS_ERR(template_res)) {
-        return YETTY_ERR(yetty_yterm_terminal_layer, template_res.error.msg);
+        return YETTY_ERR(yetty_yterm_terminal_layer,
+                         "shader_glyph_layer_create: read_file(shader-glyph-layer.wgsl) failed",
+                         template_res);
     }
 
     /* Assemble per-glyph .wgsl files + generated dispatcher. */
@@ -518,7 +522,7 @@ static struct yetty_ycore_void_result shader_glyph_destroy(
 
 static struct yetty_ycore_void_result shader_glyph_process_input(
     struct yetty_yrender_terminal_layer *self,
-    struct yetty_yterm_osc_statemachine *osc_statemachine)
+    struct yetty_ywire_wire_statemachine *osc_statemachine)
 {
     (void)self;
     (void)osc_statemachine;
@@ -626,7 +630,10 @@ static struct yetty_ycore_int_result on_anim_tick(struct yetty_yevent_event_list
     (void)event;
     struct yetty_yterm_shader_glyph_layer *layer = layer_from_listener(listener);
     if (layer->base.request_render_fn) {
-        layer->base.request_render_fn(layer->base.request_render_userdata);
+        struct yetty_ycore_void_result r =
+            layer->base.request_render_fn(layer->base.request_render_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, r,
+                            "on_anim_tick: request_render_fn failed");
     }
     return YETTY_OK(yetty_ycore_int, 0);
 }
@@ -650,7 +657,7 @@ static void anim_timer_stop(struct yetty_yterm_shader_glyph_layer *layer)
 }
 
 static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yrender_terminal_layer *self,
-                                                          struct yetty_ypaint_core_target *target)
+                                                          struct yetty_ydraw_target *target)
 {
     struct yetty_yterm_shader_glyph_layer *layer =
         container_of(self, struct yetty_yterm_shader_glyph_layer, base);
@@ -661,7 +668,7 @@ static struct yetty_ycore_void_result shader_glyph_render(struct yetty_yrender_t
     if (shader_glyph_is_empty(self)) {
         anim_timer_stop(layer);
         /* Direct-render-into-big_target path: big_target is fully redrawn
-         * every frame (text Clear + ypaint/shader-glyph Load), so there's
+         * every frame (text Clear + ydraw/shader-glyph Load), so there's
          * no stale shader-glyph image to evict — just skip. The old
          * "always render" workaround was for the per-layer-RT path, which
          * needed an explicit clear on its dedicated RT; that path is no

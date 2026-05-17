@@ -41,7 +41,6 @@ static void on_key(struct yetty_ygui_engine* engine, uint32_t key, int mods, voi
 }
 
 int main(void) {
-    (void)freopen("/dev/null", "w", stderr);
     fprintf(stderr, "=== COORDINATE DEBUG DEMO ===\n");
     fprintf(stderr, "This demo helps debug the click boundary bug.\n");
     fprintf(stderr, "Expected button area: x=[%d,%d), y=[%d,%d)\n",
@@ -55,7 +54,7 @@ int main(void) {
     }
 
     /* Create with pixel hint to trigger SCALE_ON mode */
-    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_engine_create_with_pixel_hint("coord-dbg", 1, 1, 400.0f, 250.0f);
+    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_engine_create((struct yetty_ygui_engine_args){.name = "coord-dbg"});
         if (YETTY_IS_ERR(_eng_r)) { yetty_ycore_error_destroy(_eng_r.error); return 1; }
         g_engine = _eng_r.value; }
     if (!g_engine) {
@@ -93,7 +92,6 @@ int main(void) {
     fprintf(stderr, "[DEMO] Left edge at x=%d, Right edge at x=%d\n", BTN_X, BTN_X + BTN_W);
     fprintf(stderr, "[DEMO] Press 'q' to quit\n\n");
 
-    yetty_ygui_engine_show(g_engine);
     yetty_ygui_engine_run(g_engine);
 
     yetty_ygui_engine_destroy(g_engine);
