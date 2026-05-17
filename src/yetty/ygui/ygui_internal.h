@@ -777,6 +777,15 @@ struct yetty_ycore_void_result yetty_ygui_osc_scroll_card_delta(struct yetty_pla
 /* Error */
 void yetty_ygui_set_error(const char *msg);
 
+/* Recursively queue scene-canvas DELETE records for every widget in
+ * the given subtree that owns a live entity on the receiver
+ * (was_rendered = 1 from the previous frame). Used by set_visible(0)
+ * and by widgets that gate their own emission outside of the standard
+ * VISIBLE flag (e.g. popup_menu's OPEN check). After this call every
+ * touched widget has was_rendered = 0 and dirty = 1, so it re-emits a
+ * fresh GROUP the next time it lands in the render walk. */
+void yetty_ygui_internal_queue_delete_subtree_rendered(struct yetty_ygui_widget *w);
+
 /* Internal helpers shared between the ygui-core (libuv-free) and the
  * libuv-driven runtime in ygui_engine_uv.c. Not part of the public API
  * — `yetty_ygui_internal_` prefix makes the intent obvious. */

@@ -859,10 +859,15 @@ void yetty_ygui_engine_mouse_down(struct yetty_ygui_engine *engine, float x, flo
         hit->dirty = 1;
         engine->dirty = 1;
 
-        /* Focus change */
+        /* Focus change — old focused widget must be marked dirty so
+         * its focus ring goes away on the receiver. Without this,
+         * clearing FOCUSED is invisible to incremental rendering and
+         * the focus ring sticks around on the previously-focused
+         * widget. */
         if (engine->focused != hit) {
             if (engine->focused) {
                 engine->focused->flags &= ~YETTY_YGUI_FLAG_FOCUSED;
+                engine->focused->dirty = 1;
             }
             hit->flags |= YETTY_YGUI_FLAG_FOCUSED;
             engine->focused = hit;

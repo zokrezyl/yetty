@@ -330,7 +330,7 @@ void yetty_ygui_widget_rich_set_buffer(struct yetty_ygui_widget *widget,
     }
     widget->data.rich.buffer = buffer;
     if (widget->engine) {
-        widget->engine->dirty = 1;
+        widget->engine->dirty = 1; widget->dirty = 1;
     }
 }
 

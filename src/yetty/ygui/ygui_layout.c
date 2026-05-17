@@ -633,6 +633,19 @@ static void layout_flex(struct yetty_ygui_widget *parent)
 static void layout_widget(struct yetty_ygui_widget *w, float parent_abs_x, float parent_abs_y,
                           float rel_x, float rel_y, float resolved_w, float resolved_h)
 {
+    /* Detect reflow: when a sibling's authored size changes, the flex
+     * pass shifts every other child of the same container — but their
+     * own dirty bits aren't touched, so emit_self_in_group would skip
+     * them in incremental mode and the receiver would keep showing
+     * them at their old absolute positions. Compare the resolved box
+     * against the previous frame's values and dirty the widget when
+     * it has actually moved or resized. Layout is deterministic over
+     * identical inputs, so exact float compare is fine. */
+    float prev_lx = w->layout_x;
+    float prev_ly = w->layout_y;
+    float prev_lw = w->layout_w;
+    float prev_lh = w->layout_h;
+
     w->x = rel_x;
     w->y = rel_y;
     w->w = resolved_w;
@@ -642,6 +655,11 @@ static void layout_widget(struct yetty_ygui_widget *w, float parent_abs_x, float
     w->layout_y = parent_abs_y + rel_y;
     w->layout_w = resolved_w;
     w->layout_h = resolved_h;
+
+    if (w->layout_x != prev_lx || w->layout_y != prev_ly ||
+        w->layout_w != prev_lw || w->layout_h != prev_lh) {
+        w->dirty = 1;
+    }
 
     w->effective_x = w->layout_x;
     w->effective_y = w->layout_y;

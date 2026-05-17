@@ -75,6 +75,34 @@ static void engine_queue_pending_delete(struct yetty_ygui_engine *engine, uint32
     engine->pending_deletes[engine->pending_delete_count++] = group_id;
 }
 
+/* Recursively queue DELETE for every widget in this subtree that owns
+ * a live entity on the receiver (was_rendered set from the previous
+ * frame). Used when a subtree leaves the render pipeline without going
+ * through widget_free — i.e. set_visible(false), popup_menu close, …
+ * Without this, hidden widgets retain their drawables on the receiver
+ * until the next full redraw because the visibility / OPEN gate at
+ * render_all early-returns before emit_self_in_group fires.
+ *
+ * Side effects on each touched widget:
+ *   - was_rendered reset to 0 so a later widget_free doesn't re-queue.
+ *   - dirty set to 1 so if the subtree comes back visible, every
+ *     descendant re-emits a fresh GROUP (even clean ones, whose entity
+ *     we just removed on the receiver). */
+void yetty_ygui_internal_queue_delete_subtree_rendered(struct yetty_ygui_widget *w)
+{
+    if (!w || !w->engine) {
+        return;
+    }
+    if (w->was_rendered) {
+        engine_queue_pending_delete(w->engine, w->group_id);
+        w->was_rendered = 0;
+    }
+    w->dirty = 1;
+    for (struct yetty_ygui_widget *c = w->first_child; c; c = c->next_sibling) {
+        yetty_ygui_internal_queue_delete_subtree_rendered(c);
+    }
+}
+
 void yetty_ygui_widget_free(struct yetty_ygui_widget *widget)
 {
     if (!widget) {
@@ -330,17 +358,13 @@ void yetty_ygui_widget_remove_child(struct yetty_ygui_widget *parent,
 
     if (parent->engine) {
         parent->engine->dirty = 1; parent->dirty = 1;
-        /* Queue a DELETE for the unparented child's entity on the
-         * receiver. If the caller re-adds the widget later, the next
-         * render emits a fresh GROUP at envelope root (the widget's
-         * dirty bit is still set from creation / mutation) — the
-         * DELETE-then-GROUP pair lands in order on the wire and the
-         * receiver's scene-canvas applies them sequentially. */
-        if (child->was_rendered) {
-            engine_queue_pending_delete(parent->engine, child->group_id);
-        }
-        /* Mark child dirty so it re-emits if re-parented. */
-        child->dirty = 1;
+        /* Unparented subtree leaves the render pipeline. Queue DELETE
+         * for the child AND every rendered descendant — the receiver's
+         * scene-canvas keeps each widget as an independent root-level
+         * entity, so unparenting only the top widget would orphan its
+         * descendants. The helper resets was_rendered + sets dirty=1
+         * across the subtree so a re-attach later emits fresh GROUPs. */
+        yetty_ygui_internal_queue_delete_subtree_rendered(child);
     }
 }
 
@@ -480,6 +504,7 @@ void yetty_ygui_widget_set_visible(struct yetty_ygui_widget *widget, int visible
     if (!widget) {
         return;
     }
+    int was_visible = (widget->flags & YETTY_YGUI_FLAG_VISIBLE) != 0;
     if (visible) {
         widget->flags |= YETTY_YGUI_FLAG_VISIBLE;
     } else {
@@ -487,6 +512,12 @@ void yetty_ygui_widget_set_visible(struct yetty_ygui_widget *widget, int visible
     }
     if (widget->engine) {
         widget->engine->dirty = 1; widget->dirty = 1;
+        /* visible → hidden: render_all_default will early-return for
+         * this subtree, so its entities on the receiver will never get
+         * a DELETE through emit_self_in_group. Queue them explicitly. */
+        if (was_visible && !visible) {
+            yetty_ygui_internal_queue_delete_subtree_rendered(widget);
+        }
     }
 }
 
@@ -799,17 +830,24 @@ static struct yetty_ycore_void_result button_render(struct yetty_ygui_widget *se
                                          surface, t->radius_medium);
     }
 
-    /* Focus ring: visible offset outline for keyboard navigation. */
-    if (focused) {
-        float r = t->radius_medium + 2.0f;
-        yetty_ygui_render_ctx_render_box_outline(ctx, self->x - 2.0f, self->y - 2.0f + press_offset,
-                                                 self->w + 4.0f, self->h + 4.0f, self->accent_color,
-                                                 r, 2.0f);
-    } else if (hovered && !pressed) {
-        /* Soft hover halo — inset, accent-colored. */
-        yetty_ygui_render_ctx_render_box_outline(ctx, self->x, self->y + press_offset, self->w,
-                                                 self->h, self->accent_color, t->radius_medium,
-                                                 1.5f);
+    /* Frame around the button: only shows while the cursor is over it.
+     * Focus state alone is not enough — focus persists after click and
+     * the user expects the highlight to leave with the cursor. The
+     * focus-ring variant (slightly bigger, thicker) replaces the hover
+     * halo when the button has been focused (e.g. after a click); the
+     * hover halo is the lighter "just hovering" state. Neither renders
+     * when the cursor is elsewhere. */
+    if (hovered && !pressed) {
+        if (focused) {
+            float r = t->radius_medium + 2.0f;
+            yetty_ygui_render_ctx_render_box_outline(
+                ctx, self->x - 2.0f, self->y - 2.0f + press_offset, self->w + 4.0f,
+                self->h + 4.0f, self->accent_color, r, 2.0f);
+        } else {
+            yetty_ygui_render_ctx_render_box_outline(
+                ctx, self->x, self->y + press_offset, self->w, self->h, self->accent_color,
+                t->radius_medium, 1.5f);
+        }
     }
 
     /* Label. */
@@ -2387,10 +2425,18 @@ static int popup_on_press(struct yetty_ygui_widget *self, float lx, float ly, yg
     }
     /* Non-modal popups keep the legacy click-anywhere-to-close
      * shorthand — handy for tooltips / dropdown-style transient UI. */
+    int was_open = (self->flags & YETTY_YGUI_FLAG_OPEN) != 0;
     self->flags ^= YETTY_YGUI_FLAG_OPEN;
+    int now_open = (self->flags & YETTY_YGUI_FLAG_OPEN) != 0;
+    if (self->engine) {
+        self->engine->dirty = 1; self->dirty = 1;
+        if (was_open && !now_open) {
+            yetty_ygui_internal_queue_delete_subtree_rendered(self);
+        }
+    }
     out->widget_id = self->id;
     out->type = YETTY_YGUI_EVENT_CLICK;
-    out->data.bool_value = (self->flags & YETTY_YGUI_FLAG_OPEN) ? 1 : 0;
+    out->data.bool_value = now_open ? 1 : 0;
     return 1;
 }
 
@@ -2469,6 +2515,7 @@ void yetty_ygui_widget_popup_set_open(struct yetty_ygui_widget *widget, int open
     if (!widget || widget->type != YETTY_YGUI_WIDGET_POPUP) {
         return;
     }
+    int was_open = (widget->flags & YETTY_YGUI_FLAG_OPEN) != 0;
     if (open) {
         widget->flags |= YETTY_YGUI_FLAG_OPEN;
     } else {
@@ -2476,6 +2523,12 @@ void yetty_ygui_widget_popup_set_open(struct yetty_ygui_widget *widget, int open
     }
     if (widget->engine) {
         widget->engine->dirty = 1; widget->dirty = 1;
+        /* OPEN → close: popup_render_all early-returns for the rest of
+         * the subtree, so the children's entities on the receiver would
+         * never get a DELETE through emit_self_in_group. Queue them. */
+        if (was_open && !open) {
+            yetty_ygui_internal_queue_delete_subtree_rendered(widget);
+        }
     }
 }
 
@@ -2598,10 +2651,21 @@ static int collapsing_header_on_press(struct yetty_ygui_widget *self, float lx, 
 {
     (void)lx;
     (void)ly;
+    int was_open = (self->flags & YETTY_YGUI_FLAG_OPEN) != 0;
     self->flags ^= YETTY_YGUI_FLAG_OPEN;
+    int now_open = (self->flags & YETTY_YGUI_FLAG_OPEN) != 0;
+    if (self->engine) {
+        self->engine->dirty = 1; self->dirty = 1;
+        if (was_open && !now_open) {
+            /* Header keeps rendering; only children stopped. */
+            for (struct yetty_ygui_widget *c = self->first_child; c; c = c->next_sibling) {
+                yetty_ygui_internal_queue_delete_subtree_rendered(c);
+            }
+        }
+    }
     out->widget_id = self->id;
     out->type = YETTY_YGUI_EVENT_CLICK;
-    out->data.bool_value = (self->flags & YETTY_YGUI_FLAG_OPEN) ? 1 : 0;
+    out->data.bool_value = now_open ? 1 : 0;
     return 1;
 }
 
@@ -2658,6 +2722,7 @@ void yetty_ygui_widget_collapsing_header_set_open(struct yetty_ygui_widget *widg
     if (!widget || widget->type != YETTY_YGUI_WIDGET_COLLAPSING_HEADER) {
         return;
     }
+    int was_open = (widget->flags & YETTY_YGUI_FLAG_OPEN) != 0;
     if (open) {
         widget->flags |= YETTY_YGUI_FLAG_OPEN;
     } else {
@@ -2665,6 +2730,14 @@ void yetty_ygui_widget_collapsing_header_set_open(struct yetty_ygui_widget *widg
     }
     if (widget->engine) {
         widget->engine->dirty = 1; widget->dirty = 1;
+        /* OPEN → close: the header keeps rendering, but the children
+         * stop. Queue deletes for the children's subtrees only — the
+         * header itself will re-emit via emit_self_in_group normally. */
+        if (was_open && !open) {
+            for (struct yetty_ygui_widget *c = widget->first_child; c; c = c->next_sibling) {
+                yetty_ygui_internal_queue_delete_subtree_rendered(c);
+            }
+        }
     }
 }
 

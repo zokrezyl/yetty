@@ -375,7 +375,7 @@ struct yetty_ygui_widget *yetty_ygui_widget_tabbar_add_tab(struct yetty_ygui_wid
     }
 
     if (tabbar->engine) {
-        tabbar->engine->dirty = 1;
+        tabbar->engine->dirty = 1; tabbar->dirty = 1;
     }
     return panel;
 }
@@ -442,7 +442,7 @@ void yetty_ygui_widget_tabbar_remove_tab(struct yetty_ygui_widget *tabbar, int i
         tabbar->change_callback(tabbar, (float)new_active, tabbar->change_userdata);
     }
     if (tabbar->engine) {
-        tabbar->engine->dirty = 1;
+        tabbar->engine->dirty = 1; tabbar->dirty = 1;
     }
 }
 
@@ -479,7 +479,7 @@ void yetty_ygui_widget_tabbar_set_active(struct yetty_ygui_widget *tabbar, int i
         tabbar->change_callback(tabbar, (float)index, tabbar->change_userdata);
     }
     if (tabbar->engine) {
-        tabbar->engine->dirty = 1;
+        tabbar->engine->dirty = 1; tabbar->dirty = 1;
     }
 }
 
