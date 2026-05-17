@@ -31,6 +31,10 @@
 #include <yetty/ydraw-core/text-span-prim.h>
 #include <yetty/ysdf/types.gen.h>
 
+/* Strip CMD_GROUP / CMD_DELETE / addressable-record HAS_ID bit so the
+ * raw type word can be matched against the SDF type table. */
+#define RICH_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
+
 #include <yetty/ytrace/ytrace.h>
 
 #include <stdint.h>
@@ -43,13 +47,19 @@
 /*=============================================================================
  * Buffer walker — sized strides without depending on a flyweight registry.
  *
- * The ydraw wire format reserves type-id ranges per category:
- *   [0x00000000, 0x0000FFFF]  cmd   FAM:  type, payload_size, payload[]
- *   [0x10000000, 0x1FFFFFFF]  SDF   plain: type, z_order, fill, stroke,
- *                                          stroke_width, args[]    (sized
- *                                          via yetty_ysdf_primitive_size)
- *   [0x40000000, 0x7FFFFFFF]  flyweight (FONT, TEXT_SPAN)  FAM
- *   [0x80000000, 0xFFFFFFFF]  complex (yplot, yimage, ...) FAM
+ * The ydraw wire format actually reserves these type-id ranges (see
+ * include/yetty/ydraw-core/cmds.h, include/yetty/ydraw-core/font-prim.h,
+ * include/yetty/ydraw-core/text-span-prim.h, include/yetty/ysdf/types.gen.h):
+ *   [0x00000000, 0x0000FFFF]  cmd       FAM:  type, payload_size, payload[]
+ *   0x40000001                FONT      FAM
+ *   0x40000002                TEXT_SPAN FAM
+ *   [0x7FFFFF7C, 0x7FFFFFFF]  SDF       fixed word count per type
+ *                                       (yetty_ysdf_primitive_size)
+ *   [0x80000000, 0xFFFFFFFF]  complex   FAM (yplot, yimage, ...)
+ *
+ * SDFs may also carry the HAS_ID flag (0x80000000 OR'd onto the type
+ * word) — addressable variant inserts a 4-byte id right after the type
+ * word, adding 4 bytes to the prim's overall size.
  *
  * For FAM prims size = 8 + payload_size (payload_size already 4-aligned).
  * For SDF prims size comes from the auto-generated word-count table.
@@ -62,10 +72,14 @@ static size_t rich_drawable_size(const uint32_t *prim, size_t remaining)
     }
     uint32_t type = prim[0];
 
-    /* SDF tier */
-    if (type >= 0x10000000u && type < 0x20000000u) {
-        size_t s = yetty_ysdf_primitive_size(type);
-        return (s > 0 && s <= remaining) ? s : 0;
+    /* SDF tier — primitive_size returns 0 for any non-SDF type word, so
+     * it doubles as the type-class probe. Mask off the optional HAS_ID
+     * bit before the lookup; if addressable, add the trailing id slot. */
+    uint32_t base = RICH_TYPE_BASE(type);
+    size_t sdf_bytes = yetty_ysdf_primitive_size(base);
+    if (sdf_bytes > 0) {
+        size_t s = sdf_bytes + ((type & YETTY_YDRAW_HAS_ID_FLAG) ? sizeof(uint32_t) : 0);
+        return (s <= remaining) ? s : 0;
     }
 
     /* CMD / flyweight / complex — all FAM. */

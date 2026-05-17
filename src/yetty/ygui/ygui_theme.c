@@ -54,8 +54,7 @@ struct yetty_ygui_theme *yetty_ygui_theme_create_default(void)
     theme->enable_gradient = 1;
 
     /* Colors (ABGR format — byte order R, G, B, A; literals are written
-     * 0xAABBGGRR). Yetty brand palette, see ~/.claude/yetty-new/rules/
-     * 08-branding.md. Each role is the brand equivalent of the previous
+     * 0xAABBGGRR). Yetty brand palette, Each role is the brand equivalent of the previous
      * brown ladder, preserving the visual ordering (darker bg → lighter
      * surface, darker border → lighter muted border).
      *
@@ -304,32 +303,32 @@ void yetty_ygui_theme_apply_config(struct yetty_ygui_theme *theme,
     }
 
     /* Background ladder. */
-    apply_color(theme, &theme->bg_primary,   config, "style/ygui/bg-primary");
+    apply_color(theme, &theme->bg_primary, config, "style/ygui/bg-primary");
     apply_color(theme, &theme->bg_secondary, config, "style/ygui/bg-secondary");
-    apply_color(theme, &theme->bg_surface,   config, "style/ygui/bg-surface");
-    apply_color(theme, &theme->bg_hover,     config, "style/ygui/bg-hover");
-    apply_color(theme, &theme->bg_header,    config, "style/ygui/bg-header");
-    apply_color(theme, &theme->bg_dropdown,  config, "style/ygui/bg-dropdown");
+    apply_color(theme, &theme->bg_surface, config, "style/ygui/bg-surface");
+    apply_color(theme, &theme->bg_hover, config, "style/ygui/bg-hover");
+    apply_color(theme, &theme->bg_header, config, "style/ygui/bg-header");
+    apply_color(theme, &theme->bg_dropdown, config, "style/ygui/bg-dropdown");
 
     /* Borders. */
-    apply_color(theme, &theme->border,       config, "style/ygui/border");
+    apply_color(theme, &theme->border, config, "style/ygui/border");
     apply_color(theme, &theme->border_light, config, "style/ygui/border-light");
     apply_color(theme, &theme->border_muted, config, "style/ygui/border-muted");
 
     /* Text. */
     apply_color(theme, &theme->text_primary, config, "style/ygui/text-primary");
-    apply_color(theme, &theme->text_muted,   config, "style/ygui/text-muted");
+    apply_color(theme, &theme->text_muted, config, "style/ygui/text-muted");
 
     /* Accent + selection. */
-    apply_color(theme, &theme->accent,       config, "style/ygui/accent");
+    apply_color(theme, &theme->accent, config, "style/ygui/accent");
     apply_color(theme, &theme->selection_bg, config, "style/ygui/selection-bg");
 
     /* Scrollbar thumb. */
     apply_color(theme, &theme->thumb_normal, config, "style/ygui/thumb-normal");
-    apply_color(theme, &theme->thumb_hover,  config, "style/ygui/thumb-hover");
+    apply_color(theme, &theme->thumb_hover, config, "style/ygui/thumb-hover");
 
     /* Overlays. */
     apply_color(theme, &theme->overlay_modal, config, "style/ygui/overlay-modal");
-    apply_color(theme, &theme->shadow,        config, "style/ygui/shadow");
-    apply_color(theme, &theme->tooltip_bg,    config, "style/ygui/tooltip-bg");
+    apply_color(theme, &theme->shadow, config, "style/ygui/shadow");
+    apply_color(theme, &theme->tooltip_bg, config, "style/ygui/tooltip-bg");
 }

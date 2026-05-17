@@ -38,3 +38,22 @@ add_subdirectory(20_tree_view)
 add_subdirectory(21_tree_with_panes)
 add_subdirectory(22_tree_complex)
 add_subdirectory(23_rich_tabbar)
+
+# New-widget demos — one per ygui_<producer> widget. Each guarded by the
+# producer's enable flag so a build that drops e.g. YPDF doesn't fail
+# trying to link demo-ygui-25-ypdf against a missing ygui_ypdf target.
+if(YETTY_ENABLE_FEATURE_YMARKDOWN)
+    add_subdirectory(24_yreadme)
+endif()
+if(YETTY_ENABLE_FEATURE_YPDF)
+    add_subdirectory(25_ypdf)
+endif()
+if(YETTY_ENABLE_FEATURE_YBROWSER)
+    add_subdirectory(26_ybrowser)
+endif()
+if(YETTY_ENABLE_FEATURE_YJUNGLE)
+    add_subdirectory(27_yjungle)
+endif()
+if(YETTY_ENABLE_FEATURE_YZOO)
+    add_subdirectory(28_yzoo)
+endif()
