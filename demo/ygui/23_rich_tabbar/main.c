@@ -132,15 +132,13 @@ int main(void)
     query_terminal_cells(&cols, &rows);
 
     struct ygui_engine_ptr_result eng_r =
-        yetty_ygui_engine_create("rich-tabbar", 0, 0, cols, rows);
+        yetty_ygui_engine_create((struct yetty_ygui_engine_args){.name = "rich-tabbar"});
     if (YETTY_IS_ERR(eng_r)) {
         yetty_ycore_error_destroy(eng_r.error);
         yetty_ygui_shutdown();
         return 1;
     }
     struct yetty_ygui_engine *engine = eng_r.value;
-    yetty_ygui_engine_set_canvas_mode(engine, YETTY_YGUI_CANVAS_FIT);
-
     struct yetty_ygui_theme *theme = yetty_ygui_theme_create_default();
     yetty_ygui_theme_set_font_size(theme, 16.0f);
     yetty_ygui_engine_set_theme(engine, theme);
@@ -175,7 +173,6 @@ int main(void)
 
     yetty_ygui_engine_on_resize(engine, on_resize, NULL);
     yetty_ygui_engine_on_key(engine, on_key, NULL);
-    yetty_ygui_engine_show(engine);
     {
         float cw = 0, ch = 0;
         yetty_ygui_engine_get_size(engine, &cw, &ch);

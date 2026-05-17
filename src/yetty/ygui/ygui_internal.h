@@ -799,6 +799,46 @@ void yetty_ygui_engine_notify_tick(struct yetty_ygui_engine *engine);
 void yetty_ygui_engine_notify_on_resize(struct yetty_ygui_engine *engine);
 void yetty_ygui_engine_notify_shutdown(struct yetty_ygui_engine *engine);
 
+/* Construct the libuv runtime and the output pty inside an
+ * already-allocated engine, then fire the init OSC handshake
+ * (query_cell_size, subscribe_clicks/moves, CARD_PLACE, CANVAS_FIT
+ * placeholder). Lives in ygui_engine_uv.c because it owns the libuv
+ * dependency; called from yetty_ygui_engine_create after the engine
+ * struct has been allocated and its non-libuv state set up.
+ *
+ * If `borrowed_pty` is non-NULL the engine uses it as output_pty
+ * (yui-style in-process memory pty); otherwise the engine wraps its
+ * own STDOUT_FILENO via a libuv pipe. If `borrowed_loop` is non-NULL
+ * the engine attaches to it; otherwise the engine allocates a loop and
+ * owns it.
+ *
+ * On error, the engine is left consistent (no half-wired handles) and
+ * the caller can call yetty_ygui_engine_destroy normally. */
+struct yetty_ycore_void_result yetty_ygui_engine_internal_bootstrap_runtime(
+    struct yetty_ygui_engine *engine, struct yetty_platform_pty *borrowed_pty,
+    uv_loop_t *borrowed_loop);
+
+/* Allocate-only — used by both the libuv-coupled public entry
+ * (yetty_ygui_engine_create, in ygui_engine_uv.c, which follows up
+ * with bootstrap_runtime) and the yui in-process path. Lives in
+ * ygui_engine.c so ygui_core stays libuv-free. */
+struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc(
+    const char *name, struct yetty_ygui_theme *theme);
+
+/* yui-specific allocator. Behaviour is currently identical to
+ * internal_alloc; kept as a named alias so the yui call-site is
+ * self-documenting and so we can diverge later without touching yui. */
+struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
+    const char *name, struct yetty_ygui_theme *theme);
+
+/* Emit the init OSC handshake (cell size query, subscribe_clicks/moves,
+ * CARD_PLACE, CANVAS_FIT placeholder). Called from
+ * engine_internal_bootstrap_runtime after output_pty is wired up.
+ * Errors are chained — handshake failure should abort engine
+ * construction. */
+struct yetty_ycore_void_result yetty_ygui_engine_internal_emit_handshake(
+    struct yetty_ygui_engine *engine);
+
 /* Math helpers */
 static inline float ygui_clamp(float v, float lo, float hi)
 {

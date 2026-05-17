@@ -16,6 +16,12 @@
 
 #include <yetty/ygui/ygui.h>
 #include <yetty/yetty/yetty.h>
+
+/* yui-only entry into ygui — declared in src/yetty/ygui/ygui_internal.h.
+ * The public ygui.h is the only header outside-of-ygui code includes,
+ * so forward-declare here instead of widening the public API. */
+struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
+    const char *name, struct yetty_ygui_theme *theme);
 #include <yetty/yevent/event-loop.h>
 #include <yetty/ynotify/ynotify.h>
 #include <yetty/yplatform/pty.h>
@@ -364,10 +370,13 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
      * re-enters dispatch mid-write. */
     yetty_yplatform_memory_pty_set_wake(yui->render_endpoint, yui_wake, yui);
 
-    /* Producer engine. Local-only — no init/show/subscribe, no parent
-     * yetty to talk to via stdout. `output_pty` redirects OSC frame
-     * envelopes through the memory pty instead. */
-    struct ygui_engine_ptr_result er = yetty_ygui_engine_create("yui", 0, 0, (int)cols, (int)rows);
+    /* Producer engine. yui is in-process — no parent yetty over a pty,
+     * no stdin polling, no handshake. Allocation-only constructor, then
+     * we plug in the memory pty and the display size directly. */
+    (void)cols;
+    (void)rows;
+    struct ygui_engine_ptr_result er =
+        yetty_ygui_engine_internal_alloc_for_yui("yui", /*theme=*/NULL);
     if (YETTY_IS_OK(er)) {
         yui->engine = er.value;
         yetty_ygui_engine_set_output_pty(yui->engine, yui->yui_endpoint);

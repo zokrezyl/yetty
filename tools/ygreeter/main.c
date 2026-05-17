@@ -1008,15 +1008,6 @@ static void on_resize(struct yetty_ygui_engine *e, float new_w, float new_h, flo
     reposition_about_dialog(app);
 }
 
-static void query_terminal_cells(int *cols, int *rows)
-{
-    *cols = 80;
-    *rows = 24;
-    /* yetty_yplatform_term_get_size leaves *cols / *rows untouched on
-     * failure, so the 80x24 defaults above stick when there's no tty. */
-    (void)yetty_yplatform_term_get_size(cols, rows);
-}
-
 /* =========================================================================
  * UI construction.
  *
@@ -1117,11 +1108,17 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    int cols, rows;
-    query_terminal_cells(&cols, &rows);
+    /* Theme up front so engine_create can install it during construction;
+     * the engine takes ownership when passed in `args.theme`. */
+    struct yetty_ygui_theme *theme = yetty_ygui_theme_create_default();
+    yetty_ygui_theme_set_font_size(theme, 16.0f);
+    yetty_ygui_theme_set_row_height(theme, 28.0f);
 
-    struct ygui_engine_ptr_result eng_r =
-        yetty_ygui_engine_create("ygreeter", 0, 0, cols, rows);
+    struct yetty_ygui_engine_args args = {
+        .name = "ygreeter",
+        .theme = theme,
+    };
+    struct ygui_engine_ptr_result eng_r = yetty_ygui_engine_create(args);
     if (YETTY_IS_ERR(eng_r)) {
         yetty_ycore_error_destroy(eng_r.error);
         yetty_ygui_shutdown();
@@ -1130,12 +1127,6 @@ int main(int argc, char **argv)
 
     struct app app = {0};
     app.engine = eng_r.value;
-    yetty_ygui_engine_set_canvas_mode(app.engine, YETTY_YGUI_CANVAS_FIT);
-
-    struct yetty_ygui_theme *theme = yetty_ygui_theme_create_default();
-    yetty_ygui_theme_set_font_size(theme, 16.0f);
-    yetty_ygui_theme_set_row_height(theme, 28.0f);
-    yetty_ygui_engine_set_theme(app.engine, theme);
 
     /* Outer frame: a window widget supplies the title bar and the
      * hamburger menu button. The menu we attach below carries the
@@ -1194,20 +1185,10 @@ int main(int argc, char **argv)
     if (getenv("YGREETER_START_IMAGES")) {
         yetty_ygui_widget_tabbar_set_active(app.tabbar, g_images_tab_index);
     }
-    yetty_ygui_engine_show(app.engine);
-    {
-        /* In CANVAS_FIT mode the engine reports 1x1 until OSC 777780 returns
-         * the real pixel size. set_size(outer, 1, 1) would stomp the authored
-         * 100x100 and trip window_render's "skip first frame" early-return
-         * (self->w < 78), so the frame + titlebar would never paint. Skip the
-         * stomp here — on_resize installs the real size as soon as the host
-         * replies. */
-        float cw = 0, ch = 0;
-        yetty_ygui_engine_get_size(app.engine, &cw, &ch);
-        if (cw > 1.0f && ch > 1.0f) {
-            yetty_ygui_widget_set_size(app.outer, cw, ch);
-        }
-    }
+    /* engine_create already sent the init handshake; the real pixel size
+     * arrives via SC_RESIZE on the loop. The window stays at its authored
+     * 100x100 until then — on_resize installs the real size as soon as
+     * the host replies. */
 
     yetty_ygui_engine_run(app.engine);
 

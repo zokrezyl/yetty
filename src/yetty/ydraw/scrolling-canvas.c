@@ -802,6 +802,11 @@ static struct uint32_result add_drawable_internal(
         aabb.min.y = aabb.max.y;
         aabb.max.y = tmp;
     }
+    if (aabb.min.x > aabb.max.x) {
+        float tmp = aabb.min.x;
+        aabb.min.x = aabb.max.x;
+        aabb.max.x = tmp;
+    }
 
     uint32_t cursor_canvas_line = c->rolling_row_0 + c->cursor_row;
     float min_valid_y = -(float)cursor_canvas_line * c->cell_size.height;
@@ -810,6 +815,14 @@ static struct uint32_result add_drawable_internal(
     }
     if (aabb.min.y < min_valid_y) {
         aabb.min.y = min_valid_y;
+    }
+    /* Grid x starts at column 0; clamp negative AABB x so the
+     * float->uint32_t cast below is well-defined. */
+    if (aabb.max.x < 0.0f) {
+        aabb.max.x = 0.0f;
+    }
+    if (aabb.min.x < 0.0f) {
+        aabb.min.x = 0.0f;
     }
 
     float max_rows = aabb.max.y / c->cell_size.height;

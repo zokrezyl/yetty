@@ -94,7 +94,7 @@ int main(void) {
     srand((unsigned)time(NULL));
 
     if (yetty_ygui_init() != 0) return 1;
-    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_engine_create_with_pixel_hint("dashboard", 1, 1, 800.0f, 550.0f);
+    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_engine_create((struct yetty_ygui_engine_args){.name = "dashboard"});
         if (YETTY_IS_ERR(_eng_r)) { yetty_ycore_error_destroy(_eng_r.error); return 1; }
         g_engine = _eng_r.value; }
     if (!g_engine) { yetty_ygui_shutdown(); return 1; }
@@ -174,7 +174,6 @@ int main(void) {
     yetty_ygui_engine_label(g_engine, "footer", 30, 510, "Dashboard v1.0");
 
     yetty_ygui_engine_on_key(g_engine, on_key, NULL);
-    yetty_ygui_engine_show(g_engine);
     yetty_ygui_engine_run(g_engine);
 
     yetty_ygui_engine_destroy(g_engine);

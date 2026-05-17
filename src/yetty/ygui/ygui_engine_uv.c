@@ -385,57 +385,98 @@ static void prepare_cb(uv_prepare_t *handle)
  * Public API
  *---------------------------------------------------------------------------*/
 
-void yetty_ygui_engine_attach(struct yetty_ygui_engine *engine, uv_loop_t *loop)
+/* Framework-internal bootstrap. Called from engine_internal_create
+ * immediately after the engine struct is allocated. Wires up:
+ *   - The libuv loop (allocated + owned here unless caller supplied
+ *     `borrowed_loop`, in which case it's borrowed and never closed).
+ *   - The output pty (libuv pipe wrapping engine->output_fd unless
+ *     caller supplied `borrowed_pty`, which is the yui memory-ring
+ *     case — borrowed and not destroyed).
+ *   - stdin polling, prepare-cb auto-render, yface input handlers.
+ *   - The init OSC handshake (query_cell_size, subscribes, CARD_PLACE,
+ *     CANVAS_FIT placeholder).
+ * Errors chain. Caller (engine_internal_create) destroys the engine on
+ * failure, which tears down whatever we did get wired up. */
+struct yetty_ycore_void_result yetty_ygui_engine_internal_bootstrap_runtime(
+    struct yetty_ygui_engine *engine, struct yetty_platform_pty *borrowed_pty,
+    uv_loop_t *borrowed_loop)
 {
-    if (!engine || !loop) {
-        return;
+    if (!engine) {
+        return YETTY_ERR(yetty_ycore_void, "bootstrap_runtime: NULL engine");
     }
 
-    /* Lazily allocate the uv state on first attach. yetty_ygui_engine_run
-     * may have already populated it (with owns_loop=1) — in which case
-     * we just re-use that allocation. */
-    struct ygui_uv_state *s = uv_state_of(engine);
+    struct ygui_uv_state *s = (struct ygui_uv_state *)calloc(1, sizeof(*s));
     if (!s) {
-        s = (struct ygui_uv_state *)calloc(1, sizeof(*s));
-        if (!s) {
-            return;
-        }
-        engine->uv_state = s;
-        engine->uv_state_destroy_cb = uv_state_destroy;
+        return YETTY_ERR(yetty_ycore_void, "bootstrap_runtime: uv_state alloc");
     }
-    s->loop = loop;
-    /* owns_loop stays whatever the caller already set — see engine_run. */
+    engine->uv_state = s;
+    engine->uv_state_destroy_cb = uv_state_destroy;
 
-    /* Wire up the yface handlers so feed_bytes can dispatch into us. */
+    /* Loop: caller-supplied (borrowed) or allocate one (owned). */
+    if (borrowed_loop) {
+        s->loop = borrowed_loop;
+        s->owns_loop = 0;
+    } else {
+        s->loop = (uv_loop_t *)malloc(sizeof(uv_loop_t));
+        if (!s->loop) {
+            return YETTY_ERR(yetty_ycore_void, "bootstrap_runtime: loop alloc");
+        }
+        if (uv_loop_init(s->loop) != 0) {
+            free(s->loop);
+            s->loop = NULL;
+            return YETTY_ERR(yetty_ycore_void, "bootstrap_runtime: uv_loop_init failed");
+        }
+        s->owns_loop = 1;
+    }
+
+    /* yface inbound dispatch. */
     if (engine->yface_in) {
         yetty_yface_set_handlers(engine->yface_in, yetty_ygui_internal_yface_on_osc,
                                  yetty_ygui_internal_yface_on_raw, engine);
     }
 
-    /* Set up stdin poll */
-    uv_poll_init(loop, &s->stdin_poll, engine->input_fd);
-    s->stdin_poll.data = engine;
-    uv_poll_start(&s->stdin_poll, UV_READABLE, stdin_poll_cb);
-
-    /* Set up prepare handle for auto-render */
-    uv_prepare_init(loop, &s->prepare_handle);
-    s->prepare_handle.data = engine;
-    uv_prepare_start(&s->prepare_handle, prepare_cb);
-
-    /* Install a libuv-backed output pty wrapping engine->output_fd —
-     * unless the caller already provided one (yui's in-process
-     * memory-pty case). Producers (ygui_osc.c) then write all OSC bytes
-     * through engine->output_pty->ops->write, which queues via
-     * uv_write and never blocks the render thread. */
-    if (!engine->output_pty) {
-        struct yetty_platform_pty *pty = ygui_uv_pty_wrap_fd(loop, engine->output_fd);
-        if (pty) {
-            engine->output_pty = pty;
-            engine->output_pty_owned = 1;
-        } else {
-            yerror("ygui_uv: could not wrap output_fd=%d as uv-pipe pty", engine->output_fd);
-        }
+    /* stdin poll. */
+    if (uv_poll_init(s->loop, &s->stdin_poll, engine->input_fd) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "bootstrap_runtime: stdin uv_poll_init failed");
     }
+    s->stdin_poll.data = engine;
+    if (uv_poll_start(&s->stdin_poll, UV_READABLE, stdin_poll_cb) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "bootstrap_runtime: stdin uv_poll_start failed");
+    }
+
+    /* prepare-cb auto-render. */
+    if (uv_prepare_init(s->loop, &s->prepare_handle) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "bootstrap_runtime: prepare uv_prepare_init failed");
+    }
+    s->prepare_handle.data = engine;
+    if (uv_prepare_start(&s->prepare_handle, prepare_cb) != 0) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "bootstrap_runtime: prepare uv_prepare_start failed");
+    }
+
+    /* Output pty: caller-supplied (borrowed — yui's memory ring) or
+     * allocate a libuv pipe wrapping STDOUT (owned). Producers write
+     * OSCs through output_pty->ops->write; the queued uv_write keeps
+     * the render thread non-blocking. */
+    if (borrowed_pty) {
+        engine->output_pty = borrowed_pty;
+        engine->output_pty_owned = 0;
+    } else {
+        struct yetty_platform_pty *pty = ygui_uv_pty_wrap_fd(s->loop, engine->output_fd);
+        if (!pty) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "bootstrap_runtime: could not wrap output_fd as uv-pipe pty");
+        }
+        engine->output_pty = pty;
+        engine->output_pty_owned = 1;
+    }
+
+    /* The pty is live now — fire the init OSCs. Errors here are fatal
+     * to construction; the caller destroys the engine and propagates. */
+    struct yetty_ycore_void_result hr = yetty_ygui_engine_internal_emit_handshake(engine);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "bootstrap_runtime: handshake failed");
+
+    return YETTY_OK_VOID();
 }
 
 void yetty_ygui_engine_run(struct yetty_ygui_engine *engine)
@@ -443,38 +484,49 @@ void yetty_ygui_engine_run(struct yetty_ygui_engine *engine)
     if (!engine) {
         return;
     }
-
     struct ygui_uv_state *s = uv_state_of(engine);
-    if (!s) {
-        s = (struct ygui_uv_state *)calloc(1, sizeof(*s));
-        if (!s) {
-            return;
-        }
-        engine->uv_state = s;
-        engine->uv_state_destroy_cb = uv_state_destroy;
+    if (!s || !s->loop) {
+        yerror("ygui_engine_run: engine has no loop — was bootstrap_runtime called?");
+        return;
     }
-
-    /* Create loop if needed */
-    if (!s->loop) {
-        s->loop = (uv_loop_t *)malloc(sizeof(uv_loop_t));
-        if (!s->loop) {
-            return;
-        }
-        uv_loop_init(s->loop);
-        s->owns_loop = 1;
-
-        /* Attach to the loop */
-        yetty_ygui_engine_attach(engine, s->loop);
-    }
-
     engine->running = 1;
-
-    /* Run the loop */
     uv_run(s->loop, UV_RUN_DEFAULT);
-
-    /* Cleanup handles */
+    /* Stop our handles so engine_destroy's uv_loop_close won't error
+     * with EBUSY. (Owned-loop case; for borrowed loops the caller is
+     * responsible for stopping its own handles too.) */
     uv_poll_stop(&s->stdin_poll);
     uv_prepare_stop(&s->prepare_handle);
+}
+
+/*=============================================================================
+ * Public construction — lives here (not in ygui_engine.c) because the
+ * bootstrap step requires libuv, which ygui_core is deliberately
+ * free of. ygui_core only sees engine_internal_alloc; the libuv-side
+ * stitch is here.
+ *===========================================================================*/
+
+struct ygui_engine_ptr_result yetty_ygui_engine_create(struct yetty_ygui_engine_args args)
+{
+    struct ygui_engine_ptr_result alloc_r =
+        yetty_ygui_engine_internal_alloc(args.name, args.theme);
+    if (YETTY_IS_ERR(alloc_r)) {
+        return alloc_r;
+    }
+    struct yetty_ygui_engine *engine = alloc_r.value;
+    struct yetty_ycore_void_result br =
+        yetty_ygui_engine_internal_bootstrap_runtime(engine, /*borrowed_pty=*/NULL,
+                                                      /*borrowed_loop=*/NULL);
+    if (YETTY_IS_ERR(br)) {
+        /* engine_destroy tears down whatever the partial bootstrap did
+         * manage to wire up. */
+        struct yetty_ycore_void_result dr = yetty_ygui_engine_destroy(engine);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
+        return YETTY_ERR(ygui_engine_ptr,
+                         "yetty_ygui_engine_create: runtime bootstrap failed", br);
+    }
+    return YETTY_OK(ygui_engine_ptr, engine);
 }
 
 uv_loop_t *yetty_ygui_engine_get_loop(struct yetty_ygui_engine *engine)

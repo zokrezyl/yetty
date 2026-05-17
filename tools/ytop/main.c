@@ -469,8 +469,8 @@ int main(int argc, char **argv)
     }
     memcpy(s->cpu_st.prev, s->cpu_st.curr, sizeof(s->cpu_st.curr));
 
-    struct ygui_engine_ptr_result eng_r = yetty_ygui_engine_create_with_pixel_hint(
-        "ytop", 2, 2, 980.0f, 720.0f);
+    struct yetty_ygui_engine_args args = { .name = "ytop" };
+    struct ygui_engine_ptr_result eng_r = yetty_ygui_engine_create(args);
     if (!eng_r.ok) {
         yetty_ycore_error_destroy(eng_r.error);
         free(s);
@@ -481,25 +481,19 @@ int main(int argc, char **argv)
     build_ui(s, s->cpu_st.n_cores);
     yetty_ygui_engine_on_key(s->engine, on_key, NULL);
 
-    /* libuv loop owned by us, attached to the engine, with a refresh
-     * timer that does the per-tick sampling + UI update. */
-    uv_loop_t loop;
-    uv_loop_init(&loop);
-
+    /* Per-tick CPU/memory sampler timer attached to the engine's loop
+     * (the engine owns the loop now). */
+    uv_loop_t *loop = yetty_ygui_engine_get_loop(s->engine);
     uv_timer_t refresh_timer;
-    uv_timer_init(&loop, &refresh_timer);
+    uv_timer_init(loop, &refresh_timer);
     refresh_timer.data = s;
     uv_timer_start(&refresh_timer, on_refresh_timer, /*timeout_ms=*/0,
                    /*repeat_ms=*/REFRESH_MS);
 
-    yetty_ygui_engine_attach(s->engine, &loop);
-    yetty_ygui_engine_show(s->engine);
     yetty_ygui_engine_run(s->engine);
 
     uv_timer_stop(&refresh_timer);
     uv_close((uv_handle_t *)&refresh_timer, NULL);
-    uv_run(&loop, UV_RUN_NOWAIT);
-    uv_loop_close(&loop);
 
     yetty_ygui_engine_destroy(s->engine);
     free(s);

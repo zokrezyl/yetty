@@ -7,6 +7,7 @@
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/yfont/raster-font.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/yplatform/term.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdio.h>
 #include <string.h>
@@ -201,9 +202,12 @@ const char *yetty_ygui_version(void)
  * Engine Lifecycle
  *===========================================================================*/
 
-/* Internal helper to allocate and initialize common engine state */
-static struct ygui_engine_ptr_result engine_alloc_init(const char *card_name, int x, int y,
-                                                       int cols, int rows)
+/* Allocate the engine struct and set every non-libuv, non-pty field to
+ * its initial state. No I/O happens here — the libuv runtime + pty are
+ * wired by engine_internal_bootstrap_runtime which runs immediately
+ * after, inside engine_internal_create. */
+static struct ygui_engine_ptr_result engine_alloc_init(const char *name,
+                                                       struct yetty_ygui_theme *theme)
 {
     struct yetty_ygui_engine *engine =
         (struct yetty_ygui_engine *)calloc(1, sizeof(struct yetty_ygui_engine));
@@ -214,7 +218,7 @@ static struct ygui_engine_ptr_result engine_alloc_init(const char *card_name, in
 
     /* Create ydraw-core buffer — widgets accumulate SDF primitives + text
      * spans into it; the engine base64-encodes the serialization and ships
-     * it via OSC 666674 every render. */
+     * it via OSC SCENE_BIN every render. */
     struct yetty_ydraw_draw_list_result br = yetty_ydraw_draw_list_config_buffer_create(NULL);
     if (!YETTY_IS_OK(br)) {
         yetty_ygui_set_error("Failed to create ydraw buffer");
@@ -237,20 +241,31 @@ static struct ygui_engine_ptr_result engine_alloc_init(const char *card_name, in
         }
     }
 
-    /* Store card name, position, and cell dimensions */
-    engine->card_name = ygui_strdup(card_name);
-    engine->card_x = x;
-    engine->card_y = y;
+    /* Identifier + initial card geometry. Cell counts come from
+     * TIOCGWINSZ; the host's SC_RESIZE response replaces width/height
+     * with actual pixel dims before any real render happens. */
+    engine->card_name = ygui_strdup(name && name[0] ? name : "ygui");
+    engine->card_x = 0;
+    engine->card_y = 0;
+    int cols = 80;
+    int rows = 24;
+    (void)yetty_yplatform_term_get_size(&cols, &rows);
     engine->card_w = cols;
     engine->card_h = rows;
 
-    /* Default theme */
-    engine->theme = yetty_ygui_theme_create_default();
-    engine->owns_theme = 1;
+    /* Theme: caller-supplied (borrowed) or built-in default (owned). */
+    if (theme) {
+        engine->theme = theme;
+        engine->owns_theme = 0;
+    } else {
+        engine->theme = yetty_ygui_theme_create_default();
+        engine->owns_theme = 1;
+    }
 
-    /* Initial state - canvas size set after OSC 777780 */
+    /* Initial state — actual pixel size is set by SC_RESIZE; this 1×1
+     * placeholder is what the first (placeholder) frame ships. */
     engine->dirty = 1;
-    engine->width = 1.0f; /* Placeholder until pixel size known */
+    engine->width = 1.0f;
     engine->height = 1.0f;
     engine->cell_width = 0.0f;
     engine->cell_height = 0.0f;
@@ -269,7 +284,8 @@ static struct ygui_engine_ptr_result engine_alloc_init(const char *card_name, in
     engine->view_scroll_x = 0.0f;
     engine->view_scroll_y = 0.0f;
 
-    /* Canvas = actual card pixels, no scaling needed */
+    /* Canvas always tracks the host's reported pixel size — no other
+     * mode is supported. SCALE_OFF: widget pixels are display pixels. */
     engine->canvas_mode = YETTY_YGUI_CANVAS_FIT;
     engine->scale_mode = YETTY_YGUI_SCALE_OFF;
     engine->reference_w = 0.0f;
@@ -278,7 +294,9 @@ static struct ygui_engine_ptr_result engine_alloc_init(const char *card_name, in
     engine->display_pixel_h = 0.0f;
     engine->have_pixel_size = 0;
 
-    /* Default I/O file descriptors */
+    /* I/O endpoints. STDIN for inbound OSCs, STDOUT for outbound. The
+     * libuv pipe wrapping STDOUT becomes output_pty inside
+     * engine_internal_bootstrap_runtime. */
     engine->input_fd = STDIN_FILENO;
     engine->output_fd = STDOUT_FILENO;
 
@@ -301,44 +319,25 @@ static struct ygui_engine_ptr_result engine_alloc_init(const char *card_name, in
     return YETTY_OK(ygui_engine_ptr, engine);
 }
 
-struct ygui_engine_ptr_result yetty_ygui_engine_create(const char *card_name, int x, int y,
-                                                       int cols, int rows)
+struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
+    const char *name, struct yetty_ygui_theme *theme)
 {
-    return engine_alloc_init(card_name, x, y, cols, rows);
+    /* yui doesn't talk to a parent yetty over a real pty, doesn't poll
+     * stdin, and is driven by yetty's render loop directly. So we just
+     * allocate + initialise the engine struct here; yui then plugs in
+     * its memory-pty via engine_set_output_pty and pushes the display
+     * pixel size in directly. No bootstrap_runtime, no handshake. */
+    return engine_alloc_init(name, theme);
 }
 
-struct ygui_engine_ptr_result yetty_ygui_engine_create_with_pixel_hint(const char *card_name, int x,
-                                                                       int y, float width_hint,
-                                                                       float height_hint)
+/* Expose engine_alloc_init to engine_uv.c (which lives in the ygui
+ * library and implements the public engine_create on top of this +
+ * bootstrap_runtime). ygui_core stays libuv-free; the public entry
+ * lives in the libuv-coupled layer. */
+struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc(
+    const char *name, struct yetty_ygui_theme *theme)
 {
-    /* TODO: Query cell size first to calculate cols/rows
-     * For now, use reasonable defaults (10x16 cell size) */
-    int cols = (int)(width_hint / 10.0f + 0.5f);
-    int rows = (int)(height_hint / 16.0f + 0.5f);
-    if (cols < 1) {
-        cols = 1;
-    }
-    if (rows < 1) {
-        rows = 1;
-    }
-
-    struct ygui_engine_ptr_result r = engine_alloc_init(card_name, x, y, cols, rows);
-    if (YETTY_IS_ERR(r)) {
-        return r;
-    }
-    struct yetty_ygui_engine *engine = r.value;
-    /* Store pixel hints as reference size for widget scaling */
-    engine->reference_w = width_hint;
-    engine->reference_h = height_hint;
-    engine->width = width_hint;
-    engine->height = height_hint;
-    engine->scale_mode = YETTY_YGUI_SCALE_ON; /* Scale widgets from hint to actual */
-
-    /* Initialize grid with hint size */
-    yetty_ygui_grid_destroy(&engine->grid);
-    yetty_ygui_grid_init(&engine->grid, width_hint, height_hint,
-                         calc_grid_bucket_size(width_hint, height_hint));
-    return r;
+    return engine_alloc_init(name, theme);
 }
 
 struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engine *engine)
@@ -732,58 +731,64 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
     return yetty_ygui_osc_update_card(engine->output_pty, engine->card_name, data, size);
 }
 
-struct yetty_ycore_void_result yetty_ygui_engine_show(struct yetty_ygui_engine *engine)
+/* Send the init OSC handshake: cell-size query, mouse subscriptions,
+ * CARD_PLACE, and the CANVAS_FIT placeholder. Called from
+ * engine_internal_bootstrap_runtime after the output pty has been
+ * wired — the pty is guaranteed live here. There is no public
+ * engine_show; the handshake is part of construction. */
+struct yetty_ycore_void_result yetty_ygui_engine_internal_emit_handshake(
+    struct yetty_ygui_engine *engine)
 {
     if (!engine) {
-        return YETTY_ERR(yetty_ycore_void, "ygui_engine_show: NULL engine");
+        return YETTY_ERR(yetty_ycore_void, "engine_emit_handshake: NULL engine");
+    }
+    if (!engine->output_pty) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "engine_emit_handshake: output_pty not installed — "
+                         "bootstrap must run before any OSC emission");
     }
 
-    /* card_x, card_y, card_w, card_h already set in ygui_engine_create */
-
-    /* Query cell size (kept for future use) */
+    /* Cell size query — host replies via OSC and runtime stores it. */
     struct yetty_ycore_void_result qr = yetty_ygui_osc_query_cell_size(engine->output_pty);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, qr, "ygui_engine_show: query_cell_size failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, qr, "engine_emit_handshake: query_cell_size failed");
 
     /* Subscribe to click AND move events (move needed for slider drag) */
     struct yetty_ycore_void_result sc_r = yetty_ygui_osc_subscribe_clicks(engine->output_pty, 1);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, sc_r, "ygui_engine_show: subscribe_clicks failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sc_r, "engine_emit_handshake: subscribe_clicks failed");
     engine->clicks_subscribed = 1;
     struct yetty_ycore_void_result sm_r = yetty_ygui_osc_subscribe_moves(engine->output_pty, 1);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, sm_r, "ygui_engine_show: subscribe_moves failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sm_r, "engine_emit_handshake: subscribe_moves failed");
     engine->moves_subscribed = 1;
 
-    /* Register our card with the ymgui-layer so the server hit-tests the
-     * cursor against our rect and emits YMGUI_OSC_SC_MOUSE with card-local
-     * coordinates. Without this, mouse events have nowhere to go. */
+    /* Register the card with the ymgui-layer so the server hit-tests
+     * the cursor against our rect and emits YMGUI_OSC_SC_MOUSE with
+     * card-local coordinates. Triggers the host's YMGUI_OSC_SC_RESIZE
+     * reply carrying the actual pixel size. */
     struct yetty_ycore_void_result place_r =
         yetty_ygui_osc_card_place(engine->output_pty, engine->card_id, engine->card_x,
                                   engine->card_y, (uint32_t)engine->card_w,
                                   (uint32_t)engine->card_h);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, place_r, "ygui_engine_show: card_place failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, place_r, "engine_emit_handshake: card_place failed");
 
-    /* In CANVAS_FIT mode, create card with minimal data first to trigger OSC 777780.
-     * The real render happens after we receive the actual pixel size.
-     * This prevents the visual "zoom jump" when canvas resizes to match display. */
-    if (engine->canvas_mode == YETTY_YGUI_CANVAS_FIT && !engine->have_pixel_size) {
-        /* Establish the card with an empty buffer so the receiver responds
-         * with the pixel size we need to drive the first real render. */
-        yetty_ydraw_draw_list_clear(engine->buffer);
-        yetty_ydraw_draw_list_set_scene_bounds(engine->buffer, 0, 0, 1, 1);
-        const uint8_t *data = NULL;
-        uint32_t size = (uint32_t)yetty_ydraw_draw_list_serialize(engine->buffer, &data);
-        if (size > 0 && data) {
-            struct yetty_ycore_void_result cr = yetty_ygui_osc_create_card(
-                engine->output_pty, engine->card_name, engine->card_x, engine->card_y,
-                engine->card_w, engine->card_h, data, size);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "ygui_engine_show: create_card failed");
-            engine->card_shown = 1;
-        }
-        engine->dirty = 1; /* Real render after OSC 777780 */
-        YGUI_LOG("CANVAS_FIT: created placeholder card, waiting for OSC 777780");
-        return YETTY_OK_VOID();
+    /* Send a minimal placeholder envelope so the host has a card to
+     * size against. The real render fires after SC_RESIZE updates
+     * width/height — that prevents the visual "zoom jump" of doing the
+     * first render at the initial 1×1 dims. */
+    yetty_ydraw_draw_list_clear(engine->buffer);
+    yetty_ydraw_draw_list_set_scene_bounds(engine->buffer, 0, 0, 1, 1);
+    const uint8_t *data = NULL;
+    uint32_t size = (uint32_t)yetty_ydraw_draw_list_serialize(engine->buffer, &data);
+    if (size > 0 && data) {
+        struct yetty_ycore_void_result cr = yetty_ygui_osc_create_card(
+            engine->output_pty, engine->card_name, engine->card_x, engine->card_y,
+            engine->card_w, engine->card_h, data, size);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cr,
+                            "engine_emit_handshake: create_card placeholder failed");
+        engine->card_shown = 1;
     }
-    /* CANVAS_FIXED or already have pixel size: render immediately */
-    return yetty_ygui_engine_render(engine);
+    engine->dirty = 1;
+    YGUI_LOG("ygui: handshake sent, waiting for SC_RESIZE");
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================

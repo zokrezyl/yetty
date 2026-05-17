@@ -1089,10 +1089,14 @@ static struct yetty_ydraw_scene_entity *scene_lookup_entity(struct scene_canvas 
     return NULL;
 }
 
-/* Return the entity for `external_id`, creating it as a child of
- * `parent` if it doesn't exist yet. Re-OPEN: an existing entity is
- * returned as-is so contents are appended (ydraw.md §7). The root id
- * (0) is reserved and rejected here. */
+/* Look up an entity by `external_id`; create it as a child of `parent`
+ * if it doesn't exist. Strict: an existing entity is a producer bug —
+ * the wire contract is "DELETE(id) must precede a new GROUP(id) when
+ * mutating an existing widget". Silent re-OPEN previously appended
+ * drawables to the existing arena, growing it unboundedly each frame
+ * (multi-GB process death under steady-state mouse activity). Now we
+ * surface the violation as a chained error that propagates all the
+ * way to main and crashes yetty with the full chain printed. */
 static struct yetty_ydraw_scene_entity_ptr_result scene_lookup_or_create_entity(
     struct scene_canvas *sc, struct yetty_ydraw_scene_entity *parent, uint64_t external_id)
 {
@@ -1102,7 +1106,12 @@ static struct yetty_ydraw_scene_entity_ptr_result scene_lookup_or_create_entity(
     }
     struct yetty_ydraw_scene_entity *existing = scene_lookup_entity(sc, external_id);
     if (existing) {
-        return YETTY_OK(yetty_ydraw_scene_entity_ptr, existing);
+        yerror("scene-canvas: GROUP id=%llu already exists — producer emitted "
+               "GROUP without preceding DELETE(id) (re-OPEN is not supported, "
+               "drawables would accumulate forever)",
+               (unsigned long long)external_id);
+        return YETTY_ERR(yetty_ydraw_scene_entity_ptr,
+                         "scene-canvas: GROUP id collision — producer must DELETE before re-emit");
     }
     return yetty_ydraw_scene_entity_create(&sc->base, parent, external_id);
 }

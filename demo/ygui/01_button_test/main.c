@@ -64,7 +64,7 @@ int main(void) {
     }
 
     /* Create engine with pixel hint - this enables SCALE_ON mode */
-    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_engine_create_with_pixel_hint("btn-test", 1, 1, 500.0f, 300.0f);
+    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_engine_create((struct yetty_ygui_engine_args){.name = "btn-test"});
         if (YETTY_IS_ERR(_eng_r)) { yetty_ycore_error_destroy(_eng_r.error); return 1; }
         g_engine = _eng_r.value; }
     if (!g_engine) {
@@ -109,7 +109,6 @@ int main(void) {
     fprintf(stderr, "[DEMO] Showing card and running event loop\n");
     fprintf(stderr, "[DEMO] Press 'q' to quit\n");
 
-    yetty_ygui_engine_show(g_engine);
     yetty_ygui_engine_run(g_engine);
 
     fprintf(stderr, "[DEMO] Cleaning up\n");

@@ -281,31 +281,47 @@ typedef void (*ygui_resize_callback_t)(struct yetty_ygui_engine *engine, float n
 
 /*=============================================================================
  * Engine API
+ *
+ * Framework, not just a library: the engine owns the libuv loop, the pty
+ * wrapping the process's stdin/stdout, the wire-side OSC handshake, and
+ * the render scheduling. Apps only see widgets, callbacks, and the
+ * engine handle.
+ *
+ * Lifecycle:
+ *   1. eng = yetty_ygui_engine_create({.name = "myapp"}).value
+ *      Allocates the loop, wires the pty, installs handles, emits the
+ *      init OSCs (CSI 16t, subscribe_clicks/moves, CARD_PLACE, CANVAS_FIT
+ *      placeholder). The pty is live before this returns.
+ *   2. Build widget tree against `eng`; register callbacks.
+ *   3. yetty_ygui_engine_run(eng) — blocks on the engine's own loop until
+ *      shutdown.
+ *   4. yetty_ygui_engine_destroy(eng) — unsubscribes, drops the card,
+ *      tears down handles, closes the loop.
+ *
+ * Apps never pass file descriptors, pty pointers, loop pointers, cell
+ * sizes, canvas modes, or any pixel geometry — every one of those is
+ * either framework-internal or discovered at runtime from the host's
+ * OSC reply.
  *===========================================================================*/
 
-/* Create engine with card name, position, and size in terminal cells.
- * x, y: card position in terminal cells
- * cols, rows: card size in terminal cells
- * After show(), queries card pixel size (OSC 777780).
- * Canvas = actual card pixels (cols * cell_width, rows * cell_height).
- * Widgets are positioned in actual pixel coordinates. */
-struct ygui_engine_ptr_result yetty_ygui_engine_create(const char *card_name, int x, int y,
-                                                       int cols, int rows);
+/* Construction parameters. Pass by value; the engine copies what it
+ * needs. Both fields are optional; sensible defaults are supplied. */
+struct yetty_ygui_engine_args {
+    /* Human-readable identifier ("ygreeter", "ytop", …). Used for logs
+     * and for matching legacy name-keyed OSC events. NULL → "ygui". */
+    const char *name;
+    /* Theme handle. NULL → built-in brand-palette default. The engine
+     * takes ownership of NULL-input themes; caller-supplied themes
+     * remain caller-owned and must outlive the engine. */
+    struct yetty_ygui_theme *theme;
+};
 
-/* Create engine with pixel size hints.
- * x, y: card position in terminal cells
- * width_hint, height_hint: desired pixel size (calculates closest cols/rows)
- * Then same as ygui_engine_create: canvas = actual card pixels. */
-struct ygui_engine_ptr_result yetty_ygui_engine_create_with_pixel_hint(const char *card_name, int x,
-                                                                       int y, float width_hint,
-                                                                       float height_hint);
+/* Construct the engine. Returns a ready-to-use handle with the loop +
+ * pty + handshake already in place. */
+struct ygui_engine_ptr_result yetty_ygui_engine_create(struct yetty_ygui_engine_args args);
 
-/* Destroy engine (kills card, frees all resources) */
+/* Destroy engine (kills card, frees all resources, closes the loop). */
 struct yetty_ycore_void_result yetty_ygui_engine_destroy(struct yetty_ygui_engine *engine);
-
-/* Show card (creates it via OSC, queries pixel size).
- * Position and size were set in ygui_engine_create. */
-struct yetty_ycore_void_result yetty_ygui_engine_show(struct yetty_ygui_engine *engine);
 
 /* Render a frame (clear buffer → rebuild → serialize → send OSC)
  * Usually not needed - engine auto-renders when dirty. */
@@ -318,14 +334,11 @@ struct yetty_ycore_void_result yetty_ygui_engine_render(struct yetty_ygui_engine
  * triggering a render. */
 struct yetty_ycore_void_result yetty_ygui_engine_layout(struct yetty_ygui_engine *engine);
 
-/* Attach engine to user's libuv loop (for advanced usage) */
-void yetty_ygui_engine_attach(struct yetty_ygui_engine *engine, uv_loop_t *loop);
-
-/* Run event loop (creates libuv loop internally for simple usage)
- * Blocks until ygui_engine_stop() called or 'q' pressed. */
+/* Run the engine's event loop. Blocks until yetty_ygui_engine_stop() is
+ * called, the user closes the card, or the host shuts the pty. */
 void yetty_ygui_engine_run(struct yetty_ygui_engine *engine);
 
-/* Stop the event loop */
+/* Stop the event loop. Safe to call from any uv-loop callback. */
 void yetty_ygui_engine_stop(struct yetty_ygui_engine *engine);
 
 /* Configuration */
@@ -393,9 +406,8 @@ void yetty_ygui_engine_notify_ttl(struct yetty_ygui_engine *engine,
                                   enum yetty_ygui_severity sev, uint32_t ttl_ms,
                                   const char *fmt, ...);
 
-/* Resize handling */
-void yetty_ygui_engine_set_canvas_mode(struct yetty_ygui_engine *engine, ygui_canvas_mode_t mode);
-void yetty_ygui_engine_set_scale_mode(struct yetty_ygui_engine *engine, ygui_scale_mode_t mode);
+/* Resize handling. Canvas always tracks the host's reported pixel size
+ * (CANVAS_FIT semantics); there is no other mode. */
 void yetty_ygui_engine_on_resize(struct yetty_ygui_engine *engine, ygui_resize_callback_t callback,
                                  void *userdata);
 

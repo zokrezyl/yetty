@@ -187,15 +187,13 @@ int main(void)
     query_terminal_cells(&cols, &rows);
 
     struct ygui_engine_ptr_result eng_r =
-        yetty_ygui_engine_create("flex-column", 0, 0, cols, rows);
+        yetty_ygui_engine_create((struct yetty_ygui_engine_args){.name = "flex-column"});
     if (YETTY_IS_ERR(eng_r)) {
         yetty_ycore_error_destroy(eng_r.error);
         yetty_ygui_shutdown();
         return 1;
     }
     g_engine = eng_r.value;
-    yetty_ygui_engine_set_canvas_mode(g_engine, YETTY_YGUI_CANVAS_FIT);
-
     yetty_ygui_engine_label(g_engine, "title", 16, 14,
                             "Flex column — keys: +/- j a g s, q to quit");
     g_status = yetty_ygui_engine_label(g_engine, "status", 16, 40, "");
@@ -215,7 +213,6 @@ int main(void)
     update_status();
 
     yetty_ygui_engine_on_key(g_engine, on_key, NULL);
-    yetty_ygui_engine_show(g_engine);
     {
         float cw = 0, ch = 0;
         yetty_ygui_engine_get_size(g_engine, &cw, &ch);

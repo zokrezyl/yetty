@@ -46,6 +46,10 @@ if(YETTY_ENABLE_TOOL_YZOO)
     add_subdirectory(yzoo)
 endif()
 
+if(YETTY_ENABLE_TOOL_YJUNGLE)
+    add_subdirectory(yjungle)
+endif()
+
 if(YETTY_ENABLE_TOOL_YDRAW_MAZE)
     add_subdirectory(ydraw-maze)
 endif()

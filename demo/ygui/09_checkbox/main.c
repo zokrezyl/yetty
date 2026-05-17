@@ -50,7 +50,7 @@ static void on_key(struct yetty_ygui_engine* e, uint32_t key, int mods, void* u)
 
 int main(void) {
     if (yetty_ygui_init() != 0) return 1;
-    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_engine_create_with_pixel_hint("settings", 2, 2, 350.0f, 300.0f);
+    { struct ygui_engine_ptr_result _eng_r = yetty_ygui_engine_create((struct yetty_ygui_engine_args){.name = "settings"});
         if (YETTY_IS_ERR(_eng_r)) { yetty_ycore_error_destroy(_eng_r.error); return 1; }
         g_engine = _eng_r.value; }
     if (!g_engine) { yetty_ygui_shutdown(); return 1; }
@@ -69,7 +69,6 @@ int main(void) {
     update_status();
 
     yetty_ygui_engine_on_key(g_engine, on_key, NULL);
-    yetty_ygui_engine_show(g_engine);
     yetty_ygui_engine_run(g_engine);
 
     yetty_ygui_engine_destroy(g_engine);
