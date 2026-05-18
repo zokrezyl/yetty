@@ -8,6 +8,16 @@ struct yetty_ycore_void_result yetty_ycore_buffer_write(struct yetty_ycore_buffe
 #include <stdlib.h>
 #include <string.h>
 
+/* Process-wide monotonic id allocator. Starts at 1 so 0 is reserved as
+ * "no object" (YETTY_YCORE_OBJECT_ID_NONE). Single-threaded by the event
+ * loop, so no atomics needed today. */
+static uint64_t g_next_object_id = 1;
+
+yetty_ycore_object_id yetty_ycore_next_object_id(void)
+{
+    return g_next_object_id++;
+}
+
 struct yetty_ycore_buffer_result yetty_ycore_buffer_create(size_t initial_capacity)
 {
     struct yetty_ycore_buffer buf = {0};

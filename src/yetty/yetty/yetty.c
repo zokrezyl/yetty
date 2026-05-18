@@ -559,6 +559,171 @@ static struct yetty_ycore_int_result yetty_event_handler(
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
+    /* Chrome-driven structural mutations. The chrome side (yui's ygui
+     * widgets, context-menu actions, splitter drags) doesn't mutate the
+     * workspace directly — it pre-allocates the ids of every new tile
+     * and posts one of these four events. The handler below materialises
+     * the tile tree using the ids the chrome already keyed its widget
+     * map on, so the two domains agree on identifiers without a
+     * discovery round-trip. */
+    if (event->type == YETTY_YCORE_WORKSPACE_CREATE) {
+        if (yetty->tabbar) {
+            struct yetty_yui_workspace *ws = NULL;
+            struct yetty_ycore_void_result r = yetty_yui_tabbar_attach_empty_workspace(
+                yetty->tabbar, event->workspace_create.workspace_id,
+                yetty->context.app_context.config, &yetty->context, &ws);
+            if (YETTY_IS_ERR(r)) {
+                yerror("yetty: WORKSPACE_CREATE failed: %s", r.error.msg);
+                yetty_ycore_error_destroy(r.error);
+            } else {
+                ydebug("yetty: WORKSPACE_CREATE id=%llu",
+                       (unsigned long long)event->workspace_create.workspace_id);
+            }
+        }
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+
+    if (event->type == YETTY_YCORE_PANE_CREATE) {
+        if (yetty->tabbar) {
+            struct yetty_yui_workspace *ws = yetty_yui_tabbar_find_workspace(
+                yetty->tabbar, event->pane_create.workspace_id);
+            if (!ws) {
+                ywarn("yetty: PANE_CREATE: workspace %llu not found",
+                      (unsigned long long)event->pane_create.workspace_id);
+                return YETTY_OK(yetty_ycore_int, 1);
+            }
+            struct yetty_ycore_void_result r =
+                yetty_yui_workspace_create_first_pane(ws, event->pane_create.pane_id);
+            if (YETTY_IS_ERR(r)) {
+                yerror("yetty: PANE_CREATE failed: %s", r.error.msg);
+                yetty_ycore_error_destroy(r.error);
+                return YETTY_OK(yetty_ycore_int, 1);
+            }
+            /* Install a default terminal view in the brand-new pane so
+             * the first frame has something to render. The config-driven
+             * view selection (vnc/client, telnet, ssh) still lives in
+             * workspace_load_layout — chrome-driven creation defaults to
+             * a plain terminal; the connect-dialog path swaps it later
+             * via the existing yetty_on_yui_connect machinery. */
+            struct yetty_yui_tile *root = yetty_yui_workspace_root(ws);
+            struct yetty_yui_tile *pane =
+                yetty_yui_tile_find_by_id(root, event->pane_create.pane_id);
+            if (pane) {
+                struct yetty_ycore_grid_size gs = {.rows = 24, .cols = 80};
+                struct yetty_yterm_terminal_result tr =
+                    yetty_yterm_terminal_create(gs, &yetty->context);
+                if (YETTY_IS_ERR(tr)) {
+                    yerror("yetty: PANE_CREATE: terminal create: %s", tr.error.msg);
+                    yetty_ycore_error_destroy(tr.error);
+                } else {
+                    struct yetty_ycore_void_result pr = yetty_yui_tile_pane_push_view(
+                        pane, yetty_yterm_terminal_as_view(tr.value));
+                    if (YETTY_IS_ERR(pr)) {
+                        yerror("yetty: PANE_CREATE: push_view: %s", pr.error.msg);
+                        yetty_ycore_error_destroy(pr.error);
+                    }
+                }
+            }
+            /* Make sure the new pane gets a non-empty rect now that a
+             * root tile exists. */
+            if (yetty->window_width > 0 && yetty->window_height > 0) {
+                yetty_yui_tabbar_resize(
+                    yetty->tabbar, yetty->window_width,
+                    yetty->window_height -
+                        (yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f));
+            }
+            yetty_yui_workspace_set_active(ws, 1);
+            if (yetty->event_loop && yetty->event_loop->ops &&
+                yetty->event_loop->ops->request_render) {
+                yetty->event_loop->ops->request_render(yetty->event_loop);
+            }
+            ydebug("yetty: PANE_CREATE ws=%llu pane=%llu",
+                   (unsigned long long)event->pane_create.workspace_id,
+                   (unsigned long long)event->pane_create.pane_id);
+        }
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+
+    if (event->type == YETTY_YCORE_PANE_SPLIT) {
+        if (yetty->tabbar) {
+            struct yetty_yui_workspace *ws = yetty_yui_tabbar_find_workspace(
+                yetty->tabbar, event->pane_split.workspace_id);
+            if (!ws) {
+                ywarn("yetty: PANE_SPLIT: workspace %llu not found",
+                      (unsigned long long)event->pane_split.workspace_id);
+                return YETTY_OK(yetty_ycore_int, 1);
+            }
+            enum yetty_yui_orientation orient =
+                event->pane_split.orientation ? YETTY_YUI_HORIZONTAL
+                                              : YETTY_YUI_VERTICAL;
+            struct yetty_ycore_void_result sr = yetty_yui_workspace_split_pane_with_ids(
+                ws, event->pane_split.target_pane_id, event->pane_split.new_pane_id,
+                event->pane_split.new_split_id, orient);
+            if (YETTY_IS_ERR(sr)) {
+                yerror("yetty: PANE_SPLIT failed: %s", sr.error.msg);
+                yetty_ycore_error_destroy(sr.error);
+                return YETTY_OK(yetty_ycore_int, 1);
+            }
+
+            /* Drop a default terminal view into the freshly-minted
+             * sibling and re-layout. Same logic the old synchronous
+             * split path ran. */
+            struct yetty_yui_tile *root = yetty_yui_workspace_root(ws);
+            struct yetty_yui_tile *new_pane =
+                yetty_yui_tile_find_by_id(root, event->pane_split.new_pane_id);
+            if (new_pane) {
+                struct yetty_ycore_grid_size gs = {.rows = 24, .cols = 80};
+                struct yetty_yterm_terminal_result tr =
+                    yetty_yterm_terminal_create(gs, &yetty->context);
+                if (YETTY_IS_ERR(tr)) {
+                    yerror("yetty: PANE_SPLIT: terminal create: %s", tr.error.msg);
+                    yetty_ycore_error_destroy(tr.error);
+                } else {
+                    yetty_yui_tile_pane_push_view(
+                        new_pane, yetty_yterm_terminal_as_view(tr.value));
+                }
+                yetty_yui_tile_clear_focus(root);
+                yetty_yui_tile_pane_set_focused(new_pane, 1);
+            }
+            if (yetty->window_width > 0 && yetty->window_height > 0) {
+                yetty_yui_tabbar_resize(
+                    yetty->tabbar, yetty->window_width,
+                    yetty->window_height -
+                        (yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f));
+            }
+            if (yetty->event_loop && yetty->event_loop->ops &&
+                yetty->event_loop->ops->request_render) {
+                yetty->event_loop->ops->request_render(yetty->event_loop);
+            }
+            ydebug("yetty: PANE_SPLIT ws=%llu target=%llu new_pane=%llu new_split=%llu",
+                   (unsigned long long)event->pane_split.workspace_id,
+                   (unsigned long long)event->pane_split.target_pane_id,
+                   (unsigned long long)event->pane_split.new_pane_id,
+                   (unsigned long long)event->pane_split.new_split_id);
+        }
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+
+    if (event->type == YETTY_YCORE_SPLIT_RESIZE) {
+        if (yetty->tabbar) {
+            struct yetty_yui_workspace *ws = yetty_yui_tabbar_find_workspace(
+                yetty->tabbar, event->split_resize.workspace_id);
+            if (ws) {
+                struct yetty_ycore_void_result r = yetty_yui_workspace_resize_split(
+                    ws, event->split_resize.split_id, event->split_resize.ratio);
+                if (YETTY_IS_ERR(r)) {
+                    yerror("yetty: SPLIT_RESIZE failed: %s", r.error.msg);
+                    yetty_ycore_error_destroy(r.error);
+                }
+            }
+            if (yetty->event_loop && yetty->event_loop->ops &&
+                yetty->event_loop->ops->request_render) {
+                yetty->event_loop->ops->request_render(yetty->event_loop);
+            }
+        }
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+
     /* Graceful shutdown.
      *
      * Same handler for window-close (window_close_callback posts SHUTDOWN)
@@ -1041,11 +1206,13 @@ static int yetty_apply_view_kind_to_config(struct yetty_yetty_yetty *yetty,
     return -1;
 }
 
-/* Right-click context menu: split the focused pane and seed the new
- * sibling with a view of the chosen kind. The split is on the active
- * workspace; orientation argument: 0 = vertical (sibling below),
- * 1 = horizontal (sibling to the right) — matches the labels in the
- * yui submenu. */
+/* Right-click context menu: pre-allocate the new pane + split ids and
+ * post a PANE_SPLIT event. The actual tile-tree mutation happens in the
+ * event handler, which uses the supplied ids so chrome's widget map and
+ * the workspace tree agree on identifiers without a discovery
+ * round-trip. orientation argument: 1 = horizontal divider (panes
+ * side-by-side), 0 = vertical (panes stacked) — matches the labels in
+ * the yui submenu. */
 static void yetty_on_yui_split(void *userdata, enum yetty_yui_view_kind kind, int horizontal)
 {
     struct yetty_yetty_yetty *yetty = userdata;
@@ -1056,6 +1223,10 @@ static void yetty_on_yui_split(void *userdata, enum yetty_yui_view_kind kind, in
         ynotify(YETTY_YNOTIFY_WARN, "Split aborted: missing fields");
         return;
     }
+    if (kind == YETTY_YUI_VIEW_YVNC) {
+        ynotify(YETTY_YNOTIFY_INFO,
+                "yVNC-in-split not yet wired — opened a terminal instead");
+    }
 
     struct yetty_yui_workspace *ws = yetty_yui_tabbar_active_workspace(yetty->tabbar);
     if (!ws) {
@@ -1063,11 +1234,7 @@ static void yetty_on_yui_split(void *userdata, enum yetty_yui_view_kind kind, in
         return;
     }
     struct yetty_yui_tile *root = yetty_yui_workspace_root(ws);
-    if (!root) {
-        ywarn("yetty: split: no root tile");
-        return;
-    }
-    struct yetty_yui_tile *focused = yetty_yui_tile_find_focused_pane(root);
+    struct yetty_yui_tile *focused = root ? yetty_yui_tile_find_focused_pane(root) : NULL;
     if (!focused) {
         focused = yetty_yui_tile_find_first_pane(root);
     }
@@ -1075,84 +1242,15 @@ static void yetty_on_yui_split(void *userdata, enum yetty_yui_view_kind kind, in
         ywarn("yetty: split: no pane to split");
         return;
     }
-    yetty_ycore_object_id pane_id = yetty_yui_tile_id(focused);
 
-    /* "Split vertically" in the menu means a vertical divider line
-     * between two panes side-by-side — i.e. a HORIZONTAL flexbox
-     * direction. Map the user-facing label to the underlying
-     * orientation enum: horizontal=1 → side-by-side (cross axis is
-     * horizontal). */
-    enum yetty_yui_orientation orient =
-        horizontal ? YETTY_YUI_HORIZONTAL : YETTY_YUI_VERTICAL;
-    struct yetty_ycore_void_result sr =
-        yetty_yui_workspace_split_pane(ws, pane_id, orient);
-    if (YETTY_IS_ERR(sr)) {
-        yerror("yetty: split failed: %s", sr.error.msg);
-        yetty_ycore_error_destroy(sr.error);
-        return;
-    }
-
-    /* Re-resolve root (set_root may have replaced it) and find the new
-     * sibling — workspace_split_pane sets the old pane as `first` and
-     * creates the empty `second`. */
-    root = yetty_yui_workspace_root(ws);
-    struct yetty_yui_tile *parent_split = yetty_yui_tile_find_parent_split(root, pane_id);
-    if (!parent_split) {
-        ywarn("yetty: split: parent split not found post-split");
-        return;
-    }
-    struct yetty_yui_tile *new_pane = yetty_yui_tile_split_second(parent_split);
-    if (!new_pane) {
-        ywarn("yetty: split: new pane not found");
-        return;
-    }
-
-    /* Re-propagate bounds so the new sibling gets a non-empty rect
-     * (workspace_split_pane only wires the tree pointers). The synth
-     * RESIZE goes through the existing tabbar→workspace fan-out. */
-    yetty_yui_tabbar_resize(yetty->tabbar, yetty->window_width,
-                            yetty->window_height -
-                                (yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f));
-
-    /* All kinds spawn a terminal — config flags set above tell its PTY
-     * what to run (ssh / telnet / shell-with-command). yVNC in a split
-     * isn't wired yet (would need yvnc_viewer_create + linking yvnc
-     * into yetty.c's TU); falling back to a terminal keeps the split
-     * working for the other kinds. */
-    struct yetty_yui_view *new_view = NULL;
-    struct yetty_ycore_grid_size gs = {.rows = 24, .cols = 80};
-    struct yetty_yterm_terminal_result tr =
-        yetty_yterm_terminal_create(gs, &yetty->context);
-    if (YETTY_IS_ERR(tr)) {
-        yerror("yetty: split: terminal create: %s", tr.error.msg);
-        yetty_ycore_error_destroy(tr.error);
-        return;
-    }
-    new_view = yetty_yterm_terminal_as_view(tr.value);
-    if (!new_view) {
-        ywarn("yetty: split: no view created");
-        return;
-    }
-    if (kind == YETTY_YUI_VIEW_YVNC) {
-        ynotify(YETTY_YNOTIFY_INFO,
-                "yVNC-in-split not yet wired — opened a terminal instead");
-    }
-
-    struct yetty_ycore_void_result pr = yetty_yui_tile_pane_push_view(new_pane, new_view);
-    if (YETTY_IS_ERR(pr)) {
-        yerror("yetty: split: push_view: %s", pr.error.msg);
-        yetty_ycore_error_destroy(pr.error);
-        return;
-    }
-
-    /* Focus the new pane so the user can immediately type into it. */
-    yetty_yui_tile_clear_focus(root);
-    yetty_yui_tile_pane_set_focused(new_pane, 1);
-
-    if (yetty->event_loop && yetty->event_loop->ops &&
-        yetty->event_loop->ops->request_render) {
-        yetty->event_loop->ops->request_render(yetty->event_loop);
-    }
+    struct yetty_yui_event ev = {0};
+    ev.type = YETTY_YCORE_PANE_SPLIT;
+    ev.pane_split.workspace_id = yetty_yui_workspace_id(ws);
+    ev.pane_split.target_pane_id = yetty_yui_tile_id(focused);
+    ev.pane_split.new_pane_id = yetty_ycore_next_object_id();
+    ev.pane_split.new_split_id = yetty_ycore_next_object_id();
+    ev.pane_split.orientation = horizontal ? 1 : 0;
+    yetty_yevent_post_async(yetty->context.app_context.platform_input_pipe, &ev);
 }
 
 static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
@@ -1369,6 +1467,10 @@ struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_contex
             yetty_yui_tabbar_set_v_menu_callback(yetty->tabbar, yetty_on_v_menu_click, yetty);
             yetty_yui_set_connect_callback(yetty->yui, yetty_on_yui_connect, yetty);
             yetty_yui_set_split_callback(yetty->yui, yetty_on_yui_split, yetty);
+            /* Bind the tabbar model so yui's engine-pinned titlebar
+             * (≡, tabs, +, drag, _, □, ✕) renders and reconciles
+             * against the same workspace list yetty owns. */
+            yetty_yui_set_tabbar_model(yetty->yui, yetty->tabbar);
         } else {
             ywarn("yetty_create: yui create failed: %s", yr.error.msg);
             yetty_ycore_error_destroy(yr.error);

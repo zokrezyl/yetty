@@ -37,6 +37,7 @@ struct yetty_yui;
 struct yetty_context;
 struct yetty_ydraw_target;
 struct yetty_ygui_widget;
+struct yetty_yui_tabbar;
 
 YETTY_YRESULT_DECLARE(yetty_yui_ptr, struct yetty_yui *);
 
@@ -166,6 +167,14 @@ float yetty_yui_statusbar_height(const struct yetty_yui *yui);
 /* Install the split-handler invoked when the user picks a kind under
  * the context menu's "Split V/H ▸" submenu. Pass NULL to disarm. */
 void yetty_yui_set_split_callback(struct yetty_yui *yui, yetty_yui_split_cb cb, void *userdata);
+
+/* Bind yui to the tabbar model. Once bound, yui builds an engine-pinned
+ * titlebar widget tree (hamburger + tabs + + + drag spacer + min/max/
+ * close) and reconciles it with the model on every render. Pass NULL to
+ * unbind (used during yetty teardown). Safe to call before or after
+ * yetty_yui_create; if called before the engine is built it just
+ * stashes the pointer for the engine-construction path. */
+void yetty_yui_set_tabbar_model(struct yetty_yui *yui, struct yetty_yui_tabbar *tabbar);
 
 void yetty_yui_set_connect_callback(struct yetty_yui *yui, yetty_yui_connect_cb cb,
                                     void *userdata);

@@ -516,6 +516,23 @@ void yetty_ygui_engine_on_key(struct yetty_ygui_engine *engine, ygui_key_callbac
  * Engine State
  *===========================================================================*/
 
+int yetty_ygui_engine_has_pressed_widget(const struct yetty_ygui_engine *engine)
+{
+    return engine && engine->pressed ? 1 : 0;
+}
+
+struct yetty_ygui_widget *yetty_ygui_engine_hovered_widget(
+    const struct yetty_ygui_engine *engine)
+{
+    return engine ? engine->hovered : NULL;
+}
+
+struct yetty_ygui_widget *yetty_ygui_engine_pressed_widget(
+    const struct yetty_ygui_engine *engine)
+{
+    return engine ? engine->pressed : NULL;
+}
+
 int yetty_ygui_engine_is_dirty(const struct yetty_ygui_engine *engine)
 {
     return engine ? engine->dirty : 0;

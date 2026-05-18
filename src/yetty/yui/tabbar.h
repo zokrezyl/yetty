@@ -80,6 +80,21 @@ struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_from_config(
     struct yetty_yui_tabbar *bar, const struct yetty_yconfig_config *config,
     const struct yetty_context *yetty_ctx);
 
+/* Chrome-driven workspace creation: append an empty workspace (no
+ * layout, no tile tree yet) with the caller-supplied id. The new
+ * workspace becomes active. Use together with a subsequent PANE_CREATE
+ * (which fills in the first pane) when chrome wants to own all ids
+ * from the very first moment. Returns the new workspace via *out_ws
+ * (borrowed; the tabbar owns it). */
+struct yetty_ycore_void_result yetty_yui_tabbar_attach_empty_workspace(
+    struct yetty_yui_tabbar *bar, yetty_ycore_object_id workspace_id,
+    const struct yetty_yconfig_config *config, const struct yetty_context *yetty_ctx,
+    struct yetty_yui_workspace **out_ws);
+
+/* Find a workspace by id. NULL if not present. */
+struct yetty_yui_workspace *yetty_yui_tabbar_find_workspace(
+    const struct yetty_yui_tabbar *bar, yetty_ycore_object_id workspace_id);
+
 /* Kinds the "v" dropdown menu can spawn. Each kind toggles a small set
  * of config keys (ssh/enabled, telnet/enabled, vnc/client) so the
  * existing pty-factory + workspace dispatch paths pick the right
@@ -97,9 +112,27 @@ enum yetty_yui_tabbar_kind {
 struct yetty_ycore_void_result yetty_yui_tabbar_add_workspace_of_kind(
     struct yetty_yui_tabbar *bar, enum yetty_yui_tabbar_kind kind);
 
-/* Accessors — used by yetty.c for diagnostics and screenshot routing. */
+/* Accessors — used by yetty.c for diagnostics and screenshot routing,
+ * and by yui's ygui titlebar sync helper that mirrors the model into
+ * widgets. The "active index" is the 0-based slot in the workspaces
+ * array; the active workspace pointer is just workspaces[active]. */
 struct yetty_yui_workspace *yetty_yui_tabbar_active_workspace(const struct yetty_yui_tabbar *bar);
 size_t yetty_yui_tabbar_count(const struct yetty_yui_tabbar *bar);
+size_t yetty_yui_tabbar_active_index(const struct yetty_yui_tabbar *bar);
+
+/* Model mutators usable from outside (ygui tab-widget callbacks). All
+ * are no-ops when idx is out of range; switch_to additionally no-ops
+ * when idx is already active. */
+struct yetty_ycore_void_result yetty_yui_tabbar_switch_to(struct yetty_yui_tabbar *bar,
+                                                          size_t idx);
+struct yetty_ycore_void_result yetty_yui_tabbar_close_at(struct yetty_yui_tabbar *bar, size_t idx);
+
+/* Window-control wrappers — yui's ygui titlebar buttons (_, □, ✕)
+ * trampoline through here so the click path doesn't have to know about
+ * the platform window manager. NULL-safe; no-op when no wm is bound. */
+void yetty_yui_tabbar_iconify(struct yetty_yui_tabbar *bar);
+void yetty_yui_tabbar_toggle_maximize(struct yetty_yui_tabbar *bar);
+void yetty_yui_tabbar_close_window(struct yetty_yui_tabbar *bar);
 
 /* Callback invoked when the v-button on the tabbar is clicked. The
  * tabbar reports the on-screen anchor (the lower-left corner of the

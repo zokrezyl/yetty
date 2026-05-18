@@ -5009,6 +5009,12 @@ void yetty_ygui_widget_spinner_on_change(struct yetty_ygui_widget *widget,
 
 static int splitter_axis_row(const struct yetty_ygui_widget *self)
 {
+    /* Explicit override wins — set by external-drive callers that pin
+     * the splitter over a non-flex region (yui's pane tree). */
+    if (self->data.splitter.axis_override == 0 ||
+        self->data.splitter.axis_override == 1) {
+        return self->data.splitter.axis_override;
+    }
     return self->parent && self->parent->layout.mode == YETTY_YGUI_LAYOUT_FLEX
                ? self->parent->layout.direction == YETTY_YGUI_FLEX_ROW
                : 1; /* default: assume row (vertical bar) */
@@ -5027,15 +5033,30 @@ static struct yetty_ycore_void_result splitter_render(struct yetty_ygui_widget *
 
 static int splitter_on_drag(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
 {
+    int row = splitter_axis_row(self);
+    float delta = row ? (lx - self->w * 0.5f) : (ly - self->h * 0.5f);
+
+    /* External-drive mode: forward delta, let the host decide. The
+     * host re-positions this widget on the next frame; we do not
+     * mutate any flex siblings. */
+    if (self->change_callback) {
+        self->change_callback(self, delta, self->change_userdata);
+        self->dirty = 1;
+        if (self->engine) {
+            self->engine->dirty = 1;
+        }
+        out->widget_id = self->id;
+        out->type = YETTY_YGUI_EVENT_CHANGE;
+        return 1;
+    }
+
     struct yetty_ygui_widget *left = self->prev_sibling;
     struct yetty_ygui_widget *right = self->next_sibling;
     if (!left || !right || !self->parent) {
         return 0;
     }
     float min_sz = self->data.splitter.min_size > 0 ? self->data.splitter.min_size : 30.0f;
-    int row = splitter_axis_row(self);
     if (row) {
-        float delta = lx - self->w * 0.5f;
         float new_l = left->authored_w + delta;
         float new_r = right->authored_w - delta;
         if (new_l < min_sz || new_r < min_sz) {
@@ -5044,7 +5065,6 @@ static int splitter_on_drag(struct yetty_ygui_widget *self, float lx, float ly, 
         left->authored_w = new_l;
         right->authored_w = new_r;
     } else {
-        float delta = ly - self->h * 0.5f;
         float new_l = left->authored_h + delta;
         float new_r = right->authored_h - delta;
         if (new_l < min_sz || new_r < min_sz) {
@@ -5084,6 +5104,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_splitter(struct yetty_ygui_engine *e
     }
     yetty_ygui_widget_init_base(s, x, y, w, h);
     s->data.splitter.min_size = 30.0f;
+    s->data.splitter.axis_override = -1;
     static const struct yetty_ygui_widget_vtable splitter_vtable = {
         .render = splitter_render,
         .on_press = splitter_on_press,
@@ -5100,6 +5121,37 @@ void yetty_ygui_widget_splitter_set_min(struct yetty_ygui_widget *widget, float 
         return;
     }
     widget->data.splitter.min_size = min_size;
+}
+
+void yetty_ygui_widget_splitter_on_change(struct yetty_ygui_widget *widget,
+                                          ygui_change_callback_t cb, void *userdata)
+{
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_SPLITTER) {
+        return;
+    }
+    widget->change_callback = cb;
+    widget->change_userdata = userdata;
+}
+
+void yetty_ygui_widget_splitter_set_axis(struct yetty_ygui_widget *widget, int row)
+{
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_SPLITTER) {
+        return;
+    }
+    widget->data.splitter.axis_override = row ? 1 : 0;
+}
+
+int yetty_ygui_widget_splitter_get_axis(const struct yetty_ygui_widget *widget)
+{
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_SPLITTER) {
+        return -1;
+    }
+    return widget->data.splitter.axis_override;
+}
+
+int yetty_ygui_widget_get_type(const struct yetty_ygui_widget *widget)
+{
+    return widget ? (int)widget->type : -1;
 }
 
 /*=============================================================================

@@ -422,6 +422,27 @@ void yetty_ygui_engine_mouse_up(struct yetty_ygui_engine *engine, float x, float
                                 int button);
 void yetty_ygui_engine_mouse_move(struct yetty_ygui_engine *engine, float x, float y);
 
+/* True iff the engine currently has a widget under a held mouse button.
+ * Used by yui after engine_mouse_down to decide whether a click landed
+ * on a widget (consume) or on empty space (fall through to the host).
+ * Cleared by engine_mouse_up. */
+int yetty_ygui_engine_has_pressed_widget(const struct yetty_ygui_engine *engine);
+
+/* The widget currently under the cursor (hover) and the widget that
+ * grabbed the press (drag target), respectively. Both return NULL when
+ * nothing is hovered / pressed. Used by hosts that need to cross-check
+ * widget kind for things like OS cursor-shape changes. */
+struct yetty_ygui_widget *yetty_ygui_engine_hovered_widget(
+    const struct yetty_ygui_engine *engine);
+struct yetty_ygui_widget *yetty_ygui_engine_pressed_widget(
+    const struct yetty_ygui_engine *engine);
+
+/* Get the widget's type tag. Returns the underlying YETTY_YGUI_WIDGET_*
+ * enum value as int (negative if widget is NULL). Useful for narrow
+ * cross-checks like "is this a splitter" without exposing the entire
+ * internal widget struct. */
+int yetty_ygui_widget_get_type(const struct yetty_ygui_widget *widget);
+
 /* Direct keyboard-event injection. Same use case as the mouse variants —
  * the engine's internal dispatch routes the event to engine->focused
  * (textinput taking text, button taking Enter/Escape, …). `text_input`
@@ -778,6 +799,14 @@ void yetty_ygui_widget_tabbar_remove_tab(struct yetty_ygui_widget *tabbar, int i
 void yetty_ygui_widget_tabbar_on_tab_close(struct yetty_ygui_widget *tabbar,
                                            ygui_change_callback_t callback, void *userdata);
 
+/* Optional "+" new-tab button. When `callback` is non-NULL the tabbar
+ * renders a small "+" pill at the end of the header strip and routes
+ * clicks on it to the callback. The callback is responsible for
+ * appending a new tab (via widget_tabbar_add_tab) or asking a host
+ * model to do so. Pass NULL to hide the button. */
+void yetty_ygui_widget_tabbar_on_new_tab(struct yetty_ygui_widget *tabbar,
+                                         ygui_click_callback_t callback, void *userdata);
+
 /* Uniform per-button size used by tab close 'x' and (via the window
  * widget) the hamburger menu. Useful when an app builds custom UI
  * elements that should visually match the tabbar's close buttons. */
@@ -1069,6 +1098,28 @@ struct yetty_ygui_widget *yetty_ygui_engine_splitter(
 
 /* Minimum size enforced on each side during drag. Default 30 px. */
 void yetty_ygui_widget_splitter_set_min(struct yetty_ygui_widget *widget, float min_size);
+
+/* External-drive mode. When set, the splitter does NOT mutate its
+ * sibling widgets' authored sizes on drag — instead it fires the
+ * callback with a signed pixel `delta` along the main axis (positive =
+ * sibling-after grows by `delta`, sibling-before shrinks). The host is
+ * then responsible for re-laying out and re-positioning the splitter
+ * widget itself. Use this when the divided regions aren't sibling
+ * widgets in a flex container (e.g. yui's pane tile tree). */
+void yetty_ygui_widget_splitter_on_change(struct yetty_ygui_widget *widget,
+                                          ygui_change_callback_t cb, void *userdata);
+
+/* Pin the drag axis explicitly. row=1 → vertical bar that resizes left
+ * vs right; row=0 → horizontal bar that resizes top vs bottom. Use
+ * this together with splitter_on_change for absolute-positioned
+ * splitters whose parent isn't a flex container (so the auto-detect
+ * from the parent's flex direction doesn't apply). */
+void yetty_ygui_widget_splitter_set_axis(struct yetty_ygui_widget *widget, int row);
+
+/* Read back the axis override last set via splitter_set_axis. -1 when
+ * not explicitly pinned (auto-detect mode) or when widget isn't a
+ * splitter. */
+int yetty_ygui_widget_splitter_get_axis(const struct yetty_ygui_widget *widget);
 
 /*=============================================================================
  * Modal dialog — popup with a title, message, and bottom button row.

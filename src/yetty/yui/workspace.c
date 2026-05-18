@@ -16,6 +16,7 @@
  *===========================================================================*/
 
 struct yetty_yui_workspace {
+    yetty_ycore_object_id id;
     struct yetty_yui_tile *root;
     float origin_x;
     float origin_y;
@@ -27,7 +28,8 @@ struct yetty_yui_workspace {
  * Create/destroy
  *===========================================================================*/
 
-struct yetty_yui_workspace_ptr_result yetty_yui_workspace_create(void)
+struct yetty_yui_workspace_ptr_result yetty_yui_workspace_create_with_id(
+    yetty_ycore_object_id id)
 {
     struct yetty_yui_workspace *ws;
 
@@ -35,8 +37,19 @@ struct yetty_yui_workspace_ptr_result yetty_yui_workspace_create(void)
     if (!ws) {
         return YETTY_ERR(yetty_yui_workspace_ptr, "allocation failed");
     }
+    ws->id = id;
 
     return YETTY_OK(yetty_yui_workspace_ptr, ws);
+}
+
+struct yetty_yui_workspace_ptr_result yetty_yui_workspace_create(void)
+{
+    return yetty_yui_workspace_create_with_id(yetty_ycore_next_object_id());
+}
+
+yetty_ycore_object_id yetty_yui_workspace_id(const struct yetty_yui_workspace *ws)
+{
+    return ws ? ws->id : YETTY_YCORE_OBJECT_ID_NONE;
 }
 
 struct yetty_ycore_void_result yetty_yui_workspace_destroy(struct yetty_yui_workspace *ws)
@@ -193,8 +206,12 @@ float yetty_yui_workspace_height(const struct yetty_yui_workspace *ws)
  * Tree operations
  *===========================================================================*/
 
-struct yetty_ycore_void_result yetty_yui_workspace_split_pane(
+/* Shared body of split_pane / split_pane_with_ids — the two callers differ
+ * only in whether the new tile ids are auto-allocated or supplied. Pass
+ * YETTY_YCORE_OBJECT_ID_NONE for "auto-allocate". */
+static struct yetty_ycore_void_result workspace_split_pane_impl(
     struct yetty_yui_workspace *ws, yetty_ycore_object_id pane_id,
+    yetty_ycore_object_id new_pane_id, yetty_ycore_object_id new_split_id,
     enum yetty_yui_orientation orientation)
 {
     struct yetty_yui_tile *target;
@@ -218,15 +235,23 @@ struct yetty_ycore_void_result yetty_yui_workspace_split_pane(
         return YETTY_ERR(yetty_ycore_void, "pane not found");
     }
 
-    /* Create new split */
-    split_res = yetty_yui_split_create(orientation);
+    /* Create new split + new pane, honouring caller-supplied ids when
+     * non-zero, falling back to fresh ids otherwise. */
+    if (new_split_id != YETTY_YCORE_OBJECT_ID_NONE) {
+        split_res = yetty_yui_split_create_with_id(new_split_id, orientation);
+    } else {
+        split_res = yetty_yui_split_create(orientation);
+    }
     if (YETTY_IS_ERR(split_res)) {
         return YETTY_ERR(yetty_ycore_void, split_res.error.msg);
     }
     split = split_res.value;
 
-    /* Create new pane */
-    new_pane_res = yetty_yui_pane_create();
+    if (new_pane_id != YETTY_YCORE_OBJECT_ID_NONE) {
+        new_pane_res = yetty_yui_pane_create_with_id(new_pane_id);
+    } else {
+        new_pane_res = yetty_yui_pane_create();
+    }
     if (YETTY_IS_ERR(new_pane_res)) {
         yetty_yui_tile_destroy(split);
         return YETTY_ERR(yetty_ycore_void, new_pane_res.error.msg);
@@ -278,6 +303,69 @@ struct yetty_ycore_void_result yetty_yui_workspace_split_pane(
     }
 
     return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_yui_workspace_split_pane(
+    struct yetty_yui_workspace *ws, yetty_ycore_object_id pane_id,
+    enum yetty_yui_orientation orientation)
+{
+    return workspace_split_pane_impl(ws, pane_id, YETTY_YCORE_OBJECT_ID_NONE,
+                                     YETTY_YCORE_OBJECT_ID_NONE, orientation);
+}
+
+struct yetty_ycore_void_result yetty_yui_workspace_split_pane_with_ids(
+    struct yetty_yui_workspace *ws, yetty_ycore_object_id target_pane_id,
+    yetty_ycore_object_id new_pane_id, yetty_ycore_object_id new_split_id,
+    enum yetty_yui_orientation orientation)
+{
+    return workspace_split_pane_impl(ws, target_pane_id, new_pane_id, new_split_id,
+                                     orientation);
+}
+
+struct yetty_ycore_void_result yetty_yui_workspace_resize_split(
+    struct yetty_yui_workspace *ws, yetty_ycore_object_id split_id, float ratio)
+{
+    struct yetty_yui_tile *split;
+
+    if (!ws) {
+        return YETTY_ERR(yetty_ycore_void, "workspace is NULL");
+    }
+    if (!ws->root) {
+        return YETTY_ERR(yetty_ycore_void, "no root tile");
+    }
+
+    split = yetty_yui_tile_find_by_id(ws->root, split_id);
+    if (!split || yetty_yui_tile_type(split) != YETTY_YUI_TILE_SPLIT) {
+        return YETTY_ERR(yetty_ycore_void, "split not found");
+    }
+
+    struct yetty_ycore_void_result res = yetty_yui_tile_split_set_ratio(split, ratio);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "resize_split: set_ratio failed");
+
+    /* Re-layout from the root so the new ratio actually propagates. */
+    if (ws->width > 0 && ws->height > 0) {
+        struct yetty_yui_rect bounds = {ws->origin_x, ws->origin_y, ws->width, ws->height};
+        return yetty_yui_tile_set_bounds(ws->root, bounds);
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_yui_workspace_create_first_pane(
+    struct yetty_yui_workspace *ws, yetty_ycore_object_id pane_id)
+{
+    if (!ws) {
+        return YETTY_ERR(yetty_ycore_void, "workspace is NULL");
+    }
+    if (ws->root) {
+        return YETTY_ERR(yetty_ycore_void, "workspace already has a root tile");
+    }
+
+    struct yetty_yui_tile_ptr_result pr = yetty_yui_pane_create_with_id(pane_id);
+    if (YETTY_IS_ERR(pr)) {
+        return YETTY_ERR(yetty_ycore_void, "create_first_pane: pane create failed", pr);
+    }
+    yetty_yui_tile_pane_set_focused(pr.value, 1);
+    return yetty_yui_workspace_set_root(ws, pr.value);
 }
 
 struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_workspace *ws,

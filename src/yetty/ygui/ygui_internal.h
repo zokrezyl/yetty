@@ -345,6 +345,21 @@ struct yetty_ygui_widget {
             /* Smallest size enforced on each adjacent sibling during
              * drag (main-axis dimension). */
             float min_size;
+            /* Drag axis override for external-drive mode. When set
+             * (1=row → vertical bar, 0=column → horizontal bar),
+             * bypass splitter_axis_row's flex-parent inspection — the
+             * widget is absolutely positioned over a non-flex region,
+             * so there is no parent direction to infer from.
+             * -1 = auto (use parent flex direction, default).
+             *
+             * When change_callback (on widget base) is non-NULL, the
+             * splitter forwards drag deltas (in pixels along the main
+             * axis) instead of mutating sibling widgets' authored
+             * sizes. The host re-positions the splitter widget itself
+             * after applying its layout decision. Used by yui's pane
+             * tile tree, where the "siblings" aren't ygui widgets at
+             * all. */
+            int axis_override;
         } splitter;
 
         struct {
@@ -680,6 +695,14 @@ struct yetty_ygui_widget {
              * the same way tab-switch events do. */
             ygui_widget_change_fn on_tab_close;
             void *on_tab_close_userdata;
+            /* Optional "+" new-tab button. When `on_new_tab` is set the
+             * tabbar paints a small "+" pill right after the last tab
+             * header and routes clicks on it to the callback. NULL =
+             * no button is shown. The callback typically calls back
+             * into yetty_ygui_widget_tabbar_add_tab itself (or into a
+             * host model that owns the tab list). */
+            ygui_widget_click_fn on_new_tab;
+            void *on_new_tab_userdata;
         } tabbar;
     } data;
 };

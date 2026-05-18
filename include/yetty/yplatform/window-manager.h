@@ -46,6 +46,13 @@ struct yetty_yplatform_window_manager_ops {
      * edges move. The tabbar's edge/corner resize handles call this. */
     void (*resize_by)(struct yetty_yplatform_window_manager *self, int dx, int dy);
 
+    /* Set the OS mouse cursor shape. Shape is an enum
+     * yetty_ycore_cursor_shape value. Posted to output_pipe and applied
+     * on the main thread (GLFW cursor calls aren't safe off the main
+     * thread). Idempotent on the OS side — repeated identical calls are
+     * cheap; the platform impl no-ops when the shape didn't change. */
+    void (*set_cursor)(struct yetty_yplatform_window_manager *self, int shape);
+
     /* Main-thread side — apply one drained WINDOW_* event by calling
      * GLFW. The clipboard manager's drain dispatches here. */
     void (*handle_event)(struct yetty_yplatform_window_manager *self,

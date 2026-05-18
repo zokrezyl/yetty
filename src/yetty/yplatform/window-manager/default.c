@@ -31,12 +31,24 @@ struct yetty_yplatform_glfw_window_manager {
      * Without it the render thread keeps spinning yetty's event loop
      * after the main thread exits, and the join() at shutdown hangs. */
     struct yetty_ycore_xthread_event_pipe *input_pipe;
+    /* Mouse-cursor cache. The cursor pointers are created lazily on
+     * first request via glfwCreateStandardCursor and reused; reapplying
+     * the same shape is a cheap no-op. `applied_shape` tracks the
+     * value currently bound to the window so handle_event can skip
+     * redundant glfwSetCursor calls. */
+    GLFWcursor *cursors[5]; /* indexed by enum yetty_ycore_cursor_shape */
+    int applied_shape;
 };
 
 static void glfw_window_manager_destroy(struct yetty_yplatform_window_manager *self)
 {
     struct yetty_yplatform_glfw_window_manager *m =
         container_of(self, struct yetty_yplatform_glfw_window_manager, base);
+    for (size_t i = 0; i < sizeof(m->cursors) / sizeof(m->cursors[0]); i++) {
+        if (m->cursors[i]) {
+            glfwDestroyCursor(m->cursors[i]);
+        }
+    }
     free(m);
 }
 
@@ -92,6 +104,15 @@ static void glfw_window_manager_drag_by(struct yetty_yplatform_window_manager *s
         container_of(self, struct yetty_yplatform_glfw_window_manager, base);
     struct yetty_yui_event ev = {.type = YETTY_YCORE_WINDOW_DRAG_BY,
                                  .window_drag = {.dx = dx, .dy = dy}};
+    post_event(m, &ev);
+}
+
+static void glfw_window_manager_set_cursor(struct yetty_yplatform_window_manager *self, int shape)
+{
+    struct yetty_yplatform_glfw_window_manager *m =
+        container_of(self, struct yetty_yplatform_glfw_window_manager, base);
+    struct yetty_yui_event ev = {.type = YETTY_YCORE_SET_CURSOR,
+                                 .set_cursor = {.shape = shape}};
     post_event(m, &ev);
 }
 
@@ -166,6 +187,33 @@ static void glfw_window_manager_handle_event(struct yetty_yplatform_window_manag
                          y + (int)(event->window_drag.dy * sy));
         break;
     }
+    case YETTY_YCORE_SET_CURSOR: {
+        int shape = event->set_cursor.shape;
+        if (shape < 0 ||
+            (size_t)shape >= sizeof(m->cursors) / sizeof(m->cursors[0])) {
+            break;
+        }
+        if (shape == m->applied_shape) {
+            break; /* idempotent — already bound. */
+        }
+        /* Map enum yetty_ycore_cursor_shape onto GLFW standard cursors.
+         * Lazily create on first use; the cached pointer is reused for
+         * subsequent applies. NULL = restore default arrow. */
+        if (!m->cursors[shape] && shape != YETTY_YCORE_CURSOR_DEFAULT) {
+            int glfw_shape = GLFW_ARROW_CURSOR;
+            switch (shape) {
+            case YETTY_YCORE_CURSOR_HRESIZE: glfw_shape = GLFW_HRESIZE_CURSOR; break;
+            case YETTY_YCORE_CURSOR_VRESIZE: glfw_shape = GLFW_VRESIZE_CURSOR; break;
+            case YETTY_YCORE_CURSOR_IBEAM:   glfw_shape = GLFW_IBEAM_CURSOR;   break;
+            case YETTY_YCORE_CURSOR_HAND:    glfw_shape = GLFW_HAND_CURSOR;    break;
+            default: break;
+            }
+            m->cursors[shape] = glfwCreateStandardCursor(glfw_shape);
+        }
+        glfwSetCursor(m->window, m->cursors[shape]); /* NULL → default. */
+        m->applied_shape = shape;
+        break;
+    }
     case YETTY_YCORE_WINDOW_RESIZE_BY: {
         int ww = 0, wh = 0, fw = 0, fh = 0;
         glfwGetWindowSize(m->window, &ww, &wh);
@@ -198,6 +246,7 @@ static const struct yetty_yplatform_window_manager_ops glfw_window_manager_ops =
     .request_close = glfw_window_manager_request_close,
     .drag_by = glfw_window_manager_drag_by,
     .resize_by = glfw_window_manager_resize_by,
+    .set_cursor = glfw_window_manager_set_cursor,
     .handle_event = glfw_window_manager_handle_event,
 };
 
