@@ -20,6 +20,10 @@ struct yetty_yrender_gpu_allocator_impl {
     struct yetty_yrender_allocation allocations[MAX_ALLOCATIONS];
     size_t allocation_count;
     uint64_t total_bytes;
+    /* High-water marks. Updated whenever a create_* call grows the live
+     * counts; read by get_stats for the yui GPU-info dialog. */
+    size_t peak_allocations;
+    uint64_t peak_total_bytes;
 };
 
 /* Forward declarations */
@@ -34,6 +38,8 @@ static void gpu_allocator_release_texture(struct yetty_ydraw_gpu_allocator *self
                                           WGPUTexture texture);
 static uint64_t gpu_allocator_total_allocated_bytes(
     const struct yetty_ydraw_gpu_allocator *self);
+static void gpu_allocator_get_stats(const struct yetty_ydraw_gpu_allocator *self,
+                                    struct yetty_yrender_gpu_allocator_stats *out);
 
 static const struct yetty_yrender_gpu_allocator_ops gpu_allocator_ops = {
     .destroy = gpu_allocator_destroy,
@@ -42,6 +48,7 @@ static const struct yetty_yrender_gpu_allocator_ops gpu_allocator_ops = {
     .create_texture = gpu_allocator_create_texture,
     .release_texture = gpu_allocator_release_texture,
     .total_allocated_bytes = gpu_allocator_total_allocated_bytes,
+    .get_stats = gpu_allocator_get_stats,
 };
 
 static void label_to_string(WGPUStringView label, char *out, size_t out_size)
@@ -104,6 +111,12 @@ static WGPUBuffer gpu_allocator_create_buffer(struct yetty_ydraw_gpu_allocator *
     alloc->type = YETTY_YRENDER_ALLOC_TYPE_BUFFER;
     alloc->handle = buffer;
     impl->total_bytes += desc->size;
+    if (impl->allocation_count > impl->peak_allocations) {
+        impl->peak_allocations = impl->allocation_count;
+    }
+    if (impl->total_bytes > impl->peak_total_bytes) {
+        impl->peak_total_bytes = impl->total_bytes;
+    }
 
     ydebug("GPU [+] buffer '%s': %lu bytes — total: %lu bytes", alloc->name,
            (unsigned long)desc->size, (unsigned long)impl->total_bytes);
@@ -161,6 +174,12 @@ static WGPUTexture gpu_allocator_create_texture(struct yetty_ydraw_gpu_allocator
     alloc->type = YETTY_YRENDER_ALLOC_TYPE_TEXTURE;
     alloc->handle = texture;
     impl->total_bytes += size;
+    if (impl->allocation_count > impl->peak_allocations) {
+        impl->peak_allocations = impl->allocation_count;
+    }
+    if (impl->total_bytes > impl->peak_total_bytes) {
+        impl->peak_total_bytes = impl->total_bytes;
+    }
 
     ydebug("GPU [+] texture '%s': %ux%u = %lu bytes — total: %lu bytes", alloc->name,
            desc->size.width, desc->size.height, (unsigned long)size,
@@ -200,6 +219,38 @@ static uint64_t gpu_allocator_total_allocated_bytes(
     const struct yetty_yrender_gpu_allocator_impl *impl =
         (const struct yetty_yrender_gpu_allocator_impl *)self;
     return impl->total_bytes;
+}
+
+/* Walk the live-allocation table to derive per-type counts + bytes.
+ * O(n) over the table (capped at MAX_ALLOCATIONS = 1024), so cheap
+ * enough to call on every dialog-open / refresh click. */
+static void gpu_allocator_get_stats(const struct yetty_ydraw_gpu_allocator *self,
+                                    struct yetty_yrender_gpu_allocator_stats *out)
+{
+    if (!out) {
+        return;
+    }
+    memset(out, 0, sizeof(*out));
+    if (!self) {
+        return;
+    }
+    const struct yetty_yrender_gpu_allocator_impl *impl =
+        (const struct yetty_yrender_gpu_allocator_impl *)self;
+    for (size_t i = 0; i < impl->allocation_count; i++) {
+        const struct yetty_yrender_allocation *a = &impl->allocations[i];
+        if (a->type == YETTY_YRENDER_ALLOC_TYPE_BUFFER) {
+            out->buffer_count++;
+            out->buffer_bytes += a->size;
+        } else {
+            out->texture_count++;
+            out->texture_bytes += a->size;
+        }
+    }
+    out->total_bytes = impl->total_bytes;
+    out->live_allocations = (uint32_t)impl->allocation_count;
+    out->peak_allocations = (uint32_t)impl->peak_allocations;
+    out->peak_total_bytes = impl->peak_total_bytes;
+    out->capacity = MAX_ALLOCATIONS;
 }
 
 struct yetty_yrender_gpu_allocator_result yetty_yrender_gpu_allocator_create(WGPUDevice device)

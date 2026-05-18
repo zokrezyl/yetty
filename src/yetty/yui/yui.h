@@ -36,6 +36,7 @@ extern "C" {
 struct yetty_yui;
 struct yetty_context;
 struct yetty_ydraw_target;
+struct yetty_ygui_widget;
 
 YETTY_YRESULT_DECLARE(yetty_yui_ptr, struct yetty_yui *);
 
@@ -58,6 +59,15 @@ enum yetty_yui_view_kind {
  * Per-kind config fields (host, port, ...) are still TODO — first pass
  * just delivers the kind. */
 typedef void (*yetty_yui_connect_cb)(void *userdata, enum yetty_yui_view_kind kind);
+
+/* Fired when the user picks a view kind from a Split V / Split H
+ * submenu in the right-click context menu. The host (yetty.c) splits
+ * the currently-focused pane in the active workspace using the given
+ * orientation and creates the kind-specific view in the new sibling.
+ * horizontal == 1 means the new sibling sits to the right; 0 means
+ * below. */
+typedef void (*yetty_yui_split_cb)(void *userdata, enum yetty_yui_view_kind kind,
+                                   int horizontal);
 
 /* Read the current value of a dialog's textinput. `kind` selects the
  * dialog; `field_idx` indexes into s_views[kind].fields[] (0-based).
@@ -122,9 +132,41 @@ struct yetty_platform_pty *yetty_yui_producer_pty(struct yetty_yui *yui);
  * each opens the corresponding config dialog. */
 void yetty_yui_show_view_menu(struct yetty_yui *yui, float anchor_x, float anchor_y);
 
+/* Open the right-click context menu at (anchor_x, anchor_y). Items:
+ *   GPU info…
+ *   Split vertically  ▸  (drills into view-kind list, fires split_cb)
+ *   Split horizontally ▸ (drills into view-kind list, fires split_cb)
+ * The split_cb installed via yetty_yui_set_split_callback receives the
+ * chosen kind + orientation; the host is responsible for finding the
+ * target pane (typically the one most recently focused / right-clicked)
+ * and performing the workspace split. */
+void yetty_yui_show_context_menu(struct yetty_yui *yui, float anchor_x, float anchor_y);
+
+/* Application statusbar — STATUSBAR widget pinned to the bottom of the
+ * engine canvas by engine_set_statusbar. Lives for the whole yui
+ * lifetime. The default content is two flex-laid-out labels (left flush,
+ * right flush). The simple setters update those labels' text; callers
+ * that need richer widgets in the bar add children directly to the
+ * widget returned by yetty_yui_statusbar(). NULL when ygui engine
+ * allocation failed. */
+struct yetty_ygui_widget *yetty_yui_statusbar(struct yetty_yui *yui);
+void yetty_yui_set_status_left(struct yetty_yui *yui, const char *text);
+void yetty_yui_set_status_right(struct yetty_yui *yui, const char *text);
+
+/* Pixel height of the statusbar strip, or 0 when no statusbar is
+ * attached. Used by the tabbar / workspace layout so terminal cells
+ * don't render under the bar. Mirrors the tabbar's own
+ * YETTY_YUI_TABBAR_HEIGHT — yui carves out the bottom strip the way
+ * the tabbar carves out the top. */
+float yetty_yui_statusbar_height(const struct yetty_yui *yui);
+
 /* Subscribe to "Connect" presses in any view's config dialog. The
  * registered callback is called from the ygui widget tree at click
  * time. Pass NULL to disarm. The yui does not own `userdata`. */
+/* Install the split-handler invoked when the user picks a kind under
+ * the context menu's "Split V/H ▸" submenu. Pass NULL to disarm. */
+void yetty_yui_set_split_callback(struct yetty_yui *yui, yetty_yui_split_cb cb, void *userdata);
+
 void yetty_yui_set_connect_callback(struct yetty_yui *yui, yetty_yui_connect_cb cb,
                                     void *userdata);
 

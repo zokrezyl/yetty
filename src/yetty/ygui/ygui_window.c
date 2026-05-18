@@ -184,6 +184,58 @@ static int window_on_press(struct yetty_ygui_widget *self, float lx, float ly, y
         }
         return 1;
     }
+
+    /* Title-bar grab — anywhere in the title strip outside the
+     * hamburger button starts a window drag. We record ABSOLUTE mouse
+     * coords at press time (not the widget-local lx/ly the engine
+     * passes in) because the engine recomputes lx as
+     * `mouse_x - effective_x` on every move, and effective_x changes
+     * as soon as we move the window, so widget-local deltas accumulate
+     * a one-frame lag and the window drifts behind the cursor (visible
+     * as flicker). lx + self->effective_x is the invariant: it always
+     * equals the absolute mouse_x regardless of any intervening
+     * layout. */
+    float th = window_title_h(self);
+    if (ly >= 0 && ly < th) {
+        self->data.window.dragging = 1;
+        self->data.window.drag_press_lx = lx + self->effective_x;
+        self->data.window.drag_press_ly = ly + self->effective_y;
+        self->data.window.drag_orig_x = self->x;
+        self->data.window.drag_orig_y = self->y;
+        return 1;
+    }
+    return 0;
+}
+
+static int window_on_drag(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
+{
+    (void)out;
+    if (!self->data.window.dragging) {
+        return 0;
+    }
+    /* Absolute-mouse delta — see comment in window_on_press for why we
+     * can't use widget-local lx/ly directly. */
+    float mouse_x = lx + self->effective_x;
+    float mouse_y = ly + self->effective_y;
+    float dx = mouse_x - self->data.window.drag_press_lx;
+    float dy = mouse_y - self->data.window.drag_press_ly;
+    self->x = self->data.window.drag_orig_x + dx;
+    self->y = self->data.window.drag_orig_y + dy;
+    self->authored_x = self->x;
+    self->authored_y = self->y;
+    self->dirty = 1;
+    if (self->engine) {
+        self->engine->dirty = 1;
+    }
+    return 1;
+}
+
+static int window_on_release(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
+{
+    (void)lx;
+    (void)ly;
+    (void)out;
+    self->data.window.dragging = 0;
     return 0;
 }
 
@@ -197,6 +249,8 @@ static void window_destroy(struct yetty_ygui_widget *self)
 static const struct yetty_ygui_widget_vtable window_vtable = {
     .render = window_render,
     .on_press = window_on_press,
+    .on_drag = window_on_drag,
+    .on_release = window_on_release,
     .destroy = window_destroy,
 };
 

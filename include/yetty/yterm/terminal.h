@@ -108,13 +108,21 @@ struct yetty_yterm_terminal_layer_ops {
     struct yetty_ycore_void_result (*process_input)(
         struct yetty_yrender_terminal_layer *self,
         struct yetty_ywire_wire_statemachine *osc_statemachine);
+    /* Single atomic update: grid (cols/rows) AND cell pixel size. The
+     * canvas's grid_pixel area is `cols * cell_w x rows * cell_h`, and
+     * widget/primitive coordinates are mapped to fragments via that
+     * product — so the two must move together or primitives at
+     * the right/bottom edge get scaled or clipped (statusbar at H-22
+     * was the trigger). Used for both window resize (caller picks
+     * rows = round(client_h / cell_h_target), cell_h = client_h / rows
+     * so the product equals the framebuffer exactly) and structural
+     * zoom (caller passes scaled cell_size with the current grid).
+     * Implementations propagate cell_size into the canvas via
+     * canvas->ops->set_cell_size, into the GPU uniform, and ask the
+     * font to re-rasterise where relevant. */
     struct yetty_ycore_void_result (*resize_grid)(struct yetty_yrender_terminal_layer *self,
-                                                  struct yetty_ycore_grid_size grid_size);
-    /* Change the layer's cell pixel size. Implementations must also push the
-   * new value into any GPU uniform the layer maintains. Used by structural
-   * zoom (YETTY_EVENT_ZOOM_CELL_SIZE). */
-    struct yetty_ycore_void_result (*set_cell_size)(struct yetty_yrender_terminal_layer *self,
-                                                    struct yetty_ycore_pixel_size cell_size);
+                                                  struct yetty_ycore_grid_size grid_size,
+                                                  struct yetty_ycore_pixel_size cell_size);
     /* Push visual (shader-level) zoom state into the layer's uniforms. The
    * layer's fragment shader applies the transform at the start of fs_main so
    * all downstream MSDF/SDF math runs at the *transformed* pixel — unlike
@@ -248,7 +256,8 @@ struct yetty_ycore_void_result yetty_yterm_terminal_destroy(struct yetty_yterm_t
 struct yetty_yui_view *yetty_yterm_terminal_as_view(struct yetty_yterm_terminal *terminal);
 
 struct yetty_ycore_void_result yetty_yterm_terminal_resize_grid(
-    struct yetty_yterm_terminal *terminal, struct yetty_ycore_grid_size grid_size);
+    struct yetty_yterm_terminal *terminal, struct yetty_ycore_grid_size grid_size,
+    struct yetty_ycore_pixel_size cell_size);
 
 /* Terminal state */
 uint32_t yetty_yterm_terminal_get_cols(const struct yetty_yterm_terminal *terminal);

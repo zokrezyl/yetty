@@ -352,6 +352,14 @@ struct yetty_ygui_widget {
             int   length;   /* bytes (excluding NUL) */
             int   cursor;   /* byte offset, 0..length */
             int   scroll_line; /* first visible line index */
+            /* Word-wrap mode. When non-zero, the renderer breaks each
+             * logical line into visual sub-lines that fit the widget's
+             * inner width at word boundaries (falling back to a hard
+             * break mid-word for tokens wider than the widget). When
+             * zero, lines that don't fit are truncated at the widget's
+             * right edge so no glyph is ever painted outside the
+             * widget's surface. */
+            int   wrap;
         } textarea;
 
         struct {
@@ -607,6 +615,15 @@ struct yetty_ygui_widget {
              * window_set_statusbar. NULL = no statusbar. The widget
              * is reparented into the window's child list. */
             struct yetty_ygui_widget *statusbar;
+            /* Title-bar drag state — set in on_press when the click
+             * lands in the title strip (and not on the hamburger
+             * button), consumed by on_drag to move the window.
+             * drag_press_l[xy] are widget-local at press time;
+             * drag_orig_[xy] capture the window's authored position
+             * at press so on_drag deltas are press-relative. */
+            int   dragging;
+            float drag_press_lx, drag_press_ly;
+            float drag_orig_x,    drag_orig_y;
         } window;
 
         struct {
@@ -617,6 +634,12 @@ struct yetty_ygui_widget {
              * pure separator. */
             ygui_widget_click_fn *item_callbacks;
             void **item_userdata;
+            /* Per-row "drill" flag. When non-zero, clicking the item
+             * fires its callback BUT does not close the menu — the
+             * callback is expected to re-populate items in place
+             * (drill-down navigation pattern). Action items leave this
+             * at 0 and the menu closes after the callback. */
+            int *item_is_drill;
             int n_items;
             int capacity;
             /* Row height in pixels. 0 = derive from theme. */
@@ -625,6 +648,17 @@ struct yetty_ygui_widget {
             /* Index of the currently-hovered row (for highlight). -1
              * when the cursor isn't over any clickable row. */
             int hover_index;
+            /* Optional header rendered at the top of the menu body.
+             * `title` is the breadcrumb / path label (e.g. "Menu" or
+             * "Menu › New view"); NULL/empty means no header. When
+             * `on_back` is set a `<` chevron button is painted at the
+             * left of the header and consumes its hit area — the menu
+             * stays open and the callback re-populates the items in
+             * place (Chrome Android-style drill-down). on_back_userdata
+             * is opaque to the widget; it's forwarded as-is. */
+            char *title;
+            ygui_widget_click_fn on_back;
+            void *on_back_userdata;
         } popup_menu;
 
         struct {

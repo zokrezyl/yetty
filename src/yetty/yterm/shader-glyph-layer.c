@@ -321,9 +321,8 @@ static struct yetty_ycore_void_result shader_glyph_process_input(
     struct yetty_yrender_terminal_layer *self,
     struct yetty_ywire_wire_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result shader_glyph_resize_grid(
-    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size);
-static struct yetty_ycore_void_result shader_glyph_set_cell_size(
-    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_pixel_size cell_size);
+    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size,
+    struct yetty_ycore_pixel_size cell_size);
 static struct yetty_ycore_void_result shader_glyph_set_visual_zoom(
     struct yetty_yrender_terminal_layer *self, float scale, float off_x, float off_y);
 static struct yetty_yrender_gpu_resource_set_result shader_glyph_get_gpu_resource_set(
@@ -346,7 +345,6 @@ static const struct yetty_yterm_terminal_layer_ops shader_glyph_layer_ops = {
     .destroy = shader_glyph_destroy,
     .process_input = shader_glyph_process_input,
     .resize_grid = shader_glyph_resize_grid,
-    .set_cell_size = shader_glyph_set_cell_size,
     .set_visual_zoom = shader_glyph_set_visual_zoom,
     .get_gpu_resource_set = shader_glyph_get_gpu_resource_set,
     .render = shader_glyph_render,
@@ -532,21 +530,8 @@ static struct yetty_ycore_void_result shader_glyph_process_input(
 }
 
 static struct yetty_ycore_void_result shader_glyph_resize_grid(
-    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size)
-{
-    struct yetty_yterm_shader_glyph_layer *layer =
-        container_of(self, struct yetty_yterm_shader_glyph_layer, base);
-
-    self->grid_size = grid_size;
-    set_grid_size(&layer->rs, (float)grid_size.cols, (float)grid_size.rows);
-    layer->rs.pixel_size.width = (float)grid_size.cols * self->cell_size.width;
-    layer->rs.pixel_size.height = (float)grid_size.rows * self->cell_size.height;
-    self->dirty = 1;
-    return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result shader_glyph_set_cell_size(
-    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_pixel_size cell_size)
+    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size,
+    struct yetty_ycore_pixel_size cell_size)
 {
     struct yetty_yterm_shader_glyph_layer *layer =
         container_of(self, struct yetty_yterm_shader_glyph_layer, base);
@@ -555,10 +540,12 @@ static struct yetty_ycore_void_result shader_glyph_set_cell_size(
         return YETTY_ERR(yetty_ycore_void, "invalid cell size");
     }
 
+    self->grid_size = grid_size;
     self->cell_size = cell_size;
+    set_grid_size(&layer->rs, (float)grid_size.cols, (float)grid_size.rows);
     set_cell_size(&layer->rs, cell_size.width, cell_size.height);
-    layer->rs.pixel_size.width = (float)self->grid_size.cols * cell_size.width;
-    layer->rs.pixel_size.height = (float)self->grid_size.rows * cell_size.height;
+    layer->rs.pixel_size.width = (float)grid_size.cols * cell_size.width;
+    layer->rs.pixel_size.height = (float)grid_size.rows * cell_size.height;
     self->dirty = 1;
     return YETTY_OK_VOID();
 }

@@ -245,7 +245,8 @@ static struct yetty_ycore_void_result text_layer_process_input(
     struct yetty_yrender_terminal_layer *self,
     struct yetty_ywire_wire_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result text_layer_resize_grid(
-    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size);
+    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size,
+    struct yetty_ycore_pixel_size cell_size);
 static struct yetty_yrender_gpu_resource_set_result text_layer_get_gpu_resource_set(
     const struct yetty_yrender_terminal_layer *self);
 static int text_layer_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods);
@@ -629,11 +630,11 @@ static struct yetty_ycore_void_result text_layer_set_cursor(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result text_layer_set_cell_size(
-    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_pixel_size cell_size)
+/* Shared inner that updates the layer's cell stride. resize_grid below
+ * combines this with a grid-size update so callers can't forget either. */
+static struct yetty_ycore_void_result text_layer_apply_cell_size(
+    struct yetty_yterm_terminal_text_layer *text_layer, struct yetty_ycore_pixel_size cell_size)
 {
-    struct yetty_yterm_terminal_text_layer *text_layer =
-        container_of(self, struct yetty_yterm_terminal_text_layer, base);
     if (cell_size.width <= 0.0f || cell_size.height <= 0.0f) {
         return YETTY_ERR(yetty_ycore_void, "invalid cell size");
     }
@@ -645,17 +646,12 @@ static struct yetty_ycore_void_result text_layer_set_cell_size(
         struct yetty_ycore_void_result r =
             text_layer->font->ops->set_cell_size(text_layer->font, cell_size);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
-                            "text_layer_set_cell_size: font set_cell_size failed");
+                            "text_layer_apply_cell_size: font set_cell_size failed");
     }
 
-    self->cell_size = cell_size;
-    /* Push to the GPU uniform the shader actually reads. Keeping base.cell_size
-     * in sync without this is invisible to the shader. */
+    text_layer->base.cell_size = cell_size;
+    /* Push to the GPU uniform the shader actually reads. */
     set_cell_size(&text_layer->rs, cell_size.width, cell_size.height);
-    text_layer->rs.pixel_size.width = (float)self->grid_size.cols * cell_size.width;
-    text_layer->rs.pixel_size.height = (float)self->grid_size.rows * cell_size.height;
-    self->dirty = 1;
-    ydebug("text_layer_set_cell_size: %.1fx%.1f", cell_size.width, cell_size.height);
     return YETTY_OK_VOID();
 }
 
@@ -674,7 +670,6 @@ static const struct yetty_yterm_terminal_layer_ops text_layer_ops = {
     .destroy = text_layer_destroy,
     .process_input = text_layer_process_input,
     .resize_grid = text_layer_resize_grid,
-    .set_cell_size = text_layer_set_cell_size,
     .set_visual_zoom = text_layer_set_visual_zoom,
     .get_gpu_resource_set = text_layer_get_gpu_resource_set,
     .render = text_layer_render,
@@ -1038,7 +1033,8 @@ static struct yetty_ycore_void_result text_layer_process_input(
 }
 
 static struct yetty_ycore_void_result text_layer_resize_grid(
-    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size)
+    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size,
+    struct yetty_ycore_pixel_size cell_size)
 {
     struct yetty_yterm_terminal_text_layer *text_layer =
         container_of(self, struct yetty_yterm_terminal_text_layer, base);
@@ -1047,11 +1043,15 @@ static struct yetty_ycore_void_result text_layer_resize_grid(
         return YETTY_ERR(yetty_ycore_void, "vterm is NULL");
     }
 
+    struct yetty_ycore_void_result cr = text_layer_apply_cell_size(text_layer, cell_size);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "text_layer_resize_grid: apply_cell_size");
+
     vterm_set_size(text_layer->vterm, (int)grid_size.rows, (int)grid_size.cols);
     self->grid_size = grid_size;
     set_grid_size(&text_layer->rs, (float)grid_size.cols, (float)grid_size.rows);
 
-    /* Update pixel size */
+    /* Pixel size = grid * cell. With caller picking cell_size = client / rows,
+     * this matches the framebuffer exactly. */
     text_layer->rs.pixel_size.width = (float)grid_size.cols * self->cell_size.width;
     text_layer->rs.pixel_size.height = (float)grid_size.rows * self->cell_size.height;
 

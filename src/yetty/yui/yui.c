@@ -26,12 +26,14 @@ struct ygui_engine_ptr_result yetty_ygui_engine_internal_alloc_for_yui(
 #include <yetty/ynotify/ynotify.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/thread.h>
+#include <yetty/yrender/gpu-allocator.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterm/osc-codes.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yterm/terminal.h>
 #include <yetty/yterm/ydraw-layer.h>
 #include <yetty/ytrace/ytrace.h>
+#include <yetty/ywebgpu/utils.h>
 
 struct yetty_yui {
     /* Producer-side endpoint. ygui's output flows in here via
@@ -56,11 +58,16 @@ struct yetty_yui {
      * → SM → layer. */
     struct yetty_ygui_engine *engine;
 
-    /* The v-menu (popup) and per-view config dialogs, parked on `engine`.
-     * Menus start closed; tabbar's v-click opens v_menu, and selecting
-     * an item opens the matching dialog. Dialog widget pointers are
-     * needed so item callbacks can address-by-name. */
-    struct yetty_ygui_widget *v_menu;
+    /* Single hamburger / app menu, parked on `engine` and starting
+     * closed. Drill-down levels reuse the same popup widget — when
+     * the user clicks "New view ▸" the callback clears the items in
+     * place and re-populates with the view choices + a `<` back
+     * handler that restores the root level. The "current level" is
+     * tracked by app_menu_level so the back handler knows where to
+     * land. Dialog widget pointers are needed so item callbacks can
+     * address-by-name. */
+    struct yetty_ygui_widget *app_menu;
+    int app_menu_level; /* 0 = root, 1 = "New view" submenu */
     struct yetty_ygui_widget *dialogs[YETTY_YUI_VIEW_KIND_COUNT]; /* indexed by view_kind */
 
     /* Per-dialog textinput handles, indexed by [view_kind][field_idx]
@@ -69,9 +76,35 @@ struct yetty_yui {
      * unused slots (kinds with fewer fields, or kinds with no dialog). */
     struct yetty_ygui_widget *dialog_inputs[YETTY_YUI_VIEW_KIND_COUNT][4];
 
+    /* GPU info dialog — opened from the app menu's "GPU info…" item.
+     * Read-only textarea summarising WebGPU adapter info (vendor,
+     * device, backend, limits) and live GPU-allocator stats. The
+     * adapter + allocator pointers are stashed at create so the
+     * "Refresh" button can re-fetch on demand. Borrowed pointers; both
+     * are owned by the parent yetty context which outlives yui. */
+    struct yetty_ygui_widget *gpu_info_dialog;
+    struct yetty_ygui_widget *gpu_info_textarea;
+    WGPUAdapter gpu_info_adapter;
+    const struct yetty_ydraw_gpu_allocator *gpu_info_allocator;
+
+    /* Application statusbar — STATUSBAR widget pinned to the bottom of
+     * the engine's canvas via engine_set_statusbar. The widget paints
+     * the brand-themed strip (bg_header band + top hairline) plus
+     * vertically-centered left/right text via its own render. The
+     * default render_all walks children too, so apps can layer ygui
+     * widgets on top via yetty_yui_statusbar(). */
+    struct yetty_ygui_widget *statusbar;
+
     /* Connect dispatch — invoked from each dialog's "Connect" button. */
     yetty_yui_connect_cb connect_cb;
     void               *connect_userdata;
+
+    /* Split dispatch — invoked when the user picks a view kind under
+     * the context menu's "Split V/H ▸" submenu. The host (yetty.c)
+     * splits the focused pane with the given orientation and creates
+     * the right view in the new sibling. */
+    yetty_yui_split_cb split_cb;
+    void              *split_userdata;
 
     /* Cached for the memory-pty wake bridge. */
     struct yetty_yevent_event_loop *loop;
@@ -239,6 +272,28 @@ static void yui_menu_open_dialog(struct yetty_ygui_widget *item, void *userdata)
 static void yui_menu_spawn_shell(struct yetty_ygui_widget *item, void *userdata);
 static void yui_dialog_connect(struct yetty_ygui_widget *button, void *userdata);
 static void yui_dialog_cancel(struct yetty_ygui_widget *button, void *userdata);
+static void yui_app_menu_open_new_view(struct yetty_ygui_widget *item, void *userdata);
+static void yui_app_menu_open_gpu_info(struct yetty_ygui_widget *item, void *userdata);
+static void yui_app_menu_back_to_root(struct yetty_ygui_widget *item, void *userdata);
+static void yui_app_menu_populate_root(struct yetty_yui *yui);
+static void yui_app_menu_populate_new_view(struct yetty_yui *yui);
+static void yui_app_menu_populate_context_root(struct yetty_yui *yui);
+static void yui_app_menu_populate_split_kind(struct yetty_yui *yui, int horizontal);
+static void yui_context_open_split_vertical(struct yetty_ygui_widget *item, void *userdata);
+static void yui_context_open_split_horizontal(struct yetty_ygui_widget *item, void *userdata);
+static void yui_split_kind_action(struct yetty_ygui_widget *item, void *userdata);
+static void yui_split_back_to_context(struct yetty_ygui_widget *item, void *userdata);
+static void yui_gpu_info_refresh(struct yetty_ygui_widget *button, void *userdata);
+static void yui_gpu_info_close(struct yetty_ygui_widget *button, void *userdata);
+
+/* Per-kind callback bundle for split-from-context. Like s_cb_ctx but
+ * stashes orientation too. Indexed [orientation 0=vertical/1=horizontal][kind]. */
+struct yui_split_ctx {
+    struct yetty_yui *yui;
+    enum yetty_yui_view_kind kind;
+    int horizontal;
+};
+static struct yui_split_ctx s_split_ctx[2][YETTY_YUI_VIEW_KIND_COUNT];
 
 /* Per-callback bundle: which yui, which kind. Lives for the engine's
  * lifetime — freed in destroy. */
@@ -317,20 +372,27 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     yui->yui_endpoint = pp.value.a;
     yui->render_endpoint = pp.value.b;
 
-    /* Scene-canvas ydraw layer. Computes a coarse cols/rows from the
-     * window dims; primitives are absolute-pixel so the grid is just an
-     * addressing index for the scene-canvas's primitive lookup. */
-    uint32_t cols = (uint32_t)((float)surface_w / cell_w);
-    uint32_t rows = (uint32_t)((float)surface_h / cell_h);
+    /* Scene-canvas ydraw layer. yui primitives are absolute-pixel, so
+     * we don't care about the grid stride for layout — only that the
+     * canvas's `cols * cell_w x rows * cell_h` equals the framebuffer
+     * exactly (otherwise the shader's NDC→pixel map stretches and
+     * primitives pinned to the edges, like the statusbar at H-22, get
+     * shifted/clipped). Algorithm: round the requested cell stride
+     * against the framebuffer to pick integer cols/rows, then re-derive
+     * actual cell stride as `pixel / cells`. */
+    uint32_t cols = (uint32_t)((float)surface_w / cell_w + 0.5f);
+    uint32_t rows = (uint32_t)((float)surface_h / cell_h + 0.5f);
     if (cols == 0) {
         cols = 1;
     }
     if (rows == 0) {
         rows = 1;
     }
+    float actual_cell_w = (float)surface_w / (float)cols;
+    float actual_cell_h = (float)surface_h / (float)rows;
 
     struct yetty_yterm_terminal_layer_result lr = yetty_yterm_ydraw_layer_create(
-        YETTY_YDRAW_LAYER_KIND_SCENE, cols, rows, cell_w, cell_h, context,
+        YETTY_YDRAW_LAYER_KIND_SCENE, cols, rows, actual_cell_w, actual_cell_h, context,
         /*request_render_fn=*/NULL, /*request_render_userdata=*/NULL,
         /*scroll_fn=*/NULL, /*scroll_userdata=*/NULL,
         /*cursor_fn=*/NULL, /*cursor_userdata=*/NULL);
@@ -356,7 +418,11 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     }
     yui->sm = sr.value;
 
-    /* Register YDRAW codes against the SM. */
+    /* Register YDRAW codes against the SM. ygui's producer (ygui_osc.c)
+     * emits SCENE_BIN — that's the one that must be wired for the v-menu
+     * to reach the scene canvas. CLEAR/BIN/OVERLAY are kept registered so
+     * future producers that target the same yui layer (e.g. an external
+     * yface tool reusing this transport) still work. */
     struct yetty_ycore_void_result rr;
     rr = yetty_ywire_wire_statemachine_register(yui->sm, YETTY_OSC_YDRAW_CLEAR, yui->layer);
     YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register CLEAR");
@@ -364,6 +430,8 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register BIN");
     rr = yetty_ywire_wire_statemachine_register(yui->sm, YETTY_OSC_YDRAW_OVERLAY, yui->layer);
     YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register OVERLAY");
+    rr = yetty_ywire_wire_statemachine_register(yui->sm, YETTY_OSC_YDRAW_SCENE_BIN, yui->layer);
+    YETTY_RETURN_IF_ERR(yetty_yui_ptr, rr, "yui_create: register SCENE_BIN");
 
     /* Wake the consumer side via post_to_loop whenever the producer
      * writes — defers even in same-thread mode, so the wake never
@@ -382,20 +450,31 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         yetty_ygui_engine_set_output_pty(yui->engine, yui->yui_endpoint);
         yetty_ygui_engine_set_display_pixel_size(yui->engine, (float)surface_w, (float)surface_h);
 
-        /* Build the v-menu (closed at start) and one config dialog per
-         * view kind. Each dialog is positioned roughly under the v-button
-         * with a small offset so successive dialogs don't stack on top
-         * of one another. */
-        yui->v_menu = yetty_ygui_engine_popup_menu(yui->engine, "yui_v_menu",
-                                                   /*x=*/0, /*y=*/0,
-                                                   /*w=*/220);
-        if (yui->v_menu) {
-            yetty_ygui_widget_popup_menu_set_modal(yui->v_menu, 0);
+        /* Build the single hamburger / app menu, then one config dialog
+         * per view kind. The menu starts closed and at the root level;
+         * tabbar's hamburger click opens it via
+         * yetty_yui_show_view_menu, and the drill-down items swap the
+         * contents in place. Each dialog is positioned roughly under
+         * the hamburger button with a small offset so successive
+         * dialogs don't stack on top of one another. */
+        yui->app_menu = yetty_ygui_engine_popup_menu(yui->engine, "yui_app_menu",
+                                                     /*x=*/0, /*y=*/0,
+                                                     /*w=*/240);
+        yui->app_menu_level = 0;
+        if (yui->app_menu) {
+            yetty_ygui_widget_popup_menu_set_modal(yui->app_menu, 0);
         }
 
         for (int k = 0; k < YETTY_YUI_VIEW_KIND_COUNT; k++) {
             s_cb_ctx[k].yui = yui;
             s_cb_ctx[k].kind = (enum yetty_yui_view_kind)k;
+            /* Seed the per-(orientation, kind) bundle used by the
+             * right-click context menu's split items. */
+            for (int o = 0; o < 2; o++) {
+                s_split_ctx[o][k].yui = yui;
+                s_split_ctx[o][k].kind = (enum yetty_yui_view_kind)k;
+                s_split_ctx[o][k].horizontal = o; /* 0 = vertical, 1 = horizontal */
+            }
 
             /* SHELL has no dialog — its menu item spawns the default shell
              * directly. Skip the widget allocation entirely. */
@@ -497,37 +576,109 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             }
         }
 
-        /* Populate the menu rows. SHELL spawns directly; the rest open
-         * their kind's dialog. Order chosen to match how often each is
-         * used: default shell first, exec right after, then remote
-         * transports grouped at the bottom. */
-        if (yui->v_menu) {
-            static const char *const LABELS[YETTY_YUI_VIEW_KIND_COUNT] = {
-                [YETTY_YUI_VIEW_SHELL]  = "Shell",
-                [YETTY_YUI_VIEW_EXEC]   = "Exec…",
-                [YETTY_YUI_VIEW_SSH]    = "SSH…",
-                [YETTY_YUI_VIEW_TELNET] = "Telnet…",
-                [YETTY_YUI_VIEW_YVNC]   = "yVNC…",
-            };
-            static const int MENU_ORDER[YETTY_YUI_VIEW_KIND_COUNT] = {
-                YETTY_YUI_VIEW_SHELL,
-                YETTY_YUI_VIEW_EXEC,
-                YETTY_YUI_VIEW_SSH,
-                YETTY_YUI_VIEW_TELNET,
-                YETTY_YUI_VIEW_YVNC,
-            };
-            for (int i = 0; i < YETTY_YUI_VIEW_KIND_COUNT; i++) {
-                int k = MENU_ORDER[i];
-                /* SHELL is the only no-dialog item — it dispatches via
-                 * yui_menu_spawn_shell so the connect_cb fires immediately
-                 * with VIEW_SHELL. The rest open their config dialog. */
-                ygui_click_callback_t cb = (k == YETTY_YUI_VIEW_SHELL)
-                                               ? yui_menu_spawn_shell
-                                               : yui_menu_open_dialog;
-                yetty_ygui_widget_popup_menu_add_item(yui->v_menu, LABELS[k], cb,
-                                                       &s_cb_ctx[k]);
+        /* GPU info dialog. Stash adapter + allocator from the yetty
+         * context so the dialog can re-fetch live stats on demand
+         * (the "Refresh" button). Dialog widget tree:
+         *   yui_dlg_gpu_info  (window, hidden at start)
+         *     body            (auto vbox)
+         *       textarea      (readonly-ish; we just rewrite on open)
+         *       actions hbox
+         *         Refresh button
+         *         Close button
+         */
+        yui->gpu_info_adapter = context->gpu_context.adapter;
+        yui->gpu_info_allocator = context->gpu_context.allocator;
+
+        struct yetty_ygui_widget *gpu_dlg = yetty_ygui_engine_window(
+            yui->engine, "yui_dlg_gpu_info", /*x=*/120.0f, /*y=*/80.0f,
+            /*w=*/560.0f, /*h=*/360.0f, "GPU info");
+        yui->gpu_info_dialog = gpu_dlg;
+        if (gpu_dlg) {
+            yetty_ygui_widget_set_visible(gpu_dlg, 0);
+            struct yetty_ygui_widget *body = yetty_ygui_widget_window_body(gpu_dlg);
+            if (body) {
+                yetty_ygui_widget_apply_css(body,
+                    "display:flex;flex-direction:column;gap:10;padding:14 14 14 14;");
+                /* Word-wrapped textarea — long lines (notably the
+                 * GPU-limits dump) break at word boundaries instead of
+                 * being truncated or, worse, painting past the right
+                 * edge of the widget. */
+                struct yetty_ygui_widget *ta = yetty_ygui_engine_textarea_wrapped(
+                    yui->engine, "yui_dlg_gpu_info/text", 0, 0, 0, 0,
+                    "(no info yet — click Refresh)");
+                if (ta) {
+                    yetty_ygui_widget_apply_css(ta, "flex:1 1 0;");
+                    yetty_ygui_widget_add_child(body, ta);
+                    yui->gpu_info_textarea = ta;
+                }
+                /* Authored_h = 36 — NOT just `min-height:36;` — because
+                 * the flex algorithm distributes free space using
+                 * `flex_basis = authored_h` when no explicit basis is
+                 * set, and applies `min-height` only as a clamp AFTER
+                 * the distribution. With basis=0, the textarea above
+                 * (flex:1) absorbed the entire body content area, and
+                 * the post-distribution min-height clamp on actions
+                 * grew it again, pushing the total past the window's
+                 * bottom edge (visible as buttons rendering below the
+                 * darker dialog frame). Giving the row a real
+                 * authored_h forces the layout to reserve the space up
+                 * front. */
+                struct yetty_ygui_widget *actions = yetty_ygui_engine_hbox(
+                    yui->engine, "yui_dlg_gpu_info/actions", 0, 0, 0, 36);
+                if (actions) {
+                    yetty_ygui_widget_apply_css(actions,
+                        "display:flex;flex-direction:row;justify-content:end;gap:8;"
+                        "flex:0 0 auto;align-items:center;");
+                    yetty_ygui_widget_add_child(body, actions);
+                    struct yetty_ygui_widget *refresh = yetty_ygui_engine_button(
+                        yui->engine, "yui_dlg_gpu_info/refresh", 0, 0, 96, 28, "Refresh");
+                    if (refresh) {
+                        yetty_ygui_widget_button_on_click(refresh, yui_gpu_info_refresh, yui);
+                        yetty_ygui_widget_add_child(actions, refresh);
+                    }
+                    struct yetty_ygui_widget *close = yetty_ygui_engine_button(
+                        yui->engine, "yui_dlg_gpu_info/close", 0, 0, 80, 28, "Close");
+                    if (close) {
+                        yetty_ygui_widget_button_on_click(close, yui_gpu_info_close, yui);
+                        yetty_ygui_widget_add_child(actions, close);
+                    }
+                }
             }
         }
+
+        /* Seed the menu at its root level. The drill-down callbacks
+         * call popup_menu_clear + the matching populate_* helper, so
+         * level transitions reuse the same single widget. */
+        yui_app_menu_populate_root(yui);
+
+        /* Statusbar — STATUSBAR widget pinned to the bottom of the
+         * engine canvas by engine_set_statusbar; engine_pin_bars
+         * rewrites its width/y every layout pass so resize follows the
+         * framebuffer for free.
+         *
+         * Default content lives in the widget's own left/right text
+         * slots — statusbar_render centers them vertically inside the
+         * strip ([self->y + (self->h - font_size) * 0.5]), which a
+         * child label widget can't do (label_render is top-aligned
+         * inside its own box). The standard default render_all walks
+         * children too, so callers adding their own widgets via
+         * yetty_yui_statusbar() still get their tree drawn on top of
+         * the centered text. */
+        struct yetty_ygui_widget *sb = yetty_ygui_engine_statusbar(
+            yui->engine, "yui_statusbar", 0, 0, /*w=*/0, /*h=*/22, "Ready");
+        if (sb) {
+            yui->statusbar = sb;
+            yetty_ygui_widget_statusbar_set_right(sb, "yetty");
+            yetty_ygui_engine_set_statusbar(yui->engine, sb);
+        }
+
+        /* Force a full redraw on the next render: the engine had widgets
+         * added one-by-one during this constructor; add_to_engine sets
+         * dirty=1 per widget, but none of them flip needs_full_redraw.
+         * Without this, the very first frame after create can emit a
+         * stale GROUP set whose dedup cache then locks the bottom bar
+         * out of view until the next resize. */
+        yetty_ygui_engine_mark_dirty(yui->engine);
     } else {
         ywarn("yui_create: ygui engine create failed: %s", er.error.msg);
         yetty_ycore_error_destroy(er.error);
@@ -697,6 +848,295 @@ static void yui_dialog_cancel(struct yetty_ygui_widget *button, void *userdata)
     }
 }
 
+/* Root level: seed the menu with the top-level entries and clear any
+ * back handler. Called from yetty_yui_create and from the back arrow
+ * in deeper levels. */
+static void yui_app_menu_populate_root(struct yetty_yui *yui)
+{
+    if (!yui || !yui->app_menu) {
+        return;
+    }
+    yetty_ygui_widget_popup_menu_clear(yui->app_menu);
+    yetty_ygui_widget_popup_menu_set_title(yui->app_menu, "Menu");
+    yetty_ygui_widget_popup_menu_set_back(yui->app_menu, NULL, NULL);
+    yetty_ygui_widget_popup_menu_add_drill_item(yui->app_menu, "New view  ▸",
+                                                yui_app_menu_open_new_view, yui);
+    yetty_ygui_widget_popup_menu_add_separator(yui->app_menu);
+    yetty_ygui_widget_popup_menu_add_item(yui->app_menu, "GPU info…",
+                                          yui_app_menu_open_gpu_info, yui);
+    /* Future top-level entries (Settings, Reports, About, Quit, …) hang off here. */
+    yui->app_menu_level = 0;
+}
+
+/* "New view" level: clear the menu, set the breadcrumb + a back
+ * handler, then populate with the per-view-kind action items. */
+static void yui_app_menu_populate_new_view(struct yetty_yui *yui)
+{
+    if (!yui || !yui->app_menu) {
+        return;
+    }
+    static const char *const LABELS[YETTY_YUI_VIEW_KIND_COUNT] = {
+        [YETTY_YUI_VIEW_SHELL]  = "Shell",
+        [YETTY_YUI_VIEW_EXEC]   = "Exec…",
+        [YETTY_YUI_VIEW_SSH]    = "SSH…",
+        [YETTY_YUI_VIEW_TELNET] = "Telnet…",
+        [YETTY_YUI_VIEW_YVNC]   = "yVNC…",
+    };
+    static const int MENU_ORDER[YETTY_YUI_VIEW_KIND_COUNT] = {
+        YETTY_YUI_VIEW_SHELL,
+        YETTY_YUI_VIEW_EXEC,
+        YETTY_YUI_VIEW_SSH,
+        YETTY_YUI_VIEW_TELNET,
+        YETTY_YUI_VIEW_YVNC,
+    };
+    yetty_ygui_widget_popup_menu_clear(yui->app_menu);
+    yetty_ygui_widget_popup_menu_set_title(yui->app_menu, "Menu  ›  New view");
+    yetty_ygui_widget_popup_menu_set_back(yui->app_menu, yui_app_menu_back_to_root, yui);
+    for (int i = 0; i < YETTY_YUI_VIEW_KIND_COUNT; i++) {
+        int k = MENU_ORDER[i];
+        /* SHELL is the only no-dialog item — fires the connect callback
+         * directly. The rest open their config dialog. Both are
+         * action items (the menu closes after the click). */
+        ygui_click_callback_t cb =
+            (k == YETTY_YUI_VIEW_SHELL) ? yui_menu_spawn_shell : yui_menu_open_dialog;
+        yetty_ygui_widget_popup_menu_add_item(yui->app_menu, LABELS[k], cb, &s_cb_ctx[k]);
+    }
+    yui->app_menu_level = 1;
+}
+
+/* Drill into the "New view" submenu — repopulates app_menu in place.
+ * Items added via add_drill_item keep the menu open after their
+ * callback fires, so the user sees the submenu replace the root
+ * content. */
+static void yui_app_menu_open_new_view(struct yetty_ygui_widget *item, void *userdata)
+{
+    (void)item;
+    yui_app_menu_populate_new_view((struct yetty_yui *)userdata);
+}
+
+/* `<` back-handler installed on the New-view level. Returns to root by
+ * re-populating with the root content. Same in-place swap. */
+static void yui_app_menu_back_to_root(struct yetty_ygui_widget *item, void *userdata)
+{
+    (void)item;
+    yui_app_menu_populate_root((struct yetty_yui *)userdata);
+}
+
+/* Right-click context-menu root. Populates the same app_menu widget
+ * with context-flavoured entries (GPU info, Split V ▸, Split H ▸).
+ * Entered via yetty_yui_show_context_menu; the menu uses the SAME
+ * popup widget as the hamburger so we don't pay for a second
+ * scene-canvas entity tree. */
+static void yui_app_menu_populate_context_root(struct yetty_yui *yui)
+{
+    if (!yui || !yui->app_menu) {
+        return;
+    }
+    yetty_ygui_widget_popup_menu_clear(yui->app_menu);
+    yetty_ygui_widget_popup_menu_set_title(yui->app_menu, "Pane");
+    yetty_ygui_widget_popup_menu_set_back(yui->app_menu, NULL, NULL);
+    yetty_ygui_widget_popup_menu_add_item(yui->app_menu, "GPU info…",
+                                          yui_app_menu_open_gpu_info, yui);
+    yetty_ygui_widget_popup_menu_add_separator(yui->app_menu);
+    yetty_ygui_widget_popup_menu_add_drill_item(yui->app_menu, "Split vertically  ▸",
+                                                yui_context_open_split_vertical, yui);
+    yetty_ygui_widget_popup_menu_add_drill_item(yui->app_menu, "Split horizontally  ▸",
+                                                yui_context_open_split_horizontal, yui);
+    yui->app_menu_level = 2;
+}
+
+/* Split submenu: same view kinds as the "New view" submenu, but each
+ * action splits the focused pane (via split_cb) instead of opening a
+ * new tab. orientation is captured per-item via s_split_ctx. */
+static void yui_app_menu_populate_split_kind(struct yetty_yui *yui, int horizontal)
+{
+    if (!yui || !yui->app_menu) {
+        return;
+    }
+    static const char *const LABELS[YETTY_YUI_VIEW_KIND_COUNT] = {
+        [YETTY_YUI_VIEW_SHELL]  = "Shell",
+        [YETTY_YUI_VIEW_EXEC]   = "Exec…",
+        [YETTY_YUI_VIEW_SSH]    = "SSH…",
+        [YETTY_YUI_VIEW_TELNET] = "Telnet…",
+        [YETTY_YUI_VIEW_YVNC]   = "yVNC…",
+    };
+    static const int MENU_ORDER[YETTY_YUI_VIEW_KIND_COUNT] = {
+        YETTY_YUI_VIEW_SHELL, YETTY_YUI_VIEW_EXEC, YETTY_YUI_VIEW_SSH,
+        YETTY_YUI_VIEW_TELNET, YETTY_YUI_VIEW_YVNC,
+    };
+    yetty_ygui_widget_popup_menu_clear(yui->app_menu);
+    yetty_ygui_widget_popup_menu_set_title(yui->app_menu,
+                                           horizontal ? "Pane  ›  Split horizontally"
+                                                      : "Pane  ›  Split vertically");
+    yetty_ygui_widget_popup_menu_set_back(yui->app_menu, yui_split_back_to_context, yui);
+    int o = horizontal ? 1 : 0;
+    for (int i = 0; i < YETTY_YUI_VIEW_KIND_COUNT; i++) {
+        int k = MENU_ORDER[i];
+        yetty_ygui_widget_popup_menu_add_item(yui->app_menu, LABELS[k], yui_split_kind_action,
+                                              &s_split_ctx[o][k]);
+    }
+    yui->app_menu_level = horizontal ? 4 : 3;
+}
+
+static void yui_context_open_split_vertical(struct yetty_ygui_widget *item, void *userdata)
+{
+    (void)item;
+    yui_app_menu_populate_split_kind((struct yetty_yui *)userdata, /*horizontal=*/0);
+}
+
+static void yui_context_open_split_horizontal(struct yetty_ygui_widget *item, void *userdata)
+{
+    (void)item;
+    yui_app_menu_populate_split_kind((struct yetty_yui *)userdata, /*horizontal=*/1);
+}
+
+/* `<` back from split-kind → context root. */
+static void yui_split_back_to_context(struct yetty_ygui_widget *item, void *userdata)
+{
+    (void)item;
+    yui_app_menu_populate_context_root((struct yetty_yui *)userdata);
+}
+
+/* Action item under a Split V/H submenu — fires the split_cb with the
+ * kind + orientation captured in the per-item context bundle. */
+static void yui_split_kind_action(struct yetty_ygui_widget *item, void *userdata)
+{
+    (void)item;
+    struct yui_split_ctx *ctx = userdata;
+    if (!ctx || !ctx->yui) {
+        return;
+    }
+    if (ctx->yui->split_cb) {
+        ctx->yui->split_cb(ctx->yui->split_userdata, ctx->kind, ctx->horizontal);
+    }
+    if (ctx->yui->engine) {
+        yetty_ygui_engine_mark_dirty(ctx->yui->engine);
+    }
+}
+
+/*===========================================================================
+ * GPU info dialog — built once in yetty_yui_create; the menu item flips
+ * its visibility on. Each open refreshes the textarea with current
+ * adapter info + live allocator stats.
+ *===========================================================================*/
+
+/* Build the multi-line info text. Caller frees with free(). Returns
+ * NULL only on allocation failure; missing adapter / allocator produce
+ * a "(unavailable)" placeholder line instead so the dialog still has
+ * something useful to show in headless / partial-init contexts. */
+static char *yui_gpu_info_build_text(const struct yetty_yui *yui)
+{
+    /* Adapter section — reuse yetty_log_gpu_info's formatter so this
+     * dialog stays in sync with the console banner. */
+    char *adapter_desc = NULL;
+    if (yui->gpu_info_adapter) {
+        adapter_desc = yetty_ywebgpu_get_webgpu_description(yui->gpu_info_adapter);
+    }
+    const char *adapter_block =
+        adapter_desc ? adapter_desc : "(WebGPU adapter unavailable)\n";
+
+    /* Allocator section — pull live stats. */
+    struct yetty_yrender_gpu_allocator_stats st = {0};
+    int have_stats = 0;
+    if (yui->gpu_info_allocator && yui->gpu_info_allocator->ops &&
+        yui->gpu_info_allocator->ops->get_stats) {
+        yui->gpu_info_allocator->ops->get_stats(yui->gpu_info_allocator, &st);
+        have_stats = 1;
+    }
+
+    /* Compose into a single growing buffer. snprintf-twice idiom keeps
+     * the size exact. */
+    char alloc_block[512];
+    if (have_stats) {
+        snprintf(alloc_block, sizeof(alloc_block),
+                 "\n"
+                 "GPU allocator stats:\n"
+                 "  live allocations:   %u / %u\n"
+                 "  buffers:            %u  (%llu bytes)\n"
+                 "  textures:           %u  (%llu bytes)\n"
+                 "  total bytes:        %llu\n"
+                 "  peak allocations:   %u\n"
+                 "  peak total bytes:   %llu\n",
+                 st.live_allocations, st.capacity,
+                 st.buffer_count, (unsigned long long)st.buffer_bytes,
+                 st.texture_count, (unsigned long long)st.texture_bytes,
+                 (unsigned long long)st.total_bytes,
+                 st.peak_allocations,
+                 (unsigned long long)st.peak_total_bytes);
+    } else {
+        snprintf(alloc_block, sizeof(alloc_block),
+                 "\nGPU allocator stats: (unavailable)\n");
+    }
+
+    size_t a_len = strlen(adapter_block);
+    size_t b_len = strlen(alloc_block);
+    char *out = (char *)malloc(a_len + b_len + 1);
+    if (!out) {
+        free(adapter_desc);
+        return NULL;
+    }
+    memcpy(out, adapter_block, a_len);
+    memcpy(out + a_len, alloc_block, b_len);
+    out[a_len + b_len] = '\0';
+    free(adapter_desc);
+    return out;
+}
+
+static void yui_gpu_info_load_into_textarea(struct yetty_yui *yui)
+{
+    if (!yui || !yui->gpu_info_textarea) {
+        return;
+    }
+    char *text = yui_gpu_info_build_text(yui);
+    /* The textarea is word-wrapping, so long lines (notably the
+     * GPU-limits dump) break at word boundaries inside the widget
+     * instead of escaping the right edge — no manual dialog resize
+     * needed here. */
+    yetty_ygui_widget_textarea_set_text(yui->gpu_info_textarea,
+                                        text ? text : "(allocation failed)");
+    free(text);
+}
+
+static void yui_app_menu_open_gpu_info(struct yetty_ygui_widget *item, void *userdata)
+{
+    (void)item;
+    struct yetty_yui *yui = userdata;
+    if (!yui || !yui->gpu_info_dialog) {
+        return;
+    }
+    yui_gpu_info_load_into_textarea(yui);
+    yetty_ygui_widget_set_visible(yui->gpu_info_dialog, 1);
+    if (yui->engine) {
+        yetty_ygui_engine_mark_dirty(yui->engine);
+    }
+}
+
+static void yui_gpu_info_refresh(struct yetty_ygui_widget *button, void *userdata)
+{
+    (void)button;
+    struct yetty_yui *yui = userdata;
+    if (!yui) {
+        return;
+    }
+    yui_gpu_info_load_into_textarea(yui);
+    if (yui->engine) {
+        yetty_ygui_engine_mark_dirty(yui->engine);
+    }
+}
+
+static void yui_gpu_info_close(struct yetty_ygui_widget *button, void *userdata)
+{
+    (void)button;
+    struct yetty_yui *yui = userdata;
+    if (!yui || !yui->gpu_info_dialog) {
+        return;
+    }
+    yetty_ygui_widget_set_visible(yui->gpu_info_dialog, 0);
+    if (yui->engine) {
+        yetty_ygui_engine_mark_dirty(yui->engine);
+    }
+}
+
 static void yui_dialog_connect(struct yetty_ygui_widget *button, void *userdata)
 {
     (void)button;
@@ -727,13 +1167,67 @@ static void yui_dialog_connect(struct yetty_ygui_widget *button, void *userdata)
 
 void yetty_yui_show_view_menu(struct yetty_yui *yui, float anchor_x, float anchor_y)
 {
-    if (!yui || !yui->v_menu) {
+    /* "view_menu" is now the top-level app (hamburger) menu — the
+     * tabbar's hamburger callback still uses this entry point, so the
+     * name is kept for API stability. Reset to root level on every
+     * open so the user always lands at "Menu" rather than wherever
+     * they were when the menu was last closed. */
+    if (!yui || !yui->app_menu) {
         return;
     }
-    yetty_ygui_widget_popup_menu_open_at(yui->v_menu, anchor_x, anchor_y);
+    yui_app_menu_populate_root(yui);
+    yetty_ygui_widget_popup_menu_open_at(yui->app_menu, anchor_x, anchor_y);
     if (yui->engine) {
         yetty_ygui_engine_mark_dirty(yui->engine);
     }
+}
+
+void yetty_yui_show_context_menu(struct yetty_yui *yui, float anchor_x, float anchor_y)
+{
+    if (!yui || !yui->app_menu) {
+        return;
+    }
+    yui_app_menu_populate_context_root(yui);
+    yetty_ygui_widget_popup_menu_open_at(yui->app_menu, anchor_x, anchor_y);
+    if (yui->engine) {
+        yetty_ygui_engine_mark_dirty(yui->engine);
+    }
+}
+
+struct yetty_ygui_widget *yetty_yui_statusbar(struct yetty_yui *yui)
+{
+    return yui ? yui->statusbar : NULL;
+}
+
+void yetty_yui_set_status_left(struct yetty_yui *yui, const char *text)
+{
+    if (!yui || !yui->statusbar) {
+        return;
+    }
+    yetty_ygui_widget_statusbar_set_left(yui->statusbar, text ? text : "");
+}
+
+void yetty_yui_set_status_right(struct yetty_yui *yui, const char *text)
+{
+    if (!yui || !yui->statusbar) {
+        return;
+    }
+    yetty_ygui_widget_statusbar_set_right(yui->statusbar, text ? text : "");
+}
+
+float yetty_yui_statusbar_height(const struct yetty_yui *yui)
+{
+    /* Read the resolved size from the widget via the public accessor —
+     * engine_pin_bars rewrites the height every layout pass, so this
+     * stays in sync with whatever the bar is currently rendered at.
+     * The 22 fallback matches the constructor default for the case
+     * where layout hasn't run yet (pre-first-frame). */
+    if (!yui || !yui->statusbar) {
+        return 0.0f;
+    }
+    float w = 0.0f, h = 0.0f;
+    yetty_ygui_widget_get_size(yui->statusbar, &w, &h);
+    return h > 0.0f ? h : 22.0f;
 }
 
 const char *yetty_yui_get_field_text(const struct yetty_yui *yui,
@@ -762,13 +1256,16 @@ int yetty_yui_is_active(const struct yetty_yui *yui)
     if (!yui) {
         return 0;
     }
-    if (yui->v_menu && yetty_ygui_widget_popup_menu_is_open(yui->v_menu)) {
+    if (yui->app_menu && yetty_ygui_widget_popup_menu_is_open(yui->app_menu)) {
         return 1;
     }
     for (int k = 0; k < YETTY_YUI_VIEW_KIND_COUNT; k++) {
         if (yui->dialogs[k] && yetty_ygui_widget_is_visible(yui->dialogs[k])) {
             return 1;
         }
+    }
+    if (yui->gpu_info_dialog && yetty_ygui_widget_is_visible(yui->gpu_info_dialog)) {
+        return 1;
     }
     return 0;
 }
@@ -850,6 +1347,15 @@ void yetty_yui_set_connect_callback(struct yetty_yui *yui, yetty_yui_connect_cb 
     yui->connect_userdata = userdata;
 }
 
+void yetty_yui_set_split_callback(struct yetty_yui *yui, yetty_yui_split_cb cb, void *userdata)
+{
+    if (!yui) {
+        return;
+    }
+    yui->split_cb = cb;
+    yui->split_userdata = userdata;
+}
+
 struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t surface_w,
                                                 uint32_t surface_h)
 {
@@ -859,20 +1365,28 @@ struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t 
     if (surface_w == 0 || surface_h == 0 || yui->cell_w <= 0.0f || yui->cell_h <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    uint32_t cols = (uint32_t)((float)surface_w / yui->cell_w);
-    uint32_t rows = (uint32_t)((float)surface_h / yui->cell_h);
+    /* Same algorithm as yui_create — round the requested cell stride
+     * against the new framebuffer, then re-derive actual cell stride so
+     * cols*cell_w == surface_w and rows*cell_h == surface_h. The unified
+     * resize_grid pushes both onto the canvas in one atomic step. */
+    uint32_t cols = (uint32_t)((float)surface_w / yui->cell_w + 0.5f);
+    uint32_t rows = (uint32_t)((float)surface_h / yui->cell_h + 0.5f);
     if (cols == 0) {
         cols = 1;
     }
     if (rows == 0) {
         rows = 1;
     }
+    struct yetty_ycore_pixel_size actual_cs = {
+        .width = (float)surface_w / (float)cols,
+        .height = (float)surface_h / (float)rows,
+    };
     if (yui->engine) {
         yetty_ygui_engine_set_display_pixel_size(yui->engine, (float)surface_w, (float)surface_h);
     }
     if (yui->layer->ops->resize_grid) {
         struct yetty_ycore_grid_size gs = {.cols = cols, .rows = rows};
-        return yui->layer->ops->resize_grid(yui->layer, gs);
+        return yui->layer->ops->resize_grid(yui->layer, gs, actual_cs);
     }
     return YETTY_OK_VOID();
 }

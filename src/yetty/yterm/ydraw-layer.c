@@ -168,7 +168,8 @@ static struct yetty_ycore_void_result ydraw_layer_process_input(
     struct yetty_yrender_terminal_layer *self,
     struct yetty_ywire_wire_statemachine *osc_statemachine);
 static struct yetty_ycore_void_result ydraw_layer_resize_grid(
-    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size);
+    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size,
+    struct yetty_ycore_pixel_size cell_size);
 static struct yetty_yrender_gpu_resource_set_result ydraw_layer_get_gpu_resource_set(
     const struct yetty_yrender_terminal_layer *self);
 static int ydraw_layer_on_key(struct yetty_yrender_terminal_layer *self, int key, int mods);
@@ -233,39 +234,6 @@ static struct yetty_ycore_void_result on_canvas_cursor_set(void *user_data, uint
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result ydraw_layer_set_cell_size(
-    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_pixel_size cell_size)
-{
-    struct yetty_yterm_ydraw_layer *layer = (struct yetty_yterm_ydraw_layer *)self;
-    if (cell_size.width <= 0.0f || cell_size.height <= 0.0f) {
-        return YETTY_ERR(yetty_ycore_void, "invalid cell size");
-    }
-    if (!layer->canvas) {
-        return YETTY_ERR(yetty_ycore_void, "canvas is NULL");
-    }
-
-    self->cell_size = cell_size;
-    self->dirty = 1;
-
-    /* Don't touch the canvas — keeping canvas cell_size/grid_size constant
-     * preserves the existing drawable buckets (ydraw prims store absolute
-     * pixel coords in the same frame the canvas was built in). The zoom is
-     * achieved purely via a shader uniform transform, same mechanism as the
-     * non-intrusive visual zoom, semantically separate (own uniform pair). */
-    float base_h = layer->initial_cell_size.height;
-    float cz = (base_h > 0.0f) ? (cell_size.height / base_h) : 1.0f;
-    set_cell_zoom(&layer->rs, cz, 0.0f, 0.0f);
-
-    /* Fan out to complex-prim factories so yplot and friends apply the
-     * same transform in their own shaders. */
-    struct yetty_ydraw_figure_factory *f = layer->canvas->ops->get_figure_factory(layer->canvas);
-    yetty_ydraw_figure_factory_set_cell_zoom(f, cz, 0.0f, 0.0f);
-
-    ydebug("ydraw_layer_set_cell_size: %.1fx%.1f cell_zoom=%.3f", cell_size.width, cell_size.height,
-           cz);
-    return YETTY_OK_VOID();
-}
-
 static struct yetty_ycore_void_result ydraw_layer_set_visual_zoom(
     struct yetty_yrender_terminal_layer *self, float scale, float off_x, float off_y)
 {
@@ -290,7 +258,6 @@ static const struct yetty_yterm_terminal_layer_ops ydraw_layer_ops = {
     .destroy = ydraw_layer_destroy,
     .process_input = ydraw_layer_process_input,
     .resize_grid = ydraw_layer_resize_grid,
-    .set_cell_size = ydraw_layer_set_cell_size,
     .set_visual_zoom = ydraw_layer_set_visual_zoom,
     .get_gpu_resource_set = ydraw_layer_get_gpu_resource_set,
     .render = ydraw_layer_render,
@@ -524,21 +491,46 @@ static struct yetty_ycore_void_result ydraw_layer_process_input(
     return YETTY_OK_VOID();
 }
 
-/* Resize */
+/* Single atomic update: both grid_size and cell_size. The canvas's
+ * grid_pixel area is `cols * cell_w x rows * cell_h`, which the shader
+ * uses 1:1 to map primitive coords to fragments. Callers compute
+ * cell_size = client_area / rows so the canvas matches the framebuffer
+ * exactly (no remainder pixels, no NDC-stretch). Replaces the old
+ * resize_grid (grid only) + set_cell_size (zoom uniform only) pair. */
 static struct yetty_ycore_void_result ydraw_layer_resize_grid(
-    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size)
+    struct yetty_yrender_terminal_layer *self, struct yetty_ycore_grid_size grid_size,
+    struct yetty_ycore_pixel_size cell_size)
 {
     struct yetty_yterm_ydraw_layer *layer = (struct yetty_yterm_ydraw_layer *)self;
 
     if (!layer->canvas) {
         return YETTY_ERR(yetty_ycore_void, "canvas is NULL");
     }
+    if (cell_size.width <= 0.0f || cell_size.height <= 0.0f) {
+        return YETTY_ERR(yetty_ycore_void, "ydraw_layer_resize_grid: invalid cell size");
+    }
 
+    struct yetty_ycore_void_result cr = layer->canvas->ops->set_cell_size(layer->canvas, cell_size);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "ydraw_layer_resize_grid: canvas set_cell_size");
+
+    self->cell_size = cell_size;
     self->grid_size = grid_size;
     layer->canvas->ops->set_grid_size(layer->canvas, grid_size);
+
+    /* The old set_cell_size also drove a cell_zoom shader uniform for
+     * the structural-zoom path (scaling primitives in-place without
+     * touching the canvas). Now the canvas's cell stride moves directly,
+     * so the uniform stays at the identity factor. */
+    float base_h = layer->initial_cell_size.height;
+    float cz = (base_h > 0.0f) ? (cell_size.height / base_h) : 1.0f;
+    set_cell_zoom(&layer->rs, cz, 0.0f, 0.0f);
+    struct yetty_ydraw_figure_factory *ff = layer->canvas->ops->get_figure_factory(layer->canvas);
+    yetty_ydraw_figure_factory_set_cell_zoom(ff, cz, 0.0f, 0.0f);
+
     self->dirty = 1;
 
-    ydebug("ydraw_layer_resize_grid: %ux%u", grid_size.cols, grid_size.rows);
+    ydebug("ydraw_layer_resize_grid: grid=%ux%u cell=%.2fx%.2f", grid_size.cols, grid_size.rows,
+           cell_size.width, cell_size.height);
     return YETTY_OK_VOID();
 }
 
