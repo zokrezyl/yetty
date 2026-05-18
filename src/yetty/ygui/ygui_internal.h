@@ -352,6 +352,14 @@ struct yetty_ygui_widget {
             int   length;   /* bytes (excluding NUL) */
             int   cursor;   /* byte offset, 0..length */
             int   scroll_line; /* first visible line index */
+            /* Word-wrap mode. When non-zero, the renderer breaks each
+             * logical line into visual sub-lines that fit the widget's
+             * inner width at word boundaries (falling back to a hard
+             * break mid-word for tokens wider than the widget). When
+             * zero, lines that don't fit are truncated at the widget's
+             * right edge so no glyph is ever painted outside the
+             * widget's surface. */
+            int   wrap;
         } textarea;
 
         struct {

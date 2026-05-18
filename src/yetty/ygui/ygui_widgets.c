@@ -2570,13 +2570,16 @@ static int popup_on_press(struct yetty_ygui_widget *self, float lx, float ly, yg
         return 1;
     }
 
-    /* Title-bar drag — modal AND non-modal. The drag offsets persist
-     * into the popup's authored x/y so the new position survives the
-     * next layout pass. */
+    /* Title-bar drag — modal AND non-modal. Save ABSOLUTE mouse coords
+     * at press so on_drag's delta math is invariant to layout updates
+     * (the engine recomputes `lx = mouse - effective_x` every move,
+     * and effective_x changes as soon as we move the widget). Using
+     * widget-local lx as the anchor produces a one-frame lag that
+     * shows up as flicker / drift behind the cursor. */
     if (ly >= 0 && ly < hdr_h) {
         self->data.popup.dragging = 1;
-        self->data.popup.drag_press_lx = lx;
-        self->data.popup.drag_press_ly = ly;
+        self->data.popup.drag_press_lx = lx + self->effective_x;
+        self->data.popup.drag_press_ly = ly + self->effective_y;
         self->data.popup.drag_orig_x = self->x;
         self->data.popup.drag_orig_y = self->y;
         out->widget_id = self->id;
@@ -2597,11 +2600,15 @@ static int popup_on_press(struct yetty_ygui_widget *self, float lx, float ly, yg
 static int popup_on_drag(struct yetty_ygui_widget *self, float lx, float ly, ygui_event_t *out)
 {
     if (!self->data.popup.dragging) return 0;
-    /* lx/ly are mouse coords RELATIVE to the popup's effective_x/y
-     * at the last render. We saved the press-time lx/ly the same way;
-     * the difference is the screen-space drag delta. */
-    float dx = lx - self->data.popup.drag_press_lx;
-    float dy = ly - self->data.popup.drag_press_ly;
+    /* `lx + effective_x` is the invariant: it always equals the
+     * absolute mouse_x regardless of any intervening layout that
+     * updated effective_x (see comment in popup_on_press). Using that
+     * recovered absolute coord as the delta source keeps the widget
+     * pinned under the cursor. */
+    float mouse_x = lx + self->effective_x;
+    float mouse_y = ly + self->effective_y;
+    float dx = mouse_x - self->data.popup.drag_press_lx;
+    float dy = mouse_y - self->data.popup.drag_press_ly;
     self->x = self->data.popup.drag_orig_x + dx;
     self->y = self->data.popup.drag_orig_y + dy;
     self->authored_x = self->x;
@@ -5462,6 +5469,58 @@ static int textarea_on_press(struct yetty_ygui_widget *self, float lx, float ly,
     return 0; /* let the engine still take focus */
 }
 
+/* Render one visual line of the textarea, after applying right-edge
+ * clipping. `max_cols` is the maximum char count that fits inside the
+ * widget's inner width. `src` is the source bytes (no NUL); we copy
+ * up to min(src_len, max_cols) into a stack buffer, NUL-terminate, and
+ * emit one TEXT_SPAN. This guarantees no glyph is painted past
+ * self->x + self->w - PAD. */
+static void textarea_paint_line(struct yetty_ygui_widget *self,
+                                struct yetty_ygui_render_ctx *ctx,
+                                const char *src, int src_len, int max_cols, float row_y)
+{
+    if (src_len <= 0 || max_cols <= 0) {
+        return;
+    }
+    int n = src_len < max_cols ? src_len : max_cols;
+    char tmp[1024];
+    if (n >= (int)sizeof(tmp)) n = (int)sizeof(tmp) - 1;
+    memcpy(tmp, src, (size_t)n);
+    tmp[n] = '\0';
+    yetty_ygui_render_ctx_render_text(ctx, tmp, self->x + TEXTAREA_PAD, row_y, self->fg_color,
+                                      ctx->theme->font_size);
+}
+
+/* Word-wrap one logical line. Walks `src[0..src_len)` and yields at
+ * most one visual line per call. Returns the byte index where the
+ * caller should resume on the next call (== src_len when the logical
+ * line is consumed). Break points: the last space inside [0, max_cols),
+ * or max_cols itself when the token is wider than the line. */
+static int textarea_wrap_next(const char *src, int src_len, int from, int max_cols, int *out_end)
+{
+    int remaining = src_len - from;
+    if (remaining <= max_cols) {
+        *out_end = src_len;
+        return src_len;
+    }
+    /* Find the last space inside the window. */
+    int break_at = -1;
+    for (int i = from + max_cols; i > from; i--) {
+        if (src[i] == ' ' || src[i] == '\t') {
+            break_at = i;
+            break;
+        }
+    }
+    if (break_at < 0) {
+        /* Token wider than the line — hard break at max_cols. */
+        *out_end = from + max_cols;
+        return from + max_cols;
+    }
+    *out_end = break_at;
+    /* Skip the space at the break point on resume. */
+    return break_at + 1;
+}
+
 static struct yetty_ycore_void_result textarea_render(struct yetty_ygui_widget *self,
                                                       struct yetty_ygui_render_ctx *ctx)
 {
@@ -5473,6 +5532,19 @@ static struct yetty_ycore_void_result textarea_render(struct yetty_ygui_widget *
                                                  ? self->accent_color
                                                  : t->border,
                                              t->radius_small, 1.0f);
+
+    /* Inner width in pixels and the corresponding character cap. The
+     * cap is the source-of-truth for both the no-wrap truncation and
+     * the wrap algorithm — it guarantees no glyph is painted outside
+     * the widget's surface. */
+    float inner_w = self->w - 2.0f * TEXTAREA_PAD;
+    if (inner_w < TEXTAREA_CHAR_WIDTH) {
+        inner_w = TEXTAREA_CHAR_WIDTH;
+    }
+    int max_cols = (int)(inner_w / TEXTAREA_CHAR_WIDTH);
+    if (max_cols < 1) {
+        max_cols = 1;
+    }
 
     if (!self->data.textarea.text || self->data.textarea.length == 0) {
         /* Just paint the cursor when empty so the user knows it's focused. */
@@ -5491,29 +5563,46 @@ static struct yetty_ycore_void_result textarea_render(struct yetty_ygui_widget *
     int last = first + viewport_lines;
     if (last > total) last = total;
 
-    /* Render each visible line as one TEXT_SPAN. Carve a NUL-terminated
-     * copy because the line bytes live inside the buffer with a '\n'
-     * separator. */
-    char tmp[1024];
-    for (int li = first; li < last; li++) {
+    int rows_emitted = 0;
+    for (int li = first; li < last && rows_emitted < viewport_lines; li++) {
         int start = textarea_line_start(self, li);
         int llen = textarea_line_len(self, li);
-        if (llen >= (int)sizeof(tmp)) llen = (int)sizeof(tmp) - 1;
-        memcpy(tmp, self->data.textarea.text + start, (size_t)llen);
-        tmp[llen] = '\0';
-        if (llen > 0) {
-            yetty_ygui_render_ctx_render_text(ctx, tmp, self->x + TEXTAREA_PAD,
-                                              self->y + TEXTAREA_PAD +
-                                                  (li - first) * TEXTAREA_LINE_HEIGHT + 2.0f,
-                                              self->fg_color, t->font_size);
+        if (llen <= 0) {
+            rows_emitted++;
+            continue;
+        }
+        const char *line = self->data.textarea.text + start;
+
+        if (!self->data.textarea.wrap) {
+            /* No wrap — truncate at max_cols (clips at the right edge). */
+            float row_y = self->y + TEXTAREA_PAD + rows_emitted * TEXTAREA_LINE_HEIGHT + 2.0f;
+            textarea_paint_line(self, ctx, line, llen, max_cols, row_y);
+            rows_emitted++;
+        } else {
+            /* Wrap — emit one visual sub-row per call into the wrap
+             * iterator until the logical line is fully consumed or the
+             * viewport fills. */
+            int pos = 0;
+            while (pos < llen && rows_emitted < viewport_lines) {
+                int seg_end = 0;
+                int next_pos = textarea_wrap_next(line, llen, pos, max_cols, &seg_end);
+                float row_y = self->y + TEXTAREA_PAD + rows_emitted * TEXTAREA_LINE_HEIGHT + 2.0f;
+                textarea_paint_line(self, ctx, line + pos, seg_end - pos, max_cols, row_y);
+                rows_emitted++;
+                pos = next_pos;
+            }
         }
     }
 
-    /* Cursor */
-    if (self->flags & YETTY_YGUI_FLAG_FOCUSED) {
+    /* Cursor — only in no-wrap mode (the wrap algorithm has no inverse
+     * mapping from byte offset to visual row yet). */
+    if (!self->data.textarea.wrap && (self->flags & YETTY_YGUI_FLAG_FOCUSED)) {
         int cline, ccol;
         textarea_cursor_pos(self, &cline, &ccol);
         if (cline >= first && cline < last) {
+            if (ccol > max_cols) {
+                ccol = max_cols; /* clip cursor to the right edge */
+            }
             float cx = self->x + TEXTAREA_PAD + ccol * TEXTAREA_CHAR_WIDTH;
             float cy = self->y + TEXTAREA_PAD + (cline - first) * TEXTAREA_LINE_HEIGHT;
             yetty_ygui_render_ctx_render_box(ctx, cx, cy, 2.0f, TEXTAREA_LINE_HEIGHT,
@@ -5548,6 +5637,7 @@ struct yetty_ygui_widget *yetty_ygui_engine_textarea(struct yetty_ygui_engine *e
             ta->data.textarea.cursor = n;
         }
     }
+    ta->data.textarea.wrap = 0;
     static const struct yetty_ygui_widget_vtable textarea_vtable = {
         .render = textarea_render,
         .on_press = textarea_on_press,
@@ -5557,6 +5647,31 @@ struct yetty_ygui_widget *yetty_ygui_engine_textarea(struct yetty_ygui_engine *e
     ta->vtable = &textarea_vtable;
     add_to_engine(engine, ta);
     return ta;
+}
+
+struct yetty_ygui_widget *yetty_ygui_engine_textarea_wrapped(struct yetty_ygui_engine *engine,
+                                                             const char *id, float x, float y,
+                                                             float w, float h,
+                                                             const char *initial_text)
+{
+    struct yetty_ygui_widget *ta =
+        yetty_ygui_engine_textarea(engine, id, x, y, w, h, initial_text);
+    if (ta) {
+        ta->data.textarea.wrap = 1;
+    }
+    return ta;
+}
+
+void yetty_ygui_widget_textarea_set_wrap(struct yetty_ygui_widget *widget, int wrap)
+{
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_TEXTAREA) {
+        return;
+    }
+    widget->data.textarea.wrap = wrap ? 1 : 0;
+    widget->dirty = 1;
+    if (widget->engine) {
+        widget->engine->dirty = 1;
+    }
 }
 
 void yetty_ygui_widget_textarea_set_text(struct yetty_ygui_widget *widget, const char *text)

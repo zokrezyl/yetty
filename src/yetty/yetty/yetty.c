@@ -596,6 +596,45 @@ static struct yetty_ycore_int_result yetty_event_handler(
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
+    /* Right-click in the workspace area → open the pane context menu.
+     * Run BEFORE yui_on_event because yui only consumes events when
+     * already-active (an open menu / dialog) and we want to OPEN it on
+     * the click, not after. Also focus the clicked pane so the
+     * subsequent split applies to it. The tabbar strip and statusbar
+     * are excluded; right-click there falls through to existing
+     * handlers. */
+    if (yetty->yui && event->type == YETTY_YCORE_MOUSE_DOWN &&
+        event->mouse.button == 1 /* GLFW right */) {
+        float y = event->mouse.y;
+        float tabbar_h = (float)YETTY_YUI_TABBAR_HEIGHT;
+        float status_h = yetty_yui_statusbar_height(yetty->yui);
+        if (y >= tabbar_h && y < yetty->window_height - status_h) {
+            /* Focus the clicked pane — same logic the workspace's own
+             * MOUSE_DOWN handler runs, but without forwarding the
+             * click to the terminal (we don't want the inner program
+             * to see a mouse event for a UI gesture). */
+            struct yetty_yui_workspace *ws =
+                yetty_yui_tabbar_active_workspace(yetty->tabbar);
+            if (ws) {
+                struct yetty_yui_tile *root = yetty_yui_workspace_root(ws);
+                if (root) {
+                    struct yetty_yui_tile *clicked = yetty_yui_tile_find_pane_at(
+                        root, event->mouse.x, event->mouse.y);
+                    if (clicked) {
+                        yetty_yui_tile_clear_focus(root);
+                        yetty_yui_tile_pane_set_focused(clicked, 1);
+                    }
+                }
+            }
+            yetty_yui_show_context_menu(yetty->yui, event->mouse.x, event->mouse.y);
+            if (yetty->event_loop && yetty->event_loop->ops &&
+                yetty->event_loop->ops->request_render) {
+                yetty->event_loop->ops->request_render(yetty->event_loop);
+            }
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+    }
+
     /* yui priority: when a v-menu / dialog is up, mouse events go
      * through yui's ygui engine FIRST so the popup is hit-tested before
      * the workspace below sees them. If yui's not capturing (not active,
@@ -930,6 +969,192 @@ static void yetty_on_v_menu_click(void *userdata, float anchor_x, float anchor_y
     }
 }
 
+/* Apply the kind-specific config keys (shell/command, ssh, telnet,
+ * vnc/client) the same way yetty_on_yui_connect does so the next
+ * terminal_create / viewer_create reads them. Returns 0 on success,
+ * non-zero when validation fails (e.g. SSH/Telnet with empty host) —
+ * caller surfaces a toast and aborts. */
+static int yetty_apply_view_kind_to_config(struct yetty_yetty_yetty *yetty,
+                                           enum yetty_yui_view_kind kind)
+{
+    struct yetty_yconfig_config *config = yetty->context.app_context.config;
+    if (!config || !config->ops || !config->ops->set_string) {
+        return -1;
+    }
+    /* Reset the exclusive flags up front so every kind has a clean slate. */
+    config->ops->set_string(config, YETTY_YCONFIG_KEY_SSH, "false");
+    config->ops->set_string(config, YETTY_YCONFIG_KEY_TELNET, "false");
+    config->ops->set_string(config, "vnc/client", "");
+    switch (kind) {
+    case YETTY_YUI_VIEW_SHELL:
+        config->ops->set_string(config, "shell/command", "");
+        return 0;
+    case YETTY_YUI_VIEW_EXEC: {
+        const char *cmd = yetty_yui_get_exec_command(yetty->yui);
+        if (!cmd || !cmd[0]) {
+            ywarn("yetty: EXEC: empty command");
+            return -1;
+        }
+        config->ops->set_string(config, "shell/command", cmd);
+        return 0;
+    }
+    case YETTY_YUI_VIEW_SSH: {
+        const char *host = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 0);
+        const char *port = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 1);
+        const char *key  = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_SSH, 2);
+        if (!host || !host[0]) {
+            ywarn("yetty: SSH: empty host");
+            return -1;
+        }
+        char cmd[1024];
+        int n = snprintf(cmd, sizeof(cmd), "ssh");
+        if (port && port[0]) n += snprintf(cmd + n, sizeof(cmd) - (size_t)n, " -p %s", port);
+        if (key && key[0])   n += snprintf(cmd + n, sizeof(cmd) - (size_t)n, " -i %s", key);
+        snprintf(cmd + n, sizeof(cmd) - (size_t)n, " %s", host);
+        config->ops->set_string(config, "shell/command", cmd);
+        return 0;
+    }
+    case YETTY_YUI_VIEW_TELNET: {
+        const char *host = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_TELNET, 0);
+        const char *port = yetty_yui_get_field_text(yetty->yui, YETTY_YUI_VIEW_TELNET, 1);
+        if (!host || !host[0]) {
+            ywarn("yetty: Telnet: empty host");
+            return -1;
+        }
+        int port_i = (port && port[0]) ? atoi(port) : 23;
+        if (port_i <= 0 || port_i > 65535) {
+            return -1;
+        }
+        char port_str[16];
+        snprintf(port_str, sizeof(port_str), "%d", port_i);
+        config->ops->set_string(config, YETTY_YCONFIG_KEY_TELNET, "true");
+        config->ops->set_string(config, YETTY_YCONFIG_KEY_TELNET_HOST, host);
+        config->ops->set_string(config, YETTY_YCONFIG_KEY_TELNET_PORT, port_str);
+        return 0;
+    }
+    case YETTY_YUI_VIEW_YVNC:
+        /* The yvnc dialog stashes host:port in vnc/client (TODO when
+         * the dialog gets wired); for now the new pane will fall back
+         * to a terminal if vnc/client is empty. */
+        return 0;
+    }
+    return -1;
+}
+
+/* Right-click context menu: split the focused pane and seed the new
+ * sibling with a view of the chosen kind. The split is on the active
+ * workspace; orientation argument: 0 = vertical (sibling below),
+ * 1 = horizontal (sibling to the right) — matches the labels in the
+ * yui submenu. */
+static void yetty_on_yui_split(void *userdata, enum yetty_yui_view_kind kind, int horizontal)
+{
+    struct yetty_yetty_yetty *yetty = userdata;
+    if (!yetty || !yetty->tabbar) {
+        return;
+    }
+    if (yetty_apply_view_kind_to_config(yetty, kind) != 0) {
+        ynotify(YETTY_YNOTIFY_WARN, "Split aborted: missing fields");
+        return;
+    }
+
+    struct yetty_yui_workspace *ws = yetty_yui_tabbar_active_workspace(yetty->tabbar);
+    if (!ws) {
+        ywarn("yetty: split: no active workspace");
+        return;
+    }
+    struct yetty_yui_tile *root = yetty_yui_workspace_root(ws);
+    if (!root) {
+        ywarn("yetty: split: no root tile");
+        return;
+    }
+    struct yetty_yui_tile *focused = yetty_yui_tile_find_focused_pane(root);
+    if (!focused) {
+        focused = yetty_yui_tile_find_first_pane(root);
+    }
+    if (!focused) {
+        ywarn("yetty: split: no pane to split");
+        return;
+    }
+    yetty_ycore_object_id pane_id = yetty_yui_tile_id(focused);
+
+    /* "Split vertically" in the menu means a vertical divider line
+     * between two panes side-by-side — i.e. a HORIZONTAL flexbox
+     * direction. Map the user-facing label to the underlying
+     * orientation enum: horizontal=1 → side-by-side (cross axis is
+     * horizontal). */
+    enum yetty_yui_orientation orient =
+        horizontal ? YETTY_YUI_HORIZONTAL : YETTY_YUI_VERTICAL;
+    struct yetty_ycore_void_result sr =
+        yetty_yui_workspace_split_pane(ws, pane_id, orient);
+    if (YETTY_IS_ERR(sr)) {
+        yerror("yetty: split failed: %s", sr.error.msg);
+        yetty_ycore_error_destroy(sr.error);
+        return;
+    }
+
+    /* Re-resolve root (set_root may have replaced it) and find the new
+     * sibling — workspace_split_pane sets the old pane as `first` and
+     * creates the empty `second`. */
+    root = yetty_yui_workspace_root(ws);
+    struct yetty_yui_tile *parent_split = yetty_yui_tile_find_parent_split(root, pane_id);
+    if (!parent_split) {
+        ywarn("yetty: split: parent split not found post-split");
+        return;
+    }
+    struct yetty_yui_tile *new_pane = yetty_yui_tile_split_second(parent_split);
+    if (!new_pane) {
+        ywarn("yetty: split: new pane not found");
+        return;
+    }
+
+    /* Re-propagate bounds so the new sibling gets a non-empty rect
+     * (workspace_split_pane only wires the tree pointers). The synth
+     * RESIZE goes through the existing tabbar→workspace fan-out. */
+    yetty_yui_tabbar_resize(yetty->tabbar, yetty->window_width,
+                            yetty->window_height -
+                                (yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f));
+
+    /* All kinds spawn a terminal — config flags set above tell its PTY
+     * what to run (ssh / telnet / shell-with-command). yVNC in a split
+     * isn't wired yet (would need yvnc_viewer_create + linking yvnc
+     * into yetty.c's TU); falling back to a terminal keeps the split
+     * working for the other kinds. */
+    struct yetty_yui_view *new_view = NULL;
+    struct yetty_ycore_grid_size gs = {.rows = 24, .cols = 80};
+    struct yetty_yterm_terminal_result tr =
+        yetty_yterm_terminal_create(gs, &yetty->context);
+    if (YETTY_IS_ERR(tr)) {
+        yerror("yetty: split: terminal create: %s", tr.error.msg);
+        yetty_ycore_error_destroy(tr.error);
+        return;
+    }
+    new_view = yetty_yterm_terminal_as_view(tr.value);
+    if (!new_view) {
+        ywarn("yetty: split: no view created");
+        return;
+    }
+    if (kind == YETTY_YUI_VIEW_YVNC) {
+        ynotify(YETTY_YNOTIFY_INFO,
+                "yVNC-in-split not yet wired — opened a terminal instead");
+    }
+
+    struct yetty_ycore_void_result pr = yetty_yui_tile_pane_push_view(new_pane, new_view);
+    if (YETTY_IS_ERR(pr)) {
+        yerror("yetty: split: push_view: %s", pr.error.msg);
+        yetty_ycore_error_destroy(pr.error);
+        return;
+    }
+
+    /* Focus the new pane so the user can immediately type into it. */
+    yetty_yui_tile_clear_focus(root);
+    yetty_yui_tile_pane_set_focused(new_pane, 1);
+
+    if (yetty->event_loop && yetty->event_loop->ops &&
+        yetty->event_loop->ops->request_render) {
+        yetty->event_loop->ops->request_render(yetty->event_loop);
+    }
+}
+
 static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
 {
     struct yetty_yetty_yetty *yetty = userdata;
@@ -1143,6 +1368,7 @@ struct yetty_yetty_yetty_result yetty_create(const struct yetty_yetty_app_contex
              * Connect → tabbar add_workspace_of_kind. */
             yetty_yui_tabbar_set_v_menu_callback(yetty->tabbar, yetty_on_v_menu_click, yetty);
             yetty_yui_set_connect_callback(yetty->yui, yetty_on_yui_connect, yetty);
+            yetty_yui_set_split_callback(yetty->yui, yetty_on_yui_split, yetty);
         } else {
             ywarn("yetty_create: yui create failed: %s", yr.error.msg);
             yetty_ycore_error_destroy(yr.error);

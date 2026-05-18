@@ -185,15 +185,21 @@ static int window_on_press(struct yetty_ygui_widget *self, float lx, float ly, y
         return 1;
     }
 
-    /* Title-bar grab — anywhere in the title strip outside the hamburger
-     * button starts a window drag. The delta is captured on_drag using
-     * the press-time origin so the math stays press-relative even when
-     * the window's authored position changes between frames. */
+    /* Title-bar grab — anywhere in the title strip outside the
+     * hamburger button starts a window drag. We record ABSOLUTE mouse
+     * coords at press time (not the widget-local lx/ly the engine
+     * passes in) because the engine recomputes lx as
+     * `mouse_x - effective_x` on every move, and effective_x changes
+     * as soon as we move the window, so widget-local deltas accumulate
+     * a one-frame lag and the window drifts behind the cursor (visible
+     * as flicker). lx + self->effective_x is the invariant: it always
+     * equals the absolute mouse_x regardless of any intervening
+     * layout. */
     float th = window_title_h(self);
     if (ly >= 0 && ly < th) {
         self->data.window.dragging = 1;
-        self->data.window.drag_press_lx = lx;
-        self->data.window.drag_press_ly = ly;
+        self->data.window.drag_press_lx = lx + self->effective_x;
+        self->data.window.drag_press_ly = ly + self->effective_y;
         self->data.window.drag_orig_x = self->x;
         self->data.window.drag_orig_y = self->y;
         return 1;
@@ -207,12 +213,12 @@ static int window_on_drag(struct yetty_ygui_widget *self, float lx, float ly, yg
     if (!self->data.window.dragging) {
         return 0;
     }
-    /* Same delta math as ygui_widgets.c::popup_on_drag — lx/ly are mouse
-     * coords relative to the widget's effective_x/y at the last render,
-     * so the difference from the press-time lx/ly is the screen-space
-     * drag delta. */
-    float dx = lx - self->data.window.drag_press_lx;
-    float dy = ly - self->data.window.drag_press_ly;
+    /* Absolute-mouse delta — see comment in window_on_press for why we
+     * can't use widget-local lx/ly directly. */
+    float mouse_x = lx + self->effective_x;
+    float mouse_y = ly + self->effective_y;
+    float dx = mouse_x - self->data.window.drag_press_lx;
+    float dy = mouse_y - self->data.window.drag_press_ly;
     self->x = self->data.window.drag_orig_x + dx;
     self->y = self->data.window.drag_orig_y + dy;
     self->authored_x = self->x;

@@ -1131,10 +1131,26 @@ struct yetty_ygui_widget *yetty_ygui_engine_textarea(
     struct yetty_ygui_engine *engine, const char *id,
     float x, float y, float w, float h, const char *initial_text);
 
+/* Same as engine_textarea but with word-wrap enabled at construction.
+ * Equivalent to engine_textarea(...) + widget_textarea_set_wrap(...,1).
+ * Use this for read-only / display-oriented text where lines may exceed
+ * the widget's width — they wrap at word boundaries instead of being
+ * truncated at the right edge. */
+struct yetty_ygui_widget *yetty_ygui_engine_textarea_wrapped(
+    struct yetty_ygui_engine *engine, const char *id,
+    float x, float y, float w, float h, const char *initial_text);
+
 void yetty_ygui_widget_textarea_set_text(struct yetty_ygui_widget *widget, const char *text);
 const char *yetty_ygui_widget_textarea_get_text(const struct yetty_ygui_widget *widget);
 void yetty_ygui_widget_textarea_on_change(struct yetty_ygui_widget *widget,
                                           ygui_text_callback_t cb, void *userdata);
+
+/* Toggle word-wrap. When enabled, lines that don't fit the widget's
+ * inner width are broken at word boundaries (or hard-broken mid-word
+ * for tokens wider than the widget). When disabled (default), lines
+ * are truncated at the right edge — text is never painted outside the
+ * widget's surface in either mode. */
+void yetty_ygui_widget_textarea_set_wrap(struct yetty_ygui_widget *widget, int wrap);
 
 /*=============================================================================
  * Scrollarea — generic vertical scrolling container.
