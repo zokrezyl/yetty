@@ -120,7 +120,7 @@ extern "C" {
 #define YMGUI_WIRE_MAGIC_INPUT_KEY 0x4D59454Bu      /* "KEYM" */
 #define YMGUI_WIRE_MAGIC_TERM_INPUT_SUB 0x53504954u /* "TIPS" */
 
-#define YMGUI_WIRE_VERSION 3u
+#define YMGUI_WIRE_VERSION 4u
 
 /*=============================================================================
  * Terminal-wide input subscription flags (YMGUI_OSC_CS_TERM_INPUT_SUB).
@@ -154,17 +154,46 @@ struct yetty_ymgui_wire_term_input_sub {
 
 /* Per-cmd_list flags (yetty_ymgui_wire_cmd_list.flags).
  *
- * REPEAT: this slot's content is byte-identical to the previous frame's
- *   cmd_list at the same slot index. The wire carries ONLY the cmd_list
- *   header (16 B) — no vertex / index / cmd bytes follow. The server
- *   reuses the cached slot from the previous frame. vtx_count, idx_count,
- *   cmd_count are sent as 0 and must be ignored by the receiver.
+ * REPEAT (Stage 1): this slot's content is byte-identical to the previous
+ *   frame's cmd_list at the same slot index. The wire carries ONLY the
+ *   cmd_list header (16 B) — no vertex / index / cmd bytes follow. The
+ *   server reuses the cached slot from the previous frame. vtx_count,
+ *   idx_count, cmd_count are sent as 0 and must be ignored by the
+ *   receiver.
  *
- * The frontend computes a content hash (fnv64 over vtx + idx + cmds) per
- * cmd_list, compares against last frame's hash at the same slot, and
- * emits REPEAT on match. First frame, or any frame where a slot's hash
- * differs, sends the full cmd_list. */
+ * CMD_DIFF (Stage 2): the cmd_list's content has changed but most of its
+ *   cmds are byte-identical to last frame's cmds (e.g. one button hover
+ *   inside an otherwise static window). The wire carries a draw-order
+ *   list of per-cmd content hashes plus only the cmds whose hash isn't
+ *   in last frame's hash list for this slot. The server reassembles a
+ *   flat cmd_list by gathering cached cmds from last frame's slot bytes
+ *   and the inline ones from this wire.
+ *
+ * Either flag — but not both — may be set. Neither set = full cmd_list
+ * body (vtx/idx/cmds packed as in pre-Stage1 wire). */
 #define YMGUI_CMDLIST_FLAG_REPEAT (1u << 0)
+#define YMGUI_CMDLIST_FLAG_CMD_DIFF (1u << 1)
+
+/* CMD_DIFF body (immediately after the cmd_list_hdr when its flags has
+ * CMD_DIFF set):
+ *
+ *     uint32_t hash_count;     // == cmd_list_hdr.cmd_count (draw order)
+ *     uint32_t inline_count;   // # of cmds whose full content follows
+ *     uint64_t draw_hashes[hash_count];
+ *
+ *     // inline_count repetitions of:
+ *     struct yetty_ymgui_wire_cmd_inline hdr;   // hash + vtx_count
+ *     struct yetty_ymgui_wire_cmd       cmd;    // clip, tex, elem_count
+ *     yetty_ymgui_wire_vertex vtx[hdr.vtx_count];
+ *     idx[cmd.elem_count];                      // idx_bpe each, padded to 4
+ *
+ * Inline `cmd.vtx_offset` and `cmd.idx_offset` are unused on the wire —
+ * the server reassigns them when packing the cmd_list. */
+struct yetty_ymgui_wire_cmd_inline {
+    uint64_t hash;
+    uint32_t vtx_count; /* # vertices owned by this cmd */
+    uint32_t flags;     /* reserved, send 0 */
+};
 
 /*---------------------------------------------------------------------------
  * Vertex — identical to ImDrawVert (pos:vec2, uv:vec2, col:u32 RGBA).
@@ -302,9 +331,10 @@ struct yetty_ymgui_wire_card_place {
     uint32_t flags;   /* reserved, send 0 */
     int32_t col;      /* grid column (0-based) */
     int32_t row;      /* grid row (0-based, relative to visible top) */
-    uint32_t w_cells; /* width  in cells; 0 = "until right edge"   */
-    uint32_t h_cells; /* height in cells; 0 = "until bottom (at
-                               *                       placement time)"    */
+    uint32_t w_cells; /* width  in cells; 0 = "track right edge"  */
+    uint32_t h_cells; /* height in cells; 0 = "track bottom edge"
+                               * (both dimensions follow grid resizes
+                               * dynamically while the value stays 0)  */
 };
 
 /*---------------------------------------------------------------------------

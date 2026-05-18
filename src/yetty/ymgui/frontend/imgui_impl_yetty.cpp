@@ -70,12 +70,14 @@ struct ymgui_card_state {
     int row;
     uint32_t w_cells;
     uint32_t h_cells;
-    /* Per-slot content hashes from the last successfully emitted frame.
-     * Slot index = position in draw_data->CmdLists. On the next frame we
-     * compare each cmd_list's hash against the cached value at the same
-     * slot and emit a REPEAT marker on match (server reuses its cache),
-     * full bytes on miss (server stores them in the slot). */
+    /* Stage 1 cache — per-cmd_list content hashes from the last
+     * successfully emitted frame. Used to emit REPEAT markers. */
     std::vector<uint64_t> prev_cl_hashes;
+    /* Stage 2 cache — per-cmd_list set of per-cmd hashes from the last
+     * successfully emitted frame (draw order). A cmd whose hash appears
+     * in this set is considered "cached on the server" and shipped as a
+     * hash reference only; otherwise we ship the full cmd inline. */
+    std::vector<std::vector<uint64_t>> prev_cmd_hashes;
 };
 
 struct ymgui_impl_state {
@@ -92,6 +94,8 @@ struct ymgui_impl_state {
     std::vector<ymgui_card_state *> cards;
     uint32_t next_auto_card_id;
     uint32_t focused_card_id;
+    /* Wire-dedup flags (Stage 1 / Stage 2). Both default ON. */
+    uint32_t opt_flags;
 };
 
 static struct ymgui_impl_state g_state = {
@@ -106,6 +110,7 @@ static struct ymgui_impl_state g_state = {
     {},
     1u,
     0u,
+    YETTY_YMGUI_OPT_DEDUP_CMDLIST | YETTY_YMGUI_OPT_DEDUP_CMD,
 };
 
 /*===========================================================================
@@ -172,6 +177,22 @@ static bool emit_osc(int osc_code, bool compressed, const void *payload, size_t 
 /*===========================================================================
  * Backend lifecycle
  *=========================================================================*/
+
+void yetty_ymgui_ImGui_ImplYetty_SetOptimizations(uint32_t flags)
+{
+    g_state.opt_flags = flags;
+    /* Hash caches are now stale w.r.t. the new policy — drop them so the
+     * next frame starts fresh on every card. */
+    for (auto *c : g_state.cards) {
+        c->prev_cl_hashes.clear();
+        c->prev_cmd_hashes.clear();
+    }
+}
+
+uint32_t yetty_ymgui_ImGui_ImplYetty_GetOptimizations(void)
+{
+    return g_state.opt_flags;
+}
 
 void yetty_ymgui_ImGui_ImplYetty_SetOutputFd(int fd)
 {
@@ -430,11 +451,11 @@ static inline uint64_t fnv64_update(uint64_t h, const void *data, size_t n)
     return h;
 }
 
-/* Hash the byte sequence we'd put on the wire for one cmd_list (vtx +
- * idx + non-callback cmds), salted with the counts so different shapes
- * can't collide. Matches the write loop below — if the hash equals last
- * frame's hash at the same slot, the wire bytes would be byte-identical
- * and the server can reuse its cached slot. */
+/* Stage 1 — hash the byte sequence we'd put on the wire for one cmd_list
+ * (vtx + idx + non-callback cmds), salted with the counts so different
+ * shapes can't collide. Matches the full-emit write loop — if the hash
+ * equals last frame's hash at the same slot, the wire bytes would be
+ * byte-identical and the server can reuse its cached slot. */
 static uint64_t hash_cmd_list(const ImDrawList *cl)
 {
     uint64_t h = 0xcbf29ce484222325ULL;
@@ -473,6 +494,83 @@ static uint64_t hash_cmd_list(const ImDrawList *cl)
     return h;
 }
 
+/* Stage 2 — hash a single cmd's drawable content. The hash MUST match
+ * the server-side helper that walks the previous cmd_list slot, so any
+ * change here needs a matching update server-side. Composition:
+ *
+ *   { clip_min_x, clip_min_y, clip_max_x, clip_max_y,
+ *     tex_id, elem_count, vtx_count, idx_bpe,
+ *     vtx[vtx_offset .. vtx_offset+vtx_count]    (raw bytes),
+ *     idx[idx_offset .. idx_offset+elem_count]    (raw bytes) }
+ *
+ * `vtx_count` is the number of vertices this cmd actually references,
+ * computed as max(idx_slice) + 1 — caller passes it in. We deliberately
+ * exclude `vtx_offset` and `idx_offset` from the hash because they're
+ * positions inside the cmd_list, not part of "what this cmd draws";
+ * two cmds with identical content but different offsets must hash the
+ * same so the server can reuse them across packing changes. */
+static uint64_t hash_cmd(const ImDrawCmd *dc, const ImDrawList *cl, uint32_t vtx_count)
+{
+    uint64_t h = 0xcbf29ce484222325ULL;
+    float clip[4] = {dc->ClipRect.x, dc->ClipRect.y, dc->ClipRect.z, dc->ClipRect.w};
+    uint32_t tex = (uint32_t)(intptr_t)dc->GetTexID();
+    uint32_t ec = dc->ElemCount;
+    uint32_t isize = (uint32_t)sizeof(ImDrawIdx);
+    h = fnv64_update(h, clip, sizeof(clip));
+    h = fnv64_update(h, &tex, sizeof(tex));
+    h = fnv64_update(h, &ec, sizeof(ec));
+    h = fnv64_update(h, &vtx_count, sizeof(vtx_count));
+    h = fnv64_update(h, &isize, sizeof(isize));
+    if (vtx_count && cl->VtxBuffer.Size) {
+        h = fnv64_update(h, cl->VtxBuffer.Data + dc->VtxOffset,
+                         (size_t)vtx_count * sizeof(ImDrawVert));
+    }
+    if (ec && cl->IdxBuffer.Size) {
+        h = fnv64_update(h, cl->IdxBuffer.Data + dc->IdxOffset,
+                         (size_t)ec * sizeof(ImDrawIdx));
+    }
+    return h;
+}
+
+/* Number of vertices this cmd actually references inside the cmd_list's
+ * vtx buffer. = max(idx[idx_offset..idx_offset+elem_count]) + 1. Zero for
+ * empty cmds. */
+static uint32_t cmd_vtx_count(const ImDrawCmd *dc, const ImDrawList *cl)
+{
+    if (dc->ElemCount == 0) {
+        return 0;
+    }
+    const ImDrawIdx *idx = cl->IdxBuffer.Data + dc->IdxOffset;
+    uint32_t max_idx = 0;
+    for (uint32_t i = 0; i < dc->ElemCount; i++) {
+        if ((uint32_t)idx[i] > max_idx) {
+            max_idx = (uint32_t)idx[i];
+        }
+    }
+    return max_idx + 1u;
+}
+
+/* Per-slot emit plan computed before we start writing. */
+enum slot_mode {
+    SLOT_FULL = 0,     /* legacy: cmd_list_hdr + vtx + idx + cmds */
+    SLOT_REPEAT = 1,   /* Stage 1: only cmd_list_hdr */
+    SLOT_CMD_DIFF = 2, /* Stage 2: hashes + inline cmds */
+};
+
+struct slot_plan {
+    enum slot_mode mode;
+    /* For SLOT_CMD_DIFF: */
+    std::vector<uint64_t> cmd_hashes;       /* draw order, non-callback only */
+    std::vector<uint32_t> cmd_vtx_counts;   /* parallel to cmd_hashes */
+    std::vector<const ImDrawCmd *> cmd_ptr; /* parallel — for emit/inline */
+    std::vector<uint8_t> cmd_inline;        /* 1 = inline, 0 = hash-only */
+    uint32_t inline_count;
+    /* SLOT_CMD_DIFF rebuilds prev_cmd_hashes from cmd_hashes after emit;
+     * SLOT_FULL / SLOT_REPEAT also need to keep the cache consistent
+     * with what the server now holds for this slot. SLOT_FULL replaces
+     * the cache from scratch; SLOT_REPEAT keeps it as is. */
+};
+
 void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData *draw_data)
 {
     auto *c = find_card(card_id);
@@ -490,25 +588,105 @@ void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData
         return;
     }
 
+    const bool stage1 = (g_state.opt_flags & YETTY_YMGUI_OPT_DEDUP_CMDLIST) != 0;
+    const bool stage2 = (g_state.opt_flags & YETTY_YMGUI_OPT_DEDUP_CMD) != 0;
+
     int cl_count = draw_data->CmdListsCount;
-    std::vector<uint64_t> new_hashes((size_t)cl_count);
-    std::vector<uint8_t> repeat((size_t)cl_count, 0);
+    std::vector<uint64_t> new_cl_hashes((size_t)cl_count);
+    std::vector<slot_plan> plans((size_t)cl_count);
+
+    /* Pass 1: plan each slot. Stage 1 first (cheap byte-match against
+     * last frame); if it misses and Stage 2 is on, hash each cmd and
+     * decide inline-vs-reference per cmd using prev_cmd_hashes. */
     for (int n = 0; n < cl_count; n++) {
         const ImDrawList *cl = draw_data->CmdLists[n];
+        slot_plan &p = plans[(size_t)n];
+
         uint64_t h = hash_cmd_list(cl);
-        new_hashes[(size_t)n] = h;
-        if ((size_t)n < c->prev_cl_hashes.size() && c->prev_cl_hashes[(size_t)n] == h) {
-            repeat[(size_t)n] = 1;
+        new_cl_hashes[(size_t)n] = h;
+
+        if (stage1 && (size_t)n < c->prev_cl_hashes.size() &&
+            c->prev_cl_hashes[(size_t)n] == h) {
+            p.mode = SLOT_REPEAT;
+            continue;
+        }
+
+        if (!stage2) {
+            p.mode = SLOT_FULL;
+            continue;
+        }
+
+        /* Stage 2 path — hash each non-callback cmd. */
+        const std::vector<uint64_t> *prev =
+            ((size_t)n < c->prev_cmd_hashes.size()) ? &c->prev_cmd_hashes[(size_t)n] : nullptr;
+        p.mode = SLOT_CMD_DIFF;
+        for (int k = 0; k < cl->CmdBuffer.Size; k++) {
+            const ImDrawCmd *dc = &cl->CmdBuffer[k];
+            if (dc->UserCallback || dc->ElemCount == 0) {
+                continue;
+            }
+            uint32_t vc = cmd_vtx_count(dc, cl);
+            uint64_t ch = hash_cmd(dc, cl, vc);
+            p.cmd_hashes.push_back(ch);
+            p.cmd_vtx_counts.push_back(vc);
+            p.cmd_ptr.push_back(dc);
+            bool found = false;
+            if (prev) {
+                for (uint64_t ph : *prev) {
+                    if (ph == ch) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            p.cmd_inline.push_back(found ? 0 : 1);
+            if (!found) {
+                p.inline_count++;
+            }
+        }
+
+        /* A SLOT_CMD_DIFF with zero cmds total degenerates — fall back
+         * to SLOT_FULL (frees the bookkeeping vectors). */
+        if (p.cmd_hashes.empty()) {
+            p.mode = SLOT_FULL;
+            p.cmd_hashes.clear();
+            p.cmd_vtx_counts.clear();
+            p.cmd_ptr.clear();
+            p.cmd_inline.clear();
+            p.inline_count = 0;
         }
     }
 
+    /* Pass 2: compute total size for the frame header's total_size. */
     size_t total_size = sizeof(struct yetty_ymgui_wire_frame);
     for (int n = 0; n < cl_count; ++n) {
+        const ImDrawList *cl = draw_data->CmdLists[n];
+        const slot_plan &p = plans[(size_t)n];
         total_size += sizeof(struct yetty_ymgui_wire_cmd_list);
-        if (repeat[(size_t)n]) {
+        if (p.mode == SLOT_REPEAT) {
             continue;
         }
-        const ImDrawList *cl = draw_data->CmdLists[n];
+        if (p.mode == SLOT_CMD_DIFF) {
+            /* hash_count(4) + inline_count(4) + draw_hashes(N*8) +
+             * per inline: (inline_hdr 16) + (wire_cmd 32) + vtx + idx_padded. */
+            total_size += 8u;
+            total_size += p.cmd_hashes.size() * sizeof(uint64_t);
+            for (size_t k = 0; k < p.cmd_hashes.size(); k++) {
+                if (!p.cmd_inline[k]) {
+                    continue;
+                }
+                total_size += sizeof(struct yetty_ymgui_wire_cmd_inline);
+                total_size += sizeof(struct yetty_ymgui_wire_cmd);
+                total_size += (size_t)p.cmd_vtx_counts[k] * sizeof(ImDrawVert);
+                size_t ibytes = (size_t)p.cmd_ptr[k]->ElemCount * sizeof(ImDrawIdx);
+                if (ibytes & 3u) {
+                    ibytes += 4u - (ibytes & 3u);
+                }
+                total_size += ibytes;
+            }
+            continue;
+        }
+        /* SLOT_FULL */
         size_t idx_bytes = (size_t)cl->IdxBuffer.Size * sizeof(ImDrawIdx);
         if (idx_bytes & 3u) {
             idx_bytes += 4u - (idx_bytes & 3u);
@@ -542,13 +720,14 @@ void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData
 
     static const uint8_t pad[4] = {0, 0, 0, 0};
 
+    /* Pass 3: emit. */
     for (int n = 0; n < cl_count; ++n) {
         const ImDrawList *cl = draw_data->CmdLists[n];
+        const slot_plan &p = plans[(size_t)n];
 
         struct yetty_ymgui_wire_cmd_list cl_hdr = {};
-        if (repeat[(size_t)n]) {
-            /* REPEAT marker — server reuses cached slot. Counts must be
-             * zero so a v3 server can't mistake stale data for fresh. */
+
+        if (p.mode == SLOT_REPEAT) {
             cl_hdr.flags = YMGUI_CMDLIST_FLAG_REPEAT;
             if (!yetty_yface_write(g_state.yface_out, &cl_hdr, sizeof(cl_hdr)).ok) {
                 return;
@@ -556,6 +735,81 @@ void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData
             continue;
         }
 
+        if (p.mode == SLOT_CMD_DIFF) {
+            cl_hdr.vtx_count = 0;
+            cl_hdr.idx_count = 0;
+            cl_hdr.cmd_count = (uint32_t)p.cmd_hashes.size();
+            cl_hdr.flags = YMGUI_CMDLIST_FLAG_CMD_DIFF;
+            if (!yetty_yface_write(g_state.yface_out, &cl_hdr, sizeof(cl_hdr)).ok) {
+                return;
+            }
+            uint32_t hash_count = (uint32_t)p.cmd_hashes.size();
+            uint32_t inl = p.inline_count;
+            if (!yetty_yface_write(g_state.yface_out, &hash_count, sizeof(hash_count)).ok) {
+                return;
+            }
+            if (!yetty_yface_write(g_state.yface_out, &inl, sizeof(inl)).ok) {
+                return;
+            }
+            if (hash_count) {
+                if (!yetty_yface_write(g_state.yface_out, p.cmd_hashes.data(),
+                                       hash_count * sizeof(uint64_t))
+                         .ok) {
+                    return;
+                }
+            }
+            for (size_t k = 0; k < p.cmd_hashes.size(); k++) {
+                if (!p.cmd_inline[k]) {
+                    continue;
+                }
+                const ImDrawCmd *dc = p.cmd_ptr[k];
+                uint32_t vc = p.cmd_vtx_counts[k];
+                struct yetty_ymgui_wire_cmd_inline ih = {};
+                ih.hash = p.cmd_hashes[k];
+                ih.vtx_count = vc;
+                ih.flags = 0;
+                if (!yetty_yface_write(g_state.yface_out, &ih, sizeof(ih)).ok) {
+                    return;
+                }
+                struct yetty_ymgui_wire_cmd wc = {};
+                wc.clip_min_x = dc->ClipRect.x;
+                wc.clip_min_y = dc->ClipRect.y;
+                wc.clip_max_x = dc->ClipRect.z;
+                wc.clip_max_y = dc->ClipRect.w;
+                wc.tex_id = (uint32_t)(intptr_t)dc->GetTexID();
+                wc.vtx_offset = 0; /* server reassigns when packing */
+                wc.idx_offset = 0;
+                wc.elem_count = dc->ElemCount;
+                if (!yetty_yface_write(g_state.yface_out, &wc, sizeof(wc)).ok) {
+                    return;
+                }
+                if (vc) {
+                    if (!yetty_yface_write(g_state.yface_out,
+                                           cl->VtxBuffer.Data + dc->VtxOffset,
+                                           (size_t)vc * sizeof(ImDrawVert))
+                             .ok) {
+                        return;
+                    }
+                }
+                if (dc->ElemCount) {
+                    size_t nbytes = (size_t)dc->ElemCount * sizeof(ImDrawIdx);
+                    if (!yetty_yface_write(g_state.yface_out,
+                                           cl->IdxBuffer.Data + dc->IdxOffset, nbytes)
+                             .ok) {
+                        return;
+                    }
+                    size_t rem = nbytes & 3u;
+                    if (rem) {
+                        if (!yetty_yface_write(g_state.yface_out, pad, 4u - rem).ok) {
+                            return;
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+
+        /* SLOT_FULL */
         cl_hdr.vtx_count = (uint32_t)cl->VtxBuffer.Size;
         cl_hdr.idx_count = (uint32_t)cl->IdxBuffer.Size;
         cl_hdr.cmd_count = (uint32_t)cl->CmdBuffer.Size;
@@ -610,9 +864,34 @@ void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card_id, ImDrawData
         return;
     }
 
-    /* Frame fully shipped — cache hashes for next frame's REPEAT
-     * comparison. Server's per-slot cache now matches this state. */
-    c->prev_cl_hashes = std::move(new_hashes);
+    /* Frame fully shipped — refresh caches so they match what the server
+     * now holds. Stage 1: cl_hashes. Stage 2: per-slot cmd_hashes. */
+    c->prev_cl_hashes = std::move(new_cl_hashes);
+    c->prev_cmd_hashes.resize((size_t)cl_count);
+    for (int n = 0; n < cl_count; n++) {
+        slot_plan &p = plans[(size_t)n];
+        if (p.mode == SLOT_REPEAT) {
+            /* Server kept its prev — our cache also kept its prev. */
+            continue;
+        }
+        if (p.mode == SLOT_CMD_DIFF) {
+            c->prev_cmd_hashes[(size_t)n] = std::move(p.cmd_hashes);
+            continue;
+        }
+        /* SLOT_FULL — recompute fresh per-cmd hashes from the just-sent
+         * cmd_list so the next frame can do Stage 2 against it. */
+        const ImDrawList *cl = draw_data->CmdLists[n];
+        std::vector<uint64_t> &dst = c->prev_cmd_hashes[(size_t)n];
+        dst.clear();
+        for (int k = 0; k < cl->CmdBuffer.Size; k++) {
+            const ImDrawCmd *dc = &cl->CmdBuffer[k];
+            if (dc->UserCallback || dc->ElemCount == 0) {
+                continue;
+            }
+            uint32_t vc = cmd_vtx_count(dc, cl);
+            dst.push_back(hash_cmd(dc, cl, vc));
+        }
+    }
 }
 
 /*===========================================================================

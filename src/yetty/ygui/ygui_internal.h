@@ -277,6 +277,12 @@ struct yetty_ygui_widget {
      * so the bound scrollbar's thumb repaints in the same frame. */
     struct yetty_ygui_widget *scroll_observer;
 
+    /* Optional: popup_menu widget that opens on right-click anywhere
+     * inside this widget's bounding box. Set by
+     * yetty_ygui_widget_set_context_menu. The engine routes right-click
+     * dispatch to this menu, bypassing the widget's own on_press. */
+    struct yetty_ygui_widget *context_menu;
+
     /* User callbacks */
     ygui_widget_click_fn click_callback;
     void *click_userdata;
@@ -349,6 +355,71 @@ struct yetty_ygui_widget {
         } textarea;
 
         struct {
+            float scroll_y;
+            /* When 0 = auto-derive from children's union bounding box on
+             * every render; otherwise explicit override. */
+            float content_h;
+        } scrollarea;
+
+        struct {
+            int on; /* 0 = off, 1 = on */
+            char *label; /* optional, drawn to the right of the pill */
+        } toggle;
+
+        struct {
+            char *label;
+            int closable;        /* 1 = render ✕ button */
+            ygui_widget_click_fn on_remove;
+            void *on_remove_userdata;
+        } chip;
+
+        struct {
+            char **labels;
+            int n;
+        } breadcrumbs;
+
+        struct {
+            char *text;     /* current text (owned) */
+            int cursor_pos; /* unused today, kept for parity with textinput */
+            char **options; /* preset values shown in the dropdown */
+            int option_count;
+            int dropdown_open;
+        } combo;
+
+        struct {
+            char **labels;                  /* menu button labels */
+            struct yetty_ygui_widget **menus; /* per-button popup_menu pointers (borrowed) */
+            int n;
+            int capacity;
+        } menubar;
+
+        struct {
+            char **labels; /* one per step */
+            int n_steps;
+            int current; /* index into labels */
+        } stepper;
+
+        struct {
+            /* Currently shown month (year/month — 0-indexed month). */
+            int shown_year, shown_month;
+            /* Selected date — (-1, -1, -1) = none. */
+            int sel_year, sel_month, sel_day;
+        } datepicker;
+
+        struct {
+            char *cwd;          /* current directory (owned) */
+            char **entries;     /* listing (owned strings) */
+            int entry_count;
+            int selected;       /* -1 if none */
+            int scroll;         /* first visible row */
+        } filepicker;
+
+        struct {
+            char *left_text;  /* primary status string (owned) */
+            char *right_text; /* optional right-aligned text (owned, NULL = none) */
+        } statusbar;
+
+        struct {
             float scroll_x, scroll_y;
             float content_w, content_h;
             float header_h;
@@ -368,6 +439,8 @@ struct yetty_ygui_widget {
 
         struct {
             float value;
+            int   indeterminate; /* 1 = render sliding bar; ignore value */
+            float anim_phase;    /* 0..1 sliding-bar position, updated on render */
         } progress;
 
         struct {
@@ -379,6 +452,14 @@ struct yetty_ygui_widget {
             int modal;
             uint32_t header_color; /* 0 = use theme bg_header */
             float scene_w, scene_h;
+            /* Title-bar drag state — set in on_press when the click
+             * lands in the title strip, consumed by on_drag to move
+             * the popup. Coordinates are widget-local at press time
+             * (lx, ly) plus the popup's widget-coord origin (orig_x/y)
+             * so the on_drag delta math is press-relative. */
+            int   dragging;
+            float drag_press_lx, drag_press_ly;
+            float drag_orig_x,    drag_orig_y;
         } popup;
 
         struct {
@@ -448,6 +529,17 @@ struct yetty_ygui_widget {
             float row_height; /* 0 = use theme->row_height */
             void (*on_select)(struct yetty_ygui_widget *table, int row, void *userdata);
             void *on_select_userdata;
+            /* Sortable columns. -1 = no sort; 0..n-1 = column index.
+             * sort_order: 0=asc, 1=desc. Clicking the header cycles
+             * none -> asc -> desc -> none. */
+            int sort_column;
+            int sort_order;
+            /* Column resize drag state. Active resize column = the
+             * column being shrunk/grown by the drag, or -1. The user
+             * grabs near the right edge of a column header to start. */
+            int resizing_column;
+            float resize_start_w;
+            float resize_start_x;
         } table;
 
         struct {
@@ -504,6 +596,17 @@ struct yetty_ygui_widget {
              * regular top-level widget list; the window only holds a
              * reference. */
             struct yetty_ygui_widget *menu;
+            /* Optional menubar (any widget; typically a MENUBAR
+             * widget) inserted as a flex-column child between the
+             * title strip and the body. Set via window_set_menubar.
+             * NULL = no menubar. The widget is reparented into the
+             * window's child list. */
+            struct yetty_ygui_widget *menubar;
+            /* Optional statusbar (any widget; typically a STATUSBAR
+             * widget) pinned to the bottom of the window. Set via
+             * window_set_statusbar. NULL = no statusbar. The widget
+             * is reparented into the window's child list. */
+            struct yetty_ygui_widget *statusbar;
         } window;
 
         struct {
@@ -742,6 +845,18 @@ struct yetty_ygui_engine {
      * treated as dirty, no DELETE flush before — CMD_ZERO supersedes
      * everything on the receiver). Cleared after that render. */
     uint8_t needs_full_redraw;
+
+    /* Optional engine-wide bars — top titlebar, top menubar (under
+     * titlebar), bottom statusbar. The widgets are normal top-level
+     * widgets the app creates; engine_set_titlebar / _set_menubar /
+     * _set_statusbar just store the pointers + reposition the
+     * widgets to span the canvas at the right edge. NULL = no bar
+     * at that slot. Apps using a window widget typically set the
+     * bars on the WINDOW instead (window_set_menubar /
+     * _set_statusbar). */
+    struct yetty_ygui_widget *engine_titlebar;
+    struct yetty_ygui_widget *engine_menubar;
+    struct yetty_ygui_widget *engine_statusbar;
 };
 
 /*=============================================================================
@@ -887,6 +1002,12 @@ void yetty_ygui_set_error(const char *msg);
  * touched widget has was_rendered = 0 and dirty = 1, so it re-emits a
  * fresh GROUP the next time it lands in the render walk. */
 void yetty_ygui_internal_queue_delete_subtree_rendered(struct yetty_ygui_widget *w);
+
+/* Move a top-level widget to the END of the engine's first_widget
+ * chain so it renders LAST (= on top of every previously-painted
+ * widget). Used by popup / popup_menu when opening so the menu / dialog
+ * is never occluded by widgets that happen to be later in the chain. */
+void yetty_ygui_internal_bring_to_front(struct yetty_ygui_widget *w);
 
 /* Internal helpers shared between the ygui-core (libuv-free) and the
  * libuv-driven runtime in ygui_engine_uv.c. Not part of the public API

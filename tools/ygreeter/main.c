@@ -1203,31 +1203,43 @@ static struct yetty_ygui_widget *make_section(struct app *app,
 
 static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_panel)
 {
-    /* Outer scrollable container — panel.scroll_y advances on wheel
-     * (panel's built-in on_scroll handler) so the user can reach
-     * sections below the visible viewport when many are expanded.
-     * Children are positioned at authored y > header_h so panel's
-     * render_all routes them through the scrolled-children path. */
-    struct yetty_ygui_widget *scroll =
-        yetty_ygui_engine_panel(app->engine, "el_scroll", 0, 0, 0, 0);
-    yetty_ygui_widget_apply_css(scroll, "flex: 1 0 0; align-self: stretch;");
-    /* Tall enough to cover every section fully expanded — overshooting
-     * is fine; panel clamps scroll to max(0, content_h - viewport). */
-    yetty_ygui_widget_panel_set_content_size(scroll, 1, 2000);
-    /* No header strip — every child lives in the scrolling area. The
-     * "header_h" gating in panel_render_all uses authored y >= header_h,
-     * so we need header_h == 0 and child y > 0. */
-    yetty_ygui_widget_panel_set_header_height(scroll, 0);
-    yetty_ygui_widget_add_child(tab_panel, scroll);
+    /* Menubar at the top — a hbox of menu buttons each opening a
+     * popup_menu beneath. */
+    struct yetty_ygui_widget *mb =
+        yetty_ygui_engine_menubar(app->engine, "el_mb", 0, 0, 600, 28);
+    yetty_ygui_widget_apply_css(mb, "align-self: stretch;");
+    struct yetty_ygui_widget *m_file = yetty_ygui_engine_popup_menu(app->engine, "el_m_file",
+                                                                     0, 0, 160);
+    yetty_ygui_widget_popup_menu_add_item(m_file, "New",   on_demo_click, NULL);
+    yetty_ygui_widget_popup_menu_add_item(m_file, "Open…", on_demo_click, NULL);
+    yetty_ygui_widget_popup_menu_add_item(m_file, "Save",  on_demo_click, NULL);
+    yetty_ygui_widget_popup_menu_add_separator(m_file);
+    yetty_ygui_widget_popup_menu_add_item(m_file, "Quit",  on_demo_click, NULL);
+    struct yetty_ygui_widget *m_edit = yetty_ygui_engine_popup_menu(app->engine, "el_m_edit",
+                                                                     0, 0, 160);
+    yetty_ygui_widget_popup_menu_add_item(m_edit, "Undo",  on_demo_click, NULL);
+    yetty_ygui_widget_popup_menu_add_item(m_edit, "Redo",  on_demo_click, NULL);
+    yetty_ygui_widget_popup_menu_add_item(m_edit, "Cut",   on_demo_click, NULL);
+    yetty_ygui_widget_popup_menu_add_item(m_edit, "Copy",  on_demo_click, NULL);
+    yetty_ygui_widget_popup_menu_add_item(m_edit, "Paste", on_demo_click, NULL);
+    struct yetty_ygui_widget *m_view = yetty_ygui_engine_popup_menu(app->engine, "el_m_view",
+                                                                     0, 0, 160);
+    yetty_ygui_widget_popup_menu_add_item(m_view, "Zoom In",  on_demo_click, NULL);
+    yetty_ygui_widget_popup_menu_add_item(m_view, "Zoom Out", on_demo_click, NULL);
+    yetty_ygui_widget_menubar_add(mb, "File", m_file);
+    yetty_ygui_widget_menubar_add(mb, "Edit", m_edit);
+    yetty_ygui_widget_menubar_add(mb, "View", m_view);
+    yetty_ygui_widget_add_child(tab_panel, mb);
 
-    /* Inner column hosting all sections. Authored y = 1 (any value >0)
-     * so panel treats it as scrollable content. */
+    /* Scrollable container — flex-column scrollarea that takes care
+     * of layout, hit-test, and wheel scrolling so the user can reach
+     * every section even with all of them open. */
     struct yetty_ygui_widget *root =
-        yetty_ygui_engine_vbox(app->engine, "el_root", 0, 1, 0, 0);
+        yetty_ygui_engine_scrollarea(app->engine, "el_root", 0, 0, 0, 0);
     yetty_ygui_widget_apply_css(root,
                                 "padding: 12px; gap: 4px; flex: 1 0 0; "
-                                "align-items: stretch;");
-    yetty_ygui_widget_add_child(scroll, root);
+                                "align-self: stretch; align-items: stretch;");
+    yetty_ygui_widget_add_child(tab_panel, root);
 
     /* ---- Inputs ---- */
     {
@@ -1252,8 +1264,17 @@ static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_pa
         yetty_ygui_widget_add_child(sec, spin_f);
         yetty_ygui_widget_add_child(sec,
             yetty_ygui_engine_checkbox(app->engine, "el_check", 24, 0, 220, 24, "Enabled", 1));
+        /* Toggle switch — pill-shaped on/off. */
+        yetty_ygui_widget_add_child(sec,
+            yetty_ygui_engine_toggle(app->engine, "el_toggle", 24, 0, 240, 26,
+                                      "Notifications", 1));
         yetty_ygui_widget_add_child(sec,
             yetty_ygui_engine_progress(app->engine, "el_prog", 24, 0, 320, 16, 0.65f));
+        /* Indeterminate progress — sliding slug, no value. */
+        struct yetty_ygui_widget *prog_indet =
+            yetty_ygui_engine_progress(app->engine, "el_prog_indet", 24, 0, 320, 16, 0.0f);
+        yetty_ygui_widget_progress_set_indeterminate(prog_indet, 1);
+        yetty_ygui_widget_add_child(sec, prog_indet);
         /* Multi-line text area — initial text + line-aware nav. */
         yetty_ygui_widget_add_child(sec,
             yetty_ygui_engine_textarea(app->engine, "el_ta", 24, 0, 420, 120,
@@ -1276,6 +1297,11 @@ static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_pa
         yetty_ygui_widget_add_child(sec,
             yetty_ygui_engine_dropdown(app->engine, "el_dd", 24, 0, 220, 28,
                                        dd_items, 3));
+        /* Combo box — editable textinput with a dropdown of suggestions. */
+        static const char *combo_items[] = {"red", "green", "blue", "magenta"};
+        yetty_ygui_widget_add_child(sec,
+            yetty_ygui_engine_combo(app->engine, "el_combo", 24, 0, 220, 28,
+                                     "red", combo_items, 4));
         static const char *ch_items[] = {"Small", "Medium", "Large", "Huge"};
         /* Choicebox row count × theme row_height (28) — must match the
          * actual rendered height, otherwise the widget paints below its
@@ -1312,7 +1338,33 @@ static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_pa
         yetty_ygui_widget_table_add_row(tbl, row1, 4);
         yetty_ygui_widget_table_add_row(tbl, row2, 4);
         yetty_ygui_widget_table_add_row(tbl, row3, 4);
+        /* Sortable + resizable headers — click a header to sort, drag
+         * its right edge (~6 px grip) to resize. */
+        yetty_ygui_widget_table_set_sortable(tbl, 1);
         yetty_ygui_widget_add_child(sec, tbl);
+        /* Breadcrumbs — last segment is the "current" location and
+         * paints in fg color, others in muted. */
+        static const char *crumbs[] = {"Home", "Projects", "yetty", "ygui"};
+        yetty_ygui_widget_add_child(sec,
+            yetty_ygui_engine_breadcrumbs(app->engine, "el_crumbs", 24, 0, 400, 24,
+                                           crumbs, 4));
+        /* Chip / tag row — closable. */
+        struct yetty_ygui_widget *chip_row =
+            yetty_ygui_engine_hbox(app->engine, "el_chip_row", 24, 0, 480, 28);
+        yetty_ygui_widget_apply_css(chip_row, "padding: 0; gap: 6; align-items: stretch;");
+        yetty_ygui_widget_add_child(chip_row,
+            yetty_ygui_engine_chip(app->engine, "el_chip_a", 0, 0, 80, 24, "linux", 1));
+        yetty_ygui_widget_add_child(chip_row,
+            yetty_ygui_engine_chip(app->engine, "el_chip_b", 0, 0, 70, 24, "gpu", 1));
+        yetty_ygui_widget_add_child(chip_row,
+            yetty_ygui_engine_chip(app->engine, "el_chip_c", 0, 0, 90, 24, "rust-free", 0));
+        yetty_ygui_widget_add_child(sec, chip_row);
+        /* Stepper — three named steps with the middle one active. */
+        static const char *steps[] = {"Setup", "Install", "Done"};
+        struct yetty_ygui_widget *step =
+            yetty_ygui_engine_stepper(app->engine, "el_steps", 24, 0, 360, 56, steps, 3);
+        yetty_ygui_widget_stepper_set_current(step, 1);
+        yetty_ygui_widget_add_child(sec, step);
     }
 
     /* ---- Lists & trees ---- */
@@ -1345,6 +1397,17 @@ static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_pa
                 yetty_ygui_engine_label(app->engine, "el_tn2", 0, 0, "  child 2"));
         }
         yetty_ygui_widget_add_child(sec, tn);
+        /* Date picker — compact month calendar. */
+        struct yetty_ygui_widget *dp =
+            yetty_ygui_engine_datepicker(app->engine, "el_date", 24, 0, 240, 220);
+        yetty_ygui_widget_datepicker_set_date(dp, 2025, 4, 15); /* May 15, 2025 */
+        yetty_ygui_widget_add_child(sec, dp);
+        /* File picker — starts in user's home or "/" if none. */
+        const char *home = getenv("HOME");
+        struct yetty_ygui_widget *fp =
+            yetty_ygui_engine_filepicker(app->engine, "el_fp", 24, 0, 480, 240,
+                                          home && *home ? home : "/");
+        yetty_ygui_widget_add_child(sec, fp);
     }
 
     /* ---- Layout & Containers ---- */
@@ -1438,6 +1501,22 @@ static void build_elements_tab(struct app *app, struct yetty_ygui_widget *tab_pa
                                       "Open menu…");
         yetty_ygui_widget_button_on_click(open_menu, on_demo_open_menu, pmenu);
         yetty_ygui_widget_add_child(sec, open_menu);
+
+        /* Right-click context menu — same popup_menu type, attached to
+         * a target widget. Engine intercepts right-click and opens at
+         * the cursor. */
+        struct yetty_ygui_widget *ctx_target =
+            yetty_ygui_engine_button(app->engine, "el_ctx_target", 24, 0, 280, 30,
+                                      "Right-click me for a context menu");
+        struct yetty_ygui_widget *cmenu = yetty_ygui_engine_popup_menu(app->engine,
+                                                                       "el_ctxmenu", 0, 0, 200);
+        yetty_ygui_widget_popup_menu_add_item(cmenu, "Cut",   on_demo_click, NULL);
+        yetty_ygui_widget_popup_menu_add_item(cmenu, "Copy",  on_demo_click, NULL);
+        yetty_ygui_widget_popup_menu_add_item(cmenu, "Paste", on_demo_click, NULL);
+        yetty_ygui_widget_popup_menu_add_separator(cmenu);
+        yetty_ygui_widget_popup_menu_add_item(cmenu, "Delete", on_demo_click, NULL);
+        yetty_ygui_widget_set_context_menu(ctx_target, cmenu);
+        yetty_ygui_widget_add_child(sec, ctx_target);
     }
 }
 
@@ -1511,6 +1590,40 @@ int main(int argc, char **argv)
     /* About dialog (popup + rich content + close button). Hidden until
      * the menu's About item opens it. */
     build_about_dialog(&app);
+
+    /* Window-level menubar — File / Edit / Help. Sits between the
+     * window's title strip and the body (the tabbar). */
+    {
+        struct yetty_ygui_widget *mb =
+            yetty_ygui_engine_menubar(app.engine, "win_mb", 0, 0, 100, 26);
+        struct yetty_ygui_widget *mf = yetty_ygui_engine_popup_menu(app.engine, "win_mf",
+                                                                     0, 0, 180);
+        yetty_ygui_widget_popup_menu_add_item(mf, "New tab",  on_demo_click, NULL);
+        yetty_ygui_widget_popup_menu_add_item(mf, "Reload",   on_demo_click, NULL);
+        yetty_ygui_widget_popup_menu_add_separator(mf);
+        yetty_ygui_widget_popup_menu_add_item(mf, "Quit",     on_menu_close, &app);
+        struct yetty_ygui_widget *me = yetty_ygui_engine_popup_menu(app.engine, "win_me",
+                                                                     0, 0, 180);
+        yetty_ygui_widget_popup_menu_add_item(me, "Cut",   on_demo_click, NULL);
+        yetty_ygui_widget_popup_menu_add_item(me, "Copy",  on_demo_click, NULL);
+        yetty_ygui_widget_popup_menu_add_item(me, "Paste", on_demo_click, NULL);
+        struct yetty_ygui_widget *mh = yetty_ygui_engine_popup_menu(app.engine, "win_mh",
+                                                                     0, 0, 180);
+        yetty_ygui_widget_popup_menu_add_item(mh, "About", on_menu_about, &app);
+        yetty_ygui_widget_menubar_add(mb, "File", mf);
+        yetty_ygui_widget_menubar_add(mb, "Edit", me);
+        yetty_ygui_widget_menubar_add(mb, "Help", mh);
+        yetty_ygui_widget_window_set_menubar(app.outer, mb);
+    }
+
+    /* Window-level statusbar. */
+    {
+        struct yetty_ygui_widget *sb =
+            yetty_ygui_engine_statusbar(app.engine, "win_sb", 0, 0, 100, 22,
+                                         "Ready — ygui showcase");
+        yetty_ygui_widget_statusbar_set_right(sb, "v0.2");
+        yetty_ygui_widget_window_set_statusbar(app.outer, sb);
+    }
 
     app.tabbar = yetty_ygui_engine_tabbar(app.engine, "tabs", 0, 0, 0, 0);
     yetty_ygui_widget_apply_css(app.tabbar, "flex: 1 0 0; align-items: stretch;");

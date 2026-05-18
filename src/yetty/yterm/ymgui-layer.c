@@ -79,6 +79,17 @@ struct yetty_yterm_ymgui_card {
     size_t *slot_sizes;
     size_t slot_count;
 
+    /* Stage 2 per-slot bookkeeping. The three parallel arrays
+     * slot_cmd_hashes[i], slot_cmd_vtx_counts[i], slot_cmd_orig_indices[i]
+     * each have slot_cmd_counts[i] entries — one per non-empty cmd in
+     * draw order. orig_indices points back into the slot's wire_cmd
+     * array so a CMD_DIFF reference can locate the source cmd's
+     * (vtx_offset, idx_offset, clip, tex, elem_count) directly. */
+    uint64_t **slot_cmd_hashes;
+    uint32_t **slot_cmd_vtx_counts;
+    uint32_t **slot_cmd_orig_indices;
+    uint32_t *slot_cmd_counts;
+
     /* Atlas. */
     int atlas_ready;
     uint32_t atlas_w;
@@ -142,6 +153,19 @@ struct yetty_yterm_ymgui_layer {
 
     /* Click-focus. 0 = no card focused. */
     uint32_t focused_card_id;
+
+    /* Last viewport size seen at render time. The pane's actual pixel
+     * width/height can differ from grid_cols × cell_w (and similarly for
+     * height) by up to one cell when the cell size doesn't divide the
+     * pane evenly — the grid is computed as floor(pane / cell). Card
+     * pixel coords and the shader's "display size" must use this actual
+     * vp size, not the truncated grid * cell product, otherwise
+     * rendered geometry gets stretched by vp/(grid*cell) while mouse
+     * coords are unstretched, and hover misses by 0.5-1% × position.
+     * Updated on every render; consumed by card_pixel_w / card_origin_x
+     * and the SC_RESIZE emit path. */
+    float last_vp_w;
+    float last_vp_h;
 
     /* Alt-screen state. The currently-active card set is in the fields
      * above (cards/card_count/...). The "other" set (primary while we're
@@ -267,6 +291,33 @@ static void card_release_gpu(struct yetty_yterm_ymgui_card *c)
     c->atlas_ready = 0;
 }
 
+static void card_release_slot_caches(struct yetty_yterm_ymgui_card *c)
+{
+    if (c->slot_cmd_hashes) {
+        for (size_t i = 0; i < c->slot_count; i++) {
+            free(c->slot_cmd_hashes[i]);
+        }
+        free(c->slot_cmd_hashes);
+        c->slot_cmd_hashes = NULL;
+    }
+    if (c->slot_cmd_vtx_counts) {
+        for (size_t i = 0; i < c->slot_count; i++) {
+            free(c->slot_cmd_vtx_counts[i]);
+        }
+        free(c->slot_cmd_vtx_counts);
+        c->slot_cmd_vtx_counts = NULL;
+    }
+    if (c->slot_cmd_orig_indices) {
+        for (size_t i = 0; i < c->slot_count; i++) {
+            free(c->slot_cmd_orig_indices[i]);
+        }
+        free(c->slot_cmd_orig_indices);
+        c->slot_cmd_orig_indices = NULL;
+    }
+    free(c->slot_cmd_counts);
+    c->slot_cmd_counts = NULL;
+}
+
 static void card_destroy(struct yetty_yterm_ymgui_card *c)
 {
     if (!c) {
@@ -276,6 +327,7 @@ static void card_destroy(struct yetty_yterm_ymgui_card *c)
     free(c->frame_bytes);
     free(c->slot_offsets);
     free(c->slot_sizes);
+    card_release_slot_caches(c);
     free(c);
 }
 
@@ -307,30 +359,69 @@ static uint32_t card_effective_w_cells(const struct yetty_yterm_ymgui_layer *l,
     return l->base.grid_size.cols - (uint32_t)col;
 }
 
+/* Effective cell size in framebuffer pixels — the pane's pixel
+ * dimensions divided by the grid dimensions in cells. Use this (not
+ * the layer's `cell_size`, which comes from font metrics) for any
+ * positioning that needs to align with the actual rendering area. The
+ * two differ when grid_cols × cell_w doesn't tile the pane evenly. */
+static float eff_cell_w(const struct yetty_yterm_ymgui_layer *l)
+{
+    if (l->base.grid_size.cols == 0 || l->last_vp_w <= 0.0f) {
+        return l->base.cell_size.width;
+    }
+    return l->last_vp_w / (float)l->base.grid_size.cols;
+}
+
+static float eff_cell_h(const struct yetty_yterm_ymgui_layer *l)
+{
+    if (l->base.grid_size.rows == 0 || l->last_vp_h <= 0.0f) {
+        return l->base.cell_size.height;
+    }
+    return l->last_vp_h / (float)l->base.grid_size.rows;
+}
+
+static uint32_t card_effective_h_cells(const struct yetty_yterm_ymgui_layer *l,
+                                       const struct yetty_yterm_ymgui_card *c)
+{
+    if (c->h_cells != 0) {
+        return c->h_cells;
+    }
+    /* h_cells == 0 means "track bottom edge". The card spans from its
+     * rolling_row anchor down to the current bottom of the visible grid.
+     * row0_absolute is the absolute row of the topmost visible line. */
+    uint32_t row0 = l->row0_absolute;
+    uint32_t rows = l->base.grid_size.rows;
+    uint32_t bottom_abs = row0 + rows;
+    if (c->rolling_row >= bottom_abs) {
+        return 1;
+    }
+    return bottom_abs - c->rolling_row;
+}
+
 static float card_pixel_w(const struct yetty_yterm_ymgui_layer *l,
                           const struct yetty_yterm_ymgui_card *c)
 {
-    return (float)card_effective_w_cells(l, c) * l->base.cell_size.width;
+    return (float)card_effective_w_cells(l, c) * eff_cell_w(l);
 }
 
 static float card_pixel_h(const struct yetty_yterm_ymgui_layer *l,
                           const struct yetty_yterm_ymgui_card *c)
 {
-    return (float)c->h_cells * l->base.cell_size.height;
+    return (float)card_effective_h_cells(l, c) * eff_cell_h(l);
 }
 
 static float card_origin_x(const struct yetty_yterm_ymgui_layer *l,
                            const struct yetty_yterm_ymgui_card *c)
 {
     int32_t col = c->col < 0 ? 0 : c->col;
-    return (float)col * l->base.cell_size.width;
+    return (float)col * eff_cell_w(l);
 }
 
 static float card_origin_y(const struct yetty_yterm_ymgui_layer *l,
                            const struct yetty_yterm_ymgui_card *c)
 {
     /* int32 to allow temporarily negative when scrolled off the top. */
-    return (float)((int32_t)c->rolling_row - (int32_t)l->row0_absolute) * l->base.cell_size.height;
+    return (float)((int32_t)c->rolling_row - (int32_t)l->row0_absolute) * eff_cell_h(l);
 }
 
 static int card_visible(const struct yetty_yterm_ymgui_layer *l,
@@ -338,7 +429,8 @@ static int card_visible(const struct yetty_yterm_ymgui_layer *l,
 {
     uint32_t row0 = l->row0_absolute;
     uint32_t rows = l->base.grid_size.rows;
-    return (c->rolling_row + c->h_cells > row0) && (c->rolling_row < row0 + rows);
+    uint32_t span = card_effective_h_cells(l, c);
+    return (c->rolling_row + span > row0) && (c->rolling_row < row0 + rows);
 }
 
 /*===========================================================================
@@ -738,16 +830,11 @@ static struct yetty_ycore_void_result handle_card_place(struct yetty_yterm_ymgui
 
     c->col = cp->col;
     c->w_cells = cp->w_cells;
-    /* h_cells == 0 = "until bottom edge of the pane at placement time".
-     * Resolved once here; the card's height is fixed from then on (the
-     * width still tracks the pane if w_cells == 0 — that's dynamic). */
-    if (cp->h_cells == 0) {
-        int32_t row = cp->row < 0 ? 0 : cp->row;
-        uint32_t rows = l->base.grid_size.rows;
-        c->h_cells = ((uint32_t)row >= rows) ? 1u : (rows - (uint32_t)row);
-    } else {
-        c->h_cells = cp->h_cells;
-    }
+    /* h_cells == 0 = "track bottom edge dynamically" — same model as
+     * w_cells == 0 for the right edge. Stored verbatim; the effective
+     * cell count is computed from the current grid in card_effective_h_cells
+     * each time it's needed (anchor, render, RESIZE emit). */
+    c->h_cells = cp->h_cells;
 
     /* Map visible-row to rolling_row anchor; scroll up if not enough room. */
     {
@@ -759,7 +846,7 @@ static struct yetty_ycore_void_result handle_card_place(struct yetty_yterm_ymgui
     /* On first placement, advance the cursor under the card so subsequent
      * stdout flows beneath. Move/resize emits do NOT touch the cursor. */
     if (created && l->base.cursor_fn) {
-        int new_row = cp->row + (int)c->h_cells;
+        int new_row = cp->row + (int)card_effective_h_cells(l, c);
         uint32_t rows = l->base.grid_size.rows;
         if (new_row < 0) {
             new_row = 0;
@@ -905,11 +992,418 @@ static struct yetty_ycore_void_result handle_clear(struct yetty_yterm_ymgui_laye
  * Frame / atlas handlers
  *=========================================================================*/
 
-/* Walk the wire frame to produce a denormalized frame_bytes — REPEAT
- * slots get filled in from the card's previous frame_bytes, full slots
- * are copied straight from the wire. The result is laid out exactly
- * like a v2 frame (no REPEAT flags), so frame_measure / frame_upload /
- * draw_card don't need to know REPEAT exists. */
+/* FNV-1a 64-bit update. Identical to the frontend's fnv64_update so
+ * stage-2 hashes computed on both sides agree on the same content. */
+static inline uint64_t ymgui_fnv64_update(uint64_t h, const void *data, size_t n)
+{
+    const uint8_t *p = (const uint8_t *)data;
+    for (size_t i = 0; i < n; i++) {
+        h ^= p[i];
+        h *= 0x100000001b3ULL;
+    }
+    return h;
+}
+
+/* Mirror of imgui_impl_yetty.cpp::cmd_vtx_count — returns the number of
+ * vertices a single cmd actually references inside its cmd_list's vtx
+ * buffer, i.e. max(idx_slice) + 1. The cmd's vtx slice is then
+ * [vtx_offset, vtx_offset + vtx_count). idx_bpe must match the frame's
+ * idx32 flag. */
+static uint32_t ymgui_cmd_vtx_count(const uint8_t *idx_slice, uint32_t elem_count, int idx32)
+{
+    if (elem_count == 0) {
+        return 0;
+    }
+    uint32_t max_idx = 0;
+    if (idx32) {
+        const uint32_t *p = (const uint32_t *)idx_slice;
+        for (uint32_t i = 0; i < elem_count; i++) {
+            if (p[i] > max_idx) {
+                max_idx = p[i];
+            }
+        }
+    } else {
+        const uint16_t *p = (const uint16_t *)idx_slice;
+        for (uint32_t i = 0; i < elem_count; i++) {
+            if ((uint32_t)p[i] > max_idx) {
+                max_idx = (uint32_t)p[i];
+            }
+        }
+    }
+    return max_idx + 1u;
+}
+
+/* Mirror of imgui_impl_yetty.cpp::hash_cmd. Same field order, same
+ * salts. Operates on raw wire bytes — vtx_slice points at the start of
+ * the cmd's vertex slice within the cmd_list's vtx buffer (already at
+ * vtx_offset), idx_slice at the start of the cmd's index slice (already
+ * at idx_offset). idx32 picks 2-byte vs 4-byte index size. */
+static uint64_t ymgui_hash_cmd(const struct yetty_ymgui_wire_cmd *wc, const uint8_t *vtx_slice,
+                               uint32_t vtx_count, const uint8_t *idx_slice, int idx32)
+{
+    uint64_t h = 0xcbf29ce484222325ULL;
+    float clip[4] = {wc->clip_min_x, wc->clip_min_y, wc->clip_max_x, wc->clip_max_y};
+    uint32_t tex = wc->tex_id;
+    uint32_t ec = wc->elem_count;
+    uint32_t isize = idx32 ? 4u : 2u;
+    h = ymgui_fnv64_update(h, clip, sizeof(clip));
+    h = ymgui_fnv64_update(h, &tex, sizeof(tex));
+    h = ymgui_fnv64_update(h, &ec, sizeof(ec));
+    h = ymgui_fnv64_update(h, &vtx_count, sizeof(vtx_count));
+    h = ymgui_fnv64_update(h, &isize, sizeof(isize));
+    if (vtx_count) {
+        h = ymgui_fnv64_update(h, vtx_slice, (size_t)vtx_count * 20u);
+    }
+    if (ec) {
+        h = ymgui_fnv64_update(h, idx_slice, (size_t)ec * isize);
+    }
+    return h;
+}
+
+/* Per-slot Stage-2 index. One entry per non-empty non-callback cmd in
+ * the slot, in original draw order. `cmd_index` points into the slot's
+ * wire_cmd array so the reconstruction path can pull (clip, tex,
+ * elem_count, vtx_offset, idx_offset) directly. Empty cmds are skipped
+ * here AND on the frontend, so the indices line up across both sides. */
+struct ymgui_slot_index {
+    uint64_t *hashes;
+    uint32_t *vtx_counts;
+    uint32_t *cmd_indices;
+    uint32_t count;
+};
+
+/* Compute the per-slot index for a freshly-stored slot. Used both for
+ * SLOT_FULL receives (we just memcpy'd the wire body, now we also build
+ * the per-cmd index so the next frame can reference us) and for
+ * CMD_DIFF-reconstructed slots. Returns 0 on OOM. */
+static int ymgui_index_slot_cmds(const uint8_t *slot_bytes, int idx32,
+                                 struct ymgui_slot_index *out)
+{
+    const struct yetty_ymgui_wire_cmd_list *clh =
+        (const struct yetty_ymgui_wire_cmd_list *)slot_bytes;
+    size_t idx_bpe = idx32 ? 4u : 2u;
+    size_t vbytes = (size_t)clh->vtx_count * 20u;
+    size_t ibytes = (size_t)clh->idx_count * idx_bpe;
+    if (ibytes & 3u) {
+        ibytes += 4u - (ibytes & 3u);
+    }
+    const uint8_t *vtx_base = slot_bytes + sizeof(*clh);
+    const uint8_t *idx_base = vtx_base + vbytes;
+    const struct yetty_ymgui_wire_cmd *cmds =
+        (const struct yetty_ymgui_wire_cmd *)(idx_base + ibytes);
+
+    uint64_t *hashes = NULL;
+    uint32_t *vcs = NULL;
+    uint32_t *idxs = NULL;
+    if (clh->cmd_count) {
+        hashes = (uint64_t *)malloc((size_t)clh->cmd_count * sizeof(uint64_t));
+        vcs = (uint32_t *)malloc((size_t)clh->cmd_count * sizeof(uint32_t));
+        idxs = (uint32_t *)malloc((size_t)clh->cmd_count * sizeof(uint32_t));
+        if (!hashes || !vcs || !idxs) {
+            free(hashes);
+            free(vcs);
+            free(idxs);
+            return 0;
+        }
+    }
+
+    uint32_t kept = 0;
+    for (uint32_t k = 0; k < clh->cmd_count; k++) {
+        const struct yetty_ymgui_wire_cmd *wc = &cmds[k];
+        if (wc->elem_count == 0) {
+            continue;
+        }
+        const uint8_t *idx_slice = idx_base + (size_t)wc->idx_offset * idx_bpe;
+        uint32_t vc = ymgui_cmd_vtx_count(idx_slice, wc->elem_count, idx32);
+        const uint8_t *vtx_slice = vtx_base + (size_t)wc->vtx_offset * 20u;
+        hashes[kept] = ymgui_hash_cmd(wc, vtx_slice, vc, idx_slice, idx32);
+        vcs[kept] = vc;
+        idxs[kept] = k;
+        kept++;
+    }
+    out->hashes = hashes;
+    out->vtx_counts = vcs;
+    out->cmd_indices = idxs;
+    out->count = kept;
+    return 1;
+}
+
+/* Snapshot of one cmd's resolved content during CMD_DIFF reconstruction.
+ * Source bytes live elsewhere — these are non-owning pointers + counts
+ * used to compute slot size in pass 1 and to memcpy in pass 2. */
+struct ymgui_cmd_view {
+    struct yetty_ymgui_wire_cmd wc; /* clip / tex / elem_count (vtx_offset
+                                     * and idx_offset get reassigned when
+                                     * packing the rebuilt slot) */
+    uint32_t vtx_count;
+    const uint8_t *vtx_src;
+    const uint8_t *idx_src;
+};
+
+/* Walk the wire frame to produce a denormalized frame_bytes. Three slot
+ * modes are flattened to one canonical layout (cmd_list_hdr + vtx + idx
+ * + cmds, flags=0) so frame_measure / frame_upload / draw_card never
+ * need to know about REPEAT or CMD_DIFF:
+ *
+ *   REPEAT   — copy the slot's bytes verbatim from the prev frame.
+ *   CMD_DIFF — gather cmds from inline entries (this wire) + previous
+ *              slot's cached cmds (matched by content hash), then pack
+ *              vtx | idx | cmds in draw order with fresh offsets.
+ *   FULL     — copy the slot's bytes verbatim from the wire.
+ *
+ * In all three cases we (re)compute per-cmd hashes after composing the
+ * slot so the next frame's CMD_DIFF can reference us. */
+/* Slot resolution mode for handle_frame pass 1. */
+enum ymgui_slot_mode {
+    YMGUI_SLOT_FROM_WIRE = 0, /* SLOT_FULL: copy bytes from wire */
+    YMGUI_SLOT_FROM_PREV = 1, /* SLOT_REPEAT: copy bytes from prev frame */
+    YMGUI_SLOT_FROM_DIFF = 2, /* SLOT_CMD_DIFF: gather from inline+prev */
+};
+
+struct ymgui_slot_resolve {
+    enum ymgui_slot_mode mode;
+    /* WIRE / PREV: */
+    size_t src_off;
+    size_t size;
+    /* DIFF: array of resolved cmd views (owned). */
+    struct ymgui_cmd_view *cmd_views;
+    uint32_t cmd_view_count;
+    /* DIFF: precomputed denormalized slot size. */
+    size_t diff_slot_size;
+};
+
+static void free_slot_resolves(struct ymgui_slot_resolve *r, size_t n)
+{
+    if (!r) {
+        return;
+    }
+    for (size_t i = 0; i < n; i++) {
+        free(r[i].cmd_views);
+    }
+    free(r);
+}
+
+/* Resolve a CMD_DIFF body into a draw-order array of cmd_views, each
+ * pointing either into the wire (for inline entries) or into prev_slot
+ * bytes (for cached entries). On success returns 0 and *consumed is the
+ * # of wire bytes the body occupied (after the cmd_list_hdr). */
+static int resolve_cmd_diff(const uint8_t *wire_body, size_t wire_remaining,
+                            uint32_t expected_cmd_count, const uint8_t *prev_slot,
+                            const uint64_t *prev_hashes, const uint32_t *prev_vtx_counts,
+                            const uint32_t *prev_orig_indices, uint32_t prev_count, int idx32,
+                            struct ymgui_cmd_view **out_views, uint32_t *out_count,
+                            size_t *out_consumed)
+{
+    if (wire_remaining < 8) {
+        return -1;
+    }
+    uint32_t hash_count = *(const uint32_t *)(wire_body + 0);
+    uint32_t inline_count = *(const uint32_t *)(wire_body + 4);
+    if (hash_count != expected_cmd_count) {
+        return -1;
+    }
+    size_t off = 8;
+    if (off + (size_t)hash_count * 8u > wire_remaining) {
+        return -1;
+    }
+    const uint64_t *hashes = (const uint64_t *)(wire_body + off);
+    off += (size_t)hash_count * 8u;
+
+    size_t idx_bpe = idx32 ? 4u : 2u;
+
+    /* Index inline entries by hash so the draw-order walk below is
+     * O(hash_count) on average (inline_count is typically small). For
+     * now linear search — frames have a few dozen cmds max. */
+    struct {
+        uint64_t hash;
+        const struct yetty_ymgui_wire_cmd_inline *ih;
+        const struct yetty_ymgui_wire_cmd *wc;
+        const uint8_t *vtx;
+        const uint8_t *idx;
+    } *inlines = NULL;
+    if (inline_count) {
+        inlines = (typeof(inlines))calloc(inline_count, sizeof(*inlines));
+        if (!inlines) {
+            return -1;
+        }
+    }
+    for (uint32_t i = 0; i < inline_count; i++) {
+        if (off + sizeof(struct yetty_ymgui_wire_cmd_inline) > wire_remaining) {
+            free(inlines);
+            return -1;
+        }
+        const struct yetty_ymgui_wire_cmd_inline *ih =
+            (const struct yetty_ymgui_wire_cmd_inline *)(wire_body + off);
+        off += sizeof(*ih);
+        if (off + sizeof(struct yetty_ymgui_wire_cmd) > wire_remaining) {
+            free(inlines);
+            return -1;
+        }
+        const struct yetty_ymgui_wire_cmd *wc =
+            (const struct yetty_ymgui_wire_cmd *)(wire_body + off);
+        off += sizeof(*wc);
+        size_t vbytes = (size_t)ih->vtx_count * 20u;
+        size_t ibytes = (size_t)wc->elem_count * idx_bpe;
+        if (ibytes & 3u) {
+            ibytes += 4u - (ibytes & 3u);
+        }
+        if (off + vbytes + ibytes > wire_remaining) {
+            free(inlines);
+            return -1;
+        }
+        inlines[i].hash = ih->hash;
+        inlines[i].ih = ih;
+        inlines[i].wc = wc;
+        inlines[i].vtx = wire_body + off;
+        off += vbytes;
+        inlines[i].idx = wire_body + off;
+        off += ibytes;
+    }
+
+    /* Precompute prev slot's wire_cmd array + vtx/idx base pointers for
+     * looking up cached cmds by original index. */
+    const struct yetty_ymgui_wire_cmd *prev_cmds = NULL;
+    const uint8_t *prev_vtx_base = NULL;
+    const uint8_t *prev_idx_base = NULL;
+    if (prev_slot) {
+        const struct yetty_ymgui_wire_cmd_list *prev_clh =
+            (const struct yetty_ymgui_wire_cmd_list *)prev_slot;
+        size_t pvbytes = (size_t)prev_clh->vtx_count * 20u;
+        size_t pibytes = (size_t)prev_clh->idx_count * idx_bpe;
+        if (pibytes & 3u) {
+            pibytes += 4u - (pibytes & 3u);
+        }
+        prev_vtx_base = prev_slot + sizeof(*prev_clh);
+        prev_idx_base = prev_vtx_base + pvbytes;
+        prev_cmds = (const struct yetty_ymgui_wire_cmd *)(prev_idx_base + pibytes);
+    }
+
+    struct ymgui_cmd_view *views = NULL;
+    if (hash_count) {
+        views = (struct ymgui_cmd_view *)calloc(hash_count, sizeof(*views));
+        if (!views) {
+            free(inlines);
+            return -1;
+        }
+    }
+
+    for (uint32_t k = 0; k < hash_count; k++) {
+        uint64_t want = hashes[k];
+        int found = 0;
+        /* Inline first — fresh content, no extraction needed. */
+        for (uint32_t i = 0; i < inline_count; i++) {
+            if (inlines[i].hash != want) {
+                continue;
+            }
+            views[k].wc = *inlines[i].wc;
+            views[k].vtx_count = inlines[i].ih->vtx_count;
+            views[k].vtx_src = inlines[i].vtx;
+            views[k].idx_src = inlines[i].idx;
+            found = 1;
+            break;
+        }
+        if (found) {
+            continue;
+        }
+        /* Fall back to prev slot — locate by hash in the prev index. */
+        for (uint32_t i = 0; i < prev_count; i++) {
+            if (prev_hashes[i] != want) {
+                continue;
+            }
+            uint32_t orig = prev_orig_indices[i];
+            views[k].wc = prev_cmds[orig];
+            views[k].vtx_count = prev_vtx_counts[i];
+            views[k].vtx_src = prev_vtx_base + (size_t)prev_cmds[orig].vtx_offset * 20u;
+            views[k].idx_src = prev_idx_base + (size_t)prev_cmds[orig].idx_offset * idx_bpe;
+            found = 1;
+            break;
+        }
+        if (!found) {
+            free(inlines);
+            free(views);
+            return -1;
+        }
+    }
+
+    free(inlines);
+    *out_views = views;
+    *out_count = hash_count;
+    *out_consumed = off;
+    return 0;
+}
+
+/* Compute the denormalized slot size given resolved cmd_views. Layout:
+ *   cl_hdr (16) + vtx (concat) + idx_padded (concat) + wire_cmds. */
+static size_t diff_slot_size(const struct ymgui_cmd_view *views, uint32_t count, int idx32)
+{
+    size_t idx_bpe = idx32 ? 4u : 2u;
+    size_t vtx_total = 0;
+    size_t idx_total_elems = 0;
+    for (uint32_t k = 0; k < count; k++) {
+        vtx_total += (size_t)views[k].vtx_count;
+        idx_total_elems += (size_t)views[k].wc.elem_count;
+    }
+    size_t vbytes = vtx_total * 20u;
+    size_t ibytes = idx_total_elems * idx_bpe;
+    if (ibytes & 3u) {
+        ibytes += 4u - (ibytes & 3u);
+    }
+    return sizeof(struct yetty_ymgui_wire_cmd_list) + vbytes + ibytes +
+           (size_t)count * sizeof(struct yetty_ymgui_wire_cmd);
+}
+
+/* Write a denormalized slot from resolved cmd_views into `dst`. Returns
+ * # of bytes written. */
+static size_t write_diff_slot(uint8_t *dst, const struct ymgui_cmd_view *views, uint32_t count,
+                              int idx32)
+{
+    size_t idx_bpe = idx32 ? 4u : 2u;
+    size_t vtx_total = 0;
+    size_t idx_total_elems = 0;
+    for (uint32_t k = 0; k < count; k++) {
+        vtx_total += (size_t)views[k].vtx_count;
+        idx_total_elems += (size_t)views[k].wc.elem_count;
+    }
+    size_t vbytes = vtx_total * 20u;
+    size_t ibytes = idx_total_elems * idx_bpe;
+    size_t ipadded = ibytes;
+    if (ipadded & 3u) {
+        ipadded += 4u - (ipadded & 3u);
+    }
+
+    struct yetty_ymgui_wire_cmd_list *out_clh = (struct yetty_ymgui_wire_cmd_list *)dst;
+    out_clh->vtx_count = (uint32_t)vtx_total;
+    out_clh->idx_count = (uint32_t)idx_total_elems;
+    out_clh->cmd_count = count;
+    out_clh->flags = 0;
+
+    uint8_t *vtx_dst = dst + sizeof(*out_clh);
+    uint8_t *idx_dst = vtx_dst + vbytes;
+    struct yetty_ymgui_wire_cmd *cmd_dst = (struct yetty_ymgui_wire_cmd *)(idx_dst + ipadded);
+
+    uint32_t vo = 0;
+    uint32_t io = 0;
+    for (uint32_t k = 0; k < count; k++) {
+        const struct ymgui_cmd_view *v = &views[k];
+        if (v->vtx_count) {
+            memcpy(vtx_dst + (size_t)vo * 20u, v->vtx_src, (size_t)v->vtx_count * 20u);
+        }
+        if (v->wc.elem_count) {
+            memcpy(idx_dst + (size_t)io * idx_bpe, v->idx_src,
+                   (size_t)v->wc.elem_count * idx_bpe);
+        }
+        cmd_dst[k] = v->wc;
+        cmd_dst[k].vtx_offset = vo;
+        cmd_dst[k].idx_offset = io;
+        vo += v->vtx_count;
+        io += v->wc.elem_count;
+    }
+    if (ipadded > ibytes) {
+        memset(idx_dst + ibytes, 0, ipadded - ibytes);
+    }
+    return sizeof(*out_clh) + vbytes + ipadded + (size_t)count * sizeof(*cmd_dst);
+}
+
 static struct yetty_ycore_void_result handle_frame(struct yetty_yterm_ymgui_layer *l,
                                                    const uint8_t *raw, size_t size)
 {
@@ -930,18 +1424,13 @@ static struct yetty_ycore_void_result handle_frame(struct yetty_yterm_ymgui_laye
     size_t idx_bpe = idx32 ? 4u : 2u;
     size_t cl_count = fh->cmd_list_count;
 
-    /* Pass 1: walk the wire, classify each slot (REPEAT vs full),
-     * compute the denormalized size. */
-    struct slot_info {
-        int from_cache;   /* 1 = source = previous frame_bytes */
-        size_t src_off;   /* offset in source buffer (wire or prev frame) */
-        size_t size;      /* full slot size: hdr + vtx + idx_padded + cmds */
-    };
-    struct slot_info *infos = NULL;
+    /* Pass 1: classify each slot and (for CMD_DIFF) pre-resolve the
+     * cmd_view list so pass 2 can just memcpy. */
+    struct ymgui_slot_resolve *res = NULL;
     if (cl_count) {
-        infos = (struct slot_info *)calloc(cl_count, sizeof(*infos));
-        if (!infos) {
-            return YETTY_ERR(yetty_ycore_void, "ymgui: oom (slot infos)");
+        res = (struct ymgui_slot_resolve *)calloc(cl_count, sizeof(*res));
+        if (!res) {
+            return YETTY_ERR(yetty_ycore_void, "ymgui: oom (slot resolves)");
         }
     }
 
@@ -951,22 +1440,48 @@ static struct yetty_ycore_void_result handle_frame(struct yetty_yterm_ymgui_laye
 
     for (size_t i = 0; i < cl_count; i++) {
         if (raw + wire_off + sizeof(struct yetty_ymgui_wire_cmd_list) > wire_end) {
-            free(infos);
+            free_slot_resolves(res, cl_count);
             return YETTY_ERR(yetty_ycore_void, "ymgui: --frame truncated cmd_list_hdr");
         }
         const struct yetty_ymgui_wire_cmd_list *clh =
             (const struct yetty_ymgui_wire_cmd_list *)(raw + wire_off);
+        wire_off += sizeof(*clh);
 
         if (clh->flags & YMGUI_CMDLIST_FLAG_REPEAT) {
             if (i >= c->slot_count || !c->frame_bytes) {
-                free(infos);
+                free_slot_resolves(res, cl_count);
                 return YETTY_ERR(yetty_ycore_void,
                                  "ymgui: REPEAT slot has no cached predecessor");
             }
-            infos[i].from_cache = 1;
-            infos[i].src_off = c->slot_offsets[i];
-            infos[i].size = c->slot_sizes[i];
-            wire_off += sizeof(*clh);
+            res[i].mode = YMGUI_SLOT_FROM_PREV;
+            res[i].src_off = c->slot_offsets[i];
+            res[i].size = c->slot_sizes[i];
+        } else if (clh->flags & YMGUI_CMDLIST_FLAG_CMD_DIFF) {
+            const uint8_t *body = raw + wire_off;
+            size_t avail = (size_t)(wire_end - body);
+            const uint8_t *prev_slot =
+                (i < c->slot_count && c->frame_bytes) ? (c->frame_bytes + c->slot_offsets[i])
+                                                      : NULL;
+            const uint64_t *prev_h =
+                (c->slot_cmd_hashes && i < c->slot_count) ? c->slot_cmd_hashes[i] : NULL;
+            const uint32_t *prev_v =
+                (c->slot_cmd_vtx_counts && i < c->slot_count) ? c->slot_cmd_vtx_counts[i] : NULL;
+            const uint32_t *prev_oi =
+                (c->slot_cmd_orig_indices && i < c->slot_count) ? c->slot_cmd_orig_indices[i]
+                                                                : NULL;
+            uint32_t prev_cnt = (c->slot_cmd_counts && i < c->slot_count) ? c->slot_cmd_counts[i] : 0;
+            size_t consumed = 0;
+            if (resolve_cmd_diff(body, avail, clh->cmd_count, prev_slot, prev_h, prev_v, prev_oi,
+                                 prev_cnt, idx32, &res[i].cmd_views, &res[i].cmd_view_count,
+                                 &consumed) != 0) {
+                free_slot_resolves(res, cl_count);
+                return YETTY_ERR(yetty_ycore_void, "ymgui: CMD_DIFF resolve failed");
+            }
+            wire_off += consumed;
+            res[i].mode = YMGUI_SLOT_FROM_DIFF;
+            res[i].diff_slot_size =
+                diff_slot_size(res[i].cmd_views, res[i].cmd_view_count, idx32);
+            res[i].size = res[i].diff_slot_size;
         } else {
             size_t vbytes = (size_t)clh->vtx_count * 20u;
             size_t ibytes_padded = (size_t)clh->idx_count * idx_bpe;
@@ -974,21 +1489,21 @@ static struct yetty_ycore_void_result handle_frame(struct yetty_yterm_ymgui_laye
                 ibytes_padded += 4u - (ibytes_padded & 3u);
             }
             size_t cmd_bytes = (size_t)clh->cmd_count * sizeof(struct yetty_ymgui_wire_cmd);
-            size_t slot_size = sizeof(*clh) + vbytes + ibytes_padded + cmd_bytes;
-            if (raw + wire_off + slot_size > wire_end) {
-                free(infos);
+            size_t body_size = vbytes + ibytes_padded + cmd_bytes;
+            if (raw + wire_off + body_size > wire_end) {
+                free_slot_resolves(res, cl_count);
                 return YETTY_ERR(yetty_ycore_void, "ymgui: --frame truncated slot body");
             }
-            infos[i].from_cache = 0;
-            infos[i].src_off = wire_off;
-            infos[i].size = slot_size;
-            wire_off += slot_size;
+            res[i].mode = YMGUI_SLOT_FROM_WIRE;
+            res[i].src_off = wire_off - sizeof(*clh); /* include cl_hdr */
+            res[i].size = sizeof(*clh) + body_size;
+            wire_off += body_size;
         }
-        denorm_size += infos[i].size;
+        denorm_size += res[i].size;
     }
 
-    /* Pass 2: allocate the denormalized buffer and copy slots. We need
-     * to source REPEAT slots from c->frame_bytes BEFORE we free it. */
+    /* Pass 2: allocate the denormalized buffer and write slots. We need
+     * to read prev frame_bytes BEFORE freeing it. */
     uint8_t *new_frame = (uint8_t *)malloc(denorm_size ? denorm_size : 1);
     size_t *new_offsets = NULL;
     size_t *new_sizes = NULL;
@@ -1000,41 +1515,95 @@ static struct yetty_ycore_void_result handle_frame(struct yetty_yterm_ymgui_laye
         free(new_frame);
         free(new_offsets);
         free(new_sizes);
-        free(infos);
+        free_slot_resolves(res, cl_count);
         return YETTY_ERR(yetty_ycore_void, "ymgui: oom (denormalized frame)");
     }
 
     memcpy(new_frame, fh, sizeof(*fh));
-    /* The denormalized buffer's total_size reflects post-expansion size,
-     * not the wire's REPEAT-compressed size. Kept self-consistent so any
-     * future revalidation sees a well-formed v2-style frame. */
     ((struct yetty_ymgui_wire_frame *)new_frame)->total_size = (uint32_t)denorm_size;
 
     size_t out_off = sizeof(*fh);
     for (size_t i = 0; i < cl_count; i++) {
         new_offsets[i] = out_off;
-        new_sizes[i] = infos[i].size;
-        const uint8_t *src = infos[i].from_cache ? (c->frame_bytes + infos[i].src_off)
-                                                 : (raw + infos[i].src_off);
-        memcpy(new_frame + out_off, src, infos[i].size);
-        /* Clear the REPEAT flag in the denormalized copy of the cl_hdr
-         * so frame_measure can't misread it (cl_hdr.flags is reserved
-         * for wire-side signalling). */
+        new_sizes[i] = res[i].size;
+        if (res[i].mode == YMGUI_SLOT_FROM_PREV) {
+            memcpy(new_frame + out_off, c->frame_bytes + res[i].src_off, res[i].size);
+        } else if (res[i].mode == YMGUI_SLOT_FROM_WIRE) {
+            memcpy(new_frame + out_off, raw + res[i].src_off, res[i].size);
+        } else { /* DIFF */
+            write_diff_slot(new_frame + out_off, res[i].cmd_views, res[i].cmd_view_count, idx32);
+        }
+        /* Always clear any wire flags in the denormalized cl_hdr. */
         struct yetty_ymgui_wire_cmd_list *out_clh =
             (struct yetty_ymgui_wire_cmd_list *)(new_frame + out_off);
         out_clh->flags = 0;
-        out_off += infos[i].size;
+        out_off += res[i].size;
     }
-    free(infos);
 
+    /* Build the per-slot Stage 2 index from the just-composed slots. We
+     * do this before swapping in the new caches so the next frame's
+     * CMD_DIFF can look up against the fresh slot_cmd_* arrays. */
+    uint64_t **new_cmd_hashes = NULL;
+    uint32_t **new_cmd_vcs = NULL;
+    uint32_t **new_cmd_oi = NULL;
+    uint32_t *new_cmd_counts = NULL;
+    if (cl_count) {
+        new_cmd_hashes = (uint64_t **)calloc(cl_count, sizeof(*new_cmd_hashes));
+        new_cmd_vcs = (uint32_t **)calloc(cl_count, sizeof(*new_cmd_vcs));
+        new_cmd_oi = (uint32_t **)calloc(cl_count, sizeof(*new_cmd_oi));
+        new_cmd_counts = (uint32_t *)calloc(cl_count, sizeof(*new_cmd_counts));
+        if (!new_cmd_hashes || !new_cmd_vcs || !new_cmd_oi || !new_cmd_counts) {
+            free(new_cmd_hashes);
+            free(new_cmd_vcs);
+            free(new_cmd_oi);
+            free(new_cmd_counts);
+            free(new_frame);
+            free(new_offsets);
+            free(new_sizes);
+            free_slot_resolves(res, cl_count);
+            return YETTY_ERR(yetty_ycore_void, "ymgui: oom (slot index)");
+        }
+    }
+    for (size_t i = 0; i < cl_count; i++) {
+        struct ymgui_slot_index idx = {0};
+        if (!ymgui_index_slot_cmds(new_frame + new_offsets[i], idx32, &idx)) {
+            for (size_t j = 0; j < i; j++) {
+                free(new_cmd_hashes[j]);
+                free(new_cmd_vcs[j]);
+                free(new_cmd_oi[j]);
+            }
+            free(new_cmd_hashes);
+            free(new_cmd_vcs);
+            free(new_cmd_oi);
+            free(new_cmd_counts);
+            free(new_frame);
+            free(new_offsets);
+            free(new_sizes);
+            free_slot_resolves(res, cl_count);
+            return YETTY_ERR(yetty_ycore_void, "ymgui: oom (cmd hash array)");
+        }
+        new_cmd_hashes[i] = idx.hashes;
+        new_cmd_vcs[i] = idx.vtx_counts;
+        new_cmd_oi[i] = idx.cmd_indices;
+        new_cmd_counts[i] = idx.count;
+    }
+
+    free_slot_resolves(res, cl_count);
+
+    /* Swap in the new caches. */
     free(c->frame_bytes);
     free(c->slot_offsets);
     free(c->slot_sizes);
+    card_release_slot_caches(c);
     c->frame_bytes = new_frame;
     c->frame_size = denorm_size;
     c->slot_offsets = new_offsets;
     c->slot_sizes = new_sizes;
     c->slot_count = cl_count;
+    c->slot_cmd_hashes = new_cmd_hashes;
+    c->slot_cmd_vtx_counts = new_cmd_vcs;
+    c->slot_cmd_orig_indices = new_cmd_oi;
+    c->slot_cmd_counts = new_cmd_counts;
     c->has_frame = 1;
     c->frame_display_w = fh->display_size_x;
     c->frame_display_h = fh->display_size_y;
@@ -1188,12 +1757,13 @@ static struct yetty_ycore_void_result ymgui_resize_grid(struct yetty_yrender_ter
     self->grid_size = gs;
     self->dirty = 1;
 
-    /* Resize-aware cards (w_cells=0 = "until right edge") need to notify
-     * the client of their new pixel size so DisplaySize tracks the pane. */
+    /* Resize-aware cards (w_cells=0 = "until right edge", h_cells=0 =
+     * "until bottom edge") need to notify the client of their new pixel
+     * size so DisplaySize tracks the pane. */
     if (l->base.emit_osc_fn) {
         for (size_t i = 0; i < l->card_count; i++) {
             struct yetty_yterm_ymgui_card *c = l->cards[i];
-            if (c->w_cells != 0) {
+            if (c->w_cells != 0 && c->h_cells != 0) {
                 continue;
             }
             struct yetty_ymgui_wire_input_resize msg = {
@@ -1397,7 +1967,8 @@ static struct yetty_ycore_void_result draw_card(struct yetty_yterm_ymgui_layer *
                                                 struct yetty_yterm_ymgui_card *c,
                                                 WGPURenderPassEncoder pass, float pane_w,
                                                 float pane_h, float scissor_off_x,
-                                                float scissor_off_y)
+                                                float scissor_off_y, float scissor_w,
+                                                float scissor_h)
 {
     if (!c->has_frame || !c->atlas_ready || !c->bind_group) {
         return YETTY_OK_VOID();
@@ -1449,9 +2020,15 @@ static struct yetty_ycore_void_result draw_card(struct yetty_yterm_ymgui_layer *
     wgpuRenderPassEncoderSetIndexBuffer(pass, c->idx_buf, WGPUIndexFormat_Uint32, 0,
                                         total_idx_bytes);
 
-    /* Card pixel rect in pane space (for scissor clamping). */
+    /* Card pixel rect in pane space (for scissor clamping). Clamp against
+     * BOTH the grid-derived pane size AND the actual viewport size — the
+     * two can disagree by one row/column when grid_size doesn't divide
+     * the framebuffer evenly, and the scissor must lie inside the
+     * viewport's rendering area or WebGPU rejects the whole pass. */
     float cw = card_pixel_w(l, c);
     float ch = card_pixel_h(l, c);
+    float max_x = pane_w < scissor_w ? pane_w : scissor_w;
+    float max_y = pane_h < scissor_h ? pane_h : scissor_h;
     float card_x0 = ox;
     float card_y0 = oy;
     float card_x1 = ox + cw;
@@ -1462,11 +2039,11 @@ static struct yetty_ycore_void_result draw_card(struct yetty_yterm_ymgui_layer *
     if (card_y0 < 0) {
         card_y0 = 0;
     }
-    if (card_x1 > pane_w) {
-        card_x1 = pane_w;
+    if (card_x1 > max_x) {
+        card_x1 = max_x;
     }
-    if (card_y1 > pane_h) {
-        card_y1 = pane_h;
+    if (card_y1 > max_y) {
+        card_y1 = max_y;
     }
 
     /* Iterate cmd-lists × cmds. ImGui cmd's clip rect is in card-local
@@ -1584,13 +2161,48 @@ static struct yetty_ycore_void_result ymgui_render(struct yetty_yrender_terminal
                                             (uint32_t)vp.w, (uint32_t)vp.h);
     }
 
-    float pane_w = (float)l->base.grid_size.cols * l->base.cell_size.width;
-    float pane_h = (float)l->base.grid_size.rows * l->base.cell_size.height;
+    /* Cache the pane viewport size for use by card_pixel_w/h and
+     * card_origin_x/y. If it changed since last render, dynamic-extent
+     * cards (w_cells or h_cells == 0) need a fresh SC_RESIZE so the
+     * client's DisplaySize stays aligned with the actual pixel area we
+     * render into — otherwise mouse input and rendering use different
+     * scales. */
+    int vp_changed = (vp.w != l->last_vp_w) || (vp.h != l->last_vp_h);
+    if (vp.w > 0.0f && vp.h > 0.0f) {
+        l->last_vp_w = vp.w;
+        l->last_vp_h = vp.h;
+    }
+    if (vp_changed && l->base.emit_osc_fn) {
+        for (size_t i = 0; i < l->card_count; i++) {
+            struct yetty_yterm_ymgui_card *c = l->cards[i];
+            if (c->w_cells != 0 && c->h_cells != 0) {
+                continue;
+            }
+            struct yetty_ymgui_wire_input_resize msg = {
+                .magic = YMGUI_WIRE_MAGIC_INPUT_RESIZE,
+                .version = YMGUI_WIRE_VERSION,
+                .card_id = c->id,
+                .width = card_pixel_w(l, c),
+                .height = card_pixel_h(l, c),
+            };
+            l->base.emit_osc_fn(YMGUI_OSC_SC_RESIZE, &msg, sizeof(msg),
+                                l->base.emit_osc_userdata);
+        }
+    }
+
+    /* The shader normalises (vertex + card_origin) by this "pane size"
+     * before mapping to NDC. Using vp.w/vp.h here (vs the grid-derived
+     * grid_cols × cell_w) makes rendered framebuffer x equal exactly
+     * vp.x + (vertex.x + card_origin.x) — the same coordinate system
+     * the mouse path uses. With grid × cell instead, anything past x=0
+     * gets stretched by vp.w / (grid × cell), drifting from the mouse. */
+    float pane_w = vp.w > 0.0f ? vp.w : (float)l->base.grid_size.cols * l->base.cell_size.width;
+    float pane_h = vp.h > 0.0f ? vp.h : (float)l->base.grid_size.rows * l->base.cell_size.height;
 
     /* Older cards first, newer ones on top — matches z-order convention. */
     for (size_t i = 0; i < l->card_count; i++) {
         struct yetty_ycore_void_result r =
-            draw_card(l, l->cards[i], pass, pane_w, pane_h, vp.x, vp.y);
+            draw_card(l, l->cards[i], pass, pane_w, pane_h, vp.x, vp.y, vp.w, vp.h);
         if (YETTY_IS_ERR(r)) {
             wgpuRenderPassEncoderEnd(pass);
             wgpuRenderPassEncoderRelease(pass);

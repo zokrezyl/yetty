@@ -783,11 +783,18 @@ static void preflight_intrinsic_size(struct yetty_ygui_widget *w)
     }
 }
 
+extern void yetty_ygui_internal_engine_pin_bars(struct yetty_ygui_engine *engine);
+
 struct yetty_ycore_void_result yetty_ygui_layout_compute_engine(struct yetty_ygui_engine *engine)
 {
     if (!engine) {
         return YETTY_ERR(yetty_ycore_void, "ygui_layout_compute_engine: NULL engine");
     }
+
+    /* Re-pin engine-level bars (titlebar / menubar / statusbar) to
+     * their full-canvas-width slots before the per-widget layout pass.
+     * No-op when the engine has no bars attached. */
+    yetty_ygui_internal_engine_pin_bars(engine);
 
     /* Pre-flight: update intrinsic sizes (tree_node h grows with expanded
      * children). Walk all top-level subtrees. */

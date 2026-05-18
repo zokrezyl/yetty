@@ -838,16 +838,88 @@ void yetty_ygui_engine_mouse_move(struct yetty_ygui_engine *engine, float x, flo
     }
 }
 
+/* Click-outside-to-close for open popups and popup-menus.
+ *
+ * The spatial grid routes the click to a single widget — typically
+ * whatever is under the cursor. If that widget is not the open popup
+ * / popup_menu (or one of its descendants), the user intent is
+ * usually "dismiss the popup". This pass walks the engine's top-level
+ * widget list, finds any non-modal popup / popup_menu whose OPEN flag
+ * is set, and closes it when the click lands OUTSIDE its layout box
+ * and outside its descendants.
+ *
+ * Modal popups (set_modal=1) are skipped — their whole point is to
+ * force the user to use the in-popup buttons.
+ *
+ * The click is NOT consumed here: closing the popup is silent, and
+ * the click proceeds to whatever was under it (matches GTK / macOS /
+ * web menu UX where clicking outside closes the menu AND triggers
+ * the underlying widget). */
+static int point_in_subtree(struct yetty_ygui_widget *w, float x, float y)
+{
+    if (!w || !(w->flags & YETTY_YGUI_FLAG_VISIBLE)) {
+        return 0;
+    }
+    if (x >= w->layout_x && x < w->layout_x + w->layout_w &&
+        y >= w->layout_y && y < w->layout_y + w->layout_h) {
+        return 1;
+    }
+    for (struct yetty_ygui_widget *c = w->first_child; c; c = c->next_sibling) {
+        if (point_in_subtree(c, x, y)) return 1;
+    }
+    return 0;
+}
+
+static void close_open_overlays_outside(struct yetty_ygui_engine *engine, float x, float y)
+{
+    for (struct yetty_ygui_widget *w = engine->first_widget; w; w = w->next_sibling) {
+        if (!(w->flags & YETTY_YGUI_FLAG_OPEN)) {
+            continue;
+        }
+        if (w->type == YETTY_YGUI_WIDGET_POPUP) {
+            if (w->data.popup.modal) continue;
+            if (!point_in_subtree(w, x, y)) {
+                yetty_ygui_widget_popup_set_open(w, 0);
+            }
+        } else if (w->type == YETTY_YGUI_WIDGET_POPUP_MENU) {
+            if (w->data.popup_menu.modal) continue;
+            if (!point_in_subtree(w, x, y)) {
+                yetty_ygui_widget_popup_menu_close(w);
+            }
+        }
+    }
+}
+
 void yetty_ygui_engine_mouse_down(struct yetty_ygui_engine *engine, float x, float y, int button)
 {
     ydebug("mouse_down at (%.1f, %.1f) btn=%d", x, y, button);
     if (!engine) {
         return;
     }
-    (void)button;
+
+    /* Dismiss any open non-modal overlays before normal hit-test
+     * dispatch. This must happen BEFORE bringing-to-front / spatial
+     * grid lookup so we don't accidentally treat the click as
+     * targeting the overlay we're about to close. */
+    close_open_overlays_outside(engine, x, y);
 
     YGUI_LOG("mouse_down at (%.1f, %.1f)", x, y);
     struct yetty_ygui_widget *hit = yetty_ygui_grid_query(&engine->grid, x, y);
+
+    /* Right-click context menu — walk up the widget chain looking for
+     * an attached menu. Two button conventions in use across the
+     * codebase: bit-flag (0x4 = right) and ordinal (2 = right).
+     * Accept either. */
+    int is_right = (button == 2) || (button & 0x4);
+    if (is_right && hit) {
+        for (struct yetty_ygui_widget *w = hit; w; w = w->parent) {
+            if (w->context_menu) {
+                yetty_ygui_widget_popup_menu_open_at(w->context_menu, x, y);
+                engine->dirty = 1;
+                return;
+            }
+        }
+    }
     YGUI_LOG("  grid_query returned: %s (ptr=%p)", hit ? hit->id : "NULL", (void *)hit);
     ydebug("mouse_down: hit=%s ptr=%p has_on_press=%d",
            hit ? (hit->id ? hit->id : "?") : "NULL", (void *)hit,

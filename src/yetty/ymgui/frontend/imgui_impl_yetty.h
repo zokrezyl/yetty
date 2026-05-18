@@ -114,6 +114,34 @@ IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_RenderCardDrawData(uint32_t card
                                                                    ImDrawData *draw_data);
 
 /*=============================================================================
+ * Wire-format optimisations
+ *
+ * The renderer can dedup wire bytes against the previous frame in two
+ * layered ways. Both default ON. Pass any combination of the flags to
+ * SetOptimizations to override. Most apps never need to touch this — the
+ * defaults give the best wire size for typical UIs. Disable selectively
+ * when measuring performance differences.
+ *
+ *   DEDUP_CMDLIST (Stage 1): per-cmd_list REPEAT. If a whole cmd_list
+ *     (one ImGui window in the default render) is byte-identical to last
+ *     frame at the same slot, ship a 16-byte marker instead of the full
+ *     vtx/idx/cmds.
+ *
+ *   DEDUP_CMD (Stage 2): per-cmd content dedup. When a cmd_list differs
+ *     but most of its cmds are unchanged (button hover inside an
+ *     otherwise static window), ship a draw-order hash list plus only
+ *     the changed cmds.
+ *===========================================================================*/
+
+enum {
+    YETTY_YMGUI_OPT_DEDUP_CMDLIST = 1u << 0, /* Stage 1 */
+    YETTY_YMGUI_OPT_DEDUP_CMD = 1u << 1,     /* Stage 2 */
+};
+
+IMGUI_IMPL_API void yetty_ymgui_ImGui_ImplYetty_SetOptimizations(uint32_t flags);
+IMGUI_IMPL_API uint32_t yetty_ymgui_ImGui_ImplYetty_GetOptimizations(void);
+
+/*=============================================================================
  * Sync input drain (option 1)
  *===========================================================================*/
 
