@@ -46,3 +46,16 @@ struct uint32_result yetty_yfont_shader_glyph_codepoint(const char *name)
     }
     return YETTY_ERR(uint32, "unknown shader glyph");
 }
+
+int yetty_yfont_shader_glyph_codepoint_exists(uint32_t cp)
+{
+    /* Table is sorted by name, not codepoint, so linear scan. 47-ish
+     * entries fits comfortably in L1; the caller (resolve_glyph) runs
+     * once per cell update, not once per fragment. */
+    for (size_t i = 0; i < YETTY_YFONT_SHADER_GLYPH_TABLE_COUNT; i++) {
+        if (yetty_yfont_shader_glyph_table_data[i].codepoint == cp) {
+            return 1;
+        }
+    }
+    return 0;
+}

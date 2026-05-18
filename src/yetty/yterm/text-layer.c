@@ -4,6 +4,7 @@
 #include <yetty/yfont/ms-font.h>
 #include <yetty/yfont/ms-raster-font.h>
 #include <yetty/yfont/ms-msdf-font.h>
+#include <yetty/yfont/shader-glyph.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yconfig/config.h>
@@ -291,8 +292,17 @@ static VTermResolvedGlyph resolve_glyph(const uint32_t *chars, int count, int bo
     /* PUA → shader-glyph route. The shader-glyph "font" lives in the top
      * half of the u32 glyph_index space and is consumed by shader-glyph
      * layer instead of the text-layer's font. No bit-pattern reservation:
-     * IDs are allocated from UINT32_MAX downward. */
-    if (yetty_shader_glyph_codepoint_in_range(chars[0])) {
+     * IDs are allocated from UINT32_MAX downward.
+     *
+     * Two gates: codepoint must be in the configured PUA window AND a
+     * shader file must actually exist for that codepoint. Nerd Fonts'
+     * Material Design Icons live in U+F0001..U+F1AFE — they overlap the
+     * window but should still render via the regular font atlas, not as
+     * (non-existent) shader glyphs. Without the existence check, those
+     * cells got the bit-31 marker, pinned the shader-glyph layer's
+     * is_empty() at false, and ran the 60 Hz animation timer forever. */
+    if (yetty_shader_glyph_codepoint_in_range(chars[0]) &&
+        yetty_yfont_shader_glyph_codepoint_exists(chars[0])) {
         result.glyph_index = yetty_shader_glyph_id_from_codepoint(chars[0]);
         result.font_type = 0;
         ydebug("resolve_glyph SHADER: U+%04X -> glyph_index=0x%08X", chars[0], result.glyph_index);

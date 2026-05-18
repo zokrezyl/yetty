@@ -16,7 +16,7 @@ no list to update.
 ```
 
 `NNNN` is the local-id (lowercase hex). The runtime stores the glyph in a
-cell using `glyph_index = 0xFFFFFFFF - local_id`. Codepoint U+E000 + N
+cell using `glyph_index = 0xFFFFFFFF - local_id`. Codepoint U+100000 + N
 maps to local-id N (see `text-layer.c::resolve_glyph`).
 
 ## Function contract
@@ -46,7 +46,18 @@ just use `uv` and `time`.
 
 ## Adding the input route
 
-To call a new glyph from a terminal, the codepoint must be in the PUA
-range U+E000..U+E0FF. By default `text-layer.c::resolve_glyph` maps the
-range 1:1 to local-ids. Adjust `YETTY_SHADER_GLYPH_PUA_END` in
-`include/yetty/yterm/shader-glyph-layer.h` if you need more.
+To call a new glyph from a terminal, the codepoint must be in the
+supplementary PUA-B range U+100000..U+100FFF. By default
+`text-layer.c::resolve_glyph` maps the range 1:1 to local-ids. Adjust
+`YETTY_SHADER_GLYPH_PUA_END` in `include/yetty/yterm/shader-glyph-layer.h`
+if you need more than 4096 slots.
+
+PUA-B was chosen after measuring the bundled DejaVuSansM Nerd Font:
+  BMP PUA  (E000..F8FF) :  3,488 codepoints used (Powerline + Codicons)
+  PUA-A    (F0000..FFFFD):  6,896 codepoints used (Material Design Icons,
+                            U+F0001..U+F1AF0)
+  PUA-B    (100000..10FFFD): 0 codepoints used
+Earlier base addresses (U+E000, then U+F0000) collided with one of these
+icon blocks; any Nerd Font icon whose codepoint matched a yetty shader
+local-id stamped that cell with the shader-glyph marker, pinning the
+60 Hz animation timer on for as long as the icon was visible.

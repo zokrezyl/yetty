@@ -5,8 +5,13 @@ Generate the shader-glyph name->codepoint table.
 Scans `src/yetty/yfont/glyph-shaders/0xNN-name.wgsl` and emits a C header
 with a `static const struct ... TABLE[]` sorted alphabetically by name.
 
-Codepoint = PUA_BASE (0xE000) + local_id (the NN from the filename).
+Codepoint = PUA_BASE (0x100000) + local_id (the NNNN from the filename).
 This matches yterm/text-layer.c::resolve_glyph and shader-glyph-layer.h.
+
+PUA-B (U+100000..U+10FFFD) was picked after verifying against the bundled
+DejaVuSansM Nerd Font (13,718 cmap entries): PUA-B has 0 codepoints used
+there, while BMP PUA and PUA-A are heavily colonised by Powerline,
+Codicons and Material Design Icons.
 
 Usage: gen-shader-glyph-table.py <glyphs_dir> <output_header>
 """
@@ -15,7 +20,8 @@ import re
 import sys
 from pathlib import Path
 
-PUA_BASE = 0xE000
+PUA_BASE = 0x100000
+PUA_MAX_LOCAL = 0xFFF  # 4096-slot window — matches YETTY_SHADER_GLYPH_PUA_END
 FILE_RE = re.compile(r"^0x([0-9a-fA-F]+)-(.+)\.wgsl$")
 
 
@@ -27,10 +33,10 @@ def scan(glyphs_dir: Path):
             continue
         local_id = int(m.group(1), 16)
         name = m.group(2)
-        if local_id > 0xFF:
+        if local_id > PUA_MAX_LOCAL:
             print(
-                f"warning: {path.name}: local_id 0x{local_id:x} > 0xFF — "
-                f"outside U+E000..U+E0FF range, skipping",
+                f"warning: {path.name}: local_id 0x{local_id:x} > 0x{PUA_MAX_LOCAL:x} — "
+                f"outside U+100000..U+100FFF range, skipping",
                 file=sys.stderr,
             )
             continue
@@ -55,7 +61,7 @@ def render(entries) -> str:
         "yetty_yfont_shader_glyph_table_data[] = {",
     ]
     for name, cp in entries:
-        lines.append(f'    {{"{name}", 0x{cp:04X}u}},')
+        lines.append(f'    {{"{name}", 0x{cp:06X}u}},')
     lines.append("};")
     lines.append("")
     return "\n".join(lines)
