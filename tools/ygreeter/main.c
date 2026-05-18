@@ -1591,6 +1591,40 @@ int main(int argc, char **argv)
      * the menu's About item opens it. */
     build_about_dialog(&app);
 
+    /* Window-level menubar — File / Edit / Help. Sits between the
+     * window's title strip and the body (the tabbar). */
+    {
+        struct yetty_ygui_widget *mb =
+            yetty_ygui_engine_menubar(app.engine, "win_mb", 0, 0, 100, 26);
+        struct yetty_ygui_widget *mf = yetty_ygui_engine_popup_menu(app.engine, "win_mf",
+                                                                     0, 0, 180);
+        yetty_ygui_widget_popup_menu_add_item(mf, "New tab",  on_demo_click, NULL);
+        yetty_ygui_widget_popup_menu_add_item(mf, "Reload",   on_demo_click, NULL);
+        yetty_ygui_widget_popup_menu_add_separator(mf);
+        yetty_ygui_widget_popup_menu_add_item(mf, "Quit",     on_menu_close, &app);
+        struct yetty_ygui_widget *me = yetty_ygui_engine_popup_menu(app.engine, "win_me",
+                                                                     0, 0, 180);
+        yetty_ygui_widget_popup_menu_add_item(me, "Cut",   on_demo_click, NULL);
+        yetty_ygui_widget_popup_menu_add_item(me, "Copy",  on_demo_click, NULL);
+        yetty_ygui_widget_popup_menu_add_item(me, "Paste", on_demo_click, NULL);
+        struct yetty_ygui_widget *mh = yetty_ygui_engine_popup_menu(app.engine, "win_mh",
+                                                                     0, 0, 180);
+        yetty_ygui_widget_popup_menu_add_item(mh, "About", on_menu_about, &app);
+        yetty_ygui_widget_menubar_add(mb, "File", mf);
+        yetty_ygui_widget_menubar_add(mb, "Edit", me);
+        yetty_ygui_widget_menubar_add(mb, "Help", mh);
+        yetty_ygui_widget_window_set_menubar(app.outer, mb);
+    }
+
+    /* Window-level statusbar. */
+    {
+        struct yetty_ygui_widget *sb =
+            yetty_ygui_engine_statusbar(app.engine, "win_sb", 0, 0, 100, 22,
+                                         "Ready — ygui showcase");
+        yetty_ygui_widget_statusbar_set_right(sb, "v0.2");
+        yetty_ygui_widget_window_set_statusbar(app.outer, sb);
+    }
+
     app.tabbar = yetty_ygui_engine_tabbar(app.engine, "tabs", 0, 0, 0, 0);
     yetty_ygui_widget_apply_css(app.tabbar, "flex: 1 0 0; align-items: stretch;");
     yetty_ygui_widget_add_child(body, app.tabbar);

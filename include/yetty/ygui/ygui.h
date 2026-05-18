@@ -157,6 +157,9 @@ typedef enum {
     /* File / folder picker — list of directory entries with
      * navigation. Often used inside a modal popup. */
     YETTY_YGUI_WIDGET_FILEPICKER,
+    /* Bottom-of-window status strip: short primary text + optional
+     * right-aligned secondary text (e.g. "Ready  |  ln 12, col 3"). */
+    YETTY_YGUI_WIDGET_STATUSBAR,
     YETTY_YGUI_WIDGET_CUSTOM,
 } ygui_widget_type_t;
 
@@ -652,6 +655,24 @@ void yetty_ygui_engine_close_preserve(struct yetty_ygui_engine *engine);
  * engine. */
 void yetty_ygui_widget_window_set_menu(struct yetty_ygui_widget *window,
                                        struct yetty_ygui_widget *menu);
+
+/*=============================================================================
+ * Window menubar + statusbar
+ *
+ * Attach a menubar (any widget; typically a MENUBAR) between the
+ * window's title strip and its body, and a statusbar (typically a
+ * STATUSBAR) pinned to the bottom of the window. The widget is
+ * re-parented into the window's child list and removed from the
+ * engine's top-level chain (same lifecycle as window_body children).
+ * Passing NULL clears the slot — the previously-set widget is
+ * un-parented back to the engine's top-level chain (so the caller
+ * remains responsible for destroying it via the engine).
+ *===========================================================================*/
+
+void yetty_ygui_widget_window_set_menubar(struct yetty_ygui_widget *window,
+                                          struct yetty_ygui_widget *menubar);
+void yetty_ygui_widget_window_set_statusbar(struct yetty_ygui_widget *window,
+                                            struct yetty_ygui_widget *statusbar);
 
 /* Popup menu — a floating, vertically-stacked list of clickable items.
  * Inherits the visuals of the popup dialog (rounded body + drop
@@ -1291,6 +1312,44 @@ const char *yetty_ygui_widget_filepicker_get_cwd(const struct yetty_ygui_widget 
 const char *yetty_ygui_widget_filepicker_get_selected(const struct yetty_ygui_widget *widget);
 void yetty_ygui_widget_filepicker_on_change(struct yetty_ygui_widget *widget,
                                             ygui_text_callback_t cb, void *userdata);
+
+/*=============================================================================
+ * Statusbar — bottom-of-window strip with primary + optional secondary text.
+ *
+ * Layout: [ left_text ........................................ right_text ]
+ *
+ * Typical wiring: an app sets `left_text` to the current activity
+ * ("Ready", "Loading…") and `right_text` to a coordinate / mode
+ * indicator ("ln 12, col 3", "INSERT").
+ *===========================================================================*/
+
+struct yetty_ygui_widget *yetty_ygui_engine_statusbar(struct yetty_ygui_engine *engine,
+                                                      const char *id, float x, float y,
+                                                      float w, float h, const char *left_text);
+
+void yetty_ygui_widget_statusbar_set_left(struct yetty_ygui_widget *widget, const char *text);
+void yetty_ygui_widget_statusbar_set_right(struct yetty_ygui_widget *widget, const char *text);
+
+/*=============================================================================
+ * Engine-wide bars: titlebar + menubar + statusbar
+ *
+ * For apps that don't use the WINDOW widget. The engine pins the
+ * supplied widget to its full canvas width at the top (titlebar
+ * then menubar below it) or bottom (statusbar) on every layout pass.
+ * The bar widgets are normal top-level widgets in the engine's chain;
+ * clear by passing NULL.
+ *
+ * Don't combine engine-level bars with window-level bars in the same
+ * app — they overlap. Apps using window_set_menubar / _set_statusbar
+ * typically also use the window's built-in title bar.
+ *===========================================================================*/
+
+void yetty_ygui_engine_set_titlebar(struct yetty_ygui_engine *engine,
+                                    struct yetty_ygui_widget *widget);
+void yetty_ygui_engine_set_menubar(struct yetty_ygui_engine *engine,
+                                   struct yetty_ygui_widget *widget);
+void yetty_ygui_engine_set_statusbar(struct yetty_ygui_engine *engine,
+                                     struct yetty_ygui_widget *widget);
 
 /* Bind a scrollbar to a scrollable widget (today: ypdf — anything that
  * exposes the internal scrollable interface). The scrollbar becomes a

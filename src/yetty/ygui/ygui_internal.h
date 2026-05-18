@@ -415,6 +415,11 @@ struct yetty_ygui_widget {
         } filepicker;
 
         struct {
+            char *left_text;  /* primary status string (owned) */
+            char *right_text; /* optional right-aligned text (owned, NULL = none) */
+        } statusbar;
+
+        struct {
             float scroll_x, scroll_y;
             float content_w, content_h;
             float header_h;
@@ -591,6 +596,17 @@ struct yetty_ygui_widget {
              * regular top-level widget list; the window only holds a
              * reference. */
             struct yetty_ygui_widget *menu;
+            /* Optional menubar (any widget; typically a MENUBAR
+             * widget) inserted as a flex-column child between the
+             * title strip and the body. Set via window_set_menubar.
+             * NULL = no menubar. The widget is reparented into the
+             * window's child list. */
+            struct yetty_ygui_widget *menubar;
+            /* Optional statusbar (any widget; typically a STATUSBAR
+             * widget) pinned to the bottom of the window. Set via
+             * window_set_statusbar. NULL = no statusbar. The widget
+             * is reparented into the window's child list. */
+            struct yetty_ygui_widget *statusbar;
         } window;
 
         struct {
@@ -829,6 +845,18 @@ struct yetty_ygui_engine {
      * treated as dirty, no DELETE flush before — CMD_ZERO supersedes
      * everything on the receiver). Cleared after that render. */
     uint8_t needs_full_redraw;
+
+    /* Optional engine-wide bars — top titlebar, top menubar (under
+     * titlebar), bottom statusbar. The widgets are normal top-level
+     * widgets the app creates; engine_set_titlebar / _set_menubar /
+     * _set_statusbar just store the pointers + reposition the
+     * widgets to span the canvas at the right edge. NULL = no bar
+     * at that slot. Apps using a window widget typically set the
+     * bars on the WINDOW instead (window_set_menubar /
+     * _set_statusbar). */
+    struct yetty_ygui_widget *engine_titlebar;
+    struct yetty_ygui_widget *engine_menubar;
+    struct yetty_ygui_widget *engine_statusbar;
 };
 
 /*=============================================================================

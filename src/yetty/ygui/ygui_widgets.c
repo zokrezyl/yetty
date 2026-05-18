@@ -6988,3 +6988,217 @@ void yetty_ygui_widget_filepicker_on_change(struct yetty_ygui_widget *widget,
     widget->text_callback = cb;
     widget->text_userdata = userdata;
 }
+
+/*=============================================================================
+ * Statusbar — bottom-of-window strip.
+ *===========================================================================*/
+
+#define STATUSBAR_CHAR_W 8.0f
+#define STATUSBAR_PAD_X 10.0f
+
+static struct yetty_ycore_void_result statusbar_render(struct yetty_ygui_widget *self,
+                                                       struct yetty_ygui_render_ctx *ctx)
+{
+    const struct yetty_ygui_theme *t = ctx->theme;
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, self->h, t->bg_header,
+                                     0.0f);
+    /* Top separator line for visual delineation from the body. */
+    yetty_ygui_render_ctx_render_box(ctx, self->x, self->y, self->w, 1.0f, t->border_muted, 0.0f);
+    float ty = self->y + (self->h - t->font_size) * 0.5f;
+    if (self->data.statusbar.left_text) {
+        yetty_ygui_render_ctx_render_text(ctx, self->data.statusbar.left_text,
+                                          self->x + STATUSBAR_PAD_X, ty,
+                                          t->text_primary, t->font_size);
+    }
+    if (self->data.statusbar.right_text) {
+        int len = (int)strlen(self->data.statusbar.right_text);
+        float tx = self->x + self->w - STATUSBAR_PAD_X - len * STATUSBAR_CHAR_W;
+        yetty_ygui_render_ctx_render_text(ctx, self->data.statusbar.right_text, tx, ty,
+                                          t->text_muted, t->font_size);
+    }
+    return YETTY_OK_VOID();
+}
+
+static void statusbar_destroy(struct yetty_ygui_widget *self)
+{
+    free(self->data.statusbar.left_text);
+    free(self->data.statusbar.right_text);
+}
+
+struct yetty_ygui_widget *yetty_ygui_engine_statusbar(struct yetty_ygui_engine *engine,
+                                                      const char *id, float x, float y,
+                                                      float w, float h, const char *left_text)
+{
+    struct yetty_ygui_widget *s =
+        yetty_ygui_engine_widget_alloc(engine, YETTY_YGUI_WIDGET_STATUSBAR, id);
+    if (!s) return NULL;
+    yetty_ygui_widget_init_base(s, x, y, w, h);
+    s->data.statusbar.left_text = ygui_strdup(left_text);
+    s->data.statusbar.right_text = NULL;
+    static const struct yetty_ygui_widget_vtable statusbar_vtable = {
+        .render = statusbar_render,
+        .destroy = statusbar_destroy,
+    };
+    s->vtable = &statusbar_vtable;
+    add_to_engine(engine, s);
+    return s;
+}
+
+void yetty_ygui_widget_statusbar_set_left(struct yetty_ygui_widget *widget, const char *text)
+{
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_STATUSBAR) return;
+    free(widget->data.statusbar.left_text);
+    widget->data.statusbar.left_text = ygui_strdup(text);
+    widget->dirty = 1;
+    if (widget->engine) widget->engine->dirty = 1;
+}
+
+void yetty_ygui_widget_statusbar_set_right(struct yetty_ygui_widget *widget, const char *text)
+{
+    if (!widget || widget->type != YETTY_YGUI_WIDGET_STATUSBAR) return;
+    free(widget->data.statusbar.right_text);
+    widget->data.statusbar.right_text = ygui_strdup(text);
+    widget->dirty = 1;
+    if (widget->engine) widget->engine->dirty = 1;
+}
+
+/*=============================================================================
+ * Engine-wide bars — pin titlebar / menubar to the top and statusbar
+ * to the bottom of the canvas. The pinning happens in
+ * engine_pin_bars called at the head of the layout pass.
+ *===========================================================================*/
+
+void yetty_ygui_engine_set_titlebar(struct yetty_ygui_engine *engine,
+                                    struct yetty_ygui_widget *widget)
+{
+    if (!engine) return;
+    engine->engine_titlebar = widget;
+    engine->dirty = 1;
+}
+
+void yetty_ygui_engine_set_menubar(struct yetty_ygui_engine *engine,
+                                   struct yetty_ygui_widget *widget)
+{
+    if (!engine) return;
+    engine->engine_menubar = widget;
+    engine->dirty = 1;
+}
+
+void yetty_ygui_engine_set_statusbar(struct yetty_ygui_engine *engine,
+                                     struct yetty_ygui_widget *widget)
+{
+    if (!engine) return;
+    engine->engine_statusbar = widget;
+    engine->dirty = 1;
+}
+
+/* Called from the layout pass head. Pins engine-level bar widgets
+ * to top / bottom strips spanning the canvas width. The widgets'
+ * authored heights are preserved; width is overridden to span the
+ * canvas. */
+void yetty_ygui_internal_engine_pin_bars(struct yetty_ygui_engine *engine);
+void yetty_ygui_internal_engine_pin_bars(struct yetty_ygui_engine *engine)
+{
+    if (!engine) return;
+    float W = engine->width;
+    float H = engine->height;
+    float top_y = 0.0f;
+    if (engine->engine_titlebar) {
+        struct yetty_ygui_widget *w = engine->engine_titlebar;
+        float h = w->authored_h > 0 ? w->authored_h : 32.0f;
+        w->authored_x = 0;
+        w->authored_y = top_y;
+        w->authored_w = W;
+        w->authored_h = h;
+        top_y += h;
+    }
+    if (engine->engine_menubar) {
+        struct yetty_ygui_widget *w = engine->engine_menubar;
+        float h = w->authored_h > 0 ? w->authored_h : 28.0f;
+        w->authored_x = 0;
+        w->authored_y = top_y;
+        w->authored_w = W;
+        w->authored_h = h;
+        top_y += h;
+    }
+    if (engine->engine_statusbar) {
+        struct yetty_ygui_widget *w = engine->engine_statusbar;
+        float h = w->authored_h > 0 ? w->authored_h : 22.0f;
+        w->authored_x = 0;
+        w->authored_y = H - h;
+        w->authored_w = W;
+        w->authored_h = h;
+    }
+}
+
+/*=============================================================================
+ * Window: menubar + statusbar slots.
+ *
+ * The window is a flex-column container with this child order:
+ *   [ <padding_top = title_h> ][ menubar? ][ body ][ statusbar? ]
+ *
+ * set_menubar inserts the widget right after the title-bar padding
+ * (so it sits below the title), set_statusbar appends to the end
+ * (flex layout pushes it against the bottom because body has
+ * flex_grow=1).
+ *
+ * Both setters re-parent the widget; passing NULL detaches the
+ * current slot widget back to the engine's top-level chain (so the
+ * caller's pointer stays valid and the widget can be reattached
+ * elsewhere or destroyed via the engine).
+ *===========================================================================*/
+
+static void window_detach_slot(struct yetty_ygui_widget *window, struct yetty_ygui_widget **slot)
+{
+    if (!*slot) return;
+    yetty_ygui_widget_remove_child(window, *slot);
+    /* Reinsert at engine top level so the widget remains tracked. */
+    if (window->engine) {
+        add_to_engine(window->engine, *slot);
+    }
+    *slot = NULL;
+}
+
+void yetty_ygui_widget_window_set_menubar(struct yetty_ygui_widget *window,
+                                          struct yetty_ygui_widget *menubar)
+{
+    if (!window || window->type != YETTY_YGUI_WIDGET_WINDOW) return;
+    window_detach_slot(window, &window->data.window.menubar);
+    if (!menubar) return;
+    /* Reparent menubar into the window. We want it BEFORE body in
+     * child order so the flex column places it above. The body was
+     * added in window's constructor; if it's still the only child,
+     * inserting before it means swapping the head. The simpler
+     * approach: remove body, append menubar, re-append body. */
+    struct yetty_ygui_widget *body = window->data.window.body;
+    struct yetty_ygui_widget *sb   = window->data.window.statusbar;
+    if (body) yetty_ygui_widget_remove_child(window, body);
+    if (sb)   yetty_ygui_widget_remove_child(window, sb);
+    if (menubar->parent) {
+        yetty_ygui_widget_remove_child(menubar->parent, menubar);
+    }
+    yetty_ygui_widget_add_child(window, menubar);
+    if (body) yetty_ygui_widget_add_child(window, body);
+    if (sb)   yetty_ygui_widget_add_child(window, sb);
+    window->data.window.menubar = menubar;
+    window->dirty = 1;
+    if (window->engine) window->engine->dirty = 1;
+}
+
+void yetty_ygui_widget_window_set_statusbar(struct yetty_ygui_widget *window,
+                                            struct yetty_ygui_widget *statusbar)
+{
+    if (!window || window->type != YETTY_YGUI_WIDGET_WINDOW) return;
+    window_detach_slot(window, &window->data.window.statusbar);
+    if (!statusbar) return;
+    /* Statusbar goes at the END of the child list so flex stacks it
+     * below body (which has flex_grow=1, so it occupies remaining
+     * space leaving the statusbar at the bottom). */
+    if (statusbar->parent) {
+        yetty_ygui_widget_remove_child(statusbar->parent, statusbar);
+    }
+    yetty_ygui_widget_add_child(window, statusbar);
+    window->data.window.statusbar = statusbar;
+    window->dirty = 1;
+    if (window->engine) window->engine->dirty = 1;
+}
